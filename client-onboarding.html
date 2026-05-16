@@ -317,6 +317,110 @@ footer {
   .clause-grid { grid-template-columns: 1fr; }
 }
 
+/* ── Roadmap ── */
+.roadmap-track {
+  position: relative;
+  padding-bottom: 3rem;
+}
+.roadmap-track::before {
+  content: '';
+  position: absolute;
+  top: 28px; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--rose), var(--accent), var(--cyan), var(--gold), var(--success));
+  opacity: 0.2;
+  border-radius: 2px;
+}
+.roadmap-cols {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 0;
+  position: relative;
+}
+.rm-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  padding: 0 0.5rem;
+}
+.rm-node {
+  width: 56px; height: 56px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.15rem;
+  border: 2px solid;
+  background: var(--surface);
+  margin-bottom: 1rem;
+  position: relative; z-index: 1;
+  transition: transform 0.3s, box-shadow 0.3s;
+  cursor: default;
+}
+.rm-col:hover .rm-node { transform: scale(1.1); }
+.rm-node.done   { border-color: var(--success); box-shadow: 0 0 20px rgba(52,211,153,0.15); }
+.rm-node.active { border-color: var(--accent);  box-shadow: 0 0 24px rgba(124,106,237,0.25); animation: rm-pulse 2.5s infinite; }
+.rm-node.next   { border-color: var(--cyan);    box-shadow: 0 0 16px rgba(34,211,238,0.1); }
+.rm-node.future { border-color: var(--border);  opacity: 0.5; }
+@keyframes rm-pulse { 0%,100%{box-shadow:0 0 24px rgba(124,106,237,0.25)} 50%{box-shadow:0 0 40px rgba(124,106,237,0.45)} }
+.rm-status-badge {
+  font-size: 0.55rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em;
+  padding: 2px 8px; border-radius: 100px; margin-bottom: 0.5rem;
+}
+.rm-status-badge.done   { background: var(--success-soft); color: var(--success); }
+.rm-status-badge.active { background: var(--accent-soft);  color: var(--accent); }
+.rm-status-badge.next   { background: var(--cyan-soft);    color: var(--cyan); }
+.rm-status-badge.future { background: rgba(255,255,255,0.05); color: var(--text-dim); }
+.rm-phase-title {
+  font-size: 0.78rem; font-weight: 600; text-align: center; margin-bottom: 0.25rem; line-height: 1.3;
+}
+.rm-timeline { font-size: 0.65rem; color: var(--text-dim); margin-bottom: 0.5rem; }
+.rm-items {
+  font-size: 0.68rem; color: var(--text-muted);
+  text-align: center; line-height: 1.7;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 0.75rem;
+  width: 100%;
+}
+
+/* Post-launch roadmap */
+.postlaunch-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-top: 3rem;
+}
+.pl-quarter {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 1.5rem;
+  border-top: 3px solid;
+}
+.pl-quarter:nth-child(1) { border-top-color: var(--accent); }
+.pl-quarter:nth-child(2) { border-top-color: var(--cyan); }
+.pl-quarter:nth-child(3) { border-top-color: var(--gold); }
+.pl-q-label {
+  font-size: 0.6rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.1em; color: var(--text-dim); margin-bottom: 0.35rem;
+}
+.pl-q-title { font-size: 0.9rem; font-weight: 600; margin-bottom: 1rem; }
+.pl-milestone {
+  display: flex; align-items: flex-start; gap: 8px;
+  font-size: 0.76rem; color: var(--text-muted);
+  margin-bottom: 0.6rem; line-height: 1.45;
+}
+.pl-milestone::before {
+  content: '→'; flex-shrink: 0;
+  font-weight: 700; margin-top: 1px;
+}
+.pl-quarter:nth-child(1) .pl-milestone::before { color: var(--accent); }
+.pl-quarter:nth-child(2) .pl-milestone::before { color: var(--cyan); }
+.pl-quarter:nth-child(3) .pl-milestone::before { color: var(--gold); }
+
+@media (max-width: 900px) {
+  .roadmap-cols { grid-template-columns: repeat(3,1fr); }
+  .roadmap-track::before { display: none; }
+  .postlaunch-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 640px) {
+  .roadmap-cols { grid-template-columns: repeat(2,1fr); }
+}
+
 /* ── Animations ── */
 @keyframes fadeDown { from { opacity: 0; transform: translateY(-16px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
@@ -524,6 +628,147 @@ footer {
             <span class="tag"><span class="ico">🎯</span> First ticket kicked off</span>
           </div>
         </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- Roadmap -->
+<section class="section" id="roadmap">
+  <div class="container">
+    <span class="section-eyebrow">Roadmap</span>
+    <h2 class="section-title">From Agreement to Scale</h2>
+    <p class="section-desc">Every milestone, every deliverable, every gate — mapped to a timeline so you always know exactly where we are.</p>
+
+    <!-- Phase timeline -->
+    <div class="roadmap-track">
+      <div class="roadmap-cols">
+
+        <!-- Phase 0 -->
+        <div class="rm-col">
+          <div class="rm-node active">✍️</div>
+          <span class="rm-status-badge active">Active</span>
+          <div class="rm-phase-title">Agreement &amp; Payment</div>
+          <div class="rm-timeline">Days 1–2</div>
+          <div class="rm-items">
+            Service proposal<br>
+            Signed MSA + SOW<br>
+            First payment<br>
+            Telegram open
+          </div>
+        </div>
+
+        <!-- Phase 1 -->
+        <div class="rm-col">
+          <div class="rm-node next">🍯</div>
+          <span class="rm-status-badge next">Next</span>
+          <div class="rm-phase-title">Brand Brief</div>
+          <div class="rm-timeline">Day 3</div>
+          <div class="rm-items">
+            Brand voice doc<br>
+            Platform priority<br>
+            Persona archetypes<br>
+            Niche selection
+          </div>
+        </div>
+
+        <!-- Phase 2 -->
+        <div class="rm-col">
+          <div class="rm-node next">🖥️</div>
+          <span class="rm-status-badge next">Upcoming</span>
+          <div class="rm-phase-title">Infrastructure</div>
+          <div class="rm-timeline">Days 4–5</div>
+          <div class="rm-items">
+            VPS + EasyPanel<br>
+            GitHub + CI/CD<br>
+            Cloudflare DNS<br>
+            Account POC
+          </div>
+        </div>
+
+        <!-- Phase 3 -->
+        <div class="rm-col">
+          <div class="rm-node future">🤖</div>
+          <span class="rm-status-badge future">Week 1–3</span>
+          <div class="rm-phase-title">PersonaGen Build</div>
+          <div class="rm-timeline">Ticket #1 · Score 3</div>
+          <div class="rm-items">
+            5-container stack<br>
+            LLM gateway<br>
+            Media generation<br>
+            Content scheduler
+          </div>
+        </div>
+
+        <!-- Phase 4 -->
+        <div class="rm-col">
+          <div class="rm-node future">🚀</div>
+          <span class="rm-status-badge future">Week 3–4</span>
+          <div class="rm-phase-title">Distribution</div>
+          <div class="rm-timeline">Ticket #1 cont.</div>
+          <div class="rm-items">
+            Proxy layer<br>
+            Account creation<br>
+            Auto-posting<br>
+            Engagement metrics
+          </div>
+        </div>
+
+        <!-- Phase 5 -->
+        <div class="rm-col">
+          <div class="rm-node future">🎯</div>
+          <span class="rm-status-badge future">~Day 30</span>
+          <div class="rm-phase-title">Go-Live</div>
+          <div class="rm-timeline">Production</div>
+          <div class="rm-items">
+            11-point smoke test<br>
+            Credential handoff<br>
+            First live post<br>
+            Metrics live
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Post-launch scale roadmap -->
+    <div style="margin-top:3rem;">
+      <h3 style="font-size:1rem; font-weight:600; margin-bottom:0.4rem;">Post-Launch Scaling Roadmap</h3>
+      <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:0;">After go-live, projects flow continuously as scored tickets. Here's the recommended build order.</p>
+    </div>
+    <div class="postlaunch-grid">
+
+      <div class="pl-quarter">
+        <div class="pl-q-label">Month 2</div>
+        <div class="pl-q-title">Volume &amp; Coverage</div>
+        <div class="pl-milestone">Scale to 100+ personas across 2 platforms</div>
+        <div class="pl-milestone">Expand to secondary platform (TikTok or X)</div>
+        <div class="pl-milestone">Content moderation tuning — brand safety</div>
+        <div class="pl-milestone">Analytics dashboard v2 with engagement trends</div>
+        <div class="pl-milestone">Chrome profile backup automation</div>
+      </div>
+
+      <div class="pl-quarter">
+        <div class="pl-q-label">Month 3</div>
+        <div class="pl-q-title">Intelligence &amp; Automation</div>
+        <div class="pl-milestone">AI content calendar optimizer (best post times)</div>
+        <div class="pl-milestone">Persona performance scoring — retire low performers</div>
+        <div class="pl-milestone">UGC A/B testing — hook vs. CTA variations</div>
+        <div class="pl-milestone">Proxy pool expansion + geographic diversity</div>
+        <div class="pl-milestone">Multi-platform account creation fully automated</div>
+      </div>
+
+      <div class="pl-quarter">
+        <div class="pl-q-label">Month 4+</div>
+        <div class="pl-q-title">Scale &amp; Monetize</div>
+        <div class="pl-milestone">500+ persona roster across all target platforms</div>
+        <div class="pl-milestone">Conversion tracking — persona → product click → sale</div>
+        <div class="pl-milestone">Self-hosted LLM option for cost reduction at scale</div>
+        <div class="pl-milestone">White-label persona export for partner brands</div>
+        <div class="pl-milestone">Autonomous budget manager — reallocate by ROI</div>
       </div>
 
     </div>
