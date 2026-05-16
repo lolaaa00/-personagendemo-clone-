@@ -848,12 +848,13 @@ function renderAgentTable(filter) {
 
 function renderSparkChart() {
     const el = document.getElementById('spark-chart');
-    const w = 500, h = 150, pad = 10;
+    const w = 500, h = 160;
+    const padL = 45, padR = 12, padT = 12, padB = 20;
     const colors = ['#6366f1','#34d399','#fbbf24'];
     const allVals = SPARK_DATA.flat();
     const min = Math.min(...allVals) - 0.5, max = Math.max(...allVals) + 0.5;
-    const scaleX = i => pad + (i / 6) * (w - pad * 2);
-    const scaleY = v => h - pad - ((v - min) / (max - min)) * (h - pad * 2);
+    const scaleX = i => padL + (i / 6) * (w - padL - padR);
+    const scaleY = v => h - padB - ((v - min) / (max - min)) * (h - padT - padB);
 
     const lines = SPARK_DATA.map((data, si) => {
         const pts = data.map((v, i) => `${scaleX(i)},${scaleY(v)}`).join(' ');
@@ -863,15 +864,15 @@ function renderSparkChart() {
 
     // Grid lines
     const gridLines = [min, min + (max-min)/3, min + 2*(max-min)/3, max].map(v =>
-        `<line x1="${pad}" y1="${scaleY(v)}" x2="${w-pad}" y2="${scaleY(v)}" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>
-         <text x="${pad-2}" y="${scaleY(v)+4}" fill="rgba(255,255,255,0.2)" font-size="8" text-anchor="end">${v.toFixed(1)}%</text>`
+        `<line x1="${padL}" y1="${scaleY(v)}" x2="${w-padR}" y2="${scaleY(v)}" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>
+         <text x="${padL-6}" y="${scaleY(v)+3}" fill="rgba(255,255,255,0.25)" font-size="8" text-anchor="end">${v.toFixed(1)}%</text>`
     ).join('');
 
     const dayLabels = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map((d,i) =>
-        `<text x="${scaleX(i)}" y="${h-1}" fill="rgba(255,255,255,0.2)" font-size="8" text-anchor="middle">${d}</text>`
+        `<text x="${scaleX(i)}" y="${h-2}" fill="rgba(255,255,255,0.25)" font-size="8" text-anchor="middle">${d}</text>`
     ).join('');
 
-    el.innerHTML = `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">${gridLines}${lines}${dayLabels}</svg>`;
+    el.innerHTML = `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMidYMid meet">${gridLines}${lines}${dayLabels}</svg>`;
 }
 
 function renderPlatformBars() {
@@ -880,10 +881,9 @@ function renderPlatformBars() {
         <div class="plat-bar-row">
             <span class="plat-bar-label">${p.name}</span>
             <div class="plat-bar-track">
-                <div class="plat-bar-fill" style="width:${p.pct}%;background:${p.color}">
-                    <span class="plat-bar-val">${p.pct}%</span>
-                </div>
+                <div class="plat-bar-fill" style="width:${p.pct}%;background:${p.color}"></div>
             </div>
+            <span class="plat-bar-val">${p.pct}%</span>
         </div>
     `).join('');
 }
