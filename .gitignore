@@ -1,0 +1,5 @@
+# PersonaGen — gitignore
+.env
+node_modules/
+.wrangler/
+dist/
