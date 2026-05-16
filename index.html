@@ -8,30 +8,42 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="tokens.css">
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     <div class="grain-overlay" aria-hidden="true"></div>
     <div class="cursor-glow" id="cursor-glow"></div>
 
-    <!-- ═══════ NAVIGATION ═══════ -->
-    <nav id="main-nav">
-        <div class="nav-inner">
-            <div class="nav-brand">
-                <div class="nav-logo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></div>
-                <span class="nav-title">PersonaGen</span>
+    <!-- Ambient background (shared system) -->
+    <div class="ambient" aria-hidden="true">
+      <div class="ambient-orb" style="opacity:0.04;"></div>
+      <div class="ambient-orb" style="opacity:0.03;"></div>
+      <div class="ambient-orb" style="opacity:0.025;"></div>
+    </div>
+
+    <!-- Shared Nav -->
+    <nav class="pg-nav" id="main-nav">
+        <div class="pg-nav-inner">
+            <a href="index.html" class="pg-nav-brand">
+                <div class="pg-nav-logo">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                </div>
+                <span class="pg-nav-wordmark">PersonaGen</span>
+            </a>
+            <div class="pg-nav-links">
+                <a href="index.html" class="pg-nav-link active">Platform Demo</a>
+                <a href="client-onboarding.html" class="pg-nav-link">Client Portal</a>
+                <div class="pg-nav-sep"></div>
+                <a href="#scout" class="pg-nav-link">Scout</a>
+                <a href="#generator" class="pg-nav-link">Generate</a>
+                <a href="#showcase" class="pg-nav-link">Roster</a>
+                <a href="#calendar" class="pg-nav-link">Calendar</a>
+                <a href="#dashboard" class="pg-nav-link">Dashboard</a>
+                <a href="#milestones" class="pg-nav-link">Pricing</a>
+                <a href="client-onboarding.html" class="pg-nav-link pg-nav-cta">Client Portal →</a>
             </div>
-            <div class="nav-links">
-                <a href="#hero" class="nav-link active">Home</a>
-                <a href="#scout" class="nav-link">Scout</a>
-                <a href="#generator" class="nav-link">Generate</a>
-                <a href="#showcase" class="nav-link">Roster</a>
-                <a href="#calendar" class="nav-link">Calendar</a>
-                <a href="#dashboard" class="nav-link">Dashboard</a>
-                <a href="#pipeline" class="nav-link">Pipeline</a>
-                <a href="#milestones" class="nav-link">Pricing</a>
-            </div>
-            <div class="nav-badge"><span class="pulse-dot"></span>HoneyForX · Live</div>
+            <div class="pg-nav-badge"><span class="pg-nav-pulse"></span>HoneyForX · Live</div>
         </div>
     </nav>
 
