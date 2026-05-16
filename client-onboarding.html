@@ -364,6 +364,17 @@
 }
 .pin-nda-text strong { color: var(--text); }
 
+/* ── Nav sits above PIN gate ── */
+.pg-nav { position: relative; z-index: 10000; }
+
+/* Hide portal-only links while gate is locked */
+body.pin-locked .pg-nav-links a[href^="#"],
+body.pin-locked .pg-nav-links .pg-nav-sep,
+body.pin-locked .pg-nav-links a[href="client-onboarding.html"],
+body.pin-locked .pg-nav-badge {
+  display: none;
+}
+
 /* ── Divider ── */
 .divider { width: 50px; height: 2px; border-radius: 2px; background: linear-gradient(90deg, var(--accent), var(--cyan)); margin: 3.5rem auto; }
 
@@ -1220,6 +1231,8 @@ const PIN = {
       document.getElementById('pin-gate').classList.add('unlocked');
       return;
     }
+    // Mark body as locked so nav hides portal-only links
+    document.body.classList.add('pin-locked');
     // keyboard support
     document.addEventListener('keydown', (e) => {
       if (document.getElementById('pin-gate').classList.contains('unlocked')) return;
@@ -1260,6 +1273,7 @@ const PIN = {
   check() {
     if (this.input === this.CORRECT) {
       sessionStorage.setItem(this.SESSION_KEY, 'yes');
+      document.body.classList.remove('pin-locked');
       document.getElementById('pin-gate').classList.add('unlocked');
     } else {
       for (let i = 0; i < 4; i++) {
