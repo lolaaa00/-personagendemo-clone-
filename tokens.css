@@ -376,3 +376,95 @@ body {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.35; }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   MOBILE NAV — Hamburger + Drawer
+   ═══════════════════════════════════════════════════════════════ */
+
+.pg-nav-hamburger {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 5px;
+  width: 36px; height: 36px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-xs);
+  background: transparent;
+  cursor: pointer;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.pg-nav-hamburger span {
+  display: block;
+  width: 18px; height: 2px;
+  background: var(--text-muted);
+  border-radius: 2px;
+  transition: all 0.25s ease;
+}
+
+.pg-nav-hamburger.open span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+.pg-nav-hamburger.open span:nth-child(2) { opacity: 0; }
+.pg-nav-hamburger.open span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+
+/* Mobile drawer */
+.pg-nav-drawer {
+  display: none;
+  position: fixed;
+  top: 58px; left: 0; right: 0;
+  background: rgba(6,6,11,0.97);
+  backdrop-filter: blur(24px);
+  border-bottom: 1px solid var(--border);
+  z-index: calc(var(--z-nav) - 1);
+  padding: 1rem 1.5rem 1.5rem;
+  flex-direction: column;
+  gap: 0.25rem;
+  transform: translateY(-8px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.pg-nav-drawer.open {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: all;
+}
+
+.pg-nav-drawer .pg-nav-link {
+  display: block;
+  padding: 0.7rem 1rem;
+  font-size: 0.85rem;
+  border-radius: var(--radius-sm);
+  border: none;
+}
+
+.pg-nav-drawer .pg-nav-link.pg-nav-cta {
+  margin-top: 0.5rem;
+  border: 1px solid var(--border-hover);
+  text-align: center;
+}
+
+.pg-nav-drawer-sep {
+  height: 1px;
+  background: var(--border);
+  margin: 0.4rem 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   SHARED RESPONSIVE BREAKPOINTS
+   ═══════════════════════════════════════════════════════════════ */
+
+@media (max-width: 768px) {
+  .pg-nav-links { display: none; }
+  .pg-nav-badge { display: none; }
+  .pg-nav-hamburger { display: flex; }
+  .pg-nav-drawer { display: flex; }
+  .pg-nav-inner { gap: 1rem; }
+
+  /* Reduce ambient orb sizes on mobile */
+  .ambient-orb:nth-child(1) { width: 300px; height: 300px; }
+  .ambient-orb:nth-child(2) { width: 250px; height: 250px; }
+  .ambient-orb:nth-child(3) { width: 200px; height: 200px; }
+}

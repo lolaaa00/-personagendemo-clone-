@@ -44,7 +44,22 @@
                 <a href="client-onboarding.html" class="pg-nav-link pg-nav-cta">Client Portal →</a>
             </div>
             <div class="pg-nav-badge"><span class="pg-nav-pulse"></span>HoneyForX · Live</div>
+            <button class="pg-nav-hamburger" id="pg-hamburger" aria-label="Menu" onclick="toggleNav()">
+              <span></span><span></span><span></span>
+            </button>
         </div>
+    </nav>
+    <nav class="pg-nav-drawer" id="pg-drawer">
+      <a href="index.html" class="pg-nav-link active">Platform Demo</a>
+      <a href="client-onboarding.html" class="pg-nav-link">Client Portal</a>
+      <div class="pg-nav-drawer-sep"></div>
+      <a href="#scout" class="pg-nav-link" onclick="toggleNav()">Scout</a>
+      <a href="#generator" class="pg-nav-link" onclick="toggleNav()">Generate</a>
+      <a href="#showcase" class="pg-nav-link" onclick="toggleNav()">Roster</a>
+      <a href="#calendar" class="pg-nav-link" onclick="toggleNav()">Calendar</a>
+      <a href="#dashboard" class="pg-nav-link" onclick="toggleNav()">Dashboard</a>
+      <a href="#milestones" class="pg-nav-link" onclick="toggleNav()">Pricing</a>
+      <a href="client-onboarding.html" class="pg-nav-link pg-nav-cta">Client Portal →</a>
     </nav>
 
     <!-- ═══════ SECTION 1: HERO ═══════ -->
@@ -491,5 +506,47 @@
     </footer>
 
     <script src="script.js"></script>
+    <script>
+    function toggleNav() {
+      const btn = document.getElementById('pg-hamburger');
+      const drawer = document.getElementById('pg-drawer');
+      btn.classList.toggle('open');
+      drawer.classList.toggle('open');
+    }
+    document.addEventListener('click', function(e) {
+      const btn = document.getElementById('pg-hamburger');
+      const drawer = document.getElementById('pg-drawer');
+      if (btn && drawer && !btn.contains(e.target) && !drawer.contains(e.target)) {
+        btn.classList.remove('open');
+        drawer.classList.remove('open');
+      }
+    });
+    </script>
+    <style>
+    @media (max-width: 640px) {
+      .slide { padding: 3.5rem 0; }
+      .slide-hero { padding: 5rem 1.25rem 3rem; min-height: 90vh; }
+      .hero-title { font-size: clamp(2rem,8vw,2.8rem); }
+      .hero-stats { grid-template-columns: repeat(2,1fr); }
+      .scout-layout, .generator-layout { grid-template-columns: 1fr; }
+      .gen-output { min-height: 240px; }
+      .calendar-week { grid-template-columns: repeat(2,1fr); }
+      .dash-kpi-row { grid-template-columns: repeat(2,1fr); }
+      .dash-chart-row { grid-template-columns: 1fr; }
+      .milestone-grid, .arch-grid { grid-template-columns: 1fr; }
+      .pipeline-flow { flex-direction: column; align-items: stretch; }
+      .pipe-arrow { transform: rotate(90deg); align-self: center; }
+      .influencer-grid { grid-template-columns: 1fr; }
+      .agent-row { grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+      .agent-row-head { display: none; }
+      .slide-inner { padding: 0 1.25rem; }
+      .scout-url-row { flex-direction: column; }
+      .scout-btn { width: 100%; justify-content: center; }
+    }
+    @media (max-width: 400px) {
+      .calendar-week { grid-template-columns: 1fr; }
+      .dash-kpi-row { grid-template-columns: 1fr 1fr; }
+    }
+    </style>
 </body>
 </html>

@@ -42,7 +42,19 @@
       <span class="pg-nav-pulse"></span>
       HoneyForX · Live
     </div>
+    <button class="pg-nav-hamburger" id="pg-hamburger" aria-label="Menu" onclick="toggleNav()">
+      <span></span><span></span><span></span>
+    </button>
   </div>
+</nav>
+<nav class="pg-nav-drawer" id="pg-drawer">
+  <a href="index.html" class="pg-nav-link">Platform Demo</a>
+  <a href="client-onboarding.html" class="pg-nav-link active">Client Portal</a>
+  <div class="pg-nav-drawer-sep"></div>
+  <a href="#roadmap" class="pg-nav-link" onclick="toggleNav()">Roadmap</a>
+  <a href="#pricing" class="pg-nav-link" onclick="toggleNav()">Pricing</a>
+  <a href="#project-manager" class="pg-nav-link" onclick="toggleNav()">Projects</a>
+  <a href="#get-started" class="pg-nav-link pg-nav-cta" onclick="toggleNav()">Get Started →</a>
 </nav>
 
 <style>
@@ -240,6 +252,118 @@
 }
 .cta-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(124,106,237,0.3); }
 
+/* ── PIN Gate ── */
+#pin-gate {
+  position: fixed; inset: 0; z-index: 9999;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(8, 7, 16, 0.97);
+  backdrop-filter: blur(24px);
+  transition: opacity 0.5s ease, visibility 0.5s ease;
+}
+#pin-gate.unlocked {
+  opacity: 0; visibility: hidden; pointer-events: none;
+}
+.pin-card {
+  width: 100%; max-width: 380px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) + 4px);
+  padding: 2.5rem 2rem;
+  text-align: center;
+  box-shadow: 0 0 80px rgba(124,106,237,0.12), 0 32px 64px rgba(0,0,0,0.4);
+  animation: fadeDown 0.5s ease;
+}
+.pin-lock-ico {
+  width: 56px; height: 56px;
+  border-radius: 16px;
+  background: var(--accent-soft);
+  border: 1px solid rgba(124,106,237,0.2);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.5rem;
+  margin: 0 auto 1.25rem;
+}
+.pin-label {
+  font-size: 0.6rem; font-weight: 700; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--accent);
+  margin-bottom: 0.5rem;
+}
+.pin-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.35rem; font-weight: 600;
+  margin-bottom: 0.35rem;
+}
+.pin-subtitle {
+  font-size: 0.78rem; color: var(--text-muted);
+  line-height: 1.55; margin-bottom: 1.75rem;
+}
+.pin-dots {
+  display: flex; justify-content: center; gap: 12px;
+  margin-bottom: 1.5rem;
+}
+.pin-dot {
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  background: transparent;
+  transition: background 0.2s, border-color 0.2s, transform 0.15s;
+}
+.pin-dot.filled {
+  background: var(--accent);
+  border-color: var(--accent);
+  transform: scale(1.1);
+}
+.pin-dot.error {
+  background: var(--rose);
+  border-color: var(--rose);
+  animation: pin-shake 0.4s ease;
+}
+@keyframes pin-shake {
+  0%,100% { transform: translateX(0); }
+  20%,60% { transform: translateX(-4px); }
+  40%,80% { transform: translateX(4px); }
+}
+.pin-pad {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.6rem;
+  margin-bottom: 1rem;
+}
+.pin-key {
+  padding: 0.85rem 0;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 1rem; font-weight: 600;
+  font-family: 'IBM Plex Mono', monospace;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, transform 0.1s;
+  user-select: none;
+}
+.pin-key:hover { background: rgba(124,106,237,0.1); border-color: rgba(124,106,237,0.3); }
+.pin-key:active { transform: scale(0.95); }
+.pin-key.delete { font-family: 'Inter', sans-serif; font-size: 0.85rem; color: var(--text-muted); }
+.pin-error-msg {
+  font-size: 0.72rem; color: var(--rose);
+  min-height: 1em; transition: opacity 0.2s;
+  font-weight: 500;
+}
+.pin-nda-note {
+  margin-top: 1.5rem; padding-top: 1.25rem;
+  border-top: 1px solid var(--border);
+  display: flex; align-items: flex-start; gap: 10px;
+  text-align: left;
+}
+.pin-nda-ico {
+  width: 28px; height: 28px; flex-shrink: 0;
+  border-radius: 8px;
+  background: rgba(236,72,153,0.1);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.85rem; margin-top: 1px;
+}
+.pin-nda-text {
+  font-size: 0.72rem; color: var(--text-muted); line-height: 1.55;
+}
+.pin-nda-text strong { color: var(--text); }
+
 /* ── Divider ── */
 .divider { width: 50px; height: 2px; border-radius: 2px; background: linear-gradient(90deg, var(--accent), var(--cyan)); margin: 3.5rem auto; }
 
@@ -436,6 +560,45 @@ footer {
 </style>
 </head>
 <body>
+
+<!-- PIN Gate -->
+<div id="pin-gate" role="dialog" aria-modal="true" aria-label="Confidential Access — Enter PIN">
+  <div class="pin-card">
+    <div class="pin-lock-ico">🔐</div>
+    <div class="pin-label">Confidential Client Portal</div>
+    <h1 class="pin-title">Enter Your Access PIN</h1>
+    <p class="pin-subtitle">This portal is protected under mutual NDA.<br>Your unique PIN was shared via Telegram.</p>
+
+    <div class="pin-dots" id="pin-dots">
+      <div class="pin-dot" id="pd-0"></div>
+      <div class="pin-dot" id="pd-1"></div>
+      <div class="pin-dot" id="pd-2"></div>
+      <div class="pin-dot" id="pd-3"></div>
+    </div>
+
+    <div class="pin-pad">
+      <button class="pin-key" onclick="PIN.press('1')">1</button>
+      <button class="pin-key" onclick="PIN.press('2')">2</button>
+      <button class="pin-key" onclick="PIN.press('3')">3</button>
+      <button class="pin-key" onclick="PIN.press('4')">4</button>
+      <button class="pin-key" onclick="PIN.press('5')">5</button>
+      <button class="pin-key" onclick="PIN.press('6')">6</button>
+      <button class="pin-key" onclick="PIN.press('7')">7</button>
+      <button class="pin-key" onclick="PIN.press('8')">8</button>
+      <button class="pin-key" onclick="PIN.press('9')">9</button>
+      <button class="pin-key" onclick="PIN.clear()" style="grid-column:1;">Clear</button>
+      <button class="pin-key" onclick="PIN.press('0')">0</button>
+      <button class="pin-key delete" onclick="PIN.del()">⌫</button>
+    </div>
+
+    <div class="pin-error-msg" id="pin-error"></div>
+
+    <div class="pin-nda-note">
+      <div class="pin-nda-ico">🔒</div>
+      <p class="pin-nda-text"><strong>Confidential &amp; NDA Protected.</strong> All information within this portal — including strategy, pricing, timelines, and deliverables — is covered by our mutual non-disclosure agreement and is strictly private.</p>
+    </div>
+  </div>
+</div>
 
 <!-- Ambient -->
 <div class="ambient">
@@ -1046,6 +1209,72 @@ footer {
 </footer>
 
 <script>
+// ── PIN Gate ──
+const PIN = {
+  CORRECT: '2025',          // ← change this to client's PIN
+  SESSION_KEY: 'pg_portal_unlocked',
+  input: '',
+
+  init() {
+    if (sessionStorage.getItem(this.SESSION_KEY) === 'yes') {
+      document.getElementById('pin-gate').classList.add('unlocked');
+      return;
+    }
+    // keyboard support
+    document.addEventListener('keydown', (e) => {
+      if (document.getElementById('pin-gate').classList.contains('unlocked')) return;
+      if (/^[0-9]$/.test(e.key)) this.press(e.key);
+      if (e.key === 'Backspace') this.del();
+      if (e.key === 'Escape') this.clear();
+    });
+  },
+
+  press(digit) {
+    if (this.input.length >= 4) return;
+    this.input += digit;
+    this.updateDots();
+    if (this.input.length === 4) setTimeout(() => this.check(), 120);
+  },
+
+  del() {
+    this.input = this.input.slice(0, -1);
+    this.updateDots();
+    document.getElementById('pin-error').textContent = '';
+  },
+
+  clear() {
+    this.input = '';
+    this.updateDots();
+    document.getElementById('pin-error').textContent = '';
+  },
+
+  updateDots(state) {
+    for (let i = 0; i < 4; i++) {
+      const dot = document.getElementById('pd-' + i);
+      dot.className = 'pin-dot';
+      if (state === 'error') { dot.classList.add('error'); return; }
+      if (i < this.input.length) dot.classList.add('filled');
+    }
+  },
+
+  check() {
+    if (this.input === this.CORRECT) {
+      sessionStorage.setItem(this.SESSION_KEY, 'yes');
+      document.getElementById('pin-gate').classList.add('unlocked');
+    } else {
+      for (let i = 0; i < 4; i++) {
+        const dot = document.getElementById('pd-' + i);
+        dot.classList.remove('filled');
+        dot.classList.add('error');
+      }
+      document.getElementById('pin-error').textContent = 'Incorrect PIN — try again.';
+      setTimeout(() => { this.input = ''; this.updateDots(); }, 700);
+    }
+  }
+};
+
+PIN.init();
+
 // ── Scroll reveal ──
 const observer = new IntersectionObserver((entries) => {
   entries.forEach(e => {
@@ -1200,6 +1429,62 @@ const PM = {
 
 PM.render();
 </script>
+
+<script>
+// ── Mobile Nav Toggle ──
+function toggleNav() {
+  const btn = document.getElementById('pg-hamburger');
+  const drawer = document.getElementById('pg-drawer');
+  btn.classList.toggle('open');
+  drawer.classList.toggle('open');
+}
+// Close drawer on outside click
+document.addEventListener('click', function(e) {
+  const btn = document.getElementById('pg-hamburger');
+  const drawer = document.getElementById('pg-drawer');
+  if (btn && drawer && !btn.contains(e.target) && !drawer.contains(e.target)) {
+    btn.classList.remove('open');
+    drawer.classList.remove('open');
+  }
+});
+</script>
+
+<style>
+/* ── Portal mobile overrides ── */
+@media (max-width: 640px) {
+  .section { padding: var(--section-py-sm) 0; }
+  .hero { padding: 5rem 1.25rem 3rem; }
+  .hero h1 { font-size: clamp(1.9rem, 8vw, 2.8rem); }
+  .container { padding: 0 1.25rem; }
+  .scope-bar { gap: 0.5rem; }
+  .scope-chip { font-size: 0.72rem; padding: 6px 10px; }
+  .score-grid { grid-template-columns: 1fr; }
+  .detail-grid { grid-template-columns: 1fr; }
+  .clause-grid { grid-template-columns: 1fr; }
+  .roadmap-cols { grid-template-columns: repeat(2,1fr); gap: 0.5rem; }
+  .roadmap-track::before { display: none; }
+  .postlaunch-grid { grid-template-columns: 1fr; }
+  .rm-node { width: 44px; height: 44px; font-size: 0.9rem; }
+  .phase { padding-left: 48px; }
+  .journey::before { left: 16px; }
+  .phase-dot { left: 5px; }
+  .phase-card { padding: 1.25rem; }
+  .benefits-grid { grid-template-columns: 1fr; }
+  .comm-row { flex-wrap: wrap; }
+  .comm-sla { margin-top: 0.25rem; }
+  /* Pricing cards */
+  .pricing-grid { grid-template-columns: 1fr !important; }
+  /* PM dashboard */
+  .pm-grid { grid-template-columns: 1fr 1fr !important; }
+  .pm-stats { grid-template-columns: repeat(2,1fr) !important; }
+  .ticket-meta { flex-wrap: wrap; gap: 4px; }
+}
+@media (max-width: 480px) {
+  .roadmap-cols { grid-template-columns: 1fr; }
+  .score-grid { grid-template-columns: 1fr; }
+}
+</style>
 </body>
 </html>
+
 
