@@ -848,31 +848,51 @@ function renderAgentTable(filter) {
 
 function renderSparkChart() {
     const el = document.getElementById('spark-chart');
-    const w = 500, h = 160;
-    const padL = 45, padR = 12, padT = 12, padB = 20;
+    const w = 520, h = 200;
+    const padL = 48, padR = 16, padT = 16, padB = 28;
     const colors = ['#6366f1','#34d399','#fbbf24'];
+    const colorsSoft = ['rgba(99,102,241,0.12)','rgba(52,211,153,0.10)','rgba(251,191,36,0.10)'];
     const allVals = SPARK_DATA.flat();
     const min = Math.min(...allVals) - 0.5, max = Math.max(...allVals) + 0.5;
-    const scaleX = i => padL + (i / 6) * (w - padL - padR);
-    const scaleY = v => h - padB - ((v - min) / (max - min)) * (h - padT - padB);
+    const chartW = w - padL - padR, chartH = h - padT - padB;
+    const scaleX = i => padL + (i / 6) * chartW;
+    const scaleY = v => h - padB - ((v - min) / (max - min)) * chartH;
 
-    const lines = SPARK_DATA.map((data, si) => {
-        const pts = data.map((v, i) => `${scaleX(i)},${scaleY(v)}`).join(' ');
-        const dots = data.map((v, i) => `<circle cx="${scaleX(i)}" cy="${scaleY(v)}" r="3.5" fill="${colors[si]}" opacity="0.9"/>`).join('');
-        return `<polyline points="${pts}" fill="none" stroke="${colors[si]}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.8"/>${dots}`;
+    // Gradient defs for area fills
+    const defs = colors.map((c, i) =>
+        `<linearGradient id="areaGrad${i}" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="${c}" stop-opacity="0.18"/>
+            <stop offset="100%" stop-color="${c}" stop-opacity="0.0"/>
+        </linearGradient>`
+    ).join('');
+
+    const linesAndAreas = SPARK_DATA.map((data, si) => {
+        const pts = data.map((v, i) => `${scaleX(i)},${scaleY(v)}`);
+        const linePts = pts.join(' ');
+        // Area fill polygon: line + close along bottom
+        const areaPath = `${pts.join(' ')} ${scaleX(6)},${h - padB} ${scaleX(0)},${h - padB}`;
+        const dots = data.map((v, i) =>
+            `<circle cx="${scaleX(i)}" cy="${scaleY(v)}" r="6" fill="${colors[si]}" opacity="0.15"/>
+             <circle cx="${scaleX(i)}" cy="${scaleY(v)}" r="4" fill="${colors[si]}" opacity="0.9" stroke="rgba(0,0,0,0.3)" stroke-width="1"/>`
+        ).join('');
+        return `<polygon points="${areaPath}" fill="url(#areaGrad${si})"/>
+                <polyline points="${linePts}" fill="none" stroke="${colors[si]}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>
+                ${dots}`;
     }).join('');
 
-    // Grid lines
-    const gridLines = [min, min + (max-min)/3, min + 2*(max-min)/3, max].map(v =>
-        `<line x1="${padL}" y1="${scaleY(v)}" x2="${w-padR}" y2="${scaleY(v)}" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>
-         <text x="${padL-6}" y="${scaleY(v)+3}" fill="rgba(255,255,255,0.25)" font-size="8" text-anchor="end">${v.toFixed(1)}%</text>`
-    ).join('');
+    // Grid lines & Y-axis labels
+    const steps = 4;
+    const gridLines = Array.from({length: steps + 1}, (_, i) => {
+        const v = min + (i / steps) * (max - min);
+        return `<line x1="${padL}" y1="${scaleY(v)}" x2="${w - padR}" y2="${scaleY(v)}" stroke="rgba(255,255,255,0.06)" stroke-width="1" stroke-dasharray="${i === 0 ? 'none' : '3,4'}"/>
+                <text x="${padL - 8}" y="${scaleY(v) + 4}" fill="rgba(255,255,255,0.35)" font-size="10" font-weight="500" text-anchor="end" font-family="var(--font-mono,monospace)">${v.toFixed(1)}%</text>`;
+    }).join('');
 
     const dayLabels = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map((d,i) =>
-        `<text x="${scaleX(i)}" y="${h-2}" fill="rgba(255,255,255,0.25)" font-size="8" text-anchor="middle">${d}</text>`
+        `<text x="${scaleX(i)}" y="${h - 6}" fill="rgba(255,255,255,0.35)" font-size="10" font-weight="500" text-anchor="middle" font-family="var(--font-body,sans-serif)">${d}</text>`
     ).join('');
 
-    el.innerHTML = `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMidYMid meet">${gridLines}${lines}${dayLabels}</svg>`;
+    el.innerHTML = `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMidYMid meet"><defs>${defs}</defs>${gridLines}${linesAndAreas}${dayLabels}</svg>`;
 }
 
 function renderPlatformBars() {
