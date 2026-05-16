@@ -3,24 +3,35 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Welcome Aboard — Your Managed Plan Journey</title>
+<title>Welcome Aboard — PersonaGen AI Influencer Platform</title>
+<meta name="description" content="Your managed plan onboarding journey for AI influencer content generation. From brand brief to autonomous UGC pipeline.">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
 :root {
-  --bg: #0a0a0f;
-  --surface: #12121a;
-  --surface-2: #1a1a26;
-  --border: rgba(255,255,255,0.06);
+  --bg: #06060b;
+  --surface: #0e0e16;
+  --surface-2: #161622;
+  --surface-3: #1e1e2e;
+  --border: rgba(255,255,255,0.05);
+  --border-hover: rgba(124,106,237,0.25);
   --text: #e8e6f0;
-  --text-muted: #8a8899;
+  --text-muted: #7a7890;
+  --text-dim: #5a5870;
   --accent: #7c6aed;
-  --accent-glow: rgba(124,106,237,0.15);
+  --accent-soft: rgba(124,106,237,0.12);
+  --accent-mid: rgba(124,106,237,0.25);
+  --cyan: #22d3ee;
+  --cyan-soft: rgba(34,211,238,0.1);
   --gold: #d4a853;
-  --gold-glow: rgba(212,168,83,0.12);
+  --gold-soft: rgba(212,168,83,0.1);
   --success: #34d399;
+  --success-soft: rgba(52,211,153,0.1);
+  --rose: #f472b6;
+  --rose-soft: rgba(244,114,182,0.1);
   --radius: 16px;
+  --radius-sm: 10px;
 }
 
 body {
@@ -31,456 +42,544 @@ body {
   overflow-x: hidden;
 }
 
-/* Hero */
-.hero {
-  min-height: 70vh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  padding: 4rem 2rem;
-  position: relative;
-  overflow: hidden;
+/* ── Ambient Background ── */
+.ambient {
+  position: fixed; inset: 0; pointer-events: none; z-index: 0;
 }
-.hero::before {
-  content: '';
+.ambient-orb {
   position: absolute;
-  top: -40%;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 800px;
-  height: 800px;
-  background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
-  pointer-events: none;
-}
-.hero-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 20px;
-  border-radius: 100px;
-  background: var(--accent-glow);
-  border: 1px solid rgba(124,106,237,0.2);
-  font-size: 0.8rem;
-  font-weight: 500;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--accent);
-  margin-bottom: 2rem;
-  animation: fadeDown 0.8s ease;
-}
-.hero-badge .dot {
-  width: 8px; height: 8px;
-  background: var(--success);
   border-radius: 50%;
-  animation: pulse 2s infinite;
+  filter: blur(120px);
+  opacity: 0.07;
 }
+.ambient-orb:nth-child(1) { width: 600px; height: 600px; background: var(--accent); top: -10%; left: 30%; }
+.ambient-orb:nth-child(2) { width: 500px; height: 500px; background: var(--cyan); top: 40%; right: -10%; }
+.ambient-orb:nth-child(3) { width: 400px; height: 400px; background: var(--rose); bottom: 10%; left: -5%; }
+
+/* ── Hero ── */
+.hero {
+  min-height: 75vh;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; padding: 5rem 2rem 4rem;
+  position: relative; z-index: 1;
+}
+.hero-eyebrow {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 7px 18px; border-radius: 100px;
+  background: var(--accent-soft); border: 1px solid var(--accent-mid);
+  font-size: 0.75rem; font-weight: 600; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--accent);
+  margin-bottom: 2rem;
+  animation: fadeDown 0.7s ease;
+}
+.hero-eyebrow .pulse { width: 7px; height: 7px; background: var(--success); border-radius: 50%; animation: pulse 2s infinite; }
 .hero h1 {
   font-family: 'Playfair Display', serif;
-  font-size: clamp(2.5rem, 6vw, 4.5rem);
-  font-weight: 600;
-  line-height: 1.15;
-  margin-bottom: 1.5rem;
-  animation: fadeDown 0.8s ease 0.1s both;
+  font-size: clamp(2.4rem, 5.5vw, 4.2rem); font-weight: 600;
+  line-height: 1.15; margin-bottom: 1.5rem;
+  animation: fadeDown 0.7s ease 0.1s both;
 }
-.hero h1 span { color: var(--accent); }
+.hero h1 .grad {
+  background: linear-gradient(135deg, var(--accent), var(--cyan));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+}
 .hero p {
-  max-width: 560px;
-  color: var(--text-muted);
-  font-size: 1.1rem;
-  animation: fadeDown 0.8s ease 0.2s both;
+  max-width: 540px; color: var(--text-muted); font-size: 1.05rem;
+  animation: fadeDown 0.7s ease 0.2s both;
 }
 
-/* Container */
-.container { max-width: 900px; margin: 0 auto; padding: 0 2rem; }
+/* ── Timeline badges ── */
+.scope-bar {
+  display: flex; justify-content: center; gap: 1.5rem; flex-wrap: wrap;
+  margin-top: 2.5rem; animation: fadeDown 0.7s ease 0.3s both;
+}
+.scope-chip {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 16px; border-radius: var(--radius-sm);
+  background: var(--surface); border: 1px solid var(--border);
+  font-size: 0.8rem; color: var(--text-muted);
+}
+.scope-chip strong { color: var(--text); }
+.scope-chip .dot { width: 6px; height: 6px; border-radius: 50%; }
+.dot-purple { background: var(--accent); }
+.dot-cyan { background: var(--cyan); }
+.dot-gold { background: var(--gold); }
 
-/* Section */
+/* ── Container ── */
+.container { max-width: 880px; margin: 0 auto; padding: 0 2rem; position: relative; z-index: 1; }
+
+/* ── Section ── */
 .section { padding: 5rem 0; }
-.section-label {
-  font-size: 0.75rem;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--accent);
-  margin-bottom: 1rem;
+.section-eyebrow {
+  font-size: 0.72rem; font-weight: 600; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--accent); margin-bottom: 0.75rem;
 }
 .section-title {
   font-family: 'Playfair Display', serif;
-  font-size: 2rem;
-  font-weight: 600;
-  margin-bottom: 1rem;
+  font-size: 1.9rem; font-weight: 600; margin-bottom: 0.75rem;
 }
-.section-desc {
-  color: var(--text-muted);
-  max-width: 600px;
-  margin-bottom: 3rem;
-}
+.section-desc { color: var(--text-muted); max-width: 580px; margin-bottom: 2.5rem; font-size: 0.95rem; }
 
-/* Journey Timeline */
+/* ── Journey ── */
 .journey { position: relative; }
 .journey::before {
-  content: '';
-  position: absolute;
-  left: 28px;
-  top: 0;
-  bottom: 0;
-  width: 2px;
-  background: linear-gradient(to bottom, var(--accent), var(--gold), var(--success));
-  opacity: 0.3;
+  content: ''; position: absolute; left: 24px; top: 0; bottom: 0; width: 2px;
+  background: linear-gradient(to bottom, var(--accent) 0%, var(--cyan) 40%, var(--gold) 70%, var(--success) 100%);
+  opacity: 0.2;
 }
-.phase {
-  position: relative;
-  padding-left: 72px;
-  padding-bottom: 3.5rem;
-  animation: fadeUp 0.6s ease both;
-}
+.phase { position: relative; padding-left: 64px; padding-bottom: 3rem; }
 .phase:last-child { padding-bottom: 0; }
-.phase-marker {
-  position: absolute;
-  left: 14px;
-  top: 4px;
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.75rem;
-  font-weight: 700;
-  z-index: 1;
+.phase-dot {
+  position: absolute; left: 13px; top: 6px;
+  width: 24px; height: 24px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.65rem; font-weight: 700; color: #fff; z-index: 1;
 }
-.phase:nth-child(1) .phase-marker { background: var(--accent); color: #fff; }
-.phase:nth-child(2) .phase-marker { background: #6366f1; color: #fff; }
-.phase:nth-child(3) .phase-marker { background: #8b5cf6; color: #fff; }
-.phase:nth-child(4) .phase-marker { background: #a78bfa; color: #fff; }
-.phase:nth-child(5) .phase-marker { background: var(--gold); color: #1a1a26; }
-.phase:nth-child(6) .phase-marker { background: #f59e0b; color: #1a1a26; }
-.phase:nth-child(7) .phase-marker { background: var(--success); color: #1a1a26; }
-
 .phase-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 2rem;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 1.75rem;
   transition: border-color 0.3s, box-shadow 0.3s;
 }
 .phase-card:hover {
-  border-color: rgba(124,106,237,0.2);
-  box-shadow: 0 8px 40px rgba(124,106,237,0.06);
+  border-color: var(--border-hover);
+  box-shadow: 0 6px 30px rgba(124,106,237,0.05);
 }
-.phase-title {
-  font-size: 1.25rem;
-  font-weight: 600;
-  margin-bottom: 0.5rem;
+.phase-scope {
+  display: inline-block; padding: 3px 10px; border-radius: 6px;
+  font-size: 0.65rem; font-weight: 600; letter-spacing: 0.06em;
+  text-transform: uppercase; margin-bottom: 0.75rem;
 }
-.phase-subtitle {
-  color: var(--text-muted);
-  font-size: 0.9rem;
-  margin-bottom: 1.25rem;
-}
-.deliverables {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
+.scope-agreement { background: var(--rose-soft); color: var(--rose); }
+.scope-onboarding { background: var(--accent-soft); color: var(--accent); }
+.scope-project { background: var(--cyan-soft); color: var(--cyan); }
+.scope-golive { background: var(--success-soft); color: var(--success); }
+.phase-title { font-size: 1.15rem; font-weight: 600; margin-bottom: 0.4rem; }
+.phase-sub { color: var(--text-muted); font-size: 0.88rem; margin-bottom: 1rem; }
+.tags { display: flex; flex-wrap: wrap; gap: 6px; }
 .tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 14px;
-  border-radius: 8px;
-  font-size: 0.8rem;
-  font-weight: 500;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  color: var(--text-muted);
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 12px; border-radius: 7px; font-size: 0.76rem; font-weight: 500;
+  background: var(--surface-2); border: 1px solid var(--border); color: var(--text-muted);
 }
-.tag .icon { font-size: 0.9rem; }
+.tag .ico { font-size: 0.85rem; }
 
-/* What You Get Grid */
-.benefits-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 1.5rem;
+/* ── Gate Dividers ── */
+.gate {
+  position: relative; padding-left: 64px; padding-bottom: 2.5rem;
+  display: flex; align-items: center; gap: 12px;
 }
-.benefit-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 2rem;
-  transition: transform 0.3s, border-color 0.3s;
-}
-.benefit-card:hover {
-  transform: translateY(-4px);
-  border-color: rgba(124,106,237,0.2);
-}
-.benefit-icon {
-  width: 48px; height: 48px;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.4rem;
-  margin-bottom: 1.25rem;
-  background: var(--accent-glow);
-}
-.benefit-card h3 { font-size: 1.05rem; font-weight: 600; margin-bottom: 0.5rem; }
-.benefit-card p { color: var(--text-muted); font-size: 0.88rem; }
-
-/* SLA */
-.sla-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 1rem;
-}
-.sla-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 1.5rem;
-  text-align: center;
-}
-.sla-score {
-  font-family: 'Playfair Display', serif;
-  font-size: 2rem;
-  font-weight: 700;
-  color: var(--accent);
-}
-.sla-label { font-weight: 600; font-size: 0.9rem; margin: 0.25rem 0; }
-.sla-time { color: var(--text-muted); font-size: 0.8rem; }
-.sla-desc { color: var(--text-muted); font-size: 0.75rem; margin-top: 0.5rem; }
-
-/* Communication */
-.comm-row {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  padding: 1.25rem 1.5rem;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  margin-bottom: 0.75rem;
-  transition: border-color 0.3s;
-}
-.comm-row:hover { border-color: rgba(124,106,237,0.15); }
-.comm-icon {
-  width: 42px; height: 42px;
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.2rem;
-  background: var(--accent-glow);
-  flex-shrink: 0;
-}
-.comm-info { flex: 1; }
-.comm-info strong { font-size: 0.95rem; }
-.comm-info p { color: var(--text-muted); font-size: 0.82rem; margin-top: 2px; }
-.comm-sla {
-  padding: 4px 12px;
-  border-radius: 6px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  background: var(--surface-2);
-  color: var(--accent);
+.gate-line { flex: 1; height: 1px; background: var(--border); }
+.gate-label {
+  padding: 4px 14px; border-radius: 6px; font-size: 0.7rem;
+  font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
   white-space: nowrap;
 }
+.gate-check { background: var(--accent-soft); color: var(--accent); }
+.gate-final { background: var(--success-soft); color: var(--success); }
 
-/* CTA */
-.cta-section {
-  text-align: center;
-  padding: 5rem 2rem;
+/* ── Benefits Grid ── */
+.benefits-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.25rem; }
+.benefit {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 1.75rem;
+  transition: transform 0.3s, border-color 0.3s;
 }
-.cta-section h2 {
+.benefit:hover { transform: translateY(-3px); border-color: var(--border-hover); }
+.benefit-ico {
+  width: 44px; height: 44px; border-radius: 11px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.3rem; margin-bottom: 1rem;
+}
+.benefit h3 { font-size: 0.98rem; font-weight: 600; margin-bottom: 0.4rem; }
+.benefit p { color: var(--text-muted); font-size: 0.84rem; }
+
+/* ── Scoring Grid ── */
+.score-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+.score-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 1.5rem; text-align: center;
+  transition: border-color 0.3s;
+}
+.score-card:hover { border-color: var(--border-hover); }
+.score-num {
   font-family: 'Playfair Display', serif;
-  font-size: 2.2rem;
-  margin-bottom: 1rem;
+  font-size: 2.2rem; font-weight: 700; line-height: 1;
 }
-.cta-section p {
-  color: var(--text-muted);
-  max-width: 480px;
-  margin: 0 auto 2rem;
+.score-label { font-weight: 600; font-size: 0.9rem; margin: 0.35rem 0 0.15rem; }
+.score-eta { color: var(--accent); font-size: 0.78rem; font-weight: 500; }
+.score-desc { color: var(--text-muted); font-size: 0.75rem; margin-top: 0.4rem; }
+
+/* ── Comm Rows ── */
+.comm-row {
+  display: flex; align-items: center; gap: 1rem;
+  padding: 1.1rem 1.4rem; background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); margin-bottom: 0.6rem;
+  transition: border-color 0.3s;
 }
+.comm-row:hover { border-color: var(--border-hover); }
+.comm-ico {
+  width: 40px; height: 40px; border-radius: var(--radius-sm);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.15rem; flex-shrink: 0;
+}
+.comm-body { flex: 1; }
+.comm-body strong { font-size: 0.92rem; }
+.comm-body p { color: var(--text-muted); font-size: 0.8rem; margin-top: 1px; }
+.comm-sla {
+  padding: 3px 11px; border-radius: 6px; font-size: 0.72rem;
+  font-weight: 600; white-space: nowrap;
+}
+
+/* ── CTA ── */
+.cta { text-align: center; padding: 5rem 2rem; position: relative; z-index: 1; }
+.cta h2 { font-family: 'Playfair Display', serif; font-size: 2rem; margin-bottom: 0.75rem; }
+.cta p { color: var(--text-muted); max-width: 440px; margin: 0 auto 2rem; font-size: 0.95rem; }
 .cta-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  padding: 14px 36px;
-  border-radius: 12px;
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 13px 34px; border-radius: 12px;
   background: linear-gradient(135deg, var(--accent), #6366f1);
-  color: #fff;
-  font-weight: 600;
-  font-size: 1rem;
-  text-decoration: none;
-  border: none;
-  cursor: pointer;
+  color: #fff; font-weight: 600; font-size: 0.95rem;
+  text-decoration: none; border: none; cursor: pointer;
   transition: transform 0.2s, box-shadow 0.3s;
 }
-.cta-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 30px rgba(124,106,237,0.3);
-}
+.cta-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(124,106,237,0.3); }
 
-/* Footer */
+/* ── Divider ── */
+.divider { width: 50px; height: 2px; border-radius: 2px; background: linear-gradient(90deg, var(--accent), var(--cyan)); margin: 3.5rem auto; }
+
+/* ── Footer ── */
 footer {
-  text-align: center;
-  padding: 3rem 2rem;
-  border-top: 1px solid var(--border);
-  color: var(--text-muted);
-  font-size: 0.82rem;
+  text-align: center; padding: 2.5rem 2rem;
+  border-top: 1px solid var(--border); color: var(--text-dim); font-size: 0.78rem;
+  position: relative; z-index: 1;
 }
 
-/* Divider */
-.divider {
-  width: 60px;
-  height: 3px;
-  border-radius: 2px;
-  background: linear-gradient(90deg, var(--accent), var(--gold));
-  margin: 4rem auto;
+/* ── Expandable Details ── */
+.phase-details {
+  margin-top: 1rem; border-top: 1px solid var(--border); padding-top: 1rem;
+}
+.phase-details summary {
+  font-size: 0.78rem; font-weight: 600; color: var(--accent); cursor: pointer;
+  list-style: none; display: flex; align-items: center; gap: 6px;
+  transition: color 0.2s;
+}
+.phase-details summary::-webkit-details-marker { display: none; }
+.phase-details summary::before {
+  content: '▸'; transition: transform 0.2s; display: inline-block;
+}
+.phase-details[open] summary::before { transform: rotate(90deg); }
+.phase-details summary:hover { color: var(--rose); }
+.detail-content { padding-top: 1rem; }
+.detail-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem;
+}
+.detail-item {
+  padding: 0.75rem 1rem; border-radius: var(--radius-sm);
+  background: var(--surface-2); border: 1px solid var(--border);
+}
+.detail-item-label {
+  font-size: 0.65rem; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.08em; margin-bottom: 0.3rem;
+}
+.detail-item-label.rose { color: var(--rose); }
+.detail-item-label.accent { color: var(--accent); }
+.detail-item-label.cyan { color: var(--cyan); }
+.detail-item-label.gold { color: var(--gold); }
+.detail-item-label.green { color: var(--success); }
+.detail-item-value {
+  font-size: 0.78rem; color: var(--text-muted); line-height: 1.5;
 }
 
-/* Animations */
-@keyframes fadeDown {
-  from { opacity: 0; transform: translateY(-20px); }
-  to { opacity: 1; transform: translateY(0); }
+/* ── Agreement Section ── */
+.clause-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem;
 }
-@keyframes fadeUp {
-  from { opacity: 0; transform: translateY(20px); }
-  to { opacity: 1; transform: translateY(0); }
+.clause-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 1.5rem;
+  transition: border-color 0.3s;
+  border-left: 3px solid var(--accent);
 }
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
-}
+.clause-card:hover { border-color: var(--border-hover); }
+.clause-card:nth-child(2) { border-left-color: var(--cyan); }
+.clause-card:nth-child(3) { border-left-color: var(--rose); }
+.clause-card:nth-child(4) { border-left-color: var(--gold); }
+.clause-card:nth-child(5) { border-left-color: var(--success); }
+.clause-card:nth-child(6) { border-left-color: var(--accent); }
+.clause-card:nth-child(7) { border-left-color: var(--cyan); }
+.clause-card:nth-child(8) { border-left-color: var(--rose); }
+.clause-ico { font-size: 1.2rem; margin-bottom: 0.6rem; }
+.clause-title { font-size: 0.9rem; font-weight: 600; margin-bottom: 0.35rem; }
+.clause-desc { font-size: 0.8rem; color: var(--text-muted); line-height: 1.55; }
 
-/* Mobile */
 @media (max-width: 640px) {
-  .hero { min-height: 50vh; padding: 3rem 1.5rem; }
+  .detail-grid { grid-template-columns: 1fr; }
+  .clause-grid { grid-template-columns: 1fr; }
+}
+
+/* ── Animations ── */
+@keyframes fadeDown { from { opacity: 0; transform: translateY(-16px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+/* ── Mobile ── */
+@media (max-width: 640px) {
+  .hero { min-height: 55vh; padding: 3.5rem 1.5rem 3rem; }
   .container { padding: 0 1.25rem; }
-  .phase { padding-left: 56px; }
-  .journey::before { left: 20px; }
-  .phase-marker { left: 6px; }
-  .sla-grid { grid-template-columns: repeat(2, 1fr); }
+  .phase { padding-left: 50px; }
+  .journey::before { left: 18px; }
+  .phase-dot { left: 7px; }
+  .score-grid { grid-template-columns: 1fr; }
+  .scope-bar { gap: 0.75rem; }
+  .gate { padding-left: 50px; }
 }
 </style>
 </head>
 <body>
 
+<!-- Ambient -->
+<div class="ambient">
+  <div class="ambient-orb"></div>
+  <div class="ambient-orb"></div>
+  <div class="ambient-orb"></div>
+</div>
+
 <!-- Hero -->
-<section class="hero">
-  <div class="hero-badge"><span class="dot"></span> Managed Plan — Unlimited Projects</div>
-  <h1>Welcome to <span>Your Team</span></h1>
-  <p>We handle the technical heavy lifting so you can focus on growing your business. Here's exactly how we bring your vision to life.</p>
+<section class="hero" id="hero">
+  <div class="hero-eyebrow"><span class="pulse"></span> PersonaGen — Managed Plan Active</div>
+  <h1>Your <span class="grad">AI Influencer</span><br>Pipeline Starts Here</h1>
+  <p>We handle the infrastructure, AI models, and automation so you can focus on scaling your brand with autonomous UGC creators.</p>
+  <div class="scope-bar">
+    <div class="scope-chip"><div class="dot" style="background:var(--rose);"></div> <strong>Agreement</strong>&nbsp;1–2 days</div>
+    <div class="scope-chip"><div class="dot dot-purple"></div> <strong>Onboarding</strong>&nbsp;2–3 days</div>
+    <div class="scope-chip"><div class="dot dot-cyan"></div> <strong>First Build</strong>&nbsp;2–4 weeks</div>
+    <div class="scope-chip"><div class="dot dot-gold"></div> <strong>Go Live</strong>&nbsp;Day 1</div>
+  </div>
 </section>
 
 <!-- Journey -->
 <section class="section">
   <div class="container">
-    <span class="section-label">Your Onboarding Journey</span>
-    <h2 class="section-title">From Hello to Production in 3–5 Days</h2>
-    <p class="section-desc">Every managed client follows a structured onboarding path. Each phase builds on the last, and we don't move forward until everything is verified and confirmed.</p>
+    <span class="section-eyebrow">Your Journey</span>
+    <h2 class="section-title">From Proposal to Autonomous Pipeline</h2>
+    <p class="section-desc">Every phase builds on the last. We don't move forward until everything is verified, confirmed, and signed.</p>
 
     <div class="journey">
 
-      <div class="phase" style="animation-delay:0.1s">
-        <div class="phase-marker">1</div>
+      <!-- Phase 0 -->
+      <div class="phase" id="phase-0">
+        <div class="phase-dot" style="background:var(--rose);">0</div>
         <div class="phase-card">
-          <h3 class="phase-title">Welcome & Discovery</h3>
-          <p class="phase-subtitle">We get to know your business, confirm your plan, and establish our communication channel.</p>
-          <div class="deliverables">
-            <span class="tag"><span class="icon">💬</span> Telegram thread</span>
-            <span class="tag"><span class="icon">📋</span> Business details</span>
-            <span class="tag"><span class="icon">🌐</span> Domain preferences</span>
-            <span class="tag"><span class="icon">📄</span> SLA expectations</span>
+          <span class="phase-scope scope-agreement">Pre-Onboarding · Days 1–2</span>
+          <h3 class="phase-title">Proposal & Service Agreement</h3>
+          <p class="phase-sub">We send a detailed proposal covering scope, pricing, and timelines. Once reviewed, you sign the service agreement and we're officially engaged.</p>
+          <div class="tags">
+            <span class="tag"><span class="ico">📄</span> Service proposal</span>
+            <span class="tag"><span class="ico">✍️</span> Signed agreement</span>
+            <span class="tag"><span class="ico">🔒</span> IP & NDA</span>
+            <span class="tag"><span class="ico">💳</span> Payment confirmed</span>
+          </div>
+
+          <details class="phase-details">
+            <summary>View proposal & agreement details</summary>
+            <div class="detail-content">
+              <p style="font-size:0.78rem; color:var(--text-muted); margin-bottom:1rem;">Your proposal will include the following, and the service agreement will formalize each item before any work begins.</p>
+              <div class="detail-grid">
+                <div class="detail-item">
+                  <div class="detail-item-label rose">Scope of Work</div>
+                  <div class="detail-item-value">AI influencer generation, UGC content pipeline, account management, content scheduling, analytics dashboard, infrastructure</div>
+                </div>
+                <div class="detail-item">
+                  <div class="detail-item-label accent">IP Ownership</div>
+                  <div class="detail-item-value">You own all generated personas, content, and brand assets. We retain platform and tooling intellectual property.</div>
+                </div>
+                <div class="detail-item">
+                  <div class="detail-item-label cyan">Pricing & Costs</div>
+                  <div class="detail-item-value">Managed plan fee + operational costs (AI models, proxies, image generation) passed through with monthly caps.</div>
+                </div>
+                <div class="detail-item">
+                  <div class="detail-item-label gold">Payment Terms</div>
+                  <div class="detail-item-value">Monthly billing, Net-15. Work pauses after 30 days overdue. First payment due at signing.</div>
+                </div>
+                <div class="detail-item">
+                  <div class="detail-item-label green">SLA Commitments</div>
+                  <div class="detail-item-value">Telegram response < 4 hours. Turnaround per complexity tier. Extension protocol with written approval.</div>
+                </div>
+                <div class="detail-item">
+                  <div class="detail-item-label rose">Confidentiality</div>
+                  <div class="detail-item-value">Mutual NDA. Your data is never shared. Brand assets are protected under the agreement.</div>
+                </div>
+                <div class="detail-item">
+                  <div class="detail-item-label accent">Termination</div>
+                  <div class="detail-item-value">30-day written notice by either party. Full data export delivered within 14 days of termination.</div>
+                </div>
+                <div class="detail-item">
+                  <div class="detail-item-label cyan">Liability</div>
+                  <div class="detail-item-value">Best-effort anti-detection for social accounts. No guarantees on platform account survival rates.</div>
+                </div>
+              </div>
+            </div>
+          </details>
+        </div>
+      </div>
+
+      <!-- Gate 0 -->
+      <div class="gate">
+        <div class="gate-line"></div>
+        <span class="gate-label" style="background:var(--rose-soft); color:var(--rose);">✓ Agreement Signed</span>
+        <div class="gate-line"></div>
+      </div>
+
+      <!-- Phase 1 -->
+      <div class="phase" id="phase-1">
+        <div class="phase-dot" style="background:var(--accent);">1</div>
+        <div class="phase-card">
+          <span class="phase-scope scope-onboarding">Onboarding · Day 3</span>
+          <h3 class="phase-title">Brand Brief & Discovery</h3>
+          <p class="phase-sub">We learn your brand, products, target audience, and which platforms matter most. You tell us what kind of AI creators you need — we handle the rest.</p>
+          <div class="tags">
+            <span class="tag"><span class="ico">🍯</span> Brand voice</span>
+            <span class="tag"><span class="ico">📱</span> Platform priorities</span>
+            <span class="tag"><span class="ico">🎭</span> Persona archetypes</span>
+            <span class="tag"><span class="ico">📊</span> Project scoring</span>
           </div>
         </div>
       </div>
 
-      <div class="phase" style="animation-delay:0.2s">
-        <div class="phase-marker">2</div>
+      <!-- Phase 2 -->
+      <div class="phase" id="phase-2">
+        <div class="phase-dot" style="background:#6366f1;">2</div>
         <div class="phase-card">
-          <h3 class="phase-title">Account Setup & Access</h3>
-          <p class="phase-subtitle">We create all the accounts you need — hosting, code repository, domain management — and deliver your credentials securely.</p>
-          <div class="deliverables">
-            <span class="tag"><span class="icon">🔐</span> Secure credentials</span>
-            <span class="tag"><span class="icon">📦</span> Code repository</span>
-            <span class="tag"><span class="icon">☁️</span> Cloud accounts</span>
-            <span class="tag"><span class="icon">🖥️</span> Server access</span>
+          <span class="phase-scope scope-onboarding">Onboarding · Days 4–5</span>
+          <h3 class="phase-title">Infrastructure Goes Live</h3>
+          <p class="phase-sub">Your dedicated server, container management, code repository, domain, and SSL are all provisioned, secured, and verified.</p>
+          <div class="tags">
+            <span class="tag"><span class="ico">🖥️</span> Managed server</span>
+            <span class="tag"><span class="ico">🐳</span> Container platform</span>
+            <span class="tag"><span class="ico">🔗</span> Code repository</span>
+            <span class="tag"><span class="ico">🌍</span> Domain & SSL</span>
+            <span class="tag"><span class="ico">🔒</span> Security hardened</span>
           </div>
         </div>
       </div>
 
-      <div class="phase" style="animation-delay:0.3s">
-        <div class="phase-marker">3</div>
+      <!-- Gate 1 -->
+      <div class="gate">
+        <div class="gate-line"></div>
+        <span class="gate-label gate-check">✓ Infrastructure Verified</span>
+        <div class="gate-line"></div>
+      </div>
+
+      <!-- Phase 3 -->
+      <div class="phase" id="phase-3">
+        <div class="phase-dot" style="background:var(--cyan);">3</div>
         <div class="phase-card">
-          <h3 class="phase-title">Infrastructure Setup</h3>
-          <p class="phase-subtitle">Your production environment goes live — managed hosting, automated deployments, and health monitoring all configured.</p>
-          <div class="deliverables">
-            <span class="tag"><span class="icon">🚀</span> Managed hosting</span>
-            <span class="tag"><span class="icon">⚙️</span> Auto-deploy pipeline</span>
-            <span class="tag"><span class="icon">💚</span> Health monitoring</span>
-            <span class="tag"><span class="icon">📖</span> Deploy documentation</span>
+          <span class="phase-scope scope-project">First Project · Weeks 1–3</span>
+          <h3 class="phase-title">PersonaGen AI Engine</h3>
+          <p class="phase-sub">Your AI influencer generation pipeline is built — persona creation, avatar generation, UGC script writing, content scheduling, and the analytics dashboard.</p>
+          <div class="tags">
+            <span class="tag"><span class="ico">🤖</span> Persona generator</span>
+            <span class="tag"><span class="ico">🧠</span> AI model gateway</span>
+            <span class="tag"><span class="ico">🎨</span> Avatar & media</span>
+            <span class="tag"><span class="ico">📅</span> Content scheduler</span>
+            <span class="tag"><span class="ico">📈</span> Analytics dashboard</span>
           </div>
         </div>
       </div>
 
-      <div class="phase" style="animation-delay:0.4s">
-        <div class="phase-marker">4</div>
+      <!-- Phase 4 -->
+      <div class="phase" id="phase-4">
+        <div class="phase-dot" style="background:var(--gold);">4</div>
         <div class="phase-card">
-          <h3 class="phase-title">Domain & Email</h3>
-          <p class="phase-subtitle">Your domain is connected, subdomains configured, and professional email addresses are set up and tested.</p>
-          <div class="deliverables">
-            <span class="tag"><span class="icon">🌍</span> Domain active</span>
-            <span class="tag"><span class="icon">📧</span> Professional email</span>
-            <span class="tag"><span class="icon">🔒</span> SSL certificates</span>
-            <span class="tag"><span class="icon">✅</span> Email verified</span>
+          <span class="phase-scope scope-project">First Project · Weeks 3–4</span>
+          <h3 class="phase-title">Distribution & Automation</h3>
+          <p class="phase-sub">Social media accounts are created automatically, content posts autonomously, and engagement metrics flow back to your dashboard in real time.</p>
+          <div class="tags">
+            <span class="tag"><span class="ico">🔐</span> Proxy infrastructure</span>
+            <span class="tag"><span class="ico">📲</span> Auto account creation</span>
+            <span class="tag"><span class="ico">🚀</span> Autonomous posting</span>
+            <span class="tag"><span class="ico">📊</span> Engagement tracking</span>
           </div>
         </div>
       </div>
 
-      <div class="phase" style="animation-delay:0.5s">
-        <div class="phase-marker">5</div>
+      <!-- Gate 2 -->
+      <div class="gate">
+        <div class="gate-line"></div>
+        <span class="gate-label gate-final">✓ Full Pipeline Operational</span>
+        <div class="gate-line"></div>
+      </div>
+
+      <!-- Phase 5 -->
+      <div class="phase" id="phase-5">
+        <div class="phase-dot" style="background:var(--success);">5</div>
         <div class="phase-card">
-          <h3 class="phase-title">Tooling & Integrations</h3>
-          <p class="phase-subtitle">We deploy the intelligent routing layer, API gateways, and automation tools that power your applications.</p>
-          <div class="deliverables">
-            <span class="tag"><span class="icon">⚡</span> API gateway</span>
-            <span class="tag"><span class="icon">🤖</span> Automation tools</span>
-            <span class="tag"><span class="icon">🔗</span> Service routing</span>
-            <span class="tag"><span class="icon">🧪</span> End-to-end tested</span>
+          <span class="phase-scope scope-golive">Go Live</span>
+          <h3 class="phase-title">Validation & Handoff</h3>
+          <p class="phase-sub">Every system is smoke-tested end-to-end. You receive your credentials, a live walkthrough, and your first real project ticket is opened. You're in production.</p>
+          <div class="tags">
+            <span class="tag"><span class="ico">🧪</span> 11-point smoke test</span>
+            <span class="tag"><span class="ico">🔑</span> Credential bundle</span>
+            <span class="tag"><span class="ico">🎓</span> Live walkthrough</span>
+            <span class="tag"><span class="ico">🎯</span> First ticket kicked off</span>
           </div>
         </div>
       </div>
 
-      <div class="phase" style="animation-delay:0.6s">
-        <div class="phase-marker">6</div>
-        <div class="phase-card">
-          <h3 class="phase-title">Project Framework</h3>
-          <p class="phase-subtitle">Your project management workflow is established — clear scoping, transparent timelines, and a simple request process.</p>
-          <div class="deliverables">
-            <span class="tag"><span class="icon">📊</span> Complexity scoring</span>
-            <span class="tag"><span class="icon">⏱️</span> Turnaround SLAs</span>
-            <span class="tag"><span class="icon">📝</span> Ticket workflow</span>
-            <span class="tag"><span class="icon">🤝</span> Extension protocol</span>
-          </div>
-        </div>
-      </div>
+    </div>
+  </div>
+</section>
 
-      <div class="phase" style="animation-delay:0.7s">
-        <div class="phase-marker">7</div>
-        <div class="phase-card">
-          <h3 class="phase-title">Go Live</h3>
-          <p class="phase-subtitle">Every system is smoke-tested, you get a guided walkthrough, and your first project ticket is opened. You're in production.</p>
-          <div class="deliverables">
-            <span class="tag"><span class="icon">🧪</span> Full smoke test</span>
-            <span class="tag"><span class="icon">🎓</span> Guided walkthrough</span>
-            <span class="tag"><span class="icon">📦</span> Credential bundle</span>
-            <span class="tag"><span class="icon">🎯</span> First project kicked off</span>
-          </div>
-        </div>
-      </div>
+<div class="divider"></div>
 
+<!-- Agreement Details -->
+<section class="section">
+  <div class="container">
+    <span class="section-eyebrow">Agreement Details</span>
+    <h2 class="section-title">What the Service Agreement Covers</h2>
+    <p class="section-desc">Every clause protects both sides. No surprises, no hidden terms — here's exactly what's in the contract.</p>
+
+    <div class="clause-grid">
+      <div class="clause-card">
+        <div class="clause-ico">📋</div>
+        <h3 class="clause-title">Scope of Work</h3>
+        <p class="clause-desc">AI influencer persona generation, UGC content pipeline, social account automation, content scheduling, analytics, and full infrastructure management.</p>
+      </div>
+      <div class="clause-card">
+        <div class="clause-ico">🧠</div>
+        <h3 class="clause-title">Intellectual Property</h3>
+        <p class="clause-desc">You own every persona, avatar, script, and content asset we generate. We retain ownership of the underlying platform tooling and automation code.</p>
+      </div>
+      <div class="clause-card">
+        <div class="clause-ico">🚫</div>
+        <h3 class="clause-title">Out of Scope</h3>
+        <p class="clause-desc">Landing pages, e-commerce stores, mobile apps, non-AI-influencer projects, physical fulfillment, and paid advertising management.</p>
+      </div>
+      <div class="clause-card">
+        <div class="clause-ico">💰</div>
+        <h3 class="clause-title">Pricing & Costs</h3>
+        <p class="clause-desc">Flat managed plan fee plus operational costs (AI APIs, proxies, image gen, CAPTCHA) passed through with agreed monthly caps.</p>
+      </div>
+      <div class="clause-card">
+        <div class="clause-ico">⏱️</div>
+        <h3 class="clause-title">SLA & Response Times</h3>
+        <p class="clause-desc">Telegram < 4 hours. Project turnaround per complexity tier (1–3 days, 1–2 weeks, or 2–4 weeks). Extensions require your written approval.</p>
+      </div>
+      <div class="clause-card">
+        <div class="clause-ico">🔐</div>
+        <h3 class="clause-title">Confidentiality & NDA</h3>
+        <p class="clause-desc">Mutual non-disclosure agreement. Your brand data, credentials, and business information are never shared with third parties.</p>
+      </div>
+      <div class="clause-card">
+        <div class="clause-ico">🚪</div>
+        <h3 class="clause-title">Termination & Exit</h3>
+        <p class="clause-desc">30-day written notice by either party. Full data export (personas, content, configs) delivered within 14 days. Clean handoff guaranteed.</p>
+      </div>
+      <div class="clause-card">
+        <div class="clause-ico">⚖️</div>
+        <h3 class="clause-title">Liability & Limits</h3>
+        <p class="clause-desc">Best-effort anti-detection for automated accounts. No guarantees on platform account survival rates. All data stored on your infrastructure.</p>
+      </div>
     </div>
   </div>
 </section>
@@ -490,40 +589,40 @@ footer {
 <!-- What You Get -->
 <section class="section">
   <div class="container">
-    <span class="section-label">What's Included</span>
-    <h2 class="section-title">Everything You Need, Handled</h2>
-    <p class="section-desc">Your managed plan covers the full stack — from infrastructure to project management. No surprises.</p>
+    <span class="section-eyebrow">What's Included</span>
+    <h2 class="section-title">Your AI Influencer Stack, Managed</h2>
+    <p class="section-desc">Everything needed to generate, deploy, and scale autonomous AI influencers — handled by us.</p>
 
     <div class="benefits-grid">
-      <div class="benefit-card">
-        <div class="benefit-icon">🏗️</div>
-        <h3>Production Infrastructure</h3>
-        <p>Managed servers, automated deployments, SSL, and health monitoring — all maintained by us.</p>
+      <div class="benefit">
+        <div class="benefit-ico" style="background:var(--accent-soft);">🤖</div>
+        <h3>AI Persona Generation</h3>
+        <p>Generate hundreds of unique AI influencer identities — each with a name, backstory, visual style, and content voice.</p>
       </div>
-      <div class="benefit-card">
-        <div class="benefit-icon">🌐</div>
-        <h3>Domain & Email</h3>
-        <p>Custom domain setup, professional email addresses, and DNS management under your brand.</p>
+      <div class="benefit">
+        <div class="benefit-ico" style="background:var(--cyan-soft);">🎬</div>
+        <h3>UGC Content Pipeline</h3>
+        <p>AI-written scripts, branded content mockups, and platform-optimized posts — generated and scheduled autonomously.</p>
       </div>
-      <div class="benefit-card">
-        <div class="benefit-icon">⚡</div>
-        <h3>API & Automation</h3>
-        <p>Intelligent routing, API gateways, and automation tools deployed and maintained on your behalf.</p>
+      <div class="benefit">
+        <div class="benefit-ico" style="background:var(--rose-soft);">📲</div>
+        <h3>Account Automation</h3>
+        <p>Social accounts created and managed automatically with anti-detection infrastructure and proxy rotation.</p>
       </div>
-      <div class="benefit-card">
-        <div class="benefit-icon">📋</div>
-        <h3>Project Management</h3>
-        <p>Structured ticket workflow with complexity scoring, transparent timelines, and milestone updates.</p>
+      <div class="benefit">
+        <div class="benefit-ico" style="background:var(--gold-soft);">📊</div>
+        <h3>Analytics Dashboard</h3>
+        <p>Track every AI influencer's engagement, reach, and conversion metrics in a single command center.</p>
       </div>
-      <div class="benefit-card">
-        <div class="benefit-icon">💬</div>
-        <h3>Direct Communication</h3>
-        <p>Dedicated Telegram channel with &lt;4 hour response SLA during business hours. No ticket queues.</p>
+      <div class="benefit">
+        <div class="benefit-ico" style="background:var(--success-soft);">🏗️</div>
+        <h3>Managed Infrastructure</h3>
+        <p>Servers, containers, deployments, and monitoring — all maintained by us. You never touch a terminal.</p>
       </div>
-      <div class="benefit-card">
-        <div class="benefit-icon">♾️</div>
+      <div class="benefit">
+        <div class="benefit-ico" style="background:var(--accent-soft);">♾️</div>
         <h3>Unlimited Projects</h3>
-        <p>Submit as many projects as you need. Each is scoped, scored, and delivered on a clear timeline.</p>
+        <p>Submit as many project requests as you need. Each is scoped, scored, and delivered on a clear timeline.</p>
       </div>
     </div>
   </div>
@@ -531,43 +630,31 @@ footer {
 
 <div class="divider"></div>
 
-<!-- Project Scoping -->
+<!-- Project Scoring -->
 <section class="section">
   <div class="container">
-    <span class="section-label">How Projects Work</span>
+    <span class="section-eyebrow">How Projects Work</span>
     <h2 class="section-title">Clear Scoping, Predictable Timelines</h2>
-    <p class="section-desc">Every project is assessed on a 1–5 complexity scale so you always know what to expect.</p>
+    <p class="section-desc">Every project request is assessed on a 3-tier complexity scale so you always know what to expect.</p>
 
-    <div class="sla-grid">
-      <div class="sla-card">
-        <div class="sla-score">1</div>
-        <div class="sla-label">Quick Fix</div>
-        <div class="sla-time">1–2 days</div>
-        <div class="sla-desc">Config changes, copy updates, minor tweaks</div>
+    <div class="score-grid">
+      <div class="score-card">
+        <div class="score-num" style="color:var(--success);">1</div>
+        <div class="score-label">Tweak</div>
+        <div class="score-eta">1–3 days</div>
+        <div class="score-desc">New persona niche, calendar adjustment, platform toggle</div>
       </div>
-      <div class="sla-card">
-        <div class="sla-score">2</div>
-        <div class="sla-label">Simple</div>
-        <div class="sla-time">3–5 days</div>
-        <div class="sla-desc">Single feature, basic integration</div>
+      <div class="score-card">
+        <div class="score-num" style="color:var(--accent);">2</div>
+        <div class="score-label">Feature</div>
+        <div class="score-eta">1–2 weeks</div>
+        <div class="score-desc">New platform connector, UGC template, analytics widget</div>
       </div>
-      <div class="sla-card">
-        <div class="sla-score">3</div>
-        <div class="sla-label">Moderate</div>
-        <div class="sla-time">1–2 weeks</div>
-        <div class="sla-desc">Multi-component features, API work</div>
-      </div>
-      <div class="sla-card">
-        <div class="sla-score">4</div>
-        <div class="sla-label">Complex</div>
-        <div class="sla-time">2–4 weeks</div>
-        <div class="sla-desc">Full system builds, multi-service orchestration</div>
-      </div>
-      <div class="sla-card">
-        <div class="sla-score">5</div>
-        <div class="sla-label">Enterprise</div>
-        <div class="sla-time">4–6 weeks</div>
-        <div class="sla-desc">Major platform builds or migrations</div>
+      <div class="score-card">
+        <div class="score-num" style="color:var(--cyan);">3</div>
+        <div class="score-label">System</div>
+        <div class="score-eta">2–4 weeks</div>
+        <div class="score-desc">New AI model, account creation flow, pipeline overhaul</div>
       </div>
     </div>
   </div>
@@ -578,67 +665,300 @@ footer {
 <!-- Communication -->
 <section class="section">
   <div class="container">
-    <span class="section-label">Communication</span>
+    <span class="section-eyebrow">Communication</span>
     <h2 class="section-title">How We Stay in Touch</h2>
-    <p class="section-desc">Clear channels, clear expectations. You'll always know how to reach us and when to expect a response.</p>
+    <p class="section-desc">One primary channel. Clear response times. You always know how to reach us.</p>
 
     <div class="comm-row">
-      <div class="comm-icon">💬</div>
-      <div class="comm-info">
+      <div class="comm-ico" style="background:var(--accent-soft);">💬</div>
+      <div class="comm-body">
         <strong>Telegram</strong>
-        <p>All project communication, updates, credential delivery, and ticket submissions</p>
+        <p>All project requests, updates, credential delivery, and milestone reviews</p>
       </div>
-      <span class="comm-sla">&lt; 4 hours</span>
+      <span class="comm-sla" style="background:var(--accent-soft); color:var(--accent);">&lt; 4 hours</span>
     </div>
     <div class="comm-row">
-      <div class="comm-icon">🔧</div>
-      <div class="comm-info">
+      <div class="comm-ico" style="background:var(--cyan-soft);">🔧</div>
+      <div class="comm-body">
         <strong>GitHub</strong>
-        <p>Technical tracking, code reviews, and deployment history</p>
+        <p>Technical tracking, code changes, and deployment history</p>
       </div>
-      <span class="comm-sla">&lt; 24 hours</span>
-    </div>
-    <div class="comm-row">
-      <div class="comm-icon">📧</div>
-      <div class="comm-info">
-        <strong>Email</strong>
-        <p>Formal communications, invoicing, and documentation</p>
-      </div>
-      <span class="comm-sla">&lt; 48 hours</span>
+      <span class="comm-sla" style="background:var(--cyan-soft); color:var(--cyan);">&lt; 24 hours</span>
     </div>
   </div>
 </section>
 
 <div class="divider"></div>
 
-<!-- CTA -->
-<section class="cta-section">
-  <h2>Ready to Get Started?</h2>
-  <p>Send us a message on Telegram and we'll kick off your onboarding within 24 hours.</p>
-  <a href="#" class="cta-btn">Open Telegram →</a>
+<!-- CTA with Actions -->
+<section class="cta" id="get-started">
+  <h2>Ready to Build Your<br><span class="grad">AI Creator Army?</span></h2>
+  <p>Review the plan, sign the agreement, and submit your first project — all from here.</p>
+  <div style="display:flex; gap:1rem; justify-content:center; flex-wrap:wrap; margin-top:1.5rem;">
+    <a href="https://buy.stripe.com/YOUR_STRIPE_LINK" target="_blank" class="cta-btn" id="btn-stripe">💳 Pay & Start — $2,500/mo</a>
+    <a href="https://app.pandadoc.com/YOUR_AGREEMENT_LINK" target="_blank" class="cta-btn" style="background:linear-gradient(135deg, var(--rose), var(--accent));" id="btn-agreement">✍️ Sign Agreement</a>
+    <a href="https://t.me/YOUR_TELEGRAM" target="_blank" class="cta-btn" style="background:var(--surface-2); border:1px solid var(--border);" id="btn-telegram">💬 Open Telegram</a>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- Pricing -->
+<section class="section" id="pricing">
+  <div class="container">
+    <span class="section-eyebrow">Pricing</span>
+    <h2 class="section-title">Managed Plan Tiers</h2>
+    <p class="section-desc">Flat monthly fee covers unlimited projects. Operational costs (AI APIs, proxies) are pass-through with agreed caps.</p>
+
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:1.5rem; max-width:700px; margin:0 auto;">
+      <!-- Starter -->
+      <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:2rem; text-align:center; transition:border-color 0.3s; position:relative;" onmouseover="this.style.borderColor='rgba(124,106,237,0.3)'" onmouseout="this.style.borderColor='rgba(255,255,255,0.05)'">
+        <div style="font-size:0.7rem; font-weight:600; text-transform:uppercase; letter-spacing:0.1em; color:var(--accent); margin-bottom:0.5rem;">Starter</div>
+        <div style="font-family:'Playfair Display',serif; font-size:2.8rem; font-weight:700; margin-bottom:0.25rem;">$2,500</div>
+        <div style="font-size:0.8rem; color:var(--text-muted); margin-bottom:1.5rem;">/month</div>
+        <div style="text-align:left; font-size:0.8rem; color:var(--text-muted); line-height:2;">
+          ✓ Unlimited Tweak tickets<br>
+          ✓ 2 Feature tickets / month<br>
+          ✓ 1 System ticket / month<br>
+          ✓ Up to 50 AI personas<br>
+          ✓ 2 platforms included<br>
+          ✓ Telegram support < 4hrs
+        </div>
+        <a href="https://buy.stripe.com/YOUR_STRIPE_STARTER" target="_blank" style="display:block; margin-top:1.5rem; padding:0.7rem; border-radius:10px; background:var(--accent-soft); color:var(--accent); font-weight:600; font-size:0.85rem; text-decoration:none; transition:background 0.2s;" onmouseover="this.style.background='rgba(124,106,237,0.2)'" onmouseout="this.style.background='rgba(124,106,237,0.12)'">Select Starter →</a>
+      </div>
+      <!-- Scale -->
+      <div style="background:var(--surface); border:2px solid var(--accent); border-radius:var(--radius); padding:2rem; text-align:center; position:relative; box-shadow:0 0 40px rgba(124,106,237,0.08);">
+        <div style="position:absolute; top:-10px; left:50%; transform:translateX(-50%); background:linear-gradient(135deg,var(--accent),var(--cyan)); color:#fff; font-size:0.6rem; font-weight:700; padding:3px 14px; border-radius:100px; text-transform:uppercase; letter-spacing:0.08em;">Recommended</div>
+        <div style="font-size:0.7rem; font-weight:600; text-transform:uppercase; letter-spacing:0.1em; color:var(--cyan); margin-bottom:0.5rem;">Scale</div>
+        <div style="font-family:'Playfair Display',serif; font-size:2.8rem; font-weight:700; margin-bottom:0.25rem;">$6,500</div>
+        <div style="font-size:0.8rem; color:var(--text-muted); margin-bottom:1.5rem;">/month</div>
+        <div style="text-align:left; font-size:0.8rem; color:var(--text-muted); line-height:2;">
+          ✓ Unlimited all ticket types<br>
+          ✓ 3 concurrent System tickets<br>
+          ✓ Unlimited AI personas<br>
+          ✓ All platforms included<br>
+          ✓ Priority Telegram < 2hrs<br>
+          ✓ Dedicated ops engineer
+        </div>
+        <a href="https://buy.stripe.com/YOUR_STRIPE_SCALE" target="_blank" style="display:block; margin-top:1.5rem; padding:0.7rem; border-radius:10px; background:linear-gradient(135deg,var(--accent),var(--cyan)); color:#fff; font-weight:600; font-size:0.85rem; text-decoration:none; transition:transform 0.2s;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='none'">Select Scale →</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- PM Dashboard -->
+<section class="section" id="project-manager">
+  <div class="container">
+    <span class="section-eyebrow">Project Manager</span>
+    <h2 class="section-title">Submit & Track Projects</h2>
+    <p class="section-desc">Submit tickets directly from here. Track status, complexity scores, and timelines in real time.</p>
+
+    <!-- New Ticket Form -->
+    <div id="pm-form-wrap" style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:1.75rem; margin-bottom:2rem;">
+      <h3 style="font-size:0.95rem; font-weight:600; margin-bottom:1.25rem; display:flex; align-items:center; gap:8px;">
+        <span style="width:28px; height:28px; border-radius:8px; background:var(--accent-soft); display:flex; align-items:center; justify-content:center; font-size:0.85rem;">📝</span>
+        New Project Request
+      </h3>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.75rem; margin-bottom:0.75rem;">
+        <div>
+          <label style="display:block; font-size:0.65rem; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:0.35rem;">Title</label>
+          <input type="text" id="pm-title" placeholder="e.g. Add TikTok connector" style="width:100%; padding:0.6rem 0.75rem; border-radius:var(--radius-sm); background:var(--surface-2); border:1px solid var(--border); color:var(--text); font-size:0.82rem; font-family:'Inter',sans-serif; outline:none; transition:border-color 0.3s;" onfocus="this.style.borderColor='rgba(124,106,237,0.4)'" onblur="this.style.borderColor='rgba(255,255,255,0.05)'">
+        </div>
+        <div>
+          <label style="display:block; font-size:0.65rem; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:0.35rem;">Complexity</label>
+          <select id="pm-complexity" style="width:100%; padding:0.6rem 0.75rem; border-radius:var(--radius-sm); background:var(--surface-2); border:1px solid var(--border); color:var(--text); font-size:0.82rem; font-family:'Inter',sans-serif; outline:none; appearance:none; cursor:pointer;">
+            <option value="1">1 — Tweak (1–3 days)</option>
+            <option value="2">2 — Feature (1–2 weeks)</option>
+            <option value="3">3 — System (2–4 weeks)</option>
+          </select>
+        </div>
+      </div>
+      <div style="margin-bottom:0.75rem;">
+        <label style="display:block; font-size:0.65rem; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:0.35rem;">Description</label>
+        <textarea id="pm-desc" rows="3" placeholder="Describe what you need..." style="width:100%; padding:0.6rem 0.75rem; border-radius:var(--radius-sm); background:var(--surface-2); border:1px solid var(--border); color:var(--text); font-size:0.82rem; font-family:'Inter',sans-serif; outline:none; resize:vertical; transition:border-color 0.3s;" onfocus="this.style.borderColor='rgba(124,106,237,0.4)'" onblur="this.style.borderColor='rgba(255,255,255,0.05)'"></textarea>
+      </div>
+      <button onclick="PM.add()" style="padding:0.65rem 1.5rem; border-radius:10px; background:linear-gradient(135deg,var(--accent),#6366f1); color:#fff; font-weight:600; font-size:0.82rem; border:none; cursor:pointer; transition:transform 0.2s, box-shadow 0.3s; font-family:'Inter',sans-serif;" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 6px 20px rgba(124,106,237,0.3)'" onmouseout="this.style.transform='none';this.style.boxShadow='none'">Submit Ticket →</button>
+    </div>
+
+    <!-- Ticket Stats -->
+    <div id="pm-stats" style="display:grid; grid-template-columns:repeat(4,1fr); gap:0.75rem; margin-bottom:1.5rem;"></div>
+
+    <!-- Ticket List -->
+    <div id="pm-tickets" style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden;">
+      <div style="padding:1rem 1.25rem; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between;">
+        <h3 style="font-size:0.85rem; font-weight:600;">All Tickets</h3>
+        <div id="pm-filters" style="display:flex; gap:4px;"></div>
+      </div>
+      <div id="pm-list" style="max-height:400px; overflow-y:auto;"></div>
+      <div id="pm-empty" style="padding:3rem 2rem; text-align:center; color:var(--text-dim); font-size:0.85rem; display:none;">
+        <div style="font-size:2rem; margin-bottom:0.75rem; opacity:0.3;">📋</div>
+        No tickets yet — submit your first project above.
+      </div>
+    </div>
+  </div>
 </section>
 
 <footer>
-  <p>Managed Services — Unlimited Projects Plan · Onboarding estimated at 3–5 business days</p>
+  <p>PersonaGen — Managed AI Influencer Platform · Agreement: 1–2 days · Onboarding: 2–3 days · First delivery: 2–4 weeks</p>
 </footer>
 
 <script>
-// Intersection Observer for scroll animations
+// ── Scroll reveal ──
 const observer = new IntersectionObserver((entries) => {
-  entries.forEach(entry => {
-    if (entry.isIntersecting) {
-      entry.target.style.opacity = '1';
-      entry.target.style.transform = 'translateY(0)';
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      e.target.style.opacity = '1';
+      e.target.style.transform = 'translateY(0)';
     }
   });
-}, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+}, { threshold: 0.08, rootMargin: '0px 0px -30px 0px' });
 
-document.querySelectorAll('.phase, .benefit-card, .sla-card, .comm-row').forEach(el => {
+document.querySelectorAll('.phase, .benefit, .score-card, .comm-row, .gate, .clause-card').forEach(el => {
   el.style.opacity = '0';
-  el.style.transform = 'translateY(20px)';
-  el.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
+  el.style.transform = 'translateY(16px)';
+  el.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
   observer.observe(el);
 });
+
+// ── Project Manager (localStorage DB) ──
+const PM = {
+  KEY: 'personagen_pm_tickets',
+  filter: 'all',
+
+  load() { return JSON.parse(localStorage.getItem(this.KEY) || '[]'); },
+  save(tickets) { localStorage.setItem(this.KEY, JSON.stringify(tickets)); },
+
+  add() {
+    const title = document.getElementById('pm-title').value.trim();
+    const desc = document.getElementById('pm-desc').value.trim();
+    const complexity = parseInt(document.getElementById('pm-complexity').value);
+    if (!title) { document.getElementById('pm-title').style.borderColor = 'var(--rose)'; return; }
+
+    const labels = { 1: 'Tweak', 2: 'Feature', 3: 'System' };
+    const etas = { 1: '1–3 days', 2: '1–2 weeks', 3: '2–4 weeks' };
+    const ticket = {
+      id: 'TK-' + String(Date.now()).slice(-6),
+      title,
+      description: desc,
+      complexity,
+      complexityLabel: labels[complexity],
+      eta: etas[complexity],
+      status: 'submitted',
+      created: new Date().toISOString(),
+      updated: new Date().toISOString()
+    };
+
+    const tickets = this.load();
+    tickets.unshift(ticket);
+    this.save(tickets);
+    document.getElementById('pm-title').value = '';
+    document.getElementById('pm-desc').value = '';
+    document.getElementById('pm-complexity').value = '1';
+    this.render();
+  },
+
+  cycle(id) {
+    const order = ['submitted', 'confirmed', 'in_progress', 'review', 'complete'];
+    const tickets = this.load();
+    const t = tickets.find(x => x.id === id);
+    if (!t) return;
+    const i = order.indexOf(t.status);
+    t.status = order[(i + 1) % order.length];
+    t.updated = new Date().toISOString();
+    this.save(tickets);
+    this.render();
+  },
+
+  remove(id) {
+    const tickets = this.load().filter(t => t.id !== id);
+    this.save(tickets);
+    this.render();
+  },
+
+  setFilter(f) {
+    this.filter = f;
+    this.render();
+  },
+
+  render() {
+    const all = this.load();
+    const filtered = this.filter === 'all' ? all : all.filter(t => t.status === this.filter);
+
+    // Stats
+    const counts = { submitted: 0, confirmed: 0, in_progress: 0, review: 0, complete: 0 };
+    all.forEach(t => counts[t.status] = (counts[t.status] || 0) + 1);
+    document.getElementById('pm-stats').innerHTML = [
+      { label: 'Total', value: all.length, color: 'var(--accent)' },
+      { label: 'Active', value: counts.in_progress + counts.confirmed, color: 'var(--cyan)' },
+      { label: 'In Review', value: counts.review, color: 'var(--gold)' },
+      { label: 'Complete', value: counts.complete, color: 'var(--success)' }
+    ].map(s => `
+      <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-sm); padding:1rem; text-align:center;">
+        <div style="font-family:'Playfair Display',serif; font-size:1.6rem; font-weight:700; color:${s.color};">${s.value}</div>
+        <div style="font-size:0.65rem; font-weight:600; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.08em;">${s.label}</div>
+      </div>
+    `).join('');
+
+    // Filters
+    const filters = ['all', 'submitted', 'confirmed', 'in_progress', 'review', 'complete'];
+    const fLabels = { all: 'All', submitted: 'New', confirmed: 'Confirmed', in_progress: 'Active', review: 'Review', complete: 'Done' };
+    document.getElementById('pm-filters').innerHTML = filters.map(f =>
+      `<button onclick="PM.setFilter('${f}')" style="padding:3px 10px; border-radius:6px; border:1px solid ${this.filter === f ? 'rgba(124,106,237,0.3)' : 'var(--border)'}; background:${this.filter === f ? 'var(--accent-soft)' : 'transparent'}; color:${this.filter === f ? 'var(--accent)' : 'var(--text-dim)'}; font-size:0.65rem; font-weight:600; cursor:pointer; font-family:'Inter',sans-serif; transition:all 0.2s;">${fLabels[f]}${f !== 'all' ? ` (${f === 'submitted' ? counts.submitted : f === 'confirmed' ? counts.confirmed : f === 'in_progress' ? counts.in_progress : f === 'review' ? counts.review : counts.complete})` : ''}</button>`
+    ).join('');
+
+    // List
+    const statusStyles = {
+      submitted: { bg: 'rgba(124,106,237,0.1)', color: 'var(--accent)', label: 'Submitted' },
+      confirmed: { bg: 'rgba(34,211,238,0.1)', color: 'var(--cyan)', label: 'Confirmed' },
+      in_progress: { bg: 'rgba(34,211,238,0.15)', color: 'var(--cyan)', label: 'In Progress' },
+      review: { bg: 'rgba(212,168,83,0.1)', color: 'var(--gold)', label: 'In Review' },
+      complete: { bg: 'rgba(52,211,153,0.1)', color: 'var(--success)', label: 'Complete' }
+    };
+    const complexityColors = { 1: 'var(--success)', 2: 'var(--accent)', 3: 'var(--cyan)' };
+
+    if (filtered.length === 0) {
+      document.getElementById('pm-list').innerHTML = '';
+      document.getElementById('pm-empty').style.display = 'block';
+    } else {
+      document.getElementById('pm-empty').style.display = 'none';
+      document.getElementById('pm-list').innerHTML = filtered.map(t => {
+        const s = statusStyles[t.status];
+        const ago = this.timeAgo(t.created);
+        return `
+        <div style="display:grid; grid-template-columns:2.5fr 0.7fr 0.8fr 0.8fr 0.4fr; align-items:center; padding:0.85rem 1.25rem; border-bottom:1px solid var(--border); transition:background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.02)'" onmouseout="this.style.background='transparent'">
+          <div>
+            <div style="font-size:0.85rem; font-weight:600; margin-bottom:2px;">${t.title}</div>
+            <div style="font-size:0.68rem; color:var(--text-dim);">${t.id} · ${ago}</div>
+          </div>
+          <div style="font-size:0.7rem; font-weight:600; color:${complexityColors[t.complexity]};">${t.complexityLabel}</div>
+          <div style="font-size:0.7rem; color:var(--text-muted);">${t.eta}</div>
+          <div>
+            <button onclick="PM.cycle('${t.id}')" style="padding:3px 10px; border-radius:100px; background:${s.bg}; color:${s.color}; font-size:0.65rem; font-weight:600; border:none; cursor:pointer; font-family:'Inter',sans-serif; transition:opacity 0.2s;" title="Click to advance status">${s.label}</button>
+          </div>
+          <div>
+            <button onclick="PM.remove('${t.id}')" style="background:none; border:none; color:var(--text-dim); cursor:pointer; font-size:0.85rem; opacity:0.4; transition:opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.4'" title="Delete">✕</button>
+          </div>
+        </div>`;
+      }).join('');
+    }
+  },
+
+  timeAgo(iso) {
+    const diff = Date.now() - new Date(iso).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return mins + 'm ago';
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return hrs + 'h ago';
+    const days = Math.floor(hrs / 24);
+    return days + 'd ago';
+  }
+};
+
+PM.render();
 </script>
 </body>
 </html>
+
