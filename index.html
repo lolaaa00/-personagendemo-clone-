@@ -505,6 +505,7 @@
         <div class="slide-inner"><p>&copy; 2026 HoneyForX × PersonaGen — Confidential &amp; Proprietary</p></div>
     </footer>
 
+    <script src="data-loader.js"></script>
     <script src="script.js"></script>
     <script>
     function toggleNav() {
@@ -522,33 +523,4 @@
       }
     });
     </script>
-    <style>
-    @media (max-width: 640px) {
-      .slide { padding: 3.5rem 0; }
-      .slide-hero { padding: 5rem 1.25rem 3rem; min-height: 90vh; }
-      .hero-title { font-size: clamp(2rem,8vw,2.8rem); }
-      .hero-stats { grid-template-columns: repeat(2,1fr); }
-      .scout-layout, .generator-layout { grid-template-columns: 1fr; }
-      .gen-output { min-height: 240px; }
-      .calendar-week { grid-template-columns: repeat(2,1fr); }
-      .dash-kpi-row { grid-template-columns: repeat(2,1fr); }
-      .dash-chart-row { grid-template-columns: 1fr; }
-      .spark-chart { aspect-ratio: 2.2 / 1; }
-      .plat-bar-row { grid-template-columns: 70px 1fr 36px; }
-      .milestone-grid, .arch-grid { grid-template-columns: 1fr; }
-      .pipeline-flow { flex-direction: column; align-items: stretch; }
-      .pipe-arrow { transform: rotate(90deg); align-self: center; }
-      .influencer-grid { grid-template-columns: 1fr; }
-      .agent-row { grid-template-columns: 1fr 1fr; gap: 0.5rem; }
-      .agent-row-head { display: none; }
-      .slide-inner { padding: 0 1.25rem; }
-      .scout-url-row { flex-direction: column; }
-      .scout-btn { width: 100%; justify-content: center; }
-    }
-    @media (max-width: 400px) {
-      .calendar-week { grid-template-columns: 1fr; }
-      .dash-kpi-row { grid-template-columns: 1fr 1fr; }
-    }
-    </style>
 </body>
-</html>

@@ -97,7 +97,7 @@ const CALENDARS = [
 // ═══════════════════════════════════════
 // DATA: GENERATOR OUTPUTS
 // ═══════════════════════════════════════
-const GEN_NAMES = {
+let GEN_NAMES = {
     fitness: ["Jordan Blake","Maya Santos","Tyler Okoye","Rina Patel","Dex Moreau"],
     tech: ["Alex Kuznetsov","Priya Sharma","Leo Tanaka","Sam Odera","Kai Fischer"],
     fashion: ["Valentina Rossi","Nadia El-Amin","Zara Kim","Luca Mbeki","Celeste Voss"],
@@ -105,7 +105,7 @@ const GEN_NAMES = {
     travel: ["Luna Espinoza","Nico Strand","Amara Diallo","Finn Calloway","Isla Duarte"],
     food: ["Chef Nana K.","Marco Bianchi","Suki Park","Abena Owusu","Liam Aster"]
 };
-const GEN_BIOS = {
+let GEN_BIOS = {
     fitness: ["Certified personal trainer & nutrition coach. Helping you build sustainable habits, one rep at a time.","Movement specialist breaking fitness myths with science-backed content. No BS, just gains."],
     tech: ["Building in public. Sharing the tools, frameworks, and AI breakthroughs that actually matter.","Former FAANG engineer turned indie hacker. Documenting the future of autonomous systems."],
     fashion: ["Curating the intersection of high fashion and street culture. Every outfit tells a story.","Sustainable fashion advocate. Proving you don't need fast fashion to look incredible."],
@@ -113,7 +113,7 @@ const GEN_BIOS = {
     travel: ["Exploring hidden gems and local cultures one city at a time. Budget to luxury, I cover it all.","Digital nomad documenting the world's most underrated destinations. Adventure awaits."],
     food: ["Home cooking elevated. Restaurant-quality recipes you can actually make on a Tuesday night.","Street food hunter and recipe developer. If it's delicious, I'm there."]
 };
-const GEN_POSTS = {
+let GEN_POSTS = {
     fitness:{instagram:"Just crushed a 5AM leg day 🔥 Your body can handle almost anything — it's your mind you have to convince. Full routine in bio ➡️ #FitnessMotivation #LegDay #GymLife",tiktok:"POV: When someone says 'I don't have time to work out' but watches 3 hours of Netflix 😭💀 #GymTok #FitTok #Motivation",twitter:"Hot take: You don't need a gym membership to get in the best shape of your life. Here's my bodyweight-only program (thread) 🧵"},
     tech:{instagram:"Built an autonomous agent that manages my entire deployment pipeline. The future isn't coming — it's here. Full breakdown on YouTube ⬇️ #AI #DevOps #Automation",tiktok:"When ChatGPT writes better code than your senior dev 💀 #TechTok #Programming #AI",twitter:"Unpopular opinion: MCP (Model Context Protocol) will make traditional REST APIs obsolete within 3 years. Here's why 🧵"},
     fashion:{instagram:"Monochrome moment. Sometimes less is everything. 🖤 Jacket: @designer | Boots: vintage find | Attitude: non-negotiable ✨ #OOTD #FashionInspo #MinimalStyle",tiktok:"POV: Your friend asks you to 'dress casual' for brunch 😂👗 #FashionTok #GRWM #StyleInspo",twitter:"The best-dressed people I know own fewer than 30 pieces. Quality over quantity, always."},
@@ -122,7 +122,7 @@ const GEN_POSTS = {
     food:{instagram:"Homemade truffle pasta that took 20 minutes and zero skill. Recipe in carousel ➡️ You're welcome. 🍝✨ #FoodieLife #HomeCooking #PastaRecipe",tiktok:"Making the viral Dubai chocolate bar at home and honestly? It's better 🍫😤 #FoodTok #Recipe #Viral",twitter:"Hot take: Most 'restaurant quality' food is just home cooking with better seasoning and plating. The skills aren't hard. The confidence is."}
 };
 
-const GEN_UGC = {
+let GEN_UGC = {
     fitness: {
         brand: '🍯 HoneyForX Partnership',
         product: 'HoneyX Manly Plus',
@@ -658,7 +658,7 @@ const SCOUT_PROFILES = {
     }
 };
 
-const TREND_ITEMS = [
+let TREND_ITEMS = [
     { name: "#AIInfluencer", posts: "2.4M", growth: "+340%", hot: true },
     { name: "#VirtualCreator", posts: "890K", growth: "+180%", hot: true },
     { name: "#DigitalPersona", posts: "456K", growth: "+95%", hot: false },
@@ -782,13 +782,13 @@ const DASH_AGENTS = [
     { name:"Zara Kim", handle:"@zarakim.style", niche:"Fashion", initial:"Z", gradient:"linear-gradient(135deg,#ec4899,#a78bfa)", followers:"5.1K", engagement:3.9, trend:"+0.2%", status:"paused", active:false, perf:38, color:"#ec4899" }
 ];
 
-const SPARK_DATA = [
+let SPARK_DATA = [
     [4.8, 5.1, 5.4, 6.0, 5.8, 6.2, 6.2],  // Sofia
     [4.2, 4.5, 4.3, 4.6, 4.9, 4.7, 4.8],  // Marcus
     [5.9, 6.2, 6.5, 6.8, 7.0, 6.9, 7.1]   // Aisha
 ];
 
-const PLATFORM_DATA = [
+let PLATFORM_DATA = [
     { name:"Instagram", pct:38, color:"linear-gradient(90deg,#833ab4,#e1306c)" },
     { name:"TikTok", pct:27, color:"linear-gradient(90deg,#25f4ee,#fe2c55)" },
     { name:"Twitter/X", pct:16, color:"linear-gradient(90deg,#1da1f2,#0d8bd9)" },
@@ -935,10 +935,36 @@ function renderDashboard() {
 // ═══════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     document.querySelectorAll('.chip').forEach(chip => {
         chip.addEventListener('click', () => chip.classList.toggle('active'));
     });
+
+    // Load external data — bridge to existing global vars
+    // SERIALIZATION RULE: loadData() always returns parsed objects via
+    // response.json(). Never JSON.stringify() before storing, never double-parse.
+    try {
+        await loadData();
+        if (DATA.templates) {
+            GEN_NAMES = DATA.templates.generator?.names ?? GEN_NAMES;
+            GEN_BIOS  = DATA.templates.generator?.bios  ?? GEN_BIOS;
+            if (DATA.templates.ugc) GEN_UGC = DATA.templates.ugc;
+        }
+        if (DATA.trends) TREND_ITEMS = DATA.trends;
+        if (DATA.scouts) {
+            // Bridge scout profiles (exclude 'keywords' key)
+            const { keywords, ...profiles } = DATA.scouts;
+            Object.assign(SCOUT_PROFILES, profiles);
+            if (keywords) Object.assign(KEYWORD_TRENDS, keywords);
+        }
+        if (DATA.platforms) {
+            if (DATA.platforms.distribution) PLATFORM_DATA = DATA.platforms.distribution;
+            if (DATA.platforms.sparkData)    SPARK_DATA = DATA.platforms.sparkData;
+        }
+        console.log('[PersonaGen] Data loaded from /data/ JSON files');
+    } catch (err) {
+        console.warn('[PersonaGen] Data load failed, using inline fallback:', err);
+    }
 
     // Render all sections
     renderInfluencers();

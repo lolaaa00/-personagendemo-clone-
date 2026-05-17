@@ -479,26 +479,119 @@ footer {
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   RESPONSIVE
+   RESPONSIVE — TABLET (≤900px)
    ═══════════════════════════════════════════════════════════════ */
 
 @media (max-width: 900px) {
-  .roadmap-cols     { grid-template-columns: repeat(3, 1fr); }
+  .roadmap-cols     { grid-template-columns: repeat(3, 1fr); gap: 0.5rem; }
   .roadmap-track::before { display: none; }
   .postlaunch-grid  { grid-template-columns: 1fr; }
   .score-grid       { grid-template-columns: 1fr 1fr; }
+  .comm-sla         { display: none; }
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   RESPONSIVE — MOBILE (≤640px)
+   ═══════════════════════════════════════════════════════════════ */
+
 @media (max-width: 640px) {
-  .hero             { padding: 3.5rem 1.5rem 3rem; }
-  .container        { padding: 0 var(--space-5); }
-  .phase            { padding-left: 50px; }
-  .journey::before  { left: 18px; }
-  .phase-dot        { left: 7px; }
-  .score-grid       { grid-template-columns: 1fr; }
-  .scope-bar        { gap: 0.75rem; }
+  /* Hero */
+  .hero             { min-height: auto; padding: 3.5rem 1.25rem 2.5rem; }
+  .hero h1          { font-size: clamp(1.7rem, 7vw, 2.4rem); margin-bottom: 1rem; }
+  .hero p           { font-size: 0.92rem; }
+
+  /* Layout */
+  .container        { padding: 0 1.25rem; }
+  .section          { padding: 3rem 0; }
+
+  /* Scope bar */
+  .scope-bar        { gap: 0.5rem; }
+  .scope-chip       { font-size: 0.72rem; padding: 6px 12px; gap: 6px; }
+
+  /* Journey timeline */
+  .phase            { padding-left: 48px; padding-bottom: 2rem; }
+  .journey::before  { left: 16px; }
+  .phase-dot        { left: 5px; width: 22px; height: 22px; font-size: 0.6rem; }
+  .phase-card       { padding: 1.25rem; }
+  .phase-title      { font-size: 1rem; }
+  .phase-sub        { font-size: 0.82rem; }
+  .tags             { gap: 4px; }
+  .tag              { font-size: 0.7rem; padding: 4px 9px; }
+
+  /* Gate */
+  .gate             { padding-left: 48px; padding-bottom: 1.5rem; }
+  .gate-label       { font-size: 0.62rem; padding: 3px 10px; }
+
+  /* Expandable details */
   .detail-grid      { grid-template-columns: 1fr; }
-  .clause-grid      { grid-template-columns: 1fr; }
-  .roadmap-cols     { grid-template-columns: repeat(2, 1fr); }
-  .pg-nav-links .pg-nav-link:not(.active):not(.pg-nav-cta) { display: none; }
+  .detail-item-value { font-size: 0.75rem; }
+
+  /* Score grid */
+  .score-grid       { grid-template-columns: 1fr; gap: 0.75rem; }
+  .score-card       { padding: 1.25rem; }
+  .score-num        { font-size: 1.8rem; }
+  .score-label      { font-size: 0.85rem; }
+
+  /* Benefits grid */
+  .benefits-grid    { grid-template-columns: 1fr; gap: 0.75rem; }
+  .benefit          { padding: 1.25rem; }
+
+  /* Comm rows — stack vertically */
+  .comm-row         { flex-direction: column; align-items: flex-start; gap: 0.75rem; padding: 1rem; }
+  .comm-ico         { width: 34px; height: 34px; font-size: 1rem; }
+  .comm-body strong { font-size: 0.85rem; }
+  .comm-body p      { font-size: 0.75rem; }
+  .comm-sla         { display: none; }
+
+  /* Agreement clauses */
+  .clause-grid      { grid-template-columns: 1fr; gap: 0.75rem; }
+  .clause-card      { padding: 1.25rem; }
+  .clause-title     { font-size: 0.85rem; }
+  .clause-desc      { font-size: 0.75rem; }
+
+  /* Roadmap */
+  .roadmap-cols     { grid-template-columns: repeat(2, 1fr); gap: 0.5rem; }
+  .rm-node          { width: 44px; height: 44px; font-size: 0.95rem; }
+  .rm-status-badge  { font-size: 0.5rem; padding: 2px 6px; }
+  .rm-phase-title   { font-size: 0.72rem; }
+  .rm-timeline      { font-size: 0.58rem; }
+  .rm-items         { font-size: 0.62rem; padding: 0.5rem; }
+
+  /* Post-launch */
+  .postlaunch-grid  { grid-template-columns: 1fr; gap: 0.75rem; }
+  .pl-quarter       { padding: 1.25rem; }
+  .pl-q-title       { font-size: 0.85rem; }
+  .pl-milestone     { font-size: 0.72rem; }
+
+  /* CTA */
+  .cta              { padding: 3rem 1.25rem; }
+  .cta h2           { font-size: 1.5rem; }
+  .cta p            { font-size: 0.88rem; }
+  .cta-btn          { padding: 12px 28px; font-size: 0.88rem; width: 100%; justify-content: center; }
+
+  /* Section headings */
+  .section-title    { font-size: clamp(1.3rem, 5vw, 1.8rem); }
+  .section-desc     { font-size: 0.85rem; margin-bottom: 1.75rem; }
+  .section-eyebrow  { font-size: 0.6rem; }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   RESPONSIVE — SMALL PHONE (≤400px)
+   ═══════════════════════════════════════════════════════════════ */
+
+@media (max-width: 400px) {
+  .hero             { padding: 3rem 1rem 2rem; }
+  .hero h1          { font-size: 1.5rem; }
+  .container        { padding: 0 1rem; }
+  .scope-bar        { flex-direction: column; align-items: stretch; gap: 0.4rem; }
+  .scope-chip       { justify-content: center; }
+  .phase            { padding-left: 40px; }
+  .journey::before  { left: 13px; }
+  .phase-dot        { left: 3px; width: 20px; height: 20px; font-size: 0.55rem; }
+  .phase-card       { padding: 1rem; }
+  .roadmap-cols     { grid-template-columns: 1fr; }
+  .rm-col           { padding: 0.5rem 0; }
+  .score-num        { font-size: 1.5rem; }
+  .section-title    { font-size: 1.2rem; }
+}
+
