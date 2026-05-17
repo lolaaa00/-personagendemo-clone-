@@ -1,0 +1,134 @@
+{
+  "client": {
+    "id": "honeyforx",
+    "name": "HoneyForX",
+    "tagline": "AI UGC Creator Automation for HoneyForX",
+    "domain": "personagen-honeyforx.pages.dev",
+    "pin": "2025",
+    "whatsapp": "https://wa.me/message/jamesdev_pro",
+    "logo_emoji": "ðŸ¯",
+    "email": ""
+  },
+
+  "branding": {
+    "accent": "#7c6aed",
+    "accent_secondary": "#22d3ee",
+    "gradient": "linear-gradient(135deg, #7c6aed, #22d3ee)"
+  },
+
+  "service": {
+    "type": "AI Influencer Generation",
+    "pain_point": "Manual influencer outreach is expensive and unscalable",
+    "solution": "Autonomous AI-generated influencer personas that create and post content 24/7",
+    "deliverables": [
+      "AI Persona Generation",
+      "UGC Content Pipeline",
+      "Account Automation",
+      "Analytics Dashboard",
+      "Managed Infrastructure",
+      "Unlimited Projects"
+    ]
+  },
+
+  "pricing": {
+    "tiers": [
+      {
+        "name": "Starter",
+        "price": 2500,
+        "stripe_link": "https://buy.stripe.com/4gMfZhaQRabd8R4eyy6oo0w",
+        "stripe_product_id": "prod_UX2fe2kLwDoQl5",
+        "stripe_price_id": "price_1TXyahE7vgH3K5igoQhyLCwr",
+        "features": [
+          "Unlimited Tweak tickets",
+          "2 Feature tickets / month",
+          "1 System ticket / month",
+          "Up to 50 AI personas",
+          "2 platforms included",
+          "WhatsApp support < 4hrs"
+        ]
+      },
+      {
+        "name": "Scale",
+        "price": 5000,
+        "original_price": 6500,
+        "stripe_link": "https://buy.stripe.com/8x26oH0cd6Z1gjwgGG6oo0x",
+        "stripe_product_id": "prod_UX2fp7EpO8yev8",
+        "stripe_price_id": "price_1TXyaqE7vgH3K5igeSSVz5Rs",
+        "recommended": true,
+        "urgency": "2 Queue Slots Left",
+        "features": [
+          "Unlimited all ticket types",
+          "3 concurrent System tickets",
+          "Unlimited AI personas",
+          "All platforms included",
+          "Priority WhatsApp < 2hrs",
+          "Dedicated ops engineer"
+        ]
+      }
+    ]
+  },
+
+  "agreement": {
+    "docuseal_url": "https://sign.jamesdev.pro",
+    "docuseal_template_id": null
+  },
+
+  "roadmap": {
+    "phases": [
+      {
+        "icon": "âœï¸", "status": "active", "title": "Agreement & Payment",
+        "timeline": "Days 1â€“2",
+        "items": ["Service proposal", "Signed MSA + SOW", "First payment", "WhatsApp open"]
+      },
+      {
+        "icon": "ðŸ¯", "status": "next", "title": "Brand Brief",
+        "timeline": "Day 3",
+        "items": ["Brand voice doc", "Platform priority", "Persona archetypes", "Niche selection"]
+      },
+      {
+        "icon": "ðŸ–¥ï¸", "status": "upcoming", "title": "Infrastructure",
+        "timeline": "Days 4â€“5",
+        "items": ["VPS + EasyPanel", "GitHub + CI/CD", "Cloudflare DNS", "Account POC"]
+      },
+      {
+        "icon": "ðŸ¤–", "status": "future", "title": "PersonaGen Build",
+        "timeline": "Week 1â€“3",
+        "items": ["5-container stack", "LLM gateway", "Media generation", "Content scheduler"]
+      },
+      {
+        "icon": "ðŸš€", "status": "future", "title": "Distribution",
+        "timeline": "Week 3â€“4",
+        "items": ["Proxy layer", "Account creation", "Auto-posting", "Engagement metrics"]
+      },
+      {
+        "icon": "ðŸŽ¯", "status": "future", "title": "Go-Live",
+        "timeline": "~Day 30",
+        "items": ["11-point smoke test", "Credential handoff", "First live post", "Metrics live"]
+      }
+    ]
+  },
+
+  "communication": [
+    {
+      "icon": "ðŸ’¬",
+      "channel": "WhatsApp",
+      "desc": "All project requests, updates, credential delivery, and milestone reviews",
+      "sla": "< 4 hours",
+      "color": "accent"
+    },
+    {
+      "icon": "ðŸ”§",
+      "channel": "GitHub",
+      "desc": "Technical tracking, code changes, and deployment history",
+      "sla": "< 24 hours",
+      "color": "cyan"
+    }
+  ],
+
+  "demo": {
+    "niches": ["fitness", "tech", "fashion", "finance", "travel", "food"],
+    "hero_badge": "ðŸ¯ Built for HoneyForX Â· AI-Powered UGC Automation",
+    "hero_title": "Generate UGC Creators<br><span class=\"gradient-text\">That Sell Autonomously</span>",
+    "hero_subtitle": "Generate AI influencers that create UGC product content, post autonomously, and drive conversions for your e-commerce brand â€” from scout to sale, fully automated."
+  }
+}

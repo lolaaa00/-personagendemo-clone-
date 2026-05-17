@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Master Service Agreement â€” PersonaGen AI Platform</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@500;600&display=swap');
+
+  :root {
+    --ink: #1a1a2e;
+    --ink-light: #444;
+    --ink-muted: #666;
+    --accent: #7c6aed;
+    --border: #e0e0e0;
+    --bg: #fff;
+    --surface: #fafafa;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  @page {
+    size: letter;
+    margin: 1in 1.15in;
+  }
+
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    font-size: 10.5pt;
+    line-height: 1.65;
+    color: var(--ink);
+    background: var(--bg);
+    max-width: 8.5in;
+    margin: 0 auto;
+    padding: 0.75in 1in;
+  }
+
+  /* â”€â”€ Header â”€â”€ */
+  .msa-header {
+    text-align: center;
+    border-bottom: 2px solid var(--accent);
+    padding-bottom: 1.5rem;
+    margin-bottom: 2rem;
+  }
+  .msa-header h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: 22pt;
+    font-weight: 600;
+    color: var(--ink);
+    margin-bottom: 0.25rem;
+  }
+  .msa-header .subtitle {
+    font-size: 11pt;
+    color: var(--accent);
+    font-weight: 600;
+    letter-spacing: 0.03em;
+  }
+  .msa-header .date {
+    font-size: 9pt;
+    color: var(--ink-muted);
+    margin-top: 0.5rem;
+  }
+
+  /* â”€â”€ Parties â”€â”€ */
+  .parties {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+    margin-bottom: 2rem;
+    padding: 1.25rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+  }
+  .party-label {
+    font-size: 8pt;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--accent);
+    margin-bottom: 0.4rem;
+  }
+  .party-name {
+    font-size: 12pt;
+    font-weight: 600;
+  }
+  .party-detail {
+    font-size: 9pt;
+    color: var(--ink-muted);
+    margin-top: 0.15rem;
+  }
+
+  /* â”€â”€ Sections â”€â”€ */
+  .section {
+    margin-bottom: 1.75rem;
+    page-break-inside: avoid;
+  }
+  .section-num {
+    display: inline-block;
+    font-size: 9pt;
+    font-weight: 700;
+    color: var(--accent);
+    margin-right: 0.5rem;
+  }
+  .section h2 {
+    font-size: 13pt;
+    font-weight: 700;
+    margin-bottom: 0.6rem;
+    padding-bottom: 0.3rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .section h3 {
+    font-size: 11pt;
+    font-weight: 600;
+    margin: 1rem 0 0.4rem;
+    color: var(--ink);
+  }
+  .section p, .section li {
+    font-size: 10.5pt;
+    color: var(--ink-light);
+    line-height: 1.7;
+  }
+  .section ul, .section ol {
+    padding-left: 1.5rem;
+    margin: 0.5rem 0;
+  }
+  .section li {
+    margin-bottom: 0.3rem;
+  }
+
+  /* â”€â”€ Tables â”€â”€ */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0.75rem 0;
+    font-size: 10pt;
+  }
+  th {
+    background: var(--surface);
+    font-weight: 600;
+    font-size: 9pt;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    text-align: left;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 2px solid var(--border);
+  }
+  td {
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    color: var(--ink-light);
+  }
+  tr:last-child td { border-bottom: none; }
+
+  /* â”€â”€ Signature â”€â”€ */
+  .signature-block {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 3rem;
+    margin-top: 3rem;
+    padding-top: 1.5rem;
+    border-top: 2px solid var(--ink);
+  }
+  .sig-group {
+    padding-top: 0.5rem;
+  }
+  .sig-label {
+    font-size: 8pt;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--accent);
+    margin-bottom: 2.5rem;
+  }
+  .sig-line {
+    border-bottom: 1px solid var(--ink);
+    margin-bottom: 0.35rem;
+    height: 1.5rem;
+  }
+  .sig-field {
+    font-size: 8.5pt;
+    color: var(--ink-muted);
+    margin-bottom: 1.5rem;
+  }
+
+  /* â”€â”€ Exhibit â”€â”€ */
+  .exhibit {
+    page-break-before: always;
+    margin-top: 2rem;
+  }
+  .exhibit-label {
+    font-size: 10pt;
+    font-weight: 700;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 0.25rem;
+  }
+
+  .highlight-box {
+    background: var(--surface);
+    border-left: 3px solid var(--accent);
+    padding: 0.75rem 1rem;
+    margin: 0.75rem 0;
+    border-radius: 0 4px 4px 0;
+  }
+
+  @media print {
+    body { padding: 0; }
+    .section { page-break-inside: avoid; }
+    .signature-block { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<!-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
+<!-- HEADER -->
+<!-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
+<div class="msa-header">
+  <h1>Master Service Agreement</h1>
+  <div class="subtitle">PersonaGen AI Â· Managed Automation Partnership</div>
+  <div class="date">Effective Date: ________________________, 2026</div>
+</div>
+
+<!-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
+<!-- PARTIES -->
+<!-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
+<div class="parties">
+  <div>
+    <div class="party-label">Service Provider ("Provider")</div>
+    <div class="party-name">JamesDev Pro</div>
+    <div class="party-detail">Devante James, Principal</div>
+    <div class="party-detail">Managed Automation & AI Engineering</div>
+    <div class="party-detail">Contact: WhatsApp (provided upon signing)</div>
+  </div>
+  <div>
+    <div class="party-label">Client ("Client")</div>
+    <div class="party-name">{{client.name}}</div>
+    <div class="party-detail">Authorized Representative: ________________________</div>
+    <div class="party-detail">Email: ________________________</div>
+    <div class="party-detail">Company (if applicable): ________________________</div>
+  </div>
+</div>
+
+<!-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
+<!-- 1. SCOPE OF SERVICES -->
+<!-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
+<div class="section">
+  <h2><span class="section-num">Â§1</span> Scope of Services</h2>
+  <p>Provider agrees to deliver managed AI influencer generation services ("PersonaGen Platform") to Client under the terms described herein. The service encompasses the full lifecycle of autonomous AI-generated content creation, from persona generation to autonomous social media distribution.</p>
+
+  <h3>1.1 Core Deliverables</h3>
+  <ul>
+    <li><strong>AI Persona Generation</strong> â€” Creation of synthetic influencer identities including name, biography, visual appearance, and voice profile using proprietary AI models.</li>
+    <li><strong>UGC Content Pipeline</strong> â€” Automated generation of user-generated-style content including images, captions, hashtags, and posting schedules tailored to Client's brand.</li>
+    <li><strong>Account Automation</strong> â€” Programmatic creation and management of social media accounts for generated personas across agreed-upon platforms.</li>
+    <li><strong>Analytics Dashboard</strong> â€” Real-time metrics dashboard tracking engagement, reach, conversions, and persona performance.</li>
+    <li><strong>Managed Infrastructure</strong> â€” Dedicated server environment including container orchestration, DNS management, SSL certificates, CI/CD pipeline, and security hardening.</li>
+    <li><strong>Ongoing Operations</strong> â€” Continuous monitoring, maintenance, optimization, and support of all deployed systems per the selected Plan tier.</li>
+  </ul>
+
+  <h3>1.2 Exclusions</h3>
+  <p>Unless separately agreed in writing, the following are excluded from this Agreement:</p>
+  <ul>
+    <li>Direct advertising spend or media buying on any platform</li>
+    <li>Legal compliance review of generated content (Client bears responsibility for content compliance in their jurisdiction)</li>
+    <li>Physical merchandise or product fulfillment</li>
+    <li>Third-party API costs exceeding the Provider-allocated allowance (e.g., excessive LLM usage beyond plan limits)</li>
+  </ul>
+</div>
+
+<!-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
+<!-- 2. SERVICE PLAN & PRICING -->
+<!-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
+<div class="section">
+  <h2><span class="section-num">Â§2</span> Service Plan & Pricing</h2>
+  <p>Client selects one of the following Managed Plan tiers. The selected tier is indicated below and governs the service level for the duration of this Agreement.</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th></th>
+        <th>Starter Plan</th>
+        <th>Scale Plan</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Monthly Fee</strong></td>
+        <td>$2,500 / month</td>
+        <td>$5,000 / month</td>
+      </tr>
+      <tr>
+        <td><strong>Tweak Tickets</strong></td>
+        <td>Unlimited</td>
+        <td>Unlimited</td>
+      </tr>
+      <tr>
+        <td><strong>Feature Tickets</strong></td>
+        <td>2 / month</td>
+        <td>Unlimited</td>
+      </tr>
+      <tr>
+        <td><strong>System Tickets</strong></td>
+        <td>1 / month</td>
+        <td>3 concurrent</td>
+      </tr>
+      <tr>
+        <td><strong>AI Personas</strong></td>
+        <td>Up to 50</td>
+        <td>Unlimited</td>
+      </tr>
+      <tr>
+        <td><strong>Platforms</strong></td>
+        <td>2 included</td>
+        <td>All supported platforms</td>
+      </tr>
+      <tr>
+        <td><strong>Support SLA</strong></td>
+        <td>WhatsApp < 4 hours</td>
+        <td>Priority WhatsApp < 2 hours</td>
+      </tr>
+      <tr>
+        <td><strong>Dedicated Ops Engineer</strong></td>
+        <td>â€”</td>
+        <td>âœ“ Included</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="highlight-box">
+    <strong>Selected Plan:</strong> â˜ Starter ($2,500/mo) &nbsp;&nbsp; â˜ Scale ($5,000/mo)<br>
+    <em style="font-size:9pt; color:var(--ink-muted);">Check one. The selected plan takes effect upon first payment.</em>
+  </div>
+
+  <h3>2.1 Ticket Definitions</h3>
+  <ul>
+    <li><strong>Tweak Ticket:</strong> Minor configuration change, copy update, styling adjustment, or parameter tuning. Typically completed within 24 hours.</li>
+    <li><strong>Feature Ticket:</strong> New functionality, integration, workflow automation, or significant enhancement requiring development work. Typically 2â€“5 business days.</li>
+    <li><strong>System Ticket:</strong> Large-scale infrastructure change, new service deployment, platform migration, or architectural work. Typically 1â€“3 weeks.</li>
+  </ul>
+</div>
+
+<!-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
+<!-- 3. PAYMENT TERMS -->
+<!-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
+<div class="section">
+  <h2><span class="section-num">Â§3</span> Payment Terms</h2>
+  <ol>
+    <li><strong>Billing Cycle:</strong> Monthly, billed in advance on the same calendar date as the first payment.</li>
+    <li><strong>Payment Method:</strong> Stripe subscription (automatic recurring charge). Client's payment link will be provided upon execution of this Agreement.</li>
+    <li><strong>Late Payment:</strong> Invoices unpaid for more than seven (7) days after the due date may result in service suspension until the balance is settled. Provider will give forty-eight (48) hours written notice via WhatsApp before any suspension.</li>
+    <li><strong>Plan Changes:</strong> Client may upgrade or downgrade their plan tier with thirty (30) days written notice. Upgrades take effect immediately; downgrades take effect at the start of the next billing cycle.</li>
+    <li><strong>No Setup Fee:</strong> There is no one-time onboarding or setup fee. The monthly subscription covers all onboarding, infrastructure provisioning, and initial build.</li>
+  </ol>
+</div>
+
+<!-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
+<!-- 4. TERM & TERMINATION -->
+<!-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
+<div class="section">
+  <h2><span class="section-num">Â§4</span> Term & Termination</h2>
+  <ol>
+    <li><strong>Initial Term:</strong> This Agreement commences on the Effective Date and continues on a month-to-month basis unless terminated as provided herein.</li>
+    <li><strong>Termination by Client:</strong> Client may terminate this Agreement at any time with thirty (30) days written notice via WhatsApp or email. Services will continue through the end of the paid billing period.</li>
+    <li><strong>Termination by Provider:</strong> Provider may terminate with thirty (30) days written notice if Client fails to cure a material breach within fifteen (15) days of notice.</li>
+    <li><strong>Effect of Termination:</strong> Upon termination:
+      <ul>
+        <li>Provider will deliver all Client data, credentials, source code, and generated assets within fourteen (14) business days.</li>
+        <li>Infrastructure (servers, domains, DNS) will be maintained for thirty (30) days post-termination to enable Client migration, after which it will be decommissioned.</li>
+        <li>Unused prepaid amounts for the current billing cycle are non-refundable, but no additional charges will be made.</li>
+      </ul>
+    </li>
+    <li><strong>Prorated Refunds:</strong> If Client terminates within the first fourteen (14) days of an annual commitment (if applicable), a prorated refund of unused months will be issued minus a 15% early-termination administrative fee.</li>
+  </ol>
+</div>
+
+<!-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
+<!-- 5. COMMUNICATION & SLA -->
+<!-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
+<div class="section">
+  <h2><span class="section-num">Â§5</span> Communication & Service Levels</h2>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Channel</th>
+        <th>Purpose</th>
+        <th>Response SLA</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>WhatsApp</strong></td>
+        <td>Primary â€” all project requests, updates, milestone reviews, credential delivery</td>
+        <td>< 4 hours (Starter) / < 2 hours (Scale)</td>
+      </tr>
+      <tr>
+        <td><strong>GitHub</strong></td>
+        <td>Technical â€” code changes, deployment history, issue tracking</td>
+        <td>< 24 hours</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>5.1 Availability</h3>
+  <p>Provider maintains availability Monday through Friday, 9:00 AM â€“ 7:00 PM ET. Critical infrastructure failures affecting production systems will be addressed within two (2) hours regardless of business hours.</p>
+
+  <h3>5.2 Uptime Target</h3>
+  <p>Provider targets 99.5% monthly uptime for all production infrastructure. Scheduled maintenance windows will be communicated at least 24 hours in advance via WhatsApp.</p>
+</div>
+
+<!-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
+<!-- 6. PROJECT TIMELINE -->
+<!-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
+<div class="section">
+  <h2><span class="section-num">Â§6</span> Onboarding & Project Timeline</h2>
+  <p>The following timeline represents the standard onboarding sequence. Actual timelines may vary based on Client responsiveness and scope complexity.</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Phase</th>
+        <th>Timeline</th>
+        <th>Key Deliverables</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Agreement & Payment</strong></td>
+        <td>Days 1â€“2</td>
+        <td>Signed MSA, first Stripe payment, WhatsApp channel open</td>
+      </tr>
+      <tr>
+        <td><strong>Brand Brief & Discovery</strong></td>
+        <td>Day 3</td>
+        <td>Brand voice document, platform priorities, persona archetypes, niche selection</td>
+      </tr>
+      <tr>
+        <td><strong>Infrastructure</strong></td>
+        <td>Days 4â€“5</td>
+        <td>Dedicated VPS, EasyPanel, GitHub repo, Cloudflare DNS, SSL, security hardening</td>
+      </tr>
+      <tr>
+        <td><strong>PersonaGen Build</strong></td>
+        <td>Weeks 1â€“3</td>
+        <td>5-container stack, LLM gateway, media generation engine, content scheduler</td>
+      </tr>
+      <tr>
+        <td><strong>Distribution & Automation</strong></td>
+        <td>Weeks 3â€“4</td>
+        <td>Proxy infrastructure, auto account creation, autonomous posting, engagement tracking</td>
+      </tr>
+      <tr>
+        <td><strong>Go-Live & Handoff</strong></td>
+        <td>~Day 30</td>
+        <td>11-point smoke test, credential bundle, live walkthrough, first production post</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
+<!-- 7. INTELLECTUAL PROPERTY -->
+<!-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
+<div class="section">
+  <h2><span class="section-num">Â§7</span> Intellectual Property</h2>
+  <ol>
+    <li><strong>Client-Owned Assets:</strong> All AI-generated content (images, captions, personas, videos) created specifically for Client's brand are owned by Client upon payment. This includes persona identities, generated media, and brand-specific configurations.</li>
+    <li><strong>Provider-Owned Platform:</strong> The underlying PersonaGen platform, including its architecture, source code frameworks, automation pipelines, LLM prompt systems, and infrastructure tooling, remain the exclusive intellectual property of Provider.</li>
+    <li><strong>Client Data:</strong> Provider will host and process Client brand assets, product information, and account credentials solely for the purpose of delivering the contracted services. Client retains full ownership of all input data.</li>
+    <li><strong>License Grant:</strong> Provider grants Client a non-exclusive, non-transferable license to use the deployed platform for the duration of this Agreement. Upon termination, Client retains all generated assets but the platform license expires.</li>
+  </ol>
+</div>
+
+<!-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
+<!-- 8. CONFIDENTIALITY -->
+<!-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
+<div class="section">
+  <h2><span class="section-num">Â§8</span> Confidentiality</h2>
+  <ol>
+    <li>Both parties agree to maintain the confidentiality of all proprietary information exchanged during the term of this Agreement, including but not limited to: business strategies, pricing structures, technical architecture, credentials, API keys, and customer data.</li>
+    <li>Neither party shall disclose Confidential Information to any third party without prior written consent, except as required by law or to perform obligations under this Agreement.</li>
+    <li>Provider will not use Client's brand name, logos, or likeness in marketing materials, case studies, or public-facing content without prior written approval.</li>
+    <li>All credentials (API keys, server access, social media accounts) will be transmitted exclusively through encrypted channels (WhatsApp (end-to-end encrypted) or equivalent).</li>
+    <li>This confidentiality obligation survives termination of this Agreement for a period of two (2) years.</li>
+  </ol>
+</div>
+
+<!-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
+<!-- 9. LIABILITY -->
+<!-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
+<div class="section">
+  <h2><span class="section-num">Â§9</span> Limitation of Liability</h2>
+  <ol>
+    <li><strong>Cap:</strong> Provider's total aggregate liability under this Agreement shall not exceed the total fees paid by Client in the three (3) months immediately preceding the event giving rise to the claim.</li>
+    <li><strong>Exclusions:</strong> In no event shall Provider be liable for indirect, incidental, consequential, special, or punitive damages, including lost profits, lost data, or business interruption, even if advised of the possibility of such damages.</li>
+    <li><strong>Platform Risk:</strong> Client acknowledges that social media platforms may suspend or ban AI-generated accounts at their discretion. Provider will exercise best practices to mitigate this risk but does not guarantee uninterrupted account persistence on any third-party platform.</li>
+    <li><strong>Force Majeure:</strong> Neither party shall be liable for delays or failures in performance resulting from causes beyond their reasonable control, including but not limited to: natural disasters, internet disruptions, third-party API outages, or changes in social media platform policies.</li>
+  </ol>
+</div>
+
+<!-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
+<!-- 10. DATA SECURITY -->
+<!-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
+<div class="section">
+  <h2><span class="section-num">Â§10</span> Data Security & Infrastructure</h2>
+  <ol>
+    <li>All Client infrastructure is provisioned on dedicated, isolated server instances (not shared hosting).</li>
+    <li>All data in transit is encrypted via TLS 1.3. All domains are proxied through Cloudflare with DDoS protection enabled.</li>
+    <li>Server access is restricted to Provider's authorized personnel via SSH key authentication. No password-based server access is permitted.</li>
+    <li>Client credentials and API keys are stored in encrypted environment variables, never committed to source code repositories.</li>
+    <li>Automated daily database backups are maintained with a 30-day retention window.</li>
+  </ol>
+</div>
+
+<!-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
+<!-- 11. GENERAL PROVISIONS -->
+<!-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
+<div class="section">
+  <h2><span class="section-num">Â§11</span> General Provisions</h2>
+  <ol>
+    <li><strong>Independent Contractor:</strong> Provider is an independent contractor. Nothing in this Agreement creates an employment, partnership, or agency relationship.</li>
+    <li><strong>Entire Agreement:</strong> This Agreement, including any attached Exhibits, constitutes the entire agreement between the parties and supersedes all prior discussions, proposals, or agreements.</li>
+    <li><strong>Amendments:</strong> This Agreement may only be amended in writing signed by both parties, or via mutual written confirmation on the primary WhatsApp channel.</li>
+    <li><strong>Severability:</strong> If any provision of this Agreement is held invalid, the remaining provisions shall continue in full force.</li>
+    <li><strong>Governing Law:</strong> This Agreement shall be governed by the laws of the State of Georgia, United States, without regard to conflicts of law principles.</li>
+    <li><strong>Dispute Resolution:</strong> Any disputes arising under this Agreement shall first be addressed through good-faith negotiation. If unresolved within thirty (30) days, disputes may be submitted to binding arbitration under the rules of the American Arbitration Association.</li>
+  </ol>
+</div>
+
+<!-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
+<!-- SIGNATURES -->
+<!-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
+<div class="signature-block">
+  <div class="sig-group">
+    <div class="sig-label">Service Provider</div>
+    <div class="sig-line"></div>
+    <div class="sig-field">Signature</div>
+    <div class="sig-line"></div>
+    <div class="sig-field">Printed Name: Devante James</div>
+    <div class="sig-line"></div>
+    <div class="sig-field">Date</div>
+  </div>
+  <div class="sig-group">
+    <div class="sig-label">Client</div>
+    <div class="sig-line"></div>
+    <div class="sig-field">Signature</div>
+    <div class="sig-line"></div>
+    <div class="sig-field">Printed Name</div>
+    <div class="sig-line"></div>
+    <div class="sig-field">Date</div>
+  </div>
+</div>
+
+<!-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
+<!-- EXHIBIT A -->
+<!-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
+<div class="exhibit">
+  <div class="exhibit-label">Exhibit A â€” Statement of Work</div>
+  <h2>Initial Project Scope: {{client.name}}</h2>
+
+  <h3>A.1 Project Description</h3>
+  <p>Design, build, and deploy an autonomous AI influencer generation system ("PersonaGen") for Client's e-commerce brand. The system will generate synthetic influencer personas, produce UGC-style content, and distribute it autonomously across social media platforms to drive organic engagement and conversions.</p>
+
+  <h3>A.2 Technical Architecture</h3>
+  <table>
+    <thead>
+      <tr><th>Component</th><th>Technology</th><th>Purpose</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Container Platform</td><td>EasyPanel + Docker</td><td>Service orchestration & isolation</td></tr>
+      <tr><td>AI Model Gateway</td><td>Nova API (multi-model)</td><td>LLM routing for persona/content generation</td></tr>
+      <tr><td>Media Engine</td><td>Flux / Kling / Wan</td><td>Avatar images & video generation</td></tr>
+      <tr><td>Automation</td><td>n8n (self-hosted)</td><td>Workflow orchestration & scheduling</td></tr>
+      <tr><td>CDN & Security</td><td>Cloudflare</td><td>DNS, SSL, DDoS protection, edge caching</td></tr>
+      <tr><td>Code Management</td><td>GitHub + CI/CD</td><td>Version control & automated deployment</td></tr>
+      <tr><td>Analytics</td><td>Custom dashboard</td><td>Real-time engagement & performance metrics</td></tr>
+    </tbody>
+  </table>
+
+  <h3>A.3 Acceptance Criteria</h3>
+  <p>The project shall be considered complete upon passing the following 11-point smoke test:</p>
+  <ol>
+    <li>All containers healthy and auto-restarting on failure</li>
+    <li>DNS resolving correctly for all project domains</li>
+    <li>SSL certificates valid and auto-renewing</li>
+    <li>AI persona generation producing consistent, brand-aligned output</li>
+    <li>Content scheduler posting on the defined cadence</li>
+    <li>Analytics dashboard receiving and displaying live engagement data</li>
+    <li>Proxy infrastructure routing traffic without detection</li>
+    <li>Auto-posting verified on at least one platform</li>
+    <li>Client credential bundle delivered via encrypted channel</li>
+    <li>Live walkthrough completed with Client</li>
+    <li>First production content posted successfully</li>
+  </ol>
+</div>
+
+</body>
+</html>
