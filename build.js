@@ -188,4 +188,6 @@ fs.writeFileSync(path.join(DIST, 'manifest.json'), JSON.stringify(manifest, null
 console.log(`  ✓ Generated manifest.json`);
 
 console.log(`\n✅ Build complete: ${DIST}`);
-console.log(`   Deploy with: npx wrangler pages deploy ${DIST} --project-name=personagen-${clientId}\n`);
+console.log(`   Deploy with: npx wrangler pages deploy ${DIST} --project-name=personagen-${clientId}`);
+console.log(`   MSA PDF:     node generate-msa.js ${clientId}`);
+console.log(`   MSA + Upload: node generate-msa.js ${clientId} --upload\n`);

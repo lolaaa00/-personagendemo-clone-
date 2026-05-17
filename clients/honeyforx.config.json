@@ -6,7 +6,7 @@
     "domain": "personagen-honeyforx.pages.dev",
     "pin": "2025",
     "whatsapp": "https://wa.me/message/jamesdev_pro",
-    "logo_emoji": "ðŸ¯",
+    "logo_emoji": "🍯",
     "email": ""
   },
 
@@ -76,32 +76,32 @@
   "roadmap": {
     "phases": [
       {
-        "icon": "âœï¸", "status": "active", "title": "Agreement & Payment",
-        "timeline": "Days 1â€“2",
+        "icon": "✍️", "status": "active", "title": "Agreement & Payment",
+        "timeline": "Days 1–2",
         "items": ["Service proposal", "Signed MSA + SOW", "First payment", "WhatsApp open"]
       },
       {
-        "icon": "ðŸ¯", "status": "next", "title": "Brand Brief",
+        "icon": "🍯", "status": "next", "title": "Brand Brief",
         "timeline": "Day 3",
         "items": ["Brand voice doc", "Platform priority", "Persona archetypes", "Niche selection"]
       },
       {
-        "icon": "ðŸ–¥ï¸", "status": "upcoming", "title": "Infrastructure",
-        "timeline": "Days 4â€“5",
+        "icon": "🖥️", "status": "upcoming", "title": "Infrastructure",
+        "timeline": "Days 4–5",
         "items": ["VPS + EasyPanel", "GitHub + CI/CD", "Cloudflare DNS", "Account POC"]
       },
       {
-        "icon": "ðŸ¤–", "status": "future", "title": "PersonaGen Build",
-        "timeline": "Week 1â€“3",
+        "icon": "🤖", "status": "future", "title": "PersonaGen Build",
+        "timeline": "Week 1–3",
         "items": ["5-container stack", "LLM gateway", "Media generation", "Content scheduler"]
       },
       {
-        "icon": "ðŸš€", "status": "future", "title": "Distribution",
-        "timeline": "Week 3â€“4",
+        "icon": "🚀", "status": "future", "title": "Distribution",
+        "timeline": "Week 3–4",
         "items": ["Proxy layer", "Account creation", "Auto-posting", "Engagement metrics"]
       },
       {
-        "icon": "ðŸŽ¯", "status": "future", "title": "Go-Live",
+        "icon": "🎯", "status": "future", "title": "Go-Live",
         "timeline": "~Day 30",
         "items": ["11-point smoke test", "Credential handoff", "First live post", "Metrics live"]
       }
@@ -110,14 +110,14 @@
 
   "communication": [
     {
-      "icon": "ðŸ’¬",
+      "icon": "💬",
       "channel": "WhatsApp",
       "desc": "All project requests, updates, credential delivery, and milestone reviews",
       "sla": "< 4 hours",
       "color": "accent"
     },
     {
-      "icon": "ðŸ”§",
+      "icon": "🔧",
       "channel": "GitHub",
       "desc": "Technical tracking, code changes, and deployment history",
       "sla": "< 24 hours",
@@ -127,8 +127,8 @@
 
   "demo": {
     "niches": ["fitness", "tech", "fashion", "finance", "travel", "food"],
-    "hero_badge": "ðŸ¯ Built for HoneyForX Â· AI-Powered UGC Automation",
+    "hero_badge": "🍯 Built for HoneyForX · AI-Powered UGC Automation",
     "hero_title": "Generate UGC Creators<br><span class=\"gradient-text\">That Sell Autonomously</span>",
-    "hero_subtitle": "Generate AI influencers that create UGC product content, post autonomously, and drive conversions for your e-commerce brand â€” from scout to sale, fully automated."
+    "hero_subtitle": "Generate AI influencers that create UGC product content, post autonomously, and drive conversions for your e-commerce brand — from scout to sale, fully automated."
   }
 }
