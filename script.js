@@ -325,30 +325,6 @@ function generateAgent() {
         if (activePlatforms.includes('tiktok') && posts.tiktok) platformPosts.push({platform:'TikTok',text:posts.tiktok});
         if (activePlatforms.includes('twitter') && posts.twitter) platformPosts.push({platform:'Twitter/X',text:posts.twitter});
 
-        // Determine compliance warnings
-        let complianceBox = '';
-        if (niche === 'fitness' || niche === 'food') {
-            complianceBox = `
-                <div class="fda-warning-box" style="margin-top: 1rem; padding: 1rem; background: rgba(244, 63, 94, 0.05); border: 1px dashed var(--rose); border-radius: 8px; font-size: 0.8rem; line-height: 1.5; text-align: left;">
-                    <div class="fda-title" style="font-weight: 700; color: var(--rose); margin-bottom: 0.5rem; display: flex; align-items: center; gap: 6px;">
-                        ⚠️ FDA Regulatory Compliance Warning
-                    </div>
-                    This script promotes a dietary supplement/health product. Under FDA regulations (21 CFR Part 101), all promotional content must avoid curative, therapeutic, or diagnostic claims. The statement below must be visibly appended to the media:
-                    <br><br>
-                    <em style="color: var(--text-dim);">"These statements have not been evaluated by the Food and Drug Administration. This product is not intended to diagnose, treat, cure, or prevent any disease."</em>
-                </div>
-            `;
-        } else {
-            complianceBox = `
-                <div class="fda-warning-box" style="margin-top: 1rem; padding: 1rem; background: rgba(212, 168, 83, 0.05); border: 1px dashed var(--gold); border-radius: 8px; font-size: 0.8rem; line-height: 1.5; text-align: left;">
-                    <div class="fda-title" style="font-weight: 700; color: var(--gold); margin-bottom: 0.5rem; display: flex; align-items: center; gap: 6px;">
-                        ⚠️ FTC Endorsement Disclosure Required
-                    </div>
-                    Under FTC Guidelines (16 CFR Part 255), this content is a brand endorsement. The connection between the influencer and the sponsor must be clearly and conspicuously disclosed. Ensure the video clearly displays <strong style="color: var(--text);">#ad</strong> or <strong style="color: var(--text);">#sponsored</strong> in the first 3 seconds.
-                </div>
-            `;
-        }
-
         output.innerHTML = `
             <div class="gen-result">
                 <div class="gen-result-header" style="background:${grad.replace('linear-gradient','linear-gradient')}20">
@@ -387,11 +363,13 @@ function generateAgent() {
                             <span class="ugc-format">${activePlatforms.includes('tiktok') ? 'TikTok · 30s' : 'Reels · 30s'}</span>
                         </div>
                         <div class="ugc-script">
-                            ${GEN_UGC[niche].scenes.map(s => `<div class="ugc-scene"><span class="ugc-ts">${s.ts}</span> <strong>${s.tag}:</strong> <span class="watermark-tag" style="background:rgba(124,106,237,0.15); color:var(--accent); font-weight:bold; font-size:0.62rem; padding:1px 5px; border-radius:4px; margin-right:4px;">[AI-Generated]</span> ${s.text}</div>`).join('')}
+                            ${GEN_UGC[niche].scenes.map(s => `<div class="ugc-scene"><span class="ugc-ts">${s.ts}</span> <strong>${s.tag}:</strong> ${s.text}</div>`).join('')}
                         </div>
                         <div class="ugc-tags">${GEN_UGC[niche].tags}</div>
                     </div>
-                    ${complianceBox}
+                    <div class="ugc-disclaimer" style="margin-top: 0.75rem; font-size: 0.75rem; color: var(--text-dim); text-align: center; font-style: italic;">
+                        Disclaimer: Generated content is for demonstration purposes.
+                    </div>
                 </div>
 
                 <div class="gen-result-content">
