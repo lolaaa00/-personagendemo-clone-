@@ -299,6 +299,23 @@ body {
   background: var(--accent-soft);
 }
 
+button.pg-nav-link {
+  background: none;
+  border: none;
+  font: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pg-nav-drawer button.pg-nav-link {
+  text-align: left;
+  padding: 0.5rem 1rem;
+  width: 100%;
+  display: block;
+}
+
 .pg-nav-link.pg-nav-cta {
   color: var(--accent);
   border: 1px solid var(--border-hover);

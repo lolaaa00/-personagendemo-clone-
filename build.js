@@ -33,9 +33,44 @@ const DIST = path.join(__dirname, 'dist', clientId);
 console.log(`\n⚡ Building PersonaGen for: ${config.client.name} (${clientId})`);
 console.log(`   Output: ${DIST}\n`);
 
-// ── Ensure dist directory ──
-fs.mkdirSync(DIST, { recursive: true });
+// ── Recursive Directory Copy Helper ──
+function copyDir(src, dest) {
+  fs.mkdirSync(dest, { recursive: true });
+  const entries = fs.readdirSync(src, { withFileTypes: true });
+  for (let entry of entries) {
+    const srcPath = path.join(src, entry.name);
+    const destPath = path.join(dest, entry.name);
+    if (entry.isDirectory()) {
+      copyDir(srcPath, destPath);
+    } else {
+      fs.copyFileSync(srcPath, destPath);
+    }
+  }
+}
+
+// ── Clean and Ensure dist directory ──
+if (fs.existsSync(DIST)) {
+  fs.readdirSync(DIST).forEach(file => {
+    const filePath = path.join(DIST, file);
+    if (fs.lstatSync(filePath).isDirectory()) {
+      fs.rmSync(filePath, { recursive: true, force: true });
+    } else {
+      if (file !== 'msa.pdf') { // Preserve generated PDF if exists
+        fs.unlinkSync(filePath);
+      }
+    }
+  });
+} else {
+  fs.mkdirSync(DIST, { recursive: true });
+}
 fs.mkdirSync(path.join(DIST, 'data'), { recursive: true });
+
+// ── Copy assets directory ──
+const ASSETS_SRC = path.join(__dirname, 'assets');
+if (fs.existsSync(ASSETS_SRC)) {
+  copyDir(ASSETS_SRC, path.join(DIST, 'assets'));
+  console.log(`  ✓ Copied assets/ directory`);
+}
 
 // ── Template Processing ──
 
