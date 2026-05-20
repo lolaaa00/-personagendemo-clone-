@@ -78,6 +78,22 @@ async function main() {
   });
   html = html.replace('________________________, 2026', `${today}`);
 
+  // 3. Embed local images as base64 data URIs (Puppeteer setContent can't resolve relative paths)
+  console.log('  → Embedding persona images...');
+  const ASSETS_DIR = path.join(__dirname, 'assets');
+  html = html.replace(/src="(assets\/[^"]+)"/g, (match, relPath) => {
+    const absPath = path.join(__dirname, relPath);
+    if (fs.existsSync(absPath)) {
+      const ext = path.extname(absPath).slice(1);
+      const mime = ext === 'png' ? 'image/png' : ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : `image/${ext}`;
+      const b64 = fs.readFileSync(absPath).toString('base64');
+      console.log(`    ✓ Embedded ${relPath}`);
+      return `src="data:${mime};base64,${b64}"`;
+    }
+    console.warn(`    ⚠ Not found: ${relPath}`);
+    return match;
+  });
+
   // 2. Launch headless browser & render PDF
   console.log('  → Launching headless browser...');
   const browser = await puppeteer.launch({
@@ -85,8 +101,9 @@ async function main() {
     args: ['--no-sandbox', '--disable-setuid-sandbox']
   });
   const page = await browser.newPage();
+  page.setDefaultNavigationTimeout(120000);
 
-  await page.setContent(html, { waitUntil: 'networkidle0' });
+  await page.setContent(html, { waitUntil: 'networkidle2', timeout: 120000 });
 
   // Wait for fonts to load
   await page.evaluateHandle('document.fonts.ready');

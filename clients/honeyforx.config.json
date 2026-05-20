@@ -1,8 +1,8 @@
 {
   "client": {
     "id": "honeyforx",
-    "name": "HoneyForX",
-    "tagline": "AI UGC Creator Automation for HoneyForX",
+    "name": "HoneyX",
+    "tagline": "AI UGC Creator Automation for HoneyX",
     "domain": "personagen-honeyforx.pages.dev",
     "pin": "2025",
     "whatsapp": "https://wa.me/message/jamesdev_pro",
@@ -64,8 +64,40 @@
           "Priority WhatsApp < 2hrs",
           "Dedicated ops engineer"
         ]
+      },
+      {
+        "name": "Growth",
+        "price": 10000,
+        "stripe_link": "",
+        "stripe_product_id": "",
+        "stripe_price_id": "",
+        "features": [
+          "Unlimited all ticket types",
+          "5 concurrent System tickets",
+          "Unlimited AI personas",
+          "All platforms included",
+          "Priority WhatsApp < 1hr",
+          "Named ops engineer",
+          "Dedicated instance",
+          "4 hrs/mo custom dev",
+          "Monthly ops review"
+        ]
       }
-    ]
+    ],
+    "byok": {
+      "available": true,
+      "scale_discount": 1000,
+      "growth_discount": 2500,
+      "required_keys": ["IMAGE_VIDEO_API_KEY", "LLM_API_KEY", "VOICE_API_KEY"]
+    },
+    "credits": {
+      "starter_monthly": 2000,
+      "scale_monthly": 10000,
+      "growth_monthly": 50000,
+      "overage_rate_starter": 0.03,
+      "overage_rate_scale": 0.02,
+      "overage_rate_growth": 0.015
+    }
   },
 
   "agreement": {
@@ -127,7 +159,7 @@
 
   "demo": {
     "niches": ["fitness", "tech", "fashion", "finance", "travel", "food"],
-    "hero_badge": "🍯 Built for HoneyForX · AI-Powered UGC Automation",
+    "hero_badge": "🍯 Built for HoneyX · AI-Powered UGC Automation",
     "hero_title": "Generate UGC Creators<br><span class=\"gradient-text\">That Sell Autonomously</span>",
     "hero_subtitle": "Generate AI influencers that create UGC product content, post autonomously, and drive conversions for your e-commerce brand — from scout to sale, fully automated."
   }

@@ -205,6 +205,53 @@
     border-radius: 0 4px 4px 0;
   }
 
+  /* ── Persona Showcase (scattered throughout doc) ── */
+  .persona-showcase {
+    display: flex;
+    gap: 1.5rem;
+    margin: 2rem 0;
+    padding: 1.5rem;
+    background: #1a1a2e;
+    border-radius: 10px;
+    page-break-inside: avoid;
+  }
+  .persona-showcase .persona-frame {
+    flex: 1;
+    position: relative;
+    border-radius: 16px;
+    overflow: hidden;
+    aspect-ratio: 9 / 13;
+    background: #222;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  }
+  .persona-showcase .persona-frame img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .persona-showcase .persona-frame .niche-tag {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 1.5rem 0.75rem 0.6rem;
+    background: linear-gradient(transparent, rgba(0,0,0,0.8));
+    color: #fff;
+    font-size: 9pt;
+    font-weight: 700;
+    text-align: center;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .persona-showcase-caption {
+    text-align: center;
+    font-size: 8.5pt;
+    color: var(--ink-muted);
+    margin-top: 0.5rem;
+    font-style: italic;
+  }
+
   @media print {
     body { padding: 0; }
     .section { page-break-inside: avoid; }
@@ -242,11 +289,11 @@
 <!-- 1. SCOPE OF SERVICES -->
 <div class="section">
   <h2><span class="section-num">§1</span> Scope of Services</h2>
-  <p>Provider agrees to deliver managed AI influencer generation services ("PersonaGen Platform") to Client under the terms described herein. The service encompasses the full lifecycle of autonomous AI-generated content creation, from persona generation to autonomous social media distribution.</p>
+  <p>Provider agrees to deliver managed AI influencer generation services ("PersonaGen Platform") to Client under the terms described herein. The service encompasses the full lifecycle of autonomous AI-generated content creation, from persona generation to autonomous social media distribution. AI model execution capabilities are integrated through designated third-party AI model aggregators and direct model providers (such as OpenAI, Anthropic/Claude, or similar platforms) suited to the specific workflows scoped for the Client.</p>
 
   <h3>1.1 Core Deliverables</h3>
   <ul>
-    <li><strong>AI Persona Generation</strong> — Creation of synthetic influencer identities including name, biography, visual appearance, and voice profile using proprietary AI models.</li>
+    <li><strong>AI Persona Generation</strong> — Creation of synthetic influencer identities including name, biography, visual appearance, and voice profile via the designated model aggregators and direct providers.</li>
     <li><strong>UGC Content Pipeline</strong> — Automated generation of user-generated-style content including images, captions, hashtags, and posting schedules tailored to Client's brand.</li>
     <li><strong>Account Automation</strong> — Programmatic creation and management of social media accounts for generated personas across agreed-upon platforms.</li>
     <li><strong>Analytics Dashboard</strong> — Real-time metrics dashboard tracking engagement, reach, conversions, and persona performance.</li>
@@ -254,15 +301,34 @@
     <li><strong>Ongoing Operations</strong> — Continuous monitoring, maintenance, optimization, and support of all deployed systems per the selected Plan tier.</li>
   </ul>
 
+  <div class="highlight-box">
+    <strong>Account Setup & Optional BYOK</strong><br>
+    Client is strictly and mandatorily required to establish and fund their own accounts with the designated third-party AI aggregators or direct model providers (such as OpenRouter, OpenAI, Anthropic/Claude, etc.) or maintain active platform subscriptions required by the system. Client shall pay all token, usage, and subscription fees directly to these providers. Optionally, Client may choose to supply their own API keys ("BYOK Keys") for injection into the designated aggregator or direct provider settings. BYOK modifier eligibility and details are defined in §2 and Exhibit A.
+  </div>
+
   <h3>1.2 Exclusions</h3>
   <p>Unless separately agreed in writing, the following are excluded from this Agreement:</p>
   <ul>
     <li>Direct advertising spend or media buying on any platform</li>
-    <li>Legal compliance review of generated content (Client bears responsibility for content compliance in their jurisdiction)</li>
+    <li>Legal compliance review of generated content (Client bears sole and exclusive responsibility for verifying content compliance in their jurisdiction with FTC, FDA, and advertising regulations, including all medical, dietary supplement, and structure/function claims)</li>
     <li>Physical merchandise or product fulfillment</li>
-    <li>Third-party API costs exceeding the Provider-allocated allowance (e.g., excessive LLM usage beyond plan limits)</li>
+    <li>All third-party API, token, subscription, and model consumption fees (which must be paid directly by Client to designated aggregators and direct providers)</li>
+    <li>Provider bears no responsibility for third-party API costs, vendor-imposed rate limits, usage caps, subscription lapses, or service disruptions originating from Client-owned or funded aggregator or provider accounts</li>
   </ul>
 </div>
+
+
+<div class="persona-showcase">
+  <div class="persona-frame">
+    <img src="assets/personas/persona-1.png" alt="Lifestyle Creator">
+    <div class="niche-tag">Lifestyle</div>
+  </div>
+  <div class="persona-frame">
+    <img src="assets/personas/persona-2.png" alt="Beauty Creator">
+    <div class="niche-tag">Beauty</div>
+  </div>
+</div>
+<p class="persona-showcase-caption">AI-generated UGC creator personas — produced autonomously via the designated media engine and model aggregators</p>
 
 <!-- 2. SERVICE PLAN & PRICING -->
 <div class="section">
@@ -273,18 +339,22 @@
     <thead>
       <tr>
         <th></th>
-        <th>Starter Plan</th>
-        <th>Scale Plan</th>
+        <th>Starter</th>
+        <th>Scale</th>
+        <th>Growth</th>
       </tr>
     </thead>
     <tbody>
       <tr>
         <td><strong>Monthly Fee</strong></td>
-        <td>$2,500 / month</td>
-        <td>$5,000 / month</td>
+        <td>$2,500/mo</td>
+        <td>$5,000/mo</td>
+        <td>$10,000/mo</td>
       </tr>
+
       <tr>
         <td><strong>Tweak Tickets</strong></td>
+        <td>Unlimited</td>
         <td>Unlimited</td>
         <td>Unlimited</td>
       </tr>
@@ -292,29 +362,53 @@
         <td><strong>Feature Tickets</strong></td>
         <td>2 / month</td>
         <td>Unlimited</td>
+        <td>Unlimited</td>
       </tr>
       <tr>
         <td><strong>System Tickets</strong></td>
         <td>1 / month</td>
         <td>3 concurrent</td>
+        <td>5 concurrent</td>
       </tr>
       <tr>
         <td><strong>AI Personas</strong></td>
         <td>Up to 50</td>
         <td>Unlimited</td>
+        <td>Unlimited</td>
       </tr>
       <tr>
         <td><strong>Platforms</strong></td>
         <td>2 included</td>
-        <td>All supported platforms</td>
+        <td>All supported</td>
+        <td>All supported</td>
+      </tr>
+      <tr>
+        <td><strong>Infrastructure</strong></td>
+        <td>Shared</td>
+        <td>Shared</td>
+        <td>Dedicated instance</td>
       </tr>
       <tr>
         <td><strong>Support SLA</strong></td>
-        <td>WhatsApp < 4 hours</td>
-        <td>Priority WhatsApp < 2 hours</td>
+        <td>WhatsApp &lt; 4hr</td>
+        <td>Priority &lt; 2hr</td>
+        <td>Priority &lt; 1hr</td>
       </tr>
       <tr>
-        <td><strong>Dedicated Ops Engineer</strong></td>
+        <td><strong>Ops Engineer</strong></td>
+        <td>—</td>
+        <td>✓ Included</td>
+        <td>✓ Named resource</td>
+      </tr>
+      <tr>
+        <td><strong>Custom Dev Hours</strong></td>
+        <td>—</td>
+        <td>—</td>
+        <td>4 hrs/mo included</td>
+      </tr>
+      <tr>
+        <td><strong>Monthly Ops Review</strong></td>
+        <td>—</td>
         <td>—</td>
         <td>✓ Included</td>
       </tr>
@@ -322,8 +416,8 @@
   </table>
 
   <div class="highlight-box">
-    <strong>Selected Plan:</strong> ☐ Starter ($2,500/mo) &nbsp;&nbsp; ☐ Scale ($5,000/mo)<br>
-    <em style="font-size:9pt; color:var(--ink-muted);">Check one. The selected plan takes effect upon first payment.</em>
+    <strong>Selected Plan:</strong> ☐ Starter ($2,500/mo) &nbsp;&nbsp; ☐ Scale ($5,000/mo) &nbsp;&nbsp; ☐ Growth ($10,000/mo)<br>
+    <em style="font-size:9pt; color:var(--ink-muted);">Check one plan. All plans require Client to fund and maintain their own designated aggregator and direct provider accounts. The selected plan takes effect upon first payment.</em>
   </div>
 
   <h3>2.1 Ticket Definitions</h3>
@@ -332,6 +426,30 @@
     <li><strong>Feature Ticket:</strong> New functionality, integration, workflow automation, or significant enhancement requiring development work. Typically 2–5 business days.</li>
     <li><strong>System Ticket:</strong> Large-scale infrastructure change, new service deployment, platform migration, or architectural work. Typically 1–3 weeks.</li>
   </ul>
+
+  <h3>2.2 AI Model & Aggregator Fee Structure</h3>
+  <p>All plans operate under a direct-pay structure. Client pays the exact token/usage costs directly to the designated third-party model aggregators and direct providers. Estimated consumption rates depend on the models chosen for Client's specific systems:</p>
+
+  <table>
+    <thead><tr><th>Execution Vertical</th><th>Billing Basis</th><th>Direct Payment Recipient</th></tr></thead>
+    <tbody>
+      <tr><td>Text &amp; Chat Generation</td><td>Per 1M tokens (input/output)</td><td>Designated Aggregator or Direct Provider</td></tr>
+      <tr><td>Image &amp; Thumbnail Generation</td><td>Per generated image</td><td>Designated Media Aggregator/Provider</td></tr>
+      <tr><td>Voice Clone &amp; Text-to-Speech</td><td>Per character / cloned voice</td><td>Designated Voice Aggregator/Provider</td></tr>
+      <tr><td>Video Generation &amp; Lip-Sync</td><td>Per second of generated video</td><td>Designated Video Aggregator/Provider</td></tr>
+    </tbody>
+  </table>
+
+  <div class="highlight-box">
+    <strong>Billing Transparency:</strong> Client receives 100% cost transparency with zero markup from Provider. All third-party execution charges are billed directly by the respective platforms to the Client's registered payment method.
+  </div>
+
+  <h3>2.3 Annual Commitment Discount</h3>
+  <p>Client may elect an annual commitment at signing, which reduces the monthly fee by fifteen percent (15%). Annual commitments are billed monthly at the discounted rate and are subject to the early termination provisions in §4.5.</p>
+
+  <div class="highlight-box">
+    <em style="font-size:9pt; color:var(--ink-muted);">For organizations with high-volume AI operations, contact Provider for a custom Enterprise agreement with dedicated infrastructure, enhanced SLAs, and tailored pricing.</em>
+  </div>
 </div>
 
 <!-- 3. PAYMENT TERMS -->
@@ -343,6 +461,7 @@
     <li><strong>Late Payment:</strong> Invoices unpaid for more than seven (7) days after the due date may result in service suspension until the balance is settled. Provider will give forty-eight (48) hours written notice via WhatsApp before any suspension.</li>
     <li><strong>Plan Changes:</strong> Client may upgrade or downgrade their plan tier with thirty (30) days written notice. Upgrades take effect immediately; downgrades take effect at the start of the next billing cycle.</li>
     <li><strong>No Setup Fee:</strong> There is no one-time onboarding or setup fee. The monthly subscription covers all onboarding, infrastructure provisioning, and initial build.</li>
+    <li><strong>Suspension & Lock Release:</strong> In the event of service suspension due to non-payment under §3.3, Provider shall automatically halt the automated content scheduling and rendering pipelines, and any regional or industry exclusivity locks reserved for Client shall be immediately released.</li>
   </ol>
 </div>
 
@@ -363,6 +482,19 @@
     <li><strong>Prorated Refunds:</strong> If Client terminates within the first fourteen (14) days of an annual commitment (if applicable), a prorated refund of unused months will be issued minus a 15% early-termination administrative fee.</li>
   </ol>
 </div>
+
+
+<div class="persona-showcase">
+  <div class="persona-frame">
+    <img src="assets/personas/persona-3.png" alt="Street Style Creator">
+    <div class="niche-tag">Street Style</div>
+  </div>
+  <div class="persona-frame">
+    <img src="assets/personas/persona-4.png" alt="Product Placement Creator">
+    <div class="niche-tag">Product</div>
+  </div>
+</div>
+<p class="persona-showcase-caption">Each persona is tailored to a specific content niche and target audience</p>
 
 <!-- 5. COMMUNICATION & SLA -->
 <div class="section">
@@ -445,6 +577,18 @@
   </table>
 </div>
 
+<div class="persona-showcase">
+  <div class="persona-frame">
+    <img src="assets/personas/persona-5.png" alt="Cozy Lifestyle Creator">
+    <div class="niche-tag">Cozy</div>
+  </div>
+  <div class="persona-frame">
+    <img src="assets/personas/persona-6.png" alt="Fitness Creator">
+    <div class="niche-tag">Fitness</div>
+  </div>
+</div>
+<p class="persona-showcase-caption">Personas generate UGC-style content autonomously across all major social platforms</p>
+
 <!-- 7. INTELLECTUAL PROPERTY -->
 <div class="section">
   <h2><span class="section-num">§7</span> Intellectual Property</h2>
@@ -464,6 +608,7 @@
     <li>Neither party shall disclose Confidential Information to any third party without prior written consent, except as required by law or to perform obligations under this Agreement.</li>
     <li>Provider will not use Client's brand name, logos, or likeness in marketing materials, case studies, or public-facing content without prior written approval.</li>
     <li>All credentials (API keys, server access, social media accounts) will be transmitted exclusively through encrypted channels (WhatsApp end-to-end encryption or equivalent).</li>
+    <li><strong>BYOK Key Handling & Liability:</strong> When Client elects the BYOK option, Client-provided API keys ("BYOK Keys") will be stored in encrypted environment variables within Client's dedicated service instance and used exclusively for Client's service operations. Provider will not use BYOK Keys for any other purpose, client, or internal operation. BYOK Keys are rotatable by Client at any time. Client remains solely responsible for establishing billing alerts, consumption budget caps, and monitoring usage metrics directly within their respective third-party provider accounts to prevent budget overruns.</li>
     <li>This confidentiality obligation survives termination of this Agreement for a period of two (2) years.</li>
   </ol>
 </div>
@@ -474,7 +619,7 @@
   <ol>
     <li><strong>Cap:</strong> Provider's total aggregate liability under this Agreement shall not exceed the total fees paid by Client in the three (3) months immediately preceding the event giving rise to the claim.</li>
     <li><strong>Exclusions:</strong> In no event shall Provider be liable for indirect, incidental, consequential, special, or punitive damages, including lost profits, lost data, or business interruption, even if advised of the possibility of such damages.</li>
-    <li><strong>Platform Risk:</strong> Client acknowledges that social media platforms may suspend or ban AI-generated accounts at their discretion. Provider will exercise best practices to mitigate this risk but does not guarantee uninterrupted account persistence on any third-party platform.</li>
+    <li><strong>Platform Risk & Media Labeling:</strong> Client acknowledges that social media platforms may suspend or ban AI-generated accounts at their discretion. Provider does not guarantee uninterrupted account persistence on any third-party platform. Client agrees to comply with all platform guidelines, including mandatory labeling disclosures for synthetic or AI-generated media (such as "AI Generated" or similar overlays), and agrees that Provider may programmatically apply these watermarks or indicators to generated outputs.</li>
     <li><strong>Force Majeure:</strong> Neither party shall be liable for delays or failures in performance resulting from causes beyond their reasonable control, including but not limited to: natural disasters, internet disruptions, third-party API outages, or changes in social media platform policies.</li>
   </ol>
 </div>
@@ -483,10 +628,10 @@
 <div class="section">
   <h2><span class="section-num">§10</span> Data Security & Infrastructure</h2>
   <ol>
-    <li>All Client infrastructure is provisioned on dedicated, isolated server instances (not shared hosting).</li>
+    <li>All Client infrastructure is provisioned on isolated server instances. Growth tier clients receive a dedicated, container-isolated instance separate from all other client workloads.</li>
     <li>All data in transit is encrypted via TLS 1.3. All domains are proxied through Cloudflare with DDoS protection enabled.</li>
     <li>Server access is restricted to Provider's authorized personnel via SSH key authentication. No password-based server access is permitted.</li>
-    <li>Client credentials and API keys are stored in encrypted environment variables, never committed to source code repositories.</li>
+    <li>Client credentials and API keys — including any BYOK Keys provided by Client — are stored in encrypted environment variables, never committed to source code repositories. BYOK Keys are stored identically to Provider-managed credentials and are isolated to Client's service instance.</li>
     <li>Automated daily database backups are maintained with a 30-day retention window.</li>
   </ol>
 </div>
@@ -541,8 +686,8 @@
     </thead>
     <tbody>
       <tr><td>Container Platform</td><td>EasyPanel + Docker</td><td>Service orchestration & isolation</td></tr>
-      <tr><td>AI Model Gateway</td><td>Nova API (multi-model)</td><td>LLM routing for persona/content generation</td></tr>
-      <tr><td>Media Engine</td><td>Flux / Kling / Wan</td><td>Avatar images & video generation</td></tr>
+      <tr><td>AI Model Gateway</td><td>Multi-Aggregator Pipeline</td><td>LLM routing, model abstraction, optional BYOK key injection</td></tr>
+      <tr><td>Media Engine</td><td>Dynamic Media Pipeline</td><td>Avatar images, video generation, voice synthesis via designated providers</td></tr>
       <tr><td>Automation</td><td>n8n (self-hosted)</td><td>Workflow orchestration & scheduling</td></tr>
       <tr><td>CDN & Security</td><td>Cloudflare</td><td>DNS, SSL, DDoS protection, edge caching</td></tr>
       <tr><td>Code Management</td><td>GitHub + CI/CD</td><td>Version control & automated deployment</td></tr>
@@ -550,7 +695,23 @@
     </tbody>
   </table>
 
-  <h3>A.3 Acceptance Criteria</h3>
+  <h3>A.3 API & Aggregator Account Configuration</h3>
+  <div class="highlight-box">
+    <strong>Account & Key Setup:</strong> Client agrees to establish and fund accounts with the designated third-party model aggregators or direct providers prior to the Infrastructure phase (Days 4–5). Optionally, Client may choose to inject their own API keys ("BYOK Keys") into these accounts.
+  </div>
+
+  <table>
+    <thead>
+      <tr><th>Service Vertical</th><th>Purpose</th><th>Account/Key Provider</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Image &amp; Video Generation</td><td>Avatar images, avatar videos, face-swap rendering</td><td>Client-Funded Account (Optionally BYOK Keys)</td></tr>
+      <tr><td>LLM Inference</td><td>Persona generation, social copy, workflow logic</td><td>Client-Funded Account (Optionally BYOK Keys)</td></tr>
+      <tr><td>Voice Synthesis</td><td>Voice cloning, text-to-speech rendering</td><td>Client-Funded Account (Optionally BYOK Keys)</td></tr>
+    </tbody>
+  </table>
+
+  <h3>A.4 Acceptance Criteria</h3>
   <p>The project shall be considered complete upon passing the following 11-point smoke test:</p>
   <ol>
     <li>All containers healthy and auto-restarting on failure</li>
@@ -565,6 +726,26 @@
     <li>Live walkthrough completed with Client</li>
     <li>First production content posted successfully</li>
   </ol>
+</div>
+
+<!-- EXHIBIT B -->
+<div class="exhibit">
+  <div class="exhibit-label">Exhibit B — Sample AI Persona Output</div>
+  <h2>Additional Niche Coverage</h2>
+  <p>The PersonaGen platform supports diverse content verticals. Below are additional persona archetypes demonstrating range across tech and food niches.</p>
+
+  <div class="persona-showcase">
+    <div class="persona-frame">
+      <img src="assets/personas/persona-7.png" alt="Tech Review Creator">
+      <div class="niche-tag">Tech</div>
+    </div>
+    <div class="persona-frame">
+      <img src="assets/personas/persona-8.png" alt="Foodie Creator">
+      <div class="niche-tag">Foodie</div>
+    </div>
+  </div>
+
+  <p style="font-size:9pt; color:var(--ink-muted); margin-top:1rem;">All personas shown are AI-generated samples. Actual client deliverables will be customized to Client's brand identity, target audience, and content strategy as defined during the Brand Brief phase (§6).</p>
 </div>
 
 </body>
