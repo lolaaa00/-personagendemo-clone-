@@ -339,9 +339,9 @@
     <thead>
       <tr>
         <th></th>
-        <th>Starter</th>
-        <th>Scale</th>
-        <th>Growth</th>
+        <th>Core</th>
+        <th>Pro</th>
+        <th>Ultra</th>
       </tr>
     </thead>
     <tbody>
@@ -628,7 +628,7 @@
 <div class="section">
   <h2><span class="section-num">§10</span> Data Security & Infrastructure</h2>
   <ol>
-    <li>All Client infrastructure is provisioned on isolated server instances. Growth tier clients receive a dedicated, container-isolated instance separate from all other client workloads.</li>
+    <li>All Client infrastructure is provisioned on isolated server instances. Ultra tier clients receive a dedicated, container-isolated instance separate from all other client workloads.</li>
     <li>All data in transit is encrypted via TLS 1.3. All domains are proxied through Cloudflare with DDoS protection enabled.</li>
     <li>Server access is restricted to Provider's authorized personnel via SSH key authentication. No password-based server access is permitted.</li>
     <li>Client credentials and API keys — including any BYOK Keys provided by Client — are stored in encrypted environment variables, never committed to source code repositories. BYOK Keys are stored identically to Provider-managed credentials and are isolated to Client's service instance.</li>

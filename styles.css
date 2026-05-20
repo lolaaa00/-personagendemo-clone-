@@ -1017,3 +1017,46 @@ select option { background:var(--surface-2); }
   .score-grid { grid-template-columns: 1fr; }
   .benefits-grid { grid-template-columns: 1fr; }
 }
+
+/* ── Dashboard Sub-Tabs ── */
+.dash-sub-tabs {
+  display: inline-flex;
+  gap: 0.35rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border);
+  padding: 0.35rem;
+  border-radius: var(--radius);
+  margin-bottom: 2rem;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
+}
+
+.dash-sub-tab-btn {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-family: inherit;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.5rem 1.1rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--ease-fast);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dash-sub-tab-btn:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.dash-sub-tab-btn.active {
+  color: var(--accent);
+  background: var(--accent-soft);
+}

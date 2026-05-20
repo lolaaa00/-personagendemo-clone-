@@ -1002,7 +1002,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Active nav
     const sections = document.querySelectorAll('section[id]');
-    const navLinks = document.querySelectorAll('.nav-link');
+    const navLinks = document.querySelectorAll('.pg-nav-link');
     const navObs = new IntersectionObserver(entries => {
         entries.forEach(e => {
             if (e.isIntersecting) {
@@ -1071,11 +1071,26 @@ const PIN = {
   input: '',
 
   init() {
+    const pinGate = document.getElementById('pin-gate');
+    const portalView = document.getElementById('view-portal');
+    
     if (sessionStorage.getItem(this.SESSION_KEY) === 'yes') {
-      const pinGate = document.getElementById('pin-gate');
-      if (pinGate) pinGate.classList.add('unlocked');
-      return;
+      if (pinGate) {
+        pinGate.classList.add('unlocked');
+        pinGate.style.display = 'none';
+      }
+      if (portalView) {
+        portalView.style.display = 'block';
+      }
+    } else {
+      if (pinGate) {
+        pinGate.style.display = 'flex';
+      }
+      if (portalView) {
+        portalView.style.display = 'none';
+      }
     }
+
     // keyboard support
     document.addEventListener('keydown', (e) => {
       const pinGate = document.getElementById('pin-gate');
@@ -1122,8 +1137,14 @@ const PIN = {
     if (this.input === this.CORRECT) {
       sessionStorage.setItem(this.SESSION_KEY, 'yes');
       const pinGate = document.getElementById('pin-gate');
-      if (pinGate) pinGate.classList.add('unlocked');
-      switchTab('portal');
+      const portalView = document.getElementById('view-portal');
+      if (pinGate) {
+        pinGate.classList.add('unlocked');
+        setTimeout(() => { pinGate.style.display = 'none'; }, 300);
+      }
+      if (portalView) {
+        portalView.style.display = 'block';
+      }
     } else {
       for (let i = 0; i < 4; i++) {
         const dot = document.getElementById('pd-' + i);
@@ -1139,64 +1160,32 @@ const PIN = {
   }
 };
 
-// ── Tab Switching ──
-function switchTab(tabId) {
-    const demoView = document.getElementById('view-demo');
-    const portalView = document.getElementById('view-portal');
-    const pinGate = document.getElementById('pin-gate');
+// ── Dashboard Sub-Tab Switching ──
+function switchDashboardTab(subTabId) {
+    // Hide all sub-tab contents
+    const contents = document.querySelectorAll('.dash-sub-content');
+    contents.forEach(el => el.style.display = 'none');
     
-    // Tabs
-    const navDemoBtn = document.getElementById('nav-tab-demo');
-    const navPortalBtn = document.getElementById('nav-tab-portal');
-    const drawerDemoBtn = document.getElementById('drawer-tab-demo');
-    const drawerPortalBtn = document.getElementById('drawer-tab-portal');
+    // Deactivate all sub-tab buttons
+    const buttons = document.querySelectorAll('.dash-sub-tab-btn');
+    buttons.forEach(btn => btn.classList.remove('active'));
     
-    // Items in nav
-    const demoNavItems = document.querySelectorAll('.demo-nav-item');
-    const portalNavItems = document.querySelectorAll('.portal-nav-item');
-    const navDivider = document.getElementById('nav-divider');
+    // Show target content
+    const targetContent = document.getElementById('dash-sub-' + subTabId);
+    if (targetContent) {
+        targetContent.style.display = 'block';
+    }
     
-    if (tabId === 'demo') {
-        if (demoView) demoView.style.display = 'block';
-        if (portalView) portalView.style.display = 'none';
-        if (pinGate) pinGate.style.display = 'none';
-        
-        if (navDemoBtn) navDemoBtn.classList.add('active');
-        if (navPortalBtn) navPortalBtn.classList.remove('active');
-        if (drawerDemoBtn) drawerDemoBtn.classList.add('active');
-        if (drawerPortalBtn) drawerPortalBtn.classList.remove('active');
-        
-        demoNavItems.forEach(el => el.style.display = 'inline-flex');
-        portalNavItems.forEach(el => el.style.display = 'none');
-        if (navDivider) navDivider.style.display = 'block';
-    } else if (tabId === 'portal') {
-        if (sessionStorage.getItem(PIN.SESSION_KEY) === 'yes') {
-            if (demoView) demoView.style.display = 'none';
-            if (portalView) portalView.style.display = 'block';
-            if (pinGate) pinGate.style.display = 'none';
-            
-            if (navDemoBtn) navDemoBtn.classList.remove('active');
-            if (navPortalBtn) navPortalBtn.classList.add('active');
-            if (drawerDemoBtn) drawerDemoBtn.classList.remove('active');
-            if (drawerPortalBtn) drawerPortalBtn.classList.add('active');
-            
-            demoNavItems.forEach(el => el.style.display = 'none');
-            portalNavItems.forEach(el => el.style.display = 'inline-flex');
-            if (navDivider) navDivider.style.display = 'block';
-        } else {
-            if (demoView) demoView.style.display = 'none';
-            if (portalView) portalView.style.display = 'none';
-            if (pinGate) pinGate.style.display = 'flex';
-            
-            if (navDemoBtn) navDemoBtn.classList.remove('active');
-            if (navPortalBtn) navPortalBtn.classList.add('active');
-            if (drawerDemoBtn) drawerDemoBtn.classList.remove('active');
-            if (drawerPortalBtn) drawerPortalBtn.classList.add('active');
-            
-            demoNavItems.forEach(el => el.style.display = 'none');
-            portalNavItems.forEach(el => el.style.display = 'none');
-            if (navDivider) navDivider.style.display = 'none';
-        }
+    // Activate target button
+    const targetBtn = document.getElementById('dash-sub-tab-' + subTabId);
+    if (targetBtn) {
+        targetBtn.classList.add('active');
+    }
+    
+    // Re-trigger table renders or chart updates
+    if (subTabId === 'metrics') {
+        if (typeof renderAgentTable === 'function') renderAgentTable('all');
+        if (typeof initSparkChart === 'function') initSparkChart();
     }
 }
 

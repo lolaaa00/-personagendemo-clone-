@@ -1,0 +1,27 @@
+{
+  "name": "printing-press",
+  "version": "1.0.0",
+  "description": "Local compiled Go CLI modules for high-performance and token-lean integrations",
+  "skills": [
+    {
+      "name": "pp-clickup",
+      "binary": "bin/pp-clickup",
+      "source": "src/clickup/main.go",
+      "description": "Interface with ClickUp API to retrieve and update developer tasks",
+      "flags": [
+        { "flag": "--status", "type": "string", "description": "Filter tasks by status" },
+        { "flag": "--limit", "type": "int", "description": "Limit returned items (max 50)" }
+      ]
+    },
+    {
+      "name": "pp-stripe",
+      "binary": "bin/pp-stripe",
+      "source": "src/stripe/main.go",
+      "description": "Fetch subscription metrics and customer data with compact output formatting",
+      "flags": [
+        { "flag": "--limit", "type": "int", "description": "Limit output items" },
+        { "flag": "--status", "type": "string", "description": "Filter by subscription status" }
+      ]
+    }
+  ]
+}
