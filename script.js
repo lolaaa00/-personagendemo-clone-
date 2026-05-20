@@ -325,6 +325,30 @@ function generateAgent() {
         if (activePlatforms.includes('tiktok') && posts.tiktok) platformPosts.push({platform:'TikTok',text:posts.tiktok});
         if (activePlatforms.includes('twitter') && posts.twitter) platformPosts.push({platform:'Twitter/X',text:posts.twitter});
 
+        // Determine compliance warnings
+        let complianceBox = '';
+        if (niche === 'fitness' || niche === 'food') {
+            complianceBox = `
+                <div class="fda-warning-box" style="margin-top: 1rem; padding: 1rem; background: rgba(244, 63, 94, 0.05); border: 1px dashed var(--rose); border-radius: 8px; font-size: 0.8rem; line-height: 1.5; text-align: left;">
+                    <div class="fda-title" style="font-weight: 700; color: var(--rose); margin-bottom: 0.5rem; display: flex; align-items: center; gap: 6px;">
+                        ⚠️ FDA Regulatory Compliance Warning
+                    </div>
+                    This script promotes a dietary supplement/health product. Under FDA regulations (21 CFR Part 101), all promotional content must avoid curative, therapeutic, or diagnostic claims. The statement below must be visibly appended to the media:
+                    <br><br>
+                    <em style="color: var(--text-dim);">"These statements have not been evaluated by the Food and Drug Administration. This product is not intended to diagnose, treat, cure, or prevent any disease."</em>
+                </div>
+            `;
+        } else {
+            complianceBox = `
+                <div class="fda-warning-box" style="margin-top: 1rem; padding: 1rem; background: rgba(212, 168, 83, 0.05); border: 1px dashed var(--gold); border-radius: 8px; font-size: 0.8rem; line-height: 1.5; text-align: left;">
+                    <div class="fda-title" style="font-weight: 700; color: var(--gold); margin-bottom: 0.5rem; display: flex; align-items: center; gap: 6px;">
+                        ⚠️ FTC Endorsement Disclosure Required
+                    </div>
+                    Under FTC Guidelines (16 CFR Part 255), this content is a brand endorsement. The connection between the influencer and the sponsor must be clearly and conspicuously disclosed. Ensure the video clearly displays <strong style="color: var(--text);">#ad</strong> or <strong style="color: var(--text);">#sponsored</strong> in the first 3 seconds.
+                </div>
+            `;
+        }
+
         output.innerHTML = `
             <div class="gen-result">
                 <div class="gen-result-header" style="background:${grad.replace('linear-gradient','linear-gradient')}20">
@@ -363,10 +387,11 @@ function generateAgent() {
                             <span class="ugc-format">${activePlatforms.includes('tiktok') ? 'TikTok · 30s' : 'Reels · 30s'}</span>
                         </div>
                         <div class="ugc-script">
-                            ${GEN_UGC[niche].scenes.map(s => `<div class="ugc-scene"><span class="ugc-ts">${s.ts}</span> <strong>${s.tag}:</strong> ${s.text}</div>`).join('')}
+                            ${GEN_UGC[niche].scenes.map(s => `<div class="ugc-scene"><span class="ugc-ts">${s.ts}</span> <strong>${s.tag}:</strong> <span class="watermark-tag" style="background:rgba(124,106,237,0.15); color:var(--accent); font-weight:bold; font-size:0.62rem; padding:1px 5px; border-radius:4px; margin-right:4px;">[AI-Generated]</span> ${s.text}</div>`).join('')}
                         </div>
                         <div class="ugc-tags">${GEN_UGC[niche].tags}</div>
                     </div>
+                    ${complianceBox}
                 </div>
 
                 <div class="gen-result-content">
@@ -1037,4 +1062,400 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Glitch hover on hero title
     const heroTitle = document.querySelector('.hero-title');
     if (heroTitle) heroTitle.classList.add('glitch-hover');
+
+    // Onboarding UI initialization
+    PIN.init();
+    PM.render();
+    SocialConnections.init();
+
+    // Setup scroll reveal for portal components
+    const portalRevealObserver = new IntersectionObserver((entries) => {
+      entries.forEach(e => {
+        if (e.isIntersecting) {
+          e.target.style.opacity = '1';
+          e.target.style.transform = 'translateY(0)';
+        }
+      });
+    }, { threshold: 0.08, rootMargin: '0px 0px -30px 0px' });
+    
+    document.querySelectorAll('.phase, .benefit, .score-card, .comm-row, .gate, .clause-card').forEach(el => {
+      el.style.opacity = '0';
+      el.style.transform = 'translateY(16px)';
+      el.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
+      portalRevealObserver.observe(el);
+    });
 });
+
+// ── PIN Gate ──
+const PIN = {
+  CORRECT: '2025',
+  SESSION_KEY: 'pg_portal_unlocked',
+  input: '',
+
+  init() {
+    if (sessionStorage.getItem(this.SESSION_KEY) === 'yes') {
+      const pinGate = document.getElementById('pin-gate');
+      if (pinGate) pinGate.classList.add('unlocked');
+      return;
+    }
+    // keyboard support
+    document.addEventListener('keydown', (e) => {
+      const pinGate = document.getElementById('pin-gate');
+      if (pinGate && pinGate.style.display !== 'none' && !pinGate.classList.contains('unlocked')) {
+        if (/^[0-9]$/.test(e.key)) this.press(e.key);
+        if (e.key === 'Backspace') this.del();
+        if (e.key === 'Escape') this.clear();
+      }
+    });
+  },
+
+  press(digit) {
+    if (this.input.length >= 4) return;
+    this.input += digit;
+    this.updateDots();
+    if (this.input.length === 4) setTimeout(() => this.check(), 120);
+  },
+
+  del() {
+    this.input = this.input.slice(0, -1);
+    this.updateDots();
+    const pinErr = document.getElementById('pin-error');
+    if (pinErr) pinErr.textContent = '';
+  },
+
+  clear() {
+    this.input = '';
+    this.updateDots();
+    const pinErr = document.getElementById('pin-error');
+    if (pinErr) pinErr.textContent = '';
+  },
+
+  updateDots(state) {
+    for (let i = 0; i < 4; i++) {
+      const dot = document.getElementById('pd-' + i);
+      if (!dot) continue;
+      dot.className = 'pin-dot';
+      if (state === 'error') { dot.classList.add('error'); }
+      else if (i < this.input.length) dot.classList.add('filled');
+    }
+  },
+
+  check() {
+    if (this.input === this.CORRECT) {
+      sessionStorage.setItem(this.SESSION_KEY, 'yes');
+      const pinGate = document.getElementById('pin-gate');
+      if (pinGate) pinGate.classList.add('unlocked');
+      switchTab('portal');
+    } else {
+      for (let i = 0; i < 4; i++) {
+        const dot = document.getElementById('pd-' + i);
+        if (dot) {
+          dot.classList.remove('filled');
+          dot.classList.add('error');
+        }
+      }
+      const pinErr = document.getElementById('pin-error');
+      if (pinErr) pinErr.textContent = 'Incorrect PIN — try again.';
+      setTimeout(() => { this.input = ''; this.updateDots(); }, 700);
+    }
+  }
+};
+
+// ── Tab Switching ──
+function switchTab(tabId) {
+    const demoView = document.getElementById('view-demo');
+    const portalView = document.getElementById('view-portal');
+    const pinGate = document.getElementById('pin-gate');
+    
+    // Tabs
+    const navDemoBtn = document.getElementById('nav-tab-demo');
+    const navPortalBtn = document.getElementById('nav-tab-portal');
+    const drawerDemoBtn = document.getElementById('drawer-tab-demo');
+    const drawerPortalBtn = document.getElementById('drawer-tab-portal');
+    
+    // Items in nav
+    const demoNavItems = document.querySelectorAll('.demo-nav-item');
+    const portalNavItems = document.querySelectorAll('.portal-nav-item');
+    const navDivider = document.getElementById('nav-divider');
+    
+    if (tabId === 'demo') {
+        if (demoView) demoView.style.display = 'block';
+        if (portalView) portalView.style.display = 'none';
+        if (pinGate) pinGate.style.display = 'none';
+        
+        if (navDemoBtn) navDemoBtn.classList.add('active');
+        if (navPortalBtn) navPortalBtn.classList.remove('active');
+        if (drawerDemoBtn) drawerDemoBtn.classList.add('active');
+        if (drawerPortalBtn) drawerPortalBtn.classList.remove('active');
+        
+        demoNavItems.forEach(el => el.style.display = 'inline-flex');
+        portalNavItems.forEach(el => el.style.display = 'none');
+        if (navDivider) navDivider.style.display = 'block';
+    } else if (tabId === 'portal') {
+        if (sessionStorage.getItem(PIN.SESSION_KEY) === 'yes') {
+            if (demoView) demoView.style.display = 'none';
+            if (portalView) portalView.style.display = 'block';
+            if (pinGate) pinGate.style.display = 'none';
+            
+            if (navDemoBtn) navDemoBtn.classList.remove('active');
+            if (navPortalBtn) navPortalBtn.classList.add('active');
+            if (drawerDemoBtn) drawerDemoBtn.classList.remove('active');
+            if (drawerPortalBtn) drawerPortalBtn.classList.add('active');
+            
+            demoNavItems.forEach(el => el.style.display = 'none');
+            portalNavItems.forEach(el => el.style.display = 'inline-flex');
+            if (navDivider) navDivider.style.display = 'block';
+        } else {
+            if (demoView) demoView.style.display = 'none';
+            if (portalView) portalView.style.display = 'none';
+            if (pinGate) pinGate.style.display = 'flex';
+            
+            if (navDemoBtn) navDemoBtn.classList.remove('active');
+            if (navPortalBtn) navPortalBtn.classList.add('active');
+            if (drawerDemoBtn) drawerDemoBtn.classList.remove('active');
+            if (drawerPortalBtn) drawerPortalBtn.classList.add('active');
+            
+            demoNavItems.forEach(el => el.style.display = 'none');
+            portalNavItems.forEach(el => el.style.display = 'none');
+            if (navDivider) navDivider.style.display = 'none';
+        }
+    }
+}
+
+// ── Social Connections (Postiz Integrations) ──
+const SocialConnections = {
+  KEY: 'personagen_social_connections',
+  
+  load() {
+    return JSON.parse(localStorage.getItem(this.KEY) || '{}');
+  },
+  
+  save(data) {
+    localStorage.setItem(this.KEY, JSON.stringify(data));
+  },
+  
+  init() {
+    const data = this.load();
+    Object.keys(data).forEach(platform => {
+      this.updateUI(platform, data[platform]);
+    });
+  },
+  
+  connect(platform) {
+    const names = {
+      ig: 'Instagram',
+      tt: 'TikTok',
+      yt: 'YouTube',
+      x: 'Twitter/X',
+      ln: 'LinkedIn'
+    };
+    
+    const handle = prompt(`Enter your ${names[platform]} handle to link with Postiz:`, "@");
+    if (!handle || handle.trim() === '@' || handle.trim() === '') return;
+    
+    const cleanHandle = handle.trim().startsWith('@') ? handle.trim() : '@' + handle.trim();
+    
+    const confirmRedirect = confirm(`Redirect to self-hosted Postiz settings (https://postiz.honeyforx.com/settings/integrations) to authorize OAuth?`);
+    if (confirmRedirect) {
+      window.open('https://postiz.honeyforx.com/settings/integrations', '_blank');
+    }
+    
+    const data = this.load();
+    data[platform] = cleanHandle;
+    this.save(data);
+    
+    this.updateUI(platform, cleanHandle);
+  },
+  
+  updateUI(platform, handle) {
+    const statusBadge = document.getElementById(`${platform}-status-badge`);
+    const handleLabel = document.getElementById(`${platform}-handle-label`);
+    const btn = document.getElementById(`btn-connect-${platform}`);
+    
+    if (statusBadge && handleLabel && btn) {
+      statusBadge.textContent = 'Active';
+      statusBadge.className = 'ii-status connected';
+      handleLabel.textContent = `Connected via Postiz · ${handle}`;
+      btn.textContent = 'Disconnect';
+      btn.setAttribute('onclick', `SocialConnections.disconnect('${platform}')`);
+      btn.style.background = 'rgba(239, 68, 68, 0.1)';
+      btn.style.color = 'var(--rose)';
+      btn.style.border = '1px solid rgba(239, 68, 68, 0.2)';
+    }
+  },
+  
+  disconnect(platform) {
+    if (!confirm(`Are you sure you want to disconnect this platform?`)) return;
+    
+    const data = this.load();
+    delete data[platform];
+    this.save(data);
+    
+    const statusBadge = document.getElementById(`${platform}-status-badge`);
+    const handleLabel = document.getElementById(`${platform}-handle-label`);
+    const btn = document.getElementById(`btn-connect-${platform}`);
+    
+    if (statusBadge && handleLabel && btn) {
+      statusBadge.textContent = 'Inactive';
+      statusBadge.className = 'ii-status disconnected';
+      handleLabel.textContent = 'Disconnected — No channel linked';
+      btn.textContent = 'Connect Platform';
+      btn.setAttribute('onclick', `SocialConnections.connect('${platform}')`);
+      btn.style.background = 'var(--accent-soft)';
+      btn.style.color = 'var(--accent)';
+      btn.style.border = 'none';
+    }
+  }
+};
+
+// ── Project Manager (localStorage DB) ──
+const PM = {
+  KEY: 'personagen_pm_tickets',
+  filter: 'all',
+
+  load() { return JSON.parse(localStorage.getItem(this.KEY) || '[]'); },
+  save(tickets) { localStorage.setItem(this.KEY, JSON.stringify(tickets)); },
+
+  add() {
+    const titleEl = document.getElementById('pm-title');
+    const descEl = document.getElementById('pm-desc');
+    const compEl = document.getElementById('pm-complexity');
+    
+    if (!titleEl) return;
+    const title = titleEl.value.trim();
+    const desc = descEl ? descEl.value.trim() : '';
+    const complexity = compEl ? parseInt(compEl.value) : 1;
+    if (!title) { titleEl.style.borderColor = 'var(--rose)'; return; }
+
+    const labels = { 1: 'Tweak', 2: 'Feature', 3: 'System' };
+    const etas = { 1: '1–3 days', 2: '1–2 weeks', 3: '2–4 weeks' };
+    const ticket = {
+      id: 'TK-' + String(Date.now()).slice(-6),
+      title,
+      description: desc,
+      complexity,
+      complexityLabel: labels[complexity],
+      eta: etas[complexity],
+      status: 'submitted',
+      created: new Date().toISOString(),
+      updated: new Date().toISOString()
+    };
+
+    const tickets = this.load();
+    tickets.unshift(ticket);
+    this.save(tickets);
+    titleEl.value = '';
+    if (descEl) descEl.value = '';
+    if (compEl) compEl.value = '1';
+    this.render();
+  },
+
+  cycle(id) {
+    const order = ['submitted', 'confirmed', 'in_progress', 'review', 'complete'];
+    const tickets = this.load();
+    const t = tickets.find(x => x.id === id);
+    if (!t) return;
+    const i = order.indexOf(t.status);
+    t.status = order[(i + 1) % order.length];
+    t.updated = new Date().toISOString();
+    this.save(tickets);
+    this.render();
+  },
+
+  remove(id) {
+    const tickets = this.load().filter(t => t.id !== id);
+    this.save(tickets);
+    this.render();
+  },
+
+  setFilter(f) {
+    this.filter = f;
+    this.render();
+  },
+
+  render() {
+    const all = this.load();
+    const filtered = this.filter === 'all' ? all : all.filter(t => t.status === this.filter);
+
+    // Stats
+    const counts = { submitted: 0, confirmed: 0, in_progress: 0, review: 0, complete: 0 };
+    all.forEach(t => counts[t.status] = (counts[t.status] || 0) + 1);
+    
+    const pmStats = document.getElementById('pm-stats');
+    if (pmStats) {
+      pmStats.innerHTML = [
+        { label: 'Total', value: all.length, color: 'var(--accent)' },
+        { label: 'Active', value: counts.in_progress + counts.confirmed, color: 'var(--cyan)' },
+        { label: 'In Review', value: counts.review, color: 'var(--gold)' },
+        { label: 'Complete', value: counts.complete, color: 'var(--success)' }
+      ].map(s => `
+        <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-sm); padding:1rem; text-align:center;">
+          <div style="font-family:var(--font-display); font-size:1.6rem; font-weight:700; color:${s.color};">${s.value}</div>
+          <div style="font-size:0.65rem; font-weight:600; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.08em;">${s.label}</div>
+        </div>
+      `).join('');
+    }
+
+    // Filters
+    const pmFilters = document.getElementById('pm-filters');
+    if (pmFilters) {
+      const filters = ['all', 'submitted', 'confirmed', 'in_progress', 'review', 'complete'];
+      const fLabels = { all: 'All', submitted: 'New', confirmed: 'Confirmed', in_progress: 'Active', review: 'Review', complete: 'Done' };
+      pmFilters.innerHTML = filters.map(f =>
+        `<button onclick="PM.setFilter('${f}')" style="padding:3px 10px; border-radius:6px; border:1px solid ${this.filter === f ? 'rgba(124,106,237,0.3)' : 'var(--border)'}; background:${this.filter === f ? 'var(--accent-soft)' : 'transparent'}; color:${this.filter === f ? 'var(--accent)' : 'var(--text-dim)'}; font-size:0.65rem; font-weight:600; cursor:pointer; font-family:'Inter',sans-serif; transition:all 0.2s;">${fLabels[f]}${f !== 'all' ? ` (${f === 'submitted' ? counts.submitted : f === 'confirmed' ? counts.confirmed : f === 'in_progress' ? counts.in_progress : f === 'review' ? counts.review : counts.complete})` : ''}</button>`
+      ).join('');
+    }
+
+    // List
+    const statusStyles = {
+      submitted: { bg: 'rgba(124,106,237,0.1)', color: 'var(--accent)', label: 'Submitted' },
+      confirmed: { bg: 'rgba(34,211,238,0.1)', color: 'var(--cyan)', label: 'Confirmed' },
+      in_progress: { bg: 'rgba(34,211,238,0.15)', color: 'var(--cyan)', label: 'In Progress' },
+      review: { bg: 'rgba(212,168,83,0.1)', color: 'var(--gold)', label: 'In Review' },
+      complete: { bg: 'rgba(52,211,153,0.1)', color: 'var(--success)', label: 'Complete' }
+    };
+    const complexityColors = { 1: 'var(--success)', 2: 'var(--accent)', 3: 'var(--cyan)' };
+
+    const pmList = document.getElementById('pm-list');
+    const pmEmpty = document.getElementById('pm-empty');
+    
+    if (pmList && pmEmpty) {
+      if (filtered.length === 0) {
+        pmList.innerHTML = '';
+        pmEmpty.style.display = 'block';
+      } else {
+        pmEmpty.style.display = 'none';
+        pmList.innerHTML = filtered.map(t => {
+          const s = statusStyles[t.status];
+          const ago = this.timeAgo(t.created);
+          return `
+          <div style="display:grid; grid-template-columns:2.5fr 0.7fr 0.8fr 0.8fr 0.4fr; align-items:center; padding:0.85rem 1.25rem; border-bottom:1px solid var(--border); transition:background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.02)'" onmouseout="this.style.background='transparent'">
+            <div>
+              <div style="font-size:0.85rem; font-weight:600; margin-bottom:2px;">${t.title}</div>
+              <div style="font-size:0.68rem; color:var(--text-dim);">${t.id} · ${ago}</div>
+            </div>
+            <div style="font-size:0.7rem; font-weight:600; color:${complexityColors[t.complexity]};">${t.complexityLabel}</div>
+            <div style="font-size:0.7rem; color:var(--text-muted);">${t.eta}</div>
+            <div>
+              <button onclick="PM.cycle('${t.id}')" style="padding:3px 10px; border-radius:100px; background:${s.bg}; color:${s.color}; font-size:0.65rem; font-weight:600; border:none; cursor:pointer; font-family:'Inter',sans-serif; transition:opacity 0.2s;" title="Click to advance status">${s.label}</button>
+            </div>
+            <div>
+              <button onclick="PM.remove('${t.id}')" style="background:none; border:none; color:var(--text-dim); cursor:pointer; font-size:0.85rem; opacity:0.4; transition:opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.4'" title="Delete">✕</button>
+            </div>
+          </div>`;
+        }).join('');
+      }
+    }
+  },
+
+  timeAgo(iso) {
+    const diff = Date.now() - new Date(iso).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return mins + 'm ago';
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return hrs + 'h ago';
+    const days = Math.floor(hrs / 24);
+    return days + 'd ago';
+  }
+};

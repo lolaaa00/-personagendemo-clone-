@@ -66,8 +66,6 @@ function processTemplate(content, cfg) {
 const STATIC_FILES = [
   'tokens.css',
   'styles.css', 
-  'portal.css',
-  'script.js',
   'data-loader.js'
 ];
 
@@ -99,8 +97,21 @@ if (fs.existsSync(MSA_SRC)) {
   console.log(`  ✓ Processed msa.html`);
 }
 
+// ── Process script.js (replace PIN) ──
+const SCRIPT_SRC = path.join(__dirname, 'script.js');
+if (fs.existsSync(SCRIPT_SRC)) {
+  let scriptContent = fs.readFileSync(SCRIPT_SRC, 'utf-8');
+  // Replace PIN code
+  scriptContent = scriptContent.replace(
+    /CORRECT:\s*'[^']*'/,
+    `CORRECT: '${config.client.pin}'`
+  );
+  fs.writeFileSync(path.join(DIST, 'script.js'), scriptContent, 'utf-8');
+  console.log(`  ✓ Processed script.js`);
+}
+
 // ── Process HTML templates ──
-const HTML_FILES = ['index.html', 'client-onboarding.html'];
+const HTML_FILES = ['index.html'];
 
 HTML_FILES.forEach(file => {
   const src = path.join(__dirname, file);
@@ -115,46 +126,38 @@ HTML_FILES.forEach(file => {
   // Replace brand name in nav, hero, footer
   content = content.replace(/HoneyForX/g, config.client.name);
   
-  // Replace PIN code
-  if (file === 'client-onboarding.html') {
+  // Replace Stripe links
+  if (config.pricing.tiers[0]?.stripe_link) {
     content = content.replace(
-      /CORRECT:\s*'[^']*'/,
-      `CORRECT: '${config.client.pin}'`
+      /https:\/\/buy\.stripe\.com\/YOUR_STRIPE_LINK/g,
+      config.pricing.tiers[0].stripe_link
     );
-    
-    // Replace Stripe links
-    if (config.pricing.tiers[0]?.stripe_link) {
-      content = content.replace(
-        /https:\/\/buy\.stripe\.com\/YOUR_STRIPE_LINK/g,
-        config.pricing.tiers[0].stripe_link
-      );
-      content = content.replace(
-        /https:\/\/buy\.stripe\.com\/YOUR_STRIPE_STARTER/g,
-        config.pricing.tiers[0].stripe_link
-      );
-    }
-    if (config.pricing.tiers[1]?.stripe_link) {
-      content = content.replace(
-        /https:\/\/buy\.stripe\.com\/YOUR_STRIPE_SCALE/g,
-        config.pricing.tiers[1].stripe_link
-      );
-    }
-    
-    // Replace agreement link
-    if (config.agreement?.docuseal_url) {
-      content = content.replace(
-        /https:\/\/app\.pandadoc\.com\/YOUR_AGREEMENT_LINK/g,
-        config.agreement.docuseal_url
-      );
-    }
-    
-    // Replace WhatsApp link
-    if (config.client.whatsapp) {
-      content = content.replace(
-        /https:\/\/wa\.me\/YOUR_WHATSAPP/g,
-        config.client.whatsapp
-      );
-    }
+    content = content.replace(
+      /https:\/\/buy\.stripe\.com\/YOUR_STRIPE_STARTER/g,
+      config.pricing.tiers[0].stripe_link
+    );
+  }
+  if (config.pricing.tiers[1]?.stripe_link) {
+    content = content.replace(
+      /https:\/\/buy\.stripe\.com\/YOUR_STRIPE_SCALE/g,
+      config.pricing.tiers[1].stripe_link
+    );
+  }
+  
+  // Replace agreement link
+  if (config.agreement?.docuseal_url) {
+    content = content.replace(
+      /https:\/\/app\.pandadoc\.com\/YOUR_AGREEMENT_LINK/g,
+      config.agreement.docuseal_url
+    );
+  }
+  
+  // Replace WhatsApp link
+  if (config.client.whatsapp) {
+    content = content.replace(
+      /https:\/\/wa\.me\/YOUR_WHATSAPP/g,
+      config.client.whatsapp
+    );
   }
   
   // Replace hero content for demo page
