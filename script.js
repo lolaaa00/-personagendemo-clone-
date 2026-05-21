@@ -1235,9 +1235,8 @@ const PIN = {
         if (navPortal) navPortal.classList.add('active');
       }
     }
-  },
 
-  // keyboard support
+    // keyboard support
     document.addEventListener('keydown', (e) => {
       const pinGate = document.getElementById('pin-gate');
       if (pinGate && pinGate.style.display !== 'none' && !pinGate.classList.contains('unlocked')) {
@@ -1248,7 +1247,7 @@ const PIN = {
     });
   },
 
-  press(digit) {
+    press(digit) {
     if (this.input.length >= 4) return;
     this.input += digit;
     this.updateDots();
