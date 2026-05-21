@@ -8,7 +8,7 @@ param(
     [switch]$skipCommit = $false
 )
 
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = "Continue"
 $projectDir = $PSScriptRoot
 
 Write-Host ""
@@ -34,7 +34,7 @@ if (-not $skipCommit) {
     }
 
     Write-Host "  [2/3] Pushing to GitHub..." -ForegroundColor Yellow
-    git push origin main 2>&1
+    git push origin main
     Write-Host "  [2/3] OK Pushed to origin/main" -ForegroundColor Green
 } else {
     Write-Host "  [1/3] Skipped (skip-commit)" -ForegroundColor DarkGray
@@ -60,20 +60,11 @@ if (-not $token) {
 }
 
 if (-not $token) {
-    Write-Host ""
-    Write-Host "  WARNING: CLOUDFLARE_API_TOKEN not set." -ForegroundColor Red
-    Write-Host "  Create one at: https://dash.cloudflare.com/profile/api-tokens" -ForegroundColor Yellow
-    Write-Host "  Template: 'Edit Cloudflare Workers' (includes Pages)" -ForegroundColor Yellow
-    Write-Host "  Then either:" -ForegroundColor DarkGray
-    Write-Host "    1. Set env var: `$env:CLOUDFLARE_API_TOKEN = 'your-token'" -ForegroundColor DarkGray
-    Write-Host "    2. Create .env file with: CLOUDFLARE_API_TOKEN=your-token" -ForegroundColor DarkGray
-    Write-Host ""
-    Write-Host "  Git commit + push completed. Site will update when token is configured." -ForegroundColor Yellow
-    exit 0
+    Write-Host "  [Info] CLOUDFLARE_API_TOKEN not set. Attempting deployment using local Wrangler authentication session..." -ForegroundColor Gray
 }
 
 $deployDir = Join-Path $projectDir "dist/honeyforx"
-npx -y wrangler pages deploy $deployDir --project-name personagendemo --branch main --commit-dirty=true 2>&1
+npx -y wrangler pages deploy $deployDir --project-name personagendemo --branch main --commit-dirty=true
 if ($LASTEXITCODE -eq 0) {
     Write-Host "  [3/3] OK Live at https://personagendemo.pages.dev/" -ForegroundColor Green
 } else {
