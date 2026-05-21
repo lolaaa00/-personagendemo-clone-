@@ -1706,6 +1706,9 @@ const AccountCreator = {
 
 // ── Operations Portal View Switcher ──
 function switchPortalView(viewId, clickedBtn) {
+  const isDashboardSection = ['dashboard', 'calendar', 'scout', 'generator'].includes(viewId);
+  const targetViewId = isDashboardSection ? 'dashboard' : viewId;
+
   // Hide all subviews
   const subviews = document.querySelectorAll('.portal-subview');
   subviews.forEach(view => {
@@ -1714,7 +1717,7 @@ function switchPortalView(viewId, clickedBtn) {
   });
 
   // Show target subview
-  const activeView = document.getElementById('portal-view-' + viewId);
+  const activeView = document.getElementById('portal-view-' + targetViewId);
   if (activeView) {
     activeView.classList.add('active');
     activeView.style.display = 'block';
@@ -1748,19 +1751,47 @@ function switchPortalView(viewId, clickedBtn) {
     titleEl.textContent = titles[viewId] || 'Operations Dashboard';
   }
 
-  // Handle right sidebar collapse on non-dashboard/calendar subviews
+  // Handle right sidebar collapse
   const workspace = document.querySelector('.dash-workspace');
   if (workspace) {
-    if (viewId === 'dashboard' || viewId === 'calendar') {
+    if (isDashboardSection) {
       workspace.classList.remove('no-right-sidebar');
     } else {
       workspace.classList.add('no-right-sidebar');
     }
   }
 
-  // Handle lazy loading / init of view components
-  if (viewId === 'calendar') {
-    populateSchedulerGrid();
+  // If it's a dashboard section, scroll the .dash-main scroll container
+  if (isDashboardSection) {
+    const sectionMap = {
+      'dashboard': 'dash-sec-summary',
+      'calendar': 'dash-sec-calendar',
+      'scout': 'dash-sec-scout',
+      'generator': 'dash-sec-generator'
+    };
+    const targetSectionId = sectionMap[viewId];
+    const sectionEl = document.getElementById(targetSectionId);
+    const mainContainer = document.querySelector('.dash-main');
+    
+    if (sectionEl && mainContainer) {
+      // Lazy load scheduler cells if it's the calendar section or not populated yet
+      if (viewId === 'calendar' || !schedulerGridPopulated) {
+        populateSchedulerGrid();
+      }
+      
+      setTimeout(() => {
+        mainContainer.scrollTo({
+          top: sectionEl.offsetTop - 70, // subtract header height
+          behavior: 'smooth'
+        });
+      }, 50);
+    }
+  } else {
+    // Scroll to top for other subviews
+    const mainContainer = document.querySelector('.dash-main');
+    if (mainContainer) {
+      mainContainer.scrollTop = 0;
+    }
   }
 }
 

@@ -381,309 +381,312 @@
                         
                         <!-- 1. DASHBOARD SUBVIEW -->
                         <div id="portal-view-dashboard" class="portal-subview active">
-                            <!-- Dashboard Section -->
-                            <section class="slide" id="dashboard" style="padding:0;">
-                                <div class="slide-inner" style="max-width:100%; padding:0;">
-                                    <span class="section-tag tag-teal">Operations Center</span>
-                                    <h2 class="section-title">Agent Network Health & Status</h2>
-                                    <p class="section-lead">Live status, metrics, and health scores for your autonomous creator roster.</p>
-                                    
-                                    <!-- KPI Summary Row -->
-                                    <div class="dash-kpi-row" id="dash-kpis">
-                                        <div class="dash-kpi">
-                                            <div class="dash-kpi-icon" style="--kpi-color:#6366f1"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 10-16 0"/></svg></div>
-                                            <div class="dash-kpi-data"><span class="dash-kpi-num" id="kpi-total">13</span><span class="dash-kpi-label">Active Agents</span></div>
-                                        </div>
-                                        <div class="dash-kpi">
-                                            <div class="dash-kpi-icon" style="--kpi-color:#22c55e"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
-                                            <div class="dash-kpi-data"><span class="dash-kpi-num">5.4%</span><span class="dash-kpi-label">Avg Engagement</span></div>
-                                        </div>
-                                        <div class="dash-kpi">
-                                            <div class="dash-kpi-icon" style="--kpi-color:#f59e0b"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div>
-                                            <div class="dash-kpi-data"><span class="dash-kpi-num">2,363</span><span class="dash-kpi-label">Posts This Week</span></div>
-                                        </div>
-                                        <div class="dash-kpi">
-                                            <div class="dash-kpi-icon" style="--kpi-color:#ec4899"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg></div>
-                                            <div class="dash-kpi-data"><span class="dash-kpi-num">891K</span><span class="dash-kpi-label">Total Reach</span></div>
-                                        </div>
-                                    </div>
-
-                                    <!-- Agent Roster Table -->
-                                    <div class="dash-table-wrap" style="margin-top: 2rem;">
-                                        <div class="dash-table-header">
-                                            <h3>Agent Roster</h3>
-                                            <div class="dash-table-filters">
-                                                <button class="dash-filter active" onclick="filterAgents(this,'all')">All</button>
-                                                <button class="dash-filter" onclick="filterAgents(this,'active')">Active</button>
-                                                <button class="dash-filter" onclick="filterAgents(this,'paused')">Paused</button>
-                                                <button class="dash-filter" onclick="filterAgents(this,'top')">Top Performers</button>
+                            <!-- 1A. Summary / Health Section -->
+                            <div id="dash-sec-summary">
+                                <!-- Dashboard Section -->
+                                <section class="slide" id="dashboard" style="padding:0;">
+                                    <div class="slide-inner" style="max-width:100%; padding:0;">
+                                        <span class="section-tag tag-teal">Operations Center</span>
+                                        <h2 class="section-title">Agent Network Health & Status</h2>
+                                        <p class="section-lead">Live status, metrics, and health scores for your autonomous creator roster.</p>
+                                        
+                                        <!-- KPI Summary Row -->
+                                        <div class="dash-kpi-row" id="dash-kpis">
+                                            <div class="dash-kpi">
+                                                <div class="dash-kpi-icon" style="--kpi-color:#6366f1"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 10-16 0"/></svg></div>
+                                                <div class="dash-kpi-data"><span class="dash-kpi-num" id="kpi-total">13</span><span class="dash-kpi-label">Active Agents</span></div>
+                                            </div>
+                                            <div class="dash-kpi">
+                                                <div class="dash-kpi-icon" style="--kpi-color:#22c55e"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+                                                <div class="dash-kpi-data"><span class="dash-kpi-num">5.4%</span><span class="dash-kpi-label">Avg Engagement</span></div>
+                                            </div>
+                                            <div class="dash-kpi">
+                                                <div class="dash-kpi-icon" style="--kpi-color:#f59e0b"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div>
+                                                <div class="dash-kpi-data"><span class="dash-kpi-num">2,363</span><span class="dash-kpi-label">Posts This Week</span></div>
+                                            </div>
+                                            <div class="dash-kpi">
+                                                <div class="dash-kpi-icon" style="--kpi-color:#ec4899"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg></div>
+                                                <div class="dash-kpi-data"><span class="dash-kpi-num">891K</span><span class="dash-kpi-label">Total Reach</span></div>
                                             </div>
                                         </div>
-                                        <div class="dash-table" id="dash-agent-table">
-                                            <!-- Rendered by JS -->
-                                        </div>
-                                    </div>
 
-                                    <!-- Engagement and Platform Distribution Charts -->
-                                    <div class="dash-chart-row" style="margin-top: 2rem;">
-                                        <div class="dash-chart-card">
-                                            <h4>Engagement Trend (7 Days)</h4>
-                                            <div class="spark-chart" id="spark-chart"></div>
-                                            <div class="spark-legend">
-                                                <span><i style="background:#6366f1"></i> Sofia R.</span>
-                                                <span><i style="background:#34d399"></i> Marcus C.</span>
-                                                <span><i style="background:#fbbf24"></i> Aisha N.</span>
+                                        <!-- Agent Roster Table -->
+                                        <div class="dash-table-wrap" style="margin-top: 2rem;">
+                                            <div class="dash-table-header">
+                                                <h3>Agent Roster</h3>
+                                                <div class="dash-table-filters">
+                                                    <button class="dash-filter active" onclick="filterAgents(this,'all')">All</button>
+                                                    <button class="dash-filter" onclick="filterAgents(this,'active')">Active</button>
+                                                    <button class="dash-filter" onclick="filterAgents(this,'paused')">Paused</button>
+                                                    <button class="dash-filter" onclick="filterAgents(this,'top')">Top Performers</button>
+                                                </div>
+                                            </div>
+                                            <div class="dash-table" id="dash-agent-table">
+                                                <!-- Rendered by JS -->
                                             </div>
                                         </div>
-                                        <div class="dash-chart-card">
-                                            <h4>Platform Distribution</h4>
-                                            <div class="platform-bars" id="platform-bars"></div>
+
+                                        <!-- Engagement and Platform Distribution Charts -->
+                                        <div class="dash-chart-row" style="margin-top: 2rem;">
+                                            <div class="dash-chart-card">
+                                                <h4>Engagement Trend (7 Days)</h4>
+                                                <div class="spark-chart" id="spark-chart"></div>
+                                                <div class="spark-legend">
+                                                    <span><i style="background:#6366f1"></i> Sofia R.</span>
+                                                    <span><i style="background:#34d399"></i> Marcus C.</span>
+                                                    <span><i style="background:#fbbf24"></i> Aisha N.</span>
+                                                </div>
+                                            </div>
+                                            <div class="dash-chart-card">
+                                                <h4>Platform Distribution</h4>
+                                                <div class="platform-bars" id="platform-bars"></div>
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
-                            </section>
-                        </div>
-                        
-                        <!-- 2. CALENDAR SUBVIEW -->
-                        <div id="portal-view-calendar" class="portal-subview">
-                            <span class="section-tag tag-blue">Autonomous Content</span>
-                            <h2 class="section-title" style="margin-bottom: 0.5rem;">AI-Generated Content Calendar</h2>
-                            <p class="section-lead" style="margin-bottom: 2rem;">Every agent autonomously generates and schedules a full week of platform-native content. Drag files from your Media Library to schedule posts.</p>
-                            
-                            <div class="sched-container">
-                                <div class="sched-week-header">
-                                    <div style="width: 80px;"></div>
-                                    <div class="sched-week-day">
-                                        <span class="sched-day-name">Mon</span>
-                                        <span class="sched-day-num">25</span>
+                                </section>
+                            </div>
+
+                            <!-- 1B. Social Scout Section -->
+                            <div id="dash-sec-scout" style="margin-top: 4rem; padding-top: 3rem; border-top: 1px solid rgba(255,255,255,0.05);">
+                                <!-- Scout Section -->
+                                <section id="scout" class="slide slide-dark" style="padding:0;">
+                                    <div class="slide-inner" style="max-width:100%; padding:0;">
+                                        <div class="section-tag tag-pink">Market Intelligence</div>
+                                        <h2 class="section-title">Social Scout &<br><span class="subtitle-muted">Competitive Intelligence Engine</span></h2>
+                                        <p class="section-lead">Analyze top-performing AI influencers, extract winning content patterns, discover market pain points, and feed insights directly into your agents' soul.md and tools.md.</p>
+
+                                        <div class="scout-layout">
+                                            <!-- LEFT: Input Panel -->
+                                            <div class="scout-input-panel glass-card">
+                                                <h3 class="card-heading"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>Intelligence Engine</h3>
+
+                                                <!-- Analysis Dimension Toggle -->
+                                                <div class="gen-field">
+                                                    <label>Analysis Dimension</label>
+                                                    <div class="scout-mode-toggle">
+                                                        <button class="smt-btn active" onclick="setScoutDimension(this,'profile')">
+                                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 10-16 0"/></svg>
+                                                            Profile Analysis
+                                                        </button>
+                                                        <button class="smt-btn" onclick="setScoutDimension(this,'keywords')">
+                                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                                                            Keywords & Trends
+                                                        </button>
+                                                    </div>
+                                                </div>
+
+                                                <!-- Platform Selector -->
+                                                <div class="gen-field">
+                                                    <label>Platform</label>
+                                                    <div class="platform-toggles">
+                                                        <label class="chip active" data-splatform="instagram" onclick="setScoutPlatform(this)"><span class="chip-dot"></span>Instagram</label>
+                                                        <label class="chip" data-splatform="tiktok" onclick="setScoutPlatform(this)"><span class="chip-dot"></span>TikTok</label>
+                                                        <label class="chip" data-splatform="reddit" onclick="setScoutPlatform(this)"><span class="chip-dot"></span>Reddit</label>
+                                                    </div>
+                                                </div>
+
+                                                <!-- Profile URL input -->
+                                                <div class="gen-field" id="scout-profile-field">
+                                                    <label>Profile URL</label>
+                                                    <div class="scout-url-row">
+                                                        <input type="text" id="scout-url" class="scout-input" placeholder="https://instagram.com/username" value="https://instagram.com/fitnesswithkai">
+                                                        <button class="btn-primary scout-btn" onclick="runScout()">
+                                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                                                            Analyze
+                                                        </button>
+                                                    </div>
+                                                </div>
+
+                                                <!-- Keyword input -->
+                                                <div class="gen-field" id="scout-keyword-field" style="display:none">
+                                                    <label>Search Keywords or Trending Phrases</label>
+                                                    <div class="scout-url-row">
+                                                        <input type="text" id="scout-keyword" class="scout-input" placeholder="e.g. AI fitness coach, home workouts">
+                                                        <button class="btn-primary scout-btn" onclick="runKeywordScout()">
+                                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                                                            Search
+                                                        </button>
+                                                    </div>
+                                                </div>
+
+                                                <div class="gen-field">
+                                                    <label>Market / Niche</label>
+                                                    <select id="scout-niche">
+                                                        <option value="fitness">Fitness & Wellness</option>
+                                                        <option value="tech">Tech & AI</option>
+                                                        <option value="fashion">Fashion & Beauty</option>
+                                                        <option value="finance">Finance & Crypto</option>
+                                                        <option value="travel">Travel & Lifestyle</option>
+                                                    </select>
+                                                </div>
+                                                <div class="gen-field">
+                                                    <label>Intelligence Vectors</label>
+                                                    <div class="platform-toggles">
+                                                        <label class="chip active" data-mode="trends"><span class="chip-dot"></span>Trending Content</label>
+                                                        <label class="chip active" data-mode="pain"><span class="chip-dot"></span>Pain Points</label>
+                                                        <label class="chip" data-mode="competitors"><span class="chip-dot"></span>Competitors</label>
+                                                        <label class="chip active" data-mode="hashtags"><span class="chip-dot"></span>Hashtags</label>
+                                                    </div>
+                                                </div>
+                                                <button class="btn-primary btn-full" onclick="runMarketScan()">
+                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                                                    Run Full Market Scan
+                                                </button>
+                                            </div>
+
+                                            <!-- RIGHT: Results -->
+                                            <div class="scout-results" id="scout-results">
+                                                <div class="gen-placeholder">
+                                                    <div class="gen-placeholder-icon">
+                                                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                                                    </div>
+                                                    <p>Enter an Instagram URL or run a market scan<br><span>Intelligence report will appear here</span></p>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Trend Scanner Strip -->
+                                        <div class="trend-strip" id="trend-strip" style="margin-top: 2rem;">
+                                            <div class="trend-strip-header">
+                                                <h4><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg> Live Market Trends</h4>
+                                                <span class="trend-live-dot"><span class="pulse-dot"></span> Scanning</span>
+                                            </div>
+                                            <div class="trend-ticker" id="trend-ticker"></div>
+                                        </div>
                                     </div>
-                                    <div class="sched-week-day">
-                                        <span class="sched-day-name">Tue</span>
-                                        <span class="sched-day-num">26</span>
+                                </section>
+                            </div>
+
+                            <!-- 1C. Agent Generator & Roster Section -->
+                            <div id="dash-sec-generator" style="margin-top: 4rem; padding-top: 3rem; border-top: 1px solid rgba(255,255,255,0.05);">
+                                <!-- Generator Section -->
+                                <section id="generator" class="slide slide-dark" style="padding:0;">
+                                    <div class="slide-inner" style="max-width:100%; padding:0;">
+                                        <div class="section-tag tag-green">Interactive Generator</div>
+                                        <h2 class="section-title">Generate an AI Agent<br><span class="subtitle-muted">Watch it come to life in real-time</span></h2>
+
+                                        <div class="generator-layout">
+                                            <!-- LEFT: Config Panel -->
+                                            <div class="gen-panel glass-card">
+                                                <h3 class="card-heading"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>Agent Configuration</h3>
+                                                <div class="gen-field">
+                                                    <label>Niche / Vertical</label>
+                                                    <select id="gen-niche">
+                                                        <option value="fitness">Fitness & Wellness</option>
+                                                        <option value="tech">Tech & AI</option>
+                                                        <option value="fashion">Fashion & Beauty</option>
+                                                        <option value="finance">Finance & Crypto</option>
+                                                        <option value="travel">Travel & Lifestyle</option>
+                                                        <option value="food">Food & Cooking</option>
+                                                    </select>
+                                                </div>
+                                                <div class="gen-field">
+                                                    <label>Target Market</label>
+                                                    <select id="gen-market">
+                                                        <option value="us">United States</option>
+                                                        <option value="eu">Europe (Multi-lingual)</option>
+                                                        <option value="latam">Latin America</option>
+                                                        <option value="mena">Middle East & North Africa</option>
+                                                        <option value="apac">Asia-Pacific</option>
+                                                    </select>
+                                                </div>
+                                                <div class="gen-field">
+                                                    <label>Personality Archetype</label>
+                                                    <select id="gen-personality">
+                                                        <option value="authority">Authority / Expert</option>
+                                                        <option value="relatable">Relatable / Everyday</option>
+                                                        <option value="provocative">Provocative / Edgy</option>
+                                                        <option value="inspirational">Inspirational / Motivational</option>
+                                                    </select>
+                                                </div>
+                                                <div class="gen-field">
+                                                    <label>Active Platforms</label>
+                                                    <div class="platform-toggles">
+                                                        <label class="chip active" data-platform="instagram"><span class="chip-dot"></span>Instagram</label>
+                                                        <label class="chip active" data-platform="tiktok"><span class="chip-dot"></span>TikTok</label>
+                                                        <label class="chip" data-platform="twitter"><span class="chip-dot"></span>X / Twitter</label>
+                                                        <label class="chip" data-platform="youtube"><span class="chip-dot"></span>YouTube</label>
+                                                        <label class="chip" data-platform="linkedin"><span class="chip-dot"></span>LinkedIn</label>
+                                                        <label class="chip" data-platform="threads"><span class="chip-dot"></span>Threads</label>
+                                                    </div>
+                                                </div>
+                                                <button id="gen-btn" class="btn-primary btn-full" onclick="generateAgent()">
+                                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                                                    Generate AI Influencer
+                                                </button>
+                                            </div>
+
+                                            <!-- RIGHT: Live Output -->
+                                            <div class="gen-output" id="gen-output">
+                                                <div class="gen-placeholder">
+                                                    <div class="gen-placeholder-icon">
+                                                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 10-16 0"/></svg>
+                                                    </div>
+                                                    <p>Configure your agent and hit generate<br><span>Your AI influencer will appear here</span></p>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div class="sched-week-day">
-                                        <span class="sched-day-name">Wed</span>
-                                        <span class="sched-day-num active">27</span>
+                                </section>
+
+                                <!-- Showcase / Live Roster Section -->
+                                <section id="showcase" class="slide" style="padding: 2rem 0 0;">
+                                    <div class="slide-inner" style="max-width:100%; padding:0;">
+                                        <div class="section-tag tag-violet">Live Roster</div>
+                                        <h2 class="section-title">Meet Your AI Influencers</h2>
+                                        <p class="section-lead">Each persona is a fully-realized digital identity — complete with a backstory, visual aesthetic, content voice, and cross-platform presence.</p>
+
+                                        <div class="influencer-grid" id="influencer-grid">
+                                            <!-- Influencer cards rendered by JS -->
+                                        </div>
                                     </div>
-                                    <div class="sched-week-day">
-                                        <span class="sched-day-name">Thu</span>
-                                        <span class="sched-day-num">28</span>
-                                    </div>
-                                    <div class="sched-week-day">
-                                        <span class="sched-day-name">Fri</span>
-                                        <span class="sched-day-num">29</span>
-                                    </div>
-                                    <div class="sched-week-day">
-                                        <span class="sched-day-name">Sat</span>
-                                        <span class="sched-day-num">30</span>
-                                    </div>
-                                    <div class="sched-week-day">
-                                        <span class="sched-day-name">Sun</span>
-                                        <span class="sched-day-num">31</span>
-                                    </div>
-                                </div>
+                                </section>
+                            </div>
+
+                            <!-- 1D. Content Calendar Section -->
+                            <div id="dash-sec-calendar" style="margin-top: 4rem; padding-top: 3rem; border-top: 1px solid rgba(255,255,255,0.05);">
+                                <span class="section-tag tag-blue">Autonomous Content</span>
+                                <h2 class="section-title" style="margin-bottom: 0.5rem;">AI-Generated Content Calendar</h2>
+                                <p class="section-lead" style="margin-bottom: 2rem;">Every agent autonomously generates and schedules a full week of platform-native content. Drag files from your Media Library to schedule posts.</p>
                                 
-                                <div class="sched-grid" id="scheduler-grid-cells">
-                                    <div class="sched-time-indicator" style="top: 190px;"></div>
+                                <div class="sched-container">
+                                    <div class="sched-week-header">
+                                        <div style="width: 80px;"></div>
+                                        <div class="sched-week-day">
+                                            <span class="sched-day-name">Mon</span>
+                                            <span class="sched-day-num">25</span>
+                                        </div>
+                                        <div class="sched-week-day">
+                                            <span class="sched-day-name">Tue</span>
+                                            <span class="sched-day-num">26</span>
+                                        </div>
+                                        <div class="sched-week-day">
+                                            <span class="sched-day-name">Wed</span>
+                                            <span class="sched-day-num active">27</span>
+                                        </div>
+                                        <div class="sched-week-day">
+                                            <span class="sched-day-name">Thu</span>
+                                            <span class="sched-day-num">28</span>
+                                        </div>
+                                        <div class="sched-week-day">
+                                            <span class="sched-day-name">Fri</span>
+                                            <span class="sched-day-num">29</span>
+                                        </div>
+                                        <div class="sched-week-day">
+                                            <span class="sched-day-name">Sat</span>
+                                            <span class="sched-day-num">30</span>
+                                        </div>
+                                        <div class="sched-week-day">
+                                            <span class="sched-day-name">Sun</span>
+                                            <span class="sched-day-num">31</span>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="sched-grid" id="scheduler-grid-cells">
+                                        <div class="sched-time-indicator" style="top: 190px;"></div>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                        
-                        <!-- 3. SCOUT SUBVIEW -->
-                        <div id="portal-view-scout" class="portal-subview">
-                            <!-- Scout Section -->
-                            <section id="scout" class="slide slide-dark" style="padding:0;">
-                                <div class="slide-inner" style="max-width:100%; padding:0;">
-                                    <div class="section-tag tag-pink">Market Intelligence</div>
-                                    <h2 class="section-title">Social Scout &<br><span class="subtitle-muted">Competitive Intelligence Engine</span></h2>
-                                    <p class="section-lead">Analyze top-performing AI influencers, extract winning content patterns, discover market pain points, and feed insights directly into your agents' soul.md and tools.md.</p>
-
-                                    <div class="scout-layout">
-                                        <!-- LEFT: Input Panel -->
-                                        <div class="scout-input-panel glass-card">
-                                            <h3 class="card-heading"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>Intelligence Engine</h3>
-
-                                            <!-- Analysis Dimension Toggle -->
-                                            <div class="gen-field">
-                                                <label>Analysis Dimension</label>
-                                                <div class="scout-mode-toggle">
-                                                    <button class="smt-btn active" onclick="setScoutDimension(this,'profile')">
-                                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 10-16 0"/></svg>
-                                                        Profile Analysis
-                                                    </button>
-                                                    <button class="smt-btn" onclick="setScoutDimension(this,'keywords')">
-                                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-                                                        Keywords & Trends
-                                                    </button>
-                                                </div>
-                                            </div>
-
-                                            <!-- Platform Selector -->
-                                            <div class="gen-field">
-                                                <label>Platform</label>
-                                                <div class="platform-toggles">
-                                                    <label class="chip active" data-splatform="instagram" onclick="setScoutPlatform(this)"><span class="chip-dot"></span>Instagram</label>
-                                                    <label class="chip" data-splatform="tiktok" onclick="setScoutPlatform(this)"><span class="chip-dot"></span>TikTok</label>
-                                                    <label class="chip" data-splatform="reddit" onclick="setScoutPlatform(this)"><span class="chip-dot"></span>Reddit</label>
-                                                </div>
-                                            </div>
-
-                                            <!-- Profile URL input -->
-                                            <div class="gen-field" id="scout-profile-field">
-                                                <label>Profile URL</label>
-                                                <div class="scout-url-row">
-                                                    <input type="text" id="scout-url" class="scout-input" placeholder="https://instagram.com/username" value="https://instagram.com/fitnesswithkai">
-                                                    <button class="btn-primary scout-btn" onclick="runScout()">
-                                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-                                                        Analyze
-                                                    </button>
-                                                </div>
-                                            </div>
-
-                                            <!-- Keyword input -->
-                                            <div class="gen-field" id="scout-keyword-field" style="display:none">
-                                                <label>Search Keywords or Trending Phrases</label>
-                                                <div class="scout-url-row">
-                                                    <input type="text" id="scout-keyword" class="scout-input" placeholder="e.g. AI fitness coach, home workouts">
-                                                    <button class="btn-primary scout-btn" onclick="runKeywordScout()">
-                                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-                                                        Search
-                                                    </button>
-                                                </div>
-                                            </div>
-
-                                            <div class="gen-field">
-                                                <label>Market / Niche</label>
-                                                <select id="scout-niche">
-                                                    <option value="fitness">Fitness & Wellness</option>
-                                                    <option value="tech">Tech & AI</option>
-                                                    <option value="fashion">Fashion & Beauty</option>
-                                                    <option value="finance">Finance & Crypto</option>
-                                                    <option value="travel">Travel & Lifestyle</option>
-                                                </select>
-                                            </div>
-                                            <div class="gen-field">
-                                                <label>Intelligence Vectors</label>
-                                                <div class="platform-toggles">
-                                                    <label class="chip active" data-mode="trends"><span class="chip-dot"></span>Trending Content</label>
-                                                    <label class="chip active" data-mode="pain"><span class="chip-dot"></span>Pain Points</label>
-                                                    <label class="chip" data-mode="competitors"><span class="chip-dot"></span>Competitors</label>
-                                                    <label class="chip active" data-mode="hashtags"><span class="chip-dot"></span>Hashtags</label>
-                                                </div>
-                                            </div>
-                                            <button class="btn-primary btn-full" onclick="runMarketScan()">
-                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-                                                Run Full Market Scan
-                                            </button>
-                                        </div>
-
-                                        <!-- RIGHT: Results -->
-                                        <div class="scout-results" id="scout-results">
-                                            <div class="gen-placeholder">
-                                                <div class="gen-placeholder-icon">
-                                                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-                                                </div>
-                                                <p>Enter an Instagram URL or run a market scan<br><span>Intelligence report will appear here</span></p>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <!-- Trend Scanner Strip -->
-                                    <div class="trend-strip" id="trend-strip" style="margin-top: 2rem;">
-                                        <div class="trend-strip-header">
-                                            <h4><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg> Live Market Trends</h4>
-                                            <span class="trend-live-dot"><span class="pulse-dot"></span> Scanning</span>
-                                        </div>
-                                        <div class="trend-ticker" id="trend-ticker"></div>
-                                    </div>
-                                </div>
-                            </section>
-                        </div>
-                        
-                        <!-- 4. GENERATOR SUBVIEW -->
-                        <div id="portal-view-generator" class="portal-subview">
-                            <!-- Generator Section -->
-                            <section id="generator" class="slide slide-dark" style="padding:0;">
-                                <div class="slide-inner" style="max-width:100%; padding:0;">
-                                    <div class="section-tag tag-green">Interactive Generator</div>
-                                    <h2 class="section-title">Generate an AI Agent<br><span class="subtitle-muted">Watch it come to life in real-time</span></h2>
-
-                                    <div class="generator-layout">
-                                        <!-- LEFT: Config Panel -->
-                                        <div class="gen-panel glass-card">
-                                            <h3 class="card-heading"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>Agent Configuration</h3>
-                                            <div class="gen-field">
-                                                <label>Niche / Vertical</label>
-                                                <select id="gen-niche">
-                                                    <option value="fitness">Fitness & Wellness</option>
-                                                    <option value="tech">Tech & AI</option>
-                                                    <option value="fashion">Fashion & Beauty</option>
-                                                    <option value="finance">Finance & Crypto</option>
-                                                    <option value="travel">Travel & Lifestyle</option>
-                                                    <option value="food">Food & Cooking</option>
-                                                </select>
-                                            </div>
-                                            <div class="gen-field">
-                                                <label>Target Market</label>
-                                                <select id="gen-market">
-                                                    <option value="us">United States</option>
-                                                    <option value="eu">Europe (Multi-lingual)</option>
-                                                    <option value="latam">Latin America</option>
-                                                    <option value="mena">Middle East & North Africa</option>
-                                                    <option value="apac">Asia-Pacific</option>
-                                                </select>
-                                            </div>
-                                            <div class="gen-field">
-                                                <label>Personality Archetype</label>
-                                                <select id="gen-personality">
-                                                    <option value="authority">Authority / Expert</option>
-                                                    <option value="relatable">Relatable / Everyday</option>
-                                                    <option value="provocative">Provocative / Edgy</option>
-                                                    <option value="inspirational">Inspirational / Motivational</option>
-                                                </select>
-                                            </div>
-                                            <div class="gen-field">
-                                                <label>Active Platforms</label>
-                                                <div class="platform-toggles">
-                                                    <label class="chip active" data-platform="instagram"><span class="chip-dot"></span>Instagram</label>
-                                                    <label class="chip active" data-platform="tiktok"><span class="chip-dot"></span>TikTok</label>
-                                                    <label class="chip" data-platform="twitter"><span class="chip-dot"></span>X / Twitter</label>
-                                                    <label class="chip" data-platform="youtube"><span class="chip-dot"></span>YouTube</label>
-                                                    <label class="chip" data-platform="linkedin"><span class="chip-dot"></span>LinkedIn</label>
-                                                    <label class="chip" data-platform="threads"><span class="chip-dot"></span>Threads</label>
-                                                </div>
-                                            </div>
-                                            <button id="gen-btn" class="btn-primary btn-full" onclick="generateAgent()">
-                                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-                                                Generate AI Influencer
-                                            </button>
-                                        </div>
-
-                                        <!-- RIGHT: Live Output -->
-                                        <div class="gen-output" id="gen-output">
-                                            <div class="gen-placeholder">
-                                                <div class="gen-placeholder-icon">
-                                                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 10-16 0"/></svg>
-                                                </div>
-                                                <p>Configure your agent and hit generate<br><span>Your AI influencer will appear here</span></p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </section>
-
-                            <!-- Showcase Section -->
-                            <section id="showcase" class="slide" style="padding: 2rem 0 0;">
-                                <div class="slide-inner" style="max-width:100%; padding:0;">
-                                    <div class="section-tag tag-violet">Live Roster</div>
-                                    <h2 class="section-title">Meet Your AI Influencers</h2>
-                                    <p class="section-lead">Each persona is a fully-realized digital identity — complete with a backstory, visual aesthetic, content voice, and cross-platform presence.</p>
-
-                                    <div class="influencer-grid" id="influencer-grid">
-                                        <!-- Influencer cards rendered by JS -->
-                                    </div>
-                                </div>
-                            </section>
                         </div>
                         
                         <!-- 5. PROJECT MANAGER SUBVIEW -->
