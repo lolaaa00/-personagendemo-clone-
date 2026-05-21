@@ -192,13 +192,13 @@ function compilePortalPages(content, DIST) {
   const footerAndScripts = content.slice(content.indexOf('<!-- ═══════ FOOTER ═══════ -->'));
 
   // Sidebar and Header (extracted from the first part of view-portal)
-  const viewPortalStart = content.indexOf('<div id="view-portal"');
+  const sidebarStart = content.indexOf('<aside class="dash-sidebar">');
   const centerPanelStart = content.indexOf('<div class="dash-center-panel">');
-  if (viewPortalStart === -1 || centerPanelStart === -1) {
-    console.error('  ⚠ Could not find view-portal or dash-center-panel, skipping sub-page build.');
+  if (sidebarStart === -1 || centerPanelStart === -1) {
+    console.error('  ⚠ Could not find dash-sidebar or dash-center-panel, skipping sub-page build.');
     return;
   }
-  const sidebarAndHeader = content.slice(viewPortalStart, centerPanelStart + '<div class="dash-center-panel">'.length);
+  const sidebarAndHeader = content.slice(sidebarStart, centerPanelStart + '<div class="dash-center-panel">'.length);
 
   // Extract individual contents
   const subContents = {
@@ -290,10 +290,10 @@ ${head}
             </div>
             ${rightPanelHtml}
         </div>
+        </main>
     </div>
-    ${footerAndScripts}
-</body>
-</html>`;
+</div>
+${footerAndScripts}`;
 
     fs.writeFileSync(path.join(DIST, p.file), fullHtml, 'utf-8');
     console.log(`  ✓ Compiled sub-page: ${p.file}`);
