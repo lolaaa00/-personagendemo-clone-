@@ -1166,18 +1166,7 @@ function switchTab(tabId) {
   } else {
     // Switching to Portal: check unlock status
     if (sessionStorage.getItem('pg_portal_unlocked') === 'yes') {
-      document.body.classList.add('portal-active');
-      if (viewDemo) viewDemo.style.display = 'none';
-      if (viewPortal) viewPortal.style.display = 'block';
-      if (pinGate) pinGate.style.display = 'none';
-      
-      if (navDemo) navDemo.classList.remove('active');
-      if (navPortal) navPortal.classList.add('active');
-      if (drawerDemo) drawerDemo.classList.remove('active');
-      if (drawerPortal) drawerPortal.classList.add('active');
-      
-      document.querySelectorAll('.portal-nav-item').forEach(el => el.style.display = 'inline-block');
-      document.querySelectorAll('.demo-nav-item').forEach(el => el.style.display = 'none');
+      window.location.href = 'dashboard.html';
     } else {
       // Show PIN Gate overlay
       if (pinGate) {
@@ -1199,7 +1188,15 @@ const PIN = {
     const portalView = document.getElementById('view-portal');
     const demoView = document.getElementById('view-demo');
     
+    const urlParams = new URLSearchParams(window.location.search);
+    const triggerPortal = urlParams.get('portal') === 'trigger';
+
     if (sessionStorage.getItem(this.SESSION_KEY) === 'yes') {
+      const isSplashPage = window.location.pathname.endsWith('index.html') || window.location.pathname === '/' || window.location.pathname.endsWith('/');
+      if (isSplashPage || triggerPortal) {
+        window.location.href = 'dashboard.html';
+        return;
+      }
       document.body.classList.add('portal-active');
       if (pinGate) {
         pinGate.classList.add('unlocked');
@@ -1211,13 +1208,19 @@ const PIN = {
       if (demoView) {
         demoView.style.display = 'none';
       }
-      document.querySelectorAll('.portal-nav-item').forEach(el => el.style.display = 'inline-block');
-      document.querySelectorAll('.demo-nav-item').forEach(el => el.style.display = 'none');
-      switchTab('portal');
     } else {
       document.body.classList.remove('portal-active');
+      const isSplashPage = window.location.pathname.endsWith('index.html') || window.location.pathname === '/' || window.location.pathname.endsWith('/');
+      if (!isSplashPage) {
+        // Protect sub-pages by redirecting to splash page with login trigger
+        window.location.href = 'index.html?portal=trigger';
+        return;
+      }
       if (pinGate) {
-        pinGate.style.display = 'none';
+        pinGate.style.display = triggerPortal ? 'flex' : 'none';
+        if (triggerPortal) {
+          pinGate.classList.remove('unlocked');
+        }
       }
       if (portalView) {
         portalView.style.display = 'none';
@@ -1225,12 +1228,16 @@ const PIN = {
       if (demoView) {
         demoView.style.display = 'block';
       }
-      document.querySelectorAll('.portal-nav-item').forEach(el => el.style.display = 'none');
-      document.querySelectorAll('.demo-nav-item').forEach(el => el.style.display = 'inline-block');
-      switchTab('demo');
+      if (triggerPortal) {
+        const navDemo = document.getElementById('nav-tab-demo');
+        const navPortal = document.getElementById('nav-tab-portal');
+        if (navDemo) navDemo.classList.remove('active');
+        if (navPortal) navPortal.classList.add('active');
+      }
     }
+  },
 
-    // keyboard support
+  // keyboard support
     document.addEventListener('keydown', (e) => {
       const pinGate = document.getElementById('pin-gate');
       if (pinGate && pinGate.style.display !== 'none' && !pinGate.classList.contains('unlocked')) {
@@ -1275,37 +1282,15 @@ const PIN = {
   check() {
     if (this.input === this.CORRECT) {
       sessionStorage.setItem(this.SESSION_KEY, 'yes');
-      document.body.classList.add('portal-active');
       const pinGate = document.getElementById('pin-gate');
-      const portalView = document.getElementById('view-portal');
-      const demoView = document.getElementById('view-demo');
-      
       if (pinGate) {
         pinGate.classList.add('unlocked');
-        setTimeout(() => { pinGate.style.display = 'none'; }, 300);
+        setTimeout(() => {
+          window.location.href = 'dashboard.html';
+        }, 300);
+      } else {
+        window.location.href = 'dashboard.html';
       }
-      if (portalView) {
-        portalView.style.display = 'block';
-      }
-      if (demoView) {
-        demoView.style.display = 'none';
-      }
-      
-      document.querySelectorAll('.portal-nav-item').forEach(el => el.style.display = 'inline-block');
-      document.querySelectorAll('.demo-nav-item').forEach(el => el.style.display = 'none');
-      
-      const navDemo = document.getElementById('nav-tab-demo');
-      const navPortal = document.getElementById('nav-tab-portal');
-      if (navDemo) navDemo.classList.remove('active');
-      if (navPortal) navPortal.classList.add('active');
-      
-      const drawerDemo = document.getElementById('drawer-tab-demo');
-      const drawerPortal = document.getElementById('drawer-tab-portal');
-      if (drawerDemo) drawerDemo.classList.remove('active');
-      if (drawerPortal) drawerPortal.classList.add('active');
-      
-      alert('Welcome to your Confidential Client Portal!');
-      handleHashRoute();
     } else {
       for (let i = 0; i < 4; i++) {
         const dot = document.getElementById('pd-' + i);

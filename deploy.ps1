@@ -1,6 +1,6 @@
 # ═══════════════════════════════════════════════════════════════
 # PersonaGen — One-Command Deploy Script
-# Usage: .\deploy.ps1 [-m "commit message"] [-skip-commit]
+# Usage: .\deploy.ps1 [-m "commit message"] [-skipCommit]
 # ═══════════════════════════════════════════════════════════════
 
 param(
@@ -12,8 +12,8 @@ $ErrorActionPreference = "Stop"
 $projectDir = $PSScriptRoot
 
 Write-Host ""
-Write-Host "  ⚡ PersonaGen Deploy" -ForegroundColor Cyan
-Write-Host "  ───────────────────────" -ForegroundColor DarkGray
+Write-Host "  [Deploy] PersonaGen Deploy" -ForegroundColor Cyan
+Write-Host "  -----------------------" -ForegroundColor DarkGray
 Write-Host ""
 
 # ── Step 1: Git commit & push ──
@@ -28,17 +28,17 @@ if (-not $skipCommit) {
         Write-Host "  [1/3] Committing changes..." -ForegroundColor Yellow
         git add -A
         git commit -m $m
-        Write-Host "  [1/3] ✓ Committed: $m" -ForegroundColor Green
+        Write-Host "  [1/3] OK Committed: $m" -ForegroundColor Green
     } else {
-        Write-Host "  [1/3] ✓ Working tree clean — nothing to commit" -ForegroundColor Green
+        Write-Host "  [1/3] OK Working tree clean - nothing to commit" -ForegroundColor Green
     }
 
     Write-Host "  [2/3] Pushing to GitHub..." -ForegroundColor Yellow
     git push origin main 2>&1
-    Write-Host "  [2/3] ✓ Pushed to origin/main" -ForegroundColor Green
+    Write-Host "  [2/3] OK Pushed to origin/main" -ForegroundColor Green
 } else {
-    Write-Host "  [1/3] ⊘ Skipped (--skip-commit)" -ForegroundColor DarkGray
-    Write-Host "  [2/3] ⊘ Skipped (--skip-commit)" -ForegroundColor DarkGray
+    Write-Host "  [1/3] Skipped (skip-commit)" -ForegroundColor DarkGray
+    Write-Host "  [2/3] Skipped (skip-commit)" -ForegroundColor DarkGray
 }
 
 # ── Step 2: Deploy to Cloudflare Pages ──
@@ -61,7 +61,7 @@ if (-not $token) {
 
 if (-not $token) {
     Write-Host ""
-    Write-Host "  ⚠  CLOUDFLARE_API_TOKEN not set." -ForegroundColor Red
+    Write-Host "  WARNING: CLOUDFLARE_API_TOKEN not set." -ForegroundColor Red
     Write-Host "  Create one at: https://dash.cloudflare.com/profile/api-tokens" -ForegroundColor Yellow
     Write-Host "  Template: 'Edit Cloudflare Workers' (includes Pages)" -ForegroundColor Yellow
     Write-Host "  Then either:" -ForegroundColor DarkGray
@@ -75,13 +75,13 @@ if (-not $token) {
 $deployDir = Join-Path $projectDir "dist/honeyforx"
 npx -y wrangler pages deploy $deployDir --project-name personagendemo --branch main --commit-dirty=true 2>&1
 if ($LASTEXITCODE -eq 0) {
-    Write-Host "  [3/3] ✓ Live at https://personagendemo.pages.dev/" -ForegroundColor Green
+    Write-Host "  [3/3] OK Live at https://personagendemo.pages.dev/" -ForegroundColor Green
 } else {
-    Write-Host "  [3/3] ✗ Deploy failed — check wrangler output above" -ForegroundColor Red
+    Write-Host "  [3/3] ERROR Deploy failed - check wrangler output above" -ForegroundColor Red
     exit 1
 }
 
 Write-Host ""
-Write-Host "  ✅ Deploy complete!" -ForegroundColor Green
+Write-Host "  Deploy complete!" -ForegroundColor Green
 Write-Host "  🌐 https://personagendemo.pages.dev/" -ForegroundColor Cyan
 Write-Host ""

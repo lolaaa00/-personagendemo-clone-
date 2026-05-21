@@ -148,6 +148,158 @@ if (fs.existsSync(SCRIPT_SRC)) {
 // ── Process HTML templates ──
 const HTML_FILES = ['index.html'];
 
+function compilePortalPages(content, DIST) {
+  // Helper to extract substrings using matching tags
+  function getElementContent(html, searchStr) {
+    const startIdx = html.indexOf(searchStr);
+    if (startIdx === -1) return '';
+    
+    const tagStartCloseIdx = html.indexOf('>', startIdx);
+    if (tagStartCloseIdx === -1) return '';
+    
+    const tagTypeMatch = searchStr.match(/<([a-zA-Z0-9]+)/);
+    const tagType = tagTypeMatch ? tagTypeMatch[1] : 'div';
+    
+    let depth = 1;
+    let pos = tagStartCloseIdx + 1;
+    const openTagPattern = new RegExp(`<${tagType}\\b`, 'i');
+    const closeTagPattern = new RegExp(`</${tagType}>`, 'i');
+    
+    while (depth > 0 && pos < html.length) {
+      const slice = html.slice(pos);
+      const nextOpen = slice.search(openTagPattern);
+      const nextClose = slice.search(closeTagPattern);
+      
+      if (nextClose === -1) {
+        break;
+      }
+      
+      if (nextOpen !== -1 && nextOpen < nextClose) {
+        depth++;
+        pos += nextOpen + 1;
+      } else {
+        depth--;
+        pos += nextClose + tagType.length + 3;
+      }
+    }
+    
+    return html.slice(startIdx, pos);
+  }
+
+  // Extract base components
+  const head = content.slice(content.indexOf('<head>'), content.indexOf('</head>') + 7);
+  const rightPanel = getElementContent(content, '<aside class="dash-right-panel">');
+  const footerAndScripts = content.slice(content.indexOf('<!-- ═══════ FOOTER ═══════ -->'));
+
+  // Sidebar and Header (extracted from the first part of view-portal)
+  const viewPortalStart = content.indexOf('<div id="view-portal"');
+  const centerPanelStart = content.indexOf('<div class="dash-center-panel">');
+  if (viewPortalStart === -1 || centerPanelStart === -1) {
+    console.error('  ⚠ Could not find view-portal or dash-center-panel, skipping sub-page build.');
+    return;
+  }
+  const sidebarAndHeader = content.slice(viewPortalStart, centerPanelStart + '<div class="dash-center-panel">'.length);
+
+  // Extract individual contents
+  const subContents = {
+    dashboard: getElementContent(content, '<div id="dash-sec-summary">'),
+    scout: getElementContent(content, '<div id="dash-sec-scout"').replace(/style="[^"]*margin-top[^"]*"/, 'style="margin-top: 0; padding-top: 0; border-top: none;"'),
+    generator: getElementContent(content, '<div id="dash-sec-generator"').replace(/style="[^"]*margin-top[^"]*"/, 'style="margin-top: 0; padding-top: 0; border-top: none;"'),
+    calendar: getElementContent(content, '<div id="dash-sec-calendar"').replace(/style="[^"]*margin-top[^"]*"/, 'style="margin-top: 0; padding-top: 0; border-top: none;"'),
+    pm: getElementContent(content, '<div id="portal-view-pm"'),
+    accounts: getElementContent(content, '<div id="portal-view-accounts"'),
+    agreement: getElementContent(content, '<div id="portal-view-agreement"')
+  };
+
+  // Define pages
+  const pages = [
+    { file: 'dashboard.html', title: 'Operations Dashboard', activeMenu: 'menu-dashboard', view: 'dashboard', hasRightPanel: true, workspaceClass: '' },
+    { file: 'calendar.html', title: 'UGC Content Calendar', activeMenu: 'menu-calendar', view: 'calendar', hasRightPanel: true, workspaceClass: '' },
+    { file: 'scout.html', title: 'Social Scout Intelligence', activeMenu: 'menu-scout', view: 'scout', hasRightPanel: true, workspaceClass: '' },
+    { file: 'generator.html', title: 'Interactive Creator & Roster', activeMenu: 'menu-generator', view: 'generator', hasRightPanel: true, workspaceClass: '' },
+    { file: 'pm.html', title: 'Support Tickets & Requests', activeMenu: 'menu-pm', view: 'pm', hasRightPanel: false, workspaceClass: 'no-right-sidebar' },
+    { file: 'accounts.html', title: 'Connected Platform Handles', activeMenu: 'menu-accounts', view: 'accounts', hasRightPanel: false, workspaceClass: 'no-right-sidebar' },
+    { file: 'agreement.html', title: 'Managed Plan SOW & SLA', activeMenu: 'menu-agreement', view: 'agreement', hasRightPanel: false, workspaceClass: 'no-right-sidebar' }
+  ];
+
+  pages.forEach(p => {
+    // Build sidebar replacement with active class
+    let customizedSidebarAndHeader = sidebarAndHeader;
+    
+    // Replace button menus with links and activate correct menu item
+    const menuItemsPattern = /<button class="dash-menu-item([^"]*)" onclick="switchPortalView\('([^']*)', this\)">([\s\S]*?)<\/button>/g;
+    customizedSidebarAndHeader = customizedSidebarAndHeader.replace(menuItemsPattern, (match, classes, viewId, innerHtml) => {
+      const isCurrent = viewId === p.view;
+      const activeClass = isCurrent ? ' active' : '';
+      const pageLinkMap = {
+        dashboard: 'dashboard.html',
+        calendar: 'calendar.html',
+        scout: 'scout.html',
+        generator: 'generator.html',
+        pm: 'pm.html',
+        accounts: 'accounts.html',
+        agreement: 'agreement.html'
+      };
+      const href = pageLinkMap[viewId] || 'dashboard.html';
+      return `<a href="${href}" class="dash-menu-item${activeClass}">\n                        ${innerHtml.trim()}\n                    </a>`;
+    });
+
+    // Customize top header title
+    customizedSidebarAndHeader = customizedSidebarAndHeader.replace(
+      /<h2 class="dash-header-title" id="dash-view-title">[^<]*<\/h2>/,
+      `<h2 class="dash-header-title" id="dash-view-title">${p.title}</h2>`
+    );
+
+    // Customize + Submit Ticket button in header (change to link for pm page)
+    customizedSidebarAndHeader = customizedSidebarAndHeader.replace(
+      /<button class="dash-header-btn" onclick="switchPortalView\('pm'\)">/g,
+      `<a href="pm.html" class="dash-header-btn" style="text-decoration:none; display:inline-flex; align-items:center; justify-content:center;">`
+    ).replace(/<\/button>(\s*<div class="dash-user-badge">)/g, `</a>$1`);
+
+    // Customize workspace grid classes
+    customizedSidebarAndHeader = customizedSidebarAndHeader.replace(
+      /<div class="dash-workspace">/g,
+      `<div class="dash-workspace ${p.workspaceClass}">`
+    );
+
+    // Combine into full page HTML
+    let pageContent = subContents[p.view];
+    if (!pageContent) {
+      console.warn(`  ⚠ Content empty for view: ${p.view}`);
+      pageContent = '';
+    }
+
+    // If this view is pm, accounts, or agreement, ensure it has style display: block
+    pageContent = pageContent.replace(/class="portal-subview"/, 'class="portal-subview active" style="display:block;"');
+    
+    const rightPanelHtml = p.hasRightPanel ? rightPanel : '';
+
+    const fullHtml = `<!DOCTYPE html>
+<html lang="en">
+${head}
+<body class="portal-active">
+    <script>
+        if (sessionStorage.getItem('pg_portal_unlocked') !== 'yes') {
+            window.location.href = 'index.html?portal=trigger';
+        }
+    </script>
+    <div id="view-portal" class="tab-content" style="display: block;">
+        <div class="dashboard-layout">
+            ${customizedSidebarAndHeader}
+                ${pageContent}
+            </div>
+            ${rightPanelHtml}
+        </div>
+    </div>
+    ${footerAndScripts}
+</body>
+</html>`;
+
+    fs.writeFileSync(path.join(DIST, p.file), fullHtml, 'utf-8');
+    console.log(`  ✓ Compiled sub-page: ${p.file}`);
+  });
+}
+
 HTML_FILES.forEach(file => {
   const src = path.join(__dirname, file);
   if (!fs.existsSync(src)) {
@@ -208,6 +360,18 @@ HTML_FILES.forEach(file => {
   // Process any remaining {{}} template markers
   content = processTemplate(content, config);
   
+  if (file === 'index.html') {
+    // Compile separate portal sub-pages from content
+    compilePortalPages(content, DIST);
+
+    // Strip view-portal from landing page content to keep it clean
+    const viewPortalStart = content.indexOf('<div id="view-portal"');
+    const viewPortalEnd = content.indexOf('</div><!-- End #view-portal -->');
+    if (viewPortalStart !== -1 && viewPortalEnd !== -1) {
+      content = content.slice(0, viewPortalStart) + content.slice(viewPortalEnd + '</div><!-- End #view-portal -->'.length);
+    }
+  }
+
   // Write processed file
   fs.writeFileSync(path.join(DIST, file), content, 'utf-8');
   console.log(`  ✓ Processed ${file}`);
