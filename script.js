@@ -1070,7 +1070,74 @@ document.addEventListener('DOMContentLoaded', async () => {
       el.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
       portalRevealObserver.observe(el);
     });
+
+    // Hash navigation router
+    window.addEventListener('hashchange', handleHashRoute);
+    handleHashRoute();
 });
+
+// ── Hash Routing for Client Portal ──
+function handleHashRoute() {
+  const hash = window.location.hash;
+  if (!hash) return;
+
+  const isPortalUnlocked = sessionStorage.getItem('pg_portal_unlocked') === 'yes';
+  if (!isPortalUnlocked) return;
+
+  // Reset window scroll position to 0 to prevent browser scroll bugs
+  window.scrollTo(0, 0);
+
+  const routeMap = {
+    '#timeline':          { view: 'agreement', scroll: 'timeline' },
+    '#agreement-details': { view: 'agreement', scroll: 'agreement-details' },
+    '#scout':             { view: 'scout' },
+    '#generator':         { view: 'generator' },
+    '#calendar':          { view: 'calendar' },
+    '#dashboard':         { view: 'dashboard' },
+    '#account-creator':   { view: 'accounts' },
+    '#project-manager':   { view: 'pm' },
+    '#showcase':          { view: 'dashboard', scrollClass: 'dash-table-wrap' }
+  };
+
+  const route = routeMap[hash];
+  if (route) {
+    // If we're not currently on the portal tab, switch to it
+    const viewPortal = document.getElementById('view-portal');
+    if (viewPortal && viewPortal.style.display === 'none') {
+      switchTab('portal');
+    }
+    
+    // Switch to the correct subview
+    switchPortalView(route.view);
+
+    // If there is a sub-element to scroll to by ID
+    if (route.scroll) {
+      const targetEl = document.getElementById(route.scroll);
+      const mainContainer = document.querySelector('.dash-main');
+      if (targetEl && mainContainer) {
+        setTimeout(() => {
+          mainContainer.scrollTo({
+            top: targetEl.offsetTop - 70,
+            behavior: 'smooth'
+          });
+        }, 100);
+      }
+    }
+    // If there is a sub-element to scroll to by class
+    else if (route.scrollClass) {
+      const targetEl = document.querySelector('.' + route.scrollClass);
+      const mainContainer = document.querySelector('.dash-main');
+      if (targetEl && mainContainer) {
+        setTimeout(() => {
+          mainContainer.scrollTo({
+            top: targetEl.offsetTop - 70,
+            behavior: 'smooth'
+          });
+        }, 100);
+      }
+    }
+  }
+}
 
 // ── Global Tab Switching (Demo vs Portal) ──
 // ── Global Tab Switching (Demo vs Portal) ──
@@ -1238,6 +1305,7 @@ const PIN = {
       if (drawerPortal) drawerPortal.classList.add('active');
       
       alert('Welcome to your Confidential Client Portal!');
+      handleHashRoute();
     } else {
       for (let i = 0; i < 4; i++) {
         const dot = document.getElementById('pd-' + i);
