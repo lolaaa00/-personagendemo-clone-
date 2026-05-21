@@ -1045,6 +1045,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     PIN.init();
     PM.render();
     SocialConnections.init();
+    AccountCreator.init();
 
     // Setup scroll reveal for portal components
     const portalRevealObserver = new IntersectionObserver((entries) => {
@@ -1064,6 +1065,55 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 });
 
+// ── Global Tab Switching (Demo vs Portal) ──
+// ── Global Tab Switching (Demo vs Portal) ──
+function switchTab(tabId) {
+  const viewDemo = document.getElementById('view-demo');
+  const viewPortal = document.getElementById('view-portal');
+  const pinGate = document.getElementById('pin-gate');
+  const navDemo = document.getElementById('nav-tab-demo');
+  const navPortal = document.getElementById('nav-tab-portal');
+  const drawerDemo = document.getElementById('drawer-tab-demo');
+  const drawerPortal = document.getElementById('drawer-tab-portal');
+  
+  if (tabId === 'demo') {
+    document.body.classList.remove('portal-active');
+    if (viewDemo) viewDemo.style.display = 'block';
+    if (viewPortal) viewPortal.style.display = 'none';
+    if (pinGate) pinGate.style.display = 'none';
+    
+    if (navDemo) navDemo.classList.add('active');
+    if (navPortal) navPortal.classList.remove('active');
+    if (drawerDemo) drawerDemo.classList.add('active');
+    if (drawerPortal) drawerPortal.classList.remove('active');
+    
+    document.querySelectorAll('.portal-nav-item').forEach(el => el.style.display = 'none');
+    document.querySelectorAll('.demo-nav-item').forEach(el => el.style.display = 'inline-block');
+  } else {
+    // Switching to Portal: check unlock status
+    if (sessionStorage.getItem('pg_portal_unlocked') === 'yes') {
+      document.body.classList.add('portal-active');
+      if (viewDemo) viewDemo.style.display = 'none';
+      if (viewPortal) viewPortal.style.display = 'block';
+      if (pinGate) pinGate.style.display = 'none';
+      
+      if (navDemo) navDemo.classList.remove('active');
+      if (navPortal) navPortal.classList.add('active');
+      if (drawerDemo) drawerDemo.classList.remove('active');
+      if (drawerPortal) drawerPortal.classList.add('active');
+      
+      document.querySelectorAll('.portal-nav-item').forEach(el => el.style.display = 'inline-block');
+      document.querySelectorAll('.demo-nav-item').forEach(el => el.style.display = 'none');
+    } else {
+      // Show PIN Gate overlay
+      if (pinGate) {
+        pinGate.style.display = 'flex';
+        pinGate.classList.remove('unlocked');
+      }
+    }
+  }
+}
+
 // ── PIN Gate ──
 const PIN = {
   CORRECT: '2025',
@@ -1073,8 +1123,10 @@ const PIN = {
   init() {
     const pinGate = document.getElementById('pin-gate');
     const portalView = document.getElementById('view-portal');
+    const demoView = document.getElementById('view-demo');
     
     if (sessionStorage.getItem(this.SESSION_KEY) === 'yes') {
+      document.body.classList.add('portal-active');
       if (pinGate) {
         pinGate.classList.add('unlocked');
         pinGate.style.display = 'none';
@@ -1082,13 +1134,26 @@ const PIN = {
       if (portalView) {
         portalView.style.display = 'block';
       }
+      if (demoView) {
+        demoView.style.display = 'none';
+      }
+      document.querySelectorAll('.portal-nav-item').forEach(el => el.style.display = 'inline-block');
+      document.querySelectorAll('.demo-nav-item').forEach(el => el.style.display = 'none');
+      switchTab('portal');
     } else {
+      document.body.classList.remove('portal-active');
       if (pinGate) {
-        pinGate.style.display = 'flex';
+        pinGate.style.display = 'none';
       }
       if (portalView) {
         portalView.style.display = 'none';
       }
+      if (demoView) {
+        demoView.style.display = 'block';
+      }
+      document.querySelectorAll('.portal-nav-item').forEach(el => el.style.display = 'none');
+      document.querySelectorAll('.demo-nav-item').forEach(el => el.style.display = 'inline-block');
+      switchTab('demo');
     }
 
     // keyboard support
@@ -1136,8 +1201,11 @@ const PIN = {
   check() {
     if (this.input === this.CORRECT) {
       sessionStorage.setItem(this.SESSION_KEY, 'yes');
+      document.body.classList.add('portal-active');
       const pinGate = document.getElementById('pin-gate');
       const portalView = document.getElementById('view-portal');
+      const demoView = document.getElementById('view-demo');
+      
       if (pinGate) {
         pinGate.classList.add('unlocked');
         setTimeout(() => { pinGate.style.display = 'none'; }, 300);
@@ -1145,6 +1213,24 @@ const PIN = {
       if (portalView) {
         portalView.style.display = 'block';
       }
+      if (demoView) {
+        demoView.style.display = 'none';
+      }
+      
+      document.querySelectorAll('.portal-nav-item').forEach(el => el.style.display = 'inline-block');
+      document.querySelectorAll('.demo-nav-item').forEach(el => el.style.display = 'none');
+      
+      const navDemo = document.getElementById('nav-tab-demo');
+      const navPortal = document.getElementById('nav-tab-portal');
+      if (navDemo) navDemo.classList.remove('active');
+      if (navPortal) navPortal.classList.add('active');
+      
+      const drawerDemo = document.getElementById('drawer-tab-demo');
+      const drawerPortal = document.getElementById('drawer-tab-portal');
+      if (drawerDemo) drawerDemo.classList.remove('active');
+      if (drawerPortal) drawerPortal.classList.add('active');
+      
+      alert('Welcome to your Confidential Client Portal!');
     } else {
       for (let i = 0; i < 4; i++) {
         const dot = document.getElementById('pd-' + i);
@@ -1426,3 +1512,433 @@ const PM = {
     return days + 'd ago';
   }
 };
+
+// ── AI Influencer Account Creator Setup ──
+const AccountCreator = {
+  KEY: 'personagen_ai_accounts',
+  selectedId: 'sofia-rivera',
+  
+  load() {
+    return JSON.parse(localStorage.getItem(this.KEY) || '{}');
+  },
+  
+  save(data) {
+    localStorage.setItem(this.KEY, JSON.stringify(data));
+  },
+  
+  init() {
+    this.select(this.selectedId);
+    this.updateAllSidebarBadges();
+  },
+  
+  select(personaId) {
+    this.selectedId = personaId;
+    
+    // Update active sidebar item
+    document.querySelectorAll('.ac-sidebar-item').forEach(btn => {
+      btn.classList.remove('active');
+    });
+    const activeItem = document.getElementById(`ac-item-${personaId}`);
+    if (activeItem) {
+      activeItem.classList.add('active');
+    }
+    
+    // Find persona data from DATA (or static fallback if not loaded yet)
+    let agent = null;
+    if (window.DATA && window.DATA.agents) {
+      agent = window.DATA.agents.find(a => a.id === personaId);
+    }
+    
+    // Fallback if data loader isn't completed
+    if (!agent) {
+      const mockAgents = {
+        'sofia-rivera': {
+          name: 'Sofia Rivera', niche: 'Fitness & Wellness', market: 'US / LATAM', followers: '24.8K',
+          bio: 'Latina fitness coach & wellness advocate. Posts daily workout routines, meal prep content, and mindset motivation across Instagram and TikTok.',
+          platforms: ['Instagram', 'TikTok', 'YouTube']
+        },
+        'marcus-chen': {
+          name: 'Marcus Chen', niche: 'Tech & AI', market: 'Global English', followers: '89.2K',
+          bio: 'AI & blockchain thought leader. Breaks down complex tech trends into viral short-form content. Active on Twitter/X and LinkedIn.',
+          platforms: ['Twitter/X', 'LinkedIn']
+        },
+        'aisha-noori': {
+          name: 'Aisha Noori', niche: 'Fashion & Luxury', market: 'MENA / Europe', followers: '156K',
+          bio: 'Dubai-based luxury fashion influencer. Curates haute couture looks, brand partnerships, and aspirational lifestyle content.',
+          platforms: ['Instagram', 'TikTok', 'YouTube']
+        },
+        'veronica-hap': {
+          name: 'Veronica Hap', niche: 'Lifestyle & Beauty', market: 'Global English', followers: '412K',
+          bio: 'AI-generated lifestyle creator on TikTok. Hyper-realistic persona posting daily POV skits, beauty routines, and relatable "day in my life" content — fully autonomous.',
+          platforms: ['TikTok', 'Instagram', 'YouTube']
+        }
+      };
+      agent = mockAgents[personaId];
+    }
+    
+    if (!agent) return;
+    
+    // Populate layout
+    document.getElementById('ac-details-name').textContent = agent.name;
+    document.getElementById('ac-details-niche').textContent = agent.niche;
+    document.getElementById('ac-market-val').textContent = agent.market;
+    document.getElementById('ac-followers-val').textContent = agent.followers;
+    document.getElementById('ac-details-bio').textContent = agent.bio;
+    
+    // Recommendations
+    const handleBase = agent.name.toLowerCase().replace(/\s+/g, '');
+    document.getElementById('ac-rec-ig').textContent = `@${handleBase}.ai`;
+    document.getElementById('ac-rec-tt').textContent = `@${handleBase}_tt`;
+    document.getElementById('ac-rec-yt').textContent = `@${handleBase}_shorts`;
+    
+    // Update Connection inputs/badges based on localStorage
+    const saved = this.load();
+    const personaAccounts = saved[personaId] || {};
+    
+    ['ig', 'tt', 'yt'].forEach(platform => {
+      const handleInput = document.getElementById(`ac-${platform}-handle-input`);
+      const badge = document.getElementById(`ac-${platform}-badge`);
+      const btn = document.getElementById(`ac-btn-connect-${platform}`);
+      
+      if (handleInput && badge && btn) {
+        if (personaAccounts[platform]) {
+          handleInput.value = personaAccounts[platform];
+          badge.textContent = 'Linked';
+          badge.className = 'ac-status-badge connected';
+          btn.textContent = 'Disconnect';
+          btn.style.background = 'rgba(239, 68, 68, 0.1)';
+          btn.style.color = 'var(--rose)';
+          btn.style.border = '1px solid rgba(239, 68, 68, 0.2)';
+        } else {
+          handleInput.value = '';
+          badge.textContent = 'Not Connected';
+          badge.className = 'ac-status-badge disconnected';
+          btn.textContent = 'Link Account';
+          btn.style.background = 'var(--accent-soft)';
+          btn.style.color = 'var(--accent)';
+          btn.style.border = 'none';
+        }
+      }
+    });
+  },
+  
+  connectPlatform(platform) {
+    const personaId = this.selectedId;
+    const handleInput = document.getElementById(`ac-${platform}-handle-input`);
+    const btn = document.getElementById(`ac-btn-connect-${platform}`);
+    
+    if (!handleInput || !btn) return;
+    
+    const saved = this.load();
+    if (!saved[personaId]) saved[personaId] = {};
+    
+    if (saved[personaId][platform]) {
+      // Disconnect action
+      if (!confirm(`Are you sure you want to disconnect this platform?`)) return;
+      delete saved[personaId][platform];
+      this.save(saved);
+      this.select(personaId);
+      this.updateAllSidebarBadges();
+      return;
+    }
+    
+    // Connect action
+    let handle = handleInput.value.trim();
+    if (!handle || handle === '@') {
+      alert('Please enter a valid handle to connect!');
+      return;
+    }
+    if (!handle.startsWith('@')) handle = '@' + handle;
+    
+    // Simulate connection check
+    btn.textContent = 'Verifying...';
+    btn.disabled = true;
+    
+    setTimeout(() => {
+      saved[personaId][platform] = handle;
+      this.save(saved);
+      this.select(personaId);
+      this.updateAllSidebarBadges();
+      
+      // Mirror connection status to main Postiz Connections UI
+      if (personaId === 'sofia-rivera') {
+        const mainData = SocialConnections.load();
+        mainData[platform] = handle;
+        SocialConnections.save(mainData);
+        SocialConnections.updateUI(platform, handle);
+      }
+      
+      // Simulate webhook event dispatching to n8n
+      console.log(`[Webhook Event] Firing account connection webhook to n8n: ${platform} account ${handle} linked for ${personaId}`);
+      
+      alert(`Success! Channel ${handle} verified and linked with autonomous content engine.`);
+    }, 1200);
+  },
+  
+  updateAllSidebarBadges() {
+    // Show green/blue indicator if persona has at least one account connected
+    const saved = this.load();
+    ['sofia-rivera', 'marcus-chen', 'aisha-noori', 'veronica-hap'].forEach(id => {
+      const label = document.getElementById(`ac-item-${id}`);
+      if (label) {
+        const counts = Object.keys(saved[id] || {}).length;
+        const handleEl = label.querySelector('.ac-item-handle');
+        if (handleEl) {
+          if (counts > 0) {
+            handleEl.innerHTML = `🟢 ${counts} account${counts > 1 ? 's' : ''} connected`;
+            handleEl.style.color = 'var(--success)';
+          } else {
+            // Default handles
+            const handles = {
+              'sofia-rivera': '@sofiarivera.ai',
+              'marcus-chen': '@marcuschen.tech',
+              'aisha-noori': '@aishanoori.style',
+              'veronica-hap': '@veronicahap'
+            };
+            handleEl.textContent = handles[id];
+            handleEl.style.color = 'var(--text-muted)';
+          }
+        }
+      }
+    });
+  }
+};
+
+// ── Operations Portal View Switcher ──
+function switchPortalView(viewId, clickedBtn) {
+  // Hide all subviews
+  const subviews = document.querySelectorAll('.portal-subview');
+  subviews.forEach(view => {
+    view.classList.remove('active');
+    view.style.display = 'none';
+  });
+
+  // Show target subview
+  const activeView = document.getElementById('portal-view-' + viewId);
+  if (activeView) {
+    activeView.classList.add('active');
+    activeView.style.display = 'block';
+  }
+
+  // Deactivate all menu items
+  const menuItems = document.querySelectorAll('.dash-sidebar .dash-menu-item');
+  menuItems.forEach(item => item.classList.remove('active'));
+
+  // Activate target button
+  let targetBtn = clickedBtn;
+  if (!targetBtn) {
+    targetBtn = document.querySelector(`.dash-sidebar button[onclick*="switchPortalView('${viewId}'"]`);
+  }
+  if (targetBtn) {
+    targetBtn.classList.add('active');
+  }
+
+  // Update header title
+  const titleEl = document.getElementById('dash-view-title');
+  if (titleEl) {
+    const titles = {
+      'dashboard': 'Operations Dashboard',
+      'calendar': 'UGC Content Calendar',
+      'scout': 'Social Scout Intelligence',
+      'generator': 'Interactive Creator & Roster',
+      'pm': 'Support Tickets & Requests',
+      'accounts': 'Connected Platform Handles',
+      'agreement': 'Managed Plan SOW & SLA'
+    };
+    titleEl.textContent = titles[viewId] || 'Operations Dashboard';
+  }
+
+  // Handle right sidebar collapse on non-dashboard/calendar subviews
+  const workspace = document.querySelector('.dash-workspace');
+  if (workspace) {
+    if (viewId === 'dashboard' || viewId === 'calendar') {
+      workspace.classList.remove('no-right-sidebar');
+    } else {
+      workspace.classList.add('no-right-sidebar');
+    }
+  }
+
+  // Handle lazy loading / init of view components
+  if (viewId === 'calendar') {
+    populateSchedulerGrid();
+  }
+}
+
+// ── Weekly Calendar Grid Generator ──
+let schedulerGridPopulated = false;
+
+function populateSchedulerGrid() {
+  const grid = document.getElementById('scheduler-grid-cells');
+  if (!grid) return;
+
+  const indicatorHtml = '<div class="sched-time-indicator" id="sched-time-indicator" style="top: 140px;"></div>';
+  const hours = ['08:00', '10:00', '12:00', '14:00', '16:00', '18:00'];
+  let html = indicatorHtml;
+
+  const mockBlocks = {
+    '2-10:00': {
+      platform: 'ig',
+      title: 'Sofia Rivera Fitness Reel',
+      cls: 'sb-ig'
+    },
+    '4-14:00': {
+      platform: 'tt',
+      title: 'Veronica Lifestyle POV',
+      cls: 'sb-tt'
+    },
+    '0-12:00': {
+      platform: 'yt',
+      title: 'Marcus Chen AI Insights',
+      cls: 'sb-yt'
+    }
+  };
+
+  hours.forEach(hour => {
+    // Hour label cell
+    html += `<div class="sched-time-col">${hour}</div>`;
+
+    // 7 days of the week cells (Mon-Sun)
+    for (let dayIdx = 0; dayIdx < 7; dayIdx++) {
+      const cellKey = `${dayIdx}-${hour}`;
+      const block = mockBlocks[cellKey];
+      let blockHtml = '';
+
+      if (block) {
+        blockHtml = `
+          <div class="sched-block ${block.cls}">
+            <div class="sched-block-title">${block.title}</div>
+            <div class="sched-block-meta">
+              <span class="sched-block-platform">${block.platform.toUpperCase()}</span>
+              <span>${hour}</span>
+            </div>
+          </div>
+        `;
+      }
+
+      html += `
+        <div class="sched-cell" data-day="${dayIdx}" data-time="${hour}" ondragover="allowDrop(event)" ondrop="dropMedia(event)">
+          ${blockHtml}
+        </div>
+      `;
+    }
+  });
+
+  grid.innerHTML = html;
+  initMediaDragEvents();
+}
+
+// ── Drag & Drop Event Handlers ──
+function allowDrop(ev) {
+  ev.preventDefault();
+}
+
+function initMediaDragEvents() {
+  const mediaItems = document.querySelectorAll('.media-item');
+  mediaItems.forEach(item => {
+    item.setAttribute('draggable', 'true');
+    item.addEventListener('dragstart', (e) => {
+      const bgImg = e.target.style.backgroundImage || '';
+      e.dataTransfer.setData('text/plain', bgImg);
+      
+      // Get title/name if any
+      const parentCard = e.target.closest('.media-grid');
+      let mediaName = 'UGC Video Post';
+      if (e.target.dataset.title) {
+        mediaName = e.target.dataset.title;
+      } else {
+        // Fallback names
+        const names = ['Product Demo Short', 'Hook Test A', 'Hook Test B', 'Unboxing POV', 'Review Reel'];
+        mediaName = names[Math.floor(Math.random() * names.length)];
+      }
+      e.dataTransfer.setData('media-name', mediaName);
+    });
+  });
+}
+
+function dropMedia(ev) {
+  ev.preventDefault();
+  const cell = ev.currentTarget;
+  if (!cell.classList.contains('sched-cell')) return;
+
+  const bgImg = ev.dataTransfer.getData('text/plain');
+  const mediaName = ev.dataTransfer.getData('media-name') || 'UGC Video Post';
+  const hour = cell.getAttribute('data-time');
+  const day = cell.getAttribute('data-day');
+
+  const platforms = ['ig', 'tt', 'yt', 'tw'];
+  const pClasses = { ig: 'sb-ig', tt: 'sb-tt', yt: 'sb-yt', tw: 'sb-tw' };
+  const randPlatform = platforms[Math.floor(Math.random() * platforms.length)];
+  const pClass = pClasses[randPlatform];
+
+  const blockHtml = `
+    <div class="sched-block ${pClass}">
+      <div class="sched-block-thumb" style="background-image: ${bgImg}; height: 40px; margin-bottom: 2px;"></div>
+      <div class="sched-block-title">${mediaName}</div>
+      <div class="sched-block-meta">
+        <span class="sched-block-platform">${randPlatform.toUpperCase()}</span>
+        <span>${hour}</span>
+      </div>
+    </div>
+  `;
+
+  cell.innerHTML = blockHtml;
+  
+  const alertMsg = `Scheduled "${mediaName}" for ${getDayName(parseInt(day))} at ${hour} via ${randPlatform.toUpperCase()}!`;
+  console.log(`[Calendar] ${alertMsg}`);
+  showNotification(alertMsg);
+}
+
+function getDayName(idx) {
+  const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+  return days[idx] || 'Monday';
+}
+
+function showNotification(msg) {
+  let container = document.getElementById('dash-notification-container');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'dash-notification-container';
+    container.style.position = 'fixed';
+    container.style.top = '24px';
+    container.style.right = '24px';
+    container.style.zIndex = '99999';
+    container.style.display = 'flex';
+    container.style.flexDirection = 'column';
+    container.style.gap = '12px';
+    document.body.appendChild(container);
+  }
+
+  const toast = document.createElement('div');
+  toast.style.background = 'rgba(7, 6, 11, 0.95)';
+  toast.style.border = '1px solid rgba(124, 106, 237, 0.3)';
+  toast.style.boxShadow = '0 12px 30px rgba(124, 106, 237, 0.15)';
+  toast.style.padding = '14px 22px';
+  toast.style.borderRadius = '10px';
+  toast.style.color = '#fff';
+  toast.style.fontSize = '0.75rem';
+  toast.style.fontWeight = '600';
+  toast.style.fontFamily = "'Inter', sans-serif";
+  toast.style.display = 'flex';
+  toast.style.alignItems = 'center';
+  toast.style.gap = '10px';
+  toast.style.transform = 'translateX(120%)';
+  toast.style.transition = 'transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)';
+  toast.innerHTML = `
+    <span style="font-size: 1rem; color: var(--accent);">⚡</span>
+    <span>${msg}</span>
+  `;
+
+  container.appendChild(toast);
+  
+  // Trigger layout reflow then transition
+  setTimeout(() => {
+    toast.style.transform = 'translateX(0)';
+  }, 50);
+
+  // Auto remove
+  setTimeout(() => {
+    toast.style.transform = 'translateX(120%)';
+    setTimeout(() => toast.remove(), 400);
+  }, 4000);
+}
+

@@ -35,9 +35,9 @@
       {
         "name": "Core",
         "price": 2500,
-        "stripe_link": "https://buy.stripe.com/14A8wO1NdfjR6uz5Pn2cg00",
-        "stripe_product_id": "prod_UXYzIsPUUG0qlu",
-        "stripe_price_id": "price_1TYTs1BrZEqY0S5jpoKlrcQl",
+        "stripe_link": "https://buy.stripe.com/4gMfZhaQRabd8R4eyy6oo0w",
+        "stripe_product_id": "prod_UX2fe2kLwDoQl5",
+        "stripe_price_id": "price_1TXyahE7vgH3K5igoQhyLCwr",
         "features": [
           "Unlimited Tweak tickets (Score 1)",
           "2 Feature tickets / month (Score 2)",
@@ -52,9 +52,9 @@
         "name": "Pro",
         "price": 5000,
         "original_price": 6500,
-        "stripe_link": "https://buy.stripe.com/4gM00i9fFc7FaKP0v32cg01",
-        "stripe_product_id": "prod_UXYzV8UWKpV7bX",
-        "stripe_price_id": "price_1TYTs1BrZEqY0S5jGWP6pCBq",
+        "stripe_link": "https://buy.stripe.com/8x26oH0cd6Z1gjwgGG6oo0x",
+        "stripe_product_id": "prod_UX2fp7EpO8yev8",
+        "stripe_price_id": "price_1TXyaqE7vgH3K5igeSSVz5Rs",
         "recommended": true,
         "urgency": "2 Queue Slots Left",
         "features": [
