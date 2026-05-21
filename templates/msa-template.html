@@ -33,6 +33,13 @@
     max-width: 8.5in;
     margin: 0 auto;
     padding: 0.75in 1in;
+    text-align: justify;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    text-align: left;
+    page-break-after: avoid;
+    break-after: avoid;
   }
 
   /* ── Header ── */
@@ -93,7 +100,7 @@
   /* ── Sections ── */
   .section {
     margin-bottom: 1.75rem;
-    page-break-inside: avoid;
+    /* page-break-inside: avoid; */
   }
   .section-num {
     display: inline-block;
@@ -254,7 +261,7 @@
 
   @media print {
     body { padding: 0; }
-    .section { page-break-inside: avoid; }
+    .section { /* page-break-inside: avoid; */ }
     .signature-block { page-break-inside: avoid; }
   }
 </style>
@@ -318,17 +325,7 @@
 </div>
 
 
-<div class="persona-showcase">
-  <div class="persona-frame">
-    <img src="assets/personas/persona-1.png" alt="Lifestyle Creator">
-    <div class="niche-tag">Lifestyle</div>
-  </div>
-  <div class="persona-frame">
-    <img src="assets/personas/persona-2.png" alt="Beauty Creator">
-    <div class="niche-tag">Beauty</div>
-  </div>
-</div>
-<p class="persona-showcase-caption">AI-generated UGC creator personas — produced autonomously via the designated media engine and model aggregators</p>
+
 
 <!-- 2. SERVICE PLAN & PRICING -->
 <div class="section">
@@ -484,17 +481,7 @@
 </div>
 
 
-<div class="persona-showcase">
-  <div class="persona-frame">
-    <img src="assets/personas/persona-3.png" alt="Street Style Creator">
-    <div class="niche-tag">Street Style</div>
-  </div>
-  <div class="persona-frame">
-    <img src="assets/personas/persona-4.png" alt="Product Placement Creator">
-    <div class="niche-tag">Product</div>
-  </div>
-</div>
-<p class="persona-showcase-caption">Each persona is tailored to a specific content niche and target audience</p>
+
 
 <!-- 5. COMMUNICATION & SLA -->
 <div class="section">
@@ -577,17 +564,7 @@
   </table>
 </div>
 
-<div class="persona-showcase">
-  <div class="persona-frame">
-    <img src="assets/personas/persona-5.png" alt="Cozy Lifestyle Creator">
-    <div class="niche-tag">Cozy</div>
-  </div>
-  <div class="persona-frame">
-    <img src="assets/personas/persona-6.png" alt="Fitness Creator">
-    <div class="niche-tag">Fitness</div>
-  </div>
-</div>
-<p class="persona-showcase-caption">Personas generate UGC-style content autonomously across all major social platforms</p>
+
 
 <!-- 7. INTELLECTUAL PROPERTY -->
 <div class="section">
@@ -726,26 +703,6 @@
     <li>Live walkthrough completed with Client</li>
     <li>First production content posted successfully</li>
   </ol>
-</div>
-
-<!-- EXHIBIT B -->
-<div class="exhibit">
-  <div class="exhibit-label">Exhibit B — Sample AI Persona Output</div>
-  <h2>Additional Niche Coverage</h2>
-  <p>The PersonaGen platform supports diverse content verticals. Below are additional persona archetypes demonstrating range across tech and food niches.</p>
-
-  <div class="persona-showcase">
-    <div class="persona-frame">
-      <img src="assets/personas/persona-7.png" alt="Tech Review Creator">
-      <div class="niche-tag">Tech</div>
-    </div>
-    <div class="persona-frame">
-      <img src="assets/personas/persona-8.png" alt="Foodie Creator">
-      <div class="niche-tag">Foodie</div>
-    </div>
-  </div>
-
-  <p style="font-size:9pt; color:var(--ink-muted); margin-top:1rem;">All personas shown are AI-generated samples. Actual client deliverables will be customized to Client's brand identity, target audience, and content strategy as defined during the Brand Brief phase (§6).</p>
 </div>
 
 </body>
