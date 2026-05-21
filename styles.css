@@ -1599,7 +1599,7 @@ select option { background:var(--surface-2); }
 
 /* Hide global layout components in Portal mode */
 body.portal-active #footer,
-body.portal-active header.pg-nav {
+body.portal-active nav.pg-nav {
   display: none !important;
 }
 
