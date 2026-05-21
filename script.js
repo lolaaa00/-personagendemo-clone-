@@ -202,6 +202,7 @@ let GEN_UGC = {
 // ═══════════════════════════════════════
 function renderInfluencers() {
     const grid = document.getElementById('influencer-grid');
+    if (!grid) return;
     grid.innerHTML = INFLUENCERS.map((inf, idx) => `
         <div class="inf-card">
             <div class="inf-header" style="background:${inf.headerBg}">
@@ -262,6 +263,7 @@ let currentCalendarAgent = 0;
 
 function renderCalendar(agentIdx) {
     const grid = document.getElementById('calendar-grid');
+    if (!grid) return;
     const cal = CALENDARS[agentIdx];
     grid.innerHTML = DAYS.map((day, i) => `
         <div class="cal-day">
@@ -758,6 +760,7 @@ function trainAgent() {
 
 function renderTrendTicker() {
     const el = document.getElementById('trend-ticker');
+    if (!el) return;
     el.innerHTML = TREND_ITEMS.map(t => `
         <div class="trend-tag">
             <div class="trend-tag-name">${t.name}</div>
@@ -807,6 +810,7 @@ let currentFilter = 'all';
 // ═══════════════════════════════════════
 function renderAgentTable(filter) {
     const table = document.getElementById('dash-agent-table');
+    if (!table) return;
     let agents = [...DASH_AGENTS];
     if (filter === 'active') agents = agents.filter(a => a.status === 'active');
     else if (filter === 'paused') agents = agents.filter(a => a.status === 'paused' || a.status === 'failing');
@@ -851,6 +855,7 @@ function renderAgentTable(filter) {
 
 function renderSparkChart() {
     const el = document.getElementById('spark-chart');
+    if (!el) return;
     const w = 520, h = 200;
     const padL = 48, padR = 16, padT = 16, padB = 28;
     const colors = ['#6366f1','#34d399','#fbbf24'];
@@ -900,6 +905,7 @@ function renderSparkChart() {
 
 function renderPlatformBars() {
     const el = document.getElementById('platform-bars');
+    if (!el) return;
     el.innerHTML = PLATFORM_DATA.map(p => `
         <div class="plat-bar-row">
             <span class="plat-bar-label">${p.name}</span>
@@ -978,12 +984,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Counter animation
     document.querySelectorAll('.counter').forEach(counter => {
         const target = +counter.dataset.target;
+        const suffix = counter.dataset.suffix || '';
         const increment = target / 60;
         let current = 0;
         const timer = setInterval(() => {
             current += increment;
-            if (current >= target) { counter.textContent = target; clearInterval(timer); }
-            else counter.textContent = Math.floor(current);
+            if (current >= target) { counter.textContent = target + suffix; clearInterval(timer); }
+            else counter.textContent = Math.floor(current) + suffix;
         }, 30);
     });
 
@@ -1002,7 +1009,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Active nav
     const sections = document.querySelectorAll('section[id]');
-    const navLinks = document.querySelectorAll('.pg-nav-link');
+    const navLinks = document.querySelectorAll('.pg-nav-link[href]');
     const navObs = new IntersectionObserver(entries => {
         entries.forEach(e => {
             if (e.isIntersecting) {
