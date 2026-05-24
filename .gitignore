@@ -1,5 +1,32 @@
 # PersonaGen — gitignore
+
+# Environment & secrets
 .env
+env_vars.txt
+db_dump.txt
+
+# Dependencies
 node_modules/
+
+# Build output
 .wrangler/
 dist/
+
+# Backups (use git history instead)
+backup/
+
+# Test artifacts
+temp_test/
+*.log
+*.tmp
+
+# IDE / OS
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Screenshots & media artifacts
+screenshots/
