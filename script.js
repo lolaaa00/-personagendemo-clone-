@@ -1050,7 +1050,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Onboarding UI initialization
     PIN.init();
-    PM.render();
+    PM.init();
     SocialConnections.init();
     AccountCreator.init();
 
@@ -1175,6 +1175,12 @@ function switchTab(tabId) {
       }
     }
   }
+}
+
+// ── Exit Portal ──
+function exitPortal() {
+  sessionStorage.removeItem('pg_portal_unlocked');
+  window.location.href = 'index.html';
 }
 
 // ── PIN Gate ──
@@ -1420,13 +1426,75 @@ const SocialConnections = {
   }
 };
 
-// ── Project Manager (localStorage DB) ──
+// ── Project Manager (localStorage + onboarding tasks from docs) ──
 const PM = {
   KEY: 'personagen_pm_tickets',
+  ONB_KEY: 'personagen_onb_overrides',
   filter: 'all',
+  viewMode: 'list',
+  searchQuery: '',
+  filterAssignee: '',
+  filterPhase: '',
+  onboardingTasks: [],
+  docs: [],
 
   load() { return JSON.parse(localStorage.getItem(this.KEY) || '[]'); },
   save(tickets) { localStorage.setItem(this.KEY, JSON.stringify(tickets)); },
+
+  loadOnbOverrides() { return JSON.parse(localStorage.getItem(this.ONB_KEY) || '{}'); },
+  saveOnbOverrides(overrides) { localStorage.setItem(this.ONB_KEY, JSON.stringify(overrides)); },
+
+  async init() {
+    await this.loadOnboarding();
+    this.populateFilterDropdowns();
+    this.render();
+    this.renderDocPanels();
+  },
+
+  populateFilterDropdowns() {
+    const allItems = this.getAllItems();
+    const assigneeEl = document.getElementById('pm-filter-assignee');
+    const phaseEl = document.getElementById('pm-filter-phase');
+    if (assigneeEl) {
+      const owners = [...new Set(allItems.map(t => t.owner).filter(Boolean))].sort();
+      assigneeEl.innerHTML = '<option value="">All Assignees</option>' + owners.map(o => `<option value="${o}">${o}</option>`).join('');
+    }
+    if (phaseEl) {
+      const phases = [...new Set(allItems.map(t => t.phase).filter(Boolean))].sort();
+      phaseEl.innerHTML = '<option value="">All Phases</option>' + phases.map(p => `<option value="${p}">${p}</option>`).join('');
+    }
+  },
+
+  async loadOnboarding() {
+    try {
+      const [tasksRes, docsRes] = await Promise.all([
+        fetch('data/onboarding-tasks.json').catch(() => null),
+        fetch('data/onboarding-docs.json').catch(() => null)
+      ]);
+      if (tasksRes && tasksRes.ok) {
+        const tasks = await tasksRes.json();
+        // Apply localStorage overrides (dashboard status changes)
+        const overrides = this.loadOnbOverrides();
+        this.onboardingTasks = tasks.map(t => ({
+          ...t,
+          status: overrides[t.id]?.status || t.status,
+          date: overrides[t.id]?.date || t.date
+        }));
+      }
+      if (docsRes && docsRes.ok) {
+        this.docs = await docsRes.json();
+      }
+    } catch(e) {
+      console.warn('No onboarding data found:', e);
+    }
+  },
+
+  getAllItems() {
+    return [
+      ...this.onboardingTasks.map(t => ({...t, category: 'onboarding'})),
+      ...this.load().map(t => ({...t, category: 'ticket'}))
+    ];
+  },
 
   add() {
     const titleEl = document.getElementById('pm-title');
@@ -1463,6 +1531,11 @@ const PM = {
   },
 
   cycle(id) {
+    // Handle onboarding tasks
+    if (id.startsWith('onb-')) {
+      this.cycleOnboarding(id);
+      return;
+    }
     const order = ['submitted', 'confirmed', 'in_progress', 'review', 'complete'];
     const tickets = this.load();
     const t = tickets.find(x => x.id === id);
@@ -1474,7 +1547,37 @@ const PM = {
     this.render();
   },
 
+  cycleOnboarding(taskId) {
+    const task = this.onboardingTasks.find(t => t.id === taskId);
+    if (!task) return;
+
+    const cycle = { new: 'active', active: 'review', review: 'done' };
+    if (task.status === 'done') return; // Cannot undo done
+    
+    const nextStatus = cycle[task.status];
+    if (!nextStatus) return;
+
+    // Update in-memory
+    task.status = nextStatus;
+    task.date = new Date().toISOString().split('T')[0];
+
+    // Persist override to localStorage
+    const overrides = this.loadOnbOverrides();
+    overrides[taskId] = { status: nextStatus, date: task.date, updatedAt: new Date().toISOString() };
+    this.saveOnbOverrides(overrides);
+
+    // Bump local version tracker
+    const versionKey = 'personagen_doc_version';
+    const currentVersion = parseFloat(localStorage.getItem(versionKey) || '1.0');
+    const newVersion = (currentVersion + 0.1).toFixed(1);
+    localStorage.setItem(versionKey, newVersion);
+
+    this.render();
+    this.showToast(`Task updated → ${nextStatus.charAt(0).toUpperCase() + nextStatus.slice(1)} (v${newVersion})`, 'success');
+  },
+
   remove(id) {
+    if (id.startsWith('onb-')) return; // Can't delete onboarding tasks
     const tickets = this.load().filter(t => t.id !== id);
     this.save(tickets);
     this.render();
@@ -1483,23 +1586,117 @@ const PM = {
   setFilter(f) {
     this.filter = f;
     this.render();
+    if (this.viewMode === 'kanban') this.renderKanban();
+  },
+
+  setView(mode) {
+    this.viewMode = mode;
+    const listPanel = document.getElementById('pm-tickets');
+    const kanbanPanel = document.getElementById('pm-kanban');
+    const listBtn = document.getElementById('pm-view-list-btn');
+    const kanbanBtn = document.getElementById('pm-view-kanban-btn');
+    if (mode === 'kanban') {
+      if (listPanel) listPanel.style.display = 'none';
+      if (kanbanPanel) kanbanPanel.style.display = 'block';
+      if (listBtn) listBtn.classList.remove('active');
+      if (kanbanBtn) kanbanBtn.classList.add('active');
+      this.renderKanban();
+    } else {
+      if (listPanel) listPanel.style.display = '';
+      if (kanbanPanel) kanbanPanel.style.display = 'none';
+      if (listBtn) listBtn.classList.add('active');
+      if (kanbanBtn) kanbanBtn.classList.remove('active');
+      this.render();
+    }
+  },
+
+  applyFilters() {
+    const searchEl = document.getElementById('pm-search');
+    const assigneeEl = document.getElementById('pm-filter-assignee');
+    const phaseEl = document.getElementById('pm-filter-phase');
+    this.searchQuery = (searchEl ? searchEl.value : '').toLowerCase().trim();
+    this.filterAssignee = assigneeEl ? assigneeEl.value : '';
+    this.filterPhase = phaseEl ? phaseEl.value : '';
+    this.render();
+    if (this.viewMode === 'kanban') this.renderKanban();
+  },
+
+  getFilteredItems() {
+    let items = this.getAllItems();
+
+    // Status filter
+    if (this.filter === 'onboarding') {
+      items = items.filter(t => t.category === 'onboarding');
+    } else if (this.filter === 'complete') {
+      items = items.filter(t => t.status === 'complete' || t.status === 'done');
+    } else if (this.filter !== 'all') {
+      items = items.filter(t => t.status === this.filter);
+    }
+
+    // Search
+    if (this.searchQuery) {
+      const q = this.searchQuery;
+      items = items.filter(t =>
+        (t.title || '').toLowerCase().includes(q) ||
+        (t.owner || '').toLowerCase().includes(q) ||
+        (t.phase || '').toLowerCase().includes(q) ||
+        (t.id || '').toLowerCase().includes(q) ||
+        (t.source || '').toLowerCase().includes(q)
+      );
+    }
+
+    // Assignee filter
+    if (this.filterAssignee) {
+      items = items.filter(t => t.owner === this.filterAssignee);
+    }
+
+    // Phase filter
+    if (this.filterPhase) {
+      items = items.filter(t => t.phase === this.filterPhase);
+    }
+
+    return items;
+  },
+
+  showToast(message, type) {
+    const existing = document.getElementById('pm-toast');
+    if (existing) existing.remove();
+    
+    const toast = document.createElement('div');
+    toast.id = 'pm-toast';
+    const bg = type === 'success' ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)';
+    const color = type === 'success' ? 'var(--success)' : 'var(--rose)';
+    toast.style.cssText = `position:fixed; bottom:24px; right:24px; padding:12px 20px; border-radius:10px; background:${bg}; color:${color}; font-size:0.82rem; font-weight:600; font-family:'Inter',sans-serif; z-index:9999; backdrop-filter:blur(12px); border:1px solid ${color}; animation:fadeInUp 0.3s ease;`;
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 3000);
   },
 
   render() {
-    const all = this.load();
-    const filtered = this.filter === 'all' ? all : all.filter(t => t.status === this.filter);
+    const tickets = this.load();
+    const allItems = this.getAllItems();
 
-    // Stats
-    const counts = { submitted: 0, confirmed: 0, in_progress: 0, review: 0, complete: 0 };
-    all.forEach(t => counts[t.status] = (counts[t.status] || 0) + 1);
-    
+    // Normalize statuses for counting
+    const statusNormalize = {
+      submitted: 'active', confirmed: 'active', in_progress: 'active',
+      new: 'new', active: 'active', review: 'review',
+      complete: 'done', done: 'done', blocked: 'active'
+    };
+
+    // Stats — aggregate both
+    const counts = { total: allItems.length, new: 0, active: 0, review: 0, done: 0 };
+    allItems.forEach(t => {
+      const norm = statusNormalize[t.status] || 'new';
+      counts[norm]++;
+    });
+
     const pmStats = document.getElementById('pm-stats');
     if (pmStats) {
       pmStats.innerHTML = [
-        { label: 'Total', value: all.length, color: 'var(--accent)' },
-        { label: 'Active', value: counts.in_progress + counts.confirmed, color: 'var(--cyan)' },
+        { label: 'Total', value: counts.total, color: 'var(--accent)' },
+        { label: 'Active', value: counts.active, color: 'var(--cyan)' },
         { label: 'In Review', value: counts.review, color: 'var(--gold)' },
-        { label: 'Complete', value: counts.complete, color: 'var(--success)' }
+        { label: 'Complete', value: counts.done, color: 'var(--success)' }
       ].map(s => `
         <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-sm); padding:1rem; text-align:center;">
           <div style="font-family:var(--font-display); font-size:1.6rem; font-weight:700; color:${s.color};">${s.value}</div>
@@ -1508,24 +1705,49 @@ const PM = {
       `).join('');
     }
 
-    // Filters
+    // Filters — add Onboarding filter
     const pmFilters = document.getElementById('pm-filters');
     if (pmFilters) {
-      const filters = ['all', 'submitted', 'confirmed', 'in_progress', 'review', 'complete'];
-      const fLabels = { all: 'All', submitted: 'New', confirmed: 'Confirmed', in_progress: 'Active', review: 'Review', complete: 'Done' };
+      const filters = ['all', 'onboarding', 'submitted', 'confirmed', 'in_progress', 'review', 'complete'];
+      const fLabels = { all: 'All', onboarding: 'Onboarding', submitted: 'New', confirmed: 'Confirmed', in_progress: 'Active', review: 'Review', complete: 'Done' };
+      
+      const getCount = (f) => {
+        if (f === 'all') return '';
+        if (f === 'onboarding') return ` (${this.onboardingTasks.length})`;
+        return ` (${allItems.filter(t => t.status === f || (f === 'complete' && t.status === 'done')).length})`;
+      };
+
       pmFilters.innerHTML = filters.map(f =>
-        `<button onclick="PM.setFilter('${f}')" style="padding:3px 10px; border-radius:6px; border:1px solid ${this.filter === f ? 'rgba(124,106,237,0.3)' : 'var(--border)'}; background:${this.filter === f ? 'var(--accent-soft)' : 'transparent'}; color:${this.filter === f ? 'var(--accent)' : 'var(--text-dim)'}; font-size:0.65rem; font-weight:600; cursor:pointer; font-family:'Inter',sans-serif; transition:all 0.2s;">${fLabels[f]}${f !== 'all' ? ` (${f === 'submitted' ? counts.submitted : f === 'confirmed' ? counts.confirmed : f === 'in_progress' ? counts.in_progress : f === 'review' ? counts.review : counts.complete})` : ''}</button>`
+        `<button onclick="PM.setFilter('${f}')" style="padding:3px 10px; border-radius:6px; border:1px solid ${this.filter === f ? 'rgba(124,106,237,0.3)' : 'var(--border)'}; background:${this.filter === f ? 'var(--accent-soft)' : 'transparent'}; color:${this.filter === f ? 'var(--accent)' : 'var(--text-dim)'}; font-size:0.65rem; font-weight:600; cursor:pointer; font-family:'Inter',sans-serif; transition:all 0.2s;">${fLabels[f]}${getCount(f)}</button>`
       ).join('');
     }
 
-    // List
+    // Filter items (uses search + assignee + phase filters)
+    const filtered = this.getFilteredItems();
+
+    // Status styles
     const statusStyles = {
+      new: { bg: 'rgba(148,163,184,0.1)', color: 'var(--text-muted)', label: 'Pending' },
       submitted: { bg: 'rgba(124,106,237,0.1)', color: 'var(--accent)', label: 'Submitted' },
       confirmed: { bg: 'rgba(34,211,238,0.1)', color: 'var(--cyan)', label: 'Confirmed' },
+      active: { bg: 'rgba(99,102,241,0.15)', color: '#818cf8', label: 'Active' },
       in_progress: { bg: 'rgba(34,211,238,0.15)', color: 'var(--cyan)', label: 'In Progress' },
-      review: { bg: 'rgba(212,168,83,0.1)', color: 'var(--gold)', label: 'In Review' },
-      complete: { bg: 'rgba(52,211,153,0.1)', color: 'var(--success)', label: 'Complete' }
+      review: { bg: 'rgba(251,191,36,0.15)', color: '#fbbf24', label: 'In Review' },
+      done: { bg: 'rgba(34,197,94,0.15)', color: '#22c55e', label: 'Complete' },
+      complete: { bg: 'rgba(52,211,153,0.1)', color: 'var(--success)', label: 'Complete' },
+      blocked: { bg: 'rgba(239,68,68,0.15)', color: 'var(--rose)', label: 'Blocked' }
     };
+
+    // Phase colors for onboarding tasks
+    const phaseColors = {
+      'Agreement & Payment': 'var(--rose)',
+      'Brand Discovery': 'var(--accent)',
+      'Infrastructure': 'var(--cyan)',
+      'Platform Build': '#8b5cf6',
+      'Distribution Network': 'var(--gold)',
+      'Go-Live': 'var(--success)'
+    };
+
     const complexityColors = { 1: 'var(--success)', 2: 'var(--accent)', 3: 'var(--cyan)' };
 
     const pmList = document.getElementById('pm-list');
@@ -1538,16 +1760,44 @@ const PM = {
       } else {
         pmEmpty.style.display = 'none';
         pmList.innerHTML = filtered.map(t => {
-          const s = statusStyles[t.status];
+          const s = statusStyles[t.status] || statusStyles.new;
           const ago = this.timeAgo(t.created);
+
+          // Onboarding task rendering
+          if (t.category === 'onboarding') {
+            const phaseColor = phaseColors[t.phase] || 'var(--accent)';
+            const canCycle = t.status !== 'done';
+            const nextLabel = { new: 'Active', active: 'Review', review: 'Done' };
+            const cursorStyle = canCycle ? 'cursor:pointer;' : 'cursor:default;';
+            const titleHover = canCycle ? `title="Click to advance → ${nextLabel[t.status] || ''}"` : 'title="Complete"';
+            
+            return `
+            <div style="display:grid; grid-template-columns:2.5fr 0.8fr 0.7fr 0.8fr 0.4fr; align-items:center; padding:0.85rem 1.25rem; border-bottom:1px solid var(--border); border-left:3px solid ${phaseColor}; transition:background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.02)'" onmouseout="this.style.background='transparent'">
+              <div>
+                <div style="font-size:0.85rem; font-weight:600; margin-bottom:2px;">${t.title}</div>
+                <div style="font-size:0.68rem; color:var(--text-dim); display:flex; align-items:center; gap:6px;">
+                  <span style="padding:1px 6px; border-radius:4px; background:${phaseColor}22; color:${phaseColor}; font-weight:600; font-size:0.6rem;">${t.phase}</span>
+                  <span>From: ${t.source}</span>
+                </div>
+              </div>
+              <div style="font-size:0.7rem; font-weight:600; color:${phaseColor};">${t.owner}</div>
+              <div style="font-size:0.65rem; color:var(--text-dim);">${t.date || '—'}</div>
+              <div>
+                <button onclick="PM.cycle('${t.id}')" style="padding:3px 10px; border-radius:100px; background:${s.bg}; color:${s.color}; font-size:0.65rem; font-weight:600; border:none; ${cursorStyle} font-family:'Inter',sans-serif; transition:opacity 0.2s;" ${titleHover}>${s.label}</button>
+              </div>
+              <div style="font-size:0.55rem; color:var(--text-dim); opacity:0.5;">📋</div>
+            </div>`;
+          }
+
+          // Regular ticket rendering
           return `
-          <div style="display:grid; grid-template-columns:2.5fr 0.7fr 0.8fr 0.8fr 0.4fr; align-items:center; padding:0.85rem 1.25rem; border-bottom:1px solid var(--border); transition:background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.02)'" onmouseout="this.style.background='transparent'">
+          <div style="display:grid; grid-template-columns:2.5fr 0.8fr 0.7fr 0.8fr 0.4fr; align-items:center; padding:0.85rem 1.25rem; border-bottom:1px solid var(--border); transition:background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.02)'" onmouseout="this.style.background='transparent'">
             <div>
               <div style="font-size:0.85rem; font-weight:600; margin-bottom:2px;">${t.title}</div>
               <div style="font-size:0.68rem; color:var(--text-dim);">${t.id} · ${ago}</div>
             </div>
-            <div style="font-size:0.7rem; font-weight:600; color:${complexityColors[t.complexity]};">${t.complexityLabel}</div>
-            <div style="font-size:0.7rem; color:var(--text-muted);">${t.eta}</div>
+            <div style="font-size:0.7rem; font-weight:600; color:${complexityColors[t.complexity]};">${t.complexityLabel || ''}</div>
+            <div style="font-size:0.7rem; color:var(--text-muted);">${t.eta || ''}</div>
             <div>
               <button onclick="PM.cycle('${t.id}')" style="padding:3px 10px; border-radius:100px; background:${s.bg}; color:${s.color}; font-size:0.65rem; font-weight:600; border:none; cursor:pointer; font-family:'Inter',sans-serif; transition:opacity 0.2s;" title="Click to advance status">${s.label}</button>
             </div>
@@ -1558,6 +1808,158 @@ const PM = {
         }).join('');
       }
     }
+  },
+
+  renderDocPanels() {
+    const container = document.getElementById('pm-docs-list');
+    if (!container || this.docs.length === 0) return;
+
+    const localVersion = localStorage.getItem('personagen_doc_version') || null;
+
+    container.innerHTML = this.docs.map(doc => {
+      const displayVersion = localVersion || doc.version;
+      return `
+      <details class="pm-doc-panel">
+        <summary class="pm-doc-summary">
+          <span class="pm-doc-summary-left">
+            <span class="pm-doc-icon">${doc.icon}</span>
+            <span class="pm-doc-title">${doc.title}</span>
+          </span>
+          <span class="pm-doc-version-badge">v${displayVersion}</span>
+        </summary>
+        <div class="pm-doc-content">
+          ${doc.html}
+        </div>
+      </details>`;
+    }).join('');
+  },
+
+  // ── Kanban Board ──
+  renderKanban() {
+    const board = document.getElementById('pm-kanban-board');
+    if (!board) return;
+    const filtered = this.getFilteredItems();
+
+    const statusStyles = {
+      new: { bg: 'rgba(148,163,184,0.1)', color: 'var(--text-muted)', label: 'Pending' },
+      submitted: { bg: 'rgba(124,106,237,0.1)', color: 'var(--accent)', label: 'Submitted' },
+      confirmed: { bg: 'rgba(34,211,238,0.1)', color: 'var(--cyan)', label: 'Confirmed' },
+      active: { bg: 'rgba(99,102,241,0.15)', color: '#818cf8', label: 'Active' },
+      in_progress: { bg: 'rgba(34,211,238,0.15)', color: 'var(--cyan)', label: 'In Progress' },
+      review: { bg: 'rgba(251,191,36,0.15)', color: '#fbbf24', label: 'In Review' },
+      done: { bg: 'rgba(34,197,94,0.15)', color: '#22c55e', label: 'Complete' },
+      complete: { bg: 'rgba(52,211,153,0.1)', color: 'var(--success)', label: 'Complete' },
+      blocked: { bg: 'rgba(239,68,68,0.15)', color: 'var(--rose)', label: 'Blocked' }
+    };
+
+    const phaseColors = {
+      'Agreement & Payment': 'var(--rose)', 'Brand Discovery': 'var(--accent)',
+      'Infrastructure': 'var(--cyan)', 'Platform Build': '#8b5cf6',
+      'Distribution Network': 'var(--gold)', 'Go-Live': 'var(--success)'
+    };
+
+    // Normalize into 4 kanban columns
+    const normalize = s => {
+      if (['new','submitted'].includes(s)) return 'backlog';
+      if (['active','confirmed','in_progress','blocked'].includes(s)) return 'active';
+      if (s === 'review') return 'review';
+      if (['done','complete'].includes(s)) return 'done';
+      return 'backlog';
+    };
+
+    const columns = [
+      { key: 'backlog', label: 'Backlog', color: 'var(--text-muted)', icon: '📋' },
+      { key: 'active',  label: 'Active',  color: '#818cf8',          icon: '⚡' },
+      { key: 'review',  label: 'Review',  color: '#fbbf24',          icon: '👁️' },
+      { key: 'done',    label: 'Done',    color: '#22c55e',          icon: '✅' }
+    ];
+
+    const grouped = { backlog: [], active: [], review: [], done: [] };
+    filtered.forEach(t => {
+      const col = normalize(t.status);
+      grouped[col].push(t);
+    });
+
+    board.innerHTML = columns.map(col => {
+      const items = grouped[col.key];
+      return `
+      <div class="pm-kanban-col" data-col="${col.key}" ondragover="event.preventDefault();this.classList.add('drag-over')" ondragleave="this.classList.remove('drag-over')" ondrop="PM.kanbanDrop(event,'${col.key}');this.classList.remove('drag-over')">
+        <div class="pm-kanban-col-header">
+          <span class="pm-kanban-col-icon">${col.icon}</span>
+          <span class="pm-kanban-col-title">${col.label}</span>
+          <span class="pm-kanban-col-count" style="color:${col.color};">${items.length}</span>
+        </div>
+        <div class="pm-kanban-col-body">
+          ${items.length === 0 ? '<div class="pm-kanban-empty">No tasks</div>' : items.map(t => {
+            const s = statusStyles[t.status] || statusStyles.new;
+            const pc = phaseColors[t.phase] || 'var(--accent)';
+            const ownerInitial = (t.owner || '?').charAt(0).toUpperCase();
+            return `
+          <div class="pm-kanban-card" draggable="true" ondragstart="PM.kanbanDragStart(event,'${t.id}')" data-id="${t.id}">
+            <div class="pm-kanban-card-top">
+              <span class="pm-kanban-card-badge" style="background:${s.bg};color:${s.color};">${s.label}</span>
+              <span class="pm-kanban-card-avatar" style="background:${pc}22;color:${pc};" title="${t.owner || ''}">${ownerInitial}</span>
+            </div>
+            <div class="pm-kanban-card-title">${t.title}</div>
+            ${t.phase ? `<span class="pm-kanban-card-phase" style="color:${pc};background:${pc}15;">${t.phase}</span>` : ''}
+            <div class="pm-kanban-card-meta">
+              <span>${t.id}</span>
+              ${t.date ? `<span>${t.date}</span>` : ''}
+            </div>
+          </div>`;
+          }).join('')}
+        </div>
+      </div>`;
+    }).join('');
+  },
+
+  kanbanDragStart(e, id) {
+    e.dataTransfer.setData('text/plain', id);
+    e.dataTransfer.effectAllowed = 'move';
+    setTimeout(() => e.target.classList.add('dragging'), 0);
+  },
+
+  kanbanDrop(e, colKey) {
+    e.preventDefault();
+    const id = e.dataTransfer.getData('text/plain');
+    if (!id) return;
+
+    // Map column key to target status
+    const colToStatus = {
+      backlog: { onb: 'new', ticket: 'submitted' },
+      active:  { onb: 'active', ticket: 'in_progress' },
+      review:  { onb: 'review', ticket: 'review' },
+      done:    { onb: 'done', ticket: 'complete' }
+    };
+
+    const mapping = colToStatus[colKey];
+    if (!mapping) return;
+
+    if (id.startsWith('onb-')) {
+      const task = this.onboardingTasks.find(t => t.id === id);
+      if (!task) return;
+      task.status = mapping.onb;
+      task.date = new Date().toISOString().split('T')[0];
+      const overrides = this.loadOnbOverrides();
+      overrides[id] = { status: mapping.onb, date: task.date, updatedAt: new Date().toISOString() };
+      this.saveOnbOverrides(overrides);
+    } else {
+      const tickets = this.load();
+      const t = tickets.find(x => x.id === id);
+      if (!t) return;
+      t.status = mapping.ticket;
+      t.updated = new Date().toISOString();
+      this.save(tickets);
+    }
+
+    // Bump version
+    const versionKey = 'personagen_doc_version';
+    const cv = parseFloat(localStorage.getItem(versionKey) || '1.0');
+    localStorage.setItem(versionKey, (cv + 0.1).toFixed(1));
+
+    this.render();
+    this.renderKanban();
+    this.showToast(`Moved to ${colKey.charAt(0).toUpperCase() + colKey.slice(1)}`, 'success');
   },
 
   timeAgo(iso) {

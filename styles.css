@@ -1616,3 +1616,350 @@ body.portal-active {
   display: none !important;
 }
 
+/* ── PM Deliverable Document Panels ── */
+.pm-doc-panel {
+  border-bottom: 1px solid var(--border);
+}
+.pm-doc-panel:last-child {
+  border-bottom: none;
+}
+
+.pm-doc-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.85rem 1.25rem;
+  cursor: pointer;
+  transition: background 0.2s;
+  list-style: none;
+  user-select: none;
+}
+.pm-doc-summary::-webkit-details-marker { display: none; }
+.pm-doc-summary:hover {
+  background: rgba(255,255,255,0.02);
+}
+
+.pm-doc-summary-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.pm-doc-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.95rem;
+}
+.pm-doc-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text);
+}
+.pm-doc-version-badge {
+  padding: 2px 8px;
+  border-radius: 100px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.65rem;
+  font-weight: 700;
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+}
+
+.pm-doc-panel[open] .pm-doc-summary {
+  border-bottom: 1px solid var(--border);
+  background: rgba(124,106,237,0.03);
+}
+
+.pm-doc-content {
+  padding: 1.5rem 1.25rem;
+  max-height: 500px;
+  overflow-y: auto;
+  font-size: 0.82rem;
+  line-height: 1.65;
+  color: var(--text-muted);
+}
+
+/* Markdown rendered elements */
+.pm-doc-content .pm-doc-h1 { font-size: 1.15rem; font-weight: 700; color: var(--text); margin: 1.5rem 0 0.75rem; }
+.pm-doc-content .pm-doc-h2 { font-size: 1rem; font-weight: 700; color: var(--text); margin: 1.25rem 0 0.5rem; border-bottom: 1px solid var(--border); padding-bottom: 0.4rem; }
+.pm-doc-content .pm-doc-h3 { font-size: 0.9rem; font-weight: 600; color: var(--accent); margin: 1rem 0 0.4rem; }
+.pm-doc-content .pm-doc-h4 { font-size: 0.82rem; font-weight: 600; color: var(--cyan); margin: 0.75rem 0 0.3rem; }
+.pm-doc-content .pm-doc-p  { margin: 0.4rem 0; }
+
+.pm-doc-content .pm-doc-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.75rem 0;
+  font-size: 0.75rem;
+}
+.pm-doc-content .pm-doc-table th {
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  background: rgba(255,255,255,0.03);
+  border-bottom: 2px solid var(--border);
+  color: var(--text);
+  font-weight: 700;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.pm-doc-content .pm-doc-table td {
+  padding: 0.45rem 0.75rem;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  color: var(--text-muted);
+}
+.pm-doc-content .pm-doc-table tr:hover td {
+  background: rgba(255,255,255,0.02);
+}
+
+.pm-doc-content .pm-doc-code {
+  background: rgba(0,0,0,0.3);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+  overflow-x: auto;
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  font-size: 0.75rem;
+  line-height: 1.5;
+  margin: 0.75rem 0;
+}
+.pm-doc-content .pm-doc-inline-code {
+  background: rgba(124,106,237,0.1);
+  color: var(--accent);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  font-size: 0.78em;
+}
+
+.pm-doc-content .pm-doc-link {
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px solid rgba(124,106,237,0.3);
+  transition: border-color 0.2s;
+}
+.pm-doc-content .pm-doc-link:hover {
+  border-color: var(--accent);
+}
+
+.pm-doc-content .pm-doc-quote {
+  border-left: 3px solid var(--accent);
+  padding: 0.5rem 1rem;
+  margin: 0.5rem 0;
+  background: rgba(124,106,237,0.04);
+  border-radius: 0 6px 6px 0;
+  font-style: italic;
+}
+
+.pm-doc-content .pm-doc-callout {
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  margin: 0.75rem 0;
+  border-left: 3px solid;
+  font-size: 0.8rem;
+}
+.pm-doc-content .pm-doc-callout-note      { background: rgba(59,130,246,0.06); border-color: #3b82f6; }
+.pm-doc-content .pm-doc-callout-tip       { background: rgba(34,197,94,0.06);  border-color: #22c55e; }
+.pm-doc-content .pm-doc-callout-important { background: rgba(124,106,237,0.06); border-color: var(--accent); }
+.pm-doc-content .pm-doc-callout-warning   { background: rgba(251,191,36,0.06); border-color: #fbbf24; }
+.pm-doc-content .pm-doc-callout-caution   { background: rgba(239,68,68,0.06);  border-color: #ef4444; }
+
+.pm-doc-content .pm-doc-check {
+  padding: 0.3rem 0;
+  font-size: 0.8rem;
+}
+.pm-doc-content .pm-doc-check.done   { color: var(--success); }
+.pm-doc-content .pm-doc-check.active { color: #818cf8; }
+.pm-doc-content .pm-doc-check.pending { color: var(--text-dim); }
+
+.pm-doc-content .pm-doc-li {
+  padding: 0.2rem 0;
+}
+.pm-doc-content .pm-doc-hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 1rem 0;
+}
+
+/* Status badges (inline in rendered markdown) */
+.pm-status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border-radius: 100px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  font-family: 'Inter', sans-serif;
+}
+.pm-status-new     { background: rgba(148,163,184,0.1); color: var(--text-muted); }
+.pm-status-active  { background: rgba(99,102,241,0.15); color: #818cf8; }
+.pm-status-review  { background: rgba(251,191,36,0.15); color: #fbbf24; }
+.pm-status-done    { background: rgba(34,197,94,0.15); color: #22c55e; }
+.pm-status-blocked { background: rgba(239,68,68,0.15); color: #ef4444; }
+
+/* Toast animation */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── PM View Toggle Buttons ── */
+.pm-view-btn {
+  width: 34px; height: 34px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.pm-view-btn:hover { color: var(--text); border-color: var(--border-hover); }
+.pm-view-btn.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: rgba(124,106,237,0.3);
+}
+
+/* ── PM Kanban Board ── */
+.pm-kanban-board {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.75rem;
+  min-height: 400px;
+}
+
+.pm-kanban-col {
+  background: rgba(255,255,255,0.015);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  min-height: 350px;
+  transition: border-color 0.2s, background 0.2s;
+}
+.pm-kanban-col.drag-over {
+  border-color: rgba(124,106,237,0.5);
+  background: rgba(124,106,237,0.03);
+}
+
+.pm-kanban-col-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+.pm-kanban-col-icon { font-size: 0.9rem; }
+.pm-kanban-col-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text);
+  flex: 1;
+}
+.pm-kanban-col-count {
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  font-weight: 700;
+  min-width: 22px;
+  text-align: center;
+}
+
+.pm-kanban-col-body {
+  padding: 0.5rem;
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.pm-kanban-empty {
+  color: var(--text-dim);
+  font-size: 0.72rem;
+  text-align: center;
+  padding: 2rem 0.5rem;
+  opacity: 0.5;
+}
+
+/* ── Kanban Cards ── */
+.pm-kanban-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.75rem;
+  cursor: grab;
+  transition: transform 0.15s, box-shadow 0.2s, border-color 0.2s, opacity 0.2s;
+}
+.pm-kanban-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+  border-color: var(--border-hover);
+}
+.pm-kanban-card:active { cursor: grabbing; }
+.pm-kanban-card.dragging { opacity: 0.4; transform: scale(0.95); }
+
+.pm-kanban-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.pm-kanban-card-badge {
+  padding: 1px 7px;
+  border-radius: 100px;
+  font-size: 0.6rem;
+  font-weight: 700;
+  font-family: 'Inter', sans-serif;
+}
+.pm-kanban-card-avatar {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.6rem; font-weight: 700;
+}
+
+.pm-kanban-card-title {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.35;
+  margin-bottom: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.pm-kanban-card-phase {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 0.58rem;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.pm-kanban-card-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.6rem;
+  color: var(--text-dim);
+  font-family: var(--font-mono, monospace);
+}
+
+/* ── Kanban Responsive ── */
+@media (max-width: 900px) {
+  .pm-kanban-board { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 640px) {
+  .pm-kanban-board { grid-template-columns: 1fr; }
+}
+

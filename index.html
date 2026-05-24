@@ -350,7 +350,7 @@
                     <a href="https://wa.me/YOUR_WHATSAPP" target="_blank" class="dash-menu-item" style="text-decoration: none;">
                         <span>💬</span> WhatsApp Support
                     </a>
-                    <button class="dash-menu-item" onclick="switchTab('demo')">
+                    <button class="dash-menu-item" onclick="exitPortal()">
                         <span>🚪</span> Exit Portal
                     </button>
                 </div>
@@ -731,16 +731,66 @@
                                     <!-- Ticket Stats -->
                                     <div id="pm-stats" style="display:grid; grid-template-columns:repeat(4,1fr); gap:0.75rem; margin-bottom:1.5rem;"></div>
                                 
-                                    <!-- Ticket List -->
-                                    <div id="pm-tickets" style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden;">
+                                    <!-- PM Toolbar: View Toggle + Search + Filters -->
+                                    <div id="pm-toolbar" style="display:flex; align-items:center; justify-content:space-between; gap:0.75rem; margin-bottom:1rem; flex-wrap:wrap;">
+                                        <!-- Left: View Toggle -->
+                                        <div style="display:flex; align-items:center; gap:6px;">
+                                            <button onclick="PM.setView('list')" id="pm-view-list-btn" class="pm-view-btn active" title="List View">
+                                                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1" y="2" width="14" height="2.5" rx="1" fill="currentColor"/><rect x="1" y="6.75" width="14" height="2.5" rx="1" fill="currentColor"/><rect x="1" y="11.5" width="14" height="2.5" rx="1" fill="currentColor"/></svg>
+                                            </button>
+                                            <button onclick="PM.setView('kanban')" id="pm-view-kanban-btn" class="pm-view-btn" title="Kanban Board">
+                                                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1" y="1" width="4" height="14" rx="1" fill="currentColor"/><rect x="6" y="1" width="4" height="10" rx="1" fill="currentColor"/><rect x="11" y="1" width="4" height="12" rx="1" fill="currentColor"/></svg>
+                                            </button>
+                                        </div>
+
+                                        <!-- Center: Search -->
+                                        <div style="flex:1; max-width:320px; position:relative;">
+                                            <span style="position:absolute; left:10px; top:50%; transform:translateY(-50%); font-size:0.75rem; color:var(--text-dim); pointer-events:none;">🔍</span>
+                                            <input type="text" id="pm-search" placeholder="Search tasks, owners, phases..." oninput="PM.applyFilters()" style="width:100%; padding:0.45rem 0.75rem 0.45rem 30px; border-radius:8px; background:var(--surface-2); border:1px solid var(--border); color:var(--text); font-size:0.78rem; font-family:'Inter',sans-serif; outline:none; transition:border-color 0.3s;" onfocus="this.style.borderColor='rgba(124,106,237,0.4)'" onblur="this.style.borderColor='var(--border)'">
+                                        </div>
+
+                                        <!-- Right: Filter Dropdowns -->
+                                        <div style="display:flex; align-items:center; gap:6px;">
+                                            <select id="pm-filter-assignee" onchange="PM.applyFilters()" style="padding:0.4rem 0.6rem; border-radius:6px; background:var(--surface-2); border:1px solid var(--border); color:var(--text); font-size:0.72rem; font-family:'Inter',sans-serif; outline:none; cursor:pointer; appearance:none; min-width:100px;">
+                                                <option value="">All Assignees</option>
+                                            </select>
+                                            <select id="pm-filter-phase" onchange="PM.applyFilters()" style="padding:0.4rem 0.6rem; border-radius:6px; background:var(--surface-2); border:1px solid var(--border); color:var(--text); font-size:0.72rem; font-family:'Inter',sans-serif; outline:none; cursor:pointer; appearance:none; min-width:120px;">
+                                                <option value="">All Phases</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <!-- Ticket List View -->
+                                    <div id="pm-tickets" class="pm-view-panel pm-view-active" style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden;">
                                         <div style="padding:1rem 1.25rem; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between;">
                                             <h3 style="font-size:0.85rem; font-weight:600;">All Tickets</h3>
-                                            <div id="pm-filters" style="display:flex; gap:4px;"></div>
+                                            <div id="pm-filters" style="display:flex; gap:4px; flex-wrap:wrap;"></div>
                                         </div>
-                                        <div id="pm-list" style="max-height:400px; overflow-y:auto;"></div>
+                                        <div id="pm-list" style="max-height:500px; overflow-y:auto;"></div>
                                         <div id="pm-empty" style="padding:3rem 2rem; text-align:center; color:var(--text-dim); font-size:0.85rem; display:none;">
                                             <div style="font-size:2rem; margin-bottom:0.75rem; opacity:0.3;">📋</div>
                                             No tickets yet — submit your first project above.
+                                        </div>
+                                    </div>
+
+                                    <!-- Kanban Board View -->
+                                    <div id="pm-kanban" class="pm-view-panel" style="display:none;">
+                                        <div class="pm-kanban-board" id="pm-kanban-board">
+                                            <!-- Columns rendered by JS -->
+                                        </div>
+                                    </div>
+
+                                    <!-- Deliverable Documents -->
+                                    <div id="pm-deliverables" style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); margin-top:1.5rem; overflow:hidden;">
+                                        <div style="padding:1rem 1.25rem; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between;">
+                                            <h3 style="font-size:0.85rem; font-weight:600; display:flex; align-items:center; gap:8px;">
+                                                <span style="width:28px; height:28px; border-radius:8px; background:var(--accent-soft); display:flex; align-items:center; justify-content:center; font-size:0.85rem;">📄</span>
+                                                Deliverable Documents
+                                            </h3>
+                                            <span id="pm-docs-version" style="font-size:0.72rem; color:var(--text-dim);">Living references — updated throughout engagement</span>
+                                        </div>
+                                        <div id="pm-docs-list">
+                                            <!-- Rendered by JS from onboarding-docs.json -->
                                         </div>
                                     </div>
                                 </div>

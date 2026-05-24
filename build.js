@@ -112,6 +112,260 @@ STATIC_FILES.forEach(file => {
   }
 });
 
+// ── Onboarding Docs → JSON Pipeline ──
+
+/**
+ * Parse status emojis from markdown table rows and list items
+ * Returns structured task objects for the PM dashboard
+ */
+function parseOnboardingTasks(mdContent, sourceFile) {
+  const tasks = [];
+  const lines = mdContent.split('\n');
+  let currentPhase = '';
+  let phaseIndex = 0;
+  let taskIndex = 0;
+
+  // Status emoji → dashboard status mapping
+  const statusMap = {
+    '🔲': 'new',
+    '🔄': 'active',
+    '👁️': 'review',
+    '✅': 'done',
+    '❌': 'blocked'
+  };
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    // Track current phase heading (### Phase X — Name)
+    const phaseMatch = line.match(/^###\s+(?:Phase\s+\d+\s*[—–-]\s*)?(.+)/);
+    if (phaseMatch) {
+      currentPhase = phaseMatch[1].trim();
+      phaseIndex++;
+      taskIndex = 0;
+    }
+
+    // Parse table rows with status emojis
+    const tableMatch = line.match(/\|\s*(.+?)\s*\|\s*(.+?)\s*\|\s*(🔲|🔄|👁️|✅|❌)\s*\|\s*(.*?)\s*\|/);
+    if (tableMatch) {
+      const title = tableMatch[1].trim();
+      const owner = tableMatch[2].trim();
+      const emoji = tableMatch[3];
+      const date = tableMatch[4].trim() || null;
+
+      // Skip header rows and status-board overview rows (where title is just a number)
+      if (title === 'Milestone' || title === '#' || title.match(/^[-─]+$/) || title.match(/^\d+$/)) continue;
+      // Skip filler rows
+      if (title === '—' || title === '-') continue;
+
+      taskIndex++;
+      const source = sourceFile.replace(/^\d+-/, '').replace(/\.md$/, '');
+      tasks.push({
+        id: `onb-${source}-${phaseIndex}-${String(taskIndex).padStart(3, '0')}`,
+        title: title.replace(/\*\*/g, ''),
+        phase: currentPhase,
+        status: statusMap[emoji] || 'new',
+        owner: owner.replace(/\*\*/g, ''),
+        source: sourceFile.replace('.md', ''),
+        type: 'onboarding',
+        date: date === '—' ? null : date,
+        created: new Date().toISOString()
+      });
+    }
+
+    // Also parse checklist items: - [ ] / - [x] with owner context
+    const checkMatch = line.match(/^[-*]\s+\[([ xX/])\]\s+(.+)/);
+    if (checkMatch) {
+      const checked = checkMatch[1].toLowerCase();
+      const title = checkMatch[2].trim().replace(/\*\*/g, '');
+      const status = checked === 'x' ? 'done' : checked === '/' ? 'active' : 'new';
+
+      // Skip sub-items (indented)
+      if (line.match(/^\s{4,}/)) continue;
+
+      taskIndex++;
+      const source = sourceFile.replace(/^\d+-/, '').replace(/\.md$/, '');
+      tasks.push({
+        id: `onb-${source}-${phaseIndex}-${String(taskIndex).padStart(3, '0')}`,
+        title: title.replace(/\[.*?\]\(.*?\)/g, (m) => m.match(/\[(.*?)\]/)[1]), // strip links, keep text
+        phase: currentPhase || 'General',
+        status,
+        owner: 'Monarch',
+        source: sourceFile.replace('.md', ''),
+        type: 'onboarding',
+        date: null,
+        created: new Date().toISOString()
+      });
+    }
+  }
+  return tasks;
+}
+
+/**
+ * Convert markdown to HTML for dashboard doc panels
+ * Lightweight regex-based — handles tables, headers, lists, code, links, status emojis
+ */
+function convertMarkdownToHtml(md) {
+  let html = md;
+
+  // Remove YAML frontmatter if any
+  html = html.replace(/^---[\s\S]*?---\n*/m, '');
+
+  // Code blocks (``` ... ```)
+  html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) =>
+    `<pre class="pm-doc-code"><code>${code.replace(/</g, '&lt;').replace(/>/g, '&gt;').trim()}</code></pre>`
+  );
+
+  // Headers
+  html = html.replace(/^#### (.+)$/gm, '<h5 class="pm-doc-h4">$1</h5>');
+  html = html.replace(/^### (.+)$/gm, '<h4 class="pm-doc-h3">$1</h4>');
+  html = html.replace(/^## (.+)$/gm, '<h3 class="pm-doc-h2">$1</h3>');
+  html = html.replace(/^# (.+)$/gm, '<h2 class="pm-doc-h1">$1</h2>');
+
+  // Horizontal rules
+  html = html.replace(/^---+$/gm, '<hr class="pm-doc-hr">');
+
+  // Blockquotes (including nested > [!NOTE] etc.)
+  html = html.replace(/^>\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\n((?:>.*\n?)*)/gm, (_, type, content) => {
+    const cleanContent = content.replace(/^>\s?/gm, '').trim();
+    return `<div class="pm-doc-callout pm-doc-callout-${type.toLowerCase()}">${cleanContent}</div>`;
+  });
+  html = html.replace(/^>\s+(.+)$/gm, '<blockquote class="pm-doc-quote">$1</blockquote>');
+
+  // Tables
+  html = html.replace(/((?:\|.+\|[ \t]*\n){2,})/g, (tableBlock) => {
+    const rows = tableBlock.trim().split('\n').filter(r => r.trim());
+    if (rows.length < 2) return tableBlock;
+
+    const parseRow = (row) => row.split('|').slice(1, -1).map(c => c.trim());
+    const headers = parseRow(rows[0]);
+
+    // Skip separator row
+    const dataRows = rows.slice(2);
+    let tableHtml = '<table class="pm-doc-table"><thead><tr>';
+    headers.forEach(h => { tableHtml += `<th>${h}</th>`; });
+    tableHtml += '</tr></thead><tbody>';
+    dataRows.forEach(row => {
+      const cells = parseRow(row);
+      tableHtml += '<tr>';
+      cells.forEach(c => {
+        // Replace status emojis with badges
+        let cell = c;
+        cell = cell.replace(/🔲/g, '<span class="pm-status-badge pm-status-new">Pending</span>');
+        cell = cell.replace(/🔄/g, '<span class="pm-status-badge pm-status-active">Active</span>');
+        cell = cell.replace(/👁️/g, '<span class="pm-status-badge pm-status-review">Review</span>');
+        cell = cell.replace(/✅/g, '<span class="pm-status-badge pm-status-done">Done</span>');
+        cell = cell.replace(/❌/g, '<span class="pm-status-badge pm-status-blocked">Blocked</span>');
+        tableHtml += `<td>${cell}</td>`;
+      });
+      tableHtml += '</tr>';
+    });
+    tableHtml += '</tbody></table>';
+    return tableHtml;
+  });
+
+  // Checklist items
+  html = html.replace(/^[-*]\s+\[x\]\s+(.+)$/gm, '<div class="pm-doc-check done">✅ $1</div>');
+  html = html.replace(/^[-*]\s+\[\/\]\s+(.+)$/gm, '<div class="pm-doc-check active">🔄 $1</div>');
+  html = html.replace(/^[-*]\s+\[ \]\s+(.+)$/gm, '<div class="pm-doc-check pending">🔲 $1</div>');
+
+  // Regular list items
+  html = html.replace(/^[-*]\s+(.+)$/gm, '<div class="pm-doc-li">• $1</div>');
+
+  // Bold and italic
+  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+
+  // Inline code
+  html = html.replace(/`([^`]+)`/g, '<code class="pm-doc-inline-code">$1</code>');
+
+  // Links
+  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" class="pm-doc-link" target="_blank">$1</a>');
+
+  // Status emojis in body text
+  html = html.replace(/🔲/g, '<span class="pm-status-badge pm-status-new">Pending</span>');
+  html = html.replace(/🔄/g, '<span class="pm-status-badge pm-status-active">Active</span>');
+  html = html.replace(/✅/g, '<span class="pm-status-badge pm-status-done">Done</span>');
+
+  // Paragraphs — wrap remaining plain lines
+  html = html.replace(/^(?!<[a-zA-Z]|$)(.+)$/gm, '<p class="pm-doc-p">$1</p>');
+
+  // Clean up empty paragraphs
+  html = html.replace(/<p class="pm-doc-p">\s*<\/p>/g, '');
+
+  return html;
+}
+
+/**
+ * Extract version from markdown changelog table
+ */
+function extractDocVersion(mdContent) {
+  const versionMatch = mdContent.match(/\|\s*([\d.]+)\s*\|/);
+  return versionMatch ? versionMatch[1] : '1.0';
+}
+
+/**
+ * Build onboarding data: tasks JSON + docs HTML JSON
+ */
+function buildOnboardingData(cfg) {
+  const DOCS_DIR = path.join(__dirname, 'docs', 'onboarding');
+  if (!fs.existsSync(DOCS_DIR)) {
+    console.log('  ⚠ No docs/onboarding/ directory found, skipping');
+    return;
+  }
+
+  const docFiles = fs.readdirSync(DOCS_DIR).filter(f => f.endsWith('.md')).sort();
+  if (docFiles.length === 0) return;
+
+  let allTasks = [];
+  const docPanels = [];
+
+  // Icon + title mapping for doc panels
+  const docMeta = {
+    '01-welcome': { icon: '👋', label: 'Welcome Letter' },
+    '02-system-playbook': { icon: '🏗️', label: 'System Playbook' },
+    '03-project-tracker': { icon: '📊', label: 'Project Tracker' }
+  };
+
+  docFiles.forEach(file => {
+    let content = fs.readFileSync(path.join(DOCS_DIR, file), 'utf-8');
+
+    // Apply template token replacement
+    content = processTemplate(content, cfg);
+
+    // Extract tasks from tracker and playbook
+    if (file !== '01-welcome.md') {
+      const tasks = parseOnboardingTasks(content, file);
+      allTasks = allTasks.concat(tasks);
+    }
+
+    // Convert to HTML for doc panels
+    const html = convertMarkdownToHtml(content);
+    const version = extractDocVersion(content);
+    const baseName = file.replace('.md', '');
+    const meta = docMeta[baseName] || { icon: '📄', label: baseName };
+
+    docPanels.push({
+      id: baseName,
+      title: meta.label,
+      icon: meta.icon,
+      version: version,
+      file: file,
+      html: html
+    });
+  });
+
+  // Write tasks JSON (only if no live state exists yet — preserve dashboard edits)
+  const tasksPath = path.join(DIST, 'data', 'onboarding-tasks.json');
+  fs.writeFileSync(tasksPath, JSON.stringify(allTasks, null, 2));
+  console.log(`  ✓ Extracted ${allTasks.length} onboarding tasks → data/onboarding-tasks.json`);
+
+  // Write docs HTML JSON (always regenerate — content may have changed)
+  const docsPath = path.join(DIST, 'data', 'onboarding-docs.json');
+  fs.writeFileSync(docsPath, JSON.stringify(docPanels, null, 2));
+  console.log(`  ✓ Converted ${docPanels.length} docs → data/onboarding-docs.json`);
+}
+
 // ── Copy data files ──
 const DATA_DIR = path.join(__dirname, 'data');
 if (fs.existsSync(DATA_DIR)) {
@@ -376,6 +630,8 @@ HTML_FILES.forEach(file => {
   fs.writeFileSync(path.join(DIST, file), content, 'utf-8');
   console.log(`  ✓ Processed ${file}`);
 });
+// ── Build onboarding data (docs → JSON for dashboard) ──
+buildOnboardingData(config);
 
 // ── Generate build manifest ──
 const manifest = {
