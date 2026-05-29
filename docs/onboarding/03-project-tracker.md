@@ -16,7 +16,7 @@
 | 1.1 | 2026-05-24 | Direct API posting verified — Create/Read/Update proven live |
 | 1.2 | 2026-05-25 | MSA §7 IP rewritten (perpetual client ownership), §1 Scope updated (client-owned accounts), §10 Infrastructure named stack added |
 | 1.3 | 2026-05-25 | Invoice reissued — $2,500 due May 28, 2026. Prior duplicates voided |
-| 1.4 | 2026-05-25 | Client config completed — rep_name, email, effective_date populated |
+| 1.4 | 2026-05-29 | Client config completed — rep_name, email, effective_date populated |
 
 ---
 
@@ -41,7 +41,7 @@
 
 | Milestone | Owner | Status | Date |
 |-----------|-------|--------|------|
-| MSA signed | Client | ▶ | MSA v1.4 delivered 2026-05-25 |
+| MSA signed | Client | ▶ | MSA v1.4 delivered 2026-05-29 |
 | Payment processed | Client | ▶ | Invoice sent — due 2026-05-28 |
 | WhatsApp channel live | Monarch | ✔ | Active |
 | Onboarding packet delivered | Monarch | ✔ | 3-doc set delivered |
