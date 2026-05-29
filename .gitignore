@@ -15,10 +15,19 @@ dist/
 # Backups (use git history instead)
 backup/
 
-# Test artifacts
+# Test artifacts & automation secrets
 temp_test/
 *.log
 *.tmp
+
+# Session & credential files (NEVER commit)
+cookies.json
+**/cookies.json
+vault.enc
+**/vault.enc
+**/device_*.json
+**/mobile_session.json
+**/chrome-profile/
 
 # IDE / OS
 .vscode/
@@ -30,3 +39,5 @@ Thumbs.db
 
 # Screenshots & media artifacts
 screenshots/
+**/screenshots/
+

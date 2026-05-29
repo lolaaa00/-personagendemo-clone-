@@ -403,7 +403,238 @@ function getMSAStyles(accent) {
     h2 { page-break-after: avoid; }
     pre, blockquote { page-break-inside: avoid; }
   }
+
+  /* ── Page Break ── */
+  .page-break {
+    page-break-before: always;
+    break-before: page;
+  }
+
+  /* ── Cover Page ── */
+  .cover {
+    min-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    padding: 1.5in 1in;
+  }
+
+  .cover-logo {
+    font-size: 56pt;
+    margin-bottom: 0.3in;
+  }
+
+  .cover-brand {
+    font-size: 10pt;
+    font-weight: 600;
+    letter-spacing: 6px;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+    margin-bottom: 0.3in;
+  }
+
+  .cover h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: 30pt;
+    font-weight: 600;
+    line-height: 1.2;
+    color: var(--ink);
+    margin-bottom: 0.15in;
+    border-bottom: none;
+    padding-bottom: 0;
+  }
+
+  .cover .subtitle {
+    font-size: 11pt;
+    color: var(--accent);
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    margin-bottom: 0.4in;
+  }
+
+  .cover-subtitle {
+    font-size: 11pt;
+    font-weight: 300;
+    color: var(--ink-muted);
+    max-width: 5in;
+    margin-bottom: 0.5in;
+    line-height: 1.7;
+  }
+
+  .cover-meta {
+    font-size: 9.5pt;
+    color: var(--ink-muted);
+    border-top: 2px solid var(--accent);
+    padding-top: 0.25in;
+    width: 4in;
+    line-height: 1.8;
+  }
+
+  .cover-meta span {
+    font-weight: 600;
+    color: var(--ink);
+  }
+
+  /* ── TOC Page ── */
+  .toc {
+    min-height: 80vh;
+    padding: 1.5in 1in;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  .toc h2 {
+    font-family: 'Playfair Display', serif;
+    font-size: 22pt;
+    font-weight: 600;
+    color: var(--ink);
+    margin-bottom: 0.4in;
+    padding-bottom: 0.15in;
+    border-bottom: 2px solid var(--accent);
+    display: inline-block;
+  }
+
+  .toc-item {
+    display: flex;
+    align-items: center;
+    gap: 2rem;
+    padding: 1rem 1.25rem;
+    margin-bottom: 0.75rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    border-left: 3px solid var(--accent);
+  }
+
+  .toc-num {
+    font-size: 20pt;
+    font-weight: 800;
+    color: var(--accent);
+    min-width: 0.5in;
+  }
+
+  .toc-label {
+    font-size: 12pt;
+    font-weight: 600;
+    color: var(--ink);
+  }
+
+  .toc-desc {
+    font-size: 9pt;
+    color: var(--ink-muted);
+    margin-top: 2px;
+  }
+
+  /* ── Document Sections ── */
+  .doc-section {
+    padding-top: 0.5in;
+    break-after: auto;
+  }
+
+  .doc-badge {
+    display: inline-block;
+    font-size: 8pt;
+    font-weight: 700;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--accent);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 4px 12px;
+    border-radius: 20px;
+    margin-bottom: 1.5rem;
+  }
 `;
+}
+
+// ── Build combined HTML for the entire onboarding packet ──
+function buildPacketHTML(html1, html2, html3, cfg) {
+  const accent = cfg.branding?.accent || '#7c6aed';
+  const clientName = cfg.client?.name || 'Client';
+  const logoEmoji = cfg.client?.logo_emoji || '🍯';
+  const effectiveDate = cfg.effective_date || new Date().toLocaleDateString('en-US', {
+    year: 'numeric', month: 'long', day: 'numeric'
+  });
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${clientName} — Onboarding Packet | Monarch Stack</title>
+<style>${getMSAStyles(accent)}</style>
+</head>
+<body>
+
+  <!-- ═══ Cover ═══ -->
+  <div class="cover">
+    <div class="cover-logo">${logoEmoji}</div>
+    <div class="cover-brand">Monarch Stack</div>
+    <h1>Onboarding Packet</h1>
+    <div class="subtitle">Managed Automation Partnership</div>
+    <p class="cover-subtitle">
+      Your complete partnership handbook — welcome letter, playbook, and live project tracker.
+    </p>
+    <div class="cover-meta">
+      <span>Prepared for</span> ${clientName}<br>
+      <span>Date</span> ${effectiveDate}<br>
+      <span>Confidential</span> — Do not distribute
+    </div>
+  </div>
+
+  <!-- ═══ TOC ═══ -->
+  <div class="page-break"></div>
+  <div class="toc">
+    <h2>Contents</h2>
+    <div class="toc-item">
+      <div class="toc-num">01</div>
+      <div>
+        <div class="toc-label">Welcome Letter</div>
+        <div class="toc-desc">Partnership overview, principles, and what sets this apart</div>
+      </div>
+    </div>
+    <div class="toc-item">
+      <div class="toc-num">02</div>
+      <div>
+        <div class="toc-label">System Playbook</div>
+        <div class="toc-desc">Architecture, stack, setup guides, costs, and scaling roadmap</div>
+      </div>
+    </div>
+    <div class="toc-item">
+      <div class="toc-num">03</div>
+      <div>
+        <div class="toc-label">Project Tracker</div>
+        <div class="toc-desc">Live milestones, status board, decision log, and operations cadence</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ Welcome Letter ═══ -->
+  <div class="page-break"></div>
+  <section class="doc-section">
+    <div class="doc-badge">01 — Welcome Letter</div>
+    ${html1}
+  </section>
+
+  <!-- ═══ System Playbook ═══ -->
+  <div class="page-break"></div>
+  <section class="doc-section">
+    <div class="doc-badge">02 — System Playbook</div>
+    ${html2}
+  </section>
+
+  <!-- ═══ Project Tracker ═══ -->
+  <div class="page-break"></div>
+  <section class="doc-section">
+    <div class="doc-badge">03 — Project Tracker</div>
+    ${html3}
+  </section>
+
+</body>
+</html>`;
 }
 
 // ── Build standalone HTML for a single document ──
@@ -628,6 +859,8 @@ async function main() {
     args: ['--no-sandbox', '--disable-setuid-sandbox']
   });
 
+  const htmls = [];
+
   for (const doc of DOCS) {
     // 1. Read + hydrate + render
     const mdPath = path.join(DOCS_DIR, doc.file);
@@ -638,6 +871,7 @@ async function main() {
     let md = fs.readFileSync(mdPath, 'utf-8');
     md = hydrate(md, config);
     const html = cleanHTMLTableRows(renderMarkdown(md));
+    htmls.push(html);
 
     // 2. Build standalone HTML (welcome letter gets letterhead treatment)
     const fullHTML = doc.file === '01-welcome.md'
@@ -681,8 +915,46 @@ async function main() {
     console.log(`  ✓ ${doc.title.padEnd(20)} → ${doc.pdfName} (${(sz.size / 1024).toFixed(1)} KB)`);
   }
 
+  // ── Combined Onboarding Packet Generation ──
+  if (htmls.length === 3) {
+    const packetHTML = buildPacketHTML(htmls[0], htmls[1], htmls[2], config);
+    const packetHtmlPath = path.join(DIST, 'onboarding-packet.html');
+    fs.writeFileSync(packetHtmlPath, packetHTML, 'utf-8');
+
+    const page = await browser.newPage();
+    page.setDefaultNavigationTimeout(120000);
+    await page.setContent(packetHTML, { waitUntil: 'networkidle2', timeout: 120000 });
+    await page.evaluateHandle('document.fonts.ready');
+
+    const clientName = config.client?.name || 'Client';
+    const accent = config.branding?.accent || '#7c6aed';
+    const packetPdfPath = path.join(DIST, 'onboarding-packet.pdf');
+    await page.pdf({
+      path: packetPdfPath,
+      format: 'Letter',
+      margin: { top: '0.75in', bottom: '0.85in', left: '1in', right: '1in' },
+      printBackground: true,
+      displayHeaderFooter: true,
+      headerTemplate: '<span></span>',
+      footerTemplate: `
+        <div style="width:100%;text-align:center;font-family:'Inter',sans-serif;font-size:7pt;color:#666;padding:0 1in;">
+          <div style="border-top:1.5px solid ${accent};padding-top:6px;">
+            <span style="font-weight:700;font-size:6.5pt;letter-spacing:0.1em;text-transform:uppercase;color:${accent};">Monarch Stack · Onboarding Packet</span><br>
+            <span>Confidential — Prepared exclusively for ${clientName}</span>
+          </div>
+        </div>
+      `,
+      preferCSSPageSize: false
+    });
+
+    await page.close();
+
+    const sz = fs.statSync(packetPdfPath);
+    console.log(`  ✓ Onboarding Packet    → onboarding-packet.pdf (${(sz.size / 1024).toFixed(1)} KB)`);
+  }
+
   await browser.close();
-  console.log('\n✅ All 3 documents generated.\n');
+  console.log('\n✅ All onboarding documents generated.\n');
 }
 
 main().catch(err => {

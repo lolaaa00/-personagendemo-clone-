@@ -8,13 +8,13 @@
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@500;600&display=swap');
 
   :root {
-    --ink: #e8e6f0;
-    --ink-light: #b0aec4;
-    --ink-muted: #7a7890;
+    --ink: #1a1a2e;
+    --ink-light: #444;
+    --ink-muted: #666;
     --accent: #7c6aed;
-    --border: rgba(255, 255, 255, 0.08);
-    --bg: #06060b;
-    --surface: #0e0e16;
+    --border: #e0e0e0;
+    --bg: #fff;
+    --surface: #fafafa;
   }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -32,7 +32,7 @@
     background: var(--bg);
     max-width: 8.5in;
     margin: 0 auto;
-    padding: 0.75in 1in;
+    padding: 1.5in 1in 0.75in 1in;
     text-align: justify;
   }
 
@@ -46,8 +46,8 @@
   .msa-header {
     text-align: center;
     border-bottom: 2px solid var(--accent);
-    padding-bottom: 1.5rem;
-    margin-bottom: 2rem;
+    padding-bottom: 2rem;
+    margin-bottom: 2.5rem;
   }
   .msa-header h1 {
     font-family: 'Playfair Display', serif;
@@ -55,6 +55,7 @@
     font-weight: 600;
     color: var(--ink);
     margin-bottom: 0.25rem;
+    text-align: center;
   }
   .msa-header .subtitle {
     font-size: 11pt;
@@ -78,6 +79,7 @@
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 6px;
+    text-align: left;
   }
   .party-label {
     font-size: 8pt;
@@ -96,11 +98,27 @@
     color: var(--ink-muted);
     margin-top: 0.15rem;
   }
+  .party-field {
+    margin-top: 0.6rem;
+  }
+  .party-field-label {
+    font-size: 7.5pt;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ink-muted);
+    margin-bottom: 0.1rem;
+  }
+  .party-field-value {
+    font-size: 9.5pt;
+    font-weight: 600;
+    color: var(--ink);
+  }
 
   /* ── Sections ── */
   .section {
     margin-bottom: 1.75rem;
-    /* page-break-inside: avoid; */
+    break-inside: auto;
   }
   .section-num {
     display: inline-block;
@@ -115,17 +133,23 @@
     margin-bottom: 0.6rem;
     padding-bottom: 0.3rem;
     border-bottom: 1px solid var(--border);
+    break-after: avoid;
+    page-break-after: avoid;
   }
   .section h3 {
     font-size: 11pt;
     font-weight: 600;
     margin: 1rem 0 0.4rem;
     color: var(--ink);
+    break-after: avoid;
+    page-break-after: avoid;
   }
   .section p, .section li {
     font-size: 10.5pt;
     color: var(--ink-light);
     line-height: 1.7;
+    orphans: 3;
+    widows: 3;
   }
   .section ul, .section ol {
     padding-left: 1.5rem;
@@ -133,6 +157,8 @@
   }
   .section li {
     margin-bottom: 0.3rem;
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
 
   /* ── Tables ── */
@@ -141,6 +167,8 @@
     border-collapse: collapse;
     margin: 0.75rem 0;
     font-size: 10pt;
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
   th {
     background: var(--surface);
@@ -164,9 +192,11 @@
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 3rem;
-    margin-top: 3rem;
+    margin-top: 2rem;
     padding-top: 1.5rem;
     border-top: 2px solid var(--ink);
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
   .sig-group {
     padding-top: 0.5rem;
@@ -210,6 +240,8 @@
     padding: 0.75rem 1rem;
     margin: 0.75rem 0;
     border-radius: 0 4px 4px 0;
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
 
   /* ── Persona Showcase (scattered throughout doc) ── */
@@ -218,7 +250,7 @@
     gap: 1.5rem;
     margin: 2rem 0;
     padding: 1.5rem;
-    background: #161622;
+    background: #1a1a2e;
     border-radius: 10px;
     page-break-inside: avoid;
   }
@@ -261,8 +293,10 @@
 
   @media print {
     body { padding: 0; }
-    .section { /* page-break-inside: avoid; */ }
+    .section h2, .section h3 { page-break-after: avoid; }
     .signature-block { page-break-inside: avoid; }
+    table { page-break-inside: avoid; }
+    .highlight-box { page-break-inside: avoid; }
   }
 </style>
 </head>
@@ -280,23 +314,41 @@
   <div>
     <div class="party-label">Service Provider ("Provider")</div>
     <div class="party-name">Monarch Stack</div>
-    <div class="party-detail">Ratio, Chief Automation Officer (CAO)</div>
-    <div class="party-detail">Managed Automation & AI Engineering</div>
-    <div class="party-detail">Contact: WhatsApp (provided upon signing)</div>
+    <div class="party-field">
+      <div class="party-field-label">Representative</div>
+      <div class="party-field-value">Ratio, Chief Automation Officer (CAO)</div>
+    </div>
+    <div class="party-field">
+      <div class="party-field-label">Services</div>
+      <div class="party-field-value">Managed Automation & AI Engineering</div>
+    </div>
+    <div class="party-field">
+      <div class="party-field-label">Contact</div>
+      <div class="party-field-value">WhatsApp (provided upon signing)</div>
+    </div>
   </div>
   <div>
     <div class="party-label">Client ("Client")</div>
     <div class="party-name">{{client.name}}</div>
-    <div class="party-detail">Authorized Representative: ________________________</div>
-    <div class="party-detail">Email: ________________________</div>
-    <div class="party-detail">Company (if applicable): ________________________</div>
+    <div class="party-field">
+      <div class="party-field-label">Authorized Representative</div>
+      <div class="party-field-value">{{client.rep_name}}</div>
+    </div>
+    <div class="party-field">
+      <div class="party-field-label">Email</div>
+      <div class="party-field-value">{{client.email}}</div>
+    </div>
+    <div class="party-field">
+      <div class="party-field-label">Company</div>
+      <div class="party-field-value">{{client.rep_name}}</div>
+    </div>
   </div>
 </div>
 
 <!-- 1. SCOPE OF SERVICES -->
 <div class="section">
   <h2><span class="section-num">§1</span> Scope of Services</h2>
-  <p>Provider agrees to deliver managed AI influencer generation services ("PersonaGen Platform") to Client under the terms described herein. The service encompasses the full lifecycle of autonomous AI-generated content creation, from persona generation to autonomous social media distribution. AI model execution capabilities are integrated through designated third-party AI model aggregators and direct model providers (such as OpenAI, Anthropic/Claude, or similar platforms) suited to the specific workflows scoped for the Client.</p>
+  <p>Provider agrees to deliver managed AI influencer generation services ("PersonaGen Platform") to Client under the terms described herein. The service encompasses the full lifecycle of autonomous AI-generated content creation, from persona generation to autonomous social media distribution. All infrastructure, accounts, and deployments are provisioned within Client's own accounts and credentials. Provider builds, deploys, and manages the platform on Client's behalf, maintaining collaborative access solely to perform contracted services. AI model execution capabilities are integrated through designated third-party AI model aggregators and direct model providers (such as OpenAI, Anthropic/Claude, or similar platforms) suited to the specific workflows scoped for the Client.</p>
 
   <h3>1.1 Core Deliverables</h3>
   <ul>
@@ -570,10 +622,11 @@
 <div class="section">
   <h2><span class="section-num">§7</span> Intellectual Property</h2>
   <ol>
-    <li><strong>Client-Owned Assets:</strong> All AI-generated content (images, captions, personas, videos) created specifically for Client's brand are owned by Client upon payment. This includes persona identities, generated media, and brand-specific configurations.</li>
-    <li><strong>Provider-Owned Platform:</strong> The underlying PersonaGen platform, including its architecture, source code frameworks, automation pipelines, LLM prompt systems, and infrastructure tooling, remain the exclusive intellectual property of Provider.</li>
-    <li><strong>Client Data:</strong> Provider will host and process Client brand assets, product information, and account credentials solely for the purpose of delivering the contracted services. Client retains full ownership of all input data.</li>
-    <li><strong>License Grant:</strong> Provider grants Client a non-exclusive, non-transferable license to use the deployed platform for the duration of this Agreement. Upon termination, Client retains all generated assets but the platform license expires.</li>
+    <li><strong>Client-Owned Work Product:</strong> All source code, configurations, automation workflows, AI persona profiles, generated content (images, captions, videos), deployed infrastructure configurations, and agent architectures created or deployed for Client's use under this Agreement are the exclusive property of Client ("Work Product"). Ownership vests upon payment and is perpetual and irrevocable — Client retains full ownership of all Work Product regardless of whether this Agreement is renewed, terminated, or expires.</li>
+    <li><strong>Infrastructure Ownership:</strong> All accounts provisioned during onboarding — including but not limited to VPS hosting, DNS/CDN, AI aggregator accounts, code repositories, and automation platforms — are registered under Client's own credentials and remain Client's property at all times. Provider maintains collaborative access solely to perform contracted services and shall relinquish all access upon termination.</li>
+    <li><strong>Provider-Retained Tooling:</strong> Provider retains exclusive intellectual property rights only in its proprietary internal build tooling, meta-template scaffolding systems, and internal development methodologies used to construct and deploy the platform (collectively, "Provider Tooling"). Provider Tooling is not deployed to or resident on Client's infrastructure and is not included in the Work Product.</li>
+    <li><strong>Client Data:</strong> Provider will host and process Client brand assets, product information, and account credentials solely for the purpose of delivering the contracted services. Client retains full ownership of all input data at all times.</li>
+    <li><strong>Post-Termination Rights:</strong> Upon termination of this Agreement for any reason, Client retains perpetual, irrevocable ownership of all Work Product, deployed source code, agent configurations, generated media, and infrastructure. Provider shall deliver a complete handoff package including all credentials, documentation, and deployment instructions within ten (10) business days of termination.</li>
   </ol>
 </div>
 
@@ -604,8 +657,13 @@
 <!-- 10. DATA SECURITY -->
 <div class="section">
   <h2><span class="section-num">§10</span> Data Security & Infrastructure</h2>
+
+  <div class="highlight-box">
+    <strong>Named Technology Stack:</strong> Client's platform is deployed on the following infrastructure, all registered under Client's own accounts: <strong>Hostinger VPS</strong> (compute), <strong>EasyPanel + Docker</strong> (container orchestration), <strong>OpenRouter</strong> (AI model gateway), <strong>Cloudflare</strong> (DNS, SSL, DDoS protection), and <strong>GitHub</strong> (source code management &amp; CI/CD). Provider maintains collaborative access to these accounts solely to perform contracted services.
+  </div>
+
   <ol>
-    <li>All Client infrastructure is provisioned on isolated server instances. Ultra tier clients receive a dedicated, container-isolated instance separate from all other client workloads.</li>
+    <li>All Client infrastructure is provisioned on isolated server instances under Client's own hosting account. Growth tier clients receive a dedicated, container-isolated instance separate from all other client workloads.</li>
     <li>All data in transit is encrypted via TLS 1.3. All domains are proxied through Cloudflare with DDoS protection enabled.</li>
     <li>Server access is restricted to Provider's authorized personnel via SSH key authentication. No password-based server access is permitted.</li>
     <li>Client credentials and API keys — including any BYOK Keys provided by Client — are stored in encrypted environment variables, never committed to source code repositories. BYOK Keys are stored identically to Provider-managed credentials and are isolated to Client's service instance.</li>

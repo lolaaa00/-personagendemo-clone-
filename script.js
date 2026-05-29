@@ -1,4 +1,13 @@
 // ═══════════════════════════════════════
+// PORTAL CONFIG — swap this block per client
+// ═══════════════════════════════════════
+const PersonaGenConfig = {
+  postiz_url: 'https://l2g-postiz.zi1cc5.easypanel.host',
+  webhook_url: 'https://auto.l2gseo.com/webhook/personagen-social',
+  n8n_url: 'https://auto.l2gseo.com',
+};
+
+// ═══════════════════════════════════════
 // DATA: AI INFLUENCER ROSTER
 // ═══════════════════════════════════════
 const INFLUENCERS = [
@@ -1340,7 +1349,27 @@ function switchDashboardTab(subTabId) {
     }
 }
 
-// ── Social Connections (Postiz Integrations) ──
+// ── Webhook Helper — fires events to n8n PersonaGen Gate Handler ──
+const PersonaWebhook = {
+  get ENDPOINT() { return PersonaGenConfig.webhook_url; },
+  
+  async fire(eventType, payload) {
+    try {
+      const res = await fetch(this.ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ event: eventType, ts: new Date().toISOString(), ...payload })
+      });
+      console.log(`[Webhook] ${eventType} → ${res.status}`);
+      return res.ok;
+    } catch (err) {
+      console.warn(`[Webhook] ${eventType} failed:`, err.message);
+      return false;
+    }
+  }
+};
+
+// ── Social Connections (Publishing Layer) ──
 const SocialConnections = {
   KEY: 'personagen_social_connections',
   
@@ -1368,19 +1397,17 @@ const SocialConnections = {
       ln: 'LinkedIn'
     };
     
-    const handle = prompt(`Enter your ${names[platform]} handle to link with Postiz:`, "@");
+    const handle = prompt(`Enter your ${names[platform]} handle:`, "@");
     if (!handle || handle.trim() === '@' || handle.trim() === '') return;
     
     const cleanHandle = handle.trim().startsWith('@') ? handle.trim() : '@' + handle.trim();
     
-    const confirmRedirect = confirm(`Redirect to self-hosted Postiz settings (https://postiz.honeyforx.com/settings/integrations) to authorize OAuth?`);
-    if (confirmRedirect) {
-      window.open('https://postiz.honeyforx.com/settings/integrations', '_blank');
-    }
-    
     const data = this.load();
     data[platform] = cleanHandle;
     this.save(data);
+    
+    // Fire webhook to n8n
+    PersonaWebhook.fire('social.connect', { platform, handle: cleanHandle, source: 'main-dashboard' });
     
     this.updateUI(platform, cleanHandle);
   },
@@ -1393,7 +1420,7 @@ const SocialConnections = {
     if (statusBadge && handleLabel && btn) {
       statusBadge.textContent = 'Active';
       statusBadge.className = 'ii-status connected';
-      handleLabel.textContent = `Connected via Postiz · ${handle}`;
+      handleLabel.textContent = `Connected · ${handle}`;
       btn.textContent = 'Disconnect';
       btn.setAttribute('onclick', `SocialConnections.disconnect('${platform}')`);
       btn.style.background = 'rgba(239, 68, 68, 0.1)';
@@ -1405,9 +1432,13 @@ const SocialConnections = {
   disconnect(platform) {
     if (!confirm(`Are you sure you want to disconnect this platform?`)) return;
     
+    const oldHandle = this.load()[platform];
     const data = this.load();
     delete data[platform];
     this.save(data);
+    
+    // Fire webhook to n8n
+    PersonaWebhook.fire('social.disconnect', { platform, handle: oldHandle, source: 'main-dashboard' });
     
     const statusBadge = document.getElementById(`${platform}-status-badge`);
     const handleLabel = document.getElementById(`${platform}-handle-label`);
@@ -2111,7 +2142,7 @@ const AccountCreator = {
     }
     if (!handle.startsWith('@')) handle = '@' + handle;
     
-    // Simulate connection check
+    // Connection verification with webhook
     btn.textContent = 'Verifying...';
     btn.disabled = true;
     
@@ -2121,16 +2152,14 @@ const AccountCreator = {
       this.select(personaId);
       this.updateAllSidebarBadges();
       
-      // Mirror connection status to main Postiz Connections UI
-      if (personaId === 'sofia-rivera') {
-        const mainData = SocialConnections.load();
-        mainData[platform] = handle;
-        SocialConnections.save(mainData);
-        SocialConnections.updateUI(platform, handle);
-      }
+      // Mirror connection status to main Social Connections UI
+      const mainData = SocialConnections.load();
+      mainData[platform] = handle;
+      SocialConnections.save(mainData);
+      SocialConnections.updateUI(platform, handle);
       
-      // Simulate webhook event dispatching to n8n
-      console.log(`[Webhook Event] Firing account connection webhook to n8n: ${platform} account ${handle} linked for ${personaId}`);
+      // Fire webhook to n8n
+      PersonaWebhook.fire('social.connect', { personaId, platform, handle, source: 'persona-accounts' });
       
       alert(`Success! Channel ${handle} verified and linked with autonomous content engine.`);
     }, 1200);

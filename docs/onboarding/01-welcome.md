@@ -1,28 +1,28 @@
 # Welcome to Monarch Stack
 
-**Your Fractional CTO Partnership**
-
----
-
 Dear {{client.rep_name}},
 
-Welcome to Monarch Stack. You now have a dedicated technology partner responsible for building, deploying, and managing your AI infrastructure — the same caliber of engineering leadership that companies pay $250K+/year for a full-time CTO to provide, delivered as a fractional service.
+Thank you for selecting Monarch Stack as your technology partner. This letter confirms the commencement of our engagement and outlines the scope, deliverables, and operating principles that will govern our partnership.
 
-## What We're Building
+You now have a dedicated engineering team responsible for building, deploying, and managing your AI infrastructure — the same caliber of technical leadership that companies pay $250K+/year for a full-time Chief Technology Officer to provide, delivered as a fractional service.
+
+## Engagement Overview
 
 **PersonaGen** — an autonomous AI influencer generation platform, delivered as a turnkey product on your own infrastructure and accounts. You own everything we build. We manage and optimize it.
 
 This is not a SaaS subscription where you log into someone else's dashboard. This is **your platform**, running on **your servers**, with **your API keys**, deployed to **your GitHub**.
 
-## Your Deliverable Documents
+## Deliverable Documents
+
+The following documents constitute your complete onboarding package. Each is a living document that evolves with your platform:
 
 | # | Document | Purpose |
 |---|----------|---------|
 | 01 | **This Welcome Letter** | Partnership overview and core principles |
-| 02 | **[System Playbook](./02-system-playbook.md)** | Living reference — architecture, setup, costs, scaling |
-| 03 | **[Project Tracker](./03-project-tracker.md)** | Living operations — status, decisions, tickets |
+| 02 | **System Playbook** | Living reference — architecture, setup, costs, scaling |
+| 03 | **Project Tracker** | Living operations — status, decisions, tickets |
 
-## What Sets This Apart
+## Differentiators
 
 | Traditional Agency | Monarch Stack |
 |-------------------|---------------|
@@ -32,14 +32,19 @@ This is not a SaaS subscription where you log into someone else's dashboard. Thi
 | You pay their AI markup | You pay providers **directly** |
 | They disappear after launch | We **manage and optimize** continuously |
 
-## Core Principles
+## Operating Principles
 
-1. **You own everything.** Every server, API key, line of code, and generated asset.
-2. **Zero markup.** You pay providers at their published rates. We don't touch your AI spend.
-3. **Full transparency.** Every tool, every cost, every decision — documented in your Playbook.
-4. **Living documentation.** Your Playbook and Tracker evolve with your platform.
+1. **Ownership.** Every server, API key, line of code, and generated asset belongs to you.
+2. **Zero Markup.** You pay providers at their published rates. We do not touch your AI spend.
+3. **Full Transparency.** Every tool, every cost, every decision — documented in your Playbook.
+4. **Living Documentation.** Your Playbook and Tracker evolve with your platform.
 
 ---
 
+We look forward to building something exceptional together. Should you have any questions regarding this engagement, please do not hesitate to reach out via WhatsApp.
+
+Respectfully,
+
 **James Adams**
+Chief Automation Officer
 Monarch Stack — Fractional CTO Services
