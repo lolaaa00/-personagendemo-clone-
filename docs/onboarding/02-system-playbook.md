@@ -61,9 +61,9 @@
 
 | Device | Assigned Persona | IP Type | Status |
 |--------|-----------------|---------|--------|
-| Mac A | — | Residential | 🔲 Pending |
-| Mac B | — | Residential | 🔲 Pending |
-| Mac C | — | Residential | 🔲 Pending |
+| Mac A | — | Residential | ☐ Pending |
+| Mac B | — | Residential | ☐ Pending |
+| Mac C | — | Residential | ☐ Pending |
 
 ---
 
@@ -84,7 +84,7 @@
 | KVM 4 | 4 vCPU, 16GB RAM, 200GB NVMe | ~$18–25 | Heavy workloads |
 | KVM 8 | 8 vCPU, 32GB RAM, 400GB NVMe | ~$40–80 | Enterprise |
 
-**Current selection:** 🔲 TBD
+**Current selection:** ☐ TBD
 
 ### 3.2 OpenRouter
 
@@ -115,9 +115,9 @@ OpenRouter charges a **5.5% surcharge** on credits purchased through them, plus 
 
 | Provider | What It Powers | Direct Account | BYOK Injected |
 |----------|---------------|---------------|--------------|
-| Anthropic | Claude (text) | [console.anthropic.com](https://console.anthropic.com) | 🔲 |
-| Black Forest Labs | FLUX.2 (images) | [api.bfl.ml](https://api.bfl.ml) | 🔲 |
-| OpenAI | GPT (text) | [platform.openai.com](https://platform.openai.com) | 🔲 |
+| Anthropic | Claude (text) | [console.anthropic.com](https://console.anthropic.com) | ☐ |
+| Black Forest Labs | FLUX.2 (images) | [api.bfl.ml](https://api.bfl.ml) | ☐ |
+| OpenAI | GPT (text) | [platform.openai.com](https://platform.openai.com) | ☐ |
 
 First 1M BYOK requests/month are free. Saves 5–10% on all AI spend at scale.
 
@@ -129,11 +129,11 @@ Your existing Macs serve as dedicated posting and account creation nodes. One de
 
 | Device | Model | Persona | Setup Complete |
 |--------|-------|---------|---------------|
-| 1 | — | — | 🔲 |
-| 2 | — | — | 🔲 |
-| 3 | — | — | 🔲 |
-| 4 | — | — | 🔲 |
-| 5 | — | — | 🔲 |
+| 1 | — | — | ☐ |
+| 2 | — | — | ☐ |
+| 3 | — | — | ☐ |
+| 4 | — | — | ☐ |
+| 5 | — | — | ☐ |
 
 **Per-device requirements:**
 
@@ -218,9 +218,9 @@ Node.js script → Upload image (HTTP POST to i.instagram.com/rupload_igphoto/)
 
 | Cookie | Lifespan | Risk Level |
 |--------|----------|------------|
-| `sessionid` | 365 days | 🟢 Low |
-| `csrftoken` | 400 days | 🟢 Low |
-| `ds_user_id` | 90 days | 🔴 **First to expire** |
+| `sessionid` | 365 days | Low |
+| `csrftoken` | 400 days | Low |
+| `ds_user_id` | 90 days | **First to expire (High)** |
 
 **Maintenance schedule:**
 - **Day 60:** Preventive session refresh (re-run login capture, ~30s)
@@ -254,7 +254,7 @@ Node.js script → Upload image (HTTP POST to i.instagram.com/rupload_igphoto/)
 
 **Why cloud, not more Macs?** One A100 (~$2.72/hr) delivers ~500+ tok/s batched. One Mac M4 Max does ~10–15 tok/s. Matching one A100 requires 5–6 Macs (~$20K+). Macs are optimally deployed as posting nodes.
 
-**Status:** 🔲 Not yet needed
+**Status:** ☐ Not yet needed
 
 ---
 

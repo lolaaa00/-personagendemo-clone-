@@ -14,6 +14,9 @@
 |---------|------|--------|
 | 1.0 | {{effective_date}} | Project initiated |
 | 1.1 | 2026-05-24 | Direct API posting verified — Create/Read/Update proven live |
+| 1.2 | 2026-05-25 | MSA §7 IP rewritten (perpetual client ownership), §1 Scope updated (client-owned accounts), §10 Infrastructure named stack added |
+| 1.3 | 2026-05-25 | Invoice reissued — $2,500 due May 28, 2026. Prior duplicates voided |
+| 1.4 | 2026-05-25 | Client config completed — rep_name, email, effective_date populated |
 
 ---
 
@@ -21,14 +24,14 @@
 
 | # | Workstream | Status | Owner | ETA |
 |---|-----------|--------|-------|-----|
-| 1 | Agreement & Payment | 🔲 | Client + Monarch | Days 1–2 |
-| 2 | Brand Discovery | 🔲 | Client + Monarch | Day 3 |
-| 3 | Infrastructure Setup | 🔲 | Client + Monarch | Days 4–5 |
-| 4 | Platform Build | 🔲 | Monarch | Weeks 1–3 |
-| 5 | Distribution Network | 🔲 | Client + Monarch | Weeks 3–4 |
-| 6 | Go-Live | 🔲 | Monarch | ~Day 30 |
+| 1 | Agreement & Payment | ▶ | Client + Monarch | Days 1–2 |
+| 2 | Brand Discovery | ☐ | Client + Monarch | Day 3 |
+| 3 | Infrastructure Setup | ☐ | Client + Monarch | Days 4–5 |
+| 4 | Platform Build | ☐ | Monarch | Weeks 1–3 |
+| 5 | Distribution Network | ▶ | Client + Monarch | Weeks 3–4 |
+| 6 | Go-Live | ☐ | Monarch | ~Day 30 |
 
-**Key:** 🔲 Backlog · 🔄 In Progress · 👁️ Review · ✅ Live · ❌ Blocked
+**Key:** ☐ Backlog · ▶ In Progress · ✦ Review · ✔ Live · ✘ Blocked
 
 ---
 
@@ -38,55 +41,55 @@
 
 | Milestone | Owner | Status | Date |
 |-----------|-------|--------|------|
-| MSA signed | Client | 🔲 | — |
-| Payment processed | Client | 🔲 | — |
-| WhatsApp channel live | Monarch | 🔲 | — |
-| Onboarding packet delivered | Monarch | 🔲 | — |
+| MSA signed | Client | ▶ | MSA v1.4 delivered 2026-05-25 |
+| Payment processed | Client | ▶ | Invoice sent — due 2026-05-28 |
+| WhatsApp channel live | Monarch | ✔ | Active |
+| Onboarding packet delivered | Monarch | ✔ | 3-doc set delivered |
 
 ### Phase 2 — Brand Discovery
 
 | Milestone | Owner | Status | Date |
 |-----------|-------|--------|------|
-| Brand brief completed | Client | 🔲 | — |
-| Brand assets received | Client | 🔲 | — |
-| Persona archetypes defined | Monarch | 🔲 | — |
-| Brand voice document compiled | Monarch | 🔲 | — |
+| Brand brief completed | Client | ☐ | — |
+| Brand assets received | Client | ☐ | — |
+| Persona archetypes defined | Monarch | ☐ | — |
+| Brand voice document compiled | Monarch | ☐ | — |
 
 ### Phase 3 — Infrastructure
 *Setup procedures: [Playbook §3](./02-system-playbook.md#3-setup-guide)*
 
 | Milestone | Owner | Status | Date |
 |-----------|-------|--------|------|
-| All client accounts created | Client | 🔲 | — |
-| VPS provisioned (EasyPanel + Docker + n8n) | Monarch | 🔲 | — |
-| OpenRouter + BYOK configured | Monarch | 🔲 | — |
-| DNS + SSL active | Monarch | 🔲 | — |
-| Security hardened | Monarch | 🔲 | — |
-| **Infrastructure health check: all green** | Monarch | 🔲 | — |
+| All client accounts created | Client | ☐ | — |
+| VPS provisioned (EasyPanel + Docker + n8n) | Monarch | ☐ | — |
+| OpenRouter + BYOK configured | Monarch | ☐ | — |
+| DNS + SSL active | Monarch | ☐ | — |
+| Security hardened | Monarch | ☐ | — |
+| **Infrastructure health check: all green** | Monarch | ☐ | — |
 
 ### Phase 4 — Platform Build
 
 | Milestone | Owner | Status | Date |
 |-----------|-------|--------|------|
-| Content pipeline deployed | Monarch | 🔲 | — |
-| Media engine deployed | Monarch | 🔲 | — |
-| Persona database + scheduler live | Monarch | 🔲 | — |
-| Analytics dashboard live | Monarch | 🔲 | — |
-| Persona set generated | Monarch | 🔲 | — |
-| **Client approval on personas** | Client | 🔲 | — |
+| Content pipeline deployed | Monarch | ☐ | — |
+| Media engine deployed | Monarch | ☐ | — |
+| Persona database + scheduler live | Monarch | ☐ | — |
+| Analytics dashboard live | Monarch | ☐ | — |
+| Persona set generated | Monarch | ☐ | — |
+| **Client approval on personas** | Client | ☐ | — |
 
 ### Phase 5 — Distribution Network
 *Device specs & architecture: [Playbook §5](./02-system-playbook.md#5-execution-network)*
 
 | Milestone | Owner | Status | Date |
 |-----------|-------|--------|------|
-| Devices identified + assigned | Client | 🔲 | — |
-| Daemon scripts deployed | Monarch | 🔲 | — |
-| Account creation tested per device | Monarch | 🔲 | — |
-| Direct API posting verified (CRUD) | Monarch | ✅ | 2026-05-24 |
-| Session cookie maintenance documented | Monarch | ✅ | 2026-05-24 |
-| Fingerprint + IP verified | Monarch | 🔲 | — |
-| **Network operational** | Monarch | 🔲 | — |
+| Devices identified + assigned | Client | ☐ | — |
+| Daemon scripts deployed | Monarch | ☐ | — |
+| Account creation tested per device | Monarch | ☐ | — |
+| Direct API posting verified (CRUD) | Monarch | ✔ | 2026-05-24 |
+| Session cookie maintenance documented | Monarch | ✔ | 2026-05-24 |
+| Fingerprint + IP verified | Monarch | ☐ | — |
+| **Network operational** | Monarch | ☐ | — |
 
 ### Phase 6 — Go-Live
 
@@ -94,26 +97,26 @@
 
 | # | Criterion | Pass |
 |---|----------|------|
-| 1 | Containers healthy, auto-restarting | 🔲 |
-| 2 | DNS resolving | 🔲 |
-| 3 | SSL valid, auto-renewing | 🔲 |
-| 4 | Persona output brand-aligned | 🔲 |
-| 5 | Scheduler posting on cadence | 🔲 |
-| 6 | Analytics receiving live data | 🔲 |
-| 7 | Devices posting via real fingerprints | 🔲 |
-| 8 | Auto-posting verified (1+ platform) | 🔲 |
-| 9 | Source code in Client's GitHub | 🔲 |
-| 10 | Live walkthrough completed | 🔲 |
-| 11 | First production post published | 🔲 |
+| 1 | Containers healthy, auto-restarting | ☐ |
+| 2 | DNS resolving | ☐ |
+| 3 | SSL valid, auto-renewing | ☐ |
+| 4 | Persona output brand-aligned | ☐ |
+| 5 | Scheduler posting on cadence | ☐ |
+| 6 | Analytics receiving live data | ☐ |
+| 7 | Devices posting via real fingerprints | ☐ |
+| 8 | Auto-posting verified (1+ platform) | ☐ |
+| 9 | Source code in Client's GitHub | ☐ |
+| 10 | Live walkthrough completed | ☐ |
+| 11 | First production post published | ☐ |
 
 **Handoff:**
 
 | Deliverable | Status |
 |------------|--------|
-| Source code (Client is owner) | 🔲 |
-| Credential bundle | 🔲 |
-| Playbook updated to final state | 🔲 |
-| Device setup guide | 🔲 |
+| Source code (Client is owner) | ☐ |
+| Credential bundle | ☐ |
+| Playbook updated to final state | ☐ |
+| Device setup guide | ☐ |
 
 ---
 
