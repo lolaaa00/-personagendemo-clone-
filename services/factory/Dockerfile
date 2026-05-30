@@ -24,8 +24,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-COPY services/factory/package.json services/factory/package-lock.json* ./
-RUN npm ci --production --ignore-scripts=false
+COPY services/factory/package.json ./
+RUN npm install --omit=dev
 
 COPY services/factory/src/ ./src/
 
