@@ -472,7 +472,8 @@ function compilePortalPages(content, DIST) {
     'persona-config': getElementContent(content, '<div id="portal-view-persona-config"'),
     inbox: getElementContent(content, '<div id="portal-view-inbox"'),
     trends: getElementContent(content, '<div id="portal-view-trends"'),
-    agreement: getElementContent(content, '<div id="portal-view-agreement"')
+    agreement: getElementContent(content, '<div id="portal-view-agreement"'),
+    'brand-brief': getElementContent(content, '<div id="portal-view-brand-brief"')
   };
 
   // Define pages
@@ -486,7 +487,8 @@ function compilePortalPages(content, DIST) {
     { file: 'persona-config.html', title: 'AI Agent Configuration', activeMenu: 'menu-persona-config', view: 'persona-config', hasRightPanel: false, workspaceClass: 'no-right-sidebar' },
     { file: 'inbox.html', title: 'Inbox & Engagement Hub', activeMenu: 'menu-inbox', view: 'inbox', hasRightPanel: false, workspaceClass: 'no-right-sidebar' },
     { file: 'trends.html', title: 'Trending Topics Monitor', activeMenu: 'menu-trends', view: 'trends', hasRightPanel: false, workspaceClass: 'no-right-sidebar' },
-    { file: 'agreement.html', title: 'Managed Plan SOW & SLA', activeMenu: 'menu-agreement', view: 'agreement', hasRightPanel: false, workspaceClass: 'no-right-sidebar' }
+    { file: 'agreement.html', title: 'Managed Plan SOW & SLA', activeMenu: 'menu-agreement', view: 'agreement', hasRightPanel: false, workspaceClass: 'no-right-sidebar' },
+    { file: 'brand-brief.html', title: 'Brand Brief Interview', activeMenu: 'menu-brand-brief', view: 'brand-brief', hasRightPanel: false, workspaceClass: 'no-right-sidebar' }
   ];
 
   pages.forEach(p => {
@@ -505,7 +507,11 @@ function compilePortalPages(content, DIST) {
         generator: 'generator.html',
         pm: 'pm.html',
         accounts: 'accounts.html',
-        agreement: 'agreement.html'
+        'persona-config': 'persona-config.html',
+        inbox: 'inbox.html',
+        trends: 'trends.html',
+        agreement: 'agreement.html',
+        'brand-brief': 'brand-brief.html'
       };
       const href = pageLinkMap[viewId] || 'dashboard.html';
       return `<a href="${href}" class="dash-menu-item${activeClass}">\n                        ${innerHtml.trim()}\n                    </a>`;
