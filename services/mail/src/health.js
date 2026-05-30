@@ -1,7 +1,6 @@
 "use strict";
 
 const http = require("node:http");
-const { execSync } = require("node:child_process");
 
 const HEALTH_PORT = parseInt(process.env.HEALTH_PORT || "8081", 10);
 const MAIL_API_PORT = parseInt(process.env.MAIL_API_PORT || "8080", 10);
@@ -20,40 +19,27 @@ function log(level, msg, extra = {}) {
 
 /**
  * Check if Stalwart mail server process is running.
- * @returns {{ up: boolean, detail: string }}
+ * Uses a direct TCP probe — no system tools needed.
+ * @returns {Promise<{ up: boolean, detail: string }>}
  */
 function checkStalwart() {
-  try {
-    /* Check if any process is listening on port 587 (submission) */
-    const result = execSync(
-      'ss -tlnp | grep ":587" || netstat -tlnp 2>/dev/null | grep ":587" || echo "not found"',
-      { encoding: "utf8", timeout: 5000 }
-    ).trim();
-
-    if (result.includes("not found") || result === "") {
-      return { up: false, detail: "Stalwart not listening on port 587" };
-    }
-    return { up: true, detail: "Stalwart listening on port 587" };
-  } catch (err) {
-    /* Fallback: try to connect to SMTP port */
-    return new Promise((resolve) => {
-      const socket = require("node:net").createConnection(
-        { port: 587, host: "127.0.0.1", timeout: 3000 },
-        () => {
-          socket.destroy();
-          resolve({ up: true, detail: "Stalwart SMTP responsive" });
-        }
-      );
-      socket.on("error", () => {
+  return new Promise((resolve) => {
+    const socket = require("node:net").createConnection(
+      { port: 587, host: "127.0.0.1", timeout: 3000 },
+      () => {
         socket.destroy();
-        resolve({ up: false, detail: "Stalwart SMTP not reachable" });
-      });
-      socket.on("timeout", () => {
-        socket.destroy();
-        resolve({ up: false, detail: "Stalwart SMTP connection timed out" });
-      });
+        resolve({ up: true, detail: "Stalwart SMTP responsive on port 587" });
+      }
+    );
+    socket.on("error", () => {
+      socket.destroy();
+      resolve({ up: false, detail: "Stalwart SMTP not reachable on port 587" });
     });
-  }
+    socket.on("timeout", () => {
+      socket.destroy();
+      resolve({ up: false, detail: "Stalwart SMTP connection timed out" });
+    });
+  });
 }
 
 /**
@@ -92,9 +78,7 @@ function checkAgenticMailAPI() {
 
 const server = http.createServer(async (req, res) => {
   if (req.method === "GET" && req.url === "/health") {
-    const stalwartResult = await Promise.resolve(checkStalwart());
-    const stalwart =
-      stalwartResult instanceof Promise ? await stalwartResult : stalwartResult;
+    const stalwart = await checkStalwart();
     const agenticmail = await checkAgenticMailAPI();
 
     const healthy = stalwart.up && agenticmail.up;
