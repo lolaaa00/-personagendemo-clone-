@@ -434,8 +434,31 @@ const BrandBrief = (() => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return res.json();
+    const text = await res.text();
+    if (!text || text.trim() === '') {
+      throw new Error('Empty response from server');
+    }
+    try {
+      return JSON.parse(text);
+    } catch (e) {
+      console.error('[BrandBrief] Non-JSON response:', text.substring(0, 200));
+      throw new Error('Invalid response format');
+    }
+  }
+
+  function showNotice(msg, type) {
+    const el = container.querySelector('.bb-notice');
+    if (el) el.remove();
+    const notice = document.createElement('div');
+    notice.className = 'bb-notice';
+    notice.style.cssText = `padding:12px 16px;border-radius:8px;margin:1rem 0;font-size:0.85rem;display:flex;align-items:center;gap:8px;${
+      type === 'error' ? 'background:rgba(244,63,94,0.1);border:1px solid rgba(244,63,94,0.2);color:#f87171;' :
+      type === 'success' ? 'background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.2);color:#4ade80;' :
+      'background:rgba(99,102,241,0.1);border:1px solid rgba(99,102,241,0.2);color:#a5b4fc;'
+    }`;
+    notice.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> ${msg}`;
+    const stepContent = container.querySelector('.bb-step-content');
+    if (stepContent) stepContent.prepend(notice);
   }
 
   async function crawl() {
@@ -457,9 +480,13 @@ const BrandBrief = (() => {
         if (result.crawl?.colors && !briefData.colors) briefData.colors = result.crawl.colors;
         if (result.crawl?.typography && !briefData.typography) briefData.typography = result.crawl.typography;
         saveDraft();
+        showNotice('Brand analysis complete! Your data has been pre-filled.', 'success');
+      } else {
+        showNotice('Could not analyze site automatically. You can fill in details manually.', 'info');
       }
     } catch(e) {
       console.error('[BrandBrief] Crawl error:', e);
+      showNotice('Website analysis unavailable — please fill in your brand details manually on the next steps.', 'info');
     }
     isLoading = false;
     render();

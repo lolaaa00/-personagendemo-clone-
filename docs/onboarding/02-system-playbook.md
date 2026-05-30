@@ -235,6 +235,85 @@ Node.js script → Upload image (HTTP POST to i.instagram.com/rupload_igphoto/)
 
 ---
 
+## Account Factory — Automated Account Creation
+
+### Architecture
+
+The Account Factory extends the execution network (§5) with two dedicated Docker services that automate persona account creation end-to-end. Both services deploy from the same repo using separate Dockerfiles, portable across any Docker host via Easypanel.
+
+```
+┌──────────────────────────────────────────────────────┐
+│              Central Coordinator (VPS)               │
+│   • n8n triggers creation jobs                       │
+│   • Dashboard monitors pipeline status               │
+│   • Persona DB supplies identity profiles            │
+└────────────────────┬─────────────────────────────────┘
+                     │ HTTPS / Internal Docker Network
+        ┌────────────┴────────────┐
+        ▼                         ▼
+┌──────────────────┐   ┌──────────────────┐
+│ personagen-      │   │ personagen-      │
+│ factory          │   │ mail             │
+│ ─────────────    │   │ ─────────────    │
+│ CloakBrowser +   │◄──│ AgenticMail      │
+│ Playwright       │   │ SMTP/IMAP/API    │
+│ Stealth profiles │   │ DKIM-signed      │
+│ Proxy routing    │   │ AI-drafted reply │
+│ Session storage  │   │ Verification     │
+└──────────────────┘   └──────────────────┘
+   services/factory/      services/mail/
+   Dockerfile             Dockerfile
+```
+
+### Services
+
+| Service | Technology | Purpose |
+|---------|-----------|---------|
+| `personagen-factory` | CloakBrowser (npm dep) + Playwright | Stealth browser automation — navigates sign-up flows with anti-detect fingerprinting, proxy rotation, and CAPTCHA solving |
+| `personagen-mail` | AgenticMail | Dedicated email identity layer — creates per-persona mailboxes, receives verification codes, sends DKIM-signed emails, drafts AI replies |
+
+### Pipeline Steps
+
+The factory executes a multi-step pipeline for each account creation:
+
+1. **Identity Generation** — Pull persona profile from the persona database (name, bio, photos, voice)
+2. **Email Provisioning** — Request a dedicated `persona@yourdomain.com` mailbox from AgenticMail
+3. **Browser Launch** — Spin up a CloakBrowser instance with stealth fingerprint, configured proxy, and fresh profile
+4. **Sign-Up Flow** — Navigate the target platform's registration pages with human-like delays and interactions
+5. **Email Verification** — AgenticMail receives the verification email, extracts the code/link, feeds it back to the factory
+6. **SMS Verification** — Google Voice integration forwards SMS codes when phone verification is required
+7. **Profile Setup** — Upload avatar, set bio, configure privacy settings via the platform's UI
+8. **Session Capture** — Export browser cookies and session tokens, encrypt with AES-256, store to the factory database
+9. **Callback** — POST status and session data to the n8n webhook for pipeline orchestration
+
+### Session Management Alignment
+
+The factory's session capture (step 8) produces the same cookie artifacts documented in §5.4:
+
+| Cookie | Source | Lifespan | Maintenance |
+|--------|--------|----------|-------------|
+| `sessionid` | Factory capture | 365 days | Auto-refresh at day 60 |
+| `csrftoken` | Factory capture | 400 days | Auto-refresh at day 60 |
+| `ds_user_id` | Factory capture | 90 days | **First to expire — auto-refresh at day 60** |
+
+Sessions captured by the factory are **identical** to sessions from the manual capture flow (§5.2). The on-premise execution nodes consume these sessions transparently — they don't know or care whether the session came from manual login or automated creation.
+
+Health checks run every 24 hours. The factory automatically re-creates sessions that fail health checks, using the same proxy tier and fingerprint profile as the original creation.
+
+### Email Identity Layer
+
+AgenticMail gives each persona a **real, deliverable email address** on the client's domain:
+
+- **Inbound:** Receives platform notifications, verification emails, DM notifications, and fan mail
+- **Outbound:** Sends DKIM-signed emails from the persona's address (brand partnerships, collaborations)
+- **AI Replies:** When `AI_REPLY_ENABLED=true`, drafts contextual replies using the persona's voice profile
+- **Unified Inbox:** All persona mailboxes surface in the dashboard's unified inbox for human review and override
+- **Verification Flow:** Verification codes are extracted automatically and fed back to the factory pipeline — no human intervention needed
+
+> For deployment instructions, see the [Account Factory Client Delivery Guide](../client-delivery/README.md).
+
+---
+
 ## 6. Scaling Roadmap
 
 ### 6.1 GPU Cloud — RunPod (Future)

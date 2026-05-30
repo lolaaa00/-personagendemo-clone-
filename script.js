@@ -1057,11 +1057,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     const heroTitle = document.querySelector('.hero-title');
     if (heroTitle) heroTitle.classList.add('glitch-hover');
 
-    // Onboarding UI initialization
+    // Onboarding UI initialization (only if their DOM exists on this page)
     PIN.init();
-    PM.init();
-    SocialConnections.init();
-    AccountCreator.init();
+    if (document.querySelector('.pm-kanban-board')) PM.init();
+    if (document.querySelector('.sc-platform-grid')) SocialConnections.init();
+    if (document.getElementById('ac-details-name')) AccountCreator.init();
 
     // Setup scroll reveal for portal components
     const portalRevealObserver = new IntersectionObserver((entries) => {
@@ -2182,24 +2182,45 @@ const PM = {
 // ── AI Influencer Account Creator Setup ──
 const AccountCreator = {
   KEY: 'personagen_ai_accounts',
+  FACTORY_KEY: 'personagen_factory_jobs',
   selectedId: 'sofia-rivera',
-  
+  pollingTimers: {},
+
+  // ─── Factory Pipeline Steps ───
+  PIPELINE_STEPS: [
+    { key: 'identity',  label: 'Identity',  icon: '🪪' },
+    { key: 'email',     label: 'Email',     icon: '📧' },
+    { key: 'browser',   label: 'Browser',   icon: '🌐' },
+    { key: 'signup',    label: 'Signup',    icon: '📝' },
+    { key: 'verify',    label: 'Verify',    icon: '✅' },
+    { key: 'profile',   label: 'Profile',   icon: '👤' },
+    { key: 'session',   label: 'Session',   icon: '🔑' },
+  ],
+
   load() {
     return JSON.parse(localStorage.getItem(this.KEY) || '{}');
   },
-  
+
   save(data) {
     localStorage.setItem(this.KEY, JSON.stringify(data));
   },
-  
+
+  loadFactoryJobs() {
+    return JSON.parse(localStorage.getItem(this.FACTORY_KEY) || '{}');
+  },
+
+  saveFactoryJobs(data) {
+    localStorage.setItem(this.FACTORY_KEY, JSON.stringify(data));
+  },
+
   init() {
     this.select(this.selectedId);
     this.updateAllSidebarBadges();
   },
-  
+
   select(personaId) {
     this.selectedId = personaId;
-    
+
     // Update active sidebar item
     document.querySelectorAll('.ac-sidebar-item').forEach(btn => {
       btn.classList.remove('active');
@@ -2208,13 +2229,13 @@ const AccountCreator = {
     if (activeItem) {
       activeItem.classList.add('active');
     }
-    
+
     // Find persona data from DATA (or static fallback if not loaded yet)
     let agent = null;
     if (window.DATA && window.DATA.agents) {
       agent = window.DATA.agents.find(a => a.id === personaId);
     }
-    
+
     // Fallback if data loader isn't completed
     if (!agent) {
       const mockAgents = {
@@ -2241,31 +2262,31 @@ const AccountCreator = {
       };
       agent = mockAgents[personaId];
     }
-    
+
     if (!agent) return;
-    
+
     // Populate layout
     document.getElementById('ac-details-name').textContent = agent.name;
     document.getElementById('ac-details-niche').textContent = agent.niche;
     document.getElementById('ac-market-val').textContent = agent.market;
     document.getElementById('ac-followers-val').textContent = agent.followers;
     document.getElementById('ac-details-bio').textContent = agent.bio;
-    
+
     // Recommendations
     const handleBase = agent.name.toLowerCase().replace(/\s+/g, '');
     document.getElementById('ac-rec-ig').textContent = `@${handleBase}.ai`;
     document.getElementById('ac-rec-tt').textContent = `@${handleBase}_tt`;
     document.getElementById('ac-rec-yt').textContent = `@${handleBase}_shorts`;
-    
+
     // Update Connection inputs/badges based on localStorage
     const saved = this.load();
     const personaAccounts = saved[personaId] || {};
-    
+
     ['ig', 'tt', 'yt'].forEach(platform => {
       const handleInput = document.getElementById(`ac-${platform}-handle-input`);
       const badge = document.getElementById(`ac-${platform}-badge`);
       const btn = document.getElementById(`ac-btn-connect-${platform}`);
-      
+
       if (handleInput && badge && btn) {
         if (personaAccounts[platform]) {
           handleInput.value = personaAccounts[platform];
@@ -2286,18 +2307,269 @@ const AccountCreator = {
         }
       }
     });
+
+    // Render session health badges
+    this.renderHealthBadges(personaId, personaAccounts);
+
+    // Render factory pipeline if active
+    this.renderFactoryPipeline(personaId);
+
+    // Render factory button
+    this.renderFactoryButton(personaId);
   },
-  
+
+  // ─── Session Health Badges ───
+  renderHealthBadges(personaId, personaAccounts) {
+    ['ig', 'tt', 'yt'].forEach(platform => {
+      const container = document.getElementById(`ac-health-${platform}`);
+      if (!container) return;
+
+      if (!personaAccounts[platform]) {
+        container.innerHTML = '';
+        return;
+      }
+
+      // Demo: simulate session health data
+      const healthData = this.getSessionHealth(personaId, platform);
+      const badge = this.getHealthBadgeHtml(healthData);
+      container.innerHTML = `
+        <div class="ac-health-row">
+          ${badge}
+          ${healthData.status !== 'expired' ? `
+            <button class="ac-refresh-session-btn" onclick="AccountCreator.refreshSession('${personaId}', '${platform}')" title="Refresh session">
+              🔄 Refresh
+            </button>
+          ` : ''}
+        </div>
+      `;
+    });
+  },
+
+  getSessionHealth(personaId, platform) {
+    // Demo: generate deterministic health based on persona+platform
+    const seed = (personaId + platform).length;
+    const daysLeft = [45, 22, 8, 0, 60, 15, 3, 90, 28, 5, 0, 35][seed % 12];
+
+    if (daysLeft <= 0) return { status: 'expired', label: 'Expired/Banned', icon: '⚫', daysLeft: 0, color: '#6b7280' };
+    if (daysLeft < 15) return { status: 'critical', label: `Critical (${daysLeft}d)`, icon: '🔴', daysLeft, color: '#ef4444' };
+    if (daysLeft <= 30) return { status: 'expiring', label: `Expiring (${daysLeft}d)`, icon: '🟡', daysLeft, color: '#fbbf24' };
+    return { status: 'active', label: `Active (${daysLeft}d)`, icon: '🟢', daysLeft, color: '#22c55e' };
+  },
+
+  getHealthBadgeHtml(health) {
+    return `<span class="ac-session-health-badge ac-health--${health.status}" style="--health-color:${health.color};">${health.icon} ${health.label}</span>`;
+  },
+
+  async refreshSession(personaId, platform) {
+    const btn = event?.target;
+    if (btn) {
+      btn.textContent = '⏳ Refreshing...';
+      btn.disabled = true;
+    }
+
+    try {
+      await PersonaGenAPI.Factory.refresh(`${personaId}_${platform}`);
+    } catch (e) {
+      console.warn('[AccountCreator] Refresh failed (offline):', e);
+    }
+
+    // Simulate refresh
+    setTimeout(() => {
+      if (btn) {
+        btn.textContent = '✅ Refreshed';
+        btn.disabled = false;
+        setTimeout(() => { btn.textContent = '🔄 Refresh'; }, 2000);
+      }
+      PersonaGenAPI.showToast(`Session refreshed for ${platform.toUpperCase()}`, 'success');
+    }, 1500);
+  },
+
+  // ─── Factory Pipeline ───
+  renderFactoryButton(personaId) {
+    const container = document.getElementById('ac-factory-btn-container');
+    if (!container) return;
+
+    const jobs = this.loadFactoryJobs();
+    const activeJob = jobs[personaId];
+
+    if (activeJob && activeJob.status === 'running') {
+      container.innerHTML = `
+        <button class="ac-factory-btn ac-factory-btn--running" disabled>
+          <span class="ac-factory-btn-spinner"></span> Factory Running...
+        </button>
+      `;
+    } else {
+      container.innerHTML = `
+        <button class="ac-factory-btn" onclick="AccountCreator.startFactory('${personaId}')">
+          🏭 Create Account via Factory
+        </button>
+      `;
+    }
+  },
+
+  renderFactoryPipeline(personaId) {
+    const container = document.getElementById('ac-factory-pipeline');
+    if (!container) return;
+
+    const jobs = this.loadFactoryJobs();
+    const job = jobs[personaId];
+
+    if (!job) {
+      container.innerHTML = '';
+      container.style.display = 'none';
+      return;
+    }
+
+    container.style.display = 'block';
+    const steps = this.PIPELINE_STEPS;
+
+    container.innerHTML = `
+      <div class="ac-pipeline-wrapper">
+        <div class="ac-pipeline-header">
+          <span class="ac-pipeline-title">🏭 Account Factory Pipeline</span>
+          <span class="ac-pipeline-status ac-pipeline-status--${job.status}">${job.status === 'complete' ? '✅ Complete' : job.status === 'error' ? '❌ Failed' : '⏳ Running'}</span>
+        </div>
+        <div class="ac-pipeline-steps">
+          ${steps.map((step, i) => {
+            const stepStatus = job.steps?.[step.key] || 'pending';
+            const statusIcon = stepStatus === 'complete' ? '✅' : stepStatus === 'active' ? '🔄' : stepStatus === 'error' ? '❌' : '⏳';
+            const statusClass = `ac-pipeline-step--${stepStatus}`;
+            return `
+              <div class="ac-pipeline-step ${statusClass}">
+                <div class="ac-pipeline-step-icon">${statusIcon}</div>
+                <div class="ac-pipeline-step-label">${step.icon} ${step.label}</div>
+                ${stepStatus === 'error' ? `<button class="ac-pipeline-retry-btn" onclick="AccountCreator.retryStep('${personaId}', '${step.key}')">↻ Retry</button>` : ''}
+              </div>
+              ${i < steps.length - 1 ? '<div class="ac-pipeline-connector"></div>' : ''}
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
+  },
+
+  async startFactory(personaId) {
+    const jobs = this.loadFactoryJobs();
+
+    // Init job
+    const steps = {};
+    this.PIPELINE_STEPS.forEach(s => { steps[s.key] = 'pending'; });
+    steps['identity'] = 'active';
+
+    jobs[personaId] = {
+      id: 'fj_' + Date.now().toString(36),
+      status: 'running',
+      steps,
+      startedAt: new Date().toISOString(),
+    };
+    this.saveFactoryJobs(jobs);
+    this.renderFactoryButton(personaId);
+    this.renderFactoryPipeline(personaId);
+
+    PersonaGenAPI.showToast('Account Factory started — pipeline in progress...', 'info');
+
+    // Try API
+    try {
+      await PersonaGenAPI.Factory.create({ persona_id: personaId });
+    } catch (e) {
+      console.warn('[AccountCreator] Factory API call failed (offline), simulating:', e);
+    }
+
+    // Start polling simulation
+    this.simulateFactoryPipeline(personaId);
+  },
+
+  simulateFactoryPipeline(personaId) {
+    const stepKeys = this.PIPELINE_STEPS.map(s => s.key);
+    let currentIdx = 0;
+
+    const advanceStep = () => {
+      const jobs = this.loadFactoryJobs();
+      const job = jobs[personaId];
+      if (!job || job.status !== 'running') return;
+
+      // Complete current step
+      job.steps[stepKeys[currentIdx]] = 'complete';
+      currentIdx++;
+
+      if (currentIdx >= stepKeys.length) {
+        // All done
+        job.status = 'complete';
+        this.saveFactoryJobs(jobs);
+        this.renderFactoryPipeline(personaId);
+        this.renderFactoryButton(personaId);
+        PersonaGenAPI.showToast('Account Factory complete! All steps finished.', 'success');
+        return;
+      }
+
+      // Activate next step
+      job.steps[stepKeys[currentIdx]] = 'active';
+      this.saveFactoryJobs(jobs);
+      this.renderFactoryPipeline(personaId);
+
+      // Schedule next advance (simulate varying step durations)
+      const delays = [2000, 3000, 4000, 2500, 3500, 2000, 1500];
+      this.pollingTimers[personaId] = setTimeout(advanceStep, delays[currentIdx] || 3000);
+    };
+
+    // Start first step advancement
+    this.pollingTimers[personaId] = setTimeout(advanceStep, 2500);
+  },
+
+  async retryStep(personaId, stepKey) {
+    const jobs = this.loadFactoryJobs();
+    const job = jobs[personaId];
+    if (!job) return;
+
+    job.steps[stepKey] = 'active';
+    job.status = 'running';
+    this.saveFactoryJobs(jobs);
+    this.renderFactoryPipeline(personaId);
+    this.renderFactoryButton(personaId);
+
+    try {
+      await PersonaGenAPI.Factory.retry(job.id, stepKey);
+    } catch (e) {
+      console.warn('[AccountCreator] Retry failed (offline):', e);
+    }
+
+    // Simulate retry success after delay
+    setTimeout(() => {
+      const jobs2 = this.loadFactoryJobs();
+      const job2 = jobs2[personaId];
+      if (!job2) return;
+      job2.steps[stepKey] = 'complete';
+
+      // Find and activate next pending step
+      const stepKeys = this.PIPELINE_STEPS.map(s => s.key);
+      const nextIdx = stepKeys.indexOf(stepKey) + 1;
+      if (nextIdx < stepKeys.length && job2.steps[stepKeys[nextIdx]] === 'pending') {
+        job2.steps[stepKeys[nextIdx]] = 'active';
+        this.saveFactoryJobs(jobs2);
+        this.renderFactoryPipeline(personaId);
+        this.simulateFactoryPipeline(personaId);
+      } else {
+        // Check if all complete
+        const allDone = stepKeys.every(k => job2.steps[k] === 'complete');
+        job2.status = allDone ? 'complete' : 'running';
+        this.saveFactoryJobs(jobs2);
+        this.renderFactoryPipeline(personaId);
+        this.renderFactoryButton(personaId);
+        if (allDone) PersonaGenAPI.showToast('Account Factory complete!', 'success');
+      }
+    }, 3000);
+  },
+
   connectPlatform(platform) {
     const personaId = this.selectedId;
     const handleInput = document.getElementById(`ac-${platform}-handle-input`);
     const btn = document.getElementById(`ac-btn-connect-${platform}`);
-    
+
     if (!handleInput || !btn) return;
-    
+
     const saved = this.load();
     if (!saved[personaId]) saved[personaId] = {};
-    
+
     if (saved[personaId][platform]) {
       // Disconnect action
       if (!confirm(`Are you sure you want to disconnect this platform?`)) return;
@@ -2307,7 +2579,7 @@ const AccountCreator = {
       this.updateAllSidebarBadges();
       return;
     }
-    
+
     // Connect action
     let handle = handleInput.value.trim();
     if (!handle || handle === '@') {
@@ -2315,30 +2587,30 @@ const AccountCreator = {
       return;
     }
     if (!handle.startsWith('@')) handle = '@' + handle;
-    
+
     // Connection verification with webhook
     btn.textContent = 'Verifying...';
     btn.disabled = true;
-    
+
     setTimeout(() => {
       saved[personaId][platform] = handle;
       this.save(saved);
       this.select(personaId);
       this.updateAllSidebarBadges();
-      
+
       // Mirror connection status to main Social Connections UI
       const mainData = SocialConnections.load();
       mainData[platform] = handle;
       SocialConnections.save(mainData);
       SocialConnections.updateUI(platform, handle);
-      
+
       // Fire webhook to n8n
       PersonaWebhook.fire('social.connect', { personaId, platform, handle, source: 'persona-accounts' });
-      
+
       alert(`Success! Channel ${handle} verified and linked with autonomous content engine.`);
     }, 1200);
   },
-  
+
   updateAllSidebarBadges() {
     // Show green/blue indicator if persona has at least one account connected
     const saved = this.load();
@@ -2367,6 +2639,7 @@ const AccountCreator = {
     });
   }
 };
+
 
 // ── Operations Portal View Switcher ──
 function switchPortalView(viewId, clickedBtn) {

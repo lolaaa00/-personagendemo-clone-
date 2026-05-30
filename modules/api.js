@@ -15,7 +15,10 @@ const PersonaGenAPI = (() => {
     feed:       `${BASE}/personagen-posts`,
     trends:     `${BASE}/personagen-trends`,
     inbox:      `${BASE}/personagen-engagement`,
+    factory:    `${BASE}/personagen-account-factory`,
+    email:      `${BASE}/personagen-email`,
   };
+
 
   // ─── Generic Fetch Wrapper ───
   async function request(endpoint, action, payload = {}) {
@@ -154,6 +157,26 @@ const PersonaGenAPI = (() => {
     }
   };
 
+  // ─── Account Factory ───
+  const Factory = {
+    create(persona)    { return request(`${BASE}/personagen-account-factory`, 'create_account', { persona }); },
+    status(id)         { return request(`${BASE}/personagen-account-factory`, 'check_status', { id }); },
+    retry(id, step)    { return request(`${BASE}/personagen-account-factory`, 'retry', { id, step }); },
+    refresh(id)        { return request(`${BASE}/personagen-account-factory`, 'refresh_session', { id }); },
+    health(id)         { return request(`${BASE}/personagen-account-factory`, 'health_check', { id }); },
+    list()             { return request(`${BASE}/personagen-account-factory`, 'list_accounts', {}); },
+  };
+
+  // ─── Email (AgenticMail) ───
+  const Email = {
+    listInbox(personaId)      { return request(`${BASE}/personagen-email`, 'list', { persona_id: personaId }); },
+    getThread(threadId)       { return request(`${BASE}/personagen-email`, 'thread', { thread_id: threadId }); },
+    send(personaId, msg)      { return request(`${BASE}/personagen-email`, 'send', { persona_id: personaId, ...msg }); },
+    draft(personaId, emailId) { return request(`${BASE}/personagen-email`, 'ai_draft', { persona_id: personaId, email_id: emailId }); },
+    approve(emailId)          { return request(`${BASE}/personagen-email`, 'approve_send', { email_id: emailId }); },
+    search(personaId, query)  { return request(`${BASE}/personagen-email`, 'search', { persona_id: personaId, q: query }); },
+  };
+
   // ─── Toast Notifications ───
   function showToast(message, type = 'success') {
     let toast = document.getElementById('pg-toast');
@@ -170,5 +193,5 @@ const PersonaGenAPI = (() => {
     toast._timer = setTimeout(() => toast.classList.remove('pg-toast--visible'), 4000);
   }
 
-  return { Posts, Generate, Publish, Accounts, Feed, Trends, Inbox, Local, showToast, ENDPOINTS };
+  return { Posts, Generate, Publish, Accounts, Feed, Trends, Inbox, Factory, Email, Local, showToast, ENDPOINTS };
 })();

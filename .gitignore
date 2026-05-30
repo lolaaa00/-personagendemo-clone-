@@ -41,3 +41,13 @@ Thumbs.db
 screenshots/
 **/screenshots/
 
+# Account Factory
+services/factory/data/
+services/factory/node_modules/
+services/mail/data/
+services/mail/node_modules/
+*.db
+*.db-journal
+services/factory/src/data/
+services/mail/src/data/
+

@@ -927,6 +927,7 @@
                                                         <span style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); font-size: 0.65rem; color: var(--text-dim);">Rec: <span id="ac-rec-ig">@sofiarivera.ai</span></span>
                                                     </div>
                                                     <button class="ii-btn btn-connect" id="ac-btn-connect-ig" onclick="AccountCreator.connectPlatform('ig')">Link Account</button>
+                                                    <div id="ac-health-ig" style="grid-column: 1 / -1;"></div>
                                                 </div>
                                                 
                                                 <!-- TikTok -->
@@ -940,6 +941,7 @@
                                                         <span style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); font-size: 0.65rem; color: var(--text-dim);">Rec: <span id="ac-rec-tt">@sofiarivera_tt</span></span>
                                                     </div>
                                                     <button class="ii-btn btn-connect" id="ac-btn-connect-tt" onclick="AccountCreator.connectPlatform('tt')">Link Account</button>
+                                                    <div id="ac-health-tt" style="grid-column: 1 / -1;"></div>
                                                 </div>
                                                 
                                                 <!-- YouTube -->
@@ -953,8 +955,13 @@
                                                         <span style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); font-size: 0.65rem; color: var(--text-dim);">Rec: <span id="ac-rec-yt">@sofiarivera_shorts</span></span>
                                                     </div>
                                                     <button class="ii-btn btn-connect" id="ac-btn-connect-yt" onclick="AccountCreator.connectPlatform('yt')">Link Account</button>
+                                                    <div id="ac-health-yt" style="grid-column: 1 / -1;"></div>
                                                 </div>
                                             </div>
+                                            <!-- Factory Create Button -->
+                                            <div id="ac-factory-btn-container" style="margin-top: 1rem;"></div>
+                                            <!-- Factory Pipeline Tracker -->
+                                            <div id="ac-factory-pipeline"></div>
                                         </div>
                                     </div>
                                 </div>
@@ -1550,6 +1557,7 @@
     <script src="modules/composer.js"></script>
     <script src="modules/calendar-dynamic.js"></script>
     <script src="modules/persona-config.js"></script>
+    <script src="modules/inbox-email.js"></script>
     <script src="modules/inbox.js"></script>
     <script src="modules/trends.js"></script>
     <script src="modules/brand-brief.js"></script>

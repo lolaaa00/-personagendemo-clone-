@@ -173,5 +173,23 @@
     "hero_badge": "🍯 Built for HoneyX · AI-Powered UGC Automation",
     "hero_title": "Generate UGC Creators<br><span class=\"gradient-text\">That Sell Autonomously</span>",
     "hero_subtitle": "Generate AI influencers that create UGC product content, post autonomously, and drive conversions for your e-commerce brand — from scout to sale, fully automated."
+  },
+
+  "account_factory": {
+    "enabled": true,
+    "factory_url": "{{FACTORY_URL}}",
+    "factory_api_key": "{{FACTORY_API_KEY}}",
+    "mail_url": "{{MAIL_URL}}",
+    "mail_api_key": "{{MAIL_API_KEY}}",
+    "email_domain": "{{CLIENT_DOMAIN}}",
+    "proxy_tier": 0,
+    "creation_limits": {
+      "max_per_day": 3,
+      "cooldown_minutes": 30
+    },
+    "session_maintenance": {
+      "refresh_at_day": 60,
+      "health_check_hours": 24
+    }
   }
 }

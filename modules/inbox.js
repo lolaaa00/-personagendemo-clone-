@@ -1,14 +1,16 @@
 // ═══════════════════════════════════════════════════════════════
-// PersonaGen Inbox Hub — Comments, DMs, Mentions management
+// PersonaGen Inbox Hub — Unified Inbox with Channel Tabs
+// Comments, DMs, Mentions, Email, SMS management
 // AI-generated reply drafts with human approval workflow
 // ═══════════════════════════════════════════════════════════════
 
 const InboxHub = (() => {
   let selectedPersona = 'all';
-  let activeFilter = 'all';
+  let activeFilter = 'all';       // sub-filter within channel
+  let activeChannel = 'all';      // 'all' | 'email' | 'social' | 'sms'
   let inboxItems = [];
 
-  // Demo data for initial display
+  // Demo data for initial display (social items)
   const DEMO_ITEMS = [
     {
       id: 'inbox_1', persona_id: '@sofiarivera.ai', persona_name: 'Sofia Rivera',
@@ -62,18 +64,46 @@ const InboxHub = (() => {
     instagram: { icon: '📷', bg: '#e1306c', border: false },
     tiktok: { icon: '♪', bg: '#000', border: true },
     reddit: { icon: '⬆', bg: '#ff4500', border: false },
+    email: { icon: '📧', bg: '#4285f4', border: false },
+    sms: { icon: '📱', bg: '#34a853', border: false },
   };
 
   const TYPE_LABELS = {
     comment: { icon: '💬', label: 'Comment' },
     dm: { icon: '✉️', label: 'Direct Message' },
     mention: { icon: '📣', label: 'Mention' },
+    email: { icon: '📧', label: 'Email' },
+    sms: { icon: '📱', label: 'SMS' },
+  };
+
+  // ─── Sub-filter definitions per channel ───
+  const CHANNEL_SUBFILTERS = {
+    all: [],
+    social: [
+      { key: 'all', label: 'All' },
+      { key: 'comment', label: '💬 Comments' },
+      { key: 'dm', label: '✉️ DMs' },
+      { key: 'mention', label: '📣 Mentions' },
+    ],
+    email: [
+      { key: 'all', label: 'All' },
+      { key: 'inbox', label: '📥 Inbox' },
+      { key: 'drafts', label: '📝 Drafts' },
+      { key: 'sent', label: '📤 Sent' },
+    ],
+    sms: [
+      { key: 'all', label: 'All' },
+      { key: 'received', label: '📥 Received' },
+      { key: 'sent', label: '📤 Sent' },
+    ],
   };
 
   function init(containerId) {
     const container = document.getElementById(containerId);
     if (!container) return;
     inboxItems = loadItems();
+    // Init email module
+    if (typeof InboxEmail !== 'undefined') InboxEmail.init();
     container.innerHTML = renderShell();
     renderItems();
   }
@@ -92,22 +122,44 @@ const InboxHub = (() => {
     localStorage.setItem('personagen_inbox', JSON.stringify(inboxItems));
   }
 
+  // ─── Channel Counts ───
+  function getChannelCounts() {
+    const socialCount = inboxItems.length;
+    const emailCounts = (typeof InboxEmail !== 'undefined') ? InboxEmail.getCounts() : { email: 0, sms: 0, total: 0 };
+    return {
+      all: socialCount + emailCounts.total,
+      social: socialCount,
+      email: emailCounts.email,
+      sms: emailCounts.sms,
+    };
+  }
+
   function renderShell() {
     const personas = (typeof INFLUENCERS !== 'undefined') ? INFLUENCERS : [];
+    const counts = getChannelCounts();
 
     return `
       <div class="inbox-wrapper">
-        <!-- Toolbar -->
+        <!-- Channel Tabs (Row 1) -->
         <div class="inbox-toolbar">
           <div class="inbox-toolbar-left">
-            <div class="inbox-filter-tabs">
-              <button class="inbox-filter-tab active" data-filter="all" onclick="InboxHub.setFilter('all')">All</button>
-              <button class="inbox-filter-tab" data-filter="comment" onclick="InboxHub.setFilter('comment')">💬 Comments</button>
-              <button class="inbox-filter-tab" data-filter="dm" onclick="InboxHub.setFilter('dm')">✉️ DMs</button>
-              <button class="inbox-filter-tab" data-filter="mention" onclick="InboxHub.setFilter('mention')">📣 Mentions</button>
+            <div class="inbox-channel-tabs">
+              <button class="inbox-channel-tab active" data-channel="all" onclick="InboxHub.setChannel('all')">
+                All <span class="inbox-channel-count">${counts.all}</span>
+              </button>
+              <button class="inbox-channel-tab" data-channel="email" onclick="InboxHub.setChannel('email')">
+                📧 Email <span class="inbox-channel-count">${counts.email}</span>
+              </button>
+              <button class="inbox-channel-tab" data-channel="social" onclick="InboxHub.setChannel('social')">
+                💬 Social <span class="inbox-channel-count">${counts.social}</span>
+              </button>
+              <button class="inbox-channel-tab" data-channel="sms" onclick="InboxHub.setChannel('sms')">
+                📱 SMS <span class="inbox-channel-count">${counts.sms}</span>
+              </button>
             </div>
           </div>
           <div class="inbox-toolbar-right">
+            <button class="inbox-compose-btn" onclick="InboxHub.openCompose()" title="Compose new email">✉️ Compose</button>
             <select class="inbox-persona-select" onchange="InboxHub.setPersona(this.value)">
               <option value="all">All Personas</option>
               ${personas.map(p => `<option value="${p.handle}">${p.name}</option>`).join('')}
@@ -116,18 +168,58 @@ const InboxHub = (() => {
           </div>
         </div>
 
+        <!-- Sub-filter Tabs (Row 2) — context-dependent -->
+        <div class="inbox-subfilter-row" id="inbox-subfilter-row"></div>
+
         <!-- Items List -->
         <div class="inbox-list" id="inbox-list"></div>
       </div>
     `;
   }
 
+  function renderSubfilters() {
+    const row = document.getElementById('inbox-subfilter-row');
+    if (!row) return;
+
+    const subfilters = CHANNEL_SUBFILTERS[activeChannel] || [];
+    if (subfilters.length === 0) {
+      row.innerHTML = '';
+      row.style.display = 'none';
+      return;
+    }
+
+    row.style.display = '';
+    row.innerHTML = `
+      <div class="inbox-filter-tabs">
+        ${subfilters.map(sf => `
+          <button class="inbox-filter-tab ${activeFilter === sf.key ? 'active' : ''}"
+                  data-filter="${sf.key}"
+                  onclick="InboxHub.setFilter('${sf.key}')">
+            ${sf.label}
+          </button>
+        `).join('')}
+      </div>
+    `;
+  }
+
   function renderItems() {
+    renderSubfilters();
+    updateChannelTabs();
+
+    // Delegate to InboxEmail for email/sms channels
+    if (activeChannel === 'email' || activeChannel === 'sms') {
+      if (typeof InboxEmail !== 'undefined') {
+        InboxEmail.renderItems(activeChannel, activeFilter, selectedPersona);
+      }
+      return;
+    }
+
     const list = document.getElementById('inbox-list');
     const counter = document.getElementById('inbox-counter');
     if (!list) return;
 
     const filtered = inboxItems.filter(item => {
+      // For 'social' channel, show all social items; for 'all', show social items
       if (activeFilter !== 'all' && item.type !== activeFilter) return false;
       if (selectedPersona !== 'all' && item.persona_id !== selectedPersona) return false;
       return true;
@@ -199,6 +291,21 @@ const InboxHub = (() => {
         `}
       </div>
     `;
+  }
+
+  // ─── Channel / Filter Controls ───
+  function setChannel(channel) {
+    activeChannel = channel;
+    activeFilter = 'all';
+    // Update channel tab active states
+    updateChannelTabs();
+    renderItems();
+  }
+
+  function updateChannelTabs() {
+    document.querySelectorAll('.inbox-channel-tab').forEach(t => {
+      t.classList.toggle('active', t.dataset.channel === activeChannel);
+    });
   }
 
   // ─── Actions ───
@@ -307,6 +414,14 @@ const InboxHub = (() => {
     renderItems();
   }
 
+  function openCompose() {
+    if (typeof InboxEmail !== 'undefined') {
+      InboxEmail.compose();
+    } else {
+      PersonaGenAPI.showToast('Email module not loaded', 'warning');
+    }
+  }
+
   function getTimeAgo(isoStr) {
     const diff = Date.now() - new Date(isoStr).getTime();
     const mins = Math.floor(diff / 60000);
@@ -317,7 +432,18 @@ const InboxHub = (() => {
     return `${days}d ago`;
   }
 
-  return { init, setFilter, setPersona, approve, generateReply, regenerate, ignore };
+  return {
+    init,
+    setFilter,
+    setChannel,
+    setPersona,
+    approve,
+    generateReply,
+    regenerate,
+    ignore,
+    openCompose,
+    getChannelCounts,
+  };
 })();
 
 // Auto-init on built sub-pages
