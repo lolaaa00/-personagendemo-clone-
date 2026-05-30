@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-COPY src/ ./src/
+COPY services/mail/src/ ./src/
 
 RUN mkdir -p /data/stalwart /data/dkim /var/log/supervisor
 

@@ -24,10 +24,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-COPY package.json package-lock.json* ./
+COPY services/factory/package.json services/factory/package-lock.json* ./
 RUN npm ci --production --ignore-scripts=false
 
-COPY src/ ./src/
+COPY services/factory/src/ ./src/
 
 RUN mkdir -p /data/profiles /data/screenshots
 
