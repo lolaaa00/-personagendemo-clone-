@@ -10,6 +10,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="tokens.css">
     <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="modules/modules.css">
 </head>
 <body>
     <div class="grain-overlay" aria-hidden="true"></div>
@@ -45,6 +46,9 @@
                 <a href="#calendar" class="pg-nav-link portal-nav-item" style="display:none;">Calendar</a>
                 <a href="#dashboard" class="pg-nav-link portal-nav-item" style="display:none;">Dashboard</a>
                 <a href="#account-creator" class="pg-nav-link portal-nav-item" style="display:none;">AI Accounts</a>
+                <a href="#persona-config" class="pg-nav-link portal-nav-item" style="display:none;" onclick="switchPortalView('persona-config')">Persona Config</a>
+                <a href="#inbox" class="pg-nav-link portal-nav-item" style="display:none;" onclick="switchPortalView('inbox')">Inbox</a>
+                <a href="#trends" class="pg-nav-link portal-nav-item" style="display:none;" onclick="switchPortalView('trends')">Trends</a>
                 <a href="#project-manager" class="pg-nav-link portal-nav-item" style="display:none;">Projects</a>
                 <a href="#agreement-details" class="pg-nav-link portal-nav-item" style="display:none;">Agreement</a>
             </div>
@@ -68,6 +72,9 @@
       <a href="#calendar" class="pg-nav-link portal-nav-item" style="display:none;" onclick="toggleNav()">Calendar</a>
       <a href="#dashboard" class="pg-nav-link portal-nav-item" style="display:none;" onclick="toggleNav()">Dashboard</a>
       <a href="#account-creator" class="pg-nav-link portal-nav-item" style="display:none;" onclick="toggleNav()">AI Accounts</a>
+      <a href="#persona-config" class="pg-nav-link portal-nav-item" style="display:none;" onclick="switchPortalView('persona-config'); toggleNav()">Persona Config</a>
+      <a href="#inbox" class="pg-nav-link portal-nav-item" style="display:none;" onclick="switchPortalView('inbox'); toggleNav()">Inbox</a>
+      <a href="#trends" class="pg-nav-link portal-nav-item" style="display:none;" onclick="switchPortalView('trends'); toggleNav()">Trends</a>
       <a href="#project-manager" class="pg-nav-link portal-nav-item" style="display:none;" onclick="toggleNav()">Projects</a>
       <a href="#agreement-details" class="pg-nav-link portal-nav-item" style="display:none;" onclick="toggleNav()">Agreement</a>
     </nav>
@@ -339,6 +346,15 @@
                     </button>
                     <button class="dash-menu-item" onclick="switchPortalView('accounts', this)">
                         <span>🔌</span> Connected Accounts
+                    </button>
+                    <button class="dash-menu-item" onclick="switchPortalView('persona-config', this)">
+                        <span>🧠</span> Persona Config
+                    </button>
+                    <button class="dash-menu-item" onclick="switchPortalView('inbox', this)">
+                        <span>📬</span> Inbox & Engagement
+                    </button>
+                    <button class="dash-menu-item" onclick="switchPortalView('trends', this)">
+                        <span>📈</span> Trend Monitor
                     </button>
                     <button class="dash-menu-item" onclick="switchPortalView('agreement', this)">
                         <span>📜</span> SLA & Agreement
@@ -650,7 +666,10 @@
                             <div id="dash-sec-calendar" style="margin-top: 4rem; padding-top: 3rem; border-top: 1px solid rgba(255,255,255,0.05);">
                                 <span class="section-tag tag-blue">Autonomous Content</span>
                                 <h2 class="section-title" style="margin-bottom: 0.5rem;">AI-Generated Content Calendar</h2>
-                                <p class="section-lead" style="margin-bottom: 2rem;">Every agent autonomously generates and schedules a full week of platform-native content. Drag files from your Media Library to schedule posts.</p>
+                                <p class="section-lead" style="margin-bottom: 2rem;">Every agent autonomously generates and schedules a full week of platform-native content. Use the dynamic calendar to manage posts, or the weekly grid to drag-and-drop schedule.</p>
+                                
+                                <!-- Dynamic Calendar (new) -->
+                                <div id="dynamic-calendar-mount" style="margin-bottom: 2.5rem;"></div>
                                 
                                 <div class="sched-container">
                                     <div class="sched-week-header">
@@ -986,8 +1005,43 @@
                                 </div>
                             </section>
                         </div>
-                        
-                        <!-- 7. AGREEMENT SUBVIEW -->
+                        <!-- 7. PERSONA CONFIG SUBVIEW -->
+                        <div id="portal-view-persona-config" class="portal-subview">
+                            <section class="slide" style="padding:0;">
+                                <div class="slide-inner" style="max-width:100%; padding:0;">
+                                    <span class="section-tag tag-violet" style="background: var(--accent-soft); color: var(--accent);">AI Agent Configuration</span>
+                                    <h2 class="section-title">Persona Agent Configs</h2>
+                                    <p class="section-lead">Edit soul.md, tools.md, skills.md, and heartbeat.md — the personality files that drive AI content generation, posting style, and engagement behavior for each persona.</p>
+                                    <div id="persona-config-mount" style="margin-top: 1.5rem;"></div>
+                                </div>
+                            </section>
+                        </div>
+
+                        <!-- 8. INBOX & ENGAGEMENT SUBVIEW -->
+                        <div id="portal-view-inbox" class="portal-subview">
+                            <section class="slide" style="padding:0;">
+                                <div class="slide-inner" style="max-width:100%; padding:0;">
+                                    <span class="section-tag tag-blue">Engagement Hub</span>
+                                    <h2 class="section-title">Inbox & AI Replies</h2>
+                                    <p class="section-lead">Comments, DMs, and mentions received by your AI personas — with AI-generated reply drafts ready for human review and approval.</p>
+                                    <div id="inbox-mount" style="margin-top: 1.5rem;"></div>
+                                </div>
+                            </section>
+                        </div>
+
+                        <!-- 9. TREND MONITOR SUBVIEW -->
+                        <div id="portal-view-trends" class="portal-subview">
+                            <section class="slide" style="padding:0;">
+                                <div class="slide-inner" style="max-width:100%; padding:0;">
+                                    <span class="section-tag tag-teal" style="background: var(--success-soft); color: var(--success);">Trend Intelligence</span>
+                                    <h2 class="section-title">Trending Topics Monitor</h2>
+                                    <p class="section-lead">Real-time trending topics and hashtags across platforms in each persona's niche — auto-refreshed every 6 hours by the trend scanner workflow.</p>
+                                    <div id="trends-mount" style="margin-top: 1.5rem;"></div>
+                                </div>
+                            </section>
+                        </div>
+
+                        <!-- 10. AGREEMENT SUBVIEW -->
                         <div id="portal-view-agreement" class="portal-subview">
                             <!-- Portal Hero -->
                             <div style="text-align: center; padding: 2rem 0; border-bottom: 1px solid var(--border); margin-bottom: 2rem;">
@@ -1543,6 +1597,12 @@
 
     <script src="data-loader.js"></script>
     <script src="script.js"></script>
+    <script src="modules/api.js"></script>
+    <script src="modules/composer.js"></script>
+    <script src="modules/calendar-dynamic.js"></script>
+    <script src="modules/persona-config.js"></script>
+    <script src="modules/inbox.js"></script>
+    <script src="modules/trends.js"></script>
     <script>
     function toggleNav() {
       const btn = document.getElementById('pg-hamburger');
@@ -1557,6 +1617,16 @@
         btn.classList.remove('open');
         drawer.classList.remove('open');
       }
+    });
+
+    // Initialize Dynamic Calendar when portal loads
+    document.addEventListener('DOMContentLoaded', function() {
+      // Wait a tick so CALENDARS data is loaded
+      setTimeout(function() {
+        if (document.getElementById('dynamic-calendar-mount') && typeof DynamicCalendar !== 'undefined') {
+          DynamicCalendar.init('dynamic-calendar-mount');
+        }
+      }, 200);
     });
     </script>
 </body>

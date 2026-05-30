@@ -1373,6 +1373,16 @@ const PersonaWebhook = {
 const SocialConnections = {
   KEY: 'personagen_social_connections',
   
+  // Platform → Composio app mapping
+  COMPOSIO_APPS: {
+    ig: { app: 'INSTAGRAM', name: 'Instagram', icon: 'IG' },
+    tt: { app: 'TIKTOK', name: 'TikTok', icon: 'TT' },
+    yt: { app: 'YOUTUBE', name: 'YouTube', icon: 'YT' },
+    x:  { app: 'TWITTER', name: 'Twitter/X', icon: '𝕏' },
+    ln: { app: 'LINKEDIN', name: 'LinkedIn', icon: 'LI' },
+    reddit: { app: 'REDDIT', name: 'Reddit', icon: 'RD' },
+  },
+  
   load() {
     return JSON.parse(localStorage.getItem(this.KEY) || '{}');
   },
@@ -1384,35 +1394,127 @@ const SocialConnections = {
   init() {
     const data = this.load();
     Object.keys(data).forEach(platform => {
-      this.updateUI(platform, data[platform]);
+      if (typeof data[platform] === 'string') {
+        this.updateUI(platform, data[platform]);
+      } else if (data[platform]?.handle) {
+        this.updateUI(platform, data[platform].handle);
+      }
+    });
+    
+    // Listen for OAuth callback messages
+    window.addEventListener('message', (e) => {
+      if (e.data?.type === 'composio_auth_complete') {
+        this._handleOAuthCallback(e.data);
+      }
     });
   },
   
-  connect(platform) {
-    const names = {
-      ig: 'Instagram',
-      tt: 'TikTok',
-      yt: 'YouTube',
-      x: 'Twitter/X',
-      ln: 'LinkedIn'
-    };
+  connect(platform, personaId) {
+    const appInfo = this.COMPOSIO_APPS[platform];
+    if (!appInfo) {
+      console.error('[SocialConnections] Unknown platform:', platform);
+      return;
+    }
     
-    const handle = prompt(`Enter your ${names[platform]} handle:`, "@");
+    // Determine the persona (entity) for Composio
+    const entityId = personaId || 'default';
+    
+    // Build the OAuth initiation URL via n8n webhook
+    const baseUrl = PersonaGenConfig.webhook_url;
+    const oauthUrl = `${baseUrl}?event=oauth_init&platform=${platform}&app=${appInfo.app}&entity_id=${entityId}&callback=${encodeURIComponent(window.location.origin)}`;
+    
+    // Open OAuth popup
+    const popup = window.open(oauthUrl, 'composio_oauth', 'width=600,height=700,scrollbars=yes,resizable=yes');
+    
+    // If popup blocked, fall back to handle entry
+    if (!popup || popup.closed) {
+      this._fallbackConnect(platform, entityId);
+      return;
+    }
+    
+    // Track popup state
+    const statusBadge = document.getElementById(`${platform}-status-badge`);
+    const btn = document.getElementById(`btn-connect-${platform}`);
+    if (statusBadge) { statusBadge.textContent = 'Connecting...'; statusBadge.className = 'ii-status connecting'; }
+    if (btn) { btn.textContent = 'Authenticating...'; btn.disabled = true; }
+    
+    // Poll for popup close (user might close without completing)
+    const pollTimer = setInterval(() => {
+      if (popup.closed) {
+        clearInterval(pollTimer);
+        // Check if we got a callback already
+        setTimeout(() => {
+          const data = this.load();
+          if (!data[platform] || (typeof data[platform] === 'object' && !data[platform].connected)) {
+            // Popup closed without completing — reset UI
+            if (statusBadge) { statusBadge.textContent = 'Inactive'; statusBadge.className = 'ii-status disconnected'; }
+            if (btn) { btn.textContent = 'Connect Platform'; btn.disabled = false; }
+          }
+        }, 1000);
+      }
+    }, 1000);
+  },
+  
+  _handleOAuthCallback(data) {
+    const { platform, handle, entity_id, connected, error } = data;
+    
+    if (error) {
+      PersonaGenAPI.showToast(`OAuth failed: ${error}`, 'error');
+      return;
+    }
+    
+    if (connected && platform) {
+      const connData = this.load();
+      connData[platform] = {
+        handle: handle || `@${platform}_user`,
+        entity_id: entity_id || 'default',
+        connected: true,
+        connected_at: new Date().toISOString(),
+        auth_method: 'composio_oauth',
+      };
+      this.save(connData);
+      
+      // Fire webhook to n8n
+      PersonaWebhook.fire('social.connect', {
+        platform,
+        handle: connData[platform].handle,
+        entity_id: entity_id,
+        auth_method: 'composio_oauth',
+        source: 'main-dashboard',
+      });
+      
+      this.updateUI(platform, connData[platform].handle);
+      PersonaGenAPI.showToast(`${this.COMPOSIO_APPS[platform]?.name || platform} connected via OAuth!`, 'success');
+    }
+  },
+  
+  _fallbackConnect(platform, entityId) {
+    // Fallback: manual handle entry when popup is blocked
+    const names = this.COMPOSIO_APPS;
+    const name = names[platform]?.name || platform;
+    
+    const handle = prompt(`Popup blocked. Enter your ${name} handle manually:`, "@");
     if (!handle || handle.trim() === '@' || handle.trim() === '') return;
     
     const cleanHandle = handle.trim().startsWith('@') ? handle.trim() : '@' + handle.trim();
     
     const data = this.load();
-    data[platform] = cleanHandle;
+    data[platform] = {
+      handle: cleanHandle,
+      entity_id: entityId,
+      connected: true,
+      connected_at: new Date().toISOString(),
+      auth_method: 'manual',
+    };
     this.save(data);
     
-    // Fire webhook to n8n
-    PersonaWebhook.fire('social.connect', { platform, handle: cleanHandle, source: 'main-dashboard' });
+    PersonaWebhook.fire('social.connect', { platform, handle: cleanHandle, entity_id: entityId, auth_method: 'manual', source: 'main-dashboard' });
     
     this.updateUI(platform, cleanHandle);
   },
   
   updateUI(platform, handle) {
+    const displayHandle = typeof handle === 'object' ? handle.handle : handle;
     const statusBadge = document.getElementById(`${platform}-status-badge`);
     const handleLabel = document.getElementById(`${platform}-handle-label`);
     const btn = document.getElementById(`btn-connect-${platform}`);
@@ -1420,8 +1522,9 @@ const SocialConnections = {
     if (statusBadge && handleLabel && btn) {
       statusBadge.textContent = 'Active';
       statusBadge.className = 'ii-status connected';
-      handleLabel.textContent = `Connected · ${handle}`;
+      handleLabel.textContent = `Connected · ${displayHandle}`;
       btn.textContent = 'Disconnect';
+      btn.disabled = false;
       btn.setAttribute('onclick', `SocialConnections.disconnect('${platform}')`);
       btn.style.background = 'rgba(239, 68, 68, 0.1)';
       btn.style.color = 'var(--rose)';
@@ -1432,8 +1535,9 @@ const SocialConnections = {
   disconnect(platform) {
     if (!confirm(`Are you sure you want to disconnect this platform?`)) return;
     
-    const oldHandle = this.load()[platform];
     const data = this.load();
+    const oldData = data[platform];
+    const oldHandle = typeof oldData === 'string' ? oldData : oldData?.handle;
     delete data[platform];
     this.save(data);
     
@@ -1454,7 +1558,27 @@ const SocialConnections = {
       btn.style.color = 'var(--accent)';
       btn.style.border = 'none';
     }
-  }
+  },
+  
+  // Get connection status for a specific persona+platform
+  isConnected(platform) {
+    const data = this.load();
+    const entry = data[platform];
+    if (!entry) return false;
+    return typeof entry === 'string' ? true : entry.connected === true;
+  },
+  
+  // Get all connected platforms
+  getConnected() {
+    const data = this.load();
+    return Object.entries(data)
+      .filter(([_, v]) => typeof v === 'string' ? true : v?.connected)
+      .map(([platform, v]) => ({
+        platform,
+        handle: typeof v === 'string' ? v : v.handle,
+        auth_method: typeof v === 'string' ? 'manual' : v.auth_method,
+      }));
+  },
 };
 
 // ── Project Manager (localStorage + onboarding tasks from docs) ──
@@ -2236,9 +2360,23 @@ function switchPortalView(viewId, clickedBtn) {
       'generator': 'Interactive Creator & Roster',
       'pm': 'Support Tickets & Requests',
       'accounts': 'Connected Platform Handles',
+      'persona-config': 'AI Agent Configuration',
+      'inbox': 'Inbox & Engagement Hub',
+      'trends': 'Trending Topics Monitor',
       'agreement': 'Managed Plan SOW & SLA'
     };
     titleEl.textContent = titles[viewId] || 'Operations Dashboard';
+  }
+
+  // Initialize modules on first visit
+  if (viewId === 'persona-config' && !document.querySelector('.pce-layout')) {
+    PersonaConfigEditor.init('persona-config-mount');
+  }
+  if (viewId === 'inbox' && !document.querySelector('.inbox-wrapper')) {
+    InboxHub.init('inbox-mount');
+  }
+  if (viewId === 'trends' && !document.querySelector('.trends-wrapper')) {
+    TrendMonitor.init('trends-mount');
   }
 
   // Handle right sidebar collapse

@@ -72,6 +72,13 @@ if (fs.existsSync(ASSETS_SRC)) {
   console.log(`  ✓ Copied assets/ directory`);
 }
 
+// ── Copy modules directory ──
+const MODULES_SRC = path.join(__dirname, 'modules');
+if (fs.existsSync(MODULES_SRC)) {
+  copyDir(MODULES_SRC, path.join(DIST, 'modules'));
+  console.log(`  ✓ Copied modules/ directory`);
+}
+
 // ── Template Processing ──
 
 /**
@@ -462,6 +469,9 @@ function compilePortalPages(content, DIST) {
     calendar: getElementContent(content, '<div id="dash-sec-calendar"').replace(/style="[^"]*margin-top[^"]*"/, 'style="margin-top: 0; padding-top: 0; border-top: none;"'),
     pm: getElementContent(content, '<div id="portal-view-pm"'),
     accounts: getElementContent(content, '<div id="portal-view-accounts"'),
+    'persona-config': getElementContent(content, '<div id="portal-view-persona-config"'),
+    inbox: getElementContent(content, '<div id="portal-view-inbox"'),
+    trends: getElementContent(content, '<div id="portal-view-trends"'),
     agreement: getElementContent(content, '<div id="portal-view-agreement"')
   };
 
@@ -473,6 +483,9 @@ function compilePortalPages(content, DIST) {
     { file: 'generator.html', title: 'Interactive Creator & Roster', activeMenu: 'menu-generator', view: 'generator', hasRightPanel: true, workspaceClass: '' },
     { file: 'pm.html', title: 'Support Tickets & Requests', activeMenu: 'menu-pm', view: 'pm', hasRightPanel: false, workspaceClass: 'no-right-sidebar' },
     { file: 'accounts.html', title: 'Connected Platform Handles', activeMenu: 'menu-accounts', view: 'accounts', hasRightPanel: false, workspaceClass: 'no-right-sidebar' },
+    { file: 'persona-config.html', title: 'AI Agent Configuration', activeMenu: 'menu-persona-config', view: 'persona-config', hasRightPanel: false, workspaceClass: 'no-right-sidebar' },
+    { file: 'inbox.html', title: 'Inbox & Engagement Hub', activeMenu: 'menu-inbox', view: 'inbox', hasRightPanel: false, workspaceClass: 'no-right-sidebar' },
+    { file: 'trends.html', title: 'Trending Topics Monitor', activeMenu: 'menu-trends', view: 'trends', hasRightPanel: false, workspaceClass: 'no-right-sidebar' },
     { file: 'agreement.html', title: 'Managed Plan SOW & SLA', activeMenu: 'menu-agreement', view: 'agreement', hasRightPanel: false, workspaceClass: 'no-right-sidebar' }
   ];
 
