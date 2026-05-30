@@ -1193,6 +1193,48 @@ function exitPortal() {
   window.location.href = 'index.html';
 }
 
+// ── Profile Dropdown ──
+function toggleProfileDropdown() {
+  const dd = document.getElementById('profile-dropdown');
+  if (dd) dd.classList.toggle('open');
+}
+// Close dropdown when clicking outside
+document.addEventListener('click', (e) => {
+  const wrap = document.querySelector('.profile-dropdown-wrap');
+  const dd = document.getElementById('profile-dropdown');
+  if (dd && wrap && !wrap.contains(e.target)) {
+    dd.classList.remove('open');
+  }
+});
+
+// ── Mobile Sidebar Toggle ──
+function toggleDashSidebar() {
+  const sidebar = document.querySelector('.dash-sidebar');
+  const overlay = document.getElementById('sidebar-overlay');
+  if (sidebar) sidebar.classList.toggle('open');
+  if (overlay) overlay.classList.toggle('active');
+}
+
+// ── Right Panel Toggle ──
+function toggleRightPanel() {
+  const panel = document.querySelector('.dash-right-panel');
+  if (panel) panel.classList.toggle('open');
+}
+
+// ── Update Analytics Panel ──
+function updateAnalyticsPanel() {
+  const feed = document.getElementById('notification-feed');
+  if (!feed) return;
+  
+  const now = new Date();
+  const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  
+  // Update KPIs from loaded data
+  const agentCount = document.querySelectorAll('.agent-card').length;
+  const kpiTotal = document.getElementById('kpi-total');
+  if (kpiTotal) kpiTotal.textContent = agentCount || '—';
+}
+
 // ── PIN Gate ──
 const PIN = {
   CORRECT: '2026',
@@ -2356,10 +2398,10 @@ function switchPortalView(viewId, clickedBtn) {
   if (titleEl) {
     const titles = {
       'dashboard': 'Operations Dashboard',
-      'calendar': 'UGC Content Calendar',
+      'calendar': 'Content & Schedule',
       'scout': 'Social Scout Intelligence',
       'generator': 'Interactive Creator & Roster',
-      'pm': 'Support Tickets & Requests',
+      'pm': 'Support & Tickets',
       'accounts': 'Connected Platform Handles',
       'persona-config': 'AI Agent Configuration',
       'inbox': 'Inbox & Engagement Hub',
@@ -2403,11 +2445,6 @@ function switchPortalView(viewId, clickedBtn) {
     const mainContainer = document.querySelector('.dash-main');
     
     if (sectionEl && mainContainer) {
-      // Lazy load scheduler cells if it's the calendar section or not populated yet
-      if (viewId === 'calendar' || !schedulerGridPopulated) {
-        populateSchedulerGrid();
-      }
-      
       setTimeout(() => {
         mainContainer.scrollTo({
           top: sectionEl.offsetTop - 70, // subtract header height
@@ -2422,97 +2459,19 @@ function switchPortalView(viewId, clickedBtn) {
       mainContainer.scrollTop = 0;
     }
   }
-}
 
-// ── Weekly Calendar Grid Generator ──
-let schedulerGridPopulated = false;
-
-function populateSchedulerGrid() {
-  const grid = document.getElementById('scheduler-grid-cells');
-  if (!grid) return;
-
-  const indicatorHtml = '<div class="sched-time-indicator" id="sched-time-indicator" style="top: 140px;"></div>';
-  const hours = ['08:00', '10:00', '12:00', '14:00', '16:00', '18:00'];
-  let html = indicatorHtml;
-
-  const mockBlocks = {
-    '2-10:00': {
-      platform: 'ig',
-      title: 'Sofia Rivera Fitness Reel',
-      cls: 'sb-ig'
-    },
-    '4-14:00': {
-      platform: 'tt',
-      title: 'Veronica Lifestyle POV',
-      cls: 'sb-tt'
-    },
-    '0-12:00': {
-      platform: 'yt',
-      title: 'Marcus Chen AI Insights',
-      cls: 'sb-yt'
-    }
-  };
-
-  hours.forEach(hour => {
-    // Hour label cell
-    html += `<div class="sched-time-col">${hour}</div>`;
-
-    // 7 days of the week cells (Mon-Sun)
-    for (let dayIdx = 0; dayIdx < 7; dayIdx++) {
-      const cellKey = `${dayIdx}-${hour}`;
-      const block = mockBlocks[cellKey];
-      let blockHtml = '';
-
-      if (block) {
-        blockHtml = `
-          <div class="sched-block ${block.cls}">
-            <div class="sched-block-title">${block.title}</div>
-            <div class="sched-block-meta">
-              <span class="sched-block-platform">${block.platform.toUpperCase()}</span>
-              <span>${hour}</span>
-            </div>
-          </div>
-        `;
-      }
-
-      html += `
-        <div class="sched-cell" data-day="${dayIdx}" data-time="${hour}" ondragover="allowDrop(event)" ondrop="dropMedia(event)">
-          ${blockHtml}
-        </div>
-      `;
-    }
-  });
-
-  grid.innerHTML = html;
-  initMediaDragEvents();
+  // Auto-close mobile sidebar after selection
+  if (window.innerWidth <= 768) {
+    const sidebar = document.querySelector('.dash-sidebar');
+    const overlay = document.getElementById('sidebar-overlay');
+    if (sidebar) sidebar.classList.remove('open');
+    if (overlay) overlay.classList.remove('active');
+  }
 }
 
 // ── Drag & Drop Event Handlers ──
 function allowDrop(ev) {
   ev.preventDefault();
-}
-
-function initMediaDragEvents() {
-  const mediaItems = document.querySelectorAll('.media-item');
-  mediaItems.forEach(item => {
-    item.setAttribute('draggable', 'true');
-    item.addEventListener('dragstart', (e) => {
-      const bgImg = e.target.style.backgroundImage || '';
-      e.dataTransfer.setData('text/plain', bgImg);
-      
-      // Get title/name if any
-      const parentCard = e.target.closest('.media-grid');
-      let mediaName = 'UGC Video Post';
-      if (e.target.dataset.title) {
-        mediaName = e.target.dataset.title;
-      } else {
-        // Fallback names
-        const names = ['Product Demo Short', 'Hook Test A', 'Hook Test B', 'Unboxing POV', 'Review Reel'];
-        mediaName = names[Math.floor(Math.random() * names.length)];
-      }
-      e.dataTransfer.setData('media-name', mediaName);
-    });
-  });
 }
 
 function dropMedia(ev) {

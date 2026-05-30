@@ -784,4 +784,55 @@
   .dcal-cell { min-height: 60px; }
   .dcal-week-grid { grid-template-columns: 1fr; }
   .trends-platform-grid { grid-template-columns: 1fr; }
+
+  /* Toolbar stacking */
+  .dcal-toolbar,
+  .inbox-toolbar,
+  .trends-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .dcal-toolbar-left,
+  .dcal-toolbar-right,
+  .inbox-toolbar-left,
+  .inbox-toolbar-right,
+  .trends-toolbar-right {
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  /* Touch targets for toolbar buttons */
+  .dcal-nav-btn,
+  .dcal-today-btn,
+  .dcal-view-btn,
+  .dcal-new-btn,
+  .inbox-filter-tab,
+  .trends-refresh-btn {
+    min-height: 44px;
+  }
+
+  /* Composer container full width */
+  .composer-container {
+    width: 100vw;
+    max-width: 100vw;
+    border-radius: 0;
+    max-height: 100vh;
+  }
+
+  /* Inbox reply actions wrap */
+  .inbox-item-reply-actions {
+    flex-direction: column;
+  }
+  .inbox-reply-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* Calendar month grid → 2 cols for readability */
+  .dcal-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .dcal-day-header {
+    display: none;
+  }
 }

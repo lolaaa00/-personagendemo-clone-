@@ -1,0 +1,1263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PersonaGen — Social Media Publisher</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg-primary: #0a0a0f;
+      --bg-secondary: #12121a;
+      --bg-card: #1a1a26;
+      --bg-elevated: #22222e;
+      --border: #2a2a3a;
+      --text-primary: #f0f0f5;
+      --text-secondary: #9090a8;
+      --text-muted: #606078;
+      --accent: #fe2c55;
+      --accent-hover: #ff4470;
+      --accent-glow: rgba(254, 44, 85, 0.25);
+      --tiktok-cyan: #25f4ee;
+      --success: #34d399;
+      --success-bg: rgba(52, 211, 153, 0.12);
+      --warning: #fbbf24;
+      --radius: 12px;
+      --radius-sm: 8px;
+      --shadow: 0 8px 32px rgba(0,0,0,0.4);
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ─── Layout ─── */
+    .app-container {
+      display: flex;
+      min-height: 100vh;
+    }
+
+    .sidebar {
+      width: 260px;
+      background: var(--bg-secondary);
+      border-right: 1px solid var(--border);
+      padding: 24px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      position: fixed;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      z-index: 10;
+    }
+
+    .sidebar-logo {
+      font-size: 22px;
+      font-weight: 800;
+      padding: 8px 12px 24px;
+      background: linear-gradient(135deg, var(--accent), #c850c0, var(--tiktok-cyan));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: -0.5px;
+    }
+
+    .sidebar-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 14px;
+      border-radius: var(--radius-sm);
+      color: var(--text-secondary);
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      transition: all 0.2s;
+      user-select: none;
+    }
+
+    .sidebar-item:hover { background: var(--bg-elevated); color: var(--text-primary); }
+    .sidebar-item.active { background: var(--accent); color: #fff; }
+    .sidebar-item .icon { font-size: 18px; width: 24px; text-align: center; }
+    .sidebar-spacer { flex: 1; }
+
+    .main-content {
+      margin-left: 260px;
+      flex: 1;
+      padding: 32px 40px;
+      max-width: 960px;
+    }
+
+    /* ─── Page Header ─── */
+    .page-header {
+      margin-bottom: 32px;
+    }
+
+    .page-header h1 {
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      margin-bottom: 6px;
+    }
+
+    .page-header p {
+      color: var(--text-secondary);
+      font-size: 14px;
+    }
+
+    /* ─── Channel Cards ─── */
+    .channels-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 40px;
+    }
+
+    .channel-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.25s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .channel-card:hover {
+      border-color: var(--text-muted);
+      transform: translateY(-2px);
+      box-shadow: var(--shadow);
+    }
+
+    .channel-card.connected {
+      border-color: var(--success);
+      background: var(--success-bg);
+    }
+
+    .channel-card .ch-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 12px;
+      font-size: 24px;
+    }
+
+    .channel-card .ch-name {
+      font-weight: 600;
+      font-size: 14px;
+      margin-bottom: 6px;
+    }
+
+    .channel-card .ch-status {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .channel-card.connected .ch-status {
+      color: var(--success);
+      font-weight: 500;
+    }
+
+    .ch-badge {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--success);
+      box-shadow: 0 0 8px var(--success);
+    }
+
+    /* ─── TikTok-specific ─── */
+    .tiktok-icon-bg { background: linear-gradient(135deg, #25f4ee, #fe2c55); }
+
+    /* ─── Sections ─── */
+    .section { display: none; }
+    .section.active { display: block; }
+
+    /* ─── OAuth Modal ─── */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(8px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s;
+    }
+
+    .modal-overlay.visible {
+      opacity: 1;
+      pointer-events: all;
+    }
+
+    .modal {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      width: 420px;
+      max-width: 90vw;
+      box-shadow: 0 24px 64px rgba(0,0,0,0.5);
+      overflow: hidden;
+      transform: scale(0.95);
+      transition: transform 0.3s;
+    }
+
+    .modal-overlay.visible .modal { transform: scale(1); }
+
+    .modal-header {
+      padding: 24px 24px 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .modal-header .tiktok-logo {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      font-weight: 800;
+      background: #000;
+      color: #fff;
+    }
+
+    .modal-header h3 { font-size: 16px; font-weight: 600; }
+    .modal-header p { font-size: 12px; color: var(--text-secondary); }
+
+    .modal-body { padding: 24px; }
+
+    .oauth-form .field {
+      margin-bottom: 16px;
+    }
+
+    .oauth-form .field label {
+      display: block;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      margin-bottom: 6px;
+    }
+
+    .oauth-form .field input {
+      width: 100%;
+      height: 44px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 0 14px;
+      color: var(--text-primary);
+      font-size: 14px;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .oauth-form .field input:focus { border-color: var(--accent); }
+
+    .oauth-scopes {
+      background: var(--bg-elevated);
+      border-radius: var(--radius-sm);
+      padding: 16px;
+      margin-bottom: 20px;
+    }
+
+    .oauth-scopes h4 {
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 10px;
+      color: var(--text-secondary);
+    }
+
+    .scope-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 6px 0;
+      font-size: 13px;
+    }
+
+    .scope-check {
+      width: 18px;
+      height: 18px;
+      border-radius: 4px;
+      background: var(--accent);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      color: #fff;
+      flex-shrink: 0;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      height: 44px;
+      padding: 0 24px;
+      border-radius: var(--radius-sm);
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 600;
+      border: none;
+      cursor: pointer;
+      transition: all 0.2s;
+      user-select: none;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+      width: 100%;
+    }
+
+    .btn-primary:hover { background: var(--accent-hover); box-shadow: 0 4px 20px var(--accent-glow); }
+
+    .btn-outline {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+    }
+
+    .btn-outline:hover { border-color: var(--text-muted); background: var(--bg-elevated); }
+
+    .btn-danger {
+      background: transparent;
+      border: 1px solid #ef4444;
+      color: #ef4444;
+    }
+
+    .btn-danger:hover { background: rgba(239, 68, 68, 0.1); }
+
+    .btn-success {
+      background: var(--success);
+      color: #000;
+      font-weight: 700;
+    }
+
+    /* ─── Connected Profile ─── */
+    .connected-profile {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 32px;
+    }
+
+    .profile-avatar {
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #25f4ee, #fe2c55);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      font-weight: 700;
+      color: #fff;
+      flex-shrink: 0;
+    }
+
+    .profile-info h3 { font-size: 16px; font-weight: 600; }
+    .profile-info .handle { color: var(--tiktok-cyan); font-size: 13px; font-weight: 500; }
+    .profile-info .followers { color: var(--text-muted); font-size: 12px; margin-top: 2px; }
+    .profile-actions { margin-left: auto; display: flex; gap: 10px; }
+
+    /* ─── Create Post Form ─── */
+    .post-form {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 28px;
+    }
+
+    .post-form h2 {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 24px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      margin-bottom: 8px;
+    }
+
+    .form-group textarea,
+    .form-group input[type="text"],
+    .form-group select {
+      width: 100%;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 12px 14px;
+      color: var(--text-primary);
+      font-size: 14px;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.2s;
+      resize: vertical;
+    }
+
+    .form-group textarea { min-height: 100px; }
+    .form-group textarea:focus,
+    .form-group input:focus,
+    .form-group select:focus { border-color: var(--accent); }
+
+    .form-group select {
+      height: 44px;
+      cursor: pointer;
+      -webkit-appearance: none;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239090a8' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 14px center;
+      padding-right: 36px;
+    }
+
+    .form-group select option { background: var(--bg-card); color: var(--text-primary); }
+
+    .char-count {
+      text-align: right;
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    /* ─── Upload Zone ─── */
+    .upload-zone {
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 48px 24px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.25s;
+      position: relative;
+    }
+
+    .upload-zone:hover { border-color: var(--accent); background: rgba(254,44,85,0.04); }
+
+    .upload-zone .upload-icon {
+      font-size: 40px;
+      margin-bottom: 12px;
+      opacity: 0.6;
+    }
+
+    .upload-zone .upload-text {
+      font-size: 14px;
+      color: var(--text-secondary);
+      margin-bottom: 4px;
+    }
+
+    .upload-zone .upload-hint {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .upload-zone.has-file {
+      border-style: solid;
+      border-color: var(--success);
+      background: var(--success-bg);
+      padding: 20px 24px;
+    }
+
+    .file-preview {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .file-thumb {
+      width: 64px;
+      height: 64px;
+      border-radius: var(--radius-sm);
+      background: linear-gradient(135deg, #1a1a26, #2a2a3a);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 28px;
+      flex-shrink: 0;
+    }
+
+    .file-info { text-align: left; }
+    .file-info .fname { font-size: 14px; font-weight: 600; }
+    .file-info .fsize { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+    /* ─── Tags Input ─── */
+    .tags-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 10px 12px;
+      min-height: 44px;
+      cursor: text;
+      transition: border-color 0.2s;
+    }
+
+    .tags-container:focus-within { border-color: var(--accent); }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--accent);
+      color: #fff;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      animation: tagIn 0.2s ease;
+    }
+
+    @keyframes tagIn { from { transform: scale(0.8); opacity: 0; } }
+
+    .tag .remove-tag {
+      cursor: pointer;
+      font-size: 14px;
+      opacity: 0.7;
+      line-height: 1;
+    }
+
+    .tag .remove-tag:hover { opacity: 1; }
+
+    .tag-input {
+      border: none;
+      background: transparent;
+      color: var(--text-primary);
+      font-size: 13px;
+      font-family: inherit;
+      outline: none;
+      flex: 1;
+      min-width: 80px;
+    }
+
+    /* ─── Privacy / Disclosure ─── */
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .toggle-row:last-child { border-bottom: none; }
+
+    .toggle-label { font-size: 14px; font-weight: 500; }
+    .toggle-label span { display: block; font-size: 12px; color: var(--text-muted); font-weight: 400; margin-top: 2px; }
+
+    .toggle {
+      width: 44px;
+      height: 24px;
+      border-radius: 12px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      cursor: pointer;
+      position: relative;
+      transition: all 0.3s;
+      flex-shrink: 0;
+    }
+
+    .toggle.on { background: var(--accent); border-color: var(--accent); }
+
+    .toggle::after {
+      content: '';
+      position: absolute;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #fff;
+      top: 2px;
+      left: 2px;
+      transition: transform 0.3s;
+    }
+
+    .toggle.on::after { transform: translateX(20px); }
+
+    /* ─── Confirm Publish Modal ─── */
+    .confirm-body {
+      text-align: center;
+      padding: 32px 24px;
+    }
+
+    .confirm-body .confirm-icon {
+      font-size: 48px;
+      margin-bottom: 16px;
+    }
+
+    .confirm-body h3 {
+      font-size: 20px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .confirm-body p {
+      color: var(--text-secondary);
+      font-size: 14px;
+      margin-bottom: 24px;
+      line-height: 1.5;
+    }
+
+    .confirm-actions {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+    }
+
+    .confirm-actions .btn { min-width: 140px; }
+
+    /* ─── Success Toast ─── */
+    .toast {
+      position: fixed;
+      bottom: 32px;
+      right: 32px;
+      background: var(--bg-card);
+      border: 1px solid var(--success);
+      border-radius: var(--radius);
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 14px;
+      font-weight: 600;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.4);
+      z-index: 2000;
+      transform: translateY(100px);
+      opacity: 0;
+      transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .toast.visible {
+      transform: translateY(0);
+      opacity: 1;
+    }
+
+    .toast .toast-icon { font-size: 20px; }
+
+    /* ─── Settings ─── */
+    .settings-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      margin-bottom: 16px;
+    }
+
+    .settings-card h3 {
+      font-size: 15px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    .settings-card p {
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-bottom: 16px;
+      line-height: 1.5;
+    }
+
+    .settings-card .disconnect-info {
+      background: var(--bg-elevated);
+      border-radius: var(--radius-sm);
+      padding: 14px;
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.6;
+      margin-top: 12px;
+    }
+
+    /* ─── Loading spinner ─── */
+    .spinner {
+      width: 20px;
+      height: 20px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ─── Annotation Badges (for video) ─── */
+    .annotation {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(254, 44, 85, 0.15);
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .annotation.green {
+      background: var(--success-bg);
+      border-color: var(--success);
+      color: var(--success);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ═══ SIDEBAR ═══ -->
+  <div class="app-container">
+    <nav class="sidebar">
+      <div class="sidebar-logo">PersonaGen</div>
+      <div class="sidebar-item active" data-section="channels" onclick="showSection('channels')">
+        <span class="icon">📡</span> Channels
+      </div>
+      <div class="sidebar-item" data-section="create" onclick="showSection('create')">
+        <span class="icon">✏️</span> Create Post
+      </div>
+      <div class="sidebar-item" data-section="calendar" onclick="showSection('calendar')">
+        <span class="icon">📅</span> Calendar
+      </div>
+      <div class="sidebar-item" data-section="analytics" onclick="showSection('analytics')">
+        <span class="icon">📊</span> Analytics
+      </div>
+      <div class="sidebar-spacer"></div>
+      <div class="sidebar-item" data-section="settings" onclick="showSection('settings')">
+        <span class="icon">⚙️</span> Settings
+      </div>
+    </nav>
+
+    <!-- ═══ CHANNELS SECTION ═══ -->
+    <main class="main-content">
+      <section id="sec-channels" class="section active">
+        <div class="page-header">
+          <h1>Connected Channels</h1>
+          <p>Manage your social media accounts and connect new platforms.</p>
+        </div>
+
+        <div class="channels-grid">
+          <div class="channel-card" id="card-tiktok" onclick="connectTikTok()">
+            <div class="ch-icon tiktok-icon-bg" style="color:#fff;font-size:20px;font-weight:800;">♪</div>
+            <div class="ch-name">TikTok</div>
+            <div class="ch-status" id="tiktok-status">Click to connect</div>
+          </div>
+          <div class="channel-card connected">
+            <div class="ch-badge"></div>
+            <div class="ch-icon" style="background:#1da1f2;color:#fff;font-size:18px;font-weight:800;">𝕏</div>
+            <div class="ch-name">X / Twitter</div>
+            <div class="ch-status">Connected</div>
+          </div>
+          <div class="channel-card connected">
+            <div class="ch-badge"></div>
+            <div class="ch-icon" style="background:#ff4500;color:#fff;font-size:20px;">⬆</div>
+            <div class="ch-name">Reddit</div>
+            <div class="ch-status">Connected</div>
+          </div>
+          <div class="channel-card">
+            <div class="ch-icon" style="background:#e1306c;color:#fff;font-size:20px;">📷</div>
+            <div class="ch-name">Instagram</div>
+            <div class="ch-status">Click to connect</div>
+          </div>
+          <div class="channel-card">
+            <div class="ch-icon" style="background:#ff0000;color:#fff;font-size:20px;">▶</div>
+            <div class="ch-name">YouTube</div>
+            <div class="ch-status">Click to connect</div>
+          </div>
+          <div class="channel-card">
+            <div class="ch-icon" style="background:#e60023;color:#fff;font-size:20px;">📌</div>
+            <div class="ch-name">Pinterest</div>
+            <div class="ch-status">Click to connect</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══ CREATE POST SECTION ═══ -->
+      <section id="sec-create" class="section">
+        <div class="page-header">
+          <h1>Create Post</h1>
+          <p>Compose and publish content to your connected accounts.</p>
+        </div>
+
+        <!-- Connected Profile Bar -->
+        <div class="connected-profile" id="profile-bar" style="display:none;">
+          <div class="profile-avatar">J</div>
+          <div class="profile-info">
+            <h3>James Adams</h3>
+            <div class="handle">@jamesdev_pro</div>
+            <div class="followers">12.4K followers · 89 videos</div>
+          </div>
+          <div class="profile-actions">
+            <span class="annotation green">✓ Connected via TikTok</span>
+          </div>
+        </div>
+
+        <div id="no-tiktok-msg" class="settings-card">
+          <h3>⚠️ TikTok Not Connected</h3>
+          <p>Go to <strong>Channels</strong> and connect your TikTok account first to create posts.</p>
+        </div>
+
+        <div class="post-form" id="post-form" style="display:none;">
+          <h2>🎬 New TikTok Post</h2>
+
+          <!-- Video Upload -->
+          <div class="form-group">
+            <label>Video File</label>
+            <div class="upload-zone" id="upload-zone" onclick="simulateUpload()">
+              <div class="upload-icon">🎥</div>
+              <div class="upload-text">Click to upload or drag & drop</div>
+              <div class="upload-hint">MP4, MOV, WebM · Max 500 MB · 3-10 minutes</div>
+            </div>
+          </div>
+
+          <!-- Caption -->
+          <div class="form-group">
+            <label>Caption <span class="annotation">✎ User can edit before posting</span></label>
+            <textarea id="caption" placeholder="Write your caption here..." oninput="updateCharCount()">Check out this quick tip for growing your social presence! 🚀 The key is consistency and authenticity. What's your #1 strategy?</textarea>
+            <div class="char-count"><span id="char-count">126</span> / 2,200</div>
+          </div>
+
+          <!-- Hashtags -->
+          <div class="form-group">
+            <label>Hashtags <span class="annotation">✎ User can edit before posting</span></label>
+            <div class="tags-container" id="tags-container" onclick="document.getElementById('tag-input').focus()">
+              <span class="tag">#socialmedia <span class="remove-tag" onclick="removeTag(this, event)">×</span></span>
+              <span class="tag">#growth <span class="remove-tag" onclick="removeTag(this, event)">×</span></span>
+              <span class="tag">#contentcreator <span class="remove-tag" onclick="removeTag(this, event)">×</span></span>
+              <input type="text" class="tag-input" id="tag-input" placeholder="Type and press Enter..." onkeydown="addTag(event)">
+            </div>
+          </div>
+
+          <!-- Privacy Setting -->
+          <div class="form-group">
+            <label>Privacy Setting</label>
+            <select id="privacy-select">
+              <option value="public">🌍 Public — Anyone can view</option>
+              <option value="friends">👥 Friends — Only followers you follow back</option>
+              <option value="private">🔒 Private — Only you</option>
+            </select>
+          </div>
+
+          <!-- Disclosures -->
+          <div class="form-group">
+            <label>Content Disclosures</label>
+            <div style="background:var(--bg-elevated);border-radius:var(--radius-sm);padding:4px 16px;">
+              <div class="toggle-row">
+                <div class="toggle-label">
+                  Branded Content
+                  <span>Disclose if this post promotes a brand or product</span>
+                </div>
+                <div class="toggle" id="toggle-branded" onclick="toggleSwitch(this)"></div>
+              </div>
+              <div class="toggle-row">
+                <div class="toggle-label">
+                  Your Brand
+                  <span>You are promoting your own brand</span>
+                </div>
+                <div class="toggle on" id="toggle-yourbrand" onclick="toggleSwitch(this)"></div>
+              </div>
+              <div class="toggle-row">
+                <div class="toggle-label">
+                  Allow Comments
+                  <span>Let viewers comment on this video</span>
+                </div>
+                <div class="toggle on" id="toggle-comments" onclick="toggleSwitch(this)"></div>
+              </div>
+              <div class="toggle-row">
+                <div class="toggle-label">
+                  Allow Duets
+                  <span>Let other creators duet with this video</span>
+                </div>
+                <div class="toggle on" id="toggle-duets" onclick="toggleSwitch(this)"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Publish Button -->
+          <div style="display:flex;gap:12px;margin-top:8px;">
+            <button class="btn btn-outline" style="flex:1;" onclick="showToast('Draft saved!')">💾 Save Draft</button>
+            <button class="btn btn-primary" style="flex:2;" onclick="confirmPublish()">🚀 Publish to TikTok</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══ SETTINGS SECTION ═══ -->
+      <section id="sec-settings" class="section">
+        <div class="page-header">
+          <h1>Settings</h1>
+          <p>Manage your account connections and preferences.</p>
+        </div>
+
+        <div class="settings-card" id="settings-tiktok" style="display:none;">
+          <h3>TikTok Account</h3>
+          <p>Your TikTok account <strong>@jamesdev_pro</strong> is connected. You can disconnect at any time. This will revoke all access tokens and PersonaGen will no longer be able to post on your behalf.</p>
+
+          <div style="display:flex;gap:12px;">
+            <button class="btn btn-danger" onclick="disconnectTikTok()">🔌 Disconnect TikTok</button>
+          </div>
+
+          <div class="disconnect-info">
+            <strong>What happens when you disconnect:</strong><br>
+            • All access tokens are immediately revoked<br>
+            • Scheduled posts to TikTok will be cancelled<br>
+            • Your TikTok data is removed from PersonaGen<br>
+            • You can reconnect at any time from the Channels page<br>
+            • You can also revoke access directly from TikTok Settings → Security → Connected Apps
+          </div>
+        </div>
+
+        <div class="settings-card" id="settings-no-tiktok">
+          <h3>TikTok Account</h3>
+          <p>No TikTok account connected. Go to <strong>Channels</strong> to connect your account.</p>
+        </div>
+
+        <div class="settings-card">
+          <h3>Privacy Policy</h3>
+          <p>PersonaGen respects your privacy. We only access the data necessary to publish content on your behalf. We do not store your social media passwords. All connections use OAuth 2.0 industry-standard authorization. <a href="#" style="color:var(--tiktok-cyan);">Read our full Privacy Policy →</a></p>
+        </div>
+
+        <div class="settings-card">
+          <h3>Terms of Service</h3>
+          <p>By using PersonaGen, you agree to our terms of service. We are committed to responsible use of social media APIs and comply with all platform-specific developer guidelines. <a href="#" style="color:var(--tiktok-cyan);">Read our Terms of Service →</a></p>
+        </div>
+      </section>
+
+      <!-- ═══ CALENDAR (placeholder) ═══ -->
+      <section id="sec-calendar" class="section">
+        <div class="page-header">
+          <h1>Content Calendar</h1>
+          <p>View and manage your scheduled posts.</p>
+        </div>
+        <div class="settings-card" style="text-align:center;padding:60px;">
+          <div style="font-size:48px;margin-bottom:16px;">📅</div>
+          <h3>No scheduled posts yet</h3>
+          <p style="margin-bottom:0;">Create a post and schedule it for later.</p>
+        </div>
+      </section>
+
+      <!-- ═══ ANALYTICS (placeholder) ═══ -->
+      <section id="sec-analytics" class="section">
+        <div class="page-header">
+          <h1>Analytics</h1>
+          <p>Track engagement and performance across platforms.</p>
+        </div>
+        <div class="settings-card" style="text-align:center;padding:60px;">
+          <div style="font-size:48px;margin-bottom:16px;">📊</div>
+          <h3>Analytics coming soon</h3>
+          <p style="margin-bottom:0;">Connect your accounts to start tracking performance.</p>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- ═══ OAUTH MODAL ═══ -->
+  <div class="modal-overlay" id="oauth-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <div class="tiktok-logo">♪</div>
+        <div>
+          <h3>Connect to TikTok</h3>
+          <p>Authorize PersonaGen to access your account</p>
+        </div>
+      </div>
+      <div class="modal-body">
+        <div class="oauth-form">
+          <div class="field">
+            <label>TikTok Username or Email</label>
+            <input type="text" value="jamesdev_pro" id="oauth-user">
+          </div>
+          <div class="field">
+            <label>Password</label>
+            <input type="password" value="••••••••••••">
+          </div>
+        </div>
+
+        <div class="oauth-scopes">
+          <h4>PersonaGen is requesting access to:</h4>
+          <div class="scope-item">
+            <div class="scope-check">✓</div>
+            <span><strong>video.upload</strong> — Upload videos to your account</span>
+          </div>
+          <div class="scope-item">
+            <div class="scope-check">✓</div>
+            <span><strong>video.publish</strong> — Publish videos to your profile</span>
+          </div>
+          <div class="scope-item">
+            <div class="scope-check">✓</div>
+            <span><strong>user.info.basic</strong> — View your public profile info</span>
+          </div>
+        </div>
+
+        <button class="btn btn-primary" id="authorize-btn" onclick="authorizeOAuth()">
+          Authorize PersonaGen
+        </button>
+        <div style="text-align:center;margin-top:12px;">
+          <a href="#" style="color:var(--text-muted);font-size:12px;" onclick="closeOAuth()">Cancel</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ CONFIRM PUBLISH MODAL ═══ -->
+  <div class="modal-overlay" id="confirm-modal">
+    <div class="modal">
+      <div class="confirm-body">
+        <div class="confirm-icon">🚀</div>
+        <h3>Ready to publish?</h3>
+        <p>Your video will be posted to TikTok as <strong>@jamesdev_pro</strong>.<br>
+        This action requires your manual confirmation.</p>
+        <div style="background:var(--bg-elevated);border-radius:var(--radius-sm);padding:12px;margin-bottom:20px;text-align:left;">
+          <div style="font-size:12px;color:var(--text-muted);margin-bottom:4px;">PREVIEW</div>
+          <div style="font-size:13px;" id="confirm-caption"></div>
+          <div style="font-size:12px;color:var(--tiktok-cyan);margin-top:6px;" id="confirm-tags"></div>
+          <div style="font-size:12px;color:var(--text-muted);margin-top:4px;" id="confirm-privacy"></div>
+        </div>
+        <div class="confirm-actions">
+          <button class="btn btn-outline" onclick="closeConfirm()">Cancel</button>
+          <button class="btn btn-success" id="publish-final-btn" onclick="publishPost()">✓ Confirm & Publish</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ DISCONNECT MODAL ═══ -->
+  <div class="modal-overlay" id="disconnect-modal">
+    <div class="modal">
+      <div class="confirm-body">
+        <div class="confirm-icon">⚠️</div>
+        <h3>Disconnect TikTok?</h3>
+        <p>This will revoke all access tokens. PersonaGen will no longer be able to post to your TikTok account. You can reconnect at any time.</p>
+        <div class="confirm-actions">
+          <button class="btn btn-outline" onclick="closeDisconnect()">Cancel</button>
+          <button class="btn btn-danger" onclick="confirmDisconnect()">Disconnect</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ TOAST ═══ -->
+  <div class="toast" id="toast">
+    <span class="toast-icon">✅</span>
+    <span id="toast-msg">Success!</span>
+  </div>
+
+  <script>
+    let tiktokConnected = false;
+
+    // ─── Navigation ───
+    function showSection(name) {
+      document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+      document.querySelectorAll('.sidebar-item').forEach(s => s.classList.remove('active'));
+      document.getElementById('sec-' + name).classList.add('active');
+      document.querySelector(`.sidebar-item[data-section="${name}"]`).classList.add('active');
+    }
+
+    // ─── TikTok OAuth Flow ───
+    function connectTikTok() {
+      if (tiktokConnected) {
+        showSection('create');
+        return;
+      }
+      document.getElementById('oauth-modal').classList.add('visible');
+    }
+
+    function closeOAuth() {
+      document.getElementById('oauth-modal').classList.remove('visible');
+    }
+
+    function authorizeOAuth() {
+      const btn = document.getElementById('authorize-btn');
+      btn.innerHTML = '<div class="spinner"></div> Authorizing...';
+      btn.style.pointerEvents = 'none';
+
+      setTimeout(() => {
+        btn.innerHTML = 'Authorize PersonaGen';
+        btn.style.pointerEvents = '';
+        closeOAuth();
+        tiktokConnected = true;
+        updateTikTokState();
+        showToast('TikTok connected successfully!');
+      }, 2000);
+    }
+
+    function updateTikTokState() {
+      const card = document.getElementById('card-tiktok');
+      const status = document.getElementById('tiktok-status');
+
+      if (tiktokConnected) {
+        card.classList.add('connected');
+        card.innerHTML = '<div class="ch-badge"></div>' + card.innerHTML.replace(/<div class="ch-badge"><\/div>/g, '');
+        if (!card.querySelector('.ch-badge')) {
+          card.insertAdjacentHTML('afterbegin', '<div class="ch-badge"></div>');
+        }
+        status.textContent = 'Connected';
+        status.style.color = 'var(--success)';
+
+        // Show post form
+        document.getElementById('profile-bar').style.display = 'flex';
+        document.getElementById('post-form').style.display = 'block';
+        document.getElementById('no-tiktok-msg').style.display = 'none';
+
+        // Show settings
+        document.getElementById('settings-tiktok').style.display = 'block';
+        document.getElementById('settings-no-tiktok').style.display = 'none';
+      } else {
+        card.classList.remove('connected');
+        const badge = card.querySelector('.ch-badge');
+        if (badge) badge.remove();
+        status.textContent = 'Click to connect';
+        status.style.color = '';
+
+        document.getElementById('profile-bar').style.display = 'none';
+        document.getElementById('post-form').style.display = 'none';
+        document.getElementById('no-tiktok-msg').style.display = 'block';
+
+        document.getElementById('settings-tiktok').style.display = 'none';
+        document.getElementById('settings-no-tiktok').style.display = 'block';
+      }
+    }
+
+    // ─── Upload Simulation ───
+    function simulateUpload() {
+      const zone = document.getElementById('upload-zone');
+      if (zone.classList.contains('has-file')) return;
+
+      zone.innerHTML = '<div style="display:flex;align-items:center;gap:12px;justify-content:center;"><div class="spinner" style="border-color:rgba(52,211,153,0.3);border-top-color:var(--success);"></div> <span>Uploading video...</span></div>';
+
+      setTimeout(() => {
+        zone.classList.add('has-file');
+        zone.innerHTML = `
+          <div class="file-preview">
+            <div class="file-thumb">🎬</div>
+            <div class="file-info">
+              <div class="fname">social_tip_growth_strategy.mp4</div>
+              <div class="fsize">24.3 MB · 0:47 duration · 1080×1920</div>
+            </div>
+            <span style="margin-left:auto;color:var(--success);font-size:20px;">✓</span>
+          </div>
+        `;
+      }, 1500);
+    }
+
+    // ─── Caption ───
+    function updateCharCount() {
+      const len = document.getElementById('caption').value.length;
+      document.getElementById('char-count').textContent = len;
+    }
+
+    // ─── Hashtags ───
+    function addTag(e) {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      const input = document.getElementById('tag-input');
+      let val = input.value.trim();
+      if (!val) return;
+      if (!val.startsWith('#')) val = '#' + val;
+
+      const tag = document.createElement('span');
+      tag.className = 'tag';
+      tag.innerHTML = `${val} <span class="remove-tag" onclick="removeTag(this, event)">×</span>`;
+      document.getElementById('tags-container').insertBefore(tag, input);
+      input.value = '';
+    }
+
+    function removeTag(el, e) {
+      e.stopPropagation();
+      el.parentElement.remove();
+    }
+
+    // ─── Toggles ───
+    function toggleSwitch(el) {
+      el.classList.toggle('on');
+    }
+
+    // ─── Confirm Publish ───
+    function confirmPublish() {
+      const caption = document.getElementById('caption').value;
+      const tags = Array.from(document.querySelectorAll('#tags-container .tag')).map(t => t.textContent.replace('×', '').trim()).join(' ');
+      const privacy = document.getElementById('privacy-select');
+      const privacyText = privacy.options[privacy.selectedIndex].text;
+
+      document.getElementById('confirm-caption').textContent = caption.substring(0, 100) + (caption.length > 100 ? '...' : '');
+      document.getElementById('confirm-tags').textContent = tags;
+      document.getElementById('confirm-privacy').textContent = 'Privacy: ' + privacyText;
+      document.getElementById('confirm-modal').classList.add('visible');
+    }
+
+    function closeConfirm() {
+      document.getElementById('confirm-modal').classList.remove('visible');
+    }
+
+    function publishPost() {
+      const btn = document.getElementById('publish-final-btn');
+      btn.innerHTML = '<div class="spinner"></div> Publishing...';
+      btn.style.pointerEvents = 'none';
+
+      setTimeout(() => {
+        btn.innerHTML = '✓ Confirm & Publish';
+        btn.style.pointerEvents = '';
+        closeConfirm();
+        showToast('🎉 Published to TikTok successfully!');
+      }, 2500);
+    }
+
+    // ─── Disconnect ───
+    function disconnectTikTok() {
+      document.getElementById('disconnect-modal').classList.add('visible');
+    }
+
+    function closeDisconnect() {
+      document.getElementById('disconnect-modal').classList.remove('visible');
+    }
+
+    function confirmDisconnect() {
+      closeDisconnect();
+      tiktokConnected = false;
+      updateTikTokState();
+      showSection('channels');
+      showToast('TikTok account disconnected');
+    }
+
+    // ─── Toast ───
+    function showToast(msg) {
+      const toast = document.getElementById('toast');
+      document.getElementById('toast-msg').textContent = msg;
+      toast.classList.add('visible');
+      setTimeout(() => toast.classList.remove('visible'), 3500);
+    }
+  </script>
+</body>
+</html>

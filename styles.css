@@ -1963,3 +1963,289 @@ body.portal-active {
   .pm-kanban-board { grid-template-columns: 1fr; }
 }
 
+/* ── Profile Dropdown ── */
+.profile-dropdown-wrap { position: relative; }
+.profile-dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  min-width: 200px;
+  background: #0f0b1a;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 10px;
+  padding: 0.5rem 0;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  z-index: 100;
+  display: none;
+}
+.profile-dropdown.open { display: block; }
+.profile-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.15s;
+  border: none;
+  background: none;
+  width: 100%;
+  font-family: inherit;
+}
+.profile-dropdown-item:hover {
+  background: rgba(255,255,255,0.04);
+  color: var(--text);
+}
+.profile-dropdown-divider {
+  height: 1px;
+  background: rgba(255,255,255,0.06);
+  margin: 0.35rem 0;
+}
+.profile-dropdown-item.danger { color: var(--rose); }
+.profile-dropdown-item.danger:hover { background: rgba(244,63,94,0.08); }
+
+/* ── Right Panel Analytics + Notification Styles ── */
+.analytics-mini-card {
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.05);
+  border-radius: 10px;
+  padding: 1rem;
+}
+.analytics-mini-card h4 {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+  margin-bottom: 0.5rem;
+}
+.analytics-stat {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.analytics-stat-sub {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.notification-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.notification-item {
+  display: flex;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.04);
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  align-items: flex-start;
+}
+.notification-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 5px;
+}
+.notification-time {
+  font-size: 0.65rem;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+
+/* ── Hamburger + Analytics Toggle Buttons ── */
+.dash-hamburger,
+.dash-analytics-toggle {
+  display: none;
+  width: 40px;
+  height: 40px;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--text);
+  font-size: 1.3rem;
+  flex-shrink: 0;
+}
+
+/* ── Sidebar Overlay ── */
+.sidebar-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 999;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+.sidebar-overlay.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   MOBILE RESPONSIVE — Dashboard ≤768px
+   ═══════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  /* Layout: single column */
+  .dashboard-layout {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Sidebar: off-canvas drawer */
+  .dash-sidebar {
+    position: fixed;
+    left: -260px;
+    top: 0;
+    width: 260px;
+    height: 100vh;
+    z-index: 1000;
+    transition: left 0.3s ease;
+    overflow-y: auto;
+  }
+  .dash-sidebar.open {
+    left: 0;
+  }
+
+  /* Workspace: stack */
+  .dash-workspace {
+    grid-template-columns: 1fr !important;
+    height: auto;
+  }
+
+  /* Right panel: off-canvas from right */
+  .dash-right-panel {
+    position: fixed;
+    right: -320px;
+    top: 0;
+    width: 300px;
+    height: 100vh;
+    z-index: 1000;
+    transition: right 0.3s ease;
+    overflow-y: auto;
+  }
+  .dash-right-panel.open {
+    right: 0;
+  }
+
+  /* Header responsive */
+  .dash-header {
+    padding: 0 1rem;
+  }
+  .dash-search-wrap {
+    display: none;
+  }
+  .dash-header-title {
+    font-size: 0.95rem;
+  }
+
+  /* Show hamburger + analytics toggle */
+  .dash-hamburger,
+  .dash-analytics-toggle {
+    display: flex;
+  }
+
+  /* Touch targets — menu items */
+  .dash-menu-item {
+    padding: 14px 16px;
+  }
+
+  /* Touch targets — PM filter buttons */
+  .dash-filter,
+  .pm-view-btn,
+  .dash-sub-tab-btn {
+    min-height: 44px;
+    padding: 8px 14px;
+    font-size: 0.75rem;
+  }
+
+  /* Center panel breathing room */
+  .dash-center-panel {
+    padding: 1rem;
+  }
+
+  /* KPI row stack */
+  .dash-kpi-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* Chart row stack */
+  .dash-chart-row {
+    grid-template-columns: 1fr;
+  }
+
+  /* Agent table scroll */
+  .dash-row {
+    grid-template-columns: 2fr 1fr 1fr;
+    font-size: 0.75rem;
+  }
+  .dash-row .dash-cell:nth-child(n+4) {
+    display: none;
+  }
+
+  /* Kanban: single column */
+  .pm-kanban-board {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Scheduler grid: stack */
+  .sched-week-header,
+  .sched-grid {
+    grid-template-columns: 1fr;
+  }
+  .sched-time-col {
+    display: none;
+  }
+
+  /* Calendar week: stack */
+  .calendar-week {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* Hero stats on mobile */
+  .hero-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* Generator / Scout layouts stack */
+  .generator-layout,
+  .scout-layout {
+    grid-template-columns: 1fr;
+  }
+
+  /* Milestone grid */
+  .milestone-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Pipeline flow wrap */
+  .pipeline-flow {
+    flex-direction: column;
+  }
+  .pipe-arrow {
+    transform: rotate(90deg);
+    margin: 0;
+    padding: 0.25rem;
+  }
+
+  /* Influencer grid */
+  .influencer-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Sub-tabs horizontal scroll */
+  .dash-sub-tabs {
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    flex-wrap: nowrap;
+  }
+}
+
