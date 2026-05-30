@@ -319,3 +319,11 @@ const InboxHub = (() => {
 
   return { init, setFilter, setPersona, approve, generateReply, regenerate, ignore };
 })();
+
+// Auto-init on built sub-pages
+document.addEventListener('DOMContentLoaded', () => {
+  const mount = document.getElementById('inbox-mount');
+  if (mount && !mount.hasChildNodes()) {
+    InboxHub.init('inbox-mount');
+  }
+});

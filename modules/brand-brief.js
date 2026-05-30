@@ -643,3 +643,11 @@ const BrandBrief = (() => {
     rejectPersona
   };
 })();
+
+// Auto-init on built sub-pages (switchPortalView doesn't fire on static page load)
+document.addEventListener('DOMContentLoaded', () => {
+  const mount = document.getElementById('pg-brand-brief');
+  if (mount && !mount.hasChildNodes()) {
+    BrandBrief.init('pg-brand-brief');
+  }
+});

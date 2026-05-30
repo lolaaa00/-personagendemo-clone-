@@ -320,3 +320,11 @@ const DynamicCalendar = (() => {
 
   return { init, prevMonth, nextMonth, goToday, setView, filterByPersona, refresh, renderMonth };
 })();
+
+// Auto-init on built sub-pages
+document.addEventListener('DOMContentLoaded', () => {
+  const mount = document.getElementById('dynamic-calendar-mount');
+  if (mount && !mount.hasChildNodes()) {
+    DynamicCalendar.init('dynamic-calendar-mount');
+  }
+});

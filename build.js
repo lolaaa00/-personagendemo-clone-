@@ -523,11 +523,26 @@ function compilePortalPages(content, DIST) {
       `<h2 class="dash-header-title" id="dash-view-title">${p.title}</h2>`
     );
 
-    // Customize + Submit Ticket button in header (change to link for pm page)
+    // Customize + Submit Ticket button in header (change to link)
     customizedSidebarAndHeader = customizedSidebarAndHeader.replace(
-      /<button class="dash-header-btn" onclick="switchPortalView\('pm'\)">/g,
-      `<a href="pm.html" class="dash-header-btn" style="text-decoration:none; display:inline-flex; align-items:center; justify-content:center;">`
-    ).replace(/<\/button>(\s*<div class="dash-user-badge">)/g, `</a>$1`);
+      /<button class="dash-header-btn" onclick="switchPortalView\('pm'\)">([^<]*)<\/button>/g,
+      `<a href="pm.html" class="dash-header-btn" style="text-decoration:none;">$1</a>`
+    );
+
+    // Convert profile dropdown switchPortalView calls to proper page links
+    customizedSidebarAndHeader = customizedSidebarAndHeader.replace(
+      /<button class="profile-dropdown-item" onclick="switchPortalView\('persona-config'\);[^"]*">/g,
+      `<a href="persona-config.html" class="profile-dropdown-item" style="text-decoration:none;">`
+    );
+    customizedSidebarAndHeader = customizedSidebarAndHeader.replace(
+      /<button class="profile-dropdown-item" onclick="switchPortalView\('accounts'\);[^"]*">/g,
+      `<a href="accounts.html" class="profile-dropdown-item" style="text-decoration:none;">`
+    );
+    // Fix corresponding closing tags for converted dropdown items
+    customizedSidebarAndHeader = customizedSidebarAndHeader.replace(
+      /<\/button>(\s*<div class="profile-dropdown-divider">)/g,
+      `</a>$1`
+    );
 
     // Customize workspace grid classes
     customizedSidebarAndHeader = customizedSidebarAndHeader.replace(

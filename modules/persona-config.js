@@ -264,3 +264,11 @@ const PersonaConfigEditor = (() => {
 
   return { init, selectPersonaByHandle, switchTab, onEdit, save };
 })();
+
+// Auto-init on built sub-pages
+document.addEventListener('DOMContentLoaded', () => {
+  const mount = document.getElementById('persona-config-mount');
+  if (mount && !mount.hasChildNodes()) {
+    PersonaConfigEditor.init('persona-config-mount');
+  }
+});

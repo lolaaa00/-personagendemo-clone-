@@ -319,3 +319,11 @@ const TrendMonitor = (() => {
 
   return { init, selectPersona, refresh, generateFromTrend };
 })();
+
+// Auto-init on built sub-pages
+document.addEventListener('DOMContentLoaded', () => {
+  const mount = document.getElementById('trends-mount');
+  if (mount && !mount.hasChildNodes()) {
+    TrendMonitor.init('trends-mount');
+  }
+});
