@@ -13,6 +13,7 @@
 | Version | Date | Change |
 |---------|------|--------|
 | 1.0 | {{effective_date}} | Initial architecture — VPS + OpenRouter + on-premise posting network |
+| 1.1 | 2026-05-30 | Scout Intelligence Engine 2.0 — Channel Decoder, Content Forge, Blueprint pipeline |
 
 ---
 
@@ -64,6 +65,32 @@
 | Mac A | — | Residential | ☐ Pending |
 | Mac B | — | Residential | ☐ Pending |
 | Mac C | — | Residential | ☐ Pending |
+
+### 2.3 Intelligence & Content Layer
+
+| Module | Technology | Purpose |
+|--------|-----------|----------|
+| Channel Decoder | `modules/channel-decoder.js` (IIFE) | 9-layer reverse-engineering of competitor channels (YouTube/TikTok/Instagram) |
+| Content Forge | `modules/content-forge.js` (IIFE) | Blueprint-to-production content package pipeline (titles, hooks, scripts, thumbnails, multi-platform) |
+| Blueprint Library | `data/blueprints.json` + localStorage | Persistence layer for decoded channel blueprints |
+| Trend Monitor | `modules/trends.js` (IIFE) | Real-time trend scanning across niches and platforms |
+| Scout Intelligence | `script.js` (scout section) | Profile analysis + keyword/trend discovery engine |
+
+**Webhook Endpoints (n8n):**
+
+| Endpoint | Purpose |
+|----------|---------|
+| `personagen-channel-decode` | Channel reverse-engineering (YouTube API + AI analysis) |
+| `personagen-content-forge` | Blueprint → production content generation |
+| `personagen-blueprints` | Agent blueprint injection (Feed Blueprint → Agent) |
+| `personagen-trends` | Trend scanning and enrichment |
+| `personagen-social` | Account connections |
+| `personagen-posts` | Post CRUD + calendar |
+| `personagen-ai-generate` | AI persona/content generation |
+| `personagen-publish` | Publishing pipeline |
+| `personagen-engagement` | Inbox management |
+| `personagen-account-factory` | Automated account creation |
+| `personagen-email` | Email/SMS operations |
 
 ---
 

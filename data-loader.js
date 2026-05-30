@@ -8,11 +8,12 @@ const DATA = {};
 
 async function loadData() {
     const files = {
-        agents:    'data/agents.json',
-        trends:    'data/trends.json',
-        templates: 'data/templates.json',
-        platforms: 'data/platforms.json',
-        scouts:    'data/scouts.json'
+        agents:     'data/agents.json',
+        trends:     'data/trends.json',
+        templates:  'data/templates.json',
+        platforms:  'data/platforms.json',
+        scouts:     'data/scouts.json',
+        blueprints: 'data/blueprints.json'
     };
 
     const entries = Object.entries(files);

@@ -99,16 +99,38 @@ const BrandBrief = (() => {
   // ── Step 0: Website Crawl ──
   function renderCrawlStep() {
     const detected = crawlData ? true : false;
+    // Support both old (crawl/analysis) and new (branding/metadata/markdown) response shapes
+    const b = crawlData?.branding || {};
+    const m = crawlData?.metadata || {};
+    const md = crawlData?.markdown || '';
+    // Fallback to old shape
     const c = crawlData?.crawl || {};
     const a = crawlData?.analysis || {};
 
+    const logo = b.logo || c.logo || '';
+    const favicon = m.favicon || '';
+    const ogImage = m.ogImage || '';
+    const title = (m.title || c.title || '').trim();
+    const desc = (m.description || c.description || '').trim();
+    const colors = b.colors || c.colors || {};
+    const fonts = b.fonts || {};
+    const typo = b.typography || c.typography || {};
+    const spacing = b.spacing || {};
+    const buttons = b.buttons || {};
+    const personality = b.personality || {};
+    const designSys = b.designSystem || {};
+    const confidence = b.confidence || {};
+
     // Auto-fill identity fields from crawl
-    if (detected && c.title && !briefData.companyName) {
-      briefData.companyName = c.title.replace(/\s*[-–|].*$/, '').trim();
+    if (detected && title && !briefData.companyName) {
+      briefData.companyName = title.replace(/\s*[-–|].*$/, '').trim();
     }
-    if (detected && c.description && !briefData.tagline) {
-      briefData.tagline = c.description.substring(0, 120);
+    if (detected && desc && !briefData.tagline) {
+      briefData.tagline = desc.substring(0, 120);
     }
+
+    // Build a clean markdown summary (first ~600 chars, stripped of image links)
+    const mdClean = md.replace(/!\[.*?\]\(.*?\)/g, '').replace(/\n{3,}/g, '\n\n').trim().substring(0, 600);
 
     return `
       <div class="bb-card">
@@ -123,25 +145,48 @@ const BrandBrief = (() => {
         ${detected ? `
           <div class="bb-detected-badge">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-3px;margin-right:4px;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-            Brand data auto-detected! We found your logo, colors, and site info.
+            Brand data auto-detected! We found your logo, colors, fonts, and brand personality.
           </div>
 
-          ${c.logo || c.title ? `
+          <!-- ═══ Brand Hero: Logo + Title + Description ═══ -->
+          ${title || logo ? `
           <div class="bb-brand-hero" style="display:flex;align-items:center;gap:1.25rem;padding:1.25rem;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:12px;margin-bottom:1rem;">
-            ${c.logo ? `<img src="${c.logo}" alt="Brand Logo" style="width:72px;height:72px;object-fit:contain;border-radius:10px;background:rgba(255,255,255,0.05);padding:6px;flex-shrink:0;" onerror="this.style.display='none'">` : ''}
+            ${logo ? `<img src="${logo}" alt="Brand Logo" style="width:72px;height:72px;object-fit:contain;border-radius:10px;background:rgba(255,255,255,0.05);padding:6px;flex-shrink:0;" onerror="this.style.display='none'">` : ''}
             <div style="flex:1;min-width:0;">
-              ${c.title ? `<div style="font-size:1rem;font-weight:700;color:var(--text);margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${c.title.trim()}</div>` : ''}
-              ${c.description ? `<div style="font-size:0.78rem;color:var(--text-muted);line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${c.description.trim()}</div>` : ''}
+              ${title ? `<div style="font-size:1rem;font-weight:700;color:var(--text);margin-bottom:4px;">${title}</div>` : ''}
+              ${desc ? `<div style="font-size:0.78rem;color:var(--text-muted);line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${desc}</div>` : ''}
               ${briefData.websiteUrl ? `<a href="${briefData.websiteUrl}" target="_blank" style="font-size:0.7rem;color:var(--accent);text-decoration:none;margin-top:6px;display:inline-flex;align-items:center;gap:4px;opacity:0.8;">${briefData.websiteUrl} <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a>` : ''}
             </div>
           </div>
           ` : ''}
 
+          <!-- ═══ Images: Logo / Favicon / OG Image ═══ -->
+          ${(logo || favicon || ogImage) ? `
+          <div class="bb-preview-section" style="margin-bottom:1rem;">
+            <h4 style="margin-bottom:0.75rem;">Images</h4>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:0.75rem;">
+              ${logo ? `<div style="text-align:center;padding:1rem;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:10px;">
+                <div style="font-size:0.6rem;text-transform:uppercase;font-weight:700;color:var(--text-dim);letter-spacing:0.06em;margin-bottom:8px;">Logo</div>
+                <img src="${logo}" alt="Logo" style="max-width:100%;max-height:60px;object-fit:contain;" onerror="this.parentElement.style.display='none'">
+              </div>` : ''}
+              ${favicon ? `<div style="text-align:center;padding:1rem;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:10px;">
+                <div style="font-size:0.6rem;text-transform:uppercase;font-weight:700;color:var(--text-dim);letter-spacing:0.06em;margin-bottom:8px;">Favicon</div>
+                <img src="${favicon}" alt="Favicon" style="width:32px;height:32px;object-fit:contain;" onerror="this.parentElement.style.display='none'">
+              </div>` : ''}
+              ${ogImage ? `<div style="text-align:center;padding:1rem;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:10px;">
+                <div style="font-size:0.6rem;text-transform:uppercase;font-weight:700;color:var(--text-dim);letter-spacing:0.06em;margin-bottom:8px;">OG Image</div>
+                <img src="${ogImage}" alt="OG Image" style="max-width:100%;max-height:60px;object-fit:contain;" onerror="this.parentElement.style.display='none'">
+              </div>` : ''}
+            </div>
+          </div>
+          ` : ''}
+
           <div class="bb-crawl-preview">
+            <!-- ═══ Color Palette ═══ -->
             <div class="bb-preview-section">
               <h4>Color Palette</h4>
               <div class="bb-color-row">
-                ${(c.colors && Object.keys(c.colors).length > 0 ? Object.entries(c.colors).map(([k,v]) =>
+                ${(Object.keys(colors).length > 0 ? Object.entries(colors).map(([k,v]) =>
                   `<div class="bb-color-chip">
                     <div class="bb-color-swatch" style="background:${v}"></div>
                     <span>${k}</span>
@@ -150,14 +195,113 @@ const BrandBrief = (() => {
                 ).join('') : '<span class="bb-muted">None detected</span>')}
               </div>
             </div>
+
+            <!-- ═══ Fonts ═══ -->
             <div class="bb-preview-section">
-              <h4>Typography</h4>
-              <span>${c.typography?.headings || 'Not detected'} / ${c.typography?.body || 'Not detected'}</span>
+              <h4>Fonts</h4>
+              ${fonts.primary || fonts.heading || fonts.body || typo.headings || typo.body ? `
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;">
+                ${fonts.heading || fonts.primary || typo.headings ? `<div style="padding:0.5rem 0.75rem;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.05);border-radius:8px;">
+                  <div style="font-size:0.6rem;text-transform:uppercase;font-weight:700;color:var(--text-dim);letter-spacing:0.06em;margin-bottom:4px;">Heading</div>
+                  <span style="font-size:0.85rem;font-weight:600;color:var(--text);">${fonts.heading?.family || fonts.primary?.family || typo.headings || 'N/A'}</span>
+                  ${fonts.heading?.weight ? `<span style="font-size:0.65rem;color:var(--text-muted);margin-left:6px;">${fonts.heading.weight}</span>` : ''}
+                </div>` : ''}
+                ${fonts.body || typo.body ? `<div style="padding:0.5rem 0.75rem;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.05);border-radius:8px;">
+                  <div style="font-size:0.6rem;text-transform:uppercase;font-weight:700;color:var(--text-dim);letter-spacing:0.06em;margin-bottom:4px;">Body</div>
+                  <span style="font-size:0.85rem;font-weight:600;color:var(--text);">${fonts.body?.family || typo.body || 'N/A'}</span>
+                  ${fonts.body?.weight ? `<span style="font-size:0.65rem;color:var(--text-muted);margin-left:6px;">${fonts.body.weight}</span>` : ''}
+                </div>` : ''}
+              </div>
+              ` : '<span class="bb-muted">Not detected</span>'}
             </div>
+
+            <!-- ═══ Typography Scale ═══ -->
+            ${typo.primary || typo.h1 || typo.headingSize ? `
             <div class="bb-preview-section">
-              <h4>Brand Voice</h4>
-              <span>${a.brandVoice || 'Will be refined in the next steps'}</span>
+              <h4>Typography Scale</h4>
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(80px,1fr));gap:0.4rem;">
+                ${typo.primary ? `<div style="text-align:center;padding:0.4rem;background:rgba(124,106,237,0.06);border:1px solid rgba(124,106,237,0.12);border-radius:6px;"><div style="font-size:0.55rem;text-transform:uppercase;color:var(--text-dim);letter-spacing:0.06em;">Primary</div><div style="font-size:0.8rem;font-weight:700;color:var(--accent);">${typo.primary}</div></div>` : ''}
+                ${typo.heading ? `<div style="text-align:center;padding:0.4rem;background:rgba(124,106,237,0.06);border:1px solid rgba(124,106,237,0.12);border-radius:6px;"><div style="font-size:0.55rem;text-transform:uppercase;color:var(--text-dim);letter-spacing:0.06em;">Heading</div><div style="font-size:0.8rem;font-weight:700;color:var(--accent);">${typo.heading}</div></div>` : ''}
+                ${typo.h1 ? `<div style="text-align:center;padding:0.4rem;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:6px;"><div style="font-size:0.55rem;text-transform:uppercase;color:var(--text-dim);letter-spacing:0.06em;">H1</div><div style="font-size:0.8rem;font-weight:700;color:var(--text);">${typo.h1}</div></div>` : ''}
+                ${typo.h2 ? `<div style="text-align:center;padding:0.4rem;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:6px;"><div style="font-size:0.55rem;text-transform:uppercase;color:var(--text-dim);letter-spacing:0.06em;">H2</div><div style="font-size:0.8rem;font-weight:700;color:var(--text);">${typo.h2}</div></div>` : ''}
+                ${typo.body ? `<div style="text-align:center;padding:0.4rem;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:6px;"><div style="font-size:0.55rem;text-transform:uppercase;color:var(--text-dim);letter-spacing:0.06em;">Body</div><div style="font-size:0.8rem;font-weight:700;color:var(--text);">${typo.body}</div></div>` : ''}
+                ${typo.scale ? `<div style="text-align:center;padding:0.4rem;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:6px;"><div style="font-size:0.55rem;text-transform:uppercase;color:var(--text-dim);letter-spacing:0.06em;">Scale</div><div style="font-size:0.8rem;font-weight:700;color:var(--text);">${typo.scale}</div></div>` : ''}
+              </div>
             </div>
+            ` : ''}
+
+            <!-- ═══ Spacing ═══ -->
+            ${(spacing.base || spacing.borderRadius) ? `
+            <div class="bb-preview-section">
+              <h4>Spacing</h4>
+              <div style="display:flex;gap:1.5rem;flex-wrap:wrap;">
+                ${spacing.base ? `<div><span style="font-size:0.6rem;text-transform:uppercase;font-weight:700;color:var(--text-dim);letter-spacing:0.06em;">Base Unit:</span> <span style="font-size:0.85rem;font-weight:600;color:var(--accent);">${spacing.base}</span></div>` : ''}
+                ${spacing.borderRadius ? `<div><span style="font-size:0.6rem;text-transform:uppercase;font-weight:700;color:var(--text-dim);letter-spacing:0.06em;">Border Radius:</span> <span style="font-size:0.85rem;font-weight:600;color:var(--rose,#f472b6);">${spacing.borderRadius}</span></div>` : ''}
+              </div>
+            </div>
+            ` : ''}
+
+            <!-- ═══ Button Components ═══ -->
+            ${(buttons.primary || buttons.secondary) ? `
+            <div class="bb-preview-section">
+              <h4>Buttons</h4>
+              <div style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:center;">
+                ${buttons.primary ? `<span style="display:inline-block;padding:8px 18px;border-radius:${spacing.borderRadius || '4px'};background:${colors.primary || '#7c6aed'};color:#fff;font-size:0.78rem;font-weight:600;">${buttons.primary.text || 'Primary'}</span>` : ''}
+                ${buttons.secondary ? `<span style="display:inline-block;padding:8px 18px;border-radius:${spacing.borderRadius || '4px'};background:${buttons.secondary.backgroundColor || colors.textPrimary || '#000'};color:#fff;font-size:0.78rem;font-weight:600;">${buttons.secondary.text || 'Secondary'}</span>` : ''}
+              </div>
+            </div>
+            ` : ''}
+
+            <!-- ═══ Brand Personality ═══ -->
+            ${(personality.tone || personality.energy || personality.targetAudience) ? `
+            <div class="bb-preview-section">
+              <h4>Brand Personality</h4>
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:0.5rem;">
+                ${personality.tone ? `<div style="padding:0.6rem 0.75rem;background:rgba(244,114,182,0.06);border:1px solid rgba(244,114,182,0.12);border-radius:8px;">
+                  <div style="font-size:0.6rem;text-transform:uppercase;font-weight:700;color:var(--text-dim);letter-spacing:0.06em;margin-bottom:2px;">Tone</div>
+                  <span style="font-size:0.85rem;font-weight:600;color:var(--rose,#f472b6);text-transform:capitalize;">${personality.tone}</span>
+                </div>` : ''}
+                ${personality.energy ? `<div style="padding:0.6rem 0.75rem;background:rgba(34,211,238,0.06);border:1px solid rgba(34,211,238,0.12);border-radius:8px;">
+                  <div style="font-size:0.6rem;text-transform:uppercase;font-weight:700;color:var(--text-dim);letter-spacing:0.06em;margin-bottom:2px;">Energy</div>
+                  <span style="font-size:0.85rem;font-weight:600;color:var(--cyan,#22d3ee);text-transform:capitalize;">${personality.energy}</span>
+                </div>` : ''}
+                ${personality.targetAudience ? `<div style="padding:0.6rem 0.75rem;background:rgba(124,106,237,0.06);border:1px solid rgba(124,106,237,0.12);border-radius:8px;">
+                  <div style="font-size:0.6rem;text-transform:uppercase;font-weight:700;color:var(--text-dim);letter-spacing:0.06em;margin-bottom:2px;">Target Audience</div>
+                  <span style="font-size:0.8rem;font-weight:500;color:var(--text);">${personality.targetAudience}</span>
+                </div>` : ''}
+              </div>
+            </div>
+            ` : ''}
+
+            <!-- ═══ Design System ═══ -->
+            ${(designSys.framework) ? `
+            <div class="bb-preview-section">
+              <h4>Design System</h4>
+              <span style="font-size:0.8rem;color:var(--text-muted);">Framework: <strong style="color:var(--text);">${designSys.framework}</strong></span>
+              ${designSys.componentLibrary ? ` · Library: <strong style="color:var(--text);">${designSys.componentLibrary}</strong>` : ''}
+            </div>
+            ` : ''}
+
+            <!-- ═══ Confidence Scores ═══ -->
+            ${confidence.overall ? `
+            <div class="bb-preview-section">
+              <h4>Analysis Confidence</h4>
+              <div style="display:flex;gap:1rem;flex-wrap:wrap;">
+                ${confidence.overall ? `<div style="display:flex;align-items:center;gap:6px;"><div style="width:40px;height:4px;border-radius:2px;background:rgba(255,255,255,0.08);overflow:hidden;"><div style="width:${Math.round(confidence.overall * 100)}%;height:100%;background:var(--success,#34d399);border-radius:2px;"></div></div><span style="font-size:0.7rem;color:var(--text-muted);">Overall ${Math.round(confidence.overall * 100)}%</span></div>` : ''}
+                ${confidence.colors ? `<div style="display:flex;align-items:center;gap:6px;"><div style="width:40px;height:4px;border-radius:2px;background:rgba(255,255,255,0.08);overflow:hidden;"><div style="width:${Math.round(confidence.colors * 100)}%;height:100%;background:var(--accent,#7c6aed);border-radius:2px;"></div></div><span style="font-size:0.7rem;color:var(--text-muted);">Colors ${Math.round(confidence.colors * 100)}%</span></div>` : ''}
+                ${confidence.buttons ? `<div style="display:flex;align-items:center;gap:6px;"><div style="width:40px;height:4px;border-radius:2px;background:rgba(255,255,255,0.08);overflow:hidden;"><div style="width:${Math.round(confidence.buttons * 100)}%;height:100%;background:var(--cyan,#22d3ee);border-radius:2px;"></div></div><span style="font-size:0.7rem;color:var(--text-muted);">Buttons ${Math.round(confidence.buttons * 100)}%</span></div>` : ''}
+              </div>
+            </div>
+            ` : ''}
+
+            <!-- ═══ Website Content Summary ═══ -->
+            ${mdClean ? `
+            <div class="bb-preview-section">
+              <h4>Website Content Summary</h4>
+              <div style="max-height:140px;overflow-y:auto;padding:0.75rem;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.05);border-radius:8px;font-size:0.75rem;color:var(--text-muted);line-height:1.65;white-space:pre-wrap;word-break:break-word;">${mdClean}${md.length > 600 ? '\n\n...(truncated)' : ''}</div>
+            </div>
+            ` : ''}
+
           </div>
         ` : `
           <div class="bb-hint">
@@ -168,6 +312,7 @@ const BrandBrief = (() => {
       </div>
     `;
   }
+
 
   // ── Step 1: Brand Identity ──
   function renderIdentityStep() {
@@ -501,15 +646,27 @@ const BrandBrief = (() => {
       const result = await apiCall(CRAWL_URL, { url });
       if (result && !result.error) {
         crawlData = result;
-        // Pre-fill briefData from crawl results
-        if (result.analysis) {
-          if (result.analysis.targetAudience && !briefData.demographics) briefData.demographics = result.analysis.targetAudience;
-          if (result.analysis.brandVoice && !briefData.voiceTone) briefData.voiceTone = result.analysis.brandVoice;
-        }
-        if (result.crawl?.colors && !briefData.colors) briefData.colors = result.crawl.colors;
-        if (result.crawl?.typography && !briefData.typography) briefData.typography = result.crawl.typography;
+        // Pre-fill briefData from new branding response
+        const b = result.branding || {};
+        const m = result.metadata || {};
+        // Fallback to old shape
+        const c = result.crawl || {};
+        const a = result.analysis || {};
+
+        // Colors
+        if ((b.colors || c.colors) && !briefData.colors) briefData.colors = b.colors || c.colors;
+        // Typography
+        if ((b.typography || c.typography) && !briefData.typography) briefData.typography = b.typography || c.typography;
+        // Brand voice / personality
+        if (b.personality?.targetAudience && !briefData.demographics) briefData.demographics = b.personality.targetAudience;
+        if (b.personality?.tone && !briefData.voiceTone) briefData.voiceTone = b.personality.tone;
+        if (a.targetAudience && !briefData.demographics) briefData.demographics = a.targetAudience;
+        if (a.brandVoice && !briefData.voiceTone) briefData.voiceTone = a.brandVoice;
+        // Store markdown for context
+        if (result.markdown) briefData._siteMarkdown = result.markdown;
+
         saveDraft();
-        showNotice('Brand analysis complete! Your data has been pre-filled.', 'success');
+        showNotice('Brand analysis complete! Logo, colors, fonts, personality — all captured.', 'success');
       } else {
         showNotice('Could not analyze site automatically. You can fill in details manually.', 'info');
       }
@@ -520,6 +677,7 @@ const BrandBrief = (() => {
     isLoading = false;
     render();
   }
+
 
   async function submit() {
     if (!confirm('Submit your brand brief? This will generate your AI persona recommendations.')) return;

@@ -17,6 +17,7 @@
 | 1.2 | 2026-05-25 | MSA §7 IP rewritten (perpetual client ownership), §1 Scope updated (client-owned accounts), §10 Infrastructure named stack added |
 | 1.3 | 2026-05-25 | Invoice reissued — $2,500 due May 28, 2026. Prior duplicates voided |
 | 1.4 | 2026-05-29 | Client config completed — rep_name, email, effective_date populated |
+| 1.5 | 2026-05-30 | Scout Intelligence Engine 2.0 — Channel Decoder + Content Forge modules deployed, agent configs updated |
 
 ---
 
@@ -75,6 +76,9 @@
 | Media engine deployed | Monarch | ☐ | — |
 | Persona database + scheduler live | Monarch | ☐ | — |
 | Analytics dashboard live | Monarch | ☐ | — |
+| Channel Decoder module deployed | Monarch | ✔ | 2026-05-30 |
+| Content Forge module deployed | Monarch | ✔ | 2026-05-30 |
+| Agent blueprint integration complete | Monarch | ✔ | 2026-05-30 |
 | Persona set generated | Monarch | ☐ | — |
 | **Client approval on personas** | Client | ☐ | — |
 
@@ -108,6 +112,9 @@
 | 9 | Source code in Client's GitHub | ☐ |
 | 10 | Live walkthrough completed | ☐ |
 | 11 | First production post published | ☐ |
+| 12 | Channel Decoder renders blueprint (demo + live) | ☐ |
+| 13 | Content Forge generates content package | ☐ |
+| 14 | Blueprint → Agent feed pipeline verified | ☐ |
 
 **Handoff:**
 

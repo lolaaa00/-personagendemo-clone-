@@ -49,6 +49,8 @@
                 <a href="#persona-config" class="pg-nav-link portal-nav-item" style="display:none;" onclick="switchPortalView('persona-config')">Persona Config</a>
                 <a href="#inbox" class="pg-nav-link portal-nav-item" style="display:none;" onclick="switchPortalView('inbox')">Inbox</a>
                 <a href="#trends" class="pg-nav-link portal-nav-item" style="display:none;" onclick="switchPortalView('trends')">Trends</a>
+                <a href="#channel-decoder" class="pg-nav-link portal-nav-item" style="display:none;" onclick="switchPortalView('channel-decoder')">Decoder</a>
+                <a href="#content-forge" class="pg-nav-link portal-nav-item" style="display:none;" onclick="switchPortalView('content-forge')">Forge</a>
                 <a href="#project-manager" class="pg-nav-link portal-nav-item" style="display:none;">Projects</a>
                 <a href="#agreement-details" class="pg-nav-link portal-nav-item" style="display:none;">Agreement</a>
             </div>
@@ -75,6 +77,8 @@
       <a href="#persona-config" class="pg-nav-link portal-nav-item" style="display:none;" onclick="switchPortalView('persona-config'); toggleNav()">Persona Config</a>
       <a href="#inbox" class="pg-nav-link portal-nav-item" style="display:none;" onclick="switchPortalView('inbox'); toggleNav()">Inbox</a>
       <a href="#trends" class="pg-nav-link portal-nav-item" style="display:none;" onclick="switchPortalView('trends'); toggleNav()">Trends</a>
+      <a href="#channel-decoder" class="pg-nav-link portal-nav-item" style="display:none;" onclick="switchPortalView('channel-decoder'); toggleNav()">Decoder</a>
+      <a href="#content-forge" class="pg-nav-link portal-nav-item" style="display:none;" onclick="switchPortalView('content-forge'); toggleNav()">Forge</a>
       <a href="#project-manager" class="pg-nav-link portal-nav-item" style="display:none;" onclick="toggleNav()">Projects</a>
       <a href="#agreement-details" class="pg-nav-link portal-nav-item" style="display:none;" onclick="toggleNav()">Agreement</a>
     </nav>
@@ -687,7 +691,7 @@
                                             <span style="width:28px; height:28px; border-radius:8px; background:var(--accent-soft); display:flex; align-items:center; justify-content:center; font-size:0.85rem;">📝</span>
                                             New Project Request
                                         </h3>
-                                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.75rem; margin-bottom:0.75rem;">
+                                        <div class="pm-form-row" style="margin-bottom:0.75rem;">
                                             <div>
                                                 <label style="display:block; font-size:0.65rem; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:0.35rem;">Title</label>
                                                 <input type="text" id="pm-title" placeholder="e.g. Add TikTok connector" style="width:100%; padding:0.6rem 0.75rem; border-radius:var(--radius-sm); background:var(--surface-2); border:1px solid var(--border); color:var(--text); font-size:0.82rem; font-family:'Inter',sans-serif; outline:none; transition:border-color 0.3s;" onfocus="this.style.borderColor='rgba(124,106,237,0.4)'" onblur="this.style.borderColor='rgba(255,255,255,0.05)'">
@@ -709,7 +713,7 @@
                                     </div>
                                 
                                     <!-- Ticket Stats -->
-                                    <div id="pm-stats" style="display:grid; grid-template-columns:repeat(4,1fr); gap:0.75rem; margin-bottom:1.5rem;"></div>
+                                    <div id="pm-stats" class="pm-stats-grid" style="margin-bottom:1.5rem;"></div>
                                 
                                     <!-- PM Toolbar: View Toggle + Search + Filters -->
                                     <div id="pm-toolbar" style="display:flex; align-items:center; justify-content:space-between; gap:0.75rem; margin-bottom:1rem; flex-wrap:wrap;">
@@ -872,7 +876,7 @@
                                     <h2 class="section-title">Automated Account Creation</h2>
                                     <p class="section-lead">Manage individual account verification, credential storage, and link platform handles directly to their respective UGC content pipelines.</p>
                                     
-                                    <div style="display: grid; grid-template-columns: 240px 1fr; gap: 1.5rem; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.5rem;">
+                                    <div class="ac-layout" style="background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.5rem;">
                                         <!-- Account Creator Sidebar -->
                                         <div style="border-right: 1px solid var(--border); padding-right: 1rem; display: flex; flex-direction: column; gap: 8px;">
                                             <span style="font-size: 0.65rem; text-transform: uppercase; font-weight: 700; color: var(--text-dim); margin-bottom: 0.25rem;">Select Persona</span>
@@ -923,7 +927,7 @@
                                             <!-- Platform Configuration Rows -->
                                             <div style="display: flex; flex-direction: column; gap: 0.75rem;">
                                                 <!-- Instagram -->
-                                                <div style="display: grid; grid-template-columns: 140px 1fr 140px; align-items: center; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 0.75rem 1rem; gap: 1rem;">
+                                                <div class="ac-platform-row" style="background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 0.75rem 1rem;">
                                                     <div style="display: flex; align-items: center; gap: 8px;">
                                                         <span style="font-size: 0.8rem; font-weight: 600;">Instagram</span>
                                                         <span class="ac-status-badge disconnected" id="ac-ig-badge">Not Connected</span>
@@ -937,7 +941,7 @@
                                                 </div>
                                                 
                                                 <!-- TikTok -->
-                                                <div style="display: grid; grid-template-columns: 140px 1fr 140px; align-items: center; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 0.75rem 1rem; gap: 1rem;">
+                                                <div class="ac-platform-row" style="background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 0.75rem 1rem;">
                                                     <div style="display: flex; align-items: center; gap: 8px;">
                                                         <span style="font-size: 0.8rem; font-weight: 600;">TikTok</span>
                                                         <span class="ac-status-badge disconnected" id="ac-tt-badge">Not Connected</span>
@@ -951,7 +955,7 @@
                                                 </div>
                                                 
                                                 <!-- YouTube -->
-                                                <div style="display: grid; grid-template-columns: 140px 1fr 140px; align-items: center; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 0.75rem 1rem; gap: 1rem;">
+                                                <div class="ac-platform-row" style="background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 0.75rem 1rem;">
                                                     <div style="display: flex; align-items: center; gap: 8px;">
                                                         <span style="font-size: 0.8rem; font-weight: 600;">YouTube</span>
                                                         <span class="ac-status-badge disconnected" id="ac-yt-badge">Not Connected</span>

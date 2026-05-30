@@ -1,7 +1,8 @@
 /* styles.css — PersonaGen Demo & Unified Portal — Requires tokens.css */
 
 /* ── Base ── */
-body { background:var(--bg); color:var(--text); font-family:var(--font-body); overflow-x:hidden; }
+html { overflow-x: hidden; }
+body { background:var(--bg); color:var(--text); font-family:var(--font-body); overflow-x:hidden; max-width:100vw; }
 .grain-overlay { position:fixed; inset:0; pointer-events:none; z-index:0; opacity:0.025; background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E"); }
 .cursor-glow { display:none; }
 
@@ -1244,6 +1245,7 @@ select option { background:var(--surface-2); }
   height: 100vh;
   overflow: visible;
   position: relative;
+  max-width: 100vw;
 }
 
 .dash-header {
@@ -2192,6 +2194,7 @@ body.portal-active {
   .dash-workspace {
     grid-template-columns: 1fr !important;
     height: auto;
+    overflow-x: hidden;
   }
 
   /* Right panel: off-canvas from right */
@@ -2218,6 +2221,10 @@ body.portal-active {
   }
   .dash-header-title {
     font-size: 0.95rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 40vw;
   }
 
   /* Show hamburger + analytics toggle */
@@ -2413,6 +2420,201 @@ body.portal-active {
 
   /* ── BB Viability ── */
   .bb-viability-breakdown { grid-template-columns: 1fr; }
+  }
+
+  /* Show hamburger + analytics toggle */
+  .dash-hamburger,
+  .dash-analytics-toggle {
+    display: flex;
+  }
+
+  /* Touch targets — menu items */
+  .dash-menu-item {
+    padding: 14px 16px;
+  }
+
+  /* Touch targets — PM filter buttons */
+  .dash-filter,
+  .pm-view-btn,
+  .dash-sub-tab-btn {
+    min-height: 44px;
+    padding: 8px 14px;
+    font-size: 0.75rem;
+  }
+
+/* Center panel breathing room */
+  .dash-center-panel {
+    padding: 1rem;
+  }
+
+  /* KPI row stack */
+  .dash-kpi-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* Chart row stack */
+  .dash-chart-row {
+    grid-template-columns: 1fr;
+  }
+
+  /* Agent table scroll */
+  .dash-row {
+    grid-template-columns: 2fr 1fr 1fr;
+    font-size: 0.75rem;
+  }
+  .dash-row .dash-cell:nth-child(n+4) {
+    display: none;
+  }
+
+  /* Kanban: single column */
+  .pm-kanban-board {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Scheduler grid: stack */
+  .sched-week-header,
+  .sched-grid {
+    grid-template-columns: 1fr;
+  }
+  .sched-time-col {
+    display: none;
+  }
+
+  /* Calendar week: stack */
+  .calendar-week {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* Hero stats on mobile */
+  .hero-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* Generator / Scout layouts stack */
+  .generator-layout,
+  .scout-layout {
+    grid-template-columns: 1fr;
+  }
+
+  /* Milestone grid */
+  .milestone-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Pipeline flow wrap */
+  .pipeline-flow {
+    flex-direction: column;
+  }
+  .pipe-arrow {
+    transform: rotate(90deg);
+    margin: 0;
+    padding: 0.25rem;
+  }
+
+  /* Influencer grid */
+  .influencer-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Sub-tabs horizontal scroll */
+  .dash-sub-tabs {
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    flex-wrap: nowrap;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   MOBILE ≤480px — Small phones, tight squeeze
+   ═══════════════════════════════════════════════════════════════ */
+@media (max-width: 480px) {
+  /* ── Landing Page ── */
+  .slide-hero { padding: 3rem 1rem 2rem; min-height: auto; }
+  .slide { padding: 2.5rem 0; }
+  .slide-inner { padding: 0 1rem; }
+  .hero-badge { font-size: 0.65rem; padding: 5px 12px; }
+  .hero-title { margin-bottom: 1rem; }
+  .hero-subtitle { font-size: 0.9rem; margin-bottom: 1.5rem; }
+  .hero-cta-row { flex-direction: column; align-items: center; gap: 0.75rem; }
+  .hero-cta-row .btn { width: 100%; max-width: 280px; text-align: center; }
+  .hero-stats { grid-template-columns: repeat(2, 1fr); gap: 0.5rem; }
+  .stat-card { padding: 0.75rem 0.5rem; }
+  .stat-number { font-size: 1.4rem; }
+  .stat-label { font-size: 0.6rem; }
+
+  /* ── Section headers ── */
+  .section-tag { font-size: 0.6rem; padding: 3px 10px; }
+
+  /* ── Dashboard Header ── */
+  .dash-header { height: 52px; padding: 0 0.75rem; }
+  .dash-header-title { font-size: 0.82rem; }
+  .dash-header-subtitle { display: none; }
+  .dash-header-right { gap: 0.5rem; }
+  .dash-header-btn { font-size: 0.7rem; padding: 6px 10px; }
+  .dash-user-badge { font-size: 0.75rem; padding: 4px 10px; gap: 6px; }
+
+  /* ── Dashboard Center Panel ── */
+  .dash-center-panel { padding: 0.75rem; }
+  .dash-kpi-row { grid-template-columns: 1fr; gap: 0.5rem; }
+  .dash-kpi-card { padding: 0.75rem; }
+  .dash-chart-row { gap: 0.75rem; }
+
+  /* ── Profile dropdown full-width ── */
+  .profile-dropdown {
+    position: fixed;
+    left: 1rem;
+    right: 1rem;
+    top: auto;
+    bottom: 1rem;
+    min-width: auto;
+    border-radius: 14px;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   MOBILE ≤768px — Brand Brief Wizard
+   ═══════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  /* ── BB Progress dots ── */
+  .bb-progress { gap: 0; }
+  .bb-step-dot { width: 32px; height: 32px; font-size: 0.7rem; }
+  .bb-step-dot span { font-size: 0.75rem; }
+  .bb-step-line { width: 12px; min-width: 8px; }
+
+  /* ── BB Layout ── */
+  .bb-container { padding: 0; }
+  .bb-card { padding: 1.25rem 1rem; }
+  .bb-title { font-size: 1.1rem; }
+  .bb-desc { font-size: 0.8rem; }
+
+  /* ── BB Inputs ── */
+  .bb-crawl-row { flex-direction: column; }
+  .bb-crawl-row .bb-input { width: 100%; }
+  .bb-btn-analyze { width: 100%; justify-content: center; min-height: 44px; }
+  .bb-field-row { grid-template-columns: 1fr; gap: 0.75rem; }
+
+  /* ── BB Colors ── */
+  .bb-color-editor { grid-template-columns: repeat(2, 1fr); }
+  .bb-color-row { gap: 0.5rem; }
+  .bb-color-chip { flex-direction: column; align-items: center; gap: 2px; }
+
+  /* ── BB Checkboxes & Platforms ── */
+  .bb-checkbox-grid { grid-template-columns: 1fr 1fr; }
+  .bb-platform-grid { grid-template-columns: 1fr 1fr; }
+  .bb-platform-btn { padding: 0.75rem 0.5rem; font-size: 0.75rem; }
+
+  /* ── BB Navigation ── */
+  .bb-nav { flex-direction: column-reverse; gap: 0.5rem; }
+  .bb-btn { width: 100%; min-height: 48px; justify-content: center; }
+
+  /* ── BB Review ── */
+  .bb-review-row { flex-direction: column; gap: 0.25rem; }
+  .bb-review-value { text-align: left; }
+  .bb-review-label { min-width: auto; }
+
+  /* ── BB Viability ── */
+  .bb-viability-breakdown { grid-template-columns: 1fr; }
 
   /* ── BB Persona Drafts ── */
   .bb-persona-draft-header { flex-direction: column; text-align: center; }
@@ -2420,4 +2622,105 @@ body.portal-active {
 
   /* ── BB Brand Hero (crawl result card) ── */
   .bb-brand-hero { flex-direction: column; text-align: center; gap: 0.75rem !important; }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   ACCOUNT CREATOR & PM — Desktop-first, mobile-safe
+   ═══════════════════════════════════════════════════════════════ */
+.ac-layout {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: 1.5rem;
+}
+.ac-platform-row {
+  display: grid;
+  grid-template-columns: 140px 1fr 140px;
+  align-items: center;
+  gap: 1rem;
+}
+.pm-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+.pm-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.75rem;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   GLOBAL OVERFLOW CONTAINMENT — Prevent horizontal scroll
+   ═══════════════════════════════════════════════════════════════ */
+.slide,
+.slide-inner,
+.dash-center-panel,
+.bb-container,
+.bb-card {
+  overflow-x: hidden;
+  max-width: 100%;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   MOBILE ≤768px — Account Creator, PM, and overflow fixes
+   ═══════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  .ac-layout {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+  .ac-layout > div:first-child {
+    border-right: none !important;
+    padding-right: 0 !important;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.75rem;
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+  .ac-platform-row {
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+  }
+  .ac-platform-row button {
+    width: 100%;
+    justify-content: center;
+  }
+  .pm-form-row {
+    grid-template-columns: 1fr;
+  }
+  .pm-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* Influencer grid — allow single column */
+  .influencer-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Section inner padding */
+  .slide-inner { padding: 0 1rem; }
+
+  /* Hero glow containment */
+  .hero-glow-1,
+  .hero-glow-2,
+  .hero-glow-3 {
+    width: 200px !important;
+    height: 200px !important;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   MOBILE ≤480px — Extra small phone refinements
+   ═══════════════════════════════════════════════════════════════ */
+@media (max-width: 480px) {
+  .pm-stats-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+  }
+  .ac-platform-row input {
+    font-size: 0.75rem;
+  }
+  .ac-platform-row span[style*="position: absolute"] {
+    display: none;
+  }
 }

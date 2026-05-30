@@ -940,9 +940,11 @@ const ChannelDecoder = (() => {
 
   function openInForge() {
     if (!currentBlueprint) return;
-    if (typeof ContentForge !== 'undefined' && ContentForge.init) {
-      ContentForge.init('content-forge-mount', currentBlueprint);
-      if (typeof PersonaGenAPI !== 'undefined') PersonaGenAPI.showToast('Opening blueprint in Content Forge…', 'info');
+    if (typeof ContentForge !== 'undefined' && ContentForge.forgeFromBlueprint) {
+      // Switch to Content Forge view if portal switcher is available
+      if (typeof switchPortalView === 'function') switchPortalView('content-forge');
+      ContentForge.forgeFromBlueprint(currentBlueprint);
+      if (typeof PersonaGenAPI !== 'undefined') PersonaGenAPI.showToast('Blueprint loaded into Content Forge', 'success');
     } else {
       if (typeof PersonaGenAPI !== 'undefined') PersonaGenAPI.showToast('Content Forge module not loaded', 'warning');
     }
