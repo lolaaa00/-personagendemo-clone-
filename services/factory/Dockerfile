@@ -29,7 +29,7 @@ RUN npm install --omit=dev
 
 COPY services/factory/src/ ./src/
 
-RUN mkdir -p /data/profiles /data/screenshots
+RUN mkdir -p /data/profiles /data/screenshots && chown -R node:node /data
 
 EXPOSE 8080
 
