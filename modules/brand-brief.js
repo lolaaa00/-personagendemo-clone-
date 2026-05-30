@@ -99,6 +99,17 @@ const BrandBrief = (() => {
   // ── Step 0: Website Crawl ──
   function renderCrawlStep() {
     const detected = crawlData ? true : false;
+    const c = crawlData?.crawl || {};
+    const a = crawlData?.analysis || {};
+
+    // Auto-fill identity fields from crawl
+    if (detected && c.title && !briefData.companyName) {
+      briefData.companyName = c.title.replace(/\s*[-–|].*$/, '').trim();
+    }
+    if (detected && c.description && !briefData.tagline) {
+      briefData.tagline = c.description.substring(0, 120);
+    }
+
     return `
       <div class="bb-card">
         <label class="bb-label">Your Website URL</label>
@@ -106,34 +117,52 @@ const BrandBrief = (() => {
           <input type="url" class="bb-input" id="bb-url" placeholder="https://yourwebsite.com"
                  value="${briefData.websiteUrl || ''}">
           <button class="bb-btn bb-btn-analyze" onclick="BrandBrief.crawl()" ${isLoading ? 'disabled' : ''}>
-            ${isLoading ? '<span class="bb-spinner"></span> Analyzing...' : '🔍 Analyze Brand'}
+            ${isLoading ? '<span class="bb-spinner"></span> Analyzing...' : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:4px;"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> Analyze Brand'}
           </button>
         </div>
         ${detected ? `
           <div class="bb-detected-badge">
-            <span>✨</span> Brand data auto-detected! We found colors, fonts, and brand voice from your site.
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-3px;margin-right:4px;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            Brand data auto-detected! We found your logo, colors, and site info.
           </div>
+
+          ${c.logo || c.title ? `
+          <div class="bb-brand-hero" style="display:flex;align-items:center;gap:1.25rem;padding:1.25rem;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:12px;margin-bottom:1rem;">
+            ${c.logo ? `<img src="${c.logo}" alt="Brand Logo" style="width:72px;height:72px;object-fit:contain;border-radius:10px;background:rgba(255,255,255,0.05);padding:6px;flex-shrink:0;" onerror="this.style.display='none'">` : ''}
+            <div style="flex:1;min-width:0;">
+              ${c.title ? `<div style="font-size:1rem;font-weight:700;color:var(--text);margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${c.title.trim()}</div>` : ''}
+              ${c.description ? `<div style="font-size:0.78rem;color:var(--text-muted);line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${c.description.trim()}</div>` : ''}
+              ${briefData.websiteUrl ? `<a href="${briefData.websiteUrl}" target="_blank" style="font-size:0.7rem;color:var(--accent);text-decoration:none;margin-top:6px;display:inline-flex;align-items:center;gap:4px;opacity:0.8;">${briefData.websiteUrl} <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a>` : ''}
+            </div>
+          </div>
+          ` : ''}
+
           <div class="bb-crawl-preview">
             <div class="bb-preview-section">
-              <h4>Colors Found</h4>
+              <h4>Color Palette</h4>
               <div class="bb-color-row">
-                ${(crawlData.crawl?.colors ? Object.entries(crawlData.crawl.colors).map(([k,v]) =>
-                  `<div class="bb-color-chip"><div class="bb-color-swatch" style="background:${v}"></div><span>${k}</span></div>`
+                ${(c.colors && Object.keys(c.colors).length > 0 ? Object.entries(c.colors).map(([k,v]) =>
+                  `<div class="bb-color-chip">
+                    <div class="bb-color-swatch" style="background:${v}"></div>
+                    <span>${k}</span>
+                    <span style="font-size:0.65rem;color:var(--text-dim);font-family:var(--font-mono,monospace);">${v}</span>
+                  </div>`
                 ).join('') : '<span class="bb-muted">None detected</span>')}
               </div>
             </div>
             <div class="bb-preview-section">
               <h4>Typography</h4>
-              <span>${crawlData.crawl?.typography?.headings || 'Not detected'} / ${crawlData.crawl?.typography?.body || 'Not detected'}</span>
+              <span>${c.typography?.headings || 'Not detected'} / ${c.typography?.body || 'Not detected'}</span>
             </div>
             <div class="bb-preview-section">
               <h4>Brand Voice</h4>
-              <span>${crawlData.analysis?.brandVoice || 'Not detected'}</span>
+              <span>${a.brandVoice || 'Will be refined in the next steps'}</span>
             </div>
           </div>
         ` : `
           <div class="bb-hint">
-            <span>💡</span> We'll crawl your website to auto-detect brand colors, fonts, logos, and voice. This pre-fills the next steps so you don't have to enter everything manually.
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-3px;margin-right:4px;flex-shrink:0;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            We'll crawl your website to auto-detect brand colors, fonts, logos, and voice. This pre-fills the next steps so you don't have to enter everything manually.
           </div>
         `}
       </div>

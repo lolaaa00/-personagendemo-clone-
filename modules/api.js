@@ -8,15 +8,18 @@ const PersonaGenAPI = (() => {
 
   // Endpoints (match n8n webhook paths)
   const ENDPOINTS = {
-    posts:      `${BASE}/personagen-posts`,
-    generate:   `${BASE}/personagen-ai-generate`,
-    publish:    `${BASE}/personagen-publish`,
-    accounts:   `${BASE}/personagen-social`,
-    feed:       `${BASE}/personagen-posts`,
-    trends:     `${BASE}/personagen-trends`,
-    inbox:      `${BASE}/personagen-engagement`,
-    factory:    `${BASE}/personagen-account-factory`,
-    email:      `${BASE}/personagen-email`,
+    posts:        `${BASE}/personagen-posts`,
+    generate:     `${BASE}/personagen-ai-generate`,
+    publish:      `${BASE}/personagen-publish`,
+    accounts:     `${BASE}/personagen-social`,
+    feed:         `${BASE}/personagen-posts`,
+    trends:       `${BASE}/personagen-trends`,
+    inbox:        `${BASE}/personagen-engagement`,
+    factory:      `${BASE}/personagen-account-factory`,
+    email:        `${BASE}/personagen-email`,
+    channelDecode:`${BASE}/personagen-channel-decode`,
+    contentForge: `${BASE}/personagen-content-forge`,
+    blueprints:   `${BASE}/personagen-blueprints`,
   };
 
 
@@ -177,6 +180,47 @@ const PersonaGenAPI = (() => {
     search(personaId, query)  { return request(`${BASE}/personagen-email`, 'search', { persona_id: personaId, q: query }); },
   };
 
+  // ─── Channel Decoder (9-Layer Reverse Engineering) ───
+  const ChannelDecode = {
+    decode(url, platform)    { return request(ENDPOINTS.channelDecode, 'decode', { url, platform }); },
+    analyze(channelData)     { return request(ENDPOINTS.channelDecode, 'analyze', { channel_data: channelData }); },
+    getBlueprint(id)         { return request(ENDPOINTS.channelDecode, 'get_blueprint', { id }); },
+    listBlueprints()         { return request(ENDPOINTS.channelDecode, 'list_blueprints', {}); },
+    deleteBlueprint(id)      { return request(ENDPOINTS.channelDecode, 'delete_blueprint', { id }); },
+  };
+
+  // ─── Content Forge (Blueprint → Production) ───
+  const ContentForge = {
+    generate(blueprintId, topic, agentHandle, platforms) {
+      return request(ENDPOINTS.contentForge, 'generate', { blueprint_id: blueprintId, topic, agent_handle: agentHandle, platforms });
+    },
+    titles(blueprintId, topic, count) {
+      return request(ENDPOINTS.contentForge, 'titles', { blueprint_id: blueprintId, topic, count: count || 5 });
+    },
+    script(blueprintId, topic, agentHandle) {
+      return request(ENDPOINTS.contentForge, 'script', { blueprint_id: blueprintId, topic, agent_handle: agentHandle });
+    },
+    thumbnailBrief(blueprintId, topic) {
+      return request(ENDPOINTS.contentForge, 'thumbnail_brief', { blueprint_id: blueprintId, topic });
+    },
+    repurpose(contentId, targetPlatforms) {
+      return request(ENDPOINTS.contentForge, 'repurpose', { content_id: contentId, target_platforms: targetPlatforms });
+    },
+  };
+
+  // ─── Blueprints (Agent Injection) ───
+  const Blueprints = {
+    feedToAgent(blueprintId, agentHandle, targets) {
+      return request(ENDPOINTS.blueprints, 'feed_to_agent', { blueprint_id: blueprintId, agent_handle: agentHandle, targets });
+    },
+    getAgentBlueprints(agentHandle) {
+      return request(ENDPOINTS.blueprints, 'get_agent_blueprints', { agent_handle: agentHandle });
+    },
+    removeFromAgent(blueprintId, agentHandle) {
+      return request(ENDPOINTS.blueprints, 'remove_from_agent', { blueprint_id: blueprintId, agent_handle: agentHandle });
+    },
+  };
+
   // ─── Toast Notifications ───
   function showToast(message, type = 'success') {
     let toast = document.getElementById('pg-toast');
@@ -193,5 +237,5 @@ const PersonaGenAPI = (() => {
     toast._timer = setTimeout(() => toast.classList.remove('pg-toast--visible'), 4000);
   }
 
-  return { Posts, Generate, Publish, Accounts, Feed, Trends, Inbox, Factory, Email, Local, showToast, ENDPOINTS };
+  return { Posts, Generate, Publish, Accounts, Feed, Trends, Inbox, Factory, Email, Local, ChannelDecode, ContentForge, Blueprints, showToast, ENDPOINTS };
 })();

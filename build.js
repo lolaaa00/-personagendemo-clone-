@@ -472,6 +472,8 @@ function compilePortalPages(content, DIST) {
     'persona-config': getElementContent(content, '<div id="portal-view-persona-config"'),
     inbox: getElementContent(content, '<div id="portal-view-inbox"'),
     trends: getElementContent(content, '<div id="portal-view-trends"'),
+    'channel-decoder': getElementContent(content, '<div id="portal-view-channel-decoder"'),
+    'content-forge': getElementContent(content, '<div id="portal-view-content-forge"'),
     agreement: getElementContent(content, '<div id="portal-view-agreement"'),
     'brand-brief': getElementContent(content, '<div id="portal-view-brand-brief"')
   };
@@ -487,6 +489,8 @@ function compilePortalPages(content, DIST) {
     { file: 'persona-config.html', title: 'AI Agent Configuration', activeMenu: 'menu-persona-config', view: 'persona-config', hasRightPanel: false, workspaceClass: 'no-right-sidebar' },
     { file: 'inbox.html', title: 'Inbox & Engagement Hub', activeMenu: 'menu-inbox', view: 'inbox', hasRightPanel: false, workspaceClass: 'no-right-sidebar' },
     { file: 'trends.html', title: 'Trending Topics Monitor', activeMenu: 'menu-trends', view: 'trends', hasRightPanel: false, workspaceClass: 'no-right-sidebar' },
+    { file: 'channel-decoder.html', title: 'Channel Decoder — 9-Layer Analysis', activeMenu: 'menu-channel-decoder', view: 'channel-decoder', hasRightPanel: false, workspaceClass: 'no-right-sidebar' },
+    { file: 'content-forge.html', title: 'Content Forge — Blueprint to Production', activeMenu: 'menu-content-forge', view: 'content-forge', hasRightPanel: false, workspaceClass: 'no-right-sidebar' },
     { file: 'agreement.html', title: 'Managed Plan SOW & SLA', activeMenu: 'menu-agreement', view: 'agreement', hasRightPanel: false, workspaceClass: 'no-right-sidebar' },
     { file: 'brand-brief.html', title: 'Brand Brief Interview', activeMenu: 'menu-brand-brief', view: 'brand-brief', hasRightPanel: false, workspaceClass: 'no-right-sidebar' }
   ];
@@ -510,6 +514,8 @@ function compilePortalPages(content, DIST) {
         'persona-config': 'persona-config.html',
         inbox: 'inbox.html',
         trends: 'trends.html',
+        'channel-decoder': 'channel-decoder.html',
+        'content-forge': 'content-forge.html',
         agreement: 'agreement.html',
         'brand-brief': 'brand-brief.html'
       };

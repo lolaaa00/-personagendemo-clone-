@@ -348,6 +348,12 @@
                     <button class="dash-menu-item" onclick="switchPortalView('trends', this)">
                         <span><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg></span> Trend Monitor
                     </button>
+                    <button class="dash-menu-item" onclick="switchPortalView('channel-decoder', this)">
+                        <span><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg></span> Channel Decoder
+                    </button>
+                    <button class="dash-menu-item" onclick="switchPortalView('content-forge', this)">
+                        <span><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></span> Content Forge
+                    </button>
                     <button class="dash-menu-item" onclick="switchPortalView('pm', this)">
                         <span><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span> Support & Tickets
                     </button>
@@ -1003,7 +1009,25 @@
                             </section>
                         </div>
 
-                        <!-- 10. AGREEMENT SUBVIEW -->
+                        <!-- 10. CHANNEL DECODER SUBVIEW -->
+                        <div id="portal-view-channel-decoder" class="portal-subview">
+                            <section class="slide" style="padding:0;">
+                                <div class="slide-inner" style="max-width:100%; padding:0;">
+                                    <div id="channel-decoder-mount" style="margin-top: 0;"></div>
+                                </div>
+                            </section>
+                        </div>
+
+                        <!-- 11. CONTENT FORGE SUBVIEW -->
+                        <div id="portal-view-content-forge" class="portal-subview">
+                            <section class="slide" style="padding:0;">
+                                <div class="slide-inner" style="max-width:100%; padding:0;">
+                                    <div id="content-forge-mount" style="margin-top: 0;"></div>
+                                </div>
+                            </section>
+                        </div>
+
+                        <!-- 12. AGREEMENT SUBVIEW -->
                         <div id="portal-view-agreement" class="portal-subview">
                             <!-- Portal Hero -->
                             <div style="text-align: center; padding: 2rem 0; border-bottom: 1px solid var(--border); margin-bottom: 2rem;">
@@ -1560,6 +1584,8 @@
     <script src="modules/inbox-email.js"></script>
     <script src="modules/inbox.js"></script>
     <script src="modules/trends.js"></script>
+    <script src="modules/channel-decoder.js"></script>
+    <script src="modules/content-forge.js"></script>
     <script src="modules/brand-brief.js"></script>
     <script>
     function toggleNav() {

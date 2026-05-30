@@ -1,0 +1,107 @@
+{
+  "demo_blueprint": {
+    "id": "bp_demo_ai_explained",
+    "channelUrl": "https://youtube.com/@aiexplained",
+    "channelName": "AI Explained",
+    "platform": "youtube",
+    "analyzedAt": "2026-05-30T21:00:00Z",
+    "assignedAgents": [],
+    "positioning": {
+      "audienceProfile": "25-45yr tech enthusiasts and AI practitioners",
+      "corePromise": "Understand cutting-edge AI before everyone else",
+      "emotionalSell": "FOMO + insider knowledge + intellectual curiosity",
+      "differentiator": "Expert-reversal narrative — takes consensus view and flips it",
+      "contentType": "education"
+    },
+    "topicDNA": {
+      "mainClusters": ["LLM breakthroughs", "AI safety debates", "Open source vs closed", "Tool reviews", "Industry analysis"],
+      "evergreenTopics": ["How transformers work", "AI ethics fundamentals", "Neural network basics"],
+      "trendTopics": ["GPT-5 speculation", "Claude vs Gemini", "AI regulation news"],
+      "avoidedTopics": ["Crypto/NFTs", "Get-rich-quick", "Political commentary"],
+      "audiencePainPoints": ["Overwhelmed by AI news velocity", "Can't tell hype from reality", "Need actionable takeaways"]
+    },
+    "outliers": {
+      "baselineViews": 145000,
+      "items": [
+        { "title": "GPT-5 Just Leaked — Here's What Nobody's Telling You", "views": 2400000, "outlierScore": 16.5, "whyItWorked": "Urgency + exclusivity hook + contrarian framing" },
+        { "title": "I Tested Every AI Coding Tool — The Winner Surprised Me", "views": 1800000, "outlierScore": 12.4, "whyItWorked": "Comparison format + curiosity gap + practical value" },
+        { "title": "The AI Feature Google Is Hiding From You", "views": 980000, "outlierScore": 6.8, "whyItWorked": "Corporate conspiracy angle + specific company + hidden knowledge" },
+        { "title": "Why Every AI Expert Is Wrong About AGI", "views": 870000, "outlierScore": 6.0, "whyItWorked": "Contrarian + authority challenge + bold claim" }
+      ]
+    },
+    "titleFormulas": {
+      "avgLength": 52,
+      "commonWords": ["AI", "Just", "Why", "Nobody", "Every", "Here's", "New"],
+      "formulas": [
+        { "name": "Urgency + Exclusivity", "template": "[Subject] Just [Action] — Here's What [Group] [Emotion]", "example": "GPT-5 Just Leaked — Here's What Nobody's Telling You", "score": 9.2 },
+        { "name": "Comparison Winner", "template": "I [Tested/Tried] Every [Category] — The Winner [Surprise]", "example": "I Tested Every AI Coding Tool — The Winner Surprised Me", "score": 8.7 },
+        { "name": "Hidden Knowledge", "template": "The [Subject] [Authority] Is [Hiding/Missing]", "example": "The AI Feature Google Is Hiding From You", "score": 8.1 },
+        { "name": "Expert Contrarian", "template": "Why [Everyone/Every Expert] Is Wrong About [Topic]", "example": "Why Every AI Expert Is Wrong About AGI", "score": 7.9 }
+      ],
+      "curiosityStyle": "Information gap — promises insider knowledge",
+      "emotionalTrigger": "FOMO + intellectual superiority"
+    },
+    "thumbnailDNA": {
+      "focalPointStyle": "Single subject center-frame with dramatic lighting",
+      "colorPalette": ["#1a1a2e", "#e94560", "#0f3460", "#16213e"],
+      "textLength": "short",
+      "facePresence": true,
+      "emotionType": "shock/concern",
+      "layoutPattern": "Face left + bold text right + dark gradient background",
+      "visualCuriosity": "Red accent elements create urgency, dark palette = serious/premium"
+    },
+    "hookProfile": {
+      "openingStyle": "Bold contrarian claim in first 5 seconds",
+      "first15Seconds": "Claim → Evidence tease → Stakes escalation",
+      "commonHookType": "Pattern interrupt + authority challenge",
+      "stakesLevel": "high",
+      "curiosityLoop": "Open 2-3 questions in intro, resolve only at end"
+    },
+    "scriptArchitecture": {
+      "structure": [
+        { "section": "Hook", "timing": "0:00-0:30", "purpose": "Bold claim + pattern interrupt" },
+        { "section": "Context", "timing": "0:30-2:00", "purpose": "Background + why this matters now" },
+        { "section": "Evidence Block 1", "timing": "2:00-5:00", "purpose": "Primary proof with data/examples" },
+        { "section": "Counterpoint", "timing": "5:00-7:00", "purpose": "Address objections head-on" },
+        { "section": "Evidence Block 2", "timing": "7:00-10:00", "purpose": "Deeper analysis + expert quotes" },
+        { "section": "Implications", "timing": "10:00-12:00", "purpose": "What this means for the audience" },
+        { "section": "CTA + Close", "timing": "12:00-13:00", "purpose": "Subscribe + next video tease" }
+      ],
+      "proofStyle": "Data visualizations + paper citations + screen recordings",
+      "transitionStyle": "Question-bridge: 'But here's where it gets interesting...'",
+      "ctaStyle": "Mid-roll soft ask + end-card hard ask",
+      "closingStyle": "Future prediction + subscribe prompt"
+    },
+    "toneDNA": {
+      "overallTone": "Urgent futurism",
+      "energyLevel": "high",
+      "vocabulary": "Technical but accessible — explains jargon inline",
+      "humor": "light",
+      "authority": "insider",
+      "emotionalMix": "60% urgency, 25% curiosity, 15% concern",
+      "pacing": "fast",
+      "hookDensity": "Every 90 seconds — micro-hooks between sections",
+      "sentenceRhythm": "Short punchy claims → evidence blocks → rhetorical questions"
+    },
+    "contentGaps": {
+      "missingTopics": ["AI in education", "AI for small business", "Non-English AI models"],
+      "outdatedContent": ["2024 GPU comparison", "Early ChatGPT tutorials"],
+      "weakCoverage": ["Practical deployment guides", "Cost analysis deep-dives"],
+      "seriesOpportunities": ["Weekly AI news roundup", "AI tool tier list updates", "Industry leader interviews"],
+      "formatGaps": ["Shorts/vertical content", "Community posts", "Live streams"]
+    },
+    "scorecard": {
+      "positioning": 9,
+      "topicDNA": 8,
+      "outliers": 9,
+      "titles": 9,
+      "thumbnails": 8,
+      "hooks": 9,
+      "scripts": 8,
+      "tone": 9,
+      "pacing": 8,
+      "gaps": 7,
+      "totalScore": 84
+    }
+  }
+}

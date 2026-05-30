@@ -2686,6 +2686,8 @@ function switchPortalView(viewId, clickedBtn) {
       'persona-config': 'AI Agent Configuration',
       'inbox': 'Inbox & Engagement Hub',
       'trends': 'Trending Topics Monitor',
+      'channel-decoder': 'Channel Decoder — 9-Layer Analysis',
+      'content-forge': 'Content Forge — Blueprint to Production',
       'agreement': 'Managed Plan SOW & SLA',
       'brand-brief': 'Brand Brief Interview'
     };
@@ -2704,6 +2706,12 @@ function switchPortalView(viewId, clickedBtn) {
   }
   if (viewId === 'brand-brief' && typeof BrandBrief !== 'undefined') {
     BrandBrief.init('pg-brand-brief');
+  }
+  if (viewId === 'channel-decoder' && typeof ChannelDecoder !== 'undefined' && !document.querySelector('.cd-wrapper')) {
+    ChannelDecoder.init('channel-decoder-mount');
+  }
+  if (viewId === 'content-forge' && typeof ContentForge !== 'undefined' && !document.querySelector('.cf-wrapper')) {
+    ContentForge.init('content-forge-mount');
   }
 
   // Handle right sidebar collapse

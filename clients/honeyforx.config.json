@@ -113,7 +113,29 @@
   "endpoints": {
     "postiz_url": "https://l2g-postiz.zi1cc5.easypanel.host",
     "webhook_url": "https://auto.l2gseo.com/webhook/personagen-social",
-    "n8n_url": "https://auto.l2gseo.com"
+    "n8n_url": "https://auto.l2gseo.com",
+    "channel_decode_url": "https://auto.l2gseo.com/webhook/personagen-channel-decode",
+    "content_forge_url": "https://auto.l2gseo.com/webhook/personagen-content-forge",
+    "blueprints_url": "https://auto.l2gseo.com/webhook/personagen-blueprints"
+  },
+
+  "features": {
+    "scout": true,
+    "trends": true,
+    "channel_decoder": true,
+    "content_forge": true,
+    "blueprints": true,
+    "composer": true,
+    "calendar": true,
+    "inbox": true,
+    "email": true,
+    "generator": true,
+    "brand_brief": true,
+    "persona_config": true,
+    "accounts": true,
+    "factory": true,
+    "pm": true,
+    "agreement": true
   },
 
   "roadmap": {
