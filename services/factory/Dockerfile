@@ -29,13 +29,11 @@ RUN npm install --omit=dev
 
 COPY services/factory/src/ ./src/
 
-RUN mkdir -p /data/profiles /data/screenshots && chown -R node:node /data
+RUN mkdir -p /data/profiles /data/screenshots
 
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD curl -sf http://localhost:8080/health || exit 1
-
-USER node
 
 CMD ["node", "src/server.js"]
