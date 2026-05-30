@@ -1148,30 +1148,7 @@ function handleHashRoute() {
   }
 }
 
-// ── Activate Portal View (SPA — no page redirect) ──
-function activatePortalView() {
-  document.body.classList.add('portal-active');
-  const pinGate = document.getElementById('pin-gate');
-  const portalView = document.getElementById('view-portal');
-  const demoView = document.getElementById('view-demo');
-  const navDemo = document.getElementById('nav-tab-demo');
-  const navPortal = document.getElementById('nav-tab-portal');
-
-  if (pinGate) { pinGate.classList.add('unlocked'); pinGate.style.display = 'none'; }
-  if (portalView) portalView.style.display = 'block';
-  if (demoView) demoView.style.display = 'none';
-  if (navDemo) navDemo.classList.remove('active');
-  if (navPortal) navPortal.classList.add('active');
-
-  // Hide top-level page elements that overlap the portal
-  const topNav = document.querySelector('.pg-topbar');
-  const footer = document.querySelector('footer');
-  if (topNav) topNav.style.display = 'none';
-  if (footer) footer.style.display = 'none';
-
-  // Ensure the default dashboard subview is visible
-  switchPortalView('dashboard');
-}
+// ── Global Tab Switching (Demo vs Portal) ──
 
 // ── Global Tab Switching (Demo vs Portal) ──
 function switchTab(tabId) {
@@ -1199,7 +1176,7 @@ function switchTab(tabId) {
   } else {
     // Switching to Portal: check unlock status
     if (sessionStorage.getItem('pg_portal_unlocked') === 'yes') {
-      activatePortalView();
+      window.location.href = 'dashboard.html';
     } else {
       // Show PIN Gate overlay
       if (pinGate) {
@@ -1231,7 +1208,22 @@ const PIN = {
     const triggerPortal = urlParams.get('portal') === 'trigger';
 
     if (sessionStorage.getItem(this.SESSION_KEY) === 'yes') {
-      activatePortalView();
+      const isSplashPage = window.location.pathname.endsWith('index.html') || window.location.pathname === '/' || window.location.pathname.endsWith('/');
+      if (isSplashPage || triggerPortal) {
+        window.location.href = 'dashboard.html';
+        return;
+      }
+      document.body.classList.add('portal-active');
+      if (pinGate) {
+        pinGate.classList.add('unlocked');
+        pinGate.style.display = 'none';
+      }
+      if (portalView) {
+        portalView.style.display = 'block';
+      }
+      if (demoView) {
+        demoView.style.display = 'none';
+      }
     } else {
       document.body.classList.remove('portal-active');
       const isSplashPage = window.location.pathname.endsWith('index.html') || window.location.pathname === '/' || window.location.pathname.endsWith('/');
@@ -1309,10 +1301,10 @@ const PIN = {
       if (pinGate) {
         pinGate.classList.add('unlocked');
         setTimeout(() => {
-          activatePortalView();
+          window.location.href = 'dashboard.html';
         }, 300);
       } else {
-        activatePortalView();
+        window.location.href = 'dashboard.html';
       }
     } else {
       for (let i = 0; i < 4; i++) {
