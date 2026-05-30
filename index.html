@@ -333,6 +333,9 @@
                     <button class="dash-menu-item active" onclick="switchPortalView('dashboard', this)">
                         <span>📊</span> Dashboard
                     </button>
+                    <button class="dash-menu-item" onclick="switchPortalView('brand-brief', this)">
+                        <span>📋</span> Brand Brief
+                    </button>
                     <button class="dash-menu-item" onclick="switchPortalView('calendar', this)">
                         <span>📅</span> Content & Schedule
                     </button>
@@ -1450,6 +1453,11 @@
                                 </div>
                             </section>
                         </div>
+
+                        <!-- 11. BRAND BRIEF SUBVIEW -->
+                        <div id="portal-view-brand-brief" class="portal-subview" style="display: none;">
+                            <div id="pg-brand-brief"></div>
+                        </div>
                         
                     </div>
                     
@@ -1544,6 +1552,7 @@
     <script src="modules/persona-config.js"></script>
     <script src="modules/inbox.js"></script>
     <script src="modules/trends.js"></script>
+    <script src="modules/brand-brief.js"></script>
     <script>
     function toggleNav() {
       const btn = document.getElementById('pg-hamburger');

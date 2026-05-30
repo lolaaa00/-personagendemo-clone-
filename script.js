@@ -2406,7 +2406,8 @@ function switchPortalView(viewId, clickedBtn) {
       'persona-config': 'AI Agent Configuration',
       'inbox': 'Inbox & Engagement Hub',
       'trends': 'Trending Topics Monitor',
-      'agreement': 'Managed Plan SOW & SLA'
+      'agreement': 'Managed Plan SOW & SLA',
+      'brand-brief': 'Brand Brief Interview'
     };
     titleEl.textContent = titles[viewId] || 'Operations Dashboard';
   }
@@ -2420,6 +2421,9 @@ function switchPortalView(viewId, clickedBtn) {
   }
   if (viewId === 'trends' && !document.querySelector('.trends-wrapper')) {
     TrendMonitor.init('trends-mount');
+  }
+  if (viewId === 'brand-brief' && typeof BrandBrief !== 'undefined') {
+    BrandBrief.init('pg-brand-brief');
   }
 
   // Handle right sidebar collapse
