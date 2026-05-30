@@ -12,6 +12,13 @@ const BrandBrief = (() => {
   const TOTAL_STEPS = 8;
   const STORAGE_KEY = 'pg_brand_brief_draft';
 
+  // Dedicated webhook endpoints for brand brief workflows
+  const N8N_BASE = (typeof PersonaGenConfig !== 'undefined' && PersonaGenConfig.webhook_url)
+    ? PersonaGenConfig.webhook_url.replace(/\/[^\/]*$/, '')
+    : 'https://auto.l2gseo.com/webhook';
+  const CRAWL_URL = N8N_BASE + '/brand-brief-crawl';
+  const ASSESS_URL = N8N_BASE + '/brand-brief-assess';
+
   // Step definitions
   const steps = [
     { id: 'crawl', title: 'Website Analysis', icon: '🔍', desc: 'Enter your website URL to auto-detect brand elements' },
@@ -421,6 +428,16 @@ const BrandBrief = (() => {
   }
 
   // ── Actions ──
+  async function apiCall(url, payload) {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  }
+
   async function crawl() {
     const url = document.getElementById('bb-url')?.value;
     if (!url) return;
@@ -429,7 +446,7 @@ const BrandBrief = (() => {
     render();
 
     try {
-      const result = await PersonaWebhook.fire('brand-brief.crawl', { url });
+      const result = await apiCall(CRAWL_URL, { url });
       if (result && !result.error) {
         crawlData = result;
         // Pre-fill briefData from crawl results
@@ -454,7 +471,7 @@ const BrandBrief = (() => {
     render();
 
     try {
-      const result = await PersonaWebhook.fire('brand-brief.submit', {
+      const result = await apiCall(ASSESS_URL, {
         brief: briefData,
         crawlData: crawlData
       });

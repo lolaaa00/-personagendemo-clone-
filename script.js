@@ -1404,10 +1404,17 @@ const PersonaWebhook = {
         body: JSON.stringify({ event: eventType, ts: new Date().toISOString(), ...payload })
       });
       console.log(`[Webhook] ${eventType} → ${res.status}`);
-      return res.ok;
+      if (!res.ok) return null;
+      // Try to parse JSON response for data-returning events
+      try {
+        const data = await res.json();
+        return data;
+      } catch(e) {
+        return true;
+      }
     } catch (err) {
       console.warn(`[Webhook] ${eventType} failed:`, err.message);
-      return false;
+      return null;
     }
   }
 };
