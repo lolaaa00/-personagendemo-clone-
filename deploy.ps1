@@ -64,7 +64,7 @@ if (-not $token) {
 }
 
 $deployDir = Join-Path $projectDir "dist/honeyforx"
-npx -y wrangler pages deploy $deployDir --project-name personagendemo --branch main --commit-dirty=true
+npx -y wrangler pages deploy $deployDir --project-name personagen-demo --branch main --commit-dirty=true
 if ($LASTEXITCODE -eq 0) {
     Write-Host "  [3/3] OK Live at https://personagendemo.pages.dev/" -ForegroundColor Green
 } else {

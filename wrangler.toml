@@ -1,0 +1,7 @@
+# PersonaGen — Cloudflare Pages config
+# This file tells Cloudflare to serve static assets from the build output
+# and NOT treat this as a Workers project
+
+name = "personagendemo"
+pages_build_output_dir = "dist/honeyforx"
+compatibility_date = "2024-09-23"
