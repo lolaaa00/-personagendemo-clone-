@@ -1163,11 +1163,14 @@ function activatePortalView() {
   if (navDemo) navDemo.classList.remove('active');
   if (navPortal) navPortal.classList.add('active');
 
-  // Initialize dashboard modules if they exist
-  if (typeof DynamicCalendar !== 'undefined') DynamicCalendar.init('pg-calendar-dynamic');
-  if (typeof TrendMonitor !== 'undefined') TrendMonitor.init('pg-trends-monitor');
-  if (typeof InboxHub !== 'undefined') InboxHub.init('pg-inbox-hub');
-  if (typeof PersonaConfig !== 'undefined') PersonaConfig.init('pg-persona-config');
+  // Hide top-level page elements that overlap the portal
+  const topNav = document.querySelector('.pg-topbar');
+  const footer = document.querySelector('footer');
+  if (topNav) topNav.style.display = 'none';
+  if (footer) footer.style.display = 'none';
+
+  // Ensure the default dashboard subview is visible
+  switchPortalView('dashboard');
 }
 
 // ── Global Tab Switching (Demo vs Portal) ──
