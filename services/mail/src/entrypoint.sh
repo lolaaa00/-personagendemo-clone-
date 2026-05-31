@@ -68,12 +68,8 @@ fi
 echo "[INIT] Running Stalwart configuration..."
 node /app/src/setup-stalwart.js
 
-# ── Start supervisor (health + api start immediately, stalwart deferred) ──
+# ── Start supervisor (all processes autostart) ──
 echo "[INIT] Starting services via supervisor..."
 
-# Note: stalwart has autostart=false so we start it after supervisor is up
-# and the config has been written by the entrypoint above.
-# We use a background subshell to wait and then start stalwart.
-(sleep 2 && /usr/bin/supervisorctl start stalwart) &
-
 exec /usr/bin/supervisord -c /etc/supervisor/conf.d/personagen-mail.conf
+

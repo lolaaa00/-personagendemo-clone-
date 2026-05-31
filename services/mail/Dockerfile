@@ -42,7 +42,7 @@ stderr_logfile_maxbytes=0
 
 [program:stalwart]
 command=/usr/local/bin/stalwart-mail -c /data/stalwart/etc/config.toml
-autostart=false
+autostart=true
 autorestart=true
 startretries=10
 startsecs=3
