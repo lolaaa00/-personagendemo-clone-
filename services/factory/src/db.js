@@ -14,30 +14,7 @@ function getDb() {
   if (!db) {
     const dir = path.dirname(DB_PATH);
     const fs = require("node:fs");
-
-    // Diagnostic: check filesystem state before opening DB
-    try {
-      fs.mkdirSync(dir, { recursive: true });
-      const stat = fs.statSync(dir);
-      console.log(JSON.stringify({
-        level: "info", msg: "DB directory check",
-        dir, dbPath: DB_PATH,
-        dirExists: true, isDir: stat.isDirectory(),
-        uid: process.getuid?.(), gid: process.getgid?.(),
-        ts: new Date().toISOString()
-      }));
-      // Test write permission
-      const testFile = path.join(dir, ".write-test");
-      fs.writeFileSync(testFile, "ok");
-      fs.unlinkSync(testFile);
-      console.log(JSON.stringify({ level: "info", msg: "DB dir is writable", ts: new Date().toISOString() }));
-    } catch (err) {
-      console.error(JSON.stringify({
-        level: "error", msg: "DB dir pre-check failed",
-        dir, dbPath: DB_PATH, error: err.message, code: err.code,
-        ts: new Date().toISOString()
-      }));
-    }
+    fs.mkdirSync(dir, { recursive: true });
 
     db = new Database(DB_PATH);
     db.pragma("journal_mode = WAL");
