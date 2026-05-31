@@ -787,9 +787,9 @@ function renderTrendTicker() {
 let DASH_AGENTS = []; // Populated by data loader
 
 let SPARK_DATA = [
-    [4.8, 5.1, 5.4, 6.0, 5.8, 6.2, 6.2],  // Sofia
-    [4.2, 4.5, 4.3, 4.6, 4.9, 4.7, 4.8],  // Marcus
-    [5.9, 6.2, 6.5, 6.8, 7.0, 6.9, 7.1]   // Aisha
+    [4.8, 5.1, 5.4, 6.0, 5.8, 6.2, 6.2],  // Agent 1
+    [4.2, 4.5, 4.3, 4.6, 4.9, 4.7, 4.8],  // Agent 2
+    [5.9, 6.2, 6.5, 6.8, 7.0, 6.9, 7.1]   // Agent 3
 ];
 
 let PLATFORM_DATA = [
@@ -899,6 +899,16 @@ function renderSparkChart() {
     ).join('');
 
     el.innerHTML = `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMidYMid meet"><defs>${defs}</defs>${gridLines}${linesAndAreas}${dayLabels}</svg>`;
+
+    // Populate legend dynamically from DATA.agents
+    const legendEl = document.getElementById('spark-legend');
+    if (legendEl) {
+      const agents = (window.DATA && window.DATA.agents) || INFLUENCERS;
+      legendEl.innerHTML = agents.slice(0,3).map((a, i) => {
+        const shortName = a.name.split(' ').map((w,j) => j === 0 ? w : w.charAt(0) + '.').join(' ');
+        return `<span><i style="background:${colors[i]}"></i> ${shortName}</span>`;
+      }).join('');
+    }
 }
 
 function renderPlatformBars() {
@@ -2402,14 +2412,14 @@ const AccountCreator = {
   },
 
   getSessionHealth(personaId, platform) {
-    // Demo: generate deterministic health based on persona+platform
-    const seed = (personaId + platform).length;
-    const daysLeft = [45, 22, 8, 0, 60, 15, 3, 90, 28, 5, 0, 35][seed % 12];
-
-    if (daysLeft <= 0) return { status: 'expired', label: 'Expired/Banned', icon: '⚫', daysLeft: 0, color: '#6b7280' };
-    if (daysLeft < 15) return { status: 'critical', label: `Critical (${daysLeft}d)`, icon: '🔴', daysLeft, color: '#ef4444' };
-    if (daysLeft <= 30) return { status: 'expiring', label: `Expiring (${daysLeft}d)`, icon: '🟡', daysLeft, color: '#fbbf24' };
-    return { status: 'active', label: `Active (${daysLeft}d)`, icon: '🟢', daysLeft, color: '#22c55e' };
+    // Check localStorage for real session data, otherwise show 'Not tracked'
+    const saved = this.load();
+    const connected = saved[personaId]?.[platform];
+    if (!connected) {
+      return { status: 'inactive', label: 'Not Connected', icon: '○', daysLeft: 0, color: '#6b7280' };
+    }
+    // Connected but no real session tracking yet
+    return { status: 'active', label: 'Connected', icon: '🟢', daysLeft: 0, color: '#22c55e' };
   },
 
   getHealthBadgeHtml(health) {

@@ -568,9 +568,10 @@ function compilePortalPages(content, DIST) {
       `<a href="agreement.html" class="profile-dropdown-item" style="text-decoration:none;">`
     );
     // Fix corresponding closing tags for converted dropdown items
+    // Replace </button> that follows a profile-dropdown-item <a> tag (not the exit/danger button)
     customizedSidebarAndHeader = customizedSidebarAndHeader.replace(
-      /<\/button>(\s*<div class="profile-dropdown-divider">)/g,
-      `</a>$1`
+      /(<a\s[^>]*class="profile-dropdown-item"[^>]*>[\s\S]*?)<\/button>/g,
+      '$1</a>'
     );
 
     // Customize workspace grid classes
