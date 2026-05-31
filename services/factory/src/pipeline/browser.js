@@ -12,7 +12,8 @@ const { toPlaywrightConfig } = require("../utils/proxy");
  * @returns {Promise<{ browser: object, context: object, page: object }>}
  */
 async function launch(persona) {
-  const cloakbrowser = require("cloakbrowser");
+  const cloakbrowser = await import("cloakbrowser");
+  const launchFn = cloakbrowser.launch || cloakbrowser.default?.launch;
 
   const profilePath = getProfilePath(persona.personaId);
   fs.mkdirSync(profilePath, { recursive: true });
@@ -43,7 +44,7 @@ async function launch(persona) {
     launchOpts.proxy = proxyConfig;
   }
 
-  const browser = await cloakbrowser.launch(launchOpts);
+  const browser = await launchFn(launchOpts);
 
   const contexts = browser.contexts();
   const context = contexts.length > 0 ? contexts[0] : await browser.newContext();
