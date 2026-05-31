@@ -1198,14 +1198,6 @@ function toggleProfileDropdown() {
   const dd = document.getElementById('profile-dropdown');
   if (dd) dd.classList.toggle('open');
 }
-// Close dropdown when clicking outside
-document.addEventListener('click', (e) => {
-  const wrap = document.querySelector('.profile-dropdown-wrap');
-  const dd = document.getElementById('profile-dropdown');
-  if (dd && wrap && !wrap.contains(e.target)) {
-    dd.classList.remove('open');
-  }
-});
 
 // ── Mobile Sidebar Toggle ──
 function toggleDashSidebar() {
@@ -2863,11 +2855,13 @@ function togglePMStats() {
 
 // ── Click-outside handler for collapsibles ──
 document.addEventListener('click', (e) => {
+  // Profile dropdown (uses .open class)
   const profileWrap = document.querySelector('.profile-dropdown-wrap');
   const profileMenu = document.getElementById('profile-dropdown');
-  if (profileMenu && profileMenu.classList.contains('show') && profileWrap && !profileWrap.contains(e.target)) {
-    profileMenu.classList.remove('show');
+  if (profileMenu && profileMenu.classList.contains('open') && profileWrap && !profileWrap.contains(e.target)) {
+    profileMenu.classList.remove('open');
   }
+  // Right analytics panel (mobile overlay)
   if (window.innerWidth <= 768) {
     const rightPanel = document.querySelector('.dash-right-panel');
     const toggleBtn = document.getElementById('dash-analytics-toggle');
@@ -2879,12 +2873,28 @@ document.addEventListener('click', (e) => {
   }
 });
 
-// ── Init: collapse right panel on load ──
+// ── Init: collapse right panel + populate analytics on load ──
 document.addEventListener('DOMContentLoaded', () => {
   const panel = document.querySelector('.dash-right-panel');
   const workspace = document.querySelector('.dash-workspace');
   if (panel) panel.classList.add('collapsed');
   if (workspace) workspace.classList.add('right-collapsed');
+
+  // Populate right-panel KPIs from loaded data after a short delay
+  setTimeout(() => {
+    const agents = window.DATA && window.DATA.agents;
+    if (agents && Array.isArray(agents)) {
+      const activeCount = agents.filter(a => a.status === 'active' || !a.status).length;
+      const el = document.getElementById('kpi-total-rp');
+      if (el) el.textContent = activeCount || agents.length;
+    }
+    // Engagement from agent data
+    const engEl = document.getElementById('kpi-engagement');
+    if (engEl && agents && agents.length) {
+      const avgEng = agents.reduce((sum, a) => sum + (a.engagement_rate || a.engagementRate || 0), 0) / agents.length;
+      engEl.textContent = avgEng > 0 ? avgEng.toFixed(1) + '%' : '—';
+    }
+  }, 1500);
 });
 
 // ── Drag & Drop Event Handlers ──
