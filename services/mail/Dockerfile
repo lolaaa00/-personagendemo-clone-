@@ -36,6 +36,15 @@ RUN echo "[supervisord]" > /etc/supervisor/conf.d/personagen-mail.conf && \
     echo "stdout_logfile=/dev/stdout" >> /etc/supervisor/conf.d/personagen-mail.conf && \
     echo "stdout_logfile_maxbytes=0" >> /etc/supervisor/conf.d/personagen-mail.conf && \
     echo "stderr_logfile=/dev/stderr" >> /etc/supervisor/conf.d/personagen-mail.conf && \
+    echo "stderr_logfile_maxbytes=0" >> /etc/supervisor/conf.d/personagen-mail.conf && \
+    echo "" >> /etc/supervisor/conf.d/personagen-mail.conf && \
+    echo "[program:api]" >> /etc/supervisor/conf.d/personagen-mail.conf && \
+    echo "command=node /app/src/api.js" >> /etc/supervisor/conf.d/personagen-mail.conf && \
+    echo "autorestart=true" >> /etc/supervisor/conf.d/personagen-mail.conf && \
+    echo "priority=3" >> /etc/supervisor/conf.d/personagen-mail.conf && \
+    echo "stdout_logfile=/dev/stdout" >> /etc/supervisor/conf.d/personagen-mail.conf && \
+    echo "stdout_logfile_maxbytes=0" >> /etc/supervisor/conf.d/personagen-mail.conf && \
+    echo "stderr_logfile=/dev/stderr" >> /etc/supervisor/conf.d/personagen-mail.conf && \
     echo "stderr_logfile_maxbytes=0" >> /etc/supervisor/conf.d/personagen-mail.conf
 
 EXPOSE 8080 587 993 8081
