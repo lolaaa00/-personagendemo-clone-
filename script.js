@@ -2647,10 +2647,11 @@ const AccountCreator = {
   },
 
   openNewAvatarWizard() {
-    PersonaGenAPI.showToast('New Avatar wizard launching in Phase 4...', 'info');
-    // Phase 4 will implement the full 5-stage wizard:
-    // ① Create → ② Assets → ③ Accounts → ④ Soul → ⑤ Activate
-    // For now, show a coming-soon toast
+    if (typeof AvatarWizard !== 'undefined') {
+      AvatarWizard.open();
+    } else {
+      PersonaGenAPI.showToast('Avatar Wizard module not loaded', 'warning');
+    }
   }
 };
 

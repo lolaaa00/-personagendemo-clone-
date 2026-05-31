@@ -13,6 +13,7 @@ const ContentForge = (() => {
   let inputMode = 'blueprint'; // 'blueprint' | 'topic'
   let isGenerating = false;
   let generationSeed = Date.now();
+  let selectedFrequency = '7d';
 
   const WEBHOOK_URL = (typeof PersonaGenConfig !== 'undefined')
     ? PersonaGenConfig.n8n_url + '/webhook/personagen-content-forge'
@@ -156,6 +157,22 @@ const ContentForge = (() => {
               <div class="cf-agent-chips" id="cf-agent-chips">
                 ${renderAgentChips()}
               </div>
+            </div>
+
+            <!-- Frequency Selector -->
+            <div class="cf-input-field">
+              <label class="cf-label">Generation Frequency</label>
+              <div class="cf-freq-chips">
+                ${['1d', '7d', '1m', '1y'].map(f => {
+                  const labels = { '1d': '1 Day', '7d': '7 Days', '1m': '1 Month', '1y': '1 Year' };
+                  const icons = { '1d': '📅', '7d': '📆', '1m': '🗓️', '1y': '📊' };
+                  return `<button class="cf-freq-chip ${(selectedFrequency || '7d') === f ? 'active' : ''}"
+                    onclick="ContentForge.setFrequency('${f}')">${icons[f]} ${labels[f]}</button>`;
+                }).join('')}
+              </div>
+              <span class="cf-hint" style="font-size:0.68rem;color:rgba(255,255,255,0.3);margin-top:2px;">
+                How much content to plan in one generation cycle
+              </span>
             </div>
 
             <!-- Generate Button -->
@@ -471,6 +488,14 @@ const ContentForge = (() => {
     }
   }
 
+  function setFrequency(freq) {
+    selectedFrequency = freq;
+    const labels = { '1d': '1 Day', '7d': '7 Days', '1m': '1 Month', '1y': '1 Year' };
+    document.querySelectorAll('.cf-freq-chip').forEach(chip => {
+      chip.classList.toggle('active', chip.textContent.trim().includes(labels[freq] || ''));
+    });
+  }
+
   // ─── Generation ───
   async function generate() {
     if (isGenerating) return;
@@ -528,6 +553,7 @@ const ContentForge = (() => {
           blueprint: blueprint || null,
           topic: topic || null,
           agentHandle: agent?.handle || null,
+          frequency: selectedFrequency || '7d',
           ts: Date.now()
         })
       });
@@ -866,6 +892,20 @@ const ContentForge = (() => {
         font-weight: 700; color: #fff; flex-shrink: 0;
       }
 
+      /* Frequency Chips */
+      .cf-freq-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+      .cf-freq-chip {
+        padding: 8px 16px; border-radius: 20px; font-size: 0.78rem; font-weight: 600;
+        background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08);
+        color: rgba(255,255,255,0.5); cursor: pointer; font-family: inherit;
+        transition: all 0.2s ease;
+      }
+      .cf-freq-chip:hover { border-color: rgba(255,255,255,0.15); color: rgba(255,255,255,0.7); }
+      .cf-freq-chip.active {
+        border-color: rgba(99,102,241,0.4); background: rgba(99,102,241,0.1);
+        color: #c7d2fe;
+      }
+
       /* Generate Button */
       .cf-generate-btn {
         display: flex; align-items: center; justify-content: center; gap: 10px;
@@ -1153,7 +1193,8 @@ const ContentForge = (() => {
     copyText,
     copyHashtags,
     forgeFromBlueprint,
-    forgeFromTrend
+    forgeFromTrend,
+    setFrequency
   };
 })();
 
