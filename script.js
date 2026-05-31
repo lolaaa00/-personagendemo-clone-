@@ -1041,6 +1041,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     renderTrendTicker();
     renderDashboard();
 
+    // Clear aria-busy on all dynamic containers after render
+    document.querySelectorAll('[aria-busy="true"]').forEach(el => {
+        el.setAttribute('aria-busy', 'false');
+    });
+
     // Counter animation
     document.querySelectorAll('.counter').forEach(counter => {
         const target = +counter.dataset.target;
