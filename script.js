@@ -8,9 +8,12 @@ const PersonaGenConfig = {
 };
 
 // ═══════════════════════════════════════
-// DATA: AI INFLUENCER ROSTER
+// DATA: AI INFLUENCER ROSTER (loaded from data/agents.json)
 // ═══════════════════════════════════════
-const INFLUENCERS = [
+let INFLUENCERS = []; // Populated by data loader from data/agents.json
+
+// Legacy placeholder — will be overwritten by loadData()
+const _INFLUENCER_FALLBACK = [
     {
         name: "Sofia Rivera", handle: "@sofiarivera.ai", initial: "S",
         gradient: "linear-gradient(135deg, #f472b6, #a78bfa)",
@@ -779,23 +782,9 @@ function renderTrendTicker() {
 }
 
 // ═══════════════════════════════════════
-// DATA: DASHBOARD AGENT ROSTER
+// DATA: DASHBOARD AGENT ROSTER (from data/agents.json)
 // ═══════════════════════════════════════
-const DASH_AGENTS = [
-    { name:"Sofia Rivera", handle:"@sofiarivera.ai", niche:"Fitness", initial:"S", gradient:"linear-gradient(135deg,#f472b6,#a78bfa)", followers:"24.8K", engagement:6.2, trend:"+1.4%", status:"active", active:true, perf:82, color:"#f472b6" },
-    { name:"Marcus Chen", handle:"@marcuschen.tech", niche:"Tech & AI", initial:"M", gradient:"linear-gradient(135deg,#34d399,#60a5fa)", followers:"89.2K", engagement:4.8, trend:"+0.6%", status:"active", active:true, perf:74, color:"#34d399" },
-    { name:"Aisha Noori", handle:"@aishanoori.style", niche:"Fashion", initial:"A", gradient:"linear-gradient(135deg,#fbbf24,#f97316)", followers:"156K", engagement:7.1, trend:"+2.1%", status:"active", active:true, perf:95, color:"#fbbf24" },
-    { name:"Veronica Hap", handle:"@veronicahap", niche:"Lifestyle", initial:"V", gradient:"linear-gradient(135deg,#8b5cf6,#ec4899)", followers:"412K", engagement:9.3, trend:"+4.1%", status:"active", active:true, perf:97, color:"#8b5cf6" },
-    { name:"Jordan Blake", handle:"@jordanblake.fit", niche:"Fitness", initial:"J", gradient:"linear-gradient(135deg,#6366f1,#ec4899)", followers:"8.4K", engagement:5.9, trend:"+0.8%", status:"active", active:true, perf:68, color:"#6366f1" },
-    { name:"Priya Sharma", handle:"@priyasharma.dev", niche:"Tech & AI", initial:"P", gradient:"linear-gradient(135deg,#a78bfa,#06b6d4)", followers:"31.6K", engagement:3.2, trend:"-0.4%", status:"active", active:true, perf:45, color:"#a78bfa" },
-    { name:"Valentina Rossi", handle:"@valentinarossi", niche:"Fashion", initial:"V", gradient:"linear-gradient(135deg,#ec4899,#f97316)", followers:"67.3K", engagement:6.8, trend:"+1.7%", status:"active", active:true, perf:88, color:"#ec4899" },
-    { name:"Grant Hawthorne", handle:"@granthawthorne", niche:"Finance", initial:"G", gradient:"linear-gradient(135deg,#22c55e,#14b8a6)", followers:"42.1K", engagement:4.1, trend:"+0.3%", status:"active", active:true, perf:61, color:"#22c55e" },
-    { name:"Luna Espinoza", handle:"@lunaespinoza", niche:"Travel", initial:"L", gradient:"linear-gradient(135deg,#06b6d4,#8b5cf6)", followers:"19.7K", engagement:8.3, trend:"+3.2%", status:"active", active:true, perf:91, color:"#06b6d4" },
-    { name:"Chef Nana K.", handle:"@chefnanak", niche:"Food", initial:"N", gradient:"linear-gradient(135deg,#f59e0b,#ef4444)", followers:"55.9K", engagement:5.5, trend:"+0.9%", status:"active", active:true, perf:72, color:"#f59e0b" },
-    { name:"Omar Farid", handle:"@omarfarid.fin", niche:"Finance", initial:"O", gradient:"linear-gradient(135deg,#14b8a6,#6366f1)", followers:"12.3K", engagement:2.1, trend:"-1.2%", status:"paused", active:false, perf:28, color:"#14b8a6" },
-    { name:"Nico Strand", handle:"@nicostrand", niche:"Travel", initial:"N", gradient:"linear-gradient(135deg,#fbbf24,#22c55e)", followers:"3.2K", engagement:1.4, trend:"-0.7%", status:"failing", active:false, perf:15, color:"#fbbf24" },
-    { name:"Zara Kim", handle:"@zarakim.style", niche:"Fashion", initial:"Z", gradient:"linear-gradient(135deg,#ec4899,#a78bfa)", followers:"5.1K", engagement:3.9, trend:"+0.2%", status:"paused", active:false, perf:38, color:"#ec4899" }
-];
+let DASH_AGENTS = []; // Populated by data loader
 
 let SPARK_DATA = [
     [4.8, 5.1, 5.4, 6.0, 5.8, 6.2, 6.2],  // Sofia
@@ -979,9 +968,31 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (DATA.platforms.distribution) PLATFORM_DATA = DATA.platforms.distribution;
             if (DATA.platforms.sparkData)    SPARK_DATA = DATA.platforms.sparkData;
         }
-        console.log('[PersonaGen] Data loaded from /data/ JSON files');
+        // Bridge agents from data/agents.json → INFLUENCERS + DASH_AGENTS
+        if (DATA.agents && DATA.agents.length) {
+            INFLUENCERS = DATA.agents;
+            DASH_AGENTS = DATA.agents.map(a => ({
+                ...a,
+                niche: (a.niche || '').split(' & ')[0] || a.niche,
+                engagement: a.engagementRate || parseFloat(a.engagement) || 0,
+                active: a.status === 'active',
+            }));
+        } else {
+            INFLUENCERS = _INFLUENCER_FALLBACK;
+            DASH_AGENTS = _INFLUENCER_FALLBACK.map(a => ({
+                ...a,
+                niche: (a.niche || '').split(' & ')[0] || a.niche,
+                engagement: parseFloat(a.engagement) || 0,
+                active: true,
+                perf: 80,
+                trend: '+0%',
+                color: '#a78bfa',
+            }));
+        }
+        console.log(`[PersonaGen] Data loaded — ${INFLUENCERS.length} agents, ${Object.keys(DATA).length} data files`);
     } catch (err) {
         console.warn('[PersonaGen] Data load failed, using inline fallback:', err);
+        INFLUENCERS = _INFLUENCER_FALLBACK;
     }
 
     // Render all sections
@@ -2257,37 +2268,14 @@ const AccountCreator = {
       activeItem.classList.add('active');
     }
 
-    // Find persona data from DATA (or static fallback if not loaded yet)
+    // Find persona data from DATA.agents (single source of truth)
     let agent = null;
     if (window.DATA && window.DATA.agents) {
       agent = window.DATA.agents.find(a => a.id === personaId);
     }
-
-    // Fallback if data loader isn't completed
+    // Fallback to INFLUENCERS if data not loaded
     if (!agent) {
-      const mockAgents = {
-        'sofia-rivera': {
-          name: 'Sofia Rivera', niche: 'Fitness & Wellness', market: 'US / LATAM', followers: '24.8K',
-          bio: 'Latina fitness coach & wellness advocate. Posts daily workout routines, meal prep content, and mindset motivation across Instagram and TikTok.',
-          platforms: ['Instagram', 'TikTok', 'YouTube']
-        },
-        'marcus-chen': {
-          name: 'Marcus Chen', niche: 'Tech & AI', market: 'Global English', followers: '89.2K',
-          bio: 'AI & blockchain thought leader. Breaks down complex tech trends into viral short-form content. Active on Twitter/X and LinkedIn.',
-          platforms: ['Twitter/X', 'LinkedIn']
-        },
-        'aisha-noori': {
-          name: 'Aisha Noori', niche: 'Fashion & Luxury', market: 'MENA / Europe', followers: '156K',
-          bio: 'Dubai-based luxury fashion influencer. Curates haute couture looks, brand partnerships, and aspirational lifestyle content.',
-          platforms: ['Instagram', 'TikTok', 'YouTube']
-        },
-        'veronica-hap': {
-          name: 'Veronica Hap', niche: 'Lifestyle & Beauty', market: 'Global English', followers: '412K',
-          bio: 'AI-generated lifestyle creator on TikTok. Hyper-realistic persona posting daily POV skits, beauty routines, and relatable "day in my life" content — fully autonomous.',
-          platforms: ['TikTok', 'Instagram', 'YouTube']
-        }
-      };
-      agent = mockAgents[personaId];
+      agent = INFLUENCERS.find(a => a.id === personaId || a.handle?.includes(personaId.split('-')[0]));
     }
 
     if (!agent) return;
@@ -2641,7 +2629,10 @@ const AccountCreator = {
   updateAllSidebarBadges() {
     // Show green/blue indicator if persona has at least one account connected
     const saved = this.load();
-    ['sofia-rivera', 'marcus-chen', 'aisha-noori', 'veronica-hap'].forEach(id => {
+    // Use DATA.agents as source of truth for persona IDs and handles
+    const agents = (window.DATA && window.DATA.agents) || INFLUENCERS;
+    agents.forEach(a => {
+      const id = a.id || a.name.toLowerCase().replace(/[^a-z]/g, '-').replace(/-+/g, '-').replace(/(^-|-$)/g, '');
       const label = document.getElementById(`ac-item-${id}`);
       if (label) {
         const counts = Object.keys(saved[id] || {}).length;
@@ -2651,14 +2642,7 @@ const AccountCreator = {
             handleEl.innerHTML = `🟢 ${counts} account${counts > 1 ? 's' : ''} connected`;
             handleEl.style.color = 'var(--success)';
           } else {
-            // Default handles
-            const handles = {
-              'sofia-rivera': '@sofiarivera.ai',
-              'marcus-chen': '@marcuschen.tech',
-              'aisha-noori': '@aishanoori.style',
-              'veronica-hap': '@veronicahap'
-            };
-            handleEl.textContent = handles[id];
+            handleEl.textContent = a.handle;
             handleEl.style.color = 'var(--text-muted)';
           }
         }
