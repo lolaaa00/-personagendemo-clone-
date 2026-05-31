@@ -5,12 +5,11 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { execSync } = require("node:child_process");
 
-const MAIL_DOMAIN = process.env.MAIL_DOMAIN || "mail.personagen.com";
-const DKIM_SELECTOR = process.env.DKIM_SELECTOR || "personagen";
+const MAIL_DOMAIN = process.env.MAIL_DOMAIN || "l2gseo.com";
+const DKIM_SELECTOR = process.env.DKIM_SELECTOR || "agenticmail";
 const STALWART_DATA = process.env.STALWART_DATA_DIR || "/data/stalwart";
 const DKIM_DIR = "/data/dkim";
-const ADMIN_USER = process.env.MAIL_ADMIN_USER || "admin";
-const ADMIN_PASS = process.env.MAIL_ADMIN_PASS || "";
+const CONFIG_PATH = "/tmp/stalwart-config.toml";
 
 function log(level, msg, extra = {}) {
   console.log(
@@ -92,38 +91,8 @@ async function setup() {
 
   /* ── Write Stalwart configuration ─────────── */
   const stalwartConfig = buildStalwartConfig();
-  const configPath = path.join(STALWART_DATA, "etc", "config.toml");
-  fs.writeFileSync(configPath, stalwartConfig, "utf8");
-  log("info", "Stalwart configuration written", { path: configPath });
-
-  /* ── Create admin inbox ───────────────────── */
-  if (ADMIN_PASS) {
-    const accountsDir = path.join(STALWART_DATA, "data", "accounts");
-    fs.mkdirSync(accountsDir, { recursive: true });
-
-    const adminAccountFile = path.join(accountsDir, `${ADMIN_USER}.json`);
-    const hashedPass = crypto
-      .createHash("sha256")
-      .update(ADMIN_PASS)
-      .digest("hex");
-
-    const adminAccount = {
-      username: ADMIN_USER,
-      password: hashedPass,
-      email: `${ADMIN_USER}@${MAIL_DOMAIN}`,
-      role: "admin",
-      quota: 0,
-      created: new Date().toISOString(),
-    };
-
-    fs.writeFileSync(adminAccountFile, JSON.stringify(adminAccount, null, 2), "utf8");
-    log("info", "Admin inbox created", {
-      user: ADMIN_USER,
-      email: `${ADMIN_USER}@${MAIL_DOMAIN}`,
-    });
-  } else {
-    log("warn", "MAIL_ADMIN_PASS not set — skipping admin inbox creation");
-  }
+  fs.writeFileSync(CONFIG_PATH, stalwartConfig, "utf8");
+  log("info", "Stalwart configuration written", { path: CONFIG_PATH });
 
   log("info", "Stalwart setup complete");
 }

@@ -30,18 +30,8 @@ RUN cat > /etc/supervisor/conf.d/personagen-mail.conf <<'EOF'
 nodaemon=true
 logfile=/var/log/supervisor/supervisord.log
 
-[program:setup]
-command=node /app/src/setup-stalwart.js
-autorestart=false
-startsecs=0
-priority=1
-stdout_logfile=/dev/stdout
-stdout_logfile_maxbytes=0
-stderr_logfile=/dev/stderr
-stderr_logfile_maxbytes=0
-
 [program:stalwart]
-command=/usr/local/bin/stalwart-mail -c /data/stalwart/etc/config.toml
+command=/usr/local/bin/stalwart-mail -c /tmp/stalwart-config.toml
 autostart=true
 autorestart=true
 startretries=10
