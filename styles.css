@@ -2236,7 +2236,7 @@ body.portal-active {
 /* ── Hamburger + Analytics Toggle Buttons ── */
 .dash-hamburger,
 .dash-analytics-toggle {
-  display: none;
+  display: flex;
   width: 40px;
   height: 40px;
   align-items: center;
@@ -2247,6 +2247,29 @@ body.portal-active {
   color: var(--text);
   font-size: 1.3rem;
   flex-shrink: 0;
+  border-radius: 8px;
+  transition: background 0.2s, color 0.2s;
+}
+.dash-hamburger:hover,
+.dash-analytics-toggle:hover {
+  background: rgba(255,255,255,0.06);
+}
+
+/* ── Desktop Sidebar Collapse ── */
+.dash-sidebar {
+  transition: width 0.3s ease, min-width 0.3s ease, padding 0.3s ease, opacity 0.25s ease;
+}
+.dashboard-layout.sidebar-collapsed .dash-sidebar {
+  width: 0 !important;
+  min-width: 0 !important;
+  padding: 0 !important;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+  border-right: none;
+}
+.dashboard-layout.sidebar-collapsed .dash-main {
+  margin-left: 0;
 }
 
 /* ── Sidebar Overlay ── */

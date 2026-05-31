@@ -58,7 +58,7 @@ stderr_logfile_maxbytes=0
 EOF
 
 # SMTP(2525), Submission(587), API(8080), Health(8081)
-EXPOSE 2525 587 8080 8081
+EXPOSE 25 587 8080 8081
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD curl -sf http://localhost:8081/health || exit 1

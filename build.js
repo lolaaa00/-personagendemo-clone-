@@ -588,6 +588,26 @@ function compilePortalPages(content, DIST) {
 
     // If this view is pm, accounts, or agreement, ensure it has style display: block
     pageContent = pageContent.replace(/class="portal-subview"/, 'class="portal-subview active" style="display:block;"');
+
+    // Inject mega-view tab bar for pages that belong to a mega-view group
+    let megaTabBarHtml = '';
+    for (const [megaId, mega] of Object.entries(megaViewMap)) {
+      if (mega.views.includes(p.view)) {
+        const tabLabels = {
+          'scout': '🔍 Social Scout', 'trends': '📈 Trends', 'channel-decoder': '🔬 Decoder',
+          'content-forge': '⚡ Forge', 'calendar': '📅 Calendar', 'brand-brief': '📋 Brand Brief'
+        };
+        const pageLinkForTab = {
+          'scout': 'scout.html', 'trends': 'trends.html', 'channel-decoder': 'channel-decoder.html',
+          'content-forge': 'content-forge.html', 'calendar': 'calendar.html', 'brand-brief': 'brand-brief.html'
+        };
+        const tabs = mega.views.map(v =>
+          `<a href="${pageLinkForTab[v]}" class="mega-tab${v === p.view ? ' active' : ''}">${tabLabels[v] || v}</a>`
+        ).join('');
+        megaTabBarHtml = `<div class="mega-tab-bar visible">${tabs}</div>`;
+        break;
+      }
+    }
     
     const rightPanelHtml = p.hasRightPanel ? rightPanel : '';
 
@@ -603,6 +623,7 @@ ${head}
     <div id="view-portal" class="tab-content" style="display: block;">
         <div class="dashboard-layout">
             ${customizedSidebarAndHeader}
+                ${megaTabBarHtml}
                 ${pageContent}
             </div>
             ${rightPanelHtml}

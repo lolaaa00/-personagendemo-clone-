@@ -1199,12 +1199,17 @@ function toggleProfileDropdown() {
   if (dd) dd.classList.toggle('open');
 }
 
-// ── Mobile Sidebar Toggle ──
+// ── Sidebar Toggle (Desktop + Mobile) ──
 function toggleDashSidebar() {
+  const layout = document.querySelector('.dashboard-layout');
   const sidebar = document.querySelector('.dash-sidebar');
   const overlay = document.getElementById('sidebar-overlay');
-  if (sidebar) sidebar.classList.toggle('open');
-  if (overlay) overlay.classList.toggle('active');
+  if (window.innerWidth > 768) {
+    if (layout) layout.classList.toggle('sidebar-collapsed');
+  } else {
+    if (sidebar) sidebar.classList.toggle('open');
+    if (overlay) overlay.classList.toggle('active');
+  }
 }
 
 // ── Right Panel Toggle ──
