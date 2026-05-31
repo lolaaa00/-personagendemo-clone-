@@ -8,12 +8,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Stalwart Mail Server binary
-RUN curl -fsSL "https://github.com/stalwartlabs/stalwart/releases/download/v0.11.8/stalwart-mail-x86_64-unknown-linux-gnu.tar.gz" \
+# Install Stalwart Mail Server binary (v0.16.7)
+RUN curl -fsSL "https://github.com/stalwartlabs/stalwart/releases/download/v0.16.7/stalwart-x86_64-unknown-linux-gnu.tar.gz" \
     -o /tmp/stalwart.tar.gz \
-    && tar xzf /tmp/stalwart.tar.gz -C /usr/local/bin/ \
-    && rm /tmp/stalwart.tar.gz \
-    && chmod +x /usr/local/bin/stalwart-mail
+    && mkdir -p /tmp/stalwart-extract \
+    && tar xzf /tmp/stalwart.tar.gz -C /tmp/stalwart-extract/ \
+    && find /tmp/stalwart-extract -type f -name "stalwart*" -exec cp {} /usr/local/bin/stalwart-mail \; \
+    && chmod +x /usr/local/bin/stalwart-mail \
+    && rm -rf /tmp/stalwart.tar.gz /tmp/stalwart-extract
 
 WORKDIR /app
 
