@@ -207,17 +207,33 @@ const DynamicCalendar = (() => {
       return plat ? plat.icon : p;
     }).join(' ');
 
-    const truncText = (post.content?.text || '').substring(0, 30);
+    const truncText = (post.content?.text || post.type || '').substring(0, 30);
+
+    // For published posts, generate platform profile links
+    const isPublished = post.status === 'published';
+    const platUrlMap = {
+      instagram: h => `https://instagram.com/${h?.replace('@','') || ''}`,
+      tiktok:    h => `https://tiktok.com/@${h?.replace('@','') || ''}`,
+      x:         h => `https://x.com/${h?.replace('@','') || ''}`,
+      youtube:   h => `https://youtube.com/@${h?.replace('@','') || ''}`,
+      linkedin:  h => `https://linkedin.com/in/${h?.replace('@','') || ''}`,
+      threads:   h => `https://threads.net/@${h?.replace('@','') || ''}`,
+      reddit:    h => `https://reddit.com/u/${h?.replace('@','') || ''}`,
+    };
+
+    const chipAction = isPublished
+      ? `event.stopPropagation(); window.open('${platUrlMap[(post.platforms||[])[0]]?.(post.persona_id) || '#'}', '_blank')`
+      : `event.stopPropagation(); PostComposer.open(${JSON.stringify(post).replace(/"/g, '&quot;')})`;
 
     return `
       <div class="dcal-post-chip" style="background:${status.bg};border-left:3px solid ${status.border};"
-           onclick="event.stopPropagation(); PostComposer.open(${JSON.stringify(post).replace(/"/g, '&quot;')})">
+           onclick="${chipAction}">
         <div class="dcal-post-chip-top">
           <span class="dcal-post-chip-dot" style="background:${status.dot}"></span>
           <span class="dcal-post-chip-plats">${platIcons}</span>
           <span class="dcal-post-chip-persona" style="background:${post.persona_gradient}">${post.persona_initial}</span>
         </div>
-        <div class="dcal-post-chip-text">${truncText}</div>
+        <div class="dcal-post-chip-text">${truncText}${isPublished ? ' <span style="font-size:0.6rem;color:var(--success)">↗ Live</span>' : ''}</div>
       </div>
     `;
   }

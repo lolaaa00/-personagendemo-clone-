@@ -148,13 +148,13 @@ const InboxHub = (() => {
                 All <span class="inbox-channel-count">${counts.all}</span>
               </button>
               <button class="inbox-channel-tab" data-channel="email" onclick="InboxHub.setChannel('email')">
-                📧 Email <span class="inbox-channel-count">${counts.email}</span>
+                📧 Email <span class="inbox-coming-soon-badge">Soon</span>
               </button>
               <button class="inbox-channel-tab" data-channel="social" onclick="InboxHub.setChannel('social')">
                 💬 Social <span class="inbox-channel-count">${counts.social}</span>
               </button>
               <button class="inbox-channel-tab" data-channel="sms" onclick="InboxHub.setChannel('sms')">
-                📱 SMS <span class="inbox-channel-count">${counts.sms}</span>
+                📱 SMS <span class="inbox-coming-soon-badge">Soon</span>
               </button>
             </div>
           </div>
@@ -206,11 +206,24 @@ const InboxHub = (() => {
     renderSubfilters();
     updateChannelTabs();
 
-    // Delegate to InboxEmail for email/sms channels
+    // Email and SMS — Coming Soon
     if (activeChannel === 'email' || activeChannel === 'sms') {
-      if (typeof InboxEmail !== 'undefined') {
-        InboxEmail.renderItems(activeChannel, activeFilter, selectedPersona);
-      }
+      const list = document.getElementById('inbox-list');
+      const counter = document.getElementById('inbox-counter');
+      if (counter) counter.textContent = 'Coming Soon';
+      if (list) list.innerHTML = `
+        <div class="inbox-coming-soon">
+          <div class="inbox-cs-icon">${activeChannel === 'email' ? '📧' : '📱'}</div>
+          <h3 class="inbox-cs-title">${activeChannel === 'email' ? 'Email Inbox' : 'SMS Inbox'}</h3>
+          <p class="inbox-cs-desc">
+            ${activeChannel === 'email'
+              ? 'Inbound emails to your AI personas will appear here. Each persona gets a real email address and auto-responds in their unique voice.'
+              : 'SMS and phone verification for AI personas is being finalized. Your personas will receive real phone numbers and handle inbound texts automatically.'}
+          </p>
+          <div class="inbox-cs-badge">🚧 Coming Soon</div>
+          <p class="inbox-cs-eta">ETA: Next sprint · <a href="https://wa.me/19545944040" target="_blank" style="color:var(--accent);">Ping us on WhatsApp</a> to prioritize</p>
+        </div>
+      `;
       return;
     }
 
