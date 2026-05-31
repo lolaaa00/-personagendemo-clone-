@@ -53,26 +53,22 @@ protocol = "imap"
 bind = ["0.0.0.0:8443"]
 protocol = "http"
 
+[store."db"]
+type = "rocksdb"
+path = "${STALWART_DATA}/data"
+compression = "lz4"
+
 [storage]
-data = "${STALWART_DATA}/data"
-blob = "${STALWART_DATA}/data/blobs"
-fts = "${STALWART_DATA}/data/fts"
-lookup = "${STALWART_DATA}/data/lookup"
+data = "db"
+blob = "db"
+fts = "db"
+lookup = "db"
 
-[queue]
-path = "${STALWART_DATA}/queue"
+[directory."local"]
+type = "internal"
+store = "db"
 
-[report]
-path = "${STALWART_DATA}/reports"
-
-[directory.local]
-type = "memory"
-
-[directory.local.options]
-catch-all = true
-subaddressing = true
-
-[tracer.stdout]
+[tracer."stdout"]
 type = "stdout"
 level = "info"
 ansi = false
