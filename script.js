@@ -2875,9 +2875,10 @@ function switchPortalView(viewId, clickedBtn, keepTabs) {
         const el = document.getElementById(secId);
         if (el) el.style.display = '';
       });
-      // Scroll to top
-      const mainContainer = document.querySelector('.dash-main');
-      if (mainContainer) mainContainer.scrollTop = 0;
+      // Scroll to top of dashboard
+      const centerPanel = document.querySelector('.dash-center-panel');
+      if (centerPanel) centerPanel.scrollTop = 0;
+      window.scrollTo({ top: 0, behavior: 'instant' });
     } else {
       // Mega-tab click → show ONLY the targeted section
       const targetSectionId = sectionMap[viewId];
@@ -2894,8 +2895,12 @@ function switchPortalView(viewId, clickedBtn, keepTabs) {
         }
       });
       // Scroll to top of the visible section
-      const mainContainer = document.querySelector('.dash-main');
-      if (mainContainer) mainContainer.scrollTop = 0;
+      const centerPanel = document.querySelector('.dash-center-panel');
+      if (centerPanel) centerPanel.scrollTop = 0;
+      window.scrollTo({ top: 0, behavior: 'instant' });
+      // Also scrollIntoView the target section for reliability
+      const targetEl = document.getElementById(targetSectionId);
+      if (targetEl) targetEl.scrollIntoView({ behavior: 'instant', block: 'start' });
     }
   } else {
     // Non-dashboard view → restore all dashboard sections for when user returns
@@ -2908,8 +2913,7 @@ function switchPortalView(viewId, clickedBtn, keepTabs) {
         el.style.borderTop = '';
       }
     });
-    const mainContainer = document.querySelector('.dash-main');
-    if (mainContainer) mainContainer.scrollTop = 0;
+    window.scrollTo({ top: 0, behavior: 'instant' });
   }
 
   if (window.innerWidth <= 768) {

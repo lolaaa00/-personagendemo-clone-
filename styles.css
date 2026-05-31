@@ -2291,22 +2291,24 @@ body.portal-active {
 .dash-hamburger,
 .dash-analytics-toggle {
   display: flex;
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   align-items: center;
   justify-content: center;
-  background: transparent;
-  border: none;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
   cursor: pointer;
-  color: var(--text);
-  font-size: 1.3rem;
+  color: var(--text-muted);
+  font-size: 1.1rem;
   flex-shrink: 0;
   border-radius: 8px;
-  transition: background 0.2s, color 0.2s;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
 }
 .dash-hamburger:hover,
 .dash-analytics-toggle:hover {
-  background: rgba(255,255,255,0.06);
+  background: rgba(255,255,255,0.08);
+  border-color: rgba(255,255,255,0.12);
+  color: var(--text);
 }
 
 /* ── Desktop Sidebar Collapse ── */
