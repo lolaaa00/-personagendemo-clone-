@@ -65,6 +65,18 @@ fts = "db"
 lookup = "db"
 directory = "local"
 
+[session.data.pipe."deliver"]
+command = "node"
+arguments = ["/app/src/inbox-deliver.js"]
+timeout = "30s"
+
+[sieve.trusted.from-config]
+name = "deliver-all"
+script = """
+require [\"vnd.stalwart.execute\"];
+execute :pipe \"deliver\";
+"""
+
 [tracer."stdout"]
 type = "stdout"
 level = "info"
