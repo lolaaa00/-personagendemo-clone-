@@ -15,6 +15,9 @@ echo "============================================="
 echo ""
 
 # ── Ensure directories ──────────────────────────
+# Wipe Stalwart data on every start — clears IP bans, stale config from DB
+# (mail is stored in /data/inboxes/inboxes.json, not in RocksDB)
+rm -rf "${STALWART_DATA}/data"
 mkdir -p "${DKIM_DIR}" "${STALWART_DATA}/data" /var/log/supervisor
 
 # ── DKIM key generation (first run only) ────────
@@ -64,7 +67,13 @@ blob = "db"
 fts = "db"
 lookup = "db"
 
+[directory."local"]
+type = "internal"
+store = "db"
+catch-all = true
+
 [session.rcpt]
+directory = "local"
 max-recipients = 100
 relay = true
 [session.data.pipe."deliver"]

@@ -2252,8 +2252,29 @@ const AccountCreator = {
   },
 
   init() {
+    this.renderSidebar();
     this.select(this.selectedId);
     this.updateAllSidebarBadges();
+  },
+
+  renderSidebar() {
+    const container = document.getElementById('ac-persona-list');
+    if (!container) return;
+    const agents = (window.DATA && window.DATA.agents) || INFLUENCERS;
+    if (!agents.length) return;
+    this.selectedId = agents[0].id || 'sofia-rivera';
+    container.innerHTML = agents.map((a, i) => {
+      const id = a.id || a.name.toLowerCase().replace(/[^a-z]/g, '-').replace(/-+/g, '-');
+      return `
+        <button class="ac-sidebar-item${i === 0 ? ' active' : ''}" id="ac-item-${id}" onclick="AccountCreator.select('${id}')">
+          <div class="ac-avatar-dot" style="background: ${a.gradient};"></div>
+          <div style="text-align: left;">
+            <div class="ac-item-name" style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted);">${a.name}</div>
+            <div class="ac-item-handle" style="font-size: 0.68rem; color: var(--text-dim);">${a.handle}</div>
+          </div>
+        </button>
+      `;
+    }).join('');
   },
 
   select(personaId) {
@@ -2388,15 +2409,13 @@ const AccountCreator = {
       console.warn('[AccountCreator] Refresh failed (offline):', e);
     }
 
-    // Simulate refresh
-    setTimeout(() => {
-      if (btn) {
-        btn.textContent = '✅ Refreshed';
-        btn.disabled = false;
-        setTimeout(() => { btn.textContent = '🔄 Refresh'; }, 2000);
-      }
-      PersonaGenAPI.showToast(`Session refreshed for ${platform.toUpperCase()}`, 'success');
-    }, 1500);
+    // Update UI after API call
+    if (btn) {
+      btn.textContent = '✅ Refreshed';
+      btn.disabled = false;
+      setTimeout(() => { btn.textContent = '🔄 Refresh'; }, 2000);
+    }
+    PersonaGenAPI.showToast(`Session refreshed for ${platform.toUpperCase()}`, 'success');
   },
 
   // ─── Factory Pipeline ───
@@ -2490,45 +2509,49 @@ const AccountCreator = {
       console.warn('[AccountCreator] Factory API call failed (offline), simulating:', e);
     }
 
-    // Start polling simulation
-    this.simulateFactoryPipeline(personaId);
+    // Start real polling for factory status
+    this.pollFactoryStatus(personaId);
   },
 
-  simulateFactoryPipeline(personaId) {
-    const stepKeys = this.PIPELINE_STEPS.map(s => s.key);
-    let currentIdx = 0;
+  async pollFactoryStatus(personaId) {
+    // Clear any existing polling timer
+    if (this.pollingTimers[personaId]) {
+      clearTimeout(this.pollingTimers[personaId]);
+    }
 
-    const advanceStep = () => {
-      const jobs = this.loadFactoryJobs();
-      const job = jobs[personaId];
-      if (!job || job.status !== 'running') return;
+    try {
+      const result = await PersonaGenAPI.Factory.status(personaId);
+      if (result && result.steps) {
+        const jobs = this.loadFactoryJobs();
+        const job = jobs[personaId];
+        if (!job) return;
 
-      // Complete current step
-      job.steps[stepKeys[currentIdx]] = 'complete';
-      currentIdx++;
-
-      if (currentIdx >= stepKeys.length) {
-        // All done
-        job.status = 'complete';
+        // Update steps from backend
+        Object.assign(job.steps, result.steps);
+        job.status = result.status || job.status;
         this.saveFactoryJobs(jobs);
         this.renderFactoryPipeline(personaId);
         this.renderFactoryButton(personaId);
-        PersonaGenAPI.showToast('Account Factory complete! All steps finished.', 'success');
-        return;
+
+        if (job.status === 'complete') {
+          PersonaGenAPI.showToast('Account Factory complete! All steps finished.', 'success');
+          return;
+        }
+        if (job.status === 'error') {
+          PersonaGenAPI.showToast('Account Factory encountered an error. Check steps for retry options.', 'error');
+          return;
+        }
       }
+    } catch (e) {
+      console.warn('[AccountCreator] Status poll failed, will retry:', e);
+    }
 
-      // Activate next step
-      job.steps[stepKeys[currentIdx]] = 'active';
-      this.saveFactoryJobs(jobs);
-      this.renderFactoryPipeline(personaId);
-
-      // Schedule next advance (simulate varying step durations)
-      const delays = [2000, 3000, 4000, 2500, 3500, 2000, 1500];
-      this.pollingTimers[personaId] = setTimeout(advanceStep, delays[currentIdx] || 3000);
-    };
-
-    // Start first step advancement
-    this.pollingTimers[personaId] = setTimeout(advanceStep, 2500);
+    // Continue polling every 5s while running
+    const jobs = this.loadFactoryJobs();
+    const job = jobs[personaId];
+    if (job && job.status === 'running') {
+      this.pollingTimers[personaId] = setTimeout(() => this.pollFactoryStatus(personaId), 5000);
+    }
   },
 
   async retryStep(personaId, stepKey) {
@@ -2548,34 +2571,11 @@ const AccountCreator = {
       console.warn('[AccountCreator] Retry failed (offline):', e);
     }
 
-    // Simulate retry success after delay
-    setTimeout(() => {
-      const jobs2 = this.loadFactoryJobs();
-      const job2 = jobs2[personaId];
-      if (!job2) return;
-      job2.steps[stepKey] = 'complete';
-
-      // Find and activate next pending step
-      const stepKeys = this.PIPELINE_STEPS.map(s => s.key);
-      const nextIdx = stepKeys.indexOf(stepKey) + 1;
-      if (nextIdx < stepKeys.length && job2.steps[stepKeys[nextIdx]] === 'pending') {
-        job2.steps[stepKeys[nextIdx]] = 'active';
-        this.saveFactoryJobs(jobs2);
-        this.renderFactoryPipeline(personaId);
-        this.simulateFactoryPipeline(personaId);
-      } else {
-        // Check if all complete
-        const allDone = stepKeys.every(k => job2.steps[k] === 'complete');
-        job2.status = allDone ? 'complete' : 'running';
-        this.saveFactoryJobs(jobs2);
-        this.renderFactoryPipeline(personaId);
-        this.renderFactoryButton(personaId);
-        if (allDone) PersonaGenAPI.showToast('Account Factory complete!', 'success');
-      }
-    }, 3000);
+    // Poll for retry result
+    this.pollFactoryStatus(personaId);
   },
 
-  connectPlatform(platform) {
+  async connectPlatform(platform) {
     const personaId = this.selectedId;
     const handleInput = document.getElementById(`ac-${platform}-handle-input`);
     const btn = document.getElementById(`ac-btn-connect-${platform}`);
@@ -2586,19 +2586,21 @@ const AccountCreator = {
     if (!saved[personaId]) saved[personaId] = {};
 
     if (saved[personaId][platform]) {
-      // Disconnect action
-      if (!confirm(`Are you sure you want to disconnect this platform?`)) return;
+      // Disconnect action — use toast confirmation pattern
+      PersonaGenAPI.showToast(`Disconnecting ${platform.toUpperCase()}...`, 'info');
       delete saved[personaId][platform];
       this.save(saved);
       this.select(personaId);
       this.updateAllSidebarBadges();
+      PersonaGenAPI.showToast(`${platform.toUpperCase()} disconnected`, 'success');
       return;
     }
 
     // Connect action
     let handle = handleInput.value.trim();
     if (!handle || handle === '@') {
-      alert('Please enter a valid handle to connect!');
+      PersonaGenAPI.showToast('Please enter a valid handle to connect', 'warning');
+      handleInput.focus();
       return;
     }
     if (!handle.startsWith('@')) handle = '@' + handle;
@@ -2607,23 +2609,27 @@ const AccountCreator = {
     btn.textContent = 'Verifying...';
     btn.disabled = true;
 
-    setTimeout(() => {
-      saved[personaId][platform] = handle;
-      this.save(saved);
-      this.select(personaId);
-      this.updateAllSidebarBadges();
+    try {
+      // Fire webhook to n8n for real verification
+      await PersonaWebhook.fire('social.connect', { personaId, platform, handle, source: 'persona-accounts' });
+    } catch (e) {
+      console.warn('[AccountCreator] Webhook fire failed:', e);
+    }
 
-      // Mirror connection status to main Social Connections UI
-      const mainData = SocialConnections.load();
-      mainData[platform] = handle;
-      SocialConnections.save(mainData);
-      SocialConnections.updateUI(platform, handle);
+    saved[personaId][platform] = handle;
+    this.save(saved);
+    this.select(personaId);
+    this.updateAllSidebarBadges();
 
-      // Fire webhook to n8n
-      PersonaWebhook.fire('social.connect', { personaId, platform, handle, source: 'persona-accounts' });
+    // Mirror connection status to main Social Connections UI
+    const mainData = SocialConnections.load();
+    mainData[platform] = handle;
+    SocialConnections.save(mainData);
+    SocialConnections.updateUI(platform, handle);
 
-      alert(`Success! Channel ${handle} verified and linked with autonomous content engine.`);
-    }, 1200);
+    PersonaGenAPI.showToast(`✅ ${handle} linked to ${personaId} — content engine active`, 'success');
+    btn.textContent = '✓ Connected';
+    btn.disabled = false;
   },
 
   updateAllSidebarBadges() {
@@ -2648,6 +2654,13 @@ const AccountCreator = {
         }
       }
     });
+  },
+
+  openNewAvatarWizard() {
+    PersonaGenAPI.showToast('New Avatar wizard launching in Phase 4...', 'info');
+    // Phase 4 will implement the full 5-stage wizard:
+    // ① Create → ② Assets → ③ Accounts → ④ Soul → ⑤ Activate
+    // For now, show a coming-soon toast
   }
 };
 

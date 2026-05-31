@@ -875,33 +875,11 @@
                                         <!-- Account Creator Sidebar -->
                                         <div style="border-right: 1px solid var(--border); padding-right: 1rem; display: flex; flex-direction: column; gap: 8px;">
                                             <span style="font-size: 0.65rem; text-transform: uppercase; font-weight: 700; color: var(--text-dim); margin-bottom: 0.25rem;">Select Persona</span>
-                                            <button class="ac-sidebar-item active" id="ac-item-sofia-rivera" onclick="AccountCreator.select('sofia-rivera')">
-                                                <div class="ac-avatar-dot" style="background: linear-gradient(135deg, #f472b6, #a78bfa);"></div>
-                                                <div style="text-align: left;">
-                                                    <div class="ac-item-name" style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted);">Sofia Rivera</div>
-                                                    <div class="ac-item-handle" style="font-size: 0.68rem; color: var(--text-dim);">@sofiarivera.ai</div>
-                                                </div>
-                                            </button>
-                                            <button class="ac-sidebar-item" id="ac-item-marcus-chen" onclick="AccountCreator.select('marcus-chen')">
-                                                <div class="ac-avatar-dot" style="background: linear-gradient(135deg, #34d399, #60a5fa);"></div>
-                                                <div style="text-align: left;">
-                                                    <div class="ac-item-name" style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted);">Marcus Chen</div>
-                                                    <div class="ac-item-handle" style="font-size: 0.68rem; color: var(--text-dim);">@marcuschen.tech</div>
-                                                </div>
-                                            </button>
-                                            <button class="ac-sidebar-item" id="ac-item-aisha-noori" onclick="AccountCreator.select('aisha-noori')">
-                                                <div class="ac-avatar-dot" style="background: linear-gradient(135deg, #fbbf24, #f97316);"></div>
-                                                <div style="text-align: left;">
-                                                    <div class="ac-item-name" style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted);">Aisha Noori</div>
-                                                    <div class="ac-item-handle" style="font-size: 0.68rem; color: var(--text-dim);">@aishanoori.style</div>
-                                                </div>
-                                            </button>
-                                            <button class="ac-sidebar-item" id="ac-item-veronica-hap" onclick="AccountCreator.select('veronica-hap')">
-                                                <div class="ac-avatar-dot" style="background: linear-gradient(135deg, #8b5cf6, #ec4899);"></div>
-                                                <div style="text-align: left;">
-                                                    <div class="ac-item-name" style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted);">Veronica Hap</div>
-                                                    <div class="ac-item-handle" style="font-size: 0.68rem; color: var(--text-dim);">@veronicahap</div>
-                                                </div>
+                                            <!-- Populated dynamically from DATA.agents by AccountCreator.renderSidebar() -->
+                                            <div id="ac-persona-list"></div>
+                                            <button class="ac-sidebar-item ac-new-avatar-btn" onclick="AccountCreator.openNewAvatarWizard()" style="border: 1px dashed var(--border); background: transparent; justify-content: center; gap: 6px; opacity: 0.7;">
+                                                <span style="font-size: 1rem;">＋</span>
+                                                <span style="font-size: 0.75rem; font-weight: 600; color: var(--text-dim);">New Avatar</span>
                                             </button>
                                         </div>
                                         
