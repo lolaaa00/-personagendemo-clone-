@@ -65,6 +65,14 @@ fts = "db"
 lookup = "db"
 directory = "local"
 
+[directory."local"]
+type = "internal"
+store = "db"
+catch-all = true
+
+[session.rcpt]
+max-recipients = 100
+relay = true
 [session.data.pipe."deliver"]
 command = "node"
 arguments = ["/app/src/inbox-deliver.js"]
