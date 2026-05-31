@@ -1,40 +1,36 @@
-# Use official Stalwart image — binary pre-installed
-FROM stalwartlabs/stalwart:v0.15.4
+FROM node:20-slim
 
-# Install Node.js, supervisor, and tools
 RUN apt-get update && apt-get install -y --no-install-recommends \
     supervisor \
-    curl \
     openssl \
-    nodejs \
-    npm \
     bash \
     ca-certificates \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 COPY services/mail/src/ ./src/
 
+# Install Node deps (smtp-server, mailparser)
+RUN cd /app/src && npm install --omit=dev
+
 # Strip Windows CRLF from shell scripts
 RUN sed -i 's/\r$//' /app/src/entrypoint.sh && chmod +x /app/src/entrypoint.sh
 
-RUN mkdir -p /data/stalwart/data /data/stalwart/queue /data/stalwart/logs \
-    /data/dkim /data/inboxes /var/log/supervisor
+RUN mkdir -p /data/dkim /data/inboxes /var/log/supervisor
 
-# Supervisor config
+# Supervisor — smtp(25), api(8080), health(8081)
 RUN cat > /etc/supervisor/conf.d/personagen-mail.conf <<'EOF'
 [supervisord]
 nodaemon=true
 logfile=/var/log/supervisor/supervisord.log
 
-[program:stalwart]
-command=/usr/local/bin/stalwart -c /tmp/stalwart-config.toml
+[program:smtp]
+command=node /app/src/smtp.js
 autostart=true
 autorestart=true
-startretries=5
-startsecs=3
-priority=10
+startsecs=2
 stdout_logfile=/dev/stdout
 stdout_logfile_maxbytes=0
 stderr_logfile=/dev/stderr
@@ -42,8 +38,9 @@ stderr_logfile_maxbytes=0
 
 [program:api]
 command=node /app/src/api.js
+autostart=true
 autorestart=true
-priority=20
+startsecs=2
 stdout_logfile=/dev/stdout
 stdout_logfile_maxbytes=0
 stderr_logfile=/dev/stderr
@@ -51,17 +48,19 @@ stderr_logfile_maxbytes=0
 
 [program:health]
 command=node /app/src/health.js
+autostart=true
 autorestart=true
-priority=20
+startsecs=2
 stdout_logfile=/dev/stdout
 stdout_logfile_maxbytes=0
 stderr_logfile=/dev/stderr
 stderr_logfile_maxbytes=0
 EOF
 
-EXPOSE 25 587 143 8080 8081
+# SMTP(25), Submission(587), API(8080), Health(8081)
+EXPOSE 25 587 8080 8081
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD curl -sf http://localhost:8081/health || exit 1
 
-ENTRYPOINT ["bash", "/app/src/entrypoint.sh"]
+ENTRYPOINT ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/personagen-mail.conf"]

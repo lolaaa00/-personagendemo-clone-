@@ -1,0 +1,9 @@
+{
+  "name": "personagen-mail",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "smtp-server": "^3.13.6",
+    "mailparser": "^3.7.1"
+  }
+}
