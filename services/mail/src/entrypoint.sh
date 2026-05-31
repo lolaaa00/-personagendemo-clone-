@@ -63,12 +63,6 @@ data = "db"
 blob = "db"
 fts = "db"
 lookup = "db"
-directory = "local"
-
-[directory."local"]
-type = "internal"
-store = "db"
-catch-all = true
 
 [session.rcpt]
 max-recipients = 100
