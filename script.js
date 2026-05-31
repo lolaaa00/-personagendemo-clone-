@@ -823,7 +823,7 @@ function renderAgentTable(filter) {
             <span>Agent</span><span>Followers</span><span>Engagement</span><span>Trend</span><span>Performance</span><span>Active</span>
         </div>
         ${agents.map((a, i) => `
-        <div class="dash-row" data-idx="${DASH_AGENTS.indexOf(a)}">
+        <div class="dash-row" data-idx="${DASH_AGENTS.indexOf(a)}" style="cursor:pointer" onclick="if(!event.target.closest('.toggle')){switchPortalView('persona-config')}">
             <div class="dash-agent-cell">
                 <div class="dash-agent-avatar" style="background:${a.gradient}">${a.initial}</div>
                 <div class="dash-agent-info">
@@ -1040,6 +1040,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     renderCalendar(0);
     renderTrendTicker();
     renderDashboard();
+
+    // Initialize dynamic calendar module if available
+    if (typeof DynamicCalendar !== 'undefined' && document.getElementById('dynamic-calendar-mount')) {
+        DynamicCalendar.init('dynamic-calendar-mount');
+    }
 
     // Clear aria-busy on all dynamic containers after render
     document.querySelectorAll('[aria-busy="true"]').forEach(el => {
@@ -2841,6 +2846,10 @@ function switchPortalView(viewId, clickedBtn, keepTabs) {
   if (viewId === 'content-forge' && typeof ContentForge !== 'undefined' && !document.querySelector('.cf-wrapper')) {
     ContentForge.init('content-forge-mount');
   }
+  // Calendar init — both when switching to calendar tab AND on initial dashboard load
+  if ((viewId === 'calendar' || viewId === 'dashboard') && typeof DynamicCalendar !== 'undefined' && !document.querySelector('.dcal-wrapper')) {
+    DynamicCalendar.init('dynamic-calendar-mount');
+  }
 
   const workspace = document.querySelector('.dash-workspace');
   if (workspace) {
@@ -2858,18 +2867,47 @@ function switchPortalView(viewId, clickedBtn, keepTabs) {
       'scout': 'dash-sec-scout',
       'generator': 'dash-sec-generator'
     };
-    const targetSectionId = sectionMap[viewId];
-    const sectionEl = document.getElementById(targetSectionId);
-    const mainContainer = document.querySelector('.dash-main');
-    if (sectionEl && mainContainer) {
-      setTimeout(() => {
-        mainContainer.scrollTo({
-          top: sectionEl.offsetTop - 70,
-          behavior: 'smooth'
-        });
-      }, 50);
+    const allSections = Object.values(sectionMap);
+    
+    if (viewId === 'dashboard') {
+      // Dashboard sidebar click → show ALL sections
+      allSections.forEach(secId => {
+        const el = document.getElementById(secId);
+        if (el) el.style.display = '';
+      });
+      // Scroll to top
+      const mainContainer = document.querySelector('.dash-main');
+      if (mainContainer) mainContainer.scrollTop = 0;
+    } else {
+      // Mega-tab click → show ONLY the targeted section
+      const targetSectionId = sectionMap[viewId];
+      allSections.forEach(secId => {
+        const el = document.getElementById(secId);
+        if (el) {
+          el.style.display = (secId === targetSectionId) ? '' : 'none';
+          // Remove the border-top separator when showing solo
+          if (secId === targetSectionId) {
+            el.style.marginTop = '0';
+            el.style.paddingTop = '0';
+            el.style.borderTop = 'none';
+          }
+        }
+      });
+      // Scroll to top of the visible section
+      const mainContainer = document.querySelector('.dash-main');
+      if (mainContainer) mainContainer.scrollTop = 0;
     }
   } else {
+    // Non-dashboard view → restore all dashboard sections for when user returns
+    ['dash-sec-summary', 'dash-sec-scout', 'dash-sec-generator', 'dash-sec-calendar'].forEach(secId => {
+      const el = document.getElementById(secId);
+      if (el) {
+        el.style.display = '';
+        el.style.marginTop = '';
+        el.style.paddingTop = '';
+        el.style.borderTop = '';
+      }
+    });
     const mainContainer = document.querySelector('.dash-main');
     if (mainContainer) mainContainer.scrollTop = 0;
   }

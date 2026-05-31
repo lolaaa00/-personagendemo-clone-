@@ -56,6 +56,9 @@ const DynamicCalendar = (() => {
               <button class="dcal-view-btn" data-view="week" onclick="DynamicCalendar.setView('week')">Week</button>
             </div>
             <button class="dcal-new-btn" onclick="PostComposer.open()">+ New Post</button>
+            <button class="dcal-bulk-btn" onclick="BulkScheduler.openWizard()" title="Generate & schedule a full week of posts">
+              ⚡ Bulk Schedule
+            </button>
           </div>
         </div>
 
@@ -78,30 +81,42 @@ const DynamicCalendar = (() => {
   }
 
   // Convert old static CALENDARS to post objects
+  // CALENDARS structure: [agentIdx][dayIdx (Mon=0..Sun=6)][{p, type, desc, time}]
   function convertLegacyCalendars() {
     const converted = [];
     const today = new Date();
-    const dayNames = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+    const dayNames = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 
-    if (typeof CALENDARS === 'undefined') return converted;
+    if (typeof CALENDARS === 'undefined' || !Array.isArray(CALENDARS)) return converted;
+    if (typeof INFLUENCERS === 'undefined') return converted;
 
-    Object.entries(CALENDARS).forEach(([persona, days]) => {
-      const inf = INFLUENCERS?.find(i => i.name.split(' ')[0].toLowerCase() === persona.toLowerCase());
-      if (!inf) return;
+    CALENDARS.forEach((agentDays, agentIdx) => {
+      const inf = INFLUENCERS[agentIdx];
+      if (!inf || !Array.isArray(agentDays)) return;
 
-      Object.entries(days).forEach(([dayName, items]) => {
-        const dayIdx = dayNames.indexOf(dayName);
-        if (dayIdx < 0) return;
+      agentDays.forEach((dayItems, dayIdx) => {
+        if (!Array.isArray(dayItems)) return;
 
-        // Map to this week's dates
-        const diff = dayIdx - today.getDay();
+        // Map CALENDARS day index (0=Monday) to JS getDay() (0=Sunday)
+        // Monday=1, Tuesday=2, ..., Saturday=6, Sunday=0
+        const jsDayOfWeek = dayIdx < 6 ? dayIdx + 1 : 0;
+        const diff = jsDayOfWeek - today.getDay();
         const postDate = new Date(today);
         postDate.setDate(today.getDate() + diff);
 
-        items.forEach((item, j) => {
-          const [time] = (item.time || '10:00 AM').split(' ');
-          const hour = parseInt(time.split(':')[0]);
-          postDate.setHours(hour + j, 0, 0, 0);
+        dayItems.forEach((item, j) => {
+          // Parse time string like "7:00 AM"
+          const timeStr = item.time || '10:00 AM';
+          const [timePart, ampm] = timeStr.split(' ');
+          let hour = parseInt(timePart.split(':')[0]);
+          const min = parseInt(timePart.split(':')[1]) || 0;
+          if (ampm === 'PM' && hour < 12) hour += 12;
+          if (ampm === 'AM' && hour === 12) hour = 0;
+          postDate.setHours(hour, min, 0, 0);
+
+          // Map platform names to keys
+          const platMap = {'instagram':'instagram','tiktok':'tiktok','twitter/x':'x','youtube':'youtube','linkedin':'linkedin','threads':'threads','reddit':'reddit'};
+          const platKey = platMap[(item.p || '').toLowerCase()] || (item.p || 'x').toLowerCase();
 
           converted.push({
             id: PersonaGenAPI.Local.uuid(),
@@ -109,10 +124,11 @@ const DynamicCalendar = (() => {
             persona_name: inf.name,
             persona_initial: inf.initial,
             persona_gradient: inf.gradient,
-            platforms: [item.platform?.toLowerCase().replace('twitter/x','x').replace('instagram','instagram') || 'x'],
-            content: { text: item.description || item.type || '', hashtags: [], media_url: null, privacy: 'public' },
+            platforms: [platKey],
+            content: { text: item.desc || item.type || '', hashtags: [], media_url: null, privacy: 'public' },
             status: 'scheduled',
-            scheduled_at: postDate.toISOString(),
+            type: item.type || 'Post',
+            scheduled_at: new Date(postDate).toISOString(),
             timezone: 'America/New_York',
             created_at: new Date().toISOString(),
             generation_source: 'legacy',

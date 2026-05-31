@@ -425,6 +425,16 @@
 
                                         </div>
 
+                                        <!-- Quick Actions -->
+                                        <div style="display:flex; gap:0.75rem; margin-top: 1.25rem; flex-wrap: wrap;">
+                                            <button class="btn-primary" onclick="switchMegaView('content-studio'); setTimeout(() => switchMegaTab('content-studio','calendar',document.querySelector('.mega-tab[onclick*=calendar]')),100)" style="font-size: 0.82rem; padding: 0.6rem 1.2rem;">
+                                                📅 New Post
+                                            </button>
+                                            <button class="btn-ghost" onclick="document.getElementById('dash-sec-generator').scrollIntoView({behavior:'smooth',block:'start'})" style="font-size: 0.82rem; padding: 0.6rem 1.2rem;">
+                                                ✨ Create Agent
+                                            </button>
+                                        </div>
+
                                         <!-- Agent Roster Table -->
                                         <div class="dash-table-wrap" style="margin-top: 2rem;">
                                             <div class="dash-table-header">
@@ -1555,6 +1565,7 @@
     <script src="modules/api.js"></script>
     <script src="modules/composer.js"></script>
     <script src="modules/calendar-dynamic.js"></script>
+    <script src="modules/bulk-scheduler.js"></script>
     <script src="modules/persona-config.js"></script>
     <script src="modules/inbox-email.js"></script>
     <script src="modules/inbox.js"></script>

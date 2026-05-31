@@ -152,7 +152,7 @@ select option { background:var(--surface-2); }
 .inf-stats { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:.75rem; }
 .inf-stat { text-align:center; }
 .inf-stat-num { display:block; font-size:0.85rem; font-weight:600; color:var(--text); }
-.inf-stat-label { display:block; font-size:0.62rem; color:var(--text-dim); text-transform:uppercase; letter-spacing:.06em; margin-top:2px; }
+.inf-stat-label { display:block; font-size:0.65rem; color:var(--text-dim); text-transform:uppercase; letter-spacing:.06em; margin-top:2px; }
 
 /* ── Calendar ── */
 .calendar-controls { margin-bottom:1.5rem; }
@@ -396,9 +396,9 @@ select option { background:var(--surface-2); }
 
 /* ── Calendar post types ── */
 .cal-post { background:rgba(124,106,237,0.08); border-left:2px solid var(--accent); }
-.cal-post-platform { font-size:0.62rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--accent); margin-bottom:2px; }
+.cal-post-platform { font-size:0.65rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--accent); margin-bottom:2px; }
 .cal-post-desc { font-size:0.68rem; color:var(--text-muted); line-height:1.4; }
-.cal-post-time { font-size:0.6rem; color:var(--text-dim); margin-top:3px; font-family:var(--font-mono); }
+.cal-post-time { font-size:0.65rem; color:var(--text-dim); margin-top:3px; font-family:var(--font-mono); }
 .cal-post.cal-tiktok { background:rgba(254,44,85,0.06); border-left-color:#fe2c55; }
 .cal-post.cal-tiktok .cal-post-platform { color:#fe2c55; }
 .cal-post.cal-twitter { background:rgba(29,161,242,0.06); border-left-color:#1da1f2; }
@@ -1729,7 +1729,11 @@ body.portal-active {
   border-bottom: 1px solid rgba(255,255,255,0.06);
   background: rgba(255,255,255,0.015);
   flex-shrink: 0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
 }
+.mega-tab-bar::-webkit-scrollbar { display: none; }
 .mega-tab-bar.visible {
   display: flex;
 }

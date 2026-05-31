@@ -8,6 +8,7 @@
   position: fixed;
   bottom: 2rem;
   right: 2rem;
+  left: auto;
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -22,7 +23,14 @@
   transform: translateY(100px);
   opacity: 0;
   transition: all 0.4s var(--ease-out);
-  max-width: 400px;
+  max-width: min(400px, calc(100vw - 2rem));
+}
+@media (max-width: 480px) {
+  .pg-toast {
+    right: 1rem;
+    left: 1rem;
+    max-width: none;
+  }
 }
 .pg-toast--visible { transform: translateY(0); opacity: 1; }
 .pg-toast--success { border-color: var(--success); }

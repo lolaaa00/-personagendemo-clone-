@@ -237,5 +237,5 @@ const PersonaGenAPI = (() => {
     toast._timer = setTimeout(() => toast.classList.remove('pg-toast--visible'), 4000);
   }
 
-  return { Posts, Generate, Publish, Accounts, Feed, Trends, Inbox, Factory, Email, Local, ChannelDecode, ContentForge, Blueprints, showToast, ENDPOINTS };
+  return { Posts, Generate, Publish, Accounts, Feed, Trends, Inbox, Factory, Email, Local, ChannelDecode, ContentForge, Blueprints, showToast, ENDPOINTS, _endpoints: () => ENDPOINTS };
 })();
