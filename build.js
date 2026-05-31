@@ -523,6 +523,20 @@ function compilePortalPages(content, DIST) {
       return `<a href="${href}" class="dash-menu-item${activeClass}">\n                        ${innerHtml.trim()}\n                    </a>`;
     });
 
+    // Handle switchMegaView buttons → link to first tab's page
+    const megaViewMap = {
+      'intelligence': { default: 'scout.html', views: ['scout', 'trends', 'channel-decoder'] },
+      'content-studio': { default: 'content-forge.html', views: ['content-forge', 'calendar', 'brand-brief'] }
+    };
+    const megaItemsPattern = /<button class="dash-menu-item([^"]*)" onclick="switchMegaView\('([^']*)', this\)">([\s\S]*?)<\/button>/g;
+    customizedSidebarAndHeader = customizedSidebarAndHeader.replace(megaItemsPattern, (match, classes, megaId, innerHtml) => {
+      const mega = megaViewMap[megaId];
+      const isCurrent = mega && mega.views.includes(p.view);
+      const activeClass = isCurrent ? ' active' : '';
+      const href = mega ? mega.default : 'dashboard.html';
+      return `<a href="${href}" class="dash-menu-item${activeClass}">\n                        ${innerHtml.trim()}\n                    </a>`;
+    });
+
     // Customize top header title
     customizedSidebarAndHeader = customizedSidebarAndHeader.replace(
       /<h2 class="dash-header-title" id="dash-view-title">[^<]*<\/h2>/,
@@ -543,6 +557,15 @@ function compilePortalPages(content, DIST) {
     customizedSidebarAndHeader = customizedSidebarAndHeader.replace(
       /<button class="profile-dropdown-item" onclick="switchPortalView\('accounts'\);[^"]*">/g,
       `<a href="accounts.html" class="profile-dropdown-item" style="text-decoration:none;">`
+    );
+    // Convert Support & SLA dropdown items to page links
+    customizedSidebarAndHeader = customizedSidebarAndHeader.replace(
+      /<button class="profile-dropdown-item" onclick="switchPortalView\('pm'\);[^"]*">/g,
+      `<a href="pm.html" class="profile-dropdown-item" style="text-decoration:none;">`
+    );
+    customizedSidebarAndHeader = customizedSidebarAndHeader.replace(
+      /<button class="profile-dropdown-item" onclick="switchPortalView\('agreement'\);[^"]*">/g,
+      `<a href="agreement.html" class="profile-dropdown-item" style="text-decoration:none;">`
     );
     // Fix corresponding closing tags for converted dropdown items
     customizedSidebarAndHeader = customizedSidebarAndHeader.replace(
