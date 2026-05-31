@@ -33,56 +33,50 @@ fi
 echo "[INIT] Writing Stalwart configuration to ${CONFIG_PATH}..."
 
 cat > "${CONFIG_PATH}" <<TOML
-# Stalwart Mail Server v0.16 — PersonaGen
-# Written by entrypoint.sh at $(date -u +%Y-%m-%dT%H:%M:%SZ)
-
 [server]
 hostname = "${MAIL_DOMAIN}"
 max-connections = 1024
 
-[server.listener."smtp"]
+[server.listener.smtp]
 bind = ["0.0.0.0:25"]
 protocol = "smtp"
 
-[server.listener."submission"]
+[server.listener.submission]
 bind = ["0.0.0.0:587"]
 protocol = "smtp"
 
-[server.listener."imap"]
+[server.listener.imap]
 bind = ["0.0.0.0:143"]
 protocol = "imap"
 
-[server.listener."http"]
+[server.listener.http]
 bind = ["0.0.0.0:8443"]
 protocol = "http"
 
-[store."rocksdb"]
-type = "rocksdb"
-path = "${STALWART_DATA}/data"
-
 [storage]
-data = "rocksdb"
-fts = "rocksdb"
-blob = "rocksdb"
-lookup = "rocksdb"
-directory = "internal"
+data = "${STALWART_DATA}/data"
+blob = "${STALWART_DATA}/data/blobs"
+fts = "${STALWART_DATA}/data/fts"
+lookup = "${STALWART_DATA}/data/lookup"
 
-[directory."internal"]
-type = "internal"
-store = "rocksdb"
+[queue]
+path = "${STALWART_DATA}/queue"
 
-[auth]
-mechanisms = ["PLAIN", "LOGIN"]
+[report]
+path = "${STALWART_DATA}/reports"
 
-[session.rcpt]
-max-recipients = 25
-relay = true
+[directory.local]
+type = "memory"
 
-[session.data]
-max-message-size = 26214400
+[directory.local.options]
+catch-all = true
+subaddressing = true
 
-[report.dmarc]
-send = "admin@${MAIL_DOMAIN}"
+[tracer.stdout]
+type = "stdout"
+level = "info"
+ansi = false
+
 TOML
 
 # Verify the file was written and is not empty
