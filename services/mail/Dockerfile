@@ -8,14 +8,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Stalwart Mail Server binary (v0.15.4 — last TOML config release)
+# Install Stalwart Mail Server binary (v0.15.4)
 RUN curl -fsSL "https://github.com/stalwartlabs/stalwart/releases/download/v0.15.4/stalwart-x86_64-unknown-linux-gnu.tar.gz" \
     -o /tmp/stalwart.tar.gz \
-    && mkdir -p /tmp/stalwart-extract \
-    && tar xzf /tmp/stalwart.tar.gz -C /tmp/stalwart-extract/ \
-    && find /tmp/stalwart-extract -type f -perm /111 ! -name "*.sh" -exec cp {} /usr/local/bin/stalwart-mail \; \
+    && tar xzf /tmp/stalwart.tar.gz -C /usr/local/bin/ \
+    && ls /usr/local/bin/stalwart* \
+    && (mv /usr/local/bin/stalwart /usr/local/bin/stalwart-mail 2>/dev/null; true) \
     && chmod +x /usr/local/bin/stalwart-mail \
-    && rm -rf /tmp/stalwart.tar.gz /tmp/stalwart-extract
+    && rm /tmp/stalwart.tar.gz
 
 WORKDIR /app
 
