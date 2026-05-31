@@ -63,10 +63,7 @@ data = "db"
 blob = "db"
 fts = "db"
 lookup = "db"
-
-[directory."local"]
-type = "internal"
-store = "db"
+directory = "local"
 
 [tracer."stdout"]
 type = "stdout"
