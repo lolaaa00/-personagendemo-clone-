@@ -11,7 +11,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
 
-const SMTP_PORT = parseInt(process.env.SMTP_PORT || "25", 10);
+const SMTP_PORT = parseInt(process.env.SMTP_PORT || "2525", 10);
 const MAIL_DOMAIN = process.env.MAIL_DOMAIN || "l2gseo.com";
 const DB_FILE = "/data/inboxes/inboxes.json";
 
