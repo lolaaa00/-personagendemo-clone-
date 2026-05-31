@@ -105,7 +105,11 @@ const PersonaConfigEditor = (() => {
   }
 
   function selectPersona(persona) {
-    if (unsavedChanges && !confirm('You have unsaved changes. Switch persona anyway?')) return;
+    if (unsavedChanges) {
+      // Auto-save before switching
+      save();
+      PersonaGenAPI.showToast('Changes auto-saved', 'info');
+    }
 
     selectedPersona = persona;
     unsavedChanges = false;
@@ -162,7 +166,11 @@ const PersonaConfigEditor = (() => {
   }
 
   function switchTab(tab) {
-    if (unsavedChanges && !confirm('You have unsaved changes. Switch tab anyway?')) return;
+    if (unsavedChanges) {
+      // Auto-save before switching tabs
+      save();
+      PersonaGenAPI.showToast('Changes auto-saved', 'info');
+    }
 
     activeTab = tab;
     unsavedChanges = false;

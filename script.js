@@ -1495,20 +1495,28 @@ const SocialConnections = {
     const existing = this.load();
     if (existing[platform]) {
       const currentHandle = typeof existing[platform] === 'object' ? existing[platform].handle : existing[platform];
-      if (!confirm(`${appInfo.name} is connected as ${currentHandle}. Disconnect?`)) return;
+      // Direct disconnect with toast feedback
       delete existing[platform];
       this.save(existing);
       this.updateUI(platform, null);
       PersonaWebhook.fire('social.disconnect', { platform, handle: currentHandle, source: 'main-dashboard' });
-      PersonaGenAPI.showToast(`${appInfo.name} disconnected.`, 'info');
+      PersonaGenAPI.showToast(`${appInfo.name} disconnected`, 'info');
       return;
     }
     
-    // Prompt for handle
-    const handle = prompt(`Enter your ${appInfo.name} handle:`, '@');
-    if (!handle || handle.trim() === '@' || handle.trim() === '') return;
+    // Inline handle input — use the existing input field on the card instead of prompt()
+    const existingInput = document.querySelector(`#${platform}-handle-input, [data-platform="${platform}"] input`);
+    let handle;
+    if (existingInput) {
+      handle = existingInput.value?.trim();
+    }
+    if (!handle || handle === '@' || handle === '') {
+      PersonaGenAPI.showToast(`Enter a handle for ${appInfo.name} first`, 'warning');
+      if (existingInput) existingInput.focus();
+      return;
+    }
     
-    const cleanHandle = handle.trim().startsWith('@') ? handle.trim() : '@' + handle.trim();
+    const cleanHandle = handle.startsWith('@') ? handle : '@' + handle;
     
     // Update button state
     const btn = document.getElementById(`btn-connect-${platform}`);
@@ -1516,30 +1524,28 @@ const SocialConnections = {
     if (btn) { btn.textContent = 'Verifying...'; btn.disabled = true; }
     if (statusBadge) { statusBadge.textContent = 'Connecting...'; statusBadge.className = 'ii-status connecting'; }
     
-    // Simulate verification delay, then save
-    setTimeout(() => {
-      const connData = this.load();
-      connData[platform] = {
-        handle: cleanHandle,
-        entity_id: entityId,
-        connected: true,
-        connected_at: new Date().toISOString(),
-        auth_method: 'manual',
-      };
-      this.save(connData);
-      this.updateUI(platform, cleanHandle);
-      
-      // Fire webhook to n8n
-      PersonaWebhook.fire('social.connect', {
-        platform,
-        handle: cleanHandle,
-        entity_id: entityId,
-        auth_method: 'manual',
-        source: 'main-dashboard',
-      });
-      
-      PersonaGenAPI.showToast(`${appInfo.name} connected as ${cleanHandle}!`, 'success');
-    }, 1200);
+    // Save and fire webhook immediately
+    const connData = this.load();
+    connData[platform] = {
+      handle: cleanHandle,
+      entity_id: entityId,
+      connected: true,
+      connected_at: new Date().toISOString(),
+      auth_method: 'manual',
+    };
+    this.save(connData);
+    this.updateUI(platform, cleanHandle);
+    
+    // Fire webhook to n8n
+    PersonaWebhook.fire('social.connect', {
+      platform,
+      handle: cleanHandle,
+      entity_id: entityId,
+      auth_method: 'manual',
+      source: 'main-dashboard',
+    });
+    
+    PersonaGenAPI.showToast(`${appInfo.name} connected as ${cleanHandle}!`, 'success');
   },
 
   
@@ -1577,28 +1583,11 @@ const SocialConnections = {
   },
   
   _fallbackConnect(platform, entityId) {
-    // Fallback: manual handle entry when popup is blocked
+    // Fallback: use toast instead of prompt when popup is blocked
     const names = this.COMPOSIO_APPS;
     const name = names[platform]?.name || platform;
     
-    const handle = prompt(`Popup blocked. Enter your ${name} handle manually:`, "@");
-    if (!handle || handle.trim() === '@' || handle.trim() === '') return;
-    
-    const cleanHandle = handle.trim().startsWith('@') ? handle.trim() : '@' + handle.trim();
-    
-    const data = this.load();
-    data[platform] = {
-      handle: cleanHandle,
-      entity_id: entityId,
-      connected: true,
-      connected_at: new Date().toISOString(),
-      auth_method: 'manual',
-    };
-    this.save(data);
-    
-    PersonaWebhook.fire('social.connect', { platform, handle: cleanHandle, entity_id: entityId, auth_method: 'manual', source: 'main-dashboard' });
-    
-    this.updateUI(platform, cleanHandle);
+    PersonaGenAPI.showToast(`OAuth popup blocked. Enter ${name} handle in the input field and click Connect.`, 'warning');
   },
   
   updateUI(platform, handle) {
@@ -1621,7 +1610,8 @@ const SocialConnections = {
   },
   
   disconnect(platform) {
-    if (!confirm(`Are you sure you want to disconnect this platform?`)) return;
+    // Direct disconnect with toast feedback
+    PersonaGenAPI.showToast(`Disconnecting ${platform}...`, 'info');
     
     const data = this.load();
     const oldData = data[platform];

@@ -680,7 +680,7 @@ const BrandBrief = (() => {
 
 
   async function submit() {
-    if (!confirm('Submit your brand brief? This will generate your AI persona recommendations.')) return;
+    // Submit brief — no confirmation dialog needed, the button click is the intent
     isLoading = true;
     render();
 
