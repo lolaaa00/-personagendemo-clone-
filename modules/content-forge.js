@@ -14,7 +14,9 @@ const ContentForge = (() => {
   let isGenerating = false;
   let generationSeed = Date.now();
 
-  const WEBHOOK_URL = 'https://auto.l2gseo.com/webhook/personagen-content-forge';
+  const WEBHOOK_URL = (typeof PersonaGenConfig !== 'undefined')
+    ? PersonaGenConfig.n8n_url + '/webhook/personagen-content-forge'
+    : 'https://auto.l2gseo.com/webhook/personagen-content-forge';
 
   // ─── HTML Escape ───
   function esc(s) {

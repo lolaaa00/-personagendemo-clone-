@@ -12,7 +12,9 @@ const ChannelDecoder = (() => {
   let savedBlueprints = [];
 
   const STORAGE_KEY = 'personagen_blueprints';
-  const DECODE_URL = 'https://auto.l2gseo.com/webhook/personagen-channel-decode';
+  const DECODE_URL = (typeof PersonaGenConfig !== 'undefined')
+    ? PersonaGenConfig.n8n_url + '/webhook/personagen-channel-decode'
+    : 'https://auto.l2gseo.com/webhook/personagen-channel-decode';
 
   const PLATFORMS = {
     youtube:   { icon: '📺', label: 'YouTube',   color: '#ff0000' },
