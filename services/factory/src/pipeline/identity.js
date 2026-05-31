@@ -16,7 +16,8 @@ function generateIdentity({ name, niche, platform, personaId }) {
   const bio = buildBio(name, niche, platform);
   const fingerprintSeed = hashSeed(personaId);
   const emailHandle = `${baseHandle.replace(/[^a-z0-9]/g, "")}${randomDigits(4)}`;
-  const email = `${emailHandle}@inbox.personagen.com`;
+  const mailDomain = process.env.MAIL_DOMAIN || "l2gseo.com";
+  const email = `${emailHandle}@${mailDomain}`;
 
   return {
     email,

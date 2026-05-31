@@ -235,14 +235,20 @@ class Orchestrator extends EventEmitter {
       case "verify-phone": {
         if (!state.signupResult?.needsPhone) break;
 
-        if (!opts.googleVoiceCreds) {
+        const gvCreds = opts.googleVoiceCreds || (
+          config.GOOGLE_VOICE_EMAIL && config.GOOGLE_VOICE_APP_PASSWORD
+            ? { email: config.GOOGLE_VOICE_EMAIL, appPassword: config.GOOGLE_VOICE_APP_PASSWORD }
+            : null
+        );
+
+        if (!gvCreds) {
           throw new PipelineError(
             "PHONE_REQUIRED",
             "Phone verification required but no Google Voice credentials provided"
           );
         }
 
-        await verifyPhone(state.browser, opts.googleVoiceCreds, state.accountId);
+        await verifyPhone(state.browser, gvCreds, state.accountId);
         break;
       }
 

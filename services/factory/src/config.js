@@ -11,8 +11,13 @@ const envSchema = z.object({
   /* ── required ─────────────────────────────── */
   FACTORY_PORT: z.coerce.number().int().min(1).max(65535).default(8080),
   FACTORY_API_KEY: z.string().min(16, "FACTORY_API_KEY must be at least 16 characters"),
+  MAIL_DOMAIN: z.string().default("l2gseo.com"),
   MAIL_URL: z.string().url("MAIL_URL must be a valid URL").optional(),
   MAIL_API_KEY: z.string().min(1, "MAIL_API_KEY is required"),
+
+  /* ── Google Voice (phone verification) ───── */
+  GOOGLE_VOICE_EMAIL: z.string().email().optional(),
+  GOOGLE_VOICE_APP_PASSWORD: z.string().optional(),
 
   /* ── CORS ─────────────────────────────────── */
   ALLOWED_ORIGINS: z.string().default("*"),
