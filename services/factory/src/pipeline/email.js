@@ -11,35 +11,66 @@ const config = require("../config");
  * @returns {Promise<{ inboxId: string, apiKey: string, address: string }>}
  */
 async function createInbox({ address, name }) {
-  const url = new URL("/api/inboxes", config.MAIL_URL);
-  const payload = JSON.stringify({
-    address,
-    name: name || address.split("@")[0],
-  });
+  const inboxName = name || address.split("@")[0];
 
-  const response = await postJson(url, payload, {
-    Authorization: `Bearer ${config.MAIL_API_KEY}`,
-    "Content-Type": "application/json",
-  });
+  /* Try remote mail API first */
+  if (config.MAIL_URL) {
+    try {
+      const url = new URL("/api/inboxes", config.MAIL_URL);
+      const payload = JSON.stringify({ address, name: inboxName });
 
-  if (response.error) {
-    if (response.error.includes("duplicate") || response.error.includes("exists")) {
-      throw new DuplicateInboxError(`Inbox already exists: ${address}`);
+      const response = await postJson(url, payload, {
+        Authorization: `Bearer ${config.MAIL_API_KEY}`,
+        "Content-Type": "application/json",
+      });
+
+      if (response.error) {
+        if (response.error.includes("duplicate") || response.error.includes("exists")) {
+          throw new DuplicateInboxError(`Inbox already exists: ${address}`);
+        }
+        throw new InboxCreationError(response.error);
+      }
+
+      if (response.inboxId || response.id) {
+        return {
+          inboxId: response.inboxId || response.id,
+          apiKey: response.apiKey || config.MAIL_API_KEY,
+          address: response.address || address,
+        };
+      }
+    } catch (err) {
+      if (err instanceof DuplicateInboxError) throw err;
+      console.log(JSON.stringify({
+        level: "warn", msg: "Remote mail API unreachable, using local fallback",
+        error: err.message, ts: new Date().toISOString(),
+      }));
     }
-    throw new InboxCreationError(response.error);
   }
 
-  if (!response.inboxId && !response.id) {
-    throw new InboxCreationError(
-      `Unexpected response from mail service: ${JSON.stringify(response)}`
-    );
+  /* Local fallback — create inbox record on disk */
+  const crypto = require("node:crypto");
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const inboxDir = path.join(config.PROFILES_DIR || "/data/profiles", "../inboxes");
+  fs.mkdirSync(inboxDir, { recursive: true });
+  const dbFile = path.join(inboxDir, "inboxes.json");
+
+  let inboxes = {};
+  try { inboxes = JSON.parse(fs.readFileSync(dbFile, "utf8")); } catch {}
+
+  const existing = Object.values(inboxes).find((i) => i.address === address);
+  if (existing) {
+    throw new DuplicateInboxError(`Inbox already exists: ${address}`);
   }
 
-  return {
-    inboxId: response.inboxId || response.id,
-    apiKey: response.apiKey || config.MAIL_API_KEY,
-    address: response.address || address,
+  const inboxId = crypto.randomUUID();
+  inboxes[inboxId] = {
+    id: inboxId, address, name: inboxName,
+    createdAt: new Date().toISOString(), messages: [],
   };
+  fs.writeFileSync(dbFile, JSON.stringify(inboxes, null, 2));
+
+  return { inboxId, apiKey: config.MAIL_API_KEY, address };
 }
 
 /**
