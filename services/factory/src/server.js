@@ -13,6 +13,9 @@ const { refreshSession } = require("./health/session-refresh");
 
 const app = express();
 
+/* Behind Traefik reverse proxy */
+app.set("trust proxy", 1);
+
 /* ── Middleware ────────────────────────────────── */
 
 app.use(helmet());
