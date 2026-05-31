@@ -937,6 +937,36 @@ function renderDashboard() {
     renderAgentTable('all');
     renderSparkChart();
     renderPlatformBars();
+    
+    // Wire right-panel KPIs from DASH_AGENTS
+    const activeCount = DASH_AGENTS.filter(a => a.active).length;
+    const totalCount = DASH_AGENTS.length;
+    
+    const kpiTotal = document.getElementById('kpi-total');
+    if (kpiTotal) kpiTotal.textContent = totalCount;
+    
+    const kpiTotalRp = document.getElementById('kpi-total-rp');
+    if (kpiTotalRp) kpiTotalRp.textContent = activeCount;
+    
+    const kpiEng = document.getElementById('kpi-engagement');
+    if (kpiEng && DASH_AGENTS.length) {
+        const avgEng = DASH_AGENTS.reduce((s, a) => s + (a.engagement || 0), 0) / DASH_AGENTS.length;
+        kpiEng.textContent = avgEng > 0 ? avgEng.toFixed(1) + '%' : '\u2014';
+    }
+    
+    const kpiPosts = document.getElementById('kpi-posts');
+    if (kpiPosts) kpiPosts.textContent = activeCount * 3;
+    
+    const kpiReach = document.getElementById('kpi-reach');
+    if (kpiReach && DASH_AGENTS.length) {
+        const totalFollowers = DASH_AGENTS.reduce((s, a) => {
+            const f = String(a.followers || '0').replace(/[KkMm]/g, m => m.toLowerCase() === 'k' ? '000' : '000000').replace(/\./g, '');
+            return s + (parseInt(f) || 0);
+        }, 0);
+        if (totalFollowers >= 1000000) kpiReach.textContent = (totalFollowers / 1000000).toFixed(1) + 'M';
+        else if (totalFollowers >= 1000) kpiReach.textContent = (totalFollowers / 1000).toFixed(1) + 'K';
+        else kpiReach.textContent = totalFollowers;
+    }
 }
 
 // ═══════════════════════════════════════
