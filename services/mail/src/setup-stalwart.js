@@ -145,16 +145,13 @@ protocol = "smtp"
 [server.listener.submission]
 bind = ["0.0.0.0:587"]
 protocol = "smtp"
-tls.implicit = false
-tls.starttls = true
 
 [server.listener.imaps]
 bind = ["0.0.0.0:993"]
 protocol = "imap"
-tls.implicit = true
 
 [server.listener.http]
-bind = ["0.0.0.0:8080"]
+bind = ["0.0.0.0:8443"]
 protocol = "http"
 
 [storage]
@@ -182,9 +179,11 @@ expire = "7d"
 
 [session.rcpt]
 max-recipients = 25
+relay = true
 
 [session.data]
 max-message-size = 26214400
+pipe."inbox-deliver" = "node /app/src/inbox-deliver.js"
 
 [report.dmarc]
 send = "admin@${MAIL_DOMAIN}"
