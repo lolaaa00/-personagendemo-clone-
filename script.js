@@ -1218,7 +1218,22 @@ function toggleDashSidebar() {
 // ── Right Panel Toggle ──
 function toggleRightPanel() {
   const panel = document.querySelector('.dash-right-panel');
-  if (panel) panel.classList.toggle('open');
+  const btn = document.getElementById('dash-analytics-toggle');
+  const workspace = document.querySelector('.dash-workspace');
+  if (!panel) return;
+  
+  const isCollapsed = panel.classList.contains('collapsed');
+  if (isCollapsed) {
+    panel.classList.remove('collapsed');
+    if (workspace) workspace.classList.remove('right-collapsed');
+    if (btn) btn.classList.add('panel-open');
+    if (window.innerWidth <= 768) panel.classList.add('open');
+  } else {
+    panel.classList.add('collapsed');
+    if (workspace) workspace.classList.add('right-collapsed');
+    if (btn) btn.classList.remove('panel-open');
+    if (window.innerWidth <= 768) panel.classList.remove('open');
+  }
 }
 
 // ── Update Analytics Panel ──
@@ -2656,39 +2671,104 @@ const AccountCreator = {
 };
 
 
+// ── Mega-View Definitions ──
+const MEGA_VIEWS = {
+  'intelligence': {
+    title: 'Intelligence Hub',
+    tabs: [
+      { id: 'scout', label: 'Social Scout', icon: '🔍' },
+      { id: 'trends', label: 'Trends', icon: '📈' },
+      { id: 'channel-decoder', label: 'Decoder', icon: '🔬' }
+    ]
+  },
+  'content-studio': {
+    title: 'Content Studio',
+    tabs: [
+      { id: 'content-forge', label: 'Forge', icon: '⚡' },
+      { id: 'calendar', label: 'Calendar', icon: '📅' },
+      { id: 'brand-brief', label: 'Brand Brief', icon: '📋' }
+    ]
+  }
+};
+
+let _activeMega = null;
+
+// ── Mega-View Switcher ──
+function switchMegaView(megaId, clickedBtn) {
+  const mega = MEGA_VIEWS[megaId];
+  if (!mega) return;
+  _activeMega = megaId;
+
+  const tabBar = document.getElementById('mega-tab-bar');
+  if (tabBar) {
+    tabBar.innerHTML = mega.tabs.map((t, i) =>
+      `<button class="mega-tab${i === 0 ? ' active' : ''}" onclick="switchMegaTab('${megaId}', '${t.id}', this)"><span class="mega-tab-icon">${t.icon}</span>${t.label}</button>`
+    ).join('');
+    tabBar.classList.add('visible');
+  }
+
+  switchPortalView(mega.tabs[0].id, clickedBtn);
+}
+
+function switchMegaTab(megaId, viewId, tabBtn) {
+  const tabBar = document.getElementById('mega-tab-bar');
+  if (tabBar) {
+    tabBar.querySelectorAll('.mega-tab').forEach(t => t.classList.remove('active'));
+    if (tabBtn) tabBtn.classList.add('active');
+  }
+  _activeMega = megaId;
+  switchPortalView(viewId, null, true);
+}
+
 // ── Operations Portal View Switcher ──
-function switchPortalView(viewId, clickedBtn) {
+function switchPortalView(viewId, clickedBtn, keepTabs) {
   const isDashboardSection = ['dashboard', 'calendar', 'scout', 'generator'].includes(viewId);
   const targetViewId = isDashboardSection ? 'dashboard' : viewId;
 
-  // Hide all subviews
   const subviews = document.querySelectorAll('.portal-subview');
   subviews.forEach(view => {
     view.classList.remove('active');
     view.style.display = 'none';
   });
 
-  // Show target subview
   const activeView = document.getElementById('portal-view-' + targetViewId);
   if (activeView) {
     activeView.classList.add('active');
     activeView.style.display = 'block';
   }
 
-  // Deactivate all menu items
   const menuItems = document.querySelectorAll('.dash-sidebar .dash-menu-item');
   menuItems.forEach(item => item.classList.remove('active'));
 
-  // Activate target button
-  let targetBtn = clickedBtn;
-  if (!targetBtn) {
-    targetBtn = document.querySelector(`.dash-sidebar button[onclick*="switchPortalView('${viewId}'"]`);
-  }
-  if (targetBtn) {
-    targetBtn.classList.add('active');
+  if (!keepTabs) {
+    let parentMega = null;
+    for (const [mId, mDef] of Object.entries(MEGA_VIEWS)) {
+      if (mDef.tabs.some(t => t.id === viewId)) { parentMega = mId; break; }
+    }
+
+    if (parentMega) {
+      const megaBtn = document.querySelector(`.dash-sidebar button[onclick*="switchMegaView('${parentMega}'"]`);
+      if (megaBtn) megaBtn.classList.add('active');
+    } else {
+      let targetBtn = clickedBtn;
+      if (!targetBtn) {
+        targetBtn = document.querySelector(`.dash-sidebar button[onclick*="switchPortalView('${viewId}'"]`);
+      }
+      if (targetBtn) targetBtn.classList.add('active');
+    }
+
+    if (!parentMega) {
+      _activeMega = null;
+      const tabBar = document.getElementById('mega-tab-bar');
+      if (tabBar) { tabBar.classList.remove('visible'); tabBar.innerHTML = ''; }
+    }
+  } else {
+    if (_activeMega) {
+      const megaBtn = document.querySelector(`.dash-sidebar button[onclick*="switchMegaView('${_activeMega}'"]`);
+      if (megaBtn) megaBtn.classList.add('active');
+    }
   }
 
-  // Update header title
   const titleEl = document.getElementById('dash-view-title');
   if (titleEl) {
     const titles = {
@@ -2706,10 +2786,13 @@ function switchPortalView(viewId, clickedBtn) {
       'agreement': 'Managed Plan SOW & SLA',
       'brand-brief': 'Brand Brief Interview'
     };
-    titleEl.textContent = titles[viewId] || 'Operations Dashboard';
+    if (_activeMega && MEGA_VIEWS[_activeMega]) {
+      titleEl.textContent = MEGA_VIEWS[_activeMega].title;
+    } else {
+      titleEl.textContent = titles[viewId] || 'Operations Dashboard';
+    }
   }
 
-  // Initialize modules on first visit
   if (viewId === 'persona-config' && !document.querySelector('.pce-layout')) {
     PersonaConfigEditor.init('persona-config-mount');
   }
@@ -2729,7 +2812,6 @@ function switchPortalView(viewId, clickedBtn) {
     ContentForge.init('content-forge-mount');
   }
 
-  // Handle right sidebar collapse
   const workspace = document.querySelector('.dash-workspace');
   if (workspace) {
     if (isDashboardSection) {
@@ -2739,7 +2821,6 @@ function switchPortalView(viewId, clickedBtn) {
     }
   }
 
-  // If it's a dashboard section, scroll the .dash-main scroll container
   if (isDashboardSection) {
     const sectionMap = {
       'dashboard': 'dash-sec-summary',
@@ -2750,24 +2831,19 @@ function switchPortalView(viewId, clickedBtn) {
     const targetSectionId = sectionMap[viewId];
     const sectionEl = document.getElementById(targetSectionId);
     const mainContainer = document.querySelector('.dash-main');
-    
     if (sectionEl && mainContainer) {
       setTimeout(() => {
         mainContainer.scrollTo({
-          top: sectionEl.offsetTop - 70, // subtract header height
+          top: sectionEl.offsetTop - 70,
           behavior: 'smooth'
         });
       }, 50);
     }
   } else {
-    // Scroll to top for other subviews
     const mainContainer = document.querySelector('.dash-main');
-    if (mainContainer) {
-      mainContainer.scrollTop = 0;
-    }
+    if (mainContainer) mainContainer.scrollTop = 0;
   }
 
-  // Auto-close mobile sidebar after selection
   if (window.innerWidth <= 768) {
     const sidebar = document.querySelector('.dash-sidebar');
     const overlay = document.getElementById('sidebar-overlay');
@@ -2775,6 +2851,41 @@ function switchPortalView(viewId, clickedBtn) {
     if (overlay) overlay.classList.remove('active');
   }
 }
+
+// ── PM Stats Toggle ──
+function togglePMStats() {
+  const grid = document.getElementById('pm-stats');
+  const chevron = document.querySelector('.pm-stats-chevron');
+  if (!grid) return;
+  grid.classList.toggle('collapsed');
+  if (chevron) chevron.classList.toggle('open', !grid.classList.contains('collapsed'));
+}
+
+// ── Click-outside handler for collapsibles ──
+document.addEventListener('click', (e) => {
+  const profileWrap = document.querySelector('.profile-dropdown-wrap');
+  const profileMenu = document.getElementById('profile-dropdown');
+  if (profileMenu && profileMenu.classList.contains('show') && profileWrap && !profileWrap.contains(e.target)) {
+    profileMenu.classList.remove('show');
+  }
+  if (window.innerWidth <= 768) {
+    const rightPanel = document.querySelector('.dash-right-panel');
+    const toggleBtn = document.getElementById('dash-analytics-toggle');
+    if (rightPanel && rightPanel.classList.contains('open') && !rightPanel.contains(e.target) && toggleBtn && !toggleBtn.contains(e.target)) {
+      rightPanel.classList.remove('open');
+      rightPanel.classList.add('collapsed');
+      if (toggleBtn) toggleBtn.classList.remove('panel-open');
+    }
+  }
+});
+
+// ── Init: collapse right panel on load ──
+document.addEventListener('DOMContentLoaded', () => {
+  const panel = document.querySelector('.dash-right-panel');
+  const workspace = document.querySelector('.dash-workspace');
+  if (panel) panel.classList.add('collapsed');
+  if (workspace) workspace.classList.add('right-collapsed');
+});
 
 // ── Drag & Drop Event Handlers ──
 function allowDrop(ev) {

@@ -1671,6 +1671,104 @@ body.portal-active {
   display: none !important;
 }
 
+/* ── Mega-view Tab Bar ── */
+.mega-tab-bar {
+  display: none;
+  gap: 0.25rem;
+  padding: 0 1.5rem;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  background: rgba(255,255,255,0.015);
+  flex-shrink: 0;
+}
+.mega-tab-bar.visible {
+  display: flex;
+}
+.mega-tab {
+  padding: 0.6rem 1.1rem;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--text-dim);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s;
+  font-family: inherit;
+  white-space: nowrap;
+  position: relative;
+}
+.mega-tab:hover {
+  color: var(--text-muted);
+}
+.mega-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+.mega-tab .mega-tab-icon {
+  margin-right: 6px;
+  font-size: 0.85rem;
+}
+
+/* ── Collapsible Right Panel (desktop) ── */
+.dash-right-panel {
+  transition: width 0.3s ease, padding 0.3s ease, opacity 0.25s ease, border 0.3s ease;
+}
+.dash-right-panel.collapsed {
+  width: 0 !important;
+  min-width: 0 !important;
+  padding: 0 !important;
+  opacity: 0;
+  pointer-events: none;
+  border-left: none;
+  overflow: hidden;
+}
+.dash-workspace.right-collapsed {
+  grid-template-columns: 1fr;
+}
+.dash-analytics-toggle.panel-open {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* ── PM Stats Collapsible ── */
+.pm-stats-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+  cursor: pointer;
+  user-select: none;
+}
+.pm-stats-header h4 {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.pm-stats-chevron {
+  width: 16px;
+  height: 16px;
+  transition: transform 0.25s ease;
+  opacity: 0.5;
+}
+.pm-stats-chevron.open {
+  transform: rotate(180deg);
+}
+.pm-stats-grid {
+  transition: max-height 0.35s ease, opacity 0.25s ease, margin 0.25s ease;
+  overflow: hidden;
+}
+.pm-stats-grid.collapsed {
+  max-height: 0 !important;
+  opacity: 0;
+  margin-bottom: 0 !important;
+}
+
 /* ── PM Deliverable Document Panels ── */
 .pm-doc-panel {
   border-bottom: 1px solid var(--border);
