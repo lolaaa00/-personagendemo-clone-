@@ -1466,44 +1466,59 @@ const SocialConnections = {
       return;
     }
     
-    // Determine the persona (entity) for Composio
     const entityId = personaId || 'default';
     
-    // Build the OAuth initiation URL via n8n webhook
-    const baseUrl = PersonaGenConfig.webhook_url;
-    const oauthUrl = `${baseUrl}?event=oauth_init&platform=${platform}&app=${appInfo.app}&entity_id=${entityId}&callback=${encodeURIComponent(window.location.origin)}`;
-    
-    // Open OAuth popup
-    const popup = window.open(oauthUrl, 'composio_oauth', 'width=600,height=700,scrollbars=yes,resizable=yes');
-    
-    // If popup blocked, fall back to handle entry
-    if (!popup || popup.closed) {
-      this._fallbackConnect(platform, entityId);
+    // Check if already connected — offer disconnect
+    const existing = this.load();
+    if (existing[platform]) {
+      const currentHandle = typeof existing[platform] === 'object' ? existing[platform].handle : existing[platform];
+      if (!confirm(`${appInfo.name} is connected as ${currentHandle}. Disconnect?`)) return;
+      delete existing[platform];
+      this.save(existing);
+      this.updateUI(platform, null);
+      PersonaWebhook.fire('social.disconnect', { platform, handle: currentHandle, source: 'main-dashboard' });
+      PersonaGenAPI.showToast(`${appInfo.name} disconnected.`, 'info');
       return;
     }
     
-    // Track popup state
-    const statusBadge = document.getElementById(`${platform}-status-badge`);
-    const btn = document.getElementById(`btn-connect-${platform}`);
-    if (statusBadge) { statusBadge.textContent = 'Connecting...'; statusBadge.className = 'ii-status connecting'; }
-    if (btn) { btn.textContent = 'Authenticating...'; btn.disabled = true; }
+    // Prompt for handle
+    const handle = prompt(`Enter your ${appInfo.name} handle:`, '@');
+    if (!handle || handle.trim() === '@' || handle.trim() === '') return;
     
-    // Poll for popup close (user might close without completing)
-    const pollTimer = setInterval(() => {
-      if (popup.closed) {
-        clearInterval(pollTimer);
-        // Check if we got a callback already
-        setTimeout(() => {
-          const data = this.load();
-          if (!data[platform] || (typeof data[platform] === 'object' && !data[platform].connected)) {
-            // Popup closed without completing — reset UI
-            if (statusBadge) { statusBadge.textContent = 'Inactive'; statusBadge.className = 'ii-status disconnected'; }
-            if (btn) { btn.textContent = 'Connect Platform'; btn.disabled = false; }
-          }
-        }, 1000);
-      }
-    }, 1000);
+    const cleanHandle = handle.trim().startsWith('@') ? handle.trim() : '@' + handle.trim();
+    
+    // Update button state
+    const btn = document.getElementById(`btn-connect-${platform}`);
+    const statusBadge = document.getElementById(`${platform}-status-badge`);
+    if (btn) { btn.textContent = 'Verifying...'; btn.disabled = true; }
+    if (statusBadge) { statusBadge.textContent = 'Connecting...'; statusBadge.className = 'ii-status connecting'; }
+    
+    // Simulate verification delay, then save
+    setTimeout(() => {
+      const connData = this.load();
+      connData[platform] = {
+        handle: cleanHandle,
+        entity_id: entityId,
+        connected: true,
+        connected_at: new Date().toISOString(),
+        auth_method: 'manual',
+      };
+      this.save(connData);
+      this.updateUI(platform, cleanHandle);
+      
+      // Fire webhook to n8n
+      PersonaWebhook.fire('social.connect', {
+        platform,
+        handle: cleanHandle,
+        entity_id: entityId,
+        auth_method: 'manual',
+        source: 'main-dashboard',
+      });
+      
+      PersonaGenAPI.showToast(`${appInfo.name} connected as ${cleanHandle}!`, 'success');
+    }, 1200);
   },
+
   
   _handleOAuthCallback(data) {
     const { platform, handle, entity_id, connected, error } = data;
