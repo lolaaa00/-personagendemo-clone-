@@ -21,6 +21,9 @@ WORKDIR /app
 
 COPY services/mail/src/ ./src/
 
+# Strip Windows CRLF line endings from shell scripts
+RUN sed -i 's/\r$//' /app/src/entrypoint.sh && chmod +x /app/src/entrypoint.sh
+
 RUN mkdir -p /data/stalwart/etc /data/stalwart/data /data/stalwart/queue /data/stalwart/logs \
     /data/dkim /data/inboxes /var/log/supervisor
 
