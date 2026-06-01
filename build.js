@@ -500,7 +500,7 @@ function compilePortalPages(content, DIST) {
     let customizedSidebarAndHeader = sidebarAndHeader;
     
     // Replace button menus with links and activate correct menu item
-    const menuItemsPattern = /<button class="dash-menu-item([^"]*)" onclick="switchPortalView\('([^']*)', this\)">([\s\S]*?)<\/button>/g;
+    const menuItemsPattern = /<button class="dash-menu-item([^"]*)"[^>]*onclick="switchPortalView\('([^']*)', this\)">([\s\S]*?)<\/button>/g;
     customizedSidebarAndHeader = customizedSidebarAndHeader.replace(menuItemsPattern, (match, classes, viewId, innerHtml) => {
       const isCurrent = viewId === p.view;
       const activeClass = isCurrent ? ' active' : '';
@@ -528,7 +528,7 @@ function compilePortalPages(content, DIST) {
       'intelligence': { default: 'scout.html', views: ['scout', 'trends', 'channel-decoder'] },
       'content-studio': { default: 'content-forge.html', views: ['content-forge', 'calendar', 'brand-brief'] }
     };
-    const megaItemsPattern = /<button class="dash-menu-item([^"]*)" onclick="switchMegaView\('([^']*)', this\)">([\s\S]*?)<\/button>/g;
+    const megaItemsPattern = /<button class="dash-menu-item([^"]*)"[^>]*onclick="switchMegaView\('([^']*)', this\)">([\s\S]*?)<\/button>/g;
     customizedSidebarAndHeader = customizedSidebarAndHeader.replace(megaItemsPattern, (match, classes, megaId, innerHtml) => {
       const mega = megaViewMap[megaId];
       const isCurrent = mega && mega.views.includes(p.view);
