@@ -1046,6 +1046,29 @@ document.addEventListener('DOMContentLoaded', async () => {
         DynamicCalendar.init('dynamic-calendar-mount');
     }
 
+    // ── Auto-init ALL modules for compiled sub-pages ──
+    // On sub-pages (dashboard.html, trends.html, etc.), switchPortalView()
+    // is never called because sidebar uses <a> links. So we must init
+    // every module whose mount point exists on this page.
+    if (typeof TrendMonitor !== 'undefined' && document.getElementById('trends-mount') && !document.querySelector('.trends-wrapper')) {
+        TrendMonitor.init('trends-mount');
+    }
+    if (typeof ChannelDecoder !== 'undefined' && document.getElementById('channel-decoder-mount') && !document.querySelector('.cd-wrapper')) {
+        ChannelDecoder.init('channel-decoder-mount');
+    }
+    if (typeof ContentForge !== 'undefined' && document.getElementById('content-forge-mount') && !document.querySelector('.cf-wrapper')) {
+        ContentForge.init('content-forge-mount');
+    }
+    if (typeof PersonaConfigEditor !== 'undefined' && document.getElementById('persona-config-mount') && !document.querySelector('.pce-layout')) {
+        PersonaConfigEditor.init('persona-config-mount');
+    }
+    if (typeof InboxHub !== 'undefined' && document.getElementById('inbox-mount') && !document.querySelector('.inbox-wrapper')) {
+        InboxHub.init('inbox-mount');
+    }
+    if (typeof BrandBrief !== 'undefined' && document.getElementById('pg-brand-brief')) {
+        BrandBrief.init('pg-brand-brief');
+    }
+
     // Clear aria-busy on all dynamic containers after render
     document.querySelectorAll('[aria-busy="true"]').forEach(el => {
         el.setAttribute('aria-busy', 'false');
