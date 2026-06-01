@@ -430,7 +430,7 @@
                                             <button class="btn-primary" onclick="switchMegaView('content-studio'); setTimeout(() => switchMegaTab('content-studio','calendar',document.querySelector('.mega-tab[onclick*=calendar]')),100)" style="font-size: 0.82rem; padding: 0.6rem 1.2rem;">
                                                 📅 New Post
                                             </button>
-                                            <button class="btn-ghost" onclick="document.getElementById('dash-sec-generator').scrollIntoView({behavior:'smooth',block:'start'})" style="font-size: 0.82rem; padding: 0.6rem 1.2rem;">
+                                            <button class="btn-ghost" onclick="if(typeof AvatarWizard!=='undefined'){AvatarWizard.open()}else{document.getElementById('dash-sec-generator').scrollIntoView({behavior:'smooth',block:'start'})}" style="font-size: 0.82rem; padding: 0.6rem 1.2rem;">
                                                 ✨ Create Agent
                                             </button>
                                         </div>
@@ -636,6 +636,9 @@
                                                 <button id="gen-btn" class="btn-primary btn-full" onclick="generateAgent()">
                                                     <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
                                                     Generate AI Influencer
+                                                </button>
+                                                <button class="btn-ghost btn-full" onclick="AvatarWizard.open()" style="margin-top:0.5rem">
+                                                    ✨ New Avatar Wizard (5-Step)
                                                 </button>
                                             </div>
 

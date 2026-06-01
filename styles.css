@@ -1710,8 +1710,7 @@ body.portal-active nav.pg-nav {
 
 body.portal-active {
   padding-top: 0 !important;
-  overflow: hidden !important;
-  height: 100vh !important;
+  overflow-x: hidden;
 }
 
 .dash-workspace.no-right-sidebar {
