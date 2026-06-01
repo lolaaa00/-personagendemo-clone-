@@ -72,10 +72,8 @@
     </nav>
 
     <!-- Landing page removed — see backup/landing-page-content.md -->
-    <section id="features" class="slide slide-dark">
-        <div class="slide-inner">
-            <div class="section-tag tag-pink">Platform Features</div>
-            <h2 class="section-title">Fully Autonomous<br><span class="subtitle-muted">UGC Creator Operations</span></h2>
+
+
             <p class="section-lead">A unified stack that orchestrates market research, identity generation, automated scriptwriting, video rendering, and scheduled publishing without lifting a finger.</p>
             
             <div class="arch-grid" style="margin-top: 3rem;">
@@ -275,7 +273,7 @@
         </div>
     </section>
 
-    <div id="view-portal" class="tab-content" style="display: none;">
+    <div id="view-portal" class="tab-content" style="display: none;" role="main">
         <div class="dashboard-layout">
             <div class="sidebar-overlay" id="sidebar-overlay" data-testid="sidebar-overlay" role="button" tabindex="-1" aria-label="Close sidebar" onclick="toggleDashSidebar()" onkeydown="if(event.key==='Enter'||event.key===' ')toggleDashSidebar()"></div>
             <!-- Left Sidebar Navigation -->
@@ -1418,7 +1416,7 @@
     </div><!-- End #view-portal -->
 
     <!-- PIN Gate overlay -->
-    <div id="pin-gate" style="display: none;">
+    <div id="pin-gate" style="display: flex;">
         <div class="pin-card">
             <div class="pin-logo">🔒</div>
             <h3 class="pin-title">Confidential Client Portal</h3>
