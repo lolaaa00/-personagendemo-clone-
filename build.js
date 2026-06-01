@@ -618,7 +618,7 @@ ${head}
 <body class="portal-active">
     <script>
         if (sessionStorage.getItem('pg_portal_unlocked') !== 'yes') {
-            window.location.href = 'index.html?portal=trigger';
+            window.location.href = 'index.html';
         }
     </script>
     <div id="view-portal" class="tab-content" style="display: block;">
@@ -703,7 +703,8 @@ HTML_FILES.forEach(file => {
     // Compile separate portal sub-pages from content
     compilePortalPages(content, DIST);
 
-    // Strip view-portal from landing page content to keep it clean
+    // Landing page removed — index.html now shows PIN gate directly.
+    // Strip view-portal from index output (portal lives in sub-pages).
     const viewPortalStart = content.indexOf('<div id="view-portal"');
     const viewPortalEnd = content.indexOf('</div><!-- End #view-portal -->');
     if (viewPortalStart !== -1 && viewPortalEnd !== -1) {
