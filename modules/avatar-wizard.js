@@ -1,10 +1,11 @@
 // ═══════════════════════════════════════════════════════════════
 // PersonaGen Avatar Wizard — 5-Stage New Avatar Creation Flow
 // ① Identity → ② Photo → ③ Accounts → ④ Soul → ⑤ Activate
+// Renders inline using Brand Brief (.bb-*) CSS classes
 // ═══════════════════════════════════════════════════════════════
 
 const AvatarWizard = (() => {
-  let overlay = null;
+  let container = null;
   let currentStep = 0;
   let avatarData = {};
   let isGenerating = false;
@@ -16,6 +17,7 @@ const AvatarWizard = (() => {
     { id: 'soul',     title: 'Soul',      icon: '🧠', desc: 'Define voice, values, and behavioral directives' },
     { id: 'activate', title: 'Activate',  icon: '🚀', desc: 'Review and launch your new avatar' },
   ];
+  const TOTAL_STEPS = STEPS.length;
 
   const NICHES = [
     'Fitness & Wellness', 'Tech & AI', 'Finance & Crypto', 'Fashion & Beauty',
@@ -41,8 +43,11 @@ const AvatarWizard = (() => {
     return d.innerHTML;
   }
 
-  // ── Open / Close ──
-  function open() {
+  // ── Init (inline pattern like BrandBrief) ──
+  function init(containerId) {
+    container = document.getElementById(containerId);
+    if (!container) return;
+
     currentStep = 0;
     avatarData = {
       name: '', handle: '', niche: 'Tech & AI', personality: 'authority',
@@ -50,63 +55,46 @@ const AvatarWizard = (() => {
       platforms: { instagram: '', tiktok: '', x: '', reddit: '' },
       soul: '', tools: '', skills: '', heartbeat: '',
     };
-    render();
-  }
 
-  function close() {
-    if (overlay) {
-      overlay.classList.add('aw-closing');
-      setTimeout(() => { if (overlay) overlay.remove(); overlay = null; }, 300);
-    }
+    render();
   }
 
   // ── Render ──
   function render() {
-    if (!overlay) {
-      overlay = document.createElement('div');
-      overlay.className = 'aw-overlay';
-      document.body.appendChild(overlay);
-    }
+    if (!container) return;
 
     const step = STEPS[currentStep];
-    overlay.innerHTML = `
-      <div class="aw-modal">
-        <!-- Header -->
-        <div class="aw-header">
-          <div>
-            <h3 class="aw-title">✨ New Avatar Wizard</h3>
-            <p class="aw-subtitle">${step.desc}</p>
-          </div>
-          <button class="aw-close" onclick="AvatarWizard.close()">✕</button>
-        </div>
-
-        <!-- Progress -->
-        <div class="aw-progress">
+    container.innerHTML = `
+      <div class="bb-container">
+        <div class="bb-progress">
           ${STEPS.map((s, i) => `
-            <div class="aw-step-dot ${i === currentStep ? 'active' : ''} ${i < currentStep ? 'done' : ''}" title="${s.title}">
+            <div class="bb-step-dot ${i === currentStep ? 'active' : ''} ${i < currentStep ? 'done' : ''}"
+                 onclick="AvatarWizard.goToStep(${i})" title="${s.title}">
               <span>${i < currentStep ? '✓' : s.icon}</span>
-              <div class="aw-step-label">${s.title}</div>
             </div>
-            ${i < STEPS.length - 1 ? '<div class="aw-step-line ' + (i < currentStep ? 'done' : '') + '"></div>' : ''}
+            ${i < STEPS.length - 1 ? '<div class="bb-step-line ' + (i < currentStep ? 'done' : '') + '"></div>' : ''}
           `).join('')}
         </div>
 
-        <!-- Content -->
-        <div class="aw-content" id="aw-content">
+        <div class="bb-header">
+          <h3 class="bb-title">${step.icon} ${step.title}</h3>
+          <p class="bb-desc">${step.desc}</p>
+          <span class="bb-step-label">Step ${currentStep + 1} of ${TOTAL_STEPS}</span>
+        </div>
+
+        <div class="bb-content">
           ${renderStep()}
         </div>
 
-        <!-- Footer -->
-        <div class="aw-footer">
-          ${currentStep > 0 ? '<button class="aw-btn aw-btn--secondary" onclick="AvatarWizard.prev()">← Back</button>' : '<span></span>'}
-          ${currentStep < STEPS.length - 1
-            ? `<button class="aw-btn aw-btn--primary" onclick="AvatarWizard.next()">${STEPS[currentStep + 1].icon} Next: ${STEPS[currentStep + 1].title} →</button>`
-            : `<button class="aw-btn aw-btn--success" onclick="AvatarWizard.activate()">🚀 Activate Avatar</button>`
+        <div class="bb-nav">
+          ${currentStep > 0 ? '<button class="bb-btn bb-btn-back" onclick="AvatarWizard.prev()">← Back</button>' : '<div></div>'}
+          ${currentStep < TOTAL_STEPS - 1
+            ? `<button class="bb-btn bb-btn-next" onclick="AvatarWizard.next()">${STEPS[currentStep + 1].icon} Next: ${STEPS[currentStep + 1].title} →</button>`
+            : '<button class="bb-btn bb-btn-submit" onclick="AvatarWizard.activate()">🚀 Activate Avatar</button>'
           }
         </div>
       </div>
     `;
-    overlay.classList.remove('aw-closing');
   }
 
   function renderStep() {
@@ -123,49 +111,52 @@ const AvatarWizard = (() => {
   // ── Step 1: Identity ──
   function renderIdentity() {
     return `
-      <div class="aw-form">
-        <div class="aw-field">
-          <label class="aw-label">Avatar Name</label>
-          <input type="text" class="aw-input" id="aw-name" value="${esc(avatarData.name)}"
+      <div class="bb-card">
+        <div class="bb-field">
+          <label class="bb-label">Avatar Name</label>
+          <input type="text" class="bb-input" id="aw-name" value="${esc(avatarData.name)}"
                  placeholder="e.g., Luna Vega" oninput="AvatarWizard.update('name', this.value)">
         </div>
-        <div class="aw-field">
-          <label class="aw-label">Handle</label>
-          <input type="text" class="aw-input" id="aw-handle" value="${esc(avatarData.handle)}"
+        <div class="bb-field">
+          <label class="bb-label">Handle</label>
+          <input type="text" class="bb-input" id="aw-handle" value="${esc(avatarData.handle)}"
                  placeholder="@lunavega.ai" oninput="AvatarWizard.update('handle', this.value)">
         </div>
-        <div class="aw-row">
-          <div class="aw-field" style="flex:1">
-            <label class="aw-label">Niche</label>
-            <select class="aw-select" id="aw-niche" onchange="AvatarWizard.update('niche', this.value)">
+        <div class="bb-field-row">
+          <div class="bb-field" style="flex:1">
+            <label class="bb-label">Niche</label>
+            <select class="bb-select" id="aw-niche" onchange="AvatarWizard.update('niche', this.value)">
               ${NICHES.map(n => `<option value="${n}" ${avatarData.niche === n ? 'selected' : ''}>${n}</option>`).join('')}
             </select>
           </div>
-          <div class="aw-field" style="flex:1">
-            <label class="aw-label">Target Market</label>
-            <select class="aw-select" id="aw-market" onchange="AvatarWizard.update('market', this.value)">
+          <div class="bb-field" style="flex:1">
+            <label class="bb-label">Target Market</label>
+            <select class="bb-select" id="aw-market" onchange="AvatarWizard.update('market', this.value)">
               ${MARKETS.map(m => `<option value="${m}" ${avatarData.market === m ? 'selected' : ''}>${MARKET_LABELS[m]}</option>`).join('')}
             </select>
           </div>
         </div>
-        <div class="aw-field">
-          <label class="aw-label">Gender Presentation</label>
-          <div class="aw-chip-row">
+        <div class="bb-field">
+          <label class="bb-label">Gender Presentation</label>
+          <div class="bb-platform-grid">
             ${['female', 'male', 'non-binary'].map(g => `
-              <button class="aw-chip ${avatarData.gender === g ? 'active' : ''}" onclick="AvatarWizard.update('gender', '${g}')">
-                ${g === 'female' ? '♀' : g === 'male' ? '♂' : '⚧'} ${g.charAt(0).toUpperCase() + g.slice(1)}
+              <button class="bb-platform-btn ${avatarData.gender === g ? 'selected' : ''}" onclick="AvatarWizard.update('gender', '${g}')">
+                <span class="bb-platform-icon">${g === 'female' ? '♀' : g === 'male' ? '♂' : '⚧'}</span>
+                <span>${g.charAt(0).toUpperCase() + g.slice(1)}</span>
+                ${avatarData.gender === g ? '<span class="bb-platform-check">✓</span>' : ''}
               </button>
             `).join('')}
           </div>
         </div>
-        <div class="aw-field">
-          <label class="aw-label">Personality Archetype</label>
-          <div class="aw-personality-grid">
+        <div class="bb-field">
+          <label class="bb-label">Personality Archetype</label>
+          <div class="bb-platform-grid">
             ${PERSONALITIES.map(p => `
-              <button class="aw-personality-card ${avatarData.personality === p.key ? 'active' : ''}"
+              <button class="bb-platform-btn ${avatarData.personality === p.key ? 'selected' : ''}"
                       onclick="AvatarWizard.update('personality', '${p.key}')">
-                <strong>${p.label}</strong>
-                <span>${p.desc}</span>
+                <span style="font-weight:700;font-size:0.82rem;">${p.label}</span>
+                <span style="font-size:0.68rem;color:var(--text-dim);">${p.desc}</span>
+                ${avatarData.personality === p.key ? '<span class="bb-platform-check">✓</span>' : ''}
               </button>
             `).join('')}
           </div>
@@ -179,28 +170,31 @@ const AvatarWizard = (() => {
     const defaultPrompt = `Professional headshot portrait of a ${avatarData.gender || 'female'} social media influencer in the ${avatarData.niche || 'tech'} space, ${avatarData.personality || 'confident'} expression, modern studio lighting, clean background, high quality professional photo`;
 
     return `
-      <div class="aw-form">
-        <div class="aw-field">
-          <label class="aw-label">Photo Generation Prompt</label>
-          <textarea class="aw-textarea" id="aw-photo-prompt" rows="3"
+      <div class="bb-card">
+        <div class="bb-field">
+          <label class="bb-label">Photo Generation Prompt</label>
+          <textarea class="bb-textarea" id="aw-photo-prompt" rows="3"
                     placeholder="Describe your avatar's look..."
                     oninput="AvatarWizard.update('photoPrompt', this.value)">${esc(avatarData.photoPrompt || defaultPrompt)}</textarea>
-          <span class="aw-hint">Powered by Grok Imagine via OpenRouter</span>
+          <div class="bb-hint">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-3px;margin-right:4px;flex-shrink:0;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            Powered by Grok Imagine via OpenRouter
+          </div>
         </div>
 
-        <button class="aw-btn aw-btn--primary aw-generate-photo-btn" id="aw-gen-photo-btn"
+        <button class="bb-btn bb-btn-next" style="width:100%;justify-content:center;" id="aw-gen-photo-btn"
                 onclick="AvatarWizard.generatePhoto()" ${isGenerating ? 'disabled' : ''}>
-          ${isGenerating ? '<span class="aw-spinner"></span> Generating...' : '📸 Generate Profile Photo'}
+          ${isGenerating ? '<span class="bb-spinner"></span> Generating...' : '📸 Generate Profile Photo'}
         </button>
 
-        <div class="aw-photo-preview" id="aw-photo-preview">
+        <div style="margin-top:1rem;border:1px solid var(--border,#333);border-radius:12px;overflow:hidden;min-height:200px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.02);">
           ${avatarData.photoUrl
-            ? `<img src="${avatarData.photoUrl}" alt="Avatar photo" class="aw-photo-img">`
-            : '<div class="aw-photo-placeholder">Photo will appear here after generation</div>'
+            ? `<img src="${avatarData.photoUrl}" alt="Avatar photo" style="width:100%;max-height:360px;object-fit:cover;display:block;">`
+            : '<div style="color:var(--text-dim,#666);font-size:0.82rem;padding:2rem;">Photo will appear here after generation</div>'
           }
         </div>
 
-        ${avatarData.photoUrl ? '<p class="aw-photo-note">✅ Photo generated. Click Generate again for a different look.</p>' : ''}
+        ${avatarData.photoUrl ? '<p style="font-size:0.72rem;color:var(--success,#22c55e);margin-top:6px;">✅ Photo generated. Click Generate again for a different look.</p>' : ''}
       </div>
     `;
   }
@@ -215,18 +209,21 @@ const AvatarWizard = (() => {
     ];
 
     return `
-      <div class="aw-form">
-        <p class="aw-section-note">Enter handles for each platform this avatar will be active on. Leave blank to skip.</p>
+      <div class="bb-card">
+        <div class="bb-hint" style="margin-bottom:1rem;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-3px;margin-right:4px;flex-shrink:0;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+          Enter handles for each platform this avatar will be active on. Leave blank to skip.
+        </div>
         ${platforms.map(p => `
-          <div class="aw-platform-row">
-            <div class="aw-platform-icon" style="background:${p.color}">${p.icon}</div>
-            <div class="aw-platform-info">
-              <span class="aw-platform-label">${p.label}</span>
-              <input type="text" class="aw-input aw-platform-input" id="aw-plat-${p.key}"
-                     value="${esc(avatarData.platforms[p.key] || '')}"
-                     placeholder="@${(avatarData.name || 'handle').toLowerCase().replace(/\s+/g, '')}"
-                     oninput="AvatarWizard.updatePlatform('${p.key}', this.value)">
-            </div>
+          <div class="bb-field" style="margin-bottom:0.75rem;">
+            <label class="bb-label">
+              <span style="display:inline-block;width:22px;height:22px;border-radius:6px;background:${p.color};color:#fff;text-align:center;line-height:22px;font-size:0.7rem;margin-right:6px;vertical-align:middle;">${p.icon}</span>
+              ${p.label}
+            </label>
+            <input type="text" class="bb-input" id="aw-plat-${p.key}"
+                   value="${esc(avatarData.platforms[p.key] || '')}"
+                   placeholder="@${(avatarData.name || 'handle').toLowerCase().replace(/\s+/g, '')}"
+                   oninput="AvatarWizard.updatePlatform('${p.key}', this.value)">
           </div>
         `).join('')}
       </div>
@@ -239,12 +236,15 @@ const AvatarWizard = (() => {
     const defaultSoul = `# ${name} — Soul Document\n\n## Identity\n- Name: ${name}\n- Niche: ${avatarData.niche}\n- Personality: ${avatarData.personality}\n- Market: ${MARKET_LABELS[avatarData.market] || avatarData.market}\n\n## Voice & Values\n- Speak with ${avatarData.personality === 'authority' ? 'expertise and confidence' : avatarData.personality === 'relatable' ? 'warmth and authenticity' : avatarData.personality === 'provocative' ? 'boldness and conviction' : 'inspiration and energy'}\n- Always prioritize ${avatarData.niche} content\n\n## Behavioral Directives\n- Post consistently on schedule\n- Engage with community comments\n- Stay on-brand at all times`;
 
     return `
-      <div class="aw-form">
-        <div class="aw-field">
-          <label class="aw-label">Soul Document (Markdown)</label>
-          <textarea class="aw-textarea aw-soul-editor" id="aw-soul" rows="14"
+      <div class="bb-card">
+        <div class="bb-field">
+          <label class="bb-label">Soul Document (Markdown)</label>
+          <textarea class="bb-textarea" id="aw-soul" rows="14" style="font-family:var(--font-mono,monospace);font-size:0.78rem;min-height:280px;line-height:1.6;"
                     oninput="AvatarWizard.update('soul', this.value)">${esc(avatarData.soul || defaultSoul)}</textarea>
-          <span class="aw-hint">This defines your avatar's core identity, voice, and behavioral rules. You can refine this later in Persona Config.</span>
+          <div class="bb-hint">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-3px;margin-right:4px;flex-shrink:0;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            This defines your avatar's core identity, voice, and behavioral rules. You can refine this later in Persona Config.
+          </div>
         </div>
       </div>
     `;
@@ -256,45 +256,50 @@ const AvatarWizard = (() => {
     const platformCount = Object.values(avatarData.platforms).filter(v => v && v.trim()).length;
 
     return `
-      <div class="aw-review">
-        <div class="aw-review-card">
-          <div class="aw-review-header">
+      <div class="bb-review">
+        <div class="bb-review-section">
+          <div style="display:flex;align-items:center;gap:16px;margin-bottom:1rem;">
             ${avatarData.photoUrl
-              ? `<img src="${avatarData.photoUrl}" class="aw-review-photo">`
-              : `<div class="aw-review-avatar-placeholder">${(name.charAt(0) || '?')}</div>`
+              ? `<img src="${avatarData.photoUrl}" style="width:56px;height:56px;border-radius:50%;object-fit:cover;border:2px solid var(--accent,#7c6aed);">`
+              : `<div style="width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.5rem;font-weight:800;color:#fff;background:linear-gradient(135deg,var(--accent,#7c6aed),#ec4899);">${(name.charAt(0) || '?')}</div>`
             }
             <div>
-              <h4 class="aw-review-name">${esc(name)}</h4>
-              <span class="aw-review-handle">${esc(avatarData.handle || '@' + name.toLowerCase().replace(/\s+/g, ''))}</span>
+              <h4 style="font-size:1.1rem;font-weight:700;margin:0;">${esc(name)}</h4>
+              <span style="font-size:0.78rem;color:var(--accent,#7c6aed);">${esc(avatarData.handle || '@' + name.toLowerCase().replace(/\s+/g, ''))}</span>
             </div>
           </div>
+        </div>
 
-          <div class="aw-review-grid">
-            <div class="aw-review-item">
-              <span class="aw-review-label">Niche</span>
-              <span class="aw-review-value">${esc(avatarData.niche)}</span>
-            </div>
-            <div class="aw-review-item">
-              <span class="aw-review-label">Personality</span>
-              <span class="aw-review-value">${esc(avatarData.personality)}</span>
-            </div>
-            <div class="aw-review-item">
-              <span class="aw-review-label">Market</span>
-              <span class="aw-review-value">${esc(MARKET_LABELS[avatarData.market] || avatarData.market)}</span>
-            </div>
-            <div class="aw-review-item">
-              <span class="aw-review-label">Platforms</span>
-              <span class="aw-review-value">${platformCount} connected</span>
-            </div>
-            <div class="aw-review-item">
-              <span class="aw-review-label">Photo</span>
-              <span class="aw-review-value">${avatarData.photoUrl ? '✅ Generated' : '⏭ Skipped'}</span>
-            </div>
-            <div class="aw-review-item">
-              <span class="aw-review-label">Soul Doc</span>
-              <span class="aw-review-value">${avatarData.soul ? '✅ ' + avatarData.soul.split('\n').length + ' lines' : '⏭ Default'}</span>
-            </div>
+        <div class="bb-review-section">
+          <h4>Configuration</h4>
+          <div class="bb-review-row">
+            <span class="bb-review-label">Niche</span>
+            <span class="bb-review-value">${esc(avatarData.niche)}</span>
           </div>
+          <div class="bb-review-row">
+            <span class="bb-review-label">Personality</span>
+            <span class="bb-review-value">${esc(avatarData.personality)}</span>
+          </div>
+          <div class="bb-review-row">
+            <span class="bb-review-label">Market</span>
+            <span class="bb-review-value">${esc(MARKET_LABELS[avatarData.market] || avatarData.market)}</span>
+          </div>
+          <div class="bb-review-row">
+            <span class="bb-review-label">Platforms</span>
+            <span class="bb-review-value">${platformCount} connected</span>
+          </div>
+          <div class="bb-review-row">
+            <span class="bb-review-label">Photo</span>
+            <span class="bb-review-value">${avatarData.photoUrl ? '✅ Generated' : '⏭ Skipped'}</span>
+          </div>
+          <div class="bb-review-row">
+            <span class="bb-review-label">Soul Doc</span>
+            <span class="bb-review-value">${avatarData.soul ? '✅ ' + avatarData.soul.split('\n').length + ' lines' : '⏭ Default'}</span>
+          </div>
+        </div>
+
+        <div class="bb-hint" style="margin-top:1rem;">
+          <span>🚀</span> Review all fields above. Click any step in the progress bar to go back and edit. When ready, activate your avatar!
         </div>
       </div>
     `;
@@ -307,9 +312,10 @@ const AvatarWizard = (() => {
       PersonaGenAPI.showToast('Please enter an avatar name', 'warning');
       return;
     }
-    if (currentStep < STEPS.length - 1) {
+    if (currentStep < TOTAL_STEPS - 1) {
       currentStep++;
       render();
+      if (container) container.scrollIntoView({ behavior: 'smooth' });
     }
   }
 
@@ -317,6 +323,15 @@ const AvatarWizard = (() => {
     collectStepData();
     if (currentStep > 0) {
       currentStep--;
+      render();
+      if (container) container.scrollIntoView({ behavior: 'smooth' });
+    }
+  }
+
+  function goToStep(step) {
+    if (step <= currentStep || step === currentStep + 1) {
+      collectStepData();
+      currentStep = step;
       render();
     }
   }
@@ -474,213 +489,25 @@ const AvatarWizard = (() => {
     }
 
     PersonaGenAPI.showToast(`🎉 ${name} activated! Avatar is live.`, 'success');
-    close();
+
+    // Reset wizard for next use
+    currentStep = 0;
+    avatarData = {
+      name: '', handle: '', niche: 'Tech & AI', personality: 'authority',
+      market: 'us', gender: 'female', photoUrl: '', photoPrompt: '',
+      platforms: { instagram: '', tiktok: '', x: '', reddit: '' },
+      soul: '', tools: '', skills: '', heartbeat: '',
+    };
+    render();
   }
 
-  // ── Inject Styles ──
-  function injectStyles() {
-    if (document.getElementById('aw-styles')) return;
-    const style = document.createElement('style');
-    style.id = 'aw-styles';
-    style.textContent = `
-      .aw-overlay {
-        position:fixed; inset:0; z-index:9999;
-        background:rgba(0,0,0,0.7); backdrop-filter:blur(8px);
-        display:flex; align-items:center; justify-content:center;
-        animation:awFadeIn 0.3s ease-out;
-      }
-      .aw-overlay.aw-closing { animation:awFadeOut 0.3s ease-in forwards; }
-      @keyframes awFadeIn { from { opacity:0; } to { opacity:1; } }
-      @keyframes awFadeOut { from { opacity:1; } to { opacity:0; } }
-
-      .aw-modal {
-        background:var(--surface,#111118); border:1px solid var(--border,#222);
-        border-radius:16px; width:min(640px, 92vw); max-height:88vh;
-        display:flex; flex-direction:column; overflow:hidden;
-        box-shadow:0 24px 64px rgba(0,0,0,0.5);
-        animation:awSlideUp 0.35s ease-out;
-      }
-      @keyframes awSlideUp { from { opacity:0; transform:translateY(24px); } to { opacity:1; transform:translateY(0); } }
-
-      .aw-header {
-        display:flex; align-items:flex-start; justify-content:space-between;
-        padding:1.25rem 1.5rem; border-bottom:1px solid var(--border,#222);
-      }
-      .aw-title { font-size:1.15rem; font-weight:800; margin:0; color:var(--text,#eee); }
-      .aw-subtitle { font-size:0.78rem; color:var(--text-dim,#666); margin:4px 0 0; }
-      .aw-close {
-        background:none; border:none; color:var(--text-dim,#666); font-size:1.1rem;
-        cursor:pointer; padding:4px 8px; border-radius:6px;
-      }
-      .aw-close:hover { background:rgba(255,255,255,0.06); color:var(--text,#eee); }
-
-      /* Progress */
-      .aw-progress {
-        display:flex; align-items:center; justify-content:center;
-        padding:1rem 1.5rem; gap:0; border-bottom:1px solid var(--border,#222);
-      }
-      .aw-step-dot {
-        width:36px; height:36px; border-radius:50%;
-        display:flex; align-items:center; justify-content:center; flex-direction:column;
-        background:var(--surface-2,#1a1a22); border:2px solid var(--border,#333);
-        font-size:0.7rem; cursor:default; position:relative; flex-shrink:0;
-      }
-      .aw-step-dot.active { border-color:var(--accent,#7c3aed); background:rgba(124,58,237,0.15); }
-      .aw-step-dot.done { border-color:var(--success,#22c55e); background:rgba(34,197,94,0.1); color:var(--success); }
-      .aw-step-label {
-        position:absolute; bottom:-18px; font-size:0.55rem; font-weight:600;
-        color:var(--text-dim); white-space:nowrap; letter-spacing:0.02em;
-      }
-      .aw-step-line {
-        height:2px; flex:1; min-width:20px; max-width:60px;
-        background:var(--border,#333); margin:0 4px;
-      }
-      .aw-step-line.done { background:var(--success,#22c55e); }
-
-      /* Content */
-      .aw-content { padding:1.5rem; overflow-y:auto; flex:1; min-height:300px; }
-
-      /* Form */
-      .aw-form { display:flex; flex-direction:column; gap:1rem; }
-      .aw-field { display:flex; flex-direction:column; gap:4px; }
-      .aw-label { font-size:0.72rem; font-weight:700; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.04em; }
-      .aw-input, .aw-select, .aw-textarea {
-        background:var(--surface-2,#1a1a22); border:1px solid var(--border,#333);
-        border-radius:8px; padding:10px 14px; color:var(--text,#eee);
-        font-size:0.88rem; font-family:inherit; outline:none;
-        transition:border-color 0.15s;
-      }
-      .aw-input:focus, .aw-select:focus, .aw-textarea:focus { border-color:var(--accent,#7c3aed); }
-      .aw-textarea { resize:vertical; min-height:80px; }
-      .aw-hint { font-size:0.68rem; color:var(--text-dim); }
-      .aw-row { display:flex; gap:1rem; }
-      .aw-section-note { font-size:0.82rem; color:var(--text-muted); margin:0 0 0.5rem; }
-
-      /* Chip Row */
-      .aw-chip-row { display:flex; gap:8px; flex-wrap:wrap; }
-      .aw-chip {
-        padding:8px 16px; border-radius:20px; font-size:0.78rem; font-weight:600;
-        background:var(--surface-2); border:1px solid var(--border); color:var(--text-muted);
-        cursor:pointer; font-family:inherit; transition:all 0.15s;
-      }
-      .aw-chip:hover { border-color:var(--accent); }
-      .aw-chip.active { background:rgba(124,58,237,0.15); border-color:var(--accent); color:var(--accent); }
-
-      /* Personality Grid */
-      .aw-personality-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
-      .aw-personality-card {
-        display:flex; flex-direction:column; gap:2px; padding:12px 16px;
-        background:var(--surface-2); border:1px solid var(--border);
-        border-radius:10px; cursor:pointer; text-align:left;
-        font-family:inherit; color:var(--text-muted); transition:all 0.15s;
-      }
-      .aw-personality-card strong { font-size:0.82rem; color:var(--text); }
-      .aw-personality-card span { font-size:0.68rem; color:var(--text-dim); }
-      .aw-personality-card:hover { border-color:var(--border-hover); }
-      .aw-personality-card.active { border-color:var(--accent); background:rgba(124,58,237,0.08); }
-      .aw-personality-card.active strong { color:var(--accent); }
-
-      /* Photo */
-      .aw-generate-photo-btn { width:100%; margin-top:4px; }
-      .aw-photo-preview {
-        margin-top:1rem; border:1px solid var(--border); border-radius:12px;
-        overflow:hidden; min-height:200px; display:flex; align-items:center; justify-content:center;
-        background:var(--surface-2);
-      }
-      .aw-photo-img { width:100%; max-height:360px; object-fit:cover; display:block; }
-      .aw-photo-placeholder { color:var(--text-dim); font-size:0.82rem; padding:2rem; }
-      .aw-photo-note { font-size:0.72rem; color:var(--success); margin-top:6px; }
-      .aw-spinner {
-        width:16px; height:16px; border:2px solid rgba(255,255,255,0.2);
-        border-top-color:#fff; border-radius:50%; display:inline-block;
-        animation:awSpin 0.6s linear infinite; vertical-align:middle; margin-right:6px;
-      }
-      @keyframes awSpin { to { transform:rotate(360deg); } }
-
-      /* Platform Rows */
-      .aw-platform-row {
-        display:flex; align-items:center; gap:12px; padding:10px;
-        background:var(--surface-2); border:1px solid var(--border);
-        border-radius:10px;
-      }
-      .aw-platform-icon {
-        width:32px; height:32px; border-radius:8px; display:flex;
-        align-items:center; justify-content:center; font-size:1rem;
-        color:#fff; flex-shrink:0;
-      }
-      .aw-platform-info { display:flex; flex-direction:column; gap:4px; flex:1; }
-      .aw-platform-label { font-size:0.72rem; font-weight:700; color:var(--text-dim); }
-      .aw-platform-input { padding:6px 10px !important; font-size:0.82rem !important; }
-
-      /* Soul Editor */
-      .aw-soul-editor { font-family:var(--font-mono, monospace); font-size:0.78rem; min-height:280px; line-height:1.6; }
-
-      /* Review */
-      .aw-review-card {
-        background:var(--surface-2); border:1px solid var(--border);
-        border-radius:14px; overflow:hidden;
-      }
-      .aw-review-header {
-        display:flex; align-items:center; gap:16px; padding:1.25rem;
-        border-bottom:1px solid var(--border);
-        background:linear-gradient(135deg, rgba(124,58,237,0.08), rgba(236,72,153,0.06));
-      }
-      .aw-review-photo { width:56px; height:56px; border-radius:50%; object-fit:cover; border:2px solid var(--accent); }
-      .aw-review-avatar-placeholder {
-        width:56px; height:56px; border-radius:50%; display:flex;
-        align-items:center; justify-content:center; font-size:1.5rem;
-        font-weight:800; color:#fff;
-        background:linear-gradient(135deg, var(--accent), #ec4899);
-      }
-      .aw-review-name { font-size:1.1rem; font-weight:700; margin:0; }
-      .aw-review-handle { font-size:0.78rem; color:var(--accent); }
-      .aw-review-grid { display:grid; grid-template-columns:1fr 1fr; gap:1px; }
-      .aw-review-item {
-        display:flex; flex-direction:column; gap:2px; padding:12px 16px;
-        border-bottom:1px solid rgba(255,255,255,0.03);
-      }
-      .aw-review-label { font-size:0.65rem; font-weight:700; color:var(--text-dim); text-transform:uppercase; }
-      .aw-review-value { font-size:0.85rem; color:var(--text-muted); font-weight:500; }
-
-      /* Footer */
-      .aw-footer {
-        display:flex; justify-content:space-between; align-items:center;
-        padding:1rem 1.5rem; border-top:1px solid var(--border,#222);
-      }
-      .aw-btn {
-        padding:10px 20px; border-radius:10px; font-size:0.82rem;
-        font-weight:700; cursor:pointer; font-family:inherit;
-        border:none; transition:all 0.15s; display:inline-flex;
-        align-items:center; gap:6px;
-      }
-      .aw-btn--primary { background:var(--accent,#7c3aed); color:#fff; }
-      .aw-btn--primary:hover { filter:brightness(1.15); }
-      .aw-btn--secondary { background:var(--surface-2); color:var(--text-muted); border:1px solid var(--border); }
-      .aw-btn--secondary:hover { border-color:var(--accent); }
-      .aw-btn--success { background:var(--success,#22c55e); color:#000; font-weight:800; }
-      .aw-btn--success:hover { filter:brightness(1.1); }
-      .aw-btn:disabled { opacity:0.5; cursor:not-allowed; }
-
-      /* Responsive */
-      @media (max-width:640px) {
-        .aw-modal { width:100vw; height:100vh; max-height:100vh; border-radius:0; }
-        .aw-personality-grid { grid-template-columns:1fr; }
-        .aw-row { flex-direction:column; }
-        .aw-review-grid { grid-template-columns:1fr; }
-        .aw-step-label { display:none; }
-      }
-    `;
-    document.head.appendChild(style);
-  }
-
-  // Inject styles on load
-  if (typeof document !== 'undefined') {
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', injectStyles);
-    } else {
-      injectStyles();
-    }
-  }
-
-  return { open, close, next, prev, update, updatePlatform, generatePhoto, activate };
+  return { init, next, prev, update, updatePlatform, generatePhoto, activate, goToStep };
 })();
+
+// Auto-init when DOMContentLoaded if mount div exists
+document.addEventListener('DOMContentLoaded', () => {
+  const mount = document.getElementById('pg-avatar-wizard');
+  if (mount && !mount.hasChildNodes()) {
+    AvatarWizard.init('pg-avatar-wizard');
+  }
+});

@@ -23,8 +23,8 @@
       <div class="ambient-orb" style="opacity:0.025;"></div>
     </div>
 
-    <!-- Shared Nav -->
-    <nav class="pg-nav" id="main-nav">
+    <!-- Shared Nav (hidden until portal unlocked) -->
+    <nav class="pg-nav" id="main-nav" style="display:none;">
         <div class="pg-nav-inner">
             <a href="index.html" class="pg-nav-brand">
                 <div class="pg-nav-logo">
@@ -33,26 +33,20 @@
                 <span class="pg-nav-wordmark">PersonaGen</span>
             </a>
             <div class="pg-nav-links">
-                <button class="pg-nav-link active" id="nav-tab-demo" onclick="switchTab('demo')">Platform</button>
-                <button class="pg-nav-link" id="nav-tab-portal" onclick="switchTab('portal')">Client Portal</button>
-                <div class="pg-nav-sep" id="nav-divider"></div>
-                <a href="#features" class="pg-nav-link demo-nav-item">Features</a>
-                <a href="#pricing" class="pg-nav-link demo-nav-item">Pricing</a>
-                
-                <a href="#timeline" class="pg-nav-link portal-nav-item" style="display:none;">Onboarding</a>
-                <a href="#scout" class="pg-nav-link portal-nav-item" style="display:none;">Scout</a>
-                <a href="#generator" class="pg-nav-link portal-nav-item" style="display:none;">Generate</a>
-                <a href="#showcase" class="pg-nav-link portal-nav-item" style="display:none;">Roster</a>
-                <a href="#calendar" class="pg-nav-link portal-nav-item" style="display:none;">Calendar</a>
-                <a href="#dashboard" class="pg-nav-link portal-nav-item" style="display:none;">Dashboard</a>
-                <a href="#account-creator" class="pg-nav-link portal-nav-item" style="display:none;">AI Accounts</a>
-                <a href="#persona-config" class="pg-nav-link portal-nav-item" style="display:none;" onclick="switchPortalView('persona-config')">Persona Config</a>
-                <a href="#inbox" class="pg-nav-link portal-nav-item" style="display:none;" onclick="switchPortalView('inbox')">Inbox</a>
-                <a href="#trends" class="pg-nav-link portal-nav-item" style="display:none;" onclick="switchPortalView('trends')">Trends</a>
-                <a href="#channel-decoder" class="pg-nav-link portal-nav-item" style="display:none;" onclick="switchPortalView('channel-decoder')">Decoder</a>
-                <a href="#content-forge" class="pg-nav-link portal-nav-item" style="display:none;" onclick="switchPortalView('content-forge')">Forge</a>
-                <a href="#project-manager" class="pg-nav-link portal-nav-item" style="display:none;">Projects</a>
-                <a href="#agreement-details" class="pg-nav-link portal-nav-item" style="display:none;">Agreement</a>
+                <a href="#timeline" class="pg-nav-link portal-nav-item">Onboarding</a>
+                <a href="#scout" class="pg-nav-link portal-nav-item">Scout</a>
+                <a href="#generator" class="pg-nav-link portal-nav-item">Generate</a>
+                <a href="#showcase" class="pg-nav-link portal-nav-item">Roster</a>
+                <a href="#calendar" class="pg-nav-link portal-nav-item">Calendar</a>
+                <a href="#dashboard" class="pg-nav-link portal-nav-item">Dashboard</a>
+                <a href="#account-creator" class="pg-nav-link portal-nav-item">AI Accounts</a>
+                <a href="#persona-config" class="pg-nav-link portal-nav-item" onclick="switchPortalView('persona-config')">Persona Config</a>
+                <a href="#inbox" class="pg-nav-link portal-nav-item" onclick="switchPortalView('inbox')">Inbox</a>
+                <a href="#trends" class="pg-nav-link portal-nav-item" onclick="switchPortalView('trends')">Trends</a>
+                <a href="#channel-decoder" class="pg-nav-link portal-nav-item" onclick="switchPortalView('channel-decoder')">Decoder</a>
+                <a href="#content-forge" class="pg-nav-link portal-nav-item" onclick="switchPortalView('content-forge')">Forge</a>
+                <a href="#project-manager" class="pg-nav-link portal-nav-item">Projects</a>
+                <a href="#agreement-details" class="pg-nav-link portal-nav-item">Agreement</a>
             </div>
             <div class="pg-nav-badge"><span class="pg-nav-pulse"></span>HoneyForX · Live</div>
             <button class="pg-nav-hamburger" id="pg-hamburger" aria-label="Menu" onclick="toggleNav()">
@@ -61,59 +55,23 @@
         </div>
     </nav>
     <nav class="pg-nav-drawer" id="pg-drawer">
-      <button class="pg-nav-link active" id="drawer-tab-demo" onclick="switchTab('demo'); toggleNav()">Platform</button>
-      <button class="pg-nav-link" id="drawer-tab-portal" onclick="switchTab('portal'); toggleNav()">Client Portal</button>
-      <div class="pg-nav-drawer-sep"></div>
-      <a href="#features" class="pg-nav-link demo-nav-item" onclick="toggleNav()">Features</a>
-      <a href="#pricing" class="pg-nav-link demo-nav-item" onclick="toggleNav()">Pricing</a>
-      
-      <a href="#timeline" class="pg-nav-link portal-nav-item" style="display:none;" onclick="toggleNav()">Onboarding</a>
-      <a href="#scout" class="pg-nav-link portal-nav-item" style="display:none;" onclick="toggleNav()">Scout</a>
-      <a href="#generator" class="pg-nav-link portal-nav-item" style="display:none;" onclick="toggleNav()">Generate</a>
-      <a href="#showcase" class="pg-nav-link portal-nav-item" style="display:none;" onclick="toggleNav()">Roster</a>
-      <a href="#calendar" class="pg-nav-link portal-nav-item" style="display:none;" onclick="toggleNav()">Calendar</a>
-      <a href="#dashboard" class="pg-nav-link portal-nav-item" style="display:none;" onclick="toggleNav()">Dashboard</a>
-      <a href="#account-creator" class="pg-nav-link portal-nav-item" style="display:none;" onclick="toggleNav()">AI Accounts</a>
-      <a href="#persona-config" class="pg-nav-link portal-nav-item" style="display:none;" onclick="switchPortalView('persona-config'); toggleNav()">Persona Config</a>
-      <a href="#inbox" class="pg-nav-link portal-nav-item" style="display:none;" onclick="switchPortalView('inbox'); toggleNav()">Inbox</a>
-      <a href="#trends" class="pg-nav-link portal-nav-item" style="display:none;" onclick="switchPortalView('trends'); toggleNav()">Trends</a>
-      <a href="#channel-decoder" class="pg-nav-link portal-nav-item" style="display:none;" onclick="switchPortalView('channel-decoder'); toggleNav()">Decoder</a>
-      <a href="#content-forge" class="pg-nav-link portal-nav-item" style="display:none;" onclick="switchPortalView('content-forge'); toggleNav()">Forge</a>
-      <a href="#project-manager" class="pg-nav-link portal-nav-item" style="display:none;" onclick="toggleNav()">Projects</a>
-      <a href="#agreement-details" class="pg-nav-link portal-nav-item" style="display:none;" onclick="toggleNav()">Agreement</a>
+      <a href="#timeline" class="pg-nav-link portal-nav-item" onclick="toggleNav()">Onboarding</a>
+      <a href="#scout" class="pg-nav-link portal-nav-item" onclick="toggleNav()">Scout</a>
+      <a href="#generator" class="pg-nav-link portal-nav-item" onclick="toggleNav()">Generate</a>
+      <a href="#showcase" class="pg-nav-link portal-nav-item" onclick="toggleNav()">Roster</a>
+      <a href="#calendar" class="pg-nav-link portal-nav-item" onclick="toggleNav()">Calendar</a>
+      <a href="#dashboard" class="pg-nav-link portal-nav-item" onclick="toggleNav()">Dashboard</a>
+      <a href="#account-creator" class="pg-nav-link portal-nav-item" onclick="toggleNav()">AI Accounts</a>
+      <a href="#persona-config" class="pg-nav-link portal-nav-item" onclick="switchPortalView('persona-config'); toggleNav()">Persona Config</a>
+      <a href="#inbox" class="pg-nav-link portal-nav-item" onclick="switchPortalView('inbox'); toggleNav()">Inbox</a>
+      <a href="#trends" class="pg-nav-link portal-nav-item" onclick="switchPortalView('trends'); toggleNav()">Trends</a>
+      <a href="#channel-decoder" class="pg-nav-link portal-nav-item" onclick="switchPortalView('channel-decoder'); toggleNav()">Decoder</a>
+      <a href="#content-forge" class="pg-nav-link portal-nav-item" onclick="switchPortalView('content-forge'); toggleNav()">Forge</a>
+      <a href="#project-manager" class="pg-nav-link portal-nav-item" onclick="toggleNav()">Projects</a>
+      <a href="#agreement-details" class="pg-nav-link portal-nav-item" onclick="toggleNav()">Agreement</a>
     </nav>
 
-    <div id="view-demo" class="tab-content active" role="main">
-    <!-- ═══════ SECTION 1: HERO ═══════ -->
-    <section id="hero" class="slide slide-hero">
-        <div class="hero-bg-grid"></div>
-        <div class="hero-glow hero-glow-1"></div>
-        <div class="hero-glow hero-glow-2"></div>
-        <div class="hero-glow hero-glow-3"></div>
-        <div class="slide-inner hero-content">
-            <div class="hero-badge">🍯 Built for HoneyForX · AI-Powered UGC Automation</div>
-            <h1 class="hero-title">
-                Generate UGC Creators<br>
-                <span class="gradient-text">That Sell Autonomously</span>
-            </h1>
-            <p class="hero-subtitle">Generate AI influencers that create UGC product content, post autonomously, and drive conversions for your e-commerce brand — from scout to sale, fully automated.</p>
-            <div class="hero-cta-row">
-                <a href="#pricing" class="btn-primary">
-                    View Managed Plans
-                </a>
-                <a href="#features" class="btn-ghost">Explore Features</a>
-            </div>
-            <div class="hero-stats">
-                <div class="stat-card"><span class="stat-number counter" data-target="500" data-suffix="+">0</span><span class="stat-label">Creators / Hour</span></div>
-                <div class="stat-card"><span class="stat-number">6+</span><span class="stat-label">Platforms</span></div>
-                <div class="stat-card"><span class="stat-number">30s</span><span class="stat-label">UGC Scripts</span></div>
-                <div class="stat-card"><span class="stat-number">0%</span><span class="stat-label">Human Intervention</span></div>
-            </div>
-        </div>
-        <div class="scroll-hint"><span>Scroll to explore</span><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12l7 7 7-7"/></svg></div>
-    </section>
-
-    <!-- ═══════ SECTION 2: FEATURES OVERVIEW ═══════ -->
+    <!-- Landing page removed — see backup/landing-page-content.md -->
     <section id="features" class="slide slide-dark">
         <div class="slide-inner">
             <div class="section-tag tag-pink">Platform Features</div>
@@ -430,7 +388,7 @@
                                             <button class="btn-primary" onclick="switchMegaView('content-studio'); setTimeout(() => switchMegaTab('content-studio','calendar',document.querySelector('.mega-tab[onclick*=calendar]')),100)" style="font-size: 0.82rem; padding: 0.6rem 1.2rem;">
                                                 📅 New Post
                                             </button>
-                                            <button class="btn-ghost" onclick="if(typeof AvatarWizard!=='undefined'){AvatarWizard.open()}else{document.getElementById('dash-sec-generator').scrollIntoView({behavior:'smooth',block:'start'})}" style="font-size: 0.82rem; padding: 0.6rem 1.2rem;">
+                                            <button class="btn-ghost" onclick="document.getElementById('pg-avatar-wizard').scrollIntoView({behavior:'smooth',block:'start'})" style="font-size: 0.82rem; padding: 0.6rem 1.2rem;">
                                                 ✨ Create Agent
                                             </button>
                                         </div>
@@ -588,70 +546,7 @@
                                         <div class="section-tag tag-green">Interactive Generator</div>
                                         <h2 class="section-title">Generate an AI Agent<br><span class="subtitle-muted">Watch it come to life in real-time</span></h2>
 
-                                        <div class="generator-layout">
-                                            <!-- LEFT: Config Panel -->
-                                            <div class="gen-panel glass-card">
-                                                <h3 class="card-heading"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>Agent Configuration</h3>
-                                                <div class="gen-field">
-                                                    <label for="gen-niche">Niche / Vertical</label>
-                                                    <select id="gen-niche">
-                                                        <option value="fitness">Fitness & Wellness</option>
-                                                        <option value="tech">Tech & AI</option>
-                                                        <option value="fashion">Fashion & Beauty</option>
-                                                        <option value="finance">Finance & Crypto</option>
-                                                        <option value="travel">Travel & Lifestyle</option>
-                                                        <option value="food">Food & Cooking</option>
-                                                    </select>
-                                                </div>
-                                                <div class="gen-field">
-                                                    <label for="gen-market">Target Market</label>
-                                                    <select id="gen-market">
-                                                        <option value="us">United States</option>
-                                                        <option value="eu">Europe (Multi-lingual)</option>
-                                                        <option value="latam">Latin America</option>
-                                                        <option value="mena">Middle East & North Africa</option>
-                                                        <option value="apac">Asia-Pacific</option>
-                                                    </select>
-                                                </div>
-                                                <div class="gen-field">
-                                                    <label for="gen-personality">Personality Archetype</label>
-                                                    <select id="gen-personality">
-                                                        <option value="authority">Authority / Expert</option>
-                                                        <option value="relatable">Relatable / Everyday</option>
-                                                        <option value="provocative">Provocative / Edgy</option>
-                                                        <option value="inspirational">Inspirational / Motivational</option>
-                                                    </select>
-                                                </div>
-                                                <div class="gen-field">
-                                                    <label id="gen-platforms-label">Active Platforms</label>
-                                                    <div class="platform-toggles">
-                                                        <button class="chip active" data-platform="instagram"><span class="chip-dot"></span>Instagram</button>
-                                                        <button class="chip active" data-platform="tiktok"><span class="chip-dot"></span>TikTok</button>
-                                                        <button class="chip" data-platform="twitter"><span class="chip-dot"></span>X / Twitter</button>
-                                                        <button class="chip" data-platform="youtube"><span class="chip-dot"></span>YouTube</button>
-                                                        <button class="chip" data-platform="linkedin"><span class="chip-dot"></span>LinkedIn</button>
-                                                        <button class="chip" data-platform="threads"><span class="chip-dot"></span>Threads</button>
-                                                    </div>
-                                                </div>
-                                                <button id="gen-btn" class="btn-primary btn-full" onclick="generateAgent()">
-                                                    <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-                                                    Generate AI Influencer
-                                                </button>
-                                                <button class="btn-ghost btn-full" onclick="AvatarWizard.open()" style="margin-top:0.5rem">
-                                                    ✨ New Avatar Wizard (5-Step)
-                                                </button>
-                                            </div>
-
-                                            <!-- RIGHT: Live Output -->
-                                            <div class="gen-output" id="gen-output">
-                                                <div class="gen-placeholder">
-                                                    <div class="gen-placeholder-icon">
-                                                        <svg aria-hidden="true" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 10-16 0"/></svg>
-                                                    </div>
-                                                    <p>Configure your agent and hit generate<br><span>Your AI influencer will appear here</span></p>
-                                                </div>
-                                            </div>
-                                        </div>
+                                        <div id="pg-avatar-wizard"></div>
                                     </div>
                                 </section>
 

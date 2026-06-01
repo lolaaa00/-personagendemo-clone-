@@ -2720,10 +2720,11 @@ const AccountCreator = {
   },
 
   openNewAvatarWizard() {
-    if (typeof AvatarWizard !== 'undefined') {
-      AvatarWizard.open();
+    const mount = document.getElementById('pg-avatar-wizard');
+    if (mount) {
+      mount.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } else {
-      PersonaGenAPI.showToast('Avatar Wizard module not loaded', 'warning');
+      PersonaGenAPI.showToast('Avatar Wizard mount not found', 'warning');
     }
   }
 };
