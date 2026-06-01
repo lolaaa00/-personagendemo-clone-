@@ -333,8 +333,8 @@
   display: flex; align-items: center; justify-content: space-between;
   flex-wrap: wrap; gap: 1rem;
 }
-.dcal-toolbar-left { display: flex; align-items: center; gap: 0.5rem; }
-.dcal-toolbar-right { display: flex; align-items: center; gap: 0.5rem; }
+.dcal-toolbar-left { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.dcal-toolbar-right { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
 .dcal-month-label { font-size: var(--text-lg); font-weight: 700; min-width: 180px; text-align: center; }
 .dcal-nav-btn {
   width: 32px; height: 32px; border-radius: var(--radius-xs);
@@ -788,8 +788,11 @@
   .pce-layout { grid-template-columns: 1fr; }
   .pce-sidebar { border-right: none; border-bottom: 1px solid var(--border); flex-direction: row; flex-wrap: wrap; padding: 0.5rem; }
   .pce-editor-split { grid-template-columns: 1fr; }
-  .dcal-grid { font-size: 0.75rem; }
-  .dcal-cell { min-height: 60px; }
+  .dcal-grid { font-size: 0.75rem; grid-template-columns: 1fr !important; }
+  .dcal-day-header { display: none; }
+  .dcal-cell { min-height: auto; padding: 0.6rem; }
+  .dcal-cell--empty { display: none; }
+  .dcal-cell-header::before { font-size: 0.65rem; font-weight: 600; color: var(--text-dim); margin-right: 0.4rem; }
   .dcal-week-grid { grid-template-columns: 1fr; }
   .trends-platform-grid { grid-template-columns: 1fr; }
 

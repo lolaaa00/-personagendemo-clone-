@@ -1158,11 +1158,13 @@ select option { background:var(--surface-2); }
 .dashboard-layout {
   display: grid !important;
   grid-template-columns: 240px 1fr;
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
   background: var(--bg);
   position: relative;
   z-index: 1;
   transition: grid-template-columns 0.3s ease;
+  overflow: hidden;
 }
 
 .dash-sidebar {
@@ -1288,10 +1290,10 @@ select option { background:var(--surface-2); }
 .dash-main {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
-  overflow: visible;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
   position: relative;
-  max-width: 100vw;
 }
 
 .dash-header {
@@ -1416,6 +1418,8 @@ select option { background:var(--surface-2); }
 .dash-center-panel {
   padding: var(--space-8);
   min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 .dash-right-panel {
   background: var(--bg);
@@ -1710,7 +1714,9 @@ body.portal-active nav.pg-nav {
 
 body.portal-active {
   padding-top: 0 !important;
-  overflow-x: hidden;
+  overflow: hidden;
+  height: 100vh;
+  height: 100dvh;
 }
 
 .dash-workspace.no-right-sidebar {
@@ -1745,17 +1751,20 @@ body.portal-active {
   border: none;
   border-bottom: 2px solid transparent;
   cursor: pointer;
-  transition: color 0.2s, border-color 0.2s;
+  transition: color 0.2s, border-color 0.2s, background 0.2s;
   font-family: inherit;
   white-space: nowrap;
   position: relative;
+  text-decoration: none;
 }
 .mega-tab:hover {
   color: var(--text-muted);
+  background: rgba(255,255,255,0.03);
 }
 .mega-tab.active {
   color: var(--accent);
   border-bottom-color: var(--accent);
+  background: rgba(124,58,237,0.06);
 }
 .mega-tab .mega-tab-icon {
   margin-right: 6px;
