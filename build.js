@@ -135,10 +135,15 @@ function parseOnboardingTasks(mdContent, sourceFile) {
   // Status emoji → dashboard status mapping
   const statusMap = {
     '🔲': 'new',
+    '☐': 'new',
     '🔄': 'active',
+    '▶': 'active',
     '👁️': 'review',
+    '✦': 'review',
     '✅': 'done',
-    '❌': 'blocked'
+    '✔': 'done',
+    '❌': 'blocked',
+    '✘': 'blocked'
   };
 
   for (let i = 0; i < lines.length; i++) {
@@ -153,7 +158,7 @@ function parseOnboardingTasks(mdContent, sourceFile) {
     }
 
     // Parse table rows with status emojis
-    const tableMatch = line.match(/\|\s*(.+?)\s*\|\s*(.+?)\s*\|\s*(🔲|🔄|👁️|✅|❌)\s*\|\s*(.*?)\s*\|/);
+    const tableMatch = line.match(/\|\s*(.+?)\s*\|\s*(.+?)\s*\|\s*(🔲|🔄|👁️|✅|❌|☐|▶|✦|✔|✘)\s*\|\s*(.*?)\s*\|/);
     if (tableMatch) {
       const title = tableMatch[1].trim();
       const owner = tableMatch[2].trim();
@@ -258,11 +263,11 @@ function convertMarkdownToHtml(md) {
       cells.forEach(c => {
         // Replace status emojis with badges
         let cell = c;
-        cell = cell.replace(/🔲/g, '<span class="pm-status-badge pm-status-new">Pending</span>');
-        cell = cell.replace(/🔄/g, '<span class="pm-status-badge pm-status-active">Active</span>');
-        cell = cell.replace(/👁️/g, '<span class="pm-status-badge pm-status-review">Review</span>');
-        cell = cell.replace(/✅/g, '<span class="pm-status-badge pm-status-done">Done</span>');
-        cell = cell.replace(/❌/g, '<span class="pm-status-badge pm-status-blocked">Blocked</span>');
+        cell = cell.replace(/🔲|☐/g, '<span class="pm-status-badge pm-status-new">Pending</span>');
+        cell = cell.replace(/🔄|▶/g, '<span class="pm-status-badge pm-status-active">Active</span>');
+        cell = cell.replace(/👁️|✦/g, '<span class="pm-status-badge pm-status-review">Review</span>');
+        cell = cell.replace(/✅|✔/g, '<span class="pm-status-badge pm-status-done">Done</span>');
+        cell = cell.replace(/❌|✘/g, '<span class="pm-status-badge pm-status-blocked">Blocked</span>');
         tableHtml += `<td>${cell}</td>`;
       });
       tableHtml += '</tr>';
@@ -290,9 +295,9 @@ function convertMarkdownToHtml(md) {
   html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" class="pm-doc-link" target="_blank">$1</a>');
 
   // Status emojis in body text
-  html = html.replace(/🔲/g, '<span class="pm-status-badge pm-status-new">Pending</span>');
-  html = html.replace(/🔄/g, '<span class="pm-status-badge pm-status-active">Active</span>');
-  html = html.replace(/✅/g, '<span class="pm-status-badge pm-status-done">Done</span>');
+  html = html.replace(/🔲|☐/g, '<span class="pm-status-badge pm-status-new">Pending</span>');
+  html = html.replace(/🔄|▶/g, '<span class="pm-status-badge pm-status-active">Active</span>');
+  html = html.replace(/✅|✔/g, '<span class="pm-status-badge pm-status-done">Done</span>');
 
   // Paragraphs — wrap remaining plain lines
   html = html.replace(/^(?!<[a-zA-Z]|$)(.+)$/gm, '<p class="pm-doc-p">$1</p>');
@@ -452,14 +457,14 @@ function compilePortalPages(content, DIST) {
   const rightPanel = getElementContent(content, '<aside class="dash-right-panel">');
   const footerAndScripts = content.slice(content.indexOf('<!-- ═══════ FOOTER ═══════ -->'));
 
-  // Sidebar and Header (extracted from the first part of view-portal)
+  // Sidebar and Header (extracted from sidebar through end of header/mega-tab-bar, up to but NOT including dash-workspace)
   const sidebarStart = content.indexOf('<aside class="dash-sidebar">');
-  const centerPanelStart = content.indexOf('<div class="dash-center-panel">');
-  if (sidebarStart === -1 || centerPanelStart === -1) {
-    console.error('  ⚠ Could not find dash-sidebar or dash-center-panel, skipping sub-page build.');
+  const workspaceStart = content.indexOf('<div class="dash-workspace">');
+  if (sidebarStart === -1 || workspaceStart === -1) {
+    console.error('  ⚠ Could not find dash-sidebar or dash-workspace, skipping sub-page build.');
     return;
   }
-  const sidebarAndHeader = content.slice(sidebarStart, centerPanelStart + '<div class="dash-center-panel">'.length);
+  const sidebarAndHeader = content.slice(sidebarStart, workspaceStart);
 
   // Extract individual contents
   const subContents = {
@@ -568,17 +573,13 @@ function compilePortalPages(content, DIST) {
       `<a href="agreement.html" class="profile-dropdown-item" style="text-decoration:none;">`
     );
     // Fix corresponding closing tags for converted dropdown items
-    // Replace </button> that follows a profile-dropdown-item <a> tag (not the exit/danger button)
+    // Only convert </button> to </a> for items that were converted (non-danger ones)
+    // Match <a...class="profile-dropdown-item"...> followed by content NOT containing another <a or <button, then </button>
     customizedSidebarAndHeader = customizedSidebarAndHeader.replace(
-      /(<a\s[^>]*class="profile-dropdown-item"[^>]*>[\s\S]*?)<\/button>/g,
+      /(<a\s[^>]*class="profile-dropdown-item"[^>]*>(?:(?!<a\s|<button\s)[\s\S])*?)<\/button>/g,
       '$1</a>'
     );
 
-    // Customize workspace grid classes
-    customizedSidebarAndHeader = customizedSidebarAndHeader.replace(
-      /<div class="dash-workspace">/g,
-      `<div class="dash-workspace ${p.workspaceClass}">`
-    );
 
     // Combine into full page HTML
     let pageContent = subContents[p.view];
@@ -625,14 +626,18 @@ ${head}
         <div class="dashboard-layout">
             ${customizedSidebarAndHeader}
                 ${megaTabBarHtml}
-                ${pageContent}
-            </div>
-            ${rightPanelHtml}
+                <div class="dash-workspace${p.workspaceClass ? ' ' + p.workspaceClass : ''}">
+                    <div class="dash-center-panel">
+                        ${pageContent}
+                    </div>
+                    ${rightPanelHtml}
+                </div>
+            </main>
         </div>
-        </main>
     </div>
 </div>
-${footerAndScripts}`;
+${footerAndScripts}
+</html>`;
 
     fs.writeFileSync(path.join(DIST, p.file), fullHtml, 'utf-8');
     console.log(`  ✓ Compiled sub-page: ${p.file}`);

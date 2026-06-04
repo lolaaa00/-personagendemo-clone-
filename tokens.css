@@ -26,6 +26,7 @@
   --accent:      #7c6aed;
   --accent-soft: rgba(124,106,237,0.12);
   --accent-mid:  rgba(124,106,237,0.25);
+  --accent-dark: #6b5ace;
 
   /* ── Colour: Cyan ── */
   --cyan:      #22d3ee;
@@ -43,6 +44,10 @@
   /* ── Colour: Rose / Pink ── */
   --rose:      #f472b6;
   --rose-soft: rgba(244,114,182,0.10);
+
+  /* ── Colour: Error / Danger ── */
+  --error:      #ef4444;
+  --error-soft: rgba(239,68,68,0.10);
 
   /* ── Colour: Gradients ── */
   --gradient:        linear-gradient(135deg, var(--accent), var(--cyan));
@@ -149,6 +154,9 @@
   --z-nav:     100;
   --z-modal:   200;
   --z-toast:   300;
+  --z-header:  50;
+  --z-drawer:  999;
+  --z-overlay: 1000;
 }
 
 /* ═══════════════════════════════════════════════════════════════

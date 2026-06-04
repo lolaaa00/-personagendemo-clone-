@@ -948,7 +948,7 @@ function renderDashboard() {
     renderSparkChart();
     renderPlatformBars();
     
-    // Wire right-panel KPIs from DASH_AGENTS
+    // Wire KPIs from DASH_AGENTS (both main-area and right-panel)
     const activeCount = DASH_AGENTS.filter(a => a.active).length;
     const totalCount = DASH_AGENTS.length;
     
@@ -958,25 +958,39 @@ function renderDashboard() {
     const kpiTotalRp = document.getElementById('kpi-total-rp');
     if (kpiTotalRp) kpiTotalRp.textContent = activeCount;
     
-    const kpiEng = document.getElementById('kpi-engagement');
-    if (kpiEng && DASH_AGENTS.length) {
+    // Engagement KPIs
+    let avgEngText = '\u2014';
+    if (DASH_AGENTS.length) {
         const avgEng = DASH_AGENTS.reduce((s, a) => s + (a.engagement || 0), 0) / DASH_AGENTS.length;
-        kpiEng.textContent = avgEng > 0 ? avgEng.toFixed(1) + '%' : '\u2014';
+        avgEngText = avgEng > 0 ? avgEng.toFixed(1) + '%' : '\u2014';
     }
+    const kpiEng = document.getElementById('kpi-engagement');
+    if (kpiEng) kpiEng.textContent = avgEngText;
+    const kpiEngMain = document.getElementById('kpi-engagement-main');
+    if (kpiEngMain) kpiEngMain.textContent = avgEngText;
     
+    // Posts KPIs
+    const postsText = activeCount * 3;
     const kpiPosts = document.getElementById('kpi-posts');
-    if (kpiPosts) kpiPosts.textContent = activeCount * 3;
+    if (kpiPosts) kpiPosts.textContent = postsText;
+    const kpiPostsMain = document.getElementById('kpi-posts-main');
+    if (kpiPostsMain) kpiPostsMain.textContent = postsText;
     
-    const kpiReach = document.getElementById('kpi-reach');
-    if (kpiReach && DASH_AGENTS.length) {
+    // Reach KPIs
+    let reachText = '\u2014';
+    if (DASH_AGENTS.length) {
         const totalFollowers = DASH_AGENTS.reduce((s, a) => {
             const f = String(a.followers || '0').replace(/[KkMm]/g, m => m.toLowerCase() === 'k' ? '000' : '000000').replace(/\./g, '');
             return s + (parseInt(f) || 0);
         }, 0);
-        if (totalFollowers >= 1000000) kpiReach.textContent = (totalFollowers / 1000000).toFixed(1) + 'M';
-        else if (totalFollowers >= 1000) kpiReach.textContent = (totalFollowers / 1000).toFixed(1) + 'K';
-        else kpiReach.textContent = totalFollowers;
+        if (totalFollowers >= 1000000) reachText = (totalFollowers / 1000000).toFixed(1) + 'M';
+        else if (totalFollowers >= 1000) reachText = (totalFollowers / 1000).toFixed(1) + 'K';
+        else reachText = totalFollowers;
     }
+    const kpiReach = document.getElementById('kpi-reach');
+    if (kpiReach) kpiReach.textContent = reachText;
+    const kpiReachMain = document.getElementById('kpi-reach-main');
+    if (kpiReachMain) kpiReachMain.textContent = reachText;
 }
 
 // ═══════════════════════════════════════
@@ -1033,6 +1047,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     } catch (err) {
         console.warn('[PersonaGen] Data load failed, using inline fallback:', err);
         INFLUENCERS = _INFLUENCER_FALLBACK;
+        DASH_AGENTS = _INFLUENCER_FALLBACK.map(a => ({
+            ...a,
+            niche: (a.niche || '').split(' & ')[0] || a.niche,
+            engagement: parseFloat(a.engagement) || 0,
+            active: true,
+            perf: 80,
+            trend: '+0%',
+            color: '#a78bfa',
+        }));
     }
 
     // Render all sections
@@ -1095,10 +1118,20 @@ document.addEventListener('DOMContentLoaded', async () => {
             el.style.transitionDelay = `${Math.min(i * 0.06, 0.4)}s`;
         });
     });
-    const obs = new IntersectionObserver(entries => {
-        entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
-    }, { threshold: 0.08, rootMargin: '0px 0px -30px 0px' });
-    document.querySelectorAll('.reveal').forEach(el => obs.observe(el));
+    // In multi-page portal layout, elements are inside a nested scrollable panel
+    // where IntersectionObserver won't fire reliably. Immediately reveal them
+    // with staggered delays for a polished entrance animation.
+    const isPortalPage = document.body.classList.contains('portal-active');
+    if (isPortalPage) {
+        requestAnimationFrame(() => {
+            document.querySelectorAll('.reveal').forEach(el => el.classList.add('visible'));
+        });
+    } else {
+        const obs = new IntersectionObserver(entries => {
+            entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
+        }, { threshold: 0.08, rootMargin: '0px 0px -30px 0px' });
+        document.querySelectorAll('.reveal').forEach(el => obs.observe(el));
+    }
 
     // Active nav
     const sections = document.querySelectorAll('section[id]');
