@@ -421,14 +421,23 @@ To prevent sequence mistakes during layout changes, feature updates, or E2E test
 > [!WARNING]
 > Bypassing stages or out-of-order execution (e.g., trying to run Social Scout before finding competitor channels, or decoding before selecting content) will cause state exceptions. E2E validation scripts (`scratch/verify-intel-wizard.js`) assert this exact sequence.
 
-### 10.2 Client Deployment Target & Live Environment
+### 10.2 Client Deployment Target & Live Environment (DO NOT ASSUME)
 - **Live Environment URL:** `https://personagen-demo.pages.dev/` (and mapped to custom domain `https://honeyx.monarchstack.com/`)
 - **Cloudflare Pages Project Name:** `personagen-demo`
 - **Auto-deployment Config:** Managed via `clients/honeyforx.config.json` (specifically the `client.domain` attribute).
 - **One-Command Deployment Script:** `deploy.ps1`.
 
-> [!IMPORTANT]
-> To prevent deployment to mismatched fallback projects (e.g., generic or incorrect client-specific domains), `deploy.ps1` dynamically reads from `clients/honeyforx.config.json`. The `client.domain` attribute in the config **must** match `personagen-demo.pages.dev` to ensure the wrangler build targets the correct live application environment.
+> [!CAUTION]
+> **CRITICAL DEPLOYMENT ASSUMPTIONS & PITFALLS TO NEVER REPEAT:**
+> 1. **DO NOT assume Cloudflare Pages automatically deploys on git push:**
+>    * The Cloudflare Pages project is a **Direct Upload** project. Pushing to GitHub updates the repository history, but **IT DOES NOT trigger an automated build on Cloudflare** because the compiled `dist/` directory is in `.gitignore` and no cloud-side build script exists.
+>    * **YOU MUST EXPLICITLY RUN THE DEPLOYMENT COMMAND** to upload the compiled static files: `npx wrangler pages deploy dist/honeyforx --project-name personagen-demo`.
+> 2. **DO NOT assume the project name is client-specific or non-hyphenated:**
+>    * Never assume the project name is client-specific (e.g., `personagen-honeyforx`) or missing the hyphen (e.g., `personagendemo`).
+>    * The correct project name is **`personagen-demo`** (with a hyphen) and the correct domain is **`personagen-demo.pages.dev`**.
+> 3. **DO NOT run wrangler deployment in a non-interactive background agent shell without a token:**
+>    * Wrangler CLI requires a `CLOUDFLARE_API_TOKEN` environment variable when executed in background, non-interactive processes.
+>    * If you do not have an API token, you must execute the deploy command interactively on the system or instruct the user to run `npx wrangler pages deploy dist/honeyforx --project-name personagen-demo` in their terminal where their authenticated Wrangler session is active.
 
 ---
 
