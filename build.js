@@ -476,6 +476,7 @@ function compilePortalPages(content, DIST) {
     accounts: getElementContent(content, '<div id="portal-view-accounts"'),
     'persona-config': getElementContent(content, '<div id="portal-view-persona-config"'),
     inbox: getElementContent(content, '<div id="portal-view-inbox"'),
+    'intel-wizard': getElementContent(content, '<div id="portal-view-intel-wizard"'),
     trends: getElementContent(content, '<div id="portal-view-trends"'),
     'channel-decoder': getElementContent(content, '<div id="portal-view-channel-decoder"'),
     'content-forge': getElementContent(content, '<div id="portal-view-content-forge"'),
@@ -493,6 +494,7 @@ function compilePortalPages(content, DIST) {
     { file: 'accounts.html', title: 'Connected Platform Handles', activeMenu: 'menu-accounts', view: 'accounts', hasRightPanel: false, workspaceClass: 'no-right-sidebar' },
     { file: 'persona-config.html', title: 'AI Agent Configuration', activeMenu: 'menu-persona-config', view: 'persona-config', hasRightPanel: false, workspaceClass: 'no-right-sidebar' },
     { file: 'inbox.html', title: 'Inbox & Engagement Hub', activeMenu: 'menu-inbox', view: 'inbox', hasRightPanel: false, workspaceClass: 'no-right-sidebar' },
+    { file: 'intel-wizard.html', title: 'Intelligence Wizard — End-to-End Pipeline', activeMenu: 'menu-intel-wizard', view: 'intel-wizard', hasRightPanel: false, workspaceClass: 'no-right-sidebar' },
     { file: 'trends.html', title: 'Trending Topics Monitor', activeMenu: 'menu-trends', view: 'trends', hasRightPanel: false, workspaceClass: 'no-right-sidebar' },
     { file: 'channel-decoder.html', title: 'Channel Decoder — 9-Layer Analysis', activeMenu: 'menu-channel-decoder', view: 'channel-decoder', hasRightPanel: false, workspaceClass: 'no-right-sidebar' },
     { file: 'content-forge.html', title: 'Content Forge — Blueprint to Production', activeMenu: 'menu-content-forge', view: 'content-forge', hasRightPanel: false, workspaceClass: 'no-right-sidebar' },
@@ -518,6 +520,7 @@ function compilePortalPages(content, DIST) {
         accounts: 'accounts.html',
         'persona-config': 'persona-config.html',
         inbox: 'inbox.html',
+        'intel-wizard': 'intel-wizard.html',
         trends: 'trends.html',
         'channel-decoder': 'channel-decoder.html',
         'content-forge': 'content-forge.html',
@@ -530,7 +533,7 @@ function compilePortalPages(content, DIST) {
 
     // Handle switchMegaView buttons → link to first tab's page
     const megaViewMap = {
-      'intelligence': { default: 'scout.html', views: ['scout', 'trends', 'channel-decoder'] },
+      'intelligence': { default: 'intel-wizard.html', views: ['intel-wizard', 'scout', 'trends', 'channel-decoder'] },
       'content-studio': { default: 'content-forge.html', views: ['content-forge', 'calendar', 'brand-brief'] }
     };
     const megaItemsPattern = /<button class="dash-menu-item([^"]*)"[^>]*onclick="switchMegaView\('([^']*)', this\)">([\s\S]*?)<\/button>/g;

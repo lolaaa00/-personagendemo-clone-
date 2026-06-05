@@ -1073,6 +1073,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     // On sub-pages (dashboard.html, trends.html, etc.), switchPortalView()
     // is never called because sidebar uses <a> links. So we must init
     // every module whose mount point exists on this page.
+    if (typeof IntelWizard !== 'undefined' && document.getElementById('intel-wizard-mount') && !document.querySelector('.wiz-container')) {
+        IntelWizard.init('intel-wizard-mount');
+    }
     if (typeof TrendMonitor !== 'undefined' && document.getElementById('trends-mount') && !document.querySelector('.trends-wrapper')) {
         TrendMonitor.init('trends-mount');
     }
@@ -2727,6 +2730,7 @@ const MEGA_VIEWS = {
   'intelligence': {
     title: 'Intelligence Hub',
     tabs: [
+      { id: 'intel-wizard', label: 'Wizard', icon: '🧠' },
       { id: 'scout', label: 'Social Scout', icon: '🔍' },
       { id: 'trends', label: 'Trends', icon: '📈' },
       { id: 'channel-decoder', label: 'Decoder', icon: '🔬' }
@@ -2831,6 +2835,7 @@ function switchPortalView(viewId, clickedBtn, keepTabs) {
       'accounts': 'Connected Platform Handles',
       'persona-config': 'AI Agent Configuration',
       'inbox': 'Inbox & Engagement Hub',
+      'intel-wizard': 'Intelligence Wizard — End-to-End Pipeline',
       'trends': 'Trending Topics Monitor',
       'channel-decoder': 'Channel Decoder — 9-Layer Analysis',
       'content-forge': 'Content Forge — Blueprint to Production',
@@ -2844,6 +2849,9 @@ function switchPortalView(viewId, clickedBtn, keepTabs) {
     }
   }
 
+  if (viewId === 'intel-wizard' && typeof IntelWizard !== 'undefined' && !document.querySelector('.wiz-container')) {
+    IntelWizard.init('intel-wizard-mount');
+  }
   if (viewId === 'persona-config' && !document.querySelector('.pce-layout')) {
     PersonaConfigEditor.init('persona-config-mount');
   }
