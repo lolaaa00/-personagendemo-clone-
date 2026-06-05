@@ -63,10 +63,27 @@ if (-not $token) {
     Write-Host "  [Info] CLOUDFLARE_API_TOKEN not set. Attempting deployment using local Wrangler authentication session..." -ForegroundColor Gray
 }
 
+$configPath = Join-Path $projectDir "clients/honeyforx.config.json"
+$domain = "personagen-demo.pages.dev"
+$projectName = "personagen-demo"
+
+if (Test-Path $configPath) {
+    try {
+        $config = Get-Content $configPath -Raw | ConvertFrom-Json
+        if ($config.client.domain) {
+            $domain = $config.client.domain
+            $projectName = $domain.Replace(".pages.dev", "")
+            Write-Host "  [Info] Resolved deployment target from config: $domain ($projectName)" -ForegroundColor Gray
+        }
+    } catch {
+        Write-Host "  [Warning] Failed to parse config JSON. Falling back to default project name." -ForegroundColor Yellow
+    }
+}
+
 $deployDir = Join-Path $projectDir "dist/honeyforx"
-npx -y wrangler pages deploy $deployDir --project-name personagen-demo --branch main --commit-dirty=true
+npx -y wrangler pages deploy $deployDir --project-name $projectName --branch main --commit-dirty=true
 if ($LASTEXITCODE -eq 0) {
-    Write-Host "  [3/3] OK Live at https://personagendemo.pages.dev/" -ForegroundColor Green
+    Write-Host "  [3/3] OK Live at https://$domain/" -ForegroundColor Green
 } else {
     Write-Host "  [3/3] ERROR Deploy failed - check wrangler output above" -ForegroundColor Red
     exit 1
@@ -74,5 +91,5 @@ if ($LASTEXITCODE -eq 0) {
 
 Write-Host ""
 Write-Host "  Deploy complete!" -ForegroundColor Green
-Write-Host "  🌐 https://personagendemo.pages.dev/" -ForegroundColor Cyan
+Write-Host "  🌐 https://$domain/" -ForegroundColor Cyan
 Write-Host ""

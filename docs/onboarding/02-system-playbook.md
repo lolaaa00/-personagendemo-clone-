@@ -14,6 +14,7 @@
 |---------|------|--------|
 | 1.0 | {{effective_date}} | Initial architecture — VPS + OpenRouter + on-premise posting network |
 | 1.1 | 2026-05-30 | Scout Intelligence Engine 2.0 — Channel Decoder, Content Forge, Blueprint pipeline |
+| 1.2 | 2026-06-05 | Client deployment target and live environment aligned to personagendemo.pages.dev; Content Intelligence Wizard 6-stage pipeline explicitly documented. |
 
 ---
 
@@ -403,6 +404,31 @@ AgenticMail gives each persona a **real, deliverable email address** on the clie
 ## 9. Data Ownership
 
 All infrastructure accounts, source code, generated assets, credentials, and data are **exclusively owned by {{client.name}}**. Monarch Stack maintains collaborative management access for the Agreement duration. Upon termination, access is revoked within seven (7) business days. Client retains and continues operating all systems independently.
+
+---
+
+## 10. Key Workflows & Common Pitfalls
+
+### 10.1 Content Intelligence Wizard Workflow (6-Stage Pipeline)
+To prevent sequence mistakes during layout changes, feature updates, or E2E testing, the Intelligence Wizard executes in a strict, logically dependent 6-stage sequence. Every step feeds its selected/generated state directly into the next:
+1. **Stage 1: Trend Discovery (Trend Monitor)**: Select niche and topic trend (e.g., `tech` ➔ `#Autonomous Coding Agents`). Feeds the chosen topic into Stage 2.
+2. **Stage 2: Competitor Channel Explorer (Channel Decoder)**: Find and analyze winning competitor channels related to the trend (e.g., `@devinexplains`). Feeds the competitor profile into Stage 3.
+3. **Stage 3: Winning Content (Social Scout)**: View viral content/posts for the selected competitor, and select a high-performing post/video to dissect. Feeds the selected post into Stage 4.
+4. **Stage 4: Content Decoder (Holographic Scan)**: Run 9-layer holographic reverse-engineering of the selected viral post (hooks, pacing, visual prompts, scripting style). Captures detailed blueprint parameters to feed into Stage 5.
+5. **Stage 5: Feed Agent (AI Agent Training)**: Ingest the generated 9-layer blueprint into the target AI persona's brain. Trigger terminal-based agent training to output topic-specific customized outlines. Feeds customized outlines to Stage 6.
+6. **Stage 6: Content Studio (Stages & Production)**: View, refine, and queue newly generated topic-specific custom drafts (complete with hooks, checklists, and visual cues) for automated posting.
+
+> [!WARNING]
+> Bypassing stages or out-of-order execution (e.g., trying to run Social Scout before finding competitor channels, or decoding before selecting content) will cause state exceptions. E2E validation scripts (`scratch/verify-intel-wizard.js`) assert this exact sequence.
+
+### 10.2 Client Deployment Target & Live Environment
+- **Live Environment URL:** `https://personagen-demo.pages.dev/` (and mapped to custom domain `https://honeyx.monarchstack.com/`)
+- **Cloudflare Pages Project Name:** `personagen-demo`
+- **Auto-deployment Config:** Managed via `clients/honeyforx.config.json` (specifically the `client.domain` attribute).
+- **One-Command Deployment Script:** `deploy.ps1`.
+
+> [!IMPORTANT]
+> To prevent deployment to mismatched fallback projects (e.g., generic or incorrect client-specific domains), `deploy.ps1` dynamically reads from `clients/honeyforx.config.json`. The `client.domain` attribute in the config **must** match `personagen-demo.pages.dev` to ensure the wrangler build targets the correct live application environment.
 
 ---
 
