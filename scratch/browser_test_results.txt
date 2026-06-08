@@ -1,8 +1,8 @@
-[Test] Starting Browser Verification at 2026-06-08T19:10:35.221Z
+[Test] Starting Browser Verification at 2026-06-08T19:17:51.485Z
 [Test] Navigating to http://localhost:5173/...
-[Browser Console] ERROR: Failed to load resource: the server responded with a status of 404 (Not Found)
 [Browser Console] DEBUG: [vite] connecting...
 [Browser Console] DEBUG: [vite] connected.
+[Browser Console] ERROR: Failed to load resource: the server responded with a status of 404 (Not Found)
 [Test] Page title: "Sign In — PersonaGen"
 [Test] Current URL after initial load: http://localhost:5173/login
 [Test] On Login page. Filling credentials...

@@ -102,29 +102,6 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				}
 			}
 
-			// Insert connection into database
-			const rawHandle = agent.handle || `@${agent.name.toLowerCase().replace(/\s+/g, '')}`;
-			const handle = `${rawHandle}.${platform}`;
-			const { error: connErr } = await db.connections.upsert({
-				user_id: user.id,
-				agent_id: persona_id,
-				platform: platform as any,
-				handle,
-				verified: true,
-				last_sync: new Date().toISOString()
-			});
-
-			if (connErr) throw connErr;
-
-			// Recalculate agent connection count and activate agent
-			const { data: conns } = await db.connections.listForAgent(persona_id);
-			const count = conns?.length || 0;
-
-			await db.agents.update(persona_id, {
-				connection_count: count,
-				status: 'active'
-			});
-
 			return json({
 				success: true,
 				data: {
