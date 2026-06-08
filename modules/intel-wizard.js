@@ -2141,7 +2141,8 @@ const IntelWizard = (() => {
       
       // Redirect to Calendar view to see it live!
       setTimeout(() => {
-        switchPortalView('calendar');
+        if (typeof switchPortalView === 'function') switchPortalView('calendar');
+        else window.location.href = 'calendar.html';
       }, 800);
     }
   }
@@ -2168,7 +2169,8 @@ const IntelWizard = (() => {
       ContentForge.forgeFromBlueprint(bp);
       
       // Switch view to content forge
-      switchPortalView('content-forge');
+      if (typeof switchPortalView === 'function') switchPortalView('content-forge');
+      else window.location.href = 'content-forge.html';
       
       if (typeof PersonaGenAPI !== 'undefined') {
         PersonaGenAPI.showToast('Transferred blueprint to Content Forge!', 'success');

@@ -945,6 +945,7 @@ const ChannelDecoder = (() => {
     if (typeof ContentForge !== 'undefined' && ContentForge.forgeFromBlueprint) {
       // Switch to Content Forge view if portal switcher is available
       if (typeof switchPortalView === 'function') switchPortalView('content-forge');
+      else window.location.href = 'content-forge.html';
       ContentForge.forgeFromBlueprint(currentBlueprint);
       if (typeof PersonaGenAPI !== 'undefined') PersonaGenAPI.showToast('Blueprint loaded into Content Forge', 'success');
     } else {

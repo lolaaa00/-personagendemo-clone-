@@ -329,7 +329,7 @@ function generateAgent() {
     const grad = gradients[Math.floor(Math.random() * gradients.length)];
     const initial = name.charAt(0);
 
-    const marketLabels = {us:"United States",eu:"Europe",latam:"Latin America",mena:"MENA",apac:"Asia-Pacific"};
+    const marketLabels = {us:"United States",eu:"Europe",latam:"Latin America",mena:"MENA",apac:"Asia-Pacific",au:"Australia"};
     const personalityLabels = {authority:"Authority",relatable:"Relatable",provocative:"Provocative",inspirational:"Inspirational"};
 
     // Simulate generation delay
@@ -812,10 +812,11 @@ function renderAgentTable(filter) {
     let agents = [...DASH_AGENTS];
     if (filter === 'active') agents = agents.filter(a => a.status === 'active');
     else if (filter === 'paused') agents = agents.filter(a => a.status === 'paused' || a.status === 'failing');
+    else if (filter === 'pending') agents = agents.filter(a => a.status === 'pending');
     else if (filter === 'top') agents = agents.filter(a => a.perf >= 70).sort((a,b) => b.perf - a.perf);
 
     const trendClass = t => t.startsWith('+') ? 'positive' : t.startsWith('-') ? 'negative' : 'neutral';
-    const statusCls = s => s === 'active' ? 'status-active' : s === 'paused' ? 'status-paused' : 'status-failing';
+    const statusCls = s => s === 'active' ? 'status-active' : s === 'paused' ? 'status-paused' : s === 'pending' ? 'status-pending' : 'status-failing';
     const perfColor = p => p >= 70 ? '#22c55e' : p >= 40 ? '#f59e0b' : '#ef4444';
 
     table.innerHTML = `
@@ -823,12 +824,12 @@ function renderAgentTable(filter) {
             <span>Agent</span><span>Followers</span><span>Engagement</span><span>Trend</span><span>Performance</span><span>Active</span>
         </div>
         ${agents.map((a, i) => `
-        <div class="dash-row" data-idx="${DASH_AGENTS.indexOf(a)}" style="cursor:pointer" onclick="if(!event.target.closest('.toggle')){switchPortalView('persona-config')}">
+        <div class="dash-row" data-idx="${DASH_AGENTS.indexOf(a)}" style="cursor:pointer" onclick="if(!event.target.closest('.toggle')&&!event.target.closest('.agent-connect-cta')){window.location.href='persona-config.html'}">
             <div class="dash-agent-cell">
                 <div class="dash-agent-avatar" style="background:${a.gradient}">${a.initial}</div>
                 <div class="dash-agent-info">
                     <span class="dash-agent-name">${a.name}</span>
-                    <span class="dash-agent-niche">${a.handle} · ${a.niche} · <span class="dash-status ${statusCls(a.status)}"><span class="dash-status-dot"></span>${a.status}</span></span>
+                    <span class="dash-agent-niche">${a.handle} · ${a.niche} · <span class="dash-status ${statusCls(a.status)}"><span class="dash-status-dot"></span>${a.status === 'pending' ? 'PENDING' : a.status}</span></span>
                 </div>
             </div>
             <span class="dash-cell">${a.followers}</span>
@@ -841,11 +842,11 @@ function renderAgentTable(filter) {
                 </div>
             </span>
             <span class="dash-cell">
-                <label class="toggle" onclick="toggleAgent(${DASH_AGENTS.indexOf(a)})">
+                ${a.status === 'pending' ? '<a href="accounts.html" class="agent-connect-cta">Connect →</a>' : `<label class="toggle" onclick="toggleAgent(${DASH_AGENTS.indexOf(a)})">
                     <input type="checkbox" ${a.active ? 'checked' : ''}>
                     <span class="toggle-track"></span>
                     <span class="toggle-thumb"></span>
-                </label>
+                </label>`}
             </span>
         </div>`).join('')}
     `;
@@ -933,6 +934,7 @@ function filterAgents(btn, filter) {
 }
 
 function toggleAgent(idx) {
+    if (DASH_AGENTS[idx].status === 'pending') return;
     DASH_AGENTS[idx].active = !DASH_AGENTS[idx].active;
     DASH_AGENTS[idx].status = DASH_AGENTS[idx].active ? 'active' : 'paused';
     // Update KPI count
@@ -940,6 +942,7 @@ function toggleAgent(idx) {
     const kpiEl = document.getElementById('kpi-total');
     if (kpiEl) kpiEl.textContent = activeCount;
     // Re-render after brief delay for toggle animation
+    AgentStore.save(DASH_AGENTS);
     setTimeout(() => renderAgentTable(currentFilter), 300);
 }
 
@@ -949,11 +952,21 @@ function renderDashboard() {
     renderPlatformBars();
     
     // Wire KPIs from DASH_AGENTS (both main-area and right-panel)
-    const activeCount = DASH_AGENTS.filter(a => a.active).length;
+    const activeCount = DASH_AGENTS.filter(a => a.active && a.status !== 'pending').length;
     const totalCount = DASH_AGENTS.length;
+    const connectedCount = DASH_AGENTS.filter(a => (a.connectionCount || 0) > 0).length;
     
     const kpiTotal = document.getElementById('kpi-total');
-    if (kpiTotal) kpiTotal.textContent = totalCount;
+    if (kpiTotal) {
+      kpiTotal.textContent = activeCount;
+      const sub = kpiTotal.parentElement.querySelector('.dash-kpi-subtitle');
+      if (!sub) {
+        const s = document.createElement('span');
+        s.className = 'dash-kpi-subtitle';
+        s.textContent = connectedCount + ' of ' + totalCount + ' connected';
+        kpiTotal.parentElement.appendChild(s);
+      } else { sub.textContent = connectedCount + ' of ' + totalCount + ' connected'; }
+    }
     
     const kpiTotalRp = document.getElementById('kpi-total-rp');
     if (kpiTotalRp) kpiTotalRp.textContent = activeCount;
@@ -994,6 +1007,38 @@ function renderDashboard() {
 }
 
 // ═══════════════════════════════════════
+// AGENT STORE — persist agent configs to localStorage
+// ═══════════════════════════════════════
+const AgentStore = {
+  KEY: 'personagen_agent_configs',
+  save(agents) {
+    const data = agents.map(a => ({ id: a.id, status: a.status, active: a.active, soul: a.soul, tools: a.tools, skills: a.skills, heartbeat: a.heartbeat }));
+    try { localStorage.setItem(this.KEY, JSON.stringify(data)); } catch(e) {}
+  },
+  load() {
+    try { return JSON.parse(localStorage.getItem(this.KEY)) || []; } catch(e) { return []; }
+  },
+  merge(agents) {
+    const stored = this.load();
+    if (!stored.length) return agents;
+    const map = Object.fromEntries(stored.map(s => [s.id, s]));
+    return agents.map(a => {
+      const s = map[a.id];
+      if (!s) return a;
+      return { ...a, status: s.status || a.status, active: s.active ?? a.active, soul: s.soul || a.soul, tools: s.tools || a.tools, skills: s.skills || a.skills, heartbeat: s.heartbeat || a.heartbeat };
+    });
+  },
+  updateField(id, field, value) {
+    const stored = this.load();
+    const idx = stored.findIndex(s => s.id === id);
+    if (idx >= 0) { stored[idx][field] = value; }
+    else { stored.push({ id, [field]: value }); }
+    try { localStorage.setItem(this.KEY, JSON.stringify(stored)); } catch(e) {}
+  }
+};
+window.AgentStore = AgentStore;
+
+// ═══════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════
 document.addEventListener('DOMContentLoaded', async () => {
@@ -1031,6 +1076,18 @@ document.addEventListener('DOMContentLoaded', async () => {
                 engagement: a.engagementRate || parseFloat(a.engagement) || 0,
                 active: a.status === 'active',
             }));
+            // Connection-gated status: agents with 0 connections → pending
+            const acctData = (() => { try { return JSON.parse(localStorage.getItem('personagen_ai_accounts')) || {}; } catch(e) { return {}; } })();
+            DASH_AGENTS = DASH_AGENTS.map(a => {
+              const handles = acctData[a.id] || {};
+              const connCount = Object.values(handles).filter(h => h && h.trim()).length;
+              if (connCount === 0) {
+                return { ...a, status: 'pending', active: false, connectionCount: 0 };
+              }
+              return { ...a, connectionCount: connCount };
+            });
+            // Merge persisted configs
+            DASH_AGENTS = AgentStore.merge(DASH_AGENTS);
         } else {
             INFLUENCERS = _INFLUENCER_FALLBACK;
             DASH_AGENTS = _INFLUENCER_FALLBACK.map(a => ({
@@ -1042,6 +1099,17 @@ document.addEventListener('DOMContentLoaded', async () => {
                 trend: '+0%',
                 color: '#a78bfa',
             }));
+            // Connection-gated status for fallback agents
+            const acctDataFb = (() => { try { return JSON.parse(localStorage.getItem('personagen_ai_accounts')) || {}; } catch(e) { return {}; } })();
+            DASH_AGENTS = DASH_AGENTS.map(a => {
+              const handles = acctDataFb[a.id] || {};
+              const connCount = Object.values(handles).filter(h => h && h.trim()).length;
+              if (connCount === 0) {
+                return { ...a, status: 'pending', active: false, connectionCount: 0 };
+              }
+              return { ...a, connectionCount: connCount };
+            });
+            DASH_AGENTS = AgentStore.merge(DASH_AGENTS);
         }
         console.log(`[PersonaGen] Data loaded — ${INFLUENCERS.length} agents, ${Object.keys(DATA).length} data files`);
     } catch (err) {
@@ -1056,6 +1124,17 @@ document.addEventListener('DOMContentLoaded', async () => {
             trend: '+0%',
             color: '#a78bfa',
         }));
+        // Connection-gated status for catch fallback
+        const acctDataCatch = (() => { try { return JSON.parse(localStorage.getItem('personagen_ai_accounts')) || {}; } catch(e) { return {}; } })();
+        DASH_AGENTS = DASH_AGENTS.map(a => {
+          const handles = acctDataCatch[a.id] || {};
+          const connCount = Object.values(handles).filter(h => h && h.trim()).length;
+          if (connCount === 0) {
+            return { ...a, status: 'pending', active: false, connectionCount: 0 };
+          }
+          return { ...a, connectionCount: connCount };
+        });
+        DASH_AGENTS = AgentStore.merge(DASH_AGENTS);
     }
 
     // Render all sections
@@ -1203,6 +1282,51 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Hash navigation router
     window.addEventListener('hashchange', handleHashRoute);
     handleHashRoute();
+
+    // ── Sidebar overlay injection ──
+    if (!document.getElementById('sidebar-overlay')) {
+      const ov = document.createElement('div');
+      ov.id = 'sidebar-overlay';
+      ov.className = 'sidebar-overlay';
+      ov.addEventListener('click', () => { toggleDashSidebar(); });
+      document.body.appendChild(ov);
+    }
+
+    // ── Inject Pending filter button if not present ──
+    const filterWrap = document.querySelector('.dash-filters');
+    if (filterWrap && !filterWrap.querySelector('[data-testid="filter-pending"]')) {
+      const topBtn = filterWrap.querySelector('[data-testid="filter-top"]');
+      if (topBtn) {
+        const pendingBtn = document.createElement('button');
+        pendingBtn.className = 'dash-filter';
+        pendingBtn.setAttribute('data-testid', 'filter-pending');
+        pendingBtn.textContent = 'Pending';
+        pendingBtn.onclick = function() { filterAgents(this, 'pending'); };
+        filterWrap.insertBefore(pendingBtn, topBtn);
+      }
+    }
+
+    // ── Init: collapse right panel + populate analytics on load (merged) ──
+    const _rpPanel = document.querySelector('.dash-right-panel');
+    const _rpWorkspace = document.querySelector('.dash-workspace');
+    if (_rpPanel) _rpPanel.classList.add('collapsed');
+    if (_rpWorkspace) _rpWorkspace.classList.add('right-collapsed');
+
+    // Populate right-panel KPIs from loaded data after a short delay
+    setTimeout(() => {
+      const _rpAgents = window.DATA && window.DATA.agents;
+      if (_rpAgents && Array.isArray(_rpAgents)) {
+        const _rpActiveCount = _rpAgents.filter(a => a.status === 'active' || !a.status).length;
+        const _rpEl = document.getElementById('kpi-total-rp');
+        if (_rpEl) _rpEl.textContent = _rpActiveCount || _rpAgents.length;
+      }
+      // Engagement from agent data
+      const _rpEngEl = document.getElementById('kpi-engagement');
+      if (_rpEngEl && _rpAgents && _rpAgents.length) {
+        const _rpAvgEng = _rpAgents.reduce((sum, a) => sum + (a.engagement_rate || a.engagementRate || 0), 0) / _rpAgents.length;
+        _rpEngEl.textContent = _rpAvgEng > 0 ? _rpAvgEng.toFixed(1) + '%' : '—';
+      }
+    }, 1500);
 });
 
 // ── Hash Routing for Client Portal ──
@@ -2977,29 +3101,7 @@ document.addEventListener('click', (e) => {
   }
 });
 
-// ── Init: collapse right panel + populate analytics on load ──
-document.addEventListener('DOMContentLoaded', () => {
-  const panel = document.querySelector('.dash-right-panel');
-  const workspace = document.querySelector('.dash-workspace');
-  if (panel) panel.classList.add('collapsed');
-  if (workspace) workspace.classList.add('right-collapsed');
-
-  // Populate right-panel KPIs from loaded data after a short delay
-  setTimeout(() => {
-    const agents = window.DATA && window.DATA.agents;
-    if (agents && Array.isArray(agents)) {
-      const activeCount = agents.filter(a => a.status === 'active' || !a.status).length;
-      const el = document.getElementById('kpi-total-rp');
-      if (el) el.textContent = activeCount || agents.length;
-    }
-    // Engagement from agent data
-    const engEl = document.getElementById('kpi-engagement');
-    if (engEl && agents && agents.length) {
-      const avgEng = agents.reduce((sum, a) => sum + (a.engagement_rate || a.engagementRate || 0), 0) / agents.length;
-      engEl.textContent = avgEng > 0 ? avgEng.toFixed(1) + '%' : '—';
-    }
-  }, 1500);
-});
+// (Right panel init merged into main DOMContentLoaded handler above)
 
 // ── Drag & Drop Event Handlers ──
 function allowDrop(ev) {

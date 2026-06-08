@@ -1,0 +1,93 @@
+version: '3.8'
+
+services:
+  # 1. SvelteKit Web Portal
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: personagen-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - NODE_ENV=production
+      # The app points to Kong internally for server-side SSR operations,
+      # but browser-side client operations will hit this same host on port 8000.
+      - PUBLIC_SUPABASE_URL=${PUBLIC_SUPABASE_URL:-http://localhost:8000}
+      - PUBLIC_SUPABASE_ANON_KEY=${PUBLIC_SUPABASE_ANON_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJhbm9uIiwKICAgICJpc3MiOiAic3VwYWJhc2UtZGVtbyIsCiAgICAiaWF0IjogMTY0MTc2OTIwMCwKICAgICJleHAiOiAxNzk5NTM1NjAwCn0.dc_X5iR_VP_qT0zsiyj_I_OZ2T9FtRU2BBNWN8Bu4GE}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJzZXJ2aWNlX3JvbGUiLAogICAgImlzcyI6ICJzdXBhYmFzZS1kZW1vIiwKICAgICpQCXRfMTY0MTc2OTIwMCwKICAgICJleHAiOiAxNzk5NTM1NjAwCn0.DaYlNEoUrrEn2Ig7tqibS-PHK5vgusbcbo7X36XVt4Q}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
+      - PUBLIC_N8N_URL=${PUBLIC_N8N_URL}
+      - PUBLIC_POSTIZ_URL=${PUBLIC_POSTIZ_URL}
+    depends_on:
+      - supabase-kong
+
+  # 2. Supabase Database (PostgreSQL with pre-baked Supabase extensions)
+  supabase-db:
+    image: supabase/postgres:15.1.1.78
+    container_name: supabase-db
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres_password_change_me}
+    volumes:
+      # Automatically run our database migration / seeding schema on first database container startup!
+      - ./supabase/migration.sql:/docker-entrypoint-initdb.d/00-schema.sql
+      - supabase-db-data:/var/lib/postgresql/data
+
+  # 3. GoTrue Auth Service (Supabase Auth API)
+  supabase-auth:
+    image: supabase/gotrue:v2.143.0
+    container_name: supabase-auth
+    restart: unless-stopped
+    depends_on:
+      - supabase-db
+    environment:
+      - GOTRUE_API_HOST=0.0.0.0
+      - GOTRUE_API_PORT=9999
+      - GOTRUE_DB_DRIVER=postgres
+      - GOTRUE_DB_DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-postgres_password_change_me}@supabase-db:5432/postgres?sslmode=disable
+      - GOTRUE_SITE_URL=${PUBLIC_APP_URL:-http://localhost:3000}
+      - GOTRUE_URI_ALLOW_LIST=${PUBLIC_APP_URL:-http://localhost:3000}/*
+      - GOTRUE_JWT_SECRET=${JWT_SECRET:-jwt_secret_change_me_must_be_long_and_secure}
+      - GOTRUE_JWT_EXP=3600
+      - GOTRUE_EXTERNAL_EMAIL_ENABLED=true
+      - GOTRUE_MAILER_AUTOCONFIRM=true
+
+  # 4. PostgREST API Service (Supabase REST Data API)
+  supabase-rest:
+    image: postgrest/postgrest:v11.2.0
+    container_name: supabase-rest
+    restart: unless-stopped
+    depends_on:
+      - supabase-db
+    environment:
+      - PGRST_DB_URI=postgresql://postgres:${POSTGRES_PASSWORD:-postgres_password_change_me}@supabase-db:5432/postgres?sslmode=disable
+      - PGRST_DB_SCHEMA=public
+      - PGRST_DB_ANON_ROLE=anon
+      - PGRST_JWT_SECRET=${JWT_SECRET:-jwt_secret_change_me_must_be_long_and_secure}
+
+  # 5. Kong Gateway (Supabase API Gateway routes /auth -> Auth, /rest -> PostgREST)
+  supabase-kong:
+    image: kong:2.8.1
+    container_name: supabase-kong
+    restart: unless-stopped
+    depends_on:
+      - supabase-auth
+      - supabase-rest
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./supabase/kong.yml:/usr/local/kong/declarative/kong.yml
+    environment:
+      - KONG_DATABASE=off
+      - KONG_DECLARATIVE_CONFIG=/usr/local/kong/declarative/kong.yml
+      - KONG_PROXY_LISTEN=0.0.0.0:8000, 0.0.0.0:8443 ssl http2
+      - KONG_LOG_LEVEL=error
+
+volumes:
+  supabase-db-data:

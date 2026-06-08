@@ -1916,9 +1916,7 @@ body.portal-active {
 @media (max-width: 900px) {
   .pm-kanban-board { grid-template-columns: repeat(2, 1fr); }
 }
-@media (max-width: 640px) {
-  .pm-kanban-board { grid-template-columns: 1fr; }
-}
+
 
 /* â”€â”€ Profile Dropdown â”€â”€ */
 .profile-dropdown-wrap { position: relative; }
@@ -1983,7 +1981,50 @@ body.portal-active {
 .profile-dropdown-item.danger:hover { background: rgba(244,63,94,0.08); }
 .profile-dropdown-item.danger span svg { stroke: var(--rose); }
 
-/* â”€â”€ Right Panel Analytics + Notification Styles â”€â”€ */
+/* ── Pending Agent Status ── */
+.dash-status.pending { color: #f59e0b; }
+.dash-status.pending::before { background: #f59e0b; animation: pulse-amber 2s infinite; }
+@keyframes pulse-amber { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+.agent-connect-cta {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 10px; border-radius: var(--radius-xs);
+  background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3);
+  color: #f59e0b; font-size: 0.72rem; font-weight: 600;
+  cursor: pointer; text-decoration: none; transition: all 0.2s;
+}
+.agent-connect-cta:hover { background: rgba(245, 158, 11, 0.2); }
+.dash-kpi-subtitle { font-size: 0.65rem; color: var(--text-dim); margin-top: 2px; }
+
+/* ── Hamburger + Analytics Toggle Buttons ── */
+.dash-hamburger {
+  display: none;
+}
+.dash-hamburger,
+.dash-analytics-toggle {
+  width: 36px;
+  height: 36px;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 1.1rem;
+  flex-shrink: 0;
+  border-radius: 8px;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+.dash-analytics-toggle {
+  display: flex;
+}
+.dash-hamburger:hover,
+.dash-analytics-toggle:hover {
+  background: rgba(255,255,255,0.08);
+  border-color: rgba(255,255,255,0.12);
+  color: var(--text);
+}
+
+/* Right Panel Analytics + Notification Styles */
 .analytics-mini-card {
   background: rgba(255,255,255,0.02);
   border: 1px solid rgba(255,255,255,0.05);
@@ -2037,30 +2078,6 @@ body.portal-active {
   margin-top: 2px;
 }
 
-/* â”€â”€ Hamburger + Analytics Toggle Buttons â”€â”€ */
-.dash-hamburger,
-.dash-analytics-toggle {
-  display: flex;
-  width: 36px;
-  height: 36px;
-  align-items: center;
-  justify-content: center;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.08);
-  cursor: pointer;
-  color: var(--text-muted);
-  font-size: 1.1rem;
-  flex-shrink: 0;
-  border-radius: 8px;
-  transition: background 0.2s, color 0.2s, border-color 0.2s;
-}
-.dash-hamburger:hover,
-.dash-analytics-toggle:hover {
-  background: rgba(255,255,255,0.08);
-  border-color: rgba(255,255,255,0.12);
-  color: var(--text);
-}
-
 /* â”€â”€ Desktop Sidebar Collapse â”€â”€ */
 .dash-sidebar {
   transition: width 0.3s ease, min-width 0.3s ease, padding 0.3s ease, opacity 0.25s ease;
@@ -2096,9 +2113,9 @@ body.portal-active {
   pointer-events: auto;
 }
 
-/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+/* â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• 
    MOBILE RESPONSIVE â€” Dashboard â‰¤768px
-   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
+   â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â•  */
 @media (max-width: 768px) {
   /* Layout: single column */
   .dashboard-layout {
@@ -2258,11 +2275,27 @@ body.portal-active {
     -webkit-overflow-scrolling: touch;
     flex-wrap: nowrap;
   }
+
+  /* Agent table row — hide extra columns */
+  .agent-row {
+    grid-template-columns: 2fr 1fr;
+    font-size: 0.75rem;
+  }
+  .agent-row > :nth-child(n+3) { display: none; }
+
+  /* Dash-row header — match hidden columns */
+  .dash-row.row-header > :nth-child(n+4) { display: none; }
+
+  /* Grid overrides for missing mobile rules */
+  .top-posts { grid-template-columns: repeat(2, 1fr); }
+  .name-check-grid { grid-template-columns: 1fr; }
+  .gen-result-stats { grid-template-columns: 1fr; }
+  .winning-grid { grid-template-columns: 1fr; }
 }
 
-/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+/* â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• 
    MOBILE â‰¤480px â€” Small phones, tight squeeze
-   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
+   â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â•  */
 @media (max-width: 480px) {
   /* â”€â”€ Landing Page â”€â”€ */
   .slide-hero { padding: 3rem 1rem 2rem; min-height: auto; }
@@ -2317,12 +2350,16 @@ body.portal-active {
   .ac-platform-row span[style*="position: absolute"] {
     display: none;
   }
+
+  /* Grid overrides for small phones */
+  .top-posts { grid-template-columns: 1fr; }
+  .plat-bar-row { grid-template-columns: 1fr; gap: 0.25rem; }
 }
 
 
-/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+/* â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• 
    MOBILE â‰¤768px â€” Brand Brief Wizard
-   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
+   â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â•  */
 @media (max-width: 768px) {
   /* â”€â”€ BB Progress dots â”€â”€ */
   .bb-progress { gap: 0; }
@@ -2372,9 +2409,9 @@ body.portal-active {
   .bb-brand-hero { flex-direction: column; text-align: center; gap: 0.75rem !important; }
 }
 
-/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+/* â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• 
    ACCOUNT CREATOR & PM â€” Desktop-first, mobile-safe
-   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
+   â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â•  */
 .ac-layout {
   display: grid;
   grid-template-columns: 240px 1fr;
@@ -2397,9 +2434,9 @@ body.portal-active {
   gap: 0.75rem;
 }
 
-/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+/* â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• 
    GLOBAL OVERFLOW CONTAINMENT â€” Prevent horizontal scroll
-   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
+   â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â•  */
 .slide,
 .slide-inner,
 .dash-center-panel,
@@ -2409,9 +2446,9 @@ body.portal-active {
   max-width: 100%;
 }
 
-/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+/* â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• 
    MOBILE â‰¤768px â€” Account Creator, PM, and overflow fixes
-   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
+   â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â• â•  */
 @media (max-width: 768px) {
   .ac-layout {
     grid-template-columns: 1fr;
@@ -2438,11 +2475,6 @@ body.portal-active {
   }
   .pm-stats-grid {
     grid-template-columns: repeat(2, 1fr);
-  }
-
-  /* Influencer grid â€” allow single column */
-  .influencer-grid {
-    grid-template-columns: 1fr;
   }
 
   /* Section inner padding */
@@ -2798,3 +2830,12 @@ body.portal-active {
   color: var(--gold); font-weight: 700; font-size: 0.82rem;
 }
 .inbox-cs-eta { font-size: 0.75rem; color: var(--text-muted); margin: 0; }
+
+/* ── Accessibility: Reduced Motion ── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

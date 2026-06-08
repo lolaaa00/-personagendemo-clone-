@@ -33,8 +33,9 @@ const AvatarWizard = (() => {
     { key: 'inspirational', label: 'Inspirational', desc: 'Motivational, uplifting, aspirational' },
   ];
 
-  const MARKETS = ['us', 'eu', 'latam', 'mena', 'apac'];
-  const MARKET_LABELS = { us: 'United States', eu: 'Europe', latam: 'Latin America', mena: 'MENA', apac: 'Asia-Pacific' };
+  const MARKETS = ['us', 'au', 'eu', 'latam', 'mena', 'apac'];
+  const MARKET_LABELS = { us: 'United States', au: 'Australia', eu: 'Europe', latam: 'Latin America', mena: 'MENA', apac: 'Asia-Pacific' };
+  const AU_CITIES = ['All of Australia','Sydney','Melbourne','Brisbane','Perth','Gold Coast','Adelaide','Canberra','Hobart','Darwin','Sunshine Coast','Newcastle','Wollongong'];
 
   function esc(s) {
     if (!s) return '';
@@ -134,6 +135,12 @@ const AvatarWizard = (() => {
             <select class="bb-select" id="aw-market" onchange="AvatarWizard.update('market', this.value)">
               ${MARKETS.map(m => `<option value="${m}" ${avatarData.market === m ? 'selected' : ''}>${MARKET_LABELS[m]}</option>`).join('')}
             </select>
+            ${avatarData.market === 'au' ? `
+            <label class="bb-label" style="margin-top:0.5rem;">City / Region</label>
+            <select class="bb-select" onchange="AvatarWizard.update('marketCity', this.value)">
+              ${AU_CITIES.map(c => `<option value="${c}"${avatarData.marketCity===c?' selected':''}>${c}</option>`).join('')}
+            </select>
+            ` : ''}
           </div>
         </div>
         <div class="bb-field">
@@ -352,8 +359,12 @@ const AvatarWizard = (() => {
 
   function update(key, value) {
     avatarData[key] = value;
+    // Default marketCity when switching to Australia
+    if (key === 'market' && value === 'au' && !avatarData.marketCity) {
+      avatarData.marketCity = 'All of Australia';
+    }
     // Re-render chips/cards that depend on selection state
-    if (key === 'gender' || key === 'personality') render();
+    if (key === 'gender' || key === 'personality' || key === 'market') render();
   }
 
   function updatePlatform(platform, value) {

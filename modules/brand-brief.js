@@ -445,7 +445,7 @@ const BrandBrief = (() => {
         <div class="bb-field">
           <label class="bb-label">Target Markets / Regions</label>
           <div class="bb-checkbox-grid">
-            ${['US', 'LATAM', 'Europe', 'MENA', 'Asia Pacific', 'Global'].map(m => `
+            ${['US', 'Australia', 'LATAM', 'Europe', 'MENA', 'Asia Pacific', 'Global'].map(m => `
               <label class="bb-check-item">
                 <input type="checkbox" ${(d.markets || []).includes(m) ? 'checked' : ''}
                        onchange="BrandBrief.toggleMarket('${m}', this.checked)">

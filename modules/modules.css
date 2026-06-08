@@ -839,13 +839,6 @@
     justify-content: center;
   }
 
-  /* Calendar month grid → 2 cols for readability */
-  .dcal-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-  .dcal-day-header {
-    display: none;
-  }
 
   /* Brand Brief mobile */
   .bb-crawl-row { flex-direction: column; }
@@ -1774,4 +1767,9 @@
   .ac-pipeline-step {
     min-width: 60px;
   }
+
+  /* Bulk Scheduler mobile */
+  .bs-slot-list { grid-template-columns: 1fr; }
+  .bs-confirm-grid { grid-template-columns: 1fr; }
+  .bs-step-content { padding: 1rem; }
 }

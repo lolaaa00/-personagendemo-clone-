@@ -431,13 +431,13 @@ To prevent sequence mistakes during layout changes, feature updates, or E2E test
 > **CRITICAL DEPLOYMENT ASSUMPTIONS & PITFALLS TO NEVER REPEAT:**
 > 1. **DO NOT assume Cloudflare Pages automatically deploys on git push:**
 >    * The Cloudflare Pages project is a **Direct Upload** project. Pushing to GitHub updates the repository history, but **IT DOES NOT trigger an automated build on Cloudflare** because the compiled `dist/` directory is in `.gitignore` and no cloud-side build script exists.
->    * **YOU MUST EXPLICITLY RUN THE DEPLOYMENT COMMAND** to upload the compiled static files: `npx wrangler pages deploy dist/honeyforx --project-name personagen-demo`.
+>    * **YOU MUST EXPLICITLY RUN THE DEPLOYMENT SCRIPT** to build and upload the SvelteKit app: `powershell -ExecutionPolicy Bypass -File .\deploy.ps1 -skipCommit` (or run `npm run build` inside `personagen-svelte` and deploy `.svelte-kit/cloudflare` via wrangler).
 > 2. **DO NOT assume the project name is client-specific or non-hyphenated:**
 >    * Never assume the project name is client-specific (e.g., `personagen-honeyforx`) or missing the hyphen (e.g., `personagendemo`).
 >    * The correct project name is **`personagen-demo`** (with a hyphen) and the correct domain is **`personagen-demo.pages.dev`**.
-> 3. **DO NOT run wrangler deployment in a non-interactive background agent shell without a token:**
->    * Wrangler CLI requires a `CLOUDFLARE_API_TOKEN` environment variable when executed in background, non-interactive processes.
->    * If you do not have an API token, you must execute the deploy command interactively on the system or instruct the user to run `npx wrangler pages deploy dist/honeyforx --project-name personagen-demo` in their terminal where their authenticated Wrangler session is active.
+> 3. **DO NOT run wrangler deployment in a non-interactive background agent shell without a token or account ID:**
+>    * Wrangler CLI requires a `CLOUDFLARE_API_TOKEN` environment variable (or a cached local Wrangler session) and `CLOUDFLARE_ACCOUNT_ID` when executing in background, non-interactive processes.
+>    * If you do not have an API token, you must execute the deploy command interactively on the system or instruct the user to run `npx wrangler pages deploy personagen-svelte/.svelte-kit/cloudflare --project-name personagen-demo` in their terminal where their authenticated Wrangler session is active.
 
 ---
 

@@ -265,6 +265,11 @@ const PersonaConfigEditor = (() => {
       console.warn('[PersonaConfig] Backend save failed, saved in memory:', e);
     }
 
+    // Persist locally via AgentStore if available
+    if (window.AgentStore) {
+      window.AgentStore.updateField(selectedPersona.id, activeTab, textarea.value);
+    }
+
     unsavedChanges = false;
     hideUnsaved();
     PersonaGenAPI.showToast(`${activeTab}.md saved for ${selectedPersona.name}`, 'success');

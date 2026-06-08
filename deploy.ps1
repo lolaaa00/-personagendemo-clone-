@@ -41,8 +41,20 @@ if (-not $skipCommit) {
     Write-Host "  [2/3] Skipped (skip-commit)" -ForegroundColor DarkGray
 }
 
-# ── Step 2: Deploy to Cloudflare Pages ──
-Write-Host "  [3/3] Deploying to Cloudflare Pages..." -ForegroundColor Yellow
+# ── Step 2: Build and Deploy SvelteKit App ──
+Write-Host "  [3/4] Building SvelteKit App..." -ForegroundColor Yellow
+
+Set-Location (Join-Path $projectDir "personagen-svelte")
+npx.cmd -y svelte-kit sync
+npm.cmd run build
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "  [3/4] ERROR SvelteKit Build failed" -ForegroundColor Red
+    Set-Location $projectDir
+    exit 1
+}
+Set-Location $projectDir
+
+Write-Host "  [4/4] Deploying SvelteKit to Cloudflare Pages..." -ForegroundColor Yellow
 
 # Check for CLOUDFLARE_API_TOKEN
 $token = $env:CLOUDFLARE_API_TOKEN
@@ -80,12 +92,17 @@ if (Test-Path $configPath) {
     }
 }
 
-$deployDir = Join-Path $projectDir "dist/honeyforx"
-npx -y wrangler pages deploy $deployDir --project-name $projectName --branch main --commit-dirty=true
+# Avoid prompt if multiple Cloudflare accounts exist on local session
+if ($projectName -eq "personagen-demo" -and -not $env:CLOUDFLARE_ACCOUNT_ID) {
+    $env:CLOUDFLARE_ACCOUNT_ID = "87725a00a89a8442984a809237911244"
+}
+
+$deployDir = Join-Path $projectDir "personagen-svelte\.svelte-kit\cloudflare"
+npx.cmd -y wrangler pages deploy $deployDir --project-name $projectName --branch main --commit-dirty=true
 if ($LASTEXITCODE -eq 0) {
-    Write-Host "  [3/3] OK Live at https://$domain/" -ForegroundColor Green
+    Write-Host "  [4/4] OK Live at https://$domain/" -ForegroundColor Green
 } else {
-    Write-Host "  [3/3] ERROR Deploy failed - check wrangler output above" -ForegroundColor Red
+    Write-Host "  [4/4] ERROR Deploy failed - check wrangler output above" -ForegroundColor Red
     exit 1
 }
 

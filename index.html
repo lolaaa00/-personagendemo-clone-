@@ -222,6 +222,7 @@
                                                     <button class="dash-filter active" data-testid="filter-all" onclick="filterAgents(this,'all')">All</button>
                                                     <button class="dash-filter" data-testid="filter-active" onclick="filterAgents(this,'active')">Active</button>
                                                     <button class="dash-filter" data-testid="filter-paused" onclick="filterAgents(this,'paused')">Paused</button>
+                                                    <button class="dash-filter" data-testid="filter-pending" onclick="filterAgents(this,'pending')">Pending</button>
                                                     <button class="dash-filter" data-testid="filter-top" onclick="filterAgents(this,'top')">Top Performers</button>
                                                 </div>
                                             </div>
@@ -1307,6 +1308,7 @@
     function toggleNav() {
       const btn = document.getElementById('pg-hamburger');
       const drawer = document.getElementById('pg-drawer');
+      if (!btn || !drawer) return;
       btn.classList.toggle('open');
       drawer.classList.toggle('open');
     }

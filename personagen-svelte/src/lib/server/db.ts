@@ -1,0 +1,359 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
+
+// ═══════════════════════════════════════
+// Row types — mirror the SQL migration
+// ═══════════════════════════════════════
+
+export interface ProfileRow {
+	id: string;
+	full_name: string | null;
+	company: string | null;
+	avatar_url: string | null;
+	created_at: string;
+	updated_at: string;
+}
+
+export interface AgentRow {
+	id: string;
+	user_id: string;
+	name: string;
+	handle: string;
+	niche: string;
+	status: 'active' | 'paused' | 'pending';
+	soul: string;
+	skills: string;
+	tools: string;
+	heartbeat: string;
+	market: string;
+	gradient: string;
+	initial: string;
+	engagement_rate: number;
+	followers: string;
+	connection_count: number;
+	created_at: string;
+	updated_at: string;
+}
+
+export interface AgentConfigRow {
+	id: string;
+	user_id: string;
+	agent_id: string;
+	soul: string;
+	skills: string;
+	tools: string;
+	timezone: string;
+	posts_per_day: number;
+	active_hours_start: number;
+	active_hours_end: number;
+	autonomy_level: 'advisor' | 'semi_autonomous' | 'fully_autonomous';
+	created_at: string;
+	updated_at: string;
+}
+
+export interface PostRow {
+	id: string;
+	user_id: string;
+	agent_id: string;
+	content: string;
+	platforms: string[];
+	status: 'draft' | 'scheduled' | 'published' | 'failed';
+	scheduled_date: string | null;
+	scheduled_time: string | null;
+	published_at: string | null;
+	created_at: string;
+	updated_at: string;
+}
+
+export interface ConnectionRow {
+	id: string;
+	user_id: string;
+	agent_id: string;
+	platform: 'tiktok' | 'instagram' | 'youtube' | 'x' | 'facebook' | 'threads';
+	handle: string | null;
+	verified: boolean;
+	connected_at: string;
+	last_sync: string | null;
+}
+
+export interface BlueprintRow {
+	id: string;
+	user_id: string;
+	channel_name: string | null;
+	channel_url: string | null;
+	platform: string | null;
+	score: number;
+	layers: Record<string, unknown>;
+	created_at: string;
+}
+
+export interface BrandBriefRow {
+	id: string;
+	user_id: string;
+	data: Record<string, unknown>;
+	version: number;
+	created_at: string;
+	updated_at: string;
+}
+
+export interface TicketRow {
+	id: string;
+	user_id: string;
+	title: string;
+	description: string;
+	status: 'backlog' | 'in_progress' | 'review' | 'done';
+	priority: 'low' | 'medium' | 'high' | 'urgent';
+	assignee_agent_id: string | null;
+	due_date: string | null;
+	position: number;
+	created_at: string;
+	updated_at: string;
+}
+
+export interface SubscriptionRow {
+	id: string;
+	user_id: string;
+	stripe_customer_id: string | null;
+	stripe_subscription_id: string | null;
+	plan: 'free' | 'starter' | 'pro' | 'enterprise';
+	status: 'active' | 'canceled' | 'past_due' | 'trialing';
+	current_period_end: string | null;
+	created_at: string;
+	updated_at: string;
+}
+
+// ═══════════════════════════════════════
+// Insert / Update partials
+// ═══════════════════════════════════════
+
+export type AgentInsert = Omit<AgentRow, 'id' | 'created_at' | 'updated_at'> & {
+	id?: string;
+};
+export type AgentUpdate = Partial<Omit<AgentRow, 'id' | 'user_id' | 'created_at' | 'updated_at'>>;
+
+export type AgentConfigInsert = Omit<AgentConfigRow, 'id' | 'created_at' | 'updated_at'> & {
+	id?: string;
+};
+export type AgentConfigUpdate = Partial<
+	Omit<AgentConfigRow, 'id' | 'user_id' | 'agent_id' | 'created_at' | 'updated_at'>
+>;
+
+export type PostInsert = Omit<PostRow, 'id' | 'created_at' | 'updated_at'> & { id?: string };
+export type PostUpdate = Partial<Omit<PostRow, 'id' | 'user_id' | 'created_at' | 'updated_at'>>;
+
+export type ConnectionInsert = Omit<ConnectionRow, 'id' | 'connected_at'> & { id?: string };
+
+export type BlueprintInsert = Omit<BlueprintRow, 'id' | 'created_at'> & { id?: string };
+
+export type BrandBriefInsert = Omit<BrandBriefRow, 'id' | 'created_at' | 'updated_at'> & {
+	id?: string;
+};
+
+export type TicketInsert = Omit<TicketRow, 'id' | 'created_at' | 'updated_at'> & { id?: string };
+export type TicketUpdate = Partial<Omit<TicketRow, 'id' | 'user_id' | 'created_at' | 'updated_at'>>;
+
+export type ProfileUpdate = Partial<Omit<ProfileRow, 'id' | 'created_at' | 'updated_at'>> & {
+	id: string;
+};
+
+export type SubscriptionUpdate = Partial<
+	Omit<SubscriptionRow, 'id' | 'created_at' | 'updated_at'>
+> & { user_id: string };
+
+// ═══════════════════════════════════════
+// Post list joined type (includes agent embed)
+// ═══════════════════════════════════════
+
+export type PostWithAgent = PostRow & {
+	agents: Pick<AgentRow, 'name' | 'handle' | 'gradient' | 'initial'>;
+};
+
+export type TicketWithAgent = TicketRow & {
+	agents: Pick<AgentRow, 'name' | 'handle' | 'gradient' | 'initial'>;
+};
+
+// ═══════════════════════════════════════
+// Filter types
+// ═══════════════════════════════════════
+
+export interface PostListFilters {
+	agent_id?: string;
+	month?: number;
+	year?: number;
+}
+
+// ═══════════════════════════════════════
+// Database service factory
+// ═══════════════════════════════════════
+
+export function createDbService(supabase: SupabaseClient) {
+	return {
+		// ── Agents ──────────────────────────────
+		agents: {
+			list: () =>
+				supabase
+					.from('agents')
+					.select('*')
+					.order('created_at', { ascending: false }),
+
+			get: (id: string) =>
+				supabase.from('agents').select('*').eq('id', id).single(),
+
+			create: (data: AgentInsert) =>
+				supabase.from('agents').insert(data).select().single(),
+
+			update: (id: string, data: AgentUpdate) =>
+				supabase.from('agents').update(data).eq('id', id).select().single(),
+
+			delete: (id: string) =>
+				supabase.from('agents').delete().eq('id', id),
+		},
+
+		// ── Agent Configs ───────────────────────
+		agentConfigs: {
+			get: (agentId: string) =>
+				supabase
+					.from('agent_configs')
+					.select('*')
+					.eq('agent_id', agentId)
+					.single(),
+
+			upsert: (data: AgentConfigInsert) =>
+				supabase
+					.from('agent_configs')
+					.upsert(data, { onConflict: 'user_id,agent_id' })
+					.select()
+					.single(),
+		},
+
+		// ── Posts ────────────────────────────────
+		posts: {
+			list: (filters?: PostListFilters) => {
+				let q = supabase
+					.from('posts')
+					.select('*, agents(name, handle, gradient, initial)');
+
+				if (filters?.agent_id) {
+					q = q.eq('agent_id', filters.agent_id);
+				}
+
+				if (filters?.month && filters?.year) {
+					const start = `${filters.year}-${String(filters.month).padStart(2, '0')}-01`;
+					const endMonth = filters.month === 12 ? 1 : filters.month + 1;
+					const endYear = filters.month === 12 ? filters.year + 1 : filters.year;
+					const end = `${endYear}-${String(endMonth).padStart(2, '0')}-01`;
+					q = q.gte('scheduled_date', start).lt('scheduled_date', end);
+				}
+
+				return q.order('scheduled_date').order('scheduled_time');
+			},
+
+			get: (id: string) =>
+				supabase.from('posts').select('*').eq('id', id).single(),
+
+			create: (data: PostInsert) =>
+				supabase.from('posts').insert(data).select().single(),
+
+			update: (id: string, data: PostUpdate) =>
+				supabase.from('posts').update(data).eq('id', id).select().single(),
+
+			delete: (id: string) =>
+				supabase.from('posts').delete().eq('id', id),
+		},
+
+		// ── Tickets ─────────────────────────────
+		tickets: {
+			list: () =>
+				supabase
+					.from('tickets')
+					.select('*, agents(name, handle, gradient, initial)')
+					.order('position'),
+
+			get: (id: string) =>
+				supabase.from('tickets').select('*').eq('id', id).single(),
+
+			create: (data: TicketInsert) =>
+				supabase.from('tickets').insert(data).select().single(),
+
+			update: (id: string, data: TicketUpdate) =>
+				supabase.from('tickets').update(data).eq('id', id).select().single(),
+
+			delete: (id: string) =>
+				supabase.from('tickets').delete().eq('id', id),
+		},
+
+		// ── Connections ─────────────────────────
+		connections: {
+			listForAgent: (agentId: string) =>
+				supabase.from('connections').select('*').eq('agent_id', agentId),
+
+			upsert: (data: ConnectionInsert) =>
+				supabase
+					.from('connections')
+					.upsert(data, { onConflict: 'agent_id,platform' })
+					.select()
+					.single(),
+
+			delete: (agentId: string, platform: string) =>
+				supabase
+					.from('connections')
+					.delete()
+					.eq('agent_id', agentId)
+					.eq('platform', platform),
+		},
+
+		// ── Blueprints ──────────────────────────
+		blueprints: {
+			list: () =>
+				supabase
+					.from('blueprints')
+					.select('*')
+					.order('created_at', { ascending: false }),
+
+			get: (id: string) =>
+				supabase.from('blueprints').select('*').eq('id', id).single(),
+
+			create: (data: BlueprintInsert) =>
+				supabase.from('blueprints').insert(data).select().single(),
+
+			delete: (id: string) =>
+				supabase.from('blueprints').delete().eq('id', id),
+		},
+
+		// ── Brand Briefs ────────────────────────
+		brandBriefs: {
+			get: () =>
+				supabase
+					.from('brand_briefs')
+					.select('*')
+					.order('updated_at', { ascending: false })
+					.limit(1)
+					.single(),
+
+			upsert: (data: BrandBriefInsert) =>
+				supabase.from('brand_briefs').upsert(data).select().single(),
+		},
+
+		// ── Profiles ────────────────────────────
+		profiles: {
+			get: () => supabase.from('profiles').select('*').single(),
+
+			update: (data: ProfileUpdate) =>
+				supabase.from('profiles').update(data).eq('id', data.id).select().single(),
+		},
+
+		// ── Subscriptions ───────────────────────
+		subscriptions: {
+			get: () => supabase.from('subscriptions').select('*').single(),
+
+			update: (data: SubscriptionUpdate) =>
+				supabase
+					.from('subscriptions')
+					.update(data)
+					.eq('user_id', data.user_id)
+					.select()
+					.single(),
+		},
+	};
+}
+
+export type DbService = ReturnType<typeof createDbService>;
