@@ -13,7 +13,6 @@ const PROTECTED_PREFIXES = [
 	'/scout',
 	'/generator',
 	'/pm',
-	'/accounts',
 	'/persona-config',
 	'/inbox',
 	'/intel-wizard',

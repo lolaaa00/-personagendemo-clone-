@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
   import type { Agent } from '$lib/types';
   import { Accounts } from '$lib/services/api';
   import { showToast } from '$lib/stores/ui.svelte';

@@ -59,7 +59,6 @@
       label: 'Manage',
       items: [
         { href: '/inbox', label: 'Inbox', icon: 'inbox' },
-        { href: '/accounts', label: 'AI Accounts', icon: 'link' },
         { href: '/pm', label: 'Projects', icon: 'folder' },
         { href: '/brand-brief', label: 'Brand Brief', icon: 'bolt' },
         { href: '/agreement', label: 'Agreement', icon: 'file' },

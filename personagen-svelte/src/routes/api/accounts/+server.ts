@@ -68,7 +68,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 			if (!isUuid(persona_id)) {
 				console.log('[Accounts API] Non-UUID agent ID (dev bypass): Generating mock redirect URL');
-				const redirectUrl = `${new URL(request.url).origin}/accounts?oauth_success=true&platform=${platform}&agentId=${persona_id}`;
+				const redirectUrl = `${new URL(request.url).origin}/persona-config?oauth_success=true&platform=${platform}&agentId=${persona_id}`;
 				return json({
 					success: true,
 					data: {
@@ -87,7 +87,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			let redirectUrl = null;
 			try {
 				const origin = new URL(request.url).origin;
-				const callbackUrl = `${origin}/accounts`;
+				const callbackUrl = `${origin}/persona-config`;
 				const composio = new ComposioClient();
 				redirectUrl = await composio.getOAuthLink(persona_id, platform, callbackUrl);
 			} catch (e) {
@@ -98,7 +98,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				const isDevBypass = !composioKey || composioKey.includes('placeholder') || composioKey.includes('change_me');
 				if (isDevBypass) {
 					console.log('[Accounts API] Dev bypass: Generating mock redirect URL');
-					redirectUrl = `${new URL(request.url).origin}/accounts?oauth_success=true&platform=${platform}&agentId=${persona_id}`;
+					redirectUrl = `${new URL(request.url).origin}/persona-config?oauth_success=true&platform=${platform}&agentId=${persona_id}`;
 				}
 			}
 

@@ -134,7 +134,7 @@
 					{#if agent.status === 'pending'}
 						<a
 							class="agent-connect-cta"
-							href="/accounts?agentId={agent.id}"
+							href="/persona-config/{agent.id}"
 							onclick={(e) => e.stopPropagation()}
 						>
 							Connect →
