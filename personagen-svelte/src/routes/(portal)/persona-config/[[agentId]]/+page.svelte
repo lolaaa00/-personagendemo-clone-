@@ -8,7 +8,7 @@
   const agents: any[] = data.agents ?? [];
 
   let selectedAgentId = $state<string | null>(null);
-  let activeTab = $state<'soul' | 'skills' | 'tools' | 'heartbeat' | 'autonomy'>('soul');
+  let activeTab = $state<'soul' | 'skills' | 'tools' | 'heartbeat' | 'autonomy' | 'rss'>('soul');
 
   $effect(() => {
     const paramAgentId = $page.params.agentId;
@@ -29,6 +29,9 @@
   let activeHoursStart = $state(8);
   let activeHoursEnd = $state(22);
   let autonomyLevel = $state<AutonomyLevel>('advisor');
+  let rssUrl = $state('');
+  let rssActive = $state(false);
+  let rssLastPolledAt = $state<string | null>(null);
   let saving = $state(false);
 
   const timezones = [
@@ -47,7 +50,8 @@
     { id: 'skills' as const, label: 'Skills', icon: '⚙' },
     { id: 'tools' as const, label: 'Tools', icon: '🔧' },
     { id: 'heartbeat' as const, label: 'Heartbeat', icon: '💓' },
-    { id: 'autonomy' as const, label: 'Autonomy', icon: '🤖' }
+    { id: 'autonomy' as const, label: 'Autonomy', icon: '🤖' },
+    { id: 'rss' as const, label: 'RSS Feed', icon: '📰' }
   ];
 
   const autonomyKeys: AutonomyLevel[] = ['advisor', 'semi_autonomous', 'fully_autonomous'];
@@ -72,6 +76,9 @@
       activeHoursStart = agent.active_hours_start ?? 8;
       activeHoursEnd = agent.active_hours_end ?? 22;
       autonomyLevel = agent.autonomy_level ?? 'advisor';
+      rssUrl = agent.rss_url ?? '';
+      rssActive = agent.rss_active ?? false;
+      rssLastPolledAt = agent.rss_last_polled_at ?? null;
       
       // Sync local storage cache
       localStorage.setItem(storageKey(agentId), JSON.stringify({
@@ -82,7 +89,10 @@
         postsPerDay,
         activeHoursStart,
         activeHoursEnd,
-        autonomyLevel
+        autonomyLevel,
+        rssUrl,
+        rssActive,
+        rssLastPolledAt
       }));
       return;
     }
@@ -100,6 +110,9 @@
         activeHoursStart = cfg.activeHoursStart ?? 8;
         activeHoursEnd = cfg.activeHoursEnd ?? 22;
         autonomyLevel = cfg.autonomyLevel ?? 'advisor';
+        rssUrl = cfg.rssUrl ?? agent.rss_url ?? '';
+        rssActive = cfg.rssActive ?? agent.rss_active ?? false;
+        rssLastPolledAt = cfg.rssLastPolledAt ?? agent.rss_last_polled_at ?? null;
         return;
       } catch { /* fall through */ }
     }
@@ -112,6 +125,9 @@
     activeHoursStart = 8;
     activeHoursEnd = 22;
     autonomyLevel = 'advisor';
+    rssUrl = agent.rss_url ?? '';
+    rssActive = agent.rss_active ?? false;
+    rssLastPolledAt = agent.rss_last_polled_at ?? null;
   }
 
   function selectAgent(id: string) {
@@ -133,7 +149,9 @@
       postsPerDay,
       activeHoursStart,
       activeHoursEnd,
-      autonomyLevel
+      autonomyLevel,
+      rssUrl,
+      rssActive
     };
 
     try {
@@ -158,6 +176,8 @@
         agent.active_hours_start = activeHoursStart;
         agent.active_hours_end = activeHoursEnd;
         agent.autonomy_level = autonomyLevel;
+        agent.rss_url = rssUrl;
+        agent.rss_active = rssActive;
       }
 
       showToast(`${activeTab.charAt(0).toUpperCase() + activeTab.slice(1)} config saved for ${selectedAgent?.name}`, 'success');
@@ -172,7 +192,10 @@
         postsPerDay: postsPerDay,
         activeHoursStart: activeHoursStart,
         activeHoursEnd: activeHoursEnd,
-        autonomyLevel: autonomyLevel
+        autonomyLevel: autonomyLevel,
+        rssUrl,
+        rssActive,
+        rssLastPolledAt
       }));
       showToast(`Saved locally (offline) for ${selectedAgent?.name}`, 'warning');
     } finally {
@@ -422,13 +445,94 @@
                 </button>
               {/each}
             </div>
+          </div>
+        {:else if activeTab === 'rss'}
+          <div class="tab-panel">
+            <div class="panel-header">
+              <h3>Content Sourcing & Mode Settings</h3>
+              <p class="panel-desc">Configure how <strong>{selectedAgent.name}</strong> creates posts: autonomously from their core persona, or auto-repurposed from an RSS Feed.</p>
+            </div>
+
+            <div class="mode-cards" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.25rem; margin-bottom: 2rem;">
+              <button
+                type="button"
+                class="autonomy-card"
+                class:selected={!rssActive}
+                onclick={() => rssActive = false}
+              >
+                <div class="autonomy-radio">
+                  <div class="radio-outer">
+                    {#if !rssActive}
+                      <div class="radio-inner"></div>
+                    {/if}
+                  </div>
+                </div>
+                <div class="autonomy-body">
+                  <span class="autonomy-icon">✨</span>
+                  <span class="autonomy-label">Dynamic Generation</span>
+                  <p class="autonomy-desc">Generate original content from niche concepts, current trends, and core persona instructions.</p>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                class="autonomy-card"
+                class:selected={rssActive}
+                onclick={() => rssActive = true}
+              >
+                <div class="autonomy-radio">
+                  <div class="radio-outer">
+                    {#if rssActive}
+                      <div class="radio-inner"></div>
+                    {/if}
+                  </div>
+                </div>
+                <div class="autonomy-body">
+                  <span class="autonomy-icon">📰</span>
+                  <span class="autonomy-label">RSS Feed Auto-Repurpose</span>
+                  <p class="autonomy-desc">Monitor an RSS feed to automatically spin, customize, and post feed updates in this agent's voice.</p>
+                </div>
+              </button>
+            </div>
+
+            {#if rssActive}
+              <div class="field-group" style="margin-bottom: 1.5rem; animation: fadeIn 0.3s ease;">
+                <label for="rss-url-input">RSS Feed URL</label>
+                <input
+                  id="rss-url-input"
+                  type="url"
+                  placeholder="https://example.com/feed.xml"
+                  bind:value={rssUrl}
+                  style="width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0.75rem 1rem; color: var(--text); font-family: var(--font-body); font-size: var(--text-sm); outline: none; transition: border-color 0.2s ease, box-shadow 0.2s ease;"
+                  onfocus={(e) => { e.currentTarget.style.borderColor = 'var(--accent-mid)'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(124, 106, 237, 0.08)'; }}
+                  onblur={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.boxShadow = 'none'; }}
+                />
+                <p style="font-size: var(--text-xs); color: var(--text-dim); margin-top: 0.5rem;">
+                  Enter a valid RSS or Atom XML feed URL. The scheduler will check this feed periodically and spin new items.
+                </p>
+              </div>
+
+              <div class="field-group" style="animation: fadeIn 0.3s ease;">
+                <label>Scheduler Status</label>
+                <div style="background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 1rem; display: flex; align-items: center; gap: 0.75rem;">
+                  <span style="font-size: 1.25rem;">⏰</span>
+                  <div>
+                    <span style="font-size: var(--text-xs); color: var(--text-dim); display: block; text-transform: uppercase; letter-spacing: 0.05em; font-weight: bold;">Last Polled</span>
+                    <span style="font-size: var(--text-sm); font-family: var(--font-mono); color: var(--text);">
+                      {rssLastPolledAt ? new Date(rssLastPolledAt).toLocaleString() : 'Never polled yet'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            {/if}
+
             <div class="panel-actions">
               <button class="save-btn" onclick={saveCurrentTab} disabled={saving}>
                 {#if saving}
                   <span class="spinner"></span> Saving…
                 {:else}
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-                  Save Autonomy
+                  Save RSS Config
                 {/if}
               </button>
             </div>
@@ -1001,5 +1105,10 @@
       padding: 0.75rem 1rem;
       font-size: var(--text-sm);
     }
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
   }
 </style>

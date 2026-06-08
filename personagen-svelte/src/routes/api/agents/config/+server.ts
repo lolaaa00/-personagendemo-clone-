@@ -19,7 +19,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			postsPerDay,
 			activeHoursStart,
 			activeHoursEnd,
-			autonomyLevel
+			autonomyLevel,
+			rssUrl,
+			rssActive
 		} = body;
 
 		if (!agentId) {
@@ -48,7 +50,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			posts_per_day: postsPerDay !== undefined ? postsPerDay : 3,
 			active_hours_start: activeHoursStart !== undefined ? activeHoursStart : 8,
 			active_hours_end: activeHoursEnd !== undefined ? activeHoursEnd : 22,
-			autonomy_level: autonomyLevel || 'advisor'
+			autonomy_level: autonomyLevel || 'advisor',
+			rss_url: rssUrl || '',
+			rss_active: rssActive !== undefined ? rssActive : false
 		});
 
 		if (configErr) throw configErr;

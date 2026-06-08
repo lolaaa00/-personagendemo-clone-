@@ -21,7 +21,10 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 					posts_per_day: config?.posts_per_day ?? 3,
 					active_hours_start: config?.active_hours_start ?? 8,
 					active_hours_end: config?.active_hours_end ?? 22,
-					autonomy_level: config?.autonomy_level ?? 'advisor'
+					autonomy_level: config?.autonomy_level ?? 'advisor',
+					rss_url: config?.rss_url ?? '',
+					rss_active: config?.rss_active ?? false,
+					rss_last_polled_at: config?.rss_last_polled_at ?? null
 				});
 			}
 			return { agents: agentsWithConfig };

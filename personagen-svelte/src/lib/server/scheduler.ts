@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { env } from '$env/dynamic/private';
 import { env as publicEnv } from '$env/dynamic/public';
 import { ComposioClient } from './social/composio';
+import { GoogleGenAI } from '@google/genai';
 
 let intervalId: NodeJS.Timeout | null = null;
 let isRunning = false;
@@ -13,6 +14,280 @@ function getServiceSupabase() {
 		throw new Error('[Scheduler] Supabase credentials not configured.');
 	}
 	return createClient(url, serviceKey);
+}
+
+interface RssItem {
+	title: string;
+	link: string;
+	guid: string;
+}
+
+/**
+ * Lightweight, Cloudflare compatible XML RSS parser
+ */
+export function parseRssFeed(xmlText: string): RssItem[] {
+	const items: RssItem[] = [];
+	
+	// Try standard RSS <item> tags
+	const itemRegex = /<item>([\s\S]*?)<\/item>/gi;
+	let match;
+	while ((match = itemRegex.exec(xmlText)) !== null) {
+		const content = match[1];
+		
+		const titleMatch = /<title>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([^<]*))<\/title>/i.exec(content);
+		const linkMatch = /<link>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([^<]*))<\/link>/i.exec(content);
+		const guidMatch = /<guid[^>]*>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([^<]*))<\/guid>/i.exec(content);
+		
+		const title = (titleMatch ? (titleMatch[1] || titleMatch[2]) : '').trim();
+		const link = (linkMatch ? (linkMatch[1] || linkMatch[2]) : '').trim();
+		const guid = (guidMatch ? (guidMatch[1] || guidMatch[2]) : link).trim();
+		
+		if (title && link) {
+			items.push({ title, link, guid });
+		}
+	}
+	
+	// Try Atom <entry> tags if no <item> found
+	if (items.length === 0) {
+		const entryRegex = /<entry>([\s\S]*?)<\/entry>/gi;
+		while ((match = entryRegex.exec(xmlText)) !== null) {
+			const content = match[1];
+			
+			const titleMatch = /<title(?:[^>]*?)>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([^<]*))<\/title>/i.exec(content);
+			
+			// For Atom: <link href="url"/> or <link>url</link>
+			let link = '';
+			const linkHrefMatch = /<link[^>]+href=["']([^"']+)["']/i.exec(content);
+			if (linkHrefMatch) {
+				link = linkHrefMatch[1];
+			} else {
+				const linkTextMatch = /<link>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([^<]*))<\/link>/i.exec(content);
+				if (linkTextMatch) {
+					link = (linkTextMatch[1] || linkTextMatch[2]).trim();
+				}
+			}
+			
+			const idMatch = /<id>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([^<]*))<\/id>/i.exec(content);
+			
+			const title = (titleMatch ? (titleMatch[1] || titleMatch[2]) : '').trim();
+			const guid = (idMatch ? (idMatch[1] || idMatch[2]) : link).trim();
+			
+			if (title && link) {
+				items.push({ title, link, guid });
+			}
+		}
+	}
+	
+	return items;
+}
+
+/**
+ * Call Gemini directly via @google/genai to spin RSS article content
+ */
+async function generateSpunPost(
+	agent: { name: string; handle: string; niche: string; soul: string; skills: string },
+	title: string,
+	link: string,
+	apiKey: string
+): Promise<string> {
+	const ai = new GoogleGenAI({ apiKey });
+	const prompt = `Repurpose the following news/feed article into a unique, high-engaging, and ready-to-publish social media post tailored exactly in my voice.
+
+Article Title: "${title}"
+Article Link: ${link}
+
+My Profile Name: ${agent.name}
+My Profile Handle: ${agent.handle}
+My Niche: ${agent.niche}
+My Personality & Soul: ${agent.soul}
+My Skills & Style: ${agent.skills}
+
+Instructions:
+1. Do not just summarize the article. Repurpose it to add my own perspective/voice.
+2. Adapt it to be engaging for social media.
+3. Keep it within typical social media post limits (less than 280 characters if posting to X, but write a clean, well-formatted piece with hooks, a concise body, and relevant hashtags).
+4. Output ONLY the post body content itself. Do not include introductory text like "Here is your post:", markdown code fences, or any other explanations.`;
+
+	const res = await ai.models.generateContent({
+		model: 'gemini-3.5-flash',
+		contents: [{ role: 'user', parts: [{ text: prompt }] }],
+		config: {
+			systemInstruction: `You are the AI avatar agent ${agent.name} (@${agent.handle}). Your personality is defined by: ${agent.soul}. Your writing style is defined by: ${agent.skills}. Repurpose/spin the input feed content into a single final post body in your own unique voice.`
+		}
+	});
+
+	let postContent = res.text || '';
+	postContent = postContent.trim();
+	if (postContent.startsWith('```') && postContent.endsWith('```')) {
+		postContent = postContent.replace(/^```[a-zA-Z]*\n/, '').replace(/\n```$/, '').trim();
+	}
+	return postContent;
+}
+
+/**
+ * Polls configured active RSS feeds, spins new articles natively with Gemini, and schedules them.
+ */
+async function pollRssFeeds() {
+	const supabase = getServiceSupabase();
+	const apiKey = env.GEMINI_API_KEY;
+	if (!apiKey) {
+		console.warn('[Scheduler RSS] GEMINI_API_KEY is not configured. Skipping RSS polling.');
+		return;
+	}
+
+	try {
+		// Fetch active agent configs with rss_active = true and rss_url not empty
+		const { data: configs, error: configErr } = await supabase
+			.from('agent_configs')
+			.select('*, agents(*)')
+			.eq('rss_active', true)
+			.neq('rss_url', '');
+
+		if (configErr) {
+			console.error('[Scheduler RSS] Error fetching active RSS configs:', configErr);
+			return;
+		}
+
+		if (!configs || configs.length === 0) {
+			return;
+		}
+
+		const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000);
+
+		for (const config of configs) {
+			const agent = config.agents;
+			if (!agent) continue;
+
+			// Check last polled timestamp (poll at most every 15 mins)
+			const lastPolled = config.rss_last_polled_at ? new Date(config.rss_last_polled_at) : null;
+			if (lastPolled && lastPolled > fifteenMinutesAgo) {
+				continue;
+			}
+
+			console.log(`[Scheduler RSS] Polling RSS feed for agent ${agent.name} (${agent.id}): ${config.rss_url}`);
+
+			try {
+				// Update polled timestamp first
+				await supabase
+					.from('agent_configs')
+					.update({ rss_last_polled_at: new Date().toISOString() })
+					.eq('id', config.id);
+
+				const response = await fetch(config.rss_url, {
+					headers: {
+						'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) PersonaGenRSS/1.0'
+					}
+				});
+
+				if (!response.ok) {
+					throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+				}
+
+				const xmlText = await response.text();
+				const items = parseRssFeed(xmlText);
+
+				console.log(`[Scheduler RSS] Found ${items.length} items in RSS feed.`);
+
+				let processedAny = false;
+				for (const item of items) {
+					// Check if item has already been processed
+					const { data: alreadyProcessed, error: procErr } = await supabase
+						.from('processed_rss_items')
+						.select('id')
+						.eq('agent_id', agent.id)
+						.eq('item_guid', item.guid)
+						.maybeSingle();
+
+					if (procErr) {
+						console.error(`[Scheduler RSS] Error checking processed items:`, procErr);
+						continue;
+					}
+
+					if (alreadyProcessed) {
+						continue;
+					}
+
+					console.log(`[Scheduler RSS] Repurposing new RSS item: "${item.title}"`);
+
+					// Spin it via Gemini!
+					const spunContent = await generateSpunPost(
+						{
+							name: agent.name,
+							handle: agent.handle,
+							niche: agent.niche,
+							soul: config.soul || agent.soul || '',
+							skills: config.skills || agent.skills || ''
+						},
+						item.title,
+						item.link,
+						apiKey
+					);
+
+					if (!spunContent) {
+						console.warn(`[Scheduler RSS] Generated content was empty for "${item.title}".`);
+						continue;
+					}
+
+					// Fetch connected platforms
+					const { data: connections } = await supabase
+						.from('connections')
+						.select('platform')
+						.eq('agent_id', agent.id);
+
+					const platforms = (connections && connections.length > 0)
+						? connections.map(c => c.platform)
+						: ['instagram'];
+
+					const now = new Date();
+					const scheduledDate = now.toISOString().split('T')[0];
+					const scheduledTime = now.toTimeString().split(' ')[0];
+
+					const { error: insertErr } = await supabase
+						.from('posts')
+						.insert({
+							user_id: config.user_id,
+							agent_id: agent.id,
+							content: spunContent,
+							platforms,
+							status: 'scheduled',
+							scheduled_date: scheduledDate,
+							scheduled_time: scheduledTime
+						});
+
+					if (insertErr) {
+						console.error(`[Scheduler RSS] Error inserting post:`, insertErr);
+						continue;
+					}
+
+					// Mark as processed
+					const { error: markErr } = await supabase
+						.from('processed_rss_items')
+						.insert({
+							agent_id: agent.id,
+							item_guid: item.guid
+						});
+
+					if (markErr) {
+						console.error(`[Scheduler RSS] Error marking item as processed:`, markErr);
+					}
+
+					console.log(`[Scheduler RSS] Successfully scheduled post for RSS item "${item.title}"`);
+					processedAny = true;
+					break; // Only process one item per poll to prevent flood
+				}
+
+				if (!processedAny) {
+					console.log(`[Scheduler RSS] No new items to process for agent ${agent.name}.`);
+				}
+
+			} catch (feedErr) {
+				console.error(`[Scheduler RSS] Failed to process feed for agent ${agent.id}:`, feedErr);
+			}
+		}
+
+	} catch (err) {
+		console.error('[Scheduler RSS] Critical RSS loop error:', err);
+	}
 }
 
 /**
@@ -49,20 +324,17 @@ async function pollScheduledPosts() {
 			for (const post of posts) {
 				console.log(`[Scheduler] Processing post ${post.id} for agent ${post.agent_id}`);
 
-				// The platforms column is a text array in Supabase (e.g. ['instagram', 'tiktok'])
 				const targetPlatforms: string[] = post.platforms || [];
 				let publishCount = 0;
 				let failureCount = 0;
 				const errors: string[] = [];
 
 				for (const platform of targetPlatforms) {
-					// We only support managed platforms
 					const normalizedPlat = platform.toLowerCase();
 					if (!['instagram', 'tiktok', 'youtube', 'facebook'].includes(normalizedPlat)) {
 						continue;
 					}
 
-					// Verify if agent has this connection connected in Supabase connections table
 					const { data: conn } = await supabase
 						.from('connections')
 						.select('*')
@@ -75,7 +347,6 @@ async function pollScheduledPosts() {
 						continue;
 					}
 
-					// Trigger publication via Composio
 					const publishRes = await composio.executePost(post.agent_id, normalizedPlat, post.content);
 					if (publishRes.success) {
 						console.log(`[Scheduler] Post ${post.id} successfully published to ${platform}.`);
@@ -87,16 +358,12 @@ async function pollScheduledPosts() {
 					}
 				}
 
-				// Update post status based on outcomes
 				let finalStatus = 'published';
 				let publishedAt: string | null = new Date().toISOString();
 
 				if (publishCount === 0 && failureCount > 0) {
 					finalStatus = 'failed';
 					publishedAt = null;
-				} else if (publishCount > 0 && failureCount > 0) {
-					// Partial success
-					finalStatus = 'published'; // Count as published but log errors
 				}
 
 				const { error: updateError } = await supabase
@@ -112,6 +379,9 @@ async function pollScheduledPosts() {
 				}
 			}
 		}
+
+		// Run RSS polling
+		await pollRssFeeds();
 	} catch (err) {
 		console.error('[Scheduler] Critical loop error:', err);
 	} finally {
@@ -139,7 +409,6 @@ export function startScheduler() {
 
 	console.log('[Scheduler] Starting SvelteKit social posting scheduler worker (60s tick)...');
 	
-	// Run immediately once on startup, then trigger interval
 	pollScheduledPosts();
 	intervalId = setInterval(pollScheduledPosts, 60 * 1000);
 }

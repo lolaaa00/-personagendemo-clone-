@@ -46,6 +46,9 @@ export interface AgentConfigRow {
 	active_hours_start: number;
 	active_hours_end: number;
 	autonomy_level: 'advisor' | 'semi_autonomous' | 'fully_autonomous';
+	rss_url: string;
+	rss_active: boolean;
+	rss_last_polled_at: string | null;
 	created_at: string;
 	updated_at: string;
 }
@@ -119,6 +122,13 @@ export interface SubscriptionRow {
 	current_period_end: string | null;
 	created_at: string;
 	updated_at: string;
+}
+
+export interface ProcessedRssItemRow {
+	id: string;
+	agent_id: string;
+	item_guid: string;
+	processed_at: string;
 }
 
 // ═══════════════════════════════════════
@@ -352,6 +362,24 @@ export function createDbService(supabase: SupabaseClient) {
 					.eq('user_id', data.user_id)
 					.select()
 					.single(),
+		},
+
+		// ── Processed RSS Items ─────────────────
+		processedRssItems: {
+			hasBeenProcessed: (agentId: string, itemGuid: string) =>
+				supabase
+					.from('processed_rss_items')
+					.select('id')
+					.eq('agent_id', agentId)
+					.eq('item_guid', itemGuid)
+					.maybeSingle(),
+
+			markAsProcessed: (agentId: string, itemGuid: string) =>
+				supabase
+					.from('processed_rss_items')
+					.insert({ agent_id: agentId, item_guid: itemGuid })
+					.select()
+					.single()
 		},
 	};
 }
