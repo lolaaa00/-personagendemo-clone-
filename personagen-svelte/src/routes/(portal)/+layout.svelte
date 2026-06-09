@@ -34,13 +34,34 @@
     {
       label: 'Overview',
       items: [
-        { href: '/dashboard', label: 'Dashboard', icon: 'grid' }
+        { href: '/dashboard', label: 'Dashboard', icon: 'grid' },
+        { href: '/scout', label: 'Social Scout', icon: 'radar' },
+        { href: '/trends', label: 'Trends', icon: 'trending' }
       ]
     },
     {
-      label: 'Configuration',
+      label: 'Create',
       items: [
+        { href: '/generator', label: 'Generate Agent', icon: 'sparkles' },
         { href: '/persona-config', label: 'Persona Config', icon: 'users' },
+        { href: '/calendar', label: 'Content Calendar', icon: 'calendar' }
+      ]
+    },
+    {
+      label: 'Intelligence',
+      items: [
+        { href: '/intel-wizard', label: 'Intel Wizard', icon: 'search' },
+        { href: '/channel-decoder', label: 'Channel Decoder', icon: 'decode' },
+        { href: '/content-forge', label: 'Content Forge', icon: 'forge' }
+      ]
+    },
+    {
+      label: 'Manage',
+      items: [
+        { href: '/inbox', label: 'Inbox', icon: 'inbox' },
+        { href: '/pm', label: 'Projects', icon: 'folder' },
+        { href: '/brand-brief', label: 'Brand Brief', icon: 'bolt' },
+        { href: '/agreement', label: 'Agreement', icon: 'file' },
         { href: '/settings', label: 'Settings', icon: 'settings' }
       ]
     }

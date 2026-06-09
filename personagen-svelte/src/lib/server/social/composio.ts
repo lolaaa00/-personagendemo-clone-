@@ -74,6 +74,35 @@ export class ComposioClient {
 	}
 
 	/**
+	 * Lists all connected accounts for an agent (personaId) from Composio
+	 */
+	async listConnections(personaId: string): Promise<any[]> {
+		if (!this.apiKey) {
+			console.warn('[Composio Client] listConnections called but COMPOSIO_API_KEY is not configured.');
+			return [];
+		}
+
+		try {
+			const response = await fetch(`${this.baseUrl}/connected_accounts?user_id=${personaId}`, {
+				method: 'GET',
+				headers: this.getHeaders()
+			});
+
+			if (!response.ok) {
+				const errorText = await response.text();
+				console.warn(`[Composio Client] Failed to list connections for agent ${personaId}: status ${response.status}: ${errorText}`);
+				return [];
+			}
+
+			const data = (await response.json()) as any;
+			return data.items || [];
+		} catch (err) {
+			console.error(`[Composio Client] Error listing connections for agent ${personaId}:`, err);
+			return [];
+		}
+	}
+
+	/**
 	 * Executes a posting action on behalf of an agent (personaId) for the given platform
 	 */
 	async executePost(

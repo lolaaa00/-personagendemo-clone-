@@ -44,9 +44,64 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			const platforms = ['tiktok', 'instagram', 'youtube', 'facebook'];
 			const statusData: Record<string, any> = {};
 
+			const composioKey = env.COMPOSIO_API_KEY || '';
+			const isDevBypass = !composioKey || composioKey.includes('placeholder') || composioKey.includes('change_me');
+
+			let activeComposioPlatforms: string[] = [];
+
+			if (!isDevBypass) {
+				try {
+					const composio = new ComposioClient();
+					const activeAccounts = await composio.listConnections(persona_id);
+					activeComposioPlatforms = activeAccounts
+						.filter((acc: any) => acc.status?.toUpperCase() === 'ACTIVE')
+						.map((acc: any) => (acc.appId || acc.appName || '').toLowerCase())
+						.filter(Boolean);
+					
+					console.log(`[Accounts API] Live active Composio platforms for agent ${persona_id}:`, activeComposioPlatforms);
+				} catch (e) {
+					console.error('[Accounts API] Failed to fetch active connections from Composio:', e);
+				}
+			}
+
+			// 1. Self-healing: If a platform is active in Composio but missing from our DB, auto-create it
+			if (!isDevBypass && conns) {
+				for (const activePlat of activeComposioPlatforms) {
+					if (platforms.includes(activePlat) && !conns.some((c) => c.platform === activePlat)) {
+						try {
+							const { data: agent } = await db.agents.get(persona_id);
+							if (agent) {
+								const rawHandle = agent.handle || `@${agent.name.toLowerCase().replace(/\s+/g, '')}`;
+								const handle = `${rawHandle}.${activePlat}`;
+								console.log(`[Accounts API] Active Composio connection found for "${activePlat}" but missing in DB. Auto-healing database row.`);
+								await db.connections.upsert({
+									user_id: agent.user_id,
+									agent_id: persona_id,
+									platform: activePlat as any,
+									handle,
+									verified: true,
+									last_sync: new Date().toISOString()
+								});
+								
+								// Re-sync local variable
+								const { data: updatedConns } = await db.connections.listForAgent(persona_id);
+								if (updatedConns) {
+									conns.splice(0, conns.length, ...updatedConns);
+								}
+							}
+						} catch (err) {
+							console.error(`[Accounts API] Failed to auto-heal DB connection for platform ${activePlat}:`, err);
+						}
+					}
+				}
+			}
+
+			// 2. Build status data & Clean up: If a platform exists in DB but is inactive/missing in Composio, delete it
 			for (const p of platforms) {
 				const conn = conns?.find((c) => c.platform === p);
-				if (conn) {
+				const isVerified = isDevBypass || activeComposioPlatforms.includes(p);
+
+				if (conn && isVerified) {
 					statusData[p] = {
 						connected: true,
 						handle: conn.handle || '@connected',
@@ -55,6 +110,26 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 					};
 				} else {
 					statusData[p] = { connected: false };
+
+					// If database has connection row but Composio says it is inactive/missing, delete the row
+					if (conn && !isDevBypass) {
+						console.log(`[Accounts API] Connection for platform "${p}" on agent ${persona_id} is inactive or missing in Composio. Cleaning up database row.`);
+						await db.connections.delete(persona_id, p);
+					}
+				}
+			}
+
+			// 3. Keep agent connection count up to date in DB
+			if (!isDevBypass && conns) {
+				try {
+					const { data: finalConns } = await db.connections.listForAgent(persona_id);
+					const count = finalConns?.length || 0;
+					await db.agents.update(persona_id, {
+						connection_count: count,
+						status: count === 0 ? 'paused' : 'active'
+					});
+				} catch (err) {
+					console.error('[Accounts API] Failed to update agent connection count:', err);
 				}
 			}
 

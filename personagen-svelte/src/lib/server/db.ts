@@ -140,8 +140,14 @@ export type AgentInsert = Omit<AgentRow, 'id' | 'created_at' | 'updated_at'> & {
 };
 export type AgentUpdate = Partial<Omit<AgentRow, 'id' | 'user_id' | 'created_at' | 'updated_at'>>;
 
-export type AgentConfigInsert = Omit<AgentConfigRow, 'id' | 'created_at' | 'updated_at'> & {
+export type AgentConfigInsert = Omit<
+	AgentConfigRow,
+	'id' | 'created_at' | 'updated_at' | 'rss_url' | 'rss_active' | 'rss_last_polled_at'
+> & {
 	id?: string;
+	rss_url?: string;
+	rss_active?: boolean;
+	rss_last_polled_at?: string | null;
 };
 export type AgentConfigUpdate = Partial<
 	Omit<AgentConfigRow, 'id' | 'user_id' | 'agent_id' | 'created_at' | 'updated_at'>
