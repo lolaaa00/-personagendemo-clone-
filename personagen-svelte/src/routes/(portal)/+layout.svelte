@@ -212,7 +212,7 @@
           {#if userDropdownOpen}
             <div class="user-dropdown-menu glass-card" role="menu">
               <div class="user-dropdown-info">
-                <span class="user-email">{data.user?.email ?? 'client@personagen.ai'}</span>
+                <span class="user-email">{data.user?.email ?? 'monarchstackteam@gmail.com'}</span>
               </div>
               <hr class="dropdown-divider" />
               <a href="/settings" class="dropdown-item" role="menuitem" onclick={closeUserDropdown}>

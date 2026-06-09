@@ -75,26 +75,9 @@ if (-not $token) {
     Write-Host "  [Info] CLOUDFLARE_API_TOKEN not set. Attempting deployment using local Wrangler authentication session..." -ForegroundColor Gray
 }
 
-$configPath = Join-Path $projectDir "clients/honeyforx.config.json"
-$domain = "personagen-demo.pages.dev"
+$domain = "honeyx.monarchstack.com"
 $projectName = "personagen-demo"
-
-if (Test-Path $configPath) {
-    try {
-        $config = Get-Content $configPath -Raw | ConvertFrom-Json
-        if ($config.client.domain) {
-            $domain = $config.client.domain
-            if ($domain.EndsWith(".pages.dev")) {
-                $projectName = $domain.Replace(".pages.dev", "")
-            } else {
-                $projectName = "personagen-demo"
-            }
-            Write-Host "  [Info] Resolved deployment target from config: $domain ($projectName)" -ForegroundColor Gray
-        }
-    } catch {
-        Write-Host "  [Warning] Failed to parse config JSON. Falling back to default project name." -ForegroundColor Yellow
-    }
-}
+Write-Host "  [Info] Resolved deployment target: $domain ($projectName)" -ForegroundColor Gray
 
 # Avoid prompt if multiple Cloudflare accounts exist on local session
 if ($projectName -eq "personagen-demo" -and -not $env:CLOUDFLARE_ACCOUNT_ID) {
