@@ -84,7 +84,11 @@ if (Test-Path $configPath) {
         $config = Get-Content $configPath -Raw | ConvertFrom-Json
         if ($config.client.domain) {
             $domain = $config.client.domain
-            $projectName = $domain.Replace(".pages.dev", "")
+            if ($domain.EndsWith(".pages.dev")) {
+                $projectName = $domain.Replace(".pages.dev", "")
+            } else {
+                $projectName = "personagen-demo"
+            }
             Write-Host "  [Info] Resolved deployment target from config: $domain ($projectName)" -ForegroundColor Gray
         }
     } catch {

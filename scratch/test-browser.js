@@ -39,7 +39,7 @@ async function runTest() {
   });
 
   try {
-    const url = process.argv[2] || 'https://personagen-demo.pages.dev/';
+    const url = process.argv[2] || 'https://honeyx.monarchstack.com/';
     log(`[Test] Navigating to ${url}...`);
     await page.goto(url, { waitUntil: 'networkidle2', timeout: 45000 });
 

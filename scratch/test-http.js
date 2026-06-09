@@ -2,7 +2,6 @@
 
 async function test() {
   const urls = [
-    'https://personagen-demo.pages.dev/login',
     'https://honeyx.monarchstack.com/login',
     'https://l2g-supabase.zi1cc5.easypanel.host/auth/v1/health'
   ];

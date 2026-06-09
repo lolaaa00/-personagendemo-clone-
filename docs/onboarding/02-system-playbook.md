@@ -422,7 +422,7 @@ To prevent sequence mistakes during layout changes, feature updates, or E2E test
 > Bypassing stages or out-of-order execution (e.g., trying to run Social Scout before finding competitor channels, or decoding before selecting content) will cause state exceptions. E2E validation scripts (`scratch/verify-intel-wizard.js`) assert this exact sequence.
 
 ### 10.2 Client Deployment Target & Live Environment (DO NOT ASSUME)
-- **Live Environment URL:** `https://personagen-demo.pages.dev/` (and mapped to custom domain `https://honeyx.monarchstack.com/`)
+- **Live Environment URL:** `https://honeyx.monarchstack.com/` (Cloudflare Pages deployment target: `personagen-demo`)
 - **Cloudflare Pages Project Name:** `personagen-demo`
 - **Auto-deployment Config:** Managed via `clients/honeyforx.config.json` (specifically the `client.domain` attribute).
 - **One-Command Deployment Script:** `deploy.ps1`.
@@ -434,7 +434,7 @@ To prevent sequence mistakes during layout changes, feature updates, or E2E test
 >    * **YOU MUST EXPLICITLY RUN THE DEPLOYMENT SCRIPT** to build and upload the SvelteKit app: `powershell -ExecutionPolicy Bypass -File .\deploy.ps1 -skipCommit` (or run `npm run build` inside `personagen-svelte` and deploy `.svelte-kit/cloudflare` via wrangler).
 > 2. **DO NOT assume the project name is client-specific or non-hyphenated:**
 >    * Never assume the project name is client-specific (e.g., `personagen-honeyforx`) or missing the hyphen (e.g., `personagendemo`).
->    * The correct project name is **`personagen-demo`** (with a hyphen) and the correct domain is **`personagen-demo.pages.dev`**.
+>    * The correct project name is **`personagen-demo`** (with a hyphen) and the mapped domain is **`honeyx.monarchstack.com`**.
 > 3. **DO NOT run wrangler deployment in a non-interactive background agent shell without a token or account ID:**
 >    * Wrangler CLI requires a `CLOUDFLARE_API_TOKEN` environment variable (or a cached local Wrangler session) and `CLOUDFLARE_ACCOUNT_ID` when executing in background, non-interactive processes.
 >    * If you do not have an API token, you must execute the deploy command interactively on the system or instruct the user to run `npx wrangler pages deploy personagen-svelte/.svelte-kit/cloudflare --project-name personagen-demo` in their terminal where their authenticated Wrangler session is active.
