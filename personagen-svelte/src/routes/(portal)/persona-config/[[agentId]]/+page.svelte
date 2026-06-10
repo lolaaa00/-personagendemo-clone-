@@ -9,7 +9,15 @@
   const agents: any[] = data.agents ?? [];
 
   let selectedAgentId = $state<string | null>(null);
-  let activeTab = $state<'accounts' | 'soul' | 'skills' | 'tools' | 'heartbeat' | 'autonomy' | 'rss'>('accounts');
+  let activeTab = $state<'accounts' | 'soul' | 'skills' | 'tools' | 'heartbeat' | 'autonomy' | 'rss' | 'settings'>('accounts');
+
+  // Agent identity settings state
+  let editName = $state('');
+  let editNiche = $state('');
+  let editInitial = $state('');
+  let editFollowers = $state('0');
+  let editEngagementRate = $state(5.2);
+  let editGradient = $state('');
 
   $effect(() => {
     const paramAgentId = $page.params.agentId || $page.url.searchParams.get('agentId');
@@ -53,7 +61,8 @@
     { id: 'tools' as const, label: 'Tools', icon: '🔧' },
     { id: 'heartbeat' as const, label: 'Heartbeat', icon: '💓' },
     { id: 'autonomy' as const, label: 'Autonomy', icon: '🤖' },
-    { id: 'rss' as const, label: 'RSS Feed', icon: '📰' }
+    { id: 'rss' as const, label: 'RSS Feed', icon: '📰' },
+    { id: 'settings' as const, label: 'Agent Settings', icon: '⚙️' }
   ];
 
   const autonomyKeys: AutonomyLevel[] = ['advisor', 'semi_autonomous', 'fully_autonomous'];
@@ -81,6 +90,14 @@
       rssUrl = agent.rss_url ?? '';
       rssActive = agent.rss_active ?? false;
       rssLastPolledAt = agent.rss_last_polled_at ?? null;
+
+      // Identity settings fields
+      editName = agent.name ?? '';
+      editNiche = agent.niche ?? '';
+      editInitial = agent.initial ?? '';
+      editFollowers = String(agent.followers ?? '0');
+      editEngagementRate = parseFloat(agent.engagement_rate as any) || parseFloat(agent.engagementRate as any) || 5.2;
+      editGradient = agent.gradient ?? 'linear-gradient(135deg, #7C3AED, #4F46E5)';
       
       // Sync local storage cache
       localStorage.setItem(storageKey(agentId), JSON.stringify({
@@ -115,6 +132,13 @@
         rssUrl = cfg.rssUrl ?? agent.rss_url ?? '';
         rssActive = cfg.rssActive ?? agent.rss_active ?? false;
         rssLastPolledAt = cfg.rssLastPolledAt ?? agent.rss_last_polled_at ?? null;
+
+        editName = agent.name ?? '';
+        editNiche = agent.niche ?? '';
+        editInitial = agent.initial ?? '';
+        editFollowers = String(agent.followers ?? '0');
+        editEngagementRate = parseFloat(agent.engagement_rate as any) || parseFloat(agent.engagementRate as any) || 5.2;
+        editGradient = agent.gradient ?? 'linear-gradient(135deg, #7C3AED, #4F46E5)';
         return;
       } catch { /* fall through */ }
     }
@@ -130,6 +154,13 @@
     rssUrl = agent.rss_url ?? '';
     rssActive = agent.rss_active ?? false;
     rssLastPolledAt = agent.rss_last_polled_at ?? null;
+
+    editName = agent.name ?? '';
+    editNiche = agent.niche ?? '';
+    editInitial = agent.initial ?? '';
+    editFollowers = String(agent.followers ?? '0');
+    editEngagementRate = parseFloat(agent.engagement_rate as any) || parseFloat(agent.engagementRate as any) || 5.2;
+    editGradient = agent.gradient ?? 'linear-gradient(135deg, #7C3AED, #4F46E5)';
   }
 
   function selectAgent(id: string) {
@@ -255,7 +286,14 @@
       activeHoursEnd,
       autonomyLevel,
       rssUrl,
-      rssActive
+      rssActive,
+      // Identity settings fields
+      name: editName,
+      niche: editNiche,
+      gradient: editGradient,
+      initial: editInitial,
+      followers: editFollowers,
+      engagementRate: editEngagementRate
     };
 
     try {
@@ -282,6 +320,14 @@
         agent.autonomy_level = autonomyLevel;
         agent.rss_url = rssUrl;
         agent.rss_active = rssActive;
+        // Settings fields
+        agent.name = editName;
+        agent.niche = editNiche;
+        agent.gradient = editGradient;
+        agent.initial = editInitial;
+        agent.followers = editFollowers;
+        agent.engagement_rate = editEngagementRate;
+        agent.engagementRate = editEngagementRate;
       }
 
       showToast(`${activeTab.charAt(0).toUpperCase() + activeTab.slice(1)} config saved for ${selectedAgent?.name}`, 'success');
@@ -708,6 +754,133 @@
                 {:else}
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
                   Save RSS Config
+                {/if}
+              </button>
+            </div>
+          </div>
+        {:else if activeTab === 'settings'}
+          <div class="tab-panel">
+            <div class="panel-header">
+              <h3>Agent Identity & Settings</h3>
+              <p class="panel-desc">Update <strong>{selectedAgent.name}</strong>'s core presentation details such as name, niche focus, followers count, and visual theme gradient.</p>
+            </div>
+
+            <div class="settings-grid" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.5rem; margin-bottom: 2rem;">
+              <div class="field-group">
+                <label for="agent-name-input" style="display: block; font-size: var(--text-xs); font-weight: 600; text-transform: uppercase; color: var(--text-dim); margin-bottom: 0.5rem; letter-spacing: 0.05em;">Agent Name</label>
+                <input
+                  id="agent-name-input"
+                  type="text"
+                  placeholder="e.g. Veronica Active"
+                  bind:value={editName}
+                  style="width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0.75rem 1rem; color: var(--text); font-family: var(--font-body); font-size: var(--text-sm); outline: none; transition: border-color 0.2s ease, box-shadow 0.2s ease;"
+                  onfocus={(e) => { e.currentTarget.style.borderColor = 'var(--accent-mid)'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(124, 106, 237, 0.08)'; }}
+                  onblur={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.boxShadow = 'none'; }}
+                />
+              </div>
+
+              <div class="field-group">
+                <label style="display: block; font-size: var(--text-xs); font-weight: 600; text-transform: uppercase; color: var(--text-dim); margin-bottom: 0.5rem; letter-spacing: 0.05em;">Agent Handle (Social Connection)</label>
+                <div style="background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0.75rem 1rem; color: var(--text); font-family: var(--font-body); font-size: var(--text-sm); display: flex; align-items: center; gap: 0.5rem;">
+                  {#if selectedAgent.handle}
+                    <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--cyan);"></span>
+                    <strong style="color: var(--cyan);">{selectedAgent.handle}</strong>
+                  {:else}
+                    <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--text-dim);"></span>
+                    <span style="color: var(--text-dim); font-style: italic;">No Active Connections (Not Connected)</span>
+                  {/if}
+                </div>
+              </div>
+
+              <div class="field-group">
+                <label for="agent-niche-input" style="display: block; font-size: var(--text-xs); font-weight: 600; text-transform: uppercase; color: var(--text-dim); margin-bottom: 0.5rem; letter-spacing: 0.05em;">Niche / Market Focus</label>
+                <input
+                  id="agent-niche-input"
+                  type="text"
+                  placeholder="e.g. AI Art & Style"
+                  bind:value={editNiche}
+                  style="width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0.75rem 1rem; color: var(--text); font-family: var(--font-body); font-size: var(--text-sm); outline: none; transition: border-color 0.2s ease, box-shadow 0.2s ease;"
+                  onfocus={(e) => { e.currentTarget.style.borderColor = 'var(--accent-mid)'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(124, 106, 237, 0.08)'; }}
+                  onblur={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.boxShadow = 'none'; }}
+                />
+              </div>
+
+              <div class="field-group">
+                <label for="agent-initial-input" style="display: block; font-size: var(--text-xs); font-weight: 600; text-transform: uppercase; color: var(--text-dim); margin-bottom: 0.5rem; letter-spacing: 0.05em;">Avatar Initial</label>
+                <input
+                  id="agent-initial-input"
+                  type="text"
+                  maxlength="2"
+                  placeholder="e.g. V"
+                  bind:value={editInitial}
+                  style="width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0.75rem 1rem; color: var(--text); font-family: var(--font-body); font-size: var(--text-sm); outline: none; transition: border-color 0.2s ease, box-shadow 0.2s ease;"
+                  onfocus={(e) => { e.currentTarget.style.borderColor = 'var(--accent-mid)'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(124, 106, 237, 0.08)'; }}
+                  onblur={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.boxShadow = 'none'; }}
+                />
+              </div>
+
+              <div class="field-group">
+                <label for="agent-followers-input" style="display: block; font-size: var(--text-xs); font-weight: 600; text-transform: uppercase; color: var(--text-dim); margin-bottom: 0.5rem; letter-spacing: 0.05em;">Followers Count</label>
+                <input
+                  id="agent-followers-input"
+                  type="text"
+                  placeholder="e.g. 24.5K"
+                  bind:value={editFollowers}
+                  style="width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0.75rem 1rem; color: var(--text); font-family: var(--font-body); font-size: var(--text-sm); outline: none; transition: border-color 0.2s ease, box-shadow 0.2s ease;"
+                  onfocus={(e) => { e.currentTarget.style.borderColor = 'var(--accent-mid)'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(124, 106, 237, 0.08)'; }}
+                  onblur={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.boxShadow = 'none'; }}
+                />
+              </div>
+
+              <div class="field-group">
+                <label for="agent-engagement-input" style="display: block; font-size: var(--text-xs); font-weight: 600; text-transform: uppercase; color: var(--text-dim); margin-bottom: 0.5rem; letter-spacing: 0.05em;">Engagement Rate (%)</label>
+                <input
+                  id="agent-engagement-input"
+                  type="number"
+                  step="0.1"
+                  placeholder="e.g. 5.2"
+                  bind:value={editEngagementRate}
+                  style="width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0.75rem 1rem; color: var(--text); font-family: var(--font-body); font-size: var(--text-sm); outline: none; transition: border-color 0.2s ease, box-shadow 0.2s ease;"
+                  onfocus={(e) => { e.currentTarget.style.borderColor = 'var(--accent-mid)'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(124, 106, 237, 0.08)'; }}
+                  onblur={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.boxShadow = 'none'; }}
+                />
+              </div>
+
+              <div class="field-group" style="grid-column: span 2;">
+                <label style="display: block; font-size: var(--text-xs); font-weight: 600; text-transform: uppercase; color: var(--text-dim); margin-bottom: 0.75rem; letter-spacing: 0.05em;">Avatar Theme Gradient</label>
+                <div style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: center;">
+                  {#each [
+                    { name: 'Purple Sunset', gradient: 'linear-gradient(135deg, #7C3AED, #4F46E5)' },
+                    { name: 'Ocean Cyan', gradient: 'linear-gradient(135deg, #06B6D4, #3B82F6)' },
+                    { name: 'Autumn Gold', gradient: 'linear-gradient(135deg, #F59E0B, #EF4444)' },
+                    { name: 'Forest Emerald', gradient: 'linear-gradient(135deg, #10B981, #059669)' },
+                    { name: 'Cosmic Magenta', gradient: 'linear-gradient(135deg, #EC4899, #8B5CF6)' }
+                  ] as preset}
+                    <button
+                      type="button"
+                      onclick={() => editGradient = preset.gradient}
+                      style="width: 44px; height: 44px; border-radius: 12px; background: {preset.gradient}; border: 3px solid {editGradient === preset.gradient ? 'var(--accent)' : 'transparent'}; box-shadow: {editGradient === preset.gradient ? '0 0 12px rgba(124, 106, 237, 0.4)' : 'none'}; cursor: pointer; transition: transform 0.2s ease; outline: none;"
+                      title={preset.name}
+                    >
+                    </button>
+                  {/each}
+                  <div style="margin-left: auto; display: flex; align-items: center; gap: 0.75rem; background: var(--bg); padding: 0.5rem 1rem; border: 1px solid var(--border); border-radius: 12px;">
+                    <div style="width: 32px; height: 32px; border-radius: 8px; background: {editGradient}; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; font-weight: bold; color: white;">
+                      {editInitial || (editName ? editName.charAt(0).toUpperCase() : '')}
+                    </div>
+                    <span style="font-size: var(--text-xs); color: var(--text-dim); font-weight: 500;">Theme Preview</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="panel-actions">
+              <button class="save-btn" onclick={saveCurrentTab} disabled={saving}>
+                {#if saving}
+                  <span class="spinner"></span> Saving…
+                {:else}
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                  Save Agent Settings
                 {/if}
               </button>
             </div>

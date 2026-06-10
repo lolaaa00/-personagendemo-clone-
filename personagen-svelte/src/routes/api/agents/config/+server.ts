@@ -21,7 +21,14 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			activeHoursEnd,
 			autonomyLevel,
 			rssUrl,
-			rssActive
+			rssActive,
+			// Editable agent settings fields
+			name,
+			niche,
+			gradient,
+			initial,
+			followers,
+			engagementRate
 		} = body;
 
 		if (!agentId) {
@@ -30,12 +37,21 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 		const db = createDbService(locals.supabase);
 
-		// 1. Update the agent's core texts in agents table
-		const { error: agentErr } = await db.agents.update(agentId, {
+		// 1. Update the agent's core texts and presentation in agents table
+		const agentUpdatePayload: any = {
 			soul: soulText || '',
 			skills: skillsText || '',
 			tools: toolsText || ''
-		});
+		};
+
+		if (name !== undefined) agentUpdatePayload.name = name;
+		if (niche !== undefined) agentUpdatePayload.niche = niche;
+		if (gradient !== undefined) agentUpdatePayload.gradient = gradient;
+		if (initial !== undefined) agentUpdatePayload.initial = initial;
+		if (followers !== undefined) agentUpdatePayload.followers = String(followers);
+		if (engagementRate !== undefined) agentUpdatePayload.engagement_rate = parseFloat(engagementRate as any) || 0;
+
+		const { error: agentErr } = await db.agents.update(agentId, agentUpdatePayload);
 
 		if (agentErr) throw agentErr;
 

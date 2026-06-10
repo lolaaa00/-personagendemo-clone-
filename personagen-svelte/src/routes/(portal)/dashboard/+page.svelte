@@ -27,7 +27,7 @@
 	</p>
 
 	<!-- KPI Grid -->
-	<KPIGrid agents={data.agents} />
+	<KPIGrid agents={data.agents} postsThisWeek={data.postsThisWeek} />
 
 	<!-- Quick Actions -->
 	<div class="quick-actions">

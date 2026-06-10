@@ -9,9 +9,10 @@
 
 	interface Props {
 		agents: any[];
+		postsThisWeek?: number;
 	}
 
-	let { agents }: Props = $props();
+	let { agents, postsThisWeek = 0 }: Props = $props();
 
 	let kpis = $derived.by<KPI[]>(() => {
 		const activeCount = agents.filter(
@@ -19,7 +20,7 @@
 		).length;
 		const totalCount = agents.length;
 		const connectedCount = agents.filter(
-			(a) => (a.connectionCount || 0) > 0
+			(a) => (a.connection_count || a.connectionCount || 0) > 0
 		).length;
 
 		// Avg engagement
@@ -30,8 +31,8 @@
 			avgEngText = avgEng > 0 ? avgEng.toFixed(1) + '%' : '—';
 		}
 
-		// Posts this week (simulated: 3 per active agent)
-		const postsText = String(activeCount * 3);
+		// Posts this week (using real database statistics passed from server)
+		const postsText = String(postsThisWeek);
 
 		// Total reach
 		let reachText = '—';
