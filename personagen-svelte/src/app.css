@@ -19,20 +19,20 @@
 
 :root {
   /* ── Colour: Backgrounds (Light Mode Default) ── */
-  --bg:        #f5f4fa; /* Smooth, ultra-comfortable off-white with warm lavender depth */
-  --surface:   #ffffff; /* Elegant pure white cards */
-  --surface-2: #eeeef6; /* Slate-tinted soft white for inputs and nested areas */
-  --surface-3: #e2e0ee; /* Darker slate-white for active states and borders */
+  --bg:        #f8f9fc; /* Soft cool off-white with sleek modern slate undertone */
+  --surface:   #ffffff; /* Clean pure white cards */
+  --surface-2: #f1f3f9; /* Bright secondary slate-gray for nested areas/inputs */
+  --surface-3: #e6e9f2; /* Active state background */
 
   /* ── Colour: Borders (Light Mode Default) ── */
-  --border:        rgba(12, 10, 30, 0.06);
+  --border:        rgba(15, 23, 42, 0.08); /* 8% Slate-900 border for clean visible guidelines */
   --border-hover:  color-mix(in srgb, var(--accent) 35%, transparent);
-  --border-strong: rgba(12, 10, 30, 0.12);
+  --border-strong: rgba(15, 23, 42, 0.15); /* 15% Slate-900 border for crisp form controls */
 
   /* ── Colour: Text (Light Mode Default) ── */
-  --text:       #13111c; /* Excellent, high-contrast readable charcoal */
-  --text-muted: #4e4a5f; /* Smooth slate-gray for easily readable description paragraphs */
-  --text-dim:   #78748d; /* Muted label colors */
+  --text:       #0f172a; /* Deep high-contrast Slate-900 for pristine reading comfort */
+  --text-muted: #334155; /* Smooth slate-700 for descriptions and sub-headers */
+  --text-dim:   #64748b; /* Clear slate-500 for captions, labels, and helper text */
 
   /* ── Colour: Accents & Brand overrides (Dynamic color-mix formulas) ── */
   --accent:      #7c6aed;
@@ -151,13 +151,13 @@
   --section-py: 5rem;         /* vertical section padding */
   --section-py-sm: 3.5rem;    /* mobile */
 
-  /* ── Shadows (Light Mode Default) ── */
-  --shadow-sm:  0 1px 3px rgba(0,0,0,0.06);
-  --shadow-md:  0 4px 16px rgba(10,5,20,0.06);
-  --shadow-lg:  0 8px 32px rgba(10,5,20,0.09);
-  --shadow-accent: 0 0 30px color-mix(in srgb, var(--accent) 15%, transparent);
-  --shadow-cyan:   0 0 30px color-mix(in srgb, var(--cyan) 12%, transparent);
-  --shadow-glow:   0 0 60px color-mix(in srgb, var(--accent) 8%, transparent);
+  /* ── Shadows (Light Mode Default — Multi-layered premium depth) ── */
+  --shadow-sm:  0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-md:  0 4px 12px rgba(15, 23, 42, 0.05), 0 1px 3px rgba(15, 23, 42, 0.02);
+  --shadow-lg:  0 12px 32px rgba(15, 23, 42, 0.08), 0 4px 12px rgba(15, 23, 42, 0.03);
+  --shadow-accent: 0 0 30px color-mix(in srgb, var(--accent) 18%, transparent);
+  --shadow-cyan:   0 0 30px color-mix(in srgb, var(--cyan) 14%, transparent);
+  --shadow-glow:   0 0 60px color-mix(in srgb, var(--accent) 10%, transparent);
 
   /* ── Transitions (Smooth variables enabled) ── */
   --ease-out:   cubic-bezier(0.16, 1, 0.3, 1);
@@ -573,15 +573,15 @@ input[type="tel"],
 textarea,
 select {
   width: 100%;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
+  background: var(--surface); /* Crisp high-contrast background */
+  border: 1px solid var(--border-strong); /* Clearly defined boundaries */
   border-radius: var(--radius-sm);
   padding: 10px 14px;
   color: var(--text);
   font-family: var(--font-body);
   font-size: 0.88rem;
   outline: none;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  transition: border-color var(--ease-fast), box-shadow var(--ease-fast);
 }
 
 input[type="text"]:focus,
@@ -593,8 +593,8 @@ input[type="number"]:focus,
 input[type="tel"]:focus,
 textarea:focus,
 select:focus {
-  border-color: var(--accent-mid);
-  box-shadow: 0 0 0 3px rgba(124,106,237,0.08);
+  border-color: var(--accent); /* Premium vibrant focus outline */
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent); /* Soft matching outline ring */
 }
 
 input::placeholder,
@@ -612,7 +612,7 @@ select {
 }
 
 select option {
-  background: var(--surface-2);
+  background: var(--surface);
   color: var(--text);
 }
 

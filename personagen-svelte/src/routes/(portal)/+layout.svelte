@@ -380,7 +380,7 @@
   /* ── Sidebar ── */
   .sidebar {
     background: var(--surface);
-    border-right: 1px solid rgba(255, 255, 255, 0.05);
+    border-right: 1px solid var(--border);
     padding: var(--space-5) var(--space-4);
     display: flex;
     flex-direction: column;
@@ -467,7 +467,7 @@
   }
 
   .sidebar-collapse-btn:hover {
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--surface-2);
     color: var(--text);
   }
 
@@ -476,8 +476,8 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    background: rgba(255, 255, 255, 0.02);
-    border: 1px solid rgba(255, 255, 255, 0.05);
+    background: var(--bg);
+    border: 1px solid var(--border);
     border-radius: 10px;
     padding: 8px 12px;
     margin-bottom: var(--space-5);
@@ -598,7 +598,7 @@
     gap: 8px;
     padding: 8px 12px;
     border-radius: 8px;
-    background: rgba(255, 255, 255, 0.02);
+    background: var(--surface-2);
     border: 1px solid var(--border);
     font-size: 0.7rem;
     font-weight: 600;
@@ -637,7 +637,7 @@
   /* ── Header ── */
   .portal-header {
     height: var(--header-height);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    border-bottom: 1px solid var(--border);
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -679,7 +679,7 @@
   }
 
   .hamburger-btn:hover {
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--surface-2);
     color: var(--text);
   }
 
@@ -738,7 +738,7 @@
 
   .portal-user-badge:hover {
     border-color: var(--border-hover);
-    background: rgba(255, 255, 255, 0.04);
+    background: var(--surface-3);
   }
 
   .portal-user-avatar {
@@ -822,7 +822,7 @@
   }
 
   .dropdown-item:hover {
-    background: rgba(255, 255, 255, 0.04);
+    background: var(--surface-2);
     color: var(--text);
   }
 
