@@ -556,47 +556,11 @@
             </div>
 
             <!-- Aggregated Dynamic Stats Overview Component under platforms grid -->
-            <div class="stats-overview-panel" style="margin-top: 2rem; background: rgba(255, 255, 255, 0.02); border: 1px dashed rgba(124, 106, 237, 0.3); border-radius: var(--radius-md); padding: 1.5rem; position: relative; overflow: hidden; box-shadow: inset 0 0 12px rgba(124, 106, 237, 0.02);">
-              <div style="position: absolute; top: -10%; right: -5%; width: 120px; height: 120px; background: radial-gradient(circle, rgba(124, 106, 237, 0.08) 0%, transparent 70%); border-radius: 50%; pointer-events: none;"></div>
-              
-              <h4 style="font-size: var(--text-sm); font-weight: 700; text-transform: uppercase; color: var(--text-dim); margin-top: 0; margin-bottom: 1rem; letter-spacing: 0.05em; display: flex; align-items: center; gap: 0.5rem;">
-                📈 Aggregated Channel Reach Settings
-              </h4>
-              
-              {#if computedMetrics.connectedCount > 0}
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
-                  <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.04); padding: 1rem; border-radius: 12px; display: flex; flex-direction: column; gap: 0.25rem;">
-                    <span style="font-size: var(--text-xs); color: var(--text-dim); font-weight: 500;">Total Followers Across Platforms</span>
-                    <span style="font-size: 1.75rem; font-weight: 800; color: var(--text); font-family: var(--font-mono); letter-spacing: -0.02em; display: flex; align-items: center; gap: 0.5rem;">
-                      {computedMetrics.followers}
-                      <span style="font-size: 10px; font-weight: 600; color: var(--success); background: rgba(16, 185, 129, 0.1); padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(16, 185, 129, 0.2);">
-                        Live
-                      </span>
-                    </span>
-                  </div>
-                  <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.04); padding: 1rem; border-radius: 12px; display: flex; flex-direction: column; gap: 0.25rem;">
-                    <span style="font-size: var(--text-xs); color: var(--text-dim); font-weight: 500;">Average Channel Engagement Rate</span>
-                    <span style="font-size: 1.75rem; font-weight: 800; color: var(--text); font-family: var(--font-mono); letter-spacing: -0.02em; display: flex; align-items: center; gap: 0.5rem;">
-                      {computedMetrics.engagementRate.toFixed(1)}%
-                      <span style="font-size: 10px; font-weight: 600; color: var(--success); background: rgba(16, 185, 129, 0.1); padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(16, 185, 129, 0.2);">
-                        Computed
-                      </span>
-                    </span>
-                  </div>
-                </div>
-                <p style="font-size: var(--text-xs); color: var(--text-dim); font-style: italic; margin-top: 1rem; margin-bottom: 0;">
-                  ⚡ These metrics are auto-computed based on connected platforms and populated automatically inside <strong>Agent Settings</strong>. Editing stats manually is disabled.
-                </p>
-              {:else}
-                <div style="display: flex; flex-direction: column; align-items: center; text-align: center; padding: 1rem 0; gap: 0.75rem;">
-                  <div style="font-size: 2rem;">🔗</div>
-                  <h5 style="margin: 0; color: var(--text); font-weight: 600;">No Active Channel Connections</h5>
-                  <p style="font-size: var(--text-xs); color: var(--text-dim); max-width: 400px; margin: 0;">
-                    Connect one or more platforms above to automatically populate reach statistics. Once connected, follower count and engagement rate will dynamically sync.
-                  </p>
-                </div>
-              {/if}
-            </div>
+            <AgentConnectionStats
+              {platformStatuses}
+              {platformMetrics}
+              platforms={PLATFORMS}
+            />
           </div>
         {:else if activeTab === 'soul'}
           <div class="tab-panel">
