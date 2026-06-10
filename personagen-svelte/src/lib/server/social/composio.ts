@@ -80,11 +80,12 @@ export class ComposioClient {
 		}
 
 		const data = (await response.json()) as any;
-		if (!data.redirectUrl) {
-			throw new Error('Composio Link API did not return a redirectUrl in the response.');
+		const redirectUrl = data.redirect_url || data.redirectUrl;
+		if (!redirectUrl) {
+			throw new Error(`Composio Link API did not return redirect_url in response: ${JSON.stringify(data)}`);
 		}
 
-		return data.redirectUrl;
+		return redirectUrl;
 	}
 
 	/**
