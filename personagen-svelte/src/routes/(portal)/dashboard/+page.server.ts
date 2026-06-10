@@ -10,12 +10,46 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 	let hasDbAgents = false;
 	let postsThisWeek = 0;
 
+	let hermesAgent: any = null;
+
 	if (!isPlaceholder && locals.supabase) {
 		const db = createDbService(locals.supabase);
 		const { data: dbAgents } = await db.agents.list();
 
 		if (dbAgents && dbAgents.length > 0) {
 			hasDbAgents = true;
+
+			// Locate or programmatically seed Hermes
+			hermesAgent = dbAgents.find((a) => a.is_overseer);
+			if (!hermesAgent) {
+				try {
+					console.log('[Dashboard Server] Hermes agent not found for active user. Programmatically seeding.');
+					const { data: sessionData } = await locals.safeGetSession();
+					if (sessionData && sessionData.user) {
+						const { data: newHermes, error: seedErr } = await locals.supabase
+							.from('agents')
+							.insert({
+								user_id: sessionData.user.id,
+								name: 'Hermes',
+								handle: '@hermes_overseer',
+								initial: 'H',
+								gradient: 'linear-gradient(135deg, #10B981, #06B6D4)',
+								status: 'active',
+								followers: '1',
+								engagement_rate: 10.0,
+								is_overseer: true
+							})
+							.select()
+							.single();
+
+						if (!seedErr && newHermes) {
+							hermesAgent = newHermes;
+						}
+					}
+				} catch (err) {
+					console.error('[Dashboard Server] Failed to seed Hermes agent:', err);
+				}
+			}
 
 			// Fetch real database posts to aggregate token costs and actual views/likes/etc.
 			const { data: dbPosts } = await locals.supabase
@@ -43,8 +77,11 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 				}).length;
 			}
 
+			// Exclude overseer from creator roster
+			const creators = dbAgents.filter((a) => !a.is_overseer);
+
 			// For each agent, dynamically compute their active state, performance score, and connection counts
-			agents = dbAgents.map((a) => {
+			agents = creators.map((a) => {
 				const connCount = a.connection_count ?? 0;
 				const agentPosts = postsByAgent[a.id] || [];
 
@@ -243,15 +280,25 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 		});
 	}
 
-	// Pad sparkData with zero lines (fewer than 3 agents)
-	while (sparkData.length < 3) {
-		sparkData.push([0, 0, 0, 0, 0, 0, 0]);
+	if (!hermesAgent) {
+		hermesAgent = {
+			id: 'hermes-fallback-id',
+			name: 'Hermes',
+			handle: '@hermes_overseer',
+			initial: 'H',
+			gradient: 'linear-gradient(135deg, #10B981, #06B6D4)',
+			status: 'active',
+			followers: '1',
+			engagement_rate: 10.0,
+			is_overseer: true
+		};
 	}
 
 	return {
 		agents,
 		sparkData,
 		platformData,
-		postsThisWeek
+		postsThisWeek,
+		hermesAgent
 	};
 };

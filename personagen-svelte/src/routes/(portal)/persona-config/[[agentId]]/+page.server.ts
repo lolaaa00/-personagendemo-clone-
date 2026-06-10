@@ -50,8 +50,9 @@ export const load: PageServerLoad = async ({ locals, url, fetch }) => {
 		const { data: dbAgents } = await db.agents.list();
 
 		if (dbAgents && dbAgents.length > 0) {
+			const creators = dbAgents.filter((a) => !a.is_overseer);
 			const agentsWithConfig = [];
-			for (const agent of dbAgents) {
+			for (const agent of creators) {
 				const { data: config } = await db.agentConfigs.get(agent.id);
 				agentsWithConfig.push({
 					...agent,

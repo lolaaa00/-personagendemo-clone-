@@ -16,7 +16,8 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 
 		if (dbAgents && dbAgents.length > 0) {
 			hasDb = true;
-			agents = dbAgents.map((a) => ({
+			const creators = dbAgents.filter((a) => !a.is_overseer);
+			agents = creators.map((a) => ({
 				...a,
 				niche: (a.niche || '').split(' & ')[0] || a.niche,
 				engagementRate: parseFloat(a.engagement_rate as any) || 0,

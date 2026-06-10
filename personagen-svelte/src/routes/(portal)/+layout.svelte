@@ -221,6 +221,7 @@
             const path = $page.url.pathname;
             if (path.startsWith('/brand-brief')) return 'Brand Brief';
             if (path.startsWith('/agreement')) return 'Agreement';
+            if (path.startsWith('/settings/overseer')) return '🤖 Hermes Overseer Config';
             if (path.startsWith('/settings/billing')) return 'Billing & Subscription';
             if (path.startsWith('/settings')) return 'Settings';
             return navSections
@@ -297,6 +298,15 @@
                 </svg>
                 Agreement
               </a>
+              
+              <!-- Premium Hermes Overseer Highlighted Link -->
+              <a href="/settings/overseer" class="dropdown-item" role="menuitem" onclick={closeUserDropdown} style="background: linear-gradient(90deg, rgba(16, 185, 129, 0.08), rgba(6, 182, 212, 0.08)); border-left: 3px solid #10b981; font-weight: 600; text-shadow: 0 0 8px rgba(16, 185, 129, 0.15);">
+                <span style="display: flex; align-items: center; gap: 0.5rem; color: #10b981;">
+                  🤖 Hermes Overseer Config
+                  <span style="width: 6px; height: 6px; background: #10b981; border-radius: 50%; box-shadow: 0 0 6px #10b981;"></span>
+                </span>
+              </a>
+
               <a href="/settings" class="dropdown-item" role="menuitem" onclick={closeUserDropdown}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <circle cx="12" cy="12" r="3"/>

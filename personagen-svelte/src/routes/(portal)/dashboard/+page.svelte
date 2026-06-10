@@ -7,10 +7,7 @@
 
 	let { data } = $props();
 
-	// Get the first active agent, or fall back to the first agent
-	let chatAgent = $derived(
-		data.agents.find((a: any) => a.status === 'active') || data.agents[0]
-	);
+	let chatAgent = $derived(data.hermesAgent);
 </script>
 
 <svelte:head>

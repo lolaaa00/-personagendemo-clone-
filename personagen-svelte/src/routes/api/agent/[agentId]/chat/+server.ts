@@ -449,7 +449,10 @@ Always stay in character. If you execute a tool, explain the outcome in characte
 				tools: [
 					{ googleSearch: {} },
 					{ functionDeclarations: localTools as any }
-				]
+				],
+				toolConfig: {
+					includeServerSideToolInvocations: true
+				}
 			}
 		});
 
@@ -516,7 +519,10 @@ Always stay in character. If you execute a tool, explain the outcome in characte
 					tools: [
 						{ googleSearch: {} },
 						{ functionDeclarations: localTools as any }
-					]
+					],
+					toolConfig: {
+						includeServerSideToolInvocations: true
+					}
 				}
 			});
 		}
