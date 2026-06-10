@@ -6,6 +6,7 @@
   import { AUTONOMY_LABELS } from '$lib/types';
   import { Accounts } from '$lib/services/api';
   import AgentConnectionStats from '$lib/components/agents/AgentConnectionStats.svelte';
+  import { slide } from 'svelte/transition';
 
   let { data }: { data: any } = $props();
   let agents = $state<any[]>([]);
@@ -258,12 +259,26 @@
   }
 
   let platformStatuses = $state<Record<string, PlatformStatus>>({});
+  let collapsedPlatforms = $state<Record<string, boolean>>({});
+  let addedPlatforms = $state<string[]>([]);
+
+  const visiblePlatforms = $derived(
+    PLATFORMS.filter((p) => platformStatuses[p.key]?.connected || addedPlatforms.includes(p.key))
+  );
+
+  const hiddenPlatforms = $derived(
+    PLATFORMS.filter((p) => !platformStatuses[p.key]?.connected && !addedPlatforms.includes(p.key))
+  );
 
   $effect(() => {
     if (selectedAgentId) {
       checkStatuses();
+      addedPlatforms = [];
+      collapsedPlatforms = {};
     } else {
       platformStatuses = {};
+      addedPlatforms = [];
+      collapsedPlatforms = {};
     }
   });
 
@@ -325,6 +340,31 @@
       }
     } catch {
       showToast('Unable to reach API', 'warning');
+    }
+  }
+
+  async function setMainHandle(handle: string) {
+    if (!selectedAgentId) return;
+    try {
+      const res = await fetch('/api/agents/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentId: selectedAgentId, handle })
+      });
+      const data = (await res.json()) as any;
+      if (res.ok && data.success) {
+        const agent = agents.find((a: any) => a.id === selectedAgentId);
+        if (agent) {
+          agent.handle = handle;
+        }
+        editHandle = handle;
+        showToast(`Main handle updated to ${handle}`, 'success');
+      } else {
+        showToast(data.error || 'Failed to update main handle', 'error');
+      }
+    } catch (err) {
+      console.error('Failed to set main handle:', err);
+      showToast('Error updating main handle', 'error');
     }
   }
 
@@ -536,12 +576,40 @@
               </div>
             {/if}
 
+            <!-- Accounts Controls row for adding/revealing platform cards -->
+            <div class="accounts-controls" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; background: rgba(255, 255, 255, 0.02); padding: 0.75rem 1.25rem; border-radius: var(--radius); border: 1px solid var(--border); gap: 1rem; flex-wrap: wrap;">
+              <div style="display: flex; align-items: center; gap: 0.5rem; font-size: var(--text-sm); font-weight: 500; color: var(--text-muted);">
+                <span style="background: var(--accent-soft); color: var(--accent); font-weight: 700; padding: 2px 8px; border-radius: 20px; font-size: 11px;">{computedMetrics.connectedCount} / {PLATFORMS.length}</span>
+                <span>Active Connections</span>
+              </div>
+              
+              {#if hiddenPlatforms.length > 0}
+                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                  <span style="font-size: var(--text-xs); font-weight: 600; text-transform: uppercase; color: var(--text-dim); letter-spacing: 0.05em;">Reveal Platform:</span>
+                  <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                    {#each hiddenPlatforms as p}
+                      <button 
+                        type="button" 
+                        onclick={() => addedPlatforms = [...addedPlatforms, p.key]}
+                        style="display: flex; align-items: center; gap: 6px; padding: 6px 12px; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border); border-radius: 20px; color: var(--text); font-size: var(--text-xs); font-weight: 600; cursor: pointer; transition: all 0.2s ease; outline: none;"
+                        onmouseover={(e) => { e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)'; e.currentTarget.style.borderColor = p.color; e.currentTarget.style.boxShadow = `0 0 10px ${p.color}33`; }}
+                        onmouseout={(e) => { e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)'; e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.boxShadow = 'none'; }}
+                      >
+                        <span style="width: 6px; height: 6px; border-radius: 50%; background: {p.color};"></span>
+                        {p.name}
+                      </button>
+                    {/each}
+                  </div>
+                </div>
+              {/if}
+            </div>
+
             <div class="platforms-grid">
-              {#each PLATFORMS as platform}
+              {#each visiblePlatforms as platform}
                 {@const status = platformStatuses[platform.key]}
                 {@const metrics = platformMetrics[platform.key]}
                 <div class="platform-card" class:connected={status?.connected} style="--platform-color: {platform.color}">
-                  <div class="platform-header">
+                  <div class="platform-header" style="display: flex; align-items: center; width: 100%;">
                     <div class="platform-icon">
                       {#if platform.key === 'tiktok'}
                         <svg width="28" height="28" viewBox="0 0 24 24" fill="none"><path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.27 6.27 0 00-.79-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.33-6.34V8.89a8.1 8.1 0 004.77 1.54V7.01a4.85 4.85 0 01-1-.32z" fill="{platform.color}"/></svg>
@@ -553,56 +621,110 @@
                         <svg width="28" height="28" viewBox="0 0 24 24" fill="none"><path d="M24 12c0-6.627-5.373-12-12-12S0 5.373 0 12c0 5.99 4.388 10.954 10.125 11.854V15.47H7.078V12h3.047V9.356c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.875V12h3.328l-.532 3.47h-2.796v8.384C19.612 22.954 24 17.99 24 12z" fill="{platform.color}"/></svg>
                       {/if}
                     </div>
-                    <div class="platform-name-wrap">
+                    <div class="platform-name-wrap" style="display: flex; align-items: center; gap: 0.5rem;">
                       <span class="platform-name">{platform.name}</span>
                       <span class="status-dot" class:on={status?.connected}></span>
                     </div>
+
+                    <!-- Platform Header Actions (Collapse + Remove) -->
+                    <div class="platform-header-actions" style="margin-left: auto; display: flex; align-items: center; gap: 0.5rem;">
+                      <!-- Expand/Collapse Button -->
+                      <button
+                        type="button"
+                        onclick={() => collapsedPlatforms[platform.key] = !collapsedPlatforms[platform.key]}
+                        style="background: none; border: none; color: var(--text-dim); cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; transition: color 0.2s ease, transform 0.2s ease; transform: rotate({collapsedPlatforms[platform.key] ? '180deg' : '0deg'}); outline: none;"
+                        title={collapsedPlatforms[platform.key] ? "Expand" : "Collapse"}
+                        onmouseover={(e) => e.currentTarget.style.color = 'var(--text)'}
+                        onmouseout={(e) => e.currentTarget.style.color = 'var(--text-dim)'}
+                      >
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
+                      </button>
+
+                      <!-- Remove Button (Only for disconnected platforms) -->
+                      {#if !status?.connected}
+                        <button
+                          type="button"
+                          onclick={() => addedPlatforms = addedPlatforms.filter(k => k !== platform.key)}
+                          style="background: none; border: none; color: var(--text-dim); cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; transition: color 0.2s ease; outline: none;"
+                          title="Hide Platform"
+                          onmouseover={(e) => e.currentTarget.style.color = 'var(--error)'}
+                          onmouseout={(e) => e.currentTarget.style.color = 'var(--text-dim)'}
+                        >
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                        </button>
+                      {/if}
+                    </div>
                   </div>
 
-                  <div class="platform-body">
-                    {#if status?.connected}
-                      {@const followers = status?.followers ?? metrics?.followers ?? 0}
-                      {@const engagement = status?.engagement_rate ?? metrics?.engagement ?? 0.0}
-                      <div class="connected-info">
-                        <div class="handle-row">
-                          <span class="handle">{status.handle || '@connected'}</span>
-                          {#if status.verified}
-                            <svg class="verified-badge" width="16" height="16" viewBox="0 0 24 24" fill="var(--cyan)"><path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 12c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" stroke="var(--cyan)" stroke-width="1.5" fill="none"/><path d="M9 12l2 2 4-4" stroke="var(--cyan)" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  {#if !collapsedPlatforms[platform.key]}
+                    <div class="platform-body" transition:slide={{ duration: 250 }}>
+                      {#if status?.connected}
+                        {@const followers = status?.followers ?? metrics?.followers ?? 0}
+                        {@const engagement = status?.engagement_rate ?? metrics?.engagement ?? 0.0}
+                        <div class="connected-info">
+                          <div class="handle-row" style="display: flex; align-items: center; gap: 0.5rem;">
+                            <span class="handle">{status.handle || '@connected'}</span>
+                            {#if status.verified}
+                              <svg class="verified-badge" width="16" height="16" viewBox="0 0 24 24" fill="var(--cyan)"><path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 12c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" stroke="var(--cyan)" stroke-width="1.5" fill="none"/><path d="M9 12l2 2 4-4" stroke="var(--cyan)" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                            {/if}
+
+                            <!-- Favorite Star button -->
+                            {#if status.handle}
+                              {@const isMain = selectedAgent.handle === status.handle}
+                              <button
+                                type="button"
+                                onclick={() => setMainHandle(status.handle!)}
+                                style="background: none; border: none; cursor: pointer; padding: 2px; display: inline-flex; align-items: center; justify-content: center; transition: transform 0.2s ease, color 0.2s ease; outline: none; margin-left: 2px;"
+                                title={isMain ? "Main Agent Handle" : "Set as Main Handle"}
+                                onmouseover={(e) => e.currentTarget.style.transform = 'scale(1.2)'}
+                                onmouseout={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                              >
+                                {#if isMain}
+                                  <svg width="16" height="16" viewBox="0 0 24 24" fill="#F59E0B" stroke="#F59E0B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="filter: drop-shadow(0 0 4px rgba(245, 158, 11, 0.6));">
+                                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                                  </svg>
+                                {:else}
+                                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-dim)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="star-outline" onmouseover={(e) => e.currentTarget.setAttribute('stroke', '#F59E0B')} onmouseout={(e) => e.currentTarget.setAttribute('stroke', 'var(--text-dim)')}>
+                                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                                  </svg>
+                                {/if}
+                              </button>
+                            {/if}
+                          </div>
+                          <span class="sync-time">Last sync: {formatSyncTime(status.lastSync)}</span>
+                          
+                          <!-- Individual Platform Stats -->
+                          <div class="platform-stats-badge-row" style="display: flex; gap: 0.5rem; margin-top: 0.75rem;">
+                            <span style="font-size: 11px; background: rgba(255,255,255,0.05); color: var(--text-dim); padding: 2px 6px; border-radius: 4px; display: flex; align-items: center; gap: 4px; border: 1px solid rgba(255,255,255,0.08); font-weight: 500;">
+                              👥 {followers >= 1000 ? (followers / 1000).toFixed(1) + 'K' : followers} followers
+                            </span>
+                            <span style="font-size: 11px; background: rgba(255,255,255,0.05); color: var(--text-dim); padding: 2px 6px; border-radius: 4px; display: flex; align-items: center; gap: 4px; border: 1px solid rgba(255,255,255,0.08); font-weight: 500;">
+                              ⚡ {engagement}% eng
+                            </span>
+                          </div>
+                        </div>
+                        <button class="btn-disconnect" onclick={() => disconnectPlatform(platform.key)}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></svg>
+                          Disconnect
+                        </button>
+                      {:else}
+                        <p class="disconnected-msg">Not connected</p>
+                        <button
+                          class="btn-connect"
+                          disabled={connectingPlatform === platform.key}
+                          onclick={() => connectPlatform(platform.key)}
+                        >
+                          {#if connectingPlatform === platform.key}
+                            <span class="spinner"></span>
+                            Connecting…
+                          {:else}
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+                            Connect
                           {/if}
-                        </div>
-                        <span class="sync-time">Last sync: {formatSyncTime(status.lastSync)}</span>
-                        
-                        <!-- Individual Platform Stats -->
-                        <div class="platform-stats-badge-row" style="display: flex; gap: 0.5rem; margin-top: 0.75rem;">
-                          <span style="font-size: 11px; background: rgba(255,255,255,0.05); color: var(--text-dim); padding: 2px 6px; border-radius: 4px; display: flex; align-items: center; gap: 4px; border: 1px solid rgba(255,255,255,0.08); font-weight: 500;">
-                            👥 {followers >= 1000 ? (followers / 1000).toFixed(1) + 'K' : followers} followers
-                          </span>
-                          <span style="font-size: 11px; background: rgba(255,255,255,0.05); color: var(--text-dim); padding: 2px 6px; border-radius: 4px; display: flex; align-items: center; gap: 4px; border: 1px solid rgba(255,255,255,0.08); font-weight: 500;">
-                            ⚡ {engagement}% eng
-                          </span>
-                        </div>
-                      </div>
-                      <button class="btn-disconnect" onclick={() => disconnectPlatform(platform.key)}>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></svg>
-                        Disconnect
-                      </button>
-                    {:else}
-                      <p class="disconnected-msg">Not connected</p>
-                      <button
-                        class="btn-connect"
-                        disabled={connectingPlatform === platform.key}
-                        onclick={() => connectPlatform(platform.key)}
-                      >
-                        {#if connectingPlatform === platform.key}
-                          <span class="spinner"></span>
-                          Connecting…
-                        {:else}
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
-                          Connect
-                        {/if}
-                      </button>
-                    {/if}
-                  </div>
+                        </button>
+                      {/if}
+                    </div>
+                  {/if}
                 </div>
               {/each}
             </div>
