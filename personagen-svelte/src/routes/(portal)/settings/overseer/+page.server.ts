@@ -1,0 +1,220 @@
+import { redirect, fail } from '@sveltejs/kit';
+import type { PageServerLoad, Actions } from './$types';
+import { createDbService } from '$lib/server/db';
+import { env } from '$env/dynamic/public';
+
+export const load: PageServerLoad = async ({ locals }) => {
+	const { session, user } = await locals.safeGetSession();
+	if (!session || !user) {
+		throw redirect(303, '/login');
+	}
+
+	const supabaseUrl = env.PUBLIC_SUPABASE_URL ?? '';
+	const isPlaceholder = !supabaseUrl || supabaseUrl.includes('placeholder');
+
+	if (isPlaceholder || !locals.supabase) {
+		// Mock Hermes for offline/dev bypass mode
+		return {
+			hermesAgent: {
+				id: 'hermes-dev-bypass-id',
+				name: 'Hermes',
+				handle: '@hermes_overseer',
+				initial: 'H',
+				gradient: 'linear-gradient(135deg, #10B981, #06B6D4)',
+				status: 'active',
+				soul: 'You are the platform-level Chief Operational Overseer. Monitor health, orchestrate agents, and support human administrators.',
+				skills: 'System diagnostics, team scheduling, autonomous recovery, user reports analysis',
+				tools: 'system_log_reader, agent_orchestrator, slack_notifier, backup_scheduler',
+				is_overseer: true
+			},
+			memories: [
+				{
+					id: 'm1',
+					content: 'Maintain server CPU threshold alerts below 85% at all times.',
+					memory_type: 'instruction',
+					importance: 9,
+					created_at: new Date().toISOString()
+				},
+				{
+					id: 'm2',
+					content: 'Hourly system heartbeat pacing is configured to run at minute :00.',
+					memory_type: 'fact',
+					importance: 7,
+					created_at: new Date().toISOString()
+				}
+			]
+		};
+	}
+
+	const db = createDbService(locals.supabase);
+
+	// 1. Fetch or Programmatically Seed Hermes Agent
+	let { data: hermesAgent, error: fetchErr } = await locals.supabase
+		.from('agents')
+		.select('*')
+		.eq('user_id', user.id)
+		.eq('is_overseer', true)
+		.maybeSingle();
+
+	if (fetchErr) {
+		console.error('[Overseer Server] Error querying Hermes agent:', fetchErr);
+	}
+
+	if (!hermesAgent) {
+		try {
+			console.log('[Overseer Server] Seeding missing Hermes agent on request.');
+			const { data: seeded, error: seedErr } = await locals.supabase
+				.from('agents')
+				.insert({
+					user_id: user.id,
+					name: 'Hermes',
+					handle: '@hermes_overseer',
+					initial: 'H',
+					gradient: 'linear-gradient(135deg, #10B981, #06B6D4)',
+					status: 'active',
+					followers: '1',
+					engagement_rate: 10.0,
+					is_overseer: true,
+					soul: 'You are the platform-level Chief Operational Overseer. Monitor health, orchestrate agents, and support human administrators.',
+					skills: 'System health monitoring, scheduling, alert dispatch, database reporting',
+					tools: 'system_log_reader, agent_orchestrator'
+				})
+				.select()
+				.single();
+
+			if (seedErr) throw seedErr;
+			hermesAgent = seeded;
+		} catch (err) {
+			console.error('[Overseer Server] Critical failure seeding Hermes:', err);
+			return fail(500, { error: 'Failed to find or seed Hermes' });
+		}
+	}
+
+	// 2. Fetch Memories
+	const { data: memories, error: memErr } = await db.agentMemories.listForAgent(hermesAgent.id);
+	if (memErr) {
+		console.error('[Overseer Server] Error loading memories:', memErr);
+	}
+
+	return {
+		hermesAgent,
+		memories: memories ?? []
+	};
+};
+
+export const actions: Actions = {
+	updateOverseer: async ({ request, locals }) => {
+		const { session, user } = await locals.safeGetSession();
+		if (!session || !user) {
+			return fail(401, { error: 'Unauthorized' });
+		}
+
+		const formData = await request.formData();
+		const name = formData.get('name')?.toString() || 'Hermes';
+		const soul = formData.get('soul')?.toString() || '';
+		const skills = formData.get('skills')?.toString() || '';
+		const tools = formData.get('tools')?.toString() || '';
+		const initial = formData.get('initial')?.toString() || 'H';
+		const gradient = formData.get('gradient')?.toString() || 'linear-gradient(135deg, #10B981, #06B6D4)';
+
+		const db = createDbService(locals.supabase);
+
+		// Get Hermes' ID
+		const { data: hermesAgent } = await locals.supabase
+			.from('agents')
+			.select('id')
+			.eq('user_id', user.id)
+			.eq('is_overseer', true)
+			.maybeSingle();
+
+		if (!hermesAgent) {
+			return fail(404, { error: 'Hermes agent not found' });
+		}
+
+		const { error } = await db.agents.update(hermesAgent.id, {
+			name,
+			soul,
+			skills,
+			tools,
+			initial,
+			gradient
+		});
+
+		if (error) {
+			console.error('[Overseer Actions] updateOverseer failure:', error);
+			return fail(500, { error: error.message });
+		}
+
+		return { success: true };
+	},
+
+	addMemory: async ({ request, locals }) => {
+		const { session, user } = await locals.safeGetSession();
+		if (!session || !user) {
+			return fail(401, { error: 'Unauthorized' });
+		}
+
+		const formData = await request.formData();
+		const content = formData.get('content')?.toString() || '';
+		const type = formData.get('memory_type')?.toString() || 'fact';
+		const importance = parseInt(formData.get('importance')?.toString() || '5');
+
+		if (!content.trim()) {
+			return fail(400, { error: 'Memory guideline content is required' });
+		}
+
+		const db = createDbService(locals.supabase);
+
+		// Get Hermes' ID
+		const { data: hermesAgent } = await locals.supabase
+			.from('agents')
+			.select('id')
+			.eq('user_id', user.id)
+			.eq('is_overseer', true)
+			.maybeSingle();
+
+		if (!hermesAgent) {
+			return fail(404, { error: 'Hermes agent not found' });
+		}
+
+		const { error } = await db.agentMemories.create({
+			user_id: user.id,
+			agent_id: hermesAgent.id,
+			memory_type: type as any,
+			content,
+			importance,
+			summary: null
+		});
+
+		if (error) {
+			console.error('[Overseer Actions] addMemory failure:', error);
+			return fail(500, { error: error.message });
+		}
+
+		return { success: true };
+	},
+
+	deleteMemory: async ({ request, locals }) => {
+		const { session, user } = await locals.safeGetSession();
+		if (!session || !user) {
+			return fail(401, { error: 'Unauthorized' });
+		}
+
+		const formData = await request.formData();
+		const id = formData.get('id')?.toString() || '';
+
+		if (!id) {
+			return fail(400, { error: 'Memory ID is required' });
+		}
+
+		const db = createDbService(locals.supabase);
+		const { error } = await db.agentMemories.delete(id);
+
+		if (error) {
+			console.error('[Overseer Actions] deleteMemory failure:', error);
+			return fail(500, { error: error.message });
+		}
+
+		return { success: true };
+	}
+};

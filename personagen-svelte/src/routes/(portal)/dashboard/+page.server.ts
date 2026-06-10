@@ -24,12 +24,12 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 			if (!hermesAgent) {
 				try {
 					console.log('[Dashboard Server] Hermes agent not found for active user. Programmatically seeding.');
-					const { data: sessionData } = await locals.safeGetSession();
-					if (sessionData && sessionData.user) {
+					const { session } = await locals.safeGetSession();
+					if (session && session.user) {
 						const { data: newHermes, error: seedErr } = await locals.supabase
 							.from('agents')
 							.insert({
-								user_id: sessionData.user.id,
+								user_id: session.user.id,
 								name: 'Hermes',
 								handle: '@hermes_overseer',
 								initial: 'H',

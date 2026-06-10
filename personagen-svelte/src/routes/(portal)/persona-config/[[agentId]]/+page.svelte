@@ -487,6 +487,7 @@
             <div class="platforms-grid">
               {#each PLATFORMS as platform}
                 {@const status = platformStatuses[platform.key]}
+                {@const metrics = platformMetrics[platform.key]}
                 <div class="platform-card" class:connected={status?.connected} style="--platform-color: {platform.color}">
                   <div class="platform-header">
                     <div class="platform-icon">
@@ -519,7 +520,6 @@
                         
                         <!-- Individual Platform Stats -->
                         <div class="platform-stats-badge-row" style="display: flex; gap: 0.5rem; margin-top: 0.75rem;">
-                          {@const metrics = platformMetrics[platform.key]}
                           {#if metrics}
                             <span style="font-size: 11px; background: rgba(255,255,255,0.05); color: var(--text-dim); padding: 2px 6px; border-radius: 4px; display: flex; align-items: center; gap: 4px; border: 1px solid rgba(255,255,255,0.08); font-weight: 500;">
                               👥 {metrics.followers >= 1000 ? (metrics.followers / 1000).toFixed(1) + 'K' : metrics.followers} followers
