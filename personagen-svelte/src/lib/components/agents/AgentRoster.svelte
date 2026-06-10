@@ -1,6 +1,7 @@
 <script lang="ts">
 	import StatusBadge from './StatusBadge.svelte';
 	import { goto } from '$app/navigation';
+	import { showToast } from '$lib/stores/ui.svelte';
 	// Using any[] because agents data comes from raw JSON with camelCase fields
 	interface Props {
 		agents: any[];
@@ -56,10 +57,34 @@
 		return '';
 	}
 
-	function toggleAgent(agent: any) {
+	async function toggleAgent(agent: any) {
 		if (agent.status === 'pending') return;
+		const originalActive = agent.active;
+		const originalStatus = agent.status;
+
 		agent.active = !agent.active;
 		agent.status = agent.active ? 'active' : 'paused';
+
+		try {
+			const res = await fetch('/api/agents/config', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					agentId: agent.id,
+					status: agent.status
+				})
+			});
+			const data = await res.json();
+			if (!res.ok || !data.success) {
+				throw new Error(data.error || 'Server error');
+			}
+			showToast(`Status updated to ${agent.status} for ${agent.name}`, 'success');
+		} catch (err: any) {
+			console.error('[AgentRoster] Failed to toggle status in DB:', err);
+			agent.active = originalActive;
+			agent.status = originalStatus;
+			showToast(err.message || 'Failed to sync status with database', 'error');
+		}
 	}
 
 	function formatTokens(tokens: number): string {

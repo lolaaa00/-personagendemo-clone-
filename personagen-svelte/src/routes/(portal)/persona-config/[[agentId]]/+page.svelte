@@ -21,6 +21,8 @@
 
   // Agent identity settings state
   let editName = $state('');
+  let editHandle = $state('');
+  let editStatus = $state<'active' | 'paused' | 'pending'>('active');
   let editNiche = $state('');
   let editInitial = $state('');
   let editFollowers = $state('0');
@@ -154,6 +156,8 @@
 
       // Identity settings fields
       editName = agent.name ?? '';
+      editHandle = agent.handle ?? '';
+      editStatus = agent.status ?? 'active';
       editNiche = agent.niche ?? '';
       editInitial = agent.initial ?? '';
       editFollowers = String(agent.followers ?? '0');
@@ -195,6 +199,8 @@
         rssLastPolledAt = cfg.rssLastPolledAt ?? agent.rss_last_polled_at ?? null;
 
         editName = agent.name ?? '';
+        editHandle = agent.handle ?? '';
+        editStatus = agent.status ?? 'active';
         editNiche = agent.niche ?? '';
         editInitial = agent.initial ?? '';
         editFollowers = String(agent.followers ?? '0');
@@ -217,6 +223,8 @@
     rssLastPolledAt = agent.rss_last_polled_at ?? null;
 
     editName = agent.name ?? '';
+    editHandle = agent.handle ?? '';
+    editStatus = agent.status ?? 'active';
     editNiche = agent.niche ?? '';
     editInitial = agent.initial ?? '';
     editFollowers = String(agent.followers ?? '0');
@@ -352,6 +360,8 @@
       rssActive,
       // Identity settings fields
       name: editName,
+      handle: editHandle,
+      status: editStatus,
       niche: editNiche,
       gradient: editGradient,
       initial: editInitial,
@@ -385,6 +395,8 @@
         agent.rss_active = rssActive;
         // Settings fields
         agent.name = editName;
+        agent.handle = editHandle;
+        agent.status = editStatus;
         agent.niche = editNiche;
         agent.gradient = editGradient;
         agent.initial = editInitial;
@@ -893,15 +905,31 @@
               </div>
 
               <div class="field-group">
-                <label style="display: block; font-size: var(--text-xs); font-weight: 600; text-transform: uppercase; color: var(--text-dim); margin-bottom: 0.5rem; letter-spacing: 0.05em;">Agent Handle (Social Connection)</label>
-                <div style="background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0.75rem 1rem; color: var(--text); font-family: var(--font-body); font-size: var(--text-sm); display: flex; align-items: center; gap: 0.5rem;">
-                  {#if selectedAgent.handle}
-                    <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--cyan);"></span>
-                    <strong style="color: var(--cyan);">{selectedAgent.handle}</strong>
-                  {:else}
-                    <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--text-dim);"></span>
-                    <span style="color: var(--text-dim); font-style: italic;">No Active Connections (Not Connected)</span>
-                  {/if}
+                <label for="agent-handle-input" style="display: block; font-size: var(--text-xs); font-weight: 600; text-transform: uppercase; color: var(--text-dim); margin-bottom: 0.5rem; letter-spacing: 0.05em;">Agent Handle</label>
+                <input
+                  id="agent-handle-input"
+                  type="text"
+                  placeholder="e.g. @veronica_ai"
+                  bind:value={editHandle}
+                  style="width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0.75rem 1rem; color: var(--text); font-family: var(--font-body); font-size: var(--text-sm); outline: none; transition: border-color 0.2s ease, box-shadow 0.2s ease;"
+                  onfocus={(e) => { e.currentTarget.style.borderColor = 'var(--accent-mid)'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(124, 106, 237, 0.08)'; }}
+                  onblur={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.boxShadow = 'none'; }}
+                />
+              </div>
+
+              <div class="field-group" style="grid-column: span 2;">
+                <label style="display: block; font-size: var(--text-xs); font-weight: 600; text-transform: uppercase; color: var(--text-dim); margin-bottom: 0.75rem; letter-spacing: 0.05em;">Agent Status</label>
+                <div style="display: flex; gap: 0.75rem; width: 100%;">
+                  {#each ['active', 'paused', 'pending'] as statusOpt}
+                    <button
+                      type="button"
+                      onclick={() => editStatus = statusOpt as any}
+                      style="flex: 1; padding: 0.75rem 1rem; border-radius: var(--radius-sm); border: 1px solid {editStatus === statusOpt ? 'var(--accent)' : 'var(--border)'}; background: {editStatus === statusOpt ? 'var(--accent-soft)' : 'var(--bg)'}; color: {editStatus === statusOpt ? 'var(--accent)' : 'var(--text-dim)'}; font-size: var(--text-sm); font-weight: 600; cursor: pointer; transition: all 0.2s ease; display: flex; align-items: center; justify-content: center; gap: 0.5rem; text-transform: capitalize; outline: none;"
+                    >
+                      <span class="status-dot" style="background: {getStatusColor(statusOpt)}; width: 8px; height: 8px; border-radius: 50%; display: inline-block;"></span>
+                      {statusOpt}
+                    </button>
+                  {/each}
                 </div>
               </div>
 

@@ -28,7 +28,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			gradient,
 			initial,
 			followers,
-			engagementRate
+			engagementRate,
+			handle,
+			status
 		} = body;
 
 		if (!agentId) {
@@ -38,40 +40,57 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		const db = createDbService(locals.supabase);
 
 		// 1. Update the agent's core texts and presentation in agents table
-		const agentUpdatePayload: any = {
-			soul: soulText || '',
-			skills: skillsText || '',
-			tools: toolsText || ''
-		};
+		const agentUpdatePayload: any = {};
 
+		if (soulText !== undefined) agentUpdatePayload.soul = soulText;
+		if (skillsText !== undefined) agentUpdatePayload.skills = skillsText;
+		if (toolsText !== undefined) agentUpdatePayload.tools = toolsText;
 		if (name !== undefined) agentUpdatePayload.name = name;
 		if (niche !== undefined) agentUpdatePayload.niche = niche;
 		if (gradient !== undefined) agentUpdatePayload.gradient = gradient;
 		if (initial !== undefined) agentUpdatePayload.initial = initial;
 		if (followers !== undefined) agentUpdatePayload.followers = String(followers);
 		if (engagementRate !== undefined) agentUpdatePayload.engagement_rate = parseFloat(engagementRate as any) || 0;
+		if (handle !== undefined) agentUpdatePayload.handle = handle;
+		if (status !== undefined) agentUpdatePayload.status = status;
 
-		const { error: agentErr } = await db.agents.update(agentId, agentUpdatePayload);
+		if (Object.keys(agentUpdatePayload).length > 0) {
+			const { error: agentErr } = await db.agents.update(agentId, agentUpdatePayload);
+			if (agentErr) throw agentErr;
+		}
 
-		if (agentErr) throw agentErr;
+		// 2. Upsert the detailed config in agent_configs table only if config fields are provided
+		const hasConfigFields = [
+			soulText,
+			skillsText,
+			toolsText,
+			timezone,
+			postsPerDay,
+			activeHoursStart,
+			activeHoursEnd,
+			autonomyLevel,
+			rssUrl,
+			rssActive
+		].some((val) => val !== undefined);
 
-		// 2. Upsert the detailed config in agent_configs table
-		const { error: configErr } = await db.agentConfigs.upsert({
-			user_id: user.id,
-			agent_id: agentId,
-			soul: soulText || '',
-			skills: skillsText || '',
-			tools: toolsText || '',
-			timezone: timezone || 'Australia/Sydney',
-			posts_per_day: postsPerDay !== undefined ? postsPerDay : 3,
-			active_hours_start: activeHoursStart !== undefined ? activeHoursStart : 8,
-			active_hours_end: activeHoursEnd !== undefined ? activeHoursEnd : 22,
-			autonomy_level: autonomyLevel || 'advisor',
-			rss_url: rssUrl || '',
-			rss_active: rssActive !== undefined ? rssActive : false
-		});
+		if (hasConfigFields) {
+			const { error: configErr } = await db.agentConfigs.upsert({
+				user_id: user.id,
+				agent_id: agentId,
+				soul: soulText !== undefined ? soulText : '',
+				skills: skillsText !== undefined ? skillsText : '',
+				tools: toolsText !== undefined ? toolsText : '',
+				timezone: timezone || 'Australia/Sydney',
+				posts_per_day: postsPerDay !== undefined ? postsPerDay : 3,
+				active_hours_start: activeHoursStart !== undefined ? activeHoursStart : 8,
+				active_hours_end: activeHoursEnd !== undefined ? activeHoursEnd : 22,
+				autonomy_level: autonomyLevel || 'advisor',
+				rss_url: rssUrl || '',
+				rss_active: rssActive !== undefined ? rssActive : false
+			});
 
-		if (configErr) throw configErr;
+			if (configErr) throw configErr;
+		}
 
 		return json({ success: true });
 	} catch (err) {
