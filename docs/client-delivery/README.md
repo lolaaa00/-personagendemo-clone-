@@ -66,7 +66,7 @@ FACTORY_PORT=4000
 FACTORY_API_KEY=<generate-a-strong-key>
 MAIL_URL=http://personagen-mail:3000
 MAIL_API_KEY=<must-match-mail-service-ADMIN_API_KEY>
-N8N_WEBHOOK_URL=https://auto.l2gseo.com/webhook/personagen-factory
+ENGINE_WEBHOOK_URL=https://auto.l2gseo.com/webhook/personagen-factory
 ENCRYPTION_KEY=<generate-32-byte-hex>
 ```
 

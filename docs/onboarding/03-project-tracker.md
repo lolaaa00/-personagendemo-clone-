@@ -62,7 +62,7 @@
 | Milestone | Owner | Status | Date |
 |-----------|-------|--------|------|
 | All client accounts created | Client | ☐ | — |
-| VPS provisioned (EasyPanel + Docker + n8n) | Monarch | ☐ | — |
+| VPS provisioned (EasyPanel + Docker + Svelte Stack) | Monarch | ☐ | — |
 | OpenRouter + BYOK configured | Monarch | ☐ | — |
 | DNS + SSL active | Monarch | ☐ | — |
 | Security hardened | Monarch | ☐ | — |

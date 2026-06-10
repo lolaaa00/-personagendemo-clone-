@@ -8,7 +8,7 @@ import { createDbService } from '$lib/server/db';
 const toolsList = [
 	{
 		name: 'get_trends',
-		description: 'Get trending topics for this agent\'s niche from n8n Trend Scanner.',
+		description: 'Get trending topics for this agent\'s niche from the Trend Scanner.',
 		parameters: {
 			type: 'OBJECT',
 			properties: {

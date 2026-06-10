@@ -63,6 +63,10 @@ export interface PostRow {
 	scheduled_date: string | null;
 	scheduled_time: string | null;
 	published_at: string | null;
+	external_id?: string | null;
+	analytics?: { views: number; likes: number; comments: number; shares: number } | null;
+	token_usage?: number | null;
+	token_cost?: number | null;
 	created_at: string;
 	updated_at: string;
 }

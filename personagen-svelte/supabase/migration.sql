@@ -145,6 +145,10 @@ CREATE TABLE public.posts (
   scheduled_date DATE,
   scheduled_time TIME,
   published_at TIMESTAMPTZ,
+  external_id TEXT,
+  analytics JSONB DEFAULT '{"views": 0, "likes": 0, "comments": 0, "shares": 0}'::jsonb,
+  token_usage INT DEFAULT 0,
+  token_cost NUMERIC(10, 6) DEFAULT 0.000000,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

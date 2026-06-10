@@ -1,7 +1,4 @@
-import adapterCloudflare from '@sveltejs/adapter-cloudflare';
 import adapterNode from '@sveltejs/adapter-node';
-
-const isDocker = process.env.IS_DOCKER === 'true';
 
 /** @type {import('@sveltejs/kit').Config} */
 const config = {
@@ -10,7 +7,7 @@ const config = {
 		runes: ({ filename }) => (filename.split(/[/\\]/).includes('node_modules') ? undefined : true)
 	},
 	kit: {
-		adapter: isDocker ? adapterNode() : adapterCloudflare()
+		adapter: adapterNode()
 	}
 };
 

@@ -1,9 +1,0 @@
-name = "personagen-honeyforx"
-compatibility_date = "2026-06-01"
-pages_build_output_dir = ".svelte-kit/cloudflare"
-
-[vars]
-PUBLIC_N8N_URL = "https://auto.l2gseo.com"
-PUBLIC_POSTIZ_URL = "https://postiz.l2gseo.com"
-PUBLIC_SUPABASE_URL = "https://l2g-supabase.zi1cc5.easypanel.host"
-PUBLIC_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNjQxNzY5MjAwLCJleHAiOjE3OTk1MzU2MDB9.KwxLETxPXHf1gktjhzbt1uyVTA0B1s_WdYgxoLgFM9g"

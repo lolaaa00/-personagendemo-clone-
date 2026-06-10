@@ -45,11 +45,11 @@
 | `CAPTCHA_PROVIDER` | Optional | — | CAPTCHA solving service provider (`2captcha`, `anticaptcha`, `capsolver`) | `2captcha` |
 | `CAPTCHA_API_KEY` | Optional | — | API key for the CAPTCHA solving service | `2cap_abc123def456...` |
 
-### n8n Integration
+### Engine Integration
 
 | Variable | Required | Default | Description | Example |
 |----------|----------|---------|-------------|---------|
-| `N8N_WEBHOOK_URL` | Optional | — | n8n webhook URL for status callbacks on account creation events | `https://auto.l2gseo.com/webhook/personagen-factory` |
+| `ENGINE_WEBHOOK_URL` | Optional | — | Engine webhook URL for status callbacks on account creation events | `https://auto.l2gseo.com/webhook/personagen-factory` |
 
 ### Rate Limiting
 
@@ -135,8 +135,8 @@ PROXY_TYPE=http
 CAPTCHA_PROVIDER=
 CAPTCHA_API_KEY=
 
-# === n8n Callbacks ===
-N8N_WEBHOOK_URL=
+# === Engine Callbacks ===
+ENGINE_WEBHOOK_URL=
 
 # === Rate Limiting ===
 MAX_CREATIONS_PER_DAY=10

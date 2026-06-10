@@ -61,6 +61,12 @@
 		agent.active = !agent.active;
 		agent.status = agent.active ? 'active' : 'paused';
 	}
+
+	function formatTokens(tokens: number): string {
+		if (tokens >= 1000000) return (tokens / 1000000).toFixed(1) + 'M';
+		if (tokens >= 1000) return (tokens / 1000).toFixed(1) + 'K';
+		return String(tokens);
+	}
 </script>
 
 <div class="dash-table-wrap">
@@ -87,7 +93,7 @@
 			<span role="columnheader">Agent</span>
 			<span role="columnheader">Followers</span>
 			<span role="columnheader">Engagement</span>
-			<span role="columnheader">Trend</span>
+			<span role="columnheader">Gen Spend</span>
 			<span role="columnheader">Performance</span>
 			<span role="columnheader">Active</span>
 		</div>
@@ -118,7 +124,13 @@
 				<span class="dash-cell {engagementClass(agent.engagementRate)}" role="cell">
 					{agent.engagementRate}%
 				</span>
-				<span class="dash-cell {trendClass(agent.trend)}" role="cell">{agent.trend}</span>
+				<span class="dash-cell token-cost-cell" role="cell">
+					{#if agent.total_token_cost !== undefined && agent.total_token_cost !== null && agent.total_token_cost > 0}
+						${agent.total_token_cost.toFixed(2)} <span class="token-count">({formatTokens(agent.total_token_usage || 0)})</span>
+					{:else}
+						$0.00 <span class="token-count">(0)</span>
+					{/if}
+				</span>
 				<span class="dash-cell" role="cell">
 					<div class="perf-bar-wrap">
 						<div class="perf-bar-bg">
@@ -426,5 +438,16 @@
 			flex-direction: column;
 			align-items: flex-start;
 		}
+	}
+
+	.token-cost-cell {
+		color: #f59e0b !important;
+		font-family: var(--font-mono);
+		font-weight: 500;
+	}
+
+	.token-count {
+		font-size: 0.7rem;
+		color: var(--text-dim);
 	}
 </style>

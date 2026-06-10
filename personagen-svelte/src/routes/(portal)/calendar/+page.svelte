@@ -2,8 +2,24 @@
   import type { Agent } from '$lib/types';
   import { showToast } from '$lib/stores/ui.svelte';
 
+  interface ScheduledPost {
+    id: string;
+    agentId: string;
+    agentName: string;
+    text: string;
+    platforms: string[];
+    date: string; // YYYY-MM-DD
+    time: string;
+    status: 'scheduled' | 'draft' | 'published' | 'failed';
+    external_id?: string | null;
+    analytics?: { views: number; likes: number; comments: number; shares: number } | null;
+    token_usage?: number | null;
+    token_cost?: number | null;
+  }
+
   interface PageData {
     agents: Agent[];
+    realPosts?: ScheduledPost[];
   }
 
   let { data } = $props<{ data: PageData }>();
@@ -24,17 +40,6 @@
   let composerTime = $state('10:00');
 
   // ── Demo posts ──
-  interface ScheduledPost {
-    id: string;
-    agentId: string;
-    agentName: string;
-    text: string;
-    platforms: string[];
-    date: string; // YYYY-MM-DD
-    time: string;
-    status: 'scheduled' | 'draft' | 'published';
-  }
-
   function generateDemoPosts(): ScheduledPost[] {
     const now = new Date();
     const y = now.getFullYear();
@@ -72,6 +77,7 @@
     for (let i = 0; i < 15; i++) {
       const day = Math.floor(Math.random() * 28) + 1;
       const agent = agents[i % agents.length];
+      if (!agent) continue;
       const dd = String(day).padStart(2, '0');
       const mm = String(m + 1).padStart(2, '0');
       posts.push({
@@ -88,7 +94,25 @@
     return posts;
   }
 
-  let posts = $state<ScheduledPost[]>(generateDemoPosts());
+  function formatViews(v: number): string {
+    if (v >= 1000000) return (v / 1000000).toFixed(1) + 'M';
+    if (v >= 1000) return (v / 1000).toFixed(1) + 'K';
+    return String(v);
+  }
+
+  function getInitialPosts(): ScheduledPost[] {
+    const demos = generateDemoPosts();
+    const real = (data.realPosts || []) as ScheduledPost[];
+    const merged = [...real];
+    for (const d of demos) {
+      if (!merged.some(m => m.date === d.date && m.platforms.join(',') === d.platforms.join(','))) {
+        merged.push(d);
+      }
+    }
+    return merged;
+  }
+
+  let posts = $state<ScheduledPost[]>(getInitialPosts());
 
   // ── Calendar helpers ──
   const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -305,6 +329,10 @@
                     <span class="dot-more">+{dayPosts.length - 4}</span>
                   {/if}
                 </div>
+                {@const totalViews = dayPosts.reduce((acc, p) => acc + (p.analytics?.views || 0), 0)}
+                {#if totalViews > 0}
+                  <span class="views-badge">🔥 {formatViews(totalViews)}</span>
+                {/if}
               {/if}
             </button>
           {/if}
@@ -350,13 +378,37 @@
           <div class="panel-posts">
             {#each selectedDayPosts as post}
               <div class="panel-post">
-                <div class="post-status-bar" style="background: {STATUS_COLORS[post.status]}"></div>
+                <div class="post-status-bar" style="background: {STATUS_COLORS[post.status] || 'var(--accent)'}"></div>
                 <div class="post-content">
                   <div class="post-time-status">
                     <span class="post-time">{post.time}</span>
-                    <span class="post-status-tag" style="color: {STATUS_COLORS[post.status]}">{post.status}</span>
+                    {#if post.status === 'published'}
+                      <span class="live-indicator">Live Tracker</span>
+                    {:else}
+                      <span class="post-status-tag" style="color: {STATUS_COLORS[post.status] || 'var(--accent)'}">{post.status}</span>
+                    {/if}
                   </div>
                   <p class="post-text">{post.text}</p>
+                  
+                  {#if post.status === 'published' && post.analytics}
+                    <div class="analytics-row">
+                      <div class="metric" title="Views">
+                        <span class="emoji">👁️</span> {formatViews(post.analytics.views)}
+                      </div>
+                      <div class="metric" title="Likes">
+                        <span class="emoji">❤️</span> {formatViews(post.analytics.likes)}
+                      </div>
+                      <div class="metric" title="Comments">
+                        <span class="emoji">💬</span> {formatViews(post.analytics.comments)}
+                      </div>
+                      {#if post.token_cost !== undefined && post.token_cost !== null && post.token_cost > 0}
+                        <div class="metric token-cost" title="Gemini Cost">
+                          <span class="emoji">🪙</span> ${post.token_cost.toFixed(4)}
+                        </div>
+                      {/if}
+                    </div>
+                  {/if}
+
                   <div class="post-meta">
                     <span class="post-agent">{post.agentName}</span>
                     <div class="post-platforms">
@@ -1022,4 +1074,89 @@
       gap: 1rem;
     }
   }
+
+  /* Live indicators & Analytics aesthetics */
+  .live-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(239, 68, 68, 0.1);
+    color: #ef4444;
+    padding: 3px 8px;
+    border-radius: var(--radius-xs);
+    font-size: 0.65rem;
+    font-weight: var(--weight-bold);
+    text-transform: uppercase;
+    box-shadow: 0 0 10px rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+  }
+
+  .live-indicator::before {
+    content: '';
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #ef4444;
+    animation: live-pulse 1.5s infinite;
+  }
+
+  @keyframes live-pulse {
+    0% {
+      transform: scale(0.9);
+      box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+    }
+    70% {
+      transform: scale(1.1);
+      box-shadow: 0 0 0 4px rgba(239, 68, 68, 0);
+    }
+    100% {
+      transform: scale(0.9);
+      box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+    }
+  }
+
+  .views-badge {
+    font-size: 0.65rem;
+    font-weight: var(--weight-bold);
+    color: #10b981;
+    background: rgba(16, 185, 129, 0.1);
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-top: auto;
+    align-self: flex-end;
+    border: 1px solid rgba(16, 185, 129, 0.2);
+    text-shadow: 0 0 8px rgba(16, 185, 129, 0.1);
+  }
+
+  .analytics-row {
+    display: flex;
+    gap: 12px;
+    margin-top: 0.5rem;
+    margin-bottom: 0.75rem;
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: var(--radius-xs);
+    border: 1px solid var(--border);
+  }
+
+  .metric {
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-family: var(--font-mono);
+  }
+
+  .metric .emoji {
+    font-size: 0.85rem;
+  }
+
+  .metric.token-cost {
+    color: #f59e0b;
+    margin-left: auto;
+    font-weight: var(--weight-semi);
+  }
 </style>
+

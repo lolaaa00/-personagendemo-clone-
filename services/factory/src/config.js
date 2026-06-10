@@ -32,8 +32,8 @@ const envSchema = z.object({
   CAPTCHA_PROVIDER: z.enum(["2captcha", "anticaptcha"]).optional(),
   CAPTCHA_API_KEY: z.string().optional(),
 
-  /* ── n8n webhook (optional) ────────────────── */
-  N8N_WEBHOOK_URL: z.string().url().optional(),
+  /* ── engine webhook (optional) ────────────────── */
+  ENGINE_WEBHOOK_URL: z.string().url().optional(),
 
   /* ── safety limits ─────────────────────────── */
   MAX_CREATIONS_PER_DAY: z.coerce.number().int().min(1).default(3),

@@ -4,15 +4,16 @@ const ENDPOINTS = {
 	posts: '/api/posts',
 	feed: '/api/posts',
 	accounts: '/api/accounts',
-	generate: '/api/n8n-proxy?path=personagen-ai-generate',
-	publish: '/api/n8n-proxy?path=personagen-publish',
-	trends: '/api/n8n-proxy?path=personagen-trends',
-	inbox: '/api/n8n-proxy?path=personagen-engagement',
-	factory: '/api/n8n-proxy?path=personagen-account-factory',
-	email: '/api/n8n-proxy?path=personagen-email',
-	channelDecode: '/api/n8n-proxy?path=personagen-channel-decode',
-	contentForge: '/api/n8n-proxy?path=personagen-content-forge',
-	blueprints: '/api/n8n-proxy?path=personagen-blueprints'
+	generate: '/api/engine?path=personagen-ai-generate',
+	publish: '/api/engine?path=personagen-publish',
+	trends: '/api/engine?path=personagen-trends',
+	inbox: '/api/engine?path=personagen-engagement',
+	factory: '/api/engine?path=personagen-account-factory',
+	email: '/api/engine?path=personagen-email',
+	channelDecode: '/api/engine?path=personagen-channel-decode',
+	contentForge: '/api/engine?path=personagen-content-forge',
+	blueprints: '/api/engine?path=personagen-blueprints',
+	brandBrief: '/api/engine?path=personagen-brand-brief'
 } as const;
 
 async function request<T>(
@@ -195,3 +196,12 @@ export const Blueprints = {
 			agent_handle: agentHandle
 		})
 };
+
+// ── Brand Brief (2 actions) ───────────────────────────────────────────────────
+
+export const BrandBrief = {
+	scrapeStore: (url: string) => request<any>(ENDPOINTS.brandBrief, 'scrape_store', { url }),
+	extendField: (fieldName: string, fieldVal: string) =>
+		request<{ enriched: string }>(ENDPOINTS.brandBrief, 'extend_field', { fieldName, fieldVal })
+};
+

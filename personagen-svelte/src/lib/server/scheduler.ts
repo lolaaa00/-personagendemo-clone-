@@ -89,7 +89,7 @@ async function generateSpunPost(
 	title: string,
 	link: string,
 	apiKey: string
-): Promise<string> {
+): Promise<{ content: string; tokenUsage: number; tokenCost: number }> {
 	const ai = new GoogleGenAI({ apiKey });
 	const prompt = `Repurpose the following news/feed article into a unique, high-engaging, and ready-to-publish social media post tailored exactly in my voice.
 
@@ -108,11 +108,13 @@ Instructions:
 3. Keep it within typical social media post limits (less than 280 characters if posting to X, but write a clean, well-formatted piece with hooks, a concise body, and relevant hashtags).
 4. Output ONLY the post body content itself. Do not include introductory text like "Here is your post:", markdown code fences, or any other explanations.`;
 
+	const systemInstruction = `You are the AI avatar agent ${agent.name} (@${agent.handle}). Your personality is defined by: ${agent.soul}. Your writing style is defined by: ${agent.skills}. Repurpose/spin the input feed content into a single final post body in your own unique voice.`;
+
 	const res = await ai.models.generateContent({
 		model: 'gemini-3.5-flash',
 		contents: [{ role: 'user', parts: [{ text: prompt }] }],
 		config: {
-			systemInstruction: `You are the AI avatar agent ${agent.name} (@${agent.handle}). Your personality is defined by: ${agent.soul}. Your writing style is defined by: ${agent.skills}. Repurpose/spin the input feed content into a single final post body in your own unique voice.`
+			systemInstruction
 		}
 	});
 
@@ -121,7 +123,23 @@ Instructions:
 	if (postContent.startsWith('```') && postContent.endsWith('```')) {
 		postContent = postContent.replace(/^```[a-zA-Z]*\n/, '').replace(/\n```$/, '').trim();
 	}
-	return postContent;
+
+	// Calculate realistic token usage and cost based on Gemini 3.5 Flash pricing
+	// 1 token ≈ 4 characters of English text. System instructions are also part of the input.
+	const inputTokens = Math.floor((prompt.length + systemInstruction.length) / 4) + 150;
+	const outputTokens = Math.floor(postContent.length / 4) + 30;
+	const tokenUsage = inputTokens + outputTokens;
+
+	// Gemini 1.5/3.5 Flash cost pricing structure:
+	// Input: $0.075 / 1M tokens ($0.000000075 per token)
+	// Output: $0.30 / 1M tokens ($0.000000300 per token)
+	const tokenCost = (inputTokens * 0.000000075) + (outputTokens * 0.000000300);
+
+	return {
+		content: postContent,
+		tokenUsage,
+		tokenCost: Number(tokenCost.toFixed(6))
+	};
 }
 
 /**
@@ -210,7 +228,8 @@ async function pollRssFeeds() {
 					console.log(`[Scheduler RSS] Repurposing new RSS item: "${item.title}"`);
 
 					// Spin it via Gemini!
-					const spunContent = await generateSpunPost(
+					// Spin it via Gemini!
+					const spinResult = await generateSpunPost(
 						{
 							name: agent.name,
 							handle: agent.handle,
@@ -223,7 +242,7 @@ async function pollRssFeeds() {
 						apiKey
 					);
 
-					if (!spunContent) {
+					if (!spinResult || !spinResult.content) {
 						console.warn(`[Scheduler RSS] Generated content was empty for "${item.title}".`);
 						continue;
 					}
@@ -247,11 +266,13 @@ async function pollRssFeeds() {
 						.insert({
 							user_id: config.user_id,
 							agent_id: agent.id,
-							content: spunContent,
+							content: spinResult.content,
 							platforms,
 							status: 'scheduled',
 							scheduled_date: scheduledDate,
-							scheduled_time: scheduledTime
+							scheduled_time: scheduledTime,
+							token_usage: spinResult.tokenUsage,
+							token_cost: spinResult.tokenCost
 						});
 
 					if (insertErr) {
@@ -327,6 +348,7 @@ async function pollScheduledPosts() {
 				const targetPlatforms: string[] = post.platforms || [];
 				let publishCount = 0;
 				let failureCount = 0;
+				let lastExternalId: string | null = null;
 				const errors: string[] = [];
 
 				for (const platform of targetPlatforms) {
@@ -351,6 +373,9 @@ async function pollScheduledPosts() {
 					if (publishRes.success) {
 						console.log(`[Scheduler] Post ${post.id} successfully published to ${platform}.`);
 						publishCount++;
+						if (publishRes.externalId) {
+							lastExternalId = publishRes.externalId;
+						}
 					} else {
 						console.error(`[Scheduler] Post ${post.id} failed to publish to ${platform}:`, publishRes.error);
 						failureCount++;
@@ -370,7 +395,9 @@ async function pollScheduledPosts() {
 					.from('posts')
 					.update({
 						status: finalStatus,
-						published_at: publishedAt
+						published_at: publishedAt,
+						external_id: lastExternalId,
+						analytics: { views: 0, likes: 0, comments: 0, shares: 0 }
 					})
 					.eq('id', post.id);
 
@@ -382,10 +409,71 @@ async function pollScheduledPosts() {
 
 		// Run RSS polling
 		await pollRssFeeds();
+
+		// Run Post-Publication Analytics Sync!
+		await syncPostAnalytics();
 	} catch (err) {
 		console.error('[Scheduler] Critical loop error:', err);
 	} finally {
 		isRunning = false;
+	}
+}
+
+/**
+ * Periodically syncs live performance metrics for all published posts
+ */
+export async function syncPostAnalytics() {
+	console.log('[Scheduler] Syncing post analytics...');
+	const supabase = getServiceSupabase();
+	const composio = new ComposioClient();
+
+	try {
+		// Fetch published posts that have an external_id
+		const { data: posts, error } = await supabase
+			.from('posts')
+			.select('*')
+			.eq('status', 'published')
+			.not('external_id', 'is', null);
+
+		if (error) {
+			console.error('[Scheduler] Error fetching published posts for analytics sync:', error);
+			return;
+		}
+
+		if (!posts || posts.length === 0) {
+			console.log('[Scheduler] No published posts to sync analytics for.');
+			return;
+		}
+
+		console.log(`[Scheduler] Syncing metrics for ${posts.length} published posts...`);
+
+		for (const post of posts) {
+			const platform = (post.platforms && post.platforms[0]) || 'instagram';
+			try {
+				const metrics = await composio.fetchPostMetrics(
+					post.agent_id,
+					platform,
+					post.external_id!,
+					post.published_at!
+				);
+
+				const { error: updateErr } = await supabase
+					.from('posts')
+					.update({ analytics: metrics })
+					.eq('id', post.id);
+
+				if (updateErr) {
+					console.error(`[Scheduler] Failed to update analytics for post ${post.id}:`, updateErr);
+				} else {
+					console.log(`[Scheduler] Synced metrics for post ${post.id}: Views=${metrics.views}, Likes=${metrics.likes}`);
+				}
+			} catch (postErr) {
+				console.error(`[Scheduler] Error syncing metrics for post ${post.id}:`, postErr);
+			}
+		}
+		console.log('[Scheduler] Finished syncing post analytics.');
+	} catch (err) {
+		console.error('[Scheduler] Critical error in syncPostAnalytics:', err);
 	}
 }
 

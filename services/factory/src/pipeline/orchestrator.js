@@ -301,10 +301,10 @@ class Orchestrator extends EventEmitter {
   }
 
   /**
-   * Fire webhook to n8n on completion/failure.
+   * Fire webhook to local engine on completion/failure.
    */
   async _webhook(event, account) {
-    if (!config.N8N_WEBHOOK_URL) return;
+    if (!config.ENGINE_WEBHOOK_URL) return;
 
     const body = JSON.stringify({
       event,
@@ -317,7 +317,7 @@ class Orchestrator extends EventEmitter {
     });
 
     try {
-      const url = new URL(config.N8N_WEBHOOK_URL);
+      const url = new URL(config.ENGINE_WEBHOOK_URL);
       const transport = url.protocol === "https:" ? https : http;
       await new Promise((resolve, reject) => {
         const req = transport.request(
@@ -347,7 +347,7 @@ class Orchestrator extends EventEmitter {
         JSON.stringify({
           level: "warn",
           msg: "Webhook delivery failed (non-fatal)",
-          url: config.N8N_WEBHOOK_URL,
+          url: config.ENGINE_WEBHOOK_URL,
           error: err.message,
           ts: new Date().toISOString(),
         })

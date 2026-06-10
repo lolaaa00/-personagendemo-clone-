@@ -59,10 +59,7 @@
       label: 'Manage',
       items: [
         { href: '/inbox', label: 'Inbox', icon: 'inbox' },
-        { href: '/pm', label: 'Projects', icon: 'folder' },
-        { href: '/brand-brief', label: 'Brand Brief', icon: 'bolt' },
-        { href: '/agreement', label: 'Agreement', icon: 'file' },
-        { href: '/settings', label: 'Settings', icon: 'settings' }
+        { href: '/pm', label: 'Projects', icon: 'folder' }
       ]
     }
   ];
@@ -206,9 +203,16 @@
           </svg>
         </button>
         <h2 class="portal-header-title">
-          {navSections
-            .flatMap(s => s.items)
-            .find(i => isActive(i.href, $page.url.pathname))?.label ?? 'Dashboard'}
+          {(() => {
+            const path = $page.url.pathname;
+            if (path.startsWith('/brand-brief')) return 'Brand Brief';
+            if (path.startsWith('/agreement')) return 'Agreement';
+            if (path.startsWith('/settings/billing')) return 'Billing & Subscription';
+            if (path.startsWith('/settings')) return 'Settings';
+            return navSections
+              .flatMap(s => s.items)
+              .find(i => isActive(i.href, path))?.label ?? 'Dashboard';
+          })()}
         </h2>
       </div>
       <div class="portal-header-right">
@@ -229,13 +233,28 @@
               </span>
             {/if}
           </button>
-
+          
           {#if userDropdownOpen}
             <div class="user-dropdown-menu glass-card" role="menu">
               <div class="user-dropdown-info">
                 <span class="user-email">{data.user?.email ?? 'monarchstackteam@gmail.com'}</span>
               </div>
               <hr class="dropdown-divider" />
+              <a href="/brand-brief" class="dropdown-item" role="menuitem" onclick={closeUserDropdown}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+                </svg>
+                Brand Brief
+              </a>
+              <a href="/agreement" class="dropdown-item" role="menuitem" onclick={closeUserDropdown}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                  <line x1="16" y1="13" x2="8" y2="13"/>
+                  <line x1="16" y1="17" x2="8" y2="17"/>
+                </svg>
+                Agreement
+              </a>
               <a href="/settings" class="dropdown-item" role="menuitem" onclick={closeUserDropdown}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <circle cx="12" cy="12" r="3"/>

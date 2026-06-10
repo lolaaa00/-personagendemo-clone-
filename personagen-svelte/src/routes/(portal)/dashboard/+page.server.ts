@@ -15,11 +15,57 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 
 		if (dbAgents && dbAgents.length > 0) {
 			hasDbAgents = true;
+
+			// Fetch real database posts to aggregate token costs and actual views/likes/etc.
+			const { data: dbPosts } = await locals.supabase
+				.from('posts')
+				.select('agent_id, token_usage, token_cost, analytics, status');
+
+			const postsByAgent: Record<string, any[]> = {};
+			if (dbPosts) {
+				dbPosts.forEach((post) => {
+					if (!postsByAgent[post.agent_id]) {
+						postsByAgent[post.agent_id] = [];
+					}
+					postsByAgent[post.agent_id].push(post);
+				});
+			}
+
 			// For each agent, dynamically compute their active state, performance score, and connection counts
 			agents = dbAgents.map((a) => {
 				const followersVal = parseFloat(a.followers) || 0;
-				const engVal = parseFloat(a.engagement_rate as any) || 0;
 				const connCount = a.connection_count ?? 0;
+				const agentPosts = postsByAgent[a.id] || [];
+
+				let totalTokenUsage = 0;
+				let totalTokenCost = 0;
+				let totalViews = 0;
+				let totalLikes = 0;
+				let publishedCount = 0;
+
+				agentPosts.forEach((p) => {
+					if (p.token_usage) totalTokenUsage += p.token_usage;
+					if (p.token_cost) totalTokenCost += parseFloat(p.token_cost);
+					if (p.status === 'published' && p.analytics) {
+						totalViews += p.analytics.views || 0;
+						totalLikes += p.analytics.likes || 0;
+						publishedCount++;
+					}
+				});
+
+				// Calculate real engagement rate if posts are published, otherwise fall back to default
+				let engVal = parseFloat(a.engagement_rate as any) || 5.2;
+				if (publishedCount > 0 && totalViews > 0) {
+					engVal = parseFloat(((totalLikes / totalViews) * 100).toFixed(2));
+				}
+
+				// If there are zero database posts for this agent, let's seed some realistic demo values
+				if (agentPosts.length === 0) {
+					let seed = 0;
+					for (let i = 0; i < a.name.length; i++) seed += a.name.charCodeAt(i);
+					totalTokenUsage = 15000 + (seed % 10) * 1250;
+					totalTokenCost = totalTokenUsage * 0.00000018 + 0.15;
+				}
 
 				// Calculate a dynamic performance score based on connections and engagement
 				const perf = Math.min(
@@ -34,7 +80,11 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 					engagement_rate: engVal,
 					active: a.status === 'active',
 					trend: '+1.2%', // default mock trend
-					perf
+					perf,
+					total_token_usage: totalTokenUsage,
+					total_token_cost: Number(totalTokenCost.toFixed(4)),
+					total_views: totalViews,
+					total_likes: totalLikes
 				};
 			});
 		}
@@ -44,15 +94,22 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 		// Fallback to static JSON
 		const agentsRes = await fetch('/data/agents.json');
 		const rawAgents: any[] = await agentsRes.json();
-		agents = rawAgents.map((a) => ({
-			...a,
-			niche: (a.niche || '').split(' & ')[0] || a.niche,
-			engagementRate: a.engagementRate || parseFloat(a.engagement) || 0,
-			engagement_rate: a.engagementRate || parseFloat(a.engagement) || 0,
-			active: a.status === 'active',
-			connection_count: a.connectionCount ?? 0,
-			autonomy_level: a.autonomy_level ?? 'advisor'
-		}));
+		agents = rawAgents.map((a, idx) => {
+			const engVal = a.engagementRate || parseFloat(a.engagement) || 5.2;
+			const totalTokenUsage = 18450 + (idx * 3420);
+			const totalTokenCost = totalTokenUsage * 0.00000018 + 0.22;
+			return {
+				...a,
+				niche: (a.niche || '').split(' & ')[0] || a.niche,
+				engagementRate: engVal,
+				engagement_rate: engVal,
+				active: a.status === 'active',
+				connection_count: a.connectionCount ?? 0,
+				autonomy_level: a.autonomy_level ?? 'advisor',
+				total_token_usage: totalTokenUsage,
+				total_token_cost: Number(totalTokenCost.toFixed(4))
+			};
+		});
 	}
 
 	// Calculate platform distribution from database if active

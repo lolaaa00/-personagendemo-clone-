@@ -2,6 +2,7 @@
   import { ContentForge } from '$lib/services/api';
   import { showToast } from '$lib/stores/ui.svelte';
   import { goto } from '$app/navigation';
+  import { browser } from '$app/environment';
 
   const PLATFORMS = [
     { id: 'youtube', label: 'YouTube', color: '#ff0000' },
@@ -41,6 +42,21 @@
     { id: 'bp-4', name: 'CookingVibes', platform: 'tiktok', niche: 'Food & Cooking', score: 78, date: '5 days ago', layers: 9 }
   ];
 
+  interface Product {
+    id: string;
+    name: string;
+    description: string;
+    price: string;
+    photoUrl: string;
+  }
+
+  const LS_KEY = 'personagen_brand_brief';
+
+  let brandName = $state('');
+  let products = $state<Product[]>([]);
+  let ugcGuidelines = $state('');
+  let selectedProductId = $state<string>('');
+
   let selectedBlueprint = $state<string | null>(SAMPLE_BLUEPRINTS[0].id);
   let topic = $state('');
   let selectedAgent = $state('');
@@ -50,6 +66,23 @@
   let editing = $state(false);
   let showRepurpose = $state(false);
   let repurposePlatforms = $state<string[]>([]);
+
+  // Load brand brief details from LocalStorage on mount
+  $effect(() => {
+    if (!browser) return;
+    try {
+      const saved = localStorage.getItem(LS_KEY);
+      if (saved) {
+        const d = JSON.parse(saved);
+        brandName = d.brandName || '';
+        products = d.products || [];
+        ugcGuidelines = d.ugcGuidelines || '';
+        if (products.length > 0) {
+          selectedProductId = products[0].id;
+        }
+      }
+    } catch { /* ignore */ }
+  });
 
   interface ForgeOutput {
     type: string;
@@ -87,24 +120,29 @@
   }
 
   function generateDemoOutput(): ForgeOutput {
+    const selectedProd = products.find(p => p.id === selectedProductId);
+    const prodName = selectedProd?.name || 'Honey For X - Performance Stamina Pouches';
+    const prodPrice = selectedProd?.price || '$34.99 (Pack of 12)';
+    const prodDesc = selectedProd?.description || 'Pure clover honey with Royal Jelly and Siberian Ginseng.';
+
     const base: Record<string, ForgeOutput> = {
       post: {
         type: 'post',
         platform: selectedPlatforms[0],
-        content: `🔥 ${topic}\n\nMost people in ${selectedBp?.niche || 'this space'} get this completely wrong.\n\nHere's what the top 1% actually do:\n\n1️⃣ They focus on consistency over perfection\n→ Posting 5x/week beats 1 "perfect" post\n\n2️⃣ They lead with the transformation, not the method\n→ Show the result in the first 3 seconds\n\n3️⃣ They treat every comment as a content idea\n→ Your audience literally tells you what to make next\n\n4️⃣ They have a system, not motivation\n→ Blueprint-driven content creation eliminates burnout\n\n5️⃣ They study competitors, then do the opposite\n→ Pattern-breaking content gets 3.2x more shares\n\nWhich one are you implementing first?\n\nDrop "BLUEPRINT" in the comments for my free content strategy template 👇`,
-        hashtags: ['#ContentStrategy', '#CreatorEconomy', '#GrowthHacks', `#${selectedBp?.niche.replace(/\s*&\s*/g, '').replace(/\s+/g, '') || 'Content'}`, '#PersonaGen'],
-        hookScore: 89,
-        estimatedReach: '12.4K - 28.7K',
+        content: `🔥 ${topic}\n\nIntroducing the ultimate game-changer: ${prodName} (${prodPrice})!\n\nMost people get stamina completely wrong. They rely on synthetic pills and jittery energy drinks.\n\nHere's how we do it differently with raw nature:\n\n1️⃣ **Royal Jelly Power**: Unlocking natural daily drive.\n2️⃣ **Siberian Ginseng**: Sustainable energy with zero crash.\n3️⃣ **Pure Clover Honey**: Fast-absorbing athletic stamina.\n\n${prodDesc}\n\nDrop a comment to grab exclusive early access 👇`,
+        hashtags: ['#EnergyBoost', '#HoneyForX', '#FitnessBiohacks', '#OrganicWellness', '#UGCContent'],
+        hookScore: 92,
+        estimatedReach: '14.2K - 31.5K',
         titles: undefined,
         thumbnailNotes: undefined
       },
       script: {
         type: 'script',
         platform: selectedPlatforms[0],
-        content: `[HOOK — 0:00-0:03]\n"I decoded the exact strategy behind a ${selectedBp?.score || 90}-score channel and here's what I found..."\n\n[PATTERN INTERRUPT — 0:03-0:05]\n[Quick zoom cut, text overlay: "${topic}"]\n\n[SETUP — 0:05-0:15]\n"I ran this channel through our 9-layer decoder and the results were insane. Their content DNA showed a pattern that 99% of creators miss."\n\n[VALUE — 0:15-0:45]\n"Here's the framework:\n\nFirst — they use what I call 'Question Hooks.' Every single video starts with a question that creates an open loop in your brain.\n\nSecond — their posting cadence isn't random. They post at exactly the times when their audience's engagement peaks — which is different from what most gurus tell you.\n\nThird — and this is the big one — they have a 'Replication Blueprint.' A literal system that turns one piece of content into 5 platform-native posts."\n\n[CTA — 0:45-0:55]\n"If you want me to decode YOUR competitors and build a custom blueprint, drop 'DECODE' in the comments. Link in bio for the full breakdown."\n\n[OUTRO — 0:55-1:00]\n[End screen with subscribe/follow prompt]`,
-        hashtags: ['#ContentCreator', '#VideoScript', '#GrowthStrategy'],
-        hookScore: 94,
-        estimatedReach: '18.2K - 45.1K',
+        content: `[SCENE DIRECTION: Close-up of a premium, golden single-serve honey pouch being ripped open with honey slowly dripping onto a spoon. Warm, low sunlight background.]\n"If you are still taking chemical pills or drinking jittery pre-workouts... stop."\n\n[PATTERN INTERRUPT: Fast-paced cut to an athlete mid-workout, breathing heavily but smiling.]\n"This is ${prodName}. It is pure raw honey packed with royal jelly and siberian ginseng. One pocket-sized pouch, all-natural stamina."\n\n[VISUAL CUE: Text overlay: "PURE HONEY POWER - NO SYNTHETIC CRASH" in bold gold letters.]\n"Here's why it works: synthetic stamina pills cause major heart-rate spikes. Synthetic energy drinks leave you crashing after 2 hours. Clover honey absorbs instantly into your muscles, delivering clean glycogen while Siberian Ginseng maintains long-term focus."\n\n[SCENE DIRECTION: Creator smiles, holding the packet, showing the beautiful amber packaging close to the lens.]\n"${prodDesc} It is premium performance, certified organic, and tastes incredible."\n\n[CTA: Text overlay: "VISIT HONEYFORX.COM"]\n"Ditch the chemicals. Grab your pack of 12 for just ${prodPrice} today. Link in bio!"`,
+        hashtags: ['#UGCReview', '#FitnessRoutine', '#OrganicStamina', '#DTCProduct'],
+        hookScore: 96,
+        estimatedReach: '22.1K - 54.0K',
         titles: undefined,
         thumbnailNotes: undefined
       },
@@ -113,17 +151,17 @@
         platform: selectedPlatforms[0],
         content: '',
         hashtags: [],
-        hookScore: 91,
+        hookScore: 94,
         estimatedReach: 'N/A',
         titles: [
-          `I Decoded a ${selectedBp?.score || 90}-Score Channel — Here's Their Exact Blueprint`,
-          `The ${topic} Strategy Nobody Talks About (9-Layer Analysis)`,
-          `Why 99% of ${selectedBp?.niche || 'Content'} Creators Fail (Data Proof)`,
-          `I Reverse-Engineered the #1 ${selectedBp?.niche || 'Content'} Channel — Here's What I Found`,
-          `Stop Guessing: The Exact ${topic} Framework That Works`,
-          `${topic}: The Content Blueprint That Gets 10x Engagement`,
-          `I Spent 48 Hours Analyzing Top Channels — This Pattern Changed Everything`,
-          `The ${topic} Playbook: What Top 1% Creators Do Differently`
+          `I Ditched Synthetic Pre-Workouts For This Active Honey Stamina (Biohack Reveal)`,
+          `Why Athletes Are Raving About ${prodName}`,
+          `The $34 Secret to Organic Workout Stamina (UGC ASMR Taste Test)`,
+          `Stop Drinking Jittery Energy Drinks, Try Honey For X Instead`,
+          `This Pocket-Sized Pack Holds the Secret to Ultimate Performance`,
+          `${prodName}: Natural Energy vs Synthetic Stamina Pills`,
+          `An Honest UGC Review of the Premium Honey For X Daily Vitality Jar`,
+          `How a Spoonful of Active Vitality Honey Can Double Your Workout Focus`
         ],
         thumbnailNotes: undefined
       },
@@ -132,18 +170,16 @@
         platform: selectedPlatforms[0],
         content: '',
         hashtags: [],
-        hookScore: 86,
+        hookScore: 89,
         estimatedReach: 'N/A',
         titles: undefined,
         thumbnailNotes: [
-          '**Layout:** Split-frame with face (left 60%) + data visualization (right 40%)',
-          '**Expression:** Surprised/intrigued face, slight head tilt, eyebrows raised',
-          '**Text Overlay:** "I DECODED IT" in bold Impact font, white with black outline',
-          `**Accent Elements:** ${selectedBp?.score || 90}/100 score badge in top-right, glowing accent color`,
-          '**Background:** Dark gradient (#0b0713 → #1e1e2e) with subtle grid pattern',
-          '**Color Palette:** Primary purple (#7c6aed), accent cyan (#22d3ee), white text',
-          '**Props/Overlays:** Holographic data streams, floating analysis cards',
-          '**Emotion Target:** Curiosity + FOMO — "I need to know what they found"'
+          `**Layout**: Close-up product layout showing the product pouch/jar surrounded by gold/honey-colored backlighting`,
+          '**Expression**: Intrigued reaction face looking at a spoonful of rich amber honey',
+          `**Text Overlay**: "BYE BYE CHEMICALS" in bold black and gold Impact font`,
+          '**Accent Elements**: Beautiful honey drip graphics, glowing energy bolts in neon golden-amber',
+          '**Background**: Dark luxury graphite texture (#111115 → #1a1c22) with a premium amber glow',
+          '**Emotion Target**: High luxury biohacking vibe — curiosity, premium health obsession'
         ]
       }
     };
@@ -158,16 +194,32 @@
     // Simulate processing time
     await new Promise(r => setTimeout(r, 1800 + Math.random() * 1200));
 
+    // Compile active product details
+    const selectedProd = products.find(p => p.id === selectedProductId);
+    let enrichedTopic = topic;
+
+    if (selectedProd) {
+      enrichedTopic += `\n\nProduct Focus Details:
+Name: ${selectedProd.name}
+Price: ${selectedProd.price}
+Description: ${selectedProd.description}
+Photo Reference URL: ${selectedProd.photoUrl}`;
+    }
+
+    if (ugcGuidelines) {
+      enrichedTopic += `\n\nBrand UGC Guidelines & Format Style to incorporate:\n${ugcGuidelines}`;
+    }
+
     try {
       let res;
       if (contentType === 'post') {
-        res = await ContentForge.generate(selectedBlueprint!, topic, selectedAgent, selectedPlatforms);
+        res = await ContentForge.generate(selectedBlueprint!, enrichedTopic, selectedAgent, selectedPlatforms);
       } else if (contentType === 'script') {
-        res = await ContentForge.script(selectedBlueprint!, topic, selectedAgent);
+        res = await ContentForge.script(selectedBlueprint!, enrichedTopic, selectedAgent);
       } else if (contentType === 'titles') {
-        res = await ContentForge.titles(selectedBlueprint!, topic);
+        res = await ContentForge.titles(selectedBlueprint!, enrichedTopic);
       } else {
-        res = await ContentForge.thumbnailBrief(selectedBlueprint!, topic);
+        res = await ContentForge.thumbnailBrief(selectedBlueprint!, enrichedTopic);
       }
 
       if (res.success && res.data) {
@@ -286,12 +338,27 @@
         <div class="form-grid">
           <div class="input-group full-width">
             <label for="forge-topic">Topic / Prompt</label>
-            <input id="forge-topic" type="text" bind:value={topic} placeholder="e.g. How to grow on TikTok in 2026" />
+            <input id="forge-topic" type="text" bind:value={topic} placeholder="e.g. Biohacking stamina with raw clover honey and royal jelly" />
+          </div>
+
+          <div class="input-group">
+            <label for="forge-product">Focus Product</label>
+            <select id="forge-product" bind:value={selectedProductId} class="premium-select">
+              <option value="">General Brand Content (No Product)</option>
+              {#each products as product}
+                <option value={product.id}>{product.name} ({product.price})</option>
+              {/each}
+            </select>
+            {#if products.length === 0}
+              <div class="no-products-info">
+                No products found. <a href="/brand-brief">Scrape or add products</a> in your Brand Brief first!
+              </div>
+            {/if}
           </div>
 
           <div class="input-group">
             <label for="forge-agent">Agent</label>
-            <select id="forge-agent" bind:value={selectedAgent}>
+            <select id="forge-agent" bind:value={selectedAgent} class="premium-select">
               <option value="">Select agent...</option>
               {#each SAMPLE_AGENTS as agent}
                 <option value={agent.id}>{agent.name}</option>
@@ -299,7 +366,7 @@
             </select>
           </div>
 
-          <div class="input-group">
+          <div class="input-group full-width">
             <label>Content Type</label>
             <div class="type-selector">
               {#each CONTENT_TYPES as ct}
@@ -395,6 +462,29 @@
               </button>
             </div>
           </div>
+
+          <!-- UGC Product Asset Reference Visual Photo Card -->
+          {#if selectedProductId}
+            {@const activeProduct = products.find(p => p.id === selectedProductId)}
+            {#if activeProduct}
+              <div class="asset-reference-section">
+                <span class="asset-header">🎥 UGC Product Asset Reference</span>
+                <div class="asset-ref-card">
+                  {#if activeProduct.photoUrl}
+                    <div class="asset-photo-wrapper">
+                      <img src={activeProduct.photoUrl} alt={activeProduct.name} class="asset-photo" />
+                      <div class="photo-overlay-badge">Reference Photo</div>
+                    </div>
+                  {/if}
+                  <div class="asset-ref-details">
+                    <h4>{activeProduct.name}</h4>
+                    <p class="asset-price">{activeProduct.price}</p>
+                    <p class="asset-desc">{activeProduct.description}</p>
+                  </div>
+                </div>
+              </div>
+            {/if}
+          {/if}
 
           <!-- Content body -->
           {#if output.type === 'titles' && output.titles}
@@ -1168,6 +1258,135 @@
   }
 
   .repurpose-go:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* ─── UGC Product Asset Reference styling ─── */
+  .asset-reference-section {
+    margin-bottom: 1.5rem;
+    padding: 1rem;
+    background: linear-gradient(135deg, rgba(234, 179, 8, 0.05), rgba(249, 115, 22, 0.05));
+    border: 1px solid rgba(234, 179, 8, 0.2);
+    border-radius: var(--radius-sm);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  }
+
+  .asset-header {
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #eab308; /* Amber */
+    margin-bottom: 0.75rem;
+  }
+
+  .asset-ref-card {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+  }
+
+  .asset-photo-wrapper {
+    position: relative;
+    width: 80px;
+    height: 80px;
+    border-radius: var(--radius-xs);
+    overflow: hidden;
+    border: 1px solid rgba(234, 179, 8, 0.3);
+    flex-shrink: 0;
+  }
+
+  .asset-photo {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 0.3s ease;
+  }
+
+  .asset-photo-wrapper:hover .asset-photo {
+    transform: scale(1.1);
+  }
+
+  .photo-overlay-badge {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: rgba(0, 0, 0, 0.7);
+    color: #eab308;
+    font-size: 0.55rem;
+    font-weight: 700;
+    text-align: center;
+    padding: 0.15rem 0;
+    text-transform: uppercase;
+  }
+
+  .asset-ref-details {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .asset-ref-details h4 {
+    margin: 0;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .asset-price {
+    margin: 0.15rem 0 0.35rem;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: #f97316; /* Orange vitality */
+    font-family: var(--font-mono);
+  }
+
+  .asset-desc {
+    margin: 0;
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  /* ─── Premium Select & Warning Link ─── */
+  .premium-select {
+    width: 100%;
+    padding: 0.75rem;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xs);
+    color: var(--text);
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .premium-select:focus {
+    border-color: #eab308;
+    box-shadow: 0 0 10px rgba(234, 179, 8, 0.15);
+    outline: none;
+  }
+
+  .no-products-info {
+    font-size: 0.78rem;
+    color: var(--text-dim);
+    margin-top: 0.5rem;
+  }
+
+  .no-products-info a {
+    color: #eab308;
+    text-decoration: underline;
+  }
+
+  .no-products-info a:hover {
+    color: #f97316;
+  }
 
   /* ─── Responsive ─── */
   @media (max-width: 900px) {

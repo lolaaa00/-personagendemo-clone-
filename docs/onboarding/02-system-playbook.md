@@ -25,7 +25,7 @@
        │      Central Coordinator (Your Cloud VPS)     │
        │   • Content generation via OpenRouter         │
        │   • Persona database & scheduling queue       │
-       │   • n8n automation workflows                  │
+       │   • Svelte scheduler/engine                   │
        │   • Analytics & monitoring                    │
        └──────────────────────┬────────────────────────┘
                               │ HTTPS polling
@@ -54,7 +54,7 @@
 | Hosting | Hostinger VPS (KVM) | Client | [§3.1](#31-hostinger-vps) |
 | Orchestration | EasyPanel + Docker | Client (Monarch manages) | Provisioned by Monarch |
 | AI Gateway | OpenRouter | Client | [§3.2](#32-openrouter) |
-| Automation | n8n (self-hosted) | Client (Monarch manages) | Provisioned by Monarch |
+| Automation | Local Svelte Engine | Client (Monarch manages) | Provisioned by Monarch |
 | CDN & Security | Cloudflare | Client | [§3.3](#33-cloudflare) |
 | Code | GitHub | Client (Monarch collaborator) | [§3.4](#34-github) |
 | Voice | ElevenLabs | Client | [§3.5](#35-elevenlabs) |
@@ -77,7 +77,7 @@
 | Trend Monitor | `modules/trends.js` (IIFE) | Real-time trend scanning across niches and platforms |
 | Scout Intelligence | `script.js` (scout section) | Profile analysis + keyword/trend discovery engine |
 
-**Webhook Endpoints (n8n):**
+**Webhook Endpoints (Svelte Engine):**
 
 | Endpoint | Purpose |
 |----------|---------|
@@ -103,7 +103,7 @@
 
 - Create account at [hostinger.com/vps](https://hostinger.com/vps)
 - Share root credentials via WhatsApp
-- Monarch provisions EasyPanel + Docker + n8n on your VPS
+- Monarch provisions EasyPanel + Docker + Svelte Engine on your VPS
 
 | Tier | Specs | Monthly | Recommendation |
 |------|-------|---------|----------------|
@@ -272,7 +272,7 @@ The Account Factory extends the execution network (§5) with two dedicated Docke
 ```
 ┌──────────────────────────────────────────────────────┐
 │              Central Coordinator (VPS)               │
-│   • n8n triggers creation jobs                       │
+│   • Engine triggers creation jobs                    │
 │   • Dashboard monitors pipeline status               │
 │   • Persona DB supplies identity profiles            │
 └────────────────────┬─────────────────────────────────┘
@@ -312,7 +312,7 @@ The factory executes a multi-step pipeline for each account creation:
 6. **SMS Verification** — Google Voice integration forwards SMS codes when phone verification is required
 7. **Profile Setup** — Upload avatar, set bio, configure privacy settings via the platform's UI
 8. **Session Capture** — Export browser cookies and session tokens, encrypt with AES-256, store to the factory database
-9. **Callback** — POST status and session data to the n8n webhook for pipeline orchestration
+9. **Callback** — POST status and session data to the Svelte engine webhook for pipeline orchestration
 
 ### Session Management Alignment
 
