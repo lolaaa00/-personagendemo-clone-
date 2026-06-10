@@ -28,15 +28,22 @@ async function request<T>(
 			body: JSON.stringify({ action, ts: Date.now(), ...payload })
 		});
 		if (!res.ok) {
+			let errorMessage = `HTTP ${res.status}`;
 			try {
 				const errorData = await res.json() as any;
-				if (errorData && errorData.error) {
-					throw new Error(errorData.error);
+				if (errorData) {
+					if (typeof errorData.error === 'string') {
+						errorMessage = errorData.error;
+					} else if (errorData.error && typeof errorData.error.message === 'string') {
+						errorMessage = errorData.error.message;
+					} else if (typeof errorData.message === 'string') {
+						errorMessage = errorData.message;
+					}
 				}
 			} catch {
-				// Ignore JSON parsing failure and fall back to generic HTTP error
+				// Ignore JSON parsing failure and keep generic HTTP error
 			}
-			throw new Error(`HTTP ${res.status}`);
+			throw new Error(errorMessage);
 		}
 		return await res.json();
 	} catch (err) {
