@@ -112,10 +112,29 @@
 		}
 	});
 
-	function saveAll(e?: MouseEvent) {
+	function saveAll(e?: MouseEvent, isManualClick = false) {
 		if (!browser) return;
 		const now = new Date().toLocaleString('en-AU', { dateStyle: 'medium', timeStyle: 'short' });
 		lastSaved = now;
+
+		// Detect if brand colors are changing compared to what's already saved
+		let colorsChanged = false;
+		try {
+			const saved = localStorage.getItem(LS_KEY);
+			if (saved) {
+				const d = JSON.parse(saved);
+				if (d.primaryColor !== primaryColor || d.secondaryColor !== secondaryColor) {
+					colorsChanged = true;
+				}
+			} else {
+				if (primaryColor !== '#7c6aed' || secondaryColor !== '#22d3ee') {
+					colorsChanged = true;
+				}
+			}
+		} catch {
+			colorsChanged = true;
+		}
+
 		localStorage.setItem(LS_KEY, JSON.stringify({
 			brandName, tagline, mission,
 			primaryColor, secondaryColor, logoUrl, fontPrimary, fontSecondary,
@@ -125,10 +144,20 @@
 		}));
 		showToast('Brand brief saved', 'success');
 
-		// Trigger magical color-burst transition from button coordinates
-		const x = e ? e.clientX : window.innerWidth / 2;
-		const y = e ? e.clientY : window.innerHeight / 2;
-		triggerBrandTransform(x, y, primaryColor, secondaryColor);
+		// Only trigger magical transition on actual manual save or scrape complete
+		// if colors changed, and ONLY ONCE per session.
+		const sessionKey = 'personagen_brand_transformed_done';
+		const alreadyTransformed = sessionStorage.getItem(sessionKey) === 'true';
+
+		if (colorsChanged && !alreadyTransformed && (isManualClick || e)) {
+			const x = e ? e.clientX : window.innerWidth / 2;
+			const y = e ? e.clientY : window.innerHeight / 2;
+			triggerBrandTransform(x, y, primaryColor, secondaryColor);
+			sessionStorage.setItem(sessionKey, 'true');
+		} else {
+			// Otherwise update values smoothly and quietly
+			updateBrandColors(primaryColor, secondaryColor);
+		}
 	}
 
 	async function runScrape() {
@@ -155,7 +184,7 @@
 				painPoints = d.painPoints || painPoints;
 				products = d.products || products;
 				
-				saveAll();
+				saveAll(undefined, true);
 				showToast(`Successfully scraped ${brandName}! Imported ${products.length} products with photos.`, 'success');
 			} else {
 				showToast(res.error || 'Failed to scrape store', 'error');

@@ -56,7 +56,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 					const activeAccounts = await composio.listConnections(persona_id);
 					activeComposioPlatforms = activeAccounts
 						.filter((acc: any) => acc.status?.toUpperCase() === 'ACTIVE')
-						.map((acc: any) => (acc.appId || acc.appName || '').toLowerCase())
+						.map((acc: any) => (acc.toolkit?.slug || acc.appId || acc.appName || '').toLowerCase())
 						.filter(Boolean);
 					
 					console.log(`[Accounts API] Live active Composio platforms for agent ${persona_id}:`, activeComposioPlatforms);

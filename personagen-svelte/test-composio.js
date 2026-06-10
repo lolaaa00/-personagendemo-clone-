@@ -1,9 +1,9 @@
-const apiKey = 'ak_E3uMv-JxpPJxpmyutBwR';
+const apiKey = 'ak_cHHRKbh3CqAOmdIfXpJv';
 const baseUrl = 'https://backend.composio.dev/api/v3';
 
 async function test() {
 	try {
-		console.log('Testing Composio Link API with new key and global fetch...');
+		console.log('Testing Composio Link API with verified key and global fetch...');
 		const response = await fetch(`${baseUrl}/connected_accounts/link`, {
 			method: 'POST',
 			headers: {
@@ -12,7 +12,7 @@ async function test() {
 			},
 			body: JSON.stringify({
 				user_id: 'test-agent-id',
-				app_id: 'tiktok',
+				auth_config_id: 'ac_Mw2OuQZDfGhS',
 				callback_url: 'https://honeyx.monarchstack.com/persona-config'
 			})
 		});

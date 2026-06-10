@@ -1,12 +1,14 @@
 import { env } from '$env/dynamic/private';
 import { env as publicEnv } from '$env/dynamic/public';
 
-// Platform to Composio App ID mapping
-const COMPOSIO_APP_MAPPING: Record<string, string> = {
-	instagram: 'instagram',
-	facebook: 'facebook',
-	youtube: 'youtube',
-	tiktok: 'tiktok'
+// Platform to Composio Auth Config ID mapping (managed/custom developer configurations)
+const COMPOSIO_AUTH_CONFIG_MAPPING: Record<string, string> = {
+	facebook: 'ac_Mw2OuQZDfGhS', // Facebook configuration ID
+	instagram: 'ac_hJwImsaP0RVh', // Active configuration with 1 connection (alternative: ac_uAyXLZGgTBwM)
+	youtube: 'ac_ThnyEqawTqZ4',   // YouTube configuration ID (alternative: ac_Jx9XnIK1u5VI)
+	tiktok: '',                 // Not configured (requires custom TikTok developer app on Composio dashboard)
+	reddit: 'ac_rN7BlBqYuamn',    // Active configuration with 1 connection (alternative: ac_NnIcAghDNrXl)
+	discord: 'ac_pXtKdjpLeCPM'    // Discord configuration ID
 };
 
 // Platform to Composio Action Slug mapping
@@ -43,19 +45,31 @@ export class ComposioClient {
 			throw new Error('COMPOSIO_API_KEY is not configured in environment variables.');
 		}
 
-		const appId = COMPOSIO_APP_MAPPING[platform.toLowerCase()];
-		if (!appId) {
-			throw new Error(`Platform ${platform} is not supported under the Managed Connection profile.`);
+		const platKey = platform.toLowerCase();
+		const authConfigId = COMPOSIO_AUTH_CONFIG_MAPPING[platKey];
+		if (authConfigId === undefined) {
+			throw new Error(`Platform ${platform} is not supported under the connection profile.`);
 		}
 
-		console.log(`[Composio Client] Generating link for agent=${personaId}, app=${appId}`);
+		if (!authConfigId) {
+			if (platKey === 'tiktok') {
+				throw new Error(
+					`TikTok connection is not configured yet on your Composio account. Please configure your custom TikTok Developer credentials on your Composio dashboard to obtain an Auth Config ID.`
+				);
+			}
+			throw new Error(
+				`Platform ${platform} has not been assigned a valid Auth Config ID. Please configure it in your dashboard.`
+			);
+		}
+
+		console.log(`[Composio Client] Generating link for agent=${personaId}, authConfigId=${authConfigId}`);
 
 		const response = await fetch(`${this.baseUrl}/connected_accounts/link`, {
 			method: 'POST',
 			headers: this.getHeaders(),
 			body: JSON.stringify({
 				user_id: personaId,
-				app_id: appId,
+				auth_config_id: authConfigId,
 				callback_url: callbackUrl
 			})
 		});
