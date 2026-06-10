@@ -27,7 +27,17 @@ async function request<T>(
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ action, ts: Date.now(), ...payload })
 		});
-		if (!res.ok) throw new Error(`HTTP ${res.status}`);
+		if (!res.ok) {
+			try {
+				const errorData = await res.json() as any;
+				if (errorData && errorData.error) {
+					throw new Error(errorData.error);
+				}
+			} catch {
+				// Ignore JSON parsing failure and fall back to generic HTTP error
+			}
+			throw new Error(`HTTP ${res.status}`);
+		}
 		return await res.json();
 	} catch (err) {
 		console.error(`[API] ${action} failed:`, err);
