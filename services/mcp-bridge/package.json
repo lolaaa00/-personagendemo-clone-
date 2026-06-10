@@ -1,0 +1,16 @@
+{
+  "name": "personagen-mcp-bridge",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Production-grade Supabase tool bridge for Model Context Protocol and Hermes Agent",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.1",
+    "@supabase/supabase-js": "^2.39.8",
+    "express": "^4.19.2",
+    "zod": "^3.22.4"
+  }
+}

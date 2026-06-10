@@ -14,7 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-COPY services/mail/src/ ./src/
+COPY src/ ./src/
 
 # Install Node deps
 RUN cd /app/src && npm install --omit=dev

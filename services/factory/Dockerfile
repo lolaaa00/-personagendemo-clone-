@@ -24,10 +24,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-COPY services/factory/package.json ./
+COPY package.json ./
 RUN npm install --omit=dev
 
-COPY services/factory/src/ ./src/
+COPY src/ ./src/
 
 RUN mkdir -p /data/profiles /data/screenshots
 
