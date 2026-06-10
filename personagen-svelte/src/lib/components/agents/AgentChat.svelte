@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import { showToast } from '$lib/stores/ui.svelte';
 
   interface Props {
@@ -25,20 +24,43 @@
   let chatOpen = $state(false);
   let scrollContainer = $state<HTMLElement | null>(null);
 
-  // Load chat session from localStorage on mount
-  onMount(() => {
+  // Fetch message history from the server with localStorage fallback
+  async function fetchHistory() {
+    try {
+      const res = await fetch(`/api/agent/${agentId}/chat`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && Array.isArray(data.messages)) {
+          if (data.messages.length > 0) {
+            messages = data.messages.map((m: any) => ({
+              id: m.id || Math.random().toString(36).substring(7),
+              role: m.role === 'model' ? 'agent' : m.role === 'user' ? 'user' : 'system',
+              content: m.content,
+              timestamp: m.created_at ? new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              toolCalls: m.tool_calls || []
+            }));
+            scrollToBottom();
+            return;
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching chat history from server:', err);
+    }
+
+    // Fallback: load from localStorage
     const cached = localStorage.getItem(`personagen_chat_session_${agentId}`);
     if (cached) {
       try {
         messages = JSON.parse(cached);
       } catch {
-        // start fresh
         initializeChat();
       }
     } else {
       initializeChat();
     }
-  });
+    scrollToBottom();
+  }
 
   // Save messages to localStorage when updated
   $effect(() => {
@@ -50,17 +72,7 @@
   // Watch agentId change
   $effect(() => {
     if (agentId) {
-      const cached = localStorage.getItem(`personagen_chat_session_${agentId}`);
-      if (cached) {
-        try {
-          messages = JSON.parse(cached);
-        } catch {
-          initializeChat();
-        }
-      } else {
-        initializeChat();
-      }
-      scrollToBottom();
+      fetchHistory();
     }
   });
 
@@ -91,7 +103,7 @@
     inputValue = '';
     loading = true;
 
-    // Push user message
+    // Push user message immediately
     messages.push({
       id: Math.random().toString(36).substring(7),
       role: 'user',
@@ -101,17 +113,11 @@
     scrollToBottom();
 
     try {
-      const history = messages.slice(1, -1).map(m => ({
-        role: m.role,
-        content: m.content
-      }));
-
       const res = await fetch(`/api/agent/${agentId}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          message: userText,
-          history
+          message: userText
         })
       });
 
@@ -143,10 +149,22 @@
     }
   }
 
-  function clearHistory() {
+  async function clearHistory() {
     if (confirm('Clear chat history?')) {
       initializeChat();
       localStorage.removeItem(`personagen_chat_session_${agentId}`);
+      try {
+        const res = await fetch(`/api/agent/${agentId}/chat`, {
+          method: 'DELETE'
+        });
+        if (!res.ok) {
+          const data = await res.json();
+          showToast(data.error || 'Failed to clear history on server', 'warning');
+        }
+      } catch (err) {
+        console.error('Error clearing chat history on server:', err);
+        showToast('Network error while clearing server history', 'warning');
+      }
     }
   }
 </script>

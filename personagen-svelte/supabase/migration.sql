@@ -369,3 +369,70 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+-- ─────────────────────────────────────────────
+-- 11. Alter agents table to support Hermes Overseer
+-- ─────────────────────────────────────────────
+ALTER TABLE public.agents ADD COLUMN is_overseer BOOLEAN DEFAULT false;
+
+-- ─────────────────────────────────────────────
+-- 12. chat_messages (Persistent Sync Chat History)
+-- ─────────────────────────────────────────────
+CREATE TABLE public.chat_messages (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  agent_id UUID REFERENCES public.agents(id) ON DELETE CASCADE,
+  role TEXT NOT NULL CHECK (role IN ('user', 'model', 'system')),
+  content TEXT NOT NULL,
+  tool_calls JSONB DEFAULT '[]'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_chat_messages_agent_id ON public.chat_messages(agent_id);
+CREATE INDEX idx_chat_messages_created_at ON public.chat_messages(created_at ASC);
+
+ALTER TABLE public.chat_messages ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "chat_messages_select_own" ON public.chat_messages
+  FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "chat_messages_insert_own" ON public.chat_messages
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "chat_messages_delete_own" ON public.chat_messages
+  FOR DELETE USING (auth.uid() = user_id);
+
+-- ─────────────────────────────────────────────
+-- 13. agent_memories (Long-Term Episodic Memory Fact Database)
+-- ─────────────────────────────────────────────
+CREATE TABLE public.agent_memories (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  agent_id UUID REFERENCES public.agents(id) ON DELETE CASCADE,
+  memory_type TEXT NOT NULL DEFAULT 'fact' CHECK (memory_type IN ('fact', 'event', 'instruction', 'task')),
+  content TEXT NOT NULL,
+  summary TEXT,
+  importance INT DEFAULT 1,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_agent_memories_agent_id ON public.agent_memories(agent_id);
+
+ALTER TABLE public.agent_memories ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "agent_memories_select_own" ON public.agent_memories
+  FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "agent_memories_insert_own" ON public.agent_memories
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "agent_memories_update_own" ON public.agent_memories
+  FOR UPDATE USING (auth.uid() = user_id);
+
+CREATE POLICY "agent_memories_delete_own" ON public.agent_memories
+  FOR DELETE USING (auth.uid() = user_id);
+
+CREATE TRIGGER agent_memories_updated_at
+  BEFORE UPDATE ON public.agent_memories
+  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at();

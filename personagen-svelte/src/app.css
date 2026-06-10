@@ -4,58 +4,70 @@
    Ported from tokens.css (496 lines, complete).
    ═══════════════════════════════════════════════════════════════ */
 
+/* ── Smooth Brand Transition Registration ── */
+@property --accent {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: #7c6aed;
+}
+
+@property --cyan {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: #22d3ee;
+}
+
 :root {
+  /* ── Colour: Backgrounds (Light Mode Default) ── */
+  --bg:        #f5f4fa; /* Smooth, ultra-comfortable off-white with warm lavender depth */
+  --surface:   #ffffff; /* Elegant pure white cards */
+  --surface-2: #eeeef6; /* Slate-tinted soft white for inputs and nested areas */
+  --surface-3: #e2e0ee; /* Darker slate-white for active states and borders */
 
-  /* ── Colour: Backgrounds ── */
-  --bg:        #0b0713;
-  --surface:   #0e0e16;
-  --surface-2: #161622;
-  --surface-3: #1e1e2e;
+  /* ── Colour: Borders (Light Mode Default) ── */
+  --border:        rgba(12, 10, 30, 0.06);
+  --border-hover:  color-mix(in srgb, var(--accent) 35%, transparent);
+  --border-strong: rgba(12, 10, 30, 0.12);
 
-  /* ── Colour: Borders ── */
-  --border:       rgba(255,255,255,0.05);
-  --border-hover: rgba(124,106,237,0.25);
-  --border-strong: rgba(255,255,255,0.10);
+  /* ── Colour: Text (Light Mode Default) ── */
+  --text:       #13111c; /* Excellent, high-contrast readable charcoal */
+  --text-muted: #4e4a5f; /* Smooth slate-gray for easily readable description paragraphs */
+  --text-dim:   #78748d; /* Muted label colors */
 
-  /* ── Colour: Text ── */
-  --text:       #e8e6f0;
-  --text-muted: #8a88a0;
-  --text-dim:   #6e6c85;
-
-  /* ── Colour: Accent (primary — purple) ── */
+  /* ── Colour: Accents & Brand overrides (Dynamic color-mix formulas) ── */
   --accent:      #7c6aed;
-  --accent-soft: rgba(124,106,237,0.12);
-  --accent-mid:  rgba(124,106,237,0.25);
-  --accent-dark: #6b5ace;
+  --accent-soft: color-mix(in srgb, var(--accent) 10%, transparent);
+  --accent-mid:  color-mix(in srgb, var(--accent) 22%, transparent);
+  --accent-dark: color-mix(in srgb, var(--accent) 85%, #000);
 
   /* ── Colour: Cyan ── */
-  --cyan:      #22d3ee;
-  --cyan-soft: rgba(34,211,238,0.10);
-  --cyan-mid:  rgba(34,211,238,0.20);
+  --cyan:      #0ea5e9; /* Shifted slightly blue-cyan in Light mode for contrast */
+  --cyan-soft: color-mix(in srgb, var(--cyan) 10%, transparent);
+  --cyan-mid:  color-mix(in srgb, var(--cyan) 20%, transparent);
 
   /* ── Colour: Gold ── */
-  --gold:      #d4a853;
-  --gold-soft: rgba(212,168,83,0.10);
+  --gold:      #b45309;
+  --gold-soft: color-mix(in srgb, var(--gold) 10%, transparent);
 
   /* ── Colour: Success / Green ── */
-  --success:      #34d399;
-  --success-soft: rgba(52,211,153,0.10);
+  --success:      #059669;
+  --success-soft: color-mix(in srgb, var(--success) 10%, transparent);
 
   /* ── Colour: Rose / Pink ── */
-  --rose:      #f472b6;
-  --rose-soft: rgba(244,114,182,0.10);
+  --rose:      #db2777;
+  --rose-soft: color-mix(in srgb, var(--rose) 10%, transparent);
 
   /* ── Colour: Error / Danger ── */
-  --error:      #ef4444;
-  --error-soft: rgba(239,68,68,0.10);
+  --error:      #dc2626;
+  --error-soft: color-mix(in srgb, var(--error) 10%, transparent);
 
   /* ── Colour: Warning / Amber ── */
-  --warning:      #f59e0b;
-  --warning-soft: rgba(245,158,11,0.10);
+  --warning:      #d97706;
+  --warning-soft: color-mix(in srgb, var(--warning) 10%, transparent);
 
   /* ── Colour: Info / Blue ── */
-  --info:      #3b82f6;
-  --info-soft: rgba(59,130,246,0.10);
+  --info:      #2563eb;
+  --info-soft: color-mix(in srgb, var(--info) 10%, transparent);
 
   /* ── Colour: Gradients ── */
   --gradient:        linear-gradient(135deg, var(--accent), var(--cyan));
@@ -139,15 +151,15 @@
   --section-py: 5rem;         /* vertical section padding */
   --section-py-sm: 3.5rem;    /* mobile */
 
-  /* ── Shadows ── */
-  --shadow-sm:  0 1px 3px rgba(0,0,0,0.15);
-  --shadow-md:  0 4px 16px rgba(0,0,0,0.25);
-  --shadow-lg:  0 8px 40px rgba(0,0,0,0.35);
-  --shadow-accent: 0 0 30px rgba(124,106,237,0.15);
-  --shadow-cyan:   0 0 30px rgba(34,211,238,0.12);
-  --shadow-glow:   0 0 60px rgba(124,106,237,0.08);
+  /* ── Shadows (Light Mode Default) ── */
+  --shadow-sm:  0 1px 3px rgba(0,0,0,0.06);
+  --shadow-md:  0 4px 16px rgba(10,5,20,0.06);
+  --shadow-lg:  0 8px 32px rgba(10,5,20,0.09);
+  --shadow-accent: 0 0 30px color-mix(in srgb, var(--accent) 15%, transparent);
+  --shadow-cyan:   0 0 30px color-mix(in srgb, var(--cyan) 12%, transparent);
+  --shadow-glow:   0 0 60px color-mix(in srgb, var(--accent) 8%, transparent);
 
-  /* ── Transitions ── */
+  /* ── Transitions (Smooth variables enabled) ── */
   --ease-out:   cubic-bezier(0.16, 1, 0.3, 1);
   --ease-in:    cubic-bezier(0.4, 0, 1, 1);
   --ease-std:   0.3s ease;
@@ -170,6 +182,57 @@
   --sidebar-width: 240px;
   --sidebar-collapsed-width: 68px;
   --header-height: 60px;
+
+  /* Smooth transition of accent/cyan custom properties */
+  transition: --accent 1s cubic-bezier(0.16, 1, 0.3, 1),
+              --cyan 1s cubic-bezier(0.16, 1, 0.3, 1),
+              background-color 0.4s ease,
+              color 0.4s ease,
+              border-color 0.4s ease;
+}
+
+/* ── Colour: Dark Mode Override ── */
+[data-theme="dark"] {
+  /* ── Colour: Backgrounds ── */
+  --bg:        #0b0713;
+  --surface:   #0e0e16;
+  --surface-2: #161622;
+  --surface-3: #1e1e2e;
+
+  /* ── Colour: Borders ── */
+  --border:       rgba(255,255,255,0.05);
+  --border-strong: rgba(255,255,255,0.10);
+
+  /* ── Colour: Text ── */
+  --text:       #e8e6f0;
+  --text-muted: #8a88a0;
+  --text-dim:   #6e6c85;
+
+  /* ── Colour: Cyan (vibrant in dark mode) ── */
+  --cyan:      #22d3ee;
+
+  /* ── Colour: Gold ── */
+  --gold:      #d4a853;
+
+  /* ── Colour: Success / Green ── */
+  --success:      #34d399;
+
+  /* ── Colour: Rose / Pink ── */
+  --rose:      #f472b6;
+
+  /* ── Colour: Error / Danger ── */
+  --error:      #ef4444;
+
+  /* ── Colour: Warning / Amber ── */
+  --warning:      #f59e0b;
+
+  /* ── Colour: Info / Blue ── */
+  --info:      #3b82f6;
+
+  /* ── Shadows (Dark Mode Override) ── */
+  --shadow-sm:  0 1px 3px rgba(0,0,0,0.25);
+  --shadow-md:  0 4px 16px rgba(0,0,0,0.35);
+  --shadow-lg:  0 8px 40px rgba(0,0,0,0.45);
 }
 
 

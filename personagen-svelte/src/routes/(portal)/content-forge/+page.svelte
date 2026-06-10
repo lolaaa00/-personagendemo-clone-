@@ -121,16 +121,16 @@
 
   function generateDemoOutput(): ForgeOutput {
     const selectedProd = products.find(p => p.id === selectedProductId);
-    const prodName = selectedProd?.name || 'Honey For X - Performance Stamina Pouches';
-    const prodPrice = selectedProd?.price || '$34.99 (Pack of 12)';
-    const prodDesc = selectedProd?.description || 'Pure clover honey with Royal Jelly and Siberian Ginseng.';
+    const prodName = selectedProd?.name || 'HoneyX Manly Plus';
+    const prodPrice = selectedProd?.price || 'Rs. 2,450';
+    const prodDesc = selectedProd?.description || 'Nature\'s premium superfood for men. Formulated to support energy, performance, stamina, and overall vitality using raw honey and active herbal ingredients.';
 
     const base: Record<string, ForgeOutput> = {
       post: {
         type: 'post',
         platform: selectedPlatforms[0],
-        content: `🔥 ${topic}\n\nIntroducing the ultimate game-changer: ${prodName} (${prodPrice})!\n\nMost people get stamina completely wrong. They rely on synthetic pills and jittery energy drinks.\n\nHere's how we do it differently with raw nature:\n\n1️⃣ **Royal Jelly Power**: Unlocking natural daily drive.\n2️⃣ **Siberian Ginseng**: Sustainable energy with zero crash.\n3️⃣ **Pure Clover Honey**: Fast-absorbing athletic stamina.\n\n${prodDesc}\n\nDrop a comment to grab exclusive early access 👇`,
-        hashtags: ['#EnergyBoost', '#HoneyForX', '#FitnessBiohacks', '#OrganicWellness', '#UGCContent'],
+        content: `🔥 ${topic}\n\nIntroducing the ultimate game-changer: ${prodName} (${prodPrice})!\n\nMost people get stamina completely wrong. They rely on synthetic pills and jittery energy drinks.\n\nHere's how we do it differently with raw nature:\n\n1️⃣ **Organic Vitality Power**: Unlocking natural daily drive.\n2️⃣ **Potent Herbal Active**: Sustainable energy with zero crash.\n3️⃣ **Pure Premium Honey**: Fast-absorbing athletic stamina.\n\n${prodDesc}\n\nDrop a comment to grab exclusive early access 👇`,
+        hashtags: ['#EnergyBoost', '#HoneyX', '#FitnessBiohacks', '#OrganicWellness', '#UGCContent'],
         hookScore: 92,
         estimatedReach: '14.2K - 31.5K',
         titles: undefined,
@@ -139,7 +139,7 @@
       script: {
         type: 'script',
         platform: selectedPlatforms[0],
-        content: `[SCENE DIRECTION: Close-up of a premium, golden single-serve honey pouch being ripped open with honey slowly dripping onto a spoon. Warm, low sunlight background.]\n"If you are still taking chemical pills or drinking jittery pre-workouts... stop."\n\n[PATTERN INTERRUPT: Fast-paced cut to an athlete mid-workout, breathing heavily but smiling.]\n"This is ${prodName}. It is pure raw honey packed with royal jelly and siberian ginseng. One pocket-sized pouch, all-natural stamina."\n\n[VISUAL CUE: Text overlay: "PURE HONEY POWER - NO SYNTHETIC CRASH" in bold gold letters.]\n"Here's why it works: synthetic stamina pills cause major heart-rate spikes. Synthetic energy drinks leave you crashing after 2 hours. Clover honey absorbs instantly into your muscles, delivering clean glycogen while Siberian Ginseng maintains long-term focus."\n\n[SCENE DIRECTION: Creator smiles, holding the packet, showing the beautiful amber packaging close to the lens.]\n"${prodDesc} It is premium performance, certified organic, and tastes incredible."\n\n[CTA: Text overlay: "VISIT HONEYFORX.COM"]\n"Ditch the chemicals. Grab your pack of 12 for just ${prodPrice} today. Link in bio!"`,
+        content: `[SCENE DIRECTION: Close-up of the premium HoneyX bottle surrounded by warm, glowing gold backlighting as rich amber honey is drizzled slowly onto a spoon. Crisp sound of bottle unscrewing and rich textures.]\n"If you are still taking chemical pills or drinking jittery pre-workouts... stop."\n\n[PATTERN INTERRUPT: Fast-paced cut to an athlete mid-workout, breathing heavily but smiling.]\n"This is ${prodName}. It is pure raw honey packed with active organic adaptogens and performance herbs. All-natural stamina, zero crashes."\n\n[VISUAL CUE: Text overlay: "PURE HONEY POWER - NO SYNTHETIC CRASH" in bold gold letters.]\n"Here's why it works: synthetic stamina pills cause major heart-rate spikes. Synthetic energy drinks leave you crashing after 2 hours. Active honey is fast-absorbing glycogen for your muscles, keeping your natural endurance high while ginseng maintains long-term focus."\n\n[SCENE DIRECTION: Creator smiles, holding the bottle, showing the premium elegant packaging close to the lens.]\n"${prodDesc} It is premium performance, certified organic, and tastes incredible."\n\n[CTA: Text overlay: "VISIT HONEYFORX.COM"]\n"Ditch the chemicals. Grab your bottle of ${prodName} for just ${prodPrice} today. Link in bio!"`,
         hashtags: ['#UGCReview', '#FitnessRoutine', '#OrganicStamina', '#DTCProduct'],
         hookScore: 96,
         estimatedReach: '22.1K - 54.0K',
@@ -156,11 +156,11 @@
         titles: [
           `I Ditched Synthetic Pre-Workouts For This Active Honey Stamina (Biohack Reveal)`,
           `Why Athletes Are Raving About ${prodName}`,
-          `The $34 Secret to Organic Workout Stamina (UGC ASMR Taste Test)`,
-          `Stop Drinking Jittery Energy Drinks, Try Honey For X Instead`,
-          `This Pocket-Sized Pack Holds the Secret to Ultimate Performance`,
+          `The Secret to Organic Workout Stamina (UGC ASMR Taste Test)`,
+          `Stop Drinking Jittery Energy Drinks, Try HoneyX Instead`,
+          `This Premium Bottle Holds the Secret to Ultimate Performance`,
           `${prodName}: Natural Energy vs Synthetic Stamina Pills`,
-          `An Honest UGC Review of the Premium Honey For X Daily Vitality Jar`,
+          `An Honest UGC Review of the Premium HoneyX Duo Active Shilajit Jar`,
           `How a Spoonful of Active Vitality Honey Can Double Your Workout Focus`
         ],
         thumbnailNotes: undefined

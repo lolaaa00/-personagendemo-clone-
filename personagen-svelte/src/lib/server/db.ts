@@ -30,6 +30,7 @@ export interface AgentRow {
 	engagement_rate: number;
 	followers: string;
 	connection_count: number;
+	is_overseer?: boolean;
 	created_at: string;
 	updated_at: string;
 }
@@ -135,6 +136,28 @@ export interface ProcessedRssItemRow {
 	processed_at: string;
 }
 
+export interface ChatMessageRow {
+	id: string;
+	user_id: string;
+	agent_id: string;
+	role: 'user' | 'model' | 'system';
+	content: string;
+	tool_calls?: any;
+	created_at: string;
+}
+
+export interface AgentMemoryRow {
+	id: string;
+	user_id: string;
+	agent_id: string;
+	memory_type: 'fact' | 'event' | 'instruction' | 'task';
+	content: string;
+	summary: string | null;
+	importance: number;
+	created_at: string;
+	updated_at: string;
+}
+
 // ═══════════════════════════════════════
 // Insert / Update partials
 // ═══════════════════════════════════════
@@ -143,6 +166,10 @@ export type AgentInsert = Omit<AgentRow, 'id' | 'created_at' | 'updated_at'> & {
 	id?: string;
 };
 export type AgentUpdate = Partial<Omit<AgentRow, 'id' | 'user_id' | 'created_at' | 'updated_at'>>;
+
+export type ChatMessageInsert = Omit<ChatMessageRow, 'id' | 'created_at'> & { id?: string };
+export type AgentMemoryInsert = Omit<AgentMemoryRow, 'id' | 'created_at' | 'updated_at'> & { id?: string };
+export type AgentMemoryUpdate = Partial<Omit<AgentMemoryRow, 'id' | 'user_id' | 'agent_id' | 'created_at' | 'updated_at'>>;
 
 export type AgentConfigInsert = Omit<
 	AgentConfigRow,
@@ -390,6 +417,42 @@ export function createDbService(supabase: SupabaseClient) {
 					.insert({ agent_id: agentId, item_guid: itemGuid })
 					.select()
 					.single()
+		},
+
+		// ── Chat Messages ─────────────────────────
+		chatMessages: {
+			listForAgent: (agentId: string) =>
+				supabase
+					.from('chat_messages')
+					.select('*')
+					.eq('agent_id', agentId)
+					.order('created_at', { ascending: true }),
+
+			create: (data: ChatMessageInsert) =>
+				supabase.from('chat_messages').insert(data).select().single(),
+
+			deleteForAgent: (agentId: string) =>
+				supabase.from('chat_messages').delete().eq('agent_id', agentId),
+		},
+
+		// ── Agent Memories ────────────────────────
+		agentMemories: {
+			listForAgent: (agentId: string) =>
+				supabase
+					.from('agent_memories')
+					.select('*')
+					.eq('agent_id', agentId)
+					.order('importance', { ascending: false })
+					.order('created_at', { ascending: false }),
+
+			create: (data: AgentMemoryInsert) =>
+				supabase.from('agent_memories').insert(data).select().single(),
+
+			update: (id: string, data: AgentMemoryUpdate) =>
+				supabase.from('agent_memories').update(data).eq('id', id).select().single(),
+
+			delete: (id: string) =>
+				supabase.from('agent_memories').delete().eq('id', id),
 		},
 	};
 }

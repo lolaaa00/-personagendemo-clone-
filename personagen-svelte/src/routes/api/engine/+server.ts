@@ -588,11 +588,12 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 					return json({
 						success: true,
 						data: {
-							brandName: 'Honey For X',
-							tagline: 'Premium Clover Honey Infused with Natural Performance Superfoods',
-							mission: 'Our mission is to replace synthetic stamina pills and chemical energy drinks with premium raw honey infused with scientifically backed vitality superfoods: Royal Jelly, Siberian Ginseng, and active minerals. Pure honey power designed to elevate performance and natural daily drive.',
+							brandName: 'HoneyX',
+							tagline: 'Nature\'s Superfood for Men - Put a Little Honey in Your Life',
+							mission: 'At HoneyX, we strive to empower men to live healthier and more fulfilling lives through nature\'s superfoods. Our proprietary formulations blend raw honey with potent organic extracts and herbs to enhance energy, strength, stamina, and daily performance.',
 							primaryColor: '#eab308', // Amber/gold
 							secondaryColor: '#f97316', // Vibrant orange
+							logoUrl: 'https://honeyforx.com/cdn/shop/files/honeyX_logo_1920x1080_329bd0fe-fcd2-4f47-ae79-3771e4539126.webp?v=1687433087', // Authentic HoneyX Brand Logo
 							traits: ['Stamina', 'Premium/Luxury', 'Energetic', 'Organic Wellness'],
 							commStyle: 'Bold',
 							demographics: 'Men and high-performers aged 24-45, athletes, fitness enthusiasts, holistic biohackers.',
@@ -602,17 +603,24 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 							products: [
 								{
 									id: 'hx-p1',
-									name: 'Honey For X - Performance Stamina Pouches',
-									description: 'Pure clover honey with Royal Jelly and Siberian Ginseng. Pocket-sized single-serve performance boosts for workout stamina or bedroom endurance.',
-									price: '$34.99 (Pack of 12)',
-									photoUrl: 'https://images.unsplash.com/photo-1587049352846-4a222e784d38?auto=format&fit=crop&w=400&q=80'
+									name: 'HoneyX Manly Plus',
+									description: 'Nature\'s premium superfood for men. An advanced blend of raw honey, Tribulus terrestris, ginseng, and organic herbal extracts designed for enhanced performance, energy, and stamina.',
+									price: 'Rs. 2,450',
+									photoUrl: 'https://cdn.shopify.com/s/files/1/0725/5674/0906/files/honeyx_is_natural_superfood_for_men_in_Pakistan.webp?v=1729879293' // Authentic HoneyX Manly Plus product photo
 								},
 								{
 									id: 'hx-p2',
-									name: 'Honey For X - Raw Daily Vitality Jar',
-									description: 'Wildflower dark amber honey enriched with organic performance minerals and active royal extracts. The ultimate daily spoonful for long-term health and stamina.',
-									price: '$49.99 (350g)',
-									photoUrl: 'https://images.unsplash.com/photo-1471193945509-9ad0617afabf?auto=format&fit=crop&w=400&q=80'
+									name: 'Honey Shilajit Duo Active',
+									description: 'A premium, active fusion of raw wildflower honey, pure organic Shilajit, and natural performance saffron to optimize total body strength and vitality.',
+									price: 'Rs. 2,450',
+									photoUrl: 'https://cdn.shopify.com/s/files/1/0725/5674/0906/files/honeyshilajitpriceinpakistan.webp?v=1753269155' // Authentic Honey Shilajit product photo
+								},
+								{
+									id: 'hx-p3',
+									name: 'Afrovit-SR Withania Somnifera Compound',
+									description: 'Formulated with high-strength Ashwagandha (Withania Somnifera) and active natural adaptogens to support stress resilience, mental focus, and optimal physical vigor.',
+									price: 'Rs. 3,000',
+									photoUrl: 'https://cdn.shopify.com/s/files/1/0725/5674/0906/files/naturalandorganicafrovitsrcapletsbyhoneyx.webp?v=1753091546' // Authentic Afrovit-SR caplets photo
 								}
 							]
 						}
@@ -628,6 +636,7 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 						mission: `Delivering exceptional value and high-performance lifestyle products globally via ${storeUrl}.`,
 						primaryColor: '#7c6aed',
 						secondaryColor: '#22d3ee',
+						logoUrl: 'https://cdn-icons-png.flaticon.com/512/825/825590.png', // Premium shopping bag icon
 						traits: ['Innovative', 'Aesthetic', 'Customer First'],
 						commStyle: 'Professional',
 						demographics: 'Modern online shoppers aged 18-35.',

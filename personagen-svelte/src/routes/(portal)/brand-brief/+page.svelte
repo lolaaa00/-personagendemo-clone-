@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { showToast } from '$lib/stores/ui.svelte';
+	import { showToast, updateBrandColors, triggerBrandTransform } from '$lib/stores/ui.svelte';
 	import { browser } from '$app/environment';
 	import { BrandBrief } from '$lib/services/api';
 
@@ -105,7 +105,14 @@
 		} catch { /* ignore */ }
 	});
 
-	function saveAll() {
+	// Live preview of primary/secondary colors in real-time as they edit
+	$effect(() => {
+		if (browser) {
+			updateBrandColors(primaryColor, secondaryColor);
+		}
+	});
+
+	function saveAll(e?: MouseEvent) {
 		if (!browser) return;
 		const now = new Date().toLocaleString('en-AU', { dateStyle: 'medium', timeStyle: 'short' });
 		lastSaved = now;
@@ -117,6 +124,11 @@
 			competitors, products, ugcGuidelines, storeUrl, lastSaved: now, version
 		}));
 		showToast('Brand brief saved', 'success');
+
+		// Trigger magical color-burst transition from button coordinates
+		const x = e ? e.clientX : window.innerWidth / 2;
+		const y = e ? e.clientY : window.innerHeight / 2;
+		triggerBrandTransform(x, y, primaryColor, secondaryColor);
 	}
 
 	async function runScrape() {
@@ -134,6 +146,7 @@
 				mission = d.mission || mission;
 				primaryColor = d.primaryColor || primaryColor;
 				secondaryColor = d.secondaryColor || secondaryColor;
+				logoUrl = d.logoUrl || logoUrl;
 				traits = d.traits || traits;
 				commStyle = d.commStyle || commStyle;
 				demographics = d.demographics || demographics;
@@ -279,7 +292,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
 					Export
 				</button>
-				<button class="action-btn primary" onclick={saveAll}>
+				<button class="action-btn primary" onclick={(e) => saveAll(e)}>
 					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
 					Save
 				</button>
@@ -467,7 +480,14 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 
 					<div class="field">
 						<label for="logoUrl">Logo URL</label>
-						<input id="logoUrl" type="url" bind:value={logoUrl} placeholder="https://example.com/logo.svg" />
+						<div class="logo-input-wrap">
+							<input id="logoUrl" type="url" bind:value={logoUrl} placeholder="https://example.com/logo.svg" style="flex: 1; border: none !important; background: transparent !important; box-shadow: none !important; padding: 4px 0 !important;" />
+							{#if logoUrl}
+								<div class="logo-preview-badge">
+									<img src={logoUrl} alt="Logo Preview" class="logo-badge-img" />
+								</div>
+							{/if}
+						</div>
 					</div>
 
 					<div class="font-row">
@@ -731,6 +751,21 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		font-size: 0.82rem; width: 90px; padding: 4px !important;
 	}
 	.color-preview { width: 24px; height: 24px; border-radius: var(--radius-xs); flex-shrink: 0; }
+	
+	.logo-input-wrap {
+		display: flex; align-items: center; gap: 0.75rem;
+		background: var(--surface-2); border: 1px solid var(--border);
+		border-radius: var(--radius-sm); padding: 6px 12px;
+	}
+	.logo-preview-badge {
+		width: 32px; height: 32px; border-radius: var(--radius-xs);
+		background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-strong);
+		display: flex; align-items: center; justify-content: center;
+		overflow: hidden; flex-shrink: 0;
+	}
+	.logo-badge-img {
+		max-width: 100%; max-height: 100%; object-fit: contain; padding: 2px;
+	}
 
 	.gradient-preview-bar {
 		height: 40px; border-radius: var(--radius-sm);

@@ -9,12 +9,15 @@ export const load: PageServerLoad = async ({ locals, url, fetch }) => {
 	if (!isPlaceholder && locals.supabase) {
 		const db = createDbService(locals.supabase);
 
-		// Handle OAuth redirect success callback
+		// Handle OAuth redirect success callback (strictly for non-UUID demo/mock agents)
 		const oauthSuccess = url.searchParams.get('oauth_success') === 'true';
 		const platform = url.searchParams.get('platform');
 		const agentId = url.searchParams.get('agentId');
 
-		if (oauthSuccess && platform && agentId) {
+		const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+		const isUuid = (id: string) => UUID_REGEX.test(id);
+
+		if (oauthSuccess && platform && agentId && !isUuid(agentId)) {
 			try {
 				const { session, user } = await locals.safeGetSession();
 				if (session && user) {

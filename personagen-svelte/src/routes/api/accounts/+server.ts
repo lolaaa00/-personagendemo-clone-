@@ -44,8 +44,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			const platforms = ['tiktok', 'instagram', 'youtube', 'facebook'];
 			const statusData: Record<string, any> = {};
 
+			const isUuidAgent = isUuid(persona_id);
 			const composioKey = env.COMPOSIO_API_KEY || '';
-			const isDevBypass = !composioKey || composioKey.includes('placeholder') || composioKey.includes('change_me');
+			const isDevBypass = !isUuidAgent && (!composioKey || composioKey.includes('placeholder') || composioKey.includes('change_me'));
 
 			let activeComposioPlatforms: string[] = [];
 
@@ -158,23 +159,29 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				return json({ success: false, error: 'Agent not found' }, { status: 404 });
 			}
 
+			const composioKey = env.COMPOSIO_API_KEY || '';
+			const isKeyMissingOrPlaceholder = !composioKey || composioKey.includes('placeholder') || composioKey.includes('change_me');
+
+			if (isKeyMissingOrPlaceholder) {
+				return json({
+					success: false,
+					error: 'COMPOSIO_API_KEY is not configured in your environment variables. Please add it to your server configuration to enable live social media connections.'
+				}, { status: 400 });
+			}
+
 			// Call Composio directly to get the redirect URL
 			let redirectUrl = null;
 			try {
 				const origin = new URL(request.url).origin;
-				const callbackUrl = `${origin}/persona-config`;
+				const callbackUrl = `${origin}/persona-config?agentId=${persona_id}`;
 				const composio = new ComposioClient();
 				redirectUrl = await composio.getOAuthLink(persona_id, platform, callbackUrl);
 			} catch (e) {
-				console.warn('[Accounts API] Failed calling Composio direct link API:', e);
-				// If Composio key isn't configured, we can still fall back or generate a mock link
-				// to allow testing local dashboard features without a live Composio token.
-				const composioKey = env.COMPOSIO_API_KEY || '';
-				const isDevBypass = !composioKey || composioKey.includes('placeholder') || composioKey.includes('change_me');
-				if (isDevBypass) {
-					console.log('[Accounts API] Dev bypass: Generating mock redirect URL');
-					redirectUrl = `${new URL(request.url).origin}/persona-config?oauth_success=true&platform=${platform}&agentId=${persona_id}`;
-				}
+				console.error('[Accounts API] Failed calling Composio direct link API for UUID agent:', e);
+				return json({
+					success: false,
+					error: `Failed to initiate Composio connection: ${(e as Error).message || e}`
+				}, { status: 500 });
 			}
 
 			return json({

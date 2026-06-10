@@ -1,9 +1,23 @@
 <script lang="ts">
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
-  import { sidebarState, toggleSidebar, toggleSidebarCollapse, closeSidebar } from '$lib/stores/ui.svelte';
+  import {
+    sidebarState,
+    toggleSidebar,
+    toggleSidebarCollapse,
+    closeSidebar,
+    themeState,
+    toggleTheme,
+    initializeThemeAndColors
+  } from '$lib/stores/ui.svelte';
+  import { onMount } from 'svelte';
+  import BrandWave from '$lib/components/shared/BrandWave.svelte';
 
   let { children, data } = $props();
+
+  onMount(() => {
+    initializeThemeAndColors();
+  });
 
   let userDropdownOpen = $state(false);
 
@@ -216,6 +230,34 @@
         </h2>
       </div>
       <div class="portal-header-right">
+        <!-- Gorgeous Light/Dark Mode Switcher -->
+        <button
+          class="theme-toggle-btn"
+          onclick={toggleTheme}
+          aria-label="Toggle theme"
+          title="Switch to {themeState.current === 'light' ? 'Dark' : 'Light'} Mode"
+        >
+          {#if themeState.current === 'light'}
+            <!-- Moon Icon -->
+            <svg class="theme-icon moon-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+            </svg>
+          {:else}
+            <!-- Sun Icon -->
+            <svg class="theme-icon sun-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="5" />
+              <line x1="12" y1="1" x2="12" y2="3" />
+              <line x1="12" y1="21" x2="12" y2="23" />
+              <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+              <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+              <line x1="1" y1="12" x2="3" y2="12" />
+              <line x1="21" y1="12" x2="23" y2="12" />
+              <line x1="4.22" y1="18.36" x2="5.64" y2="19.78" />
+              <line x1="18.36" y1="4.22" x2="19.78" y2="5.64" />
+            </svg>
+          {/if}
+        </button>
+
         <div class="portal-user-badge-container">
           <button
             class="portal-user-badge"
@@ -290,6 +332,8 @@
     </main>
   </div>
 </div>
+
+<BrandWave />
 
 <style>
   /* ═══════════════════════════════════════════════════════════════
@@ -633,6 +677,33 @@
     display: flex;
     align-items: center;
     gap: 0.75rem;
+  }
+
+  .theme-toggle-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius-full);
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--text-muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .theme-toggle-btn:hover {
+    border-color: var(--border-hover);
+    color: var(--accent);
+    background: var(--surface-3);
+    transform: scale(1.05) rotate(12deg);
+    box-shadow: var(--shadow-md);
+  }
+
+  .theme-icon {
+    transition: transform 0.5s var(--ease-out);
   }
 
   .portal-user-badge-container {
