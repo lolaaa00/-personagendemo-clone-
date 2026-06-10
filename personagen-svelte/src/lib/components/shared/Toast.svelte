@@ -43,14 +43,14 @@
     gap: var(--space-3, 0.75rem);
     padding: var(--space-3, 0.75rem) var(--space-5, 1.25rem);
     border-radius: var(--radius-sm, 10px);
-    background: rgba(22, 22, 34, 0.95);
-    border: 1px solid var(--border, rgba(255,255,255,0.05));
+    background: var(--surface-2);
+    border: 1px solid var(--border);
     backdrop-filter: blur(16px) saturate(180%);
     -webkit-backdrop-filter: blur(16px) saturate(180%);
-    box-shadow: 0 8px 40px rgba(0, 0, 0, 0.45);
+    box-shadow: var(--shadow-lg);
     font-size: var(--text-base, 0.875rem);
     font-weight: 500;
-    color: var(--text, #e8e6f0);
+    color: var(--text);
     min-width: 280px;
     max-width: 420px;
     cursor: pointer;

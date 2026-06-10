@@ -314,33 +314,21 @@
 <style>
   /* Trigger */
   .chat-trigger {
-    /* Force dark theme variables locally for premium contrast regardless of global light/dark mode */
-    --bg:            #0b0713;
-    --surface:       #0e0e16;
-    --surface-2:     #161622;
-    --surface-3:     #1e1e2e;
-    --border:        rgba(255, 255, 255, 0.05);
-    --border-strong: rgba(255, 255, 255, 0.10);
-    --text:          #e8e6f0;
-    --text-muted:    #8a88a0;
-    --text-dim:      #6e6c85;
-    --error-soft:    rgba(239, 68, 68, 0.15);
-
     position: fixed;
     bottom: 2rem;
     right: 2rem;
     width: 60px;
     height: 60px;
     border-radius: 50%;
-    border: 1px solid var(--border);
-    background: rgba(14, 14, 22, 0.85);
+    border: 1px solid var(--border-strong);
+    background: color-mix(in srgb, var(--surface) 85%, transparent);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
-    color: #fff;
+    color: var(--text);
     cursor: pointer;
     box-shadow:
-      0 10px 30px rgba(0, 0, 0, 0.3),
-      0 0 20px rgba(124, 106, 237, 0.2);
+      0 10px 30px rgba(0, 0, 0, 0.15),
+      0 0 20px rgba(124, 106, 237, 0.15);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -403,28 +391,16 @@
 
   /* Chat window */
   .chat-window {
-    /* Force dark theme variables locally for premium contrast regardless of global light/dark mode */
-    --bg:            #0b0713;
-    --surface:       #0e0e16;
-    --surface-2:     #161622;
-    --surface-3:     #1e1e2e;
-    --border:        rgba(255, 255, 255, 0.05);
-    --border-strong: rgba(255, 255, 255, 0.10);
-    --text:          #e8e6f0;
-    --text-muted:    #8a88a0;
-    --text-dim:      #6e6c85;
-    --error-soft:    rgba(239, 68, 68, 0.15);
-
     position: fixed;
     bottom: 6.5rem;
     right: 2rem;
     width: 380px;
     height: 520px;
-    background: rgba(14, 14, 22, 0.93);
+    background: color-mix(in srgb, var(--surface) 93%, transparent);
     border: 1px solid var(--border-strong);
     border-radius: var(--radius-lg);
     box-shadow:
-      0 20px 50px rgba(0, 0, 0, 0.5),
+      0 20px 50px rgba(0, 0, 0, 0.25),
       0 0 0 1px rgba(255, 255, 255, 0.05) inset;
     display: flex;
     flex-direction: column;
@@ -441,15 +417,15 @@
   }
 
   .chat-window.maximized {
-    width: 850px;
-    height: 720px;
+    width: 1150px;
+    height: 820px;
     max-width: calc(100vw - 4rem);
-    max-height: calc(100vh - 10rem);
+    max-height: calc(100vh - 6rem);
     bottom: 50%;
     right: 50%;
     transform: translate(50%, 50%);
     box-shadow:
-      0 30px 70px rgba(0, 0, 0, 0.6),
+      0 30px 70px rgba(0, 0, 0, 0.35),
       0 0 0 1px rgba(255, 255, 255, 0.08) inset;
   }
 
@@ -461,7 +437,7 @@
   /* Header */
   .chat-header {
     padding: 1.2rem;
-    background: linear-gradient(to right, rgba(14, 14, 22, 0.95), rgba(25, 25, 38, 0.95));
+    background: linear-gradient(to right, var(--surface), var(--surface-2));
     border-bottom: 1px solid var(--border);
     display: flex;
     align-items: center;
@@ -727,7 +703,7 @@
     border-top: 1px solid var(--border);
     display: flex;
     gap: 0.5rem;
-    background: rgba(14, 14, 22, 0.95);
+    background: var(--surface);
   }
 
   .chat-input-form :global(.chat-input-field) {

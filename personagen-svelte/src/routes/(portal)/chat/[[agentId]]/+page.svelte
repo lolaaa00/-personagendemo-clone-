@@ -20,10 +20,10 @@
 
 	interface Message {
 		id: string;
-		sender: 'user' | 'agent';
-		text: string;
+		role: 'user' | 'agent' | 'system';
+		content: string;
 		timestamp: string;
-		logs?: string[];
+		toolCalls?: any[];
 	}
 
 	let { data } = $props();
@@ -66,46 +66,63 @@
 		}
 	});
 
-	function loadChatHistory() {
+	async function loadChatHistory() {
 		if (typeof window === 'undefined') return;
-		const key = `personagen_chat_history_${selectedAgent.id}`;
-		const saved = localStorage.getItem(key);
-		if (saved) {
-			try {
-				messages = JSON.parse(saved);
-			} catch (e) {
-				messages = [];
-			}
-		} else {
-			// Populate welcome/intro message
-			messages = [
-				{
-					id: 'init-msg',
-					sender: 'agent',
-					text: getInitialGreeting(),
-					timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+		messages = [];
+		try {
+			const res = await fetch(`/api/agent/${selectedAgent.id}/chat`);
+			if (res.ok) {
+				const data = await res.json();
+				if (data.success && Array.isArray(data.messages) && data.messages.length > 0) {
+					messages = data.messages.map((m: any) => ({
+						id: m.id || Math.random().toString(36).substring(7),
+						role: m.role === 'model' ? 'agent' : m.role === 'user' ? 'user' : 'system',
+						content: m.content,
+						timestamp: m.created_at ? new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+						toolCalls: m.tool_calls || []
+					}));
+					scrollChatToBottom();
+					return;
 				}
-			];
+			}
+		} catch (err) {
+			console.error('Error fetching chat history from server:', err);
 		}
-		scrollChatToBottom();
-	}
 
-	function saveChatHistory() {
-		if (typeof window === 'undefined') return;
-		const key = `personagen_chat_history_${selectedAgent.id}`;
-		localStorage.setItem(key, JSON.stringify(messages));
-	}
-
-	function clearHistory() {
+		// Fallback to greeting
 		messages = [
 			{
-				id: 'init-msg',
-				sender: 'agent',
-				text: getInitialGreeting(),
+				id: 'welcome',
+				role: 'agent',
+				content: getInitialGreeting(),
 				timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 			}
 		];
-		saveChatHistory();
+		scrollChatToBottom();
+	}
+
+	async function clearHistory() {
+		if (confirm('Clear conversation history?')) {
+			messages = [
+				{
+					id: 'welcome',
+					role: 'agent',
+					content: getInitialGreeting(),
+					timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+				}
+			];
+			try {
+				const res = await fetch(`/api/agent/${selectedAgent.id}/chat`, {
+					method: 'DELETE'
+				});
+				if (!res.ok) {
+					console.error('Failed to clear history on server');
+				}
+			} catch (err) {
+				console.error('Error clearing chat history on server:', err);
+			}
+			scrollChatToBottom();
+		}
 	}
 
 	function getInitialGreeting(): string {
@@ -122,65 +139,80 @@
 		}
 	}
 
-	// Trigger dynamic typing response
 	async function sendMessage(text: string) {
 		if (!text.trim() || isTyping) return;
 
-		const userMsg: Message = {
-			id: `user-${Date.now()}`,
-			sender: 'user',
-			text: text.trim(),
-			timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-		};
-
-		messages = [...messages, userMsg];
-		saveChatHistory();
+		const userText = text.trim();
 		inputValue = '';
+
+		// Push user message immediately
+		messages = [...messages, {
+			id: Math.random().toString(36).substring(7),
+			role: 'user',
+			content: userText,
+			timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+		}];
 		await scrollChatToBottom();
 
-		// Start typing simulation
 		isTyping = true;
-		currentLogs = [];
+		
+		// Visual logs simulation while calling the actual SDK API in background
+		currentLogs = [
+			'🧠 Checking personality profile & memories...',
+			'📈 Connecting to Gemini Managed Agents API...'
+		];
 
-		// Simulated Tool Logs based on query
-		const steps = selectedAgent.is_overseer || selectedAgent.isHermes
-			? [
-				'🔍 Scanning system database indexes...',
-				'🛡️ Fetching operational metrics & memories...',
-				'⚙️ Invoking agent_orchestrator tool...',
-				'✅ Processing response parameters...'
-			]
-			: [
-				'🧠 Checking personality profile & memories...',
-				'📈 Searching social trend signals...',
-				'🛠️ Accessing social media tools...',
-				'📝 Formatting creative copy draft...'
-			];
+		try {
+			const resPromise = fetch(`/api/agent/${selectedAgent.id}/chat`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ message: userText })
+			});
 
-		// Step-by-step logs printing
-		for (const step of steps) {
 			await new Promise((resolve) => setTimeout(resolve, 800));
-			currentLogs = [...currentLogs, step];
+			currentLogs = [...currentLogs, '⚙️ Invoking model with real-time tools...'];
+			await scrollChatToBottom();
+
+			const res = await resPromise;
+			const data = await res.json();
+
+			if (res.ok && data.success) {
+				if (data.toolCalls && data.toolCalls.length > 0) {
+					currentLogs = data.toolCalls.map((tc: any) => `⚙️ Executed tool: ${tc.name}`);
+				} else {
+					currentLogs = ['✅ Processed response successfully.'];
+				}
+				await scrollChatToBottom();
+				await new Promise((resolve) => setTimeout(resolve, 400));
+
+				messages = [...messages, {
+					id: Math.random().toString(36).substring(7),
+					role: 'agent',
+					content: data.response,
+					timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+					toolCalls: data.toolCalls || []
+				}];
+			} else {
+				messages = [...messages, {
+					id: Math.random().toString(36).substring(7),
+					role: 'system',
+					content: `Connection failed: ${data.error || 'Unable to reach agent'}`,
+					timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+				}];
+			}
+		} catch (err) {
+			console.error('Chat error:', err);
+			messages = [...messages, {
+				id: Math.random().toString(36).substring(7),
+				role: 'system',
+				content: 'API connection error. Please try again.',
+				timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+			}];
+		} finally {
+			isTyping = false;
+			currentLogs = [];
 			await scrollChatToBottom();
 		}
-
-		// Generate a response based on the selected agent and input
-		await new Promise((resolve) => setTimeout(resolve, 600));
-		const replyText = generateSimulationResponse(text);
-
-		const agentMsg: Message = {
-			id: `agent-${Date.now()}`,
-			sender: 'agent',
-			text: replyText,
-			timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-			logs: currentLogs
-		};
-
-		messages = [...messages, agentMsg];
-		saveChatHistory();
-		isTyping = false;
-		currentLogs = [];
-		await scrollChatToBottom();
 	}
 
 	function handleKeyDown(event: KeyboardEvent) {
@@ -396,9 +428,9 @@ As a specialized creator, I've updated my internal logic context. I am connected
 
 				<!-- Message list -->
 				{#each messages as msg}
-					{#if msg.id !== 'init-msg'}
-						<div class="message-row" class:user-row={msg.sender === 'user'}>
-							{#if msg.sender === 'agent'}
+					{#if msg.id !== 'welcome'}
+						<div class="message-row" class:user-row={msg.role === 'user'}>
+							{#if msg.role === 'agent'}
 								<div class="message-avatar-wrap">
 									<div class="message-avatar" style="background: {selectedAgent.gradient}">
 										{selectedAgent.initial}
@@ -408,19 +440,27 @@ As a specialized creator, I've updated my internal logic context. I am connected
 
 							<div class="message-bubble-wrapper">
 								<!-- If there are execution logs, show them collapsed or elegant -->
-								{#if msg.logs && msg.logs.length > 0}
+								{#if msg.toolCalls && msg.toolCalls.length > 0}
 									<div class="tool-logs-box">
-										<div class="tool-logs-title">⚙️ Local Tool Executions</div>
-										{#each msg.logs as log}
-											<div class="tool-log-item">{log}</div>
+										<div class="tool-logs-title">⚙️ Tool Execution Trace ({msg.toolCalls.length})</div>
+										{#each msg.toolCalls as call}
+											<div class="tool-log-item">
+												<span class="tool-name">⚙ {call.name}</span>
+												<pre class="tool-args">{JSON.stringify(call.args)}</pre>
+												{#if call.result && call.result.success !== false}
+													<span class="tool-status success">✓ Completed</span>
+												{:else}
+													<span class="tool-status fail">✗ Failed</span>
+												{/if}
+											</div>
 										{/each}
 									</div>
 								{/if}
 
-								<div class="message-bubble glass-card border-strong" class:user-bubble={msg.sender === 'user'}>
+								<div class="message-bubble glass-card border-strong" class:user-bubble={msg.role === 'user'}>
 									<div class="message-text">
 										<!-- Basic rendering with bolding/markdown formatting -->
-										{#each msg.text.split('\n') as paragraph}
+										{#each msg.content.split('\n') as paragraph}
 											{#if paragraph.startsWith('### ')}
 												<h4>{paragraph.replace('### ', '')}</h4>
 											{:else if paragraph.startsWith('- ')}
@@ -512,7 +552,7 @@ As a specialized creator, I've updated my internal logic context. I am connected
 	.chat-portal-wrapper {
 		display: flex;
 		height: calc(100vh - 100px); /* Fill remaining height cleanly */
-		background: var(--bg-portal, #080710);
+		background: var(--bg);
 		border-radius: var(--radius-lg);
 		overflow: hidden;
 		position: relative;
@@ -520,16 +560,16 @@ As a specialized creator, I've updated my internal logic context. I am connected
 	}
 
 	.border-strong {
-		border-color: var(--border-strong, rgba(124, 106, 237, 0.15)) !important;
+		border-color: var(--border-strong) !important;
 	}
 
 	/* SIDEBAR */
 	.chat-sidebar {
 		width: 320px;
-		background: rgba(10, 10, 20, 0.4);
+		background: var(--surface-2);
 		backdrop-filter: blur(16px);
 		-webkit-backdrop-filter: blur(16px);
-		border-right: 1px solid rgba(255, 255, 255, 0.05);
+		border-right: 1px solid var(--border-strong);
 		display: flex;
 		flex-direction: column;
 		gap: 1.5rem;
@@ -552,11 +592,11 @@ As a specialized creator, I've updated my internal logic context. I am connected
 	.creator-count {
 		font-size: 11px;
 		font-weight: 700;
-		color: var(--accent-light, #c084fc);
-		background: rgba(124, 106, 237, 0.12);
+		color: var(--accent);
+		background: var(--accent-soft);
 		padding: 2px 8px;
 		border-radius: 20px;
-		border: 1px solid rgba(124, 106, 237, 0.15);
+		border: 1px solid var(--accent-mid);
 	}
 
 	.section-title {
@@ -565,7 +605,7 @@ As a specialized creator, I've updated my internal logic context. I am connected
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
 		font-weight: 700;
-		color: var(--text-dim, rgba(255, 255, 255, 0.5));
+		color: var(--text-dim);
 	}
 
 	/* AGENT CARD */
@@ -573,8 +613,8 @@ As a specialized creator, I've updated my internal logic context. I am connected
 		display: flex;
 		align-items: center;
 		gap: 0.75rem;
-		background: rgba(255, 255, 255, 0.01);
-		border: 1px solid rgba(255, 255, 255, 0.03);
+		background: var(--surface);
+		border: 1px solid var(--border);
 		border-radius: 12px;
 		padding: 0.75rem;
 		text-align: left;
@@ -585,21 +625,21 @@ As a specialized creator, I've updated my internal logic context. I am connected
 	}
 
 	.agent-card:hover {
-		background: rgba(255, 255, 255, 0.04);
-		border-color: rgba(124, 106, 237, 0.2);
+		background: var(--surface-2);
+		border-color: var(--accent-mid);
 		transform: translateY(-1px);
 	}
 
 	.agent-card.active {
-		background: rgba(124, 106, 237, 0.08);
-		border-color: rgba(124, 106, 237, 0.4);
-		box-shadow: 0 4px 20px rgba(124, 106, 237, 0.05);
+		background: var(--accent-soft);
+		border-color: var(--accent);
+		box-shadow: var(--shadow-sm);
 	}
 
 	.overseer-card.active {
-		background: rgba(16, 185, 129, 0.06);
-		border-color: rgba(16, 185, 129, 0.3);
-		box-shadow: 0 4px 20px rgba(16, 185, 129, 0.05);
+		background: var(--success-soft);
+		border-color: var(--success);
+		box-shadow: var(--shadow-sm);
 	}
 
 	.agent-avatar-gradient {
@@ -614,7 +654,7 @@ As a specialized creator, I've updated my internal logic context. I am connected
 		font-size: 14px;
 		flex-shrink: 0;
 		text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+		box-shadow: var(--shadow-sm);
 	}
 
 	.agent-info {
@@ -634,15 +674,15 @@ As a specialized creator, I've updated my internal logic context. I am connected
 	.agent-name {
 		font-size: 13px;
 		font-weight: 600;
-		color: var(--text, #ffffff);
+		color: var(--text);
 		white-space: nowrap;
-		overflow: text-overflow;
+		overflow: hidden;
 		text-overflow: ellipsis;
 	}
 
 	.agent-handle {
 		font-size: 11px;
-		color: var(--text-dim, rgba(255, 255, 255, 0.4));
+		color: var(--text-dim);
 		font-family: var(--font-mono, monospace);
 		white-space: nowrap;
 		overflow: hidden;
@@ -652,22 +692,22 @@ As a specialized creator, I've updated my internal logic context. I am connected
 	.badge-overseer {
 		font-size: 9px;
 		font-weight: 700;
-		color: var(--success, #10b981);
-		background: rgba(16, 185, 129, 0.12);
+		color: var(--success);
+		background: var(--success-soft);
 		padding: 1px 5px;
 		border-radius: 4px;
-		border: 1px solid rgba(16, 185, 129, 0.2);
+		border: 1px solid var(--success);
 		text-transform: uppercase;
 	}
 
 	.badge-creator {
 		font-size: 9px;
 		font-weight: 700;
-		color: var(--accent-light, #c084fc);
-		background: rgba(124, 106, 237, 0.12);
+		color: var(--accent);
+		background: var(--accent-soft);
 		padding: 1px 5px;
 		border-radius: 4px;
-		border: 1px solid rgba(124, 106, 237, 0.2);
+		border: 1px solid var(--accent-mid);
 		text-transform: uppercase;
 	}
 
@@ -675,8 +715,8 @@ As a specialized creator, I've updated my internal logic context. I am connected
 		width: 6px;
 		height: 6px;
 		border-radius: 50%;
-		background-color: var(--success, #10b981);
-		box-shadow: 0 0 6px var(--success, #10b981);
+		background-color: var(--success);
+		box-shadow: 0 0 6px var(--success);
 	}
 
 	.active-dot-glow {
@@ -687,8 +727,8 @@ As a specialized creator, I've updated my internal logic context. I am connected
 		width: 8px;
 		height: 8px;
 		border-radius: 50%;
-		background: var(--success, #10b981);
-		box-shadow: 0 0 10px var(--success, #10b981);
+		background: var(--success);
+		box-shadow: 0 0 10px var(--success);
 		opacity: 0;
 		transition: opacity 0.3s ease;
 	}
@@ -705,8 +745,8 @@ As a specialized creator, I've updated my internal logic context. I am connected
 		width: 5px;
 		height: 5px;
 		border-radius: 50%;
-		background: var(--accent-light, #c084fc);
-		box-shadow: 0 0 8px var(--accent-light, #c084fc);
+		background: var(--accent);
+		box-shadow: 0 0 8px var(--accent);
 	}
 
 	/* CREATORS LIST SCROLL */
@@ -736,10 +776,10 @@ As a specialized creator, I've updated my internal logic context. I am connected
 	}
 
 	.preset-btn {
-		background: rgba(255, 255, 255, 0.02);
-		border: 1px solid rgba(255, 255, 255, 0.04);
+		background: var(--surface);
+		border: 1px solid var(--border);
 		border-radius: 8px;
-		color: var(--text, #ffffff);
+		color: var(--text);
 		cursor: pointer;
 		font-size: var(--text-xs, 12px);
 		padding: 0.6rem 0.8rem;
@@ -751,9 +791,9 @@ As a specialized creator, I've updated my internal logic context. I am connected
 	}
 
 	.preset-btn:hover:not(:disabled) {
-		background: rgba(124, 106, 237, 0.05);
-		border-color: rgba(124, 106, 237, 0.2);
-		color: var(--accent-light, #c084fc);
+		background: var(--accent-soft);
+		border-color: var(--accent-mid);
+		color: var(--accent);
 		transform: translateX(2px);
 	}
 
@@ -767,7 +807,7 @@ As a specialized creator, I've updated my internal logic context. I am connected
 		flex-grow: 1;
 		display: flex;
 		flex-direction: column;
-		background: rgba(5, 5, 10, 0.15);
+		background: var(--bg);
 		position: relative;
 	}
 
@@ -777,10 +817,10 @@ As a specialized creator, I've updated my internal logic context. I am connected
 		align-items: center;
 		justify-content: space-between;
 		padding: 1.25rem 2rem;
-		background: rgba(10, 10, 20, 0.25);
+		background: var(--surface);
 		backdrop-filter: blur(12px);
 		-webkit-backdrop-filter: blur(12px);
-		border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+		border-bottom: 1px solid var(--border-strong);
 		z-index: 10;
 	}
 
@@ -804,14 +844,14 @@ As a specialized creator, I've updated my internal logic context. I am connected
 
 	.header-name-row h3 {
 		margin: 0;
-		font-size: var(--text-sm, 14px);
+		font-size: var(--text-base, 14px);
 		font-weight: 700;
-		color: var(--text, #ffffff);
+		color: var(--text);
 	}
 
 	.header-handle {
 		font-size: 11px;
-		color: var(--text-dim, rgba(255, 255, 255, 0.4));
+		color: var(--text-dim);
 		font-family: var(--font-mono, monospace);
 	}
 
@@ -819,9 +859,9 @@ As a specialized creator, I've updated my internal logic context. I am connected
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
-		background: rgba(239, 68, 68, 0.05);
+		background: var(--error-soft);
 		border: 1px solid rgba(239, 68, 68, 0.15);
-		color: #f87171;
+		color: var(--error);
 		font-size: 11px;
 		font-weight: 600;
 		padding: 0.5rem 0.8rem;
@@ -831,8 +871,8 @@ As a specialized creator, I've updated my internal logic context. I am connected
 	}
 
 	.clear-btn:hover {
-		background: rgba(239, 68, 68, 0.12);
-		border-color: rgba(239, 68, 68, 0.3);
+		background: rgba(239, 68, 68, 0.2);
+		border-color: var(--error);
 		transform: translateY(-1px);
 	}
 
@@ -856,8 +896,8 @@ As a specialized creator, I've updated my internal logic context. I am connected
 
 	/* WELCOME OVERLAY CARD */
 	.chat-welcome-card {
-		background: rgba(255, 255, 255, 0.01);
-		border: 1px solid rgba(124, 106, 237, 0.12);
+		background: var(--surface);
+		border: 1px solid var(--border-strong);
 		border-radius: var(--radius-lg);
 		padding: 2.5rem;
 		text-align: center;
@@ -885,7 +925,7 @@ As a specialized creator, I've updated my internal logic context. I am connected
 		color: #ffffff;
 		z-index: 2;
 		position: relative;
-		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+		box-shadow: var(--shadow-md);
 	}
 
 	.welcome-glow {
@@ -896,7 +936,7 @@ As a specialized creator, I've updated my internal logic context. I am connected
 		height: 100%;
 		border-radius: 50%;
 		filter: blur(16px);
-		opacity: 0.6;
+		opacity: 0.4;
 		z-index: 1;
 		transform: scale(1.1);
 	}
@@ -905,12 +945,12 @@ As a specialized creator, I've updated my internal logic context. I am connected
 		margin: 0 0 0.5rem 0;
 		font-size: 1.5rem;
 		font-weight: 800;
-		color: var(--text, #ffffff);
+		color: var(--text);
 	}
 
 	.welcome-subtitle {
-		font-size: var(--text-xs, 12px);
-		color: var(--text-dim, rgba(255, 255, 255, 0.5));
+		font-size: var(--text-sm, 12px);
+		color: var(--text-muted);
 		margin: 0 0 2rem 0;
 	}
 
@@ -922,25 +962,25 @@ As a specialized creator, I've updated my internal logic context. I am connected
 	}
 
 	.detail-box {
-		background: rgba(255, 255, 255, 0.015);
-		border: 1px solid rgba(255, 255, 255, 0.03);
+		background: var(--surface-2);
+		border: 1px solid var(--border);
 		border-radius: 12px;
 		padding: 1.25rem;
 	}
 
 	.detail-box h5 {
 		margin: 0 0 0.5rem 0;
-		font-size: var(--text-xs, 12px);
+		font-size: var(--text-sm, 12px);
 		font-weight: 700;
-		color: var(--accent-light, #c084fc);
+		color: var(--accent);
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
 	}
 
 	.detail-box p {
 		margin: 0;
-		font-size: var(--text-xs, 12px);
-		color: var(--text, rgba(255, 255, 255, 0.8));
+		font-size: var(--text-sm, 12px);
+		color: var(--text-muted);
 		line-height: 1.5;
 	}
 
@@ -971,7 +1011,7 @@ As a specialized creator, I've updated my internal logic context. I am connected
 		font-weight: 800;
 		color: #ffffff;
 		font-size: 12px;
-		box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+		box-shadow: var(--shadow-sm);
 	}
 
 	.message-bubble-wrapper {
@@ -982,8 +1022,8 @@ As a specialized creator, I've updated my internal logic context. I am connected
 	}
 
 	.message-bubble {
-		background: rgba(255, 255, 255, 0.02);
-		border: 1px solid rgba(255, 255, 255, 0.05);
+		background: var(--surface-2);
+		border: 1px solid var(--border);
 		border-radius: 16px;
 		border-top-left-radius: 4px;
 		padding: 1rem 1.25rem;
@@ -991,18 +1031,18 @@ As a specialized creator, I've updated my internal logic context. I am connected
 	}
 
 	.user-bubble {
-		background: linear-gradient(135deg, rgba(124, 106, 237, 0.1), rgba(124, 106, 237, 0.03));
-		border-color: rgba(124, 106, 237, 0.25);
+		background: var(--accent-soft);
+		border-color: var(--accent-mid);
 		border-radius: 16px;
 		border-top-right-radius: 4px;
-		box-shadow: 0 4px 15px rgba(124, 106, 237, 0.03);
+		box-shadow: var(--shadow-sm);
 	}
 
 	.message-text p {
 		margin: 0 0 0.5rem 0;
 		font-size: 13.5px;
 		line-height: 1.6;
-		color: var(--text, #ffffff);
+		color: var(--text);
 	}
 
 	.message-text p:last-child {
@@ -1011,9 +1051,9 @@ As a specialized creator, I've updated my internal logic context. I am connected
 
 	.message-text h4 {
 		margin: 0 0 0.75rem 0;
-		font-size: var(--text-sm, 14px);
+		font-size: var(--text-base, 14px);
 		font-weight: 700;
-		color: var(--accent-light, #c084fc);
+		color: var(--accent);
 	}
 
 	.message-text ul {
@@ -1024,22 +1064,22 @@ As a specialized creator, I've updated my internal logic context. I am connected
 	.message-text li {
 		font-size: 13px;
 		line-height: 1.5;
-		color: var(--text, rgba(255, 255, 255, 0.9));
+		color: var(--text-muted);
 		margin-bottom: 0.25rem;
 	}
 
 	.message-time {
 		display: block;
 		font-size: 10px;
-		color: var(--text-dim, rgba(255, 255, 255, 0.35));
+		color: var(--text-dim);
 		margin-top: 0.5rem;
 		text-align: right;
 	}
 
 	/* TOOL LOGS */
 	.tool-logs-box {
-		background: rgba(0, 0, 0, 0.35);
-		border: 1px solid rgba(255, 255, 255, 0.03);
+		background: var(--surface-2);
+		border: 1px solid var(--border-strong);
 		border-radius: 10px;
 		padding: 0.75rem 1rem;
 		display: flex;
@@ -1050,20 +1090,20 @@ As a specialized creator, I've updated my internal logic context. I am connected
 	}
 
 	.live-logs-box {
-		border-color: rgba(124, 106, 237, 0.15);
-		box-shadow: 0 0 15px rgba(124, 106, 237, 0.03);
+		border-color: var(--accent-mid);
+		box-shadow: var(--shadow-sm);
 	}
 
 	.tool-logs-title {
 		font-size: 11px;
 		font-weight: 700;
-		color: var(--text-dim, rgba(255, 255, 255, 0.4));
+		color: var(--text-dim);
 		margin-bottom: 4px;
 	}
 
 	.tool-log-item {
 		font-size: 11px;
-		color: var(--accent-light, #c084fc);
+		color: var(--accent);
 	}
 
 	.fade-in-log {
@@ -1080,7 +1120,7 @@ As a specialized creator, I've updated my internal logic context. I am connected
 		width: 6px;
 		height: 6px;
 		border-radius: 50%;
-		background: var(--accent-light, #c084fc);
+		background: var(--accent);
 		animation: pulse-dot 1.5s infinite;
 	}
 
@@ -1091,8 +1131,8 @@ As a specialized creator, I've updated my internal logic context. I am connected
 
 	/* TYPING INDICATOR */
 	.typing-bubble {
-		background: rgba(255, 255, 255, 0.02);
-		border: 1px solid rgba(255, 255, 255, 0.05);
+		background: var(--surface-2);
+		border: 1px solid var(--border);
 		border-radius: 16px;
 		border-top-left-radius: 4px;
 		padding: 0.75rem 1.25rem;
@@ -1106,7 +1146,7 @@ As a specialized creator, I've updated my internal logic context. I am connected
 		width: 6px;
 		height: 6px;
 		border-radius: 50%;
-		background: var(--text-dim, rgba(255, 255, 255, 0.4));
+		background: var(--text-dim);
 		animation: bounce-dot 1.4s infinite ease-in-out both;
 	}
 
@@ -1122,7 +1162,7 @@ As a specialized creator, I've updated my internal logic context. I am connected
 	.chat-footer {
 		padding: 1.5rem 2rem 2rem 2rem;
 		background: transparent;
-		border-top: 1px solid rgba(255, 255, 255, 0.03);
+		border-top: 1px solid var(--border);
 	}
 
 	.input-glow-container {
@@ -1131,17 +1171,17 @@ As a specialized creator, I've updated my internal logic context. I am connected
 		display: flex;
 		align-items: center;
 		gap: 1rem;
-		background: rgba(15, 15, 25, 0.6) !important;
-		border: 1px solid rgba(124, 106, 237, 0.2);
+		background: var(--surface) !important;
+		border: 1px solid var(--border-strong);
 		border-radius: 16px;
 		padding: 0.75rem 1.25rem;
 		transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-		box-shadow: 0 4px 30px rgba(0, 0, 0, 0.2);
+		box-shadow: var(--shadow-sm);
 	}
 
 	.input-glow-container:focus-within {
-		border-color: rgba(124, 106, 237, 0.4);
-		box-shadow: 0 0 25px rgba(124, 106, 237, 0.08), 0 8px 30px rgba(0, 0, 0, 0.25);
+		border-color: var(--accent);
+		box-shadow: 0 0 15px var(--accent-soft), var(--shadow-md);
 	}
 
 	textarea {
@@ -1149,7 +1189,7 @@ As a specialized creator, I've updated my internal logic context. I am connected
 		background: transparent;
 		border: none;
 		outline: none;
-		color: var(--text, #ffffff);
+		color: var(--text);
 		font-size: 13.5px;
 		line-height: 1.5;
 		resize: none;
@@ -1159,14 +1199,14 @@ As a specialized creator, I've updated my internal logic context. I am connected
 	}
 
 	textarea::placeholder {
-		color: var(--text-dim, rgba(255, 255, 255, 0.35));
+		color: var(--text-dim);
 	}
 
 	.send-btn {
 		width: 36px;
 		height: 36px;
 		border-radius: 10px;
-		background: var(--accent-mid, #7c6aed);
+		background: var(--accent);
 		color: #ffffff;
 		border: none;
 		outline: none;
@@ -1179,14 +1219,14 @@ As a specialized creator, I've updated my internal logic context. I am connected
 	}
 
 	.send-btn:hover:not(:disabled) {
-		background: var(--accent-light, #907efc);
+		background: var(--accent-dark, #6366f1);
 		transform: scale(1.04) rotate(-5deg);
-		box-shadow: 0 0 15px rgba(124, 106, 237, 0.3);
+		box-shadow: 0 0 15px var(--accent-mid);
 	}
 
 	.send-btn:disabled {
-		background: rgba(255, 255, 255, 0.04);
-		color: var(--text-dim, rgba(255, 255, 255, 0.2));
+		background: var(--surface-2);
+		color: var(--text-dim);
 		cursor: not-allowed;
 	}
 
@@ -1198,21 +1238,21 @@ As a specialized creator, I've updated my internal logic context. I am connected
 		background: transparent;
 	}
 	::-webkit-scrollbar-thumb {
-		background: rgba(255, 255, 255, 0.05);
+		background: var(--border-strong);
 		border-radius: 10px;
 	}
 	::-webkit-scrollbar-thumb:hover {
-		background: rgba(255, 255, 255, 0.1);
+		background: var(--accent-mid);
 	}
 
 	:global(.inline-code) {
 		font-family: var(--font-mono, monospace);
 		font-size: 11.5px;
-		background: rgba(255, 255, 255, 0.05);
+		background: var(--surface-2);
 		padding: 2px 4px;
 		border-radius: 4px;
-		color: #fca5a5;
-		border: 1px solid rgba(255, 255, 255, 0.02);
+		color: var(--accent);
+		border: 1px solid var(--border);
 	}
 
 	@keyframes fade-in {
