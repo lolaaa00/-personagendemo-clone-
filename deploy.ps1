@@ -5,7 +5,8 @@
 
 param(
     [string]$m = "",
-    [switch]$skipTests = $false
+    [switch]$skipTests = $false,
+    [switch]$integration = $false
 )
 
 $ErrorActionPreference = "Stop"
@@ -17,30 +18,43 @@ Write-Host "  -------------------------------------------------" -ForegroundColo
 Write-Host ""
 
 # ── Step 1: Quality Checks & Tests ──
-if (-not $skipTests) {
-    Write-Host "  [1/3] Running Type checks & Svelte-Check..." -ForegroundColor Yellow
-    Set-Location (Join-Path $projectDir "personagen-svelte")
-    
-    cmd.exe /c "npm run check"
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "  [1/3] ERROR: Svelte-check failed. Aborting deployment." -ForegroundColor Red
-        Set-Location $projectDir
-        exit 1
-    }
-    Write-Host "  [1/3] OK: Code type checks passed." -ForegroundColor Green
+Write-Host "  [1/3] Running Type checks & Svelte-Check..." -ForegroundColor Yellow
+Set-Location (Join-Path $projectDir "personagen-svelte")
 
-    Write-Host "  [1/3] Running Vitest Unit & Integration Tests..." -ForegroundColor Yellow
-    cmd.exe /c "npm run test:unit -- --run"
+cmd.exe /c "npm run check"
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "  [1/3] ERROR: Svelte-check failed. Aborting deployment." -ForegroundColor Red
+    Set-Location $projectDir
+    exit 1
+}
+Write-Host "  [1/3] OK: Code type checks passed." -ForegroundColor Green
+
+if (-not $skipTests) {
+    Write-Host "  [1/3] Running Vitest Unit Tests..." -ForegroundColor Yellow
+    cmd.exe /c "npm run test:unit"
     if ($LASTEXITCODE -ne 0) {
         Write-Host "  [1/3] ERROR: Unit tests failed. Aborting deployment." -ForegroundColor Red
         Set-Location $projectDir
         exit 1
     }
-    Write-Host "  [1/3] OK: All unit and integration tests passed." -ForegroundColor Green
-    Set-Location $projectDir
+    Write-Host "  [1/3] OK: Unit tests passed." -ForegroundColor Green
+
+    if ($integration) {
+        Write-Host "  [1/3] Running Live AI Sequential Integration Tests..." -ForegroundColor Yellow
+        cmd.exe /c "npm run test:integration"
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "  [1/3] ERROR: Integration tests failed. Aborting deployment." -ForegroundColor Red
+            Set-Location $projectDir
+            exit 1
+        }
+        Write-Host "  [1/3] OK: Live AI integration tests passed." -ForegroundColor Green
+    } else {
+        Write-Host "  [1/3] Skipped live integration tests (run with -integration to enable)." -ForegroundColor DarkGray
+    }
 } else {
-    Write-Host "  [1/3] Skipped quality and test validations." -ForegroundColor DarkGray
+    Write-Host "  [1/3] Skipped unit and integration tests." -ForegroundColor DarkGray
 }
+Set-Location $projectDir
 
 # ── Step 2: Stage & Commit ──
 Set-Location $projectDir
