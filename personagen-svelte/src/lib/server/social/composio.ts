@@ -270,4 +270,34 @@ export class ComposioClient {
 
 		return metrics;
 	}
+
+	/**
+	 * Executes an arbitrary tool/action on Composio
+	 */
+	async executeAction(
+		personaId: string,
+		actionSlug: string,
+		args: Record<string, any> = {}
+	): Promise<any> {
+		if (!this.apiKey) {
+			throw new Error('COMPOSIO_API_KEY is not configured.');
+		}
+
+		const response = await fetch(`${this.baseUrlV3_1}/tools/execute/${actionSlug}`, {
+			method: 'POST',
+			headers: this.getHeaders(),
+			body: JSON.stringify({
+				user_id: personaId,
+				arguments: args
+			})
+		});
+
+		if (!response.ok) {
+			const errorText = await response.text();
+			throw new Error(`Composio Action ${actionSlug} returned status ${response.status}: ${errorText}`);
+		}
+
+		return await response.json();
+	}
 }
+

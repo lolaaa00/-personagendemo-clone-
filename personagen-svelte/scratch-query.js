@@ -11,20 +11,18 @@ async function run() {
     return;
   }
   console.log(`Fetched ${agents.length} agents:`);
-  const hermes = agents.find(a => a.is_overseer);
-  console.log('Hermes agent ID:', hermes?.id);
-  if (hermes) {
-    const { data: config, error: configError } = await supabase
-      .from('agent_configs')
-      .select('*')
-      .eq('agent_id', hermes.id)
-      .maybeSingle();
-      
-    if (configError) {
-      console.error('Config fetch error:', configError);
-    } else {
-      console.log('Hermes Config:', JSON.stringify(config, null, 2));
-    }
+  for (const a of agents) {
+    console.log(`- Agent: ${a.name} (id: ${a.id}), Handle: ${a.handle}, Followers: ${a.followers}, Engagement: ${a.engagement_rate}%, Overseer: ${a.is_overseer}`);
+  }
+
+  const { data: connections, error: connError } = await supabase.from('connections').select('*');
+  if (connError) {
+    console.error('Error fetching connections:', connError);
+    return;
+  }
+  console.log(`\nFetched ${connections.length} connections:`);
+  for (const c of connections) {
+    console.log(`- Connection: agent_id=${c.agent_id}, platform=${c.platform}, handle=${c.handle}, verified=${c.verified}, connected_at=${c.connected_at}`);
   }
 }
 run();

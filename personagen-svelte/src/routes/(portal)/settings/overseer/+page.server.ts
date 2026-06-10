@@ -86,7 +86,11 @@ export const load: PageServerLoad = async ({ locals }) => {
 			hermesAgent = seeded;
 		} catch (err) {
 			console.error('[Overseer Server] Critical failure seeding Hermes:', err);
-			return fail(500, { error: 'Failed to find or seed Hermes' });
+			return {
+				hermesAgent: null,
+				memories: [],
+				error: 'Failed to find or seed Hermes'
+			};
 		}
 	}
 

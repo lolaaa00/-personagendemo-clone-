@@ -4,6 +4,8 @@
 		handle?: string;
 		verified?: boolean;
 		lastSync?: string;
+		followers?: number;
+		engagement_rate?: number;
 	}
 
 	interface Props {
@@ -31,20 +33,21 @@
 		for (const p of platforms) {
 			const status = platformStatuses[p.key];
 			if (status?.connected) {
-				const metrics = platformMetrics[p.key];
-				if (metrics) {
-					totalFollowers += metrics.followers;
-					totalEngRate += metrics.engagement;
-					connectedCount++;
-					activePlatformsList.push({
-						key: p.key,
-						name: p.name,
-						color: p.color,
-						followers: metrics.followers,
-						engagement: metrics.engagement,
-						handle: status.handle || '@connected'
-					});
-				}
+				const fallback = platformMetrics[p.key];
+				const followers = status.followers ?? fallback?.followers ?? 0;
+				const engagement = status.engagement_rate ?? fallback?.engagement ?? 0;
+
+				totalFollowers += followers;
+				totalEngRate += engagement;
+				connectedCount++;
+				activePlatformsList.push({
+					key: p.key,
+					name: p.name,
+					color: p.color,
+					followers,
+					engagement,
+					handle: status.handle || '@connected'
+				});
 			}
 		}
 

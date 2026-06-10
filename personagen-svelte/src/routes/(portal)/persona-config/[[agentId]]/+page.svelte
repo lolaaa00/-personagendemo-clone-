@@ -1,5 +1,6 @@
 <script lang="ts">
   import { page } from '$app/stores';
+  import { goto } from '$app/navigation';
   import { showToast } from '$lib/stores/ui.svelte';
   import type { AutonomyLevel } from '$lib/types';
   import { AUTONOMY_LABELS } from '$lib/types';
@@ -7,7 +8,13 @@
   import AgentConnectionStats from '$lib/components/agents/AgentConnectionStats.svelte';
 
   let { data }: { data: any } = $props();
-  const agents: any[] = data.agents ?? [];
+  let agents = $state<any[]>([]);
+
+  $effect(() => {
+    if (data.agents) {
+      agents = [...data.agents];
+    }
+  });
 
   let selectedAgentId = $state<string | null>(null);
   let activeTab = $state<'accounts' | 'soul' | 'skills' | 'tools' | 'heartbeat' | 'autonomy' | 'rss' | 'settings'>('accounts');
@@ -35,13 +42,14 @@
     let connectedCount = 0;
 
     for (const p of PLATFORMS) {
-      if (platformStatuses[p.key]?.connected) {
+      const status = platformStatuses[p.key];
+      if (status?.connected) {
         const metrics = platformMetrics[p.key];
-        if (metrics) {
-          totalFollowers += metrics.followers;
-          totalEngRate += metrics.engagement;
-          connectedCount++;
-        }
+        const followers = status.followers ?? metrics?.followers ?? 0;
+        const engagement = status.engagement_rate ?? metrics?.engagement ?? 0.0;
+        totalFollowers += followers;
+        totalEngRate += engagement;
+        connectedCount++;
       }
     }
 
@@ -237,6 +245,8 @@
     handle?: string;
     verified?: boolean;
     lastSync?: string;
+    followers?: number;
+    engagement_rate?: number;
   }
 
   let platformStatuses = $state<Record<string, PlatformStatus>>({});
@@ -406,6 +416,36 @@
     }
   }
 
+  async function deleteAgentPersona() {
+    if (!selectedAgentId) return;
+    const confirmed = confirm(`Are you sure you want to permanently delete "${selectedAgent?.name}"? All database configs and social connection metrics will be completely removed. This action cannot be undone.`);
+    if (!confirmed) return;
+
+    try {
+      const res = await fetch(`/api/agents/config`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentId: selectedAgentId })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to delete agent');
+      }
+
+      showToast(`Successfully deleted agent "${selectedAgent?.name}"`, 'success');
+      
+      // Remove from reactive state
+      agents = agents.filter((a: any) => a.id !== selectedAgentId);
+      
+      // Clear selected agent state and navigate back
+      selectedAgentId = null;
+      goto('/persona-config');
+    } catch (err: any) {
+      console.error('Failed to delete agent:', err);
+      showToast(err.message || 'Error deleting agent', 'error');
+    }
+  }
+
   function formatHour(h: number): string {
     const ampm = h >= 12 ? 'PM' : 'AM';
     const hour = h % 12 || 12;
@@ -509,6 +549,8 @@
 
                   <div class="platform-body">
                     {#if status?.connected}
+                      {@const followers = status?.followers ?? metrics?.followers ?? 0}
+                      {@const engagement = status?.engagement_rate ?? metrics?.engagement ?? 0.0}
                       <div class="connected-info">
                         <div class="handle-row">
                           <span class="handle">{status.handle || '@connected'}</span>
@@ -520,14 +562,12 @@
                         
                         <!-- Individual Platform Stats -->
                         <div class="platform-stats-badge-row" style="display: flex; gap: 0.5rem; margin-top: 0.75rem;">
-                          {#if metrics}
-                            <span style="font-size: 11px; background: rgba(255,255,255,0.05); color: var(--text-dim); padding: 2px 6px; border-radius: 4px; display: flex; align-items: center; gap: 4px; border: 1px solid rgba(255,255,255,0.08); font-weight: 500;">
-                              👥 {metrics.followers >= 1000 ? (metrics.followers / 1000).toFixed(1) + 'K' : metrics.followers} followers
-                            </span>
-                            <span style="font-size: 11px; background: rgba(255,255,255,0.05); color: var(--text-dim); padding: 2px 6px; border-radius: 4px; display: flex; align-items: center; gap: 4px; border: 1px solid rgba(255,255,255,0.08); font-weight: 500;">
-                              ⚡ {metrics.engagement}% eng
-                            </span>
-                          {/if}
+                          <span style="font-size: 11px; background: rgba(255,255,255,0.05); color: var(--text-dim); padding: 2px 6px; border-radius: 4px; display: flex; align-items: center; gap: 4px; border: 1px solid rgba(255,255,255,0.08); font-weight: 500;">
+                            👥 {followers >= 1000 ? (followers / 1000).toFixed(1) + 'K' : followers} followers
+                          </span>
+                          <span style="font-size: 11px; background: rgba(255,255,255,0.05); color: var(--text-dim); padding: 2px 6px; border-radius: 4px; display: flex; align-items: center; gap: 4px; border: 1px solid rgba(255,255,255,0.08); font-weight: 500;">
+                            ⚡ {engagement}% eng
+                          </span>
                         </div>
                       </div>
                       <button class="btn-disconnect" onclick={() => disconnectPlatform(platform.key)}>
@@ -962,6 +1002,32 @@
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
                   Save Agent Settings
                 {/if}
+              </button>
+            </div>
+
+            <!-- Danger Zone Section -->
+            <div class="danger-zone-section" style="margin-top: 3rem; padding-top: 2rem; border-top: 1px solid rgba(239, 68, 68, 0.2);">
+              <h4 style="color: #ef4444; font-size: var(--text-sm); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+                ⚠️ Danger Zone
+              </h4>
+              <p style="font-size: var(--text-xs); color: var(--text-dim); margin-bottom: 1.25rem;">
+                Permanent deletion of this agent persona. This action is irreversible and will erase all connected channel metrics and configuration rules.
+              </p>
+              
+              <button 
+                type="button" 
+                onclick={deleteAgentPersona} 
+                style="background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.3); color: #f87171; border-radius: var(--radius-sm); padding: 0.75rem 1.25rem; font-size: var(--text-xs); font-weight: 600; cursor: pointer; transition: all 0.2s ease; display: inline-flex; align-items: center; gap: 0.5rem;"
+                onmouseover={(e) => { e.currentTarget.style.background = 'rgba(239, 68, 68, 0.15)'; e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.5)'; }}
+                onmouseout={(e) => { e.currentTarget.style.background = 'rgba(239, 68, 68, 0.08)'; e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.3)'; }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="3 6 5 6 21 6"></polyline>
+                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                  <line x1="10" y1="11" x2="10" y2="17"></line>
+                  <line x1="14" y1="11" x2="14" y2="17"></line>
+                </svg>
+                Delete Agent Persona
               </button>
             </div>
           </div>

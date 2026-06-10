@@ -79,3 +79,38 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		return json({ success: false, error: (err as Error).message }, { status: 500 });
 	}
 };
+
+export const DELETE: RequestHandler = async ({ request, locals }) => {
+	const { session, user } = await locals.safeGetSession();
+	if (!session || !user) {
+		return json({ success: false, error: 'Unauthorized' }, { status: 401 });
+	}
+
+	try {
+		const { agentId } = await request.json() as any;
+
+		if (!agentId) {
+			return json({ success: false, error: 'Missing agentId' }, { status: 400 });
+		}
+
+		const db = createDbService(locals.supabase);
+
+		// Clean up dependant rows first to avoid foreign key violations
+		await locals.supabase.from('agent_configs').delete().eq('agent_id', agentId);
+		await locals.supabase.from('chat_messages').delete().eq('agent_id', agentId);
+		await locals.supabase.from('connections').delete().eq('agent_id', agentId);
+		await locals.supabase.from('agent_memories').delete().eq('agent_id', agentId);
+		await locals.supabase.from('posts').delete().eq('agent_id', agentId);
+		await locals.supabase.from('tickets').delete().eq('assignee_agent_id', agentId);
+
+		// Delete agent row
+		const { error: agentErr } = await db.agents.delete(agentId);
+		if (agentErr) throw agentErr;
+
+		return json({ success: true });
+	} catch (err) {
+		console.error('[Config API] Error deleting agent:', err);
+		return json({ success: false, error: (err as Error).message }, { status: 500 });
+	}
+};
+

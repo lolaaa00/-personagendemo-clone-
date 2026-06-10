@@ -81,7 +81,10 @@ export interface ConnectionRow {
 	verified: boolean;
 	connected_at: string;
 	last_sync: string | null;
+	followers?: number | null;
+	engagement_rate?: number | null;
 }
+
 
 export interface BlueprintRow {
 	id: string;

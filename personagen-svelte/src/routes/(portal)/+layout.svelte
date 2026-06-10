@@ -49,6 +49,7 @@
       label: 'Overview',
       items: [
         { href: '/dashboard', label: 'Dashboard', icon: 'grid' },
+        { href: '/chat', label: 'Agent Chat', icon: 'message' },
         { href: '/scout', label: 'Social Scout', icon: 'radar' },
         { href: '/trends', label: 'Trends', icon: 'trending' }
       ]
@@ -177,6 +178,8 @@
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
               {:else if item.icon === 'file'}
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+              {:else if item.icon === 'message'}
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
               {:else if item.icon === 'settings'}
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
               {/if}
@@ -221,6 +224,7 @@
             const path = $page.url.pathname;
             if (path.startsWith('/brand-brief')) return 'Brand Brief';
             if (path.startsWith('/agreement')) return 'Agreement';
+            if (path.startsWith('/chat')) return '💬 Agent Chat Portal';
             if (path.startsWith('/settings/overseer')) return '🤖 Hermes Overseer Config';
             if (path.startsWith('/settings/billing')) return 'Billing & Subscription';
             if (path.startsWith('/settings')) return 'Settings';
@@ -298,13 +302,22 @@
                 </svg>
                 Agreement
               </a>
-              
-              <!-- Premium Hermes Overseer Highlighted Link -->
-              <a href="/settings/overseer" class="dropdown-item" role="menuitem" onclick={closeUserDropdown} style="background: linear-gradient(90deg, rgba(16, 185, 129, 0.08), rgba(6, 182, 212, 0.08)); border-left: 3px solid #10b981; font-weight: 600; text-shadow: 0 0 8px rgba(16, 185, 129, 0.15);">
-                <span style="display: flex; align-items: center; gap: 0.5rem; color: #10b981;">
-                  🤖 Hermes Overseer Config
-                  <span style="width: 6px; height: 6px; background: #10b981; border-radius: 50%; box-shadow: 0 0 6px #10b981;"></span>
-                </span>
+              <a href="/settings/overseer" class="dropdown-item" role="menuitem" onclick={closeUserDropdown}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="11" width="18" height="10" rx="2" ry="2"/>
+                  <rect x="3" y="3" width="18" height="8" rx="2" ry="2"/>
+                  <line x1="7" y1="7" x2="7.01" y2="7"/>
+                  <line x1="7" y1="15" x2="7.01" y2="15"/>
+                  <line x1="13" y1="7" x2="17" y2="7"/>
+                  <line x1="13" y1="15" x2="17" y2="15"/>
+                </svg>
+                Hermes Overseer
+              </a>
+              <a href="/chat" class="dropdown-item" role="menuitem" onclick={closeUserDropdown}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                </svg>
+                Agent Chat Room
               </a>
 
               <a href="/settings" class="dropdown-item" role="menuitem" onclick={closeUserDropdown}>

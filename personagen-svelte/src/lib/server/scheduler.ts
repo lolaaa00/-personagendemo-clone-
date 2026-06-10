@@ -6,6 +6,8 @@ import { GoogleGenAI } from '@google/genai';
 
 let intervalId: NodeJS.Timeout | null = null;
 let isRunning = false;
+let lastAnalyticsSyncTime = 0;
+
 
 function getServiceSupabase() {
 	const url = publicEnv.PUBLIC_SUPABASE_URL;
@@ -410,8 +412,20 @@ async function pollScheduledPosts() {
 		// Run RSS polling
 		await pollRssFeeds();
 
-		// Run Post-Publication Analytics Sync!
-		await syncPostAnalytics();
+		// Run Post-Publication Analytics Sync! Throttled to avoid API/log spam.
+		const nowTime = Date.now();
+		let syncInterval = 4 * 60 * 60 * 1000; // Default: 4 hours
+		if (env.ANALYTICS_SYNC_INTERVAL_MS) {
+			const parsed = parseInt(env.ANALYTICS_SYNC_INTERVAL_MS, 10);
+			if (!isNaN(parsed) && parsed > 0) {
+				syncInterval = parsed;
+			}
+		}
+
+		if (nowTime - lastAnalyticsSyncTime >= syncInterval) {
+			lastAnalyticsSyncTime = nowTime;
+			await syncPostAnalytics();
+		}
 	} catch (err) {
 		console.error('[Scheduler] Critical loop error:', err);
 	} finally {
