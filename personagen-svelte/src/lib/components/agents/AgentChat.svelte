@@ -22,6 +22,7 @@
   let inputValue = $state('');
   let loading = $state(false);
   let chatOpen = $state(false);
+  let isMaximized = $state(false);
   let scrollContainer = $state<HTMLElement | null>(null);
 
   // Fetch message history from the server with localStorage fallback
@@ -172,7 +173,13 @@
 <!-- Floating Chat Trigger -->
 <button
   class="chat-trigger"
-  onclick={() => { chatOpen = !chatOpen; scrollToBottom(); }}
+  onclick={() => { 
+    chatOpen = !chatOpen; 
+    if (chatOpen) {
+      isMaximized = true;
+    }
+    scrollToBottom(); 
+  }}
   aria-label="Chat with agent"
 >
   <div class="trigger-avatar" style="background: {agentGradient}">
@@ -186,7 +193,10 @@
 
 <!-- Chat Window -->
 {#if chatOpen}
-  <div class="chat-window glass-card">
+  {#if isMaximized}
+    <button class="chat-backdrop" onclick={() => { isMaximized = false; scrollToBottom(); }} aria-label="Restore chat size"></button>
+  {/if}
+  <div class="chat-window glass-card" class:maximized={isMaximized}>
     <!-- Header -->
     <header class="chat-header" style="--agent-grad: {agentGradient}">
       <div class="agent-avatar" style="background: {agentGradient}">
@@ -202,7 +212,24 @@
         <button onclick={clearHistory} class="btn-icon" title="Clear history">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18m-2 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
         </button>
-        <button onclick={() => chatOpen = false} class="btn-icon" title="Minimize">
+        <button onclick={() => { isMaximized = !isMaximized; scrollToBottom(); }} class="btn-icon" title={isMaximized ? "Restore" : "Maximize"}>
+          {#if isMaximized}
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="4 14 10 14 10 20"/>
+              <polyline points="20 10 14 10 14 4"/>
+              <line x1="14" y1="10" x2="21" y2="3"/>
+              <line x1="10" y1="14" x2="3" y2="20"/>
+            </svg>
+          {:else}
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="15 3 21 3 21 9"/>
+              <polyline points="9 21 3 21 3 15"/>
+              <line x1="21" y1="3" x2="14" y2="10"/>
+              <line x1="3" y1="21" x2="10" y2="14"/>
+            </svg>
+          {/if}
+        </button>
+        <button onclick={() => { chatOpen = false; isMaximized = false; }} class="btn-icon" title="Minimize">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
       </div>
@@ -341,6 +368,24 @@
     75%, 100% { transform: scale(2); opacity: 0; }
   }
 
+  /* Backdrop */
+  .chat-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    z-index: 999;
+    border: none;
+    cursor: default;
+    animation: fadeIn 0.2s ease-out;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
   /* Chat window */
   .chat-window {
     position: fixed;
@@ -348,8 +393,8 @@
     right: 2rem;
     width: 380px;
     height: 520px;
-    background: rgba(14, 14, 22, 0.9);
-    border: 1px solid var(--border);
+    background: rgba(14, 14, 22, 0.93);
+    border: 1px solid var(--border-strong);
     border-radius: var(--radius-lg);
     box-shadow:
       0 20px 50px rgba(0, 0, 0, 0.5),
@@ -358,7 +403,27 @@
     flex-direction: column;
     overflow: hidden;
     z-index: 1000;
+    transform: translate(0, 0);
+    transition: 
+      width 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+      height 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+      bottom 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+      right 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+      transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
     animation: chatOpenAnim 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .chat-window.maximized {
+    width: 850px;
+    height: 720px;
+    max-width: calc(100vw - 4rem);
+    max-height: calc(100vh - 10rem);
+    bottom: 50%;
+    right: 50%;
+    transform: translate(50%, 50%);
+    box-shadow:
+      0 30px 70px rgba(0, 0, 0, 0.6),
+      0 0 0 1px rgba(255, 255, 255, 0.08) inset;
   }
 
   @keyframes chatOpenAnim {
