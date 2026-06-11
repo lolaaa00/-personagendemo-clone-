@@ -1,15 +1,7 @@
 import { env } from '$env/dynamic/private';
-import { env as publicEnv } from '$env/dynamic/public';
 
-// Platform to Composio Auth Config ID mapping (managed/custom developer configurations)
-const COMPOSIO_AUTH_CONFIG_MAPPING: Record<string, string> = {
-	facebook: 'ac_Mw2OuQZDfGhS', // Facebook configuration ID
-	instagram: 'ac_hJwImsaP0RVh', // Active configuration with 1 connection (alternative: ac_uAyXLZGgTBwM)
-	youtube: 'ac_ThnyEqawTqZ4',   // YouTube configuration ID (alternative: ac_Jx9XnIK1u5VI)
-	tiktok: '',                 // Not configured (requires custom TikTok developer app on Composio dashboard)
-	reddit: 'ac_rN7BlBqYuamn',    // Active configuration with 1 connection (alternative: ac_NnIcAghDNrXl)
-	discord: 'ac_pXtKdjpLeCPM'    // Discord configuration ID
-};
+const SUPPORTED_SOCIAL_PLATFORMS = ['tiktok', 'instagram', 'youtube', 'facebook'] as const;
+export type SocialPlatform = (typeof SUPPORTED_SOCIAL_PLATFORMS)[number];
 
 // Platform to Composio Action Slug mapping
 const COMPOSIO_ACTION_MAPPING: Record<string, string> = {
@@ -19,14 +11,25 @@ const COMPOSIO_ACTION_MAPPING: Record<string, string> = {
 	tiktok: 'TIKTOK_PUBLISH_VIDEO'
 };
 
+export function getAllSocialPlatforms(): SocialPlatform[] {
+	return [...SUPPORTED_SOCIAL_PLATFORMS];
+}
+
+export function getComposioAuthConfigId(platform: string): string {
+	const key = `COMPOSIO_AUTH_CONFIG_${platform.toUpperCase()}`;
+	return env[key] || '';
+}
+
+export function isPlatformConfigured(platform: string): boolean {
+	return Boolean(getComposioAuthConfigId(platform));
+}
+
 export class ComposioClient {
 	private apiKey: string;
 	private baseUrl = 'https://backend.composio.dev/api/v3';
 	private baseUrlV3_1 = 'https://backend.composio.dev/api/v3.1';
 
 	constructor() {
-		// Use GEMINI_API_KEY as fallback if COMPOSIO_API_KEY is not defined,
-		// or check private environment variables
 		this.apiKey = env.COMPOSIO_API_KEY || '';
 	}
 
@@ -46,19 +49,14 @@ export class ComposioClient {
 		}
 
 		const platKey = platform.toLowerCase();
-		const authConfigId = COMPOSIO_AUTH_CONFIG_MAPPING[platKey];
-		if (authConfigId === undefined) {
+		if (!SUPPORTED_SOCIAL_PLATFORMS.includes(platKey as SocialPlatform)) {
 			throw new Error(`Platform ${platform} is not supported under the connection profile.`);
 		}
 
+		const authConfigId = getComposioAuthConfigId(platKey);
 		if (!authConfigId) {
-			if (platKey === 'tiktok') {
-				throw new Error(
-					`TikTok connection is not configured yet on your Composio account. Please configure your custom TikTok Developer credentials on your Composio dashboard to obtain an Auth Config ID.`
-				);
-			}
 			throw new Error(
-				`Platform ${platform} has not been assigned a valid Auth Config ID. Please configure it in your dashboard.`
+				`Platform ${platform} is not configured. Set COMPOSIO_AUTH_CONFIG_${platKey.toUpperCase()} to enable it.`
 			);
 		}
 
@@ -93,8 +91,7 @@ export class ComposioClient {
 	 */
 	async listConnections(personaId: string): Promise<any[]> {
 		if (!this.apiKey) {
-			console.warn('[Composio Client] listConnections called but COMPOSIO_API_KEY is not configured.');
-			return [];
+			throw new Error('COMPOSIO_API_KEY is not configured.');
 		}
 
 		try {
@@ -105,15 +102,13 @@ export class ComposioClient {
 
 			if (!response.ok) {
 				const errorText = await response.text();
-				console.warn(`[Composio Client] Failed to list connections for agent ${personaId}: status ${response.status}: ${errorText}`);
-				return [];
+				throw new Error(`Composio connected accounts returned status ${response.status}: ${errorText}`);
 			}
 
 			const data = (await response.json()) as any;
 			return data.items || [];
 		} catch (err) {
-			console.error(`[Composio Client] Error listing connections for agent ${personaId}:`, err);
-			return [];
+			throw new Error(`Failed to list Composio connections for agent ${personaId}: ${(err as Error).message}`);
 		}
 	}
 
@@ -131,6 +126,10 @@ export class ComposioClient {
 		}
 
 		const platKey = platform.toLowerCase();
+		if (!isPlatformConfigured(platKey)) {
+			return { success: false, error: `Platform "${platform}" is not configured.` };
+		}
+
 		const actionSlug = COMPOSIO_ACTION_MAPPING[platKey];
 		if (!actionSlug) {
 			return { success: false, error: `Posting action for platform "${platform}" is not supported.` };
@@ -181,8 +180,7 @@ export class ComposioClient {
 
 			const result = (await response.json()) as any;
 			
-			// Extract externalId if available in the response, otherwise generate a secure fallback UUID/reference
-			let externalId = `ext_${platform}_${Math.random().toString(36).substring(2, 11)}`;
+			let externalId: string | undefined;
 			if (result && typeof result === 'object') {
 				const resObj = result.result || result.data || result;
 				if (resObj && typeof resObj === 'object') {
@@ -208,8 +206,8 @@ export class ComposioClient {
 		platform: string,
 		externalId: string,
 		publishedAt?: string | Date
-	): Promise<{ views: number; likes: number; comments: number; shares: number }> {
-		const metrics = { views: 0, likes: 0, comments: 0, shares: 0 };
+	): Promise<{ views: number; likes: number; comments: number; shares: number; estimated: boolean }> {
+		const metrics = { views: 0, likes: 0, comments: 0, shares: 0, estimated: true };
 
 		// Fallback organic growth curve logic based on time elapsed
 		const pubDate = publishedAt ? new Date(publishedAt) : new Date(Date.now() - 3600000 * 4); // default 4 hrs ago
@@ -254,6 +252,7 @@ export class ComposioClient {
 				if (response.ok) {
 					const data = (await response.json()) as any;
 					if (data && typeof data === 'object') {
+						metrics.estimated = false;
 						const resObj = data.result || data.data || data;
 						if (resObj && typeof resObj === 'object') {
 							metrics.views = Number(resObj.views || resObj.view_count || metrics.views);
@@ -300,4 +299,3 @@ export class ComposioClient {
 		return await response.json();
 	}
 }
-

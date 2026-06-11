@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { env } from '$env/dynamic/private';
 import { env as publicEnv } from '$env/dynamic/public';
-import { ComposioClient } from './social/composio';
+import { ComposioClient, isPlatformConfigured } from './social/composio';
 import { GoogleGenAI } from '@google/genai';
 
 let intervalId: NodeJS.Timeout | null = null;
@@ -350,12 +350,28 @@ async function pollScheduledPosts() {
 				const targetPlatforms: string[] = post.platforms || [];
 				let publishCount = 0;
 				let failureCount = 0;
+				let skippedCount = 0;
 				let lastExternalId: string | null = null;
 				const errors: string[] = [];
+				const publicationResults: Record<string, any> = {};
 
 				for (const platform of targetPlatforms) {
 					const normalizedPlat = platform.toLowerCase();
 					if (!['instagram', 'tiktok', 'youtube', 'facebook'].includes(normalizedPlat)) {
+						publicationResults[normalizedPlat] = {
+							status: 'skipped',
+							error: 'Platform is not supported'
+						};
+						skippedCount++;
+						continue;
+					}
+
+					if (!isPlatformConfigured(normalizedPlat)) {
+						publicationResults[normalizedPlat] = {
+							status: 'skipped',
+							error: 'Platform is not configured'
+						};
+						skippedCount++;
 						continue;
 					}
 
@@ -368,6 +384,20 @@ async function pollScheduledPosts() {
 
 					if (!conn) {
 						console.warn(`[Scheduler] Agent ${post.agent_id} has no connected account for platform "${platform}". Skipping.`);
+						publicationResults[normalizedPlat] = {
+							status: 'skipped',
+							error: 'No connected account'
+						};
+						skippedCount++;
+						continue;
+					}
+
+					if (conn.status && conn.status !== 'active') {
+						publicationResults[normalizedPlat] = {
+							status: 'skipped',
+							error: `Connection status is ${conn.status}`
+						};
+						skippedCount++;
 						continue;
 					}
 
@@ -378,19 +408,28 @@ async function pollScheduledPosts() {
 						if (publishRes.externalId) {
 							lastExternalId = publishRes.externalId;
 						}
+						publicationResults[normalizedPlat] = {
+							status: 'published',
+							external_id: publishRes.externalId || null,
+							published_at: new Date().toISOString()
+						};
 					} else {
 						console.error(`[Scheduler] Post ${post.id} failed to publish to ${platform}:`, publishRes.error);
 						failureCount++;
 						errors.push(`${platform}: ${publishRes.error}`);
+						publicationResults[normalizedPlat] = {
+							status: 'failed',
+							error: publishRes.error || 'Unknown Composio publish failure'
+						};
 					}
 				}
 
-				let finalStatus = 'published';
-				let publishedAt: string | null = new Date().toISOString();
+				let finalStatus = publishCount > 0 ? 'published' : 'failed';
+				let publishedAt: string | null = publishCount > 0 ? new Date().toISOString() : null;
 
-				if (publishCount === 0 && failureCount > 0) {
+				if (publishCount === 0 && failureCount === 0 && skippedCount === 0) {
 					finalStatus = 'failed';
-					publishedAt = null;
+					publicationResults._post = { status: 'failed', error: 'No target platforms were provided' };
 				}
 
 				const { error: updateError } = await supabase
@@ -399,6 +438,7 @@ async function pollScheduledPosts() {
 						status: finalStatus,
 						published_at: publishedAt,
 						external_id: lastExternalId,
+						publication_results: publicationResults,
 						analytics: { views: 0, likes: 0, comments: 0, shares: 0 }
 					})
 					.eq('id', post.id);
@@ -442,7 +482,7 @@ export async function syncPostAnalytics() {
 	const composio = new ComposioClient();
 
 	try {
-		// Fetch published posts that have an external_id
+		// Fetch published posts that have at least one external platform ID.
 		const { data: posts, error } = await supabase
 			.from('posts')
 			.select('*')
@@ -462,12 +502,15 @@ export async function syncPostAnalytics() {
 		console.log(`[Scheduler] Syncing metrics for ${posts.length} published posts...`);
 
 		for (const post of posts) {
-			const platform = (post.platforms && post.platforms[0]) || 'instagram';
+			const publicationResults = post.publication_results || {};
+			const platform = Object.keys(publicationResults).find((key) => publicationResults[key]?.external_id) || (post.platforms && post.platforms[0]) || 'instagram';
+			const externalId = publicationResults[platform]?.external_id || post.external_id;
+			if (!externalId) continue;
 			try {
 				const metrics = await composio.fetchPostMetrics(
 					post.agent_id,
 					platform,
-					post.external_id!,
+					externalId,
 					post.published_at!
 				);
 

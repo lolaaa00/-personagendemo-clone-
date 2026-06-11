@@ -1,4 +1,5 @@
-const apiKey = 'ak_cHHRKbh3CqAOmdIfXpJv';
+const apiKey = process.env.COMPOSIO_API_KEY;
+if (!apiKey) throw new Error('COMPOSIO_API_KEY is required.');
 const baseUrl = 'https://backend.composio.dev/api/v3';
 
 async function test() {

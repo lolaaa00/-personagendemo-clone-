@@ -1,7 +1,8 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-const apiKey = process.env.COMPOSIO_API_KEY || 'ak_cHHRKbh3CqAOmdIfXpJv';
+const apiKey = process.env.COMPOSIO_API_KEY;
+if (!apiKey) throw new Error('COMPOSIO_API_KEY is required.');
 const baseUrlV3_1 = 'https://backend.composio.dev/api/v3.1';
 
 async function executeAction(actionSlug, userId, args = {}) {

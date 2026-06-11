@@ -251,33 +251,29 @@
 
   interface PlatformStatus {
     connected: boolean;
+    configured?: boolean;
+    status?: string;
     handle?: string;
     verified?: boolean;
     lastSync?: string;
+    lastError?: string;
     followers?: number;
     engagement_rate?: number;
   }
 
   let platformStatuses = $state<Record<string, PlatformStatus>>({});
   let collapsedPlatforms = $state<Record<string, boolean>>({});
-  let addedPlatforms = $state<string[]>([]);
 
   const visiblePlatforms = $derived(
-    PLATFORMS.filter((p) => platformStatuses[p.key]?.connected || addedPlatforms.includes(p.key))
-  );
-
-  const hiddenPlatforms = $derived(
-    PLATFORMS.filter((p) => !platformStatuses[p.key]?.connected && !addedPlatforms.includes(p.key))
+    PLATFORMS
   );
 
   $effect(() => {
     if (selectedAgentId) {
       checkStatuses();
-      addedPlatforms = [];
       collapsedPlatforms = {};
     } else {
       platformStatuses = {};
-      addedPlatforms = [];
       collapsedPlatforms = {};
     }
   });
@@ -308,6 +304,11 @@
 
   async function connectPlatform(platform: string) {
     if (!selectedAgentId) return;
+    const currentStatus = platformStatuses[platform];
+    if (currentStatus?.configured === false) {
+      showToast(`${platform} is not configured yet`, 'warning');
+      return;
+    }
     connectingPlatform = platform;
     try {
       const res = await Accounts.initConnection(selectedAgentId, platform);
@@ -576,38 +577,18 @@
               </div>
             {/if}
 
-            <!-- Accounts Controls row for adding/revealing platform cards -->
             <div class="accounts-controls" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; background: rgba(255, 255, 255, 0.02); padding: 0.75rem 1.25rem; border-radius: var(--radius); border: 1px solid var(--border); gap: 1rem; flex-wrap: wrap;">
               <div style="display: flex; align-items: center; gap: 0.5rem; font-size: var(--text-sm); font-weight: 500; color: var(--text-muted);">
                 <span style="background: var(--accent-soft); color: var(--accent); font-weight: 700; padding: 2px 8px; border-radius: 20px; font-size: 11px;">{computedMetrics.connectedCount} / {PLATFORMS.length}</span>
                 <span>Active Connections</span>
               </div>
-              
-              {#if hiddenPlatforms.length > 0}
-                <div style="display: flex; align-items: center; gap: 0.75rem;">
-                  <span style="font-size: var(--text-xs); font-weight: 600; text-transform: uppercase; color: var(--text-dim); letter-spacing: 0.05em;">Reveal Platform:</span>
-                  <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-                    {#each hiddenPlatforms as p}
-                      <button 
-                        type="button" 
-                        onclick={() => addedPlatforms = [...addedPlatforms, p.key]}
-                        style="display: flex; align-items: center; gap: 6px; padding: 6px 12px; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border); border-radius: 20px; color: var(--text); font-size: var(--text-xs); font-weight: 600; cursor: pointer; transition: all 0.2s ease; outline: none;"
-                        onmouseover={(e) => { e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)'; e.currentTarget.style.borderColor = p.color; e.currentTarget.style.boxShadow = `0 0 10px ${p.color}33`; }}
-                        onmouseout={(e) => { e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)'; e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.boxShadow = 'none'; }}
-                      >
-                        <span style="width: 6px; height: 6px; border-radius: 50%; background: {p.color};"></span>
-                        {p.name}
-                      </button>
-                    {/each}
-                  </div>
-                </div>
-              {/if}
             </div>
 
             <div class="platforms-grid">
               {#each visiblePlatforms as platform}
                 {@const status = platformStatuses[platform.key]}
                 {@const metrics = platformMetrics[platform.key]}
+                {@const isConfigured = status?.configured !== false}
                 <div class="platform-card" class:connected={status?.connected} style="--platform-color: {platform.color}">
                   <div class="platform-header" style="display: flex; align-items: center; width: 100%;">
                     <div class="platform-icon">
@@ -624,6 +605,13 @@
                     <div class="platform-name-wrap" style="display: flex; align-items: center; gap: 0.5rem;">
                       <span class="platform-name">{platform.name}</span>
                       <span class="status-dot" class:on={status?.connected}></span>
+                      {#if !isConfigured}
+                        <span style="font-size: 10px; color: var(--warning); text-transform: uppercase; letter-spacing: 0.05em; border: 1px solid rgba(245, 158, 11, 0.35); background: rgba(245, 158, 11, 0.08); border-radius: 999px; padding: 2px 7px; font-weight: 700;">Not configured</span>
+                      {:else if status?.status === 'provider_unavailable'}
+                        <span style="font-size: 10px; color: var(--warning); text-transform: uppercase; letter-spacing: 0.05em; border: 1px solid rgba(245, 158, 11, 0.35); background: rgba(245, 158, 11, 0.08); border-radius: 999px; padding: 2px 7px; font-weight: 700;">Sync stale</span>
+                      {:else if status?.status === 'reauth_required'}
+                        <span style="font-size: 10px; color: var(--error); text-transform: uppercase; letter-spacing: 0.05em; border: 1px solid rgba(239, 68, 68, 0.35); background: rgba(239, 68, 68, 0.08); border-radius: 999px; padding: 2px 7px; font-weight: 700;">Reconnect</span>
+                      {/if}
                     </div>
 
                     <!-- Platform Header Actions (Collapse + Remove) -->
@@ -639,20 +627,6 @@
                       >
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
                       </button>
-
-                      <!-- Remove Button (Only for disconnected platforms) -->
-                      {#if !status?.connected}
-                        <button
-                          type="button"
-                          onclick={() => addedPlatforms = addedPlatforms.filter(k => k !== platform.key)}
-                          style="background: none; border: none; color: var(--text-dim); cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; transition: color 0.2s ease; outline: none;"
-                          title="Hide Platform"
-                          onmouseover={(e) => e.currentTarget.style.color = 'var(--error)'}
-                          onmouseout={(e) => e.currentTarget.style.color = 'var(--text-dim)'}
-                        >
-                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                        </button>
-                      {/if}
                     </div>
                   </div>
 
@@ -708,15 +682,20 @@
                           Disconnect
                         </button>
                       {:else}
-                        <p class="disconnected-msg">Not connected</p>
+                        <p class="disconnected-msg">{isConfigured ? 'Not connected' : 'Not configured'}</p>
+                        {#if status?.lastError}
+                          <p style="font-size: var(--text-xs); color: var(--text-dim); margin: -0.25rem 0 0.75rem;">{status.lastError}</p>
+                        {/if}
                         <button
                           class="btn-connect"
-                          disabled={connectingPlatform === platform.key}
+                          disabled={connectingPlatform === platform.key || !isConfigured}
                           onclick={() => connectPlatform(platform.key)}
                         >
                           {#if connectingPlatform === platform.key}
                             <span class="spinner"></span>
                             Connecting…
+                          {:else if !isConfigured}
+                            Not configured
                           {:else}
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
                             Connect

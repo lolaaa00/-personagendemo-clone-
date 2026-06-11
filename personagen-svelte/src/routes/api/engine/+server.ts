@@ -703,28 +703,33 @@ Output ONLY the enriched expanded text directly. Do NOT include markdown code bl
 		// F. PATH: personagen-publish
 		// ══════════════════════════════════════════════════════════════════════════
 		if (path === 'personagen-publish') {
-			// Live db state update: Mark post as 'published'!
+			// Queue immediate publishing. The scheduler is the only path that marks
+			// posts as published because it records actual Composio outcomes.
 			let targetPostId = body.post_id;
 			if (!targetPostId && body.post) {
 				targetPostId = body.post.id;
 			}
 
 			if (targetPostId) {
-				console.log(`[Local Engine] Updating post ${targetPostId} to published in Supabase`);
+				const now = new Date();
+				console.log(`[Local Engine] Queueing post ${targetPostId} for immediate scheduler publish`);
 				const { error } = await db.posts.update(targetPostId, {
-					status: 'published',
-					published_at: new Date().toISOString()
+					status: 'scheduled',
+					scheduled_date: now.toISOString().split('T')[0],
+					scheduled_time: now.toTimeString().split(' ')[0],
+					published_at: null
 				});
 				if (error) {
-					console.error('[Engine] Failed to update post status in DB:', error);
+					console.error('[Engine] Failed to queue post for publishing:', error);
+					return json({ success: false, error: error.message }, { status: 500 });
 				}
 			}
 
 			return json({
 				success: true,
 				data: {
-					message: 'Post successfully published to active social platforms!',
-					publishedAt: new Date().toISOString()
+					message: 'Post queued for publishing. The scheduler will mark it published only after Composio succeeds.',
+					queuedAt: new Date().toISOString()
 				}
 			});
 		}

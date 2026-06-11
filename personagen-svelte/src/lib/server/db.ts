@@ -66,6 +66,7 @@ export interface PostRow {
 	published_at: string | null;
 	external_id?: string | null;
 	analytics?: { views: number; likes: number; comments: number; shares: number } | null;
+	publication_results?: Record<string, unknown> | null;
 	token_usage?: number | null;
 	token_cost?: number | null;
 	created_at: string;
@@ -83,6 +84,9 @@ export interface ConnectionRow {
 	last_sync: string | null;
 	followers?: number | null;
 	engagement_rate?: number | null;
+	status?: 'active' | 'stale' | 'reauth_required' | 'revoked' | 'error' | null;
+	last_error?: string | null;
+	last_checked_at?: string | null;
 }
 
 

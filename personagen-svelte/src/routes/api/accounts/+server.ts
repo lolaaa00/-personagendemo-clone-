@@ -2,7 +2,11 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { createDbService } from '$lib/server/db';
 import { env } from '$env/dynamic/private';
-import { ComposioClient } from '$lib/server/social/composio';
+import {
+	ComposioClient,
+	getAllSocialPlatforms,
+	isPlatformConfigured
+} from '$lib/server/social/composio';
 
 function getSeedHash(str: string): number {
 	let hash = 0;
@@ -145,6 +149,9 @@ async function syncLiveConnectionMetrics(db: any, composio: ComposioClient, pers
 			followers: liveFollowers,
 			engagement_rate: liveEngagement,
 			verified: true,
+			status: 'active',
+			last_error: null,
+			last_checked_at: new Date().toISOString(),
 			last_sync: new Date().toISOString()
 		});
 		
@@ -182,7 +189,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			const { data: conns, error } = await db.connections.listForAgent(persona_id);
 			if (error) throw error;
 
-			const platforms = ['tiktok', 'instagram', 'youtube', 'facebook'];
+			const platforms = getAllSocialPlatforms();
 			const statusData: Record<string, any> = {};
 
 			const isUuidAgent = isUuid(persona_id);
@@ -190,6 +197,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			const isDevBypass = !isUuidAgent || (!composioKey || composioKey.includes('placeholder') || composioKey.includes('change_me'));
 
 			let activeComposioPlatforms: string[] = [];
+			let providerError = '';
 
 			if (!isDevBypass) {
 				try {
@@ -202,6 +210,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 					
 					console.log(`[Accounts API] Live active Composio platforms for agent ${persona_id}:`, activeComposioPlatforms);
 				} catch (e) {
+					providerError = (e as Error).message;
 					console.error('[Accounts API] Failed to fetch active connections from Composio:', e);
 				}
 			}
@@ -209,7 +218,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			// 1. Self-healing: If a platform is active in Composio but missing from our DB, auto-create it
 			if (!isDevBypass && conns) {
 				for (const activePlat of activeComposioPlatforms) {
-					if (platforms.includes(activePlat) && !conns.some((c) => c.platform === activePlat)) {
+					if ((platforms as string[]).includes(activePlat) && !conns.some((c) => c.platform === activePlat)) {
 						try {
 							const { data: agent } = await db.agents.get(persona_id);
 							if (agent) {
@@ -222,6 +231,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 									platform: activePlat as any,
 									handle,
 									verified: true,
+									status: 'active',
+									last_error: null,
+									last_checked_at: new Date().toISOString(),
 									last_sync: new Date().toISOString()
 								});
 								
@@ -249,12 +261,16 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				}
 			}
 
-			// 2. Build status data & Clean up: If a platform exists in DB but is inactive/missing in Composio, delete it
+			// 2. Build status data. Status checks are intentionally non-destructive:
+			// a provider outage or stale response should not delete local connection records.
 			for (const p of platforms) {
 				const conn = conns?.find((c) => c.platform === p);
+				const configured = isPlatformConfigured(p);
+				const providerUnavailable = Boolean(providerError);
 				const isVerified = isDevBypass || activeComposioPlatforms.includes(p);
+				const localActive = conn && conn.status !== 'revoked' && conn.status !== 'reauth_required';
 
-				if (conn && isVerified) {
+				if (conn && (isVerified || providerUnavailable || localActive)) {
 					let followers = conn.followers;
 					let engagement = conn.engagement_rate;
 					if (!followers || followers === 0 || !engagement || engagement === 0) {
@@ -264,21 +280,37 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 					}
 
 					statusData[p] = {
-						connected: true,
+						connected: Boolean(isVerified || (providerUnavailable && localActive)),
+						configured,
+						status: providerUnavailable ? 'provider_unavailable' : (isVerified ? 'active' : 'reauth_required'),
 						handle: conn.handle || '@connected',
-						verified: conn.verified ?? true,
+						verified: isVerified || (providerUnavailable && (conn.verified ?? true)),
 						lastSync: conn.last_sync || conn.connected_at || new Date().toISOString(),
+						lastError: providerError || conn.last_error || undefined,
 						followers,
 						engagement_rate: engagement
 					};
-				} else {
-					statusData[p] = { connected: false };
 
-					// If database has connection row but Composio says it is inactive/missing, delete the row
-					if (conn && !isDevBypass) {
-						console.log(`[Accounts API] Connection for platform "${p}" on agent ${persona_id} is inactive or missing in Composio. Cleaning up database row.`);
-						await db.connections.delete(persona_id, p);
+					if (!isDevBypass) {
+						await db.connections.upsert({
+							id: conn.id,
+							user_id: conn.user_id,
+							agent_id: persona_id,
+							platform: p as any,
+							handle: conn.handle,
+							verified: Boolean(isVerified),
+							status: providerUnavailable ? 'stale' : (isVerified ? 'active' : 'reauth_required'),
+							last_error: providerUnavailable ? providerError : (isVerified ? null : 'Composio did not report this account as active.'),
+							last_checked_at: new Date().toISOString(),
+							last_sync: isVerified ? new Date().toISOString() : conn.last_sync
+						});
 					}
+				} else {
+					statusData[p] = {
+						connected: false,
+						configured,
+						status: configured ? 'disconnected' : 'not_configured'
+					};
 				}
 			}
 
@@ -286,17 +318,20 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			if (conns) {
 				try {
 					const { data: finalConns } = await db.connections.listForAgent(persona_id);
-					const count = finalConns?.length || 0;
+					const activeConns = (finalConns || []).filter((conn) =>
+						conn.status !== 'revoked' && conn.status !== 'reauth_required' && conn.status !== 'error'
+					);
+					const count = activeConns.length;
 					
 					const { data: agent } = await db.agents.get(persona_id);
 					if (agent) {
 						let targetHandle = '';
-						if (count > 0 && finalConns && finalConns.length > 0) {
+						if (count > 0 && activeConns.length > 0) {
 							// Strict connection handle
-							targetHandle = finalConns[0].handle || '';
+							targetHandle = activeConns[0].handle || '';
 						}
 
-						const { followers: targetFollowers, engagement_rate: targetEngagement } = computeDynamicMetrics(finalConns || [], persona_id);
+						const { followers: targetFollowers, engagement_rate: targetEngagement } = computeDynamicMetrics(activeConns, persona_id);
 						
 						await db.agents.update(persona_id, {
 							connection_count: count,
@@ -317,6 +352,10 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		if (action === 'initiate_connection') {
 			if (!persona_id || !platform) {
 				return json({ success: false, error: 'Missing persona_id or platform' }, { status: 400 });
+			}
+
+			if (!isPlatformConfigured(platform)) {
+				return json({ success: false, error: `${platform} is not configured.` }, { status: 400 });
 			}
 
 			if (!isUuid(persona_id)) {

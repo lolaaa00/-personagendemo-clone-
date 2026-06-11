@@ -147,6 +147,7 @@ CREATE TABLE public.posts (
   published_at TIMESTAMPTZ,
   external_id TEXT,
   analytics JSONB DEFAULT '{"views": 0, "likes": 0, "comments": 0, "shares": 0}'::jsonb,
+  publication_results JSONB DEFAULT '{}'::jsonb,
   token_usage INT DEFAULT 0,
   token_cost NUMERIC(10, 6) DEFAULT 0.000000,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -186,8 +187,12 @@ CREATE TABLE public.connections (
     CHECK (platform IN ('tiktok', 'instagram', 'youtube', 'x', 'facebook', 'threads')),
   handle TEXT,
   verified BOOLEAN DEFAULT false,
+  status TEXT DEFAULT 'active'
+    CHECK (status IN ('active', 'stale', 'reauth_required', 'revoked', 'error')),
   connected_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   last_sync TIMESTAMPTZ,
+  last_error TEXT,
+  last_checked_at TIMESTAMPTZ,
   UNIQUE(agent_id, platform)
 );
 

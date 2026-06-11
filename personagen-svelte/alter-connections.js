@@ -1,7 +1,8 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-const apiKey = process.env.COMPOSIO_API_KEY || 'ak_cHHRKbh3CqAOmdIfXpJv';
+const apiKey = process.env.COMPOSIO_API_KEY;
+if (!apiKey) throw new Error('COMPOSIO_API_KEY is required.');
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const supabaseUrl = process.env.PUBLIC_SUPABASE_URL;
 
