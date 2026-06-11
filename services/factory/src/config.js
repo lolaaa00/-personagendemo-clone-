@@ -67,6 +67,17 @@ try {
   process.exit(1);
 }
 
+if (process.env.NODE_ENV === "production" && !config.ENCRYPTION_KEY) {
+  console.error(
+    JSON.stringify({
+      level: "fatal",
+      msg: "ENCRYPTION_KEY is required in production to protect stored session cookies",
+      ts: new Date().toISOString(),
+    })
+  );
+  process.exit(1);
+}
+
 /* ── derived helpers ──────────────────────────── */
 
 config.proxy = null;

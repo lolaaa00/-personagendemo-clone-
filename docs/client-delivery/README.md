@@ -28,8 +28,8 @@ The Account Factory consists of **two Easypanel services** deployed from the sam
 
 | Service | Dockerfile | Port | Purpose |
 |---------|-----------|------|---------|
-| `personagen-mail` | `services/mail/Dockerfile` | 3000 (API), 25 (SMTP), 993 (IMAP) | AgenticMail — Email identity layer for persona communication |
-| `personagen-factory` | `services/factory/Dockerfile` | 4000 | CloakBrowser — Stealth browser automation for account creation |
+| `personagen-mail` | `services/mail/Dockerfile` | 8080 (API), 25 (SMTP), 587 (Submission), 143 (IMAP), 8081 (Health) | AgenticMail — Email identity layer for persona communication |
+| `personagen-factory` | `services/factory/Dockerfile` | 8080 | CloakBrowser — Stealth browser automation for account creation |
 
 ---
 
@@ -45,7 +45,7 @@ In your Easypanel dashboard, create **two services** from the same GitHub reposi
 2. Source: GitHub → select the PersonaGen repo
 3. Set **Dockerfile Path** to `services/mail/Dockerfile`
 4. Set **Service Name** to `personagen-mail`
-5. Enable ports: `3000` (API), `25` (SMTP), `993` (IMAP)
+5. Enable ports: `8080` (API), `8081` (Health), `25` (SMTP), `587` (Submission), `143` (IMAP)
 
 **Service B — `personagen-factory`**
 
@@ -53,7 +53,7 @@ In your Easypanel dashboard, create **two services** from the same GitHub reposi
 2. Source: GitHub → select the PersonaGen repo
 3. Set **Dockerfile Path** to `services/factory/Dockerfile`
 4. Set **Service Name** to `personagen-factory`
-5. Enable port: `4000`
+5. Enable port: `8080`
 
 ### Step 2: Set Environment Variables
 
@@ -62,10 +62,10 @@ Configure environment variables for each service. See the [Environment Variables
 **Minimum required for `personagen-factory`:**
 
 ```env
-FACTORY_PORT=4000
+FACTORY_PORT=8080
 FACTORY_API_KEY=<generate-a-strong-key>
-MAIL_URL=http://personagen-mail:3000
-MAIL_API_KEY=<must-match-mail-service-ADMIN_API_KEY>
+MAIL_URL=http://personagen-mail:8080
+MAIL_API_KEY=<must-match-mail-service-MAIL_API_KEY>
 ENGINE_WEBHOOK_URL=https://auto.l2gseo.com/webhook/personagen-factory
 ENCRYPTION_KEY=<generate-32-byte-hex>
 ```
@@ -74,13 +74,14 @@ ENCRYPTION_KEY=<generate-32-byte-hex>
 
 ```env
 MAIL_DOMAIN=mail.yourdomain.com
-ADMIN_API_KEY=<generate-a-strong-key>
-API_PORT=3000
+MAIL_API_KEY=<generate-a-strong-key>
+MAIL_API_PORT=8080
+HEALTH_PORT=8081
 DKIM_SELECTOR=default
 ```
 
 > [!IMPORTANT]
-> `MAIL_API_KEY` on the factory service **must match** `ADMIN_API_KEY` on the mail service. These are how the services authenticate with each other.
+> `MAIL_API_KEY` on the factory service **must match** `MAIL_API_KEY` on the mail service. AgenticMail refuses to start without this key so the inbox API cannot accidentally run unauthenticated.
 
 ### Step 3: Configure DNS
 
@@ -108,11 +109,11 @@ After deployment, verify both services are healthy:
 curl https://factory.yourdomain.com/health
 
 # Check mail health
-curl http://mail.yourdomain.com:3000/health
+curl http://mail.yourdomain.com:8080/health
 
 # Test email creation
-curl -X POST http://mail.yourdomain.com:3000/api/mailbox \
-  -H "Authorization: Bearer <ADMIN_API_KEY>" \
+curl -X POST http://mail.yourdomain.com:8080/api/inboxes \
+  -H "Authorization: Bearer <MAIL_API_KEY>" \
   -H "Content-Type: application/json" \
   -d '{"address": "test@yourdomain.com"}'
 ```
@@ -130,6 +131,7 @@ curl -X POST http://mail.yourdomain.com:3000/api/mailbox \
 | Browser detection / captcha loop | Proxy is datacenter or blacklisted | Switch to residential proxy (Tier 1+) |
 | `ENCRYPTION_KEY` errors | Key not 32 bytes or not hex-encoded | Generate with: `openssl rand -hex 32` |
 | Factory returns 401 | `FACTORY_API_KEY` mismatch | Verify API key matches between caller and factory env var |
+| Mail API won't start | `MAIL_API_KEY` not set | Generate and set `MAIL_API_KEY` on both factory and mail services |
 | Mail service won't start | `MAIL_DOMAIN` not set | Set the `MAIL_DOMAIN` environment variable |
 | Google Voice SMS not forwarding | App password incorrect or 2FA not enabled | Re-generate app password with 2FA enabled on Google account |
 

@@ -276,7 +276,7 @@ The Account Factory extends the execution network (§5) with two dedicated Docke
 │   • Dashboard monitors pipeline status               │
 │   • Persona DB supplies identity profiles            │
 └────────────────────┬─────────────────────────────────┘
-                     │ HTTPS / Internal Docker Network
+                     │ Authenticated internal HTTP / Docker Network
         ┌────────────┴────────────┐
         ▼                         ▼
 ┌──────────────────┐   ┌──────────────────┐
@@ -312,7 +312,8 @@ The factory executes a multi-step pipeline for each account creation:
 6. **SMS Verification** — Google Voice integration forwards SMS codes when phone verification is required
 7. **Profile Setup** — Upload avatar, set bio, configure privacy settings via the platform's UI
 8. **Session Capture** — Export browser cookies and session tokens, encrypt with AES-256, store to the factory database
-9. **Callback** — POST status and session data to the Svelte engine webhook for pipeline orchestration
+9. **Status Contract** — Return `{ accountId, personaId, status }`; dashboard status calls use the returned `accountId`
+10. **Callback** — POST status and session data to the Svelte engine webhook for pipeline orchestration when configured
 
 ### Session Management Alignment
 
@@ -337,6 +338,7 @@ AgenticMail gives each persona a **real, deliverable email address** on the clie
 - **AI Replies:** When `AI_REPLY_ENABLED=true`, drafts contextual replies using the persona's voice profile
 - **Unified Inbox:** All persona mailboxes surface in the dashboard's unified inbox for human review and override
 - **Verification Flow:** Verification codes are extracted automatically and fed back to the factory pipeline — no human intervention needed
+- **API Security:** AgenticMail uses `MAIL_API_KEY` for every inbox API route except `/health`; it fails closed if the key is missing.
 
 > For deployment instructions, see the [Account Factory Client Delivery Guide](../client-delivery/README.md).
 

@@ -13,7 +13,7 @@
 
 | Variable | Required | Default | Description | Example |
 |----------|----------|---------|-------------|---------|
-| `FACTORY_PORT` | Optional | `4000` | HTTP port the factory API listens on | `4000` |
+| `FACTORY_PORT` | Optional | `8080` | HTTP port the factory API listens on | `8080` |
 | `FACTORY_API_KEY` | **Required** | — | API key for authenticating requests to the factory | `af_sk_a1b2c3d4e5f6...` |
 | `ENCRYPTION_KEY` | **Required** | — | 32-byte hex key for AES-256 encryption of stored sessions/cookies | `e3b0c44298fc1c14...` (64 hex chars) |
 | `ALLOWED_ORIGINS` | Optional | `*` | Comma-separated list of allowed CORS origins | `https://dashboard.yourdomain.com` |
@@ -22,8 +22,8 @@
 
 | Variable | Required | Default | Description | Example |
 |----------|----------|---------|-------------|---------|
-| `MAIL_URL` | **Required** | — | Internal URL of the AgenticMail service | `http://personagen-mail:3000` |
-| `MAIL_API_KEY` | **Required** | — | API key to authenticate with the mail service (must match `ADMIN_API_KEY`) | `am_sk_x9y8z7w6...` |
+| `MAIL_URL` | **Required** | — | Internal URL of the AgenticMail service | `http://personagen-mail:8080` |
+| `MAIL_API_KEY` | **Required** | — | API key to authenticate with the mail service (must match mail `MAIL_API_KEY`) | `am_sk_x9y8z7w6...` |
 
 ### Proxy Configuration
 
@@ -74,15 +74,19 @@
 | Variable | Required | Default | Description | Example |
 |----------|----------|---------|-------------|---------|
 | `MAIL_DOMAIN` | **Required** | — | Domain used for email addresses (must have DNS configured) | `mail.yourdomain.com` |
-| `ADMIN_API_KEY` | **Required** | — | API key for authenticating admin requests to the mail service | `am_sk_x9y8z7w6...` |
-| `API_PORT` | Optional | `3000` | HTTP port the mail API listens on | `3000` |
+| `MAIL_API_KEY` | **Required** | — | API key for authenticating requests to the mail service | `am_sk_x9y8z7w6...` |
+| `MAIL_API_PORT` | Optional | `8080` | HTTP port the mail API listens on | `8080` |
+| `HEALTH_PORT` | Optional | `8081` | HTTP port for aggregate mail health checks | `8081` |
 
 ### Email Server Ports
 
+The current Docker image binds SMTP, Submission, and IMAP listeners in `services/mail/src/entrypoint.sh`. Configure host/Easypanel port exposure rather than environment variables for these listeners.
+
 | Variable | Required | Default | Description | Example |
 |----------|----------|---------|-------------|---------|
-| `SMTP_PORT` | Optional | `25` | SMTP server listening port for inbound/outbound email | `25` |
-| `IMAP_PORT` | Optional | `993` | IMAP server listening port for mailbox access | `993` |
+| SMTP listener | Fixed | `25` | Inbound SMTP listener | `25` |
+| Submission listener | Fixed | `587` | Authenticated SMTP/submission listener | `587` |
+| IMAP listener | Fixed | `143` | IMAP listener | `143` |
 
 ### DKIM Configuration
 
@@ -115,13 +119,13 @@
 
 ```env
 # === Core ===
-FACTORY_PORT=4000
+FACTORY_PORT=8080
 FACTORY_API_KEY=
 ENCRYPTION_KEY=
 ALLOWED_ORIGINS=https://dashboard.yourdomain.com
 
 # === Mail Integration ===
-MAIL_URL=http://personagen-mail:3000
+MAIL_URL=http://personagen-mail:8080
 MAIL_API_KEY=
 
 # === Proxy (Tier 1+ recommended for production) ===
@@ -152,12 +156,9 @@ DB_PATH=./data/factory.db
 ```env
 # === Core ===
 MAIL_DOMAIN=
-ADMIN_API_KEY=
-API_PORT=3000
-
-# === Ports ===
-SMTP_PORT=25
-IMAP_PORT=993
+MAIL_API_KEY=
+MAIL_API_PORT=8080
+HEALTH_PORT=8081
 
 # === DKIM ===
 DKIM_SELECTOR=default
@@ -182,7 +183,7 @@ openssl rand -base64 32
 # Generate ENCRYPTION_KEY (32-byte hex)
 openssl rand -hex 32
 
-# Generate ADMIN_API_KEY
+# Generate MAIL_API_KEY
 openssl rand -base64 32
 ```
 

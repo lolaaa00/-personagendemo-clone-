@@ -37,11 +37,11 @@ class Orchestrator extends EventEmitter {
   /**
    * Run the full account creation pipeline.
    *
-   * @param {{ name: string, niche: string, platform?: string, personaId?: string, bio?: string, photoPath?: string, isPrivate?: boolean, googleVoiceCreds?: { email: string, appPassword: string }, retryFromStep?: string }} opts
+   * @param {{ accountId?: string, name: string, niche: string, platform?: string, personaId?: string, bio?: string, photoPath?: string, isPrivate?: boolean, googleVoiceCreds?: { email: string, appPassword: string }, retryFromStep?: string }} opts
    * @returns {Promise<object>} final account record
    */
   async run(opts) {
-    const accountId = uuidv4();
+    const accountId = opts.accountId || uuidv4();
     const personaId = opts.personaId || uuidv4();
     const platform = opts.platform || "instagram";
 
@@ -91,6 +91,10 @@ class Orchestrator extends EventEmitter {
     const startStep = opts.retryFromStep
       ? PIPELINE_STEPS.indexOf(opts.retryFromStep)
       : 0;
+
+    if (startStep < 0) {
+      throw new PipelineError("UNKNOWN_STEP", `Unknown pipeline step: ${opts.retryFromStep}`);
+    }
 
     try {
       for (let i = startStep; i < PIPELINE_STEPS.length; i++) {

@@ -3,6 +3,7 @@ import type { RequestHandler } from './$types';
 import { GoogleGenAI } from '@google/genai';
 import { env } from '$env/dynamic/private';
 import { createDbService } from '$lib/server/db';
+import { AccountFactoryClient } from '$lib/server/account-factory';
 
 // Helper: safe JSON parsing for Gemini response
 function safeParseJson(text: string) {
@@ -59,71 +60,68 @@ export const POST: RequestHandler = async ({ url, request, locals }) => {
 					return json({ success: false, error: 'Missing persona details' }, { status: 400 });
 				}
 
-				// Generate high-quality initial
-				const initial = persona.initial || persona.name[0].toUpperCase();
-				const gradient = persona.gradient || 'from-purple-600 to-indigo-600';
-
-				// Insert the new agent into Supabase
-				const { data: agent, error: agentError } = await db.agents.create({
-					user_id: session.user.id,
+				const factory = new AccountFactoryClient();
+				const data = await factory.createAccount({
 					name: persona.name,
-					handle: persona.handle || `@${persona.name.toLowerCase().replace(/\s+/g, '')}`,
 					niche: persona.niche || 'Lifestyle',
-					status: 'active',
-					soul: persona.soul || 'Warm, inspiring, and direct.',
-					skills: persona.skills || 'Content strategy, thread drafting, analytics auditing.',
-					tools: 'Content Generator, Trend Scanner, Channel Decoder',
-					heartbeat: 'Every 4 hours',
-					market: persona.market || 'US',
-					gradient,
-					initial,
-					engagement_rate: 4.8,
-					followers: '1.2K',
-					connection_count: 0
+					platform: persona.platform || 'instagram',
+					personaId: persona.id || persona.agent_id || persona.agentId,
+					bio: persona.bio,
+					photoPath: persona.photoPath,
+					isPrivate: persona.isPrivate,
+					googleVoiceCreds: persona.googleVoiceCreds
 				});
 
-				if (agentError || !agent) {
-					console.error('[Engine] Agent insertion failed:', agentError);
-					return json({ success: false, error: agentError?.message || 'Database error' }, { status: 500 });
-				}
-
-				// Insert default configuration for the agent
-				const { error: configError } = await db.agentConfigs.upsert({
-					user_id: session.user.id,
-					agent_id: agent.id,
-					soul: agent.soul,
-					skills: agent.skills,
-					tools: agent.tools,
-					timezone: 'America/New_York',
-					posts_per_day: 1,
-					active_hours_start: 9,
-					active_hours_end: 21,
-					autonomy_level: 'semi_autonomous'
-				});
-
-				if (configError) {
-					console.warn('[Engine] Agent configuration insertion failed:', configError);
-				}
-
-				return json({
-					success: true,
-					data: {
-						message: 'Account created successfully (Local Fallback Flow)',
-						accountId: agent.id,
-						status: 'active'
-					}
-				});
+				return json({ success: true, data });
 			}
 
 			if (action === 'check_status') {
-				return json({
-					success: true,
-					data: { status: 'active', progress: 100 }
-				});
+				const accountId = body.accountId || body.account_id || body.id;
+				if (!accountId) {
+					return json({ success: false, error: 'Missing accountId' }, { status: 400 });
+				}
+				const factory = new AccountFactoryClient();
+				const data = await factory.getStatus(String(accountId));
+				return json({ success: true, data });
 			}
 
-			// Catch-all for other account factory actions
-			return json({ success: true, data: { status: 'active' } });
+			if (action === 'list_accounts') {
+				const factory = new AccountFactoryClient();
+				const data = await factory.listAccounts();
+				return json({ success: true, data });
+			}
+
+			if (action === 'retry') {
+				const accountId = body.accountId || body.account_id || body.id;
+				if (!accountId) {
+					return json({ success: false, error: 'Missing accountId' }, { status: 400 });
+				}
+				const factory = new AccountFactoryClient();
+				const data = await factory.retry(String(accountId), body.fromStep || body.step);
+				return json({ success: true, data });
+			}
+
+			if (action === 'refresh_session') {
+				const accountId = body.accountId || body.account_id || body.id;
+				if (!accountId) {
+					return json({ success: false, error: 'Missing accountId' }, { status: 400 });
+				}
+				const factory = new AccountFactoryClient();
+				const data = await factory.refreshSession(String(accountId));
+				return json({ success: true, data });
+			}
+
+			if (action === 'health_check') {
+				const accountId = body.accountId || body.account_id || body.id;
+				if (!accountId) {
+					return json({ success: false, error: 'Missing accountId' }, { status: 400 });
+				}
+				const factory = new AccountFactoryClient();
+				const data = await factory.healthCheck(String(accountId));
+				return json({ success: true, data });
+			}
+
+			return json({ success: false, error: `Invalid account factory action: ${action}` }, { status: 400 });
 		}
 
 		// ══════════════════════════════════════════════════════════════════════════

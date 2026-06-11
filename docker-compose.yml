@@ -11,6 +11,7 @@ services:
       - PORT=5678 # Instructs SvelteKit Node adapter to bind to port 5678
       - NODE_ENV=production
       - PUBLIC_SUPABASE_URL=https://l2g-supabase.zi1cc5.easypanel.host
+      - PUBLIC_SUPABASE_ANON_KEY=${PUBLIC_SUPABASE_ANON_KEY}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - COMPOSIO_API_KEY=${COMPOSIO_API_KEY}
       - COMPOSIO_AUTH_CONFIG_FACEBOOK=${COMPOSIO_AUTH_CONFIG_FACEBOOK}
@@ -18,6 +19,8 @@ services:
       - COMPOSIO_AUTH_CONFIG_YOUTUBE=${COMPOSIO_AUTH_CONFIG_YOUTUBE}
       - COMPOSIO_AUTH_CONFIG_TIKTOK=${COMPOSIO_AUTH_CONFIG_TIKTOK}
       - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - FACTORY_URL=http://factory:8080
+      - FACTORY_API_KEY=${FACTORY_API_KEY}
 
   # 2. Account Factory Background Scheduler
   factory:
@@ -26,8 +29,17 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     environment:
+      - NODE_ENV=production
       - PUBLIC_SUPABASE_URL=https://l2g-supabase.zi1cc5.easypanel.host
       - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - FACTORY_API_KEY=${FACTORY_API_KEY}
+      - MAIL_URL=http://mail:8080
+      - MAIL_API_KEY=${MAIL_API_KEY}
+      - ENCRYPTION_KEY=${FACTORY_ENCRYPTION_KEY}
+      - DB_PATH=/data/factory.db
+      - PROFILES_DIR=/data/profiles
+    volumes:
+      - factory-data:/data
 
   # 3. Mail Notification Service
   mail:
@@ -36,8 +48,14 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     environment:
+      - NODE_ENV=production
       - PUBLIC_SUPABASE_URL=https://l2g-supabase.zi1cc5.easypanel.host
       - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - MAIL_API_KEY=${MAIL_API_KEY}
+      - MAIL_API_PORT=8080
+      - HEALTH_PORT=8081
+    volumes:
+      - mail-data:/data
 
   # 4. Custom Supabase MCP Bridge (Enables DB access for Hermes)
   mcp-bridge:
@@ -71,3 +89,5 @@ services:
 volumes:
   # Persist sessions, memories, skills, and configuration securely
   hermes-memories:
+  factory-data:
+  mail-data:

@@ -32,8 +32,8 @@ server.tool(
     try {
       const { data, error } = await supabase
         .from("connections")
-        .select("id, platform, username, verified, last_sync")
-        .eq("verified", false);
+        .select("id, user_id, agent_id, platform, handle, verified, status, last_sync, last_error, last_checked_at")
+        .or("verified.eq.false,status.in.(stale,reauth_required,revoked,error)");
 
       if (error) {
         return {
@@ -65,13 +65,13 @@ server.tool(
 // ============================================================================
 server.tool(
   "get_unresolved_user_messages",
-  "Fetches the latest conversations where the final turn is a USER message requiring response from Hermes",
+    "Fetches latest agent chat threads where the final turn is a user message requiring response from Hermes",
   {},
   async () => {
     try {
       const { data, error } = await supabase
         .from("chat_messages")
-        .select("id, conversation_id, role, message, created_at, sender_id")
+        .select("id, user_id, agent_id, role, content, created_at")
         .order("created_at", { ascending: false })
         .limit(50);
 
@@ -88,11 +88,11 @@ server.tool(
         };
       }
 
-      // Deduplicate to get the latest message in each conversation
+      // Deduplicate to get the latest message for each agent chat thread.
       const latestMessages = {};
       for (const msg of data) {
-        if (!latestMessages[msg.conversation_id]) {
-          latestMessages[msg.conversation_id] = msg;
+        if (!latestMessages[msg.agent_id]) {
+          latestMessages[msg.agent_id] = msg;
         }
       }
 
@@ -124,22 +124,23 @@ server.tool(
 // ============================================================================
 server.tool(
   "post_chat_response",
-  "Appends your finalized official response back into the chat_messages table to display on the user's dashboard",
-  {
-    conversationId: z.string().describe("The unique ID of the conversation thread to reply to"),
-    responseText: z.string().describe("Your helpful, web-grounded assistant reply to write back to the user")
-  },
-  async ({ conversationId, responseText }) => {
-    try {
-      const { data, error } = await supabase
-        .from("chat_messages")
-        .insert({
-          conversation_id: conversationId,
-          role: "model",
-          message: responseText,
-          sender_id: "hermes-overseer"
-        })
-        .select();
+    "Appends your finalized official response back into the current chat_messages schema to display on the user's dashboard",
+    {
+      userId: z.string().describe("The Supabase user_id that owns the chat thread"),
+      agentId: z.string().describe("The agent_id chat thread to reply to"),
+      responseText: z.string().describe("Your helpful, web-grounded assistant reply to write back to the user")
+    },
+    async ({ userId, agentId, responseText }) => {
+      try {
+        const { data, error } = await supabase
+          .from("chat_messages")
+          .insert({
+            user_id: userId,
+            agent_id: agentId,
+            role: "model",
+            content: responseText
+          })
+          .select();
 
       if (error) {
         return {
@@ -167,22 +168,23 @@ server.tool(
   "create_maintenance_ticket",
   "Injects a structured repair or maintenance ticket directly into the platform Kanban board (tickets table)",
   {
-    title: z.string().describe("Short descriptive title of the action needed (e.g. Re-auth TikTok @skincaretips)"),
-    description: z.string().describe("In-depth description of the error code, web search guidelines, and instructions"),
-    priority: z.enum(["low", "medium", "high", "critical"]).describe("Impact priority of the maintenance task")
-  },
-  async ({ title, description, priority }) => {
-    try {
-      const { data, error } = await supabase
-        .from("tickets")
-        .insert({
-          title,
-          description,
-          status: "backlog", // Surfaces instantly on Kanban board backlog
-          priority,
-          source: "hermes-overseer"
-        })
-        .select();
+      title: z.string().describe("Short descriptive title of the action needed (e.g. Re-auth TikTok @skincaretips)"),
+      description: z.string().describe("In-depth description of the error code, web search guidelines, and instructions"),
+      priority: z.enum(["low", "medium", "high", "urgent"]).describe("Impact priority of the maintenance task"),
+      userId: z.string().describe("The Supabase user_id that owns the ticket")
+    },
+    async ({ title, description, priority, userId }) => {
+      try {
+        const { data, error } = await supabase
+          .from("tickets")
+          .insert({
+            user_id: userId,
+            title,
+            description,
+            status: "backlog", // Surfaces instantly on Kanban board backlog
+            priority
+          })
+          .select();
 
       if (error) {
         return {

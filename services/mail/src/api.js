@@ -5,10 +5,20 @@ const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 
-const API_PORT = parseInt(process.env.API_PORT || "8080", 10);
-const ADMIN_API_KEY = process.env.ADMIN_API_KEY || "";
+const MAIL_API_PORT = parseInt(process.env.MAIL_API_PORT || "8080", 10);
+const MAIL_API_KEY = process.env.MAIL_API_KEY || "";
 const MAIL_DOMAIN = process.env.MAIL_DOMAIN || "l2gseo.com";
 const DB_DIR = "/data/inboxes";
+
+if (!MAIL_API_KEY) {
+  console.error(JSON.stringify({
+    level: "fatal",
+    msg: "MAIL_API_KEY is required; refusing to start an unauthenticated mail API",
+    service: "mail-api",
+    ts: new Date().toISOString(),
+  }));
+  process.exit(1);
+}
 
 // Ensure DB directory
 fs.mkdirSync(DB_DIR, { recursive: true });
@@ -48,9 +58,8 @@ function parseBody(req) {
 }
 
 function authCheck(req) {
-  if (!ADMIN_API_KEY) return true;
   const auth = req.headers.authorization || "";
-  return auth === `Bearer ${ADMIN_API_KEY}`;
+  return auth === `Bearer ${MAIL_API_KEY}`;
 }
 
 const server = http.createServer(async (req, res) => {
@@ -101,7 +110,7 @@ const server = http.createServer(async (req, res) => {
       log("info", "Inbox created", { inboxId, address });
 
       res.writeHead(201, { "Content-Type": "application/json" });
-      return res.end(JSON.stringify({ inboxId, address, apiKey: ADMIN_API_KEY }));
+      return res.end(JSON.stringify({ inboxId, address }));
     } catch (err) {
       log("error", "Failed to create inbox", { error: err.message });
       res.writeHead(500, { "Content-Type": "application/json" });
@@ -139,8 +148,8 @@ const server = http.createServer(async (req, res) => {
   res.end(JSON.stringify({ error: "Not found" }));
 });
 
-server.listen(API_PORT, () => {
-  log("info", `AgenticMail API listening on port ${API_PORT}`, { port: API_PORT, domain: MAIL_DOMAIN });
+server.listen(MAIL_API_PORT, () => {
+  log("info", `AgenticMail API listening on port ${MAIL_API_PORT}`, { port: MAIL_API_PORT, domain: MAIL_DOMAIN });
 });
 
 process.on("SIGTERM", () => {

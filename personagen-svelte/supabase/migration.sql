@@ -187,6 +187,8 @@ CREATE TABLE public.connections (
     CHECK (platform IN ('tiktok', 'instagram', 'youtube', 'x', 'facebook', 'threads')),
   handle TEXT,
   verified BOOLEAN DEFAULT false,
+  followers INT DEFAULT 0,
+  engagement_rate NUMERIC DEFAULT 0,
   status TEXT DEFAULT 'active'
     CHECK (status IN ('active', 'stale', 'reauth_required', 'revoked', 'error')),
   connected_at TIMESTAMPTZ NOT NULL DEFAULT now(),

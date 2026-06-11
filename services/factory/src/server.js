@@ -141,7 +141,7 @@ app.post("/api/accounts/create", createLimiter, async (req, res, next) => {
 
     /* Start pipeline asynchronously */
     orchestrator
-      .run({ ...opts, personaId })
+      .run({ ...opts, accountId, personaId })
       .catch((err) => {
         console.error(
           JSON.stringify({
@@ -156,7 +156,8 @@ app.post("/api/accounts/create", createLimiter, async (req, res, next) => {
 
     res.status(202).json({
       message: "Account creation started",
-      accountId: personaId,
+      accountId,
+      personaId,
       status: "running",
     });
   } catch (err) {
@@ -216,38 +217,16 @@ app.post("/api/accounts/:id/retry", createLimiter, async (req, res, next) => {
     const failedStep = account.status.replace("failed:", "");
     const retryStep = parsed.data.fromStep || failedStep;
 
-    console.log(
-      JSON.stringify({
-        level: "info",
-        msg: "Retry requested",
-        accountId: req.params.id,
-        retryFromStep: retryStep,
-        ts: new Date().toISOString(),
-      })
-    );
-
-    /* Re-run pipeline from the retry step */
-    orchestrator
-      .run({
-        name: "retry",
-        niche: "retry",
-        personaId: account.persona_id,
-        retryFromStep: retryStep,
-      })
-      .catch((err) => {
-        console.error(
-          JSON.stringify({
-            level: "error",
-            msg: "Retry pipeline failed (async)",
-            accountId: req.params.id,
-            error: err.message,
-            ts: new Date().toISOString(),
-          })
-        );
+    if (!PIPELINE_STEPS.includes(retryStep)) {
+      return res.status(400).json({
+        error: `Unknown retry step: ${retryStep}`,
+        code: "UNKNOWN_STEP",
       });
+    }
 
-    res.status(202).json({
-      message: "Retry started",
+    return res.status(501).json({
+      error: "Pipeline retry requires durable step-state hydration and is disabled to avoid creating malformed replacement accounts.",
+      code: "RETRY_NOT_IMPLEMENTED",
       accountId: req.params.id,
       retryFromStep: retryStep,
     });
