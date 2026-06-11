@@ -178,7 +178,7 @@
   onclick={() => { 
     chatOpen = !chatOpen; 
     if (chatOpen) {
-      isMaximized = true;
+      isMaximized = typeof window !== 'undefined' ? window.innerWidth > 768 : false;
     }
     scrollToBottom(); 
   }}
@@ -413,7 +413,7 @@
       bottom 0.35s cubic-bezier(0.16, 1, 0.3, 1),
       right 0.35s cubic-bezier(0.16, 1, 0.3, 1),
       transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
-    animation: chatOpenAnim 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    animation: chatOpenNormal 0.3s cubic-bezier(0.16, 1, 0.3, 1);
   }
 
   .chat-window.maximized {
@@ -427,11 +427,17 @@
     box-shadow:
       0 30px 70px rgba(0, 0, 0, 0.35),
       0 0 0 1px rgba(255, 255, 255, 0.08) inset;
+    animation: chatOpenMaximized 0.3s cubic-bezier(0.16, 1, 0.3, 1);
   }
 
-  @keyframes chatOpenAnim {
+  @keyframes chatOpenNormal {
     from { opacity: 0; transform: translateY(20px) scale(0.95); }
     to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  @keyframes chatOpenMaximized {
+    from { opacity: 0; transform: translate(50%, calc(50% + 20px)) scale(0.95); }
+    to { opacity: 1; transform: translate(50%, 50%) scale(1); }
   }
 
   /* Header */
@@ -719,16 +725,28 @@
     flex-shrink: 0;
   }
 
-  @media (max-width: 480px) {
+  @media (max-width: 768px) {
     .chat-window {
       width: calc(100vw - 2rem);
       right: 1rem;
       bottom: 6rem;
-      height: 480px;
+      height: 500px;
     }
+    
+    .chat-window.maximized {
+      width: calc(100vw - 2rem);
+      height: calc(100vh - 8rem);
+      max-width: none;
+      max-height: none;
+      bottom: 6rem;
+      right: 1rem;
+      transform: none;
+      animation: chatOpenNormal 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
     .chat-trigger {
       right: 1rem;
-      bottom: 1rem;
+      bottom: 1.5rem;
     }
   }
 </style>

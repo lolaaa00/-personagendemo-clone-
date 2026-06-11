@@ -2002,6 +2002,29 @@
       grid-template-columns: 1fr;
     }
 
+    .chat-viewport-header {
+      padding: 0.75rem 1rem;
+    }
+
+    .clear-history-btn {
+      padding: 0.35rem 0.5rem;
+      font-size: 10px;
+    }
+
+    .viewport-footer {
+      padding: 0.75rem 1rem;
+    }
+
+    .input-panel-wrapper {
+      padding: 0.5rem 0.75rem;
+      gap: 0.5rem;
+    }
+
+    .msg-row {
+      max-width: 95%;
+      gap: 0.5rem;
+    }
+
     .thread-header {
       flex-wrap: wrap;
       padding: 0.75rem;
