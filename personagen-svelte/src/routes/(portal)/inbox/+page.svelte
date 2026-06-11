@@ -1932,7 +1932,58 @@
       width: 100%;
       border-right: none;
       border-bottom: 1px solid var(--border);
-      height: 240px;
+      height: auto;
+      display: grid;
+      grid-template-columns: 1fr 1.25fr;
+      gap: 0.75rem;
+      padding: 0.75rem;
+    }
+
+    .chat-roster-sidebar > .roster-section:first-child {
+      grid-column: 1;
+    }
+
+    .chat-roster-sidebar > .list-section {
+      grid-column: 2;
+      min-width: 0;
+    }
+
+    .chat-roster-sidebar > .presets-section {
+      grid-column: span 2;
+    }
+
+    .roster-scroll-list {
+      flex-direction: row;
+      overflow-x: auto;
+      overflow-y: hidden;
+      white-space: nowrap;
+      gap: 0.5rem;
+      padding-bottom: 4px;
+      display: flex;
+    }
+
+    .roster-scroll-list .roster-card {
+      width: 160px;
+      flex-shrink: 0;
+    }
+
+    .presets-grid {
+      flex-direction: row;
+      overflow-x: auto;
+      overflow-y: hidden;
+      gap: 0.5rem;
+      padding-bottom: 4px;
+    }
+
+    .preset-card-btn {
+      width: auto;
+      flex-shrink: 0;
+      padding: 0.4rem 0.75rem;
+    }
+
+    .roster-title {
+      font-size: 10px;
+      margin-bottom: 0.25rem;
     }
 
     .chat-viewport-column {

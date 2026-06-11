@@ -32,6 +32,63 @@
   let showComposer = $state(false);
   let composerSubmitting = $state(false);
 
+  // Date Picker Dropdown State
+  let showDatePicker = $state(false);
+  let pickerYear = $state(currentYear);
+  let pickerMonth = $state(currentMonth);
+  let pickerDay = $state(selectedDay || 1);
+
+  // Derived options for date picker
+  let pickerYears = $derived.by(() => {
+    const years = [];
+    const base = new Date().getFullYear();
+    for (let y = base - 5; y <= base + 5; y++) {
+      years.push(y);
+    }
+    return years;
+  });
+
+  let pickerDays = $derived.by(() => {
+    const total = getDaysInMonth(pickerYear, pickerMonth);
+    return Array.from({ length: total }, (_, i) => i + 1);
+  });
+
+  // Ensure day selection is capped properly for the selected month/year
+  $effect(() => {
+    const maxDays = getDaysInMonth(pickerYear, pickerMonth);
+    if (pickerDay > maxDays) {
+      pickerDay = maxDays;
+    }
+  });
+
+  function toggleDatePicker() {
+    showDatePicker = !showDatePicker;
+    if (showDatePicker) {
+      pickerYear = currentYear;
+      pickerMonth = currentMonth;
+      pickerDay = selectedDay || 1;
+    }
+  }
+
+  function applyDatePicker() {
+    currentYear = pickerYear;
+    currentMonth = pickerMonth;
+    selectedDay = pickerDay;
+    showDatePicker = false;
+  }
+
+  function selectToday() {
+    const today = new Date();
+    pickerYear = today.getFullYear();
+    pickerMonth = today.getMonth();
+    pickerDay = today.getDate();
+    
+    currentYear = pickerYear;
+    currentMonth = pickerMonth;
+    selectedDay = pickerDay;
+    showDatePicker = false;
+  }
+
   // Composer form
   let composerAgentId = $state('');
   let composerText = $state('');
@@ -289,7 +346,51 @@
     <button class="nav-btn" onclick={prevMonth} aria-label="Previous month">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
     </button>
-    <h2 class="month-label">{monthLabel}</h2>
+    <div class="month-selector-wrapper">
+      <button class="month-selector-btn" onclick={toggleDatePicker} aria-label="Choose specific month and year">
+        <span>{monthLabel}</span>
+        <svg class="dropdown-icon" class:open={showDatePicker} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
+      </button>
+
+      {#if showDatePicker}
+        <div class="datepicker-backdrop" onclick={() => showDatePicker = false} role="presentation"></div>
+        <div class="datepicker-dropdown">
+          <h4 class="datepicker-title">Jump to Date</h4>
+          <div class="datepicker-fields">
+            <div class="datepicker-field">
+              <label for="picker-month">Month</label>
+              <select id="picker-month" bind:value={pickerMonth}>
+                {#each MONTHS as month, index}
+                  <option value={index}>{month}</option>
+                {/each}
+              </select>
+            </div>
+            <div class="datepicker-field">
+              <label for="picker-year">Year</label>
+              <select id="picker-year" bind:value={pickerYear}>
+                {#each pickerYears as year}
+                  <option value={year}>{year}</option>
+                {/each}
+              </select>
+            </div>
+            <div class="datepicker-field">
+              <label for="picker-day">Day</label>
+              <select id="picker-day" bind:value={pickerDay}>
+                {#each pickerDays as day}
+                  <option value={day}>{day}</option>
+                {/each}
+              </select>
+            </div>
+          </div>
+          <div class="datepicker-actions">
+            <button class="btn-ghost btn-sm" onclick={selectToday}>Today</button>
+            <button class="btn-primary btn-sm" onclick={applyDatePicker}>Apply</button>
+          </div>
+        </div>
+      {/if}
+    </div>
     <button class="nav-btn" onclick={nextMonth} aria-label="Next month">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
     </button>
@@ -562,11 +663,114 @@
     background: var(--surface-2);
   }
 
-  .month-label {
+  .month-selector-wrapper {
+    position: relative;
+    display: inline-block;
+    z-index: 80;
+  }
+
+  .month-selector-btn {
     font-family: var(--font-display);
     font-size: var(--text-lg);
-    min-width: 200px;
-    text-align: center;
+    font-weight: var(--weight-semi);
+    color: var(--text);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    padding: 0.5rem 1.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+    cursor: pointer;
+    transition: background-color 0.2s, border-color 0.2s, color 0.2s;
+    user-select: none;
+    min-width: 220px;
+  }
+
+  .month-selector-btn:hover {
+    background: var(--surface-2);
+    border-color: var(--border-strong);
+    color: var(--accent);
+  }
+
+  .dropdown-icon {
+    color: var(--text-dim);
+    transition: transform var(--ease-fast), color 0.2s;
+  }
+
+  .month-selector-btn:hover .dropdown-icon {
+    color: var(--accent);
+  }
+
+  .dropdown-icon.open {
+    transform: rotate(180deg);
+  }
+
+  /* Datepicker dropdown popup */
+  .datepicker-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 85;
+    background: transparent;
+  }
+
+  .datepicker-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%) translateY(8px);
+    z-index: 90;
+    min-width: 320px;
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-lg);
+    padding: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    animation: fadeDown 0.2s var(--ease-out);
+  }
+
+  .datepicker-title {
+    font-size: var(--text-base);
+    font-family: var(--font-display);
+    margin: 0;
+    color: var(--text);
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.5rem;
+  }
+
+  .datepicker-fields {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .datepicker-field {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+
+  .datepicker-field label {
+    font-size: 0.55rem;
+    margin-bottom: 0;
+  }
+
+  .datepicker-field select {
+    padding: 6px 20px 6px 8px;
+    font-size: var(--text-xs);
+    border-radius: var(--radius-xs);
+  }
+
+  .datepicker-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    border-top: 1px solid var(--border);
+    padding-top: 0.75rem;
   }
 
   /* ── Calendar layout ── */
