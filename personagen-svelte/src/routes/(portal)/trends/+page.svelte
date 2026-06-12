@@ -7,7 +7,14 @@
     { id: 'lifestyle', label: 'Lifestyle', icon: '✨' },
     { id: 'fitness', label: 'Fitness', icon: '💪' },
     { id: 'food', label: 'Food', icon: '🍳' },
-    { id: 'tech', label: 'Tech', icon: '💻' }
+    { id: 'tech', label: 'Tech', icon: '💻' },
+    { id: 'travel', label: 'Travel', icon: '✈️' },
+    { id: 'gaming', label: 'Gaming', icon: '🎮' },
+    { id: 'sports', label: 'Sports', icon: '⚽' },
+    { id: 'entertainment', label: 'Entertainment', icon: '🎬' },
+    { id: 'art', label: 'Art & Design', icon: '🎨' },
+    { id: 'finance', label: 'Finance & Biz', icon: '💸' },
+    { id: 'music', label: 'Music', icon: '🎵' }
   ];
 
   let selectedNiche = $state('beauty');
@@ -49,7 +56,8 @@
 
   function generateHeatmapData(niche: string): number[][] {
     const nicheOffset: Record<string, number> = {
-      beauty: 42, fashion: 87, lifestyle: 13, fitness: 56, food: 29, tech: 71
+      beauty: 42, fashion: 87, lifestyle: 13, fitness: 56, food: 29, tech: 71,
+      travel: 51, gaming: 93, sports: 22, entertainment: 64, art: 37, finance: 80, music: 18
     };
     const offset = nicheOffset[niche] ?? 0;
     return days.map((_, dayIdx) =>
@@ -127,6 +135,76 @@
       { tag: '#VibeCode', count: '1.5M', velocity: 'hot', change: '+520%' },
       { tag: '#SaaSMetrics', count: '420K', velocity: 'rising', change: '+88%' },
       { tag: '#DevSetup', count: '2.8M', velocity: 'stable', change: '+11%' }
+    ],
+    travel: [
+      { tag: '#SoloTravel', count: '2.8M', velocity: 'hot', change: '+195%' },
+      { tag: '#Wanderlust2026', count: '4.5M', velocity: 'hot', change: '+310%' },
+      { tag: '#TravelDiaries', count: '5.9M', velocity: 'stable', change: '+4%' },
+      { tag: '#BudgetTravel', count: '3.2M', velocity: 'rising', change: '+125%' },
+      { tag: '#HiddenGems', count: '1.7M', velocity: 'hot', change: '+240%' },
+      { tag: '#BucketList', count: '6.4M', velocity: 'stable', change: '+8%' },
+      { tag: '#CabinCore', count: '910K', velocity: 'rising', change: '+75%' },
+      { tag: '#JapanTravel', count: '2.2M', velocity: 'hot', change: '+160%' }
+    ],
+    gaming: [
+      { tag: '#CozyGaming', count: '1.9M', velocity: 'hot', change: '+290%' },
+      { tag: '#IndieGames', count: '2.4M', velocity: 'rising', change: '+115%' },
+      { tag: '#GamingSetup', count: '3.8M', velocity: 'stable', change: '+12%' },
+      { tag: '#NintendoSwitch', count: '7.2M', velocity: 'stable', change: '+3%' },
+      { tag: '#SteamDeck', count: '1.5M', velocity: 'rising', change: '+85%' },
+      { tag: '#Speedrun', count: '850K', velocity: 'declining', change: '-10%' },
+      { tag: '#ZeldaTears', count: '4.6M', velocity: 'stable', change: '+5%' },
+      { tag: '#GamerGirl', count: '3.1M', velocity: 'hot', change: '+180%' }
+    ],
+    sports: [
+      { tag: '#Pickleball', count: '2.1M', velocity: 'hot', change: '+320%' },
+      { tag: '#ChampionsLeague', count: '8.4M', velocity: 'hot', change: '+480%' },
+      { tag: '#RunnersLife', count: '3.7M', velocity: 'stable', change: '+7%' },
+      { tag: '#HomeGym', count: '4.2M', velocity: 'stable', change: '+6%' },
+      { tag: '#HikingAdventures', count: '1.9M', velocity: 'rising', change: '+90%' },
+      { tag: '#AthleticDrills', count: '950K', velocity: 'rising', change: '+110%' },
+      { tag: '#F1Testing', count: '1.5M', velocity: 'hot', change: '+220%' },
+      { tag: '#StreetBall', count: '1.2M', velocity: 'declining', change: '-12%' }
+    ],
+    entertainment: [
+      { tag: '#Cinephile', count: '1.5M', velocity: 'stable', change: '+14%' },
+      { tag: '#MovieReview', count: '3.8M', velocity: 'rising', change: '+85%' },
+      { tag: '#AnimeRecommend', count: '4.9M', velocity: 'hot', change: '+210%' },
+      { tag: '#OscarPredictions', count: '980K', velocity: 'hot', change: '+340%' },
+      { tag: '#BehindTheScenes', count: '5.2M', velocity: 'stable', change: '+9%' },
+      { tag: '#KDramaList', count: '2.7M', velocity: 'rising', change: '+130%' },
+      { tag: '#PopCulture', count: '6.8M', velocity: 'stable', change: '+4%' },
+      { tag: '#BingeWatch', count: '3.1M', velocity: 'declining', change: '-15%' }
+    ],
+    art: [
+      { tag: '#DigitalArt', count: '7.8M', velocity: 'stable', change: '+8%' },
+      { tag: '#ProcreateTips', count: '2.1M', velocity: 'rising', change: '+140%' },
+      { tag: '#AestheticDesign', count: '3.4M', velocity: 'rising', change: '+95%' },
+      { tag: '#3DModeling', count: '1.2M', velocity: 'hot', change: '+210%' },
+      { tag: '#CeramicsStudio', count: '850K', velocity: 'hot', change: '+185%' },
+      { tag: '#SketchbookPage', count: '2.9M', velocity: 'stable', change: '+5%' },
+      { tag: '#HandmadeWithLove', count: '4.1M', velocity: 'declining', change: '-8%' },
+      { tag: '#Blender3D', count: '1.8M', velocity: 'rising', change: '+110%' }
+    ],
+    finance: [
+      { tag: '#FinTok', count: '5.4M', velocity: 'stable', change: '+12%' },
+      { tag: '#SideHustle', count: '4.1M', velocity: 'hot', change: '+290%' },
+      { tag: '#PersonalFinance', count: '3.9M', velocity: 'stable', change: '+8%' },
+      { tag: '#StartupTips', count: '2.2M', velocity: 'rising', change: '+115%' },
+      { tag: '#PassiveIncome', count: '2.8M', velocity: 'declining', change: '-18%' },
+      { tag: '#StockMarket', count: '4.9M', velocity: 'stable', change: '+4%' },
+      { tag: '#CryptoNews', count: '3.1M', velocity: 'hot', change: '+190%' },
+      { tag: '#CareerGrowth', count: '1.7M', velocity: 'rising', change: '+85%' }
+    ],
+    music: [
+      { tag: '#NewMusicFriday', count: '6.2M', velocity: 'hot', change: '+410%' },
+      { tag: '#IndieArtist', count: '1.9M', velocity: 'rising', change: '+140%' },
+      { tag: '#Songwriter', count: '2.4M', velocity: 'stable', change: '+9%' },
+      { tag: '#Covers', count: '4.8M', velocity: 'stable', change: '+5%' },
+      { tag: '#VinylCommunity', count: '1.1M', velocity: 'rising', change: '+75%' },
+      { tag: '#MusicProducer', count: '2.2M', velocity: 'rising', change: '+98%' },
+      { tag: '#ConcertVibes', count: '3.7M', velocity: 'hot', change: '+280%' },
+      { tag: '#Synthesizer', count: '850K', velocity: 'declining', change: '-14%' }
     ]
   };
 
@@ -166,6 +244,48 @@
       { name: 'Coding Lo-Fi', artist: 'Trending Audio', uses: '2.8M', velocity: 'stable', platform: 'YouTube' },
       { name: 'Ship It Sound', artist: 'Trending Audio', uses: '180K', velocity: 'hot', platform: 'TikTok' },
       { name: 'Debug Mode', artist: 'DevBeats', uses: '95K', velocity: 'rising', platform: 'TikTok' }
+    ],
+    travel: [
+      { name: 'Adventure Awaits', artist: 'Trending Audio', uses: '1.5M', velocity: 'hot', platform: 'TikTok' },
+      { name: 'Golden Hour (Lofi)', artist: 'JVKE', uses: '980K', velocity: 'rising', platform: 'Instagram' },
+      { name: 'On The Road Again', artist: 'Chill Beats', uses: '620K', velocity: 'stable', platform: 'YouTube' },
+      { name: 'Aloha Vibes', artist: 'Island Lo-Fi', uses: '450K', velocity: 'hot', platform: 'TikTok' }
+    ],
+    gaming: [
+      { name: '8-Bit Nostalgia', artist: 'Chiptune Mix', uses: '2.4M', velocity: 'stable', platform: 'YouTube' },
+      { name: 'Victory Royale Theme', artist: 'Gamer Audio', uses: '1.1M', velocity: 'hot', platform: 'TikTok' },
+      { name: 'Chill Quest (RPG)', artist: 'RPG Ambient', uses: '530K', velocity: 'rising', platform: 'TikTok' },
+      { name: 'Original Sound - StreamerGuy', artist: 'StreamerGuy', uses: '310K', velocity: 'hot', platform: 'Twitch' }
+    ],
+    sports: [
+      { name: 'Stadium Roar', artist: 'Crowd Audio', uses: '3.1M', velocity: 'hot', platform: 'TikTok' },
+      { name: 'Fast Lane (Phonk)', artist: 'Phonk Remix', uses: '1.8M', velocity: 'hot', platform: 'Instagram' },
+      { name: 'Run Wild', artist: 'Upbeat Pop', uses: '890K', velocity: 'rising', platform: 'TikTok' },
+      { name: 'Victory Lap', artist: 'Epic Orchestral', uses: '420K', velocity: 'stable', platform: 'YouTube' }
+    ],
+    entertainment: [
+      { name: 'Dramatic Suspense', artist: 'Cinema Soundtracks', uses: '2.7M', velocity: 'stable', platform: 'TikTok' },
+      { name: 'Retro Synth Theme', artist: '80s Nostalgia', uses: '1.5M', velocity: 'rising', platform: 'Instagram' },
+      { name: 'Intro Theme', artist: 'Pop Mix', uses: '890K', velocity: 'hot', platform: 'YouTube' },
+      { name: 'Original Sound - MovieCritic', artist: 'MovieCritic', uses: '340K', velocity: 'hot', platform: 'TikTok' }
+    ],
+    art: [
+      { name: 'Lo-Fi Paint & Chill', artist: 'Lofi Beats', uses: '4.2M', velocity: 'stable', platform: 'YouTube' },
+      { name: 'Drawing ASMR', artist: 'Studio Sounds', uses: '2.1M', velocity: 'hot', platform: 'TikTok' },
+      { name: 'Satisfying Pour', artist: 'Creative Studio', uses: '980K', velocity: 'rising', platform: 'Instagram' },
+      { name: 'Creative Process', artist: 'Ambient Chill', uses: '650K', velocity: 'hot', platform: 'TikTok' }
+    ],
+    finance: [
+      { name: 'Success Frequency', artist: 'Chill Synth', uses: '1.2M', velocity: 'rising', platform: 'TikTok' },
+      { name: 'Corporate Chill', artist: 'Lofi Business', uses: '780K', velocity: 'stable', platform: 'YouTube' },
+      { name: 'Rise and Grind', artist: 'Upbeat Audio', uses: '540K', velocity: 'hot', platform: 'Instagram' },
+      { name: 'Original Sound - MoneyMindset', artist: 'MoneyMindset', uses: '320K', velocity: 'hot', platform: 'TikTok' }
+    ],
+    music: [
+      { name: 'Original Song - NewArtist', artist: 'NewArtist', uses: '1.8M', velocity: 'hot', platform: 'TikTok' },
+      { name: 'Acoustic Guitar Cover', artist: 'Chill Guitar', uses: '950K', velocity: 'rising', platform: 'YouTube' },
+      { name: 'Beat Drop 2026', artist: 'EDM Producer', uses: '720K', velocity: 'hot', platform: 'TikTok' },
+      { name: 'Synth Pop Hook', artist: 'Retro Wave', uses: '390K', velocity: 'stable', platform: 'Instagram' }
     ]
   };
 
@@ -199,6 +319,41 @@
       { platform: 'Twitter/X', icon: '𝕏', color: 'var(--text)', trends: ['Hot Takes', 'Threads', 'Launches'], trendCount: 18 },
       { platform: 'LinkedIn', icon: '💼', color: 'var(--info)', trends: ['Thought Leadership', 'Case Studies', 'Polls'], trendCount: 9 },
       { platform: 'YouTube', icon: '▶️', color: 'var(--error)', trends: ['Tutorials', 'Reviews', 'Dev Vlogs'], trendCount: 6 }
+    ],
+    travel: [
+      { platform: 'Instagram', icon: '📸', color: 'var(--gold)', trends: ['Travel Reels', 'Hidden Gems', 'Carousels'], trendCount: 14 },
+      { platform: 'TikTok', icon: '🎵', color: 'var(--rose)', trends: ['Travel Vlogs', 'Itinerary Hacks', 'Budget Guides'], trendCount: 11 },
+      { platform: 'Pinterest', icon: '📌', color: 'var(--error)', trends: ['Wanderlust Moodboards', 'Packing Lists', 'Destinations'], trendCount: 9 }
+    ],
+    gaming: [
+      { platform: 'YouTube', icon: '▶️', color: 'var(--error)', trends: ['LetsPlays', 'Walkthroughs', 'Reviews'], trendCount: 16 },
+      { platform: 'TikTok', icon: '🎵', color: 'var(--rose)', trends: ['Funny Clips', 'Setup Tours', 'Speedruns'], trendCount: 13 },
+      { platform: 'Twitch', icon: '🎮', color: 'var(--info)', trends: ['Live Streams', 'Esports', 'Just Chatting'], trendCount: 10 }
+    ],
+    sports: [
+      { platform: 'Twitter/X', icon: '𝕏', color: 'var(--text)', trends: ['Live Commentary', 'Hot Takes', 'Fandom Debates'], trendCount: 17 },
+      { platform: 'TikTok', icon: '🎵', color: 'var(--rose)', trends: ['Trickshots', 'Behind The Scenes', 'Drills'], trendCount: 12 },
+      { platform: 'YouTube', icon: '▶️', color: 'var(--error)', trends: ['Game Highlights', 'Vlogs', 'Tutorials'], trendCount: 8 }
+    ],
+    entertainment: [
+      { platform: 'TikTok', icon: '🎵', color: 'var(--rose)', trends: ['Fandom Edits', 'Movie Recaps', 'Theory Skits'], trendCount: 15 },
+      { platform: 'YouTube', icon: '▶️', color: 'var(--error)', trends: ['Video Essays', 'Trailers', 'Reviews'], trendCount: 11 },
+      { platform: 'Twitter/X', icon: '𝕏', color: 'var(--text)', trends: ['Live-tweeting', 'Meme Threads', 'Casting News'], trendCount: 8 }
+    ],
+    art: [
+      { platform: 'Pinterest', icon: '📌', color: 'var(--error)', trends: ['Inspiration', 'Color Palettes', 'Moodboards'], trendCount: 18 },
+      { platform: 'Instagram', icon: '📸', color: 'var(--gold)', trends: ['Process Reels', 'Carousels', 'Studio Views'], trendCount: 14 },
+      { platform: 'TikTok', icon: '🎵', color: 'var(--rose)', trends: ['Speedpaints', 'ASMR Studio Vlogs', 'Tips'], trendCount: 11 }
+    ],
+    finance: [
+      { platform: 'LinkedIn', icon: '💼', color: 'var(--info)', trends: ['Career Advice', 'Market News', 'Thought Leadership'], trendCount: 15 },
+      { platform: 'Twitter/X', icon: '𝕏', color: 'var(--text)', trends: ['Market Charts', 'Crypto Space', 'FinThreads'], trendCount: 12 },
+      { platform: 'YouTube', icon: '▶️', color: 'var(--error)', trends: ['Tutorials', 'Stock Analysis', 'Side Hustles'], trendCount: 9 }
+    ],
+    music: [
+      { platform: 'TikTok', icon: '🎵', color: 'var(--rose)', trends: ['Sound Trends', 'LipSync Challenges', 'Duets'], trendCount: 19 },
+      { platform: 'YouTube', icon: '▶️', color: 'var(--error)', trends: ['Music Videos', 'Behind The Scenes', 'Live Sessions'], trendCount: 10 },
+      { platform: 'Instagram', icon: '📸', color: 'var(--gold)', trends: ['Reels Covers', 'Concert Snippets', 'Promos'], trendCount: 7 }
     ]
   };
 
