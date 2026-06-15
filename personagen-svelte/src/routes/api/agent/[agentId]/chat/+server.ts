@@ -247,7 +247,10 @@ Conduct a 9-layer scorecard audit (1-100 score, Hook structures, Visual DNA, Rhy
 				handle: args.handle,
 				niche: args.niche,
 				soul: args.soul || 'Warm and engaging UGC creator agent.',
-				status: 'active'
+				status: 'active',
+				supervisor_agent_id: agentId,
+				managed_by_overseer: true,
+				runtime_owner: 'hermes-orchestrated'
 			});
 			if (error) throw error;
 			return {
@@ -659,7 +662,7 @@ Always stay in character. If you execute a tool, explain the outcome in characte
 
 				let result;
 				try {
-					result = await executeTool(name, args, locals.supabase, userId, agentId, fetch, apiKey);
+					result = await executeTool(name, args, supabaseClient, userId, agentId, fetch, apiKey);
 					toolCallsExecuted.push({
 						id: Math.random().toString(36).substring(7),
 						name,

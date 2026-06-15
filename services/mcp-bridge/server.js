@@ -106,13 +106,13 @@ server.tool(
       }
 
       // Filter where the latest message in the thread is from the user
-      // AND it is not claimed, or the claim has expired (e.g. 30 seconds ago)
+      // AND it is not claimed, or the claim has expired (e.g. 5 minutes ago)
       const now = new Date();
       const unresolved = Object.values(latestMessages).filter((msg) => {
         if (msg.role !== "user") return false;
         if (!msg.claimed_by) return true;
         const claimedTime = new Date(msg.claimed_at);
-        return now.getTime() - claimedTime.getTime() > 30000; // 30 seconds expiration
+        return now.getTime() - claimedTime.getTime() > 300000; // 5 minutes expiration
       });
 
       if (unresolved.length === 0) {

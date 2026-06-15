@@ -17,6 +17,30 @@ export async function getOrCreateHermes(supabase: SupabaseClient, userId: string
 	}
 
 	if (hermesAgent) {
+		// Normalize existing Hermes agent row if needed
+		if (
+			hermesAgent.runtime_owner !== 'svelte-gemini' ||
+			hermesAgent.managed_by_overseer === true ||
+			hermesAgent.supervisor_agent_id !== null
+		) {
+			console.log(`[Hermes Service] Normalizing existing Hermes agent parameters for user ${userId}.`);
+			const { data: updatedHermes, error: normErr } = await supabase
+				.from('agents')
+				.update({
+					runtime_owner: 'svelte-gemini',
+					managed_by_overseer: false,
+					supervisor_agent_id: null
+				})
+				.eq('id', hermesAgent.id)
+				.select()
+				.single();
+
+			if (normErr) {
+				console.error('[Hermes Service] Failed to normalize Hermes row:', normErr);
+			} else if (updatedHermes) {
+				return updatedHermes;
+			}
+		}
 		return hermesAgent;
 	}
 

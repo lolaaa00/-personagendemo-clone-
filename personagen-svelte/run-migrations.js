@@ -34,10 +34,6 @@ ALTER TABLE public.agent_configs ADD COLUMN IF NOT EXISTS rss_url TEXT DEFAULT '
 ALTER TABLE public.agent_configs ADD COLUMN IF NOT EXISTS rss_active BOOLEAN DEFAULT false;
 ALTER TABLE public.agent_configs ADD COLUMN IF NOT EXISTS rss_last_polled_at TIMESTAMPTZ;
 
-
-ALTER TABLE public.chat_messages ADD COLUMN IF NOT EXISTS claimed_by TEXT;
-ALTER TABLE public.chat_messages ADD COLUMN IF NOT EXISTS claimed_at TIMESTAMPTZ;
-
 -- 2. Create chat_messages table and indexes/RLS/policies
 CREATE TABLE IF NOT EXISTS public.chat_messages (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -50,6 +46,9 @@ CREATE TABLE IF NOT EXISTS public.chat_messages (
   claimed_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+ALTER TABLE public.chat_messages ADD COLUMN IF NOT EXISTS claimed_by TEXT;
+ALTER TABLE public.chat_messages ADD COLUMN IF NOT EXISTS claimed_at TIMESTAMPTZ;
 
 CREATE INDEX IF NOT EXISTS idx_chat_messages_agent_id ON public.chat_messages(agent_id);
 CREATE INDEX IF NOT EXISTS idx_chat_messages_created_at ON public.chat_messages(created_at ASC);
