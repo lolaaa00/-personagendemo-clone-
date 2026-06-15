@@ -30,7 +30,7 @@ async function request<T>(
 		if (!res.ok) {
 			let errorMessage = `HTTP ${res.status}`;
 			try {
-				const errorData = await res.json() as any;
+				const errorData = (await res.json()) as any;
 				if (errorData) {
 					if (typeof errorData.error === 'string') {
 						errorMessage = errorData.error;
@@ -167,12 +167,7 @@ export const ChannelDecode = {
 // ── Content Forge (5 actions) ──────────────────────────────────────────────────
 
 export const ContentForge = {
-	generate: (
-		blueprintId: string,
-		topic: string,
-		agentHandle: string,
-		platforms: string[]
-	) =>
+	generate: (blueprintId: string, topic: string, agentHandle: string, platforms: string[]) =>
 		request(ENDPOINTS.contentForge, 'generate', {
 			blueprint_id: blueprintId,
 			topic,
@@ -221,4 +216,3 @@ export const BrandBrief = {
 	extendField: (fieldName: string, fieldVal: string) =>
 		request<{ enriched: string }>(ENDPOINTS.brandBrief, 'extend_field', { fieldName, fieldVal })
 };
-

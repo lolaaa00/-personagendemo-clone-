@@ -113,21 +113,61 @@
 	<div class="actions-bar">
 		<div class="action-group">
 			<button class="action-btn" onclick={expandAll}>
-				<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="7 13 12 18 17 13"/><polyline points="7 6 12 11 17 6"/></svg>
+				<svg
+					width="14"
+					height="14"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					><polyline points="7 13 12 18 17 13" /><polyline points="7 6 12 11 17 6" /></svg
+				>
 				Expand All
 			</button>
 			<button class="action-btn" onclick={collapseAll}>
-				<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></svg>
+				<svg
+					width="14"
+					height="14"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					><polyline points="17 11 12 6 7 11" /><polyline points="17 18 12 13 7 18" /></svg
+				>
 				Collapse All
 			</button>
 		</div>
 		<div class="action-group">
 			<button class="action-btn" onclick={printDoc}>
-				<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+				<svg
+					width="14"
+					height="14"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					><polyline points="6 9 6 2 18 2 18 9" /><path
+						d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"
+					/><rect x="6" y="14" width="12" height="8" /></svg
+				>
 				Print
 			</button>
 			<button class="action-btn primary" onclick={downloadPdf}>
-				<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+				<svg
+					width="14"
+					height="14"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline
+						points="7 10 12 15 17 10"
+					/><line x1="12" y1="15" x2="12" y2="3" /></svg
+				>
 				Download PDF
 			</button>
 		</div>
@@ -139,7 +179,16 @@
 			<div class="section-block" class:open={openSections.has(section.id)}>
 				<button class="section-header" onclick={() => toggleSection(section.id)}>
 					<h3>{section.title}</h3>
-					<svg class="chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+					<svg
+						class="chevron"
+						width="18"
+						height="18"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"><polyline points="6 9 12 15 18 9" /></svg
+					>
 				</button>
 				{#if openSections.has(section.id)}
 					<div class="section-body">
@@ -153,7 +202,15 @@
 	<!-- Signature Block -->
 	<div class="signature-block">
 		<div class="sig-header">
-			<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+			<svg
+				width="20"
+				height="20"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="var(--accent)"
+				stroke-width="2"
+				stroke-linecap="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg
+			>
 			<h3>Digital Signature</h3>
 		</div>
 
@@ -166,7 +223,18 @@
 				</div>
 				<span class="sig-date">Signed: 1 June 2026</span>
 				<span class="sig-verified">
-					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2.5" stroke-linecap="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+					<svg
+						width="14"
+						height="14"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="var(--success)"
+						stroke-width="2.5"
+						stroke-linecap="round"
+						><path d="M22 11.08V12a10 10 0 11-5.93-9.14" /><polyline
+							points="22 4 12 14.01 9 11.01"
+						/></svg
+					>
 					Verified
 				</span>
 			</div>
@@ -178,7 +246,18 @@
 				</div>
 				<span class="sig-date">Signed: 1 June 2026</span>
 				<span class="sig-verified">
-					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2.5" stroke-linecap="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+					<svg
+						width="14"
+						height="14"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="var(--success)"
+						stroke-width="2.5"
+						stroke-linecap="round"
+						><path d="M22 11.08V12a10 10 0 11-5.93-9.14" /><polyline
+							points="22 4 12 14.01 9 11.01"
+						/></svg
+					>
 					Verified
 				</span>
 			</div>
@@ -187,127 +266,298 @@
 </section>
 
 <style>
-	.page { padding: 2rem; max-width: 880px; margin: 0 auto; }
-
-	.page-header { margin-bottom: 1.5rem; text-align: center; }
-	.page-header h1 {
-		font-family: var(--font-display); font-size: var(--text-3xl);
-		background: var(--gradient); -webkit-background-clip: text;
-		-webkit-text-fill-color: transparent; background-clip: text;
+	.page {
+		padding: 2rem;
+		max-width: 880px;
+		margin: 0 auto;
 	}
-	.subtitle { color: var(--text-muted); font-size: var(--text-base); margin-top: 0.25rem; }
+
+	.page-header {
+		margin-bottom: 1.5rem;
+		text-align: center;
+	}
+	.page-header h1 {
+		font-family: var(--font-display);
+		font-size: var(--text-3xl);
+		background: var(--gradient);
+		-webkit-background-clip: text;
+		-webkit-text-fill-color: transparent;
+		background-clip: text;
+	}
+	.subtitle {
+		color: var(--text-muted);
+		font-size: var(--text-base);
+		margin-top: 0.25rem;
+	}
 
 	/* Meta */
 	.agreement-meta {
-		background: var(--surface); border: 1px solid var(--border);
-		border-radius: var(--radius); padding: 1.5rem; margin-bottom: 1rem;
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		padding: 1.5rem;
+		margin-bottom: 1rem;
 	}
 	.meta-row {
-		display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem;
+		display: grid;
+		grid-template-columns: repeat(4, 1fr);
+		gap: 1rem;
 	}
-	.meta-item { display: flex; flex-direction: column; gap: 0.25rem; }
-	.meta-label { font-size: var(--text-xs); color: var(--text-dim); font-weight: 700; text-transform: uppercase; letter-spacing: var(--tracking-wider); }
-	.meta-value { font-size: 0.88rem; color: var(--text); }
-	.meta-value.mono { font-family: var(--font-mono); color: var(--accent); }
+	.meta-item {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+	}
+	.meta-label {
+		font-size: var(--text-xs);
+		color: var(--text-dim);
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: var(--tracking-wider);
+	}
+	.meta-value {
+		font-size: 0.88rem;
+		color: var(--text);
+	}
+	.meta-value.mono {
+		font-family: var(--font-mono);
+		color: var(--accent);
+	}
 
 	.status-badge {
-		display: inline-flex; align-items: center; gap: 6px;
-		font-size: 0.82rem; color: var(--success); font-weight: 600;
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		font-size: 0.82rem;
+		color: var(--success);
+		font-weight: 600;
 	}
 	.status-dot {
-		width: 8px; height: 8px; border-radius: 50%; background: var(--success);
+		width: 8px;
+		height: 8px;
+		border-radius: 50%;
+		background: var(--success);
 		animation: ambientPulse 2s ease infinite;
 	}
 
 	/* Actions */
 	.actions-bar {
-		display: flex; justify-content: space-between; align-items: center;
-		margin-bottom: 1.5rem; flex-wrap: wrap; gap: 0.75rem;
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin-bottom: 1.5rem;
+		flex-wrap: wrap;
+		gap: 0.75rem;
 	}
-	.action-group { display: flex; gap: 0.5rem; }
+	.action-group {
+		display: flex;
+		gap: 0.5rem;
+	}
 
 	.action-btn {
-		display: inline-flex; align-items: center; gap: 6px;
-		padding: 7px 14px; border-radius: var(--radius-xs);
-		border: 1px solid var(--border-strong); background: transparent;
-		color: var(--text-muted); font-size: 0.78rem; cursor: pointer;
-		font-family: var(--font-body); font-weight: 600;
-		transition: border-color 0.2s, color 0.2s, background 0.2s;
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		padding: 7px 14px;
+		border-radius: var(--radius-xs);
+		border: 1px solid var(--border-strong);
+		background: transparent;
+		color: var(--text-muted);
+		font-size: 0.78rem;
+		cursor: pointer;
+		font-family: var(--font-body);
+		font-weight: 600;
+		transition:
+			border-color 0.2s,
+			color 0.2s,
+			background 0.2s;
 	}
-	.action-btn:hover { border-color: var(--accent-mid); color: var(--text); }
+	.action-btn:hover {
+		border-color: var(--accent-mid);
+		color: var(--text);
+	}
 	.action-btn.primary {
-		background: var(--gradient-subtle); border-color: transparent; color: #fff;
+		background: var(--gradient-subtle);
+		border-color: transparent;
+		color: #fff;
 	}
-	.action-btn.primary:hover { box-shadow: var(--shadow-accent); transform: translateY(-1px); }
+	.action-btn.primary:hover {
+		box-shadow: var(--shadow-accent);
+		transform: translateY(-1px);
+	}
 
 	/* Accordion */
-	.sections { display: flex; flex-direction: column; gap: 0.5rem; }
+	.sections {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
 
 	.section-block {
-		background: var(--surface); border: 1px solid var(--border);
-		border-radius: var(--radius-sm); overflow: hidden;
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		overflow: hidden;
 		transition: border-color 0.2s;
 	}
-	.section-block:hover { border-color: var(--border-hover); }
-	.section-block.open { border-color: var(--accent-mid); }
+	.section-block:hover {
+		border-color: var(--border-hover);
+	}
+	.section-block.open {
+		border-color: var(--accent-mid);
+	}
 
 	.section-header {
-		display: flex; align-items: center; justify-content: space-between;
-		width: 100%; padding: 1.1rem 1.25rem; background: none; border: none;
-		cursor: pointer; color: var(--text); text-align: left;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		width: 100%;
+		padding: 1.1rem 1.25rem;
+		background: none;
+		border: none;
+		cursor: pointer;
+		color: var(--text);
+		text-align: left;
 	}
-	.section-header h3 { font-family: var(--font-display); font-size: var(--text-md); font-weight: 600; }
+	.section-header h3 {
+		font-family: var(--font-display);
+		font-size: var(--text-md);
+		font-weight: 600;
+	}
 
-	.chevron { transition: transform 0.25s ease; color: var(--text-dim); flex-shrink: 0; }
-	.section-block.open .chevron { transform: rotate(180deg); color: var(--accent); }
+	.chevron {
+		transition: transform 0.25s ease;
+		color: var(--text-dim);
+		flex-shrink: 0;
+	}
+	.section-block.open .chevron {
+		transform: rotate(180deg);
+		color: var(--accent);
+	}
 
 	.section-body {
 		padding: 0 1.25rem 1.25rem;
 		animation: fadeDown 0.2s var(--ease-out);
 	}
 	.section-content {
-		font-size: 0.85rem; color: var(--text-muted); line-height: 1.75;
-		white-space: pre-wrap; border-top: 1px solid var(--border);
+		font-size: 0.85rem;
+		color: var(--text-muted);
+		line-height: 1.75;
+		white-space: pre-wrap;
+		border-top: 1px solid var(--border);
 		padding-top: 1rem;
 	}
 
 	/* Signature */
 	.signature-block {
-		margin-top: 2rem; background: var(--surface); border: 1px solid var(--border);
-		border-radius: var(--radius); padding: 1.5rem;
+		margin-top: 2rem;
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		padding: 1.5rem;
 	}
-	.sig-header { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 1.25rem; }
-	.sig-header h3 { font-size: var(--text-lg); font-family: var(--font-display); }
+	.sig-header {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+		margin-bottom: 1.25rem;
+	}
+	.sig-header h3 {
+		font-size: var(--text-lg);
+		font-family: var(--font-display);
+	}
 
-	.sig-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
+	.sig-grid {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 2rem;
+	}
 
-	.sig-party { display: flex; flex-direction: column; gap: 0.5rem; }
-	.sig-label { font-size: var(--text-xs); color: var(--text-dim); font-weight: 700; text-transform: uppercase; letter-spacing: var(--tracking-wider); }
+	.sig-party {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+	.sig-label {
+		font-size: var(--text-xs);
+		color: var(--text-dim);
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: var(--tracking-wider);
+	}
 
 	.sig-line {
-		padding: 0.75rem 0; border-bottom: 2px solid var(--accent-mid);
-		display: flex; flex-direction: column; gap: 0.2rem;
+		padding: 0.75rem 0;
+		border-bottom: 2px solid var(--accent-mid);
+		display: flex;
+		flex-direction: column;
+		gap: 0.2rem;
 	}
-	.sig-name { font-family: var(--font-display); font-size: 1.1rem; font-style: italic; color: var(--text); }
-	.sig-role { font-size: var(--text-xs); color: var(--text-dim); }
-	.sig-date { font-size: var(--text-xs); color: var(--text-dim); font-family: var(--font-mono); }
-	.sig-verified { display: inline-flex; align-items: center; gap: 4px; font-size: var(--text-xs); color: var(--success); font-weight: 600; }
+	.sig-name {
+		font-family: var(--font-display);
+		font-size: 1.1rem;
+		font-style: italic;
+		color: var(--text);
+	}
+	.sig-role {
+		font-size: var(--text-xs);
+		color: var(--text-dim);
+	}
+	.sig-date {
+		font-size: var(--text-xs);
+		color: var(--text-dim);
+		font-family: var(--font-mono);
+	}
+	.sig-verified {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		font-size: var(--text-xs);
+		color: var(--success);
+		font-weight: 600;
+	}
 
 	/* Print */
 	@media print {
-		.page { padding: 0; max-width: 100%; }
-		.actions-bar { display: none; }
-		.section-block { break-inside: avoid; border: none; }
-		.section-body { display: block !important; }
-		.chevron { display: none; }
+		.page {
+			padding: 0;
+			max-width: 100%;
+		}
+		.actions-bar {
+			display: none;
+		}
+		.section-block {
+			break-inside: avoid;
+			border: none;
+		}
+		.section-body {
+			display: block !important;
+		}
+		.chevron {
+			display: none;
+		}
 	}
 
 	@media (max-width: 640px) {
-		.page { padding: 1rem; }
-		.meta-row { grid-template-columns: 1fr 1fr; }
-		.sig-grid { grid-template-columns: 1fr; }
-		.actions-bar { flex-direction: column; align-items: stretch; }
-		.action-group { justify-content: stretch; }
-		.action-btn { flex: 1; justify-content: center; }
+		.page {
+			padding: 1rem;
+		}
+		.meta-row {
+			grid-template-columns: 1fr 1fr;
+		}
+		.sig-grid {
+			grid-template-columns: 1fr;
+		}
+		.actions-bar {
+			flex-direction: column;
+			align-items: stretch;
+		}
+		.action-group {
+			justify-content: stretch;
+		}
+		.action-btn {
+			flex: 1;
+			justify-content: center;
+		}
 	}
 </style>

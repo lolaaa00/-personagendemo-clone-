@@ -43,12 +43,19 @@ export interface Agent {
 	connection_count?: number;
 	/** User-configurable autonomy level */
 	autonomy_level: AutonomyLevel;
+	is_overseer?: boolean;
+	supervisor_agent_id?: string | null;
+	managed_by_overseer?: boolean;
+	runtime_owner?: 'svelte-gemini' | 'hermes-daemon' | 'hermes-orchestrated';
 }
 
 /** Modular autonomy — set per agent in persona-config */
 export type AutonomyLevel = 'advisor' | 'semi_autonomous' | 'fully_autonomous';
 
-export const AUTONOMY_LABELS: Record<AutonomyLevel, { label: string; description: string; icon: string }> = {
+export const AUTONOMY_LABELS: Record<
+	AutonomyLevel,
+	{ label: string; description: string; icon: string }
+> = {
 	advisor: {
 		label: 'Advisor',
 		description: 'Suggests content and strategies. User approves everything.',
@@ -174,4 +181,3 @@ export interface ApiResponse<T = unknown> {
 	data?: T;
 	error?: string;
 }
-

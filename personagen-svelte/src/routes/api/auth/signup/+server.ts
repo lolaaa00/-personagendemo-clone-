@@ -24,9 +24,11 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 	if (error) {
 		// Supabase returns a generic message for duplicate emails
-		if (error.message.toLowerCase().includes('already registered') ||
+		if (
+			error.message.toLowerCase().includes('already registered') ||
 			error.message.toLowerCase().includes('already been registered') ||
-			error.message.toLowerCase().includes('user already exists')) {
+			error.message.toLowerCase().includes('user already exists')
+		) {
 			return json({ error: 'An account with this email already exists' }, { status: 409 });
 		}
 		return json({ error: error.message }, { status: 400 });

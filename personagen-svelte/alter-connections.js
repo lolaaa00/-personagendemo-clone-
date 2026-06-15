@@ -12,23 +12,23 @@ ALTER TABLE public.connections ADD COLUMN IF NOT EXISTS engagement_rate NUMERIC(
 `;
 
 async function run() {
-  console.log('Adding followers and engagement_rate columns to public.connections table...');
-  const url = `${supabaseUrl}/pg/query`;
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'apikey': serviceRoleKey,
-      'Authorization': `Bearer ${serviceRoleKey}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      query: sql
-    })
-  });
+	console.log('Adding followers and engagement_rate columns to public.connections table...');
+	const url = `${supabaseUrl}/pg/query`;
+	const response = await fetch(url, {
+		method: 'POST',
+		headers: {
+			apikey: serviceRoleKey,
+			Authorization: `Bearer ${serviceRoleKey}`,
+			'Content-Type': 'application/json'
+		},
+		body: JSON.stringify({
+			query: sql
+		})
+	});
 
-  console.log('Status:', response.status);
-  const text = await response.text();
-  console.log('Response:', text);
+	console.log('Status:', response.status);
+	const text = await response.text();
+	console.log('Response:', text);
 }
 
 run().catch(console.error);

@@ -31,6 +31,9 @@ export interface AgentRow {
 	followers: string;
 	connection_count: number;
 	is_overseer?: boolean;
+	supervisor_agent_id?: string | null;
+	managed_by_overseer?: boolean;
+	runtime_owner?: 'svelte-gemini' | 'hermes-daemon' | 'hermes-orchestrated';
 	created_at: string;
 	updated_at: string;
 }
@@ -88,7 +91,6 @@ export interface ConnectionRow {
 	last_error?: string | null;
 	last_checked_at?: string | null;
 }
-
 
 export interface BlueprintRow {
 	id: string;
@@ -150,6 +152,8 @@ export interface ChatMessageRow {
 	role: 'user' | 'model' | 'system';
 	content: string;
 	tool_calls?: any;
+	claimed_by?: string | null;
+	claimed_at?: string | null;
 	created_at: string;
 }
 
@@ -175,8 +179,12 @@ export type AgentInsert = Omit<AgentRow, 'id' | 'created_at' | 'updated_at'> & {
 export type AgentUpdate = Partial<Omit<AgentRow, 'id' | 'user_id' | 'created_at' | 'updated_at'>>;
 
 export type ChatMessageInsert = Omit<ChatMessageRow, 'id' | 'created_at'> & { id?: string };
-export type AgentMemoryInsert = Omit<AgentMemoryRow, 'id' | 'created_at' | 'updated_at'> & { id?: string };
-export type AgentMemoryUpdate = Partial<Omit<AgentMemoryRow, 'id' | 'user_id' | 'agent_id' | 'created_at' | 'updated_at'>>;
+export type AgentMemoryInsert = Omit<AgentMemoryRow, 'id' | 'created_at' | 'updated_at'> & {
+	id?: string;
+};
+export type AgentMemoryUpdate = Partial<
+	Omit<AgentMemoryRow, 'id' | 'user_id' | 'agent_id' | 'created_at' | 'updated_at'>
+>;
 
 export type AgentConfigInsert = Omit<
 	AgentConfigRow,
@@ -243,48 +251,35 @@ export function createDbService(supabase: SupabaseClient) {
 	return {
 		// ── Agents ──────────────────────────────
 		agents: {
-			list: () =>
-				supabase
-					.from('agents')
-					.select('*')
-					.order('created_at', { ascending: false }),
+			list: () => supabase.from('agents').select('*').order('created_at', { ascending: false }),
 
-			get: (id: string) =>
-				supabase.from('agents').select('*').eq('id', id).single(),
+			get: (id: string) => supabase.from('agents').select('*').eq('id', id).single(),
 
-			create: (data: AgentInsert) =>
-				supabase.from('agents').insert(data).select().single(),
+			create: (data: AgentInsert) => supabase.from('agents').insert(data).select().single(),
 
 			update: (id: string, data: AgentUpdate) =>
 				supabase.from('agents').update(data).eq('id', id).select().single(),
 
-			delete: (id: string) =>
-				supabase.from('agents').delete().eq('id', id),
+			delete: (id: string) => supabase.from('agents').delete().eq('id', id)
 		},
 
 		// ── Agent Configs ───────────────────────
 		agentConfigs: {
 			get: (agentId: string) =>
-				supabase
-					.from('agent_configs')
-					.select('*')
-					.eq('agent_id', agentId)
-					.single(),
+				supabase.from('agent_configs').select('*').eq('agent_id', agentId).single(),
 
 			upsert: (data: AgentConfigInsert) =>
 				supabase
 					.from('agent_configs')
 					.upsert(data, { onConflict: 'user_id,agent_id' })
 					.select()
-					.single(),
+					.single()
 		},
 
 		// ── Posts ────────────────────────────────
 		posts: {
 			list: (filters?: PostListFilters) => {
-				let q = supabase
-					.from('posts')
-					.select('*, agents(name, handle, gradient, initial)');
+				let q = supabase.from('posts').select('*, agents(name, handle, gradient, initial)');
 
 				if (filters?.agent_id) {
 					q = q.eq('agent_id', filters.agent_id);
@@ -301,17 +296,14 @@ export function createDbService(supabase: SupabaseClient) {
 				return q.order('scheduled_date').order('scheduled_time');
 			},
 
-			get: (id: string) =>
-				supabase.from('posts').select('*').eq('id', id).single(),
+			get: (id: string) => supabase.from('posts').select('*').eq('id', id).single(),
 
-			create: (data: PostInsert) =>
-				supabase.from('posts').insert(data).select().single(),
+			create: (data: PostInsert) => supabase.from('posts').insert(data).select().single(),
 
 			update: (id: string, data: PostUpdate) =>
 				supabase.from('posts').update(data).eq('id', id).select().single(),
 
-			delete: (id: string) =>
-				supabase.from('posts').delete().eq('id', id),
+			delete: (id: string) => supabase.from('posts').delete().eq('id', id)
 		},
 
 		// ── Tickets ─────────────────────────────
@@ -322,17 +314,14 @@ export function createDbService(supabase: SupabaseClient) {
 					.select('*, agents(name, handle, gradient, initial)')
 					.order('position'),
 
-			get: (id: string) =>
-				supabase.from('tickets').select('*').eq('id', id).single(),
+			get: (id: string) => supabase.from('tickets').select('*').eq('id', id).single(),
 
-			create: (data: TicketInsert) =>
-				supabase.from('tickets').insert(data).select().single(),
+			create: (data: TicketInsert) => supabase.from('tickets').insert(data).select().single(),
 
 			update: (id: string, data: TicketUpdate) =>
 				supabase.from('tickets').update(data).eq('id', id).select().single(),
 
-			delete: (id: string) =>
-				supabase.from('tickets').delete().eq('id', id),
+			delete: (id: string) => supabase.from('tickets').delete().eq('id', id)
 		},
 
 		// ── Connections ─────────────────────────
@@ -348,29 +337,18 @@ export function createDbService(supabase: SupabaseClient) {
 					.single(),
 
 			delete: (agentId: string, platform: string) =>
-				supabase
-					.from('connections')
-					.delete()
-					.eq('agent_id', agentId)
-					.eq('platform', platform),
+				supabase.from('connections').delete().eq('agent_id', agentId).eq('platform', platform)
 		},
 
 		// ── Blueprints ──────────────────────────
 		blueprints: {
-			list: () =>
-				supabase
-					.from('blueprints')
-					.select('*')
-					.order('created_at', { ascending: false }),
+			list: () => supabase.from('blueprints').select('*').order('created_at', { ascending: false }),
 
-			get: (id: string) =>
-				supabase.from('blueprints').select('*').eq('id', id).single(),
+			get: (id: string) => supabase.from('blueprints').select('*').eq('id', id).single(),
 
-			create: (data: BlueprintInsert) =>
-				supabase.from('blueprints').insert(data).select().single(),
+			create: (data: BlueprintInsert) => supabase.from('blueprints').insert(data).select().single(),
 
-			delete: (id: string) =>
-				supabase.from('blueprints').delete().eq('id', id),
+			delete: (id: string) => supabase.from('blueprints').delete().eq('id', id)
 		},
 
 		// ── Brand Briefs ────────────────────────
@@ -384,7 +362,7 @@ export function createDbService(supabase: SupabaseClient) {
 					.single(),
 
 			upsert: (data: BrandBriefInsert) =>
-				supabase.from('brand_briefs').upsert(data).select().single(),
+				supabase.from('brand_briefs').upsert(data).select().single()
 		},
 
 		// ── Profiles ────────────────────────────
@@ -392,7 +370,7 @@ export function createDbService(supabase: SupabaseClient) {
 			get: () => supabase.from('profiles').select('*').single(),
 
 			update: (data: ProfileUpdate) =>
-				supabase.from('profiles').update(data).eq('id', data.id).select().single(),
+				supabase.from('profiles').update(data).eq('id', data.id).select().single()
 		},
 
 		// ── Subscriptions ───────────────────────
@@ -400,12 +378,7 @@ export function createDbService(supabase: SupabaseClient) {
 			get: () => supabase.from('subscriptions').select('*').single(),
 
 			update: (data: SubscriptionUpdate) =>
-				supabase
-					.from('subscriptions')
-					.update(data)
-					.eq('user_id', data.user_id)
-					.select()
-					.single(),
+				supabase.from('subscriptions').update(data).eq('user_id', data.user_id).select().single()
 		},
 
 		// ── Processed RSS Items ─────────────────
@@ -439,7 +412,7 @@ export function createDbService(supabase: SupabaseClient) {
 				supabase.from('chat_messages').insert(data).select().single(),
 
 			deleteForAgent: (agentId: string) =>
-				supabase.from('chat_messages').delete().eq('agent_id', agentId),
+				supabase.from('chat_messages').delete().eq('agent_id', agentId)
 		},
 
 		// ── Agent Memories ────────────────────────
@@ -458,9 +431,8 @@ export function createDbService(supabase: SupabaseClient) {
 			update: (id: string, data: AgentMemoryUpdate) =>
 				supabase.from('agent_memories').update(data).eq('id', id).select().single(),
 
-			delete: (id: string) =>
-				supabase.from('agent_memories').delete().eq('id', id),
-		},
+			delete: (id: string) => supabase.from('agent_memories').delete().eq('id', id)
+		}
 	};
 }
 

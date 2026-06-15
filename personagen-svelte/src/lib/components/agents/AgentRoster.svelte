@@ -23,9 +23,7 @@
 			case 'pending':
 				return result.filter((a) => a.status === 'pending');
 			case 'top':
-				return result
-					.filter((a) => a.perf >= 70)
-					.sort((a, b) => b.perf - a.perf);
+				return result.filter((a) => a.perf >= 70).sort((a, b) => b.perf - a.perf);
 			default:
 				return result;
 		}
@@ -138,7 +136,16 @@
 						{agent.initial}
 					</div>
 					<div class="dash-agent-info">
-						<span class="dash-agent-name">{agent.name}</span>
+						<span class="dash-agent-name" style="display: flex; align-items: center; gap: 0.5rem;">
+							{agent.name}
+							{#if agent.is_overseer}
+								<span style="font-size: 9px; background: linear-gradient(135deg, #10B981, #06B6D4); color: white; padding: 2px 6px; border-radius: 4px; font-weight: 700; text-transform: uppercase; line-height: 1;">Hermes</span>
+							{:else if agent.managed_by_overseer}
+								<span style="font-size: 9px; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.2); color: #10B981; padding: 1px 5px; border-radius: 4px; font-weight: 600; display: inline-flex; align-items: center; gap: 2px; line-height: 1;" title="Orchestrated and monitored by Hermes">
+									🛡️ Managed
+								</span>
+							{/if}
+						</span>
 						<span class="dash-agent-niche">
 							{agent.handle} · {agent.niche} ·
 							<StatusBadge status={agent.status} />
@@ -151,7 +158,8 @@
 				</span>
 				<span class="dash-cell token-cost-cell" role="cell">
 					{#if agent.total_token_cost !== undefined && agent.total_token_cost !== null && agent.total_token_cost > 0}
-						${agent.total_token_cost.toFixed(2)} <span class="token-count">({formatTokens(agent.total_token_usage || 0)})</span>
+						${agent.total_token_cost.toFixed(2)}
+						<span class="token-count">({formatTokens(agent.total_token_usage || 0)})</span>
 					{:else}
 						$0.00 <span class="token-count">(0)</span>
 					{/if}
@@ -180,7 +188,10 @@
 						<!-- svelte-ignore a11y_click_events_have_key_events -->
 						<label
 							class="toggle"
-							onclick={(e) => { e.stopPropagation(); toggleAgent(agent); }}
+							onclick={(e) => {
+								e.stopPropagation();
+								toggleAgent(agent);
+							}}
 						>
 							<input type="checkbox" checked={agent.active} tabindex="-1" />
 							<span class="toggle-track"></span>

@@ -65,6 +65,10 @@ CREATE TABLE public.agents (
   engagement_rate NUMERIC DEFAULT 0,
   followers TEXT DEFAULT '0',
   connection_count INT DEFAULT 0,
+  supervisor_agent_id UUID REFERENCES public.agents(id) ON DELETE SET NULL,
+  managed_by_overseer BOOLEAN DEFAULT false,
+  runtime_owner TEXT DEFAULT 'svelte-gemini'
+    CHECK (runtime_owner IN ('svelte-gemini', 'hermes-daemon', 'hermes-orchestrated')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -392,6 +396,8 @@ CREATE TABLE public.chat_messages (
   role TEXT NOT NULL CHECK (role IN ('user', 'model', 'system')),
   content TEXT NOT NULL,
   tool_calls JSONB DEFAULT '[]'::jsonb,
+  claimed_by TEXT,
+  claimed_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -443,3 +449,14 @@ CREATE POLICY "agent_memories_delete_own" ON public.agent_memories
 CREATE TRIGGER agent_memories_updated_at
   BEFORE UPDATE ON public.agent_memories
   FOR EACH ROW EXECUTE FUNCTION public.update_updated_at();
+
+-- ─────────────────────────────────────────────
+-- 14. Supervision Indexes & Integrity Constraints
+-- ─────────────────────────────────────────────
+CREATE UNIQUE INDEX IF NOT EXISTS idx_agents_one_overseer_per_user
+ON public.agents(user_id)
+WHERE is_overseer = true;
+
+CREATE INDEX IF NOT EXISTS idx_agents_supervisor_agent_id ON public.agents(supervisor_agent_id);
+CREATE INDEX IF NOT EXISTS idx_agents_managed_by_overseer ON public.agents(managed_by_overseer);
+CREATE INDEX IF NOT EXISTS idx_agents_runtime_owner ON public.agents(runtime_owner);

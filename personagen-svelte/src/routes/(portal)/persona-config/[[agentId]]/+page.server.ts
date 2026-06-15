@@ -51,6 +51,7 @@ export const load: PageServerLoad = async ({ locals, url, fetch }) => {
 
 		if (dbAgents && dbAgents.length > 0) {
 			const creators = dbAgents.filter((a) => !a.is_overseer);
+			const supervisors = dbAgents.filter((a) => a.is_overseer);
 			const agentsWithConfig = [];
 			for (const agent of creators) {
 				const { data: config } = await db.agentConfigs.get(agent.id);
@@ -67,12 +68,12 @@ export const load: PageServerLoad = async ({ locals, url, fetch }) => {
 					rss_last_polled_at: config?.rss_last_polled_at ?? null
 				});
 			}
-			return { agents: agentsWithConfig };
+			return { agents: agentsWithConfig, supervisors };
 		}
 	}
 
 	// Fallback to static JSON
 	const res = await fetch('/data/agents.json');
 	const agents = await res.json();
-	return { agents };
+	return { agents, supervisors: [] };
 };

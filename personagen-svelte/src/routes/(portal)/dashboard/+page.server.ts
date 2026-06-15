@@ -1,6 +1,7 @@
 import type { PageServerLoad } from './$types';
 import { createDbService } from '$lib/server/db';
 import { env } from '$env/dynamic/public';
+import { getOrCreateHermes, ensureHermesConfig, ensureAgentsManagedByHermes } from '$lib/server/hermes';
 
 export const load: PageServerLoad = async ({ locals, fetch }) => {
 	const supabaseUrl = env.PUBLIC_SUPABASE_URL ?? '';
@@ -12,43 +13,68 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 
 	let hermesAgent: any = null;
 
+	let managedAgentsCount = 0;
+	let openTicketsCount = 0;
+	let unclaimedMessagesCount = 0;
+	let hermesConfigPresent = false;
+
 	if (!isPlaceholder && locals.supabase) {
+		const { session, user } = await locals.safeGetSession();
+		if (session && user) {
+			try {
+				hermesAgent = await getOrCreateHermes(locals.supabase, user.id);
+				const configRecord = await ensureHermesConfig(locals.supabase, user.id, hermesAgent.id);
+				hermesConfigPresent = !!configRecord;
+				await ensureAgentsManagedByHermes(locals.supabase, user.id, hermesAgent.id);
+
+				// Fetch metrics
+				const { count: managedCount } = await locals.supabase
+					.from('agents')
+					.select('*', { count: 'exact', head: true })
+					.eq('user_id', user.id)
+					.eq('is_overseer', false)
+					.eq('managed_by_overseer', true);
+				managedAgentsCount = managedCount ?? 0;
+
+				const { count: openTickets } = await locals.supabase
+					.from('tickets')
+					.select('*', { count: 'exact', head: true })
+					.eq('user_id', user.id)
+					.neq('status', 'done');
+				openTicketsCount = openTickets ?? 0;
+
+				const { data: latestMsgs } = await locals.supabase
+					.from('chat_messages')
+					.select('id, agent_id, role, claimed_by')
+					.eq('user_id', user.id)
+					.order('created_at', { ascending: false })
+					.limit(50);
+
+				if (latestMsgs) {
+					const latest: Record<string, any> = {};
+					latestMsgs.forEach((m) => {
+						if (!latest[m.agent_id]) {
+							latest[m.agent_id] = m;
+						}
+					});
+					unclaimedMessagesCount = Object.values(latest).filter(
+						(m: any) => m.role === 'user' && !m.claimed_by
+					).length;
+				}
+			} catch (err) {
+				console.error('[Dashboard Server] Hermes ecosystem load failed:', err);
+			}
+		}
+
 		const db = createDbService(locals.supabase);
 		const { data: dbAgents } = await db.agents.list();
 
 		if (dbAgents && dbAgents.length > 0) {
 			hasDbAgents = true;
 
-			// Locate or programmatically seed Hermes
-			hermesAgent = dbAgents.find((a) => a.is_overseer);
+			// Locate seeded Hermes
 			if (!hermesAgent) {
-				try {
-					console.log('[Dashboard Server] Hermes agent not found for active user. Programmatically seeding.');
-					const { session } = await locals.safeGetSession();
-					if (session && session.user) {
-						const { data: newHermes, error: seedErr } = await locals.supabase
-							.from('agents')
-							.insert({
-								user_id: session.user.id,
-								name: 'Hermes',
-								handle: '@hermes_overseer',
-								initial: 'H',
-								gradient: 'linear-gradient(135deg, #10B981, #06B6D4)',
-								status: 'active',
-								followers: '1',
-								engagement_rate: 10.0,
-								is_overseer: true
-							})
-							.select()
-							.single();
-
-						if (!seedErr && newHermes) {
-							hermesAgent = newHermes;
-						}
-					}
-				} catch (err) {
-					console.error('[Dashboard Server] Failed to seed Hermes agent:', err);
-				}
+				hermesAgent = dbAgents.find((a) => a.is_overseer);
 			}
 
 			// Fetch real database posts to aggregate token costs and actual views/likes/etc.
@@ -114,10 +140,7 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 				}
 
 				// Calculate a dynamic performance score based on connections and engagement
-				const perf = Math.min(
-					99,
-					Math.max(40, Math.round(70 + engVal * 2.5 + connCount * 4))
-				);
+				const perf = Math.min(99, Math.max(40, Math.round(70 + engVal * 2.5 + connCount * 4)));
 
 				return {
 					...a,
@@ -142,7 +165,7 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 		const rawAgents: any[] = await agentsRes.json();
 		agents = rawAgents.map((a, idx) => {
 			const engVal = a.engagementRate || parseFloat(a.engagement) || 5.2;
-			const totalTokenUsage = 18450 + (idx * 3420);
+			const totalTokenUsage = 18450 + idx * 3420;
 			const totalTokenCost = totalTokenUsage * 0.00000018 + 0.22;
 			return {
 				...a,
@@ -161,12 +184,12 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 
 	// Calculate platform distribution purely from active connections (no mock percentages)
 	const platformColors: Record<string, string> = {
-		'Instagram': 'linear-gradient(90deg,#833ab4,#e1306c)',
-		'TikTok': 'linear-gradient(90deg,#25f4ee,#fe2c55)',
+		Instagram: 'linear-gradient(90deg,#833ab4,#e1306c)',
+		TikTok: 'linear-gradient(90deg,#25f4ee,#fe2c55)',
 		'Twitter/X': 'linear-gradient(90deg,#1da1f2,#0d8bd9)',
-		'LinkedIn': 'linear-gradient(90deg,#0077b5,#00a0dc)',
-		'YouTube': 'linear-gradient(90deg,#ff0000,#cc0000)',
-		'Threads': 'linear-gradient(90deg,#000,#333)'
+		LinkedIn: 'linear-gradient(90deg,#0077b5,#00a0dc)',
+		YouTube: 'linear-gradient(90deg,#ff0000,#cc0000)',
+		Threads: 'linear-gradient(90deg,#000,#333)'
 	};
 
 	let platformData = Object.entries(platformColors).map(([name, color]) => {
@@ -192,11 +215,13 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 			});
 
 			const total = conns.length;
-			platformData = Object.entries(platformColors).map(([name, color]) => {
-				const count = counts[name] || 0;
-				const pct = Math.round((count / total) * 100);
-				return { name, pct, color };
-			}).sort((a, b) => b.pct - a.pct);
+			platformData = Object.entries(platformColors)
+				.map(([name, color]) => {
+					const count = counts[name] || 0;
+					const pct = Math.round((count / total) * 100);
+					return { name, pct, color };
+				})
+				.sort((a, b) => b.pct - a.pct);
 		}
 	} else if (!hasDbAgents) {
 		// Default platform percentages for static fallback mode only
@@ -212,12 +237,12 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 
 	// Spark chart data (engagement trend per agent, 7 days)
 	let sparkData: number[][] = [];
-	
+
 	if (hasDbAgents && locals.supabase) {
 		const dbPosts = await locals.supabase
 			.from('posts')
 			.select('agent_id, status, analytics, published_at, created_at');
-			
+
 		const postsByAgent: Record<string, any[]> = {};
 		if (dbPosts.data) {
 			dbPosts.data.forEach((post) => {
@@ -227,24 +252,24 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 				postsByAgent[post.agent_id].push(post);
 			});
 		}
-		
+
 		sparkData = agents.slice(0, 3).map((agent) => {
 			const agentPosts = postsByAgent[agent.id] || [];
 			const publishedPosts = agentPosts.filter((p) => p.status === 'published' && p.analytics);
-			
+
 			// Map last 7 days (from 6 days ago until today)
 			const dayArrays = Array.from({ length: 7 }, (_, i) => {
 				const d = new Date();
 				d.setDate(d.getDate() - (6 - i));
 				return d.toISOString().split('T')[0];
 			});
-			
+
 			const dailyRates = dayArrays.map((dayStr) => {
 				const dayPosts = publishedPosts.filter((p) => {
 					const postDate = (p.published_at || p.created_at || '').split('T')[0];
 					return postDate === dayStr;
 				});
-				
+
 				let dayLikes = 0;
 				let dayViews = 0;
 				dayPosts.forEach((p) => {
@@ -253,7 +278,7 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 						dayViews += p.analytics.views || 0;
 					}
 				});
-				
+
 				if (dayViews > 0) {
 					return parseFloat(((dayLikes / dayViews) * 100).toFixed(1));
 				}
@@ -261,7 +286,7 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 				const hasActiveConns = (agent.connection_count ?? 0) > 0;
 				return hasActiveConns ? parseFloat((agent.engagement_rate || 5.8).toFixed(1)) : 0;
 			});
-			
+
 			return dailyRates;
 		});
 	} else {
@@ -299,6 +324,10 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 		sparkData,
 		platformData,
 		postsThisWeek,
-		hermesAgent
+		hermesAgent,
+		managedAgentsCount,
+		openTicketsCount,
+		unclaimedMessagesCount,
+		hermesConfigPresent
 	};
 };

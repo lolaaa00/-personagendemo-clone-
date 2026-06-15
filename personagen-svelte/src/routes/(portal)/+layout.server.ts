@@ -2,6 +2,7 @@ import type { LayoutServerLoad } from './$types';
 import { redirect } from '@sveltejs/kit';
 import { env } from '$env/dynamic/public';
 import { createDbService } from '$lib/server/db';
+import { getOrCreateHermes, ensureHermesConfig, ensureAgentsManagedByHermes } from '$lib/server/hermes';
 
 export const load: LayoutServerLoad = async ({ locals, fetch }) => {
 	const supabaseUrl = env.PUBLIC_SUPABASE_URL ?? '';
@@ -61,7 +62,10 @@ export const load: LayoutServerLoad = async ({ locals, fetch }) => {
 								autonomy_level: 'advisor'
 							});
 							if (configError) {
-								console.error(`[Layout Server] Failed to seed config for agent ${agent.name}:`, configError);
+								console.error(
+									`[Layout Server] Failed to seed config for agent ${agent.name}:`,
+									configError
+								);
 							}
 						}
 					}
@@ -72,6 +76,15 @@ export const load: LayoutServerLoad = async ({ locals, fetch }) => {
 			} catch (err) {
 				console.error('[Layout Server] Error seeding agents:', err);
 			}
+		}
+
+		// Core Hermes alignment checks
+		try {
+			const hermes = await getOrCreateHermes(locals.supabase, user.id);
+			await ensureHermesConfig(locals.supabase, user.id, hermes.id);
+			await ensureAgentsManagedByHermes(locals.supabase, user.id, hermes.id);
+		} catch (err) {
+			console.error('[Layout Server] Hermes alignment checks failed:', err);
 		}
 
 		return { session, user };

@@ -44,17 +44,43 @@
 	const presets = $derived.by(() => {
 		if (selectedAgent.is_overseer || selectedAgent.isHermes) {
 			return [
-				{ label: '🔍 Audit platform state', prompt: 'Audit the current system health, check active heartbeats, and report back any anomalies.' },
-				{ label: '⚡ Run health check', prompt: 'Trigger a programmatical heartbeat across all active agent instances now.' },
-				{ label: '📋 View agent roster', prompt: 'Generate an executive summary of all creator agents under your supervision.' },
-				{ label: '💾 Dump memory logs', prompt: 'Scan and dump your core memory indexes and instruction guidelines.' }
+				{
+					label: '🔍 Audit platform state',
+					prompt:
+						'Audit the current system health, check active heartbeats, and report back any anomalies.'
+				},
+				{
+					label: '⚡ Run health check',
+					prompt: 'Trigger a programmatical heartbeat across all active agent instances now.'
+				},
+				{
+					label: '📋 View agent roster',
+					prompt: 'Generate an executive summary of all creator agents under your supervision.'
+				},
+				{
+					label: '💾 Dump memory logs',
+					prompt: 'Scan and dump your core memory indexes and instruction guidelines.'
+				}
 			];
 		} else {
 			return [
-				{ label: '✍️ Draft a viral thread', prompt: `Draft a highly engaging 3-part social media thread tailored to your niche: "${selectedAgent.soul || 'creator'}".` },
-				{ label: '📊 Scan recent trend reports', prompt: 'Scan trending topics in our market and identify content opportunities.' },
-				{ label: '🔑 Review channel parameters', prompt: 'Analyze your active tools, skills, and autonomous config settings to recommend a performance improvement.' },
-				{ label: '💡 Brainstorm new hook ideas', prompt: 'Give me 5 punchy hook templates we can use for our next video or article.' }
+				{
+					label: '✍️ Draft a viral thread',
+					prompt: `Draft a highly engaging 3-part social media thread tailored to your niche: "${selectedAgent.soul || 'creator'}".`
+				},
+				{
+					label: '📊 Scan recent trend reports',
+					prompt: 'Scan trending topics in our market and identify content opportunities.'
+				},
+				{
+					label: '🔑 Review channel parameters',
+					prompt:
+						'Analyze your active tools, skills, and autonomous config settings to recommend a performance improvement.'
+				},
+				{
+					label: '💡 Brainstorm new hook ideas',
+					prompt: 'Give me 5 punchy hook templates we can use for our next video or article.'
+				}
 			];
 		}
 	});
@@ -78,7 +104,12 @@
 						id: m.id || Math.random().toString(36).substring(7),
 						role: m.role === 'model' ? 'agent' : m.role === 'user' ? 'user' : 'system',
 						content: m.content,
-						timestamp: m.created_at ? new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+						timestamp: m.created_at
+							? new Date(m.created_at).toLocaleTimeString([], {
+									hour: '2-digit',
+									minute: '2-digit'
+								})
+							: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
 						toolCalls: m.tool_calls || []
 					}));
 					scrollChatToBottom();
@@ -146,16 +177,19 @@
 		inputValue = '';
 
 		// Push user message immediately
-		messages = [...messages, {
-			id: Math.random().toString(36).substring(7),
-			role: 'user',
-			content: userText,
-			timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-		}];
+		messages = [
+			...messages,
+			{
+				id: Math.random().toString(36).substring(7),
+				role: 'user',
+				content: userText,
+				timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+			}
+		];
 		await scrollChatToBottom();
 
 		isTyping = true;
-		
+
 		// Visual logs simulation while calling the actual SDK API in background
 		currentLogs = [
 			'🧠 Checking personality profile & memories...',
@@ -185,29 +219,38 @@
 				await scrollChatToBottom();
 				await new Promise((resolve) => setTimeout(resolve, 400));
 
-				messages = [...messages, {
-					id: Math.random().toString(36).substring(7),
-					role: 'agent',
-					content: data.response,
-					timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-					toolCalls: data.toolCalls || []
-				}];
+				messages = [
+					...messages,
+					{
+						id: Math.random().toString(36).substring(7),
+						role: 'agent',
+						content: data.response,
+						timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+						toolCalls: data.toolCalls || []
+					}
+				];
 			} else {
-				messages = [...messages, {
-					id: Math.random().toString(36).substring(7),
-					role: 'system',
-					content: `Connection failed: ${data.error || 'Unable to reach agent'}`,
-					timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-				}];
+				messages = [
+					...messages,
+					{
+						id: Math.random().toString(36).substring(7),
+						role: 'system',
+						content: `Connection failed: ${data.error || 'Unable to reach agent'}`,
+						timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+					}
+				];
 			}
 		} catch (err) {
 			console.error('Chat error:', err);
-			messages = [...messages, {
-				id: Math.random().toString(36).substring(7),
-				role: 'system',
-				content: 'API connection error. Please try again.',
-				timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-			}];
+			messages = [
+				...messages,
+				{
+					id: Math.random().toString(36).substring(7),
+					role: 'system',
+					content: 'API connection error. Please try again.',
+					timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+				}
+			];
 		} finally {
 			isTyping = false;
 			currentLogs = [];
@@ -246,7 +289,12 @@ I have executed \`system_log_reader\` and analyzed our Supabase db channels. Her
 All operations are nominal. I will continue checking the scheduler cycles.`;
 			}
 			if (lower.includes('roster') || lower.includes('agents')) {
-				const list = agents.map(a => `- **${a.name}** (${a.handle || '@creator'}): Status is *${a.status || 'active'}*. Niche is \`${a.niche || 'N/A'}\`.`).join('\n');
+				const list = agents
+					.map(
+						(a) =>
+							`- **${a.name}** (${a.handle || '@creator'}): Status is *${a.status || 'active'}*. Niche is \`${a.niche || 'N/A'}\`.`
+					)
+					.join('\n');
 				return `### 📋 Supervised Agent Roster
 
 Here is the status breakdown of the creators under my orchestration:
@@ -259,7 +307,12 @@ I will keep monitoring their connection stats and notify you if any platform API
 
 As the **Chief Operational Overseer**, I can confirm our background workers are successfully operating without any exceptions. I am ready to schedule new posts, read server logs, or dispatch instructions to creators. Please let me know how I should assist next!`;
 		} else {
-			if (lower.includes('draft') || lower.includes('viral') || lower.includes('post') || lower.includes('thread')) {
+			if (
+				lower.includes('draft') ||
+				lower.includes('viral') ||
+				lower.includes('post') ||
+				lower.includes('thread')
+			) {
 				return `### ✍️ Draft: Viral Social Media Thread
 
 Tailored for my niche (\`${selectedAgent.niche || 'Digital Growth'}\`) and soul directions:
@@ -298,12 +351,15 @@ As a specialized creator, I've updated my internal logic context. I am connected
 		<!-- Section: Chief Overseer -->
 		<div class="sidebar-section">
 			<h4 class="section-title">Chief Overseer</h4>
-			<button 
-				class="agent-card overseer-card" 
+			<button
+				class="agent-card overseer-card"
 				class:active={selectedAgent.is_overseer || selectedAgent.isHermes}
 				onclick={() => switchAgent('hermes')}
 			>
-				<div class="agent-avatar-gradient" style="background: {hermesAgent.gradient || 'linear-gradient(135deg, #10B981, #06B6D4)'}">
+				<div
+					class="agent-avatar-gradient"
+					style="background: {hermesAgent.gradient || 'linear-gradient(135deg, #10B981, #06B6D4)'}"
+				>
 					{hermesAgent.initial || 'H'}
 				</div>
 				<div class="agent-info">
@@ -323,15 +379,18 @@ As a specialized creator, I've updated my internal logic context. I am connected
 				<h4 class="section-title">Active Creators</h4>
 				<span class="creator-count">{agents.length}</span>
 			</div>
-			
+
 			<div class="creators-scroll-list">
 				{#each agents as agent}
-					<button 
-						class="agent-card" 
+					<button
+						class="agent-card"
 						class:active={selectedAgent.id === agent.id && !selectedAgent.isHermes}
 						onclick={() => switchAgent(agent.id)}
 					>
-						<div class="agent-avatar-gradient" style="background: {agent.gradient || 'linear-gradient(135deg, #7c6aed, #e84393)'}">
+						<div
+							class="agent-avatar-gradient"
+							style="background: {agent.gradient || 'linear-gradient(135deg, #7c6aed, #e84393)'}"
+						>
 							{agent.initial || agent.name.charAt(0)}
 						</div>
 						<div class="agent-info">
@@ -356,11 +415,7 @@ As a specialized creator, I've updated my internal logic context. I am connected
 			<h4 class="section-title">Quick presets</h4>
 			<div class="presets-list">
 				{#each presets as preset}
-					<button 
-						class="preset-btn"
-						onclick={() => sendMessage(preset.prompt)}
-						disabled={isTyping}
-					>
+					<button class="preset-btn" onclick={() => sendMessage(preset.prompt)} disabled={isTyping}>
 						{preset.label}
 					</button>
 				{/each}
@@ -373,7 +428,11 @@ As a specialized creator, I've updated my internal logic context. I am connected
 		<!-- Header -->
 		<header class="chat-header border-strong">
 			<div class="header-left">
-				<div class="agent-avatar-gradient" style="background: {selectedAgent.gradient || 'linear-gradient(135deg, #7c6aed, #e84393)'}">
+				<div
+					class="agent-avatar-gradient"
+					style="background: {selectedAgent.gradient ||
+						'linear-gradient(135deg, #7c6aed, #e84393)'}"
+				>
 					{selectedAgent.initial || selectedAgent.name.charAt(0)}
 				</div>
 				<div class="header-agent-meta">
@@ -391,9 +450,19 @@ As a specialized creator, I've updated my internal logic context. I am connected
 
 			<div class="header-right">
 				<button class="clear-btn" onclick={clearHistory} title="Clear conversation history">
-					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+					<svg
+						width="14"
+						height="14"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					>
 						<polyline points="3 6 5 6 21 6"></polyline>
-						<path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+						<path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"
+						></path>
 					</svg>
 					Clear History
 				</button>
@@ -406,13 +475,23 @@ As a specialized creator, I've updated my internal logic context. I am connected
 				<!-- Welcome Overlay Card -->
 				<div class="chat-welcome-card glass-card border-strong">
 					<div class="welcome-avatar-wrap">
-						<div class="welcome-avatar" style="background: {selectedAgent.gradient || 'linear-gradient(135deg, #7c6aed, #e84393)'}">
+						<div
+							class="welcome-avatar"
+							style="background: {selectedAgent.gradient ||
+								'linear-gradient(135deg, #7c6aed, #e84393)'}"
+						>
 							{selectedAgent.initial || selectedAgent.name.charAt(0)}
 						</div>
-						<div class="welcome-glow" style="background: {selectedAgent.gradient || 'linear-gradient(135deg, #7c6aed, #e84393)'}"></div>
+						<div
+							class="welcome-glow"
+							style="background: {selectedAgent.gradient ||
+								'linear-gradient(135deg, #7c6aed, #e84393)'}"
+						></div>
 					</div>
 					<h2>Interact with {selectedAgent.name}</h2>
-					<p class="welcome-subtitle">Ask details, run tool diagnostic parameters, or draft copy instantly.</p>
+					<p class="welcome-subtitle">
+						Ask details, run tool diagnostic parameters, or draft copy instantly.
+					</p>
 
 					<div class="welcome-details-grid">
 						<div class="detail-box">
@@ -421,7 +500,10 @@ As a specialized creator, I've updated my internal logic context. I am connected
 						</div>
 						<div class="detail-box">
 							<h5>Skills & Competencies</h5>
-							<p>{selectedAgent.skills || 'Autonomous social strategy, campaign scheduling, performance analysis.'}</p>
+							<p>
+								{selectedAgent.skills ||
+									'Autonomous social strategy, campaign scheduling, performance analysis.'}
+							</p>
 						</div>
 					</div>
 				</div>
@@ -442,7 +524,9 @@ As a specialized creator, I've updated my internal logic context. I am connected
 								<!-- If there are execution logs, show them collapsed or elegant -->
 								{#if msg.toolCalls && msg.toolCalls.length > 0}
 									<div class="tool-logs-box">
-										<div class="tool-logs-title">⚙️ Tool Execution Trace ({msg.toolCalls.length})</div>
+										<div class="tool-logs-title">
+											⚙️ Tool Execution Trace ({msg.toolCalls.length})
+										</div>
 										{#each msg.toolCalls as call}
 											<div class="tool-log-item">
 												<span class="tool-name">⚙ {call.name}</span>
@@ -457,7 +541,10 @@ As a specialized creator, I've updated my internal logic context. I am connected
 									</div>
 								{/if}
 
-								<div class="message-bubble glass-card border-strong" class:user-bubble={msg.role === 'user'}>
+								<div
+									class="message-bubble glass-card border-strong"
+									class:user-bubble={msg.role === 'user'}
+								>
 									<div class="message-text">
 										<!-- Basic rendering with bolding/markdown formatting -->
 										{#each msg.content.split('\n') as paragraph}
@@ -472,8 +559,7 @@ As a specialized creator, I've updated my internal logic context. I am connected
 													<!-- Simple double bold formatting -->
 													{@html paragraph
 														.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-														.replace(/`(.*?)`/g, '<code class="inline-code">$1</code>')
-													}
+														.replace(/`(.*?)`/g, '<code class="inline-code">$1</code>')}
 												</p>
 											{/if}
 										{/each}
@@ -528,13 +614,22 @@ As a specialized creator, I've updated my internal logic context. I am connected
 					rows="1"
 					disabled={isTyping}
 				></textarea>
-				<button 
-					class="send-btn" 
+				<button
+					class="send-btn"
 					onclick={() => sendMessage(inputValue)}
 					disabled={!inputValue.trim() || isTyping}
 					aria-label="Send message"
 				>
-					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+					<svg
+						width="18"
+						height="18"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2.5"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					>
 						<line x1="22" y1="2" x2="11" y2="13"></line>
 						<polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
 					</svg>
@@ -1125,8 +1220,15 @@ As a specialized creator, I've updated my internal logic context. I am connected
 	}
 
 	@keyframes pulse-dot {
-		0%, 100% { transform: scale(1); opacity: 0.4; }
-		50% { transform: scale(1.3); opacity: 1; }
+		0%,
+		100% {
+			transform: scale(1);
+			opacity: 0.4;
+		}
+		50% {
+			transform: scale(1.3);
+			opacity: 1;
+		}
 	}
 
 	/* TYPING INDICATOR */
@@ -1150,12 +1252,22 @@ As a specialized creator, I've updated my internal logic context. I am connected
 		animation: bounce-dot 1.4s infinite ease-in-out both;
 	}
 
-	.typing-dot:nth-child(1) { animation-delay: -0.32s; }
-	.typing-dot:nth-child(2) { animation-delay: -0.16s; }
+	.typing-dot:nth-child(1) {
+		animation-delay: -0.32s;
+	}
+	.typing-dot:nth-child(2) {
+		animation-delay: -0.16s;
+	}
 
 	@keyframes bounce-dot {
-		0%, 80%, 100% { transform: scale(0); }
-		40% { transform: scale(1); }
+		0%,
+		80%,
+		100% {
+			transform: scale(0);
+		}
+		40% {
+			transform: scale(1);
+		}
 	}
 
 	/* CHAT FOOTER */
@@ -1181,7 +1293,9 @@ As a specialized creator, I've updated my internal logic context. I am connected
 
 	.input-glow-container:focus-within {
 		border-color: var(--accent);
-		box-shadow: 0 0 15px var(--accent-soft), var(--shadow-md);
+		box-shadow:
+			0 0 15px var(--accent-soft),
+			var(--shadow-md);
 	}
 
 	textarea {
@@ -1256,7 +1370,13 @@ As a specialized creator, I've updated my internal logic context. I am connected
 	}
 
 	@keyframes fade-in {
-		from { opacity: 0; transform: translateY(3px); }
-		to { opacity: 1; transform: translateY(0); }
+		from {
+			opacity: 0;
+			transform: translateY(3px);
+		}
+		to {
+			opacity: 1;
+			transform: translateY(0);
+		}
 	}
 </style>

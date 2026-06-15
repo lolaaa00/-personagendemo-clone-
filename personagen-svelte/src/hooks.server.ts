@@ -6,7 +6,6 @@ import { startScheduler } from '$lib/server/scheduler';
 // Start the background social posting scheduler on server boot
 startScheduler();
 
-
 const PROTECTED_PREFIXES = [
 	'/dashboard',
 	'/calendar',
@@ -52,9 +51,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 	const isPlaceholder = !supabaseUrl || supabaseUrl.includes('placeholder');
 
 	// Protect portal routes
-	const isProtected = PROTECTED_PREFIXES.some((prefix) =>
-		event.url.pathname.startsWith(prefix)
-	);
+	const isProtected = PROTECTED_PREFIXES.some((prefix) => event.url.pathname.startsWith(prefix));
 
 	if (isProtected && !isPlaceholder) {
 		try {

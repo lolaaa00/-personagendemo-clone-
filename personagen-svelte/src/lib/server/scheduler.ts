@@ -8,7 +8,6 @@ let intervalId: NodeJS.Timeout | null = null;
 let isRunning = false;
 let lastAnalyticsSyncTime = 0;
 
-
 function getServiceSupabase() {
 	const url = publicEnv.PUBLIC_SUPABASE_URL;
 	const serviceKey = env.SUPABASE_SERVICE_ROLE_KEY;
@@ -29,34 +28,36 @@ interface RssItem {
  */
 export function parseRssFeed(xmlText: string): RssItem[] {
 	const items: RssItem[] = [];
-	
+
 	// Try standard RSS <item> tags
 	const itemRegex = /<item>([\s\S]*?)<\/item>/gi;
 	let match;
 	while ((match = itemRegex.exec(xmlText)) !== null) {
 		const content = match[1];
-		
+
 		const titleMatch = /<title>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([^<]*))<\/title>/i.exec(content);
 		const linkMatch = /<link>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([^<]*))<\/link>/i.exec(content);
 		const guidMatch = /<guid[^>]*>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([^<]*))<\/guid>/i.exec(content);
-		
-		const title = (titleMatch ? (titleMatch[1] || titleMatch[2]) : '').trim();
-		const link = (linkMatch ? (linkMatch[1] || linkMatch[2]) : '').trim();
-		const guid = (guidMatch ? (guidMatch[1] || guidMatch[2]) : link).trim();
-		
+
+		const title = (titleMatch ? titleMatch[1] || titleMatch[2] : '').trim();
+		const link = (linkMatch ? linkMatch[1] || linkMatch[2] : '').trim();
+		const guid = (guidMatch ? guidMatch[1] || guidMatch[2] : link).trim();
+
 		if (title && link) {
 			items.push({ title, link, guid });
 		}
 	}
-	
+
 	// Try Atom <entry> tags if no <item> found
 	if (items.length === 0) {
 		const entryRegex = /<entry>([\s\S]*?)<\/entry>/gi;
 		while ((match = entryRegex.exec(xmlText)) !== null) {
 			const content = match[1];
-			
-			const titleMatch = /<title(?:[^>]*?)>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([^<]*))<\/title>/i.exec(content);
-			
+
+			const titleMatch = /<title(?:[^>]*?)>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([^<]*))<\/title>/i.exec(
+				content
+			);
+
 			// For Atom: <link href="url"/> or <link>url</link>
 			let link = '';
 			const linkHrefMatch = /<link[^>]+href=["']([^"']+)["']/i.exec(content);
@@ -68,18 +69,18 @@ export function parseRssFeed(xmlText: string): RssItem[] {
 					link = (linkTextMatch[1] || linkTextMatch[2]).trim();
 				}
 			}
-			
+
 			const idMatch = /<id>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([^<]*))<\/id>/i.exec(content);
-			
-			const title = (titleMatch ? (titleMatch[1] || titleMatch[2]) : '').trim();
-			const guid = (idMatch ? (idMatch[1] || idMatch[2]) : link).trim();
-			
+
+			const title = (titleMatch ? titleMatch[1] || titleMatch[2] : '').trim();
+			const guid = (idMatch ? idMatch[1] || idMatch[2] : link).trim();
+
 			if (title && link) {
 				items.push({ title, link, guid });
 			}
 		}
 	}
-	
+
 	return items;
 }
 
@@ -123,7 +124,10 @@ Instructions:
 	let postContent = res.text || '';
 	postContent = postContent.trim();
 	if (postContent.startsWith('```') && postContent.endsWith('```')) {
-		postContent = postContent.replace(/^```[a-zA-Z]*\n/, '').replace(/\n```$/, '').trim();
+		postContent = postContent
+			.replace(/^```[a-zA-Z]*\n/, '')
+			.replace(/\n```$/, '')
+			.trim();
 	}
 
 	// Calculate realistic token usage and cost based on Gemini 3.5 Flash pricing
@@ -135,7 +139,7 @@ Instructions:
 	// Gemini 1.5/3.5 Flash cost pricing structure:
 	// Input: $0.075 / 1M tokens ($0.000000075 per token)
 	// Output: $0.30 / 1M tokens ($0.000000300 per token)
-	const tokenCost = (inputTokens * 0.000000075) + (outputTokens * 0.000000300);
+	const tokenCost = inputTokens * 0.000000075 + outputTokens * 0.0000003;
 
 	return {
 		content: postContent,
@@ -184,7 +188,9 @@ async function pollRssFeeds() {
 				continue;
 			}
 
-			console.log(`[Scheduler RSS] Polling RSS feed for agent ${agent.name} (${agent.id}): ${config.rss_url}`);
+			console.log(
+				`[Scheduler RSS] Polling RSS feed for agent ${agent.name} (${agent.id}): ${config.rss_url}`
+			);
 
 			try {
 				// Update polled timestamp first
@@ -227,27 +233,9 @@ async function pollRssFeeds() {
 						continue;
 					}
 
-					console.log(`[Scheduler RSS] Repurposing new RSS item: "${item.title}"`);
-
-					// Spin it via Gemini!
-					// Spin it via Gemini!
-					const spinResult = await generateSpunPost(
-						{
-							name: agent.name,
-							handle: agent.handle,
-							niche: agent.niche,
-							soul: config.soul || agent.soul || '',
-							skills: config.skills || agent.skills || ''
-						},
-						item.title,
-						item.link,
-						apiKey
+					console.log(
+						`[Scheduler RSS] Routing new RSS item to agent ${agent.name} chat: "${item.title}"`
 					);
-
-					if (!spinResult || !spinResult.content) {
-						console.warn(`[Scheduler RSS] Generated content was empty for "${item.title}".`);
-						continue;
-					}
 
 					// Fetch connected platforms
 					const { data: connections } = await supabase
@@ -255,40 +243,50 @@ async function pollRssFeeds() {
 						.select('platform')
 						.eq('agent_id', agent.id);
 
-					const platforms = (connections && connections.length > 0)
-						? connections.map(c => c.platform)
-						: ['instagram'];
+					const platforms =
+						connections && connections.length > 0
+							? connections.map((c) => c.platform)
+							: ['instagram'];
 
-					const now = new Date();
-					const scheduledDate = now.toISOString().split('T')[0];
-					const scheduledTime = now.toTimeString().split(' ')[0];
+					const appPort = env.PORT || '5678';
+					const isDev = process.env.NODE_ENV !== 'production';
+					const localApiUrl = `http://127.0.0.1:${isDev ? '5173' : appPort}/api/agent/${agent.id}/chat`;
 
-					const { error: insertErr } = await supabase
-						.from('posts')
-						.insert({
-							user_id: config.user_id,
-							agent_id: agent.id,
-							content: spinResult.content,
-							platforms,
-							status: 'scheduled',
-							scheduled_date: scheduledDate,
-							scheduled_time: scheduledTime,
-							token_usage: spinResult.tokenUsage,
-							token_cost: spinResult.tokenCost
+					try {
+						const res = await fetch(localApiUrl, {
+							method: 'POST',
+							headers: {
+								'Content-Type': 'application/json',
+								Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`
+							},
+							body: JSON.stringify({
+								userId: config.user_id,
+								message: `[SYSTEM EVENT - NEW RSS ITEM]:
+Title: "${item.title}"
+Link: ${item.link}
+
+Instructions: Analyze this RSS item. If it is relevant to your niche, execute the 'generate_content' tool to write a draft post for the platform(s): ${JSON.stringify(platforms)}. After running the tool, output a confirmation text and stop. Do not write a conversational reply to this event.`
+							})
 						});
 
-					if (insertErr) {
-						console.error(`[Scheduler RSS] Error inserting post:`, insertErr);
+						if (!res.ok) {
+							const errText = await res.text();
+							throw new Error(`HTTP ${res.status}: ${errText}`);
+						}
+
+						console.log(
+							`[Scheduler RSS] Agent successfully completed run for RSS item: "${item.title}"`
+						);
+					} catch (chatErr) {
+						console.error(`[Scheduler RSS] Agent chat event processing failed:`, chatErr);
 						continue;
 					}
 
 					// Mark as processed
-					const { error: markErr } = await supabase
-						.from('processed_rss_items')
-						.insert({
-							agent_id: agent.id,
-							item_guid: item.guid
-						});
+					const { error: markErr } = await supabase.from('processed_rss_items').insert({
+						agent_id: agent.id,
+						item_guid: item.guid
+					});
 
 					if (markErr) {
 						console.error(`[Scheduler RSS] Error marking item as processed:`, markErr);
@@ -302,12 +300,10 @@ async function pollRssFeeds() {
 				if (!processedAny) {
 					console.log(`[Scheduler RSS] No new items to process for agent ${agent.name}.`);
 				}
-
 			} catch (feedErr) {
 				console.error(`[Scheduler RSS] Failed to process feed for agent ${agent.id}:`, feedErr);
 			}
 		}
-
 	} catch (err) {
 		console.error('[Scheduler RSS] Critical RSS loop error:', err);
 	}
@@ -333,7 +329,9 @@ async function pollScheduledPosts() {
 			.from('posts')
 			.select('*')
 			.eq('status', 'scheduled')
-			.or(`scheduled_date.lt.${currentDateStr},and(scheduled_date.eq.${currentDateStr},scheduled_time.lte.${currentTimeStr})`);
+			.or(
+				`scheduled_date.lt.${currentDateStr},and(scheduled_date.eq.${currentDateStr},scheduled_time.lte.${currentTimeStr})`
+			);
 
 		if (error) {
 			console.error('[Scheduler] Error checking scheduled posts:', error);
@@ -383,7 +381,9 @@ async function pollScheduledPosts() {
 						.maybeSingle();
 
 					if (!conn) {
-						console.warn(`[Scheduler] Agent ${post.agent_id} has no connected account for platform "${platform}". Skipping.`);
+						console.warn(
+							`[Scheduler] Agent ${post.agent_id} has no connected account for platform "${platform}". Skipping.`
+						);
 						publicationResults[normalizedPlat] = {
 							status: 'skipped',
 							error: 'No connected account'
@@ -401,7 +401,11 @@ async function pollScheduledPosts() {
 						continue;
 					}
 
-					const publishRes = await composio.executePost(post.agent_id, normalizedPlat, post.content);
+					const publishRes = await composio.executePost(
+						post.agent_id,
+						normalizedPlat,
+						post.content
+					);
 					if (publishRes.success) {
 						console.log(`[Scheduler] Post ${post.id} successfully published to ${platform}.`);
 						publishCount++;
@@ -414,7 +418,10 @@ async function pollScheduledPosts() {
 							published_at: new Date().toISOString()
 						};
 					} else {
-						console.error(`[Scheduler] Post ${post.id} failed to publish to ${platform}:`, publishRes.error);
+						console.error(
+							`[Scheduler] Post ${post.id} failed to publish to ${platform}:`,
+							publishRes.error
+						);
 						failureCount++;
 						errors.push(`${platform}: ${publishRes.error}`);
 						publicationResults[normalizedPlat] = {
@@ -429,7 +436,10 @@ async function pollScheduledPosts() {
 
 				if (publishCount === 0 && failureCount === 0 && skippedCount === 0) {
 					finalStatus = 'failed';
-					publicationResults._post = { status: 'failed', error: 'No target platforms were provided' };
+					publicationResults._post = {
+						status: 'failed',
+						error: 'No target platforms were provided'
+					};
 				}
 
 				const { error: updateError } = await supabase
@@ -503,7 +513,10 @@ export async function syncPostAnalytics() {
 
 		for (const post of posts) {
 			const publicationResults = post.publication_results || {};
-			const platform = Object.keys(publicationResults).find((key) => publicationResults[key]?.external_id) || (post.platforms && post.platforms[0]) || 'instagram';
+			const platform =
+				Object.keys(publicationResults).find((key) => publicationResults[key]?.external_id) ||
+				(post.platforms && post.platforms[0]) ||
+				'instagram';
 			const externalId = publicationResults[platform]?.external_id || post.external_id;
 			if (!externalId) continue;
 			try {
@@ -522,7 +535,9 @@ export async function syncPostAnalytics() {
 				if (updateErr) {
 					console.error(`[Scheduler] Failed to update analytics for post ${post.id}:`, updateErr);
 				} else {
-					console.log(`[Scheduler] Synced metrics for post ${post.id}: Views=${metrics.views}, Likes=${metrics.likes}`);
+					console.log(
+						`[Scheduler] Synced metrics for post ${post.id}: Views=${metrics.views}, Likes=${metrics.likes}`
+					);
 				}
 			} catch (postErr) {
 				console.error(`[Scheduler] Error syncing metrics for post ${post.id}:`, postErr);
@@ -553,7 +568,7 @@ export function startScheduler() {
 	}
 
 	console.log('[Scheduler] Starting SvelteKit social posting scheduler worker (60s tick)...');
-	
+
 	pollScheduledPosts();
 	intervalId = setInterval(pollScheduledPosts, 60 * 1000);
 }

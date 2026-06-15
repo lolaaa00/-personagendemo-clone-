@@ -2,6 +2,7 @@ import type { PageServerLoad } from './$types';
 import { createDbService } from '$lib/server/db';
 import { env } from '$env/dynamic/public';
 import { redirect } from '@sveltejs/kit';
+import { getOrCreateHermes, ensureHermesConfig, ensureAgentsManagedByHermes } from '$lib/server/hermes';
 
 export const load: PageServerLoad = async ({ locals, params, fetch }) => {
 	const supabaseUrl = env.PUBLIC_SUPABASE_URL ?? '';
@@ -27,34 +28,21 @@ export const load: PageServerLoad = async ({ locals, params, fetch }) => {
 		}
 
 		// 2. Fetch or Programmatically Seed Hermes Agent if missing
-		if (!hermesAgent) {
-			try {
-				console.log('[Chat Server] Seeding missing Hermes agent on request.');
-				const { data: seeded, error: seedErr } = await locals.supabase
-					.from('agents')
-					.insert({
-						user_id: user.id,
-						name: 'Hermes',
-						handle: '@hermes_overseer',
-						initial: 'H',
-						gradient: 'linear-gradient(135deg, #10B981, #06B6D4)',
-						status: 'active',
-						followers: '1',
-						engagement_rate: 10.0,
-						is_overseer: true,
-						soul: 'You are the platform-level Chief Operational Overseer. Monitor health, orchestrate agents, and support human administrators.',
-						skills: 'System health monitoring, scheduling, alert dispatch, database reporting',
-						tools: 'system_log_reader, agent_orchestrator'
-					})
-					.select()
-					.single();
+		try {
+			hermesAgent = await getOrCreateHermes(locals.supabase, user.id);
+			await ensureHermesConfig(locals.supabase, user.id, hermesAgent.id);
+			await ensureAgentsManagedByHermes(locals.supabase, user.id, hermesAgent.id);
 
-				if (!seedErr && seeded) {
-					hermesAgent = seeded;
+			// Refetch agents to include newly seeded/backfilled values
+			const { data: dbAgents } = await db.agents.list();
+			if (dbAgents) {
+				agents = dbAgents.filter((a) => !a.is_overseer);
+				if (!hermesAgent) {
+					hermesAgent = dbAgents.find((a) => a.is_overseer) || null;
 				}
-			} catch (err) {
-				console.error('[Chat Server] Critical failure seeding Hermes:', err);
 			}
+		} catch (err) {
+			console.error('[Chat Server] Critical failure seeding/linking Hermes:', err);
 		}
 	}
 

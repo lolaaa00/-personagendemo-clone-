@@ -2,6 +2,7 @@ import { redirect, fail } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
 import { createDbService } from '$lib/server/db';
 import { env } from '$env/dynamic/public';
+import { getOrCreateHermes, ensureHermesConfig, ensureAgentsManagedByHermes } from '$lib/server/hermes';
 
 export const load: PageServerLoad = async ({ locals }) => {
 	const { session, user } = await locals.safeGetSession();
@@ -49,60 +50,42 @@ export const load: PageServerLoad = async ({ locals }) => {
 	const db = createDbService(locals.supabase);
 
 	// 1. Fetch or Programmatically Seed Hermes Agent
-	let { data: hermesAgent, error: fetchErr } = await locals.supabase
-		.from('agents')
-		.select('*')
-		.eq('user_id', user.id)
-		.eq('is_overseer', true)
-		.maybeSingle();
-
-	if (fetchErr) {
-		console.error('[Overseer Server] Error querying Hermes agent:', fetchErr);
+	let hermesAgent: any = null;
+	try {
+		hermesAgent = await getOrCreateHermes(locals.supabase, user.id);
+		await ensureHermesConfig(locals.supabase, user.id, hermesAgent.id);
+		await ensureAgentsManagedByHermes(locals.supabase, user.id, hermesAgent.id);
+	} catch (err) {
+		console.error('[Overseer Server] Critical failure seeding/linking Hermes:', err);
+		return {
+			hermesAgent: null,
+			memories: [],
+			managedCreators: [],
+			agentsMissingConfig: [],
+			error: 'Failed to resolve Hermes overseer'
+		};
 	}
 
-	if (!hermesAgent) {
-		try {
-			console.log('[Overseer Server] Seeding missing Hermes agent on request.');
-			const { data: seeded, error: seedErr } = await locals.supabase
-				.from('agents')
-				.insert({
-					user_id: user.id,
-					name: 'Hermes',
-					handle: '@hermes_overseer',
-					initial: 'H',
-					gradient: 'linear-gradient(135deg, #10B981, #06B6D4)',
-					status: 'active',
-					followers: '1',
-					engagement_rate: 10.0,
-					is_overseer: true,
-					soul: 'You are the platform-level Chief Operational Overseer. Monitor health, orchestrate agents, and support human administrators.',
-					skills: 'System health monitoring, scheduling, alert dispatch, database reporting',
-					tools: 'system_log_reader, agent_orchestrator'
-				})
-				.select()
-				.single();
+	// 2. Fetch Memories and Creator Lists
+	const [memoriesRes, creatorsRes, configsRes] = await Promise.all([
+		db.agentMemories.listForAgent(hermesAgent.id),
+		locals.supabase.from('agents').select('*').eq('user_id', user.id).eq('is_overseer', false),
+		locals.supabase.from('agent_configs').select('agent_id').eq('user_id', user.id)
+	]);
 
-			if (seedErr) throw seedErr;
-			hermesAgent = seeded;
-		} catch (err) {
-			console.error('[Overseer Server] Critical failure seeding Hermes:', err);
-			return {
-				hermesAgent: null,
-				memories: [],
-				error: 'Failed to find or seed Hermes'
-			};
-		}
-	}
+	const memories = memoriesRes.data ?? [];
+	const dbAgents = creatorsRes.data ?? [];
+	const configs = configsRes.data ?? [];
 
-	// 2. Fetch Memories
-	const { data: memories, error: memErr } = await db.agentMemories.listForAgent(hermesAgent.id);
-	if (memErr) {
-		console.error('[Overseer Server] Error loading memories:', memErr);
-	}
+	const managedCreators = dbAgents.filter((a) => a.supervisor_agent_id === hermesAgent.id);
+	const configuredIds = new Set(configs.map((c) => c.agent_id));
+	const agentsMissingConfig = dbAgents.filter((a) => !configuredIds.has(a.id));
 
 	return {
 		hermesAgent,
-		memories: memories ?? []
+		memories,
+		managedCreators,
+		agentsMissingConfig
 	};
 };
 
@@ -119,7 +102,8 @@ export const actions: Actions = {
 		const skills = formData.get('skills')?.toString() || '';
 		const tools = formData.get('tools')?.toString() || '';
 		const initial = formData.get('initial')?.toString() || 'H';
-		const gradient = formData.get('gradient')?.toString() || 'linear-gradient(135deg, #10B981, #06B6D4)';
+		const gradient =
+			formData.get('gradient')?.toString() || 'linear-gradient(135deg, #10B981, #06B6D4)';
 
 		const db = createDbService(locals.supabase);
 

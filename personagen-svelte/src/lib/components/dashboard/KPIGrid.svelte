@@ -15,9 +15,7 @@
 	let { agents, postsThisWeek = 0 }: Props = $props();
 
 	let kpis = $derived.by<KPI[]>(() => {
-		const activeCount = agents.filter(
-			(a) => a.active && a.status !== 'pending'
-		).length;
+		const activeCount = agents.filter((a) => a.active && a.status !== 'pending').length;
 		const totalCount = agents.length;
 		const connectedCount = agents.filter(
 			(a) => (a.connection_count || a.connectionCount || 0) > 0
@@ -26,8 +24,7 @@
 		// Avg engagement
 		let avgEngText = '—';
 		if (agents.length) {
-			const avgEng =
-				agents.reduce((s, a) => s + (a.engagementRate || 0), 0) / agents.length;
+			const avgEng = agents.reduce((s, a) => s + (a.engagementRate || 0), 0) / agents.length;
 			avgEngText = avgEng > 0 ? avgEng.toFixed(1) + '%' : '—';
 		}
 
@@ -44,10 +41,8 @@
 					.replace(/\./g, '');
 				return s + (parseInt(f) || 0);
 			}, 0);
-			if (totalFollowers >= 1000000)
-				reachText = (totalFollowers / 1000000).toFixed(1) + 'M';
-			else if (totalFollowers >= 1000)
-				reachText = (totalFollowers / 1000).toFixed(1) + 'K';
+			if (totalFollowers >= 1000000) reachText = (totalFollowers / 1000000).toFixed(1) + 'M';
+			else if (totalFollowers >= 1000) reachText = (totalFollowers / 1000).toFixed(1) + 'K';
 			else reachText = String(totalFollowers);
 		}
 

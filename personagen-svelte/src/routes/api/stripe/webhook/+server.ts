@@ -49,7 +49,11 @@ export const POST: RequestHandler = async ({ request }) => {
 	try {
 		switch (event.type) {
 			case 'checkout.session.completed': {
-				await handleCheckoutCompleted(stripe, supabase, event.data.object as Stripe.Checkout.Session);
+				await handleCheckoutCompleted(
+					stripe,
+					supabase,
+					event.data.object as Stripe.Checkout.Session
+				);
 				break;
 			}
 			case 'customer.subscription.updated': {
@@ -123,7 +127,10 @@ async function handleSubscriptionUpdated(
 ) {
 	const userId = subscription.metadata?.supabase_user_id;
 	if (!userId) {
-		console.error('[Stripe Webhook] No supabase_user_id in subscription metadata:', subscription.id);
+		console.error(
+			'[Stripe Webhook] No supabase_user_id in subscription metadata:',
+			subscription.id
+		);
 		return;
 	}
 
@@ -207,10 +214,7 @@ async function handleSubscriptionDeleted(
 	console.log(`[Stripe Webhook] Subscription canceled for user ${userId}`);
 }
 
-async function handlePaymentFailed(
-	supabase: SupabaseClient,
-	invoice: Stripe.Invoice
-) {
+async function handlePaymentFailed(supabase: SupabaseClient, invoice: Stripe.Invoice) {
 	const subscriptionId = (invoice as any).subscription as string;
 	if (!subscriptionId) return;
 
@@ -241,4 +245,3 @@ async function handlePaymentFailed(
 
 	console.log(`[Stripe Webhook] Payment failed for user ${data.user_id}, marked as past_due`);
 }
-

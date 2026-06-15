@@ -8,12 +8,36 @@
 	type TabKey = 'overview' | 'products' | 'visual' | 'voice' | 'audience' | 'competitors';
 
 	const TABS: { key: TabKey; label: string; icon: string }[] = [
-		{ key: 'overview', label: 'Overview', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0h4' },
-		{ key: 'products', label: 'Products & UGC', icon: 'M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z' },
-		{ key: 'visual', label: 'Visual Identity', icon: 'M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01' },
-		{ key: 'voice', label: 'Voice & Tone', icon: 'M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z' },
-		{ key: 'audience', label: 'Target Audience', icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z' },
-		{ key: 'competitors', label: 'Competitors', icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z' }
+		{
+			key: 'overview',
+			label: 'Overview',
+			icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0h4'
+		},
+		{
+			key: 'products',
+			label: 'Products & UGC',
+			icon: 'M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z'
+		},
+		{
+			key: 'visual',
+			label: 'Visual Identity',
+			icon: 'M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01'
+		},
+		{
+			key: 'voice',
+			label: 'Voice & Tone',
+			icon: 'M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z'
+		},
+		{
+			key: 'audience',
+			label: 'Target Audience',
+			icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z'
+		},
+		{
+			key: 'competitors',
+			label: 'Competitors',
+			icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z'
+		}
 	];
 
 	const COMM_STYLES = ['Casual', 'Professional', 'Bold', 'Minimal'];
@@ -102,7 +126,9 @@
 				lastSaved = d.lastSaved || '';
 				version = d.version || '1.0';
 			}
-		} catch { /* ignore */ }
+		} catch {
+			/* ignore */
+		}
 	});
 
 	// Live preview of primary/secondary colors in real-time as they edit
@@ -135,13 +161,32 @@
 			colorsChanged = true;
 		}
 
-		localStorage.setItem(LS_KEY, JSON.stringify({
-			brandName, tagline, mission,
-			primaryColor, secondaryColor, logoUrl, fontPrimary, fontSecondary,
-			traits, commStyle, samplePost,
-			demographics, interests, platforms, painPoints,
-			competitors, products, ugcGuidelines, storeUrl, lastSaved: now, version
-		}));
+		localStorage.setItem(
+			LS_KEY,
+			JSON.stringify({
+				brandName,
+				tagline,
+				mission,
+				primaryColor,
+				secondaryColor,
+				logoUrl,
+				fontPrimary,
+				fontSecondary,
+				traits,
+				commStyle,
+				samplePost,
+				demographics,
+				interests,
+				platforms,
+				painPoints,
+				competitors,
+				products,
+				ugcGuidelines,
+				storeUrl,
+				lastSaved: now,
+				version
+			})
+		);
 		showToast('Brand brief saved', 'success');
 
 		// Only trigger magical transition on actual manual save or scrape complete
@@ -183,9 +228,12 @@
 				platforms = d.platforms || platforms;
 				painPoints = d.painPoints || painPoints;
 				products = d.products || products;
-				
+
 				saveAll(undefined, true);
-				showToast(`Successfully scraped ${brandName}! Imported ${products.length} products with photos.`, 'success');
+				showToast(
+					`Successfully scraped ${brandName}! Imported ${products.length} products with photos.`,
+					'success'
+				);
 			} else {
 				showToast(res.error || 'Failed to scrape store', 'error');
 			}
@@ -284,7 +332,10 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 	}
 
 	function handleTraitKeydown(e: KeyboardEvent) {
-		if (e.key === 'Enter') { e.preventDefault(); addTrait(); }
+		if (e.key === 'Enter') {
+			e.preventDefault();
+			addTrait();
+		}
 	}
 
 	// Competitors
@@ -298,7 +349,8 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 
 	// Sample post preview
 	let previewText = $derived(
-		samplePost || `Hey ${brandName || 'there'}! ✨ ${tagline || 'Check this out'} — we're all about ${traits.length > 0 ? traits.slice(0, 3).join(', ') : 'being awesome'}. #brand`
+		samplePost ||
+			`Hey ${brandName || 'there'}! ✨ ${tagline || 'Check this out'} — we're all about ${traits.length > 0 ? traits.slice(0, 3).join(', ') : 'being awesome'}. #brand`
 	);
 </script>
 
@@ -315,14 +367,35 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 			</div>
 			<div class="header-actions">
 				<span class="version-badge">
-					v{version} {lastSaved ? `— Last saved: ${lastSaved}` : '— Not saved yet'}
+					v{version}
+					{lastSaved ? `— Last saved: ${lastSaved}` : '— Not saved yet'}
 				</span>
 				<button class="action-btn" onclick={exportBrief}>
-					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+					<svg
+						width="14"
+						height="14"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg
+					>
 					Export
 				</button>
 				<button class="action-btn primary" onclick={(e) => saveAll(e)}>
-					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+					<svg
+						width="14"
+						height="14"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z" /><polyline
+							points="17 21 17 13 7 13 7 21"
+						/><polyline points="7 3 7 8 15 8" /></svg
+					>
 					Save
 				</button>
 			</div>
@@ -337,7 +410,16 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 				class:active={activeTab === tab.key}
 				onclick={() => (activeTab = tab.key)}
 			>
-				<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d={tab.icon}/></svg>
+				<svg
+					width="16"
+					height="16"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="1.8"
+					stroke-linecap="round"
+					stroke-linejoin="round"><path d={tab.icon} /></svg
+				>
 				<span>{tab.label}</span>
 			</button>
 		{/each}
@@ -350,14 +432,30 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 				<!-- Scraper block -->
 				<div class="scrape-card">
 					<div class="scrape-card-header">
-						<svg class="scrape-badge-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+						<svg
+							class="scrape-badge-icon"
+							width="16"
+							height="16"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2.2"
+							><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" /></svg
+						>
 						<span class="scrape-card-title">Firecrawl E-Commerce Scraper</span>
 					</div>
 					<p class="scrape-card-desc">
-						Crawl any brand store (e.g. <code>honeyforx.com</code>) to automatically extract brand voice details, mission statement, demographics, and active physical product listings with photo references.
+						Crawl any brand store (e.g. <code>honeyforx.com</code>) to automatically extract brand
+						voice details, mission statement, demographics, and active physical product listings
+						with photo references.
 					</p>
 					<div class="scrape-form">
-						<input type="text" bind:value={storeUrl} class="scrape-input" placeholder="e.g. honeyforx.com" />
+						<input
+							type="text"
+							bind:value={storeUrl}
+							class="scrape-input"
+							placeholder="e.g. honeyforx.com"
+						/>
 						<button class="scrape-submit-btn" onclick={runScrape} disabled={scraping}>
 							{#if scraping}
 								<div class="btn-spinner"></div>
@@ -377,12 +475,21 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 				<div class="form-stack">
 					<div class="field">
 						<label for="brandName">Brand Name</label>
-						<input id="brandName" type="text" bind:value={brandName} placeholder="e.g. PersonaGen" />
+						<input
+							id="brandName"
+							type="text"
+							bind:value={brandName}
+							placeholder="e.g. PersonaGen"
+						/>
 					</div>
 					<div class="field">
 						<div class="label-row">
 							<label for="tagline">Tagline</label>
-							<button class="enrich-btn" onclick={() => extendField('Tagline', tagline, (v) => tagline = v)} disabled={extending['Tagline']}>
+							<button
+								class="enrich-btn"
+								onclick={() => extendField('Tagline', tagline, (v) => (tagline = v))}
+								disabled={extending['Tagline']}
+							>
 								{#if extending['Tagline']}
 									<div class="enrich-spinner"></div>
 									Enriching...
@@ -391,12 +498,21 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 								{/if}
 							</button>
 						</div>
-						<input id="tagline" type="text" bind:value={tagline} placeholder="e.g. AI Personas That Actually Convert" />
+						<input
+							id="tagline"
+							type="text"
+							bind:value={tagline}
+							placeholder="e.g. AI Personas That Actually Convert"
+						/>
 					</div>
 					<div class="field">
 						<div class="label-row">
 							<label for="mission">Mission Statement</label>
-							<button class="enrich-btn" onclick={() => extendField('Mission Statement', mission, (v) => mission = v)} disabled={extending['Mission Statement']}>
+							<button
+								class="enrich-btn"
+								onclick={() => extendField('Mission Statement', mission, (v) => (mission = v))}
+								disabled={extending['Mission Statement']}
+							>
 								{#if extending['Mission Statement']}
 									<div class="enrich-spinner"></div>
 									Enriching...
@@ -405,15 +521,22 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 								{/if}
 							</button>
 						</div>
-						<textarea id="mission" bind:value={mission} placeholder="What is the core purpose and mission of this brand? What problem does it solve and for whom?" rows="5"></textarea>
+						<textarea
+							id="mission"
+							bind:value={mission}
+							placeholder="What is the core purpose and mission of this brand? What problem does it solve and for whom?"
+							rows="5"
+						></textarea>
 					</div>
 				</div>
 			</div>
-
 		{:else if activeTab === 'products'}
 			<div class="panel" style="animation: fadeUp 0.25s var(--ease-out);">
 				<h3>Active Store Products</h3>
-				<p class="panel-desc">Products scraped from your e-commerce store with physical reference photos for UGC generation.</p>
+				<p class="panel-desc">
+					Products scraped from your e-commerce store with physical reference photos for UGC
+					generation.
+				</p>
 
 				<div class="products-grid">
 					{#each products as prod}
@@ -423,7 +546,19 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 									<img src={prod.photoUrl} alt={prod.name} class="product-photo" />
 								{:else}
 									<div class="product-photo-fallback">
-										<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+										<svg
+											width="24"
+											height="24"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											><rect x="3" y="3" width="18" height="18" rx="2" /><circle
+												cx="8.5"
+												cy="8.5"
+												r="1.5"
+											/><polyline points="21 15 16 10 5 21" /></svg
+										>
 										<span>No Photo</span>
 									</div>
 								{/if}
@@ -439,8 +574,22 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 
 					{#if products.length === 0}
 						<div class="products-empty">
-							<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" opacity="0.3"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg>
-							<span>No products active. Use the <strong>Firecrawl Scraper</strong> on the Overview tab to crawl your site and load product photos instantly.</span>
+							<svg
+								width="48"
+								height="48"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="1.2"
+								opacity="0.3"
+								><path
+									d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"
+								/></svg
+							>
+							<span
+								>No products active. Use the <strong>Firecrawl Scraper</strong> on the Overview tab to
+								crawl your site and load product photos instantly.</span
+							>
 						</div>
 					{/if}
 				</div>
@@ -449,7 +598,9 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 					<div class="divider-line"></div>
 					<div class="ugc-presets-header">
 						<h4>DTC UGC Meta-Prompt Presets</h4>
-						<p class="presets-desc">Select an E-Commerce script style below to auto-populate your video format guidelines.</p>
+						<p class="presets-desc">
+							Select an E-Commerce script style below to auto-populate your video format guidelines.
+						</p>
 					</div>
 
 					<div class="presets-list">
@@ -464,7 +615,12 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 					<div class="field mt-6">
 						<div class="label-row">
 							<label for="ugcGuidelines">UGC Formats & Script Guidelines</label>
-							<button class="enrich-btn" onclick={() => extendField('UGC Guidelines', ugcGuidelines, (v) => ugcGuidelines = v)} disabled={extending['UGC Guidelines']}>
+							<button
+								class="enrich-btn"
+								onclick={() =>
+									extendField('UGC Guidelines', ugcGuidelines, (v) => (ugcGuidelines = v))}
+								disabled={extending['UGC Guidelines']}
+							>
 								{#if extending['UGC Guidelines']}
 									<div class="enrich-spinner"></div>
 									Enriching...
@@ -473,11 +629,15 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 								{/if}
 							</button>
 						</div>
-						<textarea id="ugcGuidelines" bind:value={ugcGuidelines} placeholder="Choose a preset above or write custom UGC guidelines for your content here..." rows="8"></textarea>
+						<textarea
+							id="ugcGuidelines"
+							bind:value={ugcGuidelines}
+							placeholder="Choose a preset above or write custom UGC guidelines for your content here..."
+							rows="8"
+						></textarea>
 					</div>
 				</div>
 			</div>
-
 		{:else if activeTab === 'visual'}
 			<div class="panel" style="animation: fadeUp 0.25s var(--ease-out);">
 				<h3>Visual Identity</h3>
@@ -503,14 +663,23 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 						</div>
 					</div>
 
-					<div class="gradient-preview-bar" style="background: linear-gradient(135deg, {primaryColor}, {secondaryColor})">
+					<div
+						class="gradient-preview-bar"
+						style="background: linear-gradient(135deg, {primaryColor}, {secondaryColor})"
+					>
 						<span>Brand Gradient Preview</span>
 					</div>
 
 					<div class="field">
 						<label for="logoUrl">Logo URL</label>
 						<div class="logo-input-wrap">
-							<input id="logoUrl" type="url" bind:value={logoUrl} placeholder="https://example.com/logo.svg" style="flex: 1; border: none !important; background: transparent !important; box-shadow: none !important; padding: 4px 0 !important;" />
+							<input
+								id="logoUrl"
+								type="url"
+								bind:value={logoUrl}
+								placeholder="https://example.com/logo.svg"
+								style="flex: 1; border: none !important; background: transparent !important; box-shadow: none !important; padding: 4px 0 !important;"
+							/>
 							{#if logoUrl}
 								<div class="logo-preview-badge">
 									<img src={logoUrl} alt="Logo Preview" class="logo-badge-img" />
@@ -522,16 +691,25 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 					<div class="font-row">
 						<div class="field">
 							<label for="fontPrimary">Primary Font</label>
-							<input id="fontPrimary" type="text" bind:value={fontPrimary} placeholder="e.g. Inter, Playfair Display" />
+							<input
+								id="fontPrimary"
+								type="text"
+								bind:value={fontPrimary}
+								placeholder="e.g. Inter, Playfair Display"
+							/>
 						</div>
 						<div class="field">
 							<label for="fontSecondary">Secondary Font</label>
-							<input id="fontSecondary" type="text" bind:value={fontSecondary} placeholder="e.g. IBM Plex Mono" />
+							<input
+								id="fontSecondary"
+								type="text"
+								bind:value={fontSecondary}
+								placeholder="e.g. IBM Plex Mono"
+							/>
 						</div>
 					</div>
 				</div>
 			</div>
-
 		{:else if activeTab === 'voice'}
 			<div class="panel" style="animation: fadeUp 0.25s var(--ease-out);">
 				<h3>Voice & Tone</h3>
@@ -546,7 +724,21 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 									<span class="tag">
 										{trait}
 										<button class="tag-remove" onclick={() => removeTrait(trait)}>
-											<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+											<svg
+												width="12"
+												height="12"
+												viewBox="0 0 24 24"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="2.5"
+												stroke-linecap="round"
+												><line x1="18" y1="6" x2="6" y2="18" /><line
+													x1="6"
+													y1="6"
+													x2="18"
+													y2="18"
+												/></svg
+											>
 										</button>
 									</span>
 								{/each}
@@ -559,7 +751,9 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 									placeholder="Type a trait and press Enter…"
 									class="tag-input"
 								/>
-								<button class="tag-add-btn" onclick={addTrait} disabled={!traitInput.trim()}>Add</button>
+								<button class="tag-add-btn" onclick={addTrait} disabled={!traitInput.trim()}
+									>Add</button
+								>
 							</div>
 						</div>
 					</div>
@@ -578,24 +772,36 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 
 					<div class="field">
 						<label for="samplePost">Custom Sample Post</label>
-						<textarea id="samplePost" bind:value={samplePost} placeholder="Write a sample post in this brand's voice… (leave empty for auto-generated preview)" rows="3"></textarea>
+						<textarea
+							id="samplePost"
+							bind:value={samplePost}
+							placeholder="Write a sample post in this brand's voice… (leave empty for auto-generated preview)"
+							rows="3"
+						></textarea>
 					</div>
 
 					<div class="preview-card">
 						<span class="preview-label">Post Preview</span>
 						<div class="preview-body">
-							<div class="preview-avatar" style="background: linear-gradient(135deg, {primaryColor}, {secondaryColor})">
+							<div
+								class="preview-avatar"
+								style="background: linear-gradient(135deg, {primaryColor}, {secondaryColor})"
+							>
 								{brandName ? brandName.charAt(0).toUpperCase() : 'P'}
 							</div>
 							<div class="preview-content">
-								<span class="preview-name">{brandName || 'Brand'} <span class="preview-handle">@{brandName ? brandName.toLowerCase().replace(/\s/g, '') : 'brand'}</span></span>
+								<span class="preview-name"
+									>{brandName || 'Brand'}
+									<span class="preview-handle"
+										>@{brandName ? brandName.toLowerCase().replace(/\s/g, '') : 'brand'}</span
+									></span
+								>
 								<p class="preview-text">{previewText}</p>
 							</div>
 						</div>
 					</div>
 				</div>
 			</div>
-
 		{:else if activeTab === 'audience'}
 			<div class="panel" style="animation: fadeUp 0.25s var(--ease-out);">
 				<h3>Target Audience</h3>
@@ -605,58 +811,98 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 					<div class="field">
 						<div class="label-row">
 							<label for="demographics">Demographics</label>
-							<button class="enrich-btn" onclick={() => extendField('Demographics', demographics, (v) => demographics = v)} disabled={extending['Demographics']}>
+							<button
+								class="enrich-btn"
+								onclick={() => extendField('Demographics', demographics, (v) => (demographics = v))}
+								disabled={extending['Demographics']}
+							>
 								{#if extending['Demographics']}
-									<div class="enrich-spinner"></div>Enriching...
+									<div class="enrich-spinner"></div>
+									Enriching...
 								{:else}
 									✨ AI Enrich
 								{/if}
 							</button>
 						</div>
-						<textarea id="demographics" bind:value={demographics} placeholder="Age range, gender, location, income level, education, occupation…" rows="4"></textarea>
+						<textarea
+							id="demographics"
+							bind:value={demographics}
+							placeholder="Age range, gender, location, income level, education, occupation…"
+							rows="4"
+						></textarea>
 					</div>
 					<div class="field">
 						<div class="label-row">
 							<label for="interests">Interests & Behaviors</label>
-							<button class="enrich-btn" onclick={() => extendField('Interests & Behaviors', interests, (v) => interests = v)} disabled={extending['Interests & Behaviors']}>
+							<button
+								class="enrich-btn"
+								onclick={() =>
+									extendField('Interests & Behaviors', interests, (v) => (interests = v))}
+								disabled={extending['Interests & Behaviors']}
+							>
 								{#if extending['Interests & Behaviors']}
-									<div class="enrich-spinner"></div>Enriching...
+									<div class="enrich-spinner"></div>
+									Enriching...
 								{:else}
 									✨ AI Enrich
 								{/if}
 							</button>
 						</div>
-						<textarea id="interests" bind:value={interests} placeholder="Hobbies, media consumption, purchasing behaviors, lifestyle preferences…" rows="4"></textarea>
+						<textarea
+							id="interests"
+							bind:value={interests}
+							placeholder="Hobbies, media consumption, purchasing behaviors, lifestyle preferences…"
+							rows="4"
+						></textarea>
 					</div>
 					<div class="field">
 						<div class="label-row">
 							<label for="platforms">Primary Platforms</label>
-							<button class="enrich-btn" onclick={() => extendField('Primary Platforms', platforms, (v) => platforms = v)} disabled={extending['Primary Platforms']}>
+							<button
+								class="enrich-btn"
+								onclick={() => extendField('Primary Platforms', platforms, (v) => (platforms = v))}
+								disabled={extending['Primary Platforms']}
+							>
 								{#if extending['Primary Platforms']}
-									<div class="enrich-spinner"></div>Enriching...
+									<div class="enrich-spinner"></div>
+									Enriching...
 								{:else}
 									✨ AI Enrich
 								{/if}
 							</button>
 						</div>
-						<textarea id="platforms" bind:value={platforms} placeholder="Where does the audience spend time? TikTok, Instagram, YouTube, LinkedIn…" rows="3"></textarea>
+						<textarea
+							id="platforms"
+							bind:value={platforms}
+							placeholder="Where does the audience spend time? TikTok, Instagram, YouTube, LinkedIn…"
+							rows="3"
+						></textarea>
 					</div>
 					<div class="field">
 						<div class="label-row">
 							<label for="painPoints">Pain Points</label>
-							<button class="enrich-btn" onclick={() => extendField('Pain Points', painPoints, (v) => painPoints = v)} disabled={extending['Pain Points']}>
+							<button
+								class="enrich-btn"
+								onclick={() => extendField('Pain Points', painPoints, (v) => (painPoints = v))}
+								disabled={extending['Pain Points']}
+							>
 								{#if extending['Pain Points']}
-									<div class="enrich-spinner"></div>Enriching...
+									<div class="enrich-spinner"></div>
+									Enriching...
 								{:else}
 									✨ AI Enrich
 								{/if}
 							</button>
 						</div>
-						<textarea id="painPoints" bind:value={painPoints} placeholder="What problems does this audience face that the brand solves?" rows="4"></textarea>
+						<textarea
+							id="painPoints"
+							bind:value={painPoints}
+							placeholder="What problems does this audience face that the brand solves?"
+							rows="4"
+						></textarea>
 					</div>
 				</div>
 			</div>
-
 		{:else if activeTab === 'competitors'}
 			<div class="panel" style="animation: fadeUp 0.25s var(--ease-out);">
 				<h3>Competitor Analysis</h3>
@@ -668,7 +914,21 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 							<div class="comp-header">
 								<span class="comp-num">#{i + 1}</span>
 								<button class="comp-remove" onclick={() => removeCompetitor(comp.id)}>
-									<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+									<svg
+										width="14"
+										height="14"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="2"
+										stroke-linecap="round"
+										><line x1="18" y1="6" x2="6" y2="18" /><line
+											x1="6"
+											y1="6"
+											x2="18"
+											y2="18"
+										/></svg
+									>
 								</button>
 							</div>
 							<div class="comp-fields">
@@ -682,7 +942,11 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 								</div>
 								<div class="field full">
 									<label>Notes</label>
-									<textarea bind:value={comp.notes} placeholder="Strengths, weaknesses, positioning, content strategy…" rows="3"></textarea>
+									<textarea
+										bind:value={comp.notes}
+										placeholder="Strengths, weaknesses, positioning, content strategy…"
+										rows="3"
+									></textarea>
 								</div>
 							</div>
 						</div>
@@ -690,13 +954,34 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 
 					{#if competitors.length === 0}
 						<div class="empty-state">
-							<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity="0.3"><path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+							<svg
+								width="32"
+								height="32"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="1.5"
+								stroke-linecap="round"
+								opacity="0.3"
+								><path
+									d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+								/></svg
+							>
 							<span>No competitors added yet</span>
 						</div>
 					{/if}
 
 					<button class="add-comp-btn" onclick={addCompetitor}>
-						<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+						<svg
+							width="14"
+							height="14"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2.5"
+							stroke-linecap="round"
+							><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg
+						>
 						Add Competitor
 					</button>
 				</div>
@@ -706,210 +991,505 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 </section>
 
 <style>
-	.page { padding: 2rem; max-width: 960px; margin: 0 auto; }
+	.page {
+		padding: 2rem;
+		max-width: 960px;
+		margin: 0 auto;
+	}
 
-	.page-header { margin-bottom: 1.5rem; }
-	.header-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
-	.page-header h1 { font-size: var(--text-3xl); background: var(--gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
-	.subtitle { color: var(--text-muted); font-size: var(--text-base); margin-top: 0.25rem; }
+	.page-header {
+		margin-bottom: 1.5rem;
+	}
+	.header-top {
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: 1rem;
+		flex-wrap: wrap;
+	}
+	.page-header h1 {
+		font-size: var(--text-3xl);
+		background: var(--gradient);
+		-webkit-background-clip: text;
+		-webkit-text-fill-color: transparent;
+		background-clip: text;
+	}
+	.subtitle {
+		color: var(--text-muted);
+		font-size: var(--text-base);
+		margin-top: 0.25rem;
+	}
 
-	.header-actions { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+	.header-actions {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		flex-wrap: wrap;
+	}
 
 	.version-badge {
-		font-size: var(--text-xs); color: var(--text-dim); font-family: var(--font-mono);
-		padding: 6px 12px; background: var(--surface-2); border: 1px solid var(--border);
-		border-radius: var(--radius-full); white-space: nowrap;
+		font-size: var(--text-xs);
+		color: var(--text-dim);
+		font-family: var(--font-mono);
+		padding: 6px 12px;
+		background: var(--surface-2);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-full);
+		white-space: nowrap;
 	}
 
 	.action-btn {
-		display: inline-flex; align-items: center; gap: 6px;
-		padding: 8px 16px; border-radius: var(--radius-xs);
-		border: 1px solid var(--border-strong); background: transparent;
-		color: var(--text-muted); font-size: 0.78rem; cursor: pointer;
-		font-family: var(--font-body); font-weight: 600;
-		transition: border-color 0.2s, color 0.2s, transform 0.2s, box-shadow 0.2s;
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		padding: 8px 16px;
+		border-radius: var(--radius-xs);
+		border: 1px solid var(--border-strong);
+		background: transparent;
+		color: var(--text-muted);
+		font-size: 0.78rem;
+		cursor: pointer;
+		font-family: var(--font-body);
+		font-weight: 600;
+		transition:
+			border-color 0.2s,
+			color 0.2s,
+			transform 0.2s,
+			box-shadow 0.2s;
 	}
-	.action-btn:hover { border-color: var(--accent-mid); color: var(--text); }
+	.action-btn:hover {
+		border-color: var(--accent-mid);
+		color: var(--text);
+	}
 	.action-btn.primary {
-		background: var(--gradient-subtle); border-color: transparent; color: #fff;
+		background: var(--gradient-subtle);
+		border-color: transparent;
+		color: #fff;
 	}
-	.action-btn.primary:hover { transform: translateY(-1px); box-shadow: var(--shadow-accent); }
+	.action-btn.primary:hover {
+		transform: translateY(-1px);
+		box-shadow: var(--shadow-accent);
+	}
 
 	/* Tabs */
 	.tabs {
-		display: flex; gap: 0.25rem; border-bottom: 1px solid var(--border);
-		margin-bottom: 1.5rem; overflow-x: auto; padding-bottom: 0;
+		display: flex;
+		gap: 0.25rem;
+		border-bottom: 1px solid var(--border);
+		margin-bottom: 1.5rem;
+		overflow-x: auto;
+		padding-bottom: 0;
 	}
 	.tab-btn {
-		display: inline-flex; align-items: center; gap: 6px;
-		padding: 0.75rem 1rem; border: none; background: none;
-		color: var(--text-dim); font-size: 0.82rem; cursor: pointer;
-		font-family: var(--font-body); font-weight: 600; white-space: nowrap;
-		border-bottom: 2px solid transparent; margin-bottom: -1px;
-		transition: color 0.2s, border-color 0.2s;
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		padding: 0.75rem 1rem;
+		border: none;
+		background: none;
+		color: var(--text-dim);
+		font-size: 0.82rem;
+		cursor: pointer;
+		font-family: var(--font-body);
+		font-weight: 600;
+		white-space: nowrap;
+		border-bottom: 2px solid transparent;
+		margin-bottom: -1px;
+		transition:
+			color 0.2s,
+			border-color 0.2s;
 	}
-	.tab-btn:hover { color: var(--text-muted); }
-	.tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+	.tab-btn:hover {
+		color: var(--text-muted);
+	}
+	.tab-btn.active {
+		color: var(--accent);
+		border-bottom-color: var(--accent);
+	}
 
 	/* Panels */
 	.panel {
-		background: var(--surface); border: 1px solid var(--border);
-		border-radius: var(--radius); padding: 1.75rem;
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		padding: 1.75rem;
 	}
-	.panel h3 { font-size: var(--text-xl); font-family: var(--font-display); margin-bottom: 0.25rem; }
-	.panel-desc { color: var(--text-muted); font-size: var(--text-base); margin-bottom: 1.5rem; }
+	.panel h3 {
+		font-size: var(--text-xl);
+		font-family: var(--font-display);
+		margin-bottom: 0.25rem;
+	}
+	.panel-desc {
+		color: var(--text-muted);
+		font-size: var(--text-base);
+		margin-bottom: 1.5rem;
+	}
 
-	.form-stack { display: flex; flex-direction: column; gap: 1.25rem; }
-	.field { display: flex; flex-direction: column; }
-	.field label { margin-bottom: 0.35rem; }
+	.form-stack {
+		display: flex;
+		flex-direction: column;
+		gap: 1.25rem;
+	}
+	.field {
+		display: flex;
+		flex-direction: column;
+	}
+	.field label {
+		margin-bottom: 0.35rem;
+	}
 
 	/* Colors */
-	.color-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }
-	.color-field { display: flex; flex-direction: column; }
-	.color-field label { margin-bottom: 0.35rem; font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; letter-spacing: var(--tracking-wider); color: var(--text-dim); }
+	.color-row {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 1.25rem;
+	}
+	.color-field {
+		display: flex;
+		flex-direction: column;
+	}
+	.color-field label {
+		margin-bottom: 0.35rem;
+		font-size: var(--text-xs);
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: var(--tracking-wider);
+		color: var(--text-dim);
+	}
 
 	.color-input-wrap {
-		display: flex; align-items: center; gap: 0.5rem;
-		background: var(--surface-2); border: 1px solid var(--border);
-		border-radius: var(--radius-sm); padding: 6px 10px;
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		background: var(--surface-2);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		padding: 6px 10px;
 	}
-	.color-picker { width: 32px; height: 32px; border: none; cursor: pointer; background: none; padding: 0; }
+	.color-picker {
+		width: 32px;
+		height: 32px;
+		border: none;
+		cursor: pointer;
+		background: none;
+		padding: 0;
+	}
 	.color-hex {
-		border: none !important; background: transparent !important;
-		box-shadow: none !important; font-family: var(--font-mono);
-		font-size: 0.82rem; width: 90px; padding: 4px !important;
+		border: none !important;
+		background: transparent !important;
+		box-shadow: none !important;
+		font-family: var(--font-mono);
+		font-size: 0.82rem;
+		width: 90px;
+		padding: 4px !important;
 	}
-	.color-preview { width: 24px; height: 24px; border-radius: var(--radius-xs); flex-shrink: 0; }
-	
+	.color-preview {
+		width: 24px;
+		height: 24px;
+		border-radius: var(--radius-xs);
+		flex-shrink: 0;
+	}
+
 	.logo-input-wrap {
-		display: flex; align-items: center; gap: 0.75rem;
-		background: var(--surface-2); border: 1px solid var(--border);
-		border-radius: var(--radius-sm); padding: 6px 12px;
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		background: var(--surface-2);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		padding: 6px 12px;
 	}
 	.logo-preview-badge {
-		width: 32px; height: 32px; border-radius: var(--radius-xs);
-		background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-strong);
-		display: flex; align-items: center; justify-content: center;
-		overflow: hidden; flex-shrink: 0;
+		width: 32px;
+		height: 32px;
+		border-radius: var(--radius-xs);
+		background: rgba(255, 255, 255, 0.05);
+		border: 1px solid var(--border-strong);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		overflow: hidden;
+		flex-shrink: 0;
 	}
 	.logo-badge-img {
-		max-width: 100%; max-height: 100%; object-fit: contain; padding: 2px;
+		max-width: 100%;
+		max-height: 100%;
+		object-fit: contain;
+		padding: 2px;
 	}
 
 	.gradient-preview-bar {
-		height: 40px; border-radius: var(--radius-sm);
-		display: flex; align-items: center; justify-content: center;
-		font-size: var(--text-xs); color: #fff; font-weight: 600;
-		text-transform: uppercase; letter-spacing: var(--tracking-wider);
-		text-shadow: 0 1px 3px rgba(0,0,0,0.3);
+		height: 40px;
+		border-radius: var(--radius-sm);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		font-size: var(--text-xs);
+		color: #fff;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: var(--tracking-wider);
+		text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 	}
 
-	.font-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+	.font-row {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 1rem;
+	}
 
 	/* Tags */
 	.tag-input-wrap {
-		background: var(--surface-2); border: 1px solid var(--border);
-		border-radius: var(--radius-sm); padding: 0.75rem;
+		background: var(--surface-2);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		padding: 0.75rem;
 	}
-	.tags-list { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.5rem; }
+	.tags-list {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.4rem;
+		margin-bottom: 0.5rem;
+	}
 	.tag {
-		display: inline-flex; align-items: center; gap: 4px;
-		padding: 4px 10px; border-radius: var(--radius-full);
-		background: var(--accent-soft); border: 1px solid var(--accent-mid);
-		color: var(--accent); font-size: 0.75rem; font-weight: 600;
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		padding: 4px 10px;
+		border-radius: var(--radius-full);
+		background: var(--accent-soft);
+		border: 1px solid var(--accent-mid);
+		color: var(--accent);
+		font-size: 0.75rem;
+		font-weight: 600;
 	}
 	.tag-remove {
-		display: flex; background: none; border: none; cursor: pointer; color: var(--accent);
-		padding: 0; opacity: 0.6; transition: opacity 0.2s;
+		display: flex;
+		background: none;
+		border: none;
+		cursor: pointer;
+		color: var(--accent);
+		padding: 0;
+		opacity: 0.6;
+		transition: opacity 0.2s;
 	}
-	.tag-remove:hover { opacity: 1; }
+	.tag-remove:hover {
+		opacity: 1;
+	}
 
-	.tag-add-row { display: flex; gap: 0.5rem; }
+	.tag-add-row {
+		display: flex;
+		gap: 0.5rem;
+	}
 	.tag-input {
-		flex: 1; border: none !important; background: transparent !important;
-		box-shadow: none !important; padding: 6px 0 !important; font-size: 0.85rem;
+		flex: 1;
+		border: none !important;
+		background: transparent !important;
+		box-shadow: none !important;
+		padding: 6px 0 !important;
+		font-size: 0.85rem;
 	}
 	.tag-add-btn {
-		padding: 4px 14px; border-radius: var(--radius-xs);
-		background: var(--accent-soft); border: 1px solid var(--accent-mid);
-		color: var(--accent); font-size: 0.75rem; cursor: pointer;
-		font-family: var(--font-body); font-weight: 600;
+		padding: 4px 14px;
+		border-radius: var(--radius-xs);
+		background: var(--accent-soft);
+		border: 1px solid var(--accent-mid);
+		color: var(--accent);
+		font-size: 0.75rem;
+		cursor: pointer;
+		font-family: var(--font-body);
+		font-weight: 600;
 		transition: background 0.2s;
 	}
-	.tag-add-btn:hover { background: var(--accent-mid); }
-	.tag-add-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+	.tag-add-btn:hover {
+		background: var(--accent-mid);
+	}
+	.tag-add-btn:disabled {
+		opacity: 0.4;
+		cursor: not-allowed;
+	}
 
 	/* Radio cards */
-	.radio-group { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem; }
-	.radio-card {
-		display: flex; align-items: center; justify-content: center;
-		padding: 0.75rem; border-radius: var(--radius-sm);
-		background: var(--surface-2); border: 1px solid var(--border);
-		cursor: pointer; transition: border-color 0.2s, background 0.2s;
+	.radio-group {
+		display: grid;
+		grid-template-columns: repeat(4, 1fr);
+		gap: 0.5rem;
 	}
-	.radio-card:hover { border-color: var(--border-hover); }
-	.radio-card.selected { border-color: var(--accent); background: var(--accent-soft); }
-	.radio-card input { display: none; }
-	.radio-label { font-size: 0.82rem; font-weight: 600; color: var(--text-muted); }
-	.radio-card.selected .radio-label { color: var(--accent); }
+	.radio-card {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0.75rem;
+		border-radius: var(--radius-sm);
+		background: var(--surface-2);
+		border: 1px solid var(--border);
+		cursor: pointer;
+		transition:
+			border-color 0.2s,
+			background 0.2s;
+	}
+	.radio-card:hover {
+		border-color: var(--border-hover);
+	}
+	.radio-card.selected {
+		border-color: var(--accent);
+		background: var(--accent-soft);
+	}
+	.radio-card input {
+		display: none;
+	}
+	.radio-label {
+		font-size: 0.82rem;
+		font-weight: 600;
+		color: var(--text-muted);
+	}
+	.radio-card.selected .radio-label {
+		color: var(--accent);
+	}
 
 	/* Preview */
 	.preview-card {
-		background: var(--surface-2); border: 1px solid var(--border);
-		border-radius: var(--radius-sm); overflow: hidden;
+		background: var(--surface-2);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		overflow: hidden;
 	}
 	.preview-label {
-		display: block; padding: 0.5rem 1rem; font-size: var(--text-xs);
-		color: var(--text-dim); font-weight: 700; text-transform: uppercase;
-		letter-spacing: var(--tracking-wider); border-bottom: 1px solid var(--border);
+		display: block;
+		padding: 0.5rem 1rem;
+		font-size: var(--text-xs);
+		color: var(--text-dim);
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: var(--tracking-wider);
+		border-bottom: 1px solid var(--border);
 	}
-	.preview-body { display: flex; gap: 0.75rem; padding: 1rem; }
+	.preview-body {
+		display: flex;
+		gap: 0.75rem;
+		padding: 1rem;
+	}
 	.preview-avatar {
-		width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;
-		display: flex; align-items: center; justify-content: center;
-		font-size: 0.85rem; font-weight: 700; color: #fff;
+		width: 36px;
+		height: 36px;
+		border-radius: 50%;
+		flex-shrink: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		font-size: 0.85rem;
+		font-weight: 700;
+		color: #fff;
 	}
-	.preview-content { flex: 1; }
-	.preview-name { font-size: 0.85rem; font-weight: 700; }
-	.preview-handle { color: var(--text-dim); font-weight: 400; font-size: 0.8rem; }
-	.preview-text { font-size: 0.85rem; color: var(--text-muted); margin-top: 0.35rem; line-height: 1.5; }
+	.preview-content {
+		flex: 1;
+	}
+	.preview-name {
+		font-size: 0.85rem;
+		font-weight: 700;
+	}
+	.preview-handle {
+		color: var(--text-dim);
+		font-weight: 400;
+		font-size: 0.8rem;
+	}
+	.preview-text {
+		font-size: 0.85rem;
+		color: var(--text-muted);
+		margin-top: 0.35rem;
+		line-height: 1.5;
+	}
 
 	/* Competitors */
-	.competitors-list { display: flex; flex-direction: column; gap: 0.75rem; }
+	.competitors-list {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+	}
 
 	.competitor-card {
-		background: var(--surface-2); border: 1px solid var(--border);
-		border-radius: var(--radius-sm); padding: 1rem;
+		background: var(--surface-2);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		padding: 1rem;
 		transition: border-color 0.2s;
 	}
-	.competitor-card:hover { border-color: var(--border-hover); }
-
-	.comp-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; }
-	.comp-num { font-size: var(--text-xs); color: var(--accent); font-family: var(--font-mono); font-weight: 700; }
-	.comp-remove {
-		display: flex; background: none; border: none; cursor: pointer;
-		color: var(--text-dim); padding: 4px; border-radius: 4px;
-		transition: color 0.2s, background 0.2s;
+	.competitor-card:hover {
+		border-color: var(--border-hover);
 	}
-	.comp-remove:hover { color: var(--error); background: var(--error-soft); }
 
-	.comp-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
-	.comp-fields .full { grid-column: span 2; }
+	.comp-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin-bottom: 0.75rem;
+	}
+	.comp-num {
+		font-size: var(--text-xs);
+		color: var(--accent);
+		font-family: var(--font-mono);
+		font-weight: 700;
+	}
+	.comp-remove {
+		display: flex;
+		background: none;
+		border: none;
+		cursor: pointer;
+		color: var(--text-dim);
+		padding: 4px;
+		border-radius: 4px;
+		transition:
+			color 0.2s,
+			background 0.2s;
+	}
+	.comp-remove:hover {
+		color: var(--error);
+		background: var(--error-soft);
+	}
+
+	.comp-fields {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 0.75rem;
+	}
+	.comp-fields .full {
+		grid-column: span 2;
+	}
 
 	.empty-state {
-		display: flex; flex-direction: column; align-items: center; gap: 0.5rem;
-		padding: 2.5rem 1rem; color: var(--text-dim); font-size: var(--text-sm);
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 2.5rem 1rem;
+		color: var(--text-dim);
+		font-size: var(--text-sm);
 	}
 
 	.add-comp-btn {
-		display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-		padding: 10px; border-radius: var(--radius-sm);
-		border: 1px dashed var(--border-strong); background: transparent;
-		color: var(--text-muted); font-size: 0.82rem; cursor: pointer;
-		font-family: var(--font-body); font-weight: 600;
-		transition: border-color 0.2s, color 0.2s, background 0.2s;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 6px;
+		padding: 10px;
+		border-radius: var(--radius-sm);
+		border: 1px dashed var(--border-strong);
+		background: transparent;
+		color: var(--text-muted);
+		font-size: 0.82rem;
+		cursor: pointer;
+		font-family: var(--font-body);
+		font-weight: 600;
+		transition:
+			border-color 0.2s,
+			color 0.2s,
+			background 0.2s;
 	}
-	.add-comp-btn:hover { border-color: var(--accent-mid); color: var(--accent); background: var(--accent-soft); }
+	.add-comp-btn:hover {
+		border-color: var(--accent-mid);
+		color: var(--accent);
+		background: var(--accent-soft);
+	}
 
 	/* Scrape Card */
 	.scrape-card {
@@ -922,8 +1502,12 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		animation: pulseGlow 4s ease-in-out infinite alternate;
 	}
 	@keyframes pulseGlow {
-		0% { box-shadow: 0 0 10px rgba(234, 179, 8, 0.02); }
-		100% { box-shadow: 0 0 25px rgba(234, 179, 8, 0.1); }
+		0% {
+			box-shadow: 0 0 10px rgba(234, 179, 8, 0.02);
+		}
+		100% {
+			box-shadow: 0 0 25px rgba(234, 179, 8, 0.1);
+		}
 	}
 	.scrape-card-header {
 		display: flex;
@@ -972,7 +1556,9 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		font-size: 0.85rem;
 		font-weight: 700;
 		cursor: pointer;
-		transition: transform 0.2s, background 0.2s;
+		transition:
+			transform 0.2s,
+			background 0.2s;
 	}
 	.scrape-submit-btn:hover:not(:disabled) {
 		background: #ca8a04;
@@ -1005,7 +1591,9 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		font-size: 0.7rem;
 		font-weight: 700;
 		cursor: pointer;
-		transition: background 0.2s, transform 0.2s;
+		transition:
+			background 0.2s,
+			transform 0.2s;
 	}
 	.enrich-btn:hover:not(:disabled) {
 		background: var(--accent-mid);
@@ -1029,7 +1617,9 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		border: 1px solid var(--border);
 		border-radius: var(--radius-sm);
 		overflow: hidden;
-		transition: border-color 0.2s, transform 0.2s;
+		transition:
+			border-color 0.2s,
+			transform 0.2s;
 	}
 	.product-card:hover {
 		border-color: var(--border-hover);
@@ -1162,7 +1752,10 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		text-align: left;
 		cursor: pointer;
 		font-family: var(--font-body);
-		transition: border-color 0.2s, background 0.2s, transform 0.2s;
+		transition:
+			border-color 0.2s,
+			background 0.2s,
+			transform 0.2s;
 	}
 	.preset-card-btn:hover {
 		border-color: var(--accent);
@@ -1211,20 +1804,45 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		animation: spin 0.8s linear infinite;
 	}
 	@keyframes spin {
-		to { transform: rotate(360deg); }
+		to {
+			transform: rotate(360deg);
+		}
 	}
 
 	@media (max-width: 640px) {
-		.page { padding: 1rem; }
-		.header-top { flex-direction: column; }
-		.tabs { gap: 0; }
-		.tab-btn { padding: 0.6rem 0.65rem; font-size: 0.72rem; }
-		.tab-btn span { display: none; }
-		.color-row { grid-template-columns: 1fr; }
-		.font-row { grid-template-columns: 1fr; }
-		.radio-group { grid-template-columns: repeat(2, 1fr); }
-		.comp-fields { grid-template-columns: 1fr; }
-		.comp-fields .full { grid-column: span 1; }
-		.panel { padding: 1.25rem; }
+		.page {
+			padding: 1rem;
+		}
+		.header-top {
+			flex-direction: column;
+		}
+		.tabs {
+			gap: 0;
+		}
+		.tab-btn {
+			padding: 0.6rem 0.65rem;
+			font-size: 0.72rem;
+		}
+		.tab-btn span {
+			display: none;
+		}
+		.color-row {
+			grid-template-columns: 1fr;
+		}
+		.font-row {
+			grid-template-columns: 1fr;
+		}
+		.radio-group {
+			grid-template-columns: repeat(2, 1fr);
+		}
+		.comp-fields {
+			grid-template-columns: 1fr;
+		}
+		.comp-fields .full {
+			grid-column: span 1;
+		}
+		.panel {
+			padding: 1.25rem;
+		}
 	}
 </style>

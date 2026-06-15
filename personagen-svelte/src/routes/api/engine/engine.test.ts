@@ -4,7 +4,7 @@ import { createClient } from '@supabase/supabase-js';
 import fs from 'fs';
 import path from 'path';
 
-// Load .env variables into process.env manually before any imports run, 
+// Load .env variables into process.env manually before any imports run,
 // to ensure SvelteKit's dynamic env has them
 const envPath = path.resolve('.env');
 if (fs.existsSync(envPath)) {
@@ -104,7 +104,7 @@ describe('Engine Local Endpoint End-to-End Tests', { timeout: 30000 }, () => {
 
 			const event = createMockEvent('personagen-account-factory', body);
 			const response = await POST(event);
-			const resJson = await response.json() as any;
+			const resJson = (await response.json()) as any;
 
 			expect(response.status).toBe(200);
 			expect(resJson.success).toBe(true);
@@ -140,7 +140,7 @@ describe('Engine Local Endpoint End-to-End Tests', { timeout: 30000 }, () => {
 		it('should handle status check', async () => {
 			const event = createMockEvent('personagen-account-factory', { action: 'check_status' });
 			const response = await POST(event);
-			const resJson = await response.json() as any;
+			const resJson = (await response.json()) as any;
 
 			expect(response.status).toBe(200);
 			expect(resJson.success).toBe(true);
@@ -160,7 +160,7 @@ describe('Engine Local Endpoint End-to-End Tests', { timeout: 30000 }, () => {
 
 			const event = createMockEvent('personagen-channel-decode', body);
 			const response = await POST(event);
-			const resJson = await response.json() as any;
+			const resJson = (await response.json()) as any;
 
 			expect(response.status).toBe(200);
 			expect(resJson.success).toBe(true);
@@ -192,7 +192,7 @@ describe('Engine Local Endpoint End-to-End Tests', { timeout: 30000 }, () => {
 
 			const event = createMockEvent('personagen-content-forge', body);
 			const response = await POST(event);
-			const resJson = await response.json() as any;
+			const resJson = (await response.json()) as any;
 
 			expect(response.status).toBe(200);
 			expect(resJson.success).toBe(true);
@@ -212,7 +212,7 @@ describe('Engine Local Endpoint End-to-End Tests', { timeout: 30000 }, () => {
 
 			const event = createMockEvent('personagen-content-forge', body);
 			const response = await POST(event);
-			const resJson = await response.json() as any;
+			const resJson = (await response.json()) as any;
 
 			expect(response.status).toBe(200);
 			expect(resJson.success).toBe(true);
@@ -230,7 +230,7 @@ describe('Engine Local Endpoint End-to-End Tests', { timeout: 30000 }, () => {
 
 			const event = createMockEvent('personagen-content-forge', body);
 			const response = await POST(event);
-			const resJson = await response.json() as any;
+			const resJson = (await response.json()) as any;
 
 			expect(response.status).toBe(200);
 			expect(resJson.success).toBe(true);
@@ -248,7 +248,7 @@ describe('Engine Local Endpoint End-to-End Tests', { timeout: 30000 }, () => {
 
 			const event = createMockEvent('personagen-content-forge', body);
 			const response = await POST(event);
-			const resJson = await response.json() as any;
+			const resJson = (await response.json()) as any;
 
 			expect(response.status).toBe(200);
 			expect(resJson.success).toBe(true);
@@ -269,7 +269,7 @@ describe('Engine Local Endpoint End-to-End Tests', { timeout: 30000 }, () => {
 
 			const event = createMockEvent('personagen-ai-generate', body);
 			const response = await POST(event);
-			const resJson = await response.json() as any;
+			const resJson = (await response.json()) as any;
 
 			expect(response.status).toBe(200);
 			expect(resJson.success).toBe(true);
@@ -304,7 +304,7 @@ describe('Engine Local Endpoint End-to-End Tests', { timeout: 30000 }, () => {
 
 			const event = createMockEvent('personagen-publish', body);
 			const response = await POST(event);
-			const resJson = await response.json() as any;
+			const resJson = (await response.json()) as any;
 
 			expect(response.status).toBe(200);
 			expect(resJson.success).toBe(true);
@@ -330,12 +330,71 @@ describe('Engine Local Endpoint End-to-End Tests', { timeout: 30000 }, () => {
 		it('should run trend calculations successfully', async () => {
 			const event = createMockEvent('personagen-trends', {});
 			const response = await POST(event);
-			const resJson = await response.json() as any;
+			const resJson = (await response.json()) as any;
 
 			expect(response.status).toBe(200);
 			expect(resJson.success).toBe(true);
 			expect(resJson.data.message).toBe('Trends recalculated and matched');
 			expect(resJson.data.timestamp).toBeTruthy();
+		});
+	});
+
+	// 7. Hermes Alignment & Supervision Tests
+	describe('Hermes Supervision Alignment (ICM)', () => {
+		it('should ensure Hermes is seeded once and creators are linked', async () => {
+			const { getOrCreateHermes, ensureHermesConfig, ensureAgentsManagedByHermes } = await import(
+				'../../../lib/server/hermes'
+			);
+
+			// 1. Seed Hermes
+			const hermes = await getOrCreateHermes(dbClient, testUserId);
+			expect(hermes).toBeTruthy();
+			expect(hermes.is_overseer).toBe(true);
+			expect(hermes.name).toBe('Hermes');
+
+			// 2. Ensure Hermes config exists
+			const config = await ensureHermesConfig(dbClient, testUserId, hermes.id);
+			expect(config).toBeTruthy();
+
+			// 3. Create a test creator agent that is not managed
+			const { data: creator, error: creatorErr } = await dbClient
+				.from('agents')
+				.insert({
+					user_id: testUserId,
+					name: 'Hermes Monitored Test Creator',
+					handle: '@hermes_test_creator',
+					niche: 'Fitness',
+					initial: 'T',
+					gradient: 'linear-gradient(135deg, #7C3AED, #4F46E5)',
+					status: 'active',
+					is_overseer: false,
+					soul: 'Test soul'
+				})
+				.select()
+				.single();
+
+			expect(creatorErr).toBeNull();
+			expect(creator).toBeTruthy();
+
+			try {
+				// 4. Run central backfill helper
+				await ensureAgentsManagedByHermes(dbClient, testUserId, hermes.id);
+
+				// 5. Fetch updated creator agent and verify linkage
+				const { data: updatedCreator, error: getErr } = await dbClient
+					.from('agents')
+					.select('*')
+					.eq('id', creator.id)
+					.single();
+
+				expect(getErr).toBeNull();
+				expect(updatedCreator.supervisor_agent_id).toBe(hermes.id);
+				expect(updatedCreator.managed_by_overseer).toBe(true);
+				expect(updatedCreator.runtime_owner).toBe('hermes-orchestrated');
+			} finally {
+				// Clean up the temporary creator
+				await dbClient.from('agents').delete().eq('id', creator.id);
+			}
 		});
 	});
 });

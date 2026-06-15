@@ -8,7 +8,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		return json({ success: false, error: 'Unauthorized' }, { status: 401 });
 	}
 
-	const body = await request.json() as any;
+	const body = (await request.json()) as any;
 	const { action } = body;
 
 	if (!action) {
@@ -30,7 +30,10 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			const { data, error } = await db.posts.create({
 				user_id: user.id,
 				agent_id: post.agent_id || post.agentId,
-				content: typeof post.content === 'object' ? JSON.stringify(post.content) : String(post.content || post.text || ''),
+				content:
+					typeof post.content === 'object'
+						? JSON.stringify(post.content)
+						: String(post.content || post.text || ''),
 				platforms,
 				status: post.status || 'draft',
 				scheduled_date: post.scheduled_date || post.scheduledDate || null,
@@ -47,13 +50,17 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			if (!id) return json({ success: false, error: 'Missing post id' }, { status: 400 });
 
 			const updateData: any = {};
-			if (content !== undefined) updateData.content = typeof content === 'object' ? JSON.stringify(content) : String(content);
+			if (content !== undefined)
+				updateData.content =
+					typeof content === 'object' ? JSON.stringify(content) : String(content);
 			if (status !== undefined) updateData.status = status;
 			if (scheduled_date !== undefined) updateData.scheduled_date = scheduled_date;
 			if (scheduled_time !== undefined) updateData.scheduled_time = scheduled_time;
 			if (published_at !== undefined) updateData.published_at = published_at;
 			if (platforms !== undefined) {
-				updateData.platforms = Array.isArray(platforms) ? platforms.map((p: string) => p.toLowerCase()) : [];
+				updateData.platforms = Array.isArray(platforms)
+					? platforms.map((p: string) => p.toLowerCase())
+					: [];
 			}
 
 			const { data, error } = await db.posts.update(id, updateData);

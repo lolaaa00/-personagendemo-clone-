@@ -31,7 +31,7 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 			const { data: postsRes, error } = await locals.supabase
 				.from('posts')
 				.select('*, agents(name)');
-			
+
 			if (!error && postsRes) {
 				dbPosts = postsRes;
 			}

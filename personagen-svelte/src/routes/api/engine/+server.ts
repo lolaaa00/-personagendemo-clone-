@@ -9,7 +9,10 @@ import { AccountFactoryClient } from '$lib/server/account-factory';
 function safeParseJson(text: string) {
 	try {
 		// Clean up markdown block wraps if model outputs them
-		const cleaned = text.replace(/```json/g, '').replace(/```/g, '').trim();
+		const cleaned = text
+			.replace(/```json/g, '')
+			.replace(/```/g, '')
+			.trim();
 		return JSON.parse(cleaned);
 	} catch (e) {
 		console.warn('[Engine] Failed to parse Gemini response as JSON:', e);
@@ -47,7 +50,9 @@ export const POST: RequestHandler = async ({ url, request, locals }) => {
 	const apiKey = env.GEMINI_API_KEY;
 	const hasGemini = apiKey && !apiKey.includes('your-gemini') && !apiKey.includes('placeholder');
 
-	console.log(`[Local Engine] Handling path "${path}" with action "${action}" (Has Gemini: ${!!hasGemini})`);
+	console.log(
+		`[Local Engine] Handling path "${path}" with action "${action}" (Has Gemini: ${!!hasGemini})`
+	);
 
 	try {
 		// ══════════════════════════════════════════════════════════════════════════
@@ -121,7 +126,10 @@ export const POST: RequestHandler = async ({ url, request, locals }) => {
 				return json({ success: true, data });
 			}
 
-			return json({ success: false, error: `Invalid account factory action: ${action}` }, { status: 400 });
+			return json(
+				{ success: false, error: `Invalid account factory action: ${action}` },
+				{ status: 400 }
+			);
 		}
 
 		// ══════════════════════════════════════════════════════════════════════════
@@ -172,7 +180,10 @@ Ensure findings contain high-fidelity, detailed, real-world context for this pla
 							}
 						}
 					} catch (geminiErr) {
-						console.error('[Engine] Gemini channel decode failed, falling back to mock:', geminiErr);
+						console.error(
+							'[Engine] Gemini channel decode failed, falling back to mock:',
+							geminiErr
+						);
 					}
 				}
 
@@ -339,7 +350,13 @@ Return a JSON object in this exact format:
 						type: 'post',
 						platform,
 						content: `🔥 ${topic}\n\nMost content creators struggle because they lack a clear blueprint.\n\nHere is how the top 1% manage their strategy:\n\n1️⃣ **Process over Output**: Systems always beat raw motivation.\n2️⃣ **Aggressive Hooking**: Grab attention in the first 2 seconds.\n3️⃣ **Niche Mastery**: Speak deeply to one person rather than broadly to everyone.\n\nWhich of these are you focusing on today? 👇`,
-						hashtags: ['#CreatorEconomy', '#SocialMedia', '#PersonalBrand', '#GrowthHacks', '#PersonaGen'],
+						hashtags: [
+							'#CreatorEconomy',
+							'#SocialMedia',
+							'#PersonalBrand',
+							'#GrowthHacks',
+							'#PersonaGen'
+						],
 						hookScore: 88,
 						estimatedReach: '11.5K - 24.2K'
 					}
@@ -580,45 +597,58 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 		if (path === 'personagen-brand-brief') {
 			if (action === 'scrape_store') {
 				const storeUrl = body.url || 'honeyforx.com';
-				const isHoneyForX = storeUrl.toLowerCase().includes('honeyforx') || storeUrl.toLowerCase().includes('honey for x');
+				const isHoneyForX =
+					storeUrl.toLowerCase().includes('honeyforx') ||
+					storeUrl.toLowerCase().includes('honey for x');
 
 				if (isHoneyForX) {
 					return json({
 						success: true,
 						data: {
 							brandName: 'HoneyX',
-							tagline: 'Nature\'s Superfood for Men - Put a Little Honey in Your Life',
-							mission: 'At HoneyX, we strive to empower men to live healthier and more fulfilling lives through nature\'s superfoods. Our proprietary formulations blend raw honey with potent organic extracts and herbs to enhance energy, strength, stamina, and daily performance.',
+							tagline: "Nature's Superfood for Men - Put a Little Honey in Your Life",
+							mission:
+								"At HoneyX, we strive to empower men to live healthier and more fulfilling lives through nature's superfoods. Our proprietary formulations blend raw honey with potent organic extracts and herbs to enhance energy, strength, stamina, and daily performance.",
 							primaryColor: '#eab308', // Amber/gold
 							secondaryColor: '#f97316', // Vibrant orange
-							logoUrl: 'https://honeyforx.com/cdn/shop/files/honeyX_logo_1920x1080_329bd0fe-fcd2-4f47-ae79-3771e4539126.webp?v=1687433087', // Authentic HoneyX Brand Logo
+							logoUrl:
+								'https://honeyforx.com/cdn/shop/files/honeyX_logo_1920x1080_329bd0fe-fcd2-4f47-ae79-3771e4539126.webp?v=1687433087', // Authentic HoneyX Brand Logo
 							traits: ['Stamina', 'Premium/Luxury', 'Energetic', 'Organic Wellness'],
 							commStyle: 'Bold',
-							demographics: 'Men and high-performers aged 24-45, athletes, fitness enthusiasts, holistic biohackers.',
-							interests: 'Biohacking, functional foods, fitness routines, high-end nutritional wellness, aesthetic vlog reviews.',
+							demographics:
+								'Men and high-performers aged 24-45, athletes, fitness enthusiasts, holistic biohackers.',
+							interests:
+								'Biohacking, functional foods, fitness routines, high-end nutritional wellness, aesthetic vlog reviews.',
 							platforms: 'TikTok (UGC), Instagram Reels, YouTube Shorts',
-							painPoints: 'Energy crashes, jittery pre-workouts, chemical supplement side-effects, boring health routines.',
+							painPoints:
+								'Energy crashes, jittery pre-workouts, chemical supplement side-effects, boring health routines.',
 							products: [
 								{
 									id: 'hx-p1',
 									name: 'HoneyX Manly Plus',
-									description: 'Nature\'s premium superfood for men. An advanced blend of raw honey, Tribulus terrestris, ginseng, and organic herbal extracts designed for enhanced performance, energy, and stamina.',
+									description:
+										"Nature's premium superfood for men. An advanced blend of raw honey, Tribulus terrestris, ginseng, and organic herbal extracts designed for enhanced performance, energy, and stamina.",
 									price: 'Rs. 2,450',
-									photoUrl: 'https://cdn.shopify.com/s/files/1/0725/5674/0906/files/honeyx_is_natural_superfood_for_men_in_Pakistan.webp?v=1729879293' // Authentic HoneyX Manly Plus product photo
+									photoUrl:
+										'https://cdn.shopify.com/s/files/1/0725/5674/0906/files/honeyx_is_natural_superfood_for_men_in_Pakistan.webp?v=1729879293' // Authentic HoneyX Manly Plus product photo
 								},
 								{
 									id: 'hx-p2',
 									name: 'Honey Shilajit Duo Active',
-									description: 'A premium, active fusion of raw wildflower honey, pure organic Shilajit, and natural performance saffron to optimize total body strength and vitality.',
+									description:
+										'A premium, active fusion of raw wildflower honey, pure organic Shilajit, and natural performance saffron to optimize total body strength and vitality.',
 									price: 'Rs. 2,450',
-									photoUrl: 'https://cdn.shopify.com/s/files/1/0725/5674/0906/files/honeyshilajitpriceinpakistan.webp?v=1753269155' // Authentic Honey Shilajit product photo
+									photoUrl:
+										'https://cdn.shopify.com/s/files/1/0725/5674/0906/files/honeyshilajitpriceinpakistan.webp?v=1753269155' // Authentic Honey Shilajit product photo
 								},
 								{
 									id: 'hx-p3',
 									name: 'Afrovit-SR Withania Somnifera Compound',
-									description: 'Formulated with high-strength Ashwagandha (Withania Somnifera) and active natural adaptogens to support stress resilience, mental focus, and optimal physical vigor.',
+									description:
+										'Formulated with high-strength Ashwagandha (Withania Somnifera) and active natural adaptogens to support stress resilience, mental focus, and optimal physical vigor.',
 									price: 'Rs. 3,000',
-									photoUrl: 'https://cdn.shopify.com/s/files/1/0725/5674/0906/files/naturalandorganicafrovitsrcapletsbyhoneyx.webp?v=1753091546' // Authentic Afrovit-SR caplets photo
+									photoUrl:
+										'https://cdn.shopify.com/s/files/1/0725/5674/0906/files/naturalandorganicafrovitsrcapletsbyhoneyx.webp?v=1753091546' // Authentic Afrovit-SR caplets photo
 								}
 							]
 						}
@@ -640,14 +670,17 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 						demographics: 'Modern online shoppers aged 18-35.',
 						interests: 'Online shopping, premium lifestyle goods, social media trends.',
 						platforms: 'Instagram, TikTok',
-						painPoints: 'Hard-to-source quality items, unreliable shipping, generic customer support.',
+						painPoints:
+							'Hard-to-source quality items, unreliable shipping, generic customer support.',
 						products: [
 							{
 								id: 'gen-p1',
 								name: 'Signature Lifestyle Item',
-								description: 'Our flagship product designed for premium aesthetics and ultimate everyday functionality.',
+								description:
+									'Our flagship product designed for premium aesthetics and ultimate everyday functionality.',
 								price: '$45.00',
-								photoUrl: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=400&q=80'
+								photoUrl:
+									'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=400&q=80'
 							}
 						]
 					}
@@ -726,7 +759,8 @@ Output ONLY the enriched expanded text directly. Do NOT include markdown code bl
 			return json({
 				success: true,
 				data: {
-					message: 'Post queued for publishing. The scheduler will mark it published only after Composio succeeds.',
+					message:
+						'Post queued for publishing. The scheduler will mark it published only after Composio succeeds.',
 					queuedAt: new Date().toISOString()
 				}
 			});

@@ -9,7 +9,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	}
 
 	try {
-		const body = await request.json() as any;
+		const body = (await request.json()) as any;
 		const {
 			agentId,
 			soulText,
@@ -30,7 +30,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			followers,
 			engagementRate,
 			handle,
-			status
+			status,
+			supervisorAgentId,
+			runtimeOwner
 		} = body;
 
 		if (!agentId) {
@@ -50,9 +52,17 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		if (gradient !== undefined) agentUpdatePayload.gradient = gradient;
 		if (initial !== undefined) agentUpdatePayload.initial = initial;
 		if (followers !== undefined) agentUpdatePayload.followers = String(followers);
-		if (engagementRate !== undefined) agentUpdatePayload.engagement_rate = parseFloat(engagementRate as any) || 0;
+		if (engagementRate !== undefined)
+			agentUpdatePayload.engagement_rate = parseFloat(engagementRate as any) || 0;
 		if (handle !== undefined) agentUpdatePayload.handle = handle;
 		if (status !== undefined) agentUpdatePayload.status = status;
+		if (supervisorAgentId !== undefined) {
+			agentUpdatePayload.supervisor_agent_id = supervisorAgentId || null;
+			agentUpdatePayload.managed_by_overseer = !!supervisorAgentId;
+		}
+		if (runtimeOwner !== undefined) {
+			agentUpdatePayload.runtime_owner = runtimeOwner;
+		}
 
 		if (Object.keys(agentUpdatePayload).length > 0) {
 			const { error: agentErr } = await db.agents.update(agentId, agentUpdatePayload);
@@ -106,13 +116,23 @@ export const DELETE: RequestHandler = async ({ request, locals }) => {
 	}
 
 	try {
-		const { agentId } = await request.json() as any;
+		const { agentId } = (await request.json()) as any;
 
 		if (!agentId) {
 			return json({ success: false, error: 'Missing agentId' }, { status: 400 });
 		}
 
 		const db = createDbService(locals.supabase);
+
+		// Guard: check if the agent is an overseer
+		const { data: agent, error: getErr } = await db.agents.get(agentId);
+		if (getErr) throw getErr;
+		if (agent && agent.is_overseer) {
+			return json(
+				{ success: false, error: 'Deleting the Hermes overseer agent is forbidden.' },
+				{ status: 403 }
+			);
+		}
 
 		// Clean up dependant rows first to avoid foreign key violations
 		await locals.supabase.from('agent_configs').delete().eq('agent_id', agentId);
@@ -132,4 +152,3 @@ export const DELETE: RequestHandler = async ({ request, locals }) => {
 		return json({ success: false, error: (err as Error).message }, { status: 500 });
 	}
 };
-

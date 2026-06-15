@@ -5,14 +5,14 @@ import path from 'path';
 const envPath = path.resolve('.env');
 const envContent = fs.readFileSync(envPath, 'utf-8');
 const env = {};
-envContent.split('\n').forEach(line => {
-  const match = line.match(/^\s*([\w_]+)\s*=\s*(.*)\s*$/);
-  if (match) {
-    let val = match[2].trim();
-    if (val.startsWith('"') && val.endsWith('"')) val = val.slice(1, -1);
-    if (val.startsWith("'") && val.endsWith("'")) val = val.slice(1, -1);
-    env[match[1]] = val;
-  }
+envContent.split('\n').forEach((line) => {
+	const match = line.match(/^\s*([\w_]+)\s*=\s*(.*)\s*$/);
+	if (match) {
+		let val = match[2].trim();
+		if (val.startsWith('"') && val.endsWith('"')) val = val.slice(1, -1);
+		if (val.startsWith("'") && val.endsWith("'")) val = val.slice(1, -1);
+		env[match[1]] = val;
+	}
 });
 
 const supabaseUrl = env.PUBLIC_SUPABASE_URL;
@@ -26,11 +26,17 @@ ALTER TABLE public.posts ADD COLUMN IF NOT EXISTS token_usage INT DEFAULT 0;
 ALTER TABLE public.posts ADD COLUMN IF NOT EXISTS token_cost NUMERIC(10, 6) DEFAULT 0.000000;
 
 ALTER TABLE public.agents ADD COLUMN IF NOT EXISTS is_overseer BOOLEAN DEFAULT false;
+ALTER TABLE public.agents ADD COLUMN IF NOT EXISTS supervisor_agent_id UUID REFERENCES public.agents(id) ON DELETE SET NULL;
+ALTER TABLE public.agents ADD COLUMN IF NOT EXISTS managed_by_overseer BOOLEAN DEFAULT false;
+ALTER TABLE public.agents ADD COLUMN IF NOT EXISTS runtime_owner TEXT DEFAULT 'svelte-gemini' CHECK (runtime_owner IN ('svelte-gemini', 'hermes-daemon', 'hermes-orchestrated'));
 
 ALTER TABLE public.agent_configs ADD COLUMN IF NOT EXISTS rss_url TEXT DEFAULT '';
 ALTER TABLE public.agent_configs ADD COLUMN IF NOT EXISTS rss_active BOOLEAN DEFAULT false;
 ALTER TABLE public.agent_configs ADD COLUMN IF NOT EXISTS rss_last_polled_at TIMESTAMPTZ;
 
+
+ALTER TABLE public.chat_messages ADD COLUMN IF NOT EXISTS claimed_by TEXT;
+ALTER TABLE public.chat_messages ADD COLUMN IF NOT EXISTS claimed_at TIMESTAMPTZ;
 
 -- 2. Create chat_messages table and indexes/RLS/policies
 CREATE TABLE IF NOT EXISTS public.chat_messages (
@@ -40,6 +46,8 @@ CREATE TABLE IF NOT EXISTS public.chat_messages (
   role TEXT NOT NULL CHECK (role IN ('user', 'model', 'system')),
   content TEXT NOT NULL,
   tool_calls JSONB DEFAULT '[]'::jsonb,
+  claimed_by TEXT,
+  claimed_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -124,30 +132,39 @@ CREATE POLICY "processed_rss_items_insert" ON public.processed_rss_items
   FOR INSERT WITH CHECK (
     EXISTS (SELECT 1 FROM public.agents WHERE agents.id = agent_id AND agents.user_id = auth.uid())
   );
+
+-- Supervision Indexes & Integrity Constraints
+CREATE UNIQUE INDEX IF NOT EXISTS idx_agents_one_overseer_per_user
+ON public.agents(user_id)
+WHERE is_overseer = true;
+
+CREATE INDEX IF NOT EXISTS idx_agents_supervisor_agent_id ON public.agents(supervisor_agent_id);
+CREATE INDEX IF NOT EXISTS idx_agents_managed_by_overseer ON public.agents(managed_by_overseer);
+CREATE INDEX IF NOT EXISTS idx_agents_runtime_owner ON public.agents(runtime_owner);
 `;
 
 async function run() {
-  console.log('🚀 Running database migrations on production Supabase...');
-  try {
-    const url = `${supabaseUrl}/pg/query`;
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'apikey': serviceRoleKey,
-        'Authorization': `Bearer ${serviceRoleKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        query: migrationSql
-      })
-    });
+	console.log('🚀 Running database migrations on production Supabase...');
+	try {
+		const url = `${supabaseUrl}/pg/query`;
+		const response = await fetch(url, {
+			method: 'POST',
+			headers: {
+				apikey: serviceRoleKey,
+				Authorization: `Bearer ${serviceRoleKey}`,
+				'Content-Type': 'application/json'
+			},
+			body: JSON.stringify({
+				query: migrationSql
+			})
+		});
 
-    console.log('Status:', response.status);
-    const text = await response.text();
-    console.log('Response:', text);
-  } catch (err) {
-    console.error('Error during migration:', err);
-  }
+		console.log('Status:', response.status);
+		const text = await response.text();
+		console.log('Response:', text);
+	} catch (err) {
+		console.error('Error during migration:', err);
+	}
 }
 
 run();

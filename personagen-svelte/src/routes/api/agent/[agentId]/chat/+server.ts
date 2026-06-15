@@ -3,15 +3,19 @@ import type { RequestHandler } from './$types';
 import { GoogleGenAI } from '@google/genai';
 import { env } from '$env/dynamic/private';
 import { createDbService } from '$lib/server/db';
+import { createSupabaseServiceClient } from '$lib/server/supabase';
 
 const toolsList: any[] = [
 	{
 		name: 'get_trends',
-		description: 'Get trending topics for this agent\'s niche from the Trend Scanner.',
+		description: "Get trending topics for this agent's niche from the Trend Scanner.",
 		parameters: {
 			type: 'OBJECT',
 			properties: {
-				niche: { type: 'STRING', description: 'The niche to search, e.g. "Fitness & Wellness", "Tech & AI".' }
+				niche: {
+					type: 'STRING',
+					description: 'The niche to search, e.g. "Fitness & Wellness", "Tech & AI".'
+				}
 			},
 			required: ['niche']
 		}
@@ -34,7 +38,8 @@ const toolsList: any[] = [
 	},
 	{
 		name: 'decode_channel',
-		description: 'Decode a competitor channel/profile content strategy using 9-layer scorecard analysis.',
+		description:
+			'Decode a competitor channel/profile content strategy using 9-layer scorecard analysis.',
 		parameters: {
 			type: 'OBJECT',
 			properties: {
@@ -52,6 +57,25 @@ const toolsList: any[] = [
 			properties: {
 				limit: { type: 'INTEGER', description: 'Maximum number of posts to return.' }
 			}
+		}
+	},
+	{
+		name: 'report_to_overseer',
+		description: 'Report an operational issue, bug, or blocker to the platform overseer (Hermes) for automatic ticketing and administrator review.',
+		parameters: {
+			type: 'OBJECT',
+			properties: {
+				issue: {
+					type: 'STRING',
+					description: 'Detailed description of the issue or blocker.'
+				},
+				priority: {
+					type: 'STRING',
+					enum: ['low', 'medium', 'high', 'urgent'],
+					description: 'Urgency tier of the ticket.'
+				}
+			},
+			required: ['issue']
 		}
 	}
 ];
@@ -75,7 +99,8 @@ Specify target markets, popular tags, and what is currently trending today. Make
 				model: 'gemini-3.5-flash',
 				contents: [{ role: 'user', parts: [{ text: prompt }] }],
 				config: {
-					systemInstruction: "You are a professional social media trend scanner. Analyze search grounding results and provide a bulleted list of current trends.",
+					systemInstruction:
+						'You are a professional social media trend scanner. Analyze search grounding results and provide a bulleted list of current trends.',
 					tools: [{ googleSearch: {} }]
 				}
 			});
@@ -104,13 +129,30 @@ Write a ready-to-publish draft for each platform (Instagram, Facebook, YouTube, 
 				model: 'gemini-3.5-flash',
 				contents: [{ role: 'user', parts: [{ text: prompt }] }],
 				config: {
-					systemInstruction: "You are a senior social media copywriter. Generate tailored post drafts according to each platform's character limits and best practices."
+					systemInstruction:
+						"You are a senior social media copywriter. Generate tailored post drafts according to each platform's character limits and best practices."
 				}
 			});
 
+			const generatedText = res.text || '';
+			const db = createDbService(supabase);
+			const { data: postData, error: postErr } = await db.posts.create({
+				user_id: userId,
+				agent_id: agentId,
+				content: generatedText,
+				platforms: platformsList,
+				status: 'draft',
+				scheduled_date: null,
+				scheduled_time: null,
+				published_at: null
+			});
+
+			if (postErr) throw postErr;
+
 			return {
 				success: true,
-				content: res.text || 'Failed to generate content'
+				postId: postData.id,
+				content: generatedText
 			};
 		} catch (err) {
 			console.error('[Generate Content Tool] Error:', err);
@@ -126,10 +168,16 @@ Write a ready-to-publish draft for each platform (Instagram, Facebook, YouTube, 
 				const crawlRes = await fetchFn(args.url);
 				if (crawlRes.ok) {
 					const html = await crawlRes.text();
-					pageText = html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').substring(0, 3000);
+					pageText = html
+						.replace(/<[^>]*>/g, ' ')
+						.replace(/\s+/g, ' ')
+						.substring(0, 3000);
 				}
 			} catch (crawlErr) {
-				console.warn('[Decoder Tool] Direct crawl failed (normal for JS-heavy or protected sites):', crawlErr);
+				console.warn(
+					'[Decoder Tool] Direct crawl failed (normal for JS-heavy or protected sites):',
+					crawlErr
+				);
 			}
 
 			const prompt = `Perform a competitor content strategy analysis for this channel URL:
@@ -143,7 +191,8 @@ Conduct a 9-layer scorecard audit (1-100 score, Hook structures, Visual DNA, Rhy
 				model: 'gemini-3.5-flash',
 				contents: [{ role: 'user', parts: [{ text: prompt }] }],
 				config: {
-					systemInstruction: "You are an expert content strategist. Audit the competitor data and write a structured 9-layer scorecard report.",
+					systemInstruction:
+						'You are an expert content strategist. Audit the competitor data and write a structured 9-layer scorecard report.',
 					tools: [{ googleSearch: {} }]
 				}
 			});
@@ -172,15 +221,13 @@ Conduct a 9-layer scorecard audit (1-100 score, Hook structures, Visual DNA, Rhy
 
 	if (name === 'save_memory') {
 		try {
-			const { error } = await supabase
-				.from('agent_memories')
-				.insert({
-					user_id: userId,
-					agent_id: agentId,
-					content: args.content,
-					importance: args.importance || 1,
-					memory_type: 'fact'
-				});
+			const { error } = await supabase.from('agent_memories').insert({
+				user_id: userId,
+				agent_id: agentId,
+				content: args.content,
+				importance: args.importance || 1,
+				memory_type: 'fact'
+			});
 			if (error) throw error;
 			return {
 				success: true,
@@ -194,16 +241,14 @@ Conduct a 9-layer scorecard audit (1-100 score, Hook structures, Visual DNA, Rhy
 
 	if (name === 'create_new_agent') {
 		try {
-			const { error } = await supabase
-				.from('agents')
-				.insert({
-					user_id: userId,
-					name: args.name,
-					handle: args.handle,
-					niche: args.niche,
-					soul: args.soul || 'Warm and engaging UGC creator agent.',
-					status: 'active'
-				});
+			const { error } = await supabase.from('agents').insert({
+				user_id: userId,
+				name: args.name,
+				handle: args.handle,
+				niche: args.niche,
+				soul: args.soul || 'Warm and engaging UGC creator agent.',
+				status: 'active'
+			});
 			if (error) throw error;
 			return {
 				success: true,
@@ -217,12 +262,25 @@ Conduct a 9-layer scorecard audit (1-100 score, Hook structures, Visual DNA, Rhy
 
 	if (name === 'collaborate_with_agent') {
 		try {
+			const { data: initiator } = await supabase
+				.from('agents')
+				.select('name, handle')
+				.eq('id', agentId)
+				.single();
+
+			const senderLabel = initiator
+				? `${initiator.name} (@${initiator.handle})`
+				: 'Hermes Overseer';
+
 			const res = await fetchFn(`/api/agent/${args.targetAgentId}/chat`, {
 				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
+				headers: {
+					'Content-Type': 'application/json',
+					Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`
+				},
 				body: JSON.stringify({
-					message: args.message,
-					history: []
+					userId,
+					message: `[Collaboration from ${senderLabel}]: ${args.message}`
 				})
 			});
 			const data = await res.json();
@@ -239,6 +297,88 @@ Conduct a 9-layer scorecard audit (1-100 score, Hook structures, Visual DNA, Rhy
 			}
 		} catch (err) {
 			console.error('[Collaborate Tool] Error:', err);
+			return { success: false, error: (err as Error).message };
+		}
+	}
+
+	if (name === 'report_to_overseer') {
+		try {
+			// 1. Fetch current agent to determine who is reporting
+			const { data: reporterAgent, error: fetchAgentErr } = await supabase
+				.from('agents')
+				.select('*')
+				.eq('id', agentId)
+				.single();
+			
+			if (fetchAgentErr || !reporterAgent) {
+				throw new Error('Reporter agent not found: ' + (fetchAgentErr?.message || ''));
+			}
+
+			// 2. Determine overseer/supervisor agent ID
+			let supervisorId = reporterAgent.supervisor_agent_id;
+			if (!supervisorId) {
+				// Query the database for the overseer for this user
+				const { data: overseer, error: fetchOverseerErr } = await supabase
+					.from('agents')
+					.select('id')
+					.eq('user_id', userId)
+					.eq('is_overseer', true)
+					.maybeSingle();
+				if (!fetchOverseerErr && overseer) {
+					supervisorId = overseer.id;
+				}
+			}
+
+			if (!supervisorId) {
+				throw new Error('No overseer agent associated with user or agent.');
+			}
+
+			// 3. Create a chat message row in the overseer's chat thread
+			const { error: msgErr } = await supabase.from('chat_messages').insert({
+				user_id: userId,
+				agent_id: supervisorId,
+				role: 'user',
+				content: `[SYSTEM REPORT from ${reporterAgent.name} (@${reporterAgent.handle})]: ${args.issue}`
+			});
+			if (msgErr) console.error('[Report Overseer Tool] Error inserting alert chat message:', msgErr);
+
+			// 4. Insert a ticket in the database backlog
+			// Query current max position to place at the end of the backlog
+			const { data: tickets, error: ticketListErr } = await supabase
+				.from('tickets')
+				.select('position')
+				.order('position', { ascending: false })
+				.limit(1);
+
+			let nextPosition = 1;
+			if (!ticketListErr && tickets && tickets.length > 0) {
+				nextPosition = (tickets[0].position || 0) + 1;
+			}
+
+			const priorityValue = args.priority || 'medium';
+			const { data: ticket, error: ticketErr } = await supabase
+				.from('tickets')
+				.insert({
+					user_id: userId,
+					title: `Fix operational issue reported by ${reporterAgent.name}`,
+					description: args.issue,
+					status: 'backlog',
+					priority: priorityValue,
+					assignee_agent_id: agentId,
+					position: nextPosition
+				})
+				.select()
+				.single();
+
+			if (ticketErr) throw ticketErr;
+
+			return {
+				success: true,
+				message: `Successfully reported issue to Hermes overseer and created ticket #${ticket.id}.`,
+				ticketId: ticket.id
+			};
+		} catch (err) {
+			console.error('[Report Overseer Tool] Error:', err);
 			return { success: false, error: (err as Error).message };
 		}
 	}
@@ -299,31 +439,65 @@ export const DELETE: RequestHandler = async ({ params, locals }) => {
 // ─────────────────────────────────────────────
 // POST: Process standard message chat turn
 // ─────────────────────────────────────────────
-export const POST: RequestHandler = async ({ params, request, locals, fetch }) => {
-	const { user } = await locals.safeGetSession();
-	if (!user) {
-		return json({ success: false, error: 'Unauthorized' }, { status: 401 });
-	}
-
+export const POST: RequestHandler = async ({ params, locals, request }) => {
 	const agentId = params.agentId;
 	if (!agentId) {
 		return json({ success: false, error: 'Missing agentId' }, { status: 400 });
 	}
 
-	const db = createDbService(locals.supabase);
+	let requestBody: any;
+	try {
+		requestBody = await request.json();
+	} catch {
+		return json({ success: false, error: 'Invalid JSON body' }, { status: 400 });
+	}
+
+	// 1. Determine Auth Context and select client BEFORE fetching agent from database
+	const authHeader = request.headers.get('Authorization');
+	const serviceKey = env.SUPABASE_SERVICE_ROLE_KEY;
+	const isServiceCall = !!(authHeader && serviceKey && authHeader === `Bearer ${serviceKey}`);
+
+	let supabaseClient = locals.supabase;
+	let userId;
+
+	if (isServiceCall) {
+		try {
+			supabaseClient = createSupabaseServiceClient();
+			userId = requestBody.userId;
+		} catch (err) {
+			return json({ success: false, error: (err as Error).message }, { status: 500 });
+		}
+	} else {
+		const { user } = await locals.safeGetSession();
+		userId = user?.id;
+	}
+
+	// 2. Fetch agent with the resolved client
+	const db = createDbService(supabaseClient);
 	const { data: agent } = await db.agents.get(agentId);
 	if (!agent) {
 		return json({ success: false, error: 'Agent not found' }, { status: 404 });
 	}
 
-	const { message } = (await request.json()) as any;
+	// If service call is missing userId, fallback to the agent's owner
+	if (isServiceCall && !userId) {
+		userId = agent.user_id;
+	}
 
-	// 1. Persist User message immediately (Layer 1)
+	if (!userId) {
+		return json({ success: false, error: 'Unauthorized' }, { status: 401 });
+	}
+
+	const { message } = requestBody;
+
+	// 3. Persist User message immediately (Layer 1) and claim it for SvelteKit
 	await db.chatMessages.create({
-		user_id: user.id,
+		user_id: userId,
 		agent_id: agentId,
 		role: 'user',
-		content: message
+		content: message,
+		claimed_by: 'sveltekit',
+		claimed_at: new Date().toISOString()
 	});
 
 	const apiKey = env.GEMINI_API_KEY;
@@ -331,9 +505,9 @@ export const POST: RequestHandler = async ({ params, request, locals, fetch }) =
 	// In dev bypass/placeholder mode without key, we return a mock response but keep history synced
 	if (!apiKey || apiKey.includes('your-gemini') || apiKey.includes('placeholder')) {
 		const bypassText = `[Bypass Mode] I received: "${message}". Set a valid GEMINI_API_KEY in your .env file to enable real Gemini AI interactions.`;
-		
+
 		await db.chatMessages.create({
-			user_id: user.id,
+			user_id: userId,
 			agent_id: agentId,
 			role: 'model',
 			content: bypassText
@@ -351,7 +525,9 @@ export const POST: RequestHandler = async ({ params, request, locals, fetch }) =
 		const { data: memories } = await db.agentMemories.listForAgent(agentId);
 		let memoriesString = '';
 		if (memories && memories.length > 0) {
-			memoriesString = memories.map((m: any) => `- ${m.content} (importance: ${m.importance})`).join('\n');
+			memoriesString = memories
+				.map((m: any) => `- ${m.content} (importance: ${m.importance})`)
+				.join('\n');
 		}
 
 		// 3. Assemble System Prompt with dynamic role & memory context
@@ -397,12 +573,16 @@ Always stay in character. If you execute a tool, explain the outcome in characte
 		const localTools = [...toolsList];
 		localTools.push({
 			name: 'save_memory',
-			description: 'Save a core fact, preference, or instruction about the user, store, or brand to your long-term memory so you remember it in future conversations.',
+			description:
+				'Save a core fact, preference, or instruction about the user, store, or brand to your long-term memory so you remember it in future conversations.',
 			parameters: {
 				type: 'OBJECT',
 				properties: {
 					content: { type: 'STRING', description: 'The precise fact or instruction to remember.' },
-					importance: { type: 'INTEGER', description: 'Importance rating from 1 (low/trivial) to 5 (critical instruction).' }
+					importance: {
+						type: 'INTEGER',
+						description: 'Importance rating from 1 (low/trivial) to 5 (critical instruction).'
+					}
 				},
 				required: ['content']
 			}
@@ -426,12 +606,16 @@ Always stay in character. If you execute a tool, explain the outcome in characte
 
 			localTools.push({
 				name: 'collaborate_with_agent',
-				description: 'Ask another UGC creator agent on the platform a question, request a draft, or coordinate campaigns.',
+				description:
+					'Ask another UGC creator agent on the platform a question, request a draft, or coordinate campaigns.',
 				parameters: {
 					type: 'OBJECT',
 					properties: {
 						targetAgentId: { type: 'STRING', description: 'UUID of the target creator agent.' },
-						message: { type: 'STRING', description: 'The message, question, or brief to send to that agent.' }
+						message: {
+							type: 'STRING',
+							description: 'The message, question, or brief to send to that agent.'
+						}
 					},
 					required: ['targetAgentId', 'message']
 				}
@@ -446,10 +630,7 @@ Always stay in character. If you execute a tool, explain the outcome in characte
 			contents: currentMessages,
 			config: {
 				systemInstruction: systemPrompt,
-				tools: [
-					{ googleSearch: {} },
-					{ functionDeclarations: localTools as any }
-				],
+				tools: [{ googleSearch: {} }, { functionDeclarations: localTools as any }],
 				toolConfig: {
 					includeServerSideToolInvocations: true
 				}
@@ -478,7 +659,7 @@ Always stay in character. If you execute a tool, explain the outcome in characte
 
 				let result;
 				try {
-					result = await executeTool(name, args, locals.supabase, user.id, agentId, fetch, apiKey);
+					result = await executeTool(name, args, locals.supabase, userId, agentId, fetch, apiKey);
 					toolCallsExecuted.push({
 						id: Math.random().toString(36).substring(7),
 						name,
@@ -516,10 +697,7 @@ Always stay in character. If you execute a tool, explain the outcome in characte
 				contents: currentMessages,
 				config: {
 					systemInstruction: systemPrompt,
-					tools: [
-						{ googleSearch: {} },
-						{ functionDeclarations: localTools as any }
-					],
+					tools: [{ googleSearch: {} }, { functionDeclarations: localTools as any }],
 					toolConfig: {
 						includeServerSideToolInvocations: true
 					}
@@ -531,7 +709,7 @@ Always stay in character. If you execute a tool, explain the outcome in characte
 
 		// 6. Persist Agent's reply and tool execution logs
 		await db.chatMessages.create({
-			user_id: user.id,
+			user_id: userId,
 			agent_id: agentId,
 			role: 'model',
 			content: finalText,

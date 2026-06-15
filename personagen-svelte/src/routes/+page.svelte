@@ -1,41 +1,46 @@
 <script lang="ts">
-  import { goto } from '$app/navigation';
-  import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
+	import { onMount } from 'svelte';
 
-  let { data } = $props();
+	let { data } = $props();
 
-  onMount(() => {
-    // In dev mode (no real session), always go to dashboard
-    goto('/dashboard');
-  });
+	onMount(() => {
+		// In dev mode (no real session), always go to dashboard
+		goto('/dashboard');
+	});
 </script>
 
 <svelte:head>
-  <title>PersonaGen — AI Agent-Powered UGC Creator Management</title>
-  <meta name="description" content="Autonomous AI agents managing your UGC creator roster, content calendar, and analytics." />
+	<title>PersonaGen — AI Agent-Powered UGC Creator Management</title>
+	<meta
+		name="description"
+		content="Autonomous AI agents managing your UGC creator roster, content calendar, and analytics."
+	/>
 </svelte:head>
 
 <div class="loading-screen">
-  <div class="loader"></div>
+	<div class="loader"></div>
 </div>
 
 <style>
-  .loading-screen {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 100vh;
-    background: var(--bg);
-  }
-  .loader {
-    width: 40px;
-    height: 40px;
-    border: 3px solid var(--border);
-    border-top-color: var(--accent);
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-  }
-  @keyframes spin {
-    to { transform: rotate(360deg); }
-  }
+	.loading-screen {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		min-height: 100vh;
+		background: var(--bg);
+	}
+	.loader {
+		width: 40px;
+		height: 40px;
+		border: 3px solid var(--border);
+		border-top-color: var(--accent);
+		border-radius: 50%;
+		animation: spin 0.8s linear infinite;
+	}
+	@keyframes spin {
+		to {
+			transform: rotate(360deg);
+		}
+	}
 </style>

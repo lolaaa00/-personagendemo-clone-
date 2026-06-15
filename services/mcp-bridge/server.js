@@ -65,24 +65,33 @@ server.tool(
 // ============================================================================
 server.tool(
   "get_unresolved_user_messages",
-    "Fetches latest agent chat threads where the final turn is a user message requiring response from Hermes",
+  "Fetches latest agent chat threads where the final turn is a user message requiring response from Hermes",
   {},
   async () => {
     try {
-      const { data, error } = await supabase
-        .from("chat_messages")
-        .select("id, user_id, agent_id, role, content, created_at")
-        .order("created_at", { ascending: false })
-        .limit(50);
+      const [messagesRes, overseersRes] = await Promise.all([
+        supabase
+          .from("chat_messages")
+          .select("id, user_id, agent_id, role, content, created_at, claimed_by, claimed_at")
+          .order("created_at", { ascending: false })
+          .limit(100),
+        supabase
+          .from("agents")
+          .select("id")
+          .eq("is_overseer", true)
+      ]);
 
-      if (error) {
+      if (messagesRes.error) {
         return {
-          content: [{ type: "text", text: `Error loading messages: ${error.message}` }],
+          content: [{ type: "text", text: `Error loading messages: ${messagesRes.error.message}` }],
           isError: true
         };
       }
 
-      if (!data || data.length === 0) {
+      const data = messagesRes.data || [];
+      const overseerIds = new Set((overseersRes.data || []).map(o => o.id));
+
+      if (data.length === 0) {
         return {
           content: [{ type: "text", text: "No chat messages found in the database." }]
         };
@@ -97,9 +106,14 @@ server.tool(
       }
 
       // Filter where the latest message in the thread is from the user
-      const unresolved = Object.values(latestMessages).filter(
-        (msg) => msg.role === "user"
-      );
+      // AND it is not claimed, or the claim has expired (e.g. 30 seconds ago)
+      const now = new Date();
+      const unresolved = Object.values(latestMessages).filter((msg) => {
+        if (msg.role !== "user") return false;
+        if (!msg.claimed_by) return true;
+        const claimedTime = new Date(msg.claimed_at);
+        return now.getTime() - claimedTime.getTime() > 30000; // 30 seconds expiration
+      });
 
       if (unresolved.length === 0) {
         return {
@@ -107,12 +121,59 @@ server.tool(
         };
       }
 
+      // Sort: messages directed to Hermes overseers first
+      unresolved.sort((a, b) => {
+        const aIsOverseer = overseerIds.has(a.agent_id) ? 1 : 0;
+        const bIsOverseer = overseerIds.has(b.agent_id) ? 1 : 0;
+        return bIsOverseer - aIsOverseer;
+      });
+
       return {
-        content: [{ type: "text", text: `Unresolved conversations requiring response:\n${JSON.stringify(unresolved, null, 2)}` }]
+        content: [{ type: "text", text: `Unresolved conversations requiring response (overseers prioritized):\n${JSON.stringify(unresolved, null, 2)}` }]
       };
     } catch (e) {
       return {
         content: [{ type: "text", text: `Unexpected system error: ${e.message}` }],
+        isError: true
+      };
+    }
+  }
+);
+
+// ============================================================================
+// Tool 2b: Claim User Message
+// ============================================================================
+server.tool(
+  "claim_user_message",
+  "Claims a specific user message to prevent duplicate processing by other runtimes",
+  {
+    messageId: z.string().describe("The ID of the message to claim"),
+    claimedBy: z.string().describe("Identifier of the claimant, e.g. hermes-daemon")
+  },
+  async ({ messageId, claimedBy }) => {
+    try {
+      const { data, error } = await supabase
+        .from("chat_messages")
+        .update({
+          claimed_by: claimedBy,
+          claimed_at: new Date().toISOString()
+        })
+        .eq("id", messageId)
+        .select();
+
+      if (error) {
+        return {
+          content: [{ type: "text", text: `Failed to claim message: ${error.message}` }],
+          isError: true
+        };
+      }
+
+      return {
+        content: [{ type: "text", text: `Successfully claimed message ${messageId} for ${claimedBy}` }]
+      };
+    } catch (e) {
+      return {
+        content: [{ type: "text", text: `Unexpected error: ${e.message}` }],
         isError: true
       };
     }
@@ -171,10 +232,41 @@ server.tool(
       title: z.string().describe("Short descriptive title of the action needed (e.g. Re-auth TikTok @skincaretips)"),
       description: z.string().describe("In-depth description of the error code, web search guidelines, and instructions"),
       priority: z.enum(["low", "medium", "high", "urgent"]).describe("Impact priority of the maintenance task"),
-      userId: z.string().describe("The Supabase user_id that owns the ticket")
+      userId: z.string().describe("The Supabase user_id that owns the ticket"),
+      assigneeAgentId: z.string().optional().describe("Optional UUID of the agent to assign this ticket to")
     },
-    async ({ title, description, priority, userId }) => {
+    async ({ title, description, priority, userId, assigneeAgentId }) => {
       try {
+        if (assigneeAgentId) {
+          // Validate assignee belongs to the same userId
+          const { data: agent, error: agentErr } = await supabase
+            .from("agents")
+            .select("user_id")
+            .eq("id", assigneeAgentId)
+            .maybeSingle();
+
+          if (agentErr) {
+            return {
+              content: [{ type: "text", text: `Error validating assignee agent: ${agentErr.message}` }],
+              isError: true
+            };
+          }
+
+          if (!agent) {
+            return {
+              content: [{ type: "text", text: `Assignee agent with ID ${assigneeAgentId} not found.` }],
+              isError: true
+            };
+          }
+
+          if (agent.user_id !== userId) {
+            return {
+              content: [{ type: "text", text: `Security violation: Assignee agent does not belong to user ${userId}.` }],
+              isError: true
+            };
+          }
+        }
+
         const { data, error } = await supabase
           .from("tickets")
           .insert({
@@ -182,7 +274,8 @@ server.tool(
             title,
             description,
             status: "backlog", // Surfaces instantly on Kanban board backlog
-            priority
+            priority,
+            assignee_agent_id: assigneeAgentId || null
           })
           .select();
 
@@ -199,6 +292,104 @@ server.tool(
     } catch (e) {
       return {
         content: [{ type: "text", text: `Unexpected system error: ${e.message}` }],
+        isError: true
+      };
+    }
+  }
+);
+
+
+// ============================================================================
+// Tool 5: Get Managed Agents
+// ============================================================================
+server.tool(
+  "get_managed_agents",
+  "Fetches all creator agents managed by a specific supervisor agent (overseer)",
+  {
+    supervisorAgentId: z.string().describe("The UUID of the supervisor agent (overseer)")
+  },
+  async ({ supervisorAgentId }) => {
+    try {
+      const { data, error } = await supabase
+        .from("agents")
+        .select("id, name, handle, niche, status, managed_by_overseer, runtime_owner")
+        .eq("supervisor_agent_id", supervisorAgentId);
+
+      if (error) {
+        return {
+          content: [{ type: "text", text: `Error fetching managed agents: ${error.message}` }],
+          isError: true
+        };
+      }
+
+      return {
+        content: [{ type: "text", text: `Managed agents list:\n${JSON.stringify(data, null, 2)}` }]
+      };
+    } catch (e) {
+      return {
+        content: [{ type: "text", text: `Unexpected error: ${e.message}` }],
+        isError: true
+      };
+    }
+  }
+);
+
+// ============================================================================
+// Tool 6: Get Agent Health Summary
+// ============================================================================
+server.tool(
+  "get_agent_health_summary",
+  "Compiles an ecosystem-wide health summary including broken connections, open maintenance tickets, and unconfigured agents for a user",
+  {
+    userId: z.string().describe("The user_id to run the health audit for")
+  },
+  async ({ userId }) => {
+    try {
+      // Fetch agents, tickets, and configurations in parallel
+      const [agentsRes, ticketsRes, connectionsRes, configsRes] = await Promise.all([
+        supabase.from("agents").select("id, name, handle, is_overseer, supervisor_agent_id, managed_by_overseer").eq("user_id", userId),
+        supabase.from("tickets").select("id, status").eq("user_id", userId).neq("status", "done"),
+        supabase.from("connections").select("platform, verified, status").eq("user_id", userId),
+        supabase.from("agent_configs").select("agent_id").eq("user_id", userId)
+      ]);
+
+      if (agentsRes.error || ticketsRes.error || connectionsRes.error || configsRes.error) {
+        return {
+          content: [{ type: "text", text: `Failed to compile health summary: ${agentsRes.error?.message || ticketsRes.error?.message || connectionsRes.error?.message || configsRes.error?.message}` }],
+          isError: true
+        };
+      }
+
+      const agents = agentsRes.data || [];
+      const openTickets = ticketsRes.data || [];
+      const connections = connectionsRes.data || [];
+      const configs = configsRes.data || [];
+
+      const configAgentIds = new Set(configs.map(c => c.agent_id));
+      const brokenConns = connections.filter(c => !c.verified || ["stale", "reauth_required", "revoked", "error"].includes(c.status));
+      const unconfiguredCreators = agents.filter(a => !a.is_overseer && !configAgentIds.has(a.id));
+      const unlinkedCreators = agents.filter(a => !a.is_overseer && (!a.supervisor_agent_id || !a.managed_by_overseer));
+
+      const summary = {
+        totalAgents: agents.length,
+        creatorsCount: agents.filter(a => !a.is_overseer).length,
+        hasHermesOverseer: agents.some(a => a.is_overseer),
+        managedByHermesCount: agents.filter(a => a.supervisor_agent_id && a.managed_by_overseer).length,
+        unlinkedCreatorsCount: unlinkedCreators.length,
+        openTicketsCount: openTickets.length,
+        brokenConnectionsCount: brokenConns.length,
+        unconfiguredCreatorsCount: unconfiguredCreators.length,
+        brokenConnections: brokenConns,
+        unconfiguredCreators: unconfiguredCreators.map(a => ({ id: a.id, name: a.name, handle: a.handle })),
+        unlinkedCreators: unlinkedCreators.map(a => ({ id: a.id, name: a.name, handle: a.handle }))
+      };
+
+      return {
+        content: [{ type: "text", text: `Ecosystem Health Summary:\n${JSON.stringify(summary, null, 2)}` }]
+      };
+    } catch (e) {
+      return {
+        content: [{ type: "text", text: `Unexpected system error during health audit: ${e.message}` }],
         isError: true
       };
     }

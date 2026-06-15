@@ -51,7 +51,8 @@
 			}
 		}
 
-		const avgEngRate = connectedCount > 0 ? parseFloat((totalEngRate / connectedCount).toFixed(1)) : 0.0;
+		const avgEngRate =
+			connectedCount > 0 ? parseFloat((totalEngRate / connectedCount).toFixed(1)) : 0.0;
 
 		let followersStr = '0';
 		if (totalFollowers >= 1000000) {
@@ -93,8 +94,8 @@
 					<span class="live-badge">Live Sync</span>
 				</div>
 				<div class="stat-progress-track">
-					<div 
-						class="stat-progress-bar followers-progress" 
+					<div
+						class="stat-progress-bar followers-progress"
 						style="width: {Math.min(100, (stats.followersRaw / 250000) * 100)}%"
 					></div>
 				</div>
@@ -107,8 +108,8 @@
 					<span class="computed-badge">Computed</span>
 				</div>
 				<div class="stat-progress-track">
-					<div 
-						class="stat-progress-bar engagement-progress" 
+					<div
+						class="stat-progress-bar engagement-progress"
 						style="width: {Math.min(100, (stats.engagementRate / 10) * 100)}%"
 					></div>
 				</div>
@@ -130,7 +131,9 @@
 							<div class="plat-metric">
 								<span class="plat-metric-label">Followers:</span>
 								<span class="plat-metric-val">
-									{platform.followers >= 1000 ? (platform.followers / 1000).toFixed(1) + 'K' : platform.followers}
+									{platform.followers >= 1000
+										? (platform.followers / 1000).toFixed(1) + 'K'
+										: platform.followers}
 								</span>
 							</div>
 							<div class="plat-divider">|</div>
@@ -145,14 +148,17 @@
 		</div>
 
 		<p class="stats-footer-note">
-			⚡ These parameters dynamically aggregate platform-level metadata inside <strong>Agent Settings</strong>. Manual entry is restricted to maintain data authenticity.
+			⚡ These parameters dynamically aggregate platform-level metadata inside <strong
+				>Agent Settings</strong
+			>. Manual entry is restricted to maintain data authenticity.
 		</p>
 	{:else}
 		<div class="empty-stats-state">
 			<div class="empty-icon">🔗</div>
 			<h5>No Channels Connected Yet</h5>
 			<p>
-				Link one or more social media channels above. Once connected, audience reach and engagement rates will instantly calculate and sync.
+				Link one or more social media channels above. Once connected, audience reach and engagement
+				rates will instantly calculate and sync.
 			</p>
 		</div>
 	{/if}
@@ -440,7 +446,8 @@
 	}
 
 	@keyframes pulse-icon {
-		0%, 100% {
+		0%,
+		100% {
 			transform: scale(1);
 			opacity: 0.8;
 		}

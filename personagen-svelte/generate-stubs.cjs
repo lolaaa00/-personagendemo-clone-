@@ -3,29 +3,89 @@ const fs = require('fs');
 const path = require('path');
 
 const pages = [
-  { route: 'scout', title: 'Social Scout', icon: '🔍', desc: 'Monitor competitor channels and discover trending content' },
-  { route: 'generator', title: 'Avatar Generator', icon: '✨', desc: 'Create and configure new AI agent personas' },
-  { route: 'pm', title: 'Project Manager', icon: '📋', desc: 'Kanban board and onboarding task management' },
-  { route: 'accounts', title: 'Connected Accounts', icon: '🔗', desc: 'Manage social platform connections for each agent' },
-  { route: 'persona-config', title: 'Persona Config', icon: '⚙️', desc: 'Configure agent soul, skills, tools, and heartbeat' },
-  { route: 'inbox', title: 'Inbox', icon: '📨', desc: 'Engagement inbox and email management' },
-  { route: 'intel-wizard', title: 'Intel Wizard', icon: '🧠', desc: '6-step content intelligence and strategy wizard' },
-  { route: 'trends', title: 'Trends', icon: '📈', desc: 'Real-time trending topics and niche insights' },
-  { route: 'channel-decoder', title: 'Channel Decoder', icon: '🔬', desc: '9-layer reverse engineering of top-performing channels' },
-  { route: 'content-forge', title: 'Content Forge', icon: '🔨', desc: 'Transform blueprints into production-ready content' },
-  { route: 'brand-brief', title: 'Brand Brief', icon: '📝', desc: 'Define brand voice, target audience, and content guidelines' },
-  { route: 'agreement', title: 'Agreement', icon: '📄', desc: 'Master Service Agreement and legal documents' },
-  { route: 'settings', title: 'Settings', icon: '⚙️', desc: 'Account settings and preferences' },
-  { route: 'settings/billing', title: 'Billing', icon: '💳', desc: 'Subscription management and payment history' },
+	{
+		route: 'scout',
+		title: 'Social Scout',
+		icon: '🔍',
+		desc: 'Monitor competitor channels and discover trending content'
+	},
+	{
+		route: 'generator',
+		title: 'Avatar Generator',
+		icon: '✨',
+		desc: 'Create and configure new AI agent personas'
+	},
+	{
+		route: 'pm',
+		title: 'Project Manager',
+		icon: '📋',
+		desc: 'Kanban board and onboarding task management'
+	},
+	{
+		route: 'accounts',
+		title: 'Connected Accounts',
+		icon: '🔗',
+		desc: 'Manage social platform connections for each agent'
+	},
+	{
+		route: 'persona-config',
+		title: 'Persona Config',
+		icon: '⚙️',
+		desc: 'Configure agent soul, skills, tools, and heartbeat'
+	},
+	{ route: 'inbox', title: 'Inbox', icon: '📨', desc: 'Engagement inbox and email management' },
+	{
+		route: 'intel-wizard',
+		title: 'Intel Wizard',
+		icon: '🧠',
+		desc: '6-step content intelligence and strategy wizard'
+	},
+	{
+		route: 'trends',
+		title: 'Trends',
+		icon: '📈',
+		desc: 'Real-time trending topics and niche insights'
+	},
+	{
+		route: 'channel-decoder',
+		title: 'Channel Decoder',
+		icon: '🔬',
+		desc: '9-layer reverse engineering of top-performing channels'
+	},
+	{
+		route: 'content-forge',
+		title: 'Content Forge',
+		icon: '🔨',
+		desc: 'Transform blueprints into production-ready content'
+	},
+	{
+		route: 'brand-brief',
+		title: 'Brand Brief',
+		icon: '📝',
+		desc: 'Define brand voice, target audience, and content guidelines'
+	},
+	{
+		route: 'agreement',
+		title: 'Agreement',
+		icon: '📄',
+		desc: 'Master Service Agreement and legal documents'
+	},
+	{ route: 'settings', title: 'Settings', icon: '⚙️', desc: 'Account settings and preferences' },
+	{
+		route: 'settings/billing',
+		title: 'Billing',
+		icon: '💳',
+		desc: 'Subscription management and payment history'
+	}
 ];
 
 const baseDir = path.join(__dirname, 'src', 'routes', '(portal)');
 
 pages.forEach(({ route, title, icon, desc }) => {
-  const dir = path.join(baseDir, route);
-  fs.mkdirSync(dir, { recursive: true });
+	const dir = path.join(baseDir, route);
+	fs.mkdirSync(dir, { recursive: true });
 
-  const content = `<script lang="ts">
+	const content = `<script lang="ts">
 </script>
 
 <svelte:head>
@@ -95,13 +155,13 @@ pages.forEach(({ route, title, icon, desc }) => {
 </style>
 `;
 
-  const filePath = path.join(dir, '+page.svelte');
-  if (!fs.existsSync(filePath)) {
-    fs.writeFileSync(filePath, content);
-    console.log(`✅ Created ${route}/+page.svelte`);
-  } else {
-    console.log(`⏭️  Skipped ${route}/+page.svelte (exists)`);
-  }
+	const filePath = path.join(dir, '+page.svelte');
+	if (!fs.existsSync(filePath)) {
+		fs.writeFileSync(filePath, content);
+		console.log(`✅ Created ${route}/+page.svelte`);
+	} else {
+		console.log(`⏭️  Skipped ${route}/+page.svelte (exists)`);
+	}
 });
 
 console.log(`\n✅ Done — ${pages.length} pages`);
