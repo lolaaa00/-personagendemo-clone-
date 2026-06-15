@@ -62,7 +62,7 @@ export async function getOrCreateHermes(supabase: SupabaseClient, userId: string
 				soul: 'You are the platform-level Chief Operational Overseer. Monitor health, orchestrate agents, and support human administrators.',
 				skills: 'System health monitoring, scheduling, alert dispatch, database reporting',
 				tools: 'system_log_reader, agent_orchestrator',
-				runtime_owner: 'hermes-orchestrated'
+				runtime_owner: 'svelte-gemini'
 			})
 			.select()
 			.single();
