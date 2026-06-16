@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Agent } from '$lib/types';
 	import { showToast } from '$lib/stores/ui.svelte';
+	import { Posts } from '$lib/services/api';
 
 	interface ScheduledPost {
 		id: string;
@@ -103,66 +104,21 @@
 	let composerDate = $state('');
 	let composerTime = $state('10:00');
 
-	// ── Demo posts ──
-	function generateDemoPosts(): ScheduledPost[] {
-		const now = new Date();
-		const y = now.getFullYear();
-		const m = now.getMonth();
-		const agents = data.agents;
-		const platformSets = [
-			['instagram', 'tiktok'],
-			['x', 'threads'],
-			['youtube', 'instagram'],
-			['tiktok'],
-			['instagram'],
-			['x'],
-			['facebook', 'instagram'],
-			['youtube'],
-			['threads', 'x'],
-			['tiktok', 'youtube']
-		];
-		const texts = [
-			'💪 Morning workout routine — 20min full body HIIT',
-			'🤖 Thread: Why AI agents will replace social media managers',
-			'✨ OOTD: Summer collection from emerging designers',
-			'🎬 POV: When the algorithm finally picks up your video',
-			'📊 Breaking down Q2 tech earnings in 60 seconds',
-			'🌿 5-minute meal prep for busy professionals',
-			"🎨 Behind the scenes of today's shoot",
-			'💡 Hot take: The creator economy is overrated',
-			'🔥 Trending audio breakdown + how to use it',
-			'📱 New feature deep dive: What you need to know',
-			'🏋️ Leg day motivation — no excuses',
-			'👗 Luxury vs dupe: Can you tell the difference?'
-		];
-		const statuses: ('scheduled' | 'draft' | 'published')[] = [
-			'scheduled',
-			'draft',
-			'published',
-			'scheduled',
-			'scheduled'
-		];
-		const posts: ScheduledPost[] = [];
+	let currentComposerAgent = $derived(data.agents.find((a: any) => a.id === composerAgentId));
+	let composerAgentPlatforms = $derived(currentComposerAgent?.connected_platforms || ['instagram', 'youtube']);
 
-		for (let i = 0; i < 15; i++) {
-			const day = Math.floor(Math.random() * 28) + 1;
-			const agent = agents[i % agents.length];
-			if (!agent) continue;
-			const dd = String(day).padStart(2, '0');
-			const mm = String(m + 1).padStart(2, '0');
-			posts.push({
-				id: `demo-${i}`,
-				agentId: agent.id,
-				agentName: agent.name,
-				text: texts[i % texts.length],
-				platforms: platformSets[i % platformSets.length],
-				date: `${y}-${mm}-${dd}`,
-				time: `${String(8 + (i % 12)).padStart(2, '0')}:${i % 2 === 0 ? '00' : '30'}`,
-				status: statuses[i % statuses.length]
-			});
+	$effect(() => {
+		if (composerAgentId) {
+			composerPlatforms = {
+				tiktok: false,
+				instagram: false,
+				youtube: false,
+				x: false,
+				facebook: false,
+				threads: false
+			};
 		}
-		return posts;
-	}
+	});
 
 	function formatViews(v: number): string {
 		if (v >= 1000000) return (v / 1000000).toFixed(1) + 'M';
@@ -170,21 +126,7 @@
 		return String(v);
 	}
 
-	function getInitialPosts(): ScheduledPost[] {
-		const demos = generateDemoPosts();
-		const real = (data.realPosts || []) as ScheduledPost[];
-		const merged = [...real];
-		for (const d of demos) {
-			if (
-				!merged.some((m) => m.date === d.date && m.platforms.join(',') === d.platforms.join(','))
-			) {
-				merged.push(d);
-			}
-		}
-		return merged;
-	}
-
-	let posts = $state<ScheduledPost[]>(getInitialPosts());
+	let posts = $state<ScheduledPost[]>(data.realPosts || []);
 
 	// ── Calendar helpers ──
 	const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -332,25 +274,41 @@
 		}
 
 		composerSubmitting = true;
-		// Simulate scheduling
-		await new Promise((r) => setTimeout(r, 800));
-		const agent = data.agents.find((a: Agent) => a.id === composerAgentId);
-		posts = [
-			...posts,
-			{
-				id: `user-${Date.now()}`,
-				agentId: composerAgentId,
-				agentName: agent?.name || 'Agent',
-				text: composerText,
+		try {
+			const res = await Posts.create({
+				agent_id: composerAgentId,
+				content: composerText,
 				platforms: selectedPlatforms,
-				date: composerDate,
-				time: composerTime,
+				scheduled_date: composerDate,
+				scheduled_time: composerTime + ':00',
 				status: 'scheduled'
+			});
+			if (res.success && res.data) {
+				const created = res.data as any;
+				const agent = data.agents.find((a: Agent) => a.id === composerAgentId);
+				posts = [
+					...posts,
+					{
+						id: created.id,
+						agentId: created.agent_id,
+						agentName: agent?.name || 'Agent',
+						text: created.content,
+						platforms: created.platforms || [],
+						date: created.scheduled_date,
+						time: created.scheduled_time ? created.scheduled_time.substring(0, 5) : '10:00',
+						status: 'scheduled'
+					}
+				];
+				showToast('Post scheduled successfully', 'success');
+				showComposer = false;
+			} else {
+				showToast(res.error || 'Failed to schedule post', 'error');
 			}
-		];
-		composerSubmitting = false;
-		showComposer = false;
-		showToast('Post scheduled successfully', 'success');
+		} catch (err: any) {
+			showToast(err.message || 'Error scheduling post', 'error');
+		} finally {
+			composerSubmitting = false;
+		}
 	}
 
 	const PLATFORM_COLORS: Record<string, string> = {
@@ -717,7 +675,8 @@
 					<div class="field">
 						<label>Platforms</label>
 						<div class="platform-checkboxes">
-							{#each Object.entries(PLATFORM_COLORS) as [key, color]}
+							{#each composerAgentPlatforms as key}
+								{@const color = PLATFORM_COLORS[key] || 'var(--accent)'}
 								<label class="platform-checkbox" style="--p-color: {color}">
 									<input type="checkbox" bind:checked={composerPlatforms[key]} />
 									<span class="checkbox-label">{key}</span>

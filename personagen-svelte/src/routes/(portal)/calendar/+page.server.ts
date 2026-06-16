@@ -16,16 +16,27 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 
 		if (dbAgents && dbAgents.length > 0) {
 			hasDb = true;
-			const creators = dbAgents.filter((a) => !a.is_overseer);
-			agents = creators.map((a) => ({
-				...a,
-				niche: (a.niche || '').split(' & ')[0] || a.niche,
-				engagementRate: parseFloat(a.engagement_rate as any) || 0,
-				engagement_rate: parseFloat(a.engagement_rate as any) || 0,
-				active: a.status === 'active',
-				connection_count: a.connection_count ?? 0,
-				autonomy_level: a.autonomy_level ?? 'advisor'
-			}));
+
+			// Fetch active platform connections
+			const { data: dbConnections } = await locals.supabase
+				.from('connections')
+				.select('agent_id, platform');
+
+			const creators = dbAgents.filter((a) => !a.is_overseer && a.status === 'active');
+			agents = creators.map((a) => {
+				const agentConns = dbConnections?.filter(c => c.agent_id === a.id) || [];
+				const connectedPlatforms = agentConns.map(c => c.platform);
+				return {
+					...a,
+					niche: (a.niche || '').split(' & ')[0] || a.niche,
+					engagementRate: parseFloat(a.engagement_rate as any) || 0,
+					engagement_rate: parseFloat(a.engagement_rate as any) || 0,
+					active: a.status === 'active',
+					connection_count: a.connection_count ?? 0,
+					autonomy_level: a.autonomy_level ?? 'advisor',
+					connected_platforms: connectedPlatforms
+				};
+			});
 
 			// Fetch real database posts
 			const { data: postsRes, error } = await locals.supabase
@@ -33,7 +44,8 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 				.select('*, agents(name)');
 
 			if (!error && postsRes) {
-				dbPosts = postsRes;
+				const activeAgentIds = new Set(agents.map(a => a.id));
+				dbPosts = postsRes.filter(p => activeAgentIds.has(p.agent_id));
 			}
 		}
 	}
@@ -42,14 +54,15 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 		// Fallback static agents
 		const agentsRes = await fetch('/data/agents.json');
 		const rawAgents: any[] = await agentsRes.json();
-		agents = rawAgents.map((a) => ({
+		agents = rawAgents.filter((a) => a.status === 'active').map((a) => ({
 			...a,
 			niche: (a.niche || '').split(' & ')[0] || a.niche,
 			engagementRate: a.engagementRate || parseFloat(a.engagement) || 0,
 			engagement_rate: a.engagementRate || parseFloat(a.engagement) || 0,
 			active: a.status === 'active',
 			connection_count: a.connectionCount ?? 0,
-			autonomy_level: a.autonomy_level ?? 'advisor'
+			autonomy_level: a.autonomy_level ?? 'advisor',
+			connected_platforms: ['instagram', 'youtube']
 		}));
 	}
 

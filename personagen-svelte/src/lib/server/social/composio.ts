@@ -6,7 +6,7 @@ export type SocialPlatform = (typeof SUPPORTED_SOCIAL_PLATFORMS)[number];
 // Platform to Composio Action Slug mapping
 const COMPOSIO_ACTION_MAPPING: Record<string, string> = {
 	facebook: 'FACEBOOK_CREATE_POST',
-	instagram: 'INSTAGRAM_PUBLISH_PHOTO',
+	instagram: 'INSTAGRAM_POST_IG_USER_MEDIA',
 	youtube: 'YOUTUBE_MULTIPART_UPLOAD_VIDEO',
 	tiktok: 'TIKTOK_PUBLISH_VIDEO'
 };
@@ -146,29 +146,127 @@ export class ComposioClient {
 			};
 		}
 
-		// Build arguments based on the platform's API requirements
+		// Parse content if it's a JSON string, to extract text and media URL
+		let textContent = content;
+		let extractedMediaUrl = mediaUrl;
+
+		try {
+			if (content.trim().startsWith('{') && content.trim().endsWith('}')) {
+				const parsed = JSON.parse(content);
+				if (parsed && typeof parsed === 'object') {
+					if (parsed.text !== undefined) {
+						textContent = parsed.text;
+					}
+					if (parsed.media_url !== undefined) {
+						extractedMediaUrl = parsed.media_url;
+					} else if (parsed.mediaUrl !== undefined) {
+						extractedMediaUrl = parsed.mediaUrl;
+					}
+				}
+			}
+		} catch (e) {
+			// Ignore JSON parse error, treat as raw text
+		}
+
+		// Handle Instagram separately since it is a two-step process
+		if (platKey === 'instagram') {
+			console.log(`[Composio Client] Starting two-step Instagram posting for agent ${personaId}`);
+			try {
+				const targetMediaUrl = extractedMediaUrl || 'https://picsum.photos/1080/1080.jpg';
+				console.log(`[Composio Client] Step 1: Creating Instagram Media Container via INSTAGRAM_POST_IG_USER_MEDIA`);
+				const createResponse = await fetch(`${this.baseUrlV3_1}/tools/execute/INSTAGRAM_POST_IG_USER_MEDIA`, {
+					method: 'POST',
+					headers: this.getHeaders(),
+					body: JSON.stringify({
+						user_id: personaId,
+						arguments: {
+							ig_user_id: 'me',
+							image_url: targetMediaUrl,
+							caption: textContent
+						}
+					})
+				});
+
+				if (!createResponse.ok) {
+					const errorText = await createResponse.text();
+					return {
+						success: false,
+						error: `Composio Instagram container creation failed (status ${createResponse.status}): ${errorText}`
+					};
+				}
+
+				const createResult = (await createResponse.json()) as any;
+				if (!createResult.successful) {
+					return {
+						success: false,
+						error: `Composio Instagram container creation failed: ${createResult.error || JSON.stringify(createResult.data || createResult)}`
+					};
+				}
+
+				const creationId = createResult.data?.id || createResult.result?.id || createResult.id;
+				if (!creationId) {
+					return {
+						success: false,
+						error: `Failed to extract creation_id from container response: ${JSON.stringify(createResult)}`
+					};
+				}
+
+				console.log(`[Composio Client] Step 2: Publishing Instagram Media Container via INSTAGRAM_POST_IG_USER_MEDIA_PUBLISH. Creation ID: ${creationId}`);
+				const publishResponse = await fetch(`${this.baseUrlV3_1}/tools/execute/INSTAGRAM_POST_IG_USER_MEDIA_PUBLISH`, {
+					method: 'POST',
+					headers: this.getHeaders(),
+					body: JSON.stringify({
+						user_id: personaId,
+						arguments: {
+							ig_user_id: 'me',
+							creation_id: creationId,
+							max_wait_seconds: 60
+						}
+					})
+				});
+
+				if (!publishResponse.ok) {
+					const errorText = await publishResponse.text();
+					return {
+						success: false,
+						error: `Composio Instagram publishing failed (status ${publishResponse.status}): ${errorText}`
+					};
+				}
+
+				const publishResult = (await publishResponse.json()) as any;
+				if (!publishResult.successful) {
+					return {
+						success: false,
+						error: `Composio Instagram publishing failed: ${publishResult.error || JSON.stringify(publishResult.data || publishResult)}`
+					};
+				}
+
+				const externalId = publishResult.data?.id || publishResult.result?.id || publishResult.id;
+				return { success: true, externalId, data: publishResult };
+			} catch (err) {
+				console.error('[Composio Client] Instagram posting execution failed:', err);
+				return { success: false, error: (err as Error).message };
+			}
+		}
+
+		// Build arguments based on the platform's API requirements for other platforms
 		let args: Record<string, any> = {};
 		if (platKey === 'facebook') {
-			args = { message: content };
-		} else if (platKey === 'instagram') {
-			args = {
-				caption: content,
-				image_url: mediaUrl || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800'
-			};
+			args = { message: textContent };
 		} else if (platKey === 'youtube') {
 			args = {
-				title: content.substring(0, 100),
-				description: content,
+				title: textContent.substring(0, 100),
+				description: textContent,
 				video_file:
-					mediaUrl ||
+					extractedMediaUrl ||
 					'https://assets.mixkit.co/videos/preview/mixkit-stars-in-space-1611-large.mp4',
 				privacyStatus: 'public'
 			};
 		} else if (platKey === 'tiktok') {
 			args = {
-				title: content.substring(0, 150),
+				title: textContent.substring(0, 150),
 				video_url:
-					mediaUrl || 'https://assets.mixkit.co/videos/preview/mixkit-stars-in-space-1611-large.mp4'
+					extractedMediaUrl || 'https://assets.mixkit.co/videos/preview/mixkit-stars-in-space-1611-large.mp4'
 			};
 		}
 
