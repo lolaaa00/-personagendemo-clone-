@@ -27,7 +27,7 @@ export async function validateUrlForSsrf(urlStr: string): Promise<boolean> {
 					const parts = address.split('.').map(Number);
 					if (
 						parts[0] === 127 || // Loopback
-						parts[0] === 10 ||  // Class A Private
+						parts[0] === 10 || // Class A Private
 						(parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) || // Class B Private
 						(parts[0] === 192 && parts[1] === 168) || // Class C Private
 						(parts[0] === 169 && parts[1] === 254) || // Link Local

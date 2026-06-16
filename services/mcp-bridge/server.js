@@ -24,21 +24,21 @@ function checkAuth(req, res, next) {
   if (!mcpBridgeToken) {
     return res.status(401).send("Unauthorized: MCP_BRIDGE_TOKEN is not configured on the server.");
   }
-  
+
   const authHeader = req.headers.authorization;
   const queryToken = req.query.token;
-  
+
   let token = null;
   if (authHeader && authHeader.startsWith("Bearer ")) {
     token = authHeader.substring(7);
   } else if (queryToken) {
     token = queryToken;
   }
-  
+
   if (token !== mcpBridgeToken) {
     return res.status(401).send("Unauthorized: Invalid or missing token.");
   }
-  
+
   next();
 }
 
@@ -437,7 +437,7 @@ const transports = new Map();
 app.get("/sse", checkAuth, async (req, res) => {
   console.log(`[MCP] New client connecting via SSE...`);
   const transport = new SSEServerTransport("/messages", res);
-  
+
   transports.set(transport.sessionId, transport);
 
   res.on("close", () => {

@@ -167,7 +167,10 @@ Write a ready-to-publish draft for each platform (Instagram, Facebook, YouTube, 
 			const ai = new GoogleGenAI({ apiKey });
 			let pageText = '';
 			if (!(await validateUrlForSsrf(args.url))) {
-				return { success: false, error: 'SSRF Warning: URL resolved to a restricted or invalid address.' };
+				return {
+					success: false,
+					error: 'SSRF Warning: URL resolved to a restricted or invalid address.'
+				};
 			}
 			try {
 				const crawlRes = await fetchFn(args.url);
@@ -464,7 +467,11 @@ export const POST: RequestHandler = async ({ params, locals, request }) => {
 	// 1. Determine Auth Context and select client BEFORE fetching agent from database
 	const authHeader = request.headers.get('Authorization');
 	const internalSecret = env.INTERNAL_API_SECRET;
-	const isServiceCall = !!(authHeader && internalSecret && authHeader === `Bearer ${internalSecret}`);
+	const isServiceCall = !!(
+		authHeader &&
+		internalSecret &&
+		authHeader === `Bearer ${internalSecret}`
+	);
 
 	let supabaseClient = locals.supabase;
 	let userId;

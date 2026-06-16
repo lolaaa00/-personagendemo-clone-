@@ -201,7 +201,9 @@ async function pollRssFeeds() {
 					.eq('id', config.id);
 
 				if (!(await validateUrlForSsrf(config.rss_url))) {
-					console.warn(`[Scheduler RSS] SSRF Warning: RSS URL resolved to a restricted or invalid address: ${config.rss_url}`);
+					console.warn(
+						`[Scheduler RSS] SSRF Warning: RSS URL resolved to a restricted or invalid address: ${config.rss_url}`
+					);
 					continue;
 				}
 
