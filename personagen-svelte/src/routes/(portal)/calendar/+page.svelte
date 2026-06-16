@@ -211,7 +211,10 @@
 			});
 		} else {
 			untrack(() => {
-				showComposer = false;
+				// Only close composer if we are still on the calendar route
+				if ($page.url.pathname === '/calendar') {
+					showComposer = false;
+				}
 			});
 		}
 	});
