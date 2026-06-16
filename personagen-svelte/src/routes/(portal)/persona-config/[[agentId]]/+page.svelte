@@ -99,6 +99,11 @@
 			if (agentExists && selectedAgentId !== paramAgentId) {
 				selectAgent(paramAgentId);
 			}
+		} else if (agents.length > 0 && !selectedAgentId) {
+			const activeAgents = agents.filter((a) => a.status === 'active');
+			if (activeAgents.length > 0) {
+				selectAgent(activeAgents[0].id);
+			}
 		}
 	});
 
@@ -559,7 +564,7 @@
 
 	<!-- Agent Selector Grid -->
 	<div class="agent-grid">
-		{#each agents as agent (agent.id)}
+		{#each agents.filter((a) => a.status === 'active') as agent (agent.id)}
 			<button
 				class="agent-card"
 				class:selected={selectedAgentId === agent.id}
@@ -627,291 +632,293 @@
 								>
 								<span>Active Connections</span>
 							</div>
+
+							<!-- Compact inline connect buttons for disconnected platforms -->
+							<div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+								{#each PLATFORMS as platform}
+									{@const status = platformStatuses[platform.key]}
+									{#if !status?.connected}
+										<button
+											type="button"
+											class="connect-inline-btn"
+											disabled={connectingPlatform === platform.key || status?.configured === false}
+											onclick={() => connectPlatform(platform.key)}
+											style="font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 6px; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border); color: var(--text-muted); cursor: pointer; transition: all 0.2s;"
+											onmouseover={(e) => {
+												if (!e.currentTarget.disabled) {
+													e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+													e.currentTarget.style.borderColor = 'var(--accent)';
+													e.currentTarget.style.color = 'var(--text)';
+												}
+											}}
+											onmouseout={(e) => {
+												e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)';
+												e.currentTarget.style.borderColor = 'var(--border)';
+												e.currentTarget.style.color = 'var(--text-muted)';
+											}}
+										>
+											{#if connectingPlatform === platform.key}
+												Connecting…
+											{:else}
+												+ Connect {platform.name}
+											{/if}
+										</button>
+									{/if}
+								{/each}
+							</div>
 						</div>
 
-						<div class="platforms-grid">
-							{#each visiblePlatforms as platform}
-								{@const status = platformStatuses[platform.key]}
-								{@const metrics = platformMetrics[platform.key]}
-								{@const isConfigured = status?.configured !== false}
-								<div
-									class="platform-card"
-									class:connected={status?.connected}
-									style="--platform-color: {platform.color}"
-								>
+						{#if computedMetrics.connectedCount === 0}
+							<div style="padding: 2.5rem; text-align: center; border: 1px dashed var(--border); border-radius: var(--radius); background: rgba(255, 255, 255, 0.01); margin-bottom: 1.5rem;">
+								<span style="font-size: 24px; display: block; margin-bottom: 0.5rem;">🔌</span>
+								<p style="color: var(--text-dim); font-size: var(--text-sm); margin: 0;">No active channel connections. Click one of the connect buttons above to link a platform.</p>
+							</div>
+						{:else}
+							<div class="platforms-grid">
+								{#each visiblePlatforms.filter((p) => platformStatuses[p.key]?.connected) as platform}
+									{@const status = platformStatuses[platform.key]}
+									{@const metrics = platformMetrics[platform.key]}
+									{@const isConfigured = status?.configured !== false}
 									<div
-										class="platform-header"
-										style="display: flex; align-items: center; width: 100%;"
+										class="platform-card"
+										class:connected={status?.connected}
+										style="--platform-color: {platform.color}"
 									>
-										<div class="platform-icon">
-											{#if platform.key === 'tiktok'}
-												<svg width="28" height="28" viewBox="0 0 24 24" fill="none"
-													><path
-														d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.27 6.27 0 00-.79-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.33-6.34V8.89a8.1 8.1 0 004.77 1.54V7.01a4.85 4.85 0 01-1-.32z"
-														fill={platform.color}
-													/></svg
-												>
-											{:else if platform.key === 'instagram'}
-												<svg width="28" height="28" viewBox="0 0 24 24" fill="none"
-													><rect
-														x="2"
-														y="2"
-														width="20"
-														height="20"
-														rx="5"
-														stroke={platform.color}
-														stroke-width="1.8"
-													/><circle
-														cx="12"
-														cy="12"
-														r="5"
-														stroke={platform.color}
-														stroke-width="1.8"
-													/><circle cx="17.5" cy="6.5" r="1.5" fill={platform.color} /></svg
-												>
-											{:else if platform.key === 'youtube'}
-												<svg width="28" height="28" viewBox="0 0 24 24" fill="none"
-													><path
-														d="M22.54 6.42a2.78 2.78 0 00-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 00-1.94 2A29.94 29.94 0 001 12a29.94 29.94 0 00.46 5.58 2.78 2.78 0 001.94 2c1.72.46 8.6.46 8.6.46s6.88 0 8.6-.46a2.78 2.78 0 001.94-2A29.94 29.94 0 0023 12a29.94 29.94 0 00-.46-5.58z"
-														fill={platform.color}
-													/><path d="M9.75 15.02l5.75-3.27-5.75-3.27v6.54z" fill="#fff" /></svg
-												>
-											{:else if platform.key === 'facebook'}
-												<svg width="28" height="28" viewBox="0 0 24 24" fill="none"
-													><path
-														d="M24 12c0-6.627-5.373-12-12-12S0 5.373 0 12c0 5.99 4.388 10.954 10.125 11.854V15.47H7.078V12h3.047V9.356c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.875V12h3.328l-.532 3.47h-2.796v8.384C19.612 22.954 24 17.99 24 12z"
-														fill={platform.color}
-													/></svg
-												>
-											{/if}
-										</div>
 										<div
-											class="platform-name-wrap"
-											style="display: flex; align-items: center; gap: 0.5rem;"
+											class="platform-header"
+											style="display: flex; align-items: center; width: 100%;"
 										>
-											<span class="platform-name">{platform.name}</span>
-											<span class="status-dot" class:on={status?.connected}></span>
-											{#if !isConfigured}
-												<span
-													style="font-size: 10px; color: var(--warning); text-transform: uppercase; letter-spacing: 0.05em; border: 1px solid rgba(245, 158, 11, 0.35); background: rgba(245, 158, 11, 0.08); border-radius: 999px; padding: 2px 7px; font-weight: 700;"
-													>Not configured</span
-												>
-											{:else if status?.status === 'provider_unavailable'}
-												<span
-													style="font-size: 10px; color: var(--warning); text-transform: uppercase; letter-spacing: 0.05em; border: 1px solid rgba(245, 158, 11, 0.35); background: rgba(245, 158, 11, 0.08); border-radius: 999px; padding: 2px 7px; font-weight: 700;"
-													>Sync stale</span
-												>
-											{:else if status?.status === 'reauth_required'}
-												<span
-													style="font-size: 10px; color: var(--error); text-transform: uppercase; letter-spacing: 0.05em; border: 1px solid rgba(239, 68, 68, 0.35); background: rgba(239, 68, 68, 0.08); border-radius: 999px; padding: 2px 7px; font-weight: 700;"
-													>Reconnect</span
-												>
-											{/if}
-										</div>
-
-										<!-- Platform Header Actions (Collapse + Remove) -->
-										<div
-											class="platform-header-actions"
-											style="margin-left: auto; display: flex; align-items: center; gap: 0.5rem;"
-										>
-											<!-- Expand/Collapse Button -->
-											<button
-												type="button"
-												onclick={() =>
-													(collapsedPlatforms[platform.key] = !collapsedPlatforms[platform.key])}
-												style="background: none; border: none; color: var(--text-dim); cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; transition: color 0.2s ease, transform 0.2s ease; transform: rotate({collapsedPlatforms[
-													platform.key
-												]
-													? '180deg'
-													: '0deg'}); outline: none;"
-												title={collapsedPlatforms[platform.key] ? 'Expand' : 'Collapse'}
-												onmouseover={(e) => (e.currentTarget.style.color = 'var(--text)')}
-												onmouseout={(e) => (e.currentTarget.style.color = 'var(--text-dim)')}
+											<div class="platform-icon">
+												{#if platform.key === 'tiktok'}
+													<svg width="24" height="24" viewBox="0 0 24 24" fill="none"
+														><path
+															d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.27 6.27 0 00-.79-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.33-6.34V8.89a8.1 8.1 0 004.77 1.54V7.01a4.85 4.85 0 01-1-.32z"
+															fill={platform.color}
+														/></svg
+													>
+												{:else if platform.key === 'instagram'}
+													<svg width="24" height="24" viewBox="0 0 24 24" fill="none"
+														><rect
+															x="2"
+															y="2"
+															width="20"
+															height="20"
+															rx="5"
+															stroke={platform.color}
+															stroke-width="1.8"
+														/><circle
+															cx="12"
+															cy="12"
+															r="5"
+															stroke={platform.color}
+															stroke-width="1.8"
+														/><circle cx="17.5" cy="6.5" r="1.5" fill={platform.color} /></svg
+													>
+												{:else if platform.key === 'youtube'}
+													<svg width="24" height="24" viewBox="0 0 24 24" fill="none"
+														><path
+															d="M22.54 6.42a2.78 2.78 0 00-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 00-1.94 2A29.94 29.94 0 001 12a29.94 29.94 0 00.46 5.58 2.78 2.78 0 001.94 2c1.72.46 8.6.46 8.6.46s6.88 0 8.6-.46a2.78 2.78 0 001.94-2A29.94 29.94 0 0023 12a29.94 29.94 0 00-.46-5.58z"
+															fill={platform.color}
+														/><path d="M9.75 15.02l5.75-3.27-5.75-3.27v6.54z" fill="#fff" /></svg
+													>
+												{:else if platform.key === 'facebook'}
+													<svg width="24" height="24" viewBox="0 0 24 24" fill="none"
+														><path
+															d="M24 12c0-6.627-5.373-12-12-12S0 5.373 0 12c0 5.99 4.388 10.954 10.125 11.854V15.47H7.078V12h3.047V9.356c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.875V12h3.328l-.532 3.47h-2.796v8.384C19.612 22.954 24 17.99 24 12z"
+															fill={platform.color}
+														/></svg
+													>
+												{/if}
+											</div>
+											<div
+												class="platform-name-wrap"
+												style="display: flex; align-items: center; gap: 0.5rem;"
 											>
-												<svg
-													width="18"
-													height="18"
-													viewBox="0 0 24 24"
-													fill="none"
-													stroke="currentColor"
-													stroke-width="2.5"
-													stroke-linecap="round"
-													stroke-linejoin="round"><polyline points="18 15 12 9 6 15" /></svg
-												>
-											</button>
-										</div>
-									</div>
-
-									{#if !collapsedPlatforms[platform.key]}
-										<div class="platform-body" transition:slide={{ duration: 250 }}>
-											{#if status?.connected}
-												{@const followers = status?.followers ?? metrics?.followers ?? 0}
-												{@const engagement = status?.engagement_rate ?? metrics?.engagement ?? 0.0}
-												<div class="connected-info">
-													<div
-														class="handle-row"
-														style="display: flex; align-items: center; gap: 0.5rem;"
+												<span class="platform-name">{platform.name}</span>
+												<span class="status-dot" class:on={status?.connected}></span>
+												{#if !isConfigured}
+													<span
+														style="font-size: 10px; color: var(--warning); text-transform: uppercase; letter-spacing: 0.05em; border: 1px solid rgba(245, 158, 11, 0.35); background: rgba(245, 158, 11, 0.08); border-radius: 999px; padding: 2px 7px; font-weight: 700;"
+														>Not configured</span
 													>
-														<span class="handle">{status.handle || '@connected'}</span>
-														{#if status.verified}
-															<svg
-																class="verified-badge"
-																width="16"
-																height="16"
-																viewBox="0 0 24 24"
-																fill="var(--cyan)"
-																><path
-																	d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 12c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
-																	stroke="var(--cyan)"
-																	stroke-width="1.5"
-																	fill="none"
-																/><path
-																	d="M9 12l2 2 4-4"
-																	stroke="var(--cyan)"
-																	stroke-width="2"
-																	fill="none"
-																	stroke-linecap="round"
-																	stroke-linejoin="round"
-																/></svg
-															>
-														{/if}
-
-														<!-- Favorite Star button -->
-														{#if status.handle}
-															{@const isMain = selectedAgent.handle === status.handle}
-															<button
-																type="button"
-																onclick={() => setMainHandle(status.handle!)}
-																style="background: none; border: none; cursor: pointer; padding: 2px; display: inline-flex; align-items: center; justify-content: center; transition: transform 0.2s ease, color 0.2s ease; outline: none; margin-left: 2px;"
-																title={isMain ? 'Main Agent Handle' : 'Set as Main Handle'}
-																onmouseover={(e) =>
-																	(e.currentTarget.style.transform = 'scale(1.2)')}
-																onmouseout={(e) => (e.currentTarget.style.transform = 'scale(1)')}
-															>
-																{#if isMain}
-																	<svg
-																		width="16"
-																		height="16"
-																		viewBox="0 0 24 24"
-																		fill="#F59E0B"
-																		stroke="#F59E0B"
-																		stroke-width="2"
-																		stroke-linecap="round"
-																		stroke-linejoin="round"
-																		style="filter: drop-shadow(0 0 4px rgba(245, 158, 11, 0.6));"
-																	>
-																		<polygon
-																			points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"
-																		/>
-																	</svg>
-																{:else}
-																	<svg
-																		width="16"
-																		height="16"
-																		viewBox="0 0 24 24"
-																		fill="none"
-																		stroke="var(--text-dim)"
-																		stroke-width="2"
-																		stroke-linecap="round"
-																		stroke-linejoin="round"
-																		class="star-outline"
-																		onmouseover={(e) =>
-																			e.currentTarget.setAttribute('stroke', '#F59E0B')}
-																		onmouseout={(e) =>
-																			e.currentTarget.setAttribute('stroke', 'var(--text-dim)')}
-																	>
-																		<polygon
-																			points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"
-																		/>
-																	</svg>
-																{/if}
-															</button>
-														{/if}
-													</div>
-													<span class="sync-time">Last sync: {formatSyncTime(status.lastSync)}</span
+												{:else if status?.status === 'provider_unavailable'}
+													<span
+														style="font-size: 10px; color: var(--warning); text-transform: uppercase; letter-spacing: 0.05em; border: 1px solid rgba(245, 158, 11, 0.35); background: rgba(245, 158, 11, 0.08); border-radius: 999px; padding: 2px 7px; font-weight: 700;"
+														>Sync stale</span
 													>
-
-													<!-- Individual Platform Stats -->
-													<div
-														class="platform-stats-badge-row"
-														style="display: flex; gap: 0.5rem; margin-top: 0.75rem;"
+												{:else if status?.status === 'reauth_required'}
+													<span
+														style="font-size: 10px; color: var(--error); text-transform: uppercase; letter-spacing: 0.05em; border: 1px solid rgba(239, 68, 68, 0.35); background: rgba(239, 68, 68, 0.08); border-radius: 999px; padding: 2px 7px; font-weight: 700;"
+														>Reconnect</span
 													>
-														<span
-															style="font-size: 11px; background: rgba(255,255,255,0.05); color: var(--text-dim); padding: 2px 6px; border-radius: 4px; display: flex; align-items: center; gap: 4px; border: 1px solid rgba(255,255,255,0.08); font-weight: 500;"
-														>
-															👥 {followers >= 1000
-																? (followers / 1000).toFixed(1) + 'K'
-																: followers} followers
-														</span>
-														<span
-															style="font-size: 11px; background: rgba(255,255,255,0.05); color: var(--text-dim); padding: 2px 6px; border-radius: 4px; display: flex; align-items: center; gap: 4px; border: 1px solid rgba(255,255,255,0.08); font-weight: 500;"
-														>
-															⚡ {engagement}% eng
-														</span>
-													</div>
-												</div>
+												{/if}
+											</div>
+
+											<!-- Platform Header Actions (Collapse + Remove) -->
+											<div
+												class="platform-header-actions"
+												style="margin-left: auto; display: flex; align-items: center; gap: 0.5rem;"
+											>
+												<!-- Expand/Collapse Button -->
 												<button
-													class="btn-disconnect"
-													onclick={() => disconnectPlatform(platform.key)}
+													type="button"
+													onclick={() =>
+														(collapsedPlatforms[platform.key] = !collapsedPlatforms[platform.key])}
+													style="background: none; border: none; color: var(--text-dim); cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; transition: color 0.2s ease, transform 0.2s ease; transform: rotate({collapsedPlatforms[
+														platform.key
+													]
+														? '180deg'
+														: '0deg'}); outline: none;"
+													title={collapsedPlatforms[platform.key] ? 'Expand' : 'Collapse'}
+													onmouseover={(e) => (e.currentTarget.style.color = 'var(--text)')}
+													onmouseout={(e) => (e.currentTarget.style.color = 'var(--text-dim)')}
 												>
 													<svg
-														width="14"
-														height="14"
+														width="18"
+														height="18"
 														viewBox="0 0 24 24"
 														fill="none"
 														stroke="currentColor"
-														stroke-width="2"
+														stroke-width="2.5"
 														stroke-linecap="round"
-														stroke-linejoin="round"
-														><path d="M18 6L6 18" /><path d="M6 6l12 12" /></svg
+														stroke-linejoin="round"><polyline points="18 15 12 9 6 15" /></svg
 													>
-													Disconnect
 												</button>
-											{:else}
-												<p class="disconnected-msg">
-													{isConfigured ? 'Not connected' : 'Not configured'}
-												</p>
-												{#if status?.lastError}
-													<p
-														style="font-size: var(--text-xs); color: var(--text-dim); margin: -0.25rem 0 0.75rem;"
+											</div>
+										</div>
+
+										{#if !collapsedPlatforms[platform.key]}
+											<div class="platform-body" transition:slide={{ duration: 250 }}>
+												{#if status?.connected}
+													{@const followers = status?.followers ?? metrics?.followers ?? 0}
+													{@const engagement = status?.engagement_rate ?? metrics?.engagement ?? 0.0}
+													<div class="connected-info">
+														<div
+															class="handle-row"
+															style="display: flex; align-items: center; gap: 0.5rem;"
+														>
+															<span class="handle">{status.handle || '@connected'}</span>
+															{#if status.verified}
+																<svg
+																	class="verified-badge"
+																	width="16"
+																	height="16"
+																	viewBox="0 0 24 24"
+																	fill="var(--cyan)"
+																	><path
+																		d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 12c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
+																		stroke="var(--cyan)"
+																		stroke-width="1.5"
+																		fill="none"
+																	/><path
+																		d="M9 12l2 2 4-4"
+																		stroke="var(--cyan)"
+																		stroke-width="2"
+																		fill="none"
+																		stroke-linecap="round"
+																		stroke-linejoin="round"
+																	/></svg
+																>
+															{/if}
+
+															<!-- Favorite Star button -->
+															{#if status.handle}
+																{@const isMain = selectedAgent.handle === status.handle}
+																<button
+																	type="button"
+																	onclick={() => setMainHandle(status.handle!)}
+																	style="background: none; border: none; cursor: pointer; padding: 2px; display: inline-flex; align-items: center; justify-content: center; transition: transform 0.2s ease, color 0.2s ease; outline: none; margin-left: 2px;"
+																	title={isMain ? 'Main Agent Handle' : 'Set as Main Handle'}
+																	onmouseover={(e) =>
+																		(e.currentTarget.style.transform = 'scale(1.2)')}
+																	onmouseout={(e) => (e.currentTarget.style.transform = 'scale(1)')}
+																>
+																	{#if isMain}
+																		<svg
+																			width="16"
+																			height="16"
+																			viewBox="0 0 24 24"
+																			fill="#F59E0B"
+																			stroke="#F59E0B"
+																			stroke-width="2"
+																			stroke-linecap="round"
+																			stroke-linejoin="round"
+																			style="filter: drop-shadow(0 0 4px rgba(245, 158, 11, 0.6));"
+																		>
+																			<polygon
+																				points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"
+																			/>
+																		</svg>
+																	{:else}
+																		<svg
+																			width="16"
+																			height="16"
+																			viewBox="0 0 24 24"
+																			fill="none"
+																			stroke="var(--text-dim)"
+																			stroke-width="2"
+																			stroke-linecap="round"
+																			stroke-linejoin="round"
+																			class="star-outline"
+																			onmouseover={(e) =>
+																				e.currentTarget.setAttribute('stroke', '#F59E0B')}
+																			onmouseout={(e) =>
+																				e.currentTarget.setAttribute('stroke', 'var(--text-dim)')}
+																		>
+																			<polygon
+																				points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"
+																			/>
+																		</svg>
+																	{/if}
+																</button>
+															{/if}
+														</div>
+														<span class="sync-time">Last sync: {formatSyncTime(status.lastSync)}</span
+														>
+
+														<!-- Individual Platform Stats -->
+														<div
+															class="platform-stats-badge-row"
+															style="display: flex; gap: 0.5rem; margin-top: 0.75rem;"
+														>
+															<span
+																style="font-size: 11px; background: rgba(255,255,255,0.05); color: var(--text-dim); padding: 2px 6px; border-radius: 4px; display: flex; align-items: center; gap: 4px; border: 1px solid rgba(255,255,255,0.08); font-weight: 500;"
+															>
+																👥 {followers >= 1000
+																	? (followers / 1000).toFixed(1) + 'K'
+																	: followers} followers
+															</span>
+															<span
+																style="font-size: 11px; background: rgba(255,255,255,0.05); color: var(--text-dim); padding: 2px 6px; border-radius: 4px; display: flex; align-items: center; gap: 4px; border: 1px solid rgba(255,255,255,0.08); font-weight: 500;"
+															>
+																⚡ {engagement}% eng
+															</span>
+														</div>
+													</div>
+													<button
+														class="btn-disconnect"
+														onclick={() => disconnectPlatform(platform.key)}
 													>
-														{status.lastError}
-													</p>
-												{/if}
-												<button
-													class="btn-connect"
-													disabled={connectingPlatform === platform.key || !isConfigured}
-													onclick={() => connectPlatform(platform.key)}
-												>
-													{#if connectingPlatform === platform.key}
-														<span class="spinner"></span>
-														Connecting…
-													{:else if !isConfigured}
-														Not configured
-													{:else}
 														<svg
 															width="14"
 															height="14"
 															viewBox="0 0 24 24"
 															fill="none"
 															stroke="currentColor"
-															stroke-width="2.5"
+															stroke-width="2"
 															stroke-linecap="round"
 															stroke-linejoin="round"
-															><path d="M12 5v14" /><path d="M5 12h14" /></svg
+															><path d="M18 6L6 18" /><path d="M6 6l12 12" /></svg
 														>
-														Connect
-													{/if}
-												</button>
-											{/if}
-										</div>
-									{/if}
-								</div>
-							{/each}
-						</div>
-
-						<!-- Aggregated Dynamic Stats Overview Component under platforms grid -->
-						<AgentConnectionStats {platformStatuses} {platformMetrics} platforms={PLATFORMS} />
+														Disconnect
+													</button>
+												{/if}
+											</div>
+										{/if}
+									</div>
+								{/each}
+							</div>
+						{/if}
 					</div>
 				{:else if activeTab === 'soul'}
 					<div class="tab-panel">
@@ -1656,19 +1663,19 @@
 
 <style>
 	.page {
-		padding: 2rem;
-		max-width: 1400px;
+		padding: 1.25rem 1.5rem;
+		max-width: 1300px;
 		margin: 0 auto;
 	}
 
 	.page-header {
-		margin-bottom: 2rem;
+		margin-bottom: 1.25rem;
 	}
 
 	.page-header h1 {
-		font-size: var(--text-3xl);
+		font-size: 1.75rem;
 		font-family: var(--font-display);
-		margin-bottom: 0.5rem;
+		margin-bottom: 0.25rem;
 	}
 
 	.grad {
@@ -1680,25 +1687,25 @@
 
 	.subtitle {
 		color: var(--text-muted);
-		font-size: var(--text-base);
+		font-size: var(--text-sm);
 	}
 
 	/* ── Agent Grid ── */
 	.agent-grid {
 		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-		gap: 1rem;
-		margin-bottom: 2rem;
+		grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+		gap: 0.75rem;
+		margin-bottom: 1.25rem;
 	}
 
 	.agent-card {
 		display: flex;
 		align-items: center;
-		gap: 0.75rem;
-		padding: 1rem 1.25rem;
+		gap: 0.5rem;
+		padding: 0.65rem 0.85rem;
 		background: var(--surface);
 		border: 1px solid var(--border);
-		border-radius: var(--radius);
+		border-radius: var(--radius-sm);
 		cursor: pointer;
 		transition:
 			border-color 0.2s ease,
@@ -1723,9 +1730,9 @@
 	}
 
 	.agent-avatar {
-		width: 42px;
-		height: 42px;
-		border-radius: 12px;
+		width: 32px;
+		height: 32px;
+		border-radius: 8px;
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -1735,7 +1742,7 @@
 	.agent-avatar span {
 		color: white;
 		font-weight: 700;
-		font-size: 1.1rem;
+		font-size: 0.95rem;
 		font-family: var(--font-display);
 	}
 
@@ -1749,14 +1756,14 @@
 
 	.agent-name {
 		font-weight: 600;
-		font-size: var(--text-base);
+		font-size: var(--text-sm);
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
 	}
 
 	.agent-handle {
-		font-size: var(--text-xs);
+		font-size: 10px;
 		color: var(--text-dim);
 		font-family: var(--font-mono);
 	}
@@ -1764,10 +1771,10 @@
 	.agent-status {
 		display: flex;
 		align-items: center;
-		gap: 0.35rem;
-		font-size: var(--text-xs);
+		gap: 0.25rem;
+		font-size: 10px;
 		text-transform: uppercase;
-		letter-spacing: 0.06em;
+		letter-spacing: 0.05em;
 		font-weight: 600;
 		flex-shrink: 0;
 	}
@@ -1801,13 +1808,13 @@
 	.tab-btn {
 		display: flex;
 		align-items: center;
-		gap: 0.5rem;
-		padding: 1rem 1.5rem;
+		gap: 0.35rem;
+		padding: 0.65rem 1rem;
 		background: none;
 		border: none;
 		border-bottom: 2px solid transparent;
 		color: var(--text-muted);
-		font-size: var(--text-base);
+		font-size: var(--text-sm);
 		font-weight: 500;
 		cursor: pointer;
 		white-space: nowrap;
@@ -1837,17 +1844,17 @@
 	}
 
 	.tab-panel {
-		padding: 2rem;
+		padding: 1.25rem;
 	}
 
 	.panel-header {
-		margin-bottom: 1.5rem;
+		margin-bottom: 1rem;
 	}
 
 	.panel-header h3 {
-		font-size: var(--text-xl);
+		font-size: var(--text-lg);
 		font-family: var(--font-display);
-		margin-bottom: 0.5rem;
+		margin-bottom: 0.25rem;
 	}
 
 	.panel-desc {
@@ -1862,15 +1869,15 @@
 
 	.config-textarea {
 		width: 100%;
-		min-height: 400px;
+		min-height: 320px;
 		background: var(--bg);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-sm);
-		padding: 1.25rem;
+		padding: 0.85rem;
 		color: var(--text);
 		font-family: var(--font-mono);
 		font-size: var(--text-sm);
-		line-height: 1.7;
+		line-height: 1.6;
 		resize: vertical;
 		outline: none;
 		transition:
@@ -1886,21 +1893,21 @@
 	.panel-actions {
 		display: flex;
 		justify-content: flex-end;
-		margin-top: 1.5rem;
-		padding-top: 1.5rem;
+		margin-top: 1rem;
+		padding-top: 1rem;
 		border-top: 1px solid var(--border);
 	}
 
 	.save-btn {
 		display: inline-flex;
 		align-items: center;
-		gap: 0.5rem;
-		padding: 0.75rem 1.75rem;
+		gap: 0.4rem;
+		padding: 0.55rem 1.25rem;
 		background: var(--gradient-subtle);
 		color: #fff;
 		border: none;
 		border-radius: var(--radius-sm);
-		font-size: var(--text-base);
+		font-size: var(--text-sm);
 		font-weight: 600;
 		cursor: pointer;
 		transition:
@@ -1939,7 +1946,7 @@
 	.heartbeat-grid {
 		display: grid;
 		grid-template-columns: 1fr 1fr;
-		gap: 1.5rem;
+		gap: 1rem;
 	}
 
 	.field-group {
@@ -2082,17 +2089,17 @@
 	.autonomy-cards {
 		display: flex;
 		flex-direction: column;
-		gap: 1rem;
+		gap: 0.75rem;
 	}
 
 	.autonomy-card {
 		display: flex;
 		align-items: flex-start;
-		gap: 1rem;
-		padding: 1.25rem 1.5rem;
+		gap: 0.75rem;
+		padding: 0.85rem 1.15rem;
 		background: var(--bg);
 		border: 1px solid var(--border);
-		border-radius: var(--radius);
+		border-radius: var(--radius-sm);
 		cursor: pointer;
 		text-align: left;
 		width: 100%;
@@ -2234,7 +2241,7 @@
 	.platforms-grid {
 		display: grid;
 		grid-template-columns: repeat(2, 1fr);
-		gap: 1.5rem;
+		gap: 1rem;
 	}
 
 	@media (max-width: 1024px) {
@@ -2246,11 +2253,11 @@
 	.platform-card {
 		background: var(--surface-2);
 		border: 1px solid var(--border);
-		border-radius: var(--radius);
-		padding: 1.5rem;
+		border-radius: var(--radius-sm);
+		padding: 0.75rem 1rem;
 		display: flex;
 		flex-direction: column;
-		gap: 1.25rem;
+		gap: 0.5rem;
 		transition:
 			border-color 0.25s ease,
 			box-shadow 0.25s ease,

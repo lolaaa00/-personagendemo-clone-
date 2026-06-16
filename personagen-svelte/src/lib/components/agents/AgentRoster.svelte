@@ -14,7 +14,7 @@
 	let currentFilter = $state<FilterType>('all');
 
 	let filteredAgents = $derived.by(() => {
-		let result = [...agents];
+		let result = agents.filter((a) => a.status === 'active' || a.is_overseer);
 		switch (currentFilter) {
 			case 'active':
 				return result.filter((a) => a.status === 'active');
