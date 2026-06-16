@@ -2,7 +2,11 @@ import type { LayoutServerLoad } from './$types';
 import { redirect } from '@sveltejs/kit';
 import { env } from '$env/dynamic/public';
 import { createDbService } from '$lib/server/db';
-import { getOrCreateHermes, ensureHermesConfig, ensureAgentsManagedByHermes } from '$lib/server/hermes';
+import {
+	getOrCreateHermes,
+	ensureHermesConfig,
+	ensureAgentsManagedByHermes
+} from '$lib/server/hermes';
 
 export const load: LayoutServerLoad = async ({ locals, fetch }) => {
 	const supabaseUrl = env.PUBLIC_SUPABASE_URL ?? '';

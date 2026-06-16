@@ -40,53 +40,121 @@
 	</div>
 
 	<!-- Ecosystem Health Panel -->
-	<div class="ecosystem-health-panel" style="margin-top: 2rem; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.5rem;">
-		<div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 1rem; margin-bottom: 1.25rem;">
+	<div
+		class="ecosystem-health-panel"
+		style="margin-top: 2rem; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.5rem;"
+	>
+		<div
+			style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 1rem; margin-bottom: 1.25rem;"
+		>
 			<div>
-				<h3 style="font-size: 0.95rem; font-weight: 600; margin: 0; display: flex; align-items: center; gap: 0.5rem; color: var(--text);">
+				<h3
+					style="font-size: 0.95rem; font-weight: 600; margin: 0; display: flex; align-items: center; gap: 0.5rem; color: var(--text);"
+				>
 					🛡️ Hermes Ecosystem Monitor
 				</h3>
 				<p style="font-size: 0.72rem; color: var(--text-dim); margin: 0.25rem 0 0 0;">
 					Real-time verification of Svelte agent runtimes and overseer constraints.
 				</p>
 			</div>
-			<span style="font-size: 0.75rem; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.2); color: #10B981; padding: 4px 10px; border-radius: 99px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">
-				<span style="width: 6px; height: 6px; background: #10B981; border-radius: 50%; display: inline-block;"></span>
+			<span
+				style="font-size: 0.75rem; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.2); color: #10B981; padding: 4px 10px; border-radius: 99px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;"
+			>
+				<span
+					style="width: 6px; height: 6px; background: #10B981; border-radius: 50%; display: inline-block;"
+				></span>
 				Hermes Online
 			</span>
 		</div>
 
-		<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem;">
-			<div style="background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 1rem; text-align: left;">
+		<div
+			style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem;"
+		>
+			<div
+				style="background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 1rem; text-align: left;"
+			>
 				<span style="font-size: 1.25rem; display: block; margin-bottom: 0.5rem;">👥</span>
-				<div style="font-size: var(--text-xs); color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;">Monitored Creators</div>
-				<div style="font-size: 1.5rem; font-weight: 700; margin-top: 0.25rem; font-family: var(--font-display); color: var(--text);">{managedAgentsCount} / {data.agents.filter(a => !a.is_overseer).length}</div>
-				<span style="font-size: 10px; color: var(--success); font-weight: 500; display: block; margin-top: 0.25rem;">🛡️ Supervised by Hermes</span>
+				<div
+					style="font-size: var(--text-xs); color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;"
+				>
+					Monitored Creators
+				</div>
+				<div
+					style="font-size: 1.5rem; font-weight: 700; margin-top: 0.25rem; font-family: var(--font-display); color: var(--text);"
+				>
+					{managedAgentsCount} / {data.agents.filter((a) => !a.is_overseer).length}
+				</div>
+				<span
+					style="font-size: 10px; color: var(--success); font-weight: 500; display: block; margin-top: 0.25rem;"
+					>🛡️ Supervised by Hermes</span
+				>
 			</div>
 
-			<div style="background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 1rem; text-align: left;">
+			<div
+				style="background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 1rem; text-align: left;"
+			>
 				<span style="font-size: 1.25rem; display: block; margin-bottom: 0.5rem;">📋</span>
-				<div style="font-size: var(--text-xs); color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;">Open PM Tickets</div>
-				<div style="font-size: 1.5rem; font-weight: 700; margin-top: 0.25rem; font-family: var(--font-display); color: var(--text);">{openTicketsCount}</div>
-				<span style="font-size: 10px; color: {openTicketsCount > 0 ? '#f59e0b' : 'var(--text-dim)'}; font-weight: 500; display: block; margin-top: 0.25rem;">
+				<div
+					style="font-size: var(--text-xs); color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;"
+				>
+					Open PM Tickets
+				</div>
+				<div
+					style="font-size: 1.5rem; font-weight: 700; margin-top: 0.25rem; font-family: var(--font-display); color: var(--text);"
+				>
+					{openTicketsCount}
+				</div>
+				<span
+					style="font-size: 10px; color: {openTicketsCount > 0
+						? '#f59e0b'
+						: 'var(--text-dim)'}; font-weight: 500; display: block; margin-top: 0.25rem;"
+				>
 					{openTicketsCount > 0 ? '⚠️ Awaiting agent resolution' : '✓ Backlog is clear'}
 				</span>
 			</div>
 
-			<div style="background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 1rem; text-align: left;">
+			<div
+				style="background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 1rem; text-align: left;"
+			>
 				<span style="font-size: 1.25rem; display: block; margin-bottom: 0.5rem;">💬</span>
-				<div style="font-size: var(--text-xs); color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;">Unclaimed Messages</div>
-				<div style="font-size: 1.5rem; font-weight: 700; margin-top: 0.25rem; font-family: var(--font-display); color: var(--text);">{unclaimedMessagesCount}</div>
-				<span style="font-size: 10px; color: {unclaimedMessagesCount > 0 ? '#ef4444' : 'var(--text-dim)'}; font-weight: 500; display: block; margin-top: 0.25rem;">
+				<div
+					style="font-size: var(--text-xs); color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;"
+				>
+					Unclaimed Messages
+				</div>
+				<div
+					style="font-size: 1.5rem; font-weight: 700; margin-top: 0.25rem; font-family: var(--font-display); color: var(--text);"
+				>
+					{unclaimedMessagesCount}
+				</div>
+				<span
+					style="font-size: 10px; color: {unclaimedMessagesCount > 0
+						? '#ef4444'
+						: 'var(--text-dim)'}; font-weight: 500; display: block; margin-top: 0.25rem;"
+				>
 					{unclaimedMessagesCount > 0 ? '🔴 Pending daemon polling' : '✓ All threads synced'}
 				</span>
 			</div>
 
-			<div style="background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 1rem; text-align: left;">
+			<div
+				style="background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 1rem; text-align: left;"
+			>
 				<span style="font-size: 1.25rem; display: block; margin-bottom: 0.5rem;">⚙️</span>
-				<div style="font-size: var(--text-xs); color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;">Cognitive Configs</div>
-				<div style="font-size: 1.5rem; font-weight: 700; margin-top: 0.25rem; font-family: var(--font-display); color: var(--text);">{hermesConfigPresent ? 'Active' : 'Missing'}</div>
-				<span style="font-size: 10px; color: {hermesConfigPresent ? 'var(--success)' : '#ef4444'}; font-weight: 500; display: block; margin-top: 0.25rem;">
+				<div
+					style="font-size: var(--text-xs); color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;"
+				>
+					Cognitive Configs
+				</div>
+				<div
+					style="font-size: 1.5rem; font-weight: 700; margin-top: 0.25rem; font-family: var(--font-display); color: var(--text);"
+				>
+					{hermesConfigPresent ? 'Active' : 'Missing'}
+				</div>
+				<span
+					style="font-size: 10px; color: {hermesConfigPresent
+						? 'var(--success)'
+						: '#ef4444'}; font-weight: 500; display: block; margin-top: 0.25rem;"
+				>
 					{hermesConfigPresent ? '✓ Hermes configuration OK' : '🔴 Seed config failed'}
 				</span>
 			</div>

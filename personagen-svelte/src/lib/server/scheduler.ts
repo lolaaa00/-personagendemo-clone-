@@ -3,6 +3,7 @@ import { env } from '$env/dynamic/private';
 import { env as publicEnv } from '$env/dynamic/public';
 import { ComposioClient, isPlatformConfigured } from './social/composio';
 import { GoogleGenAI } from '@google/genai';
+import { validateUrlForSsrf } from './security';
 
 let intervalId: NodeJS.Timeout | null = null;
 let isRunning = false;
@@ -199,6 +200,11 @@ async function pollRssFeeds() {
 					.update({ rss_last_polled_at: new Date().toISOString() })
 					.eq('id', config.id);
 
+				if (!(await validateUrlForSsrf(config.rss_url))) {
+					console.warn(`[Scheduler RSS] SSRF Warning: RSS URL resolved to a restricted or invalid address: ${config.rss_url}`);
+					continue;
+				}
+
 				const response = await fetch(config.rss_url, {
 					headers: {
 						'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) PersonaGenRSS/1.0'
@@ -257,7 +263,7 @@ async function pollRssFeeds() {
 							method: 'POST',
 							headers: {
 								'Content-Type': 'application/json',
-								Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`
+								Authorization: `Bearer ${env.INTERNAL_API_SECRET}`
 							},
 							body: JSON.stringify({
 								userId: config.user_id,

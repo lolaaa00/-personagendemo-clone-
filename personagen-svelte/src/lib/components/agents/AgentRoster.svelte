@@ -139,9 +139,15 @@
 						<span class="dash-agent-name" style="display: flex; align-items: center; gap: 0.5rem;">
 							{agent.name}
 							{#if agent.is_overseer}
-								<span style="font-size: 9px; background: linear-gradient(135deg, #10B981, #06B6D4); color: white; padding: 2px 6px; border-radius: 4px; font-weight: 700; text-transform: uppercase; line-height: 1;">Hermes</span>
+								<span
+									style="font-size: 9px; background: linear-gradient(135deg, #10B981, #06B6D4); color: white; padding: 2px 6px; border-radius: 4px; font-weight: 700; text-transform: uppercase; line-height: 1;"
+									>Hermes</span
+								>
 							{:else if agent.managed_by_overseer}
-								<span style="font-size: 9px; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.2); color: #10B981; padding: 1px 5px; border-radius: 4px; font-weight: 600; display: inline-flex; align-items: center; gap: 2px; line-height: 1;" title="Orchestrated and monitored by Hermes">
+								<span
+									style="font-size: 9px; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.2); color: #10B981; padding: 1px 5px; border-radius: 4px; font-weight: 600; display: inline-flex; align-items: center; gap: 2px; line-height: 1;"
+									title="Orchestrated and monitored by Hermes"
+								>
 									🛡️ Managed
 								</span>
 							{/if}

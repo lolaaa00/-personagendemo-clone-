@@ -4,6 +4,15 @@
 	import { goto } from '$app/navigation';
 	import { onMount, tick } from 'svelte';
 
+	function escapeHtml(text: string): string {
+		return text
+			.replace(/&/g, '&amp;')
+			.replace(/</g, '&lt;')
+			.replace(/>/g, '&gt;')
+			.replace(/"/g, '&quot;')
+			.replace(/'/g, '&#039;');
+	}
+
 	type InboxTab = 'chat' | 'social' | 'email';
 	let activeTab = $state<InboxTab>('chat');
 	let agentFilter = $state('all');
@@ -782,7 +791,7 @@
 															</ul>
 														{:else}
 															<p>
-																{@html paragraph
+																{@html escapeHtml(paragraph)
 																	.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
 																	.replace(/`(.*?)`/g, '<code class="inline-code">$1</code>')}
 															</p>

@@ -369,10 +369,22 @@
 
 	<!-- Ecosystem Integrity & Monitored Agents Section -->
 	<section class="grid-card full-width-panel" style="margin-top: 2rem;">
-		<div class="card-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 1.25rem;">
+		<div
+			class="card-header"
+			style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 1.25rem;"
+		>
 			<div>
-				<h3 style="display: flex; align-items: center; gap: 0.5rem; margin: 0; font-size: 1.1rem; font-weight: 700; color: var(--text);">🛡️ Ecosystem Integrity & Monitored Creators</h3>
-				<p style="margin: 0.25rem 0 0 0; font-size: var(--text-xs); color: var(--text-dim); line-height: 1.4;">Verify that all creator agents are supervised by Hermes and have valid cognitive configurations.</p>
+				<h3
+					style="display: flex; align-items: center; gap: 0.5rem; margin: 0; font-size: 1.1rem; font-weight: 700; color: var(--text);"
+				>
+					🛡️ Ecosystem Integrity & Monitored Creators
+				</h3>
+				<p
+					style="margin: 0.25rem 0 0 0; font-size: var(--text-xs); color: var(--text-dim); line-height: 1.4;"
+				>
+					Verify that all creator agents are supervised by Hermes and have valid cognitive
+					configurations.
+				</p>
 			</div>
 			{#if agentsMissingConfig.length === 0}
 				<span class="health-pill healthy">✓ All Configured</span>
@@ -384,24 +396,48 @@
 		<div style="display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 2rem; margin-top: 1.5rem;">
 			<!-- Managed Creators Grid -->
 			<div>
-				<h4 style="font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); margin-bottom: 1rem;">Supervised Creators ({managedCreators.length})</h4>
+				<h4
+					style="font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); margin-bottom: 1rem;"
+				>
+					Supervised Creators ({managedCreators.length})
+				</h4>
 				{#if managedCreators.length > 0}
-					<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1rem;">
+					<div
+						style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1rem;"
+					>
 						{#each managedCreators as agent}
-							<div class="creator-mini-card" style="background: rgba(255,255,255,0.01); border: 1px solid rgba(255,255,255,0.04); border-radius: 8px; padding: 0.75rem 1rem; display: flex; align-items: center; gap: 0.75rem;">
-								<div style="width: 28px; height: 28px; border-radius: 50%; background: {agent.gradient}; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: bold; color: white; flex-shrink: 0;">
+							<div
+								class="creator-mini-card"
+								style="background: rgba(255,255,255,0.01); border: 1px solid rgba(255,255,255,0.04); border-radius: 8px; padding: 0.75rem 1rem; display: flex; align-items: center; gap: 0.75rem;"
+							>
+								<div
+									style="width: 28px; height: 28px; border-radius: 50%; background: {agent.gradient}; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: bold; color: white; flex-shrink: 0;"
+								>
 									{agent.initial}
 								</div>
 								<div style="min-width: 0; flex: 1;">
-									<div style="font-weight: 600; font-size: var(--text-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text);">{agent.name}</div>
-									<div style="font-size: 10px; color: var(--text-dim); font-family: var(--font-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{agent.handle}</div>
+									<div
+										style="font-weight: 600; font-size: var(--text-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text);"
+									>
+										{agent.name}
+									</div>
+									<div
+										style="font-size: 10px; color: var(--text-dim); font-family: var(--font-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"
+									>
+										{agent.handle}
+									</div>
 								</div>
-								<span style="font-size: 9px; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.2); color: #10B981; padding: 1px 5px; border-radius: 4px; font-weight: 600;">Monitored</span>
+								<span
+									style="font-size: 9px; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.2); color: #10B981; padding: 1px 5px; border-radius: 4px; font-weight: 600;"
+									>Monitored</span
+								>
 							</div>
 						{/each}
 					</div>
 				{:else}
-					<div style="background: rgba(255,255,255,0.01); border: 1px dashed rgba(255,255,255,0.05); border-radius: 8px; padding: 2rem; text-align: center; color: var(--text-dim); font-size: var(--text-sm);">
+					<div
+						style="background: rgba(255,255,255,0.01); border: 1px dashed rgba(255,255,255,0.05); border-radius: 8px; padding: 2rem; text-align: center; color: var(--text-dim); font-size: var(--text-sm);"
+					>
 						No subordinate creator agents currently registered.
 					</div>
 				{/if}
@@ -409,33 +445,62 @@
 
 			<!-- Configuration Audits -->
 			<div>
-				<h4 style="font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); margin-bottom: 1rem;">Integrity Diagnostic Log</h4>
+				<h4
+					style="font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); margin-bottom: 1rem;"
+				>
+					Integrity Diagnostic Log
+				</h4>
 				<div style="display: flex; flex-direction: column; gap: 0.75rem;">
 					<!-- Hermes Overseer Check -->
-					<div class="diagnostic-item" style="display: flex; align-items: flex-start; gap: 0.75rem; background: rgba(255,255,255,0.01); border: 1px solid rgba(255,255,255,0.03); padding: 0.75rem 1rem; border-radius: 8px;">
+					<div
+						class="diagnostic-item"
+						style="display: flex; align-items: flex-start; gap: 0.75rem; background: rgba(255,255,255,0.01); border: 1px solid rgba(255,255,255,0.03); padding: 0.75rem 1rem; border-radius: 8px;"
+					>
 						<span style="font-size: var(--text-base); line-height: 1;">🛡️</span>
 						<div style="flex: 1;">
-							<div style="font-weight: 600; font-size: var(--text-xs); color: var(--text);">Overseer Identity</div>
-							<div style="font-size: 10px; color: var(--text-dim); margin-top: 2px;">Hermes is correctly seeded and active with operational overrides.</div>
+							<div style="font-weight: 600; font-size: var(--text-xs); color: var(--text);">
+								Overseer Identity
+							</div>
+							<div style="font-size: 10px; color: var(--text-dim); margin-top: 2px;">
+								Hermes is correctly seeded and active with operational overrides.
+							</div>
 						</div>
-						<span style="font-size: 10px; color: var(--success); font-weight: 700; text-transform: uppercase;">OK</span>
+						<span
+							style="font-size: 10px; color: var(--success); font-weight: 700; text-transform: uppercase;"
+							>OK</span
+						>
 					</div>
 
 					<!-- Config Check -->
 					{#if agentsMissingConfig.length === 0}
-						<div class="diagnostic-item" style="display: flex; align-items: flex-start; gap: 0.75rem; background: rgba(255,255,255,0.01); border: 1px solid rgba(255,255,255,0.03); padding: 0.75rem 1rem; border-radius: 8px;">
+						<div
+							class="diagnostic-item"
+							style="display: flex; align-items: flex-start; gap: 0.75rem; background: rgba(255,255,255,0.01); border: 1px solid rgba(255,255,255,0.03); padding: 0.75rem 1rem; border-radius: 8px;"
+						>
 							<span style="font-size: var(--text-base); line-height: 1;">⚙️</span>
 							<div style="flex: 1;">
-								<div style="font-weight: 600; font-size: var(--text-xs); color: var(--text);">Cognitive Architectures</div>
-								<div style="font-size: 10px; color: var(--text-dim); margin-top: 2px;">All creator agents have database-backed agent_config parameters.</div>
+								<div style="font-weight: 600; font-size: var(--text-xs); color: var(--text);">
+									Cognitive Architectures
+								</div>
+								<div style="font-size: 10px; color: var(--text-dim); margin-top: 2px;">
+									All creator agents have database-backed agent_config parameters.
+								</div>
 							</div>
-							<span style="font-size: 10px; color: var(--success); font-weight: 700; text-transform: uppercase;">OK</span>
+							<span
+								style="font-size: 10px; color: var(--success); font-weight: 700; text-transform: uppercase;"
+								>OK</span
+							>
 						</div>
 					{:else}
-						<div class="diagnostic-item warning" style="display: flex; align-items: flex-start; gap: 0.75rem; background: rgba(245, 158, 11, 0.03); border: 1px solid rgba(245, 158, 11, 0.15); padding: 0.75rem 1rem; border-radius: 8px;">
+						<div
+							class="diagnostic-item warning"
+							style="display: flex; align-items: flex-start; gap: 0.75rem; background: rgba(245, 158, 11, 0.03); border: 1px solid rgba(245, 158, 11, 0.15); padding: 0.75rem 1rem; border-radius: 8px;"
+						>
 							<span style="font-size: var(--text-base); line-height: 1;">⚠️</span>
 							<div style="flex: 1;">
-								<div style="font-weight: 600; font-size: var(--text-xs); color: #f59e0b;">Cognitive Architectures ({agentsMissingConfig.length} Unconfigured)</div>
+								<div style="font-weight: 600; font-size: var(--text-xs); color: #f59e0b;">
+									Cognitive Architectures ({agentsMissingConfig.length} Unconfigured)
+								</div>
 								<div style="font-size: 10px; color: var(--text-dim); margin-top: 4px;">
 									The following agents are missing configuration profiles and may act with defaults:
 									<ul style="margin: 4px 0 0 12px; padding: 0; color: #f87171;">
@@ -445,7 +510,10 @@
 									</ul>
 								</div>
 							</div>
-							<span style="font-size: 10px; color: #f59e0b; font-weight: 700; text-transform: uppercase;">Mismatched</span>
+							<span
+								style="font-size: 10px; color: #f59e0b; font-weight: 700; text-transform: uppercase;"
+								>Mismatched</span
+							>
 						</div>
 					{/if}
 				</div>

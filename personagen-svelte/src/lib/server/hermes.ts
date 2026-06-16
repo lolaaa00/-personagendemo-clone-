@@ -23,7 +23,9 @@ export async function getOrCreateHermes(supabase: SupabaseClient, userId: string
 			hermesAgent.managed_by_overseer === true ||
 			hermesAgent.supervisor_agent_id !== null
 		) {
-			console.log(`[Hermes Service] Normalizing existing Hermes agent parameters for user ${userId}.`);
+			console.log(
+				`[Hermes Service] Normalizing existing Hermes agent parameters for user ${userId}.`
+			);
 			const { data: updatedHermes, error: normErr } = await supabase
 				.from('agents')
 				.update({
@@ -90,7 +92,11 @@ export async function getOrCreateHermes(supabase: SupabaseClient, userId: string
 /**
  * Ensures a configuration record exists in agent_configs for the Hermes overseer.
  */
-export async function ensureHermesConfig(supabase: SupabaseClient, userId: string, hermesId: string) {
+export async function ensureHermesConfig(
+	supabase: SupabaseClient,
+	userId: string,
+	hermesId: string
+) {
 	const { data: config } = await supabase
 		.from('agent_configs')
 		.select('id')
@@ -129,7 +135,11 @@ export async function ensureHermesConfig(supabase: SupabaseClient, userId: strin
 /**
  * Scans all non-overseer creator agents for the user and backfills them to be managed by Hermes.
  */
-export async function ensureAgentsManagedByHermes(supabase: SupabaseClient, userId: string, hermesId: string) {
+export async function ensureAgentsManagedByHermes(
+	supabase: SupabaseClient,
+	userId: string,
+	hermesId: string
+) {
 	try {
 		// 1. Fetch creators (explicitly excluding is_overseer = true to prevent self-management)
 		const { data: creators, error } = await supabase
@@ -151,7 +161,9 @@ export async function ensureAgentsManagedByHermes(supabase: SupabaseClient, user
 
 		if (unlinked.length === 0) return;
 
-		console.log(`[Hermes Service] Backfilling ${unlinked.length} unlinked creator agents under Hermes management...`);
+		console.log(
+			`[Hermes Service] Backfilling ${unlinked.length} unlinked creator agents under Hermes management...`
+		);
 
 		for (const agent of unlinked) {
 			const { error: updateErr } = await supabase
@@ -164,7 +176,10 @@ export async function ensureAgentsManagedByHermes(supabase: SupabaseClient, user
 				.eq('id', agent.id);
 
 			if (updateErr) {
-				console.error(`[Hermes Service] Failed to link agent ${agent.name} (${agent.id}) to Hermes:`, updateErr);
+				console.error(
+					`[Hermes Service] Failed to link agent ${agent.name} (${agent.id}) to Hermes:`,
+					updateErr
+				);
 			}
 		}
 	} catch (err) {

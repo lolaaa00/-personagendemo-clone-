@@ -3,6 +3,15 @@
 	import { goto } from '$app/navigation';
 	import { onMount, tick } from 'svelte';
 
+	function escapeHtml(text: string): string {
+		return text
+			.replace(/&/g, '&amp;')
+			.replace(/</g, '&lt;')
+			.replace(/>/g, '&gt;')
+			.replace(/"/g, '&quot;')
+			.replace(/'/g, '&#039;');
+	}
+
 	interface Agent {
 		id: string;
 		name: string;
@@ -557,7 +566,7 @@ As a specialized creator, I've updated my internal logic context. I am connected
 											{:else}
 												<p>
 													<!-- Simple double bold formatting -->
-													{@html paragraph
+													{@html escapeHtml(paragraph)
 														.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
 														.replace(/`(.*?)`/g, '<code class="inline-code">$1</code>')}
 												</p>

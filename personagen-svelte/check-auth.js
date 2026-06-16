@@ -1,8 +1,11 @@
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = 'https://l2g-supabase.zi1cc5.easypanel.host';
-const serviceRoleKey =
-	'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJzZXJ2aWNlX3JvbGUiLAogICAgImlzcyI6ICJzdXBhYmFzZS1kZW1vIiwKICAgICJpYXQiOiAxNjQxNzY5MjAwLAogICAgImV4cCI6IDE3OTk1MzU2MDAKfQ.DaYlNEoUrrEn2Ig7tqibS-PHK5vgusbcbo7X36XVt4Q';
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+if (!serviceRoleKey) {
+	console.error('Error: SUPABASE_SERVICE_ROLE_KEY environment variable is not set!');
+	process.exit(1);
+}
 
 const supabase = createClient(supabaseUrl, serviceRoleKey, {
 	auth: {

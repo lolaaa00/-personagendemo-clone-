@@ -4,6 +4,7 @@ import { GoogleGenAI } from '@google/genai';
 import { env } from '$env/dynamic/private';
 import { createDbService } from '$lib/server/db';
 import { createSupabaseServiceClient } from '$lib/server/supabase';
+import { validateUrlForSsrf } from '$lib/server/security';
 
 const toolsList: any[] = [
 	{
@@ -61,7 +62,8 @@ const toolsList: any[] = [
 	},
 	{
 		name: 'report_to_overseer',
-		description: 'Report an operational issue, bug, or blocker to the platform overseer (Hermes) for automatic ticketing and administrator review.',
+		description:
+			'Report an operational issue, bug, or blocker to the platform overseer (Hermes) for automatic ticketing and administrator review.',
 		parameters: {
 			type: 'OBJECT',
 			properties: {
@@ -164,6 +166,9 @@ Write a ready-to-publish draft for each platform (Instagram, Facebook, YouTube, 
 		try {
 			const ai = new GoogleGenAI({ apiKey });
 			let pageText = '';
+			if (!(await validateUrlForSsrf(args.url))) {
+				return { success: false, error: 'SSRF Warning: URL resolved to a restricted or invalid address.' };
+			}
 			try {
 				const crawlRes = await fetchFn(args.url);
 				if (crawlRes.ok) {
@@ -279,7 +284,7 @@ Conduct a 9-layer scorecard audit (1-100 score, Hook structures, Visual DNA, Rhy
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json',
-					Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`
+					Authorization: `Bearer ${env.INTERNAL_API_SECRET}`
 				},
 				body: JSON.stringify({
 					userId,
@@ -312,7 +317,7 @@ Conduct a 9-layer scorecard audit (1-100 score, Hook structures, Visual DNA, Rhy
 				.select('*')
 				.eq('id', agentId)
 				.single();
-			
+
 			if (fetchAgentErr || !reporterAgent) {
 				throw new Error('Reporter agent not found: ' + (fetchAgentErr?.message || ''));
 			}
@@ -343,7 +348,8 @@ Conduct a 9-layer scorecard audit (1-100 score, Hook structures, Visual DNA, Rhy
 				role: 'user',
 				content: `[SYSTEM REPORT from ${reporterAgent.name} (@${reporterAgent.handle})]: ${args.issue}`
 			});
-			if (msgErr) console.error('[Report Overseer Tool] Error inserting alert chat message:', msgErr);
+			if (msgErr)
+				console.error('[Report Overseer Tool] Error inserting alert chat message:', msgErr);
 
 			// 4. Insert a ticket in the database backlog
 			// Query current max position to place at the end of the backlog
@@ -457,8 +463,8 @@ export const POST: RequestHandler = async ({ params, locals, request }) => {
 
 	// 1. Determine Auth Context and select client BEFORE fetching agent from database
 	const authHeader = request.headers.get('Authorization');
-	const serviceKey = env.SUPABASE_SERVICE_ROLE_KEY;
-	const isServiceCall = !!(authHeader && serviceKey && authHeader === `Bearer ${serviceKey}`);
+	const internalSecret = env.INTERNAL_API_SECRET;
+	const isServiceCall = !!(authHeader && internalSecret && authHeader === `Bearer ${internalSecret}`);
 
 	let supabaseClient = locals.supabase;
 	let userId;

@@ -15,6 +15,33 @@ if (!supabaseKey) {
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
+const mcpBridgeToken = process.env.MCP_BRIDGE_TOKEN;
+if (!mcpBridgeToken) {
+  console.warn("WARNING: MCP_BRIDGE_TOKEN environment variable is not set! Authenticating requests will fail.");
+}
+
+function checkAuth(req, res, next) {
+  if (!mcpBridgeToken) {
+    return res.status(401).send("Unauthorized: MCP_BRIDGE_TOKEN is not configured on the server.");
+  }
+  
+  const authHeader = req.headers.authorization;
+  const queryToken = req.query.token;
+  
+  let token = null;
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    token = authHeader.substring(7);
+  } else if (queryToken) {
+    token = queryToken;
+  }
+  
+  if (token !== mcpBridgeToken) {
+    return res.status(401).send("Unauthorized: Invalid or missing token.");
+  }
+  
+  next();
+}
+
 // Initialize high-level MCP Server
 const server = new McpServer({
   name: "personagen-supabase-bridge",
@@ -407,7 +434,7 @@ app.use(express.json());
 const transports = new Map();
 
 // 1. SSE Connection stream
-app.get("/sse", async (req, res) => {
+app.get("/sse", checkAuth, async (req, res) => {
   console.log(`[MCP] New client connecting via SSE...`);
   const transport = new SSEServerTransport("/messages", res);
   
@@ -422,7 +449,7 @@ app.get("/sse", async (req, res) => {
 });
 
 // 2. Incoming Post Messages gateway
-app.post("/messages", async (req, res) => {
+app.post("/messages", checkAuth, async (req, res) => {
   const sessionId = req.query.sessionId;
   const transport = transports.get(sessionId);
 

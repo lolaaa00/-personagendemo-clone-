@@ -2,7 +2,11 @@ import { redirect, fail } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
 import { createDbService } from '$lib/server/db';
 import { env } from '$env/dynamic/public';
-import { getOrCreateHermes, ensureHermesConfig, ensureAgentsManagedByHermes } from '$lib/server/hermes';
+import {
+	getOrCreateHermes,
+	ensureHermesConfig,
+	ensureAgentsManagedByHermes
+} from '$lib/server/hermes';
 
 export const load: PageServerLoad = async ({ locals }) => {
 	const { session, user } = await locals.safeGetSession();

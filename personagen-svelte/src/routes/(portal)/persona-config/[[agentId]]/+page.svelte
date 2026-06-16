@@ -32,7 +32,9 @@
 	let editEngagementRate = $state(5.2);
 	let editGradient = $state('');
 	let editSupervisorId = $state<string | null>(null);
-	let editRuntimeOwner = $state<'svelte-gemini' | 'hermes-daemon' | 'hermes-orchestrated'>('svelte-gemini');
+	let editRuntimeOwner = $state<'svelte-gemini' | 'hermes-daemon' | 'hermes-orchestrated'>(
+		'svelte-gemini'
+	);
 
 	let supervisors = $derived(data.supervisors || []);
 

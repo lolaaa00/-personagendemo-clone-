@@ -1,7 +1,11 @@
 import type { PageServerLoad } from './$types';
 import { createDbService } from '$lib/server/db';
 import { env } from '$env/dynamic/public';
-import { getOrCreateHermes, ensureHermesConfig, ensureAgentsManagedByHermes } from '$lib/server/hermes';
+import {
+	getOrCreateHermes,
+	ensureHermesConfig,
+	ensureAgentsManagedByHermes
+} from '$lib/server/hermes';
 
 export const load: PageServerLoad = async ({ locals, fetch }) => {
 	const supabaseUrl = env.PUBLIC_SUPABASE_URL ?? '';

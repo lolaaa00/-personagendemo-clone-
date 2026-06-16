@@ -14,10 +14,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
+COPY src/package*.json ./src/
+RUN cd /app/src && npm ci --omit=dev
 COPY src/ ./src/
-
-# Install Node deps
-RUN cd /app/src && npm install --omit=dev
 
 # Strip Windows CRLF from shell scripts
 RUN sed -i 's/\r$//' /app/src/entrypoint.sh && chmod +x /app/src/entrypoint.sh

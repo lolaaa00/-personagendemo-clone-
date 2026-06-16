@@ -22,10 +22,13 @@ export function createSupabaseServerClient(cookies: Cookies) {
 }
 
 export function createSupabaseServiceClient() {
-	const supabaseUrl = env.PUBLIC_SUPABASE_URL || privateEnv.PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
+	const supabaseUrl =
+		env.PUBLIC_SUPABASE_URL || privateEnv.PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
 	const serviceRoleKey = privateEnv.SUPABASE_SERVICE_ROLE_KEY;
 	if (!serviceRoleKey) {
-		throw new Error('[Supabase Service Client] SUPABASE_SERVICE_ROLE_KEY is not configured in environment variables.');
+		throw new Error(
+			'[Supabase Service Client] SUPABASE_SERVICE_ROLE_KEY is not configured in environment variables.'
+		);
 	}
 	return createClient(supabaseUrl, serviceRoleKey, {
 		auth: {

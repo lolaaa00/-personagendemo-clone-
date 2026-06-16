@@ -4,6 +4,15 @@
 	import { goto } from '$app/navigation';
 	import { browser } from '$app/environment';
 
+	function escapeHtml(text: string): string {
+		return text
+			.replace(/&/g, '&amp;')
+			.replace(/</g, '&lt;')
+			.replace(/>/g, '&gt;')
+			.replace(/"/g, '&quot;')
+			.replace(/'/g, '&#039;');
+	}
+
 	const PLATFORMS = [
 		{ id: 'youtube', label: 'YouTube', color: '#ff0000' },
 		{ id: 'tiktok', label: 'TikTok', color: '#00f2ea' },
@@ -710,7 +719,7 @@ Photo Reference URL: ${selectedProd.photoUrl}`;
 						<div class="thumbnail-brief">
 							{#each output.thumbnailNotes as note}
 								<div class="brief-item">
-									{@html note.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')}
+									{@html escapeHtml(note).replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')}
 								</div>
 							{/each}
 						</div>

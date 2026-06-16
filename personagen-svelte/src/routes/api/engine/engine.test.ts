@@ -342,9 +342,8 @@ describe('Engine Local Endpoint End-to-End Tests', { timeout: 30000 }, () => {
 	// 7. Hermes Alignment & Supervision Tests
 	describe('Hermes Supervision Alignment (ICM)', () => {
 		it('should ensure Hermes is seeded once and creators are linked', async () => {
-			const { getOrCreateHermes, ensureHermesConfig, ensureAgentsManagedByHermes } = await import(
-				'../../../lib/server/hermes'
-			);
+			const { getOrCreateHermes, ensureHermesConfig, ensureAgentsManagedByHermes } =
+				await import('../../../lib/server/hermes');
 
 			// 1. Seed Hermes
 			const hermes = await getOrCreateHermes(dbClient, testUserId);
