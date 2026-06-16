@@ -69,8 +69,6 @@ The codebase is organized into modular components for ease of maintenance and de
 │   ├── factory/           # Playwright-stealth automated account creator
 │   ├── mail/              # Stalwart-based SMTP/IMAP verification capture server
 │   └── mcp-bridge/        # Model Context Protocol (MCP) server for Supabase access
-├── tools/
-│   └── printing-press/    # Go-based CLI utilities for API interfacing
 └── docker-compose.yml     # Multi-container orchestrator configuration
 ```
 
