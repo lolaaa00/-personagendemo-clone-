@@ -6,6 +6,7 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 	const supabaseUrl = env.PUBLIC_SUPABASE_URL ?? '';
 	const isPlaceholder = !supabaseUrl || supabaseUrl.includes('placeholder');
 
+	let blueprints: any[] = [];
 	let agents: any[] = [];
 	let dbPosts: any[] = [];
 	let hasDb = false;
@@ -13,6 +14,19 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 	if (!isPlaceholder && locals.supabase) {
 		const db = createDbService(locals.supabase);
 		const { data: dbAgents } = await db.agents.list();
+
+		const { data: dbBlueprints } = await db.blueprints.list();
+		if (dbBlueprints) {
+			blueprints = dbBlueprints.map((bp) => ({
+				id: bp.id,
+				name: bp.channel_name || 'Competitor Channel',
+				platform: bp.platform || 'youtube',
+				niche: bp.channel_url || 'Competitor Analysis',
+				score: bp.score || 85,
+				date: new Date(bp.created_at).toLocaleDateString(),
+				layers: Array.isArray(bp.layers) ? bp.layers.length : (bp.layers ? Object.keys(bp.layers).length : 9)
+			}));
+		}
 
 		if (dbAgents && dbAgents.length > 0) {
 			hasDb = true;
@@ -44,8 +58,8 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 				.select('*, agents(name)');
 
 			if (!error && postsRes) {
-				const activeAgentIds = new Set(agents.map(a => a.id));
-				dbPosts = postsRes.filter(p => activeAgentIds.has(p.agent_id));
+				const activeAgentIds = new Set(agents.map((a: any) => a.id));
+				dbPosts = postsRes.filter((p: any) => activeAgentIds.has(p.agent_id));
 			}
 		}
 	}
@@ -67,7 +81,7 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 	}
 
 	// Map database posts to front-end expected ScheduledPost interface
-	const realPosts = dbPosts.map((p) => ({
+	const realPosts = dbPosts.map((p: any) => ({
 		id: p.id,
 		agentId: p.agent_id,
 		agentName: p.agents?.name || 'Agent',
@@ -84,6 +98,7 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 
 	return {
 		agents,
-		realPosts
+		realPosts,
+		blueprints
 	};
 };

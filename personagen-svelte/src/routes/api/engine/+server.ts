@@ -176,7 +176,30 @@ Ensure findings contain high-fidelity, detailed, real-world context for this pla
 						if (res.text) {
 							const parsed = safeParseJson(res.text);
 							if (parsed && parsed.layers) {
-								return json({ success: true, data: parsed });
+								let insertedId = undefined;
+								try {
+									const { data: inserted } = await db.blueprints.create({
+										user_id: session.user.id,
+										channel_name: parsed.channelName || channelName,
+										channel_url: channelUrl,
+										platform: parsed.platform || platform,
+										score: Number(parsed.overallScore || parsed.score || 85),
+										layers: parsed.layers || []
+									});
+									if (inserted) {
+										insertedId = inserted.id;
+									}
+								} catch (dbErr) {
+									console.error('[Engine] Failed to auto-save blueprint to DB:', dbErr);
+								}
+
+								return json({
+									success: true,
+									data: {
+										...parsed,
+										id: insertedId
+									}
+								});
 							}
 						}
 					} catch (geminiErr) {
@@ -188,119 +211,160 @@ Ensure findings contain high-fidelity, detailed, real-world context for this pla
 				}
 
 				// Mock fallback
+				const mockData = {
+					channelName,
+					platform,
+					overallScore: 86,
+					layers: [
+						{
+							score: 90,
+							title: 'Content DNA',
+							findings: [
+								'Primary format: vertical short-form (72% frequency)',
+								'Average hook-to-hold duration is 42 seconds',
+								'Content pillars balance educational topics (50%) with dynamic lifestyle (50%)',
+								'Frequent pattern interrupt cuts every 2-3 seconds'
+							],
+							confidence: 92
+						},
+						{
+							score: 84,
+							title: 'Audience Profile',
+							findings: [
+								'Primary age bracket: 18-34 years old (68% total)',
+								'High affinity with self-improvement and tech-adjacent topics',
+								'Active hours: 8:00 AM and 6:30 PM Eastern Time',
+								'Sentiment ratio: 88% positive comment feedback'
+							],
+							confidence: 89
+						},
+						{
+							score: 88,
+							title: 'Posting Cadence',
+							findings: [
+								'Upload cycle: 4-5 items per week',
+								'Most optimal days: Monday, Wednesday, and Friday afternoons',
+								'Consistent scheduling window maintained over past 90 days',
+								'Re-sharing delay: 4 hours from Instagram to TikTok'
+							],
+							confidence: 91
+						},
+						{
+							score: 92,
+							title: 'Hook Patterns',
+							findings: [
+								'Opener strategy: curiosity questions ("Why is nobody talking about...")',
+								'High-contrast visual overlay texts within the first 1.5 seconds',
+								'Retention holds up to 74% at the 3-second mark',
+								'Audio pacing: dramatic up-tempo soundtracks under voice'
+							],
+							confidence: 95
+						},
+						{
+							score: 81,
+							title: 'Visual Identity',
+							findings: [
+								'Branding palette: deep charcoal bases with striking neon teal highlights',
+								'Text overlay font: heavy sans-serif (Inter/Montserrat Bold)',
+								'Layout structure: centralized headshot framed by glowing elements',
+								'Thumbnail thumb-stop rate calculated above average category benchmark'
+							],
+							confidence: 85
+						},
+						{
+							score: 87,
+							title: 'Engagement Mechanics',
+							findings: [
+								'High engagement feedback: pinned comment asking a polarizing question',
+								'Prompt responses: creator likes/replies to top comments in first hour',
+								'Clear bookmark triggers ("Save this video for your next session")',
+								'Call to action placement: subtle midway transition'
+							],
+							confidence: 88
+						},
+						{
+							score: 85,
+							title: 'Growth Levers',
+							findings: [
+								'Cross-niche targeting: tagging rising trending audios',
+								'Keyword optimization: deep search phrases incorporated in descriptions',
+								'Strategic duet/stitch reactions with major channel figures',
+								'Consistent month-over-month follower growth rate (+7.2%)'
+							],
+							confidence: 87
+						},
+						{
+							score: 79,
+							title: 'Monetization',
+							findings: [
+								'Core funnel: digital guide links located in the bio',
+								'Occasional integrated brand sponsorships (approx 1 per month)',
+								'Affiliate tracking codes highlighted inside pinned threads',
+								'Estimated revenue CPM profile: $10.50 - $14.20 tier'
+							],
+							confidence: 80
+						},
+						{
+							score: 89,
+							title: 'Replication Blueprint',
+							findings: [
+								'Excellent structural blueprint clarity: 89/100',
+								'Actionable start: copy hook rhythm and neon teal design highlights',
+								'High ROI opportunity: vertical short-form education formats',
+								'Traction expectation: positive trajectory visible within 4-6 weeks'
+							],
+							confidence: 90
+						}
+					]
+				};
+
+				let insertedId = undefined;
+				try {
+					const { data: inserted } = await db.blueprints.create({
+						user_id: session.user.id,
+						channel_name: mockData.channelName,
+						channel_url: channelUrl,
+						platform: mockData.platform,
+						score: mockData.overallScore,
+						layers: mockData.layers as any
+					});
+					if (inserted) {
+						insertedId = inserted.id;
+					}
+				} catch (dbErr) {
+					console.error('[Engine] Failed to auto-save mock blueprint to DB:', dbErr);
+				}
+
 				return json({
 					success: true,
 					data: {
-						channelName,
-						platform,
-						overallScore: 86,
-						layers: [
-							{
-								score: 90,
-								title: 'Content DNA',
-								findings: [
-									'Primary format: vertical short-form (72% frequency)',
-									'Average hook-to-hold duration is 42 seconds',
-									'Content pillars balance educational topics (50%) with dynamic lifestyle (50%)',
-									'Frequent pattern interrupt cuts every 2-3 seconds'
-								],
-								confidence: 92
-							},
-							{
-								score: 84,
-								title: 'Audience Profile',
-								findings: [
-									'Primary age bracket: 18-34 years old (68% total)',
-									'High affinity with self-improvement and tech-adjacent topics',
-									'Active hours: 8:00 AM and 6:30 PM Eastern Time',
-									'Sentiment ratio: 88% positive comment feedback'
-								],
-								confidence: 89
-							},
-							{
-								score: 88,
-								title: 'Posting Cadence',
-								findings: [
-									'Upload cycle: 4-5 items per week',
-									'Most optimal days: Monday, Wednesday, and Friday afternoons',
-									'Consistent scheduling window maintained over past 90 days',
-									'Re-sharing delay: 4 hours from Instagram to TikTok'
-								],
-								confidence: 91
-							},
-							{
-								score: 92,
-								title: 'Hook Patterns',
-								findings: [
-									'Opener strategy: curiosity questions ("Why is nobody talking about...")',
-									'High-contrast visual overlay texts within the first 1.5 seconds',
-									'Retention holds up to 74% at the 3-second mark',
-									'Audio pacing: dramatic up-tempo soundtracks under voice'
-								],
-								confidence: 95
-							},
-							{
-								score: 81,
-								title: 'Visual Identity',
-								findings: [
-									'Branding palette: deep charcoal bases with striking neon teal highlights',
-									'Text overlay font: heavy sans-serif (Inter/Montserrat Bold)',
-									'Layout structure: centralized headshot framed by glowing elements',
-									'Thumbnail thumb-stop rate calculated above average category benchmark'
-								],
-								confidence: 85
-							},
-							{
-								score: 87,
-								title: 'Engagement Mechanics',
-								findings: [
-									'High engagement feedback: pinned comment asking a polarizing question',
-									'Prompt responses: creator likes/replies to top comments in first hour',
-									'Clear bookmark triggers ("Save this video for your next session")',
-									'Call to action placement: subtle midway transition'
-								],
-								confidence: 88
-							},
-							{
-								score: 85,
-								title: 'Growth Levers',
-								findings: [
-									'Cross-niche targeting: tagging rising trending audios',
-									'Keyword optimization: deep search phrases incorporated in descriptions',
-									'Strategic duet/stitch reactions with major channel figures',
-									'Consistent month-over-month follower growth rate (+7.2%)'
-								],
-								confidence: 87
-							},
-							{
-								score: 79,
-								title: 'Monetization',
-								findings: [
-									'Core funnel: digital guide links located in the bio',
-									'Occasional integrated brand sponsorships (approx 1 per month)',
-									'Affiliate tracking codes highlighted inside pinned threads',
-									'Estimated revenue CPM profile: $10.50 - $14.20 tier'
-								],
-								confidence: 80
-							},
-							{
-								score: 89,
-								title: 'Replication Blueprint',
-								findings: [
-									'Excellent structural blueprint clarity: 89/100',
-									'Actionable start: copy hook rhythm and neon teal design highlights',
-									'High ROI opportunity: vertical short-form education formats',
-									'Traction expectation: positive trajectory visible within 4-6 weeks'
-								],
-								confidence: 90
-							}
-						]
+						...mockData,
+						id: insertedId
 					}
 				});
 			}
 
 			if (action === 'analyze') {
-				return json({ success: true, data: { message: 'Blueprint analysis complete' } });
+				const channelData = body.channel_data;
+				if (!channelData) {
+					return json({ success: false, error: 'Missing channel_data' }, { status: 400 });
+				}
+
+				const { data: inserted, error } = await db.blueprints.create({
+					user_id: session.user.id,
+					channel_name: channelData.channelName || 'Competitor Channel',
+					channel_url: channelData.channelUrl || null,
+					platform: channelData.platform || 'youtube',
+					score: Number(channelData.overallScore || channelData.score || 85),
+					layers: channelData.layers || {}
+				});
+
+				if (error) {
+					console.error('[Engine] Failed to save blueprint via analyze:', error);
+					return json({ success: false, error: error.message }, { status: 500 });
+				}
+
+				return json({ success: true, data: inserted });
 			}
 		}
 
@@ -310,6 +374,35 @@ Ensure findings contain high-fidelity, detailed, real-world context for this pla
 		if (path === 'personagen-content-forge') {
 			const topic = body.topic || 'Growing your personal brand';
 			const platform = body.platforms?.[0] || 'youtube';
+			const blueprintId = body.blueprint_id;
+			let blueprintDetails = '';
+
+			if (blueprintId && !blueprintId.startsWith('bp-')) {
+				try {
+					const { data: bp } = await db.blueprints.get(blueprintId);
+					if (bp) {
+						blueprintDetails = `Competitor Blueprint Context to incorporate:\n- Platform: ${bp.platform || platform}\n- Channel Name Reference: ${bp.channel_name || 'Competitor Channel'}\n`;
+						if (bp.layers) {
+							const layersList = Array.isArray(bp.layers) ? bp.layers : [];
+							const hookFindings = layersList.find((l: any) => l.title === 'Hook Patterns')?.findings;
+							const dnaFindings = layersList.find((l: any) => l.title === 'Content DNA')?.findings;
+							const replicationFindings = layersList.find((l: any) => l.title === 'Replication Blueprint')?.findings;
+
+							if (hookFindings && hookFindings.length > 0) {
+								blueprintDetails += `- Hook style constraints:\n  * ${hookFindings.join('\n  * ')}\n`;
+							}
+							if (dnaFindings && dnaFindings.length > 0) {
+								blueprintDetails += `- Content structure constraints:\n  * ${dnaFindings.join('\n  * ')}\n`;
+							}
+							if (replicationFindings && replicationFindings.length > 0) {
+								blueprintDetails += `- Style replication guidelines:\n  * ${replicationFindings.join('\n  * ')}\n`;
+							}
+						}
+					}
+				} catch (err) {
+					console.warn('[Engine] Failed to load blueprint for prompt enrichment:', err);
+				}
+			}
 
 			if (action === 'generate') {
 				// Generate Post
@@ -318,6 +411,7 @@ Ensure findings contain high-fidelity, detailed, real-world context for this pla
 						const ai = new GoogleGenAI({ apiKey });
 						const prompt = `Write a ready-to-publish social media post for ${platform}.
 Topic: "${topic}"
+${blueprintDetails ? `Please align this post's hook, tone, and formatting style with the following competitor blueprint details:\n${blueprintDetails}\n` : ''}
 Make it highly engaging, include a killer hook, spaced body paragraphs, emojis, a call to action, and 5 hashtags.
 Return a JSON object in this exact format:
 {
@@ -369,6 +463,7 @@ Return a JSON object in this exact format:
 					try {
 						const ai = new GoogleGenAI({ apiKey });
 						const prompt = `Write a detailed 60-second video script for platform ${platform} on topic: "${topic}".
+${blueprintDetails ? `Please align this script's visual identity, pacing, and hooks with the following competitor blueprint details:\n${blueprintDetails}\n` : ''}
 Include [Scene Direction], [Visual Cues], and voiceover content.
 Return a JSON object in this exact format:
 {
@@ -414,6 +509,7 @@ Return a JSON object in this exact format:
 					try {
 						const ai = new GoogleGenAI({ apiKey });
 						const prompt = `Generate 8 highly viral, click-worthy titles/hooks for a video about: "${topic}".
+${blueprintDetails ? `Please write these titles/hooks mimicking the style patterns found in the following competitor blueprint details:\n${blueprintDetails}\n` : ''}
 Return a JSON object in this exact format:
 {
   "type": "titles",
@@ -469,6 +565,7 @@ Return a JSON object in this exact format:
 					try {
 						const ai = new GoogleGenAI({ apiKey });
 						const prompt = `Create a professional, graphic design brief for a YouTube/Social thumbnail for topic: "${topic}".
+${blueprintDetails ? `Please align these thumbnail briefing guidelines with the visual identity and replication rules found in this competitor blueprint:\n${blueprintDetails}\n` : ''}
 List 6 key visual briefing points.
 Return a JSON object in this exact format:
 {

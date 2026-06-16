@@ -65,9 +65,8 @@
 		{
 			label: 'Intelligence',
 			items: [
-				{ href: '/intel-wizard', label: 'Intel Wizard', icon: 'search' },
 				{ href: '/channel-decoder', label: 'Channel Decoder', icon: 'decode' },
-				{ href: '/content-forge', label: 'Content Forge', icon: 'forge' }
+				{ href: '/calendar?forge=true', label: 'Content Forge', icon: 'forge' }
 			]
 		},
 		{
@@ -80,8 +79,14 @@
 	];
 
 	function isActive(href: string, pathname: string): boolean {
-		if (href === '/dashboard') return pathname === '/dashboard' || pathname === '/';
-		return pathname.startsWith(href);
+		const baseHref = href.split('?')[0];
+		const hasForgeParam = href.includes('forge=true');
+		const currentHasForgeParam = $page.url.searchParams.get('forge') === 'true';
+
+		if (hasForgeParam !== currentHasForgeParam) return false;
+
+		if (baseHref === '/dashboard') return pathname === '/dashboard' || pathname === '/';
+		return pathname.startsWith(baseHref);
 	}
 </script>
 

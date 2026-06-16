@@ -1,7 +1,10 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import type { Agent } from '$lib/types';
 	import { showToast } from '$lib/stores/ui.svelte';
-	import { Posts } from '$lib/services/api';
+	import { Posts, ContentForge } from '$lib/services/api';
+	import { page } from '$app/stores';
+	import { goto } from '$app/navigation';
 
 	interface ScheduledPost {
 		id: string;
@@ -18,9 +21,20 @@
 		token_cost?: number | null;
 	}
 
+	interface SampleBlueprint {
+		id: string;
+		name: string;
+		platform: string;
+		niche: string;
+		score: number;
+		date: string;
+		layers: number;
+	}
+
 	interface PageData {
 		agents: Agent[];
 		realPosts?: ScheduledPost[];
+		blueprints?: SampleBlueprint[];
 	}
 
 	let { data } = $props<{ data: PageData }>();
@@ -103,6 +117,213 @@
 	});
 	let composerDate = $state('');
 	let composerTime = $state('10:00');
+
+	// Content Forge Integration inside Composer
+
+	const SAMPLE_BLUEPRINTS: SampleBlueprint[] = [
+		{
+			id: 'bp-1',
+			name: 'FitnessByKira',
+			platform: 'youtube',
+			niche: 'Fitness & Wellness',
+			score: 92,
+			date: '2 days ago',
+			layers: 9
+		},
+		{
+			id: 'bp-2',
+			name: 'TechBroDaily',
+			platform: 'x',
+			niche: 'Tech & AI',
+			score: 87,
+			date: '1 week ago',
+			layers: 9
+		},
+		{
+			id: 'bp-3',
+			name: 'StyleWithMaya',
+			platform: 'instagram',
+			niche: 'Fashion & Luxury',
+			score: 95,
+			date: '3 days ago',
+			layers: 9
+		},
+		{
+			id: 'bp-4',
+			name: 'CookingVibes',
+			platform: 'tiktok',
+			niche: 'Food & Cooking',
+			score: 78,
+			date: '5 days ago',
+			layers: 9
+		}
+	];
+
+	const CONTENT_TYPES = [
+		{ id: 'post', label: 'Post', icon: '📝' },
+		{ id: 'script', label: 'Script', icon: '🎬' },
+		{ id: 'titles', label: 'Title Ideas', icon: '💡' },
+		{ id: 'thumbnail', label: 'Thumbnail Brief', icon: '🖼️' }
+	];
+
+	let dbBlueprints = $derived(data.blueprints || []);
+	let allBlueprints = $derived([...dbBlueprints, ...SAMPLE_BLUEPRINTS]);
+	let selectedBlueprintId = $state<string | null>(null);
+
+	$effect(() => {
+		if (!selectedBlueprintId && allBlueprints.length > 0) {
+			selectedBlueprintId = allBlueprints[0].id;
+		}
+	});
+	let forgeTopic = $state('');
+	let forgeProductId = $state('');
+	let forgeContentType = $state('post');
+	let forging = $state(false);
+
+	let brandName = $state('');
+	let products = $state<any[]>([]);
+	let ugcGuidelines = $state('');
+
+	$effect(() => {
+		const LS_KEY = 'personagen_brand_brief';
+		try {
+			const saved = localStorage.getItem(LS_KEY);
+			if (saved) {
+				const d = JSON.parse(saved);
+				brandName = d.brandName || '';
+				products = d.products || [];
+				ugcGuidelines = d.ugcGuidelines || '';
+				if (products.length > 0 && !forgeProductId) {
+					forgeProductId = products[0].id;
+				}
+			}
+		} catch {
+			/* ignore */
+		}
+	});
+
+	// Check if '?forge=true' query parameter is present to auto-open composer
+	$effect(() => {
+		if ($page.url.searchParams.get('forge') === 'true') {
+			untrack(() => {
+				openComposer();
+			});
+		}
+	});
+
+	function selectBlueprint(bp: SampleBlueprint) {
+		selectedBlueprintId = bp.id;
+		// Auto-select platform and check it
+		if (bp.platform) {
+			const normPlat = bp.platform.toLowerCase();
+			if (composerAgentPlatforms.includes(normPlat)) {
+				composerPlatforms = {
+					tiktok: false,
+					instagram: false,
+					youtube: false,
+					x: false,
+					facebook: false,
+					threads: false,
+					[normPlat]: true
+				};
+			}
+		}
+	}
+
+	async function runForge() {
+		if (!selectedBlueprintId || !forgeTopic.trim()) return;
+		forging = true;
+
+		const selectedProd = products.find((p) => p.id === forgeProductId);
+		let enrichedTopic = forgeTopic;
+
+		if (selectedProd) {
+			enrichedTopic += `\n\nProduct Focus Details:\nName: ${selectedProd.name}\nPrice: ${selectedProd.price}\nDescription: ${selectedProd.description}`;
+		}
+
+		if (ugcGuidelines) {
+			enrichedTopic += `\n\nBrand UGC Guidelines & Format Style to incorporate:\n${ugcGuidelines}`;
+		}
+
+		const activePlatforms = Object.entries(composerPlatforms)
+			.filter(([, v]) => v)
+			.map(([k]) => k);
+		
+		const platforms = activePlatforms.length > 0 ? activePlatforms : ['instagram'];
+
+		try {
+			let res;
+			if (forgeContentType === 'post') {
+				res = await ContentForge.generate(
+					selectedBlueprintId,
+					enrichedTopic,
+					composerAgentId,
+					platforms
+				);
+			} else if (forgeContentType === 'script') {
+				res = await ContentForge.script(selectedBlueprintId, enrichedTopic, composerAgentId);
+			} else if (forgeContentType === 'titles') {
+				res = await ContentForge.titles(selectedBlueprintId, enrichedTopic);
+			} else {
+				res = await ContentForge.thumbnailBrief(selectedBlueprintId, enrichedTopic);
+			}
+
+			if (res.success && res.data) {
+				const data = res.data as any;
+				if (forgeContentType === 'titles' && data.titles) {
+					composerText = data.titles.join('\n\n');
+				} else if (forgeContentType === 'thumbnail' && data.thumbnailNotes) {
+					composerText = data.thumbnailNotes.join('\n\n');
+				} else {
+					composerText = data.content || '';
+				}
+				showToast('Content forged successfully!', 'success');
+			} else {
+				composerText = getMockForgedContent(enrichedTopic, selectedProd);
+				showToast('Using forged demo template', 'info');
+			}
+		} catch (e) {
+			composerText = getMockForgedContent(enrichedTopic, selectedProd);
+			showToast('Using forged demo template', 'info');
+		} finally {
+			forging = false;
+		}
+	}
+
+	function getMockForgedContent(topicText: string, product: any): string {
+		const prodName = product?.name || 'HoneyX Manly Plus';
+		const prodPrice = product?.price || 'Rs. 2,450';
+		const prodDesc = product?.description || "Nature's premium superfood for energy.";
+		
+		if (forgeContentType === 'post') {
+			return `🔥 ${topicText}\n\nIntroducing: ${prodName} (${prodPrice})!\n\n1️⃣ **Organic Vitality Power**: Unlocking natural daily drive.\n2️⃣ **Potent Herbal Active**: Sustainable energy with zero crash.\n\n${prodDesc}\n\nDrop a comment to grab exclusive early access 👇`;
+		} else if (forgeContentType === 'script') {
+			return `[SCENE: Close-up of ${prodName}]\n"Ditch the synthetic energy drinks. This is pure raw honey packed with performance herbs. All-natural stamina, zero crashes."\n\n[CTA: Link in bio!]`;
+		} else if (forgeContentType === 'titles') {
+			return `- Why Athletes Are Raving About ${prodName}\n- I Ditched Synthetic Pre-Workouts For Active Honey\n- The Secret to Organic Workout Stamina`;
+		} else {
+			return `Layout: Close-up pouch of ${prodName} with amber lighting\nText: "BYE BYE CHEMICALS"\nBackground: Dark luxury graphite with honey drips`;
+		}
+	}
+
+	function getPlatformColor(id: string): string {
+		const colors: Record<string, string> = {
+			youtube: '#ff0000',
+			tiktok: '#00f2ea',
+			instagram: '#e1306c',
+			x: '#1da1f2',
+			facebook: '#1877f2',
+			threads: '#999'
+		};
+		return colors[id] || 'var(--accent)';
+	}
+
+	function getScoreColor(score: number): string {
+		if (score >= 90) return 'var(--success)';
+		if (score >= 75) return 'var(--cyan)';
+		if (score >= 60) return 'var(--gold)';
+		return 'var(--rose)';
+	}
 
 	let currentComposerAgent = $derived(data.agents.find((a: any) => a.id === composerAgentId));
 	let composerAgentPlatforms = $derived(currentComposerAgent?.connected_platforms || ['instagram', 'youtube']);
@@ -234,6 +455,8 @@
 		showComposer = true;
 		composerAgentId = selectedAgentId || data.agents[0]?.id || '';
 		composerText = '';
+		forgeTopic = '';
+		selectedBlueprintId = allBlueprints[0]?.id || null;
 		composerPlatforms = {
 			tiktok: false,
 			instagram: false,
@@ -250,6 +473,9 @@
 
 	function closeComposer() {
 		showComposer = false;
+		if ($page.url.searchParams.get('forge') === 'true') {
+			goto('/calendar', { replaceState: true, noScroll: true });
+		}
 	}
 
 	async function schedulePost() {
@@ -637,7 +863,27 @@
 		<div class="composer-overlay" onclick={closeComposer} role="presentation">
 			<div class="composer" onclick={(e) => e.stopPropagation()} role="dialog">
 				<div class="composer-header">
-					<h3>Schedule Post</h3>
+					<div class="header-title-group" style="display: flex; align-items: center; gap: 8px;">
+						<svg
+							width="20"
+							height="20"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="url(#forgeGrad)"
+							stroke-width="2.5"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+						>
+							<defs>
+								<linearGradient id="forgeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+									<stop offset="0%" stop-color="var(--rose)" />
+									<stop offset="100%" stop-color="var(--gold)" />
+								</linearGradient>
+							</defs>
+							<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+						</svg>
+						<h3>Content Forge & Schedule Post</h3>
+					</div>
 					<button class="panel-close" onclick={closeComposer}>
 						<svg
 							width="18"
@@ -652,47 +898,146 @@
 					</button>
 				</div>
 
-				<div class="composer-body">
-					<div class="field">
-						<label for="comp-agent">Agent</label>
-						<select id="comp-agent" bind:value={composerAgentId}>
-							{#each data.agents as agent}
-								<option value={agent.id}>{agent.name}</option>
-							{/each}
-						</select>
-					</div>
-
-					<div class="field">
-						<label for="comp-text">Content</label>
-						<textarea
-							id="comp-text"
-							bind:value={composerText}
-							rows="4"
-							placeholder="Write your post content…"
-						></textarea>
-					</div>
-
-					<div class="field">
-						<label>Platforms</label>
-						<div class="platform-checkboxes">
-							{#each composerAgentPlatforms as key}
-								{@const color = PLATFORM_COLORS[key] || 'var(--accent)'}
-								<label class="platform-checkbox" style="--p-color: {color}">
-									<input type="checkbox" bind:checked={composerPlatforms[key]} />
-									<span class="checkbox-label">{key}</span>
-								</label>
+				<div class="composer-grid">
+					<!-- Left Column: Blueprint Selector & Forge Settings -->
+					<div class="composer-left-panel">
+						<div class="panel-section-title">Select Blueprint</div>
+						<div class="blueprint-mini-list">
+							{#each allBlueprints as bp}
+								<button
+									type="button"
+									class="blueprint-mini-item"
+									class:active={selectedBlueprintId === bp.id}
+									onclick={() => selectBlueprint(bp)}
+								>
+									<div class="bp-mini-header">
+										<span class="bp-mini-score" style="color: {getScoreColor(bp.score)}">{bp.score} pts</span>
+										<span class="bp-mini-platform" style="color: {getPlatformColor(bp.platform)}">{bp.platform}</span>
+									</div>
+									<div class="bp-mini-name">{bp.name}</div>
+									<div class="bp-mini-meta">{bp.niche}</div>
+								</button>
 							{/each}
 						</div>
+
+						<div class="panel-divider" style="margin: 0.5rem 0;"></div>
+
+						<div class="field">
+							<label for="forge-topic" class="panel-section-title" style="margin-bottom: 0.25rem;">Topic / Prompt</label>
+							<input
+								id="forge-topic"
+								type="text"
+								bind:value={forgeTopic}
+								placeholder="e.g. Biohacking stamina with raw clover honey..."
+								style="font-size: var(--text-sm); padding: 0.5rem 0.75rem; border-radius: var(--radius-xs); border: 1px solid var(--border); background: var(--surface); color: var(--text);"
+							/>
+						</div>
+
+						<div class="field">
+							<label for="forge-product" class="panel-section-title" style="margin-bottom: 0.25rem;">Focus Product</label>
+							<select
+								id="forge-product"
+								bind:value={forgeProductId}
+								style="font-size: var(--text-sm); padding: 0.5rem; border-radius: var(--radius-xs); border: 1px solid var(--border); background: var(--surface); color: var(--text);"
+							>
+								<option value="">No Product (General Content)</option>
+								{#each products as product}
+									<option value={product.id}>{product.name} ({product.price})</option>
+								{/each}
+							</select>
+						</div>
+
+						<div class="field">
+							<label class="panel-section-title" style="margin-bottom: 0.25rem;">Content Type</label>
+							<div class="type-selector-mini">
+								{#each CONTENT_TYPES as ct}
+									<button
+										type="button"
+										class="type-btn-mini"
+										class:active={forgeContentType === ct.id}
+										onclick={() => (forgeContentType = ct.id)}
+									>
+										<span class="type-icon">{ct.icon}</span>
+										<span>{ct.label}</span>
+									</button>
+								{/each}
+							</div>
+						</div>
+
+						<button
+							type="button"
+							class="btn-forge-action"
+							disabled={forging || !forgeTopic.trim()}
+							onclick={runForge}
+						>
+							{#if forging}
+								<span class="spinner"></span> Forging...
+							{:else}
+								✨ Forge Content
+							{/if}
+						</button>
 					</div>
 
-					<div class="field-row">
-						<div class="field">
-							<label for="comp-date">Date</label>
-							<input id="comp-date" type="date" bind:value={composerDate} />
+					<!-- Right Column: Content Preview, Platform selection, and DateTime scheduler -->
+					<div class="composer-right-panel">
+						<div class="field-row">
+							<div class="field" style="flex: 1;">
+								<label for="comp-agent" class="panel-section-title" style="margin-bottom: 0.25rem;">Target Agent</label>
+								<select
+									id="comp-agent"
+									bind:value={composerAgentId}
+									style="font-size: var(--text-sm); padding: 0.5rem; border-radius: var(--radius-xs); border: 1px solid var(--border); background: var(--surface); color: var(--text);"
+								>
+									{#each data.agents as agent}
+										<option value={agent.id}>{agent.name}</option>
+									{/each}
+								</select>
+							</div>
 						</div>
+
 						<div class="field">
-							<label for="comp-time">Time</label>
-							<input id="comp-time" type="time" bind:value={composerTime} />
+							<label for="comp-text" class="panel-section-title" style="margin-bottom: 0.25rem;">Content & Copy</label>
+							<textarea
+								id="comp-text"
+								bind:value={composerText}
+								rows="5"
+								placeholder="Select blueprint and prompt to Forge, or write/edit your post content here directly…"
+								style="font-size: var(--text-sm); padding: 0.75rem; border-radius: var(--radius-xs); border: 1px solid var(--border); background: var(--surface); color: var(--text); resize: vertical; line-height: 1.5;"
+							></textarea>
+						</div>
+
+						<div class="field">
+							<label class="panel-section-title" style="margin-bottom: 0.25rem;">Target Platforms</label>
+							<div class="platform-checkboxes">
+								{#each composerAgentPlatforms as key}
+									{@const color = PLATFORM_COLORS[key] || 'var(--accent)'}
+									<label class="platform-checkbox" style="--p-color: {color}">
+										<input type="checkbox" bind:checked={composerPlatforms[key]} />
+										<span class="checkbox-label">{key}</span>
+									</label>
+								{/each}
+							</div>
+						</div>
+
+						<div class="field-row">
+							<div class="field" style="flex: 1;">
+								<label for="comp-date" class="panel-section-title" style="margin-bottom: 0.25rem;">Schedule Date</label>
+								<input
+									id="comp-date"
+									type="date"
+									bind:value={composerDate}
+									style="font-size: var(--text-sm); padding: 0.5rem; border-radius: var(--radius-xs); border: 1px solid var(--border); background: var(--surface); color: var(--text);"
+								/>
+							</div>
+							<div class="field" style="flex: 1;">
+								<label for="comp-time" class="panel-section-title" style="margin-bottom: 0.25rem;">Schedule Time</label>
+								<input
+									id="comp-time"
+									type="time"
+									bind:value={composerTime}
+									style="font-size: var(--text-sm); padding: 0.5rem; border-radius: var(--radius-xs); border: 1px solid var(--border); background: var(--surface); color: var(--text);"
+								/>
+							</div>
 						</div>
 					</div>
 				</div>
@@ -720,7 +1065,7 @@
 									y2="6"
 								/><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg
 							>
-							Schedule
+							Schedule Post
 						{/if}
 					</button>
 				</div>
@@ -1217,10 +1562,12 @@
 		border: 1px solid var(--border);
 		border-radius: var(--radius);
 		width: 100%;
-		max-width: 560px;
+		max-width: 1000px;
 		max-height: 90vh;
-		overflow-y: auto;
+		display: flex;
+		flex-direction: column;
 		animation: fadeDown 0.3s var(--ease-out);
+		overflow: hidden;
 	}
 
 	.composer-header {
@@ -1517,5 +1864,187 @@
 		color: #f59e0b;
 		margin-left: auto;
 		font-weight: var(--weight-semi);
+	}
+
+	/* ── Composer Grid ── */
+	.composer-grid {
+		display: grid;
+		grid-template-columns: 280px 1fr;
+		height: 70vh;
+		min-height: 520px;
+		overflow: hidden;
+	}
+
+	@media (max-width: 768px) {
+		.composer-grid {
+			grid-template-columns: 1fr;
+			height: auto;
+			overflow-y: auto;
+		}
+	}
+
+	.composer-left-panel {
+		border-right: 1px solid var(--border);
+		background: var(--surface-2);
+		padding: 1.25rem;
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+		overflow-y: auto;
+	}
+
+	@media (max-width: 768px) {
+		.composer-left-panel {
+			border-right: none;
+			border-bottom: 1px solid var(--border);
+		}
+	}
+
+	.panel-section-title {
+		font-size: var(--text-xs);
+		font-weight: var(--weight-bold);
+		text-transform: uppercase;
+		color: var(--text-muted);
+		letter-spacing: 0.05em;
+		margin-bottom: 0.25rem;
+	}
+
+	.blueprint-mini-list {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+	}
+
+	.blueprint-mini-item {
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-xs);
+		padding: 0.75rem;
+		text-align: left;
+		cursor: pointer;
+		transition: all 0.2s ease;
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+	}
+
+	.blueprint-mini-item:hover {
+		border-color: var(--accent);
+		transform: translateY(-1px);
+	}
+
+	.blueprint-mini-item.active {
+		border-color: var(--accent);
+		background: rgba(124, 106, 237, 0.05);
+		box-shadow: 0 0 12px rgba(124, 106, 237, 0.1);
+	}
+
+	.bp-mini-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+	}
+
+	.bp-mini-score {
+		font-size: var(--text-xs);
+		font-weight: var(--weight-bold);
+		font-family: var(--font-mono);
+	}
+
+	.bp-mini-platform {
+		font-size: 10px;
+		font-weight: var(--weight-bold);
+		text-transform: uppercase;
+	}
+
+	.bp-mini-name {
+		font-size: var(--text-sm);
+		font-weight: var(--weight-semi);
+		color: var(--text);
+	}
+
+	.bp-mini-meta {
+		font-size: 10px;
+		color: var(--text-muted);
+	}
+
+	.composer-right-panel {
+		padding: 1.5rem;
+		display: flex;
+		flex-direction: column;
+		gap: 1.25rem;
+		overflow-y: auto;
+		background: var(--surface);
+	}
+
+	.type-selector-mini {
+		display: grid;
+		grid-template-columns: repeat(4, 1fr);
+		gap: 0.35rem;
+	}
+
+	.type-btn-mini {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		padding: 0.45rem 0.25rem;
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-xs);
+		cursor: pointer;
+		font-size: 11px;
+		color: var(--text-muted);
+		transition: all 0.2s ease;
+		gap: 0.25rem;
+		border: 1px solid var(--border);
+	}
+
+	.type-btn-mini:hover {
+		border-color: var(--accent);
+		color: var(--text);
+	}
+
+	.type-btn-mini.active {
+		background: var(--accent);
+		border-color: var(--accent);
+		color: #fff;
+	}
+
+	.type-btn-mini .type-icon {
+		font-size: var(--text-base);
+	}
+
+	.btn-forge-action {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.5rem;
+		padding: 0.65rem;
+		background: linear-gradient(135deg, var(--rose), var(--gold));
+		color: #fff;
+		border: none;
+		border-radius: var(--radius-xs);
+		font-weight: var(--weight-bold);
+		font-size: var(--text-sm);
+		cursor: pointer;
+		transition: opacity 0.2s;
+		margin-top: auto;
+	}
+
+	.btn-forge-action:hover:not(:disabled) {
+		opacity: 0.95;
+	}
+
+	.btn-forge-action:disabled {
+		background: var(--surface-3);
+		color: var(--text-muted);
+		cursor: not-allowed;
+	}
+
+	.panel-divider {
+		height: 1px;
+		background: var(--border);
+		margin: 0.25rem 0;
 	}
 </style>

@@ -1,11 +1,12 @@
 <script lang="ts">
+	import { page } from '$app/stores';
 	import { showToast, updateBrandColors, triggerBrandTransform } from '$lib/stores/ui.svelte';
 	import { browser } from '$app/environment';
 	import { BrandBrief } from '$lib/services/api';
 
 	const LS_KEY = 'personagen_brand_brief';
 
-	type TabKey = 'overview' | 'products' | 'visual' | 'voice' | 'audience' | 'competitors';
+	type TabKey = 'overview' | 'products' | 'visual' | 'voice' | 'audience' | 'competitors' | 'intel';
 
 	const TABS: { key: TabKey; label: string; icon: string }[] = [
 		{
@@ -37,12 +38,25 @@
 			key: 'competitors',
 			label: 'Competitors',
 			icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z'
+		},
+		{
+			key: 'intel',
+			label: 'Intel Wizard',
+			icon: 'M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z'
 		}
 	];
 
 	const COMM_STYLES = ['Casual', 'Professional', 'Bold', 'Minimal'];
 
 	let activeTab = $state<TabKey>('overview');
+
+	// Auto-select tab from query param
+	$effect(() => {
+		const tabParam = $page.url.searchParams.get('tab') as TabKey;
+		if (tabParam && TABS.some((t) => t.key === tabParam)) {
+			activeTab = tabParam;
+		}
+	});
 
 	// Overview
 	let brandName = $state('');
@@ -352,6 +366,373 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		samplePost ||
 			`Hey ${brandName || 'there'}! ✨ ${tagline || 'Check this out'} — we're all about ${traits.length > 0 ? traits.slice(0, 3).join(', ') : 'being awesome'}. #brand`
 	);
+
+	// ─── Intel Wizard State & Logic ───
+	const INTEL_STORAGE_KEY = 'personagen_intel_wizard_merged';
+
+	const INTEL_STEPS = [
+		{ id: 1, label: 'Brand Discovery', icon: '🏢' },
+		{ id: 2, label: 'Competitor Analysis', icon: '🔍' },
+		{ id: 3, label: 'Content Audit', icon: '📋' },
+		{ id: 4, label: 'Audience Mapping', icon: '🎯' },
+		{ id: 5, label: 'Strategy Generation', icon: '⚡' },
+		{ id: 6, label: 'Results', icon: '📊' }
+	];
+
+	const INTEL_INDUSTRIES = [
+		'Technology',
+		'Finance',
+		'Healthcare',
+		'Education',
+		'E-Commerce',
+		'Real Estate',
+		'Food & Beverage',
+		'Fashion',
+		'Fitness & Wellness',
+		'Entertainment',
+		'SaaS',
+		'Marketing',
+		'Travel',
+		'Automotive',
+		'Other'
+	];
+
+	const INTEL_PLATFORMS_LIST = [
+		{ id: 'youtube', label: 'YouTube' },
+		{ id: 'tiktok', label: 'TikTok' },
+		{ id: 'instagram', label: 'Instagram' },
+		{ id: 'x', label: 'X / Twitter' },
+		{ id: 'linkedin', label: 'LinkedIn' }
+	];
+
+	const INTEL_CONTENT_TYPES_LIST = [
+		'Blog Posts',
+		'Social Posts',
+		'Videos',
+		'Podcasts',
+		'Newsletters',
+		'Case Studies',
+		'Infographics',
+		'Webinars',
+		'Stories/Reels'
+	];
+
+	const INTEL_LOCATIONS = [
+		'Sydney',
+		'Melbourne',
+		'Brisbane',
+		'Perth',
+		'Adelaide',
+		'Gold Coast',
+		'Canberra',
+		'Hobart',
+		'Darwin',
+		'National (AU)',
+		'United States',
+		'United Kingdom',
+		'Global'
+	];
+
+	const INTEL_INTEREST_SUGGESTIONS = [
+		'AI & Technology',
+		'Entrepreneurship',
+		'Fitness',
+		'Fashion',
+		'Cooking',
+		'Gaming',
+		'Travel',
+		'Photography',
+		'Music',
+		'Finance',
+		'Sustainability',
+		'Self-improvement',
+		'Parenting'
+	];
+
+	let intelCurrentStep = $state(1);
+	let intelGenerating = $state(false);
+
+	let intelCompanyName = $state('');
+	let intelIndustry = $state('');
+	let intelTargetAudience = $state('');
+
+	interface IntelCompetitor {
+		url: string;
+		platform: string;
+	}
+	let intelCompetitors = $state<IntelCompetitor[]>([{ url: '', platform: 'youtube' }]);
+
+	let intelExistingContent = $state('');
+	let intelContentTypes = $state<string[]>([]);
+
+	let intelAgeMin = $state(18);
+	let intelAgeMax = $state(44);
+	let intelInterests = $state<string[]>([]);
+	let intelInterestInput = $state('');
+	let intelLocations = $state<string[]>(['Sydney']);
+
+	interface IntelStrategyResults {
+		pillars: { name: string; description: string; priority: string }[];
+		schedule: { day: string; time: string; type: string; platform: string }[];
+		platformPriority: { platform: string; score: number; reason: string }[];
+		targets: { metric: string; current: string; target30: string; target90: string }[];
+	}
+	let intelStrategyResults = $state<IntelStrategyResults | null>(null);
+
+	// Synchronize with main Brand Brief state
+	$effect(() => {
+		if (brandName && !intelCompanyName) {
+			intelCompanyName = brandName;
+		}
+	});
+
+	function saveIntelToStorage() {
+		if (!browser) return;
+		const data = {
+			intelCurrentStep,
+			intelCompanyName,
+			intelIndustry,
+			intelTargetAudience,
+			intelCompetitors,
+			intelExistingContent,
+			intelContentTypes,
+			intelAgeMin,
+			intelAgeMax,
+			intelInterests,
+			intelLocations
+		};
+		localStorage.setItem(INTEL_STORAGE_KEY, JSON.stringify(data));
+	}
+
+	function loadIntelFromStorage() {
+		if (!browser) return;
+		try {
+			const raw = localStorage.getItem(INTEL_STORAGE_KEY);
+			if (!raw) return;
+			const data = JSON.parse(raw);
+			if (data.intelCurrentStep) intelCurrentStep = Math.min(data.intelCurrentStep, 5);
+			if (data.intelCompanyName) intelCompanyName = data.intelCompanyName;
+			if (data.intelIndustry) intelIndustry = data.intelIndustry;
+			if (data.intelTargetAudience) intelTargetAudience = data.intelTargetAudience;
+			if (data.intelCompetitors) intelCompetitors = data.intelCompetitors;
+			if (data.intelExistingContent) intelExistingContent = data.intelExistingContent;
+			if (data.intelContentTypes) intelContentTypes = data.intelContentTypes;
+			if (data.intelAgeMin != null) intelAgeMin = data.intelAgeMin;
+			if (data.intelAgeMax != null) intelAgeMax = data.intelAgeMax;
+			if (data.intelInterests) intelInterests = data.intelInterests;
+			if (data.intelLocations) intelLocations = data.intelLocations;
+		} catch {
+			/* ignore */
+		}
+	}
+
+	$effect(() => {
+		loadIntelFromStorage();
+	});
+
+	$effect(() => {
+		if (browser && intelCurrentStep < 6) {
+			saveIntelToStorage();
+		}
+	});
+
+	let intelStep1Valid = $derived(intelCompanyName.trim().length > 0 && intelIndustry.length > 0);
+	let intelStep2Valid = $derived(intelCompetitors.some((c) => c.url.trim().length > 0));
+	let intelStep3Valid = $derived(intelExistingContent.trim().length > 0 || intelContentTypes.length > 0);
+	let intelStep4Valid = $derived(intelLocations.length > 0);
+
+	function canIntelProceed(step: number): boolean {
+		switch (step) {
+			case 1:
+				return intelStep1Valid;
+			case 2:
+				return intelStep2Valid;
+			case 3:
+				return intelStep3Valid;
+			case 4:
+				return intelStep4Valid;
+			case 5:
+				return true;
+			default:
+				return false;
+		}
+	}
+
+	function nextIntelStep() {
+		if (intelCurrentStep < 6 && canIntelProceed(intelCurrentStep)) {
+			intelCurrentStep++;
+			saveIntelToStorage();
+		}
+	}
+
+	function prevIntelStep() {
+		if (intelCurrentStep > 1) {
+			intelCurrentStep--;
+		}
+	}
+
+	function goToIntelStep(step: number) {
+		if (step <= intelCurrentStep || (step <= 5 && canIntelProceed(step - 1))) {
+			intelCurrentStep = step;
+		}
+	}
+
+	function addIntelCompetitor() {
+		if (intelCompetitors.length < 5) {
+			intelCompetitors = [...intelCompetitors, { url: '', platform: 'youtube' }];
+		}
+	}
+
+	function removeIntelCompetitor(index: number) {
+		if (intelCompetitors.length > 1) {
+			intelCompetitors = intelCompetitors.filter((_, i) => i !== index);
+		}
+	}
+
+	function toggleIntelContentType(ct: string) {
+		if (intelContentTypes.includes(ct)) {
+			intelContentTypes = intelContentTypes.filter((c) => c !== ct);
+		} else {
+			intelContentTypes = [...intelContentTypes, ct];
+		}
+	}
+
+	function addIntelInterest(tag: string) {
+		const trimmed = tag.trim();
+		if (trimmed && !intelInterests.includes(trimmed)) {
+			intelInterests = [...intelInterests, trimmed];
+			intelInterestInput = '';
+		}
+	}
+
+	function removeIntelInterest(tag: string) {
+		intelInterests = intelInterests.filter((i) => i !== tag);
+	}
+
+	function handleIntelInterestKeydown(e: KeyboardEvent) {
+		if (e.key === 'Enter' && intelInterestInput.trim()) {
+			e.preventDefault();
+			addIntelInterest(intelInterestInput);
+		}
+	}
+
+	function toggleIntelLocation(loc: string) {
+		if (intelLocations.includes(loc)) {
+			intelLocations = intelLocations.filter((l) => l !== loc);
+		} else {
+			intelLocations = [...intelLocations, loc];
+		}
+	}
+
+	function generateIntelStrategyResults(): IntelStrategyResults {
+		return {
+			pillars: [
+				{
+					name: 'Educational Authority',
+					description: `Deep-dive content establishing ${intelCompanyName || 'your brand'} as the go-to source for ${intelIndustry || 'industry'} knowledge. Focus on data-backed insights, how-to guides, and myth-busting.`,
+					priority: 'Primary'
+				},
+				{
+					name: 'Behind-the-Scenes',
+					description:
+						'Humanize the brand with process reveals, team spotlights, and day-in-the-life content. Builds trust and relatability with your audience.',
+					priority: 'Secondary'
+				},
+				{
+					name: 'Community Stories',
+					description:
+						'User-generated content, testimonials, and audience Q&A sessions. Drives engagement and creates social proof at scale.',
+					priority: 'Secondary'
+				},
+				{
+					name: 'Trend Commentary',
+					description: `Real-time takes on ${intelIndustry || 'industry'} trends and news. Positions the brand as a thought leader and drives discovery through timely, shareable content.`,
+					priority: 'Tertiary'
+				}
+			],
+			schedule: [
+				{ day: 'Monday', time: '8:00 AM', type: 'Educational Post', platform: 'Instagram' },
+				{ day: 'Tuesday', time: '12:00 PM', type: 'Short-form Video', platform: 'TikTok' },
+				{ day: 'Wednesday', time: '9:00 AM', type: 'Thread / Carousel', platform: 'X / Twitter' },
+				{ day: 'Thursday', time: '7:00 AM', type: 'BTS Content', platform: 'Instagram' },
+				{ day: 'Friday', time: '11:00 AM', type: 'Long-form Video', platform: 'YouTube' },
+				{ day: 'Saturday', time: '10:00 AM', type: 'Community Q&A', platform: 'Instagram' },
+				{ day: 'Sunday', time: '6:00 PM', type: 'Week Preview', platform: 'X / Twitter' }
+			],
+			platformPriority: [
+				{
+					platform: 'Instagram',
+					score: 92,
+					reason: `Best fit for ${intelTargetAudience || 'your target audience'}. High engagement potential in ${intelIndustry || 'your niche'} with Reels + Carousel format.`
+				},
+				{
+					platform: 'TikTok',
+					score: 87,
+					reason:
+						'Highest organic reach potential. Ideal for short-form educational and trend content targeting 18-34 demo.'
+				},
+				{
+					platform: 'YouTube',
+					score: 81,
+					reason:
+						'Long-form authority building. SEO benefits drive passive discovery. Best for evergreen educational content.'
+				},
+				{
+					platform: 'X / Twitter',
+					score: 74,
+					reason:
+						'Real-time engagement and thought leadership. Thread format works well for breaking down complex topics.'
+				},
+				{
+					platform: 'LinkedIn',
+					score: 68,
+					reason:
+						'Professional credibility builder. Effective for B2B reach and industry networking.'
+				}
+			],
+			targets: [
+				{ metric: 'Total Followers', current: '2,400', target30: '3,800', target90: '12,500' },
+				{ metric: 'Engagement Rate', current: '2.1%', target30: '4.5%', target90: '6.8%' },
+				{ metric: 'Weekly Posts', current: '3', target30: '5', target90: '7' },
+				{ metric: 'Avg. Reach / Post', current: '450', target30: '1,200', target90: '4,800' },
+				{ metric: 'Content Saves', current: '12/wk', target30: '45/wk', target90: '180/wk' },
+				{ metric: 'Brand Mentions', current: '5/mo', target30: '20/mo', target90: '80/mo' }
+			]
+		};
+	}
+
+	async function generateIntelStrategy() {
+		intelGenerating = true;
+		await new Promise((r) => setTimeout(r, 2500 + Math.random() * 1500));
+		intelStrategyResults = generateIntelStrategyResults();
+		intelGenerating = false;
+		intelCurrentStep = 6;
+		if (browser) localStorage.removeItem(INTEL_STORAGE_KEY);
+	}
+
+	function startIntelOver() {
+		intelCurrentStep = 1;
+		intelCompanyName = brandName || '';
+		intelIndustry = '';
+		intelTargetAudience = '';
+		intelCompetitors = [{ url: '', platform: 'youtube' }];
+		intelExistingContent = '';
+		intelContentTypes = [];
+		intelAgeMin = 18;
+		intelAgeMax = 44;
+		intelInterests = [];
+		intelInterestInput = '';
+		intelLocations = ['Sydney'];
+		intelStrategyResults = null;
+		if (browser) localStorage.removeItem(INTEL_STORAGE_KEY);
+	}
+
+	function getIntelScoreColor(score: number): string {
+		if (score >= 85) return 'var(--success)';
+		if (score >= 70) return 'var(--cyan)';
+		if (score >= 55) return 'var(--gold)';
+		return 'var(--rose)';
+	}
 </script>
 
 <svelte:head>
@@ -985,6 +1366,597 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 						Add Competitor
 					</button>
 				</div>
+			</div>
+		{:else if activeTab === 'intel'}
+			<div class="panel intel-wizard-panel" style="animation: fadeUp 0.25s var(--ease-out);">
+				<div class="intel-wizard-header">
+					<h3>Content Intelligence & Strategy Wizard</h3>
+					<p class="panel-desc">6-step wizard to analyze competitors, map audiences, and generate customized content strategies.</p>
+				</div>
+
+				<!-- ─── Progress Steps ─── -->
+				<div class="progress-steps">
+					{#each INTEL_STEPS as s, i}
+						<button
+							type="button"
+							class="step-dot-group"
+							class:active={intelCurrentStep === s.id}
+							class:completed={intelCurrentStep > s.id}
+							class:disabled={s.id > intelCurrentStep + 1}
+							onclick={() => goToIntelStep(s.id)}
+							disabled={s.id > intelCurrentStep + 1}
+						>
+							<div class="step-dot">
+								{#if intelCurrentStep > s.id}
+									<svg
+										width="14"
+										height="14"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="3"
+										stroke-linecap="round"
+										stroke-linejoin="round"><polyline points="20 6 9 17 4 12" /></svg
+									>
+								{:else}
+									<span>{s.id}</span>
+								{/if}
+							</div>
+							<span class="step-label">{s.label}</span>
+						</button>
+						{#if i < INTEL_STEPS.length - 1}
+							<div class="step-line" class:filled={intelCurrentStep > s.id}></div>
+						{/if}
+					{/each}
+				</div>
+
+				<!-- ─── Step Content ─── -->
+				<div class="step-container">
+					<!-- STEP 1: Brand Discovery -->
+					{#if intelCurrentStep === 1}
+						<div class="step-card" style="animation: fadeUp 0.4s var(--ease-out)">
+							<div class="step-card-header">
+								<span class="step-icon">🏢</span>
+								<div>
+									<h4>Brand Discovery</h4>
+									<p>Tell us about your brand and target market</p>
+								</div>
+							</div>
+
+							<div class="form-fields">
+								<div class="field">
+									<label for="intel-company-name">Company / Brand Name <span class="req">*</span></label>
+									<input
+										id="intel-company-name"
+										type="text"
+										bind:value={intelCompanyName}
+										placeholder="e.g. PersonaGen"
+									/>
+								</div>
+
+								<div class="field">
+									<label for="intel-industry-select">Industry <span class="req">*</span></label>
+									<select id="intel-industry-select" bind:value={intelIndustry}>
+										<option value="">Select industry...</option>
+										{#each INTEL_INDUSTRIES as ind}
+											<option value={ind}>{ind}</option>
+										{/each}
+									</select>
+								</div>
+
+								<div class="field">
+									<label for="intel-target-audience">Target Audience</label>
+									<textarea
+										id="intel-target-audience"
+										bind:value={intelTargetAudience}
+										placeholder="Describe your ideal customer / audience. E.g. 'Small business owners aged 25-45 in Australia looking to grow their social media presence'"
+										rows="4"
+									></textarea>
+								</div>
+							</div>
+						</div>
+
+					<!-- STEP 2: Competitor Analysis -->
+					{:else if intelCurrentStep === 2}
+						<div class="step-card" style="animation: fadeUp 0.4s var(--ease-out)">
+							<div class="step-card-header">
+								<span class="step-icon">🔍</span>
+								<div>
+									<h4>Competitor Analysis</h4>
+									<p>Add up to 5 competitor channels to analyze</p>
+								</div>
+							</div>
+
+							<div class="competitors-list">
+								{#each intelCompetitors as comp, i}
+									<div class="competitor-row">
+										<span class="comp-num">{i + 1}</span>
+										<input
+											type="url"
+											bind:value={comp.url}
+											placeholder="https://youtube.com/@competitor"
+											class="comp-url"
+										/>
+										<select bind:value={comp.platform} class="comp-platform">
+											{#each INTEL_PLATFORMS_LIST as p}
+												<option value={p.id}>{p.label}</option>
+											{/each}
+										</select>
+										<button
+											type="button"
+											class="comp-remove"
+											onclick={() => removeIntelCompetitor(i)}
+											disabled={intelCompetitors.length <= 1}
+											title="Remove"
+										>
+											<svg
+												width="16"
+												height="16"
+												viewBox="0 0 24 24"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="2"
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg
+											>
+										</button>
+									</div>
+								{/each}
+							</div>
+
+							{#if intelCompetitors.length < 5}
+								<button type="button" class="add-comp-btn" onclick={addIntelCompetitor}>
+									<svg
+										width="16"
+										height="16"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="2"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg
+									>
+									Add Competitor ({intelCompetitors.length}/5)
+								</button>
+							{/if}
+						</div>
+
+					<!-- STEP 3: Content Audit -->
+					{:else if intelCurrentStep === 3}
+						<div class="step-card" style="animation: fadeUp 0.4s var(--ease-out)">
+							<div class="step-card-header">
+								<span class="step-icon">📋</span>
+								<div>
+									<h4>Content Audit</h4>
+									<p>Share your existing content for analysis</p>
+								</div>
+							</div>
+
+							<div class="form-fields">
+								<div class="field">
+									<label for="intel-existing-content">Existing Content (paste URLs or descriptions)</label>
+									<textarea
+										id="intel-existing-content"
+										bind:value={intelExistingContent}
+										placeholder="Paste links to your existing content, or describe what you've been posting. E.g.&#10;&#10;- Instagram: @mybrand (3 posts/week, mostly product photos)&#10;- Blog: mybrand.com/blog (monthly articles)&#10;- YouTube: 2 videos total"
+										rows="6"
+									></textarea>
+								</div>
+
+								<div class="field">
+									<label>Content Types You Currently Produce</label>
+									<div class="content-type-grid">
+										{#each INTEL_CONTENT_TYPES_LIST as ct}
+											<button
+												type="button"
+												class="ct-btn"
+												class:active={intelContentTypes.includes(ct)}
+												onclick={() => toggleIntelContentType(ct)}
+											>
+												{ct}
+											</button>
+										{/each}
+									</div>
+								</div>
+							</div>
+						</div>
+
+					<!-- STEP 4: Audience Mapping -->
+					{:else if intelCurrentStep === 4}
+						<div class="step-card" style="animation: fadeUp 0.4s var(--ease-out)">
+							<div class="step-card-header">
+								<span class="step-icon">🎯</span>
+								<div>
+									<h4>Audience Mapping</h4>
+									<p>Define your ideal audience demographics and interests</p>
+								</div>
+							</div>
+
+							<div class="form-fields">
+								<div class="field">
+									<label>Age Range: {intelAgeMin} — {intelAgeMax}</label>
+									<div class="range-group">
+										<div class="range-row">
+											<span class="range-label">Min</span>
+											<input
+												type="range"
+												min="13"
+												max="65"
+												bind:value={intelAgeMin}
+												class="slider"
+												oninput={() => {
+													if (intelAgeMin > intelAgeMax) intelAgeMax = intelAgeMin;
+												}}
+											/>
+											<span class="range-val">{intelAgeMin}</span>
+										</div>
+										<div class="range-row">
+											<span class="range-label">Max</span>
+											<input
+												type="range"
+												min="13"
+												max="65"
+												bind:value={intelAgeMax}
+												class="slider"
+												oninput={() => {
+													if (intelAgeMax < intelAgeMin) intelAgeMin = intelAgeMax;
+												}}
+											/>
+											<span class="range-val">{intelAgeMax}</span>
+										</div>
+									</div>
+								</div>
+
+								<div class="field">
+									<label for="intel-interest-input">Interest Tags</label>
+									<div class="tags-input-wrapper">
+										<div class="tags-display">
+											{#each intelInterests as tag}
+												<span class="tag">
+													{tag}
+													<button type="button" class="tag-remove" onclick={() => removeIntelInterest(tag)}>×</button>
+												</span>
+											{/each}
+											<input
+												id="intel-interest-input"
+												type="text"
+												bind:value={intelInterestInput}
+												placeholder={intelInterests.length > 0 ? 'Add more...' : 'Type and press Enter'}
+												onkeydown={handleIntelInterestKeydown}
+												class="tag-input"
+											/>
+										</div>
+									</div>
+									<div class="suggestions">
+										{#each INTEL_INTEREST_SUGGESTIONS.filter((s) => !intelInterests.includes(s)) as sug}
+											<button type="button" class="sug-btn" onclick={() => addIntelInterest(sug)}>{sug}</button>
+										{/each}
+									</div>
+								</div>
+
+								<div class="field">
+									<label>Locations <span class="req">*</span></label>
+									<div class="location-grid">
+										{#each INTEL_LOCATIONS as loc}
+											<button
+												type="button"
+												class="loc-btn"
+												class:active={intelLocations.includes(loc)}
+												onclick={() => toggleIntelLocation(loc)}
+											>
+												{loc}
+											</button>
+										{/each}
+									</div>
+								</div>
+							</div>
+						</div>
+
+					<!-- STEP 5: Strategy Generation -->
+					{:else if intelCurrentStep === 5}
+						<div class="step-card" style="animation: fadeUp 0.4s var(--ease-out)">
+							<div class="step-card-header">
+								<span class="step-icon">⚡</span>
+								<div>
+									<h4>Strategy Generation</h4>
+									<p>Review your inputs and generate a custom strategy</p>
+								</div>
+							</div>
+
+							<div class="review-grid">
+								<div class="review-item">
+									<h4>Brand</h4>
+									<p><strong>{intelCompanyName || '—'}</strong> • {intelIndustry || '—'}</p>
+									{#if intelTargetAudience}
+										<p class="review-sub">{intelTargetAudience}</p>
+									{/if}
+								</div>
+
+								<div class="review-item">
+									<h4>Competitors</h4>
+									{#each intelCompetitors.filter((c) => c.url.trim()) as comp}
+										<p class="review-url">
+											{comp.url}
+											<span class="review-plat"
+												>{INTEL_PLATFORMS_LIST.find((p) => p.id === comp.platform)?.label}</span
+											>
+										</p>
+									{/each}
+									{#if !intelCompetitors.some((c) => c.url.trim())}
+										<p class="review-sub">None added</p>
+									{/if}
+								</div>
+
+								<div class="review-item">
+									<h4>Content Types</h4>
+									<div class="review-tags">
+										{#each intelContentTypes as ct}
+											<span class="review-tag">{ct}</span>
+										{/each}
+										{#if intelContentTypes.length === 0}
+											<span class="review-sub">None selected</span>
+										{/if}
+									</div>
+								</div>
+
+								<div class="review-item">
+									<h4>Audience</h4>
+									<p>Ages {intelAgeMin}–{intelAgeMax} • {intelLocations.join(', ') || '—'}</p>
+									{#if intelInterests.length > 0}
+										<div class="review-tags">
+											{#each intelInterests as int}
+												<span class="review-tag accent">{int}</span>
+											{/each}
+										</div>
+									{/if}
+								</div>
+							</div>
+
+							<button type="button" class="generate-btn" onclick={generateIntelStrategy} disabled={intelGenerating}>
+								{#if intelGenerating}
+									<div class="gen-spinner"></div>
+									Generating Strategy...
+								{:else}
+									<svg
+										width="20"
+										height="20"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="2"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" /></svg
+									>
+									Generate Strategy
+								{/if}
+							</button>
+
+							{#if intelGenerating}
+								<div class="gen-progress" style="animation: fadeUp 0.3s var(--ease-out)">
+									<div class="gen-bar"><div class="gen-fill"></div></div>
+									<p>Analyzing competitors, mapping audience, building strategy...</p>
+								</div>
+							{/if}
+						</div>
+
+					<!-- STEP 6: Results -->
+					{:else if intelCurrentStep === 6 && intelStrategyResults}
+						<div class="results-container" style="animation: fadeUp 0.4s var(--ease-out)">
+							<div class="results-header-card">
+								<div class="results-title">
+									<h4>Strategy Report Generated</h4>
+									<p>{intelCompanyName} • {intelIndustry}</p>
+								</div>
+								<button type="button" class="start-over-btn" onclick={startIntelOver}>
+									<svg
+										width="16"
+										height="16"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="2"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										><polyline points="1 4 1 10 7 10" /><path
+											d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"
+										/></svg
+									>
+									Start Over
+								</button>
+							</div>
+
+							<!-- Content Pillars -->
+							<div class="result-section">
+								<h4 class="section-title">
+									<svg
+										width="20"
+										height="20"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="var(--accent)"
+										stroke-width="2"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										><rect x="3" y="3" width="7" height="7" /><rect
+											x="14"
+											y="3"
+											width="7"
+											height="7"
+										/><rect x="14" y="14" width="7" height="7" /><rect
+											x="3"
+											y="14"
+											width="7"
+											height="7"
+										/></svg
+									>
+									Content Pillars
+								</h4>
+								<div class="pillars-grid">
+									{#each intelStrategyResults.pillars as pillar, i}
+										<div class="pillar-card" style="animation-delay: {i * 0.08}s">
+											<div class="pillar-header">
+												<h5>{pillar.name}</h5>
+												<span
+													class="priority-tag"
+													class:primary={pillar.priority === 'Primary'}
+													class:secondary={pillar.priority === 'Secondary'}>{pillar.priority}</span
+												>
+											</div>
+											<p>{pillar.description}</p>
+										</div>
+									{/each}
+								</div>
+							</div>
+
+							<!-- Posting Schedule -->
+							<div class="result-section">
+								<h4 class="section-title">
+									<svg
+										width="20"
+										height="20"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="var(--cyan)"
+										stroke-width="2"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										><rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line
+											x1="16"
+											y1="2"
+											x2="16"
+											y2="6"
+										/><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg
+									>
+									Posting Schedule
+								</h4>
+								<div class="schedule-table">
+									<div class="table-header">
+										<span>Day</span><span>Time</span><span>Content Type</span><span>Platform</span>
+									</div>
+									{#each intelStrategyResults.schedule as row}
+										<div class="table-row">
+											<span class="day-cell">{row.day}</span>
+											<span class="time-cell">{row.time}</span>
+											<span>{row.type}</span>
+											<span class="plat-cell">{row.platform}</span>
+										</div>
+									{/each}
+								</div>
+							</div>
+
+							<!-- Platform Priority -->
+							<div class="result-section">
+								<h4 class="section-title">
+									<svg
+										width="20"
+										height="20"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="var(--gold)"
+										stroke-width="2"
+										stroke-linecap="round"
+										stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" /></svg
+									>
+									Platform Priority
+								</h4>
+								<div class="platform-cards">
+									{#each intelStrategyResults.platformPriority as plat, i}
+										<div class="plat-card" style="animation-delay: {i * 0.06}s">
+											<div class="plat-card-header">
+												<span class="plat-name">{plat.platform}</span>
+												<div class="plat-score-bar">
+													<div
+														class="plat-score-fill"
+														style="width: {plat.score}%; background: {getIntelScoreColor(plat.score)}"
+													></div>
+												</div>
+												<span class="plat-score-num" style="color: {getIntelScoreColor(plat.score)}"
+													>{plat.score}</span
+												>
+											</div>
+											<p class="plat-reason">{plat.reason}</p>
+										</div>
+									{/each}
+								</div>
+							</div>
+
+							<!-- Growth Targets -->
+							<div class="result-section">
+								<h4 class="section-title">
+									<svg
+										width="20"
+										height="20"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="var(--success)"
+										stroke-width="2"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										><line x1="12" y1="20" x2="12" y2="10" /><line x1="18" y1="20" x2="18" y2="4" /><line
+											x1="6"
+											y1="20"
+											x2="6"
+											y2="16"
+										/></svg
+									>
+									Growth Targets
+								</h4>
+								<div class="targets-table">
+									<div class="table-header targets-header">
+										<span>Metric</span><span>Current</span><span>30 Days</span><span>90 Days</span>
+									</div>
+									{#each intelStrategyResults.targets as target}
+										<div class="table-row targets-row">
+											<span class="metric-cell">{target.metric}</span>
+											<span class="current-cell">{target.current}</span>
+											<span class="t30-cell">{target.target30}</span>
+											<span class="t90-cell">{target.target90}</span>
+										</div>
+									{/each}
+								</div>
+							</div>
+						</div>
+					{/if}
+				</div>
+
+				<!-- ─── Navigation Buttons ─── -->
+				{#if intelCurrentStep < 6}
+					<div class="nav-buttons" style="margin-top: 1.5rem;">
+						<button type="button" class="nav-btn back" onclick={prevIntelStep} disabled={intelCurrentStep === 1}>
+							<svg
+								width="16"
+								height="16"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								><line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" /></svg
+							>
+							Back
+						</button>
+						{#if intelCurrentStep < 5}
+							<button type="button" class="nav-btn next" onclick={nextIntelStep} disabled={!canIntelProceed(intelCurrentStep)}>
+								Next
+								<svg
+									width="16"
+									height="16"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></svg
+								>
+							</button>
+						{/if}
+					</div>
+				{/if}
 			</div>
 		{/if}
 	</div>
@@ -1843,6 +2815,918 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		}
 		.panel {
 			padding: 1.25rem;
+		}
+	}
+
+	/* ─── Intel Wizard Merged Styles ─── */
+	.intel-wizard-panel {
+		animation: fadeUp 0.25s var(--ease-out);
+	}
+
+	.intel-wizard-panel .intel-wizard-header {
+		margin-bottom: 2rem;
+	}
+
+	.intel-wizard-panel .progress-steps {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0;
+		margin-bottom: 2.5rem;
+		padding: 1.5rem;
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		overflow-x: auto;
+	}
+
+	.intel-wizard-panel .step-dot-group {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.5rem;
+		background: none;
+		border: none;
+		cursor: pointer;
+		padding: 0.5rem;
+		min-width: 80px;
+		transition: opacity 0.2s ease;
+	}
+
+	.intel-wizard-panel .step-dot-group.disabled {
+		cursor: not-allowed;
+		opacity: 0.35;
+	}
+
+	.intel-wizard-panel .step-dot {
+		width: 36px;
+		height: 36px;
+		border-radius: 50%;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		font-size: 0.78rem;
+		font-weight: 700;
+		color: var(--text-dim);
+		background: var(--surface-2);
+		border: 2px solid var(--border-strong);
+		transition: all 0.3s ease;
+	}
+
+	.intel-wizard-panel .step-dot-group.active .step-dot {
+		background: var(--accent-soft);
+		border-color: var(--accent);
+		color: var(--accent);
+		box-shadow: 0 0 20px rgba(124, 106, 237, 0.2);
+	}
+
+	.intel-wizard-panel .step-dot-group.completed .step-dot {
+		background: var(--success-soft);
+		border-color: var(--success);
+		color: var(--success);
+	}
+
+	.intel-wizard-panel .step-label {
+		font-size: 0.68rem;
+		font-weight: 600;
+		color: var(--text-dim);
+		text-align: center;
+		white-space: nowrap;
+	}
+
+	.intel-wizard-panel .step-dot-group.active .step-label {
+		color: var(--accent);
+	}
+
+	.intel-wizard-panel .step-dot-group.completed .step-label {
+		color: var(--success);
+	}
+
+	.intel-wizard-panel .step-line {
+		width: 40px;
+		height: 2px;
+		background: var(--border-strong);
+		flex-shrink: 0;
+		margin-bottom: 1.5rem;
+		transition: background 0.3s ease;
+	}
+
+	.intel-wizard-panel .step-line.filled {
+		background: var(--success);
+	}
+
+	.intel-wizard-panel .step-card {
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		padding: 2rem;
+	}
+
+	.intel-wizard-panel .step-card-header {
+		display: flex;
+		align-items: center;
+		gap: 1rem;
+		margin-bottom: 2rem;
+	}
+
+	.intel-wizard-panel .step-icon {
+		font-size: 2rem;
+	}
+
+	.intel-wizard-panel .step-card-header h4 {
+		font-family: var(--font-display);
+		font-size: 1.3rem;
+		color: var(--text);
+		margin: 0;
+	}
+
+	.intel-wizard-panel .step-card-header p {
+		color: var(--text-muted);
+		font-size: 0.85rem;
+		margin: 0.2rem 0 0;
+	}
+
+	.intel-wizard-panel .form-fields {
+		display: flex;
+		flex-direction: column;
+		gap: 1.5rem;
+	}
+
+	.intel-wizard-panel .field label {
+		margin-bottom: 0.5rem;
+	}
+
+	.intel-wizard-panel .req {
+		color: var(--rose);
+	}
+
+	.intel-wizard-panel .competitors-list {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+		margin-bottom: 1rem;
+	}
+
+	.intel-wizard-panel .competitor-row {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+	}
+
+	.intel-wizard-panel .comp-num {
+		width: 24px;
+		height: 24px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: var(--accent-soft);
+		border-radius: var(--radius-full);
+		font-size: 0.72rem;
+		font-weight: 700;
+		color: var(--accent);
+		flex-shrink: 0;
+	}
+
+	.intel-wizard-panel .comp-url {
+		flex: 1;
+	}
+
+	.intel-wizard-panel .comp-platform {
+		width: 140px;
+		flex-shrink: 0;
+	}
+
+	.intel-wizard-panel .comp-remove {
+		width: 32px;
+		height: 32px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: transparent;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-xs);
+		color: var(--text-dim);
+		cursor: pointer;
+		flex-shrink: 0;
+		transition: all 0.2s ease;
+	}
+
+	.intel-wizard-panel .comp-remove:hover:not(:disabled) {
+		border-color: var(--error);
+		color: var(--error);
+		background: var(--error-soft);
+	}
+
+	.intel-wizard-panel .comp-remove:disabled {
+		opacity: 0.3;
+		cursor: not-allowed;
+	}
+
+	.intel-wizard-panel .add-comp-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.5rem;
+		padding: 0.65rem;
+		border: 1px dashed var(--border-strong);
+		border-radius: var(--radius-sm);
+		background: transparent;
+		color: var(--text-dim);
+		font-size: 0.82rem;
+		cursor: pointer;
+		transition: all 0.2s ease;
+		width: 100%;
+	}
+
+	.intel-wizard-panel .add-comp-btn:hover {
+		border-color: var(--accent-mid);
+		color: var(--accent);
+	}
+
+	.intel-wizard-panel .content-type-grid {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+	}
+
+	.intel-wizard-panel .ct-btn {
+		padding: 0.5rem 1rem;
+		background: var(--surface-2);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-full);
+		color: var(--text-muted);
+		font-size: 0.8rem;
+		cursor: pointer;
+		transition: all 0.2s ease;
+	}
+
+	.intel-wizard-panel .ct-btn:hover {
+		border-color: var(--border-hover);
+		color: var(--text);
+	}
+
+	.intel-wizard-panel .ct-btn.active {
+		border-color: var(--accent-mid);
+		background: var(--accent-soft);
+		color: var(--accent);
+	}
+
+	.intel-wizard-panel .range-group {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+	}
+
+	.intel-wizard-panel .range-row {
+		display: flex;
+		align-items: center;
+		gap: 1rem;
+	}
+
+	.intel-wizard-panel .range-label {
+		font-size: 0.75rem;
+		color: var(--text-dim);
+		width: 30px;
+		flex-shrink: 0;
+	}
+
+	.intel-wizard-panel .slider {
+		flex: 1;
+		-webkit-appearance: none;
+		appearance: none;
+		height: 6px;
+		background: var(--surface-3);
+		border-radius: var(--radius-full);
+		outline: none;
+		border: none;
+		padding: 0;
+	}
+
+	.intel-wizard-panel .slider::-webkit-slider-thumb {
+		-webkit-appearance: none;
+		appearance: none;
+		width: 20px;
+		height: 20px;
+		border-radius: 50%;
+		background: var(--accent);
+		cursor: pointer;
+		border: 2px solid var(--bg);
+		box-shadow: 0 0 10px rgba(124, 106, 237, 0.3);
+	}
+
+	.intel-wizard-panel .slider::-moz-range-thumb {
+		width: 20px;
+		height: 20px;
+		border-radius: 50%;
+		background: var(--accent);
+		cursor: pointer;
+		border: 2px solid var(--bg);
+	}
+
+	.intel-wizard-panel .range-val {
+		font-family: var(--font-mono);
+		font-size: 0.82rem;
+		color: var(--text);
+		width: 30px;
+		text-align: right;
+		flex-shrink: 0;
+	}
+
+	.intel-wizard-panel .tags-input-wrapper {
+		background: var(--surface-2);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		padding: 0.5rem;
+		margin-bottom: 0.5rem;
+	}
+
+	.intel-wizard-panel .tags-display {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.4rem;
+		align-items: center;
+	}
+
+	.intel-wizard-panel .tag {
+		display: flex;
+		align-items: center;
+		gap: 0.3rem;
+		padding: 0.3rem 0.6rem;
+		background: var(--accent-soft);
+		border: 1px solid var(--accent-mid);
+		border-radius: var(--radius-full);
+		font-size: 0.75rem;
+		color: var(--accent);
+	}
+
+	.intel-wizard-panel .tag-remove {
+		background: none;
+		border: none;
+		color: var(--accent);
+		cursor: pointer;
+		font-size: 1rem;
+		padding: 0;
+		line-height: 1;
+		transition: color 0.2s ease;
+	}
+
+	.intel-wizard-panel .tag-remove:hover {
+		color: var(--error);
+	}
+
+	.intel-wizard-panel .tag-input {
+		border: none !important;
+		background: transparent !important;
+		padding: 0.3rem 0.5rem !important;
+		font-size: 0.85rem;
+		flex: 1;
+		min-width: 120px;
+		outline: none;
+		box-shadow: none !important;
+	}
+
+	.intel-wizard-panel .suggestions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.35rem;
+	}
+
+	.intel-wizard-panel .sug-btn {
+		padding: 0.25rem 0.6rem;
+		background: transparent;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-full);
+		color: var(--text-dim);
+		font-size: 0.7rem;
+		cursor: pointer;
+		transition: all 0.2s ease;
+	}
+
+	.intel-wizard-panel .sug-btn:hover {
+		border-color: var(--accent-mid);
+		color: var(--accent);
+	}
+
+	.intel-wizard-panel .location-grid {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+	}
+
+	.intel-wizard-panel .loc-btn {
+		padding: 0.5rem 1rem;
+		background: var(--surface-2);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-full);
+		color: var(--text-muted);
+		font-size: 0.8rem;
+		cursor: pointer;
+		transition: all 0.2s ease;
+	}
+
+	.intel-wizard-panel .loc-btn:hover {
+		border-color: var(--border-hover);
+		color: var(--text);
+	}
+
+	.intel-wizard-panel .loc-btn.active {
+		border-color: var(--cyan-mid);
+		background: var(--cyan-soft);
+		color: var(--cyan);
+	}
+
+	.intel-wizard-panel .review-grid {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 1.25rem;
+		margin-bottom: 2rem;
+	}
+
+	.intel-wizard-panel .review-item {
+		background: var(--surface-2);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		padding: 1.25rem;
+	}
+
+	.intel-wizard-panel .review-item h4 {
+		font-family: var(--font-display);
+		font-size: 0.85rem;
+		color: var(--text);
+		margin: 0 0 0.5rem;
+	}
+
+	.intel-wizard-panel .review-item p {
+		font-size: 0.82rem;
+		color: var(--text-muted);
+		margin: 0 0 0.25rem;
+		line-height: 1.5;
+	}
+
+	.intel-wizard-panel .review-item p strong {
+		color: var(--text);
+	}
+
+	.intel-wizard-panel .review-sub {
+		font-size: 0.78rem;
+		color: var(--text-dim);
+	}
+
+	.intel-wizard-panel .review-url {
+		font-family: var(--font-mono);
+		font-size: 0.72rem;
+		word-break: break-all;
+	}
+
+	.intel-wizard-panel .review-plat {
+		color: var(--accent);
+		font-weight: 600;
+		margin-left: 0.5rem;
+		font-family: var(--font-body);
+	}
+
+	.intel-wizard-panel .review-tags {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.35rem;
+	}
+
+	.intel-wizard-panel .review-tag {
+		padding: 0.2rem 0.6rem;
+		background: var(--surface-3);
+		border-radius: var(--radius-full);
+		font-size: 0.72rem;
+		color: var(--text-muted);
+	}
+
+	.intel-wizard-panel .review-tag.accent {
+		background: var(--accent-soft);
+		color: var(--accent);
+	}
+
+	.intel-wizard-panel .generate-btn {
+		width: 100%;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.6rem;
+		padding: 1rem;
+		background: var(--gradient);
+		border: none;
+		border-radius: var(--radius-sm);
+		color: #fff;
+		font-weight: 600;
+		font-size: 1rem;
+		cursor: pointer;
+		transition:
+			transform 0.2s ease,
+			box-shadow 0.3s ease;
+	}
+
+	.intel-wizard-panel .generate-btn:hover:not(:disabled) {
+		transform: translateY(-2px);
+		box-shadow: 0 8px 30px rgba(124, 106, 237, 0.3);
+	}
+
+	.intel-wizard-panel .generate-btn:disabled {
+		opacity: 0.6;
+		cursor: not-allowed;
+	}
+
+	.intel-wizard-panel .gen-spinner {
+		width: 18px;
+		height: 18px;
+		border: 2px solid rgba(255, 255, 255, 0.3);
+		border-top-color: #fff;
+		border-radius: 50%;
+		animation: spin 0.8s linear infinite;
+	}
+
+	.intel-wizard-panel .gen-progress {
+		text-align: center;
+		margin-top: 1.5rem;
+	}
+
+	.intel-wizard-panel .gen-bar {
+		width: 100%;
+		height: 4px;
+		background: var(--surface-3);
+		border-radius: var(--radius-full);
+		overflow: hidden;
+		margin-bottom: 0.75rem;
+	}
+
+	.intel-wizard-panel .gen-fill {
+		height: 100%;
+		width: 40%;
+		background: var(--gradient);
+		border-radius: var(--radius-full);
+		animation: genSlide 1.8s ease-in-out infinite;
+	}
+
+	.intel-wizard-panel .gen-progress p {
+		color: var(--text-dim);
+		font-size: 0.82rem;
+	}
+
+	.intel-wizard-panel .results-header-card {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		padding: 1.5rem 2rem;
+		margin-bottom: 1.5rem;
+	}
+
+	.intel-wizard-panel .results-title h4 {
+		font-family: var(--font-display);
+		font-size: 1.4rem;
+		color: var(--text);
+		margin: 0;
+	}
+
+	.intel-wizard-panel .results-title p {
+		color: var(--text-muted);
+		font-size: 0.85rem;
+		margin: 0.2rem 0 0;
+	}
+
+	.intel-wizard-panel .start-over-btn {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.6rem 1.2rem;
+		background: transparent;
+		border: 1px solid var(--border-strong);
+		border-radius: var(--radius-sm);
+		color: var(--text-muted);
+		font-size: 0.82rem;
+		font-weight: 600;
+		cursor: pointer;
+		transition: all 0.2s ease;
+	}
+
+	.intel-wizard-panel .start-over-btn:hover {
+		border-color: var(--accent-mid);
+		color: var(--accent);
+	}
+
+	.intel-wizard-panel .result-section {
+		margin-bottom: 1.5rem;
+	}
+
+	.intel-wizard-panel .section-title {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+		font-family: var(--font-display);
+		font-size: 1.1rem;
+		color: var(--text);
+		margin: 0 0 1rem;
+	}
+
+	.intel-wizard-panel .pillars-grid {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 1rem;
+	}
+
+	.intel-wizard-panel .pillar-card {
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		padding: 1.25rem;
+		transition: border-color 0.2s ease;
+		animation: fadeUp 0.4s var(--ease-out) both;
+	}
+
+	.intel-wizard-panel .pillar-card:hover {
+		border-color: var(--border-hover);
+	}
+
+	.intel-wizard-panel .pillar-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		margin-bottom: 0.75rem;
+	}
+
+	.intel-wizard-panel .pillar-header h5 {
+		font-family: var(--font-display);
+		font-size: 0.95rem;
+		color: var(--text);
+		margin: 0;
+	}
+
+	.intel-wizard-panel .priority-tag {
+		font-size: 0.65rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+		padding: 0.2rem 0.6rem;
+		border-radius: var(--radius-full);
+		background: var(--surface-3);
+		color: var(--text-dim);
+	}
+
+	.intel-wizard-panel .priority-tag.primary {
+		background: var(--accent-soft);
+		color: var(--accent);
+	}
+
+	.intel-wizard-panel .priority-tag.secondary {
+		background: var(--cyan-soft);
+		color: var(--cyan);
+	}
+
+	.intel-wizard-panel .pillar-card p {
+		font-size: 0.82rem;
+		color: var(--text-muted);
+		line-height: 1.6;
+		margin: 0;
+	}
+
+	.intel-wizard-panel .schedule-table,
+	.intel-wizard-panel .targets-table {
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		overflow: hidden;
+	}
+
+	.intel-wizard-panel .table-header {
+		display: grid;
+		grid-template-columns: 1fr 1fr 1.5fr 1fr;
+		padding: 0.75rem 1.25rem;
+		background: var(--surface-2);
+		border-bottom: 1px solid var(--border);
+		font-size: 0.7rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.1em;
+		color: var(--text-dim);
+	}
+
+	.intel-wizard-panel .targets-header {
+		grid-template-columns: 1.5fr 1fr 1fr 1fr;
+	}
+
+	.intel-wizard-panel .table-row {
+		display: grid;
+		grid-template-columns: 1fr 1fr 1.5fr 1fr;
+		padding: 0.75rem 1.25rem;
+		border-bottom: 1px solid var(--border);
+		font-size: 0.82rem;
+		color: var(--text-muted);
+		transition: background 0.15s ease;
+	}
+
+	.intel-wizard-panel .table-row:hover {
+		background: var(--surface-2);
+	}
+
+	.intel-wizard-panel .table-row:last-child {
+		border-bottom: none;
+	}
+
+	.intel-wizard-panel .targets-row {
+		grid-template-columns: 1.5fr 1fr 1fr 1fr;
+	}
+
+	.intel-wizard-panel .day-cell {
+		color: var(--text);
+		font-weight: 600;
+	}
+	.intel-wizard-panel .time-cell {
+		font-family: var(--font-mono);
+		font-size: 0.78rem;
+	}
+	.intel-wizard-panel .plat-cell {
+		color: var(--accent);
+		font-weight: 500;
+	}
+	.intel-wizard-panel .metric-cell {
+		color: var(--text);
+		font-weight: 500;
+	}
+	.intel-wizard-panel .current-cell {
+		color: var(--text-dim);
+	}
+	.intel-wizard-panel .t30-cell {
+		color: var(--gold);
+		font-weight: 600;
+	}
+	.intel-wizard-panel .t90-cell {
+		color: var(--success);
+		font-weight: 600;
+	}
+
+	.intel-wizard-panel .platform-cards {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+	}
+
+	.intel-wizard-panel .plat-card {
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		padding: 1rem 1.25rem;
+		transition: border-color 0.2s ease;
+		animation: fadeUp 0.4s var(--ease-out) both;
+	}
+
+	.intel-wizard-panel .plat-card:hover {
+		border-color: var(--border-hover);
+	}
+
+	.intel-wizard-panel .plat-card-header {
+		display: flex;
+		align-items: center;
+		gap: 1rem;
+		margin-bottom: 0.5rem;
+	}
+
+	.intel-wizard-panel .plat-name {
+		font-weight: 600;
+		font-size: 0.88rem;
+		color: var(--text);
+		min-width: 100px;
+	}
+
+	.intel-wizard-panel .plat-score-bar {
+		flex: 1;
+		height: 6px;
+		background: var(--surface-3);
+		border-radius: var(--radius-full);
+		overflow: hidden;
+	}
+
+	.intel-wizard-panel .plat-score-fill {
+		height: 100%;
+		border-radius: var(--radius-full);
+		transition: width 0.5s var(--ease-out);
+	}
+
+	.intel-wizard-panel .plat-score-num {
+		font-family: var(--font-mono);
+		font-size: 0.85rem;
+		font-weight: 700;
+		min-width: 30px;
+		text-align: right;
+	}
+
+	.intel-wizard-panel .plat-reason {
+		font-size: 0.8rem;
+		color: var(--text-dim);
+		line-height: 1.5;
+		margin: 0;
+	}
+
+	.intel-wizard-panel .nav-buttons {
+		display: flex;
+		justify-content: space-between;
+		margin-top: 2rem;
+	}
+
+	.intel-wizard-panel .nav-btn {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.75rem 1.5rem;
+		border-radius: var(--radius-sm);
+		font-weight: 600;
+		font-size: 0.88rem;
+		cursor: pointer;
+		transition: all 0.2s ease;
+	}
+
+	.intel-wizard-panel .nav-btn.back {
+		background: transparent;
+		border: 1px solid var(--border-strong);
+		color: var(--text-muted);
+	}
+
+	.intel-wizard-panel .nav-btn.back:hover:not(:disabled) {
+		border-color: var(--border-hover);
+		color: var(--text);
+	}
+
+	.intel-wizard-panel .nav-btn.next {
+		background: var(--gradient);
+		border: none;
+		color: #fff;
+		margin-left: auto;
+	}
+
+	.intel-wizard-panel .nav-btn.next:hover:not(:disabled) {
+		transform: translateY(-1px);
+		box-shadow: var(--shadow-accent);
+	}
+
+	.intel-wizard-panel .nav-btn:disabled {
+		opacity: 0.35;
+		cursor: not-allowed;
+	}
+
+	@media (max-width: 768px) {
+		.intel-wizard-panel .progress-steps {
+			padding: 1rem;
+			gap: 0;
+			justify-content: flex-start;
+		}
+
+		.intel-wizard-panel .step-dot-group {
+			min-width: 60px;
+		}
+		.intel-wizard-panel .step-label {
+			font-size: 0.6rem;
+		}
+		.intel-wizard-panel .step-line {
+			width: 20px;
+		}
+
+		.intel-wizard-panel .step-card {
+			padding: 1.5rem;
+		}
+
+		.intel-wizard-panel .competitor-row {
+			flex-wrap: wrap;
+		}
+
+		.intel-wizard-panel .comp-url {
+			flex: 1 1 100%;
+			order: 2;
+		}
+		.intel-wizard-panel .comp-platform {
+			width: 100%;
+			order: 3;
+		}
+		.intel-wizard-panel .comp-num {
+			order: 1;
+		}
+		.intel-wizard-panel .comp-remove {
+			order: 1;
+		}
+
+		.intel-wizard-panel .review-grid {
+			grid-template-columns: 1fr;
+		}
+		.intel-wizard-panel .pillars-grid {
+			grid-template-columns: 1fr;
+		}
+
+		.intel-wizard-panel .table-header,
+		.intel-wizard-panel .table-row {
+			grid-template-columns: 1fr 1fr;
+			gap: 0.25rem;
+		}
+
+		.intel-wizard-panel .targets-header,
+		.intel-wizard-panel .targets-row {
+			grid-template-columns: 1fr 1fr;
 		}
 	}
 </style>
