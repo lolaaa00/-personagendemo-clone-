@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { untrack } from 'svelte';
+	import { untrack, onMount } from 'svelte';
 	import type { Agent } from '$lib/types';
 	import { showToast } from '$lib/stores/ui.svelte';
 	import { Posts, ContentForge } from '$lib/services/api';
@@ -185,7 +185,7 @@
 	let products = $state<any[]>([]);
 	let ugcGuidelines = $state('');
 
-	$effect(() => {
+	onMount(() => {
 		const LS_KEY = 'personagen_brand_brief';
 		try {
 			const saved = localStorage.getItem(LS_KEY);

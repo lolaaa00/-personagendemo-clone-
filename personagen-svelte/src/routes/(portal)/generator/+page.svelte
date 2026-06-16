@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { showToast } from '$lib/stores/ui.svelte';
+	import { onMount } from 'svelte';
 	import { Factory } from '$lib/services/api';
 	import { goto } from '$app/navigation';
 	import { browser } from '$app/environment';
@@ -58,7 +59,7 @@
 	let initial = $derived(agentName.trim() ? agentName.trim().charAt(0).toUpperCase() : '?');
 
 	// Load from localStorage
-	$effect(() => {
+	onMount(() => {
 		if (!browser) return;
 		try {
 			const saved = localStorage.getItem(LS_KEY);

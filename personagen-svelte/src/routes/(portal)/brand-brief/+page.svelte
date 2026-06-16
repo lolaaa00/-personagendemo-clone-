@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/stores';
+	import { onMount } from 'svelte';
 	import { showToast, updateBrandColors, triggerBrandTransform } from '$lib/stores/ui.svelte';
 	import { browser } from '$app/environment';
 	import { BrandBrief } from '$lib/services/api';
@@ -112,7 +113,7 @@
 	let version = $state('1.0');
 
 	// Load from localStorage
-	$effect(() => {
+	onMount(() => {
 		if (!browser) return;
 		try {
 			const saved = localStorage.getItem(LS_KEY);

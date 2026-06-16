@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { showToast } from '$lib/stores/ui.svelte';
+	import { onMount } from 'svelte';
 
 	// Profile
 	let profileName = $state('James Adams');
@@ -21,7 +22,7 @@
 	let deleteConfirmText = $state('');
 
 	// Load from localStorage
-	$effect(() => {
+	onMount(() => {
 		const stored = localStorage.getItem('personagen_settings');
 		if (stored) {
 			try {
