@@ -621,11 +621,11 @@
 					<div class="roster-section list-section">
 						<div class="section-header-row">
 							<h4 class="roster-title">Active Creators</h4>
-							<span class="badge-count">{agents.length}</span>
+							<span class="badge-count">{agents.filter((a) => a.status === 'active').length}</span>
 						</div>
 
 						<div class="roster-scroll-list">
-							{#each agents as agent}
+							{#each agents.filter((a) => a.status === 'active') as agent}
 								<button
 									class="roster-card"
 									class:active={selectedAgent.id === agent.id && !selectedAgent.isHermes}

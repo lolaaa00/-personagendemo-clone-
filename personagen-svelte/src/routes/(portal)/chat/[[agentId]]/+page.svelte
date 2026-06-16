@@ -386,11 +386,11 @@ As a specialized creator, I've updated my internal logic context. I am connected
 		<div class="sidebar-section creators-section">
 			<div class="section-title-row">
 				<h4 class="section-title">Active Creators</h4>
-				<span class="creator-count">{agents.length}</span>
+				<span class="creator-count">{agents.filter((a) => a.status === 'active').length}</span>
 			</div>
 
 			<div class="creators-scroll-list">
-				{#each agents as agent}
+				{#each agents.filter((a) => a.status === 'active') as agent}
 					<button
 						class="agent-card"
 						class:active={selectedAgent.id === agent.id && !selectedAgent.isHermes}
