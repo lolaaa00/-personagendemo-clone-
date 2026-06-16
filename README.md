@@ -11,7 +11,7 @@ PersonaGen is built as a **hybrid cloud/on-premise** platform, designed to maxim
 
 ```mermaid
 graph TD
-    subgraph Cloud VPS ["Cloud VPS Coordinator Layer"]
+    subgraph CloudVPS ["Cloud VPS Coordinator Layer"]
         Svelte["SvelteKit Web Portal & Scheduler"]
         DB[("Supabase DB & Auth")]
         Bridge["MCP Database Bridge"]
