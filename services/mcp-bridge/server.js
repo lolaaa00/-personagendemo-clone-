@@ -5,8 +5,13 @@ import express from "express";
 import { z } from "zod";
 
 // Initialize Supabase Client (bypasses RLS utilizing Service Role Key for background automation)
-const supabaseUrl = process.env.SUPABASE_URL || "https://l2g-supabase.zi1cc5.easypanel.host";
+const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_KEY;
+
+if (!supabaseUrl) {
+  console.error("FATAL ERROR: SUPABASE_URL environment variable is not set!");
+  process.exit(1);
+}
 
 if (!supabaseKey) {
   console.error("FATAL ERROR: SUPABASE_SERVICE_KEY environment variable is not set!");

@@ -10,7 +10,7 @@ services:
     environment:
       - PORT=5678 # Instructs SvelteKit Node adapter to bind to port 5678
       - NODE_ENV=production
-      - PUBLIC_SUPABASE_URL=https://l2g-supabase.zi1cc5.easypanel.host
+      - PUBLIC_SUPABASE_URL=${PUBLIC_SUPABASE_URL}
       - PUBLIC_SUPABASE_ANON_KEY=${PUBLIC_SUPABASE_ANON_KEY}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - COMPOSIO_API_KEY=${COMPOSIO_API_KEY}
@@ -30,7 +30,7 @@ services:
     restart: unless-stopped
     environment:
       - NODE_ENV=production
-      - PUBLIC_SUPABASE_URL=https://l2g-supabase.zi1cc5.easypanel.host
+      - PUBLIC_SUPABASE_URL=${PUBLIC_SUPABASE_URL}
       - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
       - FACTORY_API_KEY=${FACTORY_API_KEY}
       - MAIL_URL=http://mail:8080
@@ -49,7 +49,7 @@ services:
     restart: unless-stopped
     environment:
       - NODE_ENV=production
-      - PUBLIC_SUPABASE_URL=https://l2g-supabase.zi1cc5.easypanel.host
+      - PUBLIC_SUPABASE_URL=${PUBLIC_SUPABASE_URL}
       - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
       - MAIL_API_KEY=${MAIL_API_KEY}
       - MAIL_API_PORT=8080
@@ -66,7 +66,7 @@ services:
     expose:
       - "8000"  # Exposed purely internally inside the virtual network
     environment:
-      - SUPABASE_URL=https://l2g-supabase.zi1cc5.easypanel.host
+      - SUPABASE_URL=${PUBLIC_SUPABASE_URL}
       - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
       - MCP_BRIDGE_TOKEN=${MCP_BRIDGE_TOKEN}
 

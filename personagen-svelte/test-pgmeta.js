@@ -15,7 +15,7 @@ envContent.split('\n').forEach((line) => {
 	}
 });
 
-const supabaseUrl = env.PUBLIC_SUPABASE_URL; // e.g. https://l2g-supabase.zi1cc5.easypanel.host
+const supabaseUrl = env.PUBLIC_SUPABASE_URL; // e.g. https://<your-supabase-url>
 const serviceRoleKey = env.SUPABASE_SERVICE_ROLE_KEY;
 
 async function run() {

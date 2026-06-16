@@ -1,6 +1,10 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = 'https://l2g-supabase.zi1cc5.easypanel.host';
+const supabaseUrl = process.env.PUBLIC_SUPABASE_URL;
+if (!supabaseUrl) {
+	console.error('Error: PUBLIC_SUPABASE_URL environment variable is not set!');
+	process.exit(1);
+}
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 if (!serviceRoleKey) {
 	console.error('Error: SUPABASE_SERVICE_ROLE_KEY environment variable is not set!');

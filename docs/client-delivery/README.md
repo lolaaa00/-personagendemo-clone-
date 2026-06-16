@@ -66,14 +66,14 @@ FACTORY_PORT=8080
 FACTORY_API_KEY=<generate-a-strong-key>
 MAIL_URL=http://personagen-mail:8080
 MAIL_API_KEY=<must-match-mail-service-MAIL_API_KEY>
-ENGINE_WEBHOOK_URL=https://auto.l2gseo.com/webhook/personagen-factory
+ENGINE_WEBHOOK_URL=https://<your-portal-domain>/webhook/personagen-factory
 ENCRYPTION_KEY=<generate-32-byte-hex>
 ```
 
 **Minimum required for `personagen-mail`:**
 
 ```env
-MAIL_DOMAIN=mail.yourdomain.com
+MAIL_DOMAIN=mail.<your-domain.com>
 MAIL_API_KEY=<generate-a-strong-key>
 MAIL_API_PORT=8080
 HEALTH_PORT=8081
@@ -90,7 +90,7 @@ Add these DNS records in Cloudflare for the mail service:
 | Type | Name | Content | Proxy |
 |------|------|---------|-------|
 | A | `mail` | `<your-vps-ip>` | ❌ DNS only |
-| MX | `@` | `mail.yourdomain.com` | — |
+| MX | `@` | `mail.<your-domain.com>` | — |
 | TXT | `@` | `v=spf1 ip4:<your-vps-ip> ~all` | — |
 | TXT | `default._domainkey` | `<DKIM-public-key>` | — |
 | CNAME | `factory` | `<easypanel-host>` | ✅ Proxied |
@@ -106,16 +106,16 @@ After deployment, verify both services are healthy:
 
 ```bash
 # Check factory health
-curl https://factory.yourdomain.com/health
+curl https://factory.<your-domain.com>/health
 
 # Check mail health
-curl http://mail.yourdomain.com:8080/health
+curl http://mail.<your-domain.com>:8080/health
 
 # Test email creation
-curl -X POST http://mail.yourdomain.com:8080/api/inboxes \
+curl -X POST http://mail.<your-domain.com>:8080/api/inboxes \
   -H "Authorization: Bearer <MAIL_API_KEY>" \
   -H "Content-Type: application/json" \
-  -d '{"address": "test@yourdomain.com"}'
+  -d '{"address": "test@<your-domain.com>"}'
 ```
 
 ---

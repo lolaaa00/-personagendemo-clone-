@@ -16,7 +16,10 @@ function generateIdentity({ name, niche, platform, personaId }) {
   const bio = buildBio(name, niche, platform);
   const fingerprintSeed = hashSeed(personaId);
   const emailHandle = `${baseHandle.replace(/[^a-z0-9]/g, "")}${randomDigits(4)}`;
-  const mailDomain = process.env.MAIL_DOMAIN || "l2gseo.com";
+  const mailDomain = process.env.MAIL_DOMAIN;
+  if (!mailDomain) {
+    throw new Error("MAIL_DOMAIN environment variable is not configured on the factory server.");
+  }
   const email = `${emailHandle}@${mailDomain}`;
 
   return {

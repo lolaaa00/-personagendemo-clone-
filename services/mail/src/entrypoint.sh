@@ -5,7 +5,10 @@ DKIM_DIR="/data/dkim"
 DKIM_PRIVATE="${DKIM_DIR}/private.pem"
 DKIM_PUBLIC="${DKIM_DIR}/public.pem"
 DKIM_SELECTOR="${DKIM_SELECTOR:-agenticmail}"
-MAIL_DOMAIN="${MAIL_DOMAIN:-l2gseo.com}"
+if [ -z "${MAIL_DOMAIN:-}" ]; then
+    echo "ERROR: MAIL_DOMAIN environment variable is not set!" >&2
+    exit 1
+fi
 STALWART_DATA="${STALWART_DATA_DIR:-/data/stalwart}"
 CONFIG_PATH="/tmp/stalwart-config.toml"
 

@@ -2,7 +2,7 @@ import pg from 'pg';
 const { Client } = pg;
 
 async function run() {
-	const hosts = ['l2g-supabase.zi1cc5.easypanel.host', 'localhost', '127.0.0.1'];
+	const hosts = ['localhost', '127.0.0.1'];
 	const passwords = ['postgres_password_change_me', 'postgres'];
 
 	for (const host of hosts) {

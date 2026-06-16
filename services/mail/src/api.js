@@ -7,7 +7,17 @@ const path = require("node:path");
 
 const MAIL_API_PORT = parseInt(process.env.MAIL_API_PORT || "8080", 10);
 const MAIL_API_KEY = process.env.MAIL_API_KEY || "";
-const MAIL_DOMAIN = process.env.MAIL_DOMAIN || "l2gseo.com";
+const MAIL_DOMAIN = process.env.MAIL_DOMAIN;
+
+if (!MAIL_DOMAIN) {
+  console.error(JSON.stringify({
+    level: "fatal",
+    msg: "MAIL_DOMAIN is required",
+    service: "mail-api",
+    ts: new Date().toISOString(),
+  }));
+  process.exit(1);
+}
 const DB_DIR = "/data/inboxes";
 
 if (!MAIL_API_KEY) {

@@ -5,7 +5,11 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { execSync } = require("node:child_process");
 
-const MAIL_DOMAIN = process.env.MAIL_DOMAIN || "l2gseo.com";
+const MAIL_DOMAIN = process.env.MAIL_DOMAIN;
+if (!MAIL_DOMAIN) {
+  console.error("FATAL ERROR: MAIL_DOMAIN environment variable is not set!");
+  process.exit(1);
+}
 const DKIM_SELECTOR = process.env.DKIM_SELECTOR || "agenticmail";
 const STALWART_DATA = process.env.STALWART_DATA_DIR || "/data/stalwart";
 const DKIM_DIR = "/data/dkim";

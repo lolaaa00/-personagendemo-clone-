@@ -12,7 +12,11 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 
 const SMTP_PORT = parseInt(process.env.SMTP_PORT || "25", 10);
-const MAIL_DOMAIN = process.env.MAIL_DOMAIN || "l2gseo.com";
+const MAIL_DOMAIN = process.env.MAIL_DOMAIN;
+if (!MAIL_DOMAIN) {
+  console.error("FATAL ERROR: MAIL_DOMAIN environment variable is not set!");
+  process.exit(1);
+}
 const DB_FILE = "/data/inboxes/inboxes.json";
 
 function log(level, msg, extra = {}) {

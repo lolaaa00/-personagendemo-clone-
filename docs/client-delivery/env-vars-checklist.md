@@ -49,7 +49,7 @@
 
 | Variable | Required | Default | Description | Example |
 |----------|----------|---------|-------------|---------|
-| `ENGINE_WEBHOOK_URL` | Optional | — | Engine webhook URL for status callbacks on account creation events | `https://auto.l2gseo.com/webhook/personagen-factory` |
+| `ENGINE_WEBHOOK_URL` | Optional | — | Engine webhook URL for status callbacks on account creation events | `https://<your-portal-domain>/webhook/personagen-factory` |
 
 ### Rate Limiting
 
@@ -73,7 +73,7 @@
 
 | Variable | Required | Default | Description | Example |
 |----------|----------|---------|-------------|---------|
-| `MAIL_DOMAIN` | **Required** | — | Domain used for email addresses (must have DNS configured) | `mail.yourdomain.com` |
+| `MAIL_DOMAIN` | **Required** | — | Domain used for email addresses (must have DNS configured) | `mail.<your-domain.com>` |
 | `MAIL_API_KEY` | **Required** | — | API key for authenticating requests to the mail service | `am_sk_x9y8z7w6...` |
 | `MAIL_API_PORT` | Optional | `8080` | HTTP port the mail API listens on | `8080` |
 | `HEALTH_PORT` | Optional | `8081` | HTTP port for aggregate mail health checks | `8081` |
@@ -122,7 +122,7 @@ The current Docker image binds SMTP, Submission, and IMAP listeners in `services
 FACTORY_PORT=8080
 FACTORY_API_KEY=
 ENCRYPTION_KEY=
-ALLOWED_ORIGINS=https://dashboard.yourdomain.com
+ALLOWED_ORIGINS=https://<your-dashboard-domain>
 
 # === Mail Integration ===
 MAIL_URL=http://personagen-mail:8080
