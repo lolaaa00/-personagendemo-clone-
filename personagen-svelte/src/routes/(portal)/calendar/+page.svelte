@@ -4,7 +4,8 @@
 	import { showToast } from '$lib/stores/ui.svelte';
 	import { Posts, ContentForge } from '$lib/services/api';
 	import { page } from '$app/stores';
-	import { goto } from '$app/navigation';
+	import { goto, afterNavigate } from '$app/navigation';
+
 
 	interface ScheduledPost {
 		id: string;
@@ -202,22 +203,19 @@
 		}
 	});
 
-	// Check if '?forge=true' query parameter is present to auto-open/close composer
-	let isForge = $derived($page.url.searchParams.get('forge') === 'true');
-	$effect(() => {
+	// Handle auto-open/close composer on navigation
+	afterNavigate((navigation) => {
+		const isForge = navigation.to?.url.searchParams.get('forge') === 'true';
 		if (isForge) {
-			untrack(() => {
-				openComposer();
-			});
+			openComposer();
 		} else {
-			untrack(() => {
-				// Only close composer if we are still on the calendar route
-				if ($page.url.pathname === '/calendar') {
-					showComposer = false;
-				}
-			});
+			// Only close composer if we are still on the calendar route
+			if (navigation.to?.url.pathname === '/calendar') {
+				showComposer = false;
+			}
 		}
 	});
+
 
 	function selectBlueprint(bp: SampleBlueprint) {
 		selectedBlueprintId = bp.id;
