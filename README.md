@@ -11,22 +11,22 @@ PersonaGen is built as a **hybrid cloud/on-premise** platform, designed to maxim
 
 ```mermaid
 graph TD
-    subgraph Cloud VPS [Cloud VPS Coordinator Layer]
-        Svelte[SvelteKit Web Portal & Scheduler]
-        DB[(Supabase DB & Auth)]
-        Bridge[MCP Database Bridge]
-        Hermes[Hermes Agent Daemon]
+    subgraph Cloud VPS ["Cloud VPS Coordinator Layer"]
+        Svelte["SvelteKit Web Portal & Scheduler"]
+        DB[("Supabase DB & Auth")]
+        Bridge["MCP Database Bridge"]
+        Hermes["Hermes Agent Daemon"]
     end
 
-    subgraph FactoryServices [Automated Account Provisioning]
-        Factory[Account Factory (Playwright Stealth)]
-        Mail[AgenticMail SMTP/IMAP Server]
+    subgraph FactoryServices ["Automated Account Provisioning"]
+        Factory["Account Factory (Playwright Stealth)"]
+        Mail["AgenticMail SMTP/IMAP Server"]
     end
 
-    subgraph OnPremise [On-Premise Execution Nodes]
-        MacA[Mac Node A - Persona 1]
-        MacB[Mac Node B - Persona 2]
-        MacC[Mac Node C - Persona 3]
+    subgraph OnPremise ["On-Premise Execution Nodes"]
+        MacA["Mac Node A - Persona 1"]
+        MacB["Mac Node B - Persona 2"]
+        MacC["Mac Node C - Persona 3"]
     end
 
     %% Cloud Interactions
@@ -39,14 +39,14 @@ graph TD
     Factory --> DB
     
     %% Outbound Posting via secure network
-    MacA -- Polling via HTTPS / Tailscale --Svelte
-    MacB -- Polling via HTTPS / Tailscale --Svelte
-    MacC -- Polling via HTTPS / Tailscale --Svelte
+    MacA -->|Polling via HTTPS / Tailscale| Svelte
+    MacB -->|Polling via HTTPS / Tailscale| Svelte
+    MacC -->|Polling via HTTPS / Tailscale| Svelte
     
     %% Post Executions
-    MacA --> Instagram1[Instagram API]
-    MacB --> Instagram2[Instagram API]
-    MacC --> Instagram3[Instagram API]
+    MacA --> Instagram1["Instagram API"]
+    MacB --> Instagram2["Instagram API"]
+    MacC --> Instagram3["Instagram API"]
 ```
 
 *   **Cloud VPS Coordinator Layer**: Always-on central hub hosting SvelteKit, Supabase, and the Hermes Chief Overseer Agent. Exposes the portal to users and accepts inbound webhook payloads (e.g., Stripe, DocuSeal).
