@@ -23,6 +23,8 @@
 		matchScore: number;
 		hashtags: string[];
 		description: string;
+		volume: string;
+		growth: string;
 	}
 
 	const SAMPLE_TRENDS: Trend[] = [
@@ -34,7 +36,9 @@
 			niche: 'Beauty',
 			matchScore: 92,
 			hashtags: ['#glassskin', '#skincare', '#kbeauty', '#glowup'],
-			description: 'Minimalist skincare routines achieving translucent, dewy finish'
+			description: 'Minimalist skincare routines achieving translucent, dewy finish',
+			volume: '24.2K',
+			growth: '+340%'
 		},
 		{
 			id: 't2',
@@ -44,7 +48,9 @@
 			niche: 'Fashion',
 			matchScore: 88,
 			hashtags: ['#aifashion', '#lookbook', '#ootd', '#styleai'],
-			description: 'AI-generated outfit combinations and virtual try-on content'
+			description: 'AI-generated outfit combinations and virtual try-on content',
+			volume: '18.5K',
+			growth: '+210%'
 		},
 		{
 			id: 't3',
@@ -54,7 +60,9 @@
 			niche: 'Fitness',
 			matchScore: 85,
 			hashtags: ['#proffee', '#proteincoffee', '#fitfuel', '#gymlife'],
-			description: 'High-protein iced coffee recipes replacing pre-workouts'
+			description: 'High-protein iced coffee recipes replacing pre-workouts',
+			volume: '40.5K',
+			growth: '+525%'
 		},
 		{
 			id: 't4',
@@ -64,7 +72,9 @@
 			niche: 'Fashion',
 			matchScore: 78,
 			hashtags: ['#quietluxury', '#oldmoney', '#stealth wealth', '#minimal'],
-			description: 'Understated designer pieces, no logos, premium fabrics'
+			description: 'Understated designer pieces, no logos, premium fabrics',
+			volume: '12.1K',
+			growth: '+15%'
 		},
 		{
 			id: 't5',
@@ -74,7 +84,9 @@
 			niche: 'Fitness',
 			matchScore: 90,
 			hashtags: ['#cortisol', '#stressrelief', '#lowimpact', '#hormonehealth'],
-			description: 'Low-impact workouts optimized for hormonal balance'
+			description: 'Low-impact workouts optimized for hormonal balance',
+			volume: '33.1K',
+			growth: '+122%'
 		},
 		{
 			id: 't6',
@@ -84,7 +96,9 @@
 			niche: 'Lifestyle',
 			matchScore: 62,
 			hashtags: ['#deinfluencing', '#dontbuy', '#honest review'],
-			description: 'Counter-trend calling out overhyped products'
+			description: 'Counter-trend calling out overhyped products',
+			volume: '590',
+			growth: '-12%'
 		},
 		{
 			id: 't7',
@@ -94,7 +108,9 @@
 			niche: 'Fashion',
 			matchScore: 71,
 			hashtags: ['#mobwife', '#aesthetic', '#faux fur', '#maximalism'],
-			description: 'Bold furs, gold jewelry, dramatic makeup — anti-minimalism'
+			description: 'Bold furs, gold jewelry, dramatic makeup — anti-minimalism',
+			volume: '3.1M',
+			growth: '+8%'
 		},
 		{
 			id: 't8',
@@ -104,7 +120,9 @@
 			niche: 'Fitness',
 			matchScore: 94,
 			hashtags: ['#walkingpad', '#deskworkout', '#10ksteps', '#wfh'],
-			description: 'Under-desk treadmill content for remote workers'
+			description: 'Under-desk treadmill content for remote workers',
+			volume: '92.4K',
+			growth: '+688%'
 		},
 		{
 			id: 't9',
@@ -114,7 +132,9 @@
 			niche: 'Beauty',
 			matchScore: 83,
 			hashtags: ['#sunsetblush', '#blushtrend', '#makeuptutorial'],
-			description: 'Draping blush upward toward temples for a sun-kissed glow'
+			description: 'Draping blush upward toward temples for a sun-kissed glow',
+			volume: '14.8K',
+			growth: '+224%'
 		},
 		{
 			id: 't10',
@@ -124,27 +144,44 @@
 			niche: 'Lifestyle',
 			matchScore: 67,
 			hashtags: ['#digitaldetox', '#touchgrass', '#mindfulness', '#offline'],
-			description: 'Vlogs and guides about reducing screen time intentionally'
+			description: 'Vlogs and guides about reducing screen time intentionally',
+			volume: '8.2K',
+			growth: '+5%'
 		}
 	];
 
 	let trends = $state<Trend[]>([...SAMPLE_TRENDS]);
+	let searchTrend = $state('');
+	let timeRange = $state('2 Years');
+	const TIME_RANGES = ['3 Months', '6 Months', '1 Year', '2 Years', '5 Years'];
 
 	let selectedAgent = $derived(data.agents.find((a: Agent) => a.id === selectedAgentId));
 
 	let filteredTrends = $derived.by(() => {
-		if (!selectedAgentId || !selectedAgent) return trends;
-		const agentNiche = selectedAgent.niche.toLowerCase();
-		return trends.filter((t) => {
-			const tNiche = t.niche.toLowerCase();
-			return (
-				tNiche.includes(agentNiche) ||
-				agentNiche.includes(tNiche) ||
-				agentNiche.includes('lifestyle') ||
-				agentNiche.includes('beauty') ||
-				tNiche === 'lifestyle'
+		let result = trends;
+		if (selectedAgentId && selectedAgent) {
+			const agentNiche = selectedAgent.niche.toLowerCase();
+			result = trends.filter((t) => {
+				const tNiche = t.niche.toLowerCase();
+				return (
+					tNiche.includes(agentNiche) ||
+					agentNiche.includes(tNiche) ||
+					agentNiche.includes('lifestyle') ||
+					agentNiche.includes('beauty') ||
+					tNiche === 'lifestyle'
+				);
+			});
+		}
+		if (searchTrend.trim()) {
+			const query = searchTrend.toLowerCase();
+			result = result.filter(
+				(t) =>
+					t.name.toLowerCase().includes(query) ||
+					t.description.toLowerCase().includes(query) ||
+					t.hashtags.some((tag) => tag.toLowerCase().includes(query))
 			);
-		});
+		}
+		return result;
 	});
 
 	let allHashtags = $derived.by(() => {
@@ -244,6 +281,65 @@
 		};
 		return map[p.toLowerCase()] || 'var(--accent)';
 	}
+
+	function getTrendChartPath(trendId: string, momentum: string): { linePath: string; fillPath: string } {
+		const pointsCount = 15;
+		const width = 300;
+		const height = 100;
+		const points: { x: number; y: number }[] = [];
+
+		let seed = 0;
+		for (let i = 0; i < trendId.length; i++) {
+			seed += trendId.charCodeAt(i);
+		}
+
+		for (let i = 0; i < pointsCount; i++) {
+			const x = (i / (pointsCount - 1)) * width;
+			let y = 50;
+			const rand = Math.sin(i * 1.5 + seed) * 7;
+
+			if (momentum === 'rising') {
+				const progress = i / (pointsCount - 1);
+				const curve = Math.pow(progress, 4) * 60;
+				y = 80 - curve + rand;
+			} else if (momentum === 'falling') {
+				const progress = i / (pointsCount - 1);
+				const curve = Math.pow(progress, 3) * 60;
+				y = 20 + curve + rand;
+			} else {
+				y = 55 + Math.sin(i * 2.5 + seed) * 12;
+			}
+
+			y = Math.max(12, Math.min(88, y));
+			points.push({ x, y });
+		}
+
+		let linePath = `M ${points[0].x} ${points[0].y}`;
+		for (let i = 1; i < points.length; i++) {
+			linePath += ` L ${points[i].x} ${points[i].y}`;
+		}
+
+		const fillPath = `${linePath} L ${width} ${height} L 0 ${height} Z`;
+
+		return { linePath, fillPath };
+	}
+
+	function getXAxisLabels(range: string): { start: string; end: string } {
+		switch (range) {
+			case '3 Months':
+				return { start: 'Mar 2026', end: 'Jun 2026' };
+			case '6 Months':
+				return { start: 'Dec 2025', end: 'Jun 2026' };
+			case '1 Year':
+				return { start: 'Jun 2025', end: 'Jun 2026' };
+			case '2 Years':
+				return { start: '2025', end: '2026' };
+			case '5 Years':
+				return { start: '2021', end: '2026' };
+			default:
+				return { start: '2025', end: '2026' };
+		}
+	}
 </script>
 
 <svelte:head>
@@ -251,31 +347,49 @@
 </svelte:head>
 
 <section class="page">
-	<header class="page-header">
-		<div class="header-left">
-			<h1>Scout Intelligence</h1>
-			<p class="subtitle">Discover trending topics and generate niche-matched content</p>
-		</div>
-		<div class="header-controls">
-			<div class="agent-filter">
-				<label for="scout-agent">Filter by Agent</label>
-				<select id="scout-agent" bind:value={selectedAgentId}>
-					<option value="">All Niches</option>
+	<!-- Exploding Topics style header -->
+	<div class="exploding-header">
+		<h1>Discover Exploding Topics</h1>
+		
+		<div class="exploding-filter-bar">
+			<span class="filter-label">FILTER BY:</span>
+			
+			<div class="select-wrapper">
+				<select class="exploding-select" bind:value={timeRange}>
+					{#each TIME_RANGES as range}
+						<option value={range}>{range}</option>
+					{/each}
+				</select>
+			</div>
+
+			<div class="select-wrapper">
+				<select class="exploding-select" bind:value={selectedAgentId}>
+					<option value="">All Categories</option>
 					{#each data.agents as agent}
 						<option value={agent.id}>{agent.name} — {agent.niche}</option>
 					{/each}
 				</select>
 			</div>
-			<button class="refresh-btn" onclick={refreshTrends} disabled={refreshing}>
+
+			<div class="search-wrapper">
+				<svg class="search-icon-svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+					<circle cx="11" cy="11" r="8"></circle>
+					<line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+				</svg>
+				<input type="text" class="exploding-search-input" placeholder="Search Trends" bind:value={searchTrend} />
+				<span class="pro-badge">PRO</span>
+			</div>
+
+			<button class="refresh-circle-btn" onclick={refreshTrends} disabled={refreshing} title="Refresh Trends">
 				<svg
-					class="refresh-icon"
+					class="refresh-icon-svg"
 					class:spinning={refreshing}
-					width="18"
-					height="18"
+					width="16"
+					height="16"
 					viewBox="0 0 24 24"
 					fill="none"
 					stroke="currentColor"
-					stroke-width="2"
+					stroke-width="2.5"
 					stroke-linecap="round"
 					stroke-linejoin="round"
 				>
@@ -283,10 +397,9 @@
 					<polyline points="1 20 1 14 7 14" />
 					<path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" />
 				</svg>
-				{refreshing ? 'Refreshing…' : 'Refresh'}
 			</button>
 		</div>
-	</header>
+	</div>
 
 	<!-- Stats bar -->
 	<div class="stats-bar">
@@ -325,91 +438,92 @@
 	<!-- Trend cards grid -->
 	<div class="trends-grid">
 		{#each filteredTrends as trend (trend.id)}
-			<div class="trend-card" style="--gradient-border: {getGradientBorder(trend.momentum)}">
-				<div class="trend-card-top"></div>
+			{@const chart = getTrendChartPath(trend.id, trend.momentum)}
+			{@const labels = getXAxisLabels(timeRange)}
+			<div class="trend-card">
 				<div class="trend-card-body">
-					<div class="trend-header">
-						<h3 class="trend-name">{trend.name}</h3>
-						<span
-							class="momentum-badge"
-							style="color: {getMomentumColor(trend.momentum)}; background: {getMomentumColor(
-								trend.momentum
-							)}15"
-						>
-							<span class="momentum-arrow">{getMomentumIcon(trend.momentum)}</span>
-							{trend.momentum}
-						</span>
-					</div>
-
-					<p class="trend-desc">{trend.description}</p>
-
-					<div class="trend-meta">
-						<span
-							class="platform-badge"
-							style="color: {getPlatformColor(trend.platform)}; border-color: {getPlatformColor(
-								trend.platform
-							)}40"
-						>
-							{trend.platform}
-						</span>
-						<span class="niche-badge">{trend.niche}</span>
-					</div>
-
-					<!-- Match score bar -->
-					<div class="match-section">
-						<div class="match-label-row">
-							<span class="match-label">Niche Match</span>
-							<span
-								class="match-value"
-								style="color: {trend.matchScore >= 80
-									? 'var(--success)'
-									: trend.matchScore >= 60
-										? 'var(--warning)'
-										: 'var(--error)'}">{trend.matchScore}%</span
-							>
-						</div>
-						<div class="match-bar-bg">
-							<div
-								class="match-bar-fill"
-								style="width: {trend.matchScore}%; background: {trend.matchScore >= 80
-									? 'var(--success)'
-									: trend.matchScore >= 60
-										? 'var(--warning)'
-										: 'var(--error)'}"
-							></div>
+					<div class="trend-card-header-row">
+						<h3 class="trend-card-title">{trend.name}</h3>
+						
+						<div class="trend-card-stats">
+							<div class="stat-group">
+								<span class="stat-num volume">{trend.volume}</span>
+								<span class="stat-lbl">Volume</span>
+							</div>
+							<div class="stat-group">
+								<span class="stat-num growth" style="color: {trend.momentum === 'rising' ? 'var(--success)' : trend.momentum === 'falling' ? 'var(--error)' : 'var(--warning)'}">
+									{trend.growth}
+								</span>
+								<span class="stat-lbl">Growth</span>
+							</div>
 						</div>
 					</div>
 
-					<!-- Hashtags -->
-					<div class="trend-hashtags">
-						{#each trend.hashtags.slice(0, 3) as tag}
-							<span class="hashtag">{tag}</span>
-						{/each}
+					<!-- SVG Chart Block -->
+					<div class="trend-chart-container">
+						<svg class="trend-svg" viewBox="0 0 300 100" preserveAspectRatio="none">
+							<defs>
+								<linearGradient id="chartGrad-{trend.id}" x1="0%" y1="0%" x2="0%" y2="100%">
+									<stop offset="0%" stop-color="var(--accent)" stop-opacity="0.18" />
+									<stop offset="100%" stop-color="var(--accent)" stop-opacity="0.0" />
+								</linearGradient>
+							</defs>
+							<!-- Grid Lines -->
+							<line x1="0" y1="25" x2="300" y2="25" stroke="var(--border-strong)" stroke-dasharray="2,3" stroke-width="0.7"></line>
+							<line x1="0" y1="50" x2="300" y2="50" stroke="var(--border-strong)" stroke-dasharray="2,3" stroke-width="0.7"></line>
+							<line x1="0" y1="75" x2="300" y2="75" stroke="var(--border-strong)" stroke-dasharray="2,3" stroke-width="0.7"></line>
+							
+							<!-- Area path under line -->
+							<path d={chart.fillPath} fill="url(#chartGrad-{trend.id})"></path>
+							
+							<!-- Smooth trend line -->
+							<path d={chart.linePath} fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></path>
+						</svg>
+						
+						<!-- X-Axis Labels -->
+						<div class="chart-axis-labels">
+							<span>{labels.start}</span>
+							<span>{labels.end}</span>
+						</div>
 					</div>
 
-					<button
-						class="btn-generate"
-						disabled={generatingTrendId === trend.id || !selectedAgentId}
-						onclick={() => generateContent(trend)}
-					>
-						{#if generatingTrendId === trend.id}
-							<span class="spinner"></span>
-							Generating…
-						{:else}
-							<svg
-								width="14"
-								height="14"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="2.5"
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" /></svg
-							>
-							Generate Content
-						{/if}
-					</button>
+					<p class="trend-card-description">{trend.description}</p>
+
+					<!-- Badges, Niche Match & Action Section -->
+					<div class="trend-card-footer">
+						<div class="meta-row">
+							<span class="platform-pill" style="--p-color: {getPlatformColor(trend.platform)}">
+								{trend.platform}
+							</span>
+							<span class="niche-pill">{trend.niche}</span>
+							<span class="match-pill" style="color: {trend.matchScore >= 80 ? 'var(--success)' : trend.matchScore >= 60 ? 'var(--warning)' : 'var(--error)'}">
+								{trend.matchScore}% Match
+							</span>
+						</div>
+
+						<div class="hashtags-row">
+							{#each trend.hashtags.slice(0, 3) as tag}
+								<span class="hashtag-tag">{tag}</span>
+							{/each}
+						</div>
+
+						<button
+							class="exploding-action-btn"
+							disabled={generatingTrendId === trend.id || !selectedAgentId}
+							onclick={() => generateContent(trend)}
+						>
+							{#if generatingTrendId === trend.id}
+								<span class="action-spinner"></span>
+								Generating…
+							{:else}
+								<span>Generate Content</span>
+								<svg class="arrow-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+									<line x1="5" y1="12" x2="19" y2="12"></line>
+									<polyline points="12 5 19 12 12 19"></polyline>
+								</svg>
+							{/if}
+						</button>
+					</div>
 				</div>
 			</div>
 		{/each}
@@ -459,85 +573,161 @@
 		margin: 0 auto;
 	}
 
-	/* ── Header ── */
-	.page-header {
-		display: flex;
-		align-items: flex-start;
-		justify-content: space-between;
-		gap: 2rem;
-		margin-bottom: 1.5rem;
-		flex-wrap: wrap;
+	/* ── Exploding Topics Header & Filter Bar ── */
+	.exploding-header {
+		text-align: center;
+		margin-bottom: 2.5rem;
 	}
 
-	.page-header h1 {
+	.exploding-header h1 {
 		font-family: var(--font-display);
-		font-size: var(--text-xl);
-		margin: 0 0 0.3rem;
+		font-size: 2.2rem;
+		font-weight: 800;
+		color: var(--text);
+		margin: 0 0 1.75rem 0;
+		letter-spacing: -0.02em;
 	}
 
-	.subtitle {
-		color: var(--text-muted);
-		font-size: var(--text-base);
-		margin: 0;
-	}
-
-	.header-controls {
-		display: flex;
-		align-items: flex-end;
-		gap: 1rem;
-		flex-wrap: wrap;
-	}
-
-	.agent-filter select {
-		min-width: 220px;
-	}
-
-	.refresh-btn {
+	.exploding-filter-bar {
 		display: inline-flex;
 		align-items: center;
-		gap: 0.5rem;
-		padding: 0.6rem 1.2rem;
-		border-radius: var(--radius-sm);
+		justify-content: center;
+		gap: 0.75rem;
 		background: var(--surface);
 		border: 1px solid var(--border);
-		color: var(--text-muted);
-		font-weight: var(--weight-semi);
-		font-size: var(--text-sm);
-		cursor: pointer;
-		transition:
-			border-color 0.2s,
-			color 0.2s,
-			background 0.2s;
+		border-radius: var(--radius-sm);
+		padding: 0.5rem 1rem;
+		box-shadow: var(--shadow-sm);
+		flex-wrap: wrap;
+	}
+
+	.filter-label {
 		font-family: var(--font-body);
+		font-size: 0.75rem;
+		font-weight: 700;
+		color: var(--text-dim);
+		letter-spacing: 0.05em;
+		margin-right: 0.25rem;
 	}
 
-	.refresh-btn:hover:not(:disabled) {
-		border-color: var(--accent-mid);
+	.select-wrapper {
+		position: relative;
+	}
+
+	.exploding-select {
+		appearance: none;
+		background: var(--bg);
+		border: 1px solid var(--border-strong);
+		border-radius: var(--radius-xs);
+		padding: 0.4rem 2rem 0.4rem 0.75rem;
+		font-family: var(--font-body);
+		font-size: 0.82rem;
+		font-weight: 600;
 		color: var(--text);
-		background: var(--surface-2);
+		cursor: pointer;
+		min-width: 130px;
+		transition: all 0.2s ease;
 	}
 
-	.refresh-btn:disabled {
-		opacity: 0.6;
+	.exploding-select:hover {
+		border-color: var(--accent-mid);
+	}
+
+	.select-wrapper::after {
+		content: "";
+		position: absolute;
+		right: 0.75rem;
+		top: 50%;
+		transform: translateY(-20%);
+		border-left: 4px solid transparent;
+		border-right: 4px solid transparent;
+		border-top: 5px solid var(--text-muted);
+		pointer-events: none;
+	}
+
+	.search-wrapper {
+		position: relative;
+		display: flex;
+		align-items: center;
+	}
+
+	.search-icon-svg {
+		position: absolute;
+		left: 0.75rem;
+		color: var(--text-dim);
+		pointer-events: none;
+	}
+
+	.exploding-search-input {
+		background: var(--bg) !important;
+		border: 1px solid var(--border-strong) !important;
+		border-radius: var(--radius-xs) !important;
+		padding: 0.4rem 3.5rem 0.4rem 2.25rem !important;
+		font-family: var(--font-body);
+		font-size: 0.82rem;
+		color: var(--text);
+		width: 200px;
+		transition: all 0.2s ease;
+		outline: none;
+		box-shadow: none !important;
+	}
+
+	.exploding-search-input:focus {
+		border-color: var(--accent) !important;
+		width: 240px;
+	}
+
+	.pro-badge {
+		position: absolute;
+		right: 0.5rem;
+		background: #2563eb;
+		color: #ffffff;
+		font-family: var(--font-mono);
+		font-size: 9px;
+		font-weight: 800;
+		padding: 1.5px 5px;
+		border-radius: 3px;
+		letter-spacing: 0.05em;
+		pointer-events: none;
+	}
+
+	.refresh-circle-btn {
+		background: var(--bg);
+		border: 1px solid var(--border-strong);
+		color: var(--text-muted);
+		border-radius: var(--radius-xs);
+		width: 32px;
+		height: 32px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		cursor: pointer;
+		transition: all 0.2s ease;
+	}
+
+	.refresh-circle-btn:hover:not(:disabled) {
+		color: var(--accent);
+		border-color: var(--accent-mid);
+	}
+
+	.refresh-circle-btn:disabled {
+		opacity: 0.5;
 		cursor: wait;
 	}
 
-	.refresh-icon {
-		transition: none;
+	.refresh-icon-svg.spinning {
+		animation: spin 0.8s linear infinite;
 	}
 
-	.refresh-icon.spinning {
-		animation: spin 1s linear infinite;
-	}
-
-	/* ── Stats bar ── */
+	/* ── Stats Bar ── */
 	.stats-bar {
 		display: flex;
 		gap: 0;
 		background: var(--surface);
 		border: 1px solid var(--border);
 		border-radius: var(--radius);
-		margin-bottom: 2rem;
+		margin-bottom: 2.5rem;
+		box-shadow: var(--shadow-sm);
 		overflow: hidden;
 	}
 
@@ -556,224 +746,250 @@
 
 	.stat-value {
 		font-size: var(--text-lg);
-		font-weight: var(--weight-bold);
+		font-weight: 800;
 		font-family: var(--font-mono);
 		color: var(--text);
 	}
 
 	.stat-label {
-		font-size: var(--text-xs);
+		font-size: 0.65rem;
 		color: var(--text-dim);
 		text-transform: uppercase;
 		letter-spacing: var(--tracking-wider);
-		font-weight: var(--weight-bold);
+		font-weight: 700;
 		margin-top: 0.25rem;
 	}
 
-	/* ── Trend cards grid ── */
+	/* ── Trend Grid ── */
 	.trends-grid {
 		display: grid;
 		grid-template-columns: repeat(3, 1fr);
 		gap: var(--gap-lg);
-		margin-bottom: 2.5rem;
+		margin-bottom: 3rem;
 	}
 
+	/* ── Exploding Topics Card ── */
 	.trend-card {
 		background: var(--surface);
 		border: 1px solid var(--border);
 		border-radius: var(--radius);
 		overflow: hidden;
-		transition:
-			border-color 0.25s,
-			box-shadow 0.25s,
-			transform 0.2s;
-		position: relative;
+		transition: border-color 0.25s, box-shadow 0.25s, transform 0.2s;
+		box-shadow: var(--shadow-sm);
 	}
 
 	.trend-card:hover {
 		border-color: var(--border-hover);
-		transform: translateY(-3px);
+		transform: translateY(-4px);
 		box-shadow: var(--shadow-md);
-	}
-
-	.trend-card-top {
-		height: 4px;
-		background: var(--gradient-border);
 	}
 
 	.trend-card-body {
 		padding: 1.5rem;
 		display: flex;
 		flex-direction: column;
+		gap: 1.25rem;
+	}
+
+	.trend-card-header-row {
+		display: flex;
+		justify-content: space-between;
+		align-items: flex-start;
 		gap: 1rem;
 	}
 
-	.trend-header {
-		display: flex;
-		align-items: flex-start;
-		justify-content: space-between;
-		gap: 0.75rem;
-	}
-
-	.trend-name {
+	.trend-card-title {
 		font-family: var(--font-body);
-		font-weight: var(--weight-semi);
-		font-size: var(--text-md);
+		font-size: 1.15rem;
+		font-weight: 700;
+		color: var(--text);
 		margin: 0;
-		line-height: var(--leading-snug);
+		line-height: 1.3;
+		flex: 1;
 	}
 
-	.momentum-badge {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.3rem;
-		font-size: var(--text-xs);
-		font-weight: var(--weight-bold);
-		text-transform: uppercase;
-		letter-spacing: var(--tracking-wide);
-		padding: 0.25rem 0.65rem;
-		border-radius: var(--radius-full);
-		white-space: nowrap;
+	.trend-card-stats {
+		display: flex;
+		gap: 1rem;
 		flex-shrink: 0;
 	}
 
-	.momentum-arrow {
-		font-size: 0.9rem;
-		line-height: 1;
+	.stat-group {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-end;
 	}
 
-	.trend-desc {
-		font-size: var(--text-sm);
+	.stat-num {
+		font-family: var(--font-mono);
+		font-size: 0.95rem;
+		font-weight: 700;
+	}
+
+	.stat-num.volume {
+		color: #2563eb;
+	}
+
+	.stat-lbl {
+		font-family: var(--font-body);
+		font-size: 0.65rem;
+		color: var(--text-dim);
+		margin-top: 0.15rem;
+	}
+
+	/* ── SVG Chart Section ── */
+	.trend-chart-container {
+		position: relative;
+		height: 110px;
+		background: rgba(0, 0, 0, 0.02);
+		border-radius: var(--radius-xs);
+		overflow: hidden;
+		border: 1px solid rgba(255, 255, 255, 0.04);
+		padding: 4px 0 0 0;
+	}
+
+	.trend-svg {
+		width: 100%;
+		height: 100%;
+		display: block;
+	}
+
+	.chart-axis-labels {
+		position: absolute;
+		bottom: 4px;
+		left: 8px;
+		right: 8px;
+		display: flex;
+		justify-content: space-between;
+		font-family: var(--font-mono);
+		font-size: 9px;
+		color: var(--text-dim);
+		pointer-events: none;
+		font-weight: 600;
+	}
+
+	.trend-card-description {
+		font-family: var(--font-body);
+		font-size: 0.82rem;
 		color: var(--text-muted);
 		margin: 0;
-		line-height: var(--leading-snug);
+		line-height: 1.5;
 		display: -webkit-box;
 		-webkit-line-clamp: 2;
 		-webkit-box-orient: vertical;
 		overflow: hidden;
+		min-height: 2.85rem;
 	}
 
-	.trend-meta {
+	/* ── Footer Elements ── */
+	.trend-card-footer {
 		display: flex;
-		align-items: center;
-		gap: 0.5rem;
+		flex-direction: column;
+		gap: 1rem;
+		margin-top: auto;
+		border-top: 1px solid var(--border);
+		padding-top: 1rem;
 	}
 
-	.platform-badge {
-		font-size: var(--text-xs);
-		font-weight: var(--weight-bold);
-		padding: 0.2rem 0.6rem;
-		border-radius: var(--radius-full);
-		border: 1px solid;
+	.meta-row {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.4rem;
+		align-items: center;
+	}
+
+	.platform-pill {
+		font-family: var(--font-body);
+		font-size: 0.68rem;
+		font-weight: 700;
+		color: #ffffff;
+		background: var(--p-color);
+		padding: 2.5px 8px;
+		border-radius: var(--radius-xs);
 		text-transform: capitalize;
 	}
 
-	.niche-badge {
-		font-size: var(--text-xs);
-		font-weight: var(--weight-semi);
-		color: var(--text-dim);
-		padding: 0.2rem 0.6rem;
-		border-radius: var(--radius-full);
+	.niche-pill {
+		font-family: var(--font-body);
+		font-size: 0.68rem;
+		font-weight: 600;
+		color: var(--text-muted);
 		background: var(--surface-2);
 		border: 1px solid var(--border);
+		padding: 2px 8px;
+		border-radius: var(--radius-xs);
 	}
 
-	/* ── Match score ── */
-	.match-section {
-		display: flex;
-		flex-direction: column;
-		gap: 0.35rem;
-	}
-
-	.match-label-row {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-	}
-
-	.match-label {
-		font-size: var(--text-xs);
-		color: var(--text-dim);
-		font-weight: var(--weight-semi);
-		text-transform: uppercase;
-		letter-spacing: var(--tracking-wide);
-	}
-
-	.match-value {
-		font-size: var(--text-sm);
-		font-weight: var(--weight-bold);
+	.match-pill {
 		font-family: var(--font-mono);
+		font-size: 0.68rem;
+		font-weight: 700;
+		background: var(--surface-2);
+		border: 1px solid var(--border);
+		padding: 2px 8px;
+		border-radius: var(--radius-xs);
 	}
 
-	.match-bar-bg {
-		width: 100%;
-		height: 6px;
-		border-radius: 3px;
-		background: var(--surface-3);
-		overflow: hidden;
-	}
-
-	.match-bar-fill {
-		height: 100%;
-		border-radius: 3px;
-		transition: width 0.6s var(--ease-out);
-	}
-
-	/* ── Hashtags ── */
-	.trend-hashtags {
+	.hashtags-row {
 		display: flex;
 		flex-wrap: wrap;
 		gap: 0.35rem;
 	}
 
-	.hashtag {
-		font-size: var(--text-xs);
-		color: var(--accent);
+	.hashtag-tag {
 		font-family: var(--font-mono);
+		font-size: 0.68rem;
+		color: var(--accent);
 		background: var(--accent-soft);
-		padding: 0.15rem 0.5rem;
-		border-radius: var(--radius-xs);
+		padding: 1px 6px;
+		border-radius: 3px;
 	}
 
-	/* ── Generate button ── */
-	.btn-generate {
+	/* ── Premium Link Action Button ── */
+	.exploding-action-btn {
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
 		gap: 0.5rem;
-		padding: 0.65rem 1.2rem;
-		border-radius: var(--radius-sm);
-		background: var(--gradient-subtle);
+		background: var(--accent-soft);
+		color: var(--accent);
 		border: none;
-		color: #fff;
-		font-weight: var(--weight-semi);
-		font-size: var(--text-sm);
-		cursor: pointer;
-		transition:
-			transform 0.2s ease,
-			box-shadow 0.2s ease,
-			opacity 0.2s;
 		font-family: var(--font-body);
-		margin-top: auto;
+		font-size: 0.8rem;
+		font-weight: 700;
+		padding: 0.6rem 1.25rem;
+		border-radius: var(--radius-xs);
+		cursor: pointer;
+		transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 		width: 100%;
 	}
 
-	.btn-generate:hover:not(:disabled) {
+	.exploding-action-btn:hover:not(:disabled) {
+		background: var(--accent-mid);
+		color: #ffffff;
 		transform: translateY(-1px);
-		box-shadow: var(--shadow-accent);
 	}
 
-	.btn-generate:disabled {
-		opacity: 0.5;
+	.exploding-action-btn:disabled {
+		opacity: 0.45;
 		cursor: not-allowed;
 	}
 
-	/* ── Hashtag cloud ── */
+	.arrow-icon {
+		transition: transform 0.2s ease;
+	}
+
+	.exploding-action-btn:hover:not(:disabled) .arrow-icon {
+		transform: translateX(3px);
+	}
+
+	/* ── Hashtag Cloud ── */
 	.hashtag-cloud-section {
 		background: var(--surface);
 		border: 1px solid var(--border);
 		border-radius: var(--radius);
 		padding: 2rem;
+		box-shadow: var(--shadow-sm);
 	}
 
 	.section-title {
@@ -796,27 +1012,26 @@
 	.cloud-tag {
 		font-family: var(--font-mono);
 		color: var(--accent);
-		padding: 0.3rem 0.8rem;
+		padding: 0.35rem 0.85rem;
 		border-radius: var(--radius-xs);
 		background: var(--accent-soft);
-		transition:
-			background 0.2s,
-			transform 0.15s;
+		transition: background 0.2s, transform 0.15s;
 		cursor: default;
 		white-space: nowrap;
 	}
 
 	.cloud-tag:hover {
 		background: var(--accent-mid);
+		color: #ffffff;
 		transform: scale(1.05);
 	}
 
-	/* ── Spinner ── */
-	.spinner {
+	/* ── Action Spinners ── */
+	.action-spinner {
 		width: 14px;
 		height: 14px;
-		border: 2px solid rgba(255, 255, 255, 0.2);
-		border-top-color: #fff;
+		border: 2px solid rgba(124, 106, 237, 0.3);
+		border-top-color: var(--accent);
 		border-radius: 50%;
 		animation: spin 0.6s linear infinite;
 	}
@@ -827,40 +1042,32 @@
 		}
 	}
 
-	/* ── Responsive ── */
-	@media (max-width: 1100px) {
+	/* ── Responsive breakpoints ── */
+	@media (max-width: 1150px) {
 		.trends-grid {
 			grid-template-columns: repeat(2, 1fr);
 		}
 	}
 
-	@media (max-width: 700px) {
+	@media (max-width: 768px) {
 		.page {
 			padding: 1.25rem;
 		}
 
-		.page-header {
-			flex-direction: column;
-			gap: 1rem;
+		.exploding-header h1 {
+			font-size: 1.8rem;
 		}
 
-		.header-controls {
+		.exploding-filter-bar {
 			width: 100%;
 			flex-direction: column;
+			align-items: stretch;
 		}
 
-		.agent-filter {
-			width: 100%;
-		}
-
-		.agent-filter select {
-			min-width: 0;
-			width: 100%;
-		}
-
-		.refresh-btn {
-			width: 100%;
-			justify-content: center;
+		.exploding-select,
+		.exploding-search-input,
+		.refresh-circle-btn {
+			width: 100% !important;
 		}
 
 		.stats-bar {
@@ -868,16 +1075,16 @@
 		}
 
 		.stat-item {
-			flex: 1 1 calc(33.33% - 1px);
-			min-width: 0;
+			flex: 1 1 calc(50% - 1px);
+			border-bottom: 1px solid var(--border);
+		}
+
+		.stat-item:nth-child(even) {
+			border-right: none;
 		}
 
 		.trends-grid {
 			grid-template-columns: 1fr;
-		}
-
-		.hashtag-cloud-section {
-			padding: 1.25rem;
 		}
 	}
 </style>
