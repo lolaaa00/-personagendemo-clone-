@@ -202,11 +202,16 @@
 		}
 	});
 
-	// Check if '?forge=true' query parameter is present to auto-open composer
+	// Check if '?forge=true' query parameter is present to auto-open/close composer
+	let isForge = $derived($page.url.searchParams.get('forge') === 'true');
 	$effect(() => {
-		if ($page.url.searchParams.get('forge') === 'true') {
+		if (isForge) {
 			untrack(() => {
 				openComposer();
+			});
+		} else {
+			untrack(() => {
+				showComposer = false;
 			});
 		}
 	});

@@ -50,8 +50,7 @@
 			items: [
 				{ href: '/dashboard', label: 'Dashboard', icon: 'grid' },
 				{ href: '/chat', label: 'Agent Chat', icon: 'message' },
-				{ href: '/scout', label: 'Social Scout', icon: 'radar' },
-				{ href: '/trends', label: 'Trends', icon: 'trending' }
+				{ href: '/scout', label: 'Social Scout', icon: 'radar' }
 			]
 		},
 		{
