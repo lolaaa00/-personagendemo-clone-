@@ -161,6 +161,8 @@ export const ChannelDecode = {
 		request(ENDPOINTS.channelDecode, 'analyze', { channel_data: channelData }),
 	getBlueprint: (id: string) => request(ENDPOINTS.channelDecode, 'get_blueprint', { id }),
 	listBlueprints: () => request(ENDPOINTS.channelDecode, 'list_blueprints', {}),
+	updateBlueprint: (id: string, data: unknown) =>
+		request(ENDPOINTS.channelDecode, 'update_blueprint', { id, data }),
 	deleteBlueprint: (id: string) => request(ENDPOINTS.channelDecode, 'delete_blueprint', { id })
 };
 

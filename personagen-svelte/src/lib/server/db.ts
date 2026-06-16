@@ -348,6 +348,9 @@ export function createDbService(supabase: SupabaseClient) {
 
 			create: (data: BlueprintInsert) => supabase.from('blueprints').insert(data).select().single(),
 
+			update: (id: string, data: Partial<BlueprintRow>) =>
+				supabase.from('blueprints').update(data).eq('id', id).select().single(),
+
 			delete: (id: string) => supabase.from('blueprints').delete().eq('id', id)
 		},
 

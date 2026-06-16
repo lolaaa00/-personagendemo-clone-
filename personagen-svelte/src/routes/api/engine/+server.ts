@@ -366,6 +366,42 @@ Ensure findings contain high-fidelity, detailed, real-world context for this pla
 
 				return json({ success: true, data: inserted });
 			}
+
+			if (action === 'list_blueprints') {
+				const { data: blueprints, error } = await db.blueprints.list();
+				if (error) {
+					console.error('[Engine] Failed to list blueprints:', error);
+					return json({ success: false, error: error.message }, { status: 500 });
+				}
+				return json({ success: true, data: blueprints });
+			}
+
+			if (action === 'get_blueprint') {
+				const { data: blueprint, error } = await db.blueprints.get(body.id);
+				if (error) {
+					console.error('[Engine] Failed to get blueprint:', error);
+					return json({ success: false, error: error.message }, { status: 500 });
+				}
+				return json({ success: true, data: blueprint });
+			}
+
+			if (action === 'update_blueprint') {
+				const { data: updated, error } = await db.blueprints.update(body.id, body.data);
+				if (error) {
+					console.error('[Engine] Failed to update blueprint:', error);
+					return json({ success: false, error: error.message }, { status: 500 });
+				}
+				return json({ success: true, data: updated });
+			}
+
+			if (action === 'delete_blueprint') {
+				const { error } = await db.blueprints.delete(body.id);
+				if (error) {
+					console.error('[Engine] Failed to delete blueprint:', error);
+					return json({ success: false, error: error.message }, { status: 500 });
+				}
+				return json({ success: true });
+			}
 		}
 
 		// ══════════════════════════════════════════════════════════════════════════

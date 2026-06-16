@@ -4,7 +4,7 @@
 	import { showToast } from '$lib/stores/ui.svelte';
 	import { Posts, ContentForge } from '$lib/services/api';
 	import { page } from '$app/stores';
-	import { goto, afterNavigate } from '$app/navigation';
+	import { goto } from '$app/navigation';
 
 
 	interface ScheduledPost {
@@ -69,13 +69,12 @@
 		return Array.from({ length: total }, (_, i) => i + 1);
 	});
 
-	// Ensure day selection is capped properly for the selected month/year
-	$effect(() => {
+	function capPickerDay() {
 		const maxDays = getDaysInMonth(pickerYear, pickerMonth);
 		if (pickerDay > maxDays) {
 			pickerDay = maxDays;
 		}
-	});
+	}
 
 	function toggleDatePicker() {
 		showDatePicker = !showDatePicker;
@@ -160,25 +159,12 @@
 		}
 	];
 
-	const CONTENT_TYPES = [
-		{ id: 'post', label: 'Post', icon: '📝' },
-		{ id: 'script', label: 'Script', icon: '🎬' },
-		{ id: 'titles', label: 'Title Ideas', icon: '💡' },
-		{ id: 'thumbnail', label: 'Thumbnail Brief', icon: '🖼️' }
-	];
-
 	let dbBlueprints = $derived(data.blueprints || []);
 	let allBlueprints = $derived([...dbBlueprints, ...SAMPLE_BLUEPRINTS]);
-	let selectedBlueprintId = $state<string | null>(null);
+	let selectedBlueprintId = $state<string | null>('');
 
-	$effect(() => {
-		if (!selectedBlueprintId && allBlueprints.length > 0) {
-			selectedBlueprintId = allBlueprints[0].id;
-		}
-	});
 	let forgeTopic = $state('');
 	let forgeProductId = $state('');
-	let forgeContentType = $state('post');
 	let forging = $state(false);
 
 	let brandName = $state('');
@@ -203,35 +189,25 @@
 		}
 	});
 
-	// Handle auto-open/close composer on navigation
-	afterNavigate((navigation) => {
-		const isForge = navigation.to?.url.searchParams.get('forge') === 'true';
-		if (isForge) {
-			openComposer();
-		} else {
-			// Only close composer if we are still on the calendar route
-			if (navigation.to?.url.pathname === '/calendar') {
-				showComposer = false;
-			}
-		}
-	});
-
-
-	function selectBlueprint(bp: SampleBlueprint) {
-		selectedBlueprintId = bp.id;
-		// Auto-select platform and check it
-		if (bp.platform) {
-			const normPlat = bp.platform.toLowerCase();
-			if (composerAgentPlatforms.includes(normPlat)) {
-				composerPlatforms = {
-					tiktok: false,
-					instagram: false,
-					youtube: false,
-					x: false,
-					facebook: false,
-					threads: false,
-					[normPlat]: true
-				};
+	function handleBlueprintSelect(e: Event) {
+		const target = e.target as HTMLSelectElement;
+		selectedBlueprintId = target.value || '';
+		
+		if (selectedBlueprintId) {
+			const bp = allBlueprints.find((b: SampleBlueprint) => b.id === selectedBlueprintId);
+			if (bp && bp.platform) {
+				const normPlat = bp.platform.toLowerCase();
+				if (composerAgentPlatforms.includes(normPlat)) {
+					composerPlatforms = {
+						tiktok: false,
+						instagram: false,
+						youtube: false,
+						x: false,
+						facebook: false,
+						threads: false,
+						[normPlat]: true
+					};
+				}
 			}
 		}
 	}
@@ -240,7 +216,7 @@
 		if (!selectedBlueprintId || !forgeTopic.trim()) return;
 		forging = true;
 
-		const selectedProd = products.find((p) => p.id === forgeProductId);
+		const selectedProd = products.find((p: any) => p.id === forgeProductId);
 		let enrichedTopic = forgeTopic;
 
 		if (selectedProd) {
@@ -258,31 +234,17 @@
 		const platforms = activePlatforms.length > 0 ? activePlatforms : ['instagram'];
 
 		try {
-			let res;
-			if (forgeContentType === 'post') {
-				res = await ContentForge.generate(
-					selectedBlueprintId,
-					enrichedTopic,
-					composerAgentId,
-					platforms
-				);
-			} else if (forgeContentType === 'script') {
-				res = await ContentForge.script(selectedBlueprintId, enrichedTopic, composerAgentId);
-			} else if (forgeContentType === 'titles') {
-				res = await ContentForge.titles(selectedBlueprintId, enrichedTopic);
-			} else {
-				res = await ContentForge.thumbnailBrief(selectedBlueprintId, enrichedTopic);
-			}
+			const agent = data.agents.find((a: Agent) => a.id === composerAgentId);
+			const res = await ContentForge.generate(
+				selectedBlueprintId,
+				enrichedTopic,
+				agent?.handle || '@agent',
+				platforms
+			);
 
 			if (res.success && res.data) {
 				const data = res.data as any;
-				if (forgeContentType === 'titles' && data.titles) {
-					composerText = data.titles.join('\n\n');
-				} else if (forgeContentType === 'thumbnail' && data.thumbnailNotes) {
-					composerText = data.thumbnailNotes.join('\n\n');
-				} else {
-					composerText = data.content || '';
-				}
+				composerText = data.content || '';
 				showToast('Content forged successfully!', 'success');
 			} else {
 				composerText = getMockForgedContent(enrichedTopic, selectedProd);
@@ -301,15 +263,7 @@
 		const prodPrice = product?.price || 'Rs. 2,450';
 		const prodDesc = product?.description || "Nature's premium superfood for energy.";
 		
-		if (forgeContentType === 'post') {
-			return `🔥 ${topicText}\n\nIntroducing: ${prodName} (${prodPrice})!\n\n1️⃣ **Organic Vitality Power**: Unlocking natural daily drive.\n2️⃣ **Potent Herbal Active**: Sustainable energy with zero crash.\n\n${prodDesc}\n\nDrop a comment to grab exclusive early access 👇`;
-		} else if (forgeContentType === 'script') {
-			return `[SCENE: Close-up of ${prodName}]\n"Ditch the synthetic energy drinks. This is pure raw honey packed with performance herbs. All-natural stamina, zero crashes."\n\n[CTA: Link in bio!]`;
-		} else if (forgeContentType === 'titles') {
-			return `- Why Athletes Are Raving About ${prodName}\n- I Ditched Synthetic Pre-Workouts For Active Honey\n- The Secret to Organic Workout Stamina`;
-		} else {
-			return `Layout: Close-up pouch of ${prodName} with amber lighting\nText: "BYE BYE CHEMICALS"\nBackground: Dark luxury graphite with honey drips`;
-		}
+		return `🔥 ${topicText}\n\nIntroducing: ${prodName} (${prodPrice})!\n\n1️⃣ **Organic Vitality Power**: Unlocking natural daily drive.\n2️⃣ **Potent Herbal Active**: Sustainable energy with zero crash.\n\n${prodDesc}\n\nDrop a comment to grab exclusive early access 👇`;
 	}
 
 	function getPlatformColor(id: string): string {
@@ -334,18 +288,16 @@
 	let currentComposerAgent = $derived(data.agents.find((a: any) => a.id === composerAgentId));
 	let composerAgentPlatforms = $derived(currentComposerAgent?.connected_platforms || ['instagram', 'youtube']);
 
-	$effect(() => {
-		if (composerAgentId) {
-			composerPlatforms = {
-				tiktok: false,
-				instagram: false,
-				youtube: false,
-				x: false,
-				facebook: false,
-				threads: false
-			};
-		}
-	});
+	function resetPlatforms() {
+		composerPlatforms = {
+			tiktok: false,
+			instagram: false,
+			youtube: false,
+			x: false,
+			facebook: false,
+			threads: false
+		};
+	}
 
 	function formatViews(v: number): string {
 		if (v >= 1000000) return (v / 1000000).toFixed(1) + 'M';
@@ -462,7 +414,7 @@
 		composerAgentId = selectedAgentId || data.agents[0]?.id || '';
 		composerText = '';
 		forgeTopic = '';
-		selectedBlueprintId = allBlueprints[0]?.id || null;
+		selectedBlueprintId = '';
 		composerPlatforms = {
 			tiktok: false,
 			instagram: false,
@@ -479,9 +431,6 @@
 
 	function closeComposer() {
 		showComposer = false;
-		if ($page.url.searchParams.get('forge') === 'true') {
-			goto('/calendar', { replaceState: true, noScroll: true });
-		}
 	}
 
 	async function schedulePost() {
@@ -631,7 +580,7 @@
 					<div class="datepicker-fields">
 						<div class="datepicker-field">
 							<label for="picker-month">Month</label>
-							<select id="picker-month" bind:value={pickerMonth}>
+							<select id="picker-month" bind:value={pickerMonth} onchange={capPickerDay}>
 								{#each MONTHS as month, index}
 									<option value={index}>{month}</option>
 								{/each}
@@ -639,7 +588,7 @@
 						</div>
 						<div class="datepicker-field">
 							<label for="picker-year">Year</label>
-							<select id="picker-year" bind:value={pickerYear}>
+							<select id="picker-year" bind:value={pickerYear} onchange={capPickerDay}>
 								{#each pickerYears as year}
 									<option value={year}>{year}</option>
 								{/each}
@@ -867,29 +816,9 @@
 	<!-- Composer overlay -->
 	{#if showComposer}
 		<div class="composer-overlay" onclick={closeComposer} role="presentation">
-			<div class="composer" onclick={(e) => e.stopPropagation()} role="dialog">
+			<div class="composer" onclick={(e) => e.stopPropagation()} role="dialog" style="max-width: 600px;">
 				<div class="composer-header">
-					<div class="header-title-group" style="display: flex; align-items: center; gap: 8px;">
-						<svg
-							width="20"
-							height="20"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="url(#forgeGrad)"
-							stroke-width="2.5"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-						>
-							<defs>
-								<linearGradient id="forgeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-									<stop offset="0%" stop-color="var(--rose)" />
-									<stop offset="100%" stop-color="var(--gold)" />
-								</linearGradient>
-							</defs>
-							<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
-						</svg>
-						<h3>Content Forge & Schedule Post</h3>
-					</div>
+					<h3>Schedule New Post</h3>
 					<button class="panel-close" onclick={closeComposer}>
 						<svg
 							width="18"
@@ -904,156 +833,139 @@
 					</button>
 				</div>
 
-				<div class="composer-grid">
-					<!-- Left Column: Blueprint Selector & Forge Settings -->
-					<div class="composer-left-panel">
-						<div class="panel-section-title">Select Blueprint</div>
-						<div class="blueprint-mini-list">
-							{#each allBlueprints as bp}
-								<button
-									type="button"
-									class="blueprint-mini-item"
-									class:active={selectedBlueprintId === bp.id}
-									onclick={() => selectBlueprint(bp)}
-								>
-									<div class="bp-mini-header">
-										<span class="bp-mini-score" style="color: {getScoreColor(bp.score)}">{bp.score} pts</span>
-										<span class="bp-mini-platform" style="color: {getPlatformColor(bp.platform)}">{bp.platform}</span>
-									</div>
-									<div class="bp-mini-name">{bp.name}</div>
-									<div class="bp-mini-meta">{bp.niche}</div>
-								</button>
+				<div class="composer-body" style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem; max-height: 70vh; overflow-y: auto;">
+					<!-- Target Agent -->
+					<div class="field" style="display: flex; flex-direction: column; gap: 0.25rem;">
+						<label for="comp-agent" style="font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; color: var(--text-dim);">Target Agent</label>
+						<select
+							id="comp-agent"
+							bind:value={composerAgentId}
+							onchange={resetPlatforms}
+							style="font-size: var(--text-sm); padding: 0.5rem; border-radius: var(--radius-xs); border: 1px solid var(--border); background: var(--surface); color: var(--text);"
+						>
+							{#each data.agents as agent}
+								<option value={agent.id}>{agent.name}</option>
 							{/each}
-						</div>
+						</select>
+					</div>
 
-						<div class="panel-divider" style="margin: 0.5rem 0;"></div>
-
-						<div class="field">
-							<label for="forge-topic" class="panel-section-title" style="margin-bottom: 0.25rem;">Topic / Prompt</label>
-							<input
-								id="forge-topic"
-								type="text"
-								bind:value={forgeTopic}
-								placeholder="e.g. Biohacking stamina with raw clover honey..."
-								style="font-size: var(--text-sm); padding: 0.5rem 0.75rem; border-radius: var(--radius-xs); border: 1px solid var(--border); background: var(--surface); color: var(--text);"
-							/>
-						</div>
-
-						<div class="field">
-							<label for="forge-product" class="panel-section-title" style="margin-bottom: 0.25rem;">Focus Product</label>
+					<!-- Optional Content Forge section -->
+					<div class="forge-collapsible glass-card" style="border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 1rem; display: flex; flex-direction: column; gap: 0.75rem; background: var(--surface-2);">
+						<h4 style="margin: 0; font-size: var(--text-xs); text-transform: uppercase; letter-spacing: var(--tracking-wider); color: var(--accent);">
+							✨ Optional: Forge with Competitor Blueprint
+						</h4>
+						
+						<div class="field" style="display: flex; flex-direction: column; gap: 0.25rem;">
+							<label for="comp-blueprint" style="font-size: 0.65rem; font-weight: 700; color: var(--text-muted);">Select Blueprint</label>
 							<select
-								id="forge-product"
-								bind:value={forgeProductId}
-								style="font-size: var(--text-sm); padding: 0.5rem; border-radius: var(--radius-xs); border: 1px solid var(--border); background: var(--surface); color: var(--text);"
+								id="comp-blueprint"
+								value={selectedBlueprintId}
+								onchange={handleBlueprintSelect}
+								style="font-size: var(--text-xs); padding: 0.4rem; border-radius: var(--radius-xs); border: 1px solid var(--border); background: var(--surface); color: var(--text);"
 							>
-								<option value="">No Product (General Content)</option>
-								{#each products as product}
-									<option value={product.id}>{product.name} ({product.price})</option>
+								<option value="">No blueprint selected</option>
+								{#each allBlueprints as bp}
+									<option value={bp.id}>{bp.name} ({bp.platform} - {bp.score} pts)</option>
 								{/each}
 							</select>
 						</div>
 
-						<div class="field">
-							<label class="panel-section-title" style="margin-bottom: 0.25rem;">Content Type</label>
-							<div class="type-selector-mini">
-								{#each CONTENT_TYPES as ct}
-									<button
-										type="button"
-										class="type-btn-mini"
-										class:active={forgeContentType === ct.id}
-										onclick={() => (forgeContentType = ct.id)}
-									>
-										<span class="type-icon">{ct.icon}</span>
-										<span>{ct.label}</span>
-									</button>
-								{/each}
+						{#if selectedBlueprintId}
+							<div class="field" style="display: flex; flex-direction: column; gap: 0.25rem;">
+								<label for="comp-topic" style="font-size: 0.65rem; font-weight: 700; color: var(--text-muted);">Topic / Prompt</label>
+								<input
+									id="comp-topic"
+									type="text"
+									bind:value={forgeTopic}
+									placeholder="e.g. Swapping pre-workout for adaptogenic honey..."
+									style="font-size: var(--text-xs); padding: 0.4rem 0.6rem; border-radius: var(--radius-xs); border: 1px solid var(--border); background: var(--surface); color: var(--text);"
+								/>
 							</div>
-						</div>
 
-						<button
-							type="button"
-							class="btn-forge-action"
-							disabled={forging || !forgeTopic.trim()}
-							onclick={runForge}
-						>
-							{#if forging}
-								<span class="spinner"></span> Forging...
-							{:else}
-								✨ Forge Content
-							{/if}
-						</button>
-					</div>
-
-					<!-- Right Column: Content Preview, Platform selection, and DateTime scheduler -->
-					<div class="composer-right-panel">
-						<div class="field-row">
-							<div class="field" style="flex: 1;">
-								<label for="comp-agent" class="panel-section-title" style="margin-bottom: 0.25rem;">Target Agent</label>
+							<div class="field" style="display: flex; flex-direction: column; gap: 0.25rem;">
+								<label for="comp-product" style="font-size: 0.65rem; font-weight: 700; color: var(--text-muted);">Focus Product</label>
 								<select
-									id="comp-agent"
-									bind:value={composerAgentId}
-									style="font-size: var(--text-sm); padding: 0.5rem; border-radius: var(--radius-xs); border: 1px solid var(--border); background: var(--surface); color: var(--text);"
+									id="comp-product"
+									bind:value={forgeProductId}
+									style="font-size: var(--text-xs); padding: 0.4rem; border-radius: var(--radius-xs); border: 1px solid var(--border); background: var(--surface); color: var(--text);"
 								>
-									{#each data.agents as agent}
-										<option value={agent.id}>{agent.name}</option>
+									<option value="">No product focus</option>
+									{#each products as product}
+										<option value={product.id}>{product.name} ({product.price})</option>
 									{/each}
 								</select>
 							</div>
-						</div>
 
-						<div class="field">
-							<label for="comp-text" class="panel-section-title" style="margin-bottom: 0.25rem;">Content & Copy</label>
-							<textarea
-								id="comp-text"
-								bind:value={composerText}
-								rows="5"
-								placeholder="Select blueprint and prompt to Forge, or write/edit your post content here directly…"
-								style="font-size: var(--text-sm); padding: 0.75rem; border-radius: var(--radius-xs); border: 1px solid var(--border); background: var(--surface); color: var(--text); resize: vertical; line-height: 1.5;"
-							></textarea>
-						</div>
+							<button
+								type="button"
+								class="btn-forge-action"
+								disabled={forging || !forgeTopic.trim()}
+								onclick={runForge}
+								style="background: var(--gradient-subtle); color: #fff; border: none; padding: 0.45rem; font-size: var(--text-xs); font-weight: 700; border-radius: var(--radius-xs); cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.5rem; margin-top: 0.25rem;"
+							>
+								{#if forging}
+									<span class="spinner" style="width: 12px; height: 12px; border: 2px solid rgba(255,255,255,0.3); border-top-color:#fff; border-radius:50%; animation: spin 0.6s linear infinite;"></span> Forging...
+								{:else}
+									✨ Forge Copy
+								{/if}
+							</button>
+						{/if}
+					</div>
 
-						<div class="field">
-							<label class="panel-section-title" style="margin-bottom: 0.25rem;">Target Platforms</label>
-							<div class="platform-checkboxes">
-								{#each composerAgentPlatforms as key}
-									{@const color = PLATFORM_COLORS[key] || 'var(--accent)'}
-									<label class="platform-checkbox" style="--p-color: {color}">
-										<input type="checkbox" bind:checked={composerPlatforms[key]} />
-										<span class="checkbox-label">{key}</span>
-									</label>
-								{/each}
-							</div>
-						</div>
+					<!-- Content & Copy -->
+					<div class="field" style="display: flex; flex-direction: column; gap: 0.25rem;">
+						<label for="comp-text" style="font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; color: var(--text-dim);">Content & Copy</label>
+						<textarea
+							id="comp-text"
+							bind:value={composerText}
+							rows="5"
+							placeholder="Write your post content here directly, or use a blueprint above to auto-forge..."
+							style="font-size: var(--text-sm); padding: 0.6rem 0.75rem; border-radius: var(--radius-xs); border: 1px solid var(--border); background: var(--surface); color: var(--text); resize: vertical; line-height: 1.5;"
+						></textarea>
+					</div>
 
-						<div class="field-row">
-							<div class="field" style="flex: 1;">
-								<label for="comp-date" class="panel-section-title" style="margin-bottom: 0.25rem;">Schedule Date</label>
-								<input
-									id="comp-date"
-									type="date"
-									bind:value={composerDate}
-									style="font-size: var(--text-sm); padding: 0.5rem; border-radius: var(--radius-xs); border: 1px solid var(--border); background: var(--surface); color: var(--text);"
-								/>
-							</div>
-							<div class="field" style="flex: 1;">
-								<label for="comp-time" class="panel-section-title" style="margin-bottom: 0.25rem;">Schedule Time</label>
-								<input
-									id="comp-time"
-									type="time"
-									bind:value={composerTime}
-									style="font-size: var(--text-sm); padding: 0.5rem; border-radius: var(--radius-xs); border: 1px solid var(--border); background: var(--surface); color: var(--text);"
-								/>
-							</div>
+					<!-- Target Platforms -->
+					<div class="field" style="display: flex; flex-direction: column; gap: 0.25rem;">
+						<label style="font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; color: var(--text-dim);">Target Platforms</label>
+						<div class="platform-checkboxes" style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.25rem;">
+							{#each composerAgentPlatforms as key}
+								{@const color = PLATFORM_COLORS[key] || 'var(--accent)'}
+								<label class="platform-checkbox" style="--p-color: {color}; display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.35rem 0.65rem; border: 1px solid var(--border); border-radius: var(--radius-xs); background: var(--surface-2); cursor: pointer; font-size: var(--text-xs); font-weight: 600;">
+									<input type="checkbox" bind:checked={composerPlatforms[key]} />
+									<span class="checkbox-label" style="text-transform: capitalize;">{key}</span>
+								</label>
+							{/each}
+						</div>
+					</div>
+
+					<!-- Schedule Date & Time -->
+					<div class="field-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+						<div class="field" style="display: flex; flex-direction: column; gap: 0.25rem;">
+							<label for="comp-date" style="font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; color: var(--text-dim);">Schedule Date</label>
+							<input
+								id="comp-date"
+								type="date"
+								bind:value={composerDate}
+								style="font-size: var(--text-sm); padding: 0.5rem; border-radius: var(--radius-xs); border: 1px solid var(--border); background: var(--surface); color: var(--text);"
+							/>
+						</div>
+						<div class="field" style="display: flex; flex-direction: column; gap: 0.25rem;">
+							<label for="comp-time" style="font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; color: var(--text-dim);">Schedule Time</label>
+							<input
+								id="comp-time"
+								type="time"
+								bind:value={composerTime}
+								style="font-size: var(--text-sm); padding: 0.5rem; border-radius: var(--radius-xs); border: 1px solid var(--border); background: var(--surface); color: var(--text);"
+							/>
 						</div>
 					</div>
 				</div>
 
-				<div class="composer-footer">
+				<div class="composer-footer" style="padding: 1rem 1.5rem; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 0.75rem; background: var(--surface-2);">
 					<button class="btn-ghost btn-sm" onclick={closeComposer}>Cancel</button>
 					<button class="btn-primary btn-sm" onclick={schedulePost} disabled={composerSubmitting}>
 						{#if composerSubmitting}
-							<span class="spinner"></span>
-							Scheduling…
+							<span class="spinner"></span> Scheduling…
 						{:else}
 							<svg
 								width="14"

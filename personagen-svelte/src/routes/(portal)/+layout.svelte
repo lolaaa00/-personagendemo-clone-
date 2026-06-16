@@ -65,7 +65,7 @@
 			label: 'Intelligence',
 			items: [
 				{ href: '/channel-decoder', label: 'Channel Decoder', icon: 'decode' },
-				{ href: '/calendar?forge=true', label: 'Content Forge', icon: 'forge' }
+				{ href: '/content-forge', label: 'Content Forge', icon: 'forge' }
 			]
 		},
 		{
