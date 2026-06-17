@@ -736,7 +736,7 @@
 											>
 												<span class="platform-name">{platform.name}</span>
 												<span class="status-dot" class:on={status?.connected}></span>
-												{#if !isConfigured}
+												{#if !isConfigured && !status?.connected}
 													<span
 														style="font-size: 10px; color: var(--warning); text-transform: uppercase; letter-spacing: 0.05em; border: 1px solid rgba(245, 158, 11, 0.35); background: rgba(245, 158, 11, 0.08); border-radius: 999px; padding: 2px 7px; font-weight: 700;"
 														>Not configured</span
