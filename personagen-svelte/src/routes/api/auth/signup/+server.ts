@@ -1,11 +1,23 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { env } from '$env/dynamic/private';
 
 export const POST: RequestHandler = async ({ request, locals }) => {
-	const { email, password, full_name } = (await request.json()) as any;
+	const { email, password, full_name, pin } = (await request.json()) as any;
 
 	if (!email || !password) {
 		return json({ error: 'Email and password required' }, { status: 400 });
+	}
+
+	// Validate Admin PIN if configured in env
+	const adminPin = env.ADMIN_PIN || process.env.ADMIN_PIN;
+	if (adminPin) {
+		if (!pin) {
+			return json({ error: 'Admin PIN is required for registration' }, { status: 400 });
+		}
+		if (pin !== adminPin) {
+			return json({ error: 'Invalid Admin PIN' }, { status: 400 });
+		}
 	}
 
 	if (password.length < 6) {
