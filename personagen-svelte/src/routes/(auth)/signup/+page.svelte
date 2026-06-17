@@ -146,7 +146,7 @@
 		</div>
 
 		<!-- Card Primitive -->
-		<Card dark={true} class="signup-card">
+		<Card dark={themeState.current === 'dark'} class="signup-card">
 			{#snippet title()}
 				<h1>Create your account</h1>
 			{/snippet}

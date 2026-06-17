@@ -104,9 +104,7 @@
 			</div>
 			<span class="login-wordmark">PersonaGen</span>
 		</div>
-
-		<!-- Card Primitive -->
-		<Card dark={true} class="login-card">
+		<Card dark={themeState.current === 'dark'} class="login-card">
 			{#snippet title()}
 				<h1>Welcome back</h1>
 			{/snippet}
