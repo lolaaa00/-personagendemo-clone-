@@ -112,7 +112,8 @@ export class ComposioClient {
 			}
 
 			const data = (await response.json()) as any;
-			return data.items || [];
+			const items = data.items || [];
+			return items.filter((item: any) => item.user_id === personaId);
 		} catch (err) {
 			throw new Error(
 				`Failed to list Composio connections for agent ${personaId}: ${(err as Error).message}`
