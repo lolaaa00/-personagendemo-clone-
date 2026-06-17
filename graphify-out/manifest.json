@@ -9,20 +9,15 @@
     "ast_hash": "7ea92a95edaa521fbff06f607dd92e43",
     "semantic_hash": "7ea92a95edaa521fbff06f607dd92e43"
   },
-  "personagen-svelte/check-auth.js": {
-    "mtime": 1781572398.0114324,
-    "ast_hash": "b90acfcf44ae7438c5755e75471e1593",
-    "semantic_hash": "b90acfcf44ae7438c5755e75471e1593"
-  },
   "personagen-svelte/eslint.config.js": {
     "mtime": 1780783065.9712124,
     "ast_hash": "d5640828217adc9601daa29a1aa3799b",
     "semantic_hash": "d5640828217adc9601daa29a1aa3799b"
   },
   "personagen-svelte/package.json": {
-    "mtime": 1781058888.6012423,
-    "ast_hash": "90a160e334d8d41d677454a096e846f5",
-    "semantic_hash": "90a160e334d8d41d677454a096e846f5"
+    "mtime": 1781658167.1049562,
+    "ast_hash": "113556bb0dc45c4121ee3d74ea5d4c87",
+    "semantic_hash": ""
   },
   "personagen-svelte/playwright.config.ts": {
     "mtime": 1780783038.3370042,
@@ -130,9 +125,9 @@
     "semantic_hash": "82d447fac03c5fba7bee41befda823ef"
   },
   "personagen-svelte/src/lib/server/scheduler.ts": {
-    "mtime": 1781570621.6698344,
-    "ast_hash": "21964ce5865e97f584b8de1ffe3fab7a",
-    "semantic_hash": "21964ce5865e97f584b8de1ffe3fab7a"
+    "mtime": 1781657287.7407908,
+    "ast_hash": "09f2184126fbf4a0b369f86e2cff4656",
+    "semantic_hash": ""
   },
   "personagen-svelte/src/lib/server/security.ts": {
     "mtime": 1781570613.8887875,
@@ -169,30 +164,20 @@
     "ast_hash": "2a7ad705c4c649e07c1d58a4328dd1a2",
     "semantic_hash": "2a7ad705c4c649e07c1d58a4328dd1a2"
   },
-  "personagen-svelte/src/lib/vitest-examples/greet.spec.ts": {
-    "mtime": 1781468165.178056,
-    "ast_hash": "763a61165f9b01506ff3c0670b610435",
-    "semantic_hash": "763a61165f9b01506ff3c0670b610435"
-  },
-  "personagen-svelte/src/lib/vitest-examples/greet.ts": {
-    "mtime": 1781468165.180919,
-    "ast_hash": "97a7dc5d18df366afb5c5ca2b6f3ba62",
-    "semantic_hash": "97a7dc5d18df366afb5c5ca2b6f3ba62"
-  },
   "personagen-svelte/src/routes/(auth)/+layout.svelte": {
     "mtime": 1781655453.0272367,
     "ast_hash": "a0b7c20cc407375d0c14642a1073eeb1",
     "semantic_hash": "a0b7c20cc407375d0c14642a1073eeb1"
   },
   "personagen-svelte/src/routes/(auth)/login/+page.svelte": {
-    "mtime": 1781655459.0423958,
-    "ast_hash": "bc34b1ac2e418a9ef33555353be1322a",
-    "semantic_hash": "bc34b1ac2e418a9ef33555353be1322a"
+    "mtime": 1781656755.937761,
+    "ast_hash": "2c81afd602f6e588a8165db4a2f4bb7d",
+    "semantic_hash": ""
   },
   "personagen-svelte/src/routes/(auth)/signup/+page.svelte": {
-    "mtime": 1781655464.421065,
-    "ast_hash": "571cc194b325c25d929fd9b60d9d8f4e",
-    "semantic_hash": "571cc194b325c25d929fd9b60d9d8f4e"
+    "mtime": 1781656761.231697,
+    "ast_hash": "f1dcd4c5551f524f73c227b81269ee43",
+    "semantic_hash": ""
   },
   "personagen-svelte/src/routes/(portal)/+layout.server.ts": {
     "mtime": 1781569120.2521842,
@@ -390,9 +375,9 @@
     "semantic_hash": "dd5f6fe07b3696be02b61abe23dd078a"
   },
   "personagen-svelte/src/routes/api/engine/engine.test.ts": {
-    "mtime": 1781569121.035627,
-    "ast_hash": "59d8cc3f0b18155f65ad5f6d9ba04fc7",
-    "semantic_hash": "59d8cc3f0b18155f65ad5f6d9ba04fc7"
+    "mtime": 1781658232.7219615,
+    "ast_hash": "2c2df4d693444b4f2ed8b1ed892f520b",
+    "semantic_hash": ""
   },
   "personagen-svelte/src/routes/api/posts/+server.ts": {
     "mtime": 1781468166.7059095,
@@ -488,21 +473,6 @@
     "mtime": 1780783038.326794,
     "ast_hash": "11ac4c0b28bdfe9fbbae5e9f4f1f5a58",
     "semantic_hash": "11ac4c0b28bdfe9fbbae5e9f4f1f5a58"
-  },
-  "scripts/edit-msa.js": {
-    "mtime": 1779339808.218562,
-    "ast_hash": "d2e8f2639ec32d906c2bb0634972e3d0",
-    "semantic_hash": "d2e8f2639ec32d906c2bb0634972e3d0"
-  },
-  "scripts/inject-button.js": {
-    "mtime": 1779338833.7249365,
-    "ast_hash": "0818418bb0ada6966f15269f7eae39ee",
-    "semantic_hash": "0818418bb0ada6966f15269f7eae39ee"
-  },
-  "scripts/screenshot-onboarding.js": {
-    "mtime": 1780031871.3906739,
-    "ast_hash": "a0cd88d96cf74023e0ad52ff777ff486",
-    "semantic_hash": "a0cd88d96cf74023e0ad52ff777ff486"
   },
   "services/factory/package.json": {
     "mtime": 1780237828.6169486,
@@ -623,16 +593,6 @@
     "mtime": 1780260388.8168612,
     "ast_hash": "96fcfa7d129660e08cda9c04c10aa69f",
     "semantic_hash": "96fcfa7d129660e08cda9c04c10aa69f"
-  },
-  "services/mail/src/setup-stalwart.js": {
-    "mtime": 1781572424.8503542,
-    "ast_hash": "3acfd32d97579ec551cf2c9f436a2fab",
-    "semantic_hash": "3acfd32d97579ec551cf2c9f436a2fab"
-  },
-  "services/mail/src/smtp.js": {
-    "mtime": 1781572416.8448646,
-    "ast_hash": "54b25ae2517dcdcf41fcac835dbbb536",
-    "semantic_hash": "54b25ae2517dcdcf41fcac835dbbb536"
   },
   "services/mcp-bridge/package.json": {
     "mtime": 1781115206.4752996,

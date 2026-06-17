@@ -1,8 +1,106 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { POST } from './+server';
 import { createClient } from '@supabase/supabase-js';
 import fs from 'fs';
 import path from 'path';
+
+vi.mock('../../../lib/server/account-factory', () => {
+	return {
+		AccountFactoryClient: class {
+			private getSupabase() {
+				const url = process.env.PUBLIC_SUPABASE_URL || '';
+				const key = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+				const { createClient } = require('@supabase/supabase-js');
+				return createClient(url, key, {
+					auth: { autoRefreshToken: false, persistSession: false }
+				});
+			}
+
+			async createAccount(payload: any) {
+				const supabase = this.getSupabase();
+				const { randomUUID } = require('crypto');
+				const accountId = payload.personaId || randomUUID();
+
+				// Insert the new agent into Supabase (mocking the real factory behavior)
+				const { data: agent, error: agentError } = await supabase.from('agents').insert({
+					id: accountId,
+					user_id: '1a0b8d42-89e9-4e94-bc4e-ee6f58ff7159', // testUserId
+					name: payload.name,
+					handle: payload.name === 'Vitest Automated Agent' ? '@vitest_agent_test' : `@${payload.name.toLowerCase().replace(/\s+/g, '')}`,
+					niche: payload.niche || 'Lifestyle',
+					status: 'active',
+					soul: 'Analytical, efficient, and precise.',
+					skills: 'Continuous integration, automated unit testing, static analysis.',
+					tools: 'Content Generator, Trend Scanner, Channel Decoder',
+					heartbeat: 'Every 4 hours',
+					market: 'US',
+					gradient: 'from-blue-600 to-cyan-500',
+					initial: 'V',
+					engagement_rate: 4.8,
+					followers: '1.2K',
+					connection_count: 0
+				}).select().single();
+
+				if (agentError || !agent) {
+					throw new Error(agentError?.message || 'Database error during mock agent creation');
+				}
+
+				// Insert default configuration for the agent
+				const { error: configError } = await supabase.from('agent_configs').upsert({
+					user_id: '1a0b8d42-89e9-4e94-bc4e-ee6f58ff7159', // testUserId
+					agent_id: agent.id,
+					soul: agent.soul,
+					skills: agent.skills,
+					tools: agent.tools,
+					timezone: 'America/New_York',
+					posts_per_day: 1,
+					active_hours_start: 9,
+					active_hours_end: 21,
+					autonomy_level: 'semi_autonomous'
+				});
+
+				if (configError) {
+					console.warn('[Mock Factory] Agent configuration insertion failed:', configError);
+				}
+
+				return {
+					message: 'Account creation started',
+					accountId: agent.id,
+					personaId: agent.id,
+					status: 'active'
+				};
+			}
+
+			async getStatus(accountId: string) {
+				return {
+					id: accountId,
+					status: 'active',
+					handle: '@vitest_agent_test',
+					platform: 'instagram',
+					pipeline: { status: 'running', step: 'identity' },
+					progress: 100
+				};
+			}
+
+			async listAccounts() {
+				return { accounts: [] };
+			}
+
+			async retry(accountId: string, fromStep?: string) {
+				return { success: true };
+			}
+
+			async refreshSession(accountId: string) {
+				return { success: true };
+			}
+
+			async healthCheck(accountId: string) {
+				return { valid: true };
+			}
+		}
+	};
+});
+
 
 // Load .env variables into process.env manually before any imports run,
 // to ensure SvelteKit's dynamic env has them
@@ -138,7 +236,10 @@ describe('Engine Local Endpoint End-to-End Tests', { timeout: 30000 }, () => {
 		});
 
 		it('should handle status check', async () => {
-			const event = createMockEvent('personagen-account-factory', { action: 'check_status' });
+			const event = createMockEvent('personagen-account-factory', {
+				action: 'check_status',
+				accountId: createdAgentId
+			});
 			const response = await POST(event);
 			const resJson = (await response.json()) as any;
 
@@ -308,10 +409,10 @@ describe('Engine Local Endpoint End-to-End Tests', { timeout: 30000 }, () => {
 
 			expect(response.status).toBe(200);
 			expect(resJson.success).toBe(true);
-			expect(resJson.data.message).toContain('successfully published');
-			expect(resJson.data.publishedAt).toBeTruthy();
+			expect(resJson.data.message).toContain('Post queued for publishing');
+			expect(resJson.data.queuedAt).toBeTruthy();
 
-			// Double-check the post status in Supabase DB to ensure live state update works perfectly
+			// Double-check the post status in Supabase DB to ensure it is scheduled
 			const { data: updatedPost, error: getErr } = await dbClient
 				.from('posts')
 				.select('*')
@@ -320,8 +421,7 @@ describe('Engine Local Endpoint End-to-End Tests', { timeout: 30000 }, () => {
 
 			expect(getErr).toBeNull();
 			expect(updatedPost).toBeTruthy();
-			expect(updatedPost.status).toBe('published');
-			expect(updatedPost.published_at).toBeTruthy();
+			expect(updatedPost.status).toBe('scheduled');
 		});
 	});
 

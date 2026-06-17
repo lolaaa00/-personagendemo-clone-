@@ -222,22 +222,23 @@ async function pollRssFeeds() {
 
 				console.log(`[Scheduler RSS] Found ${items.length} items in RSS feed.`);
 
+				// Fetch processed item GUIDs for this agent at once
+				const { data: processed, error: procErr } = await supabase
+					.from('processed_rss_items')
+					.select('item_guid')
+					.eq('agent_id', agent.id);
+
+				if (procErr) {
+					console.error(`[Scheduler RSS] Error checking processed items:`, procErr);
+					continue;
+				}
+
+				const processedGuids = new Set(processed?.map((p) => p.item_guid) || []);
+
 				let processedAny = false;
 				for (const item of items) {
-					// Check if item has already been processed
-					const { data: alreadyProcessed, error: procErr } = await supabase
-						.from('processed_rss_items')
-						.select('id')
-						.eq('agent_id', agent.id)
-						.eq('item_guid', item.guid)
-						.maybeSingle();
-
-					if (procErr) {
-						console.error(`[Scheduler RSS] Error checking processed items:`, procErr);
-						continue;
-					}
-
-					if (alreadyProcessed) {
+					// Check if item has already been processed in-memory
+					if (processedGuids.has(item.guid)) {
 						continue;
 					}
 
@@ -500,12 +501,14 @@ export async function syncPostAnalytics() {
 	const composio = new ComposioClient();
 
 	try {
-		// Fetch published posts that have at least one external platform ID.
+		// Fetch published posts published in the last 7 days that have at least one external platform ID.
+		const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 		const { data: posts, error } = await supabase
 			.from('posts')
 			.select('*')
 			.eq('status', 'published')
-			.not('external_id', 'is', null);
+			.not('external_id', 'is', null)
+			.gte('published_at', sevenDaysAgo);
 
 		if (error) {
 			console.error('[Scheduler] Error fetching published posts for analytics sync:', error);
@@ -519,38 +522,53 @@ export async function syncPostAnalytics() {
 
 		console.log(`[Scheduler] Syncing metrics for ${posts.length} published posts...`);
 
-		for (const post of posts) {
-			const publicationResults = post.publication_results || {};
-			const platform =
-				Object.keys(publicationResults).find((key) => publicationResults[key]?.external_id) ||
-				(post.platforms && post.platforms[0]) ||
-				'instagram';
-			const externalId = publicationResults[platform]?.external_id || post.external_id;
-			if (!externalId) continue;
-			try {
-				const metrics = await composio.fetchPostMetrics(
-					post.agent_id,
-					platform,
-					externalId,
-					post.published_at!
-				);
+		// Process posts in parallel chunks (concurrency limit of 5 to avoid API rate limits)
+		const CONCURRENCY_LIMIT = 5;
+		const postQueue = [...posts];
 
-				const { error: updateErr } = await supabase
-					.from('posts')
-					.update({ analytics: metrics })
-					.eq('id', post.id);
+		const worker = async () => {
+			while (postQueue.length > 0) {
+				const post = postQueue.shift();
+				if (!post) continue;
 
-				if (updateErr) {
-					console.error(`[Scheduler] Failed to update analytics for post ${post.id}:`, updateErr);
-				} else {
-					console.log(
-						`[Scheduler] Synced metrics for post ${post.id}: Views=${metrics.views}, Likes=${metrics.likes}`
+				const publicationResults = post.publication_results || {};
+				const platform =
+					Object.keys(publicationResults).find((key) => publicationResults[key]?.external_id) ||
+					(post.platforms && post.platforms[0]) ||
+					'instagram';
+				const externalId = publicationResults[platform]?.external_id || post.external_id;
+				if (!externalId) continue;
+
+				try {
+					const metrics = await composio.fetchPostMetrics(
+						post.agent_id,
+						platform,
+						externalId,
+						post.published_at!
 					);
+
+					const { error: updateErr } = await supabase
+						.from('posts')
+						.update({ analytics: metrics })
+						.eq('id', post.id);
+
+					if (updateErr) {
+						console.error(`[Scheduler] Failed to update analytics for post ${post.id}:`, updateErr);
+					} else {
+						console.log(
+							`[Scheduler] Synced metrics for post ${post.id}: Views=${metrics.views}, Likes=${metrics.likes}`
+						);
+					}
+				} catch (postErr) {
+					console.error(`[Scheduler] Error syncing metrics for post ${post.id}:`, postErr);
 				}
-			} catch (postErr) {
-				console.error(`[Scheduler] Error syncing metrics for post ${post.id}:`, postErr);
 			}
-		}
+		};
+
+		// Run workers in parallel
+		const workers = Array.from({ length: Math.min(CONCURRENCY_LIMIT, posts.length) }, worker);
+		await Promise.all(workers);
+
 		console.log('[Scheduler] Finished syncing post analytics.');
 	} catch (err) {
 		console.error('[Scheduler] Critical error in syncPostAnalytics:', err);

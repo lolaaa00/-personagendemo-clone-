@@ -40,8 +40,6 @@
 	"dependencies": {
 		"@google/genai": "^2.8.0",
 		"@supabase/ssr": "^0.10.3",
-		"@supabase/supabase-js": "^2.107.0",
-		"pg": "^8.21.0",
-		"stripe": "^22.2.0"
+		"@supabase/supabase-js": "^2.107.0"
 	}
 }
