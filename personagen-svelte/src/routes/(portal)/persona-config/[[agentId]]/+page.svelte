@@ -19,7 +19,7 @@
 
 	let selectedAgentId = $state<string | null>(null);
 	let activeTab = $state<
-		'accounts' | 'soul' | 'skills' | 'tools' | 'heartbeat' | 'autonomy' | 'rss' | 'settings'
+		'accounts' | 'soul' | 'skills' | 'tools' | 'heartbeat' | 'autonomy' | 'rss' | 'settings' | 'feed'
 	>('accounts');
 
 	// Agent identity settings state
@@ -103,6 +103,8 @@
 			const activeAgents = agents.filter((a) => a.status === 'active');
 			if (activeAgents.length > 0) {
 				selectAgent(activeAgents[0].id);
+			} else {
+				selectAgent(agents[0].id);
 			}
 		}
 	});
@@ -140,7 +142,8 @@
 		{ id: 'heartbeat' as const, label: 'Heartbeat', icon: '💓' },
 		{ id: 'autonomy' as const, label: 'Autonomy', icon: '🤖' },
 		{ id: 'rss' as const, label: 'RSS Feed', icon: '📰' },
-		{ id: 'settings' as const, label: 'Agent Settings', icon: '⚙️' }
+		{ id: 'settings' as const, label: 'Agent Settings', icon: '⚙️' },
+		{ id: 'feed' as const, label: 'Creator Feed', icon: '📱' }
 	];
 
 	const autonomyKeys: AutonomyLevel[] = ['advisor', 'semi_autonomous', 'fully_autonomous'];
@@ -263,9 +266,63 @@
 
 	function selectAgent(id: string) {
 		selectedAgentId = id;
-		activeTab = 'accounts';
 		loadConfig(id);
 	}
+
+	let feedPosts = $state<any[]>([]);
+	let feedLoading = $state(false);
+	let syncingFeed = $state(false);
+
+	async function loadFeed() {
+		if (!selectedAgentId) return;
+		feedLoading = true;
+		try {
+			const res = await fetch('/api/posts', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ action: 'list', agent_id: selectedAgentId })
+			});
+			const result = await res.json();
+			if (result.success) {
+				feedPosts = (result.data || []).filter((p: any) => p.status === 'published')
+					.sort((a: any, b: any) => new Date(b.published_at || b.created_at).getTime() - new Date(a.published_at || a.created_at).getTime());
+			} else {
+				showToast('Failed to load feed: ' + result.error, 'error');
+			}
+		} catch (err) {
+			showToast('Error loading feed: ' + (err as Error).message, 'error');
+		} finally {
+			feedLoading = false;
+		}
+	}
+
+	async function syncFeed() {
+		if (!selectedAgentId) return;
+		syncingFeed = true;
+		try {
+			const res = await fetch(`/api/agent/${selectedAgentId}/sync`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' }
+			});
+			const result = await res.json();
+			if (result.success) {
+				showToast(result.message || 'Feed synced successfully!', 'success');
+				await loadFeed();
+			} else {
+				showToast('Failed to sync: ' + result.error, 'error');
+			}
+		} catch (err) {
+			showToast('Error syncing feed: ' + (err as Error).message, 'error');
+		} finally {
+			syncingFeed = false;
+		}
+	}
+
+	$effect(() => {
+		if (activeTab === 'feed' && selectedAgentId) {
+			loadFeed();
+		}
+	});
 
 	let statusLoading = $state(false);
 	let connectingPlatform = $state('');
@@ -564,7 +621,7 @@
 
 	<!-- Agent Selector Grid -->
 	<div class="agent-grid">
-		{#each agents.filter((a) => a.status === 'active') as agent (agent.id)}
+		{#each agents as agent (agent.id)}
 			<button
 				class="agent-card"
 				class:selected={selectedAgentId === agent.id}
@@ -1175,6 +1232,28 @@
 								</button>
 							{/each}
 						</div>
+						<div class="panel-actions">
+							<button class="save-btn" onclick={saveCurrentTab} disabled={saving}>
+								{#if saving}
+									<span class="spinner"></span> Saving…
+								{:else}
+									<svg
+										width="16"
+										height="16"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="2"
+										><path
+											d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"
+										/><polyline points="17 21 17 13 7 13 7 21" /><polyline
+											points="7 3 7 8 15 8"
+										/></svg
+									>
+									Save Autonomy Level
+								{/if}
+							</button>
+						</div>
 					</div>
 				{:else if activeTab === 'rss'}
 					<div class="tab-panel">
@@ -1632,6 +1711,132 @@
 								Delete Agent Persona
 							</button>
 						</div>
+					</div>
+				{:else if activeTab === 'feed'}
+					<div class="tab-panel">
+						<div class="panel-header" style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;">
+							<div>
+								<h3>Creator Feed</h3>
+								<p class="panel-desc">
+									View and synchronize published content from connected platforms for <strong>{selectedAgent.name}</strong>.
+								</p>
+							</div>
+							<button 
+								class="save-btn" 
+								onclick={syncFeed} 
+								disabled={syncingFeed || feedLoading}
+								style="margin-top: 0; display: inline-flex; align-items: center; gap: 0.5rem;"
+							>
+								{#if syncingFeed}
+									<span class="spinner"></span> Syncing Feed…
+								{:else}
+									<svg
+										width="16"
+										height="16"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="2"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg
+									>
+									Sync Social Feed
+								{/if}
+							</button>
+						</div>
+
+						{#if feedLoading}
+							<div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 4rem 2rem; color: var(--text-dim);">
+								<span class="spinner" style="width: 2rem; height: 2rem; border-width: 3px; margin-bottom: 1rem;"></span>
+								<p style="font-size: var(--text-sm);">Loading synced publications...</p>
+							</div>
+						{:else if feedPosts.length === 0}
+							<div class="empty-state" style="padding: 4rem 2rem; background: var(--bg-card-dark); border: 1px dashed var(--border); border-radius: var(--radius-md); text-align: center; margin-top: 1rem; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+								<div class="empty-icon" style="font-size: 3rem; margin-bottom: 1rem;">📱</div>
+								<h4 style="font-size: var(--text-md); font-weight: 600; color: var(--text); margin-bottom: 0.5rem;">No Published Posts Yet</h4>
+								<p style="font-size: var(--text-xs); color: var(--text-dim); max-width: 380px; margin: 0 auto 1.5rem;">
+									This agent has no synced feed posts. Make sure you have connected accounts configured, and click the sync button to fetch posts and metrics.
+								</p>
+								<button 
+									class="save-btn" 
+									onclick={syncFeed} 
+									disabled={syncingFeed}
+									style="margin: 0 auto; display: inline-flex; align-items: center; gap: 0.5rem;"
+								>
+									{#if syncingFeed}
+										<span class="spinner"></span> Syncing Feed…
+									{:else}
+										Sync Social Feed
+									{/if}
+								</button>
+							</div>
+						{:else}
+							<div class="feed-list" style="display: flex; flex-direction: column; gap: 1rem; margin-top: 1.5rem;">
+								{#each feedPosts as post (post.id)}
+									{@const plat = (post.platforms?.[0] || 'instagram').toLowerCase()}
+									<div 
+										class="feed-card" 
+										style="background: var(--bg-card-dark); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem; transition: transform 0.2s ease, border-color 0.2s ease;"
+										onmouseover={(e) => {
+											e.currentTarget.style.borderColor = 'var(--accent-mid)';
+											e.currentTarget.style.transform = 'translateY(-2px)';
+										}}
+										onmouseout={(e) => {
+											e.currentTarget.style.borderColor = 'var(--border)';
+											e.currentTarget.style.transform = 'translateY(0)';
+										}}
+									>
+										<div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem;">
+											<div style="display: flex; align-items: center; gap: 0.75rem;">
+												<span 
+													style="padding: 0.25rem 0.6rem; border-radius: 9999px; font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; background: {plat === 'tiktok' ? '#fe2c55' : plat === 'instagram' ? '#e1306c' : plat === 'youtube' ? '#ff0000' : '#1877f2'}; color: white;"
+												>
+													{plat}
+												</span>
+												<span style="font-size: var(--text-xs); color: var(--text-dim);">
+													{post.published_at ? new Date(post.published_at).toLocaleString() : 'Recently'}
+												</span>
+											</div>
+											{#if post.external_id}
+												<span 
+													style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--text-dim); background: var(--bg); padding: 0.15rem 0.4rem; border-radius: 4px; border: 1px solid var(--border);"
+													title="Composio Integration ID"
+												>
+													ID: {post.external_id}
+												</span>
+											{/if}
+										</div>
+
+										<p style="font-size: var(--text-sm); color: var(--text); line-height: 1.5; margin: 0; white-space: pre-wrap;">
+											{post.content}
+										</p>
+
+										<div 
+											class="metrics-row" 
+											style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.75rem; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0.75rem 1rem;"
+										>
+											<div style="text-align: center;">
+												<span style="display: block; font-size: var(--text-xs); color: var(--text-dim); margin-bottom: 0.25rem;">Views</span>
+												<strong style="font-size: var(--text-sm); color: var(--text);">{post.analytics?.views?.toLocaleString() ?? 0}</strong>
+											</div>
+											<div style="text-align: center;">
+												<span style="display: block; font-size: var(--text-xs); color: var(--text-dim); margin-bottom: 0.25rem;">Likes</span>
+												<strong style="font-size: var(--text-sm); color: var(--text);">{post.analytics?.likes?.toLocaleString() ?? 0}</strong>
+											</div>
+											<div style="text-align: center;">
+												<span style="display: block; font-size: var(--text-xs); color: var(--text-dim); margin-bottom: 0.25rem;">Comments</span>
+												<strong style="font-size: var(--text-sm); color: var(--text);">{post.analytics?.comments?.toLocaleString() ?? 0}</strong>
+											</div>
+											<div style="text-align: center;">
+												<span style="display: block; font-size: var(--text-xs); color: var(--text-dim); margin-bottom: 0.25rem;">Shares</span>
+												<strong style="font-size: var(--text-sm); color: var(--text);">{post.analytics?.shares?.toLocaleString() ?? 0}</strong>
+											</div>
+										</div>
+									</div>
+								{/each}
+							</div>
+						{/if}
 					</div>
 				{/if}
 			</div>

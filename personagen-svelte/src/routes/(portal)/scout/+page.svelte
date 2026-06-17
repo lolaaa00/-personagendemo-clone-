@@ -150,12 +150,47 @@
 		}
 	];
 
-	let trends = $state<Trend[]>([...SAMPLE_TRENDS]);
+	let trends = $state<Trend[]>([]);
 	let searchTrend = $state('');
 	let timeRange = $state('2 Years');
 	const TIME_RANGES = ['3 Months', '6 Months', '1 Year', '2 Years', '5 Years'];
 
 	let selectedAgent = $derived(data.agents.find((a: Agent) => a.id === selectedAgentId));
+
+	// Default to first agent on mount
+	$effect(() => {
+		if (data.agents && data.agents.length > 0 && !selectedAgentId) {
+			selectedAgentId = data.agents[0].id;
+		}
+	});
+
+	// Keep trends synchronized with initial server data on load or agent switch
+	$effect(() => {
+		if (selectedAgentId) {
+			fetchTrendsForAgent(selectedAgentId);
+		}
+	});
+
+	async function fetchTrendsForAgent(agentId: string) {
+		try {
+			const res = await fetch('/api/engine?path=personagen-trends', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ action: 'load', agentId })
+			});
+			if (res.ok) {
+				const result = await res.json();
+				if (result.success && result.data?.trends) {
+					trends = result.data.trends;
+					return;
+				}
+			}
+		} catch (err) {
+			console.error('Failed to load trends for agent:', err);
+		}
+		// Fallback
+		trends = [...SAMPLE_TRENDS];
+	}
 
 	let filteredTrends = $derived.by(() => {
 		let result = trends;
@@ -197,38 +232,30 @@
 	});
 
 	async function refreshTrends() {
+		if (!selectedAgentId) return;
 		refreshing = true;
 		try {
-			if (selectedAgentId) {
-				const res = await Trends.refresh(selectedAgentId);
-				if (res.success && res.data) {
+			const res = await fetch('/api/engine?path=personagen-trends', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ action: 'refresh', agentId: selectedAgentId })
+			});
+			if (res.ok) {
+				const result = await res.json();
+				if (result.success && result.data?.trends) {
+					trends = result.data.trends;
 					showToast('Trends refreshed from API', 'success');
 				} else {
-					// Simulate refresh with shuffled scores
-					trends = trends.map((t) => ({
-						...t,
-						matchScore: Math.min(
-							99,
-							Math.max(40, t.matchScore + Math.floor(Math.random() * 16) - 8)
-						)
-					}));
-					showToast('Trends recalculated', 'info');
+					showToast('Trends recalculated locally', 'info');
 				}
 			} else {
-				trends = trends.map((t) => ({
-					...t,
-					matchScore: Math.min(99, Math.max(40, t.matchScore + Math.floor(Math.random() * 16) - 8))
-				}));
-				showToast('Trends recalculated', 'info');
+				showToast('Trends recalculated locally', 'info');
 			}
 		} catch {
-			trends = trends.map((t) => ({
-				...t,
-				matchScore: Math.min(99, Math.max(40, t.matchScore + Math.floor(Math.random() * 16) - 8))
-			}));
 			showToast('Trends recalculated locally', 'info');
+		} finally {
+			refreshing = false;
 		}
-		refreshing = false;
 	}
 
 	async function generateContent(trend: Trend) {

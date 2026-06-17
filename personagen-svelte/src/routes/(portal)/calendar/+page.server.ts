@@ -36,7 +36,7 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 				.from('connections')
 				.select('agent_id, platform');
 
-			const creators = dbAgents.filter((a) => !a.is_overseer && a.status === 'active');
+			const creators = dbAgents.filter((a) => !a.is_overseer);
 			agents = creators.map((a) => {
 				const agentConns = dbConnections?.filter(c => c.agent_id === a.id) || [];
 				const connectedPlatforms = agentConns.map(c => c.platform);
@@ -68,7 +68,7 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 		// Fallback static agents
 		const agentsRes = await fetch('/data/agents.json');
 		const rawAgents: any[] = await agentsRes.json();
-		agents = rawAgents.filter((a) => a.status === 'active').map((a) => ({
+		agents = rawAgents.map((a) => ({
 			...a,
 			niche: (a.niche || '').split(' & ')[0] || a.niche,
 			engagementRate: a.engagementRate || parseFloat(a.engagement) || 0,

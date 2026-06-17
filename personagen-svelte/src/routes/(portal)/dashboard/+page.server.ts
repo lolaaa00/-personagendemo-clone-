@@ -37,7 +37,6 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 					.select('*', { count: 'exact', head: true })
 					.eq('user_id', user.id)
 					.eq('is_overseer', false)
-					.eq('status', 'active')
 					.eq('managed_by_overseer', true);
 				managedAgentsCount = managedCount ?? 0;
 
@@ -108,8 +107,8 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 				}).length;
 			}
 
-			// Exclude overseer from creator roster and filter out non-active creators (non connections)
-			const creators = dbAgents.filter((a) => !a.is_overseer && a.status === 'active');
+			// Exclude overseer from creator roster and load all creators (active, paused, pending)
+			const creators = dbAgents.filter((a) => !a.is_overseer);
 
 			// For each agent, dynamically compute their active state, performance score, and connection counts
 			agents = creators.map((a) => {

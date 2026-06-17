@@ -2,6 +2,9 @@
 	import { ChannelDecode, Blueprints } from '$lib/services/api';
 	import { showToast } from '$lib/stores/ui.svelte';
 
+	let { data }: { data: any } = $props();
+	const agents = $derived(data.agents || []);
+
 	type Step = 'input' | 'processing' | 'results';
 
 	const PLATFORMS = [
@@ -21,13 +24,6 @@
 		{ id: 7, name: 'Growth Levers', icon: '📈' },
 		{ id: 8, name: 'Monetization', icon: '💰' },
 		{ id: 9, name: 'Replication Blueprint', icon: '🔁' }
-	];
-
-	const SAMPLE_AGENTS = [
-		{ id: 'sofia-rivera', name: 'Sofia Rivera', handle: '@sofiarivera.ai' },
-		{ id: 'marcus-chen', name: 'Marcus Chen', handle: '@marcuschen.tech' },
-		{ id: 'aisha-noori', name: 'Aisha Noori', handle: '@aishanoori.style' },
-		{ id: 'veronica-hap', name: 'Veronica Hap', handle: '@veronicahap' }
 	];
 
 	let step = $state<Step>('input');
@@ -246,13 +242,13 @@
 				showToast(`Blueprint fed to agent successfully`, 'success');
 			} else {
 				showToast(
-					`Blueprint queued for ${SAMPLE_AGENTS.find((a) => a.id === selectedAgent)?.name}`,
+					`Blueprint queued for ${agents.find((a: any) => a.id === selectedAgent)?.name}`,
 					'info'
 				);
 			}
 		} catch {
 			showToast(
-				`Blueprint queued for ${SAMPLE_AGENTS.find((a) => a.id === selectedAgent)?.name}`,
+				`Blueprint queued for ${agents.find((a: any) => a.id === selectedAgent)?.name}`,
 				'info'
 			);
 		}
@@ -581,7 +577,7 @@
 						<div class="agent-selector" style="animation: fadeUp 0.25s var(--ease-out)">
 							<select bind:value={selectedAgent}>
 								<option value="">Select an agent...</option>
-								{#each SAMPLE_AGENTS as agent}
+								{#each agents as agent}
 									<option value={agent.id}>{agent.name} ({agent.handle})</option>
 								{/each}
 							</select>

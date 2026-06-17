@@ -31,7 +31,7 @@ function extractChannelName(u: string): string {
 	}
 }
 
-export const POST: RequestHandler = async ({ url, request, locals }) => {
+export const POST: RequestHandler = async ({ url, request, locals, fetch }) => {
 	// 1. Authenticate user
 	const { session } = await locals.safeGetSession();
 	if (!session) {
@@ -714,11 +714,103 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 		// E. PATH: personagen-trends
 		// ══════════════════════════════════════════════════════════════════════════
 		if (path === 'personagen-trends') {
-			// Simply return success so the frontend knows calculation was successful
+			const agentId = body.agentId || body.agent_id;
+			if (!agentId) {
+				// Static mock success for testing / simple calls
+				return json({
+					success: true,
+					data: {
+						message: 'Trends recalculated and matched',
+						timestamp: new Date().toISOString()
+					}
+				});
+			}
+
+			// Get the agent's niche
+			const { data: agent } = await db.agents.get(agentId);
+			const niche = agent?.niche || 'Lifestyle';
+			const agentName = agent?.name || 'Agent';
+
+			let trends: any[] = [];
+
+			if (hasGemini) {
+				try {
+					const ai = new GoogleGenAI({ apiKey });
+					const prompt = `Generate 10 trending topics or themes relevant to the "${niche}" niche.
+For each trend, specify its momentum (rising, stable, or falling), the main platform (TikTok, Instagram, YouTube, or Facebook), match score (how well it matches a creator named ${agentName} in this niche, between 60 and 99), typical hashtags, a short description, volume (e.g. "24.2K"), and growth (e.g. "+340%").
+
+Return a JSON array where each object has this exact structure:
+{
+  "id": "t1",
+  "name": "Trend Name",
+  "momentum": "rising",
+  "platform": "TikTok",
+  "niche": "${niche}",
+  "matchScore": 92,
+  "hashtags": ["tag1", "tag2"],
+  "description": "Short description of the trend",
+  "volume": "24.2K",
+  "growth": "+340%"
+}
+Ensure the output is ONLY a raw JSON array. Do not wrap in markdown code blocks.`;
+
+					const res = await ai.models.generateContent({
+						model: 'gemini-3.5-flash',
+						contents: [{ role: 'user', parts: [{ text: prompt }] }]
+					});
+
+					if (res.text) {
+						const parsed = safeParseJson(res.text);
+						if (Array.isArray(parsed)) {
+							trends = parsed.map((t, idx) => ({
+								id: t.id || `t_${idx}_${Date.now()}`,
+								name: t.name || 'Niche Trend',
+								momentum: t.momentum || 'rising',
+								platform: t.platform || 'TikTok',
+								niche: t.niche || niche,
+								matchScore: Number(t.matchScore || 85),
+								hashtags: Array.isArray(t.hashtags) ? t.hashtags : ['trend'],
+								description: t.description || 'Trending content description',
+								volume: t.volume || '15K',
+								growth: t.growth || '+100%'
+							}));
+						}
+					}
+				} catch (err) {
+					console.error('[Engine] Gemini trends generation failed:', err);
+				}
+			}
+
+			if (trends.length === 0) {
+				// Fallback to static trends.json
+				try {
+					const response = await fetch('/data/trends.json');
+					if (response.ok) {
+						const allTrends = await response.ok ? await response.json() : [];
+						// Filter or select trends related to this niche, or return all
+						const matched = allTrends.filter(
+							(t: any) => t.niche && t.niche.toLowerCase() === niche.toLowerCase()
+						);
+						if (matched.length > 0) {
+							trends = matched;
+						} else {
+							// Return all but adjust match scores to simulate relevance
+							trends = allTrends.map((t: any, idx: number) => ({
+								...t,
+								matchScore: Math.min(99, Math.max(50, 85 - idx * 4))
+							}));
+						}
+					}
+				} catch (fallbackErr) {
+					console.error('[Engine] Trends static fallback read failed:', fallbackErr);
+				}
+			}
+
 			return json({
 				success: true,
 				data: {
-					message: 'Trends recalculated and matched',
+					trends,
+					message: 'Trends loaded successfully',
 					timestamp: new Date().toISOString()
 				}
 			});
