@@ -453,10 +453,8 @@
 					{(() => {
 						const path = $page.url.pathname;
 						if (path.startsWith('/brand-brief')) return 'Brand Brief';
-						if (path.startsWith('/agreement')) return 'Agreement';
 						if (path.startsWith('/chat')) return '💬 Agent Chat Portal';
 						if (path.startsWith('/settings/overseer')) return '🤖 Hermes Overseer Config';
-						if (path.startsWith('/settings/billing')) return 'Billing & Subscription';
 						if (path.startsWith('/settings')) return 'Settings';
 						return (
 							navSections.flatMap((s) => s.items).find((i) => isActive(i.href, path))?.label ??
@@ -558,29 +556,7 @@
 								</svg>
 								Brand Brief
 							</a>
-							<a
-								href="/agreement"
-								class="dropdown-item"
-								role="menuitem"
-								onclick={closeUserDropdown}
-							>
-								<svg
-									width="14"
-									height="14"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-								>
-									<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-									<polyline points="14 2 14 8 20 8" />
-									<line x1="16" y1="13" x2="8" y2="13" />
-									<line x1="16" y1="17" x2="8" y2="17" />
-								</svg>
-								Agreement
-							</a>
+
 							<a
 								href="/settings/overseer"
 								class="dropdown-item"
@@ -640,27 +616,7 @@
 								</svg>
 								Settings
 							</a>
-							<a
-								href="/settings/billing"
-								class="dropdown-item"
-								role="menuitem"
-								onclick={closeUserDropdown}
-							>
-								<svg
-									width="14"
-									height="14"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-								>
-									<rect x="1" y="4" width="22" height="16" rx="2" ry="2" />
-									<line x1="1" y1="10" x2="23" y2="10" />
-								</svg>
-								Billing & Subscription
-							</a>
+
 							<hr class="dropdown-divider" />
 							<button class="dropdown-item logout-btn" role="menuitem" onclick={handleLogout}>
 								<svg

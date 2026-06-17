@@ -19,7 +19,6 @@ const PROTECTED_PREFIXES = [
 	'/channel-decoder',
 	'/content-forge',
 	'/brand-brief',
-	'/agreement',
 	'/settings'
 ];
 
