@@ -97,6 +97,9 @@
 	// Load chat logs on agent change
 	$effect(() => {
 		if (selectedAgent?.id) {
+			isTyping = false;
+			currentLogs = [];
+			inputValue = '';
 			loadChatHistory();
 		}
 	});
@@ -184,6 +187,7 @@
 
 		const userText = text.trim();
 		inputValue = '';
+		const targetAgentId = selectedAgent.id;
 
 		// Push user message immediately
 		messages = [
@@ -206,18 +210,21 @@
 		];
 
 		try {
-			const resPromise = fetch(`/api/agent/${selectedAgent.id}/chat`, {
+			const resPromise = fetch(`/api/agent/${targetAgentId}/chat`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ message: userText })
 			});
 
 			await new Promise((resolve) => setTimeout(resolve, 800));
+			if (selectedAgent.id !== targetAgentId) return; // Discard if agent switched
 			currentLogs = [...currentLogs, '⚙️ Invoking model with real-time tools...'];
 			await scrollChatToBottom();
 
 			const res = await resPromise;
 			const data = await res.json();
+
+			if (selectedAgent.id !== targetAgentId) return; // Discard if agent switched
 
 			if (res.ok && data.success) {
 				if (data.toolCalls && data.toolCalls.length > 0) {
@@ -227,6 +234,7 @@
 				}
 				await scrollChatToBottom();
 				await new Promise((resolve) => setTimeout(resolve, 400));
+				if (selectedAgent.id !== targetAgentId) return; // Discard if agent switched
 
 				messages = [
 					...messages,
@@ -251,6 +259,7 @@
 			}
 		} catch (err) {
 			console.error('Chat error:', err);
+			if (selectedAgent.id !== targetAgentId) return; // Discard if agent switched
 			messages = [
 				...messages,
 				{
@@ -261,9 +270,11 @@
 				}
 			];
 		} finally {
-			isTyping = false;
-			currentLogs = [];
-			await scrollChatToBottom();
+			if (selectedAgent.id === targetAgentId) {
+				isTyping = false;
+				currentLogs = [];
+				await scrollChatToBottom();
+			}
 		}
 	}
 
