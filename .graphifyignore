@@ -1,0 +1,15 @@
+# Ignore all non-code files for local AST-only graph construction
+*.md
+*.mdx
+*.txt
+*.rst
+*.html
+*.yaml
+*.yml
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.svg
+*.pdf

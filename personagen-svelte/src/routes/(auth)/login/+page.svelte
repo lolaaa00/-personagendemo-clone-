@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { showToast } from '$lib/stores/ui.svelte';
+	import { showToast, themeState } from '$lib/stores/ui.svelte';
 	import { createBrowserClient } from '@supabase/ssr';
 	import { env } from '$env/dynamic/public';
 	import Button from '$lib/components/ui/Button.svelte';
@@ -106,7 +106,7 @@
 		</div>
 
 		<!-- Card Primitive -->
-		<Card dark={true} class="login-card">
+		<Card dark={themeState.current === 'dark'} class="login-card">
 			{#snippet title()}
 				<h1>Welcome back</h1>
 			{/snippet}
@@ -235,7 +235,7 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		background: #0b0713;
+		background: var(--bg);
 		position: relative;
 		overflow: hidden;
 	}
@@ -317,10 +317,11 @@
 	.login-grid {
 		position: fixed;
 		inset: 0;
-		background-image: radial-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+		background-image: radial-gradient(var(--border-strong) 1px, transparent 1px);
 		background-size: 28px 28px;
 		pointer-events: none;
 		z-index: 0;
+		opacity: 0.35;
 	}
 
 	/* Container */
