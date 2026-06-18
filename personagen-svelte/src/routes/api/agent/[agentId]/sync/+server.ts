@@ -2,6 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { createDbService } from '$lib/server/db';
 import { ComposioClient } from '$lib/server/social/composio';
+import { env } from '$env/dynamic/private';
 
 // Simulated post content templates by niche
 const NICHE_TEMPLATES: Record<string, string[]> = {
@@ -126,63 +127,191 @@ export const POST: RequestHandler = async ({ params, locals }) => {
 			}
 		}
 
+		const composioKey = env.COMPOSIO_API_KEY || '';
+		const isUuid = (id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
+		const isDevBypass =
+			!isUuid(agentId) ||
+			!composioKey ||
+			composioKey.includes('placeholder') ||
+			composioKey.includes('change_me');
+
 		// Loop through active connections to sync posts
 		for (const conn of activeConns) {
 			const platform = conn.platform;
-			// Generate 5 simulated feed posts per platform
-			for (let i = 0; i < 5; i++) {
-				const postSeed = `${agentId}-${platform}-${i}`;
-				const hash = getSeedHash(postSeed);
+			let fetchedPosts: { externalId: string; content: string; publishedAtStr: string; publicationResults?: any; preFetchedMetrics?: any }[] = [];
 
-				// Create distinct dates ranging from 1 to 14 days ago
-				const daysAgo = i === 0 ? 1 : i === 1 ? 3 : i === 2 ? 6 : i === 3 ? 10 : 14;
-				const publishedTime = new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000 - (hash % 12) * 60 * 60 * 1000);
-				const publishedAtStr = publishedTime.toISOString();
-
-				// Get unique external_id
-				const externalId = `ext_${platform}_${getSeedHash(agentId + platform + publishedAtStr)}`;
-
-				// Get simulated metrics via ComposioClient.fetchPostMetrics
-				const metrics = await composio.fetchPostMetrics(agentId, platform, externalId, publishedTime);
-
-				const contentIndex = hash % templates.length;
-				const content = templates[contentIndex];
-
-				if (existingMap.has(externalId)) {
-					// Post already exists, update metrics
-					const existing = existingMap.get(externalId)!;
-					const { error: updateErr } = await db.posts.update(existing.id, {
-						analytics: {
-							views: metrics.views,
-							likes: metrics.likes,
-							comments: metrics.comments,
-							shares: metrics.shares
+			if (!isDevBypass) {
+				try {
+					if (platform === 'instagram') {
+						console.log(`[Sync Feed API] Fetching real Instagram posts for agent ${agentId}...`);
+						const res = await composio.executeAction(agentId, 'INSTAGRAM_GET_IG_USER_MEDIA', { ig_user_id: 'me' });
+						if (res && res.successful) {
+							const items = res.data?.data || res.data?.items || [];
+							fetchedPosts = items.map((item: any) => {
+								const publishedAt = item.timestamp ? new Date(item.timestamp).toISOString() : new Date().toISOString();
+								return {
+									externalId: item.id,
+									content: item.caption || '',
+									publishedAtStr: publishedAt,
+									publicationResults: {
+										permalink: item.permalink || '',
+										media_url: item.media_url || '',
+										media_type: item.media_type || ''
+									}
+								};
+							});
+						} else {
+							console.error(`[Sync Feed API] Failed to fetch real Instagram posts:`, res?.error || res);
 						}
-					});
-					if (!updateErr) syncedCount++;
-				} else {
-					// Insert new published post
-					const dateStr = publishedAtStr.split('T')[0];
-					const timeStr = publishedAtStr.split('T')[1].split('.')[0];
+					} else if (platform === 'youtube') {
+						console.log(`[Sync Feed API] Fetching real YouTube videos for agent ${agentId}...`);
+						const res = await composio.executeAction(agentId, 'YOUTUBE_LIST_CHANNEL_VIDEOS', { mine: true });
+						if (res && res.successful) {
+							const items = res.data?.items || [];
+							const videoIds = items.map((item: any) => item.snippet?.resourceId?.videoId || item.id).filter(Boolean);
+							
+							let statsMap = new Map<string, any>();
+							if (videoIds.length > 0) {
+								const statsRes = await composio.executeAction(agentId, 'YOUTUBE_GET_VIDEO_DETAILS_BATCH', { id: videoIds });
+								if (statsRes && statsRes.successful) {
+									const detailItems = statsRes.data?.items || [];
+									for (const det of detailItems) {
+										statsMap.set(det.id, det.statistics);
+									}
+								}
+							}
 
-					const { error: insertErr } = await db.posts.create({
-						user_id: user.id,
-						agent_id: agentId,
-						content,
-						platforms: [platform],
-						status: 'published',
-						scheduled_date: dateStr,
-						scheduled_time: timeStr,
-						published_at: publishedAtStr,
-						external_id: externalId,
-						analytics: {
-							views: metrics.views,
-							likes: metrics.likes,
-							comments: metrics.comments,
-							shares: metrics.shares
+							fetchedPosts = items.map((item: any) => {
+								const videoId = item.snippet?.resourceId?.videoId || item.id;
+								const title = item.snippet?.title || '';
+								const description = item.snippet?.description || '';
+								const publishedAt = item.snippet?.publishedAt ? new Date(item.snippet.publishedAt).toISOString() : new Date().toISOString();
+								const stats = statsMap.get(videoId);
+								
+								return {
+									externalId: videoId,
+									content: `${title}\n\n${description}`,
+									publishedAtStr: publishedAt,
+									publicationResults: {
+										videoId: videoId,
+										permalink: `https://www.youtube.com/watch?v=${videoId}`,
+										thumbnails: item.snippet?.thumbnails
+									},
+									preFetchedMetrics: stats ? {
+										views: parseInt(stats.viewCount, 10) || 0,
+										likes: parseInt(stats.likeCount, 10) || 0,
+										comments: parseInt(stats.commentCount, 10) || 0,
+										shares: 0,
+										estimated: false
+									} : undefined
+								};
+							});
+						} else {
+							console.error(`[Sync Feed API] Failed to fetch real YouTube videos:`, res?.error || res);
 						}
-					});
-					if (!insertErr) syncedCount++;
+					}
+				} catch (err) {
+					console.error(`[Sync Feed API] Error fetching real posts for ${platform}:`, err);
+				}
+			}
+
+			if (fetchedPosts.length === 0) {
+				console.log(`[Sync Feed API] Using simulated posts for platform ${platform}`);
+				// Generate 5 simulated feed posts per platform
+				for (let i = 0; i < 5; i++) {
+					const postSeed = `${agentId}-${platform}-${i}`;
+					const hash = getSeedHash(postSeed);
+
+					const daysAgo = i === 0 ? 1 : i === 1 ? 3 : i === 2 ? 6 : i === 3 ? 10 : 14;
+					const publishedTime = new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000 - (hash % 12) * 60 * 60 * 1000);
+					const publishedAtStr = publishedTime.toISOString();
+
+					const externalId = `ext_${platform}_${getSeedHash(agentId + platform + publishedAtStr)}`;
+					const metrics = await composio.fetchPostMetrics(agentId, platform, externalId, publishedTime);
+					const contentIndex = hash % templates.length;
+					const content = templates[contentIndex];
+
+					if (existingMap.has(externalId)) {
+						const existing = existingMap.get(externalId)!;
+						const { error: updateErr } = await db.posts.update(existing.id, {
+							analytics: {
+								views: metrics.views,
+								likes: metrics.likes,
+								comments: metrics.comments,
+								shares: metrics.shares
+							}
+						});
+						if (!updateErr) syncedCount++;
+					} else {
+						const dateStr = publishedAtStr.split('T')[0];
+						const timeStr = publishedAtStr.split('T')[1].split('.')[0];
+
+						const { error: insertErr } = await db.posts.create({
+							user_id: user.id,
+							agent_id: agentId,
+							content,
+							platforms: [platform],
+							status: 'published',
+							scheduled_date: dateStr,
+							scheduled_time: timeStr,
+							published_at: publishedAtStr,
+							external_id: externalId,
+							analytics: {
+								views: metrics.views,
+								likes: metrics.likes,
+								comments: metrics.comments,
+								shares: metrics.shares
+							}
+						});
+						if (!insertErr) syncedCount++;
+					}
+				}
+			} else {
+				console.log(`[Sync Feed API] Found ${fetchedPosts.length} real posts for platform ${platform}, writing to DB`);
+				for (const item of fetchedPosts) {
+					const { externalId, content, publishedAtStr, publicationResults } = item;
+					
+					let metrics = item.preFetchedMetrics;
+					if (!metrics) {
+						metrics = await composio.fetchPostMetrics(agentId, platform, externalId, publishedAtStr);
+					}
+
+					if (existingMap.has(externalId)) {
+						const existing = existingMap.get(externalId)!;
+						const { error: updateErr } = await db.posts.update(existing.id, {
+							analytics: {
+								views: metrics.views,
+								likes: metrics.likes,
+								comments: metrics.comments,
+								shares: metrics.shares
+							},
+							publication_results: publicationResults
+						});
+						if (!updateErr) syncedCount++;
+					} else {
+						const dateStr = publishedAtStr.split('T')[0];
+						const timeStr = publishedAtStr.split('T')[1].split('.')[0];
+
+						const { error: insertErr } = await db.posts.create({
+							user_id: user.id,
+							agent_id: agentId,
+							content,
+							platforms: [platform],
+							status: 'published',
+							scheduled_date: dateStr,
+							scheduled_time: timeStr,
+							published_at: publishedAtStr,
+							external_id: externalId,
+							analytics: {
+								views: metrics.views,
+								likes: metrics.likes,
+								comments: metrics.comments,
+								shares: metrics.shares
+							},
+							publication_results: publicationResults
+						});
+						if (!insertErr) syncedCount++;
+					}
 				}
 			}
 		}

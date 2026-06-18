@@ -361,33 +361,67 @@ export class ComposioClient {
 		// If COMPOSIO_API_KEY is configured, try querying the live integration
 		if (this.apiKey && externalId && !externalId.startsWith('ext_')) {
 			try {
-				const response = await fetch(
-					`${this.baseUrlV3_1}/tools/execute/${platform.toUpperCase()}_GET_POST_METRICS`,
-					{
-						method: 'POST',
-						headers: this.getHeaders(),
-						body: JSON.stringify({
-							user_id: personaId,
-							arguments: { post_id: externalId }
-						})
-					}
-				);
+				let response;
+				if (platform.toLowerCase() === 'instagram') {
+					response = await fetch(
+						`${this.baseUrlV3_1}/tools/execute/INSTAGRAM_GET_IG_MEDIA_INSIGHTS`,
+						{
+							method: 'POST',
+							headers: this.getHeaders(),
+							body: JSON.stringify({
+								user_id: personaId,
+								arguments: {
+									ig_media_id: externalId,
+									metric: ['views', 'likes', 'comments', 'shares']
+								}
+							})
+						}
+					);
+				} else {
+					response = await fetch(
+						`${this.baseUrlV3_1}/tools/execute/${platform.toUpperCase()}_GET_POST_METRICS`,
+						{
+							method: 'POST',
+							headers: this.getHeaders(),
+							body: JSON.stringify({
+								user_id: personaId,
+								arguments: { post_id: externalId }
+							})
+						}
+					);
+				}
 				if (response.ok) {
 					const data = (await response.json()) as any;
 					if (data && typeof data === 'object') {
 						metrics.estimated = false;
 						const resObj = data.result || data.data || data;
 						if (resObj && typeof resObj === 'object') {
-							metrics.views = Number(resObj.views || resObj.view_count || metrics.views);
-							metrics.likes = Number(
-								resObj.likes || resObj.like_count || resObj.favorite_count || metrics.likes
-							);
-							metrics.comments = Number(
-								resObj.comments || resObj.comment_count || metrics.comments
-							);
-							metrics.shares = Number(
-								resObj.shares || resObj.share_count || resObj.retweet_count || metrics.shares
-							);
+							if (platform.toLowerCase() === 'instagram') {
+								const insightsList = Array.isArray(resObj.data) ? resObj.data : (Array.isArray(resObj) ? resObj : []);
+								for (const insight of insightsList) {
+									const val = Number(insight.values?.[0]?.value) || 0;
+									if (insight.name === 'views' || insight.name === 'reach') {
+										metrics.views = val;
+									} else if (insight.name === 'likes') {
+										metrics.likes = val;
+									} else if (insight.name === 'comments') {
+										metrics.comments = val;
+									} else if (insight.name === 'shares') {
+										metrics.shares = val;
+									}
+								}
+							} else {
+								metrics.views = Number(resObj.views || resObj.view_count || metrics.views);
+								metrics.likes = Number(
+									resObj.likes || resObj.like_count || resObj.favorite_count || metrics.likes
+								);
+								metrics.comments = Number(
+									resObj.comments || resObj.comment_count || metrics.comments
+								);
+								metrics.shares = Number(
+									resObj.shares || resObj.share_count || resObj.retweet_count || metrics.shares
+								);
+							}
 						}
 					}
 				}
