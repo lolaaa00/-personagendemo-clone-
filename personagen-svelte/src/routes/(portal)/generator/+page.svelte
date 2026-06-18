@@ -77,7 +77,8 @@
 			niche: 'Beauty & Skincare',
 			market: 'Australia',
 			soul: 'Warm, empathetic, and skin-science obsessed. Tone is conversational, supportive, and educational. Speaks directly to skincare enthusiasts looking for clean, non-toxic routines.',
-			skills: 'Expert in sunscreen matching, active ingredient layering (retinols & Vitamin C), and UGC video script creation. Translates complex dermatological terms into simple tips.',
+			skills:
+				'Expert in sunscreen matching, active ingredient layering (retinols & Vitamin C), and UGC video script creation. Translates complex dermatological terms into simple tips.',
 			gradient: 0 // Violet Cyan
 		},
 		{
@@ -86,7 +87,8 @@
 			niche: 'Fitness & Health',
 			market: 'Australia',
 			soul: 'High-energy, motivational, and discipline-focused. Energetic but grounded tone. Believes in consistency over intensity.',
-			skills: 'Creates daily workout routines, macro tracking advice, and gym mindset audio scripts. Focuses on longevity and functional strength.',
+			skills:
+				'Creates daily workout routines, macro tracking advice, and gym mindset audio scripts. Focuses on longevity and functional strength.',
 			gradient: 2 // Emerald Blue
 		},
 		{
@@ -95,7 +97,8 @@
 			niche: 'Fashion & Style',
 			market: 'United States',
 			soul: 'Chic, aesthetic, and bold. Speaks with a confident, trendy, and expressive voice. Loves street fashion and sustainable wardrobes.',
-			skills: 'Styling capsules, color analysis, and visual aesthetic mapping. Guides followers to find their unique style without overspending.',
+			skills:
+				'Styling capsules, color analysis, and visual aesthetic mapping. Guides followers to find their unique style without overspending.',
 			gradient: 1 // Rose Gold
 		},
 		{
@@ -104,7 +107,8 @@
 			niche: 'Tech & Gaming',
 			market: 'Global',
 			soul: 'Witty, analytical, and futuristic. Passionate about AI, developer tools, and clean setups. Slightly sarcastic but highly helpful.',
-			skills: 'Interactive coding walkthroughs, productivity hacks for software engineers, and hardware review scripts.',
+			skills:
+				'Interactive coding walkthroughs, productivity hacks for software engineers, and hardware review scripts.',
 			gradient: 7 // Midnight
 		},
 		{
@@ -113,7 +117,8 @@
 			niche: 'Lifestyle & Wellness',
 			market: 'Australia',
 			soul: 'Calm, mindful, and holistic. Gentle, grounding, and peaceful tone. Speaks about slow living, meditation, and work-life harmony.',
-			skills: 'Mindfulness challenge creation, morning routine templates, stress management guides, and sleep hygiene scripts.',
+			skills:
+				'Mindfulness challenge creation, morning routine templates, stress management guides, and sleep hygiene scripts.',
 			gradient: 5 // Ocean
 		},
 		{
@@ -122,7 +127,8 @@
 			niche: 'Food & Cooking',
 			market: 'Australia',
 			soul: 'Enthusiastic, flavor-first, and rustic. Loud, fun, and warm tone. Passionate about local organic produce and easy-to-cook gourmet meals.',
-			skills: 'Quick 15-minute recipe scripting, meal prep blueprints, flavor pairing science, and food photography styling.',
+			skills:
+				'Quick 15-minute recipe scripting, meal prep blueprints, flavor pairing science, and food photography styling.',
 			gradient: 3 // Sunset
 		},
 		{
@@ -131,7 +137,8 @@
 			niche: 'Beauty & Skincare',
 			market: 'United Kingdom',
 			soul: 'Aesthetic, clean, and minimalist. Tone is sophisticated, soothing, and highly curated. Focuses on the glass-skin routine and barrier repair.',
-			skills: 'Dull skin revitalization hacks, product shelf-life analysis, and aesthetic ASMR video concepts.',
+			skills:
+				'Dull skin revitalization hacks, product shelf-life analysis, and aesthetic ASMR video concepts.',
 			gradient: 4 // Berry
 		},
 		{
@@ -140,7 +147,8 @@
 			niche: 'Tech & Gaming',
 			market: 'Canada',
 			soul: 'Enthusiastic gadget geek and reviewer. Friendly, detailed, and objective tone. Believes technology should simplify life.',
-			skills: 'Consumer electronics breakdown, smart home automation guides, and detailed spec comparison tables.',
+			skills:
+				'Consumer electronics breakdown, smart home automation guides, and detailed spec comparison tables.',
 			gradient: 6 // Coral
 		},
 		{
@@ -149,7 +157,8 @@
 			niche: 'Fashion & Style',
 			market: 'Australia',
 			soul: 'Eco-conscious, creative, and vintage-obsessed. Inspiring and approachable tone. Encourages second-hand shopping and upcycling.',
-			skills: 'Thrift-store scouting guides, clothing repair basics, fabric sustainability ratings, and creative styling challenges.',
+			skills:
+				'Thrift-store scouting guides, clothing repair basics, fabric sustainability ratings, and creative styling challenges.',
 			gradient: 2 // Emerald Blue
 		},
 		{
@@ -158,7 +167,8 @@
 			niche: 'Fitness & Health',
 			market: 'United States',
 			soul: 'Direct, no-nonsense strength coach. Science-based, encouraging, and authoritative tone. Believes in heavy lifting and sleep.',
-			skills: 'Strength progression programs, injury prevention guides, deadlift form analysis, and sports nutrition calculations.',
+			skills:
+				'Strength progression programs, injury prevention guides, deadlift form analysis, and sports nutrition calculations.',
 			gradient: 4 // Berry
 		},
 		{
@@ -167,7 +177,8 @@
 			niche: 'Food & Cooking',
 			market: 'Japan',
 			soul: 'Aesthetic, zen, and dessert-obsessed. Delicate, warm, and comforting tone. Focuses on plant-based Asian desserts and tea rituals.',
-			skills: 'Matcha grade guides, traditional baking adjustments, recipe scaling, and visual presentation layout.',
+			skills:
+				'Matcha grade guides, traditional baking adjustments, recipe scaling, and visual presentation layout.',
 			gradient: 5 // Ocean
 		},
 		{
@@ -176,7 +187,8 @@
 			niche: 'Lifestyle & Wellness',
 			market: 'New Zealand',
 			soul: 'Adventurous, nature-connected, and breath-focused. Outdoorsy and calm tone. Promotes forest bathing and outdoor meditation.',
-			skills: 'Breathwork guides, hiking prep checklists, cold-plunge protocol scripts, and digital detox strategies.',
+			skills:
+				'Breathwork guides, hiking prep checklists, cold-plunge protocol scripts, and digital detox strategies.',
 			gradient: 7 // Midnight
 		},
 		{
@@ -185,7 +197,8 @@
 			niche: 'Tech & Gaming',
 			market: 'Germany',
 			soul: 'Logical, structured, and open-source advocate. Pragmatic and teaching-oriented tone. Loves clean architecture and refactoring.',
-			skills: 'React performance optimization checklists, design pattern explanations, TypeScript tips, and Git workflow scripts.',
+			skills:
+				'React performance optimization checklists, design pattern explanations, TypeScript tips, and Git workflow scripts.',
 			gradient: 0 // Violet Cyan
 		},
 		{
@@ -194,7 +207,8 @@
 			niche: 'Beauty & Skincare',
 			market: 'United States',
 			soul: 'Vibrant, cheerful, and curl-proud. Enthusiastic, helpful, and community-driven tone. Dedicated to curly hair health and representation.',
-			skills: 'Hair porosity testing guides, product routine builders, curl definition hacks, and wash-day scheduling.',
+			skills:
+				'Hair porosity testing guides, product routine builders, curl definition hacks, and wash-day scheduling.',
 			gradient: 3 // Sunset
 		},
 		{
@@ -203,7 +217,8 @@
 			niche: 'Fashion & Style',
 			market: 'France',
 			soul: 'Avant-garde, tailoring-focused, and elegant. Precise, poetic, and professional tone. High appreciation for design and textiles.',
-			skills: 'Suit styling guidelines, fabric composition analysis, minimalist packing guides, and luxury brand histories.',
+			skills:
+				'Suit styling guidelines, fabric composition analysis, minimalist packing guides, and luxury brand histories.',
 			gradient: 1 // Rose Gold
 		},
 		{
@@ -212,7 +227,8 @@
 			niche: 'Fitness & Health',
 			market: 'United Kingdom',
 			soul: 'Biohacker, cellular-health enthusiast, and researcher. Analytical, curious, and experimental tone. Explores longevity and sleep tech.',
-			skills: 'Circadian rhythm alignment guides, blue-light blocking routines, supplement stacking formulas, and CGM data reading.',
+			skills:
+				'Circadian rhythm alignment guides, blue-light blocking routines, supplement stacking formulas, and CGM data reading.',
 			gradient: 6 // Coral
 		},
 		{
@@ -221,7 +237,8 @@
 			niche: 'Food & Cooking',
 			market: 'Global',
 			soul: 'Colorful, plant-forward, and joyful. Friendly, enthusiastic, and inviting tone. Believes eating healthy should be a feast of color.',
-			skills: 'Vegan substitute matrix, colorful meal prep guides, food waste reduction hacks, and spice blending recipes.',
+			skills:
+				'Vegan substitute matrix, colorful meal prep guides, food waste reduction hacks, and spice blending recipes.',
 			gradient: 1 // Rose Gold
 		},
 		{
@@ -230,7 +247,8 @@
 			niche: 'Lifestyle & Wellness',
 			market: 'Canada',
 			soul: 'Minimalist, organized, and home-decor focused. Calm, neat, and highly structured tone. Loves decluttering and aesthetic storage.',
-			skills: 'KonMari decluttering plans, functional space layouts, budget home makeover blueprints, and daily productivity routines.',
+			skills:
+				'KonMari decluttering plans, functional space layouts, budget home makeover blueprints, and daily productivity routines.',
 			gradient: 2 // Emerald Blue
 		}
 	];
@@ -251,7 +269,7 @@
 		})
 	);
 
-	function selectPersona(p: typeof RANDOM_PERSONAS[0]) {
+	function selectPersona(p: (typeof RANDOM_PERSONAS)[0]) {
 		agentName = p.name;
 		handle = p.handle;
 		niche = p.niche;
@@ -278,7 +296,9 @@
 			brief.interests,
 			brief.painPoints,
 			...(brief.traits || [])
-		].join(' ').toLowerCase();
+		]
+			.join(' ')
+			.toLowerCase();
 
 		if (/skin|beauty|makeup|cosmetic|hair|glow|cream|serum|skincare/i.test(textToSearch)) {
 			return 'Beauty & Skincare';
@@ -286,16 +306,30 @@
 		if (/fashion|style|clothing|wear|apparel|wardrobe|dress|streetwear/i.test(textToSearch)) {
 			return 'Fashion & Style';
 		}
-		if (/wellness|mindfulness|yoga|meditation|sleep|lifestyle|slow living|detox/i.test(textToSearch)) {
+		if (
+			/wellness|mindfulness|yoga|meditation|sleep|lifestyle|slow living|detox/i.test(textToSearch)
+		) {
 			return 'Lifestyle & Wellness';
 		}
-		if (/fitness|workout|gym|muscle|stamina|training|exercise|strength|biohack|coach|bodybuilder/i.test(textToSearch)) {
+		if (
+			/fitness|workout|gym|muscle|stamina|training|exercise|strength|biohack|coach|bodybuilder/i.test(
+				textToSearch
+			)
+		) {
 			return 'Fitness & Health';
 		}
-		if (/food|cooking|recipe|eat|kitchen|delicious|taste|honey|baking|meal prep|chef/i.test(textToSearch)) {
+		if (
+			/food|cooking|recipe|eat|kitchen|delicious|taste|honey|baking|meal prep|chef/i.test(
+				textToSearch
+			)
+		) {
 			return 'Food & Cooking';
 		}
-		if (/tech|gaming|software|app|digital|ai|smart|device|gadget|developer|programming|code/i.test(textToSearch)) {
+		if (
+			/tech|gaming|software|app|digital|ai|smart|device|gadget|developer|programming|code/i.test(
+				textToSearch
+			)
+		) {
 			return 'Tech & Gaming';
 		}
 		return '';
@@ -321,21 +355,27 @@
 
 				// Prefill Soul
 				const parts = [];
-				if (brief.brandName) parts.push(`You are the official brand advocate for ${brief.brandName}.`);
+				if (brief.brandName)
+					parts.push(`You are the official brand advocate for ${brief.brandName}.`);
 				if (brief.commStyle) parts.push(`Communication style: ${brief.commStyle}.`);
-				if (brief.traits && brief.traits.length > 0) parts.push(`Core traits: ${brief.traits.join(', ')}.`);
+				if (brief.traits && brief.traits.length > 0)
+					parts.push(`Core traits: ${brief.traits.join(', ')}.`);
 				if (brief.mission) parts.push(`Mission: ${brief.mission}`);
 				if (parts.length > 0) {
-					soul = parts.join(' ') + ' Always maintain an engaging, professional, and authentic voice.';
+					soul =
+						parts.join(' ') + ' Always maintain an engaging, professional, and authentic voice.';
 				} else {
-					soul = 'Official brand advocate. Always maintain an engaging, professional, and authentic voice.';
+					soul =
+						'Official brand advocate. Always maintain an engaging, professional, and authentic voice.';
 				}
 
 				// Prefill Skills
 				const skillParts = [];
 				if (brief.tagline) skillParts.push(`Key message: "${brief.tagline}".`);
 				if (brief.products && brief.products.length > 0) {
-					skillParts.push(`Promoting products: ${brief.products.map((p: any) => p.name).join(', ')}.`);
+					skillParts.push(
+						`Promoting products: ${brief.products.map((p: any) => p.name).join(', ')}.`
+					);
 				}
 				if (brief.painPoints) skillParts.push(`Solving problems like: ${brief.painPoints}.`);
 				if (skillParts.length > 0) {
@@ -346,7 +386,7 @@
 
 				// Pick a random gradient
 				selectedGradient = Math.floor(Math.random() * GRADIENT_PRESETS.length);
-				
+
 				saveProgress();
 				showToast('Prefilled generator from brand brief settings! ⚡', 'success');
 			}
@@ -506,7 +546,10 @@
 	<div class="wizard-body">
 		{#if currentStep === 1}
 			<div class="step-panel" style="animation: fadeUp 0.3s var(--ease-out);">
-				<div class="panel-header" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+				<div
+					class="panel-header"
+					style="display: flex; justify-content: space-between; align-items: center; width: 100%;"
+				>
 					<div style="display: flex; align-items: center; gap: 0.6rem;">
 						<svg
 							width="22"
@@ -525,21 +568,27 @@
 						<h2>Identity</h2>
 					</div>
 					<div class="lightning-btn-wrapper">
-						<button 
-							type="button" 
-							class="prefill-brief-btn" 
+						<button
+							type="button"
+							class="prefill-brief-btn"
 							onclick={prefillFromBrandBrief}
 							title="Prefill fields from your Brand Brief"
 						>
 							Sync Brand
 						</button>
-						<button 
-							type="button" 
-							class="lightning-btn" 
-							onclick={() => showVaultModal = true}
+						<button
+							type="button"
+							class="lightning-btn"
+							onclick={() => (showVaultModal = true)}
 							title="Generate or choose from presets"
 						>
-							<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="margin-right: 2px;">
+							<svg
+								width="14"
+								height="14"
+								viewBox="0 0 24 24"
+								fill="currentColor"
+								style="margin-right: 2px;"
+							>
 								<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
 							</svg>
 							Vault Preset
@@ -860,20 +909,41 @@
 </section>
 
 {#if showVaultModal}
-	<div class="modal-overlay" onclick={() => showVaultModal = false} role="button" tabindex="0" onkeydown={(e) => e.key === 'Escape' && (showVaultModal = false)}>
+	<div
+		class="modal-overlay"
+		onclick={() => (showVaultModal = false)}
+		role="button"
+		tabindex="0"
+		onkeydown={(e) => e.key === 'Escape' && (showVaultModal = false)}
+	>
 		<div class="modal-content glass-card" onclick={(e) => e.stopPropagation()} role="none">
 			<header class="modal-header">
 				<div class="header-left">
-					<svg width="24" height="24" viewBox="0 0 24 24" fill="var(--accent)" style="margin-top: 2px;">
+					<svg
+						width="24"
+						height="24"
+						viewBox="0 0 24 24"
+						fill="var(--accent)"
+						style="margin-top: 2px;"
+					>
 						<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
 					</svg>
 					<div>
 						<h3>Persona Vault</h3>
-						<p class="modal-subtitle">Instantly choose from our hand-crafted agent presets or roll a random one.</p>
+						<p class="modal-subtitle">
+							Instantly choose from our hand-crafted agent presets or roll a random one.
+						</p>
 					</div>
 				</div>
-				<button type="button" class="close-btn" onclick={() => showVaultModal = false}>
-					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+				<button type="button" class="close-btn" onclick={() => (showVaultModal = false)}>
+					<svg
+						width="18"
+						height="18"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2.5"
+					>
 						<line x1="18" y1="6" x2="6" y2="18"></line>
 						<line x1="6" y1="6" x2="18" y2="18"></line>
 					</svg>
@@ -882,16 +952,34 @@
 
 			<div class="modal-toolbar">
 				<div class="search-box">
-					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="color: var(--text-dim);">
+					<svg
+						width="14"
+						height="14"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2.5"
+						style="color: var(--text-dim);"
+					>
 						<circle cx="11" cy="11" r="8"></circle>
 						<line x1="21" y1="21" x2="16.65" y2="16.65"></line>
 					</svg>
 					<input type="text" placeholder="Search presets..." bind:value={vaultSearch} />
 				</div>
 				<div class="filter-tabs">
-					<button type="button" class="filter-tab" class:active={selectedVaultNiche === 'All'} onclick={() => selectedVaultNiche = 'All'}>All</button>
+					<button
+						type="button"
+						class="filter-tab"
+						class:active={selectedVaultNiche === 'All'}
+						onclick={() => (selectedVaultNiche = 'All')}>All</button
+					>
 					{#each NICHES as n}
-						<button type="button" class="filter-tab" class:active={selectedVaultNiche === n} onclick={() => selectedVaultNiche = n}>{n.split(' ')[0]}</button>
+						<button
+							type="button"
+							class="filter-tab"
+							class:active={selectedVaultNiche === n}
+							onclick={() => (selectedVaultNiche = n)}>{n.split(' ')[0]}</button
+						>
 					{/each}
 				</div>
 				<button type="button" class="randomize-btn" onclick={selectRandomFromVault}>
@@ -919,7 +1007,9 @@
 					</button>
 				{/each}
 				{#if filteredPersonas.length === 0}
-					<div style="grid-column: span 3; text-align: center; color: var(--text-dim); padding: 3rem 0;">
+					<div
+						style="grid-column: span 3; text-align: center; color: var(--text-dim); padding: 3rem 0;"
+					>
 						No presets found matching "{vaultSearch}"
 					</div>
 				{/if}
@@ -1360,7 +1450,9 @@
 		cursor: pointer;
 		font-weight: 600;
 		font-size: 0.8rem;
-		transition: transform 0.2s, box-shadow 0.2s;
+		transition:
+			transform 0.2s,
+			box-shadow 0.2s;
 	}
 
 	.lightning-btn:hover {
@@ -1380,7 +1472,9 @@
 		cursor: pointer;
 		font-weight: 600;
 		font-size: 0.8rem;
-		transition: border-color 0.2s, color 0.2s;
+		transition:
+			border-color 0.2s,
+			color 0.2s;
 	}
 
 	.prefill-brief-btn:hover {
@@ -1513,7 +1607,9 @@
 		cursor: pointer;
 		border-radius: var(--radius-xs);
 		color: var(--text-muted);
-		transition: background 0.2s, color 0.2s;
+		transition:
+			background 0.2s,
+			color 0.2s;
 		white-space: nowrap;
 	}
 
@@ -1535,7 +1631,9 @@
 		font-weight: 600;
 		font-size: 0.8rem;
 		cursor: pointer;
-		transition: background 0.2s, color 0.2s;
+		transition:
+			background 0.2s,
+			color 0.2s;
 	}
 
 	.randomize-btn:hover {
@@ -1561,7 +1659,10 @@
 		display: flex;
 		gap: 0.75rem;
 		cursor: pointer;
-		transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
+		transition:
+			transform 0.2s,
+			border-color 0.2s,
+			box-shadow 0.2s;
 		text-align: left;
 		width: 100%;
 	}

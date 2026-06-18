@@ -7,4 +7,6 @@
 	});
 </script>
 
-<p style="padding: 2rem; color: var(--text-muted); font-family: var(--font-body);">Redirecting to Social Scout...</p>
+<p style="padding: 2rem; color: var(--text-muted); font-family: var(--font-body);">
+	Redirecting to Social Scout...
+</p>

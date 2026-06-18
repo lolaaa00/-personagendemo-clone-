@@ -217,13 +217,7 @@
 
 				<div class="signup-field">
 					<label for="pin">Admin PIN (Optional)</label>
-					<Input
-						id="pin"
-						type="password"
-						bind:value={pin}
-						placeholder="••••"
-						autocomplete="off"
-					/>
+					<Input id="pin" type="password" bind:value={pin} placeholder="••••" autocomplete="off" />
 				</div>
 
 				<Button

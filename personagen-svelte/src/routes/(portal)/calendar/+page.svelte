@@ -6,7 +6,6 @@
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 
-
 	interface ScheduledPost {
 		id: string;
 		agentId: string;
@@ -192,7 +191,7 @@
 	function handleBlueprintSelect(e: Event) {
 		const target = e.target as HTMLSelectElement;
 		selectedBlueprintId = target.value || '';
-		
+
 		if (selectedBlueprintId) {
 			const bp = allBlueprints.find((b: SampleBlueprint) => b.id === selectedBlueprintId);
 			if (bp && bp.platform) {
@@ -230,7 +229,7 @@
 		const activePlatforms = Object.entries(composerPlatforms)
 			.filter(([, v]) => v)
 			.map(([k]) => k);
-		
+
 		const platforms = activePlatforms.length > 0 ? activePlatforms : ['instagram'];
 
 		try {
@@ -262,7 +261,7 @@
 		const prodName = product?.name || 'HoneyX Manly Plus';
 		const prodPrice = product?.price || 'Rs. 2,450';
 		const prodDesc = product?.description || "Nature's premium superfood for energy.";
-		
+
 		return `🔥 ${topicText}\n\nIntroducing: ${prodName} (${prodPrice})!\n\n1️⃣ **Organic Vitality Power**: Unlocking natural daily drive.\n2️⃣ **Potent Herbal Active**: Sustainable energy with zero crash.\n\n${prodDesc}\n\nDrop a comment to grab exclusive early access 👇`;
 	}
 
@@ -286,7 +285,9 @@
 	}
 
 	let currentComposerAgent = $derived(data.agents.find((a: any) => a.id === composerAgentId));
-	let composerAgentPlatforms = $derived(currentComposerAgent?.connected_platforms || ['instagram', 'youtube']);
+	let composerAgentPlatforms = $derived(
+		currentComposerAgent?.connected_platforms || ['instagram', 'youtube']
+	);
 
 	function resetPlatforms() {
 		composerPlatforms = {
@@ -816,7 +817,12 @@
 	<!-- Composer overlay -->
 	{#if showComposer}
 		<div class="composer-overlay" onclick={closeComposer} role="presentation">
-			<div class="composer" onclick={(e) => e.stopPropagation()} role="dialog" style="max-width: 600px;">
+			<div
+				class="composer"
+				onclick={(e) => e.stopPropagation()}
+				role="dialog"
+				style="max-width: 600px;"
+			>
 				<div class="composer-header">
 					<h3>Schedule New Post</h3>
 					<button class="panel-close" onclick={closeComposer}>
@@ -833,10 +839,17 @@
 					</button>
 				</div>
 
-				<div class="composer-body" style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem; max-height: 70vh; overflow-y: auto;">
+				<div
+					class="composer-body"
+					style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem; max-height: 70vh; overflow-y: auto;"
+				>
 					<!-- Target Agent -->
 					<div class="field" style="display: flex; flex-direction: column; gap: 0.25rem;">
-						<label for="comp-agent" style="font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; color: var(--text-dim);">Target Agent</label>
+						<label
+							for="comp-agent"
+							style="font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; color: var(--text-dim);"
+							>Target Agent</label
+						>
 						<select
 							id="comp-agent"
 							bind:value={composerAgentId}
@@ -850,13 +863,22 @@
 					</div>
 
 					<!-- Optional Content Forge section -->
-					<div class="forge-collapsible glass-card" style="border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 1rem; display: flex; flex-direction: column; gap: 0.75rem; background: var(--surface-2);">
-						<h4 style="margin: 0; font-size: var(--text-xs); text-transform: uppercase; letter-spacing: var(--tracking-wider); color: var(--accent);">
+					<div
+						class="forge-collapsible glass-card"
+						style="border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 1rem; display: flex; flex-direction: column; gap: 0.75rem; background: var(--surface-2);"
+					>
+						<h4
+							style="margin: 0; font-size: var(--text-xs); text-transform: uppercase; letter-spacing: var(--tracking-wider); color: var(--accent);"
+						>
 							✨ Optional: Forge with Competitor Blueprint
 						</h4>
-						
+
 						<div class="field" style="display: flex; flex-direction: column; gap: 0.25rem;">
-							<label for="comp-blueprint" style="font-size: 0.65rem; font-weight: 700; color: var(--text-muted);">Select Blueprint</label>
+							<label
+								for="comp-blueprint"
+								style="font-size: 0.65rem; font-weight: 700; color: var(--text-muted);"
+								>Select Blueprint</label
+							>
 							<select
 								id="comp-blueprint"
 								value={selectedBlueprintId}
@@ -872,7 +894,11 @@
 
 						{#if selectedBlueprintId}
 							<div class="field" style="display: flex; flex-direction: column; gap: 0.25rem;">
-								<label for="comp-topic" style="font-size: 0.65rem; font-weight: 700; color: var(--text-muted);">Topic / Prompt</label>
+								<label
+									for="comp-topic"
+									style="font-size: 0.65rem; font-weight: 700; color: var(--text-muted);"
+									>Topic / Prompt</label
+								>
 								<input
 									id="comp-topic"
 									type="text"
@@ -883,7 +909,11 @@
 							</div>
 
 							<div class="field" style="display: flex; flex-direction: column; gap: 0.25rem;">
-								<label for="comp-product" style="font-size: 0.65rem; font-weight: 700; color: var(--text-muted);">Focus Product</label>
+								<label
+									for="comp-product"
+									style="font-size: 0.65rem; font-weight: 700; color: var(--text-muted);"
+									>Focus Product</label
+								>
 								<select
 									id="comp-product"
 									bind:value={forgeProductId}
@@ -904,7 +934,10 @@
 								style="background: var(--gradient-subtle); color: #fff; border: none; padding: 0.45rem; font-size: var(--text-xs); font-weight: 700; border-radius: var(--radius-xs); cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.5rem; margin-top: 0.25rem;"
 							>
 								{#if forging}
-									<span class="spinner" style="width: 12px; height: 12px; border: 2px solid rgba(255,255,255,0.3); border-top-color:#fff; border-radius:50%; animation: spin 0.6s linear infinite;"></span> Forging...
+									<span
+										class="spinner"
+										style="width: 12px; height: 12px; border: 2px solid rgba(255,255,255,0.3); border-top-color:#fff; border-radius:50%; animation: spin 0.6s linear infinite;"
+									></span> Forging...
 								{:else}
 									✨ Forge Copy
 								{/if}
@@ -914,7 +947,11 @@
 
 					<!-- Content & Copy -->
 					<div class="field" style="display: flex; flex-direction: column; gap: 0.25rem;">
-						<label for="comp-text" style="font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; color: var(--text-dim);">Content & Copy</label>
+						<label
+							for="comp-text"
+							style="font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; color: var(--text-dim);"
+							>Content & Copy</label
+						>
 						<textarea
 							id="comp-text"
 							bind:value={composerText}
@@ -926,11 +963,20 @@
 
 					<!-- Target Platforms -->
 					<div class="field" style="display: flex; flex-direction: column; gap: 0.25rem;">
-						<label style="font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; color: var(--text-dim);">Target Platforms</label>
-						<div class="platform-checkboxes" style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.25rem;">
+						<label
+							style="font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; color: var(--text-dim);"
+							>Target Platforms</label
+						>
+						<div
+							class="platform-checkboxes"
+							style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.25rem;"
+						>
 							{#each composerAgentPlatforms as key}
 								{@const color = PLATFORM_COLORS[key] || 'var(--accent)'}
-								<label class="platform-checkbox" style="--p-color: {color}; display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.35rem 0.65rem; border: 1px solid var(--border); border-radius: var(--radius-xs); background: var(--surface-2); cursor: pointer; font-size: var(--text-xs); font-weight: 600;">
+								<label
+									class="platform-checkbox"
+									style="--p-color: {color}; display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.35rem 0.65rem; border: 1px solid var(--border); border-radius: var(--radius-xs); background: var(--surface-2); cursor: pointer; font-size: var(--text-xs); font-weight: 600;"
+								>
 									<input type="checkbox" bind:checked={composerPlatforms[key]} />
 									<span class="checkbox-label" style="text-transform: capitalize;">{key}</span>
 								</label>
@@ -941,7 +987,11 @@
 					<!-- Schedule Date & Time -->
 					<div class="field-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
 						<div class="field" style="display: flex; flex-direction: column; gap: 0.25rem;">
-							<label for="comp-date" style="font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; color: var(--text-dim);">Schedule Date</label>
+							<label
+								for="comp-date"
+								style="font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; color: var(--text-dim);"
+								>Schedule Date</label
+							>
 							<input
 								id="comp-date"
 								type="date"
@@ -950,7 +1000,11 @@
 							/>
 						</div>
 						<div class="field" style="display: flex; flex-direction: column; gap: 0.25rem;">
-							<label for="comp-time" style="font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; color: var(--text-dim);">Schedule Time</label>
+							<label
+								for="comp-time"
+								style="font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; color: var(--text-dim);"
+								>Schedule Time</label
+							>
 							<input
 								id="comp-time"
 								type="time"
@@ -961,7 +1015,10 @@
 					</div>
 				</div>
 
-				<div class="composer-footer" style="padding: 1rem 1.5rem; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 0.75rem; background: var(--surface-2);">
+				<div
+					class="composer-footer"
+					style="padding: 1rem 1.5rem; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 0.75rem; background: var(--surface-2);"
+				>
 					<button class="btn-ghost btn-sm" onclick={closeComposer}>Cancel</button>
 					<button class="btn-primary btn-sm" onclick={schedulePost} disabled={composerSubmitting}>
 						{#if composerSubmitting}

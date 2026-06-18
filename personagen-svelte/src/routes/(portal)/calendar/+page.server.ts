@@ -24,7 +24,11 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 				niche: bp.channel_url || 'Competitor Analysis',
 				score: bp.score || 85,
 				date: new Date(bp.created_at).toLocaleDateString(),
-				layers: Array.isArray(bp.layers) ? bp.layers.length : (bp.layers ? Object.keys(bp.layers).length : 9)
+				layers: Array.isArray(bp.layers)
+					? bp.layers.length
+					: bp.layers
+						? Object.keys(bp.layers).length
+						: 9
 			}));
 		}
 
@@ -38,8 +42,8 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 
 			const creators = dbAgents.filter((a) => !a.is_overseer);
 			agents = creators.map((a) => {
-				const agentConns = dbConnections?.filter(c => c.agent_id === a.id) || [];
-				const connectedPlatforms = agentConns.map(c => c.platform);
+				const agentConns = dbConnections?.filter((c) => c.agent_id === a.id) || [];
+				const connectedPlatforms = agentConns.map((c) => c.platform);
 				return {
 					...a,
 					niche: (a.niche || '').split(' & ')[0] || a.niche,

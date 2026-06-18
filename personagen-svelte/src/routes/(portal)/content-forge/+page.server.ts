@@ -35,14 +35,15 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 
 			const creators = dbAgents.filter((a) => !a.is_overseer);
 			agents = creators.map((a) => {
-				const agentConns = dbConnections?.filter(c => c.agent_id === a.id) || [];
-				const connectedPlatforms = agentConns.map(c => c.platform);
+				const agentConns = dbConnections?.filter((c) => c.agent_id === a.id) || [];
+				const connectedPlatforms = agentConns.map((c) => c.platform);
 				return {
 					...a,
 					niche: (a.niche || '').split(' & ')[0] || a.niche,
 					engagement_rate: parseFloat(a.engagement_rate as any) || 0,
 					active: a.status === 'active',
-					connected_platforms: connectedPlatforms.length > 0 ? connectedPlatforms : ['instagram', 'youtube']
+					connected_platforms:
+						connectedPlatforms.length > 0 ? connectedPlatforms : ['instagram', 'youtube']
 				};
 			});
 		}

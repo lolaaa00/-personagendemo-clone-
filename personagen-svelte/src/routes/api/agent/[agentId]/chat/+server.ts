@@ -289,9 +289,9 @@ Conduct a 9-layer scorecard audit (1-100 score, Hook structures, Visual DNA, Rhy
 						.from('agents')
 						.select('id, handle')
 						.eq('user_id', userId);
-					
-					const found = allAgents?.find((a: any) => 
-						a.handle.replace(/^@/, '').trim().toLowerCase() === handleClean
+
+					const found = allAgents?.find(
+						(a: any) => a.handle.replace(/^@/, '').trim().toLowerCase() === handleClean
 					);
 					if (found) {
 						targetId = found.id;
@@ -709,19 +709,32 @@ Always stay in character. If you execute a tool, explain the outcome in characte
 
 			localTools.push({
 				name: 'update_agent_config',
-				description: "Update an existing creator agent's profile configuration, niche, soul/personality, or handle.",
+				description:
+					"Update an existing creator agent's profile configuration, niche, soul/personality, or handle.",
 				parameters: {
 					type: 'OBJECT',
 					properties: {
-						targetAgentId: { type: 'STRING', description: 'The UUID of the target agent to update (optional if targetHandle is provided).' },
-						targetHandle: { type: 'STRING', description: 'The social handle of the target agent, e.g. "rationocode" (optional if targetAgentId is provided).' },
+						targetAgentId: {
+							type: 'STRING',
+							description:
+								'The UUID of the target agent to update (optional if targetHandle is provided).'
+						},
+						targetHandle: {
+							type: 'STRING',
+							description:
+								'The social handle of the target agent, e.g. "rationocode" (optional if targetAgentId is provided).'
+						},
 						name: { type: 'STRING', description: 'New name for the creator agent.' },
 						handle: { type: 'STRING', description: 'New social handle for the creator agent.' },
 						niche: { type: 'STRING', description: 'New content niche, e.g. "Fitness & Wellness".' },
 						soul: { type: 'STRING', description: 'New soul / personality profile of the agent.' },
 						skills: { type: 'STRING', description: 'New skills / competencies list.' },
 						tools: { type: 'STRING', description: 'New tools list.' },
-						status: { type: 'STRING', enum: ['active', 'paused', 'pending'], description: 'New status for the agent.' }
+						status: {
+							type: 'STRING',
+							enum: ['active', 'paused', 'pending'],
+							description: 'New status for the agent.'
+						}
 					}
 				}
 			});

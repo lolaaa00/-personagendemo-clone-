@@ -8,54 +8,54 @@ import { env } from '$env/dynamic/private';
 const NICHE_TEMPLATES: Record<string, string[]> = {
 	beauty: [
 		"Get ready with me using my favorite skincare routine! ✨🧴 What's your go-to product? #skincare #makeup #grwm #beauty",
-		"This simple glowy makeup look takes less than 10 minutes. Here is how I did it! 💄✨ #makeuptutorial #glowyskin #easymakeup",
-		"Reviewing the top viral beauty products of the month. Are they actually worth the hype? 🤔💋 #beautyreview #viralskincare #makeupreview",
-		"Sharing 3 skincare habits that completely changed my skin texture. Consistency is key! 🧴💧 #skincaretips #healthyhabits #skinbarrier",
-		"An aesthetic routine reset for the week. Time to pamper yourself! 🧖‍♀️💅 #selfcareday #beautyroutine #asmrbeauty"
+		'This simple glowy makeup look takes less than 10 minutes. Here is how I did it! 💄✨ #makeuptutorial #glowyskin #easymakeup',
+		'Reviewing the top viral beauty products of the month. Are they actually worth the hype? 🤔💋 #beautyreview #viralskincare #makeupreview',
+		'Sharing 3 skincare habits that completely changed my skin texture. Consistency is key! 🧴💧 #skincaretips #healthyhabits #skinbarrier',
+		'An aesthetic routine reset for the week. Time to pamper yourself! 🧖‍♀️💅 #selfcareday #beautyroutine #asmrbeauty'
 	],
 	fashion: [
-		"Styling this monochrome look for summer. Let me know what you think of the color palette! 👗👠 #outfitinspo #fashiontrends #ootd",
-		"5 wardrobe essentials you need for a capsule wardrobe this season. Simple is classy! 👔🧥 #capsulewardrobe #stylebasics #fashiontips",
-		"Transitioning this dress from day to night style. Which look is your favorite? ☀️🌙 #outfitstyling #daytonight #fashioninspo",
+		'Styling this monochrome look for summer. Let me know what you think of the color palette! 👗👠 #outfitinspo #fashiontrends #ootd',
+		'5 wardrobe essentials you need for a capsule wardrobe this season. Simple is classy! 👔🧥 #capsulewardrobe #stylebasics #fashiontips',
+		'Transitioning this dress from day to night style. Which look is your favorite? ☀️🌙 #outfitstyling #daytonight #fashioninspo',
 		"Thrift store haul! Found these amazing vintage pieces today. Can't wait to style them! 🛍️✨ #thriftfinds #vintagefashion #sustainablestyle",
-		"My go-to comfy but put-together outfit for running errands. 👟🕶️ #streetstyle #comfychic #errandsoutfit"
+		'My go-to comfy but put-together outfit for running errands. 👟🕶️ #streetstyle #comfychic #errandsoutfit'
 	],
 	fitness: [
-		"Fueling my body with a quick high-protein snack post-workout. Keep grinding! 💪🥗 #fitnessgoals #healthylifestyle #workout",
-		"Try this 15-minute full body burner workout. Save this for your next gym session! 🔥🏋️‍♂️ #gymmotivation #fullbodyworkout #fitnessinspo",
-		"Consistency over intensity. Show up for yourself even when motivation is low! 🙌👟 #mindsetshift #fitnessjourney #dailyroutine",
-		"3 mobility exercises to relieve lower back tightness after sitting all day. 🧘‍♂️✨ #stretchingtips #mobilitywork #fitnesscoach",
+		'Fueling my body with a quick high-protein snack post-workout. Keep grinding! 💪🥗 #fitnessgoals #healthylifestyle #workout',
+		'Try this 15-minute full body burner workout. Save this for your next gym session! 🔥🏋️‍♂️ #gymmotivation #fullbodyworkout #fitnessinspo',
+		'Consistency over intensity. Show up for yourself even when motivation is low! 🙌👟 #mindsetshift #fitnessjourney #dailyroutine',
+		'3 mobility exercises to relieve lower back tightness after sitting all day. 🧘‍♂️✨ #stretchingtips #mobilitywork #fitnesscoach',
 		"Pre-workout hydration and fuel routine. Let's crush this upper body session! 🥤💪 #workoutprep #gymsession #healthyhabits"
 	],
 	tech: [
-		"Reviewing the latest updates on this smart device. Is it worth the upgrade? 📱💻 #techreview #gadgetlife #tech #innovation",
-		"My minimal desk setup for maximum productivity. Clean desk, clear mind! ⌨️🖱️ #desksetup #developerlife #minimalism",
-		"3 useful software shortcuts that will save you hours of work every week. 💻🚀 #productivitytips #techhack #lifehacks",
-		"Exploring the future of AI tools and how they are changing creative workflows. 🤖✨ #aitrends #futureofwork #techtrends",
-		"Unboxing the latest noise-canceling headphones. The sound isolation is unreal! 🎧📦 #unboxing #audiophile #gadgets"
+		'Reviewing the latest updates on this smart device. Is it worth the upgrade? 📱💻 #techreview #gadgetlife #tech #innovation',
+		'My minimal desk setup for maximum productivity. Clean desk, clear mind! ⌨️🖱️ #desksetup #developerlife #minimalism',
+		'3 useful software shortcuts that will save you hours of work every week. 💻🚀 #productivitytips #techhack #lifehacks',
+		'Exploring the future of AI tools and how they are changing creative workflows. 🤖✨ #aitrends #futureofwork #techtrends',
+		'Unboxing the latest noise-canceling headphones. The sound isolation is unreal! 🎧📦 #unboxing #audiophile #gadgets'
 	],
 	food: [
 		"Sharing this simple 15-minute pasta recipe. It's incredibly creamy and delicious! 🍝🧑‍🍳 #cookingathome #easyrecipes #foodie",
-		"My favorite healthy breakfast bowl to start the morning right. So colorful! 🥣🍓 #breakfastinspo #healthyrecipes #foodblogger",
-		"Testing this viral dessert recipe. It only needs 3 ingredients and tastes like heaven! 🍨✨ #easydesserts #sweettooth #foodielife",
-		"Meal prep Sunday! Here are the 4 lunch boxes I prepared for the week. 🍱🥦 #mealpreptips #healthyfood #savingmoney",
-		"Exploring the local food market and trying some of the best street food. 🌮🍢 #streetfood #foodtravel #localflavors"
+		'My favorite healthy breakfast bowl to start the morning right. So colorful! 🥣🍓 #breakfastinspo #healthyrecipes #foodblogger',
+		'Testing this viral dessert recipe. It only needs 3 ingredients and tastes like heaven! 🍨✨ #easydesserts #sweettooth #foodielife',
+		'Meal prep Sunday! Here are the 4 lunch boxes I prepared for the week. 🍱🥦 #mealpreptips #healthyfood #savingmoney',
+		'Exploring the local food market and trying some of the best street food. 🌮🍢 #streetfood #foodtravel #localflavors'
 	],
 	lifestyle: [
-		"Explored this beautiful hidden gem today. Wanderlust is real! ✈️🗺️ #traveldiaries #lifestyledesign #aesthetic",
-		"5 morning habits that set me up for a productive and stress-free day. ☕🌅 #morningroutine #productivity #wellness",
-		"A little Sunday reset vlog: cleaning, organizing, and preparing for the week. 🧹🧺 #sundayreset #cleanwithme #organization",
-		"Books that completely changed how I think about time and productivity. 📚✨ #bookrecommendations #mustread #personalgrowth",
-		"Creating a cozy evening routine to wind down after a long day of work. 🕯️📖 #slowliving #nightroutine #cozyvibes"
+		'Explored this beautiful hidden gem today. Wanderlust is real! ✈️🗺️ #traveldiaries #lifestyledesign #aesthetic',
+		'5 morning habits that set me up for a productive and stress-free day. ☕🌅 #morningroutine #productivity #wellness',
+		'A little Sunday reset vlog: cleaning, organizing, and preparing for the week. 🧹🧺 #sundayreset #cleanwithme #organization',
+		'Books that completely changed how I think about time and productivity. 📚✨ #bookrecommendations #mustread #personalgrowth',
+		'Creating a cozy evening routine to wind down after a long day of work. 🕯️📖 #slowliving #nightroutine #cozyvibes'
 	]
 };
 
 const DEFAULT_TEMPLATES = [
-	"Sharing some weekly inspiration! Hope you all have an amazing day ahead. 🌟🙌 #mindset #motivation #daily",
-	"Reflecting on a few lessons learned this week. Progress is better than perfection! 📈✨ #inspiration #growth",
+	'Sharing some weekly inspiration! Hope you all have an amazing day ahead. 🌟🙌 #mindset #motivation #daily',
+	'Reflecting on a few lessons learned this week. Progress is better than perfection! 📈✨ #inspiration #growth',
 	"A quick snapshot of today's highlights. Grateful for the little things. 📸🤍 #lifestyle #dailyvlog",
-	"What are you working on today? Let me know in the comments! 👇💬 #community #questionoftheday",
-	"Taking a moment to pause, breathe, and reset. Happy weekend! 🍃🧘‍♂️ #weekendvibes #mindfulness"
+	'What are you working on today? Let me know in the comments! 👇💬 #community #questionoftheday',
+	'Taking a moment to pause, breathe, and reset. Happy weekend! 🍃🧘‍♂️ #weekendvibes #mindfulness'
 ];
 
 function getSeedHash(str: string): number {
@@ -118,37 +118,99 @@ export const POST: RequestHandler = async ({ params, locals }) => {
 
 		if (existingErr) throw existingErr;
 
-		const existingMap = new Map<string, { id: string; analytics: any }>();
+		const existingMap = new Map<
+			string,
+			{
+				id: string;
+				analytics: { views: number; likes: number; comments: number; shares: number } | null;
+			}
+		>();
 		if (existingPosts) {
 			for (const p of existingPosts) {
 				if (p.external_id) {
-					existingMap.set(p.external_id, { id: p.id, analytics: p.analytics });
+					existingMap.set(p.external_id, {
+						id: p.id,
+						analytics: p.analytics as {
+							views: number;
+							likes: number;
+							comments: number;
+							shares: number;
+						} | null
+					});
 				}
 			}
 		}
 
 		const composioKey = env.COMPOSIO_API_KEY || '';
-		const isUuid = (id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
+		const isUuid = (id: string) =>
+			/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
 		const isDevBypass =
 			!isUuid(agentId) ||
 			!composioKey ||
 			composioKey.includes('placeholder') ||
 			composioKey.includes('change_me');
 
+		interface InstagramMediaItem {
+			id: string;
+			caption?: string;
+			timestamp?: string;
+			permalink?: string;
+			media_url?: string;
+			media_type?: string;
+		}
+
+		interface YouTubePlaylistItem {
+			id: string;
+			snippet?: {
+				title?: string;
+				description?: string;
+				publishedAt?: string;
+				resourceId?: {
+					videoId?: string;
+				};
+				thumbnails?: Record<string, unknown>;
+			};
+		}
+
+		interface YouTubeVideoDetail {
+			id: string;
+			statistics?: {
+				viewCount?: string;
+				likeCount?: string;
+				commentCount?: string;
+			};
+		}
+
 		// Loop through active connections to sync posts
 		for (const conn of activeConns) {
 			const platform = conn.platform;
-			let fetchedPosts: { externalId: string; content: string; publishedAtStr: string; publicationResults?: any; preFetchedMetrics?: any }[] = [];
+			let fetchedPosts: {
+				externalId: string;
+				content: string;
+				publishedAtStr: string;
+				publicationResults?: Record<string, unknown>;
+				preFetchedMetrics?: {
+					views: number;
+					likes: number;
+					comments: number;
+					shares: number;
+					estimated: boolean;
+				};
+			}[] = [];
 
 			if (!isDevBypass) {
 				try {
 					if (platform === 'instagram') {
 						console.log(`[Sync Feed API] Fetching real Instagram posts for agent ${agentId}...`);
-						const res = await composio.executeAction(agentId, 'INSTAGRAM_GET_IG_USER_MEDIA', { ig_user_id: 'me' });
+						const res = await composio.executeAction(agentId, 'INSTAGRAM_GET_IG_USER_MEDIA', {
+							ig_user_id: 'me'
+						});
 						if (res && res.successful) {
-							const items = res.data?.data || res.data?.items || [];
-							fetchedPosts = items.map((item: any) => {
-								const publishedAt = item.timestamp ? new Date(item.timestamp).toISOString() : new Date().toISOString();
+							const items = (res.data?.data || res.data?.items || []) as InstagramMediaItem[];
+							fetchedPosts = items.map((item) => {
+								const publishedAt = item.timestamp
+									? new Date(item.timestamp).toISOString()
+									: new Date().toISOString();
 								return {
 									externalId: item.id,
 									content: item.caption || '',
@@ -161,33 +223,51 @@ export const POST: RequestHandler = async ({ params, locals }) => {
 								};
 							});
 						} else {
-							console.error(`[Sync Feed API] Failed to fetch real Instagram posts:`, res?.error || res);
+							console.error(
+								`[Sync Feed API] Failed to fetch real Instagram posts:`,
+								res?.error || res
+							);
 						}
 					} else if (platform === 'youtube') {
 						console.log(`[Sync Feed API] Fetching real YouTube videos for agent ${agentId}...`);
-						const res = await composio.executeAction(agentId, 'YOUTUBE_LIST_CHANNEL_VIDEOS', { mine: true });
+						const res = await composio.executeAction(agentId, 'YOUTUBE_LIST_CHANNEL_VIDEOS', {
+							mine: true
+						});
 						if (res && res.successful) {
-							const items = res.data?.items || [];
-							const videoIds = items.map((item: any) => item.snippet?.resourceId?.videoId || item.id).filter(Boolean);
-							
-							let statsMap = new Map<string, any>();
+							const items = (res.data?.items || []) as YouTubePlaylistItem[];
+							const videoIds = items
+								.map((item) => item.snippet?.resourceId?.videoId || item.id)
+								.filter(Boolean);
+
+							const statsMap = new Map<
+								string,
+								{ viewCount?: string; likeCount?: string; commentCount?: string }
+							>();
 							if (videoIds.length > 0) {
-								const statsRes = await composio.executeAction(agentId, 'YOUTUBE_GET_VIDEO_DETAILS_BATCH', { id: videoIds });
+								const statsRes = await composio.executeAction(
+									agentId,
+									'YOUTUBE_GET_VIDEO_DETAILS_BATCH',
+									{ id: videoIds }
+								);
 								if (statsRes && statsRes.successful) {
-									const detailItems = statsRes.data?.items || [];
+									const detailItems = (statsRes.data?.items || []) as YouTubeVideoDetail[];
 									for (const det of detailItems) {
-										statsMap.set(det.id, det.statistics);
+										if (det.id && det.statistics) {
+											statsMap.set(det.id, det.statistics);
+										}
 									}
 								}
 							}
 
-							fetchedPosts = items.map((item: any) => {
+							fetchedPosts = items.map((item) => {
 								const videoId = item.snippet?.resourceId?.videoId || item.id;
 								const title = item.snippet?.title || '';
 								const description = item.snippet?.description || '';
-								const publishedAt = item.snippet?.publishedAt ? new Date(item.snippet.publishedAt).toISOString() : new Date().toISOString();
+								const publishedAt = item.snippet?.publishedAt
+									? new Date(item.snippet.publishedAt).toISOString()
+									: new Date().toISOString();
 								const stats = statsMap.get(videoId);
-								
+
 								return {
 									externalId: videoId,
 									content: `${title}\n\n${description}`,
@@ -195,19 +275,24 @@ export const POST: RequestHandler = async ({ params, locals }) => {
 									publicationResults: {
 										videoId: videoId,
 										permalink: `https://www.youtube.com/watch?v=${videoId}`,
-										thumbnails: item.snippet?.thumbnails
+										thumbnails: item.snippet?.thumbnails as Record<string, unknown>
 									},
-									preFetchedMetrics: stats ? {
-										views: parseInt(stats.viewCount, 10) || 0,
-										likes: parseInt(stats.likeCount, 10) || 0,
-										comments: parseInt(stats.commentCount, 10) || 0,
-										shares: 0,
-										estimated: false
-									} : undefined
+									preFetchedMetrics: stats
+										? {
+												views: parseInt(stats.viewCount || '0', 10) || 0,
+												likes: parseInt(stats.likeCount || '0', 10) || 0,
+												comments: parseInt(stats.commentCount || '0', 10) || 0,
+												shares: 0,
+												estimated: false
+											}
+										: undefined
 								};
 							});
 						} else {
-							console.error(`[Sync Feed API] Failed to fetch real YouTube videos:`, res?.error || res);
+							console.error(
+								`[Sync Feed API] Failed to fetch real YouTube videos:`,
+								res?.error || res
+							);
 						}
 					}
 				} catch (err) {
@@ -223,11 +308,18 @@ export const POST: RequestHandler = async ({ params, locals }) => {
 					const hash = getSeedHash(postSeed);
 
 					const daysAgo = i === 0 ? 1 : i === 1 ? 3 : i === 2 ? 6 : i === 3 ? 10 : 14;
-					const publishedTime = new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000 - (hash % 12) * 60 * 60 * 1000);
+					const publishedTime = new Date(
+						Date.now() - daysAgo * 24 * 60 * 60 * 1000 - (hash % 12) * 60 * 60 * 1000
+					);
 					const publishedAtStr = publishedTime.toISOString();
 
 					const externalId = `ext_${platform}_${getSeedHash(agentId + platform + publishedAtStr)}`;
-					const metrics = await composio.fetchPostMetrics(agentId, platform, externalId, publishedTime);
+					const metrics = await composio.fetchPostMetrics(
+						agentId,
+						platform,
+						externalId,
+						publishedTime
+					);
 					const contentIndex = hash % templates.length;
 					const content = templates[contentIndex];
 
@@ -267,13 +359,20 @@ export const POST: RequestHandler = async ({ params, locals }) => {
 					}
 				}
 			} else {
-				console.log(`[Sync Feed API] Found ${fetchedPosts.length} real posts for platform ${platform}, writing to DB`);
+				console.log(
+					`[Sync Feed API] Found ${fetchedPosts.length} real posts for platform ${platform}, writing to DB`
+				);
 				for (const item of fetchedPosts) {
 					const { externalId, content, publishedAtStr, publicationResults } = item;
-					
+
 					let metrics = item.preFetchedMetrics;
 					if (!metrics) {
-						metrics = await composio.fetchPostMetrics(agentId, platform, externalId, publishedAtStr);
+						metrics = await composio.fetchPostMetrics(
+							agentId,
+							platform,
+							externalId,
+							publishedAtStr
+						);
 					}
 
 					if (existingMap.has(externalId)) {

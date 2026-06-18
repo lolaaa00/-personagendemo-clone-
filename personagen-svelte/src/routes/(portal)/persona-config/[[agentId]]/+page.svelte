@@ -19,7 +19,15 @@
 
 	let selectedAgentId = $state<string | null>(null);
 	let activeTab = $state<
-		'accounts' | 'soul' | 'skills' | 'tools' | 'heartbeat' | 'autonomy' | 'rss' | 'settings' | 'feed'
+		| 'accounts'
+		| 'soul'
+		| 'skills'
+		| 'tools'
+		| 'heartbeat'
+		| 'autonomy'
+		| 'rss'
+		| 'settings'
+		| 'feed'
 	>('accounts');
 
 	// Agent identity settings state
@@ -284,8 +292,13 @@
 			});
 			const result = await res.json();
 			if (result.success) {
-				feedPosts = (result.data || []).filter((p: any) => p.status === 'published')
-					.sort((a: any, b: any) => new Date(b.published_at || b.created_at).getTime() - new Date(a.published_at || a.created_at).getTime());
+				feedPosts = (result.data || [])
+					.filter((p: any) => p.status === 'published')
+					.sort(
+						(a: any, b: any) =>
+							new Date(b.published_at || b.created_at).getTime() -
+							new Date(a.published_at || a.created_at).getTime()
+					);
 			} else {
 				showToast('Failed to load feed: ' + result.error, 'error');
 			}
@@ -726,9 +739,14 @@
 						</div>
 
 						{#if computedMetrics.connectedCount === 0}
-							<div style="padding: 2.5rem; text-align: center; border: 1px dashed var(--border); border-radius: var(--radius); background: rgba(255, 255, 255, 0.01); margin-bottom: 1.5rem;">
+							<div
+								style="padding: 2.5rem; text-align: center; border: 1px dashed var(--border); border-radius: var(--radius); background: rgba(255, 255, 255, 0.01); margin-bottom: 1.5rem;"
+							>
 								<span style="font-size: 24px; display: block; margin-bottom: 0.5rem;">🔌</span>
-								<p style="color: var(--text-dim); font-size: var(--text-sm); margin: 0;">No active channel connections. Click one of the connect buttons above to link a platform.</p>
+								<p style="color: var(--text-dim); font-size: var(--text-sm); margin: 0;">
+									No active channel connections. Click one of the connect buttons above to link a
+									platform.
+								</p>
 							</div>
 						{:else}
 							<div class="platforms-grid">
@@ -848,7 +866,8 @@
 											<div class="platform-body" transition:slide={{ duration: 250 }}>
 												{#if status?.connected}
 													{@const followers = status?.followers ?? metrics?.followers ?? 0}
-													{@const engagement = status?.engagement_rate ?? metrics?.engagement ?? 0.0}
+													{@const engagement =
+														status?.engagement_rate ?? metrics?.engagement ?? 0.0}
 													<div class="connected-info">
 														<div
 															class="handle-row"
@@ -930,7 +949,8 @@
 																</button>
 															{/if}
 														</div>
-														<span class="sync-time">Last sync: {formatSyncTime(status.lastSync)}</span
+														<span class="sync-time"
+															>Last sync: {formatSyncTime(status.lastSync)}</span
 														>
 
 														<!-- Individual Platform Stats -->
@@ -1714,16 +1734,21 @@
 					</div>
 				{:else if activeTab === 'feed'}
 					<div class="tab-panel">
-						<div class="panel-header" style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;">
+						<div
+							class="panel-header"
+							style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;"
+						>
 							<div>
 								<h3>Creator Feed</h3>
 								<p class="panel-desc">
-									View and synchronize published content from connected platforms for <strong>{selectedAgent.name}</strong>.
+									View and synchronize published content from connected platforms for <strong
+										>{selectedAgent.name}</strong
+									>.
 								</p>
 							</div>
-							<button 
-								class="save-btn" 
-								onclick={syncFeed} 
+							<button
+								class="save-btn"
+								onclick={syncFeed}
 								disabled={syncingFeed || feedLoading}
 								style="margin-top: 0; display: inline-flex; align-items: center; gap: 0.5rem;"
 							>
@@ -1739,7 +1764,7 @@
 										stroke-width="2"
 										stroke-linecap="round"
 										stroke-linejoin="round"
-										><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg
+										><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" /></svg
 									>
 									Sync Social Feed
 								{/if}
@@ -1747,20 +1772,35 @@
 						</div>
 
 						{#if feedLoading}
-							<div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 4rem 2rem; color: var(--text-dim);">
-								<span class="spinner" style="width: 2rem; height: 2rem; border-width: 3px; margin-bottom: 1rem;"></span>
+							<div
+								style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 4rem 2rem; color: var(--text-dim);"
+							>
+								<span
+									class="spinner"
+									style="width: 2rem; height: 2rem; border-width: 3px; margin-bottom: 1rem;"
+								></span>
 								<p style="font-size: var(--text-sm);">Loading synced publications...</p>
 							</div>
 						{:else if feedPosts.length === 0}
-							<div class="empty-state" style="padding: 4rem 2rem; background: var(--bg-card-dark); border: 1px dashed var(--border); border-radius: var(--radius-md); text-align: center; margin-top: 1rem; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+							<div
+								class="empty-state"
+								style="padding: 4rem 2rem; background: var(--bg-card-dark); border: 1px dashed var(--border); border-radius: var(--radius-md); text-align: center; margin-top: 1rem; display: flex; flex-direction: column; align-items: center; justify-content: center;"
+							>
 								<div class="empty-icon" style="font-size: 3rem; margin-bottom: 1rem;">📱</div>
-								<h4 style="font-size: var(--text-md); font-weight: 600; color: var(--text); margin-bottom: 0.5rem;">No Published Posts Yet</h4>
-								<p style="font-size: var(--text-xs); color: var(--text-dim); max-width: 380px; margin: 0 auto 1.5rem;">
-									This agent has no synced feed posts. Make sure you have connected accounts configured, and click the sync button to fetch posts and metrics.
+								<h4
+									style="font-size: var(--text-md); font-weight: 600; color: var(--text); margin-bottom: 0.5rem;"
+								>
+									No Published Posts Yet
+								</h4>
+								<p
+									style="font-size: var(--text-xs); color: var(--text-dim); max-width: 380px; margin: 0 auto 1.5rem;"
+								>
+									This agent has no synced feed posts. Make sure you have connected accounts
+									configured, and click the sync button to fetch posts and metrics.
 								</p>
-								<button 
-									class="save-btn" 
-									onclick={syncFeed} 
+								<button
+									class="save-btn"
+									onclick={syncFeed}
 									disabled={syncingFeed}
 									style="margin: 0 auto; display: inline-flex; align-items: center; gap: 0.5rem;"
 								>
@@ -1772,11 +1812,14 @@
 								</button>
 							</div>
 						{:else}
-							<div class="feed-list" style="display: flex; flex-direction: column; gap: 1rem; margin-top: 1.5rem;">
+							<div
+								class="feed-list"
+								style="display: flex; flex-direction: column; gap: 1rem; margin-top: 1.5rem;"
+							>
 								{#each feedPosts as post (post.id)}
 									{@const plat = (post.platforms?.[0] || 'instagram').toLowerCase()}
-									<div 
-										class="feed-card" 
+									<div
+										class="feed-card"
 										style="background: var(--bg-card-dark); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem; transition: transform 0.2s ease, border-color 0.2s ease;"
 										onmouseover={(e) => {
 											e.currentTarget.style.borderColor = 'var(--accent-mid)';
@@ -1787,19 +1830,30 @@
 											e.currentTarget.style.transform = 'translateY(0)';
 										}}
 									>
-										<div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem;">
+										<div
+											style="display: flex; align-items: center; justify-content: space-between; gap: 1rem;"
+										>
 											<div style="display: flex; align-items: center; gap: 0.75rem;">
-												<span 
-													style="padding: 0.25rem 0.6rem; border-radius: 9999px; font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; background: {plat === 'tiktok' ? '#fe2c55' : plat === 'instagram' ? '#e1306c' : plat === 'youtube' ? '#ff0000' : '#1877f2'}; color: white;"
+												<span
+													style="padding: 0.25rem 0.6rem; border-radius: 9999px; font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; background: {plat ===
+													'tiktok'
+														? '#fe2c55'
+														: plat === 'instagram'
+															? '#e1306c'
+															: plat === 'youtube'
+																? '#ff0000'
+																: '#1877f2'}; color: white;"
 												>
 													{plat}
 												</span>
 												<span style="font-size: var(--text-xs); color: var(--text-dim);">
-													{post.published_at ? new Date(post.published_at).toLocaleString() : 'Recently'}
+													{post.published_at
+														? new Date(post.published_at).toLocaleString()
+														: 'Recently'}
 												</span>
 											</div>
 											{#if post.external_id}
-												<span 
+												<span
 													style="font-family: var(--font-mono); font-size: var(--text-xs); color: var(--text-dim); background: var(--bg); padding: 0.15rem 0.4rem; border-radius: 4px; border: 1px solid var(--border);"
 													title="Composio Integration ID"
 												>
@@ -1808,29 +1862,51 @@
 											{/if}
 										</div>
 
-										<p style="font-size: var(--text-sm); color: var(--text); line-height: 1.5; margin: 0; white-space: pre-wrap;">
+										<p
+											style="font-size: var(--text-sm); color: var(--text); line-height: 1.5; margin: 0; white-space: pre-wrap;"
+										>
 											{post.content}
 										</p>
 
-										<div 
-											class="metrics-row" 
+										<div
+											class="metrics-row"
 											style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.75rem; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0.75rem 1rem;"
 										>
 											<div style="text-align: center;">
-												<span style="display: block; font-size: var(--text-xs); color: var(--text-dim); margin-bottom: 0.25rem;">Views</span>
-												<strong style="font-size: var(--text-sm); color: var(--text);">{post.analytics?.views?.toLocaleString() ?? 0}</strong>
+												<span
+													style="display: block; font-size: var(--text-xs); color: var(--text-dim); margin-bottom: 0.25rem;"
+													>Views</span
+												>
+												<strong style="font-size: var(--text-sm); color: var(--text);"
+													>{post.analytics?.views?.toLocaleString() ?? 0}</strong
+												>
 											</div>
 											<div style="text-align: center;">
-												<span style="display: block; font-size: var(--text-xs); color: var(--text-dim); margin-bottom: 0.25rem;">Likes</span>
-												<strong style="font-size: var(--text-sm); color: var(--text);">{post.analytics?.likes?.toLocaleString() ?? 0}</strong>
+												<span
+													style="display: block; font-size: var(--text-xs); color: var(--text-dim); margin-bottom: 0.25rem;"
+													>Likes</span
+												>
+												<strong style="font-size: var(--text-sm); color: var(--text);"
+													>{post.analytics?.likes?.toLocaleString() ?? 0}</strong
+												>
 											</div>
 											<div style="text-align: center;">
-												<span style="display: block; font-size: var(--text-xs); color: var(--text-dim); margin-bottom: 0.25rem;">Comments</span>
-												<strong style="font-size: var(--text-sm); color: var(--text);">{post.analytics?.comments?.toLocaleString() ?? 0}</strong>
+												<span
+													style="display: block; font-size: var(--text-xs); color: var(--text-dim); margin-bottom: 0.25rem;"
+													>Comments</span
+												>
+												<strong style="font-size: var(--text-sm); color: var(--text);"
+													>{post.analytics?.comments?.toLocaleString() ?? 0}</strong
+												>
 											</div>
 											<div style="text-align: center;">
-												<span style="display: block; font-size: var(--text-xs); color: var(--text-dim); margin-bottom: 0.25rem;">Shares</span>
-												<strong style="font-size: var(--text-sm); color: var(--text);">{post.analytics?.shares?.toLocaleString() ?? 0}</strong>
+												<span
+													style="display: block; font-size: var(--text-xs); color: var(--text-dim); margin-bottom: 0.25rem;"
+													>Shares</span
+												>
+												<strong style="font-size: var(--text-sm); color: var(--text);"
+													>{post.analytics?.shares?.toLocaleString() ?? 0}</strong
+												>
 											</div>
 										</div>
 									</div>

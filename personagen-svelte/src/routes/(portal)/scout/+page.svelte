@@ -309,7 +309,10 @@
 		return map[p.toLowerCase()] || 'var(--accent)';
 	}
 
-	function getTrendChartPath(trendId: string, momentum: string): { linePath: string; fillPath: string } {
+	function getTrendChartPath(
+		trendId: string,
+		momentum: string
+	): { linePath: string; fillPath: string } {
 		const pointsCount = 15;
 		const width = 300;
 		const height = 100;
@@ -532,126 +535,522 @@
 
 	const nicheSounds: Record<string, TrendSound[]> = {
 		beauty: [
-			{ name: 'Get Ready With Me', artist: 'Doja Cat', uses: '1.2M', velocity: 'hot', platform: 'TikTok' },
-			{ name: 'Espresso (sped up)', artist: 'Sabrina Carpenter', uses: '890K', velocity: 'rising', platform: 'TikTok' },
-			{ name: 'Original Sound - SkincareSara', artist: 'SkincareSara', uses: '340K', velocity: 'hot', platform: 'Instagram' },
-			{ name: 'Glow Up Transition', artist: 'Trending Audio', uses: '560K', velocity: 'rising', platform: 'TikTok' }
+			{
+				name: 'Get Ready With Me',
+				artist: 'Doja Cat',
+				uses: '1.2M',
+				velocity: 'hot',
+				platform: 'TikTok'
+			},
+			{
+				name: 'Espresso (sped up)',
+				artist: 'Sabrina Carpenter',
+				uses: '890K',
+				velocity: 'rising',
+				platform: 'TikTok'
+			},
+			{
+				name: 'Original Sound - SkincareSara',
+				artist: 'SkincareSara',
+				uses: '340K',
+				velocity: 'hot',
+				platform: 'Instagram'
+			},
+			{
+				name: 'Glow Up Transition',
+				artist: 'Trending Audio',
+				uses: '560K',
+				velocity: 'rising',
+				platform: 'TikTok'
+			}
 		],
 		fashion: [
-			{ name: 'I Look Good (Remix)', artist: 'O.T. Genasis', uses: '2.1M', velocity: 'hot', platform: 'TikTok' },
-			{ name: 'Outfit Check ✨', artist: 'Trending Audio', uses: '780K', velocity: 'rising', platform: 'Instagram' },
-			{ name: 'Walk Walk Fashion Baby', artist: 'Lady Gaga', uses: '1.5M', velocity: 'stable', platform: 'TikTok' }
+			{
+				name: 'I Look Good (Remix)',
+				artist: 'O.T. Genasis',
+				uses: '2.1M',
+				velocity: 'hot',
+				platform: 'TikTok'
+			},
+			{
+				name: 'Outfit Check ✨',
+				artist: 'Trending Audio',
+				uses: '780K',
+				velocity: 'rising',
+				platform: 'Instagram'
+			},
+			{
+				name: 'Walk Walk Fashion Baby',
+				artist: 'Lady Gaga',
+				uses: '1.5M',
+				velocity: 'stable',
+				platform: 'TikTok'
+			}
 		],
 		lifestyle: [
-			{ name: 'Silent Vlog Background', artist: 'Cozy Beats', uses: '3.2M', velocity: 'hot', platform: 'YouTube' },
-			{ name: 'That Girl Morning', artist: 'Trending Audio', uses: '1.8M', velocity: 'stable', platform: 'TikTok' },
-			{ name: 'Soft Life Aesthetic', artist: 'lo-fi chill', uses: '670K', velocity: 'rising', platform: 'Instagram' }
+			{
+				name: 'Silent Vlog Background',
+				artist: 'Cozy Beats',
+				uses: '3.2M',
+				velocity: 'hot',
+				platform: 'YouTube'
+			},
+			{
+				name: 'That Girl Morning',
+				artist: 'Trending Audio',
+				uses: '1.8M',
+				velocity: 'stable',
+				platform: 'TikTok'
+			},
+			{
+				name: 'Soft Life Aesthetic',
+				artist: 'lo-fi chill',
+				uses: '670K',
+				velocity: 'rising',
+				platform: 'Instagram'
+			}
 		],
 		fitness: [
-			{ name: 'Push It (Gym Remix)', artist: 'Salt-N-Pepa', uses: '1.4M', velocity: 'hot', platform: 'TikTok' },
-			{ name: 'Training Montage', artist: 'Trending Audio', uses: '920K', velocity: 'rising', platform: 'TikTok' },
-			{ name: 'Run Girl Run', artist: 'Dua Lipa', uses: '780K', velocity: 'rising', platform: 'Instagram' }
+			{
+				name: 'Push It (Gym Remix)',
+				artist: 'Salt-N-Pepa',
+				uses: '1.4M',
+				velocity: 'hot',
+				platform: 'TikTok'
+			},
+			{
+				name: 'Training Montage',
+				artist: 'Trending Audio',
+				uses: '920K',
+				velocity: 'rising',
+				platform: 'TikTok'
+			},
+			{
+				name: 'Run Girl Run',
+				artist: 'Dua Lipa',
+				uses: '780K',
+				velocity: 'rising',
+				platform: 'Instagram'
+			}
 		],
 		food: [
-			{ name: 'Cooking ASMR', artist: 'Trending Audio', uses: '4.1M', platform: 'TikTok', velocity: 'stable' },
-			{ name: 'Taste Test Reaction', artist: 'Trending Audio', uses: '1.3M', platform: 'TikTok', velocity: 'hot' },
-			{ name: 'Kitchen Vibes', artist: 'lo-fi cooking', uses: '890K', platform: 'YouTube', velocity: 'rising' }
+			{
+				name: 'Cooking ASMR',
+				artist: 'Trending Audio',
+				uses: '4.1M',
+				platform: 'TikTok',
+				velocity: 'stable'
+			},
+			{
+				name: 'Taste Test Reaction',
+				artist: 'Trending Audio',
+				uses: '1.3M',
+				platform: 'TikTok',
+				velocity: 'hot'
+			},
+			{
+				name: 'Kitchen Vibes',
+				artist: 'lo-fi cooking',
+				uses: '890K',
+				platform: 'YouTube',
+				velocity: 'rising'
+			}
 		],
 		tech: [
-			{ name: 'Hack The Planet', artist: 'Synthwave Mix', uses: '420K', platform: 'TikTok', velocity: 'rising' },
-			{ name: 'Coding Lo-Fi', artist: 'Trending Audio', uses: '2.8M', platform: 'YouTube', velocity: 'stable' },
-			{ name: 'Ship It Sound', artist: 'Trending Audio', uses: '180K', platform: 'TikTok', velocity: 'hot' }
+			{
+				name: 'Hack The Planet',
+				artist: 'Synthwave Mix',
+				uses: '420K',
+				platform: 'TikTok',
+				velocity: 'rising'
+			},
+			{
+				name: 'Coding Lo-Fi',
+				artist: 'Trending Audio',
+				uses: '2.8M',
+				platform: 'YouTube',
+				velocity: 'stable'
+			},
+			{
+				name: 'Ship It Sound',
+				artist: 'Trending Audio',
+				uses: '180K',
+				platform: 'TikTok',
+				velocity: 'hot'
+			}
 		],
 		travel: [
-			{ name: 'Adventure Awaits', artist: 'Trending Audio', uses: '1.5M', platform: 'TikTok', velocity: 'hot' },
-			{ name: 'Golden Hour (Lofi)', artist: 'JVKE', uses: '980K', platform: 'Instagram', velocity: 'rising' },
-			{ name: 'On The Road Again', artist: 'Chill Beats', uses: '620K', platform: 'YouTube', velocity: 'stable' }
+			{
+				name: 'Adventure Awaits',
+				artist: 'Trending Audio',
+				uses: '1.5M',
+				platform: 'TikTok',
+				velocity: 'hot'
+			},
+			{
+				name: 'Golden Hour (Lofi)',
+				artist: 'JVKE',
+				uses: '980K',
+				platform: 'Instagram',
+				velocity: 'rising'
+			},
+			{
+				name: 'On The Road Again',
+				artist: 'Chill Beats',
+				uses: '620K',
+				platform: 'YouTube',
+				velocity: 'stable'
+			}
 		],
 		gaming: [
-			{ name: '8-Bit Nostalgia', artist: 'Chiptune Mix', uses: '2.4M', platform: 'YouTube', velocity: 'stable' },
-			{ name: 'Victory Royale Theme', artist: 'Gamer Audio', uses: '1.1M', platform: 'TikTok', velocity: 'hot' },
-			{ name: 'Chill Quest (RPG)', artist: 'RPG Ambient', uses: '530K', platform: 'TikTok', velocity: 'rising' }
+			{
+				name: '8-Bit Nostalgia',
+				artist: 'Chiptune Mix',
+				uses: '2.4M',
+				platform: 'YouTube',
+				velocity: 'stable'
+			},
+			{
+				name: 'Victory Royale Theme',
+				artist: 'Gamer Audio',
+				uses: '1.1M',
+				platform: 'TikTok',
+				velocity: 'hot'
+			},
+			{
+				name: 'Chill Quest (RPG)',
+				artist: 'RPG Ambient',
+				uses: '530K',
+				platform: 'TikTok',
+				velocity: 'rising'
+			}
 		],
 		sports: [
-			{ name: 'Stadium Roar', artist: 'Crowd Audio', uses: '3.1M', platform: 'TikTok', velocity: 'hot' },
-			{ name: 'Fast Lane (Phonk)', artist: 'Phonk Remix', uses: '1.8M', platform: 'Instagram', velocity: 'hot' },
-			{ name: 'Run Wild', artist: 'Upbeat Pop', uses: '890K', platform: 'TikTok', velocity: 'rising' }
+			{
+				name: 'Stadium Roar',
+				artist: 'Crowd Audio',
+				uses: '3.1M',
+				platform: 'TikTok',
+				velocity: 'hot'
+			},
+			{
+				name: 'Fast Lane (Phonk)',
+				artist: 'Phonk Remix',
+				uses: '1.8M',
+				platform: 'Instagram',
+				velocity: 'hot'
+			},
+			{
+				name: 'Run Wild',
+				artist: 'Upbeat Pop',
+				uses: '890K',
+				platform: 'TikTok',
+				velocity: 'rising'
+			}
 		],
 		entertainment: [
-			{ name: 'Dramatic Suspense', artist: 'Cinema Soundtracks', uses: '2.7M', platform: 'TikTok', velocity: 'stable' },
-			{ name: 'Retro Synth Theme', artist: '80s Nostalgia', uses: '1.5M', platform: 'Instagram', velocity: 'rising' },
+			{
+				name: 'Dramatic Suspense',
+				artist: 'Cinema Soundtracks',
+				uses: '2.7M',
+				platform: 'TikTok',
+				velocity: 'stable'
+			},
+			{
+				name: 'Retro Synth Theme',
+				artist: '80s Nostalgia',
+				uses: '1.5M',
+				platform: 'Instagram',
+				velocity: 'rising'
+			},
 			{ name: 'Intro Theme', artist: 'Pop Mix', uses: '890K', platform: 'YouTube', velocity: 'hot' }
 		],
 		art: [
-			{ name: 'Lo-Fi Paint & Chill', artist: 'Lofi Beats', uses: '4.2M', platform: 'YouTube', velocity: 'stable' },
-			{ name: 'Drawing ASMR', artist: 'Studio Sounds', uses: '2.1M', platform: 'TikTok', velocity: 'hot' },
-			{ name: 'Satisfying Pour', artist: 'Creative Studio', uses: '980K', platform: 'Instagram', velocity: 'rising' }
+			{
+				name: 'Lo-Fi Paint & Chill',
+				artist: 'Lofi Beats',
+				uses: '4.2M',
+				platform: 'YouTube',
+				velocity: 'stable'
+			},
+			{
+				name: 'Drawing ASMR',
+				artist: 'Studio Sounds',
+				uses: '2.1M',
+				platform: 'TikTok',
+				velocity: 'hot'
+			},
+			{
+				name: 'Satisfying Pour',
+				artist: 'Creative Studio',
+				uses: '980K',
+				platform: 'Instagram',
+				velocity: 'rising'
+			}
 		],
 		finance: [
-			{ name: 'Success Frequency', artist: 'Chill Synth', uses: '1.2M', platform: 'TikTok', velocity: 'rising' },
-			{ name: 'Corporate Chill', artist: 'Lofi Business', uses: '780K', platform: 'YouTube', velocity: 'stable' },
-			{ name: 'Rise and Grind', artist: 'Upbeat Audio', uses: '540K', platform: 'Instagram', velocity: 'hot' }
+			{
+				name: 'Success Frequency',
+				artist: 'Chill Synth',
+				uses: '1.2M',
+				platform: 'TikTok',
+				velocity: 'rising'
+			},
+			{
+				name: 'Corporate Chill',
+				artist: 'Lofi Business',
+				uses: '780K',
+				platform: 'YouTube',
+				velocity: 'stable'
+			},
+			{
+				name: 'Rise and Grind',
+				artist: 'Upbeat Audio',
+				uses: '540K',
+				platform: 'Instagram',
+				velocity: 'hot'
+			}
 		],
 		music: [
-			{ name: 'Original Song - NewArtist', artist: 'NewArtist', uses: '1.8M', platform: 'TikTok', velocity: 'hot' },
-			{ name: 'Acoustic Guitar Cover', artist: 'Chill Guitar', uses: '950K', platform: 'YouTube', velocity: 'rising' },
-			{ name: 'Beat Drop 2026', artist: 'EDM Producer', uses: '720K', platform: 'TikTok', velocity: 'hot' }
+			{
+				name: 'Original Song - NewArtist',
+				artist: 'NewArtist',
+				uses: '1.8M',
+				platform: 'TikTok',
+				velocity: 'hot'
+			},
+			{
+				name: 'Acoustic Guitar Cover',
+				artist: 'Chill Guitar',
+				uses: '950K',
+				platform: 'YouTube',
+				velocity: 'rising'
+			},
+			{
+				name: 'Beat Drop 2026',
+				artist: 'EDM Producer',
+				uses: '720K',
+				platform: 'TikTok',
+				velocity: 'hot'
+			}
 		]
 	};
 
 	const nichePlatforms: Record<string, PlatformTrend[]> = {
 		beauty: [
-			{ platform: 'TikTok', icon: '🎵', color: '#fe2c55', trends: ['Glass Skin', 'Lip Combos', 'GRWM'], trendCount: 12 },
-			{ platform: 'Instagram', icon: '📸', color: '#e1306c', trends: ['Reels Tutorials', 'Before/After', 'Flat Lays'], trendCount: 8 },
-			{ platform: 'YouTube', icon: '▶️', color: '#ff0000', trends: ['Long-form Reviews', 'Routines', 'Hauls'], trendCount: 5 }
+			{
+				platform: 'TikTok',
+				icon: '🎵',
+				color: '#fe2c55',
+				trends: ['Glass Skin', 'Lip Combos', 'GRWM'],
+				trendCount: 12
+			},
+			{
+				platform: 'Instagram',
+				icon: '📸',
+				color: '#e1306c',
+				trends: ['Reels Tutorials', 'Before/After', 'Flat Lays'],
+				trendCount: 8
+			},
+			{
+				platform: 'YouTube',
+				icon: '▶️',
+				color: '#ff0000',
+				trends: ['Long-form Reviews', 'Routines', 'Hauls'],
+				trendCount: 5
+			}
 		],
 		fashion: [
-			{ platform: 'Instagram', icon: '📸', color: '#e1306c', trends: ['OOTD Carousels', 'Quiet Luxury', 'Style Guides'], trendCount: 15 },
-			{ platform: 'TikTok', icon: '🎵', color: '#fe2c55', trends: ['Outfit Checks', 'Thrift Flips', 'Hauls'], trendCount: 11 }
+			{
+				platform: 'Instagram',
+				icon: '📸',
+				color: '#e1306c',
+				trends: ['OOTD Carousels', 'Quiet Luxury', 'Style Guides'],
+				trendCount: 15
+			},
+			{
+				platform: 'TikTok',
+				icon: '🎵',
+				color: '#fe2c55',
+				trends: ['Outfit Checks', 'Thrift Flips', 'Hauls'],
+				trendCount: 11
+			}
 		],
 		lifestyle: [
-			{ platform: 'TikTok', icon: '🎵', color: '#fe2c55', trends: ['Day In My Life', 'POV Skits', 'Silent Vlogs'], trendCount: 14 },
-			{ platform: 'YouTube', icon: '▶️', color: '#ff0000', trends: ['Aesthetic Vlogs', 'Room Tours', 'Routines'], trendCount: 9 }
+			{
+				platform: 'TikTok',
+				icon: '🎵',
+				color: '#fe2c55',
+				trends: ['Day In My Life', 'POV Skits', 'Silent Vlogs'],
+				trendCount: 14
+			},
+			{
+				platform: 'YouTube',
+				icon: '▶️',
+				color: '#ff0000',
+				trends: ['Aesthetic Vlogs', 'Room Tours', 'Routines'],
+				trendCount: 9
+			}
 		],
 		fitness: [
-			{ platform: 'TikTok', icon: '🎵', color: '#fe2c55', trends: ['GymTok', 'Form Checks', 'PR Videos'], trendCount: 13 },
-			{ platform: 'Instagram', icon: '📸', color: '#e1306c', trends: ['Workout Carousels', 'Transformation', 'Reels'], trendCount: 10 }
+			{
+				platform: 'TikTok',
+				icon: '🎵',
+				color: '#fe2c55',
+				trends: ['GymTok', 'Form Checks', 'PR Videos'],
+				trendCount: 13
+			},
+			{
+				platform: 'Instagram',
+				icon: '📸',
+				color: '#e1306c',
+				trends: ['Workout Carousels', 'Transformation', 'Reels'],
+				trendCount: 10
+			}
 		],
 		food: [
-			{ platform: 'TikTok', icon: '🎵', color: '#fe2c55', trends: ['Recipe Shorts', 'Taste Tests', 'ASMR Cooking'], trendCount: 16 },
-			{ platform: 'YouTube', icon: '▶️', color: '#ff0000', trends: ['Full Recipes', 'Mukbang', 'Challenges'], trendCount: 11 }
+			{
+				platform: 'TikTok',
+				icon: '🎵',
+				color: '#fe2c55',
+				trends: ['Recipe Shorts', 'Taste Tests', 'ASMR Cooking'],
+				trendCount: 16
+			},
+			{
+				platform: 'YouTube',
+				icon: '▶️',
+				color: '#ff0000',
+				trends: ['Full Recipes', 'Mukbang', 'Challenges'],
+				trendCount: 11
+			}
 		],
 		tech: [
-			{ platform: 'Twitter/X', icon: '𝕏', color: 'var(--text)', trends: ['Hot Takes', 'Threads', 'Launches'], trendCount: 18 },
-			{ platform: 'LinkedIn', icon: '💼', color: '#0077b5', trends: ['Thought Leadership', 'Case Studies', 'Polls'], trendCount: 9 }
+			{
+				platform: 'Twitter/X',
+				icon: '𝕏',
+				color: 'var(--text)',
+				trends: ['Hot Takes', 'Threads', 'Launches'],
+				trendCount: 18
+			},
+			{
+				platform: 'LinkedIn',
+				icon: '💼',
+				color: '#0077b5',
+				trends: ['Thought Leadership', 'Case Studies', 'Polls'],
+				trendCount: 9
+			}
 		],
 		travel: [
-			{ platform: 'Instagram', icon: '📸', color: '#e1306c', trends: ['Travel Reels', 'Hidden Gems', 'Carousels'], trendCount: 14 },
-			{ platform: 'TikTok', icon: '🎵', color: '#fe2c55', trends: ['Travel Vlogs', 'Itinerary Hacks', 'Budget Guides'], trendCount: 11 }
+			{
+				platform: 'Instagram',
+				icon: '📸',
+				color: '#e1306c',
+				trends: ['Travel Reels', 'Hidden Gems', 'Carousels'],
+				trendCount: 14
+			},
+			{
+				platform: 'TikTok',
+				icon: '🎵',
+				color: '#fe2c55',
+				trends: ['Travel Vlogs', 'Itinerary Hacks', 'Budget Guides'],
+				trendCount: 11
+			}
 		],
 		gaming: [
-			{ platform: 'YouTube', icon: '▶️', color: '#ff0000', trends: ['LetsPlays', 'Walkthroughs', 'Reviews'], trendCount: 16 },
-			{ platform: 'TikTok', icon: '🎵', color: '#fe2c55', trends: ['Funny Clips', 'Setup Tours', 'Speedruns'], trendCount: 13 }
+			{
+				platform: 'YouTube',
+				icon: '▶️',
+				color: '#ff0000',
+				trends: ['LetsPlays', 'Walkthroughs', 'Reviews'],
+				trendCount: 16
+			},
+			{
+				platform: 'TikTok',
+				icon: '🎵',
+				color: '#fe2c55',
+				trends: ['Funny Clips', 'Setup Tours', 'Speedruns'],
+				trendCount: 13
+			}
 		],
 		sports: [
-			{ platform: 'Twitter/X', icon: '𝕏', color: 'var(--text)', trends: ['Live Commentary', 'Hot Takes', 'Fandom Debates'], trendCount: 17 },
-			{ platform: 'TikTok', icon: '🎵', color: '#fe2c55', trends: ['Trickshots', 'Behind The Scenes', 'Drills'], trendCount: 12 }
+			{
+				platform: 'Twitter/X',
+				icon: '𝕏',
+				color: 'var(--text)',
+				trends: ['Live Commentary', 'Hot Takes', 'Fandom Debates'],
+				trendCount: 17
+			},
+			{
+				platform: 'TikTok',
+				icon: '🎵',
+				color: '#fe2c55',
+				trends: ['Trickshots', 'Behind The Scenes', 'Drills'],
+				trendCount: 12
+			}
 		],
 		entertainment: [
-			{ platform: 'TikTok', icon: '🎵', color: '#fe2c55', trends: ['Fandom Edits', 'Movie Recaps', 'Theory Skits'], trendCount: 15 },
-			{ platform: 'YouTube', icon: '▶️', color: '#ff0000', trends: ['Video Essays', 'Trailers', 'Reviews'], trendCount: 11 }
+			{
+				platform: 'TikTok',
+				icon: '🎵',
+				color: '#fe2c55',
+				trends: ['Fandom Edits', 'Movie Recaps', 'Theory Skits'],
+				trendCount: 15
+			},
+			{
+				platform: 'YouTube',
+				icon: '▶️',
+				color: '#ff0000',
+				trends: ['Video Essays', 'Trailers', 'Reviews'],
+				trendCount: 11
+			}
 		],
 		art: [
-			{ platform: 'Pinterest', icon: '📌', color: '#bd081c', trends: ['Inspiration', 'Color Palettes', 'Moodboards'], trendCount: 18 },
-			{ platform: 'Instagram', icon: '📸', color: '#e1306c', trends: ['Process Reels', 'Carousels', 'Studio Views'], trendCount: 14 }
+			{
+				platform: 'Pinterest',
+				icon: '📌',
+				color: '#bd081c',
+				trends: ['Inspiration', 'Color Palettes', 'Moodboards'],
+				trendCount: 18
+			},
+			{
+				platform: 'Instagram',
+				icon: '📸',
+				color: '#e1306c',
+				trends: ['Process Reels', 'Carousels', 'Studio Views'],
+				trendCount: 14
+			}
 		],
 		finance: [
-			{ platform: 'LinkedIn', icon: '💼', color: '#0077b5', trends: ['Career Advice', 'Market News', 'Thought Leadership'], trendCount: 15 },
-			{ platform: 'Twitter/X', icon: '𝕏', color: 'var(--text)', trends: ['Market Charts', 'Crypto Space', 'FinThreads'], trendCount: 12 }
+			{
+				platform: 'LinkedIn',
+				icon: '💼',
+				color: '#0077b5',
+				trends: ['Career Advice', 'Market News', 'Thought Leadership'],
+				trendCount: 15
+			},
+			{
+				platform: 'Twitter/X',
+				icon: '𝕏',
+				color: 'var(--text)',
+				trends: ['Market Charts', 'Crypto Space', 'FinThreads'],
+				trendCount: 12
+			}
 		],
 		music: [
-			{ platform: 'TikTok', icon: '🎵', color: '#fe2c55', trends: ['Sound Trends', 'LipSync Challenges', 'Duets'], trendCount: 19 },
-			{ platform: 'YouTube', icon: '▶️', color: '#ff0000', trends: ['Music Videos', 'Behind The Scenes', 'Live Sessions'], trendCount: 10 }
+			{
+				platform: 'TikTok',
+				icon: '🎵',
+				color: '#fe2c55',
+				trends: ['Sound Trends', 'LipSync Challenges', 'Duets'],
+				trendCount: 19
+			},
+			{
+				platform: 'YouTube',
+				icon: '▶️',
+				color: '#ff0000',
+				trends: ['Music Videos', 'Behind The Scenes', 'Live Sessions'],
+				trendCount: 10
+			}
 		]
 	};
 
@@ -694,7 +1093,7 @@
 	$effect(() => {
 		if (selectedAgent) {
 			const nicheKey = selectedAgent.niche.toLowerCase();
-			const found = niches.find(n => nicheKey.includes(n.id) || n.id.includes(nicheKey));
+			const found = niches.find((n) => nicheKey.includes(n.id) || n.id.includes(nicheKey));
 			if (found) {
 				selectedNiche = found.id;
 			}
@@ -710,10 +1109,10 @@
 	<!-- Exploding Topics style header -->
 	<div class="exploding-header">
 		<h1>Discover Exploding Topics</h1>
-		
+
 		<div class="exploding-filter-bar">
 			<span class="filter-label">FILTER BY:</span>
-			
+
 			<div class="select-wrapper">
 				<select class="exploding-select" bind:value={timeRange}>
 					{#each TIME_RANGES as range}
@@ -732,15 +1131,35 @@
 			</div>
 
 			<div class="search-wrapper">
-				<svg class="search-icon-svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+				<svg
+					class="search-icon-svg"
+					width="16"
+					height="16"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2.5"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+				>
 					<circle cx="11" cy="11" r="8"></circle>
 					<line x1="21" y1="21" x2="16.65" y2="16.65"></line>
 				</svg>
-				<input type="text" class="exploding-search-input" placeholder="Search Trends" bind:value={searchTrend} />
+				<input
+					type="text"
+					class="exploding-search-input"
+					placeholder="Search Trends"
+					bind:value={searchTrend}
+				/>
 				<span class="pro-badge">PRO</span>
 			</div>
 
-			<button class="refresh-circle-btn" onclick={refreshTrends} disabled={refreshing} title="Refresh Trends">
+			<button
+				class="refresh-circle-btn"
+				onclick={refreshTrends}
+				disabled={refreshing}
+				title="Refresh Trends"
+			>
 				<svg
 					class="refresh-icon-svg"
 					class:spinning={refreshing}
@@ -804,14 +1223,21 @@
 				<div class="trend-card-body">
 					<div class="trend-card-header-row">
 						<h3 class="trend-card-title">{trend.name}</h3>
-						
+
 						<div class="trend-card-stats">
 							<div class="stat-group">
 								<span class="stat-num volume">{trend.volume}</span>
 								<span class="stat-lbl">Volume</span>
 							</div>
 							<div class="stat-group">
-								<span class="stat-num growth" style="color: {trend.momentum === 'rising' ? 'var(--success)' : trend.momentum === 'falling' ? 'var(--error)' : 'var(--warning)'}">
+								<span
+									class="stat-num growth"
+									style="color: {trend.momentum === 'rising'
+										? 'var(--success)'
+										: trend.momentum === 'falling'
+											? 'var(--error)'
+											: 'var(--warning)'}"
+								>
 									{trend.growth}
 								</span>
 								<span class="stat-lbl">Growth</span>
@@ -829,17 +1255,48 @@
 								</linearGradient>
 							</defs>
 							<!-- Grid Lines -->
-							<line x1="0" y1="25" x2="300" y2="25" stroke="var(--border-strong)" stroke-dasharray="2,3" stroke-width="0.7"></line>
-							<line x1="0" y1="50" x2="300" y2="50" stroke="var(--border-strong)" stroke-dasharray="2,3" stroke-width="0.7"></line>
-							<line x1="0" y1="75" x2="300" y2="75" stroke="var(--border-strong)" stroke-dasharray="2,3" stroke-width="0.7"></line>
-							
+							<line
+								x1="0"
+								y1="25"
+								x2="300"
+								y2="25"
+								stroke="var(--border-strong)"
+								stroke-dasharray="2,3"
+								stroke-width="0.7"
+							></line>
+							<line
+								x1="0"
+								y1="50"
+								x2="300"
+								y2="50"
+								stroke="var(--border-strong)"
+								stroke-dasharray="2,3"
+								stroke-width="0.7"
+							></line>
+							<line
+								x1="0"
+								y1="75"
+								x2="300"
+								y2="75"
+								stroke="var(--border-strong)"
+								stroke-dasharray="2,3"
+								stroke-width="0.7"
+							></line>
+
 							<!-- Area path under line -->
 							<path d={chart.fillPath} fill="url(#chartGrad-{trend.id})"></path>
-							
+
 							<!-- Smooth trend line -->
-							<path d={chart.linePath} fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></path>
+							<path
+								d={chart.linePath}
+								fill="none"
+								stroke="var(--accent)"
+								stroke-width="2.5"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+							></path>
 						</svg>
-						
+
 						<!-- X-Axis Labels -->
 						<div class="chart-axis-labels">
 							<span>{labels.start}</span>
@@ -856,7 +1313,14 @@
 								{trend.platform}
 							</span>
 							<span class="niche-pill">{trend.niche}</span>
-							<span class="match-pill" style="color: {trend.matchScore >= 80 ? 'var(--success)' : trend.matchScore >= 60 ? 'var(--warning)' : 'var(--error)'}">
+							<span
+								class="match-pill"
+								style="color: {trend.matchScore >= 80
+									? 'var(--success)'
+									: trend.matchScore >= 60
+										? 'var(--warning)'
+										: 'var(--error)'}"
+							>
 								{trend.matchScore}% Match
 							</span>
 						</div>
@@ -877,7 +1341,17 @@
 								Generating…
 							{:else}
 								<span>Generate Content</span>
-								<svg class="arrow-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+								<svg
+									class="arrow-icon"
+									width="12"
+									height="12"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="3"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+								>
 									<line x1="5" y1="12" x2="19" y2="12"></line>
 									<polyline points="12 5 19 12 12 19"></polyline>
 								</svg>
@@ -983,7 +1457,8 @@
 									cx="18"
 									cy="16"
 									r="3"
-								/></svg>
+								/></svg
+							>
 						</div>
 						<div class="sound-info">
 							<span class="sound-name">{sound.name}</span>
@@ -1103,7 +1578,7 @@
 	}
 
 	.select-wrapper::after {
-		content: "";
+		content: '';
 		position: absolute;
 		right: 0.75rem;
 		top: 50%;
@@ -1243,7 +1718,10 @@
 		border: 1px solid var(--border);
 		border-radius: var(--radius);
 		overflow: hidden;
-		transition: border-color 0.25s, box-shadow 0.25s, transform 0.2s;
+		transition:
+			border-color 0.25s,
+			box-shadow 0.25s,
+			transform 0.2s;
 		box-shadow: var(--shadow-sm);
 	}
 
@@ -1546,7 +2024,9 @@
 		flex: 1;
 		height: 22px;
 		border-radius: 3px;
-		transition: background 0.3s ease, transform 0.15s ease;
+		transition:
+			background 0.3s ease,
+			transform 0.15s ease;
 		cursor: crosshair;
 	}
 

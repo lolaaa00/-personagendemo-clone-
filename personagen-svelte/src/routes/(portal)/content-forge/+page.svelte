@@ -175,13 +175,17 @@
 
 	function removeFinding(layerIndex: number, findingIndex: number) {
 		if (!editableBlueprint || !editableBlueprint.layers[layerIndex]) return;
-		editableBlueprint.layers[layerIndex].findings = editableBlueprint.layers[layerIndex].findings.filter(
-			(_: any, i: number) => i !== findingIndex
-		);
+		editableBlueprint.layers[layerIndex].findings = editableBlueprint.layers[
+			layerIndex
+		].findings.filter((_: any, i: number) => i !== findingIndex);
 	}
 
 	async function deleteBlueprint(id: string) {
-		if (!confirm('Are you sure you want to delete this competitor blueprint? This action is irreversible.')) {
+		if (
+			!confirm(
+				'Are you sure you want to delete this competitor blueprint? This action is irreversible.'
+			)
+		) {
 			return;
 		}
 
@@ -312,7 +316,11 @@
 			let res;
 
 			if (sandboxType === 'script') {
-				res = await ContentForge.script(selectedBlueprintId, sandboxTopic, agent?.handle || '@agent');
+				res = await ContentForge.script(
+					selectedBlueprintId,
+					sandboxTopic,
+					agent?.handle || '@agent'
+				);
 			} else if (sandboxType === 'titles') {
 				res = await ContentForge.titles(selectedBlueprintId, sandboxTopic);
 			} else {
@@ -382,7 +390,10 @@
 	<header class="page-header">
 		<div>
 			<h1>Content Forge</h1>
-			<p class="subtitle">Competitor Blueprint Manager: edit strategy frameworks, generate posts, and test creative layouts.</p>
+			<p class="subtitle">
+				Competitor Blueprint Manager: edit strategy frameworks, generate posts, and test creative
+				layouts.
+			</p>
 		</div>
 	</header>
 
@@ -431,10 +442,20 @@
 							onclick={() => selectBlueprint(bp.id)}
 						>
 							<div class="bp-card-header">
-								<span class="bp-score" style="color: {bp.score >= 90 ? 'var(--success)' : bp.score >= 75 ? 'var(--cyan)' : 'var(--gold)'}">
+								<span
+									class="bp-score"
+									style="color: {bp.score >= 90
+										? 'var(--success)'
+										: bp.score >= 75
+											? 'var(--cyan)'
+											: 'var(--gold)'}"
+								>
 									{bp.score} pts
 								</span>
-								<span class="bp-platform" style="color: {PLATFORM_COLORS[bp.platform] || 'var(--text-muted)'}">
+								<span
+									class="bp-platform"
+									style="color: {PLATFORM_COLORS[bp.platform] || 'var(--text-muted)'}"
+								>
 									{bp.platform}
 								</span>
 							</div>
@@ -462,10 +483,15 @@
 						stroke-linecap="round"
 						stroke-linejoin="round"
 					>
-						<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+						<path
+							d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"
+						/>
 					</svg>
 					<h3>Select Competitor Blueprint</h3>
-					<p>Choose an analyzed channel blueprint from the sidebar to inspect strategy layers, edit guidelines, or forge adaptogenic posts.</p>
+					<p>
+						Choose an analyzed channel blueprint from the sidebar to inspect strategy layers, edit
+						guidelines, or forge adaptogenic posts.
+					</p>
 				</div>
 			{:else}
 				<!-- Blueprint Workspace Header -->
@@ -473,7 +499,9 @@
 					<div class="header-details">
 						<span
 							class="platform-badge"
-							style="background: {PLATFORM_COLORS[editableBlueprint.platform]}20; color: {PLATFORM_COLORS[editableBlueprint.platform]}"
+							style="background: {PLATFORM_COLORS[
+								editableBlueprint.platform
+							]}20; color: {PLATFORM_COLORS[editableBlueprint.platform]}"
 						>
 							{editableBlueprint.platform}
 						</span>
@@ -528,7 +556,10 @@
 							<div class="editor-header">
 								<div>
 									<h3>Decoded Blueprint Scorecard</h3>
-									<p class="subtitle">Modify the exact rule layers extracted from this competitor. These constraints shape post forging.</p>
+									<p class="subtitle">
+										Modify the exact rule layers extracted from this competitor. These constraints
+										shape post forging.
+									</p>
 								</div>
 								<button
 									class="btn-save-blueprint"
@@ -569,10 +600,7 @@
 													</button>
 												</div>
 											{/each}
-											<button
-												class="btn-add-finding"
-												onclick={() => addFinding(lIndex)}
-											>
+											<button class="btn-add-finding" onclick={() => addFinding(lIndex)}>
 												+ Add Finding Rule
 											</button>
 										</div>
@@ -581,14 +609,16 @@
 							</div>
 						</div>
 
-					<!-- TAB 2: FORGE POST -->
+						<!-- TAB 2: FORGE POST -->
 					{:else if activeTab === 'forge'}
 						<div class="forge-post-workspace" style="animation: fadeIn 0.2s var(--ease-out)">
 							<div class="forge-grid">
 								<!-- Inputs Column -->
 								<div class="forge-inputs-column">
 									<h3>Post Generator Configuration</h3>
-									<p class="subtitle">Enter topic guidelines to forge ready-to-publish copies focused on posts.</p>
+									<p class="subtitle">
+										Enter topic guidelines to forge ready-to-publish copies focused on posts.
+									</p>
 
 									<div class="field">
 										<label for="forge-agent">Target Agent Voice</label>
@@ -651,7 +681,7 @@
 								<!-- Outputs / Scheduler Column -->
 								<div class="forge-outputs-column">
 									<h3>Forged Copy Preview</h3>
-									
+
 									<div class="copy-preview-box">
 										{#if forgedCopy}
 											<textarea class="copy-textarea" bind:value={forgedCopy}></textarea>
@@ -671,24 +701,19 @@
 									</div>
 
 									{#if forgedCopy}
-										<div class="scheduler-section glass-card" style="animation: fadeUp 0.3s var(--ease-out)">
+										<div
+											class="scheduler-section glass-card"
+											style="animation: fadeUp 0.3s var(--ease-out)"
+										>
 											<h4>Schedule directly to Calendar</h4>
 											<div class="schedule-fields">
 												<div class="field">
 													<label for="schedule-date">Date</label>
-													<input
-														id="schedule-date"
-														type="date"
-														bind:value={scheduleDate}
-													/>
+													<input id="schedule-date" type="date" bind:value={scheduleDate} />
 												</div>
 												<div class="field">
 													<label for="schedule-time">Time</label>
-													<input
-														id="schedule-time"
-														type="time"
-														bind:value={scheduleTime}
-													/>
+													<input id="schedule-time" type="time" bind:value={scheduleTime} />
 												</div>
 											</div>
 											<button
@@ -708,14 +733,17 @@
 							</div>
 						</div>
 
-					<!-- TAB 3: REPLICATION SANDBOX -->
+						<!-- TAB 3: REPLICATION SANDBOX -->
 					{:else if activeTab === 'sandbox'}
 						<div class="replication-sandbox" style="animation: fadeIn 0.2s var(--ease-out)">
 							<div class="sandbox-grid">
 								<!-- Settings -->
 								<div class="sandbox-settings">
 									<h3>Generate Creative Briefs</h3>
-									<p class="subtitle">Extract specialized formats copying competitor structures (scripts, titles, storyboards).</p>
+									<p class="subtitle">
+										Extract specialized formats copying competitor structures (scripts, titles,
+										storyboards).
+									</p>
 
 									<div class="sandbox-type-selector">
 										<button

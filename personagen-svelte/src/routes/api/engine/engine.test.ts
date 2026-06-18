@@ -22,24 +22,31 @@ vi.mock('../../../lib/server/account-factory', () => {
 				const accountId = payload.personaId || randomUUID();
 
 				// Insert the new agent into Supabase (mocking the real factory behavior)
-				const { data: agent, error: agentError } = await supabase.from('agents').insert({
-					id: accountId,
-					user_id: '1a0b8d42-89e9-4e94-bc4e-ee6f58ff7159', // testUserId
-					name: payload.name,
-					handle: payload.name === 'Vitest Automated Agent' ? '@vitest_agent_test' : `@${payload.name.toLowerCase().replace(/\s+/g, '')}`,
-					niche: payload.niche || 'Lifestyle',
-					status: 'active',
-					soul: 'Analytical, efficient, and precise.',
-					skills: 'Continuous integration, automated unit testing, static analysis.',
-					tools: 'Content Generator, Trend Scanner, Channel Decoder',
-					heartbeat: 'Every 4 hours',
-					market: 'US',
-					gradient: 'from-blue-600 to-cyan-500',
-					initial: 'V',
-					engagement_rate: 4.8,
-					followers: '1.2K',
-					connection_count: 0
-				}).select().single();
+				const { data: agent, error: agentError } = await supabase
+					.from('agents')
+					.insert({
+						id: accountId,
+						user_id: '1a0b8d42-89e9-4e94-bc4e-ee6f58ff7159', // testUserId
+						name: payload.name,
+						handle:
+							payload.name === 'Vitest Automated Agent'
+								? '@vitest_agent_test'
+								: `@${payload.name.toLowerCase().replace(/\s+/g, '')}`,
+						niche: payload.niche || 'Lifestyle',
+						status: 'active',
+						soul: 'Analytical, efficient, and precise.',
+						skills: 'Continuous integration, automated unit testing, static analysis.',
+						tools: 'Content Generator, Trend Scanner, Channel Decoder',
+						heartbeat: 'Every 4 hours',
+						market: 'US',
+						gradient: 'from-blue-600 to-cyan-500',
+						initial: 'V',
+						engagement_rate: 4.8,
+						followers: '1.2K',
+						connection_count: 0
+					})
+					.select()
+					.single();
 
 				if (agentError || !agent) {
 					throw new Error(agentError?.message || 'Database error during mock agent creation');
@@ -100,7 +107,6 @@ vi.mock('../../../lib/server/account-factory', () => {
 		}
 	};
 });
-
 
 // Load .env variables into process.env manually before any imports run,
 // to ensure SvelteKit's dynamic env has them

@@ -420,9 +420,13 @@ Ensure findings contain high-fidelity, detailed, real-world context for this pla
 						blueprintDetails = `Competitor Blueprint Context to incorporate:\n- Platform: ${bp.platform || platform}\n- Channel Name Reference: ${bp.channel_name || 'Competitor Channel'}\n`;
 						if (bp.layers) {
 							const layersList = Array.isArray(bp.layers) ? bp.layers : [];
-							const hookFindings = layersList.find((l: any) => l.title === 'Hook Patterns')?.findings;
+							const hookFindings = layersList.find(
+								(l: any) => l.title === 'Hook Patterns'
+							)?.findings;
 							const dnaFindings = layersList.find((l: any) => l.title === 'Content DNA')?.findings;
-							const replicationFindings = layersList.find((l: any) => l.title === 'Replication Blueprint')?.findings;
+							const replicationFindings = layersList.find(
+								(l: any) => l.title === 'Replication Blueprint'
+							)?.findings;
 
 							if (hookFindings && hookFindings.length > 0) {
 								blueprintDetails += `- Hook style constraints:\n  * ${hookFindings.join('\n  * ')}\n`;
@@ -786,7 +790,7 @@ Ensure the output is ONLY a raw JSON array. Do not wrap in markdown code blocks.
 				try {
 					const response = await fetch('/data/trends.json');
 					if (response.ok) {
-						const allTrends = await response.ok ? await response.json() : [];
+						const allTrends = (await response.ok) ? await response.json() : [];
 						// Filter or select trends related to this niche, or return all
 						const matched = allTrends.filter(
 							(t: any) => t.niche && t.niche.toLowerCase() === niche.toLowerCase()

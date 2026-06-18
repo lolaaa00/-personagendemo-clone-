@@ -174,19 +174,24 @@ export class ComposioClient {
 			console.log(`[Composio Client] Starting two-step Instagram posting for agent ${personaId}`);
 			try {
 				const targetMediaUrl = extractedMediaUrl || 'https://picsum.photos/1080/1080.jpg';
-				console.log(`[Composio Client] Step 1: Creating Instagram Media Container via INSTAGRAM_POST_IG_USER_MEDIA`);
-				const createResponse = await fetch(`${this.baseUrlV3_1}/tools/execute/INSTAGRAM_POST_IG_USER_MEDIA`, {
-					method: 'POST',
-					headers: this.getHeaders(),
-					body: JSON.stringify({
-						user_id: personaId,
-						arguments: {
-							ig_user_id: 'me',
-							image_url: targetMediaUrl,
-							caption: textContent
-						}
-					})
-				});
+				console.log(
+					`[Composio Client] Step 1: Creating Instagram Media Container via INSTAGRAM_POST_IG_USER_MEDIA`
+				);
+				const createResponse = await fetch(
+					`${this.baseUrlV3_1}/tools/execute/INSTAGRAM_POST_IG_USER_MEDIA`,
+					{
+						method: 'POST',
+						headers: this.getHeaders(),
+						body: JSON.stringify({
+							user_id: personaId,
+							arguments: {
+								ig_user_id: 'me',
+								image_url: targetMediaUrl,
+								caption: textContent
+							}
+						})
+					}
+				);
 
 				if (!createResponse.ok) {
 					const errorText = await createResponse.text();
@@ -212,19 +217,24 @@ export class ComposioClient {
 					};
 				}
 
-				console.log(`[Composio Client] Step 2: Publishing Instagram Media Container via INSTAGRAM_POST_IG_USER_MEDIA_PUBLISH. Creation ID: ${creationId}`);
-				const publishResponse = await fetch(`${this.baseUrlV3_1}/tools/execute/INSTAGRAM_POST_IG_USER_MEDIA_PUBLISH`, {
-					method: 'POST',
-					headers: this.getHeaders(),
-					body: JSON.stringify({
-						user_id: personaId,
-						arguments: {
-							ig_user_id: 'me',
-							creation_id: creationId,
-							max_wait_seconds: 60
-						}
-					})
-				});
+				console.log(
+					`[Composio Client] Step 2: Publishing Instagram Media Container via INSTAGRAM_POST_IG_USER_MEDIA_PUBLISH. Creation ID: ${creationId}`
+				);
+				const publishResponse = await fetch(
+					`${this.baseUrlV3_1}/tools/execute/INSTAGRAM_POST_IG_USER_MEDIA_PUBLISH`,
+					{
+						method: 'POST',
+						headers: this.getHeaders(),
+						body: JSON.stringify({
+							user_id: personaId,
+							arguments: {
+								ig_user_id: 'me',
+								creation_id: creationId,
+								max_wait_seconds: 60
+							}
+						})
+					}
+				);
 
 				if (!publishResponse.ok) {
 					const errorText = await publishResponse.text();
@@ -267,7 +277,8 @@ export class ComposioClient {
 			args = {
 				title: textContent.substring(0, 150),
 				video_url:
-					extractedMediaUrl || 'https://assets.mixkit.co/videos/preview/mixkit-stars-in-space-1611-large.mp4'
+					extractedMediaUrl ||
+					'https://assets.mixkit.co/videos/preview/mixkit-stars-in-space-1611-large.mp4'
 			};
 		}
 
@@ -397,7 +408,11 @@ export class ComposioClient {
 						const resObj = data.result || data.data || data;
 						if (resObj && typeof resObj === 'object') {
 							if (platform.toLowerCase() === 'instagram') {
-								const insightsList = Array.isArray(resObj.data) ? resObj.data : (Array.isArray(resObj) ? resObj : []);
+								const insightsList = Array.isArray(resObj.data)
+									? resObj.data
+									: Array.isArray(resObj)
+										? resObj
+										: [];
 								for (const insight of insightsList) {
 									const val = Number(insight.values?.[0]?.value) || 0;
 									if (insight.name === 'views' || insight.name === 'reach') {

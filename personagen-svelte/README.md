@@ -61,6 +61,7 @@ You can run the entire stack (SvelteKit app + PostgreSQL + Gotrue Auth + PostgRE
 ## 📲 Testing & Troubleshooting Social Integrations
 
 ### Instagram API (Composio)
+
 Instagram requires a **two-step publishing process** via Composio. Standard single-action publish slugs (such as `INSTAGRAM_PUBLISH_PHOTO`) are deprecated and will return `404 ToolNotFound`.
 
 1. **Step 1 (Create Container)**: Call `INSTAGRAM_POST_IG_USER_MEDIA` with `ig_user_id: 'me'`, your `caption`, and a public `image_url` (or `video_url`). This returns a `creation_id`.
@@ -70,6 +71,7 @@ Instagram requires a **two-step publishing process** via Composio. Standard sing
 > **No Query Parameters in Media URLs**: The Instagram Graph API will fail with a `400 Bad Request` if your `image_url` contains query parameters (e.g. `?w=800` or AWS S3 authentication tokens). Always provide a direct link without query strings. For test fallbacks, use `https://picsum.photos/1080/1080.jpg`.
 
 ### Reusable Instagram Post Test Snippet
+
 To verify your Composio connection end-to-end without running the entire SvelteKit scheduler, save the following script as `test_post_instagram.js` at the root and run `node test_post_instagram.js`:
 
 ```javascript
@@ -78,7 +80,7 @@ import fs from 'fs';
 // Parse .env manually
 const envContent = fs.readFileSync('.env', 'utf8');
 const env = {};
-envContent.split('\n').forEach(line => {
+envContent.split('\n').forEach((line) => {
 	const match = line.match(/^\s*([\w.-]+)\s*=\s*(.*)?\s*$/);
 	if (match) {
 		let value = match[2] || '';
@@ -102,17 +104,23 @@ async function run() {
 	const mediaUrl = 'https://picsum.photos/1080/1080.jpg'; // No query parameters allowed!
 
 	console.log('Step 1: Creating Instagram Media Container via INSTAGRAM_POST_IG_USER_MEDIA...');
-	const createResponse = await fetch('https://backend.composio.dev/api/v3.1/tools/execute/INSTAGRAM_POST_IG_USER_MEDIA', {
-		method: 'POST',
-		headers: { 'x-api-key': apiKey, 'Content-Type': 'application/json' },
-		body: JSON.stringify({
-			user_id: agentId,
-			arguments: { ig_user_id: 'me', image_url: mediaUrl, caption: content }
-		})
-	});
+	const createResponse = await fetch(
+		'https://backend.composio.dev/api/v3.1/tools/execute/INSTAGRAM_POST_IG_USER_MEDIA',
+		{
+			method: 'POST',
+			headers: { 'x-api-key': apiKey, 'Content-Type': 'application/json' },
+			body: JSON.stringify({
+				user_id: agentId,
+				arguments: { ig_user_id: 'me', image_url: mediaUrl, caption: content }
+			})
+		}
+	);
 
 	if (!createResponse.ok) {
-		console.error(`Container creation failed! Status: ${createResponse.status}, Error:`, await createResponse.text());
+		console.error(
+			`Container creation failed! Status: ${createResponse.status}, Error:`,
+			await createResponse.text()
+		);
 		return;
 	}
 
@@ -124,26 +132,36 @@ async function run() {
 	}
 
 	console.log(`Container created successfully. Creation ID: ${creationId}`);
-	console.log('Step 2: Publishing Instagram Media Container via INSTAGRAM_POST_IG_USER_MEDIA_PUBLISH...');
+	console.log(
+		'Step 2: Publishing Instagram Media Container via INSTAGRAM_POST_IG_USER_MEDIA_PUBLISH...'
+	);
 
-	const publishResponse = await fetch('https://backend.composio.dev/api/v3.1/tools/execute/INSTAGRAM_POST_IG_USER_MEDIA_PUBLISH', {
-		method: 'POST',
-		headers: { 'x-api-key': apiKey, 'Content-Type': 'application/json' },
-		body: JSON.stringify({
-			user_id: agentId,
-			arguments: { ig_user_id: 'me', creation_id: creationId, max_wait_seconds: 60 }
-		})
-	});
+	const publishResponse = await fetch(
+		'https://backend.composio.dev/api/v3.1/tools/execute/INSTAGRAM_POST_IG_USER_MEDIA_PUBLISH',
+		{
+			method: 'POST',
+			headers: { 'x-api-key': apiKey, 'Content-Type': 'application/json' },
+			body: JSON.stringify({
+				user_id: agentId,
+				arguments: { ig_user_id: 'me', creation_id: creationId, max_wait_seconds: 60 }
+			})
+		}
+	);
 
 	if (!publishResponse.ok) {
-		console.error(`Publish failed! Status: ${publishResponse.status}, Error:`, await publishResponse.text());
+		console.error(
+			`Publish failed! Status: ${publishResponse.status}, Error:`,
+			await publishResponse.text()
+		);
 		return;
 	}
 
 	const publishResult = await publishResponse.json();
-	console.log('Publish completed successfully! Result ID:', publishResult.data?.id || publishResult.id);
+	console.log(
+		'Publish completed successfully! Result ID:',
+		publishResult.data?.id || publishResult.id
+	);
 }
 
 run().catch(console.error);
 ```
-

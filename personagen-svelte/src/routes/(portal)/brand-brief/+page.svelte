@@ -539,7 +539,9 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 
 	let intelStep1Valid = $derived(intelCompanyName.trim().length > 0 && intelIndustry.length > 0);
 	let intelStep2Valid = $derived(intelCompetitors.some((c) => c.url.trim().length > 0));
-	let intelStep3Valid = $derived(intelExistingContent.trim().length > 0 || intelContentTypes.length > 0);
+	let intelStep3Valid = $derived(
+		intelExistingContent.trim().length > 0 || intelContentTypes.length > 0
+	);
 	let intelStep4Valid = $derived(intelLocations.length > 0);
 
 	function canIntelProceed(step: number): boolean {
@@ -1372,7 +1374,10 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 			<div class="panel intel-wizard-panel" style="animation: fadeUp 0.25s var(--ease-out);">
 				<div class="intel-wizard-header">
 					<h3>Content Intelligence & Strategy Wizard</h3>
-					<p class="panel-desc">6-step wizard to analyze competitors, map audiences, and generate customized content strategies.</p>
+					<p class="panel-desc">
+						6-step wizard to analyze competitors, map audiences, and generate customized content
+						strategies.
+					</p>
 				</div>
 
 				<!-- ─── Progress Steps ─── -->
@@ -1426,7 +1431,9 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 
 							<div class="form-fields">
 								<div class="field">
-									<label for="intel-company-name">Company / Brand Name <span class="req">*</span></label>
+									<label for="intel-company-name"
+										>Company / Brand Name <span class="req">*</span></label
+									>
 									<input
 										id="intel-company-name"
 										type="text"
@@ -1457,7 +1464,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 							</div>
 						</div>
 
-					<!-- STEP 2: Competitor Analysis -->
+						<!-- STEP 2: Competitor Analysis -->
 					{:else if intelCurrentStep === 2}
 						<div class="step-card" style="animation: fadeUp 0.4s var(--ease-out)">
 							<div class="step-card-header">
@@ -1499,7 +1506,12 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 												stroke-width="2"
 												stroke-linecap="round"
 												stroke-linejoin="round"
-												><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg
+												><line x1="18" y1="6" x2="6" y2="18" /><line
+													x1="6"
+													y1="6"
+													x2="18"
+													y2="18"
+												/></svg
 											>
 										</button>
 									</div>
@@ -1517,14 +1529,19 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 										stroke-width="2"
 										stroke-linecap="round"
 										stroke-linejoin="round"
-										><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg
+										><line x1="12" y1="5" x2="12" y2="19" /><line
+											x1="5"
+											y1="12"
+											x2="19"
+											y2="12"
+										/></svg
 									>
 									Add Competitor ({intelCompetitors.length}/5)
 								</button>
 							{/if}
 						</div>
 
-					<!-- STEP 3: Content Audit -->
+						<!-- STEP 3: Content Audit -->
 					{:else if intelCurrentStep === 3}
 						<div class="step-card" style="animation: fadeUp 0.4s var(--ease-out)">
 							<div class="step-card-header">
@@ -1537,7 +1554,9 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 
 							<div class="form-fields">
 								<div class="field">
-									<label for="intel-existing-content">Existing Content (paste URLs or descriptions)</label>
+									<label for="intel-existing-content"
+										>Existing Content (paste URLs or descriptions)</label
+									>
 									<textarea
 										id="intel-existing-content"
 										bind:value={intelExistingContent}
@@ -1564,7 +1583,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 							</div>
 						</div>
 
-					<!-- STEP 4: Audience Mapping -->
+						<!-- STEP 4: Audience Mapping -->
 					{:else if intelCurrentStep === 4}
 						<div class="step-card" style="animation: fadeUp 0.4s var(--ease-out)">
 							<div class="step-card-header">
@@ -1617,14 +1636,20 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 											{#each intelInterests as tag}
 												<span class="tag">
 													{tag}
-													<button type="button" class="tag-remove" onclick={() => removeIntelInterest(tag)}>×</button>
+													<button
+														type="button"
+														class="tag-remove"
+														onclick={() => removeIntelInterest(tag)}>×</button
+													>
 												</span>
 											{/each}
 											<input
 												id="intel-interest-input"
 												type="text"
 												bind:value={intelInterestInput}
-												placeholder={intelInterests.length > 0 ? 'Add more...' : 'Type and press Enter'}
+												placeholder={intelInterests.length > 0
+													? 'Add more...'
+													: 'Type and press Enter'}
 												onkeydown={handleIntelInterestKeydown}
 												class="tag-input"
 											/>
@@ -1632,7 +1657,9 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 									</div>
 									<div class="suggestions">
 										{#each INTEL_INTEREST_SUGGESTIONS.filter((s) => !intelInterests.includes(s)) as sug}
-											<button type="button" class="sug-btn" onclick={() => addIntelInterest(sug)}>{sug}</button>
+											<button type="button" class="sug-btn" onclick={() => addIntelInterest(sug)}
+												>{sug}</button
+											>
 										{/each}
 									</div>
 								</div>
@@ -1655,7 +1682,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 							</div>
 						</div>
 
-					<!-- STEP 5: Strategy Generation -->
+						<!-- STEP 5: Strategy Generation -->
 					{:else if intelCurrentStep === 5}
 						<div class="step-card" style="animation: fadeUp 0.4s var(--ease-out)">
 							<div class="step-card-header">
@@ -1715,7 +1742,12 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 								</div>
 							</div>
 
-							<button type="button" class="generate-btn" onclick={generateIntelStrategy} disabled={intelGenerating}>
+							<button
+								type="button"
+								class="generate-btn"
+								onclick={generateIntelStrategy}
+								disabled={intelGenerating}
+							>
 								{#if intelGenerating}
 									<div class="gen-spinner"></div>
 									Generating Strategy...
@@ -1743,7 +1775,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 							{/if}
 						</div>
 
-					<!-- STEP 6: Results -->
+						<!-- STEP 6: Results -->
 					{:else if intelCurrentStep === 6 && intelStrategyResults}
 						<div class="results-container" style="animation: fadeUp 0.4s var(--ease-out)">
 							<div class="results-header-card">
@@ -1829,7 +1861,12 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 											y1="2"
 											x2="16"
 											y2="6"
-										/><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg
+										/><line x1="8" y1="2" x2="8" y2="6" /><line
+											x1="3"
+											y1="10"
+											x2="21"
+											y2="10"
+										/></svg
 									>
 									Posting Schedule
 								</h4>
@@ -1859,7 +1896,8 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 										stroke="var(--gold)"
 										stroke-width="2"
 										stroke-linecap="round"
-										stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" /></svg
+										stroke-linejoin="round"
+										><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" /></svg
 									>
 									Platform Priority
 								</h4>
@@ -1871,7 +1909,9 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 												<div class="plat-score-bar">
 													<div
 														class="plat-score-fill"
-														style="width: {plat.score}%; background: {getIntelScoreColor(plat.score)}"
+														style="width: {plat.score}%; background: {getIntelScoreColor(
+															plat.score
+														)}"
 													></div>
 												</div>
 												<span class="plat-score-num" style="color: {getIntelScoreColor(plat.score)}"
@@ -1896,12 +1936,12 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 										stroke-width="2"
 										stroke-linecap="round"
 										stroke-linejoin="round"
-										><line x1="12" y1="20" x2="12" y2="10" /><line x1="18" y1="20" x2="18" y2="4" /><line
-											x1="6"
+										><line x1="12" y1="20" x2="12" y2="10" /><line
+											x1="18"
 											y1="20"
-											x2="6"
-											y2="16"
-										/></svg
+											x2="18"
+											y2="4"
+										/><line x1="6" y1="20" x2="6" y2="16" /></svg
 									>
 									Growth Targets
 								</h4>
@@ -1926,7 +1966,12 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 				<!-- ─── Navigation Buttons ─── -->
 				{#if intelCurrentStep < 6}
 					<div class="nav-buttons" style="margin-top: 1.5rem;">
-						<button type="button" class="nav-btn back" onclick={prevIntelStep} disabled={intelCurrentStep === 1}>
+						<button
+							type="button"
+							class="nav-btn back"
+							onclick={prevIntelStep}
+							disabled={intelCurrentStep === 1}
+						>
 							<svg
 								width="16"
 								height="16"
@@ -1941,7 +1986,12 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 							Back
 						</button>
 						{#if intelCurrentStep < 5}
-							<button type="button" class="nav-btn next" onclick={nextIntelStep} disabled={!canIntelProceed(intelCurrentStep)}>
+							<button
+								type="button"
+								class="nav-btn next"
+								onclick={nextIntelStep}
+								disabled={!canIntelProceed(intelCurrentStep)}
+							>
 								Next
 								<svg
 									width="16"
@@ -1952,7 +2002,9 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 									stroke-width="2"
 									stroke-linecap="round"
 									stroke-linejoin="round"
-									><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></svg
+									><line x1="5" y1="12" x2="19" y2="12" /><polyline
+										points="12 5 19 12 12 19"
+									/></svg
 								>
 							</button>
 						{/if}

@@ -990,7 +990,10 @@ textarea {
 	box-shadow:
 		0 20px 60px rgba(15, 23, 42, 0.06),
 		0 0 0 1px rgba(255, 255, 255, 0.6) inset;
-	transition: background-color 0.4s ease, border-color 0.4s ease, box-shadow 0.4s ease;
+	transition:
+		background-color 0.4s ease,
+		border-color 0.4s ease,
+		box-shadow 0.4s ease;
 }
 
 [data-theme='dark'] .glass-panel,
