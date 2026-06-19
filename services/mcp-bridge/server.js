@@ -104,7 +104,7 @@ server.tool(
       const [messagesRes, overseersRes] = await Promise.all([
         supabase
           .from("chat_messages")
-          .select("id, user_id, agent_id, role, content, created_at, claimed_by, claimed_at")
+          .select("id, user_id, agent_id, session_id, role, content, created_at, claimed_by, claimed_at")
           .order("created_at", { ascending: false })
           .limit(100),
         supabase
@@ -129,11 +129,12 @@ server.tool(
         };
       }
 
-      // Deduplicate to get the latest message for each agent chat thread.
+      // Deduplicate to get the latest message for each unique conversation thread (user_id + agent_id + session_id).
       const latestMessages = {};
       for (const msg of data) {
-        if (!latestMessages[msg.agent_id]) {
-          latestMessages[msg.agent_id] = msg;
+        const threadKey = `${msg.user_id}_${msg.agent_id}_${msg.session_id || 'no-session'}`;
+        if (!latestMessages[threadKey]) {
+          latestMessages[threadKey] = msg;
         }
       }
 
@@ -217,23 +218,53 @@ server.tool(
 // ============================================================================
 server.tool(
   "post_chat_response",
-    "Appends your finalized official response back into the current chat_messages schema to display on the user's dashboard",
-    {
-      userId: z.string().describe("The Supabase user_id that owns the chat thread"),
-      agentId: z.string().describe("The agent_id chat thread to reply to"),
-      responseText: z.string().describe("Your helpful, web-grounded assistant reply to write back to the user")
-    },
-    async ({ userId, agentId, responseText }) => {
-      try {
-        const { data, error } = await supabase
-          .from("chat_messages")
-          .insert({
-            user_id: userId,
-            agent_id: agentId,
-            role: "model",
-            content: responseText
-          })
-          .select();
+  "Appends your finalized official response back into the current chat_messages schema to display on the user's dashboard",
+  {
+    userId: z.string().describe("The Supabase user_id that owns the chat thread"),
+    agentId: z.string().describe("The agent_id chat thread to reply to"),
+    sessionId: z.string().describe("The session_id of the chat session to reply to"),
+    responseText: z.string().describe("Your helpful, web-grounded assistant reply to write back to the user")
+  },
+  async ({ userId, agentId, sessionId, responseText }) => {
+    try {
+      // Validate session ownership and agent match before inserting message
+      const { data: session, error: sessionErr } = await supabase
+        .from("chat_sessions")
+        .select("user_id, agent_id")
+        .eq("id", sessionId)
+        .maybeSingle();
+
+      if (sessionErr) {
+        return {
+          content: [{ type: "text", text: `Error validating session: ${sessionErr.message}` }],
+          isError: true
+        };
+      }
+
+      if (!session) {
+        return {
+          content: [{ type: "text", text: `Validation failed: Chat session with ID ${sessionId} not found.` }],
+          isError: true
+        };
+      }
+
+      if (session.user_id !== userId || session.agent_id !== agentId) {
+        return {
+          content: [{ type: "text", text: `Validation failed: Session ${sessionId} does not belong to user ${userId} and agent ${agentId}.` }],
+          isError: true
+        };
+      }
+
+      const { data, error } = await supabase
+        .from("chat_messages")
+        .insert({
+          user_id: userId,
+          agent_id: agentId,
+          session_id: sessionId,
+          role: "model",
+          content: responseText
+        })
+        .select();
 
       if (error) {
         return {

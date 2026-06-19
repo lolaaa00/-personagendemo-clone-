@@ -387,12 +387,39 @@ CREATE TRIGGER on_auth_user_created
 ALTER TABLE public.agents ADD COLUMN is_overseer BOOLEAN DEFAULT false;
 
 -- ─────────────────────────────────────────────
--- 12. chat_messages (Persistent Sync Chat History)
+-- 12. chat_sessions (Multiple Conversation Sessions)
+-- ─────────────────────────────────────────────
+CREATE TABLE public.chat_sessions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  agent_id UUID NOT NULL REFERENCES public.agents(id) ON DELETE CASCADE,
+  title TEXT NOT NULL DEFAULT 'New Chat',
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'archived')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_chat_sessions_user_agent_updated ON public.chat_sessions(user_id, agent_id, updated_at DESC);
+
+ALTER TABLE public.chat_sessions ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "chat_sessions_select_own" ON public.chat_sessions FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "chat_sessions_insert_own" ON public.chat_sessions FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "chat_sessions_update_own" ON public.chat_sessions FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "chat_sessions_delete_own" ON public.chat_sessions FOR DELETE USING (auth.uid() = user_id);
+
+CREATE TRIGGER chat_sessions_updated_at
+  BEFORE UPDATE ON public.chat_sessions
+  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at();
+
+-- ─────────────────────────────────────────────
+-- 12.5. chat_messages (Persistent Sync Chat History)
 -- ─────────────────────────────────────────────
 CREATE TABLE public.chat_messages (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   agent_id UUID REFERENCES public.agents(id) ON DELETE CASCADE,
+  session_id UUID REFERENCES public.chat_sessions(id) ON DELETE CASCADE,
   role TEXT NOT NULL CHECK (role IN ('user', 'model', 'system')),
   content TEXT NOT NULL,
   tool_calls JSONB DEFAULT '[]'::jsonb,
@@ -402,7 +429,7 @@ CREATE TABLE public.chat_messages (
 );
 
 CREATE INDEX idx_chat_messages_agent_id ON public.chat_messages(agent_id);
-CREATE INDEX idx_chat_messages_created_at ON public.chat_messages(created_at ASC);
+CREATE INDEX idx_chat_messages_session_created ON public.chat_messages(session_id, created_at ASC);
 
 ALTER TABLE public.chat_messages ENABLE ROW LEVEL SECURITY;
 

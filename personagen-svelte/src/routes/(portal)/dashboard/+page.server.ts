@@ -49,16 +49,17 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 
 				const { data: latestMsgs } = await locals.supabase
 					.from('chat_messages')
-					.select('id, agent_id, role, claimed_by')
+					.select('id, agent_id, session_id, role, claimed_by')
 					.eq('user_id', user.id)
 					.order('created_at', { ascending: false })
-					.limit(50);
+					.limit(100);
 
 				if (latestMsgs) {
 					const latest: Record<string, any> = {};
 					latestMsgs.forEach((m) => {
-						if (!latest[m.agent_id]) {
-							latest[m.agent_id] = m;
+						const key = m.session_id || m.agent_id;
+						if (!latest[key]) {
+							latest[key] = m;
 						}
 					});
 					unclaimedMessagesCount = Object.values(latest).filter(

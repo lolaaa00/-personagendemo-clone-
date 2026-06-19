@@ -34,7 +34,44 @@ ALTER TABLE public.agent_configs ADD COLUMN IF NOT EXISTS rss_url TEXT DEFAULT '
 ALTER TABLE public.agent_configs ADD COLUMN IF NOT EXISTS rss_active BOOLEAN DEFAULT false;
 ALTER TABLE public.agent_configs ADD COLUMN IF NOT EXISTS rss_last_polled_at TIMESTAMPTZ;
 
--- 2. Create chat_messages table and indexes/RLS/policies
+-- 2. Create chat_sessions table and indexes/RLS/policies
+CREATE TABLE IF NOT EXISTS public.chat_sessions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  agent_id UUID NOT NULL REFERENCES public.agents(id) ON DELETE CASCADE,
+  title TEXT NOT NULL DEFAULT 'New Chat',
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'archived')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_chat_sessions_user_agent_updated ON public.chat_sessions(user_id, agent_id, updated_at DESC);
+
+ALTER TABLE public.chat_sessions ENABLE ROW LEVEL SECURITY;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'chat_sessions' AND policyname = 'chat_sessions_select_own') THEN
+        CREATE POLICY "chat_sessions_select_own" ON public.chat_sessions FOR SELECT USING (auth.uid() = user_id);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'chat_sessions' AND policyname = 'chat_sessions_insert_own') THEN
+        CREATE POLICY "chat_sessions_insert_own" ON public.chat_sessions FOR INSERT WITH CHECK (auth.uid() = user_id);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'chat_sessions' AND policyname = 'chat_sessions_update_own') THEN
+        CREATE POLICY "chat_sessions_update_own" ON public.chat_sessions FOR UPDATE USING (auth.uid() = user_id);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'chat_sessions' AND policyname = 'chat_sessions_delete_own') THEN
+        CREATE POLICY "chat_sessions_delete_own" ON public.chat_sessions FOR DELETE USING (auth.uid() = user_id);
+    END IF;
+END
+$$;
+
+DROP TRIGGER IF EXISTS chat_sessions_updated_at ON public.chat_sessions;
+CREATE TRIGGER chat_sessions_updated_at
+  BEFORE UPDATE ON public.chat_sessions
+  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at();
+
+-- 2.5. Create chat_messages table and indexes/RLS/policies
 CREATE TABLE IF NOT EXISTS public.chat_messages (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -49,9 +86,10 @@ CREATE TABLE IF NOT EXISTS public.chat_messages (
 
 ALTER TABLE public.chat_messages ADD COLUMN IF NOT EXISTS claimed_by TEXT;
 ALTER TABLE public.chat_messages ADD COLUMN IF NOT EXISTS claimed_at TIMESTAMPTZ;
+ALTER TABLE public.chat_messages ADD COLUMN IF NOT EXISTS session_id UUID REFERENCES public.chat_sessions(id) ON DELETE CASCADE;
 
 CREATE INDEX IF NOT EXISTS idx_chat_messages_agent_id ON public.chat_messages(agent_id);
-CREATE INDEX IF NOT EXISTS idx_chat_messages_created_at ON public.chat_messages(created_at ASC);
+CREATE INDEX IF NOT EXISTS idx_chat_messages_session_created ON public.chat_messages(session_id, created_at ASC);
 
 ALTER TABLE public.chat_messages ENABLE ROW LEVEL SECURITY;
 
@@ -66,6 +104,28 @@ CREATE POLICY "chat_messages_insert_own" ON public.chat_messages
 DROP POLICY IF EXISTS "chat_messages_delete_own" ON public.chat_messages;
 CREATE POLICY "chat_messages_delete_own" ON public.chat_messages
   FOR DELETE USING (auth.uid() = user_id);
+
+-- Backfill: Create one legacy session per unique (user_id, agent_id) that has messages without session_id
+DO $$
+DECLARE
+    rec RECORD;
+    new_sess_id UUID;
+BEGIN
+    FOR rec IN
+        SELECT DISTINCT user_id, agent_id
+        FROM public.chat_messages
+        WHERE session_id IS NULL AND user_id IS NOT NULL AND agent_id IS NOT NULL
+    LOOP
+        INSERT INTO public.chat_sessions (user_id, agent_id, title)
+        VALUES (rec.user_id, rec.agent_id, 'Legacy Conversation')
+        RETURNING id INTO new_sess_id;
+
+        UPDATE public.chat_messages
+        SET session_id = new_sess_id
+        WHERE user_id = rec.user_id AND agent_id = rec.agent_id AND session_id IS NULL;
+    END LOOP;
+END
+$$;
 
 
 -- 3. Create agent_memories table and indexes/RLS/policies/triggers

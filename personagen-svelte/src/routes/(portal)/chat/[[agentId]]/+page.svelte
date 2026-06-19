@@ -94,21 +94,144 @@
 		}
 	});
 
+	// Sessions state
+	let sessions: any[] = $state([]);
+	let activeSessionId: string | null = $state(null);
+	let editingSessionId: string | null = $state(null);
+	let editTitleValue = $state('');
+
+	async function loadSessions(selectLatest = false) {
+		if (!selectedAgent?.id || selectedAgent.id === 'hermes-dev-bypass-id') return;
+		try {
+			const res = await fetch(`/api/agent/${selectedAgent.id}/sessions`);
+			if (res.ok) {
+				const data = await res.json();
+				if (data.success) {
+					sessions = data.sessions || [];
+
+					// Set active session from URL if present
+					const urlParams = new URLSearchParams(window.location.search);
+					const querySessId = urlParams.get('session');
+					if (querySessId && sessions.some(s => s.id === querySessId)) {
+						activeSessionId = querySessId;
+					} else if (selectLatest && sessions.length > 0) {
+						activeSessionId = sessions[0].id;
+						updateUrlParams(activeSessionId);
+					} else if (!querySessId) {
+						activeSessionId = null;
+					}
+				}
+			}
+		} catch (err) {
+			console.error('Error loading sessions:', err);
+		}
+	}
+
+	function updateUrlParams(sessionId: string | null) {
+		if (typeof window === 'undefined') return;
+		const url = new URL(window.location.href);
+		if (sessionId) {
+			url.searchParams.set('session', sessionId);
+		} else {
+			url.searchParams.delete('session');
+		}
+		window.history.replaceState({}, '', url.toString());
+	}
+
+	async function createNewChat() {
+		activeSessionId = null;
+		updateUrlParams(null);
+		loadChatHistory();
+	}
+
+	async function deleteSession(sessionId: string, event: Event) {
+		event.stopPropagation();
+		if (!confirm('Are you sure you want to delete this conversation?')) return;
+		try {
+			const res = await fetch(`/api/agent/${selectedAgent.id}/sessions?sessionId=${sessionId}`, {
+				method: 'DELETE'
+			});
+			if (res.ok) {
+				const data = await res.json();
+				if (data.success) {
+					if (activeSessionId === sessionId) {
+						activeSessionId = null;
+						updateUrlParams(null);
+					}
+					await loadSessions(true);
+					await loadChatHistory();
+				}
+			}
+		} catch (err) {
+			console.error('Error deleting session:', err);
+		}
+	}
+
+	function startRenameSession(session: any, event: Event) {
+		event.stopPropagation();
+		editingSessionId = session.id;
+		editTitleValue = session.title;
+	}
+
+	async function saveRenameSession(sessionId: string) {
+		if (!editTitleValue.trim()) return;
+		try {
+			const res = await fetch(`/api/agent/${selectedAgent.id}/sessions`, {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ sessionId, title: editTitleValue.trim() })
+			});
+			if (res.ok) {
+				const data = await res.json();
+				if (data.success) {
+					editingSessionId = null;
+					await loadSessions(false);
+				}
+			}
+		} catch (err) {
+			console.error('Error renaming session:', err);
+		}
+	}
+
+	function handleRenameKeyDown(event: KeyboardEvent, sessionId: string) {
+		if (event.key === 'Enter') {
+			saveRenameSession(sessionId);
+		} else if (event.key === 'Escape') {
+			editingSessionId = null;
+		}
+	}
+
 	// Load chat logs on agent change
 	$effect(() => {
 		if (selectedAgent?.id) {
 			isTyping = false;
 			currentLogs = [];
 			inputValue = '';
-			loadChatHistory();
+			loadSessions(true).then(() => {
+				loadChatHistory();
+			});
 		}
 	});
 
 	async function loadChatHistory() {
 		if (typeof window === 'undefined') return;
 		messages = [];
+		if (!activeSessionId) {
+			// Fallback to greeting
+			messages = [
+				{
+					id: 'welcome',
+					role: 'agent',
+					content: getInitialGreeting(),
+					timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+				}
+			];
+			scrollChatToBottom();
+			return;
+		}
+
 		try {
-			const res = await fetch(`/api/agent/${selectedAgent.id}/chat`);
+			const res = await fetch(`/api/agent/${selectedAgent.id}/chat?sessionId=${activeSessionId}`);
 			if (res.ok) {
 				const data = await res.json();
 				if (data.success && Array.isArray(data.messages) && data.messages.length > 0) {
@@ -145,6 +268,7 @@
 	}
 
 	async function clearHistory() {
+		if (!activeSessionId) return;
 		if (confirm('Clear conversation history?')) {
 			messages = [
 				{
@@ -155,7 +279,7 @@
 				}
 			];
 			try {
-				const res = await fetch(`/api/agent/${selectedAgent.id}/chat`, {
+				const res = await fetch(`/api/agent/${selectedAgent.id}/chat?sessionId=${activeSessionId}`, {
 					method: 'DELETE'
 				});
 				if (!res.ok) {
@@ -213,7 +337,7 @@
 			const resPromise = fetch(`/api/agent/${targetAgentId}/chat`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ message: userText })
+				body: JSON.stringify({ message: userText, sessionId: activeSessionId })
 			});
 
 			await new Promise((resolve) => setTimeout(resolve, 800));
@@ -227,6 +351,12 @@
 			if (selectedAgent.id !== targetAgentId) return; // Discard if agent switched
 
 			if (res.ok && data.success) {
+				if (!activeSessionId && data.sessionId) {
+					activeSessionId = data.sessionId;
+					updateUrlParams(activeSessionId);
+					await loadSessions(false);
+				}
+
 				if (data.toolCalls && data.toolCalls.length > 0) {
 					currentLogs = data.toolCalls.map((tc: any) => `⚙️ Executed tool: ${tc.name}`);
 				} else {
@@ -361,7 +491,9 @@ As a specialized creator, I've updated my internal logic context. I am connected
 	}
 
 	onMount(() => {
-		loadChatHistory();
+		loadSessions(true).then(() => {
+			loadChatHistory();
+		});
 	});
 </script>
 
@@ -443,6 +575,79 @@ As a specialized creator, I've updated my internal logic context. I am connected
 		</div>
 	</aside>
 
+	<!-- Middle Sidebar (Sessions) -->
+	<aside class="sessions-sidebar border-strong">
+		<div class="sidebar-section">
+			<button class="new-chat-btn" onclick={createNewChat} disabled={isTyping}>
+				<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+					<line x1="12" y1="5" x2="12" y2="19"></line>
+					<line x1="5" y1="12" x2="19" y2="12"></line>
+				</svg>
+				New Chat
+			</button>
+		</div>
+
+		<div class="sidebar-section sessions-section">
+			<h4 class="section-title">Conversations</h4>
+			<div class="sessions-scroll-list">
+				{#each sessions as session (session.id)}
+					<button
+						class="session-card"
+						class:active={activeSessionId === session.id}
+						onclick={() => {
+							if (editingSessionId !== session.id) {
+								activeSessionId = session.id;
+								updateUrlParams(activeSessionId);
+								loadChatHistory();
+							}
+						}}
+					>
+						<div class="session-icon">
+							<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+								<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+							</svg>
+						</div>
+
+						<div class="session-info">
+							{#if editingSessionId === session.id}
+								<input
+									type="text"
+									class="rename-input"
+									bind:value={editTitleValue}
+									onkeydown={(e) => handleRenameKeyDown(e, session.id)}
+									onblur={() => saveRenameSession(session.id)}
+									onclick={(e) => e.stopPropagation()}
+									aria-label="Rename conversation"
+								/>
+							{:else}
+								<span class="session-title-text" title={session.title}>{session.title}</span>
+							{/if}
+						</div>
+
+						<div class="session-actions">
+							{#if editingSessionId !== session.id}
+								<button class="action-icon-btn" onclick={(e) => startRenameSession(session, e)} title="Rename chat">
+									<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+										<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+										<path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+									</svg>
+								</button>
+								<button class="action-icon-btn delete" onclick={(e) => deleteSession(session.id, e)} title="Delete chat">
+									<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+										<polyline points="3 6 5 6 21 6"></polyline>
+										<path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+									</svg>
+								</button>
+							{/if}
+						</div>
+					</button>
+				{:else}
+					<div class="no-sessions">No recent chats</div>
+				{/each}
+			</div>
+		</div>
+	</aside>
+
 	<!-- Right Chat Area -->
 	<section class="chat-main-container">
 		<!-- Header -->
@@ -469,7 +674,7 @@ As a specialized creator, I've updated my internal logic context. I am connected
 			</div>
 
 			<div class="header-right">
-				<button class="clear-btn" onclick={clearHistory} title="Clear conversation history">
+				<button class="clear-btn" onclick={clearHistory} disabled={!activeSessionId} title="Clear conversation history">
 					<svg
 						width="14"
 						height="14"
@@ -680,7 +885,7 @@ As a specialized creator, I've updated my internal logic context. I am connected
 
 	/* SIDEBAR */
 	.chat-sidebar {
-		width: 320px;
+		width: 260px;
 		background: var(--surface-2);
 		backdrop-filter: blur(16px);
 		-webkit-backdrop-filter: blur(16px);
@@ -924,6 +1129,157 @@ As a specialized creator, I've updated my internal logic context. I am connected
 		flex-direction: column;
 		background: var(--bg);
 		position: relative;
+	}
+
+	/* MIDDLE SESSIONS SIDEBAR */
+	.sessions-sidebar {
+		width: 240px;
+		background: var(--surface);
+		border-right: 1px solid var(--border-strong);
+		display: flex;
+		flex-direction: column;
+		gap: 1.5rem;
+		padding: 1.5rem 1rem;
+		flex-shrink: 0;
+	}
+
+	.new-chat-btn {
+		width: 100%;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.5rem;
+		background: var(--accent);
+		color: #ffffff;
+		border: none;
+		border-radius: 10px;
+		padding: 0.75rem;
+		font-weight: 600;
+		font-size: 13px;
+		cursor: pointer;
+		transition: all 0.2s ease;
+	}
+
+	.new-chat-btn:hover {
+		background: var(--accent-dark, #6366f1);
+		transform: translateY(-1px);
+	}
+
+	.sessions-section {
+		flex-grow: 1;
+		min-height: 0;
+	}
+
+	.sessions-scroll-list {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+		overflow-y: auto;
+		flex-grow: 1;
+	}
+
+	.session-card {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		background: var(--surface-2);
+		border: 1px solid var(--border);
+		border-radius: 8px;
+		padding: 0.6rem;
+		text-align: left;
+		cursor: pointer;
+		position: relative;
+		transition: all 0.2s ease;
+		width: 100%;
+		min-width: 0;
+	}
+
+	.session-card:hover {
+		background: var(--surface);
+		border-color: var(--accent-mid);
+	}
+
+	.session-card.active {
+		background: var(--accent-soft);
+		border-color: var(--accent);
+	}
+
+	.session-icon {
+		color: var(--text-dim);
+		flex-shrink: 0;
+	}
+
+	.session-card.active .session-icon {
+		color: var(--accent);
+	}
+
+	.session-info {
+		flex-grow: 1;
+		min-width: 0;
+		overflow: hidden;
+	}
+
+	.session-title-text {
+		display: block;
+		font-size: 12.5px;
+		color: var(--text);
+		font-weight: 500;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.rename-input {
+		width: 100%;
+		background: var(--surface);
+		border: 1px solid var(--accent);
+		border-radius: 4px;
+		color: var(--text);
+		font-size: 12px;
+		padding: 2px 4px;
+		outline: none;
+	}
+
+	.session-actions {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		opacity: 0;
+		transition: opacity 0.2s ease;
+	}
+
+	.session-card:hover .session-actions {
+		opacity: 1;
+	}
+
+	.action-icon-btn {
+		background: transparent;
+		border: none;
+		color: var(--text-dim);
+		cursor: pointer;
+		padding: 2px;
+		border-radius: 4px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		transition: all 0.2s ease;
+	}
+
+	.action-icon-btn:hover {
+		color: var(--text);
+		background: var(--border-strong);
+	}
+
+	.action-icon-btn.delete:hover {
+		color: var(--error);
+		background: var(--error-soft);
+	}
+
+	.no-sessions {
+		font-size: 12px;
+		color: var(--text-dim);
+		text-align: center;
+		padding: 1rem;
 	}
 
 	/* CHAT HEADER */

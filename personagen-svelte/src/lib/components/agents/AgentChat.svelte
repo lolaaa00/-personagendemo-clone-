@@ -2,6 +2,7 @@
 	import { showToast } from '$lib/stores/ui.svelte';
 	import Input from '$lib/components/ui/Input.svelte';
 	import Button from '$lib/components/ui/Button.svelte';
+	import { page } from '$app/stores';
 
 	interface Props {
 		agentId: string;
@@ -26,6 +27,7 @@
 	let chatOpen = $state(false);
 	let isMaximized = $state(false);
 	let scrollContainer = $state<HTMLElement | null>(null);
+	let activeSessionId = $state<string | null>(null);
 
 	// Fetch message history from the server with localStorage fallback
 	async function fetchHistory() {
@@ -34,6 +36,7 @@
 			if (res.ok) {
 				const data = await res.json();
 				if (data.success && Array.isArray(data.messages)) {
+					activeSessionId = data.sessionId || null;
 					if (data.messages.length > 0) {
 						messages = data.messages.map((m: any) => ({
 							id: m.id || Math.random().toString(36).substring(7),
@@ -57,7 +60,11 @@
 		}
 
 		// Fallback: load from localStorage
-		const cached = localStorage.getItem(`personagen_chat_session_${agentId}`);
+		const userId = $page.data.user?.id || 'guest';
+		const cacheKey = activeSessionId
+			? `personagen_chat_session_${userId}_${agentId}_${activeSessionId}`
+			: `personagen_chat_session_${userId}_${agentId}`;
+		const cached = localStorage.getItem(cacheKey);
 		if (cached) {
 			try {
 				messages = JSON.parse(cached);
@@ -73,7 +80,11 @@
 	// Save messages to localStorage when updated
 	$effect(() => {
 		if (messages.length > 0) {
-			localStorage.setItem(`personagen_chat_session_${agentId}`, JSON.stringify(messages));
+			const userId = $page.data.user?.id || 'guest';
+			const cacheKey = activeSessionId
+				? `personagen_chat_session_${userId}_${agentId}_${activeSessionId}`
+				: `personagen_chat_session_${userId}_${agentId}`;
+			localStorage.setItem(cacheKey, JSON.stringify(messages));
 		}
 	});
 
@@ -125,13 +136,17 @@
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
-					message: userText
+					message: userText,
+					sessionId: activeSessionId
 				})
 			});
 
 			const data = (await res.json()) as any;
 
 			if (res.ok && data.success) {
+				if (!activeSessionId && data.sessionId) {
+					activeSessionId = data.sessionId;
+				}
 				messages.push({
 					id: Math.random().toString(36).substring(7),
 					role: 'agent',
@@ -160,9 +175,16 @@
 	async function clearHistory() {
 		if (confirm('Clear chat history?')) {
 			initializeChat();
-			localStorage.removeItem(`personagen_chat_session_${agentId}`);
+			const userId = $page.data.user?.id || 'guest';
+			if (activeSessionId) {
+				localStorage.removeItem(`personagen_chat_session_${userId}_${agentId}_${activeSessionId}`);
+			}
+			localStorage.removeItem(`personagen_chat_session_${userId}_${agentId}`);
 			try {
-				const res = await fetch(`/api/agent/${agentId}/chat`, {
+				const url = activeSessionId
+					? `/api/agent/${agentId}/chat?sessionId=${activeSessionId}`
+					: `/api/agent/${agentId}/chat`;
+				const res = await fetch(url, {
 					method: 'DELETE'
 				});
 				if (!res.ok) {

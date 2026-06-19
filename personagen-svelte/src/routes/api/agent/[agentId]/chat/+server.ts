@@ -431,10 +431,40 @@ Conduct a 9-layer scorecard audit (1-100 score, Hook structures, Visual DNA, Rhy
 				throw new Error('No overseer agent associated with user or agent.');
 			}
 
+			// Get or create a dedicated System Alerts session for Hermes
+			let overseerSessId = null;
+			try {
+				const { data: existingSess } = await supabase
+					.from('chat_sessions')
+					.select('id')
+					.eq('agent_id', supervisorId)
+					.eq('user_id', userId)
+					.eq('title', 'System Alerts')
+					.maybeSingle();
+
+				if (existingSess) {
+					overseerSessId = existingSess.id;
+				} else {
+					const { data: newSess } = await supabase
+						.from('chat_sessions')
+						.insert({
+							user_id: userId,
+							agent_id: supervisorId,
+							title: 'System Alerts'
+						})
+						.select('id')
+						.single();
+					if (newSess) overseerSessId = newSess.id;
+				}
+			} catch (sessErr) {
+				console.error('[Report Overseer Tool] Failed to get/create System Alerts session:', sessErr);
+			}
+
 			// 3. Create a chat message row in the overseer's chat thread
 			const { error: msgErr } = await supabase.from('chat_messages').insert({
 				user_id: userId,
 				agent_id: supervisorId,
+				session_id: overseerSessId,
 				role: 'user',
 				content: `[SYSTEM REPORT from ${reporterAgent.name} (@${reporterAgent.handle})]: ${args.issue}`
 			});
@@ -488,7 +518,7 @@ Conduct a 9-layer scorecard audit (1-100 score, Hook structures, Visual DNA, Rhy
 // ─────────────────────────────────────────────
 // GET: Retrieve persistent sync chat history (Layer 1)
 // ─────────────────────────────────────────────
-export const GET: RequestHandler = async ({ params, locals }) => {
+export const GET: RequestHandler = async ({ params, locals, url }) => {
 	const { user } = await locals.safeGetSession();
 	if (!user) {
 		return json({ success: false, error: 'Unauthorized' }, { status: 401 });
@@ -500,10 +530,36 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 	}
 
 	const db = createDbService(locals.supabase);
+	let sessionId = url.searchParams.get('sessionId');
+
 	try {
-		const { data: messages, error } = await db.chatMessages.listForAgent(agentId);
+		if (!sessionId) {
+			// Try to find the latest session for user + agent
+			const { data: sessions, error: sessErr } = await db.chatSessions.listForAgent(agentId, user.id);
+			if (sessErr) throw sessErr;
+			if (sessions && sessions.length > 0) {
+				sessionId = sessions[0].id;
+			} else {
+				// Create a default session
+				const { data: newSession, error: createErr } = await db.chatSessions.create({
+					user_id: user.id,
+					agent_id: agentId,
+					title: 'New Chat'
+				});
+				if (createErr || !newSession) throw createErr || new Error('Failed to create default session');
+				sessionId = newSession.id;
+			}
+		} else {
+			// Verify session ownership and agent match!
+			const { data: session, error: sessCheckErr } = await db.chatSessions.get(sessionId);
+			if (sessCheckErr || !session || session.user_id !== user.id || session.agent_id !== agentId) {
+				return json({ success: false, error: 'Forbidden' }, { status: 403 });
+			}
+		}
+
+		const { data: messages, error } = await db.chatMessages.listForSession(sessionId!, user.id, agentId);
 		if (error) throw error;
-		return json({ success: true, messages });
+		return json({ success: true, messages, sessionId });
 	} catch (err) {
 		console.error('[Agent API] Error listing messages:', err);
 		return json({ success: false, error: (err as Error).message }, { status: 500 });
@@ -511,9 +567,9 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 };
 
 // ─────────────────────────────────────────────
-// DELETE: Wipe chat history for an agent
+// DELETE: Wipe chat history for an agent's session
 // ─────────────────────────────────────────────
-export const DELETE: RequestHandler = async ({ params, locals }) => {
+export const DELETE: RequestHandler = async ({ params, locals, url }) => {
 	const { user } = await locals.safeGetSession();
 	if (!user) {
 		return json({ success: false, error: 'Unauthorized' }, { status: 401 });
@@ -524,9 +580,23 @@ export const DELETE: RequestHandler = async ({ params, locals }) => {
 		return json({ success: false, error: 'Missing agentId' }, { status: 400 });
 	}
 
+	const sessionId = url.searchParams.get('sessionId');
+	if (!sessionId) {
+		return json({ success: false, error: 'Missing sessionId query param' }, { status: 400 });
+	}
+
 	const db = createDbService(locals.supabase);
 	try {
-		const { error } = await db.chatMessages.deleteForAgent(agentId);
+		// First verify owner and agent match
+		const { data: session, error: getErr } = await db.chatSessions.get(sessionId);
+		if (getErr || !session) {
+			return json({ success: false, error: 'Session not found' }, { status: 404 });
+		}
+		if (session.user_id !== user.id || session.agent_id !== agentId) {
+			return json({ success: false, error: 'Forbidden' }, { status: 403 });
+		}
+
+		const { error } = await db.chatMessages.deleteForSession(sessionId, user.id, agentId);
 		if (error) throw error;
 		return json({ success: true });
 	} catch (err) {
@@ -592,11 +662,71 @@ export const POST: RequestHandler = async ({ params, locals, request }) => {
 	}
 
 	const { message } = requestBody;
+	let sessionId = requestBody.sessionId;
+
+	if (!sessionId) {
+		if (isServiceCall) {
+			// System/Internal service calls automatically route to a dedicated "System Events" session
+			try {
+				const { data: existingSess } = await supabaseClient
+					.from('chat_sessions')
+					.select('id')
+					.eq('agent_id', agentId)
+					.eq('user_id', userId)
+					.eq('title', 'System Events')
+					.maybeSingle();
+
+				if (existingSess) {
+					sessionId = existingSess.id;
+				} else {
+					const { data: newSess } = await supabaseClient
+						.from('chat_sessions')
+						.insert({
+							user_id: userId,
+							agent_id: agentId,
+							title: 'System Events'
+						})
+						.select('id')
+						.single();
+					if (newSess) sessionId = newSess.id;
+				}
+			} catch (sessErr) {
+				console.error('[Internal Chat POST] Failed to get/create System Events session:', sessErr);
+			}
+		}
+
+		if (!sessionId) {
+			// Create new session automatically!
+			const title = message.length > 30 ? message.substring(0, 30) + '...' : message;
+			const { data: newSession, error: sessionErr } = await db.chatSessions.create({
+				user_id: userId,
+				agent_id: agentId,
+				title
+			});
+			if (sessionErr || !newSession) {
+				throw sessionErr || new Error('Failed to create new session');
+			}
+			sessionId = newSession.id;
+		}
+	} else {
+		// Verify session ownership and agent match!
+		const { data: session, error: sessCheckErr } = await db.chatSessions.get(sessionId);
+		if (sessCheckErr || !session || session.user_id !== userId || session.agent_id !== agentId) {
+			return json({ success: false, error: 'Forbidden' }, { status: 403 });
+		}
+
+		// Touch the session
+		await supabaseClient
+			.from('chat_sessions')
+			.update({ updated_at: new Date().toISOString() })
+			.eq('id', sessionId);
+	}
 
 	// 3. Persist User message immediately (Layer 1) and claim it for SvelteKit
 	await db.chatMessages.create({
 		user_id: userId,
 		agent_id: agentId,
+		session_id: sessionId,
 		role: 'user',
 		content: message,
 		claimed_by: 'sveltekit',
@@ -612,6 +742,7 @@ export const POST: RequestHandler = async ({ params, locals, request }) => {
 		await db.chatMessages.create({
 			user_id: userId,
 			agent_id: agentId,
+			session_id: sessionId,
 			role: 'model',
 			content: bypassText
 		});
@@ -619,7 +750,8 @@ export const POST: RequestHandler = async ({ params, locals, request }) => {
 		return json({
 			success: true,
 			response: bypassText,
-			toolCalls: []
+			toolCalls: [],
+			sessionId
 		});
 	}
 
@@ -660,7 +792,7 @@ Always stay in character. If you execute a tool, explain the outcome in characte
 `;
 
 		// 4. Retrieve sliding context window (Layer 3 - last 15 messages)
-		const { data: historyMessages } = await db.chatMessages.listForAgent(agentId);
+		const { data: historyMessages } = await db.chatMessages.listForSession(sessionId!, userId, agentId);
 		const slidingHistory = (historyMessages || []).slice(-15);
 
 		// Format messages for Gemini API
@@ -846,6 +978,7 @@ Always stay in character. If you execute a tool, explain the outcome in characte
 		await db.chatMessages.create({
 			user_id: userId,
 			agent_id: agentId,
+			session_id: sessionId,
 			role: 'model',
 			content: finalText,
 			tool_calls: toolCallsExecuted
@@ -854,7 +987,8 @@ Always stay in character. If you execute a tool, explain the outcome in characte
 		return json({
 			success: true,
 			response: finalText,
-			toolCalls: toolCallsExecuted
+			toolCalls: toolCallsExecuted,
+			sessionId
 		});
 	} catch (err) {
 		console.error('[Gemini Agent API] Chat error:', err);
