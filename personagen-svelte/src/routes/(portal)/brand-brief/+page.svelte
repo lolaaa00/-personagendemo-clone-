@@ -108,6 +108,12 @@
 	let scraping = $state(false);
 	let extending = $state<Record<string, boolean>>({});
 
+	// Manual product entry form
+	let newProductName = $state('');
+	let newProductPrice = $state('');
+	let newProductDesc = $state('');
+	let newProductPhoto = $state('');
+
 	// Meta
 	let lastSaved = $state('');
 	let version = $state('1.0');
@@ -257,6 +263,27 @@
 		} finally {
 			scraping = false;
 		}
+	}
+
+	function addManualProduct() {
+		if (!newProductName.trim()) {
+			showToast('Product name is required', 'warning');
+			return;
+		}
+		const newProd: Product = {
+			id: 'manual-' + Date.now().toString(36),
+			name: newProductName.trim(),
+			description: newProductDesc.trim() || 'Manually added product.',
+			price: newProductPrice.trim() || 'N/A',
+			photoUrl: newProductPhoto.trim() || ''
+		};
+		products = [...products, newProd];
+		newProductName = '';
+		newProductPrice = '';
+		newProductDesc = '';
+		newProductPhoto = '';
+		saveAll();
+		showToast(`Product "${newProd.name}" added successfully`, 'success');
 	}
 
 	async function extendField(fieldName: string, fieldVal: string, setter: (val: string) => void) {
@@ -971,11 +998,48 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 								/></svg
 							>
 							<span
-								>No products active. Use the <strong>Firecrawl Scraper</strong> on the Overview tab to
-								crawl your site and load product photos instantly.</span
+								>No products active. Use the <strong>Firecrawl Scraper</strong> on the Overview tab or
+								<strong>add products manually</strong> below.</span
 							>
 						</div>
 					{/if}
+				</div>
+
+				<!-- Manual Product Entry Card -->
+				<div class="manual-product-card glass-card" style="
+					border: 1px dashed var(--border-strong);
+					border-radius: 12px;
+					padding: 1.25rem;
+					margin-bottom: 1.5rem;
+					background: var(--surface-2);
+				">
+					<h4 style="margin: 0 0 0.75rem 0; font-size: 0.85rem; font-weight: 700; color: var(--accent);">➕ Add Product Manually</h4>
+					<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+						<div class="field">
+							<label for="mp-name" style="font-size: 0.72rem; font-weight: 600; text-transform: uppercase; color: var(--text-dim);">Product Name</label>
+							<input id="mp-name" type="text" bind:value={newProductName} placeholder="e.g. Premium Honey Extract" style="width: 100%; padding: 0.5rem; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 0.82rem;" />
+						</div>
+						<div class="field">
+							<label for="mp-price" style="font-size: 0.72rem; font-weight: 600; text-transform: uppercase; color: var(--text-dim);">Price</label>
+							<input id="mp-price" type="text" bind:value={newProductPrice} placeholder="e.g. Rs. 2,450" style="width: 100%; padding: 0.5rem; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 0.82rem;" />
+						</div>
+					</div>
+					<div class="field" style="margin-top: 0.75rem;">
+						<label for="mp-desc" style="font-size: 0.72rem; font-weight: 600; text-transform: uppercase; color: var(--text-dim);">Description</label>
+						<textarea id="mp-desc" bind:value={newProductDesc} placeholder="Brief product description for UGC content generation..." rows="2" style="width: 100%; padding: 0.5rem; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 0.82rem; resize: vertical;"></textarea>
+					</div>
+					<div class="field" style="margin-top: 0.75rem;">
+						<label for="mp-photo" style="font-size: 0.72rem; font-weight: 600; text-transform: uppercase; color: var(--text-dim);">Image URL (optional)</label>
+						<input id="mp-photo" type="url" bind:value={newProductPhoto} placeholder="https://example.com/product.jpg" style="width: 100%; padding: 0.5rem; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 0.82rem;" />
+					</div>
+					<button
+						style="margin-top: 0.75rem; padding: 0.5rem 1.25rem; border-radius: 8px; background: var(--accent); color: #fff; border: none; font-size: 0.82rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 0.4rem; transition: all 0.2s;"
+						onclick={addManualProduct}
+						disabled={!newProductName.trim()}
+					>
+						<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+						Add Product
+					</button>
 				</div>
 
 				<div class="ugc-presets-section">

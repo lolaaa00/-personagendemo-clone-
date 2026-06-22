@@ -1,0 +1,163 @@
+# Implementation Plan - Product Hardening Pass (Approved)
+
+This plan outlines the final implementation to remove all demo/mock/fallback behavior from the application, forcing only real database-backed workflows in production.
+
+## User Review Required
+
+> [!IMPORTANT]
+> - **Portal Guard (hooks.server.ts):** Portal guard will block only protected app routes (e.g. `/dashboard`, `/chat`, `/persona-config`, `/calendar`, etc.). Route endpoints like `/login`, `/signup`, health checks, and static files will render normally. If Supabase is unconfigured, protected routes render a detailed setup page (unless `ALLOW_DEMO_MODE` is set to `'true'`).
+> - **ALLOW_DEMO_MODE Security:** The `ALLOW_DEMO_MODE` flag will be a private server-only variable (`$env/dynamic/private`). The client will receive this configuration state via the server layout load data, keeping the flag hidden from public client scripts.
+> - **Direct Persona Creation API:** We will create a dedicated `/api/agents` POST route for direct persona creation, avoiding mixing database writes with the external account factory engine path.
+> - **Safe Ticket Preservation:** Before deleting an agent, SvelteKit will manually update all assigned Kanban tickets to set `assignee_agent_id = NULL`, guaranteeing data preservation regardless of DB cascade definitions.
+> - **Social Handle Sync Protection:** The connection sync will not overwrite the agent's core `handle`. Connected platform handles will remain local to the connection metrics card.
+
+## Proposed Changes
+
+---
+
+### Phase 1: Remove Fake/Demo Behavior & Misleading Success Paths
+
+#### [MODIFY] [hooks.server.ts](file:///c:/Users/nexal/personagendemo/personagen-svelte/src/hooks.server.ts)
+* Check if the path starts with protected app routes (e.g., `/dashboard`, `/chat`, `/persona-config`, `/calendar`, `/scout`, `/generator`, `/settings`, `/inbox`, `/pm`, `/channel-decoder`, `/content-forge`).
+* If `PUBLIC_SUPABASE_URL` is placeholder/empty, and private `ALLOW_DEMO_MODE` is not `'true'`, block the request and return a 503 HTML configuration instructions page.
+* Do not block `/login`, `/signup`, `/api/auth`, `/api/health`, `/api/config-status`, or static assets.
+
+#### [MODIFY] [+layout.server.ts](file:///c:/Users/nexal/personagendemo/personagen-svelte/src/routes/(portal)/+layout.server.ts)
+* Remove the auto-seeding block entirely.
+
+#### [MODIFY] [engine/+server.ts](file:///c:/Users/nexal/personagendemo/personagen-svelte/src/routes/api/engine/+server.ts)
+* Change the catch-all response at the bottom of the POST handler to return `400 Bad Request` with `{ success: false, error: 'Unknown engine path' }` instead of returning mock success.
+* In `personagen-channel-decode` -> `decode` action, return `isInferred: true` when returning fallback data or AI-inferred scorecards (to support UI tag rendering).
+* In `personagen-brand-brief` -> `scrape_store` action: if the scraper fails (or if scraping is not possible/fails and `ALLOW_DEMO_MODE !== 'true'`), return a clear error instead of fabricated product metrics. (HoneyX storefront fallback is preserved strictly when `ALLOW_DEMO_MODE === 'true'`).
+* In `personagen-brand-brief` -> `extend_field` action, fix the JSON contract. Nest the enriched text under `data: { enriched: text }` instead of putting it at the root of the JSON response.
+
+#### [MODIFY] [api/accounts/+server.ts](file:///c:/Users/nexal/personagendemo/personagen-svelte/src/routes/api/accounts/+server.ts)
+* Disable `isDevBypass` unless `ALLOW_DEMO_MODE === 'true'`.
+* Change `getPlatformFallbackMetrics()` to return `0` followers and `0.0` engagement rate.
+* Do not overwrite `agents.handle` from connection handles during sync or disconnect. Store connection handles strictly inside `connections.handle`.
+
+#### [MODIFY] [Svelte Portal Server Loaders]
+* Remove all static JSON `/data/*.json` imports/fallbacks from:
+  - `dashboard/+page.server.ts`
+  - `calendar/+page.server.ts`
+  - `chat/[[agentId]]/+page.server.ts`
+  - `inbox/+page.server.ts`
+  - `scout/+page.server.ts`
+  - `content-forge/+page.server.ts`
+  - `persona-config/[[agentId]]/+page.server.ts`
+* Let loaders return empty arrays/results if database records are not present.
+
+---
+
+### Phase 2: Direct Persona Creation Workflow & Clean Static Data Migration
+
+#### [NEW] [generator/+page.server.ts](file:///c:/Users/nexal/personagendemo/personagen-svelte/src/routes/(portal)/generator/+page.server.ts)
+* Create SvelteKit server loader to check if Account Factory variables (`FACTORY_URL` and `FACTORY_API_KEY`) are configured, passing `isFactoryConfigured` to the client.
+
+#### [NEW] [api/agents/+server.ts](file:///c:/Users/nexal/personagendemo/personagen-svelte/src/routes/api/agents/+server.ts)
+* Create a dedicated SvelteKit API POST route for direct persona database insertion.
+* Creates `agents` and `agent_configs` records in Supabase.
+
+#### [MODIFY] [generator/+page.svelte](file:///c:/Users/nexal/personagendemo/personagen-svelte/src/routes/(portal)/generator/+page.svelte)
+* Split the review step (Step 3) into two explicit workflows:
+  - **Create Persona (Direct Database Creation):** POSTs to `/api/agents` to directly insert a real persona in Supabase.
+  - **Register Automated Social Account:** Disabled with setup warning text if `data.isFactoryConfigured` is false. Runs `create_account` calling the Account Factory without DB fallback.
+* Remove the "saved locally" redirection fallback on error. Show a clear error banner.
+
+#### [MODIFY] [engine/+server.ts](file:///c:/Users/nexal/personagendemo/personagen-svelte/src/routes/api/engine/+server.ts)
+* Remove database insertion fallback from `create_account` action. It must only attempt to call `factory.createAccount` and throw an error on failure.
+
+#### [RENAME / MOVE] [static JSON files](file:///c:/Users/nexal/personagendemo/personagen-svelte/static/data)
+* Move the static JSON data files (`agents.json`, `blueprints.json`, `scouts.json`, `templates.json`, `trends.json`) to `src/lib/tests/fixtures/` for test/reference use only, ensuring no runtime imports remain under `static/data`.
+
+---
+
+### Phase 3: Gate External Integrations with Setup States
+
+#### [NEW] [config-check.ts](file:///c:/Users/nexal/personagendemo/personagen-svelte/src/lib/server/config-check.ts)
+* Implement a server-side config status utility checking:
+  - Supabase configured
+  - Gemini configured
+  - Composio configured
+  - Account Factory configured
+  - Mail service configured
+  - Internal API secret configured
+  - MCP/Hermes configured
+* Verifies environment presence strictly (no external network calls to avoid latency or rate limits).
+
+#### [MODIFY] [+layout.server.ts](file:///c:/Users/nexal/personagendemo/personagen-svelte/src/routes/(portal)/+layout.server.ts)
+* Return `configStatus` map and `allowDemoMode` to Svelte layout.
+
+#### [MODIFY] [dashboard/+page.svelte](file:///c:/Users/nexal/personagendemo/personagen-svelte/src/routes/(portal)/dashboard/+page.svelte)
+* Render a premium empty-state onboarding card guiding the user to Create Persona, Connect Account, and Verify Settings if no creator agents exist.
+
+#### [MODIFY] [persona-config/[[agentId]]/+page.server.ts](file:///c:/Users/nexal/personagendemo/personagen-svelte/src/routes/(portal)/persona-config/[[agentId]]/+page.server.ts)
+* Remove OAuth success redirect insertion handler for non-UUID agents.
+* Return `isComposioConfigured` from load.
+
+#### [MODIFY] [persona-config/[[agentId]]/+page.svelte](file:///c:/Users/nexal/personagendemo/personagen-svelte/src/routes/(portal)/persona-config/[[agentId]]/+page.svelte)
+* If `data.isComposioConfigured` is false, render a warning card stating `"Social connections not configured. Set COMPOSIO_API_KEY in your environment"` and disable "+ Connect" buttons.
+
+---
+
+### Phase 4: UI Polish & Empty States from Client Feedback
+
+#### [MODIFY] [calendar/+page.svelte](file:///c:/Users/nexal/personagendemo/personagen-svelte/src/routes/(portal)/calendar/+page.svelte)
+* Update empty state text from "No posts scheduled" to "No real content yet. Generate a draft or connect a profile."
+
+#### [MODIFY] [channel-decoder/+page.svelte](file:///c:/Users/nexal/personagendemo/personagen-svelte/src/routes/(portal)/channel-decoder/+page.svelte)
+* If `results.isInferred` is true, render prominent badge tags (`AI-Inferred`, `Limited Public Data`) next to the channel name.
+* Replace "Blueprint saved locally (offline mode)" toast copy with a clear API error message toast on failure.
+
+#### [MODIFY] [Svelte Portal Views (No Data Onboarding states)]
+* Ensure clean UI empty states are rendered in the following views when database data is empty:
+  - **Blueprints / Channel Decoder:** Show "No blueprints found. Run a strategy decode above."
+  - **Brand Brief overview:** Show "No brand details configured. Enter brand details manually."
+  - **Connections:** Show "No active platform connections. Select a platform to connect."
+
+#### [MODIFY] [Global UI Text Cleanup]
+* Search and replace all instances of "saved locally", "offline mode", "demo template", "Bypass Mode", and "Using forged demo template" with clean real-world status descriptions.
+
+---
+
+### Phase 5: Fix Critical Data, Runtime, & Security Bugs
+
+#### [MODIFY] [api/agents/config/+server.ts](file:///c:/Users/nexal/personagendemo/personagen-svelte/src/routes/api/agents/config/+server.ts)
+* **Ownership Check:** Verify `agent.user_id === user.id` before executing updates or deletion.
+* **PM Ticket Safety:** Update all tickets assigned to the deleted agent to set `assignee_agent_id = NULL` before executing `db.agents.delete(agentId)`.
+
+#### [MODIFY] [api/posts/+server.ts](file:///c:/Users/nexal/personagendemo/personagen-svelte/src/routes/api/posts/+server.ts)
+* **Ownership Checks:**
+  - On Create: Verify `post.agent_id` belongs to current user.
+  - On Update/Delete/Get: Fetch post by ID and verify `post.user_id === user.id` (or query with both post ID and user ID).
+
+#### [MODIFY] [api/accounts/+server.ts](file:///c:/Users/nexal/personagendemo/personagen-svelte/src/routes/api/accounts/+server.ts)
+* **Ownership Check:** Check user owns the `persona_id` agent before syncing or disconnecting accounts.
+* **Status Overwrite Protection:** Do not overwrite manually paused agent status during connection status checks.
+
+#### [MODIFY] [persona-config/[[agentId]]/+page.svelte](file:///c:/Users/nexal/personagendemo/personagen-svelte/src/routes/(portal)/persona-config/[[agentId]]/+page.svelte)
+* Restrict `runtime_owner` dropdown selections so that *only* the Hermes overseer agent (`is_overseer` is true) can be set to `hermes-daemon`.
+
+#### [MODIFY] [api/agent/[agentId]/chat/+server.ts](file:///c:/Users/nexal/personagendemo/personagen-svelte/src/routes/api/agent/[agentId]/chat/+server.ts)
+* Reject chat message processing with 400 status if Gemini API key is missing and `ALLOW_DEMO_MODE !== 'true'`.
+* Fetch and append user's global `brand_briefs` record details to the Gemini chat prompt instructions.
+* Inject agent parameters dynamically into `generate_content` tool instructions.
+
+---
+
+## Verification Plan
+
+### Automated Checks
+* Run compilation checks:
+  ```bash
+  cd personagen-svelte
+  npm run check
+  ```
+
+### Manual Verification
+* **Portal Guard:** Run without `PUBLIC_SUPABASE_URL`. Portal route redirects should be blocked with HTML setup guide.
+* **Direct Creation:** In `/generator`, create a new persona. Verify that it inserts directly to database without calling the factory or printing "saved locally."
+* **PM Ticket Safety:** Assign a ticket to an agent, delete the agent, and verify the ticket remains (with `assignee_agent_id = NULL`).
+* **Connection Sync:** Pause an agent, sync connections, and verify status remains `'paused'`.
+* **AI Generation:** Verify generated calendar posts and chat prompts incorporate brand brief and specific agent niche details.
+* **Grep Checks:** Run a global grep for: `agents.json`, `/data/`, `saved locally`, `offline mode`, `Bypass Mode`, `demo template`, `mock`, `fallback`, `placeholder` to verify no runtime fallbacks or misleading messages remain active.

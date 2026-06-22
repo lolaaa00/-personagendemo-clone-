@@ -434,13 +434,13 @@ describe('Engine Local Endpoint End-to-End Tests', { timeout: 30000 }, () => {
 	// 6. Trends Calculations Tests
 	describe('PATH: personagen-trends', () => {
 		it('should run trend calculations successfully', async () => {
-			const event = createMockEvent('personagen-trends', {});
+			const event = createMockEvent('personagen-trends', { agentId: createdAgentId });
 			const response = await POST(event);
 			const resJson = (await response.json()) as any;
 
 			expect(response.status).toBe(200);
 			expect(resJson.success).toBe(true);
-			expect(resJson.data.message).toBe('Trends recalculated and matched');
+			expect(resJson.data.message).toBe('Trends loaded successfully');
 			expect(resJson.data.timestamp).toBeTruthy();
 		});
 	});

@@ -1,7 +1,8 @@
-import { redirect, fail } from '@sveltejs/kit';
+import { error, redirect, fail } from '@sveltejs/kit';
 import type { PageServerLoad, Actions } from './$types';
 import { createDbService } from '$lib/server/db';
 import { env } from '$env/dynamic/public';
+import { env as privateEnv } from '$env/dynamic/private';
 import {
 	getOrCreateHermes,
 	ensureHermesConfig,
@@ -18,6 +19,10 @@ export const load: PageServerLoad = async ({ locals }) => {
 	const isPlaceholder = !supabaseUrl || supabaseUrl.includes('placeholder');
 
 	if (isPlaceholder || !locals.supabase) {
+		const allowDemoMode = privateEnv.ALLOW_DEMO_MODE === 'true';
+		if (!allowDemoMode) {
+			throw error(503, 'Database not configured. Hermes Overseer requires a configured Supabase database.');
+		}
 		// Mock Hermes for offline/dev bypass mode
 		return {
 			hermesAgent: {

@@ -119,13 +119,22 @@ Specify target markets, popular tags, and what is currently trending today. Make
 
 	if (name === 'generate_content') {
 		try {
+			const db = createDbService(supabase);
+			const { data: agent } = await db.agents.get(agentId);
+			const agentNiche = agent?.niche || 'General';
+			const agentName = agent?.name || 'AI Creator';
+			const agentHandle = agent?.handle || '@creator';
+			const agentSoul = agent?.soul || '';
+
 			const ai = new GoogleGenAI({ apiKey });
 			const platformsList = args.platforms || ['instagram'];
 			const prompt = `Generate a high-converting social media post draft for the platform(s): ${platformsList.join(', ')}.
-Niche: ${args.niche || 'General'}
+Agent Name: ${agentName} (${agentHandle})
+Niche: ${agentNiche}
+Personality/Voice: ${agentSoul}
 Topic / Prompt: "${args.prompt}"
 
-Write a ready-to-publish draft for each platform (Instagram, Facebook, YouTube, TikTok) with appropriate characters, hooks, CTAs, and hashtags.`;
+Write a ready-to-publish draft for each platform (Instagram, Facebook, YouTube, TikTok) with appropriate characters, hooks, CTAs, and hashtags. Ensure the tone is fully aligned with the agent's personality.`;
 
 			const res = await ai.models.generateContent({
 				model: 'gemini-3.5-flash',
@@ -137,7 +146,6 @@ Write a ready-to-publish draft for each platform (Instagram, Facebook, YouTube, 
 			});
 
 			const generatedText = res.text || '';
-			const db = createDbService(supabase);
 			const { data: postData, error: postErr } = await db.posts.create({
 				user_id: userId,
 				agent_id: agentId,
@@ -663,6 +671,7 @@ export const POST: RequestHandler = async ({ params, locals, request }) => {
 
 	const { message } = requestBody;
 	let sessionId = requestBody.sessionId;
+	const isHermesDaemonTurn = agent.is_overseer || agent.runtime_owner === 'hermes-daemon';
 
 	if (!sessionId) {
 		if (isServiceCall) {
@@ -722,22 +731,43 @@ export const POST: RequestHandler = async ({ params, locals, request }) => {
 			.eq('id', sessionId);
 	}
 
-	// 3. Persist User message immediately (Layer 1) and claim it for SvelteKit
+	// 3. Persist User message immediately (Layer 1). Hermes daemon turns must remain
+	// unclaimed so the daemon can claim and process them asynchronously.
 	await db.chatMessages.create({
 		user_id: userId,
 		agent_id: agentId,
 		session_id: sessionId,
 		role: 'user',
 		content: message,
-		claimed_by: 'sveltekit',
-		claimed_at: new Date().toISOString()
+		claimed_by: isHermesDaemonTurn ? null : 'sveltekit',
+		claimed_at: isHermesDaemonTurn ? null : new Date().toISOString()
 	});
 
-	const apiKey = env.GEMINI_API_KEY;
+	if (isHermesDaemonTurn) {
+		return json({
+			success: true,
+			queued: true,
+			sessionId,
+			message: 'Hermes daemon queued the request.'
+		});
+	}
 
-	// In dev bypass/placeholder mode without key, we return a mock response but keep history synced
-	if (!apiKey || apiKey.includes('your-gemini') || apiKey.includes('placeholder')) {
-		const bypassText = `[Bypass Mode] I received: "${message}". Set a valid GEMINI_API_KEY in your .env file to enable real Gemini AI interactions.`;
+	const apiKey = env.GEMINI_API_KEY;
+	const isKeyMissing = !apiKey || apiKey.includes('your-gemini') || apiKey.includes('placeholder');
+
+if (isKeyMissing) {
+		const allowDemo = env.ALLOW_DEMO_MODE === 'true';
+		if (!allowDemo) {
+			return json(
+				{
+					success: false,
+					error: 'Gemini API key is not configured. Please set GEMINI_API_KEY in your environment.'
+				},
+				{ status: 400 }
+			);
+		}
+
+		const bypassText = `I received: "${message}". Configure a valid GEMINI_API_KEY in settings to enable live Gemini AI interactions.`;
 
 		await db.chatMessages.create({
 			user_id: userId,
@@ -765,6 +795,33 @@ export const POST: RequestHandler = async ({ params, locals, request }) => {
 				.join('\n');
 		}
 
+		// Fetch user's global brand brief from supabase
+		const { data: brandBrief } = await supabaseClient
+			.from('brand_briefs')
+			.select('data')
+			.eq('user_id', userId)
+			.order('updated_at', { ascending: false })
+			.limit(1)
+			.maybeSingle();
+
+		let brandBriefDetails = '';
+		if (brandBrief && brandBrief.data) {
+			const b = brandBrief.data;
+			brandBriefDetails = `
+## Global Brand & Product Context
+Brand Name: ${b.brandName || 'N/A'}
+Tagline: ${b.tagline || 'N/A'}
+Mission: ${b.mission || 'N/A'}
+Communication Style: ${b.commStyle || 'N/A'}
+Voice Traits: ${Array.isArray(b.traits) ? b.traits.join(', ') : 'N/A'}
+Target Demographics: ${b.demographics || 'N/A'}
+Audience Interests: ${b.interests || 'N/A'}
+Pain Points: ${b.painPoints || 'N/A'}
+Products/Services offered:
+${Array.isArray(b.products) ? b.products.map((p: any) => `- ${p.name}: ${p.description} (${p.price})`).join('\n') : 'N/A'}
+`;
+		}
+
 		// 3. Assemble System Prompt with dynamic role & memory context
 		const systemPrompt = `
 You are ${agent.name} (@${agent.handle}), an AI content creator in the ${agent.niche} niche.
@@ -786,6 +843,8 @@ ${agent.heartbeat || 'Posting daily.'}
 ${agent.market || 'Australia'}
 
 ${memoriesString ? `\n## Your Memories (Persisted Facts)\n${memoriesString}\n` : ''}
+
+${brandBriefDetails ? `\n${brandBriefDetails}\n` : ''}
 
 You have access to tools for generating content drafts, reading market trends, decoding competitor profiles, listing posts, and long-term memory operations.
 Always stay in character. If you execute a tool, explain the outcome in character.

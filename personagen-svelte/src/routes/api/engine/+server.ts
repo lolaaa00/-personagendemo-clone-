@@ -65,19 +65,25 @@ export const POST: RequestHandler = async ({ url, request, locals, fetch }) => {
 					return json({ success: false, error: 'Missing persona details' }, { status: 400 });
 				}
 
-				const factory = new AccountFactoryClient();
-				const data = await factory.createAccount({
-					name: persona.name,
-					niche: persona.niche || 'Lifestyle',
-					platform: persona.platform || 'instagram',
-					personaId: persona.id || persona.agent_id || persona.agentId,
-					bio: persona.bio,
-					photoPath: persona.photoPath,
-					isPrivate: persona.isPrivate,
-					googleVoiceCreds: persona.googleVoiceCreds
-				});
+				// Attempt external Account Factory only
+				try {
+					const factory = new AccountFactoryClient();
+					const data = await factory.createAccount({
+						name: persona.name,
+						niche: persona.niche || 'Lifestyle',
+						platform: persona.platform || 'instagram',
+						personaId: persona.id || persona.agent_id || persona.agentId,
+						bio: persona.bio,
+						photoPath: persona.photoPath,
+						isPrivate: persona.isPrivate,
+						googleVoiceCreds: persona.googleVoiceCreds
+					});
 
-				return json({ success: true, data });
+					return json({ success: true, data });
+				} catch (factoryErr: any) {
+					console.error('[Engine] Account Factory registration failed:', factoryErr?.message || factoryErr);
+					return json({ success: false, error: `Account Factory failed: ${factoryErr?.message || 'Service unreachable'}` }, { status: 500 });
+				}
 			}
 
 			if (action === 'check_status') {
@@ -197,7 +203,8 @@ Ensure findings contain high-fidelity, detailed, real-world context for this pla
 									success: true,
 									data: {
 										...parsed,
-										id: insertedId
+										id: insertedId,
+										isInferred: true
 									}
 								});
 							}
@@ -208,6 +215,17 @@ Ensure findings contain high-fidelity, detailed, real-world context for this pla
 							geminiErr
 						);
 					}
+				}
+
+				const allowDemoMode = env.ALLOW_DEMO_MODE === 'true';
+				if (!allowDemoMode) {
+					return json(
+						{
+							success: false,
+							error: 'Failed to run competitor strategy decode. Real strategy audits require a valid GEMINI_API_KEY.'
+						},
+						{ status: 400 }
+					);
 				}
 
 				// Mock fallback
@@ -339,7 +357,8 @@ Ensure findings contain high-fidelity, detailed, real-world context for this pla
 					success: true,
 					data: {
 						...mockData,
-						id: insertedId
+						id: insertedId,
+						isInferred: true
 					}
 				});
 			}
@@ -704,6 +723,17 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 				}
 			}
 
+			const allowDemoMode = env.ALLOW_DEMO_MODE === 'true';
+			if (!allowDemoMode) {
+				return json(
+					{
+						success: false,
+						error: 'Failed to generate content. Real content generation requires a valid GEMINI_API_KEY.'
+					},
+					{ status: 400 }
+				);
+			}
+
 			// Fallback
 			return json({
 				success: true,
@@ -720,6 +750,16 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 		if (path === 'personagen-trends') {
 			const agentId = body.agentId || body.agent_id;
 			if (!agentId) {
+				const allowDemoMode = env.ALLOW_DEMO_MODE === 'true';
+				if (!allowDemoMode) {
+					return json(
+						{
+							success: false,
+							error: 'Missing agentId parameter. Trends analysis requires an agent context.'
+						},
+						{ status: 400 }
+					);
+				}
 				// Static mock success for testing / simple calls
 				return json({
 					success: true,
@@ -786,27 +826,30 @@ Ensure the output is ONLY a raw JSON array. Do not wrap in markdown code blocks.
 			}
 
 			if (trends.length === 0) {
-				// Fallback to static trends.json
-				try {
-					const response = await fetch('/data/trends.json');
-					if (response.ok) {
-						const allTrends = (await response.ok) ? await response.json() : [];
-						// Filter or select trends related to this niche, or return all
-						const matched = allTrends.filter(
-							(t: any) => t.niche && t.niche.toLowerCase() === niche.toLowerCase()
-						);
-						if (matched.length > 0) {
-							trends = matched;
-						} else {
-							// Return all but adjust match scores to simulate relevance
-							trends = allTrends.map((t: any, idx: number) => ({
-								...t,
-								matchScore: Math.min(99, Math.max(50, 85 - idx * 4))
-							}));
+				const allowDemoMode = env.ALLOW_DEMO_MODE === 'true';
+				if (allowDemoMode) {
+					// Fallback mock trends
+					trends = [
+						{
+							topic: `Autonomous ${niche} Growth`,
+							description: `Trending interest in ${niche} content creation tools and workflow automation.`,
+							volume: '45K',
+							growth: '+180%',
+							matchScore: 95
+						},
+						{
+							topic: `${niche} Strategy Optimization`,
+							description: 'High engagement on posts dissecting campaign rhythm and audience retention.',
+							volume: '22K',
+							growth: '+120%',
+							matchScore: 88
 						}
-					}
-				} catch (fallbackErr) {
-					console.error('[Engine] Trends static fallback read failed:', fallbackErr);
+					];
+				} else {
+					return json({
+						success: false,
+						error: 'Failed to retrieve niche trends. Real trend analysis requires a valid GEMINI_API_KEY.'
+					}, { status: 400 });
 				}
 			}
 
@@ -825,7 +868,96 @@ Ensure the output is ONLY a raw JSON array. Do not wrap in markdown code blocks.
 		// ══════════════════════════════════════════════════════════════════════════
 		if (path === 'personagen-brand-brief') {
 			if (action === 'scrape_store') {
-				const storeUrl = body.url || 'honeyforx.com';
+				const storeUrl = body.url || '';
+				const allowDemoMode = env.ALLOW_DEMO_MODE === 'true';
+
+				// 1. Try real scraping if URL is provided
+				let scrapeSuccess = false;
+				let scrapedData: any = null;
+
+				if (storeUrl) {
+					try {
+						// Simple fetch of the page
+						const response = await fetch(storeUrl, {
+							headers: {
+								'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+							}
+						});
+						if (response.ok) {
+							const html = await response.text();
+							// Clean up HTML to save tokens
+							const cleanHtml = html
+								.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+								.replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
+								.replace(/<svg\b[^<]*(?:(?!<\/svg>)<[^<]*)*<\/svg>/gi, '')
+								.substring(0, 40000); // Take first 40k chars
+
+							if (hasGemini) {
+								const ai = new GoogleGenAI({ apiKey });
+								const prompt = `You are a web scraper agent. Extract the brand brief details and any products (with name, description, price, and image URL if visible) from this e-commerce storefront page content.
+Return a JSON object matching this exact shape:
+{
+  "brandName": "Brand name",
+  "tagline": "Brief tagline",
+  "mission": "Mission statement",
+  "primaryColor": "#hexcolor",
+  "secondaryColor": "#hexcolor",
+  "logoUrl": "URL to logo or placeholder image",
+  "traits": ["Trait1", "Trait2"],
+  "commStyle": "Communication style",
+  "demographics": "Target demographics",
+  "interests": "Target interests",
+  "platforms": "Target platforms",
+  "painPoints": "Customer pain points",
+  "products": [
+    {
+      "id": "p1",
+      "name": "Product Name",
+      "description": "Product Description",
+      "price": "$Price",
+      "photoUrl": "URL to product photo"
+    }
+  ]
+}
+Store HTML:
+${cleanHtml}`;
+								const geminiRes = await ai.models.generateContent({
+									model: 'gemini-3.5-flash',
+									contents: [{ role: 'user', parts: [{ text: prompt }] }]
+								});
+								if (geminiRes.text) {
+									const parsed = safeParseJson(geminiRes.text);
+									if (parsed && parsed.brandName) {
+										scrapedData = parsed;
+										scrapeSuccess = true;
+									}
+								}
+							}
+						}
+					} catch (e) {
+						console.warn('[Engine] Real scraping failed:', e);
+					}
+				}
+
+				if (scrapeSuccess && scrapedData) {
+					return json({
+						success: true,
+						data: scrapedData
+					});
+				}
+
+				// 2. If real scraping failed, check Demo Mode
+				if (!allowDemoMode) {
+					return json(
+						{
+							success: false,
+							error: 'Failed to scrape the storefront page. Real scraping failed and demo mode is disabled. Please verify the URL or enter brand details and products manually.'
+						},
+						{ status: 400 }
+					);
+				}
+
+				// 3. Fallbacks when in Demo Mode
 				const isHoneyForX =
 					storeUrl.toLowerCase().includes('honeyforx') ||
 					storeUrl.toLowerCase().includes('honey for x');
@@ -841,7 +973,7 @@ Ensure the output is ONLY a raw JSON array. Do not wrap in markdown code blocks.
 							primaryColor: '#eab308', // Amber/gold
 							secondaryColor: '#f97316', // Vibrant orange
 							logoUrl:
-								'https://honeyforx.com/cdn/shop/files/honeyX_logo_1920x1080_329bd0fe-fcd2-4f47-ae79-3771e4539126.webp?v=1687433087', // Authentic HoneyX Brand Logo
+								'https://honeyforx.com/cdn/shop/files/honeyX_logo_1920x1080_329bd0fe-fcd2-4f47-ae79-3771e4539126.webp?v=1687433087',
 							traits: ['Stamina', 'Premium/Luxury', 'Energetic', 'Organic Wellness'],
 							commStyle: 'Bold',
 							demographics:
@@ -859,7 +991,7 @@ Ensure the output is ONLY a raw JSON array. Do not wrap in markdown code blocks.
 										"Nature's premium superfood for men. An advanced blend of raw honey, Tribulus terrestris, ginseng, and organic herbal extracts designed for enhanced performance, energy, and stamina.",
 									price: 'Rs. 2,450',
 									photoUrl:
-										'https://cdn.shopify.com/s/files/1/0725/5674/0906/files/honeyx_is_natural_superfood_for_men_in_Pakistan.webp?v=1729879293' // Authentic HoneyX Manly Plus product photo
+										'https://cdn.shopify.com/s/files/1/0725/5674/0906/files/honeyx_is_natural_superfood_for_men_in_Pakistan.webp?v=1729879293'
 								},
 								{
 									id: 'hx-p2',
@@ -868,7 +1000,7 @@ Ensure the output is ONLY a raw JSON array. Do not wrap in markdown code blocks.
 										'A premium, active fusion of raw wildflower honey, pure organic Shilajit, and natural performance saffron to optimize total body strength and vitality.',
 									price: 'Rs. 2,450',
 									photoUrl:
-										'https://cdn.shopify.com/s/files/1/0725/5674/0906/files/honeyshilajitpriceinpakistan.webp?v=1753269155' // Authentic Honey Shilajit product photo
+										'https://cdn.shopify.com/s/files/1/0725/5674/0906/files/honeyshilajitpriceinpakistan.webp?v=1753269155'
 								},
 								{
 									id: 'hx-p3',
@@ -877,14 +1009,14 @@ Ensure the output is ONLY a raw JSON array. Do not wrap in markdown code blocks.
 										'Formulated with high-strength Ashwagandha (Withania Somnifera) and active natural adaptogens to support stress resilience, mental focus, and optimal physical vigor.',
 									price: 'Rs. 3,000',
 									photoUrl:
-										'https://cdn.shopify.com/s/files/1/0725/5674/0906/files/naturalandorganicafrovitsrcapletsbyhoneyx.webp?v=1753091546' // Authentic Afrovit-SR caplets photo
+										'https://cdn.shopify.com/s/files/1/0725/5674/0906/files/naturalandorganicafrovitsrcapletsbyhoneyx.webp?v=1753091546'
 								}
 							]
 						}
 					});
 				}
 
-				// General scraper fallback
+				// General scraper fallback (only in demo mode)
 				return json({
 					success: true,
 					data: {
@@ -893,7 +1025,7 @@ Ensure the output is ONLY a raw JSON array. Do not wrap in markdown code blocks.
 						mission: `Delivering exceptional value and high-performance lifestyle products globally via ${storeUrl}.`,
 						primaryColor: '#7c6aed',
 						secondaryColor: '#22d3ee',
-						logoUrl: 'https://cdn-icons-png.flaticon.com/512/825/825590.png', // Premium shopping bag icon
+						logoUrl: 'https://cdn-icons-png.flaticon.com/512/825/825590.png',
 						traits: ['Innovative', 'Aesthetic', 'Customer First'],
 						commStyle: 'Professional',
 						demographics: 'Modern online shoppers aged 18-35.',
@@ -943,7 +1075,9 @@ Output ONLY the enriched expanded text directly. Do NOT include markdown code bl
 						if (res.text) {
 							return json({
 								success: true,
-								enriched: res.text.trim()
+								data: {
+									enriched: res.text.trim()
+								}
 							});
 						}
 					} catch (err) {
@@ -952,9 +1086,22 @@ Output ONLY the enriched expanded text directly. Do NOT include markdown code bl
 				}
 
 				// Fallback enricher
+				const allowDemoMode = env.ALLOW_DEMO_MODE === 'true';
+				if (!allowDemoMode) {
+					return json(
+						{
+							success: false,
+							error: 'Failed to enrich field. Real field enrichment requires a valid GEMINI_API_KEY.'
+						},
+						{ status: 400 }
+					);
+				}
+
 				return json({
 					success: true,
-					enriched: `${fieldVal} — meticulously crafted for discerning individuals, blending exceptional premium quality with modern functional design to deliver a transformative consumer experience.`
+					data: {
+						enriched: `${fieldVal} — meticulously crafted for discerning individuals, blending exceptional premium quality with modern functional design to deliver a transformative consumer experience.`
+					}
 				});
 			}
 		}
@@ -998,14 +1145,13 @@ Output ONLY the enriched expanded text directly. Do NOT include markdown code bl
 		// ══════════════════════════════════════════════════════════════════════════
 		// G. PATH: Catch-All Fallback
 		// ══════════════════════════════════════════════════════════════════════════
-		return json({
-			success: true,
-			data: {
-				message: `Service path "${path}" handled natively by local engine.`,
-				status: 'completed',
-				timestamp: new Date().toISOString()
-			}
-		});
+		return json(
+			{
+				success: false,
+				error: `Unknown engine path: ${path}`
+			},
+			{ status: 400 }
+		);
 	} catch (err) {
 		console.error(`[Local Engine] Error processing path "${path}":`, err);
 		return json({ success: false, error: (err as Error).message }, { status: 500 });

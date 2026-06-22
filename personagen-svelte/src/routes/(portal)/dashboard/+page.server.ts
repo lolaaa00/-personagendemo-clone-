@@ -1,6 +1,7 @@
 import type { PageServerLoad } from './$types';
 import { createDbService } from '$lib/server/db';
 import { env } from '$env/dynamic/public';
+import { env as privateEnv } from '$env/dynamic/private';
 import {
 	getOrCreateHermes,
 	ensureHermesConfig,
@@ -164,27 +165,11 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 		}
 	}
 
+	const allowDemo = privateEnv.ALLOW_DEMO_MODE === 'true';
+
 	if (!hasDbAgents) {
-		// Fallback to static JSON
-		const agentsRes = await fetch('/data/agents.json');
-		const rawAgents: any[] = await agentsRes.json();
-		agents = rawAgents.map((a, idx) => {
-			const engVal = a.engagementRate || parseFloat(a.engagement) || 5.2;
-			const totalTokenUsage = 18450 + idx * 3420;
-			const totalTokenCost = totalTokenUsage * 0.00000018 + 0.22;
-			return {
-				...a,
-				niche: (a.niche || '').split(' & ')[0] || a.niche,
-				engagementRate: engVal,
-				engagement_rate: engVal,
-				active: a.status === 'active',
-				connection_count: a.connectionCount ?? 0,
-				autonomy_level: a.autonomy_level ?? 'advisor',
-				total_token_usage: totalTokenUsage,
-				total_token_cost: Number(totalTokenCost.toFixed(4))
-			};
-		});
-		postsThisWeek = agents.filter((a) => a.active).length * 3;
+		agents = [];
+		postsThisWeek = 0;
 	}
 
 	// Calculate platform distribution purely from active connections (no mock percentages)
@@ -229,15 +214,19 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 				.sort((a, b) => b.pct - a.pct);
 		}
 	} else if (!hasDbAgents) {
-		// Default platform percentages for static fallback mode only
-		platformData = [
-			{ name: 'Instagram', pct: 38, color: platformColors['Instagram'] },
-			{ name: 'TikTok', pct: 27, color: platformColors['TikTok'] },
-			{ name: 'Twitter/X', pct: 16, color: platformColors['Twitter/X'] },
-			{ name: 'LinkedIn', pct: 10, color: platformColors['LinkedIn'] },
-			{ name: 'YouTube', pct: 6, color: platformColors['YouTube'] },
-			{ name: 'Threads', pct: 3, color: platformColors['Threads'] }
-		];
+		if (allowDemo) {
+			// Default platform percentages for static fallback mode only
+			platformData = [
+				{ name: 'Instagram', pct: 38, color: platformColors['Instagram'] },
+				{ name: 'TikTok', pct: 27, color: platformColors['TikTok'] },
+				{ name: 'Twitter/X', pct: 16, color: platformColors['Twitter/X'] },
+				{ name: 'LinkedIn', pct: 10, color: platformColors['LinkedIn'] },
+				{ name: 'YouTube', pct: 6, color: platformColors['YouTube'] },
+				{ name: 'Threads', pct: 3, color: platformColors['Threads'] }
+			];
+		} else {
+			platformData = [];
+		}
 	}
 
 	// Spark chart data (engagement trend per agent, 7 days)
@@ -295,33 +284,41 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 			return dailyRates;
 		});
 	} else {
-		// Static fallbacks for offline demo mode
-		sparkData = agents.slice(0, 3).map((agent) => {
-			const base = agent.engagementRate || 5.0;
-			return [
-				Math.max(1, +(base - 0.8).toFixed(1)),
-				Math.max(1, +(base - 0.5).toFixed(1)),
-				Math.max(1, +(base - 0.3).toFixed(1)),
-				Math.max(1, +(base + 0.2).toFixed(1)),
-				Math.max(1, +(base + 0.1).toFixed(1)),
-				Math.max(1, +(base + 0.3).toFixed(1)),
-				Math.max(1, +base.toFixed(1))
-			];
-		});
+		if (allowDemo) {
+			// Static fallbacks for offline demo mode
+			sparkData = agents.slice(0, 3).map((agent) => {
+				const base = agent.engagementRate || 5.0;
+				return [
+					Math.max(1, +(base - 0.8).toFixed(1)),
+					Math.max(1, +(base - 0.5).toFixed(1)),
+					Math.max(1, +(base - 0.3).toFixed(1)),
+					Math.max(1, +(base + 0.2).toFixed(1)),
+					Math.max(1, +(base + 0.1).toFixed(1)),
+					Math.max(1, +(base + 0.3).toFixed(1)),
+					Math.max(1, +base.toFixed(1))
+				];
+			});
+		} else {
+			sparkData = [];
+		}
 	}
 
 	if (!hermesAgent) {
-		hermesAgent = {
-			id: 'hermes-fallback-id',
-			name: 'Hermes',
-			handle: '@hermes_overseer',
-			initial: 'H',
-			gradient: 'linear-gradient(135deg, #10B981, #06B6D4)',
-			status: 'active',
-			followers: '1',
-			engagement_rate: 10.0,
-			is_overseer: true
-		};
+		if (allowDemo) {
+			hermesAgent = {
+				id: 'hermes-fallback-id',
+				name: 'Hermes',
+				handle: '@hermes_overseer',
+				initial: 'H',
+				gradient: 'linear-gradient(135deg, #10B981, #06B6D4)',
+				status: 'active',
+				followers: '1',
+				engagement_rate: 10.0,
+				is_overseer: true
+			};
+		} else {
+			hermesAgent = null;
+		}
 	}
 
 	return {

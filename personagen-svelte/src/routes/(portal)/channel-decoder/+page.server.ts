@@ -1,10 +1,12 @@
 import type { PageServerLoad } from './$types';
 import { createDbService } from '$lib/server/db';
 import { env } from '$env/dynamic/public';
+import { env as privateEnv } from '$env/dynamic/private';
 
 export const load: PageServerLoad = async ({ locals, fetch }) => {
 	const supabaseUrl = env.PUBLIC_SUPABASE_URL ?? '';
 	const isPlaceholder = !supabaseUrl || supabaseUrl.includes('placeholder');
+	const allowDemo = privateEnv.ALLOW_DEMO_MODE === 'true';
 
 	let agents: any[] = [];
 	let hasDb = false;
@@ -25,14 +27,7 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 	}
 
 	if (!hasDb) {
-		// Fallback static agents
-		const agentsRes = await fetch('/data/agents.json');
-		const rawAgents: any[] = await agentsRes.json();
-		agents = rawAgents.map((a) => ({
-			id: a.id,
-			name: a.name,
-			handle: a.handle || `@${a.name.toLowerCase().replace(/\s+/g, '')}`
-		}));
+		agents = [];
 	}
 
 	return {

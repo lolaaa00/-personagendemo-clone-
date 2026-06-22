@@ -218,3 +218,20 @@ export const BrandBrief = {
 	extendField: (fieldName: string, fieldVal: string) =>
 		request<{ enriched: string }>(ENDPOINTS.brandBrief, 'extend_field', { fieldName, fieldVal })
 };
+
+// ── Personas (Direct DB) ──────────────────────────────────────────────────────
+export const Personas = {
+	createDirect: (payload: { name: string; niche: string; platform: string; bio: string }) =>
+		fetch('/api/agents', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify(payload)
+		}).then(async (res) => {
+			const data = await res.json();
+			if (!res.ok || !data.success) {
+				throw new Error(data.error || `HTTP ${res.status}`);
+			}
+			return data;
+		})
+};
+

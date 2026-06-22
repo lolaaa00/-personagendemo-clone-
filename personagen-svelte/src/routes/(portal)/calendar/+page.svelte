@@ -35,6 +35,7 @@
 		agents: Agent[];
 		realPosts?: ScheduledPost[];
 		blueprints?: SampleBlueprint[];
+		allowDemoMode?: boolean;
 	}
 
 	let { data } = $props<{ data: PageData }>();
@@ -43,6 +44,7 @@
 	let currentYear = $state(new Date().getFullYear());
 	let currentMonth = $state(new Date().getMonth()); // 0-indexed
 	let selectedAgentId = $state('');
+	let selectedStatusFilter = $state('');
 	let selectedDay = $state<number | null>(null);
 	let showComposer = $state(false);
 	let composerSubmitting = $state(false);
@@ -246,12 +248,20 @@
 				composerText = data.content || '';
 				showToast('Content forged successfully!', 'success');
 			} else {
+				if (data.allowDemoMode) {
+					composerText = getMockForgedContent(enrichedTopic, selectedProd);
+					showToast('Using forged demo template', 'info');
+				} else {
+					showToast(`Failed to forge content: ${res.error || 'Unknown error'}`, 'error');
+				}
+			}
+		} catch (e: any) {
+			if (data.allowDemoMode) {
 				composerText = getMockForgedContent(enrichedTopic, selectedProd);
 				showToast('Using forged demo template', 'info');
+			} else {
+				showToast(`Failed to forge content: ${e.message || e}`, 'error');
 			}
-		} catch (e) {
-			composerText = getMockForgedContent(enrichedTopic, selectedProd);
-			showToast('Using forged demo template', 'info');
 		} finally {
 			forging = false;
 		}
@@ -369,6 +379,7 @@
 	let filteredPosts = $derived(
 		posts.filter((p) => {
 			if (selectedAgentId && p.agentId !== selectedAgentId) return false;
+			if (selectedStatusFilter && p.status !== selectedStatusFilter) return false;
 			return true;
 		})
 	);
@@ -493,6 +504,53 @@
 		}
 	}
 
+	async function saveAsDraft() {
+		const selectedPlatforms = Object.entries(composerPlatforms)
+			.filter(([, v]) => v)
+			.map(([k]) => k);
+		if (!composerAgentId) { showToast('Select an agent', 'warning'); return; }
+		if (!composerText.trim()) { showToast('Write some content', 'warning'); return; }
+		if (selectedPlatforms.length === 0) { showToast('Select at least one platform', 'warning'); return; }
+
+		composerSubmitting = true;
+		try {
+			const draftDate = composerDate || new Date().toISOString().slice(0, 10);
+			const res = await Posts.create({
+				agent_id: composerAgentId,
+				content: composerText,
+				platforms: selectedPlatforms,
+				scheduled_date: draftDate,
+				scheduled_time: composerTime + ':00',
+				status: 'draft'
+			});
+			if (res.success && res.data) {
+				const created = res.data as any;
+				const agent = data.agents.find((a: Agent) => a.id === composerAgentId);
+				posts = [
+					...posts,
+					{
+						id: created.id,
+						agentId: created.agent_id,
+						agentName: agent?.name || 'Agent',
+						text: created.content,
+						platforms: created.platforms || [],
+						date: created.scheduled_date,
+						time: created.scheduled_time ? created.scheduled_time.substring(0, 5) : '10:00',
+						status: 'draft'
+					}
+				];
+				showToast('Draft saved successfully', 'success');
+				showComposer = false;
+			} else {
+				showToast(res.error || 'Failed to save draft', 'error');
+			}
+		} catch (err: any) {
+			showToast(err.message || 'Error saving draft', 'error');
+		} finally {
+			composerSubmitting = false;
+		}
+	}
+
 	const PLATFORM_COLORS: Record<string, string> = {
 		tiktok: '#fe2c55',
 		instagram: '#e1306c',
@@ -505,7 +563,8 @@
 	const STATUS_COLORS: Record<string, string> = {
 		scheduled: 'var(--accent)',
 		draft: 'var(--warning)',
-		published: 'var(--success)'
+		published: 'var(--success)',
+		failed: 'var(--error)'
 	};
 </script>
 
@@ -528,6 +587,16 @@
 					{#each data.agents as agent}
 						<option value={agent.id}>{agent.name}</option>
 					{/each}
+				</select>
+			</div>
+			<div class="agent-filter">
+				<label for="cal-status">Filter Status</label>
+				<select id="cal-status" bind:value={selectedStatusFilter}>
+					<option value="">All Statuses</option>
+					<option value="draft">Draft</option>
+					<option value="scheduled">Scheduled</option>
+					<option value="published">Published</option>
+					<option value="failed">Failed</option>
 				</select>
 			</div>
 		</div>
@@ -732,7 +801,7 @@
 								y2="6"
 							/><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg
 						>
-						<p>No posts scheduled</p>
+						<p>No real content yet. Generate a draft or connect a profile.</p>
 					</div>
 				{:else}
 					<div class="panel-posts">
@@ -1020,6 +1089,13 @@
 					style="padding: 1rem 1.5rem; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 0.75rem; background: var(--surface-2);"
 				>
 					<button class="btn-ghost btn-sm" onclick={closeComposer}>Cancel</button>
+					<button class="btn-ghost btn-sm" style="border: 1px solid var(--warning); color: var(--warning);" onclick={saveAsDraft} disabled={composerSubmitting}>
+						{#if composerSubmitting}
+							<span class="spinner"></span> Saving…
+						{:else}
+							📝 Save as Draft
+						{/if}
+					</button>
 					<button class="btn-primary btn-sm" onclick={schedulePost} disabled={composerSubmitting}>
 						{#if composerSubmitting}
 							<span class="spinner"></span> Scheduling…

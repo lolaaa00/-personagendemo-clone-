@@ -8,6 +8,7 @@
 	let { data } = $props();
 
 	let chatAgent = $derived(data.hermesAgent);
+	let creatorAgents = $derived(data.agents.filter((a) => !a.is_overseer));
 	let managedAgentsCount = $derived(data.managedAgentsCount || 0);
 	let openTicketsCount = $derived(data.openTicketsCount || 0);
 	let unclaimedMessagesCount = $derived(data.unclaimedMessagesCount || 0);
@@ -32,6 +33,36 @@
 
 	<!-- KPI Grid -->
 	<KPIGrid agents={data.agents} postsThisWeek={data.postsThisWeek} />
+
+	{#if creatorAgents.length === 0}
+		<div class="onboarding-card">
+			<div class="onboarding-header">
+				<h3>🚀 Welcome to PersonaGen! Let's initialize your Agent Network</h3>
+				<p>Deploy your first autonomous creator and link them to social platforms to begin operations.</p>
+			</div>
+			
+			<div class="onboarding-steps">
+				<div class="step-box">
+					<div class="step-num">1</div>
+					<h4>Create Persona</h4>
+					<p>Design a tailored niche, target audience, and personality. Create it in the database directly or use Account Factory registration.</p>
+					<a href="/generator" class="step-link">Configure Persona →</a>
+				</div>
+				<div class="step-box">
+					<div class="step-num">2</div>
+					<h4>Link Platforms</h4>
+					<p>Connect your persona to Instagram, TikTok, YouTube, or Twitter/X using Composio integration in the agent settings.</p>
+					<span class="step-link disabled">Awaiting Agent Creation</span>
+				</div>
+				<div class="step-box">
+					<div class="step-num">3</div>
+					<h4>Configure API Keys</h4>
+					<p>Ensure Gemini API, Composio, and Supabase connections are operational under system settings.</p>
+					<a href="/settings" class="step-link">Manage Environment →</a>
+				</div>
+			</div>
+		</div>
+	{/if}
 
 	<!-- Quick Actions -->
 	<div class="quick-actions">
@@ -185,6 +216,99 @@
 <style>
 	.dashboard-page {
 		max-width: 100%;
+	}
+
+	/* Onboarding Card styling */
+	.onboarding-card {
+		background: linear-gradient(135deg, rgba(30, 41, 59, 0.7), rgba(15, 23, 42, 0.8));
+		backdrop-filter: blur(12px);
+		border: 1px solid rgba(99, 102, 241, 0.2);
+		border-radius: var(--radius);
+		padding: 2rem;
+		margin-top: 1.5rem;
+		box-shadow: 0 8px 32px rgba(0, 0, 0, 0.24);
+	}
+
+	.onboarding-header h3 {
+		font-family: var(--font-display);
+		font-size: 1.25rem;
+		font-weight: 600;
+		color: #fff;
+		margin: 0 0 0.5rem 0;
+	}
+
+	.onboarding-header p {
+		font-size: 0.85rem;
+		color: var(--text-dim);
+		margin: 0 0 1.5rem 0;
+	}
+
+	.onboarding-steps {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+		gap: 1.25rem;
+	}
+
+	.step-box {
+		background: rgba(255, 255, 255, 0.02);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		padding: 1.25rem;
+		position: relative;
+		display: flex;
+		flex-direction: column;
+		transition: transform 0.2s, border-color 0.2s;
+	}
+
+	.step-box:hover {
+		transform: translateY(-2px);
+		border-color: rgba(99, 102, 241, 0.4);
+	}
+
+	.step-num {
+		position: absolute;
+		top: 1rem;
+		right: 1rem;
+		font-size: 1.75rem;
+		font-weight: 900;
+		font-family: var(--font-mono);
+		color: rgba(99, 102, 241, 0.15);
+		line-height: 1;
+	}
+
+	.step-box h4 {
+		font-size: 0.9rem;
+		font-weight: 600;
+		color: var(--text);
+		margin: 0 0 0.5rem 0;
+	}
+
+	.step-box p {
+		font-size: 0.75rem;
+		color: var(--text-dim);
+		line-height: 1.5;
+		margin: 0 0 1.25rem 0;
+		flex-grow: 1;
+	}
+
+	.step-link {
+		font-size: 0.75rem;
+		font-weight: 600;
+		color: var(--accent);
+		text-decoration: none;
+		display: inline-flex;
+		align-items: center;
+		transition: color 0.2s;
+	}
+
+	.step-link:hover:not(.disabled) {
+		color: #818cf8;
+	}
+
+	.step-link.disabled {
+		color: var(--text-dim);
+		cursor: not-allowed;
+		opacity: 0.5;
 	}
 
 	/* Section tags */

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { page } from '$app/stores';
 	import type { Agent } from '$lib/types';
 	import { showToast } from '$lib/stores/ui.svelte';
 	import { ChannelDecode, ContentForge, Posts } from '$lib/services/api';
@@ -17,6 +18,7 @@
 	interface PageData {
 		agents: Agent[];
 		blueprints: SampleBlueprint[];
+		allowDemoMode?: boolean;
 	}
 
 	let { data } = $props<{ data: PageData }>();
@@ -250,12 +252,20 @@
 				forgedCopy = data.content || '';
 				showToast('Post content forged successfully!', 'success');
 			} else {
+				if (data.allowDemoMode) {
+					forgedCopy = getMockPostContent(enrichedTopic, selectedProd);
+					showToast('Demo post template loaded', 'info');
+				} else {
+					showToast(`Failed to forge post content: ${res.error || 'Unknown error'}`, 'error');
+				}
+			}
+		} catch (e: any) {
+			if (data.allowDemoMode) {
 				forgedCopy = getMockPostContent(enrichedTopic, selectedProd);
 				showToast('Demo post template loaded', 'info');
+			} else {
+				showToast(`Failed to forge post content: ${e.message || e}`, 'error');
 			}
-		} catch {
-			forgedCopy = getMockPostContent(enrichedTopic, selectedProd);
-			showToast('Demo post template loaded', 'info');
 		} finally {
 			forgingPost = false;
 		}
@@ -338,12 +348,20 @@
 				}
 				showToast('Creative brief generated!', 'success');
 			} else {
+				if (data.allowDemoMode) {
+					sandboxResult = getMockSandboxContent(sandboxTopic);
+					showToast('Demo brief template loaded', 'info');
+				} else {
+					showToast(`Failed to generate sandbox asset: ${res.error || 'Unknown error'}`, 'error');
+				}
+			}
+		} catch (e: any) {
+			if (data.allowDemoMode) {
 				sandboxResult = getMockSandboxContent(sandboxTopic);
 				showToast('Demo brief template loaded', 'info');
+			} else {
+				showToast(`Failed to generate sandbox asset: ${e.message || e}`, 'error');
 			}
-		} catch {
-			sandboxResult = getMockSandboxContent(sandboxTopic);
-			showToast('Demo brief template loaded', 'info');
 		} finally {
 			generatingSandbox = false;
 		}

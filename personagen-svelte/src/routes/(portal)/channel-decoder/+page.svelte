@@ -47,6 +47,7 @@
 		platform: string;
 		overallScore: number;
 		layers: LayerResult[];
+		isInferred?: boolean;
 	} | null>(null);
 
 	function generateDemoResults(): typeof results {
@@ -226,10 +227,10 @@
 			if (res.success) {
 				showToast('Blueprint saved successfully', 'success');
 			} else {
-				showToast('Blueprint saved locally (offline mode)', 'info');
+				showToast(`Failed to save blueprint: ${res.error || 'Unknown error'}`, 'error');
 			}
-		} catch {
-			showToast('Blueprint saved locally (offline mode)', 'info');
+		} catch (err: any) {
+			showToast(`Failed to save blueprint: ${err.message || err}`, 'error');
 		}
 		saving = false;
 	}
@@ -499,6 +500,30 @@
 		<!-- ─── STEP 3: RESULTS ─── -->
 	{:else if step === 'results' && results}
 		<div class="results-step" style="animation: fadeUp 0.4s var(--ease-out)">
+			<!-- AI Inference Notice -->
+			<div class="ai-inference-banner glass-card" style="
+				border: 1px solid rgba(251, 191, 36, 0.25);
+				background: rgba(251, 191, 36, 0.06);
+				backdrop-filter: blur(8px);
+				-webkit-backdrop-filter: blur(8px);
+				border-radius: 12px;
+				padding: 1rem 1.25rem;
+				margin-bottom: 1.5rem;
+				display: flex;
+				align-items: flex-start;
+				gap: 0.75rem;
+			">
+				<span style="font-size: 1.25rem; line-height: 1;">⚠️</span>
+				<div>
+					<p style="margin: 0 0 0.25rem 0; font-weight: 700; font-size: 0.82rem; color: var(--warning);">
+						AI Strategic Inference Mode
+					</p>
+					<p style="margin: 0; font-size: 0.75rem; line-height: 1.5; color: var(--text-muted);">
+						This analysis was generated using AI inference from publicly available data. Without authenticated API access to the platform, confidence scores are estimated and findings reflect strategic patterns rather than verified analytics. Connect platform credentials for higher-fidelity data.
+					</p>
+				</div>
+			</div>
+
 			<!-- Overall Score -->
 			<div class="overall-score-card">
 				<div class="score-visual">
@@ -512,7 +537,19 @@
 					</div>
 				</div>
 				<div class="score-info">
-					<h2>{results.channelName}</h2>
+					<h2 style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+						{results.channelName}
+						{#if results.isInferred}
+							<span
+								style="font-size: 0.65rem; background: rgba(99, 102, 241, 0.15); border: 1px solid rgba(99, 102, 241, 0.3); color: #818cf8; padding: 2px 8px; border-radius: 4px; font-weight: 600;"
+								>AI-Inferred</span
+							>
+							<span
+								style="font-size: 0.65rem; background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.3); color: #fbbf24; padding: 2px 8px; border-radius: 4px; font-weight: 600;"
+								>Limited Public Data</span
+							>
+						{/if}
+					</h2>
 					<p class="score-platform">
 						{PLATFORMS.find((p) => p.id === results?.platform)?.label || results.platform} • Blueprint
 						Score

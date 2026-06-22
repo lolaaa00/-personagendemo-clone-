@@ -18,6 +18,10 @@ function getSeedHash(str: string): number {
 }
 
 function getPlatformFallbackMetrics(agentId: string, platform: string) {
+	const allowDemo = env.ALLOW_DEMO_MODE === 'true';
+	if (!allowDemo) {
+		return { followers: 0, engagement: 0.0 };
+	}
 	const hash = getSeedHash(agentId + platform);
 	const plat = platform.toLowerCase();
 
@@ -194,6 +198,17 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				return json({ success: false, error: 'Missing persona_id' }, { status: 400 });
 			}
 
+			const allowDemoMode = env.ALLOW_DEMO_MODE === 'true';
+			if (!allowDemoMode || isUuid(persona_id)) {
+				const { data: agent, error: agentCheckErr } = await db.agents.get(persona_id);
+				if (agentCheckErr || !agent) {
+					return json({ success: false, error: 'Agent not found' }, { status: 404 });
+				}
+				if (agent.user_id !== user.id) {
+					return json({ success: false, error: 'Forbidden' }, { status: 403 });
+				}
+			}
+
 			const { data: conns, error } = await db.connections.listForAgent(persona_id);
 			if (error) throw error;
 
@@ -202,11 +217,14 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 			const isUuidAgent = isUuid(persona_id);
 			const composioKey = env.COMPOSIO_API_KEY || '';
+			const allowDemo = env.ALLOW_DEMO_MODE === 'true';
 			const isDevBypass =
-				!isUuidAgent ||
-				!composioKey ||
-				composioKey.includes('placeholder') ||
-				composioKey.includes('change_me');
+				allowDemo && (
+					!isUuidAgent ||
+					!composioKey ||
+					composioKey.includes('placeholder') ||
+					composioKey.includes('change_me')
+				);
 
 			let activeComposioPlatforms: string[] = [];
 			let providerError = '';
@@ -346,7 +364,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				}
 			}
 
-			// 3. Keep agent connection count, handle, and dynamic stats up to date in DB
+			// 3. Keep agent connection count and dynamic stats up to date in DB
 			if (conns) {
 				try {
 					const { data: finalConns } = await db.connections.listForAgent(persona_id);
@@ -360,10 +378,11 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 					const { data: agent } = await db.agents.get(persona_id);
 					if (agent) {
-						let targetHandle = '';
-						if (count > 0 && activeConns.length > 0) {
-							// Strict connection handle
-							targetHandle = activeConns[0].handle || '';
+						let newStatus = agent.status;
+						if (count === 0) {
+							newStatus = 'paused';
+						} else if (agent.status !== 'paused') {
+							newStatus = 'active';
 						}
 
 						const { followers: targetFollowers, engagement_rate: targetEngagement } =
@@ -371,15 +390,14 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 						await db.agents.update(persona_id, {
 							connection_count: count,
-							status: count === 0 ? 'paused' : 'active',
-							handle: targetHandle,
+							status: newStatus,
 							followers: targetFollowers,
 							engagement_rate: targetEngagement
 						});
 					}
 				} catch (err) {
 					console.error(
-						'[Accounts API] Failed to update agent connection count and handle metrics:',
+						'[Accounts API] Failed to update agent connection count and metrics:',
 						err
 					);
 				}
@@ -398,6 +416,10 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			}
 
 			if (!isUuid(persona_id)) {
+				const allowDemoMode = env.ALLOW_DEMO_MODE === 'true';
+				if (!allowDemoMode) {
+					return json({ success: false, error: 'Invalid persona_id format (UUID required).' }, { status: 400 });
+				}
 				console.log('[Accounts API] Non-UUID agent ID (dev bypass): Generating mock redirect URL');
 				const redirectUrl = `${new URL(request.url).origin}/persona-config?oauth_success=true&platform=${platform}&agentId=${persona_id}`;
 				return json({
@@ -412,6 +434,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			const { data: agent, error: agentErr } = await db.agents.get(persona_id);
 			if (agentErr || !agent) {
 				return json({ success: false, error: 'Agent not found' }, { status: 404 });
+			}
+			if (agent.user_id !== user.id) {
+				return json({ success: false, error: 'Forbidden' }, { status: 403 });
 			}
 
 			const composioKey = env.COMPOSIO_API_KEY || '';
@@ -461,25 +486,36 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			}
 
 			if (!isUuid(persona_id)) {
+				const allowDemoMode = env.ALLOW_DEMO_MODE === 'true';
+				if (!allowDemoMode) {
+					return json({ success: false, error: 'Invalid persona_id format (UUID required).' }, { status: 400 });
+				}
 				return json({ success: true });
+			}
+
+			const { data: agent, error: agentErr } = await db.agents.get(persona_id);
+			if (agentErr || !agent) {
+				return json({ success: false, error: 'Agent not found' }, { status: 404 });
+			}
+			if (agent.user_id !== user.id) {
+				return json({ success: false, error: 'Forbidden' }, { status: 403 });
 			}
 
 			const { error: delErr } = await db.connections.delete(persona_id, platform);
 			if (delErr) throw delErr;
 
-			// Recalculate connection count, handle, and dynamic stats
+			// Recalculate connection count and dynamic stats
 			try {
 				const { data: finalConns } = await db.connections.listForAgent(persona_id);
 				const count = finalConns?.length || 0;
 
 				const { data: agent } = await db.agents.get(persona_id);
 				if (agent) {
-					let targetHandle = '';
-					if (count > 0 && finalConns && finalConns.length > 0) {
-						targetHandle = finalConns[0].handle || '';
-					} else {
-						// Cleanly remove any handle if disconnected
-						targetHandle = '';
+					let newStatus = agent.status;
+					if (count === 0) {
+						newStatus = 'paused';
+					} else if (agent.status !== 'paused') {
+						newStatus = 'active';
 					}
 
 					const { followers: targetFollowers, engagement_rate: targetEngagement } =
@@ -487,8 +523,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 					await db.agents.update(persona_id, {
 						connection_count: count,
-						status: count === 0 ? 'paused' : 'active',
-						handle: targetHandle,
+						status: newStatus,
 						followers: targetFollowers,
 						engagement_rate: targetEngagement
 					});

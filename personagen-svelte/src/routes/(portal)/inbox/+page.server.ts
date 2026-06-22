@@ -1,6 +1,7 @@
 import type { PageServerLoad } from './$types';
 import { createDbService } from '$lib/server/db';
 import { env } from '$env/dynamic/public';
+import { env as privateEnv } from '$env/dynamic/private';
 import { redirect } from '@sveltejs/kit';
 import {
 	getOrCreateHermes,
@@ -50,37 +51,34 @@ export const load: PageServerLoad = async ({ locals, url, fetch }) => {
 		}
 	}
 
-	// 3. Fallback to static JSON if offline or no DB agents found
-	if (agents.length === 0) {
-		try {
-			const res = await fetch('/data/agents.json');
-			if (res.ok) {
-				const staticAgents = await res.json();
-				agents = staticAgents.filter((a: any) => !a.is_overseer);
-				const staticHermes = staticAgents.find((a: any) => a.is_overseer);
-				if (staticHermes && !hermesAgent) {
-					hermesAgent = staticHermes;
-				}
-			}
-		} catch (err) {
-			console.error('[Inbox Server] Fallback JSON load failed:', err);
-		}
-	}
+	const allowDemo = privateEnv.ALLOW_DEMO_MODE === 'true';
 
 	// If hermes is still null, generate a fallback
 	if (!hermesAgent) {
-		hermesAgent = {
-			id: 'hermes-dev-bypass-id',
-			name: 'Hermes',
-			handle: '@hermes_overseer',
-			initial: 'H',
-			gradient: 'linear-gradient(135deg, #10B981, #06B6D4)',
-			status: 'active',
-			soul: 'You are the platform-level Chief Operational Overseer. Monitor health, orchestrate agents, and support human administrators.',
-			skills: 'System diagnostics, team scheduling, autonomous recovery, user reports analysis',
-			tools: 'system_log_reader, agent_orchestrator, slack_notifier, backup_scheduler',
-			is_overseer: true
-		};
+		if (allowDemo) {
+			hermesAgent = {
+				id: 'hermes-dev-bypass-id',
+				name: 'Hermes',
+				handle: '@hermes_overseer',
+				initial: 'H',
+				gradient: 'linear-gradient(135deg, #10B981, #06B6D4)',
+				status: 'active',
+				soul: 'You are the platform-level Chief Operational Overseer. Monitor health, orchestrate agents, and support human administrators.',
+				skills: 'System diagnostics, team scheduling, autonomous recovery, user reports analysis',
+				tools: 'system_log_reader, agent_orchestrator, slack_notifier, backup_scheduler',
+				is_overseer: true
+			};
+		} else {
+			hermesAgent = {
+				id: 'empty-hermes-id',
+				name: 'Hermes',
+				handle: '@hermes_overseer',
+				initial: 'H',
+				gradient: 'linear-gradient(135deg, #10B981, #06B6D4)',
+				status: 'active',
+				is_overseer: true
+			};
+		}
 	}
 
 	// 4. Resolve currently selected agent

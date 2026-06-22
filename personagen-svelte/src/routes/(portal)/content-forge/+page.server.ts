@@ -1,6 +1,7 @@
 import type { PageServerLoad } from './$types';
 import { createDbService } from '$lib/server/db';
 import { env } from '$env/dynamic/public';
+import { env as privateEnv } from '$env/dynamic/private';
 
 export const load: PageServerLoad = async ({ locals, fetch }) => {
 	const supabaseUrl = env.PUBLIC_SUPABASE_URL ?? '';
@@ -50,19 +51,12 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 	}
 
 	if (!hasDb) {
-		const agentsRes = await fetch('/data/agents.json');
-		const rawAgents: any[] = await agentsRes.json();
-		agents = rawAgents.map((a) => ({
-			...a,
-			niche: (a.niche || '').split(' & ')[0] || a.niche,
-			engagement_rate: a.engagementRate || parseFloat(a.engagement) || 0,
-			active: a.status === 'active',
-			connected_platforms: ['instagram', 'youtube']
-		}));
+		agents = [];
 	}
 
 	return {
 		agents,
-		blueprints
+		blueprints,
+		allowDemoMode: privateEnv.ALLOW_DEMO_MODE === 'true'
 	};
 };

@@ -12,6 +12,111 @@
 			.replace(/'/g, '&#039;');
 	}
 
+	/**
+	 * Robust Markdown-to-HTML renderer for chat messages.
+	 * Handles headings (h1-h6), bold, italic, inline code, code blocks,
+	 * ordered/unordered lists, horizontal rules, and paragraphs.
+	 */
+	function renderMarkdown(raw: string): string {
+		if (!raw) return '';
+
+		// 1. Extract fenced code blocks first to protect them from further processing
+		const codeBlocks: string[] = [];
+		let text = raw.replace(/```([\s\S]*?)```/g, (_match, code) => {
+			const idx = codeBlocks.length;
+			codeBlocks.push(`<pre class="md-code-block"><code>${escapeHtml(code.trim())}</code></pre>`);
+			return `%%CODEBLOCK_${idx}%%`;
+		});
+
+		// 2. Split into lines and process block-level elements
+		const lines = text.split('\n');
+		const htmlParts: string[] = [];
+		let i = 0;
+
+		while (i < lines.length) {
+			const line = lines[i];
+			const trimmed = line.trim();
+
+			// Codeblock placeholder — pass through
+			if (trimmed.startsWith('%%CODEBLOCK_')) {
+				htmlParts.push(trimmed.replace(/%%CODEBLOCK_(\d+)%%/, (_m, idx) => codeBlocks[Number(idx)] || ''));
+				i++;
+				continue;
+			}
+
+			// Empty line — skip (paragraph break)
+			if (trimmed === '') { i++; continue; }
+
+			// Horizontal rule
+			if (/^[-*_]{3,}$/.test(trimmed)) {
+				htmlParts.push('<hr class="md-hr">');
+				i++;
+				continue;
+			}
+
+			// Headings (h1-h6)
+			const headingMatch = trimmed.match(/^(#{1,6})\s+(.*)$/);
+			if (headingMatch) {
+				const level = headingMatch[1].length;
+				const content = inlineFormat(headingMatch[2]);
+				htmlParts.push(`<h${level} class="md-h${level}">${content}</h${level}>`);
+				i++;
+				continue;
+			}
+
+			// Unordered list
+			if (/^[-*+]\s+/.test(trimmed)) {
+				const items: string[] = [];
+				while (i < lines.length && /^[-*+]\s+/.test(lines[i].trim())) {
+					items.push(inlineFormat(lines[i].trim().replace(/^[-*+]\s+/, '')));
+					i++;
+				}
+				htmlParts.push('<ul class="md-ul">' + items.map(it => `<li>${it}</li>`).join('') + '</ul>');
+				continue;
+			}
+
+			// Ordered list
+			if (/^\d+[.)\u{FF0E}]\s+/u.test(trimmed) || /^\d+️⃣/.test(trimmed)) {
+				const items: string[] = [];
+				while (i < lines.length) {
+					const t = lines[i].trim();
+					if (/^\d+[.)\u{FF0E}]\s+/u.test(t)) {
+						items.push(inlineFormat(t.replace(/^\d+[.)\u{FF0E}]\s+/u, '')));
+					} else if (/^\d+️⃣/.test(t)) {
+						items.push(inlineFormat(t.replace(/^\d+️⃣\s*/, '')));
+					} else {
+						break;
+					}
+					i++;
+				}
+				htmlParts.push('<ol class="md-ol">' + items.map(it => `<li>${it}</li>`).join('') + '</ol>');
+				continue;
+			}
+
+			// Regular paragraph
+			htmlParts.push(`<p>${inlineFormat(trimmed)}</p>`);
+			i++;
+		}
+
+		return htmlParts.join('');
+	}
+
+	/** Format inline markdown: bold, italic, inline code, links */
+	function inlineFormat(text: string): string {
+		let s = escapeHtml(text);
+		// Inline code (must run before bold/italic to avoid conflicts)
+		s = s.replace(/`([^`]+)`/g, '<code class="md-inline-code">$1</code>');
+		// Bold + italic
+		s = s.replace(/\*\*\*(.*?)\*\*\*/g, '<strong><em>$1</em></strong>');
+		// Bold
+		s = s.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+		// Italic
+		s = s.replace(/\*(.*?)\*/g, '<em>$1</em>');
+		// Links
+		s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+		return s;
+	}
+
 	interface Agent {
 		id: string;
 		name: string;
@@ -24,6 +129,7 @@
 		tools?: string;
 		is_overseer?: boolean;
 		isHermes?: boolean;
+		runtime_owner?: string;
 		niche?: string;
 	}
 
@@ -48,6 +154,21 @@
 	let isTyping = $state(false);
 	let currentLogs: string[] = $state([]);
 	let chatContainer: HTMLDivElement | null = $state(null);
+
+	function mapDbMessage(m: any): Message {
+		return {
+			id: m.id || Math.random().toString(36).substring(7),
+			role: m.role === 'model' ? 'agent' : m.role === 'user' ? 'user' : 'system',
+			content: m.content,
+			timestamp: m.created_at
+				? new Date(m.created_at).toLocaleTimeString([], {
+						hour: '2-digit',
+						minute: '2-digit'
+					})
+				: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+			toolCalls: m.tool_calls || []
+		};
+	}
 
 	// Custom agent presets for direct interaction
 	const presets = $derived.by(() => {
@@ -235,18 +356,7 @@
 			if (res.ok) {
 				const data = await res.json();
 				if (data.success && Array.isArray(data.messages) && data.messages.length > 0) {
-					messages = data.messages.map((m: any) => ({
-						id: m.id || Math.random().toString(36).substring(7),
-						role: m.role === 'model' ? 'agent' : m.role === 'user' ? 'user' : 'system',
-						content: m.content,
-						timestamp: m.created_at
-							? new Date(m.created_at).toLocaleTimeString([], {
-									hour: '2-digit',
-									minute: '2-digit'
-								})
-							: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-						toolCalls: m.tool_calls || []
-					}));
+					messages = data.messages.map(mapDbMessage);
 					scrollChatToBottom();
 					return;
 				}
@@ -306,6 +416,40 @@
 		}
 	}
 
+	async function pollForDaemonResponse(targetAgentId: string, sessionId: string) {
+		for (let attempt = 0; attempt < 20; attempt++) {
+			await new Promise((resolve) => setTimeout(resolve, 2000));
+			if (selectedAgent.id !== targetAgentId || activeSessionId !== sessionId) return;
+
+			const res = await fetch(`/api/agent/${targetAgentId}/chat?sessionId=${sessionId}`);
+			if (!res.ok) continue;
+
+			const data = await res.json();
+			if (!data.success || !Array.isArray(data.messages)) continue;
+
+			messages = data.messages.length > 0 ? data.messages.map(mapDbMessage) : messages;
+			await scrollChatToBottom();
+
+			const last = data.messages[data.messages.length - 1];
+			if (last?.role === 'model') {
+				currentLogs = ['Hermes daemon response received.'];
+				return;
+			}
+
+			currentLogs = [`Hermes daemon is processing... (${attempt + 1}/20)`];
+		}
+
+		messages = [
+			...messages,
+			{
+				id: Math.random().toString(36).substring(7),
+				role: 'system',
+				content: 'Hermes daemon has not responded yet. Confirm the daemon worker is running.',
+				timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+			}
+		];
+	}
+
 	async function sendMessage(text: string) {
 		if (!text.trim() || isTyping) return;
 
@@ -327,11 +471,9 @@
 
 		isTyping = true;
 
-		// Visual logs simulation while calling the actual SDK API in background
-		currentLogs = [
-			'🧠 Checking personality profile & memories...',
-			'📈 Connecting to Gemini Managed Agents API...'
-		];
+		currentLogs = selectedAgent.is_overseer || selectedAgent.runtime_owner === 'hermes-daemon'
+			? ['Queueing request for Hermes daemon...']
+			: ['🧠 Checking personality profile & memories...', '📈 Connecting to Gemini Managed Agents API...'];
 
 		try {
 			const resPromise = fetch(`/api/agent/${targetAgentId}/chat`, {
@@ -342,7 +484,9 @@
 
 			await new Promise((resolve) => setTimeout(resolve, 800));
 			if (selectedAgent.id !== targetAgentId) return; // Discard if agent switched
-			currentLogs = [...currentLogs, '⚙️ Invoking model with real-time tools...'];
+			currentLogs = selectedAgent.is_overseer || selectedAgent.runtime_owner === 'hermes-daemon'
+				? ['Hermes daemon accepted the request...']
+				: [...currentLogs, '⚙️ Invoking model with real-time tools...'];
 			await scrollChatToBottom();
 
 			const res = await resPromise;
@@ -355,6 +499,12 @@
 					activeSessionId = data.sessionId;
 					updateUrlParams(activeSessionId);
 					await loadSessions(false);
+				}
+
+				if (data.queued && data.sessionId) {
+					currentLogs = ['Hermes daemon queued the request. Waiting for daemon response...'];
+					await pollForDaemonResponse(targetAgentId, data.sessionId);
+					return;
 				}
 
 				if (data.toolCalls && data.toolCalls.length > 0) {
@@ -771,23 +921,7 @@ As a specialized creator, I've updated my internal logic context. I am connected
 									class:user-bubble={msg.role === 'user'}
 								>
 									<div class="message-text">
-										<!-- Basic rendering with bolding/markdown formatting -->
-										{#each msg.content.split('\n') as paragraph}
-											{#if paragraph.startsWith('### ')}
-												<h4>{paragraph.replace('### ', '')}</h4>
-											{:else if paragraph.startsWith('- ')}
-												<ul>
-													<li>{paragraph.replace('- ', '')}</li>
-												</ul>
-											{:else}
-												<p>
-													<!-- Simple double bold formatting -->
-													{@html escapeHtml(paragraph)
-														.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-														.replace(/`(.*?)`/g, '<code class="inline-code">$1</code>')}
-												</p>
-											{/if}
-										{/each}
+										{@html renderMarkdown(msg.content)}
 									</div>
 									<span class="message-time">{msg.timestamp}</span>
 								</div>
@@ -1499,6 +1633,8 @@ As a specialized creator, I've updated my internal logic context. I am connected
 		border-top-left-radius: 4px;
 		padding: 1rem 1.25rem;
 		position: relative;
+		word-break: break-word;
+		overflow-wrap: break-word;
 	}
 
 	.user-bubble {
@@ -1514,29 +1650,96 @@ As a specialized creator, I've updated my internal logic context. I am connected
 		font-size: 13.5px;
 		line-height: 1.6;
 		color: var(--text);
+		word-break: break-word;
+		overflow-wrap: break-word;
 	}
 
 	.message-text p:last-child {
 		margin-bottom: 0;
 	}
 
-	.message-text h4 {
-		margin: 0 0 0.75rem 0;
-		font-size: var(--text-base, 14px);
+	/* Markdown heading styles */
+	.message-text :global(.md-h1),
+	.message-text :global(.md-h2),
+	.message-text :global(.md-h3),
+	.message-text :global(.md-h4),
+	.message-text :global(.md-h5),
+	.message-text :global(.md-h6) {
+		margin: 0.25rem 0 0.5rem 0;
 		font-weight: 700;
 		color: var(--accent);
+		line-height: 1.4;
 	}
 
-	.message-text ul {
+	.message-text :global(.md-h1) { font-size: 1.25rem; }
+	.message-text :global(.md-h2) { font-size: 1.1rem; }
+	.message-text :global(.md-h3) { font-size: 1rem; }
+	.message-text :global(.md-h4) { font-size: 0.9rem; }
+	.message-text :global(.md-h5) { font-size: 0.85rem; }
+	.message-text :global(.md-h6) { font-size: 0.8rem; }
+
+	.message-text :global(.md-ul),
+	.message-text :global(.md-ol) {
 		margin: 0 0 0.75rem 0;
 		padding-left: 1.25rem;
 	}
 
-	.message-text li {
+	.message-text :global(.md-ul li),
+	.message-text :global(.md-ol li) {
 		font-size: 13px;
 		line-height: 1.5;
 		color: var(--text-muted);
 		margin-bottom: 0.25rem;
+	}
+
+	.message-text :global(.md-inline-code) {
+		background: rgba(124, 106, 237, 0.12);
+		color: var(--accent);
+		padding: 2px 6px;
+		border-radius: 4px;
+		font-family: var(--font-mono, monospace);
+		font-size: 0.85em;
+	}
+
+	.message-text :global(.md-code-block) {
+		background: var(--bg);
+		border: 1px solid var(--border);
+		border-radius: 8px;
+		padding: 0.75rem 1rem;
+		margin: 0.5rem 0;
+		overflow-x: auto;
+		font-size: 12px;
+		line-height: 1.5;
+		font-family: var(--font-mono, monospace);
+		color: var(--text-muted);
+	}
+
+	.message-text :global(.md-code-block code) {
+		background: none;
+		padding: 0;
+		color: inherit;
+	}
+
+	.message-text :global(.md-hr) {
+		border: none;
+		border-top: 1px solid var(--border);
+		margin: 0.75rem 0;
+	}
+
+	.message-text :global(strong) {
+		font-weight: 700;
+		color: var(--text);
+	}
+
+	.message-text :global(em) {
+		font-style: italic;
+		color: var(--text-muted);
+	}
+
+	.message-text :global(a) {
+		color: var(--accent);
+		text-decoration: underline;
+		text-underline-offset: 2px;
 	}
 
 	.message-time {

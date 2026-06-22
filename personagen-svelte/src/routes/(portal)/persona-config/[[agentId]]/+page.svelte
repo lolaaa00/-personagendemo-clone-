@@ -550,26 +550,9 @@
 				`${activeTab.charAt(0).toUpperCase() + activeTab.slice(1)} config saved for ${selectedAgent?.name}`,
 				'success'
 			);
-		} catch (err) {
+		} catch (err: any) {
 			console.error('Failed to save config:', err);
-			// Fallback to localStorage for development bypass/offline
-			localStorage.setItem(
-				storageKey(selectedAgentId),
-				JSON.stringify({
-					soul: soulText,
-					skills: skillsText,
-					tools: toolsText,
-					timezone,
-					postsPerDay: postsPerDay,
-					activeHoursStart: activeHoursStart,
-					activeHoursEnd: activeHoursEnd,
-					autonomyLevel: autonomyLevel,
-					rssUrl,
-					rssActive,
-					rssLastPolledAt
-				})
-			);
-			showToast(`Saved locally (offline) for ${selectedAgent?.name}`, 'warning');
+			showToast(`Failed to save configuration: ${err.message || err}`, 'error');
 		} finally {
 			saving = false;
 		}
@@ -1618,7 +1601,9 @@
 									style="width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0.75rem 1rem; color: var(--text); font-family: var(--font-body); font-size: var(--text-sm); outline: none; transition: border-color 0.2s ease, box-shadow 0.2s ease;"
 								>
 									<option value="svelte-gemini">Svelte UI Runtime (Gemini)</option>
-									<option value="hermes-daemon">Hermes Daemon Service</option>
+									{#if selectedAgent?.is_overseer}
+										<option value="hermes-daemon">Hermes Daemon Service</option>
+									{/if}
 									<option value="hermes-orchestrated">Hermes Orchestrated</option>
 								</select>
 							</div>

@@ -4,6 +4,72 @@
 	import Button from '$lib/components/ui/Button.svelte';
 	import { page } from '$app/stores';
 
+	/** Escape HTML entities for safe rendering */
+	function escapeHtml(text: string): string {
+		return text
+			.replace(/&/g, '&amp;')
+			.replace(/</g, '&lt;')
+			.replace(/>/g, '&gt;')
+			.replace(/"/g, '&quot;')
+			.replace(/'/g, '&#039;');
+	}
+
+	/** Robust Markdown-to-HTML renderer for chat messages */
+	function renderMarkdown(raw: string): string {
+		if (!raw) return '';
+		const codeBlocks: string[] = [];
+		let text = raw.replace(/```([\s\S]*?)```/g, (_match, code) => {
+			const idx = codeBlocks.length;
+			codeBlocks.push(`<pre class="md-code-block"><code>${escapeHtml(code.trim())}</code></pre>`);
+			return `%%CODEBLOCK_${idx}%%`;
+		});
+		const lines = text.split('\n');
+		const htmlParts: string[] = [];
+		let i = 0;
+		while (i < lines.length) {
+			const trimmed = lines[i].trim();
+			if (trimmed.startsWith('%%CODEBLOCK_')) {
+				htmlParts.push(trimmed.replace(/%%CODEBLOCK_(\d+)%%/, (_m, idx) => codeBlocks[Number(idx)] || ''));
+				i++; continue;
+			}
+			if (trimmed === '') { i++; continue; }
+			if (/^[-*_]{3,}$/.test(trimmed)) { htmlParts.push('<hr class="md-hr">'); i++; continue; }
+			const hm = trimmed.match(/^(#{1,6})\s+(.*)$/);
+			if (hm) { htmlParts.push(`<h${hm[1].length} class="md-h${hm[1].length}">${inlineFormat(hm[2])}</h${hm[1].length}>`); i++; continue; }
+			if (/^[-*+]\s+/.test(trimmed)) {
+				const items: string[] = [];
+				while (i < lines.length && /^[-*+]\s+/.test(lines[i].trim())) { items.push(inlineFormat(lines[i].trim().replace(/^[-*+]\s+/, ''))); i++; }
+				htmlParts.push('<ul class="md-ul">' + items.map(it => `<li>${it}</li>`).join('') + '</ul>');
+				continue;
+			}
+			if (/^\d+[.)\u{FF0E}]\s+/u.test(trimmed) || /^\d+️⃣/.test(trimmed)) {
+				const items: string[] = [];
+				while (i < lines.length) {
+					const t = lines[i].trim();
+					if (/^\d+[.)\u{FF0E}]\s+/u.test(t)) { items.push(inlineFormat(t.replace(/^\d+[.)\u{FF0E}]\s+/u, ''))); }
+					else if (/^\d+️⃣/.test(t)) { items.push(inlineFormat(t.replace(/^\d+️⃣\s*/, ''))); }
+					else break;
+					i++;
+				}
+				htmlParts.push('<ol class="md-ol">' + items.map(it => `<li>${it}</li>`).join('') + '</ol>');
+				continue;
+			}
+			htmlParts.push(`<p>${inlineFormat(trimmed)}</p>`);
+			i++;
+		}
+		return htmlParts.join('');
+	}
+
+	function inlineFormat(text: string): string {
+		let s = escapeHtml(text);
+		s = s.replace(/`([^`]+)`/g, '<code class="md-inline-code">$1</code>');
+		s = s.replace(/\*\*\*(.*?)\*\*\*/g, '<strong><em>$1</em></strong>');
+		s = s.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+		s = s.replace(/\*(.*?)\*/g, '<em>$1</em>');
+		s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+		return s;
+	}
+
 	interface Props {
 		agentId: string;
 		agentName: string;
@@ -114,6 +180,40 @@
 		}, 50);
 	}
 
+	async function pollForDaemonResponse(sessionId: string) {
+		for (let attempt = 0; attempt < 20; attempt++) {
+			await new Promise((resolve) => setTimeout(resolve, 2000));
+			const res = await fetch(`/api/agent/${agentId}/chat?sessionId=${sessionId}`);
+			if (!res.ok) continue;
+
+			const data = await res.json();
+			if (!data.success || !Array.isArray(data.messages) || data.messages.length === 0) continue;
+
+			messages = data.messages.map((m: any) => ({
+				id: m.id || Math.random().toString(36).substring(7),
+				role: m.role === 'model' ? 'agent' : m.role === 'user' ? 'user' : 'system',
+				content: m.content,
+				timestamp: m.created_at
+					? new Date(m.created_at).toLocaleTimeString([], {
+							hour: '2-digit',
+							minute: '2-digit'
+						})
+					: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+				toolCalls: m.tool_calls || []
+			}));
+			scrollToBottom();
+
+			if (data.messages[data.messages.length - 1]?.role === 'model') return;
+		}
+
+		messages.push({
+			id: Math.random().toString(36).substring(7),
+			role: 'system',
+			content: 'Hermes daemon has not responded yet. Confirm the daemon worker is running.',
+			timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+		});
+	}
+
 	async function handleSend(e: Event) {
 		e.preventDefault();
 		if (!inputValue.trim() || loading) return;
@@ -146,6 +246,10 @@
 			if (res.ok && data.success) {
 				if (!activeSessionId && data.sessionId) {
 					activeSessionId = data.sessionId;
+				}
+				if (data.queued && data.sessionId) {
+					await pollForDaemonResponse(data.sessionId);
+					return;
 				}
 				messages.push({
 					id: Math.random().toString(36).substring(7),
@@ -341,7 +445,7 @@
 					{/if}
 					<div class="bubble-content-wrap">
 						<div class="chat-bubble">
-							<p class="bubble-text">{msg.content}</p>
+							<div class="bubble-text">{@html renderMarkdown(msg.content)}</div>
 
 							<!-- Tool Calls Display -->
 							{#if msg.toolCalls && msg.toolCalls.length > 0}
@@ -716,6 +820,8 @@
 		border-radius: 14px;
 		font-size: 0.82rem;
 		line-height: 1.5;
+		word-break: break-word;
+		overflow-wrap: break-word;
 	}
 
 	.user .chat-bubble {
@@ -741,8 +847,34 @@
 
 	.bubble-text {
 		margin: 0;
-		white-space: pre-wrap;
+		white-space: normal;
+		word-break: break-word;
+		overflow-wrap: break-word;
 	}
+
+	/* Markdown styles in bubble */
+	.bubble-text :global(p) { margin: 0 0 0.35rem 0; }
+	.bubble-text :global(p:last-child) { margin-bottom: 0; }
+	.bubble-text :global(.md-h1),
+	.bubble-text :global(.md-h2),
+	.bubble-text :global(.md-h3),
+	.bubble-text :global(.md-h4),
+	.bubble-text :global(.md-h5),
+	.bubble-text :global(.md-h6) { margin: 0.15rem 0 0.3rem 0; font-weight: 700; color: var(--accent); }
+	.bubble-text :global(.md-h1) { font-size: 1.05rem; }
+	.bubble-text :global(.md-h2) { font-size: 0.95rem; }
+	.bubble-text :global(.md-h3) { font-size: 0.88rem; }
+	.bubble-text :global(.md-h4) { font-size: 0.82rem; }
+	.bubble-text :global(.md-ul),
+	.bubble-text :global(.md-ol) { margin: 0 0 0.4rem 0; padding-left: 1.1rem; }
+	.bubble-text :global(.md-ul li),
+	.bubble-text :global(.md-ol li) { font-size: 0.78rem; line-height: 1.45; color: var(--text-muted); margin-bottom: 0.15rem; }
+	.bubble-text :global(.md-inline-code) { background: rgba(124,106,237,0.12); color: var(--accent); padding: 1px 4px; border-radius: 3px; font-family: var(--font-mono); font-size: 0.8em; }
+	.bubble-text :global(.md-code-block) { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 0.5rem 0.75rem; margin: 0.3rem 0; overflow-x: auto; font-size: 0.72rem; font-family: var(--font-mono); color: var(--text-muted); }
+	.bubble-text :global(.md-code-block code) { background: none; padding: 0; color: inherit; }
+	.bubble-text :global(.md-hr) { border: none; border-top: 1px solid var(--border); margin: 0.4rem 0; }
+	.bubble-text :global(strong) { font-weight: 700; color: var(--text); }
+	.bubble-text :global(em) { font-style: italic; color: var(--text-muted); }
 
 	.bubble-ts {
 		font-size: 0.65rem;

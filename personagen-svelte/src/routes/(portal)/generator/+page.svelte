@@ -1,9 +1,11 @@
 <script lang="ts">
 	import { showToast } from '$lib/stores/ui.svelte';
 	import { onMount } from 'svelte';
-	import { Factory } from '$lib/services/api';
+	import { Factory, Personas } from '$lib/services/api';
 	import { goto } from '$app/navigation';
 	import { browser } from '$app/environment';
+
+	let { data } = $props<{ data: { isFactoryConfigured: boolean } }>();
 
 	const LS_KEY = 'personagen_generator_progress';
 
@@ -452,7 +454,36 @@
 		}
 	}
 
-	async function createAgent() {
+	async function createPersonaDirect() {
+		isCreating = true;
+		createError = '';
+		try {
+			const payload = {
+				name: agentName.trim(),
+				handle: displayHandle,
+				niche,
+				platform: 'instagram',
+				bio: soul.trim(),
+				gradient: GRADIENT_PRESETS[selectedGradient].value,
+				initial
+			};
+			const res = await Personas.createDirect(payload);
+			if (res.success) {
+				showToast('Persona created successfully!', 'success');
+				if (browser) localStorage.removeItem(LS_KEY);
+				await goto('/persona-config');
+			} else {
+				throw new Error(res.error || 'Creation failed');
+			}
+		} catch (err) {
+			createError = (err as Error).message;
+			showToast(`Persona creation failed: ${createError}`, 'error');
+		} finally {
+			isCreating = false;
+		}
+	}
+
+	async function registerAutomatedAccount() {
 		isCreating = true;
 		createError = '';
 		try {
@@ -468,18 +499,15 @@
 			};
 			const res = await Factory.create(payload);
 			if (res.success) {
-				showToast('Agent created successfully!', 'success');
+				showToast('Automated social account registered successfully!', 'success');
 				if (browser) localStorage.removeItem(LS_KEY);
 				await goto('/persona-config');
 			} else {
-				throw new Error(res.error || 'Creation failed');
+				throw new Error(res.error || 'Registration failed');
 			}
 		} catch (err) {
 			createError = (err as Error).message;
-			showToast('Agent creation failed — saved locally', 'warning');
-			// Still clear and redirect for demo
-			if (browser) localStorage.removeItem(LS_KEY);
-			setTimeout(() => goto('/persona-config'), 1500);
+			showToast(`Registration failed: ${createError}`, 'error');
 		} finally {
 			isCreating = false;
 		}
@@ -808,6 +836,60 @@
 					</div>
 				</div>
 
+				<!-- Selection Cards for Creation Methods -->
+				<div class="creation-methods-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin-top: 2rem;">
+					<!-- Method 1: DB Only -->
+					<div class="method-card glass-card" style="padding: 1.5rem; border: 1px solid var(--border); border-radius: var(--radius-sm); display: flex; flex-direction: column; justify-content: space-between; gap: 1rem; background: var(--surface-2);">
+						<div>
+							<h4 style="margin: 0; font-size: var(--text-base); font-weight: 700; color: var(--text);">Create Persona Direct</h4>
+							<p style="margin: 0.5rem 0 0 0; font-size: var(--text-xs); color: var(--text-dim); line-height: 1.5;">
+								Creates a persona directly in the database. Social media channels can be linked manually later using the dashboard.
+							</p>
+						</div>
+						<button
+							type="button"
+							class="btn-method-action"
+							disabled={isCreating || !step1Valid || !step2Valid}
+							onclick={createPersonaDirect}
+							style="background: var(--gradient-subtle); color: #fff; border: none; padding: 0.75rem; font-size: var(--text-xs); font-weight: 700; border-radius: var(--radius-xs); cursor: pointer; text-align: center; transition: all 0.2s;"
+						>
+							{#if isCreating}
+								Creating...
+							{:else}
+								👤 Create Persona
+							{/if}
+						</button>
+					</div>
+
+					<!-- Method 2: Account Factory Automation -->
+					<div class="method-card glass-card" style="padding: 1.5rem; border: 1px solid var(--border); border-radius: var(--radius-sm); display: flex; flex-direction: column; justify-content: space-between; gap: 1rem; background: var(--surface-2); position: relative; opacity: {data.isFactoryConfigured ? 1 : 0.65};">
+						<div>
+							<h4 style="margin: 0; font-size: var(--text-base); font-weight: 700; color: var(--text);">Register Automated Account</h4>
+							<p style="margin: 0.5rem 0 0 0; font-size: var(--text-xs); color: var(--text-dim); line-height: 1.5;">
+								Trigger automated account creation on Instagram, YouTube, etc. using the Account Factory service.
+							</p>
+							{#if !data.isFactoryConfigured}
+								<div class="warning-text" style="color: var(--warning); font-size: 11px; margin-top: 0.5rem; font-weight: 600; display: flex; align-items: center; gap: 4px;">
+									⚠️ Account Factory is not configured in the server environment.
+								</div>
+							{/if}
+						</div>
+						<button
+							type="button"
+							class="btn-method-action"
+							disabled={isCreating || !data.isFactoryConfigured || !step1Valid || !step2Valid}
+							onclick={registerAutomatedAccount}
+							style="background: {data.isFactoryConfigured ? 'var(--gradient)' : 'var(--border-strong)'}; color: #fff; border: none; padding: 0.75rem; font-size: var(--text-xs); font-weight: 700; border-radius: var(--radius-xs); cursor: {data.isFactoryConfigured ? 'pointer' : 'not-allowed'}; text-align: center; transition: all 0.2s;"
+						>
+							{#if isCreating}
+								Registering...
+							{:else}
+								🚀 Register Automated Account
+							{/if}
+						</button>
+					</div>
+				</div>
+
 				{#if createError}
 					<div class="error-banner">
 						<svg
@@ -871,39 +953,7 @@
 				>
 			</button>
 		{:else}
-			<button
-				class="nav-create"
-				onclick={createAgent}
-				disabled={isCreating || !step1Valid || !step2Valid}
-			>
-				{#if isCreating}
-					<svg
-						class="spinner"
-						width="16"
-						height="16"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2.5"
-						stroke-linecap="round"><path d="M21 12a9 9 0 11-6.22-8.56" /></svg
-					>
-					Creating…
-				{:else}
-					<svg
-						width="16"
-						height="16"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						><path d="M12 2L2 7l10 5 10-5-10-5z" /><path d="M2 17l10 5 10-5" /><path
-							d="M2 12l10 5 10-5"
-						/></svg
-					>
-					Create Agent
-				{/if}
-			</button>
+			<div></div>
 		{/if}
 	</div>
 </section>

@@ -41,6 +41,13 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 		const db = createDbService(locals.supabase);
 
+		// Ownership Check
+		const { data: agent, error: getErr } = await db.agents.get(agentId);
+		if (getErr) throw getErr;
+		if (!agent || agent.user_id !== user.id) {
+			return json({ success: false, error: 'Agent not found or ownership mismatch' }, { status: 404 });
+		}
+
 		// 1. Update the agent's core texts and presentation in agents table
 		const agentUpdatePayload: any = {};
 
@@ -124,10 +131,14 @@ export const DELETE: RequestHandler = async ({ request, locals }) => {
 
 		const db = createDbService(locals.supabase);
 
-		// Guard: check if the agent is an overseer
 		const { data: agent, error: getErr } = await db.agents.get(agentId);
 		if (getErr) throw getErr;
-		if (agent && agent.is_overseer) {
+		if (!agent || agent.user_id !== user.id) {
+			return json({ success: false, error: 'Agent not found or ownership mismatch' }, { status: 404 });
+		}
+
+		// Guard: check if the agent is an overseer
+		if (agent.is_overseer) {
 			return json(
 				{ success: false, error: 'Deleting the Hermes overseer agent is forbidden.' },
 				{ status: 403 }
@@ -140,7 +151,12 @@ export const DELETE: RequestHandler = async ({ request, locals }) => {
 		await locals.supabase.from('connections').delete().eq('agent_id', agentId);
 		await locals.supabase.from('agent_memories').delete().eq('agent_id', agentId);
 		await locals.supabase.from('posts').delete().eq('agent_id', agentId);
-		await locals.supabase.from('tickets').delete().eq('assignee_agent_id', agentId);
+
+		// PM Ticket Safety: Update assigned tickets to set assignee_agent_id = NULL to preserve them
+		await locals.supabase
+			.from('tickets')
+			.update({ assignee_agent_id: null })
+			.eq('assignee_agent_id', agentId);
 
 		// Delete agent row
 		const { error: agentErr } = await db.agents.delete(agentId);

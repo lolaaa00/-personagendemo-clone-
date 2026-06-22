@@ -22,6 +22,15 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			const { post } = body;
 			if (!post) return json({ success: false, error: 'Missing post data' }, { status: 400 });
 
+			const agentId = post.agent_id || post.agentId;
+			if (!agentId) return json({ success: false, error: 'Missing agentId' }, { status: 400 });
+
+			// Verify agent ownership
+			const { data: agent, error: agentErr } = await db.agents.get(agentId);
+			if (agentErr || !agent || agent.user_id !== user.id) {
+				return json({ success: false, error: 'Agent not found or ownership mismatch' }, { status: 404 });
+			}
+
 			// Format platforms as PostgreSQL array
 			const platforms = Array.isArray(post.platforms)
 				? post.platforms.map((p: string) => p.toLowerCase())
@@ -29,7 +38,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 			const { data, error } = await db.posts.create({
 				user_id: user.id,
-				agent_id: post.agent_id || post.agentId,
+				agent_id: agentId,
 				content:
 					typeof post.content === 'object'
 						? JSON.stringify(post.content)
@@ -48,6 +57,12 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		if (action === 'update') {
 			const { id, content, status, scheduled_date, scheduled_time, published_at, platforms } = body;
 			if (!id) return json({ success: false, error: 'Missing post id' }, { status: 400 });
+
+			// Verify post ownership
+			const { data: existingPost, error: getErr } = await db.posts.get(id);
+			if (getErr || !existingPost || existingPost.user_id !== user.id) {
+				return json({ success: false, error: 'Post not found or ownership mismatch' }, { status: 404 });
+			}
 
 			const updateData: any = {};
 			if (content !== undefined)
@@ -72,6 +87,12 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			const { id } = body;
 			if (!id) return json({ success: false, error: 'Missing post id' }, { status: 400 });
 
+			// Verify post ownership
+			const { data: existingPost, error: getErr } = await db.posts.get(id);
+			if (getErr || !existingPost || existingPost.user_id !== user.id) {
+				return json({ success: false, error: 'Post not found or ownership mismatch' }, { status: 404 });
+			}
+
 			const { error } = await db.posts.delete(id);
 			if (error) throw error;
 			return json({ success: true });
@@ -81,13 +102,23 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			const { id } = body;
 			if (!id) return json({ success: false, error: 'Missing post id' }, { status: 400 });
 
-			const { data, error } = await db.posts.get(id);
-			if (error) throw error;
-			return json({ success: true, data });
+			// Verify post ownership
+			const { data: existingPost, error: getErr } = await db.posts.get(id);
+			if (getErr || !existingPost || existingPost.user_id !== user.id) {
+				return json({ success: false, error: 'Post not found or ownership mismatch' }, { status: 404 });
+			}
+
+			return json({ success: true, data: existingPost });
 		}
 
 		if (action === 'list') {
 			const { agent_id } = body;
+			if (agent_id) {
+				const { data: agent, error: agentErr } = await db.agents.get(agent_id);
+				if (agentErr || !agent || agent.user_id !== user.id) {
+					return json({ success: false, error: 'Agent not found or ownership mismatch' }, { status: 404 });
+				}
+			}
 			const { data, error } = await db.posts.list({ agent_id });
 			if (error) throw error;
 			return json({ success: true, data });
@@ -97,6 +128,13 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			const { month, year, persona_id } = body;
 			if (!month || !year) {
 				return json({ success: false, error: 'Missing month or year' }, { status: 400 });
+			}
+
+			if (persona_id) {
+				const { data: agent, error: agentErr } = await db.agents.get(persona_id);
+				if (agentErr || !agent || agent.user_id !== user.id) {
+					return json({ success: false, error: 'Agent not found or ownership mismatch' }, { status: 404 });
+				}
 			}
 
 			const { data, error } = await db.posts.list({
@@ -115,6 +153,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			const { data, error } = await locals.supabase
 				.from('posts')
 				.select('*, agents(name, handle, gradient, initial)')
+				.eq('user_id', user.id)
 				.eq('status', 'scheduled')
 				.order('scheduled_date')
 				.order('scheduled_time')
@@ -130,6 +169,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			const { data, error } = await locals.supabase
 				.from('posts')
 				.select('*, agents(name, handle, gradient, initial)')
+				.eq('user_id', user.id)
 				.eq('status', 'published')
 				.order('published_at', { ascending: false })
 				.limit(limit || 10);

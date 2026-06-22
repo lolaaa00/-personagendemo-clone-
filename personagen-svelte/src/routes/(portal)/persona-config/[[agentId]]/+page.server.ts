@@ -1,52 +1,22 @@
 import type { PageServerLoad } from './$types';
 import { createDbService } from '$lib/server/db';
 import { env } from '$env/dynamic/public';
+import { env as privateEnv } from '$env/dynamic/private';
 
 export const load: PageServerLoad = async ({ locals, url, fetch }) => {
 	const supabaseUrl = env.PUBLIC_SUPABASE_URL ?? '';
 	const isPlaceholder = !supabaseUrl || supabaseUrl.includes('placeholder');
+	const allowDemo = privateEnv.ALLOW_DEMO_MODE === 'true';
+
+	const composioKey = privateEnv.COMPOSIO_API_KEY || '';
+	const isComposioConfigured = Boolean(
+		composioKey &&
+		!composioKey.includes('placeholder') &&
+		!composioKey.includes('change_me')
+	);
 
 	if (!isPlaceholder && locals.supabase) {
 		const db = createDbService(locals.supabase);
-
-		// Handle OAuth redirect success callback (strictly for non-UUID demo/mock agents)
-		const oauthSuccess = url.searchParams.get('oauth_success') === 'true';
-		const platform = url.searchParams.get('platform');
-		const agentId = url.searchParams.get('agentId');
-
-		const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-		const isUuid = (id: string) => UUID_REGEX.test(id);
-
-		if (oauthSuccess && platform && agentId && !isUuid(agentId)) {
-			try {
-				const { session, user } = await locals.safeGetSession();
-				if (session && user) {
-					const { data: agent } = await db.agents.get(agentId);
-					if (agent) {
-						const rawHandle = agent.handle || `@${agent.name.toLowerCase().replace(/\s+/g, '')}`;
-						const handle = `${rawHandle}.${platform}`;
-						await db.connections.upsert({
-							user_id: user.id,
-							agent_id: agentId,
-							platform: platform as any,
-							handle,
-							verified: true,
-							last_sync: new Date().toISOString()
-						});
-
-						const { data: conns } = await db.connections.listForAgent(agentId);
-						const count = conns?.length || 0;
-						await db.agents.update(agentId, {
-							connection_count: count,
-							status: 'active'
-						});
-					}
-				}
-			} catch (e) {
-				console.error('[PersonaConfig Load] Failed to insert connection from OAuth callback:', e);
-			}
-		}
-
 		const { data: dbAgents } = await db.agents.list();
 
 		if (dbAgents && dbAgents.length > 0) {
@@ -57,7 +27,6 @@ export const load: PageServerLoad = async ({ locals, url, fetch }) => {
 				const { data: config } = await db.agentConfigs.get(agent.id);
 				agentsWithConfig.push({
 					...agent,
-					// Attach config properties directly or as config object
 					timezone: config?.timezone ?? 'Australia/Sydney',
 					posts_per_day: config?.posts_per_day ?? 3,
 					active_hours_start: config?.active_hours_start ?? 8,
@@ -68,12 +37,11 @@ export const load: PageServerLoad = async ({ locals, url, fetch }) => {
 					rss_last_polled_at: config?.rss_last_polled_at ?? null
 				});
 			}
-			return { agents: agentsWithConfig, supervisors };
+			return { agents: agentsWithConfig, supervisors, isComposioConfigured };
 		}
 	}
 
-	// Fallback to static JSON
-	const res = await fetch('/data/agents.json');
-	const agents = await res.json();
-	return { agents, supervisors: [] };
+
+
+	return { agents: [], supervisors: [], isComposioConfigured };
 };
