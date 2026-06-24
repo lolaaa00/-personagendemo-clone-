@@ -12,6 +12,7 @@
 	let selectedAgentId = $state('');
 	let refreshing = $state(false);
 	let generatingTrendId = $state('');
+	let loadingTrends = $state(false);
 
 	// ── Sample trend data ──
 	interface Trend {
@@ -172,6 +173,7 @@
 	});
 
 	async function fetchTrendsForAgent(agentId: string) {
+		loadingTrends = true;
 		try {
 			const res = await fetch('/api/engine?path=personagen-trends', {
 				method: 'POST',
@@ -182,11 +184,14 @@
 				const result = await res.json();
 				if (result.success && result.data?.trends) {
 					trends = result.data.trends;
+					loadingTrends = false;
 					return;
 				}
 			}
 		} catch (err) {
 			console.error('Failed to load trends for agent:', err);
+		} finally {
+			loadingTrends = false;
 		}
 		// Fallback
 		trends = [...SAMPLE_TRENDS];
@@ -1215,153 +1220,165 @@
 	</div>
 
 	<!-- Trend cards grid -->
-	<div class="trends-grid">
-		{#each filteredTrends as trend (trend.id)}
-			{@const chart = getTrendChartPath(trend.id, trend.momentum)}
-			{@const labels = getXAxisLabels(timeRange)}
-			<div class="trend-card">
-				<div class="trend-card-body">
-					<div class="trend-card-header-row">
-						<h3 class="trend-card-title">{trend.name}</h3>
+	{#if loadingTrends}
+		<div class="skeleton-trends-grid">
+			{#each Array(6) as _}
+				<div class="skeleton-card glass-card">
+					<div class="skeleton-shimmer header-shimmer"></div>
+					<div class="skeleton-shimmer chart-shimmer"></div>
+					<div class="skeleton-shimmer footer-shimmer"></div>
+				</div>
+			{/each}
+		</div>
+	{:else}
+		<div class="trends-grid">
+			{#each filteredTrends as trend (trend.id)}
+				{@const chart = getTrendChartPath(trend.id, trend.momentum)}
+				{@const labels = getXAxisLabels(timeRange)}
+				<div class="trend-card">
+					<div class="trend-card-body">
+						<div class="trend-card-header-row">
+							<h3 class="trend-card-title">{trend.name}</h3>
 
-						<div class="trend-card-stats">
-							<div class="stat-group">
-								<span class="stat-num volume">{trend.volume}</span>
-								<span class="stat-lbl">Volume</span>
+							<div class="trend-card-stats">
+								<div class="stat-group">
+									<span class="stat-num volume">{trend.volume}</span>
+									<span class="stat-lbl">Volume</span>
+								</div>
+								<div class="stat-group">
+									<span
+										class="stat-num growth"
+										style="color: {trend.momentum === 'rising'
+											? 'var(--success)'
+											: trend.momentum === 'falling'
+												? 'var(--error)'
+												: 'var(--warning)'}"
+									>
+										{trend.growth}
+									</span>
+									<span class="stat-lbl">Growth</span>
+								</div>
 							</div>
-							<div class="stat-group">
-								<span
-									class="stat-num growth"
-									style="color: {trend.momentum === 'rising'
-										? 'var(--success)'
-										: trend.momentum === 'falling'
-											? 'var(--error)'
-											: 'var(--warning)'}"
-								>
-									{trend.growth}
-								</span>
-								<span class="stat-lbl">Growth</span>
-							</div>
-						</div>
-					</div>
-
-					<!-- SVG Chart Block -->
-					<div class="trend-chart-container">
-						<svg class="trend-svg" viewBox="0 0 300 100" preserveAspectRatio="none">
-							<defs>
-								<linearGradient id="chartGrad-{trend.id}" x1="0%" y1="0%" x2="0%" y2="100%">
-									<stop offset="0%" stop-color="var(--accent)" stop-opacity="0.18" />
-									<stop offset="100%" stop-color="var(--accent)" stop-opacity="0.0" />
-								</linearGradient>
-							</defs>
-							<!-- Grid Lines -->
-							<line
-								x1="0"
-								y1="25"
-								x2="300"
-								y2="25"
-								stroke="var(--border-strong)"
-								stroke-dasharray="2,3"
-								stroke-width="0.7"
-							></line>
-							<line
-								x1="0"
-								y1="50"
-								x2="300"
-								y2="50"
-								stroke="var(--border-strong)"
-								stroke-dasharray="2,3"
-								stroke-width="0.7"
-							></line>
-							<line
-								x1="0"
-								y1="75"
-								x2="300"
-								y2="75"
-								stroke="var(--border-strong)"
-								stroke-dasharray="2,3"
-								stroke-width="0.7"
-							></line>
-
-							<!-- Area path under line -->
-							<path d={chart.fillPath} fill="url(#chartGrad-{trend.id})"></path>
-
-							<!-- Smooth trend line -->
-							<path
-								d={chart.linePath}
-								fill="none"
-								stroke="var(--accent)"
-								stroke-width="2.5"
-								stroke-linecap="round"
-								stroke-linejoin="round"
-							></path>
-						</svg>
-
-						<!-- X-Axis Labels -->
-						<div class="chart-axis-labels">
-							<span>{labels.start}</span>
-							<span>{labels.end}</span>
-						</div>
-					</div>
-
-					<p class="trend-card-description">{trend.description}</p>
-
-					<!-- Badges, Niche Match & Action Section -->
-					<div class="trend-card-footer">
-						<div class="meta-row">
-							<span class="platform-pill" style="--p-color: {getPlatformColor(trend.platform)}">
-								{trend.platform}
-							</span>
-							<span class="niche-pill">{trend.niche}</span>
-							<span
-								class="match-pill"
-								style="color: {trend.matchScore >= 80
-									? 'var(--success)'
-									: trend.matchScore >= 60
-										? 'var(--warning)'
-										: 'var(--error)'}"
-							>
-								{trend.matchScore}% Match
-							</span>
 						</div>
 
-						<div class="hashtags-row">
-							{#each trend.hashtags.slice(0, 3) as tag}
-								<span class="hashtag-tag">{tag}</span>
-							{/each}
-						</div>
+						<!-- SVG Chart Block -->
+						<div class="trend-chart-container">
+							<svg class="trend-svg" viewBox="0 0 300 100" preserveAspectRatio="none">
+								<defs>
+									<linearGradient id="chartGrad-{trend.id}" x1="0%" y1="0%" x2="0%" y2="100%">
+										<stop offset="0%" stop-color="var(--accent)" stop-opacity="0.18" />
+										<stop offset="100%" stop-color="var(--accent)" stop-opacity="0.0" />
+									</linearGradient>
+								</defs>
+								<!-- Grid Lines -->
+								<svg:line
+									x1="0"
+									y1="25"
+									x2="300"
+									y2="25"
+									stroke="var(--border-strong)"
+									stroke-dasharray="2,3"
+									stroke-width="0.7"
+								></svg:line>
+								<svg:line
+									x1="0"
+									y1="50"
+									x2="300"
+									y2="50"
+									stroke="var(--border-strong)"
+									stroke-dasharray="2,3"
+									stroke-width="0.7"
+								></svg:line>
+								<svg:line
+									x1="0"
+									y1="75"
+									x2="300"
+									y2="75"
+									stroke="var(--border-strong)"
+									stroke-dasharray="2,3"
+									stroke-width="0.7"
+								></svg:line>
 
-						<button
-							class="exploding-action-btn"
-							disabled={generatingTrendId === trend.id || !selectedAgentId}
-							onclick={() => generateContent(trend)}
-						>
-							{#if generatingTrendId === trend.id}
-								<span class="action-spinner"></span>
-								Generating…
-							{:else}
-								<span>Generate Content</span>
-								<svg
-									class="arrow-icon"
-									width="12"
-									height="12"
-									viewBox="0 0 24 24"
+								<!-- Area path under line -->
+								<path d={chart.fillPath} fill="url(#chartGrad-{trend.id})"></path>
+
+								<!-- Smooth trend line -->
+								<path
+									d={chart.linePath}
 									fill="none"
-									stroke="currentColor"
-									stroke-width="3"
+									stroke="var(--accent)"
+									stroke-width="2.5"
 									stroke-linecap="round"
 									stroke-linejoin="round"
+								></path>
+							</svg>
+
+							<!-- X-Axis Labels -->
+							<div class="chart-axis-labels">
+								<span>{labels.start}</span>
+								<span>{labels.end}</span>
+							</div>
+						</div>
+
+						<p class="trend-card-description">{trend.description}</p>
+
+						<!-- Badges, Niche Match & Action Section -->
+						<div class="trend-card-footer">
+							<div class="meta-row">
+								<span class="platform-pill" style="--p-color: {getPlatformColor(trend.platform)}">
+									{trend.platform}
+								</span>
+								<span class="niche-pill">{trend.niche}</span>
+								<span
+									class="match-pill"
+									style="color: {trend.matchScore >= 80
+										? 'var(--success)'
+										: trend.matchScore >= 60
+											? 'var(--warning)'
+											: 'var(--error)'}"
 								>
-									<line x1="5" y1="12" x2="19" y2="12"></line>
-									<polyline points="12 5 19 12 12 19"></polyline>
-								</svg>
-							{/if}
-						</button>
+									{trend.matchScore}% Match
+								</span>
+							</div>
+
+							<div class="hashtags-row">
+								{#each trend.hashtags.slice(0, 3) as tag}
+									<span class="hashtag-tag">{tag}</span>
+								{/each}
+							</div>
+
+							<button
+								class="exploding-action-btn"
+								disabled={generatingTrendId === trend.id || !selectedAgentId}
+								onclick={() => generateContent(trend)}
+							>
+								{#if generatingTrendId === trend.id}
+									<span class="action-spinner"></span>
+									Generating…
+								{:else}
+									<span>Generate Content</span>
+									<svg
+										class="arrow-icon"
+										width="12"
+										height="12"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="3"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+									>
+										<line x1="5" y1="12" x2="19" y2="12"></line>
+										<polyline points="12 5 19 12 12 19"></polyline>
+									</svg>
+								{/if}
+							</button>
+						</div>
 					</div>
 				</div>
-			</div>
-		{/each}
-	</div>
+			{/each}
+		</div>
+	{/if}
 
 	<!-- Activity Heatmap Section -->
 	<div class="card heatmap-card">
@@ -2350,6 +2367,64 @@
 
 		.trends-grid {
 			grid-template-columns: 1fr;
+		}
+	}
+
+	/* ── Loading Skeleton ── */
+	.skeleton-trends-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+		gap: 1.5rem;
+		margin-top: 1.5rem;
+	}
+
+	.skeleton-card {
+		background: var(--surface-2);
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		padding: 1.5rem;
+		height: 340px;
+		display: flex;
+		flex-direction: column;
+		justify-content: space-between;
+		position: relative;
+		overflow: hidden;
+	}
+
+	.skeleton-shimmer {
+		background: linear-gradient(
+			90deg,
+			var(--surface-3) 25%,
+			var(--border) 50%,
+			var(--surface-3) 75%
+		);
+		background-size: 200% 100%;
+		animation: shimmer 1.5s infinite;
+		border-radius: var(--radius-xs);
+	}
+
+	.header-shimmer {
+		height: 24px;
+		width: 70%;
+	}
+
+	.chart-shimmer {
+		height: 100px;
+		width: 100%;
+		margin: 1.5rem 0;
+	}
+
+	.footer-shimmer {
+		height: 36px;
+		width: 100%;
+	}
+
+	@keyframes shimmer {
+		0% {
+			background-position: 200% 0;
+		}
+		100% {
+			background-position: -200% 0;
 		}
 	}
 </style>

@@ -362,6 +362,23 @@ export const POST: RequestHandler = async ({ params, locals }) => {
 				console.log(
 					`[Sync Feed API] Found ${fetchedPosts.length} real posts for platform ${platform}, writing to DB`
 				);
+
+				// Clean up any simulated posts for this agent and platform to prevent "false data" pollution
+				try {
+					const { error: deleteErr } = await locals.supabase
+						.from('posts')
+						.delete()
+						.eq('agent_id', agentId)
+						.like('external_id', `ext_${platform}_%`);
+					if (deleteErr) {
+						console.error('[Sync Feed API] Failed to delete simulated posts:', deleteErr);
+					} else {
+						console.log(`[Sync Feed API] Cleaned up simulated posts for ${platform}`);
+					}
+				} catch (deleteEx) {
+					console.error('[Sync Feed API] Exception during simulated posts cleanup:', deleteEx);
+				}
+
 				for (const item of fetchedPosts) {
 					const { externalId, content, publishedAtStr, publicationResults } = item;
 

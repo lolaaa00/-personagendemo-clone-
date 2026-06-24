@@ -32,25 +32,5 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 		agents = [];
 	}
 
-	// Fetch initial trends for the first agent
-	let initialTrends: any[] = [];
-	if (agents.length > 0) {
-		try {
-			const res = await fetch('/api/engine?path=personagen-trends', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ action: 'load', agentId: agents[0].id })
-			});
-			if (res.ok) {
-				const result = await res.json();
-				if (result.success && result.data?.trends) {
-					initialTrends = result.data.trends;
-				}
-			}
-		} catch (err) {
-			console.error('[Scout Server Load] Failed to fetch initial trends:', err);
-		}
-	}
-
-	return { agents, initialTrends };
+	return { agents, initialTrends: [] };
 };

@@ -46,6 +46,7 @@
 	let selectedAgentId = $state('');
 	let selectedStatusFilter = $state('');
 	let selectedDay = $state<number | null>(null);
+	let selectedPost = $state<ScheduledPost | null>(null);
 	let showComposer = $state(false);
 	let composerSubmitting = $state(false);
 
@@ -187,6 +188,12 @@
 			}
 		} catch {
 			/* ignore */
+		}
+
+		// Default selectedAgentId to first active agent
+		const activeAgent = data.agents.find((a: any) => a.status === 'active' || a.active);
+		if (activeAgent) {
+			selectedAgentId = activeAgent.id;
 		}
 	});
 
@@ -404,6 +411,7 @@
 			currentMonth--;
 		}
 		selectedDay = null;
+		selectedPost = null;
 	}
 
 	function nextMonth() {
@@ -414,6 +422,7 @@
 			currentMonth++;
 		}
 		selectedDay = null;
+		selectedPost = null;
 	}
 
 	function selectDay(day: number | null) {
@@ -764,108 +773,163 @@
 			</div>
 		</div>
 
-		<!-- Side panel (selected day) -->
+		<!-- Day Posts Modal -->
 		{#if selectedDay !== null}
-			<aside class="day-panel">
-				<div class="panel-header">
-					<h3>{MONTHS[currentMonth]} {selectedDay}</h3>
-					<button class="panel-close" onclick={() => (selectedDay = null)}>
-						<svg
-							width="18"
-							height="18"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2"
-							stroke-linecap="round"
-							stroke-linejoin="round"><path d="M18 6L6 18" /><path d="M6 6l12 12" /></svg
-						>
-					</button>
-				</div>
-
-				{#if selectedDayPosts.length === 0}
-					<div class="panel-empty">
-						<svg
-							width="32"
-							height="32"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="var(--text-dim)"
-							stroke-width="1.5"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							><rect x="3" y="4" width="18" height="18" rx="2" /><line
-								x1="16"
-								y1="2"
-								x2="16"
-								y2="6"
-							/><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg
-						>
-						<p>No real content yet. Generate a draft or connect a profile.</p>
+			<div class="modal-backdrop" onclick={() => (selectedDay = null)} role="presentation">
+				<div class="day-modal" onclick={(e) => e.stopPropagation()} role="dialog">
+					<div class="modal-header">
+						<h3>{MONTHS[currentMonth]} {selectedDay}, {currentYear}</h3>
+						<button class="modal-close" onclick={() => (selectedDay = null)} aria-label="Close modal">
+							<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18" /><path d="M6 6l12 12" /></svg>
+						</button>
 					</div>
-				{:else}
-					<div class="panel-posts">
-						{#each selectedDayPosts as post}
-							<div class="panel-post">
-								<div
-									class="post-status-bar"
-									style="background: {STATUS_COLORS[post.status] || 'var(--accent)'}"
-								></div>
-								<div class="post-content">
-									<div class="post-time-status">
-										<span class="post-time">{post.time}</span>
-										{#if post.status === 'published'}
-											<span class="live-indicator">Live Tracker</span>
-										{:else}
-											<span
-												class="post-status-tag"
-												style="color: {STATUS_COLORS[post.status] || 'var(--accent)'}"
-												>{post.status}</span
-											>
-										{/if}
-									</div>
-									<p class="post-text">{post.text}</p>
-
-									{#if post.status === 'published' && post.analytics}
-										<div class="analytics-row">
-											<div class="metric" title="Views">
-												<span class="emoji">👁️</span>
-												{formatViews(post.analytics.views)}
+					<div class="modal-body">
+						{#if selectedDayPosts.length === 0}
+							<div class="panel-empty">
+								<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--text-dim)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
+								<p>No content scheduled or published for this day.</p>
+							</div>
+						{:else}
+							<div class="modal-posts-list">
+								{#each selectedDayPosts as post}
+									<button class="modal-post-card" onclick={() => selectedPost = post}>
+										<div class="post-card-status" style="background: {STATUS_COLORS[post.status] || 'var(--accent)'}"></div>
+										<div class="post-card-body">
+											<div class="post-card-time-row">
+												<span class="post-card-time">{post.time}</span>
+												{#if post.status === 'published'}
+													<span class="live-indicator-badge">Live Tracker</span>
+												{:else}
+													<span class="status-badge" style="color: {STATUS_COLORS[post.status]}; border-color: {STATUS_COLORS[post.status]}">{post.status}</span>
+												{/if}
 											</div>
-											<div class="metric" title="Likes">
-												<span class="emoji">❤️</span>
-												{formatViews(post.analytics.likes)}
-											</div>
-											<div class="metric" title="Comments">
-												<span class="emoji">💬</span>
-												{formatViews(post.analytics.comments)}
-											</div>
-											{#if post.token_cost !== undefined && post.token_cost !== null && post.token_cost > 0}
-												<div class="metric token-cost" title="Gemini Cost">
-													<span class="emoji">🪙</span> ${post.token_cost.toFixed(4)}
+											<p class="post-card-text">{post.text}</p>
+											<div class="post-card-footer">
+												<span class="post-card-agent">{post.agentName}</span>
+												<div class="post-card-platforms">
+													{#each post.platforms as p}
+														<span class="platform-dot" style="background: {PLATFORM_COLORS[p]}" title={p}></span>
+													{/each}
 												</div>
-											{/if}
+											</div>
 										</div>
-									{/if}
+									</button>
+								{/each}
+							</div>
+						{/if}
+					</div>
+					<div class="modal-footer">
+						<button class="btn-ghost btn-sm" onclick={() => (selectedDay = null)}>Close</button>
+					</div>
+				</div>
+			</div>
+		{/if}
 
-									<div class="post-meta">
-										<span class="post-agent">{post.agentName}</span>
-										<div class="post-platforms">
-											{#each post.platforms as p}
-												<span
-													class="platform-dot"
-													style="background: {PLATFORM_COLORS[p]}"
-													title={p}
-												></span>
-											{/each}
+		<!-- Full Post Detail Modal -->
+		{#if selectedPost !== null}
+			<div class="modal-backdrop z-top" onclick={() => (selectedPost = null)} role="presentation">
+				<div class="full-post-modal" onclick={(e) => e.stopPropagation()} role="dialog">
+					<div class="modal-header">
+						<h3>Post Details</h3>
+						<button class="modal-close" onclick={() => (selectedPost = null)} aria-label="Close modal">
+							<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18" /><path d="M6 6l12 12" /></svg>
+						</button>
+					</div>
+					<div class="modal-body scrollable">
+						<div class="detail-header-row">
+							<div class="detail-agent-info">
+								<span class="detail-agent-avatar" style="background: var(--gradient-subtle)">{(selectedPost.agentName || 'A')[0]}</span>
+								<div class="detail-agent-text">
+									<span class="detail-agent-name">{selectedPost.agentName}</span>
+									<span class="detail-time-date">{selectedPost.date} at {selectedPost.time}</span>
+								</div>
+							</div>
+							<div class="detail-status">
+								{#if selectedPost.status === 'published'}
+									<span class="live-indicator-badge pulse">Live Tracker</span>
+								{:else}
+									<span class="status-badge-lg" style="background: {STATUS_COLORS[selectedPost.status]}15; color: {STATUS_COLORS[selectedPost.status]}; border: 1px solid {STATUS_COLORS[selectedPost.status]}30;">
+										{selectedPost.status}
+									</span>
+								{/if}
+							</div>
+						</div>
+
+						<div class="detail-content-box">
+							<p class="detail-text">{selectedPost.text}</p>
+						</div>
+
+						<div class="detail-meta-section">
+							<div class="meta-item">
+								<span class="meta-label">Platforms</span>
+								<div class="meta-platforms-list">
+									{#each selectedPost.platforms as p}
+										<span class="platform-badge" style="background: {PLATFORM_COLORS[p]}20; color: {PLATFORM_COLORS[p]}; border: 1px solid {PLATFORM_COLORS[p]}40;">
+											{p}
+										</span>
+									{/each}
+								</div>
+							</div>
+
+							{#if selectedPost.status === 'published' && selectedPost.analytics}
+								<div class="meta-item">
+									<span class="meta-label">Analytics</span>
+									<div class="analytics-detailed-grid">
+										<div class="metric-card">
+											<span class="metric-icon">👁️</span>
+											<span class="metric-val">{formatViews(selectedPost.analytics.views)}</span>
+											<span class="metric-lbl">Views</span>
+										</div>
+										<div class="metric-card">
+											<span class="metric-icon">❤️</span>
+											<span class="metric-val">{formatViews(selectedPost.analytics.likes)}</span>
+											<span class="metric-lbl">Likes</span>
+										</div>
+										<div class="metric-card">
+											<span class="metric-icon">💬</span>
+											<span class="metric-val">{formatViews(selectedPost.analytics.comments)}</span>
+											<span class="metric-lbl">Comments</span>
+										</div>
+										<div class="metric-card">
+											<span class="metric-icon">🔄</span>
+											<span class="metric-val">{formatViews(selectedPost.analytics.shares || 0)}</span>
+											<span class="metric-lbl">Shares</span>
 										</div>
 									</div>
 								</div>
-							</div>
-						{/each}
+							{/if}
+
+							{#if selectedPost.token_cost !== undefined && selectedPost.token_cost !== null && selectedPost.token_cost > 0}
+								<div class="meta-item cost-item">
+									<div class="cost-row">
+										<span class="cost-icon">🪙</span>
+										<span class="cost-label">Gemini API Cost</span>
+										<span class="cost-value">${selectedPost.token_cost.toFixed(6)}</span>
+									</div>
+								</div>
+							{/if}
+
+							{#if selectedPost.external_id && !selectedPost.external_id.startsWith('ext_')}
+								<div class="meta-item link-item">
+									<span class="meta-label">Live Link</span>
+									{#if selectedPost.platforms.includes('youtube')}
+										<a href="https://www.youtube.com/watch?v={selectedPost.external_id}" target="_blank" rel="noopener noreferrer" class="live-post-link">
+											View on YouTube ↗
+										</a>
+									{:else if selectedPost.platforms.includes('instagram')}
+										<a href="https://www.instagram.com/p/{selectedPost.external_id}" target="_blank" rel="noopener noreferrer" class="live-post-link">
+											View on Instagram ↗
+										</a>
+									{/if}
+								</div>
+							{/if}
+						</div>
 					</div>
-				{/if}
-			</aside>
+					<div class="modal-footer">
+						<button class="btn-ghost btn-sm" onclick={() => (selectedPost = null)}>Close</button>
+					</div>
+				</div>
+			</div>
 		{/if}
 	</div>
 
@@ -1418,143 +1482,210 @@
 		display: none;
 	}
 
-	/* ── Day panel ── */
-	.day-panel {
-		width: 340px;
-		flex-shrink: 0;
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: var(--radius);
-		overflow: hidden;
-		animation: fadeDown 0.25s var(--ease-out);
-		position: sticky;
-		top: 80px;
-		max-height: calc(100vh - 120px);
-		overflow-y: auto;
+	/* ── Day panel (Deprecated in favor of centered modals) ── */
+	/* ── Modals ── */
+	.modal-backdrop {
+		position: fixed;
+		inset: 0;
+		background: rgba(15, 23, 42, 0.75);
+		backdrop-filter: blur(8px);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		z-index: 1000;
+		animation: fadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+		padding: 1.5rem;
 	}
 
-	.panel-header {
+	.modal-backdrop.z-top {
+		z-index: 1100;
+	}
+
+	.day-modal,
+	.full-post-modal {
+		background: var(--surface);
+		border: 1px solid var(--border-strong);
+		border-radius: var(--radius);
+		width: 100%;
+		max-width: 550px;
+		max-height: 80vh;
+		display: flex;
+		flex-direction: column;
+		box-shadow: 
+			var(--shadow-lg), 
+			0 20px 25px -5px rgba(0, 0, 0, 0.3),
+			0 0 50px rgba(124, 106, 237, 0.15);
+		animation: scaleUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+		overflow: hidden;
+	}
+
+	.full-post-modal {
+		max-width: 600px;
+	}
+
+	.modal-header {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
 		padding: 1.25rem 1.5rem;
 		border-bottom: 1px solid var(--border);
+		background: var(--surface-2);
 	}
 
-	.panel-header h3 {
+	.modal-header h3 {
 		font-size: var(--text-md);
 		font-family: var(--font-display);
+		font-weight: 600;
 		margin: 0;
+		color: var(--text);
 	}
 
-	.panel-close {
-		width: 28px;
-		height: 28px;
+	.modal-close {
+		width: 32px;
+		height: 32px;
 		border-radius: var(--radius-full);
 		border: none;
-		background: var(--surface-2);
+		background: var(--surface-3);
 		color: var(--text-muted);
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		cursor: pointer;
+		transition: background 0.2s, color 0.2s, transform 0.2s;
 	}
 
-	.panel-close:hover {
+	.modal-close:hover {
 		color: var(--text);
-		background: var(--surface-3);
+		background: var(--border-strong);
+		transform: rotate(90deg);
 	}
 
-	.panel-empty {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		gap: 0.75rem;
-		padding: 3rem 1.5rem;
-		text-align: center;
+	.modal-body {
+		padding: 1.5rem;
+		overflow-y: auto;
+		flex: 1;
 	}
 
-	.panel-empty p {
-		color: var(--text-dim);
-		font-size: var(--text-sm);
-		margin: 0;
+	.modal-body.scrollable {
+		max-height: 60vh;
 	}
 
-	.panel-posts {
-		display: flex;
-		flex-direction: column;
-		gap: 0;
-	}
-
-	.panel-post {
-		display: flex;
-		gap: 0;
-		border-bottom: 1px solid var(--border);
-		transition: background 0.15s;
-	}
-
-	.panel-post:last-child {
-		border-bottom: none;
-	}
-
-	.panel-post:hover {
+	.modal-footer {
+		padding: 1rem 1.5rem;
+		border-top: 1px solid var(--border);
 		background: var(--surface-2);
+		display: flex;
+		justify-content: flex-end;
 	}
 
-	.post-status-bar {
-		width: 3px;
+	/* Day Modal Post Cards */
+	.modal-posts-list {
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+	}
+
+	.modal-post-card {
+		display: flex;
+		text-align: left;
+		background: var(--surface-2);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		overflow: hidden;
+		cursor: pointer;
+		width: 100%;
+		padding: 0;
+		transition: 
+			transform 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+			border-color 0.2s,
+			box-shadow 0.2s;
+	}
+
+	.modal-post-card:hover {
+		transform: translateY(-2px);
+		border-color: var(--accent-mid);
+		box-shadow: var(--shadow-md), 0 4px 20px rgba(124, 106, 237, 0.08);
+	}
+
+	.post-card-status {
+		width: 4px;
 		flex-shrink: 0;
 	}
 
-	.post-content {
-		padding: 1rem 1.25rem;
+	.post-card-body {
+		padding: 1.25rem;
 		flex: 1;
 		min-width: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.6rem;
 	}
 
-	.post-time-status {
+	.post-card-time-row {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		margin-bottom: 0.4rem;
 	}
 
-	.post-time {
+	.post-card-time {
 		font-size: var(--text-xs);
 		font-family: var(--font-mono);
 		color: var(--text-muted);
+		font-weight: 500;
 	}
 
-	.post-status-tag {
-		font-size: var(--text-xs);
-		font-weight: var(--weight-bold);
+	.live-indicator-badge {
+		font-size: 0.65rem;
+		font-weight: 700;
 		text-transform: uppercase;
-		letter-spacing: var(--tracking-wider);
+		background: var(--error);
+		color: #fff;
+		padding: 3px 8px;
+		border-radius: 4px;
+		letter-spacing: 0.05em;
 	}
 
-	.post-text {
+	.live-indicator-badge.pulse {
+		animation: heartBeat 2s infinite;
+	}
+
+	.status-badge {
+		font-size: 0.65rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		padding: 2px 6px;
+		border-radius: 4px;
+		border: 1px solid currentColor;
+		background: transparent;
+	}
+
+	.post-card-text {
 		font-size: var(--text-sm);
 		color: var(--text);
-		margin: 0 0 0.5rem;
-		line-height: var(--leading-snug);
+		margin: 0;
+		line-height: var(--leading-relaxed);
 		display: -webkit-box;
-		-webkit-line-clamp: 2;
+		-webkit-line-clamp: 3;
 		-webkit-box-orient: vertical;
 		overflow: hidden;
 	}
 
-	.post-meta {
+	.post-card-footer {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
+		border-top: 1px solid var(--border);
+		padding-top: 0.6rem;
+		margin-top: 0.2rem;
 	}
 
-	.post-agent {
+	.post-card-agent {
 		font-size: var(--text-xs);
 		color: var(--text-dim);
+		font-weight: 500;
 	}
 
-	.post-platforms {
+	.post-card-platforms {
 		display: flex;
 		gap: 4px;
 	}
@@ -1563,6 +1694,211 @@
 		width: 8px;
 		height: 8px;
 		border-radius: 50%;
+	}
+
+	/* Detail Modal Styles */
+	.detail-header-row {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin-bottom: 1.5rem;
+		gap: 1rem;
+		flex-wrap: wrap;
+	}
+
+	.detail-agent-info {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+	}
+
+	.detail-agent-avatar {
+		width: 40px;
+		height: 40px;
+		border-radius: 50%;
+		color: #fff;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		font-weight: 700;
+		font-size: var(--text-md);
+		box-shadow: 0 4px 10px rgba(124, 106, 237, 0.2);
+	}
+
+	.detail-agent-text {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+	}
+
+	.detail-agent-name {
+		font-weight: 600;
+		font-size: var(--text-sm);
+		color: var(--text);
+	}
+
+	.detail-time-date {
+		font-size: var(--text-xs);
+		color: var(--text-muted);
+	}
+
+	.status-badge-lg {
+		font-size: 0.7rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		padding: 4px 10px;
+		border-radius: 99px;
+		letter-spacing: 0.05em;
+	}
+
+	.detail-content-box {
+		background: var(--surface-2);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		padding: 1.25rem;
+		margin-bottom: 1.5rem;
+		white-space: pre-wrap;
+	}
+
+	.detail-text {
+		font-size: var(--text-sm);
+		line-height: var(--leading-relaxed);
+		color: var(--text);
+		margin: 0;
+	}
+
+	.detail-meta-section {
+		display: flex;
+		flex-direction: column;
+		gap: 1.25rem;
+	}
+
+	.meta-item {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+
+	.meta-label {
+		font-size: 0.65rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: var(--tracking-wider);
+		color: var(--text-dim);
+	}
+
+	.meta-platforms-list {
+		display: flex;
+		gap: 0.5rem;
+	}
+
+	.platform-badge {
+		font-size: var(--text-xs);
+		font-weight: 600;
+		text-transform: capitalize;
+		padding: 4px 10px;
+		border-radius: 6px;
+	}
+
+	.analytics-detailed-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+		gap: 0.75rem;
+	}
+
+	.metric-card {
+		background: var(--surface-2);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-xs);
+		padding: 0.75rem;
+		text-align: center;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 4px;
+		transition: border-color 0.2s;
+	}
+
+	.metric-card:hover {
+		border-color: var(--accent-mid);
+	}
+
+	.metric-icon {
+		font-size: 1.25rem;
+	}
+
+	.metric-val {
+		font-size: var(--text-base);
+		font-weight: 700;
+		color: var(--text);
+		font-family: var(--font-display);
+	}
+
+	.metric-lbl {
+		font-size: 10px;
+		color: var(--text-muted);
+		text-transform: uppercase;
+		font-weight: 600;
+	}
+
+	.cost-item {
+		background: rgba(16, 185, 129, 0.05);
+		border: 1px dashed rgba(16, 185, 129, 0.2);
+		border-radius: var(--radius-xs);
+		padding: 0.75rem 1rem;
+	}
+
+	.cost-row {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		font-size: var(--text-sm);
+	}
+
+	.cost-label {
+		font-weight: 600;
+		color: var(--text-dim);
+		flex: 1;
+	}
+
+	.cost-value {
+		font-family: var(--font-mono);
+		font-weight: 700;
+		color: #10b981;
+	}
+
+	.link-item {
+		margin-top: 0.25rem;
+	}
+
+	.live-post-link {
+		font-size: var(--text-sm);
+		color: var(--accent);
+		text-decoration: none;
+		font-weight: 600;
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		width: fit-content;
+	}
+
+	.live-post-link:hover {
+		color: var(--accent-mid);
+		text-decoration: underline;
+	}
+
+	/* Animations */
+	@keyframes heartBeat {
+		0% { transform: scale(1); }
+		14% { transform: scale(1.05); }
+		28% { transform: scale(1); }
+		42% { transform: scale(1.05); }
+		70% { transform: scale(1); }
+	}
+
+	@keyframes scaleUp {
+		from { transform: scale(0.95); opacity: 0; }
+		to { transform: scale(1); opacity: 1; }
 	}
 
 	/* ── FAB ── */
