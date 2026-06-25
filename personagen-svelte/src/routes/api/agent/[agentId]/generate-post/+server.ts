@@ -103,7 +103,18 @@ Provide a caption and short video layout according to the UGC prompt vault guide
 		let script = '';
 
 		try {
-			const parsed = JSON.parse(responseText);
+			let parsed = JSON.parse(responseText);
+			// Robust parsing: check if the parsed object has a text field which is itself a JSON string
+			if (parsed && typeof parsed.text === 'string' && parsed.text.trim().startsWith('{') && parsed.text.trim().endsWith('}')) {
+				try {
+					const nested = JSON.parse(parsed.text);
+					if (nested && typeof nested === 'object') {
+						parsed = { ...parsed, ...nested };
+					}
+				} catch (e) {
+					// Ignore and fallback
+				}
+			}
 			text = parsed.text || '';
 			ugcBroll = parsed.ugc_broll_prompt || parsed.ugcPrompt || '';
 			script = parsed.script || '';

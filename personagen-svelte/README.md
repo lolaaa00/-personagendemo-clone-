@@ -54,6 +54,8 @@ You can run the entire stack (SvelteKit app + PostgreSQL + Gotrue Auth + PostgRE
    - `FACTORY_ENCRYPTION_KEY`: 32-byte hex key used by the account factory for stored sessions.
    - `MAIL_API_KEY`: Internal bearer key shared by the account factory and mail service.
    - `COMPOSIO_API_KEY` and `COMPOSIO_AUTH_CONFIG_*`: Social connection credentials where live posting is enabled.
+   - `USER_SECRETS_ENCRYPTION_KEY`: 32-byte base64 key, 64-char hex key, or 32+ character secret used to encrypt user-supplied provider API keys.
+   - Optional app-level fallbacks: `ZERNIO_API_KEY`, `OPENROUTER_API_KEY`, `FIRECRAWL_API_KEY`, `KIE_AI_API_KEY`, and `FAL_KEY` if you do not require every user to bring their own keys.
 6. Click **Deploy**. Easypanel will build the frontend, spin up all 5 containers, mount persistent database volumes, and automatically run the migrations.
 
 ---

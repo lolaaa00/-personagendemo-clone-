@@ -1,16 +1,16 @@
-# Graph Report - personagendemo  (2026-06-16)
+# Graph Report - personagendemo  (2026-06-24)
 
 ## Corpus Check
-- 121 files · ~113,744 words
+- 132 files · ~132,586 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 659 nodes · 942 edges · 52 communities (47 shown, 5 thin omitted)
-- Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 5 edges (avg confidence: 0.8)
+- 747 nodes · 1094 edges · 55 communities (51 shown, 4 thin omitted)
+- Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS · INFERRED: 5 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `8657af64`
+- Built from commit: `505abe70`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -44,27 +44,30 @@
 - [[_COMMUNITY_Community 26|Community 26]]
 - [[_COMMUNITY_Community 27|Community 27]]
 - [[_COMMUNITY_Community 28|Community 28]]
+- [[_COMMUNITY_Community 29|Community 29]]
 - [[_COMMUNITY_Community 30|Community 30]]
 - [[_COMMUNITY_Community 31|Community 31]]
 - [[_COMMUNITY_Community 32|Community 32]]
 - [[_COMMUNITY_Community 33|Community 33]]
+- [[_COMMUNITY_Community 34|Community 34]]
 - [[_COMMUNITY_Community 35|Community 35]]
+- [[_COMMUNITY_Community 36|Community 36]]
 - [[_COMMUNITY_Community 38|Community 38]]
 - [[_COMMUNITY_Community 40|Community 40]]
 - [[_COMMUNITY_Community 42|Community 42]]
-- [[_COMMUNITY_Community 44|Community 44]]
+- [[_COMMUNITY_Community 49|Community 49]]
 
 ## God Nodes (most connected - your core abstractions)
-1. `createDbService()` - 33 edges
+1. `createDbService()` - 46 edges
 2. `$lib/stores/ui.svelte` - 19 edges
 3. `scripts` - 13 edges
-4. `$lib/components/agents/AgentChat.svelte` - 13 edges
-5. `AccountFactoryClient` - 11 edges
-6. `getOrCreateHermes()` - 11 edges
-7. `ensureHermesConfig()` - 11 edges
-8. `ensureAgentsManagedByHermes()` - 11 edges
-9. `compilerOptions` - 11 edges
-10. `ComposioClient` - 10 edges
+4. `$lib/components/agents/AgentChat.svelte` - 12 edges
+5. `ComposioClient` - 12 edges
+6. `AccountFactoryClient` - 11 edges
+7. `getOrCreateHermes()` - 11 edges
+8. `ensureHermesConfig()` - 11 edges
+9. `ensureAgentsManagedByHermes()` - 11 edges
+10. `compilerOptions` - 11 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `DELETE()` --calls--> `createDbService()`  [EXTRACTED]
@@ -72,20 +75,20 @@
 - `GET()` --calls--> `createDbService()`  [EXTRACTED]
   personagen-svelte/src/routes/api/agent/[agentId]/chat/+server.ts → personagen-svelte/src/lib/server/db.ts
 - `load()` --calls--> `createDbService()`  [INFERRED]
+  personagen-svelte/src/routes/(portal)/chat/[[agentId]]/+page.server.ts → personagen-svelte/src/lib/server/db.ts
+- `load()` --calls--> `createDbService()`  [INFERRED]
   personagen-svelte/src/routes/(portal)/persona-config/[[agentId]]/+page.server.ts → personagen-svelte/src/lib/server/db.ts
-- `POST()` --calls--> `createDbService()`  [EXTRACTED]
-  personagen-svelte/src/routes/api/accounts/+server.ts → personagen-svelte/src/lib/server/db.ts
 - `load()` --calls--> `createDbService()`  [EXTRACTED]
-  personagen-svelte/src/routes/(portal)/calendar/+page.server.ts → personagen-svelte/src/lib/server/db.ts
+  personagen-svelte/src/lib/archive/routes/(portal)/channel-decoder/+page.server.ts → personagen-svelte/src/lib/server/db.ts
 
 ## Import Cycles
 - None detected.
 
-## Communities (52 total, 5 thin omitted)
+## Communities (55 total, 4 thin omitted)
 
 ### Community 0 - "Community 0"
 Cohesion: 0.06
-Nodes (51): load(), DELETE(), POST(), load(), load(), load(), actions, load() (+43 more)
+Nodes (35): AgentConfigInsert, AgentConfigRow, AgentConfigUpdate, AgentInsert, AgentMemoryInsert, AgentMemoryRow, AgentMemoryUpdate, AgentRow (+27 more)
 
 ### Community 1 - "Community 1"
 Cohesion: 0.08
@@ -93,18 +96,18 @@ Nodes (37): browser, { captureSession }, db, refreshSession(), buildBaseHandle()
 
 ### Community 2 - "Community 2"
 Cohesion: 0.05
-Nodes (39): dependencies, @google/genai, @supabase/ssr, @supabase/supabase-js, devDependencies, eslint, eslint-config-prettier, @eslint/js (+31 more)
+Nodes (40): dependencies, @google/genai, @supabase/ssr, @supabase/supabase-js, devDependencies, eslint, eslint-config-prettier, @eslint/js (+32 more)
 
 ### Community 3 - "Community 3"
-Cohesion: 0.06
-Nodes (34): Agent, AgentChatMessage, AgentSession, AgentToolCall, ApiAction, ApiResponse, AUTONOMY_LABELS, AutonomyLevel (+26 more)
+Cohesion: 0.05
+Nodes (35): Agent, AgentChatMessage, AgentSession, AgentToolCall, ApiAction, ApiResponse, AUTONOMY_LABELS, AutonomyLevel (+27 more)
 
 ### Community 4 - "Community 4"
-Cohesion: 0.19
-Nodes (12): computeDynamicMetrics(), getPlatformFallbackMetrics(), getSeedHash(), POST(), syncLiveConnectionMetrics(), COMPOSIO_ACTION_MAPPING, ComposioClient, getAllSocialPlatforms() (+4 more)
+Cohesion: 0.07
+Nodes (10): calendarCells, composerAgentPlatforms, currentComposerAgent, DAYS, filteredPosts, generatingPost, monthLabel, MONTHS (+2 more)
 
 ### Community 5 - "Community 5"
-Cohesion: 0.10
+Cohesion: 0.09
 Nodes (24): createError, detectNicheFromBrandBrief(), displayHandle, filteredPersonas, GRADIENT_PRESETS, initial, isCreating, MARKETS (+16 more)
 
 ### Community 6 - "Community 6"
@@ -140,16 +143,16 @@ Cohesion: 0.15
 Nodes (12): config, createInbox(), DuplicateInboxError, fetchMessages(), getJson(), http, https, InboxCreationError (+4 more)
 
 ### Community 14 - "Community 14"
-Cohesion: 0.12
-Nodes (8): days, hashtags, heatmapData, hours, niches, platforms, selectedNiche, sounds
+Cohesion: 0.19
+Nodes (14): active, clearHistory(), createNewChat(), deleteSession(), getInitialGreeting(), handleKeyDown(), handleRenameKeyDown(), loadChatHistory() (+6 more)
 
 ### Community 15 - "Community 15"
-Cohesion: 0.29
-Nodes (10): $lib/components/agents/AgentChat.svelte, chatOpen, clearHistory(), fetchHistory(), handleSend(), initializeChat(), inputValue, isMaximized (+2 more)
+Cohesion: 0.16
+Nodes (15): $lib/components/agents/AgentChat.svelte, clearHistory(), fetchHistory(), handleSend(), initializeChat(), pollForDaemonResponse(), scrollToBottom(), $lib/types/agent (+7 more)
 
 ### Community 16 - "Community 16"
-Cohesion: 0.24
-Nodes (3): active, $app/navigation, svelte
+Cohesion: 0.23
+Nodes (4): $lib/components/agents/AgentRoster.svelte, $lib/stores/ui.svelte, $app/navigation, $lib/components/shared/BrandWave.svelte
 
 ### Community 17 - "Community 17"
 Cohesion: 0.15
@@ -164,32 +167,32 @@ Cohesion: 0.14
 Nodes (12): close(), config, fs, getProfilePath(), launch(), path, { toPlaywrightConfig }, envSchema (+4 more)
 
 ### Community 20 - "Community 20"
-Cohesion: 0.20
-Nodes (7): ../app.css, $lib/stores/ui.svelte, $app/forms, instruction, on, $lib/components/shared/BrandWave.svelte, $lib/components/shared/Toast.svelte
+Cohesion: 0.27
+Nodes (4): ../app.css, $app/forms, instruction, $lib/components/shared/Toast.svelte
 
 ### Community 21 - "Community 21"
 Cohesion: 0.17
 Nodes (6): crypto, fs, http, MAIL_API_PORT, path, server
 
 ### Community 22 - "Community 22"
-Cohesion: 0.15
-Nodes (17): DELETE(), executeTool(), GET(), POST(), toolsList, getServiceSupabase(), parseRssFeed(), pollRssFeeds() (+9 more)
+Cohesion: 0.07
+Nodes (37): computeDynamicMetrics(), getPlatformFallbackMetrics(), getSeedHash(), POST(), syncLiveConnectionMetrics(), DELETE(), executeTool(), GET() (+29 more)
 
 ### Community 23 - "Community 23"
 Cohesion: 0.24
 Nodes (8): clearInput(), EmailBlockedError, fs, humanType(), path, RateLimitError, screenshot(), signup()
 
 ### Community 24 - "Community 24"
-Cohesion: 0.27
-Nodes (6): canSubmit, passwordsMatch, @supabase/ssr, $lib/components/ui/Button.svelte, $lib/components/ui/Card.svelte, $lib/components/ui/Input.svelte
+Cohesion: 0.32
+Nodes (5): canSubmit, passwordsMatch, $lib/components/ui/Button.svelte, $lib/components/ui/Card.svelte, $lib/components/ui/Input.svelte
 
 ### Community 25 - "Community 25"
 Cohesion: 0.31
 Nodes (9): DB_FILE, extractAddress(), extractCode(), fs, loadInboxes(), main(), parseEmail(), path (+1 more)
 
 ### Community 26 - "Community 26"
-Cohesion: 0.17
-Nodes (8): $lib/components/agents/AgentConnectionStats.svelte, runScrape(), saveAll(), $lib/services/api, $lib/types, $app/environment, $app/stores, svelte/transition
+Cohesion: 0.24
+Nodes (5): addManualProduct(), runScrape(), saveAll(), $lib/services/api, $app/environment
 
 ### Community 27 - "Community 27"
 Cohesion: 0.36
@@ -199,9 +202,13 @@ Nodes (7): { pollForInstagramSMS }, verifyPhone(), fetchLatestSMS(), https, http
 Cohesion: 0.25
 Nodes (6): HEALTH_PORT, http, log(), MAIL_API_PORT, server, shutdown()
 
+### Community 29 - "Community 29"
+Cohesion: 0.24
+Nodes (16): DELETE(), GET(), POST(), requireUser(), testProviderKey(), decryptSecret(), EncryptedSecret, encryptSecret() (+8 more)
+
 ### Community 30 - "Community 30"
-Cohesion: 0.29
-Nodes (5): $lib/components/agents/AgentRoster.svelte, $lib/types/agent, $lib/components/dashboard/KPIGrid.svelte, $lib/components/dashboard/PlatformBars.svelte, $lib/components/dashboard/SparkChart.svelte
+Cohesion: 0.32
+Nodes (11): load(), load(), actions, load(), load(), load(), checkConfigStatus(), ConfigStatus (+3 more)
 
 ### Community 31 - "Community 31"
 Cohesion: 0.29
@@ -211,29 +218,41 @@ Nodes (6): dependencies, mailparser, smtp-server, name, private, version
 Cohesion: 0.33
 Nodes (4): app, server, supabase, transports
 
+### Community 34 - "Community 34"
+Cohesion: 0.18
+Nodes (10): dependencies, @google/genai, @supabase/supabase-js, description, main, name, scripts, start (+2 more)
+
 ### Community 35 - "Community 35"
 Cohesion: 0.40
 Nodes (3): env, envContent, envPath
 
+### Community 36 - "Community 36"
+Cohesion: 0.29
+Nodes (4): $lib/components/agents/AgentConnectionStats.svelte, $lib/types, $app/stores, svelte/transition
+
+### Community 49 - "Community 49"
+Cohesion: 0.13
+Nodes (15): load(), load(), DELETE(), POST(), load(), load(), actions, load() (+7 more)
+
 ## Knowledge Gaps
-- **296 isolated node(s):** `gitignorePath`, `name`, `private`, `version`, `type` (+291 more)
+- **315 isolated node(s):** `gitignorePath`, `name`, `private`, `version`, `type` (+310 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **5 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **4 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `$lib/stores/ui.svelte` connect `Community 20` to `Community 5`, `Community 7`, `Community 14`, `Community 15`, `Community 16`, `Community 24`, `Community 26`, `Community 30`?**
-  _High betweenness centrality (0.080) - this node is a cross-community bridge._
-- **Why does `devDependencies` connect `Community 2` to `Community 16`?**
-  _High betweenness centrality (0.054) - this node is a cross-community bridge._
-- **Why does `svelte` connect `Community 16` to `Community 2`?**
-  _High betweenness centrality (0.053) - this node is a cross-community bridge._
+- **Why does `svelte` connect `Community 2` to `Community 16`?**
+  _High betweenness centrality (0.026) - this node is a cross-community bridge._
+- **Why does `$lib/stores/ui.svelte` connect `Community 16` to `Community 4`, `Community 5`, `Community 36`, `Community 7`, `Community 15`, `Community 20`, `Community 24`, `Community 26`?**
+  _High betweenness centrality (0.019) - this node is a cross-community bridge._
 - **Are the 2 inferred relationships involving `createDbService()` (e.g. with `load()` and `load()`) actually correct?**
   _`createDbService()` has 2 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `gitignorePath`, `name`, `private` to the rest of the system?**
-  _296 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _315 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Community 0` be split into smaller, more focused modules?**
-  _Cohesion score 0.06299603174603174 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.05555555555555555 - nodes in this community are weakly interconnected._
 - **Should `Community 1` be split into smaller, more focused modules?**
   _Cohesion score 0.07822410147991543 - nodes in this community are weakly interconnected._
+- **Should `Community 2` be split into smaller, more focused modules?**
+  _Cohesion score 0.04878048780487805 - nodes in this community are weakly interconnected._

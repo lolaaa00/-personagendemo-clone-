@@ -87,7 +87,7 @@ describe('Direct Endpoint Testing', () => {
     console.log('[TEST] Sync Result:', JSON.stringify(resJson, null, 2));
     expect(res.status).toBe(200);
     expect(resJson.success).toBe(true);
-  });
+  }, 30000);
 
   it('3. should process chat agent query', async () => {
     const event = createMockEvent(

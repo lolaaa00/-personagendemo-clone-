@@ -25,9 +25,9 @@
     "semantic_hash": "63d21a7774a92097c46557f838648214"
   },
   "personagen-svelte/run-migrations.js": {
-    "mtime": 1781500775.3421996,
-    "ast_hash": "f1edc55de348c7abc7e5f6ff93f66ae9",
-    "semantic_hash": "f1edc55de348c7abc7e5f6ff93f66ae9"
+    "mtime": 1782346239.107414,
+    "ast_hash": "b4b6f7e16a26576737b71f36fec43f74",
+    "semantic_hash": ""
   },
   "personagen-svelte/src/app.d.ts": {
     "mtime": 1781468164.6086884,
@@ -35,14 +35,14 @@
     "semantic_hash": "cb70f2f64b75d94df5292a1c51eafa79"
   },
   "personagen-svelte/src/hooks.server.ts": {
-    "mtime": 1781651366.1667063,
-    "ast_hash": "9430bf6918a68b7335d79334c313f394",
-    "semantic_hash": "9430bf6918a68b7335d79334c313f394"
+    "mtime": 1782348459.065342,
+    "ast_hash": "b7ad8ed810c9d721800c265a9bab7ff1",
+    "semantic_hash": ""
   },
   "personagen-svelte/src/lib/components/agents/AgentChat.svelte": {
-    "mtime": 1781468164.7592063,
-    "ast_hash": "7e3b5342e158a602fdf2486135f90b79",
-    "semantic_hash": "7e3b5342e158a602fdf2486135f90b79"
+    "mtime": 1782111761.3324964,
+    "ast_hash": "eee743d8e032f5f16167843859e1fc29",
+    "semantic_hash": ""
   },
   "personagen-svelte/src/lib/components/agents/AgentConnectionStats.svelte": {
     "mtime": 1781468164.7959526,
@@ -50,9 +50,9 @@
     "semantic_hash": "8b209d61515f34d26184d821e35e2216"
   },
   "personagen-svelte/src/lib/components/agents/AgentRoster.svelte": {
-    "mtime": 1781575758.3439572,
-    "ast_hash": "f994c1fc6c5058da8e43a36962380e4e",
-    "semantic_hash": "f994c1fc6c5058da8e43a36962380e4e"
+    "mtime": 1781702654.7554166,
+    "ast_hash": "fbbf7b0812b1a2bb805bfca248c32586",
+    "semantic_hash": ""
   },
   "personagen-svelte/src/lib/components/agents/StatusBadge.svelte": {
     "mtime": 1781468164.855331,
@@ -115,18 +115,18 @@
     "semantic_hash": "a0024b105a3ec2df1612895d1f592921"
   },
   "personagen-svelte/src/lib/server/db.ts": {
-    "mtime": 1781585787.0608878,
-    "ast_hash": "778e30329e76fce84d03aa2df4d33a5a",
-    "semantic_hash": "778e30329e76fce84d03aa2df4d33a5a"
+    "mtime": 1782348475.8849173,
+    "ast_hash": "9bd8e512232c51253c33733eb18c6e25",
+    "semantic_hash": ""
   },
   "personagen-svelte/src/lib/server/hermes.ts": {
-    "mtime": 1781569120.197125,
-    "ast_hash": "82d447fac03c5fba7bee41befda823ef",
-    "semantic_hash": "82d447fac03c5fba7bee41befda823ef"
+    "mtime": 1782283938.3180783,
+    "ast_hash": "d6f783edf0a9538829f45395278770e5",
+    "semantic_hash": ""
   },
   "personagen-svelte/src/lib/server/scheduler.ts": {
-    "mtime": 1781657287.7407908,
-    "ast_hash": "09f2184126fbf4a0b369f86e2cff4656",
+    "mtime": 1782348612.4608514,
+    "ast_hash": "15b95e47f39c19d10258380149266544",
     "semantic_hash": ""
   },
   "personagen-svelte/src/lib/server/security.ts": {
@@ -135,9 +135,9 @@
     "semantic_hash": "5bd482da59e4d3fff94fc65fff9c650a"
   },
   "personagen-svelte/src/lib/server/social/composio.ts": {
-    "mtime": 1781576628.4167187,
-    "ast_hash": "395d37f006f49b1427a951ad54da5ff1",
-    "semantic_hash": "395d37f006f49b1427a951ad54da5ff1"
+    "mtime": 1782351040.1264317,
+    "ast_hash": "999156d31273b5fd3c952672e1248a74",
+    "semantic_hash": ""
   },
   "personagen-svelte/src/lib/server/supabase.ts": {
     "mtime": 1781569120.2144566,
@@ -145,9 +145,9 @@
     "semantic_hash": "c5e886f30e57c27b05b628b13e251180"
   },
   "personagen-svelte/src/lib/services/api.ts": {
-    "mtime": 1781585810.1017232,
-    "ast_hash": "70406151b18e9979a88475e44c9a43ee",
-    "semantic_hash": "70406151b18e9979a88475e44c9a43ee"
+    "mtime": 1782112413.2733576,
+    "ast_hash": "8db8b4cd996bc8b58c3b40d0af6a9dad",
+    "semantic_hash": ""
   },
   "personagen-svelte/src/lib/stores/ui.svelte.ts": {
     "mtime": 1781468165.1614854,
@@ -155,9 +155,9 @@
     "semantic_hash": "19f59c27e5eae0728b9f54d3af970f9b"
   },
   "personagen-svelte/src/lib/types.ts": {
-    "mtime": 1781470921.193983,
-    "ast_hash": "c7cce5f52feeab99362bf086c3b02096",
-    "semantic_hash": "c7cce5f52feeab99362bf086c3b02096"
+    "mtime": 1782283933.869738,
+    "ast_hash": "45222e28433f5116cb8a5218688bd0a3",
+    "semantic_hash": ""
   },
   "personagen-svelte/src/lib/types/agent.ts": {
     "mtime": 1781468165.1744816,
@@ -170,109 +170,84 @@
     "semantic_hash": "a0b7c20cc407375d0c14642a1073eeb1"
   },
   "personagen-svelte/src/routes/(auth)/login/+page.svelte": {
-    "mtime": 1781656755.937761,
-    "ast_hash": "2c81afd602f6e588a8165db4a2f4bb7d",
+    "mtime": 1781744883.5425544,
+    "ast_hash": "02c5e0f9cd3ea74ffb003050919ea51e",
     "semantic_hash": ""
   },
   "personagen-svelte/src/routes/(auth)/signup/+page.svelte": {
-    "mtime": 1781656761.231697,
-    "ast_hash": "f1dcd4c5551f524f73c227b81269ee43",
+    "mtime": 1781744883.6052234,
+    "ast_hash": "2e4d7c8f7c5ab322726fc5f4fa39a5fc",
     "semantic_hash": ""
   },
   "personagen-svelte/src/routes/(portal)/+layout.server.ts": {
-    "mtime": 1781569120.2521842,
-    "ast_hash": "562f87d8e0e6762616a53b07ea5e19a0",
-    "semantic_hash": "562f87d8e0e6762616a53b07ea5e19a0"
+    "mtime": 1782111455.9818532,
+    "ast_hash": "86fc045d50b6bcda183bf1b2dfccc270",
+    "semantic_hash": ""
   },
   "personagen-svelte/src/routes/(portal)/+layout.svelte": {
-    "mtime": 1781651376.5931518,
-    "ast_hash": "edfdf0ad209b5154cea456f4fe9db687",
-    "semantic_hash": "edfdf0ad209b5154cea456f4fe9db687"
+    "mtime": 1782348455.3042767,
+    "ast_hash": "8877eee0b4118308a2d43cf399197b07",
+    "semantic_hash": ""
   },
   "personagen-svelte/src/routes/(portal)/brand-brief/+page.svelte": {
-    "mtime": 1781581694.9144623,
-    "ast_hash": "c27a59a1be711e09ad338a9e51c5b618",
-    "semantic_hash": "c27a59a1be711e09ad338a9e51c5b618"
+    "mtime": 1782109307.9538093,
+    "ast_hash": "7ec6933bc0b313776e2432201fa702ad",
+    "semantic_hash": ""
   },
   "personagen-svelte/src/routes/(portal)/calendar/+page.server.ts": {
-    "mtime": 1781578267.4677148,
-    "ast_hash": "8662d2ea9f7759ca861a50964653e703",
-    "semantic_hash": "8662d2ea9f7759ca861a50964653e703"
+    "mtime": 1782348496.1714957,
+    "ast_hash": "85e88895d10f8faa973cd3d8fcd7082c",
+    "semantic_hash": ""
   },
   "personagen-svelte/src/routes/(portal)/calendar/+page.svelte": {
-    "mtime": 1781586233.6078718,
-    "ast_hash": "ce0f46526c04c3f9b5cad48e4d96bb32",
-    "semantic_hash": "ce0f46526c04c3f9b5cad48e4d96bb32"
-  },
-  "personagen-svelte/src/routes/(portal)/channel-decoder/+page.svelte": {
-    "mtime": 1781468165.6406746,
-    "ast_hash": "903c533b0b87c36a5878952d709738dc",
-    "semantic_hash": "903c533b0b87c36a5878952d709738dc"
+    "mtime": 1782348638.6790683,
+    "ast_hash": "503333fa45400de728059c11314a4988",
+    "semantic_hash": ""
   },
   "personagen-svelte/src/routes/(portal)/chat/[[agentId]]/+page.server.ts": {
-    "mtime": 1781569120.273844,
-    "ast_hash": "b84897a9bb0d4f5f885599605f53df67",
-    "semantic_hash": "b84897a9bb0d4f5f885599605f53df67"
+    "mtime": 1782114460.989176,
+    "ast_hash": "0906e46a6c705a20078555b2eb0c774d",
+    "semantic_hash": ""
   },
   "personagen-svelte/src/routes/(portal)/chat/[[agentId]]/+page.svelte": {
-    "mtime": 1781574232.125154,
-    "ast_hash": "c4a25af08df67b94968dc8275131d61c",
-    "semantic_hash": "c4a25af08df67b94968dc8275131d61c"
-  },
-  "personagen-svelte/src/routes/(portal)/content-forge/+page.server.ts": {
-    "mtime": 1781585830.5868628,
-    "ast_hash": "b1db03a9a9b55d057c7561c033d8203f",
-    "semantic_hash": "b1db03a9a9b55d057c7561c033d8203f"
-  },
-  "personagen-svelte/src/routes/(portal)/content-forge/+page.svelte": {
-    "mtime": 1781586001.9726727,
-    "ast_hash": "decbadd03cee0e95b35c5781fc8f7adb",
-    "semantic_hash": "decbadd03cee0e95b35c5781fc8f7adb"
+    "mtime": 1782283996.483717,
+    "ast_hash": "60d29d94c2b4db9f09a2c1cd0eba0ac4",
+    "semantic_hash": ""
   },
   "personagen-svelte/src/routes/(portal)/dashboard/+page.server.ts": {
-    "mtime": 1781575753.0737844,
-    "ast_hash": "a471cec50b1b54f4dc4547451191b429",
-    "semantic_hash": "a471cec50b1b54f4dc4547451191b429"
+    "mtime": 1782114453.5623534,
+    "ast_hash": "a506283b44e310492f76fcc4daabe14a",
+    "semantic_hash": ""
   },
   "personagen-svelte/src/routes/(portal)/dashboard/+page.svelte": {
-    "mtime": 1781569120.3739169,
-    "ast_hash": "2d7333e2f2a3e371e64f80b59d484cbc",
-    "semantic_hash": "2d7333e2f2a3e371e64f80b59d484cbc"
+    "mtime": 1782114028.3224168,
+    "ast_hash": "29663ee7e3afaac532d0206694a56eff",
+    "semantic_hash": ""
   },
   "personagen-svelte/src/routes/(portal)/generator/+page.svelte": {
-    "mtime": 1781654782.096035,
-    "ast_hash": "604ac6a133d1f4795e056e2c80120ade",
-    "semantic_hash": "604ac6a133d1f4795e056e2c80120ade"
+    "mtime": 1782113084.4470465,
+    "ast_hash": "7760b18f27574cc150f0af033acac8ef",
+    "semantic_hash": ""
   },
   "personagen-svelte/src/routes/(portal)/inbox/+page.server.ts": {
-    "mtime": 1781569120.4058383,
-    "ast_hash": "a33361b96449233272997dc1167d89d5",
-    "semantic_hash": "a33361b96449233272997dc1167d89d5"
+    "mtime": 1782114391.4303513,
+    "ast_hash": "6e23819fad2102224e7ea7918b752f18",
+    "semantic_hash": ""
   },
   "personagen-svelte/src/routes/(portal)/inbox/+page.svelte": {
     "mtime": 1781574240.0692887,
     "ast_hash": "07ea602847bf2640d037ff8e64cf3d68",
     "semantic_hash": "07ea602847bf2640d037ff8e64cf3d68"
   },
-  "personagen-svelte/src/routes/(portal)/intel-wizard/+page.server.ts": {
-    "mtime": 1781578227.2367008,
-    "ast_hash": "b1c228402b18af65fd9f4f0f976f5ce4",
-    "semantic_hash": "b1c228402b18af65fd9f4f0f976f5ce4"
-  },
-  "personagen-svelte/src/routes/(portal)/intel-wizard/+page.svelte": {
-    "mtime": 1781578231.1611524,
-    "ast_hash": "8cf12d9df5ef5cc96cec049b81455ce0",
-    "semantic_hash": "8cf12d9df5ef5cc96cec049b81455ce0"
-  },
   "personagen-svelte/src/routes/(portal)/persona-config/[[agentId]]/+page.server.ts": {
-    "mtime": 1781471398.2657063,
-    "ast_hash": "b1c0de06fb23bee46eebc53bc6240654",
-    "semantic_hash": "b1c0de06fb23bee46eebc53bc6240654"
+    "mtime": 1782114375.1522684,
+    "ast_hash": "297be4152094ffd329451937b34b53e8",
+    "semantic_hash": ""
   },
   "personagen-svelte/src/routes/(portal)/persona-config/[[agentId]]/+page.svelte": {
-    "mtime": 1781575799.6339662,
-    "ast_hash": "eb9e7e23766ad9f85c2c830e6b48a557",
-    "semantic_hash": "eb9e7e23766ad9f85c2c830e6b48a557"
+    "mtime": 1782348656.3040683,
+    "ast_hash": "daad25621621f1b822557de8c0b161e7",
+    "semantic_hash": ""
   },
   "personagen-svelte/src/routes/(portal)/pm/+page.server.ts": {
     "mtime": 1781468166.2730656,
@@ -284,40 +259,20 @@
     "ast_hash": "031284fc03298747d4e5b01542bb8995",
     "semantic_hash": "031284fc03298747d4e5b01542bb8995"
   },
-  "personagen-svelte/src/routes/(portal)/scout/+page.server.ts": {
-    "mtime": 1781468166.3311121,
-    "ast_hash": "9a6acfaacf20500fda994e4e63daf4a1",
-    "semantic_hash": "9a6acfaacf20500fda994e4e63daf4a1"
-  },
-  "personagen-svelte/src/routes/(portal)/scout/+page.svelte": {
-    "mtime": 1781580048.023018,
-    "ast_hash": "8ed21e976f11b6e1ce5d2b6637d274b0",
-    "semantic_hash": "8ed21e976f11b6e1ce5d2b6637d274b0"
-  },
   "personagen-svelte/src/routes/(portal)/settings/+page.svelte": {
-    "mtime": 1781581682.8367097,
-    "ast_hash": "a6d3332b55cca5a00c09d1624e2517fd",
-    "semantic_hash": "a6d3332b55cca5a00c09d1624e2517fd"
+    "mtime": 1782350932.2969117,
+    "ast_hash": "747590e5a08a27bbbc6a7a662e388b0a",
+    "semantic_hash": ""
   },
   "personagen-svelte/src/routes/(portal)/settings/overseer/+page.server.ts": {
-    "mtime": 1781569120.8263419,
-    "ast_hash": "c21468dc073169353381e6f8fb0c6dcc",
-    "semantic_hash": "c21468dc073169353381e6f8fb0c6dcc"
+    "mtime": 1782117790.3942134,
+    "ast_hash": "9d4b5c5bbb0320123b0a47118aaee581",
+    "semantic_hash": ""
   },
   "personagen-svelte/src/routes/(portal)/settings/overseer/+page.svelte": {
     "mtime": 1781569120.912394,
     "ast_hash": "6fd0415207b218a00efa2902e1b9a036",
     "semantic_hash": "6fd0415207b218a00efa2902e1b9a036"
-  },
-  "personagen-svelte/src/routes/(portal)/trends/+page.server.ts": {
-    "mtime": 1781580109.042045,
-    "ast_hash": "7c15125859f5cff2f559738b7b9565fa",
-    "semantic_hash": "7c15125859f5cff2f559738b7b9565fa"
-  },
-  "personagen-svelte/src/routes/(portal)/trends/+page.svelte": {
-    "mtime": 1781580058.6053133,
-    "ast_hash": "4a9723cd7a84b0fcc12220fb7ba1ec64",
-    "semantic_hash": "4a9723cd7a84b0fcc12220fb7ba1ec64"
   },
   "personagen-svelte/src/routes/+layout.server.ts": {
     "mtime": 1781468166.5612571,
@@ -335,19 +290,19 @@
     "semantic_hash": "95876c707e3fe80a5693b22de18061f4"
   },
   "personagen-svelte/src/routes/api/accounts/+server.ts": {
-    "mtime": 1781468166.596653,
-    "ast_hash": "b48a90a7e75b4b868adacaa6fa18c34e",
-    "semantic_hash": "b48a90a7e75b4b868adacaa6fa18c34e"
+    "mtime": 1782346113.4461334,
+    "ast_hash": "a5c9c04feebc823ae27a67982d2b0673",
+    "semantic_hash": ""
   },
   "personagen-svelte/src/routes/api/agent/[agentId]/chat/+server.ts": {
-    "mtime": 1781570623.4011643,
-    "ast_hash": "f1154d1bccbcde148e0f489f17b59ddc",
-    "semantic_hash": "f1154d1bccbcde148e0f489f17b59ddc"
+    "mtime": 1782349954.6130543,
+    "ast_hash": "ed15050a8e58ee4e1501acaf407fab1f",
+    "semantic_hash": ""
   },
   "personagen-svelte/src/routes/api/agents/config/+server.ts": {
-    "mtime": 1781471383.917902,
-    "ast_hash": "e1fc141738e94345129a7c2d664b8515",
-    "semantic_hash": "e1fc141738e94345129a7c2d664b8515"
+    "mtime": 1782114051.1899154,
+    "ast_hash": "9e8f37a339834ca3e20a959476693142",
+    "semantic_hash": ""
   },
   "personagen-svelte/src/routes/api/auth/callback/+server.ts": {
     "mtime": 1781468166.6425254,
@@ -365,69 +320,24 @@
     "semantic_hash": "2b5a6c51d6f39b220ea7339e7cca372f"
   },
   "personagen-svelte/src/routes/api/auth/signup/+server.ts": {
-    "mtime": 1781468166.655079,
-    "ast_hash": "adab5dad1acb24f1ff66a4de4ae01139",
-    "semantic_hash": "adab5dad1acb24f1ff66a4de4ae01139"
+    "mtime": 1781668644.4509528,
+    "ast_hash": "189e81f3e01a23a4637314ba8e7d1013",
+    "semantic_hash": ""
   },
   "personagen-svelte/src/routes/api/engine/+server.ts": {
-    "mtime": 1781585805.219736,
-    "ast_hash": "dd5f6fe07b3696be02b61abe23dd078a",
-    "semantic_hash": "dd5f6fe07b3696be02b61abe23dd078a"
+    "mtime": 1782349861.4279206,
+    "ast_hash": "bc405da84e11ddc8170150fe8aeae794",
+    "semantic_hash": ""
   },
   "personagen-svelte/src/routes/api/engine/engine.test.ts": {
-    "mtime": 1781658232.7219615,
-    "ast_hash": "2c2df4d693444b4f2ed8b1ed892f520b",
+    "mtime": 1782118212.1184456,
+    "ast_hash": "99db5b7608dde815abd7ec008f2436d0",
     "semantic_hash": ""
   },
   "personagen-svelte/src/routes/api/posts/+server.ts": {
-    "mtime": 1781468166.7059095,
-    "ast_hash": "313f01828a7fff9a256428278aa50036",
-    "semantic_hash": "313f01828a7fff9a256428278aa50036"
-  },
-  "personagen-svelte/src/routes/demo/+page.svelte": {
-    "mtime": 1781468166.7377589,
-    "ast_hash": "4035ccf613807cbdb99c51d9d14d771c",
-    "semantic_hash": "4035ccf613807cbdb99c51d9d14d771c"
-  },
-  "personagen-svelte/src/routes/demo/playwright/+page.svelte": {
-    "mtime": 1781468166.7411244,
-    "ast_hash": "14eaa1ba38e937dc7745701903530143",
-    "semantic_hash": "14eaa1ba38e937dc7745701903530143"
-  },
-  "personagen-svelte/src/routes/demo/playwright/page.svelte.e2e.ts": {
-    "mtime": 1781468166.7437775,
-    "ast_hash": "850e8be339f62a159f91dd09166f3b54",
-    "semantic_hash": "850e8be339f62a159f91dd09166f3b54"
-  },
-  "personagen-svelte/static/data/agents.json": {
-    "mtime": 1781053408.9723227,
-    "ast_hash": "4079ed441a652d1819e00a96d0c646ca",
-    "semantic_hash": "4079ed441a652d1819e00a96d0c646ca"
-  },
-  "personagen-svelte/static/data/blueprints.json": {
-    "mtime": 1780178495.341622,
-    "ast_hash": "042b278c84ff7029934fd267e00e1a90",
-    "semantic_hash": "042b278c84ff7029934fd267e00e1a90"
-  },
-  "personagen-svelte/static/data/platforms.json": {
-    "mtime": 1778991473.639216,
-    "ast_hash": "781e6cfe3fceaaf01951a9281dd445c4",
-    "semantic_hash": "781e6cfe3fceaaf01951a9281dd445c4"
-  },
-  "personagen-svelte/static/data/scouts.json": {
-    "mtime": 1778991753.8257356,
-    "ast_hash": "b2b66be4820687f43ab705010b86e445",
-    "semantic_hash": "b2b66be4820687f43ab705010b86e445"
-  },
-  "personagen-svelte/static/data/templates.json": {
-    "mtime": 1778991471.6282856,
-    "ast_hash": "4c3e6f53acc1584abf7d6467ec12ba7d",
-    "semantic_hash": "4c3e6f53acc1584abf7d6467ec12ba7d"
-  },
-  "personagen-svelte/static/data/trends.json": {
-    "mtime": 1778991467.1509936,
-    "ast_hash": "14c7933b2f0ec82e1e138fdebd8318fc",
-    "semantic_hash": "14c7933b2f0ec82e1e138fdebd8318fc"
+    "mtime": 1782114085.9923623,
+    "ast_hash": "3480e38069144b3ea8755ebeed337026",
+    "semantic_hash": ""
   },
   "personagen-svelte/supabase/composio_hardening_migration.sql": {
     "mtime": 1781149410.6426826,
@@ -435,9 +345,9 @@
     "semantic_hash": "8e41d8f8ba4130eaf6876dd59fe8e1db"
   },
   "personagen-svelte/supabase/migration.sql": {
-    "mtime": 1781470872.4862993,
-    "ast_hash": "fcdf3ce191468df850bdf47cd620c57a",
-    "semantic_hash": "fcdf3ce191468df850bdf47cd620c57a"
+    "mtime": 1781827348.2778594,
+    "ast_hash": "fd03590b8f0b67090371a699ebf1ce49",
+    "semantic_hash": ""
   },
   "personagen-svelte/supabase/rss_migration.sql": {
     "mtime": 1780946633.9272175,
@@ -600,8 +510,153 @@
     "semantic_hash": "c444eb62831c4574b2c20ba1e71e155e"
   },
   "services/mcp-bridge/server.js": {
-    "mtime": 1781572404.5496383,
-    "ast_hash": "05591ad2415122b0aa8a5de96d5ff8ad",
-    "semantic_hash": "05591ad2415122b0aa8a5de96d5ff8ad"
+    "mtime": 1782284059.9407668,
+    "ast_hash": "9b89ae847dc7cba0bbe1962c5a3e9dd1",
+    "semantic_hash": ""
+  },
+  "personagen-svelte/src/lib/archive/routes/(portal)/channel-decoder/+page.server.ts": {
+    "mtime": 1782348670.5449636,
+    "ast_hash": "c2117be233e0d6f9c404d14177177ff9",
+    "semantic_hash": ""
+  },
+  "personagen-svelte/src/lib/archive/routes/(portal)/channel-decoder/+page.svelte": {
+    "mtime": 1782114780.0108044,
+    "ast_hash": "469e09db5b982aac7772fbf667137143",
+    "semantic_hash": ""
+  },
+  "personagen-svelte/src/lib/archive/routes/(portal)/content-forge/+page.server.ts": {
+    "mtime": 1782348687.349466,
+    "ast_hash": "bf17cb9eb49e3df668e9c258a54c67d9",
+    "semantic_hash": ""
+  },
+  "personagen-svelte/src/lib/archive/routes/(portal)/content-forge/+page.svelte": {
+    "mtime": 1782117724.9188328,
+    "ast_hash": "925f6c60b106c482184a49dd54c83a77",
+    "semantic_hash": ""
+  },
+  "personagen-svelte/src/lib/archive/routes/(portal)/intel-wizard/+page.server.ts": {
+    "mtime": 1782348693.6346672,
+    "ast_hash": "9254d7e2c16cf5111e2ce3a18215c512",
+    "semantic_hash": ""
+  },
+  "personagen-svelte/src/lib/archive/routes/(portal)/intel-wizard/+page.svelte": {
+    "mtime": 1781578231.1611524,
+    "ast_hash": "8cf12d9df5ef5cc96cec049b81455ce0",
+    "semantic_hash": ""
+  },
+  "personagen-svelte/src/lib/archive/routes/(portal)/scout/+page.server.ts": {
+    "mtime": 1782348704.446255,
+    "ast_hash": "f75294eb3fd72d2d37077a7a44af6fb9",
+    "semantic_hash": ""
+  },
+  "personagen-svelte/src/lib/archive/routes/(portal)/scout/+page.svelte": {
+    "mtime": 1782265500.5155792,
+    "ast_hash": "d4083e7adfe3ee88af7360d29b1cdf53",
+    "semantic_hash": ""
+  },
+  "personagen-svelte/src/lib/archive/routes/(portal)/trends/+page.server.ts": {
+    "mtime": 1781580109.042045,
+    "ast_hash": "7c15125859f5cff2f559738b7b9565fa",
+    "semantic_hash": ""
+  },
+  "personagen-svelte/src/lib/archive/routes/(portal)/trends/+page.svelte": {
+    "mtime": 1781744886.2784183,
+    "ast_hash": "22e810980e971be31eb9cb643ed39ad0",
+    "semantic_hash": ""
+  },
+  "personagen-svelte/src/lib/server/config-check.ts": {
+    "mtime": 1782283940.4534702,
+    "ast_hash": "fc76936149164aec2afe28c3b1c2c3c4",
+    "semantic_hash": ""
+  },
+  "personagen-svelte/src/lib/server/user-api-keys.ts": {
+    "mtime": 1782350589.7545931,
+    "ast_hash": "0564cdda225fc2b9ee2311763bcb0eb1",
+    "semantic_hash": ""
+  },
+  "personagen-svelte/src/lib/tests/fixtures/agents.json": {
+    "mtime": 1781053408.9723227,
+    "ast_hash": "4079ed441a652d1819e00a96d0c646ca",
+    "semantic_hash": ""
+  },
+  "personagen-svelte/src/lib/tests/fixtures/blueprints.json": {
+    "mtime": 1780178495.341622,
+    "ast_hash": "042b278c84ff7029934fd267e00e1a90",
+    "semantic_hash": ""
+  },
+  "personagen-svelte/src/lib/tests/fixtures/platforms.json": {
+    "mtime": 1778991473.639216,
+    "ast_hash": "781e6cfe3fceaaf01951a9281dd445c4",
+    "semantic_hash": ""
+  },
+  "personagen-svelte/src/lib/tests/fixtures/scouts.json": {
+    "mtime": 1778991753.8257356,
+    "ast_hash": "b2b66be4820687f43ab705010b86e445",
+    "semantic_hash": ""
+  },
+  "personagen-svelte/src/lib/tests/fixtures/templates.json": {
+    "mtime": 1778991471.6282856,
+    "ast_hash": "4c3e6f53acc1584abf7d6467ec12ba7d",
+    "semantic_hash": ""
+  },
+  "personagen-svelte/src/lib/tests/fixtures/trends.json": {
+    "mtime": 1781702732.3450797,
+    "ast_hash": "5ca217bddcacdb88238344505dc2deb5",
+    "semantic_hash": ""
+  },
+  "personagen-svelte/src/routes/(portal)/generator/+page.server.ts": {
+    "mtime": 1782112280.8074648,
+    "ast_hash": "f1248650aa4a798f14a5b99cf213dbac",
+    "semantic_hash": ""
+  },
+  "personagen-svelte/src/routes/api/agent/[agentId]/generate-post/+server.ts": {
+    "mtime": 1782350886.4311535,
+    "ast_hash": "ff33465e154d5a22a6734bcfc229a1ed",
+    "semantic_hash": ""
+  },
+  "personagen-svelte/src/routes/api/agent/[agentId]/sessions/+server.ts": {
+    "mtime": 1781827730.4740648,
+    "ast_hash": "366c871016bf721eee69746a4d8ef8cc",
+    "semantic_hash": ""
+  },
+  "personagen-svelte/src/routes/api/agent/[agentId]/sync/+server.ts": {
+    "mtime": 1782346117.6500766,
+    "ast_hash": "296c309a12f5287237cbfd9003a7ad94",
+    "semantic_hash": ""
+  },
+  "personagen-svelte/src/routes/api/agents/+server.ts": {
+    "mtime": 1782115536.549943,
+    "ast_hash": "99f71d6f1261a090ce54bf2507afa8cf",
+    "semantic_hash": ""
+  },
+  "personagen-svelte/src/routes/api/engine/test-live-endpoints.test.ts": {
+    "mtime": 1782350590.2001483,
+    "ast_hash": "04edd4a73e6a40e9df82c2421c9541e2",
+    "semantic_hash": ""
+  },
+  "personagen-svelte/src/routes/api/settings/api-keys/+server.ts": {
+    "mtime": 1782350630.161695,
+    "ast_hash": "4fc9e5884936eb610ab5f5663af7278f",
+    "semantic_hash": ""
+  },
+  "personagen-svelte/supabase/user_api_keys_migration.sql": {
+    "mtime": 1782350589.784533,
+    "ast_hash": "3779286b643e7045121af7998d36a54d",
+    "semantic_hash": ""
+  },
+  "personagen-svelte/supabase/user_api_keys_providers_migration.sql": {
+    "mtime": 1782350589.8407109,
+    "ast_hash": "f4c19b0cf70514fc687b01e13851c42a",
+    "semantic_hash": ""
+  },
+  "services/hermes-daemon/package.json": {
+    "mtime": 1781830066.0422175,
+    "ast_hash": "90c9d903fa696009663353b5564aba50",
+    "semantic_hash": ""
+  },
+  "services/hermes-daemon/worker.js": {
+    "mtime": 1782284017.0713465,
+    "ast_hash": "d958320910d5a40a4e9cb61efb540362",
+    "semantic_hash": ""
   }
 }

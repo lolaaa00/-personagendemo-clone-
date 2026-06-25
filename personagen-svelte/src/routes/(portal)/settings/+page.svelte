@@ -12,10 +12,71 @@
 	let pushNotifications = $state(false);
 	let weeklyReports = $state(true);
 
-	// API Key
-	let apiKey = $state('pg_live_7x4m9kRt2pWqZb8nFhJv3YcL');
-	let showKey = $state(false);
-	let regenerating = $state(false);
+	interface ApiKeyMetadata {
+		provider: ApiKeyProvider;
+		masked_value: string;
+		status: 'untested' | 'valid' | 'invalid' | 'error';
+		last_error: string | null;
+		last_tested_at: string | null;
+		updated_at: string | null;
+	}
+
+	type ApiKeyProvider = 'zernio' | 'gemini' | 'openrouter' | 'firecrawl' | 'kie_ai' | 'fal_ai';
+
+	const providerConfigs: Array<{
+		provider: ApiKeyProvider;
+		label: string;
+		description: string;
+		optional?: boolean;
+		placeholder: string;
+	}> = [
+		{
+			provider: 'zernio',
+			label: 'Zernio',
+			description: 'TikTok-first publishing and optional Instagram provider routing.',
+			placeholder: 'Paste your Zernio API key'
+		},
+		{
+			provider: 'openrouter',
+			label: 'OpenRouter',
+			description: 'Optional model routing for agent/chat generation through OpenRouter.',
+			placeholder: 'Paste your OpenRouter API key'
+		},
+		{
+			provider: 'firecrawl',
+			label: 'Firecrawl',
+			description: 'Storefront scraping and JS-rendered page extraction.',
+			placeholder: 'Paste your Firecrawl API key'
+		},
+		{
+			provider: 'kie_ai',
+			label: 'Kie AI',
+			description: 'Optional video/image generation provider for creative assets.',
+			optional: true,
+			placeholder: 'Paste your Kie AI API key'
+		},
+		{
+			provider: 'fal_ai',
+			label: 'Fal AI',
+			description: 'Optional fast media generation provider for images/video workflows.',
+			optional: true,
+			placeholder: 'Paste your Fal AI API key'
+		}
+	];
+
+	let apiKeys = $state<ApiKeyMetadata[]>([]);
+	let apiKeyInputs = $state<Record<ApiKeyProvider, string>>({
+		zernio: '',
+		gemini: '',
+		openrouter: '',
+		firecrawl: '',
+		kie_ai: '',
+		fal_ai: ''
+	});
+	let apiKeysLoading = $state(false);
+	let apiKeySaving = $state<Record<string, boolean>>({});
+	let apiKeyTesting = $state<Record<string, boolean>>({});
+	let apiKeyDeleting = $state<Record<string, boolean>>({});
 
 	// Danger
 	let showDeleteModal = $state(false);
@@ -35,6 +96,7 @@
 				/* ignore */
 			}
 		}
+		loadApiKeys();
 	});
 
 	function persistSettings() {
@@ -66,32 +128,99 @@
 		showToast('Notification preference saved', 'success');
 	}
 
-	function maskedKey(): string {
-		if (showKey) return apiKey;
-		return apiKey.slice(0, 8) + '•'.repeat(apiKey.length - 12) + apiKey.slice(-4);
+	function getSavedKey(provider: ApiKeyProvider) {
+		return apiKeys.find((key) => key.provider === provider);
 	}
 
-	function copyKey() {
-		navigator.clipboard
-			.writeText(apiKey)
-			.then(() => {
-				showToast('API key copied to clipboard', 'success');
-			})
-			.catch(() => {
-				showToast('Failed to copy', 'error');
+	async function loadApiKeys() {
+		apiKeysLoading = true;
+		try {
+			const res = await fetch('/api/settings/api-keys');
+			const data = await res.json();
+			if (res.ok && data.success) {
+				apiKeys = data.keys || [];
+			} else {
+				showToast(data.error || 'Unable to load API key settings', 'error');
+			}
+		} catch (err) {
+			showToast((err as Error).message || 'Unable to load API key settings', 'error');
+		} finally {
+			apiKeysLoading = false;
+		}
+	}
+
+	async function saveProviderKey(provider: ApiKeyProvider) {
+		const input = apiKeyInputs[provider]?.trim() || '';
+		if (input.length < 8) {
+			showToast('Enter a valid API key first', 'warning');
+			return;
+		}
+		apiKeySaving = { ...apiKeySaving, [provider]: true };
+		try {
+			const res = await fetch('/api/settings/api-keys', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ action: 'save', provider, apiKey: input })
 			});
+			const data = await res.json();
+			if (res.ok && data.success) {
+				apiKeys = [...apiKeys.filter((key) => key.provider !== provider), data.key];
+				apiKeyInputs = { ...apiKeyInputs, [provider]: '' };
+				showToast('API key saved securely', 'success');
+			} else {
+				showToast(data.error || 'Failed to save API key', 'error');
+			}
+		} catch (err) {
+			showToast((err as Error).message || 'Failed to save API key', 'error');
+		} finally {
+			apiKeySaving = { ...apiKeySaving, [provider]: false };
+		}
 	}
 
-	function regenerateKey() {
-		regenerating = true;
-		setTimeout(() => {
-			const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-			let newKey = 'pg_live_';
-			for (let i = 0; i < 20; i++) newKey += chars.charAt(Math.floor(Math.random() * chars.length));
-			apiKey = newKey;
-			regenerating = false;
-			showToast('API key regenerated. Update your integrations.', 'warning');
-		}, 800);
+	async function testProviderKey(provider: ApiKeyProvider) {
+		apiKeyTesting = { ...apiKeyTesting, [provider]: true };
+		try {
+			const res = await fetch('/api/settings/api-keys', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ action: 'test', provider })
+			});
+			const data = await res.json();
+			if (data.key) {
+				apiKeys = [...apiKeys.filter((key) => key.provider !== provider), data.key];
+			}
+			if (res.ok && data.success) {
+				showToast('Provider connection verified', 'success');
+			} else {
+				showToast(data.error || 'API key test failed', 'error');
+			}
+		} catch (err) {
+			showToast((err as Error).message || 'API key test failed', 'error');
+		} finally {
+			apiKeyTesting = { ...apiKeyTesting, [provider]: false };
+		}
+	}
+
+	async function deleteProviderKey(provider: ApiKeyProvider) {
+		apiKeyDeleting = { ...apiKeyDeleting, [provider]: true };
+		try {
+			const res = await fetch('/api/settings/api-keys', {
+				method: 'DELETE',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ provider })
+			});
+			const data = await res.json();
+			if (res.ok && data.success) {
+				apiKeys = apiKeys.filter((key) => key.provider !== provider);
+				showToast('API key deleted', 'info');
+			} else {
+				showToast(data.error || 'Failed to delete API key', 'error');
+			}
+		} catch (err) {
+			showToast((err as Error).message || 'Failed to delete API key', 'error');
+		} finally {
+			apiKeyDeleting = { ...apiKeyDeleting, [provider]: false };
+		}
 	}
 
 	function confirmDelete() {
@@ -239,7 +368,7 @@
 			</div>
 		</div>
 
-		<!-- API Keys -->
+		<!-- Provider API Keys -->
 		<div class="settings-card">
 			<div class="card-header">
 				<div class="card-icon">
@@ -255,81 +384,79 @@
 						/></svg
 					>
 				</div>
-				<h3>API Keys</h3>
+				<h3>Provider API Keys</h3>
 			</div>
 			<div class="card-body">
 				<p class="key-hint">
-					Use this key to access the PersonaGen API from external integrations.
+					Store user-owned provider keys securely. Saved keys are encrypted on the server and
+					are never shown again after saving.
 				</p>
-				<div class="key-display">
-					<code class="key-value">{maskedKey()}</code>
-					<div class="key-actions">
-						<button
-							class="icon-btn"
-							onclick={() => (showKey = !showKey)}
-							title={showKey ? 'Hide' : 'Show'}
-						>
-							{#if showKey}
-								<svg
-									width="16"
-									height="16"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2"
-									><path
-										d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"
-									/><line x1="1" y1="1" x2="23" y2="23" /></svg
-								>
-							{:else}
-								<svg
-									width="16"
-									height="16"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2"
-									><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle
-										cx="12"
-										cy="12"
-										r="3"
-									/></svg
-								>
+				<div class="provider-key-list">
+					{#each providerConfigs as config}
+						{@const savedKey = getSavedKey(config.provider)}
+						<div class="provider-key-row">
+							<div class="provider-key-header">
+								<div>
+									<strong>{config.label}{config.optional ? ' (Optional)' : ''}</strong>
+									<span>{config.description}</span>
+								</div>
+								{#if savedKey}
+									<span class="status-pill" class:valid={savedKey.status === 'valid'} class:error={savedKey.status === 'invalid' || savedKey.status === 'error'}>
+										{savedKey.status}
+									</span>
+								{:else if apiKeysLoading}
+									<span class="status-pill">loading</span>
+								{:else}
+									<span class="status-pill">not saved</span>
+								{/if}
+							</div>
+
+							{#if savedKey}
+								<div class="key-display">
+									<code class="key-value">{savedKey.masked_value}</code>
+								</div>
+								{#if savedKey.last_error}
+									<p class="key-error">{savedKey.last_error}</p>
+								{/if}
 							{/if}
-						</button>
-						<button class="icon-btn" onclick={copyKey} title="Copy">
-							<svg
-								width="16"
-								height="16"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="2"
-								><rect x="9" y="9" width="13" height="13" rx="2" ry="2" /><path
-									d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"
-								/></svg
-							>
-						</button>
-					</div>
+
+							<div class="field">
+								<label for={`${config.provider}-api-key`}>{config.label} API Key</label>
+								<input
+									id={`${config.provider}-api-key`}
+									type="password"
+									bind:value={apiKeyInputs[config.provider]}
+									placeholder={savedKey ? 'Paste a new key to replace the saved one' : config.placeholder}
+									autocomplete="off"
+								/>
+							</div>
+
+							<div class="provider-actions">
+								<button class="save-btn" onclick={() => saveProviderKey(config.provider)} disabled={apiKeySaving[config.provider] || !apiKeyInputs[config.provider]?.trim()}>
+									{#if apiKeySaving[config.provider]}
+										<span class="spinner"></span> Saving…
+									{:else}
+										Save Key
+									{/if}
+								</button>
+								<button class="secondary-btn" onclick={() => testProviderKey(config.provider)} disabled={apiKeyTesting[config.provider] || !savedKey}>
+									{#if apiKeyTesting[config.provider]}
+										<span class="spinner"></span> Testing…
+									{:else}
+										Test Connection
+									{/if}
+								</button>
+								<button class="danger-inline-btn" onclick={() => deleteProviderKey(config.provider)} disabled={apiKeyDeleting[config.provider] || !savedKey}>
+									{#if apiKeyDeleting[config.provider]}
+										<span class="spinner"></span> Deleting…
+									{:else}
+										Delete Key
+									{/if}
+								</button>
+							</div>
+						</div>
+					{/each}
 				</div>
-				<button class="regen-btn" onclick={regenerateKey} disabled={regenerating}>
-					{#if regenerating}
-						<span class="spinner"></span> Regenerating…
-					{:else}
-						<svg
-							width="14"
-							height="14"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2"
-							><polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" /><path
-								d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"
-							/></svg
-						>
-						Regenerate Key
-					{/if}
-				</button>
 			</div>
 		</div>
 
@@ -708,60 +835,117 @@
 		word-break: break-all;
 	}
 
-	.key-actions {
-		display: flex;
-		gap: 0.5rem;
-		flex-shrink: 0;
+	.provider-key-row {
+		border: 1px solid var(--border);
+		border-radius: var(--radius-md);
+		padding: 1rem;
+		background: var(--bg-card-dark);
 	}
 
-	.icon-btn {
-		width: 32px;
-		height: 32px;
+	.provider-key-list {
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+	}
+
+	.provider-key-header {
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: 1rem;
+		margin-bottom: 1rem;
+	}
+
+	.provider-key-header strong {
+		display: block;
+		font-size: var(--text-base);
+		margin-bottom: 0.2rem;
+	}
+
+	.provider-key-header span:not(.status-pill) {
+		display: block;
+		font-size: var(--text-xs);
+		color: var(--text-muted);
+		line-height: 1.5;
+	}
+
+	.status-pill {
+		padding: 0.25rem 0.55rem;
+		border-radius: 999px;
+		border: 1px solid var(--border);
+		color: var(--text-muted);
+		font-size: var(--text-xs);
+		font-weight: 700;
+		text-transform: uppercase;
+		white-space: nowrap;
+	}
+
+	.status-pill.valid {
+		border-color: var(--success);
+		color: var(--success);
+	}
+
+	.status-pill.error {
+		border-color: var(--error);
+		color: var(--error);
+	}
+
+	.key-error {
+		margin: -0.35rem 0 1rem;
+		font-size: var(--text-xs);
+		color: var(--error);
+		line-height: 1.5;
+	}
+
+	.provider-actions {
 		display: flex;
 		align-items: center;
-		justify-content: center;
-		background: var(--surface-2);
-		border: 1px solid var(--border);
-		border-radius: 8px;
-		cursor: pointer;
-		color: var(--text-muted);
-		transition:
-			color 0.2s ease,
-			border-color 0.2s ease,
-			background 0.2s ease;
-		padding: 0;
+		gap: 0.75rem;
+		flex-wrap: wrap;
 	}
 
-	.icon-btn:hover {
+	.secondary-btn,
+	.danger-inline-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.7rem 1.1rem;
+		border-radius: var(--radius-sm);
+		font-size: var(--text-sm);
+		font-weight: 600;
+		cursor: pointer;
+		font-family: var(--font-body);
+		transition:
+			border-color 0.2s ease,
+			color 0.2s ease,
+			background 0.2s ease;
+	}
+
+	.secondary-btn {
+		background: var(--surface-2);
+		border: 1px solid var(--border-strong);
+		color: var(--text-muted);
+	}
+
+	.secondary-btn:hover:not(:disabled) {
 		color: var(--text);
 		border-color: var(--accent-mid);
 		background: var(--accent-soft);
 	}
 
-	.regen-btn {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.5rem;
-		padding: 0.6rem 1.25rem;
-		background: var(--surface-2);
-		border: 1px solid var(--border-strong);
-		border-radius: var(--radius-sm);
-		color: var(--text-muted);
-		font-size: var(--text-sm);
-		font-weight: 600;
-		cursor: pointer;
-		transition:
-			color 0.2s ease,
-			border-color 0.2s ease;
-		font-family: var(--font-body);
+	.danger-inline-btn {
+		background: transparent;
+		border: 1px solid rgba(239, 68, 68, 0.35);
+		color: var(--error);
 	}
 
-	.regen-btn:hover:not(:disabled) {
-		color: var(--text);
-		border-color: var(--accent-mid);
+	.danger-inline-btn:hover:not(:disabled) {
+		background: rgba(239, 68, 68, 0.08);
+		border-color: var(--error);
 	}
 
-	.regen-btn:disabled {
+	.secondary-btn:disabled,
+	.danger-inline-btn:disabled {
 		opacity: 0.5;
 		cursor: not-allowed;
 	}
@@ -933,10 +1117,6 @@
 		.key-display {
 			flex-direction: column;
 			align-items: flex-start;
-		}
-
-		.key-actions {
-			align-self: flex-end;
 		}
 
 		.modal-actions {
