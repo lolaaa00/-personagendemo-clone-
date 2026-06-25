@@ -129,13 +129,27 @@ export class ComposioClient {
 		platform: string,
 		content: string,
 		mediaUrl?: string
-	): Promise<{ success: boolean; externalId?: string; data?: any; error?: string }> {
+	): Promise<{ success: boolean; externalId?: string; permalink?: string | null; data?: any; error?: string }> {
 		if (!this.apiKey) {
 			return { success: false, error: 'COMPOSIO_API_KEY is not configured.' };
 		}
 
 		const platKey = platform.toLowerCase();
 		if (!isPlatformConfigured(platKey)) {
+			if (env.ALLOW_DEMO_MODE === 'true') {
+				const mockExternalId = Math.random().toString(36).substring(2, 11);
+				let mockPermalink = `https://www.${platKey}.com/p/${mockExternalId}`;
+				if (platKey === 'youtube') {
+					mockPermalink = `https://www.youtube.com/watch?v=${mockExternalId}`;
+				}
+				console.log(`[Composio Client] DEMO MODE: Simulating success for platform "${platform}" with permalink: ${mockPermalink}`);
+				return {
+					success: true,
+					externalId: mockExternalId,
+					permalink: mockPermalink,
+					data: { message: `Simulated posting success on ${platform}` }
+				};
+			}
 			return { success: false, error: `Platform "${platform}" is not configured.` };
 		}
 
@@ -252,8 +266,10 @@ export class ComposioClient {
 					};
 				}
 
-				const externalId = publishResult.data?.id || publishResult.result?.id || publishResult.id;
-				return { success: true, externalId, data: publishResult };
+				const resObj = publishResult.result || publishResult.data || publishResult;
+				const externalId = resObj?.id || publishResult.id;
+				const permalink = resObj?.permalink || resObj?.link || resObj?.url || resObj?.uri || null;
+				return { success: true, externalId, permalink, data: publishResult };
 			} catch (err) {
 				console.error('[Composio Client] Instagram posting execution failed:', err);
 				return { success: false, error: (err as Error).message };
@@ -305,6 +321,7 @@ export class ComposioClient {
 			const result = (await response.json()) as any;
 
 			let externalId: string | undefined;
+			let permalink: string | null = null;
 			if (result && typeof result === 'object') {
 				const resObj = result.result || result.data || result;
 				if (resObj && typeof resObj === 'object') {
@@ -313,10 +330,14 @@ export class ComposioClient {
 					if (extracted) {
 						externalId = String(extracted);
 					}
+					const possibleLink = resObj.permalink || resObj.link || resObj.url || resObj.uri || resObj.share_url;
+					if (possibleLink) {
+						permalink = String(possibleLink);
+					}
 				}
 			}
 
-			return { success: true, externalId, data: result };
+			return { success: true, externalId, permalink, data: result };
 		} catch (err) {
 			console.error(`[Composio Client] Error executing post to ${platform}:`, err);
 			return { success: false, error: (err as Error).message };

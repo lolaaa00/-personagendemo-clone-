@@ -49,8 +49,7 @@
 			label: 'Overview',
 			items: [
 				{ href: '/dashboard', label: 'Dashboard', icon: 'grid' },
-				{ href: '/chat', label: 'Agent Chat', icon: 'message' },
-				{ href: '/scout', label: 'Social Scout', icon: 'radar' }
+				{ href: '/chat', label: 'Agent Chat', icon: 'message' }
 			]
 		},
 		{
@@ -59,13 +58,6 @@
 				{ href: '/generator', label: 'Generate Agent', icon: 'sparkles' },
 				{ href: '/persona-config', label: 'Persona Config', icon: 'users' },
 				{ href: '/calendar', label: 'Content Calendar', icon: 'calendar' }
-			]
-		},
-		{
-			label: 'Intelligence',
-			items: [
-				{ href: '/channel-decoder', label: 'Channel Decoder', icon: 'decode' },
-				{ href: '/content-forge', label: 'Content Forge', icon: 'forge' }
 			]
 		},
 		{

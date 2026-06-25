@@ -218,13 +218,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			const isUuidAgent = isUuid(persona_id);
 			const composioKey = env.COMPOSIO_API_KEY || '';
 			const allowDemo = env.ALLOW_DEMO_MODE === 'true';
-			const isDevBypass =
-				allowDemo && (
-					!isUuidAgent ||
-					!composioKey ||
-					composioKey.includes('placeholder') ||
-					composioKey.includes('change_me')
-				);
+			const isDevBypass = false;
 
 			let activeComposioPlatforms: string[] = [];
 			let providerError = '';

@@ -877,24 +877,59 @@ Ensure the output is ONLY a raw JSON array. Do not wrap in markdown code blocks.
 
 				if (storeUrl) {
 					try {
-						// Simple fetch of the page
-						const response = await fetch(storeUrl, {
-							headers: {
-								'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-							}
-						});
-						if (response.ok) {
-							const html = await response.text();
-							// Clean up HTML to save tokens
-							const cleanHtml = html
-								.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
-								.replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
-								.replace(/<svg\b[^<]*(?:(?!<\/svg>)<[^<]*)*<\/svg>/gi, '')
-								.substring(0, 40000); // Take first 40k chars
+						const firecrawlKey = env.FIRECRAWL_API_KEY;
+						let contentToParse = '';
 
-							if (hasGemini) {
-								const ai = new GoogleGenAI({ apiKey });
-								const prompt = `You are a web scraper agent. Extract the brand brief details and any products (with name, description, price, and image URL if visible) from this e-commerce storefront page content.
+						// 1. Try Firecrawl scraping if API key is configured
+						if (firecrawlKey && !firecrawlKey.includes('placeholder') && firecrawlKey.trim() !== '') {
+							console.log(`[Engine] Scrape using Firecrawl for: ${storeUrl}`);
+							try {
+								const fcRes = await fetch('https://api.firecrawl.dev/v1/scrape', {
+									method: 'POST',
+									headers: {
+										'Content-Type': 'application/json',
+										'Authorization': `Bearer ${firecrawlKey}`
+									},
+									body: JSON.stringify({
+										url: storeUrl,
+										formats: ['markdown']
+									})
+								});
+								if (fcRes.ok) {
+									const fcJson = await fcRes.json();
+									if (fcJson.success && fcJson.data?.markdown) {
+										contentToParse = fcJson.data.markdown.substring(0, 40000);
+										console.log(`[Engine] Firecrawl success, parsed content length: ${contentToParse.length}`);
+									}
+								} else {
+									console.warn(`[Engine] Firecrawl API error (status ${fcRes.status}):`, await fcRes.text());
+								}
+							} catch (fcErr) {
+								console.warn('[Engine] Firecrawl API call failed:', fcErr);
+							}
+						}
+
+						// 2. Fall back to simple HTTP fetch if Firecrawl didn't return content
+						if (!contentToParse) {
+							console.log(`[Engine] Falling back to direct HTTP page fetch for: ${storeUrl}`);
+							const response = await fetch(storeUrl, {
+								headers: {
+									'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+								}
+							});
+							if (response.ok) {
+								const html = await response.text();
+								contentToParse = html
+									.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+									.replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
+									.replace(/<svg\b[^<]*(?:(?!<\/svg>)<[^<]*)*<\/svg>/gi, '')
+									.substring(0, 40000);
+							}
+						}
+
+						if (contentToParse && hasGemini) {
+							const ai = new GoogleGenAI({ apiKey });
+							const prompt = `You are a web scraper agent. Extract the brand brief details and any products (with name, description, price, and image URL if visible) from this e-commerce storefront page content.
 Return a JSON object matching this exact shape:
 {
   "brandName": "Brand name",
@@ -919,23 +954,23 @@ Return a JSON object matching this exact shape:
     }
   ]
 }
-Store HTML:
-${cleanHtml}`;
-								const geminiRes = await ai.models.generateContent({
-									model: 'gemini-3.5-flash',
-									contents: [{ role: 'user', parts: [{ text: prompt }] }]
-								});
-								if (geminiRes.text) {
-									const parsed = safeParseJson(geminiRes.text);
-									if (parsed && parsed.brandName) {
-										scrapedData = parsed;
-										scrapeSuccess = true;
-									}
+Store Content:
+${contentToParse}`;
+
+							const geminiRes = await ai.models.generateContent({
+								model: 'gemini-3.5-flash',
+								contents: [{ role: 'user', parts: [{ text: prompt }] }]
+							});
+							if (geminiRes.text) {
+								const parsed = safeParseJson(geminiRes.text);
+								if (parsed && parsed.brandName) {
+									scrapedData = parsed;
+									scrapeSuccess = true;
 								}
 							}
 						}
 					} catch (e) {
-						console.warn('[Engine] Real scraping failed:', e);
+						console.warn('[Engine] Storefront scraping failed:', e);
 					}
 				}
 

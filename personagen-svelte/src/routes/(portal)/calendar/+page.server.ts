@@ -84,6 +84,7 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 		time: p.scheduled_time ? p.scheduled_time.substring(0, 5) : '10:00',
 		status: p.status === 'published' ? 'published' : p.status === 'failed' ? 'failed' : 'scheduled',
 		external_id: p.external_id,
+		publication_results: p.publication_results,
 		analytics: p.analytics,
 		token_usage: p.token_usage,
 		token_cost: p.token_cost ? parseFloat(p.token_cost) : 0

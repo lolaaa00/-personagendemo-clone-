@@ -40,7 +40,7 @@
 	let editEngagementRate = $state(5.2);
 	let editGradient = $state('');
 	let editSupervisorId = $state<string | null>(null);
-	let editRuntimeOwner = $state<'svelte-gemini' | 'hermes-daemon' | 'hermes-orchestrated'>(
+	let editRuntimeOwner = $state<'svelte-gemini' | 'hermes-gateway' | 'hermes-orchestrated'>(
 		'svelte-gemini'
 	);
 
@@ -280,6 +280,46 @@
 	let feedPosts = $state<any[]>([]);
 	let feedLoading = $state(false);
 	let syncingFeed = $state(false);
+	let generatingPost = $state(false);
+
+	function getPostDisplay(content: string) {
+		try {
+			const trimmed = content.trim();
+			if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+				const parsed = JSON.parse(trimmed);
+				return {
+					text: parsed.text || content,
+					mediaUrl: parsed.media_url || parsed.mediaUrl || null,
+					ugcPrompt: parsed.ugc_broll_prompt || parsed.ugcPrompt || null,
+					script: parsed.script || null,
+					product: parsed.product || null
+				};
+			}
+		} catch (e) {}
+		return { text: content, mediaUrl: null, ugcPrompt: null, script: null, product: null };
+	}
+
+	async function generatePostNow() {
+		if (!selectedAgentId) return;
+		generatingPost = true;
+		try {
+			const res = await fetch(`/api/agent/${selectedAgentId}/generate-post`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' }
+			});
+			const result = await res.json();
+			if (res.ok && result.success) {
+				showToast('Post generated and published successfully!', 'success');
+				await loadFeed();
+			} else {
+				showToast(result.error || 'Failed to generate post', 'error');
+			}
+		} catch (err) {
+			showToast('Error generating post: ' + (err as Error).message, 'error');
+		} finally {
+			generatingPost = false;
+		}
+	}
 
 	async function loadFeed() {
 		if (!selectedAgentId) return;
@@ -293,7 +333,7 @@
 			const result = await res.json();
 			if (result.success) {
 				feedPosts = (result.data || [])
-					.filter((p: any) => p.status === 'published')
+					.filter((p: any) => p.status !== 'draft')
 					.sort(
 						(a: any, b: any) =>
 							new Date(b.published_at || b.created_at).getTime() -
@@ -1602,7 +1642,7 @@
 								>
 									<option value="svelte-gemini">Svelte UI Runtime (Gemini)</option>
 									{#if selectedAgent?.is_overseer}
-										<option value="hermes-daemon">Hermes Daemon Service</option>
+										<option value="hermes-gateway">Hermes Gateway Service</option>
 									{/if}
 									<option value="hermes-orchestrated">Hermes Orchestrated</option>
 								</select>
@@ -1731,29 +1771,43 @@
 									>.
 								</p>
 							</div>
-							<button
-								class="save-btn"
-								onclick={syncFeed}
-								disabled={syncingFeed || feedLoading}
-								style="margin-top: 0; display: inline-flex; align-items: center; gap: 0.5rem;"
-							>
-								{#if syncingFeed}
-									<span class="spinner"></span> Syncing Feed…
-								{:else}
-									<svg
-										width="16"
-										height="16"
-										viewBox="0 0 24 24"
-										fill="none"
-										stroke="currentColor"
-										stroke-width="2"
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" /></svg
-									>
-									Sync Social Feed
-								{/if}
-							</button>
+							<div style="display: flex; gap: 0.75rem;">
+								<button
+									class="save-btn"
+									onclick={generatePostNow}
+									disabled={generatingPost || feedLoading}
+									style="margin-top: 0; display: inline-flex; align-items: center; gap: 0.5rem; background: var(--gradient-subtle); border-color: transparent;"
+								>
+									{#if generatingPost}
+										<span class="spinner" style="width: 12px; height: 12px; border: 2px solid rgba(255,255,255,0.3); border-top-color:#fff; border-radius:50%; animation: spin 0.6s linear infinite;"></span> Generating...
+									{:else}
+										✨ Generate Post Now
+									{/if}
+								</button>
+								<button
+									class="save-btn"
+									onclick={syncFeed}
+									disabled={syncingFeed || feedLoading}
+									style="margin-top: 0; display: inline-flex; align-items: center; gap: 0.5rem;"
+								>
+									{#if syncingFeed}
+										<span class="spinner"></span> Syncing Feed…
+									{:else}
+										<svg
+											width="16"
+											height="16"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" /></svg
+										>
+										Sync Social Feed
+									{/if}
+								</button>
+							</div>
 						</div>
 
 						{#if feedLoading}
@@ -1783,18 +1837,32 @@
 									This agent has no synced feed posts. Make sure you have connected accounts
 									configured, and click the sync button to fetch posts and metrics.
 								</p>
-								<button
-									class="save-btn"
-									onclick={syncFeed}
-									disabled={syncingFeed}
-									style="margin: 0 auto; display: inline-flex; align-items: center; gap: 0.5rem;"
-								>
-									{#if syncingFeed}
-										<span class="spinner"></span> Syncing Feed…
-									{:else}
-										Sync Social Feed
-									{/if}
-								</button>
+								<div style="display: flex; gap: 0.75rem; justify-content: center; margin: 0 auto;">
+									<button
+										class="save-btn"
+										onclick={generatePostNow}
+										disabled={generatingPost}
+										style="margin: 0; display: inline-flex; align-items: center; gap: 0.5rem; background: var(--gradient-subtle); border-color: transparent;"
+									>
+										{#if generatingPost}
+											<span class="spinner" style="width: 12px; height: 12px; border: 2px solid rgba(255,255,255,0.3); border-top-color:#fff; border-radius:50%; animation: spin 0.6s linear infinite;"></span> Generating...
+										{:else}
+											✨ Generate Post Now
+										{/if}
+									</button>
+									<button
+										class="save-btn"
+										onclick={syncFeed}
+										disabled={syncingFeed}
+										style="margin: 0; display: inline-flex; align-items: center; gap: 0.5rem;"
+									>
+										{#if syncingFeed}
+											<span class="spinner"></span> Syncing Feed…
+										{:else}
+											Sync Social Feed
+										{/if}
+									</button>
+								</div>
 							</div>
 						{:else}
 							<div
@@ -1803,6 +1871,7 @@
 							>
 								{#each feedPosts as post (post.id)}
 									{@const plat = (post.platforms?.[0] || 'instagram').toLowerCase()}
+									{@const postDisplay = getPostDisplay(post.content)}
 									<div
 										class="feed-card"
 										style="background: var(--bg-card-dark); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem; transition: transform 0.2s ease, border-color 0.2s ease;"
@@ -1832,9 +1901,14 @@
 													{plat}
 												</span>
 												<span style="font-size: var(--text-xs); color: var(--text-dim);">
-													{post.published_at
-														? new Date(post.published_at).toLocaleString()
+													{post.published_at || post.scheduled_date
+														? new Date(post.published_at || `${post.scheduled_date}T${post.scheduled_time || '10:00:00'}`).toLocaleString()
 														: 'Recently'}
+												</span>
+												<span
+													style="padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 9px; font-weight: 700; text-transform: uppercase; border: 1px solid; color: {post.status === 'published' ? 'var(--success)' : post.status === 'failed' ? 'var(--error)' : post.status === 'publishing' ? 'var(--cyan)' : 'var(--accent)'}; border-color: {post.status === 'published' ? 'var(--success)' : post.status === 'failed' ? 'var(--error)' : post.status === 'publishing' ? 'var(--cyan)' : 'var(--accent)'}; background: transparent;"
+												>
+													{post.status}
 												</span>
 											</div>
 											{#if post.external_id}
@@ -1846,12 +1920,51 @@
 												</span>
 											{/if}
 										</div>
-
 										<p
 											style="font-size: var(--text-sm); color: var(--text); line-height: 1.5; margin: 0; white-space: pre-wrap;"
 										>
-											{post.content}
+											{postDisplay.text}
 										</p>
+
+										{#if postDisplay.mediaUrl}
+											<div style="margin-top: 0.5rem; max-width: 300px; border-radius: var(--radius-sm); overflow: hidden; border: 1px solid var(--border);">
+												<img src={postDisplay.mediaUrl} alt="Product focus" style="width: 100%; height: auto; display: block;" />
+											</div>
+										{/if}
+
+										{#if postDisplay.ugcPrompt || postDisplay.script}
+											<div style="margin-top: 0.5rem; padding: 0.75rem; background: var(--bg-card-light); border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: var(--text-xs); color: var(--text-dim); display: flex; flex-direction: column; gap: 0.5rem;">
+												{#if postDisplay.ugcPrompt}
+													<div>
+														<strong style="color: var(--accent);">🎥 UGC B-Roll Prompt:</strong>
+														<p style="margin: 0.25rem 0 0 0; font-style: italic;">{postDisplay.ugcPrompt}</p>
+													</div>
+												{/if}
+												{#if postDisplay.script}
+													<div>
+														<strong style="color: var(--cyan);">🎬 15s Script:</strong>
+														<p style="margin: 0.25rem 0 0 0; white-space: pre-wrap;">{postDisplay.script}</p>
+													</div>
+												{/if}
+											</div>
+										{/if}
+
+										{#if post.publication_results}
+											<div style="margin-top: 0.5rem; display: flex; gap: 0.75rem; flex-wrap: wrap;">
+												{#each Object.keys(post.publication_results) as platform}
+													{#if post.publication_results[platform]?.permalink}
+														<a
+															href={post.publication_results[platform].permalink}
+															target="_blank"
+															rel="noopener noreferrer"
+															style="font-size: var(--text-xs); font-weight: 600; text-decoration: none; color: var(--accent); display: inline-flex; align-items: center; gap: 0.25rem;"
+														>
+															View on {platform.charAt(0).toUpperCase() + platform.slice(1)} ↗
+														</a>
+													{/if}
+												{/each}
+											</div>
+										{/if}
 
 										<div
 											class="metrics-row"

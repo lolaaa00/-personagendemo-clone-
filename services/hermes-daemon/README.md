@@ -1,18 +1,24 @@
-# Hermes Daemon
+# Hermes Daemon — DEPRECATED
 
-Long-running runtime for the PersonaGen Hermes overseer agent.
+> **This service has been removed.** The Gemini polling daemon (`worker.js`) was a
+> placeholder that polled Supabase for unclaimed messages and responded via
+> Gemini 3.5 Flash. It has been replaced by the real NousResearch Hermes Agent
+> running as a Docker container with its built-in gateway API.
 
-## Required Environment
+## Current Architecture
 
-- `SUPABASE_URL` or `PUBLIC_SUPABASE_URL`
-- `SUPABASE_SERVICE_KEY` or `SUPABASE_SERVICE_ROLE_KEY`
-- `GEMINI_API_KEY`
+The real Hermes agent is defined in the root `docker-compose.yml`:
 
-## Run
-
-```bash
-npm install
-npm start
+```yaml
+hermes:
+  image: nousresearch/hermes-agent:latest
+  command: hermes gateway run --mcp-server http://mcp-bridge:8000/sse?token=$MCP_BRIDGE_TOKEN
 ```
 
-The daemon polls for unclaimed user messages addressed to agents with `is_overseer = true` and `runtime_owner = 'hermes-daemon'`, claims each message, builds session context, generates a response, and writes the model turn to the same `session_id`.
+SvelteKit calls the Hermes gateway directly at `http://hermes:8642/v1/chat/completions`
+(OpenAI-compatible API). Hermes uses the MCP bridge for database access.
+
+## Safe to Delete
+
+This entire directory (`services/hermes-daemon/`) can be safely deleted.
+No other service or docker-compose target references it.

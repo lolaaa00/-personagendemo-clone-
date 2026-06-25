@@ -181,7 +181,7 @@ server.tool(
   "Claims a specific user message to prevent duplicate processing by other runtimes",
   {
     messageId: z.string().describe("The ID of the message to claim"),
-    claimedBy: z.string().describe("Identifier of the claimant, e.g. hermes-daemon")
+    claimedBy: z.string().describe("Identifier of the claimant, e.g. hermes-gateway")
   },
   async ({ messageId, claimedBy }) => {
     try {

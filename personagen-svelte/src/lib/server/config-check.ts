@@ -50,7 +50,7 @@ export function checkConfigStatus(): ConfigStatus {
 	const internalSecret = privateEnv.INTERNAL_API_SECRET || '';
 	const isInternalSecretConfigured = Boolean(internalSecret && !internalSecret.includes('placeholder'));
 
-	const isMcpHermesConfigured = Boolean(privateEnv.HERMES_DAEMON_ID || isSupabaseConfigured);
+	const isMcpHermesConfigured = Boolean(privateEnv.HERMES_GATEWAY_URL && privateEnv.HERMES_API_KEY);
 
 	return {
 		supabase: isSupabaseConfigured,

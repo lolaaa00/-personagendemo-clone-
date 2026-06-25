@@ -10,15 +10,10 @@ startScheduler();
 const PROTECTED_PREFIXES = [
 	'/dashboard',
 	'/calendar',
-	'/scout',
 	'/generator',
 	'/pm',
 	'/persona-config',
 	'/inbox',
-	'/intel-wizard',
-	'/trends',
-	'/channel-decoder',
-	'/content-forge',
 	'/brand-brief',
 	'/settings'
 ];

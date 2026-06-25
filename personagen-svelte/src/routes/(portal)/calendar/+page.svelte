@@ -14,8 +14,9 @@
 		platforms: string[];
 		date: string; // YYYY-MM-DD
 		time: string;
-		status: 'scheduled' | 'draft' | 'published' | 'failed';
+		status: 'scheduled' | 'draft' | 'published' | 'failed' | 'publishing';
 		external_id?: string | null;
+		publication_results?: Record<string, any> | null;
 		analytics?: { views: number; likes: number; comments: number; shares: number } | null;
 		token_usage?: number | null;
 		token_cost?: number | null;
@@ -572,9 +573,76 @@
 	const STATUS_COLORS: Record<string, string> = {
 		scheduled: 'var(--accent)',
 		draft: 'var(--warning)',
+		publishing: 'var(--cyan)',
 		published: 'var(--success)',
 		failed: 'var(--error)'
 	};
+
+	let generatingPost = $state(false);
+
+	function getPostDisplay(content: string) {
+		try {
+			const trimmed = content.trim();
+			if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+				const parsed = JSON.parse(trimmed);
+				return {
+					text: parsed.text || content,
+					mediaUrl: parsed.media_url || parsed.mediaUrl || null,
+					ugcPrompt: parsed.ugc_broll_prompt || parsed.ugcPrompt || null,
+					script: parsed.script || null,
+					product: parsed.product || null
+				};
+			}
+		} catch (e) {}
+		return { text: content, mediaUrl: null, ugcPrompt: null, script: null, product: null };
+	}
+
+	async function generatePostNow() {
+		const targetAgentId = selectedAgentId || (data.agents.length > 0 ? data.agents[0].id : '');
+		if (!targetAgentId) {
+			showToast('Please select or configure an agent first', 'warning');
+			return;
+		}
+		generatingPost = true;
+		try {
+			const res = await fetch(`/api/agent/${targetAgentId}/generate-post`, {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json'
+				}
+			});
+			const result = await res.json();
+			if (res.ok && result.success) {
+				showToast('Post generated and published successfully!', 'success');
+				if (result.post) {
+					const agent = data.agents.find((a: any) => a.id === targetAgentId);
+					posts = [
+						...posts,
+						{
+							id: result.post.id,
+							agentId: result.post.agent_id,
+							agentName: agent?.name || 'Agent',
+							text: result.post.content,
+							platforms: result.post.platforms || [],
+							date: result.post.scheduled_date,
+							time: result.post.scheduled_time ? result.post.scheduled_time.substring(0, 5) : '10:00',
+							status: result.post.status,
+							publication_results: result.post.publication_results,
+							analytics: result.post.analytics,
+							token_usage: result.post.token_usage,
+							token_cost: result.post.token_cost ? parseFloat(result.post.token_cost) : 0
+						}
+					];
+				}
+			} else {
+				showToast(result.error || 'Failed to generate post', 'error');
+			}
+		} catch (e: any) {
+			showToast(e.message || 'Error generating post', 'error');
+		} finally {
+			generatingPost = false;
+		}
+	}
 </script>
 
 <svelte:head>
@@ -589,6 +657,21 @@
 			<p class="subtitle">Schedule and manage posts across all agents and platforms</p>
 		</div>
 		<div class="header-controls">
+			<button
+				class="btn-primary"
+				disabled={generatingPost}
+				onclick={generatePostNow}
+				style="margin-top: auto; height: 38px; display: inline-flex; align-items: center; gap: 0.5rem; background: var(--gradient-subtle); border-color: transparent;"
+			>
+				{#if generatingPost}
+					<span
+						class="spinner"
+						style="width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.3); border-top-color:#fff; border-radius:50%; animation: spin 0.6s linear infinite;"
+					></span> Generating...
+				{:else}
+					✨ Generate Post Now
+				{/if}
+			</button>
 			<div class="agent-filter">
 				<label for="cal-agent">Filter Agent</label>
 				<select id="cal-agent" bind:value={selectedAgentId}>
@@ -827,6 +910,7 @@
 
 		<!-- Full Post Detail Modal -->
 		{#if selectedPost !== null}
+			{@const postDisplay = getPostDisplay(selectedPost.text)}
 			<div class="modal-backdrop z-top" onclick={() => (selectedPost = null)} role="presentation">
 				<div class="full-post-modal" onclick={(e) => e.stopPropagation()} role="dialog">
 					<div class="modal-header">
@@ -855,9 +939,32 @@
 							</div>
 						</div>
 
-						<div class="detail-content-box">
-							<p class="detail-text">{selectedPost.text}</p>
+						<div class="detail-content-box" style="margin-bottom: 1rem;">
+							<p class="detail-text" style="font-size: var(--text-sm); line-height: 1.6; white-space: pre-wrap; margin: 0;">{postDisplay.text}</p>
 						</div>
+
+						{#if postDisplay.mediaUrl}
+							<div style="margin-bottom: 1rem; max-width: 400px; border-radius: var(--radius-sm); overflow: hidden; border: 1px solid var(--border);">
+								<img src={postDisplay.mediaUrl} alt="Product focus" style="width: 100%; height: auto; display: block;" />
+							</div>
+						{/if}
+
+						{#if postDisplay.ugcPrompt || postDisplay.script}
+							<div style="margin-bottom: 1rem; padding: 1rem; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: var(--text-xs); color: var(--text-dim); display: flex; flex-direction: column; gap: 0.75rem;">
+								{#if postDisplay.ugcPrompt}
+									<div>
+										<strong style="color: var(--accent); font-size: var(--text-xs);">🎥 UGC B-Roll Prompt:</strong>
+										<p style="margin: 0.25rem 0 0 0; font-style: italic; font-size: var(--text-xs);">{postDisplay.ugcPrompt}</p>
+									</div>
+								{/if}
+								{#if postDisplay.script}
+									<div>
+										<strong style="color: var(--cyan); font-size: var(--text-xs);">🎬 15s Script:</strong>
+										<p style="margin: 0.25rem 0 0 0; white-space: pre-wrap; font-size: var(--text-xs);">{postDisplay.script}</p>
+									</div>
+								{/if}
+							</div>
+						{/if}
 
 						<div class="detail-meta-section">
 							<div class="meta-item">
@@ -871,56 +978,23 @@
 								</div>
 							</div>
 
-							{#if selectedPost.status === 'published' && selectedPost.analytics}
+							{#if selectedPost.publication_results}
 								<div class="meta-item">
-									<span class="meta-label">Analytics</span>
-									<div class="analytics-detailed-grid">
-										<div class="metric-card">
-											<span class="metric-icon">👁️</span>
-											<span class="metric-val">{formatViews(selectedPost.analytics.views)}</span>
-											<span class="metric-lbl">Views</span>
-										</div>
-										<div class="metric-card">
-											<span class="metric-icon">❤️</span>
-											<span class="metric-val">{formatViews(selectedPost.analytics.likes)}</span>
-											<span class="metric-lbl">Likes</span>
-										</div>
-										<div class="metric-card">
-											<span class="metric-icon">💬</span>
-											<span class="metric-val">{formatViews(selectedPost.analytics.comments)}</span>
-											<span class="metric-lbl">Comments</span>
-										</div>
-										<div class="metric-card">
-											<span class="metric-icon">🔄</span>
-											<span class="metric-val">{formatViews(selectedPost.analytics.shares || 0)}</span>
-											<span class="metric-lbl">Shares</span>
-										</div>
+									<span class="meta-label">Live Links</span>
+									<div class="meta-links-list" style="display: flex; gap: 0.75rem; flex-wrap: wrap; margin-top: 0.5rem;">
+										{#each Object.keys(selectedPost.publication_results) as platform}
+											{#if selectedPost.publication_results[platform]?.permalink}
+												<a
+													href={selectedPost.publication_results[platform].permalink}
+													target="_blank"
+													rel="noopener noreferrer"
+													style="display: inline-flex; align-items: center; gap: 0.25rem; font-size: var(--text-xs); text-decoration: none; color: var(--accent); font-weight: 600;"
+												>
+													View on {platform.charAt(0).toUpperCase() + platform.slice(1)} ↗
+												</a>
+											{/if}
+										{/each}
 									</div>
-								</div>
-							{/if}
-
-							{#if selectedPost.token_cost !== undefined && selectedPost.token_cost !== null && selectedPost.token_cost > 0}
-								<div class="meta-item cost-item">
-									<div class="cost-row">
-										<span class="cost-icon">🪙</span>
-										<span class="cost-label">Gemini API Cost</span>
-										<span class="cost-value">${selectedPost.token_cost.toFixed(6)}</span>
-									</div>
-								</div>
-							{/if}
-
-							{#if selectedPost.external_id && !selectedPost.external_id.startsWith('ext_')}
-								<div class="meta-item link-item">
-									<span class="meta-label">Live Link</span>
-									{#if selectedPost.platforms.includes('youtube')}
-										<a href="https://www.youtube.com/watch?v={selectedPost.external_id}" target="_blank" rel="noopener noreferrer" class="live-post-link">
-											View on YouTube ↗
-										</a>
-									{:else if selectedPost.platforms.includes('instagram')}
-										<a href="https://www.instagram.com/p/{selectedPost.external_id}" target="_blank" rel="noopener noreferrer" class="live-post-link">
-											View on Instagram ↗
-										</a>
-									{/if}
 								</div>
 							{/if}
 						</div>

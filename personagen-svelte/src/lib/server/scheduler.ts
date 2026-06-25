@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { env } from '$env/dynamic/private';
 import { env as publicEnv } from '$env/dynamic/public';
-import { ComposioClient, isPlatformConfigured } from './social/composio';
+import { ComposioClient } from './social/composio';
 import { GoogleGenAI } from '@google/genai';
 import { validateUrlForSsrf } from './security';
 
@@ -270,6 +270,7 @@ async function pollRssFeeds() {
 							},
 							body: JSON.stringify({
 								userId: config.user_id,
+								isAutonomous: true,
 								message: `[SYSTEM EVENT - NEW RSS ITEM]:
 Title: "${item.title}"
 Link: ${item.link}
@@ -321,13 +322,181 @@ Instructions: Analyze this RSS item. If it is relevant to your niche, execute th
 /**
  * Polling loop iteration
  */
+/**
+ * Publishes a single post to its target platforms via Composio
+ */
+export async function publishSinglePost(supabase: any, post: any): Promise<boolean> {
+	console.log(`[Scheduler] Publishing single post ${post.id} for agent ${post.agent_id}`);
+	const composio = new ComposioClient();
+
+	const targetPlatforms: string[] = post.platforms || [];
+	let publishCount = 0;
+	let failureCount = 0;
+	let skippedCount = 0;
+	let lastExternalId: string | null = null;
+	const errors: string[] = [];
+	const publicationResults: Record<string, any> = post.publication_results || {};
+
+	// Set initial status to 'publishing' so UI can give immediate feedback
+	for (const platform of targetPlatforms) {
+		const normalizedPlat = platform.toLowerCase();
+		if (['instagram', 'tiktok', 'youtube', 'facebook'].includes(normalizedPlat)) {
+			publicationResults[normalizedPlat] = {
+				status: 'publishing',
+				started_at: new Date().toISOString()
+			};
+		}
+	}
+	await supabase
+		.from('posts')
+		.update({
+			status: 'scheduled',
+			publication_results: publicationResults
+		})
+		.eq('id', post.id);
+
+	for (const platform of targetPlatforms) {
+		const normalizedPlat = platform.toLowerCase();
+		if (!['instagram', 'tiktok', 'youtube', 'facebook'].includes(normalizedPlat)) {
+			publicationResults[normalizedPlat] = {
+				status: 'skipped',
+				error: 'Platform is not supported'
+			};
+			skippedCount++;
+			continue;
+		}
+
+		const { data: conn } = await supabase
+			.from('connections')
+			.select('*')
+			.eq('agent_id', post.agent_id)
+			.eq('platform', normalizedPlat)
+			.maybeSingle();
+
+		if (!conn) {
+			console.warn(
+				`[Scheduler] Agent ${post.agent_id} has no connected account for platform "${platform}". Skipping.`
+			);
+			publicationResults[normalizedPlat] = {
+				status: 'skipped',
+				error: 'No connected account'
+			};
+			skippedCount++;
+			continue;
+		}
+
+		if (conn.status && conn.status !== 'active') {
+			publicationResults[normalizedPlat] = {
+				status: 'skipped',
+				error: `Connection status is ${conn.status}`
+			};
+			skippedCount++;
+			continue;
+		}
+
+		const publishRes = await composio.executePost(
+			post.agent_id,
+			normalizedPlat,
+			post.content
+		);
+
+		if (publishRes.success) {
+			console.log(`[Scheduler] Post ${post.id} successfully published to ${platform}.`);
+			publishCount++;
+			if (publishRes.externalId) {
+				lastExternalId = publishRes.externalId;
+			}
+			let permalink = publishRes.permalink || null;
+			if (!permalink && publishRes.externalId) {
+				if (normalizedPlat === 'instagram') {
+					permalink = `https://www.instagram.com/p/${publishRes.externalId}/`;
+				} else if (normalizedPlat === 'youtube') {
+					permalink = `https://www.youtube.com/watch?v=${publishRes.externalId}`;
+				} else if (normalizedPlat === 'facebook') {
+					permalink = `https://www.facebook.com/${publishRes.externalId}`;
+				} else if (normalizedPlat === 'tiktok') {
+					permalink = `https://www.tiktok.com/video/${publishRes.externalId}`;
+				}
+			}
+			publicationResults[normalizedPlat] = {
+				status: 'published',
+				external_id: publishRes.externalId || null,
+				permalink: permalink,
+				published_at: new Date().toISOString()
+			};
+		} else {
+			console.error(
+				`[Scheduler] Post ${post.id} failed to publish to ${platform}:`,
+				publishRes.error
+			);
+			failureCount++;
+			errors.push(`${platform}: ${publishRes.error}`);
+			publicationResults[normalizedPlat] = {
+				status: 'failed',
+				error: publishRes.error || 'Unknown Composio publish failure'
+			};
+		}
+	}
+
+	let finalStatus = publishCount > 0 ? 'published' : 'failed';
+	let publishedAt: string | null = publishCount > 0 ? new Date().toISOString() : null;
+
+	if (publishCount === 0 && failureCount === 0 && skippedCount === 0) {
+		finalStatus = 'failed';
+		publicationResults._post = {
+			status: 'failed',
+			error: 'No target platforms were provided'
+		};
+	}
+
+	const { error: updateError } = await supabase
+		.from('posts')
+		.update({
+			status: finalStatus,
+			published_at: publishedAt,
+			external_id: lastExternalId,
+			publication_results: publicationResults,
+			analytics: { views: 0, likes: 0, comments: 0, shares: 0 }
+		})
+		.eq('id', post.id);
+
+	if (updateError) {
+		console.error(`[Scheduler] Failed to update post ${post.id} status:`, updateError);
+		return false;
+	}
+
+	return publishCount > 0;
+}
+
+/**
+ * Publishes a single post by ID directly (bypasses full background worker)
+ */
+export async function publishPostById(postId: string): Promise<boolean> {
+	console.log(`[Scheduler] Manual publishing triggered for post ID: ${postId}`);
+	const supabase = getServiceSupabase();
+	const { data: post, error } = await supabase
+		.from('posts')
+		.select('*')
+		.eq('id', postId)
+		.maybeSingle();
+
+	if (error || !post) {
+		console.error(`[Scheduler] Post ${postId} not found:`, error);
+		return false;
+	}
+
+	return await publishSinglePost(supabase, post);
+}
+
+/**
+ * Polling loop iteration
+ */
 async function pollScheduledPosts() {
 	if (isRunning) return;
 	isRunning = true;
 
 	try {
 		const supabase = getServiceSupabase();
-		const composio = new ComposioClient();
 
 		const now = new Date();
 		const currentDateStr = now.toISOString().split('T')[0]; // YYYY-MM-DD
@@ -350,126 +519,16 @@ async function pollScheduledPosts() {
 
 		if (posts && posts.length > 0) {
 			console.log(`[Scheduler] Found ${posts.length} due posts to publish.`);
-
 			for (const post of posts) {
-				console.log(`[Scheduler] Processing post ${post.id} for agent ${post.agent_id}`);
-
-				const targetPlatforms: string[] = post.platforms || [];
-				let publishCount = 0;
-				let failureCount = 0;
-				let skippedCount = 0;
-				let lastExternalId: string | null = null;
-				const errors: string[] = [];
-				const publicationResults: Record<string, any> = {};
-
-				for (const platform of targetPlatforms) {
-					const normalizedPlat = platform.toLowerCase();
-					if (!['instagram', 'tiktok', 'youtube', 'facebook'].includes(normalizedPlat)) {
-						publicationResults[normalizedPlat] = {
-							status: 'skipped',
-							error: 'Platform is not supported'
-						};
-						skippedCount++;
-						continue;
-					}
-
-					if (!isPlatformConfigured(normalizedPlat)) {
-						publicationResults[normalizedPlat] = {
-							status: 'skipped',
-							error: 'Platform is not configured'
-						};
-						skippedCount++;
-						continue;
-					}
-
-					const { data: conn } = await supabase
-						.from('connections')
-						.select('*')
-						.eq('agent_id', post.agent_id)
-						.eq('platform', normalizedPlat)
-						.maybeSingle();
-
-					if (!conn) {
-						console.warn(
-							`[Scheduler] Agent ${post.agent_id} has no connected account for platform "${platform}". Skipping.`
-						);
-						publicationResults[normalizedPlat] = {
-							status: 'skipped',
-							error: 'No connected account'
-						};
-						skippedCount++;
-						continue;
-					}
-
-					if (conn.status && conn.status !== 'active') {
-						publicationResults[normalizedPlat] = {
-							status: 'skipped',
-							error: `Connection status is ${conn.status}`
-						};
-						skippedCount++;
-						continue;
-					}
-
-					const publishRes = await composio.executePost(
-						post.agent_id,
-						normalizedPlat,
-						post.content
-					);
-					if (publishRes.success) {
-						console.log(`[Scheduler] Post ${post.id} successfully published to ${platform}.`);
-						publishCount++;
-						if (publishRes.externalId) {
-							lastExternalId = publishRes.externalId;
-						}
-						publicationResults[normalizedPlat] = {
-							status: 'published',
-							external_id: publishRes.externalId || null,
-							published_at: new Date().toISOString()
-						};
-					} else {
-						console.error(
-							`[Scheduler] Post ${post.id} failed to publish to ${platform}:`,
-							publishRes.error
-						);
-						failureCount++;
-						errors.push(`${platform}: ${publishRes.error}`);
-						publicationResults[normalizedPlat] = {
-							status: 'failed',
-							error: publishRes.error || 'Unknown Composio publish failure'
-						};
-					}
-				}
-
-				let finalStatus = publishCount > 0 ? 'published' : 'failed';
-				let publishedAt: string | null = publishCount > 0 ? new Date().toISOString() : null;
-
-				if (publishCount === 0 && failureCount === 0 && skippedCount === 0) {
-					finalStatus = 'failed';
-					publicationResults._post = {
-						status: 'failed',
-						error: 'No target platforms were provided'
-					};
-				}
-
-				const { error: updateError } = await supabase
-					.from('posts')
-					.update({
-						status: finalStatus,
-						published_at: publishedAt,
-						external_id: lastExternalId,
-						publication_results: publicationResults,
-						analytics: { views: 0, likes: 0, comments: 0, shares: 0 }
-					})
-					.eq('id', post.id);
-
-				if (updateError) {
-					console.error(`[Scheduler] Failed to update post ${post.id} status:`, updateError);
-				}
+				await publishSinglePost(supabase, post);
 			}
 		}
 
 		// Run RSS polling
 		await pollRssFeeds();
+
+		// Run Autonomous Content Generation for non-RSS active agents
+		await runAutonomousGeneration();
 
 		// Run Post-Publication Analytics Sync! Throttled to avoid API/log spam.
 		const nowTime = Date.now();
@@ -572,6 +631,104 @@ export async function syncPostAnalytics() {
 		console.log('[Scheduler] Finished syncing post analytics.');
 	} catch (err) {
 		console.error('[Scheduler] Critical error in syncPostAnalytics:', err);
+	}
+}
+
+/**
+ * Autonomous generation loop.
+ * For each active agent that does NOT use RSS, checks posting pacing and triggers
+ * the agent's chat endpoint to self-generate a new post if the window has elapsed.
+ */
+async function runAutonomousGeneration() {
+	const supabase = getServiceSupabase();
+	const internalSecret = env.INTERNAL_API_SECRET;
+	if (!internalSecret) {
+		console.warn('[Scheduler Autonomous] INTERNAL_API_SECRET is not set. Skipping autonomous generation.');
+		return;
+	}
+
+	try {
+		// Fetch all active agents that have at least one active connection
+		const { data: agents, error: agentErr } = await supabase
+			.from('agents')
+			.select('id, user_id, name, niche, status, posts_per_day')
+			.eq('status', 'active');
+
+		if (agentErr || !agents || agents.length === 0) {
+			if (agentErr) console.error('[Scheduler Autonomous] Error fetching agents:', agentErr);
+			return;
+		}
+
+		for (const agent of agents) {
+			try {
+				// Check if this agent has RSS active — if so, skip (RSS handles generation)
+				const { data: config } = await supabase
+					.from('agent_configs')
+					.select('rss_active, autonomy_level')
+					.eq('agent_id', agent.id)
+					.maybeSingle();
+
+				if (config?.rss_active) continue; // RSS handles this agent
+
+				// Check if agent has any active connections
+				const { data: connections, error: connErr } = await supabase
+					.from('connections')
+					.select('platform')
+					.eq('agent_id', agent.id)
+					.eq('status', 'active');
+
+				if (connErr || !connections || connections.length === 0) continue;
+
+				// Calculate posting pace window
+				const postsPerDay = Math.max(1, agent.posts_per_day || 1);
+				const windowHours = 24 / postsPerDay;
+				const windowMs = windowHours * 60 * 60 * 1000;
+				const cutoffTime = new Date(Date.now() - windowMs).toISOString();
+
+				// Check last post time (scheduled or published)
+				const { data: recentPosts } = await supabase
+					.from('posts')
+					.select('id, created_at')
+					.eq('agent_id', agent.id)
+					.in('status', ['draft', 'scheduled', 'published'])
+					.gte('created_at', cutoffTime)
+					.limit(1);
+
+				// If a post already exists in the window, skip
+				if (recentPosts && recentPosts.length > 0) continue;
+
+				const platforms = connections.map((c: any) => c.platform);
+				const appPort = env.PORT || '5678';
+				const isDev = process.env.NODE_ENV !== 'production';
+				const localApiUrl = `http://127.0.0.1:${isDev ? '5173' : appPort}/api/agent/${agent.id}/chat`;
+
+				console.log(`[Scheduler Autonomous] Triggering content generation for agent ${agent.name} (${agent.id}) on platforms: ${platforms.join(', ')}`);
+
+				const res = await fetch(localApiUrl, {
+					method: 'POST',
+					headers: {
+						'Content-Type': 'application/json',
+						Authorization: `Bearer ${internalSecret}`
+					},
+					body: JSON.stringify({
+						userId: agent.user_id,
+						isAutonomous: true,
+						message: `[SYSTEM AUTONOMOUS TRIGGER]: Generate a new high-quality social media post for platform(s): ${JSON.stringify(platforms)}. Use the 'generate_content' tool. Topic: trending topic or original insight in the ${agent.niche} niche. Make it ready to publish immediately.`
+					})
+				});
+
+				if (!res.ok) {
+					const errText = await res.text();
+					console.error(`[Scheduler Autonomous] Trigger failed for agent ${agent.id}: HTTP ${res.status}: ${errText}`);
+				} else {
+					console.log(`[Scheduler Autonomous] Content generation triggered for agent ${agent.name}.`);
+				}
+			} catch (agentErr) {
+				console.error(`[Scheduler Autonomous] Error processing agent ${agent.id}:`, agentErr);
+			}
+		}
+	} catch (err) {
+		console.error('[Scheduler Autonomous] Critical loop error:', err);
 	}
 }
 

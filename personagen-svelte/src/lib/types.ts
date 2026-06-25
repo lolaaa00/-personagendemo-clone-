@@ -46,7 +46,7 @@ export interface Agent {
 	is_overseer?: boolean;
 	supervisor_agent_id?: string | null;
 	managed_by_overseer?: boolean;
-	runtime_owner?: 'svelte-gemini' | 'hermes-daemon' | 'hermes-orchestrated';
+	runtime_owner?: 'svelte-gemini' | 'hermes-gateway' | 'hermes-orchestrated';
 }
 
 /** Modular autonomy — set per agent in persona-config */

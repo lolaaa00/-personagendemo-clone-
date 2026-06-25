@@ -79,6 +79,17 @@ const toolsList: any[] = [
 			},
 			required: ['issue']
 		}
+	},
+	{
+		name: 'scrape_brand_store',
+		description: 'Scrape an e-commerce storefront page using Firecrawl to extract brand brief details and product information.',
+		parameters: {
+			type: 'OBJECT',
+			properties: {
+				url: { type: 'STRING', description: 'URL of the e-commerce storefront to scrape.' }
+			},
+			required: ['url']
+		}
 	}
 ];
 
@@ -146,18 +157,29 @@ Write a ready-to-publish draft for each platform (Instagram, Facebook, YouTube, 
 			});
 
 			const generatedText = res.text || '';
+
+			// Autonomous triggers schedule the post immediately so the publisher picks it up.
+			// User-initiated chat calls create a draft for human review.
+			const isAutonomousTrigger = (args._trigger === 'autonomous');
+			const now = new Date();
+			const scheduledDate = isAutonomousTrigger ? now.toISOString().split('T')[0] : null;
+			const scheduledTime = isAutonomousTrigger ? now.toTimeString().split(' ')[0] : null;
+			const postStatus = isAutonomousTrigger ? 'scheduled' : 'draft';
+
 			const { data: postData, error: postErr } = await db.posts.create({
 				user_id: userId,
 				agent_id: agentId,
 				content: generatedText,
 				platforms: platformsList,
-				status: 'draft',
-				scheduled_date: null,
-				scheduled_time: null,
+				status: postStatus,
+				scheduled_date: scheduledDate,
+				scheduled_time: scheduledTime,
 				published_at: null
 			});
 
 			if (postErr) throw postErr;
+
+			console.log(`[Generate Content Tool] Created post ${postData.id} with status '${postStatus}' for agent ${agentId}`);
 
 			return {
 				success: true,
@@ -520,6 +542,84 @@ Conduct a 9-layer scorecard audit (1-100 score, Hook structures, Visual DNA, Rhy
 		}
 	}
 
+	if (name === 'scrape_brand_store') {
+		try {
+			if (!(await validateUrlForSsrf(args.url))) {
+				return {
+					success: false,
+					error: 'SSRF Warning: URL resolved to a restricted or invalid address.'
+				};
+			}
+			console.log(`[Scrape Brand Store Tool] Calling engine scrape_store for url: ${args.url}`);
+			const scrapeRes = await fetchFn('/api/engine', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json'
+				},
+				body: JSON.stringify({
+					path: 'personagen-brand-brief',
+					action: 'scrape_store',
+					url: args.url
+				})
+			});
+			if (!scrapeRes.ok) {
+				const errorText = await scrapeRes.text();
+				throw new Error(`Scraper API returned status ${scrapeRes.status}: ${errorText}`);
+			}
+			const scrapeJson = await scrapeRes.json();
+			return scrapeJson;
+		} catch (err) {
+			console.error('[Scrape Brand Store Tool] Error:', err);
+			return { success: false, error: (err as Error).message };
+		}
+	}
+
+	if (name === 'update_brand_brief') {
+		try {
+			// Double-check permissions
+			const { data: agent } = await supabase
+				.from('agents')
+				.select('is_overseer')
+				.eq('id', agentId)
+				.single();
+			if (!agent || !agent.is_overseer) {
+				return { success: false, error: 'Unauthorized: Only the Hermes overseer agent can update the brand brief.' };
+			}
+
+			const db = createDbService(supabase);
+			// Fetch the user's existing brand brief first (if it exists) to preserve any fields
+			const { data: existingBrief } = await db.brandBriefs.get(userId);
+
+			// Merge existing data with the updated fields from args
+			const updatedData = {
+				...(existingBrief?.data || {}),
+				...args
+			};
+
+			const briefPayload: any = {
+				user_id: userId,
+				data: updatedData,
+				version: existingBrief ? (existingBrief.version || 1) + 1 : 1
+			};
+
+			if (existingBrief?.id) {
+				briefPayload.id = existingBrief.id;
+			}
+
+			const { data: savedBrief, error: saveErr } = await db.brandBriefs.upsert(briefPayload);
+			if (saveErr) throw saveErr;
+
+			return {
+				success: true,
+				message: 'Successfully updated global brand brief.',
+				brandBrief: savedBrief
+			};
+		} catch (err) {
+			console.error('[Update Brand Brief Tool] Error:', err);
+			return { success: false, error: (err as Error).message };
+		}
+	}
+
 	throw new Error(`Tool not found: ${name}`);
 }
 
@@ -671,7 +771,7 @@ export const POST: RequestHandler = async ({ params, locals, request }) => {
 
 	const { message } = requestBody;
 	let sessionId = requestBody.sessionId;
-	const isHermesDaemonTurn = agent.is_overseer || agent.runtime_owner === 'hermes-daemon';
+	const isHermesGatewayTurn = agent.is_overseer || agent.runtime_owner === 'hermes-gateway';
 
 	if (!sessionId) {
 		if (isServiceCall) {
@@ -739,17 +839,76 @@ export const POST: RequestHandler = async ({ params, locals, request }) => {
 		session_id: sessionId,
 		role: 'user',
 		content: message,
-		claimed_by: isHermesDaemonTurn ? null : 'sveltekit',
-		claimed_at: isHermesDaemonTurn ? null : new Date().toISOString()
+		claimed_by: 'sveltekit',
+		claimed_at: new Date().toISOString()
 	});
 
-	if (isHermesDaemonTurn) {
-		return json({
-			success: true,
-			queued: true,
-			sessionId,
-			message: 'Hermes daemon queued the request.'
-		});
+	if (isHermesGatewayTurn && env.ALLOW_DEMO_MODE !== 'true') {
+		const hermesUrl = env.HERMES_GATEWAY_URL;
+		const hermesKey = env.HERMES_API_KEY;
+
+		if (!hermesUrl || !hermesKey) {
+			return json(
+				{ success: false, error: 'Hermes gateway is not configured. Set HERMES_GATEWAY_URL and HERMES_API_KEY.' },
+				{ status: 503 }
+			);
+		}
+
+		try {
+			// Load conversation history for Hermes context
+			const { data: hermesHistory } = await db.chatMessages.listForSession(sessionId!, userId, agentId);
+			const slidingHistory = (hermesHistory || []).slice(-15);
+
+			// Build OpenAI-compatible messages for the Hermes gateway
+			const hermesMessages = [
+				{
+					role: 'system',
+					content: `You are Hermes, PersonaGen's Chief Operational Overseer.\n\nAgent profile:\n- Name: ${agent.name}\n- Handle: ${agent.handle}\n- Soul: ${agent.soul || 'Operational, direct, and useful.'}\n\nYou have MCP tools connected for database access, agent management, health audits, and ticket creation. Use them when needed. Be concise and operational.`
+				},
+				...slidingHistory.map((msg: any) => ({
+					role: msg.role === 'user' ? 'user' : 'assistant',
+					content: msg.content
+				}))
+			];
+
+			const hermesRes = await fetch(`${hermesUrl}/v1/chat/completions`, {
+				method: 'POST',
+				headers: {
+					'Authorization': `Bearer ${hermesKey}`,
+					'Content-Type': 'application/json'
+				},
+				body: JSON.stringify({ model: 'hermes-agent', messages: hermesMessages })
+			});
+
+			if (!hermesRes.ok) {
+				const errText = await hermesRes.text();
+				console.error('[Hermes Gateway] Error:', hermesRes.status, errText);
+				return json(
+					{ success: false, error: `Hermes gateway error: ${hermesRes.status}` },
+					{ status: 502 }
+				);
+			}
+
+			const hermesData = await hermesRes.json();
+			const responseText = hermesData.choices?.[0]?.message?.content || 'Hermes could not generate a response.';
+
+			// Persist Hermes response
+			await db.chatMessages.create({
+				user_id: userId,
+				agent_id: agentId,
+				session_id: sessionId,
+				role: 'model',
+				content: responseText
+			});
+
+			return json({ success: true, response: responseText, toolCalls: [], sessionId });
+		} catch (err) {
+			console.error('[Hermes Gateway] Request failed:', err);
+			return json(
+				{ success: false, error: `Hermes gateway unreachable: ${(err as Error).message}` },
+				{ status: 502 }
+			);
+		}
 	}
 
 	const apiKey = env.GEMINI_API_KEY;
@@ -946,6 +1105,47 @@ Always stay in character. If you execute a tool, explain the outcome in characte
 					required: ['targetAgentId', 'message']
 				}
 			});
+
+			localTools.push({
+				name: 'update_brand_brief',
+				description: "Update the user's global brand brief profile and products list. Available ONLY to the overseer agent (Hermes).",
+				parameters: {
+					type: 'OBJECT',
+					properties: {
+						brandName: { type: 'STRING', description: 'Brand name' },
+						tagline: { type: 'STRING', description: 'Tagline' },
+						mission: { type: 'STRING', description: 'Mission statement' },
+						primaryColor: { type: 'STRING', description: 'Primary hex color code, e.g. #ff0000' },
+						secondaryColor: { type: 'STRING', description: 'Secondary hex color code, e.g. #00ff00' },
+						logoUrl: { type: 'STRING', description: 'Logo URL' },
+						traits: {
+							type: 'ARRAY',
+							items: { type: 'STRING' },
+							description: 'List of brand voice traits'
+						},
+						commStyle: { type: 'STRING', description: 'Communication style' },
+						demographics: { type: 'STRING', description: 'Target demographics' },
+						interests: { type: 'STRING', description: 'Target interests' },
+						platforms: { type: 'STRING', description: 'Target platforms' },
+						painPoints: { type: 'STRING', description: 'Customer pain points' },
+						products: {
+							type: 'ARRAY',
+							items: {
+								type: 'OBJECT',
+								properties: {
+									id: { type: 'STRING' },
+									name: { type: 'STRING' },
+									description: { type: 'STRING' },
+									price: { type: 'STRING' },
+									photoUrl: { type: 'STRING' }
+								},
+								required: ['name']
+							},
+							description: 'List of brand products'
+						}
+					}
+				}
+			});
 		}
 
 		const ai = new GoogleGenAI({ apiKey });
@@ -985,6 +1185,12 @@ Always stay in character. If you execute a tool, explain the outcome in characte
 
 				let result;
 				try {
+					const isAutonomous = requestBody?.isAutonomous === true ||
+						(requestBody?.message && requestBody.message.includes('[SYSTEM EVENT')) ||
+						(requestBody?.message && requestBody.message.includes('[SYSTEM AUTONOMOUS TRIGGER]'));
+					if (isAutonomous && name === 'generate_content' && args) {
+						args._trigger = 'autonomous';
+					}
 					result = await executeTool(name, args, supabaseClient, userId, agentId, fetch, apiKey);
 					toolCallsExecuted.push({
 						id: Math.random().toString(36).substring(7),

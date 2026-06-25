@@ -1,9 +1,8 @@
-import type { PageServerLoad } from './$types';
 import { createDbService } from '$lib/server/db';
 import { env } from '$env/dynamic/public';
 import { env as privateEnv } from '$env/dynamic/private';
 
-export const load: PageServerLoad = async ({ locals, fetch }) => {
+export const load: any = async ({ locals, fetch }: any) => {
 	const supabaseUrl = env.PUBLIC_SUPABASE_URL ?? '';
 	const isPlaceholder = !supabaseUrl || supabaseUrl.includes('placeholder');
 
@@ -36,8 +35,8 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 
 			const creators = dbAgents.filter((a) => !a.is_overseer);
 			agents = creators.map((a) => {
-				const agentConns = dbConnections?.filter((c) => c.agent_id === a.id) || [];
-				const connectedPlatforms = agentConns.map((c) => c.platform);
+				const agentConns = dbConnections?.filter((c: any) => c.agent_id === a.id) || [];
+				const connectedPlatforms = agentConns.map((c: any) => c.platform);
 				return {
 					...a,
 					niche: (a.niche || '').split(' & ')[0] || a.niche,

@@ -19,7 +19,7 @@ export async function getOrCreateHermes(supabase: SupabaseClient, userId: string
 	if (hermesAgent) {
 		// Normalize existing Hermes agent row if needed
 		if (
-			hermesAgent.runtime_owner !== 'hermes-daemon' ||
+			hermesAgent.runtime_owner !== 'hermes-gateway' ||
 			hermesAgent.managed_by_overseer === true ||
 			hermesAgent.supervisor_agent_id !== null
 		) {
@@ -29,7 +29,7 @@ export async function getOrCreateHermes(supabase: SupabaseClient, userId: string
 			const { data: updatedHermes, error: normErr } = await supabase
 				.from('agents')
 				.update({
-					runtime_owner: 'hermes-daemon',
+					runtime_owner: 'hermes-gateway',
 					managed_by_overseer: false,
 					supervisor_agent_id: null
 				})
@@ -64,7 +64,7 @@ export async function getOrCreateHermes(supabase: SupabaseClient, userId: string
 				soul: 'You are the platform-level Chief Operational Overseer. Monitor health, orchestrate agents, and support human administrators.',
 				skills: 'System health monitoring, scheduling, alert dispatch, database reporting',
 				tools: 'system_log_reader, agent_orchestrator',
-				runtime_owner: 'hermes-daemon'
+				runtime_owner: 'hermes-gateway'
 			})
 			.select()
 			.single();

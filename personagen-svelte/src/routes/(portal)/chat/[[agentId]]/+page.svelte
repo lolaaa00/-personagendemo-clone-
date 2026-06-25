@@ -471,8 +471,8 @@
 
 		isTyping = true;
 
-		currentLogs = selectedAgent.is_overseer || selectedAgent.runtime_owner === 'hermes-daemon'
-			? ['Queueing request for Hermes daemon...']
+		currentLogs = selectedAgent.is_overseer || selectedAgent.runtime_owner === 'hermes-gateway'
+			? ['Connecting to Hermes gateway...']
 			: ['🧠 Checking personality profile & memories...', '📈 Connecting to Gemini Managed Agents API...'];
 
 		try {
@@ -484,8 +484,8 @@
 
 			await new Promise((resolve) => setTimeout(resolve, 800));
 			if (selectedAgent.id !== targetAgentId) return; // Discard if agent switched
-			currentLogs = selectedAgent.is_overseer || selectedAgent.runtime_owner === 'hermes-daemon'
-				? ['Hermes daemon accepted the request...']
+			currentLogs = selectedAgent.is_overseer || selectedAgent.runtime_owner === 'hermes-gateway'
+				? ['Hermes gateway processing request...']
 				: [...currentLogs, '⚙️ Invoking model with real-time tools...'];
 			await scrollChatToBottom();
 

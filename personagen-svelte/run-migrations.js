@@ -28,7 +28,9 @@ ALTER TABLE public.posts ADD COLUMN IF NOT EXISTS token_cost NUMERIC(10, 6) DEFA
 ALTER TABLE public.agents ADD COLUMN IF NOT EXISTS is_overseer BOOLEAN DEFAULT false;
 ALTER TABLE public.agents ADD COLUMN IF NOT EXISTS supervisor_agent_id UUID REFERENCES public.agents(id) ON DELETE SET NULL;
 ALTER TABLE public.agents ADD COLUMN IF NOT EXISTS managed_by_overseer BOOLEAN DEFAULT false;
-ALTER TABLE public.agents ADD COLUMN IF NOT EXISTS runtime_owner TEXT DEFAULT 'svelte-gemini' CHECK (runtime_owner IN ('svelte-gemini', 'hermes-daemon', 'hermes-orchestrated'));
+ALTER TABLE public.agents ADD COLUMN IF NOT EXISTS runtime_owner TEXT DEFAULT 'svelte-gemini';
+ALTER TABLE public.agents DROP CONSTRAINT IF EXISTS agents_runtime_owner_check;
+ALTER TABLE public.agents ADD CONSTRAINT agents_runtime_owner_check CHECK (runtime_owner IN ('svelte-gemini', 'hermes-daemon', 'hermes-gateway', 'hermes-orchestrated'));
 
 ALTER TABLE public.agent_configs ADD COLUMN IF NOT EXISTS rss_url TEXT DEFAULT '';
 ALTER TABLE public.agent_configs ADD COLUMN IF NOT EXISTS rss_active BOOLEAN DEFAULT false;

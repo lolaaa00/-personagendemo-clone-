@@ -33,7 +33,7 @@ export interface AgentRow {
 	is_overseer?: boolean;
 	supervisor_agent_id?: string | null;
 	managed_by_overseer?: boolean;
-	runtime_owner?: 'svelte-gemini' | 'hermes-daemon' | 'hermes-orchestrated';
+	runtime_owner?: 'svelte-gemini' | 'hermes-gateway' | 'hermes-orchestrated';
 	created_at: string;
 	updated_at: string;
 }
@@ -373,13 +373,16 @@ export function createDbService(supabase: SupabaseClient) {
 
 		// ── Brand Briefs ────────────────────────
 		brandBriefs: {
-			get: () =>
-				supabase
+			get: (userId?: string) => {
+				let q = supabase
 					.from('brand_briefs')
 					.select('*')
-					.order('updated_at', { ascending: false })
-					.limit(1)
-					.single(),
+					.order('updated_at', { ascending: false });
+				if (userId) {
+					q = q.eq('user_id', userId);
+				}
+				return q.limit(1).single();
+			},
 
 			upsert: (data: BrandBriefInsert) =>
 				supabase.from('brand_briefs').upsert(data).select().single()

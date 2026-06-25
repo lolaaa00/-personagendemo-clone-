@@ -144,11 +144,7 @@ export const POST: RequestHandler = async ({ params, locals }) => {
 		const composioKey = env.COMPOSIO_API_KEY || '';
 		const isUuid = (id: string) =>
 			/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
-		const isDevBypass =
-			!isUuid(agentId) ||
-			!composioKey ||
-			composioKey.includes('placeholder') ||
-			composioKey.includes('change_me');
+		const isDevBypass = false;
 
 		interface InstagramMediaItem {
 			id: string;
@@ -301,61 +297,79 @@ export const POST: RequestHandler = async ({ params, locals }) => {
 			}
 
 			if (fetchedPosts.length === 0) {
-				console.log(`[Sync Feed API] Using simulated posts for platform ${platform}`);
-				// Generate 5 simulated feed posts per platform
-				for (let i = 0; i < 5; i++) {
-					const postSeed = `${agentId}-${platform}-${i}`;
-					const hash = getSeedHash(postSeed);
+				if (isDevBypass) {
+					console.log(`[Sync Feed API] Using simulated posts for platform ${platform}`);
+					// Generate 5 simulated feed posts per platform
+					for (let i = 0; i < 5; i++) {
+						const postSeed = `${agentId}-${platform}-${i}`;
+						const hash = getSeedHash(postSeed);
 
-					const daysAgo = i === 0 ? 1 : i === 1 ? 3 : i === 2 ? 6 : i === 3 ? 10 : 14;
-					const publishedTime = new Date(
-						Date.now() - daysAgo * 24 * 60 * 60 * 1000 - (hash % 12) * 60 * 60 * 1000
-					);
-					const publishedAtStr = publishedTime.toISOString();
+						const daysAgo = i === 0 ? 1 : i === 1 ? 3 : i === 2 ? 6 : i === 3 ? 10 : 14;
+						const publishedTime = new Date(
+							Date.now() - daysAgo * 24 * 60 * 60 * 1000 - (hash % 12) * 60 * 60 * 1000
+						);
+						const publishedAtStr = publishedTime.toISOString();
 
-					const externalId = `ext_${platform}_${getSeedHash(agentId + platform + publishedAtStr)}`;
-					const metrics = await composio.fetchPostMetrics(
-						agentId,
-						platform,
-						externalId,
-						publishedTime
-					);
-					const contentIndex = hash % templates.length;
-					const content = templates[contentIndex];
+						const externalId = `ext_${platform}_${getSeedHash(agentId + platform + publishedAtStr)}`;
+						const metrics = await composio.fetchPostMetrics(
+							agentId,
+							platform,
+							externalId,
+							publishedTime
+						);
+						const contentIndex = hash % templates.length;
+						const content = templates[contentIndex];
 
-					if (existingMap.has(externalId)) {
-						const existing = existingMap.get(externalId)!;
-						const { error: updateErr } = await db.posts.update(existing.id, {
-							analytics: {
-								views: metrics.views,
-								likes: metrics.likes,
-								comments: metrics.comments,
-								shares: metrics.shares
-							}
-						});
-						if (!updateErr) syncedCount++;
-					} else {
-						const dateStr = publishedAtStr.split('T')[0];
-						const timeStr = publishedAtStr.split('T')[1].split('.')[0];
+						if (existingMap.has(externalId)) {
+							const existing = existingMap.get(externalId)!;
+							const { error: updateErr } = await db.posts.update(existing.id, {
+								analytics: {
+									views: metrics.views,
+									likes: metrics.likes,
+									comments: metrics.comments,
+									shares: metrics.shares
+								}
+							});
+							if (!updateErr) syncedCount++;
+						} else {
+							const dateStr = publishedAtStr.split('T')[0];
+							const timeStr = publishedAtStr.split('T')[1].split('.')[0];
 
-						const { error: insertErr } = await db.posts.create({
-							user_id: user.id,
-							agent_id: agentId,
-							content,
-							platforms: [platform],
-							status: 'published',
-							scheduled_date: dateStr,
-							scheduled_time: timeStr,
-							published_at: publishedAtStr,
-							external_id: externalId,
-							analytics: {
-								views: metrics.views,
-								likes: metrics.likes,
-								comments: metrics.comments,
-								shares: metrics.shares
-							}
-						});
-						if (!insertErr) syncedCount++;
+							const { error: insertErr } = await db.posts.create({
+								user_id: user.id,
+								agent_id: agentId,
+								content,
+								platforms: [platform],
+								status: 'published',
+								scheduled_date: dateStr,
+								scheduled_time: timeStr,
+								published_at: publishedAtStr,
+								external_id: externalId,
+								analytics: {
+									views: metrics.views,
+									likes: metrics.likes,
+									comments: metrics.comments,
+									shares: metrics.shares
+								}
+							});
+							if (!insertErr) syncedCount++;
+						}
+					}
+				} else {
+					console.log(`[Sync Feed API] No real posts found for platform ${platform} and isDevBypass is false. Cleaning up any simulated posts.`);
+					try {
+						const { error: deleteErr } = await locals.supabase
+							.from('posts')
+							.delete()
+							.eq('agent_id', agentId)
+							.like('external_id', `ext_${platform}_%`);
+						if (deleteErr) {
+							console.error('[Sync Feed API] Failed to delete simulated posts:', deleteErr);
+						} else {
+							console.log(`[Sync Feed API] Cleaned up simulated posts for ${platform}`);
+						}
+					} catch (deleteEx) {
+						console.error('[Sync Feed API] Exception during simulated posts cleanup:', deleteEx);
 					}
 				}
 			} else {
