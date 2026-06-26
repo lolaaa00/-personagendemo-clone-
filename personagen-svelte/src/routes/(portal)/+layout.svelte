@@ -59,13 +59,6 @@
 				{ href: '/persona-config', label: 'Persona Config', icon: 'users' },
 				{ href: '/calendar', label: 'Content Calendar', icon: 'calendar' }
 			]
-		},
-		{
-			label: 'Manage',
-			items: [
-				{ href: '/inbox', label: 'Inbox', icon: 'inbox' },
-				{ href: '/pm', label: 'Projects', icon: 'folder' }
-			]
 		}
 	];
 

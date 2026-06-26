@@ -90,6 +90,9 @@ export interface ConnectionRow {
 	status?: 'active' | 'stale' | 'reauth_required' | 'revoked' | 'error' | null;
 	last_error?: string | null;
 	last_checked_at?: string | null;
+	provider?: 'composio' | 'zernio' | null;
+	provider_account_id?: string | null;
+	provider_metadata?: Record<string, unknown> | null;
 }
 
 export interface BlueprintRow {

@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { env } from '$env/dynamic/private';
 import { env as publicEnv } from '$env/dynamic/public';
 import { ComposioClient } from './social/composio';
+import { publishToPlatform } from './social/publisher';
 import { GoogleGenAI } from '@google/genai';
 import { validateUrlForSsrf } from './security';
 
@@ -323,11 +324,10 @@ Instructions: Analyze this RSS item. If it is relevant to your niche, execute th
  * Polling loop iteration
  */
 /**
- * Publishes a single post to its target platforms via Composio
+ * Publishes a single post to its target platforms via the configured provider.
  */
 export async function publishSinglePost(supabase: any, post: any): Promise<boolean> {
 	console.log(`[Scheduler] Publishing single post ${post.id} for agent ${post.agent_id}`);
-	const composio = new ComposioClient();
 
 	const targetPlatforms: string[] = post.platforms || [];
 	let publishCount = 0;
@@ -394,11 +394,12 @@ export async function publishSinglePost(supabase: any, post: any): Promise<boole
 			continue;
 		}
 
-		const publishRes = await composio.executePost(
-			post.agent_id,
-			normalizedPlat,
-			post.content
-		);
+		const publishRes = await publishToPlatform({
+			supabase,
+			post,
+			connection: conn,
+			platform: normalizedPlat
+		});
 
 		if (publishRes.success) {
 			console.log(`[Scheduler] Post ${post.id} successfully published to ${platform}.`);
@@ -420,6 +421,7 @@ export async function publishSinglePost(supabase: any, post: any): Promise<boole
 			}
 			publicationResults[normalizedPlat] = {
 				status: 'published',
+				provider: publishRes.provider,
 				external_id: publishRes.externalId || null,
 				permalink: permalink,
 				published_at: new Date().toISOString()
@@ -433,6 +435,7 @@ export async function publishSinglePost(supabase: any, post: any): Promise<boole
 			errors.push(`${platform}: ${publishRes.error}`);
 			publicationResults[normalizedPlat] = {
 				status: 'failed',
+				provider: publishRes.provider,
 				error: publishRes.error || 'Unknown Composio publish failure'
 			};
 		}

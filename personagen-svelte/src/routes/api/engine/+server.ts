@@ -4,6 +4,7 @@ import { GoogleGenAI } from '@google/genai';
 import { env } from '$env/dynamic/private';
 import { createDbService } from '$lib/server/db';
 import { AccountFactoryClient } from '$lib/server/account-factory';
+import { getUserApiKey } from '$lib/server/user-api-keys';
 
 // Helper: safe JSON parsing for Gemini response
 function safeParseJson(text: string) {
@@ -877,7 +878,8 @@ Ensure the output is ONLY a raw JSON array. Do not wrap in markdown code blocks.
 
 				if (storeUrl) {
 					try {
-						const firecrawlKey = env.FIRECRAWL_API_KEY;
+						const userFirecrawlKey = await getUserApiKey(locals.supabase, session.user.id, 'firecrawl');
+						const firecrawlKey = userFirecrawlKey || env.FIRECRAWL_API_KEY;
 						let contentToParse = '';
 
 						// 1. Try Firecrawl scraping if API key is configured

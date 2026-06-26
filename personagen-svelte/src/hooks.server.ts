@@ -11,9 +11,7 @@ const PROTECTED_PREFIXES = [
 	'/dashboard',
 	'/calendar',
 	'/generator',
-	'/pm',
 	'/persona-config',
-	'/inbox',
 	'/brand-brief',
 	'/settings'
 ];
