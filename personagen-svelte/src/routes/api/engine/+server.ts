@@ -1,35 +1,22 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { GoogleGenAI } from '@google/genai';
 import { env } from '$env/dynamic/private';
 import { createDbService } from '$lib/server/db';
-import { AccountFactoryClient } from '$lib/server/account-factory';
 import { getUserApiKey } from '$lib/server/user-api-keys';
 import { publishPostById } from '$lib/server/scheduler';
+import { resolveAiClient } from '$lib/server/ai-client';
 
-// Helper: safe JSON parsing for Gemini response
+// Helper: safe JSON parsing for AI responses
 function safeParseJson(text: string) {
 	try {
-		// Clean up markdown block wraps if model outputs them
 		const cleaned = text
 			.replace(/```json/g, '')
 			.replace(/```/g, '')
 			.trim();
 		return JSON.parse(cleaned);
 	} catch (e) {
-		console.warn('[Engine] Failed to parse Gemini response as JSON:', e);
+		console.warn('[Engine] Failed to parse AI response as JSON:', e);
 		return null;
-	}
-}
-
-// Helper: Extract channel name from URL
-function extractChannelName(u: string): string {
-	try {
-		const parsed = new URL(u);
-		const path = parsed.pathname.split('/').filter(Boolean);
-		return path[path.length - 1]?.replace(/^@/, '') || parsed.hostname;
-	} catch {
-		return u || 'Competitor Channel';
 	}
 }
 
@@ -49,345 +36,18 @@ export const POST: RequestHandler = async ({ url, request, locals, fetch }) => {
 	const action = body.action;
 
 	const db = createDbService(locals.supabase);
-	const apiKey = env.GEMINI_API_KEY;
-	const hasGemini = apiKey && !apiKey.includes('your-gemini') && !apiKey.includes('placeholder');
+	const ai = await resolveAiClient(locals.supabase, session.user.id);
+	const hasAi = !!ai;
 
 	console.log(
-		`[Local Engine] Handling path "${path}" with action "${action}" (Has Gemini: ${!!hasGemini})`
+		`[Local Engine] Handling path "${path}" with action "${action}" (AI Provider: ${ai?.provider || 'none'})`
 	);
 
 	try {
 		// ══════════════════════════════════════════════════════════════════════════
-		// A. PATH: personagen-account-factory
+		// A. PATH: personagen-blueprints (Style Template Vault)
 		// ══════════════════════════════════════════════════════════════════════════
-		if (path === 'personagen-account-factory') {
-			if (action === 'create_account') {
-				const persona = body.persona;
-				if (!persona || !persona.name) {
-					return json({ success: false, error: 'Missing persona details' }, { status: 400 });
-				}
-
-				// Attempt external Account Factory only
-				try {
-					const factory = new AccountFactoryClient();
-					const data = await factory.createAccount({
-						name: persona.name,
-						niche: persona.niche || 'Lifestyle',
-						platform: persona.platform || 'instagram',
-						personaId: persona.id || persona.agent_id || persona.agentId,
-						bio: persona.bio,
-						photoPath: persona.photoPath,
-						isPrivate: persona.isPrivate,
-						googleVoiceCreds: persona.googleVoiceCreds
-					});
-
-					return json({ success: true, data });
-				} catch (factoryErr: any) {
-					console.error('[Engine] Account Factory registration failed:', factoryErr?.message || factoryErr);
-					return json({ success: false, error: `Account Factory failed: ${factoryErr?.message || 'Service unreachable'}` }, { status: 500 });
-				}
-			}
-
-			if (action === 'check_status') {
-				const accountId = body.accountId || body.account_id || body.id;
-				if (!accountId) {
-					return json({ success: false, error: 'Missing accountId' }, { status: 400 });
-				}
-				const factory = new AccountFactoryClient();
-				const data = await factory.getStatus(String(accountId));
-				return json({ success: true, data });
-			}
-
-			if (action === 'list_accounts') {
-				const factory = new AccountFactoryClient();
-				const data = await factory.listAccounts();
-				return json({ success: true, data });
-			}
-
-			if (action === 'retry') {
-				const accountId = body.accountId || body.account_id || body.id;
-				if (!accountId) {
-					return json({ success: false, error: 'Missing accountId' }, { status: 400 });
-				}
-				const factory = new AccountFactoryClient();
-				const data = await factory.retry(String(accountId), body.fromStep || body.step);
-				return json({ success: true, data });
-			}
-
-			if (action === 'refresh_session') {
-				const accountId = body.accountId || body.account_id || body.id;
-				if (!accountId) {
-					return json({ success: false, error: 'Missing accountId' }, { status: 400 });
-				}
-				const factory = new AccountFactoryClient();
-				const data = await factory.refreshSession(String(accountId));
-				return json({ success: true, data });
-			}
-
-			if (action === 'health_check') {
-				const accountId = body.accountId || body.account_id || body.id;
-				if (!accountId) {
-					return json({ success: false, error: 'Missing accountId' }, { status: 400 });
-				}
-				const factory = new AccountFactoryClient();
-				const data = await factory.healthCheck(String(accountId));
-				return json({ success: true, data });
-			}
-
-			return json(
-				{ success: false, error: `Invalid account factory action: ${action}` },
-				{ status: 400 }
-			);
-		}
-
-		// ══════════════════════════════════════════════════════════════════════════
-		// B. PATH: personagen-channel-decode
-		// ══════════════════════════════════════════════════════════════════════════
-		if (path === 'personagen-channel-decode') {
-			if (action === 'decode') {
-				const channelUrl = body.url || 'https://youtube.com/c/Creator';
-				const platform = body.platform || 'youtube';
-				const channelName = extractChannelName(channelUrl);
-
-				if (hasGemini) {
-					try {
-						const ai = new GoogleGenAI({ apiKey });
-						const prompt = `Perform a high-fidelity competitor strategy analysis for this social media channel:
-URL: ${channelUrl}
-Platform: ${platform}
-Channel Name: ${channelName}
-
-Conduct a 9-layer scorecard audit. Return a JSON object matching this exact shape:
-{
-  "channelName": "${channelName}",
-  "platform": "${platform}",
-  "overallScore": <number between 50 and 99>,
-  "layers": [
-    { "title": "Content DNA", "score": <number>, "findings": [string, string, string, string], "confidence": <number> },
-    { "title": "Audience Profile", "score": <number>, "findings": [string, string, string, string], "confidence": <number> },
-    { "title": "Posting Cadence", "score": <number>, "findings": [string, string, string, string], "confidence": <number> },
-    { "title": "Hook Patterns", "score": <number>, "findings": [string, string, string, string], "confidence": <number> },
-    { "title": "Visual Identity", "score": <number>, "findings": [string, string, string, string], "confidence": <number> },
-    { "title": "Engagement Mechanics", "score": <number>, "findings": [string, string, string, string], "confidence": <number> },
-    { "title": "Growth Levers", "score": <number>, "findings": [string, string, string, string], "confidence": <number> },
-    { "title": "Monetization", "score": <number>, "findings": [string, string, string, string], "confidence": <number> },
-    { "title": "Replication Blueprint", "score": <number>, "findings": [string, string, string, string], "confidence": <number> }
-  ]
-}
-Ensure findings contain high-fidelity, detailed, real-world context for this platform/channel niche. Do NOT wrap inside markdown block code, output ONLY raw valid JSON.`;
-
-						const res = await ai.models.generateContent({
-							model: 'gemini-3.5-flash',
-							contents: [{ role: 'user', parts: [{ text: prompt }] }]
-						});
-
-						if (res.text) {
-							const parsed = safeParseJson(res.text);
-							if (parsed && parsed.layers) {
-								let insertedId = undefined;
-								try {
-									const { data: inserted } = await db.blueprints.create({
-										user_id: session.user.id,
-										channel_name: parsed.channelName || channelName,
-										channel_url: channelUrl,
-										platform: parsed.platform || platform,
-										score: Number(parsed.overallScore || parsed.score || 85),
-										layers: parsed.layers || []
-									});
-									if (inserted) {
-										insertedId = inserted.id;
-									}
-								} catch (dbErr) {
-									console.error('[Engine] Failed to auto-save blueprint to DB:', dbErr);
-								}
-
-								return json({
-									success: true,
-									data: {
-										...parsed,
-										id: insertedId,
-										isInferred: true
-									}
-								});
-							}
-						}
-					} catch (geminiErr) {
-						console.error(
-							'[Engine] Gemini channel decode failed, falling back to mock:',
-							geminiErr
-						);
-					}
-				}
-
-				const allowDemoMode = env.ALLOW_DEMO_MODE === 'true';
-				if (!allowDemoMode) {
-					return json(
-						{
-							success: false,
-							error: 'Failed to run competitor strategy decode. Real strategy audits require a valid GEMINI_API_KEY.'
-						},
-						{ status: 400 }
-					);
-				}
-
-				// Mock fallback
-				const mockData = {
-					channelName,
-					platform,
-					overallScore: 86,
-					layers: [
-						{
-							score: 90,
-							title: 'Content DNA',
-							findings: [
-								'Primary format: vertical short-form (72% frequency)',
-								'Average hook-to-hold duration is 42 seconds',
-								'Content pillars balance educational topics (50%) with dynamic lifestyle (50%)',
-								'Frequent pattern interrupt cuts every 2-3 seconds'
-							],
-							confidence: 92
-						},
-						{
-							score: 84,
-							title: 'Audience Profile',
-							findings: [
-								'Primary age bracket: 18-34 years old (68% total)',
-								'High affinity with self-improvement and tech-adjacent topics',
-								'Active hours: 8:00 AM and 6:30 PM Eastern Time',
-								'Sentiment ratio: 88% positive comment feedback'
-							],
-							confidence: 89
-						},
-						{
-							score: 88,
-							title: 'Posting Cadence',
-							findings: [
-								'Upload cycle: 4-5 items per week',
-								'Most optimal days: Monday, Wednesday, and Friday afternoons',
-								'Consistent scheduling window maintained over past 90 days',
-								'Re-sharing delay: 4 hours from Instagram to TikTok'
-							],
-							confidence: 91
-						},
-						{
-							score: 92,
-							title: 'Hook Patterns',
-							findings: [
-								'Opener strategy: curiosity questions ("Why is nobody talking about...")',
-								'High-contrast visual overlay texts within the first 1.5 seconds',
-								'Retention holds up to 74% at the 3-second mark',
-								'Audio pacing: dramatic up-tempo soundtracks under voice'
-							],
-							confidence: 95
-						},
-						{
-							score: 81,
-							title: 'Visual Identity',
-							findings: [
-								'Branding palette: deep charcoal bases with striking neon teal highlights',
-								'Text overlay font: heavy sans-serif (Inter/Montserrat Bold)',
-								'Layout structure: centralized headshot framed by glowing elements',
-								'Thumbnail thumb-stop rate calculated above average category benchmark'
-							],
-							confidence: 85
-						},
-						{
-							score: 87,
-							title: 'Engagement Mechanics',
-							findings: [
-								'High engagement feedback: pinned comment asking a polarizing question',
-								'Prompt responses: creator likes/replies to top comments in first hour',
-								'Clear bookmark triggers ("Save this video for your next session")',
-								'Call to action placement: subtle midway transition'
-							],
-							confidence: 88
-						},
-						{
-							score: 85,
-							title: 'Growth Levers',
-							findings: [
-								'Cross-niche targeting: tagging rising trending audios',
-								'Keyword optimization: deep search phrases incorporated in descriptions',
-								'Strategic duet/stitch reactions with major channel figures',
-								'Consistent month-over-month follower growth rate (+7.2%)'
-							],
-							confidence: 87
-						},
-						{
-							score: 79,
-							title: 'Monetization',
-							findings: [
-								'Core funnel: digital guide links located in the bio',
-								'Occasional integrated brand sponsorships (approx 1 per month)',
-								'Affiliate tracking codes highlighted inside pinned threads',
-								'Estimated revenue CPM profile: $10.50 - $14.20 tier'
-							],
-							confidence: 80
-						},
-						{
-							score: 89,
-							title: 'Replication Blueprint',
-							findings: [
-								'Excellent structural blueprint clarity: 89/100',
-								'Actionable start: copy hook rhythm and neon teal design highlights',
-								'High ROI opportunity: vertical short-form education formats',
-								'Traction expectation: positive trajectory visible within 4-6 weeks'
-							],
-							confidence: 90
-						}
-					]
-				};
-
-				let insertedId = undefined;
-				try {
-					const { data: inserted } = await db.blueprints.create({
-						user_id: session.user.id,
-						channel_name: mockData.channelName,
-						channel_url: channelUrl,
-						platform: mockData.platform,
-						score: mockData.overallScore,
-						layers: mockData.layers as any
-					});
-					if (inserted) {
-						insertedId = inserted.id;
-					}
-				} catch (dbErr) {
-					console.error('[Engine] Failed to auto-save mock blueprint to DB:', dbErr);
-				}
-
-				return json({
-					success: true,
-					data: {
-						...mockData,
-						id: insertedId,
-						isInferred: true
-					}
-				});
-			}
-
-			if (action === 'analyze') {
-				const channelData = body.channel_data;
-				if (!channelData) {
-					return json({ success: false, error: 'Missing channel_data' }, { status: 400 });
-				}
-
-				const { data: inserted, error } = await db.blueprints.create({
-					user_id: session.user.id,
-					channel_name: channelData.channelName || 'Competitor Channel',
-					channel_url: channelData.channelUrl || null,
-					platform: channelData.platform || 'youtube',
-					score: Number(channelData.overallScore || channelData.score || 85),
-					layers: channelData.layers || {}
-				});
-
-				if (error) {
-					console.error('[Engine] Failed to save blueprint via analyze:', error);
-					return json({ success: false, error: error.message }, { status: 500 });
-				}
-
-				return json({ success: true, data: inserted });
-			}
-
+		if (path === 'personagen-blueprints') {
 			if (action === 'list_blueprints') {
 				const { data: blueprints, error } = await db.blueprints.list();
 				if (error) {
@@ -404,6 +64,22 @@ Ensure findings contain high-fidelity, detailed, real-world context for this pla
 					return json({ success: false, error: error.message }, { status: 500 });
 				}
 				return json({ success: true, data: blueprint });
+			}
+
+			if (action === 'save_blueprint') {
+				const { data: inserted, error } = await db.blueprints.create({
+					user_id: session.user.id,
+					channel_name: body.channel_name || body.name || 'UGC Template',
+					channel_url: body.channel_url || null,
+					platform: body.platform || 'instagram',
+					score: Number(body.score || 90),
+					layers: body.layers || {}
+				});
+				if (error) {
+					console.error('[Engine] Failed to save blueprint:', error);
+					return json({ success: false, error: error.message }, { status: 500 });
+				}
+				return json({ success: true, data: inserted });
 			}
 
 			if (action === 'update_blueprint') {
@@ -423,22 +99,76 @@ Ensure findings contain high-fidelity, detailed, real-world context for this pla
 				}
 				return json({ success: true });
 			}
+
+			return json(
+				{ success: false, error: `Invalid blueprint vault action: ${action}` },
+				{ status: 400 }
+			);
 		}
 
 		// ══════════════════════════════════════════════════════════════════════════
-		// C. PATH: personagen-content-forge
+		// B. PATH: personagen-content-forge (Unified Generation Engine)
 		// ══════════════════════════════════════════════════════════════════════════
 		if (path === 'personagen-content-forge') {
 			const topic = body.topic || 'Growing your personal brand';
-			const platform = body.platforms?.[0] || 'youtube';
-			const blueprintId = body.blueprint_id;
-			let blueprintDetails = '';
+			const platform = body.platforms?.[0] || body.platform || 'instagram';
+			const blueprintId = body.blueprint_id || body.template_id;
+			const agentId = body.agent_id || body.agentId;
+			const productId = body.product_id || body.productId;
 
+			// ── Load agent persona ──────────────────────────────────────────────
+			let agentContext = '';
+			let agentData: any = null;
+			if (agentId) {
+				const { data: agent } = await db.agents.get(agentId);
+				if (agent) {
+					agentData = agent;
+					agentContext = `You are ${agent.name} (@${agent.handle}), a ${agent.niche} content creator.
+Personality: ${agent.soul || 'Authentic and relatable'}
+Content Style: ${agent.skills || 'UGC-style product content'}
+`;
+				}
+			}
+
+			// ── Load brand brief + select product ───────────────────────────────
+			let productContext = '';
+			let selectedProduct: any = null;
+			let briefData: any = null;
+			const { data: brandBrief } = await db.brandBriefs.get(session.user.id);
+			if (brandBrief?.data) {
+				briefData = brandBrief.data;
+				const products = Array.isArray(briefData.products) ? briefData.products : [];
+				selectedProduct = productId
+					? products.find((p: any) => p.id === productId)
+					: products.find((p: any) => p.photoUrl) || products[0];
+
+				if (selectedProduct) {
+					productContext += `PRODUCT TO FEATURE:
+Name: ${selectedProduct.name}
+Price: ${selectedProduct.price || 'N/A'}
+Description: ${selectedProduct.description || 'N/A'}
+Product Image URL: ${selectedProduct.photoUrl || 'N/A'}
+`;
+				}
+				productContext += `BRAND CONTEXT:
+Brand: ${briefData.brandName || 'N/A'}
+Tagline: ${briefData.tagline || 'N/A'}
+Target Audience: ${briefData.demographics || 'N/A'}
+Pain Points: ${briefData.painPoints || 'N/A'}
+Brand Voice: ${briefData.commStyle || 'N/A'}
+Brand Traits: ${Array.isArray(briefData.traits) ? briefData.traits.join(', ') : 'N/A'}
+`;
+			}
+
+			// ── Load style template (blueprint) ─────────────────────────────────
+			let templateDetails = '';
 			if (blueprintId && !blueprintId.startsWith('bp-')) {
 				try {
 					const { data: bp } = await db.blueprints.get(blueprintId);
 					if (bp) {
-						blueprintDetails = `Competitor Blueprint Context to incorporate:\n- Platform: ${bp.platform || platform}\n- Channel Name Reference: ${bp.channel_name || 'Competitor Channel'}\n`;
+						templateDetails = `UGC STYLE TEMPLATE: "${bp.channel_name}"
+Platform: ${bp.platform || platform}
+`;
 						if (bp.layers) {
 							const layersList = Array.isArray(bp.layers) ? bp.layers : [];
 							const hookFindings = layersList.find(
@@ -449,240 +179,241 @@ Ensure findings contain high-fidelity, detailed, real-world context for this pla
 								(l: any) => l.title === 'Replication Blueprint'
 							)?.findings;
 
-							if (hookFindings && hookFindings.length > 0) {
-								blueprintDetails += `- Hook style constraints:\n  * ${hookFindings.join('\n  * ')}\n`;
+							if (hookFindings?.length > 0) {
+								templateDetails += `- Hook style: ${hookFindings.join('; ')}\n`;
 							}
-							if (dnaFindings && dnaFindings.length > 0) {
-								blueprintDetails += `- Content structure constraints:\n  * ${dnaFindings.join('\n  * ')}\n`;
+							if (dnaFindings?.length > 0) {
+								templateDetails += `- Content DNA: ${dnaFindings.join('; ')}\n`;
 							}
-							if (replicationFindings && replicationFindings.length > 0) {
-								blueprintDetails += `- Style replication guidelines:\n  * ${replicationFindings.join('\n  * ')}\n`;
+							if (replicationFindings?.length > 0) {
+								templateDetails += `- Style guidelines: ${replicationFindings.join('; ')}\n`;
 							}
 						}
 					}
 				} catch (err) {
-					console.warn('[Engine] Failed to load blueprint for prompt enrichment:', err);
+					console.warn('[Engine] Failed to load template for prompt enrichment:', err);
 				}
 			}
 
+			// ── Assembled context block (injected into every prompt) ─────────────
+			const fullContext = [agentContext, productContext, templateDetails].filter(Boolean).join('\n');
+
+			// ── ACTION: generate (single UGC post pack — replaces generate-post) ──
 			if (action === 'generate') {
-				// Generate Post
-				if (hasGemini) {
-					try {
-						const ai = new GoogleGenAI({ apiKey });
-						const prompt = `Write a ready-to-publish social media post for ${platform}.
-Topic: "${topic}"
-${blueprintDetails ? `Please align this post's hook, tone, and formatting style with the following competitor blueprint details:\n${blueprintDetails}\n` : ''}
-Make it highly engaging, include a killer hook, spaced body paragraphs, emojis, a call to action, and 5 hashtags.
-Return a JSON object in this exact format:
+				if (!hasAi) {
+					// Fallback
+					return json({
+						success: true,
+						data: {
+							text: `🔥 ${topic}\n\nMost creators struggle because they lack a clear blueprint.\n\n1️⃣ Process over Output\n2️⃣ Aggressive Hooking\n3️⃣ Niche Mastery\n\nWhich one are you focusing on today? 👇`,
+							hashtags: ['#CreatorEconomy', '#UGC', '#PersonalBrand', '#Growth', '#PersonaGen'],
+							hookScore: 88,
+							ugc_broll_prompt: `Handheld close-up of a person using a product, natural lighting, authentic feel.`,
+							script: `[HOOK] "Stop scrolling if you care about ${topic}"\n[BODY] Quick cuts showing the product in use\n[CTA] "Follow for more!"`,
+							media_url: selectedProduct?.photoUrl || null,
+							product: selectedProduct ? { name: selectedProduct.name, price: selectedProduct.price } : null,
+							platform
+						}
+					});
+				}
+
+				const systemInstruction = `${agentContext || 'You are a UGC content creator.'}
+Generate a social media post pack containing a caption, a UGC B-roll description, and a 15s short video script.
+You MUST respond with a valid JSON object ONLY. No markdown fences or commentary.
+
+JSON schema:
 {
-  "type": "post",
-  "platform": "${platform}",
-  "content": "the body text of the post with emojis and spacing",
+  "text": "Ready-to-publish caption (hooks, body, hashtags, CTA). Do NOT include script or prompt text in the caption.",
   "hashtags": ["#tag1", "#tag2", ...],
-  "hookScore": <number between 70 and 99>,
-  "estimatedReach": "10K - 25K"
+  "hookScore": <number 70-99>,
+  "ugc_broll_prompt": "UGC video description: actor details, handheld camera feel, natural lighting, negative constraints, high platform energy",
+  "script": "15s Short Video Script (Hook in first 3s, voiceover/dialogue, text-on-screen, CTA)"
 }`;
-						const res = await ai.models.generateContent({
-							model: 'gemini-3.5-flash',
-							contents: [{ role: 'user', parts: [{ text: prompt }] }]
-						});
-						if (res.text) {
-							const parsed = safeParseJson(res.text);
-							if (parsed && parsed.content) {
-								return json({ success: true, data: parsed });
-							}
+
+				const prompt = `Generate a UGC post pack for ${platform}.
+Topic: "${topic}"
+
+${productContext ? `PRODUCT FOCUS:\n${productContext}` : 'Focus on the brand niche.'}
+${templateDetails ? `STYLE TEMPLATE:\n${templateDetails}` : ''}
+${briefData ? `Audience: ${briefData.demographics || 'N/A'}\nPain points: ${briefData.painPoints || 'N/A'}` : ''}
+
+The content must feature the specific product by name. The UGC B-roll prompt should describe a person using THIS product specifically. Output ONLY the JSON.`;
+
+				try {
+					const responseText = await ai!.generate(prompt, { systemInstruction, json: true }) || '{}';
+					let parsed = safeParseJson(responseText);
+					if (parsed) {
+						// Robust parsing: check for nested JSON in text field
+						if (parsed.text && typeof parsed.text === 'string' && parsed.text.trim().startsWith('{')) {
+							try {
+								const nested = JSON.parse(parsed.text);
+								if (nested && typeof nested === 'object') parsed = { ...parsed, ...nested };
+							} catch { /* ignore */ }
 						}
-					} catch (err) {
-						console.error('[Engine] Gemini generate post failed:', err);
+						parsed.media_url = selectedProduct?.photoUrl || null;
+						parsed.product = selectedProduct ? { name: selectedProduct.name, price: selectedProduct.price, description: selectedProduct.description } : null;
+						parsed.platform = platform;
+						return json({ success: true, data: parsed });
 					}
+				} catch (err) {
+					console.error('[Engine] AI generate post pack failed:', err);
 				}
 
-				// Fallback
-				return json({
-					success: true,
-					data: {
-						type: 'post',
-						platform,
-						content: `🔥 ${topic}\n\nMost content creators struggle because they lack a clear blueprint.\n\nHere is how the top 1% manage their strategy:\n\n1️⃣ **Process over Output**: Systems always beat raw motivation.\n2️⃣ **Aggressive Hooking**: Grab attention in the first 2 seconds.\n3️⃣ **Niche Mastery**: Speak deeply to one person rather than broadly to everyone.\n\nWhich of these are you focusing on today? 👇`,
-						hashtags: [
-							'#CreatorEconomy',
-							'#SocialMedia',
-							'#PersonalBrand',
-							'#GrowthHacks',
-							'#PersonaGen'
-						],
-						hookScore: 88,
-						estimatedReach: '11.5K - 24.2K'
-					}
-				});
+				return json({ success: false, error: 'AI generation failed' }, { status: 500 });
 			}
 
-			if (action === 'script') {
-				// Generate Script
-				if (hasGemini) {
-					try {
-						const ai = new GoogleGenAI({ apiKey });
-						const prompt = `Write a detailed 60-second video script for platform ${platform} on topic: "${topic}".
-${blueprintDetails ? `Please align this script's visual identity, pacing, and hooks with the following competitor blueprint details:\n${blueprintDetails}\n` : ''}
-Include [Scene Direction], [Visual Cues], and voiceover content.
-Return a JSON object in this exact format:
+			// ── ACTION: batch_generate (100 UGC copies in one click) ────────────
+			if (action === 'batch_generate') {
+				const count = Math.min(Math.max(body.count || 10, 1), 100);
+				const BATCH_SIZE = 10;
+
+				if (!hasAi) {
+					return json({ success: false, error: 'No AI provider configured. Add an API key in Settings.' }, { status: 500 });
+				}
+
+				const copies: any[] = [];
+
+				for (let i = 0; i < count; i += BATCH_SIZE) {
+					const batchPromises = Array.from(
+						{ length: Math.min(BATCH_SIZE, count - i) },
+						(_, j) => {
+							const idx = i + j + 1;
+							const prompt = `${fullContext}
+Write variation ${idx} of ${count} — a UNIQUE, ready-to-publish UGC social media post for ${platform}.
+Topic: "${topic}"
+
+CRITICAL: Make this variation DISTINCT. Vary the hook style, emoji usage, CTA, tone angle, and sentence structure from other variations.
+${selectedProduct ? `The post MUST feature the product "${selectedProduct.name}" by name and describe it being used authentically.` : ''}
+
+Return JSON:
 {
-  "type": "script",
-  "platform": "${platform}",
-  "content": "the formatted script content",
-  "hashtags": ["#tag1", "#tag2"],
-  "hookScore": <number between 70 and 99>,
-  "estimatedReach": "15K - 35K"
+  "text": "Ready-to-publish caption with hook, body, hashtags, CTA",
+  "hashtags": ["#tag1", "#tag2", ...],
+  "hookScore": <number 70-99>,
+  "ugc_broll_prompt": "UGC video description showing a real person using ${selectedProduct?.name || 'the product'}",
+  "script": "15s video script (3s hook, body, CTA)"
 }`;
-						const res = await ai.models.generateContent({
-							model: 'gemini-3.5-flash',
-							contents: [{ role: 'user', parts: [{ text: prompt }] }]
-						});
-						if (res.text) {
-							const parsed = safeParseJson(res.text);
-							if (parsed && parsed.content) {
-								return json({ success: true, data: parsed });
+							return ai!.generate(prompt, { json: true }).catch((err: any) => {
+								console.error(`[Engine] Batch item ${idx} failed:`, err);
+								return null;
+							});
+						}
+					);
+
+					const results = await Promise.allSettled(batchPromises);
+					for (const r of results) {
+						if (r.status === 'fulfilled' && r.value) {
+							const parsed = safeParseJson(r.value);
+							if (parsed && parsed.text) {
+								parsed.media_url = selectedProduct?.photoUrl || null;
+								parsed.product = selectedProduct
+									? { name: selectedProduct.name, price: selectedProduct.price, description: selectedProduct.description }
+									: null;
+								parsed.platform = platform;
+								copies.push(parsed);
 							}
 						}
-					} catch (err) {
-						console.error('[Engine] Gemini script forge failed:', err);
 					}
 				}
 
-				// Fallback
 				return json({
 					success: true,
 					data: {
-						type: 'script',
-						platform,
-						content: `[SCENE DIRECTION: Close-up on speaker, animated expression]\n"I decoded the exact blueprint for this topic: ${topic}."\n\n[VISUAL: Text pop-up overlay: ${topic}]\n"Here is the single mistake 99% of creators make: they do not capture attention fast enough. To change this, follow this three-part blueprint..."`,
-						hashtags: ['#VideoScript', '#ContentForge', '#CreatorGrowth'],
-						hookScore: 93,
-						estimatedReach: '14.8K - 38.6K'
+						copies,
+						total: copies.length,
+						requested: count,
+						product: selectedProduct?.name || null,
+						agent: agentData?.name || null
 					}
 				});
 			}
 
-			if (action === 'titles') {
-				// Brainstorm Titles
-				if (hasGemini) {
-					try {
-						const ai = new GoogleGenAI({ apiKey });
-						const prompt = `Generate 8 highly viral, click-worthy titles/hooks for a video about: "${topic}".
-${blueprintDetails ? `Please write these titles/hooks mimicking the style patterns found in the following competitor blueprint details:\n${blueprintDetails}\n` : ''}
-Return a JSON object in this exact format:
-{
-  "type": "titles",
-  "platform": "${platform}",
-  "content": "",
-  "hashtags": [],
-  "hookScore": 91,
-  "estimatedReach": "N/A",
-  "titles": [string, string, string, string, string, string, string, string]
-}`;
-						const res = await ai.models.generateContent({
-							model: 'gemini-3.5-flash',
-							contents: [{ role: 'user', parts: [{ text: prompt }] }]
+			// ── ACTION: auto_schedule (distribute copies across calendar) ────────
+			if (action === 'auto_schedule') {
+				const copies = body.copies || [];
+				if (copies.length === 0) {
+					return json({ success: false, error: 'No copies provided to schedule' }, { status: 400 });
+				}
+				if (!agentId) {
+					return json({ success: false, error: 'Missing agent_id' }, { status: 400 });
+				}
+
+				const startDate = body.start_date || new Date().toISOString().split('T')[0];
+				const intervalHours = body.interval_hours || 2;
+				const windowStart = body.window_start || 8;   // 8 AM
+				const windowEnd = body.window_end || 20;       // 8 PM
+				const targetPlatforms = body.platforms || [platform];
+
+				// Calculate slots per day: [8, 10, 12, 14, 16, 18, 20]
+				const slotsPerDay: number[] = [];
+				for (let h = windowStart; h <= windowEnd; h += intervalHours) {
+					slotsPerDay.push(h);
+				}
+
+				const scheduled: any[] = [];
+				let dayOffset = 0;
+				let slotIdx = 0;
+
+				for (const copy of copies) {
+					const date = new Date(startDate);
+					date.setDate(date.getDate() + dayOffset);
+					const hour = slotsPerDay[slotIdx];
+					const scheduledDate = date.toISOString().split('T')[0];
+					const scheduledTime = `${String(hour).padStart(2, '0')}:00:00`;
+
+					const contentObj = {
+						text: copy.text || '',
+						ugc_broll_prompt: copy.ugc_broll_prompt || '',
+						script: copy.script || '',
+						media_url: copy.media_url || selectedProduct?.photoUrl || null,
+						product: copy.product || null,
+						hashtags: copy.hashtags || []
+					};
+
+					const { data: post, error: postErr } = await db.posts.create({
+						user_id: session.user.id,
+						agent_id: agentId,
+						content: JSON.stringify(contentObj),
+						platforms: targetPlatforms,
+						status: 'scheduled',
+						scheduled_date: scheduledDate,
+						scheduled_time: scheduledTime,
+						published_at: null
+					});
+
+					if (post && !postErr) {
+						scheduled.push({
+							id: post.id,
+							scheduled_date: scheduledDate,
+							scheduled_time: scheduledTime
 						});
-						if (res.text) {
-							const parsed = safeParseJson(res.text);
-							if (parsed && parsed.titles) {
-								return json({ success: true, data: parsed });
-							}
-						}
-					} catch (err) {
-						console.error('[Engine] Gemini titles failed:', err);
+					}
+
+					slotIdx++;
+					if (slotIdx >= slotsPerDay.length) {
+						slotIdx = 0;
+						dayOffset++;
 					}
 				}
 
-				// Fallback
 				return json({
 					success: true,
 					data: {
-						type: 'titles',
-						platform,
-						content: '',
-						hashtags: [],
-						hookScore: 90,
-						estimatedReach: 'N/A',
-						titles: [
-							`The exact strategy for ${topic} nobody talks about`,
-							`Stop scrolling if you want to master ${topic}`,
-							`I spent 100 hours auditing ${topic} — here is what I found`,
-							`Why 99% of creators fail at ${topic}`,
-							`The 3 secrets to ${topic} revealed`,
-							`Before you write another post about ${topic}, watch this`,
-							`The ultimate 2026 checklist for ${topic}`,
-							`How to go viral with ${topic} in 3 easy steps`
-						]
+						scheduled: scheduled.length,
+						days_covered: dayOffset + (slotIdx > 0 ? 1 : 0),
+						slots_per_day: slotsPerDay.length,
+						interval_hours: intervalHours,
+						window: `${windowStart}:00 - ${windowEnd}:00`,
+						first_post: scheduled[0]?.scheduled_date || null,
+						last_post: scheduled[scheduled.length - 1]?.scheduled_date || null,
+						posts: scheduled
 					}
 				});
 			}
 
-			if (action === 'thumbnail_brief') {
-				// Thumbnail Brief
-				if (hasGemini) {
-					try {
-						const ai = new GoogleGenAI({ apiKey });
-						const prompt = `Create a professional, graphic design brief for a YouTube/Social thumbnail for topic: "${topic}".
-${blueprintDetails ? `Please align these thumbnail briefing guidelines with the visual identity and replication rules found in this competitor blueprint:\n${blueprintDetails}\n` : ''}
-List 6 key visual briefing points.
-Return a JSON object in this exact format:
-{
-  "type": "thumbnail",
-  "platform": "${platform}",
-  "content": "",
-  "hashtags": [],
-  "hookScore": 87,
-  "estimatedReach": "N/A",
-  "thumbnailNotes": [string, string, string, string, string, string]
-}`;
-						const res = await ai.models.generateContent({
-							model: 'gemini-3.5-flash',
-							contents: [{ role: 'user', parts: [{ text: prompt }] }]
-						});
-						if (res.text) {
-							const parsed = safeParseJson(res.text);
-							if (parsed && parsed.thumbnailNotes) {
-								return json({ success: true, data: parsed });
-							}
-						}
-					} catch (err) {
-						console.error('[Engine] Gemini thumbnail brief failed:', err);
-					}
-				}
-
-				// Fallback
-				return json({
-					success: true,
-					data: {
-						type: 'thumbnail',
-						platform,
-						content: '',
-						hashtags: [],
-						hookScore: 85,
-						estimatedReach: 'N/A',
-						thumbnailNotes: [
-							'**Layout**: Split composition with face (left 50%) and text graphics (right 50%)',
-							'**Expression**: Surprised/intrigued face with slight head tilt and focused look',
-							'**Text Overlay**: "I DECODED IT" in bold Impact style font, white with thick black outline',
-							'**Accent Elements**: Highlight badges and trending symbols colored bright teal',
-							'**Background**: Clean dark slate gradient (#0d0e15 to #1a1c29) with faint grid overlay',
-							'**Emotion Target**: High curiosity and FOMO — "What exactly did they find?"'
-						]
-					}
-				});
-			}
-
-			if (action === 'repurpose') {
-				return json({ success: true, data: { message: 'Repurposing scheduled' } });
-			}
-
+			// ── ACTION: publish_generated (publish a saved post immediately) ─────
 			if (action === 'publish_generated') {
-				// Wire Content Forge output into the existing publish pipeline
 				const content = body.content;
-				const agentId = body.agent_id || body.agentId;
 				const mediaUrl = body.media_url || body.mediaUrl || null;
 
 				if (!content || !agentId) {
@@ -707,7 +438,6 @@ Return a JSON object in this exact format:
 					);
 				}
 
-				// Build content object matching generate-post format
 				const contentObj = {
 					text: typeof content === 'string' ? content : (content.content || content.text || ''),
 					media_url: mediaUrl
@@ -732,7 +462,6 @@ Return a JSON object in this exact format:
 					);
 				}
 
-				// Trigger the same publish pipeline that powers generate-post
 				const publishSuccess = await publishPostById(post.id);
 				const { data: updatedPost } = await db.posts.get(post.id);
 
@@ -745,17 +474,192 @@ Return a JSON object in this exact format:
 					}
 				});
 			}
+
+			// ── ACTION: generate_profile ─────────────────────────────────────────
+			if (action === 'generate_profile') {
+				if (!agentId) {
+					return json({ success: false, error: 'Missing agent_id' }, { status: 400 });
+				}
+				if (!agentData) {
+					const { data: agent } = await db.agents.get(agentId);
+					if (!agent) return json({ success: false, error: 'Agent not found' }, { status: 404 });
+					agentData = agent;
+				}
+
+				if (hasAi) {
+					const prompt = `You are a social media branding expert. Generate a complete profile setup for this persona:
+
+Name: ${agentData.name}
+Handle: @${agentData.handle}
+Niche: ${agentData.niche}
+Personality: ${agentData.soul || 'Professional and authentic'}
+Skills/Style: ${agentData.skills || 'Content creation'}
+${briefData ? `Brand: ${briefData.brandName || ''}\nIndustry: ${briefData.industry || ''}\nTarget Audience: ${briefData.demographics || ''}\nBrand Voice: ${briefData.commStyle || ''}` : ''}
+
+Return a JSON object with:
+{
+  "bio": "Ready-to-paste Instagram bio (max 150 chars). Include relevant emoji, a hook line, niche identifier, and a CTA. No hashtags in bio.",
+  "profile_picture_prompt": "Detailed AI image generation prompt for a professional profile picture. Describe: subject appearance/style matching the niche, lighting (soft studio or natural), composition (headshot or upper body, centered), background (clean/branded), mood (approachable, trustworthy). Square 1:1 ratio, high quality.",
+  "display_name": "Optimized display name with relevant emoji or niche keyword (max 30 chars)",
+  "highlights_suggestions": ["5 Instagram Story Highlight cover names relevant to the niche"]
+}`;
+
+					try {
+						const text = await ai!.generate(prompt, { json: true });
+						const parsed = safeParseJson(text);
+						if (parsed) {
+							return json({
+								success: true,
+								data: {
+									...parsed,
+									provider: ai!.provider,
+									instructions: 'Copy the bio and display name to your Instagram profile. Use the profile_picture_prompt with any AI image generator (Midjourney, DALL-E, Flux) to create your profile picture, then upload manually.'
+								}
+							});
+						}
+					} catch (err) {
+						console.error('[Engine] Profile generation failed:', err);
+					}
+				}
+
+				// Fallback
+				const fallbackBio = `${agentData.niche} creator ✨ | ${agentData.soul?.slice(0, 60) || 'Authentic content'} | Link below 👇`;
+				return json({
+					success: true,
+					data: {
+						bio: fallbackBio.slice(0, 150),
+						profile_picture_prompt: `Professional social media profile photo of a ${agentData.niche} content creator. Clean background, soft studio lighting, square 1:1 format, approachable expression, high quality.`,
+						display_name: agentData.name,
+						highlights_suggestions: ['About', 'Products', 'Reviews', 'Tips', 'BTS'],
+						instructions: 'Copy the bio and display name to your Instagram profile. Use the profile_picture_prompt with any AI image generator to create your profile picture, then upload manually.'
+					}
+				});
+			}
+
+			// ── ACTION: script ───────────────────────────────────────────────────
+			if (action === 'script') {
+				if (hasAi) {
+					try {
+						const prompt = `${fullContext}
+Write a detailed 60-second video script for ${platform} on topic: "${topic}".
+${selectedProduct ? `The script MUST feature "${selectedProduct.name}" as the main product being demonstrated.` : ''}
+Include [Scene Direction], [Visual Cues], and voiceover content.
+Return JSON: { "type": "script", "platform": "${platform}", "content": "formatted script", "hashtags": [...], "hookScore": <70-99>, "estimatedReach": "15K - 35K" }`;
+						const resText = await ai!.generate(prompt, { json: true });
+						if (resText) {
+							const parsed = safeParseJson(resText);
+							if (parsed?.content) return json({ success: true, data: parsed });
+						}
+					} catch (err) {
+						console.error('[Engine] AI script forge failed:', err);
+					}
+				}
+
+				return json({
+					success: true,
+					data: {
+						type: 'script',
+						platform,
+						content: `[SCENE: Close-up, handheld]\n"I tried ${selectedProduct?.name || topic} and here's what happened..."\n\n[VISUAL: Product in use, natural lighting]\n"The results speak for themselves."\n\n[CTA] "Link in bio — try it yourself."`,
+						hashtags: ['#UGC', '#ProductReview', '#Authentic'],
+						hookScore: 90,
+						estimatedReach: '14.8K - 38.6K'
+					}
+				});
+			}
+
+			// ── ACTION: titles ───────────────────────────────────────────────────
+			if (action === 'titles') {
+				if (hasAi) {
+					try {
+						const prompt = `${fullContext}
+Generate 8 highly viral, click-worthy titles/hooks for content about: "${topic}".
+${selectedProduct ? `Each title should reference or relate to "${selectedProduct.name}".` : ''}
+Return JSON: { "type": "titles", "platform": "${platform}", "titles": [string x 8], "hookScore": 91 }`;
+						const resText = await ai!.generate(prompt, { json: true });
+						if (resText) {
+							const parsed = safeParseJson(resText);
+							if (parsed?.titles) return json({ success: true, data: parsed });
+						}
+					} catch (err) {
+						console.error('[Engine] AI titles failed:', err);
+					}
+				}
+
+				return json({
+					success: true,
+					data: {
+						type: 'titles',
+						platform,
+						titles: [
+							`The truth about ${selectedProduct?.name || topic} nobody tells you`,
+							`I tried ${selectedProduct?.name || topic} for 30 days — here's what happened`,
+							`Stop scrolling if you care about ${topic}`,
+							`Why everyone is switching to ${selectedProduct?.name || topic}`,
+							`The 3 secrets about ${topic} revealed`,
+							`Before you buy ${selectedProduct?.name || 'another product'}, watch this`,
+							`The ultimate 2026 guide to ${topic}`,
+							`How ${selectedProduct?.name || topic} changed my routine forever`
+						],
+						hookScore: 90
+					}
+				});
+			}
+
+			// ── ACTION: thumbnail_brief ──────────────────────────────────────────
+			if (action === 'thumbnail_brief') {
+				if (hasAi) {
+					try {
+						const prompt = `${fullContext}
+Create a professional thumbnail brief for a YouTube/Social thumbnail about: "${topic}".
+${selectedProduct ? `Feature "${selectedProduct.name}" prominently in the visual.` : ''}
+Return JSON: { "type": "thumbnail", "platform": "${platform}", "thumbnailNotes": [6 visual briefing points], "hookScore": 87 }`;
+						const resText = await ai!.generate(prompt, { json: true });
+						if (resText) {
+							const parsed = safeParseJson(resText);
+							if (parsed?.thumbnailNotes) return json({ success: true, data: parsed });
+						}
+					} catch (err) {
+						console.error('[Engine] AI thumbnail brief failed:', err);
+					}
+				}
+
+				return json({
+					success: true,
+					data: {
+						type: 'thumbnail',
+						platform,
+						thumbnailNotes: [
+							'**Layout**: Split composition with face (left 50%) and product (right 50%)',
+							'**Expression**: Surprised/excited face with genuine reaction',
+							`**Product**: ${selectedProduct?.name || 'Featured product'} prominently displayed`,
+							'**Text Overlay**: Bold Impact font, white with thick black outline',
+							'**Background**: Clean gradient with brand colors',
+							'**Emotion Target**: High curiosity and FOMO'
+						],
+						hookScore: 85
+					}
+				});
+			}
+
+			if (action === 'repurpose') {
+				return json({ success: true, data: { message: 'Repurposing scheduled' } });
+			}
+
+			return json(
+				{ success: false, error: `Invalid content forge action: ${action}` },
+				{ status: 400 }
+			);
 		}
 
 		// ══════════════════════════════════════════════════════════════════════════
-		// D. PATH: personagen-ai-generate
+		// C. PATH: personagen-ai-generate (Direct freeform content)
 		// ══════════════════════════════════════════════════════════════════════════
 		if (path === 'personagen-ai-generate') {
 			const promptText = body.prompt || 'Writing social content';
 			const personaId = body.persona_id;
 			const platforms = body.platforms || ['instagram'];
 
-			// Let's get agent context if personaId is valid
 			let agentContext = 'an expert creator';
 			if (personaId) {
 				const { data: agent } = await db.agents.get(personaId);
@@ -764,46 +668,37 @@ Return a JSON object in this exact format:
 				}
 			}
 
-			if (hasGemini) {
+			if (hasAi) {
 				try {
-					const ai = new GoogleGenAI({ apiKey });
 					const systemPrompt = `You are ${agentContext}. Generate premium, high-converting social media copy.`;
 					const prompt = `Write a ready-to-post piece of social media content for: ${platforms.join(', ')}.
 Topic / Prompt: "${promptText}"
 Ensure the draft captures the voice perfectly. Do not include meta text, output the completed ready-to-post draft content directly.`;
 
-					const res = await ai.models.generateContent({
-						model: 'gemini-3.5-flash',
-						contents: [{ role: 'user', parts: [{ text: prompt }] }],
-						config: { systemInstruction: systemPrompt }
-					});
+					const resText = await ai!.generate(prompt, { systemInstruction: systemPrompt });
 
-					if (res.text) {
+					if (resText) {
 						return json({
 							success: true,
 							data: {
 								message: 'Content generated successfully',
-								content: res.text.trim()
+								content: resText.trim()
 							}
 						});
 					}
 				} catch (err) {
-					console.error('[Engine] Gemini content generation failed:', err);
+					console.error('[Engine] AI content generation failed:', err);
 				}
 			}
 
 			const allowDemoMode = env.ALLOW_DEMO_MODE === 'true';
 			if (!allowDemoMode) {
 				return json(
-					{
-						success: false,
-						error: 'Failed to generate content. Real content generation requires a valid GEMINI_API_KEY.'
-					},
+					{ success: false, error: 'Failed to generate content. Configure an AI provider in Settings.' },
 					{ status: 400 }
 				);
 			}
 
-			// Fallback
 			return json({
 				success: true,
 				data: {
@@ -814,126 +709,7 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 		}
 
 		// ══════════════════════════════════════════════════════════════════════════
-		// E. PATH: personagen-trends
-		// ══════════════════════════════════════════════════════════════════════════
-		if (path === 'personagen-trends') {
-			const agentId = body.agentId || body.agent_id;
-			if (!agentId) {
-				const allowDemoMode = env.ALLOW_DEMO_MODE === 'true';
-				if (!allowDemoMode) {
-					return json(
-						{
-							success: false,
-							error: 'Missing agentId parameter. Trends analysis requires an agent context.'
-						},
-						{ status: 400 }
-					);
-				}
-				// Static mock success for testing / simple calls
-				return json({
-					success: true,
-					data: {
-						message: 'Trends recalculated and matched',
-						timestamp: new Date().toISOString()
-					}
-				});
-			}
-
-			// Get the agent's niche
-			const { data: agent } = await db.agents.get(agentId);
-			const niche = agent?.niche || 'Lifestyle';
-			const agentName = agent?.name || 'Agent';
-
-			let trends: any[] = [];
-
-			if (hasGemini) {
-				try {
-					const ai = new GoogleGenAI({ apiKey });
-					const prompt = `Generate 10 trending topics or themes relevant to the "${niche}" niche.
-For each trend, specify its momentum (rising, stable, or falling), the main platform (TikTok, Instagram, YouTube, or Facebook), match score (how well it matches a creator named ${agentName} in this niche, between 60 and 99), typical hashtags, a short description, volume (e.g. "24.2K"), and growth (e.g. "+340%").
-
-Return a JSON array where each object has this exact structure:
-{
-  "id": "t1",
-  "name": "Trend Name",
-  "momentum": "rising",
-  "platform": "TikTok",
-  "niche": "${niche}",
-  "matchScore": 92,
-  "hashtags": ["tag1", "tag2"],
-  "description": "Short description of the trend",
-  "volume": "24.2K",
-  "growth": "+340%"
-}
-Ensure the output is ONLY a raw JSON array. Do not wrap in markdown code blocks.`;
-
-					const res = await ai.models.generateContent({
-						model: 'gemini-3.5-flash',
-						contents: [{ role: 'user', parts: [{ text: prompt }] }]
-					});
-
-					if (res.text) {
-						const parsed = safeParseJson(res.text);
-						if (Array.isArray(parsed)) {
-							trends = parsed.map((t, idx) => ({
-								id: t.id || `t_${idx}_${Date.now()}`,
-								name: t.name || 'Niche Trend',
-								momentum: t.momentum || 'rising',
-								platform: t.platform || 'TikTok',
-								niche: t.niche || niche,
-								matchScore: Number(t.matchScore || 85),
-								hashtags: Array.isArray(t.hashtags) ? t.hashtags : ['trend'],
-								description: t.description || 'Trending content description',
-								volume: t.volume || '15K',
-								growth: t.growth || '+100%'
-							}));
-						}
-					}
-				} catch (err) {
-					console.error('[Engine] Gemini trends generation failed:', err);
-				}
-			}
-
-			if (trends.length === 0) {
-				const allowDemoMode = env.ALLOW_DEMO_MODE === 'true';
-				if (allowDemoMode) {
-					// Fallback mock trends
-					trends = [
-						{
-							topic: `Autonomous ${niche} Growth`,
-							description: `Trending interest in ${niche} content creation tools and workflow automation.`,
-							volume: '45K',
-							growth: '+180%',
-							matchScore: 95
-						},
-						{
-							topic: `${niche} Strategy Optimization`,
-							description: 'High engagement on posts dissecting campaign rhythm and audience retention.',
-							volume: '22K',
-							growth: '+120%',
-							matchScore: 88
-						}
-					];
-				} else {
-					return json({
-						success: false,
-						error: 'Failed to retrieve niche trends. Real trend analysis requires a valid GEMINI_API_KEY.'
-					}, { status: 400 });
-				}
-			}
-
-			return json({
-				success: true,
-				data: {
-					trends,
-					message: 'Trends loaded successfully',
-					timestamp: new Date().toISOString()
-				}
-			});
-		}
-
-		// ══════════════════════════════════════════════════════════════════════════
-		// DD. PATH: personagen-brand-brief
+		// D. PATH: personagen-brand-brief
 		// ══════════════════════════════════════════════════════════════════════════
 		if (path === 'personagen-brand-brief') {
 			if (action === 'scrape_store') {
@@ -997,8 +773,7 @@ Ensure the output is ONLY a raw JSON array. Do not wrap in markdown code blocks.
 							}
 						}
 
-						if (contentToParse && hasGemini) {
-							const ai = new GoogleGenAI({ apiKey });
+						if (contentToParse && hasAi) {
 							const prompt = `You are a web scraper agent. Extract the brand brief details and any products (with name, description, price, and image URL if visible) from this e-commerce storefront page content.
 Return a JSON object matching this exact shape:
 {
@@ -1027,12 +802,9 @@ Return a JSON object matching this exact shape:
 Store Content:
 ${contentToParse}`;
 
-							const geminiRes = await ai.models.generateContent({
-								model: 'gemini-3.5-flash',
-								contents: [{ role: 'user', parts: [{ text: prompt }] }]
-							});
-							if (geminiRes.text) {
-								const parsed = safeParseJson(geminiRes.text);
+							const resText = await ai!.generate(prompt, { json: true });
+							if (resText) {
+								const parsed = safeParseJson(resText);
 								if (parsed && parsed.brandName) {
 									scrapedData = parsed;
 									scrapeSuccess = true;
@@ -1045,10 +817,7 @@ ${contentToParse}`;
 				}
 
 				if (scrapeSuccess && scrapedData) {
-					return json({
-						success: true,
-						data: scrapedData
-					});
+					return json({ success: true, data: scrapedData });
 				}
 
 				// 2. If real scraping failed, check Demo Mode
@@ -1056,7 +825,7 @@ ${contentToParse}`;
 					return json(
 						{
 							success: false,
-							error: 'Failed to scrape the storefront page. Real scraping failed and demo mode is disabled. Please verify the URL or enter brand details and products manually.'
+							error: 'Failed to scrape the storefront page. Please verify the URL or enter brand details and products manually.'
 						},
 						{ status: 400 }
 					);
@@ -1074,60 +843,51 @@ ${contentToParse}`;
 							brandName: 'HoneyX',
 							tagline: "Nature's Superfood for Men - Put a Little Honey in Your Life",
 							mission:
-								"At HoneyX, we strive to empower men to live healthier and more fulfilling lives through nature's superfoods. Our proprietary formulations blend raw honey with potent organic extracts and herbs to enhance energy, strength, stamina, and daily performance.",
-							primaryColor: '#eab308', // Amber/gold
-							secondaryColor: '#f97316', // Vibrant orange
+								"At HoneyX, we strive to empower men to live healthier and more fulfilling lives through nature's superfoods.",
+							primaryColor: '#eab308',
+							secondaryColor: '#f97316',
 							logoUrl:
 								'https://honeyforx.com/cdn/shop/files/honeyX_logo_1920x1080_329bd0fe-fcd2-4f47-ae79-3771e4539126.webp?v=1687433087',
 							traits: ['Stamina', 'Premium/Luxury', 'Energetic', 'Organic Wellness'],
 							commStyle: 'Bold',
-							demographics:
-								'Men and high-performers aged 24-45, athletes, fitness enthusiasts, holistic biohackers.',
-							interests:
-								'Biohacking, functional foods, fitness routines, high-end nutritional wellness, aesthetic vlog reviews.',
+							demographics: 'Men and high-performers aged 24-45, athletes, fitness enthusiasts.',
+							interests: 'Biohacking, functional foods, fitness routines, nutritional wellness.',
 							platforms: 'TikTok (UGC), Instagram Reels, YouTube Shorts',
-							painPoints:
-								'Energy crashes, jittery pre-workouts, chemical supplement side-effects, boring health routines.',
+							painPoints: 'Energy crashes, jittery pre-workouts, chemical supplement side-effects.',
 							products: [
 								{
 									id: 'hx-p1',
 									name: 'HoneyX Manly Plus',
-									description:
-										"Nature's premium superfood for men. An advanced blend of raw honey, Tribulus terrestris, ginseng, and organic herbal extracts designed for enhanced performance, energy, and stamina.",
+									description: "Nature's premium superfood for men. Raw honey with Tribulus terrestris, ginseng, and organic herbal extracts.",
 									price: 'Rs. 2,450',
-									photoUrl:
-										'https://cdn.shopify.com/s/files/1/0725/5674/0906/files/honeyx_is_natural_superfood_for_men_in_Pakistan.webp?v=1729879293'
+									photoUrl: 'https://cdn.shopify.com/s/files/1/0725/5674/0906/files/honeyx_is_natural_superfood_for_men_in_Pakistan.webp?v=1729879293'
 								},
 								{
 									id: 'hx-p2',
 									name: 'Honey Shilajit Duo Active',
-									description:
-										'A premium, active fusion of raw wildflower honey, pure organic Shilajit, and natural performance saffron to optimize total body strength and vitality.',
+									description: 'Raw wildflower honey, pure organic Shilajit, and natural performance saffron.',
 									price: 'Rs. 2,450',
-									photoUrl:
-										'https://cdn.shopify.com/s/files/1/0725/5674/0906/files/honeyshilajitpriceinpakistan.webp?v=1753269155'
+									photoUrl: 'https://cdn.shopify.com/s/files/1/0725/5674/0906/files/honeyshilajitpriceinpakistan.webp?v=1753269155'
 								},
 								{
 									id: 'hx-p3',
 									name: 'Afrovit-SR Withania Somnifera Compound',
-									description:
-										'Formulated with high-strength Ashwagandha (Withania Somnifera) and active natural adaptogens to support stress resilience, mental focus, and optimal physical vigor.',
+									description: 'High-strength Ashwagandha with active natural adaptogens for stress resilience and focus.',
 									price: 'Rs. 3,000',
-									photoUrl:
-										'https://cdn.shopify.com/s/files/1/0725/5674/0906/files/naturalandorganicafrovitsrcapletsbyhoneyx.webp?v=1753091546'
+									photoUrl: 'https://cdn.shopify.com/s/files/1/0725/5674/0906/files/naturalandorganicafrovitsrcapletsbyhoneyx.webp?v=1753091546'
 								}
 							]
 						}
 					});
 				}
 
-				// General scraper fallback (only in demo mode)
+				// General fallback (demo mode only)
 				return json({
 					success: true,
 					data: {
 						brandName: storeUrl.split('.')[0]?.toUpperCase() || 'My Ecom Brand',
 						tagline: 'Premium Quality E-commerce Products',
-						mission: `Delivering exceptional value and high-performance lifestyle products globally via ${storeUrl}.`,
+						mission: `Delivering exceptional value and high-performance lifestyle products.`,
 						primaryColor: '#7c6aed',
 						secondaryColor: '#22d3ee',
 						logoUrl: 'https://cdn-icons-png.flaticon.com/512/825/825590.png',
@@ -1136,17 +896,14 @@ ${contentToParse}`;
 						demographics: 'Modern online shoppers aged 18-35.',
 						interests: 'Online shopping, premium lifestyle goods, social media trends.',
 						platforms: 'Instagram, TikTok',
-						painPoints:
-							'Hard-to-source quality items, unreliable shipping, generic customer support.',
+						painPoints: 'Hard-to-source quality items, unreliable shipping, generic support.',
 						products: [
 							{
 								id: 'gen-p1',
 								name: 'Signature Lifestyle Item',
-								description:
-									'Our flagship product designed for premium aesthetics and ultimate everyday functionality.',
+								description: 'Flagship product designed for premium aesthetics and functionality.',
 								price: '$45.00',
-								photoUrl:
-									'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=400&q=80'
+								photoUrl: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=400&q=80'
 							}
 						]
 					}
@@ -1161,43 +918,27 @@ ${contentToParse}`;
 					return json({ success: false, error: 'Input text is empty' }, { status: 400 });
 				}
 
-				if (hasGemini) {
+				if (hasAi) {
 					try {
-						const ai = new GoogleGenAI({ apiKey });
 						const prompt = `You are an elite brand strategist, copywriter, and e-commerce UGC marketer.
-Take the following simple input for the brand brief field "${fieldName}" and expand/enrich it into a beautiful, premium, high-converting, and evocative brand description or positioning statement.
-Ensure it is active, rich, modern, and aligned with luxury DTC trends. Keep the output under 3 sentences.
+Take the following simple input for the brand brief field "${fieldName}" and expand/enrich it into a beautiful, premium, high-converting positioning statement.
+Keep under 3 sentences. Output ONLY the enriched text directly.
 
-Input: "${fieldVal}"
+Input: "${fieldVal}"`;
 
-Output ONLY the enriched expanded text directly. Do NOT include markdown code blocks, labels, or intros.`;
-
-						const res = await ai.models.generateContent({
-							model: 'gemini-3.5-flash',
-							contents: [{ role: 'user', parts: [{ text: prompt }] }]
-						});
-
-						if (res.text) {
-							return json({
-								success: true,
-								data: {
-									enriched: res.text.trim()
-								}
-							});
+						const resText = await ai!.generate(prompt);
+						if (resText) {
+							return json({ success: true, data: { enriched: resText.trim() } });
 						}
 					} catch (err) {
-						console.error('[Engine] Gemini field enrichment failed, falling back:', err);
+						console.error('[Engine] AI field enrichment failed:', err);
 					}
 				}
 
-				// Fallback enricher
 				const allowDemoMode = env.ALLOW_DEMO_MODE === 'true';
 				if (!allowDemoMode) {
 					return json(
-						{
-							success: false,
-							error: 'Failed to enrich field. Real field enrichment requires a valid GEMINI_API_KEY.'
-						},
+						{ success: false, error: 'Failed to enrich field. Configure an AI provider in Settings.' },
 						{ status: 400 }
 					);
 				}
@@ -1212,11 +953,9 @@ Output ONLY the enriched expanded text directly. Do NOT include markdown code bl
 		}
 
 		// ══════════════════════════════════════════════════════════════════════════
-		// F. PATH: personagen-publish
+		// E. PATH: personagen-publish
 		// ══════════════════════════════════════════════════════════════════════════
 		if (path === 'personagen-publish') {
-			// Queue immediate publishing. The scheduler is the only path that marks
-			// posts as published because it records actual Composio outcomes.
 			let targetPostId = body.post_id;
 			if (!targetPostId && body.post) {
 				targetPostId = body.post.id;
@@ -1240,21 +979,17 @@ Output ONLY the enriched expanded text directly. Do NOT include markdown code bl
 			return json({
 				success: true,
 				data: {
-					message:
-						'Post queued for publishing. The scheduler will mark it published only after Composio succeeds.',
+					message: 'Post queued for publishing. The scheduler will publish via Composio/Zernio.',
 					queuedAt: new Date().toISOString()
 				}
 			});
 		}
 
 		// ══════════════════════════════════════════════════════════════════════════
-		// G. PATH: Catch-All Fallback
+		// F. Catch-All Fallback
 		// ══════════════════════════════════════════════════════════════════════════
 		return json(
-			{
-				success: false,
-				error: `Unknown engine path: ${path}`
-			},
+			{ success: false, error: `Unknown engine path: ${path}` },
 			{ status: 400 }
 		);
 	} catch (err) {

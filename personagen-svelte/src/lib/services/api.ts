@@ -4,13 +4,6 @@ const ENDPOINTS = {
 	posts: '/api/posts',
 	feed: '/api/posts',
 	accounts: '/api/accounts',
-	generate: '/api/engine?path=personagen-ai-generate',
-	publish: '/api/engine?path=personagen-publish',
-	trends: '/api/engine?path=personagen-trends',
-	inbox: '/api/engine?path=personagen-engagement',
-	factory: '/api/engine?path=personagen-account-factory',
-	email: '/api/engine?path=personagen-email',
-	channelDecode: '/api/engine?path=personagen-channel-decode',
 	contentForge: '/api/engine?path=personagen-content-forge',
 	blueprints: '/api/engine?path=personagen-blueprints',
 	brandBrief: '/api/engine?path=personagen-brand-brief'
@@ -63,43 +56,7 @@ export const Posts = {
 	get: (id: string) => request(ENDPOINTS.posts, 'get', { id })
 };
 
-// ── Generate (4 actions) ───────────────────────────────────────────────────────
-
-export const Generate = {
-	content: (personaId: string, prompt: string, platforms: string[]) =>
-		request(ENDPOINTS.generate, 'content', { persona_id: personaId, prompt, platforms }),
-	reply: (personaId: string, context: unknown, platform: string) =>
-		request(ENDPOINTS.generate, 'reply', { persona_id: personaId, context, platform }),
-	trendPost: (personaId: string, trendTopic: string, platforms: string[]) =>
-		request(ENDPOINTS.generate, 'trend_post', {
-			persona_id: personaId,
-			trend_topic: trendTopic,
-			platforms
-		}),
-	batch: (personaId: string, count: number, platforms: string[]) =>
-		request(ENDPOINTS.generate, 'batch', { persona_id: personaId, count, platforms })
-};
-
-// ── Publish (2 actions) ────────────────────────────────────────────────────────
-
-export const Publish = {
-	now: (post: unknown) => request(ENDPOINTS.publish, 'publish', { post }),
-	retry: (postId: string) => request(ENDPOINTS.publish, 'retry', { post_id: postId })
-};
-
-// ── Accounts (4 actions) ───────────────────────────────────────────────────────
-
-export const Accounts = {
-	initConnection: (personaId: string, platform: string) =>
-		request(ENDPOINTS.accounts, 'initiate_connection', { persona_id: personaId, platform }),
-	checkStatus: (personaId: string) =>
-		request(ENDPOINTS.accounts, 'check_status', { persona_id: personaId }),
-	disconnect: (personaId: string, platform: string) =>
-		request(ENDPOINTS.accounts, 'disconnect', { persona_id: personaId, platform }),
-	listAll: () => request(ENDPOINTS.accounts, 'list_accounts', {})
-};
-
-// ── Feed (3 actions) ───────────────────────────────────────────────────────────
+// ── Feed (3 actions) ───────────────────────────────────────────────────────
 
 export const Feed = {
 	calendar: (month: number, year: number, personaId?: string) =>
@@ -108,84 +65,64 @@ export const Feed = {
 	recent: (limit = 10) => request(ENDPOINTS.feed, 'recent', { limit })
 };
 
-// ── Trends (3 actions) ─────────────────────────────────────────────────────────
-
-export const Trends = {
-	get: (personaId: string) => request(ENDPOINTS.trends, 'get', { persona_id: personaId }),
-	getByNiche: (niche: string) => request(ENDPOINTS.trends, 'get_by_niche', { niche }),
-	refresh: (personaId: string) => request(ENDPOINTS.trends, 'refresh', { persona_id: personaId })
-};
-
-// ── Inbox (4 actions) ──────────────────────────────────────────────────────────
-
-export const Inbox = {
-	list: (personaId: string, filters?: Record<string, unknown>) =>
-		request(ENDPOINTS.inbox, 'list', { persona_id: personaId, ...filters }),
-	approve: (id: string) => request(ENDPOINTS.inbox, 'approve', { id }),
-	ignore: (id: string) => request(ENDPOINTS.inbox, 'ignore', { id }),
-	updateReply: (id: string, replyText: string) =>
-		request(ENDPOINTS.inbox, 'update_reply', { id, reply_text: replyText })
-};
-
-// ── Factory (6 actions) ────────────────────────────────────────────────────────
-
-export const Factory = {
-	create: (persona: unknown) => request(ENDPOINTS.factory, 'create_account', { persona }),
-	status: (id: string) => request(ENDPOINTS.factory, 'check_status', { id }),
-	retry: (id: string, step: string) => request(ENDPOINTS.factory, 'retry', { id, step }),
-	refresh: (id: string) => request(ENDPOINTS.factory, 'refresh_session', { id }),
-	health: (id: string) => request(ENDPOINTS.factory, 'health_check', { id }),
-	list: () => request(ENDPOINTS.factory, 'list_accounts', {})
-};
-
-// ── Email (6 actions) ──────────────────────────────────────────────────────────
-
-export const Email = {
-	listInbox: (personaId: string) => request(ENDPOINTS.email, 'list', { persona_id: personaId }),
-	getThread: (threadId: string) => request(ENDPOINTS.email, 'thread', { thread_id: threadId }),
-	send: (personaId: string, msg: Record<string, unknown>) =>
-		request(ENDPOINTS.email, 'send', { persona_id: personaId, ...msg }),
-	draft: (personaId: string, emailId: string) =>
-		request(ENDPOINTS.email, 'ai_draft', { persona_id: personaId, email_id: emailId }),
-	approve: (emailId: string) => request(ENDPOINTS.email, 'approve_send', { email_id: emailId }),
-	search: (personaId: string, query: string) =>
-		request(ENDPOINTS.email, 'search', { persona_id: personaId, q: query })
-};
-
-// ── Channel Decode (5 actions) ─────────────────────────────────────────────────
-
-export const ChannelDecode = {
-	decode: (url: string, platform: string) =>
-		request(ENDPOINTS.channelDecode, 'decode', { url, platform }),
-	analyze: (channelData: unknown) =>
-		request(ENDPOINTS.channelDecode, 'analyze', { channel_data: channelData }),
-	getBlueprint: (id: string) => request(ENDPOINTS.channelDecode, 'get_blueprint', { id }),
-	listBlueprints: () => request(ENDPOINTS.channelDecode, 'list_blueprints', {}),
-	updateBlueprint: (id: string, data: unknown) =>
-		request(ENDPOINTS.channelDecode, 'update_blueprint', { id, data }),
-	deleteBlueprint: (id: string) => request(ENDPOINTS.channelDecode, 'delete_blueprint', { id })
-};
-
-// ── Content Forge (5 actions) ──────────────────────────────────────────────────
+// ── Content Forge (9 actions — unified generation engine) ──────────────────
 
 export const ContentForge = {
-	generate: (blueprintId: string, topic: string, agentHandle: string, platforms: string[]) =>
+	generate: (agentId: string, topic: string, platform: string, templateId?: string, productId?: string) =>
 		request(ENDPOINTS.contentForge, 'generate', {
-			blueprint_id: blueprintId,
+			agent_id: agentId,
 			topic,
-			agent_handle: agentHandle,
-			platforms
+			platforms: [platform],
+			template_id: templateId,
+			product_id: productId
 		}),
-	titles: (blueprintId: string, topic: string, count = 5) =>
-		request(ENDPOINTS.contentForge, 'titles', { blueprint_id: blueprintId, topic, count }),
-	script: (blueprintId: string, topic: string, agentHandle: string) =>
+	batchGenerate: (agentId: string, topic: string, count: number, platform: string, templateId?: string, productId?: string) =>
+		request(ENDPOINTS.contentForge, 'batch_generate', {
+			agent_id: agentId,
+			topic,
+			count,
+			platforms: [platform],
+			template_id: templateId,
+			product_id: productId
+		}),
+	autoSchedule: (copies: unknown[], agentId: string, startDate: string, platform: string, intervalHours = 2, windowStart = 8, windowEnd = 20) =>
+		request(ENDPOINTS.contentForge, 'auto_schedule', {
+			copies,
+			agent_id: agentId,
+			start_date: startDate,
+			platform,
+			interval_hours: intervalHours,
+			window_start: windowStart,
+			window_end: windowEnd
+		}),
+	publishGenerated: (content: unknown, agentId: string, mediaUrl?: string) =>
+		request(ENDPOINTS.contentForge, 'publish_generated', {
+			content,
+			agent_id: agentId,
+			media_url: mediaUrl
+		}),
+	generateProfile: (agentId: string) =>
+		request(ENDPOINTS.contentForge, 'generate_profile', { agent_id: agentId }),
+	script: (agentId: string, topic: string, platform: string, templateId?: string) =>
 		request(ENDPOINTS.contentForge, 'script', {
-			blueprint_id: blueprintId,
+			agent_id: agentId,
 			topic,
-			agent_handle: agentHandle
+			platforms: [platform],
+			blueprint_id: templateId
 		}),
-	thumbnailBrief: (blueprintId: string, topic: string) =>
-		request(ENDPOINTS.contentForge, 'thumbnail_brief', { blueprint_id: blueprintId, topic }),
+	titles: (agentId: string, topic: string, platform: string, templateId?: string) =>
+		request(ENDPOINTS.contentForge, 'titles', {
+			agent_id: agentId,
+			topic,
+			platforms: [platform],
+			blueprint_id: templateId
+		}),
+	thumbnailBrief: (agentId: string, topic: string, platform: string) =>
+		request(ENDPOINTS.contentForge, 'thumbnail_brief', {
+			agent_id: agentId,
+			topic,
+			platforms: [platform]
+		}),
 	repurpose: (contentId: string, targetPlatforms: string[]) =>
 		request(ENDPOINTS.contentForge, 'repurpose', {
 			content_id: contentId,
@@ -193,25 +130,18 @@ export const ContentForge = {
 		})
 };
 
-// ── Blueprints (3 actions) ─────────────────────────────────────────────────────
+// ── Blueprints / Style Templates (5 actions) ──────────────────────────────
 
 export const Blueprints = {
-	feedToAgent: (blueprintId: string, agentHandle: string, targets: unknown) =>
-		request(ENDPOINTS.blueprints, 'feed_to_agent', {
-			blueprint_id: blueprintId,
-			agent_handle: agentHandle,
-			targets
-		}),
-	getAgentBlueprints: (agentHandle: string) =>
-		request(ENDPOINTS.blueprints, 'get_agent_blueprints', { agent_handle: agentHandle }),
-	removeFromAgent: (blueprintId: string, agentHandle: string) =>
-		request(ENDPOINTS.blueprints, 'remove_from_agent', {
-			blueprint_id: blueprintId,
-			agent_handle: agentHandle
-		})
+	list: () => request(ENDPOINTS.blueprints, 'list_blueprints', {}),
+	get: (id: string) => request(ENDPOINTS.blueprints, 'get_blueprint', { id }),
+	save: (data: Record<string, unknown>) => request(ENDPOINTS.blueprints, 'save_blueprint', data),
+	update: (id: string, data: unknown) =>
+		request(ENDPOINTS.blueprints, 'update_blueprint', { id, data }),
+	delete: (id: string) => request(ENDPOINTS.blueprints, 'delete_blueprint', { id })
 };
 
-// ── Brand Brief (2 actions) ───────────────────────────────────────────────────
+// ── Brand Brief (2 actions) ───────────────────────────────────────────────
 
 export const BrandBrief = {
 	scrapeStore: (url: string) => request<any>(ENDPOINTS.brandBrief, 'scrape_store', { url }),
@@ -219,7 +149,21 @@ export const BrandBrief = {
 		request<{ enriched: string }>(ENDPOINTS.brandBrief, 'extend_field', { fieldName, fieldVal })
 };
 
-// ── Personas (Direct DB) ──────────────────────────────────────────────────────
+// ── Accounts / Connections (3 actions) ────────────────────────────────────
+
+export const Accounts = {
+	checkStatus: (agentId: string) =>
+		request<Record<string, any>>(ENDPOINTS.accounts, 'check_status', { agentId }),
+	initConnection: (agentId: string, platform: string) =>
+		request<{ redirect_url?: string }>(ENDPOINTS.accounts, 'initiate_connection', {
+			agentId,
+			platform
+		}),
+	disconnect: (agentId: string, platform: string) =>
+		request(ENDPOINTS.accounts, 'disconnect', { agentId, platform })
+};
+
+// ── Personas (Direct DB) ──────────────────────────────────────────────────
 export const Personas = {
 	createDirect: (payload: { name: string; niche: string; platform: string; bio: string }) =>
 		fetch('/api/agents', {
@@ -234,4 +178,3 @@ export const Personas = {
 			return data;
 		})
 };
-

@@ -1,11 +1,11 @@
 <script lang="ts">
 	import { showToast } from '$lib/stores/ui.svelte';
 	import { onMount } from 'svelte';
-	import { Factory, Personas } from '$lib/services/api';
+	import { Personas } from '$lib/services/api';
 	import { goto } from '$app/navigation';
 	import { browser } from '$app/environment';
 
-	let { data } = $props<{ data: { isFactoryConfigured: boolean } }>();
+	let { data } = $props();
 
 	const LS_KEY = 'personagen_generator_progress';
 
@@ -489,25 +489,21 @@
 		try {
 			const payload = {
 				name: agentName.trim(),
-				handle: displayHandle,
 				niche,
-				market,
-				soul: soul.trim(),
-				skills: skills.trim(),
-				gradient: GRADIENT_PRESETS[selectedGradient].value,
-				initial
+				platform: 'instagram',
+				bio: soul.trim()
 			};
-			const res = await Factory.create(payload);
+			const res = await Personas.createDirect(payload);
 			if (res.success) {
-				showToast('Automated social account registered successfully!', 'success');
+				showToast('Persona created successfully!', 'success');
 				if (browser) localStorage.removeItem(LS_KEY);
 				await goto('/persona-config');
 			} else {
-				throw new Error(res.error || 'Registration failed');
+				throw new Error(res.error || 'Creation failed');
 			}
 		} catch (err) {
 			createError = (err as Error).message;
-			showToast(`Registration failed: ${createError}`, 'error');
+			showToast(`Persona creation failed: ${createError}`, 'error');
 		} finally {
 			isCreating = false;
 		}
@@ -862,24 +858,19 @@
 					</div>
 
 					<!-- Method 2: Account Factory Automation -->
-					<div class="method-card glass-card" style="padding: 1.5rem; border: 1px solid var(--border); border-radius: var(--radius-sm); display: flex; flex-direction: column; justify-content: space-between; gap: 1rem; background: var(--surface-2); position: relative; opacity: {data.isFactoryConfigured ? 1 : 0.65};">
+					<div class="method-card glass-card" style="padding: 1.5rem; border: 1px solid var(--border); border-radius: var(--radius-sm); display: flex; flex-direction: column; justify-content: space-between; gap: 1rem; background: var(--surface-2); position: relative;">
 						<div>
 							<h4 style="margin: 0; font-size: var(--text-base); font-weight: 700; color: var(--text);">Register Automated Account</h4>
 							<p style="margin: 0.5rem 0 0 0; font-size: var(--text-xs); color: var(--text-dim); line-height: 1.5;">
 								Trigger automated account creation on Instagram, YouTube, etc. using the Account Factory service.
 							</p>
-							{#if !data.isFactoryConfigured}
-								<div class="warning-text" style="color: var(--warning); font-size: 11px; margin-top: 0.5rem; font-weight: 600; display: flex; align-items: center; gap: 4px;">
-									⚠️ Account Factory is not configured in the server environment.
-								</div>
-							{/if}
 						</div>
 						<button
 							type="button"
 							class="btn-method-action"
-							disabled={isCreating || !data.isFactoryConfigured || !step1Valid || !step2Valid}
+							disabled={isCreating || !step1Valid || !step2Valid}
 							onclick={registerAutomatedAccount}
-							style="background: {data.isFactoryConfigured ? 'var(--gradient)' : 'var(--border-strong)'}; color: #fff; border: none; padding: 0.75rem; font-size: var(--text-xs); font-weight: 700; border-radius: var(--radius-xs); cursor: {data.isFactoryConfigured ? 'pointer' : 'not-allowed'}; text-align: center; transition: all 0.2s;"
+							style="background: var(--gradient); color: #fff; border: none; padding: 0.75rem; font-size: var(--text-xs); font-weight: 700; border-radius: var(--radius-xs); cursor: pointer; text-align: center; transition: all 0.2s;"
 						>
 							{#if isCreating}
 								Registering...

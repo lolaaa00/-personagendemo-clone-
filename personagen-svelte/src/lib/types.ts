@@ -122,56 +122,8 @@ export interface BrandBrief {
 	version: number;
 }
 
-export interface PMTicket {
-	id: string;
-	tenant_id: string;
-	title: string;
-	description: string;
-	status: 'backlog' | 'in_progress' | 'review' | 'done';
-	priority: 'low' | 'medium' | 'high' | 'urgent';
-	assignee_agent_id?: string;
-	due_date?: string;
-	position: number;
-}
 
-export interface InboxThread {
-	id: string;
-	tenant_id: string;
-	agent_id: string;
-	thread_id: string;
-	platform: string;
-	messages: unknown[];
-	status: 'pending' | 'approved' | 'ignored';
-}
 
-// ═══════════════════════════════════════
-// Gemini Managed Agent Types
-// ═══════════════════════════════════════
-
-export interface AgentChatMessage {
-	id: string;
-	role: 'user' | 'agent' | 'system';
-	content: string;
-	tool_calls?: AgentToolCall[];
-	timestamp: string;
-}
-
-export interface AgentToolCall {
-	id: string;
-	name: string;
-	args: Record<string, unknown>;
-	result?: unknown;
-	status: 'pending' | 'executing' | 'completed' | 'failed';
-}
-
-export interface AgentSession {
-	id: string;
-	agent_id: string;
-	environment_id?: string;
-	messages: AgentChatMessage[];
-	created_at: string;
-	updated_at: string;
-}
 
 // API action types
 export type ApiAction = string;

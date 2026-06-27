@@ -3,12 +3,8 @@ import { env as publicEnv } from '$env/dynamic/public';
 
 export interface ConfigStatus {
 	supabase: boolean;
-	gemini: boolean;
+	ai: boolean;
 	composio: boolean;
-	accountFactory: boolean;
-	mailService: boolean;
-	internalApiSecret: boolean;
-	mcpHermes: boolean;
 }
 
 export function checkConfigStatus(): ConfigStatus {
@@ -21,11 +17,12 @@ export function checkConfigStatus(): ConfigStatus {
 		!supabaseAnonKey.includes('placeholder')
 	);
 
+	// ponytail: check any AI provider (Gemini env OR OpenRouter env). User-stored keys checked at runtime.
 	const geminiApiKey = privateEnv.GEMINI_API_KEY ?? '';
-	const isGeminiConfigured = Boolean(
-		geminiApiKey &&
-		!geminiApiKey.includes('placeholder') &&
-		!geminiApiKey.includes('your-gemini')
+	const openRouterKey = privateEnv.OPENROUTER_API_KEY ?? '';
+	const isAiConfigured = Boolean(
+		(geminiApiKey && !geminiApiKey.includes('placeholder') && !geminiApiKey.includes('your-gemini')) ||
+		(openRouterKey && openRouterKey.trim() !== '')
 	);
 
 	const composioApiKey = privateEnv.COMPOSIO_API_KEY ?? '';
@@ -35,30 +32,9 @@ export function checkConfigStatus(): ConfigStatus {
 		!composioApiKey.includes('change_me')
 	);
 
-	const factoryUrl = privateEnv.FACTORY_URL ?? '';
-	const factoryApiKey = privateEnv.FACTORY_API_KEY ?? '';
-	const isFactoryConfigured = Boolean(
-		factoryUrl &&
-		!factoryUrl.includes('placeholder') &&
-		factoryApiKey &&
-		!factoryApiKey.includes('placeholder')
-	);
-
-	const mailHost = privateEnv.SMTP_HOST || privateEnv.MAIL_PORT || '';
-	const isMailConfigured = Boolean(mailHost && !mailHost.includes('placeholder'));
-
-	const internalSecret = privateEnv.INTERNAL_API_SECRET || '';
-	const isInternalSecretConfigured = Boolean(internalSecret && !internalSecret.includes('placeholder'));
-
-	const isMcpHermesConfigured = Boolean(privateEnv.HERMES_GATEWAY_URL && privateEnv.HERMES_API_KEY);
-
 	return {
 		supabase: isSupabaseConfigured,
-		gemini: isGeminiConfigured,
-		composio: isComposioConfigured,
-		accountFactory: isFactoryConfigured,
-		mailService: isMailConfigured,
-		internalApiSecret: isInternalSecretConfigured,
-		mcpHermes: isMcpHermesConfigured
+		ai: isAiConfigured,
+		composio: isComposioConfigured
 	};
 }

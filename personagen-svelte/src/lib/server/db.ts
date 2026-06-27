@@ -115,20 +115,6 @@ export interface BrandBriefRow {
 	updated_at: string;
 }
 
-export interface TicketRow {
-	id: string;
-	user_id: string;
-	title: string;
-	description: string;
-	status: 'backlog' | 'in_progress' | 'review' | 'done';
-	priority: 'low' | 'medium' | 'high' | 'urgent';
-	assignee_agent_id: string | null;
-	due_date: string | null;
-	position: number;
-	created_at: string;
-	updated_at: string;
-}
-
 export interface SubscriptionRow {
 	id: string;
 	user_id: string;
@@ -148,40 +134,6 @@ export interface ProcessedRssItemRow {
 	processed_at: string;
 }
 
-export interface ChatMessageRow {
-	id: string;
-	user_id: string;
-	agent_id: string;
-	session_id?: string | null;
-	role: 'user' | 'model' | 'system';
-	content: string;
-	tool_calls?: any;
-	claimed_by?: string | null;
-	claimed_at?: string | null;
-	created_at: string;
-}
-
-export interface ChatSessionRow {
-	id: string;
-	user_id: string;
-	agent_id: string;
-	title: string;
-	created_at: string;
-	updated_at: string;
-}
-
-export interface AgentMemoryRow {
-	id: string;
-	user_id: string;
-	agent_id: string;
-	memory_type: 'fact' | 'event' | 'instruction' | 'task';
-	content: string;
-	summary: string | null;
-	importance: number;
-	created_at: string;
-	updated_at: string;
-}
-
 // ═══════════════════════════════════════
 // Insert / Update partials
 // ═══════════════════════════════════════
@@ -191,20 +143,7 @@ export type AgentInsert = Omit<AgentRow, 'id' | 'created_at' | 'updated_at'> & {
 };
 export type AgentUpdate = Partial<Omit<AgentRow, 'id' | 'user_id' | 'created_at' | 'updated_at'>>;
 
-export type ChatSessionInsert = Omit<ChatSessionRow, 'id' | 'created_at' | 'updated_at'> & {
-	id?: string;
-};
-export type ChatSessionUpdate = Partial<
-	Omit<ChatSessionRow, 'id' | 'user_id' | 'agent_id' | 'created_at' | 'updated_at'>
->;
 
-export type ChatMessageInsert = Omit<ChatMessageRow, 'id' | 'created_at'> & { id?: string };
-export type AgentMemoryInsert = Omit<AgentMemoryRow, 'id' | 'created_at' | 'updated_at'> & {
-	id?: string;
-};
-export type AgentMemoryUpdate = Partial<
-	Omit<AgentMemoryRow, 'id' | 'user_id' | 'agent_id' | 'created_at' | 'updated_at'>
->;
 
 export type AgentConfigInsert = Omit<
 	AgentConfigRow,
@@ -230,8 +169,7 @@ export type BrandBriefInsert = Omit<BrandBriefRow, 'id' | 'created_at' | 'update
 	id?: string;
 };
 
-export type TicketInsert = Omit<TicketRow, 'id' | 'created_at' | 'updated_at'> & { id?: string };
-export type TicketUpdate = Partial<Omit<TicketRow, 'id' | 'user_id' | 'created_at' | 'updated_at'>>;
+
 
 export type ProfileUpdate = Partial<Omit<ProfileRow, 'id' | 'created_at' | 'updated_at'>> & {
 	id: string;
@@ -249,9 +187,7 @@ export type PostWithAgent = PostRow & {
 	agents: Pick<AgentRow, 'name' | 'handle' | 'gradient' | 'initial'>;
 };
 
-export type TicketWithAgent = TicketRow & {
-	agents: Pick<AgentRow, 'name' | 'handle' | 'gradient' | 'initial'>;
-};
+
 
 // ═══════════════════════════════════════
 // Filter types
@@ -326,23 +262,6 @@ export function createDbService(supabase: SupabaseClient) {
 			delete: (id: string) => supabase.from('posts').delete().eq('id', id)
 		},
 
-		// ── Tickets ─────────────────────────────
-		tickets: {
-			list: () =>
-				supabase
-					.from('tickets')
-					.select('*, agents(name, handle, gradient, initial)')
-					.order('position'),
-
-			get: (id: string) => supabase.from('tickets').select('*').eq('id', id).single(),
-
-			create: (data: TicketInsert) => supabase.from('tickets').insert(data).select().single(),
-
-			update: (id: string, data: TicketUpdate) =>
-				supabase.from('tickets').update(data).eq('id', id).select().single(),
-
-			delete: (id: string) => supabase.from('tickets').delete().eq('id', id)
-		},
 
 		// ── Connections ─────────────────────────
 		connections: {
@@ -425,83 +344,7 @@ export function createDbService(supabase: SupabaseClient) {
 					.single()
 		},
 
-		// ── Chat Sessions ─────────────────────────
-		chatSessions: {
-			listForAgent: (agentId: string, userId: string) =>
-				supabase
-					.from('chat_sessions')
-					.select('*')
-					.eq('agent_id', agentId)
-					.eq('user_id', userId)
-					.order('updated_at', { ascending: false }),
 
-			get: (id: string) =>
-				supabase.from('chat_sessions').select('*').eq('id', id).single(),
-
-			create: (data: ChatSessionInsert) =>
-				supabase.from('chat_sessions').insert(data).select().single(),
-
-			update: (id: string, data: ChatSessionUpdate) =>
-				supabase.from('chat_sessions').update(data).eq('id', id).select().single(),
-
-			delete: (id: string) =>
-				supabase.from('chat_sessions').delete().eq('id', id)
-		},
-
-		// ── Chat Messages ─────────────────────────
-		chatMessages: {
-			listForAgent: (agentId: string) =>
-				supabase
-					.from('chat_messages')
-					.select('*')
-					.eq('agent_id', agentId)
-					.order('created_at', { ascending: true }),
-
-			listForSession: (sessionId: string, userId?: string, agentId?: string) => {
-				let q = supabase
-					.from('chat_messages')
-					.select('*')
-					.eq('session_id', sessionId);
-				if (userId) q = q.eq('user_id', userId);
-				if (agentId) q = q.eq('agent_id', agentId);
-				return q.order('created_at', { ascending: true });
-			},
-
-			create: (data: ChatMessageInsert) =>
-				supabase.from('chat_messages').insert(data).select().single(),
-
-			deleteForAgent: (agentId: string) =>
-				supabase.from('chat_messages').delete().eq('agent_id', agentId),
-
-			deleteForSession: (sessionId: string, userId?: string, agentId?: string) => {
-				let q = supabase
-					.from('chat_messages')
-					.delete()
-					.eq('session_id', sessionId);
-				if (userId) q = q.eq('user_id', userId);
-				if (agentId) q = q.eq('agent_id', agentId);
-				return q;
-			}
-		},
-
-		// ── Agent Memories ────────────────────────
-		agentMemories: {
-			listForAgent: (agentId: string) =>
-				supabase
-					.from('agent_memories')
-					.select('*')
-					.eq('agent_id', agentId)
-					.order('importance', { ascending: false })
-					.order('created_at', { ascending: false }),
-
-			create: (data: AgentMemoryInsert) =>
-				supabase.from('agent_memories').insert(data).select().single(),
-
-			update: (id: string, data: AgentMemoryUpdate) =>
-				supabase.from('agent_memories').update(data).eq('id', id).select().single(),
-
-			delete: (id: string) => supabase.from('agent_memories').delete().eq('id', id)
-		}
 	};
 }
 

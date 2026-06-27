@@ -2,15 +2,9 @@ import type { LayoutServerLoad } from './$types';
 import { redirect } from '@sveltejs/kit';
 import { env } from '$env/dynamic/public';
 import { env as privateEnv } from '$env/dynamic/private';
-import { createDbService } from '$lib/server/db';
 import { checkConfigStatus } from '$lib/server/config-check';
-import {
-	getOrCreateHermes,
-	ensureHermesConfig,
-	ensureAgentsManagedByHermes
-} from '$lib/server/hermes';
 
-export const load: LayoutServerLoad = async ({ locals, fetch }) => {
+export const load: LayoutServerLoad = async ({ locals }) => {
 	const supabaseUrl = env.PUBLIC_SUPABASE_URL ?? '';
 	const isPlaceholder = !supabaseUrl || supabaseUrl.includes('placeholder');
 	const allowDemoMode = privateEnv.ALLOW_DEMO_MODE === 'true';
@@ -22,15 +16,6 @@ export const load: LayoutServerLoad = async ({ locals, fetch }) => {
 	try {
 		const { session, user } = await locals.safeGetSession();
 		if (!session || !user) throw redirect(303, '/login');
-
-		// Core Hermes alignment checks
-		try {
-			const hermes = await getOrCreateHermes(locals.supabase, user.id);
-			await ensureHermesConfig(locals.supabase, user.id, hermes.id);
-			await ensureAgentsManagedByHermes(locals.supabase, user.id, hermes.id);
-		} catch (err) {
-			console.error('[Layout Server] Hermes alignment checks failed:', err);
-		}
 
 		return {
 			session,

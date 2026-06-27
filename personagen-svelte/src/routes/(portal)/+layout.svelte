@@ -48,8 +48,7 @@
 		{
 			label: 'Overview',
 			items: [
-				{ href: '/dashboard', label: 'Dashboard', icon: 'grid' },
-				{ href: '/chat', label: 'Agent Chat', icon: 'message' }
+				{ href: '/dashboard', label: 'Dashboard', icon: 'grid' }
 			]
 		},
 		{
@@ -542,46 +541,7 @@
 								Brand Brief
 							</a>
 
-							<a
-								href="/settings/overseer"
-								class="dropdown-item"
-								role="menuitem"
-								onclick={closeUserDropdown}
-							>
-								<svg
-									width="14"
-									height="14"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-								>
-									<rect x="3" y="11" width="18" height="10" rx="2" ry="2" />
-									<rect x="3" y="3" width="18" height="8" rx="2" ry="2" />
-									<line x1="7" y1="7" x2="7.01" y2="7" />
-									<line x1="7" y1="15" x2="7.01" y2="15" />
-									<line x1="13" y1="7" x2="17" y2="7" />
-									<line x1="13" y1="15" x2="17" y2="15" />
-								</svg>
-								Hermes Overseer
-							</a>
-							<a href="/chat" class="dropdown-item" role="menuitem" onclick={closeUserDropdown}>
-								<svg
-									width="14"
-									height="14"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-								>
-									<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-								</svg>
-								Agent Chat Room
-							</a>
+
 
 							<a href="/settings" class="dropdown-item" role="menuitem" onclick={closeUserDropdown}>
 								<svg
