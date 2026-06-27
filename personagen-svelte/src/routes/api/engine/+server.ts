@@ -5,6 +5,7 @@ import { env } from '$env/dynamic/private';
 import { createDbService } from '$lib/server/db';
 import { AccountFactoryClient } from '$lib/server/account-factory';
 import { getUserApiKey } from '$lib/server/user-api-keys';
+import { publishPostById } from '$lib/server/scheduler';
 
 // Helper: safe JSON parsing for Gemini response
 function safeParseJson(text: string) {
@@ -676,6 +677,73 @@ Return a JSON object in this exact format:
 
 			if (action === 'repurpose') {
 				return json({ success: true, data: { message: 'Repurposing scheduled' } });
+			}
+
+			if (action === 'publish_generated') {
+				// Wire Content Forge output into the existing publish pipeline
+				const content = body.content;
+				const agentId = body.agent_id || body.agentId;
+				const mediaUrl = body.media_url || body.mediaUrl || null;
+
+				if (!content || !agentId) {
+					return json(
+						{ success: false, error: 'Missing content or agent_id' },
+						{ status: 400 }
+					);
+				}
+
+				// Fetch agent's active connections to determine target platforms
+				const { data: connections } = await locals.supabase
+					.from('connections')
+					.select('platform')
+					.eq('agent_id', agentId)
+					.eq('status', 'active');
+
+				const targetPlatforms = (connections || []).map((c: any) => c.platform);
+				if (targetPlatforms.length === 0) {
+					return json(
+						{ success: false, error: 'No active social connections. Connect a platform first.' },
+						{ status: 400 }
+					);
+				}
+
+				// Build content object matching generate-post format
+				const contentObj = {
+					text: typeof content === 'string' ? content : (content.content || content.text || ''),
+					media_url: mediaUrl
+				};
+
+				const now = new Date();
+				const { data: post, error: postErr } = await db.posts.create({
+					user_id: session.user.id,
+					agent_id: agentId,
+					content: JSON.stringify(contentObj),
+					platforms: targetPlatforms,
+					status: 'scheduled',
+					scheduled_date: now.toISOString().split('T')[0],
+					scheduled_time: now.toTimeString().split(' ')[0],
+					published_at: null
+				});
+
+				if (postErr || !post) {
+					return json(
+						{ success: false, error: postErr?.message || 'Failed to create post' },
+						{ status: 500 }
+					);
+				}
+
+				// Trigger the same publish pipeline that powers generate-post
+				const publishSuccess = await publishPostById(post.id);
+				const { data: updatedPost } = await db.posts.get(post.id);
+
+				return json({
+					success: true,
+					data: {
+						post: updatedPost || post,
+						published: publishSuccess,
+						platforms: targetPlatforms
+					}
+				});
 			}
 		}
 
