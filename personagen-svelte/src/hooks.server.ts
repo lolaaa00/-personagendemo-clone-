@@ -4,8 +4,7 @@ import { env } from '$env/dynamic/public';
 import { env as privateEnv } from '$env/dynamic/private';
 import { startScheduler } from '$lib/server/scheduler';
 
-// Start the background social posting scheduler on server boot
-startScheduler();
+let schedulerStarted = false;
 
 const PROTECTED_PREFIXES = [
 	'/dashboard',
@@ -17,6 +16,11 @@ const PROTECTED_PREFIXES = [
 ];
 
 export const handle: Handle = async ({ event, resolve }) => {
+	if (!schedulerStarted) {
+		schedulerStarted = true;
+		startScheduler();
+	}
+
 	event.locals.supabase = createSupabaseServerClient(event.cookies);
 
 	event.locals.safeGetSession = async () => {

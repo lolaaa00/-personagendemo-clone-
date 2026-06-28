@@ -18,7 +18,7 @@ export function getAllSocialPlatforms(): SocialPlatform[] {
 
 export function getComposioAuthConfigId(platform: string): string {
 	const key = `COMPOSIO_AUTH_CONFIG_${platform.toUpperCase()}`;
-	return env[key] || '';
+	return env[key] || process.env[key] || '';
 }
 
 export function isPlatformConfigured(platform: string): boolean {
@@ -31,7 +31,7 @@ export class ComposioClient {
 	private baseUrlV3_1 = 'https://backend.composio.dev/api/v3.1';
 
 	constructor() {
-		this.apiKey = env.COMPOSIO_API_KEY || '';
+		this.apiKey = env.COMPOSIO_API_KEY || process.env.COMPOSIO_API_KEY || '';
 	}
 
 	private getHeaders() {
@@ -272,9 +272,12 @@ export class ComposioClient {
 
 		// Handle Instagram separately since it is a two-step process
 		if (platKey === 'instagram') {
-			console.log(`[Composio Client] Starting two-step Instagram posting for agent ${personaId}`);
 			try {
-				const targetMediaUrl = extractedMediaUrl || 'https://picsum.photos/1080/1080.jpg';
+				console.log(`[Composio Client] Starting two-step Instagram posting for agent ${personaId}`);
+				let targetMediaUrl = extractedMediaUrl || 'https://picsum.photos/1080/1080.jpg';
+				if (targetMediaUrl.includes('?')) {
+					targetMediaUrl = targetMediaUrl.split('?')[0];
+				}
 				console.log(
 					`[Composio Client] Step 1: Creating Instagram Media Container via INSTAGRAM_POST_IG_USER_MEDIA`
 				);
