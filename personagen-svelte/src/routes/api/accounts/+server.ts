@@ -19,6 +19,68 @@ function mapZernioPlatform(platform: string): string {
 	return p;
 }
 
+/**
+ * Imports the user's connected Zernio accounts into the agent's `connections`
+ * as provider='zernio' rows (idempotent upsert). This is what makes Instagram +
+ * TikTok postable through Zernio without a Composio OAuth round-trip. No-ops when
+ * no Zernio key is configured. Best-effort: never throws to its caller's flow.
+ *
+ * Note: Zernio accounts are scoped to the API key (the user), not per-agent, so
+ * every active account is attached to the given agent — correct for a single
+ * brand; multi-agent account routing is a future refinement.
+ */
+async function syncZernioAccounts(
+	db: any,
+	supabase: any,
+	userId: string,
+	agentId: string
+): Promise<{ synced: string[]; skipped: string[] }> {
+	const synced: string[] = [];
+	const skipped: string[] = [];
+
+	const apiKey = await getZernioApiKey(supabase, userId).catch(() => null);
+	if (!apiKey) return { synced, skipped };
+
+	const accounts = await new ZernioClient(apiKey).listAccounts();
+	const now = new Date().toISOString();
+
+	for (const acc of accounts) {
+		if (acc.isActive === false) continue;
+		const plat = mapZernioPlatform(acc.platform);
+		if (!CONNECTABLE_PLATFORMS.has(plat)) {
+			skipped.push(acc.platform);
+			continue;
+		}
+		const handle = acc.handle
+			? acc.handle.startsWith('@')
+				? acc.handle
+				: `@${acc.handle}`
+			: null;
+
+		const { error: upErr } = await db.connections.upsert({
+			user_id: userId,
+			agent_id: agentId,
+			platform: plat as any,
+			handle,
+			verified: true,
+			status: 'active',
+			provider: 'zernio',
+			provider_account_id: acc.id,
+			provider_metadata: { zernioPlatform: acc.platform },
+			last_error: null,
+			last_checked_at: now,
+			last_sync: now
+		});
+		if (upErr) {
+			console.error(`[Accounts API] Failed to upsert Zernio connection for ${plat}:`, upErr);
+		} else {
+			synced.push(plat);
+		}
+	}
+
+	return { synced, skipped };
+}
+
 function getSeedHash(str: string): number {
 	let hash = 0;
 	for (let i = 0; i < str.length; i++) {
