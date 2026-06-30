@@ -44,32 +44,25 @@
 		}
 	}
 
-	const navSections = [
-		{
-			label: 'Overview',
-			items: [
-				{ href: '/dashboard', label: 'Dashboard', icon: 'grid' }
-			]
-		},
-		{
-			label: 'Create',
-			items: [
-				{ href: '/generator', label: 'Generate Agent', icon: 'sparkles' },
-				{ href: '/persona-config', label: 'Persona Config', icon: 'users' },
-				{ href: '/calendar', label: 'Content Calendar', icon: 'calendar' }
-			]
-		}
-	];
+	const staticSections = {
+		network: [{ href: '/dashboard', label: 'Dashboard', icon: 'grid' }],
+		publish: [{ href: '/calendar', label: 'Calendar', icon: 'calendar' }],
+		setup: [
+			{ href: '/brand-brief', label: 'Brand Brief', icon: 'bolt' },
+			{ href: '/settings', label: 'Settings', icon: 'settings' }
+		]
+	};
+
+	let sidebarAgents = $derived((data as any).sidebarAgents ?? []);
 
 	function isActive(href: string, pathname: string): boolean {
 		const baseHref = href.split('?')[0];
-		const hasForgeParam = href.includes('forge=true');
-		const currentHasForgeParam = $page.url.searchParams.get('forge') === 'true';
-
-		if (hasForgeParam !== currentHasForgeParam) return false;
-
 		if (baseHref === '/dashboard') return pathname === '/dashboard' || pathname === '/';
 		return pathname.startsWith(baseHref);
+	}
+
+	function isAgentActive(agentId: string, pathname: string): boolean {
+		return pathname.startsWith(`/personas/${agentId}`);
 	}
 </script>
 
@@ -140,264 +133,121 @@
 
 		<!-- Navigation -->
 		<nav class="sidebar-nav">
-			{#each navSections as section}
-				{#if !sidebarState.collapsed}
-					<span class="sidebar-section-label">{section.label}</span>
-				{/if}
-				{#each section.items as item}
-					<a
-						href={item.href}
-						class="sidebar-nav-item"
-						class:active={isActive(item.href, $page.url.pathname)}
-						onclick={closeSidebar}
-						title={sidebarState.collapsed ? item.label : undefined}
-					>
-						<span class="sidebar-nav-icon">
-							{#if item.icon === 'grid'}
-								<svg
-									width="18"
-									height="18"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									><rect x="3" y="3" width="7" height="7" rx="1" /><rect
-										x="14"
-										y="3"
-										width="7"
-										height="7"
-										rx="1"
-									/><rect x="3" y="14" width="7" height="7" rx="1" /><rect
-										x="14"
-										y="14"
-										width="7"
-										height="7"
-										rx="1"
-									/></svg
-								>
-							{:else if item.icon === 'search'}
-								<svg
-									width="18"
-									height="18"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									><circle cx="11" cy="11" r="8" /><line
-										x1="21"
-										y1="21"
-										x2="16.65"
-										y2="16.65"
-									/></svg
-								>
-							{:else if item.icon === 'bolt'}
-								<svg
-									width="18"
-									height="18"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2"
-									stroke-linecap="round"
-									stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" /></svg
-								>
-							{:else if item.icon === 'sparkles'}
-								<svg
-									width="18"
-									height="18"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									><path
-										d="M12 3v18M5.636 5.636l12.728 12.728M3 12h18M5.636 18.364L18.364 5.636"
-									/></svg
-								>
-							{:else if item.icon === 'users'}
-								<svg
-									width="18"
-									height="18"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									><circle cx="12" cy="8" r="4" /><path d="M20 21a8 8 0 1 0-16 0" /></svg
-								>
-							{:else if item.icon === 'calendar'}
-								<svg
-									width="18"
-									height="18"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									><rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line
-										x1="16"
-										y1="2"
-										x2="16"
-										y2="6"
-									/><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg
-								>
-							{:else if item.icon === 'radar'}
-								<svg
-									width="18"
-									height="18"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="6" /><circle
-										cx="12"
-										cy="12"
-										r="2"
-									/></svg
-								>
-							{:else if item.icon === 'trending'}
-								<svg
-									width="18"
-									height="18"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									><polyline points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline
-										points="17 6 23 6 23 12"
-									/></svg
-								>
-							{:else if item.icon === 'decode'}
-								<svg
-									width="18"
-									height="18"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									><polyline points="16 18 22 12 16 6" /><polyline points="8 6 2 12 8 18" /></svg
-								>
-							{:else if item.icon === 'forge'}
-								<svg
-									width="18"
-									height="18"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									><path
-										d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"
-									/></svg
-								>
-							{:else if item.icon === 'inbox'}
-								<svg
-									width="18"
-									height="18"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									><path d="M22 12h-6l-2 3H10l-2-3H2" /><path
-										d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"
-									/></svg
-								>
-							{:else if item.icon === 'link'}
-								<svg
-									width="18"
-									height="18"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path
-										d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"
-									/></svg
-								>
-							{:else if item.icon === 'folder'}
-								<svg
-									width="18"
-									height="18"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									><path
-										d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"
-									/></svg
-								>
-							{:else if item.icon === 'file'}
-								<svg
-									width="18"
-									height="18"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline
-										points="14 2 14 8 20 8"
-									/><line x1="16" y1="13" x2="8" y2="13" /><line
-										x1="16"
-										y1="17"
-										x2="8"
-										y2="17"
-									/></svg
-								>
-							{:else if item.icon === 'message'}
-								<svg
-									width="18"
-									height="18"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg
-								>
-							{:else if item.icon === 'settings'}
-								<svg
-									width="18"
-									height="18"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									><circle cx="12" cy="12" r="3" /><path
-										d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"
-									/></svg
-								>
-							{/if}
-						</span>
-						{#if !sidebarState.collapsed}
-							<span class="sidebar-nav-label">{item.label}</span>
+			<!-- NETWORK -->
+			{#if !sidebarState.collapsed}
+				<span class="sidebar-section-label">Network</span>
+			{/if}
+			{#each staticSections.network as item}
+				<a
+					href={item.href}
+					class="sidebar-nav-item"
+					class:active={isActive(item.href, $page.url.pathname)}
+					onclick={closeSidebar}
+					title={sidebarState.collapsed ? item.label : undefined}
+				>
+					<span class="sidebar-nav-icon">
+						{#if item.icon === 'grid'}
+							<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+								><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></svg>
 						{/if}
-					</a>
-				{/each}
+					</span>
+					{#if !sidebarState.collapsed}
+						<span class="sidebar-nav-label">{item.label}</span>
+					{/if}
+				</a>
+			{/each}
+
+			<!-- PERSONAS -->
+			{#if !sidebarState.collapsed}
+				<span class="sidebar-section-label">Personas</span>
+			{:else}
+				<div class="sidebar-section-divider"></div>
+			{/if}
+			{#each sidebarAgents as agent (agent.id)}
+				<a
+					href="/personas/{agent.id}"
+					class="sidebar-nav-item sidebar-persona-item"
+					class:active={isAgentActive(agent.id, $page.url.pathname)}
+					onclick={closeSidebar}
+					title={sidebarState.collapsed ? `${agent.name} (${agent.handle})` : undefined}
+				>
+					<span class="sidebar-persona-avatar" style="background: {agent.gradient ?? 'var(--gradient)'}">
+						{agent.initial ?? (agent.name?.[0] ?? '?').toUpperCase()}
+					</span>
+					{#if !sidebarState.collapsed}
+						<span class="sidebar-nav-label">
+							{agent.name}
+							<span class="sidebar-persona-status" class:status-active={agent.status === 'active'} class:status-paused={agent.status === 'paused'}></span>
+						</span>
+					{/if}
+				</a>
+			{/each}
+			<a
+				href="/generator"
+				class="sidebar-nav-item sidebar-new-persona"
+				onclick={closeSidebar}
+				title={sidebarState.collapsed ? 'New Persona' : undefined}
+			>
+				<span class="sidebar-nav-icon sidebar-new-icon">
+					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+				</span>
+				{#if !sidebarState.collapsed}
+					<span class="sidebar-nav-label">New Persona</span>
+				{/if}
+			</a>
+
+			<!-- PUBLISH -->
+			{#if !sidebarState.collapsed}
+				<span class="sidebar-section-label">Publish</span>
+			{:else}
+				<div class="sidebar-section-divider"></div>
+			{/if}
+			{#each staticSections.publish as item}
+				<a
+					href={item.href}
+					class="sidebar-nav-item"
+					class:active={isActive(item.href, $page.url.pathname)}
+					onclick={closeSidebar}
+					title={sidebarState.collapsed ? item.label : undefined}
+				>
+					<span class="sidebar-nav-icon">
+						{#if item.icon === 'calendar'}
+							<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+								><rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
+						{/if}
+					</span>
+					{#if !sidebarState.collapsed}
+						<span class="sidebar-nav-label">{item.label}</span>
+					{/if}
+				</a>
+			{/each}
+
+			<!-- SETUP -->
+			{#if !sidebarState.collapsed}
+				<span class="sidebar-section-label">Setup</span>
+			{:else}
+				<div class="sidebar-section-divider"></div>
+			{/if}
+			{#each staticSections.setup as item}
+				<a
+					href={item.href}
+					class="sidebar-nav-item"
+					class:active={isActive(item.href, $page.url.pathname)}
+					onclick={closeSidebar}
+					title={sidebarState.collapsed ? item.label : undefined}
+				>
+					<span class="sidebar-nav-icon">
+						{#if item.icon === 'bolt'}
+							<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" /></svg>
+						{:else if item.icon === 'settings'}
+							<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+								><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>
+						{/if}
+					</span>
+					{#if !sidebarState.collapsed}
+						<span class="sidebar-nav-label">{item.label}</span>
+					{/if}
+				</a>
 			{/each}
 		</nav>
 
@@ -436,14 +286,18 @@
 				<h2 class="portal-header-title">
 					{(() => {
 						const path = $page.url.pathname;
+						if (path.startsWith('/personas/')) {
+							const agent = sidebarAgents.find((a: any) => path.startsWith(`/personas/${a.id}`));
+							return agent ? agent.name : 'Persona';
+						}
 						if (path.startsWith('/brand-brief')) return 'Brand Brief';
-						if (path.startsWith('/chat')) return '💬 Agent Chat Portal';
-						if (path.startsWith('/settings/overseer')) return '🤖 Hermes Overseer Config';
+						if (path.startsWith('/chat')) return 'Agent Chat Portal';
+						if (path.startsWith('/settings/overseer')) return 'Hermes Overseer Config';
 						if (path.startsWith('/settings')) return 'Settings';
-						return (
-							navSections.flatMap((s) => s.items).find((i) => isActive(i.href, path))?.label ??
-							'Dashboard'
-						);
+						if (path.startsWith('/generator')) return 'New Persona';
+						if (path.startsWith('/calendar')) return 'Calendar';
+						if (path === '/dashboard' || path === '/') return 'Dashboard';
+						return 'Dashboard';
 					})()}
 				</h2>
 			</div>
@@ -517,63 +371,11 @@
 					{#if userDropdownOpen}
 						<div class="user-dropdown-menu glass-card" role="menu">
 							<div class="user-dropdown-info">
-								<span class="user-email">{data.user?.email ?? 'monarchstackteam@gmail.com'}</span>
+								<span class="user-email">{data.user?.email ?? ''}</span>
 							</div>
 							<hr class="dropdown-divider" />
-							<a
-								href="/brand-brief"
-								class="dropdown-item"
-								role="menuitem"
-								onclick={closeUserDropdown}
-							>
-								<svg
-									width="14"
-									height="14"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-								>
-									<path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
-								</svg>
-								Brand Brief
-							</a>
-
-
-
-							<a href="/settings" class="dropdown-item" role="menuitem" onclick={closeUserDropdown}>
-								<svg
-									width="14"
-									height="14"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-								>
-									<circle cx="12" cy="12" r="3" />
-									<path
-										d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"
-									/>
-								</svg>
-								Settings
-							</a>
-
-							<hr class="dropdown-divider" />
 							<button class="dropdown-item logout-btn" role="menuitem" onclick={handleLogout}>
-								<svg
-									width="14"
-									height="14"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-								>
+								<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
 									<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
 									<polyline points="16 17 21 12 16 7" />
 									<line x1="21" y1="12" x2="9" y2="12" />
@@ -1181,5 +983,85 @@
 		.portal-content {
 			padding: var(--space-6);
 		}
+	}
+
+	/* ── Persona sidebar items ── */
+	.sidebar-persona-item {
+		gap: 10px;
+	}
+
+	.sidebar-persona-avatar {
+		width: 24px;
+		height: 24px;
+		border-radius: 7px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		font-size: 0.62rem;
+		font-weight: 800;
+		color: #fff;
+		flex-shrink: 0;
+		letter-spacing: -0.01em;
+	}
+
+	.sidebar-collapsed .sidebar-persona-avatar {
+		width: 28px;
+		height: 28px;
+		border-radius: 8px;
+		font-size: 0.68rem;
+	}
+
+	.sidebar-persona-status {
+		display: inline-block;
+		width: 5px;
+		height: 5px;
+		border-radius: 50%;
+		margin-left: 4px;
+		background: var(--text-dim);
+		flex-shrink: 0;
+		vertical-align: middle;
+	}
+
+	.sidebar-persona-status.status-active {
+		background: var(--success);
+		box-shadow: 0 0 4px rgba(52, 211, 153, 0.6);
+	}
+
+	.sidebar-persona-status.status-paused {
+		background: var(--warning);
+	}
+
+	.sidebar-new-persona {
+		color: var(--text-dim);
+		border: 1px dashed var(--border);
+		margin-top: 4px;
+	}
+
+	.sidebar-new-persona:hover {
+		border-color: var(--accent-mid);
+		color: var(--accent);
+		background: var(--accent-soft);
+	}
+
+	.sidebar-new-icon {
+		width: 24px;
+		height: 24px;
+		border-radius: 7px;
+		background: var(--surface-2);
+		border: 1px dashed var(--border);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.sidebar-new-persona:hover .sidebar-new-icon {
+		border-color: var(--accent-mid);
+		background: var(--accent-soft);
+	}
+
+	.sidebar-section-divider {
+		height: 1px;
+		background: var(--border);
+		margin: var(--space-3) 6px;
 	}
 </style>

@@ -6,8 +6,17 @@ const ENDPOINTS = {
 	accounts: '/api/accounts',
 	contentForge: '/api/engine?path=personagen-content-forge',
 	blueprints: '/api/engine?path=personagen-blueprints',
-	brandBrief: '/api/engine?path=personagen-brand-brief'
+	brandBrief: '/api/engine?path=personagen-brand-brief',
+	autopilot: '/api/autopilot'
 } as const;
+
+export interface AutopilotView {
+	enabled: boolean;
+	mode: 'advisor' | 'semi_autonomous' | 'fully_autonomous';
+	window_start: number;
+	window_end: number;
+	timezone: string;
+}
 
 async function request<T>(
 	endpoint: string,
@@ -68,7 +77,13 @@ export const Feed = {
 // ── Content Forge (9 actions — unified generation engine) ──────────────────
 
 export const ContentForge = {
-	generate: (agentId: string, topic: string, platform: string, templateId?: string, productId?: string) =>
+	generate: (
+		agentId: string,
+		topic: string,
+		platform: string,
+		templateId?: string,
+		productId?: string
+	) =>
 		request(ENDPOINTS.contentForge, 'generate', {
 			agent_id: agentId,
 			topic,
@@ -76,7 +91,14 @@ export const ContentForge = {
 			template_id: templateId,
 			product_id: productId
 		}),
-	batchGenerate: (agentId: string, topic: string, count: number, platform: string, templateId?: string, productId?: string) =>
+	batchGenerate: (
+		agentId: string,
+		topic: string,
+		count: number,
+		platform: string,
+		templateId?: string,
+		productId?: string
+	) =>
 		request(ENDPOINTS.contentForge, 'batch_generate', {
 			agent_id: agentId,
 			topic,
@@ -85,7 +107,15 @@ export const ContentForge = {
 			template_id: templateId,
 			product_id: productId
 		}),
-	autoSchedule: (copies: unknown[], agentId: string, startDate: string, platform: string, intervalHours = 2, windowStart = 8, windowEnd = 20) =>
+	autoSchedule: (
+		copies: unknown[],
+		agentId: string,
+		startDate: string,
+		platform: string,
+		intervalHours = 2,
+		windowStart = 8,
+		windowEnd = 20
+	) =>
 		request(ENDPOINTS.contentForge, 'auto_schedule', {
 			copies,
 			agent_id: agentId,
@@ -146,7 +176,30 @@ export const Blueprints = {
 export const BrandBrief = {
 	scrapeStore: (url: string) => request<any>(ENDPOINTS.brandBrief, 'scrape_store', { url }),
 	extendField: (fieldName: string, fieldVal: string) =>
-		request<{ enriched: string }>(ENDPOINTS.brandBrief, 'extend_field', { fieldName, fieldVal })
+		request<{ enriched: string }>(ENDPOINTS.brandBrief, 'extend_field', { fieldName, fieldVal }),
+	save: (data: Record<string, unknown>) =>
+		request<any>(ENDPOINTS.brandBrief, 'save_brief', { data })
+};
+
+// ── Autopilot (per-agent auto-generation config + manual top-up) ───────────
+
+export const Autopilot = {
+	getConfig: (agentId: string) =>
+		request<AutopilotView>(ENDPOINTS.autopilot, 'get_config', { agent_id: agentId }),
+	setConfig: (
+		agentId: string,
+		cfg: {
+			enabled?: boolean;
+			mode?: 'semi_autonomous' | 'fully_autonomous';
+			window_start?: number;
+			window_end?: number;
+			timezone?: string;
+		}
+	) => request<AutopilotView>(ENDPOINTS.autopilot, 'set_config', { agent_id: agentId, ...cfg }),
+	generateNow: (agentId: string) =>
+		request<{ generated: number; agents: number }>(ENDPOINTS.autopilot, 'generate_now', {
+			agent_id: agentId
+		})
 };
 
 // ── Accounts / Connections (3 actions) ────────────────────────────────────

@@ -623,7 +623,7 @@
 
 			// Clear selected agent state and navigate back
 			selectedAgentId = null;
-			goto('/persona-config');
+			goto('/dashboard');
 		} catch (err: any) {
 			console.error('Failed to delete agent:', err);
 			showToast(err.message || 'Error deleting agent', 'error');

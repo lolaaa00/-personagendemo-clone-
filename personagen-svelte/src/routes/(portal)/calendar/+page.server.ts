@@ -10,6 +10,7 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 	let blueprints: any[] = [];
 	let agents: any[] = [];
 	let dbPosts: any[] = [];
+	let autopilotConfigs: Record<string, any> = {};
 	let hasDb = false;
 
 	if (!isPlaceholder && locals.supabase) {
@@ -66,6 +67,25 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 				const activeAgentIds = new Set(agents.map((a: any) => a.id));
 				dbPosts = postsRes.filter((p: any) => activeAgentIds.has(p.agent_id));
 			}
+
+			// Autopilot config per agent (drives the calendar's Autopilot panel)
+			const { data: cfgs } = await locals.supabase
+				.from('agent_configs')
+				.select('agent_id, autonomy_level, active_hours_start, active_hours_end, timezone')
+				.in(
+					'agent_id',
+					agents.map((a: any) => a.id)
+				);
+			for (const c of cfgs || []) {
+				const level = c.autonomy_level || 'advisor';
+				autopilotConfigs[c.agent_id] = {
+					enabled: level !== 'advisor',
+					mode: level,
+					window_start: c.active_hours_start ?? 8,
+					window_end: c.active_hours_end ?? 20,
+					timezone: c.timezone || 'Australia/Sydney'
+				};
+			}
 		}
 	}
 
@@ -94,6 +114,7 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 		agents,
 		realPosts,
 		blueprints,
+		autopilotConfigs,
 		allowDemoMode: privateEnv.ALLOW_DEMO_MODE === 'true'
 	};
 };

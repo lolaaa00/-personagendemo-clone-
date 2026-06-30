@@ -44,11 +44,15 @@ export class ComposioClient {
 	/**
 	 * Uploads a file from a URL to Composio S3 and returns the required { name, s3key, mimetype } object
 	 */
-	async uploadFileFromUrl(url: string, filename?: string): Promise<{ name: string; s3key: string; mimetype: string }> {
+	async uploadFileFromUrl(
+		url: string,
+		filename?: string
+	): Promise<{ name: string; s3key: string; mimetype: string }> {
 		console.log(`[Composio Client] Downloading file for upload to Composio: ${url}`);
 		const fetchRes = await fetch(url, {
 			headers: {
-				'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+				'User-Agent':
+					'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 			}
 		});
 		if (!fetchRes.ok) {
@@ -56,14 +60,16 @@ export class ComposioClient {
 		}
 		const buffer = Buffer.from(await fetchRes.arrayBuffer());
 		const mimetype = fetchRes.headers.get('content-type') || 'video/mp4';
-		
+
 		const name = filename || url.split('/').pop() || 'upload.mp4';
-		
+
 		// Calculate MD5 hash
 		const md5 = crypto.createHash('md5').update(buffer).digest('hex');
-		
-		console.log(`[Composio Client] Registering file upload with Composio. Name: ${name}, Size: ${buffer.length} bytes, MD5: ${md5}`);
-		
+
+		console.log(
+			`[Composio Client] Registering file upload with Composio. Name: ${name}, Size: ${buffer.length} bytes, MD5: ${md5}`
+		);
+
 		// Step 1: Request presigned URL
 		const requestUrl = `${this.baseUrlV3_1}/files/upload/request`;
 		const requestRes = await fetch(requestUrl, {
@@ -77,22 +83,24 @@ export class ComposioClient {
 				md5
 			})
 		});
-		
+
 		if (!requestRes.ok) {
 			const errorText = await requestRes.text();
-			throw new Error(`Failed to request presigned URL from Composio (Status: ${requestRes.status}): ${errorText}`);
+			throw new Error(
+				`Failed to request presigned URL from Composio (Status: ${requestRes.status}): ${errorText}`
+			);
 		}
-		
+
 		const requestData = (await requestRes.json()) as any;
-		
+
 		// Check if it's already uploaded (Composio might return that it's already present or needs upload)
 		const s3key = requestData.key || requestData.s3key;
 		const putUrl = requestData.new_presigned_url || requestData.newPresignedUrl || requestData.url;
-		
+
 		if (!s3key) {
 			throw new Error(`Composio did not return an s3key: ${JSON.stringify(requestData)}`);
 		}
-		
+
 		if (putUrl) {
 			console.log(`[Composio Client] Uploading file binary to presigned URL...`);
 			const putRes = await fetch(putUrl, {
@@ -102,16 +110,20 @@ export class ComposioClient {
 				},
 				body: buffer
 			});
-			
+
 			if (!putRes.ok) {
 				const errorText = await putRes.text();
-				throw new Error(`Failed to upload file to presigned URL (Status: ${putRes.status}): ${errorText}`);
+				throw new Error(
+					`Failed to upload file to presigned URL (Status: ${putRes.status}): ${errorText}`
+				);
 			}
 			console.log(`[Composio Client] File upload successful!`);
 		} else {
-			console.log(`[Composio Client] File already exists in Composio S3 (MD5 matched), using existing key.`);
+			console.log(
+				`[Composio Client] File already exists in Composio S3 (MD5 matched), using existing key.`
+			);
 		}
-		
+
 		return { name, s3key, mimetype };
 	}
 
@@ -204,7 +216,13 @@ export class ComposioClient {
 		platform: string,
 		content: string,
 		mediaUrl?: string
-	): Promise<{ success: boolean; externalId?: string; permalink?: string | null; data?: any; error?: string }> {
+	): Promise<{
+		success: boolean;
+		externalId?: string;
+		permalink?: string | null;
+		data?: any;
+		error?: string;
+	}> {
 		if (!this.apiKey) {
 			return { success: false, error: 'COMPOSIO_API_KEY is not configured.' };
 		}
@@ -217,7 +235,9 @@ export class ComposioClient {
 				if (platKey === 'youtube') {
 					mockPermalink = `https://www.youtube.com/watch?v=${mockExternalId}`;
 				}
-				console.log(`[Composio Client] DEMO MODE: Simulating success for platform "${platform}" with permalink: ${mockPermalink}`);
+				console.log(
+					`[Composio Client] DEMO MODE: Simulating success for platform "${platform}" with permalink: ${mockPermalink}`
+				);
 				return {
 					success: true,
 					externalId: mockExternalId,
@@ -254,7 +274,11 @@ export class ComposioClient {
 					}
 
 					// Double-nest check: if the extracted text is itself a JSON string
-					if (typeof textContent === 'string' && textContent.trim().startsWith('{') && textContent.trim().endsWith('}')) {
+					if (
+						typeof textContent === 'string' &&
+						textContent.trim().startsWith('{') &&
+						textContent.trim().endsWith('}')
+					) {
 						try {
 							const nested = JSON.parse(textContent);
 							if (nested && typeof nested === 'object' && nested.text !== undefined) {
@@ -263,6 +287,14 @@ export class ComposioClient {
 						} catch (e) {
 							// Ignore
 						}
+					}
+
+					// Append hashtags to caption
+					if (Array.isArray(parsed.hashtags) && parsed.hashtags.length > 0) {
+						const tags = parsed.hashtags
+							.map((h: string) => (h.startsWith('#') ? h : `#${h}`))
+							.join(' ');
+						textContent = textContent + '\n\n' + tags;
 					}
 				}
 			}
@@ -274,12 +306,28 @@ export class ComposioClient {
 		if (platKey === 'instagram') {
 			try {
 				console.log(`[Composio Client] Starting two-step Instagram posting for agent ${personaId}`);
-				let targetMediaUrl = extractedMediaUrl || 'https://picsum.photos/1080/1080.jpg';
+				if (!extractedMediaUrl) {
+					return {
+						success: false,
+						error: 'Instagram post requires a media URL — no image was provided.'
+					};
+				}
+				let targetMediaUrl = extractedMediaUrl;
 				if (targetMediaUrl.includes('?')) {
 					targetMediaUrl = targetMediaUrl.split('?')[0];
 				}
+				// Video (Fabric/Kling/Veo output) publishes as a Reel; images as a photo.
+				const isVideo = /\.(mp4|mov|webm|m4v)$/i.test(targetMediaUrl);
+				const mediaArgs: Record<string, any> = isVideo
+					? {
+							ig_user_id: 'me',
+							media_type: 'REELS',
+							video_url: targetMediaUrl,
+							caption: textContent
+						}
+					: { ig_user_id: 'me', image_url: targetMediaUrl, caption: textContent };
 				console.log(
-					`[Composio Client] Step 1: Creating Instagram Media Container via INSTAGRAM_POST_IG_USER_MEDIA`
+					`[Composio Client] Step 1: Creating Instagram ${isVideo ? 'REELS' : 'image'} container via INSTAGRAM_POST_IG_USER_MEDIA`
 				);
 				const createResponse = await fetch(
 					`${this.baseUrlV3_1}/tools/execute/INSTAGRAM_POST_IG_USER_MEDIA`,
@@ -288,11 +336,7 @@ export class ComposioClient {
 						headers: this.getHeaders(),
 						body: JSON.stringify({
 							user_id: personaId,
-							arguments: {
-								ig_user_id: 'me',
-								image_url: targetMediaUrl,
-								caption: textContent
-							}
+							arguments: mediaArgs
 						})
 					}
 				);
@@ -362,7 +406,9 @@ export class ComposioClient {
 
 				if (!permalink && externalId) {
 					try {
-						console.log(`[Composio Client] Querying INSTAGRAM_GET_IG_MEDIA for real permalink of externalId: ${externalId}`);
+						console.log(
+							`[Composio Client] Querying INSTAGRAM_GET_IG_MEDIA for real permalink of externalId: ${externalId}`
+						);
 						const mediaInfoResponse = await fetch(
 							`${this.baseUrlV3_1}/tools/execute/INSTAGRAM_GET_IG_MEDIA`,
 							{
@@ -379,10 +425,16 @@ export class ComposioClient {
 						if (mediaInfoResponse.ok) {
 							const mediaInfoResult = (await mediaInfoResponse.json()) as any;
 							if (mediaInfoResult.successful) {
-								const mediaData = mediaInfoResult.result?.data || mediaInfoResult.data?.data || mediaInfoResult.result || mediaInfoResult.data;
+								const mediaData =
+									mediaInfoResult.result?.data ||
+									mediaInfoResult.data?.data ||
+									mediaInfoResult.result ||
+									mediaInfoResult.data;
 								if (mediaData && mediaData.permalink) {
 									permalink = mediaData.permalink;
-									console.log(`[Composio Client] Successfully retrieved verified Instagram permalink: ${permalink}`);
+									console.log(
+										`[Composio Client] Successfully retrieved verified Instagram permalink: ${permalink}`
+									);
 								}
 							}
 						}
@@ -424,9 +476,7 @@ export class ComposioClient {
 		} else if (platKey === 'tiktok') {
 			args = {
 				title: textContent.substring(0, 150),
-				video_url:
-					extractedMediaUrl ||
-					'https://placeholdervideo.dev/1280x720'
+				video_url: extractedMediaUrl || 'https://placeholdervideo.dev/1280x720'
 			};
 		}
 
@@ -451,7 +501,10 @@ export class ComposioClient {
 			}
 
 			const result = (await response.json()) as any;
-			console.log(`[Composio Client] Raw Response for ${actionSlug}:`, JSON.stringify(result, null, 2));
+			console.log(
+				`[Composio Client] Raw Response for ${actionSlug}:`,
+				JSON.stringify(result, null, 2)
+			);
 
 			if (result && typeof result === 'object' && result.successful === false) {
 				return {
@@ -466,11 +519,17 @@ export class ComposioClient {
 				const resObj = result.result || result.data || result;
 				if (resObj && typeof resObj === 'object') {
 					const extracted =
-						resObj.id || resObj.post_id || resObj.message_id || resObj.item_id || resObj.id_str || resObj.video?.id;
+						resObj.id ||
+						resObj.post_id ||
+						resObj.message_id ||
+						resObj.item_id ||
+						resObj.id_str ||
+						resObj.video?.id;
 					if (extracted) {
 						externalId = String(extracted);
 					}
-					const possibleLink = resObj.permalink || resObj.link || resObj.url || resObj.uri || resObj.share_url;
+					const possibleLink =
+						resObj.permalink || resObj.link || resObj.url || resObj.uri || resObj.share_url;
 					if (possibleLink) {
 						permalink = String(possibleLink);
 					}

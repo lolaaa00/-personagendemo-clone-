@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { createDbService } from '$lib/server/db';
+import { teardownPost, type TeardownResult } from '$lib/server/social/publisher';
 
 export const POST: RequestHandler = async ({ request, locals }) => {
 	const { session, user } = await locals.safeGetSession();
@@ -93,9 +94,17 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				return json({ success: false, error: 'Post not found or ownership mismatch' }, { status: 404 });
 			}
 
+			// Best-effort live teardown (Zernio unpublish where supported); never blocks the DB delete
+			let teardown: TeardownResult = { unpublished: [], manualDeletion: [], errors: [] };
+			try {
+				teardown = await teardownPost(locals.supabase, existingPost);
+			} catch (e) {
+				console.error('[Posts API] Teardown failed (continuing with DB delete):', e);
+			}
+
 			const { error } = await db.posts.delete(id);
 			if (error) throw error;
-			return json({ success: true });
+			return json({ success: true, teardown });
 		}
 
 		if (action === 'get') {

@@ -82,4 +82,54 @@ export class ZernioClient {
 			data
 		};
 	}
+
+	/**
+	 * Deletes a draft or scheduled post record from Zernio.
+	 * Per Zernio docs, published posts cannot be deleted here — use unpublish() instead.
+	 */
+	async deletePost(postId: string): Promise<{ success: boolean; error?: string }> {
+		const response = await fetch(`${ZERNIO_BASE_URL}/posts/${encodeURIComponent(postId)}`, {
+			method: 'DELETE',
+			headers: this.getHeaders()
+		});
+		if (!response.ok) {
+			const text = await response.text();
+			return { success: false, error: `Zernio delete returned HTTP ${response.status}${text ? `: ${text.slice(0, 300)}` : ''}` };
+		}
+		return { success: true };
+	}
+
+	/**
+	 * Removes an already-published post from a specific platform.
+	 * Zernio does NOT support Instagram, TikTok, or Snapchat for unpublish.
+	 */
+	async unpublish(postId: string, platform: string): Promise<{ success: boolean; error?: string }> {
+		const response = await fetch(`${ZERNIO_BASE_URL}/posts/${encodeURIComponent(postId)}/unpublish`, {
+			method: 'POST',
+			headers: this.getHeaders(),
+			body: JSON.stringify({ platform })
+		});
+		if (!response.ok) {
+			const text = await response.text();
+			return { success: false, error: `Zernio unpublish returned HTTP ${response.status}${text ? `: ${text.slice(0, 300)}` : ''}` };
+		}
+		return { success: true };
+	}
 }
+
+/** Platforms Zernio's unpublish endpoint can remove a live post from. */
+export const ZERNIO_UNPUBLISH_SUPPORTED = [
+	'threads',
+	'facebook',
+	'twitter',
+	'linkedin',
+	'youtube',
+	'pinterest',
+	'reddit',
+	'bluesky',
+	'googlebusiness',
+	'telegram'
+] as const;
+
+/** Platforms with no API-based deletion path — the user must remove these manually. */
+export const MANUAL_DELETE_ONLY_PLATFORMS = ['instagram', 'tiktok', 'snapchat'] as const;

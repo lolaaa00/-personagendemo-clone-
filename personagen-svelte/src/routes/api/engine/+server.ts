@@ -5,20 +5,7 @@ import { createDbService } from '$lib/server/db';
 import { getUserApiKey } from '$lib/server/user-api-keys';
 import { publishPostById } from '$lib/server/scheduler';
 import { resolveAiClient } from '$lib/server/ai-client';
-
-// Helper: safe JSON parsing for AI responses
-function safeParseJson(text: string) {
-	try {
-		const cleaned = text
-			.replace(/```json/g, '')
-			.replace(/```/g, '')
-			.trim();
-		return JSON.parse(cleaned);
-	} catch (e) {
-		console.warn('[Engine] Failed to parse AI response as JSON:', e);
-		return null;
-	}
-}
+import { generateUgcPack, generateUgcImage, safeParseJson } from '$lib/server/content/generate';
 
 export const POST: RequestHandler = async ({ url, request, locals, fetch }) => {
 	// 1. Authenticate user
@@ -196,7 +183,9 @@ Platform: ${bp.platform || platform}
 			}
 
 			// ── Assembled context block (injected into every prompt) ─────────────
-			const fullContext = [agentContext, productContext, templateDetails].filter(Boolean).join('\n');
+			const fullContext = [agentContext, productContext, templateDetails]
+				.filter(Boolean)
+				.join('\n');
 
 			// ── ACTION: generate (single UGC post pack — replaces generate-post) ──
 			if (action === 'generate') {
@@ -211,55 +200,33 @@ Platform: ${bp.platform || platform}
 							ugc_broll_prompt: `Handheld close-up of a person using a product, natural lighting, authentic feel.`,
 							script: `[HOOK] "Stop scrolling if you care about ${topic}"\n[BODY] Quick cuts showing the product in use\n[CTA] "Follow for more!"`,
 							media_url: selectedProduct?.photoUrl || null,
-							product: selectedProduct ? { name: selectedProduct.name, price: selectedProduct.price } : null,
+							product: selectedProduct
+								? { name: selectedProduct.name, price: selectedProduct.price }
+								: null,
 							platform
 						}
 					});
 				}
 
-				const systemInstruction = `${agentContext || 'You are a UGC content creator.'}
-Generate a social media post pack containing a caption, a UGC B-roll description, and a 15s short video script.
-You MUST respond with a valid JSON object ONLY. No markdown fences or commentary.
-
-JSON schema:
-{
-  "text": "Ready-to-publish caption (hooks, body, hashtags, CTA). Do NOT include script or prompt text in the caption.",
-  "hashtags": ["#tag1", "#tag2", ...],
-  "hookScore": <number 70-99>,
-  "ugc_broll_prompt": "UGC video description: actor details, handheld camera feel, natural lighting, negative constraints, high platform energy",
-  "script": "15s Short Video Script (Hook in first 3s, voiceover/dialogue, text-on-screen, CTA)"
-}`;
-
-				const prompt = `Generate a UGC post pack for ${platform}.
-Topic: "${topic}"
-
-${productContext ? `PRODUCT FOCUS:\n${productContext}` : 'Focus on the brand niche.'}
-${templateDetails ? `STYLE TEMPLATE:\n${templateDetails}` : ''}
-${briefData ? `Audience: ${briefData.demographics || 'N/A'}\nPain points: ${briefData.painPoints || 'N/A'}` : ''}
-
-The content must feature the specific product by name. The UGC B-roll prompt should describe a person using THIS product specifically. Output ONLY the JSON.`;
-
 				try {
-					const responseText = await ai!.generate(prompt, { systemInstruction, json: true }) || '{}';
-					let parsed = safeParseJson(responseText);
-					if (parsed) {
-						// Robust parsing: check for nested JSON in text field
-						if (parsed.text && typeof parsed.text === 'string' && parsed.text.trim().startsWith('{')) {
-							try {
-								const nested = JSON.parse(parsed.text);
-								if (nested && typeof nested === 'object') parsed = { ...parsed, ...nested };
-							} catch { /* ignore */ }
-						}
-						parsed.media_url = selectedProduct?.photoUrl || null;
-						parsed.product = selectedProduct ? { name: selectedProduct.name, price: selectedProduct.price, description: selectedProduct.description } : null;
-						parsed.platform = platform;
-						return json({ success: true, data: parsed });
-					}
-				} catch (err) {
-					console.error('[Engine] AI generate post pack failed:', err);
+					// Interactive forge preview: caption + product-accurate still only
+					// (fast + cheap). Full video is produced at generate-post / autopilot time.
+					const { content } = await generateUgcPack({
+						supabase: locals.supabase,
+						userId: session.user.id,
+						agentId,
+						productId,
+						blueprintId,
+						platform,
+						topic,
+						video: false
+					});
+					return json({ success: true, data: content });
+				} catch (genErr) {
+					const msg = (genErr as Error).message;
+					const status = /image generation/i.test(msg) ? 502 : 500;
+					return json({ success: false, error: msg }, { status });
 				}
-
-				return json({ success: false, error: 'AI generation failed' }, { status: 500 });
 			}
 
 			// ── ACTION: batch_generate (100 UGC copies in one click) ────────────
@@ -268,52 +235,91 @@ The content must feature the specific product by name. The UGC B-roll prompt sho
 				const BATCH_SIZE = 10;
 
 				if (!hasAi) {
-					return json({ success: false, error: 'No AI provider configured. Add an API key in Settings.' }, { status: 500 });
+					return json(
+						{ success: false, error: 'No AI provider configured. Add an API key in Settings.' },
+						{ status: 500 }
+					);
 				}
 
 				const copies: any[] = [];
+				let imageFailures = 0;
+
+				// Resolve image providers once for the whole batch
+				const orKey = await getUserApiKey(locals.supabase, session.user.id, 'openrouter').catch(
+					() => null
+				);
+				const falKey = env.FAL_API_KEY || process.env.FAL_API_KEY || null;
+				if (!orKey && !falKey) {
+					return json(
+						{
+							success: false,
+							error:
+								'No image generation provider configured. Add an OpenRouter key or set FAL_API_KEY before batch generating.'
+						},
+						{ status: 500 }
+					);
+				}
+
+				const batchSystemInstruction = `${agentContext || 'You are a real person sharing authentic product experiences on social media.'}
+Write like a HUMAN — casual, punchy, first-person. Caption MAX 4 lines. BANNED words: "elevate", "premium quality", "transform", "game-changer". 1-3 emojis max. Hook lands in first 7 words. Hashtags in the hashtags array ONLY, never in text field.
+Return ONLY valid JSON: { "text": "caption no hashtags", "hashtags": ["#tag",...5 tags], "hookScore": 70-99, "ugc_broll_prompt": "specific UGC creator brief with location/action/camera", "script": "15s [0-3s hook][3-12s demo][12-15s CTA]" }`;
 
 				for (let i = 0; i < count; i += BATCH_SIZE) {
 					const batchPromises = Array.from(
 						{ length: Math.min(BATCH_SIZE, count - i) },
-						(_, j) => {
+						async (_, j) => {
 							const idx = i + j + 1;
 							const prompt = `${fullContext}
-Write variation ${idx} of ${count} — a UNIQUE, ready-to-publish UGC social media post for ${platform}.
-Topic: "${topic}"
+Write variation ${idx} of ${count} — a UNIQUE UGC post for ${platform}.
+${selectedProduct ? `Product: "${selectedProduct.name}". Feature it by name in an authentic first-person way.` : `Topic: "${topic}"`}
 
-CRITICAL: Make this variation DISTINCT. Vary the hook style, emoji usage, CTA, tone angle, and sentence structure from other variations.
-${selectedProduct ? `The post MUST feature the product "${selectedProduct.name}" by name and describe it being used authentically.` : ''}
-
-Return JSON:
-{
-  "text": "Ready-to-publish caption with hook, body, hashtags, CTA",
-  "hashtags": ["#tag1", "#tag2", ...],
-  "hookScore": <number 70-99>,
-  "ugc_broll_prompt": "UGC video description showing a real person using ${selectedProduct?.name || 'the product'}",
-  "script": "15s video script (3s hook, body, CTA)"
-}`;
-							return ai!.generate(prompt, { json: true }).catch((err: any) => {
-								console.error(`[Engine] Batch item ${idx} failed:`, err);
+Make this variation DISTINCT from others: different hook angle, different emotion, different CTA style, different scene.
+Output ONLY the JSON.`;
+							try {
+								const raw = await ai!.generate(prompt, {
+									json: true,
+									systemInstruction: batchSystemInstruction
+								});
+								const parsed = safeParseJson(raw);
+								if (!parsed || !parsed.text || !parsed.ugc_broll_prompt) return null;
+								// Generate a unique UGC image for this copy — no product-photo fallback
+								parsed.media_url = await generateUgcImage(parsed.ugc_broll_prompt, orKey, falKey);
+								parsed.media_generated = true;
+								parsed.product = selectedProduct
+									? {
+											name: selectedProduct.name,
+											price: selectedProduct.price,
+											description: selectedProduct.description
+										}
+									: null;
+								parsed.platform = platform;
+								return parsed;
+							} catch (err: any) {
+								console.error(`[Engine] Batch item ${idx} failed:`, err?.message || err);
 								return null;
-							});
+							}
 						}
 					);
 
 					const results = await Promise.allSettled(batchPromises);
 					for (const r of results) {
 						if (r.status === 'fulfilled' && r.value) {
-							const parsed = safeParseJson(r.value);
-							if (parsed && parsed.text) {
-								parsed.media_url = selectedProduct?.photoUrl || null;
-								parsed.product = selectedProduct
-									? { name: selectedProduct.name, price: selectedProduct.price, description: selectedProduct.description }
-									: null;
-								parsed.platform = platform;
-								copies.push(parsed);
-							}
+							copies.push(r.value);
+						} else {
+							imageFailures++;
 						}
 					}
+				}
+
+				if (copies.length === 0) {
+					return json(
+						{
+							success: false,
+							error:
+								'Batch generation produced no usable posts (text or image generation failed for all items).'
+						},
+						{ status: 502 }
+					);
 				}
 
 				return json({
@@ -322,6 +328,7 @@ Return JSON:
 						copies,
 						total: copies.length,
 						requested: count,
+						failed: imageFailures,
 						product: selectedProduct?.name || null,
 						agent: agentData?.name || null
 					}
@@ -340,8 +347,8 @@ Return JSON:
 
 				const startDate = body.start_date || new Date().toISOString().split('T')[0];
 				const intervalHours = body.interval_hours || 2;
-				const windowStart = body.window_start || 8;   // 8 AM
-				const windowEnd = body.window_end || 20;       // 8 PM
+				const windowStart = body.window_start || 8; // 8 AM
+				const windowEnd = body.window_end || 20; // 8 PM
 				const targetPlatforms = body.platforms || [platform];
 
 				// Calculate slots per day: [8, 10, 12, 14, 16, 18, 20]
@@ -417,10 +424,7 @@ Return JSON:
 				const mediaUrl = body.media_url || body.mediaUrl || null;
 
 				if (!content || !agentId) {
-					return json(
-						{ success: false, error: 'Missing content or agent_id' },
-						{ status: 400 }
-					);
+					return json({ success: false, error: 'Missing content or agent_id' }, { status: 400 });
 				}
 
 				// Fetch agent's active connections to determine target platforms
@@ -439,7 +443,7 @@ Return JSON:
 				}
 
 				const contentObj = {
-					text: typeof content === 'string' ? content : (content.content || content.text || ''),
+					text: typeof content === 'string' ? content : content.content || content.text || '',
 					media_url: mediaUrl
 				};
 
@@ -513,7 +517,8 @@ Return a JSON object with:
 								data: {
 									...parsed,
 									provider: ai!.provider,
-									instructions: 'Copy the bio and display name to your Instagram profile. Use the profile_picture_prompt with any AI image generator (Midjourney, DALL-E, Flux) to create your profile picture, then upload manually.'
+									instructions:
+										'Copy the bio and display name to your Instagram profile. Use the profile_picture_prompt with any AI image generator (Midjourney, DALL-E, Flux) to create your profile picture, then upload manually.'
 								}
 							});
 						}
@@ -531,7 +536,8 @@ Return a JSON object with:
 						profile_picture_prompt: `Professional social media profile photo of a ${agentData.niche} content creator. Clean background, soft studio lighting, square 1:1 format, approachable expression, high quality.`,
 						display_name: agentData.name,
 						highlights_suggestions: ['About', 'Products', 'Reviews', 'Tips', 'BTS'],
-						instructions: 'Copy the bio and display name to your Instagram profile. Use the profile_picture_prompt with any AI image generator to create your profile picture, then upload manually.'
+						instructions:
+							'Copy the bio and display name to your Instagram profile. Use the profile_picture_prompt with any AI image generator to create your profile picture, then upload manually.'
 					}
 				});
 			}
@@ -694,7 +700,10 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 			const allowDemoMode = env.ALLOW_DEMO_MODE === 'true';
 			if (!allowDemoMode) {
 				return json(
-					{ success: false, error: 'Failed to generate content. Configure an AI provider in Settings.' },
+					{
+						success: false,
+						error: 'Failed to generate content. Configure an AI provider in Settings.'
+					},
 					{ status: 400 }
 				);
 			}
@@ -712,6 +721,43 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 		// D. PATH: personagen-brand-brief
 		// ══════════════════════════════════════════════════════════════════════════
 		if (path === 'personagen-brand-brief') {
+			// ── ACTION: save_brief (persist the brand brief so server-side
+			//    generation/autopilot can tune content to the client's product) ──
+			if (action === 'save_brief') {
+				const briefData = body.data;
+				if (!briefData || typeof briefData !== 'object') {
+					return json({ success: false, error: 'Missing brief data' }, { status: 400 });
+				}
+
+				// Get-then-update-or-insert: brand_briefs has no unique constraint on
+				// user_id, so a blind upsert would create duplicate rows.
+				const { data: existing } = await db.brandBriefs.get(session.user.id);
+				if (existing?.id) {
+					const { data: updated, error } = await locals.supabase
+						.from('brand_briefs')
+						.update({ data: briefData, version: (existing.version || 1) + 1 })
+						.eq('id', existing.id)
+						.select()
+						.single();
+					if (error) {
+						console.error('[Engine] Failed to update brand brief:', error);
+						return json({ success: false, error: error.message }, { status: 500 });
+					}
+					return json({ success: true, data: updated });
+				}
+
+				const { data: inserted, error } = await locals.supabase
+					.from('brand_briefs')
+					.insert({ user_id: session.user.id, data: briefData, version: 1 })
+					.select()
+					.single();
+				if (error) {
+					console.error('[Engine] Failed to insert brand brief:', error);
+					return json({ success: false, error: error.message }, { status: 500 });
+				}
+				return json({ success: true, data: inserted });
+			}
+
 			if (action === 'scrape_store') {
 				const storeUrl = body.url || '';
 				const allowDemoMode = env.ALLOW_DEMO_MODE === 'true';
@@ -722,19 +768,27 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 
 				if (storeUrl) {
 					try {
-						const userFirecrawlKey = await getUserApiKey(locals.supabase, session.user.id, 'firecrawl');
+						const userFirecrawlKey = await getUserApiKey(
+							locals.supabase,
+							session.user.id,
+							'firecrawl'
+						);
 						const firecrawlKey = userFirecrawlKey || env.FIRECRAWL_API_KEY;
 						let contentToParse = '';
 
 						// 1. Try Firecrawl scraping if API key is configured
-						if (firecrawlKey && !firecrawlKey.includes('placeholder') && firecrawlKey.trim() !== '') {
+						if (
+							firecrawlKey &&
+							!firecrawlKey.includes('placeholder') &&
+							firecrawlKey.trim() !== ''
+						) {
 							console.log(`[Engine] Scrape using Firecrawl for: ${storeUrl}`);
 							try {
 								const fcRes = await fetch('https://api.firecrawl.dev/v1/scrape', {
 									method: 'POST',
 									headers: {
 										'Content-Type': 'application/json',
-										'Authorization': `Bearer ${firecrawlKey}`
+										Authorization: `Bearer ${firecrawlKey}`
 									},
 									body: JSON.stringify({
 										url: storeUrl,
@@ -745,10 +799,15 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 									const fcJson = await fcRes.json();
 									if (fcJson.success && fcJson.data?.markdown) {
 										contentToParse = fcJson.data.markdown.substring(0, 40000);
-										console.log(`[Engine] Firecrawl success, parsed content length: ${contentToParse.length}`);
+										console.log(
+											`[Engine] Firecrawl success, parsed content length: ${contentToParse.length}`
+										);
 									}
 								} else {
-									console.warn(`[Engine] Firecrawl API error (status ${fcRes.status}):`, await fcRes.text());
+									console.warn(
+										`[Engine] Firecrawl API error (status ${fcRes.status}):`,
+										await fcRes.text()
+									);
 								}
 							} catch (fcErr) {
 								console.warn('[Engine] Firecrawl API call failed:', fcErr);
@@ -760,7 +819,8 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 							console.log(`[Engine] Falling back to direct HTTP page fetch for: ${storeUrl}`);
 							const response = await fetch(storeUrl, {
 								headers: {
-									'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+									'User-Agent':
+										'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 								}
 							});
 							if (response.ok) {
@@ -825,7 +885,8 @@ ${contentToParse}`;
 					return json(
 						{
 							success: false,
-							error: 'Failed to scrape the storefront page. Please verify the URL or enter brand details and products manually.'
+							error:
+								'Failed to scrape the storefront page. Please verify the URL or enter brand details and products manually.'
 						},
 						{ status: 400 }
 					);
@@ -858,23 +919,29 @@ ${contentToParse}`;
 								{
 									id: 'hx-p1',
 									name: 'HoneyX Manly Plus',
-									description: "Nature's premium superfood for men. Raw honey with Tribulus terrestris, ginseng, and organic herbal extracts.",
+									description:
+										"Nature's premium superfood for men. Raw honey with Tribulus terrestris, ginseng, and organic herbal extracts.",
 									price: 'Rs. 2,450',
-									photoUrl: 'https://cdn.shopify.com/s/files/1/0725/5674/0906/files/honeyx_is_natural_superfood_for_men_in_Pakistan.webp?v=1729879293'
+									photoUrl:
+										'https://cdn.shopify.com/s/files/1/0725/5674/0906/files/honeyx_is_natural_superfood_for_men_in_Pakistan.webp?v=1729879293'
 								},
 								{
 									id: 'hx-p2',
 									name: 'Honey Shilajit Duo Active',
-									description: 'Raw wildflower honey, pure organic Shilajit, and natural performance saffron.',
+									description:
+										'Raw wildflower honey, pure organic Shilajit, and natural performance saffron.',
 									price: 'Rs. 2,450',
-									photoUrl: 'https://cdn.shopify.com/s/files/1/0725/5674/0906/files/honeyshilajitpriceinpakistan.webp?v=1753269155'
+									photoUrl:
+										'https://cdn.shopify.com/s/files/1/0725/5674/0906/files/honeyshilajitpriceinpakistan.webp?v=1753269155'
 								},
 								{
 									id: 'hx-p3',
 									name: 'Afrovit-SR Withania Somnifera Compound',
-									description: 'High-strength Ashwagandha with active natural adaptogens for stress resilience and focus.',
+									description:
+										'High-strength Ashwagandha with active natural adaptogens for stress resilience and focus.',
 									price: 'Rs. 3,000',
-									photoUrl: 'https://cdn.shopify.com/s/files/1/0725/5674/0906/files/naturalandorganicafrovitsrcapletsbyhoneyx.webp?v=1753091546'
+									photoUrl:
+										'https://cdn.shopify.com/s/files/1/0725/5674/0906/files/naturalandorganicafrovitsrcapletsbyhoneyx.webp?v=1753091546'
 								}
 							]
 						}
@@ -903,7 +970,8 @@ ${contentToParse}`;
 								name: 'Signature Lifestyle Item',
 								description: 'Flagship product designed for premium aesthetics and functionality.',
 								price: '$45.00',
-								photoUrl: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=400&q=80'
+								photoUrl:
+									'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=400&q=80'
 							}
 						]
 					}
@@ -938,7 +1006,10 @@ Input: "${fieldVal}"`;
 				const allowDemoMode = env.ALLOW_DEMO_MODE === 'true';
 				if (!allowDemoMode) {
 					return json(
-						{ success: false, error: 'Failed to enrich field. Configure an AI provider in Settings.' },
+						{
+							success: false,
+							error: 'Failed to enrich field. Configure an AI provider in Settings.'
+						},
 						{ status: 400 }
 					);
 				}
@@ -988,10 +1059,7 @@ Input: "${fieldVal}"`;
 		// ══════════════════════════════════════════════════════════════════════════
 		// F. Catch-All Fallback
 		// ══════════════════════════════════════════════════════════════════════════
-		return json(
-			{ success: false, error: `Unknown engine path: ${path}` },
-			{ status: 400 }
-		);
+		return json({ success: false, error: `Unknown engine path: ${path}` }, { status: 400 });
 	} catch (err) {
 		console.error(`[Local Engine] Error processing path "${path}":`, err);
 		return json({ success: false, error: (err as Error).message }, { status: 500 });

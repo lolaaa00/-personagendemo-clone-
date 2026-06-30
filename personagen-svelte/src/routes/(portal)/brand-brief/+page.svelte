@@ -5,6 +5,8 @@
 	import { browser } from '$app/environment';
 	import { BrandBrief } from '$lib/services/api';
 
+	let { data } = $props<{ data: { brief: Record<string, any> | null } }>();
+
 	const LS_KEY = 'personagen_brand_brief';
 
 	type TabKey = 'overview' | 'products' | 'visual' | 'voice' | 'audience' | 'competitors' | 'intel';
@@ -118,34 +120,43 @@
 	let lastSaved = $state('');
 	let version = $state('1.0');
 
-	// Load from localStorage
+	function hydrate(d: Record<string, any>) {
+		brandName = d.brandName || '';
+		tagline = d.tagline || '';
+		mission = d.mission || '';
+		primaryColor = d.primaryColor || '#7c6aed';
+		secondaryColor = d.secondaryColor || '#22d3ee';
+		logoUrl = d.logoUrl || '';
+		fontPrimary = d.fontPrimary || '';
+		fontSecondary = d.fontSecondary || '';
+		traits = d.traits || [];
+		commStyle = d.commStyle || 'Professional';
+		samplePost = d.samplePost || '';
+		demographics = d.demographics || '';
+		interests = d.interests || '';
+		platforms = d.platforms || '';
+		painPoints = d.painPoints || '';
+		competitors = d.competitors || [];
+		products = d.products || [];
+		ugcGuidelines = d.ugcGuidelines || '';
+		storeUrl = d.storeUrl || 'honeyforx.com';
+		lastSaved = d.lastSaved || '';
+		version = d.version || '1.0';
+	}
+
+	// Load: prefer the DB-persisted brief (server), fall back to localStorage.
 	onMount(() => {
 		if (!browser) return;
 		try {
+			if (data.brief && Object.keys(data.brief).length > 0) {
+				hydrate(data.brief);
+				// Mirror to localStorage so the calendar's forge picks it up too.
+				localStorage.setItem(LS_KEY, JSON.stringify(data.brief));
+				return;
+			}
 			const saved = localStorage.getItem(LS_KEY);
 			if (saved) {
-				const d = JSON.parse(saved);
-				brandName = d.brandName || '';
-				tagline = d.tagline || '';
-				mission = d.mission || '';
-				primaryColor = d.primaryColor || '#7c6aed';
-				secondaryColor = d.secondaryColor || '#22d3ee';
-				logoUrl = d.logoUrl || '';
-				fontPrimary = d.fontPrimary || '';
-				fontSecondary = d.fontSecondary || '';
-				traits = d.traits || [];
-				commStyle = d.commStyle || 'Professional';
-				samplePost = d.samplePost || '';
-				demographics = d.demographics || '';
-				interests = d.interests || '';
-				platforms = d.platforms || '';
-				painPoints = d.painPoints || '';
-				competitors = d.competitors || [];
-				products = d.products || [];
-				ugcGuidelines = d.ugcGuidelines || '';
-				storeUrl = d.storeUrl || 'honeyforx.com';
-				lastSaved = d.lastSaved || '';
-				version = d.version || '1.0';
+				hydrate(JSON.parse(saved));
 			}
 		} catch {
 			/* ignore */
@@ -182,33 +193,35 @@
 			colorsChanged = true;
 		}
 
-		localStorage.setItem(
-			LS_KEY,
-			JSON.stringify({
-				brandName,
-				tagline,
-				mission,
-				primaryColor,
-				secondaryColor,
-				logoUrl,
-				fontPrimary,
-				fontSecondary,
-				traits,
-				commStyle,
-				samplePost,
-				demographics,
-				interests,
-				platforms,
-				painPoints,
-				competitors,
-				products,
-				ugcGuidelines,
-				storeUrl,
-				lastSaved: now,
-				version
-			})
-		);
+		const payload = {
+			brandName,
+			tagline,
+			mission,
+			primaryColor,
+			secondaryColor,
+			logoUrl,
+			fontPrimary,
+			fontSecondary,
+			traits,
+			commStyle,
+			samplePost,
+			demographics,
+			interests,
+			platforms,
+			painPoints,
+			competitors,
+			products,
+			ugcGuidelines,
+			storeUrl,
+			lastSaved: now,
+			version
+		};
+
+		localStorage.setItem(LS_KEY, JSON.stringify(payload));
 		showToast('Brand brief saved', 'success');
+
+		// Persist to the database so server-side generation & autopilot can tune to it.
+		void persistBriefToDb(payload);
 
 		// Only trigger magical transition on actual manual save or scrape complete
 		// if colors changed, and ONLY ONCE per session.
@@ -223,6 +236,17 @@
 		} else {
 			// Otherwise update values smoothly and quietly
 			updateBrandColors(primaryColor, secondaryColor);
+		}
+	}
+
+	async function persistBriefToDb(payload: Record<string, unknown>) {
+		try {
+			const res = await BrandBrief.save(payload);
+			if (!res.success) {
+				showToast('Saved locally — cloud sync failed', 'warning');
+			}
+		} catch {
+			showToast('Saved locally — cloud sync failed', 'warning');
 		}
 	}
 

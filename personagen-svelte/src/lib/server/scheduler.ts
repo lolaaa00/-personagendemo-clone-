@@ -1,22 +1,17 @@
-import { createClient } from '@supabase/supabase-js';
 import { env } from '$env/dynamic/private';
 import { env as publicEnv } from '$env/dynamic/public';
 import { ComposioClient } from './social/composio';
 import { publishToPlatform } from './social/publisher';
+import { getServiceSupabase } from './service-supabase';
+import { runAutopilotDraftGeneration, zonedWallTimeToEpoch } from './autopilot';
+import { acquireSchedulerLock } from './scheduler-lock';
 
+const DEFAULT_TZ = 'Australia/Sydney';
 
 let intervalId: NodeJS.Timeout | null = null;
 let isRunning = false;
 let lastAnalyticsSyncTime = 0;
-
-function getServiceSupabase() {
-	const url = publicEnv.PUBLIC_SUPABASE_URL;
-	const serviceKey = env.SUPABASE_SERVICE_ROLE_KEY;
-	if (!url || !serviceKey) {
-		throw new Error('[Scheduler] Supabase credentials not configured.');
-	}
-	return createClient(url, serviceKey);
-}
+let lastAutopilotRunTime = 0;
 
 /**
  * Publishes a single post to its target platforms via the configured provider.
@@ -193,21 +188,26 @@ async function pollScheduledPosts() {
 	if (isRunning) return;
 	isRunning = true;
 
+	// Only the elected leader publishes/runs autopilot — prevents multiple running
+	// instances (dev servers + prod) from double-posting to live accounts.
+	if (!acquireSchedulerLock()) {
+		isRunning = false;
+		return;
+	}
+
 	try {
 		const supabase = getServiceSupabase();
 
-		const now = new Date();
-		const currentDateStr = now.toISOString().split('T')[0]; // YYYY-MM-DD
-		const currentTimeStr = now.toTimeString().split(' ')[0]; // HH:MM:SS
-
-		// Query scheduled posts that are due now or overdue
+		const nowMs = Date.now();
+		// Prefilter in SQL by a timezone-safe upper bound (+2 days UTC), then decide
+		// due-ness in JS using each agent's configured timezone. Drafts (status
+		// !== 'scheduled') are excluded automatically — they await approval.
+		const upperBound = new Date(nowMs + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 		const { data: posts, error } = await supabase
 			.from('posts')
 			.select('*')
 			.eq('status', 'scheduled')
-			.or(
-				`scheduled_date.lt.${currentDateStr},and(scheduled_date.eq.${currentDateStr},scheduled_time.lte.${currentTimeStr})`
-			);
+			.lte('scheduled_date', upperBound);
 
 		if (error) {
 			console.error('[Scheduler] Error checking scheduled posts:', error);
@@ -215,13 +215,30 @@ async function pollScheduledPosts() {
 			return;
 		}
 
-		if (posts && posts.length > 0) {
-			console.log(`[Scheduler] Found ${posts.length} due posts to publish.`);
-			for (const post of posts) {
+		let duePosts = posts || [];
+		if (duePosts.length > 0) {
+			// Resolve each post's timezone from its agent's config (default Sydney).
+			const agentIds = [...new Set(duePosts.map((p: any) => p.agent_id))];
+			const tzByAgent = new Map<string, string>();
+			const { data: cfgs } = await supabase
+				.from('agent_configs')
+				.select('agent_id, timezone')
+				.in('agent_id', agentIds);
+			for (const c of cfgs || []) tzByAgent.set(c.agent_id, c.timezone || DEFAULT_TZ);
+
+			duePosts = duePosts.filter((p: any) => {
+				if (!p.scheduled_date) return true; // no date → publish now
+				const tz = tzByAgent.get(p.agent_id) || DEFAULT_TZ;
+				return zonedWallTimeToEpoch(p.scheduled_date, p.scheduled_time || '00:00:00', tz) <= nowMs;
+			});
+		}
+
+		if (duePosts.length > 0) {
+			console.log(`[Scheduler] Found ${duePosts.length} due posts to publish.`);
+			for (const post of duePosts) {
 				await publishSinglePost(supabase, post);
 			}
 		}
-
 
 		// Run Post-Publication Analytics Sync! Throttled to avoid API/log spam.
 		const nowTime = Date.now();
@@ -236,6 +253,24 @@ async function pollScheduledPosts() {
 		if (nowTime - lastAnalyticsSyncTime >= syncInterval) {
 			lastAnalyticsSyncTime = nowTime;
 			await syncPostAnalytics();
+		}
+
+		// Autopilot: top up drafts/scheduled posts for enabled agents. Throttled.
+		let autopilotInterval = 60 * 60 * 1000; // Default: hourly
+		if (env.AUTOPILOT_RUN_INTERVAL_MS) {
+			const parsed = parseInt(env.AUTOPILOT_RUN_INTERVAL_MS, 10);
+			if (!isNaN(parsed) && parsed > 0) {
+				autopilotInterval = parsed;
+			}
+		}
+
+		if (nowTime - lastAutopilotRunTime >= autopilotInterval) {
+			lastAutopilotRunTime = nowTime;
+			try {
+				await runAutopilotDraftGeneration();
+			} catch (autoErr) {
+				console.error('[Scheduler] Autopilot run failed:', autoErr);
+			}
 		}
 	} catch (err) {
 		console.error('[Scheduler] Critical loop error:', err);
@@ -326,8 +361,6 @@ export async function syncPostAnalytics() {
 		console.error('[Scheduler] Critical error in syncPostAnalytics:', err);
 	}
 }
-
-
 
 /**
  * Starts the SvelteKit background scheduler loop.

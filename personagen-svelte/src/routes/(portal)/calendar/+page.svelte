@@ -2,9 +2,9 @@
 	import { untrack, onMount } from 'svelte';
 	import type { Agent } from '$lib/types';
 	import { showToast } from '$lib/stores/ui.svelte';
-	import { Posts, ContentForge } from '$lib/services/api';
+	import { Posts, ContentForge, Autopilot, type AutopilotView } from '$lib/services/api';
 	import { page } from '$app/stores';
-	import { goto } from '$app/navigation';
+	import { goto, invalidateAll } from '$app/navigation';
 
 	interface ScheduledPost {
 		id: string;
@@ -36,6 +36,7 @@
 		agents: Agent[];
 		realPosts?: ScheduledPost[];
 		blueprints?: SampleBlueprint[];
+		autopilotConfigs?: Record<string, AutopilotView>;
 		allowDemoMode?: boolean;
 	}
 
@@ -245,10 +246,11 @@
 		try {
 			const agent = data.agents.find((a: Agent) => a.id === composerAgentId);
 			const res = await ContentForge.generate(
-				selectedBlueprintId,
+				composerAgentId,
 				enrichedTopic,
-				agent?.handle || '@agent',
-				platforms
+				platforms[0],
+				selectedBlueprintId || undefined,
+				forgeProductId || undefined
 			);
 
 			if (res.success && res.data) {
@@ -514,6 +516,49 @@
 		}
 	}
 
+	let deletingPost = $state(false);
+	// Platforms that couldn't be auto-removed and need manual deletion (e.g. Instagram)
+	let manualDeleteNotice = $state<Array<{ platform: string; permalink: string | null }> | null>(null);
+
+	async function deletePost() {
+		if (!selectedPost) return;
+		const targetId = selectedPost.id;
+		deletingPost = true;
+		try {
+			const res = await Posts.delete(targetId);
+			if (res.success) {
+				const teardown = (res as any).teardown as
+					| { unpublished: string[]; manualDeletion: Array<{ platform: string; permalink: string | null }>; errors: string[] }
+					| undefined;
+
+				posts = posts.filter((p) => p.id !== targetId);
+				selectedPost = null;
+				selectedDay = null;
+
+				if (teardown?.unpublished?.length) {
+					showToast(`Removed from ${teardown.unpublished.join(', ')} and deleted locally`, 'success');
+				} else {
+					showToast('Post deleted', 'success');
+				}
+
+				// Surface platforms that can't be removed via API (Instagram, etc.)
+				if (teardown?.manualDeletion?.length) {
+					manualDeleteNotice = teardown.manualDeletion;
+				}
+			} else {
+				showToast(res.error || 'Failed to delete post', 'error');
+			}
+		} catch (err: any) {
+			showToast(err.message || 'Error deleting post', 'error');
+		} finally {
+			deletingPost = false;
+		}
+	}
+
+	function platformLabel(p: string): string {
+		return p.charAt(0).toUpperCase() + p.slice(1);
+	}
+
 	async function saveAsDraft() {
 		const selectedPlatforms = Object.entries(composerPlatforms)
 			.filter(([, v]) => v)
@@ -590,11 +635,156 @@
 					mediaUrl: parsed.media_url || parsed.mediaUrl || null,
 					ugcPrompt: parsed.ugc_broll_prompt || parsed.ugcPrompt || null,
 					script: parsed.script || null,
-					product: parsed.product || null
+					product: parsed.product || null,
+					autopilot: parsed.autopilot === true
 				};
 			}
 		} catch (e) {}
-		return { text: content, mediaUrl: null, ugcPrompt: null, script: null, product: null };
+		return { text: content, mediaUrl: null, ugcPrompt: null, script: null, product: null, autopilot: false };
+	}
+
+	// ── Autopilot (auto-generate UGC drafts every 2h in window) ──────────────
+	const HOURS = Array.from({ length: 24 }, (_, i) => i);
+	function fmtHour(h: number): string {
+		const hr = h % 12 === 0 ? 12 : h % 12;
+		return `${hr}${h < 12 ? 'AM' : 'PM'}`;
+	}
+
+	let autopilotAgentId = $derived(selectedAgentId || data.agents[0]?.id || '');
+	let currentAutopilotAgent = $derived(data.agents.find((a: any) => a.id === autopilotAgentId));
+
+	let autopilot = $state<AutopilotView | null>(null);
+	let apWindowStart = $state(8);
+	let apWindowEnd = $state(20);
+	let apTimezone = $state('Australia/Sydney');
+	let autopilotSaving = $state(false);
+	let autopilotGenerating = $state(false);
+	let approving = $state(false);
+
+	// Sync the panel whenever the selected agent changes.
+	$effect(() => {
+		const id = autopilotAgentId;
+		if (!id) {
+			autopilot = null;
+			return;
+		}
+		const cfg = data.autopilotConfigs?.[id] || {
+			enabled: false,
+			mode: 'semi_autonomous' as const,
+			window_start: 8,
+			window_end: 20,
+			timezone: 'Australia/Sydney'
+		};
+		untrack(() => {
+			autopilot = cfg;
+			apWindowStart = cfg.window_start;
+			apWindowEnd = cfg.window_end;
+			apTimezone = cfg.timezone;
+		});
+	});
+
+	async function persistAutopilot(enabled: boolean) {
+		const id = autopilotAgentId;
+		if (!id) return;
+		autopilotSaving = true;
+		try {
+			const res = await Autopilot.setConfig(id, {
+				enabled,
+				mode: autopilot?.mode === 'fully_autonomous' ? 'fully_autonomous' : 'semi_autonomous',
+				window_start: apWindowStart,
+				window_end: apWindowEnd,
+				timezone: apTimezone
+			});
+			if (res.success && res.data) {
+				autopilot = res.data;
+			} else {
+				showToast(res.error || 'Failed to update autopilot', 'error');
+			}
+		} catch (err: any) {
+			showToast(err.message || 'Error updating autopilot', 'error');
+		} finally {
+			autopilotSaving = false;
+		}
+	}
+
+	function toggleAutopilot(e: Event) {
+		const enabled = (e.target as HTMLInputElement).checked;
+		persistAutopilot(enabled).then(() => {
+			if (autopilot?.enabled) {
+				showToast('Autopilot on — generating drafts for approval', 'success');
+			} else {
+				showToast('Autopilot off', 'info');
+			}
+		});
+	}
+
+	function saveAutopilotWindow() {
+		if (!autopilot) return;
+		persistAutopilot(autopilot.enabled);
+	}
+
+	async function generateDraftsNow() {
+		const id = autopilotAgentId;
+		if (!id) {
+			showToast('Select an agent first', 'warning');
+			return;
+		}
+		autopilotGenerating = true;
+		try {
+			const res = await Autopilot.generateNow(id);
+			if (res.success) {
+				const n = (res.data as any)?.generated ?? 0;
+				if (n > 0) {
+					showToast(`Generated ${n} draft${n === 1 ? '' : 's'} for approval`, 'success');
+					await invalidateAll();
+					posts = data.realPosts || [];
+				} else {
+					showToast('No empty slots to fill in the window', 'info');
+				}
+			} else {
+				showToast(res.error || 'Failed to generate drafts', 'error');
+			}
+		} catch (err: any) {
+			showToast(err.message || 'Error generating drafts', 'error');
+		} finally {
+			autopilotGenerating = false;
+		}
+	}
+
+	async function approvePost(post: ScheduledPost) {
+		approving = true;
+		try {
+			const res = await Posts.update(post.id, { status: 'scheduled' });
+			if (res.success) {
+				posts = posts.map((p) => (p.id === post.id ? { ...p, status: 'scheduled' } : p));
+				if (selectedPost?.id === post.id) selectedPost = { ...selectedPost, status: 'scheduled' };
+				showToast('Approved — will auto-publish at its scheduled time', 'success');
+			} else {
+				showToast(res.error || 'Failed to approve', 'error');
+			}
+		} catch (err: any) {
+			showToast(err.message || 'Error approving', 'error');
+		} finally {
+			approving = false;
+		}
+	}
+
+	async function approveAllDrafts() {
+		const drafts = selectedDayPosts.filter((p) => p.status === 'draft');
+		if (drafts.length === 0) return;
+		approving = true;
+		try {
+			let ok = 0;
+			for (const d of drafts) {
+				const res = await Posts.update(d.id, { status: 'scheduled' });
+				if (res.success) ok++;
+			}
+			const ids = new Set(drafts.map((d) => d.id));
+			posts = posts.map((p) => (ids.has(p.id) ? { ...p, status: 'scheduled' } : p));
+			showToast(`Approved ${ok} draft${ok === 1 ? '' : 's'}`, 'success');
+		} finally {
+			approving = false;
+		}
 	}
 
 	async function generatePostNow() {
@@ -693,6 +883,72 @@
 			</div>
 		</div>
 	</header>
+
+	<!-- Autopilot bar -->
+	{#if currentAutopilotAgent}
+		<div class="autopilot-bar" class:active={autopilot?.enabled}>
+			<div class="ap-main">
+				<label class="ap-switch" title="Toggle autopilot">
+					<input
+						type="checkbox"
+						checked={autopilot?.enabled ?? false}
+						onchange={toggleAutopilot}
+						disabled={autopilotSaving}
+					/>
+					<span class="ap-slider"></span>
+				</label>
+				<div class="ap-text">
+					<span class="ap-title"
+						>🤖 Autopilot {autopilot?.enabled ? 'ON' : 'OFF'} · {currentAutopilotAgent.name}</span
+					>
+					<span class="ap-sub">
+						{#if autopilot?.enabled}
+							Auto-generates UGC drafts every 2h, {fmtHour(apWindowStart)}–{fmtHour(apWindowEnd)} ({apTimezone}).
+							Review &amp; approve — approved posts auto-publish at their slot.
+						{:else}
+							Turn on to auto-generate product UGC drafts every 2 hours for your approval.
+						{/if}
+					</span>
+				</div>
+			</div>
+			<div class="ap-controls">
+				<div class="ap-window">
+					<label for="ap-start">From</label>
+					<select
+						id="ap-start"
+						bind:value={apWindowStart}
+						onchange={saveAutopilotWindow}
+						disabled={autopilotSaving || !autopilot?.enabled}
+					>
+						{#each HOURS as h}<option value={h}>{fmtHour(h)}</option>{/each}
+					</select>
+					<label for="ap-end">to</label>
+					<select
+						id="ap-end"
+						bind:value={apWindowEnd}
+						onchange={saveAutopilotWindow}
+						disabled={autopilotSaving || !autopilot?.enabled}
+					>
+						{#each HOURS as h}<option value={h}>{fmtHour(h)}</option>{/each}
+					</select>
+				</div>
+				<button
+					class="btn-ghost btn-sm"
+					onclick={generateDraftsNow}
+					disabled={autopilotGenerating || !autopilot?.enabled}
+				>
+					{#if autopilotGenerating}
+						<span
+							class="spinner"
+							style="width:12px;height:12px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:spin 0.6s linear infinite;"
+						></span> Generating…
+					{:else}
+						⚡ Generate drafts now
+					{/if}
+				</button>
+			</div>
+		</div>
+	{/if}
 
 	<!-- Month nav -->
 	<div class="month-nav">
@@ -902,7 +1158,7 @@
 						{/if}
 					</div>
 					<div class="modal-footer">
-						<button class="btn-ghost btn-sm" onclick={() => (selectedDay = null)}>Close</button>
+						<span style="display: inline-flex; gap: 0.5rem;">{#if selectedDayPosts.some((p) => p.status === 'draft')}<button class="btn-primary btn-sm" onclick={approveAllDrafts} disabled={approving}>{approving ? 'Approving…' : `✓ Approve all drafts (${selectedDayPosts.filter((p) => p.status === 'draft').length})`}</button>{/if}<button class="btn-ghost btn-sm" onclick={() => (selectedDay = null)}>Close</button></span>
 					</div>
 				</div>
 			</div>
@@ -929,6 +1185,9 @@
 								</div>
 							</div>
 							<div class="detail-status">
+								{#if postDisplay.autopilot}
+									<span class="ai-draft-badge" title="Generated by Autopilot">✨ AI</span>
+								{/if}
 								{#if selectedPost.status === 'published'}
 									<span class="live-indicator-badge pulse">Live Tracker</span>
 								{:else}
@@ -999,8 +1258,64 @@
 							{/if}
 						</div>
 					</div>
+					<div class="modal-footer" style="justify-content: space-between;">
+						<button
+							class="btn-sm"
+							style="background: var(--error)15; color: var(--error); border: 1px solid var(--error)40; font-weight: 600; opacity: {deletingPost ? 0.5 : 1}; cursor: {deletingPost ? 'not-allowed' : 'pointer'};"
+							onclick={deletePost}
+							disabled={deletingPost}
+						>
+							{deletingPost ? 'Deleting…' : 'Delete Post'}
+						</button>
+						<span style="display: inline-flex; gap: 0.5rem;">{#if selectedPost.status === 'draft'}<button class="btn-primary btn-sm" onclick={() => selectedPost && approvePost(selectedPost)} disabled={approving}>{approving ? 'Approving…' : '✓ Approve & Schedule'}</button>{/if}<button class="btn-ghost btn-sm" onclick={() => (selectedPost = null)}>Close</button></span>
+					</div>
+				</div>
+			</div>
+		{/if}
+
+		<!-- Manual Deletion Notice (platforms with no API teardown, e.g. Instagram) -->
+		{#if manualDeleteNotice !== null}
+			<div class="modal-backdrop z-top" onclick={() => (manualDeleteNotice = null)} role="presentation">
+				<div class="day-modal" onclick={(e) => e.stopPropagation()} role="dialog" style="max-width: 460px;">
+					<div class="modal-header">
+						<h3>Removed locally — 1 step left</h3>
+						<button class="modal-close" onclick={() => (manualDeleteNotice = null)} aria-label="Close">
+							<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18" /><path d="M6 6l12 12" /></svg>
+						</button>
+					</div>
+					<div class="modal-body" style="padding: 1.25rem 1.5rem; display: flex; flex-direction: column; gap: 1rem;">
+						<p style="margin: 0; font-size: var(--text-sm); color: var(--text-dim); line-height: 1.6;">
+							The post was deleted from your dashboard. These platforms don't allow deletion through their API, so the live post must be removed by hand:
+						</p>
+						<div style="display: flex; flex-direction: column; gap: 0.75rem;">
+							{#each manualDeleteNotice as entry}
+								<div style="display: flex; flex-direction: column; gap: 0.4rem; padding: 0.85rem 1rem; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm);">
+									<div style="display: flex; align-items: center; gap: 0.5rem;">
+										<span class="platform-badge" style="background: {PLATFORM_COLORS[entry.platform] || 'var(--accent)'}20; color: {PLATFORM_COLORS[entry.platform] || 'var(--accent)'}; border: 1px solid {PLATFORM_COLORS[entry.platform] || 'var(--accent)'}40;">
+											{platformLabel(entry.platform)}
+										</span>
+										{#if entry.platform === 'instagram'}
+											<span style="font-size: var(--text-xs); color: var(--text-dim);">Open the post, tap ⋯ → Delete</span>
+										{/if}
+									</div>
+									{#if entry.permalink}
+										<a
+											href={entry.permalink}
+											target="_blank"
+											rel="noopener noreferrer"
+											style="display: inline-flex; align-items: center; gap: 0.4rem; font-size: var(--text-sm); font-weight: 700; text-decoration: none; color: {PLATFORM_COLORS[entry.platform] || 'var(--accent)'};"
+										>
+											Open {platformLabel(entry.platform)} post to delete ↗
+										</a>
+									{:else}
+										<span style="font-size: var(--text-xs); color: var(--text-dim);">No direct link available — open {platformLabel(entry.platform)} and remove it manually.</span>
+									{/if}
+								</div>
+							{/each}
+						</div>
+					</div>
 					<div class="modal-footer">
-						<button class="btn-ghost btn-sm" onclick={() => (selectedPost = null)}>Close</button>
+						<button class="btn-primary btn-sm" onclick={() => (manualDeleteNotice = null)}>Got it</button>
 					</div>
 				</div>
 			</div>
@@ -1296,6 +1611,133 @@
 
 	.agent-filter select {
 		min-width: 200px;
+	}
+
+	/* ── Autopilot bar ── */
+	.autopilot-bar {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+		flex-wrap: wrap;
+		padding: 0.85rem 1.1rem;
+		margin-bottom: 1.25rem;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		background: var(--surface);
+		transition: border-color 0.2s, background 0.2s;
+	}
+
+	.autopilot-bar.active {
+		border-color: var(--accent-mid);
+		background: var(--accent-soft);
+	}
+
+	.ap-main {
+		display: flex;
+		align-items: center;
+		gap: 0.85rem;
+		min-width: 0;
+	}
+
+	.ap-text {
+		display: flex;
+		flex-direction: column;
+		gap: 0.15rem;
+		min-width: 0;
+	}
+
+	.ap-title {
+		font-size: var(--text-sm);
+		font-weight: var(--weight-bold);
+		color: var(--text);
+	}
+
+	.ap-sub {
+		font-size: var(--text-xs);
+		color: var(--text-muted);
+		max-width: 64ch;
+	}
+
+	.ap-controls {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		flex-wrap: wrap;
+	}
+
+	.ap-window {
+		display: flex;
+		align-items: center;
+		gap: 0.35rem;
+		font-size: var(--text-xs);
+		color: var(--text-dim);
+	}
+
+	.ap-window select {
+		padding: 0.3rem 0.4rem;
+		font-size: var(--text-xs);
+		border-radius: var(--radius-xs);
+		border: 1px solid var(--border);
+		background: var(--surface);
+		color: var(--text);
+	}
+
+	.ap-switch {
+		position: relative;
+		display: inline-block;
+		width: 42px;
+		height: 24px;
+		flex-shrink: 0;
+		cursor: pointer;
+	}
+
+	.ap-switch input {
+		opacity: 0;
+		width: 0;
+		height: 0;
+	}
+
+	.ap-slider {
+		position: absolute;
+		inset: 0;
+		background: var(--surface-3);
+		border: 1px solid var(--border);
+		border-radius: 999px;
+		transition: background 0.2s;
+	}
+
+	.ap-slider::before {
+		content: '';
+		position: absolute;
+		height: 18px;
+		width: 18px;
+		left: 2px;
+		top: 2px;
+		background: #fff;
+		border-radius: 50%;
+		transition: transform 0.2s;
+	}
+
+	.ap-switch input:checked + .ap-slider {
+		background: var(--accent);
+		border-color: var(--accent);
+	}
+
+	.ap-switch input:checked + .ap-slider::before {
+		transform: translateX(18px);
+	}
+
+	.ai-draft-badge {
+		font-size: 0.6rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		background: var(--gradient-subtle);
+		color: #fff;
+		padding: 3px 7px;
+		border-radius: 4px;
+		margin-right: 0.4rem;
 	}
 
 	/* ── Month nav ── */

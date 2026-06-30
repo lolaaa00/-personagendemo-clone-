@@ -16,7 +16,9 @@ const PROTECTED_PREFIXES = [
 ];
 
 export const handle: Handle = async ({ event, resolve }) => {
-	if (!schedulerStarted) {
+	// Start the scheduler once per instance. Set RUN_SCHEDULER=false on web-only
+	// instances so only a dedicated worker publishes (the leader lock guards races too).
+	if (!schedulerStarted && privateEnv.RUN_SCHEDULER !== 'false') {
 		schedulerStarted = true;
 		startScheduler();
 	}

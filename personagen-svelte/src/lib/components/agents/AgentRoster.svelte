@@ -126,7 +126,7 @@
 			<!-- svelte-ignore a11y_click_events_have_key_events -->
 			<!-- svelte-ignore a11y_no_noninteractive_element_to_interactive_role -->
 			<div
-				onclick={() => goto(`/persona-config/${agent.id}`)}
+				onclick={() => goto(`/personas/${agent.id}`)}
 				class="dash-row"
 				role="link"
 				tabindex="0"
@@ -185,7 +185,7 @@
 					{#if agent.status === 'pending'}
 						<a
 							class="agent-connect-cta"
-							href="/persona-config/{agent.id}"
+							href="/personas/{agent.id}"
 							onclick={(e) => e.stopPropagation()}
 						>
 							Connect →

@@ -143,8 +143,6 @@ export type AgentInsert = Omit<AgentRow, 'id' | 'created_at' | 'updated_at'> & {
 };
 export type AgentUpdate = Partial<Omit<AgentRow, 'id' | 'user_id' | 'created_at' | 'updated_at'>>;
 
-
-
 export type AgentConfigInsert = Omit<
 	AgentConfigRow,
 	'id' | 'created_at' | 'updated_at' | 'rss_url' | 'rss_active' | 'rss_last_polled_at'
@@ -169,8 +167,6 @@ export type BrandBriefInsert = Omit<BrandBriefRow, 'id' | 'created_at' | 'update
 	id?: string;
 };
 
-
-
 export type ProfileUpdate = Partial<Omit<ProfileRow, 'id' | 'created_at' | 'updated_at'>> & {
 	id: string;
 };
@@ -186,8 +182,6 @@ export type SubscriptionUpdate = Partial<
 export type PostWithAgent = PostRow & {
 	agents: Pick<AgentRow, 'name' | 'handle' | 'gradient' | 'initial'>;
 };
-
-
 
 // ═══════════════════════════════════════
 // Filter types
@@ -262,7 +256,6 @@ export function createDbService(supabase: SupabaseClient) {
 			delete: (id: string) => supabase.from('posts').delete().eq('id', id)
 		},
 
-
 		// ── Connections ─────────────────────────
 		connections: {
 			listForAgent: (agentId: string) =>
@@ -296,10 +289,7 @@ export function createDbService(supabase: SupabaseClient) {
 		// ── Brand Briefs ────────────────────────
 		brandBriefs: {
 			get: (userId?: string) => {
-				let q = supabase
-					.from('brand_briefs')
-					.select('*')
-					.order('updated_at', { ascending: false });
+				let q = supabase.from('brand_briefs').select('*').order('updated_at', { ascending: false });
 				if (userId) {
 					q = q.eq('user_id', userId);
 				}
@@ -307,7 +297,7 @@ export function createDbService(supabase: SupabaseClient) {
 			},
 
 			upsert: (data: BrandBriefInsert) =>
-				supabase.from('brand_briefs').upsert(data).select().single()
+				supabase.from('brand_briefs').upsert(data, { onConflict: 'user_id' }).select().single()
 		},
 
 		// ── Profiles ────────────────────────────
@@ -342,9 +332,7 @@ export function createDbService(supabase: SupabaseClient) {
 					.insert({ agent_id: agentId, item_guid: itemGuid })
 					.select()
 					.single()
-		},
-
-
+		}
 	};
 }
 

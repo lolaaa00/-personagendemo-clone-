@@ -471,7 +471,8 @@
 			if (res.success) {
 				showToast('Persona created successfully!', 'success');
 				if (browser) localStorage.removeItem(LS_KEY);
-				await goto('/persona-config');
+				const newId = (res.data as any)?.id;
+				await goto(newId ? `/personas/${newId}` : '/dashboard');
 			} else {
 				throw new Error(res.error || 'Creation failed');
 			}
@@ -497,7 +498,8 @@
 			if (res.success) {
 				showToast('Persona created successfully!', 'success');
 				if (browser) localStorage.removeItem(LS_KEY);
-				await goto('/persona-config');
+				const newId = (res.data as any)?.id;
+				await goto(newId ? `/personas/${newId}` : '/dashboard');
 			} else {
 				throw new Error(res.error || 'Creation failed');
 			}
