@@ -630,9 +630,14 @@
 			const trimmed = content.trim();
 			if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
 				const parsed = JSON.parse(trimmed);
+				const mediaUrl = parsed.media_url || parsed.mediaUrl || null;
+				const isVideo =
+					parsed.media_type === 'video' || /\.(mp4|mov|webm|m4v)(\?|$)/i.test(mediaUrl || '');
 				return {
 					text: parsed.text || content,
-					mediaUrl: parsed.media_url || parsed.mediaUrl || null,
+					mediaUrl,
+					isVideo,
+					poster: parsed.poster_url || null,
 					ugcPrompt: parsed.ugc_broll_prompt || parsed.ugcPrompt || null,
 					script: parsed.script || null,
 					product: parsed.product || null,
@@ -640,7 +645,16 @@
 				};
 			}
 		} catch (e) {}
-		return { text: content, mediaUrl: null, ugcPrompt: null, script: null, product: null, autopilot: false };
+		return {
+			text: content,
+			mediaUrl: null,
+			isVideo: false,
+			poster: null,
+			ugcPrompt: null,
+			script: null,
+			product: null,
+			autopilot: false
+		};
 	}
 
 	// ── Autopilot (auto-generate UGC drafts every 2h in window) ──────────────
@@ -1204,7 +1218,22 @@
 
 						{#if postDisplay.mediaUrl}
 							<div style="margin-bottom: 1rem; max-width: 400px; border-radius: var(--radius-sm); overflow: hidden; border: 1px solid var(--border);">
-								<img src={postDisplay.mediaUrl} alt="Product focus" style="width: 100%; height: auto; display: block;" />
+								{#if postDisplay.isVideo}
+									<!-- svelte-ignore a11y_media_has_caption -->
+									<video
+										src={postDisplay.mediaUrl}
+										poster={postDisplay.poster || undefined}
+										controls
+										playsinline
+										style="width: 100%; height: auto; display: block; background: #000;"
+									></video>
+								{:else}
+									<img
+										src={postDisplay.mediaUrl}
+										alt="Product focus"
+										style="width: 100%; height: auto; display: block;"
+									/>
+								{/if}
 							</div>
 						{/if}
 

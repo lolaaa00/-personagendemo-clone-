@@ -20,7 +20,8 @@ import { resolveAiClient } from '$lib/server/ai-client';
 import { createDbService } from '$lib/server/db';
 import { DEFAULT_VOICE } from '$lib/server/voices';
 import { getServiceSupabase } from '$lib/server/service-supabase';
-import { persistToStorage } from '$lib/server/storage';
+import { persistToStorage, persistBufferToStorage } from '$lib/server/storage';
+import { burnCaptions } from '$lib/server/video';
 
 // ── Model slugs (env-overridable so quality/provider is a one-line swap) ─────
 const NANO_MODEL = env.UGC_NANO_MODEL || 'fal-ai/gemini-25-flash-image/edit';
@@ -306,6 +307,55 @@ JSON schema:
 }`;
 
 /**
+ * Resolves the agent's pinned creator face for face consistency across posts.
+ * Generates a hero portrait once, persists it, and pins it to the agent config
+ * (no-op if the column isn't migrated yet — still consistent within the post).
+ */
+async function ensureCharacterRef(
+	supabase: any,
+	svc: any,
+	userId: string,
+	agentId: string | undefined,
+	existingRef: string | null,
+	falKey: string | null,
+	briefData: any,
+	agentData: any
+): Promise<string | null> {
+	if (existingRef) return existingRef;
+	if (!falKey) return null;
+
+	const audience = briefData?.demographics || 'a general lifestyle audience';
+	const persona = agentData?.soul ? ` Personality vibe: ${String(agentData.soul).slice(0, 120)}.` : '';
+	const heroPrompt = `Photorealistic vertical portrait of one relatable UGC content creator who fits this audience: ${audience}.${persona} Friendly, casual, natural window light, looking straight at the camera, authentic iPhone selfie style, clear visible face, upper body. Single person only.`;
+
+	let heroUrl: string;
+	try {
+		heroUrl = await generateUgcImage(heroPrompt, null, falKey);
+	} catch {
+		return null;
+	}
+
+	let durable = heroUrl;
+	try {
+		durable = await persistToStorage(svc, heroUrl, userId, 'png');
+	} catch {
+		/* keep provider url */
+	}
+
+	if (agentId) {
+		try {
+			await supabase
+				.from('agent_configs')
+				.update({ ugc_character_ref: durable })
+				.eq('agent_id', agentId);
+		} catch {
+			/* ugc_character_ref column not migrated yet */
+		}
+	}
+	return durable;
+}
+
+/**
  * Generates a single UGC post pack tuned to the agent persona, brand brief and product,
  * using the agent's pinned voice/format/quality. Throws on unrecoverable failures.
  */
@@ -372,15 +422,33 @@ Angle for this post: "${topic}". Output ONLY the JSON.`;
 
 	const { orKey, falKey } = await resolveImageKeys(supabase, userId);
 
-	// ── Still (Nano Banana with real product, else flux fallback) ───────
+	// ── Pinned creator face (spokesperson) → consistent character across posts ──
+	let characterRef = cfg.characterRef;
+	if (format === 'spokesperson' && wantVideo) {
+		let svcForRef: any = null;
+		try {
+			svcForRef = getServiceSupabase();
+		} catch {
+			svcForRef = null;
+		}
+		if (svcForRef) {
+			characterRef = await ensureCharacterRef(
+				supabase,
+				svcForRef,
+				userId,
+				input.agentId,
+				cfg.characterRef,
+				falKey,
+				briefData,
+				agentData
+			);
+		}
+	}
+
+	// ── Still (Nano Banana with real product + pinned face, else flux fallback) ──
 	let still: string;
 	if (falKey && selectedProduct?.photoUrl) {
-		still = await generateProductStill(
-			falKey,
-			scenePrompt,
-			selectedProduct.photoUrl,
-			cfg.characterRef
-		);
+		still = await generateProductStill(falKey, scenePrompt, selectedProduct.photoUrl, characterRef);
 	} else {
 		still = await generateUgcImage(scenePrompt, orKey, falKey);
 	}
@@ -400,16 +468,22 @@ Angle for this post: "${topic}". Output ONLY the JSON.`;
 		mediaType = 'video';
 	}
 
-	// ── Persist to durable storage (don't rely on the provider's ephemeral CDN) ──
+	// ── Burn captions + AI badge (best-effort), then persist to durable storage ──
 	let durableStill = still;
 	let durableMedia = mediaUrl;
 	try {
 		const svc = getServiceSupabase();
 		durableStill = await persistToStorage(svc, still, userId, 'png').catch(() => still);
-		durableMedia =
-			mediaType === 'video'
-				? await persistToStorage(svc, mediaUrl, userId, 'mp4').catch(() => mediaUrl)
-				: durableStill;
+		if (mediaType === 'video') {
+			const captioned = parsed.on_screen_text
+				? await burnCaptions(mediaUrl, parsed.on_screen_text).catch(() => null)
+				: null;
+			durableMedia = captioned
+				? await persistBufferToStorage(svc, captioned, userId, 'mp4', 'video/mp4').catch(() => mediaUrl)
+				: await persistToStorage(svc, mediaUrl, userId, 'mp4').catch(() => mediaUrl);
+		} else {
+			durableMedia = durableStill;
+		}
 	} catch {
 		// No service-role key configured — keep the provider URLs.
 	}

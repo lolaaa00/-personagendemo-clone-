@@ -282,7 +282,17 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				}
 			}
 
-			const { data: conns, error } = await db.connections.listForAgent(persona_id);
+			// Best-effort: import the user's Zernio-connected accounts before reading
+				// status, so connecting in the Zernio dashboard is all they have to do.
+				if (isUuid(persona_id)) {
+					try {
+						await syncZernioAccounts(db, locals.supabase, user.id, persona_id);
+					} catch (e) {
+						console.warn('[Accounts API] Zernio account sync failed (continuing):', e);
+					}
+				}
+
+				const { data: conns, error } = await db.connections.listForAgent(persona_id);
 			if (error) throw error;
 
 			const platforms = getAllSocialPlatforms();
@@ -519,52 +529,20 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				);
 			}
 
-			let accounts;
+			let synced: string[] = [];
+			let skipped: string[] = [];
 			try {
-				accounts = await new ZernioClient(apiKey).listAccounts();
+				({ synced, skipped } = await syncZernioAccounts(
+					db,
+					locals.supabase,
+					user.id,
+					persona_id
+				));
 			} catch (e) {
 				return json(
-					{ success: false, error: `Failed to list Zernio accounts: ${(e as Error).message}` },
+					{ success: false, error: `Failed to sync Zernio accounts: ${(e as Error).message}` },
 					{ status: 502 }
 				);
-			}
-
-			const now = new Date().toISOString();
-			const synced: string[] = [];
-			const skipped: string[] = [];
-
-			for (const acc of accounts) {
-				if (acc.isActive === false) continue;
-				const plat = mapZernioPlatform(acc.platform);
-				if (!CONNECTABLE_PLATFORMS.has(plat)) {
-					skipped.push(acc.platform);
-					continue;
-				}
-				const handle = acc.handle
-					? acc.handle.startsWith('@')
-						? acc.handle
-						: `@${acc.handle}`
-					: null;
-
-				const { error: upErr } = await db.connections.upsert({
-					user_id: user.id,
-					agent_id: persona_id,
-					platform: plat as any,
-					handle,
-					verified: true,
-					status: 'active',
-					provider: 'zernio',
-					provider_account_id: acc.id,
-					provider_metadata: { zernioPlatform: acc.platform },
-					last_error: null,
-					last_checked_at: now,
-					last_sync: now
-				});
-				if (upErr) {
-					console.error(`[Accounts API] Failed to upsert Zernio connection for ${plat}:`, upErr);
-				} else {
-					synced.push(plat);
-				}
 			}
 
 			// Keep the agent's connection count + status in sync.
