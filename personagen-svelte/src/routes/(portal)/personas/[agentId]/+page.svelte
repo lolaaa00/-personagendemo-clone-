@@ -925,7 +925,11 @@
 						</div>
 					{/if}
 
-					<AgentConnectionStats agentId={agent.id} />
+					<AgentConnectionStats
+						{platformStatuses}
+						{platformMetrics}
+						platforms={PLATFORMS}
+					/>
 				{/if}
 			</div>
 		{/if}

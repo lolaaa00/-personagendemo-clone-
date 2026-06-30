@@ -7,6 +7,17 @@ import {
 	getAllSocialPlatforms,
 	isPlatformConfigured
 } from '$lib/server/social/composio';
+import { getZernioApiKey, ZernioClient } from '$lib/server/social/zernio';
+
+// Platforms our connections table accepts (matches the DB CHECK constraint).
+const CONNECTABLE_PLATFORMS = new Set(['tiktok', 'instagram', 'youtube', 'x', 'facebook', 'threads']);
+
+/** Maps a Zernio platform name onto our connections.platform vocabulary. */
+function mapZernioPlatform(platform: string): string {
+	const p = platform.toLowerCase();
+	if (p === 'twitter') return 'x';
+	return p;
+}
 
 function getSeedHash(str: string): number {
 	let hash = 0;
@@ -301,6 +312,31 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			// a provider outage or stale response should not delete local connection records.
 			for (const p of platforms) {
 				const conn = conns?.find((c) => c.platform === p);
+
+				// Zernio-managed connections are verified by Zernio, not Composio.
+				// Never let a Composio status check downgrade them to reauth_required.
+				if (conn && String(conn.provider || '').toLowerCase() === 'zernio') {
+					let zFollowers = conn.followers;
+					let zEngagement = conn.engagement_rate;
+					if (!zFollowers || !zEngagement) {
+						const fb = getPlatformFallbackMetrics(persona_id, p);
+						if (!zFollowers) zFollowers = fb.followers;
+						if (!zEngagement) zEngagement = fb.engagement;
+					}
+					statusData[p] = {
+						connected: true,
+						configured: true,
+						status: 'active',
+						handle: conn.handle || '@connected',
+						verified: true,
+						provider: 'zernio',
+						lastSync: conn.last_sync || conn.connected_at || new Date().toISOString(),
+						followers: zFollowers,
+						engagement_rate: zEngagement
+					};
+					continue;
+				}
+
 				const configured = isPlatformConfigured(p);
 				const providerUnavailable = Boolean(providerError);
 				const isVerified = isDevBypass || activeComposioPlatforms.includes(p);
@@ -398,6 +434,97 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			}
 
 			return json({ success: true, data: statusData });
+		}
+
+		if (action === 'sync_zernio') {
+			if (!persona_id) {
+				return json({ success: false, error: 'Missing persona_id' }, { status: 400 });
+			}
+
+			const { data: agent, error: agentErr } = await db.agents.get(persona_id);
+			if (agentErr || !agent) {
+				return json({ success: false, error: 'Agent not found' }, { status: 404 });
+			}
+			if (agent.user_id !== user.id) {
+				return json({ success: false, error: 'Forbidden' }, { status: 403 });
+			}
+
+			const apiKey = await getZernioApiKey(locals.supabase, user.id);
+			if (!apiKey) {
+				return json(
+					{ success: false, error: 'No Zernio API key configured. Add it in Settings → API Keys first.' },
+					{ status: 400 }
+				);
+			}
+
+			let accounts;
+			try {
+				accounts = await new ZernioClient(apiKey).listAccounts();
+			} catch (e) {
+				return json(
+					{ success: false, error: `Failed to list Zernio accounts: ${(e as Error).message}` },
+					{ status: 502 }
+				);
+			}
+
+			const now = new Date().toISOString();
+			const synced: string[] = [];
+			const skipped: string[] = [];
+
+			for (const acc of accounts) {
+				if (acc.isActive === false) continue;
+				const plat = mapZernioPlatform(acc.platform);
+				if (!CONNECTABLE_PLATFORMS.has(plat)) {
+					skipped.push(acc.platform);
+					continue;
+				}
+				const handle = acc.handle
+					? acc.handle.startsWith('@')
+						? acc.handle
+						: `@${acc.handle}`
+					: null;
+
+				const { error: upErr } = await db.connections.upsert({
+					user_id: user.id,
+					agent_id: persona_id,
+					platform: plat as any,
+					handle,
+					verified: true,
+					status: 'active',
+					provider: 'zernio',
+					provider_account_id: acc.id,
+					provider_metadata: { zernioPlatform: acc.platform },
+					last_error: null,
+					last_checked_at: now,
+					last_sync: now
+				});
+				if (upErr) {
+					console.error(`[Accounts API] Failed to upsert Zernio connection for ${plat}:`, upErr);
+				} else {
+					synced.push(plat);
+				}
+			}
+
+			// Keep the agent's connection count + status in sync.
+			try {
+				const { data: finalConns } = await db.connections.listForAgent(persona_id);
+				const activeConns = (finalConns || []).filter(
+					(c) => c.status !== 'revoked' && c.status !== 'reauth_required' && c.status !== 'error'
+				);
+				const count = activeConns.length;
+				const { followers: targetFollowers, engagement_rate: targetEngagement } =
+					computeDynamicMetrics(activeConns, persona_id);
+				await db.agents.update(persona_id, {
+					connection_count: count,
+					status: count > 0 && agent.status !== 'paused' ? 'active' : agent.status,
+					followers: targetFollowers,
+					engagement_rate: targetEngagement
+				});
+			} catch (err) {
+				console.error('[Accounts API] Failed to update agent after Zernio sync:', err);
+			}
+
+			return json({ success: true, data: { synced, skipped, count: synced.length } });
 		}
 
 		if (action === 'initiate_connection') {

@@ -373,6 +373,8 @@ Output ONLY the JSON.`;
 						ugc_broll_prompt: copy.ugc_broll_prompt || '',
 						script: copy.script || '',
 						media_url: copy.media_url || selectedProduct?.photoUrl || null,
+						poster_url: copy.poster_url || null,
+						media_type: copy.media_type || 'image',
 						product: copy.product || null,
 						hashtags: copy.hashtags || []
 					};

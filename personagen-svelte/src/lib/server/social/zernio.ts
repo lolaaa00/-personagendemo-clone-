@@ -10,6 +10,13 @@ export interface ZernioPublishInput {
 	mediaItems?: Array<{ type: 'image' | 'video'; url: string }>;
 }
 
+export interface ZernioAccount {
+	id: string;
+	platform: string;
+	handle: string | null;
+	isActive: boolean;
+}
+
 export interface ZernioPublishResult {
 	success: boolean;
 	externalId?: string;
@@ -100,6 +107,55 @@ export class ZernioClient {
 	}
 
 	/**
+	 * Lists the social accounts connected under this Zernio API key.
+	 * Used to resolve the `accountId` required for publishing. Verified against
+	 * Zernio's documented shape `{ accounts: [{ _id, platform, username,
+	 * displayName, isActive }], hasAnalyticsAccess }`, with tolerant fallbacks.
+	 */
+	async listAccounts(): Promise<ZernioAccount[]> {
+		const response = await fetch(`${ZERNIO_BASE_URL}/accounts`, {
+			method: 'GET',
+			headers: this.getHeaders()
+		});
+		const text = await response.text();
+		if (!response.ok) {
+			throw new Error(
+				`Zernio accounts returned HTTP ${response.status}${text ? `: ${text.slice(0, 200)}` : ''}`
+			);
+		}
+		let data: any = null;
+		try {
+			data = text ? JSON.parse(text) : null;
+		} catch {
+			data = null;
+		}
+
+		const list = Array.isArray(data?.accounts)
+			? data.accounts
+			: Array.isArray(data)
+				? data
+				: Array.isArray(data?.data?.accounts)
+					? data.data.accounts
+					: Array.isArray(data?.data)
+						? data.data
+						: Array.isArray(data?.items)
+							? data.items
+							: [];
+
+		return list
+			.map((a: any) => ({
+				id: String(a?._id || a?.id || a?.accountId || a?.account_id || ''),
+				platform: String(
+					a?.platform || a?.provider || a?.type || a?.network || a?.channel || ''
+				).toLowerCase(),
+				handle: a?.username || a?.handle || a?.displayName || a?.display_name || a?.name || null,
+				// Default true: only exclude accounts Zernio explicitly flags inactive.
+				isActive: a?.isActive !== false
+			}))
+			.filter((a: ZernioAccount) => a.id && a.platform);
+	}
+
+	/**
 	 * Removes an already-published post from a specific platform.
 	 * Zernio does NOT support Instagram, TikTok, or Snapchat for unpublish.
 	 */
@@ -116,6 +172,24 @@ export class ZernioClient {
 		return { success: true };
 	}
 }
+
+/** Platforms Zernio can publish to (used to prefer Zernio over Composio for routing). */
+export const ZERNIO_PUBLISH_SUPPORTED = [
+	'instagram',
+	'tiktok',
+	'threads',
+	'facebook',
+	'twitter',
+	'x',
+	'linkedin',
+	'youtube',
+	'pinterest',
+	'reddit',
+	'bluesky',
+	'googlebusiness',
+	'telegram',
+	'snapchat'
+] as const;
 
 /** Platforms Zernio's unpublish endpoint can remove a live post from. */
 export const ZERNIO_UNPUBLISH_SUPPORTED = [
