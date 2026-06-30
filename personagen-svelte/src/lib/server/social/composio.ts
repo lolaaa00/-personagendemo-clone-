@@ -229,22 +229,6 @@ export class ComposioClient {
 
 		const platKey = platform.toLowerCase();
 		if (!isPlatformConfigured(platKey)) {
-			if (env.ALLOW_DEMO_MODE === 'true') {
-				const mockExternalId = Math.random().toString(36).substring(2, 11);
-				let mockPermalink = `https://www.${platKey}.com/p/${mockExternalId}`;
-				if (platKey === 'youtube') {
-					mockPermalink = `https://www.youtube.com/watch?v=${mockExternalId}`;
-				}
-				console.log(
-					`[Composio Client] DEMO MODE: Simulating success for platform "${platform}" with permalink: ${mockPermalink}`
-				);
-				return {
-					success: true,
-					externalId: mockExternalId,
-					permalink: mockPermalink,
-					data: { message: `Simulated posting success on ${platform}` }
-				};
-			}
 			return { success: false, error: `Platform "${platform}" is not configured.` };
 		}
 
@@ -455,10 +439,12 @@ export class ComposioClient {
 		if (platKey === 'facebook') {
 			args = { message: textContent };
 		} else if (platKey === 'youtube') {
-			const videoUrl = extractedMediaUrl || 'https://placeholdervideo.dev/1280x720';
+			if (!extractedMediaUrl) {
+				return { success: false, error: 'YouTube post requires a video URL — no media was provided.' };
+			}
 			let videoFileObj;
 			try {
-				videoFileObj = await this.uploadFileFromUrl(videoUrl, 'video.mp4');
+				videoFileObj = await this.uploadFileFromUrl(extractedMediaUrl, 'video.mp4');
 			} catch (err) {
 				return {
 					success: false,
@@ -474,9 +460,12 @@ export class ComposioClient {
 				privacyStatus: 'public'
 			};
 		} else if (platKey === 'tiktok') {
+			if (!extractedMediaUrl) {
+				return { success: false, error: 'TikTok post requires a video URL — no media was provided.' };
+			}
 			args = {
 				title: textContent.substring(0, 150),
-				video_url: extractedMediaUrl || 'https://placeholdervideo.dev/1280x720'
+				video_url: extractedMediaUrl
 			};
 		}
 

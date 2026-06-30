@@ -81,44 +81,6 @@ async function syncZernioAccounts(
 	return { synced, skipped };
 }
 
-function getSeedHash(str: string): number {
-	let hash = 0;
-	for (let i = 0; i < str.length; i++) {
-		hash = (hash << 5) - hash + str.charCodeAt(i);
-		hash |= 0; // Convert to 32bit integer
-	}
-	return Math.abs(hash);
-}
-
-function getPlatformFallbackMetrics(agentId: string, platform: string) {
-	const allowDemo = env.ALLOW_DEMO_MODE === 'true';
-	if (!allowDemo) {
-		return { followers: 0, engagement: 0.0 };
-	}
-	const hash = getSeedHash(agentId + platform);
-	const plat = platform.toLowerCase();
-
-	let followers = 0;
-	let engagement = 0;
-
-	if (plat === 'tiktok') {
-		followers = 15000 + (hash % 185000); // 15k to 200k
-		engagement = parseFloat((3.5 + (hash % 45) / 10).toFixed(1)); // 3.5% to 8.0%
-	} else if (plat === 'instagram') {
-		followers = 5000 + (hash % 45000); // 5k to 50k
-		engagement = parseFloat((2.5 + (hash % 35) / 10).toFixed(1)); // 2.5% to 6.0%
-	} else if (plat === 'youtube') {
-		followers = 1000 + (hash % 24000); // 1k to 25k
-		engagement = parseFloat((1.5 + (hash % 25) / 10).toFixed(1)); // 1.5% to 4.0%
-	} else {
-		// facebook / other
-		followers = 2000 + (hash % 13000); // 2k to 15k
-		engagement = parseFloat((1.0 + (hash % 15) / 10).toFixed(1)); // 1.0% to 2.5%
-	}
-
-	return { followers, engagement };
-}
-
 function computeDynamicMetrics(conns: any[], agentId: string) {
 	let totalFollowers = 0;
 	let totalEngRate = 0;
@@ -126,16 +88,8 @@ function computeDynamicMetrics(conns: any[], agentId: string) {
 
 	if (conns && conns.length > 0) {
 		for (const conn of conns) {
-			const platformKey = (conn.platform || '').toLowerCase();
-			let followers = conn.followers;
-			let engagement = conn.engagement_rate;
-
-			if (!followers || followers === 0 || !engagement || engagement === 0) {
-				const fallbacks = getPlatformFallbackMetrics(agentId, platformKey);
-				if (!followers || followers === 0) followers = fallbacks.followers;
-				if (!engagement || engagement === 0) engagement = fallbacks.engagement;
-			}
-
+			const followers = conn.followers || 0;
+			const engagement = conn.engagement_rate || 0;
 			totalFollowers += followers;
 			totalEngRate += engagement;
 			connectedCount++;
@@ -271,15 +225,16 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				return json({ success: false, error: 'Missing persona_id' }, { status: 400 });
 			}
 
-			const allowDemoMode = env.ALLOW_DEMO_MODE === 'true';
-			if (!allowDemoMode || isUuid(persona_id)) {
-				const { data: agent, error: agentCheckErr } = await db.agents.get(persona_id);
-				if (agentCheckErr || !agent) {
-					return json({ success: false, error: 'Agent not found' }, { status: 404 });
-				}
-				if (agent.user_id !== user.id) {
-					return json({ success: false, error: 'Forbidden' }, { status: 403 });
-				}
+			if (!isUuid(persona_id)) {
+				return json({ success: false, error: 'Invalid persona_id format (UUID required).' }, { status: 400 });
+			}
+
+			const { data: agent, error: agentCheckErr } = await db.agents.get(persona_id);
+			if (agentCheckErr || !agent) {
+				return json({ success: false, error: 'Agent not found' }, { status: 404 });
+			}
+			if (agent.user_id !== user.id) {
+				return json({ success: false, error: 'Forbidden' }, { status: 403 });
 			}
 
 			// Best-effort: import the user's Zernio-connected accounts before reading
@@ -298,35 +253,28 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			const platforms = getAllSocialPlatforms();
 			const statusData: Record<string, any> = {};
 
-			const isUuidAgent = isUuid(persona_id);
-			const composioKey = env.COMPOSIO_API_KEY || '';
-			const allowDemo = env.ALLOW_DEMO_MODE === 'true';
-			const isDevBypass = false;
-
 			let activeComposioPlatforms: string[] = [];
 			let providerError = '';
 
-			if (!isDevBypass) {
-				try {
-					const composio = new ComposioClient();
-					const activeAccounts = await composio.listConnections(persona_id);
-					activeComposioPlatforms = activeAccounts
-						.filter((acc: any) => acc.status?.toUpperCase() === 'ACTIVE')
-						.map((acc: any) => (acc.toolkit?.slug || acc.appId || acc.appName || '').toLowerCase())
-						.filter(Boolean);
+			try {
+				const composio = new ComposioClient();
+				const activeAccounts = await composio.listConnections(persona_id);
+				activeComposioPlatforms = activeAccounts
+					.filter((acc: any) => acc.status?.toUpperCase() === 'ACTIVE')
+					.map((acc: any) => (acc.toolkit?.slug || acc.appId || acc.appName || '').toLowerCase())
+					.filter(Boolean);
 
-					console.log(
-						`[Accounts API] Live active Composio platforms for agent ${persona_id}:`,
-						activeComposioPlatforms
-					);
-				} catch (e) {
-					providerError = (e as Error).message;
-					console.error('[Accounts API] Failed to fetch active connections from Composio:', e);
-				}
+				console.log(
+					`[Accounts API] Live active Composio platforms for agent ${persona_id}:`,
+					activeComposioPlatforms
+				);
+			} catch (e) {
+				providerError = (e as Error).message;
+				console.error('[Accounts API] Failed to fetch active connections from Composio:', e);
 			}
 
 			// 1. Self-healing: If a platform is active in Composio but missing from our DB, auto-create it
-			if (!isDevBypass && conns) {
+			if (conns) {
 				for (const activePlat of activeComposioPlatforms) {
 					if (
 						(platforms as string[]).includes(activePlat) &&
@@ -370,7 +318,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			}
 
 			// 1.5. Live Sync: Query live details from Composio and update DB connection properties
-			if (!isDevBypass && conns) {
+			if (conns) {
 				const composio = new ComposioClient();
 				for (const conn of conns) {
 					const isVerified = activeComposioPlatforms.includes(conn.platform);
@@ -388,13 +336,6 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				// Zernio-managed connections are verified by Zernio, not Composio.
 				// Never let a Composio status check downgrade them to reauth_required.
 				if (conn && String(conn.provider || '').toLowerCase() === 'zernio') {
-					let zFollowers = conn.followers;
-					let zEngagement = conn.engagement_rate;
-					if (!zFollowers || !zEngagement) {
-						const fb = getPlatformFallbackMetrics(persona_id, p);
-						if (!zFollowers) zFollowers = fb.followers;
-						if (!zEngagement) zEngagement = fb.engagement;
-					}
 					statusData[p] = {
 						connected: true,
 						configured: true,
@@ -403,26 +344,18 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 						verified: true,
 						provider: 'zernio',
 						lastSync: conn.last_sync || conn.connected_at || new Date().toISOString(),
-						followers: zFollowers,
-						engagement_rate: zEngagement
+						followers: conn.followers || 0,
+						engagement_rate: conn.engagement_rate || 0
 					};
 					continue;
 				}
 
 				const configured = isPlatformConfigured(p);
 				const providerUnavailable = Boolean(providerError);
-				const isVerified = isDevBypass || activeComposioPlatforms.includes(p);
+				const isVerified = activeComposioPlatforms.includes(p);
 				const localActive = conn && conn.status !== 'revoked' && conn.status !== 'reauth_required';
 
 				if (conn && (isVerified || providerUnavailable || localActive)) {
-					let followers = conn.followers;
-					let engagement = conn.engagement_rate;
-					if (!followers || followers === 0 || !engagement || engagement === 0) {
-						const fallbacks = getPlatformFallbackMetrics(persona_id, p);
-						if (!followers || followers === 0) followers = fallbacks.followers;
-						if (!engagement || engagement === 0) engagement = fallbacks.engagement;
-					}
-
 					statusData[p] = {
 						connected: Boolean(isVerified || (providerUnavailable && localActive)),
 						configured,
@@ -435,28 +368,26 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 						verified: isVerified || (providerUnavailable && (conn.verified ?? true)),
 						lastSync: conn.last_sync || conn.connected_at || new Date().toISOString(),
 						lastError: providerError || conn.last_error || undefined,
-						followers,
-						engagement_rate: engagement
+						followers: conn.followers || 0,
+						engagement_rate: conn.engagement_rate || 0
 					};
 
-					if (!isDevBypass) {
-						await db.connections.upsert({
-							id: conn.id,
-							user_id: conn.user_id,
-							agent_id: persona_id,
-							platform: p as any,
-							handle: conn.handle,
-							verified: Boolean(isVerified),
-							status: providerUnavailable ? 'stale' : isVerified ? 'active' : 'reauth_required',
-							last_error: providerUnavailable
-								? providerError
-								: isVerified
-									? null
-									: 'Composio did not report this account as active.',
-							last_checked_at: new Date().toISOString(),
-							last_sync: isVerified ? new Date().toISOString() : conn.last_sync
-						});
-					}
+					await db.connections.upsert({
+						id: conn.id,
+						user_id: conn.user_id,
+						agent_id: persona_id,
+						platform: p as any,
+						handle: conn.handle,
+						verified: Boolean(isVerified),
+						status: providerUnavailable ? 'stale' : isVerified ? 'active' : 'reauth_required',
+						last_error: providerUnavailable
+							? providerError
+							: isVerified
+								? null
+								: 'Composio did not report this account as active.',
+						last_checked_at: new Date().toISOString(),
+						last_sync: isVerified ? new Date().toISOString() : conn.last_sync
+					});
 				} else {
 					statusData[p] = {
 						connected: false,
@@ -577,18 +508,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			}
 
 			if (!isUuid(persona_id)) {
-				const allowDemoMode = env.ALLOW_DEMO_MODE === 'true';
-				if (!allowDemoMode) {
-					return json({ success: false, error: 'Invalid persona_id format (UUID required).' }, { status: 400 });
-				}
-				console.log('[Accounts API] Non-UUID agent ID (dev bypass): Generating mock redirect URL');
-				const redirectUrl = `${new URL(request.url).origin}/persona-config?oauth_success=true&platform=${platform}&agentId=${persona_id}`;
-				return json({
-					success: true,
-					data: {
-						redirect_url: redirectUrl
-					}
-				});
+				return json({ success: false, error: 'Invalid persona_id format (UUID required).' }, { status: 400 });
 			}
 
 			// Fetch agent info
@@ -647,11 +567,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			}
 
 			if (!isUuid(persona_id)) {
-				const allowDemoMode = env.ALLOW_DEMO_MODE === 'true';
-				if (!allowDemoMode) {
-					return json({ success: false, error: 'Invalid persona_id format (UUID required).' }, { status: 400 });
-				}
-				return json({ success: true });
+				return json({ success: false, error: 'Invalid persona_id format (UUID required).' }, { status: 400 });
 			}
 
 			const { data: agent, error: agentErr } = await db.agents.get(persona_id);

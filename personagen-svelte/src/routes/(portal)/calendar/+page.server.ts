@@ -115,6 +115,6 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 		realPosts,
 		blueprints,
 		autopilotConfigs,
-		allowDemoMode: privateEnv.ALLOW_DEMO_MODE === 'true'
+		allowDemoMode: false
 	};
 };

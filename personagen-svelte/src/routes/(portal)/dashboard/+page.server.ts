@@ -1,7 +1,6 @@
 import type { PageServerLoad } from './$types';
 import { createDbService } from '$lib/server/db';
 import { env } from '$env/dynamic/public';
-import { env as privateEnv } from '$env/dynamic/private';
 
 export const load: PageServerLoad = async ({ locals }) => {
 	const supabaseUrl = env.PUBLIC_SUPABASE_URL ?? '';
@@ -99,8 +98,6 @@ export const load: PageServerLoad = async ({ locals }) => {
 		}
 	}
 
-	const allowDemo = privateEnv.ALLOW_DEMO_MODE === 'true';
-
 	if (!hasDbAgents) {
 		agents = [];
 		postsThisWeek = 0;
@@ -145,15 +142,6 @@ export const load: PageServerLoad = async ({ locals }) => {
 				})
 				.sort((a, b) => b.pct - a.pct);
 		}
-	} else if (!hasDbAgents && allowDemo) {
-		platformData = [
-			{ name: 'Instagram', pct: 38, color: platformColors['Instagram'] },
-			{ name: 'TikTok', pct: 27, color: platformColors['TikTok'] },
-			{ name: 'Twitter/X', pct: 16, color: platformColors['Twitter/X'] },
-			{ name: 'LinkedIn', pct: 10, color: platformColors['LinkedIn'] },
-			{ name: 'YouTube', pct: 6, color: platformColors['YouTube'] },
-			{ name: 'Threads', pct: 3, color: platformColors['Threads'] }
-		];
 	}
 
 	let sparkData: number[][] = [];
@@ -206,19 +194,6 @@ export const load: PageServerLoad = async ({ locals }) => {
 			});
 
 			return dailyRates;
-		});
-	} else if (!hasDbAgents && allowDemo) {
-		sparkData = agents.slice(0, 3).map((agent) => {
-			const base = agent.engagementRate || 5.0;
-			return [
-				Math.max(1, +(base - 0.8).toFixed(1)),
-				Math.max(1, +(base - 0.5).toFixed(1)),
-				Math.max(1, +(base - 0.3).toFixed(1)),
-				Math.max(1, +(base + 0.2).toFixed(1)),
-				Math.max(1, +(base + 0.1).toFixed(1)),
-				Math.max(1, +(base + 0.3).toFixed(1)),
-				Math.max(1, +base.toFixed(1))
-			];
 		});
 	}
 

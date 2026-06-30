@@ -8,10 +8,9 @@ import { createDbService } from '$lib/server/db';
 export const load: LayoutServerLoad = async ({ locals }) => {
 	const supabaseUrl = env.PUBLIC_SUPABASE_URL ?? '';
 	const isPlaceholder = !supabaseUrl || supabaseUrl.includes('placeholder');
-	const allowDemoMode = privateEnv.ALLOW_DEMO_MODE === 'true';
 
-	if (isPlaceholder && !allowDemoMode) {
-		return { session: null, user: null, configStatus: checkConfigStatus(), allowDemoMode, sidebarAgents: [] };
+	if (isPlaceholder) {
+		return { session: null, user: null, configStatus: checkConfigStatus(), sidebarAgents: [] };
 	}
 
 	try {
@@ -36,18 +35,15 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 			session,
 			user,
 			configStatus: checkConfigStatus(),
-			allowDemoMode,
 			sidebarAgents
 		};
 	} catch (e) {
-		// Re-throw SvelteKit redirects
 		if ((e as any)?.status === 303) throw e;
 		console.error('Portal layout auth error:', e);
 		return {
 			session: null,
 			user: null,
 			configStatus: checkConfigStatus(),
-			allowDemoMode,
 			sidebarAgents: []
 		};
 	}

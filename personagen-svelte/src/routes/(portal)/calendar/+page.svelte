@@ -37,7 +37,6 @@
 		realPosts?: ScheduledPost[];
 		blueprints?: SampleBlueprint[];
 		autopilotConfigs?: Record<string, AutopilotView>;
-		allowDemoMode?: boolean;
 	}
 
 	let { data } = $props<{ data: PageData }>();
@@ -258,31 +257,13 @@
 				composerText = data.content || '';
 				showToast('Content forged successfully!', 'success');
 			} else {
-				if (data.allowDemoMode) {
-					composerText = getMockForgedContent(enrichedTopic, selectedProd);
-					showToast('Using forged demo template', 'info');
-				} else {
-					showToast(`Failed to forge content: ${res.error || 'Unknown error'}`, 'error');
-				}
+				showToast(`Failed to forge content: ${res.error || 'Unknown error'}`, 'error');
 			}
 		} catch (e: any) {
-			if (data.allowDemoMode) {
-				composerText = getMockForgedContent(enrichedTopic, selectedProd);
-				showToast('Using forged demo template', 'info');
-			} else {
-				showToast(`Failed to forge content: ${e.message || e}`, 'error');
-			}
+			showToast(`Failed to forge content: ${e.message || e}`, 'error');
 		} finally {
 			forging = false;
 		}
-	}
-
-	function getMockForgedContent(topicText: string, product: any): string {
-		const prodName = product?.name || 'HoneyX Manly Plus';
-		const prodPrice = product?.price || 'Rs. 2,450';
-		const prodDesc = product?.description || "Nature's premium superfood for energy.";
-
-		return `🔥 ${topicText}\n\nIntroducing: ${prodName} (${prodPrice})!\n\n1️⃣ **Organic Vitality Power**: Unlocking natural daily drive.\n2️⃣ **Potent Herbal Active**: Sustainable energy with zero crash.\n\n${prodDesc}\n\nDrop a comment to grab exclusive early access 👇`;
 	}
 
 	function getPlatformColor(id: string): string {

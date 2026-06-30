@@ -460,6 +460,38 @@
 			</div>
 		</div>
 
+		<!-- Billing -->
+		<div class="settings-card">
+			<div class="card-header">
+				<div class="card-icon billing-icon">
+					<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2">
+						<rect x="1" y="4" width="22" height="16" rx="2" ry="2" />
+						<line x1="1" y1="10" x2="23" y2="10" />
+					</svg>
+				</div>
+				<h3>Billing &amp; Plan</h3>
+				<span class="coming-soon-badge">Coming Soon</span>
+			</div>
+			<div class="card-body">
+				<div class="billing-coming-soon">
+					<div class="billing-icon-wrap">
+						<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+							<path d="M12 2L2 7l10 5 10-5-10-5z" />
+							<path d="M2 17l10 5 10-5" />
+							<path d="M2 12l10 5 10-5" />
+						</svg>
+					</div>
+					<div class="billing-text">
+						<p class="billing-title">Subscription management is on the way</p>
+						<p class="billing-desc">
+							Billing, plan upgrades, and invoice history will be available here soon.
+							Your current access is fully active — no action needed.
+						</p>
+					</div>
+				</div>
+			</div>
+		</div>
+
 		<!-- Danger Zone -->
 		<div class="settings-card danger-card">
 			<div class="card-header">
@@ -948,6 +980,67 @@
 	.danger-inline-btn:disabled {
 		opacity: 0.5;
 		cursor: not-allowed;
+	}
+
+	/* Billing */
+	.billing-icon {
+		background: var(--accent-soft);
+	}
+
+	.coming-soon-badge {
+		margin-left: auto;
+		padding: 0.2rem 0.6rem;
+		border-radius: 999px;
+		border: 1px solid var(--accent-mid);
+		color: var(--accent);
+		font-size: 0.65rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+		white-space: nowrap;
+	}
+
+	.billing-coming-soon {
+		display: flex;
+		align-items: flex-start;
+		gap: 1.25rem;
+		padding: 1.25rem;
+		background: var(--bg);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-md);
+	}
+
+	.billing-icon-wrap {
+		width: 52px;
+		height: 52px;
+		border-radius: 14px;
+		background: var(--accent-soft);
+		border: 1px solid var(--accent-mid);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		color: var(--accent);
+		flex-shrink: 0;
+	}
+
+	.billing-text {
+		display: flex;
+		flex-direction: column;
+		gap: 0.35rem;
+	}
+
+	.billing-title {
+		font-size: var(--text-base);
+		font-weight: 600;
+		color: var(--text);
+		margin: 0;
+	}
+
+	.billing-desc {
+		font-size: var(--text-sm);
+		color: var(--text-muted);
+		line-height: 1.6;
+		margin: 0;
 	}
 
 	/* Danger */

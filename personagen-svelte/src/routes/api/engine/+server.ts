@@ -699,24 +699,13 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 				}
 			}
 
-			const allowDemoMode = env.ALLOW_DEMO_MODE === 'true';
-			if (!allowDemoMode) {
-				return json(
-					{
-						success: false,
-						error: 'Failed to generate content. Configure an AI provider in Settings.'
-					},
-					{ status: 400 }
-				);
-			}
-
-			return json({
-				success: true,
-				data: {
-					message: 'Content generated successfully (Offline Fallback)',
-					content: `🚀 **${promptText}**\n\nConsistency is the key multiplier in personal branding. If you want to scale effectively, build systems that support daily publishing without sacrificing depth.\n\n💡 Set up a reusable content blueprint and iterate on the results.\n\n#PersonalBrand #ContentStrategy #Growth #Systemize`
-				}
-			});
+			return json(
+				{
+					success: false,
+					error: 'Failed to generate content. Configure an AI provider in Settings.'
+				},
+				{ status: 400 }
+			);
 		}
 
 		// ══════════════════════════════════════════════════════════════════════════
@@ -762,7 +751,6 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 
 			if (action === 'scrape_store') {
 				const storeUrl = body.url || '';
-				const allowDemoMode = env.ALLOW_DEMO_MODE === 'true';
 
 				// 1. Try real scraping if URL is provided
 				let scrapeSuccess = false;
@@ -882,102 +870,14 @@ ${contentToParse}`;
 					return json({ success: true, data: scrapedData });
 				}
 
-				// 2. If real scraping failed, check Demo Mode
-				if (!allowDemoMode) {
-					return json(
-						{
-							success: false,
-							error:
-								'Failed to scrape the storefront page. Please verify the URL or enter brand details and products manually.'
-						},
-						{ status: 400 }
-					);
-				}
-
-				// 3. Fallbacks when in Demo Mode
-				const isHoneyForX =
-					storeUrl.toLowerCase().includes('honeyforx') ||
-					storeUrl.toLowerCase().includes('honey for x');
-
-				if (isHoneyForX) {
-					return json({
-						success: true,
-						data: {
-							brandName: 'HoneyX',
-							tagline: "Nature's Superfood for Men - Put a Little Honey in Your Life",
-							mission:
-								"At HoneyX, we strive to empower men to live healthier and more fulfilling lives through nature's superfoods.",
-							primaryColor: '#eab308',
-							secondaryColor: '#f97316',
-							logoUrl:
-								'https://honeyforx.com/cdn/shop/files/honeyX_logo_1920x1080_329bd0fe-fcd2-4f47-ae79-3771e4539126.webp?v=1687433087',
-							traits: ['Stamina', 'Premium/Luxury', 'Energetic', 'Organic Wellness'],
-							commStyle: 'Bold',
-							demographics: 'Men and high-performers aged 24-45, athletes, fitness enthusiasts.',
-							interests: 'Biohacking, functional foods, fitness routines, nutritional wellness.',
-							platforms: 'TikTok (UGC), Instagram Reels, YouTube Shorts',
-							painPoints: 'Energy crashes, jittery pre-workouts, chemical supplement side-effects.',
-							products: [
-								{
-									id: 'hx-p1',
-									name: 'HoneyX Manly Plus',
-									description:
-										"Nature's premium superfood for men. Raw honey with Tribulus terrestris, ginseng, and organic herbal extracts.",
-									price: 'Rs. 2,450',
-									photoUrl:
-										'https://cdn.shopify.com/s/files/1/0725/5674/0906/files/honeyx_is_natural_superfood_for_men_in_Pakistan.webp?v=1729879293'
-								},
-								{
-									id: 'hx-p2',
-									name: 'Honey Shilajit Duo Active',
-									description:
-										'Raw wildflower honey, pure organic Shilajit, and natural performance saffron.',
-									price: 'Rs. 2,450',
-									photoUrl:
-										'https://cdn.shopify.com/s/files/1/0725/5674/0906/files/honeyshilajitpriceinpakistan.webp?v=1753269155'
-								},
-								{
-									id: 'hx-p3',
-									name: 'Afrovit-SR Withania Somnifera Compound',
-									description:
-										'High-strength Ashwagandha with active natural adaptogens for stress resilience and focus.',
-									price: 'Rs. 3,000',
-									photoUrl:
-										'https://cdn.shopify.com/s/files/1/0725/5674/0906/files/naturalandorganicafrovitsrcapletsbyhoneyx.webp?v=1753091546'
-								}
-							]
-						}
-					});
-				}
-
-				// General fallback (demo mode only)
-				return json({
-					success: true,
-					data: {
-						brandName: storeUrl.split('.')[0]?.toUpperCase() || 'My Ecom Brand',
-						tagline: 'Premium Quality E-commerce Products',
-						mission: `Delivering exceptional value and high-performance lifestyle products.`,
-						primaryColor: '#7c6aed',
-						secondaryColor: '#22d3ee',
-						logoUrl: 'https://cdn-icons-png.flaticon.com/512/825/825590.png',
-						traits: ['Innovative', 'Aesthetic', 'Customer First'],
-						commStyle: 'Professional',
-						demographics: 'Modern online shoppers aged 18-35.',
-						interests: 'Online shopping, premium lifestyle goods, social media trends.',
-						platforms: 'Instagram, TikTok',
-						painPoints: 'Hard-to-source quality items, unreliable shipping, generic support.',
-						products: [
-							{
-								id: 'gen-p1',
-								name: 'Signature Lifestyle Item',
-								description: 'Flagship product designed for premium aesthetics and functionality.',
-								price: '$45.00',
-								photoUrl:
-									'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=400&q=80'
-							}
-						]
-					}
-				});
+				return json(
+					{
+						success: false,
+						error:
+							'Failed to scrape the storefront page. Please verify the URL or enter brand details and products manually.'
+					},
+					{ status: 400 }
+				);
 			}
 
 			if (action === 'extend_field') {
@@ -1005,23 +905,13 @@ Input: "${fieldVal}"`;
 					}
 				}
 
-				const allowDemoMode = env.ALLOW_DEMO_MODE === 'true';
-				if (!allowDemoMode) {
-					return json(
-						{
-							success: false,
-							error: 'Failed to enrich field. Configure an AI provider in Settings.'
-						},
-						{ status: 400 }
-					);
-				}
-
-				return json({
-					success: true,
-					data: {
-						enriched: `${fieldVal} — meticulously crafted for discerning individuals, blending exceptional premium quality with modern functional design to deliver a transformative consumer experience.`
-					}
-				});
+				return json(
+					{
+						success: false,
+						error: 'Failed to enrich field. Configure an AI provider in Settings.'
+					},
+					{ status: 400 }
+				);
 			}
 		}
 
