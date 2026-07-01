@@ -331,6 +331,14 @@ export async function syncPostAnalytics() {
 				const externalId = publicationResults[platform]?.external_id || post.external_id;
 				if (!externalId) continue;
 
+				// This sync only knows how to query Composio. A Zernio-published post's
+				// externalId means nothing to Composio's API (wrong provider entirely) —
+				// calling it anyway would just burn a request on a guaranteed failure.
+				// TODO: wire in Zernio's own analytics endpoint once verified against its
+				// real API (no confirmed spec for it yet — Zernio isn't live in this
+				// deployment either, so there's nothing to verify against right now).
+				if (publicationResults[platform]?.provider === 'zernio') continue;
+
 				try {
 					const metrics = await composio.fetchPostMetrics(
 						post.agent_id,
