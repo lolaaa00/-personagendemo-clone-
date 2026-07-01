@@ -21,13 +21,22 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 		if (locals.supabase) {
 			const db = createDbService(locals.supabase);
 			const { data: agents } = await db.agents.list();
-			sidebarAgents = (agents ?? []).filter((a: any) => !a.is_overseer).map((a: any) => ({
+			const creatorAgents = (agents ?? []).filter((a: any) => !a.is_overseer);
+
+			const agentIds = creatorAgents.map((a: any) => a.id);
+			const { data: configs } = agentIds.length
+				? await locals.supabase.from('agent_configs').select('agent_id, ugc_character_ref').in('agent_id', agentIds)
+				: { data: [] };
+			const characterRefById = new Map((configs ?? []).map((c: any) => [c.agent_id, c.ugc_character_ref]));
+
+			sidebarAgents = creatorAgents.map((a: any) => ({
 				id: a.id,
 				name: a.name,
 				handle: a.handle,
 				initial: a.initial,
 				gradient: a.gradient,
-				status: a.status
+				status: a.status,
+				ugc_character_ref: characterRefById.get(a.id) ?? null
 			}));
 		}
 

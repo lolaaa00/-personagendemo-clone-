@@ -53,6 +53,9 @@ export interface AgentConfigRow {
 	rss_url: string;
 	rss_active: boolean;
 	rss_last_polled_at: string | null;
+	ugc_voice: string;
+	ugc_character_ref: string | null;
+	ugc_reference_kit: Record<string, string> | null;
 	created_at: string;
 	updated_at: string;
 }
@@ -63,7 +66,7 @@ export interface PostRow {
 	agent_id: string;
 	content: string;
 	platforms: string[];
-	status: 'draft' | 'scheduled' | 'published' | 'failed';
+	status: 'draft' | 'scheduled' | 'published' | 'failed' | 'partial';
 	scheduled_date: string | null;
 	scheduled_time: string | null;
 	published_at: string | null;
@@ -118,8 +121,6 @@ export interface BrandBriefRow {
 export interface SubscriptionRow {
 	id: string;
 	user_id: string;
-	stripe_customer_id: string | null;
-	stripe_subscription_id: string | null;
 	plan: 'free' | 'starter' | 'pro' | 'enterprise';
 	status: 'active' | 'canceled' | 'past_due' | 'trialing';
 	current_period_end: string | null;
@@ -145,12 +146,23 @@ export type AgentUpdate = Partial<Omit<AgentRow, 'id' | 'user_id' | 'created_at'
 
 export type AgentConfigInsert = Omit<
 	AgentConfigRow,
-	'id' | 'created_at' | 'updated_at' | 'rss_url' | 'rss_active' | 'rss_last_polled_at'
+	| 'id'
+	| 'created_at'
+	| 'updated_at'
+	| 'rss_url'
+	| 'rss_active'
+	| 'rss_last_polled_at'
+	| 'ugc_voice'
+	| 'ugc_character_ref'
+	| 'ugc_reference_kit'
 > & {
 	id?: string;
 	rss_url?: string;
 	rss_active?: boolean;
 	rss_last_polled_at?: string | null;
+	ugc_voice?: string;
+	ugc_character_ref?: string | null;
+	ugc_reference_kit?: Record<string, string> | null;
 };
 export type AgentConfigUpdate = Partial<
 	Omit<AgentConfigRow, 'id' | 'user_id' | 'agent_id' | 'created_at' | 'updated_at'>

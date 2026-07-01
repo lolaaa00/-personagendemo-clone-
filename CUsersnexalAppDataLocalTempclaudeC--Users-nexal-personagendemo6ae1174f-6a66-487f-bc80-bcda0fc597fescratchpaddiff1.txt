@@ -1,0 +1,1632 @@
+warning: in the working copy of 'personagen-svelte/src/lib/components/agents/AgentRoster.svelte', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'personagen-svelte/src/lib/server/autopilot.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'personagen-svelte/src/lib/server/content/generate.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'personagen-svelte/src/lib/services/api.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'personagen-svelte/src/routes/(portal)/+layout.server.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'personagen-svelte/src/routes/(portal)/+layout.svelte', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'personagen-svelte/src/routes/(portal)/dashboard/+page.server.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'personagen-svelte/src/routes/(portal)/personas/[agentId]/+page.server.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'personagen-svelte/src/routes/(portal)/personas/[agentId]/+page.svelte', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'personagen-svelte/src/routes/api/agents/config/+server.ts', LF will be replaced by CRLF the next time Git touches it
+diff --git a/personagen-svelte/src/lib/components/agents/AgentRoster.svelte b/personagen-svelte/src/lib/components/agents/AgentRoster.svelte
+index 3575645..9113dec 100644
+--- a/personagen-svelte/src/lib/components/agents/AgentRoster.svelte
++++ b/personagen-svelte/src/lib/components/agents/AgentRoster.svelte
+@@ -132,8 +132,12 @@
+ 				tabindex="0"
+ 			>
+ 				<div class="dash-agent-cell" role="cell">
+-					<div class="dash-agent-avatar" style="background: {agent.gradient}">
+-						{agent.initial}
++					<div class="dash-agent-avatar" style={agent.ugc_character_ref ? '' : `background: ${agent.gradient}`}>
++						{#if agent.ugc_character_ref}
++							<img src={agent.ugc_character_ref} alt={agent.name} />
++						{:else}
++							{agent.initial}
++						{/if}
+ 					</div>
+ 					<div class="dash-agent-info">
+ 						<span class="dash-agent-name" style="display: flex; align-items: center; gap: 0.5rem;">
+@@ -319,6 +323,14 @@
+ 		font-weight: 700;
+ 		color: #fff;
+ 		flex-shrink: 0;
++		overflow: hidden;
++	}
++
++	.dash-agent-avatar img {
++		width: 100%;
++		height: 100%;
++		object-fit: cover;
++		display: block;
+ 	}
+ 
+ 	.dash-agent-info {
+diff --git a/personagen-svelte/src/lib/server/autopilot.ts b/personagen-svelte/src/lib/server/autopilot.ts
+index 09277f0..9e30f79 100644
+--- a/personagen-svelte/src/lib/server/autopilot.ts
++++ b/personagen-svelte/src/lib/server/autopilot.ts
+@@ -14,7 +14,7 @@
+ 
+ import { env } from '$env/dynamic/private';
+ import { getServiceSupabase } from './service-supabase';
+-import { generateUgcPack } from './content/generate';
++import { generateUgcPack, generateCinematicUgcPack } from './content/generate';
+ import { VIDEO_ONLY_PLATFORMS } from './social/platforms';
+ 
+ const DEFAULT_TZ = 'Australia/Sydney';
+@@ -160,6 +160,13 @@ async function generateDraftsForAgent(
+ 		(existing || []).map((p: any) => `${p.scheduled_date}T${(p.scheduled_time || '').slice(0, 5)}`)
+ 	);
+ 
++	// Exactly one high-production cinematic post per day — always the day's
++	// first slot (deterministic regardless of run history), everything else
++	// stays the cheap standard single-shot path. Keeps cinematic mode off the
++	// 2-hourly cadence by default per cost (~$2.30/post vs ~$0.70) while still
++	// guaranteeing one per day.
++	const firstSlotTimeStr = `${String(startH).padStart(2, '0')}:00:00`;
++
+ 	let created = 0;
+ 	for (const slot of slots) {
+ 		if (created >= opts.maxToCreate) break;
+@@ -168,14 +175,27 @@ async function generateDraftsForAgent(
+ 		// Only fill future slots — don't backfill times that already passed today.
+ 		if (zonedWallTimeToEpoch(slot.dateStr, slot.timeStr, tz) <= Date.now()) continue;
+ 
++		const isCinematicSlot = slot.timeStr === firstSlotTimeStr;
++
+ 		try {
+-			const pack = await generateUgcPack({
+-				supabase,
+-				userId,
+-				agentId,
+-				platform: platforms[0],
+-				autopilot: true
+-			});
++			const genInput = { supabase, userId, agentId, platform: platforms[0], autopilot: true };
++			let pack;
++			if (isCinematicSlot) {
++				try {
++					pack = await generateCinematicUgcPack(genInput);
++				} catch (cinematicErr) {
++					// Don't leave the day's slot empty over a cinematic-only failure
++					// (e.g. no product photo yet) — fall back to the standard path.
++					console.warn(
++						'[Autopilot] Cinematic generation failed, falling back to standard for',
++						key,
++						(cinematicErr as Error).message
++					);
++					pack = await generateUgcPack(genInput);
++				}
++			} else {
++				pack = await generateUgcPack(genInput);
++			}
+ 
+ 			const slotPlatforms =
+ 				pack.content?.media_type === 'video'
+diff --git a/personagen-svelte/src/lib/server/content/generate.ts b/personagen-svelte/src/lib/server/content/generate.ts
+index eff6c19..bde484e 100644
+--- a/personagen-svelte/src/lib/server/content/generate.ts
++++ b/personagen-svelte/src/lib/server/content/generate.ts
+@@ -1,11 +1,26 @@
+ /**
+  * Shared UGC content generation.
+  *
+- * Pipeline (all on the user's fal key + an LLM key):
++ * Standard pipeline, `generateUgcPack` (all on the user's fal key + an LLM key):
+  *   1. LLM "director"  -> JSON: caption, hashtags, dialogue, on-screen text, scene & motion prompts
+  *   2. Nano Banana     -> product-accurate still (real product + optional pinned creator face)
+  *   3a. spokesperson   -> ElevenLabs TTS (pinned voice) -> VEED Fabric talking head
+- *   3b. b-roll         -> Kling v3 Pro (mvp) / Veo 3.1 (premium) motion clip
++ *   3b. b-roll         -> Kling O3 Pro ("Omni") single-shot motion clip
++ *
++ * Cinematic pipeline, `generateCinematicUgcPack` — one per day via the autopilot
++ * (see autopilot.ts), the rest of the day's slots stay on the standard pipeline:
++ *   1. LLM "director"  -> JSON storyboard: caption + a shot list (single-dominant-
++ *      action prompt + duration per shot, product+character in every shot)
++ *   2. Nano Banana     -> ALL storyboard stills generated in parallel, every one
++ *      compositing the same character + product references
++ *   3. Kling O3 Pro's native `multi_prompt` -> one multi-shot video in a single
++ *      call, anchored on the first storyboard still (no per-shot reference
++ *      parameter exists on this endpoint — verified against the live OpenAPI
++ *      spec — so the composited still is the only consistency anchor)
++ *
++ * Veo 3.1 is intentionally not wired into either active path right now (no
++ * multi-shot/reference support via fal, ~2x Kling's per-second cost) — see
++ * BROLL_MODEL_VEO_DEFERRED.
+  *
+  * Per-agent config (agent_configs, read defensively so it works before the UI lands):
+  *   ugc_voice ('Adam'), ugc_format ('auto'|'spokesperson'|'broll'),
+@@ -18,19 +33,57 @@ import { env } from '$env/dynamic/private';
+ import { getUserApiKey } from '$lib/server/user-api-keys';
+ import { resolveAiClient } from '$lib/server/ai-client';
+ import { createDbService } from '$lib/server/db';
+-import { DEFAULT_VOICE } from '$lib/server/voices';
++import { DEFAULT_VOICE, VOICE_CATALOG } from '$lib/server/voices';
+ import { getServiceSupabase } from '$lib/server/service-supabase';
+ import { persistToStorage, persistBufferToStorage } from '$lib/server/storage';
+ import { burnCaptions } from '$lib/server/video';
+ 
+ // ── Model slugs (env-overridable so quality/provider is a one-line swap) ─────
+-const NANO_MODEL = env.UGC_NANO_MODEL || 'fal-ai/gemini-25-flash-image/edit';
++// Re-verified against fal.ai's live docs/OpenAPI specs as of 2026-07-01 —
++// dated here since this landscape moves fast enough that "latest" from even
++// a few months ago can be stale.
++//
++// Nano Banana 2 (Gemini 3.1 Flash Image) superseded the original Nano Banana
++// (Gemini 2.5) in Feb 2026 — same `image_urls`/`prompt`/`aspect_ratio` request
++// shape, so this is a drop-in swap, not a rewrite. Supports up to 14 reference
++// images (vs. the 1-2 this pipeline currently passes) and higher fidelity, at
++// roughly double the per-image cost ($0.08 vs $0.039 at 1K).
++const NANO_MODEL = env.UGC_NANO_MODEL || 'fal-ai/nano-banana-2/edit';
++// NOT upgraded to Eleven v3 despite it being newer (GA March 2026): voice-name
++// compatibility with this app's VOICE_CATALOG is only partially confirmed
++// (Adam — the DEFAULT_VOICE fallback — isn't in v3's documented voice list),
++// it's ~2x the cost per character, and its higher latency has no upside for
++// this app's async generation use case. Revisit once Adam's availability on
++// v3 is confirmed.
+ const TTS_MODEL = env.UGC_TTS_MODEL || 'fal-ai/elevenlabs/tts/turbo-v2.5';
+ const TALKINGHEAD_MODEL = env.UGC_TALKINGHEAD_MODEL || 'veed/fabric-1.0';
+-const BROLL_MODEL_MVP = env.UGC_BROLL_MODEL || 'fal-ai/kling-video/v3/pro/image-to-video';
+-const BROLL_MODEL_PREMIUM = env.UGC_BROLL_MODEL_PREMIUM || 'fal-ai/veo3.1/image-to-video';
++// Kling 3.0 is still the latest Kling generation (no Kling 4 exists as of
++// this date) — but Standard and Pro are priced ~25% apart ($0.084/s vs
++// $0.112/s without audio), so the two tiers now map onto separate model
++// slugs instead of both paying Pro pricing:
++//   - Standard: the high-frequency (6x/day) single-shot clips, plain
++//     image-to-video (no reference/elements needed for a single shot).
++//   - Pro ("Omni") reference-to-video: the once-a-day cinematic multi-shot
++//     pipeline. This is a DISTINCT endpoint from plain image-to-video —
++//     confirmed via its own OpenAPI spec to have a real `elements`/
++//     `image_urls` reference mechanism (plain image-to-video does not, despite
++//     marketing copy implying otherwise — verify against the specific
++//     endpoint's own spec, not the family's marketing page, before trusting
++//     any capability claim for these models). Same per-second price as plain
++//     image-to-video Pro, so this is a strict upgrade for the cinematic path.
++const BROLL_MODEL_STANDARD =
++	env.UGC_BROLL_MODEL || 'fal-ai/kling-video/o3/standard/image-to-video';
++const BROLL_MODEL_CINEMATIC =
++	env.UGC_BROLL_MODEL_CINEMATIC || 'fal-ai/kling-video/o3/pro/reference-to-video';
++// Veo 3.1 (still Google's latest as of this date — no Veo 4 released despite
++// plenty of speculation) is intentionally NOT wired into any active
++// generation path right now (no multi-shot/elements support via fal, and
++// ~2x Kling's cost) — kept here, unused, so it's a one-line change to bring
++// back later rather than a re-integration from scratch.
++const BROLL_MODEL_VEO_DEFERRED = env.UGC_BROLL_MODEL_PREMIUM || 'fal-ai/veo3.1/image-to-video';
+ const FABRIC_RES = env.UGC_FABRIC_RES || '720p';
+ const VIDEO_DURATION = env.UGC_VIDEO_DURATION || '5';
++const CINEMATIC_VIDEO_DURATION = env.UGC_CINEMATIC_DURATION || '15';
+ 
+ /** Tolerant JSON parse for AI responses (strips markdown fences). */
+ export function safeParseJson(text: string): any {
+@@ -198,6 +251,16 @@ async function generateTalkingHead(
+ 	return url;
+ }
+ 
++/**
++ * Character/product consistency does NOT come from a Kling-side reference
++ * parameter — verified against the live OpenAPI spec and playground UI for
++ * this endpoint, there is no `elements`/reference-image field, only
++ * image_url/end_image_url/prompt/duration/generate_audio/multi_prompt. The
++ * only real consistency lever is `stillUrl`: it must already have the
++ * character + product composited into it (via generateProductStill's
++ * Nano Banana pass) before it ever reaches Kling, since Kling only continues
++ * motion from whatever visual it's handed.
++ */
+ async function generateBrollVideo(
+ 	falKey: string,
+ 	model: string,
+@@ -220,6 +283,278 @@ async function generateBrollVideo(
+ 	return url;
+ }
+ 
++export interface CinematicShot {
++	/** Concise, single-dominant-action prompt for this shot (camera + action + framing). */
++	prompt: string;
++	/** Seconds, "3"-"15" per Kling's DurationEnum — shots sum to the total video length. */
++	duration: string;
++}
++
++const CINEMATIC_MAX_TOTAL_SECONDS = 15;
++const CINEMATIC_MIN_SHOT_SECONDS = 2;
++const CINEMATIC_MAX_SHOT_SECONDS = 10;
++
++/**
++ * Defensively clamps LLM-produced shot durations to values Kling's API will
++ * actually accept, and trims the list (never scales individual shots below
++ * their floor) if the total still exceeds the endpoint's max — the Director
++ * prompt asks for compliant output, but a prompt is a request, not a
++ * validation layer.
++ */
++function clampCinematicShots(shots: CinematicShot[]): CinematicShot[] {
++	const clamped = shots.map((s) => {
++		const n = parseInt(s.duration, 10);
++		const seconds = Number.isFinite(n)
++			? Math.min(CINEMATIC_MAX_SHOT_SECONDS, Math.max(CINEMATIC_MIN_SHOT_SECONDS, n))
++			: 3;
++		return { prompt: s.prompt, duration: String(seconds) };
++	});
++
++	const result: CinematicShot[] = [];
++	let total = 0;
++	for (const shot of clamped) {
++		const seconds = parseInt(shot.duration, 10);
++		if (total + seconds > CINEMATIC_MAX_TOTAL_SECONDS) {
++			if (result.length === 0) {
++				// Even the first shot alone exceeds the cap — clip it down rather
++				// than produce an empty shot list.
++				result.push({ prompt: shot.prompt, duration: String(CINEMATIC_MAX_TOTAL_SECONDS) });
++			}
++			break;
++		}
++		result.push(shot);
++		total += seconds;
++	}
++	return result;
++}
++
++export interface CinematicReferences {
++	/** Character's main/frontal reference (reference-kit full_body, or the plain characterRef as a fallback). */
++	characterFrontal: string;
++	/** Up to 3 additional character angles (side_profiles/face_closeup/feature_grid), whichever exist. */
++	characterAngles: string[];
++	/** Product photo — kept separate from the character element via `image_urls`. */
++	productPhotoUrl: string | null;
++}
++
++/**
++ * Kling O3 Pro's `reference-to-video` endpoint (distinct from plain
++ * `image-to-video` — verified against its own live OpenAPI spec, not the
++ * image-to-video one): unlike image-to-video, this one has a REAL
++ * `elements`/`image_urls` reference mechanism, so character + product
++ * consistency no longer depends on pre-compositing everything into one
++ * starting still. `elements[0]` carries the character (frontal + up to 3
++ * angle references, addressed as @Element1 in shot prompts); `image_urls`
++ * carries the product photo (addressed as @Image1). Still passes
++ * `multi_prompt` for the shot list, same as before.
++ */
++async function generateCinematicVideo(
++	falKey: string,
++	refs: CinematicReferences,
++	shots: CinematicShot[]
++): Promise<string> {
++	const data = await falQueueJson(
++		BROLL_MODEL_CINEMATIC,
++		{
++			elements: [
++				{
++					frontal_image_url: refs.characterFrontal,
++					...(refs.characterAngles.length
++						? { reference_image_urls: refs.characterAngles.slice(0, 3) }
++						: {})
++				}
++			],
++			...(refs.productPhotoUrl ? { image_urls: [refs.productPhotoUrl] } : {}),
++			multi_prompt: shots,
++			shot_type: 'customize',
++			generate_audio: true,
++			negative_prompt: 'blur, distort, low quality, extra limbs, missing product, wrong product'
++		},
++		falKey
++	);
++	const url = data.video?.url;
++	if (!url) throw new Error('Cinematic multi-shot model returned no video');
++	return url;
++}
++
++const CINEMATIC_DIRECTOR_SYSTEM = `You are a world-class commercial/UGC director storyboarding a short vertical ad.
++Strict rules:
++- Caption: 1 punchy hook + 1-2 authentic lines + 1 natural CTA. No hashtags in the caption.
++- BANNED words: "elevate", "premium quality", "transform", "game-changer", "innovative", "discover", "unlock potential".
++- The character is referenced as @Element1 and the product as @Image1 — every single shot's prompt MUST mention both @Element1 and @Image1, clearly visible together. Never a shot of just the environment or just the product alone. This is the most important rule.
++- Each shot prompt must describe ONE dominant action/camera move only (per current video-model best practice, a single prompt trying to cover multiple actions produces worse, blended results) — sequence distinct beats as separate shots instead of packing them into one.
++- 3 to 5 shots total, each shot's "duration" between "3" and "6" seconds, summing to at most 15 seconds.
++- Respond with ONLY valid JSON. No markdown fences.
++
++JSON schema:
++{
++  "format": "broll",
++  "text": "caption — hook, 1-2 personal lines, CTA (no hashtags)",
++  "hashtags": ["#a","#b","#c","#d","#e"],
++  "hookScore": <integer 70-99>,
++  "on_screen_text": "<=6 word burned-in caption hook",
++  "shots": [
++    { "prompt": "shot 1: what's shown, one dominant action, camera move, framing — @Element1 and @Image1 both visible", "duration": "3" },
++    { "prompt": "shot 2: ...", "duration": "3" }
++  ]
++}`;
++
++/**
++ * Cinematic UGC pack: a storyboard-driven variant of `generateUgcPack` for
++ * the one high-production-value post per day, instead of the standard
++ * single-shot path. Generates the storyboard stills for every shot IN
++ * PARALLEL (fast preview of the whole sequence, all grounded in the same
++ * character + product references), then one native Kling multi-shot call
++ * from the first still to produce the actual video. Throws on unrecoverable
++ * failures, same contract as `generateUgcPack`.
++ */
++export async function generateCinematicUgcPack(input: UgcPackInput): Promise<UgcPack> {
++	const { supabase, userId } = input;
++	const platform = input.platform || 'instagram';
++	const topic = input.topic || 'Sharing an honest experience with this product';
++
++	const ai = await resolveAiClient(supabase, userId);
++	if (!ai)
++		throw new Error('No AI provider configured. Add an OpenRouter or Gemini key in Settings.');
++
++	const db = createDbService(supabase);
++	const cfg = await loadUgcConfig(supabase, input.agentId);
++	const voiceGender = VOICE_CATALOG.find((v) => v.name === cfg.voice)?.gender;
++
++	let agentContext = '';
++	let agentData: any = null;
++	if (input.agentId) {
++		const { data: agent } = await db.agents.get(input.agentId);
++		if (agent) {
++			agentData = agent;
++			agentContext = `You are ${agent.name} (@${agent.handle}), a ${agent.niche} creator. Personality: ${agent.soul || 'authentic and relatable'}.`;
++		}
++	}
++
++	let selectedProduct: any = null;
++	let briefData: any = null;
++	const { data: brandBrief } = await db.brandBriefs.get(userId);
++	if (brandBrief?.data) {
++		briefData = brandBrief.data;
++		const products = Array.isArray(briefData.products) ? briefData.products : [];
++		selectedProduct = input.productId
++			? products.find((p: any) => p.id === input.productId)
++			: products.find((p: any) => p.photoUrl) || products[0];
++	}
++	if (!selectedProduct?.photoUrl) {
++		throw new Error('Cinematic mode needs a product photo — add one in the Brand Brief first.');
++	}
++
++	const prompt = `${agentContext}
++Product: "${selectedProduct.name}" — ${selectedProduct.description || 'no description'}. Price: ${selectedProduct.price || 'N/A'}.
++${briefData ? `Brand: ${briefData.brandName || ''}. Voice: ${briefData.commStyle || 'authentic'}. Audience: ${briefData.demographics || 'general'}. Pain points: ${briefData.painPoints || 'N/A'}.` : ''}
++${voiceGender ? `The on-camera character should read as ${voiceGender}, matching the pinned voice.` : ''}
++Angle for this post: "${topic}". Output ONLY the JSON.`;
++
++	const raw =
++		(await ai.generate(prompt, { systemInstruction: CINEMATIC_DIRECTOR_SYSTEM, json: true })) ||
++		'{}';
++	const parsed = safeParseJson(raw);
++	if (!parsed) throw new Error('AI returned unparseable response');
++
++	const rawShots: CinematicShot[] = Array.isArray(parsed.shots) && parsed.shots.length > 0
++		? parsed.shots
++				.slice(0, 5)
++				.map((s: any) => ({
++					prompt: String(s.prompt || '').slice(0, 800),
++					duration: String(s.duration || '3')
++				}))
++		: [{ prompt: topic, duration: '5' }];
++	// The Director is only prompt-instructed to keep shots at 3-6s summing to
++	// <=15s — that's a request, not a guarantee, so clamp defensively before
++	// this ever reaches Kling's API (which will reject an invalid/out-of-range
++	// total rather than silently truncating it for us).
++	const shots = clampCinematicShots(rawShots);
++
++	const { falKey } = await resolveImageKeys(supabase, userId);
++	if (!falKey) throw new Error('No fal.ai key configured. Add one in Settings.');
++
++	let svc: any;
++	try {
++		svc = getServiceSupabase();
++	} catch {
++		throw new Error('Storage service is not configured on this server.');
++	}
++
++	// Pinned character face — same consistency anchor as the standard spokesperson path.
++	let characterRef = cfg.characterRef;
++	characterRef = await ensureCharacterRef(
++		supabase,
++		svc,
++		userId,
++		input.agentId,
++		cfg.characterRef,
++		falKey,
++		briefData,
++		agentData,
++		voiceGender
++	);
++
++	// All storyboard stills generated simultaneously — every one composites the
++	// same character + product references, just with that shot's own framing.
++	// (Still valuable even though the video call below no longer depends on
++	// stitching from the first one — this is the fast, cheap preview the user
++	// reviews before the video generation call runs.)
++	const storyboard = await Promise.all(
++		shots.map((shot) => generateProductStill(falKey, shot.prompt, selectedProduct.photoUrl, characterRef))
++	);
++
++	const durableStoryboard = await Promise.all(
++		storyboard.map((url) => persistToStorage(svc, url, userId, 'png').catch(() => url))
++	);
++
++	// Reference-kit angles (if the user has generated them from the Profile tab)
++	// give the video model far richer character grounding than a single portrait —
++	// falls back to just the plain characterRef when the kit isn't populated yet.
++	const kit = cfg.referenceKit || {};
++	const cinematicRefs: CinematicReferences = {
++		characterFrontal: kit.full_body || characterRef || durableStoryboard[0],
++		characterAngles: [kit.side_profiles, kit.face_closeup, kit.feature_grid].filter(
++			(url): url is string => Boolean(url)
++		),
++		productPhotoUrl: selectedProduct.photoUrl
++	};
++
++	const videoUrl = await generateCinematicVideo(falKey, cinematicRefs, shots);
++
++	const captioned = parsed.on_screen_text
++		? await burnCaptions(videoUrl, parsed.on_screen_text).catch(() => null)
++		: null;
++	const durableMedia = captioned
++		? await persistBufferToStorage(svc, captioned, userId, 'mp4', 'video/mp4').catch(() => videoUrl)
++		: await persistToStorage(svc, videoUrl, userId, 'mp4').catch(() => videoUrl);
++
++	const content: UgcContent & { storyboard?: string[]; cinematic?: boolean } = {
++		text: parsed.text || '',
++		hashtags: Array.isArray(parsed.hashtags) ? parsed.hashtags : [],
++		hookScore: parsed.hookScore,
++		on_screen_text: parsed.on_screen_text || '',
++		ugc_broll_prompt: shots.map((s, i) => `Shot ${i + 1} (${s.duration}s): ${s.prompt}`).join('\n\n'),
++		media_url: durableMedia,
++		poster_url: durableStoryboard[0],
++		media_type: 'video',
++		media_generated: true,
++		format: 'broll',
++		voice: cfg.voice,
++		product: {
++			name: selectedProduct.name,
++			price: selectedProduct.price,
++			description: selectedProduct.description
++		},
++		platform,
++		storyboard: durableStoryboard,
++		cinematic: true
++	};
++	if (input.autopilot) content.autopilot = true;
++
++	return { content, selectedProduct, briefData, agentData };
++}
++
+ // ── Per-agent UGC config (read defensively from agent_configs) ──────────────
+ 
+ interface UgcConfig {
+@@ -227,6 +562,8 @@ interface UgcConfig {
+ 	format: 'auto' | 'spokesperson' | 'broll';
+ 	quality: 'mvp' | 'premium';
+ 	characterRef: string | null;
++	/** full_body/side_profiles/face_closeup/feature_grid, from the Profile tab's reference-kit flow. */
++	referenceKit: Record<string, string> | null;
+ }
+ 
+ async function loadUgcConfig(supabase: any, agentId?: string): Promise<UgcConfig> {
+@@ -243,7 +580,8 @@ async function loadUgcConfig(supabase: any, agentId?: string): Promise<UgcConfig
+ 		voice: row?.ugc_voice || env.UGC_DEFAULT_VOICE || DEFAULT_VOICE,
+ 		format: row?.ugc_format || 'auto',
+ 		quality: row?.ugc_video_quality || 'mvp',
+-		characterRef: row?.ugc_character_ref || null
++		characterRef: row?.ugc_character_ref || null,
++		referenceKit: row?.ugc_reference_kit || null
+ 	};
+ }
+ 
+@@ -311,50 +649,302 @@ JSON schema:
+  * Generates a hero portrait once, persists it, and pins it to the agent config
+  * (no-op if the column isn't migrated yet — still consistent within the post).
+  */
+-async function ensureCharacterRef(
++/**
++ * Generates a fresh pinned hero portrait for an agent and persists it to
++ * `agent_configs.ugc_character_ref`. Always generates (no "already have one"
++ * check) — callers that only want a lazy one-time generation should use
++ * `ensureCharacterRef` below. Throws on failure (unlike `ensureCharacterRef`,
++ * which swallows errors since it runs inline in the background post-generation
++ * pipeline); this one is meant to be called from a user-facing action where a
++ * real error should surface.
++ */
++export async function generateCharacterPortrait(
+ 	supabase: any,
+ 	svc: any,
+ 	userId: string,
+-	agentId: string | undefined,
+-	existingRef: string | null,
+-	falKey: string | null,
++	agentId: string,
++	falKey: string,
+ 	briefData: any,
+-	agentData: any
+-): Promise<string | null> {
+-	if (existingRef) return existingRef;
+-	if (!falKey) return null;
+-
++	agentData: any,
++	voiceGender: 'male' | 'female' | undefined
++): Promise<string> {
+ 	const audience = briefData?.demographics || 'a general lifestyle audience';
+ 	const persona = agentData?.soul ? ` Personality vibe: ${String(agentData.soul).slice(0, 120)}.` : '';
+-	const heroPrompt = `Photorealistic vertical portrait of one relatable UGC content creator who fits this audience: ${audience}.${persona} Friendly, casual, natural window light, looking straight at the camera, authentic iPhone selfie style, clear visible face, upper body. Single person only.`;
++	// This face is pinned and reused for every future spokesperson video for this
++	// agent, so it must match the agent's configured voice gender once, up front —
++	// there's no per-post opportunity to correct it after the fact.
++	const genderLine = voiceGender ? ` The creator is ${voiceGender}, matching the agent's pinned voice.` : '';
++	const heroPrompt = `Photorealistic vertical portrait of one relatable UGC content creator who fits this audience: ${audience}.${persona}${genderLine} Friendly, casual, natural window light, looking straight at the camera, authentic iPhone selfie style, clear visible face, upper body. Single person only.`;
++
++	const heroUrl = await generateUgcImage(heroPrompt, null, falKey);
+ 
+-	let heroUrl: string;
++	let durable = heroUrl;
+ 	try {
+-		heroUrl = await generateUgcImage(heroPrompt, null, falKey);
++		durable = await persistToStorage(svc, heroUrl, userId, 'png');
+ 	} catch {
+-		return null;
++		/* keep provider url */
+ 	}
+ 
+-	let durable = heroUrl;
++	await supabase.from('agent_configs').update({ ugc_character_ref: durable }).eq('agent_id', agentId);
++	return durable;
++}
++
++/**
++ * Fixed prompt for turning a user-uploaded reference photo into a neutral,
++ * reusable character turnaround/reference sheet (multi-view + detail panels),
++ * via Nano Banana's edit endpoint. Kept verbatim as given — this is a tuned
++ * prompt, not something to paraphrase.
++ */
++const CHARACTER_SHEET_PROMPT = `This is for upscale 4k hyper realistic UGC generation. Create a professional character turnaround and reference sheet based on the reference image. Use the uploaded image as the primary visual reference for the character's identity, proportions, facial features, body shape, hairstyle, and overall design language, while translating it into a clean, neutral, reusable presentation board. The final image should be arranged like a polished concept art sheet on a pure white studio background. Show the same character in four full-body views: front view, side profile, back view, and three-quarter view. On the right side, include multiple clean detail panels with close-ups of the eyes, upper face, lower face lips, skin texture, hair detail, and one small clothing or material detail. Keep the styling neutral and generic so the sheet can be reused as a base template for future adaptations. Simplify anything overly specific, thematic, fantasy-based, branded, culturally tied, or heavily ornamental from the source image into a more universal version while preserving the essence of the character. The outfit should become a clean neutral base outfit with minimal detailing, soft solid tones, and a refined silhouette. No excessive accessories, no dramatic headpieces, no strong lore-specific elements, no heavy decoration unless they are essential to the base identity. The character should feel balanced, elegant, realistic, and adaptable. Expression should be calm and neutral. Makeup should be subtle and natural. Lighting should be soft, even, and studio-clean. The layout should feel like a premium design presentation board used for model sheets, character development, or production reference. Preserve the core identity from the reference, but present it in a simplified, neutral, production-ready format that can serve as a universal template for future redesigns.`;
++
++/** Reads-modifies-writes `agent_configs.ugc_reference_kit`, merging in one new stage's asset. */
++async function mergeReferenceKit(
++	supabase: any,
++	agentId: string,
++	patch: Record<string, string>
++): Promise<void> {
++	const { data } = await supabase
++		.from('agent_configs')
++		.select('ugc_reference_kit')
++		.eq('agent_id', agentId)
++		.maybeSingle();
++	const merged = { ...(data?.ugc_reference_kit || {}), ...patch };
++	await supabase.from('agent_configs').update({ ugc_reference_kit: merged }).eq('agent_id', agentId);
++}
++
++/**
++ * Stage 2's fixed prompt: given the stage-1 turnaround sheet (front/side/back/
++ * three-quarter views + detail panels), extract one clean, isolated, full-body
++ * shot with a clear face — this (not the multi-panel sheet) is what actually
++ * gets shown as the avatar/profile picture everywhere.
++ */
++const AVATAR_HERO_SHOT_PROMPT = 'Give me a full body shot and ensure the face is clear.';
++
++/**
++ * Stage 2: takes a generated character sheet (or any character reference
++ * image) and distills it into a single clean full-body shot via Nano Banana,
++ * conditioned on that sheet. Does not persist — caller decides what to do
++ * with the result.
++ */
++async function generateAvatarHeroShot(falKey: string, referenceImageUrl: string): Promise<string> {
++	const data = await falSyncJson(
++		NANO_MODEL,
++		{ prompt: AVATAR_HERO_SHOT_PROMPT, image_urls: [referenceImageUrl], aspect_ratio: '3:4' },
++		falKey
++	);
++	const url = data.images?.[0]?.url;
++	if (!url) throw new Error('Nano Banana returned no image for the hero shot');
++	return url;
++}
++
++/**
++ * Generates a character turnaround/reference sheet from a user-uploaded
++ * reference photo (Nano Banana edit, stage 1), then immediately chains into
++ * stage 2 (`generateAvatarHeroShot`) to distill it into one clean full-body
++ * shot with a clear face — THAT final shot, not the multi-panel sheet, is
++ * what gets persisted and pinned as `ugc_character_ref` (the same field
++ * `generateCharacterPortrait` populates for the from-scratch path, so both
++ * paths feed the same downstream consistency/avatar-display usage).
++ */
++export async function generateCharacterSheetFromReference(
++	supabase: any,
++	svc: any,
++	userId: string,
++	agentId: string,
++	falKey: string,
++	referenceImageUrl: string
++): Promise<string> {
++	const data = await falSyncJson(
++		NANO_MODEL,
++		{ prompt: CHARACTER_SHEET_PROMPT, image_urls: [referenceImageUrl], aspect_ratio: '16:9' },
++		falKey
++	);
++	const sheetUrl = data.images?.[0]?.url;
++	if (!sheetUrl) throw new Error('Nano Banana returned no image');
++
++	let durableSheet = sheetUrl;
+ 	try {
+-		durable = await persistToStorage(svc, heroUrl, userId, 'png');
++		durableSheet = await persistToStorage(svc, sheetUrl, userId, 'png');
+ 	} catch {
+ 		/* keep provider url */
+ 	}
+ 
+-	if (agentId) {
+-		try {
+-			await supabase
+-				.from('agent_configs')
+-				.update({ ugc_character_ref: durable })
+-				.eq('agent_id', agentId);
+-		} catch {
+-			/* ugc_character_ref column not migrated yet */
+-		}
++	const heroShotUrl = await generateAvatarHeroShot(falKey, sheetUrl);
++
++	let durable = heroShotUrl;
++	try {
++		durable = await persistToStorage(svc, heroShotUrl, userId, 'png');
++	} catch {
++		/* keep provider url */
+ 	}
++
++	await supabase.from('agent_configs').update({ ugc_character_ref: durable }).eq('agent_id', agentId);
++	await mergeReferenceKit(supabase, agentId, { sheet: durableSheet, full_body: durable });
++	return durable;
++}
++
++/**
++ * Stage 3's fixed prompt: given the approved full-body shot + the original
++ * turnaround sheet, produce one composite image of the character's left and
++ * right side profiles, preserving facial detail/imperfections (facial hair,
++ * skin texture, etc.) at high fidelity.
++ */
++const SIDE_PROFILE_PROMPT =
++	'Upscale this and the character sheet to 4K resolution for maximum detail. I need a close-up shot of his side profile, left and right, to retain his facial details and imperfections including facial hair etc. Output as one high quality composite image.';
++
++/**
++ * Stage 3: takes the approved full-body hero shot + the stage-1 turnaround
++ * sheet and produces one composite of both side profiles (left + right), for
++ * maximum facial-detail consistency. Persists the result and merges it into
++ * `ugc_reference_kit.side_profiles` — does not touch `ugc_character_ref`
++ * (the primary avatar stays the full-body shot from stage 2).
++ */
++export async function generateSideProfileComposite(
++	supabase: any,
++	svc: any,
++	userId: string,
++	agentId: string,
++	falKey: string,
++	fullBodyShotUrl: string,
++	characterSheetUrl: string
++): Promise<string> {
++	const data = await falSyncJson(
++		NANO_MODEL,
++		{
++			prompt: SIDE_PROFILE_PROMPT,
++			image_urls: [fullBodyShotUrl, characterSheetUrl],
++			aspect_ratio: '16:9'
++		},
++		falKey
++	);
++	const url = data.images?.[0]?.url;
++	if (!url) throw new Error('Nano Banana returned no image for the side-profile composite');
++
++	let durable = url;
++	try {
++		durable = await persistToStorage(svc, url, userId, 'png');
++	} catch {
++		/* keep provider url */
++	}
++
++	await mergeReferenceKit(supabase, agentId, { side_profiles: durable });
+ 	return durable;
+ }
+ 
++/**
++ * Stage 4's fixed prompt: an extreme facial close-up, for maximum
++ * skin-texture/feature fidelity in the reference kit.
++ */
++const FACE_CLOSEUP_PROMPT = 'give me a close up of this man focusing on his facial features';
++
++/**
++ * Stage 4: takes the stage-3 side-profile composite (richest facial-detail
++ * reference so far) and produces one extreme facial close-up. Persists the
++ * result and merges it into `ugc_reference_kit.face_closeup`.
++ */
++export async function generateFacialCloseup(
++	supabase: any,
++	svc: any,
++	userId: string,
++	agentId: string,
++	falKey: string,
++	referenceImageUrl: string
++): Promise<string> {
++	const data = await falSyncJson(
++		NANO_MODEL,
++		{ prompt: FACE_CLOSEUP_PROMPT, image_urls: [referenceImageUrl], aspect_ratio: '1:1' },
++		falKey
++	);
++	const url = data.images?.[0]?.url;
++	if (!url) throw new Error('Nano Banana returned no image for the facial close-up');
++
++	let durable = url;
++	try {
++		durable = await persistToStorage(svc, url, userId, 'png');
++	} catch {
++		/* keep provider url */
++	}
++
++	await mergeReferenceKit(supabase, agentId, { face_closeup: durable });
++	return durable;
++}
++
++/**
++ * Stage 5's fixed prompt: a labelless grid of individual feature close-ups
++ * (eyes, lips, nose, lashes, brow, hair) — a companion to stage 4's single
++ * close-up, giving the kit per-feature detail crops in one image.
++ */
++const FEATURE_GRID_PROMPT =
++	"give me a grid of close up shots of the man's features such as eyes, lips, nose, lashes, brow, and hair.";
++
++/**
++ * Stage 5: takes the facial close-up (+ the original turnaround sheet, which
++ * already has hair/skin/clothing detail panels) and produces a labelless grid
++ * of individual feature close-ups. Persists the result and merges it into
++ * `ugc_reference_kit.feature_grid`.
++ */
++export async function generateFeatureGrid(
++	supabase: any,
++	svc: any,
++	userId: string,
++	agentId: string,
++	falKey: string,
++	faceCloseupUrl: string,
++	characterSheetUrl: string
++): Promise<string> {
++	const data = await falSyncJson(
++		NANO_MODEL,
++		{
++			prompt: FEATURE_GRID_PROMPT,
++			image_urls: [faceCloseupUrl, characterSheetUrl],
++			aspect_ratio: '1:1'
++		},
++		falKey
++	);
++	const url = data.images?.[0]?.url;
++	if (!url) throw new Error('Nano Banana returned no image for the feature grid');
++
++	let durable = url;
++	try {
++		durable = await persistToStorage(svc, url, userId, 'png');
++	} catch {
++		/* keep provider url */
++	}
++
++	await mergeReferenceKit(supabase, agentId, { feature_grid: durable });
++	return durable;
++}
++
++async function ensureCharacterRef(
++	supabase: any,
++	svc: any,
++	userId: string,
++	agentId: string | undefined,
++	existingRef: string | null,
++	falKey: string | null,
++	briefData: any,
++	agentData: any,
++	voiceGender: 'male' | 'female' | undefined
++): Promise<string | null> {
++	if (existingRef) return existingRef;
++	if (!falKey || !agentId) return null;
++
++	try {
++		return await generateCharacterPortrait(
++			supabase,
++			svc,
++			userId,
++			agentId,
++			falKey,
++			briefData,
++			agentData,
++			voiceGender
++		);
++	} catch {
++		return null;
++	}
++}
++
+ /**
+  * Generates a single UGC post pack tuned to the agent persona, brand brief and product,
+  * using the agent's pinned voice/format/quality. Throws on unrecoverable failures.
+@@ -371,6 +961,11 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
+ 
+ 	const db = createDbService(supabase);
+ 	const cfg = await loadUgcConfig(supabase, input.agentId);
++	// The on-camera character's depicted gender must match the configured voice —
++	// the Director/character-ref prompts below don't know about `cfg.voice` on
++	// their own, so this is threaded through explicitly to avoid e.g. a male
++	// voice narrating a video of a female creator.
++	const voiceGender = VOICE_CATALOG.find((v) => v.name === cfg.voice)?.gender;
+ 
+ 	// ── Load agent persona ──────────────────────────────────────────────
+ 	let agentContext = '';
+@@ -400,6 +995,7 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
+ ${selectedProduct ? `Product: "${selectedProduct.name}" — ${selectedProduct.description || 'no description'}. Price: ${selectedProduct.price || 'N/A'}.` : `Topic: "${topic}"`}
+ ${briefData ? `Brand: ${briefData.brandName || ''}. Voice: ${briefData.commStyle || 'authentic'}. Audience: ${briefData.demographics || 'general'}. Pain points: ${briefData.painPoints || 'N/A'}.` : ''}
+ Requested format: ${cfg.format === 'auto' ? 'choose the best of spokesperson or broll' : cfg.format}.
++${voiceGender ? `If the scene shows a person on camera, they should read as ${voiceGender} — the pinned voice is ${voiceGender}, and the two must match.` : ''}
+ Angle for this post: "${topic}". Output ONLY the JSON.`;
+ 
+ 	const raw =
+@@ -440,7 +1036,8 @@ Angle for this post: "${topic}". Output ONLY the JSON.`;
+ 				cfg.characterRef,
+ 				falKey,
+ 				briefData,
+-				agentData
++				agentData,
++				voiceGender
+ 			);
+ 		}
+ 	}
+@@ -462,8 +1059,8 @@ Angle for this post: "${topic}". Output ONLY the JSON.`;
+ 			const audio = await generateVoiceAudio(falKey, cfg.voice, dialogue);
+ 			mediaUrl = await generateTalkingHead(falKey, still, audio);
+ 		} else {
+-			const model = cfg.quality === 'premium' ? BROLL_MODEL_PREMIUM : BROLL_MODEL_MVP;
+-			mediaUrl = await generateBrollVideo(falKey, model, still, motionPrompt);
++			// Both quality tiers route to Kling Standard for now — see BROLL_MODEL_VEO_DEFERRED.
++			mediaUrl = await generateBrollVideo(falKey, BROLL_MODEL_STANDARD, still, motionPrompt);
+ 		}
+ 		mediaType = 'video';
+ 	}
+diff --git a/personagen-svelte/src/lib/services/api.ts b/personagen-svelte/src/lib/services/api.ts
+index 3c9c334..44bf225 100644
+--- a/personagen-svelte/src/lib/services/api.ts
++++ b/personagen-svelte/src/lib/services/api.ts
+@@ -206,14 +206,14 @@ export const Autopilot = {
+ 
+ export const Accounts = {
+ 	checkStatus: (agentId: string) =>
+-		request<Record<string, any>>(ENDPOINTS.accounts, 'check_status', { agentId }),
++		request<Record<string, any>>(ENDPOINTS.accounts, 'check_status', { persona_id: agentId }),
+ 	initConnection: (agentId: string, platform: string) =>
+ 		request<{ redirect_url?: string }>(ENDPOINTS.accounts, 'initiate_connection', {
+-			agentId,
++			persona_id: agentId,
+ 			platform
+ 		}),
+ 	disconnect: (agentId: string, platform: string) =>
+-		request(ENDPOINTS.accounts, 'disconnect', { agentId, platform })
++		request(ENDPOINTS.accounts, 'disconnect', { persona_id: agentId, platform })
+ };
+ 
+ // ── Personas (Direct DB) ──────────────────────────────────────────────────
+diff --git a/personagen-svelte/src/routes/(portal)/+layout.server.ts b/personagen-svelte/src/routes/(portal)/+layout.server.ts
+index 3453eb8..3e58183 100644
+--- a/personagen-svelte/src/routes/(portal)/+layout.server.ts
++++ b/personagen-svelte/src/routes/(portal)/+layout.server.ts
+@@ -21,13 +21,22 @@ export const load: LayoutServerLoad = async ({ locals }) => {
+ 		if (locals.supabase) {
+ 			const db = createDbService(locals.supabase);
+ 			const { data: agents } = await db.agents.list();
+-			sidebarAgents = (agents ?? []).filter((a: any) => !a.is_overseer).map((a: any) => ({
++			const creatorAgents = (agents ?? []).filter((a: any) => !a.is_overseer);
++
++			const agentIds = creatorAgents.map((a: any) => a.id);
++			const { data: configs } = agentIds.length
++				? await locals.supabase.from('agent_configs').select('agent_id, ugc_character_ref').in('agent_id', agentIds)
++				: { data: [] };
++			const characterRefById = new Map((configs ?? []).map((c: any) => [c.agent_id, c.ugc_character_ref]));
++
++			sidebarAgents = creatorAgents.map((a: any) => ({
+ 				id: a.id,
+ 				name: a.name,
+ 				handle: a.handle,
+ 				initial: a.initial,
+ 				gradient: a.gradient,
+-				status: a.status
++				status: a.status,
++				ugc_character_ref: characterRefById.get(a.id) ?? null
+ 			}));
+ 		}
+ 
+diff --git a/personagen-svelte/src/routes/(portal)/+layout.svelte b/personagen-svelte/src/routes/(portal)/+layout.svelte
+index 61280a3..d0d55f7 100644
+--- a/personagen-svelte/src/routes/(portal)/+layout.svelte
++++ b/personagen-svelte/src/routes/(portal)/+layout.svelte
+@@ -196,8 +196,12 @@
+ 					onclick={closeSidebar}
+ 					title={sidebarState.collapsed ? `${agent.name} (${agent.handle})` : undefined}
+ 				>
+-					<span class="sidebar-persona-avatar" style="background: {agent.gradient ?? 'var(--gradient)'}">
+-						{agent.initial ?? (agent.name?.[0] ?? '?').toUpperCase()}
++					<span class="sidebar-persona-avatar" style={agent.ugc_character_ref ? '' : `background: ${agent.gradient ?? 'var(--gradient)'}`}>
++						{#if agent.ugc_character_ref}
++							<img src={agent.ugc_character_ref} alt={agent.name} />
++						{:else}
++							{agent.initial ?? (agent.name?.[0] ?? '?').toUpperCase()}
++						{/if}
+ 					</span>
+ 					{#if !sidebarState.collapsed}
+ 						<span class="sidebar-nav-label">
+@@ -1030,6 +1034,14 @@
+ 		color: #fff;
+ 		flex-shrink: 0;
+ 		letter-spacing: -0.01em;
++		overflow: hidden;
++	}
++
++	.sidebar-persona-avatar img {
++		width: 100%;
++		height: 100%;
++		object-fit: cover;
++		display: block;
+ 	}
+ 
+ 	.sidebar-collapsed .sidebar-persona-avatar {
+diff --git a/personagen-svelte/src/routes/(portal)/dashboard/+page.server.ts b/personagen-svelte/src/routes/(portal)/dashboard/+page.server.ts
+index 38281c0..966eb44 100644
+--- a/personagen-svelte/src/routes/(portal)/dashboard/+page.server.ts
++++ b/personagen-svelte/src/routes/(portal)/dashboard/+page.server.ts
+@@ -48,6 +48,12 @@ export const load: PageServerLoad = async ({ locals }) => {
+ 				// Roster of creator agents
+ 				const creators = dbAgents.filter((a) => !a.is_overseer);
+ 
++				const creatorIds = creators.map((a) => a.id);
++				const { data: configs } = creatorIds.length
++					? await locals.supabase.from('agent_configs').select('agent_id, ugc_character_ref').in('agent_id', creatorIds)
++					: { data: [] };
++				const characterRefById = new Map((configs ?? []).map((c: any) => [c.agent_id, c.ugc_character_ref]));
++
+ 				agents = creators.map((a) => {
+ 					const connCount = a.connection_count ?? 0;
+ 					const agentPosts = postsByAgent[a.id] || [];
+@@ -88,6 +94,7 @@ export const load: PageServerLoad = async ({ locals }) => {
+ 						active: a.status === 'active',
+ 						trend: '+0.0%',
+ 						perf,
++						ugc_character_ref: characterRefById.get(a.id) ?? null,
+ 						total_token_usage: totalTokenUsage,
+ 						total_token_cost: Number(totalTokenCost.toFixed(4)),
+ 						total_views: totalViews,
+diff --git a/personagen-svelte/src/routes/(portal)/personas/[agentId]/+page.server.ts b/personagen-svelte/src/routes/(portal)/personas/[agentId]/+page.server.ts
+index b10c9b5..b0b7339 100644
+--- a/personagen-svelte/src/routes/(portal)/personas/[agentId]/+page.server.ts
++++ b/personagen-svelte/src/routes/(portal)/personas/[agentId]/+page.server.ts
+@@ -36,7 +36,10 @@ export const load: PageServerLoad = async ({ locals, params }) => {
+ 				autonomy_level: config?.autonomy_level ?? 'advisor',
+ 				rss_url: config?.rss_url ?? '',
+ 				rss_active: config?.rss_active ?? false,
+-				rss_last_polled_at: config?.rss_last_polled_at ?? null
++				rss_last_polled_at: config?.rss_last_polled_at ?? null,
++				ugc_voice: config?.ugc_voice ?? 'Adam',
++				ugc_character_ref: config?.ugc_character_ref ?? null,
++				ugc_reference_kit: config?.ugc_reference_kit ?? {}
+ 			},
+ 			supervisors,
+ 			isComposioConfigured
+diff --git a/personagen-svelte/src/routes/(portal)/personas/[agentId]/+page.svelte b/personagen-svelte/src/routes/(portal)/personas/[agentId]/+page.svelte
+index 3b5ab2b..6a2eaae 100644
+--- a/personagen-svelte/src/routes/(portal)/personas/[agentId]/+page.svelte
++++ b/personagen-svelte/src/routes/(portal)/personas/[agentId]/+page.svelte
+@@ -50,6 +50,10 @@
+ 	let editNiche = $state(agent?.niche ?? '');
+ 	let editInitial = $state(agent?.initial ?? '');
+ 	let editGradient = $state(agent?.gradient ?? 'linear-gradient(135deg, #7C3AED, #4F46E5)');
++	let characterRef = $state<string | null>(agent?.ugc_character_ref ?? null);
++	let generatingAvatar = $state(false);
++	let referenceKit = $state<Record<string, string>>(agent?.ugc_reference_kit ?? {});
++	let generatingKitStage = $state<'side_profiles' | 'face_closeup' | 'feature_grid' | null>(null);
+ 	let editSupervisorId = $state<string | null>(agent?.supervisor_agent_id ?? null);
+ 	let editRuntimeOwner = $state<'svelte-gemini' | 'hermes-gateway' | 'hermes-orchestrated'>(
+ 		agent?.runtime_owner ?? 'svelte-gemini'
+@@ -66,6 +70,7 @@
+ 	let activeHoursStart = $state(agent?.active_hours_start ?? 8);
+ 	let activeHoursEnd = $state(agent?.active_hours_end ?? 22);
+ 	let autonomyLevel = $state<AutonomyLevel>(agent?.autonomy_level ?? 'advisor');
++	let selectedVoice = $state(agent?.ugc_voice ?? 'Adam');
+ 	let rssUrl = $state(agent?.rss_url ?? '');
+ 	let rssActive = $state(agent?.rss_active ?? false);
+ 	let rssLastPolledAt = $state<string | null>(agent?.rss_last_polled_at ?? null);
+@@ -166,6 +171,8 @@
+ 		editNiche = fresh.niche ?? '';
+ 		editInitial = fresh.initial ?? '';
+ 		editGradient = fresh.gradient ?? 'linear-gradient(135deg, #7C3AED, #4F46E5)';
++		characterRef = fresh.ugc_character_ref ?? null;
++		referenceKit = fresh.ugc_reference_kit ?? {};
+ 		editSupervisorId = fresh.supervisor_agent_id ?? null;
+ 		editRuntimeOwner = fresh.runtime_owner ?? 'svelte-gemini';
+ 
+@@ -181,6 +188,7 @@
+ 		rssUrl = fresh.rss_url ?? '';
+ 		rssActive = fresh.rss_active ?? false;
+ 		rssLastPolledAt = fresh.rss_last_polled_at ?? null;
++		selectedVoice = fresh.ugc_voice ?? 'Adam';
+ 
+ 		// Feed/Connections data belongs to the previous persona — drop it so
+ 		// stale posts or a stale open modal can't linger under the new identity.
+@@ -199,6 +207,47 @@
+ 		if (activeTab === 'connections' && agent?.id) checkStatuses();
+ 	});
+ 
++	$effect(() => {
++		if (activeTab === 'profile') loadVoiceCatalog();
++	});
++
++	// ── UGC voice picker ───────────────────────────────────────────
++	let voiceCatalog = $state<Array<{ name: string; label: string; gender: 'male' | 'female'; style: string }>>([]);
++	let previewingVoice = $state(false);
++	let previewAudio: HTMLAudioElement | null = null;
++
++	async function loadVoiceCatalog() {
++		if (voiceCatalog.length > 0) return;
++		try {
++			const res = await fetch('/api/voices');
++			const d = await res.json();
++			if (d.success) voiceCatalog = d.voices;
++		} catch (err) {
++			console.error('[Voices] Failed to load catalog:', err);
++		}
++	}
++
++	async function previewVoice() {
++		if (previewingVoice) return;
++		previewingVoice = true;
++		try {
++			const res = await fetch('/api/voices', {
++				method: 'POST',
++				headers: { 'Content-Type': 'application/json' },
++				body: JSON.stringify({ voice: selectedVoice })
++			});
++			const d = await res.json();
++			if (!d.success) throw new Error(d.error || 'Preview failed');
++			if (!previewAudio) previewAudio = new Audio();
++			previewAudio.src = d.audio_url;
++			await previewAudio.play();
++		} catch (err: any) {
++			showToast('Voice preview failed: ' + err.message, 'error');
++		} finally {
++			previewingVoice = false;
++		}
++	}
++
+ 	// ── Feed functions ─────────────────────────────────────────────
+ 	async function loadFeed() {
+ 		if (!agent?.id) return;
+@@ -331,6 +380,7 @@
+ 			autonomyLevel,
+ 			rssUrl,
+ 			rssActive,
++			ugcVoice: selectedVoice,
+ 			name: editName,
+ 			handle: editHandle,
+ 			status: editStatus,
+@@ -351,7 +401,7 @@
+ 			const d = await res.json();
+ 			if (!res.ok || !d.success) throw new Error(d.error || 'Server error');
+ 			// Update local agent state
+-			agent = { ...agent, name: editName, handle: editHandle, status: editStatus, niche: editNiche, gradient: editGradient, initial: editInitial, soul: soulText, skills: skillsText, tools: toolsText, timezone, posts_per_day: postsPerDay, active_hours_start: activeHoursStart, active_hours_end: activeHoursEnd, autonomy_level: autonomyLevel, rss_url: rssUrl, rss_active: rssActive };
++			agent = { ...agent, name: editName, handle: editHandle, status: editStatus, niche: editNiche, gradient: editGradient, initial: editInitial, soul: soulText, skills: skillsText, tools: toolsText, timezone, posts_per_day: postsPerDay, active_hours_start: activeHoursStart, active_hours_end: activeHoursEnd, autonomy_level: autonomyLevel, rss_url: rssUrl, rss_active: rssActive, ugc_voice: selectedVoice };
+ 			showToast(`Profile saved for ${editName}`, 'success');
+ 		} catch (err: any) {
+ 			showToast('Failed to save: ' + err.message, 'error');
+@@ -360,6 +410,92 @@
+ 		}
+ 	}
+ 
++	async function generateAvatar() {
++		if (!agent?.id || generatingAvatar) return;
++		generatingAvatar = true;
++		try {
++			const res = await fetch(`/api/agent/${agent.id}/generate-avatar`, { method: 'POST' });
++			const d = await res.json();
++			if (!res.ok || !d.success) throw new Error(d.error || 'Server error');
++			characterRef = d.character_ref;
++			agent = { ...agent, ugc_character_ref: d.character_ref };
++			showToast('Profile picture generated', 'success');
++		} catch (err: any) {
++			showToast('Failed to generate profile picture: ' + err.message, 'error');
++		} finally {
++			generatingAvatar = false;
++		}
++	}
++
++	// ── Reference-photo upload → character sheet ──────────────────
++	let referenceFile = $state<File | null>(null);
++	let referencePreviewUrl = $state<string | null>(null);
++
++	function onReferenceFileChange(e: Event) {
++		const input = e.currentTarget as HTMLInputElement;
++		const file = input.files?.[0];
++		if (!file) return;
++		if (referencePreviewUrl) URL.revokeObjectURL(referencePreviewUrl);
++		referenceFile = file;
++		referencePreviewUrl = URL.createObjectURL(file);
++	}
++
++	function clearReferenceFile() {
++		if (referencePreviewUrl) URL.revokeObjectURL(referencePreviewUrl);
++		referenceFile = null;
++		referencePreviewUrl = null;
++	}
++
++	async function generateAvatarFromReference() {
++		if (!agent?.id || !referenceFile || generatingAvatar) return;
++		generatingAvatar = true;
++		try {
++			const form = new FormData();
++			form.append('reference', referenceFile);
++			const res = await fetch(`/api/agent/${agent.id}/generate-avatar`, {
++				method: 'POST',
++				body: form
++			});
++			const d = await res.json();
++			if (!res.ok || !d.success) throw new Error(d.error || 'Server error');
++			characterRef = d.character_ref;
++			referenceKit = d.reference_kit ?? referenceKit;
++			agent = { ...agent, ugc_character_ref: d.character_ref, ugc_reference_kit: referenceKit };
++			clearReferenceFile();
++			showToast('Character sheet generated from your reference photo', 'success');
++		} catch (err: any) {
++			showToast('Failed to generate from reference photo: ' + err.message, 'error');
++		} finally {
++			generatingAvatar = false;
++		}
++	}
++
++	async function generateKitStage(stage: 'side_profiles' | 'face_closeup' | 'feature_grid') {
++		if (!agent?.id || generatingKitStage) return;
++		generatingKitStage = stage;
++		try {
++			const res = await fetch(`/api/agent/${agent.id}/generate-reference-kit`, {
++				method: 'POST',
++				headers: { 'Content-Type': 'application/json' },
++				body: JSON.stringify({ stage })
++			});
++			const d = await res.json();
++			if (!res.ok || !d.success) throw new Error(d.error || 'Server error');
++			referenceKit = { ...referenceKit, [stage]: d[stage] };
++			agent = { ...agent, ugc_reference_kit: referenceKit };
++			const stageLabels: Record<string, string> = {
++				side_profiles: 'Side-profile composite generated',
++				face_closeup: 'Facial close-up generated',
++				feature_grid: 'Feature grid generated'
++			};
++			showToast(stageLabels[stage], 'success');
++		} catch (err: any) {
++			showToast(`Failed to generate: ${err.message}`, 'error');
++		} finally {
++			generatingKitStage = null;
++		}
++	}
++
+ 	async function deleteAgent() {
+ 		if (!agent?.id) return;
+ 		const confirmed = confirm(`Permanently delete "${agent.name}"? This cannot be undone.`);
+@@ -493,8 +629,12 @@
+ <div class="persona-page">
+ 	<!-- ── Hero header ─────────────────────────────────────────── -->
+ 	<header class="persona-hero">
+-		<div class="hero-avatar" style="background: {agent.gradient}">
+-			{agent.initial ?? agent.name?.[0]?.toUpperCase() ?? '?'}
++		<div class="hero-avatar" style={agent.ugc_character_ref ? '' : `background: ${agent.gradient}`}>
++			{#if agent.ugc_character_ref}
++				<img src={agent.ugc_character_ref} alt={agent.name} />
++			{:else}
++				{agent.initial ?? agent.name?.[0]?.toUpperCase() ?? '?'}
++			{/if}
+ 		</div>
+ 		<div class="hero-info">
+ 			<div class="hero-name-row">
+@@ -535,8 +675,12 @@
+ 	     class of confusion where you lose track of which persona you're on). -->
+ 	<nav class="tab-nav">
+ 		<div class="tab-nav-identity" title="{agent.name} ({agent.handle})">
+-			<span class="tab-nav-avatar" style="background: {agent.gradient}">
+-				{agent.initial ?? agent.name?.[0]?.toUpperCase() ?? '?'}
++			<span class="tab-nav-avatar" style={agent.ugc_character_ref ? '' : `background: ${agent.gradient}`}>
++				{#if agent.ugc_character_ref}
++					<img src={agent.ugc_character_ref} alt={agent.name} />
++				{:else}
++					{agent.initial ?? agent.name?.[0]?.toUpperCase() ?? '?'}
++				{/if}
+ 			</span>
+ 			<span class="tab-nav-name">{agent.name}</span>
+ 		</div>
+@@ -688,7 +832,149 @@
+ 						</div>
+ 
+ 						<div class="field-group col-span-2">
+-							<label>Avatar Gradient</label>
++							<label>Profile Picture</label>
++							<p class="section-desc" style="margin-bottom: 0.75rem;">
++								The AI-generated character used to keep this persona's face consistent across its
++								spokesperson videos — used as the profile picture everywhere once generated.
++							</p>
++							<div class="avatar-gen-row">
++								<div class="avatar-gen-preview" style={characterRef ? '' : `background: ${editGradient}`}>
++									{#if characterRef}
++										<img src={characterRef} alt={editName} />
++									{:else}
++										{editInitial || editName?.[0]?.toUpperCase() || '?'}
++									{/if}
++								</div>
++								<div class="avatar-gen-actions">
++									<button
++										type="button"
++										class="btn-sync"
++										onclick={generateAvatar}
++										disabled={generatingAvatar}
++									>
++										{#if generatingAvatar}
++											<span class="spinner-sm"></span> Generating…
++										{:else}
++											✨ {characterRef ? 'Regenerate' : 'Generate'} Profile Picture
++										{/if}
++									</button>
++									<label class="btn-sync file-upload-btn">
++										📷 Upload Reference Photo
++										<input type="file" accept="image/*" onchange={onReferenceFileChange} hidden />
++									</label>
++									{#if !characterRef}
++										<p class="field-hint">No photo yet — falls back to the gradient below until generated.</p>
++									{/if}
++								</div>
++							</div>
++
++							{#if referencePreviewUrl}
++								<div class="reference-preview-row">
++									<img src={referencePreviewUrl} alt="Reference upload preview" class="reference-preview-thumb" />
++									<div class="avatar-gen-actions">
++										<button
++											type="button"
++											class="btn-generate"
++											onclick={generateAvatarFromReference}
++											disabled={generatingAvatar}
++										>
++											{#if generatingAvatar}
++												<span class="spinner-sm"></span> Generating (sheet + hero shot, ~30-60s)…
++											{:else}
++												✨ Generate Character Sheet From This Photo
++											{/if}
++										</button>
++										<button type="button" class="btn-clear-reference" onclick={clearReferenceFile} disabled={generatingAvatar}>
++											Cancel
++										</button>
++										<p class="field-hint">
++											Generates a full turnaround/reference sheet (multiple angles + detail close-ups) from this
++											photo, then pins it as the profile picture.
++										</p>
++									</div>
++								</div>
++							{/if}
++						</div>
++
++						{#if referenceKit.full_body}
++							<div class="field-group col-span-2">
++								<label>Reference Kit</label>
++								<p class="section-desc" style="margin-bottom: 0.75rem;">
++									Once you're happy with the profile picture above, generate the rest of the
++									consistency kit — side profiles, then a facial close-up.
++								</p>
++								<div class="kit-stage-row">
++									<div class="kit-stage">
++										<span class="kit-stage-label">1. Full body</span>
++										<img src={referenceKit.full_body} alt="Full body reference" class="kit-stage-thumb" />
++									</div>
++									<div class="kit-stage">
++										<span class="kit-stage-label">2. Side profiles</span>
++										{#if referenceKit.side_profiles}
++											<img src={referenceKit.side_profiles} alt="Side profile composite" class="kit-stage-thumb wide" />
++										{:else}
++											<button
++												type="button"
++												class="btn-sync kit-stage-generate"
++												onclick={() => generateKitStage('side_profiles')}
++												disabled={generatingKitStage !== null}
++											>
++												{#if generatingKitStage === 'side_profiles'}
++													<span class="spinner-sm"></span> Generating…
++												{:else}
++													Generate
++												{/if}
++											</button>
++										{/if}
++									</div>
++									<div class="kit-stage">
++										<span class="kit-stage-label">3. Facial close-up</span>
++										{#if referenceKit.face_closeup}
++											<img src={referenceKit.face_closeup} alt="Facial close-up" class="kit-stage-thumb" />
++										{:else if referenceKit.side_profiles}
++											<button
++												type="button"
++												class="btn-sync kit-stage-generate"
++												onclick={() => generateKitStage('face_closeup')}
++												disabled={generatingKitStage !== null}
++											>
++												{#if generatingKitStage === 'face_closeup'}
++													<span class="spinner-sm"></span> Generating…
++												{:else}
++													Generate
++												{/if}
++											</button>
++										{:else}
++											<span class="kit-stage-locked">Generate side profiles first</span>
++										{/if}
++									</div>
++									<div class="kit-stage">
++										<span class="kit-stage-label">4. Feature grid</span>
++										{#if referenceKit.feature_grid}
++											<img src={referenceKit.feature_grid} alt="Feature grid" class="kit-stage-thumb" />
++										{:else if referenceKit.face_closeup}
++											<button
++												type="button"
++												class="btn-sync kit-stage-generate"
++												onclick={() => generateKitStage('feature_grid')}
++												disabled={generatingKitStage !== null}
++											>
++												{#if generatingKitStage === 'feature_grid'}
++													<span class="spinner-sm"></span> Generating…
++												{:else}
++													Generate
++												{/if}
++											</button>
++										{:else}
++											<span class="kit-stage-locked">Generate facial close-up first</span>
++										{/if}
++									</div>
++								</div>
++							</div>
++						{/if}
++
++						<div class="field-group col-span-2">
++							<label>Avatar Gradient (fallback)</label>
+ 							<div class="gradient-row">
+ 								{#each GRADIENT_PRESETS as preset}
+ 									<button
+@@ -757,6 +1043,22 @@
+ 								{/each}
+ 							</select>
+ 						</div>
++						<div class="field-group">
++							<label for="p-voice">UGC Voice</label>
++							<div class="voice-picker-row">
++								<select id="p-voice" bind:value={selectedVoice}>
++									{#each voiceCatalog as v}
++										<option value={v.name}>{v.label} · {v.gender === 'male' ? '♂' : '♀'} · {v.style}</option>
++									{:else}
++										<option value={selectedVoice}>{selectedVoice}</option>
++									{/each}
++								</select>
++								<button type="button" class="btn-sync" onclick={previewVoice} disabled={previewingVoice}>
++									{previewingVoice ? '…' : '▶ Preview'}
++								</button>
++							</div>
++							<p class="field-hint">The video's spoken voice — pin one that matches this persona's on-camera character.</p>
++						</div>
+ 						<div class="field-group">
+ 							<label for="p-ppd">Posts Per Day: <strong>{postsPerDay}</strong></label>
+ 							<div class="slider-row">
+@@ -1012,9 +1314,18 @@
+ 		font-weight: 800;
+ 		color: #fff;
+ 		flex-shrink: 0;
++		overflow: hidden;
+ 		box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+ 	}
+ 
++	.hero-avatar img,
++	.tab-nav-avatar img {
++		width: 100%;
++		height: 100%;
++		object-fit: cover;
++		display: block;
++	}
++
+ 	.hero-info {
+ 		flex: 1;
+ 		min-width: 0;
+@@ -1128,6 +1439,7 @@
+ 		font-weight: 800;
+ 		color: #fff;
+ 		flex-shrink: 0;
++		overflow: hidden;
+ 	}
+ 
+ 	.tab-nav-name {
+@@ -1371,6 +1683,16 @@
+ 		margin: 0;
+ 	}
+ 
++	.voice-picker-row {
++		display: flex;
++		gap: 0.5rem;
++	}
++
++	.voice-picker-row select {
++		flex: 1;
++		min-width: 0;
++	}
++
+ 	.status-row {
+ 		display: flex;
+ 		gap: 0.5rem;
+@@ -1408,6 +1730,143 @@
+ 		flex-shrink: 0;
+ 	}
+ 
++	.avatar-gen-row {
++		display: flex;
++		align-items: center;
++		gap: 1.25rem;
++		flex-wrap: wrap;
++	}
++
++	.avatar-gen-preview {
++		width: 96px;
++		height: 96px;
++		border-radius: 20px;
++		display: flex;
++		align-items: center;
++		justify-content: center;
++		font-size: 2rem;
++		font-weight: 800;
++		color: #fff;
++		flex-shrink: 0;
++		overflow: hidden;
++		border: 1px solid var(--border);
++	}
++
++	.avatar-gen-preview img {
++		width: 100%;
++		height: 100%;
++		object-fit: cover;
++		display: block;
++	}
++
++	.avatar-gen-actions {
++		display: flex;
++		flex-direction: column;
++		gap: 0.4rem;
++		align-items: flex-start;
++	}
++
++	.file-upload-btn {
++		display: inline-flex;
++		align-items: center;
++		gap: 0.4rem;
++		cursor: pointer;
++	}
++
++	.reference-preview-row {
++		display: flex;
++		align-items: flex-start;
++		gap: 1.25rem;
++		margin-top: 1rem;
++		padding-top: 1rem;
++		border-top: 1px dashed var(--border);
++	}
++
++	.reference-preview-thumb {
++		width: 96px;
++		height: 96px;
++		border-radius: 12px;
++		object-fit: cover;
++		border: 1px solid var(--border);
++		flex-shrink: 0;
++	}
++
++	.btn-clear-reference {
++		background: none;
++		border: none;
++		color: var(--text-dim);
++		font-size: 0.75rem;
++		font-weight: 600;
++		cursor: pointer;
++		padding: 0.2rem 0;
++		text-decoration: underline;
++	}
++
++	.btn-clear-reference:disabled {
++		opacity: 0.5;
++		cursor: not-allowed;
++	}
++
++	.kit-stage-row {
++		display: flex;
++		gap: 1rem;
++		flex-wrap: wrap;
++	}
++
++	.kit-stage {
++		display: flex;
++		flex-direction: column;
++		gap: 0.5rem;
++		align-items: flex-start;
++	}
++
++	.kit-stage-label {
++		font-size: 0.7rem;
++		font-weight: 700;
++		text-transform: uppercase;
++		letter-spacing: 0.04em;
++		color: var(--text-dim);
++	}
++
++	.kit-stage-thumb {
++		width: 120px;
++		height: 120px;
++		border-radius: 12px;
++		object-fit: cover;
++		border: 1px solid var(--border);
++	}
++
++	.kit-stage-thumb.wide {
++		width: 200px;
++	}
++
++	.kit-stage-generate {
++		width: 120px;
++		height: 120px;
++		border-radius: 12px;
++		border: 1px dashed var(--border-strong);
++		background: var(--surface-2);
++		display: flex;
++		align-items: center;
++		justify-content: center;
++		text-align: center;
++		font-size: 0.78rem;
++	}
++
++	.kit-stage-locked {
++		width: 120px;
++		height: 120px;
++		border-radius: 12px;
++		border: 1px dashed var(--border);
++		display: flex;
++		align-items: center;
++		justify-content: center;
++		text-align: center;
++		font-size: 0.68rem;
++		color: var(--text-dim);
++		padding: 0.5rem;
++	}
++
+ 	.gradient-row {
+ 		display: flex;
+ 		align-items: center;
+diff --git a/personagen-svelte/src/routes/api/agents/config/+server.ts b/personagen-svelte/src/routes/api/agents/config/+server.ts
+index a9df2da..c258101 100644
+--- a/personagen-svelte/src/routes/api/agents/config/+server.ts
++++ b/personagen-svelte/src/routes/api/agents/config/+server.ts
+@@ -22,6 +22,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
+ 			autonomyLevel,
+ 			rssUrl,
+ 			rssActive,
++			ugcVoice,
+ 			// Editable agent settings fields
+ 			name,
+ 			niche,
+@@ -87,7 +88,8 @@ export const POST: RequestHandler = async ({ request, locals }) => {
+ 			activeHoursEnd,
+ 			autonomyLevel,
+ 			rssUrl,
+-			rssActive
++			rssActive,
++			ugcVoice
+ 		].some((val) => val !== undefined);
+ 
+ 		if (hasConfigFields) {
+@@ -103,7 +105,8 @@ export const POST: RequestHandler = async ({ request, locals }) => {
+ 				active_hours_end: activeHoursEnd !== undefined ? activeHoursEnd : 22,
+ 				autonomy_level: autonomyLevel || 'advisor',
+ 				rss_url: rssUrl || '',
+-				rss_active: rssActive !== undefined ? rssActive : false
++				rss_active: rssActive !== undefined ? rssActive : false,
++				ugc_voice: ugcVoice || 'Adam'
+ 			});
+ 
+ 			if (configErr) throw configErr;

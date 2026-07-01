@@ -14,7 +14,7 @@
 
 import { env } from '$env/dynamic/private';
 import { getServiceSupabase } from './service-supabase';
-import { generateUgcPack } from './content/generate';
+import { generateUgcPack, generateCinematicUgcPack } from './content/generate';
 import { VIDEO_ONLY_PLATFORMS } from './social/platforms';
 
 const DEFAULT_TZ = 'Australia/Sydney';
@@ -160,6 +160,13 @@ async function generateDraftsForAgent(
 		(existing || []).map((p: any) => `${p.scheduled_date}T${(p.scheduled_time || '').slice(0, 5)}`)
 	);
 
+	// Exactly one high-production cinematic post per day — always the day's
+	// first slot (deterministic regardless of run history), everything else
+	// stays the cheap standard single-shot path. Keeps cinematic mode off the
+	// 2-hourly cadence by default per cost (~$2.30/post vs ~$0.70) while still
+	// guaranteeing one per day.
+	const firstSlotTimeStr = `${String(startH).padStart(2, '0')}:00:00`;
+
 	let created = 0;
 	for (const slot of slots) {
 		if (created >= opts.maxToCreate) break;
@@ -168,14 +175,27 @@ async function generateDraftsForAgent(
 		// Only fill future slots — don't backfill times that already passed today.
 		if (zonedWallTimeToEpoch(slot.dateStr, slot.timeStr, tz) <= Date.now()) continue;
 
+		const isCinematicSlot = slot.timeStr === firstSlotTimeStr;
+
 		try {
-			const pack = await generateUgcPack({
-				supabase,
-				userId,
-				agentId,
-				platform: platforms[0],
-				autopilot: true
-			});
+			const genInput = { supabase, userId, agentId, platform: platforms[0], autopilot: true };
+			let pack;
+			if (isCinematicSlot) {
+				try {
+					pack = await generateCinematicUgcPack(genInput);
+				} catch (cinematicErr) {
+					// Don't leave the day's slot empty over a cinematic-only failure
+					// (e.g. no product photo yet) — fall back to the standard path.
+					console.warn(
+						'[Autopilot] Cinematic generation failed, falling back to standard for',
+						key,
+						(cinematicErr as Error).message
+					);
+					pack = await generateUgcPack(genInput);
+				}
+			} else {
+				pack = await generateUgcPack(genInput);
+			}
 
 			const slotPlatforms =
 				pack.content?.media_type === 'video'

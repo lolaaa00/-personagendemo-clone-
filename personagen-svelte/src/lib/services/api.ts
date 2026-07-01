@@ -206,14 +206,14 @@ export const Autopilot = {
 
 export const Accounts = {
 	checkStatus: (agentId: string) =>
-		request<Record<string, any>>(ENDPOINTS.accounts, 'check_status', { agentId }),
+		request<Record<string, any>>(ENDPOINTS.accounts, 'check_status', { persona_id: agentId }),
 	initConnection: (agentId: string, platform: string) =>
 		request<{ redirect_url?: string }>(ENDPOINTS.accounts, 'initiate_connection', {
-			agentId,
+			persona_id: agentId,
 			platform
 		}),
 	disconnect: (agentId: string, platform: string) =>
-		request(ENDPOINTS.accounts, 'disconnect', { agentId, platform })
+		request(ENDPOINTS.accounts, 'disconnect', { persona_id: agentId, platform })
 };
 
 // ── Personas (Direct DB) ──────────────────────────────────────────────────

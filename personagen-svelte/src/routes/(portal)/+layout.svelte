@@ -196,8 +196,12 @@
 					onclick={closeSidebar}
 					title={sidebarState.collapsed ? `${agent.name} (${agent.handle})` : undefined}
 				>
-					<span class="sidebar-persona-avatar" style="background: {agent.gradient ?? 'var(--gradient)'}">
-						{agent.initial ?? (agent.name?.[0] ?? '?').toUpperCase()}
+					<span class="sidebar-persona-avatar" style={agent.ugc_character_ref ? '' : `background: ${agent.gradient ?? 'var(--gradient)'}`}>
+						{#if agent.ugc_character_ref}
+							<img src={agent.ugc_character_ref} alt={agent.name} />
+						{:else}
+							{agent.initial ?? (agent.name?.[0] ?? '?').toUpperCase()}
+						{/if}
 					</span>
 					{#if !sidebarState.collapsed}
 						<span class="sidebar-nav-label">
@@ -1030,6 +1034,14 @@
 		color: #fff;
 		flex-shrink: 0;
 		letter-spacing: -0.01em;
+		overflow: hidden;
+	}
+
+	.sidebar-persona-avatar img {
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+		display: block;
 	}
 
 	.sidebar-collapsed .sidebar-persona-avatar {

@@ -48,6 +48,12 @@ export const load: PageServerLoad = async ({ locals }) => {
 				// Roster of creator agents
 				const creators = dbAgents.filter((a) => !a.is_overseer);
 
+				const creatorIds = creators.map((a) => a.id);
+				const { data: configs } = creatorIds.length
+					? await locals.supabase.from('agent_configs').select('agent_id, ugc_character_ref').in('agent_id', creatorIds)
+					: { data: [] };
+				const characterRefById = new Map((configs ?? []).map((c: any) => [c.agent_id, c.ugc_character_ref]));
+
 				agents = creators.map((a) => {
 					const connCount = a.connection_count ?? 0;
 					const agentPosts = postsByAgent[a.id] || [];
@@ -88,6 +94,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 						active: a.status === 'active',
 						trend: '+0.0%',
 						perf,
+						ugc_character_ref: characterRefById.get(a.id) ?? null,
 						total_token_usage: totalTokenUsage,
 						total_token_cost: Number(totalTokenCost.toFixed(4)),
 						total_views: totalViews,

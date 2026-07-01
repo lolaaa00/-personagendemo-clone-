@@ -36,7 +36,10 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 				autonomy_level: config?.autonomy_level ?? 'advisor',
 				rss_url: config?.rss_url ?? '',
 				rss_active: config?.rss_active ?? false,
-				rss_last_polled_at: config?.rss_last_polled_at ?? null
+				rss_last_polled_at: config?.rss_last_polled_at ?? null,
+				ugc_voice: config?.ugc_voice ?? 'Adam',
+				ugc_character_ref: config?.ugc_character_ref ?? null,
+				ugc_reference_kit: config?.ugc_reference_kit ?? {}
 			},
 			supervisors,
 			isComposioConfigured

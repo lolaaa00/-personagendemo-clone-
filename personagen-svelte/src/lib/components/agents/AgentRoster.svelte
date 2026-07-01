@@ -132,8 +132,12 @@
 				tabindex="0"
 			>
 				<div class="dash-agent-cell" role="cell">
-					<div class="dash-agent-avatar" style="background: {agent.gradient}">
-						{agent.initial}
+					<div class="dash-agent-avatar" style={agent.ugc_character_ref ? '' : `background: ${agent.gradient}`}>
+						{#if agent.ugc_character_ref}
+							<img src={agent.ugc_character_ref} alt={agent.name} />
+						{:else}
+							{agent.initial}
+						{/if}
 					</div>
 					<div class="dash-agent-info">
 						<span class="dash-agent-name" style="display: flex; align-items: center; gap: 0.5rem;">
@@ -319,6 +323,14 @@
 		font-weight: 700;
 		color: #fff;
 		flex-shrink: 0;
+		overflow: hidden;
+	}
+
+	.dash-agent-avatar img {
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+		display: block;
 	}
 
 	.dash-agent-info {

@@ -2,9 +2,11 @@
 	import { showToast } from '$lib/stores/ui.svelte';
 	import { onMount } from 'svelte';
 
-	// Profile
-	let profileName = $state('James Adams');
-	let profileEmail = $state('james@personagen.ai');
+	let { data } = $props<{ data: { user?: { email?: string } | null } }>();
+
+	// Profile — email comes from auth session; name persisted in localStorage
+	let profileEmail = $derived(data.user?.email ?? '');
+	let profileName = $state(data.user?.email?.split('@')[0] ?? 'Account');
 	let profileSaving = $state(false);
 
 	// Notifications
@@ -88,7 +90,7 @@
 		if (stored) {
 			try {
 				const s = JSON.parse(stored);
-				profileName = s.profileName ?? profileName;
+				if (s.profileName) profileName = s.profileName;
 				emailAlerts = s.emailAlerts ?? emailAlerts;
 				pushNotifications = s.pushNotifications ?? pushNotifications;
 				weeklyReports = s.weeklyReports ?? weeklyReports;
@@ -261,12 +263,7 @@
 			<div class="card-body">
 				<div class="avatar-row">
 					<div class="profile-avatar">
-						<span
-							>{profileName
-								.split(' ')
-								.map((n) => n[0])
-								.join('')}</span
-						>
+						<span>{(profileName[0] ?? profileEmail[0] ?? 'U').toUpperCase()}</span>
 					</div>
 					<div class="avatar-info">
 						<span class="avatar-name">{profileName}</span>

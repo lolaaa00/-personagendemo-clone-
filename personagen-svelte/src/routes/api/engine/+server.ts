@@ -720,33 +720,20 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 					return json({ success: false, error: 'Missing brief data' }, { status: 400 });
 				}
 
-				// Get-then-update-or-insert: brand_briefs has no unique constraint on
-				// user_id, so a blind upsert would create duplicate rows.
+				// brand_briefs now has a UNIQUE(user_id) constraint (migration applied),
+				// so a single upsert is safe — still read first to compute the next
+				// version number rather than resetting it on every save.
 				const { data: existing } = await db.brandBriefs.get(session.user.id);
-				if (existing?.id) {
-					const { data: updated, error } = await locals.supabase
-						.from('brand_briefs')
-						.update({ data: briefData, version: (existing.version || 1) + 1 })
-						.eq('id', existing.id)
-						.select()
-						.single();
-					if (error) {
-						console.error('[Engine] Failed to update brand brief:', error);
-						return json({ success: false, error: error.message }, { status: 500 });
-					}
-					return json({ success: true, data: updated });
-				}
-
-				const { data: inserted, error } = await locals.supabase
-					.from('brand_briefs')
-					.insert({ user_id: session.user.id, data: briefData, version: 1 })
-					.select()
-					.single();
+				const { data: saved, error } = await db.brandBriefs.upsert({
+					user_id: session.user.id,
+					data: briefData,
+					version: (existing?.version || 0) + 1
+				});
 				if (error) {
-					console.error('[Engine] Failed to insert brand brief:', error);
+					console.error('[Engine] Failed to save brand brief:', error);
 					return json({ success: false, error: error.message }, { status: 500 });
 				}
-				return json({ success: true, data: inserted });
+				return json({ success: true, data: saved });
 			}
 
 			if (action === 'scrape_store') {

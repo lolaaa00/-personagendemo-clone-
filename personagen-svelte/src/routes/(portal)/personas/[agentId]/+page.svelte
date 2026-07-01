@@ -50,6 +50,10 @@
 	let editNiche = $state(agent?.niche ?? '');
 	let editInitial = $state(agent?.initial ?? '');
 	let editGradient = $state(agent?.gradient ?? 'linear-gradient(135deg, #7C3AED, #4F46E5)');
+	let characterRef = $state<string | null>(agent?.ugc_character_ref ?? null);
+	let generatingAvatar = $state(false);
+	let referenceKit = $state<Record<string, string>>(agent?.ugc_reference_kit ?? {});
+	let generatingKitStage = $state<'side_profiles' | 'face_closeup' | 'feature_grid' | null>(null);
 	let editSupervisorId = $state<string | null>(agent?.supervisor_agent_id ?? null);
 	let editRuntimeOwner = $state<'svelte-gemini' | 'hermes-gateway' | 'hermes-orchestrated'>(
 		agent?.runtime_owner ?? 'svelte-gemini'
@@ -66,6 +70,7 @@
 	let activeHoursStart = $state(agent?.active_hours_start ?? 8);
 	let activeHoursEnd = $state(agent?.active_hours_end ?? 22);
 	let autonomyLevel = $state<AutonomyLevel>(agent?.autonomy_level ?? 'advisor');
+	let selectedVoice = $state(agent?.ugc_voice ?? 'Adam');
 	let rssUrl = $state(agent?.rss_url ?? '');
 	let rssActive = $state(agent?.rss_active ?? false);
 	let rssLastPolledAt = $state<string | null>(agent?.rss_last_polled_at ?? null);
@@ -166,6 +171,8 @@
 		editNiche = fresh.niche ?? '';
 		editInitial = fresh.initial ?? '';
 		editGradient = fresh.gradient ?? 'linear-gradient(135deg, #7C3AED, #4F46E5)';
+		characterRef = fresh.ugc_character_ref ?? null;
+		referenceKit = fresh.ugc_reference_kit ?? {};
 		editSupervisorId = fresh.supervisor_agent_id ?? null;
 		editRuntimeOwner = fresh.runtime_owner ?? 'svelte-gemini';
 
@@ -181,6 +188,7 @@
 		rssUrl = fresh.rss_url ?? '';
 		rssActive = fresh.rss_active ?? false;
 		rssLastPolledAt = fresh.rss_last_polled_at ?? null;
+		selectedVoice = fresh.ugc_voice ?? 'Adam';
 
 		// Feed/Connections data belongs to the previous persona — drop it so
 		// stale posts or a stale open modal can't linger under the new identity.
@@ -198,6 +206,47 @@
 	$effect(() => {
 		if (activeTab === 'connections' && agent?.id) checkStatuses();
 	});
+
+	$effect(() => {
+		if (activeTab === 'profile') loadVoiceCatalog();
+	});
+
+	// ── UGC voice picker ───────────────────────────────────────────
+	let voiceCatalog = $state<Array<{ name: string; label: string; gender: 'male' | 'female'; style: string }>>([]);
+	let previewingVoice = $state(false);
+	let previewAudio: HTMLAudioElement | null = null;
+
+	async function loadVoiceCatalog() {
+		if (voiceCatalog.length > 0) return;
+		try {
+			const res = await fetch('/api/voices');
+			const d = await res.json();
+			if (d.success) voiceCatalog = d.voices;
+		} catch (err) {
+			console.error('[Voices] Failed to load catalog:', err);
+		}
+	}
+
+	async function previewVoice() {
+		if (previewingVoice) return;
+		previewingVoice = true;
+		try {
+			const res = await fetch('/api/voices', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ voice: selectedVoice })
+			});
+			const d = await res.json();
+			if (!d.success) throw new Error(d.error || 'Preview failed');
+			if (!previewAudio) previewAudio = new Audio();
+			previewAudio.src = d.audio_url;
+			await previewAudio.play();
+		} catch (err: any) {
+			showToast('Voice preview failed: ' + err.message, 'error');
+		} finally {
+			previewingVoice = false;
+		}
+	}
 
 	// ── Feed functions ─────────────────────────────────────────────
 	async function loadFeed() {
@@ -331,6 +380,7 @@
 			autonomyLevel,
 			rssUrl,
 			rssActive,
+			ugcVoice: selectedVoice,
 			name: editName,
 			handle: editHandle,
 			status: editStatus,
@@ -351,12 +401,98 @@
 			const d = await res.json();
 			if (!res.ok || !d.success) throw new Error(d.error || 'Server error');
 			// Update local agent state
-			agent = { ...agent, name: editName, handle: editHandle, status: editStatus, niche: editNiche, gradient: editGradient, initial: editInitial, soul: soulText, skills: skillsText, tools: toolsText, timezone, posts_per_day: postsPerDay, active_hours_start: activeHoursStart, active_hours_end: activeHoursEnd, autonomy_level: autonomyLevel, rss_url: rssUrl, rss_active: rssActive };
+			agent = { ...agent, name: editName, handle: editHandle, status: editStatus, niche: editNiche, gradient: editGradient, initial: editInitial, soul: soulText, skills: skillsText, tools: toolsText, timezone, posts_per_day: postsPerDay, active_hours_start: activeHoursStart, active_hours_end: activeHoursEnd, autonomy_level: autonomyLevel, rss_url: rssUrl, rss_active: rssActive, ugc_voice: selectedVoice };
 			showToast(`Profile saved for ${editName}`, 'success');
 		} catch (err: any) {
 			showToast('Failed to save: ' + err.message, 'error');
 		} finally {
 			saving = false;
+		}
+	}
+
+	async function generateAvatar() {
+		if (!agent?.id || generatingAvatar) return;
+		generatingAvatar = true;
+		try {
+			const res = await fetch(`/api/agent/${agent.id}/generate-avatar`, { method: 'POST' });
+			const d = await res.json();
+			if (!res.ok || !d.success) throw new Error(d.error || 'Server error');
+			characterRef = d.character_ref;
+			agent = { ...agent, ugc_character_ref: d.character_ref };
+			showToast('Profile picture generated', 'success');
+		} catch (err: any) {
+			showToast('Failed to generate profile picture: ' + err.message, 'error');
+		} finally {
+			generatingAvatar = false;
+		}
+	}
+
+	// ── Reference-photo upload → character sheet ──────────────────
+	let referenceFile = $state<File | null>(null);
+	let referencePreviewUrl = $state<string | null>(null);
+
+	function onReferenceFileChange(e: Event) {
+		const input = e.currentTarget as HTMLInputElement;
+		const file = input.files?.[0];
+		if (!file) return;
+		if (referencePreviewUrl) URL.revokeObjectURL(referencePreviewUrl);
+		referenceFile = file;
+		referencePreviewUrl = URL.createObjectURL(file);
+	}
+
+	function clearReferenceFile() {
+		if (referencePreviewUrl) URL.revokeObjectURL(referencePreviewUrl);
+		referenceFile = null;
+		referencePreviewUrl = null;
+	}
+
+	async function generateAvatarFromReference() {
+		if (!agent?.id || !referenceFile || generatingAvatar) return;
+		generatingAvatar = true;
+		try {
+			const form = new FormData();
+			form.append('reference', referenceFile);
+			const res = await fetch(`/api/agent/${agent.id}/generate-avatar`, {
+				method: 'POST',
+				body: form
+			});
+			const d = await res.json();
+			if (!res.ok || !d.success) throw new Error(d.error || 'Server error');
+			characterRef = d.character_ref;
+			referenceKit = d.reference_kit ?? referenceKit;
+			agent = { ...agent, ugc_character_ref: d.character_ref, ugc_reference_kit: referenceKit };
+			clearReferenceFile();
+			showToast('Character sheet generated from your reference photo', 'success');
+		} catch (err: any) {
+			showToast('Failed to generate from reference photo: ' + err.message, 'error');
+		} finally {
+			generatingAvatar = false;
+		}
+	}
+
+	async function generateKitStage(stage: 'side_profiles' | 'face_closeup' | 'feature_grid') {
+		if (!agent?.id || generatingKitStage) return;
+		generatingKitStage = stage;
+		try {
+			const res = await fetch(`/api/agent/${agent.id}/generate-reference-kit`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ stage })
+			});
+			const d = await res.json();
+			if (!res.ok || !d.success) throw new Error(d.error || 'Server error');
+			referenceKit = { ...referenceKit, [stage]: d[stage] };
+			agent = { ...agent, ugc_reference_kit: referenceKit };
+			const stageLabels: Record<string, string> = {
+				side_profiles: 'Side-profile composite generated',
+				face_closeup: 'Facial close-up generated',
+				feature_grid: 'Feature grid generated'
+			};
+			showToast(stageLabels[stage], 'success');
+		} catch (err: any) {
+			showToast(`Failed to generate: ${err.message}`, 'error');
+		} finally {
+			generatingKitStage = null;
 		}
 	}
 
@@ -493,8 +629,12 @@
 <div class="persona-page">
 	<!-- ── Hero header ─────────────────────────────────────────── -->
 	<header class="persona-hero">
-		<div class="hero-avatar" style="background: {agent.gradient}">
-			{agent.initial ?? agent.name?.[0]?.toUpperCase() ?? '?'}
+		<div class="hero-avatar" style={agent.ugc_character_ref ? '' : `background: ${agent.gradient}`}>
+			{#if agent.ugc_character_ref}
+				<img src={agent.ugc_character_ref} alt={agent.name} />
+			{:else}
+				{agent.initial ?? agent.name?.[0]?.toUpperCase() ?? '?'}
+			{/if}
 		</div>
 		<div class="hero-info">
 			<div class="hero-name-row">
@@ -535,8 +675,12 @@
 	     class of confusion where you lose track of which persona you're on). -->
 	<nav class="tab-nav">
 		<div class="tab-nav-identity" title="{agent.name} ({agent.handle})">
-			<span class="tab-nav-avatar" style="background: {agent.gradient}">
-				{agent.initial ?? agent.name?.[0]?.toUpperCase() ?? '?'}
+			<span class="tab-nav-avatar" style={agent.ugc_character_ref ? '' : `background: ${agent.gradient}`}>
+				{#if agent.ugc_character_ref}
+					<img src={agent.ugc_character_ref} alt={agent.name} />
+				{:else}
+					{agent.initial ?? agent.name?.[0]?.toUpperCase() ?? '?'}
+				{/if}
 			</span>
 			<span class="tab-nav-name">{agent.name}</span>
 		</div>
@@ -688,7 +832,149 @@
 						</div>
 
 						<div class="field-group col-span-2">
-							<label>Avatar Gradient</label>
+							<label>Profile Picture</label>
+							<p class="section-desc" style="margin-bottom: 0.75rem;">
+								The AI-generated character used to keep this persona's face consistent across its
+								spokesperson videos — used as the profile picture everywhere once generated.
+							</p>
+							<div class="avatar-gen-row">
+								<div class="avatar-gen-preview" style={characterRef ? '' : `background: ${editGradient}`}>
+									{#if characterRef}
+										<img src={characterRef} alt={editName} />
+									{:else}
+										{editInitial || editName?.[0]?.toUpperCase() || '?'}
+									{/if}
+								</div>
+								<div class="avatar-gen-actions">
+									<button
+										type="button"
+										class="btn-sync"
+										onclick={generateAvatar}
+										disabled={generatingAvatar}
+									>
+										{#if generatingAvatar}
+											<span class="spinner-sm"></span> Generating…
+										{:else}
+											✨ {characterRef ? 'Regenerate' : 'Generate'} Profile Picture
+										{/if}
+									</button>
+									<label class="btn-sync file-upload-btn">
+										📷 Upload Reference Photo
+										<input type="file" accept="image/*" onchange={onReferenceFileChange} hidden />
+									</label>
+									{#if !characterRef}
+										<p class="field-hint">No photo yet — falls back to the gradient below until generated.</p>
+									{/if}
+								</div>
+							</div>
+
+							{#if referencePreviewUrl}
+								<div class="reference-preview-row">
+									<img src={referencePreviewUrl} alt="Reference upload preview" class="reference-preview-thumb" />
+									<div class="avatar-gen-actions">
+										<button
+											type="button"
+											class="btn-generate"
+											onclick={generateAvatarFromReference}
+											disabled={generatingAvatar}
+										>
+											{#if generatingAvatar}
+												<span class="spinner-sm"></span> Generating (sheet + hero shot, ~30-60s)…
+											{:else}
+												✨ Generate Character Sheet From This Photo
+											{/if}
+										</button>
+										<button type="button" class="btn-clear-reference" onclick={clearReferenceFile} disabled={generatingAvatar}>
+											Cancel
+										</button>
+										<p class="field-hint">
+											Generates a full turnaround/reference sheet (multiple angles + detail close-ups) from this
+											photo, then pins it as the profile picture.
+										</p>
+									</div>
+								</div>
+							{/if}
+						</div>
+
+						{#if referenceKit.full_body}
+							<div class="field-group col-span-2">
+								<label>Reference Kit</label>
+								<p class="section-desc" style="margin-bottom: 0.75rem;">
+									Once you're happy with the profile picture above, generate the rest of the
+									consistency kit — side profiles, then a facial close-up.
+								</p>
+								<div class="kit-stage-row">
+									<div class="kit-stage">
+										<span class="kit-stage-label">1. Full body</span>
+										<img src={referenceKit.full_body} alt="Full body reference" class="kit-stage-thumb" />
+									</div>
+									<div class="kit-stage">
+										<span class="kit-stage-label">2. Side profiles</span>
+										{#if referenceKit.side_profiles}
+											<img src={referenceKit.side_profiles} alt="Side profile composite" class="kit-stage-thumb wide" />
+										{:else}
+											<button
+												type="button"
+												class="btn-sync kit-stage-generate"
+												onclick={() => generateKitStage('side_profiles')}
+												disabled={generatingKitStage !== null}
+											>
+												{#if generatingKitStage === 'side_profiles'}
+													<span class="spinner-sm"></span> Generating…
+												{:else}
+													Generate
+												{/if}
+											</button>
+										{/if}
+									</div>
+									<div class="kit-stage">
+										<span class="kit-stage-label">3. Facial close-up</span>
+										{#if referenceKit.face_closeup}
+											<img src={referenceKit.face_closeup} alt="Facial close-up" class="kit-stage-thumb" />
+										{:else if referenceKit.side_profiles}
+											<button
+												type="button"
+												class="btn-sync kit-stage-generate"
+												onclick={() => generateKitStage('face_closeup')}
+												disabled={generatingKitStage !== null}
+											>
+												{#if generatingKitStage === 'face_closeup'}
+													<span class="spinner-sm"></span> Generating…
+												{:else}
+													Generate
+												{/if}
+											</button>
+										{:else}
+											<span class="kit-stage-locked">Generate side profiles first</span>
+										{/if}
+									</div>
+									<div class="kit-stage">
+										<span class="kit-stage-label">4. Feature grid</span>
+										{#if referenceKit.feature_grid}
+											<img src={referenceKit.feature_grid} alt="Feature grid" class="kit-stage-thumb" />
+										{:else if referenceKit.face_closeup}
+											<button
+												type="button"
+												class="btn-sync kit-stage-generate"
+												onclick={() => generateKitStage('feature_grid')}
+												disabled={generatingKitStage !== null}
+											>
+												{#if generatingKitStage === 'feature_grid'}
+													<span class="spinner-sm"></span> Generating…
+												{:else}
+													Generate
+												{/if}
+											</button>
+										{:else}
+											<span class="kit-stage-locked">Generate facial close-up first</span>
+										{/if}
+									</div>
+								</div>
+							</div>
+						{/if}
+
+						<div class="field-group col-span-2">
+							<label>Avatar Gradient (fallback)</label>
 							<div class="gradient-row">
 								{#each GRADIENT_PRESETS as preset}
 									<button
@@ -756,6 +1042,22 @@
 									<option value={tz.value}>{tz.label}</option>
 								{/each}
 							</select>
+						</div>
+						<div class="field-group">
+							<label for="p-voice">UGC Voice</label>
+							<div class="voice-picker-row">
+								<select id="p-voice" bind:value={selectedVoice}>
+									{#each voiceCatalog as v}
+										<option value={v.name}>{v.label} · {v.gender === 'male' ? '♂' : '♀'} · {v.style}</option>
+									{:else}
+										<option value={selectedVoice}>{selectedVoice}</option>
+									{/each}
+								</select>
+								<button type="button" class="btn-sync" onclick={previewVoice} disabled={previewingVoice}>
+									{previewingVoice ? '…' : '▶ Preview'}
+								</button>
+							</div>
+							<p class="field-hint">The video's spoken voice — pin one that matches this persona's on-camera character.</p>
 						</div>
 						<div class="field-group">
 							<label for="p-ppd">Posts Per Day: <strong>{postsPerDay}</strong></label>
@@ -1012,7 +1314,16 @@
 		font-weight: 800;
 		color: #fff;
 		flex-shrink: 0;
+		overflow: hidden;
 		box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+	}
+
+	.hero-avatar img,
+	.tab-nav-avatar img {
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+		display: block;
 	}
 
 	.hero-info {
@@ -1128,6 +1439,7 @@
 		font-weight: 800;
 		color: #fff;
 		flex-shrink: 0;
+		overflow: hidden;
 	}
 
 	.tab-nav-name {
@@ -1371,6 +1683,16 @@
 		margin: 0;
 	}
 
+	.voice-picker-row {
+		display: flex;
+		gap: 0.5rem;
+	}
+
+	.voice-picker-row select {
+		flex: 1;
+		min-width: 0;
+	}
+
 	.status-row {
 		display: flex;
 		gap: 0.5rem;
@@ -1406,6 +1728,143 @@
 		height: 7px;
 		border-radius: 50%;
 		flex-shrink: 0;
+	}
+
+	.avatar-gen-row {
+		display: flex;
+		align-items: center;
+		gap: 1.25rem;
+		flex-wrap: wrap;
+	}
+
+	.avatar-gen-preview {
+		width: 96px;
+		height: 96px;
+		border-radius: 20px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		font-size: 2rem;
+		font-weight: 800;
+		color: #fff;
+		flex-shrink: 0;
+		overflow: hidden;
+		border: 1px solid var(--border);
+	}
+
+	.avatar-gen-preview img {
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+		display: block;
+	}
+
+	.avatar-gen-actions {
+		display: flex;
+		flex-direction: column;
+		gap: 0.4rem;
+		align-items: flex-start;
+	}
+
+	.file-upload-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		cursor: pointer;
+	}
+
+	.reference-preview-row {
+		display: flex;
+		align-items: flex-start;
+		gap: 1.25rem;
+		margin-top: 1rem;
+		padding-top: 1rem;
+		border-top: 1px dashed var(--border);
+	}
+
+	.reference-preview-thumb {
+		width: 96px;
+		height: 96px;
+		border-radius: 12px;
+		object-fit: cover;
+		border: 1px solid var(--border);
+		flex-shrink: 0;
+	}
+
+	.btn-clear-reference {
+		background: none;
+		border: none;
+		color: var(--text-dim);
+		font-size: 0.75rem;
+		font-weight: 600;
+		cursor: pointer;
+		padding: 0.2rem 0;
+		text-decoration: underline;
+	}
+
+	.btn-clear-reference:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	.kit-stage-row {
+		display: flex;
+		gap: 1rem;
+		flex-wrap: wrap;
+	}
+
+	.kit-stage {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+		align-items: flex-start;
+	}
+
+	.kit-stage-label {
+		font-size: 0.7rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		color: var(--text-dim);
+	}
+
+	.kit-stage-thumb {
+		width: 120px;
+		height: 120px;
+		border-radius: 12px;
+		object-fit: cover;
+		border: 1px solid var(--border);
+	}
+
+	.kit-stage-thumb.wide {
+		width: 200px;
+	}
+
+	.kit-stage-generate {
+		width: 120px;
+		height: 120px;
+		border-radius: 12px;
+		border: 1px dashed var(--border-strong);
+		background: var(--surface-2);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		text-align: center;
+		font-size: 0.78rem;
+	}
+
+	.kit-stage-locked {
+		width: 120px;
+		height: 120px;
+		border-radius: 12px;
+		border: 1px dashed var(--border);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		text-align: center;
+		font-size: 0.68rem;
+		color: var(--text-dim);
+		padding: 0.5rem;
 	}
 
 	.gradient-row {

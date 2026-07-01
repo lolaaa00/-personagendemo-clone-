@@ -22,6 +22,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			autonomyLevel,
 			rssUrl,
 			rssActive,
+			ugcVoice,
 			// Editable agent settings fields
 			name,
 			niche,
@@ -87,7 +88,8 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			activeHoursEnd,
 			autonomyLevel,
 			rssUrl,
-			rssActive
+			rssActive,
+			ugcVoice
 		].some((val) => val !== undefined);
 
 		if (hasConfigFields) {
@@ -103,7 +105,8 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				active_hours_end: activeHoursEnd !== undefined ? activeHoursEnd : 22,
 				autonomy_level: autonomyLevel || 'advisor',
 				rss_url: rssUrl || '',
-				rss_active: rssActive !== undefined ? rssActive : false
+				rss_active: rssActive !== undefined ? rssActive : false,
+				ugc_voice: ugcVoice || 'Adam'
 			});
 
 			if (configErr) throw configErr;
