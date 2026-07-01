@@ -83,7 +83,6 @@ const BROLL_MODEL_CINEMATIC =
 const BROLL_MODEL_VEO_DEFERRED = env.UGC_BROLL_MODEL_PREMIUM || 'fal-ai/veo3.1/image-to-video';
 const FABRIC_RES = env.UGC_FABRIC_RES || '720p';
 const VIDEO_DURATION = env.UGC_VIDEO_DURATION || '5';
-const CINEMATIC_VIDEO_DURATION = env.UGC_CINEMATIC_DURATION || '15';
 
 /** Tolerant JSON parse for AI responses (strips markdown fences). */
 export function safeParseJson(text: string): any {
@@ -290,9 +289,10 @@ export interface CinematicShot {
 	duration: string;
 }
 
-const CINEMATIC_MAX_TOTAL_SECONDS = 15;
+const CINEMATIC_MAX_TOTAL_SECONDS = parseInt(env.UGC_CINEMATIC_DURATION || '15', 10);
 const CINEMATIC_MIN_SHOT_SECONDS = 2;
 const CINEMATIC_MAX_SHOT_SECONDS = 10;
+const CINEMATIC_MIN_SHOT_COUNT = 2;
 
 /**
  * Defensively clamps LLM-produced shot durations to values Kling's API will
@@ -302,27 +302,27 @@ const CINEMATIC_MAX_SHOT_SECONDS = 10;
  * validation layer.
  */
 function clampCinematicShots(shots: CinematicShot[]): CinematicShot[] {
-	const clamped = shots.map((s) => {
-		const n = parseInt(s.duration, 10);
-		const seconds = Number.isFinite(n)
-			? Math.min(CINEMATIC_MAX_SHOT_SECONDS, Math.max(CINEMATIC_MIN_SHOT_SECONDS, n))
-			: 3;
-		return { prompt: s.prompt, duration: String(seconds) };
-	});
-
 	const result: CinematicShot[] = [];
 	let total = 0;
-	for (const shot of clamped) {
-		const seconds = parseInt(shot.duration, 10);
+	for (const shot of shots) {
+		const n = parseInt(shot.duration, 10);
+		const seconds = Number.isFinite(n)
+			? Math.min(CINEMATIC_MAX_SHOT_SECONDS, Math.max(CINEMATIC_MIN_SHOT_SECONDS, n))
+			: CINEMATIC_MIN_SHOT_SECONDS;
+
 		if (total + seconds > CINEMATIC_MAX_TOTAL_SECONDS) {
 			if (result.length === 0) {
 				// Even the first shot alone exceeds the cap — clip it down rather
 				// than produce an empty shot list.
 				result.push({ prompt: shot.prompt, duration: String(CINEMATIC_MAX_TOTAL_SECONDS) });
+			} else {
+				console.warn(
+					`[Cinematic] Dropping ${shots.length - result.length} shot(s) — total duration would exceed the ${CINEMATIC_MAX_TOTAL_SECONDS}s cap.`
+				);
 			}
 			break;
 		}
-		result.push(shot);
+		result.push({ prompt: shot.prompt, duration: String(seconds) });
 		total += seconds;
 	}
 	return result;
@@ -348,6 +348,12 @@ export interface CinematicReferences {
  * carries the product photo (addressed as @Image1). Still passes
  * `multi_prompt` for the shot list, same as before.
  */
+// Multi-shot reference-to-video with audio (up to 5 shots, Pro tier) is a
+// meaningfully heavier job than the standard single 5s image-to-video clip —
+// falQueueJson's 270s default was tuned for the latter and was seen timing
+// out on cinematic jobs that were still legitimately rendering.
+const CINEMATIC_QUEUE_TIMEOUT_MS = 600000;
+
 async function generateCinematicVideo(
 	falKey: string,
 	refs: CinematicReferences,
@@ -370,7 +376,8 @@ async function generateCinematicVideo(
 			generate_audio: true,
 			negative_prompt: 'blur, distort, low quality, extra limbs, missing product, wrong product'
 		},
-		falKey
+		falKey,
+		CINEMATIC_QUEUE_TIMEOUT_MS
 	);
 	const url = data.video?.url;
 	if (!url) throw new Error('Cinematic multi-shot model returned no video');
@@ -413,27 +420,31 @@ export async function generateCinematicUgcPack(input: UgcPackInput): Promise<Ugc
 	const platform = input.platform || 'instagram';
 	const topic = input.topic || 'Sharing an honest experience with this product';
 
-	const ai = await resolveAiClient(supabase, userId);
+	const db = createDbService(supabase);
+	// Four independent lookups (none depends on another's result) — run
+	// concurrently rather than paying 4 sequential round-trips.
+	const [ai, cfg, agentResult, brandBriefResult] = await Promise.all([
+		resolveAiClient(supabase, userId),
+		loadUgcConfig(supabase, input.agentId),
+		input.agentId ? db.agents.get(input.agentId) : Promise.resolve({ data: null as any }),
+		db.brandBriefs.get(userId)
+	]);
 	if (!ai)
 		throw new Error('No AI provider configured. Add an OpenRouter or Gemini key in Settings.');
 
-	const db = createDbService(supabase);
-	const cfg = await loadUgcConfig(supabase, input.agentId);
 	const voiceGender = VOICE_CATALOG.find((v) => v.name === cfg.voice)?.gender;
 
 	let agentContext = '';
 	let agentData: any = null;
-	if (input.agentId) {
-		const { data: agent } = await db.agents.get(input.agentId);
-		if (agent) {
-			agentData = agent;
-			agentContext = `You are ${agent.name} (@${agent.handle}), a ${agent.niche} creator. Personality: ${agent.soul || 'authentic and relatable'}.`;
-		}
+	const agent = agentResult?.data;
+	if (agent) {
+		agentData = agent;
+		agentContext = `You are ${agent.name} (@${agent.handle}), a ${agent.niche} creator. Personality: ${agent.soul || 'authentic and relatable'}.`;
 	}
 
 	let selectedProduct: any = null;
 	let briefData: any = null;
-	const { data: brandBrief } = await db.brandBriefs.get(userId);
+	const brandBrief = brandBriefResult?.data;
 	if (brandBrief?.data) {
 		briefData = brandBrief.data;
 		const products = Array.isArray(briefData.products) ? briefData.products : [];
@@ -457,8 +468,33 @@ Angle for this post: "${topic}". Output ONLY the JSON.`;
 	const parsed = safeParseJson(raw);
 	if (!parsed) throw new Error('AI returned unparseable response');
 
-	const rawShots: CinematicShot[] = Array.isArray(parsed.shots) && parsed.shots.length > 0
-		? parsed.shots
+	let directorShots: any[] = Array.isArray(parsed.shots) ? parsed.shots : [];
+
+	if (directorShots.length > 0 && directorShots.length < CINEMATIC_MIN_SHOT_COUNT) {
+		// A 1-shot "cinematic" post still pays the full Kling Pro
+		// reference-to-video multi-shot price for content indistinguishable
+		// from the cheap standard path — retry once with a more insistent
+		// instruction before accepting the degenerate output.
+		console.warn(
+			`[Cinematic] Director returned ${directorShots.length} shot(s) (need >=${CINEMATIC_MIN_SHOT_COUNT}), retrying once.`
+		);
+		const retryRaw =
+			(await ai.generate(
+				`${prompt}\n\nYour previous response had too few shots. You MUST return at least ${CINEMATIC_MIN_SHOT_COUNT} shots (3-5 is ideal).`,
+				{ systemInstruction: CINEMATIC_DIRECTOR_SYSTEM, json: true }
+			)) || '{}';
+		const retryParsed = safeParseJson(retryRaw);
+		if (Array.isArray(retryParsed?.shots) && retryParsed.shots.length >= CINEMATIC_MIN_SHOT_COUNT) {
+			directorShots = retryParsed.shots;
+		} else {
+			console.warn(
+				`[Cinematic] Retry still returned ${retryParsed?.shots?.length ?? 0} shot(s) — proceeding with what we have.`
+			);
+		}
+	}
+
+	const rawShots: CinematicShot[] = directorShots.length > 0
+		? directorShots
 				.slice(0, 5)
 				.map((s: any) => ({
 					prompt: String(s.prompt || '').slice(0, 800),
@@ -482,8 +518,7 @@ Angle for this post: "${topic}". Output ONLY the JSON.`;
 	}
 
 	// Pinned character face — same consistency anchor as the standard spokesperson path.
-	let characterRef = cfg.characterRef;
-	characterRef = await ensureCharacterRef(
+	const characterRef = await ensureCharacterRef(
 		supabase,
 		svc,
 		userId,
@@ -499,10 +534,19 @@ Angle for this post: "${topic}". Output ONLY the JSON.`;
 	// same character + product references, just with that shot's own framing.
 	// (Still valuable even though the video call below no longer depends on
 	// stitching from the first one — this is the fast, cheap preview the user
-	// reviews before the video generation call runs.)
-	const storyboard = await Promise.all(
-		shots.map((shot) => generateProductStill(falKey, shot.prompt, selectedProduct.photoUrl, characterRef))
-	);
+	// reviews before the video generation call runs.) Isolated per-shot: these
+	// are a preview, not load-bearing for the video call below, so one shot's
+	// still failing shouldn't sink the whole cinematic post.
+	const storyboard = (
+		await Promise.all(
+			shots.map((shot, i) =>
+				generateProductStill(falKey, shot.prompt, selectedProduct.photoUrl, characterRef).catch((err) => {
+					console.warn(`[Cinematic] Storyboard still ${i + 1}/${shots.length} failed, skipping:`, err);
+					return null;
+				})
+			)
+		)
+	).filter((url): url is string => Boolean(url));
 
 	const durableStoryboard = await Promise.all(
 		storyboard.map((url) => persistToStorage(svc, url, userId, 'png').catch(() => url))
@@ -644,25 +688,10 @@ JSON schema:
   "motion_prompt": "for broll only: subtle camera/product motion (slow push-in, hand enters frame, gentle rotate)"
 }`;
 
-/**
- * Resolves the agent's pinned creator face for face consistency across posts.
- * Generates a hero portrait once, persists it, and pins it to the agent config
- * (no-op if the column isn't migrated yet — still consistent within the post).
- */
-/**
- * Generates a fresh pinned hero portrait for an agent and persists it to
- * `agent_configs.ugc_character_ref`. Always generates (no "already have one"
- * check) — callers that only want a lazy one-time generation should use
- * `ensureCharacterRef` below. Throws on failure (unlike `ensureCharacterRef`,
- * which swallows errors since it runs inline in the background post-generation
- * pipeline); this one is meant to be called from a user-facing action where a
- * real error should surface.
- */
-export async function generateCharacterPortrait(
-	supabase: any,
+/** Generates (and durably persists) a fresh hero portrait image. No DB pin — just the image. */
+async function generateHeroPortraitImage(
 	svc: any,
 	userId: string,
-	agentId: string,
 	falKey: string,
 	briefData: any,
 	agentData: any,
@@ -677,15 +706,40 @@ export async function generateCharacterPortrait(
 	const heroPrompt = `Photorealistic vertical portrait of one relatable UGC content creator who fits this audience: ${audience}.${persona}${genderLine} Friendly, casual, natural window light, looking straight at the camera, authentic iPhone selfie style, clear visible face, upper body. Single person only.`;
 
 	const heroUrl = await generateUgcImage(heroPrompt, null, falKey);
-
-	let durable = heroUrl;
 	try {
-		durable = await persistToStorage(svc, heroUrl, userId, 'png');
+		return await persistToStorage(svc, heroUrl, userId, 'png');
 	} catch {
-		/* keep provider url */
+		return heroUrl;
 	}
+}
+
+/**
+ * Generates a fresh pinned hero portrait for an agent and persists it to
+ * `agent_configs.ugc_character_ref`. Always generates (no "already have one"
+ * check) — callers that only want a lazy one-time generation should use
+ * `ensureCharacterRef` below. Throws on failure (unlike `ensureCharacterRef`,
+ * which swallows errors since it runs inline in the background post-generation
+ * pipeline); this one is meant to be called from a user-facing action where a
+ * real error — including a failed DB pin — should surface so the user knows
+ * to retry rather than believing a save that didn't happen.
+ */
+export async function generateCharacterPortrait(
+	supabase: any,
+	svc: any,
+	userId: string,
+	agentId: string,
+	falKey: string,
+	briefData: any,
+	agentData: any,
+	voiceGender: 'male' | 'female' | undefined
+): Promise<string> {
+	const durable = await generateHeroPortraitImage(svc, userId, falKey, briefData, agentData, voiceGender);
 
 	await supabase.from('agent_configs').update({ ugc_character_ref: durable }).eq('agent_id', agentId);
+	// Replace, not merge: a fresh from-scratch face invalidates any
+	// side_profiles/face_closeup/feature_grid derived from a previous face
+	// (whether from an earlier regenerate or an earlier uploaded photo).
+	await mergeReferenceKit(supabase, agentId, { full_body: durable }, true);
 	return durable;
 }
 
@@ -697,18 +751,30 @@ export async function generateCharacterPortrait(
  */
 const CHARACTER_SHEET_PROMPT = `This is for upscale 4k hyper realistic UGC generation. Create a professional character turnaround and reference sheet based on the reference image. Use the uploaded image as the primary visual reference for the character's identity, proportions, facial features, body shape, hairstyle, and overall design language, while translating it into a clean, neutral, reusable presentation board. The final image should be arranged like a polished concept art sheet on a pure white studio background. Show the same character in four full-body views: front view, side profile, back view, and three-quarter view. On the right side, include multiple clean detail panels with close-ups of the eyes, upper face, lower face lips, skin texture, hair detail, and one small clothing or material detail. Keep the styling neutral and generic so the sheet can be reused as a base template for future adaptations. Simplify anything overly specific, thematic, fantasy-based, branded, culturally tied, or heavily ornamental from the source image into a more universal version while preserving the essence of the character. The outfit should become a clean neutral base outfit with minimal detailing, soft solid tones, and a refined silhouette. No excessive accessories, no dramatic headpieces, no strong lore-specific elements, no heavy decoration unless they are essential to the base identity. The character should feel balanced, elegant, realistic, and adaptable. Expression should be calm and neutral. Makeup should be subtle and natural. Lighting should be soft, even, and studio-clean. The layout should feel like a premium design presentation board used for model sheets, character development, or production reference. Preserve the core identity from the reference, but present it in a simplified, neutral, production-ready format that can serve as a universal template for future redesigns.`;
 
-/** Reads-modifies-writes `agent_configs.ugc_reference_kit`, merging in one new stage's asset. */
+/**
+ * Reads-modifies-writes `agent_configs.ugc_reference_kit`, merging in one new
+ * stage's asset. Pass `replace: true` when `patch` establishes a new identity
+ * (a fresh from-scratch portrait, or a newly uploaded reference photo) — the
+ * later kit stages (side_profiles/face_closeup/feature_grid) are all derived
+ * from a specific full_body+sheet pair, so keeping them around after that
+ * pair changes would silently mix two different faces into one "reference
+ * kit" sent to the video model as a single character.
+ */
 async function mergeReferenceKit(
 	supabase: any,
 	agentId: string,
-	patch: Record<string, string>
+	patch: Record<string, string>,
+	replace = false
 ): Promise<void> {
-	const { data } = await supabase
-		.from('agent_configs')
-		.select('ugc_reference_kit')
-		.eq('agent_id', agentId)
-		.maybeSingle();
-	const merged = { ...(data?.ugc_reference_kit || {}), ...patch };
+	let merged = patch;
+	if (!replace) {
+		const { data } = await supabase
+			.from('agent_configs')
+			.select('ugc_reference_kit')
+			.eq('agent_id', agentId)
+			.maybeSingle();
+		merged = { ...(data?.ugc_reference_kit || {}), ...patch };
+	}
 	await supabase.from('agent_configs').update({ ugc_reference_kit: merged }).eq('agent_id', agentId);
 }
 
@@ -779,7 +845,10 @@ export async function generateCharacterSheetFromReference(
 	}
 
 	await supabase.from('agent_configs').update({ ugc_character_ref: durable }).eq('agent_id', agentId);
-	await mergeReferenceKit(supabase, agentId, { sheet: durableSheet, full_body: durable });
+	// Replace, not merge: a newly uploaded photo is a new identity, so any
+	// side_profiles/face_closeup/feature_grid derived from a previous photo
+	// (or a previous from-scratch face) no longer depict the same person.
+	await mergeReferenceKit(supabase, agentId, { sheet: durableSheet, full_body: durable }, true);
 	return durable;
 }
 

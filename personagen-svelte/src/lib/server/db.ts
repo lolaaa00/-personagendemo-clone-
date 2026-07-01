@@ -210,6 +210,32 @@ export interface PostListFilters {
 // ═══════════════════════════════════════
 
 export function createDbService(supabase: SupabaseClient) {
+	/**
+	 * Upsert-as-merge: fetches the existing row (if any) and layers `data` on
+	 * top of it before upserting. Postgres/PostgREST upsert-on-conflict treats
+	 * any column absent from the payload as null/default, not "leave
+	 * unchanged" — without this, a caller that saves one field (e.g. voice)
+	 * silently wipes every other column the payload didn't mention (e.g. a
+	 * generated avatar/reference kit). An explicit `null`/value in `data`
+	 * still overrides `existing` as expected; only omitted keys are protected.
+	 */
+	async function mergeUpsert(
+		table: string,
+		data: Record<string, any>,
+		onConflict: string,
+		matchColumns: string[]
+	) {
+		let query = supabase.from(table).select('*');
+		for (const col of matchColumns) query = query.eq(col, data[col]);
+		const { data: existing } = await query.maybeSingle();
+
+		return supabase
+			.from(table)
+			.upsert({ ...existing, ...data }, { onConflict })
+			.select()
+			.single();
+	}
+
 	return {
 		// ── Agents ──────────────────────────────
 		agents: {
@@ -231,11 +257,7 @@ export function createDbService(supabase: SupabaseClient) {
 				supabase.from('agent_configs').select('*').eq('agent_id', agentId).single(),
 
 			upsert: (data: AgentConfigInsert) =>
-				supabase
-					.from('agent_configs')
-					.upsert(data, { onConflict: 'user_id,agent_id' })
-					.select()
-					.single()
+				mergeUpsert('agent_configs', data, 'user_id,agent_id', ['agent_id'])
 		},
 
 		// ── Posts ────────────────────────────────
@@ -274,11 +296,7 @@ export function createDbService(supabase: SupabaseClient) {
 				supabase.from('connections').select('*').eq('agent_id', agentId),
 
 			upsert: (data: ConnectionInsert) =>
-				supabase
-					.from('connections')
-					.upsert(data, { onConflict: 'agent_id,platform' })
-					.select()
-					.single(),
+				mergeUpsert('connections', data, 'agent_id,platform', ['agent_id', 'platform']),
 
 			delete: (agentId: string, platform: string) =>
 				supabase.from('connections').delete().eq('agent_id', agentId).eq('platform', platform)
@@ -300,16 +318,20 @@ export function createDbService(supabase: SupabaseClient) {
 
 		// ── Brand Briefs ────────────────────────
 		brandBriefs: {
+			// maybeSingle (not single): a brand-new user genuinely has zero rows
+			// here, which must resolve to {data: null, error: null} — .single()
+			// would return a PGRST116 error for that normal case, making it
+			// indistinguishable from a real query failure to any caller that
+			// only checks `data`.
 			get: (userId?: string) => {
 				let q = supabase.from('brand_briefs').select('*').order('updated_at', { ascending: false });
 				if (userId) {
 					q = q.eq('user_id', userId);
 				}
-				return q.limit(1).single();
+				return q.limit(1).maybeSingle();
 			},
 
-			upsert: (data: BrandBriefInsert) =>
-				supabase.from('brand_briefs').upsert(data, { onConflict: 'user_id' }).select().single()
+			upsert: (data: BrandBriefInsert) => mergeUpsert('brand_briefs', data, 'user_id', ['user_id'])
 		},
 
 		// ── Profiles ────────────────────────────

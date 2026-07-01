@@ -11,6 +11,10 @@ export const load: PageServerLoad = async ({ locals }) => {
 	if (!user) return { brief: null };
 
 	const db = createDbService(locals.supabase);
-	const { data } = await db.brandBriefs.get(user.id);
+	const { data, error } = await db.brandBriefs.get(user.id);
+	// A real query failure (RLS misconfig, connection issue) must not look
+	// identical to "no brief saved yet" — the page has a localStorage fallback
+	// for the common case, but a genuine error is worth a server-side trace.
+	if (error) console.error('[Brand Brief] Failed to load brief:', error);
 	return { brief: (data?.data as Record<string, unknown>) ?? null };
 };

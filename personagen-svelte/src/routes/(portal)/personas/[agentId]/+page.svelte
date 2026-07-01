@@ -8,6 +8,7 @@
 	import PostCard from '$lib/components/feed/PostCard.svelte';
 	import PostModal from '$lib/components/feed/PostModal.svelte';
 	import ManualDeleteNotice from '$lib/components/feed/ManualDeleteNotice.svelte';
+	import { getPostDisplay } from '$lib/components/feed/postDisplay';
 	import type { AutonomyLevel } from '$lib/types';
 	import { AUTONOMY_LABELS } from '$lib/types';
 
@@ -36,6 +37,7 @@
 	let platformFilter = $state<'all' | 'tiktok' | 'instagram' | 'youtube' | 'facebook'>('all');
 	let modalPost = $state<any | null>(null);
 	let deletingPostId = $state<string | null>(null);
+	let approvingPostId = $state<string | null>(null);
 	let manualDeleteNotice = $state<Array<{ platform: string; permalink: string | null }> | null>(
 		null
 	);
@@ -76,11 +78,16 @@
 	let rssLastPolledAt = $state<string | null>(agent?.rss_last_polled_at ?? null);
 
 	// ── Connections state ──────────────────────────────────────────
+	// Full connectable set (matches the connections table CHECK constraint and
+	// Zernio's supported platforms) — not just Composio's narrower subset, so
+	// a Zernio-only connection (x, threads) still shows up here.
 	const PLATFORMS = [
 		{ key: 'tiktok', name: 'TikTok', color: '#fe2c55' },
 		{ key: 'instagram', name: 'Instagram', color: '#e1306c' },
 		{ key: 'youtube', name: 'YouTube', color: '#ff0000' },
-		{ key: 'facebook', name: 'Facebook', color: '#1877f2' }
+		{ key: 'facebook', name: 'Facebook', color: '#1877f2' },
+		{ key: 'x', name: 'X', color: '#000000' },
+		{ key: 'threads', name: 'Threads', color: '#000000' }
 	] as const;
 
 	interface PlatformStatus {
@@ -196,6 +203,16 @@
 		modalPost = null;
 		manualDeleteNotice = null;
 		platformStatuses = {};
+
+		// A staged (not-yet-submitted) reference-photo upload or in-flight kit-stage
+		// spinner also belongs to the previous persona — otherwise switching personas
+		// mid-upload would silently apply persona A's staged photo to persona B, or
+		// show a "generating" spinner attributed to the wrong persona.
+		if (referencePreviewUrl) URL.revokeObjectURL(referencePreviewUrl);
+		referenceFile = null;
+		referencePreviewUrl = null;
+		generatingKitStage = null;
+		generatingAvatar = false;
 	});
 
 	// ── Tab init effects ───────────────────────────────────────────
@@ -355,7 +372,30 @@
 		}
 	}
 
+	async function handleApprovePost(post: any) {
+		if (!post?.id) return;
+		approvingPostId = post.id;
+		try {
+			const res = await Posts.update(post.id, { status: 'scheduled' });
+			if (res.success) {
+				feedPosts = feedPosts.map((p: any) => (p.id === post.id ? { ...p, status: 'scheduled' } : p));
+				if (modalPost?.id === post.id) modalPost = { ...modalPost, status: 'scheduled' };
+				showToast('Approved — will auto-publish at its scheduled time', 'success');
+			} else {
+				showToast(res.error || 'Failed to approve', 'error');
+			}
+		} catch (err) {
+			showToast('Error approving post: ' + (err as Error).message, 'error');
+		} finally {
+			approvingPostId = null;
+		}
+	}
+
 	let filteredPosts = $derived(feedPosts.filter((p: any) => {
+		// The mosaic is a media grid — a post with no real image/video (a
+		// generation that never completed, or corrupted content) has nothing
+		// to show here and would just render as a broken-looking card.
+		if (!getPostDisplay(p).mediaUrl) return false;
 		if (feedFilter !== 'all' && p.status !== feedFilter) return false;
 		if (platformFilter !== 'all') {
 			const plats = (p.platforms ?? []).map((x: string) => x.toLowerCase());
@@ -412,18 +452,27 @@
 
 	async function generateAvatar() {
 		if (!agent?.id || generatingAvatar) return;
+		const requestAgentId = agent.id;
+		const requestAgentName = agent.name;
 		generatingAvatar = true;
 		try {
-			const res = await fetch(`/api/agent/${agent.id}/generate-avatar`, { method: 'POST' });
+			const res = await fetch(`/api/agent/${requestAgentId}/generate-avatar`, { method: 'POST' });
 			const d = await res.json();
 			if (!res.ok || !d.success) throw new Error(d.error || 'Server error');
-			characterRef = d.character_ref;
-			agent = { ...agent, ugc_character_ref: d.character_ref };
-			showToast('Profile picture generated', 'success');
+			// The user may have switched personas while this request was in flight —
+			// the server already persisted the result under requestAgentId regardless,
+			// but only apply it to in-memory state if we're still looking at that persona.
+			if (agent?.id === requestAgentId) {
+				characterRef = d.character_ref;
+				agent = { ...agent, ugc_character_ref: d.character_ref };
+				showToast('Profile picture generated', 'success');
+			} else {
+				showToast(`Profile picture generated for ${requestAgentName}`, 'success');
+			}
 		} catch (err: any) {
 			showToast('Failed to generate profile picture: ' + err.message, 'error');
 		} finally {
-			generatingAvatar = false;
+			if (agent?.id === requestAgentId) generatingAvatar = false;
 		}
 	}
 
@@ -448,25 +497,33 @@
 
 	async function generateAvatarFromReference() {
 		if (!agent?.id || !referenceFile || generatingAvatar) return;
+		const requestAgentId = agent.id;
+		const requestAgentName = agent.name;
 		generatingAvatar = true;
 		try {
 			const form = new FormData();
 			form.append('reference', referenceFile);
-			const res = await fetch(`/api/agent/${agent.id}/generate-avatar`, {
+			const res = await fetch(`/api/agent/${requestAgentId}/generate-avatar`, {
 				method: 'POST',
 				body: form
 			});
 			const d = await res.json();
 			if (!res.ok || !d.success) throw new Error(d.error || 'Server error');
-			characterRef = d.character_ref;
-			referenceKit = d.reference_kit ?? referenceKit;
-			agent = { ...agent, ugc_character_ref: d.character_ref, ugc_reference_kit: referenceKit };
-			clearReferenceFile();
-			showToast('Character sheet generated from your reference photo', 'success');
+			// Same in-flight-persona-switch guard as generateAvatar() above — the
+			// server already persisted this under requestAgentId either way.
+			if (agent?.id === requestAgentId) {
+				characterRef = d.character_ref;
+				referenceKit = d.reference_kit ?? referenceKit;
+				agent = { ...agent, ugc_character_ref: d.character_ref, ugc_reference_kit: referenceKit };
+				clearReferenceFile();
+				showToast('Character sheet generated from your reference photo', 'success');
+			} else {
+				showToast(`Character sheet generated for ${requestAgentName}`, 'success');
+			}
 		} catch (err: any) {
 			showToast('Failed to generate from reference photo: ' + err.message, 'error');
 		} finally {
-			generatingAvatar = false;
+			if (agent?.id === requestAgentId) generatingAvatar = false;
 		}
 	}
 
@@ -775,14 +832,22 @@
 								{post}
 								onOpen={(p) => (modalPost = p)}
 								onDelete={handleDeletePost}
+								onApprove={handleApprovePost}
 								deleting={deletingPostId === post.id}
+								approving={approvingPostId === post.id}
 							/>
 						{/each}
 					</div>
 				{/if}
 			</div>
 
-			<PostModal post={modalPost} onClose={() => (modalPost = null)} onDelete={handleDeletePost} />
+			<PostModal
+				post={modalPost}
+				onClose={() => (modalPost = null)}
+				onDelete={handleDeletePost}
+				onApprove={handleApprovePost}
+				approving={approvingPostId === modalPost?.id}
+			/>
 			{#if manualDeleteNotice}
 				<ManualDeleteNotice entries={manualDeleteNotice} onClose={() => (manualDeleteNotice = null)} />
 			{/if}
@@ -858,13 +923,20 @@
 											✨ {characterRef ? 'Regenerate' : 'Generate'} Profile Picture
 										{/if}
 									</button>
-									<label class="btn-sync file-upload-btn">
+									<label class="btn-sync file-upload-btn" class:disabled={generatingAvatar} aria-disabled={generatingAvatar}>
 										📷 Upload Reference Photo
-										<input type="file" accept="image/*" onchange={onReferenceFileChange} hidden />
+										<input
+											type="file"
+											accept="image/*"
+											onchange={onReferenceFileChange}
+											disabled={generatingAvatar}
+											hidden
+										/>
 									</label>
 									{#if !characterRef}
 										<p class="field-hint">No photo yet — falls back to the gradient below until generated.</p>
 									{/if}
+									<p class="field-hint">~$0.08 per generation (Nano Banana 2 image call).</p>
 								</div>
 							</div>
 
@@ -889,7 +961,7 @@
 										</button>
 										<p class="field-hint">
 											Generates a full turnaround/reference sheet (multiple angles + detail close-ups) from this
-											photo, then pins it as the profile picture.
+											photo, then pins it as the profile picture. ~$0.16 (2 Nano Banana 2 calls).
 										</p>
 									</div>
 								</div>
@@ -900,8 +972,15 @@
 							<div class="field-group col-span-2">
 								<label>Reference Kit</label>
 								<p class="section-desc" style="margin-bottom: 0.75rem;">
-									Once you're happy with the profile picture above, generate the rest of the
-									consistency kit — side profiles, then a facial close-up.
+									{#if referenceKit.sheet}
+										Once you're happy with the profile picture above, generate the rest of the
+										consistency kit — side profiles, then a facial close-up. Each stage below is
+										~$0.08 (one Nano Banana 2 call).
+									{:else}
+										This profile picture was generated from scratch, so there's no character sheet to
+										build the rest of the kit from. Upload a reference photo above to unlock side
+										profiles and facial close-ups for stronger face consistency in cinematic videos.
+									{/if}
 								</p>
 								<div class="kit-stage-row">
 									<div class="kit-stage">
@@ -912,7 +991,7 @@
 										<span class="kit-stage-label">2. Side profiles</span>
 										{#if referenceKit.side_profiles}
 											<img src={referenceKit.side_profiles} alt="Side profile composite" class="kit-stage-thumb wide" />
-										{:else}
+										{:else if referenceKit.sheet}
 											<button
 												type="button"
 												class="btn-sync kit-stage-generate"
@@ -925,6 +1004,8 @@
 													Generate
 												{/if}
 											</button>
+										{:else}
+											<span class="kit-stage-locked">Upload a reference photo to unlock (needs a character sheet)</span>
 										{/if}
 									</div>
 									<div class="kit-stage">
@@ -1771,6 +1852,12 @@
 		align-items: center;
 		gap: 0.4rem;
 		cursor: pointer;
+	}
+
+	.file-upload-btn.disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+		pointer-events: none;
 	}
 
 	.reference-preview-row {

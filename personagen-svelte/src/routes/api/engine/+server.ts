@@ -720,9 +720,10 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 					return json({ success: false, error: 'Missing brief data' }, { status: 400 });
 				}
 
-				// brand_briefs now has a UNIQUE(user_id) constraint (migration applied),
-				// so a single upsert is safe — still read first to compute the next
-				// version number rather than resetting it on every save.
+				// brand_briefs has a UNIQUE(user_id) constraint, so db.brandBriefs.upsert
+				// (which internally merges against the existing row — see db.ts's
+				// mergeUpsert) is safe against a partial payload. Still read here first,
+				// separately, to compute the next version number.
 				const { data: existing } = await db.brandBriefs.get(session.user.id);
 				const { data: saved, error } = await db.brandBriefs.upsert({
 					user_id: session.user.id,

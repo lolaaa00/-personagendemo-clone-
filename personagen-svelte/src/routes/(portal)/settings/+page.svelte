@@ -39,6 +39,13 @@
 			placeholder: 'Paste your Zernio API key'
 		},
 		{
+			provider: 'gemini',
+			label: 'Gemini',
+			description: 'Google Gemini for agent/chat generation — used if no OpenRouter key is set below.',
+			optional: true,
+			placeholder: 'Paste your Gemini API key'
+		},
+		{
 			provider: 'openrouter',
 			label: 'OpenRouter',
 			description: 'Optional model routing for agent/chat generation through OpenRouter.',

@@ -79,7 +79,9 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 				return json(
 					{
 						success: false,
-						error: 'Generate a profile picture from a reference photo first (need the full-body shot and character sheet).'
+						error: kit.full_body
+							? 'This stage needs a character sheet, which is only produced by the "Upload Reference Photo" path. Upload a reference photo to unlock the rest of the reference kit.'
+							: 'Generate a profile picture from a reference photo first (need the full-body shot and character sheet).'
 					},
 					{ status: 400 }
 				);

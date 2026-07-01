@@ -1,43 +1,23 @@
 <script lang="ts">
+	import { getPostDisplay } from './postDisplay';
+
 	let {
 		post,
 		onOpen,
 		onDelete,
-		deleting = false
+		onApprove,
+		deleting = false,
+		approving = false
 	}: {
 		post: any;
 		onOpen: (post: any) => void;
 		onDelete: (post: any) => void;
+		onApprove: (post: any) => void;
 		deleting?: boolean;
+		approving?: boolean;
 	} = $props();
 
-	// ── Content parsing ──────────────────────────────────────────────
-	function getPostDisplay(content: string) {
-		try {
-			const trimmed = content?.trim() ?? '';
-			if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
-				const parsed = JSON.parse(trimmed);
-				return {
-					text: parsed.text || content,
-					mediaUrl: parsed.media_url || parsed.mediaUrl || null,
-					mediaType: parsed.media_type || parsed.mediaType || 'image',
-					ugcPrompt: parsed.ugc_broll_prompt || parsed.ugcPrompt || null,
-					script: parsed.script || null,
-					product: parsed.product || null
-				};
-			}
-		} catch {}
-		return {
-			text: content,
-			mediaUrl: null,
-			mediaType: 'image',
-			ugcPrompt: null,
-			script: null,
-			product: null
-		};
-	}
-
-	let display = $derived(getPostDisplay(post.content));
+	let display = $derived(getPostDisplay(post));
 	let analytics = $derived(post.analytics ?? {});
 
 	// ── Publication results / error parsing ──────────────────────────
@@ -126,7 +106,7 @@
 	{#if display.mediaUrl}
 		<button type="button" class="post-media" onclick={() => onOpen(post)} aria-label="Open post details">
 			{#if display.mediaType === 'video'}
-				<video src={display.mediaUrl} muted playsinline preload="metadata"></video>
+				<video src={display.mediaUrl} poster={display.posterUrl || undefined} muted playsinline preload="metadata"></video>
 				<span class="video-badge">▶ video</span>
 			{:else}
 				<img src={display.mediaUrl} loading="lazy" alt="Post media" />
@@ -188,21 +168,37 @@
 	<!-- Footer actions -->
 	<div class="post-card-footer">
 		<button type="button" class="btn-card-open" onclick={() => onOpen(post)}>View details</button>
-		<button
-			type="button"
-			class="btn-card-delete"
-			class:confirming={confirmingDelete}
-			disabled={deleting}
-			onclick={handleDeleteClick}
-		>
-			{#if deleting}
-				<span class="spinner-sm"></span> Deleting…
-			{:else if confirmingDelete}
-				Confirm delete?
-			{:else}
-				Delete
+		<span class="footer-actions-right">
+			{#if post.status === 'draft'}
+				<button
+					type="button"
+					class="btn-card-approve"
+					disabled={approving}
+					onclick={() => onApprove(post)}
+				>
+					{#if approving}
+						<span class="spinner-sm"></span> Approving…
+					{:else}
+						✓ Approve
+					{/if}
+				</button>
 			{/if}
-		</button>
+			<button
+				type="button"
+				class="btn-card-delete"
+				class:confirming={confirmingDelete}
+				disabled={deleting}
+				onclick={handleDeleteClick}
+			>
+				{#if deleting}
+					<span class="spinner-sm"></span> Deleting…
+				{:else if confirmingDelete}
+					Confirm delete?
+				{:else}
+					Delete
+				{/if}
+			</button>
+		</span>
 	</div>
 </div>
 
@@ -417,6 +413,37 @@
 
 	.btn-card-open:hover {
 		text-decoration: underline;
+	}
+
+	.footer-actions-right {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
+	.btn-card-approve {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		background: var(--success-soft);
+		color: var(--success);
+		border: 1px solid transparent;
+		border-radius: 6px;
+		padding: 0.35rem 0.7rem;
+		font-size: 0.72rem;
+		font-weight: 600;
+		cursor: pointer;
+		transition: all 0.15s ease;
+	}
+
+	.btn-card-approve:hover:not(:disabled) {
+		background: var(--success);
+		color: #fff;
+	}
+
+	.btn-card-approve:disabled {
+		opacity: 0.6;
+		cursor: not-allowed;
 	}
 
 	.btn-card-delete {

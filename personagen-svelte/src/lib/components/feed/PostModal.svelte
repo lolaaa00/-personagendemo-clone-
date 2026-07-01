@@ -1,40 +1,21 @@
 <script lang="ts">
+	import { getPostDisplay } from './postDisplay';
+
 	let {
 		post,
 		onClose,
-		onDelete
+		onDelete,
+		onApprove,
+		approving = false
 	}: {
 		post: any | null;
 		onClose: () => void;
 		onDelete: (post: any) => void;
+		onApprove: (post: any) => void;
+		approving?: boolean;
 	} = $props();
 
-	function getPostDisplay(content: string) {
-		try {
-			const trimmed = content?.trim() ?? '';
-			if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
-				const parsed = JSON.parse(trimmed);
-				return {
-					text: parsed.text || content,
-					mediaUrl: parsed.media_url || parsed.mediaUrl || null,
-					mediaType: parsed.media_type || parsed.mediaType || 'image',
-					ugcPrompt: parsed.ugc_broll_prompt || parsed.ugcPrompt || null,
-					script: parsed.script || null,
-					product: parsed.product || null
-				};
-			}
-		} catch {}
-		return {
-			text: content,
-			mediaUrl: null,
-			mediaType: 'image',
-			ugcPrompt: null,
-			script: null,
-			product: null
-		};
-	}
-
-	let display = $derived(post ? getPostDisplay(post.content) : null);
+	let display = $derived(post ? getPostDisplay(post) : null);
 
 	let platformResults = $derived.by(() => {
 		if (!post?.publication_results) return [];
@@ -117,7 +98,7 @@
 					<div class="modal-media">
 						{#if display.mediaType === 'video'}
 							<!-- svelte-ignore a11y_media_has_caption -->
-							<video src={display.mediaUrl} controls playsinline></video>
+							<video src={display.mediaUrl} poster={display.posterUrl || undefined} controls playsinline></video>
 						{:else}
 							<img src={display.mediaUrl} alt="Post media" />
 						{/if}
@@ -194,6 +175,16 @@
 				>
 					{confirmingDelete ? 'Confirm delete?' : 'Delete Post'}
 				</button>
+				{#if post.status === 'draft'}
+					<button
+						type="button"
+						class="btn-modal-approve"
+						disabled={approving}
+						onclick={() => onApprove(post)}
+					>
+						{approving ? 'Approving…' : '✓ Approve & Schedule'}
+					</button>
+				{/if}
 				<button type="button" class="btn-modal-close" onclick={onClose}>Close</button>
 			</div>
 		</div>
@@ -494,6 +485,28 @@
 	.btn-modal-delete.confirming {
 		background: var(--error);
 		color: #fff;
+	}
+
+	.btn-modal-approve {
+		background: var(--success-soft);
+		color: var(--success);
+		border: 1px solid transparent;
+		border-radius: 6px;
+		padding: 0.5rem 1rem;
+		font-size: 0.78rem;
+		font-weight: 600;
+		cursor: pointer;
+		transition: all 0.15s ease;
+	}
+
+	.btn-modal-approve:hover:not(:disabled) {
+		background: var(--success);
+		color: #fff;
+	}
+
+	.btn-modal-approve:disabled {
+		opacity: 0.6;
+		cursor: not-allowed;
 	}
 
 	.btn-modal-close {

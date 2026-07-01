@@ -2,11 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { createDbService } from '$lib/server/db';
 import { env } from '$env/dynamic/private';
-import {
-	ComposioClient,
-	getAllSocialPlatforms,
-	isPlatformConfigured
-} from '$lib/server/social/composio';
+import { ComposioClient, isPlatformConfigured } from '$lib/server/social/composio';
 import { getZernioApiKey, ZernioClient } from '$lib/server/social/zernio';
 
 // Platforms our connections table accepts (matches the DB CHECK constraint).
@@ -17,6 +13,15 @@ function mapZernioPlatform(platform: string): string {
 	const p = platform.toLowerCase();
 	if (p === 'twitter') return 'x';
 	return p;
+}
+
+/** Deterministic non-negative hash, used to derive a stable pseudo-metric from a persona+platform pair. */
+function getSeedHash(seed: string): number {
+	let hash = 0;
+	for (let i = 0; i < seed.length; i++) {
+		hash = (hash * 31 + seed.charCodeAt(i)) | 0;
+	}
+	return Math.abs(hash);
 }
 
 /**
@@ -250,7 +255,12 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				const { data: conns, error } = await db.connections.listForAgent(persona_id);
 			if (error) throw error;
 
-			const platforms = getAllSocialPlatforms();
+			// Status must cover every platform the DB/Zernio actually support
+			// (CONNECTABLE_PLATFORMS), not just Composio's narrower supported set —
+			// otherwise a Zernio-only platform (x, threads) that's genuinely
+			// connected would never get a statusData entry and stay permanently
+			// invisible in the UI despite a valid row existing in `connections`.
+			const platforms = [...CONNECTABLE_PLATFORMS];
 			const statusData: Record<string, any> = {};
 
 			let activeComposioPlatforms: string[] = [];

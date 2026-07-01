@@ -12,10 +12,6 @@ const COMPOSIO_ACTION_MAPPING: Record<string, string> = {
 	tiktok: 'TIKTOK_PUBLISH_VIDEO'
 };
 
-export function getAllSocialPlatforms(): SocialPlatform[] {
-	return [...SUPPORTED_SOCIAL_PLATFORMS];
-}
-
 export function getComposioAuthConfigId(platform: string): string {
 	const key = `COMPOSIO_AUTH_CONFIG_${platform.toUpperCase()}`;
 	return env[key] || process.env[key] || '';
