@@ -55,6 +55,18 @@
 
 	let sidebarAgents = $derived((data as any).sidebarAgents ?? []);
 
+	let personaSearch = $state('');
+
+	let filteredSidebarAgents = $derived.by(() => {
+		const query = personaSearch.trim().toLowerCase();
+		if (!query) return sidebarAgents;
+		return sidebarAgents.filter((agent: any) => {
+			const name = (agent.name ?? '').toLowerCase();
+			const handle = (agent.handle ?? '').toLowerCase();
+			return name.includes(query) || handle.includes(query);
+		});
+	});
+
 	function isActive(href: string, pathname: string): boolean {
 		const baseHref = href.split('?')[0];
 		if (baseHref === '/dashboard') return pathname === '/dashboard' || pathname === '/';
@@ -163,7 +175,20 @@
 			{:else}
 				<div class="sidebar-section-divider"></div>
 			{/if}
-			{#each sidebarAgents as agent (agent.id)}
+			{#if !sidebarState.collapsed && sidebarAgents.length > 4}
+				<div class="sidebar-persona-search">
+					<svg class="sidebar-persona-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+						><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
+					<input
+						type="search"
+						class="sidebar-persona-search-input"
+						placeholder="Search personas..."
+						bind:value={personaSearch}
+						aria-label="Search personas"
+					/>
+				</div>
+			{/if}
+			{#each filteredSidebarAgents as agent (agent.id)}
 				<a
 					href="/personas/{agent.id}"
 					class="sidebar-nav-item sidebar-persona-item"
@@ -182,6 +207,9 @@
 					{/if}
 				</a>
 			{/each}
+			{#if !sidebarState.collapsed && filteredSidebarAgents.length === 0 && personaSearch.trim()}
+				<div class="sidebar-persona-empty">No personas match "{personaSearch}"</div>
+			{/if}
 			<a
 				href="/generator"
 				class="sidebar-nav-item sidebar-new-persona"
@@ -1029,6 +1057,58 @@
 
 	.sidebar-persona-status.status-paused {
 		background: var(--warning);
+	}
+
+	.sidebar-persona-search {
+		position: relative;
+		display: flex;
+		align-items: center;
+		margin: 2px 0 6px;
+	}
+
+	.sidebar-persona-search-icon {
+		position: absolute;
+		left: 9px;
+		color: var(--text-dim);
+		opacity: 0.6;
+		pointer-events: none;
+		flex-shrink: 0;
+	}
+
+	.sidebar-persona-search-input {
+		width: 100%;
+		padding: 6px 10px 6px 28px;
+		border-radius: 8px;
+		border: 1px solid var(--border);
+		background: var(--surface-2);
+		color: var(--text);
+		font-size: 0.78rem;
+		font-family: inherit;
+		transition:
+			border-color 0.15s ease,
+			background 0.15s ease;
+	}
+
+	.sidebar-persona-search-input::placeholder {
+		color: var(--text-dim);
+	}
+
+	.sidebar-persona-search-input:focus {
+		outline: none;
+		border-color: var(--accent-mid);
+		background: var(--surface);
+	}
+
+	.sidebar-persona-search-input::-webkit-search-cancel-button {
+		cursor: pointer;
+	}
+
+	.sidebar-persona-empty {
+		padding: var(--space-2) 12px;
+		font-size: 0.76rem;
+		color: var(--text-dim);
+		white-space: normal;
+		line-height: 1.4;
 	}
 
 	.sidebar-new-persona {

@@ -3,12 +3,13 @@ import type { RequestHandler } from './$types';
 import { createDbService } from '$lib/server/db';
 import { generateUgcPack } from '$lib/server/content/generate';
 import { publishPostById } from '$lib/server/scheduler';
+import { VIDEO_ONLY_PLATFORMS } from '$lib/server/social/platforms';
 
 /**
  * Generate a fresh UGC post (caption + AI image tuned to the brand brief / product)
  * for an agent and publish it immediately to that agent's live connected accounts.
  *
- * Called by the calendar "✨ Generate Post Now" button and the persona-config page.
+ * Called by the calendar '✨ Generate Post Now' button and the persona feed's 'Generate Now' action.
  */
 export const POST: RequestHandler = async ({ params, request, locals }) => {
 	const { session, user } = await locals.safeGetSession();
@@ -73,13 +74,30 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		return json({ success: false, error: msg }, { status });
 	}
 
+	// Now that media_type is known, drop video-only platforms if this pack is image-only.
+	let finalPlatforms = targetPlatforms;
+	if (content?.media_type !== 'video') {
+		finalPlatforms = targetPlatforms.filter(
+			(p: string) => !(VIDEO_ONLY_PLATFORMS as readonly string[]).includes(p.toLowerCase())
+		);
+	}
+	if (finalPlatforms.length === 0) {
+		return json(
+			{
+				success: false,
+				error: `Generated content is image-only, and none of this agent's connected platforms (${targetPlatforms.join(', ')}) accept image posts.`
+			},
+			{ status: 400 }
+		);
+	}
+
 	// Create the post, then publish it immediately
 	const now = new Date();
 	const { data: post, error: postErr } = await db.posts.create({
 		user_id: user.id,
 		agent_id: agentId,
 		content: JSON.stringify(content),
-		platforms: targetPlatforms,
+		platforms: finalPlatforms,
 		status: 'scheduled',
 		scheduled_date: now.toISOString().split('T')[0],
 		scheduled_time: now.toTimeString().split(' ')[0],

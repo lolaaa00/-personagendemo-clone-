@@ -6,6 +6,7 @@ import {
 	ZERNIO_UNPUBLISH_SUPPORTED,
 	type ZernioAccount
 } from './zernio';
+import { VIDEO_ONLY_PLATFORMS } from './platforms';
 
 export interface PublishPlatformInput {
 	supabase: any;
@@ -180,6 +181,17 @@ export async function publishToPlatform({
 			success: false,
 			provider: 'zernio',
 			error: `Video publishing to ${normalizedPlat} requires Zernio. Add your Zernio API key in Settings and connect ${normalizedPlat}.`
+		};
+	}
+
+	// Composio's only YouTube/TikTok action requires video — an image would be
+	// silently mis-uploaded and rejected by the platform API with a cryptic error.
+	// Fail clearly here instead of attempting a doomed upload.
+	if (!isVideo && (VIDEO_ONLY_PLATFORMS as readonly string[]).includes(normalizedPlat)) {
+		return {
+			success: false,
+			provider: 'composio',
+			error: `${normalizedPlat} requires video content (Composio has no image-upload path for this platform). This post's media is an image, so it can't be published here.`
 		};
 	}
 

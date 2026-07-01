@@ -10,7 +10,7 @@ const PROTECTED_PREFIXES = [
 	'/dashboard',
 	'/calendar',
 	'/generator',
-	'/persona-config',
+	'/personas',
 	'/brand-brief',
 	'/settings'
 ];

@@ -15,6 +15,7 @@
 import { env } from '$env/dynamic/private';
 import { getServiceSupabase } from './service-supabase';
 import { generateUgcPack } from './content/generate';
+import { VIDEO_ONLY_PLATFORMS } from './social/platforms';
 
 const DEFAULT_TZ = 'Australia/Sydney';
 
@@ -175,11 +176,21 @@ async function generateDraftsForAgent(
 				platform: platforms[0],
 				autopilot: true
 			});
+
+			const slotPlatforms =
+				pack.content?.media_type === 'video'
+					? platforms
+					: platforms.filter((p: string) => !(VIDEO_ONLY_PLATFORMS as readonly string[]).includes(p.toLowerCase()));
+			if (slotPlatforms.length === 0) {
+				console.warn('[Autopilot] Slot skipped: image-only content, no image-capable platform connected for agent', agentId);
+				continue;
+			}
+
 			const { error } = await supabase.from('posts').insert({
 				user_id: userId,
 				agent_id: agentId,
 				content: JSON.stringify(pack.content),
-				platforms,
+				platforms: slotPlatforms,
 				status,
 				scheduled_date: slot.dateStr,
 				scheduled_time: slot.timeStr,

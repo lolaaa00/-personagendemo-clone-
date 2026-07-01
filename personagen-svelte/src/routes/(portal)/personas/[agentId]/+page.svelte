@@ -1,9 +1,13 @@
 <script lang="ts">
 	import { showToast } from '$lib/stores/ui.svelte';
 	import { goto } from '$app/navigation';
+	import { page } from '$app/stores';
 	import { slide } from 'svelte/transition';
-	import { Accounts } from '$lib/services/api';
+	import { Accounts, Posts } from '$lib/services/api';
 	import AgentConnectionStats from '$lib/components/agents/AgentConnectionStats.svelte';
+	import PostCard from '$lib/components/feed/PostCard.svelte';
+	import PostModal from '$lib/components/feed/PostModal.svelte';
+	import ManualDeleteNotice from '$lib/components/feed/ManualDeleteNotice.svelte';
 	import type { AutonomyLevel } from '$lib/types';
 	import { AUTONOMY_LABELS } from '$lib/types';
 
@@ -11,17 +15,30 @@
 
 	let agent = $state<any>(data.agent ?? null);
 	let supervisors = $derived(data.supervisors ?? []);
+	// Tracks which agent's data is currently loaded into `agent`/the editable
+	// fields below, so the resync effect (further down) can tell "navigated to
+	// a different persona" apart from "same persona's data merely refreshed."
+	let loadedAgentId: string | null = data.agent?.id ?? null;
 
 	// ── Tab state ──────────────────────────────────────────────────
-	let activeTab = $state<'feed' | 'profile' | 'connections'>('feed');
+	function initialTab(): 'feed' | 'profile' | 'connections' {
+		const t = $page.url.searchParams.get('tab');
+		return t === 'profile' || t === 'connections' ? t : 'feed';
+	}
+	let activeTab = $state<'feed' | 'profile' | 'connections'>(initialTab());
 
 	// ── Feed state ─────────────────────────────────────────────────
 	let feedPosts = $state<any[]>([]);
 	let feedLoading = $state(false);
 	let syncingFeed = $state(false);
 	let generatingPost = $state(false);
-	let feedFilter = $state<'all' | 'published' | 'scheduled' | 'draft' | 'failed'>('all');
+	let feedFilter = $state<'all' | 'published' | 'scheduled' | 'draft' | 'failed' | 'partial'>('all');
 	let platformFilter = $state<'all' | 'tiktok' | 'instagram' | 'youtube' | 'facebook'>('all');
+	let modalPost = $state<any | null>(null);
+	let deletingPostId = $state<string | null>(null);
+	let manualDeleteNotice = $state<Array<{ platform: string; permalink: string | null }> | null>(
+		null
+	);
 
 	// ── Profile / config state ─────────────────────────────────────
 	let saving = $state(false);
@@ -126,6 +143,53 @@
 		{ name: 'Cosmic Magenta', gradient: 'linear-gradient(135deg, #EC4899, #8B5CF6)' }
 	];
 
+	// ── Resync when navigating to a different persona ──────────────
+	// SvelteKit reuses this component instance across /personas/[agentId] →
+	// /personas/[otherId] navigations (same route, only the param changes), so
+	// `agent` and the editable fields below — all seeded once at mount — would
+	// otherwise keep showing the previous persona while the URL/sidebar already
+	// point at the new one. Re-seed everything when `data.agent` (reactive,
+	// re-fetched by +page.server.ts on every navigation) resolves to a new id.
+	// Guarded by `loadedAgentId` so this does NOT clobber in-progress edits or
+	// the optimistic local updates in saveProfile()/setMainHandle() whenever
+	// `data.agent` merely revalidates for the SAME persona.
+	$effect(() => {
+		const fresh = data.agent;
+		if (!fresh || fresh.id === loadedAgentId) return;
+		loadedAgentId = fresh.id;
+
+		agent = fresh;
+
+		editName = fresh.name ?? '';
+		editHandle = fresh.handle ?? '';
+		editStatus = fresh.status ?? 'active';
+		editNiche = fresh.niche ?? '';
+		editInitial = fresh.initial ?? '';
+		editGradient = fresh.gradient ?? 'linear-gradient(135deg, #7C3AED, #4F46E5)';
+		editSupervisorId = fresh.supervisor_agent_id ?? null;
+		editRuntimeOwner = fresh.runtime_owner ?? 'svelte-gemini';
+
+		soulText = fresh.soul ?? '';
+		skillsText = fresh.skills ?? '';
+		toolsText = fresh.tools ?? '';
+
+		timezone = fresh.timezone ?? 'Australia/Sydney';
+		postsPerDay = fresh.posts_per_day ?? 3;
+		activeHoursStart = fresh.active_hours_start ?? 8;
+		activeHoursEnd = fresh.active_hours_end ?? 22;
+		autonomyLevel = fresh.autonomy_level ?? 'advisor';
+		rssUrl = fresh.rss_url ?? '';
+		rssActive = fresh.rss_active ?? false;
+		rssLastPolledAt = fresh.rss_last_polled_at ?? null;
+
+		// Feed/Connections data belongs to the previous persona — drop it so
+		// stale posts or a stale open modal can't linger under the new identity.
+		feedPosts = [];
+		modalPost = null;
+		manualDeleteNotice = null;
+		platformStatuses = {};
+	});
+
 	// ── Tab init effects ───────────────────────────────────────────
 	$effect(() => {
 		if (activeTab === 'feed' && agent?.id) loadFeed();
@@ -136,23 +200,6 @@
 	});
 
 	// ── Feed functions ─────────────────────────────────────────────
-	function getPostDisplay(content: string) {
-		try {
-			const trimmed = content?.trim() ?? '';
-			if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
-				const parsed = JSON.parse(trimmed);
-				return {
-					text: parsed.text || content,
-					mediaUrl: parsed.media_url || parsed.mediaUrl || null,
-					ugcPrompt: parsed.ugc_broll_prompt || parsed.ugcPrompt || null,
-					script: parsed.script || null,
-					product: parsed.product || null
-				};
-			}
-		} catch {}
-		return { text: content, mediaUrl: null, ugcPrompt: null, script: null, product: null };
-	}
-
 	async function loadFeed() {
 		if (!agent?.id) return;
 		feedLoading = true;
@@ -220,6 +267,42 @@
 			showToast('Error: ' + (err as Error).message, 'error');
 		} finally {
 			generatingPost = false;
+		}
+	}
+
+	async function handleDeletePost(post: any) {
+		if (!post?.id) return;
+		deletingPostId = post.id;
+		try {
+			const res = await Posts.delete(post.id);
+			if (res.success) {
+				const teardown = (res as any).teardown as
+					| {
+							unpublished: string[];
+							manualDeletion: Array<{ platform: string; permalink: string | null }>;
+							errors: string[];
+					  }
+					| undefined;
+
+				feedPosts = feedPosts.filter((p: any) => p.id !== post.id);
+				if (modalPost?.id === post.id) modalPost = null;
+
+				if (teardown?.unpublished?.length) {
+					showToast(`Removed from ${teardown.unpublished.join(', ')} and deleted locally`, 'success');
+				} else {
+					showToast('Post deleted', 'success');
+				}
+
+				if (teardown?.manualDeletion?.length) {
+					manualDeleteNotice = teardown.manualDeletion;
+				}
+			} else {
+				showToast(res.error || 'Failed to delete post', 'error');
+			}
+		} catch (err) {
+			showToast('Error deleting post: ' + (err as Error).message, 'error');
+		} finally {
+			deletingPostId = null;
 		}
 	}
 
@@ -395,12 +478,6 @@
 		if (s === 'paused') return 'var(--warning)';
 		return 'var(--text-dim)';
 	}
-
-	function formatPostDate(post: any): string {
-		const d = post.published_at || (post.scheduled_date ? `${post.scheduled_date}T${post.scheduled_time || '10:00:00'}` : null);
-		if (!d) return 'Recently';
-		return new Date(d).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-	}
 </script>
 
 <svelte:head>
@@ -454,22 +531,32 @@
 	</header>
 
 	<!-- ── Tab nav ────────────────────────────────────────────── -->
+	<!-- Sticky so identity stays visible while scrolling a long tab (fixes the
+	     class of confusion where you lose track of which persona you're on). -->
 	<nav class="tab-nav">
-		<button class="tab-btn" class:active={activeTab === 'feed'} onclick={() => (activeTab = 'feed')}>
-			<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
-			Feed
-		</button>
-		<button class="tab-btn" class:active={activeTab === 'profile'} onclick={() => (activeTab = 'profile')}>
-			<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 1 0-16 0"/></svg>
-			Profile
-		</button>
-		<button class="tab-btn" class:active={activeTab === 'connections'} onclick={() => (activeTab = 'connections')}>
-			<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-			Connections
-			{#if computedMetrics.connectedCount > 0}
-				<span class="tab-badge">{computedMetrics.connectedCount}</span>
-			{/if}
-		</button>
+		<div class="tab-nav-identity" title="{agent.name} ({agent.handle})">
+			<span class="tab-nav-avatar" style="background: {agent.gradient}">
+				{agent.initial ?? agent.name?.[0]?.toUpperCase() ?? '?'}
+			</span>
+			<span class="tab-nav-name">{agent.name}</span>
+		</div>
+		<div class="tab-nav-buttons">
+			<button class="tab-btn" class:active={activeTab === 'feed'} onclick={() => (activeTab = 'feed')}>
+				<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+				Feed
+			</button>
+			<button class="tab-btn" class:active={activeTab === 'profile'} onclick={() => (activeTab = 'profile')}>
+				<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 1 0-16 0"/></svg>
+				Profile
+			</button>
+			<button class="tab-btn" class:active={activeTab === 'connections'} onclick={() => (activeTab = 'connections')}>
+				<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+				Connections
+				{#if computedMetrics.connectedCount > 0}
+					<span class="tab-badge">{computedMetrics.connectedCount}</span>
+				{/if}
+			</button>
+		</div>
 	</nav>
 
 	<!-- ── Tab content ────────────────────────────────────────── -->
@@ -486,6 +573,7 @@
 							<option value="published">Published</option>
 							<option value="scheduled">Scheduled</option>
 							<option value="draft">Draft</option>
+							<option value="partial">Partial</option>
 							<option value="failed">Failed</option>
 						</select>
 						<select class="filter-select" bind:value={platformFilter}>
@@ -526,84 +614,34 @@
 						<h3>No posts yet</h3>
 						<p>{feedFilter !== 'all' || platformFilter !== 'all' ? 'No posts match these filters.' : 'Connect platforms and generate your first post.'}</p>
 						{#if feedFilter === 'all' && platformFilter === 'all'}
-							<button class="btn-generate" onclick={generatePostNow} disabled={generatingPost}>
-								{generatingPost ? 'Generating…' : '✨ Generate First Post'}
-							</button>
+							<div class="feed-empty-actions">
+								<button class="btn-generate" onclick={generatePostNow} disabled={generatingPost}>
+									{generatingPost ? 'Generating…' : '✨ Generate First Post'}
+								</button>
+								<button type="button" class="btn-sync" onclick={() => (activeTab = 'connections')}>
+									Manage Connections
+								</button>
+							</div>
 						{/if}
 					</div>
 				{:else}
-					<div class="post-grid">
+					<div class="post-mosaic">
 						{#each filteredPosts as post (post.id)}
-							{@const plat = (post.platforms?.[0] ?? 'instagram').toLowerCase()}
-							{@const display = getPostDisplay(post.content)}
-							{@const analytics = post.analytics ?? {}}
-							<div class="post-card">
-								<!-- Card header -->
-								<div class="post-card-header">
-									<span class="platform-pill" style="background: {plat === 'tiktok' ? '#fe2c55' : plat === 'instagram' ? '#e1306c' : plat === 'youtube' ? '#ff0000' : '#1877f2'}">
-										{plat}
-									</span>
-									<span class="post-date">{formatPostDate(post)}</span>
-									<span class="post-status-badge" data-status={post.status}>{post.status}</span>
-								</div>
-
-								<!-- Media preview -->
-								{#if display.mediaUrl}
-									<div class="post-media">
-										<img src={display.mediaUrl} alt="Post media" loading="lazy" />
-									</div>
-								{/if}
-
-								<!-- Caption -->
-								<p class="post-text">{display.text}</p>
-
-								<!-- UGC prompt if present -->
-								{#if display.ugcPrompt}
-									<div class="post-ugc-prompt">
-										<span class="ugc-label">UGC prompt</span>
-										<span class="ugc-text">{display.ugcPrompt}</span>
-									</div>
-								{/if}
-
-								<!-- Analytics strip -->
-								{#if post.status === 'published' && (analytics.views || analytics.likes || analytics.comments || analytics.shares)}
-									<div class="analytics-strip">
-										{#if analytics.views}
-											<span class="analytics-stat">
-												<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-												{analytics.views >= 1000 ? (analytics.views / 1000).toFixed(1) + 'K' : analytics.views}
-											</span>
-										{/if}
-										{#if analytics.likes}
-											<span class="analytics-stat">
-												<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
-												{analytics.likes}
-											</span>
-										{/if}
-										{#if analytics.comments}
-											<span class="analytics-stat">
-												<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-												{analytics.comments}
-											</span>
-										{/if}
-										{#if analytics.shares}
-											<span class="analytics-stat">
-												<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
-												{analytics.shares}
-											</span>
-										{/if}
-										{#if analytics.views && analytics.likes}
-											<span class="analytics-stat engagement-rate">
-												{((analytics.likes / analytics.views) * 100).toFixed(1)}% eng
-											</span>
-										{/if}
-									</div>
-								{/if}
-							</div>
+							<PostCard
+								{post}
+								onOpen={(p) => (modalPost = p)}
+								onDelete={handleDeletePost}
+								deleting={deletingPostId === post.id}
+							/>
 						{/each}
 					</div>
 				{/if}
 			</div>
+
+			<PostModal post={modalPost} onClose={() => (modalPost = null)} onDelete={handleDeletePost} />
+			{#if manualDeleteNotice}
+				<ManualDeleteNotice entries={manualDeleteNotice} onClose={() => (manualDeleteNotice = null)} />
+			{/if}
 
 		<!-- PROFILE TAB -->
 		{:else if activeTab === 'profile'}
@@ -1056,12 +1094,57 @@
 	/* ── Tabs ── */
 	.tab-nav {
 		display: flex;
-		gap: 4px;
+		align-items: center;
+		gap: 0.75rem;
 		background: var(--surface);
 		border: 1px solid var(--border);
 		border-radius: 12px;
 		padding: 5px;
 		margin-bottom: 1.5rem;
+		position: sticky;
+		top: 0;
+		z-index: 20;
+		backdrop-filter: blur(16px) saturate(180%);
+		-webkit-backdrop-filter: blur(16px) saturate(180%);
+	}
+
+	.tab-nav-identity {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding-left: 0.35rem;
+		flex-shrink: 0;
+		min-width: 0;
+	}
+
+	.tab-nav-avatar {
+		width: 26px;
+		height: 26px;
+		border-radius: 8px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		font-size: 0.7rem;
+		font-weight: 800;
+		color: #fff;
+		flex-shrink: 0;
+	}
+
+	.tab-nav-name {
+		font-size: 0.8rem;
+		font-weight: 700;
+		color: var(--text);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		max-width: 140px;
+	}
+
+	.tab-nav-buttons {
+		display: flex;
+		gap: 4px;
+		flex: 1;
+		min-width: 0;
 	}
 
 	.tab-btn {
@@ -1174,6 +1257,13 @@
 	.btn-sync:hover:not(:disabled) { border-color: var(--accent-mid); color: var(--text); }
 	.btn-sync:disabled { opacity: 0.6; cursor: not-allowed; }
 
+	.feed-empty-actions {
+		display: flex;
+		gap: 0.5rem;
+		flex-wrap: wrap;
+		justify-content: center;
+	}
+
 	.feed-loading, .feed-empty {
 		display: flex;
 		flex-direction: column;
@@ -1189,135 +1279,9 @@
 	.feed-empty h3 { font-size: 1rem; font-weight: 600; color: var(--text); margin: 0; }
 	.feed-empty p { font-size: 0.82rem; max-width: 340px; margin: 0; }
 
-	.post-grid {
-		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-		gap: 1rem;
-	}
-
-	.post-card {
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-md);
-		padding: 1.1rem;
-		display: flex;
-		flex-direction: column;
-		gap: 0.75rem;
-		transition: border-color 0.15s ease, transform 0.15s ease;
-	}
-
-	.post-card:hover {
-		border-color: var(--accent-mid);
-		transform: translateY(-2px);
-	}
-
-	.post-card-header {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		flex-wrap: wrap;
-	}
-
-	.platform-pill {
-		font-size: 10px;
-		font-weight: 700;
-		text-transform: uppercase;
-		color: #fff;
-		padding: 2px 8px;
-		border-radius: 999px;
-	}
-
-	.post-date {
-		font-size: 0.72rem;
-		color: var(--text-dim);
-		flex: 1;
-	}
-
-	.post-status-badge {
-		font-size: 9px;
-		font-weight: 700;
-		text-transform: uppercase;
-		padding: 2px 6px;
-		border-radius: 4px;
-		border: 1px solid;
-	}
-
-	.post-status-badge[data-status="published"] { color: var(--success); border-color: var(--success); }
-	.post-status-badge[data-status="scheduled"] { color: var(--accent); border-color: var(--accent); }
-	.post-status-badge[data-status="draft"] { color: var(--text-dim); border-color: var(--border-strong); }
-	.post-status-badge[data-status="failed"] { color: var(--error); border-color: var(--error); }
-	.post-status-badge[data-status="publishing"] { color: var(--cyan); border-color: var(--cyan); }
-
-	.post-media {
-		border-radius: 8px;
-		overflow: hidden;
-		border: 1px solid var(--border);
-		max-height: 200px;
-	}
-
-	.post-media img {
-		width: 100%;
-		height: 100%;
-		object-fit: cover;
-		display: block;
-	}
-
-	.post-text {
-		font-size: 0.82rem;
-		color: var(--text);
-		line-height: 1.55;
-		margin: 0;
-		display: -webkit-box;
-		-webkit-line-clamp: 4;
-		-webkit-box-orient: vertical;
-		overflow: hidden;
-		white-space: pre-wrap;
-	}
-
-	.post-ugc-prompt {
-		background: rgba(124, 106, 237, 0.06);
-		border: 1px solid rgba(124, 106, 237, 0.2);
-		border-radius: 6px;
-		padding: 0.5rem 0.75rem;
-	}
-
-	.ugc-label {
-		display: block;
-		font-size: 9px;
-		text-transform: uppercase;
-		letter-spacing: 0.08em;
-		color: var(--accent);
-		font-weight: 700;
-		margin-bottom: 2px;
-	}
-
-	.ugc-text {
-		font-size: 0.75rem;
-		color: var(--text-dim);
-		font-style: italic;
-	}
-
-	.analytics-strip {
-		display: flex;
-		gap: 0.75rem;
-		padding-top: 0.5rem;
-		border-top: 1px solid var(--border);
-		flex-wrap: wrap;
-	}
-
-	.analytics-stat {
-		display: flex;
-		align-items: center;
-		gap: 4px;
-		font-size: 0.75rem;
-		color: var(--text-muted);
-		font-weight: 500;
-	}
-
-	.analytics-stat.engagement-rate {
-		margin-left: auto;
-		color: var(--accent);
-		font-weight: 700;
+	.post-mosaic {
+		columns: 280px;
+		column-gap: 1rem;
 	}
 
 	/* ── Profile ── */
@@ -1900,9 +1864,10 @@
 		.hero-stats { display: none; }
 		.fields-grid { grid-template-columns: 1fr; }
 		.col-span-2 { grid-column: span 1; }
-		.post-grid { grid-template-columns: 1fr; }
 		.platforms-grid { grid-template-columns: 1fr; }
 		.feed-toolbar { flex-direction: column; align-items: stretch; }
 		.feed-actions { justify-content: flex-end; }
+		.tab-nav-name { display: none; }
+		.post-mosaic { columns: 1; }
 	}
 </style>

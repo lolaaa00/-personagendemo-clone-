@@ -539,7 +539,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			let redirectUrl = null;
 			try {
 				const origin = new URL(request.url).origin;
-				const callbackUrl = `${origin}/persona-config?agentId=${persona_id}`;
+				const callbackUrl = `${origin}/personas/${persona_id}?tab=connections`;
 				const composio = new ComposioClient();
 				redirectUrl = await composio.getOAuthLink(persona_id, platform, callbackUrl);
 			} catch (e) {

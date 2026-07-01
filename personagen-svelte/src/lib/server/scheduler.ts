@@ -131,7 +131,12 @@ export async function publishSinglePost(supabase: any, post: any): Promise<boole
 		}
 	}
 
-	let finalStatus = publishCount > 0 ? 'published' : 'failed';
+	let finalStatus: string = 'failed';
+	if (publishCount > 0 && failureCount > 0) {
+		finalStatus = 'partial';
+	} else if (publishCount > 0) {
+		finalStatus = 'published';
+	}
 	let publishedAt: string | null = publishCount > 0 ? new Date().toISOString() : null;
 
 	if (publishCount === 0 && failureCount === 0 && skippedCount === 0) {
