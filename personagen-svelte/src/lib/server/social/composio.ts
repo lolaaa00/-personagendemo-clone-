@@ -1,5 +1,11 @@
 import { env } from '$env/dynamic/private';
 import crypto from 'crypto';
+import { fetchWithTimeout } from './http';
+
+// Module-scope shadow: every Composio call in this file gets a hard deadline
+// instead of hanging a scheduler tick or the connections tab on a stuck socket.
+// The media-upload PUT (large video bodies) passes its own longer timeout.
+const fetch = fetchWithTimeout;
 
 const SUPPORTED_SOCIAL_PLATFORMS = ['tiktok', 'instagram', 'youtube', 'facebook'] as const;
 export type SocialPlatform = (typeof SUPPORTED_SOCIAL_PLATFORMS)[number];
@@ -45,12 +51,18 @@ export class ComposioClient {
 		filename?: string
 	): Promise<{ name: string; s3key: string; mimetype: string }> {
 		console.log(`[Composio Client] Downloading file for upload to Composio: ${url}`);
-		const fetchRes = await fetch(url, {
-			headers: {
-				'User-Agent':
-					'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-			}
-		});
+		// Media bodies (video especially) legitimately take longer than API calls.
+		const MEDIA_TRANSFER_TIMEOUT_MS = 5 * 60 * 1000;
+		const fetchRes = await fetch(
+			url,
+			{
+				headers: {
+					'User-Agent':
+						'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+				}
+			},
+			MEDIA_TRANSFER_TIMEOUT_MS
+		);
 		if (!fetchRes.ok) {
 			throw new Error(`Failed to fetch file from URL: ${url} (Status: ${fetchRes.status})`);
 		}
@@ -99,13 +111,17 @@ export class ComposioClient {
 
 		if (putUrl) {
 			console.log(`[Composio Client] Uploading file binary to presigned URL...`);
-			const putRes = await fetch(putUrl, {
-				method: 'PUT',
-				headers: {
-					'Content-Type': mimetype
+			const putRes = await fetch(
+				putUrl,
+				{
+					method: 'PUT',
+					headers: {
+						'Content-Type': mimetype
+					},
+					body: buffer
 				},
-				body: buffer
-			});
+				MEDIA_TRANSFER_TIMEOUT_MS
+			);
 
 			if (!putRes.ok) {
 				const errorText = await putRes.text();
@@ -547,125 +563,79 @@ export class ComposioClient {
 		personaId: string,
 		platform: string,
 		externalId: string,
-		publishedAt?: string | Date
-	): Promise<{
-		views: number;
-		likes: number;
-		comments: number;
-		shares: number;
-		estimated: boolean;
-	}> {
-		const metrics = { views: 0, likes: 0, comments: 0, shares: 0, estimated: true };
+		_publishedAt?: string | Date
+	): Promise<{ views: number; likes: number; comments: number; shares: number } | null> {
+		// Real platform metrics or nothing. No synthetic/estimated numbers — an
+		// invented KPI shown to a client is worse than an empty one.
+		if (!this.apiKey || !externalId || externalId.startsWith('ext_')) return null;
 
-		// Fallback organic growth curve logic based on time elapsed
-		const pubDate = publishedAt ? new Date(publishedAt) : new Date(Date.now() - 3600000 * 4); // default 4 hrs ago
-		const elapsedHours = Math.max(0.1, (Date.now() - pubDate.getTime()) / (1000 * 60 * 60));
-
-		// Generate stable seed based on externalId
-		let seed = 0;
-		if (externalId) {
-			for (let i = 0; i < externalId.length; i++) {
-				seed += externalId.charCodeAt(i);
-			}
-		} else {
-			seed = Math.floor(Math.random() * 100);
-		}
-
-		// Calculate organic scaling metrics (logarithmic or logistic growth)
-		// More time = more views, plateauing after 72 hours
-		const baseViews = 500 + (seed % 9500); // 500 to 10000 views baseline
-		const growthFactor = 1 - Math.exp(-elapsedHours / 24); // logistic-like curve
-		metrics.views = Math.max(10, Math.floor(baseViews * growthFactor * (1 + 0.1 * (seed % 10))));
-
-		// Engagement rates
-		const likeRate = 0.05 + 0.005 * (seed % 15); // 5% to 12.5% of views
-		const commentRate = 0.005 + 0.001 * (seed % 5); // 0.5% to 1% of views
-		const shareRate = 0.002 + 0.0005 * (seed % 8); // 0.2% to 0.6% of views
-
-		metrics.likes = Math.floor(metrics.views * likeRate);
-		metrics.comments = Math.floor(metrics.views * commentRate);
-		metrics.shares = Math.floor(metrics.views * shareRate);
-
-		// If COMPOSIO_API_KEY is configured, try querying the live integration
-		if (this.apiKey && externalId && !externalId.startsWith('ext_')) {
-			try {
-				let response;
-				if (platform.toLowerCase() === 'instagram') {
-					response = await fetch(
-						`${this.baseUrlV3_1}/tools/execute/INSTAGRAM_GET_IG_MEDIA_INSIGHTS`,
-						{
-							method: 'POST',
-							headers: this.getHeaders(),
-							body: JSON.stringify({
-								user_id: personaId,
-								arguments: {
-									ig_media_id: externalId,
-									metric: ['views', 'likes', 'comments', 'shares']
-								}
-							})
-						}
-					);
-				} else {
-					response = await fetch(
-						`${this.baseUrlV3_1}/tools/execute/${platform.toUpperCase()}_GET_POST_METRICS`,
-						{
-							method: 'POST',
-							headers: this.getHeaders(),
-							body: JSON.stringify({
-								user_id: personaId,
-								arguments: { post_id: externalId }
-							})
-						}
-					);
-				}
-				if (response.ok) {
-					const data = (await response.json()) as any;
-					if (data && typeof data === 'object') {
-						metrics.estimated = false;
-						const resObj = data.result || data.data || data;
-						if (resObj && typeof resObj === 'object') {
-							if (platform.toLowerCase() === 'instagram') {
-								const insightsList = Array.isArray(resObj.data)
-									? resObj.data
-									: Array.isArray(resObj)
-										? resObj
-										: [];
-								for (const insight of insightsList) {
-									const val = Number(insight.values?.[0]?.value) || 0;
-									if (insight.name === 'views' || insight.name === 'reach') {
-										metrics.views = val;
-									} else if (insight.name === 'likes') {
-										metrics.likes = val;
-									} else if (insight.name === 'comments') {
-										metrics.comments = val;
-									} else if (insight.name === 'shares') {
-										metrics.shares = val;
-									}
-								}
-							} else {
-								metrics.views = Number(resObj.views || resObj.view_count || metrics.views);
-								metrics.likes = Number(
-									resObj.likes || resObj.like_count || resObj.favorite_count || metrics.likes
-								);
-								metrics.comments = Number(
-									resObj.comments || resObj.comment_count || metrics.comments
-								);
-								metrics.shares = Number(
-									resObj.shares || resObj.share_count || resObj.retweet_count || metrics.shares
-								);
+		try {
+			let response;
+			if (platform.toLowerCase() === 'instagram') {
+				response = await fetch(
+					`${this.baseUrlV3_1}/tools/execute/INSTAGRAM_GET_IG_MEDIA_INSIGHTS`,
+					{
+						method: 'POST',
+						headers: this.getHeaders(),
+						body: JSON.stringify({
+							user_id: personaId,
+							arguments: {
+								ig_media_id: externalId,
+								metric: ['views', 'likes', 'comments', 'shares']
 							}
-						}
+						})
 					}
-				}
-			} catch (err) {
-				console.warn(
-					'[Composio Client] Failed to fetch live metrics, falling back to simulated data:',
-					err
+				);
+			} else {
+				response = await fetch(
+					`${this.baseUrlV3_1}/tools/execute/${platform.toUpperCase()}_GET_POST_METRICS`,
+					{
+						method: 'POST',
+						headers: this.getHeaders(),
+						body: JSON.stringify({
+							user_id: personaId,
+							arguments: { post_id: externalId }
+						})
+					}
 				);
 			}
-		}
+			if (!response.ok) return null;
 
-		return metrics;
+			const data = (await response.json()) as any;
+			if (!data || typeof data !== 'object') return null;
+			const resObj = data.result || data.data || data;
+			if (!resObj || typeof resObj !== 'object') return null;
+
+			const metrics = { views: 0, likes: 0, comments: 0, shares: 0 };
+			if (platform.toLowerCase() === 'instagram') {
+				const insightsList = Array.isArray(resObj.data)
+					? resObj.data
+					: Array.isArray(resObj)
+						? resObj
+						: [];
+				for (const insight of insightsList) {
+					const val = Number(insight.values?.[0]?.value) || 0;
+					if (insight.name === 'views' || insight.name === 'reach') {
+						metrics.views = val;
+					} else if (insight.name === 'likes') {
+						metrics.likes = val;
+					} else if (insight.name === 'comments') {
+						metrics.comments = val;
+					} else if (insight.name === 'shares') {
+						metrics.shares = val;
+					}
+				}
+			} else {
+				metrics.views = Number(resObj.views || resObj.view_count || 0);
+				metrics.likes = Number(resObj.likes || resObj.like_count || resObj.favorite_count || 0);
+				metrics.comments = Number(resObj.comments || resObj.comment_count || 0);
+				metrics.shares = Number(resObj.shares || resObj.share_count || resObj.retweet_count || 0);
+			}
+			return metrics;
+		} catch (err) {
+			console.warn('[Composio Client] Failed to fetch live metrics (no data stored):', err);
+			return null;
+		}
 	}
 
 	/**

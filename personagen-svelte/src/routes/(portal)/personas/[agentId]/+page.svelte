@@ -6,7 +6,7 @@
 	import { Accounts, Posts } from '$lib/services/api';
 	import AgentConnectionStats from '$lib/components/agents/AgentConnectionStats.svelte';
 	import PostCard from '$lib/components/feed/PostCard.svelte';
-	import PostModal from '$lib/components/feed/PostModal.svelte';
+	import PostDrawer from '$lib/components/feed/PostDrawer.svelte';
 	import ManualDeleteNotice from '$lib/components/feed/ManualDeleteNotice.svelte';
 	import { getPostDisplay } from '$lib/components/feed/postDisplay';
 	import type { AutonomyLevel } from '$lib/types';
@@ -22,11 +22,11 @@
 	let loadedAgentId: string | null = data.agent?.id ?? null;
 
 	// ── Tab state ──────────────────────────────────────────────────
-	function initialTab(): 'feed' | 'profile' | 'connections' {
+	function initialTab(): 'feed' | 'profile' | 'connections' | 'assets' {
 		const t = $page.url.searchParams.get('tab');
-		return t === 'profile' || t === 'connections' ? t : 'feed';
+		return t === 'profile' || t === 'connections' || t === 'assets' ? t : 'feed';
 	}
-	let activeTab = $state<'feed' | 'profile' | 'connections'>(initialTab());
+	let activeTab = $state<'feed' | 'profile' | 'connections' | 'assets'>(initialTab());
 
 	// ── Feed state ─────────────────────────────────────────────────
 	let feedPosts = $state<any[]>([]);
@@ -203,6 +203,7 @@
 		modalPost = null;
 		manualDeleteNotice = null;
 		platformStatuses = {};
+		assetLightbox = null;
 
 		// A staged (not-yet-submitted) reference-photo upload or in-flight kit-stage
 		// spinner also belongs to the previous persona — otherwise switching personas
@@ -217,7 +218,8 @@
 
 	// ── Tab init effects ───────────────────────────────────────────
 	$effect(() => {
-		if (activeTab === 'feed' && agent?.id) loadFeed();
+		// Assets tab derives its grid from the same posts data as the feed.
+		if ((activeTab === 'feed' || activeTab === 'assets') && agent?.id) loadFeed();
 	});
 
 	$effect(() => {
@@ -403,6 +405,40 @@
 		}
 		return true;
 	}));
+
+	// ── Assets: every generated visual for this persona in one grid ──
+	interface AssetItem {
+		url: string;
+		type: 'image' | 'video';
+		label: string;
+	}
+	let assetItems = $derived.by(() => {
+		const seen = new Set<string>();
+		const items: AssetItem[] = [];
+		const add = (url: string | null | undefined, type: 'image' | 'video', label: string) => {
+			if (!url || typeof url !== 'string' || seen.has(url)) return;
+			seen.add(url);
+			items.push({ url, type, label });
+		};
+		for (const p of feedPosts) {
+			try {
+				const c = JSON.parse(p.content);
+				add(c.media_url || c.mediaUrl, c.media_type === 'video' ? 'video' : 'image', 'Post media');
+				add(c.poster_url, 'image', 'Poster still');
+				if (Array.isArray(c.storyboard)) {
+					for (const s of c.storyboard) add(s, 'image', 'Storyboard still');
+				}
+			} catch {
+				/* non-JSON content has no assets */
+			}
+		}
+		add(characterRef, 'image', 'Profile picture');
+		for (const [k, v] of Object.entries(referenceKit ?? {})) {
+			add(v as string, 'image', `Reference kit — ${k.replace(/_/g, ' ')}`);
+		}
+		return items;
+	});
+	let assetLightbox = $state<AssetItem | null>(null);
 
 	// ── Profile save ───────────────────────────────────────────────
 	async function saveProfile() {
@@ -757,6 +793,10 @@
 					<span class="tab-badge">{computedMetrics.connectedCount}</span>
 				{/if}
 			</button>
+			<button class="tab-btn" class:active={activeTab === 'assets'} onclick={() => (activeTab = 'assets')}>
+				<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+				Assets
+			</button>
 		</div>
 	</nav>
 
@@ -828,25 +868,19 @@
 				{:else}
 					<div class="post-mosaic">
 						{#each filteredPosts as post (post.id)}
-							<PostCard
-								{post}
-								onOpen={(p) => (modalPost = p)}
-								onDelete={handleDeletePost}
-								onApprove={handleApprovePost}
-								deleting={deletingPostId === post.id}
-								approving={approvingPostId === post.id}
-							/>
+							<PostCard {post} onOpen={(p) => (modalPost = p)} />
 						{/each}
 					</div>
 				{/if}
 			</div>
 
-			<PostModal
+			<PostDrawer
 				post={modalPost}
 				onClose={() => (modalPost = null)}
 				onDelete={handleDeletePost}
 				onApprove={handleApprovePost}
 				approving={approvingPostId === modalPost?.id}
+				deleting={deletingPostId === modalPost?.id}
 			/>
 			{#if manualDeleteNotice}
 				<ManualDeleteNotice entries={manualDeleteNotice} onClose={() => (manualDeleteNotice = null)} />
@@ -1353,9 +1387,56 @@
 					/>
 				{/if}
 			</div>
+
+		<!-- ASSETS TAB -->
+		{:else if activeTab === 'assets'}
+			<div class="assets-tab">
+				{#if feedLoading && assetItems.length === 0}
+					<div class="feed-loading"><span class="spinner"></span> Loading assets…</div>
+				{:else if assetItems.length === 0}
+					<div class="feed-empty">
+						<span class="empty-icon">🖼</span>
+						<h3>No assets yet</h3>
+						<p>Every image and video generated for this persona will collect here — post media, poster stills, storyboards, the profile picture, and the reference kit.</p>
+					</div>
+				{:else}
+					<p class="assets-count">{assetItems.length} generated asset{assetItems.length === 1 ? '' : 's'}</p>
+					<div class="assets-grid">
+						{#each assetItems as asset (asset.url)}
+							<button type="button" class="asset-tile" onclick={() => (assetLightbox = asset)} aria-label="View {asset.label}">
+								{#if asset.type === 'video'}
+									<video src={asset.url} muted playsinline preload="metadata"></video>
+									<span class="asset-video-badge">▶</span>
+								{:else}
+									<img src={asset.url} loading="lazy" alt={asset.label} />
+								{/if}
+								<span class="asset-label">{asset.label}</span>
+							</button>
+						{/each}
+					</div>
+				{/if}
+			</div>
 		{/if}
 	</div>
 </div>
+
+{#if assetLightbox}
+	<div class="lightbox-backdrop" onclick={() => (assetLightbox = null)} role="presentation">
+		<div class="lightbox-content" onclick={(e) => e.stopPropagation()} role="dialog" aria-label={assetLightbox.label}>
+			{#if assetLightbox.type === 'video'}
+				<!-- svelte-ignore a11y_media_has_caption -->
+				<video src={assetLightbox.url} controls autoplay playsinline></video>
+			{:else}
+				<img src={assetLightbox.url} alt={assetLightbox.label} />
+			{/if}
+			<div class="lightbox-bar">
+				<span>{assetLightbox.label}</span>
+				<a href={assetLightbox.url} target="_blank" rel="noopener noreferrer">Open original ↗</a>
+				<button type="button" onclick={() => (assetLightbox = null)}>Close</button>
+			</div>
+		</div>
+	</div>
+{/if}
 {/if}
 
 <style>
@@ -1363,6 +1444,138 @@
 	.persona-page {
 		max-width: 900px;
 		margin: 0 auto;
+	}
+
+	/* ── Assets tab ── */
+	.assets-count {
+		font-size: 0.78rem;
+		color: var(--text-dim);
+		margin: 0 0 0.75rem;
+	}
+
+	.assets-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+		gap: 0.75rem;
+	}
+
+	.asset-tile {
+		position: relative;
+		padding: 0;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		overflow: hidden;
+		background: var(--surface);
+		cursor: pointer;
+		aspect-ratio: 1;
+		transition: border-color 0.15s ease, transform 0.15s ease;
+	}
+
+	.asset-tile:hover {
+		border-color: var(--accent-mid);
+		transform: translateY(-2px);
+	}
+
+	.asset-tile img,
+	.asset-tile video {
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+		display: block;
+	}
+
+	.asset-video-badge {
+		position: absolute;
+		top: 6px;
+		right: 6px;
+		width: 24px;
+		height: 24px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: rgba(0, 0, 0, 0.65);
+		color: #fff;
+		font-size: 10px;
+		border-radius: 999px;
+		pointer-events: none;
+	}
+
+	.asset-label {
+		position: absolute;
+		bottom: 0;
+		left: 0;
+		right: 0;
+		padding: 1rem 0.5rem 0.35rem;
+		background: linear-gradient(transparent, rgba(0, 0, 0, 0.75));
+		color: #fff;
+		font-size: 0.62rem;
+		font-weight: 600;
+		text-align: left;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		pointer-events: none;
+	}
+
+	.lightbox-backdrop {
+		position: fixed;
+		inset: 0;
+		background: rgba(10, 14, 26, 0.88);
+		backdrop-filter: blur(6px);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		z-index: 1100;
+		padding: 1.5rem;
+	}
+
+	.lightbox-content {
+		max-width: min(920px, 94vw);
+		max-height: 90vh;
+		display: flex;
+		flex-direction: column;
+		border-radius: var(--radius);
+		overflow: hidden;
+		background: var(--surface);
+		border: 1px solid var(--border-strong);
+	}
+
+	.lightbox-content img,
+	.lightbox-content video {
+		max-width: 100%;
+		max-height: calc(90vh - 52px);
+		object-fit: contain;
+		background: #000;
+	}
+
+	.lightbox-bar {
+		display: flex;
+		align-items: center;
+		gap: 1rem;
+		padding: 0.6rem 1rem;
+		font-size: 0.75rem;
+		color: var(--text-muted);
+	}
+
+	.lightbox-bar span {
+		flex: 1;
+		font-weight: 600;
+	}
+
+	.lightbox-bar a {
+		color: var(--accent);
+		text-decoration: none;
+		font-weight: 600;
+	}
+
+	.lightbox-bar button {
+		background: var(--surface-2);
+		border: 1px solid var(--border);
+		border-radius: 6px;
+		color: var(--text-muted);
+		padding: 0.3rem 0.8rem;
+		font-size: 0.72rem;
+		cursor: pointer;
 	}
 
 	.no-agent {

@@ -15,14 +15,6 @@ function mapZernioPlatform(platform: string): string {
 	return p;
 }
 
-/** Deterministic non-negative hash, used to derive a stable pseudo-metric from a persona+platform pair. */
-function getSeedHash(seed: string): number {
-	let hash = 0;
-	for (let i = 0; i < seed.length; i++) {
-		hash = (hash * 31 + seed.charCodeAt(i)) | 0;
-	}
-	return Math.abs(hash);
-}
 
 /**
  * Imports the user's connected Zernio accounts into the agent's `connections`
@@ -129,7 +121,6 @@ async function syncLiveConnectionMetrics(
 	const plat = platform.toLowerCase();
 	let liveHandle = conn.handle;
 	let liveFollowers = conn.followers || 0;
-	let liveEngagement = conn.engagement_rate || 0.0;
 	let hasLiveUpdates = false;
 
 	try {
@@ -152,8 +143,9 @@ async function syncLiveConnectionMetrics(
 						liveFollowers = parseInt(channel.statistics.subscriberCount, 10) || 0;
 					}
 
-					const hash = getSeedHash(personaId + plat);
-					liveEngagement = parseFloat((2.0 + (hash % 30) / 10).toFixed(1)); // 2.0% to 5.0%
+					// Engagement rate is NOT fabricated — YouTube's channel-statistics
+					// call doesn't provide one, so we keep whatever real value exists
+					// (0 until a real per-post metrics source lands).
 					hasLiveUpdates = true;
 				}
 			}
@@ -170,8 +162,7 @@ async function syncLiveConnectionMetrics(
 						liveFollowers = parseInt(user.followers_count, 10) || 0;
 					}
 
-					const hash = getSeedHash(personaId + plat);
-					liveEngagement = parseFloat((3.0 + (hash % 40) / 10).toFixed(1)); // 3.0% to 7.0%
+					// Same policy as YouTube above: no invented engagement rate.
 					hasLiveUpdates = true;
 				}
 			}
@@ -182,8 +173,10 @@ async function syncLiveConnectionMetrics(
 
 	if (hasLiveUpdates) {
 		console.log(
-			`[Accounts Sync] Synced live metrics for ${platform} (${personaId}): Handle=${liveHandle}, Followers=${liveFollowers}, Engagement=${liveEngagement}`
+			`[Accounts Sync] Synced live metrics for ${platform} (${personaId}): Handle=${liveHandle}, Followers=${liveFollowers}`
 		);
+		// engagement_rate deliberately not written here — no provider call in this
+		// sync returns a real one, and invented numbers are worse than none.
 		await db.connections.upsert({
 			id: conn.id,
 			user_id: conn.user_id,
@@ -191,7 +184,6 @@ async function syncLiveConnectionMetrics(
 			platform: plat as any,
 			handle: liveHandle,
 			followers: liveFollowers,
-			engagement_rate: liveEngagement,
 			verified: true,
 			status: 'active',
 			last_error: null,
@@ -201,7 +193,6 @@ async function syncLiveConnectionMetrics(
 
 		conn.handle = liveHandle;
 		conn.followers = liveFollowers;
-		conn.engagement_rate = liveEngagement;
 		conn.last_sync = new Date().toISOString();
 	}
 }
@@ -366,35 +357,40 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				const localActive = conn && conn.status !== 'revoked' && conn.status !== 'reauth_required';
 
 				if (conn && (isVerified || providerUnavailable || localActive)) {
+					// DB truth first: a locally-active connection row stays "connected"
+					// in the UI even when the live provider check can't confirm it
+					// (empty list, entity-id mismatch, expired provider key). The live
+					// check only ever ADDS confidence (verified) — an absence must not
+					// flip a working connection to "disconnected", which is exactly how
+					// real connections were vanishing from the Connections tab.
 					statusData[p] = {
-						connected: Boolean(isVerified || (providerUnavailable && localActive)),
+						connected: Boolean(isVerified || localActive),
 						configured,
-						status: providerUnavailable
-							? 'provider_unavailable'
-							: isVerified
-								? 'active'
-								: 'reauth_required',
+						status: isVerified ? 'active' : providerUnavailable ? 'provider_unavailable' : 'active',
 						handle: conn.handle || '@connected',
-						verified: isVerified || (providerUnavailable && (conn.verified ?? true)),
+						verified: isVerified,
 						lastSync: conn.last_sync || conn.connected_at || new Date().toISOString(),
-						lastError: providerError || conn.last_error || undefined,
+						lastError: isVerified
+							? undefined
+							: providerError ||
+								conn.last_error ||
+								'Live provider check could not confirm this account — showing saved connection.',
 						followers: conn.followers || 0,
 						engagement_rate: conn.engagement_rate || 0
 					};
 
+					// Persist only what we actually learned: the check timestamp, and a
+					// verified/active upgrade when the provider confirmed it. Never
+					// downgrade status on mere absence from the live list.
 					await db.connections.upsert({
 						id: conn.id,
 						user_id: conn.user_id,
 						agent_id: persona_id,
 						platform: p as any,
 						handle: conn.handle,
-						verified: Boolean(isVerified),
-						status: providerUnavailable ? 'stale' : isVerified ? 'active' : 'reauth_required',
-						last_error: providerUnavailable
-							? providerError
-							: isVerified
-								? null
-								: 'Composio did not report this account as active.',
+						verified: isVerified ? true : (conn.verified ?? false),
+						status: isVerified ? 'active' : conn.status || 'active',
+						last_error: isVerified ? null : conn.last_error,
 						last_checked_at: new Date().toISOString(),
 						last_sync: isVerified ? new Date().toISOString() : conn.last_sync
 					});

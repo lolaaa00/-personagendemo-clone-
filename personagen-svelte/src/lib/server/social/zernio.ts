@@ -1,5 +1,10 @@
 import { env } from '$env/dynamic/private';
 import { getUserApiKey } from '$lib/server/user-api-keys';
+import { fetchWithTimeout } from './http';
+
+// Module-scope shadow: every Zernio call in this file gets a hard deadline
+// instead of hanging a scheduler tick on one stuck socket.
+const fetch = fetchWithTimeout;
 
 const ZERNIO_BASE_URL = 'https://zernio.com/api/v1';
 

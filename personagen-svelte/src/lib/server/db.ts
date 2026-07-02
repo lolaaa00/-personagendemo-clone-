@@ -66,7 +66,7 @@ export interface PostRow {
 	agent_id: string;
 	content: string;
 	platforms: string[];
-	status: 'draft' | 'scheduled' | 'published' | 'failed' | 'partial';
+	status: 'draft' | 'scheduled' | 'publishing' | 'published' | 'failed' | 'partial';
 	scheduled_date: string | null;
 	scheduled_time: string | null;
 	published_at: string | null;

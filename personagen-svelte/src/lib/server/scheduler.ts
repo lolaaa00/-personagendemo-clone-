@@ -13,8 +13,35 @@ let isRunning = false;
 let lastAnalyticsSyncTime = 0;
 let lastAutopilotRunTime = 0;
 
+// Transient provider failures (network blips, 5xx, rate limits) are retried on
+// later ticks with spaced backoff instead of terminally failing the post.
+// Permanent errors (bad credentials, unsupported content) fail immediately.
+const MAX_PUBLISH_ATTEMPTS = 3;
+const RETRY_BACKOFF_MS = 5 * 60 * 1000; // per attempt: 5min, 10min
+// A post claimed (status='publishing') longer than this is presumed orphaned by
+// a crashed/restarted process and is released back to 'scheduled'.
+const CLAIM_LEASE_MS = 15 * 60 * 1000;
+
+function isRetriableError(message: string): boolean {
+	return /timed?\s?out|timeout|rate.?limit|too many requests|\b429\b|\b5\d\d\b|econnreset|econnrefused|etimedout|eai_again|fetch failed|network|socket|abort/i.test(
+		message || ''
+	);
+}
+
+const PUBLISHABLE_PLATFORMS = ['instagram', 'tiktok', 'youtube', 'facebook', 'x', 'threads'];
+
 /**
  * Publishes a single post to its target platforms via the configured provider.
+ *
+ * Exactly-once discipline (as close as providers allow):
+ * 1. Atomically CLAIMS the row (status scheduled -> publishing) before any
+ *    provider call — a concurrent tick or manual publish loses the claim and
+ *    skips, so a post is never in two publish loops at once.
+ * 2. Platforms already recorded 'published' in publication_results are never
+ *    re-sent — a retry after a partial failure only touches the failed ones.
+ * 3. Transient failures revert the post to 'scheduled' with a backoff window
+ *    (publication_results._post.not_before) so a flaky minute self-heals
+ *    instead of terminally failing an unattended autopilot slot.
  */
 export async function publishSinglePost(supabase: any, post: any): Promise<boolean> {
 	console.log(`[Scheduler] Publishing single post ${post.id} for agent ${post.agent_id}`);
@@ -23,36 +50,73 @@ export async function publishSinglePost(supabase: any, post: any): Promise<boole
 	let publishCount = 0;
 	let failureCount = 0;
 	let skippedCount = 0;
+	let alreadyPublishedCount = 0;
+	let retriableFailureCount = 0;
 	let lastExternalId: string | null = null;
 	const errors: string[] = [];
 	const publicationResults: Record<string, any> = post.publication_results || {};
+	const priorMeta = publicationResults._post || {};
+	const attempts = (Number(priorMeta.attempts) || 0) + 1;
 
-	// Set initial status to 'publishing' so UI can give immediate feedback
+	// Seed 'publishing' markers ONLY for platforms not already published — a
+	// prior partial success must never be stomped back to pending (that's what
+	// caused re-posts of already-live content).
 	for (const platform of targetPlatforms) {
 		const normalizedPlat = platform.toLowerCase();
-		if (['instagram', 'tiktok', 'youtube', 'facebook'].includes(normalizedPlat)) {
+		if (
+			PUBLISHABLE_PLATFORMS.includes(normalizedPlat) &&
+			publicationResults[normalizedPlat]?.status !== 'published'
+		) {
 			publicationResults[normalizedPlat] = {
 				status: 'publishing',
 				started_at: new Date().toISOString()
 			};
 		}
 	}
-	await supabase
+	publicationResults._post = { ...priorMeta, attempts, claimed_at: new Date().toISOString() };
+	delete publicationResults._post.not_before;
+
+	// Atomic claim: only the worker that flips scheduled -> publishing owns this
+	// post. Zero rows updated = another worker (concurrent tick, manual publish,
+	// second instance) already claimed it — bail without touching the provider.
+	const { data: claimed, error: claimErr } = await supabase
 		.from('posts')
-		.update({
-			status: 'scheduled',
-			publication_results: publicationResults
-		})
-		.eq('id', post.id);
+		.update({ status: 'publishing', publication_results: publicationResults })
+		.eq('id', post.id)
+		.eq('status', 'scheduled')
+		.select('id');
+
+	if (claimErr) {
+		// Most likely the posts_status_check constraint doesn't allow 'publishing'
+		// yet (post_status_publishing_migration.sql not applied). Fall back to the
+		// legacy non-atomic write so publishing still works — just without the
+		// double-publish guard.
+		console.warn(
+			`[Scheduler] Atomic claim unavailable (${claimErr.message}) — run post_status_publishing_migration.sql. Publishing without claim guard.`
+		);
+		await supabase
+			.from('posts')
+			.update({ status: 'scheduled', publication_results: publicationResults })
+			.eq('id', post.id);
+	} else if (!claimed || claimed.length === 0) {
+		console.log(`[Scheduler] Post ${post.id} already claimed by another worker — skipping.`);
+		return false;
+	}
 
 	for (const platform of targetPlatforms) {
 		const normalizedPlat = platform.toLowerCase();
-		if (!['instagram', 'tiktok', 'youtube', 'facebook'].includes(normalizedPlat)) {
+		if (!PUBLISHABLE_PLATFORMS.includes(normalizedPlat)) {
 			publicationResults[normalizedPlat] = {
 				status: 'skipped',
 				error: 'Platform is not supported'
 			};
 			skippedCount++;
+			continue;
+		}
+
+		// Never re-publish a platform that already succeeded (partial retry).
+		if (post.publication_results?.[normalizedPlat]?.status === 'published') {
+			alreadyPublishedCount++;
 			continue;
 		}
 
@@ -84,12 +148,19 @@ export async function publishSinglePost(supabase: any, post: any): Promise<boole
 			continue;
 		}
 
+		// A thrown error (vs a returned failure) must not unwind the whole loop —
+		// that would abandon the row in 'publishing' until the lease reaper and
+		// skip recording results for platforms already processed this run.
 		const publishRes = await publishToPlatform({
 			supabase,
 			post,
 			connection: conn,
 			platform: normalizedPlat
-		});
+		}).catch((err: Error) => ({
+			success: false as const,
+			provider: 'zernio' as const,
+			error: err.message || 'Publish threw unexpectedly'
+		}));
 
 		if (publishRes.success) {
 			console.log(`[Scheduler] Post ${post.id} successfully published to ${platform}.`);
@@ -122,41 +193,72 @@ export async function publishSinglePost(supabase: any, post: any): Promise<boole
 				publishRes.error
 			);
 			failureCount++;
-			errors.push(`${platform}: ${publishRes.error}`);
+			const errMsg = publishRes.error || 'Unknown publish failure';
+			if (isRetriableError(errMsg)) retriableFailureCount++;
+			errors.push(`${platform}: ${errMsg}`);
 			publicationResults[normalizedPlat] = {
 				status: 'failed',
 				provider: publishRes.provider,
-				error: publishRes.error || 'Unknown Composio publish failure'
+				error: errMsg
 			};
 		}
 	}
 
-	let finalStatus: string = 'failed';
-	if (publishCount > 0 && failureCount > 0) {
-		finalStatus = 'partial';
-	} else if (publishCount > 0) {
-		finalStatus = 'published';
-	}
-	let publishedAt: string | null = publishCount > 0 ? new Date().toISOString() : null;
+	const totalPublished = publishCount + alreadyPublishedCount;
 
-	if (publishCount === 0 && failureCount === 0 && skippedCount === 0) {
+	// Retry path: every failure this run was transient (network/5xx/rate limit)
+	// and we still have attempts left → put the post back in the scheduled pool
+	// with a backoff window instead of terminally failing it. Platforms that
+	// succeeded stay recorded as published and are skipped on the retry tick.
+	const shouldRetry =
+		failureCount > 0 && retriableFailureCount === failureCount && attempts < MAX_PUBLISH_ATTEMPTS;
+
+	let finalStatus: string;
+	if (shouldRetry) {
+		finalStatus = 'scheduled';
+		publicationResults._post = {
+			...publicationResults._post,
+			attempts,
+			not_before: new Date(Date.now() + attempts * RETRY_BACKOFF_MS).toISOString(),
+			last_error: errors.join('; ')
+		};
+		console.log(
+			`[Scheduler] Post ${post.id}: ${failureCount} transient failure(s), attempt ${attempts}/${MAX_PUBLISH_ATTEMPTS} — retrying after backoff.`
+		);
+	} else if (totalPublished > 0 && failureCount > 0) {
+		finalStatus = 'partial';
+	} else if (totalPublished > 0) {
+		finalStatus = 'published';
+	} else {
+		finalStatus = 'failed';
+	}
+
+	if (totalPublished === 0 && failureCount === 0 && skippedCount === 0) {
 		finalStatus = 'failed';
 		publicationResults._post = {
+			...publicationResults._post,
 			status: 'failed',
 			error: 'No target platforms were provided'
 		};
 	}
 
-	const { error: updateError } = await supabase
-		.from('posts')
-		.update({
-			status: finalStatus,
-			published_at: publishedAt,
-			external_id: lastExternalId,
-			publication_results: publicationResults,
-			analytics: { views: 0, likes: 0, comments: 0, shares: 0 }
-		})
-		.eq('id', post.id);
+	// Preserve prior publish evidence on retries: published_at keeps its first
+	// value, external_id is never nulled out by a later run that published
+	// nothing new, and synced analytics are only zero-seeded once.
+	const publishedAt: string | null =
+		post.published_at || (totalPublished > 0 ? new Date().toISOString() : null);
+
+	const finalUpdate: Record<string, any> = {
+		status: finalStatus,
+		published_at: publishedAt,
+		publication_results: publicationResults
+	};
+	if (lastExternalId) finalUpdate.external_id = lastExternalId;
+	// analytics intentionally left untouched: it stays NULL until the analytics
+	// sync stores REAL platform numbers. Zero-seeding would display as "0 views"
+	// — a claim about performance we haven't actually measured.
+
+	const { error: updateError } = await supabase.from('posts').update(finalUpdate).eq('id', post.id);
 
 	if (updateError) {
 		console.error(`[Scheduler] Failed to update post ${post.id} status:`, updateError);
@@ -204,6 +306,27 @@ async function pollScheduledPosts() {
 		const supabase = getServiceSupabase();
 
 		const nowMs = Date.now();
+
+		// Release orphaned claims: a post stuck in 'publishing' past its lease was
+		// claimed by a process that died mid-publish. Put it back in the pool —
+		// the per-platform published guard prevents re-sending anything that was
+		// recorded as published before the crash.
+		const { data: stale } = await supabase
+			.from('posts')
+			.select('id, publication_results')
+			.eq('status', 'publishing');
+		for (const p of stale || []) {
+			const claimedAt = Date.parse(p.publication_results?._post?.claimed_at || '');
+			if (!claimedAt || nowMs - claimedAt > CLAIM_LEASE_MS) {
+				console.warn(`[Scheduler] Releasing orphaned publishing claim on post ${p.id}.`);
+				await supabase
+					.from('posts')
+					.update({ status: 'scheduled' })
+					.eq('id', p.id)
+					.eq('status', 'publishing');
+			}
+		}
+
 		// Prefilter in SQL by a timezone-safe upper bound (+2 days UTC), then decide
 		// due-ness in JS using each agent's configured timezone. Drafts (status
 		// !== 'scheduled') are excluded automatically — they await approval.
@@ -232,6 +355,9 @@ async function pollScheduledPosts() {
 			for (const c of cfgs || []) tzByAgent.set(c.agent_id, c.timezone || DEFAULT_TZ);
 
 			duePosts = duePosts.filter((p: any) => {
+				// Respect the retry backoff window set after a transient failure.
+				const notBefore = Date.parse(p.publication_results?._post?.not_before || '');
+				if (notBefore && notBefore > nowMs) return false;
 				if (!p.scheduled_date) return true; // no date → publish now
 				const tz = tzByAgent.get(p.agent_id) || DEFAULT_TZ;
 				return zonedWallTimeToEpoch(p.scheduled_date, p.scheduled_time || '00:00:00', tz) <= nowMs;
@@ -346,6 +472,10 @@ export async function syncPostAnalytics() {
 						externalId,
 						post.published_at!
 					);
+
+					// Real metrics or nothing — never store synthetic numbers. A null
+					// leaves the post's analytics untouched (UI shows no stats).
+					if (!metrics) continue;
 
 					const { error: updateErr } = await supabase
 						.from('posts')
