@@ -33,8 +33,12 @@
 	let feedLoading = $state(false);
 	let syncingFeed = $state(false);
 	let generatingPost = $state(false);
-	let feedFilter = $state<'all' | 'published' | 'scheduled' | 'draft' | 'failed' | 'partial'>('all');
-	let platformFilter = $state<'all' | 'tiktok' | 'instagram' | 'youtube' | 'facebook'>('all');
+	let feedFilter = $state<
+		'all' | 'published' | 'scheduled' | 'publishing' | 'draft' | 'failed' | 'partial'
+	>('all');
+	let platformFilter = $state<
+		'all' | 'tiktok' | 'instagram' | 'youtube' | 'facebook' | 'x' | 'threads'
+	>('all');
 	let modalPost = $state<any | null>(null);
 	let deletingPostId = $state<string | null>(null);
 	let approvingPostId = $state<string | null>(null);
@@ -60,6 +64,35 @@
 	let editRuntimeOwner = $state<'svelte-gemini' | 'hermes-daemon' | 'hermes-orchestrated'>(
 		agent?.runtime_owner ?? 'svelte-gemini'
 	);
+
+	// ── Extended persona profile (stored in agent.market as JSON) ──────────
+	function parsePersonaProfile(agent: any): Record<string, any> {
+		try {
+			if (agent?.market && typeof agent.market === 'string' && agent.market.startsWith('{')) {
+				return JSON.parse(agent.market);
+			}
+		} catch { /* ignore */ }
+		return {};
+	}
+	let personaProfile = $state<Record<string, any>>(parsePersonaProfile(agent));
+	let ppAgeMin = $state<number>(personaProfile.ageMin ?? 18);
+	let ppAgeMax = $state<number>(personaProfile.ageMax ?? 35);
+	let ppArchetype = $state<string>(personaProfile.archetype ?? '');
+	let ppContentFocus = $state<string>(personaProfile.contentFocus ?? '');
+	let ppPsychProfile = $state<string>(personaProfile.psychProfile ?? '');
+	let ppContentAngle = $state<string>(personaProfile.contentAngle ?? '');
+	let ppTargetAvatar = $state<string>(personaProfile.targetAvatar ?? '');
+
+	const PERSONA_ARCHETYPES = [
+		'The Creator', 'The Expert / Authority', 'The Relatable Friend', 'The Aspirational',
+		'The Storyteller', 'The Activist / Advocate', 'The Entertainer', 'The Educator',
+		'The Disruptor', 'The Community Builder'
+	];
+	const CONTENT_FOCUS_OPTIONS = [
+		'Education & How-Tos', 'Entertainment & Humor', 'Lifestyle & Aesthetic',
+		'Product Reviews & UGC', 'Inspiration & Motivation', 'Behind-the-Scenes',
+		'News & Commentary', 'Tutorials & Demos', 'Personal Journey'
+	];
 
 	// Soul / Skills / Tools
 	let soulText = $state(agent?.soul ?? '');
@@ -182,6 +215,17 @@
 		referenceKit = fresh.ugc_reference_kit ?? {};
 		editSupervisorId = fresh.supervisor_agent_id ?? null;
 		editRuntimeOwner = fresh.runtime_owner ?? 'svelte-gemini';
+
+		// Reset persona profile from new agent
+		const freshProfile = parsePersonaProfile(fresh);
+		personaProfile = freshProfile;
+		ppAgeMin = freshProfile.ageMin ?? 18;
+		ppAgeMax = freshProfile.ageMax ?? 35;
+		ppArchetype = freshProfile.archetype ?? '';
+		ppContentFocus = freshProfile.contentFocus ?? '';
+		ppPsychProfile = freshProfile.psychProfile ?? '';
+		ppContentAngle = freshProfile.contentAngle ?? '';
+		ppTargetAvatar = freshProfile.targetAvatar ?? '';
 
 		soulText = fresh.soul ?? '';
 		skillsText = fresh.skills ?? '';
@@ -432,6 +476,17 @@
 	let assetLightbox = $state<AssetItem | null>(null);
 
 	// ── Profile save ───────────────────────────────────────────────
+	// ── Generation cost tracking ────────────────────────────────────────────
+	let generationCost = $derived.by(() => {
+		let total = 0;
+		for (const p of feedPosts) {
+			if (typeof p.token_cost === 'number' && p.token_cost > 0) {
+				total += p.token_cost;
+			}
+		}
+		return total;
+	});
+
 	async function saveProfile() {
 		if (!agent?.id) return;
 		saving = true;
@@ -457,7 +512,16 @@
 			followers: agent.followers,
 			engagementRate: agent.engagement_rate,
 			supervisorAgentId: editSupervisorId,
-			runtimeOwner: editRuntimeOwner
+			runtimeOwner: editRuntimeOwner,
+			personaProfile: {
+				ageMin: ppAgeMin,
+				ageMax: ppAgeMax,
+				archetype: ppArchetype,
+				contentFocus: ppContentFocus,
+				psychProfile: ppPsychProfile,
+				contentAngle: ppContentAngle,
+				targetAvatar: ppTargetAvatar
+			}
 		};
 		try {
 			const res = await fetch('/api/agents/config', {
@@ -719,45 +783,59 @@
 {:else}
 <div class="persona-page">
 	<!-- ── Hero header ─────────────────────────────────────────── -->
-	<header class="persona-hero">
-		<div class="hero-avatar" style={agent.ugc_character_ref ? '' : `background: ${agent.gradient}`}>
-			{#if agent.ugc_character_ref}
-				<img src={agent.ugc_character_ref} alt={agent.name} />
-			{:else}
-				{agent.initial ?? agent.name?.[0]?.toUpperCase() ?? '?'}
-			{/if}
-		</div>
-		<div class="hero-info">
-			<div class="hero-name-row">
-				<h1 class="hero-name">{agent.name}</h1>
-				<span class="hero-handle">{agent.handle}</span>
-				<span class="hero-status-dot" style="background: {getStatusColor(agent.status)}" title={agent.status}></span>
+	<header class="persona-hero" class:has-banner={!!agent.ugc_character_ref}>
+		{#if agent.ugc_character_ref}
+			<div class="hero-banner">
+				<img src={agent.ugc_character_ref} alt={agent.name} class="hero-banner-img" />
+				<div class="hero-banner-overlay"></div>
 			</div>
-			<div class="hero-meta">
-				<span class="hero-niche">{agent.niche}</span>
-				<span class="hero-sep">·</span>
-				<span class="hero-autonomy">{AUTONOMY_LABELS[agent.autonomy_level as AutonomyLevel]?.label ?? agent.autonomy_level}</span>
-				{#if computedMetrics.connectedCount > 0}
-					<span class="hero-sep">·</span>
-					<span class="hero-connections">{computedMetrics.connectedCount} platform{computedMetrics.connectedCount !== 1 ? 's' : ''} connected</span>
+		{/if}
+		<div class="hero-row">
+			<div class="hero-avatar" style={agent.ugc_character_ref ? '' : `background: ${agent.gradient}`}>
+				{#if agent.ugc_character_ref}
+					<img src={agent.ugc_character_ref} alt={agent.name} />
+				{:else}
+					{agent.initial ?? agent.name?.[0]?.toUpperCase() ?? '?'}
 				{/if}
 			</div>
-		</div>
-		<div class="hero-stats">
-			<div class="stat-chip">
-				<span class="stat-val">{feedPosts.length}</span>
-				<span class="stat-label">Posts</span>
+			<div class="hero-info">
+				<div class="hero-name-row">
+					<h1 class="hero-name">{agent.name}</h1>
+					<span class="hero-handle">{agent.handle}</span>
+					<span class="hero-status-dot" style="background: {getStatusColor(agent.status)}" title={agent.status}></span>
+				</div>
+				<div class="hero-meta">
+					<span class="hero-niche">{agent.niche}</span>
+					<span class="hero-sep">·</span>
+					<span class="hero-autonomy">{AUTONOMY_LABELS[agent.autonomy_level as AutonomyLevel]?.label ?? agent.autonomy_level}</span>
+					{#if computedMetrics.connectedCount > 0}
+						<span class="hero-sep">·</span>
+						<span class="hero-connections">{computedMetrics.connectedCount} platform{computedMetrics.connectedCount !== 1 ? 's' : ''} connected</span>
+					{/if}
+				</div>
 			</div>
-			{#if computedMetrics.followersRaw > 0}
+			<div class="hero-stats">
 				<div class="stat-chip">
-					<span class="stat-val">{computedMetrics.followers}</span>
-					<span class="stat-label">Followers</span>
+					<span class="stat-val">{feedPosts.length}</span>
+					<span class="stat-label">Posts</span>
 				</div>
-				<div class="stat-chip">
-					<span class="stat-val">{computedMetrics.engagementRate}%</span>
-					<span class="stat-label">Engagement</span>
-				</div>
-			{/if}
+				{#if generationCost > 0}
+					<div class="stat-chip stat-chip-spend">
+						<span class="stat-val">${generationCost < 0.01 ? generationCost.toFixed(4) : generationCost.toFixed(2)}</span>
+						<span class="stat-label">Spend</span>
+					</div>
+				{/if}
+				{#if computedMetrics.followersRaw > 0}
+					<div class="stat-chip">
+						<span class="stat-val">{computedMetrics.followers}</span>
+						<span class="stat-label">Followers</span>
+					</div>
+					<div class="stat-chip">
+						<span class="stat-val">{computedMetrics.engagementRate}%</span>
+						<span class="stat-label">Engagement</span>
+					</div>
+				{/if}
+			</div>
 		</div>
 	</header>
 
@@ -811,6 +889,7 @@
 							<option value="all">All statuses</option>
 							<option value="published">Published</option>
 							<option value="scheduled">Scheduled</option>
+							<option value="publishing">Publishing</option>
 							<option value="draft">Draft</option>
 							<option value="partial">Partial</option>
 							<option value="failed">Failed</option>
@@ -821,6 +900,8 @@
 							<option value="tiktok">TikTok</option>
 							<option value="youtube">YouTube</option>
 							<option value="facebook">Facebook</option>
+							<option value="x">X</option>
+							<option value="threads">Threads</option>
 						</select>
 					</div>
 					<div class="feed-actions">
@@ -851,7 +932,7 @@
 					<div class="feed-empty">
 						<span class="empty-icon">📱</span>
 						<h3>No posts yet</h3>
-						<p>{feedFilter !== 'all' || platformFilter !== 'all' ? 'No posts match these filters.' : 'Connect platforms and generate your first post.'}</p>
+						<p>{feedFilter !== 'all' || platformFilter !== 'all' ? 'No posts match these filters.' : 'Generate your first post — drafts save even without a connected platform.'}</p>
 						{#if feedFilter === 'all' && platformFilter === 'all'}
 							<div class="feed-empty-actions">
 								<button class="btn-generate" onclick={generatePostNow} disabled={generatingPost}>
@@ -1004,15 +1085,8 @@
 							<div class="field-group col-span-2">
 								<label>Reference Kit</label>
 								<p class="section-desc" style="margin-bottom: 0.75rem;">
-									{#if referenceKit.sheet}
-										Once you're happy with the profile picture above, generate the rest of the
-										consistency kit — side profiles, then a facial close-up. Each stage below is
-										~$0.08 (one Nano Banana 2 call).
-									{:else}
-										This profile picture was generated from scratch, so there's no character sheet to
-										build the rest of the kit from. Upload a reference photo above to unlock side
-										profiles and facial close-ups for stronger face consistency in cinematic videos.
-									{/if}
+									Each stage builds face-consistency assets for cinematic video generation. Every stage
+									can be regenerated independently at any time — ~$0.08 per stage (one Nano Banana 2 call).
 								</p>
 								<div class="kit-stage-row">
 									<div class="kit-stage">
@@ -1023,64 +1097,55 @@
 										<span class="kit-stage-label">2. Side profiles</span>
 										{#if referenceKit.side_profiles}
 											<img src={referenceKit.side_profiles} alt="Side profile composite" class="kit-stage-thumb wide" />
-										{:else if referenceKit.sheet}
-											<button
-												type="button"
-												class="btn-sync kit-stage-generate"
-												onclick={() => generateKitStage('side_profiles')}
-												disabled={generatingKitStage !== null}
-											>
-												{#if generatingKitStage === 'side_profiles'}
-													<span class="spinner-sm"></span> Generating…
-												{:else}
-													Generate
-												{/if}
-											</button>
-										{:else}
-											<span class="kit-stage-locked">Upload a reference photo to unlock (needs a character sheet)</span>
 										{/if}
+										<button
+											type="button"
+											class="btn-sync kit-stage-generate"
+											onclick={() => generateKitStage('side_profiles')}
+											disabled={generatingKitStage !== null}
+										>
+											{#if generatingKitStage === 'side_profiles'}
+												<span class="spinner-sm"></span> Generating…
+											{:else}
+												{referenceKit.side_profiles ? '↺ Regenerate' : 'Generate'}
+											{/if}
+										</button>
 									</div>
 									<div class="kit-stage">
 										<span class="kit-stage-label">3. Facial close-up</span>
 										{#if referenceKit.face_closeup}
 											<img src={referenceKit.face_closeup} alt="Facial close-up" class="kit-stage-thumb" />
-										{:else if referenceKit.side_profiles}
-											<button
-												type="button"
-												class="btn-sync kit-stage-generate"
-												onclick={() => generateKitStage('face_closeup')}
-												disabled={generatingKitStage !== null}
-											>
-												{#if generatingKitStage === 'face_closeup'}
-													<span class="spinner-sm"></span> Generating…
-												{:else}
-													Generate
-												{/if}
-											</button>
-										{:else}
-											<span class="kit-stage-locked">Generate side profiles first</span>
 										{/if}
+										<button
+											type="button"
+											class="btn-sync kit-stage-generate"
+											onclick={() => generateKitStage('face_closeup')}
+											disabled={generatingKitStage !== null}
+										>
+											{#if generatingKitStage === 'face_closeup'}
+												<span class="spinner-sm"></span> Generating…
+											{:else}
+												{referenceKit.face_closeup ? '↺ Regenerate' : 'Generate'}
+											{/if}
+										</button>
 									</div>
 									<div class="kit-stage">
 										<span class="kit-stage-label">4. Feature grid</span>
 										{#if referenceKit.feature_grid}
 											<img src={referenceKit.feature_grid} alt="Feature grid" class="kit-stage-thumb" />
-										{:else if referenceKit.face_closeup}
-											<button
-												type="button"
-												class="btn-sync kit-stage-generate"
-												onclick={() => generateKitStage('feature_grid')}
-												disabled={generatingKitStage !== null}
-											>
-												{#if generatingKitStage === 'feature_grid'}
-													<span class="spinner-sm"></span> Generating…
-												{:else}
-													Generate
-												{/if}
-											</button>
-										{:else}
-											<span class="kit-stage-locked">Generate facial close-up first</span>
 										{/if}
+										<button
+											type="button"
+											class="btn-sync kit-stage-generate"
+											onclick={() => generateKitStage('feature_grid')}
+											disabled={generatingKitStage !== null}
+										>
+											{#if generatingKitStage === 'feature_grid'}
+												<span class="spinner-sm"></span> Generating…
+											{:else}
+												{referenceKit.feature_grid ? '↺ Regenerate' : 'Generate'}
+											{/if}
+										</button>
 									</div>
 								</div>
 							</div>
@@ -1136,6 +1201,81 @@
 								{/if}
 								<option value="hermes-orchestrated">Hermes Orchestrated</option>
 							</select>
+						</div>
+					</div>
+				</section>
+
+				<!-- Persona Profile section -->
+				<section class="profile-section">
+					<div class="section-header">
+						<h2 class="section-title">Persona Profile</h2>
+						<p class="section-desc">Psychological depth and content strategy — these feed directly into content generation prompts.</p>
+					</div>
+
+					<div class="fields-grid">
+						<div class="field-group col-span-2">
+							<label>Target Age Range: <strong>{ppAgeMin}–{ppAgeMax}</strong></label>
+							<div class="age-range-row">
+								<div class="age-slider-group">
+									<span class="slider-cap">13</span>
+									<input type="range" min="13" max="65" step="1" bind:value={ppAgeMin}
+										oninput={() => { if (ppAgeMin > ppAgeMax - 2) ppAgeMax = ppAgeMin + 2; }} />
+									<span class="slider-cap">65</span>
+									<span class="age-label">Min {ppAgeMin}</span>
+								</div>
+								<div class="age-slider-group">
+									<span class="slider-cap">15</span>
+									<input type="range" min="15" max="70" step="1" bind:value={ppAgeMax}
+										oninput={() => { if (ppAgeMax < ppAgeMin + 2) ppAgeMin = ppAgeMax - 2; }} />
+									<span class="slider-cap">70</span>
+									<span class="age-label">Max {ppAgeMax}</span>
+								</div>
+							</div>
+						</div>
+
+						<div class="field-group">
+							<label for="pp-archetype">Persona Archetype</label>
+							<select id="pp-archetype" bind:value={ppArchetype}>
+								<option value="">— Select archetype —</option>
+								{#each PERSONA_ARCHETYPES as a}
+									<option value={a}>{a}</option>
+								{/each}
+							</select>
+							<p class="field-hint">Defines the persona's role and audience relationship style.</p>
+						</div>
+
+						<div class="field-group">
+							<label for="pp-focus">Content Focus</label>
+							<select id="pp-focus" bind:value={ppContentFocus}>
+								<option value="">— Select focus —</option>
+								{#each CONTENT_FOCUS_OPTIONS as f}
+									<option value={f}>{f}</option>
+								{/each}
+							</select>
+							<p class="field-hint">Primary category of content this persona produces.</p>
+						</div>
+
+						<div class="field-group col-span-2">
+							<label for="pp-target">Target Avatar</label>
+							<input id="pp-target" type="text" bind:value={ppTargetAvatar}
+								placeholder="e.g. Working moms 28-42, fitness-curious, short on time" />
+							<p class="field-hint">One-liner describing the ideal audience member this persona speaks to.</p>
+						</div>
+
+						<div class="field-group col-span-2">
+							<label for="pp-psych">Psychology Profile</label>
+							<textarea id="pp-psych" bind:value={ppPsychProfile} rows="4"
+								placeholder="Describe audience psychology — motivations, fears, desires, pain points, identity hooks…">
+							</textarea>
+							<p class="field-hint">Used to tune tone, hooks, and emotional framing in generated content.</p>
+						</div>
+
+						<div class="field-group col-span-2">
+							<label for="pp-angle">Content Angle / POV</label>
+							<textarea id="pp-angle" bind:value={ppContentAngle} rows="3"
+								placeholder="e.g. 'Real results, no fluff' — direct, relatable transformations told in first person…">
+							</textarea>
+							<p class="field-hint">The unique angle or point of view that differentiates this persona's content.</p>
 						</div>
 					</div>
 				</section>
@@ -1584,30 +1724,66 @@
 
 	/* ── Hero ── */
 	.persona-hero {
-		display: flex;
-		align-items: center;
-		gap: 1.5rem;
-		padding: 1.75rem 2rem;
 		background: var(--surface);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-lg);
 		margin-bottom: 1.5rem;
+		overflow: hidden;
+	}
+
+	/* Banner image — shown when characterRef exists */
+	.hero-banner {
+		position: relative;
+		width: 100%;
+		height: 220px;
+		overflow: hidden;
+	}
+
+	.hero-banner-img {
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+		object-position: top center;
+		display: block;
+	}
+
+	.hero-banner-overlay {
+		position: absolute;
+		inset: 0;
+		background: linear-gradient(to bottom, transparent 40%, rgba(10,14,26,0.82) 100%);
+	}
+
+	/* Row that holds avatar + info + stats */
+	.hero-row {
+		display: flex;
+		align-items: center;
+		gap: 1.5rem;
+		padding: 1.25rem 2rem;
 		flex-wrap: wrap;
 	}
 
+	/* Lift avatar up to overlap the banner */
+	.has-banner .hero-row {
+		margin-top: -44px;
+		padding-top: 0;
+		position: relative;
+		z-index: 2;
+	}
+
 	.hero-avatar {
-		width: 64px;
-		height: 64px;
-		border-radius: 18px;
+		width: 80px;
+		height: 80px;
+		border-radius: 20px;
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		font-size: 1.5rem;
+		font-size: 1.75rem;
 		font-weight: 800;
 		color: #fff;
 		flex-shrink: 0;
 		overflow: hidden;
-		box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+		box-shadow: 0 6px 24px rgba(0,0,0,0.4);
+		border: 3px solid var(--surface);
 	}
 
 	.hero-avatar img,
@@ -1680,6 +1856,15 @@
 		min-width: 60px;
 	}
 
+	.stat-chip-spend {
+		border-color: rgba(251, 191, 36, 0.35);
+		background: rgba(251, 191, 36, 0.06);
+	}
+
+	.stat-chip-spend .stat-val {
+		color: #f59e0b;
+	}
+
 	.stat-val {
 		font-size: 1.1rem;
 		font-weight: 700;
@@ -1692,6 +1877,33 @@
 		letter-spacing: 0.06em;
 		color: var(--text-dim);
 		font-weight: 600;
+	}
+
+	/* ── Persona Profile section ── */
+	.age-range-row {
+		display: flex;
+		gap: 2rem;
+		flex-wrap: wrap;
+	}
+
+	.age-slider-group {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		flex: 1;
+		min-width: 180px;
+	}
+
+	.age-slider-group input[type="range"] {
+		flex: 1;
+	}
+
+	.age-label {
+		font-size: 0.75rem;
+		color: var(--text-muted);
+		white-space: nowrap;
+		min-width: 3rem;
+		text-align: right;
 	}
 
 	/* ── Tabs ── */
@@ -2139,16 +2351,29 @@
 	}
 
 	.kit-stage-generate {
-		width: 120px;
-		height: 120px;
-		border-radius: 12px;
+		border-radius: 8px;
 		border: 1px dashed var(--border-strong);
 		background: var(--surface-2);
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		text-align: center;
-		font-size: 0.78rem;
+		font-size: 0.75rem;
+		padding: 0.45rem 0.9rem;
+		cursor: pointer;
+		color: var(--text-muted);
+		transition: border-color 0.15s, color 0.15s;
+	}
+
+	.kit-stage-generate:hover:not(:disabled) {
+		border-color: var(--accent-mid);
+		color: var(--text);
+	}
+
+	/* When there is NO image above it, give it the square placeholder look */
+	.kit-stage:not(:has(img)) .kit-stage-generate {
+		width: 120px;
+		height: 120px;
 	}
 
 	.kit-stage-locked {

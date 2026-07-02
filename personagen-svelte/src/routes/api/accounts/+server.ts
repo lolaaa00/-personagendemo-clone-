@@ -382,18 +382,34 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 					// Persist only what we actually learned: the check timestamp, and a
 					// verified/active upgrade when the provider confirmed it. Never
 					// downgrade status on mere absence from the live list.
+					const nextVerified = isVerified ? true : (conn.verified ?? false);
+					const nextStatus = isVerified ? 'active' : conn.status || 'active';
+					const nextLastError = isVerified ? null : conn.last_error;
+					const nextLastCheckedAt = new Date().toISOString();
+					const nextLastSync = isVerified ? new Date().toISOString() : conn.last_sync;
+
 					await db.connections.upsert({
 						id: conn.id,
 						user_id: conn.user_id,
 						agent_id: persona_id,
 						platform: p as any,
 						handle: conn.handle,
-						verified: isVerified ? true : (conn.verified ?? false),
-						status: isVerified ? 'active' : conn.status || 'active',
-						last_error: isVerified ? null : conn.last_error,
-						last_checked_at: new Date().toISOString(),
-						last_sync: isVerified ? new Date().toISOString() : conn.last_sync
+						verified: nextVerified,
+						status: nextStatus,
+						last_error: nextLastError,
+						last_checked_at: nextLastCheckedAt,
+						last_sync: nextLastSync
 					});
+
+					// Keep the in-memory row truthful — steps 1 and 1.5 above already
+					// mutate `conn` in place after their own writes; this loop is the
+					// only one that determines final `status`, so step 3 below needs
+					// this update too, or it'd filter on pre-this-loop status values.
+					conn.verified = nextVerified;
+					conn.status = nextStatus;
+					conn.last_error = nextLastError;
+					conn.last_checked_at = nextLastCheckedAt;
+					conn.last_sync = nextLastSync;
 				} else {
 					statusData[p] = {
 						connected: false,
@@ -403,11 +419,13 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				}
 			}
 
-			// 3. Keep agent connection count and dynamic stats up to date in DB
+			// 3. Keep agent connection count and dynamic stats up to date in DB.
+			// `conns` is a truthful in-memory mirror of the DB at this point (steps
+			// 1/1.5/2 above all patch it alongside their own writes) — no need to
+			// re-fetch what's already in hand.
 			if (conns) {
 				try {
-					const { data: finalConns } = await db.connections.listForAgent(persona_id);
-					const activeConns = (finalConns || []).filter(
+					const activeConns = conns.filter(
 						(conn) =>
 							conn.status !== 'revoked' &&
 							conn.status !== 'reauth_required' &&

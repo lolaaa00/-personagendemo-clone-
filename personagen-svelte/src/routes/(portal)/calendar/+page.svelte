@@ -6,6 +6,8 @@
 	import { page } from '$app/stores';
 	import { goto, invalidateAll } from '$app/navigation';
 	import PostDrawer from '$lib/components/feed/PostDrawer.svelte';
+	import { getPostDisplay as sharedGetPostDisplay } from '$lib/components/feed/postDisplay';
+	import { platformColor } from '$lib/platforms';
 
 	interface ScheduledPost {
 		id: string;
@@ -265,18 +267,6 @@
 		} finally {
 			forging = false;
 		}
-	}
-
-	function getPlatformColor(id: string): string {
-		const colors: Record<string, string> = {
-			youtube: '#ff0000',
-			tiktok: '#00f2ea',
-			instagram: '#e1306c',
-			x: '#1da1f2',
-			facebook: '#1877f2',
-			threads: '#999'
-		};
-		return colors[id] || 'var(--accent)';
 	}
 
 	function getScoreColor(score: number): string {
@@ -609,15 +599,6 @@
 		}
 	}
 
-	const PLATFORM_COLORS: Record<string, string> = {
-		tiktok: '#fe2c55',
-		instagram: '#e1306c',
-		youtube: '#ff0000',
-		x: '#1da1f2',
-		facebook: '#1877f2',
-		threads: '#999'
-	};
-
 	const STATUS_COLORS: Record<string, string> = {
 		scheduled: 'var(--accent)',
 		draft: 'var(--warning)',
@@ -628,43 +609,16 @@
 
 	let generatingPost = $state(false);
 
-	function getPostDisplay(content: string) {
-		try {
-			const trimmed = content.trim();
-			if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
-				const parsed = JSON.parse(trimmed);
-				const mediaUrl = parsed.media_url || parsed.mediaUrl || null;
-				const isVideo =
-					parsed.media_type === 'video' || /\.(mp4|mov|webm|m4v)(\?|$)/i.test(mediaUrl || '');
-				return {
-					text: parsed.text || content,
-					mediaUrl,
-					isVideo,
-					poster: parsed.poster_url || null,
-					ugcPrompt: parsed.ugc_broll_prompt || parsed.ugcPrompt || null,
-					script: parsed.script || null,
-					product: parsed.product || null,
-					autopilot: parsed.autopilot === true
-				};
-			}
-		} catch (e) {}
-		return {
-			text: content,
-			mediaUrl: null,
-			isVideo: false,
-			poster: null,
-			ugcPrompt: null,
-			script: null,
-			product: null,
-			autopilot: false
-		};
+	/** Bridges the calendar's view-mapped ScheduledPost (text, not content) onto the shared util. */
+	function getPostDisplay(p: ScheduledPost) {
+		return sharedGetPostDisplay({ content: p.text, publication_results: p.publication_results });
 	}
 
 	/** Best displayable thumbnail for a post: poster still first, else the image itself (never a raw video file). */
 	function getPostThumb(p: ScheduledPost): string | null {
-		const d = getPostDisplay(p.text);
-		if (d.poster) return d.poster;
-		if (d.mediaUrl && !d.isVideo) return d.mediaUrl;
+		const d = getPostDisplay(p);
+		if (d.posterUrl) return d.posterUrl;
+		if (d.mediaUrl && d.mediaType !== 'video') return d.mediaUrl;
 		return null;
 	}
 
@@ -902,7 +856,9 @@
 					<option value="">All Statuses</option>
 					<option value="draft">Draft</option>
 					<option value="scheduled">Scheduled</option>
+					<option value="publishing">Publishing</option>
 					<option value="published">Published</option>
+					<option value="partial">Partial</option>
 					<option value="failed">Failed</option>
 				</select>
 			</div>
@@ -1101,7 +1057,7 @@
 									{#each dayPosts.slice(0, 4) as post}
 										<span
 											class="dot"
-											style="background: {PLATFORM_COLORS[post.platforms[0]] || 'var(--accent)'}"
+											style="background: {platformColor(post.platforms[0])}"
 										></span>
 									{/each}
 									{#if dayPosts.length > 4}
@@ -1127,12 +1083,12 @@
 				{#each filteredPosts.sort((a, b) => a.date.localeCompare(b.date)) as post}
 					<div class="mobile-post-item">
 						<div class="mobile-post-date">{post.date} · {post.time}</div>
-						<div class="mobile-post-text">{getPostDisplay(post.text).text}</div>
+						<div class="mobile-post-text">{getPostDisplay(post).text}</div>
 						<div class="mobile-post-meta">
 							<span class="mobile-post-agent">{post.agentName}</span>
 							<div class="mobile-post-platforms">
 								{#each post.platforms as p}
-									<span class="platform-tag" style="color: {PLATFORM_COLORS[p]}">{p}</span>
+									<span class="platform-tag" style="color: {platformColor(p)}">{p}</span>
 								{/each}
 							</div>
 						</div>
@@ -1160,7 +1116,7 @@
 						{:else}
 							<div class="modal-posts-list">
 								{#each selectedDayPosts as post}
-									{@const dp = getPostDisplay(post.text)}
+									{@const dp = getPostDisplay(post)}
 									{@const thumb = getPostThumb(post)}
 									<button class="modal-post-card" onclick={() => selectedPost = post}>
 										<div class="post-card-status" style="background: {STATUS_COLORS[post.status] || 'var(--accent)'}"></div>
@@ -1181,7 +1137,7 @@
 												<span class="post-card-agent">{post.agentName}</span>
 												<div class="post-card-platforms">
 													{#each post.platforms as p}
-														<span class="platform-dot" style="background: {PLATFORM_COLORS[p]}" title={p}></span>
+														<span class="platform-dot" style="background: {platformColor(p)}" title={p}></span>
 													{/each}
 												</div>
 											</div>
@@ -1228,7 +1184,7 @@
 							{#each manualDeleteNotice as entry}
 								<div style="display: flex; flex-direction: column; gap: 0.4rem; padding: 0.85rem 1rem; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm);">
 									<div style="display: flex; align-items: center; gap: 0.5rem;">
-										<span class="platform-badge" style="background: {PLATFORM_COLORS[entry.platform] || 'var(--accent)'}20; color: {PLATFORM_COLORS[entry.platform] || 'var(--accent)'}; border: 1px solid {PLATFORM_COLORS[entry.platform] || 'var(--accent)'}40;">
+										<span class="platform-badge" style="background: {platformColor(entry.platform)}20; color: {platformColor(entry.platform)}; border: 1px solid {platformColor(entry.platform)}40;">
 											{platformLabel(entry.platform)}
 										</span>
 										{#if entry.platform === 'instagram'}
@@ -1240,7 +1196,7 @@
 											href={entry.permalink}
 											target="_blank"
 											rel="noopener noreferrer"
-											style="display: inline-flex; align-items: center; gap: 0.4rem; font-size: var(--text-sm); font-weight: 700; text-decoration: none; color: {PLATFORM_COLORS[entry.platform] || 'var(--accent)'};"
+											style="display: inline-flex; align-items: center; gap: 0.4rem; font-size: var(--text-sm); font-weight: 700; text-decoration: none; color: {platformColor(entry.platform)};"
 										>
 											Open {platformLabel(entry.platform)} post to delete ↗
 										</a>
@@ -1431,7 +1387,7 @@
 							style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.25rem;"
 						>
 							{#each composerAgentPlatforms as key}
-								{@const color = PLATFORM_COLORS[key] || 'var(--accent)'}
+								{@const color = platformColor(key)}
 								<label
 									class="platform-checkbox"
 									style="--p-color: {color}; display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.35rem 0.65rem; border: 1px solid var(--border); border-radius: var(--radius-xs); background: var(--surface-2); cursor: pointer; font-size: var(--text-xs); font-weight: 600;"

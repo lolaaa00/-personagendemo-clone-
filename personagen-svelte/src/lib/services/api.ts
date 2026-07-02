@@ -54,24 +54,16 @@ async function request<T>(
 	}
 }
 
-// ── Posts (5 actions) ──────────────────────────────────────────────────────────
+// ── Posts (3 actions) ──────────────────────────────────────────────────────────
+// list/get and the old Feed object (calendar/upcoming/recent) were removed —
+// zero callers; calendar and the persona Feed tab both load posts via their
+// own +page.server.ts, not this client-side service.
 
 export const Posts = {
 	create: (post: unknown) => request(ENDPOINTS.posts, 'create', { post }),
 	update: (id: string, data: unknown) =>
 		request(ENDPOINTS.posts, 'update', { id, ...(data as Record<string, unknown>) }),
-	delete: (id: string) => request(ENDPOINTS.posts, 'delete', { id }),
-	list: (filters?: Record<string, unknown>) => request(ENDPOINTS.posts, 'list', filters || {}),
-	get: (id: string) => request(ENDPOINTS.posts, 'get', { id })
-};
-
-// ── Feed (3 actions) ───────────────────────────────────────────────────────
-
-export const Feed = {
-	calendar: (month: number, year: number, personaId?: string) =>
-		request(ENDPOINTS.feed, 'calendar', { month, year, persona_id: personaId }),
-	upcoming: (limit = 10) => request(ENDPOINTS.feed, 'upcoming', { limit }),
-	recent: (limit = 10) => request(ENDPOINTS.feed, 'recent', { limit })
+	delete: (id: string) => request(ENDPOINTS.posts, 'delete', { id })
 };
 
 // ── Content Forge (9 actions — unified generation engine) ──────────────────
@@ -171,12 +163,16 @@ export const Blueprints = {
 	delete: (id: string) => request(ENDPOINTS.blueprints, 'delete_blueprint', { id })
 };
 
-// ── Brand Brief (2 actions) ───────────────────────────────────────────────
+// ── Brand Brief (5 actions) ───────────────────────────────────────────────
 
 export const BrandBrief = {
 	scrapeStore: (url: string) => request<any>(ENDPOINTS.brandBrief, 'scrape_store', { url }),
-	extendField: (fieldName: string, fieldVal: string) =>
-		request<{ enriched: string }>(ENDPOINTS.brandBrief, 'extend_field', { fieldName, fieldVal }),
+	extendField: (fieldName: string, fieldVal: string, brandContext?: string) =>
+		request<{ enriched: string }>(ENDPOINTS.brandBrief, 'extend_field', { fieldName, fieldVal, brandContext }),
+	generateField: (fieldName: string, brandContext?: string) =>
+		request<{ generated: string }>(ENDPOINTS.brandBrief, 'generate_field', { fieldName, brandContext }),
+	spinField: (fieldName: string, fieldVal: string, brandContext?: string) =>
+		request<{ variations: string[] }>(ENDPOINTS.brandBrief, 'spin_field', { fieldName, fieldVal, brandContext }),
 	save: (data: Record<string, unknown>) =>
 		request<any>(ENDPOINTS.brandBrief, 'save_brief', { data })
 };

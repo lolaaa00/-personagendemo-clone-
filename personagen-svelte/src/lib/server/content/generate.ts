@@ -205,20 +205,158 @@ export async function generateUgcImage(
 	);
 }
 
+// ── Intent classification + prompt quality enhancement ──────────────────────
+
+type ContentType = 'testimonial' | 'unboxing' | 'lifestyle' | 'tutorial' | 'review';
+type MotionLevel = 'gentle' | 'dynamic' | 'static';
+
+interface ContentIntent {
+	type: ContentType;
+	motionLevel: MotionLevel;
+	setting: 'indoor' | 'outdoor';
+	platformVoice: string;
+}
+
+function classifyContentIntent(topic: string, platform: string): ContentIntent {
+	const t = topic.toLowerCase();
+	const type: ContentType = t.includes('unbox')
+		? 'unboxing'
+		: t.includes('how') || t.includes('tutorial') || t.includes('tip')
+			? 'tutorial'
+			: t.includes('lifestyle') || t.includes('routine') || t.includes('day in')
+				? 'lifestyle'
+				: t.includes('review') || t.includes('honest') || t.includes('worth it')
+					? 'review'
+					: 'testimonial';
+
+	const motionLevel: MotionLevel =
+		type === 'unboxing' ? 'dynamic' : type === 'lifestyle' ? 'gentle' : 'gentle';
+
+	const setting: 'indoor' | 'outdoor' =
+		type === 'lifestyle' ? 'outdoor' : 'indoor';
+
+	const voiceMap: Record<string, string> = {
+		tiktok: 'Gen-Z casual energy, trending-aware, watch-till-end hook in first 1.5 seconds, fast-paced',
+		instagram:
+			'Aspirational yet real, lifestyle-forward, slightly polished but never stiff, community warmth',
+		youtube:
+			'Value-promise hook in first 3 seconds, slightly longer setup is OK, educational undertone welcome',
+		threads: 'Hot-take conversational, opinion-first, like a trusted friend texting you',
+		x: 'Punchy, opinionated, culturally aware, direct',
+		facebook: 'Warm, community-oriented, relatable, slightly longer form OK'
+	};
+
+	return {
+		type,
+		motionLevel,
+		setting,
+		platformVoice: voiceMap[platform] ?? voiceMap.instagram
+	};
+}
+
+/**
+ * Builds a rich agent context string from the agent row, pulling extended
+ * persona profile from agent.market (stored as JSON by the persona editor).
+ */
+function buildRichAgentContext(agent: any): string {
+	const lines: string[] = [
+		`You are ${agent.name} (@${agent.handle}), a ${agent.niche} creator.`,
+		`Core personality: ${agent.soul || 'authentic and relatable'}.`
+	];
+
+	let pp: Record<string, any> = {};
+	try {
+		if (agent.market && typeof agent.market === 'string' && agent.market.startsWith('{')) {
+			pp = JSON.parse(agent.market);
+		}
+	} catch {
+		/* ignore malformed market field */
+	}
+
+	if (pp.archetype)
+		lines.push(
+			`Persona archetype: "${pp.archetype}" — let this archetype's energy, tone, and style govern every creative decision.`
+		);
+	if (pp.contentFocus) lines.push(`Primary content focus: ${pp.contentFocus}.`);
+	if (pp.contentAngle)
+		lines.push(`Signature content angle / POV: "${pp.contentAngle}" — this is the unique lens through which all content is filtered.`);
+	if (pp.ageMin && pp.ageMax)
+		lines.push(`Target age demographic: ${pp.ageMin}–${pp.ageMax} year olds.`);
+	if (pp.targetAvatar) lines.push(`Ideal viewer profile: ${pp.targetAvatar}.`);
+	if (pp.psychProfile)
+		lines.push(
+			`Audience psychology (use to tune emotional hooks and pain-point language): ${pp.psychProfile}.`
+		);
+
+	return lines.join('\n');
+}
+
+/**
+ * Extracts brand visual direction from the brand brief for threading into
+ * image generation prompts (Nano Banana) and the Director's style guidance.
+ */
+function buildBrandVisualContext(briefData: any): string {
+	if (!briefData) return '';
+	const parts: string[] = [];
+	if (briefData.brandColors) parts.push(`Brand color palette: ${briefData.brandColors}`);
+	if (briefData.fontPrimary) parts.push(`Primary font: ${briefData.fontPrimary}`);
+	if (briefData.brandPersonality) parts.push(`Visual personality: ${briefData.brandPersonality}`);
+	if (briefData.ugcGuidelines) parts.push(`UGC visual guidelines: ${briefData.ugcGuidelines}`);
+	return parts.length > 0 ? `Brand visual direction — ${parts.join('. ')}.` : '';
+}
+
+/**
+ * Enriches the Director's motion_prompt with Kling-optimized camera vocabulary
+ * so the video model gets precise, actionable movement instructions rather than
+ * vague adjectives like "subtle" or "smooth".
+ */
+function enhanceMotionPrompt(
+	basePrompt: string,
+	intent: ContentIntent,
+	format: 'spokesperson' | 'broll'
+): string {
+	const cameraByLevel: Record<MotionLevel, string> = {
+		static:
+			'Locked-off shot. Zero camera movement. Subject acts naturally in front of a completely still frame. Only ambient environmental movement (steam, foliage, fabric) is permitted.',
+		gentle:
+			'Very slow gimbal dolly-in (2-4 cm over the full clip duration). Minimal handheld breathing. Near-imperceptible movement — cinematic stillness with life, not shakey cam.',
+		dynamic:
+			'Confident gimbal arc sweeping 15-20°. Motivated push-in on the product reveal moment. Brief rack-focus shift at the payoff beat. Energy without chaos.'
+	};
+
+	const subjectByFormat =
+		format === 'spokesperson'
+			? 'Character: natural direct eye contact with lens, occasional glance to product, subtle head tilt on key spoken word. Real micro-expressions — not posed or frozen.'
+			: 'Product: slow rotation revealing texture, label, and material. Hand entering frame to pick up or use it. Real surface contact — not floating or artificially suspended.';
+
+	return `${basePrompt}\n\nCamera: ${cameraByLevel[intent.motionLevel]}\n${subjectByFormat}\nTechnical: smooth motion, no compression artifacts, no overexposed highlights, no jump cuts.`;
+}
+
 /** Nano Banana: composite the real product (+ optional pinned face) into a UGC scene. */
 async function generateProductStill(
 	falKey: string,
 	scenePrompt: string,
 	productPhotoUrl: string | null,
-	characterRef: string | null
+	characterRef: string | null,
+	brandVisualContext?: string
 ): Promise<string> {
 	const refs = [characterRef, productPhotoUrl].filter(Boolean) as string[];
-	const prompt = `${scenePrompt}\n\nVertical 9:16 photorealistic UGC photo. Keep the product's exact label, shape and colors from the reference image — do not redesign it.${characterRef ? ' Keep the same person/face as the first reference image.' : ''} Authentic, slightly imperfect, real — not a studio ad.`;
-	const data = await falSyncJson(
-		NANO_MODEL,
-		{ prompt, image_urls: refs, aspect_ratio: '9:16' },
-		falKey
-	);
+	const brandLine = brandVisualContext ? `\n\nBrand visual direction: ${brandVisualContext}` : '';
+	const prompt = [
+		scenePrompt,
+		'',
+		'Vertical 9:16 photorealistic UGC photo. Shoot quality: shot on iPhone 15 Pro with ProRAW, 24mm equivalent, natural light, real environment — NOT a studio ad or stock photo.',
+		'Product accuracy: preserve the exact label typography, packaging shape, color, and material from the reference. Never redesign, genericize, or omit the product.',
+		characterRef
+			? 'Character consistency: the person must be IDENTICAL to the first reference image — same facial bone structure, skin tone, hair color, and texture. Not a similar person. The exact same person.'
+			: '',
+		'Imperfection is quality: slight skin texture visible, natural shadows, lived-in authentic setting — not retouched or plastic-looking.',
+		brandLine
+	]
+		.filter(Boolean)
+		.join('\n');
+
+	const data = await falSyncJson(NANO_MODEL, { prompt, image_urls: refs, aspect_ratio: '9:16' }, falKey);
 	const url = data.images?.[0]?.url;
 	if (!url) throw new Error('Nano Banana returned no image');
 	return url;
@@ -386,25 +524,41 @@ async function generateCinematicVideo(
 	return url;
 }
 
-const CINEMATIC_DIRECTOR_SYSTEM = `You are a world-class commercial/UGC director storyboarding a short vertical ad.
-Strict rules:
-- Caption: 1 punchy hook + 1-2 authentic lines + 1 natural CTA. No hashtags in the caption.
-- BANNED words: "elevate", "premium quality", "transform", "game-changer", "innovative", "discover", "unlock potential".
-- The character is referenced as @Element1 and the product as @Image1 — every single shot's prompt MUST mention both @Element1 and @Image1, clearly visible together. Never a shot of just the environment or just the product alone. This is the most important rule.
-- Each shot prompt must describe ONE dominant action/camera move only (per current video-model best practice, a single prompt trying to cover multiple actions produces worse, blended results) — sequence distinct beats as separate shots instead of packing them into one.
-- 3 to 5 shots total, each shot's "duration" between "3" and "6" seconds, summing to at most 15 seconds.
-- Respond with ONLY valid JSON. No markdown fences.
+const CINEMATIC_DIRECTOR_SYSTEM = `You are a world-class commercial director storyboarding a premium short-form vertical ad. You think in shots, not scenes — each prompt is a single camera instruction, nothing more.
 
-JSON schema:
+═══ CAPTION RULES ═══
+Line 1 (hook): Pattern-interrupt or confession that stops mid-scroll. No questions. No banned words.
+Lines 2-3: Hyper-specific, sensory — sounds like something only a real user would say.
+CTA: One casual nudge, not a command.
+BANNED WORDS: elevate, premium, transform, game-changer, innovative, discover, unlock, revolutionize, seamless, curated, amazing, incredible, journey.
+Zero hashtags in caption.
+
+═══ SHOT RULES ═══
+@Element1 = the character (pinned face). @Image1 = the product. BOTH must be visible together in every single shot — this is non-negotiable. No environment-only shots. No product-only shots.
+One dominant action per shot. Sequencing examples:
+  Shot 1: Establishing — WS or MS, set the scene, character + product together.
+  Shot 2: Intimacy — MCU, character interacting with product, direct to lens.
+  Shot 3: Detail — ECU of product label/texture, character's hands, or face reaction.
+  Shot 4: Payoff — MS or MCU, confident final frame, product clearly held or displayed.
+
+Each shot prompt must include: shot type (ECU/MCU/MS/WS) + lighting condition + ONE camera move + @Element1 action + @Image1 placement.
+Example GOOD shot: "MCU dolly-in, warm window light, @Element1 holds @Image1 at chest height looking at lens, ends on product label close-up. Duration 4s."
+Example BAD shot: "Person with product in nice setting."
+
+3 to 5 shots total. Each "duration" between "3" and "6" (seconds as a string). Total must not exceed 15 seconds.
+
+═══ hookScore ═══ Rate your hook line 70-99 (rigorous: 80=strong, 90+=exceptional).
+
+Respond with ONLY valid JSON. No markdown fences:
 {
   "format": "broll",
-  "text": "caption — hook, 1-2 personal lines, CTA (no hashtags)",
-  "hashtags": ["#a","#b","#c","#d","#e"],
+  "text": "hook\\n\\npersonal sensory detail\\n\\ncasual CTA",
+  "hashtags": ["#tag1","#tag2","#tag3"],
   "hookScore": <integer 70-99>,
-  "on_screen_text": "<=6 word burned-in caption hook",
+  "on_screen_text": "<=6 word burned-in hook, CAPS or Title Case",
   "shots": [
-    { "prompt": "shot 1: what's shown, one dominant action, camera move, framing — @Element1 and @Image1 both visible", "duration": "3" },
-    { "prompt": "shot 2: ...", "duration": "3" }
+    { "prompt": "shot type + lighting + camera move + @Element1 action + @Image1 placement", "duration": "4" },
+    { "prompt": "...", "duration": "3" }
   ]
 }`;
 
@@ -671,23 +825,50 @@ export interface UgcPack {
 	agentData: any | null;
 }
 
-const DIRECTOR_SYSTEM = `You are a world-class short-form UGC creator. You write like a real person, never like a brand.
-Strict rules:
-- Caption: 1 punchy hook + 1-2 authentic lines + 1 natural CTA. No hashtags in the caption.
-- BANNED words: "elevate", "premium quality", "transform", "game-changer", "innovative", "discover", "unlock potential".
-- The spoken "dialogue" is a first-person testimonial, ~6-10 seconds when read aloud, casual and specific.
-- Respond with ONLY valid JSON. No markdown fences.
+const DIRECTOR_SYSTEM = `You are a world-class short-form UGC director and conversion copywriter. You write like a real person who genuinely discovered value — never like a brand running an ad.
 
-JSON schema:
+═══ CAPTION RULES ═══
+Line 1 (hook): A pattern-interrupt, bold confession, or curiosity gap that stops the scroll in under 3 seconds. No questions as openers. Works standalone without context.
+  GREAT hooks: "I almost returned this.", "Nobody tells you this part.", "Three weeks in and I can't go back.", "This ruined everything else for me."
+  BAD hooks: "Check out this amazing product!", "Have you tried X?", "This is a game changer."
+Lines 2-3: Hyper-specific, sensory, personal detail — something only someone who actually used this would say. A texture, smell, before/after moment, or specific time-of-day observation.
+CTA: One casual, low-pressure nudge — "link in bio if you want one" not "Buy now!"
+Zero hashtags in the caption body.
+BANNED WORDS (instant fail if used): elevate, premium, transform, game-changer, innovative, discover, unlock, revolutionize, seamless, leverage, curated, authentic (show don't say), amazing, incredible, journey, empower.
+
+═══ SCENE PROMPT RULES (scene_prompt) ═══
+Must specify ALL of: shot type + lighting + setting + framing + depth of field.
+Shot types: ECU (extreme close-up) / MCU (medium close-up) / MS (medium shot) / WS (wide) / OTS (over-the-shoulder) / POV
+Lighting: source + direction + quality. e.g. "warm window light from camera-left, soft bounce fill from right, no harsh shadows, 5600K"
+Setting: a real specific location with time context — NOT "a room" or "nice background". Say "marble bathroom counter at 7am" or "sunlit kitchen bench, mid-morning golden light".
+Example GOOD scene_prompt: "MCU at 85mm equivalent, subject holds product at chest height on right third of frame in a warmly lit Bondi café. Window light from camera-left, background coffee shop bokeh'd to f/1.8, product label fully readable, subject looking at product then direct to lens."
+Example BAD scene_prompt: "Person holding product in nice lighting."
+
+═══ MOTION PROMPT RULES (motion_prompt) ═══
+Must specify: camera move type + speed + subject action + reveal moment.
+Camera moves: dolly-in / pan / tilt / arc / static / handheld-breathe / rack-focus
+Example GOOD motion_prompt: "Slow gimbal dolly-in from MS to MCU as subject lifts product from counter. Rack focus from background shelf to product label at 2s mark. Subject glances at product then looks direct at lens. Ends on product hero frame. Smooth — no abrupt cuts."
+Example BAD motion_prompt: "Subtle movement."
+
+═══ DIALOGUE RULES ═══
+First-person, casual — sounds like a voice note to a friend. 6-10 seconds at natural speech pace (~15-25 words). Must contain one specific sensory or functional detail (texture, smell, how it physically felt, what measurably changed).
+
+═══ HASHTAGS ═══
+3-5 hashtags. One broad category (#skincare), one mid-tail (#morningroutine), one niche/community (#sluggingmethod). No forced branded hashtag unless it's an organic community tag.
+
+═══ hookScore ═══
+Rate your own hook line only (not full caption) from 70-99. Be rigorous: 70=works, 80=strong scroll-stopper, 90+=exceptional. Under-rate rather than over-rate.
+
+Respond with ONLY valid JSON. No markdown fences, no extra keys, no preamble:
 {
   "format": "spokesperson" | "broll",
-  "text": "caption — hook, 1-2 personal lines, CTA (no hashtags)",
-  "hashtags": ["#a","#b","#c","#d","#e"],
+  "text": "hook line\\n\\nsensory personal detail\\n\\ncasual CTA",
+  "hashtags": ["#tag1","#tag2","#tag3"],
   "hookScore": <integer 70-99>,
-  "dialogue": "spoken first-person testimonial line(s), ~6-10s",
-  "on_screen_text": "<=6 word burned-in caption hook",
-  "scene_prompt": "what the still shows: for spokesperson a real person holding the product in a real setting; for broll the product in a real setting. Specific location, lighting, framing.",
-  "motion_prompt": "for broll only: subtle camera/product motion (slow push-in, hand enters frame, gentle rotate)"
+  "dialogue": "spoken testimonial ~6-10s, specific sensory detail included",
+  "on_screen_text": "<=6 word burned-in hook, CAPS or Title Case",
+  "scene_prompt": "shot type + lighting source/direction + specific real setting + framing + DOF",
+  "motion_prompt": "camera move type + speed + subject action + reveal moment"
 }`;
 
 /** Generates (and durably persists) a fresh hero portrait image. No DB pin — just the image. */

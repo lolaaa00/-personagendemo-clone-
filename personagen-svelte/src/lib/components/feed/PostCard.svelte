@@ -1,4 +1,7 @@
 <script lang="ts">
+	import { getPostDisplay } from './postDisplay';
+	import { platformColor } from '$lib/platforms';
+
 	let {
 		post,
 		onOpen
@@ -7,24 +10,7 @@
 		onOpen: (post: any) => void;
 	} = $props();
 
-	// ── Content parsing ──────────────────────────────────────────────
-	function getPostDisplay(content: string) {
-		try {
-			const trimmed = content?.trim() ?? '';
-			if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
-				const parsed = JSON.parse(trimmed);
-				return {
-					text: parsed.text || content,
-					mediaUrl: parsed.media_url || parsed.mediaUrl || null,
-					mediaType: parsed.media_type || parsed.mediaType || 'image',
-					posterUrl: parsed.poster_url || null
-				};
-			}
-		} catch {}
-		return { text: content, mediaUrl: null, mediaType: 'image', posterUrl: null };
-	}
-
-	let display = $derived(getPostDisplay(post.content));
+	let display = $derived(getPostDisplay(post));
 	let analytics = $derived(post.analytics ?? null);
 	let hasRealStats = $derived(Boolean(analytics && (analytics.views || analytics.likes)));
 
@@ -38,15 +24,6 @@
 	});
 
 	let plat = $derived((post.platforms?.[0] ?? 'instagram').toLowerCase());
-
-	function platformColor(p: string): string {
-		if (p === 'tiktok') return '#fe2c55';
-		if (p === 'instagram') return '#e1306c';
-		if (p === 'youtube') return '#ff0000';
-		if (p === 'x') return '#555';
-		if (p === 'threads') return '#999';
-		return '#1877f2';
-	}
 </script>
 
 <!-- Media-first mosaic tile: the media IS the card. Everything else lives in

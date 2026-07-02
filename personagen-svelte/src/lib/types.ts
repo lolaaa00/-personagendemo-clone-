@@ -1,6 +1,5 @@
 export interface Agent {
 	id: string;
-	tenant_id: string;
 	name: string;
 	handle: string;
 	niche: string;

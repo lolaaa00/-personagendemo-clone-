@@ -201,6 +201,7 @@ export const ZERNIO_UNPUBLISH_SUPPORTED = [
 	'threads',
 	'facebook',
 	'twitter',
+	'x',
 	'linkedin',
 	'youtube',
 	'pinterest',

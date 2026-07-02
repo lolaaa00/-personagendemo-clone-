@@ -109,6 +109,9 @@
 	let storeUrl = $state('honeyforx.com');
 	let scraping = $state(false);
 	let extending = $state<Record<string, boolean>>({});
+	let generating = $state<Record<string, boolean>>({});
+	let spinning = $state<Record<string, boolean>>({});
+	let spinVariations = $state<Record<string, string[] | null>>({});
 
 	// Manual product entry form
 	let newProductName = $state('');
@@ -310,6 +313,18 @@
 		showToast(`Product "${newProd.name}" added successfully`, 'success');
 	}
 
+	function getBrandContext(): string {
+		return [
+			brandName && `Brand: ${brandName}`,
+			tagline && `Tagline: ${tagline}`,
+			mission && `Mission: ${mission}`,
+			demographics && `Target audience: ${demographics}`,
+			traits.length && `Traits: ${traits.join(', ')}`
+		]
+			.filter(Boolean)
+			.join('\n');
+	}
+
 	async function extendField(fieldName: string, fieldVal: string, setter: (val: string) => void) {
 		if (!fieldVal.trim()) {
 			showToast('Please type some brief text first to enrich', 'info');
@@ -317,7 +332,7 @@
 		}
 		extending = { ...extending, [fieldName]: true };
 		try {
-			const res = await BrandBrief.extendField(fieldName, fieldVal);
+			const res = await BrandBrief.extendField(fieldName, fieldVal, getBrandContext());
 			if (res.success && res.data?.enriched) {
 				setter(res.data.enriched);
 				saveAll();
@@ -330,6 +345,57 @@
 		} finally {
 			extending = { ...extending, [fieldName]: false };
 		}
+	}
+
+	async function generateField(fieldName: string, setter: (val: string) => void) {
+		generating = { ...generating, [fieldName]: true };
+		try {
+			const res = await BrandBrief.generateField(fieldName, getBrandContext());
+			if (res.success && res.data?.generated) {
+				setter(res.data.generated);
+				saveAll();
+				showToast(`${fieldName} generated!`, 'success');
+			} else {
+				showToast(res.error || 'AI generation failed — configure an API key in Settings', 'error');
+			}
+		} catch (err: any) {
+			showToast(err.message || 'AI generation failed', 'error');
+		} finally {
+			generating = { ...generating, [fieldName]: false };
+		}
+	}
+
+	async function spinField(fieldName: string, fieldVal: string) {
+		if (!fieldVal.trim()) {
+			showToast('Write some text first to spin it', 'info');
+			return;
+		}
+		spinning = { ...spinning, [fieldName]: true };
+		spinVariations = { ...spinVariations, [fieldName]: null };
+		try {
+			const res = await BrandBrief.spinField(fieldName, fieldVal, getBrandContext());
+			if (res.success && res.data?.variations?.length) {
+				spinVariations = { ...spinVariations, [fieldName]: res.data.variations };
+				showToast('3 variations ready — pick one below!', 'success');
+			} else {
+				showToast(res.error || 'Spin failed — configure an API key in Settings', 'error');
+			}
+		} catch (err: any) {
+			showToast(err.message || 'Spin failed', 'error');
+		} finally {
+			spinning = { ...spinning, [fieldName]: false };
+		}
+	}
+
+	function applySpinVariation(fieldName: string, text: string, setter: (val: string) => void) {
+		setter(text);
+		spinVariations = { ...spinVariations, [fieldName]: null };
+		saveAll();
+		showToast('Variation applied!', 'success');
+	}
+
+	function dismissSpin(fieldName: string) {
+		spinVariations = { ...spinVariations, [fieldName]: null };
 	}
 
 	const UGC_PRESETS = [
@@ -531,10 +597,32 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 	}
 	let intelStrategyResults = $state<IntelStrategyResults | null>(null);
 
-	// Synchronize with main Brand Brief state
+	// Synchronize brand brief data into the Intel Wizard whenever the tab is opened
 	$effect(() => {
-		if (brandName && !intelCompanyName) {
-			intelCompanyName = brandName;
+		if (activeTab === 'intel') {
+			if (brandName && !intelCompanyName) intelCompanyName = brandName;
+			// Pre-populate target audience from brief
+			if (demographics && !intelTargetAudience) intelTargetAudience = demographics;
+			// Pre-populate interests from brief
+			if (interests) {
+				const briefInterests = interests
+					.split(/[,;|]+/)
+					.map((s) => s.trim())
+					.filter((s) => s.length > 0 && s.length < 50);
+				for (const interest of briefInterests) {
+					if (!intelInterests.includes(interest)) {
+						intelInterests = [...intelInterests, interest];
+					}
+				}
+			}
+			// Pre-populate competitors from brief
+			if (competitors.length > 0 && intelCompetitors.every((c) => !c.url.trim())) {
+				intelCompetitors = competitors
+					.filter((c) => c.url.trim())
+					.slice(0, 5)
+					.map((c) => ({ url: c.url, platform: 'instagram' }));
+				if (intelCompetitors.length === 0) intelCompetitors = [{ url: '', platform: 'youtube' }];
+			}
 		}
 	});
 
@@ -920,48 +1008,53 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 					<div class="field">
 						<div class="label-row">
 							<label for="tagline">Tagline</label>
-							<button
-								class="enrich-btn"
-								onclick={() => extendField('Tagline', tagline, (v) => (tagline = v))}
-								disabled={extending['Tagline']}
-							>
-								{#if extending['Tagline']}
-									<div class="enrich-spinner"></div>
-									Enriching...
-								{:else}
-									✨ AI Extend
-								{/if}
-							</button>
+							<div class="ai-btn-group">
+								<button class="enrich-btn" onclick={() => generateField('Tagline', (v) => (tagline = v))} disabled={generating['Tagline']}>
+									{#if generating['Tagline']}<div class="enrich-spinner"></div>Generating...{:else}✨ Generate{/if}
+								</button>
+								<button class="enrich-btn spin" onclick={() => spinField('Tagline', tagline)} disabled={spinning['Tagline'] || !tagline.trim()}>
+									{#if spinning['Tagline']}<div class="enrich-spinner"></div>Spinning...{:else}↩ Spin{/if}
+								</button>
+							</div>
 						</div>
-						<input
-							id="tagline"
-							type="text"
-							bind:value={tagline}
-							placeholder="e.g. AI Personas That Actually Convert"
-						/>
+						<input id="tagline" type="text" bind:value={tagline} placeholder="e.g. AI Personas That Actually Convert" />
+						{#if spinVariations['Tagline']}
+							<div class="spin-picker">
+								{#each spinVariations['Tagline'] as v, i}
+									<button class="spin-option" onclick={() => applySpinVariation('Tagline', v, (x) => (tagline = x))}>
+										<span class="spin-idx">{i + 1}</span><span class="spin-text">{v}</span>
+									</button>
+								{/each}
+								<button class="spin-dismiss" onclick={() => dismissSpin('Tagline')}>Dismiss</button>
+							</div>
+						{/if}
 					</div>
 					<div class="field">
 						<div class="label-row">
 							<label for="mission">Mission Statement</label>
-							<button
-								class="enrich-btn"
-								onclick={() => extendField('Mission Statement', mission, (v) => (mission = v))}
-								disabled={extending['Mission Statement']}
-							>
-								{#if extending['Mission Statement']}
-									<div class="enrich-spinner"></div>
-									Enriching...
-								{:else}
-									✨ AI Enrich
-								{/if}
-							</button>
+							<div class="ai-btn-group">
+								<button class="enrich-btn" onclick={() => generateField('Mission Statement', (v) => (mission = v))} disabled={generating['Mission Statement']}>
+									{#if generating['Mission Statement']}<div class="enrich-spinner"></div>Generating...{:else}✨ Generate{/if}
+								</button>
+								<button class="enrich-btn" onclick={() => extendField('Mission Statement', mission, (v) => (mission = v))} disabled={extending['Mission Statement'] || !mission.trim()}>
+									{#if extending['Mission Statement']}<div class="enrich-spinner"></div>Enriching...{:else}AI Enrich{/if}
+								</button>
+								<button class="enrich-btn spin" onclick={() => spinField('Mission Statement', mission)} disabled={spinning['Mission Statement'] || !mission.trim()}>
+									{#if spinning['Mission Statement']}<div class="enrich-spinner"></div>Spinning...{:else}↩ Spin{/if}
+								</button>
+							</div>
 						</div>
-						<textarea
-							id="mission"
-							bind:value={mission}
-							placeholder="What is the core purpose and mission of this brand? What problem does it solve and for whom?"
-							rows="5"
-						></textarea>
+						<textarea id="mission" bind:value={mission} placeholder="What is the core purpose and mission of this brand? What problem does it solve and for whom?" rows="5"></textarea>
+						{#if spinVariations['Mission Statement']}
+							<div class="spin-picker">
+								{#each spinVariations['Mission Statement'] as v, i}
+									<button class="spin-option" onclick={() => applySpinVariation('Mission Statement', v, (x) => (mission = x))}>
+										<span class="spin-idx">{i + 1}</span><span class="spin-text">{v}</span>
+									</button>
+								{/each}
+								<button class="spin-dismiss" onclick={() => dismissSpin('Mission Statement')}>Dismiss</button>
+							</div>
+						{/if}
 					</div>
 				</div>
 			</div>
@@ -1087,26 +1180,22 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 					<div class="field mt-6">
 						<div class="label-row">
 							<label for="ugcGuidelines">UGC Formats & Script Guidelines</label>
-							<button
-								class="enrich-btn"
-								onclick={() =>
-									extendField('UGC Guidelines', ugcGuidelines, (v) => (ugcGuidelines = v))}
-								disabled={extending['UGC Guidelines']}
-							>
-								{#if extending['UGC Guidelines']}
-									<div class="enrich-spinner"></div>
-									Enriching...
-								{:else}
-									✨ AI Enrich
-								{/if}
-							</button>
+							<div class="ai-btn-group">
+								<button class="enrich-btn" onclick={() => generateField('UGC Video Script Guidelines and Formats for this brand', (v) => (ugcGuidelines = v))} disabled={generating['UGC Guidelines']}>
+									{#if generating['UGC Guidelines']}<div class="enrich-spinner"></div>Generating...{:else}✨ Generate{/if}
+								</button>
+								<button class="enrich-btn" onclick={() => extendField('UGC Guidelines', ugcGuidelines, (v) => (ugcGuidelines = v))} disabled={extending['UGC Guidelines'] || !ugcGuidelines.trim()}>
+									{#if extending['UGC Guidelines']}<div class="enrich-spinner"></div>Enriching...{:else}AI Enrich{/if}
+								</button>
+								<button class="enrich-btn spin" onclick={() => spinField('UGC Guidelines', ugcGuidelines)} disabled={spinning['UGC Guidelines'] || !ugcGuidelines.trim()}>
+									{#if spinning['UGC Guidelines']}<div class="enrich-spinner"></div>...{:else}↩ Spin{/if}
+								</button>
+							</div>
 						</div>
-						<textarea
-							id="ugcGuidelines"
-							bind:value={ugcGuidelines}
-							placeholder="Choose a preset above or write custom UGC guidelines for your content here..."
-							rows="8"
-						></textarea>
+						<textarea id="ugcGuidelines" bind:value={ugcGuidelines} placeholder="Choose a preset above or write custom UGC guidelines for your content here..." rows="8"></textarea>
+						{#if spinVariations['UGC Guidelines']}
+							<div class="spin-picker">{#each spinVariations['UGC Guidelines'] as v, i}<button class="spin-option" onclick={() => applySpinVariation('UGC Guidelines', v, (x) => (ugcGuidelines = x))}><span class="spin-idx">{i + 1}</span><span class="spin-text">{v.substring(0, 200)}{v.length > 200 ? '...' : ''}</span></button>{/each}<button class="spin-dismiss" onclick={() => dismissSpin('UGC Guidelines')}>Dismiss</button></div>
+						{/if}
 					</div>
 				</div>
 			</div>
@@ -1162,22 +1251,22 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 
 					<div class="font-row">
 						<div class="field">
-							<label for="fontPrimary">Primary Font</label>
-							<input
-								id="fontPrimary"
-								type="text"
-								bind:value={fontPrimary}
-								placeholder="e.g. Inter, Playfair Display"
-							/>
+							<div class="label-row">
+								<label for="fontPrimary">Primary Font</label>
+								<button class="enrich-btn" onclick={() => generateField('Primary Font (suggest a Google Font name matching the brand personality)', (v) => (fontPrimary = v))} disabled={generating['Primary Font']}>
+									{#if generating['Primary Font']}<div class="enrich-spinner"></div>...{:else}✨ Suggest{/if}
+								</button>
+							</div>
+							<input id="fontPrimary" type="text" bind:value={fontPrimary} placeholder="e.g. Inter, Playfair Display" />
 						</div>
 						<div class="field">
-							<label for="fontSecondary">Secondary Font</label>
-							<input
-								id="fontSecondary"
-								type="text"
-								bind:value={fontSecondary}
-								placeholder="e.g. IBM Plex Mono"
-							/>
+							<div class="label-row">
+								<label for="fontSecondary">Secondary Font</label>
+								<button class="enrich-btn" onclick={() => generateField('Secondary Font (a complementary Google Font to pair with ' + (fontPrimary || 'the primary font') + ')', (v) => (fontSecondary = v))} disabled={generating['Secondary Font']}>
+									{#if generating['Secondary Font']}<div class="enrich-spinner"></div>...{:else}✨ Suggest{/if}
+								</button>
+							</div>
+							<input id="fontSecondary" type="text" bind:value={fontSecondary} placeholder="e.g. IBM Plex Mono" />
 						</div>
 					</div>
 				</div>
@@ -1189,7 +1278,26 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 
 				<div class="form-stack">
 					<div class="field">
-						<label>Personality Traits</label>
+						<div class="label-row">
+							<label>Personality Traits</label>
+							<button class="enrich-btn" onclick={async () => {
+								generating = { ...generating, 'Traits': true };
+								try {
+									const res = await BrandBrief.generateField('Brand Personality Traits (5 single-word or short-phrase descriptors as a comma-separated list)', getBrandContext());
+									if (res.success && res.data?.generated) {
+										const suggested = res.data.generated.split(/[,;|]+/).map((s: string) => s.trim().replace(/^["'\s]+|["'\s]+$/g, '')).filter((s: string) => s.length > 0 && s.length < 30);
+										let added = 0;
+										for (const t of suggested) {
+											if (!traits.includes(t)) { traits = [...traits, t]; added++; }
+										}
+										if (added > 0) { saveAll(); showToast(`${added} trait(s) suggested!`, 'success'); }
+									}
+								} catch { showToast('Trait suggestion failed', 'error'); }
+								finally { generating = { ...generating, 'Traits': false }; }
+							}} disabled={generating['Traits']}>
+								{#if generating['Traits']}<div class="enrich-spinner"></div>...{:else}✨ Suggest{/if}
+							</button>
+						</div>
 						<div class="tag-input-wrap">
 							<div class="tags-list">
 								{#each traits as trait}
@@ -1243,13 +1351,28 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 					</div>
 
 					<div class="field">
-						<label for="samplePost">Custom Sample Post</label>
-						<textarea
-							id="samplePost"
-							bind:value={samplePost}
-							placeholder="Write a sample post in this brand's voice… (leave empty for auto-generated preview)"
-							rows="3"
-						></textarea>
+						<div class="label-row">
+							<label for="samplePost">Custom Sample Post</label>
+							<div class="ai-btn-group">
+								<button class="enrich-btn" onclick={() => generateField('Sample Social Media Post (write a realistic brand post in the brand voice described above)', (v) => (samplePost = v))} disabled={generating['Sample Post']}>
+									{#if generating['Sample Post']}<div class="enrich-spinner"></div>Generating...{:else}✨ Generate{/if}
+								</button>
+								<button class="enrich-btn spin" onclick={() => spinField('Sample Post', samplePost)} disabled={spinning['Sample Post'] || !samplePost.trim()}>
+									{#if spinning['Sample Post']}<div class="enrich-spinner"></div>Spinning...{:else}↩ Spin{/if}
+								</button>
+							</div>
+						</div>
+						<textarea id="samplePost" bind:value={samplePost} placeholder="Write a sample post in this brand's voice… (leave empty for auto-generated preview)" rows="3"></textarea>
+						{#if spinVariations['Sample Post']}
+							<div class="spin-picker">
+								{#each spinVariations['Sample Post'] as v, i}
+									<button class="spin-option" onclick={() => applySpinVariation('Sample Post', v, (x) => (samplePost = x))}>
+										<span class="spin-idx">{i + 1}</span><span class="spin-text">{v}</span>
+									</button>
+								{/each}
+								<button class="spin-dismiss" onclick={() => dismissSpin('Sample Post')}>Dismiss</button>
+							</div>
+						{/if}
 					</div>
 
 					<div class="preview-card">
@@ -1283,95 +1406,79 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 					<div class="field">
 						<div class="label-row">
 							<label for="demographics">Demographics</label>
-							<button
-								class="enrich-btn"
-								onclick={() => extendField('Demographics', demographics, (v) => (demographics = v))}
-								disabled={extending['Demographics']}
-							>
-								{#if extending['Demographics']}
-									<div class="enrich-spinner"></div>
-									Enriching...
-								{:else}
-									✨ AI Enrich
-								{/if}
-							</button>
+							<div class="ai-btn-group">
+								<button class="enrich-btn" onclick={() => generateField('Target Audience Demographics', (v) => (demographics = v))} disabled={generating['Demographics']}>
+									{#if generating['Demographics']}<div class="enrich-spinner"></div>Generating...{:else}✨ Generate{/if}
+								</button>
+								<button class="enrich-btn" onclick={() => extendField('Demographics', demographics, (v) => (demographics = v))} disabled={extending['Demographics'] || !demographics.trim()}>
+									{#if extending['Demographics']}<div class="enrich-spinner"></div>Enriching...{:else}AI Enrich{/if}
+								</button>
+								<button class="enrich-btn spin" onclick={() => spinField('Demographics', demographics)} disabled={spinning['Demographics'] || !demographics.trim()}>
+									{#if spinning['Demographics']}<div class="enrich-spinner"></div>...{:else}↩ Spin{/if}
+								</button>
+							</div>
 						</div>
-						<textarea
-							id="demographics"
-							bind:value={demographics}
-							placeholder="Age range, gender, location, income level, education, occupation…"
-							rows="4"
-						></textarea>
+						<textarea id="demographics" bind:value={demographics} placeholder="Age range, gender, location, income level, education, occupation…" rows="4"></textarea>
+						{#if spinVariations['Demographics']}
+							<div class="spin-picker">{#each spinVariations['Demographics'] as v, i}<button class="spin-option" onclick={() => applySpinVariation('Demographics', v, (x) => (demographics = x))}><span class="spin-idx">{i + 1}</span><span class="spin-text">{v}</span></button>{/each}<button class="spin-dismiss" onclick={() => dismissSpin('Demographics')}>Dismiss</button></div>
+						{/if}
 					</div>
 					<div class="field">
 						<div class="label-row">
 							<label for="interests">Interests & Behaviors</label>
-							<button
-								class="enrich-btn"
-								onclick={() =>
-									extendField('Interests & Behaviors', interests, (v) => (interests = v))}
-								disabled={extending['Interests & Behaviors']}
-							>
-								{#if extending['Interests & Behaviors']}
-									<div class="enrich-spinner"></div>
-									Enriching...
-								{:else}
-									✨ AI Enrich
-								{/if}
-							</button>
+							<div class="ai-btn-group">
+								<button class="enrich-btn" onclick={() => generateField('Audience Interests & Behaviors', (v) => (interests = v))} disabled={generating['Interests']}>
+									{#if generating['Interests']}<div class="enrich-spinner"></div>Generating...{:else}✨ Generate{/if}
+								</button>
+								<button class="enrich-btn" onclick={() => extendField('Interests & Behaviors', interests, (v) => (interests = v))} disabled={extending['Interests & Behaviors'] || !interests.trim()}>
+									{#if extending['Interests & Behaviors']}<div class="enrich-spinner"></div>Enriching...{:else}AI Enrich{/if}
+								</button>
+								<button class="enrich-btn spin" onclick={() => spinField('Interests', interests)} disabled={spinning['Interests'] || !interests.trim()}>
+									{#if spinning['Interests']}<div class="enrich-spinner"></div>...{:else}↩ Spin{/if}
+								</button>
+							</div>
 						</div>
-						<textarea
-							id="interests"
-							bind:value={interests}
-							placeholder="Hobbies, media consumption, purchasing behaviors, lifestyle preferences…"
-							rows="4"
-						></textarea>
+						<textarea id="interests" bind:value={interests} placeholder="Hobbies, media consumption, purchasing behaviors, lifestyle preferences…" rows="4"></textarea>
+						{#if spinVariations['Interests']}
+							<div class="spin-picker">{#each spinVariations['Interests'] as v, i}<button class="spin-option" onclick={() => applySpinVariation('Interests', v, (x) => (interests = x))}><span class="spin-idx">{i + 1}</span><span class="spin-text">{v}</span></button>{/each}<button class="spin-dismiss" onclick={() => dismissSpin('Interests')}>Dismiss</button></div>
+						{/if}
 					</div>
 					<div class="field">
 						<div class="label-row">
 							<label for="platforms">Primary Platforms</label>
-							<button
-								class="enrich-btn"
-								onclick={() => extendField('Primary Platforms', platforms, (v) => (platforms = v))}
-								disabled={extending['Primary Platforms']}
-							>
-								{#if extending['Primary Platforms']}
-									<div class="enrich-spinner"></div>
-									Enriching...
-								{:else}
-									✨ AI Enrich
-								{/if}
-							</button>
+							<div class="ai-btn-group">
+								<button class="enrich-btn" onclick={() => generateField('Primary Social Media Platforms for target audience', (v) => (platforms = v))} disabled={generating['Platforms']}>
+									{#if generating['Platforms']}<div class="enrich-spinner"></div>Generating...{:else}✨ Generate{/if}
+								</button>
+								<button class="enrich-btn spin" onclick={() => spinField('Platforms', platforms)} disabled={spinning['Platforms'] || !platforms.trim()}>
+									{#if spinning['Platforms']}<div class="enrich-spinner"></div>...{:else}↩ Spin{/if}
+								</button>
+							</div>
 						</div>
-						<textarea
-							id="platforms"
-							bind:value={platforms}
-							placeholder="Where does the audience spend time? TikTok, Instagram, YouTube, LinkedIn…"
-							rows="3"
-						></textarea>
+						<textarea id="platforms" bind:value={platforms} placeholder="Where does the audience spend time? TikTok, Instagram, YouTube, LinkedIn…" rows="3"></textarea>
+						{#if spinVariations['Platforms']}
+							<div class="spin-picker">{#each spinVariations['Platforms'] as v, i}<button class="spin-option" onclick={() => applySpinVariation('Platforms', v, (x) => (platforms = x))}><span class="spin-idx">{i + 1}</span><span class="spin-text">{v}</span></button>{/each}<button class="spin-dismiss" onclick={() => dismissSpin('Platforms')}>Dismiss</button></div>
+						{/if}
 					</div>
 					<div class="field">
 						<div class="label-row">
 							<label for="painPoints">Pain Points</label>
-							<button
-								class="enrich-btn"
-								onclick={() => extendField('Pain Points', painPoints, (v) => (painPoints = v))}
-								disabled={extending['Pain Points']}
-							>
-								{#if extending['Pain Points']}
-									<div class="enrich-spinner"></div>
-									Enriching...
-								{:else}
-									✨ AI Enrich
-								{/if}
-							</button>
+							<div class="ai-btn-group">
+								<button class="enrich-btn" onclick={() => generateField('Customer Pain Points this brand solves', (v) => (painPoints = v))} disabled={generating['Pain Points']}>
+									{#if generating['Pain Points']}<div class="enrich-spinner"></div>Generating...{:else}✨ Generate{/if}
+								</button>
+								<button class="enrich-btn" onclick={() => extendField('Pain Points', painPoints, (v) => (painPoints = v))} disabled={extending['Pain Points'] || !painPoints.trim()}>
+									{#if extending['Pain Points']}<div class="enrich-spinner"></div>Enriching...{:else}AI Enrich{/if}
+								</button>
+								<button class="enrich-btn spin" onclick={() => spinField('Pain Points', painPoints)} disabled={spinning['Pain Points'] || !painPoints.trim()}>
+									{#if spinning['Pain Points']}<div class="enrich-spinner"></div>...{:else}↩ Spin{/if}
+								</button>
+							</div>
 						</div>
-						<textarea
-							id="painPoints"
-							bind:value={painPoints}
-							placeholder="What problems does this audience face that the brand solves?"
-							rows="4"
-						></textarea>
+						<textarea id="painPoints" bind:value={painPoints} placeholder="What problems does this audience face that the brand solves?" rows="4"></textarea>
+						{#if spinVariations['Pain Points']}
+							<div class="spin-picker">{#each spinVariations['Pain Points'] as v, i}<button class="spin-option" onclick={() => applySpinVariation('Pain Points', v, (x) => (painPoints = x))}><span class="spin-idx">{i + 1}</span><span class="spin-text">{v}</span></button>{/each}<button class="spin-dismiss" onclick={() => dismissSpin('Pain Points')}>Dismiss</button></div>
+						{/if}
 					</div>
 				</div>
 			</div>
@@ -2717,6 +2824,74 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		opacity: 0.5;
 		cursor: not-allowed;
 	}
+	.enrich-btn.spin {
+		border-color: var(--cyan);
+		color: var(--cyan);
+		background: rgba(34, 211, 238, 0.06);
+	}
+	.enrich-btn.spin:hover:not(:disabled) {
+		background: var(--cyan);
+		color: #000;
+	}
+
+	/* AI button group (Generate + Enrich + Spin in one row) */
+	.ai-btn-group {
+		display: flex;
+		gap: 4px;
+		flex-wrap: wrap;
+	}
+
+	/* Spin variations picker */
+	.spin-picker {
+		margin-top: 0.5rem;
+		background: var(--surface-2);
+		border: 1px solid var(--cyan);
+		border-radius: var(--radius-sm);
+		padding: 0.5rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.35rem;
+		animation: fadeUp 0.2s var(--ease-out);
+	}
+	.spin-option {
+		display: flex;
+		align-items: flex-start;
+		gap: 0.5rem;
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-xs);
+		padding: 0.4rem 0.6rem;
+		cursor: pointer;
+		text-align: left;
+		transition: border-color 0.2s, background 0.2s;
+		font-family: var(--font-body);
+	}
+	.spin-option:hover {
+		border-color: var(--accent-mid);
+		background: var(--accent-soft);
+	}
+	.spin-idx {
+		font-size: 0.65rem;
+		font-weight: 800;
+		color: var(--accent);
+		min-width: 14px;
+		padding-top: 1px;
+	}
+	.spin-text {
+		font-size: 0.78rem;
+		color: var(--text);
+		line-height: 1.4;
+	}
+	.spin-dismiss {
+		align-self: flex-end;
+		background: none;
+		border: none;
+		font-size: 0.7rem;
+		color: var(--text-dim);
+		cursor: pointer;
+		padding: 2px 6px;
+	}
+	.spin-dismiss:hover { color: var(--text-muted); }
 
 	/* Products Grid */
 	.products-grid {

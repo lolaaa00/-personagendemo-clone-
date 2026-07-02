@@ -136,16 +136,22 @@ async function generateDraftsForAgent(
 	const endH = clampHour(cfg.active_hours_end ?? 20);
 	if (endH < startH) return 0;
 
-	const status = cfg.autonomy_level === 'fully_autonomous' ? 'scheduled' : 'draft';
-
-	// Target platforms = the agent's active connections (where it can actually post)
+	// Target platforms = the agent's active connections (where it can actually post).
 	const { data: conns } = await supabase
 		.from('connections')
 		.select('platform')
 		.eq('agent_id', agentId)
 		.eq('status', 'active');
-	const platforms = (conns || []).map((c: any) => c.platform);
-	if (platforms.length === 0) return 0;
+	const connected = (conns || []).map((c: any) => c.platform);
+	const hasConnections = connected.length > 0;
+
+	// Generation is NOT gated on connections: an unconnected agent still gets
+	// content generated (shaped for Instagram by default), saved as drafts to
+	// publish once an account is linked. Only publish (status 'scheduled') when
+	// there's actually somewhere to post — otherwise force 'draft'.
+	const platforms = hasConnections ? connected : ['instagram'];
+	const status =
+		hasConnections && cfg.autonomy_level === 'fully_autonomous' ? 'scheduled' : 'draft';
 
 	const slots = buildSlots(tz, opts.lookaheadDays, startH, endH, opts.intervalHours);
 	const dateStrs = [...new Set(slots.map((s) => s.dateStr))];

@@ -41,22 +41,21 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		/* an empty body is fine */
 	}
 
-	// Resolve target platforms from the agent's active connections
+	// Resolve target platforms from the agent's active connections (used for
+	// publishing). Generation itself does NOT require any connection — an agent
+	// with no linked account still generates content, saved as a draft to
+	// publish later once connected.
 	const { data: connections } = await locals.supabase
 		.from('connections')
 		.select('platform')
 		.eq('agent_id', agentId)
 		.eq('status', 'active');
 
-	const targetPlatforms = (connections || []).map((c: any) => c.platform);
-	if (targetPlatforms.length === 0) {
-		return json(
-			{ success: false, error: 'No active social connections. Connect a platform first.' },
-			{ status: 400 }
-		);
-	}
+	const connectedPlatforms = (connections || []).map((c: any) => c.platform);
 
-	// Generate a UGC pack tuned to the brand brief / product
+	// Generate a UGC pack tuned to the persona / brand brief / product.
+	// Shape the content for a real connected platform when we have one, else
+	// default to Instagram so aspect/format still make sense.
 	let content;
 	try {
 		const pack = await generateUgcPack({
@@ -64,7 +63,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 			userId: user.id,
 			agentId,
 			productId: body.product_id || body.productId,
-			platform: body.platform || targetPlatforms[0],
+			platform: body.platform || connectedPlatforms[0] || 'instagram',
 			topic: body.topic
 		});
 		content = pack.content;
@@ -74,30 +73,48 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		return json({ success: false, error: msg }, { status });
 	}
 
-	// Now that media_type is known, drop video-only platforms if this pack is image-only.
-	let finalPlatforms = targetPlatforms;
+	// Which connected platforms can actually accept this pack's media type?
+	let publishablePlatforms = connectedPlatforms;
 	if (content?.media_type !== 'video') {
-		finalPlatforms = targetPlatforms.filter(
+		publishablePlatforms = connectedPlatforms.filter(
 			(p: string) => !(VIDEO_ONLY_PLATFORMS as readonly string[]).includes(p.toLowerCase())
 		);
 	}
-	if (finalPlatforms.length === 0) {
-		return json(
-			{
-				success: false,
-				error: `Generated content is image-only, and none of this agent's connected platforms (${targetPlatforms.join(', ')}) accept image posts.`
-			},
-			{ status: 400 }
-		);
+
+	const now = new Date();
+
+	// No publishable platform → save the generated content as a DRAFT rather
+	// than erroring. This is the "generate without a connection" path.
+	if (publishablePlatforms.length === 0) {
+		const reason =
+			connectedPlatforms.length === 0
+				? 'No social account connected yet — saved as a draft.'
+				: `Content is image-only and this agent's connected platforms (${connectedPlatforms.join(', ')}) don't accept image posts — saved as a draft.`;
+		const { data: draft, error: draftErr } = await db.posts.create({
+			user_id: user.id,
+			agent_id: agentId,
+			content: JSON.stringify(content),
+			platforms: connectedPlatforms,
+			status: 'draft',
+			scheduled_date: null,
+			scheduled_time: null,
+			published_at: null
+		});
+		if (draftErr || !draft) {
+			return json(
+				{ success: false, error: draftErr?.message || 'Failed to save draft' },
+				{ status: 500 }
+			);
+		}
+		return json({ success: true, post: draft, published: false, draft: true, reason });
 	}
 
-	// Create the post, then publish it immediately
-	const now = new Date();
+	// Have a publishable platform → create a scheduled post and publish now.
 	const { data: post, error: postErr } = await db.posts.create({
 		user_id: user.id,
 		agent_id: agentId,
 		content: JSON.stringify(content),
-		platforms: finalPlatforms,
+		platforms: publishablePlatforms,
 		status: 'scheduled',
 		scheduled_date: now.toISOString().split('T')[0],
 		scheduled_time: now.toTimeString().split(' ')[0],
@@ -119,5 +136,5 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 	}
 
 	const { data: updatedPost } = await db.posts.get(post.id);
-	return json({ success: true, post: updatedPost || post, published });
+	return json({ success: true, post: updatedPost || post, published, draft: false });
 };

@@ -499,7 +499,7 @@ Output ONLY the JSON.`;
 					return json({ success: false, error: 'Missing content or agent_id' }, { status: 400 });
 				}
 
-				// Fetch agent's active connections to determine target platforms
+				// Fetch agent's active connections — optional. No connections → draft.
 				const { data: connections } = await locals.supabase
 					.from('connections')
 					.select('platform')
@@ -507,12 +507,8 @@ Output ONLY the JSON.`;
 					.eq('status', 'active');
 
 				const targetPlatforms = (connections || []).map((c: any) => c.platform);
-				if (targetPlatforms.length === 0) {
-					return json(
-						{ success: false, error: 'No active social connections. Connect a platform first.' },
-						{ status: 400 }
-					);
-				}
+				const hasConnections = targetPlatforms.length > 0;
+				const postStatus = hasConnections ? 'scheduled' : 'draft';
 
 				const contentObj = {
 					text: typeof content === 'string' ? content : content.content || content.text || '',
@@ -524,10 +520,10 @@ Output ONLY the JSON.`;
 					user_id: session.user.id,
 					agent_id: agentId,
 					content: JSON.stringify(contentObj),
-					platforms: targetPlatforms,
-					status: 'scheduled',
-					scheduled_date: now.toISOString().split('T')[0],
-					scheduled_time: now.toTimeString().split(' ')[0],
+					platforms: targetPlatforms.length > 0 ? targetPlatforms : ['instagram'],
+					status: postStatus,
+					scheduled_date: postStatus === 'scheduled' ? now.toISOString().split('T')[0] : null,
+					scheduled_time: postStatus === 'scheduled' ? now.toTimeString().split(' ')[0] : null,
 					published_at: null
 				});
 
@@ -538,7 +534,10 @@ Output ONLY the JSON.`;
 					);
 				}
 
-				const publishSuccess = await publishPostById(post.id);
+				let publishSuccess = false;
+				if (postStatus === 'scheduled') {
+					publishSuccess = await publishPostById(post.id);
+				}
 				const { data: updatedPost } = await db.posts.get(post.id);
 
 				return json({
@@ -546,7 +545,9 @@ Output ONLY the JSON.`;
 					data: {
 						post: updatedPost || post,
 						published: publishSuccess,
-						platforms: targetPlatforms
+						draft: postStatus === 'draft',
+						platforms: targetPlatforms,
+						message: postStatus === 'draft' ? 'Saved as draft — connect a platform to publish.' : undefined
 					}
 				});
 			}
@@ -816,6 +817,11 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 
 				if (storeUrl) {
 					try {
+						// Validate BEFORE any fetch — including the Firecrawl call below,
+						// not just the direct-fetch fallback — so a user-supplied internal/
+						// private URL is never handed to any scraper. A throw here is caught
+						// by this block's catch and degrades to the manual-entry response.
+						await assertPublicHttpUrl(storeUrl);
 						const userFirecrawlKey = await getUserApiKey(
 							locals.supabase,
 							session.user.id,
@@ -823,6 +829,11 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 						);
 						const firecrawlKey = userFirecrawlKey || env.FIRECRAWL_API_KEY;
 						let contentToParse = '';
+							// Logo/product image URLs live in page metadata + links, not in the
+							// markdown text — capture them separately so the extractor can fill
+							// logoUrl and product photoUrl reliably.
+							const logoCandidates: string[] = [];
+							const discoveredLinks: string[] = [];
 
 						// 1. Try Firecrawl scraping if API key is configured
 						if (
@@ -840,15 +851,34 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 									},
 									body: JSON.stringify({
 										url: storeUrl,
-										formats: ['markdown']
+										// Full data spectrum: markdown for copy, links for product
+										// discovery, and keep nav/footer (onlyMainContent:false) so the
+										// logo in the header is visible to the extractor.
+										formats: ['markdown', 'links'],
+										onlyMainContent: false
 									})
 								});
 								if (fcRes.ok) {
 									const fcJson = await fcRes.json();
 									if (fcJson.success && fcJson.data?.markdown) {
 										contentToParse = fcJson.data.markdown.substring(0, 40000);
+										const meta = fcJson.data.metadata || {};
+										// Logo candidates from OpenGraph / favicon metadata.
+										for (const key of ['ogImage', 'og:image', 'image', 'favicon', 'logo']) {
+											const v = meta[key];
+											if (typeof v === 'string' && v.startsWith('http')) logoCandidates.push(v);
+											else if (Array.isArray(v))
+												v.filter((x) => typeof x === 'string' && x.startsWith('http')).forEach((x) => logoCandidates.push(x));
+										}
+										if (Array.isArray(fcJson.data.links)) {
+											discoveredLinks.push(
+												...fcJson.data.links
+													.filter((l: any) => typeof l === 'string')
+													.slice(0, 200)
+											);
+										}
 										console.log(
-											`[Engine] Firecrawl success, parsed content length: ${contentToParse.length}`
+											`[Engine] Firecrawl success: markdown ${contentToParse.length} chars, ${logoCandidates.length} logo candidate(s), ${discoveredLinks.length} link(s)`
 										);
 									}
 								} else {
@@ -904,7 +934,57 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 						}
 
 						if (contentToParse && hasAi) {
-							const prompt = `You are a web scraper agent. Extract the brand brief details and any products (with name, description, price, and image URL if visible) from this e-commerce storefront page content.
+							// Scrape individual product pages for richer product data + photos.
+							// Filter product-like URLs from the discovered links and scrape up to 4.
+							const productLinks = discoveredLinks
+								.filter((l) => /\/(products?|shop|item)\//i.test(l))
+								.slice(0, 4);
+
+							let productPageContent = '';
+							if (firecrawlKey && !firecrawlKey.includes('placeholder') && productLinks.length > 0) {
+								const productPageResults = await Promise.allSettled(
+									productLinks.map(async (link) => {
+										try {
+											await assertPublicHttpUrl(link);
+											const r = await fetch('https://api.firecrawl.dev/v1/scrape', {
+												method: 'POST',
+												headers: {
+													'Content-Type': 'application/json',
+													Authorization: `Bearer ${firecrawlKey}`
+												},
+												body: JSON.stringify({ url: link, formats: ['markdown', 'links'], onlyMainContent: true })
+											});
+											if (!r.ok) return '';
+											const rj = await r.json();
+											// Collect image URLs from product page links/metadata
+											if (rj.success) {
+												const meta = rj.data?.metadata || {};
+												for (const key of ['ogImage', 'og:image', 'image']) {
+													const v = meta[key];
+													if (typeof v === 'string' && v.startsWith('http')) logoCandidates.push(v);
+												}
+											}
+											return rj.success ? (rj.data?.markdown || '').substring(0, 5000) : '';
+										} catch {
+											return '';
+										}
+									})
+								);
+								productPageContent = productPageResults
+									.map((r) => (r.status === 'fulfilled' ? r.value : ''))
+									.filter(Boolean)
+									.join('\n\n---\n\n');
+							}
+
+							const logoHint = logoCandidates.length
+								? `\nLOGO CANDIDATES (pick the best brand logo for logoUrl; prefer the first): ${logoCandidates.slice(0, 5).join(', ')}`
+								: '';
+							const productPagesHint = productPageContent
+								? `\n\nPRODUCT PAGES CONTENT (extract products from here with real image URLs):\n${productPageContent.substring(0, 15000)}`
+								: '';
+
+							const prompt = `You are a web scraper agent. Extract the brand brief details and all products (with name, description, price, and image URL) from this e-commerce storefront content.
+Use the LOGO CANDIDATES for "logoUrl". Prefer real absolute image URLs (https://...) for every product "photoUrl" — look in the product pages content section. Never leave logoUrl empty if a candidate exists.${logoHint}
 Return a JSON object matching this exact shape:
 {
   "brandName": "Brand name",
@@ -912,30 +992,39 @@ Return a JSON object matching this exact shape:
   "mission": "Mission statement",
   "primaryColor": "#hexcolor",
   "secondaryColor": "#hexcolor",
-  "logoUrl": "URL to logo or placeholder image",
-  "traits": ["Trait1", "Trait2"],
-  "commStyle": "Communication style",
-  "demographics": "Target demographics",
-  "interests": "Target interests",
-  "platforms": "Target platforms",
-  "painPoints": "Customer pain points",
+  "logoUrl": "URL to logo image (from LOGO CANDIDATES above)",
+  "fontPrimary": "Primary font name if found",
+  "fontSecondary": "Secondary font name if found",
+  "traits": ["Trait1", "Trait2", "Trait3"],
+  "commStyle": "Communication style (Casual/Professional/Bold/Minimal)",
+  "demographics": "Target demographics description",
+  "interests": "Target audience interests",
+  "platforms": "Social platforms they use",
+  "painPoints": "Customer pain points addressed",
   "products": [
     {
       "id": "p1",
       "name": "Product Name",
       "description": "Product Description",
       "price": "$Price",
-      "photoUrl": "URL to product photo"
+      "photoUrl": "Absolute URL to product photo"
     }
   ]
 }
-Store Content:
-${contentToParse}`;
+Store Homepage Content:
+${contentToParse.substring(0, 20000)}${productPagesHint}`;
 
 							const resText = await ai!.generate(prompt, { json: true });
 							if (resText) {
 								const parsed = safeParseJson(resText);
 								if (parsed && parsed.brandName) {
+									// Backfill the logo from metadata if the model didn't set one.
+									if (
+										(!parsed.logoUrl || !String(parsed.logoUrl).startsWith('http')) &&
+										logoCandidates.length
+									) {
+										parsed.logoUrl = logoCandidates[0];
+									}
 									scrapedData = parsed;
 									scrapeSuccess = true;
 								}
@@ -992,6 +1081,69 @@ Input: "${fieldVal}"`;
 					},
 					{ status: 400 }
 				);
+			}
+
+			// ── ACTION: generate_field (generate from scratch, no existing text needed) ──
+			if (action === 'generate_field') {
+				const fieldName = body.fieldName || 'Description';
+				const brandContext = body.brandContext || '';
+
+				if (!hasAi) {
+					return json({ success: false, error: 'No AI provider configured. Add an API key in Settings.' }, { status: 400 });
+				}
+
+				try {
+					const prompt = `You are an elite brand strategist and copywriter.
+Generate compelling text for the brand brief field: "${fieldName}".
+${brandContext ? `Brand context:\n${brandContext}` : ''}
+Keep the output concise and high-converting (2-3 sentences max unless the field requires more).
+Output ONLY the generated text for this field — no explanation, no label, no quotes.`;
+
+					const resText = await ai!.generate(prompt);
+					if (resText) {
+						return json({ success: true, data: { generated: resText.trim() } });
+					}
+				} catch (err) {
+					console.error('[Engine] AI field generation failed:', err);
+				}
+
+				return json({ success: false, error: 'Failed to generate field. Configure an AI provider in Settings.' }, { status: 400 });
+			}
+
+			// ── ACTION: spin_field (rewrite existing text in 3 distinct ways) ──────
+			if (action === 'spin_field') {
+				const fieldName = body.fieldName || 'Description';
+				const fieldVal = body.fieldVal || '';
+				const brandContext = body.brandContext || '';
+
+				if (!fieldVal.trim()) {
+					return json({ success: false, error: 'No text to spin' }, { status: 400 });
+				}
+				if (!hasAi) {
+					return json({ success: false, error: 'No AI provider configured. Add an API key in Settings.' }, { status: 400 });
+				}
+
+				try {
+					const prompt = `You are an elite brand strategist, copywriter, and e-commerce UGC marketer.
+Rewrite this brand brief field "${fieldName}" in 3 distinctly different ways.
+Each variation should have a different angle, tone, emotional hook, or emphasis — not just synonym swaps.
+${brandContext ? `Brand context:\n${brandContext}` : ''}
+Original text: "${fieldVal}"
+
+Return JSON: { "variations": ["variation 1 text", "variation 2 text", "variation 3 text"] }`;
+
+					const resText = await ai!.generate(prompt, { json: true });
+					if (resText) {
+						const parsed = safeParseJson(resText);
+						if (parsed?.variations?.length) {
+							return json({ success: true, data: { variations: parsed.variations } });
+						}
+					}
+				} catch (err) {
+					console.error('[Engine] AI field spin failed:', err);
+				}
+
+				return json({ success: false, error: 'Failed to spin field. Configure an AI provider in Settings.' }, { status: 400 });
 			}
 		}
 

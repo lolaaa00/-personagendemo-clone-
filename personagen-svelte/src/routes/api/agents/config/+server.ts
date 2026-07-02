@@ -33,7 +33,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			handle,
 			status,
 			supervisorAgentId,
-			runtimeOwner
+			runtimeOwner,
+			// Extended persona profile (stored as JSON in market field)
+			personaProfile
 		} = body;
 
 		if (!agentId) {
@@ -70,6 +72,12 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		}
 		if (runtimeOwner !== undefined) {
 			agentUpdatePayload.runtime_owner = runtimeOwner;
+		}
+		// Extended persona profile stored as JSON string in the market field.
+		if (personaProfile !== undefined) {
+			agentUpdatePayload.market = typeof personaProfile === 'string'
+				? personaProfile
+				: JSON.stringify(personaProfile);
 		}
 
 		if (Object.keys(agentUpdatePayload).length > 0) {

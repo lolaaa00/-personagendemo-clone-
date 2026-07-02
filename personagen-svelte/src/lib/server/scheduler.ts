@@ -103,6 +103,23 @@ export async function publishSinglePost(supabase: any, post: any): Promise<boole
 		return false;
 	}
 
+	// One query for every platform this post targets, instead of one query per
+	// platform inside the loop below — a 5-platform post used to cost 5 round
+	// trips here alone.
+	const normalizedPlatforms = targetPlatforms
+		.map((p) => p.toLowerCase())
+		.filter((p) => PUBLISHABLE_PLATFORMS.includes(p));
+	const { data: connRows } = normalizedPlatforms.length
+		? await supabase
+				.from('connections')
+				.select('*')
+				.eq('agent_id', post.agent_id)
+				.in('platform', normalizedPlatforms)
+		: { data: [] as any[] };
+	const connByPlatform: Map<string, any> = new Map(
+		(connRows || []).map((c: any) => [c.platform, c])
+	);
+
 	for (const platform of targetPlatforms) {
 		const normalizedPlat = platform.toLowerCase();
 		if (!PUBLISHABLE_PLATFORMS.includes(normalizedPlat)) {
@@ -120,12 +137,7 @@ export async function publishSinglePost(supabase: any, post: any): Promise<boole
 			continue;
 		}
 
-		const { data: conn } = await supabase
-			.from('connections')
-			.select('*')
-			.eq('agent_id', post.agent_id)
-			.eq('platform', normalizedPlat)
-			.maybeSingle();
+		const conn = connByPlatform.get(normalizedPlat);
 
 		if (!conn) {
 			console.warn(

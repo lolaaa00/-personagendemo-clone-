@@ -4,15 +4,6 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 // Row types — mirror the SQL migration
 // ═══════════════════════════════════════
 
-export interface ProfileRow {
-	id: string;
-	full_name: string | null;
-	company: string | null;
-	avatar_url: string | null;
-	created_at: string;
-	updated_at: string;
-}
-
 export interface AgentRow {
 	id: string;
 	user_id: string;
@@ -118,16 +109,6 @@ export interface BrandBriefRow {
 	updated_at: string;
 }
 
-export interface SubscriptionRow {
-	id: string;
-	user_id: string;
-	plan: 'free' | 'starter' | 'pro' | 'enterprise';
-	status: 'active' | 'canceled' | 'past_due' | 'trialing';
-	current_period_end: string | null;
-	created_at: string;
-	updated_at: string;
-}
-
 export interface ProcessedRssItemRow {
 	id: string;
 	agent_id: string;
@@ -168,14 +149,6 @@ export type BrandBriefInsert = Omit<BrandBriefRow, 'id' | 'created_at' | 'update
 	id?: string;
 };
 
-export type ProfileUpdate = Partial<Omit<ProfileRow, 'id' | 'created_at' | 'updated_at'>> & {
-	id: string;
-};
-
-export type SubscriptionUpdate = Partial<
-	Omit<SubscriptionRow, 'id' | 'created_at' | 'updated_at'>
-> & { user_id: string };
-
 // ═══════════════════════════════════════
 // Post list joined type (includes agent embed)
 // ═══════════════════════════════════════
@@ -200,13 +173,19 @@ export interface PostListFilters {
 
 export function createDbService(supabase: SupabaseClient) {
 	/**
-	 * Upsert-as-merge: fetches the existing row (if any) and layers `data` on
-	 * top of it before upserting. Postgres/PostgREST upsert-on-conflict treats
-	 * any column absent from the payload as null/default, not "leave
-	 * unchanged" — without this, a caller that saves one field (e.g. voice)
-	 * silently wipes every other column the payload didn't mention (e.g. a
-	 * generated avatar/reference kit). An explicit `null`/value in `data`
-	 * still overrides `existing` as expected; only omitted keys are protected.
+	 * Upsert-as-merge, race-free for the common case: tries a plain UPDATE
+	 * first. A real SQL UPDATE only ever touches the columns present in
+	 * `data` — no read, no merge, no race window, and safe under concurrent
+	 * writers touching different columns of the same row (each statement only
+	 * SETs its own columns; Postgres's row lock serializes the rest).
+	 *
+	 * Falls back to read-merge-upsert ONLY when the row doesn't exist yet
+	 * (UPDATE affected 0 rows) — upsert's actual job. That fallback still
+	 * needs the merge: Postgres/PostgREST upsert-on-conflict treats any
+	 * column absent from the payload as null/default, not "leave unchanged",
+	 * so a first-creation payload that races with another creator (the row
+	 * appears between our UPDATE and this upsert) must re-read and merge
+	 * before writing, or it'd null out whatever the other writer just set.
 	 */
 	async function mergeUpsert(
 		table: string,
@@ -214,9 +193,18 @@ export function createDbService(supabase: SupabaseClient) {
 		onConflict: string,
 		matchColumns: string[]
 	) {
-		let query = supabase.from(table).select('*');
-		for (const col of matchColumns) query = query.eq(col, data[col]);
-		const { data: existing } = await query.maybeSingle();
+		let updateQuery = supabase.from(table).update(data);
+		for (const col of matchColumns) updateQuery = updateQuery.eq(col, data[col]);
+		const { data: updated, error: updateError } = await updateQuery.select();
+
+		if (updateError) return { data: null, error: updateError };
+		if (updated && updated.length > 0) {
+			return { data: updated[0], error: null };
+		}
+
+		let selectQuery = supabase.from(table).select('*');
+		for (const col of matchColumns) selectQuery = selectQuery.eq(col, data[col]);
+		const { data: existing } = await selectQuery.maybeSingle();
 
 		return supabase
 			.from(table)
@@ -321,22 +309,6 @@ export function createDbService(supabase: SupabaseClient) {
 			},
 
 			upsert: (data: BrandBriefInsert) => mergeUpsert('brand_briefs', data, 'user_id', ['user_id'])
-		},
-
-		// ── Profiles ────────────────────────────
-		profiles: {
-			get: () => supabase.from('profiles').select('*').single(),
-
-			update: (data: ProfileUpdate) =>
-				supabase.from('profiles').update(data).eq('id', data.id).select().single()
-		},
-
-		// ── Subscriptions ───────────────────────
-		subscriptions: {
-			get: () => supabase.from('subscriptions').select('*').single(),
-
-			update: (data: SubscriptionUpdate) =>
-				supabase.from('subscriptions').update(data).eq('user_id', data.user_id).select().single()
 		},
 
 		// ── Processed RSS Items ─────────────────

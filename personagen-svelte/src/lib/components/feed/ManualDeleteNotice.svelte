@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { platformColor, platformLabel } from '$lib/platforms';
+
 	let {
 		entries,
 		onClose
@@ -6,19 +8,6 @@
 		entries: Array<{ platform: string; permalink: string | null }>;
 		onClose: () => void;
 	} = $props();
-
-	const PLATFORM_COLORS: Record<string, string> = {
-		tiktok: '#fe2c55',
-		instagram: '#e1306c',
-		youtube: '#ff0000',
-		x: '#1da1f2',
-		facebook: '#1877f2',
-		threads: '#999'
-	};
-
-	function platformLabel(p: string): string {
-		return p.charAt(0).toUpperCase() + p.slice(1);
-	}
 </script>
 
 <div class="modal-backdrop z-top" onclick={onClose} role="presentation">
@@ -40,7 +29,7 @@
 						<div class="notice-item-header">
 							<span
 								class="platform-badge"
-								style="background: {PLATFORM_COLORS[entry.platform] || 'var(--accent)'}20; color: {PLATFORM_COLORS[entry.platform] || 'var(--accent)'}; border: 1px solid {PLATFORM_COLORS[entry.platform] || 'var(--accent)'}40;"
+								style="background: {platformColor(entry.platform)}20; color: {platformColor(entry.platform)}; border: 1px solid {platformColor(entry.platform)}40;"
 							>
 								{platformLabel(entry.platform)}
 							</span>
@@ -54,7 +43,7 @@
 								target="_blank"
 								rel="noopener noreferrer"
 								class="notice-link"
-								style="color: {PLATFORM_COLORS[entry.platform] || 'var(--accent)'};"
+								style="color: {platformColor(entry.platform)};"
 							>
 								Open {platformLabel(entry.platform)} post to delete ↗
 							</a>

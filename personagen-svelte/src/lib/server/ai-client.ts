@@ -16,6 +16,13 @@ import { env } from '$env/dynamic/private';
 import { getUserApiKey, type UserKeyProvider } from './user-api-keys';
 import { GoogleGenAI } from '@google/genai';
 
+// Gemini model, env-overridable so it can be pinned/rolled without a code edit
+// (and so it stops flip-flopping between hardcoded values). Verified 2026-07-01:
+// gemini-3.5-flash is a current stable model — Google's most capable Flash tier —
+// while gemini-2.5-flash is the older price/latency tier. Both clients stay in step.
+const GEMINI_MODEL = env.GEMINI_MODEL || 'gemini-3.5-flash';
+const OPENROUTER_GEMINI_MODEL = env.OPENROUTER_GEMINI_MODEL || 'google/gemini-3.5-flash';
+
 export interface AiGenerateOptions {
 	systemInstruction?: string;
 	json?: boolean;
@@ -66,8 +73,7 @@ function createOpenRouterClient(apiKey: string): AiClient {
 			messages.push({ role: 'user', content: prompt });
 
 			const body: any = {
-				// Keep in step with the direct-Gemini client below.
-				model: 'google/gemini-2.5-flash',
+				model: OPENROUTER_GEMINI_MODEL,
 				messages,
 				max_tokens: 4096
 			};
@@ -112,7 +118,7 @@ function createGeminiClient(apiKey: string): AiClient {
 			}
 
 			const res = await ai.models.generateContent({
-				model: 'gemini-2.5-flash',
+				model: GEMINI_MODEL,
 				contents: [{ role: 'user', parts: [{ text: prompt }] }],
 				config
 			});

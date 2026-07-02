@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { fly, fade } from 'svelte/transition';
+	import { getPostDisplay } from './postDisplay';
+	import { platformColor } from '$lib/platforms';
 
 	let {
 		post,
@@ -17,34 +19,7 @@
 		deleting?: boolean;
 	} = $props();
 
-	function getPostDisplay(content: string) {
-		try {
-			const trimmed = content?.trim() ?? '';
-			if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
-				const parsed = JSON.parse(trimmed);
-				return {
-					text: parsed.text || content,
-					mediaUrl: parsed.media_url || parsed.mediaUrl || null,
-					mediaType: parsed.media_type || parsed.mediaType || 'image',
-					posterUrl: parsed.poster_url || null,
-					ugcPrompt: parsed.ugc_broll_prompt || parsed.ugcPrompt || null,
-					script: parsed.script || null,
-					product: parsed.product || null
-				};
-			}
-		} catch {}
-		return {
-			text: content,
-			mediaUrl: null,
-			mediaType: 'image',
-			posterUrl: null,
-			ugcPrompt: null,
-			script: null,
-			product: null
-		};
-	}
-
-	let display = $derived(post ? getPostDisplay(post.content) : null);
+	let display = $derived(post ? getPostDisplay(post) : null);
 	let analytics = $derived(post?.analytics ?? null);
 	let hasRealStats = $derived(
 		Boolean(analytics && (analytics.views || analytics.likes || analytics.comments || analytics.shares))
@@ -56,18 +31,6 @@
 	});
 
 	let postLevelError = $derived(post?.publication_results?._post?.error ?? null);
-
-	function platformColor(p: string): string {
-		const colors: Record<string, string> = {
-			tiktok: '#fe2c55',
-			instagram: '#e1306c',
-			youtube: '#ff0000',
-			facebook: '#1877f2',
-			x: '#555',
-			threads: '#999'
-		};
-		return colors[p?.toLowerCase()] || 'var(--accent)';
-	}
 
 	function statusColor(status: string): string {
 		if (status === 'published') return 'var(--success)';
