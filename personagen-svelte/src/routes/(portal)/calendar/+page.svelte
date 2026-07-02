@@ -310,6 +310,27 @@
 
 	let posts = $state<ScheduledPost[]>(data.realPosts || []);
 
+	// The shared PostDrawer expects a DB-shaped post row; the calendar keeps a
+	// view-mapped shape (text/date/time), so normalize on the way in.
+	let drawerPost = $derived(
+		selectedPost
+			? {
+					id: selectedPost.id,
+					content: selectedPost.text,
+					status: selectedPost.status,
+					platforms: selectedPost.platforms,
+					scheduled_date: selectedPost.date,
+					scheduled_time:
+						selectedPost.time && selectedPost.time.length === 5
+							? `${selectedPost.time}:00`
+							: selectedPost.time,
+					published_at: null,
+					publication_results: selectedPost.publication_results ?? null,
+					analytics: selectedPost.analytics ?? null
+				}
+			: null
+	);
+
 	// ── Calendar helpers ──
 	const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 	const MONTHS = [
@@ -637,6 +658,14 @@
 			product: null,
 			autopilot: false
 		};
+	}
+
+	/** Best displayable thumbnail for a post: poster still first, else the image itself (never a raw video file). */
+	function getPostThumb(p: ScheduledPost): string | null {
+		const d = getPostDisplay(p.text);
+		if (d.poster) return d.poster;
+		if (d.mediaUrl && !d.isVideo) return d.mediaUrl;
+		return null;
 	}
 
 	// ── Autopilot (auto-generate UGC drafts every 2h in window) ──────────────
