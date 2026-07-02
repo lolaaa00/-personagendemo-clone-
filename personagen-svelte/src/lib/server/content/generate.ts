@@ -207,6 +207,9 @@ export async function generateUgcImage(
 
 // ── Intent classification + prompt quality enhancement ──────────────────────
 
+/** Minimum hookScore before the Director retries — tuned empirically. */
+const HOOK_SCORE_THRESHOLD = 80;
+
 type ContentType = 'testimonial' | 'unboxing' | 'lifestyle' | 'tutorial' | 'review';
 type MotionLevel = 'gentle' | 'dynamic' | 'static';
 
@@ -595,7 +598,7 @@ export async function generateCinematicUgcPack(input: UgcPackInput): Promise<Ugc
 	const agent = agentResult?.data;
 	if (agent) {
 		agentData = agent;
-		agentContext = `You are ${agent.name} (@${agent.handle}), a ${agent.niche} creator. Personality: ${agent.soul || 'authentic and relatable'}.`;
+		agentContext = buildRichAgentContext(agent);
 	}
 
 	let selectedProduct: any = null;
@@ -612,17 +615,54 @@ export async function generateCinematicUgcPack(input: UgcPackInput): Promise<Ugc
 		throw new Error('Cinematic mode needs a product photo — add one in the Brand Brief first.');
 	}
 
-	const prompt = `${agentContext}
-Product: "${selectedProduct.name}" — ${selectedProduct.description || 'no description'}. Price: ${selectedProduct.price || 'N/A'}.
-${briefData ? `Brand: ${briefData.brandName || ''}. Voice: ${briefData.commStyle || 'authentic'}. Audience: ${briefData.demographics || 'general'}. Pain points: ${briefData.painPoints || 'N/A'}.` : ''}
-${voiceGender ? `The on-camera character should read as ${voiceGender}, matching the pinned voice.` : ''}
-Angle for this post: "${topic}". Output ONLY the JSON.`;
+	const cinematicIntent = classifyContentIntent(topic, platform);
+	const cinematicBrandVisualCtx = buildBrandVisualContext(briefData);
+
+	const buildCinematicPrompt = () =>
+		[
+			agentContext,
+			`Product: "${selectedProduct.name}" — ${selectedProduct.description || 'no description'}. Price: ${selectedProduct.price || 'N/A'}.`,
+			briefData
+				? [
+						`Brand: ${briefData.brandName || '(unnamed)'}.`,
+						`Voice: ${briefData.commStyle || 'authentic'}.`,
+						`Audience: ${briefData.demographics || 'general'}.`,
+						`Pain points: ${briefData.painPoints || 'N/A'}.`,
+						cinematicBrandVisualCtx
+					]
+						.filter(Boolean)
+						.join(' ')
+				: '',
+			`Content type: ${cinematicIntent.type}. Platform: ${platform}. Platform voice: ${cinematicIntent.platformVoice}.`,
+			voiceGender ? `The on-camera character (@Element1) must present as ${voiceGender}, matching the pinned voice.` : '',
+			`Angle for this post: "${topic}". Output ONLY the JSON.`
+		]
+			.filter(Boolean)
+			.join('\n');
+
+	const prompt = buildCinematicPrompt();
 
 	const raw =
 		(await ai.generate(prompt, { systemInstruction: CINEMATIC_DIRECTOR_SYSTEM, json: true })) ||
 		'{}';
-	const parsed = safeParseJson(raw);
+	let parsed = safeParseJson(raw);
 	if (!parsed) throw new Error('AI returned unparseable response');
+
+	// Hook quality gate — same threshold as the standard path
+	if (typeof parsed.hookScore === 'number' && parsed.hookScore < HOOK_SCORE_THRESHOLD) {
+		console.warn(
+			`[Cinematic Director] hookScore ${parsed.hookScore} below threshold — retrying with stronger hook instruction.`
+		);
+		const retryHookRaw =
+			(await ai.generate(
+				`${buildCinematicPrompt()}\n\nYour previous hook scored ${parsed.hookScore}/99. The hook must stop mid-scroll cold — a real confession or bold claim, not a description. Aim for 85+. Rewrite the full JSON.`,
+				{ systemInstruction: CINEMATIC_DIRECTOR_SYSTEM, json: true }
+			)) || '{}';
+		const hookRetryParsed = safeParseJson(retryHookRaw);
+		if (hookRetryParsed && (hookRetryParsed.hookScore ?? 0) > (parsed.hookScore ?? 0)) {
+			parsed = hookRetryParsed;
+		}
+	}
 
 	let directorShots: any[] = Array.isArray(parsed.shots) ? parsed.shots : [];
 
@@ -696,7 +736,7 @@ Angle for this post: "${topic}". Output ONLY the JSON.`;
 	const storyboard = (
 		await Promise.all(
 			shots.map((shot, i) =>
-				generateProductStill(falKey, shot.prompt, selectedProduct.photoUrl, characterRef).catch((err) => {
+				generateProductStill(falKey, shot.prompt, selectedProduct.photoUrl, characterRef, cinematicBrandVisualCtx).catch((err) => {
 					console.warn(`[Cinematic] Storyboard still ${i + 1}/${shots.length} failed, skipping:`, err);
 					return null;
 				})
@@ -1226,7 +1266,7 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 		const { data: agent } = await db.agents.get(input.agentId);
 		if (agent) {
 			agentData = agent;
-			agentContext = `You are ${agent.name} (@${agent.handle}), a ${agent.niche} creator. Personality: ${agent.soul || 'authentic and relatable'}.`;
+			agentContext = buildRichAgentContext(agent);
 		}
 	}
 
@@ -1242,16 +1282,41 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 			: products.find((p: any) => p.photoUrl) || products[0];
 	}
 
+	// ── Content intent classification ───────────────────────────────────
+	const intent = classifyContentIntent(topic, platform);
+	const brandVisualCtx = buildBrandVisualContext(briefData);
+
 	// ── Director (LLM) ──────────────────────────────────────────────────
-	const prompt = `${agentContext}
-${selectedProduct ? `Product: "${selectedProduct.name}" — ${selectedProduct.description || 'no description'}. Price: ${selectedProduct.price || 'N/A'}.` : `Topic: "${topic}"`}
-${briefData ? `Brand: ${briefData.brandName || ''}. Voice: ${briefData.commStyle || 'authentic'}. Audience: ${briefData.demographics || 'general'}. Pain points: ${briefData.painPoints || 'N/A'}.` : ''}
-Requested format: ${cfg.format === 'auto' ? 'choose the best of spokesperson or broll' : cfg.format}.
-${voiceGender ? `If the scene shows a person on camera, they should read as ${voiceGender} — the pinned voice is ${voiceGender}, and the two must match.` : ''}
-Angle for this post: "${topic}". Output ONLY the JSON.`;
+	const buildDirectorPrompt = () => [
+		agentContext,
+		selectedProduct
+			? `Product: "${selectedProduct.name}" — ${selectedProduct.description || 'no description'}. Price: ${selectedProduct.price || 'N/A'}.`
+			: `Topic: "${topic}"`,
+		briefData
+			? [
+					`Brand: ${briefData.brandName || '(unnamed)'}.`,
+					`Voice/tone: ${briefData.commStyle || 'authentic and direct'}.`,
+					`Target audience: ${briefData.demographics || 'general'}.`,
+					`Audience pain points: ${briefData.painPoints || 'N/A'}.`,
+					briefData.samplePost ? `Reference post style: "${briefData.samplePost}".` : '',
+					brandVisualCtx
+				]
+					.filter(Boolean)
+					.join(' ')
+			: '',
+		`Content type detected: ${intent.type}. Platform: ${platform}. Platform voice guide: ${intent.platformVoice}.`,
+		`Requested format: ${cfg.format === 'auto' ? 'choose spokesperson or broll based on what will perform best for this content type' : cfg.format}.`,
+		voiceGender
+			? `If the scene shows a person on camera, they must present as ${voiceGender} — the pinned voice is ${voiceGender} and the on-camera character must match.`
+			: '',
+		`Creative angle for this post: "${topic}". Output ONLY the JSON.`
+	]
+		.filter(Boolean)
+		.join('\n');
 
 	const raw =
-		(await ai.generate(prompt, { systemInstruction: DIRECTOR_SYSTEM, json: true })) || '{}';
+		(await ai.generate(buildDirectorPrompt(), { systemInstruction: DIRECTOR_SYSTEM, json: true })) ||
+		'{}';
 	let parsed = safeParseJson(raw);
 	if (!parsed) throw new Error('AI returned unparseable response');
 	if (parsed.text && typeof parsed.text === 'string' && parsed.text.trim().startsWith('{')) {
@@ -1262,11 +1327,28 @@ Angle for this post: "${topic}". Output ONLY the JSON.`;
 		}
 	}
 
+	// ── Hook quality gate — retry once if score is below threshold ──────
+	if (typeof parsed.hookScore === 'number' && parsed.hookScore < HOOK_SCORE_THRESHOLD) {
+		console.warn(
+			`[Director] hookScore ${parsed.hookScore} below threshold ${HOOK_SCORE_THRESHOLD} — retrying with stronger hook instruction.`
+		);
+		const retryRaw =
+			(await ai.generate(
+				`${buildDirectorPrompt()}\n\nYour previous hook scored ${parsed.hookScore}/99. The hook must be a genuine pattern-interrupt or confession that stops the scroll cold — not a description or question. Aim for 85+. Rewrite the entire JSON with a stronger hook.`,
+				{ systemInstruction: DIRECTOR_SYSTEM, json: true }
+			)) || '{}';
+		const retryParsed = safeParseJson(retryRaw);
+		if (retryParsed && (retryParsed.hookScore ?? 0) > (parsed.hookScore ?? 0)) {
+			parsed = retryParsed;
+		}
+	}
+
 	const format: 'spokesperson' | 'broll' =
 		cfg.format === 'auto' ? (parsed.format === 'broll' ? 'broll' : 'spokesperson') : cfg.format;
 	const scenePrompt = parsed.scene_prompt || parsed.ugc_broll_prompt || topic;
-	const motionPrompt =
-		parsed.motion_prompt || 'Subtle handheld motion, gentle push-in, soft natural light.';
+	const baseMotion =
+		parsed.motion_prompt || 'Slow gimbal dolly-in, natural ambient light, product label in focus.';
+	const motionPrompt = enhanceMotionPrompt(baseMotion, intent, format);
 
 	const { orKey, falKey } = await resolveImageKeys(supabase, userId);
 
@@ -1297,7 +1379,7 @@ Angle for this post: "${topic}". Output ONLY the JSON.`;
 	// ── Still (Nano Banana with real product + pinned face, else flux fallback) ──
 	let still: string;
 	if (falKey && selectedProduct?.photoUrl) {
-		still = await generateProductStill(falKey, scenePrompt, selectedProduct.photoUrl, characterRef);
+		still = await generateProductStill(falKey, scenePrompt, selectedProduct.photoUrl, characterRef, brandVisualCtx);
 	} else {
 		still = await generateUgcImage(scenePrompt, orKey, falKey);
 	}
