@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { createDbService } from '$lib/server/db';
+import { createDbService, type AgentConfigInsert } from '$lib/server/db';
 
 export const POST: RequestHandler = async ({ request, locals }) => {
 	const { session, user } = await locals.safeGetSession();
@@ -93,21 +93,26 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		].some((val) => val !== undefined);
 
 		if (hasConfigFields) {
-			const { error: configErr } = await db.agentConfigs.upsert({
-				user_id: user.id,
-				agent_id: agentId,
-				soul: soulText !== undefined ? soulText : '',
-				skills: skillsText !== undefined ? skillsText : '',
-				tools: toolsText !== undefined ? toolsText : '',
-				timezone: timezone || 'Australia/Sydney',
-				posts_per_day: postsPerDay !== undefined ? postsPerDay : 3,
-				active_hours_start: activeHoursStart !== undefined ? activeHoursStart : 8,
-				active_hours_end: activeHoursEnd !== undefined ? activeHoursEnd : 22,
-				autonomy_level: autonomyLevel || 'advisor',
-				rss_url: rssUrl || '',
-				rss_active: rssActive !== undefined ? rssActive : false,
-				ugc_voice: ugcVoice || 'Adam'
-			});
+			// Only include fields this request actually provided. mergeUpsert
+			// preserves whatever's already in the DB for any omitted key — but
+			// only if we don't hand it a hardcoded default as a literal value
+			// (that would silently overwrite real settings, e.g. resetting
+			// autonomy_level to 'advisor' just because this save only touched
+			// soulText, quietly disabling autopilot the user had turned on).
+			const configPatch: AgentConfigInsert = { user_id: user.id, agent_id: agentId };
+			if (soulText !== undefined) configPatch.soul = soulText;
+			if (skillsText !== undefined) configPatch.skills = skillsText;
+			if (toolsText !== undefined) configPatch.tools = toolsText;
+			if (timezone !== undefined) configPatch.timezone = timezone;
+			if (postsPerDay !== undefined) configPatch.posts_per_day = postsPerDay;
+			if (activeHoursStart !== undefined) configPatch.active_hours_start = activeHoursStart;
+			if (activeHoursEnd !== undefined) configPatch.active_hours_end = activeHoursEnd;
+			if (autonomyLevel !== undefined) configPatch.autonomy_level = autonomyLevel;
+			if (rssUrl !== undefined) configPatch.rss_url = rssUrl;
+			if (rssActive !== undefined) configPatch.rss_active = rssActive;
+			if (ugcVoice !== undefined) configPatch.ugc_voice = ugcVoice;
+
+			const { error: configErr } = await db.agentConfigs.upsert(configPatch);
 
 			if (configErr) throw configErr;
 		}

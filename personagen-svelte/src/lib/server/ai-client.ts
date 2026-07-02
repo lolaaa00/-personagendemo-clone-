@@ -66,6 +66,7 @@ function createOpenRouterClient(apiKey: string): AiClient {
 			messages.push({ role: 'user', content: prompt });
 
 			const body: any = {
+				// Keep in step with the direct-Gemini client below.
 				model: 'google/gemini-2.5-flash',
 				messages,
 				max_tokens: 4096
@@ -111,7 +112,7 @@ function createGeminiClient(apiKey: string): AiClient {
 			}
 
 			const res = await ai.models.generateContent({
-				model: 'gemini-3.5-flash',
+				model: 'gemini-2.5-flash',
 				contents: [{ role: 'user', parts: [{ text: prompt }] }],
 				config
 			});

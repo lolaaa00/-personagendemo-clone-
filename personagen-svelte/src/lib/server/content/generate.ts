@@ -266,11 +266,13 @@ async function generateBrollVideo(
 	stillUrl: string,
 	motionPrompt: string
 ): Promise<string> {
-	// Kling uses start_image_url; Veo and most others use image_url.
+	// Kling O3 takes `image_url` as the start frame (verified against the live
+	// OpenAPI spec above — the older v3/pro shape's `start_image_url` is NOT in
+	// this spec and fails validation). Veo also uses image_url but adds resolution.
 	const isKling = model.includes('kling');
 	const input: any = isKling
 		? {
-				start_image_url: stillUrl,
+				image_url: stillUrl,
 				prompt: motionPrompt,
 				duration: VIDEO_DURATION,
 				generate_audio: false

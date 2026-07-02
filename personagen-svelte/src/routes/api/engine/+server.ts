@@ -6,6 +6,76 @@ import { getUserApiKey } from '$lib/server/user-api-keys';
 import { publishPostById } from '$lib/server/scheduler';
 import { resolveAiClient } from '$lib/server/ai-client';
 import { generateUgcPack, generateUgcImage, safeParseJson } from '$lib/server/content/generate';
+import dns from 'node:dns/promises';
+import net from 'node:net';
+
+/**
+ * SSRF guard for the storefront-scrape fallback below: an authenticated user
+ * supplies an arbitrary URL, and without this check the server would fetch
+ * whatever they point it at — cloud metadata endpoints, internal admin
+ * panels, localhost services. Resolves the hostname (not just string-matches
+ * it) so a public-looking domain that resolves to a private IP is still
+ * rejected — a bare hostname check alone doesn't stop that DNS-rebinding-style
+ * bypass.
+ */
+async function assertPublicHttpUrl(rawUrl: string): Promise<void> {
+	let parsed: URL;
+	try {
+		parsed = new URL(rawUrl);
+	} catch {
+		throw new Error('Invalid URL');
+	}
+	if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+		throw new Error('Only http/https URLs are allowed');
+	}
+	const hostname = parsed.hostname.toLowerCase();
+	if (hostname === 'localhost' || hostname.endsWith('.localhost')) {
+		throw new Error('URL resolves to a disallowed host');
+	}
+
+	const candidateIps: string[] = [];
+	if (net.isIP(hostname)) {
+		candidateIps.push(hostname);
+	} else {
+		const records = await dns.lookup(hostname, { all: true }).catch(() => []);
+		candidateIps.push(...records.map((r) => r.address));
+	}
+	if (candidateIps.length === 0) {
+		throw new Error('Could not resolve URL host');
+	}
+
+	for (const ip of candidateIps) {
+		if (isPrivateOrReservedIp(ip)) {
+			throw new Error('URL resolves to a private/internal address');
+		}
+	}
+}
+
+function isPrivateOrReservedIp(ip: string): boolean {
+	if (net.isIPv4(ip)) {
+		const parts = ip.split('.').map(Number);
+		const [a, b] = parts;
+		if (a === 127) return true; // loopback
+		if (a === 10) return true; // private
+		if (a === 172 && b >= 16 && b <= 31) return true; // private
+		if (a === 192 && b === 168) return true; // private
+		if (a === 169 && b === 254) return true; // link-local (incl. cloud metadata: 169.254.169.254)
+		if (a === 0) return true; // "this network"
+		return false;
+	}
+	if (net.isIPv6(ip)) {
+		const lower = ip.toLowerCase();
+		if (lower === '::1') return true; // loopback
+		if (lower.startsWith('fe80:')) return true; // link-local
+		if (lower.startsWith('fc') || lower.startsWith('fd')) return true; // unique local (fc00::/7)
+		if (lower.startsWith('::ffff:')) {
+			// IPv4-mapped IPv6 — recheck the embedded IPv4 address.
+			return isPrivateOrReservedIp(lower.replace('::ffff:', ''));
+		}
+		return false;
+	}
+	return true; // unrecognized format — fail closed
+}
 
 export const POST: RequestHandler = async ({ url, request, locals, fetch }) => {
 	// 1. Authenticate user
@@ -795,19 +865,41 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 						// 2. Fall back to simple HTTP fetch if Firecrawl didn't return content
 						if (!contentToParse) {
 							console.log(`[Engine] Falling back to direct HTTP page fetch for: ${storeUrl}`);
-							const response = await fetch(storeUrl, {
-								headers: {
-									'User-Agent':
-										'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+							try {
+								await assertPublicHttpUrl(storeUrl);
+								// Follow redirects manually so a public URL that 3xx's to an
+								// internal address can't bypass the check above.
+								let nextUrl = storeUrl;
+								let response: Response | null = null;
+								for (let hop = 0; hop < 5; hop++) {
+									const res = await fetch(nextUrl, {
+										redirect: 'manual',
+										headers: {
+											'User-Agent':
+												'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+										}
+									});
+									if (res.status >= 300 && res.status < 400 && res.headers.get('location')) {
+										nextUrl = new URL(res.headers.get('location')!, nextUrl).toString();
+										await assertPublicHttpUrl(nextUrl);
+										continue;
+									}
+									response = res;
+									break;
 								}
-							});
-							if (response.ok) {
-								const html = await response.text();
-								contentToParse = html
-									.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
-									.replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
-									.replace(/<svg\b[^<]*(?:(?!<\/svg>)<[^<]*)*<\/svg>/gi, '')
-									.substring(0, 40000);
+								if (response?.ok) {
+									const html = await response.text();
+									contentToParse = html
+										.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+										.replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
+										.replace(/<svg\b[^<]*(?:(?!<\/svg>)<[^<]*)*<\/svg>/gi, '')
+										.substring(0, 40000);
+								}
+							} catch (ssrfErr) {
+								console.warn(
+									`[Engine] Refused direct fetch for ${storeUrl}:`,
+									(ssrfErr as Error).message
+								);
 							}
 						}
 

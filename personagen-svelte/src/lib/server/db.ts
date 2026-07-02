@@ -33,7 +33,7 @@ export interface AgentRow {
 	is_overseer?: boolean;
 	supervisor_agent_id?: string | null;
 	managed_by_overseer?: boolean;
-	runtime_owner?: 'svelte-gemini' | 'hermes-gateway' | 'hermes-orchestrated';
+	runtime_owner?: 'svelte-gemini' | 'hermes-daemon' | 'hermes-orchestrated';
 	created_at: string;
 	updated_at: string;
 }
@@ -144,25 +144,14 @@ export type AgentInsert = Omit<AgentRow, 'id' | 'created_at' | 'updated_at'> & {
 };
 export type AgentUpdate = Partial<Omit<AgentRow, 'id' | 'user_id' | 'created_at' | 'updated_at'>>;
 
-export type AgentConfigInsert = Omit<
-	AgentConfigRow,
-	| 'id'
-	| 'created_at'
-	| 'updated_at'
-	| 'rss_url'
-	| 'rss_active'
-	| 'rss_last_polled_at'
-	| 'ugc_voice'
-	| 'ugc_character_ref'
-	| 'ugc_reference_kit'
-> & {
+// Everything but the row-identity keys is optional: db.agentConfigs.upsert
+// goes through mergeUpsert (see below), which merges onto the existing row —
+// any field genuinely can be omitted and will keep its current DB value
+// rather than needing a caller-supplied default.
+export type AgentConfigInsert = Partial<Omit<AgentConfigRow, 'id' | 'created_at' | 'updated_at'>> & {
 	id?: string;
-	rss_url?: string;
-	rss_active?: boolean;
-	rss_last_polled_at?: string | null;
-	ugc_voice?: string;
-	ugc_character_ref?: string | null;
-	ugc_reference_kit?: Record<string, string> | null;
+	user_id: string;
+	agent_id: string;
 };
 export type AgentConfigUpdate = Partial<
 	Omit<AgentConfigRow, 'id' | 'user_id' | 'agent_id' | 'created_at' | 'updated_at'>

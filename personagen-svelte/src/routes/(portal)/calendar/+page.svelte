@@ -1084,6 +1084,7 @@
 						<div class="cell empty"></div>
 					{:else}
 						{@const dayPosts = getPostsForDate(cell.dateStr)}
+						{@const cellThumb = dayPosts.map(getPostThumb).find(Boolean) ?? null}
 						<button
 							class="cell"
 							class:today={cell.isToday}
@@ -1091,6 +1092,9 @@
 							class:has-posts={dayPosts.length > 0}
 							onclick={() => selectDay(cell.day)}
 						>
+							{#if cellThumb}
+								<img class="cell-thumb" src={cellThumb} alt="" loading="lazy" />
+							{/if}
 							<span class="cell-day">{cell.day}</span>
 							{#if dayPosts.length > 0}
 								<div class="cell-dots">
@@ -1123,7 +1127,7 @@
 				{#each filteredPosts.sort((a, b) => a.date.localeCompare(b.date)) as post}
 					<div class="mobile-post-item">
 						<div class="mobile-post-date">{post.date} · {post.time}</div>
-						<div class="mobile-post-text">{post.text}</div>
+						<div class="mobile-post-text">{getPostDisplay(post.text).text}</div>
 						<div class="mobile-post-meta">
 							<span class="mobile-post-agent">{post.agentName}</span>
 							<div class="mobile-post-platforms">
@@ -1156,8 +1160,13 @@
 						{:else}
 							<div class="modal-posts-list">
 								{#each selectedDayPosts as post}
+									{@const dp = getPostDisplay(post.text)}
+									{@const thumb = getPostThumb(post)}
 									<button class="modal-post-card" onclick={() => selectedPost = post}>
 										<div class="post-card-status" style="background: {STATUS_COLORS[post.status] || 'var(--accent)'}"></div>
+										{#if thumb}
+											<img class="post-card-thumb" src={thumb} alt="" loading="lazy" />
+										{/if}
 										<div class="post-card-body">
 											<div class="post-card-time-row">
 												<span class="post-card-time">{post.time}</span>
@@ -1167,7 +1176,7 @@
 													<span class="status-badge" style="color: {STATUS_COLORS[post.status]}; border-color: {STATUS_COLORS[post.status]}">{post.status}</span>
 												{/if}
 											</div>
-											<p class="post-card-text">{post.text}</p>
+											<p class="post-card-text">{dp.text}</p>
 											<div class="post-card-footer">
 												<span class="post-card-agent">{post.agentName}</span>
 												<div class="post-card-platforms">
@@ -1656,18 +1665,6 @@
 		transform: translateX(18px);
 	}
 
-	.ai-draft-badge {
-		font-size: 0.6rem;
-		font-weight: 700;
-		text-transform: uppercase;
-		letter-spacing: 0.04em;
-		background: var(--gradient-subtle);
-		color: #fff;
-		padding: 3px 7px;
-		border-radius: 4px;
-		margin-right: 0.4rem;
-	}
-
 	/* ── Month nav ── */
 	.month-nav {
 		display: flex;
@@ -1945,8 +1942,7 @@
 		z-index: 1100;
 	}
 
-	.day-modal,
-	.full-post-modal {
+	.day-modal {
 		background: var(--surface);
 		border: 1px solid var(--border-strong);
 		border-radius: var(--radius);
@@ -1955,16 +1951,12 @@
 		max-height: 80vh;
 		display: flex;
 		flex-direction: column;
-		box-shadow: 
-			var(--shadow-lg), 
+		box-shadow:
+			var(--shadow-lg),
 			0 20px 25px -5px rgba(0, 0, 0, 0.3),
 			0 0 50px rgba(124, 106, 237, 0.15);
 		animation: scaleUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 		overflow: hidden;
-	}
-
-	.full-post-modal {
-		max-width: 600px;
 	}
 
 	.modal-header {
@@ -2008,10 +2000,6 @@
 		padding: 1.5rem;
 		overflow-y: auto;
 		flex: 1;
-	}
-
-	.modal-body.scrollable {
-		max-height: 60vh;
 	}
 
 	.modal-footer {
@@ -2089,10 +2077,6 @@
 		letter-spacing: 0.05em;
 	}
 
-	.live-indicator-badge.pulse {
-		animation: heartBeat 2s infinite;
-	}
-
 	.status-badge {
 		font-size: 0.65rem;
 		font-weight: 700;
@@ -2140,102 +2124,6 @@
 		border-radius: 50%;
 	}
 
-	/* Detail Modal Styles */
-	.detail-header-row {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		margin-bottom: 1.5rem;
-		gap: 1rem;
-		flex-wrap: wrap;
-	}
-
-	.detail-agent-info {
-		display: flex;
-		align-items: center;
-		gap: 0.75rem;
-	}
-
-	.detail-agent-avatar {
-		width: 40px;
-		height: 40px;
-		border-radius: 50%;
-		color: #fff;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		font-weight: 700;
-		font-size: var(--text-md);
-		box-shadow: 0 4px 10px rgba(124, 106, 237, 0.2);
-	}
-
-	.detail-agent-text {
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-	}
-
-	.detail-agent-name {
-		font-weight: 600;
-		font-size: var(--text-sm);
-		color: var(--text);
-	}
-
-	.detail-time-date {
-		font-size: var(--text-xs);
-		color: var(--text-muted);
-	}
-
-	.status-badge-lg {
-		font-size: 0.7rem;
-		font-weight: 700;
-		text-transform: uppercase;
-		padding: 4px 10px;
-		border-radius: 99px;
-		letter-spacing: 0.05em;
-	}
-
-	.detail-content-box {
-		background: var(--surface-2);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-sm);
-		padding: 1.25rem;
-		margin-bottom: 1.5rem;
-		white-space: pre-wrap;
-	}
-
-	.detail-text {
-		font-size: var(--text-sm);
-		line-height: var(--leading-relaxed);
-		color: var(--text);
-		margin: 0;
-	}
-
-	.detail-meta-section {
-		display: flex;
-		flex-direction: column;
-		gap: 1.25rem;
-	}
-
-	.meta-item {
-		display: flex;
-		flex-direction: column;
-		gap: 0.5rem;
-	}
-
-	.meta-label {
-		font-size: 0.65rem;
-		font-weight: 700;
-		text-transform: uppercase;
-		letter-spacing: var(--tracking-wider);
-		color: var(--text-dim);
-	}
-
-	.meta-platforms-list {
-		display: flex;
-		gap: 0.5rem;
-	}
-
 	.platform-badge {
 		font-size: var(--text-xs);
 		font-weight: 600;
@@ -2244,102 +2132,7 @@
 		border-radius: 6px;
 	}
 
-	.analytics-detailed-grid {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
-		gap: 0.75rem;
-	}
-
-	.metric-card {
-		background: var(--surface-2);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-xs);
-		padding: 0.75rem;
-		text-align: center;
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		gap: 4px;
-		transition: border-color 0.2s;
-	}
-
-	.metric-card:hover {
-		border-color: var(--accent-mid);
-	}
-
-	.metric-icon {
-		font-size: 1.25rem;
-	}
-
-	.metric-val {
-		font-size: var(--text-base);
-		font-weight: 700;
-		color: var(--text);
-		font-family: var(--font-display);
-	}
-
-	.metric-lbl {
-		font-size: 10px;
-		color: var(--text-muted);
-		text-transform: uppercase;
-		font-weight: 600;
-	}
-
-	.cost-item {
-		background: rgba(16, 185, 129, 0.05);
-		border: 1px dashed rgba(16, 185, 129, 0.2);
-		border-radius: var(--radius-xs);
-		padding: 0.75rem 1rem;
-	}
-
-	.cost-row {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		font-size: var(--text-sm);
-	}
-
-	.cost-label {
-		font-weight: 600;
-		color: var(--text-dim);
-		flex: 1;
-	}
-
-	.cost-value {
-		font-family: var(--font-mono);
-		font-weight: 700;
-		color: #10b981;
-	}
-
-	.link-item {
-		margin-top: 0.25rem;
-	}
-
-	.live-post-link {
-		font-size: var(--text-sm);
-		color: var(--accent);
-		text-decoration: none;
-		font-weight: 600;
-		display: inline-flex;
-		align-items: center;
-		gap: 4px;
-		width: fit-content;
-	}
-
-	.live-post-link:hover {
-		color: var(--accent-mid);
-		text-decoration: underline;
-	}
-
 	/* Animations */
-	@keyframes heartBeat {
-		0% { transform: scale(1); }
-		14% { transform: scale(1.05); }
-		28% { transform: scale(1); }
-		42% { transform: scale(1.05); }
-		70% { transform: scale(1); }
-	}
-
 	@keyframes scaleUp {
 		from { transform: scale(0.95); opacity: 0; }
 		to { transform: scale(1); opacity: 1; }
@@ -2877,5 +2670,49 @@
 		height: 1px;
 		background: var(--border);
 		margin: 0.25rem 0;
+	}
+
+	/* ── Cell media thumbnails (posts visible at a glance, not just dots) ── */
+	.cell {
+		position: relative;
+		overflow: hidden;
+	}
+
+	.cell-thumb {
+		position: absolute;
+		inset: 0;
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+		opacity: 0.3;
+		pointer-events: none;
+	}
+
+	.cell:hover .cell-thumb {
+		opacity: 0.5;
+	}
+
+	.cell-day,
+	.cell-dots,
+	.views-badge {
+		position: relative;
+		z-index: 1;
+	}
+
+	/* ── Day-modal post card thumbnails ── */
+	.modal-post-card {
+		display: flex;
+		align-items: stretch;
+		gap: 0.6rem;
+	}
+
+	.post-card-thumb {
+		width: 52px;
+		height: 52px;
+		border-radius: 8px;
+		object-fit: cover;
+		align-self: center;
+		flex-shrink: 0;
+		border: 1px solid var(--border);
 	}
 </style>

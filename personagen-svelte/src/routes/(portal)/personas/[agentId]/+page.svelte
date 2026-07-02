@@ -57,7 +57,7 @@
 	let referenceKit = $state<Record<string, string>>(agent?.ugc_reference_kit ?? {});
 	let generatingKitStage = $state<'side_profiles' | 'face_closeup' | 'feature_grid' | null>(null);
 	let editSupervisorId = $state<string | null>(agent?.supervisor_agent_id ?? null);
-	let editRuntimeOwner = $state<'svelte-gemini' | 'hermes-gateway' | 'hermes-orchestrated'>(
+	let editRuntimeOwner = $state<'svelte-gemini' | 'hermes-daemon' | 'hermes-orchestrated'>(
 		agent?.runtime_owner ?? 'svelte-gemini'
 	);
 
@@ -295,25 +295,16 @@
 	}
 
 	async function syncFeed() {
+		// There is no separate server-side "sync" step — posts are always
+		// written straight to the DB by generation/publishing. This button
+		// used to POST to a since-removed /api/agent/[agentId]/sync route
+		// (always 404'd); a real refetch of this persona's posts is what
+		// "sync" actually means here. loadFeed() already reports its own
+		// success/failure via toast, so no need to duplicate that here.
 		if (!agent?.id) return;
 		syncingFeed = true;
-		try {
-			const res = await fetch(`/api/agent/${agent.id}/sync`, {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' }
-			});
-			const result = await res.json();
-			if (result.success) {
-				showToast(result.message || 'Feed synced!', 'success');
-				await loadFeed();
-			} else {
-				showToast('Failed to sync: ' + result.error, 'error');
-			}
-		} catch (err) {
-			showToast('Error syncing: ' + (err as Error).message, 'error');
-		} finally {
-			syncingFeed = false;
-		}
+		await loadFeed();
+		syncingFeed = false;
 	}
 
 	async function generatePostNow() {
@@ -565,27 +556,34 @@
 
 	async function generateKitStage(stage: 'side_profiles' | 'face_closeup' | 'feature_grid') {
 		if (!agent?.id || generatingKitStage) return;
+		const requestAgentId = agent.id;
 		generatingKitStage = stage;
 		try {
-			const res = await fetch(`/api/agent/${agent.id}/generate-reference-kit`, {
+			const res = await fetch(`/api/agent/${requestAgentId}/generate-reference-kit`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ stage })
 			});
 			const d = await res.json();
 			if (!res.ok || !d.success) throw new Error(d.error || 'Server error');
-			referenceKit = { ...referenceKit, [stage]: d[stage] };
-			agent = { ...agent, ugc_reference_kit: referenceKit };
 			const stageLabels: Record<string, string> = {
 				side_profiles: 'Side-profile composite generated',
 				face_closeup: 'Facial close-up generated',
 				feature_grid: 'Feature grid generated'
 			};
-			showToast(stageLabels[stage], 'success');
+			// Same in-flight-persona-switch guard as generateAvatar()/generateAvatarFromReference()
+			// above — the server already persisted this under requestAgentId either way.
+			if (agent?.id === requestAgentId) {
+				referenceKit = { ...referenceKit, [stage]: d[stage] };
+				agent = { ...agent, ugc_reference_kit: referenceKit };
+				showToast(stageLabels[stage], 'success');
+			} else {
+				showToast(`${stageLabels[stage]} for a different persona`, 'success');
+			}
 		} catch (err: any) {
 			showToast(`Failed to generate: ${err.message}`, 'error');
 		} finally {
-			generatingKitStage = null;
+			if (agent?.id === requestAgentId) generatingKitStage = null;
 		}
 	}
 
@@ -1134,7 +1132,7 @@
 							<select id="p-runtime" bind:value={editRuntimeOwner}>
 								<option value="svelte-gemini">Svelte UI Runtime</option>
 								{#if agent?.is_overseer}
-									<option value="hermes-gateway">Hermes Gateway</option>
+									<option value="hermes-daemon">Hermes Daemon</option>
 								{/if}
 								<option value="hermes-orchestrated">Hermes Orchestrated</option>
 							</select>
