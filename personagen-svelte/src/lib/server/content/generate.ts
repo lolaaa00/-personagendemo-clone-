@@ -142,7 +142,10 @@ export async function resolveImageKeys(
 	supabase: any,
 	userId: string
 ): Promise<{ orKey: string | null; falKey: string | null }> {
-	const orKey = await getUserApiKey(supabase, userId, 'openrouter').catch(() => null);
+	const userOrKey = await getUserApiKey(supabase, userId, 'openrouter').catch(() => null);
+	const envOrKey = env.OPENROUTER_API_KEY?.trim();
+	const orKey =
+		userOrKey || (envOrKey && !envOrKey.includes('placeholder') ? envOrKey : null) || null;
 	const userFalKey = await getUserApiKey(supabase, userId, 'fal_ai').catch(() => null);
 	const falKey = userFalKey || env.FAL_API_KEY || process.env.FAL_API_KEY || null;
 	return { orKey, falKey };
@@ -601,6 +604,75 @@ async function generateBrollVideo(
 	const url = data.video?.url;
 	if (!url) throw new Error('B-roll model returned no video');
 	return url;
+}
+
+// ── OpenRouter video failover (verified 2026-07-04 against the live API) ────
+// OpenRouter now ships a Video Generation API (POST /api/v1/videos, async job
+// with polling_url → unsigned_urls) carrying kwaivgi/kling-v3.0-std|pro,
+// google/veo-3.1(-fast|-lite), seedance, wan, etc. Used as the b-roll fallback
+// when fal is down (balance lock, outage) so autopilot keeps producing video.
+
+const BROLL_MODEL_OPENROUTER = env.UGC_BROLL_MODEL_OR || 'kwaivgi/kling-v3.0-std';
+
+/** fal failures that warrant provider failover (vs. bad-input errors that would fail anywhere). */
+function isFalOutage(msg: string): boolean {
+	return /exhausted balance|user is locked|\b403\b|\b429\b|\b5\d\d\b|timed out|ECONNRESET|fetch failed/i.test(
+		msg
+	);
+}
+
+/** Image-to-video via OpenRouter's async videos API. Returns the finished video URL. */
+async function openRouterBrollVideo(
+	orKey: string,
+	stillUrl: string,
+	motionPrompt: string,
+	timeoutMs = 270000
+): Promise<string> {
+	const submit = await fetch('https://openrouter.ai/api/v1/videos', {
+		method: 'POST',
+		headers: {
+			Authorization: `Bearer ${orKey}`,
+			'Content-Type': 'application/json',
+			'HTTP-Referer': 'https://personagen.app',
+			'X-Title': 'PersonaGen'
+		},
+		body: JSON.stringify({
+			model: BROLL_MODEL_OPENROUTER,
+			prompt: motionPrompt,
+			duration: parseInt(VIDEO_DURATION, 10) || 5,
+			aspect_ratio: '9:16',
+			generate_audio: false,
+			frame_images: [
+				{ type: 'image_url', image_url: { url: stillUrl }, frame_type: 'first_frame' }
+			]
+		})
+	});
+	if (!submit.ok) {
+		const t = await submit.text();
+		throw new Error(`OpenRouter video submit failed (${submit.status}): ${t.slice(0, 200)}`);
+	}
+	const job = (await submit.json()) as any;
+	const pollingUrl = job.polling_url || `https://openrouter.ai/api/v1/videos/${job.id}`;
+	if (!job.id && !job.polling_url) {
+		throw new Error(`OpenRouter video submit returned no job: ${JSON.stringify(job).slice(0, 200)}`);
+	}
+
+	const deadline = Date.now() + timeoutMs;
+	while (Date.now() < deadline) {
+		await new Promise((r) => setTimeout(r, 5000));
+		const res = await fetch(pollingUrl, { headers: { Authorization: `Bearer ${orKey}` } });
+		if (!res.ok) continue;
+		const st = (await res.json()) as any;
+		if (st.status === 'completed') {
+			const url = st.unsigned_urls?.[0] || st.urls?.[0] || st.video?.url;
+			if (!url) throw new Error('OpenRouter video completed but returned no URL');
+			return url;
+		}
+		if (st.status === 'failed') {
+			throw new Error(`OpenRouter video job failed: ${JSON.stringify(st).slice(0, 200)}`);
+		}
+	}
+	throw new Error('OpenRouter video job timed out');
 }
 
 export interface CinematicShot {
@@ -1661,26 +1733,57 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 	}
 
 	// ── Still (Nano Banana with real product + pinned face, else flux fallback) ──
+	// Failover: a fal OUTAGE (balance lock, 5xx) degrades to the OpenRouter
+	// text-to-image path — loses product-photo compositing but keeps the slot
+	// alive — rather than killing generation outright.
 	let still: string;
 	if (falKey && selectedProduct?.photoUrl) {
-		still = await generateProductStill(falKey, scenePrompt, selectedProduct.photoUrl, characterRef, brandVisualCtx);
+		try {
+			still = await generateProductStill(falKey, scenePrompt, selectedProduct.photoUrl, characterRef, brandVisualCtx);
+		} catch (e) {
+			const msg = (e as Error).message;
+			if (orKey && isFalOutage(msg)) {
+				console.warn(`[Failover] fal still failed (${msg.slice(0, 120)}) — OpenRouter image fallback.`);
+				still = await generateUgcImage(scenePrompt, orKey, null);
+			} else {
+				throw e;
+			}
+		}
 	} else {
 		still = await generateUgcImage(scenePrompt, orKey, falKey);
 	}
 
-	// ── Video (skip for fast preview, or when no fal key) ───────────────
+	// ── Video — fal primary, OpenRouter video API failover ──────────────
+	// Verified 2026-07-04: OpenRouter's /api/v1/videos carries Kling v3.0, so a
+	// fal outage degrades b-roll to OpenRouter Kling instead of an image-only
+	// post. Spokesperson (TTS + talking-head) is fal-exclusive — on outage it
+	// degrades to OpenRouter b-roll format rather than failing the slot.
 	let mediaUrl = still;
 	let mediaType: 'image' | 'video' = 'image';
-	if (wantVideo && falKey) {
-		if (format === 'spokesperson') {
-			const dialogue = parsed.dialogue || parsed.text || topic;
-			const audio = await generateVoiceAudio(falKey, cfg.voice, dialogue);
-			mediaUrl = await generateTalkingHead(falKey, still, audio);
-		} else {
-			// Both quality tiers route to Kling Standard for now — see BROLL_MODEL_VEO_DEFERRED.
-			mediaUrl = await generateBrollVideo(falKey, BROLL_MODEL_STANDARD, still, motionPrompt);
+	if (wantVideo && (falKey || orKey)) {
+		try {
+			if (format === 'spokesperson' && falKey) {
+				const dialogue = parsed.dialogue || parsed.text || topic;
+				const audio = await generateVoiceAudio(falKey, cfg.voice, dialogue);
+				mediaUrl = await generateTalkingHead(falKey, still, audio);
+			} else if (falKey) {
+				// Both quality tiers route to Kling Standard for now — see BROLL_MODEL_VEO_DEFERRED.
+				mediaUrl = await generateBrollVideo(falKey, BROLL_MODEL_STANDARD, still, motionPrompt);
+			} else {
+				// No fal at all — straight to OpenRouter video.
+				mediaUrl = await openRouterBrollVideo(orKey!, still, motionPrompt);
+			}
+			mediaType = 'video';
+		} catch (e) {
+			const msg = (e as Error).message;
+			if (orKey && isFalOutage(msg)) {
+				console.warn(`[Failover] fal video failed (${msg.slice(0, 120)}) — OpenRouter Kling b-roll fallback.`);
+				mediaUrl = await openRouterBrollVideo(orKey, still, motionPrompt);
+				mediaType = 'video';
+			} else {
+				throw e;
+			}
 		}
-		mediaType = 'video';
 	}
 
 	// ── Burn captions + AI badge (best-effort), then persist to durable storage ──
