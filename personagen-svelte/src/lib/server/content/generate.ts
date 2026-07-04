@@ -32,6 +32,7 @@
 import { env } from '$env/dynamic/private';
 import { getUserApiKey } from '$lib/server/user-api-keys';
 import { resolveAiClient, type AiClient } from '$lib/server/ai-client';
+import { priceOf, summarizeCosts, type CostEvent } from '$lib/pricing';
 import { createDbService } from '$lib/server/db';
 import { DEFAULT_VOICE, VOICE_CATALOG } from '$lib/server/voices';
 import { getServiceSupabase } from '$lib/server/service-supabase';
@@ -832,14 +833,16 @@ export async function generateCinematicUgcPack(input: UgcPackInput): Promise<Ugc
 	const db = createDbService(supabase);
 	// Four independent lookups (none depends on another's result) — run
 	// concurrently rather than paying 4 sequential round-trips.
-	const [ai, cfg, agentResult, brandBriefResult] = await Promise.all([
+	const [rawAi, cfg, agentResult, brandBriefResult] = await Promise.all([
 		resolveAiClient(supabase, userId),
 		loadUgcConfig(supabase, input.agentId),
 		input.agentId ? db.agents.get(input.agentId) : Promise.resolve({ data: null as any }),
 		db.brandBriefs.get(userId)
 	]);
-	if (!ai)
+	if (!rawAi)
 		throw new Error('No AI provider configured. Add an OpenRouter or Gemini key in Settings.');
+	const costEvents: CostEvent[] = [];
+	const ai = trackAi(rawAi, costEvents);
 
 	const voiceGender = VOICE_CATALOG.find((v) => v.name === cfg.voice)?.gender;
 
@@ -1027,6 +1030,10 @@ export async function generateCinematicUgcPack(input: UgcPackInput): Promise<Ugc
 		)
 	).filter((url): url is string => Boolean(url));
 
+	for (let i = 0; i < storyboard.length; i++) {
+		costEvents.push({ provider: 'fal', operation: 'image', model: 'nano-banana-2 (storyboard)', usd: priceOf('fal', 'image', 'nano') });
+	}
+
 	const durableStoryboard = await Promise.all(
 		storyboard.map((url) => persistToStorage(svc, url, userId, 'png').catch(() => url))
 	);
@@ -1044,6 +1051,7 @@ export async function generateCinematicUgcPack(input: UgcPackInput): Promise<Ugc
 	};
 
 	const videoUrl = await generateCinematicVideo(falKey, cinematicRefs, shots);
+	costEvents.push({ provider: 'fal', operation: 'video', model: 'kling-o3-pro reference (cinematic)', usd: priceOf('fal', 'video', 'pro') });
 
 	const captioned = parsed.on_screen_text
 		? await burnCaptions(videoUrl, parsed.on_screen_text).catch(() => null)
@@ -1072,9 +1080,12 @@ export async function generateCinematicUgcPack(input: UgcPackInput): Promise<Ugc
 		platform,
 		storyboard: durableStoryboard,
 		cinematic: true,
-		qualityGrade: cinematicGrade
+		qualityGrade: cinematicGrade,
+		costBreakdown: summarizeCosts(costEvents)
 	};
 	if (input.autopilot) content.autopilot = true;
+
+	await recordCostEvents(supabase, userId, input.agentId, costEvents);
 
 	return { content, selectedProduct, briefData, agentData };
 }
@@ -1142,6 +1153,48 @@ export interface UgcContent {
 	autopilot?: boolean;
 	/** Independent QC grade (pre-media gate) — surfaced in the review queue. */
 	qualityGrade?: QualityGrade | null;
+	/** Estimated generation spend for THIS post, split by provider. */
+	costBreakdown?: { total: number; byProvider: Record<string, number> };
+}
+
+/** Wraps an AiClient so every text call self-records into the cost ledger. */
+function trackAi(ai: AiClient, costEvents: CostEvent[]): AiClient {
+	return {
+		provider: ai.provider,
+		async generate(prompt, opts) {
+			costEvents.push({
+				provider: ai.provider,
+				operation: 'llm',
+				model: 'text-generation',
+				usd: priceOf(ai.provider, 'llm')
+			});
+			return ai.generate(prompt, opts);
+		}
+	};
+}
+
+/** Best-effort ledger write — spend analytics must never break generation. */
+async function recordCostEvents(
+	supabase: any,
+	userId: string,
+	agentId: string | undefined,
+	events: CostEvent[]
+): Promise<void> {
+	if (events.length === 0) return;
+	try {
+		await supabase.from('generation_events').insert(
+			events.map((e) => ({
+				user_id: userId,
+				agent_id: agentId ?? null,
+				provider: e.provider,
+				operation: e.operation,
+				model: e.model,
+				est_cost: e.usd
+			}))
+		);
+	} catch (err) {
+		console.warn('[Cost] Failed to record generation events:', (err as Error).message);
+	}
 }
 
 export interface UgcPack {
@@ -1571,9 +1624,12 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 	const topic = input.topic || 'Sharing an honest experience with this product';
 	const wantVideo = input.video !== false;
 
-	const ai = await resolveAiClient(supabase, userId);
-	if (!ai)
+	const rawAi = await resolveAiClient(supabase, userId);
+	if (!rawAi)
 		throw new Error('No AI provider configured. Add an OpenRouter or Gemini key in Settings.');
+	// Every text call (director, retries, grader) self-records into the ledger.
+	const costEvents: CostEvent[] = [];
+	const ai = trackAi(rawAi, costEvents);
 
 	const db = createDbService(supabase);
 	const cfg = await loadUgcConfig(supabase, input.agentId);
@@ -1740,17 +1796,24 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 	if (falKey && selectedProduct?.photoUrl) {
 		try {
 			still = await generateProductStill(falKey, scenePrompt, selectedProduct.photoUrl, characterRef, brandVisualCtx);
+			costEvents.push({ provider: 'fal', operation: 'image', model: 'nano-banana-2', usd: priceOf('fal', 'image', 'nano') });
 		} catch (e) {
 			const msg = (e as Error).message;
 			if (orKey && isFalOutage(msg)) {
 				console.warn(`[Failover] fal still failed (${msg.slice(0, 120)}) — OpenRouter image fallback.`);
 				still = await generateUgcImage(scenePrompt, orKey, null);
+				costEvents.push({ provider: 'openrouter', operation: 'image', model: 'flux-schnell', usd: priceOf('openrouter', 'image') });
 			} else {
 				throw e;
 			}
 		}
 	} else {
 		still = await generateUgcImage(scenePrompt, orKey, falKey);
+		costEvents.push(
+			orKey
+				? { provider: 'openrouter', operation: 'image', model: 'flux-schnell', usd: priceOf('openrouter', 'image') }
+				: { provider: 'fal', operation: 'image', model: 'flux-schnell', usd: priceOf('fal', 'image', 'flux') }
+		);
 	}
 
 	// ── Video — fal primary, OpenRouter video API failover ──────────────
@@ -1765,13 +1828,17 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 			if (format === 'spokesperson' && falKey) {
 				const dialogue = parsed.dialogue || parsed.text || topic;
 				const audio = await generateVoiceAudio(falKey, cfg.voice, dialogue);
+				costEvents.push({ provider: 'fal', operation: 'tts', model: 'elevenlabs-turbo-v2.5', usd: priceOf('fal', 'tts') });
 				mediaUrl = await generateTalkingHead(falKey, still, audio);
+				costEvents.push({ provider: 'fal', operation: 'talking_head', model: 'veed-fabric-1.0', usd: priceOf('fal', 'talking_head') });
 			} else if (falKey) {
 				// Both quality tiers route to Kling Standard for now — see BROLL_MODEL_VEO_DEFERRED.
 				mediaUrl = await generateBrollVideo(falKey, BROLL_MODEL_STANDARD, still, motionPrompt);
+				costEvents.push({ provider: 'fal', operation: 'video', model: 'kling-o3-standard', usd: priceOf('fal', 'video', 'standard') });
 			} else {
 				// No fal at all — straight to OpenRouter video.
 				mediaUrl = await openRouterBrollVideo(orKey!, still, motionPrompt);
+				costEvents.push({ provider: 'openrouter', operation: 'video', model: BROLL_MODEL_OPENROUTER, usd: priceOf('openrouter', 'video') });
 			}
 			mediaType = 'video';
 		} catch (e) {
@@ -1779,6 +1846,7 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 			if (orKey && isFalOutage(msg)) {
 				console.warn(`[Failover] fal video failed (${msg.slice(0, 120)}) — OpenRouter Kling b-roll fallback.`);
 				mediaUrl = await openRouterBrollVideo(orKey, still, motionPrompt);
+				costEvents.push({ provider: 'openrouter', operation: 'video', model: BROLL_MODEL_OPENROUTER, usd: priceOf('openrouter', 'video') });
 				mediaType = 'video';
 			} else {
 				throw e;
@@ -1828,9 +1896,12 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 				}
 			: null,
 		platform,
-		qualityGrade
+		qualityGrade,
+		costBreakdown: summarizeCosts(costEvents)
 	};
 	if (input.autopilot) content.autopilot = true;
+
+	await recordCostEvents(supabase, userId, input.agentId, costEvents);
 
 	return { content, selectedProduct, briefData, agentData };
 }

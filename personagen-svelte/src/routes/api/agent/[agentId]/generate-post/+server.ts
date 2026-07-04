@@ -98,7 +98,8 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 			status: 'draft',
 			scheduled_date: null,
 			scheduled_time: null,
-			published_at: null
+			published_at: null,
+			token_cost: content?.costBreakdown?.total ?? 0
 		});
 		if (draftErr || !draft) {
 			return json(
@@ -118,7 +119,8 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		status: 'scheduled',
 		scheduled_date: now.toISOString().split('T')[0],
 		scheduled_time: now.toTimeString().split(' ')[0],
-		published_at: null
+		published_at: null,
+		token_cost: content?.costBreakdown?.total ?? 0
 	});
 
 	if (postErr || !post) {

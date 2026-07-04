@@ -1,10 +1,11 @@
 <script lang="ts">
-	import { untrack, onMount } from 'svelte';
+	import { onMount } from 'svelte';
 	import type { Agent } from '$lib/types';
 	import { showToast } from '$lib/stores/ui.svelte';
-	import { Posts, ContentForge, Autopilot, type AutopilotView } from '$lib/services/api';
+	import { Posts, ContentForge, type AutopilotView } from '$lib/services/api';
+	import { priceOf } from '$lib/pricing';
 	import { page } from '$app/stores';
-	import { goto, invalidateAll } from '$app/navigation';
+	import { goto } from '$app/navigation';
 	import PostDrawer from '$lib/components/feed/PostDrawer.svelte';
 	import { getPostDisplay as sharedGetPostDisplay } from '$lib/components/feed/postDisplay';
 	import { platformColor } from '$lib/platforms';
@@ -622,113 +623,9 @@
 		return null;
 	}
 
-	// ── Autopilot (auto-generate UGC drafts every 2h in window) ──────────────
-	const HOURS = Array.from({ length: 24 }, (_, i) => i);
-	function fmtHour(h: number): string {
-		const hr = h % 12 === 0 ? 12 : h % 12;
-		return `${hr}${h < 12 ? 'AM' : 'PM'}`;
-	}
-
-	let autopilotAgentId = $derived(selectedAgentId || data.agents[0]?.id || '');
-	let currentAutopilotAgent = $derived(data.agents.find((a: any) => a.id === autopilotAgentId));
-
-	let autopilot = $state<AutopilotView | null>(null);
-	let apWindowStart = $state(8);
-	let apWindowEnd = $state(20);
-	let apTimezone = $state('Australia/Sydney');
-	let autopilotSaving = $state(false);
-	let autopilotGenerating = $state(false);
+	// Autopilot config now lives where it belongs — the persona's Profile →
+	// Automation section. The calendar shows resulting drafts, nothing more.
 	let approving = $state(false);
-
-	// Sync the panel whenever the selected agent changes.
-	$effect(() => {
-		const id = autopilotAgentId;
-		if (!id) {
-			autopilot = null;
-			return;
-		}
-		const cfg = data.autopilotConfigs?.[id] || {
-			enabled: false,
-			mode: 'semi_autonomous' as const,
-			window_start: 8,
-			window_end: 20,
-			timezone: 'Australia/Sydney'
-		};
-		untrack(() => {
-			autopilot = cfg;
-			apWindowStart = cfg.window_start;
-			apWindowEnd = cfg.window_end;
-			apTimezone = cfg.timezone;
-		});
-	});
-
-	async function persistAutopilot(enabled: boolean) {
-		const id = autopilotAgentId;
-		if (!id) return;
-		autopilotSaving = true;
-		try {
-			const res = await Autopilot.setConfig(id, {
-				enabled,
-				mode: autopilot?.mode === 'fully_autonomous' ? 'fully_autonomous' : 'semi_autonomous',
-				window_start: apWindowStart,
-				window_end: apWindowEnd,
-				timezone: apTimezone
-			});
-			if (res.success && res.data) {
-				autopilot = res.data;
-			} else {
-				showToast(res.error || 'Failed to update autopilot', 'error');
-			}
-		} catch (err: any) {
-			showToast(err.message || 'Error updating autopilot', 'error');
-		} finally {
-			autopilotSaving = false;
-		}
-	}
-
-	function toggleAutopilot(e: Event) {
-		const enabled = (e.target as HTMLInputElement).checked;
-		persistAutopilot(enabled).then(() => {
-			if (autopilot?.enabled) {
-				showToast('Autopilot on — generating drafts for approval', 'success');
-			} else {
-				showToast('Autopilot off', 'info');
-			}
-		});
-	}
-
-	function saveAutopilotWindow() {
-		if (!autopilot) return;
-		persistAutopilot(autopilot.enabled);
-	}
-
-	async function generateDraftsNow() {
-		const id = autopilotAgentId;
-		if (!id) {
-			showToast('Select an agent first', 'warning');
-			return;
-		}
-		autopilotGenerating = true;
-		try {
-			const res = await Autopilot.generateNow(id);
-			if (res.success) {
-				const n = (res.data as any)?.generated ?? 0;
-				if (n > 0) {
-					showToast(`Generated ${n} draft${n === 1 ? '' : 's'} for approval`, 'success');
-					await invalidateAll();
-					posts = data.realPosts || [];
-				} else {
-					showToast('No empty slots to fill in the window', 'info');
-				}
-			} else {
-				showToast(res.error || 'Failed to generate drafts', 'error');
-			}
-		} catch (err: any) {
-			showToast(err.message || 'Error generating drafts', 'error');
-		} finally {
-			autopilotGenerating = false;
-		}
-	}
 
 	async function approvePost(post: ScheduledPost) {
 		approving = true;
@@ -764,6 +661,37 @@
 		} finally {
 			approving = false;
 		}
+	}
+
+	// ── Generate confirmation (no surprise generations, no surprise spend) ──
+	let showGenerateConfirm = $state(false);
+	let skipGenerateConfirm = $state(false);
+	let confirmSkipNext = $state(false);
+	onMount(() => {
+		skipGenerateConfirm = localStorage.getItem('pg-skip-generate-confirm') === '1';
+	});
+	let confirmAgent = $derived(
+		data.agents.find((a: any) => a.id === (selectedAgentId || data.agents[0]?.id))
+	);
+	// Estimated cost range: image+llm (spokesperson adds tts+talking-head; b-roll adds video)
+	const EST_LOW = +(priceOf('fal', 'image', 'nano') + 3 * priceOf('openrouter', 'llm') + priceOf('fal', 'tts') + priceOf('fal', 'talking_head')).toFixed(2);
+	const EST_HIGH = +(priceOf('fal', 'image', 'nano') + 3 * priceOf('openrouter', 'llm') + priceOf('fal', 'video', 'standard')).toFixed(2);
+
+	function requestGeneratePost() {
+		if (skipGenerateConfirm) {
+			void generatePostNow();
+		} else {
+			showGenerateConfirm = true;
+		}
+	}
+
+	function confirmGenerate(skipNextTime: boolean) {
+		if (skipNextTime) {
+			localStorage.setItem('pg-skip-generate-confirm', '1');
+			skipGenerateConfirm = true;
+		}
+		showGenerateConfirm = false;
+		void generatePostNow();
 	}
 
 	async function generatePostNow() {
@@ -829,7 +757,7 @@
 			<button
 				class="btn-primary"
 				disabled={generatingPost}
-				onclick={generatePostNow}
+				onclick={requestGeneratePost}
 				style="margin-top: auto; height: 38px; display: inline-flex; align-items: center; gap: 0.5rem; background: var(--gradient-subtle); border-color: transparent;"
 			>
 				{#if generatingPost}
@@ -865,68 +793,25 @@
 		</div>
 	</header>
 
-	<!-- Autopilot bar -->
-	{#if currentAutopilotAgent}
-		<div class="autopilot-bar" class:active={autopilot?.enabled}>
-			<div class="ap-main">
-				<label class="ap-switch" title="Toggle autopilot">
-					<input
-						type="checkbox"
-						checked={autopilot?.enabled ?? false}
-						onchange={toggleAutopilot}
-						disabled={autopilotSaving}
-					/>
-					<span class="ap-slider"></span>
+	<!-- Generate confirmation -->
+	{#if showGenerateConfirm}
+		<div class="gen-confirm-overlay" role="dialog" aria-modal="true" aria-label="Confirm generation">
+			<div class="gen-confirm">
+				<h3>Generate a post now?</h3>
+				<div class="gc-rows">
+					<div class="gc-row"><span class="gc-label">Persona</span><span>{confirmAgent?.name ?? '—'}</span></div>
+					<div class="gc-row"><span class="gc-label">Content</span><span>UGC post tuned to your brand brief &amp; persona (video when a video provider is available, image otherwise)</span></div>
+					<div class="gc-row"><span class="gc-label">Destination</span><span>Publishes to this persona's connected platforms immediately; saved as a draft if none are connected</span></div>
+					<div class="gc-row"><span class="gc-label">Est. cost</span><span>~${Math.min(EST_LOW, EST_HIGH).toFixed(2)}–${Math.max(EST_LOW, EST_HIGH).toFixed(2)} in generation credits</span></div>
+				</div>
+				<label class="gc-skip">
+					<input type="checkbox" bind:checked={confirmSkipNext} />
+					Skip this confirmation next time
 				</label>
-				<div class="ap-text">
-					<span class="ap-title"
-						>🤖 Autopilot {autopilot?.enabled ? 'ON' : 'OFF'} · {currentAutopilotAgent.name}</span
-					>
-					<span class="ap-sub">
-						{#if autopilot?.enabled}
-							Auto-generates UGC drafts every 2h, {fmtHour(apWindowStart)}–{fmtHour(apWindowEnd)} ({apTimezone}).
-							Review &amp; approve — approved posts auto-publish at their slot.
-						{:else}
-							Turn on to auto-generate product UGC drafts every 2 hours for your approval.
-						{/if}
-					</span>
+				<div class="gc-actions">
+					<button class="btn-ghost" onclick={() => (showGenerateConfirm = false)}>Cancel</button>
+					<button class="btn-primary" onclick={() => confirmGenerate(confirmSkipNext)}>✨ Generate</button>
 				</div>
-			</div>
-			<div class="ap-controls">
-				<div class="ap-window">
-					<label for="ap-start">From</label>
-					<select
-						id="ap-start"
-						bind:value={apWindowStart}
-						onchange={saveAutopilotWindow}
-						disabled={autopilotSaving || !autopilot?.enabled}
-					>
-						{#each HOURS as h}<option value={h}>{fmtHour(h)}</option>{/each}
-					</select>
-					<label for="ap-end">to</label>
-					<select
-						id="ap-end"
-						bind:value={apWindowEnd}
-						onchange={saveAutopilotWindow}
-						disabled={autopilotSaving || !autopilot?.enabled}
-					>
-						{#each HOURS as h}<option value={h}>{fmtHour(h)}</option>{/each}
-					</select>
-				</div>
-				<button
-					class="btn-ghost btn-sm"
-					onclick={generateDraftsNow}
-					disabled={autopilotGenerating || !autopilot?.enabled}
-				>
-					{#if autopilotGenerating}
-						<span
-							class="spinner"
-							style="width:12px;height:12px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:spin 0.6s linear infinite;"
-						></span> Generating…
-					{:else}
-						⚡ Generate drafts now
-					{/if}
-				</button>
 			</div>
 		</div>
 	{/if}
@@ -1077,22 +962,37 @@
 				{/each}
 			</div>
 
-			<!-- Mobile list view -->
+			<!-- Mobile list view: tappable cards with thumbnails, opening the same
+			     post drawer as desktop (the old read-only divs were the "can't
+			     click anything / can't see pictures" complaint). -->
 			<div class="mobile-list">
 				<h3 class="mobile-list-title">Upcoming Posts</h3>
 				{#each filteredPosts.sort((a, b) => a.date.localeCompare(b.date)) as post}
-					<div class="mobile-post-item">
-						<div class="mobile-post-date">{post.date} · {post.time}</div>
-						<div class="mobile-post-text">{getPostDisplay(post).text}</div>
-						<div class="mobile-post-meta">
-							<span class="mobile-post-agent">{post.agentName}</span>
-							<div class="mobile-post-platforms">
-								{#each post.platforms as p}
-									<span class="platform-tag" style="color: {platformColor(p)}">{p}</span>
-								{/each}
+					{@const thumb = getPostThumb(post)}
+					<button class="mobile-post-item" onclick={() => (selectedPost = post)}>
+						{#if thumb}
+							<img class="mobile-post-thumb" src={thumb} alt="" loading="lazy" />
+						{:else}
+							<div class="mobile-post-thumb mobile-post-thumb-empty">📝</div>
+						{/if}
+						<div class="mobile-post-body">
+							<div class="mobile-post-date">
+								{post.date} · {post.time}
+								<span class="mobile-post-status status-{post.status}">{post.status}</span>
+							</div>
+							<div class="mobile-post-text">{getPostDisplay(post).text}</div>
+							<div class="mobile-post-meta">
+								<span class="mobile-post-agent">{post.agentName}</span>
+								<div class="mobile-post-platforms">
+									{#each post.platforms as p}
+										<span class="platform-tag" style="color: {platformColor(p)}">{p}</span>
+									{/each}
+								</div>
 							</div>
 						</div>
-					</div>
+					</button>
+				{:else}
+					<p class="mobile-list-empty">No posts match the current filters.</p>
 				{/each}
 			</div>
 		</div>
@@ -1502,123 +1402,78 @@
 		margin: 0;
 	}
 
-	.agent-filter select {
-		min-width: 200px;
-	}
-
-	/* ── Autopilot bar ── */
-	.autopilot-bar {
+	.header-controls {
 		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 1rem;
-		flex-wrap: wrap;
-		padding: 0.85rem 1.1rem;
-		margin-bottom: 1.25rem;
-		border: 1px solid var(--border);
-		border-radius: var(--radius-sm);
-		background: var(--surface);
-		transition: border-color 0.2s, background 0.2s;
-	}
-
-	.autopilot-bar.active {
-		border-color: var(--accent-mid);
-		background: var(--accent-soft);
-	}
-
-	.ap-main {
-		display: flex;
-		align-items: center;
-		gap: 0.85rem;
-		min-width: 0;
-	}
-
-	.ap-text {
-		display: flex;
-		flex-direction: column;
-		gap: 0.15rem;
-		min-width: 0;
-	}
-
-	.ap-title {
-		font-size: var(--text-sm);
-		font-weight: var(--weight-bold);
-		color: var(--text);
-	}
-
-	.ap-sub {
-		font-size: var(--text-xs);
-		color: var(--text-muted);
-		max-width: 64ch;
-	}
-
-	.ap-controls {
-		display: flex;
-		align-items: center;
+		align-items: flex-end;
 		gap: 0.75rem;
 		flex-wrap: wrap;
 	}
 
-	.ap-window {
+	.agent-filter select {
+		min-width: 200px;
+	}
+
+	/* ── Generate confirmation ── */
+	.gen-confirm-overlay {
+		position: fixed;
+		inset: 0;
+		background: rgba(0, 0, 0, 0.55);
+		display: grid;
+		place-items: center;
+		z-index: 200;
+		padding: 1rem;
+	}
+
+	.gen-confirm {
+		width: min(480px, 100%);
+		background: var(--surface, #17171f);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-md, 14px);
+		padding: 1.25rem 1.4rem;
+		box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+	}
+
+	.gen-confirm h3 {
+		margin: 0 0 0.9rem;
+		font-family: var(--font-display);
+	}
+
+	.gc-rows {
+		display: flex;
+		flex-direction: column;
+		gap: 0.55rem;
+		margin-bottom: 1rem;
+	}
+
+	.gc-row {
+		display: flex;
+		gap: 0.75rem;
+		font-size: var(--text-sm);
+	}
+
+	.gc-label {
+		flex: 0 0 88px;
+		color: var(--text-dim);
+		font-size: var(--text-xs);
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		padding-top: 2px;
+	}
+
+	.gc-skip {
 		display: flex;
 		align-items: center;
-		gap: 0.35rem;
+		gap: 0.5rem;
 		font-size: var(--text-xs);
-		color: var(--text-dim);
-	}
-
-	.ap-window select {
-		padding: 0.3rem 0.4rem;
-		font-size: var(--text-xs);
-		border-radius: var(--radius-xs);
-		border: 1px solid var(--border);
-		background: var(--surface);
-		color: var(--text);
-	}
-
-	.ap-switch {
-		position: relative;
-		display: inline-block;
-		width: 42px;
-		height: 24px;
-		flex-shrink: 0;
+		color: var(--text-muted);
+		margin-bottom: 1rem;
 		cursor: pointer;
 	}
 
-	.ap-switch input {
-		opacity: 0;
-		width: 0;
-		height: 0;
-	}
-
-	.ap-slider {
-		position: absolute;
-		inset: 0;
-		background: var(--surface-3);
-		border: 1px solid var(--border);
-		border-radius: 999px;
-		transition: background 0.2s;
-	}
-
-	.ap-slider::before {
-		content: '';
-		position: absolute;
-		height: 18px;
-		width: 18px;
-		left: 2px;
-		top: 2px;
-		background: #fff;
-		border-radius: 50%;
-		transition: transform 0.2s;
-	}
-
-	.ap-switch input:checked + .ap-slider {
-		background: var(--accent);
-		border-color: var(--accent);
-	}
-
-	.ap-switch input:checked + .ap-slider::before {
-		transform: translateX(18px);
+	.gc-actions {
+		display: flex;
+		justify-content: flex-end;
+		gap: 0.6rem;
 	}
 
 	/* ── Month nav ── */
@@ -2270,11 +2125,65 @@
 
 	/* ── Mobile list items ── */
 	.mobile-post-item {
-		padding: 1rem;
+		display: flex;
+		gap: 0.75rem;
+		width: 100%;
+		text-align: left;
+		padding: 0.75rem;
 		background: var(--surface);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-sm);
 		margin-bottom: 0.5rem;
+		cursor: pointer;
+		color: inherit;
+		font: inherit;
+	}
+
+	.mobile-post-item:active {
+		border-color: var(--accent-mid);
+		background: var(--surface-2);
+	}
+
+	.mobile-post-thumb {
+		width: 64px;
+		height: 80px;
+		object-fit: cover;
+		border-radius: var(--radius-xs);
+		flex-shrink: 0;
+	}
+
+	.mobile-post-thumb-empty {
+		display: grid;
+		place-items: center;
+		background: var(--surface-2);
+		font-size: 1.25rem;
+	}
+
+	.mobile-post-body {
+		min-width: 0;
+		flex: 1;
+	}
+
+	.mobile-post-status {
+		margin-left: 0.5rem;
+		padding: 1px 7px;
+		border-radius: 999px;
+		border: 1px solid var(--border);
+		font-size: 0.6rem;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+	}
+
+	.mobile-post-status.status-draft { color: #f59e0b; border-color: #f59e0b; }
+	.mobile-post-status.status-scheduled { color: #38bdf8; border-color: #38bdf8; }
+	.mobile-post-status.status-published { color: #10b981; border-color: #10b981; }
+	.mobile-post-status.status-failed { color: #ef4444; border-color: #ef4444; }
+
+	.mobile-list-empty {
+		color: var(--text-dim);
+		font-size: var(--text-sm);
+		text-align: center;
+		padding: 1.5rem 0;
 	}
 
 	.mobile-post-date {
@@ -2349,6 +2258,29 @@
 
 		.mobile-list {
 			display: block;
+		}
+
+		/* Filters stop bunching: full-width stacked controls with real tap targets */
+		.header-controls {
+			width: 100%;
+			flex-direction: column;
+			align-items: stretch;
+			gap: 0.6rem;
+		}
+
+		.header-controls .btn-primary {
+			width: 100%;
+			justify-content: center;
+		}
+
+		.agent-filter {
+			width: 100%;
+		}
+
+		.agent-filter select {
+			width: 100%;
+			min-width: 0;
+			min-height: 42px;
 		}
 
 		.fab {

@@ -5,6 +5,7 @@
 	import { slide } from 'svelte/transition';
 	import { Accounts, Posts } from '$lib/services/api';
 	import AgentConnectionStats from '$lib/components/agents/AgentConnectionStats.svelte';
+	import { PRICING_MATRIX } from '$lib/pricing';
 	import PostCard from '$lib/components/feed/PostCard.svelte';
 	import PostDrawer from '$lib/components/feed/PostDrawer.svelte';
 	import ManualDeleteNotice from '$lib/components/feed/ManualDeleteNotice.svelte';
@@ -544,6 +545,21 @@
 
 	// ── Profile save ───────────────────────────────────────────────
 	// ── Generation cost tracking ────────────────────────────────────────────
+	// Per-provider spend (estimates from the generation_events ledger).
+	let agentSpend = $state<{ total: number; byProvider: Record<string, number>; byOperation: Record<string, number> } | null>(null);
+	async function loadSpend(agentId: string) {
+		try {
+			const res = await fetch(`/api/agent/${agentId}/spend`);
+			const d = await res.json();
+			if (d.success) agentSpend = d;
+		} catch {
+			/* analytics only — never block the page */
+		}
+	}
+	$effect(() => {
+		if (agent?.id) loadSpend(agent.id);
+	});
+
 	let generationCost = $derived.by(() => {
 		let total = 0;
 		for (const p of feedPosts) {
@@ -1437,6 +1453,56 @@
 							{/if}
 						</div>
 					</div>
+				</section>
+
+				<!-- Spend & Pricing section -->
+				<section class="profile-section">
+					<div class="section-header">
+						<h2 class="section-title">Spend &amp; Pricing</h2>
+						<p class="section-desc">Estimated generation credits used by this persona, split by provider — plus the rate card behind the numbers.</p>
+					</div>
+
+					{#if agentSpend && agentSpend.total > 0}
+						<div class="spend-chips">
+							<div class="spend-chip spend-total">
+								<span class="spend-label">Total</span>
+								<span class="spend-val">${agentSpend.total.toFixed(2)}</span>
+							</div>
+							{#each Object.entries(agentSpend.byProvider) as [prov, amt]}
+								<div class="spend-chip">
+									<span class="spend-label">{prov}</span>
+									<span class="spend-val">${amt.toFixed(2)}</span>
+								</div>
+							{/each}
+							{#each Object.entries(agentSpend.byOperation) as [op, amt]}
+								<div class="spend-chip spend-op">
+									<span class="spend-label">{op}</span>
+									<span class="spend-val">${amt.toFixed(2)}</span>
+								</div>
+							{/each}
+						</div>
+					{:else}
+						<p class="field-hint">No tracked generation spend yet — the ledger starts recording with the next generation.</p>
+					{/if}
+
+					<details class="pricing-details">
+						<summary>Rate card (estimated USD per call)</summary>
+						<div class="pricing-table-wrap">
+							<table class="pricing-table">
+								<thead><tr><th>Provider</th><th>Operation</th><th>Model</th><th>Est. cost</th></tr></thead>
+								<tbody>
+									{#each PRICING_MATRIX as row}
+										<tr>
+											<td>{row.provider}</td>
+											<td>{row.operation}</td>
+											<td>{row.model}</td>
+											<td>{row.note ?? `$${row.usd}`}</td>
+										</tr>
+									{/each}
+								</tbody>
+							</table>
+						</div>
+					</details>
 				</section>
 
 				<!-- Save + Danger zone -->
@@ -2595,6 +2661,66 @@
 	.autonomy-icon { grid-column: 2; grid-row: 1; font-size: 1rem; }
 	.autonomy-label { grid-column: 3; grid-row: 1; font-size: 0.85rem; font-weight: 600; color: var(--text); }
 	.autonomy-desc { grid-column: 2 / 4; grid-row: 2; font-size: 0.75rem; color: var(--text-dim); margin: 0; line-height: 1.4; }
+
+	/* ── Spend & Pricing ── */
+	.spend-chips {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+		margin-bottom: 1rem;
+	}
+	.spend-chip {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		padding: 0.5rem 0.9rem;
+		border-radius: 10px;
+		border: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+		min-width: 84px;
+	}
+	.spend-chip.spend-total {
+		border-color: var(--accent-mid, #7c6aed);
+	}
+	.spend-chip.spend-op {
+		opacity: 0.75;
+	}
+	.spend-label {
+		font-size: 10px;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		color: var(--text-dim, #99a);
+	}
+	.spend-val {
+		font-family: var(--font-mono, monospace);
+		font-weight: 700;
+		font-size: var(--text-sm, 0.9rem);
+	}
+	.pricing-details summary {
+		cursor: pointer;
+		font-size: var(--text-sm, 0.85rem);
+		color: var(--text-dim, #99a);
+		margin-bottom: 0.5rem;
+	}
+	.pricing-table-wrap {
+		overflow-x: auto;
+	}
+	.pricing-table {
+		width: 100%;
+		border-collapse: collapse;
+		font-size: var(--text-xs, 0.78rem);
+	}
+	.pricing-table th,
+	.pricing-table td {
+		text-align: left;
+		padding: 0.4rem 0.6rem;
+		border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.06));
+	}
+	.pricing-table th {
+		color: var(--text-dim, #99a);
+		text-transform: uppercase;
+		font-size: 10px;
+		letter-spacing: 0.05em;
+	}
 
 	.profile-footer {
 		display: flex;

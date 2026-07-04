@@ -269,7 +269,8 @@ async function generateDraftsForAgent(
 				status,
 				scheduled_date: slot.dateStr,
 				scheduled_time: slot.timeStr,
-				published_at: null
+				published_at: null,
+				token_cost: pack.content?.costBreakdown?.total ?? 0
 			});
 			if (!error) {
 				created++;

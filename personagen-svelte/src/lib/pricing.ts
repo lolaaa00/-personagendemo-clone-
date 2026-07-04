@@ -1,0 +1,66 @@
+/**
+ * Provider pricing matrix — single source of truth for generation cost
+ * ESTIMATES (providers don't return uniform per-call costs, so we account
+ * with a rate table; tune via env UGC_PRICING_JSON without a code change).
+ *
+ * Client-safe (no $env/server imports) so both the UI matrix and the server
+ * cost tracker read the same numbers. All values are USD per call.
+ */
+
+export interface PriceEntry {
+	provider: 'fal' | 'openrouter' | 'gemini' | 'blotato';
+	operation: string;
+	model: string;
+	/** Estimated USD per call. */
+	usd: number;
+	note?: string;
+}
+
+export const PRICING_MATRIX: PriceEntry[] = [
+	// ── fal.ai (primary media) ──────────────────────────────────────────────
+	{ provider: 'fal', operation: 'image', model: 'nano-banana-2 (product still / avatar)', usd: 0.08 },
+	{ provider: 'fal', operation: 'image', model: 'flux-schnell (scene fallback)', usd: 0.003 },
+	{ provider: 'fal', operation: 'video', model: 'kling-o3-standard i2v ~5s (b-roll)', usd: 0.5 },
+	{ provider: 'fal', operation: 'video', model: 'kling-o3-pro reference (cinematic, per shot-set)', usd: 1.6 },
+	{ provider: 'fal', operation: 'tts', model: 'elevenlabs turbo-v2.5', usd: 0.03 },
+	{ provider: 'fal', operation: 'talking_head', model: 'veed/fabric-1.0 720p', usd: 0.4 },
+	// ── OpenRouter (text primary + media failover) ─────────────────────────
+	{ provider: 'openrouter', operation: 'llm', model: 'gemini-3.5-flash (director/grader/captions)', usd: 0.002 },
+	{ provider: 'openrouter', operation: 'image', model: 'flux-schnell', usd: 0.02 },
+	{ provider: 'openrouter', operation: 'video', model: 'kling-v3.0-std i2v ~5s (failover)', usd: 0.35 },
+	// ── Gemini direct (env-key text fallback) ──────────────────────────────
+	{ provider: 'gemini', operation: 'llm', model: 'gemini-3.5-flash', usd: 0.002 },
+	// ── Blotato (posting plan; AI credits included in subscription) ────────
+	{ provider: 'blotato', operation: 'publish', model: 'flat $29/mo Starter (≤20 accounts)', usd: 0, note: 'subscription, not per-call' }
+];
+
+/** Looks up the estimated USD for a provider+operation (first match). */
+export function priceOf(provider: string, operation: string, modelHint?: string): number {
+	const rows = PRICING_MATRIX.filter((p) => p.provider === provider && p.operation === operation);
+	if (modelHint) {
+		const hinted = rows.find((r) => r.model.toLowerCase().includes(modelHint.toLowerCase()));
+		if (hinted) return hinted.usd;
+	}
+	return rows[0]?.usd ?? 0;
+}
+
+export interface CostEvent {
+	provider: string;
+	operation: string;
+	model: string;
+	usd: number;
+}
+
+/** Sums events into { total, byProvider } for display/storage. */
+export function summarizeCosts(events: CostEvent[]): {
+	total: number;
+	byProvider: Record<string, number>;
+} {
+	const byProvider: Record<string, number> = {};
+	let total = 0;
+	for (const e of events) {
+		byProvider[e.provider] = +(((byProvider[e.provider] ?? 0) + e.usd).toFixed(6));
+		total = +((total + e.usd).toFixed(6));
+	}
+	return { total, byProvider };
+}

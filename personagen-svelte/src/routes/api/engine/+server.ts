@@ -809,7 +809,12 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 			}
 
 			if (action === 'scrape_store') {
-				const storeUrl = body.url || '';
+				// Users paste "justkidshoney.com" — normalize to https:// BEFORE the
+				// SSRF guard, whose `new URL()` throws on protocol-less input (this
+				// was the "Failed to scrape" regression: valid domains rejected
+				// before Firecrawl ever saw them).
+				let storeUrl = String(body.url || '').trim();
+				if (storeUrl && !/^https?:\/\//i.test(storeUrl)) storeUrl = `https://${storeUrl}`;
 
 				// 1. Try real scraping if URL is provided
 				let scrapeSuccess = false;
