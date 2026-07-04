@@ -13,13 +13,23 @@ export interface PlatformInfo {
 }
 
 export const PLATFORMS: Record<string, PlatformInfo> = {
-	tiktok: { key: 'tiktok', label: 'TikTok', color: '#fe2c55' },
 	instagram: { key: 'instagram', label: 'Instagram', color: '#e1306c' },
+	tiktok: { key: 'tiktok', label: 'TikTok', color: '#fe2c55' },
 	youtube: { key: 'youtube', label: 'YouTube', color: '#ff0000' },
 	facebook: { key: 'facebook', label: 'Facebook', color: '#1877f2' },
 	x: { key: 'x', label: 'X', color: '#000000' },
-	threads: { key: 'threads', label: 'Threads', color: '#999999' }
+	threads: { key: 'threads', label: 'Threads', color: '#000000' },
+	linkedin: { key: 'linkedin', label: 'LinkedIn', color: '#0A66C2' },
+	bluesky: { key: 'bluesky', label: 'Bluesky', color: '#0285FF' },
+	pinterest: { key: 'pinterest', label: 'Pinterest', color: '#E60023' },
+	reddit: { key: 'reddit', label: 'Reddit', color: '#FF4500' },
+	googlebusiness: { key: 'googlebusiness', label: 'Google Business', color: '#4285F4' },
+	telegram: { key: 'telegram', label: 'Telegram', color: '#26A5E4' },
+	snapchat: { key: 'snapchat', label: 'Snapchat', color: '#FFFC00' }
 };
+
+/** Every platform PersonaGen can connect + publish through Zernio. */
+export const ALL_PLATFORM_KEYS = Object.keys(PLATFORMS);
 
 export function platformColor(key: string | undefined | null): string {
 	return PLATFORMS[key?.toLowerCase() ?? '']?.color || 'var(--accent)';

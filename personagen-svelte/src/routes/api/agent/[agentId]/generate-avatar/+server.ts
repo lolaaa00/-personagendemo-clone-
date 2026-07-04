@@ -119,6 +119,19 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		.maybeSingle();
 	const voiceGender = VOICE_CATALOG.find((v) => v.name === (cfg?.ugc_voice || 'Adam'))?.gender;
 
+	// The persona profile's explicit gender (Identity → Gender) outranks the
+	// gender implied by the pinned voice — the client requires F/M control
+	// over the generated character, not an inference.
+	let profileGender: 'male' | 'female' | undefined;
+	try {
+		if (agent.market && typeof agent.market === 'string' && agent.market.startsWith('{')) {
+			const pp = JSON.parse(agent.market);
+			if (pp.gender === 'male' || pp.gender === 'female') profileGender = pp.gender;
+		}
+	} catch {
+		/* ignore malformed market */
+	}
+
 	const { data: brandBrief } = await db.brandBriefs.get(user.id);
 	const briefData = brandBrief?.data || null;
 
@@ -131,7 +144,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 			falKey,
 			briefData,
 			agent,
-			voiceGender
+			profileGender || voiceGender
 		);
 		return json({ success: true, character_ref: characterRef });
 	} catch (err) {

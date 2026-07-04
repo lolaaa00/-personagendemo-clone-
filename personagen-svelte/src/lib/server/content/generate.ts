@@ -31,7 +31,7 @@
 
 import { env } from '$env/dynamic/private';
 import { getUserApiKey } from '$lib/server/user-api-keys';
-import { resolveAiClient } from '$lib/server/ai-client';
+import { resolveAiClient, type AiClient } from '$lib/server/ai-client';
 import { createDbService } from '$lib/server/db';
 import { DEFAULT_VOICE, VOICE_CATALOG } from '$lib/server/voices';
 import { getServiceSupabase } from '$lib/server/service-supabase';
@@ -84,18 +84,57 @@ const BROLL_MODEL_VEO_DEFERRED = env.UGC_BROLL_MODEL_PREMIUM || 'fal-ai/veo3.1/i
 const FABRIC_RES = env.UGC_FABRIC_RES || '720p';
 const VIDEO_DURATION = env.UGC_VIDEO_DURATION || '5';
 
-/** Tolerant JSON parse for AI responses (strips markdown fences). */
+/**
+ * Tolerant JSON parse for AI responses: strips markdown fences, and when the
+ * model appends commentary after (or before) the JSON, extracts the first
+ * balanced JSON object/array instead of failing. Observed in production:
+ * Gemini returning valid JSON followed by trailing prose lost entire
+ * autopilot slots ("Unexpected non-whitespace character after JSON").
+ */
 export function safeParseJson(text: string): any {
+	const cleaned = text
+		.replace(/```json/g, '')
+		.replace(/```/g, '')
+		.trim();
 	try {
-		const cleaned = text
-			.replace(/```json/g, '')
-			.replace(/```/g, '')
-			.trim();
 		return JSON.parse(cleaned);
-	} catch (e) {
-		console.warn('[Content] Failed to parse AI response as JSON:', e);
-		return null;
+	} catch {
+		/* fall through to balanced-extraction */
 	}
+
+	const start = cleaned.search(/[{[]/);
+	if (start !== -1) {
+		const open = cleaned[start];
+		const close = open === '{' ? '}' : ']';
+		let depth = 0;
+		let inString = false;
+		let escaped = false;
+		for (let i = start; i < cleaned.length; i++) {
+			const ch = cleaned[i];
+			if (escaped) {
+				escaped = false;
+			} else if (ch === '\\') {
+				escaped = true;
+			} else if (ch === '"') {
+				inString = !inString;
+			} else if (!inString) {
+				if (ch === open) depth++;
+				else if (ch === close) {
+					depth--;
+					if (depth === 0) {
+						try {
+							return JSON.parse(cleaned.slice(start, i + 1));
+						} catch {
+							break;
+						}
+					}
+				}
+			}
+		}
+	}
+
+	console.warn('[Content] Failed to parse AI response as JSON (no balanced object found)');
+	return null;
 }
 
 /** Resolves the OpenRouter + fal.ai keys available for media generation. */
@@ -257,6 +296,134 @@ function classifyContentIntent(topic: string, platform: string): ContentIntent {
 	};
 }
 
+// ── Hook framework library ───────────────────────────────────────────────────
+// Proven short-form hook patterns. Variety is structural (rotated per post via
+// a seed hash), not luck. Blueprint hook-patterns, when the user analyzed a
+// channel, are injected separately and take precedence in the Director prompt.
+
+interface HookFramework {
+	name: string;
+	pattern: string;
+	bestFor: ContentType[];
+}
+
+const HOOK_FRAMEWORKS: HookFramework[] = [
+	{ name: 'Confession', pattern: `Admit something vulnerable/counterintuitive: "I was wrong about…", "I almost returned this…"`, bestFor: ['testimonial', 'review'] },
+	{ name: 'Contrarian', pattern: `Attack the accepted belief: "Everyone tells you to X. That's exactly why you're stuck."`, bestFor: ['review', 'tutorial'] },
+	{ name: 'Cost of inaction', pattern: `Name what ignoring this costs: "Every week you skip this, you're paying for it in…"`, bestFor: ['tutorial', 'testimonial'] },
+	{ name: 'Specific number', pattern: `Oddly precise stat/result: "17 days. That's how long it took before…"`, bestFor: ['testimonial', 'review', 'tutorial'] },
+	{ name: 'POV switch', pattern: `Speak as/to the skeptic: "To the person who scrolled past this twice already…"`, bestFor: ['testimonial', 'lifestyle'] },
+	{ name: 'Before/after tease', pattern: `State the after, withhold the how: "My mornings look nothing like they did in March."`, bestFor: ['lifestyle', 'testimonial'] },
+	{ name: 'Forbidden knowledge', pattern: `Insider framing: "Nobody in [industry] wants you to figure this out."`, bestFor: ['review', 'tutorial'] },
+	{ name: 'Pattern break', pattern: `Open mid-story, no context: "So the second jar arrived and my husband hid it."`, bestFor: ['unboxing', 'lifestyle', 'testimonial'] },
+	{ name: 'Stakes-first', pattern: `Lead with what was at risk: "I had one week before the wedding and zero plan."`, bestFor: ['lifestyle', 'testimonial'] },
+	{ name: 'Anti-sell', pattern: `Disqualify buyers: "Honestly? Don't buy this if you only want…"`, bestFor: ['review', 'unboxing'] }
+];
+
+/** Deterministic-ish rotation: same seed → same picks, different posts → different picks. */
+function selectHookFrameworks(intent: ContentIntent, seed: string): HookFramework[] {
+	let h = 0;
+	for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) | 0;
+	const matching = HOOK_FRAMEWORKS.filter((f) => f.bestFor.includes(intent.type));
+	const rest = HOOK_FRAMEWORKS.filter((f) => !f.bestFor.includes(intent.type));
+	const pool = [...matching, ...rest];
+	const start = Math.abs(h) % Math.max(matching.length, 1);
+	return [pool[start], pool[(start + 1) % pool.length], pool[(start + 2) % pool.length]];
+}
+
+/** Prompt block offering 3 rotated hook frameworks for this specific post. */
+function buildHookGuidance(intent: ContentIntent, seed: string): string {
+	const picks = selectHookFrameworks(intent, seed);
+	return `HOOK FRAMEWORKS for this post — pick the ONE that fits the product/angle best and execute it precisely (do not blend them):
+${picks.map((p, i) => `${i + 1}. ${p.name}: ${p.pattern}`).join('\n')}`;
+}
+
+// ── Independent quality grader (pre-media cost gate) ────────────────────────
+// A SEPARATE adversarial pass — the Director must not grade its own homework.
+// Runs on text only (≈free) BEFORE image/video generation (the expensive step),
+// so weak drafts die before any media spend. Floor is deliberately lenient and
+// env-tunable; 0 disables the gate entirely.
+
+export interface QualityGrade {
+	hook: number;
+	authenticity: number;
+	brandFit: number;
+	cta: number;
+	overall: number;
+	topIssue: string;
+	fix: string;
+}
+
+function qualityFloor(): number {
+	const raw = Number(env.UGC_QUALITY_FLOOR);
+	if (Number.isFinite(raw) && raw >= 0 && raw <= 10) return raw;
+	return 5; // lenient default — placeholder-era models shouldn't empty the runway
+}
+
+const GRADER_SYSTEM = `You are a ruthless short-form content QC reviewer for UGC ads. You are NOT the writer — judge adversarially, as a scroller who has seen 10,000 ads.
+Score each 1-10 (10 = top 1% of UGC):
+- hook: does line 1 stop the scroll cold? (generic openers, questions, "elevate/discover" language = 3 or less)
+- authenticity: does it read like a real person, not a brand? (banned-word smell, ad-speak = low)
+- brandFit: does it plausibly sell THIS product to THIS audience?
+- cta: natural, conversational close?
+overall = 0.5*hook + 0.2*authenticity + 0.2*brandFit + 0.1*cta (round to 1 decimal).
+Respond ONLY with JSON: {"hook":n,"authenticity":n,"brandFit":n,"cta":n,"overall":n,"topIssue":"one sentence","fix":"one concrete rewrite instruction"}`;
+
+/** Grades a draft's text fields. Returns null on grader failure (never blocks generation on QC flakiness). */
+async function gradeDraft(
+	ai: AiClient,
+	draft: { text?: string; dialogue?: string; on_screen_text?: string },
+	productName: string | null,
+	platform: string
+): Promise<QualityGrade | null> {
+	try {
+		const raw = await ai.generate(
+			`Platform: ${platform}. Product: ${productName || 'unknown'}.
+CAPTION: ${draft.text || '(none)'}
+SPOKEN DIALOGUE: ${draft.dialogue || '(none)'}
+ON-SCREEN TEXT: ${draft.on_screen_text || '(none)'}
+Grade it.`,
+			{ systemInstruction: GRADER_SYSTEM, json: true }
+		);
+		const g = safeParseJson(raw || '');
+		if (!g || typeof g.overall !== 'number') return null;
+		return {
+			hook: Number(g.hook) || 0,
+			authenticity: Number(g.authenticity) || 0,
+			brandFit: Number(g.brandFit) || 0,
+			cta: Number(g.cta) || 0,
+			overall: Number(g.overall) || 0,
+			topIssue: String(g.topIssue || ''),
+			fix: String(g.fix || '')
+		};
+	} catch (e) {
+		console.warn('[QC] Grader pass failed (continuing ungated):', (e as Error).message);
+		return null;
+	}
+}
+
+/** Best-effort append of an auto-rejection to post_reviews (the QC training log). */
+async function logAutoReject(
+	supabase: any,
+	userId: string,
+	agentId: string | undefined,
+	grade: QualityGrade,
+	draft: { text?: string }
+): Promise<void> {
+	try {
+		await supabase.from('post_reviews').insert({
+			user_id: userId,
+			post_id: null,
+			agent_id: agentId ?? null,
+			decision: 'reject',
+			reason: `auto-qc: ${grade.overall}/10 — ${grade.topIssue}`.slice(0, 500),
+			content_snapshot: { text: draft.text ?? null, grade }
+		});
+	} catch (e) {
+		console.warn('[QC] Failed to log auto-reject:', (e as Error).message);
+	}
+}
+
 /**
  * Builds a rich agent context string from the agent row, pulling extended
  * persona profile from agent.market (stored as JSON by the persona editor).
@@ -283,7 +450,9 @@ function buildRichAgentContext(agent: any): string {
 	if (pp.contentFocus) lines.push(`Primary content focus: ${pp.contentFocus}.`);
 	if (pp.contentAngle)
 		lines.push(`Signature content angle / POV: "${pp.contentAngle}" — this is the unique lens through which all content is filtered.`);
-	if (pp.ageMin && pp.ageMax)
+	if (Array.isArray(pp.ageRanges) && pp.ageRanges.length)
+		lines.push(`Target age demographic: ${pp.ageRanges.join(', ')}.`);
+	else if (pp.ageMin && pp.ageMax)
 		lines.push(`Target age demographic: ${pp.ageMin}–${pp.ageMax} year olds.`);
 	if (pp.targetAvatar) lines.push(`Ideal viewer profile: ${pp.targetAvatar}.`);
 	if (pp.psychProfile)
@@ -301,9 +470,18 @@ function buildRichAgentContext(agent: any): string {
 function buildBrandVisualContext(briefData: any): string {
 	if (!briefData) return '';
 	const parts: string[] = [];
-	if (briefData.brandColors) parts.push(`Brand color palette: ${briefData.brandColors}`);
+	// The brand brief stores primaryColor/secondaryColor/traits/commStyle (scraped
+	// or manual). Read those real fields, with the aspirational names as fallbacks.
+	const colors =
+		[briefData.primaryColor, briefData.secondaryColor].filter(Boolean).join(', ') ||
+		briefData.brandColors;
+	if (colors) parts.push(`Brand color palette: ${colors}`);
 	if (briefData.fontPrimary) parts.push(`Primary font: ${briefData.fontPrimary}`);
-	if (briefData.brandPersonality) parts.push(`Visual personality: ${briefData.brandPersonality}`);
+	const traits = Array.isArray(briefData.traits) ? briefData.traits.join(', ') : briefData.traits;
+	const personality =
+		briefData.brandPersonality || [traits, briefData.commStyle].filter(Boolean).join(' · ');
+	if (personality) parts.push(`Visual personality: ${personality}`);
+	if (briefData.tagline) parts.push(`Brand tagline/essence: ${briefData.tagline}`);
 	if (briefData.ugcGuidelines) parts.push(`UGC visual guidelines: ${briefData.ugcGuidelines}`);
 	return parts.length > 0 ? `Brand visual direction — ${parts.join('. ')}.` : '';
 }
@@ -634,6 +812,7 @@ export async function generateCinematicUgcPack(input: UgcPackInput): Promise<Ugc
 						.join(' ')
 				: '',
 			`Content type: ${cinematicIntent.type}. Platform: ${platform}. Platform voice: ${cinematicIntent.platformVoice}.`,
+			buildHookGuidance(cinematicIntent, `${topic}|${platform}|cinematic`),
 			voiceGender ? `The on-camera character (@Element1) must present as ${voiceGender}, matching the pinned voice.` : '',
 			`Angle for this post: "${topic}". Output ONLY the JSON.`
 		]
@@ -661,6 +840,38 @@ export async function generateCinematicUgcPack(input: UgcPackInput): Promise<Ugc
 		const hookRetryParsed = safeParseJson(retryHookRaw);
 		if (hookRetryParsed && (hookRetryParsed.hookScore ?? 0) > (parsed.hookScore ?? 0)) {
 			parsed = hookRetryParsed;
+		}
+	}
+
+	// Pre-media quality gate — cinematic is the expensive path (~3x standard),
+	// so a below-floor script must die HERE, before storyboard stills + Kling.
+	// Placed BEFORE shot derivation so an accepted rewrite replaces the shots
+	// too. One improvement-guided rewrite, then abandon (autopilot falls back
+	// to the standard path, which runs its own gate).
+	const cinematicFloor = qualityFloor();
+	let cinematicGrade = await gradeDraft(ai, parsed, selectedProduct?.name ?? null, platform);
+	if (cinematicFloor > 0 && cinematicGrade && cinematicGrade.overall < cinematicFloor) {
+		console.warn(
+			`[Cinematic QC] Draft graded ${cinematicGrade.overall}/10 (< floor ${cinematicFloor}) — one rewrite: ${cinematicGrade.fix}`
+		);
+		const rewriteRaw =
+			(await ai.generate(
+				`${buildCinematicPrompt()}\n\nAn independent QC reviewer graded your draft ${cinematicGrade.overall}/10. Top issue: ${cinematicGrade.topIssue}. Required fix: ${cinematicGrade.fix}. Rewrite the ENTIRE JSON applying that fix.`,
+				{ systemInstruction: CINEMATIC_DIRECTOR_SYSTEM, json: true }
+			)) || '{}';
+		const rewritten = safeParseJson(rewriteRaw);
+		if (rewritten?.text && Array.isArray(rewritten.shots) && rewritten.shots.length > 0) {
+			const regrade = await gradeDraft(ai, rewritten, selectedProduct?.name ?? null, platform);
+			if (!regrade || regrade.overall >= (cinematicGrade?.overall ?? 0)) {
+				parsed = rewritten;
+				cinematicGrade = regrade ?? cinematicGrade;
+			}
+		}
+		if (cinematicGrade && cinematicGrade.overall < cinematicFloor) {
+			await logAutoReject(supabase, userId, input.agentId, cinematicGrade, parsed);
+			throw new Error(
+				`Cinematic draft quality ${cinematicGrade.overall}/10 below floor ${cinematicFloor} (${cinematicGrade.topIssue}) — no media generated.`
+			);
 		}
 	}
 
@@ -788,7 +999,8 @@ export async function generateCinematicUgcPack(input: UgcPackInput): Promise<Ugc
 		},
 		platform,
 		storyboard: durableStoryboard,
-		cinematic: true
+		cinematic: true,
+		qualityGrade: cinematicGrade
 	};
 	if (input.autopilot) content.autopilot = true;
 
@@ -856,6 +1068,8 @@ export interface UgcContent {
 	product: { name: string; price?: string; description?: string } | null;
 	platform: string;
 	autopilot?: boolean;
+	/** Independent QC grade (pre-media gate) — surfaced in the review queue. */
+	qualityGrade?: QualityGrade | null;
 }
 
 export interface UgcPack {
@@ -956,13 +1170,51 @@ export async function generateCharacterPortrait(
 	agentData: any,
 	voiceGender: 'male' | 'female' | undefined
 ): Promise<string> {
+	// 1. Config/brief-tuned hero portrait → pinned as the profile picture.
 	const durable = await generateHeroPortraitImage(svc, userId, falKey, briefData, agentData, voiceGender);
-
 	await supabase.from('agent_configs').update({ ugc_character_ref: durable }).eq('agent_id', agentId);
-	// Replace, not merge: a fresh from-scratch face invalidates any
-	// side_profiles/face_closeup/feature_grid derived from a previous face
-	// (whether from an earlier regenerate or an earlier uploaded photo).
-	await mergeReferenceKit(supabase, agentId, { full_body: durable }, true);
+
+	// 2. Build a REAL reference-kit foundation from that portrait — a character
+	//    turnaround sheet plus a distinct full-body shot — so the kit stages
+	//    (side profiles / facial close-up / feature grid) work WITHOUT requiring
+	//    a separately uploaded reference photo. Previously `full_body` was just
+	//    the portrait reused and no `sheet` existed, which left the kit unusable
+	//    for from-scratch personas. Best-effort: on failure we still leave a
+	//    valid pinned profile picture and fall back to the portrait as full_body.
+	//    Replace (not merge): a fresh face invalidates any prior derived stages.
+	try {
+		const sheetData = await falSyncJson(
+			NANO_MODEL,
+			{ prompt: CHARACTER_SHEET_PROMPT, image_urls: [durable], aspect_ratio: '16:9' },
+			falKey
+		);
+		const sheetUrl = sheetData.images?.[0]?.url;
+		if (!sheetUrl) throw new Error('Nano Banana returned no character sheet');
+
+		let durableSheet = sheetUrl;
+		try {
+			durableSheet = await persistToStorage(svc, sheetUrl, userId, 'png');
+		} catch {
+			/* keep provider url */
+		}
+
+		const heroShotUrl = await generateAvatarHeroShot(falKey, sheetUrl);
+		let durableFull = heroShotUrl;
+		try {
+			durableFull = await persistToStorage(svc, heroShotUrl, userId, 'png');
+		} catch {
+			/* keep provider url */
+		}
+
+		await mergeReferenceKit(supabase, agentId, { sheet: durableSheet, full_body: durableFull }, true);
+	} catch (err) {
+		console.warn(
+			'[Content] Character-sheet foundation generation failed; kit stages will need a reference photo:',
+			(err as Error).message
+		);
+		await mergeReferenceKit(supabase, agentId, { full_body: durable }, true);
+	}
+
 	return durable;
 }
 
@@ -1305,6 +1557,7 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 					.join(' ')
 			: '',
 		`Content type detected: ${intent.type}. Platform: ${platform}. Platform voice guide: ${intent.platformVoice}.`,
+		buildHookGuidance(intent, `${topic}|${platform}|${input.agentId || ''}`),
 		`Requested format: ${cfg.format === 'auto' ? 'choose spokesperson or broll based on what will perform best for this content type' : cfg.format}.`,
 		voiceGender
 			? `If the scene shows a person on camera, they must present as ${voiceGender} — the pinned voice is ${voiceGender} and the on-camera character must match.`
@@ -1340,6 +1593,37 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 		const retryParsed = safeParseJson(retryRaw);
 		if (retryParsed && (retryParsed.hookScore ?? 0) > (parsed.hookScore ?? 0)) {
 			parsed = retryParsed;
+		}
+	}
+
+	// ── Pre-media quality gate: independent grader, improvement-guided retry ──
+	// Text grading is ~free; media is the expensive step. A draft below the
+	// floor gets ONE targeted rewrite; still below → the slot is abandoned
+	// BEFORE any image/video spend, and the rejection is logged as QC data.
+	const floor = qualityFloor();
+	let qualityGrade = await gradeDraft(ai, parsed, selectedProduct?.name ?? null, platform);
+	if (floor > 0 && qualityGrade && qualityGrade.overall < floor) {
+		console.warn(
+			`[QC] Draft graded ${qualityGrade.overall}/10 (< floor ${floor}) — one improvement-guided rewrite: ${qualityGrade.fix}`
+		);
+		const rewriteRaw =
+			(await ai.generate(
+				`${buildDirectorPrompt()}\n\nAn independent QC reviewer graded your draft ${qualityGrade.overall}/10. Top issue: ${qualityGrade.topIssue}. Required fix: ${qualityGrade.fix}. Rewrite the ENTIRE JSON applying that fix without losing the persona voice.`,
+				{ systemInstruction: DIRECTOR_SYSTEM, json: true }
+			)) || '{}';
+		const rewritten = safeParseJson(rewriteRaw);
+		if (rewritten?.text) {
+			const regrade = await gradeDraft(ai, rewritten, selectedProduct?.name ?? null, platform);
+			if (!regrade || regrade.overall >= (qualityGrade?.overall ?? 0)) {
+				parsed = rewritten;
+				qualityGrade = regrade ?? qualityGrade;
+			}
+		}
+		if (qualityGrade && qualityGrade.overall < floor) {
+			await logAutoReject(supabase, userId, input.agentId, qualityGrade, parsed);
+			throw new Error(
+				`Draft quality ${qualityGrade.overall}/10 below floor ${floor} after rewrite (${qualityGrade.topIssue}) — no media generated.`
+			);
 		}
 	}
 
@@ -1440,7 +1724,8 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 					description: selectedProduct.description
 				}
 			: null,
-		platform
+		platform,
+		qualityGrade
 	};
 	if (input.autopilot) content.autopilot = true;
 

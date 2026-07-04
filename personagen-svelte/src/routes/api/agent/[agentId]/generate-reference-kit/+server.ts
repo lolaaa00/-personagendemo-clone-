@@ -68,21 +68,21 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 
 	const { data: cfg } = await locals.supabase
 		.from('agent_configs')
-		.select('ugc_reference_kit')
+		.select('ugc_reference_kit, ugc_character_ref')
 		.eq('agent_id', agentId)
 		.maybeSingle();
 	const kit = cfg?.ugc_reference_kit || {};
+	const characterRef = cfg?.ugc_character_ref || null;
 
 	try {
 		if (stage === 'side_profiles') {
-			if (!kit.full_body || !kit.sheet) {
+			// A full-body shot is the minimum. The sheet sharpens fidelity but
+			// isn't required — fall back to the full-body shot as the reference so
+			// from-scratch personas (which may not have a separate sheet) still work.
+			const frontal = kit.full_body || kit.sheet || characterRef;
+			if (!frontal) {
 				return json(
-					{
-						success: false,
-						error: kit.full_body
-							? 'This stage needs a character sheet, which is only produced by the "Upload Reference Photo" path. Upload a reference photo to unlock the rest of the reference kit.'
-							: 'Generate a profile picture from a reference photo first (need the full-body shot and character sheet).'
-					},
+					{ success: false, error: 'Generate a profile picture first.' },
 					{ status: 400 }
 				);
 			}
@@ -92,8 +92,8 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 				user.id,
 				agentId,
 				falKey,
-				kit.full_body,
-				kit.sheet
+				frontal,
+				kit.sheet || frontal
 			);
 			return json({ success: true, side_profiles: url });
 		}
@@ -111,7 +111,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		}
 
 		// stage === 'feature_grid'
-		if (!kit.face_closeup || !kit.sheet) {
+		if (!kit.face_closeup) {
 			return json(
 				{ success: false, error: 'Generate the facial close-up first.' },
 				{ status: 400 }
@@ -124,7 +124,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 			agentId,
 			falKey,
 			kit.face_closeup,
-			kit.sheet
+			kit.sheet || kit.full_body || kit.face_closeup
 		);
 		return json({ success: true, feature_grid: url });
 	} catch (err) {

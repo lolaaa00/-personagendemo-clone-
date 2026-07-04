@@ -4,9 +4,13 @@ import { createDbService } from '$lib/server/db';
 import { env } from '$env/dynamic/private';
 import { ComposioClient, isPlatformConfigured } from '$lib/server/social/composio';
 import { getZernioApiKey, ZernioClient } from '$lib/server/social/zernio';
+import { getBlotatoApiKey, BlotatoClient } from '$lib/server/social/blotato';
 
 // Platforms our connections table accepts (matches the DB CHECK constraint).
-const CONNECTABLE_PLATFORMS = new Set(['tiktok', 'instagram', 'youtube', 'x', 'facebook', 'threads']);
+const CONNECTABLE_PLATFORMS = new Set([
+	'instagram', 'tiktok', 'youtube', 'facebook', 'x', 'threads',
+	'linkedin', 'bluesky', 'pinterest', 'reddit', 'googlebusiness', 'telegram', 'snapchat'
+]);
 
 /** Maps a Zernio platform name onto our connections.platform vocabulary. */
 function mapZernioPlatform(platform: string): string {
@@ -70,6 +74,69 @@ async function syncZernioAccounts(
 		});
 		if (upErr) {
 			console.error(`[Accounts API] Failed to upsert Zernio connection for ${plat}:`, upErr);
+		} else {
+			synced.push(plat);
+		}
+	}
+
+	return { synced, skipped };
+}
+
+/**
+ * Imports the user's Blotato-connected accounts into the agent's `connections`
+ * as provider='blotato' rows (idempotent upsert). Platform OAuth happens in
+ * Blotato's dashboard; this sync is what makes those accounts postable here.
+ * No-ops when no Blotato key is configured. Same account-scoping caveat as
+ * syncZernioAccounts: accounts are per-key (per user), attached to this agent.
+ */
+async function syncBlotatoAccounts(
+	db: any,
+	supabase: any,
+	userId: string,
+	agentId: string
+): Promise<{ synced: string[]; skipped: string[] }> {
+	const synced: string[] = [];
+	const skipped: string[] = [];
+
+	const apiKey = await getBlotatoApiKey(supabase, userId).catch(() => null);
+	if (!apiKey) return { synced, skipped };
+
+	const accounts = await new BlotatoClient(apiKey).listAccounts();
+	const now = new Date().toISOString();
+
+	for (const acc of accounts) {
+		// Blotato reports 'twitter'; our connections vocabulary uses 'x'.
+		const plat = acc.platform === 'twitter' ? 'x' : acc.platform;
+		if (!CONNECTABLE_PLATFORMS.has(plat)) {
+			skipped.push(acc.platform);
+			continue;
+		}
+		const handle = acc.handle
+			? acc.handle.startsWith('@')
+				? acc.handle
+				: `@${acc.handle}`
+			: null;
+
+		const { error: upErr } = await db.connections.upsert({
+			user_id: userId,
+			agent_id: agentId,
+			platform: plat as any,
+			handle,
+			verified: true,
+			status: 'active',
+			provider: 'blotato',
+			provider_account_id: acc.id,
+			provider_metadata: {
+				blotatoPlatform: acc.platform,
+				displayName: acc.displayName,
+				pageId: acc.pageId ?? null
+			},
+			last_error: null,
+			last_checked_at: now,
+			last_sync: now
+		});
+		if (upErr) {
+			console.error(`[Accounts API] Failed to upsert Blotato connection for ${plat}:`, upErr);
 		} else {
 			synced.push(plat);
 		}
@@ -241,6 +308,11 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 					} catch (e) {
 						console.warn('[Accounts API] Zernio account sync failed (continuing):', e);
 					}
+					try {
+						await syncBlotatoAccounts(db, locals.supabase, user.id, persona_id);
+					} catch (e) {
+						console.warn('[Accounts API] Blotato account sync failed (continuing):', e);
+					}
 				}
 
 				const { data: conns, error } = await db.connections.listForAgent(persona_id);
@@ -334,17 +406,21 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			for (const p of platforms) {
 				const conn = conns?.find((c) => c.platform === p);
 
-				// Zernio-managed connections are verified by Zernio, not Composio.
-				// Never let a Composio status check downgrade them to reauth_required.
-				if (conn && String(conn.provider || '').toLowerCase() === 'zernio') {
+				// Zernio/Blotato-managed connections are verified by their own provider,
+				// not Composio. Never let a Composio status check downgrade them —
+				// EXCEPT when the publish path itself flagged them reauth_required.
+				const ownProvider = String(conn?.provider || '').toLowerCase();
+				if (conn && (ownProvider === 'zernio' || ownProvider === 'blotato')) {
+					const needsReauth = conn.status === 'reauth_required';
 					statusData[p] = {
-						connected: true,
+						connected: !needsReauth,
 						configured: true,
-						status: 'active',
+						status: needsReauth ? 'reauth_required' : 'active',
 						handle: conn.handle || '@connected',
-						verified: true,
-						provider: 'zernio',
+						verified: !needsReauth,
+						provider: ownProvider,
 						lastSync: conn.last_sync || conn.connected_at || new Date().toISOString(),
+						lastError: needsReauth ? conn.last_error || undefined : undefined,
 						followers: conn.followers || 0,
 						engagement_rate: conn.engagement_rate || 0
 					};
@@ -463,7 +539,8 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			return json({ success: true, data: statusData });
 		}
 
-		if (action === 'sync_zernio') {
+		if (action === 'sync_zernio' || action === 'sync_blotato') {
+			const providerName = action === 'sync_blotato' ? 'Blotato' : 'Zernio';
 			if (!persona_id) {
 				return json({ success: false, error: 'Missing persona_id' }, { status: 400 });
 			}
@@ -476,10 +553,16 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				return json({ success: false, error: 'Forbidden' }, { status: 403 });
 			}
 
-			const apiKey = await getZernioApiKey(locals.supabase, user.id);
+			const apiKey =
+				action === 'sync_blotato'
+					? await getBlotatoApiKey(locals.supabase, user.id)
+					: await getZernioApiKey(locals.supabase, user.id);
 			if (!apiKey) {
 				return json(
-					{ success: false, error: 'No Zernio API key configured. Add it in Settings → API Keys first.' },
+					{
+						success: false,
+						error: `No ${providerName} API key configured. Add it in Settings → API Keys first.`
+					},
 					{ status: 400 }
 				);
 			}
@@ -487,15 +570,16 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			let synced: string[] = [];
 			let skipped: string[] = [];
 			try {
-				({ synced, skipped } = await syncZernioAccounts(
-					db,
-					locals.supabase,
-					user.id,
-					persona_id
-				));
+				({ synced, skipped } =
+					action === 'sync_blotato'
+						? await syncBlotatoAccounts(db, locals.supabase, user.id, persona_id)
+						: await syncZernioAccounts(db, locals.supabase, user.id, persona_id));
 			} catch (e) {
 				return json(
-					{ success: false, error: `Failed to sync Zernio accounts: ${(e as Error).message}` },
+					{
+						success: false,
+						error: `Failed to sync ${providerName} accounts: ${(e as Error).message}`
+					},
 					{ status: 502 }
 				);
 			}
@@ -516,7 +600,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 					engagement_rate: targetEngagement
 				});
 			} catch (err) {
-				console.error('[Accounts API] Failed to update agent after Zernio sync:', err);
+				console.error(`[Accounts API] Failed to update agent after ${providerName} sync:`, err);
 			}
 
 			return json({ success: true, data: { synced, skipped, count: synced.length } });

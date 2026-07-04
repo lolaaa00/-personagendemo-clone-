@@ -46,7 +46,10 @@
 
 	const staticSections = {
 		network: [{ href: '/dashboard', label: 'Dashboard', icon: 'grid' }],
-		publish: [{ href: '/calendar', label: 'Calendar', icon: 'calendar' }],
+		publish: [
+			{ href: '/review', label: 'Review Queue', icon: 'check' },
+			{ href: '/calendar', label: 'Calendar', icon: 'calendar' }
+		],
 		setup: [
 			{ href: '/brand-brief', label: 'Brand Brief', icon: 'bolt' },
 			{ href: '/settings', label: 'Settings', icon: 'settings' }
@@ -59,11 +62,15 @@
 
 	let filteredSidebarAgents = $derived.by(() => {
 		const query = personaSearch.trim().toLowerCase();
-		if (!query) return sidebarAgents;
-		return sidebarAgents.filter((agent: any) => {
-			const name = (agent.name ?? '').toLowerCase();
-			const handle = (agent.handle ?? '').toLowerCase();
-			return name.includes(query) || handle.includes(query);
+		const list = query
+			? sidebarAgents.filter((agent: any) => (agent.name ?? '').toLowerCase().includes(query))
+			: [...sidebarAgents];
+		// Sort: active personas first, then alphabetical by name.
+		return list.sort((a: any, b: any) => {
+			const aActive = a.status === 'active' ? 0 : 1;
+			const bActive = b.status === 'active' ? 0 : 1;
+			if (aActive !== bActive) return aActive - bActive;
+			return (a.name ?? '').localeCompare(b.name ?? '');
 		});
 	});
 
@@ -188,13 +195,26 @@
 					/>
 				</div>
 			{/if}
+			<a
+				href="/generator"
+				class="sidebar-nav-item sidebar-new-persona"
+				onclick={closeSidebar}
+				title={sidebarState.collapsed ? 'New Persona' : undefined}
+			>
+				<span class="sidebar-nav-icon sidebar-new-icon">
+					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+				</span>
+				{#if !sidebarState.collapsed}
+					<span class="sidebar-nav-label">New Persona</span>
+				{/if}
+			</a>
 			{#each filteredSidebarAgents as agent (agent.id)}
 				<a
 					href="/personas/{agent.id}"
 					class="sidebar-nav-item sidebar-persona-item"
 					class:active={isAgentActive(agent.id, $page.url.pathname)}
 					onclick={closeSidebar}
-					title={sidebarState.collapsed ? `${agent.name} (${agent.handle})` : undefined}
+					title={sidebarState.collapsed ? agent.name : undefined}
 				>
 					<span class="sidebar-persona-avatar" style={agent.ugc_character_ref ? '' : `background: ${agent.gradient ?? 'var(--gradient)'}`}>
 						{#if agent.ugc_character_ref}
@@ -214,20 +234,6 @@
 			{#if !sidebarState.collapsed && filteredSidebarAgents.length === 0 && personaSearch.trim()}
 				<div class="sidebar-persona-empty">No personas match "{personaSearch}"</div>
 			{/if}
-			<a
-				href="/generator"
-				class="sidebar-nav-item sidebar-new-persona"
-				onclick={closeSidebar}
-				title={sidebarState.collapsed ? 'New Persona' : undefined}
-			>
-				<span class="sidebar-nav-icon sidebar-new-icon">
-					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-				</span>
-				{#if !sidebarState.collapsed}
-					<span class="sidebar-nav-label">New Persona</span>
-				{/if}
-			</a>
-
 			<!-- PUBLISH -->
 			{#if !sidebarState.collapsed}
 				<span class="sidebar-section-label">Publish</span>
@@ -246,6 +252,9 @@
 						{#if item.icon === 'calendar'}
 							<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
 								><rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
+						{:else if item.icon === 'check'}
+							<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+								><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>
 						{/if}
 					</span>
 					{#if !sidebarState.collapsed}
@@ -327,7 +336,8 @@
 						if (path.startsWith('/settings/overseer')) return 'Hermes Overseer Config';
 						if (path.startsWith('/settings')) return 'Settings';
 						if (path.startsWith('/generator')) return 'New Persona';
-						if (path.startsWith('/calendar')) return 'Calendar';
+						if (path.startsWith('/review')) return 'Review Queue';
+					if (path.startsWith('/calendar')) return 'Calendar';
 						if (path === '/dashboard' || path === '/') return 'Dashboard';
 						return 'Dashboard';
 					})()}

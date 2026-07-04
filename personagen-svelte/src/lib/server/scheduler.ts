@@ -28,7 +28,10 @@ function isRetriableError(message: string): boolean {
 	);
 }
 
-const PUBLISHABLE_PLATFORMS = ['instagram', 'tiktok', 'youtube', 'facebook', 'x', 'threads'];
+const PUBLISHABLE_PLATFORMS = [
+	'instagram', 'tiktok', 'youtube', 'facebook', 'x', 'threads',
+	'linkedin', 'bluesky', 'pinterest', 'reddit', 'googlebusiness', 'telegram', 'snapchat'
+];
 
 /**
  * Publishes a single post to its target platforms via the configured provider.
@@ -213,6 +216,28 @@ export async function publishSinglePost(supabase: any, post: any): Promise<boole
 				provider: publishRes.provider,
 				error: errMsg
 			};
+
+			// Auth-shaped failure → the CONNECTION is broken, not just this post.
+			// Mark it reauth_required so (a) the UI surfaces "reconnect needed"
+			// instead of silent per-post failures, and (b) subsequent posts skip
+			// this platform (connection-status guard above) rather than burning
+			// retries against a dead token.
+			if (/\b401\b|unauthoriz|token.{0,20}(expired|invalid|revoked)|expired.{0,10}token|re-?auth|invalid_grant|OAuthException/i.test(errMsg)) {
+				const { error: reauthErr } = await supabase
+					.from('connections')
+					.update({
+						status: 'reauth_required',
+						last_error: errMsg.slice(0, 300),
+						last_checked_at: new Date().toISOString()
+					})
+					.eq('agent_id', post.agent_id)
+					.eq('platform', normalizedPlat);
+				if (!reauthErr) {
+					console.warn(
+						`[Scheduler] Marked ${normalizedPlat} connection for agent ${post.agent_id} as reauth_required (auth failure during publish).`
+					);
+				}
+			}
 		}
 	}
 

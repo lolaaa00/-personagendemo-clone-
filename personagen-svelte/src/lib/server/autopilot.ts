@@ -95,13 +95,24 @@ function buildSlots(
 	lookaheadDays: number,
 	startH: number,
 	endH: number,
-	intervalHours: number
+	postsPerDay: number
 ): Slot[] {
+	// N slots per day, spread evenly across the active window (e.g. 3/day over
+	// 8–20 → 08:00, 14:00, 20:00). This is what makes the runway match the
+	// persona's configured posts_per_day instead of a fixed 2-hourly cadence.
+	const n = Math.min(Math.max(Math.trunc(postsPerDay) || 3, 1), 10);
+	const span = Math.max(endH - startH, 0);
+	const hours: number[] = [];
+	for (let i = 0; i < n; i++) {
+		const h = n === 1 ? startH : Math.round(startH + (i * span) / (n - 1));
+		if (!hours.includes(h)) hours.push(h);
+	}
+
 	const slots: Slot[] = [];
 	const today = getLocalParts(tz);
 	for (let d = 0; d < lookaheadDays; d++) {
 		const dateStr = addDaysToDateStr(today.dateStr, d);
-		for (let h = startH; h <= endH; h += intervalHours) {
+		for (const h of hours) {
 			slots.push({ dateStr, timeStr: `${String(h).padStart(2, '0')}:00:00` });
 		}
 	}
@@ -115,11 +126,11 @@ interface AgentConfig {
 	active_hours_start?: number | null;
 	active_hours_end?: number | null;
 	timezone?: string | null;
+	posts_per_day?: number | null;
 }
 
 interface GenerateOpts {
 	lookaheadDays: number;
-	intervalHours: number;
 	maxToCreate: number;
 }
 
@@ -153,7 +164,7 @@ async function generateDraftsForAgent(
 	const status =
 		hasConnections && cfg.autonomy_level === 'fully_autonomous' ? 'scheduled' : 'draft';
 
-	const slots = buildSlots(tz, opts.lookaheadDays, startH, endH, opts.intervalHours);
+	const slots = buildSlots(tz, opts.lookaheadDays, startH, endH, cfg.posts_per_day ?? 3);
 	const dateStrs = [...new Set(slots.map((s) => s.dateStr))];
 
 	// Existing posts in the window → never double-book a slot (and don't re-spend on images)
@@ -165,6 +176,44 @@ async function generateDraftsForAgent(
 	const taken = new Set(
 		(existing || []).map((p: any) => `${p.scheduled_date}T${(p.scheduled_time || '').slice(0, 5)}`)
 	);
+
+	// ── Roll stale drafts forward ────────────────────────────────────────────
+	// A draft whose slot passed unapproved simply didn't publish (the scheduler
+	// only takes status='scheduled'). Rather than letting it rot in the past,
+	// move it to the next free future slot so the already-paid-for content
+	// stays in the review runway. No regeneration, no extra spend.
+	const nowMs = Date.now();
+	const { data: staleDrafts } = await supabase
+		.from('posts')
+		.select('id, scheduled_date, scheduled_time')
+		.eq('agent_id', agentId)
+		.eq('status', 'draft')
+		.not('scheduled_date', 'is', null)
+		.lte('scheduled_date', getLocalParts(tz).dateStr);
+	for (const draft of staleDrafts || []) {
+		if (
+			zonedWallTimeToEpoch(draft.scheduled_date, draft.scheduled_time || '00:00:00', tz) > nowMs
+		) {
+			continue; // still in the future today
+		}
+		const nextFree = slots.find(
+			(s) =>
+				!taken.has(`${s.dateStr}T${s.timeStr.slice(0, 5)}`) &&
+				zonedWallTimeToEpoch(s.dateStr, s.timeStr, tz) > nowMs
+		);
+		if (!nextFree) break; // runway fully booked — leave remaining drafts as-is
+		const { error: rollErr } = await supabase
+			.from('posts')
+			.update({ scheduled_date: nextFree.dateStr, scheduled_time: nextFree.timeStr })
+			.eq('id', draft.id)
+			.eq('status', 'draft'); // guard: don't move it if it was approved mid-run
+		if (!rollErr) {
+			taken.add(`${nextFree.dateStr}T${nextFree.timeStr.slice(0, 5)}`);
+			console.log(
+				`[Autopilot] Rolled stale draft ${draft.id} forward to ${nextFree.dateStr} ${nextFree.timeStr}`
+			);
+		}
+	}
 
 	// Exactly one high-production cinematic post per day — always the day's
 	// first slot (deterministic regardless of run history), everything else
@@ -231,8 +280,10 @@ async function generateDraftsForAgent(
 		} catch (e) {
 			const msg = (e as Error).message;
 			console.error('[Autopilot] Generation failed for slot', key, msg);
-			// Hard config errors won't fix themselves mid-run — stop this agent.
-			if (/No AI provider|No image generation/i.test(msg)) break;
+			// Hard config/account errors won't fix themselves mid-run — stop this
+			// agent instead of burning LLM tokens on every remaining slot.
+			// "Exhausted balance"/"User is locked" = fal account lock (seen live).
+			if (/No AI provider|No image generation|Exhausted balance|User is locked/i.test(msg)) break;
 		}
 	}
 	return created;
@@ -242,7 +293,9 @@ async function generateDraftsForAgent(
 async function resolveAgentConfig(supabase: any, agentId: string): Promise<AgentConfig | null> {
 	const { data: cfg } = await supabase
 		.from('agent_configs')
-		.select('agent_id, user_id, autonomy_level, active_hours_start, active_hours_end, timezone')
+		.select(
+			'agent_id, user_id, autonomy_level, active_hours_start, active_hours_end, timezone, posts_per_day'
+		)
 		.eq('agent_id', agentId)
 		.maybeSingle();
 	if (cfg) return cfg as AgentConfig;
@@ -259,7 +312,8 @@ async function resolveAgentConfig(supabase: any, agentId: string): Promise<Agent
 		autonomy_level: 'semi_autonomous',
 		active_hours_start: 8,
 		active_hours_end: 20,
-		timezone: DEFAULT_TZ
+		timezone: DEFAULT_TZ,
+		posts_per_day: 3
 	};
 }
 
@@ -271,9 +325,10 @@ export async function runAutopilotDraftGeneration(opts?: {
 	agentId?: string;
 }): Promise<{ generated: number; agents: number }> {
 	const supabase = getServiceSupabase();
-	const lookaheadDays = intFromEnv('AUTOPILOT_LOOKAHEAD_DAYS', 2);
-	const intervalHours = intFromEnv('AUTOPILOT_INTERVAL_HOURS', 2);
-	const maxPerRun = intFromEnv('AUTOPILOT_MAX_PER_RUN', 14);
+	// 7-day runway of drafts ahead of the calendar (the review window), topped
+	// up incrementally each run — maxPerRun caps per-run spend, not the runway.
+	const lookaheadDays = intFromEnv('AUTOPILOT_LOOKAHEAD_DAYS', 7);
+	const maxPerRun = intFromEnv('AUTOPILOT_MAX_PER_RUN', 24);
 
 	let configs: AgentConfig[] = [];
 	if (opts?.agentId) {
@@ -282,7 +337,9 @@ export async function runAutopilotDraftGeneration(opts?: {
 	} else {
 		const { data } = await supabase
 			.from('agent_configs')
-			.select('agent_id, user_id, autonomy_level, active_hours_start, active_hours_end, timezone')
+			.select(
+				'agent_id, user_id, autonomy_level, active_hours_start, active_hours_end, timezone, posts_per_day'
+			)
 			.in('autonomy_level', ['semi_autonomous', 'fully_autonomous']);
 		configs = (data || []) as AgentConfig[];
 	}
@@ -294,7 +351,6 @@ export async function runAutopilotDraftGeneration(opts?: {
 		if (totalGenerated >= maxPerRun) break;
 		const created = await generateDraftsForAgent(supabase, cfg, {
 			lookaheadDays,
-			intervalHours,
 			maxToCreate: maxPerRun - totalGenerated
 		});
 		totalGenerated += created;

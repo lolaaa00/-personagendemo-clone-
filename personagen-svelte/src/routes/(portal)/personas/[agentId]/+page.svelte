@@ -30,6 +30,19 @@
 
 	// ── Feed state ─────────────────────────────────────────────────
 	let feedPosts = $state<any[]>([]);
+
+	// Graduation signal: enough clean published posts + no recent failures →
+	// safe to promote this persona from Semi (review phase) to Fully Autonomous.
+	const GRADUATION_TARGET = 21; // ≈ 3/day × 7-day clean streak
+	let publishedCleanCount = $derived(
+		feedPosts.filter((p: any) => p.status === 'published').length
+	);
+	let recentFailedCount = $derived(
+		feedPosts.filter((p: any) => p.status === 'failed' || p.status === 'partial').length
+	);
+	let graduationEligible = $derived(
+		publishedCleanCount >= GRADUATION_TARGET && recentFailedCount === 0
+	);
 	let feedLoading = $state(false);
 	let syncingFeed = $state(false);
 	let generatingPost = $state(false);
@@ -75,8 +88,34 @@
 		return {};
 	}
 	let personaProfile = $state<Record<string, any>>(parsePersonaProfile(agent));
-	let ppAgeMin = $state<number>(personaProfile.ageMin ?? 18);
-	let ppAgeMax = $state<number>(personaProfile.ageMax ?? 35);
+	// Age targeting as selectable buckets (multi-select) instead of dual sliders.
+	const AGE_RANGES = [
+		{ key: '13–17', lo: 13, hi: 17 },
+		{ key: '18–24', lo: 18, hi: 24 },
+		{ key: '25–34', lo: 25, hi: 34 },
+		{ key: '35–44', lo: 35, hi: 44 },
+		{ key: '45–54', lo: 45, hi: 54 },
+		{ key: '55+', lo: 55, hi: 99 }
+	];
+	function deriveAgeRanges(p: Record<string, any>): string[] {
+		if (Array.isArray(p.ageRanges)) return p.ageRanges;
+		// Migrate legacy ageMin/ageMax → the buckets they overlap.
+		const { ageMin, ageMax } = p;
+		if (typeof ageMin === 'number' && typeof ageMax === 'number') {
+			return AGE_RANGES.filter((r) => r.hi >= ageMin && r.lo <= ageMax).map((r) => r.key);
+		}
+		return [];
+	}
+	let ppAgeRanges = $state<string[]>(deriveAgeRanges(personaProfile));
+	function toggleAgeRange(key: string) {
+		ppAgeRanges = ppAgeRanges.includes(key)
+			? ppAgeRanges.filter((k) => k !== key)
+			: [...ppAgeRanges, key];
+	}
+	function toggleAllAgeRanges() {
+		ppAgeRanges = ppAgeRanges.length === AGE_RANGES.length ? [] : AGE_RANGES.map((r) => r.key);
+	}
+	let ppGender = $state<'' | 'female' | 'male'>(personaProfile.gender ?? '');
 	let ppArchetype = $state<string>(personaProfile.archetype ?? '');
 	let ppContentFocus = $state<string>(personaProfile.contentFocus ?? '');
 	let ppPsychProfile = $state<string>(personaProfile.psychProfile ?? '');
@@ -93,6 +132,15 @@
 		'Product Reviews & UGC', 'Inspiration & Motivation', 'Behind-the-Scenes',
 		'News & Commentary', 'Tutorials & Demos', 'Personal Journey'
 	];
+
+	const NICHE_OPTIONS = [
+		'Beauty & Wellness', 'Fitness & Health', 'Tech & AI', 'Food & Cooking',
+		'Fashion & Style', 'Travel & Adventure', 'Finance & Business', 'Gaming & Esports',
+		'Education & Learning', 'Lifestyle', 'Parenting & Family', 'Home & DIY',
+		'Pets & Animals', 'Entertainment & Pop Culture', 'Sustainability & Eco',
+		'Arts & Creativity', 'Sports', 'Automotive'
+	];
+	const STATUS_OPTIONS = ['active', 'paused', 'pending'];
 
 	// Soul / Skills / Tools
 	let soulText = $state(agent?.soul ?? '');
@@ -168,17 +216,36 @@
 	});
 
 	const timezones = [
-		{ value: 'Australia/Sydney', label: 'Sydney (AEST)' },
-		{ value: 'Australia/Melbourne', label: 'Melbourne (AEST)' },
-		{ value: 'Australia/Brisbane', label: 'Brisbane (AEST)' },
-		{ value: 'Australia/Perth', label: 'Perth (AWST)' },
-		{ value: 'Australia/Adelaide', label: 'Adelaide (ACST)' },
-		{ value: 'Australia/Hobart', label: 'Hobart (AEST)' },
-		{ value: 'Australia/Darwin', label: 'Darwin (ACST)' },
-		{ value: 'Australia/Canberra', label: 'Canberra (AEST)' }
+		{ value: 'Pacific/Midway', label: '(UTC−11) Midway' },
+		{ value: 'Pacific/Honolulu', label: '(UTC−10) Hawaii' },
+		{ value: 'America/Anchorage', label: '(UTC−09) Alaska' },
+		{ value: 'America/Los_Angeles', label: '(UTC−08) Pacific — Los Angeles' },
+		{ value: 'America/Denver', label: '(UTC−07) Mountain — Denver' },
+		{ value: 'America/Chicago', label: '(UTC−06) Central — Chicago' },
+		{ value: 'America/New_York', label: '(UTC−05) Eastern — New York' },
+		{ value: 'America/Halifax', label: '(UTC−04) Atlantic — Halifax' },
+		{ value: 'America/Sao_Paulo', label: '(UTC−03) São Paulo' },
+		{ value: 'Atlantic/Azores', label: '(UTC−01) Azores' },
+		{ value: 'Etc/UTC', label: '(UTC+00) UTC' },
+		{ value: 'Europe/London', label: '(UTC+00) London' },
+		{ value: 'Europe/Paris', label: '(UTC+01) Paris / Berlin / Madrid' },
+		{ value: 'Europe/Athens', label: '(UTC+02) Athens / Cairo / Johannesburg' },
+		{ value: 'Europe/Moscow', label: '(UTC+03) Moscow / Istanbul' },
+		{ value: 'Asia/Dubai', label: '(UTC+04) Dubai' },
+		{ value: 'Asia/Karachi', label: '(UTC+05) Karachi' },
+		{ value: 'Asia/Kolkata', label: '(UTC+05:30) India' },
+		{ value: 'Asia/Dhaka', label: '(UTC+06) Dhaka' },
+		{ value: 'Asia/Bangkok', label: '(UTC+07) Bangkok / Jakarta' },
+		{ value: 'Asia/Shanghai', label: '(UTC+08) China / Singapore' },
+		{ value: 'Asia/Tokyo', label: '(UTC+09) Tokyo / Seoul' },
+		{ value: 'Australia/Perth', label: '(UTC+08) Perth' },
+		{ value: 'Australia/Darwin', label: '(UTC+09:30) Darwin' },
+		{ value: 'Australia/Adelaide', label: '(UTC+09:30) Adelaide' },
+		{ value: 'Australia/Brisbane', label: '(UTC+10) Brisbane' },
+		{ value: 'Australia/Sydney', label: '(UTC+10) Sydney / Melbourne' },
+		{ value: 'Pacific/Auckland', label: '(UTC+12) Auckland' }
 	];
 
-	const autonomyKeys: AutonomyLevel[] = ['advisor', 'semi_autonomous', 'fully_autonomous'];
 
 	const GRADIENT_PRESETS = [
 		{ name: 'Purple Sunset', gradient: 'linear-gradient(135deg, #7C3AED, #4F46E5)' },
@@ -219,8 +286,8 @@
 		// Reset persona profile from new agent
 		const freshProfile = parsePersonaProfile(fresh);
 		personaProfile = freshProfile;
-		ppAgeMin = freshProfile.ageMin ?? 18;
-		ppAgeMax = freshProfile.ageMax ?? 35;
+		ppAgeRanges = deriveAgeRanges(freshProfile);
+		ppGender = freshProfile.gender ?? '';
 		ppArchetype = freshProfile.archetype ?? '';
 		ppContentFocus = freshProfile.contentFocus ?? '';
 		ppPsychProfile = freshProfile.psychProfile ?? '';
@@ -275,7 +342,7 @@
 	});
 
 	// ── UGC voice picker ───────────────────────────────────────────
-	let voiceCatalog = $state<Array<{ name: string; label: string; gender: 'male' | 'female'; style: string }>>([]);
+	let voiceCatalog = $state<Array<{ name: string; label: string; gender: 'male' | 'female'; style: string; accent?: string }>>([]);
 	let previewingVoice = $state(false);
 	let previewAudio: HTMLAudioElement | null = null;
 
@@ -514,8 +581,16 @@
 			supervisorAgentId: editSupervisorId,
 			runtimeOwner: editRuntimeOwner,
 			personaProfile: {
-				ageMin: ppAgeMin,
-				ageMax: ppAgeMax,
+				ageRanges: ppAgeRanges,
+				// Keep numeric min/max derived from the selected buckets so existing
+				// generation prompts that read ageMin/ageMax keep working.
+				ageMin: ppAgeRanges.length
+					? Math.min(...AGE_RANGES.filter((r) => ppAgeRanges.includes(r.key)).map((r) => r.lo))
+					: null,
+				ageMax: ppAgeRanges.length
+					? Math.max(...AGE_RANGES.filter((r) => ppAgeRanges.includes(r.key)).map((r) => r.hi))
+					: null,
+				gender: ppGender,
 				archetype: ppArchetype,
 				contentFocus: ppContentFocus,
 				psychProfile: ppPsychProfile,
@@ -981,32 +1056,24 @@
 							<input id="p-name" type="text" bind:value={editName} placeholder="e.g. Veronica Active" />
 						</div>
 						<div class="field-group">
-							<label for="p-handle">Handle</label>
-							<input id="p-handle" type="text" bind:value={editHandle} placeholder="e.g. @veronica_ai" />
-						</div>
-						<div class="field-group">
 							<label for="p-niche">Niche</label>
-							<input id="p-niche" type="text" bind:value={editNiche} placeholder="e.g. Beauty & Wellness" />
+							<select id="p-niche" bind:value={editNiche}>
+								{#if editNiche && !NICHE_OPTIONS.includes(editNiche)}
+									<option value={editNiche}>{editNiche}</option>
+								{/if}
+								<option value="">— Select niche —</option>
+								{#each NICHE_OPTIONS as n}
+									<option value={n}>{n}</option>
+								{/each}
+							</select>
 						</div>
 						<div class="field-group">
-							<label for="p-initial">Avatar Initial</label>
-							<input id="p-initial" type="text" maxlength="2" bind:value={editInitial} placeholder="e.g. V" />
-						</div>
-						<div class="field-group col-span-2">
-							<label>Status</label>
-							<div class="status-row">
-								{#each ['active', 'paused', 'pending'] as s}
-									<button
-										type="button"
-										class="status-btn"
-										class:selected={editStatus === s}
-										onclick={() => (editStatus = s as any)}
-									>
-										<span class="status-dot-sm" style="background: {getStatusColor(s)}"></span>
-										{s}
-									</button>
+							<label for="p-status">Status</label>
+							<select id="p-status" bind:value={editStatus}>
+								{#each STATUS_OPTIONS as s}
+									<option value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
 								{/each}
-							</div>
+							</select>
 						</div>
 
 						<div class="field-group col-span-2">
@@ -1152,25 +1219,6 @@
 						{/if}
 
 						<div class="field-group col-span-2">
-							<label>Avatar Gradient (fallback)</label>
-							<div class="gradient-row">
-								{#each GRADIENT_PRESETS as preset}
-									<button
-										type="button"
-										class="gradient-swatch"
-										class:selected={editGradient === preset.gradient}
-										style="background: {preset.gradient}"
-										title={preset.name}
-										onclick={() => (editGradient = preset.gradient)}
-									></button>
-								{/each}
-								<div class="gradient-preview" style="background: {editGradient}">
-									{editInitial || editName?.[0]?.toUpperCase() || '?'}
-								</div>
-							</div>
-						</div>
-
-						<div class="field-group col-span-2">
 							<label for="p-soul">Soul / Personality</label>
 							<textarea id="p-soul" bind:value={soulText} rows="6" placeholder="Define your agent's personality, voice, and behavioral directives…"></textarea>
 						</div>
@@ -1214,23 +1262,34 @@
 
 					<div class="fields-grid">
 						<div class="field-group col-span-2">
-							<label>Target Age Range: <strong>{ppAgeMin}–{ppAgeMax}</strong></label>
-							<div class="age-range-row">
-								<div class="age-slider-group">
-									<span class="slider-cap">13</span>
-									<input type="range" min="13" max="65" step="1" bind:value={ppAgeMin}
-										oninput={() => { if (ppAgeMin > ppAgeMax - 2) ppAgeMax = ppAgeMin + 2; }} />
-									<span class="slider-cap">65</span>
-									<span class="age-label">Min {ppAgeMin}</span>
-								</div>
-								<div class="age-slider-group">
-									<span class="slider-cap">15</span>
-									<input type="range" min="15" max="70" step="1" bind:value={ppAgeMax}
-										oninput={() => { if (ppAgeMax < ppAgeMin + 2) ppAgeMin = ppAgeMax - 2; }} />
-									<span class="slider-cap">70</span>
-									<span class="age-label">Max {ppAgeMax}</span>
-								</div>
+							<label>Target Age Range</label>
+							<div class="age-chips">
+								<button
+									type="button"
+									class="age-chip age-chip-all"
+									class:selected={ppAgeRanges.length === AGE_RANGES.length}
+									onclick={toggleAllAgeRanges}
+								>All ages</button>
+								{#each AGE_RANGES as r}
+									<button
+										type="button"
+										class="age-chip"
+										class:selected={ppAgeRanges.includes(r.key)}
+										onclick={() => toggleAgeRange(r.key)}
+									>{r.key}</button>
+								{/each}
 							</div>
+							<p class="field-hint">Select one or more audience age brackets (or all).</p>
+						</div>
+
+						<div class="field-group">
+							<label for="pp-gender">Gender</label>
+							<select id="pp-gender" bind:value={ppGender}>
+								<option value="">— Select —</option>
+								<option value="female">Female</option>
+								<option value="male">Male</option>
+							</select>
+							<p class="field-hint">Drives the generated character's appearance and default voice.</p>
 						</div>
 
 						<div class="field-group">
@@ -1284,7 +1343,7 @@
 				<section class="profile-section">
 					<div class="section-header">
 						<h2 class="section-title">Automation</h2>
-						<p class="section-desc">Schedule, autonomy level, and content sourcing mode.</p>
+						<p class="section-desc">Posting schedule and content sourcing mode.</p>
 					</div>
 
 					<div class="fields-grid">
@@ -1301,7 +1360,7 @@
 							<div class="voice-picker-row">
 								<select id="p-voice" bind:value={selectedVoice}>
 									{#each voiceCatalog as v}
-										<option value={v.name}>{v.label} · {v.gender === 'male' ? '♂' : '♀'} · {v.style}</option>
+										<option value={v.name}>{v.label} · {v.gender === 'male' ? '♂' : '♀'}{v.accent ? ` · ${v.accent}` : ''} · {v.style}</option>
 									{:else}
 										<option value={selectedVoice}>{selectedVoice}</option>
 									{/each}
@@ -1313,55 +1372,39 @@
 							<p class="field-hint">The video's spoken voice — pin one that matches this persona's on-camera character.</p>
 						</div>
 						<div class="field-group">
-							<label for="p-ppd">Posts Per Day: <strong>{postsPerDay}</strong></label>
-							<div class="slider-row">
-								<span class="slider-cap">1</span>
-								<input id="p-ppd" type="range" min="1" max="10" step="1" bind:value={postsPerDay} />
-								<span class="slider-cap">10</span>
-							</div>
-						</div>
-						<div class="field-group col-span-2">
-							<label>Active Hours</label>
-							<div class="hours-row">
-								<div class="hour-pick">
-									<span class="hour-label">Start</span>
-									<select bind:value={activeHoursStart}>
-										{#each Array.from({ length: 24 }, (_, i) => i) as h}
-											<option value={h}>{formatHour(h)}</option>
-										{/each}
-									</select>
-								</div>
-								<span class="hour-arrow">→</span>
-								<div class="hour-pick">
-									<span class="hour-label">End</span>
-									<select bind:value={activeHoursEnd}>
-										{#each Array.from({ length: 24 }, (_, i) => i) as h}
-											<option value={h}>{formatHour(h)}</option>
-										{/each}
-									</select>
-								</div>
-							</div>
+							<label for="p-ppd">Posts Per Day</label>
+							<input
+								id="p-ppd"
+								type="number"
+								min="1"
+								max="10"
+								step="1"
+								class="field-input"
+								bind:value={postsPerDay}
+								oninput={() => {
+									if (postsPerDay > 10) postsPerDay = 10;
+									if (postsPerDay < 1) postsPerDay = 1;
+								}}
+							/>
+							<p class="field-hint">Max 10 per day.</p>
 						</div>
 
-						<div class="field-group col-span-2">
-							<label>Autonomy Level</label>
-							<div class="autonomy-cards">
-								{#each autonomyKeys as level}
-									{@const meta = AUTONOMY_LABELS[level]}
-									<button
-										class="autonomy-card"
-										class:selected={autonomyLevel === level}
-										onclick={() => (autonomyLevel = level)}
-									>
-										<div class="autonomy-radio">
-											<div class="radio-outer">{#if autonomyLevel === level}<div class="radio-inner"></div>{/if}</div>
-										</div>
-										<span class="autonomy-icon">{meta.icon}</span>
-										<span class="autonomy-label">{meta.label}</span>
-										<p class="autonomy-desc">{meta.description}</p>
-									</button>
-								{/each}
-							</div>
+						<div class="field-group">
+							<label for="p-autonomy">Autonomy</label>
+							<select id="p-autonomy" bind:value={autonomyLevel}>
+								<option value="advisor">Advisor — manual generate only</option>
+								<option value="semi_autonomous">Semi — drafts for review</option>
+								<option value="fully_autonomous">Fully — publishes unattended</option>
+							</select>
+							<p class="field-hint">
+								{#if autonomyLevel === 'fully_autonomous'}
+									Publishing without review — drop back to Semi if quality slips.
+								{:else if graduationEligible}
+									✅ Eligible to graduate: {publishedCleanCount} clean published posts. Switch to Fully when confident.
+								{:else}
+									Graduates to Fully after ~21 clean published posts ({publishedCleanCount} so far, {recentFailedCount} recent failure{recentFailedCount === 1 ? '' : 's'}).
+								{/if}
+							</p>
 						</div>
 
 						<div class="field-group col-span-2">
@@ -1880,6 +1923,35 @@
 	}
 
 	/* ── Persona Profile section ── */
+	.age-chips {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+	}
+	.age-chip {
+		padding: 0.4rem 0.85rem;
+		border-radius: 999px;
+		border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
+		background: rgba(255, 255, 255, 0.03);
+		color: var(--text-dim, #9aa);
+		font-size: var(--text-sm, 0.85rem);
+		font-weight: 600;
+		cursor: pointer;
+		transition: all 0.15s ease;
+	}
+	.age-chip:hover {
+		border-color: var(--accent-mid, #7c6aed);
+		color: var(--text, #fff);
+	}
+	.age-chip.selected {
+		background: var(--accent-mid, #7c6aed);
+		border-color: var(--accent-mid, #7c6aed);
+		color: #fff;
+	}
+	.age-chip-all {
+		font-style: italic;
+	}
+
 	.age-range-row {
 		display: flex;
 		gap: 2rem;

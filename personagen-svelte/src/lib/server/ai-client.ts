@@ -4,7 +4,8 @@
  * Resolution order:
  * 1. User's OpenRouter key (from user_api_keys table)
  * 2. User's Gemini key (from user_api_keys table)
- * 3. Server-wide GEMINI_API_KEY env var (fallback)
+ * 3. Server-wide OPENROUTER_API_KEY env var (fallback)
+ * 4. Server-wide GEMINI_API_KEY env var (fallback)
  *
  * OpenRouter uses the OpenAI-compatible /v1/chat/completions endpoint.
  * Gemini uses the @google/genai SDK.
@@ -53,7 +54,15 @@ export async function resolveAiClient(
 		return createGeminiClient(userGeminiKey);
 	}
 
-	// 3. Fall back to server-wide env var
+	// 3. Fall back to server-wide env vars — OpenRouter first (matches the
+	//    user-key precedence above), then Gemini. Without the OpenRouter env
+	//    fallback, a server with only OPENROUTER_API_KEY set reported
+	//    "No AI provider configured" even though a key existed.
+	const envOrKey = env.OPENROUTER_API_KEY;
+	if (envOrKey && !envOrKey.includes('placeholder') && !envOrKey.includes('your-')) {
+		return createOpenRouterClient(envOrKey);
+	}
+
 	const envKey = env.GEMINI_API_KEY;
 	if (envKey && !envKey.includes('placeholder') && !envKey.includes('your-gemini')) {
 		return createGeminiClient(envKey);
