@@ -5,6 +5,7 @@ import { publishToPlatform } from './social/publisher';
 import { getServiceSupabase } from './service-supabase';
 import { runAutopilotDraftGeneration, zonedWallTimeToEpoch } from './autopilot';
 import { acquireSchedulerLock } from './scheduler-lock';
+import { ALL_PLATFORM_KEYS } from '$lib/platforms';
 
 const DEFAULT_TZ = 'Australia/Sydney';
 
@@ -28,10 +29,11 @@ function isRetriableError(message: string): boolean {
 	);
 }
 
-const PUBLISHABLE_PLATFORMS = [
-	'instagram', 'tiktok', 'youtube', 'facebook', 'x', 'threads',
-	'linkedin', 'bluesky', 'pinterest', 'reddit', 'googlebusiness', 'telegram', 'snapchat'
-];
+// Derived from the single platform registry — publishable = connectable, since
+// publishToPlatform routes Zernio-first (full registry breadth) with Composio
+// as the narrower image-only fallback, and fails loudly per-platform when no
+// provider can actually serve a target.
+const PUBLISHABLE_PLATFORMS = ALL_PLATFORM_KEYS;
 
 /**
  * Publishes a single post to its target platforms via the configured provider.

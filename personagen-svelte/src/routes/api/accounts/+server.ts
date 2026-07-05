@@ -5,12 +5,12 @@ import { env } from '$env/dynamic/private';
 import { ComposioClient, isPlatformConfigured } from '$lib/server/social/composio';
 import { getZernioApiKey, ZernioClient } from '$lib/server/social/zernio';
 import { getBlotatoApiKey, BlotatoClient } from '$lib/server/social/blotato';
+import { ALL_PLATFORM_KEYS } from '$lib/platforms';
 
-// Platforms our connections table accepts (matches the DB CHECK constraint).
-const CONNECTABLE_PLATFORMS = new Set([
-	'instagram', 'tiktok', 'youtube', 'facebook', 'x', 'threads',
-	'linkedin', 'bluesky', 'pinterest', 'reddit', 'googlebusiness', 'telegram', 'snapchat'
-]);
+// Platforms our connections table accepts — derived from the single platform
+// registry, which the connections_platforms_expand migration keeps the DB
+// CHECK constraint in step with.
+const CONNECTABLE_PLATFORMS = new Set(ALL_PLATFORM_KEYS);
 
 /** Maps a Zernio platform name onto our connections.platform vocabulary. */
 function mapZernioPlatform(platform: string): string {

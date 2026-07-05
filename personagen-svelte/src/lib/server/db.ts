@@ -74,7 +74,9 @@ export interface ConnectionRow {
 	id: string;
 	user_id: string;
 	agent_id: string;
-	platform: 'tiktok' | 'instagram' | 'youtube' | 'x' | 'facebook' | 'threads';
+	// Validated by the DB CHECK constraint + CONNECTABLE_PLATFORMS (both derived
+	// from $lib/platforms) — a TS union here would just be a third copy to drift.
+	platform: string;
 	handle: string | null;
 	verified: boolean;
 	connected_at: string;

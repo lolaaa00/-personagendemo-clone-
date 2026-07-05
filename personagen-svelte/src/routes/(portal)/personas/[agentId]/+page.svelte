@@ -13,6 +13,7 @@
 	import { getPostDisplay } from '$lib/components/feed/postDisplay';
 	import type { AutonomyLevel } from '$lib/types';
 	import { AUTONOMY_LABELS } from '$lib/types';
+	import { PLATFORMS as PLATFORM_REGISTRY, platformLabel } from '$lib/platforms';
 
 	let { data }: { data: any } = $props();
 
@@ -51,9 +52,8 @@
 	let feedFilter = $state<
 		'all' | 'published' | 'scheduled' | 'publishing' | 'draft' | 'failed' | 'partial'
 	>('all');
-	let platformFilter = $state<
-		'all' | 'tiktok' | 'instagram' | 'youtube' | 'facebook' | 'x' | 'threads'
-	>('all');
+	// 'all' or any registry platform key — options render from the registry.
+	let platformFilter = $state<string>('all');
 	let modalPost = $state<any | null>(null);
 	let deletingPostId = $state<string | null>(null);
 	let approvingPostId = $state<string | null>(null);
@@ -161,17 +161,14 @@
 	let rssLastPolledAt = $state<string | null>(agent?.rss_last_polled_at ?? null);
 
 	// ── Connections state ──────────────────────────────────────────
-	// Full connectable set (matches the connections table CHECK constraint and
-	// Zernio's supported platforms) — not just Composio's narrower subset, so
-	// a Zernio-only connection (x, threads) still shows up here.
-	const PLATFORMS = [
-		{ key: 'tiktok', name: 'TikTok', color: '#fe2c55' },
-		{ key: 'instagram', name: 'Instagram', color: '#e1306c' },
-		{ key: 'youtube', name: 'YouTube', color: '#ff0000' },
-		{ key: 'facebook', name: 'Facebook', color: '#1877f2' },
-		{ key: 'x', name: 'X', color: '#000000' },
-		{ key: 'threads', name: 'Threads', color: '#000000' }
-	] as const;
+	// Full connectable set, derived from the single platform registry (which
+	// matches the connections table CHECK constraint and Zernio's supported
+	// platforms) — adding a platform there makes it appear here automatically.
+	const PLATFORMS = Object.values(PLATFORM_REGISTRY).map((p) => ({
+		key: p.key,
+		name: p.label,
+		color: p.color
+	}));
 
 	interface PlatformStatus {
 		connected: boolean;
@@ -895,7 +892,15 @@
 	async function connectPlatform(platform: string) {
 		if (!agent?.id) return;
 		const status = platformStatuses[platform];
-		if (status?.configured === false) { showToast(`${platform} is not configured`, 'warning'); return; }
+		if (status?.configured === false) {
+			// "configured" means Composio OAuth config — Zernio-routed platforms
+			// never have one; they connect in the Zernio dashboard and import here.
+			showToast(
+				`Connect ${platformLabel(platform)} in your Zernio dashboard, then Refresh — it imports automatically.`,
+				'info'
+			);
+			return;
+		}
 		connectingPlatform = platform;
 		try {
 			const res = await Accounts.initConnection(agent.id, platform);
@@ -1100,12 +1105,9 @@
 						</select>
 						<select class="filter-select" bind:value={platformFilter}>
 							<option value="all">All platforms</option>
-							<option value="instagram">Instagram</option>
-							<option value="tiktok">TikTok</option>
-							<option value="youtube">YouTube</option>
-							<option value="facebook">Facebook</option>
-							<option value="x">X</option>
-							<option value="threads">Threads</option>
+							{#each PLATFORMS as p}
+								<option value={p.key}>{p.name}</option>
+							{/each}
 						</select>
 					</div>
 					<div class="feed-actions">
@@ -1732,10 +1734,16 @@
 						<div class="conn-quick-links">
 							{#each PLATFORMS as p}
 								{#if !platformStatuses[p.key]?.connected}
+									<!-- Kept clickable even when Composio isn't configured for this
+									     platform: the click explains the Zernio-dashboard route
+									     instead of dead-ending on a silently disabled button. -->
 									<button
 										type="button"
 										class="btn-connect-inline"
-										disabled={connectingPlatform === p.key || platformStatuses[p.key]?.configured === false}
+										disabled={connectingPlatform === p.key}
+										title={platformStatuses[p.key]?.configured === false
+											? `Connects via your Zernio dashboard`
+											: `Connect ${p.name}`}
 										onclick={() => connectPlatform(p.key)}
 									>
 										{connectingPlatform === p.key ? 'Connecting…' : `+ ${p.name}`}
