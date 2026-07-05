@@ -916,6 +916,12 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 										// the response schema isn't published, only the categories.
 										const b = fcJson.data.branding;
 										if (b && typeof b === 'object') {
+											// Fonts arrive as objects ({ family, role }) — verified live
+											// 2026-07-05 — so coerce every font-ish value to its name.
+											const fontName = (f: any): string | null =>
+												typeof f === 'string'
+													? f
+													: f?.family || f?.name || null;
 											brandGuide = {
 												logo: b.images?.logo || b.logo || b.logoUrl || null,
 												favicon: b.images?.favicon || b.favicon || null,
@@ -923,11 +929,12 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 												secondaryColor: b.colors?.secondary || b.colors?.secondaryColor || null,
 												accentColor: b.colors?.accent || null,
 												fontPrimary:
-													b.typography?.primary || b.typography?.heading || b.fonts?.primary ||
-													(Array.isArray(b.fonts) ? b.fonts[0]?.name || b.fonts[0] : null) || null,
+													fontName(b.typography?.heading) || fontName(b.typography?.primary) ||
+													fontName(b.fonts?.primary) ||
+													(Array.isArray(b.fonts) ? fontName(b.fonts[0]) : null),
 												fontSecondary:
-													b.typography?.body || b.fonts?.secondary ||
-													(Array.isArray(b.fonts) ? b.fonts[1]?.name || b.fonts[1] : null) || null,
+													fontName(b.typography?.body) || fontName(b.fonts?.secondary) ||
+													(Array.isArray(b.fonts) ? fontName(b.fonts[1]) : null),
 												tone: b.personality?.tone || null,
 												energy: b.personality?.energy || null,
 												audience: b.personality?.audience || null
@@ -1109,6 +1116,11 @@ ${contentToParse.substring(0, 20000)}${productPagesHint}`;
 									// Backfill fonts from the harvested CSS candidates.
 									if (!parsed.fontPrimary && fontCandidates[0]) parsed.fontPrimary = fontCandidates[0];
 									if (!parsed.fontSecondary && fontCandidates[1]) parsed.fontSecondary = fontCandidates[1];
+									// Belt+braces: never let a font reach the UI as an object.
+									const coerceFont = (f: any) =>
+										typeof f === 'string' ? f : f?.family || f?.name || '';
+									parsed.fontPrimary = coerceFont(parsed.fontPrimary);
+									parsed.fontSecondary = coerceFont(parsed.fontSecondary);
 									scrapedData = parsed;
 									scrapeSuccess = true;
 								}
