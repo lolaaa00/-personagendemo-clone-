@@ -614,6 +614,59 @@ async function generateBrollVideo(
 // when fal is down (balance lock, outage) so autopilot keeps producing video.
 
 const BROLL_MODEL_OPENROUTER = env.UGC_BROLL_MODEL_OR || 'kwaivgi/kling-v3.0-std';
+// Reference-conditioned image editing on OpenRouter — same Nano-Banana model
+// family fal serves, so faces/product composites survive a fal outage.
+// Verified live 2026-07-05: google/gemini-3.1-flash-image is image-in→image-out.
+const IMAGE_EDIT_MODEL_OPENROUTER = env.UGC_IMAGE_EDIT_MODEL_OR || 'google/gemini-3.1-flash-image';
+
+/**
+ * Reference-conditioned image generation via OpenRouter chat completions
+ * (multimodal input + image output). Returns a URL; data: URLs are persisted
+ * to Supabase storage first so post JSON never carries megabytes of base64.
+ */
+async function openRouterImageEdit(
+	orKey: string,
+	userId: string,
+	prompt: string,
+	imageUrls: string[]
+): Promise<string> {
+	const content: any[] = [{ type: 'text', text: prompt }];
+	for (const url of imageUrls.slice(0, 4)) {
+		content.push({ type: 'image_url', image_url: { url } });
+	}
+	const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+		method: 'POST',
+		headers: {
+			Authorization: `Bearer ${orKey}`,
+			'Content-Type': 'application/json',
+			'HTTP-Referer': 'https://personagen.app',
+			'X-Title': 'PersonaGen'
+		},
+		body: JSON.stringify({
+			model: IMAGE_EDIT_MODEL_OPENROUTER,
+			messages: [{ role: 'user', content }],
+			modalities: ['image', 'text']
+		})
+	});
+	if (!res.ok) {
+		const t = await res.text();
+		throw new Error(`OpenRouter image edit failed (${res.status}): ${t.slice(0, 200)}`);
+	}
+	const data = (await res.json()) as any;
+	const img = data.choices?.[0]?.message?.images?.[0];
+	const url: string | undefined = img?.image_url?.url || img?.url;
+	if (!url) throw new Error('OpenRouter image edit returned no image');
+
+	if (url.startsWith('data:')) {
+		// Decode and persist — a base64 data URL must never end up in post content.
+		const b64 = url.split(',')[1] || '';
+		const buffer = Buffer.from(b64, 'base64');
+		if (buffer.length === 0) throw new Error('OpenRouter image edit returned empty data URL');
+		const svc = getServiceSupabase(); // throws when unconfigured → caller falls back
+		return persistBufferToStorage(svc, buffer, userId, 'png', 'image/png');
+	}
+	return url;
+}
 
 /** fal failures that warrant provider failover (vs. bad-input errors that would fail anywhere). */
 function isFalOutage(msg: string): boolean {
@@ -1800,9 +1853,20 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 		} catch (e) {
 			const msg = (e as Error).message;
 			if (orKey && isFalOutage(msg)) {
-				console.warn(`[Failover] fal still failed (${msg.slice(0, 120)}) — OpenRouter image fallback.`);
-				still = await generateUgcImage(scenePrompt, orKey, null);
-				costEvents.push({ provider: 'openrouter', operation: 'image', model: 'flux-schnell', usd: priceOf('openrouter', 'image') });
+				// True composite failover: OpenRouter serves the same Nano-Banana
+				// model family with image input, so the REAL product (and pinned
+				// face) stay in-frame — flux text-to-image is only the last resort.
+				try {
+					const refs = [characterRef, selectedProduct.photoUrl].filter(Boolean) as string[];
+					const compositePrompt = `${scenePrompt}\n\nVertical 9:16 photorealistic UGC photo. Keep the product's exact label, shape and colors from the reference image — do not redesign it.${characterRef ? ' Keep the same person/face as the first reference image.' : ''} Authentic, slightly imperfect, real — not a studio ad.`;
+					console.warn(`[Failover] fal still failed (${msg.slice(0, 120)}) — OpenRouter Nano-Banana composite fallback.`);
+					still = await openRouterImageEdit(orKey, userId, compositePrompt, refs);
+					costEvents.push({ provider: 'openrouter', operation: 'image', model: IMAGE_EDIT_MODEL_OPENROUTER, usd: priceOf('openrouter', 'image') });
+				} catch (editErr) {
+					console.warn(`[Failover] OpenRouter composite also failed (${(editErr as Error).message.slice(0, 120)}) — flux text-to-image last resort.`);
+					still = await generateUgcImage(scenePrompt, orKey, null);
+					costEvents.push({ provider: 'openrouter', operation: 'image', model: 'flux-schnell', usd: priceOf('openrouter', 'image') });
+				}
 			} else {
 				throw e;
 			}

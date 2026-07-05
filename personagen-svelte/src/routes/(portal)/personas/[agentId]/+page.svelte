@@ -1,11 +1,12 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { showToast } from '$lib/stores/ui.svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { slide } from 'svelte/transition';
-	import { Accounts, Posts } from '$lib/services/api';
+	import { Accounts, Posts, BrandBrief } from '$lib/services/api';
 	import AgentConnectionStats from '$lib/components/agents/AgentConnectionStats.svelte';
-	import { PRICING_MATRIX } from '$lib/pricing';
+	import { PRICING_MATRIX, priceOf } from '$lib/pricing';
 	import PostCard from '$lib/components/feed/PostCard.svelte';
 	import PostDrawer from '$lib/components/feed/PostDrawer.svelte';
 	import ManualDeleteNotice from '$lib/components/feed/ManualDeleteNotice.svelte';
@@ -297,6 +298,8 @@
 
 		soulText = fresh.soul ?? '';
 		skillsText = fresh.skills ?? '';
+		skillsList = parseSkills(fresh.skills ?? '');
+		toolsList = parseTools(fresh.tools ?? '');
 		toolsText = fresh.tools ?? '';
 
 		timezone = fresh.timezone ?? 'Australia/Sydney';
@@ -417,6 +420,107 @@
 		syncingFeed = true;
 		await loadFeed();
 		syncingFeed = false;
+	}
+
+	// ── Generate confirmation (parity with the calendar — no surprise spend) ──
+	let showGenerateConfirm = $state(false);
+	let confirmSkipNext = $state(false);
+	let skipGenerateConfirm = $state(false);
+	onMount(() => {
+		skipGenerateConfirm = localStorage.getItem('pg-skip-generate-confirm') === '1';
+	});
+	const GEN_EST_LOW = +(priceOf('fal', 'image', 'nano') + 3 * priceOf('openrouter', 'llm') + priceOf('fal', 'tts') + priceOf('fal', 'talking_head')).toFixed(2);
+	const GEN_EST_HIGH = +(priceOf('fal', 'image', 'nano') + 3 * priceOf('openrouter', 'llm') + priceOf('fal', 'video', 'standard')).toFixed(2);
+
+	function requestGeneratePost() {
+		if (skipGenerateConfirm) void generatePostNow();
+		else showGenerateConfirm = true;
+	}
+	function confirmGenerate() {
+		if (confirmSkipNext) {
+			localStorage.setItem('pg-skip-generate-confirm', '1');
+			skipGenerateConfirm = true;
+		}
+		showGenerateConfirm = false;
+		void generatePostNow();
+	}
+
+	// ── Soul AI enrich ──────────────────────────────────────────────────────
+	let enrichingSoul = $state(false);
+	async function enrichSoul() {
+		if (!soulText.trim()) {
+			showToast('Write a line or two first — enrich expands what you give it', 'warning');
+			return;
+		}
+		enrichingSoul = true;
+		try {
+			const res = await BrandBrief.extendField('Persona Soul / Personality', soulText);
+			if (res.success && res.data?.enriched) {
+				soulText = res.data.enriched;
+				showToast('Soul enriched — review and save', 'success');
+			} else {
+				showToast(res.error || 'Enrich failed', 'error');
+			}
+		} catch (e: any) {
+			showToast(e.message || 'Enrich failed', 'error');
+		} finally {
+			enrichingSoul = false;
+		}
+	}
+
+	// ── Skills & Tools: structured editors (stored as JSON in the existing
+	//    text columns; legacy plain text becomes a single migratable card) ───
+	interface SkillItem { id: string; name: string; md: string }
+	interface ToolItem { id: string; kind: string; label: string; config: string }
+	function parseSkills(raw: string): SkillItem[] {
+		try {
+			const j = JSON.parse(raw);
+			if (Array.isArray(j)) return j.filter((s) => s && s.name);
+		} catch { /* legacy plain text */ }
+		return raw.trim() ? [{ id: 'legacy', name: 'Legacy notes', md: raw }] : [];
+	}
+	function parseTools(raw: string): ToolItem[] {
+		try {
+			const j = JSON.parse(raw);
+			if (Array.isArray(j)) return j.filter((t) => t && t.label);
+		} catch { /* legacy plain text */ }
+		return raw.trim() ? [{ id: 'legacy', kind: 'other', label: 'Legacy notes', config: raw }] : [];
+	}
+	let skillsList = $state<SkillItem[]>(parseSkills(agent?.skills ?? ''));
+	let toolsList = $state<ToolItem[]>(parseTools(agent?.tools ?? ''));
+	let editingSkill = $state<SkillItem | null>(null);
+	let editingTool = $state<ToolItem | null>(null);
+	const TOOL_KINDS = ['posting', 'analytics', 'mcp', 'api', 'automation', 'other'];
+
+	function saveSkill() {
+		if (!editingSkill) return;
+		if (!editingSkill.name.trim()) { showToast('Skill needs a name', 'warning'); return; }
+		const i = skillsList.findIndex((s) => s.id === editingSkill!.id);
+		skillsList = i >= 0
+			? skillsList.map((s) => (s.id === editingSkill!.id ? { ...editingSkill! } : s))
+			: [...skillsList, { ...editingSkill }];
+		skillsText = JSON.stringify(skillsList);
+		editingSkill = null;
+	}
+	function deleteSkill(id: string) {
+		skillsList = skillsList.filter((s) => s.id !== id);
+		skillsText = JSON.stringify(skillsList);
+		editingSkill = null;
+	}
+	function saveTool() {
+		if (!editingTool) return;
+		if (!editingTool.label.trim()) { showToast('Integration needs a label', 'warning'); return; }
+		const i = toolsList.findIndex((t) => t.id === editingTool!.id);
+		toolsList = i >= 0
+			? toolsList.map((t) => (t.id === editingTool!.id ? { ...editingTool! } : t))
+			: [...toolsList, { ...editingTool }];
+		toolsText = JSON.stringify(toolsList);
+		editingTool = null;
+	}
+	function deleteTool(id: string) {
+		toolsList = toolsList.filter((t) => t.id !== id);
+		toolsText = JSON.stringify(toolsList);
+		editingTool = null;
 	}
 
 	async function generatePostNow() {
@@ -1005,7 +1109,7 @@
 						</select>
 					</div>
 					<div class="feed-actions">
-						<button class="btn-generate" onclick={generatePostNow} disabled={generatingPost || feedLoading}>
+						<button class="btn-generate" onclick={requestGeneratePost} disabled={generatingPost || feedLoading}>
 							{#if generatingPost}
 								<span class="spinner-sm"></span> Generating…
 							{:else}
@@ -1035,7 +1139,7 @@
 						<p>{feedFilter !== 'all' || platformFilter !== 'all' ? 'No posts match these filters.' : 'Generate your first post — drafts save even without a connected platform.'}</p>
 						{#if feedFilter === 'all' && platformFilter === 'all'}
 							<div class="feed-empty-actions">
-								<button class="btn-generate" onclick={generatePostNow} disabled={generatingPost}>
+								<button class="btn-generate" onclick={requestGeneratePost} disabled={generatingPost}>
 									{generatingPost ? 'Generating…' : '✨ Generate First Post'}
 								</button>
 								<button type="button" class="btn-sync" onclick={() => (activeTab = 'connections')}>
@@ -1052,6 +1156,27 @@
 					</div>
 				{/if}
 			</div>
+
+			{#if showGenerateConfirm}
+				<div class="gen-confirm-overlay" role="dialog" aria-modal="true" aria-label="Confirm generation">
+					<div class="gen-confirm">
+						<h3>Generate a post for {agent.name}?</h3>
+						<div class="gc-rows">
+							<div class="gc-row"><span class="gc-label">Content</span><span>UGC post tuned to your brand brief &amp; this persona (video when a video provider is available)</span></div>
+							<div class="gc-row"><span class="gc-label">Destination</span><span>Publishes to connected platforms now; saved as a draft if none are connected</span></div>
+							<div class="gc-row"><span class="gc-label">Est. cost</span><span>~${Math.min(GEN_EST_LOW, GEN_EST_HIGH).toFixed(2)}–${Math.max(GEN_EST_LOW, GEN_EST_HIGH).toFixed(2)} in generation credits</span></div>
+						</div>
+						<label class="gc-skip">
+							<input type="checkbox" bind:checked={confirmSkipNext} />
+							Skip this confirmation next time
+						</label>
+						<div class="gc-actions">
+							<button type="button" class="btn-sync" onclick={() => (showGenerateConfirm = false)}>Cancel</button>
+							<button type="button" class="btn-generate" onclick={confirmGenerate}>✨ Generate</button>
+						</div>
+					</div>
+				</div>
+			{/if}
 
 			<PostDrawer
 				post={modalPost}
@@ -1244,39 +1369,105 @@
 						{/if}
 
 						<div class="field-group col-span-2">
-							<label for="p-soul">Soul / Personality</label>
+							<div class="label-row">
+								<label for="p-soul">Soul / Personality</label>
+								<button type="button" class="btn-sync btn-xs" onclick={enrichSoul} disabled={enrichingSoul}>
+									{enrichingSoul ? '…' : '✨ AI Enrich'}
+								</button>
+							</div>
 							<textarea id="p-soul" bind:value={soulText} rows="6" placeholder="Define your agent's personality, voice, and behavioral directives…"></textarea>
 						</div>
+
 						<div class="field-group col-span-2">
-							<label for="p-skills">Skills & Capabilities</label>
-							<textarea id="p-skills" bind:value={skillsText} rows="5" placeholder="Define skills, content capabilities, and learning loops…"></textarea>
-						</div>
-						<div class="field-group col-span-2">
-							<label for="p-tools">Tools & Integrations</label>
-							<textarea id="p-tools" bind:value={toolsText} rows="4" placeholder="Configure platforms, integrations, and capability layers…"></textarea>
+							<div class="label-row">
+								<label>Skills &amp; Capabilities</label>
+								<button type="button" class="btn-sync btn-xs" onclick={() => (editingSkill = { id: `s${Date.now()}`, name: '', md: '' })}>+ Add skill</button>
+							</div>
+							{#if skillsList.length === 0}
+								<p class="field-hint">No skills defined yet — each skill is a markdown playbook the persona follows.</p>
+							{:else}
+								<div class="item-chips">
+									{#each skillsList as s (s.id)}
+										<button type="button" class="item-chip" onclick={() => (editingSkill = { ...s })}>
+											📘 {s.name}
+										</button>
+									{/each}
+								</div>
+							{/if}
 						</div>
 
-						<div class="field-group">
-							<label for="p-supervisor">Supervisor (Overseer)</label>
-							<select id="p-supervisor" bind:value={editSupervisorId}>
-								<option value={null}>None — Standalone</option>
-								{#each supervisors as sup}
-									<option value={sup.id}>{sup.name} ({sup.handle})</option>
-								{/each}
-							</select>
+						<div class="field-group col-span-2">
+							<div class="label-row">
+								<label>Tools &amp; Integrations</label>
+								<button type="button" class="btn-sync btn-xs" onclick={() => (editingTool = { id: `t${Date.now()}`, kind: 'posting', label: '', config: '' })}>+ Add integration</button>
+							</div>
+							{#if toolsList.length === 0}
+								<p class="field-hint">Connect intents — posting targets, analytics, MCP servers, API calls this persona uses.</p>
+							{:else}
+								<div class="item-chips">
+									{#each toolsList as t (t.id)}
+										<button type="button" class="item-chip" onclick={() => (editingTool = { ...t })}>
+											🔌 {t.label} <span class="chip-kind">{t.kind}</span>
+										</button>
+									{/each}
+								</div>
+							{/if}
 						</div>
-						<div class="field-group">
-							<label for="p-runtime">Runtime Owner</label>
-							<select id="p-runtime" bind:value={editRuntimeOwner}>
-								<option value="svelte-gemini">Svelte UI Runtime</option>
-								{#if agent?.is_overseer}
-									<option value="hermes-daemon">Hermes Daemon</option>
-								{/if}
-								<option value="hermes-orchestrated">Hermes Orchestrated</option>
-							</select>
-						</div>
+
 					</div>
 				</section>
+
+				{#if editingSkill}
+					<div class="gen-confirm-overlay" role="dialog" aria-modal="true" aria-label="Edit skill">
+						<div class="gen-confirm editor-modal">
+							<h3>{skillsList.some((s) => s.id === editingSkill?.id) ? 'Edit skill' : 'New skill'}</h3>
+							<div class="field-group">
+								<label for="skill-name">Skill name</label>
+								<input id="skill-name" type="text" bind:value={editingSkill.name} placeholder="e.g. Hook writing for Reels" />
+							</div>
+							<div class="field-group">
+								<label for="skill-md">Playbook (markdown)</label>
+								<textarea id="skill-md" class="mono" rows="12" bind:value={editingSkill.md} placeholder="## When to use&#10;- …&#10;&#10;## Steps&#10;1. …"></textarea>
+							</div>
+							<div class="gc-actions">
+								{#if skillsList.some((s) => s.id === editingSkill?.id)}
+									<button type="button" class="btn-danger-ghost" onclick={() => deleteSkill(editingSkill!.id)}>Delete</button>
+								{/if}
+								<button type="button" class="btn-sync" onclick={() => (editingSkill = null)}>Cancel</button>
+								<button type="button" class="btn-generate" onclick={saveSkill}>Save skill</button>
+							</div>
+						</div>
+					</div>
+				{/if}
+
+				{#if editingTool}
+					<div class="gen-confirm-overlay" role="dialog" aria-modal="true" aria-label="Edit integration">
+						<div class="gen-confirm editor-modal">
+							<h3>{toolsList.some((t) => t.id === editingTool?.id) ? 'Edit integration' : 'New integration'}</h3>
+							<div class="field-group">
+								<label for="tool-kind">Type</label>
+								<select id="tool-kind" bind:value={editingTool.kind}>
+									{#each TOOL_KINDS as k}<option value={k}>{k}</option>{/each}
+								</select>
+							</div>
+							<div class="field-group">
+								<label for="tool-label">Label</label>
+								<input id="tool-label" type="text" bind:value={editingTool.label} placeholder="e.g. Instagram via Zernio, Analytics webhook" />
+							</div>
+							<div class="field-group">
+								<label for="tool-config">Configuration / intent</label>
+								<textarea id="tool-config" class="mono" rows="8" bind:value={editingTool.config} placeholder={'{ "endpoint": "…", "notes": "what this persona uses it for" }'}></textarea>
+							</div>
+							<div class="gc-actions">
+								{#if toolsList.some((t) => t.id === editingTool?.id)}
+									<button type="button" class="btn-danger-ghost" onclick={() => deleteTool(editingTool!.id)}>Delete</button>
+								{/if}
+								<button type="button" class="btn-sync" onclick={() => (editingTool = null)}>Cancel</button>
+								<button type="button" class="btn-generate" onclick={saveTool}>Save integration</button>
+							</div>
+						</div>
+					</div>
+				{/if}
 
 				<!-- Persona Profile section -->
 				<section class="profile-section">
@@ -2644,6 +2835,92 @@
 	.autonomy-icon { grid-column: 2; grid-row: 1; font-size: 1rem; }
 	.autonomy-label { grid-column: 3; grid-row: 1; font-size: 0.85rem; font-weight: 600; color: var(--text); }
 	.autonomy-desc { grid-column: 2 / 4; grid-row: 2; font-size: 0.75rem; color: var(--text-dim); margin: 0; line-height: 1.4; }
+
+	/* ── Confirm + editor modals / structured skills & tools ── */
+	.gen-confirm-overlay {
+		position: fixed;
+		inset: 0;
+		background: rgba(0, 0, 0, 0.55);
+		display: grid;
+		place-items: center;
+		z-index: 1100;
+		padding: 1rem;
+	}
+	.gen-confirm {
+		width: min(480px, 100%);
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-md);
+		padding: 1.25rem 1.4rem;
+		box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+		max-height: 90vh;
+		overflow-y: auto;
+	}
+	.gen-confirm h3 { margin: 0 0 0.9rem; }
+	.editor-modal { width: min(620px, 100%); display: flex; flex-direction: column; gap: 0.9rem; }
+	.gc-rows { display: flex; flex-direction: column; gap: 0.55rem; margin-bottom: 1rem; }
+	.gc-row { display: flex; gap: 0.75rem; font-size: var(--text-sm); }
+	.gc-label {
+		flex: 0 0 88px;
+		color: var(--text-dim);
+		font-size: var(--text-xs);
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		padding-top: 2px;
+	}
+	.gc-skip {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		font-size: var(--text-xs);
+		color: var(--text-dim);
+		margin-bottom: 1rem;
+		cursor: pointer;
+	}
+	.gc-actions { display: flex; justify-content: flex-end; gap: 0.6rem; }
+	.label-row {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.75rem;
+		margin-bottom: 0.4rem;
+	}
+	.btn-xs { padding: 0.3rem 0.7rem; font-size: var(--text-xs); }
+	.item-chips { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+	.item-chip {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		padding: 0.45rem 0.85rem;
+		border-radius: 10px;
+		border: 1px solid var(--border);
+		background: var(--surface-2, rgba(255, 255, 255, 0.03));
+		color: var(--text);
+		font-size: var(--text-sm);
+		cursor: pointer;
+		transition: border-color 0.15s ease;
+	}
+	.item-chip:hover { border-color: var(--accent-mid); }
+	.chip-kind {
+		font-size: 10px;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		color: var(--text-dim);
+		border: 1px solid var(--border);
+		border-radius: 999px;
+		padding: 1px 6px;
+	}
+	.editor-modal .mono { font-family: var(--font-mono, monospace); font-size: 0.8rem; }
+	.btn-danger-ghost {
+		margin-right: auto;
+		padding: 0.5rem 0.9rem;
+		border-radius: 9px;
+		border: 1px solid var(--danger, #ef4444);
+		color: var(--danger, #ef4444);
+		background: transparent;
+		font-size: var(--text-sm);
+		cursor: pointer;
+	}
 
 	/* ── Spend & Pricing ── */
 	.spend-chips {

@@ -174,6 +174,22 @@ export const POST: RequestHandler = async ({ url, request, locals, fetch }) => {
 			const productId = body.product_id || body.productId;
 
 			// ── Load agent persona ──────────────────────────────────────────────
+			// skills may be structured JSON ([{name, md}]) from the persona editor —
+			// summarize to names+playbooks instead of dumping raw JSON in prompts.
+			const summarizeSkills = (raw: string): string => {
+				try {
+					const j = JSON.parse(raw);
+					if (Array.isArray(j)) {
+						return j
+							.filter((s: any) => s?.name)
+							.map((s: any) => `${s.name}${s.md ? `: ${String(s.md).slice(0, 200)}` : ''}`)
+							.join(' | ');
+					}
+				} catch {
+					/* legacy plain text */
+				}
+				return raw;
+			};
 			let agentContext = '';
 			let agentData: any = null;
 			if (agentId) {
@@ -182,7 +198,7 @@ export const POST: RequestHandler = async ({ url, request, locals, fetch }) => {
 					agentData = agent;
 					agentContext = `You are ${agent.name} (@${agent.handle}), a ${agent.niche} content creator.
 Personality: ${agent.soul || 'Authentic and relatable'}
-Content Style: ${agent.skills || 'UGC-style product content'}
+Content Style: ${summarizeSkills(agent.skills || '') || 'UGC-style product content'}
 `;
 				}
 			}
