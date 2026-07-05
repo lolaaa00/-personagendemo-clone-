@@ -276,10 +276,20 @@
 				platforms = d.platforms || platforms;
 				painPoints = d.painPoints || painPoints;
 				products = d.products || products;
+				fontPrimary = d.fontPrimary || fontPrimary;
+				fontSecondary = d.fontSecondary || fontSecondary;
+				if (Array.isArray(d.competitors) && d.competitors.length > 0) {
+					competitors = d.competitors.map((c: any, i: number) => ({
+						id: c.id || `c${Date.now()}-${i}`,
+						name: c.name || '',
+						url: c.url || '',
+						notes: c.notes || ''
+					}));
+				}
 
 				saveAll(undefined, true);
 				showToast(
-					`Successfully scraped ${brandName}! Imported ${products.length} products with photos.`,
+					`Scraped ${brandName}! ${products.length} product(s), ${competitors.length} competitor(s), fonts ${fontPrimary ? '✓' : '—'}.`,
 					'success'
 				);
 			} else {
@@ -289,6 +299,33 @@
 			showToast(err.message || 'Scrape failed', 'error');
 		} finally {
 			scraping = false;
+		}
+	}
+
+	// ── Add product by URL (Firecrawl-scrape a single product page) ──────────
+	let productScrapeUrl = $state('');
+	let scrapingProduct = $state(false);
+	async function scrapeProductByUrl() {
+		const url = productScrapeUrl.trim();
+		if (!url) {
+			showToast('Paste a product page URL first', 'warning');
+			return;
+		}
+		scrapingProduct = true;
+		try {
+			const res = await BrandBrief.scrapeProduct(url);
+			if (res.success && res.data?.name) {
+				products = [...products, res.data];
+				productScrapeUrl = '';
+				saveAll(undefined, true);
+				showToast(`Added "${res.data.name}" from URL`, 'success');
+			} else {
+				showToast(res.error || 'Could not extract a product from that URL', 'error');
+			}
+		} catch (err: any) {
+			showToast(err.message || 'Product scrape failed', 'error');
+		} finally {
+			scrapingProduct = false;
 		}
 	}
 
@@ -1130,6 +1167,18 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 					margin-bottom: 1.5rem;
 					background: var(--surface-2);
 				">
+					<h4 style="margin: 0 0 0.75rem 0; font-size: 0.85rem; font-weight: 700; color: var(--accent);">🔗 Add Product by URL</h4>
+					<div style="display: flex; gap: 0.6rem; margin-bottom: 1.25rem; flex-wrap: wrap;">
+						<input
+							type="url"
+							placeholder="https://yourstore.com/products/honey-sticks"
+							bind:value={productScrapeUrl}
+							style="flex: 1; min-width: 220px;"
+						/>
+						<button class="scrape-submit-btn" onclick={scrapeProductByUrl} disabled={scrapingProduct}>
+							{scrapingProduct ? 'Scraping…' : '🔥 Scrape Product'}
+						</button>
+					</div>
 					<h4 style="margin: 0 0 0.75rem 0; font-size: 0.85rem; font-weight: 700; color: var(--accent);">➕ Add Product Manually</h4>
 					<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
 						<div class="field">

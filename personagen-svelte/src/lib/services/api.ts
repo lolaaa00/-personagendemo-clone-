@@ -167,6 +167,7 @@ export const Blueprints = {
 
 export const BrandBrief = {
 	scrapeStore: (url: string) => request<any>(ENDPOINTS.brandBrief, 'scrape_store', { url }),
+	scrapeProduct: (url: string) => request<any>(ENDPOINTS.brandBrief, 'scrape_product', { url }),
 	extendField: (fieldName: string, fieldVal: string, brandContext?: string) =>
 		request<{ enriched: string }>(ENDPOINTS.brandBrief, 'extend_field', { fieldName, fieldVal, brandContext }),
 	generateField: (fieldName: string, brandContext?: string) =>

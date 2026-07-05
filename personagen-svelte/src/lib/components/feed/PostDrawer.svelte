@@ -202,7 +202,7 @@
 		top: 0;
 		right: 0;
 		bottom: 0;
-		width: min(440px, 100vw);
+		width: min(580px, 100vw);
 		background: var(--surface);
 		border-left: 1px solid var(--border-strong);
 		z-index: 1001;

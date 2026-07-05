@@ -839,6 +839,31 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 							// logoUrl and product photoUrl reliably.
 							const logoCandidates: string[] = [];
 							const discoveredLinks: string[] = [];
+						// Fonts live in <link>/inline CSS — they don't survive markdown.
+						const fontCandidates: string[] = [];
+						// Structured brand guide from Firecrawl's Branding format (when present).
+						let brandGuide: Record<string, any> | null = null;
+						const harvestFonts = (html: string) => {
+							for (const m of html.matchAll(/fonts\.googleapis\.com\/css2?\?[^"')]+/gi)) {
+								for (const fam of m[0].matchAll(/family=([A-Za-z0-9+ _-]+)/g)) {
+									const name = decodeURIComponent(fam[1]).replace(/\+/g, ' ').split(':')[0].trim();
+									if (name && !fontCandidates.includes(name)) fontCandidates.push(name);
+								}
+							}
+							for (const m of html.matchAll(/font-family:\s*['"]?([A-Za-z0-9 _-]{3,40})['"]?/gi)) {
+								const name = m[1].trim();
+								if (
+									name &&
+									!/^(sans-serif|serif|monospace|inherit|initial|system-ui|Arial|Helvetica)$/i.test(
+										name
+									) &&
+									!fontCandidates.includes(name)
+								) {
+									fontCandidates.push(name);
+								}
+								if (fontCandidates.length > 8) break;
+							}
+						};
 
 						// 1. Try Firecrawl scraping if API key is configured
 						if (
@@ -859,7 +884,7 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 										// Full data spectrum: markdown for copy, links for product
 										// discovery, and keep nav/footer (onlyMainContent:false) so the
 										// logo in the header is visible to the extractor.
-										formats: ['markdown', 'links'],
+										formats: ['markdown', 'links', 'rawHtml', 'branding'],
 										onlyMainContent: false
 									})
 								});
@@ -882,8 +907,35 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 													.slice(0, 200)
 											);
 										}
+										if (typeof fcJson.data.rawHtml === 'string') {
+											harvestFonts(fcJson.data.rawHtml.slice(0, 300000));
+										}
+										// Firecrawl Branding format: the structured brand guide
+										// (logo, hex colors, fonts, personality) — deterministic
+										// ground truth that outranks AI inference. Tolerant reads:
+										// the response schema isn't published, only the categories.
+										const b = fcJson.data.branding;
+										if (b && typeof b === 'object') {
+											brandGuide = {
+												logo: b.images?.logo || b.logo || b.logoUrl || null,
+												favicon: b.images?.favicon || b.favicon || null,
+												primaryColor: b.colors?.primary || b.colors?.primaryColor || null,
+												secondaryColor: b.colors?.secondary || b.colors?.secondaryColor || null,
+												accentColor: b.colors?.accent || null,
+												fontPrimary:
+													b.typography?.primary || b.typography?.heading || b.fonts?.primary ||
+													(Array.isArray(b.fonts) ? b.fonts[0]?.name || b.fonts[0] : null) || null,
+												fontSecondary:
+													b.typography?.body || b.fonts?.secondary ||
+													(Array.isArray(b.fonts) ? b.fonts[1]?.name || b.fonts[1] : null) || null,
+												tone: b.personality?.tone || null,
+												energy: b.personality?.energy || null,
+												audience: b.personality?.audience || null
+											};
+											console.log('[Engine] Firecrawl branding guide captured:', JSON.stringify(brandGuide).slice(0, 300));
+										}
 										console.log(
-											`[Engine] Firecrawl success: markdown ${contentToParse.length} chars, ${logoCandidates.length} logo candidate(s), ${discoveredLinks.length} link(s)`
+											`[Engine] Firecrawl success: markdown ${contentToParse.length} chars, ${logoCandidates.length} logo candidate(s), ${discoveredLinks.length} link(s), ${fontCandidates.length} font candidate(s)`
 										);
 									}
 								} else {
@@ -924,6 +976,7 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 								}
 								if (response?.ok) {
 									const html = await response.text();
+									harvestFonts(html.slice(0, 300000));
 									contentToParse = html
 										.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
 										.replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
@@ -988,8 +1041,15 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 								? `\n\nPRODUCT PAGES CONTENT (extract products from here with real image URLs):\n${productPageContent.substring(0, 15000)}`
 								: '';
 
+							const fontHint = fontCandidates.length
+								? `\nFONT CANDIDATES (harvested from the page's CSS — use these for fontPrimary/fontSecondary): ${fontCandidates.slice(0, 6).join(', ')}`
+								: '';
+							const brandGuideHint = brandGuide
+								? `\nBRAND GUIDE (structured extraction — treat as ground truth): ${JSON.stringify(brandGuide)}`
+								: '';
 							const prompt = `You are a web scraper agent. Extract the brand brief details and all products (with name, description, price, and image URL) from this e-commerce storefront content.
-Use the LOGO CANDIDATES for "logoUrl". Prefer real absolute image URLs (https://...) for every product "photoUrl" — look in the product pages content section. Never leave logoUrl empty if a candidate exists.${logoHint}
+Use the LOGO CANDIDATES for "logoUrl". Prefer real absolute image URLs (https://...) for every product "photoUrl" — look in the product pages content section. Never leave logoUrl empty if a candidate exists.${logoHint}${fontHint}${brandGuideHint}
+COMPETITORS: identify 3-5 REAL direct competitors of this brand (same product category and audience — well-known brands count). Use any mentioned in the content first, then infer from the category. Never return fewer than 3.
 Return a JSON object matching this exact shape:
 {
   "brandName": "Brand name",
@@ -998,14 +1058,22 @@ Return a JSON object matching this exact shape:
   "primaryColor": "#hexcolor",
   "secondaryColor": "#hexcolor",
   "logoUrl": "URL to logo image (from LOGO CANDIDATES above)",
-  "fontPrimary": "Primary font name if found",
-  "fontSecondary": "Secondary font name if found",
+  "fontPrimary": "Primary font name (prefer FONT CANDIDATES)",
+  "fontSecondary": "Secondary font name (prefer FONT CANDIDATES)",
   "traits": ["Trait1", "Trait2", "Trait3"],
   "commStyle": "Communication style (Casual/Professional/Bold/Minimal)",
   "demographics": "Target demographics description",
   "interests": "Target audience interests",
   "platforms": "Social platforms they use",
   "painPoints": "Customer pain points addressed",
+  "competitors": [
+    {
+      "id": "c1",
+      "name": "Competitor brand name",
+      "url": "https://competitor-site.com",
+      "notes": "One-line differentiator vs this brand"
+    }
+  ],
   "products": [
     {
       "id": "p1",
@@ -1030,6 +1098,17 @@ ${contentToParse.substring(0, 20000)}${productPagesHint}`;
 									) {
 										parsed.logoUrl = logoCandidates[0];
 									}
+									// Deterministic brand-guide values OUTRANK model inference.
+									if (brandGuide) {
+										if (brandGuide.logo) parsed.logoUrl = brandGuide.logo;
+										if (brandGuide.primaryColor) parsed.primaryColor = brandGuide.primaryColor;
+										if (brandGuide.secondaryColor) parsed.secondaryColor = brandGuide.secondaryColor;
+										if (brandGuide.fontPrimary) parsed.fontPrimary = brandGuide.fontPrimary;
+										if (brandGuide.fontSecondary) parsed.fontSecondary = brandGuide.fontSecondary;
+									}
+									// Backfill fonts from the harvested CSS candidates.
+									if (!parsed.fontPrimary && fontCandidates[0]) parsed.fontPrimary = fontCandidates[0];
+									if (!parsed.fontSecondary && fontCandidates[1]) parsed.fontSecondary = fontCandidates[1];
 									scrapedData = parsed;
 									scrapeSuccess = true;
 								}
@@ -1052,6 +1131,97 @@ ${contentToParse.substring(0, 20000)}${productPagesHint}`;
 					},
 					{ status: 400 }
 				);
+			}
+
+			// ── ACTION: scrape_product (add a single product by URL via Firecrawl) ──
+			if (action === 'scrape_product') {
+				let productUrl = String(body.url || '').trim();
+				if (!productUrl) {
+					return json({ success: false, error: 'Missing product URL' }, { status: 400 });
+				}
+				if (!/^https?:\/\//i.test(productUrl)) productUrl = `https://${productUrl}`;
+				if (!hasAi) {
+					return json(
+						{ success: false, error: 'No AI provider configured. Add a key in Settings.' },
+						{ status: 400 }
+					);
+				}
+
+				try {
+					await assertPublicHttpUrl(productUrl);
+
+					const userFcKey = await getUserApiKey(locals.supabase, session.user.id, 'firecrawl').catch(
+						() => null
+					);
+					const fcKey = userFcKey || env.FIRECRAWL_API_KEY;
+					let pageContent = '';
+					const imageCandidates: string[] = [];
+
+					if (fcKey && !fcKey.includes('placeholder') && fcKey.trim() !== '') {
+						const fcRes = await fetch('https://api.firecrawl.dev/v1/scrape', {
+							method: 'POST',
+							headers: {
+								'Content-Type': 'application/json',
+								Authorization: `Bearer ${fcKey}`
+							},
+							body: JSON.stringify({ url: productUrl, formats: ['markdown'], onlyMainContent: false })
+						});
+						if (fcRes.ok) {
+							const fcJson = (await fcRes.json()) as any;
+							if (fcJson.success && fcJson.data?.markdown) {
+								pageContent = fcJson.data.markdown.substring(0, 20000);
+								const meta = fcJson.data.metadata || {};
+								for (const key of ['ogImage', 'og:image', 'image']) {
+									const v = meta[key];
+									if (typeof v === 'string' && v.startsWith('http')) imageCandidates.push(v);
+									else if (Array.isArray(v))
+										v.filter((x) => typeof x === 'string' && x.startsWith('http')).forEach((x) =>
+											imageCandidates.push(x)
+										);
+								}
+							}
+						}
+					}
+
+					if (!pageContent) {
+						return json(
+							{ success: false, error: 'Could not fetch that product page (check the URL / Firecrawl key).' },
+							{ status: 400 }
+						);
+					}
+
+					const resText = await ai!.generate(
+						`Extract ONE product from this product page.
+${imageCandidates.length ? `IMAGE CANDIDATES (prefer the first for photoUrl): ${imageCandidates.slice(0, 4).join(', ')}` : ''}
+Return ONLY JSON: { "name": "Product name", "description": "1-2 sentence description", "price": "$Price as shown", "photoUrl": "absolute https image URL" }
+Page content:
+${pageContent}`,
+						{ json: true }
+					);
+					const parsed = safeParseJson(resText || '');
+					if (!parsed?.name) {
+						return json({ success: false, error: 'Could not extract a product from that page.' }, { status: 422 });
+					}
+					if ((!parsed.photoUrl || !String(parsed.photoUrl).startsWith('http')) && imageCandidates[0]) {
+						parsed.photoUrl = imageCandidates[0];
+					}
+					return json({
+						success: true,
+						data: {
+							id: `p${Math.random().toString(36).slice(2, 8)}`,
+							name: String(parsed.name).slice(0, 120),
+							description: String(parsed.description || '').slice(0, 500),
+							price: String(parsed.price || ''),
+							photoUrl: parsed.photoUrl || null,
+							sourceUrl: productUrl
+						}
+					});
+				} catch (e) {
+					return json(
+						{ success: false, error: `Product scrape failed: ${(e as Error).message}` },
+						{ status: 500 }
+					);
+				}
 			}
 
 			if (action === 'extend_field') {

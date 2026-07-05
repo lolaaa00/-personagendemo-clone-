@@ -496,12 +496,20 @@
 		}
 	}
 
+	let mediaTypeFilter = $state<'all' | 'video' | 'image'>('all');
+
 	let filteredPosts = $derived(feedPosts.filter((p: any) => {
-		// The mosaic is a media grid — a post with no real image/video (a
+		// The feed is a media grid — a post with no real image/video (a
 		// generation that never completed, or corrupted content) has nothing
 		// to show here and would just render as a broken-looking card.
-		if (!getPostDisplay(p).mediaUrl) return false;
+		const display = getPostDisplay(p);
+		if (!display.mediaUrl) return false;
 		if (feedFilter !== 'all' && p.status !== feedFilter) return false;
+		if (mediaTypeFilter !== 'all') {
+			const isVideo =
+				display.mediaType === 'video' || /\.(mp4|mov|webm|m4v)(\?|$)/i.test(display.mediaUrl);
+			if (mediaTypeFilter === 'video' ? !isVideo : isVideo) return false;
+		}
 		if (platformFilter !== 'all') {
 			const plats = (p.platforms ?? []).map((x: string) => x.toLowerCase());
 			if (!plats.includes(platformFilter)) return false;
@@ -874,13 +882,9 @@
 {:else}
 <div class="persona-page">
 	<!-- ── Hero header ─────────────────────────────────────────── -->
-	<header class="persona-hero" class:has-banner={!!agent.ugc_character_ref}>
-		{#if agent.ugc_character_ref}
-			<div class="hero-banner">
-				<img src={agent.ugc_character_ref} alt={agent.name} class="hero-banner-img" />
-				<div class="hero-banner-overlay"></div>
-			</div>
-		{/if}
+	<!-- Compact identity header — the banner image was removed on request:
+	     the character photo shows ONCE (avatar), not stretched behind the name. -->
+	<header class="persona-hero">
 		<div class="hero-row">
 			<div class="hero-avatar" style={agent.ugc_character_ref ? '' : `background: ${agent.gradient}`}>
 				{#if agent.ugc_character_ref}
@@ -984,6 +988,11 @@
 							<option value="draft">Draft</option>
 							<option value="partial">Partial</option>
 							<option value="failed">Failed</option>
+						</select>
+						<select class="filter-select" bind:value={mediaTypeFilter}>
+							<option value="all">Images + videos</option>
+							<option value="video">Videos only</option>
+							<option value="image">Images only</option>
 						</select>
 						<select class="filter-select" bind:value={platformFilter}>
 							<option value="all">All platforms</option>
@@ -1840,28 +1849,6 @@
 		overflow: hidden;
 	}
 
-	/* Banner image — shown when characterRef exists */
-	.hero-banner {
-		position: relative;
-		width: 100%;
-		height: 220px;
-		overflow: hidden;
-	}
-
-	.hero-banner-img {
-		width: 100%;
-		height: 100%;
-		object-fit: cover;
-		object-position: top center;
-		display: block;
-	}
-
-	.hero-banner-overlay {
-		position: absolute;
-		inset: 0;
-		background: linear-gradient(to bottom, transparent 40%, rgba(10,14,26,0.82) 100%);
-	}
-
 	/* Row that holds avatar + info + stats */
 	.hero-row {
 		display: flex;
@@ -1869,14 +1856,6 @@
 		gap: 1.5rem;
 		padding: 1.25rem 2rem;
 		flex-wrap: wrap;
-	}
-
-	/* Lift avatar up to overlap the banner */
-	.has-banner .hero-row {
-		margin-top: -44px;
-		padding-top: 0;
-		position: relative;
-		z-index: 2;
 	}
 
 	.hero-avatar {
@@ -2233,9 +2212,13 @@
 	.feed-empty h3 { font-size: 1rem; font-weight: 600; color: var(--text); margin: 0; }
 	.feed-empty p { font-size: 0.82rem; max-width: 340px; margin: 0; }
 
+	/* Uniform asset-style tile grid (the masonry/mosaic columns are retired —
+	   cards now match the Assets tab's clean, equal-sized tile look). */
 	.post-mosaic {
-		columns: 280px;
-		column-gap: 1rem;
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+		gap: 1rem;
+		align-items: start;
 	}
 
 	/* ── Profile ── */
@@ -3048,6 +3031,6 @@
 		.feed-toolbar { flex-direction: column; align-items: stretch; }
 		.feed-actions { justify-content: flex-end; }
 		.tab-nav-name { display: none; }
-		.post-mosaic { columns: 1; }
+		.post-mosaic { grid-template-columns: 1fr; }
 	}
 </style>
