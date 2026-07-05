@@ -419,19 +419,65 @@
 		syncingFeed = false;
 	}
 
-	// ── Generate confirmation (parity with the calendar — no surprise spend) ──
+	// ── Generation composer — every API-bound field is editable before send ──
 	let showGenerateConfirm = $state(false);
 	let confirmSkipNext = $state(false);
 	let skipGenerateConfirm = $state(false);
 	onMount(() => {
 		skipGenerateConfirm = localStorage.getItem('pg-skip-generate-confirm') === '1';
 	});
-	const GEN_EST_LOW = +(priceOf('fal', 'image', 'nano') + 3 * priceOf('openrouter', 'llm') + priceOf('fal', 'tts') + priceOf('fal', 'talking_head')).toFixed(2);
-	const GEN_EST_HIGH = +(priceOf('fal', 'image', 'nano') + 3 * priceOf('openrouter', 'llm') + priceOf('fal', 'video', 'standard')).toFixed(2);
+
+	let genTopic = $state('');
+	let genScene = $state('');
+	let genMedia = $state<'video' | 'image'>('video');
+	let genProvider = $state<'auto' | 'fal' | 'openrouter'>('auto');
+	let genPlatforms = $state<string[]>([]);
+	let genProductId = $state('');
+	let genProductPhotoUrl = $state('');
+	let genCharacterRefUrl = $state('');
+	let briefProducts = $state<any[]>([]);
+	let briefLoaded = $state(false);
+
+	let genEstimate = $derived.by(() => {
+		const llm = 3 * priceOf('openrouter', 'llm');
+		if (genMedia === 'image') {
+			const img = genProvider === 'openrouter' ? priceOf('openrouter', 'image') : priceOf('fal', 'image', 'nano');
+			return { low: +(img + llm).toFixed(2), high: +(img + llm).toFixed(2) };
+		}
+		const img = genProvider === 'openrouter' ? priceOf('openrouter', 'image') : priceOf('fal', 'image', 'nano');
+		const vidLow = genProvider === 'openrouter' ? priceOf('openrouter', 'video') : priceOf('fal', 'tts') + priceOf('fal', 'talking_head');
+		const vidHigh = genProvider === 'openrouter' ? priceOf('openrouter', 'video') : priceOf('fal', 'video', 'standard');
+		return {
+			low: +(img + llm + Math.min(vidLow, vidHigh)).toFixed(2),
+			high: +(img + llm + Math.max(vidLow, vidHigh)).toFixed(2)
+		};
+	});
+
+	let connectedKeys = $derived(PLATFORMS.filter((p) => platformStatuses[p.key]?.connected).map((p) => p.key));
+
+	async function openComposer() {
+		genPlatforms = [...connectedKeys];
+		showGenerateConfirm = true;
+		if (!briefLoaded) {
+			briefLoaded = true;
+			try {
+				const res = await BrandBrief.get();
+				if (res.success && Array.isArray(res.data?.products)) briefProducts = res.data.products;
+			} catch {
+				/* composer works without the product list */
+			}
+		}
+	}
+
+	function toggleGenPlatform(key: string) {
+		genPlatforms = genPlatforms.includes(key)
+			? genPlatforms.filter((k) => k !== key)
+			: [...genPlatforms, key];
+	}
 
 	function requestGeneratePost() {
 		if (skipGenerateConfirm) void generatePostNow();
-		else showGenerateConfirm = true;
+		else void openComposer();
 	}
 	function confirmGenerate() {
 		if (confirmSkipNext) {
@@ -524,9 +570,22 @@
 		if (!agent?.id) return;
 		generatingPost = true;
 		try {
+			// Only send fields the user actually set — server defaults handle the rest.
+			const body: Record<string, unknown> = {};
+			if (genTopic.trim()) body.topic = genTopic.trim();
+			if (genScene.trim()) body.scene = genScene.trim();
+			if (genMedia === 'image') body.media = 'image';
+			if (genProvider !== 'auto') body.provider = genProvider;
+			if (genPlatforms.length > 0 && genPlatforms.length < connectedKeys.length)
+				body.platforms = genPlatforms;
+			if (genProductId) body.product_id = genProductId;
+			if (genProductPhotoUrl.trim()) body.product_photo_url = genProductPhotoUrl.trim();
+			if (genCharacterRefUrl.trim()) body.character_ref_url = genCharacterRefUrl.trim();
+
 			const res = await fetch(`/api/agent/${agent.id}/generate-post`, {
 				method: 'POST',
-				headers: { 'Content-Type': 'application/json' }
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(body)
 			});
 			const result = await res.json();
 			if (res.ok && result.success) {
@@ -539,6 +598,33 @@
 			showToast('Error: ' + (err as Error).message, 'error');
 		} finally {
 			generatingPost = false;
+		}
+	}
+
+	// Caption editing from the drawer — works at every status (draft → published;
+	// note: editing a published post only changes OUR copy, not the live platform).
+	async function handleSaveText(post: any, newText: string): Promise<boolean> {
+		try {
+			let parsed: any = {};
+			try {
+				parsed = JSON.parse(post.content);
+			} catch {
+				parsed = { text: String(post.content ?? '') };
+			}
+			parsed.text = newText;
+			const res = await Posts.update(post.id, { content: parsed });
+			if (res.success) {
+				const serialized = JSON.stringify(parsed);
+				feedPosts = feedPosts.map((p: any) => (p.id === post.id ? { ...p, content: serialized } : p));
+				if (modalPost?.id === post.id) modalPost = { ...modalPost, content: serialized };
+				showToast('Caption updated', 'success');
+				return true;
+			}
+			showToast(res.error || 'Failed to update caption', 'error');
+			return false;
+		} catch (e: any) {
+			showToast(e.message || 'Failed to update caption', 'error');
+			return false;
 		}
 	}
 
@@ -1160,17 +1246,85 @@
 			</div>
 
 			{#if showGenerateConfirm}
-				<div class="gen-confirm-overlay" role="dialog" aria-modal="true" aria-label="Confirm generation">
-					<div class="gen-confirm">
-						<h3>Generate a post for {agent.name}?</h3>
+				<div class="gen-confirm-overlay" role="dialog" aria-modal="true" aria-label="Generation composer">
+					<div class="gen-confirm editor-modal">
+						<h3>Generate a post for {agent.name}</h3>
+
+						<div class="field-group">
+							<label for="gen-topic">Topic / creative angle <span class="opt">(optional — persona-driven when empty)</span></label>
+							<input id="gen-topic" type="text" bind:value={genTopic} placeholder="e.g. Morning routine with honey sticks before school" />
+						</div>
+
+						<div class="composer-grid-2">
+							<div class="field-group">
+								<label for="gen-media">Media</label>
+								<select id="gen-media" bind:value={genMedia}>
+									<option value="video">Video (UGC clip)</option>
+									<option value="image">Image only (faster, cheaper)</option>
+								</select>
+							</div>
+							<div class="field-group">
+								<label for="gen-provider">Provider</label>
+								<select id="gen-provider" bind:value={genProvider}>
+									<option value="auto">Auto (fal → OpenRouter failover)</option>
+									<option value="fal">fal.ai only</option>
+									<option value="openrouter">OpenRouter only</option>
+								</select>
+							</div>
+						</div>
+
+						<div class="field-group">
+							<label>Publish to</label>
+							{#if connectedKeys.length === 0}
+								<p class="field-hint">No platforms connected — the post saves as a draft you can publish later.</p>
+							{:else}
+								<div class="age-chips">
+									{#each PLATFORMS.filter((p) => connectedKeys.includes(p.key)) as p}
+										<button
+											type="button"
+											class="age-chip"
+											class:selected={genPlatforms.includes(p.key)}
+											onclick={() => toggleGenPlatform(p.key)}
+										>{p.name}</button>
+									{/each}
+								</div>
+							{/if}
+						</div>
+
+						<details class="composer-advanced">
+							<summary>Advanced — prompts &amp; reference photos</summary>
+							<div class="field-group">
+								<label for="gen-scene">Visual scene brief <span class="opt">(replaces the AI director's scene)</span></label>
+								<textarea id="gen-scene" rows="3" bind:value={genScene} placeholder="e.g. Kitchen counter at golden hour, kid's lunchbox open, honey stick being packed…"></textarea>
+							</div>
+							{#if briefProducts.length > 0}
+								<div class="field-group">
+									<label for="gen-product">Product</label>
+									<select id="gen-product" bind:value={genProductId}>
+										<option value="">Auto (first product with a photo)</option>
+										{#each briefProducts as prod}
+											<option value={prod.id}>{prod.name}</option>
+										{/each}
+									</select>
+								</div>
+							{/if}
+							<div class="field-group">
+								<label for="gen-photo">Product photo URL <span class="opt">(override)</span></label>
+								<input id="gen-photo" type="url" bind:value={genProductPhotoUrl} placeholder="https://…/product.jpg" />
+							</div>
+							<div class="field-group">
+								<label for="gen-face">Character reference URL <span class="opt">(override the pinned face)</span></label>
+								<input id="gen-face" type="url" bind:value={genCharacterRefUrl} placeholder="https://…/face.png" />
+							</div>
+						</details>
+
 						<div class="gc-rows">
-							<div class="gc-row"><span class="gc-label">Content</span><span>UGC post tuned to your brand brief &amp; this persona (video when a video provider is available)</span></div>
-							<div class="gc-row"><span class="gc-label">Destination</span><span>Publishes to connected platforms now; saved as a draft if none are connected</span></div>
-							<div class="gc-row"><span class="gc-label">Est. cost</span><span>~${Math.min(GEN_EST_LOW, GEN_EST_HIGH).toFixed(2)}–${Math.max(GEN_EST_LOW, GEN_EST_HIGH).toFixed(2)} in generation credits</span></div>
+							<div class="gc-row"><span class="gc-label">Est. cost</span><span>~${genEstimate.low.toFixed(2)}{genEstimate.high > genEstimate.low ? `–$${genEstimate.high.toFixed(2)}` : ''} in generation credits</span></div>
+							<div class="gc-row"><span class="gc-label">After</span><span>The result lands in the feed — open it to edit the caption before/after publishing.</span></div>
 						</div>
 						<label class="gc-skip">
 							<input type="checkbox" bind:checked={confirmSkipNext} />
-							Skip this confirmation next time
+							Skip this composer next time (use defaults)
 						</label>
 						<div class="gc-actions">
 							<button type="button" class="btn-sync" onclick={() => (showGenerateConfirm = false)}>Cancel</button>
@@ -1185,6 +1339,7 @@
 				onClose={() => (modalPost = null)}
 				onDelete={handleDeletePost}
 				onApprove={handleApprovePost}
+				onSaveText={handleSaveText}
 				approving={approvingPostId === modalPost?.id}
 				deleting={deletingPostId === modalPost?.id}
 			/>
@@ -2919,6 +3074,15 @@
 		padding: 1px 6px;
 	}
 	.editor-modal .mono { font-family: var(--font-mono, monospace); font-size: 0.8rem; }
+	.opt { font-weight: 400; color: var(--text-dim); font-size: var(--text-xs); }
+	.composer-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.9rem; }
+	.composer-advanced summary {
+		cursor: pointer;
+		font-size: var(--text-sm);
+		color: var(--text-dim);
+		margin: 0.25rem 0 0.75rem;
+	}
+	.composer-advanced .field-group { margin-bottom: 0.75rem; }
 	.btn-danger-ghost {
 		margin-right: auto;
 		padding: 0.5rem 0.9rem;

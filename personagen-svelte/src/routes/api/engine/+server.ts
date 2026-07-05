@@ -824,6 +824,12 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 				return json({ success: true, data: saved });
 			}
 
+			// ── ACTION: get_brief (read-only — powers the generation composer) ────
+			if (action === 'get_brief') {
+				const { data: brief } = await db.brandBriefs.get(session.user.id);
+				return json({ success: true, data: brief?.data ?? null });
+			}
+
 			if (action === 'scrape_store') {
 				// Users paste "justkidshoney.com" — normalize to https:// BEFORE the
 				// SSRF guard, whose `new URL()` throws on protocol-less input (this

@@ -1185,6 +1185,13 @@ export interface UgcPackInput {
 	video?: boolean;
 	/** Marks the resulting content as autopilot-generated (badged in the UI). */
 	autopilot?: boolean;
+	/** Media provider routing: 'auto' (fal → OpenRouter failover, default), or pin one. */
+	providerPreference?: 'auto' | 'fal' | 'openrouter';
+	/** User-edited visual brief — replaces the Director's scene_prompt verbatim. */
+	sceneOverride?: string;
+	/** Reference-photo overrides from the generation composer. */
+	productPhotoUrlOverride?: string;
+	characterRefOverride?: string;
 }
 
 export interface UgcContent {
@@ -1810,16 +1817,25 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 
 	const format: 'spokesperson' | 'broll' =
 		cfg.format === 'auto' ? (parsed.format === 'broll' ? 'broll' : 'spokesperson') : cfg.format;
-	const scenePrompt = parsed.scene_prompt || parsed.ugc_broll_prompt || topic;
+	// A composer-edited visual brief outranks the Director's scene.
+	const scenePrompt =
+		input.sceneOverride?.trim() || parsed.scene_prompt || parsed.ugc_broll_prompt || topic;
 	const baseMotion =
 		parsed.motion_prompt || 'Slow gimbal dolly-in, natural ambient light, product label in focus.';
 	const motionPrompt = enhanceMotionPrompt(baseMotion, intent, format);
 
-	const { orKey, falKey } = await resolveImageKeys(supabase, userId);
+	// Provider preference from the composer: pinning 'fal' disables the
+	// OpenRouter media failover; pinning 'openrouter' skips fal media entirely.
+	// (Text/LLM routing is unaffected — this governs media only.)
+	const resolvedKeys = await resolveImageKeys(supabase, userId);
+	const pref = input.providerPreference || 'auto';
+	const falKey = pref === 'openrouter' ? null : resolvedKeys.falKey;
+	const orKey = pref === 'fal' ? null : resolvedKeys.orKey;
 
 	// ── Pinned creator face (spokesperson) → consistent character across posts ──
-	let characterRef = cfg.characterRef;
-	if (format === 'spokesperson' && wantVideo) {
+	// Composer override wins; when present we also skip lazy face generation.
+	let characterRef = input.characterRefOverride?.trim() || cfg.characterRef;
+	if (format === 'spokesperson' && wantVideo && !input.characterRefOverride) {
 		let svcForRef: any = null;
 		try {
 			svcForRef = getServiceSupabase();
@@ -1846,9 +1862,10 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 	// text-to-image path — loses product-photo compositing but keeps the slot
 	// alive — rather than killing generation outright.
 	let still: string;
-	if (falKey && selectedProduct?.photoUrl) {
+	const productPhoto = input.productPhotoUrlOverride?.trim() || selectedProduct?.photoUrl || null;
+	if (falKey && productPhoto) {
 		try {
-			still = await generateProductStill(falKey, scenePrompt, selectedProduct.photoUrl, characterRef, brandVisualCtx);
+			still = await generateProductStill(falKey, scenePrompt, productPhoto, characterRef, brandVisualCtx);
 			costEvents.push({ provider: 'fal', operation: 'image', model: 'nano-banana-2', usd: priceOf('fal', 'image', 'nano') });
 		} catch (e) {
 			const msg = (e as Error).message;
@@ -1857,7 +1874,7 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 				// model family with image input, so the REAL product (and pinned
 				// face) stay in-frame — flux text-to-image is only the last resort.
 				try {
-					const refs = [characterRef, selectedProduct.photoUrl].filter(Boolean) as string[];
+					const refs = [characterRef, productPhoto].filter(Boolean) as string[];
 					const compositePrompt = `${scenePrompt}\n\nVertical 9:16 photorealistic UGC photo. Keep the product's exact label, shape and colors from the reference image — do not redesign it.${characterRef ? ' Keep the same person/face as the first reference image.' : ''} Authentic, slightly imperfect, real — not a studio ad.`;
 					console.warn(`[Failover] fal still failed (${msg.slice(0, 120)}) — OpenRouter Nano-Banana composite fallback.`);
 					still = await openRouterImageEdit(orKey, userId, compositePrompt, refs);
@@ -1870,6 +1887,19 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 			} else {
 				throw e;
 			}
+		}
+	} else if (orKey && productPhoto) {
+		// OpenRouter-pinned (or fal-less) WITH a product photo → real composite
+		// via Nano Banana on OpenRouter, not a generic text-to-image scene.
+		try {
+			const refs = [characterRef, productPhoto].filter(Boolean) as string[];
+			const compositePrompt = `${scenePrompt}\n\nVertical 9:16 photorealistic UGC photo. Keep the product's exact label, shape and colors from the reference image — do not redesign it.${characterRef ? ' Keep the same person/face as the first reference image.' : ''} Authentic, slightly imperfect, real — not a studio ad.`;
+			still = await openRouterImageEdit(orKey, userId, compositePrompt, refs);
+			costEvents.push({ provider: 'openrouter', operation: 'image', model: IMAGE_EDIT_MODEL_OPENROUTER, usd: priceOf('openrouter', 'image') });
+		} catch (e) {
+			console.warn(`[Composer] OpenRouter composite failed (${(e as Error).message.slice(0, 120)}) — flux fallback.`);
+			still = await generateUgcImage(scenePrompt, orKey, null);
+			costEvents.push({ provider: 'openrouter', operation: 'image', model: 'flux-schnell', usd: priceOf('openrouter', 'image') });
 		}
 	} else {
 		still = await generateUgcImage(scenePrompt, orKey, falKey);

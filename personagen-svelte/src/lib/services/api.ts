@@ -166,6 +166,7 @@ export const Blueprints = {
 // ── Brand Brief (5 actions) ───────────────────────────────────────────────
 
 export const BrandBrief = {
+	get: () => request<any>(ENDPOINTS.brandBrief, 'get_brief', {}),
 	scrapeStore: (url: string) => request<any>(ENDPOINTS.brandBrief, 'scrape_store', { url }),
 	scrapeProduct: (url: string) => request<any>(ENDPOINTS.brandBrief, 'scrape_product', { url }),
 	extendField: (fieldName: string, fieldVal: string, brandContext?: string) =>

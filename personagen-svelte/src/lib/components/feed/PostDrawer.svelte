@@ -8,6 +8,7 @@
 		onClose,
 		onDelete,
 		onApprove,
+		onSaveText = undefined,
 		approving = false,
 		deleting = false
 	}: {
@@ -15,9 +16,36 @@
 		onClose: () => void;
 		onDelete: (post: any) => void;
 		onApprove: (post: any) => void;
+		/** When provided, the caption becomes editable (returns false to keep editing open). */
+		onSaveText?: (post: any, newText: string) => Promise<boolean> | boolean;
 		approving?: boolean;
 		deleting?: boolean;
 	} = $props();
+
+	// ── Caption editing (available at any status — drafts through published) ──
+	let editingText = $state(false);
+	let draftText = $state('');
+	let savingText = $state(false);
+	$effect(() => {
+		// Reset edit mode whenever a different post opens.
+		void post?.id;
+		editingText = false;
+		savingText = false;
+	});
+	function startTextEdit() {
+		draftText = display?.text ?? '';
+		editingText = true;
+	}
+	async function saveTextEdit() {
+		if (!onSaveText || !post || savingText) return;
+		savingText = true;
+		try {
+			const ok = await onSaveText(post, draftText);
+			if (ok !== false) editingText = false;
+		} finally {
+			savingText = false;
+		}
+	}
 
 	let display = $derived(post ? getPostDisplay(post) : null);
 	let analytics = $derived(post?.analytics ?? null);
@@ -118,7 +146,24 @@
 				<p class="drawer-stats-pending">Stats pending first sync from the platform.</p>
 			{/if}
 
-			<p class="drawer-text">{display.text}</p>
+			{#if editingText}
+				<div class="drawer-text-edit">
+					<textarea rows="6" bind:value={draftText}></textarea>
+					<div class="drawer-text-edit-actions">
+						<button type="button" class="dt-btn" onclick={() => (editingText = false)} disabled={savingText}>Cancel</button>
+						<button type="button" class="dt-btn dt-save" onclick={saveTextEdit} disabled={savingText}>
+							{savingText ? 'Saving…' : 'Save caption'}
+						</button>
+					</div>
+				</div>
+			{:else}
+				<div class="drawer-text-row">
+					<p class="drawer-text">{display.text}</p>
+					{#if onSaveText}
+						<button type="button" class="dt-edit" onclick={startTextEdit} title="Edit caption" aria-label="Edit caption">✎</button>
+					{/if}
+				</div>
+			{/if}
 
 			{#if display.product?.name}
 				<div class="drawer-product">
@@ -195,6 +240,53 @@
 		background: rgba(15, 23, 42, 0.55);
 		backdrop-filter: blur(4px);
 		z-index: 1000;
+	}
+
+	.drawer-text-row {
+		display: flex;
+		align-items: flex-start;
+		gap: 0.5rem;
+	}
+	.dt-edit {
+		flex-shrink: 0;
+		width: 28px;
+		height: 28px;
+		border-radius: 8px;
+		border: 1px solid var(--border);
+		background: transparent;
+		color: var(--text-dim);
+		cursor: pointer;
+	}
+	.dt-edit:hover { border-color: var(--accent-mid); color: var(--text); }
+	.drawer-text-edit textarea {
+		width: 100%;
+		background: var(--surface-2, rgba(255, 255, 255, 0.03));
+		border: 1px solid var(--border);
+		border-radius: 8px;
+		color: var(--text);
+		padding: 0.6rem;
+		font: inherit;
+		font-size: 0.85rem;
+	}
+	.drawer-text-edit-actions {
+		display: flex;
+		justify-content: flex-end;
+		gap: 0.5rem;
+		margin-top: 0.5rem;
+	}
+	.dt-btn {
+		padding: 0.4rem 0.85rem;
+		border-radius: 8px;
+		border: 1px solid var(--border);
+		background: transparent;
+		color: var(--text-dim);
+		font-size: 0.8rem;
+		cursor: pointer;
+	}
+	.dt-save {
+		background: var(--accent, #d4a017);
+		border-color: transparent;
+		color: #fff;
 	}
 
 	.post-drawer {
