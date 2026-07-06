@@ -536,7 +536,22 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				}
 			}
 
-			return json({ success: true, data: statusData });
+			// Tell the client where "connect an account" actually happens, so the
+			// UI can forward the user to the right provider hub instead of
+			// dead-ending on platforms Composio can't OAuth. Prefers Zernio (the
+			// primary posting provider), falls back to Blotato; null = no
+			// provider key saved yet (UI forwards to Settings instead).
+			const zernioConfigured = !!(await getZernioApiKey(locals.supabase, user.id).catch(() => null));
+			const blotatoConfigured = zernioConfigured
+				? false
+				: !!(await getBlotatoApiKey(locals.supabase, user.id).catch(() => null));
+			const connectHub = zernioConfigured
+				? { provider: 'zernio', url: 'https://zernio.com/dashboard' }
+				: blotatoConfigured
+					? { provider: 'blotato', url: 'https://my.blotato.com/settings' }
+					: null;
+
+			return json({ success: true, data: statusData, connect_hub: connectHub });
 		}
 
 		if (action === 'sync_zernio' || action === 'sync_blotato') {
@@ -611,10 +626,6 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				return json({ success: false, error: 'Missing persona_id or platform' }, { status: 400 });
 			}
 
-			if (!isPlatformConfigured(platform)) {
-				return json({ success: false, error: `${platform} is not configured.` }, { status: 400 });
-			}
-
 			if (!isUuid(persona_id)) {
 				return json({ success: false, error: 'Invalid persona_id format (UUID required).' }, { status: 400 });
 			}
@@ -628,43 +639,46 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				return json({ success: false, error: 'Forbidden' }, { status: 403 });
 			}
 
+			const origin = new URL(request.url).origin;
+			const callbackUrl = `${origin}/personas/${persona_id}?tab=connections&connected=${encodeURIComponent(platform)}`;
+
+			// 1. Zernio-first: a hosted OAuth link for ANY registry platform when a
+			//    key exists. After authorizing, Zernio bounces back to the persona
+			//    Connections tab and check_status auto-imports the new account.
+			const zernioKey = await getZernioApiKey(locals.supabase, user.id).catch(() => null);
+			if (zernioKey) {
+				try {
+					const authUrl = await new ZernioClient(zernioKey).getConnectUrl(platform, callbackUrl);
+					return json({ success: true, data: { redirect_url: authUrl, provider: 'zernio' } });
+				} catch (e) {
+					console.warn(
+						`[Accounts API] Zernio connect-link failed for ${platform} (${(e as Error).message}) — trying Composio.`
+					);
+				}
+			}
+
+			// 2. Composio OAuth for its configured platforms.
 			const composioKey = env.COMPOSIO_API_KEY || '';
-			const isKeyMissingOrPlaceholder =
-				!composioKey || composioKey.includes('placeholder') || composioKey.includes('change_me');
-
-			if (isKeyMissingOrPlaceholder) {
-				return json(
-					{
-						success: false,
-						error:
-							'COMPOSIO_API_KEY is not configured in your environment variables. Please add it to your server configuration to enable live social media connections.'
-					},
-					{ status: 400 }
-				);
+			const composioUsable =
+				composioKey && !composioKey.includes('placeholder') && !composioKey.includes('change_me');
+			if (composioUsable && isPlatformConfigured(platform)) {
+				try {
+					const composio = new ComposioClient();
+					const redirectUrl = await composio.getOAuthLink(persona_id, platform, callbackUrl);
+					return json({ success: true, data: { redirect_url: redirectUrl, provider: 'composio' } });
+				} catch (e) {
+					console.error('[Accounts API] Composio link failed:', e);
+				}
 			}
 
-			// Call Composio directly to get the redirect URL
-			let redirectUrl = null;
-			try {
-				const origin = new URL(request.url).origin;
-				const callbackUrl = `${origin}/personas/${persona_id}?tab=connections`;
-				const composio = new ComposioClient();
-				redirectUrl = await composio.getOAuthLink(persona_id, platform, callbackUrl);
-			} catch (e) {
-				console.error('[Accounts API] Failed calling Composio direct link API for UUID agent:', e);
-				return json(
-					{
-						success: false,
-						error: `Failed to initiate Composio connection: ${(e as Error).message || e}`
-					},
-					{ status: 500 }
-				);
-			}
-
+			// 3. Last resort: forward to Zernio's dashboard — never leave the user
+			//    with a dead-end toast and a blank state.
 			return json({
 				success: true,
 				data: {
-					redirect_url: redirectUrl
+					redirect_url: 'https://zernio.com/dashboard/accounts',
+					provider: 'zernio-dashboard',
+					note: `Connect ${platform} in the Zernio dashboard, then return and refresh — it imports automatically.`
 				}
 			});
 		}

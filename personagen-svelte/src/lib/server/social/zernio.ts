@@ -160,6 +160,70 @@ export class ZernioClient {
 			.filter((a: ZernioAccount) => a.id && a.platform);
 	}
 
+	/** Lists Zernio profiles (workspaces) — tolerant to endpoint/shape variants. */
+	async listProfiles(): Promise<Array<{ id: string; name: string | null }>> {
+		for (const path of ['/users/me/profiles', '/profiles']) {
+			const res = await fetch(`${ZERNIO_BASE_URL}${path}`, {
+				method: 'GET',
+				headers: this.getHeaders()
+			});
+			if (!res.ok) continue;
+			let data: any = null;
+			try {
+				data = await res.json();
+			} catch {
+				continue;
+			}
+			const list = Array.isArray(data?.profiles)
+				? data.profiles
+				: Array.isArray(data?.items)
+					? data.items
+					: Array.isArray(data)
+						? data
+						: [];
+			const mapped = list
+				.map((p: any) => ({
+					id: String(p?._id || p?.id || p?.profileId || ''),
+					name: p?.name || p?.title || null
+				}))
+				.filter((p: { id: string }) => p.id);
+			if (mapped.length) return mapped;
+		}
+		return [];
+	}
+
+	/**
+	 * Generates a hosted OAuth connect URL for a platform (verified against
+	 * Zernio docs: GET /v1/connect/{platform}?profileId=…&redirect_url=… →
+	 * { authUrl }). After the user authorizes, Zernio redirects back to
+	 * redirect_url with ?connected={platform}&accountId=… appended.
+	 */
+	async getConnectUrl(platform: string, redirectUrl?: string): Promise<string> {
+		const p = platform.toLowerCase() === 'x' ? 'twitter' : platform.toLowerCase();
+		const profiles = await this.listProfiles();
+		const params = new URLSearchParams();
+		if (profiles[0]?.id) params.set('profileId', profiles[0].id);
+		if (redirectUrl) params.set('redirect_url', redirectUrl);
+		const qs = params.toString();
+		const res = await fetch(
+			`${ZERNIO_BASE_URL}/connect/${encodeURIComponent(p)}${qs ? `?${qs}` : ''}`,
+			{ method: 'GET', headers: this.getHeaders() }
+		);
+		const text = await res.text();
+		if (!res.ok) {
+			throw new Error(`Zernio connect returned HTTP ${res.status}${text ? `: ${text.slice(0, 200)}` : ''}`);
+		}
+		let data: any = null;
+		try {
+			data = JSON.parse(text);
+		} catch {
+			data = null;
+		}
+		const url = data?.authUrl || data?.auth_url || data?.url;
+		if (!url) throw new Error(`Zernio connect returned no authUrl: ${text.slice(0, 200)}`);
+		return String(url);
+	}
+
 	/**
 	 * Removes an already-published post from a specific platform.
 	 * Zernio does NOT support Instagram, TikTok, or Snapchat for unpublish.

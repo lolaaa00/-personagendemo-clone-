@@ -25,11 +25,18 @@
 	let loadedAgentId: string | null = data.agent?.id ?? null;
 
 	// ── Tab state ──────────────────────────────────────────────────
-	function initialTab(): 'feed' | 'profile' | 'connections' | 'assets' {
+	function initialTab(): 'feed' | 'profile' | 'connections' {
 		const t = $page.url.searchParams.get('tab');
-		return t === 'profile' || t === 'connections' || t === 'assets' ? t : 'feed';
+		// Legacy ?tab=assets links land on the Feed tab in assets view — the
+		// Assets tab was merged into Feed as a view toggle.
+		return t === 'profile' || t === 'connections' ? t : 'feed';
 	}
-	let activeTab = $state<'feed' | 'profile' | 'connections' | 'assets'>(initialTab());
+	let activeTab = $state<'feed' | 'profile' | 'connections'>(initialTab());
+	// Feed tab renders one dataset through two lenses: the post mosaic, or the
+	// flat grid of every generated visual (former Assets tab).
+	let feedView = $state<'posts' | 'assets'>(
+		$page.url.searchParams.get('tab') === 'assets' ? 'assets' : 'posts'
+	);
 
 	// ── Feed state ─────────────────────────────────────────────────
 	let feedPosts = $state<any[]>([]);
@@ -185,6 +192,9 @@
 	let platformStatuses = $state<Record<string, PlatformStatus>>({});
 	let statusLoading = $state(false);
 	let connectingPlatform = $state('');
+	// Where non-Composio platforms actually get connected (Zernio dashboard or
+	// Blotato settings), reported by check_status; null = no provider key yet.
+	let connectHub = $state<{ provider: string; url: string } | null>(null);
 	let collapsedPlatforms = $state<Record<string, boolean>>({});
 
 	const platformMetrics: Record<string, { followers: number; engagement: number }> = {
@@ -330,8 +340,8 @@
 
 	// ── Tab init effects ───────────────────────────────────────────
 	$effect(() => {
-		// Assets tab derives its grid from the same posts data as the feed.
-		if ((activeTab === 'feed' || activeTab === 'assets') && agent?.id) loadFeed();
+		// Both feed views (posts mosaic + assets grid) derive from the same posts data.
+		if (activeTab === 'feed' && agent?.id) loadFeed();
 	});
 
 	$effect(() => {
@@ -355,6 +365,24 @@
 			if (d.success) voiceCatalog = d.voices;
 		} catch (err) {
 			console.error('[Voices] Failed to load catalog:', err);
+		}
+	}
+
+	/**
+	 * Persona gender is the source of truth for the voice: picking a gender
+	 * whose current voice contradicts it swaps the picker to the first
+	 * matching-gender voice immediately, so the mismatch is visible and fixed
+	 * BEFORE anything is generated (the server enforces the same rule at
+	 * generation time as the backstop).
+	 */
+	function alignVoiceToGender() {
+		if (ppGender !== 'male' && ppGender !== 'female') return;
+		const current = voiceCatalog.find((v) => v.name === selectedVoice);
+		if (current && current.gender === ppGender) return;
+		const aligned = voiceCatalog.find((v) => v.gender === ppGender);
+		if (aligned) {
+			selectedVoice = aligned.name;
+			showToast(`Voice switched to ${aligned.label} to match the ${ppGender} persona`, 'info');
 		}
 	}
 
@@ -425,6 +453,21 @@
 	let skipGenerateConfirm = $state(false);
 	onMount(() => {
 		skipGenerateConfirm = localStorage.getItem('pg-skip-generate-confirm') === '1';
+
+		// Returning from a provider OAuth flow (Zernio appends ?connected=platform
+		// to our callback): confirm, refresh statuses (which auto-imports the new
+		// account), and clean the URL.
+		const connectedParam = $page.url.searchParams.get('connected');
+		if (connectedParam) {
+			showToast(`${platformLabel(connectedParam)} connected — importing…`, 'success');
+			void checkStatuses();
+			const clean = new URL(window.location.href);
+			clean.searchParams.delete('connected');
+			clean.searchParams.delete('profileId');
+			clean.searchParams.delete('accountId');
+			clean.searchParams.delete('username');
+			history.replaceState({}, '', clean.toString());
+		}
 	});
 
 	let genTopic = $state('');
@@ -705,23 +748,33 @@
 	}));
 
 	// ── Assets: every generated visual for this persona in one grid ──
+	// Lives inside the Feed tab as an alternate view (feedView toggle) — same
+	// posts data, different lens.
 	interface AssetItem {
 		url: string;
 		type: 'image' | 'video';
 		label: string;
+		/** Poster still for video assets — without it a video tile renders blank. */
+		poster?: string | null;
 	}
 	let assetItems = $derived.by(() => {
 		const seen = new Set<string>();
 		const items: AssetItem[] = [];
-		const add = (url: string | null | undefined, type: 'image' | 'video', label: string) => {
+		const add = (
+			url: string | null | undefined,
+			type: 'image' | 'video',
+			label: string,
+			poster?: string | null
+		) => {
 			if (!url || typeof url !== 'string' || seen.has(url)) return;
 			seen.add(url);
-			items.push({ url, type, label });
+			items.push({ url, type, label, poster: poster ?? null });
 		};
 		for (const p of feedPosts) {
 			try {
 				const c = JSON.parse(p.content);
-				add(c.media_url || c.mediaUrl, c.media_type === 'video' ? 'video' : 'image', 'Post media');
+				const isVideo = c.media_type === 'video';
+				add(c.media_url || c.mediaUrl, isVideo ? 'video' : 'image', 'Post media', isVideo ? c.poster_url : null);
 				add(c.poster_url, 'image', 'Poster still');
 				if (Array.isArray(c.storyboard)) {
 					for (const s of c.storyboard) add(s, 'image', 'Storyboard still');
@@ -964,6 +1017,9 @@
 			const res = await Accounts.checkStatus(agent.id);
 			if (res.success && res.data) {
 				platformStatuses = res.data as Record<string, PlatformStatus>;
+				// User-scoped (keys live per-user, not per-agent): where "connect an
+				// account" actually happens for platforms Composio can't OAuth.
+				connectHub = (res as any).connect_hub ?? null;
 			} else {
 				platformStatuses = {};
 				PLATFORMS.forEach(p => { platformStatuses[p.key] = { connected: false }; });
@@ -977,23 +1033,22 @@
 
 	async function connectPlatform(platform: string) {
 		if (!agent?.id) return;
-		const status = platformStatuses[platform];
-		if (status?.configured === false) {
-			// "configured" means Composio OAuth config — Zernio-routed platforms
-			// never have one; they connect in the Zernio dashboard and import here.
-			showToast(
-				`Connect ${platformLabel(platform)} in your Zernio dashboard, then Refresh — it imports automatically.`,
-				'info'
-			);
-			return;
-		}
+		// The server routes every platform to the right connect flow:
+		// Zernio hosted OAuth (any platform, when keyed) → Composio OAuth
+		// (its configured platforms) → Zernio dashboard as the last resort.
+		// No dead-ends: the user is always forwarded somewhere actionable.
 		connectingPlatform = platform;
 		try {
 			const res = await Accounts.initConnection(agent.id, platform);
 			if (res.success) {
-				showToast(`Connection initiated for ${platform}`, 'success');
-				const redirectUrl = (res.data as any)?.redirect_url;
-				if (redirectUrl) { showToast(`Opening ${platform} auth…`, 'info'); window.open(redirectUrl, '_blank'); }
+				const d = res.data as any;
+				if (d?.redirect_url) {
+					showToast(
+						d.note || `Opening ${platformLabel(platform)} authorization…`,
+						'info'
+					);
+					window.open(d.redirect_url, '_blank', 'noopener');
+				}
 				await checkStatuses();
 			} else {
 				showToast(res.error || `Failed to connect ${platform}`, 'error');
@@ -1159,10 +1214,6 @@
 					<span class="tab-badge">{computedMetrics.connectedCount}</span>
 				{/if}
 			</button>
-			<button class="tab-btn" class:active={activeTab === 'assets'} onclick={() => (activeTab = 'assets')}>
-				<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
-				Assets
-			</button>
 		</div>
 	</nav>
 
@@ -1174,6 +1225,26 @@
 			<div class="feed-tab">
 				<!-- Toolbar -->
 				<div class="feed-toolbar">
+					<!-- One dataset, two lenses: the post mosaic or the flat assets grid. -->
+					<div class="feed-view-toggle" role="tablist" aria-label="Feed view">
+						<button
+							type="button"
+							class="view-toggle-btn"
+							class:active={feedView === 'posts'}
+							onclick={() => (feedView = 'posts')}
+						>
+							Posts
+						</button>
+						<button
+							type="button"
+							class="view-toggle-btn"
+							class:active={feedView === 'assets'}
+							onclick={() => (feedView = 'assets')}
+						>
+							Assets{#if assetItems.length > 0}&nbsp;({assetItems.length}){/if}
+						</button>
+					</div>
+					{#if feedView === 'posts'}
 					<div class="feed-filters">
 						<select class="filter-select" bind:value={feedFilter}>
 							<option value="all">All statuses</option>
@@ -1196,6 +1267,7 @@
 							{/each}
 						</select>
 					</div>
+					{/if}
 					<div class="feed-actions">
 						<button class="btn-generate" onclick={requestGeneratePost} disabled={generatingPost || feedLoading}>
 							{#if generatingPost}
@@ -1215,6 +1287,7 @@
 					</div>
 				</div>
 
+				{#if feedView === 'posts'}
 				{#if feedLoading}
 					<div class="feed-loading">
 						<span class="spinner-lg"></span>
@@ -1242,6 +1315,35 @@
 							<PostCard {post} onOpen={(p) => (modalPost = p)} />
 						{/each}
 					</div>
+				{/if}
+				{/if}
+
+				{#if feedView === 'assets'}
+					<!-- Assets view: every generated visual in one flat grid (former Assets tab). -->
+					{#if feedLoading && assetItems.length === 0}
+						<div class="feed-loading"><span class="spinner"></span> Loading assets…</div>
+					{:else if assetItems.length === 0}
+						<div class="feed-empty">
+							<span class="empty-icon">🖼</span>
+							<h3>No assets yet</h3>
+							<p>Every image and video generated for this persona will collect here — post media, poster stills, storyboards, the profile picture, and the reference kit.</p>
+						</div>
+					{:else}
+						<div class="assets-grid">
+							{#each assetItems as asset (asset.url)}
+								<button type="button" class="asset-tile" onclick={() => (assetLightbox = asset)} aria-label="View {asset.label}">
+									{#if asset.type === 'video'}
+										<!-- Poster keeps video tiles from rendering blank while unbuffered. -->
+										<video src={asset.url} poster={asset.poster || undefined} muted playsinline preload="metadata"></video>
+										<span class="asset-video-badge">▶</span>
+									{:else}
+										<img src={asset.url} loading="lazy" alt={asset.label} />
+									{/if}
+									<span class="asset-label">{asset.label}</span>
+								</button>
+							{/each}
+						</div>
+					{/if}
 				{/if}
 			</div>
 
@@ -1657,7 +1759,7 @@
 
 						<div class="field-group">
 							<label for="pp-gender">Gender</label>
-							<select id="pp-gender" bind:value={ppGender}>
+							<select id="pp-gender" bind:value={ppGender} onchange={alignVoiceToGender}>
 								<option value="">— Select —</option>
 								<option value="female">Female</option>
 								<option value="male">Male</option>
@@ -1897,7 +1999,7 @@
 										class="btn-connect-inline"
 										disabled={connectingPlatform === p.key}
 										title={platformStatuses[p.key]?.configured === false
-											? `Connects via your Zernio dashboard`
+											? `Opens ${connectHub?.provider === 'blotato' ? 'Blotato' : 'Zernio'} to connect ${p.name}`
 											: `Connect ${p.name}`}
 										onclick={() => connectPlatform(p.key)}
 									>
@@ -1998,34 +2100,6 @@
 				{/if}
 			</div>
 
-		<!-- ASSETS TAB -->
-		{:else if activeTab === 'assets'}
-			<div class="assets-tab">
-				{#if feedLoading && assetItems.length === 0}
-					<div class="feed-loading"><span class="spinner"></span> Loading assets…</div>
-				{:else if assetItems.length === 0}
-					<div class="feed-empty">
-						<span class="empty-icon">🖼</span>
-						<h3>No assets yet</h3>
-						<p>Every image and video generated for this persona will collect here — post media, poster stills, storyboards, the profile picture, and the reference kit.</p>
-					</div>
-				{:else}
-					<p class="assets-count">{assetItems.length} generated asset{assetItems.length === 1 ? '' : 's'}</p>
-					<div class="assets-grid">
-						{#each assetItems as asset (asset.url)}
-							<button type="button" class="asset-tile" onclick={() => (assetLightbox = asset)} aria-label="View {asset.label}">
-								{#if asset.type === 'video'}
-									<video src={asset.url} muted playsinline preload="metadata"></video>
-									<span class="asset-video-badge">▶</span>
-								{:else}
-									<img src={asset.url} loading="lazy" alt={asset.label} />
-								{/if}
-								<span class="asset-label">{asset.label}</span>
-							</button>
-						{/each}
-					</div>
-				{/if}
-			</div>
 		{/if}
 	</div>
 </div>
@@ -2035,7 +2109,7 @@
 		<div class="lightbox-content" onclick={(e) => e.stopPropagation()} role="dialog" aria-label={assetLightbox.label}>
 			{#if assetLightbox.type === 'video'}
 				<!-- svelte-ignore a11y_media_has_caption -->
-				<video src={assetLightbox.url} controls autoplay playsinline></video>
+				<video src={assetLightbox.url} poster={assetLightbox.poster || undefined} controls autoplay playsinline></video>
 			{:else}
 				<img src={assetLightbox.url} alt={assetLightbox.label} />
 			{/if}
@@ -2056,7 +2130,32 @@
 		margin: 0 auto;
 	}
 
-	/* ── Assets tab ── */
+	/* ── Feed view toggle (Posts | Assets) ── */
+	.feed-view-toggle {
+		display: inline-flex;
+		border: 1px solid var(--border);
+		border-radius: 8px;
+		overflow: hidden;
+		background: var(--surface);
+	}
+
+	.view-toggle-btn {
+		border: none;
+		background: transparent;
+		color: var(--text-muted);
+		font-size: 0.78rem;
+		font-weight: 600;
+		padding: 0.45rem 0.9rem;
+		cursor: pointer;
+		transition: background 0.15s ease, color 0.15s ease;
+	}
+
+	.view-toggle-btn.active {
+		background: var(--accent-soft, rgba(124, 106, 237, 0.12));
+		color: var(--accent);
+	}
+
+	/* ── Assets view ── */
 	.assets-count {
 		font-size: 0.78rem;
 		color: var(--text-dim);

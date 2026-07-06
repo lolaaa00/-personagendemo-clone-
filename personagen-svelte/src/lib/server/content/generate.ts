@@ -897,8 +897,6 @@ export async function generateCinematicUgcPack(input: UgcPackInput): Promise<Ugc
 	const costEvents: CostEvent[] = [];
 	const ai = trackAi(rawAi, costEvents);
 
-	const voiceGender = VOICE_CATALOG.find((v) => v.name === cfg.voice)?.gender;
-
 	let agentContext = '';
 	let agentData: any = null;
 	const agent = agentResult?.data;
@@ -906,6 +904,9 @@ export async function generateCinematicUgcPack(input: UgcPackInput): Promise<Ugc
 		agentData = agent;
 		agentContext = buildRichAgentContext(agent);
 	}
+
+	// Persona gender is authoritative: overrides a contradicting configured voice.
+	const { voice: resolvedVoice, voiceGender } = resolveVoiceForPersona(cfg.voice, agentData);
 
 	let selectedProduct: any = null;
 	let briefData: any = null;
@@ -1124,7 +1125,7 @@ export async function generateCinematicUgcPack(input: UgcPackInput): Promise<Ugc
 		media_type: 'video',
 		media_generated: true,
 		format: 'broll',
-		voice: cfg.voice,
+		voice: resolvedVoice,
 		product: {
 			name: selectedProduct.name,
 			price: selectedProduct.price,
@@ -1310,6 +1311,43 @@ Respond with ONLY valid JSON. No markdown fences, no extra keys, no preamble:
   "motion_prompt": "camera move type + speed + subject action + reveal moment"
 }`;
 
+/** Persona-profile JSON stored in agents.market (gender/archetype/target avatar/etc. from the Profile tab). */
+function parsePersonaProfile(agentData: any): Record<string, any> {
+	try {
+		const m = agentData?.market;
+		if (typeof m === 'string' && m.trim().startsWith('{')) return JSON.parse(m);
+	} catch {
+		/* legacy plain-text market value */
+	}
+	return {};
+}
+
+/**
+ * The persona's configured gender (Profile tab) is the source of truth for how
+ * the character looks AND sounds. A voice that contradicts it — e.g. the
+ * column-default 'Adam' on a female persona that was never explicitly voiced —
+ * is overridden to the first catalog voice of the right gender BEFORE any
+ * content is generated, so alignment is enforced up front rather than
+ * discovered in a finished video.
+ */
+function resolveVoiceForPersona(
+	cfgVoice: string,
+	agentData: any
+): { voice: string; voiceGender: 'male' | 'female' | undefined } {
+	const profileGender = parsePersonaProfile(agentData).gender;
+	const cfgGender = VOICE_CATALOG.find((v) => v.name === cfgVoice)?.gender;
+	if ((profileGender === 'male' || profileGender === 'female') && cfgGender !== profileGender) {
+		const aligned = VOICE_CATALOG.find((v) => v.gender === profileGender);
+		if (aligned) {
+			console.log(
+				`[UGC] Voice '${cfgVoice}' (${cfgGender ?? 'unknown gender'}) contradicts persona gender '${profileGender}' — using '${aligned.name}' instead.`
+			);
+			return { voice: aligned.name, voiceGender: profileGender };
+		}
+	}
+	return { voice: cfgVoice, voiceGender: cfgGender };
+}
+
 /** Generates (and durably persists) a fresh hero portrait image. No DB pin — just the image. */
 async function generateHeroPortraitImage(
 	svc: any,
@@ -1325,7 +1363,12 @@ async function generateHeroPortraitImage(
 	// agent, so it must match the agent's configured voice gender once, up front —
 	// there's no per-post opportunity to correct it after the fact.
 	const genderLine = voiceGender ? ` The creator is ${voiceGender}, matching the agent's pinned voice.` : '';
-	const heroPrompt = `Photorealistic vertical portrait of one relatable UGC content creator who fits this audience: ${audience}.${persona}${genderLine} Friendly, casual, natural window light, looking straight at the camera, authentic iPhone selfie style, clear visible face, upper body. Single person only.`;
+	// Persona Profile fields feed the portrait too — the hero face should look
+	// like the influencer the brief describes, not a generic person.
+	const profile = parsePersonaProfile(agentData);
+	const archetypeLine = profile.archetype ? ` Their creator archetype: ${profile.archetype}.` : '';
+	const avatarLine = profile.targetAvatar ? ` They make content for: ${String(profile.targetAvatar).slice(0, 120)}.` : '';
+	const heroPrompt = `Photorealistic vertical portrait of one relatable UGC content creator who fits this audience: ${audience}.${persona}${genderLine}${archetypeLine}${avatarLine} Friendly, casual, natural window light, looking straight at the camera, authentic iPhone selfie style, clear visible face, upper body. Single person only.`;
 
 	const heroUrl = await generateUgcImage(heroPrompt, null, falKey);
 	try {
@@ -1693,11 +1736,6 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 
 	const db = createDbService(supabase);
 	const cfg = await loadUgcConfig(supabase, input.agentId);
-	// The on-camera character's depicted gender must match the configured voice —
-	// the Director/character-ref prompts below don't know about `cfg.voice` on
-	// their own, so this is threaded through explicitly to avoid e.g. a male
-	// voice narrating a video of a female creator.
-	const voiceGender = VOICE_CATALOG.find((v) => v.name === cfg.voice)?.gender;
 
 	// ── Load agent persona ──────────────────────────────────────────────
 	let agentContext = '';
@@ -1709,6 +1747,13 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 			agentContext = buildRichAgentContext(agent);
 		}
 	}
+
+	// The on-camera character's depicted gender must match the voice actually
+	// used — and the persona's configured gender (Profile tab) is authoritative
+	// over a contradicting voice pick (e.g. the 'Adam' column default on a
+	// female persona). Threaded through explicitly so the Director/character-ref
+	// prompts and the TTS call all agree.
+	const { voice: resolvedVoice, voiceGender } = resolveVoiceForPersona(cfg.voice, agentData);
 
 	// ── Brand brief + product ───────────────────────────────────────────
 	let selectedProduct: any = null;
@@ -1832,10 +1877,15 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 	const falKey = pref === 'openrouter' ? null : resolvedKeys.falKey;
 	const orKey = pref === 'fal' ? null : resolvedKeys.orKey;
 
-	// ── Pinned creator face (spokesperson) → consistent character across posts ──
+	// ── Pinned creator face → consistent character across ALL posts ──
 	// Composer override wins; when present we also skip lazy face generation.
+	// Runs for every format, not just spokesperson video: b-roll stills feature
+	// the persona too, and without a pinned face each still invents a brand-new
+	// person (three posts, three different "influencers" — the exact identity
+	// drift this anchor exists to prevent). First generation for an agent
+	// creates + pins the hero portrait; everything after reuses it.
 	let characterRef = input.characterRefOverride?.trim() || cfg.characterRef;
-	if (format === 'spokesperson' && wantVideo && !input.characterRefOverride) {
+	if (input.agentId && !input.characterRefOverride) {
 		let svcForRef: any = null;
 		try {
 			svcForRef = getServiceSupabase();
@@ -1921,7 +1971,7 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 		try {
 			if (format === 'spokesperson' && falKey) {
 				const dialogue = parsed.dialogue || parsed.text || topic;
-				const audio = await generateVoiceAudio(falKey, cfg.voice, dialogue);
+				const audio = await generateVoiceAudio(falKey, resolvedVoice, dialogue);
 				costEvents.push({ provider: 'fal', operation: 'tts', model: 'elevenlabs-turbo-v2.5', usd: priceOf('fal', 'tts') });
 				mediaUrl = await generateTalkingHead(falKey, still, audio);
 				costEvents.push({ provider: 'fal', operation: 'talking_head', model: 'veed-fabric-1.0', usd: priceOf('fal', 'talking_head') });
@@ -1981,7 +2031,7 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 		media_type: mediaType,
 		media_generated: true,
 		format,
-		voice: cfg.voice,
+		voice: resolvedVoice,
 		product: selectedProduct
 			? {
 					name: selectedProduct.name,
