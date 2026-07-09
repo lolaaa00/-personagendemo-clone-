@@ -4,7 +4,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { slide } from 'svelte/transition';
-	import { Accounts, Posts, BrandBrief } from '$lib/services/api';
+	import { Accounts, Autopilot, Posts, BrandBrief } from '$lib/services/api';
 	import AgentConnectionStats from '$lib/components/agents/AgentConnectionStats.svelte';
 	import { PRICING_MATRIX, priceOf } from '$lib/pricing';
 	import PostCard from '$lib/components/feed/PostCard.svelte';
@@ -127,7 +127,12 @@
 	function toggleAllAgeRanges() {
 		ppAgeRanges = ppAgeRanges.length === AGE_RANGES.length ? [] : AGE_RANGES.map((r) => r.key);
 	}
-	let ppGender = $state<'' | 'female' | 'male'>(personaProfile.gender ?? '');
+	// Pre-fill from the explicit field, else the server's inference from the soul
+	// text — so the picker shows the gender that will actually be generated,
+	// not a blank the user has to notice. Persists only when they Save.
+	let ppGender = $state<'' | 'female' | 'male'>(
+		personaProfile.gender ?? (data.inferredGender as '' | 'female' | 'male' | null) ?? ''
+	);
 	let ppArchetype = $state<string>(personaProfile.archetype ?? '');
 	let ppContentFocus = $state<string>(personaProfile.contentFocus ?? '');
 	let ppPsychProfile = $state<string>(personaProfile.psychProfile ?? '');
@@ -165,6 +170,22 @@
 	let activeHoursStart = $state(agent?.active_hours_start ?? 8);
 	let activeHoursEnd = $state(agent?.active_hours_end ?? 22);
 	let autonomyLevel = $state<AutonomyLevel>(agent?.autonomy_level ?? 'advisor');
+	// Switching to Fully Autonomous means posts publish WITHOUT review — gate it
+	// behind an explicit confirm (same native confirm pattern as persona delete),
+	// reverting the select when the user backs out.
+	let prevAutonomyLevel: AutonomyLevel = agent?.autonomy_level ?? 'advisor';
+	function handleAutonomyChange() {
+		if (autonomyLevel === 'fully_autonomous' && prevAutonomyLevel !== 'fully_autonomous') {
+			const ok = confirm(
+				`Switch ${agent?.name ?? 'this persona'} to Fully Autonomous?\n\nPosts will publish without review — the autopilot generates AND publishes them unattended. You can drop back to Semi at any time.`
+			);
+			if (!ok) {
+				autonomyLevel = prevAutonomyLevel;
+				return;
+			}
+		}
+		prevAutonomyLevel = autonomyLevel;
+	}
 	let selectedVoice = $state(agent?.ugc_voice ?? 'Adam');
 	let rssUrl = $state(agent?.rss_url ?? '');
 	let rssActive = $state(agent?.rss_active ?? false);
@@ -312,7 +333,7 @@
 		const freshProfile = parsePersonaProfile(fresh);
 		personaProfile = freshProfile;
 		ppAgeRanges = deriveAgeRanges(freshProfile);
-		ppGender = freshProfile.gender ?? '';
+		ppGender = freshProfile.gender ?? (data.inferredGender as '' | 'female' | 'male' | null) ?? '';
 		ppArchetype = freshProfile.archetype ?? '';
 		ppContentFocus = freshProfile.contentFocus ?? '';
 		ppPsychProfile = freshProfile.psychProfile ?? '';
@@ -330,6 +351,7 @@
 		activeHoursStart = fresh.active_hours_start ?? 8;
 		activeHoursEnd = fresh.active_hours_end ?? 22;
 		autonomyLevel = fresh.autonomy_level ?? 'advisor';
+		prevAutonomyLevel = autonomyLevel;
 		rssUrl = fresh.rss_url ?? '';
 		rssActive = fresh.rss_active ?? false;
 		rssLastPolledAt = fresh.rss_last_polled_at ?? null;
@@ -382,23 +404,30 @@
 		} catch (err) {
 			console.error('[Voices] Failed to load catalog:', err);
 		}
+		// Once the catalog is known, silently align the picker to the persona's
+		// gender (explicit or inferred) so what's shown matches what the server
+		// will generate — no toast, since the user didn't just act.
+		alignVoiceToGender(true);
 	}
 
 	/**
-	 * Persona gender is the source of truth for the voice: picking a gender
-	 * whose current voice contradicts it swaps the picker to the first
-	 * matching-gender voice immediately, so the mismatch is visible and fixed
-	 * BEFORE anything is generated (the server enforces the same rule at
-	 * generation time as the backstop).
+	 * Persona gender is the source of truth for the voice: a voice whose gender
+	 * contradicts the persona's is swapped to the first matching-gender voice,
+	 * so the mismatch is fixed BEFORE anything generates (the server enforces
+	 * the same rule as the backstop). `silent` skips the toast for on-load
+	 * alignment vs. an explicit gender change by the user.
 	 */
-	function alignVoiceToGender() {
+	function alignVoiceToGender(silent = false) {
 		if (ppGender !== 'male' && ppGender !== 'female') return;
+		if (voiceCatalog.length === 0) return;
 		const current = voiceCatalog.find((v) => v.name === selectedVoice);
 		if (current && current.gender === ppGender) return;
 		const aligned = voiceCatalog.find((v) => v.gender === ppGender);
 		if (aligned) {
 			selectedVoice = aligned.name;
-			showToast(`Voice switched to ${aligned.label} to match the ${ppGender} persona`, 'info');
+			if (!silent) {
+				showToast(`Voice switched to ${aligned.label} to match the ${ppGender} persona`, 'info');
+			}
 		}
 	}
 
@@ -450,6 +479,33 @@
 		}
 	}
 
+	// ── Autopilot manual top-up: fill this persona's review queue on demand ──
+	let fillingDrafts = $state(false);
+	async function fillDraftsNow() {
+		if (!agent?.id || fillingDrafts) return;
+		fillingDrafts = true;
+		showToast('Generating drafts — this can take a few minutes…', 'info');
+		try {
+			const res = await Autopilot.generateNow(agent.id);
+			if (res.success) {
+				const n = res.data?.generated ?? 0;
+				showToast(
+					n > 0
+						? `${n} draft${n === 1 ? '' : 's'} created — review them in the feed`
+						: 'Draft runway is already full — no new drafts needed',
+					n > 0 ? 'success' : 'info'
+				);
+				if (n > 0) await loadFeed();
+			} else {
+				showToast(res.error || 'Draft generation failed', 'error');
+			}
+		} catch (err) {
+			showToast('Draft generation failed: ' + (err as Error).message, 'error');
+		} finally {
+			fillingDrafts = false;
+		}
+	}
+
 	async function syncFeed() {
 		// There is no separate server-side "sync" step — posts are always
 		// written straight to the DB by generation/publishing. This button
@@ -488,7 +544,7 @@
 
 	let genTopic = $state('');
 	let genScene = $state('');
-	let genMedia = $state<'video' | 'image'>('video');
+	let genMedia = $state<'video' | 'image' | 'cinematic'>('video');
 	let genProvider = $state<'auto' | 'fal' | 'openrouter'>('auto');
 	let genPlatforms = $state<string[]>([]);
 	let genProductId = $state('');
@@ -502,6 +558,13 @@
 		if (genMedia === 'image') {
 			const img = genProvider === 'openrouter' ? priceOf('openrouter', 'image') : priceOf('fal', 'image', 'nano');
 			return { low: +(img + llm).toFixed(2), high: +(img + llm).toFixed(2) };
+		}
+		if (genMedia === 'cinematic') {
+			// fal-exclusive: 3-5 storyboard stills (Nano Banana) + one Kling O3 Pro
+			// multi-shot reference video.
+			const still = priceOf('fal', 'image', 'nano');
+			const vid = priceOf('fal', 'video', 'pro');
+			return { low: +(3 * still + vid + llm).toFixed(2), high: +(5 * still + vid + llm).toFixed(2) };
 		}
 		const img = genProvider === 'openrouter' ? priceOf('openrouter', 'image') : priceOf('fal', 'image', 'nano');
 		const vidLow = genProvider === 'openrouter' ? priceOf('openrouter', 'video') : priceOf('fal', 'tts') + priceOf('fal', 'talking_head');
@@ -633,7 +696,7 @@
 			const body: Record<string, unknown> = {};
 			if (genTopic.trim()) body.topic = genTopic.trim();
 			if (genScene.trim()) body.scene = genScene.trim();
-			if (genMedia === 'image') body.media = 'image';
+			if (genMedia !== 'video') body.media = genMedia;
 			if (genProvider !== 'auto') body.provider = genProvider;
 			if (genPlatforms.length > 0 && genPlatforms.length < connectedKeys.length)
 				body.platforms = genPlatforms;
@@ -1292,6 +1355,18 @@
 								✨ Generate Now
 							{/if}
 						</button>
+						<button
+							class="btn-sync"
+							onclick={fillDraftsNow}
+							disabled={fillingDrafts || feedLoading}
+							title="Top up this persona's review queue: autopilot fills the empty future slots with drafts"
+						>
+							{#if fillingDrafts}
+								<span class="spinner-sm"></span> Filling drafts…
+							{:else}
+								📥 Generate Drafts
+							{/if}
+						</button>
 						<button class="btn-sync" onclick={syncFeed} disabled={syncingFeed || feedLoading}>
 							{#if syncingFeed}
 								<span class="spinner-sm"></span> Syncing…
@@ -1379,7 +1454,11 @@
 								<select id="gen-media" bind:value={genMedia}>
 									<option value="video">Video (UGC clip)</option>
 									<option value="image">Image only (faster, cheaper)</option>
+									<option value="cinematic">Cinematic (multi-shot video, premium)</option>
 								</select>
+								{#if genMedia === 'cinematic'}
+									<p class="field-hint">Storyboarded multi-shot video via fal.ai (Kling O3 Pro) — needs a Fal AI key and a product photo in the Brand Brief.</p>
+								{/if}
 							</div>
 							<div class="field-group">
 								<label for="gen-provider">Provider</label>
@@ -1810,7 +1889,7 @@
 
 						<div class="field-group">
 							<label for="pp-gender">Gender</label>
-							<select id="pp-gender" bind:value={ppGender} onchange={alignVoiceToGender}>
+							<select id="pp-gender" bind:value={ppGender} onchange={() => alignVoiceToGender()}>
 								<option value="">— Select —</option>
 								<option value="female">Female</option>
 								<option value="male">Male</option>
@@ -1917,7 +1996,7 @@
 
 						<div class="field-group">
 							<label for="p-autonomy">Autonomy</label>
-							<select id="p-autonomy" bind:value={autonomyLevel}>
+							<select id="p-autonomy" bind:value={autonomyLevel} onchange={handleAutonomyChange}>
 								<option value="advisor">Advisor — manual generate only</option>
 								<option value="semi_autonomous">Semi — drafts for review</option>
 								<option value="fully_autonomous">Fully — publishes unattended</option>
@@ -2069,7 +2148,7 @@
 								<span class="meter-sub">across your key · billed per connected account</span>
 							</div>
 							<div class="meter-track" role="img" aria-label="{accountMeter.total} accounts connected, {accountMeter.freeUsed} of 2 free used">
-								{#each Array(Math.max(accountMeter.total, 2)) as _, i}
+								{#each Array(Math.min(Math.max(accountMeter.total, 2), 12)) as _, i}
 									<span
 										class="meter-pip"
 										class:free={i < 2}
@@ -2077,6 +2156,9 @@
 										class:billable={i >= 2 && i < accountMeter.total}
 									></span>
 								{/each}
+								{#if accountMeter.total > 12}
+									<span class="meter-overflow">+{accountMeter.total - 12}</span>
+								{/if}
 							</div>
 							<div class="meter-stats">
 								<span><strong>{accountMeter.total}</strong> connected</span>
@@ -3477,6 +3559,12 @@
 	.meter-pip.filled.billable {
 		background: #f59e0b;
 		border-color: #f59e0b;
+	}
+	.meter-overflow {
+		font-size: 0.7rem;
+		font-weight: 600;
+		color: var(--text-muted);
+		margin-left: 2px;
 	}
 	.meter-stats {
 		display: flex;

@@ -1,6 +1,7 @@
 /**
- * Autopilot: keeps each enabled agent's calendar topped up with UGC posts at
- * 2-hour slots between active hours (default 8am–8pm) in the agent's timezone.
+ * Autopilot: keeps each enabled agent's calendar topped up with UGC posts —
+ * `posts_per_day` slots spread evenly across the active hours (default
+ * 8am–8pm) in the agent's timezone (see buildSlots).
  *
  * Mode is driven by `agent_configs.autonomy_level`:
  *   - 'advisor'          → off (no auto-generation)

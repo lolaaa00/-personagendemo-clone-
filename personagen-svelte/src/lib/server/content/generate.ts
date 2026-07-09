@@ -38,6 +38,18 @@ import { DEFAULT_VOICE, VOICE_CATALOG } from '$lib/server/voices';
 import { getServiceSupabase } from '$lib/server/service-supabase';
 import { persistToStorage, persistBufferToStorage } from '$lib/server/storage';
 import { burnCaptions } from '$lib/server/video';
+import { fetchWithTimeout } from '$lib/server/social/http';
+import { assertWithinBudget } from '$lib/server/budget';
+
+// Every provider call in this file gets a hard PER-REQUEST deadline. The queue
+// pollers below bound total job time, but only a per-request timeout stops a
+// single hung socket from stalling a scheduler tick forever (the queue loops
+// only re-check their deadline BETWEEN polls, so a stuck poll never returns).
+// 120s is generous for a slow-but-alive image/submit call while still killing
+// a truly dead connection.
+const GEN_FETCH_TIMEOUT_MS = 120_000;
+const fetch = (input: string | URL, init?: RequestInit) =>
+	fetchWithTimeout(input, init, GEN_FETCH_TIMEOUT_MS);
 
 // ── Model slugs (env-overridable so quality/provider is a one-line swap) ─────
 // Re-verified against fal.ai's live docs/OpenAPI specs as of 2026-07-01 —
@@ -404,6 +416,30 @@ Grade it.`,
 		console.warn('[QC] Grader pass failed (continuing ungated):', (e as Error).message);
 		return null;
 	}
+}
+
+/**
+ * gradeDraft with one retry on grader failure. A single flaky grader call
+ * shouldn't silently ungate media spend; two failures in a row means the
+ * grade is genuinely unavailable — the caller proceeds ungated and tags the
+ * post's content with qc_status 'ungraded' so those posts stay queryable.
+ */
+async function gradeDraftWithRetry(
+	ai: AiClient,
+	draft: { text?: string; dialogue?: string; on_screen_text?: string },
+	productName: string | null,
+	platform: string
+): Promise<QualityGrade | null> {
+	const first = await gradeDraft(ai, draft, productName, platform);
+	if (first) return first;
+	console.warn('[QC] Grader returned no grade — retrying once before proceeding ungated.');
+	const second = await gradeDraft(ai, draft, productName, platform);
+	if (!second) {
+		console.warn(
+			'[QC] Grader failed twice — generation proceeds ungated; post will carry qc_status "ungraded".'
+		);
+	}
+	return second;
 }
 
 /** Best-effort append of an auto-rejection to post_reviews (the QC training log). */
@@ -909,6 +945,12 @@ export async function generateCinematicUgcPack(input: UgcPackInput): Promise<Ugc
 	const costEvents: CostEvent[] = [];
 	const ai = trackAi(rawAi, costEvents);
 
+	// Fail-closed spend guard: refuse to start a paid generation once this agent's
+	// daily or the user's monthly estimated spend has crossed the configured cap.
+	await assertWithinBudget(supabase, userId, input.agentId);
+
+	try {
+
 	let agentContext = '';
 	let agentData: any = null;
 	const agent = agentResult?.data;
@@ -990,7 +1032,7 @@ export async function generateCinematicUgcPack(input: UgcPackInput): Promise<Ugc
 	// too. One improvement-guided rewrite, then abandon (autopilot falls back
 	// to the standard path, which runs its own gate).
 	const cinematicFloor = qualityFloor();
-	let cinematicGrade = await gradeDraft(ai, parsed, selectedProduct?.name ?? null, platform);
+	let cinematicGrade = await gradeDraftWithRetry(ai, parsed, selectedProduct?.name ?? null, platform);
 	if (cinematicFloor > 0 && cinematicGrade && cinematicGrade.overall < cinematicFloor) {
 		console.warn(
 			`[Cinematic QC] Draft graded ${cinematicGrade.overall}/10 (< floor ${cinematicFloor}) — one rewrite: ${cinematicGrade.fix}`
@@ -1100,9 +1142,14 @@ export async function generateCinematicUgcPack(input: UgcPackInput): Promise<Ugc
 		costEvents.push({ provider: 'fal', operation: 'image', model: 'nano-banana-2 (storyboard)', usd: priceOf('fal', 'image', 'nano') });
 	}
 
-	const durableStoryboard = await Promise.all(
-		storyboard.map((url) => persistToStorage(svc, url, userId, 'png').catch(() => url))
-	);
+	// Archive the previews too — but a still that genuinely can't be persisted is
+	// dropped (null → filtered) rather than stored as an ephemeral URL that would
+	// 404 later. These are non-load-bearing previews, so a missing one is harmless.
+	const durableStoryboard = (
+		await Promise.all(
+			storyboard.map((url) => persistToStorage(svc, url, userId, 'png').catch(() => null))
+		)
+	).filter((url): url is string => Boolean(url));
 
 	// Reference-kit angles (if the user has generated them from the Profile tab)
 	// give the video model far richer character grounding than a single portrait —
@@ -1147,13 +1194,17 @@ export async function generateCinematicUgcPack(input: UgcPackInput): Promise<Ugc
 		storyboard: durableStoryboard,
 		cinematic: true,
 		qualityGrade: cinematicGrade,
+		qc_status: cinematicGrade ? 'graded' : 'ungraded',
 		costBreakdown: summarizeCosts(costEvents)
 	};
 	if (input.autopilot) content.autopilot = true;
 
-	await recordCostEvents(supabase, userId, input.agentId, costEvents);
-
 	return { content, selectedProduct, briefData, agentData };
+	} finally {
+		// Flush the ledger even if generation threw partway through — otherwise
+		// every failed/retried generation is silent spend the cap never sees.
+		await recordCostEvents(supabase, userId, input.agentId, costEvents);
+	}
 }
 
 // ── Per-agent UGC config (read defensively from agent_configs) ──────────────
@@ -1196,7 +1247,7 @@ async function loadUgcConfig(supabase: any, agentId?: string): Promise<UgcConfig
  * brief. A selected-but-deleted brief falls through to the fallback rather
  * than failing generation.
  */
-async function loadBriefForAgent(
+export async function loadBriefForAgent(
 	db: ReturnType<typeof createDbService>,
 	userId: string,
 	brandBriefId: string | null
@@ -1252,6 +1303,8 @@ export interface UgcContent {
 	autopilot?: boolean;
 	/** Independent QC grade (pre-media gate) — surfaced in the review queue. */
 	qualityGrade?: QualityGrade | null;
+	/** 'ungraded' = the QC grader failed (twice) and generation proceeded ungated. */
+	qc_status?: 'graded' | 'ungraded';
 	/** Estimated generation spend for THIS post, split by provider. */
 	costBreakdown?: { total: number; byProvider: Record<string, number> };
 }
@@ -1361,29 +1414,67 @@ function parsePersonaProfile(agentData: any): Record<string, any> {
 }
 
 /**
- * The persona's configured gender (Profile tab) is the source of truth for how
- * the character looks AND sounds. A voice that contradicts it — e.g. the
- * column-default 'Adam' on a female persona that was never explicitly voiced —
- * is overridden to the first catalog voice of the right gender BEFORE any
- * content is generated, so alignment is enforced up front rather than
- * discovered in a finished video.
+ * Best-effort gender inference from free-text persona description. Used ONLY as
+ * a fallback when the explicit Gender field is unset — so a persona whose soul
+ * plainly reads "a slim blond girl" is never mis-voiced as male just because
+ * someone skipped the dropdown. Deterministic keyword scan (word-boundary), and
+ * deliberately returns undefined on ambiguity rather than guessing.
+ */
+export function inferGenderFromText(
+	...texts: Array<string | undefined | null>
+): 'male' | 'female' | undefined {
+	const t = texts.filter(Boolean).join(' ').toLowerCase();
+	if (!t) return undefined;
+	// \bman\b does NOT match "woman"/"human"; \bmen\b does NOT match "women" — the
+	// missing word boundary protects against those overlaps.
+	const female = /\b(she|her|hers|herself|woman|women|girl|girls|female|lady|ladies|mother|mom|mum|feminine|actress|businesswoman|queen|sister|daughter|wife|girlfriend)\b/;
+	const male = /\b(he|him|his|himself|man|men|boy|boys|male|gentleman|father|dad|masculine|actor|businessman|king|brother|son|husband|boyfriend|guy|dude|bloke)\b/;
+	const hasF = female.test(t);
+	const hasM = male.test(t);
+	if (hasF && !hasM) return 'female';
+	if (hasM && !hasF) return 'male';
+	return undefined; // none, or contradictory → don't guess
+}
+
+/**
+ * Resolves a persona's authoritative gender: the explicit Profile-tab field
+ * first, else inferred from the soul/name/target-avatar text. This is what
+ * both the voice and the on-camera character must agree with.
+ */
+export function resolvePersonaGender(agentData: any): 'male' | 'female' | undefined {
+	const explicit = parsePersonaProfile(agentData).gender;
+	if (explicit === 'male' || explicit === 'female') return explicit;
+	return inferGenderFromText(
+		agentData?.soul,
+		agentData?.name,
+		parsePersonaProfile(agentData).targetAvatar
+	);
+}
+
+/**
+ * The persona's gender (explicit Profile field, else inferred from its
+ * description) is the source of truth for how the character looks AND sounds.
+ * A voice that contradicts it — e.g. the column-default 'Adam' on a persona
+ * whose soul reads "a slim blond girl" — is overridden to the first catalog
+ * voice of the right gender BEFORE any content is generated, so alignment is
+ * enforced up front rather than discovered in a finished video.
  */
 function resolveVoiceForPersona(
 	cfgVoice: string,
 	agentData: any
 ): { voice: string; voiceGender: 'male' | 'female' | undefined } {
-	const profileGender = parsePersonaProfile(agentData).gender;
+	const personaGender = resolvePersonaGender(agentData);
 	const cfgGender = VOICE_CATALOG.find((v) => v.name === cfgVoice)?.gender;
-	if ((profileGender === 'male' || profileGender === 'female') && cfgGender !== profileGender) {
-		const aligned = VOICE_CATALOG.find((v) => v.gender === profileGender);
+	if ((personaGender === 'male' || personaGender === 'female') && cfgGender !== personaGender) {
+		const aligned = VOICE_CATALOG.find((v) => v.gender === personaGender);
 		if (aligned) {
 			console.log(
-				`[UGC] Voice '${cfgVoice}' (${cfgGender ?? 'unknown gender'}) contradicts persona gender '${profileGender}' — using '${aligned.name}' instead.`
+				`[UGC] Voice '${cfgVoice}' (${cfgGender ?? 'unknown gender'}) contradicts persona gender '${personaGender}' — using '${aligned.name}' instead.`
 			);
-			return { voice: aligned.name, voiceGender: profileGender };
+			return { voice: aligned.name, voiceGender: personaGender };
 		}
 	}
-	return { voice: cfgVoice, voiceGender: cfgGender };
+	return { voice: cfgVoice, voiceGender: cfgGender ?? personaGender };
 }
 
 /** Generates (and durably persists) a fresh hero portrait image. No DB pin — just the image. */
@@ -1409,11 +1500,9 @@ async function generateHeroPortraitImage(
 	const heroPrompt = `Photorealistic vertical portrait of one relatable UGC content creator who fits this audience: ${audience}.${persona}${genderLine}${archetypeLine}${avatarLine} Friendly, casual, natural window light, looking straight at the camera, authentic iPhone selfie style, clear visible face, upper body. Single person only.`;
 
 	const heroUrl = await generateUgcImage(heroPrompt, null, falKey);
-	try {
-		return await persistToStorage(svc, heroUrl, userId, 'png');
-	} catch {
-		return heroUrl;
-	}
+	// Loud persist: pinned reusable face fed as grounding to every future video
+	// -- never return the ephemeral provider URL, which would expire and break it.
+	return await persistToStorage(svc, heroUrl, userId, 'png');
 }
 
 /**
@@ -1457,20 +1546,10 @@ export async function generateCharacterPortrait(
 		const sheetUrl = sheetData.images?.[0]?.url;
 		if (!sheetUrl) throw new Error('Nano Banana returned no character sheet');
 
-		let durableSheet = sheetUrl;
-		try {
-			durableSheet = await persistToStorage(svc, sheetUrl, userId, 'png');
-		} catch {
-			/* keep provider url */
-		}
+		const durableSheet = await persistToStorage(svc, sheetUrl, userId, 'png');
 
 		const heroShotUrl = await generateAvatarHeroShot(falKey, sheetUrl);
-		let durableFull = heroShotUrl;
-		try {
-			durableFull = await persistToStorage(svc, heroShotUrl, userId, 'png');
-		} catch {
-			/* keep provider url */
-		}
+		const durableFull = await persistToStorage(svc, heroShotUrl, userId, 'png');
 
 		await mergeReferenceKit(supabase, agentId, { sheet: durableSheet, full_body: durableFull }, true);
 	} catch (err) {
@@ -1569,21 +1648,11 @@ export async function generateCharacterSheetFromReference(
 	const sheetUrl = data.images?.[0]?.url;
 	if (!sheetUrl) throw new Error('Nano Banana returned no image');
 
-	let durableSheet = sheetUrl;
-	try {
-		durableSheet = await persistToStorage(svc, sheetUrl, userId, 'png');
-	} catch {
-		/* keep provider url */
-	}
+	const durableSheet = await persistToStorage(svc, sheetUrl, userId, 'png');
 
 	const heroShotUrl = await generateAvatarHeroShot(falKey, sheetUrl);
 
-	let durable = heroShotUrl;
-	try {
-		durable = await persistToStorage(svc, heroShotUrl, userId, 'png');
-	} catch {
-		/* keep provider url */
-	}
+	const durable = await persistToStorage(svc, heroShotUrl, userId, 'png');
 
 	await supabase.from('agent_configs').update({ ugc_character_ref: durable }).eq('agent_id', agentId);
 	// Replace, not merge: a newly uploaded photo is a new identity, so any
@@ -1630,12 +1699,7 @@ export async function generateSideProfileComposite(
 	const url = data.images?.[0]?.url;
 	if (!url) throw new Error('Nano Banana returned no image for the side-profile composite');
 
-	let durable = url;
-	try {
-		durable = await persistToStorage(svc, url, userId, 'png');
-	} catch {
-		/* keep provider url */
-	}
+	const durable = await persistToStorage(svc, url, userId, 'png');
 
 	await mergeReferenceKit(supabase, agentId, { side_profiles: durable });
 	return durable;
@@ -1668,12 +1732,7 @@ export async function generateFacialCloseup(
 	const url = data.images?.[0]?.url;
 	if (!url) throw new Error('Nano Banana returned no image for the facial close-up');
 
-	let durable = url;
-	try {
-		durable = await persistToStorage(svc, url, userId, 'png');
-	} catch {
-		/* keep provider url */
-	}
+	const durable = await persistToStorage(svc, url, userId, 'png');
 
 	await mergeReferenceKit(supabase, agentId, { face_closeup: durable });
 	return durable;
@@ -1714,12 +1773,7 @@ export async function generateFeatureGrid(
 	const url = data.images?.[0]?.url;
 	if (!url) throw new Error('Nano Banana returned no image for the feature grid');
 
-	let durable = url;
-	try {
-		durable = await persistToStorage(svc, url, userId, 'png');
-	} catch {
-		/* keep provider url */
-	}
+	const durable = await persistToStorage(svc, url, userId, 'png');
 
 	await mergeReferenceKit(supabase, agentId, { feature_grid: durable });
 	return durable;
@@ -1771,6 +1825,12 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 	// Every text call (director, retries, grader) self-records into the ledger.
 	const costEvents: CostEvent[] = [];
 	const ai = trackAi(rawAi, costEvents);
+
+	// Fail-closed spend guard: refuse to start a paid generation once this agent's
+	// daily or the user's monthly estimated spend has crossed the configured cap.
+	await assertWithinBudget(supabase, userId, input.agentId);
+
+	try {
 
 	const db = createDbService(supabase);
 	const cfg = await loadUgcConfig(supabase, input.agentId);
@@ -1872,7 +1932,7 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 	// floor gets ONE targeted rewrite; still below → the slot is abandoned
 	// BEFORE any image/video spend, and the rejection is logged as QC data.
 	const floor = qualityFloor();
-	let qualityGrade = await gradeDraft(ai, parsed, selectedProduct?.name ?? null, platform);
+	let qualityGrade = await gradeDraftWithRetry(ai, parsed, selectedProduct?.name ?? null, platform);
 	if (floor > 0 && qualityGrade && qualityGrade.overall < floor) {
 		console.warn(
 			`[QC] Draft graded ${qualityGrade.overall}/10 (< floor ${floor}) — one improvement-guided rewrite: ${qualityGrade.fix}`
@@ -2091,11 +2151,15 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 			: null,
 		platform,
 		qualityGrade,
+		qc_status: qualityGrade ? 'graded' : 'ungraded',
 		costBreakdown: summarizeCosts(costEvents)
 	};
 	if (input.autopilot) content.autopilot = true;
 
-	await recordCostEvents(supabase, userId, input.agentId, costEvents);
-
 	return { content, selectedProduct, briefData, agentData };
+	} finally {
+		// Flush the ledger even if generation threw partway through — otherwise
+		// every failed/retried generation is silent spend the cap never sees.
+		await recordCostEvents(supabase, userId, input.agentId, costEvents);
+	}
 }

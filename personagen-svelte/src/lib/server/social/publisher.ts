@@ -99,7 +99,10 @@ async function resolveZernioAccountId(
 	const stored = getStoredZernioAccountId(connection);
 	if (stored) return stored;
 
-	const accounts = await getZernioAccounts(client, cacheKey, profileId).catch(() => []);
+	// Let a transient failure (timeout/5xx listing accounts) THROW rather than
+	// swallowing it to [] → null → a permanent "not connected" failure. The caller
+	// turns a throw into a retriable error result instead.
+	const accounts = await getZernioAccounts(client, cacheKey, profileId);
 	if (!accounts.length) return null;
 
 	const aliases = platformAliases(platform);
@@ -116,7 +119,12 @@ async function resolveZernioAccountId(
 		);
 		if (byHandle) return byHandle.id;
 	}
-	return matches[0].id;
+	// Fall back to the first match ONLY when scoped to this persona's own profile —
+	// there, every account belongs to this persona so "first Instagram" is safe.
+	// Unscoped (no profileId), a first-match could be a DIFFERENT persona's account,
+	// so refuse to guess and let the publish fail with a clear "connect it" error.
+	if (profileId) return matches[0].id;
+	return null;
 }
 
 /** Looks up the persona's Zernio profile id for profile-scoped account resolution. */
@@ -150,7 +158,14 @@ export async function publishToPlatform({
 	const mediaItems = extractMediaItems(post.content);
 	const isVideo = !!mediaItems?.some((m) => m.type === 'video');
 
-	const apiKey = await getZernioApiKey(supabase, post.user_id).catch(() => null);
+	let apiKey: string | null;
+	try {
+		apiKey = await getZernioApiKey(supabase, post.user_id);
+	} catch (err) {
+		// Transient DB/key-store error — surface it (retriable) instead of masking
+		// it as "no key configured", which the scheduler would fail permanently.
+		return { success: false, provider: 'zernio', error: (err as Error).message };
+	}
 	if (!apiKey) {
 		return {
 			success: false,
@@ -180,13 +195,15 @@ export async function publishToPlatform({
 	const client = new ZernioClient(apiKey);
 	const profileId = await getAgentProfileId(supabase, post.agent_id);
 	const cacheKey = `${apiKey}::${profileId || 'all'}`;
-	const accountId = await resolveZernioAccountId(
-		client,
-		cacheKey,
-		normalizedPlat,
-		connection,
-		profileId
-	).catch(() => null);
+	let accountId: string | null;
+	try {
+		accountId = await resolveZernioAccountId(client, cacheKey, normalizedPlat, connection, profileId);
+	} catch (err) {
+		// Transient (timeout/5xx while listing accounts) — surface the real message
+		// so the scheduler classifies it retriable instead of terminally failing the
+		// post as "not connected" on a passing network blip.
+		return { success: false, provider: 'zernio', error: (err as Error).message };
+	}
 
 	if (!accountId) {
 		return {
@@ -201,7 +218,10 @@ export async function publishToPlatform({
 			content: getTextContent(post.content),
 			platform: normalizedPlat,
 			accountId,
-			mediaItems
+			mediaItems,
+			// Stable across retries of the same post→platform so a timeout-after-commit
+			// retry dedupes at Zernio instead of double-posting.
+			idempotencyKey: `${post.id}:${normalizedPlat}`
 		});
 		return { ...result, provider: 'zernio' };
 	} catch (err) {

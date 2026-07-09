@@ -7,7 +7,7 @@
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import PostDrawer from '$lib/components/feed/PostDrawer.svelte';
-	import { getPostDisplay as sharedGetPostDisplay } from '$lib/components/feed/postDisplay';
+	import { getPostDisplay as sharedGetPostDisplay, getPostErrorSummary } from '$lib/components/feed/postDisplay';
 	import { platformColor } from '$lib/platforms';
 
 	interface ScheduledPost {
@@ -18,7 +18,7 @@
 		platforms: string[];
 		date: string; // YYYY-MM-DD
 		time: string;
-		status: 'scheduled' | 'draft' | 'published' | 'failed' | 'publishing';
+		status: 'scheduled' | 'draft' | 'published' | 'failed' | 'publishing' | 'partial' | 'rejected';
 		external_id?: string | null;
 		publication_results?: Record<string, any> | null;
 		analytics?: { views: number; likes: number; comments: number; shares: number } | null;
@@ -26,7 +26,7 @@
 		token_cost?: number | null;
 	}
 
-	interface SampleBlueprint {
+	interface Blueprint {
 		id: string;
 		name: string;
 		platform: string;
@@ -39,7 +39,7 @@
 	interface PageData {
 		agents: Agent[];
 		realPosts?: ScheduledPost[];
-		blueprints?: SampleBlueprint[];
+		blueprints?: Blueprint[];
 		autopilotConfigs?: Record<string, AutopilotView>;
 	}
 
@@ -125,49 +125,9 @@
 	let composerDate = $state('');
 	let composerTime = $state('10:00');
 
-	// Content Forge Integration inside Composer
-
-	const SAMPLE_BLUEPRINTS: SampleBlueprint[] = [
-		{
-			id: 'bp-1',
-			name: 'FitnessByKira',
-			platform: 'youtube',
-			niche: 'Fitness & Wellness',
-			score: 92,
-			date: '2 days ago',
-			layers: 9
-		},
-		{
-			id: 'bp-2',
-			name: 'TechBroDaily',
-			platform: 'x',
-			niche: 'Tech & AI',
-			score: 87,
-			date: '1 week ago',
-			layers: 9
-		},
-		{
-			id: 'bp-3',
-			name: 'StyleWithMaya',
-			platform: 'instagram',
-			niche: 'Fashion & Luxury',
-			score: 95,
-			date: '3 days ago',
-			layers: 9
-		},
-		{
-			id: 'bp-4',
-			name: 'CookingVibes',
-			platform: 'tiktok',
-			niche: 'Food & Cooking',
-			score: 78,
-			date: '5 days ago',
-			layers: 9
-		}
-	];
+	// Content Forge Integration inside Composer — real DB blueprints only.
 
 	let dbBlueprints = $derived(data.blueprints || []);
-	let allBlueprints = $derived([...dbBlueprints, ...SAMPLE_BLUEPRINTS]);
 	let selectedBlueprintId = $state<string | null>('');
 
 	let forgeTopic = $state('');
@@ -207,7 +167,7 @@
 		selectedBlueprintId = target.value || '';
 
 		if (selectedBlueprintId) {
-			const bp = allBlueprints.find((b: SampleBlueprint) => b.id === selectedBlueprintId);
+			const bp = dbBlueprints.find((b: Blueprint) => b.id === selectedBlueprintId);
 			if (bp && bp.platform) {
 				const normPlat = bp.platform.toLowerCase();
 				if (composerAgentPlatforms.includes(normPlat)) {
@@ -553,6 +513,70 @@
 		return p.charAt(0).toUpperCase() + p.slice(1);
 	}
 
+	// Caption editing from the drawer — same behavior as the persona feed
+	// (note: editing a published post only changes OUR copy, not the live platform).
+	async function handleSaveText(post: any, newText: string): Promise<boolean> {
+		try {
+			let parsed: any = {};
+			try {
+				parsed = JSON.parse(post.content);
+			} catch {
+				parsed = { text: String(post.content ?? '') };
+			}
+			parsed.text = newText;
+			const res = await Posts.update(post.id, { content: parsed });
+			if (res.success) {
+				const serialized = JSON.stringify(parsed);
+				posts = posts.map((p) => (p.id === post.id ? { ...p, text: serialized } : p));
+				if (selectedPost && selectedPost.id === post.id)
+					selectedPost = { ...selectedPost, text: serialized };
+				showToast('Caption updated', 'success');
+				return true;
+			}
+			showToast(res.error || 'Failed to update caption', 'error');
+			return false;
+		} catch (e: any) {
+			showToast(e.message || 'Failed to update caption', 'error');
+			return false;
+		}
+	}
+
+	// Reschedule from the drawer — optimistic local update on success.
+	async function handleReschedule(post: any, date: string, time: string): Promise<boolean> {
+		try {
+			const res = await fetch('/api/posts', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					action: 'reschedule',
+					id: post.id,
+					scheduled_date: date,
+					scheduled_time: time
+				})
+			});
+			const result = await res.json();
+			if (res.ok && result.success) {
+				const shortTime = time.substring(0, 5);
+				posts = posts.map((p) => (p.id === post.id ? { ...p, date, time: shortTime } : p));
+				if (selectedPost && selectedPost.id === post.id)
+					selectedPost = { ...selectedPost, date, time: shortTime };
+				showToast('Post rescheduled', 'success');
+				return true;
+			}
+			showToast(result.error || 'Failed to reschedule post', 'error');
+			return false;
+		} catch (err: any) {
+			showToast(err.message || 'Error rescheduling post', 'error');
+			return false;
+		}
+	}
+
+	/** Short failure hint for grid/list chips — only failed/partial posts get one. */
+	function postErrorHint(p: ScheduledPost): string | undefined {
+		if (p.status !== 'failed' && p.status !== 'partial') return undefined;
+		return getPostErrorSummary(p) || 'Publish failed — open the post for details';
+	}
+
 	async function saveAsDraft() {
 		const selectedPlatforms = Object.entries(composerPlatforms)
 			.filter(([, v]) => v)
@@ -605,6 +629,8 @@
 		draft: 'var(--warning)',
 		publishing: 'var(--cyan)',
 		published: 'var(--success)',
+		partial: 'var(--gold)',
+		rejected: 'var(--rose)',
 		failed: 'var(--error)'
 	};
 
@@ -787,6 +813,7 @@
 					<option value="publishing">Publishing</option>
 					<option value="published">Published</option>
 					<option value="partial">Partial</option>
+					<option value="rejected">Rejected</option>
 					<option value="failed">Failed</option>
 				</select>
 			</div>
@@ -942,7 +969,9 @@
 									{#each dayPosts.slice(0, 4) as post}
 										<span
 											class="dot"
+											class:dot-failed={post.status === 'failed' || post.status === 'partial'}
 											style="background: {platformColor(post.platforms[0])}"
+											title={postErrorHint(post)}
 										></span>
 									{/each}
 									{#if dayPosts.length > 4}
@@ -978,7 +1007,7 @@
 						<div class="mobile-post-body">
 							<div class="mobile-post-date">
 								{post.date} · {post.time}
-								<span class="mobile-post-status status-{post.status}">{post.status}</span>
+								<span class="mobile-post-status status-{post.status}" title={postErrorHint(post)}>{post.status}</span>
 							</div>
 							<div class="mobile-post-text">{getPostDisplay(post).text}</div>
 							<div class="mobile-post-meta">
@@ -1029,7 +1058,7 @@
 												{#if post.status === 'published'}
 													<span class="live-indicator-badge">Live Tracker</span>
 												{:else}
-													<span class="status-badge" style="color: {STATUS_COLORS[post.status]}; border-color: {STATUS_COLORS[post.status]}">{post.status}</span>
+													<span class="status-badge" style="color: {STATUS_COLORS[post.status]}; border-color: {STATUS_COLORS[post.status]}" title={postErrorHint(post)}>{post.status}</span>
 												{/if}
 											</div>
 											<p class="post-card-text">{dp.text}</p>
@@ -1062,6 +1091,8 @@
 			onClose={() => (selectedPost = null)}
 			onDelete={() => deletePost()}
 			onApprove={() => selectedPost && approvePost(selectedPost)}
+			onSaveText={handleSaveText}
+			onReschedule={handleReschedule}
 			approving={approving}
 			deleting={deletingPost}
 		/>
@@ -1201,8 +1232,10 @@
 								style="font-size: var(--text-xs); padding: 0.4rem; border-radius: var(--radius-xs); border: 1px solid var(--border); background: var(--surface); color: var(--text);"
 							>
 								<option value="">No blueprint selected</option>
-								{#each allBlueprints as bp}
+								{#each dbBlueprints as bp}
 									<option value={bp.id}>{bp.name} ({bp.platform} - {bp.score} pts)</option>
+								{:else}
+									<option value="" disabled>No blueprints yet — analyze a competitor first</option>
 								{/each}
 							</select>
 						</div>
@@ -1729,6 +1762,11 @@
 		font-weight: var(--weight-bold);
 	}
 
+	/* Failed/partial posts get a red ring so the error tooltip is discoverable */
+	.dot.dot-failed {
+		box-shadow: 0 0 0 1.5px var(--error);
+	}
+
 	/* ── Mobile list view (hidden on desktop) ── */
 	.mobile-list {
 		display: none;
@@ -2176,7 +2214,10 @@
 
 	.mobile-post-status.status-draft { color: #f59e0b; border-color: #f59e0b; }
 	.mobile-post-status.status-scheduled { color: #38bdf8; border-color: #38bdf8; }
+	.mobile-post-status.status-publishing { color: #22d3ee; border-color: #22d3ee; }
 	.mobile-post-status.status-published { color: #10b981; border-color: #10b981; }
+	.mobile-post-status.status-partial { color: #f97316; border-color: #f97316; }
+	.mobile-post-status.status-rejected { color: #f43f5e; border-color: #f43f5e; }
 	.mobile-post-status.status-failed { color: #ef4444; border-color: #ef4444; }
 
 	.mobile-list-empty {

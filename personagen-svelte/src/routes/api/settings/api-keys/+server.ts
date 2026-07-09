@@ -178,13 +178,17 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	}
 };
 
+// Retired providers no longer offered in the UI, but existing stored rows must
+// remain deletable so users can clean them up.
+const LEGACY_KEY_PROVIDERS = ['blotato', 'composio'];
+
 export const DELETE: RequestHandler = async ({ request, locals }) => {
 	const user = await requireUser(locals);
 	if (!user) return json({ success: false, error: 'Unauthorized' }, { status: 401 });
 
 	const body = (await request.json()) as any;
 	const provider = String(body.provider || '').toLowerCase();
-	if (!isSupportedProvider(provider)) {
+	if (!isSupportedProvider(provider) && !LEGACY_KEY_PROVIDERS.includes(provider)) {
 		return json({ success: false, error: 'Unsupported provider' }, { status: 400 });
 	}
 

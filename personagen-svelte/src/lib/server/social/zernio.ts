@@ -13,6 +13,13 @@ export interface ZernioPublishInput {
 	platform: string;
 	accountId: string;
 	mediaItems?: Array<{ type: 'image' | 'video'; url: string }>;
+	/**
+	 * Stable per-(post,platform) key. If Zernio accepts+publishes but the response
+	 * is lost (timeout after commit), the scheduler retries — this lets Zernio
+	 * dedupe the second request instead of double-posting to the live account.
+	 * Harmless if Zernio ignores the header.
+	 */
+	idempotencyKey?: string;
 }
 
 export interface ZernioAccount {
@@ -135,7 +142,10 @@ export class ZernioClient {
 	async publishNow(input: ZernioPublishInput): Promise<ZernioPublishResult> {
 		const response = await fetch(`${ZERNIO_BASE_URL}/posts`, {
 			method: 'POST',
-			headers: this.getHeaders(),
+			headers: {
+				...this.getHeaders(),
+				...(input.idempotencyKey ? { 'Idempotency-Key': input.idempotencyKey } : {})
+			},
 			body: JSON.stringify({
 				content: input.content,
 				publishNow: true,
@@ -376,20 +386,6 @@ export class ZernioClient {
 			const res = await fetch(`${ZERNIO_BASE_URL}/accounts/${encodeURIComponent(accountId)}`, {
 				method: 'DELETE',
 				headers: this.getHeaders()
-			});
-			return res.ok;
-		} catch {
-			return false;
-		}
-	}
-
-	/** Moves an account onto a persona's profile (PATCH /v1/accounts/{id}). Best-effort. */
-	async moveAccountToProfile(accountId: string, profileId: string): Promise<boolean> {
-		try {
-			const res = await fetch(`${ZERNIO_BASE_URL}/accounts/${encodeURIComponent(accountId)}`, {
-				method: 'PATCH',
-				headers: this.getHeaders(),
-				body: JSON.stringify({ profileId })
 			});
 			return res.ok;
 		} catch {

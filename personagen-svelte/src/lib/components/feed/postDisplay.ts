@@ -8,6 +8,38 @@ export interface PostDisplay {
 	product: any | null;
 }
 
+const ERROR_SNIPPET_MAX = 140;
+
+/** Clamps a stored provider error to a UI-safe length. */
+export function truncateError(msg: string): string {
+	const clean = msg.trim();
+	return clean.length > ERROR_SNIPPET_MAX ? clean.slice(0, ERROR_SNIPPET_MAX - 1) + '…' : clean;
+}
+
+/**
+ * Human-readable summary of why a post failed (or partially failed) to
+ * publish: per-platform errors from publication_results when available,
+ * falling back to the post-level _post.error / _post.last_error.
+ */
+export function getPostErrorSummary(post: any): string | null {
+	const results = post?.publication_results;
+	if (!results || typeof results !== 'object') return null;
+
+	const platformErrors: string[] = [];
+	for (const [platform, result] of Object.entries(results)) {
+		if (platform === '_post') continue;
+		const r = result as any;
+		if (r && typeof r === 'object' && typeof r.error === 'string' && r.error) {
+			platformErrors.push(`${platform}: ${truncateError(r.error)}`);
+		}
+	}
+	if (platformErrors.length > 0) return platformErrors.join('\n');
+
+	const meta = results._post;
+	const postLevel = meta?.error || meta?.last_error;
+	return typeof postLevel === 'string' && postLevel ? truncateError(postLevel) : null;
+}
+
 /**
  * Parses a post's `content` (JSON-stringified) into display fields, with a
  * fallback to `publication_results` for older rows from a since-retired

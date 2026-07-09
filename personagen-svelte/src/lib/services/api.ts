@@ -66,7 +66,7 @@ export const Posts = {
 	delete: (id: string) => request(ENDPOINTS.posts, 'delete', { id })
 };
 
-// ── Content Forge (9 actions — unified generation engine) ──────────────────
+// ── Content Forge (8 actions — unified generation engine) ──────────────────
 
 export const ContentForge = {
 	generate: (
@@ -144,12 +144,9 @@ export const ContentForge = {
 			agent_id: agentId,
 			topic,
 			platforms: [platform]
-		}),
-	repurpose: (contentId: string, targetPlatforms: string[]) =>
-		request(ENDPOINTS.contentForge, 'repurpose', {
-			content_id: contentId,
-			target_platforms: targetPlatforms
 		})
+	// `repurpose` was removed: the engine action was a fake no-op (it returned
+	// "Repurposing scheduled" without doing anything) and now answers 501.
 };
 
 // ── Blueprints / Style Templates (5 actions) ──────────────────────────────

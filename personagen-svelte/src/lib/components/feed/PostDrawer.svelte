@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { fly, fade } from 'svelte/transition';
-	import { getPostDisplay } from './postDisplay';
+	import { getPostDisplay, truncateError } from './postDisplay';
 	import { platformColor } from '$lib/platforms';
 
 	let {
@@ -9,6 +9,7 @@
 		onDelete,
 		onApprove,
 		onSaveText = undefined,
+		onReschedule = undefined,
 		approving = false,
 		deleting = false
 	}: {
@@ -18,6 +19,8 @@
 		onApprove: (post: any) => void;
 		/** When provided, the caption becomes editable (returns false to keep editing open). */
 		onSaveText?: (post: any, newText: string) => Promise<boolean> | boolean;
+		/** When provided, draft/scheduled posts get a date/time edit control (returns false to keep the values dirty). */
+		onReschedule?: (post: any, date: string, time: string) => Promise<boolean> | boolean;
 		approving?: boolean;
 		deleting?: boolean;
 	} = $props();
@@ -31,6 +34,9 @@
 		void post?.id;
 		editingText = false;
 		savingText = false;
+		schedDate = post?.scheduled_date ?? '';
+		schedTime = (post?.scheduled_time ?? '10:00:00').slice(0, 5);
+		savingSchedule = false;
 	});
 	function startTextEdit() {
 		draftText = display?.text ?? '';
@@ -47,6 +53,23 @@
 		}
 	}
 
+	// ── Reschedule (draft/scheduled only, when the host page wires it) ──
+	let schedDate = $state('');
+	let schedTime = $state('');
+	let savingSchedule = $state(false);
+	let canReschedule = $derived(
+		Boolean(onReschedule && post && (post.status === 'draft' || post.status === 'scheduled'))
+	);
+	async function saveReschedule() {
+		if (!onReschedule || !post || savingSchedule || !schedDate || !schedTime) return;
+		savingSchedule = true;
+		try {
+			await onReschedule(post, schedDate, `${schedTime}:00`);
+		} finally {
+			savingSchedule = false;
+		}
+	}
+
 	let display = $derived(post ? getPostDisplay(post) : null);
 	let analytics = $derived(post?.analytics ?? null);
 	let hasRealStats = $derived(
@@ -58,13 +81,19 @@
 		return Object.entries(post.publication_results).filter(([key]) => key !== '_post');
 	});
 
-	let postLevelError = $derived(post?.publication_results?._post?.error ?? null);
+	// Post-level failure reason: terminal error first, else the last retry error.
+	let postLevelError = $derived.by(() => {
+		const meta = post?.publication_results?._post;
+		const msg = meta?.error ?? meta?.last_error ?? null;
+		return typeof msg === 'string' && msg ? truncateError(msg) : null;
+	});
 
 	function statusColor(status: string): string {
 		if (status === 'published') return 'var(--success)';
 		if (status === 'failed') return 'var(--error)';
 		if (status === 'publishing') return 'var(--cyan)';
 		if (status === 'partial') return 'var(--warning)';
+		if (status === 'rejected') return 'var(--rose)';
 		if (status === 'scheduled') return 'var(--accent)';
 		return 'var(--text-dim)';
 	}
@@ -165,6 +194,24 @@
 				</div>
 			{/if}
 
+			{#if canReschedule}
+				<div class="drawer-reschedule">
+					<span class="drawer-block-label">Scheduled for</span>
+					<div class="reschedule-row">
+						<input type="date" bind:value={schedDate} disabled={savingSchedule} aria-label="Scheduled date" />
+						<input type="time" bind:value={schedTime} disabled={savingSchedule} aria-label="Scheduled time" />
+						<button
+							type="button"
+							class="dt-btn dt-save"
+							onclick={saveReschedule}
+							disabled={savingSchedule || !schedDate || !schedTime}
+						>
+							{savingSchedule ? 'Saving…' : 'Reschedule'}
+						</button>
+					</div>
+				</div>
+			{/if}
+
 			{#if display.product?.name}
 				<div class="drawer-product">
 					<span class="drawer-block-label">Product</span>
@@ -207,8 +254,8 @@
 								<span style="color: {platformColor(platform)}; font-weight: 700; text-transform: capitalize;">{platform}</span>
 								<span class="breakdown-pill" style="color: {statusColor(r.status)}; border-color: {statusColor(r.status)};">{r.status}</span>
 							</div>
-							{#if r.status === 'failed' && r.error}
-								<p class="breakdown-error">{r.error}</p>
+							{#if r.error && r.status !== 'published'}
+								<p class="breakdown-error">{truncateError(r.error)}</p>
 							{/if}
 							{#if r.permalink}
 								<a href={r.permalink} target="_blank" rel="noopener noreferrer" class="breakdown-link">View live post ↗</a>
@@ -287,6 +334,29 @@
 		background: var(--accent, #d4a017);
 		border-color: transparent;
 		color: #fff;
+	}
+
+	.drawer-reschedule {
+		display: flex;
+		flex-direction: column;
+		gap: 0.4rem;
+	}
+
+	.reschedule-row {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		flex-wrap: wrap;
+	}
+
+	.reschedule-row input {
+		background: var(--surface-2, rgba(255, 255, 255, 0.03));
+		border: 1px solid var(--border);
+		border-radius: 8px;
+		color: var(--text);
+		padding: 0.4rem 0.6rem;
+		font: inherit;
+		font-size: 0.8rem;
 	}
 
 	.post-drawer {

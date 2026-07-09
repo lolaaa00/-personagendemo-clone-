@@ -3,21 +3,72 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 /**
- * Single-instance leader lock for the scheduler.
+ * Leader lease for the scheduler — elects ONE instance that does the
+ * publishing/autopilot work each tick; the rest no-op.
  *
- * Multiple app instances on one machine (dev servers + preview/prod) each boot a
- * scheduler. Without coordination they'd all publish the same due posts -> double
- * posting. This file lease (in the OS temp dir, shared by all local instances)
- * elects ONE leader that does the publishing/autopilot work; the rest no-op.
+ * Primary: a Postgres lease (scheduler_leases table + acquire_scheduler_lease
+ * RPC, see supabase/scheduler_leases_migration.sql). Works across HOSTS, not
+ * just processes on one machine — the RPC is a single atomic upsert, so two
+ * instances racing the same tick can never both win.
  *
- * For multi-host production, swap this for a DB/Redis lease — same `acquireSchedulerLock`
- * contract. Lease is refreshed every tick; if the leader dies, another claims after TTL.
+ * Fallback: the original tmpdir file lease (single-host only). Used when the
+ * migration hasn't been applied yet, so nothing breaks pre-migration — with a
+ * logged warning, once, that multi-host deployments risk double-publishing.
+ *
+ * Lease is refreshed every tick; if the leader dies, another claims after TTL.
  */
 
 const LOCK_FILE = join(tmpdir(), 'personagen-scheduler.lock');
 const LEASE_MS = 70_000; // > the 60s tick, so the leader keeps refreshing in time
+const LEASE_NAME = 'scheduler';
 const ME = `${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
 
+// Set once the DB lease is confirmed missing (migration not applied) so we
+// don't hit the DB with a known-failing RPC on every tick.
+let dbLeaseUnavailable = false;
+
+function isMissingLeaseInfra(error: { code?: string; message?: string }): boolean {
+	// PGRST202 = function not in schema cache, 42883 = undefined function,
+	// 42P01 = undefined table — all mean scheduler_leases_migration.sql is unapplied.
+	if (error.code === 'PGRST202' || error.code === '42883' || error.code === '42P01') return true;
+	return /does not exist|schema cache|not found/i.test(error.message || '');
+}
+
+/**
+ * Multi-host leader lease via Postgres. Returns true iff this instance holds
+ * the lease for this tick. Falls back to the single-host file lock (with a
+ * one-time warning) when the lease table/RPC is missing or the DB errors.
+ */
+export async function acquireSchedulerLease(supabase: any): Promise<boolean> {
+	if (!dbLeaseUnavailable) {
+		try {
+			const { data, error } = await supabase.rpc('acquire_scheduler_lease', {
+				p_name: LEASE_NAME,
+				p_holder: ME,
+				p_ttl_ms: LEASE_MS
+			});
+			if (!error) return data === true;
+			if (isMissingLeaseInfra(error)) {
+				dbLeaseUnavailable = true;
+				console.warn(
+					'[Scheduler] DB leader lease unavailable — run supabase/scheduler_leases_migration.sql. ' +
+						'Falling back to the single-host file lock (multi-host deployments risk double-publishing).'
+				);
+			} else {
+				console.warn(
+					`[Scheduler] DB lease acquire failed (${error.message}) — using file lock for this tick.`
+				);
+			}
+		} catch (e) {
+			console.warn(
+				`[Scheduler] DB lease acquire threw (${(e as Error).message}) — using file lock for this tick.`
+			);
+		}
+	}
+	return acquireSchedulerLock();
+}
+
+/** Single-host file lease (OS temp dir, shared by all local instances). */
 export function acquireSchedulerLock(): boolean {
 	const now = Date.now();
 	try {

@@ -332,8 +332,6 @@
 							return agent ? agent.name : 'Persona';
 						}
 						if (path.startsWith('/brand-brief')) return 'Brand Brief';
-						if (path.startsWith('/chat')) return 'Agent Chat Portal';
-						if (path.startsWith('/settings/overseer')) return 'Hermes Overseer Config';
 						if (path.startsWith('/settings')) return 'Settings';
 						if (path.startsWith('/generator')) return 'New Persona';
 						if (path.startsWith('/review')) return 'Review Queue';

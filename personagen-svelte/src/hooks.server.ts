@@ -2,9 +2,22 @@ import { createSupabaseServerClient } from '$lib/server/supabase';
 import { redirect, type Handle } from '@sveltejs/kit';
 import { env } from '$env/dynamic/public';
 import { env as privateEnv } from '$env/dynamic/private';
+import { building } from '$app/environment';
 import { startScheduler } from '$lib/server/scheduler';
 
-let schedulerStarted = false;
+// Start the scheduler at server boot (adapter-node runs module-level code on
+// startup), not lazily on first request — an idle deployment still publishes.
+// Set RUN_SCHEDULER=false on web-only instances so only a dedicated worker
+// publishes (the leader lease guards races too). startScheduler() itself no-ops
+// on placeholder Supabase credentials. The `building` guard keeps prerendering
+// from booting a scheduler (dynamic env is unavailable at build time anyway).
+if (!building && privateEnv.RUN_SCHEDULER !== 'false') {
+	try {
+		startScheduler();
+	} catch (e) {
+		console.error('[Hooks] Scheduler failed to start at boot:', e);
+	}
+}
 
 const PROTECTED_PREFIXES = [
 	'/dashboard',
@@ -16,18 +29,6 @@ const PROTECTED_PREFIXES = [
 ];
 
 export const handle: Handle = async ({ event, resolve }) => {
-	// Start the scheduler once per instance. Set RUN_SCHEDULER=false on web-only
-	// instances so only a dedicated worker publishes (the leader lock guards races too).
-	if (!schedulerStarted && privateEnv.RUN_SCHEDULER !== 'false') {
-		schedulerStarted = true;
-		try {
-			startScheduler();
-		} catch (e) {
-			console.error('[Hooks] Scheduler failed to start — will retry on next request:', e);
-			schedulerStarted = false;
-		}
-	}
-
 	event.locals.supabase = createSupabaseServerClient(event.cookies);
 
 	event.locals.safeGetSession = async () => {

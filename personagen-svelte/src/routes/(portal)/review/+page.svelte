@@ -101,6 +101,57 @@
 		act('reject', [...selected], reason);
 	}
 
+	// ── Inline caption editing (persists via the same /api/posts 'update'
+	// action the persona feed's drawer uses — no duplicate endpoint) ──
+	let editingId = $state<string | null>(null);
+	let editDraft = $state('');
+	let savingEdit = $state(false);
+
+	function startEdit(item: ReviewItem) {
+		editingId = item.id;
+		editDraft = item.text;
+	}
+
+	async function saveEdit(item: ReviewItem) {
+		if (savingEdit) return;
+		savingEdit = true;
+		try {
+			// Fetch the full stored content first so non-caption fields
+			// (media_url, script, product…) survive the edit.
+			const getRes = await fetch('/api/posts', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ action: 'get', id: item.id })
+			});
+			const got = await getRes.json();
+			if (!getRes.ok || !got.success) throw new Error(got.error || 'Failed to load post');
+
+			let parsed: any = {};
+			try {
+				parsed = JSON.parse(got.data.content);
+			} catch {
+				parsed = { text: String(got.data.content ?? '') };
+			}
+			parsed.text = editDraft;
+
+			const res = await fetch('/api/posts', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ action: 'update', id: item.id, content: parsed })
+			});
+			const d = await res.json();
+			if (!res.ok || !d.success) throw new Error(d.error || 'Failed to save caption');
+
+			items = items.map((i) => (i.id === item.id ? { ...i, text: editDraft } : i));
+			editingId = null;
+			showToast('✏️ Caption updated');
+		} catch (e: any) {
+			showToast(`⚠ ${e.message}`);
+		} finally {
+			savingEdit = false;
+		}
+	}
+
 	function slotLabel(i: ReviewItem): string {
 		if (!i.scheduled_date) return 'Unscheduled';
 		return `${i.scheduled_date} · ${(i.scheduled_time || '').slice(0, 5)}`;
@@ -197,7 +248,28 @@
 							{/if}
 							<span class="slot">{slotLabel(item)}</span>
 						</div>
-						<p class="caption">{item.text}</p>
+						{#if editingId === item.id}
+							<div class="caption-edit">
+								<textarea rows="4" bind:value={editDraft} disabled={savingEdit}></textarea>
+								<div class="caption-edit-actions">
+									<button class="btn-ghost sm" disabled={savingEdit} onclick={() => (editingId = null)}>Cancel</button>
+									<button class="btn-approve sm" disabled={savingEdit} onclick={() => saveEdit(item)}>
+										{savingEdit ? 'Saving…' : 'Save caption'}
+									</button>
+								</div>
+							</div>
+						{:else}
+							<div class="caption-row">
+								<p class="caption">{item.text}</p>
+								<button
+									class="edit-btn"
+									title="Edit caption"
+									aria-label="Edit caption"
+									disabled={working}
+									onclick={() => startEdit(item)}>✎</button
+								>
+							</div>
+						{/if}
 						<div class="plat-row">
 							{#each item.platforms as p}<span class="plat-chip">{platformLabel(p)}</span>{/each}
 						</div>
@@ -419,6 +491,49 @@
 		color: var(--danger, #f66);
 		border-color: var(--danger, #f66);
 	}
+	.caption-row {
+		display: flex;
+		align-items: flex-start;
+		gap: 0.4rem;
+	}
+	.caption-row .caption {
+		flex: 1;
+		min-width: 0;
+	}
+	.edit-btn {
+		flex-shrink: 0;
+		width: 26px;
+		height: 26px;
+		border-radius: 7px;
+		border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
+		background: transparent;
+		color: var(--text-dim, #889);
+		cursor: pointer;
+	}
+	.edit-btn:hover:not(:disabled) {
+		border-color: var(--accent-mid, #7c6aed);
+		color: var(--text, #eee);
+	}
+	.caption-edit {
+		margin-bottom: 0.5rem;
+	}
+	.caption-edit textarea {
+		width: 100%;
+		padding: 0.45rem 0.6rem;
+		border-radius: 8px;
+		border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
+		background: transparent;
+		color: inherit;
+		font: inherit;
+		font-size: var(--text-sm, 0.85rem);
+		resize: vertical;
+	}
+	.caption-edit-actions {
+		display: flex;
+		justify-content: flex-end;
+		gap: 0.4rem;
+		margin-top: 0.4rem;
+	}
 	.caption {
 		margin: 0 0 0.5rem 0;
 		font-size: var(--text-sm, 0.85rem);
@@ -474,6 +589,9 @@
 	.btn-reject.sm {
 		flex: 1;
 		padding: 0.4rem 0.5rem;
+	}
+	.btn-ghost.sm {
+		padding: 0.4rem 0.7rem;
 	}
 	button:disabled {
 		opacity: 0.5;

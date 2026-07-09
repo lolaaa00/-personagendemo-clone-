@@ -3,8 +3,8 @@ import { env as publicEnv } from '$env/dynamic/public';
 import { getZernioApiKey, ZernioClient } from './social/zernio';
 import { publishToPlatform } from './social/publisher';
 import { getServiceSupabase } from './service-supabase';
-import { runAutopilotDraftGeneration, zonedWallTimeToEpoch } from './autopilot';
-import { acquireSchedulerLock } from './scheduler-lock';
+import { getLocalParts, runAutopilotDraftGeneration, zonedWallTimeToEpoch } from './autopilot';
+import { acquireSchedulerLease } from './scheduler-lock';
 import { ALL_PLATFORM_KEYS } from '$lib/platforms';
 
 const DEFAULT_TZ = 'Australia/Sydney';
@@ -91,17 +91,15 @@ export async function publishSinglePost(supabase: any, post: any): Promise<boole
 		.select('id');
 
 	if (claimErr) {
-		// Most likely the posts_status_check constraint doesn't allow 'publishing'
-		// yet (post_status_publishing_migration.sql not applied). Fall back to the
-		// legacy non-atomic write so publishing still works — just without the
-		// double-publish guard.
-		console.warn(
-			`[Scheduler] Atomic claim unavailable (${claimErr.message}) — run post_status_publishing_migration.sql. Publishing without claim guard.`
+		// The atomic claim failed — almost always because posts_status_check doesn't
+		// allow 'publishing' yet (post_status_publishing_migration.sql not applied).
+		// FAIL CLOSED: skip this post rather than fall through and publish without a
+		// claim guard, which lets two overlapping ticks both publish → duplicate
+		// live posts. It retries next tick once the migration is applied.
+		console.error(
+			`[Scheduler] Atomic claim FAILED for post ${post.id} (${claimErr.message}) — apply post_status_publishing_migration.sql. Skipping to avoid an unguarded double-publish.`
 		);
-		await supabase
-			.from('posts')
-			.update({ status: 'scheduled', publication_results: publicationResults })
-			.eq('id', post.id);
+		return false;
 	} else if (!claimed || claimed.length === 0) {
 		console.log(`[Scheduler] Post ${post.id} already claimed by another worker — skipping.`);
 		return false;
@@ -333,15 +331,14 @@ async function pollScheduledPosts() {
 	if (isRunning) return;
 	isRunning = true;
 
-	// Only the elected leader publishes/runs autopilot — prevents multiple running
-	// instances (dev servers + prod) from double-posting to live accounts.
-	if (!acquireSchedulerLock()) {
-		isRunning = false;
-		return;
-	}
-
 	try {
 		const supabase = getServiceSupabase();
+
+		// Only the elected leader publishes/runs autopilot — prevents multiple running
+		// instances (other hosts, dev servers + prod) from double-posting to live accounts.
+		if (!(await acquireSchedulerLease(supabase))) {
+			return;
+		}
 
 		const nowMs = Date.now();
 
@@ -355,7 +352,10 @@ async function pollScheduledPosts() {
 			.eq('status', 'publishing');
 		for (const p of stale || []) {
 			const claimedAt = Date.parse(p.publication_results?._post?.claimed_at || '');
-			if (!claimedAt || nowMs - claimedAt > CLAIM_LEASE_MS) {
+			// Only reap a claim we can PROVE is stale (finite timestamp past the
+			// lease). The old `!claimedAt` also fired on Date.parse('') === NaN,
+			// which could yank an in-flight publish and cause a duplicate post.
+			if (Number.isFinite(claimedAt) && nowMs - claimedAt > CLAIM_LEASE_MS) {
 				console.warn(`[Scheduler] Releasing orphaned publishing claim on post ${p.id}.`);
 				await supabase
 					.from('posts')
@@ -383,22 +383,68 @@ async function pollScheduledPosts() {
 
 		let duePosts = posts || [];
 		if (duePosts.length > 0) {
-			// Resolve each post's timezone from its agent's config (default Sydney).
+			// Resolve each post's timezone + active-hours window from its agent's
+			// config (default Sydney, 8am–8pm) — one fetch serves both the wall-clock
+			// due check and the publish-window enforcement below.
 			const agentIds = [...new Set(duePosts.map((p: any) => p.agent_id))];
-			const tzByAgent = new Map<string, string>();
+			const cfgByAgent = new Map<
+				string,
+				{ timezone: string; active_hours_start: number; active_hours_end: number }
+			>();
 			const { data: cfgs } = await supabase
 				.from('agent_configs')
-				.select('agent_id, timezone')
+				.select('agent_id, timezone, active_hours_start, active_hours_end')
 				.in('agent_id', agentIds);
-			for (const c of cfgs || []) tzByAgent.set(c.agent_id, c.timezone || DEFAULT_TZ);
+			for (const c of cfgs || []) {
+				cfgByAgent.set(c.agent_id, {
+					timezone: c.timezone || DEFAULT_TZ,
+					active_hours_start: c.active_hours_start ?? 8,
+					active_hours_end: c.active_hours_end ?? 20
+				});
+			}
+			const cfgFor = (agentId: string) =>
+				cfgByAgent.get(agentId) || {
+					timezone: DEFAULT_TZ,
+					active_hours_start: 8,
+					active_hours_end: 20
+				};
+
+			// Scheduled publishing respects the agent's active-hours window: a due
+			// post outside it (e.g. a 3am slot) is DEFERRED — left 'scheduled', no
+			// attempt counted — and fires on the first tick inside the window.
+			// Manual "publish now" (publishPostById) is exempt: explicit user intent.
+			const enforceActiveHours = env.PUBLISH_ENFORCE_ACTIVE_HOURS !== 'false';
 
 			duePosts = duePosts.filter((p: any) => {
 				// Respect the retry backoff window set after a transient failure.
 				const notBefore = Date.parse(p.publication_results?._post?.not_before || '');
 				if (notBefore && notBefore > nowMs) return false;
-				if (!p.scheduled_date) return true; // no date → publish now
-				const tz = tzByAgent.get(p.agent_id) || DEFAULT_TZ;
-				return zonedWallTimeToEpoch(p.scheduled_date, p.scheduled_time || '00:00:00', tz) <= nowMs;
+				const cfg = cfgFor(p.agent_id);
+				if (
+					p.scheduled_date &&
+					zonedWallTimeToEpoch(p.scheduled_date, p.scheduled_time || '00:00:00', cfg.timezone) >
+						nowMs
+				) {
+					return false; // not due yet (no date → publish now)
+				}
+				if (enforceActiveHours) {
+					const { hour } = getLocalParts(cfg.timezone);
+					const startH = cfg.active_hours_start;
+					const endH = cfg.active_hours_end;
+					// End hour is inclusive (autopilot books slots at endH:00). An
+					// inverted window (end < start) means overnight, e.g. 22 → 6.
+					const inWindow =
+						endH >= startH
+							? hour >= startH && hour <= endH
+							: hour >= startH || hour <= endH;
+					if (!inWindow) {
+						console.log(
+							`[Scheduler] Deferring post ${p.id}: agent-local hour ${hour} is outside active window ${startH}–${endH} (${cfg.timezone}).`
+						);
+						return false;
+					}
+				}
+				return true;
 			});
 		}
 

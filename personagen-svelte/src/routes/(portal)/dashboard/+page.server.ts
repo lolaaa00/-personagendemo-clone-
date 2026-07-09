@@ -45,6 +45,11 @@ export const load: PageServerLoad = async ({ locals }) => {
 					}).length;
 				}
 
+				// Week-over-week trend windows
+				const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+				const nowMs = Date.now();
+				const formatTrend = (pct: number) => `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%`;
+
 				// Roster of creator agents
 				const creators = dbAgents.filter((a) => !a.is_overseer);
 
@@ -84,6 +89,34 @@ export const load: PageServerLoad = async ({ locals }) => {
 						totalTokenCost = 0;
 					}
 
+					// Real week-over-week trend: views this 7 days vs prior 7 days,
+					// falling back to published-post counts when no view data exists.
+					let curViews = 0;
+					let prevViews = 0;
+					let curPosts = 0;
+					let prevPosts = 0;
+					agentPosts.forEach((p) => {
+						if (p.status !== 'published') return;
+						const ts = new Date(p.published_at || p.created_at).getTime();
+						if (Number.isNaN(ts)) return;
+						const age = nowMs - ts;
+						if (age < 0) return;
+						if (age < WEEK_MS) {
+							curPosts++;
+							curViews += p.analytics?.views || 0;
+						} else if (age < 2 * WEEK_MS) {
+							prevPosts++;
+							prevViews += p.analytics?.views || 0;
+						}
+					});
+
+					let trend = '—';
+					if (prevViews > 0) {
+						trend = formatTrend(((curViews - prevViews) / prevViews) * 100);
+					} else if (prevPosts > 0) {
+						trend = formatTrend(((curPosts - prevPosts) / prevPosts) * 100);
+					}
+
 					const perf = Math.min(99, Math.max(40, Math.round(70 + engVal * 2.5 + connCount * 4)));
 
 					return {
@@ -92,7 +125,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 						engagementRate: engVal,
 						engagement_rate: engVal,
 						active: a.status === 'active',
-						trend: '+0.0%',
+						trend,
 						perf,
 						ugc_character_ref: characterRefById.get(a.id) ?? null,
 						total_token_usage: totalTokenUsage,
@@ -151,7 +184,10 @@ export const load: PageServerLoad = async ({ locals }) => {
 		}
 	}
 
+	// Engagement sparklines: built only from real analytics rows. Agents with no
+	// measured views in the window are excluded — no synthetic fallback values.
 	let sparkData: number[][] = [];
+	let sparkAgents: any[] = [];
 
 	if (hasDbAgents && locals.supabase) {
 		const dbPosts = await locals.supabase
@@ -168,16 +204,19 @@ export const load: PageServerLoad = async ({ locals }) => {
 			});
 		}
 
-		sparkData = agents.slice(0, 3).map((agent) => {
+		const dayArrays = Array.from({ length: 7 }, (_, i) => {
+			const d = new Date();
+			d.setDate(d.getDate() - (6 - i));
+			return d.toISOString().split('T')[0];
+		});
+
+		for (const agent of agents) {
+			if (sparkData.length >= 3) break;
+
 			const agentPosts = postsByAgent[agent.id] || [];
 			const publishedPosts = agentPosts.filter((p) => p.status === 'published' && p.analytics);
 
-			const dayArrays = Array.from({ length: 7 }, (_, i) => {
-				const d = new Date();
-				d.setDate(d.getDate() - (6 - i));
-				return d.toISOString().split('T')[0];
-			});
-
+			let hasRealData = false;
 			const dailyRates = dayArrays.map((dayStr) => {
 				const dayPosts = publishedPosts.filter((p) => {
 					const postDate = (p.published_at || p.created_at || '').split('T')[0];
@@ -194,19 +233,23 @@ export const load: PageServerLoad = async ({ locals }) => {
 				});
 
 				if (dayViews > 0) {
+					hasRealData = true;
 					return parseFloat(((dayLikes / dayViews) * 100).toFixed(1));
 				}
-				const hasActiveConns = (agent.connection_count ?? 0) > 0;
-				return hasActiveConns ? parseFloat((agent.engagement_rate || 5.8).toFixed(1)) : 0;
+				return 0;
 			});
 
-			return dailyRates;
-		});
+			if (hasRealData) {
+				sparkData.push(dailyRates);
+				sparkAgents.push(agent);
+			}
+		}
 	}
 
 	return {
 		agents,
 		sparkData,
+		sparkAgents,
 		platformData,
 		postsThisWeek
 	};

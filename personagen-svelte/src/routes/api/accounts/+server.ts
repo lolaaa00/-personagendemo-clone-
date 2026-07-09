@@ -56,7 +56,13 @@ async function syncZernioAccounts(
 	db: any,
 	supabase: any,
 	userId: string,
-	agent: { id: string; name?: string | null; zernio_profile_id?: string | null }
+	agent: { id: string; name?: string | null; zernio_profile_id?: string | null },
+	// Only provision a new Zernio profile when the caller is an explicit connect /
+	// manual-sync action. check_status is a high-frequency poll — creating profiles
+	// there would spin up empty profiles for never-connected personas and risk
+	// double-creation under concurrent polls. Passive polls sync only if a profile
+	// already exists.
+	provision = false
 ): Promise<{ synced: string[]; skipped: string[] }> {
 	const synced: string[] = [];
 	const skipped: string[] = [];
@@ -65,16 +71,15 @@ async function syncZernioAccounts(
 	if (!apiKey) return { synced, skipped };
 
 	const client = new ZernioClient(apiKey);
-	const profileId = await ensureAgentProfileId(db, client, agent);
+	const profileId = provision
+		? await ensureAgentProfileId(db, client, agent)
+		: agent.zernio_profile_id || null;
 
 	// Require a resolved profile: NEVER fall back to the unscoped account list —
 	// that would vacuum every account under the key into this one persona and
-	// cross-contaminate every other persona's connections. If provisioning failed,
-	// sync nothing and let the caller retry.
+	// cross-contaminate every other persona's connections. Without a profile
+	// (not yet provisioned, or provisioning failed), sync nothing.
 	if (!profileId) {
-		console.warn(
-			`[Accounts API] No Zernio profile for agent ${agent.id} — skipping sync to avoid cross-persona contamination.`
-		);
 		return { synced, skipped };
 	}
 	const { accounts } = await client.fetchAccounts({ profileId });
@@ -374,7 +379,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			let synced: string[] = [];
 			let skipped: string[] = [];
 			try {
-				({ synced, skipped } = await syncZernioAccounts(db, locals.supabase, user.id, agent));
+				// provision=true: manual sync is user-initiated, so create the persona's
+				// Zernio profile if it doesn't exist yet.
+				({ synced, skipped } = await syncZernioAccounts(db, locals.supabase, user.id, agent, true));
 			} catch (e) {
 				return json(
 					{ success: false, error: `Failed to sync Zernio accounts: ${(e as Error).message}` },
@@ -432,25 +439,31 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			const origin = new URL(request.url).origin;
 			const callbackUrl = `${origin}/personas/${persona_id}?tab=connections&connected=${encodeURIComponent(platform)}`;
 
-			// Hosted Zernio OAuth, filed under the persona's own profile so the new
-			// account lands in the right bucket. On success Zernio bounces back to
-			// the Connections tab and check_status auto-imports it.
+			// Provision the persona's profile up-front so both the OAuth link and the
+			// dashboard fallback can file the account under the correct bucket.
 			const client = new ZernioClient(apiKey);
+			const profileId = await ensureAgentProfileId(db, client, agent);
+			const profileName = `${(agent.name || 'Persona').trim()} · ${agent.id.slice(0, 8)}`;
+
+			// Hosted Zernio OAuth, filed under the persona's own profile. On success
+			// Zernio bounces back to the Connections tab and check_status imports it.
 			try {
-				const profileId = await ensureAgentProfileId(db, client, agent);
 				const authUrl = await client.getConnectUrl(platform, callbackUrl, profileId || undefined);
 				return json({ success: true, data: { redirect_url: authUrl, provider: 'zernio' } });
 			} catch (e) {
 				console.warn(
 					`[Accounts API] Zernio connect-link failed for ${platform} (${(e as Error).message}) — forwarding to dashboard.`
 				);
-				// Never dead-end: forward to the Zernio dashboard as a last resort.
+				// Some platforms (e.g. Bluesky app-password, Telegram code flow) have no
+				// hosted GET connect link. Forward to the dashboard, but tell the user to
+				// pick THIS persona's profile — accounts connected under a different
+				// profile won't import here (our sync is profile-scoped by design).
 				return json({
 					success: true,
 					data: {
 						redirect_url: 'https://zernio.com/dashboard/accounts',
 						provider: 'zernio-dashboard',
-						note: `Connect ${platform} in the Zernio dashboard, then return and refresh — it imports automatically.`
+						note: `${platform} connects in the Zernio dashboard. Select the profile "${profileName}" so it imports to this persona, then return and refresh.`
 					}
 				});
 			}

@@ -102,7 +102,9 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 		platforms: p.platforms || [],
 		date: p.scheduled_date || '',
 		time: p.scheduled_time ? p.scheduled_time.substring(0, 5) : '10:00',
-		status: p.status === 'published' ? 'published' : p.status === 'failed' ? 'failed' : 'scheduled',
+		// Pass the real status through — remapping draft/rejected/etc. to
+		// 'scheduled' hid drafts from the approve flow after a reload.
+		status: p.status || 'scheduled',
 		external_id: p.external_id,
 		publication_results: p.publication_results,
 		analytics: p.analytics,

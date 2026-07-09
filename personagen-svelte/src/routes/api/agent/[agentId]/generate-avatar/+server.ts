@@ -4,6 +4,7 @@ import { createDbService } from '$lib/server/db';
 import {
 	generateCharacterPortrait,
 	generateCharacterSheetFromReference,
+	resolvePersonaGender,
 	resolveImageKeys
 } from '$lib/server/content/generate';
 import { getServiceSupabase } from '$lib/server/service-supabase';
@@ -119,18 +120,11 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		.maybeSingle();
 	const voiceGender = VOICE_CATALOG.find((v) => v.name === (cfg?.ugc_voice || 'Adam'))?.gender;
 
-	// The persona profile's explicit gender (Identity → Gender) outranks the
-	// gender implied by the pinned voice — the client requires F/M control
-	// over the generated character, not an inference.
-	let profileGender: 'male' | 'female' | undefined;
-	try {
-		if (agent.market && typeof agent.market === 'string' && agent.market.startsWith('{')) {
-			const pp = JSON.parse(agent.market);
-			if (pp.gender === 'male' || pp.gender === 'female') profileGender = pp.gender;
-		}
-	} catch {
-		/* ignore malformed market */
-	}
+	// Persona gender is authoritative: the explicit Profile field first, else
+	// inferred from the soul/name (shared with the content-generation path, so
+	// the hero face and the videos can't disagree on gender). Only falls back
+	// to the voice's gender when the persona gives no signal at all.
+	const profileGender = resolvePersonaGender(agent);
 
 	// Persona's selected brand brief first (multi-brand users), newest as fallback.
 	const { data: selectedBrief } = cfg?.brand_brief_id

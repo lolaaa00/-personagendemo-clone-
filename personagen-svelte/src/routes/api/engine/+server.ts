@@ -5,7 +5,15 @@ import { createDbService } from '$lib/server/db';
 import { getUserApiKey } from '$lib/server/user-api-keys';
 import { publishPostById } from '$lib/server/scheduler';
 import { resolveAiClient } from '$lib/server/ai-client';
-import { generateUgcPack, generateUgcImage, safeParseJson } from '$lib/server/content/generate';
+import {
+	generateUgcPack,
+	generateUgcImage,
+	safeParseJson,
+	resolveImageKeys,
+	loadBriefForAgent
+} from '$lib/server/content/generate';
+import { getServiceSupabase } from '$lib/server/service-supabase';
+import { persistToStorage } from '$lib/server/storage';
 import dns from 'node:dns/promises';
 import net from 'node:net';
 
@@ -204,10 +212,22 @@ Content Style: ${summarizeSkills(agent.skills || '') || 'UGC-style product conte
 			}
 
 			// ── Load brand brief + select product ───────────────────────────────
+			// Persona-pinned brief first (multi-brand users pin one brief per
+			// persona via agent_configs.brand_brief_id), newest brief as the
+			// fallback — the same resolution the UGC pipeline uses.
 			let productContext = '';
 			let selectedProduct: any = null;
 			let briefData: any = null;
-			const { data: brandBrief } = await db.brandBriefs.get(session.user.id);
+			let pinnedBriefId: string | null = null;
+			if (agentId) {
+				const { data: agentCfg } = await locals.supabase
+					.from('agent_configs')
+					.select('brand_brief_id')
+					.eq('agent_id', agentId)
+					.maybeSingle();
+				pinnedBriefId = agentCfg?.brand_brief_id || null;
+			}
+			const brandBrief = await loadBriefForAgent(db, session.user.id, pinnedBriefId);
 			if (brandBrief?.data) {
 				briefData = brandBrief.data;
 				const products = Array.isArray(briefData.products) ? briefData.products : [];
@@ -276,22 +296,15 @@ Platform: ${bp.platform || platform}
 			// ── ACTION: generate (single UGC post pack — replaces generate-post) ──
 			if (action === 'generate') {
 				if (!hasAi) {
-					// Fallback
-					return json({
-						success: true,
-						data: {
-							text: `🔥 ${topic}\n\nMost creators struggle because they lack a clear blueprint.\n\n1️⃣ Process over Output\n2️⃣ Aggressive Hooking\n3️⃣ Niche Mastery\n\nWhich one are you focusing on today? 👇`,
-							hashtags: ['#CreatorEconomy', '#UGC', '#PersonalBrand', '#Growth', '#PersonaGen'],
-							hookScore: 88,
-							ugc_broll_prompt: `Handheld close-up of a person using a product, natural lighting, authentic feel.`,
-							script: `[HOOK] "Stop scrolling if you care about ${topic}"\n[BODY] Quick cuts showing the product in use\n[CTA] "Follow for more!"`,
-							media_url: selectedProduct?.photoUrl || null,
-							product: selectedProduct
-								? { name: selectedProduct.name, price: selectedProduct.price }
-								: null,
-							platform
-						}
-					});
+					// No AI = no content. Never fabricate a canned post as success —
+					// it would look like real generation and get published as-is.
+					return json(
+						{
+							success: false,
+							error: 'No AI provider configured. Add an OpenRouter or Gemini key in Settings.'
+						},
+						{ status: 400 }
+					);
 				}
 
 				try {
@@ -330,21 +343,36 @@ Platform: ${bp.platform || platform}
 				const copies: any[] = [];
 				let imageFailures = 0;
 
-				// Resolve image providers once for the whole batch
-				const orKey = await getUserApiKey(locals.supabase, session.user.id, 'openrouter').catch(
-					() => null
-				);
-				const falKey = env.FAL_API_KEY || process.env.FAL_API_KEY || null;
+				// Resolve image providers once for the whole batch — same per-user
+				// key resolution the rest of the pipeline uses (user's saved
+				// OpenRouter/fal keys first, env keys as the fallback).
+				const { orKey, falKey } = await resolveImageKeys(locals.supabase, session.user.id);
 				if (!orKey && !falKey) {
 					return json(
 						{
 							success: false,
 							error:
-								'No image generation provider configured. Add an OpenRouter key or set FAL_API_KEY before batch generating.'
+								'No image generation provider configured. Add an OpenRouter or Fal AI key in Settings before batch generating.'
 						},
 						{ status: 500 }
 					);
 				}
+
+				// Every batch image must be archived in our bucket so the scheduled post
+				// doesn't reference a provider URL that 404s before it's ever published.
+				// Degrade (warn + keep provider URL) only if no service-role key exists.
+				const batchSvc = (() => {
+						try {
+							return getServiceSupabase();
+						} catch {
+							return null;
+						}
+					})();
+				if (!batchSvc) {
+						console.warn(
+							'[Engine] No service-role Supabase key — batch images will be stored as EPHEMERAL provider URLs (not backed up).'
+						);
+					}
 
 				const batchSystemInstruction = `${agentContext || 'You are a real person sharing authentic product experiences on social media.'}
 Write like a HUMAN — casual, punchy, first-person. Caption MAX 4 lines. BANNED words: "elevate", "premium quality", "transform", "game-changer". 1-3 emojis max. Hook lands in first 7 words. Hashtags in the hashtags array ONLY, never in text field.
@@ -369,7 +397,13 @@ Output ONLY the JSON.`;
 								const parsed = safeParseJson(raw);
 								if (!parsed || !parsed.text || !parsed.ugc_broll_prompt) return null;
 								// Generate a unique UGC image for this copy — no product-photo fallback
-								parsed.media_url = await generateUgcImage(parsed.ugc_broll_prompt, orKey, falKey);
+								const genUrl = await generateUgcImage(parsed.ugc_broll_prompt, orKey, falKey);
+								// Archive it now. With a service key, a persist failure throws →
+								// this item drops to a failure rather than scheduling a post with a
+								// dead media_url. Without one, we fall back to the provider URL.
+								parsed.media_url = batchSvc
+									? await persistToStorage(batchSvc, genUrl, session.user.id, 'png')
+									: genUrl;
 								parsed.media_generated = true;
 								parsed.product = selectedProduct
 									? {
@@ -633,112 +667,114 @@ Return a JSON object with:
 
 			// ── ACTION: script ───────────────────────────────────────────────────
 			if (action === 'script') {
-				if (hasAi) {
-					try {
-						const prompt = `${fullContext}
+				if (!hasAi) {
+					return json(
+						{
+							success: false,
+							error: 'No AI provider configured. Add an OpenRouter or Gemini key in Settings.'
+						},
+						{ status: 400 }
+					);
+				}
+				try {
+					const prompt = `${fullContext}
 Write a detailed 60-second video script for ${platform} on topic: "${topic}".
 ${selectedProduct ? `The script MUST feature "${selectedProduct.name}" as the main product being demonstrated.` : ''}
 Include [Scene Direction], [Visual Cues], and voiceover content.
 Return JSON: { "type": "script", "platform": "${platform}", "content": "formatted script", "hashtags": [...], "hookScore": <70-99>, "estimatedReach": "15K - 35K" }`;
-						const resText = await ai!.generate(prompt, { json: true });
-						if (resText) {
-							const parsed = safeParseJson(resText);
-							if (parsed?.content) return json({ success: true, data: parsed });
-						}
-					} catch (err) {
-						console.error('[Engine] AI script forge failed:', err);
+					const resText = await ai!.generate(prompt, { json: true });
+					if (resText) {
+						const parsed = safeParseJson(resText);
+						if (parsed?.content) return json({ success: true, data: parsed });
 					}
+					return json(
+						{ success: false, error: `${ai!.provider} returned an unusable script response — try again.` },
+						{ status: 502 }
+					);
+				} catch (err) {
+					const msg = (err as Error).message || 'unknown error';
+					console.error('[Engine] AI script forge failed:', msg);
+					return json(
+						{ success: false, error: `Script generation failed via ${ai!.provider}: ${msg.slice(0, 200)}` },
+						{ status: 502 }
+					);
 				}
-
-				return json({
-					success: true,
-					data: {
-						type: 'script',
-						platform,
-						content: `[SCENE: Close-up, handheld]\n"I tried ${selectedProduct?.name || topic} and here's what happened..."\n\n[VISUAL: Product in use, natural lighting]\n"The results speak for themselves."\n\n[CTA] "Link in bio — try it yourself."`,
-						hashtags: ['#UGC', '#ProductReview', '#Authentic'],
-						hookScore: 90,
-						estimatedReach: '14.8K - 38.6K'
-					}
-				});
 			}
 
 			// ── ACTION: titles ───────────────────────────────────────────────────
 			if (action === 'titles') {
-				if (hasAi) {
-					try {
-						const prompt = `${fullContext}
+				if (!hasAi) {
+					return json(
+						{
+							success: false,
+							error: 'No AI provider configured. Add an OpenRouter or Gemini key in Settings.'
+						},
+						{ status: 400 }
+					);
+				}
+				try {
+					const prompt = `${fullContext}
 Generate 8 highly viral, click-worthy titles/hooks for content about: "${topic}".
 ${selectedProduct ? `Each title should reference or relate to "${selectedProduct.name}".` : ''}
 Return JSON: { "type": "titles", "platform": "${platform}", "titles": [string x 8], "hookScore": 91 }`;
-						const resText = await ai!.generate(prompt, { json: true });
-						if (resText) {
-							const parsed = safeParseJson(resText);
-							if (parsed?.titles) return json({ success: true, data: parsed });
-						}
-					} catch (err) {
-						console.error('[Engine] AI titles failed:', err);
+					const resText = await ai!.generate(prompt, { json: true });
+					if (resText) {
+						const parsed = safeParseJson(resText);
+						if (parsed?.titles) return json({ success: true, data: parsed });
 					}
+					return json(
+						{ success: false, error: `${ai!.provider} returned no usable titles — try again.` },
+						{ status: 502 }
+					);
+				} catch (err) {
+					const msg = (err as Error).message || 'unknown error';
+					console.error('[Engine] AI titles failed:', msg);
+					return json(
+						{ success: false, error: `Title generation failed via ${ai!.provider}: ${msg.slice(0, 200)}` },
+						{ status: 502 }
+					);
 				}
-
-				return json({
-					success: true,
-					data: {
-						type: 'titles',
-						platform,
-						titles: [
-							`The truth about ${selectedProduct?.name || topic} nobody tells you`,
-							`I tried ${selectedProduct?.name || topic} for 30 days — here's what happened`,
-							`Stop scrolling if you care about ${topic}`,
-							`Why everyone is switching to ${selectedProduct?.name || topic}`,
-							`The 3 secrets about ${topic} revealed`,
-							`Before you buy ${selectedProduct?.name || 'another product'}, watch this`,
-							`The ultimate 2026 guide to ${topic}`,
-							`How ${selectedProduct?.name || topic} changed my routine forever`
-						],
-						hookScore: 90
-					}
-				});
 			}
 
 			// ── ACTION: thumbnail_brief ──────────────────────────────────────────
 			if (action === 'thumbnail_brief') {
-				if (hasAi) {
-					try {
-						const prompt = `${fullContext}
+				if (!hasAi) {
+					return json(
+						{
+							success: false,
+							error: 'No AI provider configured. Add an OpenRouter or Gemini key in Settings.'
+						},
+						{ status: 400 }
+					);
+				}
+				try {
+					const prompt = `${fullContext}
 Create a professional thumbnail brief for a YouTube/Social thumbnail about: "${topic}".
 ${selectedProduct ? `Feature "${selectedProduct.name}" prominently in the visual.` : ''}
 Return JSON: { "type": "thumbnail", "platform": "${platform}", "thumbnailNotes": [6 visual briefing points], "hookScore": 87 }`;
-						const resText = await ai!.generate(prompt, { json: true });
-						if (resText) {
-							const parsed = safeParseJson(resText);
-							if (parsed?.thumbnailNotes) return json({ success: true, data: parsed });
-						}
-					} catch (err) {
-						console.error('[Engine] AI thumbnail brief failed:', err);
+					const resText = await ai!.generate(prompt, { json: true });
+					if (resText) {
+						const parsed = safeParseJson(resText);
+						if (parsed?.thumbnailNotes) return json({ success: true, data: parsed });
 					}
+					return json(
+						{ success: false, error: `${ai!.provider} returned no usable thumbnail brief — try again.` },
+						{ status: 502 }
+					);
+				} catch (err) {
+					const msg = (err as Error).message || 'unknown error';
+					console.error('[Engine] AI thumbnail brief failed:', msg);
+					return json(
+						{ success: false, error: `Thumbnail brief failed via ${ai!.provider}: ${msg.slice(0, 200)}` },
+						{ status: 502 }
+					);
 				}
-
-				return json({
-					success: true,
-					data: {
-						type: 'thumbnail',
-						platform,
-						thumbnailNotes: [
-							'**Layout**: Split composition with face (left 50%) and product (right 50%)',
-							'**Expression**: Surprised/excited face with genuine reaction',
-							`**Product**: ${selectedProduct?.name || 'Featured product'} prominently displayed`,
-							'**Text Overlay**: Bold Impact font, white with thick black outline',
-							'**Background**: Clean gradient with brand colors',
-							'**Emotion Target**: High curiosity and FOMO'
-						],
-						hookScore: 85
-					}
-				});
 			}
 
 			if (action === 'repurpose') {
-				return json({ success: true, data: { message: 'Repurposing scheduled' } });
+				// Honest 501: repurposing was a fake no-op ("Repurposing scheduled"
+				// with no side effects). No client calls this anymore.
+				return json({ success: false, error: "Repurposing isn't available yet." }, { status: 501 });
 			}
 
 			return json(
@@ -1368,11 +1404,18 @@ Output ONLY the generated text for this field — no explanation, no label, no q
 					if (resText) {
 						return json({ success: true, data: { generated: resText.trim() } });
 					}
+					return json(
+						{ success: false, error: `${ai!.provider} returned an empty response — try again.` },
+						{ status: 502 }
+					);
 				} catch (err) {
-					console.error('[Engine] AI field generation failed:', err);
+					const msg = (err as Error).message || 'unknown error';
+					console.error('[Engine] AI field generation failed:', msg);
+					return json(
+						{ success: false, error: `Generation failed via ${ai!.provider}: ${msg.slice(0, 200)}` },
+						{ status: 502 }
+					);
 				}
-
-				return json({ success: false, error: 'Failed to generate field. Configure an AI provider in Settings.' }, { status: 400 });
 			}
 
 			// ── ACTION: spin_field (rewrite existing text in 3 distinct ways) ──────
@@ -1404,11 +1447,18 @@ Return JSON: { "variations": ["variation 1 text", "variation 2 text", "variation
 							return json({ success: true, data: { variations: parsed.variations } });
 						}
 					}
+					return json(
+						{ success: false, error: `${ai!.provider} returned no usable variations — try again.` },
+						{ status: 502 }
+					);
 				} catch (err) {
-					console.error('[Engine] AI field spin failed:', err);
+					const msg = (err as Error).message || 'unknown error';
+					console.error('[Engine] AI field spin failed:', msg);
+					return json(
+						{ success: false, error: `Spin failed via ${ai!.provider}: ${msg.slice(0, 200)}` },
+						{ status: 502 }
+					);
 				}
-
-				return json({ success: false, error: 'Failed to spin field. Configure an AI provider in Settings.' }, { status: 400 });
 			}
 		}
 

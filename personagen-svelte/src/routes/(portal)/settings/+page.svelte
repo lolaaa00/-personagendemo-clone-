@@ -2,17 +2,32 @@
 	import { showToast } from '$lib/stores/ui.svelte';
 	import { onMount } from 'svelte';
 
-	let { data } = $props<{ data: { user?: { email?: string } | null } }>();
+	let { data } = $props<{
+		data: {
+			user?: { email?: string } | null;
+			profile?: {
+				displayName: string;
+				preferences: {
+					emailAlerts: boolean | null;
+					pushNotifications: boolean | null;
+					weeklyReports: boolean | null;
+				};
+			};
+		};
+	}>();
 
-	// Profile — email comes from auth session; name persisted in localStorage
+	// Profile — email comes from auth session; name + notification preferences
+	// are persisted in Supabase user metadata (localStorage is only a cache).
 	let profileEmail = $derived(data.user?.email ?? '');
-	let profileName = $state(data.user?.email?.split('@')[0] ?? 'Account');
+	let profileName = $state(
+		data.profile?.displayName || data.user?.email?.split('@')[0] || 'Account'
+	);
 	let profileSaving = $state(false);
 
 	// Notifications
-	let emailAlerts = $state(true);
-	let pushNotifications = $state(false);
-	let weeklyReports = $state(true);
+	let emailAlerts = $state(data.profile?.preferences?.emailAlerts ?? true);
+	let pushNotifications = $state(data.profile?.preferences?.pushNotifications ?? false);
+	let weeklyReports = $state(data.profile?.preferences?.weeklyReports ?? true);
 
 	interface ApiKeyMetadata {
 		provider: ApiKeyProvider;
@@ -90,17 +105,21 @@
 	// Danger
 	let showDeleteModal = $state(false);
 	let deleteConfirmText = $state('');
+	let deleteInProgress = $state(false);
 
-	// Load from localStorage
+	// Server metadata is the source of truth; localStorage only fills gaps for
+	// values that were never persisted server-side (pre-migration installs).
 	onMount(() => {
 		const stored = localStorage.getItem('personagen_settings');
 		if (stored) {
 			try {
 				const s = JSON.parse(stored);
-				if (s.profileName) profileName = s.profileName;
-				emailAlerts = s.emailAlerts ?? emailAlerts;
-				pushNotifications = s.pushNotifications ?? pushNotifications;
-				weeklyReports = s.weeklyReports ?? weeklyReports;
+				if (!data.profile?.displayName && s.profileName) profileName = s.profileName;
+				if (data.profile?.preferences?.emailAlerts == null) emailAlerts = s.emailAlerts ?? emailAlerts;
+				if (data.profile?.preferences?.pushNotifications == null)
+					pushNotifications = s.pushNotifications ?? pushNotifications;
+				if (data.profile?.preferences?.weeklyReports == null)
+					weeklyReports = s.weeklyReports ?? weeklyReports;
 			} catch {
 				/* ignore */
 			}
@@ -120,21 +139,64 @@
 		);
 	}
 
-	function saveProfile() {
+	async function saveProfile() {
+		const trimmed = profileName.trim();
+		if (!trimmed) {
+			showToast('Display name cannot be empty', 'warning');
+			return;
+		}
 		profileSaving = true;
-		setTimeout(() => {
-			persistSettings();
+		try {
+			const res = await fetch('/api/settings/profile', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ displayName: trimmed })
+			});
+			const result = await res.json();
+			if (res.ok && result.success) {
+				profileName = result.displayName || trimmed;
+				persistSettings();
+				showToast('Profile updated', 'success');
+			} else {
+				showToast(result.error || 'Failed to save profile', 'error');
+			}
+		} catch (err) {
+			showToast((err as Error).message || 'Failed to save profile', 'error');
+		} finally {
 			profileSaving = false;
-			showToast('Profile updated', 'success');
-		}, 400);
+		}
 	}
 
-	function toggleNotification(key: 'emailAlerts' | 'pushNotifications' | 'weeklyReports') {
+	async function toggleNotification(key: 'emailAlerts' | 'pushNotifications' | 'weeklyReports') {
+		// Optimistic flip; revert if the server rejects the update.
 		if (key === 'emailAlerts') emailAlerts = !emailAlerts;
 		else if (key === 'pushNotifications') pushNotifications = !pushNotifications;
 		else weeklyReports = !weeklyReports;
 		persistSettings();
-		showToast('Notification preference saved', 'success');
+
+		try {
+			const res = await fetch('/api/settings/profile', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					preferences: { emailAlerts, pushNotifications, weeklyReports }
+				})
+			});
+			const result = await res.json();
+			if (res.ok && result.success) {
+				showToast('Notification preference saved', 'success');
+				return;
+			}
+			showToast(result.error || 'Failed to save preference', 'error');
+		} catch (err) {
+			showToast((err as Error).message || 'Failed to save preference', 'error');
+		}
+
+		// Server rejected — undo the optimistic flip.
+		if (key === 'emailAlerts') emailAlerts = !emailAlerts;
+		else if (key === 'pushNotifications') pushNotifications = !pushNotifications;
+		else weeklyReports = !weeklyReports;
+		persistSettings();
 	}
 
 	function getSavedKey(provider: ApiKeyProvider) {
@@ -232,11 +294,29 @@
 		}
 	}
 
-	function confirmDelete() {
-		if (deleteConfirmText === 'DELETE') {
-			showDeleteModal = false;
-			deleteConfirmText = '';
-			showToast('Account deletion requested. This is a demo.', 'info');
+	async function confirmDelete() {
+		if (deleteConfirmText !== 'DELETE' || deleteInProgress) return;
+		deleteInProgress = true;
+		try {
+			const res = await fetch('/api/account/delete', { method: 'POST' });
+			const result = await res.json();
+			if (res.ok && result.success) {
+				localStorage.removeItem('personagen_settings');
+				if (result.failedSteps?.length) {
+					showToast(
+						`Account deleted, but some data could not be removed: ${result.failedSteps.join('; ')}`,
+						'warning'
+					);
+				}
+				// Session is gone server-side — hard navigation clears all client state.
+				window.location.href = '/login';
+				return;
+			}
+			showToast(result.error || 'Failed to delete account', 'error');
+			deleteInProgress = false;
+		} catch (err) {
+			showToast((err as Error).message || 'Failed to delete account', 'error');
+			deleteInProgress = false;
 		}
 	}
 </script>
@@ -577,6 +657,7 @@
 			<div class="modal-actions">
 				<button
 					class="cancel-btn"
+					disabled={deleteInProgress}
 					onclick={() => {
 						showDeleteModal = false;
 						deleteConfirmText = '';
@@ -585,9 +666,13 @@
 				<button
 					class="confirm-delete-btn"
 					onclick={confirmDelete}
-					disabled={deleteConfirmText !== 'DELETE'}
+					disabled={deleteConfirmText !== 'DELETE' || deleteInProgress}
 				>
-					Delete My Account
+					{#if deleteInProgress}
+						<span class="spinner"></span> Deleting…
+					{:else}
+						Delete My Account
+					{/if}
 				</button>
 			</div>
 		</div>
@@ -1179,6 +1264,10 @@
 	}
 
 	.confirm-delete-btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.5rem;
 		padding: 0.6rem 1.25rem;
 		background: var(--error);
 		border: none;

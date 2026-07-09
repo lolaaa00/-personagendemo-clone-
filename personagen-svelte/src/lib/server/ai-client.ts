@@ -16,6 +16,31 @@
 import { env } from '$env/dynamic/private';
 import { getUserApiKey, type UserKeyProvider } from './user-api-keys';
 import { GoogleGenAI } from '@google/genai';
+import { fetchWithTimeout } from './social/http';
+
+// LLM generation is slower than a provider REST ping, so it gets its own, more
+// generous per-request deadline — but a deadline nonetheless. Without it a hung
+// OpenRouter/Gemini socket never resolves, `pollScheduledPosts`'s `isRunning`
+// flag never clears, and the ENTIRE scheduler (publish + analytics + autopilot)
+// wedges silently until the process restarts.
+const LLM_TIMEOUT_MS = 120_000;
+
+/** Rejects if `p` doesn't settle within `ms` — a timeout for SDK calls with no signal. */
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+	return new Promise<T>((resolve, reject) => {
+		const timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+		p.then(
+			(v) => {
+				clearTimeout(timer);
+				resolve(v);
+			},
+			(e) => {
+				clearTimeout(timer);
+				reject(e);
+			}
+		);
+	});
+}
 
 // Gemini model, env-overridable so it can be pinned/rolled without a code edit
 // (and so it stops flip-flopping between hardcoded values). Verified 2026-07-01:
@@ -91,16 +116,20 @@ function createOpenRouterClient(apiKey: string): AiClient {
 				body.response_format = { type: 'json_object' };
 			}
 
-			const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-				method: 'POST',
-				headers: {
-					Authorization: `Bearer ${apiKey}`,
-					'Content-Type': 'application/json',
-					'HTTP-Referer': 'https://personagen.app',
-					'X-Title': 'PersonaGen'
+			const res = await fetchWithTimeout(
+				'https://openrouter.ai/api/v1/chat/completions',
+				{
+					method: 'POST',
+					headers: {
+						Authorization: `Bearer ${apiKey}`,
+						'Content-Type': 'application/json',
+						'HTTP-Referer': 'https://personagen.app',
+						'X-Title': 'PersonaGen'
+					},
+					body: JSON.stringify(body)
 				},
-				body: JSON.stringify(body)
-			});
+				LLM_TIMEOUT_MS
+			);
 
 			if (!res.ok) {
 				const errText = await res.text();
@@ -126,11 +155,15 @@ function createGeminiClient(apiKey: string): AiClient {
 				config.systemInstruction = opts.systemInstruction;
 			}
 
-			const res = await ai.models.generateContent({
-				model: GEMINI_MODEL,
-				contents: [{ role: 'user', parts: [{ text: prompt }] }],
-				config
-			});
+			const res = await withTimeout(
+				ai.models.generateContent({
+					model: GEMINI_MODEL,
+					contents: [{ role: 'user', parts: [{ text: prompt }] }],
+					config
+				}),
+				LLM_TIMEOUT_MS,
+				'Gemini generateContent'
+			);
 
 			return res.text || '';
 		}

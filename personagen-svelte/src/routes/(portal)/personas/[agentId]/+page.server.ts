@@ -1,5 +1,6 @@
 import type { PageServerLoad } from './$types';
 import { createDbService } from '$lib/server/db';
+import { resolvePersonaGender } from '$lib/server/content/generate';
 import { error } from '@sveltejs/kit';
 import { env } from '$env/dynamic/public';
 
@@ -41,9 +42,14 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 				brand_brief_id: config?.brand_brief_id ?? null
 			},
 			supervisors,
-			brandBriefs: briefsResult.data ?? []
+			brandBriefs: briefsResult.data ?? [],
+			// Gender the server WILL use at generation time when the explicit
+			// field is blank (inferred from the soul/name). The Profile tab uses
+			// this to pre-fill the picker so what's shown matches what generates
+			// — no more "why is my female persona voiced as Adam".
+			inferredGender: resolvePersonaGender(agent) ?? null
 		};
 	}
 
-	return { agent: null, supervisors: [], brandBriefs: [] };
+	return { agent: null, supervisors: [], brandBriefs: [], inferredGender: null };
 };

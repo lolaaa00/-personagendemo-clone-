@@ -3,6 +3,7 @@
 	import AgentRoster from '$lib/components/agents/AgentRoster.svelte';
 	import SparkChart from '$lib/components/dashboard/SparkChart.svelte';
 	import PlatformBars from '$lib/components/dashboard/PlatformBars.svelte';
+	import AnalyticsPanel from '$lib/components/dashboard/AnalyticsPanel.svelte';
 
 	let { data } = $props();
 
@@ -72,8 +73,38 @@
 
 	<!-- Charts Row -->
 	<div class="dash-chart-row">
-		<SparkChart sparkData={data.sparkData} agents={data.agents} />
+		{#if data.sparkData.length > 0}
+			<SparkChart sparkData={data.sparkData} agents={data.sparkAgents} />
+		{:else}
+			<div class="dash-chart-card">
+				<h4>Engagement Trend (7 Days)</h4>
+				<div class="chart-empty">
+					<svg
+						aria-hidden="true"
+						width="28"
+						height="28"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="1.5"
+					>
+						<path d="M3 3v18h18" />
+						<path d="M7 14l4-4 3 3 5-6" />
+					</svg>
+					<p>No engagement data yet</p>
+					<span>
+						Engagement trends appear here once your personas publish posts and analytics sync back
+						from connected platforms.
+					</span>
+				</div>
+			</div>
+		{/if}
 		<PlatformBars platforms={data.platformData} />
+	</div>
+
+	<!-- Analytics Section -->
+	<div class="analytics-section">
+		<AnalyticsPanel agents={creatorAgents} />
 	</div>
 </div>
 
@@ -275,6 +306,72 @@
 		grid-template-columns: 1.5fr 1fr;
 		gap: 1.25rem;
 		margin-top: 2rem;
+	}
+
+	/* Sparkline empty-state card (matches SparkChart's card shell) */
+	.dash-chart-card {
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		padding: 1.75rem 1.75rem 1.5rem;
+		overflow: hidden;
+	}
+
+	.dash-chart-card h4 {
+		font-size: 0.8rem;
+		font-weight: 700;
+		margin-bottom: 1.25rem;
+		color: var(--text-muted);
+		text-transform: uppercase;
+		letter-spacing: 0.1em;
+		display: flex;
+		align-items: center;
+		gap: 8px;
+	}
+
+	.dash-chart-card h4::before {
+		content: '';
+		display: inline-block;
+		width: 3px;
+		height: 14px;
+		border-radius: 2px;
+		background: var(--gradient-subtle);
+		flex-shrink: 0;
+	}
+
+	.chart-empty {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		text-align: center;
+		padding: 2.5rem 1.5rem;
+		gap: 0.4rem;
+		color: var(--text-dim);
+	}
+
+	.chart-empty svg {
+		opacity: 0.4;
+		margin-bottom: 0.35rem;
+	}
+
+	.chart-empty p {
+		font-size: 0.9rem;
+		font-weight: 600;
+		color: var(--text-muted);
+		margin: 0;
+	}
+
+	.chart-empty span {
+		font-size: 0.75rem;
+		color: var(--text-dim);
+		line-height: 1.5;
+		max-width: 340px;
+	}
+
+	/* Analytics section */
+	.analytics-section {
+		margin-top: 1.25rem;
 	}
 
 	@media (max-width: 1024px) {

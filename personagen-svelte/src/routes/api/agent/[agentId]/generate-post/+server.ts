@@ -1,7 +1,11 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { createDbService } from '$lib/server/db';
-import { generateUgcPack } from '$lib/server/content/generate';
+import {
+	generateUgcPack,
+	generateCinematicUgcPack,
+	resolveImageKeys
+} from '$lib/server/content/generate';
 import { publishPostById } from '$lib/server/scheduler';
 import { VIDEO_ONLY_PLATFORMS } from '$lib/server/social/platforms';
 
@@ -62,12 +66,25 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		: [];
 	const targetPool = requestedPlatforms.length > 0 ? requestedPlatforms : connectedPlatforms;
 
+	// Cinematic mode is fal-exclusive (Kling O3 Pro reference-to-video) — check
+	// the key up front so a missing key fails fast, BEFORE any LLM spend.
+	const wantCinematic = body.media === 'cinematic';
+	if (wantCinematic) {
+		const { falKey } = await resolveImageKeys(locals.supabase, user.id);
+		if (!falKey) {
+			return json(
+				{ success: false, error: 'Cinematic video requires a Fal AI key — add one in Settings.' },
+				{ status: 400 }
+			);
+		}
+	}
+
 	// Generate a UGC pack tuned to the persona / brand brief / product.
 	// Shape the content for a real connected platform when we have one, else
 	// default to Instagram so aspect/format still make sense.
 	let content;
 	try {
-		const pack = await generateUgcPack({
+		const genInput = {
 			supabase: locals.supabase,
 			userId: user.id,
 			agentId,
@@ -88,7 +105,10 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 				typeof body.character_ref_url === 'string' && /^https?:\/\//i.test(body.character_ref_url)
 					? body.character_ref_url
 					: undefined
-		});
+		};
+		const pack = wantCinematic
+			? await generateCinematicUgcPack(genInput)
+			: await generateUgcPack(genInput);
 		content = pack.content;
 	} catch (genErr) {
 		const msg = (genErr as Error).message;

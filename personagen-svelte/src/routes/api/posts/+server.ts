@@ -84,6 +84,45 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			return json({ success: true, data });
 		}
 
+		if (action === 'reschedule') {
+			const { id, scheduled_date, scheduled_time } = body;
+			if (!id) return json({ success: false, error: 'Missing post id' }, { status: 400 });
+			if (!scheduled_date && !scheduled_time) {
+				return json(
+					{ success: false, error: 'Missing scheduled_date or scheduled_time' },
+					{ status: 400 }
+				);
+			}
+			if (scheduled_date !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(String(scheduled_date))) {
+				return json({ success: false, error: 'Invalid scheduled_date (YYYY-MM-DD)' }, { status: 400 });
+			}
+			if (scheduled_time !== undefined && !/^\d{2}:\d{2}(:\d{2})?$/.test(String(scheduled_time))) {
+				return json({ success: false, error: 'Invalid scheduled_time (HH:MM[:SS])' }, { status: 400 });
+			}
+
+			// Verify post ownership
+			const { data: existingPost, error: getErr } = await db.posts.get(id);
+			if (getErr || !existingPost || existingPost.user_id !== user.id) {
+				return json({ success: false, error: 'Post not found or ownership mismatch' }, { status: 404 });
+			}
+
+			// Only pending posts can move — publishing/published/failed history stays put.
+			if (existingPost.status !== 'draft' && existingPost.status !== 'scheduled') {
+				return json(
+					{ success: false, error: `Cannot reschedule a ${existingPost.status} post` },
+					{ status: 400 }
+				);
+			}
+
+			const updateData: any = {};
+			if (scheduled_date !== undefined) updateData.scheduled_date = scheduled_date;
+			if (scheduled_time !== undefined) updateData.scheduled_time = scheduled_time;
+
+			const { data, error } = await db.posts.update(id, updateData);
+			if (error) throw error;
+			return json({ success: true, data });
+		}
+
 		if (action === 'delete') {
 			const { id } = body;
 			if (!id) return json({ success: false, error: 'Missing post id' }, { status: 400 });
