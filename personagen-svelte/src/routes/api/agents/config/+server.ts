@@ -97,7 +97,8 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			autonomyLevel,
 			rssUrl,
 			rssActive,
-			ugcVoice
+			ugcVoice,
+			body.brandBriefId
 		].some((val) => val !== undefined);
 
 		if (hasConfigFields) {
@@ -119,6 +120,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			if (rssUrl !== undefined) configPatch.rss_url = rssUrl;
 			if (rssActive !== undefined) configPatch.rss_active = rssActive;
 			if (ugcVoice !== undefined) configPatch.ugc_voice = ugcVoice;
+		if (body.brandBriefId !== undefined) configPatch.brand_brief_id = body.brandBriefId || null;
 
 			const { error: configErr } = await db.agentConfigs.upsert(configPatch);
 

@@ -97,6 +97,9 @@
 		return {};
 	}
 	let personaProfile = $state<Record<string, any>>(parsePersonaProfile(agent));
+	// Multi-brand: which of the user's brand briefs this persona generates for.
+	let selectedBrandBriefId = $state<string>(agent?.brand_brief_id ?? '');
+	let brandBriefs = $derived<Array<{ id: string; name: string }>>(data.brandBriefs ?? []);
 	// Age targeting as selectable buckets (multi-select) instead of dual sliders.
 	const AGE_RANGES = [
 		{ key: '13–17', lo: 13, hi: 17 },
@@ -291,6 +294,7 @@
 		referenceKit = fresh.ugc_reference_kit ?? {};
 		editSupervisorId = fresh.supervisor_agent_id ?? null;
 		editRuntimeOwner = fresh.runtime_owner ?? 'svelte-gemini';
+		selectedBrandBriefId = fresh.brand_brief_id ?? '';
 
 		// Reset persona profile from new agent
 		const freshProfile = parsePersonaProfile(fresh);
@@ -844,6 +848,7 @@
 			engagementRate: agent.engagement_rate,
 			supervisorAgentId: editSupervisorId,
 			runtimeOwner: editRuntimeOwner,
+			brandBriefId: selectedBrandBriefId || null,
 			personaProfile: {
 				ageRanges: ppAgeRanges,
 				// Keep numeric min/max derived from the selected buckets so existing
@@ -1452,6 +1457,41 @@
 		<!-- PROFILE TAB -->
 		{:else if activeTab === 'profile'}
 			<div class="profile-tab">
+				<!-- Brand section: which of the user's brand briefs this persona
+				     generates for. One client can run several brands (Just Kids
+				     Honey, HoneyX Manly Plus…) — every asset this persona makes is
+				     grounded in the brief selected here. -->
+				<section class="profile-section">
+					<div class="section-header">
+						<h2 class="section-title">Brand</h2>
+						<p class="section-desc">
+							The brand brief this persona creates content for — products, voice, and audience all
+							come from it.
+						</p>
+					</div>
+					<div class="fields-grid">
+						<div class="field-group col-span-2">
+							<label for="p-brief">Brand Brief</label>
+							<select id="p-brief" bind:value={selectedBrandBriefId}>
+								<option value="">— Newest brief (default) —</option>
+								{#each brandBriefs as b (b.id)}
+									<option value={b.id}>{b.name}</option>
+								{/each}
+							</select>
+							{#if brandBriefs.length === 0}
+								<p class="field-hint">
+									No brand briefs saved yet — create one in <a href="/brand-brief">Brand Brief</a>, then
+									select it here.
+								</p>
+							{:else}
+								<p class="field-hint">
+									Save the profile to apply. Manage briefs in <a href="/brand-brief">Brand Brief</a>.
+								</p>
+							{/if}
+						</div>
+					</div>
+				</section>
+
 				<!-- Identity section -->
 				<section class="profile-section">
 					<div class="section-header">

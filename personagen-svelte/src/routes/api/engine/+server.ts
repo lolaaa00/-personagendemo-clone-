@@ -799,35 +799,69 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 		// D. PATH: personagen-brand-brief
 		// ══════════════════════════════════════════════════════════════════════════
 		if (path === 'personagen-brand-brief') {
-			// ── ACTION: save_brief (persist the brand brief so server-side
-			//    generation/autopilot can tune content to the client's product) ──
+			// ── ACTION: save_brief — multi-brand: updates the brief named by
+			//    body.brief_id, or creates a new one when absent. One user can
+			//    run several brands (e.g. "Just Kids Honey" + "HoneyX Manly
+			//    Plus"), each persona pinning the brief it generates against. ──
 			if (action === 'save_brief') {
 				const briefData = body.data;
 				if (!briefData || typeof briefData !== 'object') {
 					return json({ success: false, error: 'Missing brief data' }, { status: 400 });
 				}
+				const briefName =
+					String(body.name || briefData.brandName || '').trim() || 'Untitled Brand';
 
-				// brand_briefs has a UNIQUE(user_id) constraint, so db.brandBriefs.upsert
-				// (which internally merges against the existing row — see db.ts's
-				// mergeUpsert) is safe against a partial payload. Still read here first,
-				// separately, to compute the next version number.
-				const { data: existing } = await db.brandBriefs.get(session.user.id);
-				const { data: saved, error } = await db.brandBriefs.upsert({
+				if (body.brief_id) {
+					const { data: existing } = await db.brandBriefs.getById(body.brief_id, session.user.id);
+					if (!existing) {
+						return json({ success: false, error: 'Brief not found' }, { status: 404 });
+					}
+					const { data: saved, error } = await db.brandBriefs.updateById(
+						body.brief_id,
+						session.user.id,
+						{ data: briefData, name: briefName, version: (existing.version || 0) + 1 }
+					);
+					if (error) {
+						console.error('[Engine] Failed to update brand brief:', error);
+						return json({ success: false, error: error.message }, { status: 500 });
+					}
+					return json({ success: true, data: saved });
+				}
+
+				const { data: created, error } = await db.brandBriefs.create({
 					user_id: session.user.id,
+					name: briefName,
 					data: briefData,
-					version: (existing?.version || 0) + 1
+					version: 1
 				});
 				if (error) {
-					console.error('[Engine] Failed to save brand brief:', error);
+					console.error('[Engine] Failed to create brand brief:', error);
 					return json({ success: false, error: error.message }, { status: 500 });
 				}
-				return json({ success: true, data: saved });
+				return json({ success: true, data: created });
 			}
 
-			// ── ACTION: get_brief (read-only — powers the generation composer) ────
+			// ── ACTION: list_briefs — id/name/updated_at for pickers ──────────────
+			if (action === 'list_briefs') {
+				const { data: briefs, error } = await db.brandBriefs.list(session.user.id);
+				if (error) {
+					return json({ success: false, error: error.message }, { status: 500 });
+				}
+				return json({ success: true, data: briefs ?? [] });
+			}
+
+			// ── ACTION: get_brief (read-only — powers the generation composer;
+			//    body.brief_id selects a specific brief, else newest) ──────────────
 			if (action === 'get_brief') {
-				const { data: brief } = await db.brandBriefs.get(session.user.id);
-				return json({ success: true, data: brief?.data ?? null });
+				const brief = body.brief_id
+					? (await db.brandBriefs.getById(body.brief_id, session.user.id)).data
+					: (await db.brandBriefs.get(session.user.id)).data;
+				return json({
+					success: true,
+					data: brief?.data ?? null,
+					brief_id: brief?.id ?? null,
+					name: brief?.name ?? null
+				});
 			}
 
 			if (action === 'scrape_store') {

@@ -114,7 +114,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 	// ── From-scratch path ──────────────────────────────────────────────────
 	const { data: cfg } = await locals.supabase
 		.from('agent_configs')
-		.select('ugc_voice')
+		.select('ugc_voice, brand_brief_id')
 		.eq('agent_id', agentId)
 		.maybeSingle();
 	const voiceGender = VOICE_CATALOG.find((v) => v.name === (cfg?.ugc_voice || 'Adam'))?.gender;
@@ -132,8 +132,12 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		/* ignore malformed market */
 	}
 
-	const { data: brandBrief } = await db.brandBriefs.get(user.id);
-	const briefData = brandBrief?.data || null;
+	// Persona's selected brand brief first (multi-brand users), newest as fallback.
+	const { data: selectedBrief } = cfg?.brand_brief_id
+		? await db.brandBriefs.getById(cfg.brand_brief_id, user.id)
+		: { data: null };
+	const { data: fallbackBrief } = selectedBrief ? { data: null } : await db.brandBriefs.get(user.id);
+	const briefData = (selectedBrief ?? fallbackBrief)?.data || null;
 
 	try {
 		const characterRef = await generateCharacterPortrait(

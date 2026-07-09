@@ -24,7 +24,13 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 		if (!agent) throw error(404, 'Agent not found');
 
 		const supervisors = dbAgents.filter((a: any) => a.is_overseer);
-		const { data: config } = await db.agentConfigs.get(params.agentId);
+		const { user } = await locals.safeGetSession();
+		const [{ data: config }, briefsResult] = await Promise.all([
+			db.agentConfigs.get(params.agentId),
+			// Multi-brand: the Profile tab's brief picker lists every brief the
+			// user has saved (e.g. "Just Kids Honey", "HoneyX Manly Plus").
+			user ? db.brandBriefs.list(user.id) : Promise.resolve({ data: [] as any[] })
+		]);
 
 		return {
 			agent: {
@@ -39,12 +45,14 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 				rss_last_polled_at: config?.rss_last_polled_at ?? null,
 				ugc_voice: config?.ugc_voice ?? 'Adam',
 				ugc_character_ref: config?.ugc_character_ref ?? null,
-				ugc_reference_kit: config?.ugc_reference_kit ?? {}
+				ugc_reference_kit: config?.ugc_reference_kit ?? {},
+				brand_brief_id: config?.brand_brief_id ?? null
 			},
 			supervisors,
+			brandBriefs: briefsResult.data ?? [],
 			isComposioConfigured
 		};
 	}
 
-	return { agent: null, supervisors: [], isComposioConfigured: false };
+	return { agent: null, supervisors: [], brandBriefs: [], isComposioConfigured: false };
 };

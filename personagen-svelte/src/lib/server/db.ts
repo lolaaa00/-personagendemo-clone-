@@ -47,6 +47,8 @@ export interface AgentConfigRow {
 	ugc_voice: string;
 	ugc_character_ref: string | null;
 	ugc_reference_kit: Record<string, string> | null;
+	/** Which of the user's brand briefs this persona generates for (null = newest-brief fallback). */
+	brand_brief_id: string | null;
 	created_at: string;
 	updated_at: string;
 }
@@ -105,6 +107,8 @@ export interface BlueprintRow {
 export interface BrandBriefRow {
 	id: string;
 	user_id: string;
+	/** Brand label for pickers — one user can run several brands, each with its own brief. */
+	name: string;
 	data: Record<string, unknown>;
 	version: number;
 	created_at: string;
@@ -295,13 +299,14 @@ export function createDbService(supabase: SupabaseClient) {
 			delete: (id: string) => supabase.from('blueprints').delete().eq('id', id)
 		},
 
-		// ── Brand Briefs ────────────────────────
+		// ── Brand Briefs (multi-brand: several briefs per user) ─────────
 		brandBriefs: {
-			// maybeSingle (not single): a brand-new user genuinely has zero rows
-			// here, which must resolve to {data: null, error: null} — .single()
-			// would return a PGRST116 error for that normal case, making it
-			// indistinguishable from a real query failure to any caller that
-			// only checks `data`.
+			// Newest-brief fallback: callers with no specific brief selected get
+			// the most recently updated one. maybeSingle (not single): a
+			// brand-new user genuinely has zero rows here, which must resolve to
+			// {data: null, error: null} — .single() would return a PGRST116
+			// error for that normal case, making it indistinguishable from a
+			// real query failure to any caller that only checks `data`.
 			get: (userId?: string) => {
 				let q = supabase.from('brand_briefs').select('*').order('updated_at', { ascending: false });
 				if (userId) {
@@ -310,7 +315,30 @@ export function createDbService(supabase: SupabaseClient) {
 				return q.limit(1).maybeSingle();
 			},
 
-			upsert: (data: BrandBriefInsert) => mergeUpsert('brand_briefs', data, 'user_id', ['user_id'])
+			getById: (id: string, userId: string) =>
+				supabase.from('brand_briefs').select('*').eq('id', id).eq('user_id', userId).maybeSingle(),
+
+			list: (userId: string) =>
+				supabase
+					.from('brand_briefs')
+					.select('id, name, version, updated_at')
+					.eq('user_id', userId)
+					.order('updated_at', { ascending: false }),
+
+			create: (data: BrandBriefInsert) =>
+				supabase.from('brand_briefs').insert(data).select().single(),
+
+			updateById: (id: string, userId: string, patch: Partial<Omit<BrandBriefRow, 'id' | 'user_id' | 'created_at'>>) =>
+				supabase
+					.from('brand_briefs')
+					.update(patch)
+					.eq('id', id)
+					.eq('user_id', userId)
+					.select()
+					.single(),
+
+			deleteById: (id: string, userId: string) =>
+				supabase.from('brand_briefs').delete().eq('id', id).eq('user_id', userId)
 		},
 
 		// ── Processed RSS Items ─────────────────

@@ -5,9 +5,62 @@
 	import { browser } from '$app/environment';
 	import { BrandBrief } from '$lib/services/api';
 
-	let { data } = $props<{ data: { brief: Record<string, any> | null } }>();
+	let { data } = $props<{
+		data: {
+			brief: Record<string, any> | null;
+			briefId: string | null;
+			briefName: string | null;
+			briefs: Array<{ id: string; name: string; updated_at: string }>;
+		};
+	}>();
 
 	const LS_KEY = 'personagen_brand_brief';
+
+	// ── Multi-brand: several briefs per user, one active in the editor ──────
+	// The client runs multiple brands (e.g. Just Kids Honey + HoneyX Manly
+	// Plus); each persona pins the brief it generates for on its Profile tab.
+	let briefList = $state<Array<{ id: string; name: string; updated_at: string }>>(
+		data.briefs ?? []
+	);
+	let currentBriefId = $state<string | null>(data.briefId ?? null);
+	let switchingBrief = $state(false);
+
+	async function refreshBriefList() {
+		try {
+			const res = await BrandBrief.list();
+			if (res.success && Array.isArray(res.data)) briefList = res.data;
+		} catch {
+			/* list refresh is cosmetic — never block editing */
+		}
+	}
+
+	async function switchBrief(id: string) {
+		if (!id || id === currentBriefId || switchingBrief) return;
+		switchingBrief = true;
+		try {
+			const res = await BrandBrief.getById(id);
+			if (res.success && res.data) {
+				currentBriefId = id;
+				hydrate(res.data);
+				// Mirror the ACTIVE brief so the calendar forge keeps working.
+				localStorage.setItem(LS_KEY, JSON.stringify(res.data));
+				showToast(`Loaded "${(res as any).name || 'brief'}"`, 'success');
+			} else {
+				showToast(res.error || 'Failed to load that brief', 'error');
+			}
+		} catch (err: any) {
+			showToast('Failed to load brief: ' + err.message, 'error');
+		} finally {
+			switchingBrief = false;
+		}
+	}
+
+	function newBrief() {
+		// Blank slate: next Save creates a new brand_briefs row.
+		currentBriefId = null;
+		hydrate({});
+		showToast('New brief — fill it in and Save to create', 'info');
+	}
 
 	type TabKey = 'overview' | 'products' | 'visual' | 'voice' | 'audience' | 'competitors' | 'intel';
 
@@ -244,10 +297,16 @@
 
 	async function persistBriefToDb(payload: Record<string, unknown>) {
 		try {
-			const res = await BrandBrief.save(payload);
+			// Targets the active brief; with no active id the server creates a new
+			// brand_briefs row (multi-brand) and we adopt its id for future saves.
+			const res = await BrandBrief.save(payload, currentBriefId, String(payload.brandName || ''));
 			if (!res.success) {
 				showToast('Saved locally — cloud sync failed', 'warning');
+				return;
 			}
+			const savedId = (res.data as any)?.id;
+			if (savedId && savedId !== currentBriefId) currentBriefId = savedId;
+			void refreshBriefList();
 		} catch {
 			showToast('Saved locally — cloud sync failed', 'warning');
 		}
@@ -926,6 +985,25 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 				<p class="subtitle">Define your brand identity for AI persona alignment.</p>
 			</div>
 			<div class="header-actions">
+				{#if briefList.length > 0}
+					<select
+						class="brief-switcher"
+						value={currentBriefId ?? ''}
+						disabled={switchingBrief}
+						onchange={(e) => switchBrief((e.currentTarget as HTMLSelectElement).value)}
+						aria-label="Active brand brief"
+					>
+						{#if !currentBriefId}
+							<option value="">— New brief —</option>
+						{/if}
+						{#each briefList as b (b.id)}
+							<option value={b.id}>{b.name}</option>
+						{/each}
+					</select>
+				{/if}
+				<button class="action-btn" onclick={newBrief} title="Start a brief for another brand">
+					+ New Brief
+				</button>
 				<span class="version-badge">
 					v{version}
 					{lastSaved ? `— Last saved: ${lastSaved}` : '— Not saved yet'}
@@ -2305,6 +2383,23 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		border: 1px solid var(--border);
 		border-radius: var(--radius-full);
 		white-space: nowrap;
+	}
+
+	.brief-switcher {
+		font-size: var(--text-xs);
+		font-weight: 600;
+		color: var(--text);
+		padding: 6px 10px;
+		background: var(--surface-2);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		max-width: 220px;
+		cursor: pointer;
+	}
+
+	.brief-switcher:disabled {
+		opacity: 0.6;
+		cursor: wait;
 	}
 
 	.action-btn {

@@ -175,8 +175,11 @@ export const BrandBrief = {
 		request<{ generated: string }>(ENDPOINTS.brandBrief, 'generate_field', { fieldName, brandContext }),
 	spinField: (fieldName: string, fieldVal: string, brandContext?: string) =>
 		request<{ variations: string[] }>(ENDPOINTS.brandBrief, 'spin_field', { fieldName, fieldVal, brandContext }),
-	save: (data: Record<string, unknown>) =>
-		request<any>(ENDPOINTS.brandBrief, 'save_brief', { data })
+	// Multi-brand: briefId targets an existing brief; omitted = create new.
+	save: (data: Record<string, unknown>, briefId?: string | null, name?: string) =>
+		request<any>(ENDPOINTS.brandBrief, 'save_brief', { data, brief_id: briefId || undefined, name }),
+	list: () => request<Array<{ id: string; name: string; updated_at: string }>>(ENDPOINTS.brandBrief, 'list_briefs', {}),
+	getById: (briefId: string) => request<any>(ENDPOINTS.brandBrief, 'get_brief', { brief_id: briefId })
 };
 
 // ── Autopilot (per-agent auto-generation config + manual top-up) ───────────

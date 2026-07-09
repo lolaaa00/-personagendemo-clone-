@@ -884,13 +884,13 @@ export async function generateCinematicUgcPack(input: UgcPackInput): Promise<Ugc
 	const topic = input.topic || 'Sharing an honest experience with this product';
 
 	const db = createDbService(supabase);
-	// Four independent lookups (none depends on another's result) — run
-	// concurrently rather than paying 4 sequential round-trips.
-	const [rawAi, cfg, agentResult, brandBriefResult] = await Promise.all([
+	// Three independent lookups run concurrently; the brand brief comes after
+	// because WHICH brief to load depends on the persona's config
+	// (brand_brief_id — multi-brand users pin one brief per persona).
+	const [rawAi, cfg, agentResult] = await Promise.all([
 		resolveAiClient(supabase, userId),
 		loadUgcConfig(supabase, input.agentId),
-		input.agentId ? db.agents.get(input.agentId) : Promise.resolve({ data: null as any }),
-		db.brandBriefs.get(userId)
+		input.agentId ? db.agents.get(input.agentId) : Promise.resolve({ data: null as any })
 	]);
 	if (!rawAi)
 		throw new Error('No AI provider configured. Add an OpenRouter or Gemini key in Settings.');
@@ -910,7 +910,7 @@ export async function generateCinematicUgcPack(input: UgcPackInput): Promise<Ugc
 
 	let selectedProduct: any = null;
 	let briefData: any = null;
-	const brandBrief = brandBriefResult?.data;
+	const brandBrief = await loadBriefForAgent(db, userId, cfg.brandBriefId);
 	if (brandBrief?.data) {
 		briefData = brandBrief.data;
 		const products = Array.isArray(briefData.products) ? briefData.products : [];
@@ -1153,6 +1153,8 @@ interface UgcConfig {
 	characterRef: string | null;
 	/** full_body/side_profiles/face_closeup/feature_grid, from the Profile tab's reference-kit flow. */
 	referenceKit: Record<string, string> | null;
+	/** The persona's selected brand brief (multi-brand users) — null = newest-brief fallback. */
+	brandBriefId: string | null;
 }
 
 async function loadUgcConfig(supabase: any, agentId?: string): Promise<UgcConfig> {
@@ -1170,8 +1172,32 @@ async function loadUgcConfig(supabase: any, agentId?: string): Promise<UgcConfig
 		format: row?.ugc_format || 'auto',
 		quality: row?.ugc_video_quality || 'mvp',
 		characterRef: row?.ugc_character_ref || null,
-		referenceKit: row?.ugc_reference_kit || null
+		referenceKit: row?.ugc_reference_kit || null,
+		brandBriefId: row?.brand_brief_id || null
 	};
+}
+
+/**
+ * Resolves the brand brief a persona should generate against: its explicitly
+ * selected brief first (multi-brand users pin one per persona — e.g. "Just
+ * Kids Honey" vs "HoneyX Manly Plus"), else the user's most recently updated
+ * brief. A selected-but-deleted brief falls through to the fallback rather
+ * than failing generation.
+ */
+async function loadBriefForAgent(
+	db: ReturnType<typeof createDbService>,
+	userId: string,
+	brandBriefId: string | null
+): Promise<any | null> {
+	if (brandBriefId) {
+		const { data } = await db.brandBriefs.getById(brandBriefId, userId);
+		if (data) return data;
+		console.warn(
+			`[UGC] Persona's selected brand brief ${brandBriefId} not found — falling back to newest brief.`
+		);
+	}
+	const { data } = await db.brandBriefs.get(userId);
+	return data ?? null;
 }
 
 export interface UgcPackInput {
@@ -1755,10 +1781,10 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 	// prompts and the TTS call all agree.
 	const { voice: resolvedVoice, voiceGender } = resolveVoiceForPersona(cfg.voice, agentData);
 
-	// ── Brand brief + product ───────────────────────────────────────────
+	// ── Brand brief + product (persona's selected brief, newest as fallback) ──
 	let selectedProduct: any = null;
 	let briefData: any = null;
-	const { data: brandBrief } = await db.brandBriefs.get(userId);
+	const brandBrief = await loadBriefForAgent(db, userId, cfg.brandBriefId);
 	if (brandBrief?.data) {
 		briefData = brandBrief.data;
 		const products = Array.isArray(briefData.products) ? briefData.products : [];
