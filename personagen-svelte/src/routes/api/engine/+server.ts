@@ -782,16 +782,26 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 						});
 					}
 				} catch (err) {
-					console.error('[Engine] AI content generation failed:', err);
+					// Surface the real provider error instead of the old misleading
+					// "configure a provider" message — a configured key that fails
+					// (rate limit, credit, model, timeout) is a different problem.
+					const msg = (err as Error).message || 'unknown error';
+					console.error('[Engine] AI content generation failed:', msg);
+					return json(
+						{ success: false, error: `Generation failed via ${ai?.provider ?? 'AI'}: ${msg.slice(0, 200)}` },
+						{ status: 502 }
+					);
 				}
 			}
 
 			return json(
 				{
 					success: false,
-					error: 'Failed to generate content. Configure an AI provider in Settings.'
+					error: hasAi
+						? 'AI returned an empty response — try again.'
+						: 'No AI provider configured. Add an OpenRouter or Gemini key in Settings.'
 				},
-				{ status: 400 }
+				{ status: hasAi ? 502 : 400 }
 			);
 		}
 
@@ -1300,30 +1310,42 @@ ${pageContent}`,
 					return json({ success: false, error: 'Input text is empty' }, { status: 400 });
 				}
 
-				if (hasAi) {
-					try {
-						const prompt = `You are an elite brand strategist, copywriter, and e-commerce UGC marketer.
+				if (!hasAi) {
+					return json(
+						{ success: false, error: 'No AI provider configured. Add an OpenRouter or Gemini key in Settings.' },
+						{ status: 400 }
+					);
+				}
+
+				try {
+					const prompt = `You are an elite brand strategist, copywriter, and e-commerce UGC marketer.
 Take the following simple input for the brand brief field "${fieldName}" and expand/enrich it into a beautiful, premium, high-converting positioning statement.
 Keep under 3 sentences. Output ONLY the enriched text directly.
 
 Input: "${fieldVal}"`;
 
-						const resText = await ai!.generate(prompt);
-						if (resText) {
-							return json({ success: true, data: { enriched: resText.trim() } });
-						}
-					} catch (err) {
-						console.error('[Engine] AI field enrichment failed:', err);
+					const resText = await ai!.generate(prompt);
+					if (resText) {
+						return json({ success: true, data: { enriched: resText.trim() } });
 					}
+					// A configured provider returned empty — that's a provider/model
+					// issue, not a missing-key issue. Say so instead of misdirecting
+					// the user to Settings for a key they already have.
+					return json(
+						{ success: false, error: `${ai!.provider} returned an empty response — try again.` },
+						{ status: 502 }
+					);
+				} catch (err) {
+					const msg = (err as Error).message || 'unknown error';
+					console.error('[Engine] AI field enrichment failed:', msg);
+					// Surface the ACTUAL provider error (rate limit, credit, model,
+					// timeout) rather than the old misleading "configure a provider"
+					// message — the user has one; the call itself failed.
+					return json(
+						{ success: false, error: `Enrichment failed via ${ai!.provider}: ${msg.slice(0, 200)}` },
+						{ status: 502 }
+					);
 				}
-
-				return json(
-					{
-						success: false,
-						error: 'Failed to enrich field. Configure an AI provider in Settings.'
-					},
-					{ status: 400 }
-				);
 			}
 
 			// ── ACTION: generate_field (generate from scratch, no existing text needed) ──
