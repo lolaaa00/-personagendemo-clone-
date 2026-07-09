@@ -8,7 +8,7 @@
  */
 
 export interface PriceEntry {
-	provider: 'fal' | 'openrouter' | 'gemini' | 'blotato';
+	provider: 'fal' | 'openrouter' | 'gemini' | 'zernio';
 	operation: string;
 	model: string;
 	/** Estimated USD per call. */
@@ -30,8 +30,8 @@ export const PRICING_MATRIX: PriceEntry[] = [
 	{ provider: 'openrouter', operation: 'video', model: 'kling-v3.0-std i2v ~5s (failover)', usd: 0.35 },
 	// ── Gemini direct (env-key text fallback) ──────────────────────────────
 	{ provider: 'gemini', operation: 'llm', model: 'gemini-3.5-flash', usd: 0.002 },
-	// ── Blotato (posting plan; AI credits included in subscription) ────────
-	{ provider: 'blotato', operation: 'publish', model: 'flat $29/mo Starter (≤20 accounts)', usd: 0, note: 'subscription, not per-call' }
+	// ── Zernio (posting; pay-per-connected-account, not per-call) ──────────
+	{ provider: 'zernio', operation: 'publish', model: 'pay-per-account: 2 free, then $6/$3/$1 per account/mo', usd: 0, note: 'per connected account/mo, not per-call' }
 ];
 
 /** Looks up the estimated USD for a provider+operation (first match). */

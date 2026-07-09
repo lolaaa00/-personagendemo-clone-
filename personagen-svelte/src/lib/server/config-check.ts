@@ -4,7 +4,6 @@ import { env as publicEnv } from '$env/dynamic/public';
 export interface ConfigStatus {
 	supabase: boolean;
 	ai: boolean;
-	composio: boolean;
 }
 
 export function checkConfigStatus(): ConfigStatus {
@@ -25,16 +24,8 @@ export function checkConfigStatus(): ConfigStatus {
 		(openRouterKey && openRouterKey.trim() !== '')
 	);
 
-	const composioApiKey = privateEnv.COMPOSIO_API_KEY ?? '';
-	const isComposioConfigured = Boolean(
-		composioApiKey &&
-		!composioApiKey.includes('placeholder') &&
-		!composioApiKey.includes('change_me')
-	);
-
 	return {
 		supabase: isSupabaseConfigured,
-		ai: isAiConfigured,
-		composio: isComposioConfigured
+		ai: isAiConfigured
 	};
 }

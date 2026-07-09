@@ -2,18 +2,10 @@ import type { PageServerLoad } from './$types';
 import { createDbService } from '$lib/server/db';
 import { error } from '@sveltejs/kit';
 import { env } from '$env/dynamic/public';
-import { env as privateEnv } from '$env/dynamic/private';
 
 export const load: PageServerLoad = async ({ locals, params }) => {
 	const supabaseUrl = env.PUBLIC_SUPABASE_URL ?? '';
 	const isPlaceholder = !supabaseUrl || supabaseUrl.includes('placeholder');
-
-	const composioKey = privateEnv.COMPOSIO_API_KEY || '';
-	const isComposioConfigured = Boolean(
-		composioKey &&
-		!composioKey.includes('placeholder') &&
-		!composioKey.includes('change_me')
-	);
 
 	if (!isPlaceholder && locals.supabase) {
 		const db = createDbService(locals.supabase);
@@ -49,10 +41,9 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 				brand_brief_id: config?.brand_brief_id ?? null
 			},
 			supervisors,
-			brandBriefs: briefsResult.data ?? [],
-			isComposioConfigured
+			brandBriefs: briefsResult.data ?? []
 		};
 	}
 
-	return { agent: null, supervisors: [], brandBriefs: [], isComposioConfigured: false };
+	return { agent: null, supervisors: [], brandBriefs: [] };
 };

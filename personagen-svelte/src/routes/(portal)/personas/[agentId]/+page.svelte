@@ -195,9 +195,21 @@
 	let platformStatuses = $state<Record<string, PlatformStatus>>({});
 	let statusLoading = $state(false);
 	let connectingPlatform = $state('');
-	// Where non-Composio platforms actually get connected (Zernio dashboard or
-	// Blotato settings), reported by check_status; null = no provider key yet.
+	// Where accounts get connected (Zernio dashboard), reported by check_status;
+	// null = no Zernio key saved yet (UI forwards to Settings instead).
 	let connectHub = $state<{ provider: string; url: string } | null>(null);
+	// Zernio pay-per-account billing meter — GLOBAL across the key, not per persona
+	// (2 free connected accounts, then $6/$3/$1 each by volume). null = no key.
+	interface AccountMeter {
+		total: number;
+		freeUsed: number;
+		freeRemaining: number;
+		billable: number;
+		monthlyCostUsd: number;
+		nextAccountCostUsd: number;
+		hasAnalyticsAccess: boolean;
+	}
+	let accountMeter = $state<AccountMeter | null>(null);
 	let collapsedPlatforms = $state<Record<string, boolean>>({});
 
 	const platformMetrics: Record<string, { followers: number; engagement: number }> = {
@@ -1022,11 +1034,11 @@
 			const res = await Accounts.checkStatus(agent.id);
 			if (res.success && res.data) {
 				platformStatuses = res.data as Record<string, PlatformStatus>;
-				// User-scoped (keys live per-user, not per-agent): where "connect an
-				// account" actually happens for platforms Composio can't OAuth.
 				connectHub = (res as any).connect_hub ?? null;
+				accountMeter = (res as any).meter ?? null;
 			} else {
 				platformStatuses = {};
+				accountMeter = null;
 				PLATFORMS.forEach(p => { platformStatuses[p.key] = { connected: false }; });
 			}
 		} catch {
@@ -1038,10 +1050,9 @@
 
 	async function connectPlatform(platform: string) {
 		if (!agent?.id) return;
-		// The server routes every platform to the right connect flow:
-		// Zernio hosted OAuth (any platform, when keyed) → Composio OAuth
-		// (its configured platforms) → Zernio dashboard as the last resort.
-		// No dead-ends: the user is always forwarded somewhere actionable.
+		// The server returns a Zernio hosted-OAuth link for the platform, filed under
+		// this persona's own Zernio profile, with the dashboard as a last resort so
+		// the user is never dead-ended. No key saved → an actionable error toast.
 		connectingPlatform = platform;
 		try {
 			const res = await Accounts.initConnection(agent.id, platform);
@@ -2031,16 +2042,13 @@
 						<div class="conn-quick-links">
 							{#each PLATFORMS as p}
 								{#if !platformStatuses[p.key]?.connected}
-									<!-- Kept clickable even when Composio isn't configured for this
-									     platform: the click explains the Zernio-dashboard route
-									     instead of dead-ending on a silently disabled button. -->
+									<!-- Every platform connects the same way: a Zernio hosted-OAuth
+									     link filed under this persona's profile. -->
 									<button
 										type="button"
 										class="btn-connect-inline"
 										disabled={connectingPlatform === p.key}
-										title={platformStatuses[p.key]?.configured === false
-											? `Opens ${connectHub?.provider === 'blotato' ? 'Blotato' : 'Zernio'} to connect ${p.name}`
-											: `Connect ${p.name}`}
+										title={`Connect ${p.name} via Zernio`}
 										onclick={() => connectPlatform(p.key)}
 									>
 										{connectingPlatform === p.key ? 'Connecting…' : `+ ${p.name}`}
@@ -2049,6 +2057,50 @@
 							{/each}
 						</div>
 					</div>
+
+					<!-- Pay-per-account meter — Zernio bills per connected account across
+					     your whole key (2 free, then $6/$3/$1 by volume), NOT per persona
+					     and NOT a plan tier. Shown so adding a platform is never a surprise
+					     charge. -->
+					{#if accountMeter}
+						<div class="zernio-meter" class:over-free={accountMeter.billable > 0}>
+							<div class="meter-head">
+								<span class="meter-title">Zernio accounts</span>
+								<span class="meter-sub">across your key · billed per connected account</span>
+							</div>
+							<div class="meter-track" role="img" aria-label="{accountMeter.total} accounts connected, {accountMeter.freeUsed} of 2 free used">
+								{#each Array(Math.max(accountMeter.total, 2)) as _, i}
+									<span
+										class="meter-pip"
+										class:free={i < 2}
+										class:filled={i < accountMeter.total}
+										class:billable={i >= 2 && i < accountMeter.total}
+									></span>
+								{/each}
+							</div>
+							<div class="meter-stats">
+								<span><strong>{accountMeter.total}</strong> connected</span>
+								{#if accountMeter.freeRemaining > 0}
+									<span class="meter-good">{accountMeter.freeRemaining} free {accountMeter.freeRemaining === 1 ? 'slot' : 'slots'} left</span>
+								{:else}
+									<span class="meter-bill"><strong>${accountMeter.monthlyCostUsd}</strong>/mo · {accountMeter.billable} billable</span>
+								{/if}
+							</div>
+							<p class="meter-note">
+								{#if accountMeter.freeRemaining > 0}
+									Your first 2 connected accounts are free. The next account adds
+									<strong>${accountMeter.nextAccountCostUsd}/mo</strong>.
+								{:else}
+									Each additional account is
+									<strong>${accountMeter.nextAccountCostUsd}/mo</strong>. Manage billing on your
+									<a href={connectHub?.url ?? 'https://zernio.com/dashboard'} target="_blank" rel="noopener">Zernio dashboard</a>.
+								{/if}
+								{#if !accountMeter.hasAnalyticsAccess}
+									<br /><span class="meter-warn">Live follower &amp; engagement stats need analytics enabled on your Zernio key.</span>
+								{/if}
+							</p>
+						</div>
+					{/if}
 
 					{#if computedMetrics.connectedCount === 0}
 						<div class="conn-empty">
@@ -3376,6 +3428,84 @@
 		font-weight: 700;
 		padding: 2px 8px;
 		border-radius: 999px;
+	}
+
+	/* Pay-per-account meter */
+	.zernio-meter {
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: 10px;
+		padding: 0.9rem 1.25rem;
+		margin-bottom: 1.25rem;
+	}
+	.zernio-meter.over-free {
+		border-color: color-mix(in srgb, #f59e0b 45%, var(--border));
+		background: color-mix(in srgb, #f59e0b 5%, var(--surface));
+	}
+	.meter-head {
+		display: flex;
+		align-items: baseline;
+		gap: 0.5rem;
+		flex-wrap: wrap;
+	}
+	.meter-title {
+		font-size: 0.82rem;
+		font-weight: 700;
+		color: var(--text);
+	}
+	.meter-sub {
+		font-size: 0.72rem;
+		color: var(--text-muted);
+	}
+	.meter-track {
+		display: flex;
+		gap: 4px;
+		margin: 0.6rem 0 0.5rem;
+		flex-wrap: wrap;
+	}
+	.meter-pip {
+		width: 22px;
+		height: 6px;
+		border-radius: 999px;
+		background: var(--surface-2, var(--border));
+		border: 1px solid var(--border);
+	}
+	.meter-pip.filled.free {
+		background: #10b981;
+		border-color: #10b981;
+	}
+	.meter-pip.filled.billable {
+		background: #f59e0b;
+		border-color: #f59e0b;
+	}
+	.meter-stats {
+		display: flex;
+		gap: 1rem;
+		font-size: 0.8rem;
+		color: var(--text-muted);
+	}
+	.meter-stats strong {
+		color: var(--text);
+	}
+	.meter-good {
+		color: #10b981;
+		font-weight: 600;
+	}
+	.meter-bill strong {
+		color: #f59e0b;
+	}
+	.meter-note {
+		font-size: 0.74rem;
+		color: var(--text-muted);
+		margin: 0.5rem 0 0;
+		line-height: 1.5;
+	}
+	.meter-note a {
+		color: var(--accent);
+		text-decoration: underline;
+	}
+	.meter-warn {
+		color: #f59e0b;
 	}
 
 	.conn-count-label {

@@ -1417,7 +1417,7 @@ Return JSON: { "variations": ["variation 1 text", "variation 2 text", "variation
 			return json({
 				success: true,
 				data: {
-					message: 'Post queued for publishing. The scheduler will publish via Composio/Zernio.',
+					message: 'Post queued for publishing. The scheduler will publish via Zernio.',
 					queuedAt: new Date().toISOString()
 				}
 			});

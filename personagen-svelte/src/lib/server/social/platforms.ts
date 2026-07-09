@@ -1,2 +1,2 @@
-/** Platforms whose only Composio action requires video (no image-post path exists). */
+/** Platforms that only accept video uploads — an image post to these is rejected. */
 export const VIDEO_ONLY_PLATFORMS = ['youtube', 'tiktok'] as const;

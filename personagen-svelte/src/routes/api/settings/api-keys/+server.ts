@@ -33,24 +33,6 @@ async function testProviderKey(provider: UserKeyProvider, apiKey: string) {
 		};
 	}
 
-	if (provider === 'blotato') {
-		const res = await fetch('https://backend.blotato.com/v2/users/me/accounts', {
-			method: 'GET',
-			headers: {
-				'blotato-api-key': apiKey,
-				Accept: 'application/json'
-			}
-		});
-		if (res.ok) return { status: 'valid' as const, error: null };
-		const text = await res.text().catch(() => '');
-		return {
-			status: res.status === 401 || res.status === 403 ? ('invalid' as const) : ('error' as const),
-			error: text
-				? `Blotato returned HTTP ${res.status}: ${text.slice(0, 180)}`
-				: `Blotato returned HTTP ${res.status}`
-		};
-	}
-
 	if (provider === 'gemini') {
 		const res = await fetch(
 			`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`,

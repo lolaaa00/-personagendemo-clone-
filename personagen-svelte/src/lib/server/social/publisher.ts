@@ -1,4 +1,3 @@
-import { ComposioClient } from './composio';
 import {
 	getZernioApiKey,
 	ZernioClient,
@@ -6,12 +5,6 @@ import {
 	ZERNIO_UNPUBLISH_SUPPORTED,
 	type ZernioAccount
 } from './zernio';
-import {
-	getBlotatoApiKey,
-	BlotatoClient,
-	BLOTATO_PUBLISH_SUPPORTED,
-	type BlotatoAccount
-} from './blotato';
 import { VIDEO_ONLY_PLATFORMS } from './platforms';
 
 export interface PublishPlatformInput {
@@ -27,7 +20,7 @@ export interface PublishPlatformResult {
 	permalink?: string | null;
 	data?: unknown;
 	error?: string;
-	provider: 'composio' | 'zernio' | 'blotato';
+	provider: 'zernio';
 }
 
 function extractMediaItems(content: string): Array<{ type: 'image' | 'video'; url: string }> | undefined {
@@ -61,7 +54,7 @@ function getTextContent(content: string): string {
 	return content;
 }
 
-function getZernioAccountId(connection: any): string | null {
+function getStoredZernioAccountId(connection: any): string | null {
 	const id =
 		connection?.provider_account_id ||
 		connection?.zernio_account_id ||
@@ -70,16 +63,16 @@ function getZernioAccountId(connection: any): string | null {
 	return id ? String(id) : null;
 }
 
-// Short-lived cache of Zernio account lookups, keyed by API key. Stops us calling
-// /accounts once per platform per post when publishing a multi-platform post.
+// Short-lived cache of Zernio account lookups, keyed by `${apiKey}::${profileId}`.
+// Stops us calling /accounts once per platform when publishing a multi-platform post.
 const zernioAccountsCache = new Map<string, { at: number; accounts: ZernioAccount[] }>();
 const ZERNIO_ACCOUNTS_TTL_MS = 60_000;
 
-async function getZernioAccounts(client: ZernioClient, apiKey: string) {
-	const cached = zernioAccountsCache.get(apiKey);
+async function getZernioAccounts(client: ZernioClient, cacheKey: string, profileId?: string) {
+	const cached = zernioAccountsCache.get(cacheKey);
 	if (cached && Date.now() - cached.at < ZERNIO_ACCOUNTS_TTL_MS) return cached.accounts;
-	const accounts = await client.listAccounts();
-	zernioAccountsCache.set(apiKey, { at: Date.now(), accounts });
+	const accounts = await client.listAccounts(profileId ? { profileId } : undefined);
+	zernioAccountsCache.set(cacheKey, { at: Date.now(), accounts });
 	return accounts;
 }
 
@@ -92,19 +85,21 @@ function platformAliases(platform: string): string[] {
 
 /**
  * Resolves the Zernio accountId to publish to for a platform: first the id stored
- * on the connection row, otherwise matched live from the account's /accounts list
- * (by platform, preferring a handle match). Returns null when no account is linked.
+ * on the connection row (set at sync time), otherwise matched live from the
+ * persona's profile-scoped /accounts list (by platform, preferring a handle
+ * match). Scoping to the persona's profileId keeps multi-persona routing correct.
  */
 async function resolveZernioAccountId(
 	client: ZernioClient,
-	apiKey: string,
+	cacheKey: string,
 	platform: string,
-	connection: any
+	connection: any,
+	profileId?: string
 ): Promise<string | null> {
-	const stored = getZernioAccountId(connection);
+	const stored = getStoredZernioAccountId(connection);
 	if (stored) return stored;
 
-	const accounts = await getZernioAccounts(client, apiKey).catch(() => []);
+	const accounts = await getZernioAccounts(client, cacheKey, profileId).catch(() => []);
 	if (!accounts.length) return null;
 
 	const aliases = platformAliases(platform);
@@ -124,104 +119,26 @@ async function resolveZernioAccountId(
 	return matches[0].id;
 }
 
-// Blotato account cache — same shape/reasoning as the Zernio cache above.
-const blotatoAccountsCache = new Map<string, { at: number; accounts: BlotatoAccount[] }>();
-
-async function getBlotatoAccounts(client: BlotatoClient, apiKey: string) {
-	const cached = blotatoAccountsCache.get(apiKey);
-	if (cached && Date.now() - cached.at < ZERNIO_ACCOUNTS_TTL_MS) return cached.accounts;
-	const accounts = await client.listAccounts();
-	blotatoAccountsCache.set(apiKey, { at: Date.now(), accounts });
-	return accounts;
-}
-
-/**
- * Resolves the Blotato account for a platform: the id stored on the connection
- * row when it's a Blotato-synced connection, else matched live by platform
- * (preferring a handle match). Returns the full account so page-based platforms
- * keep their pageId.
- */
-async function resolveBlotatoAccount(
-	client: BlotatoClient,
-	apiKey: string,
-	platform: string,
-	connection: any
-): Promise<{ accountId: string; pageId: string | null } | null> {
-	const isBlotatoConn = String(connection?.provider || '').toLowerCase() === 'blotato';
-	const storedId = isBlotatoConn && connection?.provider_account_id
-		? String(connection.provider_account_id)
-		: null;
-	const storedPageId = isBlotatoConn
-		? ((connection?.provider_metadata as any)?.pageId ?? null)
-		: null;
-	if (storedId) return { accountId: storedId, pageId: storedPageId };
-
-	const accounts = await getBlotatoAccounts(client, apiKey).catch(() => []);
-	if (!accounts.length) return null;
-
-	const aliases = platformAliases(platform).map((a) => (a === 'x' ? 'twitter' : a));
-	const matches = accounts.filter((a) => aliases.includes(a.platform));
-	if (matches.length === 0) return null;
-
-	const handle = String(connection?.handle || '')
-		.toLowerCase()
-		.replace(/^@/, '')
-		.split('.')[0];
-	const byHandle = handle
-		? matches.find((a) => String(a.handle || '').toLowerCase().replace(/^@/, '') === handle)
-		: undefined;
-	const acc = byHandle || matches[0];
-	return { accountId: acc.id, pageId: acc.pageId ?? null };
-}
-
-/** Publishes through Blotato; returns null when no account can be resolved. */
-async function tryPublishViaBlotato(
-	supabase: any,
-	post: any,
-	connection: any,
-	normalizedPlat: string,
-	mediaItems: Array<{ type: 'image' | 'video'; url: string }> | undefined,
-	isVideo: boolean
-): Promise<PublishPlatformResult | null> {
-	const apiKey = await getBlotatoApiKey(supabase, post.user_id).catch(() => null);
-	if (!apiKey) return null;
-	if (!(BLOTATO_PUBLISH_SUPPORTED as readonly string[]).includes(
-		normalizedPlat === 'x' ? 'x' : normalizedPlat
-	)) {
-		return null;
-	}
-
-	const client = new BlotatoClient(apiKey);
-	const account = await resolveBlotatoAccount(client, apiKey, normalizedPlat, connection).catch(
-		() => null
-	);
-	if (!account) return null;
-
+/** Looks up the persona's Zernio profile id for profile-scoped account resolution. */
+async function getAgentProfileId(supabase: any, agentId?: string): Promise<string | undefined> {
+	if (!agentId) return undefined;
 	try {
-		const result = await client.publishNow({
-			accountId: account.accountId,
-			pageId: account.pageId,
-			platform: normalizedPlat,
-			text: getTextContent(post.content),
-			mediaUrls: (mediaItems || []).map((m) => m.url),
-			isVideo
-		});
-		return { ...result, provider: 'blotato' };
-	} catch (err) {
-		return { success: false, provider: 'blotato', error: (err as Error).message };
+		const { data } = await supabase
+			.from('agents')
+			.select('zernio_profile_id')
+			.eq('id', agentId)
+			.maybeSingle();
+		return data?.zernio_profile_id || undefined;
+	} catch {
+		return undefined;
 	}
 }
 
 /**
- * Publishes a post to a single platform.
- *
- * Routing order:
- * 1. Explicit connection provider wins — a provider='blotato' connection goes to
- *    Blotato, a provider='zernio' one to Zernio.
- * 2. Otherwise Zernio-first when keyed (video-capable, in-app connect), then
- *    Blotato when keyed (video-capable, dashboard connect).
- * 3. Composio stays the image-only fallback. Video with no video-capable
- *    provider fails loudly rather than posting wrong.
+ * Publishes a post to a single platform via Zernio — the single consolidated
+ * provider. Requires a Zernio API key and a connected account for the platform;
+ * fails loudly (not silently) when either is missing so the scheduler can surface
+ * a real reason rather than dropping the post.
  */
 export async function publishToPlatform({
 	supabase,
@@ -232,90 +149,64 @@ export async function publishToPlatform({
 	const normalizedPlat = String(platform || '').toLowerCase();
 	const mediaItems = extractMediaItems(post.content);
 	const isVideo = !!mediaItems?.some((m) => m.type === 'video');
-	const connProvider = String(connection?.provider || '').toLowerCase();
-
-	// 1. Explicit provider wins: a Blotato-synced connection publishes via Blotato.
-	if (connProvider === 'blotato') {
-		const blotatoResult = await tryPublishViaBlotato(
-			supabase,
-			post,
-			connection,
-			normalizedPlat,
-			mediaItems,
-			isVideo
-		);
-		if (blotatoResult) return blotatoResult;
-		// Key missing/account unresolvable → fall through to the generic order.
-	}
 
 	const apiKey = await getZernioApiKey(supabase, post.user_id).catch(() => null);
-	const zernioSupportsPlatform = (ZERNIO_PUBLISH_SUPPORTED as readonly string[]).includes(
-		normalizedPlat
-	);
-
-	if (apiKey && zernioSupportsPlatform && connProvider !== 'blotato') {
-		const client = new ZernioClient(apiKey);
-		const accountId = await resolveZernioAccountId(
-			client,
-			apiKey,
-			normalizedPlat,
-			connection
-		).catch(() => null);
-
-		if (accountId) {
-			try {
-				const result = await client.publishNow({
-					content: getTextContent(post.content),
-					platform: normalizedPlat,
-					accountId,
-					mediaItems
-				});
-				return { ...result, provider: 'zernio' };
-			} catch (err) {
-				return { success: false, provider: 'zernio', error: (err as Error).message };
-			}
-		}
-
-		// No matching Zernio account → fall through to Blotato, then Composio.
-	}
-
-	// 2b. Blotato: video-capable second choice (or first when Zernio is keyless).
-	//     Skipped when step 1 already tried it for an explicit blotato connection.
-	if (connProvider !== 'blotato') {
-		const blotatoResult = await tryPublishViaBlotato(
-			supabase,
-			post,
-			connection,
-			normalizedPlat,
-			mediaItems,
-			isVideo
-		);
-		if (blotatoResult) return blotatoResult;
-	}
-
-	// Video with no video-capable provider → fail loudly; Composio cannot publish it.
-	if (isVideo) {
+	if (!apiKey) {
 		return {
 			success: false,
 			provider: 'zernio',
-			error: `Video publishing to ${normalizedPlat} requires Zernio or Blotato. Add an API key in Settings and connect ${normalizedPlat} there, then retry.`
+			error: 'No Zernio API key configured. Add one in Settings → API Keys to publish.'
 		};
 	}
 
-	// Composio's only YouTube/TikTok action requires video — an image would be
-	// silently mis-uploaded and rejected by the platform API with a cryptic error.
-	// Fail clearly here instead of attempting a doomed upload.
+	if (!(ZERNIO_PUBLISH_SUPPORTED as readonly string[]).includes(normalizedPlat)) {
+		return {
+			success: false,
+			provider: 'zernio',
+			error: `Zernio does not support publishing to ${normalizedPlat}.`
+		};
+	}
+
+	// Image posts to video-only platforms can't succeed — say so instead of shipping
+	// a doomed upload the platform API rejects with a cryptic error.
 	if (!isVideo && (VIDEO_ONLY_PLATFORMS as readonly string[]).includes(normalizedPlat)) {
 		return {
 			success: false,
-			provider: 'composio',
-			error: `${normalizedPlat} requires video content (Composio has no image-upload path for this platform). This post's media is an image, so it can't be published here.`
+			provider: 'zernio',
+			error: `${normalizedPlat} requires video content, but this post's media is an image.`
 		};
 	}
 
-	const composio = new ComposioClient();
-	const result = await composio.executePost(post.agent_id, normalizedPlat, post.content);
-	return { ...result, provider: 'composio' };
+	const client = new ZernioClient(apiKey);
+	const profileId = await getAgentProfileId(supabase, post.agent_id);
+	const cacheKey = `${apiKey}::${profileId || 'all'}`;
+	const accountId = await resolveZernioAccountId(
+		client,
+		cacheKey,
+		normalizedPlat,
+		connection,
+		profileId
+	).catch(() => null);
+
+	if (!accountId) {
+		return {
+			success: false,
+			provider: 'zernio',
+			error: `No connected ${normalizedPlat} account for this persona in Zernio. Connect it on the Connections tab, then retry.`
+		};
+	}
+
+	try {
+		const result = await client.publishNow({
+			content: getTextContent(post.content),
+			platform: normalizedPlat,
+			accountId,
+			mediaItems
+		});
+		return { ...result, provider: 'zernio' };
+	} catch (err) {
+		return { success: false, provider: 'zernio', error: (err as Error).message };
+	}
 }
 
 export interface TeardownResult {
@@ -329,8 +220,8 @@ export interface TeardownResult {
 
 /**
  * Attempts to remove a post from each platform it was published to.
- * Zernio's unpublish endpoint handles supported platforms; everything else
- * (Instagram always, Composio-published posts, etc.) is reported for manual deletion.
+ * Zernio's unpublish endpoint handles supported platforms; Instagram, TikTok, and
+ * Snapchat have no API deletion path and are reported for manual deletion.
  * Never throws — teardown is best-effort and must not block the DB delete.
  */
 export async function teardownPost(supabase: any, post: any): Promise<TeardownResult> {
@@ -349,12 +240,10 @@ export async function teardownPost(supabase: any, post: any): Promise<TeardownRe
 
 	for (const [platform, info] of publishedEntries) {
 		const plat = platform.toLowerCase();
-		const provider = String(info.provider || '').toLowerCase();
 		const externalId = info.external_id || null;
 		const permalink = info.permalink || null;
 
 		const zernioCanUnpublish =
-			provider === 'zernio' &&
 			!!zernio &&
 			!!externalId &&
 			(ZERNIO_UNPUBLISH_SUPPORTED as readonly string[]).includes(plat);
@@ -370,7 +259,7 @@ export async function teardownPost(supabase: any, post: any): Promise<TeardownRe
 			continue;
 		}
 
-		// Instagram (always), Composio-published, or missing id → manual deletion
+		// Instagram/TikTok/Snapchat (no API deletion) or missing id → manual deletion.
 		result.manualDeletion.push({ platform: plat, permalink });
 	}
 

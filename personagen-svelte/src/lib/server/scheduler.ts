@@ -1,6 +1,6 @@
 import { env } from '$env/dynamic/private';
 import { env as publicEnv } from '$env/dynamic/public';
-import { ComposioClient } from './social/composio';
+import { getZernioApiKey, ZernioClient } from './social/zernio';
 import { publishToPlatform } from './social/publisher';
 import { getServiceSupabase } from './service-supabase';
 import { runAutopilotDraftGeneration, zonedWallTimeToEpoch } from './autopilot';
@@ -30,9 +30,8 @@ function isRetriableError(message: string): boolean {
 }
 
 // Derived from the single platform registry — publishable = connectable, since
-// publishToPlatform routes Zernio-first (full registry breadth) with Composio
-// as the narrower image-only fallback, and fails loudly per-platform when no
-// provider can actually serve a target.
+// publishToPlatform routes everything through Zernio (the full registry breadth)
+// and fails loudly per-platform when no connected account can serve a target.
 const PUBLISHABLE_PLATFORMS = ALL_PLATFORM_KEYS;
 
 /**
@@ -450,15 +449,28 @@ async function pollScheduledPosts() {
 }
 
 /**
- * Periodically syncs live performance metrics for all published posts
+ * Periodically syncs live performance metrics for all published posts via Zernio's
+ * per-post analytics (GET /v1/analytics?postId=…). Analytics is bundled on every
+ * Zernio account, so this is the single metrics source. Never stores synthetic
+ * numbers — a null response leaves a post's analytics untouched.
  */
 export async function syncPostAnalytics() {
 	console.log('[Scheduler] Syncing post analytics...');
 	const supabase = getServiceSupabase();
-	const composio = new ComposioClient();
+
+	// Resolve + cache one Zernio client per user_id (keys are per-user). null marks
+	// a user with no key so we don't re-query it for every one of their posts.
+	const clientByUser = new Map<string, ZernioClient | null>();
+	const getClient = async (userId: string): Promise<ZernioClient | null> => {
+		if (clientByUser.has(userId)) return clientByUser.get(userId)!;
+		const key = await getZernioApiKey(supabase, userId).catch(() => null);
+		const client = key ? new ZernioClient(key) : null;
+		clientByUser.set(userId, client);
+		return client;
+	};
 
 	try {
-		// Fetch published posts published in the last 7 days that have at least one external platform ID.
+		// Published posts from the last 7 days with at least one external platform ID.
 		const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 		const { data: posts, error } = await supabase
 			.from('posts')
@@ -479,7 +491,6 @@ export async function syncPostAnalytics() {
 
 		console.log(`[Scheduler] Syncing metrics for ${posts.length} published posts...`);
 
-		// Process posts in parallel chunks (concurrency limit of 5 to avoid API rate limits)
 		const CONCURRENCY_LIMIT = 5;
 		const postQueue = [...posts];
 
@@ -493,27 +504,23 @@ export async function syncPostAnalytics() {
 					Object.keys(publicationResults).find((key) => publicationResults[key]?.external_id) ||
 					(post.platforms && post.platforms[0]) ||
 					'instagram';
+				// external_id is the Zernio post _id captured at publish time — exactly
+				// what GET /analytics?postId= expects.
 				const externalId = publicationResults[platform]?.external_id || post.external_id;
-				if (!externalId) continue;
+				if (!externalId || !post.user_id) continue;
 
-				// This sync only knows how to query Composio. A Zernio-published post's
-				// externalId means nothing to Composio's API (wrong provider entirely) —
-				// calling it anyway would just burn a request on a guaranteed failure.
-				// TODO: wire in Zernio's own analytics endpoint once verified against its
-				// real API (no confirmed spec for it yet — Zernio isn't live in this
-				// deployment either, so there's nothing to verify against right now).
-				if (publicationResults[platform]?.provider === 'zernio') continue;
+				// Skip posts published through a retired provider — their external_id is
+				// not a Zernio post id, so a Zernio analytics lookup would 404. Legacy
+				// pre-consolidation posts simply keep whatever analytics they had.
+				const pubProvider = String(publicationResults[platform]?.provider || '').toLowerCase();
+				if (pubProvider === 'composio' || pubProvider === 'blotato') continue;
 
 				try {
-					const metrics = await composio.fetchPostMetrics(
-						post.agent_id,
-						platform,
-						externalId,
-						post.published_at!
-					);
+					const client = await getClient(post.user_id);
+					if (!client) continue;
 
-					// Real metrics or nothing — never store synthetic numbers. A null
-					// leaves the post's analytics untouched (UI shows no stats).
+					const metrics = await client.fetchPostMetrics(String(externalId));
+					// Real metrics or nothing — a null leaves analytics untouched.
 					if (!metrics) continue;
 
 					const { error: updateErr } = await supabase
@@ -534,7 +541,6 @@ export async function syncPostAnalytics() {
 			}
 		};
 
-		// Run workers in parallel
 		const workers = Array.from({ length: Math.min(CONCURRENCY_LIMIT, posts.length) }, worker);
 		await Promise.all(workers);
 

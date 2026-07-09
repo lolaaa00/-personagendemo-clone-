@@ -1,10 +1,12 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { createDbService } from '$lib/server/db';
-import { env } from '$env/dynamic/private';
-import { ComposioClient, isPlatformConfigured } from '$lib/server/social/composio';
-import { getZernioApiKey, ZernioClient } from '$lib/server/social/zernio';
-import { getBlotatoApiKey, BlotatoClient } from '$lib/server/social/blotato';
+import {
+	getZernioApiKey,
+	ZernioClient,
+	computeZernioAccountMeter,
+	type ZernioAccountMeter
+} from '$lib/server/social/zernio';
 import { ALL_PLATFORM_KEYS } from '$lib/platforms';
 
 // Platforms our connections table accepts — derived from the single platform
@@ -19,22 +21,42 @@ function mapZernioPlatform(platform: string): string {
 	return p;
 }
 
+/**
+ * Ensures the persona has its own Zernio profile (the per-brand bucket that
+ * isolates its connected accounts under the single shared key) and returns the
+ * profileId. Provisions lazily — list-or-create by persona name — and persists
+ * the id back onto the agent so it's stable across calls.
+ */
+async function ensureAgentProfileId(
+	db: any,
+	client: ZernioClient,
+	agent: { id: string; name?: string | null; zernio_profile_id?: string | null }
+): Promise<string | null> {
+	if (agent.zernio_profile_id) return agent.zernio_profile_id;
+	// Embed a short agent-id suffix so the profile name is unique even when two
+	// personas share a display name — ensureProfile matches by name, so this
+	// guarantees a 1:1 persona↔profile mapping rather than accidentally sharing
+	// one bucket. The persona's real name still leads for dashboard readability.
+	const base = (agent.name || 'Persona').trim();
+	const profileName = `${base} · ${agent.id.slice(0, 8)}`;
+	const profileId = await client.ensureProfile(profileName).catch(() => null);
+	if (profileId) {
+		await db.agents.update(agent.id, { zernio_profile_id: profileId }).catch(() => {});
+	}
+	return profileId;
+}
 
 /**
- * Imports the user's connected Zernio accounts into the agent's `connections`
- * as provider='zernio' rows (idempotent upsert). This is what makes Instagram +
- * TikTok postable through Zernio without a Composio OAuth round-trip. No-ops when
- * no Zernio key is configured. Best-effort: never throws to its caller's flow.
- *
- * Note: Zernio accounts are scoped to the API key (the user), not per-agent, so
- * every active account is attached to the given agent — correct for a single
- * brand; multi-agent account routing is a future refinement.
+ * Imports the persona's Zernio-connected accounts into `connections` as
+ * provider='zernio' rows (idempotent upsert), scoped to the persona's own Zernio
+ * profile so each persona only ever sees its own accounts. Writes live follower
+ * counts when the key has analytics access. No-ops without a Zernio key. Best-effort.
  */
 async function syncZernioAccounts(
 	db: any,
 	supabase: any,
 	userId: string,
-	agentId: string
+	agent: { id: string; name?: string | null; zernio_profile_id?: string | null }
 ): Promise<{ synced: string[]; skipped: string[] }> {
 	const synced: string[] = [];
 	const skipped: string[] = [];
@@ -42,7 +64,20 @@ async function syncZernioAccounts(
 	const apiKey = await getZernioApiKey(supabase, userId).catch(() => null);
 	if (!apiKey) return { synced, skipped };
 
-	const accounts = await new ZernioClient(apiKey).listAccounts();
+	const client = new ZernioClient(apiKey);
+	const profileId = await ensureAgentProfileId(db, client, agent);
+
+	// Require a resolved profile: NEVER fall back to the unscoped account list —
+	// that would vacuum every account under the key into this one persona and
+	// cross-contaminate every other persona's connections. If provisioning failed,
+	// sync nothing and let the caller retry.
+	if (!profileId) {
+		console.warn(
+			`[Accounts API] No Zernio profile for agent ${agent.id} — skipping sync to avoid cross-persona contamination.`
+		);
+		return { synced, skipped };
+	}
+	const { accounts } = await client.fetchAccounts({ profileId });
 	const now = new Date().toISOString();
 
 	for (const acc of accounts) {
@@ -60,14 +95,20 @@ async function syncZernioAccounts(
 
 		const { error: upErr } = await db.connections.upsert({
 			user_id: userId,
-			agent_id: agentId,
+			agent_id: agent.id,
 			platform: plat as any,
 			handle,
+			followers: acc.followersCount ?? undefined,
 			verified: true,
 			status: 'active',
 			provider: 'zernio',
 			provider_account_id: acc.id,
-			provider_metadata: { zernioPlatform: acc.platform },
+			provider_metadata: {
+				zernioPlatform: acc.platform,
+				zernioProfileId: acc.profileId,
+				displayName: acc.displayName,
+				profilePicture: acc.profilePicture
+			},
 			last_error: null,
 			last_checked_at: now,
 			last_sync: now
@@ -83,79 +124,55 @@ async function syncZernioAccounts(
 }
 
 /**
- * Imports the user's Blotato-connected accounts into the agent's `connections`
- * as provider='blotato' rows (idempotent upsert). Platform OAuth happens in
- * Blotato's dashboard; this sync is what makes those accounts postable here.
- * No-ops when no Blotato key is configured. Same account-scoping caveat as
- * syncZernioAccounts: accounts are per-key (per user), attached to this agent.
+ * Live follower sync for a persona's connected accounts via Zernio follower-stats
+ * (requires analytics access; degrades to a no-op otherwise). Updates the
+ * `followers` column on matching connection rows. Best-effort.
  */
-async function syncBlotatoAccounts(
+async function syncZernioFollowers(
 	db: any,
-	supabase: any,
-	userId: string,
-	agentId: string
-): Promise<{ synced: string[]; skipped: string[] }> {
-	const synced: string[] = [];
-	const skipped: string[] = [];
+	client: ZernioClient,
+	agentId: string,
+	profileId: string | null,
+	conns: any[]
+): Promise<void> {
+	const zernioConns = conns.filter(
+		(c) => String(c.provider || '').toLowerCase() === 'zernio' && c.provider_account_id
+	);
+	if (zernioConns.length === 0) return;
 
-	const apiKey = await getBlotatoApiKey(supabase, userId).catch(() => null);
-	if (!apiKey) return { synced, skipped };
+	const stats = await client.getFollowerStats(profileId ? { profileId } : undefined);
+	if (stats.size === 0) return;
 
-	const accounts = await new BlotatoClient(apiKey).listAccounts();
-	const now = new Date().toISOString();
-
-	for (const acc of accounts) {
-		// Blotato reports 'twitter'; our connections vocabulary uses 'x'.
-		const plat = acc.platform === 'twitter' ? 'x' : acc.platform;
-		if (!CONNECTABLE_PLATFORMS.has(plat)) {
-			skipped.push(acc.platform);
-			continue;
-		}
-		const handle = acc.handle
-			? acc.handle.startsWith('@')
-				? acc.handle
-				: `@${acc.handle}`
-			: null;
-
-		const { error: upErr } = await db.connections.upsert({
-			user_id: userId,
-			agent_id: agentId,
-			platform: plat as any,
-			handle,
-			verified: true,
-			status: 'active',
-			provider: 'blotato',
-			provider_account_id: acc.id,
-			provider_metadata: {
-				blotatoPlatform: acc.platform,
-				displayName: acc.displayName,
-				pageId: acc.pageId ?? null
-			},
-			last_error: null,
-			last_checked_at: now,
-			last_sync: now
-		});
-		if (upErr) {
-			console.error(`[Accounts API] Failed to upsert Blotato connection for ${plat}:`, upErr);
-		} else {
-			synced.push(plat);
-		}
+	for (const conn of zernioConns) {
+		const followers = stats.get(String(conn.provider_account_id));
+		if (typeof followers !== 'number' || followers === conn.followers) continue;
+		const { error } = await db.connections
+			.upsert({
+				id: conn.id,
+				user_id: conn.user_id,
+				agent_id: agentId,
+				platform: conn.platform,
+				handle: conn.handle,
+				followers,
+				verified: true,
+				status: 'active',
+				last_checked_at: new Date().toISOString(),
+				last_sync: new Date().toISOString()
+			})
+			.catch((e: any) => ({ error: e }));
+		if (!error) conn.followers = followers;
 	}
-
-	return { synced, skipped };
 }
 
-function computeDynamicMetrics(conns: any[], agentId: string) {
+function computeDynamicMetrics(conns: any[]) {
 	let totalFollowers = 0;
 	let totalEngRate = 0;
 	let connectedCount = 0;
 
 	if (conns && conns.length > 0) {
 		for (const conn of conns) {
-			const followers = conn.followers || 0;
-			const engagement = conn.engagement_rate || 0;
-			totalFollowers += followers;
-			totalEngRate += engagement;
+			totalFollowers += conn.followers || 0;
+			totalEngRate += conn.engagement_rate || 0;
 			connectedCount++;
 		}
 	}
@@ -178,89 +195,20 @@ function computeDynamicMetrics(conns: any[], agentId: string) {
 	};
 }
 
-async function syncLiveConnectionMetrics(
-	db: any,
-	composio: ComposioClient,
-	personaId: string,
-	platform: string,
-	conn: any
-) {
-	const plat = platform.toLowerCase();
-	let liveHandle = conn.handle;
-	let liveFollowers = conn.followers || 0;
-	let hasLiveUpdates = false;
-
+/**
+ * The pay-per-account billing meter, GLOBAL across the key (Zernio bills per
+ * connected account, not per persona: 2 free, then $6/$3/$1 by volume). Read from
+ * the full unscoped account list so the number reflects the user's real bill.
+ * Best-effort — returns null on any failure so the UI just omits the meter.
+ */
+async function getAccountMeter(
+	client: ZernioClient
+): Promise<(ZernioAccountMeter & { hasAnalyticsAccess: boolean }) | null> {
 	try {
-		if (plat === 'youtube') {
-			console.log(`[Accounts Sync] Fetching live YouTube metrics for agent ${personaId}...`);
-			const res = await composio.executeAction(personaId, 'YOUTUBE_GET_CHANNEL_STATISTICS', {
-				mine: true,
-				part: 'snippet,statistics'
-			});
-			if (res && res.successful) {
-				const channel = res.data?.channels?.[0] || res.data?.items?.[0];
-				if (channel) {
-					if (channel.snippet?.customUrl) {
-						liveHandle = channel.snippet.customUrl;
-					} else if (channel.snippet?.title) {
-						liveHandle = '@' + channel.snippet.title.toLowerCase().replace(/\s+/g, '');
-					}
-
-					if (channel.statistics?.subscriberCount) {
-						liveFollowers = parseInt(channel.statistics.subscriberCount, 10) || 0;
-					}
-
-					// Engagement rate is NOT fabricated — YouTube's channel-statistics
-					// call doesn't provide one, so we keep whatever real value exists
-					// (0 until a real per-post metrics source lands).
-					hasLiveUpdates = true;
-				}
-			}
-		} else if (plat === 'instagram') {
-			console.log(`[Accounts Sync] Fetching live Instagram metrics for agent ${personaId}...`);
-			const res = await composio.executeAction(personaId, 'INSTAGRAM_GET_USER_INFO', {});
-			if (res && res.successful) {
-				const user = res.data;
-				if (user) {
-					if (user.username) {
-						liveHandle = '@' + user.username;
-					}
-					if (user.followers_count !== undefined) {
-						liveFollowers = parseInt(user.followers_count, 10) || 0;
-					}
-
-					// Same policy as YouTube above: no invented engagement rate.
-					hasLiveUpdates = true;
-				}
-			}
-		}
-	} catch (err) {
-		console.error(`[Accounts Sync] Failed to fetch live metrics for ${platform}:`, err);
-	}
-
-	if (hasLiveUpdates) {
-		console.log(
-			`[Accounts Sync] Synced live metrics for ${platform} (${personaId}): Handle=${liveHandle}, Followers=${liveFollowers}`
-		);
-		// engagement_rate deliberately not written here — no provider call in this
-		// sync returns a real one, and invented numbers are worse than none.
-		await db.connections.upsert({
-			id: conn.id,
-			user_id: conn.user_id,
-			agent_id: personaId,
-			platform: plat as any,
-			handle: liveHandle,
-			followers: liveFollowers,
-			verified: true,
-			status: 'active',
-			last_error: null,
-			last_checked_at: new Date().toISOString(),
-			last_sync: new Date().toISOString()
-		});
-
-		conn.handle = liveHandle;
-		conn.followers = liveFollowers;
-		conn.last_sync = new Date().toISOString();
+		const { accounts, hasAnalyticsAccess } = await client.fetchAccounts({ includeOverLimit: true });
+		return { ...computeZernioAccountMeter(accounts.length), hasAnalyticsAccess };
+	} catch {
+		return null;
 	}
 }
 
@@ -287,7 +235,6 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			if (!persona_id) {
 				return json({ success: false, error: 'Missing persona_id' }, { status: 400 });
 			}
-
 			if (!isUuid(persona_id)) {
 				return json({ success: false, error: 'Invalid persona_id format (UUID required).' }, { status: 400 });
 			}
@@ -300,262 +247,107 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				return json({ success: false, error: 'Forbidden' }, { status: 403 });
 			}
 
-			// Best-effort: import the user's Zernio-connected accounts before reading
-				// status, so connecting in the Zernio dashboard is all they have to do.
-				if (isUuid(persona_id)) {
-					try {
-						await syncZernioAccounts(db, locals.supabase, user.id, persona_id);
-					} catch (e) {
-						console.warn('[Accounts API] Zernio account sync failed (continuing):', e);
-					}
-					try {
-						await syncBlotatoAccounts(db, locals.supabase, user.id, persona_id);
-					} catch (e) {
-						console.warn('[Accounts API] Blotato account sync failed (continuing):', e);
-					}
-				}
+			// Best-effort: import the persona's Zernio accounts before reading status,
+			// so connecting (in-app or in the Zernio dashboard) is all that's needed.
+			try {
+				await syncZernioAccounts(db, locals.supabase, user.id, agent);
+			} catch (e) {
+				console.warn('[Accounts API] Zernio account sync failed (continuing):', e);
+			}
 
-				const { data: conns, error } = await db.connections.listForAgent(persona_id);
+			const { data: conns, error } = await db.connections.listForAgent(persona_id);
 			if (error) throw error;
 
-			// Status must cover every platform the DB/Zernio actually support
-			// (CONNECTABLE_PLATFORMS), not just Composio's narrower supported set —
-			// otherwise a Zernio-only platform (x, threads) that's genuinely
-			// connected would never get a statusData entry and stay permanently
-			// invisible in the UI despite a valid row existing in `connections`.
-			const platforms = [...CONNECTABLE_PLATFORMS];
+			const apiKey = await getZernioApiKey(locals.supabase, user.id).catch(() => null);
+			const client = apiKey ? new ZernioClient(apiKey) : null;
+
+			// Live follower sync via Zernio (analytics-gated; no-op otherwise).
+			if (client && conns) {
+				try {
+					await syncZernioFollowers(
+						db,
+						client,
+						persona_id,
+						agent.zernio_profile_id || null,
+						conns
+					);
+				} catch (e) {
+					console.warn('[Accounts API] Zernio follower sync failed (continuing):', e);
+				}
+			}
+
+			// Build status for every connectable platform. Zernio-managed rows are
+			// truth — their own provider verified them at connect time.
 			const statusData: Record<string, any> = {};
-
-			let activeComposioPlatforms: string[] = [];
-			let providerError = '';
-
-			try {
-				const composio = new ComposioClient();
-				const activeAccounts = await composio.listConnections(persona_id);
-				activeComposioPlatforms = activeAccounts
-					.filter((acc: any) => acc.status?.toUpperCase() === 'ACTIVE')
-					.map((acc: any) => (acc.toolkit?.slug || acc.appId || acc.appName || '').toLowerCase())
-					.filter(Boolean);
-
-				console.log(
-					`[Accounts API] Live active Composio platforms for agent ${persona_id}:`,
-					activeComposioPlatforms
-				);
-			} catch (e) {
-				providerError = (e as Error).message;
-				console.error('[Accounts API] Failed to fetch active connections from Composio:', e);
-			}
-
-			// 1. Self-healing: If a platform is active in Composio but missing from our DB, auto-create it
-			if (conns) {
-				for (const activePlat of activeComposioPlatforms) {
-					if (
-						(platforms as string[]).includes(activePlat) &&
-						!conns.some((c) => c.platform === activePlat)
-					) {
-						try {
-							const { data: agent } = await db.agents.get(persona_id);
-							if (agent) {
-								const rawHandle =
-									agent.handle || `@${agent.name.toLowerCase().replace(/\s+/g, '')}`;
-								const handle = `${rawHandle}.${activePlat}`;
-								console.log(
-									`[Accounts API] Active Composio connection found for "${activePlat}" but missing in DB. Auto-healing database row.`
-								);
-								await db.connections.upsert({
-									user_id: agent.user_id,
-									agent_id: persona_id,
-									platform: activePlat as any,
-									handle,
-									verified: true,
-									status: 'active',
-									last_error: null,
-									last_checked_at: new Date().toISOString(),
-									last_sync: new Date().toISOString()
-								});
-
-								// Re-sync local variable
-								const { data: updatedConns } = await db.connections.listForAgent(persona_id);
-								if (updatedConns) {
-									conns.splice(0, conns.length, ...updatedConns);
-								}
-							}
-						} catch (err) {
-							console.error(
-								`[Accounts API] Failed to auto-heal DB connection for platform ${activePlat}:`,
-								err
-							);
-						}
-					}
-				}
-			}
-
-			// 1.5. Live Sync: Query live details from Composio and update DB connection properties
-			if (conns) {
-				const composio = new ComposioClient();
-				for (const conn of conns) {
-					const isVerified = activeComposioPlatforms.includes(conn.platform);
-					if (isVerified) {
-						await syncLiveConnectionMetrics(db, composio, persona_id, conn.platform, conn);
-					}
-				}
-			}
-
-			// 2. Build status data. Status checks are intentionally non-destructive:
-			// a provider outage or stale response should not delete local connection records.
-			for (const p of platforms) {
+			for (const p of CONNECTABLE_PLATFORMS) {
 				const conn = conns?.find((c) => c.platform === p);
-
-				// Zernio/Blotato-managed connections are verified by their own provider,
-				// not Composio. Never let a Composio status check downgrade them —
-				// EXCEPT when the publish path itself flagged them reauth_required.
-				const ownProvider = String(conn?.provider || '').toLowerCase();
-				if (conn && (ownProvider === 'zernio' || ownProvider === 'blotato')) {
-					const needsReauth = conn.status === 'reauth_required';
+				if (conn) {
+					const ownProvider = String(conn.provider || 'zernio').toLowerCase();
+					// Legacy rows connected through a now-removed provider can't publish
+					// or sync anymore — surface them as needing a Zernio reconnect rather
+					// than showing a green "connected" that silently fails at publish time.
+					const isLegacyProvider = ownProvider === 'composio' || ownProvider === 'blotato';
+					const needsReauth = conn.status === 'reauth_required' || isLegacyProvider;
 					statusData[p] = {
 						connected: !needsReauth,
 						configured: true,
 						status: needsReauth ? 'reauth_required' : 'active',
 						handle: conn.handle || '@connected',
 						verified: !needsReauth,
-						provider: ownProvider,
+						provider: isLegacyProvider ? 'zernio' : ownProvider,
 						lastSync: conn.last_sync || conn.connected_at || new Date().toISOString(),
-						lastError: needsReauth ? conn.last_error || undefined : undefined,
+						lastError: isLegacyProvider
+							? 'Linked through a retired provider — reconnect via Zernio to publish.'
+							: needsReauth
+								? conn.last_error || undefined
+								: undefined,
 						followers: conn.followers || 0,
 						engagement_rate: conn.engagement_rate || 0
 					};
-					continue;
-				}
-
-				const configured = isPlatformConfigured(p);
-				const providerUnavailable = Boolean(providerError);
-				const isVerified = activeComposioPlatforms.includes(p);
-				const localActive = conn && conn.status !== 'revoked' && conn.status !== 'reauth_required';
-
-				if (conn && (isVerified || providerUnavailable || localActive)) {
-					// DB truth first: a locally-active connection row stays "connected"
-					// in the UI even when the live provider check can't confirm it
-					// (empty list, entity-id mismatch, expired provider key). The live
-					// check only ever ADDS confidence (verified) — an absence must not
-					// flip a working connection to "disconnected", which is exactly how
-					// real connections were vanishing from the Connections tab.
-					statusData[p] = {
-						connected: Boolean(isVerified || localActive),
-						configured,
-						status: isVerified ? 'active' : providerUnavailable ? 'provider_unavailable' : 'active',
-						handle: conn.handle || '@connected',
-						verified: isVerified,
-						lastSync: conn.last_sync || conn.connected_at || new Date().toISOString(),
-						lastError: isVerified
-							? undefined
-							: providerError ||
-								conn.last_error ||
-								'Live provider check could not confirm this account — showing saved connection.',
-						followers: conn.followers || 0,
-						engagement_rate: conn.engagement_rate || 0
-					};
-
-					// Persist only what we actually learned: the check timestamp, and a
-					// verified/active upgrade when the provider confirmed it. Never
-					// downgrade status on mere absence from the live list.
-					const nextVerified = isVerified ? true : (conn.verified ?? false);
-					const nextStatus = isVerified ? 'active' : conn.status || 'active';
-					const nextLastError = isVerified ? null : conn.last_error;
-					const nextLastCheckedAt = new Date().toISOString();
-					const nextLastSync = isVerified ? new Date().toISOString() : conn.last_sync;
-
-					await db.connections.upsert({
-						id: conn.id,
-						user_id: conn.user_id,
-						agent_id: persona_id,
-						platform: p as any,
-						handle: conn.handle,
-						verified: nextVerified,
-						status: nextStatus,
-						last_error: nextLastError,
-						last_checked_at: nextLastCheckedAt,
-						last_sync: nextLastSync
-					});
-
-					// Keep the in-memory row truthful — steps 1 and 1.5 above already
-					// mutate `conn` in place after their own writes; this loop is the
-					// only one that determines final `status`, so step 3 below needs
-					// this update too, or it'd filter on pre-this-loop status values.
-					conn.verified = nextVerified;
-					conn.status = nextStatus;
-					conn.last_error = nextLastError;
-					conn.last_checked_at = nextLastCheckedAt;
-					conn.last_sync = nextLastSync;
 				} else {
-					statusData[p] = {
-						connected: false,
-						configured,
-						status: configured ? 'disconnected' : 'not_configured'
-					};
+					statusData[p] = { connected: false, configured: true, status: 'disconnected' };
 				}
 			}
 
-			// 3. Keep agent connection count and dynamic stats up to date in DB.
-			// `conns` is a truthful in-memory mirror of the DB at this point (steps
-			// 1/1.5/2 above all patch it alongside their own writes) — no need to
-			// re-fetch what's already in hand.
+			// Keep agent connection count + dynamic stats current.
 			if (conns) {
 				try {
-					const activeConns = conns.filter(
-						(conn) =>
+					const activeConns = conns.filter((conn) => {
+						const prov = String(conn.provider || 'zernio').toLowerCase();
+						if (prov === 'composio' || prov === 'blotato') return false; // retired
+						return (
 							conn.status !== 'revoked' &&
 							conn.status !== 'reauth_required' &&
 							conn.status !== 'error'
-					);
+						);
+					});
 					const count = activeConns.length;
+					let newStatus = agent.status;
+					if (count === 0) newStatus = 'paused';
+					else if (agent.status !== 'paused') newStatus = 'active';
 
-					const { data: agent } = await db.agents.get(persona_id);
-					if (agent) {
-						let newStatus = agent.status;
-						if (count === 0) {
-							newStatus = 'paused';
-						} else if (agent.status !== 'paused') {
-							newStatus = 'active';
-						}
-
-						const { followers: targetFollowers, engagement_rate: targetEngagement } =
-							computeDynamicMetrics(activeConns, persona_id);
-
-						await db.agents.update(persona_id, {
-							connection_count: count,
-							status: newStatus,
-							followers: targetFollowers,
-							engagement_rate: targetEngagement
-						});
-					}
+					const { followers, engagement_rate } = computeDynamicMetrics(activeConns);
+					await db.agents.update(persona_id, {
+						connection_count: count,
+						status: newStatus,
+						followers,
+						engagement_rate
+					});
 				} catch (err) {
-					console.error(
-						'[Accounts API] Failed to update agent connection count and metrics:',
-						err
-					);
+					console.error('[Accounts API] Failed to update agent connection count/metrics:', err);
 				}
 			}
 
-			// Tell the client where "connect an account" actually happens, so the
-			// UI can forward the user to the right provider hub instead of
-			// dead-ending on platforms Composio can't OAuth. Prefers Zernio (the
-			// primary posting provider), falls back to Blotato; null = no
-			// provider key saved yet (UI forwards to Settings instead).
-			const zernioConfigured = !!(await getZernioApiKey(locals.supabase, user.id).catch(() => null));
-			const blotatoConfigured = zernioConfigured
-				? false
-				: !!(await getBlotatoApiKey(locals.supabase, user.id).catch(() => null));
-			const connectHub = zernioConfigured
+			// The pay-per-account meter (global across the key) + where to connect.
+			const meter = client ? await getAccountMeter(client) : null;
+			const connectHub = apiKey
 				? { provider: 'zernio', url: 'https://zernio.com/dashboard' }
-				: blotatoConfigured
-					? { provider: 'blotato', url: 'https://my.blotato.com/settings' }
-					: null;
+				: null;
 
-			return json({ success: true, data: statusData, connect_hub: connectHub });
+			return json({ success: true, data: statusData, meter, connect_hub: connectHub });
 		}
 
-		if (action === 'sync_zernio' || action === 'sync_blotato') {
-			const providerName = action === 'sync_blotato' ? 'Blotato' : 'Zernio';
+		if (action === 'sync_zernio') {
 			if (!persona_id) {
 				return json({ success: false, error: 'Missing persona_id' }, { status: 400 });
 			}
@@ -568,15 +360,12 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				return json({ success: false, error: 'Forbidden' }, { status: 403 });
 			}
 
-			const apiKey =
-				action === 'sync_blotato'
-					? await getBlotatoApiKey(locals.supabase, user.id)
-					: await getZernioApiKey(locals.supabase, user.id);
+			const apiKey = await getZernioApiKey(locals.supabase, user.id);
 			if (!apiKey) {
 				return json(
 					{
 						success: false,
-						error: `No ${providerName} API key configured. Add it in Settings → API Keys first.`
+						error: 'No Zernio API key configured. Add it in Settings → API Keys first.'
 					},
 					{ status: 400 }
 				);
@@ -585,37 +374,29 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			let synced: string[] = [];
 			let skipped: string[] = [];
 			try {
-				({ synced, skipped } =
-					action === 'sync_blotato'
-						? await syncBlotatoAccounts(db, locals.supabase, user.id, persona_id)
-						: await syncZernioAccounts(db, locals.supabase, user.id, persona_id));
+				({ synced, skipped } = await syncZernioAccounts(db, locals.supabase, user.id, agent));
 			} catch (e) {
 				return json(
-					{
-						success: false,
-						error: `Failed to sync ${providerName} accounts: ${(e as Error).message}`
-					},
+					{ success: false, error: `Failed to sync Zernio accounts: ${(e as Error).message}` },
 					{ status: 502 }
 				);
 			}
 
-			// Keep the agent's connection count + status in sync.
 			try {
 				const { data: finalConns } = await db.connections.listForAgent(persona_id);
 				const activeConns = (finalConns || []).filter(
 					(c) => c.status !== 'revoked' && c.status !== 'reauth_required' && c.status !== 'error'
 				);
 				const count = activeConns.length;
-				const { followers: targetFollowers, engagement_rate: targetEngagement } =
-					computeDynamicMetrics(activeConns, persona_id);
+				const { followers, engagement_rate } = computeDynamicMetrics(activeConns);
 				await db.agents.update(persona_id, {
 					connection_count: count,
 					status: count > 0 && agent.status !== 'paused' ? 'active' : agent.status,
-					followers: targetFollowers,
-					engagement_rate: targetEngagement
+					followers,
+					engagement_rate
 				});
 			} catch (err) {
-				console.error(`[Accounts API] Failed to update agent after ${providerName} sync:`, err);
+				console.error('[Accounts API] Failed to update agent after Zernio sync:', err);
 			}
 
 			return json({ success: true, data: { synced, skipped, count: synced.length } });
@@ -625,12 +406,10 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			if (!persona_id || !platform) {
 				return json({ success: false, error: 'Missing persona_id or platform' }, { status: 400 });
 			}
-
 			if (!isUuid(persona_id)) {
 				return json({ success: false, error: 'Invalid persona_id format (UUID required).' }, { status: 400 });
 			}
 
-			// Fetch agent info
 			const { data: agent, error: agentErr } = await db.agents.get(persona_id);
 			if (agentErr || !agent) {
 				return json({ success: false, error: 'Agent not found' }, { status: 404 });
@@ -639,55 +418,48 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				return json({ success: false, error: 'Forbidden' }, { status: 403 });
 			}
 
+			const apiKey = await getZernioApiKey(locals.supabase, user.id).catch(() => null);
+			if (!apiKey) {
+				return json(
+					{
+						success: false,
+						error: 'No Zernio API key configured. Add one in Settings → API Keys, then connect platforms here.'
+					},
+					{ status: 400 }
+				);
+			}
+
 			const origin = new URL(request.url).origin;
 			const callbackUrl = `${origin}/personas/${persona_id}?tab=connections&connected=${encodeURIComponent(platform)}`;
 
-			// 1. Zernio-first: a hosted OAuth link for ANY registry platform when a
-			//    key exists. After authorizing, Zernio bounces back to the persona
-			//    Connections tab and check_status auto-imports the new account.
-			const zernioKey = await getZernioApiKey(locals.supabase, user.id).catch(() => null);
-			if (zernioKey) {
-				try {
-					const authUrl = await new ZernioClient(zernioKey).getConnectUrl(platform, callbackUrl);
-					return json({ success: true, data: { redirect_url: authUrl, provider: 'zernio' } });
-				} catch (e) {
-					console.warn(
-						`[Accounts API] Zernio connect-link failed for ${platform} (${(e as Error).message}) — trying Composio.`
-					);
-				}
+			// Hosted Zernio OAuth, filed under the persona's own profile so the new
+			// account lands in the right bucket. On success Zernio bounces back to
+			// the Connections tab and check_status auto-imports it.
+			const client = new ZernioClient(apiKey);
+			try {
+				const profileId = await ensureAgentProfileId(db, client, agent);
+				const authUrl = await client.getConnectUrl(platform, callbackUrl, profileId || undefined);
+				return json({ success: true, data: { redirect_url: authUrl, provider: 'zernio' } });
+			} catch (e) {
+				console.warn(
+					`[Accounts API] Zernio connect-link failed for ${platform} (${(e as Error).message}) — forwarding to dashboard.`
+				);
+				// Never dead-end: forward to the Zernio dashboard as a last resort.
+				return json({
+					success: true,
+					data: {
+						redirect_url: 'https://zernio.com/dashboard/accounts',
+						provider: 'zernio-dashboard',
+						note: `Connect ${platform} in the Zernio dashboard, then return and refresh — it imports automatically.`
+					}
+				});
 			}
-
-			// 2. Composio OAuth for its configured platforms.
-			const composioKey = env.COMPOSIO_API_KEY || '';
-			const composioUsable =
-				composioKey && !composioKey.includes('placeholder') && !composioKey.includes('change_me');
-			if (composioUsable && isPlatformConfigured(platform)) {
-				try {
-					const composio = new ComposioClient();
-					const redirectUrl = await composio.getOAuthLink(persona_id, platform, callbackUrl);
-					return json({ success: true, data: { redirect_url: redirectUrl, provider: 'composio' } });
-				} catch (e) {
-					console.error('[Accounts API] Composio link failed:', e);
-				}
-			}
-
-			// 3. Last resort: forward to Zernio's dashboard — never leave the user
-			//    with a dead-end toast and a blank state.
-			return json({
-				success: true,
-				data: {
-					redirect_url: 'https://zernio.com/dashboard/accounts',
-					provider: 'zernio-dashboard',
-					note: `Connect ${platform} in the Zernio dashboard, then return and refresh — it imports automatically.`
-				}
-			});
 		}
 
 		if (action === 'disconnect') {
 			if (!persona_id || !platform) {
 				return json({ success: false, error: 'Missing persona_id or platform' }, { status: 400 });
 			}
-
 			if (!isUuid(persona_id)) {
 				return json({ success: false, error: 'Invalid persona_id format (UUID required).' }, { status: 400 });
 			}
@@ -700,35 +472,38 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				return json({ success: false, error: 'Forbidden' }, { status: 403 });
 			}
 
+			// Also disconnect in Zernio so the account stops accruing its per-account
+			// charge — under pay-per-account billing, a local-only hide would keep
+			// costing money. Best-effort; the local delete proceeds regardless.
+			try {
+				const { data: existing } = await db.connections.listForAgent(persona_id);
+				const target = (existing || []).find((c) => c.platform === platform);
+				const apiKey = await getZernioApiKey(locals.supabase, user.id).catch(() => null);
+				if (apiKey && target?.provider_account_id) {
+					await new ZernioClient(apiKey).disconnectAccount(String(target.provider_account_id));
+				}
+			} catch (e) {
+				console.warn('[Accounts API] Zernio account disconnect failed (continuing):', e);
+			}
+
 			const { error: delErr } = await db.connections.delete(persona_id, platform);
 			if (delErr) throw delErr;
 
-			// Recalculate connection count and dynamic stats
 			try {
 				const { data: finalConns } = await db.connections.listForAgent(persona_id);
 				const count = finalConns?.length || 0;
-
-				const { data: agent } = await db.agents.get(persona_id);
-				if (agent) {
-					let newStatus = agent.status;
-					if (count === 0) {
-						newStatus = 'paused';
-					} else if (agent.status !== 'paused') {
-						newStatus = 'active';
-					}
-
-					const { followers: targetFollowers, engagement_rate: targetEngagement } =
-						computeDynamicMetrics(finalConns || [], persona_id);
-
-					await db.agents.update(persona_id, {
-						connection_count: count,
-						status: newStatus,
-						followers: targetFollowers,
-						engagement_rate: targetEngagement
-					});
-				}
+				let newStatus = agent.status;
+				if (count === 0) newStatus = 'paused';
+				else if (agent.status !== 'paused') newStatus = 'active';
+				const { followers, engagement_rate } = computeDynamicMetrics(finalConns || []);
+				await db.agents.update(persona_id, {
+					connection_count: count,
+					status: newStatus,
+					followers,
+					engagement_rate
+				});
 			} catch (err) {
-				console.error('[Accounts API] Failed to update agent connection on disconnect:', err);
+				console.error('[Accounts API] Failed to update agent on disconnect:', err);
 			}
 
 			return json({ success: true });

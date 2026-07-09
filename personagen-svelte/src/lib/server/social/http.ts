@@ -1,5 +1,5 @@
 /**
- * fetch with a hard deadline. Provider calls (Zernio/Composio) previously had
+ * fetch with a hard deadline. Zernio API calls previously had
  * no timeout at all — one hung socket stalled a scheduler tick or the
  * connections tab indefinitely. Aborts surface as a clearly-worded "timed out"
  * error, which the scheduler's retry classifier treats as transient.

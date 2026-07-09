@@ -64,7 +64,17 @@ export interface PostRow {
 	scheduled_time: string | null;
 	published_at: string | null;
 	external_id?: string | null;
-	analytics?: { views: number; likes: number; comments: number; shares: number } | null;
+	analytics?: {
+		views: number;
+		likes: number;
+		comments: number;
+		shares: number;
+		saves?: number;
+		impressions?: number;
+		reach?: number;
+		clicks?: number;
+		engagementRate?: number;
+	} | null;
 	publication_results?: Record<string, unknown> | null;
 	token_usage?: number | null;
 	token_cost?: number | null;
@@ -88,7 +98,9 @@ export interface ConnectionRow {
 	status?: 'active' | 'stale' | 'reauth_required' | 'revoked' | 'error' | null;
 	last_error?: string | null;
 	last_checked_at?: string | null;
-	provider?: 'composio' | 'zernio' | null;
+	// New connections are always 'zernio' (the single consolidated provider).
+	// 'composio'/'blotato' remain only on legacy rows pending reconnect.
+	provider?: 'zernio' | 'composio' | 'blotato' | null;
 	provider_account_id?: string | null;
 	provider_metadata?: Record<string, unknown> | null;
 }

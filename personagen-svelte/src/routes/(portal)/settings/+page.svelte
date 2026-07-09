@@ -35,7 +35,7 @@
 		{
 			provider: 'zernio',
 			label: 'Zernio',
-			description: 'TikTok-first publishing and optional Instagram provider routing.',
+			description: 'Publishing, connections, and analytics for all 15 platforms. Billed per connected account (2 free).',
 			placeholder: 'Paste your Zernio API key'
 		},
 		{

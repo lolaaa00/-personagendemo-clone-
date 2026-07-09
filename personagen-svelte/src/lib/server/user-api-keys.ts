@@ -3,7 +3,6 @@ import { env } from '$env/dynamic/private';
 
 export const SUPPORTED_USER_KEY_PROVIDERS = [
 	'zernio',
-	'blotato',
 	'gemini',
 	'openrouter',
 	'firecrawl',

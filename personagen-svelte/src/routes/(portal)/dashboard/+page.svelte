@@ -46,13 +46,13 @@
 				<div class="step-box">
 					<div class="step-num">2</div>
 					<h4>Link Platforms</h4>
-					<p>Connect your persona to Instagram, TikTok, YouTube, or Twitter/X using Composio integration in the agent settings.</p>
+					<p>Connect your persona to Instagram, TikTok, YouTube, and 12 more platforms via Zernio's hosted OAuth on the Connections tab.</p>
 					<span class="step-link disabled">Awaiting Agent Creation</span>
 				</div>
 				<div class="step-box">
 					<div class="step-num">3</div>
 					<h4>Configure API Keys</h4>
-					<p>Ensure Gemini API, Composio, and Supabase connections are operational under system settings.</p>
+					<p>Ensure your AI, Zernio, and Supabase connections are operational under system settings.</p>
 					<a href="/settings" class="step-link">Manage Environment →</a>
 				</div>
 			</div>
