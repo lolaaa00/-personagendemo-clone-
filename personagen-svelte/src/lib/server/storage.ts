@@ -42,20 +42,53 @@ export async function persistBufferToStorage(
 	return svc.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
 }
 
+/** True once a URL already lives in our own public bucket (skip re-persisting). */
+export function isDurableBucketUrl(url: string | null | undefined): boolean {
+	return typeof url === 'string' && url.includes(`/storage/v1/object/public/${BUCKET}/`);
+}
+
 /**
  * Downloads `sourceUrl` and re-uploads it to the public `ugc-media` bucket,
- * returning the durable public URL. Throws on failure (callers fall back to the
- * original url so generation is never blocked by a storage hiccup).
+ * returning the durable public URL.
+ *
+ * `extraHeaders` lets callers pass provider auth (e.g. OpenRouter's video
+ * content endpoint requires `Authorization: Bearer …` AND expires — without it
+ * the copy silently 401'd and the ephemeral URL got stored, then 404'd later).
+ * Retries transient network failures; throws only when the source is genuinely
+ * unfetchable so callers can decide to fail loudly rather than store a dead URL.
  */
 export async function persistToStorage(
 	svc: SupabaseClient,
 	sourceUrl: string,
 	userId: string,
-	ext: string
+	ext: string,
+	extraHeaders?: Record<string, string>
 ): Promise<string> {
-	const res = await fetch(sourceUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } });
-	if (!res.ok) throw new Error(`fetch source failed (${res.status})`);
-	const contentType = res.headers.get('content-type') || (ext === 'mp4' ? 'video/mp4' : 'image/png');
-	const buffer = Buffer.from(await res.arrayBuffer());
-	return persistBufferToStorage(svc, buffer, userId, ext, contentType);
+	// Already ours — don't round-trip it through the network again.
+	if (isDurableBucketUrl(sourceUrl)) return sourceUrl;
+
+	let lastErr: unknown;
+	for (let attempt = 0; attempt < 3; attempt++) {
+		try {
+			const res = await fetch(sourceUrl, {
+				headers: { 'User-Agent': 'Mozilla/5.0', ...(extraHeaders || {}) },
+				signal: AbortSignal.timeout(90_000)
+			});
+			// 404/410 = the provider already deleted it — retrying won't help.
+			if (res.status === 404 || res.status === 410) {
+				throw new Error(`source gone (${res.status})`);
+			}
+			if (!res.ok) throw new Error(`fetch source failed (${res.status})`);
+			const contentType =
+				res.headers.get('content-type') || (ext === 'mp4' ? 'video/mp4' : 'image/png');
+			const buffer = Buffer.from(await res.arrayBuffer());
+			if (buffer.length === 0) throw new Error('empty source body');
+			return persistBufferToStorage(svc, buffer, userId, ext, contentType);
+		} catch (e) {
+			lastErr = e;
+			if (String((e as Error).message).startsWith('source gone')) break;
+			await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
+		}
+	}
+	throw lastErr instanceof Error ? lastErr : new Error('persistToStorage failed');
 }

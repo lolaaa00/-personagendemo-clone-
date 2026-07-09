@@ -675,9 +675,19 @@ function isFalOutage(msg: string): boolean {
 	);
 }
 
-/** Image-to-video via OpenRouter's async videos API. Returns the finished video URL. */
+/**
+ * Image-to-video via OpenRouter's async videos API.
+ *
+ * CRITICAL: the completed job returns an AUTHENTICATED, EPHEMERAL content URL
+ * (openrouter.ai/api/v1/videos/{id}/content — needs our Bearer key to fetch and
+ * expires when the job is cleaned up). We MUST download it here, with the key,
+ * and persist to durable storage — returning the permanent bucket URL. Storing
+ * the raw content URL is what caused videos to 404 hours later. Throws if it
+ * generated but couldn't be archived, so we never persist a link that will die.
+ */
 async function openRouterBrollVideo(
 	orKey: string,
+	userId: string,
 	stillUrl: string,
 	motionPrompt: string,
 	timeoutMs = 270000
@@ -720,7 +730,9 @@ async function openRouterBrollVideo(
 		if (st.status === 'completed') {
 			const url = st.unsigned_urls?.[0] || st.urls?.[0] || st.video?.url;
 			if (!url) throw new Error('OpenRouter video completed but returned no URL');
-			return url;
+			// Persist NOW, with the Bearer header only we have, to a permanent URL.
+			const svc = getServiceSupabase();
+			return persistToStorage(svc, url, userId, 'mp4', { Authorization: `Bearer ${orKey}` });
 		}
 		if (st.status === 'failed') {
 			throw new Error(`OpenRouter video job failed: ${JSON.stringify(st).slice(0, 200)}`);
@@ -1111,8 +1123,8 @@ export async function generateCinematicUgcPack(input: UgcPackInput): Promise<Ugc
 		? await burnCaptions(videoUrl, parsed.on_screen_text).catch(() => null)
 		: null;
 	const durableMedia = captioned
-		? await persistBufferToStorage(svc, captioned, userId, 'mp4', 'video/mp4').catch(() => videoUrl)
-		: await persistToStorage(svc, videoUrl, userId, 'mp4').catch(() => videoUrl);
+		? await persistBufferToStorage(svc, captioned, userId, 'mp4', 'video/mp4')
+		: await persistToStorage(svc, videoUrl, userId, 'mp4');
 
 	const content: UgcContent & { storyboard?: string[]; cinematic?: boolean } = {
 		text: parsed.text || '',
@@ -2007,7 +2019,7 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 				costEvents.push({ provider: 'fal', operation: 'video', model: 'kling-o3-standard', usd: priceOf('fal', 'video', 'standard') });
 			} else {
 				// No fal at all — straight to OpenRouter video.
-				mediaUrl = await openRouterBrollVideo(orKey!, still, motionPrompt);
+				mediaUrl = await openRouterBrollVideo(orKey!, userId, still, motionPrompt);
 				costEvents.push({ provider: 'openrouter', operation: 'video', model: BROLL_MODEL_OPENROUTER, usd: priceOf('openrouter', 'video') });
 			}
 			mediaType = 'video';
@@ -2015,7 +2027,7 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 			const msg = (e as Error).message;
 			if (orKey && isFalOutage(msg)) {
 				console.warn(`[Failover] fal video failed (${msg.slice(0, 120)}) — OpenRouter Kling b-roll fallback.`);
-				mediaUrl = await openRouterBrollVideo(orKey, still, motionPrompt);
+				mediaUrl = await openRouterBrollVideo(orKey, userId, still, motionPrompt);
 				costEvents.push({ provider: 'openrouter', operation: 'video', model: BROLL_MODEL_OPENROUTER, usd: priceOf('openrouter', 'video') });
 				mediaType = 'video';
 			} else {
@@ -2024,24 +2036,36 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 		}
 	}
 
-	// ── Burn captions + AI badge (best-effort), then persist to durable storage ──
+	// ── Burn captions + AI badge, then persist to durable storage ──
+	// Every generation MUST be archived in our own bucket so the paid-for media
+	// survives provider URL expiry. If we own storage (service key present) a
+	// persist failure is LOUD — we throw rather than store an ephemeral provider
+	// URL that will 404 later (the exact bug that lost earlier videos).
 	let durableStill = still;
 	let durableMedia = mediaUrl;
-	try {
-		const svc = getServiceSupabase();
-		durableStill = await persistToStorage(svc, still, userId, 'png').catch(() => still);
+	const svc = (() => {
+		try {
+			return getServiceSupabase();
+		} catch {
+			return null; // No service-role key configured at all.
+		}
+	})();
+	if (svc) {
+		durableStill = await persistToStorage(svc, still, userId, 'png');
 		if (mediaType === 'video') {
 			const captioned = parsed.on_screen_text
 				? await burnCaptions(mediaUrl, parsed.on_screen_text).catch(() => null)
 				: null;
 			durableMedia = captioned
-				? await persistBufferToStorage(svc, captioned, userId, 'mp4', 'video/mp4').catch(() => mediaUrl)
-				: await persistToStorage(svc, mediaUrl, userId, 'mp4').catch(() => mediaUrl);
+				? await persistBufferToStorage(svc, captioned, userId, 'mp4', 'video/mp4')
+				: await persistToStorage(svc, mediaUrl, userId, 'mp4');
 		} else {
 			durableMedia = durableStill;
 		}
-	} catch {
-		// No service-role key configured — keep the provider URLs.
+	} else {
+		console.warn(
+			'[generate] No service-role Supabase key configured — storing EPHEMERAL provider URLs (media is NOT backed up).'
+		);
 	}
 
 	const content: UgcContent = {
