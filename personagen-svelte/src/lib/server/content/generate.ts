@@ -48,7 +48,13 @@ import { assertWithinBudget } from '$lib/server/budget';
 // 120s is generous for a slow-but-alive image/submit call while still killing
 // a truly dead connection.
 const GEN_FETCH_TIMEOUT_MS = 120_000;
-const fetch = (input: string | URL, init?: RequestInit) =>
+// NEVER name this `fetch`. A module-level `const fetch` shadows the global, and
+// once the SSR bundle hoists modules into one scope, http.ts's own call to the
+// *global* fetch can bind to this local instead: fetch -> fetchWithTimeout ->
+// fetch -> … which blows the stack on the very first provider call. That took
+// every generation route down with an instant 502 while still type-checking
+// clean. Name it explicitly and call it explicitly, as ai-client.ts does.
+const genFetch = (input: string | URL, init?: RequestInit) =>
 	fetchWithTimeout(input, init, GEN_FETCH_TIMEOUT_MS);
 
 // ── Model slugs (env-overridable so quality/provider is a one-line swap) ─────
@@ -176,7 +182,7 @@ export async function resolveImageKeys(
 // ── fal helpers ─────────────────────────────────────────────────────────────
 
 async function falSyncJson(model: string, input: any, falKey: string): Promise<any> {
-	const res = await fetch(`https://fal.run/${model}`, {
+	const res = await genFetch(`https://fal.run/${model}`, {
 		method: 'POST',
 		headers: { Authorization: `Key ${falKey}`, 'Content-Type': 'application/json' },
 		body: JSON.stringify(input)
@@ -194,7 +200,7 @@ async function falQueueJson(
 	falKey: string,
 	timeoutMs = 270000
 ): Promise<any> {
-	const sub = await fetch(`https://queue.fal.run/${model}`, {
+	const sub = await genFetch(`https://queue.fal.run/${model}`, {
 		method: 'POST',
 		headers: { Authorization: `Key ${falKey}`, 'Content-Type': 'application/json' },
 		body: JSON.stringify(input)
@@ -206,11 +212,11 @@ async function falQueueJson(
 	const deadline = Date.now() + timeoutMs;
 	while (Date.now() < deadline) {
 		await new Promise((r) => setTimeout(r, 5000));
-		const s = await fetch(status_url, { headers: { Authorization: `Key ${falKey}` } });
+		const s = await genFetch(status_url, { headers: { Authorization: `Key ${falKey}` } });
 		if (!s.ok) continue;
 		const st = (await s.json()) as any;
 		if (st.status === 'COMPLETED') {
-			const r = await fetch(response_url, { headers: { Authorization: `Key ${falKey}` } });
+			const r = await genFetch(response_url, { headers: { Authorization: `Key ${falKey}` } });
 			return r.json();
 		}
 		if (['FAILED', 'ERROR', 'CANCELLED'].includes(st.status)) {
@@ -231,7 +237,7 @@ export async function generateUgcImage(
 ): Promise<string> {
 	const imagePrompt = `UGC lifestyle photo, candid and authentic, shot on iPhone, natural lighting, real person not staged. ${ugcPrompt}`;
 	if (orKey) {
-		const orRes = await fetch('https://openrouter.ai/api/v1/images/generations', {
+		const orRes = await genFetch('https://openrouter.ai/api/v1/images/generations', {
 			method: 'POST',
 			headers: {
 				Authorization: `Bearer ${orKey}`,
@@ -701,7 +707,7 @@ async function openRouterImageEdit(
 	for (const url of imageUrls.slice(0, 4)) {
 		content.push({ type: 'image_url', image_url: { url } });
 	}
-	const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+	const res = await genFetch('https://openrouter.ai/api/v1/chat/completions', {
 		method: 'POST',
 		headers: {
 			Authorization: `Bearer ${orKey}`,
@@ -759,7 +765,7 @@ async function openRouterBrollVideo(
 	motionPrompt: string,
 	timeoutMs = 270000
 ): Promise<string> {
-	const submit = await fetch('https://openrouter.ai/api/v1/videos', {
+	const submit = await genFetch('https://openrouter.ai/api/v1/videos', {
 		method: 'POST',
 		headers: {
 			Authorization: `Bearer ${orKey}`,
@@ -791,7 +797,7 @@ async function openRouterBrollVideo(
 	const deadline = Date.now() + timeoutMs;
 	while (Date.now() < deadline) {
 		await new Promise((r) => setTimeout(r, 5000));
-		const res = await fetch(pollingUrl, { headers: { Authorization: `Bearer ${orKey}` } });
+		const res = await genFetch(pollingUrl, { headers: { Authorization: `Bearer ${orKey}` } });
 		if (!res.ok) continue;
 		const st = (await res.json()) as any;
 		if (st.status === 'completed') {
