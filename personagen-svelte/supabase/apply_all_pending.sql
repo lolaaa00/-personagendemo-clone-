@@ -5,13 +5,14 @@
 -- Contains (in dependency-safe order):
 --   1. zernio_profile_routing_migration.sql      — agents.zernio_profile_id
 --   2. post_status_partial_migration.sql          ┐ posts_status_check — applied
---   3. post_status_publishing_migration.sql       ├ once below as the final
---   4. review_queue_migration.sql                 ┘ superset + post_reviews table
---   5. connections_platforms_expand_migration.sql — wide platform CHECK
---   6. scheduler_leases_migration.sql             — multi-host scheduler lease
+--   3. post_status_publishing_migration.sql       │ once below as the final
+--   4. post_status_generating_migration.sql       ├ superset + post_reviews
+--   5. review_queue_migration.sql                 ┘ table
+--   6. connections_platforms_expand_migration.sql — wide platform CHECK
+--   7. scheduler_leases_migration.sql             — multi-host scheduler lease
 --
 -- SAFE TO RE-RUN: every statement is idempotent (IF NOT EXISTS / DROP IF
--- EXISTS / CREATE OR REPLACE). The three posts_status_check migrations are
+-- EXISTS / CREATE OR REPLACE). The four posts_status_check migrations are
 -- collapsed into a single DROP+ADD of the final constraint (their union),
 -- because replaying them sequentially would transiently narrow the constraint.
 -- The original per-feature migration files are unchanged; this file only
@@ -31,16 +32,19 @@ COMMENT ON COLUMN public.agents.zernio_profile_id IS
 	'Zernio profile _id that isolates this persona''s connected social accounts under the single shared Zernio key. Provisioned on first connect (list-or-create by persona name).';
 
 
--- ─── 2–4a. posts.status constraint (partial + publishing + review_queue) ────
--- Final superset: 'publishing' is the scheduler's atomic-claim state,
--- 'partial' = some platforms published/some failed, 'rejected' = review queue.
+-- ─── 2–5a. posts.status constraint (partial + publishing + generating +
+--           review_queue) ─────────────────────────────────────────────────────
+-- Final superset: 'generating' is the async generate-post up-front state (a
+-- detached task finishes the row), 'publishing' is the scheduler's atomic-claim
+-- state, 'partial' = some platforms published/some failed, 'rejected' = review
+-- queue.
 
 ALTER TABLE public.posts DROP CONSTRAINT IF EXISTS posts_status_check;
 ALTER TABLE public.posts ADD CONSTRAINT posts_status_check
-	CHECK (status IN ('draft', 'scheduled', 'publishing', 'published', 'failed', 'partial', 'rejected'));
+	CHECK (status IN ('draft', 'scheduled', 'generating', 'publishing', 'published', 'failed', 'partial', 'rejected'));
 
 
--- ─── 4b. Review queue log (review_queue_migration.sql) ──────────────────────
+-- ─── 5b. Review queue log (review_queue_migration.sql) ──────────────────────
 -- Append-only approve/reject decisions with a content snapshot — future
 -- training data for an automated QC agent.
 
@@ -70,7 +74,7 @@ CREATE POLICY "post_reviews_insert_own" ON public.post_reviews
 	FOR INSERT WITH CHECK (auth.uid() = user_id);
 
 
--- ─── 5. Wide platform CHECK (connections_platforms_expand_migration.sql) ────
+-- ─── 6. Wide platform CHECK (connections_platforms_expand_migration.sql) ────
 -- Every platform PersonaGen can connect + publish through Zernio.
 
 ALTER TABLE public.connections DROP CONSTRAINT IF EXISTS connections_platform_check;
@@ -83,7 +87,7 @@ ALTER TABLE public.connections
 	));
 
 
--- ─── 6. Scheduler leader lease (scheduler_leases_migration.sql) ─────────────
+-- ─── 7. Scheduler leader lease (scheduler_leases_migration.sql) ─────────────
 -- Multi-host-safe replacement for the tmpdir file lock. One atomic upsert per
 -- tick decides the leader; without this the scheduler falls back to the
 -- single-host file lock (logged warning).

@@ -14,6 +14,29 @@ import { VOICE_CATALOG } from '$lib/server/voices';
 const MAX_REFERENCE_BYTES = 10 * 1024 * 1024; // 10MB
 
 /**
+ * Read-modify-write on `agent_configs.ugc_reference_kit` for the transient
+ * `profile_status` polling key ('generating' / 'failed: …'). Runs on the
+ * service client so a detached task can still clear its key after the user's
+ * session token would have expired.
+ */
+async function patchReferenceKit(
+	svc: any,
+	agentId: string,
+	set: Record<string, string>,
+	remove: string[] = []
+): Promise<void> {
+	const { data } = await svc
+		.from('agent_configs')
+		.select('ugc_reference_kit')
+		.eq('agent_id', agentId)
+		.maybeSingle();
+	const kit = { ...(data?.ugc_reference_kit || {}) };
+	for (const key of remove) delete kit[key];
+	Object.assign(kit, set);
+	await svc.from('agent_configs').update({ ugc_reference_kit: kit }).eq('agent_id', agentId);
+}
+
+/**
  * Generates (or regenerates) an agent's pinned AI character reference — the
  * same image used to keep the on-camera face consistent across that agent's
  * spokesperson videos — and sets it as the agent's profile picture
@@ -26,6 +49,14 @@ const MAX_REFERENCE_BYTES = 10 * 1024 * 1024; // 10MB
  *   - multipart/form-data with a `reference` file: generates a full
  *     character turnaround/reference sheet conditioned on that uploaded
  *     photo via Nano Banana's edit endpoint.
+ *
+ * ASYNC JOB PATTERN: either mode chains multiple fal calls (30s–minutes) —
+ * past the reverse proxy's request timeout. Validations stay synchronous,
+ * then `profile_status: 'generating'` is written into ugc_reference_kit, a
+ * 202 is returned, and generation runs in a detached task (marker cleared on
+ * success, set to 'failed: …' on failure). Poll via GET on
+ * /api/agent/[agentId]/generate-reference-kit — the finished avatar lands in
+ * ugc_character_ref, exposed there as `avatar_url`.
  */
 export const POST: RequestHandler = async ({ params, request, locals }) => {
 	const { session, user } = await locals.safeGetSession();
@@ -65,7 +96,14 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		);
 	}
 
+	const userId = user.id;
 	const contentType = request.headers.get('content-type') || '';
+
+	// Everything each mode needs is captured BEFORE responding — SvelteKit's
+	// request/locals must not be touched after the response is returned — and
+	// the detached task runs entirely on the service client (generation takes
+	// minutes; a session token could expire mid-task).
+	let runGeneration: () => Promise<string>;
 
 	// ── Reference-photo path: upload -> Nano Banana turnaround sheet ──────────
 	if (contentType.includes('multipart/form-data')) {
@@ -81,74 +119,71 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 			);
 		}
 
-		try {
-			const buffer = Buffer.from(await file.arrayBuffer());
-			const ext = (file.type.split('/')[1] || 'png').replace('jpeg', 'jpg');
-			const referenceUrl = await persistBufferToStorage(svc, buffer, user.id, ext, file.type);
+		// Drain the upload now — the request body is gone once we respond.
+		const buffer = Buffer.from(await file.arrayBuffer());
+		const ext = (file.type.split('/')[1] || 'png').replace('jpeg', 'jpg');
+		const mimeType = file.type;
 
-			const characterRef = await generateCharacterSheetFromReference(
-				locals.supabase,
+		runGeneration = async () => {
+			const referenceUrl = await persistBufferToStorage(svc, buffer, userId, ext, mimeType);
+			return generateCharacterSheetFromReference(svc, svc, userId, agentId, falKey, referenceUrl);
+		};
+	} else {
+		// ── From-scratch path ──────────────────────────────────────────────────
+		const { data: cfg } = await locals.supabase
+			.from('agent_configs')
+			.select('ugc_voice, brand_brief_id')
+			.eq('agent_id', agentId)
+			.maybeSingle();
+		const voiceGender = VOICE_CATALOG.find((v) => v.name === (cfg?.ugc_voice || 'Adam'))?.gender;
+
+		// Persona gender is authoritative: the explicit Profile field first, else
+		// inferred from the soul/name (shared with the content-generation path, so
+		// the hero face and the videos can't disagree on gender). Only falls back
+		// to the voice's gender when the persona gives no signal at all.
+		const profileGender = resolvePersonaGender(agent);
+
+		// Persona's selected brand brief first (multi-brand users), newest as fallback.
+		const { data: selectedBrief } = cfg?.brand_brief_id
+			? await db.brandBriefs.getById(cfg.brand_brief_id, user.id)
+			: { data: null };
+		const { data: fallbackBrief } = selectedBrief ? { data: null } : await db.brandBriefs.get(user.id);
+		const briefData = (selectedBrief ?? fallbackBrief)?.data || null;
+
+		runGeneration = () =>
+			generateCharacterPortrait(
 				svc,
-				user.id,
+				svc,
+				userId,
 				agentId,
 				falKey,
-				referenceUrl
+				briefData,
+				agent,
+				profileGender || voiceGender
 			);
-			const { data: updatedCfg } = await locals.supabase
-				.from('agent_configs')
-				.select('ugc_reference_kit')
-				.eq('agent_id', agentId)
-				.maybeSingle();
-			return json({
-				success: true,
-				character_ref: characterRef,
-				reference_kit: updatedCfg?.ugc_reference_kit ?? {}
-			});
+	}
+
+	// Mark the avatar in-flight BEFORE responding so the reference-kit GET
+	// poller (and a page reload) immediately sees a generation running.
+	await patchReferenceKit(svc, agentId, { profile_status: 'generating' });
+
+	void (async () => {
+		try {
+			// Both generators pin the finished shot as ugc_character_ref and
+			// rebuild the kit foundation themselves — we only clear the marker.
+			await runGeneration();
+			await patchReferenceKit(svc, agentId, {}, ['profile_status']);
 		} catch (err) {
-			return json(
-				{ success: false, error: `Failed to generate from reference photo: ${(err as Error).message}` },
-				{ status: 502 }
-			);
+			console.error('[generate-avatar] Detached avatar generation failed:', err);
+			try {
+				await patchReferenceKit(svc, agentId, {
+					profile_status: `failed: ${(err as Error).message}`.slice(0, 200)
+				});
+			} catch (patchErr) {
+				console.error('[generate-avatar] Failed to record avatar failure:', patchErr);
+			}
 		}
-	}
+	})();
 
-	// ── From-scratch path ──────────────────────────────────────────────────
-	const { data: cfg } = await locals.supabase
-		.from('agent_configs')
-		.select('ugc_voice, brand_brief_id')
-		.eq('agent_id', agentId)
-		.maybeSingle();
-	const voiceGender = VOICE_CATALOG.find((v) => v.name === (cfg?.ugc_voice || 'Adam'))?.gender;
-
-	// Persona gender is authoritative: the explicit Profile field first, else
-	// inferred from the soul/name (shared with the content-generation path, so
-	// the hero face and the videos can't disagree on gender). Only falls back
-	// to the voice's gender when the persona gives no signal at all.
-	const profileGender = resolvePersonaGender(agent);
-
-	// Persona's selected brand brief first (multi-brand users), newest as fallback.
-	const { data: selectedBrief } = cfg?.brand_brief_id
-		? await db.brandBriefs.getById(cfg.brand_brief_id, user.id)
-		: { data: null };
-	const { data: fallbackBrief } = selectedBrief ? { data: null } : await db.brandBriefs.get(user.id);
-	const briefData = (selectedBrief ?? fallbackBrief)?.data || null;
-
-	try {
-		const characterRef = await generateCharacterPortrait(
-			locals.supabase,
-			svc,
-			user.id,
-			agentId,
-			falKey,
-			briefData,
-			agent,
-			profileGender || voiceGender
-		);
-		return json({ success: true, character_ref: characterRef });
-	} catch (err) {
-		return json(
-			{ success: false, error: `Failed to generate profile picture: ${(err as Error).message}` },
-			{ status: 502 }
-		);
-	}
+	return json({ success: true, status: 'generating' }, { status: 202 });
 };

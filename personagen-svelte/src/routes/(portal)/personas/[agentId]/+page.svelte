@@ -1,10 +1,10 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 	import { showToast } from '$lib/stores/ui.svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { slide } from 'svelte/transition';
-	import { Accounts, Autopilot, Posts, BrandBrief } from '$lib/services/api';
+	import { Accounts, Autopilot, Posts, BrandBrief, parseJsonResponse } from '$lib/services/api';
 	import AgentConnectionStats from '$lib/components/agents/AgentConnectionStats.svelte';
 	import { PRICING_MATRIX, priceOf } from '$lib/pricing';
 	import PostCard from '$lib/components/feed/PostCard.svelte';
@@ -399,7 +399,7 @@
 		if (voiceCatalog.length > 0) return;
 		try {
 			const res = await fetch('/api/voices');
-			const d = await res.json();
+			const d = await parseJsonResponse<any>(res);
 			if (d.success) voiceCatalog = d.voices;
 		} catch (err) {
 			console.error('[Voices] Failed to load catalog:', err);
@@ -440,7 +440,7 @@
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ voice: selectedVoice })
 			});
-			const d = await res.json();
+			const d = await parseJsonResponse<any>(res);
 			if (!d.success) throw new Error(d.error || 'Preview failed');
 			if (!previewAudio) previewAudio = new Audio();
 			previewAudio.src = d.audio_url;
@@ -462,7 +462,7 @@
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ action: 'list', agent_id: agent.id })
 			});
-			const result = await res.json();
+			const result = await parseJsonResponse<any>(res);
 			if (result.success) {
 				feedPosts = (result.data || []).sort(
 					(a: any, b: any) =>
@@ -709,12 +709,56 @@
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify(body)
 			});
-			const result = await res.json();
-			if (res.ok && result.success) {
+			const result = await parseJsonResponse<any>(res);
+			if (!res.ok || !result.success) {
+				showToast(result?.error || 'Failed to generate post', 'error');
+				return;
+			}
+			if (res.status === 202 && result.post_id) {
+				// Async job: the row exists with status 'generating' — poll it.
+				showToast('Generation started — this takes a minute or two', 'info');
+				const deadline = Date.now() + 10 * 60_000;
+				while (Date.now() < deadline) {
+					if (pageDestroyed) return;
+					await sleep(5000);
+					if (pageDestroyed) return;
+					let post: any = null;
+					try {
+						const pres = await fetch('/api/posts', {
+							method: 'POST',
+							headers: { 'Content-Type': 'application/json' },
+							body: JSON.stringify({ action: 'get', id: result.post_id })
+						});
+						const pd = await parseJsonResponse<any>(pres);
+						post = pd?.data ?? pd?.post ?? null;
+					} catch {
+						continue; // transient — the job runs server-side regardless
+					}
+					const status = post?.status;
+					if (!status || status === 'generating') continue;
+					if (status === 'failed') {
+						let reason = 'Generation failed';
+						try {
+							const c = typeof post.content === 'string' ? JSON.parse(post.content) : post.content;
+							if (c?.error) reason = c.error;
+						} catch {
+							/* keep generic reason */
+						}
+						showToast(reason, 'error');
+						return;
+					}
+					showToast(status === 'published' ? 'Post generated and published!' : 'Post generated!', 'success');
+					await loadFeed();
+					return;
+				}
+				showToast(
+					'Still generating after 10 minutes — it may finish in the background. Check the feed shortly.',
+					'warning'
+				);
+			} else {
+				// Legacy synchronous completion (pre-migration fallback).
 				showToast('Post generated and published!', 'success');
 				await loadFeed();
-			} else {
-				showToast(result.error || 'Failed to generate post', 'error');
 			}
 		} catch (err) {
 			showToast('Error: ' + (err as Error).message, 'error');
@@ -877,7 +921,7 @@
 	async function loadSpend(agentId: string) {
 		try {
 			const res = await fetch(`/api/agent/${agentId}/spend`);
-			const d = await res.json();
+			const d = await parseJsonResponse<any>(res);
 			if (d.success) agentSpend = d;
 		} catch {
 			/* analytics only — never block the page */
@@ -948,7 +992,7 @@
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify(payload)
 			});
-			const d = await res.json();
+			const d = await parseJsonResponse<any>(res);
 			if (!res.ok || !d.success) throw new Error(d.error || 'Server error');
 			// Update local agent state
 			agent = { ...agent, name: editName, handle: editHandle, status: editStatus, niche: editNiche, gradient: editGradient, initial: editInitial, soul: soulText, skills: skillsText, tools: toolsText, timezone, posts_per_day: postsPerDay, active_hours_start: activeHoursStart, active_hours_end: activeHoursEnd, autonomy_level: autonomyLevel, rss_url: rssUrl, rss_active: rssActive, ugc_voice: selectedVoice };
@@ -967,8 +1011,14 @@
 		generatingAvatar = true;
 		try {
 			const res = await fetch(`/api/agent/${requestAgentId}/generate-avatar`, { method: 'POST' });
-			const d = await res.json();
+			let d = await parseJsonResponse<any>(res);
 			if (!res.ok || !d.success) throw new Error(d.error || 'Server error');
+			if (res.status === 202) {
+				// Async job — poll until profile_status clears, then read the result.
+				showToast('Generating profile picture — takes a minute or two', 'info');
+				const state = await pollKitJob(requestAgentId, 'profile_status');
+				d = { character_ref: state.avatarUrl };
+			}
 			// The user may have switched personas while this request was in flight —
 			// the server already persisted the result under requestAgentId regardless,
 			// but only apply it to in-memory state if we're still looking at that persona.
@@ -980,10 +1030,65 @@
 				showToast(`Profile picture generated for ${requestAgentName}`, 'success');
 			}
 		} catch (err: any) {
+			if (err.message === 'cancelled') return;
 			showToast('Failed to generate profile picture: ' + err.message, 'error');
 		} finally {
 			if (agent?.id === requestAgentId) generatingAvatar = false;
 		}
+	}
+
+	// ── Async-generation polling (202 job contract) ────────────────────────
+	// Generation endpoints respond 202 immediately and run detached (the old
+	// in-request flow died at the reverse proxy with HTML 502 pages). Progress
+	// is read back via GET generate-reference-kit ({ kit, avatar_url }): a
+	// `<stage>_status` of 'generating' means in flight, 'failed: …' carries the
+	// error, and a cleared status key means done. Legacy synchronous 200s (env
+	// without the 'generating' status migration) are still handled at each call
+	// site.
+	const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+	let pageDestroyed = false;
+	onDestroy(() => {
+		pageDestroyed = true;
+	});
+
+	async function fetchKitState(agentId: string): Promise<{ kit: any; avatarUrl: string | null }> {
+		const res = await fetch(`/api/agent/${agentId}/generate-reference-kit`);
+		const d = await parseJsonResponse<any>(res);
+		if (!res.ok || !d.success) throw new Error(d.error || `Server error (HTTP ${res.status}).`);
+		return { kit: d.kit || {}, avatarUrl: d.avatar_url ?? null };
+	}
+
+	/**
+	 * Polls the kit-state GET until `statusKey` clears (success) or reads
+	 * 'failed: …' (throws with the server's reason). Transient poll errors are
+	 * swallowed — the job is running server-side regardless. Throws 'cancelled'
+	 * if the user navigated away.
+	 */
+	async function pollKitJob(
+		agentId: string,
+		statusKey: string,
+		timeoutMs = 5 * 60_000
+	): Promise<{ kit: any; avatarUrl: string | null }> {
+		const deadline = Date.now() + timeoutMs;
+		while (Date.now() < deadline) {
+			if (pageDestroyed) throw new Error('cancelled');
+			await sleep(4000);
+			if (pageDestroyed) throw new Error('cancelled');
+			let state: { kit: any; avatarUrl: string | null };
+			try {
+				state = await fetchKitState(agentId);
+			} catch {
+				continue; // transient — keep polling
+			}
+			const status = state.kit?.[statusKey];
+			if (typeof status === 'string' && status.startsWith('failed')) {
+				throw new Error(status.replace(/^failed:\s*/, '') || 'Generation failed');
+			}
+			if (!status) return state;
+		}
+		throw new Error(
+			'Timed out — the generation may still finish in the background. Refresh in a minute.'
+		);
 	}
 
 	// ── Reference-photo upload → character sheet ──────────────────
@@ -1017,8 +1122,13 @@
 				method: 'POST',
 				body: form
 			});
-			const d = await res.json();
+			let d = await parseJsonResponse<any>(res);
 			if (!res.ok || !d.success) throw new Error(d.error || 'Server error');
+			if (res.status === 202) {
+				showToast('Building the character sheet — takes a minute or two', 'info');
+				const state = await pollKitJob(requestAgentId, 'profile_status');
+				d = { character_ref: state.avatarUrl, reference_kit: state.kit };
+			}
 			// Same in-flight-persona-switch guard as generateAvatar() above — the
 			// server already persisted this under requestAgentId either way.
 			if (agent?.id === requestAgentId) {
@@ -1031,42 +1141,106 @@
 				showToast(`Character sheet generated for ${requestAgentName}`, 'success');
 			}
 		} catch (err: any) {
+			if (err.message === 'cancelled') return;
 			showToast('Failed to generate from reference photo: ' + err.message, 'error');
 		} finally {
 			if (agent?.id === requestAgentId) generatingAvatar = false;
 		}
 	}
 
-	async function generateKitStage(stage: 'side_profiles' | 'face_closeup' | 'feature_grid') {
+	const KIT_STAGE_ORDER = ['side_profiles', 'face_closeup', 'feature_grid'] as const;
+	type KitStage = (typeof KIT_STAGE_ORDER)[number];
+	const KIT_STAGE_DONE_LABELS: Record<KitStage, string> = {
+		side_profiles: 'Side-profile composite generated',
+		face_closeup: 'Facial close-up generated',
+		feature_grid: 'Feature grid generated'
+	};
+
+	// The server enforces this order (each stage builds on the previous one's
+	// output) — gate the buttons on the same rule so a click can never 400.
+	function kitStageBlockedReason(stage: KitStage): string | null {
+		if (!referenceKit.full_body && !characterRef) return 'Generate a profile picture first';
+		if (stage === 'face_closeup' && !referenceKit.side_profiles)
+			return 'Needs the side-profile composite first';
+		if (stage === 'feature_grid' && !referenceKit.face_closeup)
+			return 'Needs the facial close-up first';
+		return null;
+	}
+	let missingKitStages = $derived(KIT_STAGE_ORDER.filter((s) => !referenceKit[s]));
+
+	/** Runs one stage end-to-end (202-poll or legacy sync). Returns the stage URL. */
+	async function runKitStage(requestAgentId: string, stage: KitStage): Promise<string> {
+		const res = await fetch(`/api/agent/${requestAgentId}/generate-reference-kit`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ stage })
+		});
+		const d = await parseJsonResponse<any>(res);
+		if (!res.ok || !d.success) throw new Error(d.error || 'Server error');
+		if (res.status === 202) {
+			const state = await pollKitJob(requestAgentId, `${stage}_status`);
+			if (!state.kit?.[stage]) throw new Error('Generation finished but returned no image');
+			return state.kit[stage];
+		}
+		return d[stage]; // legacy synchronous completion
+	}
+
+	async function generateKitStage(stage: KitStage) {
 		if (!agent?.id || generatingKitStage) return;
+		const blocked = kitStageBlockedReason(stage);
+		if (blocked) {
+			showToast(blocked, 'warning');
+			return;
+		}
 		const requestAgentId = agent.id;
 		generatingKitStage = stage;
 		try {
-			const res = await fetch(`/api/agent/${requestAgentId}/generate-reference-kit`, {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ stage })
-			});
-			const d = await res.json();
-			if (!res.ok || !d.success) throw new Error(d.error || 'Server error');
-			const stageLabels: Record<string, string> = {
-				side_profiles: 'Side-profile composite generated',
-				face_closeup: 'Facial close-up generated',
-				feature_grid: 'Feature grid generated'
-			};
+			const url = await runKitStage(requestAgentId, stage);
 			// Same in-flight-persona-switch guard as generateAvatar()/generateAvatarFromReference()
 			// above — the server already persisted this under requestAgentId either way.
 			if (agent?.id === requestAgentId) {
-				referenceKit = { ...referenceKit, [stage]: d[stage] };
+				referenceKit = { ...referenceKit, [stage]: url };
 				agent = { ...agent, ugc_reference_kit: referenceKit };
-				showToast(stageLabels[stage], 'success');
+				showToast(KIT_STAGE_DONE_LABELS[stage], 'success');
 			} else {
-				showToast(`${stageLabels[stage]} for a different persona`, 'success');
+				showToast(`${KIT_STAGE_DONE_LABELS[stage]} for a different persona`, 'success');
 			}
 		} catch (err: any) {
+			if (err.message === 'cancelled') return;
 			showToast(`Failed to generate: ${err.message}`, 'error');
 		} finally {
 			if (agent?.id === requestAgentId) generatingKitStage = null;
+		}
+	}
+
+	// One click, whole kit: runs every missing stage sequentially (the order is
+	// a hard server-side dependency chain), stopping at the first failure.
+	let generatingAllKit = $state(false);
+	async function generateAllKitStages() {
+		if (!agent?.id || generatingKitStage || generatingAllKit) return;
+		const requestAgentId = agent.id;
+		generatingAllKit = true;
+		try {
+			for (const stage of KIT_STAGE_ORDER) {
+				if (agent?.id !== requestAgentId || pageDestroyed) return;
+				if (referenceKit[stage]) continue;
+				generatingKitStage = stage;
+				const url = await runKitStage(requestAgentId, stage);
+				if (agent?.id === requestAgentId) {
+					referenceKit = { ...referenceKit, [stage]: url };
+					agent = { ...agent, ugc_reference_kit: referenceKit };
+				}
+			}
+			if (agent?.id === requestAgentId) showToast('Reference kit complete', 'success');
+		} catch (err: any) {
+			if (err.message !== 'cancelled') {
+				showToast(`Kit stopped at ${generatingKitStage ?? 'a stage'}: ${err.message}`, 'error');
+			}
+		} finally {
+			if (agent?.id === requestAgentId) {
+				generatingKitStage = null;
+				generatingAllKit = false;
+			}
 		}
 	}
 
@@ -1080,7 +1254,7 @@
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ agentId: agent.id })
 			});
-			const d = await res.json();
+			const d = await parseJsonResponse<any>(res);
 			if (!res.ok || !d.success) throw new Error(d.error || 'Failed to delete');
 			showToast(`Deleted ${agent.name}`, 'success');
 			goto('/dashboard');
@@ -1161,7 +1335,7 @@
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ agentId: agent.id, handle })
 			});
-			const d = await res.json();
+			const d = await parseJsonResponse<any>(res);
 			if (res.ok && d.success) {
 				agent = { ...agent, handle };
 				editHandle = handle;
@@ -1689,70 +1863,60 @@
 
 						{#if referenceKit.full_body}
 							<div class="field-group col-span-2">
-								<label>Reference Kit</label>
+								<div class="label-row">
+									<label>Reference Kit</label>
+									{#if missingKitStages.length > 0}
+										<button
+											type="button"
+											class="btn-sync btn-xs"
+											onclick={generateAllKitStages}
+											disabled={generatingKitStage !== null || generatingAllKit}
+										>
+											{#if generatingAllKit}
+												<span class="spinner-sm"></span> Building kit…
+											{:else}
+												⚡ Generate all remaining ({missingKitStages.length})
+											{/if}
+										</button>
+									{/if}
+								</div>
 								<p class="section-desc" style="margin-bottom: 0.75rem;">
-									Each stage builds face-consistency assets for cinematic video generation. Every stage
-									can be regenerated independently at any time — ~$0.08 per stage (one Nano Banana 2 call).
+									Each stage builds on the previous one — generate them in order (or use Generate all).
+									Every stage can be regenerated independently — ~$0.08 per stage (one Nano Banana 2 call).
+									{#if generatingKitStage || generatingAllKit}
+										Generating — takes a minute or two per stage.
+									{/if}
 								</p>
 								<div class="kit-stage-row">
 									<div class="kit-stage">
-										<span class="kit-stage-label">1. Full body</span>
+										<span class="kit-stage-label">1. Full body ✓</span>
 										<img src={referenceKit.full_body} alt="Full body reference" class="kit-stage-thumb" />
 									</div>
-									<div class="kit-stage">
-										<span class="kit-stage-label">2. Side profiles</span>
-										{#if referenceKit.side_profiles}
-											<img src={referenceKit.side_profiles} alt="Side profile composite" class="kit-stage-thumb wide" />
-										{/if}
-										<button
-											type="button"
-											class="btn-sync kit-stage-generate"
-											onclick={() => generateKitStage('side_profiles')}
-											disabled={generatingKitStage !== null}
-										>
-											{#if generatingKitStage === 'side_profiles'}
-												<span class="spinner-sm"></span> Generating…
-											{:else}
-												{referenceKit.side_profiles ? '↺ Regenerate' : 'Generate'}
+									{#each [{ key: 'side_profiles' as const, n: 2, label: 'Side profiles', alt: 'Side profile composite', wide: true }, { key: 'face_closeup' as const, n: 3, label: 'Facial close-up', alt: 'Facial close-up', wide: false }, { key: 'feature_grid' as const, n: 4, label: 'Feature grid', alt: 'Feature grid', wide: false }] as st (st.key)}
+										{@const blocked = kitStageBlockedReason(st.key)}
+										<div class="kit-stage">
+											<span class="kit-stage-label">{st.n}. {st.label}{referenceKit[st.key] ? ' ✓' : ''}</span>
+											{#if referenceKit[st.key]}
+												<img src={referenceKit[st.key]} alt={st.alt} class="kit-stage-thumb{st.wide ? ' wide' : ''}" />
 											{/if}
-										</button>
-									</div>
-									<div class="kit-stage">
-										<span class="kit-stage-label">3. Facial close-up</span>
-										{#if referenceKit.face_closeup}
-											<img src={referenceKit.face_closeup} alt="Facial close-up" class="kit-stage-thumb" />
-										{/if}
-										<button
-											type="button"
-											class="btn-sync kit-stage-generate"
-											onclick={() => generateKitStage('face_closeup')}
-											disabled={generatingKitStage !== null}
-										>
-											{#if generatingKitStage === 'face_closeup'}
-												<span class="spinner-sm"></span> Generating…
-											{:else}
-												{referenceKit.face_closeup ? '↺ Regenerate' : 'Generate'}
+											<button
+												type="button"
+												class="btn-sync kit-stage-generate"
+												onclick={() => generateKitStage(st.key)}
+												disabled={generatingKitStage !== null || generatingAllKit || blocked !== null}
+												title={blocked ?? undefined}
+											>
+												{#if generatingKitStage === st.key}
+													<span class="spinner-sm"></span> Generating…
+												{:else}
+													{referenceKit[st.key] ? '↺ Regenerate' : 'Generate'}
+												{/if}
+											</button>
+											{#if blocked && !referenceKit[st.key]}
+												<span class="field-hint">{blocked}</span>
 											{/if}
-										</button>
-									</div>
-									<div class="kit-stage">
-										<span class="kit-stage-label">4. Feature grid</span>
-										{#if referenceKit.feature_grid}
-											<img src={referenceKit.feature_grid} alt="Feature grid" class="kit-stage-thumb" />
-										{/if}
-										<button
-											type="button"
-											class="btn-sync kit-stage-generate"
-											onclick={() => generateKitStage('feature_grid')}
-											disabled={generatingKitStage !== null}
-										>
-											{#if generatingKitStage === 'feature_grid'}
-												<span class="spinner-sm"></span> Generating…
-											{:else}
-												{referenceKit.feature_grid ? '↺ Regenerate' : 'Generate'}
-											{/if}
-										</button>
-									</div>
+										</div>
+									{/each}
 								</div>
 							</div>
 						{/if}

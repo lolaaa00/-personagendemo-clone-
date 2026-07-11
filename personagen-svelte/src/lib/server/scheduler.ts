@@ -22,6 +22,10 @@ const RETRY_BACKOFF_MS = 5 * 60 * 1000; // per attempt: 5min, 10min
 // A post claimed (status='publishing') longer than this is presumed orphaned by
 // a crashed/restarted process and is released back to 'scheduled'.
 const CLAIM_LEASE_MS = 15 * 60 * 1000;
+// A post stuck in 'generating' longer than this was owned by a detached
+// in-process generation task that a restart/crash killed — no worker will
+// ever finish it, so it's failed with a user-facing reason.
+const GENERATION_LEASE_MS = 30 * 60 * 1000;
 
 function isRetriableError(message: string): boolean {
 	return /timed?\s?out|timeout|rate.?limit|too many requests|\b429\b|\b5\d\d\b|econnreset|econnrefused|etimedout|eai_again|fetch failed|network|socket|abort/i.test(
@@ -363,6 +367,33 @@ async function pollScheduledPosts() {
 					.eq('id', p.id)
 					.eq('status', 'publishing');
 			}
+		}
+
+		// Fail orphaned generations: async generate-post rows are finished by a
+		// detached in-process task, so a restart mid-generation strands them in
+		// 'generating' forever. Unlike 'publishing' there is no claim to release
+		// — the in-flight work is simply lost — so mark them failed with a
+		// user-facing reason (content.error is what the client surfaces).
+		const generatingCutoff = new Date(nowMs - GENERATION_LEASE_MS).toISOString();
+		const { data: staleGenerating } = await supabase
+			.from('posts')
+			.select('id, content')
+			.eq('status', 'generating')
+			.lt('created_at', generatingCutoff);
+		for (const p of staleGenerating || []) {
+			console.warn(`[Scheduler] Failing orphaned generating post ${p.id}.`);
+			let content: Record<string, any> = {};
+			try {
+				content = JSON.parse(p.content || '{}') || {};
+			} catch {
+				/* unparseable content — the error message below is all that matters */
+			}
+			content.error = 'Generation interrupted by a server restart — try again.';
+			await supabase
+				.from('posts')
+				.update({ status: 'failed', content: JSON.stringify(content) })
+				.eq('id', p.id)
+				.eq('status', 'generating');
 		}
 
 		// Prefilter in SQL by a timezone-safe upper bound (+2 days UTC), then decide

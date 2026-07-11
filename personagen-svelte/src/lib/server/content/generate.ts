@@ -96,6 +96,15 @@ const BROLL_MODEL_CINEMATIC =
 const BROLL_MODEL_VEO_DEFERRED = env.UGC_BROLL_MODEL_PREMIUM || 'fal-ai/veo3.1/image-to-video';
 const FABRIC_RES = env.UGC_FABRIC_RES || '720p';
 const VIDEO_DURATION = env.UGC_VIDEO_DURATION || '5';
+// Native audio on the b-roll paths (ambient/environmental sound baked into the
+// clip by Kling — the cinematic path at generateCinematicVideo already does
+// this). Silent clips read as broken on social feeds, and on a fal outage the
+// SPOKESPERSON format degrades to the b-roll path too, so muted b-roll meant
+// muted everything. Default ON; UGC_BROLL_AUDIO=false restores silent clips.
+// NOTE: Kling bills a HIGHER per-second rate with audio enabled (the $0.084/s
+// Standard figure above is the audio-off rate) — see the cost-event note where
+// the b-roll video event is recorded in generateUgcPack.
+const BROLL_AUDIO_ENABLED = env.UGC_BROLL_AUDIO !== 'false';
 
 /**
  * Tolerant JSON parse for AI responses: strips markdown fences, and when the
@@ -500,6 +509,28 @@ function buildRichAgentContext(agent: any): string {
 			`Audience psychology (use to tune emotional hooks and pain-point language): ${pp.psychProfile}.`
 		);
 
+	// Profile-tab Skills column — the persona editor stores a JSON array of
+	// {name, md} items in the legacy text column; older personas may hold plain
+	// text. Either way it describes content capabilities the director should
+	// lean on ("expert in X", "always does street interviews"), so surface a
+	// compact summary. Tools/integrations are operational, not creative — skipped.
+	const rawSkills = typeof agent.skills === 'string' ? agent.skills.trim() : '';
+	if (rawSkills) {
+		let skillsSummary = '';
+		try {
+			const items = JSON.parse(rawSkills);
+			if (Array.isArray(items)) {
+				skillsSummary = items
+					.filter((s: any) => s?.name && s.name !== 'Legacy notes')
+					.map((s: any) => (s.md ? `${s.name} (${String(s.md).slice(0, 80)})` : s.name))
+					.join('; ');
+			}
+		} catch {
+			skillsSummary = rawSkills.slice(0, 300); // legacy plain text
+		}
+		if (skillsSummary) lines.push(`Creator skills & capabilities: ${skillsSummary.slice(0, 400)}.`);
+	}
+
 	return lines.join('\n');
 }
 
@@ -634,9 +665,9 @@ async function generateBrollVideo(
 				image_url: stillUrl,
 				prompt: motionPrompt,
 				duration: VIDEO_DURATION,
-				generate_audio: false
+				generate_audio: BROLL_AUDIO_ENABLED
 			}
-		: { image_url: stillUrl, prompt: motionPrompt, generate_audio: false, resolution: '1080p' };
+		: { image_url: stillUrl, prompt: motionPrompt, generate_audio: BROLL_AUDIO_ENABLED, resolution: '1080p' };
 	const data = await falQueueJson(model, input, falKey);
 	const url = data.video?.url;
 	if (!url) throw new Error('B-roll model returned no video');
@@ -741,7 +772,7 @@ async function openRouterBrollVideo(
 			prompt: motionPrompt,
 			duration: parseInt(VIDEO_DURATION, 10) || 5,
 			aspect_ratio: '9:16',
-			generate_audio: false,
+			generate_audio: BROLL_AUDIO_ENABLED,
 			frame_images: [
 				{ type: 'image_url', image_url: { url: stillUrl }, frame_type: 'first_frame' }
 			]
@@ -1451,13 +1482,29 @@ export function resolvePersonaGender(agentData: any): 'male' | 'female' | undefi
 	);
 }
 
+/** The ugc_voice column default — personas whose voice was never explicitly picked carry this. */
+const DEFAULT_VOICE_SENTINEL = 'Adam';
+
+/** Stable non-crypto string hash so a persona maps to the same catalog voice on every run. */
+function stableVoiceHash(seed: string): number {
+	let h = 0;
+	for (let i = 0; i < seed.length; i++) {
+		h = (h * 31 + seed.charCodeAt(i)) | 0;
+	}
+	return Math.abs(h);
+}
+
 /**
  * The persona's gender (explicit Profile field, else inferred from its
  * description) is the source of truth for how the character looks AND sounds.
- * A voice that contradicts it — e.g. the column-default 'Adam' on a persona
- * whose soul reads "a slim blond girl" — is overridden to the first catalog
- * voice of the right gender BEFORE any content is generated, so alignment is
- * enforced up front rather than discovered in a finished video.
+ * A voice that contradicts it is overridden BEFORE any content is generated,
+ * so alignment is enforced up front rather than discovered in a finished video.
+ *
+ * Voice picks are per-persona, not first-of-gender: an unpinned voice (unset,
+ * or still the column default 'Adam') hashes the agent id into the
+ * gender-matched slice of VOICE_CATALOG, so two personas of the same gender get
+ * different voices instead of all sharing the catalog's first entry. An
+ * explicitly pinned, gender-aligned voice is always respected.
  */
 function resolveVoiceForPersona(
 	cfgVoice: string,
@@ -1465,13 +1512,22 @@ function resolveVoiceForPersona(
 ): { voice: string; voiceGender: 'male' | 'female' | undefined } {
 	const personaGender = resolvePersonaGender(agentData);
 	const cfgGender = VOICE_CATALOG.find((v) => v.name === cfgVoice)?.gender;
-	if ((personaGender === 'male' || personaGender === 'female') && cfgGender !== personaGender) {
-		const aligned = VOICE_CATALOG.find((v) => v.gender === personaGender);
-		if (aligned) {
-			console.log(
-				`[UGC] Voice '${cfgVoice}' (${cfgGender ?? 'unknown gender'}) contradicts persona gender '${personaGender}' — using '${aligned.name}' instead.`
-			);
-			return { voice: aligned.name, voiceGender: personaGender };
+	const isPinned = !!cfgVoice && cfgVoice !== DEFAULT_VOICE_SENTINEL;
+
+	if (personaGender === 'male' || personaGender === 'female') {
+		if (isPinned && cfgGender === personaGender) {
+			return { voice: cfgVoice, voiceGender: personaGender };
+		}
+		const pool = VOICE_CATALOG.filter((v) => v.gender === personaGender);
+		if (pool.length > 0) {
+			const seed = String(agentData?.id ?? agentData?.name ?? '');
+			const picked = pool[stableVoiceHash(seed) % pool.length];
+			if (picked.name !== cfgVoice) {
+				console.log(
+					`[UGC] Voice '${cfgVoice}' (${cfgGender ?? 'unknown gender'}${isPinned ? '' : ', unpinned default'}) → '${picked.name}' for persona gender '${personaGender}' (per-persona pick).`
+				);
+			}
+			return { voice: picked.name, voiceGender: personaGender };
 		}
 	}
 	return { voice: cfgVoice, voiceGender: cfgGender ?? personaGender };
@@ -1487,7 +1543,10 @@ async function generateHeroPortraitImage(
 	voiceGender: 'male' | 'female' | undefined
 ): Promise<string> {
 	const audience = briefData?.demographics || 'a general lifestyle audience';
-	const persona = agentData?.soul ? ` Personality vibe: ${String(agentData.soul).slice(0, 120)}.` : '';
+	// The soul often carries the persona's PHYSICAL identity ("Emirati fashion
+	// curator, 26, Dubai") — clamping it to 120 chars was dropping exactly the
+	// details the pinned face must reflect. 600 keeps identity + vibe intact.
+	const persona = agentData?.soul ? ` Personality vibe: ${String(agentData.soul).slice(0, 600)}.` : '';
 	// This face is pinned and reused for every future spokesperson video for this
 	// agent, so it must match the agent's configured voice gender once, up front —
 	// there's no per-post opportunity to correct it after the fact.

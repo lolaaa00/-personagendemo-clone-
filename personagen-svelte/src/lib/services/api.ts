@@ -18,6 +18,32 @@ export interface AutopilotView {
 	timezone: string;
 }
 
+/**
+ * Parses a fetch Response as JSON, translating non-JSON bodies (an HTML 502/504
+ * gateway page, an empty proxy error) into a readable Error instead of letting
+ * the raw `Unexpected token '<', "<!DOCTYPE"… is not valid JSON` parse failure
+ * bubble into a toast.
+ */
+export async function parseJsonResponse<T = any>(res: Response): Promise<T> {
+	const contentType = res.headers.get('content-type') ?? '';
+	if (contentType.includes('json')) {
+		try {
+			return (await res.json()) as T;
+		} catch {
+			// Claimed JSON but unparseable — fall through to the status-based message.
+		}
+	}
+	if (res.status === 502 || res.status === 504) {
+		throw new Error(
+			'The server took too long — the generation may still be running in the background.'
+		);
+	}
+	if (res.status === 401) {
+		throw new Error('Session expired — log in again.');
+	}
+	throw new Error(`Server error (HTTP ${res.status}).`);
+}
+
 async function request<T>(
 	endpoint: string,
 	action: string,
@@ -29,25 +55,19 @@ async function request<T>(
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ action, ts: Date.now(), ...payload })
 		});
+		const data = (await parseJsonResponse<any>(res)) ?? {};
 		if (!res.ok) {
 			let errorMessage = `HTTP ${res.status}`;
-			try {
-				const errorData = (await res.json()) as any;
-				if (errorData) {
-					if (typeof errorData.error === 'string') {
-						errorMessage = errorData.error;
-					} else if (errorData.error && typeof errorData.error.message === 'string') {
-						errorMessage = errorData.error.message;
-					} else if (typeof errorData.message === 'string') {
-						errorMessage = errorData.message;
-					}
-				}
-			} catch {
-				// Ignore JSON parsing failure and keep generic HTTP error
+			if (typeof data.error === 'string') {
+				errorMessage = data.error;
+			} else if (data.error && typeof data.error.message === 'string') {
+				errorMessage = data.error.message;
+			} else if (typeof data.message === 'string') {
+				errorMessage = data.message;
 			}
 			throw new Error(errorMessage);
 		}
-		return await res.json();
+		return data;
 	} catch (err) {
 		console.error(`[API] ${action} failed:`, err);
 		return { success: false, error: (err as Error).message };

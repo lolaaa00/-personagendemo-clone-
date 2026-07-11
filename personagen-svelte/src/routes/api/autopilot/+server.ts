@@ -81,8 +81,15 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		}
 
 		if (action === 'generate_now') {
-			const result = await runAutopilotDraftGeneration({ agentId });
-			return json({ success: true, data: result });
+			// A run chains one fal generation per empty slot (30s–5min each) —
+			// far past the reverse proxy's request timeout. Kick it off detached
+			// and 202 immediately; drafts land in the review queue as each slot
+			// completes. runAutopilotDraftGeneration uses its own service-role
+			// client internally, so nothing session-scoped leaks into the task.
+			void runAutopilotDraftGeneration({ agentId }).catch((genErr) => {
+				console.error('[Autopilot API] Detached generate_now run failed:', genErr);
+			});
+			return json({ success: true, status: 'generating' }, { status: 202 });
 		}
 
 		return json({ success: false, error: `Invalid action: ${action}` }, { status: 400 });
