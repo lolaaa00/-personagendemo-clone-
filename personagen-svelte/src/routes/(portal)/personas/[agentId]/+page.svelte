@@ -774,7 +774,10 @@
 						'warning'
 					);
 				}
-				showToast('Persona profile generated — review and Save', 'success');
+				// Persist immediately. Generation used to only FILL the form and rely on a
+				// separate manual Save — so leaving the page lost everything and the user
+				// had to re-generate on every visit. Auto-saving makes it durable.
+				await saveProfile('Persona profile generated and saved');
 			} else {
 				showToast(res.error || 'Generation failed', 'error');
 			}
@@ -800,7 +803,7 @@
 			const res = await BrandBrief.readAppearanceFromImage(characterRef);
 			if (res.success && res.data?.appearance) {
 				ppAppearance = { ...ppAppearance, ...res.data.appearance };
-				showToast('Appearance read from photo — review and Save', 'success');
+				await saveProfile('Appearance read from photo and saved');
 			} else {
 				showToast(res.error || 'Read failed', 'error');
 			}
@@ -1121,8 +1124,8 @@
 		return total;
 	});
 
-	async function saveProfile() {
-		if (!agent?.id) return;
+	async function saveProfile(successMessage?: string): Promise<boolean> {
+		if (!agent?.id) return false;
 		saving = true;
 		const payload = {
 			agentId: agent.id,
@@ -1176,14 +1179,17 @@
 			});
 			const d = await parseJsonResponse<any>(res);
 			if (!res.ok || !d.success) throw new Error(d.error || 'Server error');
-			// Update local agent state optimistically…
-			agent = { ...agent, name: editName, handle: editHandle, status: editStatus, niche: editNiche, gradient: editGradient, initial: editInitial, soul: soulText, skills: skillsText, tools: toolsText, timezone, posts_per_day: postsPerDay, active_hours_start: activeHoursStart, active_hours_end: activeHoursEnd, autonomy_level: autonomyLevel, rss_url: rssUrl, rss_active: rssActive, ugc_voice: selectedVoice };
+			// Update local agent state optimistically… (market included so a later
+			// read of agent.market reflects the just-saved persona profile).
+			agent = { ...agent, name: editName, handle: editHandle, status: editStatus, niche: editNiche, gradient: editGradient, initial: editInitial, market: JSON.stringify(payload.personaProfile), soul: soulText, skills: skillsText, tools: toolsText, timezone, posts_per_day: postsPerDay, active_hours_start: activeHoursStart, active_hours_end: activeHoursEnd, autonomy_level: autonomyLevel, rss_url: rssUrl, rss_active: rssActive, ugc_voice: selectedVoice };
 			// …then re-fetch layout data so the sidebar roster + header (which read
 			// server-loaded sidebarAgents) reflect the new name/avatar immediately.
 			await invalidateAll();
-			showToast(`Profile saved for ${editName}`, 'success');
+			showToast(successMessage ?? `Profile saved for ${editName}`, 'success');
+			return true;
 		} catch (err: any) {
 			showToast('Failed to save: ' + err.message, 'error');
+			return false;
 		} finally {
 			saving = false;
 		}
@@ -2196,7 +2202,7 @@
 						<p class="section-desc">
 							Psychological depth and content strategy — these feed directly into content generation
 							prompts. “Generate for brand” fills a unique, brand-tailored profile (aligned to this
-							persona's gender) that you can review and Save.
+							persona's gender) and saves it automatically — review and tweak anytime.
 						</p>
 					</div>
 
@@ -2824,7 +2830,7 @@
 
 				<!-- Save + Danger zone -->
 				<div class="profile-footer">
-					<button class="btn-save" onclick={saveProfile} disabled={saving}>
+					<button class="btn-save" onclick={() => saveProfile()} disabled={saving}>
 						{#if saving}<span class="spinner-sm"></span> Saving…{:else}Save Profile{/if}
 					</button>
 				</div>
