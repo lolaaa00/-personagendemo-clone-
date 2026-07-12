@@ -450,7 +450,14 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			// Provision the persona's profile up-front so both the OAuth link and the
 			// dashboard fallback can file the account under the correct bucket.
 			const client = new ZernioClient(apiKey);
-			const profileId = await ensureAgentProfileId(db, client, agent);
+			// Provisioning the persona's profile is best-effort and must NOT block the
+			// connect click: if Zernio is slow, proceed without the profile id (sync
+			// re-files the account later) so the request returns well within the
+			// proxy's timeout instead of being dropped as "Failed to fetch".
+			const profileId = await Promise.race([
+				ensureAgentProfileId(db, client, agent).catch(() => null),
+				new Promise<string | null>((resolve) => setTimeout(() => resolve(null), 10_000))
+			]);
 			const profileName = `${(agent.name || 'Persona').trim()} · ${agent.id.slice(0, 8)}`;
 
 			// Hosted Zernio OAuth, filed under the persona's own profile. On success

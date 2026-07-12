@@ -9,7 +9,15 @@ import { fetchWithTimeout } from './http';
 // the WHOLE module — hoisted and in the TDZ until the initializer runs — and in
 // generate.ts that exact pattern took down every generation route (b7625ba). Same
 // reason generate.ts uses `genFetch`.
-const zFetch = fetchWithTimeout;
+// Every Zernio endpoint is a quick REST call, NOT a slow generation — so cap it
+// at 15s rather than the 60s provider default. A connect click makes up to three
+// of these in sequence; at 60s each that worst-cases to ~180s and blows past the
+// production reverse-proxy's request timeout, which drops the connection so the
+// browser reports "Failed to fetch". 15s makes a slow/unreachable Zernio fail
+// fast with a clean, actionable error instead.
+const ZERNIO_TIMEOUT_MS = 15_000;
+const zFetch = (input: string | URL, init?: RequestInit) =>
+	fetchWithTimeout(input, init, ZERNIO_TIMEOUT_MS);
 
 const ZERNIO_BASE_URL = 'https://zernio.com/api/v1';
 
@@ -406,13 +414,12 @@ export class ZernioClient {
 	 */
 	async getConnectUrl(platform: string, redirectUrl?: string, profileId?: string): Promise<string> {
 		const p = platform.toLowerCase() === 'x' ? 'twitter' : platform.toLowerCase();
-		let pid = profileId;
-		if (!pid) {
-			const profiles = await this.listProfiles();
-			pid = profiles[0]?.id;
-		}
+		// No extra listProfiles() fallback here: the caller already resolves the
+		// profile id, and when that lookup was slow/failed, re-listing would just
+		// add another slow call to an interactive connect click. Connect without a
+		// profile id in that case — sync re-files the account to the right bucket.
 		const params = new URLSearchParams();
-		if (pid) params.set('profileId', pid);
+		if (profileId) params.set('profileId', profileId);
 		if (redirectUrl) params.set('redirect_url', redirectUrl);
 		const qs = params.toString();
 		const res = await zFetch(
