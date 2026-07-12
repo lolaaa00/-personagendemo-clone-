@@ -727,6 +727,41 @@
 		}
 	}
 
+	// ── Generate a unique, brand-tailored persona profile ─────────────────
+	// From the persona's gender + the selected brand brief, fills every profile
+	// field (except gender) with values tailored to that brand and differentiated
+	// from every other persona on the account. Populates the form; the user
+	// reviews and Saves through the normal saveProfile() flow.
+	let generatingProfile = $state(false);
+	async function generatePersonaProfile() {
+		if (!agent?.id || generatingProfile) return;
+		generatingProfile = true;
+		try {
+			const res = await BrandBrief.generatePersonaProfile(
+				agent.id,
+				selectedBrandBriefId || null,
+				ppGender || ''
+			);
+			if (res.success && res.data) {
+				const d = res.data;
+				if (Array.isArray(d.ageRanges) && d.ageRanges.length) ppAgeRanges = d.ageRanges;
+				if (d.archetype) ppArchetype = d.archetype;
+				if (d.contentFocus) ppContentFocus = d.contentFocus;
+				if (d.targetAvatar) ppTargetAvatar = d.targetAvatar;
+				if (d.psychProfile) ppPsychProfile = d.psychProfile;
+				if (d.contentAngle) ppContentAngle = d.contentAngle;
+				// ppGender is intentionally left untouched — it's the input, not generated.
+				showToast('Persona profile generated — review and Save', 'success');
+			} else {
+				showToast(res.error || 'Generation failed', 'error');
+			}
+		} catch (e: any) {
+			showToast(e.message || 'Generation failed', 'error');
+		} finally {
+			generatingProfile = false;
+		}
+	}
+
 	// ── Skills & Tools: structured editors (stored as JSON in the existing
 	//    text columns; legacy plain text becomes a single migratable card) ───
 	interface SkillItem { id: string; name: string; md: string }
@@ -1172,15 +1207,45 @@
 	let kitRestoreStage = $state<string | null>(null);
 	let kitRestoreImages = $state<string[]>([]);
 	let kitRestoringUrl = $state<string | null>(null);
+	// Fallback: the full image library, so a stage can be restored even when it has
+	// no tagged history yet (personas generated before per-stage history existed).
+	let kitRestoreMode = $state<'stage' | 'all'>('stage');
+	let kitRestoreAll = $state<Array<{ url: string }>>([]);
+	let kitRestoreLoadingAll = $state(false);
 
 	function stageHistory(stage: string): string[] {
 		const h = referenceKit[`${stage}_history`];
 		return Array.isArray(h) ? h : [];
 	}
 
+	async function loadKitRestoreLibrary() {
+		if (!agent?.id || kitRestoreLoadingAll || kitRestoreAll.length > 0) return;
+		kitRestoreLoadingAll = true;
+		try {
+			// Reuse the profile-picture history endpoint — it lists every image in
+			// the user's library, exactly the fallback pool for any stage.
+			const res = await fetch(`/api/agent/${agent.id}/restore-avatar`);
+			const d = await res.json().catch(() => ({}));
+			if (d.success) kitRestoreAll = (d.images ?? []).map((i: any) => ({ url: i.url }));
+		} catch {
+			/* best-effort */
+		} finally {
+			kitRestoreLoadingAll = false;
+		}
+	}
+
 	function openKitRestore(stage: string) {
 		kitRestoreStage = stage;
 		kitRestoreImages = stageHistory(stage);
+		// Prefer the stage's own history; if it's empty/sparse, open straight to the
+		// full library so the picker is useful for existing personas immediately.
+		kitRestoreMode = kitRestoreImages.length > 1 ? 'stage' : 'all';
+		if (kitRestoreMode === 'all') loadKitRestoreLibrary();
+	}
+
+	function setKitRestoreMode(mode: 'stage' | 'all') {
+		kitRestoreMode = mode;
+		if (mode === 'all') loadKitRestoreLibrary();
 	}
 
 	async function restoreKitStage(url: string) {
@@ -1961,6 +2026,10 @@
 				onDelete={handleDeletePost}
 				onApprove={handleApprovePost}
 				onSaveText={handleSaveText}
+				onPublishFallback={(p) => {
+					modalPost = null;
+					openPublishFallback(p);
+				}}
 				approving={approvingPostId === modalPost?.id}
 				deleting={deletingPostId === modalPost?.id}
 			/>
@@ -2009,8 +2078,23 @@
 				<!-- Persona Profile — above Identity: these fields feed generation prompts -->
 				<section class="profile-section">
 					<div class="section-header">
-						<h2 class="section-title">Persona Profile</h2>
-						<p class="section-desc">Psychological depth and content strategy — these feed directly into content generation prompts.</p>
+						<div class="label-row">
+							<h2 class="section-title">Persona Profile</h2>
+							<button
+								type="button"
+								class="btn-sync btn-xs"
+								onclick={generatePersonaProfile}
+								disabled={generatingProfile}
+								title="Generate a unique profile tailored to the selected brand and this persona's gender"
+							>
+								{generatingProfile ? 'Generating…' : '✨ Generate for brand'}
+							</button>
+						</div>
+						<p class="section-desc">
+							Psychological depth and content strategy — these feed directly into content generation
+							prompts. “Generate for brand” fills a unique, brand-tailored profile (aligned to this
+							persona's gender) that you can review and Save.
+						</p>
 					</div>
 
 					<div class="fields-grid">
@@ -2280,17 +2364,15 @@
 													↺ Regenerate
 												{/if}
 											</button>
-											{#if stageHistory('full_body').length > 1}
-												<button
-													type="button"
-													class="btn-sync kit-stage-generate"
-													onclick={() => openKitRestore('full_body')}
-													disabled={generatingAvatar || generatingKitStage !== null || generatingAllKit}
-													title="Restore a previous full-body image from this stage's history"
-												>
-													🕑 Restore
-												</button>
-											{/if}
+											<button
+												type="button"
+												class="btn-sync kit-stage-generate"
+												onclick={() => openKitRestore('full_body')}
+												disabled={generatingAvatar || generatingKitStage !== null || generatingAllKit}
+												title="Restore a previous full-body — from this stage's history or your image library"
+											>
+												🕑 Restore
+											</button>
 										</div>
 									</div>
 									{#each [{ key: 'side_profiles' as const, n: 2, label: 'Side profiles', alt: 'Side profile composite', wide: true }, { key: 'face_closeup' as const, n: 3, label: 'Facial close-up', alt: 'Facial close-up', wide: false }, { key: 'feature_grid' as const, n: 4, label: 'Feature grid', alt: 'Feature grid', wide: false }] as st (st.key)}
@@ -2322,13 +2404,13 @@
 														{referenceKit[st.key] ? '↺ Regenerate' : 'Generate'}
 													{/if}
 												</button>
-												{#if stageHistory(st.key).length > 1}
+												{#if referenceKit[st.key]}
 													<button
 														type="button"
 														class="btn-sync kit-stage-generate"
 														onclick={() => openKitRestore(st.key)}
 														disabled={generatingKitStage !== null || generatingAllKit}
-														title="Restore a previous {st.label.toLowerCase()} from this stage's history"
+														title="Restore a previous {st.label.toLowerCase()} — from this stage's history or your image library"
 													>
 														🕑 Restore
 													</button>
@@ -2903,30 +2985,72 @@
 				<div>
 					<h3>Restore {KIT_STAGE_RESTORE_LABELS[kitRestoreStage] ?? kitRestoreStage}</h3>
 					<p>
-						Past {(KIT_STAGE_RESTORE_LABELS[kitRestoreStage] ?? kitRestoreStage).toLowerCase()}
-						generations for {agent?.name} — click one to re-pin it for this stage. Nothing is deleted.
+						Re-pin a past image for this stage — from {agent?.name}'s past
+						{(KIT_STAGE_RESTORE_LABELS[kitRestoreStage] ?? kitRestoreStage).toLowerCase()} generations, or
+						from your full image library. Nothing is deleted.
 					</p>
 				</div>
 				<button type="button" class="restore-close" onclick={() => (kitRestoreStage = null)} aria-label="Close">✕</button>
 			</div>
-			{#if kitRestoreImages.length === 0}
-				<p class="field-hint" style="padding: 2rem; text-align: center;">
-					No past versions yet — regenerate this stage to build up its history.
-				</p>
+			<div class="restore-tabs">
+				<button
+					type="button"
+					class="restore-tab"
+					class:on={kitRestoreMode === 'stage'}
+					onclick={() => setKitRestoreMode('stage')}>This stage ({kitRestoreImages.length})</button
+				>
+				<button
+					type="button"
+					class="restore-tab"
+					class:on={kitRestoreMode === 'all'}
+					onclick={() => setKitRestoreMode('all')}>All images</button
+				>
+			</div>
+
+			{#if kitRestoreMode === 'stage'}
+				{#if kitRestoreImages.length === 0}
+					<p class="field-hint" style="padding: 2rem; text-align: center;">
+						No tagged history for this stage yet — switch to “All images” to pick from any past
+						generation.
+					</p>
+				{:else}
+					<div class="restore-grid">
+						{#each kitRestoreImages as url (url)}
+							<button
+								type="button"
+								class="restore-tile"
+								class:current={url === referenceKit[kitRestoreStage]}
+								onclick={() => restoreKitStage(url)}
+								disabled={kitRestoringUrl !== null}
+							>
+								<img src={url} loading="lazy" alt="Past generation" />
+								{#if url === referenceKit[kitRestoreStage]}
+									<span class="restore-badge">Current</span>
+								{:else if kitRestoringUrl === url}
+									<span class="restore-badge">Restoring…</span>
+								{/if}
+							</button>
+						{/each}
+					</div>
+				{/if}
+			{:else if kitRestoreLoadingAll}
+				<div class="feed-loading"><span class="spinner"></span> Loading your image library…</div>
+			{:else if kitRestoreAll.length === 0}
+				<p class="field-hint" style="padding: 2rem; text-align: center;">No stored images found yet.</p>
 			{:else}
 				<div class="restore-grid">
-					{#each kitRestoreImages as url (url)}
+					{#each kitRestoreAll as img (img.url)}
 						<button
 							type="button"
 							class="restore-tile"
-							class:current={url === referenceKit[kitRestoreStage]}
-							onclick={() => restoreKitStage(url)}
+							class:current={img.url === referenceKit[kitRestoreStage]}
+							onclick={() => restoreKitStage(img.url)}
 							disabled={kitRestoringUrl !== null}
 						>
-							<img src={url} loading="lazy" alt="Past generation" />
-							{#if url === referenceKit[kitRestoreStage]}
+							<img src={img.url} loading="lazy" alt="Library image" />
+							{#if img.url === referenceKit[kitRestoreStage]}
 								<span class="restore-badge">Current</span>
-							{:else if kitRestoringUrl === url}
+							{:else if kitRestoringUrl === img.url}
 								<span class="restore-badge">Restoring…</span>
 							{/if}
 						</button>
@@ -3041,6 +3165,26 @@
 		border-radius: 999px;
 		cursor: pointer;
 		flex-shrink: 0;
+	}
+	.restore-tabs {
+		display: flex;
+		gap: 0.4rem;
+		padding: 0.75rem 1.3rem 0;
+	}
+	.restore-tab {
+		border: 1px solid var(--border-strong);
+		background: var(--surface-2);
+		color: var(--text-muted);
+		border-radius: 999px;
+		padding: 0.35rem 0.85rem;
+		font-size: 0.8rem;
+		font-weight: 600;
+		cursor: pointer;
+	}
+	.restore-tab.on {
+		background: var(--accent-mid, #7c6aed);
+		border-color: var(--accent-mid, #7c6aed);
+		color: #fff;
 	}
 	.restore-grid {
 		display: grid;

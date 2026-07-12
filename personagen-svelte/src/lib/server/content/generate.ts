@@ -32,7 +32,13 @@
 import { env } from '$env/dynamic/private';
 import { getUserApiKey } from '$lib/server/user-api-keys';
 import { resolveAiClient, type AiClient } from '$lib/server/ai-client';
-import { priceOf, summarizeCosts, type CostEvent } from '$lib/pricing';
+import {
+	priceOf,
+	summarizeCosts,
+	summarizeAspects,
+	type CostEvent,
+	type GenerationProvenance
+} from '$lib/pricing';
 import { createDbService } from '$lib/server/db';
 import { DEFAULT_VOICE, VOICE_CATALOG } from '$lib/server/voices';
 import { getServiceSupabase } from '$lib/server/service-supabase';
@@ -1216,18 +1222,22 @@ export async function generateCinematicUgcPack(input: UgcPackInput): Promise<Ugc
 		throw new Error('Storage service is not configured on this server.');
 	}
 
-	// Pinned character face — same consistency anchor as the standard spokesperson path.
-	const characterRef = await ensureCharacterRef(
-		supabase,
-		svc,
-		userId,
-		input.agentId,
-		cfg.characterRef,
-		falKey,
-		briefData,
-		agentData,
-		voiceGender
-	);
+	// Pinned character face — same consistency anchor as the standard spokesperson
+	// path. A composer-supplied Character Reference URL wins (this path previously
+	// ignored it); otherwise use the DB pin, lazily generating one if none exists.
+	const characterRef =
+		input.characterRefOverride?.trim() ||
+		(await ensureCharacterRef(
+			supabase,
+			svc,
+			userId,
+			input.agentId,
+			cfg.characterRef,
+			falKey,
+			briefData,
+			agentData,
+			voiceGender
+		));
 
 	// All storyboard stills generated simultaneously — every one composites the
 	// same character + product references, just with that shot's own framing.
@@ -1313,6 +1323,27 @@ export async function generateCinematicUgcPack(input: UgcPackInput): Promise<Ugc
 		costBreakdown: summarizeCosts(costEvents)
 	};
 	if (input.autopilot) content.autopilot = true;
+
+	// Observability record (cinematic): models per aspect + cost, the reference
+	// images actually SENT (character + kit angles), the shot prompts, selections.
+	content.generation = {
+		...summarizeAspects(costEvents),
+		images: {
+			character_ref: characterRef || null,
+			product_photo: selectedProduct?.photoUrl || null,
+			reference_kit: [kit.full_body, kit.side_profiles, kit.face_closeup, kit.feature_grid].filter(
+				Boolean
+			) as string[]
+		},
+		prompts: { scene: content.ugc_broll_prompt, script: content.script },
+		selections: {
+			platforms: [platform],
+			brand: briefData?.name ?? null,
+			videoModel: 'cinematic (Kling O3 Pro reference)',
+			provider: input.providerPreference ?? null,
+			mediaType: 'video'
+		}
+	};
 
 	return { content, selectedProduct, briefData, agentData };
 	} finally {
@@ -1426,6 +1457,9 @@ export interface UgcContent {
 	qc_status?: 'graded' | 'ungraded';
 	/** Estimated generation spend for THIS post, split by provider. */
 	costBreakdown?: { total: number; byProvider: Record<string, number> };
+	/** Full observability record — models per aspect, cost matrix, images sent,
+	 *  prompts, and the selections made. Rendered in the post drawer. */
+	generation?: GenerationProvenance;
 }
 
 /** Wraps an AiClient so every text call self-records into the cost ledger. */
@@ -1946,15 +1980,10 @@ export async function repinKitStage(
 	url: string
 ): Promise<Record<string, any>> {
 	if (!RESTORABLE_KIT_STAGES.includes(stage)) throw new Error(`Unknown reference-kit stage: ${stage}`);
-	const { data } = await supabase
-		.from('agent_configs')
-		.select('ugc_reference_kit')
-		.eq('agent_id', agentId)
-		.maybeSingle();
-	const kit: Record<string, any> = data?.ugc_reference_kit || {};
-	const history: string[] = Array.isArray(kit[`${stage}_history`]) ? kit[`${stage}_history`] : [];
-	const allowed = new Set([...history, kit[stage]].filter(Boolean));
-	if (!allowed.has(url)) throw new Error("That image is not in this stage's history.");
+	// The caller (restore-kit-stage route) already enforces that `url` is one of
+	// THIS user's own bucket images, so a stage can be re-pinned either from its
+	// own tagged history OR from the full image library (the fallback for personas
+	// generated before per-stage history existed). No history-membership gate here.
 	await mergeReferenceKit(supabase, agentId, { [stage]: url });
 	const { data: fresh } = await supabase
 		.from('agent_configs')
@@ -2555,6 +2584,22 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 		costBreakdown: summarizeCosts(costEvents)
 	};
 	if (input.autopilot) content.autopilot = true;
+
+	// Observability record: exactly which models ran for which aspect, what each
+	// aspect cost, the input images actually SENT, the prompts, and the selections
+	// made — so the post drawer can show what produced this result and why.
+	content.generation = {
+		...summarizeAspects(costEvents),
+		images: { character_ref: characterRef || null, product_photo: productPhoto || null },
+		prompts: { scene: scenePrompt, script: content.script },
+		selections: {
+			platforms: [platform],
+			brand: briefData?.name ?? null,
+			videoModel: input.videoModel ?? null,
+			provider: input.providerPreference ?? null,
+			mediaType
+		}
+	};
 
 	return { content, selectedProduct, briefData, agentData };
 	} finally {

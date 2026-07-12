@@ -198,7 +198,18 @@ export const BrandBrief = {
 	save: (data: Record<string, unknown>, briefId?: string | null, name?: string) =>
 		request<any>(ENDPOINTS.brandBrief, 'save_brief', { data, brief_id: briefId || undefined, name }),
 	list: () => request<Array<{ id: string; name: string; updated_at: string }>>(ENDPOINTS.brandBrief, 'list_briefs', {}),
-	getById: (briefId: string) => request<any>(ENDPOINTS.brandBrief, 'get_brief', { brief_id: briefId })
+	getById: (briefId: string) => request<any>(ENDPOINTS.brandBrief, 'get_brief', { brief_id: briefId }),
+	// Generate a unique, brand-tailored persona profile (all fields except gender)
+	// for competitive influencer positioning. Server resolves name/soul/siblings.
+	generatePersonaProfile: (agentId: string, brandBriefId: string | null, gender: string) =>
+		request<{
+			ageRanges: string[];
+			archetype: string;
+			contentFocus: string;
+			targetAvatar: string;
+			psychProfile: string;
+			contentAngle: string;
+		}>(ENDPOINTS.brandBrief, 'generate_persona_profile', { agentId, brandBriefId, gender })
 };
 
 // ── Autopilot (per-agent auto-generation config + manual top-up) ───────────

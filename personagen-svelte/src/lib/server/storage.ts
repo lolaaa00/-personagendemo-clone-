@@ -39,7 +39,12 @@ export async function persistBufferToStorage(
 ): Promise<string> {
 	await ensureBucket(svc);
 	const path = `${userId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-	const { error } = await svc.storage.from(BUCKET).upload(path, buffer, { contentType, upsert: false });
+	// Each path is immutable (timestamp+random), so cache it hard — a 1-week TTL
+	// (vs Storage's 1-hour default) makes repeat feed loads hit the browser cache
+	// instead of revalidating every asset against the un-CDN'd storage host.
+	const { error } = await svc.storage
+		.from(BUCKET)
+		.upload(path, buffer, { contentType, upsert: false, cacheControl: '604800' });
 	if (error) throw error;
 	return svc.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
 }

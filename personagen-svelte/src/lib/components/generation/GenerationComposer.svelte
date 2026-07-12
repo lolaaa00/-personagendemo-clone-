@@ -170,6 +170,15 @@
 	}
 
 	const usd = (n: number) => `$${Number(n ?? 0).toFixed(3)}`;
+
+	/** Hide a URL preview thumbnail if the image fails to load (bad/edited URL). */
+	function hideOnError(e: Event) {
+		(e.currentTarget as HTMLImageElement).style.display = 'none';
+	}
+	/** Re-show once a (possibly edited) URL loads successfully. */
+	function showImg(e: Event) {
+		(e.currentTarget as HTMLImageElement).style.display = 'block';
+	}
 </script>
 
 <Modal
@@ -314,10 +323,23 @@
 				<label class="fld">
 					<span class="fld-label">Product photo URL</span>
 					<input bind:value={productPhotoUrl} placeholder="https://…" />
+					{#if productPhotoUrl}
+						<img class="url-preview" src={productPhotoUrl} alt="Product preview" onload={showImg} onerror={hideOnError} />
+					{/if}
 				</label>
 				<label class="fld">
 					<span class="fld-label">Character reference URL</span>
 					<input bind:value={characterRefUrl} placeholder="https://…" />
+					{#if characterRefUrl}
+						<img class="url-preview" src={characterRefUrl} alt="Character reference preview" onload={showImg} onerror={hideOnError} />
+					{:else}
+						<!-- Blank ≠ no face. The server sends the persona's PINNED face (or
+						     generates one on the fly) so the character stays consistent. -->
+						<span class="hint char-auto">
+							Blank uses the persona's pinned face — a consistent face is still sent (generated
+							automatically the first time). Paste a URL only to override it for this post.
+						</span>
+					{/if}
 				</label>
 			</div>
 
@@ -352,6 +374,22 @@
 							</button>
 						{/each}
 					</div>
+					{#if selectedVideoModel}
+						<!-- Params adjust to the picked model: what it actually supports. -->
+						<div class="model-params">
+							<span class="param" class:param-off={!selectedVideoModel.supportsAudio}>
+								{selectedVideoModel.supportsAudio ? '🔊 Audio track' : '🔇 Silent — no audio'}
+							</span>
+							{#if selectedVideoModel.supportsDuration}
+								<span class="param">⏱ Custom duration</span>
+							{:else}
+								<span class="param param-off">⏱ Fixed 5s</span>
+							{/if}
+							{#if selectedVideoModel.caveat}
+								<span class="param param-warn">⚠ {selectedVideoModel.caveat}</span>
+							{/if}
+						</div>
+					{/if}
 				</div>
 			{/if}
 
@@ -671,5 +709,43 @@
 		border: 1px solid #fde68a;
 		border-radius: 8px;
 		padding: 0.45rem 0.6rem;
+	}
+	/* Inline preview thumbnails under the Product / Character URL inputs. */
+	.url-preview {
+		margin-top: 0.4rem;
+		width: 84px;
+		height: 84px;
+		object-fit: cover;
+		border-radius: 8px;
+		border: 1px solid var(--border, #e6e8f0);
+		display: block;
+	}
+	.char-auto {
+		color: var(--muted, #6b7280);
+		line-height: 1.4;
+	}
+	/* Capabilities of the selected video model — the params that actually apply. */
+	.model-params {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.4rem;
+		margin-top: 0.5rem;
+	}
+	.param {
+		font-size: 0.72rem;
+		font-weight: 600;
+		padding: 0.25rem 0.5rem;
+		border-radius: 999px;
+		background: var(--surface-2, #f3f4f8);
+		border: 1px solid var(--border, #e6e8f0);
+		color: var(--text, #14172b);
+	}
+	.param-off {
+		opacity: 0.6;
+	}
+	.param-warn {
+		color: #92400e;
+		background: #fffbeb;
+		border-color: #fde68a;
 	}
 </style>

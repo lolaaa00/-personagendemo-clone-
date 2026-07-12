@@ -2,6 +2,7 @@
 	import { fly, fade } from 'svelte/transition';
 	import { getPostDisplay, truncateError } from './postDisplay';
 	import { platformColor } from '$lib/platforms';
+	import { OPERATION_LABELS } from '$lib/pricing';
 
 	let {
 		post,
@@ -10,6 +11,7 @@
 		onApprove,
 		onSaveText = undefined,
 		onReschedule = undefined,
+		onPublishFallback = undefined,
 		approving = false,
 		deleting = false
 	}: {
@@ -21,6 +23,8 @@
 		onSaveText?: (post: any, newText: string) => Promise<boolean> | boolean;
 		/** When provided, draft/scheduled posts get a date/time edit control (returns false to keep the values dirty). */
 		onReschedule?: (post: any, date: string, time: string) => Promise<boolean> | boolean;
+		/** When provided, a failed/unpublished post can be (re)published to a connected platform. */
+		onPublishFallback?: ((post: any) => void) | null;
 		approving?: boolean;
 		deleting?: boolean;
 	} = $props();
@@ -71,6 +75,34 @@
 	}
 
 	let display = $derived(post ? getPostDisplay(post) : null);
+
+	// ── Observability: the generation provenance captured at generation time ──
+	let gen = $derived(display?.generation ?? null);
+	// Per-aspect model + cost rows (image / video / tts / llm …).
+	let genAspects = $derived.by(() => {
+		const a = gen?.aspects;
+		if (!a || typeof a !== 'object') return [] as { op: string; models: string[]; usd: number }[];
+		return Object.entries(a).map(([op, v]: [string, any]) => ({
+			op,
+			models: Array.isArray(v?.models) ? v.models : [],
+			usd: Number(v?.usd ?? 0)
+		}));
+	});
+	// The input images actually SENT to the models, as labelled thumbnails.
+	let genImages = $derived.by(() => {
+		const im = gen?.images ?? {};
+		const list: { label: string; url: string }[] = [];
+		if (im.character_ref) list.push({ label: 'Character', url: im.character_ref });
+		if (im.product_photo) list.push({ label: 'Product', url: im.product_photo });
+		for (const u of im.reference_kit ?? []) if (u) list.push({ label: 'Reference', url: u });
+		return list;
+	});
+	let genSelections = $derived(gen?.selections ?? null);
+	// A failed post that still has media only failed to PUBLISH — it can be re-sent.
+	let canRepublish = $derived(
+		Boolean(onPublishFallback && post && post.status === 'failed' && display?.mediaUrl)
+	);
+
 	let analytics = $derived(post?.analytics ?? null);
 	let hasRealStats = $derived(
 		Boolean(analytics && (analytics.views || analytics.likes || analytics.comments || analytics.shares))
@@ -219,19 +251,73 @@
 				</div>
 			{/if}
 
-			{#if display.ugcPrompt || display.script}
-				<details class="drawer-details-block">
+			{#if gen || display.ugcPrompt || display.script}
+				<details class="drawer-details-block" open={Boolean(gen)}>
 					<summary>Generation details</summary>
+
+					{#if genImages.length}
+						<div>
+							<span class="drawer-block-label">🖼 Images sent to the model</span>
+							<div class="gen-imgs">
+								{#each genImages as img (img.url)}
+									<figure class="gen-img">
+										<img src={img.url} alt={img.label} loading="lazy" />
+										<figcaption>{img.label}</figcaption>
+									</figure>
+								{/each}
+							</div>
+						</div>
+					{/if}
+
 					{#if display.ugcPrompt}
 						<div>
-							<span class="drawer-block-label">🎥 UGC prompt</span>
-							<p>{display.ugcPrompt}</p>
+							<span class="drawer-block-label">🎥 UGC prompt sent</span>
+							<p class="gen-prompt">{display.ugcPrompt}</p>
 						</div>
 					{/if}
 					{#if display.script}
 						<div>
 							<span class="drawer-block-label">🎬 Script</span>
-							<p>{display.script}</p>
+							<p class="gen-prompt">{display.script}</p>
+						</div>
+					{/if}
+
+					{#if genAspects.length}
+						<div>
+							<span class="drawer-block-label">⚙ Models &amp; cost by aspect</span>
+							<table class="gen-cost">
+								<tbody>
+									{#each genAspects as a (a.op)}
+										<tr>
+											<td class="gen-op">{OPERATION_LABELS[a.op] ?? a.op}</td>
+											<td class="gen-model">{a.models.join(', ') || '—'}</td>
+											<td class="gen-usd">${a.usd.toFixed(3)}</td>
+										</tr>
+									{/each}
+									<tr class="gen-total">
+										<td>Total</td>
+										<td></td>
+										<td class="gen-usd">${Number(gen?.total ?? 0).toFixed(3)}</td>
+									</tr>
+								</tbody>
+							</table>
+						</div>
+					{/if}
+
+					{#if genSelections}
+						<div>
+							<span class="drawer-block-label">🎯 Selections at generation</span>
+							<ul class="gen-sel">
+								{#if genSelections.platforms?.length}
+									<li><span>Platforms</span>{genSelections.platforms.join(', ')}</li>
+								{/if}
+								{#if genSelections.brand}<li><span>Brand</span>{genSelections.brand}</li>{/if}
+								{#if genSelections.videoModel}
+									<li><span>Video model</span>{genSelections.videoModel}</li>
+								{/if}
+								{#if genSelections.provider}<li><span>Provider</span>{genSelections.provider}</li>{/if}
+								{#if genSelections.mediaType}<li><span>Media</span>{genSelections.mediaType}</li>{/if}
+							</ul>
 						</div>
 					{/if}
 				</details>
@@ -273,6 +359,12 @@
 			{#if post.status === 'draft'}
 				<button type="button" class="btn-drawer-approve" disabled={approving} onclick={() => onApprove(post)}>
 					{approving ? 'Approving…' : '✓ Approve & Schedule'}
+				</button>
+			{:else if canRepublish}
+				<!-- Media generated fine; only publishing failed. Re-send to a platform
+				     that IS connected — the user picks which. No auto-retry. -->
+				<button type="button" class="btn-drawer-approve" onclick={() => onPublishFallback?.(post)}>
+					📤 Publish to a connected platform
 				</button>
 			{/if}
 			<button type="button" class="btn-drawer-close" onclick={onClose}>Close</button>
@@ -533,6 +625,86 @@
 	.drawer-details-block p {
 		margin: 0.25rem 0 0;
 		white-space: pre-wrap;
+	}
+
+	/* ── Observability panel ── */
+	.drawer-details-block .gen-imgs {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+		margin-top: 0.4rem;
+	}
+	.gen-img {
+		margin: 0;
+		width: 72px;
+	}
+	.gen-img img {
+		width: 72px;
+		height: 72px;
+		object-fit: cover;
+		border-radius: 8px;
+		border: 1px solid var(--border);
+		display: block;
+	}
+	.gen-img figcaption {
+		font-size: 0.62rem;
+		text-align: center;
+		color: var(--text-dim);
+		margin-top: 2px;
+	}
+	.gen-prompt {
+		font-size: 0.72rem;
+		line-height: 1.45;
+	}
+	.gen-cost {
+		width: 100%;
+		border-collapse: collapse;
+		margin-top: 0.4rem;
+		font-size: 0.72rem;
+	}
+	.gen-cost td {
+		padding: 0.3rem 0.3rem;
+		border-top: 1px solid var(--border);
+		vertical-align: top;
+	}
+	.gen-op {
+		color: var(--text-muted);
+	}
+	.gen-model {
+		color: var(--text-dim);
+		font-family: var(--font-mono, ui-monospace, monospace);
+		font-size: 0.66rem;
+		word-break: break-word;
+	}
+	.gen-usd {
+		text-align: right;
+		font-variant-numeric: tabular-nums;
+		white-space: nowrap;
+		color: var(--text);
+	}
+	.gen-total td {
+		border-top: 1px solid var(--border-strong);
+		font-weight: 700;
+		color: var(--text);
+	}
+	.gen-sel {
+		list-style: none;
+		margin: 0.4rem 0 0;
+		padding: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+		font-size: 0.72rem;
+	}
+	.gen-sel li {
+		display: flex;
+		gap: 0.5rem;
+	}
+	.gen-sel li span {
+		color: var(--text-muted);
+		min-width: 92px;
+		font-weight: 600;
+		text-transform: capitalize;
 	}
 
 	.drawer-error {

@@ -6,6 +6,8 @@ export interface PostDisplay {
 	ugcPrompt: string | null;
 	script: string | null;
 	product: any | null;
+	/** Full observability record (models/costs/images/selections), if captured. */
+	generation: any | null;
 }
 
 const ERROR_SNIPPET_MAX = 140;
@@ -76,6 +78,7 @@ export function getPostDisplay(post: any): PostDisplay {
 		posterUrl: parsed?.poster_url || null,
 		ugcPrompt: parsed?.ugc_broll_prompt || parsed?.ugcPrompt || null,
 		script: parsed?.script || null,
-		product: parsed?.product || null
+		product: parsed?.product || null,
+		generation: parsed?.generation || null
 	};
 }

@@ -14,6 +14,13 @@ import {
 } from '$lib/server/content/generate';
 import { getServiceSupabase } from '$lib/server/service-supabase';
 import { persistToStorage } from '$lib/server/storage';
+import {
+	PERSONA_ARCHETYPES,
+	CONTENT_FOCUS_OPTIONS,
+	AGE_RANGE_KEYS,
+	coerceToOption,
+	coerceAgeRanges
+} from '$lib/persona-profile';
 import dns from 'node:dns/promises';
 import net from 'node:net';
 
@@ -1379,6 +1386,102 @@ Input: "${fieldVal}"`;
 					// message — the user has one; the call itself failed.
 					return json(
 						{ success: false, error: `Enrichment failed via ${ai!.provider}: ${msg.slice(0, 200)}` },
+						{ status: 502 }
+					);
+				}
+			}
+
+			// ── ACTION: generate_persona_profile ──
+			// Fills a UNIQUE, brand-tailored persona profile (archetype, focus, avatar,
+			// psychology, angle, age ranges) from the persona's gender + the saved brand
+			// brief, differentiated from every other persona on the account. Gender is
+			// an INPUT (never overwritten); everything else is generated for competitive
+			// influencer positioning and feeds content generation prompts.
+			if (action === 'generate_persona_profile') {
+				if (!hasAi) {
+					return json(
+						{ success: false, error: 'No AI provider configured. Add an OpenRouter or Gemini key in Settings.' },
+						{ status: 400 }
+					);
+				}
+				const agentId = typeof body.agentId === 'string' ? body.agentId : '';
+				if (!agentId) return json({ success: false, error: 'Missing agentId' }, { status: 400 });
+
+				const { data: agent } = await db.agents.get(agentId);
+				if (!agent || agent.user_id !== session.user.id) {
+					return json({ success: false, error: 'Agent not found' }, { status: 404 });
+				}
+				const gender = typeof body.gender === 'string' && body.gender ? body.gender : 'unspecified';
+				const brief = await loadBriefForAgent(
+					db,
+					session.user.id,
+					body.brandBriefId || agent.brand_brief_id || null
+				);
+				const b: any = brief?.data ?? {};
+
+				// Angles/archetypes/avatars already taken by OTHER personas — the new one
+				// must differ, so no two creators share the same positioning.
+				const { data: allAgents } = await db.agents.list();
+				const taken = (allAgents ?? [])
+					.filter(
+						(a: any) => a.id !== agentId && typeof a.market === 'string' && a.market.startsWith('{')
+					)
+					.map((a: any) => {
+						try {
+							return JSON.parse(a.market);
+						} catch {
+							return {};
+						}
+					})
+					.map((p: any) => ({ angle: p.contentAngle, archetype: p.archetype, avatar: p.targetAvatar }))
+					.filter((x: any) => x.angle || x.archetype || x.avatar);
+
+				const prompt = `You are an elite influencer strategist. Design a UNIQUE, competitive persona profile for a UGC creator who represents one brand.
+
+CREATOR: ${agent.name || 'this creator'} — gender: ${gender}. Personality/soul: ${String(agent.soul || '').slice(0, 800)}.
+BRAND: ${b.brandName || b.name || 'the brand'}${b.tagline ? ` — ${b.tagline}` : ''}. Mission: ${b.mission || '—'}.
+AUDIENCE: ${b.demographics || '—'}. Pain points: ${b.painPoints || '—'}. Interests: ${Array.isArray(b.interests) ? b.interests.join(', ') : b.interests || '—'}.
+BRAND VOICE: ${b.commStyle || '—'}. Traits: ${Array.isArray(b.traits) ? b.traits.join(', ') : '—'}.
+PRODUCTS: ${Array.isArray(b.products) ? b.products.map((p: any) => p.name).filter(Boolean).join(', ') : '—'}.
+
+Make this persona DISTINCT from every other creator on the account. Do NOT reuse any of these already-taken angles/archetypes/avatars:
+${JSON.stringify(taken).slice(0, 1500)}
+
+Rules:
+- "archetype" MUST be exactly one of: ${PERSONA_ARCHETYPES.join(' | ')}.
+- "contentFocus" MUST be exactly one of: ${CONTENT_FOCUS_OPTIONS.join(' | ')}.
+- "ageRanges" is an array using ONLY these exact strings (keep the en-dash): ${AGE_RANGE_KEYS.join(', ')}.
+- "targetAvatar": one vivid sentence naming the ideal audience member.
+- "psychProfile": 2-3 sentences on audience motivations, fears, desires, identity hooks.
+- "contentAngle": the unique, ownable point of view that differentiates THIS creator competitively — first-person and specific.
+- Tailor everything to the brand and keep it consistent with the creator's gender and personality.
+
+Return ONLY JSON: {"ageRanges":["25–34"],"archetype":"","contentFocus":"","targetAvatar":"","psychProfile":"","contentAngle":""}`;
+
+				try {
+					const parsed: any = safeParseJson(await ai!.generate(prompt, { json: true }));
+					if (!parsed || typeof parsed !== 'object') {
+						return json(
+							{ success: false, error: `${ai!.provider} returned no usable profile — try again.` },
+							{ status: 502 }
+						);
+					}
+					// Coerce the LLM output back onto the allowed sets so every value selects
+					// cleanly in the UI's <select> / chip bindings.
+					const data = {
+						ageRanges: coerceAgeRanges(parsed.ageRanges),
+						archetype: coerceToOption(parsed.archetype, PERSONA_ARCHETYPES),
+						contentFocus: coerceToOption(parsed.contentFocus, CONTENT_FOCUS_OPTIONS),
+						targetAvatar: typeof parsed.targetAvatar === 'string' ? parsed.targetAvatar.trim() : '',
+						psychProfile: typeof parsed.psychProfile === 'string' ? parsed.psychProfile.trim() : '',
+						contentAngle: typeof parsed.contentAngle === 'string' ? parsed.contentAngle.trim() : ''
+					};
+					return json({ success: true, data });
+				} catch (err) {
+					const msg = (err as Error).message || 'unknown error';
+					console.error('[Engine] Persona profile generation failed:', msg);
+					return json(
+						{ success: false, error: `Generation failed via ${ai!.provider}: ${msg.slice(0, 200)}` },
 						{ status: 502 }
 					);
 				}

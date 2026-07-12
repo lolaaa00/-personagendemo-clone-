@@ -118,13 +118,15 @@
 		</div>
 	{:else if display.mediaUrl}
 		{#if display.mediaType === 'video'}
-			<video
-				src={display.mediaUrl}
-				poster={display.posterUrl || undefined}
-				muted
-				playsinline
-				preload="metadata"
-			></video>
+			<!-- Grid tiles are static (never play inline) — show the POSTER image, not
+			     a <video>. A <video preload="metadata"> here fired a metadata range
+			     request for every tile (incl. off-screen) on page open, which made the
+			     feed slow. The real <video> loads only in the drawer, on click. -->
+			{#if display.posterUrl}
+				<img src={display.posterUrl} loading="lazy" alt="Video poster" />
+			{:else}
+				<div class="tile-video-placeholder"></div>
+			{/if}
 			<span class="tile-video-badge">▶</span>
 		{:else}
 			<img src={display.mediaUrl} loading="lazy" alt="Post media" />
@@ -344,6 +346,14 @@
 		font-size: 11px;
 		border-radius: 999px;
 		pointer-events: none;
+	}
+
+	/* Fallback for legacy video posts with no poster still — a neutral tile
+	   instead of forcing a video-frame download. */
+	.tile-video-placeholder {
+		width: 100%;
+		height: 100%;
+		background: linear-gradient(135deg, #1f2433, #2b3247);
 	}
 
 	.tile-error-dot {

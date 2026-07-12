@@ -67,3 +67,69 @@ export function summarizeCosts(events: CostEvent[]): {
 	}
 	return { total, byProvider };
 }
+
+/** Human labels for cost/provenance operations, for the observability panel. */
+export const OPERATION_LABELS: Record<string, string> = {
+	llm: 'Script & caption (LLM)',
+	image: 'Product still (image)',
+	video: 'Motion clip (video)',
+	tts: 'Voiceover (TTS)',
+	talking_head: 'Talking head',
+	persist: 'Media storage'
+};
+
+/** One aspect of a generation: which model(s) ran and what it cost. */
+export interface AspectProvenance {
+	models: string[];
+	usd: number;
+}
+
+/**
+ * Full provenance for one generation — the observability record shown in the
+ * post drawer. Derived from the cost ledger (`aspects`/`total`) plus the inputs
+ * and selections captured at generation time.
+ */
+export interface GenerationProvenance {
+	/** Per-operation: models used + summed cost (from the cost ledger). */
+	aspects: Record<string, AspectProvenance>;
+	total: number;
+	/** The input images actually SENT to the models. */
+	images?: {
+		character_ref?: string | null;
+		product_photo?: string | null;
+		reference_kit?: string[];
+	};
+	/** The prompts sent to the models. */
+	prompts?: { scene?: string; script?: string };
+	/** What was selected during generation. */
+	selections?: {
+		platforms?: string[];
+		brand?: string | null;
+		videoModel?: string | null;
+		provider?: string | null;
+		mediaType?: string | null;
+	};
+}
+
+/**
+ * Groups a generation's cost events by operation into a per-aspect provenance
+ * matrix — which model(s) ran for each aspect and what each aspect cost. Storage
+ * ('persist', $0) is folded out. Powers the observability panel: models-per-
+ * aspect + the pricing breakdown, both derived from the same ledger the ledger
+ * table records, so the panel never drifts from what was actually spent.
+ */
+export function summarizeAspects(events: CostEvent[]): {
+	aspects: Record<string, AspectProvenance>;
+	total: number;
+} {
+	const aspects: Record<string, AspectProvenance> = {};
+	let total = 0;
+	for (const e of events) {
+		if (e.operation === 'persist') continue;
+		const a = (aspects[e.operation] ||= { models: [], usd: 0 });
+		if (e.model && !a.models.includes(e.model)) a.models.push(e.model);
+		a.usd = +(a.usd + e.usd).toFixed(6);
+		total = +(total + e.usd).toFixed(6);
+	}
+	return { aspects, total };
+}
