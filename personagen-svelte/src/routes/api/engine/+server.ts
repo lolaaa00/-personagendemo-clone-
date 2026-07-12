@@ -24,6 +24,7 @@ import {
 	coerceAgeRanges,
 	coerceAppearance
 } from '$lib/persona-profile';
+import { pickVoiceForProfile } from '$lib/server/voices';
 import dns from 'node:dns/promises';
 import net from 'node:net';
 
@@ -1473,9 +1474,10 @@ Rules:
 - "psychProfile": 2-3 sentences on audience motivations, fears, desires, identity hooks.
 - "contentAngle": the unique, ownable point of view that differentiates THIS creator competitively — first-person and specific, and unlike any other persona's angle above.
 - "appearance": an object giving this creator a DISTINCT, ownable look (consistent with the gender) that does NOT match any other persona's look above — vary the hair color/style, eye color, headwear, wardrobe, and colors so each creator is visually unique. Keys — ${APPEARANCE_FIELDS.map((f) => `${f.key} (${f.placeholder.replace(/^e\.g\.\s*/, '')})`).join('; ')}. Use "none" for headwear if not applicable.
+- "voiceProfile": read the creator's NAME (and soul) like a casting director — infer the heritage the name suggests and the spoken voice that fits the character. Keys: gender ("male"|"female"${gender !== 'unspecified' ? ` — MUST be "${gender}", it is already set` : ', inferred from the name'}), nationality (e.g. "American", "Indian", "Vietnamese-American", "British"), accent (the accent that voice would have, e.g. "American", "Indian", "British"). Examples: "Lexy Connor" → female American; "Ratio Ramadan" → male, Indian/South-Asian accent; "Jenny Tran" → female, Vietnamese-American; "Elena Washington" → female. Be faithful to the name — never default everyone to American.
 - Tailor everything to the brand and keep it consistent with the creator's gender and personality.
 
-Return ONLY JSON: {"niche":"","ageRanges":["25–34"],"archetype":"","contentFocus":"","targetAvatar":"","psychProfile":"","contentAngle":"","appearance":{"wardrobe":"","outfitColors":"","hairstyle":"","hairColor":"","eyeColor":"","headwear":"","styling":""}}`;
+Return ONLY JSON: {"niche":"","ageRanges":["25–34"],"archetype":"","contentFocus":"","targetAvatar":"","psychProfile":"","contentAngle":"","appearance":{"wardrobe":"","outfitColors":"","hairstyle":"","hairColor":"","eyeColor":"","headwear":"","styling":""},"voiceProfile":{"gender":"","nationality":"","accent":""}}`;
 
 				try {
 					const parsed: any = safeParseJson(await ai!.generate(prompt, { json: true }));
@@ -1487,6 +1489,31 @@ Return ONLY JSON: {"niche":"","ageRanges":["25–34"],"archetype":"","contentFoc
 					}
 					// Coerce the LLM output back onto the allowed sets so every value selects
 					// cleanly in the UI's <select> / chip bindings.
+					// Voice: record the TRUE inferred profile (nationality/accent from the
+					// name), then pin the closest voice the catalog actually has. The
+					// explicit gender input always wins over the LLM's inference.
+					const vpRaw = parsed.voiceProfile || {};
+					const vpGender: 'male' | 'female' | null =
+						gender === 'male' || gender === 'female'
+							? gender
+							: vpRaw.gender === 'male' || vpRaw.gender === 'female'
+								? vpRaw.gender
+								: null;
+					const voiceProfile = {
+						gender: vpGender ?? '',
+						nationality: typeof vpRaw.nationality === 'string' ? vpRaw.nationality.trim() : '',
+						accent: typeof vpRaw.accent === 'string' ? vpRaw.accent.trim() : ''
+					};
+					let voice: string | null = null;
+					let voiceMatch: 'exact' | 'fallback' | null = null;
+					if (vpGender) {
+						// agentId as seed: personas sharing an accent spread across the
+						// matching voices instead of all landing on the same one.
+						const picked = pickVoiceForProfile(vpGender, voiceProfile.accent, agentId);
+						voice = picked.voice.name;
+						voiceMatch = picked.exact ? 'exact' : 'fallback';
+					}
+
 					const data = {
 						niche: coerceToOption(parsed.niche, NICHE_OPTIONS),
 						ageRanges: coerceAgeRanges(parsed.ageRanges),
@@ -1495,7 +1522,10 @@ Return ONLY JSON: {"niche":"","ageRanges":["25–34"],"archetype":"","contentFoc
 						targetAvatar: typeof parsed.targetAvatar === 'string' ? parsed.targetAvatar.trim() : '',
 						psychProfile: typeof parsed.psychProfile === 'string' ? parsed.psychProfile.trim() : '',
 						contentAngle: typeof parsed.contentAngle === 'string' ? parsed.contentAngle.trim() : '',
-						appearance: coerceAppearance(parsed.appearance)
+						appearance: coerceAppearance(parsed.appearance),
+						voiceProfile,
+						voice,
+						voiceMatch
 					};
 					return json({ success: true, data });
 				} catch (err) {

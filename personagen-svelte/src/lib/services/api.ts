@@ -211,6 +211,9 @@ export const BrandBrief = {
 			psychProfile: string;
 			contentAngle: string;
 			appearance: Record<string, string>;
+			voiceProfile: { gender: string; nationality: string; accent: string };
+			voice: string | null;
+			voiceMatch: 'exact' | 'fallback' | null;
 		}>(ENDPOINTS.brandBrief, 'generate_persona_profile', { agentId, brandBriefId, gender }),
 	// Vision: read the appearance fields straight from a reference image so they
 	// match the actual character.
