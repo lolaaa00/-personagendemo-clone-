@@ -1811,20 +1811,25 @@ export function buildHeroPortraitPrompt(
 	// curator, 26, Dubai") — clamping it to 120 chars was dropping exactly the
 	// details the pinned face must reflect. 600 keeps identity + vibe intact.
 	const persona = agentData?.soul ? ` Personality vibe: ${String(agentData.soul).slice(0, 600)}.` : '';
-	// This face is pinned and reused for every future spokesperson video for this
-	// agent, so it must match the agent's configured voice gender once, up front —
-	// there's no per-post opportunity to correct it after the fact.
-	const genderLine = voiceGender ? ` The creator is ${voiceGender}, matching the agent's pinned voice.` : '';
-	// Persona Profile fields feed the portrait too — the hero face should look
-	// like the influencer the brief describes, not a generic person.
 	const profile = parsePersonaProfile(agentData);
+	// Ethnicity is the single strongest identity + uniqueness signal, so it leads the
+	// SUBJECT (stronger than a trailing clause) with an explicit authenticity directive.
+	// This is the fix for "the face didn't match the persona's heritage" (Jenny Tran came
+	// out non-Asian) AND for personas all looking alike — with nothing to distinguish them
+	// the model collapses to one generic "UGC creator" face. Gender rides in the subject
+	// too (the pinned face must match the configured voice gender up front).
+	const ethnicity = (profile.appearance?.ethnicity || '').trim();
+	const subject = [ethnicity, voiceGender, 'relatable UGC content creator'].filter(Boolean).join(' ');
+	const ethnicityEmphasis = ethnicity
+		? ` The creator is authentically ${ethnicity} — render accurate, respectful ${ethnicity} facial features, skin tone, and hair; this is essential and must not be generic or ambiguous.`
+		: '';
 	const archetypeLine = profile.archetype ? ` Their creator archetype: ${profile.archetype}.` : '';
 	const avatarLine = profile.targetAvatar ? ` They make content for: ${String(profile.targetAvatar).slice(0, 120)}.` : '';
-	// Wardrobe/hair/eyes/headwear directives from the persona profile — so the
-	// pinned face reflects the exact look the user configured (and "Generate for
-	// brand" filled), instead of a generic person.
+	// Wardrobe/hair/eyes/distinctive-features directives from the persona profile — so the
+	// pinned face reflects the exact look the user configured (and "Generate for brand"
+	// filled), instead of a generic person.
 	const appearanceLine = appearanceToPromptClause(profile.appearance);
-	return `Photorealistic vertical portrait of one relatable UGC content creator who fits this audience: ${audience}.${persona}${genderLine}${archetypeLine}${avatarLine}${appearanceLine} Friendly, casual, natural window light, looking straight at the camera, authentic iPhone selfie style, clear visible face, upper body. Single person only.`;
+	return `Photorealistic vertical portrait of one ${subject} who fits this audience: ${audience}.${ethnicityEmphasis}${persona}${archetypeLine}${avatarLine}${appearanceLine} Friendly, casual, natural window light, looking straight at the camera, authentic iPhone selfie style, clear visible face, upper body. Single person only — a unique, specific individual with their own distinct face, NOT a generic stock model.`;
 }
 
 /**
@@ -1835,8 +1840,16 @@ export function buildHeroPortraitPrompt(
  */
 export function buildPortraitEditPrompt(agentData: any): string {
 	const profile = parsePersonaProfile(agentData);
+	const ethnicity = (profile.appearance?.ethnicity || '').trim();
 	const appearanceLine = appearanceToPromptClause(profile.appearance);
-	return `Regenerate this exact person as a fresh photorealistic vertical portrait. Preserve their facial identity from the reference image — same face, bone structure, eye shape, nose, jaw, hairline, and skin tone; do NOT turn them into a different person.${appearanceLine} Friendly, casual, natural window light, looking straight at the camera, authentic iPhone selfie style, clear visible face, upper body. Single person only.`;
+	// Preserve STRUCTURE (bone structure, feature placement) for consistency, but assert
+	// ethnicity rather than pinning "skin tone" — locking skin tone would perpetuate a face
+	// generated with the wrong heritage. When the source is already correct this is a no-op;
+	// when it's off, the edit nudges it right while keeping the person recognizable.
+	const ethnicityLine = ethnicity
+		? ` This person is authentically ${ethnicity}; keep them recognizably the same individual while ensuring the depiction accurately reflects ${ethnicity} features and skin tone.`
+		: '';
+	return `Regenerate this exact person as a fresh photorealistic vertical portrait. Preserve their facial identity from the reference image — same bone structure, eye shape, nose, jaw, and hairline; do NOT turn them into a different person.${ethnicityLine}${appearanceLine} Friendly, casual, natural window light, looking straight at the camera, authentic iPhone selfie style, clear visible face, upper body. Single person only.`;
 }
 
 /** Generates (and durably persists) a fresh hero portrait image. No DB pin — just the image. */

@@ -65,12 +65,18 @@ export const NICHE_OPTIONS = [
  * face/outfit reflect them, and are filled by "Generate for brand".
  */
 export const APPEARANCE_FIELDS = [
+	// Ethnicity leads: it's the strongest identity + uniqueness signal and the fix for
+	// "the face doesn't match the persona's heritage". Inferred from the name at profile
+	// time (Jenny Tran → Vietnamese), editable, and fed into the SUBJECT of the portrait.
+	{ key: 'ethnicity', label: 'Ethnicity / heritage', placeholder: 'e.g. Vietnamese, Nigerian, Brazilian, Korean-American' },
 	{ key: 'wardrobe', label: 'Wardrobe / outfit', placeholder: 'e.g. cream linen sets, minimal gold jewelry' },
 	{ key: 'outfitColors', label: 'Outfit colors', placeholder: 'e.g. earth tones — cream, tan, olive' },
 	{ key: 'hairstyle', label: 'Hairstyle', placeholder: 'e.g. long loose waves / sleek bun / bald' },
 	{ key: 'hairColor', label: 'Hair color', placeholder: 'e.g. honey blonde' },
 	{ key: 'eyeColor', label: 'Eye color', placeholder: 'e.g. warm brown' },
 	{ key: 'headwear', label: 'Headwear', placeholder: 'e.g. none / silk turban / headscarf' },
+	// Distinctive features keep two same-ethnicity personas from converging on one face.
+	{ key: 'distinctiveFeatures', label: 'Distinctive features', placeholder: 'e.g. freckles, dimples, sharp jawline, warm smile' },
 	{ key: 'styling', label: 'Styling / season / era', placeholder: 'e.g. summer 2025, breezy minimalism' }
 ] as const;
 
@@ -96,9 +102,13 @@ export function coerceAppearance(value: any): Record<string, string> {
 export function appearanceToPromptClause(appearance: Record<string, string> | null | undefined): string {
 	const a = coerceAppearance(appearance);
 	const parts: string[] = [];
+	// NOTE: ethnicity is deliberately NOT emitted here — the portrait builders put it
+	// in the SUBJECT of the prompt (stronger than a trailing clause), so keeping it out
+	// avoids diluting or duplicating it.
 	if (a.hairstyle || a.hairColor)
 		parts.push(`${[a.hairColor, a.hairstyle].filter(Boolean).join(' ')} hair`);
 	if (a.eyeColor) parts.push(`${a.eyeColor} eyes`);
+	if (a.distinctiveFeatures) parts.push(a.distinctiveFeatures);
 	if (a.headwear && !/^(none|no|n\/a)$/i.test(a.headwear)) parts.push(`wearing a ${a.headwear}`);
 	if (a.wardrobe) parts.push(`dressed in ${a.wardrobe}`);
 	if (a.outfitColors) parts.push(`outfit in ${a.outfitColors}`);

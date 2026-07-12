@@ -1473,11 +1473,11 @@ Rules:
 - "targetAvatar": one vivid sentence naming the ideal audience member.
 - "psychProfile": 2-3 sentences on audience motivations, fears, desires, identity hooks.
 - "contentAngle": the unique, ownable point of view that differentiates THIS creator competitively — first-person and specific, and unlike any other persona's angle above.
-- "appearance": an object giving this creator a DISTINCT, ownable look (consistent with the gender) that does NOT match any other persona's look above — vary the hair color/style, eye color, headwear, wardrobe, and colors so each creator is visually unique. Keys — ${APPEARANCE_FIELDS.map((f) => `${f.key} (${f.placeholder.replace(/^e\.g\.\s*/, '')})`).join('; ')}. Use "none" for headwear if not applicable.
+- "appearance": an object giving this creator a DISTINCT, ownable look that does NOT match any other persona's look above. "ethnicity" is REQUIRED and must be a specific, real heritage faithful to the creator's NAME and consistent with voiceProfile.nationality (e.g. "Jenny Tran" → "Vietnamese"; "Ratio Ramadan" → "Middle Eastern / Arab"; "Elena Washington" → "African-American"; "Chen Kai" → "Chinese") — never blank, never generic, never default everyone to the same ethnicity. Vary the ethnicity, hair color/style, eye color, distinctive facial features, headwear, wardrobe, and colors so each creator is visually UNMISTAKABLE from every other persona above. Keys — ${APPEARANCE_FIELDS.map((f) => `${f.key} (${f.placeholder.replace(/^e\.g\.\s*/, '')})`).join('; ')}. Use "none" for headwear if not applicable.
 - "voiceProfile": read the creator's NAME (and soul) like a casting director — infer the heritage the name suggests and the spoken voice that fits the character. Keys: gender ("male"|"female"${gender !== 'unspecified' ? ` — MUST be "${gender}", it is already set` : ', inferred from the name'}), nationality (e.g. "American", "Indian", "Vietnamese-American", "British"), accent (the accent that voice would have, e.g. "American", "Indian", "British"). Examples: "Lexy Connor" → female American; "Ratio Ramadan" → male, Indian/South-Asian accent; "Jenny Tran" → female, Vietnamese-American; "Elena Washington" → female. Be faithful to the name — never default everyone to American.
 - Tailor everything to the brand and keep it consistent with the creator's gender and personality.
 
-Return ONLY JSON: {"niche":"","ageRanges":["25–34"],"archetype":"","contentFocus":"","targetAvatar":"","psychProfile":"","contentAngle":"","appearance":{"wardrobe":"","outfitColors":"","hairstyle":"","hairColor":"","eyeColor":"","headwear":"","styling":""},"voiceProfile":{"gender":"","nationality":"","accent":""}}`;
+Return ONLY JSON: {"niche":"","ageRanges":["25–34"],"archetype":"","contentFocus":"","targetAvatar":"","psychProfile":"","contentAngle":"","appearance":{"ethnicity":"","wardrobe":"","outfitColors":"","hairstyle":"","hairColor":"","eyeColor":"","headwear":"","distinctiveFeatures":"","styling":""},"voiceProfile":{"gender":"","nationality":"","accent":""}}`;
 
 				try {
 					const parsed: any = safeParseJson(await ai!.generate(prompt, { json: true }));
@@ -1553,14 +1553,16 @@ Return ONLY JSON: {"niche":"","ageRanges":["25–34"],"archetype":"","contentFoc
 				if (!imageUrl) return json({ success: false, error: 'No image provided' }, { status: 400 });
 
 				const prompt = `Look ONLY at the person in the provided image and describe their real appearance for a character config. Fill each field from what you actually SEE; use "" if genuinely unclear and "none" for headwear if there is none.
+- ethnicity: the person's apparent ethnicity / heritage (e.g. Vietnamese, Nigerian, Brazilian, Korean-American) — describe respectfully from visible features so the pinned face can be reproduced faithfully
 - wardrobe: their outfit / clothing
 - outfitColors: the main colors of the outfit
 - hairstyle: hair length and style
 - hairColor: hair color
 - eyeColor: eye color
 - headwear: any hat / turban / scarf, else "none"
+- distinctiveFeatures: notable facial features (freckles, dimples, jawline, smile, face shape)
 - styling: the overall vibe, season, or era of the look
-Return ONLY JSON: {"wardrobe":"","outfitColors":"","hairstyle":"","hairColor":"","eyeColor":"","headwear":"","styling":""}`;
+Return ONLY JSON: {"ethnicity":"","wardrobe":"","outfitColors":"","hairstyle":"","hairColor":"","eyeColor":"","headwear":"","distinctiveFeatures":"","styling":""}`;
 
 				try {
 					const parsed: any = safeParseJson(await ai!.generate(prompt, { json: true, imageUrl }));
