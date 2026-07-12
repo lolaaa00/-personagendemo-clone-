@@ -43,9 +43,14 @@ function findFont(): string | null {
 		process.platform === 'win32'
 			? ['C:/Windows/Fonts/arialbd.ttf', 'C:/Windows/Fonts/arial.ttf', 'C:/Windows/Fonts/segoeui.ttf']
 			: [
+					// Alpine (our Docker runtime) — `font-dejavu` installs here.
+					'/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf',
+					'/usr/share/fonts/dejavu/DejaVuSans.ttf',
+					// Debian / Ubuntu
 					'/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
 					'/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
 					'/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf',
+					// Arch
 					'/usr/share/fonts/TTF/DejaVuSans.ttf'
 				];
 	return candidates.find((f) => existsSync(f)) || null;

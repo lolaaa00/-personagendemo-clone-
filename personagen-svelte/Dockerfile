@@ -23,6 +23,14 @@ FROM node:22-alpine AS runner
 
 WORKDIR /app
 
+# Runtime media deps: ffmpeg + a DejaVu font power the optional on-screen caption
+# and "AI GENERATED" badge burn (src/lib/server/video.ts). Without them the burn
+# silently no-ops (captions are an enhancement, never a hard dep) — install them
+# so the feature actually works in the container. font-dejavu lands the .ttf at
+# /usr/share/fonts/dejavu/, which findFont() looks for. Own layer = cached across
+# app rebuilds.
+RUN apk add --no-cache ffmpeg font-dejavu
+
 # Copy built package and manifest files
 COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/build ./build
