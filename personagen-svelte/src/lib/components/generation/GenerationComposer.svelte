@@ -52,6 +52,9 @@
 	// Budget-vs-quality: the model is a first-class, user-owned decision.
 	let model = $state('');
 	let videoModel = $state('');
+	// Video format for this run: 'spokesperson' (voiceover + talking-head/OmniHuman),
+	// 'broll' (the picked i2v clip), or 'auto' (Director decides, biased to spokesperson).
+	let format = $state('auto');
 
 	let isPromptKind = $derived(!!preview && typeof preview.prompt === 'string');
 	let isPostKind = $derived(!!preview && Array.isArray(preview.steps));
@@ -68,12 +71,21 @@
 	let videoModelOptions = $derived<ModelOption[]>(preview?.videoModelOptions ?? []);
 	let selectedVideoModel = $derived(videoModelOptions.find((m) => m.id === videoModel) ?? null);
 
-	// Re-price the whole pipeline as the user swaps the clip tier — the video is the
-	// dominant line item, so a static total would misrepresent the decision.
+	// The pipeline actually shown/priced, driven by the format selector. A video forks
+	// between the spokesperson and b-roll step arrays the server resolved; non-video
+	// (image/cinematic) has a single stack. 'auto' shows the spokesperson default.
+	let activeSteps = $derived.by(() => {
+		if (!isPostKind) return [] as any[];
+		if (media !== 'video') return (preview.steps ?? []) as any[];
+		if (format === 'broll') return (preview.stepsBroll ?? preview.steps ?? []) as any[];
+		return (preview.stepsSpokesperson ?? preview.steps ?? []) as any[];
+	});
+
+	// Re-price the whole pipeline as the user swaps format or clip tier — the video is
+	// the dominant line item, so a static total would misrepresent the decision.
 	let livePostTotal = $derived.by(() => {
 		if (!isPostKind) return 0;
-		const steps = preview.steps ?? [];
-		return steps.reduce((sum: number, st: any) => {
+		return activeSteps.reduce((sum: number, st: any) => {
 			const isVideoStep = String(st.step).includes('b-roll');
 			if (isVideoStep && selectedVideoModel) return sum + selectedVideoModel.usd;
 			return sum + (st.usd ?? 0);
@@ -127,6 +139,7 @@
 			topic = preview.topic ?? '';
 			scene = preview.scene ?? '';
 			media = preview.media ?? 'video';
+			format = preview.format ?? 'auto';
 			captions = preview.captions === true;
 			aiBadge = preview.aiBadge === true;
 			provider = preview.provider ?? 'auto';
@@ -165,6 +178,7 @@
 			body.topic = topic || undefined;
 			body.media = media;
 			body.provider = provider;
+			body.format = format;
 			body.captions = captions;
 			body.ai_badge = aiBadge;
 			body.platforms = platforms;
@@ -385,7 +399,27 @@
 				</label>
 			</div>
 
-			{#if videoModelOptions.length}
+			{#if media === 'video'}
+				<div class="fld">
+					<span class="fld-label">Video format</span>
+					<div class="chips">
+						<button type="button" class="chip" class:on={format === 'spokesperson'} onclick={() => (format = 'spokesperson')}>🎤 Spokesperson</button>
+						<button type="button" class="chip" class:on={format === 'broll'} onclick={() => (format = 'broll')}>🎬 B-roll</button>
+						<button type="button" class="chip" class:on={format === 'auto'} onclick={() => (format = 'auto')}>✨ Auto</button>
+					</div>
+					<span class="hint">
+						{#if format === 'spokesperson'}
+							The character speaks on camera — voiceover + talking head (OmniHuman). The b-roll model picker below doesn't apply to this run.
+						{:else if format === 'broll'}
+							A silent product/lifestyle clip from the b-roll model below. No voiceover.
+						{:else}
+							The Director picks spokesperson or b-roll per post (biased to spokesperson). Pick one to lock the exact pipeline.
+						{/if}
+					</span>
+				</div>
+			{/if}
+
+			{#if videoModelOptions.length && format !== 'spokesperson'}
 				<div class="fld">
 					<span class="fld-label">Video model — the biggest cost in this run</span>
 					<div class="models">
@@ -426,7 +460,7 @@
 
 			<div class="steps">
 				<span class="fld-label">Pipeline that will run</span>
-				{#each preview.steps as s}
+				{#each activeSteps as s}
 					{@const isVid = String(s.step).includes('b-roll') && selectedVideoModel}
 					<div class="step">
 						<span class="step-name">{s.step}</span>

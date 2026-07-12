@@ -4,12 +4,15 @@ import { createDbService } from '$lib/server/db';
 import {
 	generateUgcPack,
 	generateCinematicUgcPack,
-	resolveImageKeys
+	resolveImageKeys,
+	resolveVoiceForPersona,
+	TALKINGHEAD_LABEL
 } from '$lib/server/content/generate';
 import { publishPostById } from '$lib/server/scheduler';
 import { getServiceSupabase } from '$lib/server/service-supabase';
 import { priceOf } from '$lib/pricing';
 import { modelsFor, resolveModel } from '$lib/models';
+import { VOICE_CATALOG, DEFAULT_VOICE } from '$lib/server/voices';
 import { VIDEO_ONLY_PLATFORMS } from '$lib/server/social/platforms';
 
 /**
@@ -114,6 +117,11 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 				: undefined,
 		// The user's budget-vs-quality pick for the b-roll clip (Wan $0.10 → Veo $1.50).
 		videoModel: resolveModel('video_i2v', body.video_model).id,
+		// Composer format choice: spokesperson (TTS + talking-head) vs b-roll clip.
+		// 'auto' (or anything unrecognized) defers to the persona's ugc_format.
+		formatOverride: (['spokesperson', 'broll', 'auto'].includes(body.format)
+			? body.format
+			: 'auto') as 'auto' | 'spokesperson' | 'broll',
 		// Captions + AI badge are OFF unless the composer explicitly opts in.
 		captions: body.captions === true,
 		aiBadge: body.ai_badge === true
@@ -129,7 +137,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 	if (body.preview === true) {
 		const { data: cfgRow } = await locals.supabase
 			.from('agent_configs')
-			.select('ugc_character_ref, brand_brief_id')
+			.select('ugc_character_ref, brand_brief_id, ugc_format, ugc_voice')
 			.eq('agent_id', agentId)
 			.maybeSingle();
 
@@ -151,15 +159,43 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 
 		const videoModel = resolveModel('video_i2v', body.video_model);
 
-		// The model stack this media kind actually runs through, with per-call costs.
-		const steps: { step: string; provider: string; model: string; usd: number }[] = [
+		// The model stack this run actually goes through, with per-call costs. A VIDEO
+		// forks by format: a spokesperson clip runs voiceover + talking-head (OmniHuman),
+		// a b-roll clip runs the picked i2v model. The persona's ugc_format decides
+		// (auto → the Director picks, biased to spokesperson); the composer can override.
+		const personaFormat: 'auto' | 'spokesperson' | 'broll' =
+			cfgRow?.ugc_format === 'spokesperson' || cfgRow?.ugc_format === 'broll'
+				? cfgRow.ugc_format
+				: 'auto';
+		const { voice: previewVoice } = resolveVoiceForPersona(cfgRow?.ugc_voice || DEFAULT_VOICE, agent);
+		const voiceLabel = VOICE_CATALOG.find((v) => v.name === previewVoice)?.label || previewVoice;
+
+		type Step = { step: string; provider: string; model: string; usd: number };
+		const baseSteps: Step[] = [
 			{ step: 'director (caption + scene)', provider: 'openrouter', model: 'gemini-3.5-flash', usd: priceOf('openrouter', 'llm') },
 			{ step: 'product still', provider: 'fal', model: 'nano-banana-2', usd: priceOf('fal', 'image', 'nano') }
 		];
-		if (mediaKind === 'video') {
-			steps.push({ step: 'b-roll video', provider: 'fal', model: videoModel.label, usd: videoModel.usd });
-		} else if (mediaKind === 'cinematic') {
-			steps.push({ step: 'cinematic video', provider: 'fal', model: 'kling-o3-pro reference', usd: priceOf('fal', 'video', 'pro') });
+		// Both video branches, so the composer's format selector can flip between them
+		// client-side (with the right cost) without a re-fetch that would clobber edits.
+		const stepsBroll: Step[] = [
+			...baseSteps,
+			{ step: 'b-roll video', provider: 'fal', model: videoModel.label, usd: videoModel.usd }
+		];
+		const stepsSpokesperson: Step[] = [
+			...baseSteps,
+			{ step: 'voiceover', provider: 'fal', model: `elevenlabs (${voiceLabel})`, usd: priceOf('fal', 'tts') },
+			{ step: 'talking head', provider: 'fal', model: TALKINGHEAD_LABEL, usd: priceOf('fal', 'talking_head') }
+		];
+
+		// Initial pipeline shown = what this persona runs right now. For 'auto' that's
+		// the spokesperson default (the Director's runtime bias).
+		let steps: Step[];
+		if (mediaKind === 'cinematic') {
+			steps = [...baseSteps, { step: 'cinematic video', provider: 'fal', model: 'kling-o3-pro reference', usd: priceOf('fal', 'video', 'pro') }];
+		} else if (mediaKind === 'image') {
+			steps = baseSteps;
+		} else {
+			steps = personaFormat === 'broll' ? stepsBroll : stepsSpokesperson;
 		}
 
 		return json({
@@ -186,10 +222,15 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 				videoModelKind: 'video_i2v',
 				videoModel: videoModel.id,
 				videoModelOptions: mediaKind === 'video' ? modelsFor('video_i2v') : [],
+				// Video format: the persona's setting is the initial pick; the composer
+				// lets the user force spokesperson (OmniHuman) or b-roll for this run.
+				format: personaFormat,
+				stepsSpokesperson,
+				stepsBroll,
 				// Captions + AI badge default OFF — the composer surfaces them as toggles.
 				captions: false,
 				aiBadge: false,
-				editable: ['topic', 'media', 'provider', 'platforms', 'product_id', 'product_photo_url', 'character_ref_url', 'scene', 'video_model', 'scheduled_date', 'scheduled_time', 'captions', 'ai_badge'],
+				editable: ['topic', 'media', 'provider', 'platforms', 'product_id', 'product_photo_url', 'character_ref_url', 'scene', 'video_model', 'format', 'scheduled_date', 'scheduled_time', 'captions', 'ai_badge'],
 				steps,
 				estimatedCostUsd: +steps.reduce((s, x) => s + x.usd, 0).toFixed(4)
 			}

@@ -90,7 +90,16 @@ const TTS_MODEL = env.UGC_TTS_MODEL || 'fal-ai/elevenlabs/tts/turbo-v2.5';
 // {video:{url}} output, so nothing downstream changes. Verified on fal
 // 2026-07-12. Override with UGC_TALKINGHEAD_MODEL (e.g. the cheaper Kling
 // AI-Avatar 'fal-ai/kling-video/ai-avatar/v2/standard', or 'veed/fabric-1.0').
-const TALKINGHEAD_MODEL = env.UGC_TALKINGHEAD_MODEL || 'fal-ai/bytedance/omnihuman';
+export const TALKINGHEAD_MODEL = env.UGC_TALKINGHEAD_MODEL || 'fal-ai/bytedance/omnihuman';
+/** Short display label for the talking-head model — for the composer preview and
+ *  post observability, so the UI names the model that actually runs. */
+export const TALKINGHEAD_LABEL = TALKINGHEAD_MODEL.includes('omnihuman')
+	? 'omnihuman v1.5'
+	: TALKINGHEAD_MODEL.includes('veed/fabric')
+		? 'veed fabric 1.0'
+		: TALKINGHEAD_MODEL.includes('kling')
+			? 'kling ai-avatar'
+			: TALKINGHEAD_MODEL;
 // Kling 3.0 is still the latest Kling generation (no Kling 4 exists as of
 // this date) — but Standard and Pro are priced ~25% apart ($0.084/s vs
 // $0.112/s without audio), so the two tiers now map onto separate model
@@ -1453,6 +1462,10 @@ export interface UgcPackInput {
 	/** Opt-in: burn a small "AI GENERATED" disclosure badge (top-left). OFF by
 	 *  default — independent of captions. */
 	aiBadge?: boolean;
+	/** Composer per-run format choice. 'spokesperson' forces TTS + talking-head,
+	 *  'broll' forces a b-roll clip; 'auto' (or unset) defers to the persona's
+	 *  ugc_format, which the Director then resolves. */
+	formatOverride?: 'auto' | 'spokesperson' | 'broll';
 	/** The post row this generation belongs to — links ledger rows to the post. */
 	postId?: string;
 }
@@ -1752,7 +1765,7 @@ function stableVoiceHash(seed: string): number {
  * different voices instead of all sharing the catalog's first entry. An
  * explicitly pinned, gender-aligned voice is always respected.
  */
-function resolveVoiceForPersona(
+export function resolveVoiceForPersona(
 	cfgVoice: string,
 	agentData: any
 ): { voice: string; voiceGender: 'male' | 'female' | undefined } {
@@ -2329,6 +2342,13 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 
 	const db = createDbService(supabase);
 	const cfg = await loadUgcConfig(supabase, input.agentId);
+	// The composer can force this run's format; 'auto' (or unset) defers to the
+	// persona's ugc_format, which the Director resolves from the content. This one
+	// value drives both the Director's brief and the final spokesperson/broll branch.
+	const formatPref: 'auto' | 'spokesperson' | 'broll' =
+		input.formatOverride === 'spokesperson' || input.formatOverride === 'broll'
+			? input.formatOverride
+			: cfg.format;
 
 	// ── Load agent persona ──────────────────────────────────────────────
 	let agentContext = '';
@@ -2384,7 +2404,7 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 			: '',
 		`Content type detected: ${intent.type}. Platform: ${platform}. Platform voice guide: ${intent.platformVoice}.`,
 		buildHookGuidance(intent, `${topic}|${platform}|${input.agentId || ''}`),
-		`Requested format: ${cfg.format === 'auto' ? 'choose spokesperson or broll based on what will perform best for this content type' : cfg.format}.`,
+		`Requested format: ${formatPref === 'auto' ? 'choose spokesperson or broll based on what will perform best for this content type' : formatPref}.`,
 		voiceGender
 			? `If the scene shows a person on camera, they must present as ${voiceGender} — the pinned voice is ${voiceGender} and the on-camera character must match.`
 			: '',
@@ -2454,7 +2474,7 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 	}
 
 	const format: 'spokesperson' | 'broll' =
-		cfg.format === 'auto' ? (parsed.format === 'broll' ? 'broll' : 'spokesperson') : cfg.format;
+		formatPref === 'auto' ? (parsed.format === 'broll' ? 'broll' : 'spokesperson') : formatPref;
 	// A composer-edited visual brief outranks the Director's scene.
 	const scenePrompt =
 		input.sceneOverride?.trim() || parsed.scene_prompt || parsed.ugc_broll_prompt || topic;
