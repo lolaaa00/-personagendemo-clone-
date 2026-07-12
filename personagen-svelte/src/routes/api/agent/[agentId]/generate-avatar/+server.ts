@@ -7,6 +7,7 @@ import {
 	resolvePersonaGender,
 	resolveImageKeys,
 	buildHeroPortraitPrompt,
+	buildPortraitEditPrompt,
 	buildUgcImagePrompt,
 	UGC_IMAGE_MODEL_FAL,
 	UGC_IMAGE_MODEL_OPENROUTER
@@ -140,9 +141,13 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 
 		const { data: cfg } = await locals.supabase
 			.from('agent_configs')
-			.select('ugc_voice, brand_brief_id')
+			.select('ugc_voice, brand_brief_id, ugc_character_ref')
 			.eq('agent_id', agentId)
 			.maybeSingle();
+		// The current pinned face. When present, a regenerate EDITS it (identity
+		// preserved) instead of generating a brand-new person from text.
+		const identityRef: string | null = cfg?.ugc_character_ref || null;
+		const editing = Boolean(identityRef);
 		const voiceGender = VOICE_CATALOG.find((v) => v.name === (cfg?.ugc_voice || 'Adam'))?.gender;
 
 		// Persona gender is authoritative: the explicit Profile field first, else
@@ -161,28 +166,36 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		const gender = profileGender || voiceGender;
 		// The REAL prompt this generation will send — built by the same function the
 		// generator uses, so the preview can never drift from what actually runs.
-		const resolvedPrompt = buildHeroPortraitPrompt(briefData, agent, gender);
+		// Regeneration (a face already exists) EDITS that face to keep the same
+		// person; the first generation builds one from scratch. The prompt + model
+		// kind differ accordingly, so the composer shows exactly what will run.
+		const resolvedPrompt = editing
+			? buildPortraitEditPrompt(agent)
+			: buildHeroPortraitPrompt(briefData, agent, gender);
+		const modelKind = editing ? 'image_edit' : 'image_t2i';
 
 		// `preview: true` costs nothing and generates nothing — it hands back the
 		// resolved payload so the composer can show exactly what is about to be
 		// sent and let the user edit it before approving.
 		if (body.preview === true) {
-			const selected = resolveModel('image_t2i', body.model);
+			const selected = resolveModel(modelKind, body.model);
 			return json({
 				success: true,
 				preview: {
-					mode: 'from_scratch',
+					mode: editing ? 'edit' : 'from_scratch',
 					prompt: resolvedPrompt,
-					// generateUgcImage silently prepends a UGC style prefix — show the
-					// literal string the provider receives, not a flattering summary.
-					finalPrompt: buildUgcImagePrompt(resolvedPrompt),
+					// Edit mode sends the prompt as-is; from-scratch prepends a UGC style
+					// prefix — show the literal string the provider actually receives.
+					finalPrompt: editing ? resolvedPrompt : buildUgcImagePrompt(resolvedPrompt),
 					provider: 'fal',
 					gender: gender ?? null,
+					// The existing face fed back in as the identity reference (regen only).
+					image_urls: editing && identityRef ? [identityRef] : [],
 					// Budget-vs-quality is the user's call, so hand them the menu rather
 					// than a fixed model they can only accept.
-					modelKind: 'image_t2i',
+					modelKind,
 					model: selected.id,
-					modelOptions: modelsFor('image_t2i'),
+					modelOptions: modelsFor(modelKind),
 					editable: ['prompt', 'model'],
 					estimatedCostUsd: selected.usd
 				}
@@ -195,7 +208,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 				? String(body.prompt).slice(0, 2000)
 				: undefined;
 
-		const chosenModel = resolveModel('image_t2i', body.model).id;
+		const chosenModel = resolveModel(modelKind, body.model).id;
 
 		runGeneration = () =>
 			generateCharacterPortrait(
@@ -208,7 +221,8 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 				agent,
 				gender,
 				promptOverride,
-				chosenModel
+				chosenModel,
+				identityRef
 			);
 	}
 

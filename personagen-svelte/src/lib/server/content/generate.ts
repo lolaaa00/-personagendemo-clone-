@@ -39,6 +39,7 @@ import {
 	type CostEvent,
 	type GenerationProvenance
 } from '$lib/pricing';
+import { appearanceToPromptClause } from '$lib/persona-profile';
 import { createDbService } from '$lib/server/db';
 import { DEFAULT_VOICE, VOICE_CATALOG } from '$lib/server/voices';
 import { getServiceSupabase } from '$lib/server/service-supabase';
@@ -1338,7 +1339,7 @@ export async function generateCinematicUgcPack(input: UgcPackInput): Promise<Ugc
 		prompts: { scene: content.ugc_broll_prompt, script: content.script },
 		selections: {
 			platforms: [platform],
-			brand: briefData?.name ?? null,
+			brand: briefData?.name ?? briefData?.brandName ?? briefData?.data?.brandName ?? null,
 			videoModel: 'cinematic (Kling O3 Pro reference)',
 			provider: input.providerPreference ?? null,
 			mediaType: 'video'
@@ -1780,7 +1781,23 @@ export function buildHeroPortraitPrompt(
 	const profile = parsePersonaProfile(agentData);
 	const archetypeLine = profile.archetype ? ` Their creator archetype: ${profile.archetype}.` : '';
 	const avatarLine = profile.targetAvatar ? ` They make content for: ${String(profile.targetAvatar).slice(0, 120)}.` : '';
-	return `Photorealistic vertical portrait of one relatable UGC content creator who fits this audience: ${audience}.${persona}${genderLine}${archetypeLine}${avatarLine} Friendly, casual, natural window light, looking straight at the camera, authentic iPhone selfie style, clear visible face, upper body. Single person only.`;
+	// Wardrobe/hair/eyes/headwear directives from the persona profile — so the
+	// pinned face reflects the exact look the user configured (and "Generate for
+	// brand" filled), instead of a generic person.
+	const appearanceLine = appearanceToPromptClause(profile.appearance);
+	return `Photorealistic vertical portrait of one relatable UGC content creator who fits this audience: ${audience}.${persona}${genderLine}${archetypeLine}${avatarLine}${appearanceLine} Friendly, casual, natural window light, looking straight at the camera, authentic iPhone selfie style, clear visible face, upper body. Single person only.`;
+}
+
+/**
+ * Prompt for REGENERATING the profile picture as an EDIT of the existing face —
+ * it keeps the persona the same person (same facial identity) while refreshing
+ * the shot and applying any configured wardrobe/styling. Used whenever a profile
+ * picture already exists, so a regenerate never produces a whole new person.
+ */
+export function buildPortraitEditPrompt(agentData: any): string {
+	const profile = parsePersonaProfile(agentData);
+	const appearanceLine = appearanceToPromptClause(profile.appearance);
+	return `Regenerate this exact person as a fresh photorealistic vertical portrait. Preserve their facial identity from the reference image — same face, bone structure, eye shape, nose, jaw, hairline, and skin tone; do NOT turn them into a different person.${appearanceLine} Friendly, casual, natural window light, looking straight at the camera, authentic iPhone selfie style, clear visible face, upper body. Single person only.`;
 }
 
 /** Generates (and durably persists) a fresh hero portrait image. No DB pin — just the image. */
@@ -1824,27 +1841,48 @@ export async function generateCharacterPortrait(
 	agentData: any,
 	voiceGender: 'male' | 'female' | undefined,
 	promptOverride?: string,
-	modelId?: string | null
+	modelId?: string | null,
+	/** When set, REGENERATE by editing this existing face (identity preserved)
+	 *  instead of generating a brand-new person from text. */
+	identityRef?: string | null
 ): Promise<string> {
-	const portraitModel = resolveModel('image_t2i', modelId);
+	const editing = Boolean(identityRef);
+	const portraitModel = resolveModel(editing ? 'image_edit' : 'image_t2i', modelId);
 	const costEvents: CostEvent[] = [];
 	return await runBudgetedAssetJob(supabase, userId, agentId, costEvents, async () => {
-	// 1. Config/brief-tuned hero portrait → pinned as the profile picture.
-	const durable = await generateHeroPortraitImage(
-		svc,
-		userId,
-		falKey,
-		briefData,
-		agentData,
-		voiceGender,
-		promptOverride,
-		portraitModel.id
-	);
+	// 1. Hero portrait → pinned as the profile picture. When a face already exists
+	//    we EDIT it (feed the existing image back in) so the persona stays the SAME
+	//    person — only the shot and any configured styling change. This is the fix
+	//    for "regenerate produced a whole new person / new facial features". With no
+	//    existing face we create one from scratch (first generation).
+	let durable: string;
+	if (editing) {
+		const editPrompt = promptOverride?.trim() || buildPortraitEditPrompt(agentData);
+		const editData = await falSyncJson(
+			portraitModel.id,
+			buildEditInput(portraitModel, editPrompt, [identityRef!], '3:4'),
+			falKey
+		);
+		const editUrl = editData.images?.[0]?.url;
+		if (!editUrl) throw new Error(`${portraitModel.label} returned no portrait`);
+		durable = await persistToStorage(svc, editUrl, userId, 'png');
+	} else {
+		durable = await generateHeroPortraitImage(
+			svc,
+			userId,
+			falKey,
+			briefData,
+			agentData,
+			voiceGender,
+			promptOverride,
+			portraitModel.id
+		);
+	}
 	// Bill the model we actually ran, not a hard-coded flux-schnell rate.
 	costEvents.push({
 		provider: 'fal',
 		operation: 'image',
-		model: `${portraitModel.label} (hero portrait)`,
+		model: `${portraitModel.label} (hero portrait${editing ? ' edit' : ''})`,
 		usd: portraitModel.usd
 	});
 	await supabase.from('agent_configs').update({ ugc_character_ref: durable }).eq('agent_id', agentId);
@@ -2112,7 +2150,7 @@ export function buildFeatureGridPrompt(gender?: 'male' | 'female'): string {
 /** The image model every reference-kit stage runs on — surfaced so the UI can show it. */
 export const KIT_IMAGE_MODEL = NANO_MODEL;
 
-export type KitStage = 'side_profiles' | 'face_closeup' | 'feature_grid';
+export type KitStage = 'full_body' | 'side_profiles' | 'face_closeup' | 'feature_grid';
 
 /**
  * The single source of truth for what a kit stage will actually send: the prompt,
@@ -2126,6 +2164,17 @@ export function resolveKitStagePlan(
 	characterRef: string | null,
 	gender?: 'male' | 'female'
 ): { prompt: string; model: string; image_urls: string[]; aspect_ratio: string } | { error: string } {
+	if (stage === 'full_body') {
+		// The full-body shot is regenerated FROM the existing profile picture (the
+		// pinned face) — so the composer shows that face as the reference and only
+		// the full-body shot changes, without touching the persona's identity. The
+		// character sheet, if present, is a secondary anchor for a faithful body.
+		const primary = characterRef || kit.sheet || kit.full_body;
+		if (!primary) return { error: 'Generate a profile picture first.' };
+		const image_urls = [primary];
+		if (kit.sheet && kit.sheet !== primary) image_urls.push(kit.sheet);
+		return { prompt: AVATAR_HERO_SHOT_PROMPT, model: NANO_MODEL, image_urls, aspect_ratio: '3:4' };
+	}
 	if (stage === 'side_profiles') {
 		const frontal = kit.full_body || kit.sheet || characterRef;
 		if (!frontal) return { error: 'Generate a profile picture first.' };
@@ -2594,7 +2643,7 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 		prompts: { scene: scenePrompt, script: content.script },
 		selections: {
 			platforms: [platform],
-			brand: briefData?.name ?? null,
+			brand: briefData?.name ?? briefData?.brandName ?? briefData?.data?.brandName ?? null,
 			videoModel: input.videoModel ?? null,
 			provider: input.providerPreference ?? null,
 			mediaType

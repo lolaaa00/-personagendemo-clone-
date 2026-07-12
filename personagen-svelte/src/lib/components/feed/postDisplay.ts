@@ -8,6 +8,11 @@ export interface PostDisplay {
 	product: any | null;
 	/** Full observability record (models/costs/images/selections), if captured. */
 	generation: any | null;
+	/** Estimated spend { total, byProvider } — present on most posts even without the full record. */
+	costBreakdown: any | null;
+	/** Format + media type, for the observability panel. */
+	format: string | null;
+	mediaGenerated: boolean;
 }
 
 const ERROR_SNIPPET_MAX = 140;
@@ -79,6 +84,9 @@ export function getPostDisplay(post: any): PostDisplay {
 		ugcPrompt: parsed?.ugc_broll_prompt || parsed?.ugcPrompt || null,
 		script: parsed?.script || null,
 		product: parsed?.product || null,
-		generation: parsed?.generation || null
+		generation: parsed?.generation || null,
+		costBreakdown: parsed?.costBreakdown || null,
+		format: parsed?.format || null,
+		mediaGenerated: parsed?.media_generated ?? false
 	};
 }

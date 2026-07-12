@@ -203,13 +203,21 @@ export const BrandBrief = {
 	// for competitive influencer positioning. Server resolves name/soul/siblings.
 	generatePersonaProfile: (agentId: string, brandBriefId: string | null, gender: string) =>
 		request<{
+			niche: string;
 			ageRanges: string[];
 			archetype: string;
 			contentFocus: string;
 			targetAvatar: string;
 			psychProfile: string;
 			contentAngle: string;
-		}>(ENDPOINTS.brandBrief, 'generate_persona_profile', { agentId, brandBriefId, gender })
+			appearance: Record<string, string>;
+		}>(ENDPOINTS.brandBrief, 'generate_persona_profile', { agentId, brandBriefId, gender }),
+	// Vision: read the appearance fields straight from a reference image so they
+	// match the actual character.
+	readAppearanceFromImage: (imageUrl: string) =>
+		request<{ appearance: Record<string, string> }>(ENDPOINTS.brandBrief, 'read_appearance_from_image', {
+			imageUrl
+		})
 };
 
 // ── Autopilot (per-agent auto-generation config + manual top-up) ───────────

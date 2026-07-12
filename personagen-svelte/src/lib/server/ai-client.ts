@@ -52,6 +52,23 @@ const OPENROUTER_GEMINI_MODEL = env.OPENROUTER_GEMINI_MODEL || 'google/gemini-3.
 export interface AiGenerateOptions {
 	systemInstruction?: string;
 	json?: boolean;
+	/** Optional image URL — the (multimodal) model reads the image with the prompt. */
+	imageUrl?: string;
+}
+
+/** Fetches an image URL into base64 inline data for Gemini's vision input. */
+async function fetchImageInlineData(
+	url: string
+): Promise<{ mimeType: string; data: string } | null> {
+	try {
+		const res = await fetchWithTimeout(url, {}, LLM_TIMEOUT_MS);
+		if (!res.ok) return null;
+		const mimeType = res.headers.get('content-type') || 'image/png';
+		const data = Buffer.from(await res.arrayBuffer()).toString('base64');
+		return { mimeType, data };
+	} catch {
+		return null;
+	}
 }
 
 export interface AiClient {
@@ -104,7 +121,16 @@ function createOpenRouterClient(apiKey: string): AiClient {
 			if (opts?.systemInstruction) {
 				messages.push({ role: 'system', content: opts.systemInstruction });
 			}
-			messages.push({ role: 'user', content: prompt });
+			// Multimodal user turn when an image is supplied (OpenAI/OpenRouter shape).
+			messages.push({
+				role: 'user',
+				content: opts?.imageUrl
+					? [
+							{ type: 'text', text: prompt },
+							{ type: 'image_url', image_url: { url: opts.imageUrl } }
+						]
+					: prompt
+			});
 
 			const body: any = {
 				model: OPENROUTER_GEMINI_MODEL,
@@ -155,10 +181,17 @@ function createGeminiClient(apiKey: string): AiClient {
 				config.systemInstruction = opts.systemInstruction;
 			}
 
+			// Vision: fetch the image into inline base64 (Gemini takes no arbitrary URL).
+			const parts: any[] = [{ text: prompt }];
+			if (opts?.imageUrl) {
+				const inline = await fetchImageInlineData(opts.imageUrl);
+				if (inline) parts.unshift({ inlineData: inline });
+			}
+
 			const res = await withTimeout(
 				ai.models.generateContent({
 					model: GEMINI_MODEL,
-					contents: [{ role: 'user', parts: [{ text: prompt }] }],
+					contents: [{ role: 'user', parts }],
 					config
 				}),
 				LLM_TIMEOUT_MS,

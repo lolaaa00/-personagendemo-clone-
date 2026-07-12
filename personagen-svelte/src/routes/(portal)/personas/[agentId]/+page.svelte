@@ -16,6 +16,7 @@
 	import { PLATFORMS as PLATFORM_REGISTRY, platformLabel } from '$lib/platforms';
 	import GenerationComposer from '$lib/components/generation/GenerationComposer.svelte';
 	import type { ComposerSpec } from '$lib/components/generation/types';
+	import { NICHE_OPTIONS, APPEARANCE_FIELDS } from '$lib/persona-profile';
 	import MediaPreviewModal from '$lib/components/generation/MediaPreviewModal.svelte';
 	import {
 		startGeneration,
@@ -125,7 +126,9 @@
 	// Values are stage URLs (string) plus `<stage>_history` pools (string[]), so
 	// the type is widened from the old string-only shape.
 	let referenceKit = $state<Record<string, any>>(agent?.ugc_reference_kit ?? {});
-	let generatingKitStage = $state<'side_profiles' | 'face_closeup' | 'feature_grid' | null>(null);
+	let generatingKitStage = $state<'full_body' | 'side_profiles' | 'face_closeup' | 'feature_grid' | null>(
+		null
+	);
 	let editSupervisorId = $state<string | null>(agent?.supervisor_agent_id ?? null);
 	let editRuntimeOwner = $state<'svelte-gemini' | 'hermes-daemon' | 'hermes-orchestrated'>(
 		agent?.runtime_owner ?? 'svelte-gemini'
@@ -182,6 +185,10 @@
 	let ppPsychProfile = $state<string>(personaProfile.psychProfile ?? '');
 	let ppContentAngle = $state<string>(personaProfile.contentAngle ?? '');
 	let ppTargetAvatar = $state<string>(personaProfile.targetAvatar ?? '');
+	// Appearance / wardrobe "dynamic variables" — the influencer's configurable look
+	// (clothing, colors, hair, eyes, headwear, styling). Feeds the profile-picture
+	// prompt; filled by "Generate for brand".
+	let ppAppearance = $state<Record<string, string>>({ ...(personaProfile.appearance ?? {}) });
 
 	const PERSONA_ARCHETYPES = [
 		'The Creator', 'The Expert / Authority', 'The Relatable Friend', 'The Aspirational',
@@ -194,13 +201,8 @@
 		'News & Commentary', 'Tutorials & Demos', 'Personal Journey'
 	];
 
-	const NICHE_OPTIONS = [
-		'Beauty & Wellness', 'Fitness & Health', 'Tech & AI', 'Food & Cooking',
-		'Fashion & Style', 'Travel & Adventure', 'Finance & Business', 'Gaming & Esports',
-		'Education & Learning', 'Lifestyle', 'Parenting & Family', 'Home & DIY',
-		'Pets & Animals', 'Entertainment & Pop Culture', 'Sustainability & Eco',
-		'Arts & Creativity', 'Sports', 'Automotive'
-	];
+	// NICHE_OPTIONS is imported from $lib/persona-profile (single source of truth,
+	// shared with the "Generate for brand" generator).
 	const STATUS_OPTIONS = ['active', 'paused', 'pending'];
 
 	// Soul / Skills / Tools
@@ -383,6 +385,7 @@
 		ppPsychProfile = freshProfile.psychProfile ?? '';
 		ppContentAngle = freshProfile.contentAngle ?? '';
 		ppTargetAvatar = freshProfile.targetAvatar ?? '';
+		ppAppearance = { ...(freshProfile.appearance ?? {}) };
 
 		soulText = fresh.soul ?? '';
 		skillsText = fresh.skills ?? '';
@@ -744,12 +747,15 @@
 			);
 			if (res.success && res.data) {
 				const d = res.data;
+				if (d.niche) editNiche = d.niche;
 				if (Array.isArray(d.ageRanges) && d.ageRanges.length) ppAgeRanges = d.ageRanges;
 				if (d.archetype) ppArchetype = d.archetype;
 				if (d.contentFocus) ppContentFocus = d.contentFocus;
 				if (d.targetAvatar) ppTargetAvatar = d.targetAvatar;
 				if (d.psychProfile) ppPsychProfile = d.psychProfile;
 				if (d.contentAngle) ppContentAngle = d.contentAngle;
+				if (d.appearance && typeof d.appearance === 'object')
+					ppAppearance = { ...ppAppearance, ...d.appearance };
 				// ppGender is intentionally left untouched — it's the input, not generated.
 				showToast('Persona profile generated — review and Save', 'success');
 			} else {
@@ -759,6 +765,32 @@
 			showToast(e.message || 'Generation failed', 'error');
 		} finally {
 			generatingProfile = false;
+		}
+	}
+
+	// ── Read appearance from the reference photo (vision) ─────────────────
+	// Reads the wardrobe/hair/eyes/etc. from the actual pinned profile picture so
+	// the appearance variables match the real character (not invented values).
+	let readingAppearance = $state(false);
+	async function readAppearanceFromPhoto() {
+		if (!characterRef) {
+			showToast('Generate or set a profile picture first', 'warning');
+			return;
+		}
+		if (readingAppearance) return;
+		readingAppearance = true;
+		try {
+			const res = await BrandBrief.readAppearanceFromImage(characterRef);
+			if (res.success && res.data?.appearance) {
+				ppAppearance = { ...ppAppearance, ...res.data.appearance };
+				showToast('Appearance read from photo — review and Save', 'success');
+			} else {
+				showToast(res.error || 'Read failed', 'error');
+			}
+		} catch (e: any) {
+			showToast(e.message || 'Read failed', 'error');
+		} finally {
+			readingAppearance = false;
 		}
 	}
 
@@ -1114,7 +1146,8 @@
 				contentFocus: ppContentFocus,
 				psychProfile: ppPsychProfile,
 				contentAngle: ppContentAngle,
-				targetAvatar: ppTargetAvatar
+				targetAvatar: ppTargetAvatar,
+				appearance: ppAppearance
 			}
 		};
 		try {
@@ -1511,9 +1544,13 @@
 		}
 	}
 
+	// full_body is regenerated independently (from the profile picture), so it's NOT
+	// part of KIT_STAGE_ORDER (the "generate all downstream" sequence) — but it IS a
+	// valid stage with its own composer, hence the widened KitStage.
 	const KIT_STAGE_ORDER = ['side_profiles', 'face_closeup', 'feature_grid'] as const;
-	type KitStage = (typeof KIT_STAGE_ORDER)[number];
+	type KitStage = 'full_body' | (typeof KIT_STAGE_ORDER)[number];
 	const KIT_STAGE_DONE_LABELS: Record<KitStage, string> = {
+		full_body: 'Full body regenerated',
 		side_profiles: 'Side-profile composite generated',
 		face_closeup: 'Facial close-up generated',
 		feature_grid: 'Feature grid generated'
@@ -1553,6 +1590,7 @@
 	}
 
 	const KIT_STAGE_TITLES: Record<KitStage, string> = {
+		full_body: 'Full body',
 		side_profiles: 'Side-profile composite',
 		face_closeup: 'Facial close-up',
 		feature_grid: 'Feature grid'
@@ -2026,6 +2064,7 @@
 				onDelete={handleDeletePost}
 				onApprove={handleApprovePost}
 				onSaveText={handleSaveText}
+				{characterRef}
 				onPublishFallback={(p) => {
 					modalPost = null;
 					openPublishFallback(p);
@@ -2098,6 +2137,33 @@
 					</div>
 
 					<div class="fields-grid">
+						<!-- Identity fields, moved up into the profile: the NAME stays constant;
+						     NICHE (and everything below) is filled by "Generate for brand". -->
+						<div class="field-group">
+							<label for="p-name">Agent Name</label>
+							<input id="p-name" type="text" bind:value={editName} placeholder="e.g. Veronica Active" />
+						</div>
+						<div class="field-group">
+							<label for="p-niche">Niche</label>
+							<select id="p-niche" bind:value={editNiche}>
+								{#if editNiche && !(NICHE_OPTIONS as readonly string[]).includes(editNiche)}
+									<option value={editNiche}>{editNiche}</option>
+								{/if}
+								<option value="">— Select niche —</option>
+								{#each NICHE_OPTIONS as n}
+									<option value={n}>{n}</option>
+								{/each}
+							</select>
+						</div>
+						<div class="field-group">
+							<label for="p-status">Status</label>
+							<select id="p-status" bind:value={editStatus}>
+								{#each STATUS_OPTIONS as s}
+									<option value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
+								{/each}
+							</select>
+						</div>
+
 						<div class="field-group col-span-2">
 							<label>Target Age Range</label>
 							<div class="age-chips">
@@ -2173,42 +2239,45 @@
 							</textarea>
 							<p class="field-hint">The unique angle or point of view that differentiates this persona's content.</p>
 						</div>
+
+						<div class="field-group col-span-2">
+							<div class="label-row">
+								<label>Appearance &amp; Wardrobe</label>
+								<button
+									type="button"
+									class="btn-sync btn-xs"
+									onclick={readAppearanceFromPhoto}
+									disabled={readingAppearance || !characterRef}
+									title="Read the wardrobe, hair, eyes, etc. from the current profile picture so they match the real character"
+								>
+									{readingAppearance ? 'Reading…' : '📷 Read from photo'}
+								</button>
+							</div>
+							<p class="field-hint" style="margin: 0 0 0.6rem;">
+								Dynamic look variables — clothing, colors, hair, eyes, headwear, styling. They feed
+								the profile-picture generation so the face and outfit match. Fill them from the brand
+								(“Generate for brand”) or read them from the current photo (“Read from photo”).
+							</p>
+							<div class="appearance-grid">
+								{#each APPEARANCE_FIELDS as f (f.key)}
+									<label class="appearance-field">
+										<span>{f.label}</span>
+										<input type="text" bind:value={ppAppearance[f.key]} placeholder={f.placeholder} />
+									</label>
+								{/each}
+							</div>
+						</div>
 					</div>
 				</section>
 
 				<!-- Identity section -->
 				<section class="profile-section">
 					<div class="section-header">
-						<h2 class="section-title">Identity</h2>
-						<p class="section-desc">Core presentation — name, personality, capabilities, and visual theme.</p>
+						<h2 class="section-title">Character & Visuals</h2>
+						<p class="section-desc">The persona's generated face and multi-angle reference kit, plus its personality, skills, and tools. Name, niche, and appearance now live in the Persona Profile above.</p>
 					</div>
 
 					<div class="fields-grid">
-						<div class="field-group">
-							<label for="p-name">Agent Name</label>
-							<input id="p-name" type="text" bind:value={editName} placeholder="e.g. Veronica Active" />
-						</div>
-						<div class="field-group">
-							<label for="p-niche">Niche</label>
-							<select id="p-niche" bind:value={editNiche}>
-								{#if editNiche && !NICHE_OPTIONS.includes(editNiche)}
-									<option value={editNiche}>{editNiche}</option>
-								{/if}
-								<option value="">— Select niche —</option>
-								{#each NICHE_OPTIONS as n}
-									<option value={n}>{n}</option>
-								{/each}
-							</select>
-						</div>
-						<div class="field-group">
-							<label for="p-status">Status</label>
-							<select id="p-status" bind:value={editStatus}>
-								{#each STATUS_OPTIONS as s}
-									<option value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
-								{/each}
-							</select>
-						</div>
-
 						<div class="field-group col-span-2">
 							<label>Profile Picture</label>
 							<p class="section-desc" style="margin-bottom: 0.75rem;">
@@ -2346,19 +2415,24 @@
 											alt="Full body reference"
 											class="kit-stage-thumb clickable"
 											role="button"
-											onclick={() => openPreview(referenceKit.full_body, '1. Full body', requestGenerateAvatar)}
+											onclick={() =>
+												openPreview(referenceKit.full_body, '1. Full body', () =>
+													requestGenerateKitStage('full_body')
+												)}
 										/>
-										<!-- Full body is produced by the profile-picture generator, so
-										     regenerating it = regenerating the profile picture. -->
+										<!-- Full body regenerates on its OWN — a composer that shows the
+										     full-body prompt + the profile picture as the reference, and
+										     re-runs just this shot without touching the persona's identity.
+										     (The whole identity is regenerated from the Profile Picture card.) -->
 										<div class="kit-stage-actions">
 											<button
 												type="button"
 												class="btn-sync kit-stage-generate"
-												onclick={requestGenerateAvatar}
-												disabled={generatingAvatar || generatingKitStage !== null || generatingAllKit}
-												title="Full body comes from the profile picture — this regenerates both"
+												onclick={() => requestGenerateKitStage('full_body')}
+												disabled={generatingKitStage !== null || generatingAllKit || generatingAvatar}
+												title="Regenerate just the full-body shot from the profile picture — opens a composer to review and edit"
 											>
-												{#if generatingAvatar}
+												{#if generatingKitStage === 'full_body'}
 													<span class="spinner-sm"></span> Generating…
 												{:else}
 													↺ Regenerate
@@ -3930,6 +4004,23 @@
 		font-size: 0.72rem;
 		color: var(--text-dim);
 		margin: 0;
+	}
+
+	/* Appearance / wardrobe dynamic-variable grid. */
+	.appearance-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+		gap: 0.6rem 0.75rem;
+	}
+	.appearance-field {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+	}
+	.appearance-field span {
+		font-size: 0.72rem;
+		font-weight: 600;
+		color: var(--text-muted);
 	}
 
 	.voice-picker-row {

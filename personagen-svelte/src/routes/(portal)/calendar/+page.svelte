@@ -270,6 +270,9 @@
 		selectedPost
 			? {
 					id: selectedPost.id,
+					// The drawer's observability panel fetches the post's ACTUAL models/
+					// cost/product-reference per agent — it needs the agent id to do so.
+					agent_id: selectedPost.agentId,
 					content: selectedPost.text,
 					status: selectedPost.status,
 					platforms: selectedPost.platforms,

@@ -12,6 +12,7 @@
 		onSaveText = undefined,
 		onReschedule = undefined,
 		onPublishFallback = undefined,
+		characterRef = null,
 		approving = false,
 		deleting = false
 	}: {
@@ -19,6 +20,9 @@
 		onClose: () => void;
 		onDelete: (post: any) => void;
 		onApprove: (post: any) => void;
+		/** The persona's current pinned face — shown as the character reference when
+		 *  a post predates full provenance capture. */
+		characterRef?: string | null;
 		/** When provided, the caption becomes editable (returns false to keep editing open). */
 		onSaveText?: (post: any, newText: string) => Promise<boolean> | boolean;
 		/** When provided, draft/scheduled posts get a date/time edit control (returns false to keep the values dirty). */
@@ -76,11 +80,42 @@
 
 	let display = $derived(post ? getPostDisplay(post) : null);
 
-	// ── Observability: the generation provenance captured at generation time ──
+	// ── Observability ──────────────────────────────────────────────────────
+	// New posts carry a full `content.generation` record. Older posts predate it,
+	// so we ALSO fetch the ACTUAL models/costs from the generation ledger and the
+	// real product reference from the brief — factual values, never guessed. The
+	// current pinned face is deliberately NOT shown as a "reference used" because
+	// it may not be what actually ran.
 	let gen = $derived(display?.generation ?? null);
-	// Per-aspect model + cost rows (image / video / tts / llm …).
+	let obs = $state<{
+		aspects: Record<string, { models: string[]; usd: number }>;
+		total: number;
+		productPhoto: string | null;
+		matchMode: string;
+	} | null>(null);
+	$effect(() => {
+		const id = post?.id;
+		const agentId = post?.agent_id;
+		obs = null;
+		// New posts already have the full record; only fetch for the rest.
+		if (!id || !agentId || display?.generation) return;
+		fetch(`/api/agent/${agentId}/post-observability?postId=${encodeURIComponent(id)}`)
+			.then((r) => r.json())
+			.then((d) => {
+				if (d?.success)
+					obs = {
+						aspects: d.aspects ?? {},
+						total: Number(d.total ?? 0),
+						productPhoto: d.productPhoto ?? null,
+						matchMode: d.matchMode ?? 'none'
+					};
+			})
+			.catch(() => {});
+	});
+
+	// Per-aspect model + cost — from the stored record (new) or the ledger (older).
 	let genAspects = $derived.by(() => {
-		const a = gen?.aspects;
+		const a = gen?.aspects ?? obs?.aspects;
 		if (!a || typeof a !== 'object') return [] as { op: string; models: string[]; usd: number }[];
 		return Object.entries(a).map(([op, v]: [string, any]) => ({
 			op,
@@ -88,16 +123,32 @@
 			usd: Number(v?.usd ?? 0)
 		}));
 	});
-	// The input images actually SENT to the models, as labelled thumbnails.
+	let aspectsTotal = $derived(Number(gen?.total ?? obs?.total ?? 0));
+	// Input images: the recorded ones (new posts) or the real product reference
+	// from the brief (older posts). No hallucinated character pin.
 	let genImages = $derived.by(() => {
 		const im = gen?.images ?? {};
 		const list: { label: string; url: string }[] = [];
 		if (im.character_ref) list.push({ label: 'Character', url: im.character_ref });
 		if (im.product_photo) list.push({ label: 'Product', url: im.product_photo });
 		for (const u of im.reference_kit ?? []) if (u) list.push({ label: 'Reference', url: u });
+		if (!list.length && obs?.productPhoto)
+			list.push({ label: 'Product reference', url: obs.productPhoto });
 		return list;
 	});
 	let genSelections = $derived(gen?.selections ?? null);
+	// Cost by provider — the stored breakdown, shown only when no per-aspect data.
+	let costByProvider = $derived.by(() => {
+		const bp = display?.costBreakdown?.byProvider;
+		if (!bp || typeof bp !== 'object') return [] as { provider: string; usd: number }[];
+		return Object.entries(bp).map(([provider, usd]: [string, any]) => ({
+			provider,
+			usd: Number(usd ?? 0)
+		}));
+	});
+	let costTotal = $derived(
+		Number(gen?.total ?? obs?.total ?? display?.costBreakdown?.total ?? 0)
+	);
 	// A failed post that still has media only failed to PUBLISH — it can be re-sent.
 	let canRepublish = $derived(
 		Boolean(onPublishFallback && post && post.status === 'failed' && display?.mediaUrl)
@@ -251,13 +302,13 @@
 				</div>
 			{/if}
 
-			{#if gen || display.ugcPrompt || display.script}
-				<details class="drawer-details-block" open={Boolean(gen)}>
+			{#if gen || display.ugcPrompt || display.script || costByProvider.length || genImages.length}
+				<details class="drawer-details-block" open={Boolean(gen || costByProvider.length || genImages.length)}>
 					<summary>Generation details</summary>
 
 					{#if genImages.length}
 						<div>
-							<span class="drawer-block-label">🖼 Images sent to the model</span>
+							<span class="drawer-block-label">🖼 {gen?.images ? 'Images sent to the model' : 'Reference image'}</span>
 							<div class="gen-imgs">
 								{#each genImages as img (img.url)}
 									<figure class="gen-img">
@@ -297,11 +348,57 @@
 									<tr class="gen-total">
 										<td>Total</td>
 										<td></td>
-										<td class="gen-usd">${Number(gen?.total ?? 0).toFixed(3)}</td>
+										<td class="gen-usd">${aspectsTotal.toFixed(3)}</td>
 									</tr>
 								</tbody>
 							</table>
 						</div>
+					{:else if costByProvider.length}
+						<!-- Fallback for posts without the full per-aspect record: the stored
+						     cost-by-provider breakdown (still real estimated spend). -->
+						<div>
+							<span class="drawer-block-label">💰 Estimated cost by provider</span>
+							<table class="gen-cost">
+								<tbody>
+									{#each costByProvider as c (c.provider)}
+										<tr>
+											<td class="gen-op" style="text-transform: capitalize;">{c.provider}</td>
+											<td class="gen-model"></td>
+											<td class="gen-usd">${c.usd.toFixed(3)}</td>
+										</tr>
+									{/each}
+									<tr class="gen-total">
+										<td>Total</td>
+										<td></td>
+										<td class="gen-usd">${costTotal.toFixed(3)}</td>
+									</tr>
+								</tbody>
+							</table>
+						</div>
+					{/if}
+
+					{#if display.format || display.mediaType}
+						<div>
+							<span class="drawer-block-label">🎬 Format</span>
+							<p class="gen-prompt">
+								{display.format ?? 'media'} · {display.mediaType}{display.mediaGenerated
+									? ' · generated'
+									: ''}
+							</p>
+						</div>
+					{/if}
+
+					{#if !gen && genAspects.length}
+						<p class="gen-note">
+							Models &amp; cost recovered from the generation ledger. The exact input images sent
+							weren't recorded for this older post — the product reference is shown from the brief.
+							New generations capture every input image directly.
+						</p>
+					{:else if !gen}
+						<p class="gen-note">
+							No per-model record was found in the ledger for this post — showing its stored prompt
+							and cost. New generations capture the full model + reference-image record.
+						</p>
 					{/if}
 
 					{#if genSelections}
@@ -655,6 +752,13 @@
 	.gen-prompt {
 		font-size: 0.72rem;
 		line-height: 1.45;
+	}
+	.gen-note {
+		font-size: 0.68rem;
+		line-height: 1.4;
+		color: var(--text-dim);
+		font-style: italic;
+		margin-top: 0.6rem;
 	}
 	.gen-cost {
 		width: 100%;

@@ -18,8 +18,11 @@ import {
 	PERSONA_ARCHETYPES,
 	CONTENT_FOCUS_OPTIONS,
 	AGE_RANGE_KEYS,
+	NICHE_OPTIONS,
+	APPEARANCE_FIELDS,
 	coerceToOption,
-	coerceAgeRanges
+	coerceAgeRanges,
+	coerceAppearance
 } from '$lib/persona-profile';
 import dns from 'node:dns/promises';
 import net from 'node:net';
@@ -1422,19 +1425,33 @@ Input: "${fieldVal}"`;
 				// Angles/archetypes/avatars already taken by OTHER personas — the new one
 				// must differ, so no two creators share the same positioning.
 				const { data: allAgents } = await db.agents.list();
+				// A full identity + look fingerprint of every OTHER persona, so the new one
+				// is distinct across the whole account — strategy AND visual look. niche
+				// is an agent column; the rest live in the market JSON.
 				const taken = (allAgents ?? [])
-					.filter(
-						(a: any) => a.id !== agentId && typeof a.market === 'string' && a.market.startsWith('{')
-					)
+					.filter((a: any) => a.id !== agentId)
 					.map((a: any) => {
+						let p: any = {};
 						try {
-							return JSON.parse(a.market);
+							if (typeof a.market === 'string' && a.market.startsWith('{')) p = JSON.parse(a.market);
 						} catch {
-							return {};
+							/* ignore unparseable market */
 						}
+						const ap = p.appearance || {};
+						const look = [ap.hairColor, ap.hairstyle, ap.eyeColor, ap.headwear, ap.wardrobe, ap.outfitColors]
+							.filter(Boolean)
+							.join(', ');
+						return {
+							name: a.name,
+							niche: a.niche || undefined,
+							archetype: p.archetype || undefined,
+							contentFocus: p.contentFocus || undefined,
+							angle: p.contentAngle || undefined,
+							avatar: p.targetAvatar || undefined,
+							look: look || undefined
+						};
 					})
-					.map((p: any) => ({ angle: p.contentAngle, archetype: p.archetype, avatar: p.targetAvatar }))
-					.filter((x: any) => x.angle || x.archetype || x.avatar);
+					.filter((x: any) => x.niche || x.archetype || x.angle || x.avatar || x.look);
 
 				const prompt = `You are an elite influencer strategist. Design a UNIQUE, competitive persona profile for a UGC creator who represents one brand.
 
@@ -1444,19 +1461,21 @@ AUDIENCE: ${b.demographics || '—'}. Pain points: ${b.painPoints || '—'}. Int
 BRAND VOICE: ${b.commStyle || '—'}. Traits: ${Array.isArray(b.traits) ? b.traits.join(', ') : '—'}.
 PRODUCTS: ${Array.isArray(b.products) ? b.products.map((p: any) => p.name).filter(Boolean).join(', ') : '—'}.
 
-Make this persona DISTINCT from every other creator on the account. Do NOT reuse any of these already-taken angles/archetypes/avatars:
-${JSON.stringify(taken).slice(0, 1500)}
+This persona must be UNIQUE across the ENTIRE account — recognizably different from every other creator at a glance AND in positioning. Do NOT reuse another persona's content angle, target avatar, or visual look (hair color, hairstyle, eye color, headwear, wardrobe, colors). Prefer a niche/archetype/content-focus not already taken; only repeat one if it is unavoidable, and even then make the angle and look unmistakably distinct. Already used by other personas — avoid overlapping with any of these:
+${JSON.stringify(taken).slice(0, 2500)}
 
 Rules:
+- "niche" MUST be exactly one of: ${NICHE_OPTIONS.join(' | ')}.
 - "archetype" MUST be exactly one of: ${PERSONA_ARCHETYPES.join(' | ')}.
 - "contentFocus" MUST be exactly one of: ${CONTENT_FOCUS_OPTIONS.join(' | ')}.
 - "ageRanges" is an array using ONLY these exact strings (keep the en-dash): ${AGE_RANGE_KEYS.join(', ')}.
 - "targetAvatar": one vivid sentence naming the ideal audience member.
 - "psychProfile": 2-3 sentences on audience motivations, fears, desires, identity hooks.
-- "contentAngle": the unique, ownable point of view that differentiates THIS creator competitively — first-person and specific.
+- "contentAngle": the unique, ownable point of view that differentiates THIS creator competitively — first-person and specific, and unlike any other persona's angle above.
+- "appearance": an object giving this creator a DISTINCT, ownable look (consistent with the gender) that does NOT match any other persona's look above — vary the hair color/style, eye color, headwear, wardrobe, and colors so each creator is visually unique. Keys — ${APPEARANCE_FIELDS.map((f) => `${f.key} (${f.placeholder.replace(/^e\.g\.\s*/, '')})`).join('; ')}. Use "none" for headwear if not applicable.
 - Tailor everything to the brand and keep it consistent with the creator's gender and personality.
 
-Return ONLY JSON: {"ageRanges":["25–34"],"archetype":"","contentFocus":"","targetAvatar":"","psychProfile":"","contentAngle":""}`;
+Return ONLY JSON: {"niche":"","ageRanges":["25–34"],"archetype":"","contentFocus":"","targetAvatar":"","psychProfile":"","contentAngle":"","appearance":{"wardrobe":"","outfitColors":"","hairstyle":"","hairColor":"","eyeColor":"","headwear":"","styling":""}}`;
 
 				try {
 					const parsed: any = safeParseJson(await ai!.generate(prompt, { json: true }));
@@ -1469,12 +1488,14 @@ Return ONLY JSON: {"ageRanges":["25–34"],"archetype":"","contentFocus":"","tar
 					// Coerce the LLM output back onto the allowed sets so every value selects
 					// cleanly in the UI's <select> / chip bindings.
 					const data = {
+						niche: coerceToOption(parsed.niche, NICHE_OPTIONS),
 						ageRanges: coerceAgeRanges(parsed.ageRanges),
 						archetype: coerceToOption(parsed.archetype, PERSONA_ARCHETYPES),
 						contentFocus: coerceToOption(parsed.contentFocus, CONTENT_FOCUS_OPTIONS),
 						targetAvatar: typeof parsed.targetAvatar === 'string' ? parsed.targetAvatar.trim() : '',
 						psychProfile: typeof parsed.psychProfile === 'string' ? parsed.psychProfile.trim() : '',
-						contentAngle: typeof parsed.contentAngle === 'string' ? parsed.contentAngle.trim() : ''
+						contentAngle: typeof parsed.contentAngle === 'string' ? parsed.contentAngle.trim() : '',
+						appearance: coerceAppearance(parsed.appearance)
 					};
 					return json({ success: true, data });
 				} catch (err) {
@@ -1482,6 +1503,49 @@ Return ONLY JSON: {"ageRanges":["25–34"],"archetype":"","contentFocus":"","tar
 					console.error('[Engine] Persona profile generation failed:', msg);
 					return json(
 						{ success: false, error: `Generation failed via ${ai!.provider}: ${msg.slice(0, 200)}` },
+						{ status: 502 }
+					);
+				}
+			}
+
+			// ── ACTION: read_appearance_from_image ──
+			// Vision: reads the persona's appearance (wardrobe, colors, hair, eyes,
+			// headwear, styling) straight from a reference image so the appearance
+			// variables MATCH the actual character instead of being invented.
+			if (action === 'read_appearance_from_image') {
+				if (!hasAi) {
+					return json(
+						{ success: false, error: 'No AI provider configured. Add an OpenRouter or Gemini key in Settings.' },
+						{ status: 400 }
+					);
+				}
+				const imageUrl = typeof body.imageUrl === 'string' ? body.imageUrl.trim() : '';
+				if (!imageUrl) return json({ success: false, error: 'No image provided' }, { status: 400 });
+
+				const prompt = `Look ONLY at the person in the provided image and describe their real appearance for a character config. Fill each field from what you actually SEE; use "" if genuinely unclear and "none" for headwear if there is none.
+- wardrobe: their outfit / clothing
+- outfitColors: the main colors of the outfit
+- hairstyle: hair length and style
+- hairColor: hair color
+- eyeColor: eye color
+- headwear: any hat / turban / scarf, else "none"
+- styling: the overall vibe, season, or era of the look
+Return ONLY JSON: {"wardrobe":"","outfitColors":"","hairstyle":"","hairColor":"","eyeColor":"","headwear":"","styling":""}`;
+
+				try {
+					const parsed: any = safeParseJson(await ai!.generate(prompt, { json: true, imageUrl }));
+					if (!parsed || typeof parsed !== 'object') {
+						return json(
+							{ success: false, error: `${ai!.provider} couldn't read the image — try again.` },
+							{ status: 502 }
+						);
+					}
+					return json({ success: true, data: { appearance: coerceAppearance(parsed) } });
+				} catch (err) {
+					const msg = (err as Error).message || 'unknown error';
+					console.error('[Engine] read_appearance_from_image failed:', msg);
+					return json(
+						{ success: false, error: `Read failed via ${ai!.provider}: ${msg.slice(0, 200)}` },
 						{ status: 502 }
 					);
 				}

@@ -11,7 +11,7 @@ import { getServiceSupabase } from '$lib/server/service-supabase';
 import { priceOf } from '$lib/pricing';
 import { modelsFor, resolveModel } from '$lib/models';
 
-const VALID_STAGES = ['side_profiles', 'face_closeup', 'feature_grid'] as const;
+const VALID_STAGES = ['full_body', 'side_profiles', 'face_closeup', 'feature_grid'] as const;
 
 /**
  * Read-modify-write on `agent_configs.ugc_reference_kit` for the transient
