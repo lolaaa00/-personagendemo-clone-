@@ -49,6 +49,9 @@ export interface CostEvent {
 	operation: string;
 	model: string;
 	usd: number;
+	/** Durable bucket URL of the asset this event produced, if any — recorded in
+	 * the generation_events ledger so every spent generation is recoverable. */
+	assetUrl?: string;
 }
 
 /** Sums events into { total, byProvider } for display/storage. */

@@ -1,16 +1,68 @@
 <script lang="ts">
-	import { getPostDisplay } from './postDisplay';
+	import { getPostDisplay, getPostErrorSummary } from './postDisplay';
 	import { platformColor } from '$lib/platforms';
 
 	let {
 		post,
-		onOpen
+		onOpen,
+		onRetry = null
 	}: {
 		post: any;
 		onOpen: (post: any) => void;
+		onRetry?: ((post: any) => void) | null;
 	} = $props();
 
+	// In-flight / failed state is read from the POST ROW, not a client flag, so a
+	// hard refresh mid-generation still shows the spinner and a failure survives
+	// the 4s toast that would otherwise be the only place it ever appeared.
+	let isGenerating = $derived(post.status === 'generating');
+	let isFailed = $derived(post.status === 'failed');
+
+	let genError = $derived.by(() => {
+		if (!isFailed) return null;
+		try {
+			const c = typeof post.content === 'string' ? JSON.parse(post.content) : post.content;
+			return c?.error || 'Generation failed.';
+		} catch {
+			return 'Generation failed.';
+		}
+	});
+
+	let genTopic = $derived.by(() => {
+		try {
+			const c = typeof post.content === 'string' ? JSON.parse(post.content) : post.content;
+			return c?.topic || null;
+		} catch {
+			return null;
+		}
+	});
+
+	// Elapsed-vs-expected curve. fal gives no real progress, so this decelerates
+	// toward 95% instead of parking at 100% while still spinning (which reads as
+	// "stuck"). It resolves only when the row actually leaves 'generating'.
+	const EXPECTED_MS = 90_000;
+	let now = $state(Date.now());
+	$effect(() => {
+		if (!isGenerating) return;
+		const t = setInterval(() => (now = Date.now()), 500);
+		return () => clearInterval(t);
+	});
+	let startedAt = $derived(post.created_at ? new Date(post.created_at).getTime() : Date.now());
+	let pct = $derived(
+		Math.round(Math.min(0.95, 1 - Math.exp(-Math.max(0, now - startedAt) / (EXPECTED_MS * 0.6))) * 100)
+	);
+	let elapsedS = $derived(Math.max(0, Math.round((now - startedAt) / 1000)));
+
 	let display = $derived(getPostDisplay(post));
+
+	// A 'failed' row with media DID generate successfully — it only failed to
+	// PUBLISH (e.g. no connected account). Keep the thumbnail and tag it "failed
+	// to post"; reserve the blank "Generation failed" card for rows that truly
+	// produced no media.
+	let isPublishFail = $derived(isFailed && Boolean(display.mediaUrl));
+	let isGenFail = $derived(isFailed && !display.mediaUrl);
+	let postErrorLabel = $derived(getPostErrorSummary(post));
+
 	let analytics = $derived(post.analytics ?? null);
 	let hasRealStats = $derived(Boolean(analytics && (analytics.views || analytics.likes)));
 
@@ -29,7 +81,39 @@
 <!-- Media-first mosaic tile: the media IS the card. Everything else lives in
      the drawer that opens on click — tags stay as light overlays. -->
 <button type="button" class="post-tile" onclick={() => onOpen(post)} aria-label="Open post details">
-	{#if display.mediaUrl}
+	{#if isGenerating}
+		<div class="tile-gen">
+			<span class="tile-gen-spin"></span>
+			<span class="tile-gen-title">Generating…</span>
+			{#if genTopic}<span class="tile-gen-topic">{genTopic}</span>{/if}
+			<div class="tile-gen-bar"><div class="tile-gen-fill" style="width:{pct}%"></div></div>
+			<span class="tile-gen-time">{elapsedS}s · keeps running if you leave</span>
+		</div>
+	{:else if isGenFail}
+		<div class="tile-gen failed">
+			<span class="tile-gen-x">!</span>
+			<span class="tile-gen-title">Generation failed</span>
+			<span class="tile-gen-err">{genError}</span>
+			{#if onRetry}
+				<!-- svelte-ignore node_invalid_placement_ssr -->
+				<span
+					class="tile-gen-retry"
+					role="button"
+					tabindex="0"
+					onclick={(e) => {
+						e.stopPropagation();
+						onRetry?.(post);
+					}}
+					onkeydown={(e) => {
+						if (e.key === 'Enter') {
+							e.stopPropagation();
+							onRetry?.(post);
+						}
+					}}>↺ Retry</span
+				>
+			{/if}
+		</div>
+	{:else if display.mediaUrl}
 		{#if display.mediaType === 'video'}
 			<video
 				src={display.mediaUrl}
@@ -49,10 +133,17 @@
 
 	<div class="tile-chips-top">
 		<span class="tile-platform" style="background: {platformColor(plat)}">{plat}</span>
-		<span class="tile-status" data-status={post.status}>{post.status}</span>
+		<span class="tile-status" data-status={isPublishFail ? 'post-failed' : post.status}>
+			{isPublishFail ? 'not posted' : post.status}
+		</span>
 	</div>
 
-	{#if hasError}
+	{#if isPublishFail}
+		<!-- Media generated fine; only publishing failed. Show it, don't hide it. -->
+		<div class="tile-postfail-banner" title={postErrorLabel ?? 'Failed to post'}>
+			⚠ Failed to post{postErrorLabel ? ` — ${postErrorLabel.split('\n')[0]}` : ''}
+		</div>
+	{:else if hasError}
 		<span class="tile-error-dot" title="This post has an error — open for details">⚠</span>
 	{/if}
 
@@ -167,6 +258,29 @@
 		color: var(--warning);
 		border-color: var(--warning);
 	}
+	.tile-status[data-status='post-failed'] {
+		color: var(--warning);
+		border-color: var(--warning);
+	}
+
+	.tile-postfail-banner {
+		position: absolute;
+		bottom: 0;
+		left: 0;
+		right: 0;
+		padding: 0.5rem 0.6rem;
+		background: linear-gradient(transparent, rgba(180, 90, 10, 0.92));
+		color: #fff;
+		font-size: 0.66rem;
+		font-weight: 600;
+		line-height: 1.3;
+		display: -webkit-box;
+		-webkit-line-clamp: 2;
+		line-clamp: 2;
+		-webkit-box-orient: vertical;
+		overflow: hidden;
+		pointer-events: none;
+	}
 
 	.tile-video-badge {
 		position: absolute;
@@ -213,5 +327,99 @@
 		font-size: 0.72rem;
 		font-weight: 600;
 		pointer-events: none;
+	}
+
+	/* In-flight / failed generation states (driven by the post row's status).
+	   This REPLACES the media, so it must carry its own height — absolutely
+	   positioning it would collapse the tile to nothing. */
+	.tile-gen {
+		position: relative;
+		aspect-ratio: 4 / 5;
+		width: 100%;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 0.4rem;
+		padding: 0.9rem;
+		background: var(--surface, #fff);
+		text-align: center;
+	}
+	.tile-gen.failed {
+		background: #fef2f2;
+	}
+	.tile-gen-spin {
+		width: 22px;
+		height: 22px;
+		border: 2px solid var(--border, #e6e8f0);
+		border-top-color: var(--accent, #7c6aed);
+		border-radius: 50%;
+		animation: tile-spin 0.8s linear infinite;
+	}
+	@keyframes tile-spin {
+		to {
+			transform: rotate(360deg);
+		}
+	}
+	.tile-gen-x {
+		width: 22px;
+		height: 22px;
+		border-radius: 50%;
+		background: #dc2626;
+		color: #fff;
+		font-weight: 800;
+		font-size: 0.8rem;
+		display: grid;
+		place-items: center;
+	}
+	.tile-gen-title {
+		font-size: 0.82rem;
+		font-weight: 700;
+		color: var(--text, #14172b);
+	}
+	.tile-gen-topic {
+		font-size: 0.72rem;
+		color: var(--muted, #6b7280);
+		display: -webkit-box;
+		-webkit-line-clamp: 2;
+		line-clamp: 2;
+		-webkit-box-orient: vertical;
+		overflow: hidden;
+	}
+	.tile-gen-err {
+		font-size: 0.7rem;
+		color: #991b1b;
+		display: -webkit-box;
+		-webkit-line-clamp: 3;
+		line-clamp: 3;
+		-webkit-box-orient: vertical;
+		overflow: hidden;
+	}
+	.tile-gen-bar {
+		width: 80%;
+		height: 5px;
+		border-radius: 999px;
+		background: var(--surface-2, #eef0f6);
+		overflow: hidden;
+	}
+	.tile-gen-fill {
+		height: 100%;
+		border-radius: 999px;
+		background: linear-gradient(90deg, var(--accent, #7c6aed), var(--cyan, #22d3ee));
+		transition: width 0.5s ease-out;
+	}
+	.tile-gen-time {
+		font-size: 0.66rem;
+		color: var(--muted, #6b7280);
+	}
+	.tile-gen-retry {
+		margin-top: 0.2rem;
+		font-size: 0.72rem;
+		font-weight: 600;
+		padding: 0.25rem 0.6rem;
+		border-radius: 8px;
+		background: #dc2626;
+		color: #fff;
+		cursor: pointer;
 	}
 </style>

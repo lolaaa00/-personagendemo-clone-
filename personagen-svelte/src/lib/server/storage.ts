@@ -47,6 +47,46 @@ export function isDurableBucketUrl(url: string | null | undefined): boolean {
 	return typeof url === 'string' && url.includes(`/storage/v1/object/public/${BUCKET}/`);
 }
 
+/** True if the URL points inside THIS user's own folder in our bucket (re-pin safety). */
+export function isOwnedBucketUrl(url: string | null | undefined, userId: string): boolean {
+	return (
+		typeof url === 'string' &&
+		url.includes(`/storage/v1/object/public/${BUCKET}/${userId}/`)
+	);
+}
+
+export interface StoredImage {
+	url: string;
+	name: string;
+	createdAt: string | null;
+	sizeBytes: number | null;
+}
+
+/**
+ * Lists a user's generated images (newest first) from their bucket folder, for
+ * the "restore a previous profile picture" history picker. Images only — videos
+ * and `backup-*` internal copies are filtered out. Nothing is ever deleted, so
+ * every past generation is recoverable here.
+ */
+export async function listUserImages(
+	svc: SupabaseClient,
+	userId: string,
+	limit = 100
+): Promise<StoredImage[]> {
+	const { data, error } = await svc.storage
+		.from(BUCKET)
+		.list(userId, { limit, sortBy: { column: 'created_at', order: 'desc' } });
+	if (error || !data) return [];
+	return data
+		.filter((o) => /\.(png|jpe?g|webp)$/i.test(o.name) && !o.name.startsWith('backup-'))
+		.map((o) => ({
+			url: svc.storage.from(BUCKET).getPublicUrl(`${userId}/${o.name}`).data.publicUrl,
+			name: o.name,
+			createdAt: (o as any).created_at ?? null,
+			sizeBytes: (o as any).metadata?.size ?? null
+		}));
+}
+
 /**
  * Downloads `sourceUrl` and re-uploads it to the public `ugc-media` bucket,
  * returning the durable public URL.

@@ -41,7 +41,15 @@ async function ensureAgentProfileId(
 	const profileName = `${base} · ${agent.id.slice(0, 8)}`;
 	const profileId = await client.ensureProfile(profileName).catch(() => null);
 	if (profileId) {
-		await db.agents.update(agent.id, { zernio_profile_id: profileId }).catch(() => {});
+		// Supabase query builders are thenable but have NO `.catch` method, so
+		// `.update(...).catch()` throws "catch is not a function" and took down
+		// the whole connect flow. Await it and swallow via try/catch instead —
+		// pinning the profile id is best-effort, not load-bearing for connect.
+		try {
+			await db.agents.update(agent.id, { zernio_profile_id: profileId });
+		} catch {
+			/* best-effort — the connection still proceeds without the pin */
+		}
 	}
 	return profileId;
 }

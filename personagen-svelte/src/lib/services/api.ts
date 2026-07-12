@@ -81,6 +81,8 @@ async function request<T>(
 
 export const Posts = {
 	create: (post: unknown) => request(ENDPOINTS.posts, 'create', { post }),
+	/** Reads one post — used to poll an async generation job until it leaves 'generating'. */
+	get: (id: string) => request<any>(ENDPOINTS.posts, 'get', { id }),
 	update: (id: string, data: unknown) =>
 		request(ENDPOINTS.posts, 'update', { id, ...(data as Record<string, unknown>) }),
 	delete: (id: string) => request(ENDPOINTS.posts, 'delete', { id })

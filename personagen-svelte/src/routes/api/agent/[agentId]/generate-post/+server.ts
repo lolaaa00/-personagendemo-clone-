@@ -8,6 +8,7 @@ import {
 } from '$lib/server/content/generate';
 import { publishPostById } from '$lib/server/scheduler';
 import { getServiceSupabase } from '$lib/server/service-supabase';
+import { priceOf } from '$lib/pricing';
 import { VIDEO_ONLY_PLATFORMS } from '$lib/server/social/platforms';
 
 /**
@@ -112,12 +113,77 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 				: undefined
 	};
 
+	const scheduledDate = typeof body.scheduled_date === 'string' ? body.scheduled_date : null;
+	const scheduledTime = typeof body.scheduled_time === 'string' ? body.scheduled_time : null;
+
+	// ── Preview: resolve, don't spend ────────────────────────────────────────
+	// Hands back the fully-resolved configuration this request would run with, so
+	// the composer shows the user exactly what is about to happen (and what it
+	// costs) before a cent is spent. Nothing is generated and no row is created.
+	if (body.preview === true) {
+		const { data: cfgRow } = await locals.supabase
+			.from('agent_configs')
+			.select('ugc_character_ref, brand_brief_id')
+			.eq('agent_id', agentId)
+			.maybeSingle();
+
+		const { data: selectedBrief } = cfgRow?.brand_brief_id
+			? await db.brandBriefs.getById(cfgRow.brand_brief_id, user.id)
+			: { data: null };
+		const { data: fallbackBrief } = selectedBrief ? { data: null } : await db.brandBriefs.get(user.id);
+		const briefData = (selectedBrief ?? fallbackBrief)?.data || null;
+		const products = Array.isArray(briefData?.products) ? briefData.products : [];
+		const product =
+			products.find((p: any) => p.id === genInput.productId) ||
+			products.find((p: any) => p.photoUrl) ||
+			products[0] ||
+			null;
+
+		const mediaKind = wantCinematic ? 'cinematic' : genInput.video === false ? 'image' : 'video';
+		const characterRef = genInput.characterRefOverride || cfgRow?.ugc_character_ref || null;
+		const productPhoto = genInput.productPhotoUrlOverride || product?.photoUrl || null;
+
+		// The model stack this media kind actually runs through, with per-call costs.
+		const steps: { step: string; provider: string; model: string; usd: number }[] = [
+			{ step: 'director (caption + scene)', provider: 'openrouter', model: 'gemini-3.5-flash', usd: priceOf('openrouter', 'llm') },
+			{ step: 'product still', provider: 'fal', model: 'nano-banana-2', usd: priceOf('fal', 'image', 'nano') }
+		];
+		if (mediaKind === 'video') {
+			steps.push({ step: 'b-roll video', provider: 'fal', model: 'kling-o3-standard', usd: priceOf('fal', 'video', 'kling-o3-standard') });
+		} else if (mediaKind === 'cinematic') {
+			steps.push({ step: 'cinematic video', provider: 'fal', model: 'kling-o3-pro reference', usd: priceOf('fal', 'video', 'pro') });
+		}
+
+		return json({
+			success: true,
+			preview: {
+				topic: genInput.topic || null,
+				media: mediaKind,
+				provider: genInput.providerPreference || 'auto',
+				platforms: targetPool,
+				connectedPlatforms,
+				product: product ? { id: product.id, name: product.name, photoUrl: product.photoUrl || null } : null,
+				productPhotoUrl: productPhoto,
+				characterRefUrl: characterRef,
+				// Be honest: unless the user pins a scene, the Director LLM writes the
+				// visual prompt at run time — we cannot show a prompt that doesn't exist yet.
+				scene: genInput.sceneOverride || null,
+				sceneNote: genInput.sceneOverride
+					? 'This exact scene prompt will be sent to the image/video model.'
+					: 'Left blank: the Director model will write the scene prompt. Type one here to pin it exactly.',
+				scheduledDate,
+				scheduledTime,
+				editable: ['topic', 'media', 'provider', 'platforms', 'product_id', 'product_photo_url', 'character_ref_url', 'scene', 'scheduled_date', 'scheduled_time'],
+				steps,
+				estimatedCostUsd: +steps.reduce((s, x) => s + x.usd, 0).toFixed(4)
+			}
+		});
+	}
+
 	// ── Async job path ───────────────────────────────────────────────────────
 	// Create the post row up front so the client has an id to poll. A caller-
 	// supplied schedule slot is kept; otherwise the completion task stamps
 	// "now" exactly like the old synchronous path did.
-	const scheduledDate = typeof body.scheduled_date === 'string' ? body.scheduled_date : null;
-	const scheduledTime = typeof body.scheduled_time === 'string' ? body.scheduled_time : null;
 	const { data: pending, error: pendingErr } = await db.posts.create({
 		user_id: user.id,
 		agent_id: agentId,
@@ -164,8 +230,8 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 			const taskDb = createDbService(taskSupabase);
 			try {
 				const pack = wantCinematic
-					? await generateCinematicUgcPack({ supabase: taskSupabase, ...genInput })
-					: await generateUgcPack({ supabase: taskSupabase, ...genInput });
+					? await generateCinematicUgcPack({ supabase: taskSupabase, ...genInput, postId })
+					: await generateUgcPack({ supabase: taskSupabase, ...genInput, postId });
 				const content = pack.content;
 
 				// Which SELECTED platforms can actually accept this pack's media type?

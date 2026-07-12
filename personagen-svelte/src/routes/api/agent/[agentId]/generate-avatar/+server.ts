@@ -5,8 +5,13 @@ import {
 	generateCharacterPortrait,
 	generateCharacterSheetFromReference,
 	resolvePersonaGender,
-	resolveImageKeys
+	resolveImageKeys,
+	buildHeroPortraitPrompt,
+	buildUgcImagePrompt,
+	UGC_IMAGE_MODEL_FAL,
+	UGC_IMAGE_MODEL_OPENROUTER
 } from '$lib/server/content/generate';
+import { priceOf } from '$lib/pricing';
 import { getServiceSupabase } from '$lib/server/service-supabase';
 import { persistBufferToStorage } from '$lib/server/storage';
 import { VOICE_CATALOG } from '$lib/server/voices';
@@ -130,6 +135,8 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		};
 	} else {
 		// ── From-scratch path ──────────────────────────────────────────────────
+		const body = (await request.json().catch(() => ({}))) as any;
+
 		const { data: cfg } = await locals.supabase
 			.from('agent_configs')
 			.select('ugc_voice, brand_brief_id')
@@ -150,6 +157,43 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		const { data: fallbackBrief } = selectedBrief ? { data: null } : await db.brandBriefs.get(user.id);
 		const briefData = (selectedBrief ?? fallbackBrief)?.data || null;
 
+		const gender = profileGender || voiceGender;
+		// The REAL prompt this generation will send — built by the same function the
+		// generator uses, so the preview can never drift from what actually runs.
+		const resolvedPrompt = buildHeroPortraitPrompt(briefData, agent, gender);
+
+		// `preview: true` costs nothing and generates nothing — it hands back the
+		// resolved payload so the composer can show exactly what is about to be
+		// sent and let the user edit it before approving.
+		if (body.preview === true) {
+			// resolveImageKeys prefers the user's OpenRouter key over fal, so report
+			// whichever model this request would actually land on.
+			const { orKey } = await resolveImageKeys(locals.supabase, user.id);
+			return json({
+				success: true,
+				preview: {
+					mode: 'from_scratch',
+					prompt: resolvedPrompt,
+					// generateUgcImage silently prepends a UGC style prefix — show the
+					// literal string the provider receives, not a flattering summary.
+					finalPrompt: buildUgcImagePrompt(resolvedPrompt),
+					model: orKey ? UGC_IMAGE_MODEL_OPENROUTER : UGC_IMAGE_MODEL_FAL,
+					provider: orKey ? 'openrouter' : 'fal',
+					gender: gender ?? null,
+					editable: ['prompt'],
+					estimatedCostUsd: orKey
+						? priceOf('openrouter', 'image')
+						: priceOf('fal', 'image', 'flux')
+				}
+			});
+		}
+
+		// Honour a prompt the user edited in the composer; otherwise use the resolved one.
+		const promptOverride =
+			typeof body.prompt === 'string' && body.prompt.trim()
+				? String(body.prompt).slice(0, 2000)
+				: undefined;
+
 		runGeneration = () =>
 			generateCharacterPortrait(
 				svc,
@@ -159,7 +203,8 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 				falKey,
 				briefData,
 				agent,
-				profileGender || voiceGender
+				gender,
+				promptOverride
 			);
 	}
 

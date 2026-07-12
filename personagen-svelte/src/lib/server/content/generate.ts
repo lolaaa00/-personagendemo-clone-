@@ -230,12 +230,23 @@ async function falQueueJson(
  * Generates a UGC-style lifestyle image from a b-roll prompt (text-to-image fallback
  * when there is no product photo to composite). Throws on failure.
  */
+export const UGC_IMAGE_PREFIX =
+	'UGC lifestyle photo, candid and authentic, shot on iPhone, natural lighting, real person not staged. ';
+/** The text-to-image models this helper actually calls -- surfaced so the UI shows the truth. */
+export const UGC_IMAGE_MODEL_FAL = 'fal-ai/flux/schnell';
+export const UGC_IMAGE_MODEL_OPENROUTER = 'black-forest-labs/flux-schnell';
+
+/** The full string the provider receives, prefix included, so a preview can never lie. */
+export function buildUgcImagePrompt(ugcPrompt: string): string {
+	return `${UGC_IMAGE_PREFIX}${ugcPrompt}`;
+}
+
 export async function generateUgcImage(
 	ugcPrompt: string,
 	orKey: string | null,
 	falKey: string | null
 ): Promise<string> {
-	const imagePrompt = `UGC lifestyle photo, candid and authentic, shot on iPhone, natural lighting, real person not staged. ${ugcPrompt}`;
+	const imagePrompt = buildUgcImagePrompt(ugcPrompt);
 	if (orKey) {
 		const orRes = await genFetch('https://openrouter.ai/api/v1/images/generations', {
 			method: 'POST',
@@ -246,7 +257,7 @@ export async function generateUgcImage(
 				'X-Title': 'PersonaGen'
 			},
 			body: JSON.stringify({
-				model: 'black-forest-labs/flux-schnell',
+				model: UGC_IMAGE_MODEL_OPENROUTER,
 				prompt: imagePrompt,
 				n: 1,
 				size: '1024x1024'
@@ -262,7 +273,7 @@ export async function generateUgcImage(
 	}
 	if (falKey) {
 		const falData = await falSyncJson(
-			'fal-ai/flux/schnell',
+			UGC_IMAGE_MODEL_FAL,
 			{ prompt: imagePrompt, image_size: 'square_hd', num_images: 1 },
 			falKey
 		);
@@ -1210,6 +1221,12 @@ export async function generateCinematicUgcPack(input: UgcPackInput): Promise<Ugc
 		? await persistBufferToStorage(svc, captioned, userId, 'mp4', 'video/mp4')
 		: await persistToStorage(svc, videoUrl, userId, 'mp4');
 
+	// Record the durable asset URLs in the ledger (flushed in finally, even on a
+	// later throw) so this spend is always recoverable from the DB.
+	costEvents.push({ provider: 'storage', operation: 'persist', model: 'ugc-media', usd: 0, assetUrl: durableMedia });
+	if (durableStoryboard[0])
+		costEvents.push({ provider: 'storage', operation: 'persist', model: 'ugc-media', usd: 0, assetUrl: durableStoryboard[0] });
+
 	const content: UgcContent & { storyboard?: string[]; cinematic?: boolean } = {
 		text: parsed.text || '',
 		hashtags: Array.isArray(parsed.hashtags) ? parsed.hashtags : [],
@@ -1240,7 +1257,7 @@ export async function generateCinematicUgcPack(input: UgcPackInput): Promise<Ugc
 	} finally {
 		// Flush the ledger even if generation threw partway through — otherwise
 		// every failed/retried generation is silent spend the cap never sees.
-		await recordCostEvents(supabase, userId, input.agentId, costEvents);
+		await recordCostEvents(supabase, userId, input.agentId, costEvents, input.postId);
 	}
 }
 
@@ -1319,6 +1336,8 @@ export interface UgcPackInput {
 	/** Reference-photo overrides from the generation composer. */
 	productPhotoUrlOverride?: string;
 	characterRefOverride?: string;
+	/** The post row this generation belongs to — links ledger rows to the post. */
+	postId?: string;
 }
 
 export interface UgcContent {
@@ -1367,20 +1386,43 @@ async function recordCostEvents(
 	supabase: any,
 	userId: string,
 	agentId: string | undefined,
-	events: CostEvent[]
+	events: CostEvent[],
+	postId?: string
 ): Promise<void> {
 	if (events.length === 0) return;
+	// Link every spent generation to the post it produced (was always null before)
+	// and record the durable asset URL, so no token spend is ever untraceable and
+	// every asset is recoverable from the DB.
+	const rows = events.map((e) => ({
+		user_id: userId,
+		agent_id: agentId ?? null,
+		post_id: postId ?? null,
+		provider: e.provider,
+		operation: e.operation,
+		model: e.model,
+		est_cost: e.usd,
+		asset_url: e.assetUrl ?? null
+	}));
 	try {
-		await supabase.from('generation_events').insert(
-			events.map((e) => ({
-				user_id: userId,
-				agent_id: agentId ?? null,
-				provider: e.provider,
-				operation: e.operation,
-				model: e.model,
-				est_cost: e.usd
-			}))
-		);
+		const { error } = await supabase.from('generation_events').insert(rows);
+		if (!error) return;
+		// The asset_url column is added by generation_events_asset_url_migration.sql.
+		// If it isn't applied yet, the insert fails for an unknown column — retry
+		// WITHOUT asset_url so the ledger (and cap accounting) keeps working rather
+		// than silently dropping every cost row until the migration lands.
+		if (/asset_url/i.test(error.message ?? '') || error.code === 'PGRST204' || error.code === '42703') {
+			const { error: retryErr } = await supabase
+				.from('generation_events')
+				.insert(rows.map(({ asset_url, ...rest }) => rest));
+			if (retryErr)
+				console.warn('[Cost] Failed to record generation events:', retryErr.message);
+			else
+				console.warn(
+					'[Cost] Recorded generation events without asset_url — apply generation_events_asset_url_migration.sql to enable asset recovery.'
+				);
+			return;
+		}
+		console.warn('[Cost] Failed to record generation events:', error.message);
 	} catch (err) {
 		console.warn('[Cost] Failed to record generation events:', (err as Error).message);
 	}
@@ -1473,14 +1515,60 @@ export function inferGenderFromText(
 	return undefined; // none, or contradictory → don't guess
 }
 
+// First-name → gender lookup. A persona named "Aisha Noori" or "Marcus Chen"
+// has a clear gender its soul text may never state in pronouns — without this
+// a female persona silently generates a male face/voice (the exact "Aisha but
+// male images" bug). Curated toward the app's own personas plus common names;
+// unknown names fall through to the text scan, never a wrong guess.
+const NAME_GENDER: Record<string, 'male' | 'female'> = {
+	// female
+	aisha: 'female', sofia: 'female', sophia: 'female', veronica: 'female', chloe: 'female',
+	aria: 'female', elena: 'female', jenny: 'female', jennifer: 'female', lexy: 'female', lexi: 'female',
+	alexa: 'female', emma: 'female', olivia: 'female', ava: 'female', isabella: 'female', mia: 'female',
+	amelia: 'female', harper: 'female', evelyn: 'female', charlotte: 'female', luna: 'female',
+	grace: 'female', chloé: 'female', maya: 'female', zoe: 'female', zoey: 'female', nora: 'female',
+	lily: 'female', hannah: 'female', layla: 'female', aaliyah: 'female', fatima: 'female', noor: 'female',
+	sara: 'female', sarah: 'female', priya: 'female', ananya: 'female', mei: 'female', yuki: 'female',
+	kayla: 'female', mila: 'female', ivy: 'female', ruby: 'female', jade: 'female', bella: 'female',
+	// male
+	marcus: 'male', kai: 'male', ryan: 'male', james: 'male', liam: 'male', noah: 'male', oliver: 'male',
+	elijah: 'male', william: 'male', henry: 'male', lucas: 'male', mason: 'male', ethan: 'male',
+	logan: 'male', jack: 'male', aiden: 'male', jackson: 'male', david: 'male', joseph: 'male',
+	samuel: 'male', omar: 'male', ali: 'male', hassan: 'male', raj: 'male', arjun: 'male', chen: 'male',
+	hiro: 'male', kenji: 'male', diego: 'male', mateo: 'male', leo: 'male', max: 'male', adam: 'male',
+	brian: 'male', josh: 'male', joshua: 'male', tyler: 'male', dylan: 'male', nathan: 'male'
+};
+
+/** Gender from a name's first token (e.g. "Aisha Noori" → female), else undefined. */
+export function inferGenderFromName(name: string | undefined | null): 'male' | 'female' | undefined {
+	if (!name) return undefined;
+	const first = name.trim().toLowerCase().split(/[\s._-]+/)[0]?.replace(/[^a-zà-ÿ]/g, '');
+	return first ? NAME_GENDER[first] : undefined;
+}
+
+/** Extracts the character's name from a soul doc's "— Name" / "soul.md — Name" heading, if present. */
+function characterNameFromSoul(soul: string | undefined | null): string | undefined {
+	if (!soul) return undefined;
+	const m = String(soul).match(/(?:soul(?:\.md)?\s*)?[—–-]\s*([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'\-]+(?:\s+[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'\-]+){0,2})/);
+	return m?.[1]?.trim();
+}
+
 /**
  * Resolves a persona's authoritative gender: the explicit Profile-tab field
- * first, else inferred from the soul/name/target-avatar text. This is what
- * both the voice and the on-camera character must agree with.
+ * first, then its NAME (agent name + the character name in the soul heading),
+ * then a pronoun/keyword scan of the soul/audience text. Name beats text scan
+ * because "Aisha, a fashion curator" has no gendered keyword but an obvious
+ * name. This is what both the voice and the on-camera character must agree with.
  */
 export function resolvePersonaGender(agentData: any): 'male' | 'female' | undefined {
 	const explicit = parsePersonaProfile(agentData).gender;
 	if (explicit === 'male' || explicit === 'female') return explicit;
+
+	const byName =
+		inferGenderFromName(characterNameFromSoul(agentData?.soul)) ||
+		inferGenderFromName(agentData?.name);
+	if (byName) return byName;
+
 	return inferGenderFromText(
 		agentData?.soul,
 		agentData?.name,
@@ -1539,15 +1627,20 @@ function resolveVoiceForPersona(
 	return { voice: cfgVoice, voiceGender: cfgGender ?? personaGender };
 }
 
-/** Generates (and durably persists) a fresh hero portrait image. No DB pin — just the image. */
-async function generateHeroPortraitImage(
-	svc: any,
-	userId: string,
-	falKey: string,
+/**
+ * Builds the exact hero-portrait prompt the provider will receive.
+ *
+ * Exported (and kept separate from the call that uses it) so the UI can show the
+ * user the REAL prompt before spending anything — the confirm-before-generate
+ * composer resolves this, lets the user edit it, and sends the edited text back
+ * as `promptOverride`. Anything shown to the user must be produced here, so the
+ * preview and the actual request can never drift apart.
+ */
+export function buildHeroPortraitPrompt(
 	briefData: any,
 	agentData: any,
 	voiceGender: 'male' | 'female' | undefined
-): Promise<string> {
+): string {
 	const audience = briefData?.demographics || 'a general lifestyle audience';
 	// The soul often carries the persona's PHYSICAL identity ("Emirati fashion
 	// curator, 26, Dubai") — clamping it to 120 chars was dropping exactly the
@@ -1562,7 +1655,20 @@ async function generateHeroPortraitImage(
 	const profile = parsePersonaProfile(agentData);
 	const archetypeLine = profile.archetype ? ` Their creator archetype: ${profile.archetype}.` : '';
 	const avatarLine = profile.targetAvatar ? ` They make content for: ${String(profile.targetAvatar).slice(0, 120)}.` : '';
-	const heroPrompt = `Photorealistic vertical portrait of one relatable UGC content creator who fits this audience: ${audience}.${persona}${genderLine}${archetypeLine}${avatarLine} Friendly, casual, natural window light, looking straight at the camera, authentic iPhone selfie style, clear visible face, upper body. Single person only.`;
+	return `Photorealistic vertical portrait of one relatable UGC content creator who fits this audience: ${audience}.${persona}${genderLine}${archetypeLine}${avatarLine} Friendly, casual, natural window light, looking straight at the camera, authentic iPhone selfie style, clear visible face, upper body. Single person only.`;
+}
+
+/** Generates (and durably persists) a fresh hero portrait image. No DB pin — just the image. */
+async function generateHeroPortraitImage(
+	svc: any,
+	userId: string,
+	falKey: string,
+	briefData: any,
+	agentData: any,
+	voiceGender: 'male' | 'female' | undefined,
+	promptOverride?: string
+): Promise<string> {
+	const heroPrompt = promptOverride?.trim() || buildHeroPortraitPrompt(briefData, agentData, voiceGender);
 
 	const heroUrl = await generateUgcImage(heroPrompt, null, falKey);
 	// Loud persist: pinned reusable face fed as grounding to every future video
@@ -1588,10 +1694,19 @@ export async function generateCharacterPortrait(
 	falKey: string,
 	briefData: any,
 	agentData: any,
-	voiceGender: 'male' | 'female' | undefined
+	voiceGender: 'male' | 'female' | undefined,
+	promptOverride?: string
 ): Promise<string> {
 	// 1. Config/brief-tuned hero portrait → pinned as the profile picture.
-	const durable = await generateHeroPortraitImage(svc, userId, falKey, briefData, agentData, voiceGender);
+	const durable = await generateHeroPortraitImage(
+		svc,
+		userId,
+		falKey,
+		briefData,
+		agentData,
+		voiceGender,
+		promptOverride
+	);
 	await supabase.from('agent_configs').update({ ugc_character_ref: durable }).eq('agent_id', agentId);
 
 	// 2. Build a REAL reference-kit foundation from that portrait — a character
@@ -1733,114 +1848,111 @@ export async function generateCharacterSheetFromReference(
  * right side profiles, preserving facial detail/imperfections (facial hair,
  * skin texture, etc.) at high fidelity.
  */
-const SIDE_PROFILE_PROMPT =
-	'Upscale this and the character sheet to 4K resolution for maximum detail. I need a close-up shot of his side profile, left and right, to retain his facial details and imperfections including facial hair etc. Output as one high quality composite image.';
 
 /**
- * Stage 3: takes the approved full-body hero shot + the stage-1 turnaround
- * sheet and produces one composite of both side profiles (left + right), for
- * maximum facial-detail consistency. Persists the result and merges it into
- * `ugc_reference_kit.side_profiles` — does not touch `ugc_character_ref`
- * (the primary avatar stays the full-body shot from stage 2).
+ * Persona-correct wording for the kit prompts.
+ *
+ * The originals were hard-coded male ("his side profile", "the man's features"),
+ * which quietly fought the reference image on every female persona. These build
+ * the same prompt with pronouns that match the persona, and they're what the
+ * confirm-before-generate composer shows — so the user sees (and can edit) the
+ * exact text that will be sent.
  */
-export async function generateSideProfileComposite(
-	supabase: any,
-	svc: any,
-	userId: string,
-	agentId: string,
-	falKey: string,
-	fullBodyShotUrl: string,
-	characterSheetUrl: string
-): Promise<string> {
-	const data = await falSyncJson(
-		NANO_MODEL,
-		{
-			prompt: SIDE_PROFILE_PROMPT,
-			image_urls: [fullBodyShotUrl, characterSheetUrl],
+function genderWords(gender: 'male' | 'female' | undefined) {
+	if (gender === 'female') return { possessive: 'her', noun: "the woman's" };
+	if (gender === 'male') return { possessive: 'his', noun: "the man's" };
+	return { possessive: 'their', noun: "the person's" };
+}
+
+export function buildSideProfilePrompt(gender?: 'male' | 'female'): string {
+	const { possessive } = genderWords(gender);
+	return `Upscale this and the character sheet to 4K resolution for maximum detail. I need a close-up shot of ${possessive} side profile, left and right, to retain ${possessive} facial details and imperfections including facial hair etc. Output as one high quality composite image.`;
+}
+
+export function buildFaceCloseupPrompt(gender?: 'male' | 'female'): string {
+	const { noun } = genderWords(gender);
+	return `give me a close up of ${noun} face focusing on the facial features`;
+}
+
+export function buildFeatureGridPrompt(gender?: 'male' | 'female'): string {
+	const { noun } = genderWords(gender);
+	return `give me a grid of close up shots of ${noun} features such as eyes, lips, nose, lashes, brow, and hair.`;
+}
+
+/** The image model every reference-kit stage runs on — surfaced so the UI can show it. */
+export const KIT_IMAGE_MODEL = NANO_MODEL;
+
+export type KitStage = 'side_profiles' | 'face_closeup' | 'feature_grid';
+
+/**
+ * The single source of truth for what a kit stage will actually send: the prompt,
+ * the model, the reference images and the aspect ratio. The preview endpoint
+ * returns exactly this, and the generators below consume the same values — so
+ * what the user confirms is what gets executed, never a stale approximation.
+ */
+export function resolveKitStagePlan(
+	stage: KitStage,
+	kit: Record<string, any>,
+	characterRef: string | null,
+	gender?: 'male' | 'female'
+): { prompt: string; model: string; image_urls: string[]; aspect_ratio: string } | { error: string } {
+	if (stage === 'side_profiles') {
+		const frontal = kit.full_body || kit.sheet || characterRef;
+		if (!frontal) return { error: 'Generate a profile picture first.' };
+		return {
+			prompt: buildSideProfilePrompt(gender),
+			model: NANO_MODEL,
+			image_urls: [frontal, kit.sheet || frontal],
 			aspect_ratio: '16:9'
-		},
-		falKey
-	);
-	const url = data.images?.[0]?.url;
-	if (!url) throw new Error('Nano Banana returned no image for the side-profile composite');
-
-	const durable = await persistToStorage(svc, url, userId, 'png');
-
-	await mergeReferenceKit(supabase, agentId, { side_profiles: durable });
-	return durable;
-}
-
-/**
- * Stage 4's fixed prompt: an extreme facial close-up, for maximum
- * skin-texture/feature fidelity in the reference kit.
- */
-const FACE_CLOSEUP_PROMPT = 'give me a close up of this man focusing on his facial features';
-
-/**
- * Stage 4: takes the stage-3 side-profile composite (richest facial-detail
- * reference so far) and produces one extreme facial close-up. Persists the
- * result and merges it into `ugc_reference_kit.face_closeup`.
- */
-export async function generateFacialCloseup(
-	supabase: any,
-	svc: any,
-	userId: string,
-	agentId: string,
-	falKey: string,
-	referenceImageUrl: string
-): Promise<string> {
-	const data = await falSyncJson(
-		NANO_MODEL,
-		{ prompt: FACE_CLOSEUP_PROMPT, image_urls: [referenceImageUrl], aspect_ratio: '1:1' },
-		falKey
-	);
-	const url = data.images?.[0]?.url;
-	if (!url) throw new Error('Nano Banana returned no image for the facial close-up');
-
-	const durable = await persistToStorage(svc, url, userId, 'png');
-
-	await mergeReferenceKit(supabase, agentId, { face_closeup: durable });
-	return durable;
-}
-
-/**
- * Stage 5's fixed prompt: a labelless grid of individual feature close-ups
- * (eyes, lips, nose, lashes, brow, hair) — a companion to stage 4's single
- * close-up, giving the kit per-feature detail crops in one image.
- */
-const FEATURE_GRID_PROMPT =
-	"give me a grid of close up shots of the man's features such as eyes, lips, nose, lashes, brow, and hair.";
-
-/**
- * Stage 5: takes the facial close-up (+ the original turnaround sheet, which
- * already has hair/skin/clothing detail panels) and produces a labelless grid
- * of individual feature close-ups. Persists the result and merges it into
- * `ugc_reference_kit.feature_grid`.
- */
-export async function generateFeatureGrid(
-	supabase: any,
-	svc: any,
-	userId: string,
-	agentId: string,
-	falKey: string,
-	faceCloseupUrl: string,
-	characterSheetUrl: string
-): Promise<string> {
-	const data = await falSyncJson(
-		NANO_MODEL,
-		{
-			prompt: FEATURE_GRID_PROMPT,
-			image_urls: [faceCloseupUrl, characterSheetUrl],
+		};
+	}
+	if (stage === 'face_closeup') {
+		const reference = kit.side_profiles || kit.full_body;
+		if (!reference) return { error: 'Generate the side-profile composite first.' };
+		return {
+			prompt: buildFaceCloseupPrompt(gender),
+			model: NANO_MODEL,
+			image_urls: [reference],
 			aspect_ratio: '1:1'
-		},
+		};
+	}
+	if (!kit.face_closeup) return { error: 'Generate the facial close-up first.' };
+	return {
+		prompt: buildFeatureGridPrompt(gender),
+		model: NANO_MODEL,
+		image_urls: [kit.face_closeup, kit.sheet || kit.full_body || kit.face_closeup],
+		aspect_ratio: '1:1'
+	};
+}
+
+/**
+ * Runs ONE reference-kit stage from an already-resolved plan.
+ *
+ * The plan (prompt / model / reference images / aspect ratio) comes from
+ * `resolveKitStagePlan`, which is also what the confirm-before-generate composer
+ * shows the user — so the request that executes here is byte-for-byte the one
+ * they approved, including any prompt they edited. Persists the result durably
+ * and merges it into the matching `ugc_reference_kit` key.
+ */
+export async function executeKitStage(
+	supabase: any,
+	svc: any,
+	userId: string,
+	agentId: string,
+	falKey: string,
+	stage: KitStage,
+	plan: { prompt: string; image_urls: string[]; aspect_ratio: string }
+): Promise<string> {
+	const data = await falSyncJson(
+		NANO_MODEL,
+		{ prompt: plan.prompt, image_urls: plan.image_urls, aspect_ratio: plan.aspect_ratio },
 		falKey
 	);
 	const url = data.images?.[0]?.url;
-	if (!url) throw new Error('Nano Banana returned no image for the feature grid');
+	if (!url) throw new Error(`Nano Banana returned no image for ${stage}`);
 
 	const durable = await persistToStorage(svc, url, userId, 'png');
-
-	await mergeReferenceKit(supabase, agentId, { feature_grid: durable });
+	await mergeReferenceKit(supabase, agentId, { [stage]: durable });
 	return durable;
 }
 
@@ -2193,6 +2305,13 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 		);
 	}
 
+	// Record durable asset URLs in the ledger (flushed in finally) so this spend
+	// is always recoverable from the DB even if a later step throws.
+	if (durableMedia)
+		costEvents.push({ provider: 'storage', operation: 'persist', model: 'ugc-media', usd: 0, assetUrl: durableMedia });
+	if (durableStill && durableStill !== durableMedia)
+		costEvents.push({ provider: 'storage', operation: 'persist', model: 'ugc-media', usd: 0, assetUrl: durableStill });
+
 	const content: UgcContent = {
 		text: parsed.text || '',
 		hashtags: Array.isArray(parsed.hashtags) ? parsed.hashtags : [],
@@ -2225,6 +2344,6 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 	} finally {
 		// Flush the ledger even if generation threw partway through — otherwise
 		// every failed/retried generation is silent spend the cap never sees.
-		await recordCostEvents(supabase, userId, input.agentId, costEvents);
+		await recordCostEvents(supabase, userId, input.agentId, costEvents, input.postId);
 	}
 }

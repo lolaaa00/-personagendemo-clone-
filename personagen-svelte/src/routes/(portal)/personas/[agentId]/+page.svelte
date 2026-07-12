@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import { showToast } from '$lib/stores/ui.svelte';
-	import { goto } from '$app/navigation';
+	import { goto, invalidateAll } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { slide } from 'svelte/transition';
 	import { Accounts, Autopilot, Posts, BrandBrief, parseJsonResponse } from '$lib/services/api';
@@ -14,8 +14,50 @@
 	import type { AutonomyLevel } from '$lib/types';
 	import { AUTONOMY_LABELS } from '$lib/types';
 	import { PLATFORMS as PLATFORM_REGISTRY, platformLabel } from '$lib/platforms';
+	import GenerationComposer from '$lib/components/generation/GenerationComposer.svelte';
+	import type { ComposerSpec } from '$lib/components/generation/types';
+	import MediaPreviewModal from '$lib/components/generation/MediaPreviewModal.svelte';
+	import {
+		startGeneration,
+		finishGeneration,
+		failGeneration,
+		kitJobId
+	} from '$lib/stores/generations.svelte';
 
 	let { data }: { data: any } = $props();
+
+	// ── Confirm-before-generate ────────────────────────────────────────────
+	// Every generate/draft action routes through here. The composer asks the
+	// server to RESOLVE the request first (real prompt, real model, real cost),
+	// shows it as an editable form, and only then runs it with what was approved.
+	let composerSpec = $state<ComposerSpec | null>(null);
+	let composerOpen = $state(false);
+	let onComposerConfirm: (body: Record<string, unknown>) => void = () => {};
+
+	function askToGenerate(
+		spec: ComposerSpec,
+		run: (body: Record<string, unknown>) => void | Promise<void>
+	) {
+		composerSpec = spec;
+		onComposerConfirm = (body) => {
+			composerOpen = false;
+			void run(body);
+		};
+		composerOpen = true;
+	}
+
+	// ── Generated-asset preview (expand + regenerate) ──────────────────────
+	let previewUrl = $state<string | null>(null);
+	let previewTitle = $state('Generated asset');
+	let previewRegenerate = $state<(() => void) | null>(null);
+	let previewOpen = $state(false);
+
+	function openPreview(url: string, title: string, regenerate: (() => void) | null = null) {
+		previewUrl = url;
+		previewTitle = title;
+		previewRegenerate = regenerate;
+		previewOpen = true;
+	}
 
 	let agent = $state<any>(data.agent ?? null);
 	let supervisors = $derived(data.supervisors ?? []);
@@ -484,24 +526,47 @@
 	async function fillDraftsNow() {
 		if (!agent?.id || fillingDrafts) return;
 		fillingDrafts = true;
-		showToast('Generating drafts — this can take a few minutes…', 'info');
+		const jobId = kitJobId(agent.id, 'drafts');
 		try {
 			const res = await Autopilot.generateNow(agent.id);
-			if (res.success) {
-				const n = res.data?.generated ?? 0;
-				showToast(
-					n > 0
-						? `${n} draft${n === 1 ? '' : 's'} created — review them in the feed`
-						: 'Draft runway is already full — no new drafts needed',
-					n > 0 ? 'success' : 'info'
-				);
-				if (n > 0) await loadFeed();
-			} else {
+			if (!res.success) {
 				showToast(res.error || 'Draft generation failed', 'error');
+				return;
+			}
+
+			// The run is DETACHED: the endpoint 202s immediately and never reports a
+			// count. The old code read `data.generated` — always undefined now — so it
+			// permanently claimed the runway was full and never refreshed the feed.
+			// Instead we surface the job and let the drafts stream into the feed as
+			// 'generating' cards, which is what the user actually wants to watch.
+			startGeneration({
+				id: jobId,
+				kind: 'drafts',
+				agentId: agent.id,
+				label: 'Autopilot drafts'
+			});
+			showToast('Generating drafts — they appear in the feed as each one finishes', 'info');
+
+			const deadline = Date.now() + 6 * 60 * 1000;
+			let sawAny = false;
+			while (Date.now() < deadline && !pageDestroyed) {
+				await sleep(5000);
+				if (pageDestroyed) break;
+				await loadFeed();
+				const running = feedPosts.some((p: any) => p.status === 'generating');
+				if (running) sawAny = true;
+				// Done once the drafts we saw have all landed. If nothing ever showed up
+				// within the first ~25s, autopilot decided the runway was already full.
+				if (sawAny && !running) break;
+				if (!sawAny && Date.now() > deadline - 6 * 60 * 1000 + 25_000) {
+					showToast('Draft runway is already full — no new drafts needed', 'info');
+					break;
+				}
 			}
 		} catch (err) {
 			showToast('Draft generation failed: ' + (err as Error).message, 'error');
 		} finally {
+			finishGeneration(jobId);
 			fillingDrafts = false;
 		}
 	}
@@ -597,17 +662,44 @@
 			: [...genPlatforms, key];
 	}
 
-	function requestGeneratePost() {
-		if (skipGenerateConfirm) void generatePostNow();
-		else void openComposer();
-	}
-	function confirmGenerate() {
-		if (confirmSkipNext) {
-			localStorage.setItem('pg-skip-generate-confirm', '1');
-			skipGenerateConfirm = true;
-		}
+	/**
+	 * Composer "✨ Generate" handler: bundles exactly what the user set in the
+	 * dialog and sends it to generatePostNow (which posts it verbatim to
+	 * /generate-post). Keys match what that endpoint reads — topic/media/
+	 * provider/platforms/scene/product_id/photo/face.
+	 */
+	async function confirmGenerate() {
 		showGenerateConfirm = false;
-		void generatePostNow();
+		await generatePostNow({
+			topic: genTopic || undefined,
+			media: genMedia,
+			provider: genProvider,
+			platforms: genPlatforms,
+			scene: genScene || undefined,
+			product_id: genProductId || undefined,
+			product_photo_url: genProductPhotoUrl || undefined,
+			character_ref_url: genCharacterRefUrl || undefined
+		});
+	}
+
+	/**
+	 * Post generation always confirms now. The server resolves the real pipeline
+	 * (Director model, image/video models, product + character refs, per-step cost)
+	 * and the user approves or edits it before anything is spent — so the old
+	 * "skip the composer" shortcut is gone deliberately: it existed to skip a form
+	 * that was only a guess, and this one isn't.
+	 */
+	function requestGeneratePost() {
+		if (!agent?.id) return;
+		askToGenerate(
+			{
+				endpoint: `/api/agent/${agent.id}/generate-post`,
+				title: `Generate a post for ${agent.name}`,
+				subtitle: 'Everything below is what will actually be sent. Edit anything before approving.',
+				confirmLabel: 'Approve & generate'
+			},
+			(body) => generatePostNow(body)
+		);
 	}
 
 	// ── Soul AI enrich ──────────────────────────────────────────────────────
@@ -688,21 +780,14 @@
 		editingTool = null;
 	}
 
-	async function generatePostNow() {
+	async function generatePostNow(approved: Record<string, unknown> = {}) {
 		if (!agent?.id) return;
 		generatingPost = true;
 		try {
-			// Only send fields the user actually set — server defaults handle the rest.
-			const body: Record<string, unknown> = {};
-			if (genTopic.trim()) body.topic = genTopic.trim();
-			if (genScene.trim()) body.scene = genScene.trim();
-			if (genMedia !== 'video') body.media = genMedia;
-			if (genProvider !== 'auto') body.provider = genProvider;
-			if (genPlatforms.length > 0 && genPlatforms.length < connectedKeys.length)
-				body.platforms = genPlatforms;
-			if (genProductId) body.product_id = genProductId;
-			if (genProductPhotoUrl.trim()) body.product_photo_url = genProductPhotoUrl.trim();
-			if (genCharacterRefUrl.trim()) body.character_ref_url = genCharacterRefUrl.trim();
+			// The composer already resolved and confirmed the full payload with the
+			// server, so send exactly what the user approved — no client-side
+			// re-derivation that could disagree with what they saw.
+			const body: Record<string, unknown> = { ...approved };
 
 			const res = await fetch(`/api/agent/${agent.id}/generate-post`, {
 				method: 'POST',
@@ -852,15 +937,20 @@
 	let mediaTypeFilter = $state<'all' | 'video' | 'image'>('all');
 
 	let filteredPosts = $derived(feedPosts.filter((p: any) => {
-		// The feed is a media grid — a post with no real image/video (a
-		// generation that never completed, or corrupted content) has nothing
-		// to show here and would just render as a broken-looking card.
+		// In-flight and failed generations have no media YET, but they are exactly
+		// what the user wants to see after clicking Generate — the old blanket
+		// "no media => hide" rule silently swallowed them, so the feed looked
+		// unchanged until the job finished. PostCard renders these as a progress
+		// (or failure) card instead.
+		const inFlight = p.status === 'generating' || p.status === 'failed';
 		const display = getPostDisplay(p);
-		if (!display.mediaUrl) return false;
+		if (!inFlight && !display.mediaUrl) return false;
 		if (feedFilter !== 'all' && p.status !== feedFilter) return false;
+		// The media-type filter can't apply to a post whose media doesn't exist yet.
+		if (inFlight) return true;
 		if (mediaTypeFilter !== 'all') {
 			const isVideo =
-				display.mediaType === 'video' || /\.(mp4|mov|webm|m4v)(\?|$)/i.test(display.mediaUrl);
+				display.mediaType === 'video' || /\.(mp4|mov|webm|m4v)(\?|$)/i.test(display.mediaUrl ?? '');
 			if (mediaTypeFilter === 'video' ? !isVideo : isVideo) return false;
 		}
 		if (platformFilter !== 'all') {
@@ -908,6 +998,10 @@
 		}
 		add(characterRef, 'image', 'Profile picture');
 		for (const [k, v] of Object.entries(referenceKit ?? {})) {
+			// The kit doubles as the async-job board: it carries transient
+			// `<stage>_status` keys whose values are 'generating' / 'failed: …',
+			// not URLs. Rendering those as <img src> produced broken tiles.
+			if (k.endsWith('_status')) continue;
 			add(v as string, 'image', `Reference kit — ${k.replace(/_/g, ' ')}`);
 		}
 		return items;
@@ -994,8 +1088,11 @@
 			});
 			const d = await parseJsonResponse<any>(res);
 			if (!res.ok || !d.success) throw new Error(d.error || 'Server error');
-			// Update local agent state
+			// Update local agent state optimistically…
 			agent = { ...agent, name: editName, handle: editHandle, status: editStatus, niche: editNiche, gradient: editGradient, initial: editInitial, soul: soulText, skills: skillsText, tools: toolsText, timezone, posts_per_day: postsPerDay, active_hours_start: activeHoursStart, active_hours_end: activeHoursEnd, autonomy_level: autonomyLevel, rss_url: rssUrl, rss_active: rssActive, ugc_voice: selectedVoice };
+			// …then re-fetch layout data so the sidebar roster + header (which read
+			// server-loaded sidebarAgents) reflect the new name/avatar immediately.
+			await invalidateAll();
 			showToast(`Profile saved for ${editName}`, 'success');
 		} catch (err: any) {
 			showToast('Failed to save: ' + err.message, 'error');
@@ -1004,13 +1101,90 @@
 		}
 	}
 
-	async function generateAvatar() {
+	/**
+	 * Every avatar generation is confirmed first: the composer resolves the REAL
+	 * portrait prompt (and the model it will actually run on) server-side, lets the
+	 * user edit it, and only the approved body is sent.
+	 */
+	// ── Restore profile picture from history ──────────────────────────
+	// Every image ever generated is retained in storage; this re-pins one as
+	// the persona's face. Non-destructive — only moves the pointer.
+	let restoreOpen = $state(false);
+	let restoreLoading = $state(false);
+	let restoreImages = $state<Array<{ url: string; name: string; createdAt: string | null }>>([]);
+	let restoringUrl = $state<string | null>(null);
+
+	async function openRestore() {
+		if (!agent?.id) return;
+		restoreOpen = true;
+		restoreLoading = true;
+		restoreImages = [];
+		try {
+			const res = await fetch(`/api/agent/${agent.id}/restore-avatar`);
+			const d = await res.json();
+			if (d.success) restoreImages = d.images ?? [];
+			else showToast(d.error || 'Failed to load history', 'error');
+		} catch (e) {
+			showToast('Failed to load history: ' + (e as Error).message, 'error');
+		} finally {
+			restoreLoading = false;
+		}
+	}
+
+	async function restoreAvatar(url: string) {
+		if (!agent?.id || restoringUrl) return;
+		restoringUrl = url;
+		try {
+			const res = await fetch(`/api/agent/${agent.id}/restore-avatar`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ url })
+			});
+			const d = await res.json();
+			if (!res.ok || !d.success) throw new Error(d.error || 'Failed to restore');
+			characterRef = url;
+			agent = { ...agent, ugc_character_ref: url };
+			await invalidateAll(); // refresh sidebar/header avatar
+			showToast('Profile picture restored', 'success');
+			restoreOpen = false;
+		} catch (e) {
+			showToast('Restore failed: ' + (e as Error).message, 'error');
+		} finally {
+			restoringUrl = null;
+		}
+	}
+
+	function requestGenerateAvatar() {
+		if (!agent?.id || generatingAvatar) return;
+		askToGenerate(
+			{
+				endpoint: `/api/agent/${agent.id}/generate-avatar`,
+				title: `Profile picture for ${agent.name}`,
+				subtitle: 'This face is reused as the character reference in every future video.',
+				confirmLabel: 'Approve & generate'
+			},
+			(body) => generateAvatar(body)
+		);
+	}
+
+	async function generateAvatar(body: Record<string, unknown> = {}) {
 		if (!agent?.id || generatingAvatar) return;
 		const requestAgentId = agent.id;
 		const requestAgentName = agent.name;
+		const jobId = kitJobId(requestAgentId, 'profile_status');
 		generatingAvatar = true;
+		startGeneration({
+			id: jobId,
+			kind: 'avatar',
+			agentId: requestAgentId,
+			label: `Profile picture — ${requestAgentName}`
+		});
 		try {
-			const res = await fetch(`/api/agent/${requestAgentId}/generate-avatar`, { method: 'POST' });
+			const res = await fetch(`/api/agent/${requestAgentId}/generate-avatar`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(body)
+			});
 			let d = await parseJsonResponse<any>(res);
 			if (!res.ok || !d.success) throw new Error(d.error || 'Server error');
 			if (res.status === 202) {
@@ -1025,12 +1199,20 @@
 			if (agent?.id === requestAgentId) {
 				characterRef = d.character_ref;
 				agent = { ...agent, ugc_character_ref: d.character_ref };
+				await invalidateAll(); // refresh sidebar/header avatar
 				showToast('Profile picture generated', 'success');
 			} else {
 				showToast(`Profile picture generated for ${requestAgentName}`, 'success');
 			}
+			finishGeneration(jobId);
 		} catch (err: any) {
-			if (err.message === 'cancelled') return;
+			if (err.message === 'cancelled') {
+				finishGeneration(jobId);
+				return;
+			}
+			// Keep the failure on screen (activity panel) instead of letting it vanish
+			// with a 4s toast — a failed generation still cost time and money.
+			failGeneration(jobId, err.message);
 			showToast('Failed to generate profile picture: ' + err.message, 'error');
 		} finally {
 			if (agent?.id === requestAgentId) generatingAvatar = false;
@@ -1136,6 +1318,7 @@
 				referenceKit = d.reference_kit ?? referenceKit;
 				agent = { ...agent, ugc_character_ref: d.character_ref, ugc_reference_kit: referenceKit };
 				clearReferenceFile();
+				await invalidateAll(); // refresh sidebar/header avatar
 				showToast('Character sheet generated from your reference photo', 'success');
 			} else {
 				showToast(`Character sheet generated for ${requestAgentName}`, 'success');
@@ -1169,11 +1352,15 @@
 	let missingKitStages = $derived(KIT_STAGE_ORDER.filter((s) => !referenceKit[s]));
 
 	/** Runs one stage end-to-end (202-poll or legacy sync). Returns the stage URL. */
-	async function runKitStage(requestAgentId: string, stage: KitStage): Promise<string> {
+	async function runKitStage(
+		requestAgentId: string,
+		stage: KitStage,
+		body: Record<string, unknown> = {}
+	): Promise<string> {
 		const res = await fetch(`/api/agent/${requestAgentId}/generate-reference-kit`, {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ stage })
+			body: JSON.stringify({ stage, ...body })
 		});
 		const d = await parseJsonResponse<any>(res);
 		if (!res.ok || !d.success) throw new Error(d.error || 'Server error');
@@ -1185,7 +1372,33 @@
 		return d[stage]; // legacy synchronous completion
 	}
 
-	async function generateKitStage(stage: KitStage) {
+	const KIT_STAGE_TITLES: Record<KitStage, string> = {
+		side_profiles: 'Side-profile composite',
+		face_closeup: 'Facial close-up',
+		feature_grid: 'Feature grid'
+	};
+
+	/** Confirm first: resolve the stage's real prompt + reference images, let the user edit. */
+	function requestGenerateKitStage(stage: KitStage) {
+		if (!agent?.id || generatingKitStage) return;
+		const blocked = kitStageBlockedReason(stage);
+		if (blocked) {
+			showToast(blocked, 'warning');
+			return;
+		}
+		askToGenerate(
+			{
+				endpoint: `/api/agent/${agent.id}/generate-reference-kit`,
+				baseBody: { stage },
+				title: KIT_STAGE_TITLES[stage],
+				subtitle: 'Feeds the video model as a character reference — edit the prompt if needed.',
+				confirmLabel: 'Approve & generate'
+			},
+			(body) => generateKitStage(stage, body)
+		);
+	}
+
+	async function generateKitStage(stage: KitStage, body: Record<string, unknown> = {}) {
 		if (!agent?.id || generatingKitStage) return;
 		const blocked = kitStageBlockedReason(stage);
 		if (blocked) {
@@ -1193,9 +1406,16 @@
 			return;
 		}
 		const requestAgentId = agent.id;
+		const jobId = kitJobId(requestAgentId, `${stage}_status`);
 		generatingKitStage = stage;
+		startGeneration({
+			id: jobId,
+			kind: 'kit_stage',
+			agentId: requestAgentId,
+			label: KIT_STAGE_TITLES[stage]
+		});
 		try {
-			const url = await runKitStage(requestAgentId, stage);
+			const url = await runKitStage(requestAgentId, stage, body);
 			// Same in-flight-persona-switch guard as generateAvatar()/generateAvatarFromReference()
 			// above — the server already persisted this under requestAgentId either way.
 			if (agent?.id === requestAgentId) {
@@ -1205,8 +1425,13 @@
 			} else {
 				showToast(`${KIT_STAGE_DONE_LABELS[stage]} for a different persona`, 'success');
 			}
+			finishGeneration(jobId);
 		} catch (err: any) {
-			if (err.message === 'cancelled') return;
+			if (err.message === 'cancelled') {
+				finishGeneration(jobId);
+				return;
+			}
+			failGeneration(jobId, err.message);
 			showToast(`Failed to generate: ${err.message}`, 'error');
 		} finally {
 			if (agent?.id === requestAgentId) generatingKitStage = null;
@@ -1216,14 +1441,16 @@
 	// One click, whole kit: runs every missing stage sequentially (the order is
 	// a hard server-side dependency chain), stopping at the first failure.
 	let generatingAllKit = $state(false);
-	async function generateAllKitStages() {
+	// force=false → gap-fill only (skip stages that already exist). force=true →
+	// re-run every downstream stage in order (the persistent "Regenerate kit").
+	async function generateAllKitStages(force = false) {
 		if (!agent?.id || generatingKitStage || generatingAllKit) return;
 		const requestAgentId = agent.id;
 		generatingAllKit = true;
 		try {
 			for (const stage of KIT_STAGE_ORDER) {
 				if (agent?.id !== requestAgentId || pageDestroyed) return;
-				if (referenceKit[stage]) continue;
+				if (!force && referenceKit[stage]) continue;
 				generatingKitStage = stage;
 				const url = await runKitStage(requestAgentId, stage);
 				if (agent?.id === requestAgentId) {
@@ -1612,98 +1839,6 @@
 				{/if}
 			</div>
 
-			{#if showGenerateConfirm}
-				<div class="gen-confirm-overlay" role="dialog" aria-modal="true" aria-label="Generation composer">
-					<div class="gen-confirm editor-modal">
-						<h3>Generate a post for {agent.name}</h3>
-
-						<div class="field-group">
-							<label for="gen-topic">Topic / creative angle <span class="opt">(optional — persona-driven when empty)</span></label>
-							<input id="gen-topic" type="text" bind:value={genTopic} placeholder="e.g. Morning routine with honey sticks before school" />
-						</div>
-
-						<div class="composer-grid-2">
-							<div class="field-group">
-								<label for="gen-media">Media</label>
-								<select id="gen-media" bind:value={genMedia}>
-									<option value="video">Video (UGC clip)</option>
-									<option value="image">Image only (faster, cheaper)</option>
-									<option value="cinematic">Cinematic (multi-shot video, premium)</option>
-								</select>
-								{#if genMedia === 'cinematic'}
-									<p class="field-hint">Storyboarded multi-shot video via fal.ai (Kling O3 Pro) — needs a Fal AI key and a product photo in the Brand Brief.</p>
-								{/if}
-							</div>
-							<div class="field-group">
-								<label for="gen-provider">Provider</label>
-								<select id="gen-provider" bind:value={genProvider}>
-									<option value="auto">Auto (fal → OpenRouter failover)</option>
-									<option value="fal">fal.ai only</option>
-									<option value="openrouter">OpenRouter only</option>
-								</select>
-							</div>
-						</div>
-
-						<div class="field-group">
-							<label>Publish to</label>
-							{#if connectedKeys.length === 0}
-								<p class="field-hint">No platforms connected — the post saves as a draft you can publish later.</p>
-							{:else}
-								<div class="age-chips">
-									{#each PLATFORMS.filter((p) => connectedKeys.includes(p.key)) as p}
-										<button
-											type="button"
-											class="age-chip"
-											class:selected={genPlatforms.includes(p.key)}
-											onclick={() => toggleGenPlatform(p.key)}
-										>{p.name}</button>
-									{/each}
-								</div>
-							{/if}
-						</div>
-
-						<details class="composer-advanced">
-							<summary>Advanced — prompts &amp; reference photos</summary>
-							<div class="field-group">
-								<label for="gen-scene">Visual scene brief <span class="opt">(replaces the AI director's scene)</span></label>
-								<textarea id="gen-scene" rows="3" bind:value={genScene} placeholder="e.g. Kitchen counter at golden hour, kid's lunchbox open, honey stick being packed…"></textarea>
-							</div>
-							{#if briefProducts.length > 0}
-								<div class="field-group">
-									<label for="gen-product">Product</label>
-									<select id="gen-product" bind:value={genProductId}>
-										<option value="">Auto (first product with a photo)</option>
-										{#each briefProducts as prod}
-											<option value={prod.id}>{prod.name}</option>
-										{/each}
-									</select>
-								</div>
-							{/if}
-							<div class="field-group">
-								<label for="gen-photo">Product photo URL <span class="opt">(override)</span></label>
-								<input id="gen-photo" type="url" bind:value={genProductPhotoUrl} placeholder="https://…/product.jpg" />
-							</div>
-							<div class="field-group">
-								<label for="gen-face">Character reference URL <span class="opt">(override the pinned face)</span></label>
-								<input id="gen-face" type="url" bind:value={genCharacterRefUrl} placeholder="https://…/face.png" />
-							</div>
-						</details>
-
-						<div class="gc-rows">
-							<div class="gc-row"><span class="gc-label">Est. cost</span><span>~${genEstimate.low.toFixed(2)}{genEstimate.high > genEstimate.low ? `–$${genEstimate.high.toFixed(2)}` : ''} in generation credits</span></div>
-							<div class="gc-row"><span class="gc-label">After</span><span>The result lands in the feed — open it to edit the caption before/after publishing.</span></div>
-						</div>
-						<label class="gc-skip">
-							<input type="checkbox" bind:checked={confirmSkipNext} />
-							Skip this composer next time (use defaults)
-						</label>
-						<div class="gc-actions">
-							<button type="button" class="btn-sync" onclick={() => (showGenerateConfirm = false)}>Cancel</button>
-							<button type="button" class="btn-generate" onclick={confirmGenerate}>✨ Generate</button>
-						</div>
-					</div>
-				</div>
-			{/if}
 
 			<PostDrawer
 				post={modalPost}
@@ -1756,6 +1891,92 @@
 					</div>
 				</section>
 
+				<!-- Persona Profile — above Identity: these fields feed generation prompts -->
+				<section class="profile-section">
+					<div class="section-header">
+						<h2 class="section-title">Persona Profile</h2>
+						<p class="section-desc">Psychological depth and content strategy — these feed directly into content generation prompts.</p>
+					</div>
+
+					<div class="fields-grid">
+						<div class="field-group col-span-2">
+							<label>Target Age Range</label>
+							<div class="age-chips">
+								<button
+									type="button"
+									class="age-chip age-chip-all"
+									class:selected={ppAgeRanges.length === AGE_RANGES.length}
+									onclick={toggleAllAgeRanges}
+								>All ages</button>
+								{#each AGE_RANGES as r}
+									<button
+										type="button"
+										class="age-chip"
+										class:selected={ppAgeRanges.includes(r.key)}
+										onclick={() => toggleAgeRange(r.key)}
+									>{r.key}</button>
+								{/each}
+							</div>
+							<p class="field-hint">Select one or more audience age brackets (or all).</p>
+						</div>
+
+						<div class="field-group">
+							<label for="pp-gender">Gender</label>
+							<select id="pp-gender" bind:value={ppGender} onchange={() => alignVoiceToGender()}>
+								<option value="">— Select —</option>
+								<option value="female">Female</option>
+								<option value="male">Male</option>
+							</select>
+							<p class="field-hint">Drives the generated character's appearance and default voice.</p>
+						</div>
+
+						<div class="field-group">
+							<label for="pp-archetype">Persona Archetype</label>
+							<select id="pp-archetype" bind:value={ppArchetype}>
+								<option value="">— Select archetype —</option>
+								{#each PERSONA_ARCHETYPES as a}
+									<option value={a}>{a}</option>
+								{/each}
+							</select>
+							<p class="field-hint">Defines the persona's role and audience relationship style.</p>
+						</div>
+
+						<div class="field-group">
+							<label for="pp-focus">Content Focus</label>
+							<select id="pp-focus" bind:value={ppContentFocus}>
+								<option value="">— Select focus —</option>
+								{#each CONTENT_FOCUS_OPTIONS as f}
+									<option value={f}>{f}</option>
+								{/each}
+							</select>
+							<p class="field-hint">Primary category of content this persona produces.</p>
+						</div>
+
+						<div class="field-group col-span-2">
+							<label for="pp-target">Target Avatar</label>
+							<input id="pp-target" type="text" bind:value={ppTargetAvatar}
+								placeholder="e.g. Working moms 28-42, fitness-curious, short on time" />
+							<p class="field-hint">One-liner describing the ideal audience member this persona speaks to.</p>
+						</div>
+
+						<div class="field-group col-span-2">
+							<label for="pp-psych">Psychology Profile</label>
+							<textarea id="pp-psych" bind:value={ppPsychProfile} rows="4"
+								placeholder="Describe audience psychology — motivations, fears, desires, pain points, identity hooks…">
+							</textarea>
+							<p class="field-hint">Used to tune tone, hooks, and emotional framing in generated content.</p>
+						</div>
+
+						<div class="field-group col-span-2">
+							<label for="pp-angle">Content Angle / POV</label>
+							<textarea id="pp-angle" bind:value={ppContentAngle} rows="3"
+								placeholder="e.g. 'Real results, no fluff' — direct, relatable transformations told in first person…">
+							</textarea>
+							<p class="field-hint">The unique angle or point of view that differentiates this persona's content.</p>
+						</div>
+					</div>
+				</section>
+
 				<!-- Identity section -->
 				<section class="profile-section">
 					<div class="section-header">
@@ -1796,7 +2017,20 @@
 								spokesperson videos — used as the profile picture everywhere once generated.
 							</p>
 							<div class="avatar-gen-row">
-								<div class="avatar-gen-preview" style={characterRef ? '' : `background: ${editGradient}`}>
+								<div
+									class="avatar-gen-preview"
+									class:clickable={!!characterRef}
+									style={characterRef ? '' : `background: ${editGradient}`}
+									role={characterRef ? 'button' : undefined}
+									tabindex={characterRef ? 0 : undefined}
+									onclick={() =>
+										characterRef &&
+										openPreview(characterRef, 'Profile picture', requestGenerateAvatar)}
+									onkeydown={(e) =>
+										e.key === 'Enter' &&
+										characterRef &&
+										openPreview(characterRef, 'Profile picture', requestGenerateAvatar)}
+								>
 									{#if characterRef}
 										<img src={characterRef} alt={editName} />
 									{:else}
@@ -1807,7 +2041,7 @@
 									<button
 										type="button"
 										class="btn-sync"
-										onclick={generateAvatar}
+										onclick={requestGenerateAvatar}
 										disabled={generatingAvatar}
 									>
 										{#if generatingAvatar}
@@ -1826,10 +2060,13 @@
 											hidden
 										/>
 									</label>
+									<button type="button" class="btn-sync" onclick={openRestore} disabled={generatingAvatar}>
+										🕑 Restore from history
+									</button>
 									{#if !characterRef}
 										<p class="field-hint">No photo yet — falls back to the gradient below until generated.</p>
 									{/if}
-									<p class="field-hint">~$0.08 per generation (Nano Banana 2 image call).</p>
+									<p class="field-hint">~$0.08 per generation (Nano Banana 2 image call). Restore re-pins a past image free.</p>
 								</div>
 							</div>
 
@@ -1869,13 +2106,27 @@
 										<button
 											type="button"
 											class="btn-sync btn-xs"
-											onclick={generateAllKitStages}
+											onclick={() => generateAllKitStages(false)}
 											disabled={generatingKitStage !== null || generatingAllKit}
 										>
 											{#if generatingAllKit}
 												<span class="spinner-sm"></span> Building kit…
 											{:else}
 												⚡ Generate all remaining ({missingKitStages.length})
+											{/if}
+										</button>
+									{:else}
+										<!-- All stages exist — offer a full re-run of the whole kit. -->
+										<button
+											type="button"
+											class="btn-sync btn-xs"
+											onclick={() => generateAllKitStages(true)}
+											disabled={generatingKitStage !== null || generatingAllKit}
+										>
+											{#if generatingAllKit}
+												<span class="spinner-sm"></span> Rebuilding kit…
+											{:else}
+												↻ Regenerate reference kit
 											{/if}
 										</button>
 									{/if}
@@ -1890,19 +2141,49 @@
 								<div class="kit-stage-row">
 									<div class="kit-stage">
 										<span class="kit-stage-label">1. Full body ✓</span>
-										<img src={referenceKit.full_body} alt="Full body reference" class="kit-stage-thumb" />
+										<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
+										<img
+											src={referenceKit.full_body}
+											alt="Full body reference"
+											class="kit-stage-thumb clickable"
+											role="button"
+											onclick={() => openPreview(referenceKit.full_body, '1. Full body', requestGenerateAvatar)}
+										/>
+										<!-- Full body is produced by the profile-picture generator, so
+										     regenerating it = regenerating the profile picture. -->
+										<button
+											type="button"
+											class="btn-sync kit-stage-generate"
+											onclick={requestGenerateAvatar}
+											disabled={generatingAvatar || generatingKitStage !== null || generatingAllKit}
+											title="Full body comes from the profile picture — this regenerates both"
+										>
+											{#if generatingAvatar}
+												<span class="spinner-sm"></span> Generating…
+											{:else}
+												↺ Regenerate
+											{/if}
+										</button>
 									</div>
 									{#each [{ key: 'side_profiles' as const, n: 2, label: 'Side profiles', alt: 'Side profile composite', wide: true }, { key: 'face_closeup' as const, n: 3, label: 'Facial close-up', alt: 'Facial close-up', wide: false }, { key: 'feature_grid' as const, n: 4, label: 'Feature grid', alt: 'Feature grid', wide: false }] as st (st.key)}
 										{@const blocked = kitStageBlockedReason(st.key)}
 										<div class="kit-stage">
 											<span class="kit-stage-label">{st.n}. {st.label}{referenceKit[st.key] ? ' ✓' : ''}</span>
 											{#if referenceKit[st.key]}
-												<img src={referenceKit[st.key]} alt={st.alt} class="kit-stage-thumb{st.wide ? ' wide' : ''}" />
+												<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
+								<img
+									src={referenceKit[st.key]}
+									alt={st.alt}
+									class="kit-stage-thumb clickable{st.wide ? ' wide' : ''}"
+									role="button"
+									onclick={() =>
+										openPreview(referenceKit[st.key], st.label, () => requestGenerateKitStage(st.key))}
+								/>
 											{/if}
 											<button
 												type="button"
 												class="btn-sync kit-stage-generate"
-												onclick={() => generateKitStage(st.key)}
+												onclick={() => requestGenerateKitStage(st.key)}
 												disabled={generatingKitStage !== null || generatingAllKit || blocked !== null}
 												title={blocked ?? undefined}
 											>
@@ -2023,91 +2304,6 @@
 				{/if}
 
 				<!-- Persona Profile section -->
-				<section class="profile-section">
-					<div class="section-header">
-						<h2 class="section-title">Persona Profile</h2>
-						<p class="section-desc">Psychological depth and content strategy — these feed directly into content generation prompts.</p>
-					</div>
-
-					<div class="fields-grid">
-						<div class="field-group col-span-2">
-							<label>Target Age Range</label>
-							<div class="age-chips">
-								<button
-									type="button"
-									class="age-chip age-chip-all"
-									class:selected={ppAgeRanges.length === AGE_RANGES.length}
-									onclick={toggleAllAgeRanges}
-								>All ages</button>
-								{#each AGE_RANGES as r}
-									<button
-										type="button"
-										class="age-chip"
-										class:selected={ppAgeRanges.includes(r.key)}
-										onclick={() => toggleAgeRange(r.key)}
-									>{r.key}</button>
-								{/each}
-							</div>
-							<p class="field-hint">Select one or more audience age brackets (or all).</p>
-						</div>
-
-						<div class="field-group">
-							<label for="pp-gender">Gender</label>
-							<select id="pp-gender" bind:value={ppGender} onchange={() => alignVoiceToGender()}>
-								<option value="">— Select —</option>
-								<option value="female">Female</option>
-								<option value="male">Male</option>
-							</select>
-							<p class="field-hint">Drives the generated character's appearance and default voice.</p>
-						</div>
-
-						<div class="field-group">
-							<label for="pp-archetype">Persona Archetype</label>
-							<select id="pp-archetype" bind:value={ppArchetype}>
-								<option value="">— Select archetype —</option>
-								{#each PERSONA_ARCHETYPES as a}
-									<option value={a}>{a}</option>
-								{/each}
-							</select>
-							<p class="field-hint">Defines the persona's role and audience relationship style.</p>
-						</div>
-
-						<div class="field-group">
-							<label for="pp-focus">Content Focus</label>
-							<select id="pp-focus" bind:value={ppContentFocus}>
-								<option value="">— Select focus —</option>
-								{#each CONTENT_FOCUS_OPTIONS as f}
-									<option value={f}>{f}</option>
-								{/each}
-							</select>
-							<p class="field-hint">Primary category of content this persona produces.</p>
-						</div>
-
-						<div class="field-group col-span-2">
-							<label for="pp-target">Target Avatar</label>
-							<input id="pp-target" type="text" bind:value={ppTargetAvatar}
-								placeholder="e.g. Working moms 28-42, fitness-curious, short on time" />
-							<p class="field-hint">One-liner describing the ideal audience member this persona speaks to.</p>
-						</div>
-
-						<div class="field-group col-span-2">
-							<label for="pp-psych">Psychology Profile</label>
-							<textarea id="pp-psych" bind:value={ppPsychProfile} rows="4"
-								placeholder="Describe audience psychology — motivations, fears, desires, pain points, identity hooks…">
-							</textarea>
-							<p class="field-hint">Used to tune tone, hooks, and emotional framing in generated content.</p>
-						</div>
-
-						<div class="field-group col-span-2">
-							<label for="pp-angle">Content Angle / POV</label>
-							<textarea id="pp-angle" bind:value={ppContentAngle} rows="3"
-								placeholder="e.g. 'Real results, no fluff' — direct, relatable transformations told in first person…">
-							</textarea>
-							<p class="field-hint">The unique angle or point of view that differentiates this persona's content.</p>
-						</div>
-					</div>
-				</section>
-
 				<!-- Automation section -->
 				<section class="profile-section">
 					<div class="section-header">
@@ -2442,6 +2638,31 @@
 	</div>
 </div>
 
+<!-- Confirm-before-generate: resolves the REAL payload server-side, shows it
+     editable, and only runs what the user approved. Used by every generate action. -->
+<GenerationComposer
+	open={composerOpen}
+	spec={composerSpec}
+	onClose={() => (composerOpen = false)}
+	onConfirm={(body) => onComposerConfirm(body)}
+/>
+
+<!-- Expand a generated asset full-size, with Regenerate right where the user
+     is judging the result. -->
+<MediaPreviewModal
+	open={previewOpen}
+	url={previewUrl}
+	title={previewTitle}
+	regenerating={generatingAvatar || generatingKitStage !== null}
+	onRegenerate={previewRegenerate
+		? () => {
+				previewOpen = false;
+				previewRegenerate?.();
+			}
+		: null}
+	onClose={() => (previewOpen = false)}
+/>
+
 {#if assetLightbox}
 	<div class="lightbox-backdrop" onclick={() => (assetLightbox = null)} role="presentation">
 		<div class="lightbox-content" onclick={(e) => e.stopPropagation()} role="dialog" aria-label={assetLightbox.label}>
@@ -2459,9 +2680,165 @@
 		</div>
 	</div>
 {/if}
+
+<!-- Reference-kit / profile-picture preview. openPreview() sets these; without
+     this block the thumbnails' click handlers were no-ops (set previewOpen=true
+     with nothing rendering it). Mirrors the assets lightbox for consistency,
+     plus an optional Regenerate for the stage it came from. -->
+{#if previewOpen && previewUrl}
+	<div class="lightbox-backdrop" onclick={() => (previewOpen = false)} role="presentation">
+		<div class="lightbox-content" onclick={(e) => e.stopPropagation()} role="dialog" aria-label={previewTitle}>
+			<img src={previewUrl} alt={previewTitle} />
+			<div class="lightbox-bar">
+				<span>{previewTitle}</span>
+				<a href={previewUrl} target="_blank" rel="noopener noreferrer">Open original ↗</a>
+				{#if previewRegenerate}
+					<button
+						type="button"
+						onclick={() => {
+							const fn = previewRegenerate;
+							previewOpen = false;
+							fn?.();
+						}}
+					>↺ Regenerate</button>
+				{/if}
+				<button type="button" onclick={() => (previewOpen = false)}>Close</button>
+			</div>
+		</div>
+	</div>
+{/if}
+
+<!-- Restore-from-history picker: every past generated image, click to re-pin
+     as this persona's profile picture. Nothing here is ever deleted. -->
+{#if restoreOpen}
+	<div class="lightbox-backdrop" onclick={() => (restoreOpen = false)} role="presentation">
+		<div class="restore-modal" onclick={(e) => e.stopPropagation()} role="dialog" aria-label="Restore profile picture">
+			<div class="restore-head">
+				<div>
+					<h3>Restore a profile picture</h3>
+					<p>Every image ever generated for your account — click one to make it {agent?.name}'s face. Nothing is deleted.</p>
+				</div>
+				<button type="button" class="restore-close" onclick={() => (restoreOpen = false)} aria-label="Close">✕</button>
+			</div>
+			{#if restoreLoading}
+				<div class="feed-loading"><span class="spinner"></span> Loading your image history…</div>
+			{:else if restoreImages.length === 0}
+				<p class="field-hint" style="padding: 2rem; text-align: center;">No stored images found yet.</p>
+			{:else}
+				<div class="restore-grid">
+					{#each restoreImages as img (img.url)}
+						<button
+							type="button"
+							class="restore-tile"
+							class:current={img.url === characterRef}
+							onclick={() => restoreAvatar(img.url)}
+							disabled={restoringUrl !== null}
+							title={img.createdAt ?? img.name}
+						>
+							<img src={img.url} loading="lazy" alt="Generated image" />
+							{#if img.url === characterRef}
+								<span class="restore-badge">Current</span>
+							{:else if restoringUrl === img.url}
+								<span class="restore-badge">Restoring…</span>
+							{/if}
+						</button>
+					{/each}
+				</div>
+			{/if}
+		</div>
+	</div>
+{/if}
 {/if}
 
 <style>
+	/* ── Restore-from-history modal ── */
+	.restore-modal {
+		background: var(--surface);
+		border: 1px solid var(--border-strong);
+		border-radius: var(--radius);
+		width: min(920px, 94vw);
+		max-height: 86vh;
+		display: flex;
+		flex-direction: column;
+		overflow: hidden;
+		z-index: 1101;
+	}
+	.restore-head {
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: 1rem;
+		padding: 1.1rem 1.3rem;
+		border-bottom: 1px solid var(--border);
+	}
+	.restore-head h3 {
+		margin: 0;
+		font-size: 1rem;
+	}
+	.restore-head p {
+		margin: 0.25rem 0 0;
+		font-size: 0.78rem;
+		color: var(--text-dim);
+	}
+	.restore-close {
+		border: none;
+		background: var(--surface-2);
+		color: var(--text-muted);
+		width: 30px;
+		height: 30px;
+		border-radius: 999px;
+		cursor: pointer;
+		flex-shrink: 0;
+	}
+	.restore-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+		gap: 0.6rem;
+		padding: 1rem 1.3rem 1.3rem;
+		overflow-y: auto;
+	}
+	.restore-tile {
+		position: relative;
+		padding: 0;
+		border: 2px solid transparent;
+		border-radius: 10px;
+		overflow: hidden;
+		cursor: pointer;
+		background: var(--surface-2);
+		aspect-ratio: 1;
+		transition: border-color 0.15s ease, transform 0.15s ease;
+	}
+	.restore-tile:hover:not(:disabled) {
+		border-color: var(--accent);
+		transform: scale(1.03);
+	}
+	.restore-tile.current {
+		border-color: var(--success);
+	}
+	.restore-tile:disabled {
+		cursor: default;
+		opacity: 0.85;
+	}
+	.restore-tile img {
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+		display: block;
+	}
+	.restore-badge {
+		position: absolute;
+		bottom: 4px;
+		left: 4px;
+		right: 4px;
+		font-size: 9px;
+		font-weight: 700;
+		text-transform: uppercase;
+		background: rgba(10, 14, 26, 0.78);
+		color: #fff;
+		padding: 3px 4px;
+		border-radius: 4px;
+	}
+
 	/* ── Page ── */
 	.persona-page {
 		max-width: 900px;
@@ -3256,6 +3633,16 @@
 		border-radius: 12px;
 		object-fit: cover;
 		border: 1px solid var(--border);
+	}
+
+	.kit-stage-thumb.clickable {
+		cursor: zoom-in;
+		transition: border-color 0.15s ease, transform 0.15s ease;
+	}
+
+	.kit-stage-thumb.clickable:hover {
+		border-color: var(--accent);
+		transform: scale(1.02);
 	}
 
 	.kit-stage-thumb.wide {

@@ -2,12 +2,13 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { createDbService } from '$lib/server/db';
 import {
-	generateSideProfileComposite,
-	generateFacialCloseup,
-	generateFeatureGrid,
+	executeKitStage,
+	resolveKitStagePlan,
+	resolvePersonaGender,
 	resolveImageKeys
 } from '$lib/server/content/generate';
 import { getServiceSupabase } from '$lib/server/service-supabase';
+import { priceOf } from '$lib/pricing';
 
 const VALID_STAGES = ['side_profiles', 'face_closeup', 'feature_grid'] as const;
 
@@ -103,55 +104,45 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 	const kit = cfg?.ugc_reference_kit || {};
 	const characterRef = cfg?.ugc_character_ref || null;
 
-	// Prerequisite checks stay synchronous — a fast-fail 400 must never become
-	// a detached failure. Each branch captures everything its stage needs NOW
-	// (request/locals must not be touched after the response is returned) and
-	// runs entirely on the service client — the generation takes minutes and a
-	// session token could expire mid-task.
-	const userId = user.id;
-	let runStage: () => Promise<string>;
-
-	if (stage === 'side_profiles') {
-		// A full-body shot is the minimum. The sheet sharpens fidelity but
-		// isn't required — fall back to the full-body shot as the reference so
-		// from-scratch personas (which may not have a separate sheet) still work.
-		const frontal = kit.full_body || kit.sheet || characterRef;
-		if (!frontal) {
-			return json(
-				{ success: false, error: 'Generate a profile picture first.' },
-				{ status: 400 }
-			);
-		}
-		runStage = () =>
-			generateSideProfileComposite(svc, svc, userId, agentId, falKey, frontal, kit.sheet || frontal);
-	} else if (stage === 'face_closeup') {
-		const reference = kit.side_profiles || kit.full_body;
-		if (!reference) {
-			return json(
-				{ success: false, error: 'Generate the side-profile composite first.' },
-				{ status: 400 }
-			);
-		}
-		runStage = () => generateFacialCloseup(svc, svc, userId, agentId, falKey, reference);
-	} else {
-		// stage === 'feature_grid'
-		if (!kit.face_closeup) {
-			return json(
-				{ success: false, error: 'Generate the facial close-up first.' },
-				{ status: 400 }
-			);
-		}
-		runStage = () =>
-			generateFeatureGrid(
-				svc,
-				svc,
-				userId,
-				agentId,
-				falKey,
-				kit.face_closeup,
-				kit.sheet || kit.full_body || kit.face_closeup
-			);
+	// Resolve the EXACT request this stage will send (prompt, model, reference
+	// images, aspect ratio). Prerequisite failures surface here as a fast-fail
+	// 400 — never as a detached failure.
+	const gender = resolvePersonaGender(agent);
+	const resolved = resolveKitStagePlan(stage, kit, characterRef, gender);
+	if ('error' in resolved) {
+		return json({ success: false, error: resolved.error }, { status: 400 });
 	}
+
+	// `preview: true` costs nothing and generates nothing — it just hands back
+	// the resolved payload so the composer can show the user exactly what is
+	// about to be sent, and let them edit it before approving.
+	if (body.preview === true) {
+		return json({
+			success: true,
+			stage,
+			preview: {
+				...resolved,
+				editable: ['prompt'],
+				estimatedCostUsd: priceOf('fal', 'image', 'nano')
+			}
+		});
+	}
+
+	// The user may have edited the prompt in the composer. Everything else is
+	// server-resolved, so what runs is what they approved.
+	const plan = {
+		...resolved,
+		prompt:
+			typeof body.prompt === 'string' && body.prompt.trim()
+				? String(body.prompt).slice(0, 2000)
+				: resolved.prompt
+	};
+
+	// Captured NOW — request/locals must not be touched after we respond, and the
+	// detached task runs on the service client (a session token could expire
+	// mid-generation).
+	const userId = user.id;
+	const runStage = () => executeKitStage(svc, svc, userId, agentId, falKey, stage, plan);
 
 	// Mark the stage in-flight BEFORE responding so the GET poller (and a page
 	// reload) immediately sees a generation running.

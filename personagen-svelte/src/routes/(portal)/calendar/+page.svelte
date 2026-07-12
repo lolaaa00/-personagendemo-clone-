@@ -5,7 +5,10 @@
 	import { Posts, ContentForge, type AutopilotView } from '$lib/services/api';
 	import { priceOf } from '$lib/pricing';
 	import { page } from '$app/stores';
-	import { goto } from '$app/navigation';
+	import { goto, invalidateAll } from '$app/navigation';
+	import GenerationComposer from '$lib/components/generation/GenerationComposer.svelte';
+	import type { ComposerSpec } from '$lib/components/generation/types';
+	import { startGeneration, finishGeneration, failGeneration } from '$lib/stores/generations.svelte';
 	import PostDrawer from '$lib/components/feed/PostDrawer.svelte';
 	import { getPostDisplay as sharedGetPostDisplay, getPostErrorSummary } from '$lib/components/feed/postDisplay';
 	import { platformColor } from '$lib/platforms';
@@ -691,6 +694,8 @@
 
 	// ── Generate confirmation (no surprise generations, no surprise spend) ──
 	let showGenerateConfirm = $state(false);
+	let composerSpec = $state<ComposerSpec | null>(null);
+	let composerOpen = $state(false);
 	let skipGenerateConfirm = $state(false);
 	let confirmSkipNext = $state(false);
 	onMount(() => {
@@ -703,39 +708,77 @@
 	const EST_LOW = +(priceOf('fal', 'image', 'nano') + 3 * priceOf('openrouter', 'llm') + priceOf('fal', 'tts') + priceOf('fal', 'talking_head')).toFixed(2);
 	const EST_HIGH = +(priceOf('fal', 'image', 'nano') + 3 * priceOf('openrouter', 'llm') + priceOf('fal', 'video', 'standard')).toFixed(2);
 
+	/**
+	 * The calendar used to POST with NO body and treat any 2xx as "published" — so a
+	 * 202 ("generating", nothing published yet) still toasted success, and because
+	 * the 202 carries no `result.post` the card never appeared. Now it goes through
+	 * the same confirm-first composer as the persona page and actually polls the job.
+	 */
 	function requestGeneratePost() {
-		if (skipGenerateConfirm) {
-			void generatePostNow();
-		} else {
-			showGenerateConfirm = true;
+		const targetAgentId = selectedAgentId || (data.agents.length > 0 ? data.agents[0].id : '');
+		if (!targetAgentId) {
+			showToast('Please select or configure an agent first', 'warning');
+			return;
 		}
+		const agent = data.agents.find((a: any) => a.id === targetAgentId);
+		composerSpec = {
+			endpoint: `/api/agent/${targetAgentId}/generate-post`,
+			title: `Generate a post for ${agent?.name ?? 'this persona'}`,
+			subtitle: 'Everything below is what will actually be sent. Edit anything before approving.',
+			confirmLabel: 'Approve & generate'
+		};
+		composerOpen = true;
 	}
 
-	function confirmGenerate(skipNextTime: boolean) {
-		if (skipNextTime) {
-			localStorage.setItem('pg-skip-generate-confirm', '1');
-			skipGenerateConfirm = true;
-		}
-		showGenerateConfirm = false;
-		void generatePostNow();
-	}
-
-	async function generatePostNow() {
+	async function generatePostNow(approved: Record<string, unknown> = {}) {
 		const targetAgentId = selectedAgentId || (data.agents.length > 0 ? data.agents[0].id : '');
 		if (!targetAgentId) {
 			showToast('Please select or configure an agent first', 'warning');
 			return;
 		}
 		generatingPost = true;
+		const jobId = `${targetAgentId}:calendar-post`;
+		startGeneration({ id: jobId, kind: 'post', agentId: targetAgentId, label: 'UGC post' });
 		try {
 			const res = await fetch(`/api/agent/${targetAgentId}/generate-post`, {
 				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json'
-				}
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(approved)
 			});
 			const result = await res.json();
+
+			// 202 = accepted, still running. Poll the row until it leaves 'generating'.
+			if (res.status === 202 && result?.post_id) {
+				showToast('Generation started — it will appear here when it finishes', 'info');
+				const deadline = Date.now() + 10 * 60_000;
+				while (Date.now() < deadline) {
+					await new Promise((r) => setTimeout(r, 5000));
+					const pr = await Posts.get(result.post_id).catch(() => null);
+					const post = pr?.data ?? null;
+					if (!post || post.status === 'generating') continue;
+					if (post.status === 'failed') {
+						let msg = 'Generation failed';
+						try {
+							msg = JSON.parse(post.content)?.error || msg;
+						} catch {
+							/* keep the generic message */
+						}
+						failGeneration(jobId, msg);
+						showToast(msg, 'error');
+						return;
+					}
+					finishGeneration(jobId);
+					showToast('Post generated', 'success');
+					await invalidateAll();
+					return;
+				}
+				failGeneration(jobId, 'Timed out waiting for the generation to finish');
+				showToast('Still generating — check the feed shortly', 'warning');
+				return;
+			}
+
 			if (res.ok && result.success) {
+				finishGeneration(jobId);
 				showToast('Post generated and published successfully!', 'success');
 				if (result.post) {
 					const agent = data.agents.find((a: any) => a.id === targetAgentId);
@@ -821,27 +864,6 @@
 	</header>
 
 	<!-- Generate confirmation -->
-	{#if showGenerateConfirm}
-		<div class="gen-confirm-overlay" role="dialog" aria-modal="true" aria-label="Confirm generation">
-			<div class="gen-confirm">
-				<h3>Generate a post now?</h3>
-				<div class="gc-rows">
-					<div class="gc-row"><span class="gc-label">Persona</span><span>{confirmAgent?.name ?? '—'}</span></div>
-					<div class="gc-row"><span class="gc-label">Content</span><span>UGC post tuned to your brand brief &amp; persona (video when a video provider is available, image otherwise)</span></div>
-					<div class="gc-row"><span class="gc-label">Destination</span><span>Publishes to this persona's connected platforms immediately; saved as a draft if none are connected</span></div>
-					<div class="gc-row"><span class="gc-label">Est. cost</span><span>~${Math.min(EST_LOW, EST_HIGH).toFixed(2)}–${Math.max(EST_LOW, EST_HIGH).toFixed(2)} in generation credits</span></div>
-				</div>
-				<label class="gc-skip">
-					<input type="checkbox" bind:checked={confirmSkipNext} />
-					Skip this confirmation next time
-				</label>
-				<div class="gc-actions">
-					<button class="btn-ghost" onclick={() => (showGenerateConfirm = false)}>Cancel</button>
-					<button class="btn-primary" onclick={() => confirmGenerate(confirmSkipNext)}>✨ Generate</button>
-				</div>
-			</div>
-		</div>
-	{/if}
 
 	<!-- Month nav -->
 	<div class="month-nav">
@@ -1403,6 +1425,18 @@
 		</div>
 	{/if}
 </section>
+
+<!-- Same confirm-first composer as the persona page: the server resolves the real
+     payload/cost, the user edits and approves, then we run exactly that. -->
+<GenerationComposer
+	open={composerOpen}
+	spec={composerSpec}
+	onClose={() => (composerOpen = false)}
+	onConfirm={(body) => {
+		composerOpen = false;
+		void generatePostNow(body);
+	}}
+/>
 
 <style>
 	.page {

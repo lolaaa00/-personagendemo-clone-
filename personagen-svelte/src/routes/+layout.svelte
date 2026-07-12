@@ -1,6 +1,7 @@
 <script lang="ts">
 	import '../app.css';
 	import Toast from '$lib/components/shared/Toast.svelte';
+	import ActivityIndicator from '$lib/components/generation/ActivityIndicator.svelte';
 
 	let { children } = $props();
 </script>
@@ -32,4 +33,5 @@
 </svelte:head>
 
 <Toast />
+<ActivityIndicator />
 {@render children()}
