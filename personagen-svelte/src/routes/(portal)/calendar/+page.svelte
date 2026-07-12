@@ -677,6 +677,34 @@
 		}
 	}
 
+	// Post Now: publish a draft/scheduled post immediately, overriding its schedule.
+	let postingNow = $state(false);
+	async function postNow(post: ScheduledPost) {
+		if (!post.agentId || postingNow) return;
+		postingNow = true;
+		try {
+			const res = await fetch(`/api/agent/${post.agentId}/publish-post`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ postId: post.id })
+			});
+			const d = await res.json().catch(() => ({}));
+			if (!res.ok || !d.success) throw new Error(d.error || 'Post now failed');
+			const status = d.status || 'published';
+			posts = posts.map((p) => (p.id === post.id ? { ...p, status } : p));
+			if (selectedPost?.id === post.id) selectedPost = { ...selectedPost, status };
+			showToast(
+				status === 'published' ? 'Posted live!' : `Post ${status}`,
+				status === 'failed' ? 'error' : 'success'
+			);
+			selectedPost = null;
+		} catch (err: any) {
+			showToast('Post now failed: ' + (err.message || 'error'), 'error');
+		} finally {
+			postingNow = false;
+		}
+	}
+
 	async function approveAllDrafts() {
 		const drafts = selectedDayPosts.filter((p) => p.status === 'draft');
 		if (drafts.length === 0) return;
@@ -1118,6 +1146,8 @@
 			onApprove={() => selectedPost && approvePost(selectedPost)}
 			onSaveText={handleSaveText}
 			onReschedule={handleReschedule}
+			onPostNow={() => selectedPost && postNow(selectedPost)}
+			posting={postingNow}
 			approving={approving}
 			deleting={deletingPost}
 		/>

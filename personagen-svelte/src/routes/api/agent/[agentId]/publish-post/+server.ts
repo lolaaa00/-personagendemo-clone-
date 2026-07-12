@@ -79,16 +79,27 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 	const ctx = await ownedAgentAndPost(locals, params.agentId, postId);
 	if (ctx.err) return ctx.err;
 
-	const requested = Array.isArray(body.platforms)
-		? body.platforms.map((p: string) => String(p).toLowerCase())
-		: [];
-	if (requested.length === 0)
-		return json({ success: false, error: 'Pick at least one platform to publish to.' }, { status: 400 });
-
 	// Only allow platforms that are actually connected AND media-compatible — the
 	// user can't route an image to YouTube or send to an unconnected account.
 	const allowed = await connectedCompatible(locals, params.agentId!, ctx.post);
-	const platforms = requested.filter((p: string) => allowed.includes(p));
+
+	const requested = Array.isArray(body.platforms)
+		? body.platforms.map((p: string) => String(p).toLowerCase())
+		: [];
+
+	let platforms: string[];
+	if (requested.length) {
+		// Explicit pick (the "publish to a connected platform" picker).
+		platforms = requested.filter((p: string) => allowed.includes(p));
+	} else {
+		// "Post Now" (no picker): target the post's own platforms when they're
+		// connected + compatible, otherwise fall back to every connected platform.
+		const own = (Array.isArray(ctx.post.platforms) ? ctx.post.platforms : [])
+			.map((p: string) => String(p).toLowerCase())
+			.filter((p: string) => allowed.includes(p));
+		platforms = own.length ? own : allowed;
+	}
+
 	if (platforms.length === 0) {
 		return json(
 			{
@@ -96,7 +107,9 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 				error:
 					allowed.length === 0
 						? 'No connected account can accept this post yet. Connect a platform first.'
-						: `None of the chosen platforms are connected. Available: ${allowed.join(', ')}.`
+						: requested.length
+							? `None of the chosen platforms are connected. Available: ${allowed.join(', ')}.`
+							: 'No connected account can accept this post yet. Connect a platform first.'
 			},
 			{ status: 400 }
 		);

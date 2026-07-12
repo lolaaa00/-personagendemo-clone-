@@ -189,6 +189,10 @@
 	// (clothing, colors, hair, eyes, headwear, styling). Feeds the profile-picture
 	// prompt; filled by "Generate for brand".
 	let ppAppearance = $state<Record<string, string>>({ ...(personaProfile.appearance ?? {}) });
+	// Voice profile inferred from the persona's NAME (nationality + accent + gender,
+	// e.g. "Jenny Tran" → female Vietnamese-American). Recorded for observability;
+	// the closest catalog voice gets pinned. Filled by "Generate for brand".
+	let ppVoiceProfile = $state<Record<string, string>>({ ...(personaProfile.voiceProfile ?? {}) });
 
 	const PERSONA_ARCHETYPES = [
 		'The Creator', 'The Expert / Authority', 'The Relatable Friend', 'The Aspirational',
@@ -386,6 +390,7 @@
 		ppContentAngle = freshProfile.contentAngle ?? '';
 		ppTargetAvatar = freshProfile.targetAvatar ?? '';
 		ppAppearance = { ...(freshProfile.appearance ?? {}) };
+		ppVoiceProfile = { ...(freshProfile.voiceProfile ?? {}) };
 
 		soulText = fresh.soul ?? '';
 		skillsText = fresh.skills ?? '';
@@ -756,7 +761,19 @@
 				if (d.contentAngle) ppContentAngle = d.contentAngle;
 				if (d.appearance && typeof d.appearance === 'object')
 					ppAppearance = { ...ppAppearance, ...d.appearance };
-				// ppGender is intentionally left untouched — it's the input, not generated.
+				// Voice: record the inferred profile (nationality/accent from the name)
+				// and pin the closest catalog voice. Explicit gender stays authoritative;
+				// it's only filled here when it was blank (inferred from the name).
+				if (d.voiceProfile && typeof d.voiceProfile === 'object') ppVoiceProfile = { ...d.voiceProfile };
+				if (!ppGender && (d.voiceProfile?.gender === 'female' || d.voiceProfile?.gender === 'male'))
+					ppGender = d.voiceProfile.gender;
+				if (d.voice) selectedVoice = d.voice;
+				if (d.voiceMatch === 'fallback' && d.voiceProfile?.accent) {
+					showToast(
+						`No ${d.voiceProfile.accent} accent in the voice catalog yet — pinned the closest match. Add one via UGC_EXTRA_VOICES to upgrade.`,
+						'warning'
+					);
+				}
 				showToast('Persona profile generated — review and Save', 'success');
 			} else {
 				showToast(res.error || 'Generation failed', 'error');
@@ -1147,7 +1164,8 @@
 				psychProfile: ppPsychProfile,
 				contentAngle: ppContentAngle,
 				targetAvatar: ppTargetAvatar,
-				appearance: ppAppearance
+				appearance: ppAppearance,
+				voiceProfile: ppVoiceProfile
 			}
 		};
 		try {
@@ -1313,6 +1331,39 @@
 	let publishFallbackSelected = $state<string[]>([]);
 	let publishFallbackLoading = $state(false);
 	let publishFallbackPublishing = $state(false);
+
+	// ── Post Now: publish a draft/scheduled post immediately, overriding schedule ──
+	// Reuses the publish-post endpoint with NO platforms → the server targets the
+	// post's own connected platforms (or all connected). Does not touch the
+	// scheduler; the post simply lands as published/partial/failed.
+	let postingNowId = $state<string | null>(null);
+	async function postNow(post: any) {
+		if (!agent?.id || postingNowId) return;
+		postingNowId = post.id;
+		try {
+			const res = await fetch(`/api/agent/${agent.id}/publish-post`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ postId: post.id })
+			});
+			const d = await res.json().catch(() => ({}));
+			if (!res.ok || !d.success) throw new Error(d.error || 'Post now failed');
+			showToast(
+				d.status === 'published'
+					? 'Posted live!'
+					: d.status === 'partial'
+						? 'Posted to some platforms — open for details'
+						: `Post ${d.status}`,
+				d.status === 'failed' ? 'error' : 'success'
+			);
+			modalPost = null;
+			await loadFeed();
+		} catch (e) {
+			showToast('Post now failed: ' + (e as Error).message, 'error');
+		} finally {
+			postingNowId = null;
+		}
+	}
 
 	async function openPublishFallback(post: any) {
 		if (!agent?.id) return;
@@ -1749,7 +1800,18 @@
 				}
 				await checkStatuses();
 			} else {
-				showToast(res.error || `Failed to connect ${platform}`, 'error');
+				// A raw "Failed to fetch" means the request was dropped at the network
+				// level (the server took too long, usually reaching Zernio) — turn it
+				// into something actionable rather than a cryptic browser string.
+				const isNetworkDrop = /failed to fetch|load failed|networkerror|timed out/i.test(
+					res.error || ''
+				);
+				showToast(
+					isNetworkDrop
+						? `Couldn't reach the server to start the ${platformLabel(platform)} connection — try again in a moment.`
+						: res.error || `Failed to connect ${platform}`,
+					'error'
+				);
 			}
 		} catch {
 			showToast(`Unable to reach API — ${platform} unavailable`, 'warning');
@@ -2069,6 +2131,8 @@
 					modalPost = null;
 					openPublishFallback(p);
 				}}
+				onPostNow={postNow}
+				posting={postingNowId === modalPost?.id}
 				approving={approvingPostId === modalPost?.id}
 				deleting={deletingPostId === modalPost?.id}
 			/>
@@ -2631,7 +2695,14 @@
 									{previewingVoice ? '…' : '▶ Preview'}
 								</button>
 							</div>
-							<p class="field-hint">The video's spoken voice — pin one that matches this persona's on-camera character.</p>
+							<p class="field-hint">
+								The video's spoken voice — pin one that matches this persona's on-camera character.
+								{#if ppVoiceProfile?.nationality || ppVoiceProfile?.accent}
+									Inferred from the name: {[ppVoiceProfile.nationality, ppVoiceProfile.accent && `${ppVoiceProfile.accent} accent`]
+										.filter(Boolean)
+										.join(' · ')}.
+								{/if}
+							</p>
 						</div>
 						<div class="field-group">
 							<label for="p-ppd">Posts Per Day</label>

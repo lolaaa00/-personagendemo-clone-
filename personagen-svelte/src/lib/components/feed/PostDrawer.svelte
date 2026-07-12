@@ -12,9 +12,11 @@
 		onSaveText = undefined,
 		onReschedule = undefined,
 		onPublishFallback = undefined,
+		onPostNow = undefined,
 		characterRef = null,
 		approving = false,
-		deleting = false
+		deleting = false,
+		posting = false
 	}: {
 		post: any | null;
 		onClose: () => void;
@@ -29,8 +31,12 @@
 		onReschedule?: (post: any, date: string, time: string) => Promise<boolean> | boolean;
 		/** When provided, a failed/unpublished post can be (re)published to a connected platform. */
 		onPublishFallback?: ((post: any) => void) | null;
+		/** When provided, a draft/scheduled post gets a "Post Now" button that publishes
+		 *  immediately, overriding the schedule. */
+		onPostNow?: ((post: any) => void) | null;
 		approving?: boolean;
 		deleting?: boolean;
+		posting?: boolean;
 	} = $props();
 
 	// ── Caption editing (available at any status — drafts through published) ──
@@ -45,6 +51,8 @@
 		schedDate = post?.scheduled_date ?? '';
 		schedTime = (post?.scheduled_time ?? '10:00:00').slice(0, 5);
 		savingSchedule = false;
+		confirmingDelete = false;
+		confirmingPostNow = false;
 	});
 	function startTextEdit() {
 		draftText = display?.text ?? '';
@@ -153,6 +161,10 @@
 	let canRepublish = $derived(
 		Boolean(onPublishFallback && post && post.status === 'failed' && display?.mediaUrl)
 	);
+	// Draft/scheduled posts can be published immediately, overriding the schedule.
+	let canPostNow = $derived(
+		Boolean(onPostNow && post && (post.status === 'draft' || post.status === 'scheduled'))
+	);
 
 	let analytics = $derived(post?.analytics ?? null);
 	let hasRealStats = $derived(
@@ -208,6 +220,23 @@
 			confirmingDelete = true;
 			confirmTimeout = setTimeout(() => {
 				confirmingDelete = false;
+			}, 3000);
+		}
+	}
+
+	// ── Post-Now two-click confirm (publishing live is irreversible) ──────
+	let confirmingPostNow = $state(false);
+	let postNowTimeout: ReturnType<typeof setTimeout> | undefined;
+	function handlePostNowClick() {
+		if (!post || posting) return;
+		if (confirmingPostNow) {
+			clearTimeout(postNowTimeout);
+			confirmingPostNow = false;
+			onPostNow?.(post);
+		} else {
+			confirmingPostNow = true;
+			postNowTimeout = setTimeout(() => {
+				confirmingPostNow = false;
 			}, 3000);
 		}
 	}
@@ -388,6 +417,17 @@
 						</div>
 					{/if}
 
+					{#if display.mediaType === 'video'}
+						<div>
+							<span class="drawer-block-label">💬 Captions & badge</span>
+							<p class="gen-prompt">
+								Captions: {display.captionsBurned
+									? `burned${display.onScreenText ? ` — “${display.onScreenText}”` : ''}`
+									: 'off'} · AI badge: {display.aiBadgeBurned ? 'burned' : 'off'}
+							</p>
+						</div>
+					{/if}
+
 					{#if !gen && genAspects.length}
 						<p class="gen-note">
 							Models &amp; cost recovered from the generation ledger. The exact input images sent
@@ -462,6 +502,20 @@
 				     that IS connected — the user picks which. No auto-retry. -->
 				<button type="button" class="btn-drawer-approve" onclick={() => onPublishFallback?.(post)}>
 					📤 Publish to a connected platform
+				</button>
+			{/if}
+			{#if canPostNow}
+				<!-- Publish immediately to the post's connected platforms, overriding any
+				     schedule. Two-click confirm because posting live is irreversible. -->
+				<button
+					type="button"
+					class="btn-drawer-postnow"
+					class:confirming={confirmingPostNow}
+					disabled={posting}
+					onclick={handlePostNowClick}
+					title="Publish immediately, overriding the schedule"
+				>
+					{#if posting}Posting…{:else if confirmingPostNow}Post live now?{:else}⚡ Post Now{/if}
 				</button>
 			{/if}
 			<button type="button" class="btn-drawer-close" onclick={onClose}>Close</button>
@@ -926,9 +980,29 @@
 	}
 
 	.btn-drawer-approve:disabled,
-	.btn-drawer-delete:disabled {
+	.btn-drawer-delete:disabled,
+	.btn-drawer-postnow:disabled {
 		opacity: 0.6;
 		cursor: not-allowed;
+	}
+
+	.btn-drawer-postnow {
+		background: var(--accent, #7c6aed);
+		color: #fff;
+		border: 1px solid transparent;
+		border-radius: 6px;
+		padding: 0.5rem 1rem;
+		font-size: 0.78rem;
+		font-weight: 600;
+		cursor: pointer;
+		transition: all 0.15s ease;
+	}
+	.btn-drawer-postnow:hover:not(:disabled) {
+		filter: brightness(1.08);
+	}
+	/* Second click state — amber to signal this publishes live, right now. */
+	.btn-drawer-postnow.confirming {
+		background: var(--warning, #f59e0b);
 	}
 
 	.btn-drawer-close {
