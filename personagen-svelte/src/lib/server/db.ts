@@ -25,6 +25,10 @@ export interface AgentRow {
 	supervisor_agent_id?: string | null;
 	managed_by_overseer?: boolean;
 	runtime_owner?: 'svelte-gemini' | 'hermes-daemon' | 'hermes-orchestrated';
+	// Zernio profile that isolates this persona's connected social accounts.
+	// Null until provisioned on first connect (api/accounts writes it,
+	// publisher.ts reads it to route). See zernio_profile_routing_migration.sql.
+	zernio_profile_id?: string | null;
 	created_at: string;
 	updated_at: string;
 }
@@ -59,7 +63,17 @@ export interface PostRow {
 	agent_id: string;
 	content: string;
 	platforms: string[];
-	status: 'draft' | 'scheduled' | 'publishing' | 'published' | 'failed' | 'partial';
+	// Full superset allowed by posts_status_check. 'generating' is the async
+	// generate-post up-front state; 'rejected' is written by the review queue.
+	status:
+		| 'draft'
+		| 'generating'
+		| 'scheduled'
+		| 'publishing'
+		| 'published'
+		| 'partial'
+		| 'failed'
+		| 'rejected';
 	scheduled_date: string | null;
 	scheduled_time: string | null;
 	published_at: string | null;

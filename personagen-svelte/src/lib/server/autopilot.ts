@@ -32,6 +32,14 @@ function clampHour(h: number): number {
 	return Math.min(23, Math.max(0, Math.trunc(h)));
 }
 
+// A slot whose generation keeps throwing used to be retried on EVERY hourly tick,
+// re-paying for LLM + image + TTS each time (a slot 7 days out could burn ~168
+// attempts). After this many failures the slot dead-letters — recorded as a
+// 'failed' post so the user can see why — and is skipped, while the agent keeps
+// generating the rest of its runway. Below the cap the slot stays retriable, so a
+// single transient provider blip never costs a content slot.
+const MAX_SLOT_ATTEMPTS = intFromEnv('AUTOPILOT_MAX_SLOT_ATTEMPTS', 3);
+
 // ── Timezone helpers (dependency-free, via Intl) ────────────────────────────
 
 /** Wall-clock parts (and YYYY-MM-DD date string) for `date` as seen in `tz`. */
@@ -171,12 +179,28 @@ async function generateDraftsForAgent(
 	// Existing posts in the window → never double-book a slot (and don't re-spend on images)
 	const { data: existing } = await supabase
 		.from('posts')
-		.select('scheduled_date, scheduled_time')
+		.select('id, status, scheduled_date, scheduled_time, publication_results')
 		.eq('agent_id', agentId)
 		.in('scheduled_date', dateStrs);
-	const taken = new Set(
-		(existing || []).map((p: any) => `${p.scheduled_date}T${(p.scheduled_time || '').slice(0, 5)}`)
-	);
+
+	// A slot holding any real post is taken. The one exception is a GENERATION
+	// failure marker (publication_results._gen) still under MAX_SLOT_ATTEMPTS —
+	// that slot is still retriable. At the cap it counts as taken (dead-lettered),
+	// which is what stops a cursed slot re-spending on every tick.
+	// Note: a publish-failed post (status 'failed' with _post, not _gen) is a real
+	// post and stays taken — we must never regenerate over it.
+	const taken = new Set<string>();
+	const genFailures = new Map<string, { id: string; attempts: number }>();
+	for (const p of (existing || []) as any[]) {
+		const k = `${p.scheduled_date}T${(p.scheduled_time || '').slice(0, 5)}`;
+		const attempts = Number(p.publication_results?._gen?.attempts) || 0;
+		if (p.status === 'failed' && attempts > 0) {
+			genFailures.set(k, { id: p.id, attempts });
+			if (attempts >= MAX_SLOT_ATTEMPTS) taken.add(k);
+			continue;
+		}
+		taken.add(k);
+	}
 
 	// ── Roll stale drafts forward ────────────────────────────────────────────
 	// A draft whose slot passed unapproved simply didn't publish (the scheduler
@@ -224,12 +248,22 @@ async function generateDraftsForAgent(
 	const firstSlotTimeStr = `${String(startH).padStart(2, '0')}:00:00`;
 
 	let created = 0;
+	// `created` counts SUCCESSES, so capping on it would let a systematically
+	// failing insert (bad RLS/constraint) run a full PAID generation for every
+	// slot, every tick, forever — spend with nothing to show for it. Cap on
+	// ATTEMPTS instead: that is what actually bounds money.
+	let attempted = 0;
+	let consecutiveInsertFailures = 0;
+	const MAX_CONSECUTIVE_INSERT_FAILURES = 3;
+
 	for (const slot of slots) {
-		if (created >= opts.maxToCreate) break;
+		if (attempted >= opts.maxToCreate) break;
 		const key = `${slot.dateStr}T${slot.timeStr.slice(0, 5)}`;
 		if (taken.has(key)) continue;
 		// Only fill future slots — don't backfill times that already passed today.
 		if (zonedWallTimeToEpoch(slot.dateStr, slot.timeStr, tz) <= Date.now()) continue;
+
+		attempted++;
 
 		const isCinematicSlot = slot.timeStr === firstSlotTimeStr;
 
@@ -262,7 +296,10 @@ async function generateDraftsForAgent(
 				continue;
 			}
 
-			const { error } = await supabase.from('posts').insert({
+			// If a prior attempt left a failure marker on this slot, REPLACE it rather
+			// than inserting a second row at the same slot.
+			const priorMarker = genFailures.get(key);
+			const row = {
 				user_id: userId,
 				agent_id: agentId,
 				content: JSON.stringify(pack.content),
@@ -271,13 +308,29 @@ async function generateDraftsForAgent(
 				scheduled_date: slot.dateStr,
 				scheduled_time: slot.timeStr,
 				published_at: null,
-				token_cost: pack.content?.costBreakdown?.total ?? 0
-			});
+				token_cost: pack.content?.costBreakdown?.total ?? 0,
+				publication_results: {} // clears the _gen failure marker
+			};
+			const { error } = priorMarker
+				? await supabase.from('posts').update(row).eq('id', priorMarker.id)
+				: await supabase.from('posts').insert(row);
 			if (!error) {
+				genFailures.delete(key);
 				created++;
 				taken.add(key);
+				consecutiveInsertFailures = 0;
 			} else {
+				// We already PAID for this generation and cannot persist it. If the DB
+				// keeps rejecting the write (schema/RLS/constraint), every further slot
+				// burns real money for nothing — stop this agent instead of grinding
+				// through the whole runway.
 				console.error('[Autopilot] Failed to insert draft for', key, error);
+				if (++consecutiveInsertFailures >= MAX_CONSECUTIVE_INSERT_FAILURES) {
+					console.error(
+						`[Autopilot] ${consecutiveInsertFailures} consecutive insert failures for agent ${agentId} — aborting this agent's run to stop paying for un-persistable generations.`
+					);
+					break;
+				}
 			}
 		} catch (e) {
 			const msg = (e as Error).message;
@@ -285,7 +338,45 @@ async function generateDraftsForAgent(
 			// Hard config/account errors won't fix themselves mid-run — stop this
 			// agent instead of burning LLM tokens on every remaining slot.
 			// "Exhausted balance"/"User is locked" = fal account lock (seen live).
-			if (/No AI provider|No image generation|Exhausted balance|User is locked/i.test(msg)) break;
+			// A budget-cap hit is a hard stop too: every further slot fails identically.
+			if (/No AI provider|No image generation|Exhausted balance|User is locked|budget/i.test(msg))
+				break;
+
+			// Bounded retry. Record (or increment) a generation-failure marker on the
+			// slot. Under the cap the slot stays retriable next tick — a transient
+			// provider blip must never cost a content slot. At the cap it dead-letters
+			// and is skipped, so a permanently-failing slot stops re-paying for
+			// LLM + image + TTS on every hourly run.
+			const prior = genFailures.get(key);
+			const attempts = (prior?.attempts ?? 0) + 1;
+			const marker = {
+				status: 'failed',
+				content: JSON.stringify({
+					text: `Generation failed (attempt ${attempts}/${MAX_SLOT_ATTEMPTS}): ${msg.slice(0, 200)}`,
+					error: msg.slice(0, 300)
+				}),
+				publication_results: { _gen: { attempts, last_error: msg.slice(0, 300) } }
+			};
+			const { error: markErr } = prior
+				? await supabase.from('posts').update(marker).eq('id', prior.id)
+				: await supabase.from('posts').insert({
+						user_id: userId,
+						agent_id: agentId,
+						platforms: [],
+						scheduled_date: slot.dateStr,
+						scheduled_time: slot.timeStr,
+						published_at: null,
+						token_cost: 0,
+						...marker
+					});
+			if (markErr) {
+				console.error('[Autopilot] Could not record failure marker for', key, markErr);
+			} else if (attempts >= MAX_SLOT_ATTEMPTS) {
+				taken.add(key);
+				console.warn(
+					`[Autopilot] Slot ${key} dead-lettered after ${attempts} failed generation attempts — no further spend on it.`
+				);
+			}
 		}
 	}
 	return created;

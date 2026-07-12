@@ -122,7 +122,9 @@
 	let editGradient = $state(agent?.gradient ?? 'linear-gradient(135deg, #7C3AED, #4F46E5)');
 	let characterRef = $state<string | null>(agent?.ugc_character_ref ?? null);
 	let generatingAvatar = $state(false);
-	let referenceKit = $state<Record<string, string>>(agent?.ugc_reference_kit ?? {});
+	// Values are stage URLs (string) plus `<stage>_history` pools (string[]), so
+	// the type is widened from the old string-only shape.
+	let referenceKit = $state<Record<string, any>>(agent?.ugc_reference_kit ?? {});
 	let generatingKitStage = $state<'side_profiles' | 'face_closeup' | 'feature_grid' | null>(null);
 	let editSupervisorId = $state<string | null>(agent?.supervisor_agent_id ?? null);
 	let editRuntimeOwner = $state<'svelte-gemini' | 'hermes-daemon' | 'hermes-orchestrated'>(
@@ -1154,6 +1156,119 @@
 		}
 	}
 
+	// ── Restore ONE reference-kit stage from its own history ──────────────
+	// Each stage (full body, side profiles, close-up, feature grid, sheet) keeps
+	// a `<stage>_history` pool of every version ever generated. This re-pins one
+	// of those for that stage only — full body from full-body generations, side
+	// profiles from side-profile generations, etc. Fills going forward: images
+	// generated before per-stage history existed can't be sorted back by stage.
+	const KIT_STAGE_RESTORE_LABELS: Record<string, string> = {
+		full_body: 'Full body',
+		side_profiles: 'Side profiles',
+		face_closeup: 'Facial close-up',
+		feature_grid: 'Feature grid',
+		sheet: 'Reference sheet'
+	};
+	let kitRestoreStage = $state<string | null>(null);
+	let kitRestoreImages = $state<string[]>([]);
+	let kitRestoringUrl = $state<string | null>(null);
+
+	function stageHistory(stage: string): string[] {
+		const h = referenceKit[`${stage}_history`];
+		return Array.isArray(h) ? h : [];
+	}
+
+	function openKitRestore(stage: string) {
+		kitRestoreStage = stage;
+		kitRestoreImages = stageHistory(stage);
+	}
+
+	async function restoreKitStage(url: string) {
+		if (!agent?.id || !kitRestoreStage || kitRestoringUrl) return;
+		const stage = kitRestoreStage;
+		kitRestoringUrl = url;
+		try {
+			const res = await fetch(`/api/agent/${agent.id}/restore-kit-stage`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ stage, url })
+			});
+			const d = await res.json().catch(() => ({}));
+			if (!res.ok || !d.success) throw new Error(d.error || 'Failed to restore');
+			referenceKit = d.kit ?? { ...referenceKit, [stage]: url };
+			showToast(`${KIT_STAGE_RESTORE_LABELS[stage] ?? stage} restored`, 'success');
+			kitRestoreStage = null;
+			await invalidateAll(); // full body feeds the sidebar/header avatar
+		} catch (e) {
+			showToast('Restore failed: ' + (e as Error).message, 'error');
+		} finally {
+			kitRestoringUrl = null;
+		}
+	}
+
+	// ── Publish an already-generated post to a connected platform ─────────
+	// For posts whose media generated fine but couldn't publish (target platform
+	// not connected). The user picks a connected, media-compatible platform —
+	// nothing auto-retries.
+	let publishFallbackPost = $state<any | null>(null);
+	let publishFallbackOptions = $state<string[]>([]);
+	let publishFallbackSelected = $state<string[]>([]);
+	let publishFallbackLoading = $state(false);
+	let publishFallbackPublishing = $state(false);
+
+	async function openPublishFallback(post: any) {
+		if (!agent?.id) return;
+		publishFallbackPost = post;
+		publishFallbackOptions = [];
+		publishFallbackSelected = [];
+		publishFallbackLoading = true;
+		try {
+			const res = await fetch(
+				`/api/agent/${agent.id}/publish-post?postId=${encodeURIComponent(post.id)}`
+			);
+			const d = await res.json().catch(() => ({}));
+			if (!res.ok || !d.success) throw new Error(d.error || 'Could not load connections');
+			publishFallbackOptions = d.connectedPlatforms ?? [];
+			publishFallbackSelected = [...publishFallbackOptions]; // default: all compatible connected
+		} catch (e) {
+			showToast((e as Error).message, 'error');
+			publishFallbackPost = null;
+		} finally {
+			publishFallbackLoading = false;
+		}
+	}
+
+	function togglePublishFallback(p: string) {
+		publishFallbackSelected = publishFallbackSelected.includes(p)
+			? publishFallbackSelected.filter((x) => x !== p)
+			: [...publishFallbackSelected, p];
+	}
+
+	async function confirmPublishFallback() {
+		if (!agent?.id || !publishFallbackPost || publishFallbackPublishing) return;
+		if (publishFallbackSelected.length === 0) {
+			showToast('Pick at least one platform', 'error');
+			return;
+		}
+		publishFallbackPublishing = true;
+		try {
+			const res = await fetch(`/api/agent/${agent.id}/publish-post`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ postId: publishFallbackPost.id, platforms: publishFallbackSelected })
+			});
+			const d = await res.json().catch(() => ({}));
+			if (!res.ok || !d.success) throw new Error(d.error || 'Publish failed');
+			showToast(d.status === 'published' ? 'Published!' : `Post ${d.status}`, 'success');
+			publishFallbackPost = null;
+			await loadFeed();
+		} catch (e) {
+			showToast('Publish failed: ' + (e as Error).message, 'error');
+		} finally {
+			publishFallbackPublishing = false;
+		}
+	}
+
 	function requestGenerateAvatar() {
 		if (!agent?.id || generatingAvatar) return;
 		askToGenerate(
@@ -1804,7 +1919,7 @@
 				{:else}
 					<div class="post-mosaic">
 						{#each filteredPosts as post (post.id)}
-							<PostCard {post} onOpen={(p) => (modalPost = p)} />
+							<PostCard {post} onOpen={(p) => (modalPost = p)} onPublishFallback={openPublishFallback} />
 						{/each}
 					</div>
 				{/if}
@@ -2151,19 +2266,32 @@
 										/>
 										<!-- Full body is produced by the profile-picture generator, so
 										     regenerating it = regenerating the profile picture. -->
-										<button
-											type="button"
-											class="btn-sync kit-stage-generate"
-											onclick={requestGenerateAvatar}
-											disabled={generatingAvatar || generatingKitStage !== null || generatingAllKit}
-											title="Full body comes from the profile picture — this regenerates both"
-										>
-											{#if generatingAvatar}
-												<span class="spinner-sm"></span> Generating…
-											{:else}
-												↺ Regenerate
+										<div class="kit-stage-actions">
+											<button
+												type="button"
+												class="btn-sync kit-stage-generate"
+												onclick={requestGenerateAvatar}
+												disabled={generatingAvatar || generatingKitStage !== null || generatingAllKit}
+												title="Full body comes from the profile picture — this regenerates both"
+											>
+												{#if generatingAvatar}
+													<span class="spinner-sm"></span> Generating…
+												{:else}
+													↺ Regenerate
+												{/if}
+											</button>
+											{#if stageHistory('full_body').length > 1}
+												<button
+													type="button"
+													class="btn-sync kit-stage-generate"
+													onclick={() => openKitRestore('full_body')}
+													disabled={generatingAvatar || generatingKitStage !== null || generatingAllKit}
+													title="Restore a previous full-body image from this stage's history"
+												>
+													🕑 Restore
+												</button>
 											{/if}
-										</button>
+										</div>
 									</div>
 									{#each [{ key: 'side_profiles' as const, n: 2, label: 'Side profiles', alt: 'Side profile composite', wide: true }, { key: 'face_closeup' as const, n: 3, label: 'Facial close-up', alt: 'Facial close-up', wide: false }, { key: 'feature_grid' as const, n: 4, label: 'Feature grid', alt: 'Feature grid', wide: false }] as st (st.key)}
 										{@const blocked = kitStageBlockedReason(st.key)}
@@ -2180,19 +2308,32 @@
 										openPreview(referenceKit[st.key], st.label, () => requestGenerateKitStage(st.key))}
 								/>
 											{/if}
-											<button
-												type="button"
-												class="btn-sync kit-stage-generate"
-												onclick={() => requestGenerateKitStage(st.key)}
-												disabled={generatingKitStage !== null || generatingAllKit || blocked !== null}
-												title={blocked ?? undefined}
-											>
-												{#if generatingKitStage === st.key}
-													<span class="spinner-sm"></span> Generating…
-												{:else}
-													{referenceKit[st.key] ? '↺ Regenerate' : 'Generate'}
+											<div class="kit-stage-actions">
+												<button
+													type="button"
+													class="btn-sync kit-stage-generate"
+													onclick={() => requestGenerateKitStage(st.key)}
+													disabled={generatingKitStage !== null || generatingAllKit || blocked !== null}
+													title={blocked ?? undefined}
+												>
+													{#if generatingKitStage === st.key}
+														<span class="spinner-sm"></span> Generating…
+													{:else}
+														{referenceKit[st.key] ? '↺ Regenerate' : 'Generate'}
+													{/if}
+												</button>
+												{#if stageHistory(st.key).length > 1}
+													<button
+														type="button"
+														class="btn-sync kit-stage-generate"
+														onclick={() => openKitRestore(st.key)}
+														disabled={generatingKitStage !== null || generatingAllKit}
+														title="Restore a previous {st.label.toLowerCase()} from this stage's history"
+													>
+														🕑 Restore
+													</button>
 												{/if}
-											</button>
+											</div>
 											{#if blocked && !referenceKit[st.key]}
 												<span class="field-hint">{blocked}</span>
 											{/if}
@@ -2645,6 +2786,10 @@
 	spec={composerSpec}
 	onClose={() => (composerOpen = false)}
 	onConfirm={(body) => onComposerConfirm(body)}
+	onGoToConnections={() => {
+		composerOpen = false;
+		activeTab = 'connections';
+	}}
 />
 
 <!-- Expand a generated asset full-size, with Regenerate right where the user
@@ -2748,6 +2893,113 @@
 		</div>
 	</div>
 {/if}
+
+<!-- Per-stage reference-kit restore: past generations of ONE stage (full body,
+     side profiles, close-up, feature grid), click to re-pin for that stage. -->
+{#if kitRestoreStage}
+	<div class="lightbox-backdrop" onclick={() => (kitRestoreStage = null)} role="presentation">
+		<div class="restore-modal" onclick={(e) => e.stopPropagation()} role="dialog" aria-label="Restore reference-kit stage">
+			<div class="restore-head">
+				<div>
+					<h3>Restore {KIT_STAGE_RESTORE_LABELS[kitRestoreStage] ?? kitRestoreStage}</h3>
+					<p>
+						Past {(KIT_STAGE_RESTORE_LABELS[kitRestoreStage] ?? kitRestoreStage).toLowerCase()}
+						generations for {agent?.name} — click one to re-pin it for this stage. Nothing is deleted.
+					</p>
+				</div>
+				<button type="button" class="restore-close" onclick={() => (kitRestoreStage = null)} aria-label="Close">✕</button>
+			</div>
+			{#if kitRestoreImages.length === 0}
+				<p class="field-hint" style="padding: 2rem; text-align: center;">
+					No past versions yet — regenerate this stage to build up its history.
+				</p>
+			{:else}
+				<div class="restore-grid">
+					{#each kitRestoreImages as url (url)}
+						<button
+							type="button"
+							class="restore-tile"
+							class:current={url === referenceKit[kitRestoreStage]}
+							onclick={() => restoreKitStage(url)}
+							disabled={kitRestoringUrl !== null}
+						>
+							<img src={url} loading="lazy" alt="Past generation" />
+							{#if url === referenceKit[kitRestoreStage]}
+								<span class="restore-badge">Current</span>
+							{:else if kitRestoringUrl === url}
+								<span class="restore-badge">Restoring…</span>
+							{/if}
+						</button>
+					{/each}
+				</div>
+			{/if}
+		</div>
+	</div>
+{/if}
+
+<!-- Publish an already-generated post to a connected platform. Media is ready;
+     only publishing failed. User picks where — no auto-retry. -->
+{#if publishFallbackPost}
+	<div class="lightbox-backdrop" onclick={() => (publishFallbackPost = null)} role="presentation">
+		<div
+			class="restore-modal pubfb-modal"
+			onclick={(e) => e.stopPropagation()}
+			role="dialog"
+			aria-label="Publish to a connected platform"
+		>
+			<div class="restore-head">
+				<div>
+					<h3>Publish to a connected platform</h3>
+					<p>
+						This post's media is ready — only publishing failed. Pick where to send it. Only
+						connected, compatible platforms are shown, and nothing auto-retries.
+					</p>
+				</div>
+				<button type="button" class="restore-close" onclick={() => (publishFallbackPost = null)} aria-label="Close">✕</button>
+			</div>
+			{#if publishFallbackLoading}
+				<div class="feed-loading"><span class="spinner"></span> Checking your connections…</div>
+			{:else if publishFallbackOptions.length === 0}
+				<div class="pubfb-empty">
+					<p>No connected account can accept this post yet — connect a platform first.</p>
+					<button
+						type="button"
+						class="btn-sync"
+						onclick={() => {
+							publishFallbackPost = null;
+							activeTab = 'connections';
+						}}>Go to Connections →</button
+					>
+				</div>
+			{:else}
+				<div class="pubfb-chips">
+					{#each publishFallbackOptions as p}
+						<button
+							type="button"
+							class="pubfb-chip"
+							class:on={publishFallbackSelected.includes(p)}
+							onclick={() => togglePublishFallback(p)}>{p}</button
+						>
+					{/each}
+				</div>
+				<div class="pubfb-actions">
+					<button
+						type="button"
+						class="btn-primary-cta"
+						disabled={publishFallbackPublishing || publishFallbackSelected.length === 0}
+						onclick={confirmPublishFallback}
+					>
+						{#if publishFallbackPublishing}
+							<span class="spinner-sm"></span> Publishing…
+						{:else}
+							Publish now
+						{/if}
+					</button>
+				</div>
+			{/if}
+		</div>
+	</div>
+{/if}
 {/if}
 
 <style>
@@ -2837,6 +3089,66 @@
 		color: #fff;
 		padding: 3px 4px;
 		border-radius: 4px;
+	}
+
+	/* ── Publish-to-connected-platform modal ── */
+	.pubfb-modal {
+		max-width: 460px;
+	}
+	.pubfb-chips {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+		padding: 0.5rem 0 1rem;
+	}
+	.pubfb-chip {
+		border: 1px solid var(--border-strong);
+		background: var(--surface-2);
+		color: var(--text);
+		border-radius: 999px;
+		padding: 0.4rem 0.85rem;
+		font-size: 0.85rem;
+		text-transform: capitalize;
+		cursor: pointer;
+		transition: background 0.15s, border-color 0.15s;
+	}
+	.pubfb-chip.on {
+		background: var(--accent-mid, #7c6aed);
+		border-color: var(--accent-mid, #7c6aed);
+		color: #fff;
+	}
+	.pubfb-actions {
+		display: flex;
+		justify-content: flex-end;
+	}
+	.btn-primary-cta {
+		background: var(--accent-mid, #7c6aed);
+		border: 1px solid var(--accent-mid, #7c6aed);
+		color: #fff;
+		border-radius: 10px;
+		padding: 0.55rem 1.1rem;
+		font-weight: 600;
+		font-size: 0.88rem;
+		cursor: pointer;
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+	}
+	.btn-primary-cta:disabled {
+		opacity: 0.55;
+		cursor: not-allowed;
+	}
+	.pubfb-empty {
+		padding: 1rem 0 0.5rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+		align-items: flex-start;
+	}
+	.pubfb-empty p {
+		margin: 0;
+		color: var(--text-muted);
+		font-size: 0.9rem;
 	}
 
 	/* ── Page ── */
@@ -3667,6 +3979,14 @@
 	.kit-stage-generate:hover:not(:disabled) {
 		border-color: var(--accent-mid);
 		color: var(--text);
+	}
+
+	/* Regenerate + Restore sit side by side under a generated stage. */
+	.kit-stage-actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.35rem;
+		justify-content: center;
 	}
 
 	/* When there is NO image above it, give it the square placeholder look */

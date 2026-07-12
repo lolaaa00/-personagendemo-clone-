@@ -36,6 +36,7 @@ import { priceOf, summarizeCosts, type CostEvent } from '$lib/pricing';
 import { createDbService } from '$lib/server/db';
 import { DEFAULT_VOICE, VOICE_CATALOG } from '$lib/server/voices';
 import { getServiceSupabase } from '$lib/server/service-supabase';
+import { resolveModel, getModel, type ModelOption } from '$lib/models';
 import { persistToStorage, persistBufferToStorage } from '$lib/server/storage';
 import { burnCaptions } from '$lib/server/video';
 import { fetchWithTimeout } from '$lib/server/social/http';
@@ -241,12 +242,72 @@ export function buildUgcImagePrompt(ugcPrompt: string): string {
 	return `${UGC_IMAGE_PREFIX}${ugcPrompt}`;
 }
 
+/**
+ * fal's image endpoints do NOT share a request shape -- flux/qwen want
+ * `image_size` (an enum), nano-banana wants `aspect_ratio` (a ratio string).
+ * Sending the wrong one is a 422 the user waits for, so the shape is derived from
+ * the catalog rather than assumed at the call site.
+ */
+function fluxImageSize(aspect: string): string {
+	switch (aspect) {
+		case '1:1':
+			return 'square_hd';
+		case '16:9':
+			return 'landscape_16_9';
+		case '9:16':
+			return 'portrait_16_9';
+		case '4:3':
+			return 'landscape_4_3';
+		default:
+			return 'portrait_4_3'; // 3:4 and anything unexpected
+	}
+}
+
+function withSize(model: ModelOption, input: Record<string, any>, aspect: string) {
+	if (model.sizeParam === 'aspect_ratio') input.aspect_ratio = aspect;
+	else if (model.sizeParam === 'image_size') input.image_size = fluxImageSize(aspect);
+	return input;
+}
+
+/** Text-to-image request for whichever model the user picked. */
+function buildT2iInput(model: ModelOption, prompt: string, aspect: string) {
+	return withSize(model, { prompt, num_images: 1 }, aspect);
+}
+
+/**
+ * Image-EDIT request. Single-reference models (Kontext, Qwen Edit) take
+ * `image_url`; only Nano Banana takes `image_urls`. We pass the PRIMARY reference
+ * to single-ref models and drop the rest -- the catalog flags that as a caveat so
+ * the user is TOLD their character sheet is being ignored, rather than silently
+ * losing facial consistency.
+ */
+function buildEditInput(model: ModelOption, prompt: string, imageUrls: string[], aspect: string) {
+	const input: Record<string, any> = { prompt, num_images: 1 };
+	if (model.multiRef) input.image_urls = imageUrls;
+	else input.image_url = imageUrls[0];
+	return withSize(model, input, aspect);
+}
+
 export async function generateUgcImage(
 	ugcPrompt: string,
 	orKey: string | null,
-	falKey: string | null
+	falKey: string | null,
+	modelId?: string | null,
+	aspect: string = '3:4'
 ): Promise<string> {
 	const imagePrompt = buildUgcImagePrompt(ugcPrompt);
+
+	// An explicitly chosen model is a budget/quality decision the user made and
+	// confirmed. It must win over the "OpenRouter first" default routing, which
+	// would otherwise silently ignore the pick and bill a different model.
+	if (modelId && falKey) {
+		const model = resolveModel('image_t2i', modelId);
+		const falData = await falSyncJson(model.id, buildT2iInput(model, imagePrompt, aspect), falKey);
+		const url = falData.images?.[0]?.url;
+		if (!url) throw new Error(`${model.label} returned no image`);
+		return url;
+	}
+
 	if (orKey) {
 		const orRes = await genFetch('https://openrouter.ai/api/v1/images/generations', {
 			method: 'POST',
@@ -673,18 +734,18 @@ async function generateBrollVideo(
 	stillUrl: string,
 	motionPrompt: string
 ): Promise<string> {
-	// Kling O3 takes `image_url` as the start frame (verified against the live
-	// OpenAPI spec above — the older v3/pro shape's `start_image_url` is NOT in
-	// this spec and fails validation). Veo also uses image_url but adds resolution.
-	const isKling = model.includes('kling');
-	const input: any = isKling
-		? {
-				image_url: stillUrl,
-				prompt: motionPrompt,
-				duration: VIDEO_DURATION,
-				generate_audio: BROLL_AUDIO_ENABLED
-			}
-		: { image_url: stillUrl, prompt: motionPrompt, generate_audio: BROLL_AUDIO_ENABLED, resolution: '1080p' };
+	// Every i2v model here takes `image_url` as the start frame (verified against
+	// the live OpenAPI specs — the older v3/pro `start_image_url` shape is NOT in
+	// them and fails validation). Beyond that they diverge, and fal rejects params a
+	// model doesn't declare: wan-i2v and hailuo have no `generate_audio`, and
+	// wan-i2v has no `duration` (it counts frames). Blanket-sending Kling's shape to
+	// a user-selected budget model would 422 after they'd already waited. So the
+	// request is built from the catalog's verified capability flags.
+	const spec = getModel(model);
+	const input: any = { image_url: stillUrl, prompt: motionPrompt };
+	if (spec?.supportsDuration ?? model.includes('kling')) input.duration = VIDEO_DURATION;
+	if (spec?.supportsAudio ?? model.includes('kling')) input.generate_audio = BROLL_AUDIO_ENABLED;
+	if (!model.includes('kling')) input.resolution = '1080p';
 	const data = await falQueueJson(model, input, falKey);
 	const url = data.video?.url;
 	if (!url) throw new Error('B-roll model returned no video');
@@ -1336,6 +1397,8 @@ export interface UgcPackInput {
 	/** Reference-photo overrides from the generation composer. */
 	productPhotoUrlOverride?: string;
 	characterRefOverride?: string;
+	/** Model picks from the composer — the user's budget-vs-quality decision. */
+	videoModel?: string;
 	/** The post row this generation belongs to — links ledger rows to the post. */
 	postId?: string;
 }
@@ -1379,6 +1442,34 @@ function trackAi(ai: AiClient, costEvents: CostEvent[]): AiClient {
 			return ai.generate(prompt, opts);
 		}
 	};
+}
+
+/**
+ * Standalone (non-pack) paid generation: the avatar + reference-kit jobs.
+ *
+ * These bill fal on every click but had NEITHER the fail-closed budget cap NOR a
+ * ledger write. Two consequences: they could spend without limit (a user blocked
+ * at their cap on the post path could still click "Regenerate avatar" forever),
+ * and because the spend never reached `generation_events`, `assertWithinBudget`
+ * computed the cap on partial data — someone who burned $200 on avatars still
+ * read as $0 spent.
+ *
+ * Same discipline as the packs: assert BEFORE spending, and flush the ledger in a
+ * `finally` so a job that dies partway still records what it already paid for.
+ */
+async function runBudgetedAssetJob<T>(
+	supabase: any,
+	userId: string,
+	agentId: string,
+	costEvents: CostEvent[],
+	job: () => Promise<T>
+): Promise<T> {
+	await assertWithinBudget(supabase, userId, agentId);
+	try {
+		return await job();
+	} finally {
+		await recordCostEvents(supabase, userId, agentId, costEvents);
+	}
 }
 
 /** Best-effort ledger write — spend analytics must never break generation. */
@@ -1666,11 +1757,14 @@ async function generateHeroPortraitImage(
 	briefData: any,
 	agentData: any,
 	voiceGender: 'male' | 'female' | undefined,
-	promptOverride?: string
+	promptOverride?: string,
+	modelId?: string | null
 ): Promise<string> {
 	const heroPrompt = promptOverride?.trim() || buildHeroPortraitPrompt(briefData, agentData, voiceGender);
 
-	const heroUrl = await generateUgcImage(heroPrompt, null, falKey);
+	// Portraits are 3:4. orKey stays null on purpose: routing to OpenRouter would
+	// silently ignore the model the user picked (and billed for) in the composer.
+	const heroUrl = await generateUgcImage(heroPrompt, null, falKey, modelId, '3:4');
 	// Loud persist: pinned reusable face fed as grounding to every future video
 	// -- never return the ephemeral provider URL, which would expire and break it.
 	return await persistToStorage(svc, heroUrl, userId, 'png');
@@ -1695,8 +1789,12 @@ export async function generateCharacterPortrait(
 	briefData: any,
 	agentData: any,
 	voiceGender: 'male' | 'female' | undefined,
-	promptOverride?: string
+	promptOverride?: string,
+	modelId?: string | null
 ): Promise<string> {
+	const portraitModel = resolveModel('image_t2i', modelId);
+	const costEvents: CostEvent[] = [];
+	return await runBudgetedAssetJob(supabase, userId, agentId, costEvents, async () => {
 	// 1. Config/brief-tuned hero portrait → pinned as the profile picture.
 	const durable = await generateHeroPortraitImage(
 		svc,
@@ -1705,8 +1803,16 @@ export async function generateCharacterPortrait(
 		briefData,
 		agentData,
 		voiceGender,
-		promptOverride
+		promptOverride,
+		portraitModel.id
 	);
+	// Bill the model we actually ran, not a hard-coded flux-schnell rate.
+	costEvents.push({
+		provider: 'fal',
+		operation: 'image',
+		model: `${portraitModel.label} (hero portrait)`,
+		usd: portraitModel.usd
+	});
 	await supabase.from('agent_configs').update({ ugc_character_ref: durable }).eq('agent_id', agentId);
 
 	// 2. Build a REAL reference-kit foundation from that portrait — a character
@@ -1723,12 +1829,24 @@ export async function generateCharacterPortrait(
 			{ prompt: CHARACTER_SHEET_PROMPT, image_urls: [durable], aspect_ratio: '16:9' },
 			falKey
 		);
+		costEvents.push({
+			provider: 'fal',
+			operation: 'image',
+			model: 'nano-banana-2 (character sheet)',
+			usd: priceOf('fal', 'image', 'nano')
+		});
 		const sheetUrl = sheetData.images?.[0]?.url;
 		if (!sheetUrl) throw new Error('Nano Banana returned no character sheet');
 
 		const durableSheet = await persistToStorage(svc, sheetUrl, userId, 'png');
 
 		const heroShotUrl = await generateAvatarHeroShot(falKey, sheetUrl);
+		costEvents.push({
+			provider: 'fal',
+			operation: 'image',
+			model: 'nano-banana-2 (avatar hero shot)',
+			usd: priceOf('fal', 'image', 'nano')
+		});
 		const durableFull = await persistToStorage(svc, heroShotUrl, userId, 'png');
 
 		await mergeReferenceKit(supabase, agentId, { sheet: durableSheet, full_body: durableFull }, true);
@@ -1741,6 +1859,7 @@ export async function generateCharacterPortrait(
 	}
 
 	return durable;
+	});
 }
 
 /**
@@ -1760,22 +1879,89 @@ const CHARACTER_SHEET_PROMPT = `This is for upscale 4k hyper realistic UGC gener
  * pair changes would silently mix two different faces into one "reference
  * kit" sent to the video model as a single character.
  */
+/** Stages that keep a per-stage "restore from history" pool (a `<stage>_history`
+ *  array in ugc_reference_kit). Every stage image ever generated is retained
+ *  here so it can be re-pinned later; nothing is deleted from the bucket. */
+const KIT_HISTORY_STAGES = ['sheet', 'full_body', 'side_profiles', 'face_closeup', 'feature_grid'];
+/** Cap each stage's history so the JSONB row can't grow without bound. */
+const KIT_HISTORY_CAP = 24;
+
 async function mergeReferenceKit(
 	supabase: any,
 	agentId: string,
 	patch: Record<string, string>,
 	replace = false
 ): Promise<void> {
-	let merged = patch;
-	if (!replace) {
-		const { data } = await supabase
-			.from('agent_configs')
-			.select('ugc_reference_kit')
-			.eq('agent_id', agentId)
-			.maybeSingle();
-		merged = { ...(data?.ugc_reference_kit || {}), ...patch };
+	// Always read the existing kit — even on replace — so we can maintain the
+	// per-stage `<stage>_history` arrays that power each stage's restore picker.
+	const { data } = await supabase
+		.from('agent_configs')
+		.select('ugc_reference_kit')
+		.eq('agent_id', agentId)
+		.maybeSingle();
+	const existing: Record<string, any> = data?.ugc_reference_kit || {};
+
+	// For every stage URL in this patch, prepend it to that stage's history
+	// (newest first, de-duped, capped). Seed with the stage's current value the
+	// first time we track it so history is never empty for an existing stage.
+	const historyPatch: Record<string, string[]> = {};
+	for (const stage of KIT_HISTORY_STAGES) {
+		const url = patch[stage];
+		if (typeof url !== 'string' || !url) continue;
+		const key = `${stage}_history`;
+		const prior: string[] = Array.isArray(existing[key]) ? existing[key] : [];
+		const seed = typeof existing[stage] === 'string' && existing[stage] ? [existing[stage]] : [];
+		const next = [url, ...prior, ...seed].filter((u, i, arr) => arr.indexOf(u) === i);
+		historyPatch[key] = next.slice(0, KIT_HISTORY_CAP);
+	}
+
+	let merged: Record<string, any>;
+	if (replace) {
+		// New identity: drop the derived stages' CURRENT values (a fresh face
+		// invalidates them), but PRESERVE every `<stage>_history` array — history
+		// is just the pool of past images the user can re-pin, never load-bearing
+		// for what's sent to the video model.
+		const preservedHistory: Record<string, any> = {};
+		for (const k of Object.keys(existing)) if (k.endsWith('_history')) preservedHistory[k] = existing[k];
+		merged = { ...preservedHistory, ...patch, ...historyPatch };
+	} else {
+		merged = { ...existing, ...patch, ...historyPatch };
 	}
 	await supabase.from('agent_configs').update({ ugc_reference_kit: merged }).eq('agent_id', agentId);
+}
+
+/** Kit stages a client is allowed to restore-from-history. */
+export const RESTORABLE_KIT_STAGES = KIT_HISTORY_STAGES;
+
+/**
+ * Restore-from-history for a single kit stage: re-pin `<stage>` to `url`, which
+ * must be one of that stage's past generations (in `<stage>_history`) or its
+ * current value. Only moves the pointer — nothing is generated or deleted.
+ * Returns the fresh `ugc_reference_kit` (including updated history) for the UI.
+ */
+export async function repinKitStage(
+	supabase: any,
+	agentId: string,
+	stage: string,
+	url: string
+): Promise<Record<string, any>> {
+	if (!RESTORABLE_KIT_STAGES.includes(stage)) throw new Error(`Unknown reference-kit stage: ${stage}`);
+	const { data } = await supabase
+		.from('agent_configs')
+		.select('ugc_reference_kit')
+		.eq('agent_id', agentId)
+		.maybeSingle();
+	const kit: Record<string, any> = data?.ugc_reference_kit || {};
+	const history: string[] = Array.isArray(kit[`${stage}_history`]) ? kit[`${stage}_history`] : [];
+	const allowed = new Set([...history, kit[stage]].filter(Boolean));
+	if (!allowed.has(url)) throw new Error("That image is not in this stage's history.");
+	await mergeReferenceKit(supabase, agentId, { [stage]: url });
+	const { data: fresh } = await supabase
+		.from('agent_configs')
+		.select('ugc_reference_kit')
+		.eq('agent_id', agentId)
+		.maybeSingle();
+	return fresh?.ugc_reference_kit || {};
 }
 
 /**
@@ -1820,17 +2006,31 @@ export async function generateCharacterSheetFromReference(
 	falKey: string,
 	referenceImageUrl: string
 ): Promise<string> {
+	const costEvents: CostEvent[] = [];
+	return await runBudgetedAssetJob(supabase, userId, agentId, costEvents, async () => {
 	const data = await falSyncJson(
 		NANO_MODEL,
 		{ prompt: CHARACTER_SHEET_PROMPT, image_urls: [referenceImageUrl], aspect_ratio: '16:9' },
 		falKey
 	);
+	costEvents.push({
+		provider: 'fal',
+		operation: 'image',
+		model: 'nano-banana-2 (character sheet)',
+		usd: priceOf('fal', 'image', 'nano')
+	});
 	const sheetUrl = data.images?.[0]?.url;
 	if (!sheetUrl) throw new Error('Nano Banana returned no image');
 
 	const durableSheet = await persistToStorage(svc, sheetUrl, userId, 'png');
 
 	const heroShotUrl = await generateAvatarHeroShot(falKey, sheetUrl);
+	costEvents.push({
+		provider: 'fal',
+		operation: 'image',
+		model: 'nano-banana-2 (avatar hero shot)',
+		usd: priceOf('fal', 'image', 'nano')
+	});
 
 	const durable = await persistToStorage(svc, heroShotUrl, userId, 'png');
 
@@ -1840,6 +2040,7 @@ export async function generateCharacterSheetFromReference(
 	// (or a previous from-scratch face) no longer depict the same person.
 	await mergeReferenceKit(supabase, agentId, { sheet: durableSheet, full_body: durable }, true);
 	return durable;
+	});
 }
 
 /**
@@ -1941,19 +2142,32 @@ export async function executeKitStage(
 	agentId: string,
 	falKey: string,
 	stage: KitStage,
-	plan: { prompt: string; image_urls: string[]; aspect_ratio: string }
+	plan: { prompt: string; image_urls: string[]; aspect_ratio: string; model?: string }
 ): Promise<string> {
-	const data = await falSyncJson(
-		NANO_MODEL,
-		{ prompt: plan.prompt, image_urls: plan.image_urls, aspect_ratio: plan.aspect_ratio },
-		falKey
-	);
-	const url = data.images?.[0]?.url;
-	if (!url) throw new Error(`Nano Banana returned no image for ${stage}`);
+	// The user picks this in the composer (budget vs quality). Single-reference
+	// models receive only the primary reference -- see buildEditInput.
+	const model = resolveModel('image_edit', plan.model);
+	const costEvents: CostEvent[] = [];
+	return await runBudgetedAssetJob(supabase, userId, agentId, costEvents, async () => {
+		const data = await falSyncJson(
+			model.id,
+			buildEditInput(model, plan.prompt, plan.image_urls, plan.aspect_ratio),
+			falKey
+		);
+		// Bill what we actually ran, not a hard-coded Nano Banana rate.
+		costEvents.push({
+			provider: 'fal',
+			operation: 'image',
+			model: `${model.label} (kit: ${stage})`,
+			usd: model.usd
+		});
+		const url = data.images?.[0]?.url;
+		if (!url) throw new Error(`${model.label} returned no image for ${stage}`);
 
-	const durable = await persistToStorage(svc, url, userId, 'png');
-	await mergeReferenceKit(supabase, agentId, { [stage]: durable });
-	return durable;
+		const durable = await persistToStorage(svc, url, userId, 'png');
+		await mergeReferenceKit(supabase, agentId, { [stage]: durable });
+		return durable;
+	});
 }
 
 async function ensureCharacterRef(
@@ -2240,6 +2454,7 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 	// fal outage degrades b-roll to OpenRouter Kling instead of an image-only
 	// post. Spokesperson (TTS + talking-head) is fal-exclusive — on outage it
 	// degrades to OpenRouter b-roll format rather than failing the slot.
+	const brollModel = resolveModel('video_i2v', input.videoModel);
 	let mediaUrl = still;
 	let mediaType: 'image' | 'video' = 'image';
 	if (wantVideo && (falKey || orKey)) {
@@ -2251,9 +2466,10 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 				mediaUrl = await generateTalkingHead(falKey, still, audio);
 				costEvents.push({ provider: 'fal', operation: 'talking_head', model: 'veed-fabric-1.0', usd: priceOf('fal', 'talking_head') });
 			} else if (falKey) {
-				// Both quality tiers route to Kling Standard for now — see BROLL_MODEL_VEO_DEFERRED.
-				mediaUrl = await generateBrollVideo(falKey, BROLL_MODEL_STANDARD, still, motionPrompt);
-				costEvents.push({ provider: 'fal', operation: 'video', model: 'kling-o3-standard', usd: priceOf('fal', 'video', 'standard') });
+				// The user picked this tier in the composer (Wan $0.10 → Veo $1.50); bill
+				// what actually ran rather than a hard-coded Kling Standard rate.
+				mediaUrl = await generateBrollVideo(falKey, brollModel.id, still, motionPrompt);
+				costEvents.push({ provider: 'fal', operation: 'video', model: brollModel.label, usd: brollModel.usd });
 			} else {
 				// No fal at all — straight to OpenRouter video.
 				mediaUrl = await openRouterBrollVideo(orKey!, userId, still, motionPrompt);

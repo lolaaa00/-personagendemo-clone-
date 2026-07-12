@@ -1,4 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { env as publicEnv } from '$env/dynamic/public';
+import { env as privateEnv } from '$env/dynamic/private';
 
 /**
  * Durable media storage.
@@ -47,12 +49,55 @@ export function isDurableBucketUrl(url: string | null | undefined): boolean {
 	return typeof url === 'string' && url.includes(`/storage/v1/object/public/${BUCKET}/`);
 }
 
-/** True if the URL points inside THIS user's own folder in our bucket (re-pin safety). */
+/**
+ * The origin our public bucket URLs are served from — the same Supabase URL the
+ * service/server clients are built from (see `createSupabaseServiceClient`), which
+ * is also what `getPublicUrl()` above stamps onto every URL we mint. Returns null
+ * when unconfigured/unparseable, which makes `isOwnedBucketUrl` fail closed.
+ */
+function ownedStorageOrigin(): string | null {
+	const raw = (publicEnv.PUBLIC_SUPABASE_URL || privateEnv.PUBLIC_SUPABASE_URL || '').trim();
+	if (!raw) return null;
+	try {
+		const u = new URL(raw);
+		if (u.protocol !== 'https:' && u.protocol !== 'http:') return null;
+		return u.origin;
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * True if the URL points inside THIS user's own folder in our bucket (re-pin safety).
+ *
+ * SECURITY: this is the ONLY gate on the restore-avatar / restore-kit-stage routes,
+ * i.e. the thing that stops an attacker pinning an arbitrary external URL as a
+ * persona's face (it gets written to `ugc_character_ref`, handed to fal as an
+ * image_urls entry, and fetched by `persistToStorage`). It used to be a bare
+ * `url.includes('/storage/v1/object/public/<bucket>/<uid>/')`, which a substring
+ * anywhere in the URL satisfies — so
+ *   https://evil.tld/x?=/storage/v1/object/public/ugc-media/<uid>/a.png
+ * sailed through. Match the ORIGIN and a PATH PREFIX on a parsed URL instead;
+ * anything that isn't http(s) on our storage origin, or that fails to parse, is
+ * rejected.
+ */
 export function isOwnedBucketUrl(url: string | null | undefined, userId: string): boolean {
-	return (
-		typeof url === 'string' &&
-		url.includes(`/storage/v1/object/public/${BUCKET}/${userId}/`)
-	);
+	if (typeof url !== 'string' || !url || typeof userId !== 'string' || !userId) return false;
+
+	const origin = ownedStorageOrigin();
+	if (!origin) return false;
+
+	let parsed: URL;
+	try {
+		parsed = new URL(url);
+	} catch {
+		return false;
+	}
+
+	if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return false;
+	if (parsed.origin !== origin) return false;
+
+	return parsed.pathname.startsWith(`/storage/v1/object/public/${BUCKET}/${userId}/`);
 }
 
 export interface StoredImage {

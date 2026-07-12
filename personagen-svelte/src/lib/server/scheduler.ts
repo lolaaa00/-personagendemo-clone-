@@ -26,6 +26,13 @@ const CLAIM_LEASE_MS = 15 * 60 * 1000;
 // in-process generation task that a restart/crash killed — no worker will
 // ever finish it, so it's failed with a user-facing reason.
 const GENERATION_LEASE_MS = 30 * 60 * 1000;
+// Same idea for avatar / reference-kit jobs, whose in-flight markers live in
+// agent_configs.ugc_reference_kit. Deliberately longer than GENERATION_LEASE_MS:
+// staleness there can only be judged from agent_configs.updated_at (see
+// reapStrandedKitJobs), a coarser signal than a per-job start time, and clearing
+// a marker for a job that is genuinely still running would let the user fire a
+// second, duplicate PAID generation. Err long.
+const KIT_GENERATION_LEASE_MS = 60 * 60 * 1000;
 
 function isRetriableError(message: string): boolean {
 	return /timed?\s?out|timeout|rate.?limit|too many requests|\b429\b|\b5\d\d\b|econnreset|econnrefused|etimedout|eai_again|fetch failed|network|socket|abort/i.test(
@@ -329,6 +336,89 @@ export async function publishPostById(postId: string): Promise<boolean> {
 }
 
 /**
+ * Fails orphaned avatar / reference-kit generations.
+ *
+ * Those jobs don't live in `posts` — /api/agent/[agentId]/generate-avatar and
+ * /generate-reference-kit return a 202 and run detached in-process, tracking
+ * progress with transient keys inside `agent_configs.ugc_reference_kit`:
+ *   - `profile_status`      (avatar: from-scratch portrait or reference sheet)
+ *   - `<stage>_status`      (side_profiles / face_closeup / feature_grid)
+ * each 'generating' while in flight, 'failed: …' on failure, and DELETED on
+ * success. Only the detached task's own completion path ever clears them, so a
+ * restart mid-generation (a deploy) strands the marker at 'generating' forever:
+ * the persona page re-derives "generating" on every load and spins with no way
+ * out short of a DB edit. Same failure mode as the stale-'generating' posts
+ * above, so: same treatment — flip to a terminal 'failed: …' the UI already
+ * knows how to render, which unblocks a retry.
+ *
+ * STALENESS SIGNAL — the endpoints write NO `*_started_at` alongside the marker,
+ * so there is no per-job start time to test. The only trustworthy timestamp is
+ * `agent_configs.updated_at`, which is maintained by a BEFORE UPDATE trigger
+ * (supabase/migration.sql) and therefore CANNOT be older than the marker write:
+ * that write is itself an UPDATE of this row. So `updated_at` is an upper bound
+ * on the marker's age — if the row hasn't been touched in a lease, the marker
+ * has been sitting there at least that long. Its coarseness is one-directional
+ * and safe: unrelated writes to the row (a settings save, a live job merging an
+ * intermediate image into the kit) push `updated_at` FORWARD and merely make us
+ * wait longer. It never lets us reap early.
+ *
+ * TODO(owners of generate-avatar / generate-reference-kit): write a
+ * `<key>_started_at` ISO timestamp next to each `*_status: 'generating'` marker
+ * and this can key off the real job start instead of a whole-row proxy.
+ */
+async function reapStrandedKitJobs(supabase: any, nowMs: number): Promise<void> {
+	const cutoff = new Date(nowMs - KIT_GENERATION_LEASE_MS).toISOString();
+	const { data: configs, error } = await supabase
+		.from('agent_configs')
+		.select('agent_id, ugc_reference_kit')
+		.lt('updated_at', cutoff)
+		.not('ugc_reference_kit', 'is', null);
+
+	if (error) {
+		console.error('[Scheduler] Error scanning for stranded reference-kit jobs:', error);
+		return;
+	}
+
+	for (const cfg of configs || []) {
+		const kit = cfg.ugc_reference_kit;
+		if (!kit || typeof kit !== 'object') continue;
+
+		const stranded = Object.keys(kit).filter(
+			(k) => k.endsWith('_status') && kit[k] === 'generating'
+		);
+		if (stranded.length === 0) continue;
+
+		const patched = { ...kit };
+		for (const key of stranded) {
+			patched[key] = 'failed: Generation interrupted by a server restart — try again.';
+		}
+
+		// `.lt('updated_at', cutoff)` repeated on the UPDATE is a compare-and-swap:
+		// the predicate is evaluated against the row as it stands now, so if the job
+		// turned out to be alive and wrote anything between the scan and here (which
+		// bumps updated_at via the trigger), this matches zero rows and we leave its
+		// marker alone rather than clobbering a live job's kit — the read-modify-write
+		// on a JSONB blob would otherwise stomp whatever it just merged in.
+		const { error: updateErr } = await supabase
+			.from('agent_configs')
+			.update({ ugc_reference_kit: patched })
+			.eq('agent_id', cfg.agent_id)
+			.lt('updated_at', cutoff);
+
+		if (updateErr) {
+			console.error(
+				`[Scheduler] Failed to clear stranded kit marker(s) on agent ${cfg.agent_id}:`,
+				updateErr
+			);
+		} else {
+			console.warn(
+				`[Scheduler] Failed orphaned reference-kit job(s) on agent ${cfg.agent_id}: ${stranded.join(', ')}.`
+			);
+		}
+	}
+}
+
+/**
  * Polling loop iteration
  */
 async function pollScheduledPosts() {
@@ -395,6 +485,11 @@ async function pollScheduledPosts() {
 				.eq('id', p.id)
 				.eq('status', 'generating');
 		}
+
+		// Same orphan problem, different home: avatar/reference-kit jobs record
+		// their progress in agent_configs.ugc_reference_kit, not in posts, so the
+		// posts sweep above can't see them.
+		await reapStrandedKitJobs(supabase, nowMs);
 
 		// Prefilter in SQL by a timezone-safe upper bound (+2 days UTC), then decide
 		// due-ness in JS using each agent's configured timezone. Drafts (status

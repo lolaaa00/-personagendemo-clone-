@@ -9,6 +9,7 @@ import {
 import { publishPostById } from '$lib/server/scheduler';
 import { getServiceSupabase } from '$lib/server/service-supabase';
 import { priceOf } from '$lib/pricing';
+import { modelsFor, resolveModel } from '$lib/models';
 import { VIDEO_ONLY_PLATFORMS } from '$lib/server/social/platforms';
 
 /**
@@ -110,7 +111,9 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		characterRefOverride:
 			typeof body.character_ref_url === 'string' && /^https?:\/\//i.test(body.character_ref_url)
 				? body.character_ref_url
-				: undefined
+				: undefined,
+		// The user's budget-vs-quality pick for the b-roll clip (Wan $0.10 → Veo $1.50).
+		videoModel: resolveModel('video_i2v', body.video_model).id
 	};
 
 	const scheduledDate = typeof body.scheduled_date === 'string' ? body.scheduled_date : null;
@@ -143,13 +146,15 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		const characterRef = genInput.characterRefOverride || cfgRow?.ugc_character_ref || null;
 		const productPhoto = genInput.productPhotoUrlOverride || product?.photoUrl || null;
 
+		const videoModel = resolveModel('video_i2v', body.video_model);
+
 		// The model stack this media kind actually runs through, with per-call costs.
 		const steps: { step: string; provider: string; model: string; usd: number }[] = [
 			{ step: 'director (caption + scene)', provider: 'openrouter', model: 'gemini-3.5-flash', usd: priceOf('openrouter', 'llm') },
 			{ step: 'product still', provider: 'fal', model: 'nano-banana-2', usd: priceOf('fal', 'image', 'nano') }
 		];
 		if (mediaKind === 'video') {
-			steps.push({ step: 'b-roll video', provider: 'fal', model: 'kling-o3-standard', usd: priceOf('fal', 'video', 'kling-o3-standard') });
+			steps.push({ step: 'b-roll video', provider: 'fal', model: videoModel.label, usd: videoModel.usd });
 		} else if (mediaKind === 'cinematic') {
 			steps.push({ step: 'cinematic video', provider: 'fal', model: 'kling-o3-pro reference', usd: priceOf('fal', 'video', 'pro') });
 		}
@@ -173,7 +178,12 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 					: 'Left blank: the Director model will write the scene prompt. Type one here to pin it exactly.',
 				scheduledDate,
 				scheduledTime,
-				editable: ['topic', 'media', 'provider', 'platforms', 'product_id', 'product_photo_url', 'character_ref_url', 'scene', 'scheduled_date', 'scheduled_time'],
+				// Budget control: the clip is by far the biggest line item, so let the
+				// user pick the tier instead of silently billing the default.
+				videoModelKind: 'video_i2v',
+				videoModel: videoModel.id,
+				videoModelOptions: mediaKind === 'video' ? modelsFor('video_i2v') : [],
+				editable: ['topic', 'media', 'provider', 'platforms', 'product_id', 'product_photo_url', 'character_ref_url', 'scene', 'video_model', 'scheduled_date', 'scheduled_time'],
 				steps,
 				estimatedCostUsd: +steps.reduce((s, x) => s + x.usd, 0).toFixed(4)
 			}

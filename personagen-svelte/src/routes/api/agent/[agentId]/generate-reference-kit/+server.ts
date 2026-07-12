@@ -9,6 +9,7 @@ import {
 } from '$lib/server/content/generate';
 import { getServiceSupabase } from '$lib/server/service-supabase';
 import { priceOf } from '$lib/pricing';
+import { modelsFor, resolveModel } from '$lib/models';
 
 const VALID_STAGES = ['side_profiles', 'face_closeup', 'feature_grid'] as const;
 
@@ -117,13 +118,21 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 	// the resolved payload so the composer can show the user exactly what is
 	// about to be sent, and let them edit it before approving.
 	if (body.preview === true) {
+		const selected = resolveModel('image_edit', body.model);
 		return json({
 			success: true,
 			stage,
 			preview: {
 				...resolved,
-				editable: ['prompt'],
-				estimatedCostUsd: priceOf('fal', 'image', 'nano')
+				modelKind: 'image_edit',
+				model: selected.id,
+				modelOptions: modelsFor('image_edit'),
+				// This stage feeds TWO references (the shot + the character sheet). A
+				// single-reference model would quietly drop the sheet, so say so instead
+				// of letting facial consistency degrade without explanation.
+				multiRefNeeded: resolved.image_urls.length > 1,
+				editable: ['prompt', 'model'],
+				estimatedCostUsd: selected.usd
 			}
 		});
 	}
@@ -132,6 +141,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 	// server-resolved, so what runs is what they approved.
 	const plan = {
 		...resolved,
+		model: resolveModel('image_edit', body.model).id,
 		prompt:
 			typeof body.prompt === 'string' && body.prompt.trim()
 				? String(body.prompt).slice(0, 2000)

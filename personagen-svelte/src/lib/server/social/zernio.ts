@@ -2,9 +2,14 @@ import { env } from '$env/dynamic/private';
 import { getUserApiKey } from '$lib/server/user-api-keys';
 import { fetchWithTimeout } from './http';
 
-// Module-scope shadow: every Zernio call in this file gets a hard deadline
-// instead of hanging a scheduler tick on one stuck socket.
-const fetch = fetchWithTimeout;
+// Named wrapper: every Zernio call in this file gets a hard deadline instead of
+// hanging a scheduler tick on one stuck socket.
+//
+// NEVER name this `fetch`. A module-scope `const fetch = …` shadows the global for
+// the WHOLE module — hoisted and in the TDZ until the initializer runs — and in
+// generate.ts that exact pattern took down every generation route (b7625ba). Same
+// reason generate.ts uses `genFetch`.
+const zFetch = fetchWithTimeout;
 
 const ZERNIO_BASE_URL = 'https://zernio.com/api/v1';
 
@@ -125,7 +130,7 @@ export class ZernioClient {
 	}
 
 	private async getJson(path: string): Promise<{ ok: boolean; status: number; data: any; text: string }> {
-		const res = await fetch(`${ZERNIO_BASE_URL}${path}`, {
+		const res = await zFetch(`${ZERNIO_BASE_URL}${path}`, {
 			method: 'GET',
 			headers: this.getHeaders()
 		});
@@ -140,7 +145,7 @@ export class ZernioClient {
 	}
 
 	async publishNow(input: ZernioPublishInput): Promise<ZernioPublishResult> {
-		const response = await fetch(`${ZERNIO_BASE_URL}/posts`, {
+		const response = await zFetch(`${ZERNIO_BASE_URL}/posts`, {
 			method: 'POST',
 			headers: {
 				...this.getHeaders(),
@@ -191,7 +196,7 @@ export class ZernioClient {
 	 * Per Zernio docs, published posts cannot be deleted here — use unpublish() instead.
 	 */
 	async deletePost(postId: string): Promise<{ success: boolean; error?: string }> {
-		const response = await fetch(`${ZERNIO_BASE_URL}/posts/${encodeURIComponent(postId)}`, {
+		const response = await zFetch(`${ZERNIO_BASE_URL}/posts/${encodeURIComponent(postId)}`, {
 			method: 'DELETE',
 			headers: this.getHeaders()
 		});
@@ -360,7 +365,7 @@ export class ZernioClient {
 			if (match) return match.id;
 		}
 
-		const res = await fetch(`${ZERNIO_BASE_URL}/profiles`, {
+		const res = await zFetch(`${ZERNIO_BASE_URL}/profiles`, {
 			method: 'POST',
 			headers: this.getHeaders(),
 			body: JSON.stringify({ name: name.trim() || 'Persona', ...(color ? { color } : {}) })
@@ -383,7 +388,7 @@ export class ZernioClient {
 	 */
 	async disconnectAccount(accountId: string): Promise<boolean> {
 		try {
-			const res = await fetch(`${ZERNIO_BASE_URL}/accounts/${encodeURIComponent(accountId)}`, {
+			const res = await zFetch(`${ZERNIO_BASE_URL}/accounts/${encodeURIComponent(accountId)}`, {
 				method: 'DELETE',
 				headers: this.getHeaders()
 			});
@@ -410,7 +415,7 @@ export class ZernioClient {
 		if (pid) params.set('profileId', pid);
 		if (redirectUrl) params.set('redirect_url', redirectUrl);
 		const qs = params.toString();
-		const res = await fetch(
+		const res = await zFetch(
 			`${ZERNIO_BASE_URL}/connect/${encodeURIComponent(p)}${qs ? `?${qs}` : ''}`,
 			{ method: 'GET', headers: this.getHeaders() }
 		);
@@ -434,7 +439,7 @@ export class ZernioClient {
 	 * Zernio does NOT support Instagram, TikTok, or Snapchat for unpublish.
 	 */
 	async unpublish(postId: string, platform: string): Promise<{ success: boolean; error?: string }> {
-		const response = await fetch(`${ZERNIO_BASE_URL}/posts/${encodeURIComponent(postId)}/unpublish`, {
+		const response = await zFetch(`${ZERNIO_BASE_URL}/posts/${encodeURIComponent(postId)}/unpublish`, {
 			method: 'POST',
 			headers: this.getHeaders(),
 			body: JSON.stringify({ platform })

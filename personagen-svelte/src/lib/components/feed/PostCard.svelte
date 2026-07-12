@@ -5,11 +5,14 @@
 	let {
 		post,
 		onOpen,
-		onRetry = null
+		onRetry = null,
+		onPublishFallback = null
 	}: {
 		post: any;
 		onOpen: (post: any) => void;
 		onRetry?: ((post: any) => void) | null;
+		/** Publish an already-generated but unpublished post to a connected platform. */
+		onPublishFallback?: ((post: any) => void) | null;
 	} = $props();
 
 	// In-flight / failed state is read from the POST ROW, not a client flag, so a
@@ -139,9 +142,30 @@
 	</div>
 
 	{#if isPublishFail}
-		<!-- Media generated fine; only publishing failed. Show it, don't hide it. -->
-		<div class="tile-postfail-banner" title={postErrorLabel ?? 'Failed to post'}>
-			⚠ Failed to post{postErrorLabel ? ` — ${postErrorLabel.split('\n')[0]}` : ''}
+		<!-- Media generated fine; only publishing failed. Show it, don't hide it,
+		     and offer a one-tap route to a platform that IS connected. -->
+		<div class="tile-postfail-banner">
+			<span class="tile-postfail-msg" title={postErrorLabel ?? 'Failed to post'}>
+				⚠ Failed to post{postErrorLabel ? ` — ${postErrorLabel.split('\n')[0]}` : ''}
+			</span>
+			{#if onPublishFallback}
+				<!-- svelte-ignore node_invalid_placement_ssr -->
+				<span
+					class="tile-postfail-cta"
+					role="button"
+					tabindex="0"
+					onclick={(e) => {
+						e.stopPropagation();
+						onPublishFallback?.(post);
+					}}
+					onkeydown={(e) => {
+						if (e.key === 'Enter') {
+							e.stopPropagation();
+							onPublishFallback?.(post);
+						}
+					}}>📤 Publish to a connected platform</span
+				>
+			{/if}
 		</div>
 	{:else if hasError}
 		<span class="tile-error-dot" title="This post has an error — open for details">⚠</span>
@@ -274,12 +298,36 @@
 		font-size: 0.66rem;
 		font-weight: 600;
 		line-height: 1.3;
+		display: flex;
+		flex-direction: column;
+		gap: 0.35rem;
+		/* Let taps fall through to the tile — except the CTA, which opts back in. */
+		pointer-events: none;
+	}
+	.tile-postfail-msg {
 		display: -webkit-box;
 		-webkit-line-clamp: 2;
 		line-clamp: 2;
 		-webkit-box-orient: vertical;
 		overflow: hidden;
-		pointer-events: none;
+	}
+	.tile-postfail-cta {
+		align-self: flex-start;
+		pointer-events: auto;
+		background: rgba(255, 255, 255, 0.95);
+		color: #9a3412;
+		border-radius: 6px;
+		padding: 0.25rem 0.5rem;
+		font-size: 0.64rem;
+		font-weight: 700;
+		cursor: pointer;
+		white-space: nowrap;
+		max-width: 100%;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.tile-postfail-cta:hover {
+		background: #fff;
 	}
 
 	.tile-video-badge {

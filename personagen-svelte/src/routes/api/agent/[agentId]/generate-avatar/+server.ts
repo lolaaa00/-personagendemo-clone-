@@ -12,6 +12,7 @@ import {
 	UGC_IMAGE_MODEL_OPENROUTER
 } from '$lib/server/content/generate';
 import { priceOf } from '$lib/pricing';
+import { modelsFor, resolveModel } from '$lib/models';
 import { getServiceSupabase } from '$lib/server/service-supabase';
 import { persistBufferToStorage } from '$lib/server/storage';
 import { VOICE_CATALOG } from '$lib/server/voices';
@@ -166,9 +167,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		// resolved payload so the composer can show exactly what is about to be
 		// sent and let the user edit it before approving.
 		if (body.preview === true) {
-			// resolveImageKeys prefers the user's OpenRouter key over fal, so report
-			// whichever model this request would actually land on.
-			const { orKey } = await resolveImageKeys(locals.supabase, user.id);
+			const selected = resolveModel('image_t2i', body.model);
 			return json({
 				success: true,
 				preview: {
@@ -177,13 +176,15 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 					// generateUgcImage silently prepends a UGC style prefix — show the
 					// literal string the provider receives, not a flattering summary.
 					finalPrompt: buildUgcImagePrompt(resolvedPrompt),
-					model: orKey ? UGC_IMAGE_MODEL_OPENROUTER : UGC_IMAGE_MODEL_FAL,
-					provider: orKey ? 'openrouter' : 'fal',
+					provider: 'fal',
 					gender: gender ?? null,
-					editable: ['prompt'],
-					estimatedCostUsd: orKey
-						? priceOf('openrouter', 'image')
-						: priceOf('fal', 'image', 'flux')
+					// Budget-vs-quality is the user's call, so hand them the menu rather
+					// than a fixed model they can only accept.
+					modelKind: 'image_t2i',
+					model: selected.id,
+					modelOptions: modelsFor('image_t2i'),
+					editable: ['prompt', 'model'],
+					estimatedCostUsd: selected.usd
 				}
 			});
 		}
@@ -193,6 +194,8 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 			typeof body.prompt === 'string' && body.prompt.trim()
 				? String(body.prompt).slice(0, 2000)
 				: undefined;
+
+		const chosenModel = resolveModel('image_t2i', body.model).id;
 
 		runGeneration = () =>
 			generateCharacterPortrait(
@@ -204,7 +207,8 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 				briefData,
 				agent,
 				gender,
-				promptOverride
+				promptOverride,
+				chosenModel
 			);
 	}
 

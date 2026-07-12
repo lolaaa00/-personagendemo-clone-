@@ -14,6 +14,7 @@
 	 */
 	import Modal from '$lib/components/ui/Modal.svelte';
 	import type { ComposerSpec } from './types';
+	import { TIER_LABEL, type ModelOption } from '$lib/models';
 
 	interface Props {
 		open: boolean;
@@ -21,9 +22,11 @@
 		onClose: () => void;
 		/** Called with the FINAL body the user approved. Caller performs the POST. */
 		onConfirm: (body: Record<string, unknown>) => void;
+		/** Optional: jump to the Connections tab from the no-connection notice. */
+		onGoToConnections?: () => void;
 	}
 
-	let { open, spec, onClose, onConfirm }: Props = $props();
+	let { open, spec, onClose, onConfirm, onGoToConnections }: Props = $props();
 
 	let loading = $state(false);
 	let loadError = $state<string | null>(null);
@@ -41,9 +44,46 @@
 	let characterRefUrl = $state('');
 	let scheduledDate = $state('');
 	let scheduledTime = $state('');
+	// Budget-vs-quality: the model is a first-class, user-owned decision.
+	let model = $state('');
+	let videoModel = $state('');
 
 	let isPromptKind = $derived(!!preview && typeof preview.prompt === 'string');
 	let isPostKind = $derived(!!preview && Array.isArray(preview.steps));
+
+	let modelOptions = $derived<ModelOption[]>(preview?.modelOptions ?? []);
+	let selectedModel = $derived(modelOptions.find((m) => m.id === model) ?? null);
+
+	// Re-price live as the user trades quality for budget, instead of showing the
+	// cost of whatever the server happened to default to.
+	let liveCost = $derived(
+		selectedModel ? selectedModel.usd : (preview?.estimatedCostUsd ?? 0)
+	);
+
+	let videoModelOptions = $derived<ModelOption[]>(preview?.videoModelOptions ?? []);
+	let selectedVideoModel = $derived(videoModelOptions.find((m) => m.id === videoModel) ?? null);
+
+	// Re-price the whole pipeline as the user swaps the clip tier — the video is the
+	// dominant line item, so a static total would misrepresent the decision.
+	let livePostTotal = $derived.by(() => {
+		if (!isPostKind) return 0;
+		const steps = preview.steps ?? [];
+		return steps.reduce((sum: number, st: any) => {
+			const isVideoStep = String(st.step).includes('b-roll');
+			if (isVideoStep && selectedVideoModel) return sum + selectedVideoModel.usd;
+			return sum + (st.usd ?? 0);
+		}, 0);
+	});
+
+	// This step feeds two references; a single-ref model silently drops one.
+	let refWarning = $derived(
+		preview?.multiRefNeeded && selectedModel && selectedModel.multiRef === false
+			? selectedModel.caveat
+			: null
+	);
+	// A post with no connected account can only be a draft — reflect that on the
+	// confirm button so the outcome isn't a surprise.
+	let hasConnections = $derived(!!preview?.connectedPlatforms?.length);
 
 	// The literal string the provider will receive. generateUgcImage prepends a
 	// style prefix, so for those flows we show prefix + the (possibly edited)
@@ -89,6 +129,8 @@
 			characterRefUrl = preview.characterRefUrl ?? '';
 			scheduledDate = preview.scheduledDate ?? '';
 			scheduledTime = preview.scheduledTime ?? '';
+			model = preview.model ?? '';
+			videoModel = preview.videoModel ?? '';
 		} catch (e) {
 			loadError = (e as Error).message;
 		} finally {
@@ -110,6 +152,8 @@
 		if (isPromptKind) {
 			body.prompt = prompt;
 		}
+		if (model) body.model = model;
+		if (videoModel) body.video_model = videoModel;
 		if (isPostKind) {
 			body.topic = topic || undefined;
 			body.media = media;
@@ -145,6 +189,32 @@
 			<p>{loadError}</p>
 		</div>
 	{:else if preview}
+		{#if modelOptions.length}
+			<div class="fld">
+				<span class="fld-label">Model — pick your budget vs quality</span>
+				<div class="models">
+					{#each modelOptions as m}
+						<button
+							type="button"
+							class="model"
+							class:on={model === m.id}
+							onclick={() => (model = m.id)}
+						>
+							<span class="model-top">
+								<span class="model-name">{m.label}</span>
+								<span class="model-usd">{usd(m.usd)}</span>
+							</span>
+							<span class="model-tier tier-{m.tier}">{TIER_LABEL[m.tier]}</span>
+							<span class="model-note">{m.note}</span>
+						</button>
+					{/each}
+				</div>
+				{#if refWarning}
+					<p class="model-warn">⚠ {refWarning}</p>
+				{/if}
+			</div>
+		{/if}
+
 		{#if isPromptKind}
 			<label class="fld">
 				<span class="fld-label">Prompt sent to the model</span>
@@ -201,7 +271,7 @@
 
 			{#if preview.connectedPlatforms?.length}
 				<div class="fld">
-					<span class="fld-label">Publish to</span>
+					<span class="fld-label">Publish to (connected accounts only)</span>
 					<div class="chips">
 						{#each preview.connectedPlatforms as p}
 							<button
@@ -212,9 +282,25 @@
 							>
 						{/each}
 					</div>
+					<span class="hint">
+						Only connected platforms are shown — a post only publishes where an account is connected.
+					</span>
 				</div>
 			{:else}
-				<p class="hint">No connected accounts — this will be saved as a draft.</p>
+				<!-- No connected account: a post can't be scheduled to publish. It can
+				     still be saved as a draft and posted later once a platform connects. -->
+				<div class="no-conn">
+					<strong>⚠ No connected account</strong>
+					<p>
+						This post can't be scheduled to publish — there's nowhere to send it yet. Connect a
+						platform first, then it can go out. You can still save it as a draft below.
+					</p>
+					{#if onGoToConnections}
+						<button type="button" class="no-conn-cta" onclick={onGoToConnections}>
+							Go to Connections →
+						</button>
+					{/if}
+				</div>
 			{/if}
 
 			<label class="fld">
@@ -246,13 +332,37 @@
 				</label>
 			</div>
 
+			{#if videoModelOptions.length}
+				<div class="fld">
+					<span class="fld-label">Video model — the biggest cost in this run</span>
+					<div class="models">
+						{#each videoModelOptions as m}
+							<button
+								type="button"
+								class="model"
+								class:on={videoModel === m.id}
+								onclick={() => (videoModel = m.id)}
+							>
+								<span class="model-top">
+									<span class="model-name">{m.label}</span>
+									<span class="model-usd">{usd(m.usd)}</span>
+								</span>
+								<span class="model-tier tier-{m.tier}">{TIER_LABEL[m.tier]}</span>
+								<span class="model-note">{m.note}</span>
+							</button>
+						{/each}
+					</div>
+				</div>
+			{/if}
+
 			<div class="steps">
 				<span class="fld-label">Pipeline that will run</span>
 				{#each preview.steps as s}
+					{@const isVid = String(s.step).includes('b-roll') && selectedVideoModel}
 					<div class="step">
 						<span class="step-name">{s.step}</span>
-						<code>{s.model}</code>
-						<span class="step-usd">{usd(s.usd)}</span>
+						<code>{isVid ? selectedVideoModel?.label : s.model}</code>
+						<span class="step-usd">{usd(isVid ? selectedVideoModel!.usd : s.usd)}</span>
 					</div>
 				{/each}
 			</div>
@@ -261,14 +371,18 @@
 		<div class="meta">
 			{#if preview.model}<span>Model <code>{preview.model}</code></span>{/if}
 			{#if preview.provider && isPromptKind}<span>via {preview.provider}</span>{/if}
-			<span class="cost">Est. {usd(preview.estimatedCostUsd)}</span>
+			<span class="cost">Est. {usd(isPostKind ? livePostTotal : liveCost)}</span>
 		</div>
 	{/if}
 
 	{#snippet footer()}
 		<button class="btn-ghost" onclick={onClose}>Cancel</button>
 		<button class="btn-primary" disabled={loading || !!loadError || !preview} onclick={confirm}>
-			{spec?.confirmLabel ?? 'Approve & generate'}
+			{#if isPostKind && !hasConnections}
+				Save as draft
+			{:else}
+				{spec?.confirmLabel ?? 'Approve & generate'}
+			{/if}
 		</button>
 	{/snippet}
 </Modal>
@@ -366,6 +480,35 @@
 		font-size: 0.75rem;
 		color: var(--muted, #6b7280);
 	}
+	.no-conn {
+		background: #fffbeb;
+		border: 1px solid #fde68a;
+		border-radius: 10px;
+		padding: 0.8rem 0.9rem;
+		margin-bottom: 0.9rem;
+	}
+	.no-conn strong {
+		color: #92400e;
+		font-size: 0.85rem;
+	}
+	.no-conn p {
+		margin: 0.35rem 0 0.6rem;
+		font-size: 0.8rem;
+		color: var(--muted, #6b7280);
+	}
+	.no-conn-cta {
+		background: #f59e0b;
+		border: 1px solid #f59e0b;
+		color: #fff;
+		border-radius: 8px;
+		padding: 0.4rem 0.8rem;
+		font-size: 0.8rem;
+		font-weight: 600;
+		cursor: pointer;
+	}
+	.no-conn-cta:hover {
+		background: #d97706;
+	}
 	.refs {
 		display: flex;
 		gap: 0.5rem;
@@ -457,5 +600,76 @@
 	.btn-primary:disabled {
 		opacity: 0.55;
 		cursor: not-allowed;
+	}
+
+	.models {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+		gap: 0.5rem;
+	}
+	.model {
+		text-align: left;
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+		padding: 0.6rem 0.7rem;
+		border: 1px solid var(--border, #e6e8f0);
+		border-radius: 10px;
+		background: var(--surface, #fff);
+		cursor: pointer;
+	}
+	.model.on {
+		border-color: var(--accent, #7c6aed);
+		box-shadow: 0 0 0 2px rgba(124, 106, 237, 0.16);
+	}
+	.model-top {
+		display: flex;
+		align-items: baseline;
+		justify-content: space-between;
+		gap: 0.4rem;
+	}
+	.model-name {
+		font-weight: 700;
+		font-size: 0.84rem;
+	}
+	.model-usd {
+		font-size: 0.78rem;
+		font-variant-numeric: tabular-nums;
+		color: var(--text, #14172b);
+	}
+	.model-tier {
+		align-self: flex-start;
+		font-size: 0.64rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.03em;
+		padding: 0.1rem 0.35rem;
+		border-radius: 999px;
+	}
+	.tier-budget {
+		background: #ecfdf5;
+		color: #047857;
+	}
+	.tier-balanced {
+		background: #eff6ff;
+		color: #1d4ed8;
+	}
+	.tier-premium {
+		background: #faf5ff;
+		color: #7e22ce;
+	}
+	.model-note {
+		font-size: 0.72rem;
+		color: var(--muted, #6b7280);
+		line-height: 1.35;
+	}
+	.model-warn {
+		margin: 0.5rem 0 0;
+		font-size: 0.74rem;
+		color: #92400e;
+		background: #fffbeb;
+		border: 1px solid #fde68a;
+		border-radius: 8px;
+		padding: 0.45rem 0.6rem;
 	}
 </style>
