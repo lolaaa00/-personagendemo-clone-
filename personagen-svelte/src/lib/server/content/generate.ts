@@ -83,7 +83,14 @@ const NANO_MODEL = env.UGC_NANO_MODEL || 'fal-ai/nano-banana-2/edit';
 // this app's async generation use case. Revisit once Adam's availability on
 // v3 is confirmed.
 const TTS_MODEL = env.UGC_TTS_MODEL || 'fal-ai/elevenlabs/tts/turbo-v2.5';
-const TALKINGHEAD_MODEL = env.UGC_TALKINGHEAD_MODEL || 'veed/fabric-1.0';
+// Talking-head (spokesperson) model. Upgraded from VEED Fabric 1.0 — whose
+// lip-sync was visibly off — to ByteDance OmniHuman v1.5, the current SOTA
+// image+audio avatar (film-grade realism, tight audio↔motion correlation from
+// ~18.7k hrs of training). It's a DROP-IN: same image_url/audio_url inputs and
+// {video:{url}} output, so nothing downstream changes. Verified on fal
+// 2026-07-12. Override with UGC_TALKINGHEAD_MODEL (e.g. the cheaper Kling
+// AI-Avatar 'fal-ai/kling-video/ai-avatar/v2/standard', or 'veed/fabric-1.0').
+const TALKINGHEAD_MODEL = env.UGC_TALKINGHEAD_MODEL || 'fal-ai/bytedance/omnihuman';
 // Kling 3.0 is still the latest Kling generation (no Kling 4 exists as of
 // this date) — but Standard and Pro are priced ~25% apart ($0.084/s vs
 // $0.112/s without audio), so the two tiers now map onto separate model
@@ -683,6 +690,9 @@ async function generateProductStill(
 		scenePrompt,
 		'',
 		'Vertical 9:16 photorealistic UGC photo. Shoot quality: shot on iPhone 15 Pro with ProRAW, 24mm equivalent, natural light, real environment — NOT a studio ad or stock photo.',
+		// Image models love adding promo captions to ad-style scenes — this produced
+		// ugly baked-in text that collided with our real captions. Forbid it outright.
+		'ABSOLUTELY NO text, captions, subtitles, words, letters, numbers, logos, watermarks, or graphic/UI overlays anywhere in the frame. A clean photographic image only — the ONLY text allowed is the real product label already on the packaging.',
 		'Product accuracy: preserve the exact label typography, packaging shape, color, and material from the reference. Never redesign, genericize, or omit the product.',
 		characterRef
 			? 'Character consistency: the person must be IDENTICAL to the first reference image — same facial bone structure, skin tone, hair color, and texture. Not a similar person. The exact same person.'
@@ -715,11 +725,11 @@ async function generateTalkingHead(
 	stillUrl: string,
 	audioUrl: string
 ): Promise<string> {
-	const data = await falQueueJson(
-		TALKINGHEAD_MODEL,
-		{ image_url: stillUrl, audio_url: audioUrl, resolution: FABRIC_RES },
-		falKey
-	);
+	// Per-model input shape: VEED Fabric takes a `resolution`; OmniHuman and Kling
+	// AI-Avatar take only image+audio and reject (422) params they don't declare.
+	const input: any = { image_url: stillUrl, audio_url: audioUrl };
+	if (TALKINGHEAD_MODEL.includes('veed/fabric')) input.resolution = FABRIC_RES;
+	const data = await falQueueJson(TALKINGHEAD_MODEL, input, falKey);
 	const url = data.video?.url;
 	if (!url) throw new Error('Talking-head model returned no video');
 	return url;
@@ -1286,9 +1296,11 @@ export async function generateCinematicUgcPack(input: UgcPackInput): Promise<Ugc
 	const videoUrl = await generateCinematicVideo(falKey, cinematicRefs, shots);
 	costEvents.push({ provider: 'fal', operation: 'video', model: 'kling-o3-pro reference (cinematic)', usd: priceOf('fal', 'video', 'pro') });
 
-	const captioned = parsed.on_screen_text
-		? await burnCaptions(videoUrl, parsed.on_screen_text).catch(() => null)
-		: null;
+	// Captions + AI badge are both opt-in and independent (default off → clean clip).
+	const captioned = await burnCaptions(videoUrl, {
+		badge: input.aiBadge,
+		hook: input.captions ? parsed.on_screen_text : ''
+	}).catch(() => null);
 	const durableMedia = captioned
 		? await persistBufferToStorage(svc, captioned, userId, 'mp4', 'video/mp4')
 		: await persistToStorage(svc, videoUrl, userId, 'mp4');
@@ -1304,6 +1316,11 @@ export async function generateCinematicUgcPack(input: UgcPackInput): Promise<Ugc
 		hashtags: Array.isArray(parsed.hashtags) ? parsed.hashtags : [],
 		hookScore: parsed.hookScore,
 		on_screen_text: parsed.on_screen_text || '',
+		// Actual burn outcome — captioned is non-null only when ffmpeg really ran; the
+		// caption flag also requires real hook text (a badge-only burn returns a buffer
+		// too, but no caption was drawn), so we never claim an overlay that wasn't made.
+		captions: Boolean(input.captions) && captioned != null && Boolean((parsed.on_screen_text || '').trim()),
+		ai_badge: Boolean(input.aiBadge) && captioned != null,
 		ugc_broll_prompt: shots.map((s, i) => `Shot ${i + 1} (${s.duration}s): ${s.prompt}`).join('\n\n'),
 		media_url: durableMedia,
 		poster_url: durableStoryboard[0],
@@ -1431,6 +1448,11 @@ export interface UgcPackInput {
 	characterRefOverride?: string;
 	/** Model picks from the composer — the user's budget-vs-quality decision. */
 	videoModel?: string;
+	/** Opt-in: burn the on-screen caption hook onto the video. OFF by default. */
+	captions?: boolean;
+	/** Opt-in: burn a small "AI GENERATED" disclosure badge (top-left). OFF by
+	 *  default — independent of captions. */
+	aiBadge?: boolean;
 	/** The post row this generation belongs to — links ledger rows to the post. */
 	postId?: string;
 }
@@ -1441,6 +1463,10 @@ export interface UgcContent {
 	hookScore?: number;
 	dialogue?: string;
 	on_screen_text?: string;
+	/** Whether the on-screen caption was burned onto the video (opt-in). */
+	captions?: boolean;
+	/** Whether the "AI GENERATED" disclosure badge was burned on (opt-in). */
+	ai_badge?: boolean;
 	ugc_broll_prompt?: string;
 	script?: string;
 	media_url: string;
@@ -2542,7 +2568,7 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 				const audio = await generateVoiceAudio(falKey, resolvedVoice, dialogue);
 				costEvents.push({ provider: 'fal', operation: 'tts', model: 'elevenlabs-turbo-v2.5', usd: priceOf('fal', 'tts') });
 				mediaUrl = await generateTalkingHead(falKey, still, audio);
-				costEvents.push({ provider: 'fal', operation: 'talking_head', model: 'veed-fabric-1.0', usd: priceOf('fal', 'talking_head') });
+				costEvents.push({ provider: 'fal', operation: 'talking_head', model: TALKINGHEAD_MODEL, usd: priceOf('fal', 'talking_head') });
 			} else if (falKey) {
 				// The user picked this tier in the composer (Wan $0.10 → Veo $1.50); bill
 				// what actually ran rather than a hard-coded Kling Standard rate.
@@ -2574,6 +2600,12 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 	// URL that will 404 later (the exact bug that lost earlier videos).
 	let durableStill = still;
 	let durableMedia = mediaUrl;
+	// Did ffmpeg actually burn the requested caption/badge overlay? burnCaptions
+	// returns null when it no-ops (nothing requested) OR silently can't run (no
+	// ffmpeg/font in the deploy image, or the video fetch failed) — in which case
+	// the clean original is kept. We record the ACTUAL outcome below, not the
+	// request, so the post's observability never claims a burn that didn't happen.
+	let captionsApplied = false;
 	const svc = (() => {
 		try {
 			return getServiceSupabase();
@@ -2584,9 +2616,13 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 	if (svc) {
 		durableStill = await persistToStorage(svc, still, userId, 'png');
 		if (mediaType === 'video') {
-			const captioned = parsed.on_screen_text
-				? await burnCaptions(mediaUrl, parsed.on_screen_text).catch(() => null)
-				: null;
+			// Captions and the AI badge are BOTH opt-in and independent. With neither,
+			// burnCaptions no-ops and the clean original video is kept.
+			const captioned = await burnCaptions(mediaUrl, {
+				badge: input.aiBadge,
+				hook: input.captions ? parsed.on_screen_text : ''
+			}).catch(() => null);
+			captionsApplied = captioned != null;
 			durableMedia = captioned
 				? await persistBufferToStorage(svc, captioned, userId, 'mp4', 'video/mp4')
 				: await persistToStorage(svc, mediaUrl, userId, 'mp4');
@@ -2612,6 +2648,12 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 		hookScore: parsed.hookScore,
 		dialogue: parsed.dialogue || '',
 		on_screen_text: parsed.on_screen_text || '',
+		// Actual burn outcome (see captionsApplied) — not merely what was requested.
+		// The caption flag ALSO requires real hook text: a badge-only burn returns a
+		// buffer too, so gating on captionsApplied alone would falsely claim a caption
+		// when on_screen_text was empty. Observability must reflect what was drawn.
+		captions: Boolean(input.captions) && captionsApplied && Boolean((parsed.on_screen_text || '').trim()),
+		ai_badge: Boolean(input.aiBadge) && captionsApplied,
 		ugc_broll_prompt: parsed.scene_prompt || parsed.ugc_broll_prompt || '',
 		script: parsed.script || parsed.dialogue || '',
 		media_url: durableMedia,

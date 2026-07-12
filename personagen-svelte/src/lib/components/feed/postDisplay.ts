@@ -13,6 +13,11 @@ export interface PostDisplay {
 	/** Format + media type, for the observability panel. */
 	format: string | null;
 	mediaGenerated: boolean;
+	/** On-screen caption hook + whether it was burned onto the video (opt-in). */
+	onScreenText: string | null;
+	captionsBurned: boolean;
+	/** Whether the "AI GENERATED" disclosure badge was burned on (opt-in). */
+	aiBadgeBurned: boolean;
 }
 
 const ERROR_SNIPPET_MAX = 140;
@@ -87,6 +92,9 @@ export function getPostDisplay(post: any): PostDisplay {
 		generation: parsed?.generation || null,
 		costBreakdown: parsed?.costBreakdown || null,
 		format: parsed?.format || null,
-		mediaGenerated: parsed?.media_generated ?? false
+		mediaGenerated: parsed?.media_generated ?? false,
+		onScreenText: parsed?.on_screen_text || null,
+		captionsBurned: parsed?.captions === true,
+		aiBadgeBurned: parsed?.ai_badge === true
 	};
 }

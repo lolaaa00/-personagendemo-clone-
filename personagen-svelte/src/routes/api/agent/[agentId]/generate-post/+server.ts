@@ -113,7 +113,10 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 				? body.character_ref_url
 				: undefined,
 		// The user's budget-vs-quality pick for the b-roll clip (Wan $0.10 → Veo $1.50).
-		videoModel: resolveModel('video_i2v', body.video_model).id
+		videoModel: resolveModel('video_i2v', body.video_model).id,
+		// Captions + AI badge are OFF unless the composer explicitly opts in.
+		captions: body.captions === true,
+		aiBadge: body.ai_badge === true
 	};
 
 	const scheduledDate = typeof body.scheduled_date === 'string' ? body.scheduled_date : null;
@@ -183,7 +186,10 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 				videoModelKind: 'video_i2v',
 				videoModel: videoModel.id,
 				videoModelOptions: mediaKind === 'video' ? modelsFor('video_i2v') : [],
-				editable: ['topic', 'media', 'provider', 'platforms', 'product_id', 'product_photo_url', 'character_ref_url', 'scene', 'video_model', 'scheduled_date', 'scheduled_time'],
+				// Captions + AI badge default OFF — the composer surfaces them as toggles.
+				captions: false,
+				aiBadge: false,
+				editable: ['topic', 'media', 'provider', 'platforms', 'product_id', 'product_photo_url', 'character_ref_url', 'scene', 'video_model', 'scheduled_date', 'scheduled_time', 'captions', 'ai_badge'],
 				steps,
 				estimatedCostUsd: +steps.reduce((s, x) => s + x.usd, 0).toFixed(4)
 			}

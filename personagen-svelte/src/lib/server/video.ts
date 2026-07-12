@@ -72,7 +72,14 @@ function escDrawtext(s: string): string {
  * Returns captioned mp4 bytes, or null if captions couldn't be applied
  * (ffmpeg/font missing, or any failure — caller keeps the original).
  */
-export async function burnCaptions(videoUrl: string, hook: string): Promise<Buffer | null> {
+export async function burnCaptions(
+	videoUrl: string,
+	opts: { badge?: boolean; hook?: string }
+): Promise<Buffer | null> {
+	const wantBadge = opts.badge === true;
+	const hookText = (opts.hook || '').replace(/[\r\n]+/g, ' ').trim().slice(0, 90);
+	// Nothing requested → don't re-encode; the caller keeps the clean original.
+	if (!wantBadge && !hookText) return null;
 	if (!(await hasFfmpeg())) return null;
 	const font = findFont();
 	if (!font) return null;
@@ -90,12 +97,14 @@ export async function burnCaptions(videoUrl: string, hook: string): Promise<Buff
 		await writeFile(join(dir, inName), Buffer.from(await res.arrayBuffer()));
 		await copyFile(font, join(dir, fontName));
 
-		const hookText = (hook || '').replace(/[\r\n]+/g, ' ').trim().slice(0, 90);
-		const filters = [
+		const filters: string[] = [];
+		if (wantBadge) {
 			// "AI GENERATED" badge: translucent box + text, top-left
-			'drawbox=x=22:y=26:w=196:h=46:color=black@0.55:t=fill',
-			`drawtext=fontfile=${fontName}:text='${escDrawtext('AI GENERATED')}':fontcolor=white:fontsize=22:x=38:y=38`
-		];
+			filters.push('drawbox=x=22:y=26:w=196:h=46:color=black@0.55:t=fill');
+			filters.push(
+				`drawtext=fontfile=${fontName}:text='${escDrawtext('AI GENERATED')}':fontcolor=white:fontsize=22:x=38:y=38`
+			);
+		}
 		if (hookText) {
 			await writeFile(join(dir, hookName), hookText, 'utf8');
 			filters.push(

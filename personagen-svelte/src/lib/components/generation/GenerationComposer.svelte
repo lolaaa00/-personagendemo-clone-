@@ -38,6 +38,11 @@
 	let scene = $state('');
 	let media = $state('video');
 	let provider = $state('auto');
+	// Burn the on-screen caption hook onto the video. OFF by default — captions are
+	// never generated without this explicit opt-in.
+	let captions = $state(false);
+	// Burn a small "AI GENERATED" disclosure badge. Independent of captions, OFF by default.
+	let aiBadge = $state(false);
 	let platforms = $state<string[]>([]);
 	let productId = $state('');
 	let productPhotoUrl = $state('');
@@ -122,6 +127,8 @@
 			topic = preview.topic ?? '';
 			scene = preview.scene ?? '';
 			media = preview.media ?? 'video';
+			captions = preview.captions === true;
+			aiBadge = preview.aiBadge === true;
 			provider = preview.provider ?? 'auto';
 			platforms = [...(preview.platforms ?? [])];
 			productId = preview.product?.id ?? '';
@@ -158,6 +165,8 @@
 			body.topic = topic || undefined;
 			body.media = media;
 			body.provider = provider;
+			body.captions = captions;
+			body.ai_badge = aiBadge;
 			body.platforms = platforms;
 			body.product_id = productId || undefined;
 			body.product_photo_url = productPhotoUrl || undefined;
@@ -277,6 +286,28 @@
 					</select>
 				</label>
 			</div>
+
+			{#if media !== 'image'}
+				<label class="captions-toggle">
+					<input type="checkbox" bind:checked={captions} />
+					<span class="captions-copy">
+						<strong>Burn on-screen captions</strong>
+						<span class="hint">
+							Off by default — the video stays clean. When on, a short hook caption is burned
+							onto the clip.
+						</span>
+					</span>
+				</label>
+				<label class="captions-toggle">
+					<input type="checkbox" bind:checked={aiBadge} />
+					<span class="captions-copy">
+						<strong>“AI GENERATED” disclosure badge</strong>
+						<span class="hint">
+							Off by default. When on, a small badge is burned top-left. Independent of captions.
+						</span>
+					</span>
+				</label>
+			{/if}
 
 			{#if preview.connectedPlatforms?.length}
 				<div class="fld">
@@ -517,6 +548,26 @@
 		margin-top: 0.3rem;
 		font-size: 0.75rem;
 		color: var(--muted, #6b7280);
+	}
+	.captions-toggle {
+		display: flex;
+		align-items: flex-start;
+		gap: 0.55rem;
+		margin-bottom: 0.9rem;
+		cursor: pointer;
+	}
+	.captions-toggle input {
+		margin-top: 0.15rem;
+		width: 16px;
+		height: 16px;
+		flex-shrink: 0;
+	}
+	.captions-copy strong {
+		font-size: 0.82rem;
+		color: var(--text, #14172b);
+	}
+	.captions-copy .hint {
+		margin-top: 0.15rem;
 	}
 	.no-conn {
 		background: #fffbeb;

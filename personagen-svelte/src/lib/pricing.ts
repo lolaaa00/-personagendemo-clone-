@@ -23,7 +23,7 @@ export const PRICING_MATRIX: PriceEntry[] = [
 	{ provider: 'fal', operation: 'video', model: 'kling-o3-standard i2v ~5s (b-roll)', usd: 0.5 },
 	{ provider: 'fal', operation: 'video', model: 'kling-o3-pro reference (cinematic, per shot-set)', usd: 1.6 },
 	{ provider: 'fal', operation: 'tts', model: 'elevenlabs turbo-v2.5', usd: 0.03 },
-	{ provider: 'fal', operation: 'talking_head', model: 'veed/fabric-1.0 720p', usd: 0.4 },
+	{ provider: 'fal', operation: 'talking_head', model: 'bytedance omnihuman v1.5 (~5s @ $0.14/s)', usd: 0.7 },
 	// ── OpenRouter (text primary + media failover) ─────────────────────────
 	{ provider: 'openrouter', operation: 'llm', model: 'gemini-3.5-flash (director/grader/captions)', usd: 0.002 },
 	{ provider: 'openrouter', operation: 'image', model: 'flux-schnell', usd: 0.02 },
