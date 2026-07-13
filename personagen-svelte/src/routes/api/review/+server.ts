@@ -32,11 +32,17 @@ export const GET: RequestHandler = async ({ locals }) => {
 	const { session, user } = await locals.safeGetSession();
 	if (!session || !user) return json({ success: false, error: 'Unauthorized' }, { status: 401 });
 
+	// Pending content across EVERY persona: drafts awaiting approval AND scheduled
+	// posts not yet published. The old draft-only filter hid content generated on a
+	// CONNECTED persona (which auto-schedules, skipping the draft state) — so "I
+	// generated content but it's not in review" was the auto-scheduled posts. Both
+	// are now surfaced (distinguished by status), and the client filters by
+	// agent / platform / status.
 	const { data: drafts, error } = await locals.supabase
 		.from('posts')
 		.select('id, agent_id, content, platforms, status, scheduled_date, scheduled_time, created_at')
 		.eq('user_id', user.id)
-		.eq('status', 'draft')
+		.in('status', ['draft', 'scheduled'])
 		.order('scheduled_date', { ascending: true })
 		.order('scheduled_time', { ascending: true });
 
@@ -70,6 +76,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 			agent_id: d.agent_id,
 			agent_name: agent?.name ?? 'Unknown',
 			agent_avatar: refByAgent.get(d.agent_id) ?? null,
+			status: d.status,
 			text: parsed?.text ?? '',
 			media_url: parsed?.media_url ?? null,
 			poster_url: parsed?.poster_url ?? null,
@@ -102,13 +109,15 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		return json({ success: false, error: 'Provide 1-200 post_ids' }, { status: 400 });
 	}
 
-	// Ownership + draft-state check in one fetch; only rows that are still
-	// drafts get flipped (a post approved elsewhere mid-flight is left alone).
+	// Approve only promotes DRAFTS (→ scheduled). Reject/unschedule can also pull back
+	// an already-SCHEDULED post (→ rejected) so the queue can catch content before it
+	// publishes. Ownership + eligible-status checked in one fetch.
+	const reviewable = action === 'approve' ? ['draft'] : ['draft', 'scheduled'];
 	const { data: posts, error: fetchErr } = await locals.supabase
 		.from('posts')
 		.select('id, agent_id, content, status')
 		.eq('user_id', user.id)
-		.eq('status', 'draft')
+		.in('status', reviewable)
 		.in('id', postIds);
 	if (fetchErr) return json({ success: false, error: fetchErr.message }, { status: 500 });
 
@@ -122,7 +131,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		.from('posts')
 		.update({ status: newStatus })
 		.eq('user_id', user.id)
-		.eq('status', 'draft')
+		.in('status', reviewable)
 		.in(
 			'id',
 			eligible.map((p: any) => p.id)

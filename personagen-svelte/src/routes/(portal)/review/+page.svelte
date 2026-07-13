@@ -7,6 +7,7 @@
 		agent_id: string;
 		agent_name: string;
 		agent_avatar: string | null;
+		status: string;
 		text: string;
 		media_url: string | null;
 		poster_url: string | null;
@@ -24,6 +25,29 @@
 	let error = $state('');
 	let selected = $state<Set<string>>(new Set());
 	let toast = $state('');
+
+	// ── Filters (agent / platform / status), applied client-side ──
+	let filterAgent = $state('all');
+	let filterPlatform = $state('all');
+	let filterStatus = $state('all');
+
+	// Options built from whatever is actually in the queue.
+	let agentOptions = $derived(
+		[...new Map(items.map((i) => [i.agent_id, i.agent_name])).entries()].map(([id, name]) => ({
+			id,
+			name
+		}))
+	);
+	let platformOptions = $derived([...new Set(items.flatMap((i) => i.platforms))].sort());
+
+	let filteredItems = $derived(
+		items.filter(
+			(i) =>
+				(filterAgent === 'all' || i.agent_id === filterAgent) &&
+				(filterPlatform === 'all' || i.platforms.includes(filterPlatform)) &&
+				(filterStatus === 'all' || i.status === filterStatus)
+		)
+	);
 
 	const REJECT_REASONS = [
 		'Warped hands / anatomy',
@@ -61,7 +85,9 @@
 		selected = next;
 	}
 	function toggleAll() {
-		selected = selected.size === items.length ? new Set() : new Set(items.map((i) => i.id));
+		const allShownSelected =
+			filteredItems.length > 0 && filteredItems.every((i) => selected.has(i.id));
+		selected = allShownSelected ? new Set() : new Set(filteredItems.map((i) => i.id));
 	}
 
 	function showToast(msg: string) {
@@ -163,8 +189,9 @@
 		<div>
 			<h1>Review Queue</h1>
 			<p class="sub">
-				Drafts from every persona in one place — approve to schedule, reject with a reason
-				(reasons train the future QC agent).
+				Pending content from every persona — drafts to approve <em>and</em> scheduled posts not
+				yet published. Approve to schedule, reject with a reason (reasons train the future QC
+				agent).
 			</p>
 		</div>
 		<div class="header-actions">
@@ -181,14 +208,44 @@
 	{:else if items.length === 0}
 		<div class="empty">🎉 Queue is clear — no drafts awaiting review.</div>
 	{:else}
+		<div class="filter-bar">
+			<label class="filt">
+				<span>Agent</span>
+				<select bind:value={filterAgent}>
+					<option value="all">All agents</option>
+					{#each agentOptions as a}
+						<option value={a.id}>{a.name}</option>
+					{/each}
+				</select>
+			</label>
+			<label class="filt">
+				<span>Platform</span>
+				<select bind:value={filterPlatform}>
+					<option value="all">All platforms</option>
+					{#each platformOptions as p}
+						<option value={p}>{platformLabel(p)}</option>
+					{/each}
+				</select>
+			</label>
+			<label class="filt">
+				<span>Status</span>
+				<select bind:value={filterStatus}>
+					<option value="all">Draft + Scheduled</option>
+					<option value="draft">Draft only</option>
+					<option value="scheduled">Scheduled only</option>
+				</select>
+			</label>
+			<span class="filt-count">{filteredItems.length} of {items.length} shown</span>
+		</div>
+
 		<div class="bulk-bar">
 			<label class="check-all">
 				<input
 					type="checkbox"
-					checked={selected.size === items.length && items.length > 0}
+					checked={filteredItems.length > 0 && filteredItems.every((i) => selected.has(i.id))}
 					onchange={toggleAll}
 				/>
-				{selected.size} / {items.length} selected
+				{selected.size} / {filteredItems.length} selected
 			</label>
 			<div class="bulk-actions">
 				<button
@@ -220,8 +277,12 @@
 			</div>
 		{/if}
 
+		{#if filteredItems.length === 0}
+			<div class="empty">No items match these filters.</div>
+		{/if}
+
 		<div class="queue-grid">
-			{#each items as item (item.id)}
+			{#each filteredItems as item (item.id)}
 				<div class="queue-card" class:selected={selected.has(item.id)}>
 					<button type="button" class="card-media" onclick={() => toggle(item.id)}>
 						{#if item.media_type === 'video' && (item.poster_url || item.media_url)}
@@ -247,6 +308,9 @@
 								>QC {item.quality_score.toFixed(1)}</span>
 							{/if}
 							<span class="slot">{slotLabel(item)}</span>
+							<span class="status-badge status-{item.status}"
+								>{item.status === 'scheduled' ? '📅 Scheduled' : '📝 Draft'}</span
+							>
 						</div>
 						{#if editingId === item.id}
 							<div class="caption-edit">
@@ -274,14 +338,16 @@
 							{#each item.platforms as p}<span class="plat-chip">{platformLabel(p)}</span>{/each}
 						</div>
 						<div class="card-actions">
-							<button class="btn-approve sm" disabled={working} onclick={() => act('approve', [item.id])}>Approve</button>
+							{#if item.status === 'draft'}
+								<button class="btn-approve sm" disabled={working} onclick={() => act('approve', [item.id])}>Approve</button>
+							{/if}
 							<button
 								class="btn-reject sm"
 								disabled={working}
 								onclick={() => {
 									selected = new Set([item.id]);
 									rejectPickerOpen = true;
-								}}>Reject</button
+								}}>{item.status === 'scheduled' ? 'Unschedule' : 'Reject'}</button
 							>
 						</div>
 					</div>
@@ -332,6 +398,54 @@
 	.empty.err {
 		color: var(--danger, #f66);
 	}
+	.filter-bar {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: flex-end;
+		gap: 0.75rem;
+		padding: 0.6rem 0.25rem;
+		margin-bottom: 0.75rem;
+	}
+	.filt {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+		font-size: 0.68rem;
+		color: var(--muted, #9aa0aa);
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+	}
+	.filt select {
+		padding: 0.4rem 0.6rem;
+		border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
+		border-radius: 8px;
+		background: var(--surface, #16161f);
+		color: var(--text, #e7e7ee);
+		font-size: 0.8rem;
+		text-transform: none;
+		letter-spacing: 0;
+	}
+	.filt-count {
+		margin-left: auto;
+		font-size: 0.75rem;
+		color: var(--muted, #9aa0aa);
+	}
+	.status-badge {
+		font-size: 0.62rem;
+		font-weight: 700;
+		padding: 0.1rem 0.42rem;
+		border-radius: 999px;
+		white-space: nowrap;
+	}
+	.status-draft {
+		background: rgba(148, 163, 184, 0.18);
+		color: #7c8698;
+	}
+	.status-scheduled {
+		background: rgba(59, 130, 246, 0.18);
+		color: #3b82f6;
+	}
+
 	.bulk-bar {
 		display: flex;
 		justify-content: space-between;
