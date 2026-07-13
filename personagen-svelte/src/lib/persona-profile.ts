@@ -117,6 +117,29 @@ export function appearanceToPromptClause(appearance: Record<string, string> | nu
 }
 
 /**
+ * Strips a leading fictional proper name from a target-avatar sentence — a cleanup
+ * for personas generated before the "name the audience" prompt bug was fixed, so
+ * existing profiles read clean without regenerating. Applied wherever the avatar is
+ * USED (content generation) and SHOWN (profile field), and it self-persists on the
+ * next save.
+ *
+ * Deliberately conservative: it fires ONLY on the exact bug signature — 1–3
+ * Title-Case tokens, a comma, then an article ("a"/"an"/"the") or an age. So real
+ * descriptions ("A 36-year-old mom who…", "Health-conscious parents who…") are left
+ * untouched because they don't have a "Name, a/the/<age>…" prefix.
+ */
+export function stripLeadingAvatarName(value: string | null | undefined): string {
+	const t = (value ?? '').trim();
+	if (!t) return '';
+	const m = t.match(
+		/^[A-Z][A-Za-z'’.-]*(?:\s+[A-Z][A-Za-z'’.-]*){0,2},\s+((?:an?|the)\s+.+|\d{1,2}[-\s]?year.+)$/s
+	);
+	if (!m) return t;
+	const rest = m[1].trim();
+	return rest.charAt(0).toUpperCase() + rest.slice(1);
+}
+
+/**
  * Coerces an arbitrary LLM value onto the allowed set: exact (case-insensitive)
  * match first, then a loose contains-match, else '' — so an off-list value never
  * silently fails to select in the UI's <select> binding.

@@ -16,7 +16,7 @@
 	import { PLATFORMS as PLATFORM_REGISTRY, platformLabel } from '$lib/platforms';
 	import GenerationComposer from '$lib/components/generation/GenerationComposer.svelte';
 	import type { ComposerSpec } from '$lib/components/generation/types';
-	import { NICHE_OPTIONS, APPEARANCE_FIELDS } from '$lib/persona-profile';
+	import { NICHE_OPTIONS, APPEARANCE_FIELDS, stripLeadingAvatarName } from '$lib/persona-profile';
 	import MediaPreviewModal from '$lib/components/generation/MediaPreviewModal.svelte';
 	import {
 		startGeneration,
@@ -184,7 +184,9 @@
 	let ppContentFocus = $state<string>(personaProfile.contentFocus ?? '');
 	let ppPsychProfile = $state<string>(personaProfile.psychProfile ?? '');
 	let ppContentAngle = $state<string>(personaProfile.contentAngle ?? '');
-	let ppTargetAvatar = $state<string>(personaProfile.targetAvatar ?? '');
+	// Sanitized on load: strips any leading fictional name from avatars generated
+	// before the "name the audience" bug fix, so existing personas read clean.
+	let ppTargetAvatar = $state<string>(stripLeadingAvatarName(personaProfile.targetAvatar));
 	// Appearance / wardrobe "dynamic variables" — the influencer's configurable look
 	// (clothing, colors, hair, eyes, headwear, styling). Feeds the profile-picture
 	// prompt; filled by "Generate for brand".
@@ -388,7 +390,7 @@
 		ppContentFocus = freshProfile.contentFocus ?? '';
 		ppPsychProfile = freshProfile.psychProfile ?? '';
 		ppContentAngle = freshProfile.contentAngle ?? '';
-		ppTargetAvatar = freshProfile.targetAvatar ?? '';
+		ppTargetAvatar = stripLeadingAvatarName(freshProfile.targetAvatar);
 		ppAppearance = { ...(freshProfile.appearance ?? {}) };
 		ppVoiceProfile = { ...(freshProfile.voiceProfile ?? {}) };
 

@@ -39,7 +39,7 @@ import {
 	type CostEvent,
 	type GenerationProvenance
 } from '$lib/pricing';
-import { appearanceToPromptClause } from '$lib/persona-profile';
+import { appearanceToPromptClause, stripLeadingAvatarName } from '$lib/persona-profile';
 import { createDbService } from '$lib/server/db';
 import { DEFAULT_VOICE, VOICE_CATALOG } from '$lib/server/voices';
 import { getServiceSupabase } from '$lib/server/service-supabase';
@@ -581,6 +581,10 @@ async function logAutoReject(
 function buildRichAgentContext(agent: any): string {
 	const lines: string[] = [
 		`You are ${agent.name} (@${agent.handle}), a ${agent.niche} creator.`,
+		// Identity anchor: some older persona profiles were generated with a NAMED
+		// target avatar (a since-fixed generator bug), so guard against any stray name
+		// leaking into the script and breaking character.
+		`Your name is ALWAYS ${agent.name} — never introduce yourself as, or invent, any other name, and never address the viewer by a personal name (the "Ideal viewer profile" below describes your audience, not a named character).`,
 		`Core personality: ${agent.soul || 'authentic and relatable'}.`
 	];
 
@@ -604,7 +608,7 @@ function buildRichAgentContext(agent: any): string {
 		lines.push(`Target age demographic: ${pp.ageRanges.join(', ')}.`);
 	else if (pp.ageMin && pp.ageMax)
 		lines.push(`Target age demographic: ${pp.ageMin}–${pp.ageMax} year olds.`);
-	if (pp.targetAvatar) lines.push(`Ideal viewer profile: ${pp.targetAvatar}.`);
+	if (pp.targetAvatar) lines.push(`Ideal viewer profile: ${stripLeadingAvatarName(pp.targetAvatar)}.`);
 	if (pp.psychProfile)
 		lines.push(
 			`Audience psychology (use to tune emotional hooks and pain-point language): ${pp.psychProfile}.`
