@@ -22,7 +22,8 @@ import {
 	APPEARANCE_FIELDS,
 	coerceToOption,
 	coerceAgeRanges,
-	coerceAppearance
+	coerceAppearance,
+	stripLeadingAvatarName
 } from '$lib/persona-profile';
 import { pickVoiceForProfile } from '$lib/server/voices';
 import dns from 'node:dns/promises';
@@ -1534,6 +1535,204 @@ Return ONLY JSON: {"niche":"","ageRanges":["25–34"],"archetype":"","contentFoc
 					console.error('[Engine] Persona profile generation failed:', msg);
 					return json(
 						{ success: false, error: `Generation failed via ${ai!.provider}: ${msg.slice(0, 200)}` },
+						{ status: 502 }
+					);
+				}
+			}
+
+			// ── ACTION: generate_full_persona ──
+			// Generates one or more COMPLETE brand-tailored personas from scratch (for
+			// the Agent Generator create flow). Unlike generate_persona_profile — which
+			// fills an EXISTING agent — this invents the whole persona: a realistic
+			// creator NAME, gender, niche, soul, PLUS the full profile. Each is unique
+			// across the account and (when count>1) distinct from the others returned.
+			if (action === 'generate_full_persona') {
+				if (!hasAi) {
+					return json(
+						{ success: false, error: 'No AI provider configured. Add an OpenRouter or Gemini key in Settings.' },
+						{ status: 400 }
+					);
+				}
+				const count = Math.min(Math.max(Number(body.count) || 1, 1), 3);
+				// Optional user-set creative direction — a steer every generated persona
+				// must honour (e.g. "a no-nonsense male strength coach for busy dads").
+				const direction = typeof body.direction === 'string' ? body.direction.trim().slice(0, 400) : '';
+				const brief = await loadBriefForAgent(db, session.user.id, body.brandBriefId || null);
+				const b: any = brief?.data ?? {};
+
+				// Full identity + look fingerprint of EVERY existing persona (incl. name),
+				// so the new one(s) don't overlap on positioning, look, OR name.
+				const { data: allAgents } = await db.agents.list();
+				const taken = (allAgents ?? []).map((a: any) => {
+					let p: any = {};
+					try {
+						if (typeof a.market === 'string' && a.market.startsWith('{')) p = JSON.parse(a.market);
+					} catch {
+						/* ignore */
+					}
+					const ap = p.appearance || {};
+					const look = [ap.ethnicity, ap.hairColor, ap.hairstyle, ap.eyeColor, ap.headwear, ap.wardrobe]
+						.filter(Boolean)
+						.join(', ');
+					return {
+						name: a.name,
+						niche: a.niche || undefined,
+						archetype: p.archetype || undefined,
+						angle: p.contentAngle || undefined,
+						look: look || undefined
+					};
+				});
+
+				const prompt = `You are an elite influencer strategist. Design ${count} UNIQUE, competitive UGC creator persona${count > 1 ? 's' : ''} that represent ONE brand.
+
+BRAND: ${b.brandName || b.name || 'the brand'}${b.tagline ? ` — ${b.tagline}` : ''}. Mission: ${b.mission || '—'}.
+AUDIENCE: ${b.demographics || '—'}. Pain points: ${b.painPoints || '—'}. Interests: ${Array.isArray(b.interests) ? b.interests.join(', ') : b.interests || '—'}.
+BRAND VOICE: ${b.commStyle || '—'}. Traits: ${Array.isArray(b.traits) ? b.traits.join(', ') : '—'}.
+PRODUCTS: ${Array.isArray(b.products) ? b.products.map((p: any) => p.name).filter(Boolean).join(', ') : '—'}.
+${direction ? `\nCREATIVE DIRECTION (agreed with the user — EVERY persona you return MUST be fine-tuned to this steer, on top of the brand): ${direction}\n` : ''}
+Each persona must be UNIQUE across the ENTIRE account${count > 1 ? ' AND distinct from every other persona you return in this batch' : ''} — recognizably different in name, niche, positioning, and visual look. Do NOT reuse another persona's name, content angle, or look. Already used by existing personas — avoid overlapping:
+${JSON.stringify(taken).slice(0, 2200)}
+
+For EACH persona, produce these keys:
+- "name": a realistic, memorable CREATOR name that fits the niche + brand and the inferred heritage (e.g. "Marcus Fit", "Elle Vitae", "Priya Kapoor") — a REAL person's name, NOT "<Brand> Advocate" or a slogan, and different from every existing name above.
+- "gender": "male" | "female".
+- "soul": 2-3 sentences on their personality, tone, and values (this becomes their character voice).
+- "niche" MUST be exactly one of: ${NICHE_OPTIONS.join(' | ')}.
+- "archetype" MUST be exactly one of: ${PERSONA_ARCHETYPES.join(' | ')}.
+- "contentFocus" MUST be exactly one of: ${CONTENT_FOCUS_OPTIONS.join(' | ')}.
+- "ageRanges" is an array using ONLY these exact strings (keep the en-dash): ${AGE_RANGE_KEYS.join(', ')}.
+- "targetAvatar": one vivid sentence DESCRIBING the ideal audience member by traits/situation — do NOT give them a proper name.
+- "psychProfile": 2-3 sentences on audience motivations, fears, desires.
+- "contentAngle": the unique, ownable first-person POV that differentiates THIS creator.
+- "appearance": a DISTINCT, ownable look. "ethnicity" is REQUIRED and must match the creator's NAME (e.g. "Priya Kapoor" → "Indian") — never blank or generic. Vary ethnicity, hair, eyes, wardrobe so each creator is visually unmistakable. Keys — ${APPEARANCE_FIELDS.map((f) => `${f.key} (${f.placeholder.replace(/^e\.g\.\s*/, '')})`).join('; ')}. Use "none" for headwear if not applicable.
+- "voiceProfile": read the NAME like a casting director. Keys: gender ("male"|"female"), nationality (e.g. "American", "Indian", "Vietnamese-American"), accent.
+- NAMES: the ONLY proper name in each persona's output is that creator's own "name". Never invent any other proper name in targetAvatar/psychProfile/contentAngle.
+
+Return ONLY JSON: {"personas":[{"name":"","gender":"","soul":"","niche":"","archetype":"","contentFocus":"","ageRanges":["25–34"],"targetAvatar":"","psychProfile":"","contentAngle":"","appearance":{"ethnicity":"","wardrobe":"","outfitColors":"","hairstyle":"","hairColor":"","eyeColor":"","headwear":"","distinctiveFeatures":"","styling":""},"voiceProfile":{"gender":"","nationality":"","accent":""}}]}`;
+
+				try {
+					const parsed: any = safeParseJson(await ai!.generate(prompt, { json: true }));
+					const rawList: any[] = Array.isArray(parsed?.personas)
+						? parsed.personas
+						: parsed?.name
+							? [parsed]
+							: [];
+					const personas = rawList
+						.slice(0, count)
+						.map((p: any, i: number) => {
+							const vpRaw = p.voiceProfile || {};
+							const vpGender: 'male' | 'female' | null =
+								p.gender === 'male' || p.gender === 'female'
+									? p.gender
+									: vpRaw.gender === 'male' || vpRaw.gender === 'female'
+										? vpRaw.gender
+										: null;
+							const voiceProfile = {
+								gender: vpGender ?? '',
+								nationality: typeof vpRaw.nationality === 'string' ? vpRaw.nationality.trim() : '',
+								accent: typeof vpRaw.accent === 'string' ? vpRaw.accent.trim() : ''
+							};
+							let voice: string | null = null;
+							let voiceMatch: 'exact' | 'fallback' | null = null;
+							if (vpGender) {
+								// Seed by name+index so a batch of 3 spreads across voices.
+								const picked = pickVoiceForProfile(vpGender, voiceProfile.accent, `${p.name || ''}-${i}`);
+								voice = picked.voice.name;
+								voiceMatch = picked.exact ? 'exact' : 'fallback';
+							}
+							return {
+								name: typeof p.name === 'string' ? p.name.trim() : '',
+								gender: vpGender ?? '',
+								soul: typeof p.soul === 'string' ? p.soul.trim() : '',
+								niche: coerceToOption(p.niche, NICHE_OPTIONS),
+								archetype: coerceToOption(p.archetype, PERSONA_ARCHETYPES),
+								contentFocus: coerceToOption(p.contentFocus, CONTENT_FOCUS_OPTIONS),
+								ageRanges: coerceAgeRanges(p.ageRanges),
+								// Defensive: strip any leading name the model slipped into the avatar.
+								targetAvatar: stripLeadingAvatarName(
+									typeof p.targetAvatar === 'string' ? p.targetAvatar.trim() : ''
+								),
+								psychProfile: typeof p.psychProfile === 'string' ? p.psychProfile.trim() : '',
+								contentAngle: typeof p.contentAngle === 'string' ? p.contentAngle.trim() : '',
+								appearance: coerceAppearance(p.appearance),
+								voiceProfile,
+								voice,
+								voiceMatch
+							};
+						})
+						.filter((p: any) => p.name && p.niche);
+					if (!personas.length) {
+						return json(
+							{ success: false, error: `${ai!.provider} returned no usable persona — try again.` },
+							{ status: 502 }
+						);
+					}
+					return json({ success: true, data: { personas } });
+				} catch (err) {
+					const msg = (err as Error).message || 'unknown error';
+					console.error('[Engine] Full persona generation failed:', msg);
+					return json(
+						{ success: false, error: `Generation failed via ${ai!.provider}: ${msg.slice(0, 200)}` },
+						{ status: 502 }
+					);
+				}
+			}
+
+			// ── ACTION: suggest_directions ──
+			// From the selected brand brief, proposes a handful of SHORT persona
+			// "direction" ideas (distinct angles) the user can click to steer generation
+			// — on-brand and non-overlapping with existing personas' angles.
+			if (action === 'suggest_directions') {
+				if (!hasAi) {
+					return json(
+						{ success: false, error: 'No AI provider configured. Add an OpenRouter or Gemini key in Settings.' },
+						{ status: 400 }
+					);
+				}
+				const brief = await loadBriefForAgent(db, session.user.id, body.brandBriefId || null);
+				const b: any = brief?.data ?? {};
+				const { data: allAgents } = await db.agents.list();
+				const takenAngles = (allAgents ?? [])
+					.map((a: any) => {
+						let p: any = {};
+						try {
+							if (typeof a.market === 'string' && a.market.startsWith('{')) p = JSON.parse(a.market);
+						} catch {
+							/* ignore */
+						}
+						return p.contentAngle || p.archetype || undefined;
+					})
+					.filter(Boolean)
+					.slice(0, 20);
+
+				const prompt = `You are an influencer strategist. Suggest 5 SHORT, punchy creative directions (persona angles) for UGC creators representing this brand. Each is ONE phrase, max 12 words, describing a distinct persona angle (e.g. "a no-nonsense male strength coach for busy dads"). Each must be tailored to the brand, clearly different from the others, and NOT overlap these existing angles: ${JSON.stringify(takenAngles).slice(0, 1200)}.
+
+BRAND: ${b.brandName || b.name || 'the brand'}${b.tagline ? ` — ${b.tagline}` : ''}. Mission: ${b.mission || '—'}.
+AUDIENCE: ${b.demographics || '—'}. Pain points: ${b.painPoints || '—'}.
+PRODUCTS: ${Array.isArray(b.products) ? b.products.map((p: any) => p.name).filter(Boolean).join(', ') : '—'}.
+
+Return ONLY JSON: {"directions":["","","","",""]}`;
+
+				try {
+					const parsed: any = safeParseJson(await ai!.generate(prompt, { json: true }));
+					const directions: string[] = Array.isArray(parsed?.directions)
+						? parsed.directions
+								.filter((d: any) => typeof d === 'string' && d.trim())
+								.map((d: string) => d.trim().slice(0, 120))
+								.slice(0, 6)
+						: [];
+					if (!directions.length) {
+						return json(
+							{ success: false, error: `${ai!.provider} returned no ideas — try again.` },
+							{ status: 502 }
+						);
+					}
+					return json({ success: true, data: { directions } });
+				} catch (err) {
+					const msg = (err as Error).message || 'unknown error';
+					console.error('[Engine] Direction suggestions failed:', msg);
+					return json(
+						{ success: false, error: `Suggestions failed via ${ai!.provider}: ${msg.slice(0, 200)}` },
 						{ status: 502 }
 					);
 				}

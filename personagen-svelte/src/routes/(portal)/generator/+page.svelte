@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { showToast } from '$lib/stores/ui.svelte';
 	import { onMount } from 'svelte';
-	import { Personas } from '$lib/services/api';
+	import { Personas, BrandBrief, type GeneratedPersona } from '$lib/services/api';
 	import { goto } from '$app/navigation';
 	import { browser } from '$app/environment';
 
@@ -15,9 +15,24 @@
 
 	// Step 1 — Identity
 	let agentName = $state('');
-	let handle = $state('');
 	let niche = $state('');
-	let market = $state('Australia');
+	let market = $state('Australia'); // optional — can be changed in the profile later
+	// Brand-brief-driven generation: the selected brief feeds generation, and the
+	// full generated profile + pinned voice are stashed so the created persona is
+	// born fully configured (not a bare name/soul shell).
+	let selectedBriefId = $state<string>(data.brandBriefs?.[0]?.id ?? '');
+	// User-set creative direction — an agreed steer that fine-tunes every generated
+	// option to a specific angle (e.g. "a no-nonsense male strength coach").
+	let direction = $state('');
+	// Brand-kit-informed direction ideas (clickable) so the steer isn't a blank field.
+	let directionIdeas = $state<string[]>([]);
+	let loadingIdeas = $state(false);
+	let generatingPersona = $state(false);
+	let generatedProfile = $state<Record<string, any> | null>(null);
+	let pinnedVoice = $state('');
+	// Vault → 3 brand-tailored options to pick from (replaces the old generic presets).
+	let vaultOptions = $state<GeneratedPersona[]>([]);
+	let vaultLoading = $state(false);
 
 	const NICHES = [
 		'Beauty & Skincare',
@@ -49,13 +64,16 @@
 	let createError = $state('');
 
 	// Validation
-	let step1Valid = $derived(
-		agentName.trim().length >= 2 && handle.trim().length >= 2 && niche !== ''
-	);
+	// Handle was removed as a field; niche + market are generated/optional. Only a
+	// name and niche are needed to proceed.
+	let step1Valid = $derived(agentName.trim().length >= 2 && niche !== '');
 	let step2Valid = $derived(soul.trim().length >= 10 && skills.trim().length >= 10);
 
-	// Computed handle
-	let displayHandle = $derived(handle.startsWith('@') ? handle : handle ? `@${handle}` : '@');
+	// Handle is auto-derived from the name ("Marcus Fit" → "@marcusfit"); the server
+	// falls back to the same rule, this just powers the review preview.
+	let displayHandle = $derived(
+		'@' + (agentName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '') || 'persona')
+	);
 
 	// Computed initial
 	let initial = $derived(agentName.trim() ? agentName.trim().charAt(0).toUpperCase() : '?');
@@ -72,333 +90,107 @@
 		'Global'
 	];
 
-	const RANDOM_PERSONAS = [
-		{
-			name: 'Emma Glow',
-			handle: 'emmaglow.ai',
-			niche: 'Beauty & Skincare',
-			market: 'Australia',
-			soul: 'Warm, empathetic, and skin-science obsessed. Tone is conversational, supportive, and educational. Speaks directly to skincare enthusiasts looking for clean, non-toxic routines.',
-			skills:
-				'Expert in sunscreen matching, active ingredient layering (retinols & Vitamin C), and UGC video script creation. Translates complex dermatological terms into simple tips.',
-			gradient: 0 // Violet Cyan
-		},
-		{
-			name: 'Marcus Fit',
-			handle: 'marcusfit',
-			niche: 'Fitness & Health',
-			market: 'Australia',
-			soul: 'High-energy, motivational, and discipline-focused. Energetic but grounded tone. Believes in consistency over intensity.',
-			skills:
-				'Creates daily workout routines, macro tracking advice, and gym mindset audio scripts. Focuses on longevity and functional strength.',
-			gradient: 2 // Emerald Blue
-		},
-		{
-			name: 'Chloe Style',
-			handle: 'chloestyle.ai',
-			niche: 'Fashion & Style',
-			market: 'United States',
-			soul: 'Chic, aesthetic, and bold. Speaks with a confident, trendy, and expressive voice. Loves street fashion and sustainable wardrobes.',
-			skills:
-				'Styling capsules, color analysis, and visual aesthetic mapping. Guides followers to find their unique style without overspending.',
-			gradient: 1 // Rose Gold
-		},
-		{
-			name: 'Devon Tech',
-			handle: 'devontech',
-			niche: 'Tech & Gaming',
-			market: 'Global',
-			soul: 'Witty, analytical, and futuristic. Passionate about AI, developer tools, and clean setups. Slightly sarcastic but highly helpful.',
-			skills:
-				'Interactive coding walkthroughs, productivity hacks for software engineers, and hardware review scripts.',
-			gradient: 7 // Midnight
-		},
-		{
-			name: 'Aria Wellness',
-			handle: 'ariawellness',
-			niche: 'Lifestyle & Wellness',
-			market: 'Australia',
-			soul: 'Calm, mindful, and holistic. Gentle, grounding, and peaceful tone. Speaks about slow living, meditation, and work-life harmony.',
-			skills:
-				'Mindfulness challenge creation, morning routine templates, stress management guides, and sleep hygiene scripts.',
-			gradient: 5 // Ocean
-		},
-		{
-			name: 'Chef Kai',
-			handle: 'chefkai.eats',
-			niche: 'Food & Cooking',
-			market: 'Australia',
-			soul: 'Enthusiastic, flavor-first, and rustic. Loud, fun, and warm tone. Passionate about local organic produce and easy-to-cook gourmet meals.',
-			skills:
-				'Quick 15-minute recipe scripting, meal prep blueprints, flavor pairing science, and food photography styling.',
-			gradient: 3 // Sunset
-		},
-		{
-			name: 'Zara Skin',
-			handle: 'zaraskin',
-			niche: 'Beauty & Skincare',
-			market: 'United Kingdom',
-			soul: 'Aesthetic, clean, and minimalist. Tone is sophisticated, soothing, and highly curated. Focuses on the glass-skin routine and barrier repair.',
-			skills:
-				'Dull skin revitalization hacks, product shelf-life analysis, and aesthetic ASMR video concepts.',
-			gradient: 4 // Berry
-		},
-		{
-			name: 'Nate Gear',
-			handle: 'nategear.tech',
-			niche: 'Tech & Gaming',
-			market: 'Canada',
-			soul: 'Enthusiastic gadget geek and reviewer. Friendly, detailed, and objective tone. Believes technology should simplify life.',
-			skills:
-				'Consumer electronics breakdown, smart home automation guides, and detailed spec comparison tables.',
-			gradient: 6 // Coral
-		},
-		{
-			name: 'Sophia Eco',
-			handle: 'sophia.eco',
-			niche: 'Fashion & Style',
-			market: 'Australia',
-			soul: 'Eco-conscious, creative, and vintage-obsessed. Inspiring and approachable tone. Encourages second-hand shopping and upcycling.',
-			skills:
-				'Thrift-store scouting guides, clothing repair basics, fabric sustainability ratings, and creative styling challenges.',
-			gradient: 2 // Emerald Blue
-		},
-		{
-			name: 'Leo Lift',
-			handle: 'leolifts',
-			niche: 'Fitness & Health',
-			market: 'United States',
-			soul: 'Direct, no-nonsense strength coach. Science-based, encouraging, and authoritative tone. Believes in heavy lifting and sleep.',
-			skills:
-				'Strength progression programs, injury prevention guides, deadlift form analysis, and sports nutrition calculations.',
-			gradient: 4 // Berry
-		},
-		{
-			name: 'Mia Matcha',
-			handle: 'miamatcha',
-			niche: 'Food & Cooking',
-			market: 'Japan',
-			soul: 'Aesthetic, zen, and dessert-obsessed. Delicate, warm, and comforting tone. Focuses on plant-based Asian desserts and tea rituals.',
-			skills:
-				'Matcha grade guides, traditional baking adjustments, recipe scaling, and visual presentation layout.',
-			gradient: 5 // Ocean
-		},
-		{
-			name: 'Kai Mind',
-			handle: 'kaimindfulness',
-			niche: 'Lifestyle & Wellness',
-			market: 'New Zealand',
-			soul: 'Adventurous, nature-connected, and breath-focused. Outdoorsy and calm tone. Promotes forest bathing and outdoor meditation.',
-			skills:
-				'Breathwork guides, hiking prep checklists, cold-plunge protocol scripts, and digital detox strategies.',
-			gradient: 7 // Midnight
-		},
-		{
-			name: 'Lucas Code',
-			handle: 'lucascode.ai',
-			niche: 'Tech & Gaming',
-			market: 'Germany',
-			soul: 'Logical, structured, and open-source advocate. Pragmatic and teaching-oriented tone. Loves clean architecture and refactoring.',
-			skills:
-				'React performance optimization checklists, design pattern explanations, TypeScript tips, and Git workflow scripts.',
-			gradient: 0 // Violet Cyan
-		},
-		{
-			name: 'Bella Curl',
-			handle: 'bellacurls',
-			niche: 'Beauty & Skincare',
-			market: 'United States',
-			soul: 'Vibrant, cheerful, and curl-proud. Enthusiastic, helpful, and community-driven tone. Dedicated to curly hair health and representation.',
-			skills:
-				'Hair porosity testing guides, product routine builders, curl definition hacks, and wash-day scheduling.',
-			gradient: 3 // Sunset
-		},
-		{
-			name: 'Oliver Drap',
-			handle: 'oliverdrap',
-			niche: 'Fashion & Style',
-			market: 'France',
-			soul: 'Avant-garde, tailoring-focused, and elegant. Precise, poetic, and professional tone. High appreciation for design and textiles.',
-			skills:
-				'Suit styling guidelines, fabric composition analysis, minimalist packing guides, and luxury brand histories.',
-			gradient: 1 // Rose Gold
-		},
-		{
-			name: 'Elena Bio',
-			handle: 'elenabiohack',
-			niche: 'Fitness & Health',
-			market: 'United Kingdom',
-			soul: 'Biohacker, cellular-health enthusiast, and researcher. Analytical, curious, and experimental tone. Explores longevity and sleep tech.',
-			skills:
-				'Circadian rhythm alignment guides, blue-light blocking routines, supplement stacking formulas, and CGM data reading.',
-			gradient: 6 // Coral
-		},
-		{
-			name: 'Maya Plate',
-			handle: 'mayasplates',
-			niche: 'Food & Cooking',
-			market: 'Global',
-			soul: 'Colorful, plant-forward, and joyful. Friendly, enthusiastic, and inviting tone. Believes eating healthy should be a feast of color.',
-			skills:
-				'Vegan substitute matrix, colorful meal prep guides, food waste reduction hacks, and spice blending recipes.',
-			gradient: 1 // Rose Gold
-		},
-		{
-			name: 'Noah Green',
-			handle: 'noahgreen.life',
-			niche: 'Lifestyle & Wellness',
-			market: 'Canada',
-			soul: 'Minimalist, organized, and home-decor focused. Calm, neat, and highly structured tone. Loves decluttering and aesthetic storage.',
-			skills:
-				'KonMari decluttering plans, functional space layouts, budget home makeover blueprints, and daily productivity routines.',
-			gradient: 2 // Emerald Blue
-		}
-	];
-
-	// Vault modal state
+	// Vault modal state — now a gallery of 3 freshly-generated, brand-tailored options.
 	let showVaultModal = $state(false);
-	let vaultSearch = $state('');
-	let selectedVaultNiche = $state('All');
 
-	let filteredPersonas = $derived(
-		RANDOM_PERSONAS.filter((p) => {
-			const matchSearch =
-				p.name.toLowerCase().includes(vaultSearch.toLowerCase()) ||
-				p.soul.toLowerCase().includes(vaultSearch.toLowerCase()) ||
-				p.handle.toLowerCase().includes(vaultSearch.toLowerCase());
-			const matchNiche = selectedVaultNiche === 'All' || p.niche === selectedVaultNiche;
-			return matchSearch && matchNiche;
-		})
-	);
+	/** The full persona-profile object (agents.market shape) from a generated persona. */
+	function buildProfileFromGenerated(p: GeneratedPersona): Record<string, any> {
+		return {
+			ageRanges: p.ageRanges ?? [],
+			gender: p.gender ?? '',
+			archetype: p.archetype ?? '',
+			contentFocus: p.contentFocus ?? '',
+			psychProfile: p.psychProfile ?? '',
+			contentAngle: p.contentAngle ?? '',
+			targetAvatar: p.targetAvatar ?? '',
+			appearance: p.appearance ?? {},
+			voiceProfile: p.voiceProfile ?? {}
+		};
+	}
 
-	function selectPersona(p: (typeof RANDOM_PERSONAS)[0]) {
+	/** Loads a generated persona into the form + stashes its full profile & voice so
+	 *  the created agent is born fully configured. */
+	function applyGeneratedPersona(p: GeneratedPersona) {
 		agentName = p.name;
-		handle = p.handle;
-		niche = p.niche;
-		market = p.market;
-		soul = p.soul;
-		skills = p.skills;
-		selectedGradient = p.gradient;
+		if (p.niche) niche = p.niche;
+		if (p.soul) soul = p.soul;
+		// Derive a skills line from the generated strategy so step 2 is ready to go.
+		skills = [
+			p.niche ? `Expert in ${p.niche}.` : '',
+			p.contentFocus ? `Content focus: ${p.contentFocus}.` : '',
+			p.contentAngle ? `Signature angle: ${p.contentAngle}` : ''
+		]
+			.filter(Boolean)
+			.join(' ');
+		pinnedVoice = p.voice || '';
+		generatedProfile = buildProfileFromGenerated(p);
+		selectedGradient = Math.floor(Math.random() * GRADIENT_PRESETS.length);
 		saveProgress();
 		showVaultModal = false;
-		showToast(`⚡ Loaded persona: ${p.name}`, 'success');
+		showToast(`✨ Loaded persona: ${p.name}`, 'success');
 	}
 
-	function selectRandomFromVault() {
-		const rand = RANDOM_PERSONAS[Math.floor(Math.random() * RANDOM_PERSONAS.length)];
-		selectPersona(rand);
-	}
-
-	function detectNicheFromBrandBrief(brief: any): string {
-		const textToSearch = [
-			brief.brandName,
-			brief.tagline,
-			brief.mission,
-			brief.demographics,
-			brief.interests,
-			brief.painPoints,
-			...(brief.traits || [])
-		]
-			.join(' ')
-			.toLowerCase();
-
-		if (/skin|beauty|makeup|cosmetic|hair|glow|cream|serum|skincare/i.test(textToSearch)) {
-			return 'Beauty & Skincare';
-		}
-		if (/fashion|style|clothing|wear|apparel|wardrobe|dress|streetwear/i.test(textToSearch)) {
-			return 'Fashion & Style';
-		}
-		if (
-			/wellness|mindfulness|yoga|meditation|sleep|lifestyle|slow living|detox/i.test(textToSearch)
-		) {
-			return 'Lifestyle & Wellness';
-		}
-		if (
-			/fitness|workout|gym|muscle|stamina|training|exercise|strength|biohack|coach|bodybuilder/i.test(
-				textToSearch
-			)
-		) {
-			return 'Fitness & Health';
-		}
-		if (
-			/food|cooking|recipe|eat|kitchen|delicious|taste|honey|baking|meal prep|chef/i.test(
-				textToSearch
-			)
-		) {
-			return 'Food & Cooking';
-		}
-		if (
-			/tech|gaming|software|app|digital|ai|smart|device|gadget|developer|programming|code/i.test(
-				textToSearch
-			)
-		) {
-			return 'Tech & Gaming';
-		}
-		return '';
-	}
-
-	function prefillFromBrandBrief() {
+	/** Fetch brand-kit-informed direction ideas for the user to click. */
+	async function suggestDirections() {
+		if (loadingIdeas) return;
+		loadingIdeas = true;
 		try {
-			const briefRaw = localStorage.getItem('personagen_brand_brief');
-			if (!briefRaw) {
-				showToast('No brand brief found to prefill. Fill it in Brand Brief first!', 'warning');
-				return;
+			const res = await BrandBrief.suggestDirections(selectedBriefId || null);
+			if (res.success && res.data?.directions?.length) {
+				directionIdeas = res.data.directions;
+			} else {
+				showToast(res.error || 'No ideas — check a brand brief exists', 'error');
 			}
-			const brief = JSON.parse(briefRaw);
-			if (brief) {
-				if (brief.brandName) {
-					agentName = `${brief.brandName} Advocate`;
-					handle = brief.brandName.toLowerCase().replace(/[^a-z0-9]/g, '') + '_advocate';
-				}
-				const detected = detectNicheFromBrandBrief(brief);
-				if (detected) niche = detected;
-
-				market = 'Australia'; // Default location is Australia but user can change it
-
-				// Prefill Soul
-				const parts = [];
-				if (brief.brandName)
-					parts.push(`You are the official brand advocate for ${brief.brandName}.`);
-				if (brief.commStyle) parts.push(`Communication style: ${brief.commStyle}.`);
-				if (brief.traits && brief.traits.length > 0)
-					parts.push(`Core traits: ${brief.traits.join(', ')}.`);
-				if (brief.mission) parts.push(`Mission: ${brief.mission}`);
-				if (parts.length > 0) {
-					soul =
-						parts.join(' ') + ' Always maintain an engaging, professional, and authentic voice.';
-				} else {
-					soul =
-						'Official brand advocate. Always maintain an engaging, professional, and authentic voice.';
-				}
-
-				// Prefill Skills
-				const skillParts = [];
-				if (brief.tagline) skillParts.push(`Key message: "${brief.tagline}".`);
-				if (brief.products && brief.products.length > 0) {
-					skillParts.push(
-						`Promoting products: ${brief.products.map((p: any) => p.name).join(', ')}.`
-					);
-				}
-				if (brief.painPoints) skillParts.push(`Solving problems like: ${brief.painPoints}.`);
-				if (skillParts.length > 0) {
-					skills = skillParts.join(' ');
-				} else {
-					skills = 'Expert in content generation, product showcase, and audience interaction.';
-				}
-
-				// Pick a random gradient
-				selectedGradient = Math.floor(Math.random() * GRADIENT_PRESETS.length);
-
-				saveProgress();
-				showToast('Prefilled generator from brand brief settings! ⚡', 'success');
-			}
-		} catch (e) {
-			console.error('Failed to prefill from brand brief', e);
-			showToast('Failed to prefill from brand brief', 'error');
+		} catch (e: any) {
+			showToast(e.message || 'Failed to suggest directions', 'error');
+		} finally {
+			loadingIdeas = false;
 		}
 	}
 
-	// Load from localStorage
+	/** Primary action: generate ONE unique persona for the selected brand and load it. */
+	async function generatePersonaForBrand() {
+		if (generatingPersona) return;
+		generatingPersona = true;
+		try {
+			const res = await BrandBrief.generateFullPersona(selectedBriefId || null, 1, direction);
+			if (res.success && res.data?.personas?.length) {
+				applyGeneratedPersona(res.data.personas[0]);
+			} else {
+				showToast(res.error || 'Generation failed — check a brand brief exists', 'error');
+			}
+		} catch (e: any) {
+			showToast(e.message || 'Generation failed', 'error');
+		} finally {
+			generatingPersona = false;
+		}
+	}
+
+	/** Vault: open the modal so the user can set/confirm the DIRECTION first — it does
+	 *  NOT auto-generate, so the 3 options are only produced once the direction is agreed. */
+	function openVault() {
+		showVaultModal = true;
+	}
+
+	/** Generate 3 distinct brand-tailored options fine-tuned to the agreed direction. */
+	async function generateVaultOptions() {
+		if (vaultLoading) return;
+		vaultLoading = true;
+		vaultOptions = [];
+		try {
+			const res = await BrandBrief.generateFullPersona(selectedBriefId || null, 3, direction);
+			if (res.success && res.data?.personas) {
+				vaultOptions = res.data.personas;
+			} else {
+				showToast(res.error || 'Generation failed — check a brand brief exists', 'error');
+			}
+		} catch (e: any) {
+			showToast(e.message || 'Generation failed', 'error');
+		} finally {
+			vaultLoading = false;
+		}
+	}
+	// Load in-progress draft from localStorage (incl. the stashed generated profile).
 	onMount(() => {
 		if (!browser) return;
 		try {
@@ -406,36 +198,40 @@
 			if (saved) {
 				const d = JSON.parse(saved);
 				agentName = d.agentName || '';
-				handle = d.handle || '';
 				niche = d.niche || '';
 				market = d.market || 'Australia';
 				soul = d.soul || '';
 				skills = d.skills || '';
 				selectedGradient = d.selectedGradient || 0;
 				currentStep = d.currentStep || 1;
-			} else {
-				// No saved progress, prefill from Brand Brief if possible
-				prefillFromBrandBrief();
+				selectedBriefId = d.selectedBriefId || selectedBriefId;
+				direction = d.direction || '';
+				pinnedVoice = d.pinnedVoice || '';
+				generatedProfile = d.generatedProfile || null;
 			}
 		} catch {
 			/* ignore */
 		}
 	});
 
-	// Save to localStorage
+	// Save to localStorage (persists the generated profile + voice so a refresh
+	// mid-flow doesn't lose the generation).
 	function saveProgress() {
 		if (!browser) return;
 		localStorage.setItem(
 			LS_KEY,
 			JSON.stringify({
 				agentName,
-				handle,
 				niche,
 				market,
 				soul,
 				skills,
 				selectedGradient,
-				currentStep
+				currentStep,
+				selectedBriefId,
+				direction,
+				pinnedVoice,
+				generatedProfile
 			})
 		);
 	}
@@ -454,47 +250,29 @@
 		}
 	}
 
+	// Everything the create endpoint needs — including the stashed full profile,
+	// pinned voice, and brand link, so the persona is born fully configured.
+	function buildCreatePayload() {
+		return {
+			name: agentName.trim(),
+			handle: displayHandle,
+			niche,
+			platform: 'instagram',
+			bio: soul.trim(),
+			gradient: GRADIENT_PRESETS[selectedGradient].value,
+			initial,
+			skills: skills.trim(),
+			ugcVoice: pinnedVoice || undefined,
+			brandBriefId: selectedBriefId || null,
+			personaProfile: generatedProfile || undefined
+		};
+	}
+
 	async function createPersonaDirect() {
 		isCreating = true;
 		createError = '';
 		try {
-			const payload = {
-				name: agentName.trim(),
-				handle: displayHandle,
-				niche,
-				platform: 'instagram',
-				bio: soul.trim(),
-				gradient: GRADIENT_PRESETS[selectedGradient].value,
-				initial
-			};
-			const res = await Personas.createDirect(payload);
-			if (res.success) {
-				showToast('Persona created successfully!', 'success');
-				if (browser) localStorage.removeItem(LS_KEY);
-				const newId = (res.data as any)?.id;
-				await goto(newId ? `/personas/${newId}` : '/dashboard');
-			} else {
-				throw new Error(res.error || 'Creation failed');
-			}
-		} catch (err) {
-			createError = (err as Error).message;
-			showToast(`Persona creation failed: ${createError}`, 'error');
-		} finally {
-			isCreating = false;
-		}
-	}
-
-	async function registerAutomatedAccount() {
-		isCreating = true;
-		createError = '';
-		try {
-			const payload = {
-				name: agentName.trim(),
-				niche,
-				platform: 'instagram',
-				bio: soul.trim()
-			};
-			const res = await Personas.createDirect(payload);
+			const res = await Personas.createDirect(buildCreatePayload());
 			if (res.success) {
 				showToast('Persona created successfully!', 'success');
 				if (browser) localStorage.removeItem(LS_KEY);
@@ -596,17 +374,9 @@
 					<div class="lightning-btn-wrapper">
 						<button
 							type="button"
-							class="prefill-brief-btn"
-							onclick={prefillFromBrandBrief}
-							title="Prefill fields from your Brand Brief"
-						>
-							Sync Brand
-						</button>
-						<button
-							type="button"
 							class="lightning-btn"
-							onclick={() => (showVaultModal = true)}
-							title="Generate or choose from presets"
+							onclick={openVault}
+							title="Generate 3 brand-tailored personas to choose from"
 						>
 							<svg
 								width="14"
@@ -617,11 +387,77 @@
 							>
 								<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
 							</svg>
-							Vault Preset
+							Vault · 3 options
 						</button>
 					</div>
 				</div>
-				<p class="panel-desc">Define who this agent is. Name, handle, and niche.</p>
+				<p class="panel-desc">Pick a brand and generate a unique persona — or fill it in yourself.</p>
+
+				<!-- Primary path: brand-brief-driven generation of a complete, unique persona,
+				     fine-tuned to an optional creative direction the user sets first. -->
+				<div class="brand-gen-box">
+					<div class="brand-gen-fields">
+						<div class="field">
+							<label for="brand">Brand brief</label>
+							<select id="brand" bind:value={selectedBriefId} onchange={saveProgress}>
+								{#if !data.brandBriefs?.length}
+									<option value="">No brand briefs yet — create one in Brand Brief</option>
+								{:else}
+									{#each data.brandBriefs as b}
+										<option value={b.id}>{b.name}</option>
+									{/each}
+								{/if}
+							</select>
+						</div>
+						<div class="field">
+							<label for="direction">Direction <span class="opt-tag">(optional steer)</span></label>
+							<input
+								id="direction"
+								type="text"
+								bind:value={direction}
+								oninput={saveProgress}
+								placeholder="e.g. a no-nonsense male strength coach for busy dads"
+							/>
+						</div>
+					</div>
+					<div class="dir-suggest">
+						<button
+							type="button"
+							class="dir-suggest-btn"
+							onclick={suggestDirections}
+							disabled={loadingIdeas || !data.brandBriefs?.length}
+						>
+							{loadingIdeas ? '💡 Thinking…' : '💡 Suggest directions from this brand'}
+						</button>
+						{#if directionIdeas.length}
+							<div class="dir-chips">
+								{#each directionIdeas as idea}
+									<button
+										type="button"
+										class="dir-chip"
+										class:on={direction === idea}
+										onclick={() => {
+											direction = idea;
+											saveProgress();
+										}}>{idea}</button
+									>
+								{/each}
+							</div>
+						{/if}
+					</div>
+					<button
+						type="button"
+						class="brand-gen-btn"
+						onclick={generatePersonaForBrand}
+						disabled={generatingPersona || !data.brandBriefs?.length}
+					>
+						{#if generatingPersona}
+							<span class="spinner-sm"></span> Generating…
+						{:else}
+							✨ Generate persona for this brand
+						{/if}
+					</button>
+				</div>
 
 				<div class="form-grid">
 					<div class="field">
@@ -634,27 +470,6 @@
 							placeholder="e.g. Luna Styles"
 						/>
 						{#if agentName.length > 0 && agentName.trim().length < 2}
-							<span class="field-error">At least 2 characters</span>
-						{/if}
-					</div>
-
-					<div class="field">
-						<label for="handle">Handle</label>
-						<div class="handle-input-wrap">
-							<span class="handle-prefix">@</span>
-							<input
-								id="handle"
-								type="text"
-								bind:value={handle}
-								oninput={() => {
-									handle = handle.replace(/^@/, '');
-									saveProgress();
-								}}
-								placeholder="lunastyles.ai"
-								class="handle-input"
-							/>
-						</div>
-						{#if handle.length > 0 && handle.replace(/@/g, '').trim().length < 2}
 							<span class="field-error">At least 2 characters</span>
 						{/if}
 					</div>
@@ -673,15 +488,12 @@
 					</div>
 
 					<div class="field">
-						<label for="market">Market</label>
+						<label for="market">Market <span class="opt-tag">(optional)</span></label>
 						<select id="market" bind:value={market} onchange={saveProgress}>
 							{#each MARKETS as m}
 								<option value={m}>{m}</option>
 							{/each}
 						</select>
-						{#if market === '' && agentName.length > 0}
-							<span class="field-error">Required</span>
-						{/if}
 					</div>
 				</div>
 			</div>
@@ -871,13 +683,13 @@
 							type="button"
 							class="btn-method-action"
 							disabled={isCreating || !step1Valid || !step2Valid}
-							onclick={registerAutomatedAccount}
+							onclick={createPersonaDirect}
 							style="background: var(--gradient); color: #fff; border: none; padding: 0.75rem; font-size: var(--text-xs); font-weight: 700; border-radius: var(--radius-xs); cursor: pointer; text-align: center; transition: all 0.2s;"
 						>
 							{#if isCreating}
-								Registering...
+								Creating...
 							{:else}
-								🚀 Register Automated Account
+								🚀 Create &amp; Connect Later
 							{/if}
 						</button>
 					</div>
@@ -974,7 +786,7 @@
 					<div>
 						<h3>Persona Vault</h3>
 						<p class="modal-subtitle">
-							Instantly choose from our hand-crafted agent presets or roll a random one.
+							3 unique personas tailored to your selected brand — pick one to load it.
 						</p>
 					</div>
 				</div>
@@ -993,68 +805,93 @@
 				</button>
 			</header>
 
-			<div class="modal-toolbar">
-				<div class="search-box">
-					<svg
-						width="14"
-						height="14"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2.5"
-						style="color: var(--text-dim);"
-					>
-						<circle cx="11" cy="11" r="8"></circle>
-						<line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-					</svg>
-					<input type="text" placeholder="Search presets..." bind:value={vaultSearch} />
-				</div>
-				<div class="filter-tabs">
-					<button
-						type="button"
-						class="filter-tab"
-						class:active={selectedVaultNiche === 'All'}
-						onclick={() => (selectedVaultNiche = 'All')}>All</button
-					>
-					{#each NICHES as n}
-						<button
-							type="button"
-							class="filter-tab"
-							class:active={selectedVaultNiche === n}
-							onclick={() => (selectedVaultNiche = n)}>{n.split(' ')[0]}</button
-						>
-					{/each}
-				</div>
-				<button type="button" class="randomize-btn" onclick={selectRandomFromVault}>
-					🎲 Roll Random
+			<div class="modal-toolbar vault-direction-bar">
+				<span class="vault-brand-label">
+					⚡ {data.brandBriefs?.find((b) => b.id === selectedBriefId)?.name ?? 'No brand selected'}
+				</span>
+				<input
+					class="vault-direction-input"
+					type="text"
+					bind:value={direction}
+					placeholder="Direction (optional): steer all 3 options — e.g. 'Gen-Z wellness girl'"
+				/>
+				<button
+					type="button"
+					class="randomize-btn"
+					onclick={generateVaultOptions}
+					disabled={vaultLoading || !data.brandBriefs?.length}
+				>
+					{vaultLoading
+						? 'Generating…'
+						: vaultOptions.length
+							? '🔄 Regenerate'
+							: '✨ Generate 3 options'}
 				</button>
 			</div>
 
+			<div class="dir-suggest vault-dir-suggest">
+				<button
+					type="button"
+					class="dir-suggest-btn"
+					onclick={suggestDirections}
+					disabled={loadingIdeas || !data.brandBriefs?.length}
+				>
+					{loadingIdeas ? '💡 Thinking…' : '💡 Suggest directions'}
+				</button>
+				{#if directionIdeas.length}
+					<div class="dir-chips">
+						{#each directionIdeas as idea}
+							<button
+								type="button"
+								class="dir-chip"
+								class:on={direction === idea}
+								onclick={() => (direction = idea)}>{idea}</button
+							>
+						{/each}
+					</div>
+				{/if}
+			</div>
+
 			<div class="vault-grid">
-				{#each filteredPersonas as p}
-					<button type="button" class="persona-card" onclick={() => selectPersona(p)}>
-						<div class="card-avatar-wrap" style="background: {GRADIENT_PRESETS[p.gradient].value}">
-							<span>{p.name.charAt(0)}</span>
-						</div>
-						<div class="card-info">
-							<div class="card-title-row">
-								<h4>{p.name}</h4>
-								<span class="badge-niche">{p.niche}</span>
-							</div>
-							<span class="card-handle">@{p.handle}</span>
-							<p class="card-desc">{p.soul}</p>
-							<div class="card-meta">
-								<span class="badge-market-mini">📍 {p.market}</span>
-							</div>
-						</div>
-					</button>
-				{/each}
-				{#if filteredPersonas.length === 0}
+				{#if vaultLoading}
 					<div
 						style="grid-column: span 3; text-align: center; color: var(--text-dim); padding: 3rem 0;"
 					>
-						No presets found matching "{vaultSearch}"
+						<span class="spinner-sm"></span> Generating 3 brand-tailored personas…
 					</div>
+				{:else}
+					{#each vaultOptions as p, i}
+						<button type="button" class="persona-card" onclick={() => applyGeneratedPersona(p)}>
+							<div
+								class="card-avatar-wrap"
+								style="background: {GRADIENT_PRESETS[i % GRADIENT_PRESETS.length].value}"
+							>
+								<span>{p.name.charAt(0)}</span>
+							</div>
+							<div class="card-info">
+								<div class="card-title-row">
+									<h4>{p.name}</h4>
+									<span class="badge-niche">{p.niche}</span>
+								</div>
+								<span class="card-handle">{p.archetype || p.gender}</span>
+								<p class="card-desc">{p.soul}</p>
+								<div class="card-meta">
+									{#if p.appearance?.ethnicity}
+										<span class="badge-market-mini">🌍 {p.appearance.ethnicity}</span>
+									{/if}
+									{#if p.gender}<span class="badge-market-mini">{p.gender}</span>{/if}
+								</div>
+							</div>
+						</button>
+					{/each}
+					{#if !vaultOptions.length}
+						<div
+							style="grid-column: span 3; text-align: center; color: var(--text-dim); padding: 3rem 0;"
+						>
+							Set your direction above (optional), then <strong>Generate 3 options</strong> fine-tuned
+							to this brand.
+						</div>
+					{/if}
 				{/if}
 			</div>
 		</div>
@@ -1066,6 +903,141 @@
 		padding: 2rem;
 		max-width: 800px;
 		margin: 0 auto;
+	}
+
+	/* Brand-brief-driven generation (Step 1) */
+	.brand-gen-box {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+		margin-bottom: 1.25rem;
+	}
+	.brand-gen-fields {
+		display: flex;
+		gap: 0.75rem;
+		flex-wrap: wrap;
+	}
+	.brand-gen-fields .field {
+		flex: 1;
+		min-width: 200px;
+	}
+	.brand-gen-btn {
+		align-self: flex-start;
+		background: var(--gradient, linear-gradient(135deg, #7c6aed, #22d3ee));
+		color: #fff;
+		border: none;
+		border-radius: var(--radius-xs, 8px);
+		padding: 0.7rem 1.1rem;
+		font-size: 0.82rem;
+		font-weight: 700;
+		cursor: pointer;
+		white-space: nowrap;
+		transition: filter 0.15s ease;
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+	}
+	.brand-gen-btn:hover:not(:disabled) {
+		filter: brightness(1.08);
+	}
+	.brand-gen-btn:disabled {
+		opacity: 0.55;
+		cursor: not-allowed;
+	}
+	.opt-tag {
+		font-weight: 400;
+		color: var(--text-dim, #9ca3af);
+		font-size: 0.72rem;
+	}
+	.vault-brand-label {
+		font-weight: 700;
+		font-size: 0.85rem;
+		color: var(--text, #14172b);
+		white-space: nowrap;
+	}
+	.vault-direction-bar {
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.6rem;
+	}
+	.vault-direction-input {
+		flex: 1;
+		min-width: 220px;
+		padding: 0.5rem 0.7rem;
+		border: 1px solid var(--border, #e6e8f0);
+		border-radius: var(--radius-xs, 8px);
+		background: var(--surface, #fff);
+		color: var(--text, #14172b);
+		font-size: 0.8rem;
+	}
+
+	/* Brand-kit direction suggestions */
+	.dir-suggest {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+	.vault-dir-suggest {
+		margin-bottom: 0.75rem;
+	}
+	.dir-suggest-btn {
+		align-self: flex-start;
+		background: transparent;
+		border: 1px dashed var(--border, #cbd5e1);
+		color: var(--text-dim, #6b7280);
+		border-radius: 999px;
+		padding: 0.4rem 0.85rem;
+		font-size: 0.76rem;
+		font-weight: 600;
+		cursor: pointer;
+		transition: all 0.15s ease;
+	}
+	.dir-suggest-btn:hover:not(:disabled) {
+		border-color: var(--accent, #7c6aed);
+		color: var(--accent, #7c6aed);
+	}
+	.dir-suggest-btn:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+	.dir-chips {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.4rem;
+	}
+	.dir-chip {
+		background: var(--surface-2, #f3f4f6);
+		border: 1px solid var(--border, #e6e8f0);
+		color: var(--text, #14172b);
+		border-radius: 999px;
+		padding: 0.35rem 0.7rem;
+		font-size: 0.74rem;
+		cursor: pointer;
+		text-align: left;
+		transition: all 0.15s ease;
+	}
+	.dir-chip:hover {
+		border-color: var(--accent, #7c6aed);
+	}
+	.dir-chip.on {
+		background: var(--accent, #7c6aed);
+		color: #fff;
+		border-color: transparent;
+	}
+	.spinner-sm {
+		display: inline-block;
+		width: 13px;
+		height: 13px;
+		border: 2px solid rgba(255, 255, 255, 0.4);
+		border-top-color: currentColor;
+		border-radius: 50%;
+		animation: gen-spin 0.7s linear infinite;
+		vertical-align: -2px;
+	}
+	@keyframes gen-spin {
+		to {
+			transform: rotate(360deg);
+		}
 	}
 
 	.page-header {

@@ -220,8 +220,37 @@ export const BrandBrief = {
 	readAppearanceFromImage: (imageUrl: string) =>
 		request<{ appearance: Record<string, string> }>(ENDPOINTS.brandBrief, 'read_appearance_from_image', {
 			imageUrl
-		})
+		}),
+	// Agent Generator: invent `count` COMPLETE brand-tailored personas from scratch
+	// (name + gender + soul + full profile), each unique across the account.
+	generateFullPersona: (brandBriefId: string | null, count = 1, direction = '') =>
+		request<{ personas: GeneratedPersona[] }>(ENDPOINTS.brandBrief, 'generate_full_persona', {
+			brandBriefId,
+			count,
+			direction
+		}),
+	// Brand-kit-informed direction ideas the user can click to steer generation.
+	suggestDirections: (brandBriefId: string | null) =>
+		request<{ directions: string[] }>(ENDPOINTS.brandBrief, 'suggest_directions', { brandBriefId })
 };
+
+/** A complete persona invented by the Agent Generator (generate_full_persona). */
+export interface GeneratedPersona {
+	name: string;
+	gender: string;
+	soul: string;
+	niche: string;
+	archetype: string;
+	contentFocus: string;
+	ageRanges: string[];
+	targetAvatar: string;
+	psychProfile: string;
+	contentAngle: string;
+	appearance: Record<string, string>;
+	voiceProfile: { gender: string; nationality: string; accent: string };
+	voice: string | null;
+	voiceMatch: 'exact' | 'fallback' | null;
+}
 
 // ── Autopilot (per-agent auto-generation config + manual top-up) ───────────
 
@@ -260,7 +289,19 @@ export const Accounts = {
 
 // ── Personas (Direct DB) ──────────────────────────────────────────────────
 export const Personas = {
-	createDirect: (payload: { name: string; niche: string; platform: string; bio: string }) =>
+	createDirect: (payload: {
+		name: string;
+		niche: string;
+		platform: string;
+		bio: string;
+		handle?: string;
+		gradient?: string;
+		initial?: string;
+		skills?: string;
+		ugcVoice?: string;
+		brandBriefId?: string | null;
+		personaProfile?: Record<string, unknown>;
+	}) =>
 		fetch('/api/agents', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
