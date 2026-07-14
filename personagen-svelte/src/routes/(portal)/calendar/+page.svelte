@@ -61,6 +61,7 @@
 	let showComposer = $state(false);
 	let composerSubmitting = $state(false);
 	let sidebarOpen = $state(false);
+	let calendarView = $state<'day' | 'week' | 'month'>('month');
 
 	// Date Picker Dropdown State
 	let showDatePicker = $state(false);
@@ -853,30 +854,34 @@
 <section class="page">
 	<!-- Header -->
 	<header class="page-header">
-		<div class="header-left">
-			<button class="sidebar-toggle" onclick={() => (sidebarOpen = !sidebarOpen)} aria-label="Toggle sidebar">
-				<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-					<line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" />
-				</svg>
-			</button>
-			<div>
-				<h1>Content Calendar</h1>
-				<p class="subtitle">Schedule and manage posts across all agents and platforms</p>
-			</div>
+		<div>
+			<h1>Content Calendar</h1>
+			<p class="subtitle">Schedule and manage posts across all agents and platforms</p>
 		</div>
 		<div class="header-controls">
-			<button
-				class="btn-primary"
-				disabled={generatingPost}
-				onclick={requestGeneratePost}
-				style="display: inline-flex; align-items: center; gap: 0.5rem; background: var(--gradient-subtle); border-color: transparent;"
-			>
-				{#if generatingPost}
-					<span class="spinner"></span> Generating...
-				{:else}
-					✨ Generate Post Now
-				{/if}
-			</button>
+			<div class="view-toggle">
+				<button
+					class="view-btn"
+					class:active={calendarView === 'day'}
+					onclick={() => (calendarView = 'day')}
+				>
+					Day
+				</button>
+				<button
+					class="view-btn"
+					class:active={calendarView === 'week'}
+					onclick={() => (calendarView = 'week')}
+				>
+					Week
+				</button>
+				<button
+					class="view-btn"
+					class:active={calendarView === 'month'}
+					onclick={() => (calendarView = 'month')}
+				>
+					Month
+				</button>
+			</div>
 			<div class="header-filter">
 				<label for="cal-status">Status</label>
 				<select id="cal-status" bind:value={selectedStatusFilter}>
@@ -887,6 +892,18 @@
 					<option value="failed">Failed</option>
 				</select>
 			</div>
+			<button
+				class="btn-primary"
+				disabled={generatingPost}
+				onclick={requestGeneratePost}
+				style="display: inline-flex; align-items: center; gap: 0.5rem; background: var(--gradient-subtle); border-color: transparent; white-space: nowrap;"
+			>
+				{#if generatingPost}
+					<span class="spinner"></span> Generating...
+				{:else}
+					✨ Generate
+				{/if}
+			</button>
 		</div>
 	</header>
 
@@ -1519,21 +1536,15 @@
 		position: fixed;
 		left: 0;
 		top: 60px;
-		width: 240px;
+		width: 180px;
 		height: calc(100vh - 60px);
 		background: var(--surface-2);
 		border-right: 1px solid var(--border);
 		padding: 0;
 		overflow-y: auto;
 		z-index: 800;
-		transform: translateX(0);
-		transition: transform 0.3s ease;
 		display: flex;
 		flex-direction: column;
-	}
-
-	.sidebar.open {
-		transform: translateX(0);
 	}
 
 	.sidebar-overlay {
@@ -1639,16 +1650,9 @@
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		gap: 1.5rem;
+		gap: 2rem;
 		margin-bottom: 1.5rem;
-		margin-left: 240px;
 		flex-wrap: wrap;
-	}
-
-	.page-header .header-left {
-		display: flex;
-		align-items: flex-start;
-		gap: 1rem;
 	}
 
 	.page-header h1 {
@@ -1666,8 +1670,38 @@
 	.header-controls {
 		display: flex;
 		align-items: center;
-		gap: 0.75rem;
+		gap: 1rem;
 		flex-wrap: wrap;
+	}
+
+	.view-toggle {
+		display: inline-flex;
+		gap: 0;
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-xs);
+		padding: 2px;
+	}
+
+	.view-btn {
+		padding: 0.5rem 0.85rem;
+		background: transparent;
+		border: none;
+		color: var(--text-muted);
+		font-size: var(--text-sm);
+		font-weight: 500;
+		cursor: pointer;
+		border-radius: 4px;
+		transition: all 0.2s ease;
+	}
+
+	.view-btn:hover {
+		color: var(--text);
+	}
+
+	.view-btn.active {
+		background: var(--accent);
+		color: #fff;
 	}
 
 	.header-filter {
@@ -1684,7 +1718,7 @@
 	}
 
 	.header-filter select {
-		min-width: 140px;
+		min-width: 120px;
 		padding: 0.45rem 0.6rem;
 		font-size: var(--text-sm);
 		border-radius: var(--radius-xs);
@@ -1763,7 +1797,6 @@
 		justify-content: center;
 		gap: 1.5rem;
 		margin-bottom: 1.5rem;
-		margin-left: 240px;
 	}
 
 	.nav-btn {
@@ -1909,7 +1942,6 @@
 		display: flex;
 		gap: 1.5rem;
 		align-items: flex-start;
-		margin-left: 240px;
 	}
 
 	.calendar-wrap {
@@ -2562,29 +2594,22 @@
 	}
 
 	/* ── Responsive ── */
-	@media (max-width: 1024px) {
+	@media (max-width: 1200px) {
 		.sidebar {
-			width: 220px;
+			width: 160px;
 		}
 
-		.page-header {
-			margin-left: 220px;
-		}
-
-		.month-nav {
-			margin-left: 220px;
-		}
-
-		.calendar-layout {
-			margin-left: 220px;
+		.page {
+			padding: 1.5rem;
 		}
 	}
 
-	@media (max-width: 768px) {
+	@media (max-width: 900px) {
 		.sidebar {
-			width: 100%;
-			max-width: 280px;
+			position: fixed;
 			transform: translateX(-100%);
+			width: 220px;
+			z-index: 800;
 		}
 
 		.sidebar.open {
@@ -2616,44 +2641,56 @@
 			display: flex;
 		}
 
-		.page-header {
-			margin-left: 0;
-		}
-
-		.month-nav {
-			margin-left: 0;
-		}
-
-		.calendar-layout {
-			margin-left: 0;
-		}
-
-		.page-header .header-left {
-			align-items: center;
-		}
-
-		.page-header h1 {
-			font-size: var(--text-lg);
-		}
-
 		.header-controls {
-			flex-direction: column;
-			width: 100%;
 			gap: 0.5rem;
 		}
 
-		.header-filter {
+		.view-toggle {
+			order: -1;
+		}
+
+		.header-filter select {
+			min-width: 100px;
+		}
+	}
+
+	@media (max-width: 768px) {
+		.sidebar {
 			width: 100%;
+			max-width: 280px;
+		}
+
+		.page {
+			padding: 1rem;
+		}
+
+		.page-header {
+			flex-direction: column;
+			align-items: flex-start;
+			gap: 1rem;
+		}
+
+		.header-controls {
+			width: 100%;
+			flex-direction: row;
+			gap: 0.5rem;
+		}
+
+		.view-toggle {
+			order: 0;
+		}
+
+		.header-filter {
+			flex: 1;
+			min-width: 0;
 		}
 
 		.header-filter select {
 			width: 100%;
-			min-width: 0;
 		}
 
 		.header-controls .btn-primary {
-			width: 100%;
-			justify-content: center;
+			white-space: nowrap;
 		}
 
 		.calendar-grid {
@@ -2661,7 +2698,20 @@
 		}
 
 		.cell {
-			min-height: 90px;
+			min-height: 85px;
+			font-size: var(--text-xs);
+		}
+
+		.event-block {
+			gap: 0.25rem;
+		}
+
+		.event-agent {
+			font-size: 0.6rem;
+		}
+
+		.event-text {
+			font-size: 0.7rem;
 		}
 	}
 
