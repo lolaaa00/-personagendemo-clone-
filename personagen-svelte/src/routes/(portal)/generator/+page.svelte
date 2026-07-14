@@ -28,7 +28,22 @@
 	let directionIdeas = $state<string[]>([]);
 	let loadingIdeas = $state(false);
 	let generatingPersona = $state(false);
-	let generatedProfile = $state<Record<string, any> | null>(null);
+	// Full persona-profile object (agents.market shape). Kept non-null so the profile
+	// fields in step 2 always render + bind; brand generation fills it, and it stays
+	// editable. Persisted verbatim at create so the persona is born fully configured.
+	const emptyProfile = (): Record<string, any> => ({
+		ageRanges: [],
+		niche: '',
+		gender: '',
+		archetype: '',
+		contentFocus: '',
+		psychProfile: '',
+		contentAngle: '',
+		targetAvatar: '',
+		appearance: {},
+		voiceProfile: {}
+	});
+	let generatedProfile = $state<Record<string, any>>(emptyProfile());
 	let pinnedVoice = $state('');
 	// Vault → 3 brand-tailored options to pick from (replaces the old generic presets).
 	let vaultOptions = $state<GeneratedPersona[]>([]);
@@ -207,7 +222,11 @@
 				selectedBriefId = d.selectedBriefId || selectedBriefId;
 				direction = d.direction || '';
 				pinnedVoice = d.pinnedVoice || '';
-				generatedProfile = d.generatedProfile || null;
+				generatedProfile = d.generatedProfile || emptyProfile();
+			} else {
+				// The gradient is no longer a UI choice — auto-pick a random one per persona
+				// (generation re-randomizes it too) so avatars differ without manual fiddling.
+				selectedGradient = Math.floor(Math.random() * GRADIENT_PRESETS.length);
 			}
 		} catch {
 			/* ignore */
@@ -264,7 +283,7 @@
 			skills: skills.trim(),
 			ugcVoice: pinnedVoice || undefined,
 			brandBriefId: selectedBriefId || null,
-			personaProfile: generatedProfile || undefined
+			personaProfile: generatedProfile
 		};
 	}
 
@@ -549,35 +568,88 @@
 						>
 					</div>
 
-					<div class="field">
-						<label>Avatar Gradient</label>
-						<div class="gradient-grid">
-							{#each GRADIENT_PRESETS as grad, i}
-								<button
-									class="gradient-swatch"
-									class:selected={selectedGradient === i}
-									style="background: {grad.value}"
-									onclick={() => {
-										selectedGradient = i;
-										saveProgress();
-									}}
-									title={grad.label}
-								>
-									{#if selectedGradient === i}
-										<svg
-											width="18"
-											height="18"
-											viewBox="0 0 24 24"
-											fill="none"
-											stroke="#fff"
-											stroke-width="3"
-											stroke-linecap="round"><polyline points="20 6 9 17 4 12" /></svg
-										>
-									{/if}
-								</button>
-							{/each}
+					<!-- Persona profile — generated from the brand, observable & editable here
+					     (mirrors the Profile tab). The avatar gradient is auto-picked, no UI. -->
+					<div class="profile-section">
+						<span class="profile-section-title"
+							>Persona profile <span class="pf-hint">— generated from the brand; edit anything</span></span
+						>
+						<div class="pf-row">
+							<div class="field">
+								<label for="pf-arch">Archetype</label>
+								<input
+									id="pf-arch"
+									type="text"
+									bind:value={generatedProfile.archetype}
+									oninput={saveProgress}
+									placeholder="e.g. The Educator"
+								/>
+							</div>
+							<div class="field">
+								<label for="pf-focus">Content focus</label>
+								<input
+									id="pf-focus"
+									type="text"
+									bind:value={generatedProfile.contentFocus}
+									oninput={saveProgress}
+									placeholder="e.g. Education & How-Tos"
+								/>
+							</div>
 						</div>
-						<span class="gradient-label">{GRADIENT_PRESETS[selectedGradient].label}</span>
+						<div class="pf-row">
+							<div class="field">
+								<label for="pf-gender">Gender</label>
+								<select id="pf-gender" bind:value={generatedProfile.gender} onchange={saveProgress}>
+									<option value="">—</option>
+									<option value="female">Female</option>
+									<option value="male">Male</option>
+								</select>
+							</div>
+							<div class="field">
+								<label for="pf-eth">Ethnicity / heritage</label>
+								<input
+									id="pf-eth"
+									type="text"
+									bind:value={generatedProfile.appearance.ethnicity}
+									oninput={saveProgress}
+									placeholder="e.g. Vietnamese, Nigerian, Brazilian"
+								/>
+							</div>
+						</div>
+						<div class="field">
+							<label for="pf-avatar">Target avatar (ideal audience)</label>
+							<textarea
+								id="pf-avatar"
+								bind:value={generatedProfile.targetAvatar}
+								oninput={saveProgress}
+								rows="2"
+								placeholder="Who this persona speaks to…"
+							></textarea>
+						</div>
+						<div class="field">
+							<label for="pf-psych">Psychology profile</label>
+							<textarea
+								id="pf-psych"
+								bind:value={generatedProfile.psychProfile}
+								oninput={saveProgress}
+								rows="2"
+								placeholder="Audience motivations, fears, desires…"
+							></textarea>
+						</div>
+						<div class="field">
+							<label for="pf-angle">Content angle / POV</label>
+							<textarea
+								id="pf-angle"
+								bind:value={generatedProfile.contentAngle}
+								oninput={saveProgress}
+								rows="2"
+								placeholder="The unique, ownable point of view…"
+							></textarea>
+						</div>
+						{#if pinnedVoice}
+							<span class="pf-voice">🎙 Voice: <strong>{pinnedVoice}</strong> — auto-cast from the name</span
+							>
+						{/if}
 					</div>
 				</div>
 			</div>
@@ -1230,40 +1302,40 @@
 		font-size: 0.88rem;
 	}
 
-	/* Gradient swatches */
-	.gradient-grid {
-		display: grid;
-		grid-template-columns: repeat(8, 1fr);
-		gap: 0.5rem;
-	}
-	.gradient-swatch {
-		aspect-ratio: 1;
-		border-radius: var(--radius-sm);
-		border: 2px solid transparent;
-		cursor: pointer;
+	/* Persona profile fields (step 2) */
+	.profile-section {
 		display: flex;
-		align-items: center;
-		justify-content: center;
-		transition:
-			transform 0.2s,
-			border-color 0.2s,
-			box-shadow 0.2s;
-		min-height: 44px;
+		flex-direction: column;
+		gap: 1rem;
+		margin-top: 0.5rem;
+		padding-top: 1rem;
+		border-top: 1px solid var(--border, rgba(255, 255, 255, 0.08));
 	}
-	.gradient-swatch:hover {
-		transform: scale(1.1);
+	.profile-section-title {
+		font-size: 0.72rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		color: var(--text-dim);
 	}
-	.gradient-swatch.selected {
-		border-color: #fff;
-		box-shadow: 0 0 16px rgba(255, 255, 255, 0.2);
-		transform: scale(1.1);
+	.pf-hint {
+		font-weight: 400;
+		text-transform: none;
+		letter-spacing: 0;
+		opacity: 0.8;
 	}
-
-	.gradient-label {
+	.pf-row {
+		display: flex;
+		gap: 1rem;
+		flex-wrap: wrap;
+	}
+	.pf-row .field {
+		flex: 1;
+		min-width: 180px;
+	}
+	.pf-voice {
 		font-size: var(--text-xs);
 		color: var(--text-dim);
-		margin-top: 0.5rem;
-		font-family: var(--font-mono);
 	}
 
 	/* Review */
