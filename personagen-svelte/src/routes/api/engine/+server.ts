@@ -10,7 +10,8 @@ import {
 	generateUgcImage,
 	safeParseJson,
 	resolveImageKeys,
-	loadBriefForAgent
+	loadBriefForAgent,
+	inferGenderFromName
 } from '$lib/server/content/generate';
 import { getServiceSupabase } from '$lib/server/service-supabase';
 import { persistToStorage } from '$lib/server/storage';
@@ -1417,6 +1418,12 @@ Input: "${fieldVal}"`;
 					return json({ success: false, error: 'Agent not found' }, { status: 404 });
 				}
 				const gender = typeof body.gender === 'string' && body.gender ? body.gender : 'unspecified';
+				// Gender is driven by the persona's NAME (its identity), NOT a possibly-stale
+				// stored value — so "Generate for brand" CORRECTS a mis-set gender instead of
+				// obeying it (the "Ratio Ramadan shows as Female" bug, which then fed a female
+				// face/voice/kit prompt). Deterministic first-name lookup; the LLM fills the gap
+				// for names not in the table, guided by the examples in the prompt.
+				const nameGender = inferGenderFromName(agent.name);
 				const brief = await loadBriefForAgent(
 					db,
 					session.user.id,
@@ -1475,7 +1482,7 @@ Rules:
 - "psychProfile": 2-3 sentences on audience motivations, fears, desires, identity hooks.
 - "contentAngle": the unique, ownable point of view that differentiates THIS creator competitively — first-person and specific, and unlike any other persona's angle above.
 - "appearance": an object giving this creator a DISTINCT, ownable look that does NOT match any other persona's look above. "ethnicity" is REQUIRED and must be a specific, real heritage faithful to the creator's NAME and consistent with voiceProfile.nationality (e.g. "Jenny Tran" → "Vietnamese"; "Ratio Ramadan" → "Middle Eastern / Arab"; "Elena Washington" → "African-American"; "Chen Kai" → "Chinese") — never blank, never generic, never default everyone to the same ethnicity. Vary the ethnicity, hair color/style, eye color, distinctive facial features, headwear, wardrobe, and colors so each creator is visually UNMISTAKABLE from every other persona above. Keys — ${APPEARANCE_FIELDS.map((f) => `${f.key} (${f.placeholder.replace(/^e\.g\.\s*/, '')})`).join('; ')}. Use "none" for headwear if not applicable.
-- "voiceProfile": read the creator's NAME (and soul) like a casting director — infer the heritage the name suggests and the spoken voice that fits the character. Keys: gender ("male"|"female"${gender !== 'unspecified' ? ` — MUST be "${gender}", it is already set` : ', inferred from the name'}), nationality (e.g. "American", "Indian", "Vietnamese-American", "British"), accent (the accent that voice would have, e.g. "American", "Indian", "British"). Examples: "Lexy Connor" → female American; "Ratio Ramadan" → male, Indian/South-Asian accent; "Jenny Tran" → female, Vietnamese-American; "Elena Washington" → female. Be faithful to the name — never default everyone to American.
+- "voiceProfile": read the creator's NAME (and soul) like a casting director — infer the heritage the name suggests and the spoken voice that fits the character. Keys: gender ("male"|"female"${nameGender ? ` — MUST be "${nameGender}", inferred from the creator's name` : " — infer STRICTLY from the creator's NAME; NEVER default to female"}), nationality (e.g. "American", "Indian", "Vietnamese-American", "British"), accent (the accent that voice would have, e.g. "American", "Indian", "British"). Examples: "Lexy Connor" → female American; "Ratio Ramadan" → male, Indian/South-Asian accent; "Jenny Tran" → female, Vietnamese-American; "Elena Washington" → female. Be faithful to the name — never default everyone to American.
 - Tailor everything to the brand and keep it consistent with the creator's gender and personality.
 - NAMES: the ONLY person with a proper name is the creator, ${agent.name || 'this creator'}. Never invent or use any other proper name ANYWHERE in the output — targetAvatar, psychProfile, and contentAngle must describe people by their traits/role, never by a made-up first name. A stray name here leaks into generated scripts and breaks character consistency.
 
@@ -1492,15 +1499,15 @@ Return ONLY JSON: {"niche":"","ageRanges":["25–34"],"archetype":"","contentFoc
 					// Coerce the LLM output back onto the allowed sets so every value selects
 					// cleanly in the UI's <select> / chip bindings.
 					// Voice: record the TRUE inferred profile (nationality/accent from the
-					// name), then pin the closest voice the catalog actually has. The
-					// explicit gender input always wins over the LLM's inference.
+					// name), then pin the closest voice the catalog actually has. Gender
+					// resolves NAME-first (identity) → the LLM's read of the name → the passed
+					// value only as a last resort — so a mis-set stored gender is CORRECTED,
+					// not obeyed, and everything downstream (face, voice, kit) realigns.
 					const vpRaw = parsed.voiceProfile || {};
+					const llmGender: 'male' | 'female' | null =
+						vpRaw.gender === 'male' || vpRaw.gender === 'female' ? vpRaw.gender : null;
 					const vpGender: 'male' | 'female' | null =
-						gender === 'male' || gender === 'female'
-							? gender
-							: vpRaw.gender === 'male' || vpRaw.gender === 'female'
-								? vpRaw.gender
-								: null;
+						nameGender ?? llmGender ?? (gender === 'male' || gender === 'female' ? gender : null);
 					const voiceProfile = {
 						gender: vpGender ?? '',
 						nationality: typeof vpRaw.nationality === 'string' ? vpRaw.nationality.trim() : '',
@@ -1519,6 +1526,9 @@ Return ONLY JSON: {"niche":"","ageRanges":["25–34"],"archetype":"","contentFoc
 					const data = {
 						niche: coerceToOption(parsed.niche, NICHE_OPTIONS),
 						ageRanges: coerceAgeRanges(parsed.ageRanges),
+						// The resolved (name-driven) gender — the UI adopts it so a mis-set
+						// gender is corrected in place and everything realigns.
+						gender: vpGender,
 						archetype: coerceToOption(parsed.archetype, PERSONA_ARCHETYPES),
 						contentFocus: coerceToOption(parsed.contentFocus, CONTENT_FOCUS_OPTIONS),
 						targetAvatar: typeof parsed.targetAvatar === 'string' ? parsed.targetAvatar.trim() : '',

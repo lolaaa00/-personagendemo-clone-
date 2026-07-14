@@ -96,6 +96,16 @@
 	let graduationEligible = $derived(
 		publishedCleanCount >= GRADUATION_TARGET && recentFailedCount === 0
 	);
+	// Hero "Posts" must reflect what's ACTUALLY live on the platform — published (or
+	// partial = live on ≥1 platform) — NOT every internal row. Counting drafts/scheduled
+	// as "Posts" claimed "8 posts" for a persona whose connected account had 0. Pending
+	// work is surfaced separately as "Queued" so nothing is hidden.
+	let postedCount = $derived(
+		feedPosts.filter((p: any) => p.status === 'published' || p.status === 'partial').length
+	);
+	let queuedCount = $derived(
+		feedPosts.filter((p: any) => p.status === 'draft' || p.status === 'scheduled').length
+	);
 	let feedLoading = $state(false);
 	let syncingFeed = $state(false);
 	let generatingPost = $state(false);
@@ -534,9 +544,13 @@
 	}
 
 	// ── Autopilot manual top-up: fill this persona's review queue on demand ──
+	// Confirmed before it runs — this spends one generation PER empty slot, so it must
+	// follow the same confirm-before-spend rule as every other generate action.
 	let fillingDrafts = $state(false);
+	let confirmDraftsOpen = $state(false);
 	async function fillDraftsNow() {
 		if (!agent?.id || fillingDrafts) return;
+		confirmDraftsOpen = false;
 		fillingDrafts = true;
 		const jobId = kitJobId(agent.id, 'drafts');
 		try {
@@ -767,8 +781,10 @@
 				// and pin the closest catalog voice. Explicit gender stays authoritative;
 				// it's only filled here when it was blank (inferred from the name).
 				if (d.voiceProfile && typeof d.voiceProfile === 'object') ppVoiceProfile = { ...d.voiceProfile };
-				if (!ppGender && (d.voiceProfile?.gender === 'female' || d.voiceProfile?.gender === 'male'))
-					ppGender = d.voiceProfile.gender;
+				// Adopt the resolved (name-driven) gender — corrects a mis-set gender in place so
+				// the generated face, voice, and reference-kit prompts all realign to the real
+				// identity (fixes "Ratio Ramadan was Female → woman's-face regen + female voice").
+				if (d.gender === 'male' || d.gender === 'female') ppGender = d.gender;
 				if (d.voice) selectedVoice = d.voice;
 				if (d.voiceMatch === 'fallback' && d.voiceProfile?.accent) {
 					showToast(
@@ -1929,9 +1945,15 @@
 			</div>
 			<div class="hero-stats">
 				<div class="stat-chip">
-					<span class="stat-val">{feedPosts.length}</span>
+					<span class="stat-val">{postedCount}</span>
 					<span class="stat-label">Posts</span>
 				</div>
+				{#if queuedCount > 0}
+					<div class="stat-chip stat-chip-queued" title="Drafts + scheduled — not yet published">
+						<span class="stat-val">{queuedCount}</span>
+						<span class="stat-label">Queued</span>
+					</div>
+				{/if}
 				{#if generationCost > 0}
 					<div class="stat-chip stat-chip-spend">
 						<span class="stat-val">${generationCost < 0.01 ? generationCost.toFixed(4) : generationCost.toFixed(2)}</span>
@@ -2046,7 +2068,7 @@
 						</button>
 						<button
 							class="btn-sync"
-							onclick={fillDraftsNow}
+							onclick={() => (confirmDraftsOpen = true)}
 							disabled={fillingDrafts || feedLoading}
 							title="Top up this persona's review queue: autopilot fills the empty future slots with drafts"
 						>
@@ -3027,6 +3049,31 @@
 	}}
 />
 
+<!-- Confirm-before-spend for the autopilot draft top-up — it generates one post per
+     empty review slot, so it must be approved like every other generate action. -->
+{#if confirmDraftsOpen}
+	<div class="lightbox-backdrop" onclick={() => (confirmDraftsOpen = false)} role="presentation">
+		<div
+			class="confirm-card"
+			onclick={(e) => e.stopPropagation()}
+			role="dialog"
+			aria-label="Generate drafts"
+		>
+			<h3>Generate drafts for {agent?.name}?</h3>
+			<p>
+				This fills the empty upcoming slots in the review queue with autopilot drafts — about
+				<strong>{postsPerDay}/day</strong> across active hours — and spends one generation
+				<strong>per draft</strong>. Nothing publishes: each lands in the
+				<a href="/review">review queue</a> for your approval.
+			</p>
+			<div class="confirm-actions">
+				<button class="btn-cancel" onclick={() => (confirmDraftsOpen = false)}>Cancel</button>
+				<button class="btn-generate" onclick={fillDraftsNow}>📥 Generate drafts</button>
+			</div>
+		</div>
+	</div>
+{/if}
+
 <!-- Expand a generated asset full-size, with Regenerate right where the user
      is judging the result. -->
 <MediaPreviewModal
@@ -3562,6 +3609,41 @@
 		padding: 1.5rem;
 	}
 
+	.confirm-card {
+		background: var(--surface, #fff);
+		border: 1px solid var(--border, #e6e8f0);
+		border-radius: 14px;
+		padding: 1.4rem 1.5rem;
+		max-width: min(440px, 94vw);
+		box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+	}
+	.confirm-card h3 {
+		margin: 0 0 0.6rem;
+		font-size: 1.05rem;
+		color: var(--text, #14172b);
+	}
+	.confirm-card p {
+		margin: 0 0 1.2rem;
+		font-size: 0.85rem;
+		line-height: 1.5;
+		color: var(--muted, #6b7280);
+	}
+	.confirm-actions {
+		display: flex;
+		justify-content: flex-end;
+		gap: 0.6rem;
+	}
+	.btn-cancel {
+		background: var(--surface-2, #f3f4f6);
+		border: 1px solid var(--border, #e6e8f0);
+		color: var(--text, #14172b);
+		border-radius: 8px;
+		padding: 0.55rem 1rem;
+		font-size: 0.82rem;
+		font-weight: 600;
+		cursor: pointer;
+	}
+
 	.lightbox-content {
 		max-width: min(920px, 94vw);
 		max-height: 90vh;
@@ -3728,6 +3810,11 @@
 
 	.stat-chip-spend .stat-val {
 		color: #f59e0b;
+	}
+
+	/* Queued = drafts + scheduled, not yet published — muted so it reads as pending. */
+	.stat-chip-queued .stat-val {
+		color: var(--muted, #6b7280);
 	}
 
 	.stat-val {

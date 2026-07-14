@@ -722,12 +722,33 @@ async function generateProductStill(
 	return url;
 }
 
-async function generateVoiceAudio(falKey: string, voice: string, text: string): Promise<string> {
-	const data = await falSyncJson(
-		TTS_MODEL,
-		{ text, voice, stability: 0.5, similarity_boost: 0.75 },
-		falKey
-	);
+async function generateVoiceAudio(
+	falKey: string,
+	voice: string,
+	text: string,
+	fallbackVoice?: string
+): Promise<string> {
+	const call = (v: string) =>
+		falSyncJson(TTS_MODEL, { text, voice: v, stability: 0.5, similarity_boost: 0.75 }, falKey);
+	let data: any;
+	try {
+		data = await call(voice);
+	} catch (e) {
+		// fal returns 422 ("feature_not_supported" on body.voice) for voices its
+		// ElevenLabs endpoint doesn't accept (some Voice-Library names). NEVER fail the
+		// whole post over a voice pick — retry once with a classic, always-supported
+		// fallback so audio still generates.
+		const msg = (e as Error).message || '';
+		const voiceUnsupported = /\b422\b|not.?supported|feature_not_supported|"voice"/i.test(msg);
+		if (fallbackVoice && fallbackVoice !== voice && voiceUnsupported) {
+			console.warn(
+				`[TTS] Voice '${voice}' rejected by fal (${msg.slice(0, 100)}) — falling back to '${fallbackVoice}'.`
+			);
+			data = await call(fallbackVoice);
+		} else {
+			throw e;
+		}
+	}
 	const url = data.audio?.url;
 	if (!url) throw new Error('TTS returned no audio');
 	return url;
@@ -2602,7 +2623,14 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 		try {
 			if (format === 'spokesperson' && falKey) {
 				const dialogue = parsed.dialogue || parsed.text || topic;
-				const audio = await generateVoiceAudio(falKey, resolvedVoice, dialogue);
+				// Adam/Rachel are the original ElevenLabs voices — universally fal-supported,
+				// so a rejected exotic voice degrades to a same-gender classic, never a failure.
+				const audio = await generateVoiceAudio(
+					falKey,
+					resolvedVoice,
+					dialogue,
+					voiceGender === 'female' ? 'Rachel' : 'Adam'
+				);
 				costEvents.push({ provider: 'fal', operation: 'tts', model: 'elevenlabs-turbo-v2.5', usd: priceOf('fal', 'tts') });
 				mediaUrl = await generateTalkingHead(falKey, still, audio);
 				costEvents.push({ provider: 'fal', operation: 'talking_head', model: TALKINGHEAD_MODEL, usd: priceOf('fal', 'talking_head') });
