@@ -1920,13 +1920,22 @@
 	     the character photo shows ONCE (avatar), not stretched behind the name. -->
 	<header class="persona-hero">
 		<div class="hero-row">
-			<div class="hero-avatar" style={agent.ugc_character_ref ? '' : `background: ${agent.gradient}`}>
-				{#if agent.ugc_character_ref}
+			{#if agent.ugc_character_ref}
+				<!-- Clickable → enlarge (same lightbox as the profile-picture/kit thumbnails),
+				     so every photo instance can be enlarged. -->
+				<button
+					type="button"
+					class="hero-avatar hero-avatar-btn"
+					onclick={() => openPreview(agent.ugc_character_ref, 'Profile picture', requestGenerateAvatar)}
+					aria-label="Enlarge {agent.name}'s profile picture"
+				>
 					<img src={agent.ugc_character_ref} alt={agent.name} />
-				{:else}
+				</button>
+			{:else}
+				<div class="hero-avatar" style={`background: ${agent.gradient}`}>
 					{agent.initial ?? agent.name?.[0]?.toUpperCase() ?? '?'}
-				{/if}
-			</div>
+				</div>
+			{/if}
 			<div class="hero-info">
 				<div class="hero-name-row">
 					<h1 class="hero-name">{agent.name}</h1>
@@ -1979,13 +1988,20 @@
 	     class of confusion where you lose track of which persona you're on). -->
 	<nav class="tab-nav">
 		<div class="tab-nav-identity" title="{agent.name} ({agent.handle})">
-			<span class="tab-nav-avatar" style={agent.ugc_character_ref ? '' : `background: ${agent.gradient}`}>
-				{#if agent.ugc_character_ref}
+			{#if agent.ugc_character_ref}
+				<button
+					type="button"
+					class="tab-nav-avatar tab-nav-avatar-btn"
+					onclick={() => openPreview(agent.ugc_character_ref, 'Profile picture', requestGenerateAvatar)}
+					aria-label="Enlarge profile picture"
+				>
 					<img src={agent.ugc_character_ref} alt={agent.name} />
-				{:else}
+				</button>
+			{:else}
+				<span class="tab-nav-avatar" style={`background: ${agent.gradient}`}>
 					{agent.initial ?? agent.name?.[0]?.toUpperCase() ?? '?'}
-				{/if}
-			</span>
+				</span>
+			{/if}
 			<span class="tab-nav-name">{agent.name}</span>
 		</div>
 		<div class="tab-nav-buttons">
@@ -3731,6 +3747,16 @@
 		overflow: hidden;
 		box-shadow: 0 6px 24px rgba(0,0,0,0.4);
 		border: 3px solid var(--surface);
+	}
+
+	/* Avatar images double as enlarge triggers — reset the button chrome so they
+	   look identical to the non-clickable variant, just with a pointer + zoom hint. */
+	.hero-avatar-btn,
+	.tab-nav-avatar-btn {
+		padding: 0;
+		background: none;
+		font: inherit;
+		cursor: zoom-in;
 	}
 
 	.hero-avatar img,

@@ -51,12 +51,16 @@
 	// ── State ──
 	let currentYear = $state(new Date().getFullYear());
 	let currentMonth = $state(new Date().getMonth()); // 0-indexed
-	let selectedAgentId = $state('');
+	let selectedAgentId = $state(() => {
+		const activeAgent = data.agents.find((a: any) => a.status === 'active' || a.active);
+		return activeAgent?.id ?? '';
+	});
 	let selectedStatusFilter = $state('');
 	let selectedDay = $state<number | null>(null);
 	let selectedPost = $state<ScheduledPost | null>(null);
 	let showComposer = $state(false);
 	let composerSubmitting = $state(false);
+	let sidebarOpen = $state(false);
 
 	// Date Picker Dropdown State
 	let showDatePicker = $state(false);
@@ -850,49 +854,80 @@
 	<!-- Header -->
 	<header class="page-header">
 		<div class="header-left">
-			<h1>Content Calendar</h1>
-			<p class="subtitle">Schedule and manage posts across all agents and platforms</p>
+			<button class="sidebar-toggle" onclick={() => (sidebarOpen = !sidebarOpen)} aria-label="Toggle sidebar">
+				<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+					<line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" />
+				</svg>
+			</button>
+			<div>
+				<h1>Content Calendar</h1>
+				<p class="subtitle">Schedule and manage posts across all agents and platforms</p>
+			</div>
 		</div>
 		<div class="header-controls">
 			<button
 				class="btn-primary"
 				disabled={generatingPost}
 				onclick={requestGeneratePost}
-				style="margin-top: auto; height: 38px; display: inline-flex; align-items: center; gap: 0.5rem; background: var(--gradient-subtle); border-color: transparent;"
+				style="display: inline-flex; align-items: center; gap: 0.5rem; background: var(--gradient-subtle); border-color: transparent;"
 			>
 				{#if generatingPost}
-					<span
-						class="spinner"
-						style="width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.3); border-top-color:#fff; border-radius:50%; animation: spin 0.6s linear infinite;"
-					></span> Generating...
+					<span class="spinner"></span> Generating...
 				{:else}
 					✨ Generate Post Now
 				{/if}
 			</button>
-			<div class="agent-filter">
-				<label for="cal-agent">Filter Agent</label>
-				<select id="cal-agent" bind:value={selectedAgentId}>
-					<option value="">All Agents</option>
-					{#each data.agents as agent}
-						<option value={agent.id}>{agent.name}</option>
-					{/each}
-				</select>
-			</div>
-			<div class="agent-filter">
-				<label for="cal-status">Filter Status</label>
+			<div class="header-filter">
+				<label for="cal-status">Status</label>
 				<select id="cal-status" bind:value={selectedStatusFilter}>
-					<option value="">All Statuses</option>
+					<option value="">All</option>
 					<option value="draft">Draft</option>
 					<option value="scheduled">Scheduled</option>
-					<option value="publishing">Publishing</option>
 					<option value="published">Published</option>
-					<option value="partial">Partial</option>
-					<option value="rejected">Rejected</option>
 					<option value="failed">Failed</option>
 				</select>
 			</div>
 		</div>
 	</header>
+
+	<!-- Sidebar -->
+	<div class="sidebar-overlay" class:open={sidebarOpen} onclick={() => (sidebarOpen = false)} role="presentation"></div>
+	<aside class="sidebar" class:open={sidebarOpen}>
+		<div class="sidebar-header">
+			<h3>Personas</h3>
+			<button class="sidebar-close" onclick={() => (sidebarOpen = false)} aria-label="Close sidebar">
+				<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+					<path d="M18 6L6 18M6 6l12 12" />
+				</svg>
+			</button>
+		</div>
+		<div class="sidebar-agents">
+			<button
+				class="agent-item"
+				class:active={!selectedAgentId}
+				onclick={() => {
+					selectedAgentId = '';
+					sidebarOpen = false;
+				}}
+			>
+				<span class="agent-dot"></span>
+				<span class="agent-name">All Personas</span>
+			</button>
+			{#each data.agents as agent}
+				<button
+					class="agent-item"
+					class:active={selectedAgentId === agent.id}
+					onclick={() => {
+						selectedAgentId = agent.id;
+						sidebarOpen = false;
+					}}
+				>
+					<span class="agent-dot" style="background: {agent.gradient || 'var(--accent)'}"></span>
+					<span class="agent-name">{agent.name}</span>
+				</button>
+			{/each}
+		</div>
+	</aside>
 
 	<!-- Generate confirmation -->
 
@@ -1005,7 +1040,6 @@
 						<div class="cell empty"></div>
 					{:else}
 						{@const dayPosts = getPostsForDate(cell.dateStr)}
-						{@const cellThumb = dayPosts.map(getPostThumb).find(Boolean) ?? null}
 						<button
 							class="cell"
 							class:today={cell.isToday}
@@ -1013,31 +1047,29 @@
 							class:has-posts={dayPosts.length > 0}
 							onclick={() => selectDay(cell.day)}
 						>
-							{#if cellThumb}
-								<img class="cell-thumb" src={cellThumb} alt="" loading="lazy" />
-							{/if}
 							<span class="cell-day">{cell.day}</span>
 							{#if dayPosts.length > 0}
-								<div class="cell-dots">
-									{#each dayPosts.slice(0, 4) as post}
-										<span
-											class="dot"
-											class:dot-failed={post.status === 'failed' || post.status === 'partial'}
-											style="background: {platformColor(post.platforms[0])}"
+								<div class="cell-events">
+									{#each dayPosts.slice(0, 3) as post}
+										<div
+											class="event-block"
+											class:status-draft={post.status === 'draft'}
+											class:status-scheduled={post.status === 'scheduled'}
+											class:status-published={post.status === 'published'}
+											class:status-failed={post.status === 'failed' || post.status === 'partial'}
 											title={postErrorHint(post)}
-										></span>
+										>
+											<div class="event-status-bar" style="background: {STATUS_COLORS[post.status]}"></div>
+											<div class="event-content">
+												<span class="event-agent">{post.agentName.split(' ')[0]}</span>
+												<span class="event-text">{getPostDisplay(post).text.slice(0, 32)}...</span>
+											</div>
+										</div>
 									{/each}
-									{#if dayPosts.length > 4}
-										<span class="dot-more">+{dayPosts.length - 4}</span>
+									{#if dayPosts.length > 3}
+										<div class="event-overflow">+{dayPosts.length - 3} more</div>
 									{/if}
 								</div>
-								{@const totalViews = dayPosts.reduce(
-									(acc, p) => acc + (p.analytics?.views || 0),
-									0
-								)}
-								{#if totalViews > 0}
-									<span class="views-badge">🔥 {formatViews(totalViews)}</span>
-								{/if}
 							{/if}
 						</button>
 					{/if}
@@ -1478,16 +1510,145 @@
 		margin: 0 auto;
 		position: relative;
 		min-height: calc(100vh - 60px);
+		display: flex;
+		flex-direction: column;
+	}
+
+	/* ── Sidebar ── */
+	.sidebar {
+		position: fixed;
+		left: 0;
+		top: 60px;
+		width: 240px;
+		height: calc(100vh - 60px);
+		background: var(--surface-2);
+		border-right: 1px solid var(--border);
+		padding: 0;
+		overflow-y: auto;
+		z-index: 800;
+		transform: translateX(0);
+		transition: transform 0.3s ease;
+		display: flex;
+		flex-direction: column;
+	}
+
+	.sidebar.open {
+		transform: translateX(0);
+	}
+
+	.sidebar-overlay {
+		display: none;
+	}
+
+	.sidebar-header {
+		padding: 1.25rem;
+		border-bottom: 1px solid var(--border);
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		flex-shrink: 0;
+	}
+
+	.sidebar-header h3 {
+		margin: 0;
+		font-size: var(--text-base);
+		font-family: var(--font-display);
+	}
+
+	.sidebar-close {
+		display: none;
+		width: 28px;
+		height: 28px;
+		border: none;
+		background: transparent;
+		color: var(--text-muted);
+		cursor: pointer;
+		border-radius: var(--radius-xs);
+		align-items: center;
+		justify-content: center;
+	}
+
+	.sidebar-agents {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+		padding: 0.75rem;
+		overflow-y: auto;
+		flex: 1;
+	}
+
+	.agent-item {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		padding: 0.625rem 0.75rem;
+		background: transparent;
+		border: 1px solid transparent;
+		border-radius: var(--radius-xs);
+		cursor: pointer;
+		color: var(--text-muted);
+		font-size: var(--text-sm);
+		transition: all 0.2s ease;
+		text-align: left;
+		font-weight: 500;
+	}
+
+	.agent-item:hover {
+		background: var(--surface-3);
+		color: var(--text);
+	}
+
+	.agent-item.active {
+		background: var(--accent-soft);
+		border-color: var(--accent);
+		color: var(--accent);
+	}
+
+	.agent-dot {
+		width: 8px;
+		height: 8px;
+		border-radius: 50%;
+		flex-shrink: 0;
+		background: var(--text-dim);
+	}
+
+	.agent-name {
+		flex: 1;
+		min-width: 0;
+		text-overflow: ellipsis;
+		overflow: hidden;
+		white-space: nowrap;
+	}
+
+	.sidebar-toggle {
+		display: none;
+		width: 32px;
+		height: 32px;
+		border: none;
+		background: transparent;
+		color: var(--text-muted);
+		cursor: pointer;
+		border-radius: var(--radius-xs);
+		align-items: center;
+		justify-content: center;
+		margin-right: 0.5rem;
 	}
 
 	/* ── Header ── */
 	.page-header {
 		display: flex;
-		align-items: flex-start;
+		align-items: center;
 		justify-content: space-between;
-		gap: 2rem;
+		gap: 1.5rem;
 		margin-bottom: 1.5rem;
+		margin-left: 240px;
 		flex-wrap: wrap;
+	}
+
+	.page-header .header-left {
+		display: flex;
+		align-items: flex-start;
+		gap: 1rem;
 	}
 
 	.page-header h1 {
@@ -1504,13 +1665,32 @@
 
 	.header-controls {
 		display: flex;
-		align-items: flex-end;
+		align-items: center;
 		gap: 0.75rem;
 		flex-wrap: wrap;
 	}
 
-	.agent-filter select {
-		min-width: 200px;
+	.header-filter {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+	}
+
+	.header-filter label {
+		font-size: var(--text-xs);
+		font-weight: 600;
+		text-transform: uppercase;
+		color: var(--text-dim);
+	}
+
+	.header-filter select {
+		min-width: 140px;
+		padding: 0.45rem 0.6rem;
+		font-size: var(--text-sm);
+		border-radius: var(--radius-xs);
+		border: 1px solid var(--border);
+		background: var(--surface);
+		color: var(--text);
 	}
 
 	/* ── Generate confirmation ── */
@@ -1583,6 +1763,7 @@
 		justify-content: center;
 		gap: 1.5rem;
 		margin-bottom: 1.5rem;
+		margin-left: 240px;
 	}
 
 	.nav-btn {
@@ -1728,6 +1909,7 @@
 		display: flex;
 		gap: 1.5rem;
 		align-items: flex-start;
+		margin-left: 240px;
 	}
 
 	.calendar-wrap {
@@ -1767,15 +1949,16 @@
 		display: flex;
 		flex-direction: column;
 		align-items: flex-start;
-		gap: 0.3rem;
+		gap: 0.35rem;
 		cursor: pointer;
 		transition:
 			border-color 0.2s,
 			background 0.2s;
-		min-height: 75px;
+		min-height: 100px;
 		font-family: var(--font-body);
 		color: var(--text);
 		text-align: left;
+		overflow: hidden;
 	}
 
 	.cell.empty {
@@ -1803,35 +1986,77 @@
 		font-size: var(--text-sm);
 		font-weight: var(--weight-semi);
 		color: var(--text);
+		margin-bottom: 0.15rem;
 	}
 
 	.cell.today .cell-day {
 		color: var(--accent);
 	}
 
-	.cell-dots {
+	.cell-events {
 		display: flex;
-		gap: 3px;
-		flex-wrap: wrap;
-		align-items: center;
+		flex-direction: column;
+		gap: 0.35rem;
+		width: 100%;
+		flex: 1;
+		min-height: 0;
+		overflow-y: auto;
 	}
 
-	.dot {
-		width: 6px;
-		height: 6px;
-		border-radius: 50%;
+	.event-block {
+		display: flex;
+		align-items: stretch;
+		gap: 0.35rem;
+		background: var(--surface-2);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-xs);
+		overflow: hidden;
+		cursor: pointer;
+		transition: all 0.2s ease;
+		font-size: var(--text-xs);
+	}
+
+	.event-block:hover {
+		border-color: var(--accent-mid);
+		transform: translateY(-1px);
+	}
+
+	.event-status-bar {
+		width: 3px;
 		flex-shrink: 0;
 	}
 
-	.dot-more {
-		font-size: 0.55rem;
-		color: var(--text-dim);
-		font-weight: var(--weight-bold);
+	.event-content {
+		padding: 0.35rem 0.45rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.1rem;
+		min-width: 0;
+		flex: 1;
 	}
 
-	/* Failed/partial posts get a red ring so the error tooltip is discoverable */
-	.dot.dot-failed {
-		box-shadow: 0 0 0 1.5px var(--error);
+	.event-agent {
+		font-weight: 600;
+		color: var(--text-muted);
+		font-size: 0.65rem;
+		text-transform: uppercase;
+		letter-spacing: 0.03em;
+	}
+
+	.event-text {
+		color: var(--text);
+		font-size: var(--text-xs);
+		white-space: nowrap;
+		text-overflow: ellipsis;
+		overflow: hidden;
+	}
+
+	.event-overflow {
+		padding: 0.3rem 0.45rem;
+		font-size: 0.65rem;
+		color: var(--text-dim);
+		font-weight: 600;
+		text-align: center;
 	}
 
 	/* ── Mobile list view (hidden on desktop) ── */
@@ -2337,26 +2562,112 @@
 	}
 
 	/* ── Responsive ── */
-	@media (max-width: 900px) {
-		.calendar-layout {
-			flex-direction: column;
+	@media (max-width: 1024px) {
+		.sidebar {
+			width: 220px;
 		}
 
-		.day-panel {
+		.page-header {
+			margin-left: 220px;
+		}
+
+		.month-nav {
+			margin-left: 220px;
+		}
+
+		.calendar-layout {
+			margin-left: 220px;
+		}
+	}
+
+	@media (max-width: 768px) {
+		.sidebar {
 			width: 100%;
-			position: static;
-			max-height: none;
+			max-width: 280px;
+			transform: translateX(-100%);
+		}
+
+		.sidebar.open {
+			transform: translateX(0);
+			box-shadow: var(--shadow-lg);
+		}
+
+		.sidebar-close {
+			display: flex;
+		}
+
+		.sidebar-overlay {
+			display: block;
+			position: fixed;
+			inset: 0;
+			background: rgba(0, 0, 0, 0.5);
+			z-index: 799;
+			opacity: 0;
+			pointer-events: none;
+			transition: opacity 0.3s ease;
+		}
+
+		.sidebar-overlay.open {
+			opacity: 1;
+			pointer-events: auto;
+		}
+
+		.sidebar-toggle {
+			display: flex;
+		}
+
+		.page-header {
+			margin-left: 0;
+		}
+
+		.month-nav {
+			margin-left: 0;
+		}
+
+		.calendar-layout {
+			margin-left: 0;
+		}
+
+		.page-header .header-left {
+			align-items: center;
+		}
+
+		.page-header h1 {
+			font-size: var(--text-lg);
+		}
+
+		.header-controls {
+			flex-direction: column;
+			width: 100%;
+			gap: 0.5rem;
+		}
+
+		.header-filter {
+			width: 100%;
+		}
+
+		.header-filter select {
+			width: 100%;
+			min-width: 0;
+		}
+
+		.header-controls .btn-primary {
+			width: 100%;
+			justify-content: center;
+		}
+
+		.calendar-grid {
+			gap: 1px;
+		}
+
+		.cell {
+			min-height: 90px;
 		}
 	}
 
 	@media (max-width: 640px) {
 		.page {
 			padding: 1rem;
-		}
-
-		.page-header {
-			flex-direction: column;
-			gap: 1rem;
 		}
 
 		.calendar-grid,
@@ -2368,29 +2679,6 @@
 			display: block;
 		}
 
-		/* Filters stop bunching: full-width stacked controls with real tap targets */
-		.header-controls {
-			width: 100%;
-			flex-direction: column;
-			align-items: stretch;
-			gap: 0.6rem;
-		}
-
-		.header-controls .btn-primary {
-			width: 100%;
-			justify-content: center;
-		}
-
-		.agent-filter {
-			width: 100%;
-		}
-
-		.agent-filter select {
-			width: 100%;
-			min-width: 0;
-			min-height: 42px;
-		}
-
 		.fab {
 			bottom: 1.25rem;
 			right: 1.25rem;
@@ -2399,6 +2687,15 @@
 		.field-row {
 			flex-direction: column;
 			gap: 1rem;
+		}
+
+		.header-controls {
+			flex-direction: column;
+			width: 100%;
+		}
+
+		.month-nav {
+			margin-left: 0;
 		}
 	}
 
