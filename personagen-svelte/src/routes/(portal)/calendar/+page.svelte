@@ -51,17 +51,16 @@
 	// ── State ──
 	let currentYear = $state(new Date().getFullYear());
 	let currentMonth = $state(new Date().getMonth()); // 0-indexed
-	let selectedAgentId = $state(() => {
-		const activeAgent = data.agents.find((a: any) => a.status === 'active' || a.active);
-		return activeAgent?.id ?? '';
-	});
+	// '' = All Personas — the rail below is the only agent filter (Postiz-style).
+	let selectedAgentId = $state('');
 	let selectedStatusFilter = $state('');
 	let selectedDay = $state<number | null>(null);
 	let selectedPost = $state<ScheduledPost | null>(null);
 	let showComposer = $state(false);
 	let composerSubmitting = $state(false);
-	let sidebarOpen = $state(false);
 	let calendarView = $state<'day' | 'week' | 'month'>('month');
+	// Day-of-month anchor for the day/week views; the month view only reads year+month.
+	let cursorDay = $state(new Date().getDate());
 
 	// Date Picker Dropdown State
 	let showDatePicker = $state(false);
@@ -103,19 +102,14 @@
 	function applyDatePicker() {
 		currentYear = pickerYear;
 		currentMonth = pickerMonth;
-		selectedDay = pickerDay;
+		cursorDay = pickerDay;
+		// Month view opens the picked day's post list; day/week views just navigate there.
+		selectedDay = calendarView === 'month' ? pickerDay : null;
 		showDatePicker = false;
 	}
 
 	function selectToday() {
-		const today = new Date();
-		pickerYear = today.getFullYear();
-		pickerMonth = today.getMonth();
-		pickerDay = today.getDate();
-
-		currentYear = pickerYear;
-		currentMonth = pickerMonth;
-		selectedDay = pickerDay;
+		goToday();
 		showDatePicker = false;
 	}
 
@@ -163,10 +157,10 @@
 			/* ignore */
 		}
 
-		// Default selectedAgentId to first active agent
-		const activeAgent = data.agents.find((a: any) => a.status === 'active' || a.active);
-		if (activeAgent) {
-			selectedAgentId = activeAgent.id;
+		// Restore the last-used calendar view (day/week/month)
+		const savedView = localStorage.getItem('pg-cal-view');
+		if (savedView === 'day' || savedView === 'week' || savedView === 'month') {
+			calendarView = savedView;
 		}
 	});
 
@@ -310,7 +304,48 @@
 		'December'
 	];
 
-	let monthLabel = $derived(`${MONTHS[currentMonth]} ${currentYear}`);
+	const WEEKDAYS_FULL = [
+		'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'
+	];
+
+	function fmtDate(d: Date): string {
+		return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+	}
+
+	const todayStr = fmtDate(new Date());
+
+	// Anchor date the day/week views revolve around.
+	let anchorDate = $derived(new Date(currentYear, currentMonth, cursorDay));
+
+	// Monday-first week around the anchor, matching the DAYS header order.
+	let weekDates = $derived.by(() => {
+		const monday = new Date(anchorDate);
+		monday.setDate(anchorDate.getDate() - ((anchorDate.getDay() + 6) % 7));
+		return Array.from({ length: 7 }, (_, i) => {
+			const d = new Date(monday);
+			d.setDate(monday.getDate() + i);
+			return d;
+		});
+	});
+
+	// Toolbar label adapts to the active view: "July 2026" / "Jul 14 – 20, 2026" /
+	// "Monday, July 13, 2026".
+	let toolbarLabel = $derived.by(() => {
+		if (calendarView === 'day') {
+			return `${WEEKDAYS_FULL[anchorDate.getDay()]}, ${MONTHS[anchorDate.getMonth()]} ${anchorDate.getDate()}, ${anchorDate.getFullYear()}`;
+		}
+		if (calendarView === 'week') {
+			const start = weekDates[0];
+			const end = weekDates[6];
+			const s = `${MONTHS[start.getMonth()].slice(0, 3)} ${start.getDate()}`;
+			const e =
+				start.getMonth() === end.getMonth()
+					? `${end.getDate()}`
+					: `${MONTHS[end.getMonth()].slice(0, 3)} ${end.getDate()}`;
+			return `${s} – ${e}, ${end.getFullYear()}`;
+		}
+		return `${MONTHS[currentMonth]} ${currentYear}`;
+	});
 
 	function getDaysInMonth(year: number, month: number): number {
 		return new Date(year, month + 1, 0).getDate();
@@ -378,6 +413,7 @@
 		} else {
 			currentMonth--;
 		}
+		cursorDay = 1;
 		selectedDay = null;
 		selectedPost = null;
 	}
@@ -389,9 +425,64 @@
 		} else {
 			currentMonth++;
 		}
+		cursorDay = 1;
 		selectedDay = null;
 		selectedPost = null;
 	}
+
+	/** Move the day/week anchor by N days, rolling months/years as needed. */
+	function shiftCursor(days: number) {
+		const d = new Date(currentYear, currentMonth, cursorDay + days);
+		currentYear = d.getFullYear();
+		currentMonth = d.getMonth();
+		cursorDay = d.getDate();
+		selectedDay = null;
+		selectedPost = null;
+	}
+
+	// Prev/next step by the active view's unit: a month, a week, or a day.
+	function goPrev() {
+		if (calendarView === 'month') prevMonth();
+		else shiftCursor(calendarView === 'week' ? -7 : -1);
+	}
+
+	function goNext() {
+		if (calendarView === 'month') nextMonth();
+		else shiftCursor(calendarView === 'week' ? 7 : 1);
+	}
+
+	function goToday() {
+		const t = new Date();
+		currentYear = t.getFullYear();
+		currentMonth = t.getMonth();
+		cursorDay = t.getDate();
+		selectedDay = null;
+		selectedPost = null;
+	}
+
+	function setView(v: 'day' | 'week' | 'month') {
+		calendarView = v;
+		selectedDay = null;
+		try {
+			localStorage.setItem('pg-cal-view', v);
+		} catch {
+			/* private mode */
+		}
+	}
+
+	/** Week-column header click zooms into that day. */
+	function openDayView(d: Date) {
+		currentYear = d.getFullYear();
+		currentMonth = d.getMonth();
+		cursorDay = d.getDate();
+		setView('day');
+	}
+
+	function postsForDateSorted(dateStr: string) {
+		return getPostsForDate(dateStr).sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+	}
+
+	let dayViewPosts = $derived(postsForDateSorted(fmtDate(anchorDate)));
 
 	function selectDay(day: number | null) {
 		if (day === null) return;
@@ -858,99 +949,24 @@
 			<h1>Content Calendar</h1>
 			<p class="subtitle">Schedule and manage posts across all agents and platforms</p>
 		</div>
-		<div class="header-controls">
-			<div class="view-toggle">
-				<button
-					class="view-btn"
-					class:active={calendarView === 'day'}
-					onclick={() => (calendarView = 'day')}
-				>
-					Day
-				</button>
-				<button
-					class="view-btn"
-					class:active={calendarView === 'week'}
-					onclick={() => (calendarView = 'week')}
-				>
-					Week
-				</button>
-				<button
-					class="view-btn"
-					class:active={calendarView === 'month'}
-					onclick={() => (calendarView = 'month')}
-				>
-					Month
-				</button>
-			</div>
-			<div class="header-filter">
-				<label for="cal-status">Status</label>
-				<select id="cal-status" bind:value={selectedStatusFilter}>
-					<option value="">All</option>
-					<option value="draft">Draft</option>
-					<option value="scheduled">Scheduled</option>
-					<option value="published">Published</option>
-					<option value="failed">Failed</option>
-				</select>
-			</div>
-			<button
-				class="btn-primary"
-				disabled={generatingPost}
-				onclick={requestGeneratePost}
-				style="display: inline-flex; align-items: center; gap: 0.5rem; background: var(--gradient-subtle); border-color: transparent; white-space: nowrap;"
-			>
-				{#if generatingPost}
-					<span class="spinner"></span> Generating...
-				{:else}
-					✨ Generate
-				{/if}
-			</button>
-		</div>
+		<button
+			class="btn-primary"
+			disabled={generatingPost}
+			onclick={requestGeneratePost}
+			style="display: inline-flex; align-items: center; gap: 0.5rem; background: var(--gradient-subtle); border-color: transparent; white-space: nowrap;"
+		>
+			{#if generatingPost}
+				<span class="spinner"></span> Generating...
+			{:else}
+				✨ Generate Post Now
+			{/if}
+		</button>
 	</header>
 
-	<!-- Sidebar -->
-	<div class="sidebar-overlay" class:open={sidebarOpen} onclick={() => (sidebarOpen = false)} role="presentation"></div>
-	<aside class="sidebar" class:open={sidebarOpen}>
-		<div class="sidebar-header">
-			<h3>Personas</h3>
-			<button class="sidebar-close" onclick={() => (sidebarOpen = false)} aria-label="Close sidebar">
-				<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-					<path d="M18 6L6 18M6 6l12 12" />
-				</svg>
-			</button>
-		</div>
-		<div class="sidebar-agents">
-			<button
-				class="agent-item"
-				class:active={!selectedAgentId}
-				onclick={() => {
-					selectedAgentId = '';
-					sidebarOpen = false;
-				}}
-			>
-				<span class="agent-dot"></span>
-				<span class="agent-name">All Personas</span>
-			</button>
-			{#each data.agents as agent}
-				<button
-					class="agent-item"
-					class:active={selectedAgentId === agent.id}
-					onclick={() => {
-						selectedAgentId = agent.id;
-						sidebarOpen = false;
-					}}
-				>
-					<span class="agent-dot" style="background: {agent.gradient || 'var(--accent)'}"></span>
-					<span class="agent-name">{agent.name}</span>
-				</button>
-			{/each}
-		</div>
-	</aside>
-
-	<!-- Generate confirmation -->
-
-	<!-- Month nav -->
-	<div class="month-nav">
-		<button class="nav-btn" onclick={prevMonth} aria-label="Previous month">
+	<!-- Toolbar: date nav + Today (left) · status filter + view switch (right) -->
+	<div class="cal-toolbar">
+		<div class="toolbar-left">
+		<button class="nav-btn" onclick={goPrev} aria-label="Previous {calendarView}">
 			<svg
 				width="20"
 				height="20"
@@ -968,7 +984,7 @@
 				onclick={toggleDatePicker}
 				aria-label="Choose specific month and year"
 			>
-				<span>{monthLabel}</span>
+				<span>{toolbarLabel}</span>
 				<svg
 					class="dropdown-icon"
 					class:open={showDatePicker}
@@ -1026,7 +1042,7 @@
 				</div>
 			{/if}
 		</div>
-		<button class="nav-btn" onclick={nextMonth} aria-label="Next month">
+		<button class="nav-btn" onclick={goNext} aria-label="Next {calendarView}">
 			<svg
 				width="20"
 				height="20"
@@ -1038,11 +1054,58 @@
 				stroke-linejoin="round"><polyline points="9 18 15 12 9 6" /></svg
 			>
 		</button>
+		<button class="btn-ghost btn-sm today-btn" onclick={goToday}>Today</button>
+		</div>
+
+		<div class="toolbar-right">
+			<select class="status-select" bind:value={selectedStatusFilter} aria-label="Filter by status">
+				<option value="">All statuses</option>
+				<option value="draft">Draft</option>
+				<option value="scheduled">Scheduled</option>
+				<option value="publishing">Publishing</option>
+				<option value="published">Published</option>
+				<option value="partial">Partial</option>
+				<option value="rejected">Rejected</option>
+				<option value="failed">Failed</option>
+			</select>
+			<div class="view-toggle" role="group" aria-label="Calendar view">
+				<button class="view-btn" class:active={calendarView === 'day'} onclick={() => setView('day')}>Day</button>
+				<button class="view-btn" class:active={calendarView === 'week'} onclick={() => setView('week')}>Week</button>
+				<button class="view-btn" class:active={calendarView === 'month'} onclick={() => setView('month')}>Month</button>
+			</div>
+		</div>
 	</div>
 
 	<div class="calendar-layout">
+		<!-- Personas rail: in-page sub-nav, sits INSIDE the content area
+		     (never covers the app's global navigation) -->
+		<aside class="personas-rail" aria-label="Filter by persona">
+			<h3 class="rail-title">Personas</h3>
+			<div class="rail-list">
+				<button
+					class="agent-item"
+					class:active={!selectedAgentId}
+					onclick={() => (selectedAgentId = '')}
+				>
+					<span class="agent-dot"></span>
+					<span class="agent-name">All Personas</span>
+				</button>
+				{#each data.agents as agent}
+					<button
+						class="agent-item"
+						class:active={selectedAgentId === agent.id}
+						onclick={() => (selectedAgentId = agent.id)}
+					>
+						<span class="agent-dot" style="background: {agent.gradient || 'var(--accent)'}"></span>
+						<span class="agent-name">{agent.name}</span>
+					</button>
+				{/each}
+			</div>
+		</aside>
+
 		<!-- Calendar grid -->
 		<div class="calendar-wrap">
+			{#if calendarView === 'month'}
 			<!-- Day headers -->
 			<div class="day-headers">
 				{#each DAYS as day}
@@ -1079,7 +1142,7 @@
 											<div class="event-status-bar" style="background: {STATUS_COLORS[post.status]}"></div>
 											<div class="event-content">
 												<span class="event-agent">{post.agentName.split(' ')[0]}</span>
-												<span class="event-text">{getPostDisplay(post).text.slice(0, 32)}...</span>
+												<span class="event-text">{getPostDisplay(post).text}</span>
 											</div>
 										</div>
 									{/each}
@@ -1126,6 +1189,71 @@
 					<p class="mobile-list-empty">No posts match the current filters.</p>
 				{/each}
 			</div>
+			{:else if calendarView === 'week'}
+				<!-- Week view: 7 agenda columns, Monday-first like the month grid -->
+				<div class="week-grid">
+					{#each weekDates as wd, i}
+						{@const dateStr = fmtDate(wd)}
+						{@const dayPosts = postsForDateSorted(dateStr)}
+						<div class="week-col" class:today={dateStr === todayStr}>
+							<button class="week-col-head" onclick={() => openDayView(wd)} title="Open day view">
+								<span class="week-dow">{DAYS[i]}</span>
+								<span class="week-num">{wd.getDate()}</span>
+							</button>
+							<div class="week-col-body">
+								{#each dayPosts as post}
+									<button
+										class="event-block week-event"
+										onclick={() => (selectedPost = post)}
+										title={postErrorHint(post)}
+									>
+										<div class="event-status-bar" style="background: {STATUS_COLORS[post.status]}"></div>
+										<div class="event-content">
+											<span class="event-time">{post.time}</span>
+											<span class="event-agent">{post.agentName.split(' ')[0]}</span>
+											<span class="event-text">{getPostDisplay(post).text}</span>
+										</div>
+									</button>
+								{/each}
+							</div>
+						</div>
+					{/each}
+				</div>
+			{:else}
+				<!-- Day view: chronological agenda for the anchor date -->
+				<div class="day-view">
+					{#each dayViewPosts as post}
+						{@const thumb = getPostThumb(post)}
+						<button class="day-post" onclick={() => (selectedPost = post)} title={postErrorHint(post)}>
+							<span class="day-post-time">{post.time}</span>
+							<div class="day-post-bar" style="background: {STATUS_COLORS[post.status]}"></div>
+							{#if thumb}
+								<img class="day-post-thumb" src={thumb} alt="" loading="lazy" />
+							{/if}
+							<div class="day-post-body">
+								<div class="day-post-top">
+									<span class="day-post-agent">{post.agentName}</span>
+									<span
+										class="status-badge"
+										style="color: {STATUS_COLORS[post.status]}; border-color: {STATUS_COLORS[post.status]}"
+										>{post.status}</span
+									>
+								</div>
+								<p class="day-post-text">{getPostDisplay(post).text}</p>
+								<div class="day-post-platforms">
+									{#each post.platforms as p}
+										<span class="platform-tag" style="color: {platformColor(p)}">{p}</span>
+									{/each}
+								</div>
+							</div>
+						</button>
+					{:else}
+						<div class="day-empty">
+							<p>Nothing scheduled for {toolbarLabel}.</p>
+						</div>
+					{/each}
+				</div>
+			{/if}
 		</div>
 
 		<!-- Day Posts Modal -->
@@ -1531,75 +1659,53 @@
 		flex-direction: column;
 	}
 
-	/* ── Sidebar ── */
-	.sidebar {
-		position: fixed;
-		left: 0;
-		top: 60px;
-		width: 180px;
-		height: calc(100vh - 60px);
-		background: var(--surface-2);
-		border-right: 1px solid var(--border);
-		padding: 0;
-		overflow-y: auto;
-		z-index: 800;
-		display: flex;
-		flex-direction: column;
-	}
-
-	.sidebar-overlay {
-		display: none;
-	}
-
-	.sidebar-header {
-		padding: 1.25rem;
-		border-bottom: 1px solid var(--border);
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		flex-shrink: 0;
-	}
-
-	.sidebar-header h3 {
-		margin: 0;
-		font-size: var(--text-base);
-		font-family: var(--font-display);
-	}
-
-	.sidebar-close {
-		display: none;
-		width: 28px;
-		height: 28px;
-		border: none;
-		background: transparent;
-		color: var(--text-muted);
-		cursor: pointer;
-		border-radius: var(--radius-xs);
-		align-items: center;
-		justify-content: center;
-	}
-
-	.sidebar-agents {
+	/* ── Personas rail (in-flow sub-nav — never covers the app's global nav) ── */
+	.personas-rail {
+		flex: 0 0 190px;
+		position: sticky;
+		top: 0;
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		padding: 0.6rem;
 		display: flex;
 		flex-direction: column;
 		gap: 0.5rem;
-		padding: 0.75rem;
+		max-height: calc(100vh - 140px);
 		overflow-y: auto;
-		flex: 1;
+	}
+
+	.rail-title {
+		margin: 0;
+		padding: 0.35rem 0.6rem 0;
+		font-size: var(--text-xs);
+		font-weight: var(--weight-bold);
+		text-transform: uppercase;
+		letter-spacing: var(--tracking-wider);
+		color: var(--text-dim);
+	}
+
+	.rail-list {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
 	}
 
 	.agent-item {
 		display: flex;
 		align-items: center;
-		gap: 0.75rem;
-		padding: 0.625rem 0.75rem;
+		gap: 0.6rem;
+		padding: 0.55rem 0.6rem;
 		background: transparent;
 		border: 1px solid transparent;
 		border-radius: var(--radius-xs);
 		cursor: pointer;
 		color: var(--text-muted);
 		font-size: var(--text-sm);
-		transition: all 0.2s ease;
+		transition:
+			background 0.2s,
+			color 0.2s,
+			border-color 0.2s;
 		text-align: left;
 		font-weight: 500;
 	}
@@ -1631,20 +1737,6 @@
 		white-space: nowrap;
 	}
 
-	.sidebar-toggle {
-		display: none;
-		width: 32px;
-		height: 32px;
-		border: none;
-		background: transparent;
-		color: var(--text-muted);
-		cursor: pointer;
-		border-radius: var(--radius-xs);
-		align-items: center;
-		justify-content: center;
-		margin-right: 0.5rem;
-	}
-
 	/* ── Header ── */
 	.page-header {
 		display: flex;
@@ -1667,11 +1759,41 @@
 		margin: 0;
 	}
 
-	.header-controls {
+	/* ── Toolbar (date nav + Today left · status filter + view switch right) ── */
+	.cal-toolbar {
 		display: flex;
 		align-items: center;
+		justify-content: space-between;
 		gap: 1rem;
 		flex-wrap: wrap;
+		margin-bottom: 1.25rem;
+	}
+
+	.toolbar-left,
+	.toolbar-right {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
+	.toolbar-right {
+		gap: 0.75rem;
+	}
+
+	.today-btn {
+		border: 1px solid var(--border);
+		border-radius: var(--radius-xs);
+		margin-left: 0.25rem;
+	}
+
+	.status-select {
+		min-width: 130px;
+		padding: 0.45rem 0.6rem;
+		font-size: var(--text-sm);
+		border-radius: var(--radius-xs);
+		border: 1px solid var(--border);
+		background: var(--surface);
+		color: var(--text);
 	}
 
 	.view-toggle {
@@ -1702,29 +1824,6 @@
 	.view-btn.active {
 		background: var(--accent);
 		color: #fff;
-	}
-
-	.header-filter {
-		display: flex;
-		flex-direction: column;
-		gap: 0.25rem;
-	}
-
-	.header-filter label {
-		font-size: var(--text-xs);
-		font-weight: 600;
-		text-transform: uppercase;
-		color: var(--text-dim);
-	}
-
-	.header-filter select {
-		min-width: 120px;
-		padding: 0.45rem 0.6rem;
-		font-size: var(--text-sm);
-		border-radius: var(--radius-xs);
-		border: 1px solid var(--border);
-		background: var(--surface);
-		color: var(--text);
 	}
 
 	/* ── Generate confirmation ── */
@@ -1788,15 +1887,6 @@
 		display: flex;
 		justify-content: flex-end;
 		gap: 0.6rem;
-	}
-
-	/* ── Month nav ── */
-	.month-nav {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		gap: 1.5rem;
-		margin-bottom: 1.5rem;
 	}
 
 	.nav-btn {
@@ -1973,7 +2063,6 @@
 	}
 
 	.cell {
-		aspect-ratio: 1;
 		background: var(--surface);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-xs);
@@ -1986,7 +2075,7 @@
 		transition:
 			border-color 0.2s,
 			background 0.2s;
-		min-height: 100px;
+		min-height: 120px;
 		font-family: var(--font-body);
 		color: var(--text);
 		text-align: left;
@@ -2089,6 +2178,191 @@
 		color: var(--text-dim);
 		font-weight: 600;
 		text-align: center;
+	}
+
+	.event-time {
+		font-family: var(--font-mono);
+		font-size: 0.65rem;
+		color: var(--text-dim);
+	}
+
+	/* ── Week view ── */
+	.week-grid {
+		display: grid;
+		grid-template-columns: repeat(7, 1fr);
+		gap: 2px;
+	}
+
+	.week-col {
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-xs);
+		min-height: 440px;
+		display: flex;
+		flex-direction: column;
+		overflow: hidden;
+	}
+
+	.week-col.today {
+		border-color: var(--accent);
+		box-shadow: inset 0 0 0 1px var(--accent-mid);
+	}
+
+	.week-col-head {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 2px;
+		padding: 0.55rem 0;
+		background: var(--surface-2);
+		border: none;
+		border-bottom: 1px solid var(--border);
+		cursor: pointer;
+		color: var(--text);
+		font: inherit;
+	}
+
+	.week-col-head:hover .week-num {
+		color: var(--accent);
+	}
+
+	.week-dow {
+		font-size: var(--text-xs);
+		font-weight: var(--weight-bold);
+		text-transform: uppercase;
+		letter-spacing: var(--tracking-wider);
+		color: var(--text-dim);
+	}
+
+	.week-num {
+		font-size: var(--text-md);
+		font-weight: var(--weight-semi);
+	}
+
+	.week-col.today .week-num {
+		color: var(--accent);
+	}
+
+	.week-col-body {
+		display: flex;
+		flex-direction: column;
+		gap: 0.35rem;
+		padding: 0.4rem;
+		flex: 1;
+		overflow-y: auto;
+	}
+
+	.week-event {
+		width: 100%;
+		padding: 0;
+		text-align: left;
+		font: inherit;
+		color: inherit;
+	}
+
+	/* ── Day view ── */
+	.day-view {
+		display: flex;
+		flex-direction: column;
+		gap: 0.6rem;
+	}
+
+	.day-post {
+		display: flex;
+		align-items: stretch;
+		gap: 0.9rem;
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		padding: 0.9rem 1rem;
+		cursor: pointer;
+		text-align: left;
+		color: inherit;
+		font: inherit;
+		transition:
+			border-color 0.2s,
+			transform 0.2s;
+	}
+
+	.day-post:hover {
+		border-color: var(--accent-mid);
+		transform: translateY(-1px);
+	}
+
+	.day-post-time {
+		font-family: var(--font-mono);
+		font-size: var(--text-sm);
+		color: var(--text-muted);
+		flex: 0 0 48px;
+		padding-top: 2px;
+	}
+
+	.day-post-bar {
+		width: 3px;
+		border-radius: 2px;
+		flex-shrink: 0;
+	}
+
+	.day-post-thumb {
+		width: 56px;
+		height: 56px;
+		border-radius: 8px;
+		object-fit: cover;
+		border: 1px solid var(--border);
+		flex-shrink: 0;
+		align-self: center;
+	}
+
+	.day-post-body {
+		flex: 1;
+		min-width: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.35rem;
+	}
+
+	.day-post-top {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.5rem;
+	}
+
+	.day-post-agent {
+		font-size: var(--text-xs);
+		font-weight: var(--weight-semi);
+		text-transform: uppercase;
+		letter-spacing: 0.03em;
+		color: var(--text-muted);
+	}
+
+	.day-post-text {
+		margin: 0;
+		font-size: var(--text-sm);
+		color: var(--text);
+		line-height: var(--leading-snug);
+		display: -webkit-box;
+		-webkit-line-clamp: 2;
+		-webkit-box-orient: vertical;
+		overflow: hidden;
+	}
+
+	.day-post-platforms {
+		display: flex;
+		gap: 0.5rem;
+	}
+
+	.day-empty {
+		padding: 2.5rem 1rem;
+		text-align: center;
+		color: var(--text-dim);
+		border: 1px dashed var(--border);
+		border-radius: var(--radius-sm);
+	}
+
+	.day-empty p {
+		margin: 0;
+		font-size: var(--text-sm);
 	}
 
 	/* ── Mobile list view (hidden on desktop) ── */
@@ -2595,8 +2869,8 @@
 
 	/* ── Responsive ── */
 	@media (max-width: 1200px) {
-		.sidebar {
-			width: 160px;
+		.personas-rail {
+			flex-basis: 170px;
 		}
 
 		.page {
@@ -2605,61 +2879,40 @@
 	}
 
 	@media (max-width: 900px) {
-		.sidebar {
-			position: fixed;
-			transform: translateX(-100%);
-			width: 220px;
-			z-index: 800;
+		/* Rail becomes a horizontal persona chip row above the calendar */
+		.calendar-layout {
+			flex-direction: column;
 		}
 
-		.sidebar.open {
-			transform: translateX(0);
-			box-shadow: var(--shadow-lg);
+		.personas-rail {
+			position: static;
+			flex: none;
+			width: 100%;
+			max-height: none;
+			padding: 0.5rem;
 		}
 
-		.sidebar-close {
-			display: flex;
+		.rail-title {
+			display: none;
 		}
 
-		.sidebar-overlay {
-			display: block;
-			position: fixed;
-			inset: 0;
-			background: rgba(0, 0, 0, 0.5);
-			z-index: 799;
-			opacity: 0;
-			pointer-events: none;
-			transition: opacity 0.3s ease;
+		.rail-list {
+			flex-direction: row;
+			overflow-x: auto;
+			gap: 0.4rem;
+			padding-bottom: 2px;
 		}
 
-		.sidebar-overlay.open {
-			opacity: 1;
-			pointer-events: auto;
+		.agent-item {
+			flex: 0 0 auto;
 		}
 
-		.sidebar-toggle {
-			display: flex;
-		}
-
-		.header-controls {
-			gap: 0.5rem;
-		}
-
-		.view-toggle {
-			order: -1;
-		}
-
-		.header-filter select {
-			min-width: 100px;
+		.cal-toolbar {
+			justify-content: center;
 		}
 	}
 
 	@media (max-width: 768px) {
-		.sidebar {
-			width: 100%;
-			max-width: 280px;
-		}
-
 		.page {
 			padding: 1rem;
 		}
@@ -2670,27 +2923,9 @@
 			gap: 1rem;
 		}
 
-		.header-controls {
+		.page-header .btn-primary {
 			width: 100%;
-			flex-direction: row;
-			gap: 0.5rem;
-		}
-
-		.view-toggle {
-			order: 0;
-		}
-
-		.header-filter {
-			flex: 1;
-			min-width: 0;
-		}
-
-		.header-filter select {
-			width: 100%;
-		}
-
-		.header-controls .btn-primary {
-			white-space: nowrap;
+			justify-content: center;
 		}
 
 		.calendar-grid {
@@ -2716,10 +2951,7 @@
 	}
 
 	@media (max-width: 640px) {
-		.page {
-			padding: 1rem;
-		}
-
+		/* Month grid gives way to the tappable list; week stacks into an agenda */
 		.calendar-grid,
 		.day-headers {
 			display: none;
@@ -2727,6 +2959,20 @@
 
 		.mobile-list {
 			display: block;
+		}
+
+		.week-grid {
+			grid-template-columns: 1fr;
+		}
+
+		.week-col {
+			min-height: 0;
+		}
+
+		.week-col-head {
+			flex-direction: row;
+			gap: 0.5rem;
+			padding: 0.5rem;
 		}
 
 		.fab {
@@ -2737,15 +2983,6 @@
 		.field-row {
 			flex-direction: column;
 			gap: 1rem;
-		}
-
-		.header-controls {
-			flex-direction: column;
-			width: 100%;
-		}
-
-		.month-nav {
-			margin-left: 0;
 		}
 	}
 
@@ -2788,19 +3025,6 @@
 			transform: scale(0.9);
 			box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
 		}
-	}
-
-	.views-badge {
-		font-size: 0.65rem;
-		font-weight: var(--weight-bold);
-		color: #10b981;
-		background: rgba(16, 185, 129, 0.1);
-		padding: 2px 6px;
-		border-radius: 4px;
-		margin-top: auto;
-		align-self: flex-end;
-		border: 1px solid rgba(16, 185, 129, 0.2);
-		text-shadow: 0 0 8px rgba(16, 185, 129, 0.1);
 	}
 
 	.analytics-row {
@@ -3013,33 +3237,6 @@
 		height: 1px;
 		background: var(--border);
 		margin: 0.25rem 0;
-	}
-
-	/* ── Cell media thumbnails (posts visible at a glance, not just dots) ── */
-	.cell {
-		position: relative;
-		overflow: hidden;
-	}
-
-	.cell-thumb {
-		position: absolute;
-		inset: 0;
-		width: 100%;
-		height: 100%;
-		object-fit: cover;
-		opacity: 0.3;
-		pointer-events: none;
-	}
-
-	.cell:hover .cell-thumb {
-		opacity: 0.5;
-	}
-
-	.cell-day,
-	.cell-dots,
-	.views-badge {
-		position: relative;
-		z-index: 1;
 	}
 
 	/* ── Day-modal post card thumbnails ── */
