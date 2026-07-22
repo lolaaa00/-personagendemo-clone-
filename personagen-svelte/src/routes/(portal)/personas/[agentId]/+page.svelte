@@ -80,8 +80,11 @@
 	function initialTab(): 'feed' | 'profile' | 'connections' {
 		const t = $page.url.searchParams.get('tab');
 		// Legacy ?tab=assets links land on the Feed tab in assets view — the
-		// Assets tab was merged into Feed as a view toggle.
-		return t === 'profile' || t === 'connections' ? t : 'feed';
+		// Assets tab was merged into Feed as a view toggle. Profile is the
+		// default landing tab; Feed/Connections require an explicit ?tab.
+		if (t === 'feed' || t === 'assets') return 'feed';
+		if (t === 'connections') return 'connections';
+		return 'profile';
 	}
 	let activeTab = $state<'feed' | 'profile' | 'connections'>(initialTab());
 	// Feed tab renders one dataset through two lenses: the post mosaic, or the
@@ -2302,13 +2305,13 @@
 			<span class="tab-nav-name">{agent.name}</span>
 		</div>
 		<div class="tab-nav-buttons">
-			<button class="tab-btn" class:active={activeTab === 'feed'} onclick={() => (activeTab = 'feed')}>
-				<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
-				Feed
-			</button>
 			<button class="tab-btn" class:active={activeTab === 'profile'} onclick={() => (activeTab = 'profile')}>
 				<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 1 0-16 0"/></svg>
 				Profile
+			</button>
+			<button class="tab-btn" class:active={activeTab === 'feed'} onclick={() => (activeTab = 'feed')}>
+				<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+				Feed
 			</button>
 			<button class="tab-btn" class:active={activeTab === 'connections'} onclick={() => (activeTab = 'connections')}>
 				<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
