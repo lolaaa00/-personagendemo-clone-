@@ -2913,6 +2913,35 @@
 									{/if}
 								</p>
 								<div class="kit-stage-row">
+									{#if referenceKit.sheet}
+										<!-- Stage 0: the turnaround/character sheet generated WITH the
+										     profile picture — the hidden identity anchor behind stages 2-4.
+										     View/restore only: a new sheet only comes from regenerating
+										     the profile picture itself. -->
+										<div class="kit-stage">
+											<span class="kit-stage-label">0. Character sheet ✓</span>
+											<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
+											<img
+												src={referenceKit.sheet}
+												alt="Character turnaround sheet"
+												class="kit-stage-thumb clickable wide"
+												role="button"
+												onclick={() => openPreview(referenceKit.sheet, '0. Character sheet')}
+											/>
+											<div class="kit-stage-actions">
+												<button
+													type="button"
+													class="btn-sync kit-stage-generate"
+													onclick={() => openKitRestore('sheet')}
+													disabled={generatingAvatar || generatingKitStage !== null || generatingAllKit}
+													title="Restore a previous character sheet — from this stage's history or your image library"
+												>
+													🕑 Restore
+												</button>
+											</div>
+											<span class="field-hint">Regenerates with the profile picture</span>
+										</div>
+									{/if}
 									<div class="kit-stage">
 										<span class="kit-stage-label">1. Full body ✓</span>
 										<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
@@ -5534,6 +5563,10 @@
 
 	.kit-select {
 		flex-shrink: 0;
+		/* The page's base field styles stretch selects to 100% — the kit picker is
+		   an inline control, not a form field. */
+		width: auto;
+		max-width: 220px;
 		background: var(--surface);
 		color: var(--text);
 		border: 1px solid var(--border);

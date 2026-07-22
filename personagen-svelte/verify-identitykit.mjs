@@ -21,18 +21,18 @@ const page = await browser.newPage({ viewport: { width: 1360, height: 900 } });
 page.on('console', (m) => {
 	if (m.type() === 'error') console.log('[console.error]', m.text().slice(0, 300));
 });
+page.on('pageerror', (err) => console.log('[pageerror]', String(err).slice(0, 500)));
 page.on('dialog', async (d) => {
 	log('dialog:', d.message().slice(0, 120));
 	await d.accept();
 });
 
-// ── 1. Login ────────────────────────────────────────────────────────────────
-await page.goto(BASE + '/login');
-await page.fill('input[type="email"]', 'verify-keymanager@personagen.test');
-await page.fill('input[type="password"]', creds.pw);
-await page.click('button[type="submit"]');
-await page.waitForURL(/dashboard|portal|\/$/, { timeout: 20000 }).catch(() => {});
-log('after login url =', page.url());
+// ── 1. Login via the API (no page navigation involved — cookies land in the
+//       shared context jar, so subsequent gotos are authenticated) ───────────
+const loginRes = await page.request.post(BASE + '/api/auth/login', {
+	data: { email: 'verify-keymanager@personagen.test', password: creds.pw }
+});
+log('login status =', loginRes.status());
 
 // ── 2. Seed a persona via the API (same session) ────────────────────────────
 const created = await page.request.post(BASE + '/api/agents', {
@@ -46,6 +46,12 @@ log('agentId =', agentId);
 // ── 3. Hero identity strip (empty state) ────────────────────────────────────
 await page.goto(`${BASE}/personas/${agentId}`);
 await page.waitForSelector('.persona-hero', { timeout: 20000 });
+// SSR paints instantly but dev-server hydration lags several seconds (on-demand
+// module transform). The feed empty/loading state only renders client-side, so
+// its appearance ≈ hydration done; without this, clicks land on dead DOM.
+await page
+	.waitForSelector('.feed-empty, .feed-loading, .post-mosaic', { timeout: 30000 })
+	.catch(() => log('WARN: feed never rendered — hydration may be incomplete'));
 const strip = page.locator('.hero-identity');
 check(await strip.isVisible(), 'hero identity strip renders');
 check((await strip.locator('.kit-select').inputValue()) === 'tiktok', 'platform dropdown defaults to TikTok');
@@ -54,16 +60,30 @@ check(/No TikTok bio yet/i.test(emptyBio), `empty state reads: "${emptyBio}"`);
 check(await strip.locator('button:has-text("Generate identity kit")').isVisible(), 'hero shows Generate CTA when empty');
 await page.screenshot({ path: join(SHOTS, 'ik-1-hero-empty.png') });
 
-// Switch hero platform → empty state follows the selection.
-await strip.locator('.kit-select').selectOption('instagram');
-const emptyBioIg = await strip.locator('.hero-bio-empty').innerText().catch(() => '');
-check(/No Instagram bio yet/i.test(emptyBioIg), 'hero empty state tracks platform switch');
+// Switch hero platform → empty state follows the selection. Retry loop doubles
+// as a binding-liveness probe in case hydration is still settling.
+let switched = false;
+for (let i = 0; i < 20 && !switched; i++) {
+	await strip.locator('.kit-select').selectOption('instagram');
+	await page.waitForTimeout(500);
+	switched = /Instagram/i.test(await strip.locator('.hero-bio-empty').innerText().catch(() => ''));
+}
+check(switched, 'hero empty state tracks platform switch (binding live)');
 await strip.locator('.kit-select').selectOption('tiktok');
+await page.waitForTimeout(300);
 
 // ── 4. Profile tab → Identity Kit card ──────────────────────────────────────
 await page.click('.tab-btn:has-text("Profile")');
-await page.waitForSelector('text=Platform Identity Kit', { timeout: 15000 });
-check(true, 'Platform Identity Kit card renders in Profile tab');
+const cardVisible = await page
+	.waitForSelector('text=Platform Identity Kit', { timeout: 15000 })
+	.then(() => true)
+	.catch(() => false);
+if (!cardVisible) {
+	await page.screenshot({ path: join(SHOTS, 'ik-debug-profile-tab.png'), fullPage: true });
+	const bodyText = await page.locator('.tab-body').innerText().catch(() => '(no .tab-body)');
+	console.log('[debug] tab-body text >>>', bodyText.replace(/\n+/g, ' | ').slice(0, 600));
+}
+check(cardVisible, 'Platform Identity Kit card renders in Profile tab');
 
 // Add own handle
 await page.fill('input[aria-label="Add a username candidate"]', '@Kit_Verify!01');
