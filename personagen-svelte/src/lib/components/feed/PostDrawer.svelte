@@ -2,17 +2,19 @@
 	import { fly, fade } from 'svelte/transition';
 	import { getPostDisplay, truncateError } from './postDisplay';
 	import { platformColor } from '$lib/platforms';
-	import { OPERATION_LABELS } from '$lib/pricing';
+	import { OPERATION_LABELS, priceOf } from '$lib/pricing';
 
 	let {
 		post,
 		onClose,
-		onDelete,
+		onDelete = undefined,
 		onApprove,
 		onSaveText = undefined,
 		onReschedule = undefined,
 		onPublishFallback = undefined,
 		onPostNow = undefined,
+		onReject = undefined,
+		onRefined = undefined,
 		characterRef = null,
 		approving = false,
 		deleting = false,
@@ -20,8 +22,12 @@
 	}: {
 		post: any | null;
 		onClose: () => void;
-		onDelete: (post: any) => void;
+		/** When provided, the footer gets a Delete button (permanent removal + live teardown). */
+		onDelete?: (post: any) => void;
 		onApprove: (post: any) => void;
+		/** Review-queue flow: reject a draft / unschedule a scheduled post (with a
+		 *  reason, logged to post_reviews). Shown instead of Delete in review contexts. */
+		onReject?: ((post: any) => void) | null;
 		/** The persona's current pinned face — shown as the character reference when
 		 *  a post predates full provenance capture. */
 		characterRef?: string | null;
@@ -34,6 +40,9 @@
 		/** When provided, a draft/scheduled post gets a "Post Now" button that publishes
 		 *  immediately, overriding the schedule. */
 		onPostNow?: ((post: any) => void) | null;
+		/** Called with the fresh post row after a successful in-drawer refine
+		 *  (media regenerated from an edited prompt) so the host can refresh its list. */
+		onRefined?: ((post: any) => void) | null;
 		approving?: boolean;
 		deleting?: boolean;
 		posting?: boolean;
@@ -43,6 +52,10 @@
 	let editingText = $state(false);
 	let draftText = $state('');
 	let savingText = $state(false);
+	// Generation details start collapsed so the media stays in view; the user
+	// expands them on demand. Reset per post (the drawer DOM persists across posts).
+	let genDetailsOpen = $state(false);
+	let bodyEl = $state<HTMLDivElement | null>(null);
 	$effect(() => {
 		// Reset edit mode whenever a different post opens.
 		void post?.id;
@@ -53,6 +66,13 @@
 		savingSchedule = false;
 		confirmingDelete = false;
 		confirmingPostNow = false;
+		genDetailsOpen = false;
+		livePost = null;
+		refineOpen = false;
+		refineError = null;
+		refining = false;
+		confirmingRefine = false;
+		bodyEl?.scrollTo({ top: 0 });
 	});
 	function startTextEdit() {
 		draftText = display?.text ?? '';
@@ -86,7 +106,139 @@
 		}
 	}
 
-	let display = $derived(post ? getPostDisplay(post) : null);
+	// After an in-drawer refine the fresh row lives here — the `post` prop stays
+	// whatever the host passed, so the drawer overlays its own newer copy.
+	let livePost = $state<any | null>(null);
+	let activePost = $derived(livePost ?? post);
+	let display = $derived(activePost ? getPostDisplay(activePost) : null);
+
+	// ── Refine: edit the visual prompt / spoken line, regenerate ONLY the media ──
+	// The caption, schedule, pinned face, product reference and voice are kept;
+	// the server re-rolls still + video from the edited prompt. Paid — so the
+	// regenerate button two-click confirms with the estimated spend.
+	let refineOpen = $state(false);
+	let refineScene = $state('');
+	let refineDialogue = $state('');
+	let refining = $state(false);
+	let refineError = $state<string | null>(null);
+	let confirmingRefine = $state(false);
+	let refineConfirmTimeout: ReturnType<typeof setTimeout> | undefined;
+	let canRefine = $derived(
+		Boolean(
+			activePost?.agent_id &&
+				(activePost.status === 'draft' || activePost.status === 'scheduled') &&
+				display?.mediaGenerated &&
+				display?.mediaUrl
+		)
+	);
+	// A refine that failed server-side restores the original media and records
+	// why in content.refine_error — surface it even after a reload.
+	let storedRefineError = $derived.by(() => {
+		try {
+			const err = JSON.parse(activePost?.content ?? '')?.refine_error;
+			return typeof err === 'string' && err ? truncateError(err) : null;
+		} catch {
+			return null;
+		}
+	});
+	// Estimated cost of the re-roll — mirrors the pipeline the post's format runs.
+	let refineEstimate = $derived.by(() => {
+		if (!display) return 0;
+		const img = priceOf('fal', 'image', 'nano');
+		if (display.mediaType !== 'video') return img;
+		if (display.format === 'broll') return img + priceOf('fal', 'video', 'standard');
+		return img + priceOf('fal', 'tts') + priceOf('fal', 'talking_head');
+	});
+
+	function openRefine() {
+		refineScene = display?.ugcPrompt ?? display?.generation?.prompts?.scene ?? '';
+		refineDialogue = display?.script ?? '';
+		refineError = null;
+		refineOpen = true;
+	}
+
+	function handleRefineClick() {
+		if (refining || !refineScene.trim()) return;
+		if (confirmingRefine) {
+			clearTimeout(refineConfirmTimeout);
+			confirmingRefine = false;
+			void startRefine();
+		} else {
+			confirmingRefine = true;
+			refineConfirmTimeout = setTimeout(() => {
+				confirmingRefine = false;
+			}, 4000);
+		}
+	}
+
+	async function startRefine() {
+		const target = activePost;
+		if (!target?.id || !target.agent_id || refining) return;
+		const targetId = target.id;
+		refining = true;
+		refineError = null;
+		try {
+			const res = await fetch(`/api/agent/${target.agent_id}/refine-post`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					post_id: targetId,
+					scene: refineScene.trim(),
+					dialogue: refineDialogue.trim()
+				})
+			});
+			const data = await res.json().catch(() => ({}));
+			if (!res.ok || !data.success) {
+				throw new Error(data.error || `Refine failed (${res.status})`);
+			}
+
+			let updated: any = data.post ?? null;
+			if (!updated) {
+				// 202 — detached job. Poll the row until it leaves 'generating'.
+				const deadline = Date.now() + 10 * 60 * 1000;
+				while (Date.now() < deadline) {
+					await new Promise((r) => setTimeout(r, 5000));
+					// Drawer moved to another post (or closed) — the job finishes
+					// server-side either way; just stop watching it here.
+					if (post?.id !== targetId && post !== null) return;
+					const poll = await fetch('/api/posts', {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ action: 'get', id: targetId })
+					}).catch(() => null);
+					const pd = poll ? await poll.json().catch(() => null) : null;
+					const row = pd?.success ? pd.data : null;
+					if (row && row.status !== 'generating') {
+						updated = row;
+						break;
+					}
+				}
+				if (!updated) {
+					throw new Error('Still regenerating after 10 minutes — it may finish in the background; check the feed shortly.');
+				}
+			}
+
+			let failMsg: string | null = null;
+			try {
+				failMsg = JSON.parse(updated.content)?.refine_error ?? null;
+			} catch {
+				/* non-JSON content — treat as success */
+			}
+			if (post?.id === targetId || post === null) {
+				livePost = updated;
+				if (failMsg) {
+					refineError = failMsg;
+				} else {
+					refineOpen = false;
+				}
+			}
+			if (!failMsg) onRefined?.(updated);
+		} catch (e) {
+			if (post?.id === targetId) refineError = (e as Error).message;
+		} finally {
+			if (post?.id === targetId) refining = false;
+		}
+	}
 
 	// ── Observability ──────────────────────────────────────────────────────
 	// New posts carry a full `content.generation` record. Older posts predate it,
@@ -215,7 +367,7 @@
 		if (confirmingDelete) {
 			clearTimeout(confirmTimeout);
 			confirmingDelete = false;
-			onDelete(post);
+			onDelete?.(post);
 		} else {
 			confirmingDelete = true;
 			confirmTimeout = setTimeout(() => {
@@ -264,14 +416,22 @@
 			</button>
 		</div>
 
-		<div class="drawer-body">
+		<div class="drawer-body" bind:this={bodyEl}>
 			{#if display.mediaUrl}
 				<div class="drawer-media">
 					{#if display.mediaType === 'video'}
 						<!-- svelte-ignore a11y_media_has_caption -->
-						<video src={display.mediaUrl} poster={display.posterUrl || undefined} controls playsinline preload="metadata"></video>
+						{#key display.mediaUrl}
+							<video src={display.mediaUrl} poster={display.posterUrl || undefined} controls playsinline preload="metadata"></video>
+						{/key}
 					{:else}
 						<img src={display.mediaUrl} alt="Post media" />
+					{/if}
+					{#if refining}
+						<div class="refine-overlay" role="status">
+							<span class="refine-spinner"></span>
+							Regenerating media — usually 1–3 minutes. Keep this open or check the feed later.
+						</div>
 					{/if}
 				</div>
 			{/if}
@@ -324,6 +484,53 @@
 				</div>
 			{/if}
 
+			{#if storedRefineError && !refineOpen}
+				<div class="drawer-error">
+					<strong>⚠ Last refine failed — original media kept</strong>
+					<p>{storedRefineError}</p>
+				</div>
+			{/if}
+
+			{#if refineOpen && canRefine}
+				<div class="drawer-refine">
+					<span class="drawer-block-label">✨ Refine &amp; regenerate</span>
+					<p class="refine-hint">
+						Edit the visual prompt to fix what the model got wrong (e.g. add "she holds the
+						sealed pouch — never opens, squeezes or pours it"), then regenerate. The caption,
+						schedule, face, product reference and voice all stay the same.
+					</p>
+					<label class="refine-field">
+						<span class="drawer-block-label">Visual prompt</span>
+						<textarea rows="5" bind:value={refineScene} disabled={refining}></textarea>
+					</label>
+					{#if display.format === 'spokesperson' && display.mediaType === 'video'}
+						<label class="refine-field">
+							<span class="drawer-block-label">Spoken line</span>
+							<textarea rows="2" bind:value={refineDialogue} disabled={refining}></textarea>
+						</label>
+					{/if}
+					{#if refineError}
+						<p class="refine-error">⚠ {truncateError(refineError)}</p>
+					{/if}
+					<div class="drawer-text-edit-actions">
+						<button type="button" class="dt-btn" onclick={() => (refineOpen = false)} disabled={refining}>
+							Cancel
+						</button>
+						<!-- Two-click confirm: a refine re-bills the media pipeline, and drafts
+						     follow the confirm-before-spend rule everywhere in this app. -->
+						<button
+							type="button"
+							class="dt-btn dt-save"
+							class:confirming={confirmingRefine}
+							onclick={handleRefineClick}
+							disabled={refining || !refineScene.trim()}
+						>
+							{#if refining}Regenerating…{:else if confirmingRefine}Spend ~${refineEstimate.toFixed(2)}?{:else}↻ Regenerate (~${refineEstimate.toFixed(2)}){/if}
+						</button>
+					</div>
+				</div>
+			{/if}
+
 			{#if display.product?.name}
 				<div class="drawer-product">
 					<span class="drawer-block-label">Product</span>
@@ -332,7 +539,7 @@
 			{/if}
 
 			{#if gen || display.ugcPrompt || display.script || costByProvider.length || genImages.length}
-				<details class="drawer-details-block" open={Boolean(gen || costByProvider.length || genImages.length)}>
+				<details class="drawer-details-block" bind:open={genDetailsOpen}>
 					<summary>Generation details</summary>
 
 					{#if genImages.length}
@@ -490,11 +697,31 @@
 		</div>
 
 		<div class="drawer-footer">
-			<button type="button" class="btn-drawer-delete" class:confirming={confirmingDelete} disabled={deleting} onclick={handleDeleteClick}>
-				{#if deleting}Deleting…{:else if confirmingDelete}Confirm delete?{:else}Delete{/if}
-			</button>
+			{#if onDelete}
+				<button type="button" class="btn-drawer-delete" class:confirming={confirmingDelete} disabled={deleting} onclick={handleDeleteClick}>
+					{#if deleting}Deleting…{:else if confirmingDelete}Confirm delete?{:else}Delete{/if}
+				</button>
+			{/if}
+			{#if onReject && (post.status === 'draft' || post.status === 'scheduled')}
+				<button type="button" class="btn-drawer-delete" onclick={() => onReject?.(post)}>
+					✕ {post.status === 'scheduled' ? 'Unschedule' : 'Reject'}
+				</button>
+			{/if}
+			{#if canRefine}
+				<!-- The media re-roll loop: edit the prompt that produced this video and
+				     regenerate it in place. Disabled while a refine is already running. -->
+				<button
+					type="button"
+					class="btn-drawer-refine"
+					disabled={refining}
+					onclick={() => (refineOpen ? (refineOpen = false) : openRefine())}
+					title="Edit the visual prompt and regenerate the media"
+				>
+					{refining ? '↻ Refining…' : '✨ Refine'}
+				</button>
+			{/if}
 			{#if post.status === 'draft'}
-				<button type="button" class="btn-drawer-approve" disabled={approving} onclick={() => onApprove(post)}>
+				<button type="button" class="btn-drawer-approve" disabled={approving || refining} onclick={() => onApprove(post)}>
 					{approving ? 'Approving…' : '✓ Approve & Schedule'}
 				</button>
 			{:else if canRepublish}
@@ -511,7 +738,7 @@
 					type="button"
 					class="btn-drawer-postnow"
 					class:confirming={confirmingPostNow}
-					disabled={posting}
+					disabled={posting || refining}
 					onclick={handlePostNowClick}
 					title="Publish immediately, overriding the schedule"
 				>
@@ -688,10 +915,82 @@
 	}
 
 	.drawer-media {
+		position: relative;
 		border-radius: var(--radius-sm);
 		overflow: hidden;
 		border: 1px solid var(--border);
 		background: #000;
+	}
+
+	/* ── Refine (regenerate media in place) ── */
+	.refine-overlay {
+		position: absolute;
+		inset: 0;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 0.6rem;
+		padding: 1rem;
+		text-align: center;
+		background: rgba(10, 14, 24, 0.78);
+		backdrop-filter: blur(3px);
+		color: #fff;
+		font-size: 0.8rem;
+		line-height: 1.5;
+	}
+	.refine-spinner {
+		width: 22px;
+		height: 22px;
+		border-radius: 999px;
+		border: 2px solid rgba(255, 255, 255, 0.25);
+		border-top-color: #fff;
+		animation: refine-spin 0.9s linear infinite;
+	}
+	@keyframes refine-spin {
+		to { transform: rotate(360deg); }
+	}
+	.drawer-refine {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+		background: var(--surface-2);
+		border: 1px solid var(--accent-mid, var(--border-strong));
+		border-radius: var(--radius-sm);
+		padding: 0.75rem 0.9rem;
+	}
+	.refine-hint {
+		margin: 0;
+		font-size: 0.72rem;
+		line-height: 1.5;
+		color: var(--text-muted);
+	}
+	.refine-field {
+		display: flex;
+		flex-direction: column;
+		gap: 0.3rem;
+	}
+	.refine-field textarea {
+		width: 100%;
+		background: var(--surface, rgba(255, 255, 255, 0.03));
+		border: 1px solid var(--border);
+		border-radius: 8px;
+		color: var(--text);
+		padding: 0.6rem;
+		font: inherit;
+		font-size: 0.78rem;
+		line-height: 1.5;
+		resize: vertical;
+	}
+	.refine-error {
+		margin: 0;
+		font-size: 0.75rem;
+		color: var(--error);
+		line-height: 1.5;
+	}
+	/* Second click state — amber to signal this spends real money right now. */
+	.dt-save.confirming {
+		background: var(--warning, #f59e0b);
 	}
 
 	.drawer-media img,
@@ -700,6 +999,12 @@
 		max-height: 55vh;
 		object-fit: contain;
 		display: block;
+	}
+
+	/* Before metadata loads a <video> has no intrinsic size and collapses to a
+	   sliver; reserve a 9:16 box (our UGC clips) until the real ratio takes over. */
+	.drawer-media video {
+		aspect-ratio: auto 9 / 16;
 	}
 
 	.drawer-stats {
@@ -981,9 +1286,26 @@
 
 	.btn-drawer-approve:disabled,
 	.btn-drawer-delete:disabled,
+	.btn-drawer-refine:disabled,
 	.btn-drawer-postnow:disabled {
 		opacity: 0.6;
 		cursor: not-allowed;
+	}
+
+	.btn-drawer-refine {
+		background: transparent;
+		color: var(--accent, #7c6aed);
+		border: 1px solid var(--accent-mid, var(--accent, #7c6aed));
+		border-radius: 6px;
+		padding: 0.5rem 1rem;
+		font-size: 0.78rem;
+		font-weight: 600;
+		cursor: pointer;
+		transition: all 0.15s ease;
+	}
+	.btn-drawer-refine:hover:not(:disabled) {
+		background: var(--accent, #7c6aed);
+		color: #fff;
 	}
 
 	.btn-drawer-postnow {

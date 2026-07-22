@@ -1,0 +1,82 @@
+import { decryptSecret } from '$lib/server/user-api-keys';
+import { getZernioApiKey } from '$lib/server/social/zernio';
+
+/**
+ * Zernio Key Manager — per-persona Zernio API keys.
+ *
+ * The default architecture is ONE user-level Zernio key (user_api_keys
+ * provider='zernio', else env ZERNIO_API_KEY) with one Zernio *profile* per
+ * persona. This module layers optional EXTRA keys on top (zernio_keys table):
+ * each extra key is a whole separate Zernio account (its own email, its own
+ * 2-free-account slots, its own bill), assignable to personas via
+ * agents.zernio_key_id.
+ *
+ * Resolution rule — deliberate, no silent fallback: a persona with an ASSIGNED
+ * key resolves to that key or to null. Falling back to the default key when the
+ * assigned one is missing/broken would provision profiles and publish under the
+ * WRONG Zernio account (wrong bill, wrong social accounts), which is far worse
+ * than a loud "no key" failure.
+ */
+
+/** Fields the resolver needs from an agent row. */
+export interface AgentKeyRouting {
+	zernio_key_id?: string | null;
+	zernio_profile_id?: string | null;
+}
+
+/** Decrypts one managed key by id. Null when the row doesn't exist. */
+export async function getZernioKeySecretById(
+	supabase: any,
+	userId: string,
+	keyId: string
+): Promise<string | null> {
+	const { data, error } = await supabase
+		.from('zernio_keys')
+		.select('encrypted_value, iv, auth_tag')
+		.eq('user_id', userId)
+		.eq('id', keyId)
+		.maybeSingle();
+
+	if (error) throw error;
+	if (!data) return null;
+	return decryptSecret(data);
+}
+
+/**
+ * The Zernio API key a persona publishes/connects through: its assigned managed
+ * key when `zernio_key_id` is set, otherwise the user's default key. Pass
+ * agent=null for user-level flows with no persona in play.
+ */
+export async function resolveZernioApiKeyForAgent(
+	supabase: any,
+	userId: string,
+	agent: AgentKeyRouting | null | undefined
+): Promise<string | null> {
+	if (agent?.zernio_key_id) {
+		return getZernioKeySecretById(supabase, userId, agent.zernio_key_id);
+	}
+	return getZernioApiKey(supabase, userId);
+}
+
+/**
+ * One-query variant for callers that only hold an agent id (publisher,
+ * analytics sync): fetches the agent's key routing and resolves the key.
+ * Returns the profile id too — the same callers always need it next.
+ */
+export async function getAgentZernioRouting(
+	supabase: any,
+	userId: string,
+	agentId?: string | null
+): Promise<{ apiKey: string | null; profileId: string | null }> {
+	let agent: AgentKeyRouting | null = null;
+	if (agentId) {
+		const { data } = await supabase
+			.from('agents')
+			.select('zernio_key_id, zernio_profile_id')
+			.eq('id', agentId)
+			.maybeSingle();
+		agent = data || null;
+	}
+	const apiKey = await resolveZernioApiKeyForAgent(supabase, userId, agent);
+	return { apiKey, profileId: agent?.zernio_profile_id || null };
+}

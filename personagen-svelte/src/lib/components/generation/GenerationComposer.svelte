@@ -24,9 +24,19 @@
 		onConfirm: (body: Record<string, unknown>) => void;
 		/** Optional: jump to the Connections tab from the no-connection notice. */
 		onGoToConnections?: () => void;
+		/**
+		 * Optional persona switcher (multi-persona surfaces like the calendar).
+		 * The parent rebuilds `spec` on change and the preview re-resolves for the
+		 * new persona — face, voice, connected platforms, and costs are all
+		 * persona-specific, so nothing here is patched client-side.
+		 */
+		agents?: Array<{ id: string; name: string }>;
+		agentId?: string;
+		onAgentChange?: (id: string) => void;
 	}
 
-	let { open, spec, onClose, onConfirm, onGoToConnections }: Props = $props();
+	let { open, spec, onClose, onConfirm, onGoToConnections, agents, agentId, onAgentChange }: Props =
+		$props();
 
 	let loading = $state(false);
 	let loadError = $state<string | null>(null);
@@ -117,8 +127,13 @@
 		return prompt;
 	});
 
+	// Guards against out-of-order responses when the user switches personas
+	// while a resolve is still in flight — only the latest request may land.
+	let previewToken = 0;
+
 	async function loadPreview() {
 		if (!spec) return;
+		const token = ++previewToken;
 		loading = true;
 		loadError = null;
 		preview = null;
@@ -129,6 +144,7 @@
 				body: JSON.stringify({ ...(spec.baseBody ?? {}), preview: true })
 			});
 			const data = await res.json().catch(() => ({}));
+			if (token !== previewToken) return; // superseded by a newer resolve
 			if (!res.ok || !data?.success) {
 				loadError = data?.error || `Could not resolve the request (HTTP ${res.status}).`;
 				return;
@@ -152,9 +168,9 @@
 			model = preview.model ?? '';
 			videoModel = preview.videoModel ?? '';
 		} catch (e) {
-			loadError = (e as Error).message;
+			if (token === previewToken) loadError = (e as Error).message;
 		} finally {
-			loading = false;
+			if (token === previewToken) loading = false;
 		}
 	}
 
@@ -211,6 +227,27 @@
 	subtitle={spec?.subtitle ?? 'Review and edit exactly what gets sent — nothing is spent until you approve.'}
 	{onClose}
 >
+	{#if agents?.length && onAgentChange}
+		<!-- Persona switcher — kept OUTSIDE the loading/error gate so a persona
+		     whose preview fails (e.g. no connected account) can be swapped for
+		     another without closing the composer. -->
+		<label class="fld persona-fld">
+			<span class="fld-label">Persona</span>
+			<select
+				value={agentId}
+				onchange={(e) => onAgentChange((e.currentTarget as HTMLSelectElement).value)}
+			>
+				{#each agents as a}
+					<option value={a.id}>{a.name}</option>
+				{/each}
+			</select>
+			<span class="hint">
+				Switching re-resolves everything below for that persona — face, voice, connected
+				platforms, and cost are all persona-specific.
+			</span>
+		</label>
+	{/if}
+
 	{#if loading}
 		<div class="composer-loading">
 			<span class="spinner"></span> Resolving the exact request…
@@ -525,6 +562,10 @@
 	.fld {
 		display: block;
 		margin-bottom: 0.9rem;
+	}
+	.persona-fld {
+		padding-bottom: 0.9rem;
+		border-bottom: 1px solid var(--border, #e6e8f0);
 	}
 	.fld-label {
 		display: block;

@@ -1,10 +1,10 @@
 import {
-	getZernioApiKey,
 	ZernioClient,
 	ZERNIO_PUBLISH_SUPPORTED,
 	ZERNIO_UNPUBLISH_SUPPORTED,
 	type ZernioAccount
 } from './zernio';
+import { getAgentZernioRouting } from '$lib/server/zernio-keys';
 import { VIDEO_ONLY_PLATFORMS } from './platforms';
 
 export interface PublishPlatformInput {
@@ -127,21 +127,6 @@ async function resolveZernioAccountId(
 	return null;
 }
 
-/** Looks up the persona's Zernio profile id for profile-scoped account resolution. */
-async function getAgentProfileId(supabase: any, agentId?: string): Promise<string | undefined> {
-	if (!agentId) return undefined;
-	try {
-		const { data } = await supabase
-			.from('agents')
-			.select('zernio_profile_id')
-			.eq('id', agentId)
-			.maybeSingle();
-		return data?.zernio_profile_id || undefined;
-	} catch {
-		return undefined;
-	}
-}
-
 /**
  * Publishes a post to a single platform via Zernio — the single consolidated
  * provider. Requires a Zernio API key and a connected account for the platform;
@@ -158,9 +143,12 @@ export async function publishToPlatform({
 	const mediaItems = extractMediaItems(post.content);
 	const isVideo = !!mediaItems?.some((m) => m.type === 'video');
 
+	// Per-persona routing: the agent's assigned managed key (Zernio Key Manager)
+	// or the user's default key, plus the persona's profile id under that key.
 	let apiKey: string | null;
+	let profileId: string | null;
 	try {
-		apiKey = await getZernioApiKey(supabase, post.user_id);
+		({ apiKey, profileId } = await getAgentZernioRouting(supabase, post.user_id, post.agent_id));
 	} catch (err) {
 		// Transient DB/key-store error — surface it (retriable) instead of masking
 		// it as "no key configured", which the scheduler would fail permanently.
@@ -170,7 +158,8 @@ export async function publishToPlatform({
 		return {
 			success: false,
 			provider: 'zernio',
-			error: 'No Zernio API key configured. Add one in Settings → API Keys to publish.'
+			error:
+				'No Zernio API key available for this persona. Add one in Settings → API Keys or fix its assignment in the Zernio Key Manager.'
 		};
 	}
 
@@ -193,11 +182,16 @@ export async function publishToPlatform({
 	}
 
 	const client = new ZernioClient(apiKey);
-	const profileId = await getAgentProfileId(supabase, post.agent_id);
 	const cacheKey = `${apiKey}::${profileId || 'all'}`;
 	let accountId: string | null;
 	try {
-		accountId = await resolveZernioAccountId(client, cacheKey, normalizedPlat, connection, profileId);
+		accountId = await resolveZernioAccountId(
+			client,
+			cacheKey,
+			normalizedPlat,
+			connection,
+			profileId || undefined
+		);
 	} catch (err) {
 		// Transient (timeout/5xx while listing accounts) — surface the real message
 		// so the scheduler classifies it retriable instead of terminally failing the
@@ -255,7 +249,11 @@ export async function teardownPost(supabase: any, post: any): Promise<TeardownRe
 	if (publishedEntries.length === 0) return result;
 
 	let zernio: ZernioClient | null = null;
-	const apiKey = await getZernioApiKey(supabase, post.user_id).catch(() => null);
+	// Tear down through the same key the post was published with (the persona's
+	// assigned key) — the post id only exists in that Zernio account.
+	const { apiKey } = await getAgentZernioRouting(supabase, post.user_id, post.agent_id).catch(
+		() => ({ apiKey: null as string | null })
+	);
 	if (apiKey) zernio = new ZernioClient(apiKey);
 
 	for (const [platform, info] of publishedEntries) {

@@ -2,11 +2,11 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { createDbService } from '$lib/server/db';
 import {
-	getZernioApiKey,
 	ZernioClient,
 	computeZernioAccountMeter,
 	type ZernioAccountMeter
 } from '$lib/server/social/zernio';
+import { resolveZernioApiKeyForAgent } from '$lib/server/zernio-keys';
 import { ALL_PLATFORM_KEYS } from '$lib/platforms';
 
 // Platforms our connections table accepts — derived from the single platform
@@ -64,7 +64,12 @@ async function syncZernioAccounts(
 	db: any,
 	supabase: any,
 	userId: string,
-	agent: { id: string; name?: string | null; zernio_profile_id?: string | null },
+	agent: {
+		id: string;
+		name?: string | null;
+		zernio_profile_id?: string | null;
+		zernio_key_id?: string | null;
+	},
 	// Only provision a new Zernio profile when the caller is an explicit connect /
 	// manual-sync action. check_status is a high-frequency poll — creating profiles
 	// there would spin up empty profiles for never-connected personas and risk
@@ -75,7 +80,7 @@ async function syncZernioAccounts(
 	const synced: string[] = [];
 	const skipped: string[] = [];
 
-	const apiKey = await getZernioApiKey(supabase, userId).catch(() => null);
+	const apiKey = await resolveZernioApiKeyForAgent(supabase, userId, agent).catch(() => null);
 	if (!apiKey) return { synced, skipped };
 
 	const client = new ZernioClient(apiKey);
@@ -271,7 +276,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			const { data: conns, error } = await db.connections.listForAgent(persona_id);
 			if (error) throw error;
 
-			const apiKey = await getZernioApiKey(locals.supabase, user.id).catch(() => null);
+			const apiKey = await resolveZernioApiKeyForAgent(locals.supabase, user.id, agent).catch(
+				() => null
+			);
 			const client = apiKey ? new ZernioClient(apiKey) : null;
 
 			// Live follower sync via Zernio (analytics-gated; no-op otherwise).
@@ -373,12 +380,13 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				return json({ success: false, error: 'Forbidden' }, { status: 403 });
 			}
 
-			const apiKey = await getZernioApiKey(locals.supabase, user.id);
+			const apiKey = await resolveZernioApiKeyForAgent(locals.supabase, user.id, agent);
 			if (!apiKey) {
 				return json(
 					{
 						success: false,
-						error: 'No Zernio API key configured. Add it in Settings → API Keys first.'
+						error:
+							'No Zernio API key available for this persona. Add one in Settings → API Keys, or fix its key assignment in the Zernio Key Manager.'
 					},
 					{ status: 400 }
 				);
@@ -433,12 +441,14 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				return json({ success: false, error: 'Forbidden' }, { status: 403 });
 			}
 
-			const apiKey = await getZernioApiKey(locals.supabase, user.id).catch(() => null);
+			const apiKey = await resolveZernioApiKeyForAgent(locals.supabase, user.id, agent).catch(
+				() => null
+			);
 			if (!apiKey) {
 				return json(
 					{
 						success: false,
-						error: 'No Zernio API key configured. Add one in Settings → API Keys, then connect platforms here.'
+						error: 'No Zernio API key available for this persona. Add one in Settings → API Keys, then connect platforms here.'
 					},
 					{ status: 400 }
 				);
@@ -506,7 +516,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			try {
 				const { data: existing } = await db.connections.listForAgent(persona_id);
 				const target = (existing || []).find((c) => c.platform === platform);
-				const apiKey = await getZernioApiKey(locals.supabase, user.id).catch(() => null);
+				const apiKey = await resolveZernioApiKeyForAgent(locals.supabase, user.id, agent).catch(
+					() => null
+				);
 				if (apiKey && target?.provider_account_id) {
 					await new ZernioClient(apiKey).disconnectAccount(String(target.provider_account_id));
 				}

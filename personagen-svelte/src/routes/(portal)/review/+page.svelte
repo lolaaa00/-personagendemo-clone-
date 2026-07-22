@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { platformLabel } from '$lib/platforms';
+	import PostDrawer from '$lib/components/feed/PostDrawer.svelte';
 
 	interface ReviewItem {
 		id: string;
@@ -108,6 +109,7 @@
 			if (!res.ok || !d.success) throw new Error(d.error || 'Action failed');
 			items = items.filter((i) => !ids.includes(i.id));
 			selected = new Set([...selected].filter((id) => !ids.includes(id)));
+			if (drawerPost && ids.includes(drawerPost.id)) drawerPost = null;
 			showToast(
 				action === 'approve'
 					? `✅ ${d.updated} post(s) approved & scheduled`
@@ -181,6 +183,98 @@
 	function slotLabel(i: ReviewItem): string {
 		if (!i.scheduled_date) return 'Unscheduled';
 		return `${i.scheduled_date} · ${(i.scheduled_time || '').slice(0, 5)}`;
+	}
+
+	// ── Details drawer (same PostDrawer as the persona feed) ───────────────
+	// Clicking a card's media opens the full post — playable video, generation
+	// provenance (models, cost, prompts, reference images), caption edit, and
+	// reschedule — while the ✓ badge keeps handling multi-select. The queue's
+	// lightweight items don't carry the full content JSON, so the row is
+	// fetched on open via the same /api/posts 'get' the persona feed uses.
+	let drawerPost = $state<any | null>(null);
+	let drawerAvatar = $state<string | null>(null);
+	let drawerLoadingId = $state<string | null>(null);
+
+	async function openDrawer(item: ReviewItem) {
+		if (drawerLoadingId) return;
+		drawerLoadingId = item.id;
+		try {
+			const res = await fetch('/api/posts', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ action: 'get', id: item.id })
+			});
+			const d = await res.json();
+			if (!res.ok || !d.success) throw new Error(d.error || 'Failed to load post details');
+			drawerAvatar = item.agent_avatar;
+			drawerPost = d.data;
+		} catch (e: any) {
+			showToast(`⚠ ${e.message}`);
+		} finally {
+			drawerLoadingId = null;
+		}
+	}
+
+	// Reject from the drawer routes through the existing reason picker so the
+	// decision (+ reason) still lands in post_reviews.
+	function drawerReject(post: any) {
+		selected = new Set([post.id]);
+		drawerPost = null;
+		rejectPickerOpen = true;
+	}
+
+	async function drawerSaveText(post: any, newText: string): Promise<boolean> {
+		try {
+			let parsed: any = {};
+			try {
+				parsed = JSON.parse(post.content);
+			} catch {
+				parsed = { text: String(post.content ?? '') };
+			}
+			parsed.text = newText;
+			const res = await fetch('/api/posts', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ action: 'update', id: post.id, content: parsed })
+			});
+			const d = await res.json();
+			if (!res.ok || !d.success) throw new Error(d.error || 'Failed to save caption');
+			const serialized = JSON.stringify(parsed);
+			items = items.map((i) => (i.id === post.id ? { ...i, text: newText } : i));
+			if (drawerPost?.id === post.id) drawerPost = { ...drawerPost, content: serialized };
+			showToast('✏️ Caption updated');
+			return true;
+		} catch (e: any) {
+			showToast(`⚠ ${e.message}`);
+			return false;
+		}
+	}
+
+	async function drawerReschedule(post: any, date: string, time: string): Promise<boolean> {
+		try {
+			const res = await fetch('/api/posts', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					action: 'reschedule',
+					id: post.id,
+					scheduled_date: date,
+					scheduled_time: time
+				})
+			});
+			const d = await res.json();
+			if (!res.ok || !d.success) throw new Error(d.error || 'Failed to reschedule');
+			items = items.map((i) =>
+				i.id === post.id ? { ...i, scheduled_date: date, scheduled_time: time } : i
+			);
+			if (drawerPost?.id === post.id)
+				drawerPost = { ...drawerPost, scheduled_date: date, scheduled_time: time };
+			showToast(`📅 Rescheduled to ${date} · ${time.slice(0, 5)}`);
+			return true;
+		} catch (e: any) {
+			showToast(`⚠ ${e.message}`);
+			return false;
+		}
 	}
 </script>
 
@@ -284,17 +378,34 @@
 		<div class="queue-grid">
 			{#each filteredItems as item (item.id)}
 				<div class="queue-card" class:selected={selected.has(item.id)}>
-					<button type="button" class="card-media" onclick={() => toggle(item.id)}>
-						{#if item.media_type === 'video' && (item.poster_url || item.media_url)}
-							<img src={item.poster_url || item.media_url} alt="draft preview" loading="lazy" />
-							<span class="media-badge">▶ video</span>
-						{:else if item.media_url}
-							<img src={item.media_url} alt="draft preview" loading="lazy" />
-						{:else}
-							<div class="no-media">no media</div>
-						{/if}
-						<span class="pick" class:on={selected.has(item.id)}>✓</span>
-					</button>
+					<div class="card-media">
+						<button
+							type="button"
+							class="media-open"
+							title="Open post details"
+							onclick={() => openDrawer(item)}
+						>
+							{#if item.media_type === 'video' && (item.poster_url || item.media_url)}
+								<img src={item.poster_url || item.media_url} alt="draft preview" loading="lazy" />
+								<span class="media-badge">▶ video</span>
+							{:else if item.media_url}
+								<img src={item.media_url} alt="draft preview" loading="lazy" />
+							{:else}
+								<div class="no-media">no media</div>
+							{/if}
+							{#if drawerLoadingId === item.id}
+								<span class="media-loading">Opening…</span>
+							{/if}
+						</button>
+						<button
+							type="button"
+							class="pick"
+							class:on={selected.has(item.id)}
+							aria-label={selected.has(item.id) ? 'Deselect' : 'Select'}
+							aria-pressed={selected.has(item.id)}
+							onclick={() => toggle(item.id)}>✓</button
+						>
+					</div>
 					<div class="card-body">
 						<div class="card-agent">
 							{#if item.agent_avatar}<img src={item.agent_avatar} alt={item.agent_name} />{/if}
@@ -355,6 +466,21 @@
 			{/each}
 		</div>
 	{/if}
+
+	<PostDrawer
+		post={drawerPost}
+		onClose={() => (drawerPost = null)}
+		onApprove={(p) => act('approve', [p.id])}
+		onReject={drawerReject}
+		onSaveText={drawerSaveText}
+		onReschedule={drawerReschedule}
+		onRefined={(p) => {
+			drawerPost = p;
+			void load();
+		}}
+		characterRef={drawerAvatar}
+		approving={working}
+	/>
 </div>
 
 <style>
@@ -516,9 +642,15 @@
 		display: block;
 		width: 100%;
 		aspect-ratio: 4 / 5;
+		background: rgba(255, 255, 255, 0.03);
+	}
+	.media-open {
+		display: block;
+		width: 100%;
+		height: 100%;
 		padding: 0;
 		border: 0;
-		background: rgba(255, 255, 255, 0.03);
+		background: transparent;
 		cursor: pointer;
 	}
 	.card-media img {
@@ -526,6 +658,16 @@
 		height: 100%;
 		object-fit: cover;
 		display: block;
+	}
+	.media-loading {
+		position: absolute;
+		inset: 0;
+		display: grid;
+		place-items: center;
+		background: rgba(0, 0, 0, 0.45);
+		color: #fff;
+		font-size: var(--text-sm, 0.85rem);
+		font-weight: 600;
 	}
 	.no-media {
 		display: grid;
@@ -548,8 +690,8 @@
 		position: absolute;
 		top: 8px;
 		right: 8px;
-		width: 24px;
-		height: 24px;
+		width: 26px;
+		height: 26px;
 		display: grid;
 		place-items: center;
 		border-radius: 50%;
@@ -557,6 +699,12 @@
 		color: transparent;
 		border: 1.5px solid rgba(255, 255, 255, 0.7);
 		font-size: 13px;
+		padding: 0;
+		cursor: pointer;
+	}
+	.pick:hover {
+		border-color: #fff;
+		color: rgba(255, 255, 255, 0.85);
 	}
 	.pick.on {
 		background: var(--accent-mid, #7c6aed);

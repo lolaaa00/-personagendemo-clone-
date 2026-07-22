@@ -102,6 +102,195 @@
 	let apiKeyTesting = $state<Record<string, boolean>>({});
 	let apiKeyDeleting = $state<Record<string, boolean>>({});
 
+	// ── Zernio Key Manager — extra Zernio accounts, assignable per persona ──
+	// Each managed key is a whole separate Zernio account (its own email login,
+	// its own 2 free connected-account slots, its own bill). Personas without an
+	// assignment use the default Zernio key from the Provider API Keys section.
+	interface ZernioManagedKey {
+		id: string;
+		label: string;
+		masked_value: string;
+		status: 'untested' | 'valid' | 'invalid' | 'error';
+		last_error: string | null;
+		last_tested_at: string | null;
+		updated_at: string | null;
+	}
+	interface ZernioAgentLite {
+		id: string;
+		name: string;
+		handle?: string | null;
+		zernio_key_id: string | null;
+	}
+
+	let zernioKeys = $state<ZernioManagedKey[]>([]);
+	let zernioAgents = $state<ZernioAgentLite[]>([]);
+	let zernioKeysLoading = $state(false);
+	let zernioKeyLabel = $state('');
+	let zernioKeyValue = $state('');
+	let zernioKeySaving = $state(false);
+	let zernioKeyBusy = $state<Record<string, boolean>>({});
+	let zernioAssigning = $state<Record<string, boolean>>({});
+
+	async function loadZernioKeys() {
+		zernioKeysLoading = true;
+		try {
+			const res = await fetch('/api/settings/zernio-keys');
+			const data = await res.json();
+			if (data.success) {
+				zernioKeys = data.keys || [];
+				zernioAgents = data.agents || [];
+			} else {
+				showToast(data.error || 'Unable to load Zernio keys', 'error');
+			}
+		} catch (err) {
+			showToast((err as Error).message || 'Unable to load Zernio keys', 'error');
+		} finally {
+			zernioKeysLoading = false;
+		}
+	}
+
+	async function saveZernioKey() {
+		const label = zernioKeyLabel.trim();
+		const apiKey = zernioKeyValue.trim();
+		if (!label) {
+			showToast('Give the key a label first (e.g. the Zernio account email)', 'warning');
+			return;
+		}
+		if (apiKey.length < 8) {
+			showToast('Enter a valid Zernio API key first', 'warning');
+			return;
+		}
+		zernioKeySaving = true;
+		try {
+			const res = await fetch('/api/settings/zernio-keys', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ action: 'save', label, apiKey })
+			});
+			const data = await res.json();
+			if (data.success) {
+				zernioKeys = [...zernioKeys.filter((k) => k.id !== data.key.id), data.key].sort((a, b) =>
+					a.label.localeCompare(b.label)
+				);
+				zernioKeyLabel = '';
+				zernioKeyValue = '';
+				showToast('Zernio key saved securely', 'success');
+			} else {
+				showToast(data.error || 'Failed to save Zernio key', 'error');
+			}
+		} catch (err) {
+			showToast((err as Error).message || 'Failed to save Zernio key', 'error');
+		} finally {
+			zernioKeySaving = false;
+		}
+	}
+
+	async function testZernioKey(id: string) {
+		zernioKeyBusy = { ...zernioKeyBusy, [id]: true };
+		try {
+			const res = await fetch('/api/settings/zernio-keys', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ action: 'test', id })
+			});
+			const data = await res.json();
+			if (data.key) {
+				zernioKeys = zernioKeys.map((k) => (k.id === id ? data.key : k));
+			}
+			if (data.success) {
+				const m = data.meter;
+				showToast(
+					m
+						? `Key verified — ${m.total} connected account${m.total === 1 ? '' : 's'}, ${m.freeRemaining} free slot${m.freeRemaining === 1 ? '' : 's'} left on this key`
+						: 'Key verified',
+					'success'
+				);
+			} else {
+				showToast(data.error || 'Zernio key test failed', 'error');
+			}
+		} catch (err) {
+			showToast((err as Error).message || 'Zernio key test failed', 'error');
+		} finally {
+			zernioKeyBusy = { ...zernioKeyBusy, [id]: false };
+		}
+	}
+
+	async function deleteZernioKey(id: string) {
+		const assignedCount = zernioAgents.filter((a) => a.zernio_key_id === id).length;
+		const warning = assignedCount
+			? `Delete this key? ${assignedCount} persona${assignedCount === 1 ? '' : 's'} will revert to the default Zernio key and need their social accounts reconnected.`
+			: 'Delete this Zernio key?';
+		if (!confirm(warning)) return;
+
+		zernioKeyBusy = { ...zernioKeyBusy, [id]: true };
+		try {
+			const res = await fetch('/api/settings/zernio-keys', {
+				method: 'DELETE',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ id })
+			});
+			const data = await res.json();
+			if (data.success) {
+				zernioKeys = zernioKeys.filter((k) => k.id !== id);
+				zernioAgents = zernioAgents.map((a) =>
+					a.zernio_key_id === id ? { ...a, zernio_key_id: null } : a
+				);
+				showToast('Zernio key deleted', 'info');
+			} else {
+				showToast(data.error || 'Failed to delete Zernio key', 'error');
+			}
+		} catch (err) {
+			showToast((err as Error).message || 'Failed to delete Zernio key', 'error');
+		} finally {
+			zernioKeyBusy = { ...zernioKeyBusy, [id]: false };
+		}
+	}
+
+	async function assignZernioKey(agent: ZernioAgentLite, select: HTMLSelectElement) {
+		const newKeyId = select.value || null;
+		if ((agent.zernio_key_id || null) === newKeyId) return;
+		// Key = Zernio account, so switching means the persona's connected socials
+		// live elsewhere now — make the reconnect cost explicit before committing.
+		// The <select> DOM value was changed by the user, not Svelte, so on cancel
+		// or failure it must be snapped back to the real assignment by hand.
+		const revert = () => (select.value = agent.zernio_key_id || '');
+		if (
+			!confirm(
+				`Move ${agent.name} to ${newKeyId ? `key "${zernioKeys.find((k) => k.id === newKeyId)?.label || 'selected'}"` : 'the default Zernio key'}? Its connected social accounts must be reconnected under that key.`
+			)
+		) {
+			revert();
+			return;
+		}
+
+		zernioAssigning = { ...zernioAssigning, [agent.id]: true };
+		try {
+			const res = await fetch('/api/settings/zernio-keys', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ action: 'assign', agent_id: agent.id, key_id: newKeyId })
+			});
+			const data = await res.json();
+			if (data.success) {
+				zernioAgents = zernioAgents.map((a) =>
+					a.id === agent.id ? { ...a, zernio_key_id: newKeyId } : a
+				);
+				showToast(
+					`${agent.name} reassigned — reconnect its platforms on the persona's Connections tab`,
+					'success'
+				);
+			} else {
+				revert();
+				showToast(data.error || 'Failed to reassign persona', 'error');
+			}
+		} catch (err) {
+			revert();
+			showToast((err as Error).message || 'Failed to reassign persona', 'error');
+		} finally {
+			zernioAssigning = { ...zernioAssigning, [agent.id]: false };
+		}
+	}
+
 	// Danger
 	let showDeleteModal = $state(false);
 	let deleteConfirmText = $state('');
@@ -125,6 +314,7 @@
 			}
 		}
 		loadApiKeys();
+		loadZernioKeys();
 	});
 
 	function persistSettings() {
@@ -540,6 +730,160 @@
 							</div>
 						</div>
 					{/each}
+				</div>
+			</div>
+		</div>
+
+		<!-- Zernio Key Manager -->
+		<div class="settings-card">
+			<div class="card-header">
+				<div class="card-icon">
+					<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="2">
+						<rect x="3" y="11" width="18" height="10" rx="2" />
+						<path d="M7 11V7a5 5 0 0110 0v4" />
+					</svg>
+				</div>
+				<h3>Zernio Key Manager</h3>
+			</div>
+			<div class="card-body">
+				<p class="key-hint">
+					Add extra Zernio accounts (one per agent email) and assign them to personas. Each key is
+					a separate Zernio account with its own <strong>2 free connected-account slots</strong> and
+					its own bill. Personas without an assignment use the default Zernio key above. Moving a
+					persona to a different key requires reconnecting its social accounts under that key.
+				</p>
+
+				<div class="provider-key-list">
+					{#if zernioKeysLoading && zernioKeys.length === 0}
+						<p class="key-hint">Loading Zernio keys…</p>
+					{:else if zernioKeys.length === 0}
+						<p class="key-hint">No extra Zernio keys yet — add one below.</p>
+					{/if}
+
+					{#each zernioKeys as key (key.id)}
+						{@const assigned = zernioAgents.filter((a) => a.zernio_key_id === key.id)}
+						<div class="provider-key-row">
+							<div class="provider-key-header">
+								<div>
+									<strong>{key.label}</strong>
+									<span>
+										{assigned.length
+											? `Assigned to ${assigned.map((a) => a.name).join(', ')}`
+											: 'Not assigned to any persona yet'}
+									</span>
+								</div>
+								<span
+									class="status-pill"
+									class:valid={key.status === 'valid'}
+									class:error={key.status === 'invalid' || key.status === 'error'}
+								>
+									{key.status}
+								</span>
+							</div>
+							<div class="key-display">
+								<code class="key-value">{key.masked_value}</code>
+							</div>
+							{#if key.last_error}
+								<p class="key-error">{key.last_error}</p>
+							{/if}
+							<div class="provider-actions">
+								<button
+									class="secondary-btn"
+									onclick={() => testZernioKey(key.id)}
+									disabled={zernioKeyBusy[key.id]}
+								>
+									{#if zernioKeyBusy[key.id]}
+										<span class="spinner"></span> Working…
+									{:else}
+										Test &amp; Check Slots
+									{/if}
+								</button>
+								<button
+									class="danger-inline-btn"
+									onclick={() => deleteZernioKey(key.id)}
+									disabled={zernioKeyBusy[key.id]}
+								>
+									Delete Key
+								</button>
+							</div>
+						</div>
+					{/each}
+
+					<!-- Add a key -->
+					<div class="provider-key-row">
+						<div class="provider-key-header">
+							<div>
+								<strong>Add a Zernio key</strong>
+								<span>Label it with the Zernio account email so you can tell keys apart.</span>
+							</div>
+						</div>
+						<div class="field">
+							<label for="zernio-key-label">Label</label>
+							<input
+								id="zernio-key-label"
+								type="text"
+								bind:value={zernioKeyLabel}
+								placeholder="e.g. mia.agent@gmail.com"
+								autocomplete="off"
+							/>
+						</div>
+						<div class="field">
+							<label for="zernio-key-value">Zernio API Key</label>
+							<input
+								id="zernio-key-value"
+								type="password"
+								bind:value={zernioKeyValue}
+								placeholder="Paste the Zernio API key for that account"
+								autocomplete="off"
+							/>
+						</div>
+						<div class="provider-actions">
+							<button
+								class="save-btn"
+								onclick={saveZernioKey}
+								disabled={zernioKeySaving || !zernioKeyLabel.trim() || !zernioKeyValue.trim()}
+							>
+								{#if zernioKeySaving}
+									<span class="spinner"></span> Saving…
+								{:else}
+									Add Key
+								{/if}
+							</button>
+						</div>
+					</div>
+
+					<!-- Persona assignments -->
+					{#if zernioAgents.length > 0}
+						<div class="provider-key-row">
+							<div class="provider-key-header">
+								<div>
+									<strong>Persona assignments</strong>
+									<span>Which Zernio account each persona connects and publishes through.</span>
+								</div>
+							</div>
+							<div class="assign-list">
+								{#each zernioAgents as agent (agent.id)}
+									<div class="assign-row">
+										<div class="assign-agent">
+											<strong>{agent.name}</strong>
+											{#if agent.handle}<span>{agent.handle}</span>{/if}
+										</div>
+										<select
+											class="assign-select"
+											value={agent.zernio_key_id || ''}
+											disabled={zernioAssigning[agent.id] || zernioKeys.length === 0}
+											onchange={(e) => assignZernioKey(agent, e.currentTarget as HTMLSelectElement)}
+										>
+											<option value="">Default key</option>
+											{#each zernioKeys as key (key.id)}
+												<option value={key.id}>{key.label}</option>
+											{/each}
+										</select>
+									</div>
+								{/each}
+							</div>
+						</div>
+					{/if}
 				</div>
 			</div>
 		</div>
@@ -1023,6 +1367,62 @@
 		align-items: center;
 		gap: 0.75rem;
 		flex-wrap: wrap;
+	}
+
+	/* Zernio Key Manager — persona ↔ key assignments */
+	.assign-list {
+		display: flex;
+		flex-direction: column;
+		gap: 0.6rem;
+	}
+
+	.assign-row {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+		padding: 0.6rem 0.85rem;
+		background: var(--bg);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+	}
+
+	.assign-agent {
+		display: flex;
+		align-items: baseline;
+		gap: 0.5rem;
+		min-width: 0;
+	}
+
+	.assign-agent strong {
+		font-size: var(--text-sm);
+		white-space: nowrap;
+	}
+
+	.assign-agent span {
+		font-size: var(--text-xs);
+		color: var(--text-muted);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.assign-select {
+		flex-shrink: 0;
+		max-width: 55%;
+		padding: 0.5rem 0.75rem;
+		background: var(--bg-card-dark);
+		border: 1px solid var(--border-strong);
+		border-radius: var(--radius-sm);
+		color: var(--text);
+		font-size: var(--text-sm);
+		font-family: var(--font-body);
+		cursor: pointer;
+	}
+
+	.assign-select:disabled {
+		opacity: 0.6;
+		cursor: not-allowed;
 	}
 
 	.secondary-btn,

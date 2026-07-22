@@ -17,6 +17,15 @@
 	import GenerationComposer from '$lib/components/generation/GenerationComposer.svelte';
 	import type { ComposerSpec } from '$lib/components/generation/types';
 	import { NICHE_OPTIONS, APPEARANCE_FIELDS, stripLeadingAvatarName } from '$lib/persona-profile';
+	import {
+		BIO_PLATFORM_KEYS,
+		bioLimit,
+		coerceHandleCandidates,
+		mergeHandleCandidates,
+		sanitizeHandle,
+		handleCompatNote,
+		type HandleCandidate
+	} from '$lib/persona-identity';
 	import MediaPreviewModal from '$lib/components/generation/MediaPreviewModal.svelte';
 	import {
 		startGeneration,
@@ -205,6 +214,25 @@
 	// e.g. "Jenny Tran" → female Vietnamese-American). Recorded for observability;
 	// the closest catalog voice gets pinned. Filled by "Generate for brand".
 	let ppVoiceProfile = $state<Record<string, string>>({ ...(personaProfile.voiceProfile ?? {}) });
+
+	// ── Platform Identity Kit ───────────────────────────────────────────────
+	// The persona's public-facing identity: per-platform bios, username
+	// candidates (availability confirmed MANUALLY — mark taken, confirm the one
+	// that registered), display name. Copy-paste only: no platform lets us push
+	// profile fields via API, so the kit is the setup source of truth.
+	let ppBios = $state<Record<string, string>>({ ...(personaProfile.bios ?? {}) });
+	let ppHandleCandidates = $state<HandleCandidate[]>(
+		coerceHandleCandidates(personaProfile.handleCandidates)
+	);
+	let ppConfirmedHandles = $state<Record<string, string>>({
+		...(personaProfile.confirmedHandles ?? {})
+	});
+	let ppDisplayName = $state<string>(personaProfile.displayName ?? '');
+	// Platform selected in the kit dropdown — shared by the hero strip and the
+	// Profile-tab card so both always show the same platform's bio.
+	let kitPlatform = $state<string>('tiktok');
+	// Manual "add my own" candidate input (for when every generated one is taken).
+	let newHandleInput = $state('');
 
 	const PERSONA_ARCHETYPES = [
 		'The Creator', 'The Expert / Authority', 'The Relatable Friend', 'The Aspirational',
@@ -403,6 +431,11 @@
 		ppTargetAvatar = stripLeadingAvatarName(freshProfile.targetAvatar);
 		ppAppearance = { ...(freshProfile.appearance ?? {}) };
 		ppVoiceProfile = { ...(freshProfile.voiceProfile ?? {}) };
+		ppBios = { ...(freshProfile.bios ?? {}) };
+		ppHandleCandidates = coerceHandleCandidates(freshProfile.handleCandidates);
+		ppConfirmedHandles = { ...(freshProfile.confirmedHandles ?? {}) };
+		ppDisplayName = freshProfile.displayName ?? '';
+		newHandleInput = '';
 
 		soulText = fresh.soul ?? '';
 		skillsText = fresh.skills ?? '';
@@ -792,6 +825,15 @@
 						'warning'
 					);
 				}
+				// Identity kit rides the same button, generated AFTER the profile so
+				// its prompt sees the fresh niche/angle. Non-fatal: a kit failure
+				// still saves the profile (the kit has its own regenerate button).
+				try {
+					const kit = await BrandBrief.generateIdentityKit(agent.id, selectedBrandBriefId || null);
+					if (kit.success && kit.data) applyIdentityKit(kit.data);
+				} catch {
+					/* profile save below still proceeds */
+				}
 				// Persist immediately. Generation used to only FILL the form and rely on a
 				// separate manual Save — so leaving the page lost everything and the user
 				// had to re-generate on every visit. Auto-saving makes it durable.
@@ -803,6 +845,118 @@
 			showToast(e.message || 'Generation failed', 'error');
 		} finally {
 			generatingProfile = false;
+		}
+	}
+
+	// ── Platform Identity Kit actions ──────────────────────────────────────
+	/**
+	 * Merges a generated kit into the form state. Bios overwrite per platform
+	 * (regenerate means refresh); handle candidates MERGE so the user's manual
+	 * taken/confirmed marks survive a re-roll.
+	 */
+	function applyIdentityKit(d: {
+		displayName?: string;
+		handleCandidates?: HandleCandidate[];
+		bios?: Record<string, string>;
+	}) {
+		if (d.displayName) ppDisplayName = d.displayName;
+		if (Array.isArray(d.handleCandidates) && d.handleCandidates.length) {
+			ppHandleCandidates = mergeHandleCandidates(ppHandleCandidates, d.handleCandidates);
+		}
+		if (d.bios && typeof d.bios === 'object') ppBios = { ...ppBios, ...d.bios };
+	}
+
+	// Standalone regenerate — re-rolls bios/handles/display name WITHOUT
+	// re-rolling the whole persona profile (which would churn the strategy and
+	// desync from an already-generated face).
+	let generatingKit = $state(false);
+	async function generateIdentityKitNow() {
+		if (!agent?.id || generatingKit) return;
+		generatingKit = true;
+		try {
+			const res = await BrandBrief.generateIdentityKit(agent.id, selectedBrandBriefId || null);
+			if (res.success && res.data) {
+				applyIdentityKit(res.data);
+				await saveProfile('Identity kit generated and saved');
+			} else {
+				showToast(res.error || 'Identity kit generation failed', 'error');
+			}
+		} catch (e: any) {
+			showToast(e.message || 'Identity kit generation failed', 'error');
+		} finally {
+			generatingKit = false;
+		}
+	}
+
+	// Manual availability loop: ✗ marks a candidate as taken on the platforms the
+	// user tried (toggles back to untried), "Use" confirms it as the handle for
+	// the currently selected platform.
+	function toggleCandidateTaken(handle: string) {
+		ppHandleCandidates = ppHandleCandidates.map((c) =>
+			c.handle === handle ? { ...c, status: c.status === 'taken' ? 'untried' : 'taken' } : c
+		);
+	}
+
+	function useCandidateFor(handle: string, platform: string) {
+		ppConfirmedHandles = { ...ppConfirmedHandles, [platform]: handle };
+		ppHandleCandidates = ppHandleCandidates.map((c) =>
+			c.handle === handle ? { ...c, status: 'confirmed' } : c
+		);
+	}
+
+	// Sanitizes live and prunes the key when cleared, so saved JSON never
+	// carries empty/illegal confirmed handles.
+	function setConfirmedHandle(platform: string, raw: string) {
+		const h = sanitizeHandle(raw);
+		const next = { ...ppConfirmedHandles };
+		if (h) next[platform] = h;
+		else delete next[platform];
+		ppConfirmedHandles = next;
+	}
+
+	function addOwnHandle() {
+		const h = sanitizeHandle(newHandleInput);
+		if (!h) {
+			showToast('Usernames: lowercase letters, digits, underscores (periods where allowed)', 'warning');
+			return;
+		}
+		if (!ppHandleCandidates.some((c) => c.handle === h)) {
+			ppHandleCandidates = [...ppHandleCandidates, { handle: h, status: 'untried' }];
+		}
+		newHandleInput = '';
+	}
+
+	async function copyKitText(text: string, label: string) {
+		try {
+			await navigator.clipboard.writeText(text);
+			showToast(`${label} copied`, 'success');
+		} catch {
+			showToast('Copy failed — select the text and copy manually', 'error');
+		}
+	}
+
+	// Profile picture for manual upload during platform signup. fetch→blob keeps
+	// the download working cross-origin (a bare <a download> is ignored there);
+	// if the host blocks CORS reads, fall back to opening the image to save-as.
+	async function downloadAvatar() {
+		if (!characterRef) return;
+		try {
+			const res = await fetch(characterRef);
+			if (!res.ok) throw new Error(String(res.status));
+			const blob = await res.blob();
+			const ext = (blob.type.split('/')[1] || 'png').replace('jpeg', 'jpg');
+			const base = (editHandle || editName || 'persona').replace(/[^a-z0-9_-]+/gi, '-').toLowerCase();
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement('a');
+			a.href = url;
+			a.download = `${base}-profile-picture.${ext}`;
+			document.body.appendChild(a);
+			a.click();
+			a.remove();
+			URL.revokeObjectURL(url);
+		} catch {
+			window.open(characterRef, '_blank');
+			showToast('Opened the image in a new tab — right-click to save it', 'info');
 		}
 	}
 
@@ -1186,7 +1340,11 @@
 				contentAngle: ppContentAngle,
 				targetAvatar: ppTargetAvatar,
 				appearance: ppAppearance,
-				voiceProfile: ppVoiceProfile
+				voiceProfile: ppVoiceProfile,
+				bios: ppBios,
+				handleCandidates: ppHandleCandidates,
+				confirmedHandles: ppConfirmedHandles,
+				displayName: ppDisplayName
 			}
 		};
 		try {
@@ -1981,6 +2139,42 @@
 				{/if}
 			</div>
 		</div>
+
+		<!-- Identity strip: the persona's public-facing bio, per platform. Fills
+		     the formerly-blank hero and gives one-click copy for manual profile
+		     setup — no platform accepts bio/avatar updates via API, so copy-paste
+		     IS the publish path for profile fields. -->
+		<div class="hero-identity">
+			<select class="kit-select" bind:value={kitPlatform} aria-label="Platform for bio">
+				{#each BIO_PLATFORM_KEYS as k (k)}
+					<option value={k}>{platformLabel(k)}</option>
+				{/each}
+			</select>
+			{#if ppBios[kitPlatform]}
+				<p class="hero-bio" title={ppBios[kitPlatform]}>{ppBios[kitPlatform]}</p>
+				<button
+					type="button"
+					class="kit-copy-btn"
+					onclick={() => copyKitText(ppBios[kitPlatform], `${platformLabel(kitPlatform)} bio`)}
+				>⧉ Copy bio</button>
+			{:else}
+				<p class="hero-bio hero-bio-empty">No {platformLabel(kitPlatform)} bio yet.</p>
+				<button
+					type="button"
+					class="kit-copy-btn"
+					onclick={generateIdentityKitNow}
+					disabled={generatingKit}
+				>{generatingKit ? 'Generating…' : '✨ Generate identity kit'}</button>
+			{/if}
+			{#if ppConfirmedHandles[kitPlatform]}
+				<button
+					type="button"
+					class="hero-handle-chip"
+					title="Confirmed {platformLabel(kitPlatform)} username — click to copy"
+					onclick={() => copyKitText(ppConfirmedHandles[kitPlatform], 'Username')}
+				>@{ppConfirmedHandles[kitPlatform]}</button>
+			{/if}
+		</div>
 	</header>
 
 	<!-- ── Tab nav ────────────────────────────────────────────── -->
@@ -2172,6 +2366,10 @@
 				onDelete={handleDeletePost}
 				onApprove={handleApprovePost}
 				onSaveText={handleSaveText}
+				onRefined={(p) => {
+					modalPost = p;
+					void loadFeed();
+				}}
 				{characterRef}
 				onPublishFallback={(p) => {
 					modalPost = null;
@@ -2376,6 +2574,204 @@
 									</label>
 								{/each}
 							</div>
+						</div>
+					</div>
+				</section>
+
+				<!-- Platform Identity Kit: the persona's public-facing profile per
+				     platform. Copy-paste tooling by design — no platform (nor Zernio)
+				     accepts profile-field updates via API; availability of a username
+				     is confirmed manually at signup. -->
+				<section class="profile-section">
+					<div class="section-header">
+						<div class="label-row">
+							<h2 class="section-title">Platform Identity Kit</h2>
+							<button
+								type="button"
+								class="btn-sync btn-xs"
+								onclick={generateIdentityKitNow}
+								disabled={generatingKit}
+								title="Generate display name, username candidates, and a bio per platform — tailored to this persona and the selected brand"
+							>
+								{generatingKit
+									? 'Generating…'
+									: `✨ ${ppHandleCandidates.length || Object.keys(ppBios).length ? 'Regenerate' : 'Generate'} kit`}
+							</button>
+						</div>
+						<p class="section-desc">
+							What goes ON the platform profile — display name, username, bio, picture. Platforms
+							don't allow profile edits via API, so copy-paste these during account setup. Usernames:
+							try the top candidate at signup; if it's taken, mark it ✗ and try the next; “Use”
+							records the winner for the selected platform. Connecting the account later shows the
+							real username as ground truth.
+						</p>
+					</div>
+
+					<div class="fields-grid">
+						<div class="field-group">
+							<label for="kit-display">Display Name</label>
+							<div class="kit-inline">
+								<input
+									id="kit-display"
+									type="text"
+									value={ppDisplayName}
+									oninput={(e) => (ppDisplayName = e.currentTarget.value)}
+									placeholder="e.g. Jenny Tran ✨"
+									maxlength="40"
+								/>
+								<button
+									type="button"
+									class="btn-sync btn-xs"
+									onclick={() => copyKitText(ppDisplayName, 'Display name')}
+									disabled={!ppDisplayName}
+									title="Copy display name"
+								>⧉</button>
+							</div>
+							<p class="field-hint">
+								The profile “name” line (TikTok nickname, Instagram name) — looser rules than the
+								username; spaces, caps, and an emoji are fine.
+							</p>
+						</div>
+
+						<div class="field-group">
+							<label>Profile Picture</label>
+							{#if characterRef}
+								<div class="kit-avatar-row">
+									<img class="kit-avatar-thumb" src={characterRef} alt={editName} />
+									<button type="button" class="btn-sync btn-xs" onclick={downloadAvatar}>
+										⬇ Download for upload
+									</button>
+								</div>
+								<p class="field-hint">
+									Upload this same image on every platform so the persona is recognizable at a glance.
+								</p>
+							{:else}
+								<p class="field-hint">
+									No generated photo yet — create one in Character &amp; Visuals below; it becomes the
+									profile picture everywhere.
+								</p>
+							{/if}
+						</div>
+
+						<div class="field-group col-span-2">
+							<label>Username Candidates</label>
+							<p class="field-hint" style="margin: 0 0 0.6rem;">
+								One handle everywhere: candidates are ≤15 chars, letters/digits/underscores, so they
+								fit every platform (X is the strictest). Confirmations apply to
+								<strong>{platformLabel(kitPlatform)}</strong> — switch the platform in the bio picker below.
+							</p>
+							{#if ppHandleCandidates.length === 0}
+								<p class="field-hint">No candidates yet — hit “✨ Generate kit” above.</p>
+							{:else}
+								<div class="kit-candidates">
+									{#each ppHandleCandidates as c (c.handle)}
+										<div
+											class="kit-candidate"
+											class:taken={c.status === 'taken'}
+											class:confirmed={c.status === 'confirmed'}
+										>
+											<span class="kit-candidate-handle">@{c.handle}</span>
+											{#if handleCompatNote(c.handle)}
+												<span class="kit-compat">{handleCompatNote(c.handle)}</span>
+											{/if}
+											{#if c.status === 'confirmed'}
+												<span class="kit-confirmed-badge">✓ in use</span>
+											{/if}
+											<span class="kit-candidate-actions">
+												<button
+													type="button"
+													title="Copy username"
+													onclick={() => copyKitText(c.handle, 'Username')}
+												>⧉</button>
+												<button
+													type="button"
+													title={c.status === 'taken'
+														? 'Un-mark — it was available after all'
+														: 'Mark as taken (tried it, unavailable)'}
+													onclick={() => toggleCandidateTaken(c.handle)}
+												>{c.status === 'taken' ? '↩' : '✗'}</button>
+												<button
+													type="button"
+													class="kit-use-btn"
+													title="This one registered — record it as the {platformLabel(kitPlatform)} username"
+													disabled={c.status === 'taken'}
+													onclick={() => useCandidateFor(c.handle, kitPlatform)}
+												>Use</button>
+											</span>
+										</div>
+									{/each}
+								</div>
+							{/if}
+							<div class="kit-inline kit-add-row">
+								<input
+									type="text"
+									bind:value={newHandleInput}
+									placeholder="add your own — e.g. jennytranglow"
+									aria-label="Add a username candidate"
+									onkeydown={(e) => e.key === 'Enter' && addOwnHandle()}
+								/>
+								<button type="button" class="btn-sync btn-xs" onclick={addOwnHandle}>+ Add</button>
+							</div>
+						</div>
+
+						<div class="field-group col-span-2">
+							<div class="label-row">
+								<label for="kit-bio">Bio — per platform</label>
+								<select class="kit-select" bind:value={kitPlatform} aria-label="Platform for bio">
+									{#each BIO_PLATFORM_KEYS as k (k)}
+										<option value={k}>{platformLabel(k)}</option>
+									{/each}
+								</select>
+							</div>
+							<textarea
+								id="kit-bio"
+								rows="4"
+								value={ppBios[kitPlatform] ?? ''}
+								oninput={(e) => (ppBios = { ...ppBios, [kitPlatform]: e.currentTarget.value })}
+								placeholder={`No ${platformLabel(kitPlatform)} bio yet — generate the kit or write one`}
+							></textarea>
+							<div class="kit-bio-meta">
+								<span
+									class="kit-bio-count"
+									class:over={(ppBios[kitPlatform] ?? '').length > (bioLimit(kitPlatform) ?? Infinity)}
+								>
+									{(ppBios[kitPlatform] ?? '').length}/{bioLimit(kitPlatform)}
+									{#if (ppBios[kitPlatform] ?? '').length > (bioLimit(kitPlatform) ?? Infinity)}
+										— over {platformLabel(kitPlatform)}'s limit, trim before pasting
+									{/if}
+								</span>
+								<button
+									type="button"
+									class="btn-sync btn-xs"
+									onclick={() => copyKitText(ppBios[kitPlatform] ?? '', `${platformLabel(kitPlatform)} bio`)}
+									disabled={!ppBios[kitPlatform]}
+								>⧉ Copy bio</button>
+							</div>
+							<div class="kit-inline kit-confirmed-row">
+								<span class="kit-at">@</span>
+								<input
+									type="text"
+									value={ppConfirmedHandles[kitPlatform] ?? ''}
+									oninput={(e) => setConfirmedHandle(kitPlatform, e.currentTarget.value)}
+									placeholder="confirmed username on {platformLabel(kitPlatform)}"
+									aria-label="Confirmed username on {platformLabel(kitPlatform)}"
+								/>
+								{#if platformStatuses[kitPlatform]?.connected && platformStatuses[kitPlatform]?.handle}
+									<span
+										class="kit-connected-chip"
+										class:mismatch={!!ppConfirmedHandles[kitPlatform] &&
+											sanitizeHandle(platformStatuses[kitPlatform].handle) !== ppConfirmedHandles[kitPlatform]}
+										title="Live username from the connected account (Zernio sync)"
+									>
+										connected as @{platformStatuses[kitPlatform].handle}
+									</span>
+								{/if}
+							</div>
+							<p class="field-hint">
+								Fields save with the profile (Save below). The confirmed username is what you actually
+								registered on {platformLabel(kitPlatform)}; once the account is connected, the live
+								handle shows next to it as ground truth.
+							</p>
 						</div>
 					</div>
 				</section>
@@ -5125,10 +5521,205 @@
 		margin-top: 1rem;
 	}
 
+	/* ── Platform Identity Kit ── */
+	/* Hero strip: one compact row under the identity — select · bio · copy · handle. */
+	.hero-identity {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		padding: 0.65rem 1.5rem;
+		border-top: 1px solid var(--border);
+		background: var(--bg);
+	}
+
+	.kit-select {
+		flex-shrink: 0;
+		background: var(--surface);
+		color: var(--text);
+		border: 1px solid var(--border);
+		border-radius: 8px;
+		padding: 0.35rem 0.6rem;
+		font-size: 0.78rem;
+		font-weight: 600;
+		cursor: pointer;
+	}
+
+	.hero-bio {
+		flex: 1;
+		min-width: 0;
+		margin: 0;
+		font-size: 0.82rem;
+		color: var(--text-muted);
+		/* Bios can be long (YouTube allows 1000 chars) — clamp; full text lives in the Profile tab. */
+		display: -webkit-box;
+		-webkit-line-clamp: 2;
+		line-clamp: 2;
+		-webkit-box-orient: vertical;
+		overflow: hidden;
+		white-space: pre-line;
+	}
+
+	.hero-bio-empty { font-style: italic; color: var(--text-dim, #9aa); }
+
+	.kit-copy-btn {
+		flex-shrink: 0;
+		background: var(--surface);
+		color: var(--text-muted);
+		border: 1px solid var(--border);
+		border-radius: 8px;
+		padding: 0.35rem 0.75rem;
+		font-size: 0.78rem;
+		font-weight: 500;
+		cursor: pointer;
+		transition: all 0.15s ease;
+	}
+	.kit-copy-btn:hover:not(:disabled) { border-color: var(--accent-mid, #7c6aed); color: var(--text); }
+	.kit-copy-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+	.hero-handle-chip {
+		flex-shrink: 0;
+		background: rgba(124, 106, 237, 0.1);
+		border: 1px solid var(--accent-mid, #7c6aed);
+		color: var(--accent);
+		border-radius: 999px;
+		padding: 0.3rem 0.8rem;
+		font-size: 0.78rem;
+		font-weight: 600;
+		cursor: pointer;
+	}
+
+	/* Profile-tab card widgets */
+	.kit-inline {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+	.kit-inline input { flex: 1; min-width: 0; }
+
+	.kit-add-row { margin-top: 0.6rem; }
+
+	.kit-avatar-row {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+	}
+
+	.kit-avatar-thumb {
+		width: 52px;
+		height: 52px;
+		border-radius: 50%;
+		object-fit: cover;
+		border: 1px solid var(--border);
+	}
+
+	.kit-candidates {
+		display: flex;
+		flex-direction: column;
+		gap: 0.35rem;
+	}
+
+	.kit-candidate {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+		padding: 0.4rem 0.7rem;
+		background: var(--bg);
+		border: 1px solid var(--border);
+		border-radius: 8px;
+		font-size: 0.85rem;
+	}
+
+	.kit-candidate.taken .kit-candidate-handle {
+		text-decoration: line-through;
+		color: var(--text-dim, #9aa);
+	}
+
+	.kit-candidate.confirmed { border-color: rgba(16, 185, 129, 0.5); }
+
+	.kit-candidate-handle {
+		font-weight: 600;
+		color: var(--text);
+		font-family: var(--font-mono, monospace);
+	}
+
+	.kit-compat {
+		font-size: 0.7rem;
+		color: #f59e0b;
+	}
+
+	.kit-confirmed-badge {
+		font-size: 0.7rem;
+		font-weight: 700;
+		color: #10b981;
+	}
+
+	.kit-candidate-actions {
+		margin-left: auto;
+		display: flex;
+		gap: 0.3rem;
+	}
+
+	.kit-candidate-actions button {
+		background: var(--surface);
+		color: var(--text-muted);
+		border: 1px solid var(--border);
+		border-radius: 6px;
+		padding: 0.2rem 0.55rem;
+		font-size: 0.75rem;
+		cursor: pointer;
+		transition: all 0.15s ease;
+	}
+	.kit-candidate-actions button:hover:not(:disabled) {
+		border-color: var(--accent-mid, #7c6aed);
+		color: var(--text);
+	}
+	.kit-candidate-actions button:disabled { opacity: 0.45; cursor: not-allowed; }
+	.kit-use-btn { font-weight: 600; }
+
+	.kit-bio-meta {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.75rem;
+		margin-top: 0.4rem;
+	}
+
+	.kit-bio-count {
+		font-size: 0.75rem;
+		color: var(--text-muted);
+		font-variant-numeric: tabular-nums;
+	}
+	/* Over the platform's limit — the ONE thing that must not be missed before pasting. */
+	.kit-bio-count.over { color: #ef4444; font-weight: 700; }
+
+	.kit-confirmed-row { margin-top: 0.6rem; }
+
+	.kit-at {
+		color: var(--text-dim, #9aa);
+		font-weight: 700;
+	}
+
+	.kit-connected-chip {
+		flex-shrink: 0;
+		font-size: 0.72rem;
+		font-weight: 600;
+		color: #10b981;
+		border: 1px solid rgba(16, 185, 129, 0.4);
+		border-radius: 999px;
+		padding: 0.25rem 0.7rem;
+	}
+	/* Confirmed handle disagrees with the live connected account — surface it. */
+	.kit-connected-chip.mismatch {
+		color: #f59e0b;
+		border-color: rgba(245, 158, 11, 0.5);
+	}
+
 	/* ── Mobile ── */
 	@media (max-width: 640px) {
 		.persona-hero { gap: 1rem; }
 		.hero-stats { display: none; }
+		.hero-identity { flex-wrap: wrap; padding: 0.65rem 1rem; }
+		.hero-bio { flex-basis: 100%; order: 3; }
 		.fields-grid { grid-template-columns: 1fr; }
 		.col-span-2 { grid-column: span 1; }
 		.platforms-grid { grid-template-columns: 1fr; }

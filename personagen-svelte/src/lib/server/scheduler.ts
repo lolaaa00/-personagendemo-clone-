@@ -1,6 +1,7 @@
 import { env } from '$env/dynamic/private';
 import { env as publicEnv } from '$env/dynamic/public';
-import { getZernioApiKey, ZernioClient } from './social/zernio';
+import { ZernioClient } from './social/zernio';
+import { getAgentZernioRouting } from './zernio-keys';
 import { publishToPlatform } from './social/publisher';
 import { getServiceSupabase } from './service-supabase';
 import { getLocalParts, runAutopilotDraftGeneration, zonedWallTimeToEpoch } from './autopilot';
@@ -630,14 +631,20 @@ export async function syncPostAnalytics() {
 	console.log('[Scheduler] Syncing post analytics...');
 	const supabase = getServiceSupabase();
 
-	// Resolve + cache one Zernio client per user_id (keys are per-user). null marks
-	// a user with no key so we don't re-query it for every one of their posts.
-	const clientByUser = new Map<string, ZernioClient | null>();
-	const getClient = async (userId: string): Promise<ZernioClient | null> => {
-		if (clientByUser.has(userId)) return clientByUser.get(userId)!;
-		const key = await getZernioApiKey(supabase, userId).catch(() => null);
-		const client = key ? new ZernioClient(key) : null;
-		clientByUser.set(userId, client);
+	// Resolve + cache one Zernio client per (user, agent): personas can route
+	// through different managed keys (Zernio Key Manager), and a post's analytics
+	// only exist in the Zernio account it was published through. null marks a
+	// routing with no key so we don't re-query it for every one of its posts.
+	const clientByRoute = new Map<string, ZernioClient | null>();
+	const getClient = async (userId: string, agentId?: string | null): Promise<ZernioClient | null> => {
+		const routeKey = `${userId}::${agentId || 'default'}`;
+		if (clientByRoute.has(routeKey)) return clientByRoute.get(routeKey)!;
+		const { apiKey } = await getAgentZernioRouting(supabase, userId, agentId).catch(() => ({
+			apiKey: null as string | null,
+			profileId: null
+		}));
+		const client = apiKey ? new ZernioClient(apiKey) : null;
+		clientByRoute.set(routeKey, client);
 		return client;
 	};
 
@@ -688,7 +695,7 @@ export async function syncPostAnalytics() {
 				if (pubProvider === 'composio' || pubProvider === 'blotato') continue;
 
 				try {
-					const client = await getClient(post.user_id);
+					const client = await getClient(post.user_id, post.agent_id);
 					if (!client) continue;
 
 					const metrics = await client.fetchPostMetrics(String(externalId));

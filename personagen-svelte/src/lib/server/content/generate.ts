@@ -2764,3 +2764,233 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 		await recordCostEvents(supabase, userId, input.agentId, costEvents, input.postId);
 	}
 }
+
+// ── Refine: regenerate ONLY the media from a user-edited prompt ──────────────
+
+export interface RefineMediaInput {
+	supabase: any;
+	userId: string;
+	agentId?: string;
+	/** The post being refined — links the refine spend to it in the ledger. */
+	postId?: string;
+	/** The post's current content record — caption, voice, format and refs are all kept. */
+	content: UgcContent;
+	/** User-edited visual prompt. Replaces the stored scene prompt VERBATIM. */
+	scene: string;
+	/** Optionally edited spoken line (spokesperson posts). Blank → keep the stored one. */
+	dialogue?: string;
+}
+
+/** The OpenRouter Nano-Banana composite prompt (fal-outage fallback), shared verbatim with generateUgcPack's failover. */
+function buildCompositeFallbackPrompt(scenePrompt: string, hasCharacter: boolean): string {
+	return `${scenePrompt}\n\nVertical 9:16 photorealistic UGC photo. Keep the product's exact label, shape and colors from the reference image — do not redesign it.${hasCharacter ? ' Keep the same person/face as the first reference image.' : ''} Authentic, slightly imperfect, real — not a studio ad.`;
+}
+
+/**
+ * Refine pass for an existing draft: the Director does NOT run again — the
+ * user's edited visual prompt is the script now. Everything that made the post
+ * consistent is reused from its stored provenance record (pinned face,
+ * product photo, voice, spokesperson-vs-broll format, video-model pick,
+ * caption/badge burn choices), and only the media is regenerated:
+ *   still (Nano Banana composite) → TTS + talking head, or b-roll clip.
+ * Caption, hashtags, platforms and schedule are untouched; the returned
+ * content merges the refine spend into the post's cost/provenance record so
+ * observability keeps telling the truth about total spend.
+ */
+export async function refineUgcMedia(input: RefineMediaInput): Promise<UgcContent> {
+	const { supabase, userId, content } = input;
+	const scene = input.scene?.trim();
+	if (!scene) throw new Error('Refine needs a visual prompt');
+
+	// Same fail-closed spend guard as a fresh generation — a refine is paid media.
+	await assertWithinBudget(supabase, userId, input.agentId);
+	const costEvents: CostEvent[] = [];
+	try {
+		const { orKey, falKey } = await resolveImageKeys(supabase, userId);
+		if (!falKey && !orKey) {
+			throw new Error('No media provider configured. Add a Fal AI or OpenRouter key in Settings.');
+		}
+
+		// The refs that actually produced this post — never the persona's CURRENT
+		// pins, which may have changed since (same rule the drawer's observability
+		// panel follows).
+		const characterRef = content.generation?.images?.character_ref || null;
+		const productPhoto = content.generation?.images?.product_photo || null;
+
+		// ── Still — identical routing/failover to generateUgcPack ──
+		let still: string;
+		if (falKey && productPhoto) {
+			try {
+				still = await generateProductStill(falKey, scene, productPhoto, characterRef);
+				costEvents.push({ provider: 'fal', operation: 'image', model: 'nano-banana-2', usd: priceOf('fal', 'image', 'nano') });
+			} catch (e) {
+				const msg = (e as Error).message;
+				if (orKey && isFalOutage(msg)) {
+					console.warn(`[Refine] fal still failed (${msg.slice(0, 120)}) — OpenRouter Nano-Banana composite fallback.`);
+					const refs = [characterRef, productPhoto].filter(Boolean) as string[];
+					still = await openRouterImageEdit(orKey, userId, buildCompositeFallbackPrompt(scene, !!characterRef), refs);
+					costEvents.push({ provider: 'openrouter', operation: 'image', model: IMAGE_EDIT_MODEL_OPENROUTER, usd: priceOf('openrouter', 'image') });
+				} else {
+					throw e;
+				}
+			}
+		} else if (orKey && (productPhoto || characterRef)) {
+			const refs = [characterRef, productPhoto].filter(Boolean) as string[];
+			still = await openRouterImageEdit(orKey, userId, buildCompositeFallbackPrompt(scene, !!characterRef), refs);
+			costEvents.push({ provider: 'openrouter', operation: 'image', model: IMAGE_EDIT_MODEL_OPENROUTER, usd: priceOf('openrouter', 'image') });
+		} else {
+			still = await generateUgcImage(scene, orKey, falKey);
+			costEvents.push(
+				orKey
+					? { provider: 'openrouter', operation: 'image', model: 'flux-schnell', usd: priceOf('openrouter', 'image') }
+					: { provider: 'fal', operation: 'image', model: 'flux-schnell', usd: priceOf('fal', 'image', 'flux') }
+			);
+		}
+
+		// ── Video — same format the post already has ──
+		const wantVideo = content.media_type === 'video';
+		const format: 'spokesperson' | 'broll' = content.format === 'broll' ? 'broll' : 'spokesperson';
+		const dialogue =
+			(input.dialogue?.trim() || content.dialogue || content.script || content.text || '').trim();
+		let mediaUrl = still;
+		let mediaType: 'image' | 'video' = 'image';
+		if (wantVideo && (falKey || orKey)) {
+			// The original Director motion_prompt isn't stored on the post, and the
+			// user's edited brief is the ground truth now — so motion guidance is
+			// rebuilt from it with the same camera-vocabulary pass a fresh run gets.
+			const intent = classifyContentIntent(content.text || '', content.platform || 'instagram');
+			const motionPrompt = enhanceMotionPrompt(scene, intent, format);
+			try {
+				if (format === 'spokesperson' && falKey) {
+					const voice = content.voice || DEFAULT_VOICE;
+					const voiceGender = VOICE_CATALOG.find((v) => v.name === voice)?.gender;
+					const audio = await generateVoiceAudio(
+						falKey,
+						voice,
+						dialogue,
+						voiceGender === 'female' ? 'Rachel' : 'Adam'
+					);
+					costEvents.push({ provider: 'fal', operation: 'tts', model: 'elevenlabs-turbo-v2.5', usd: priceOf('fal', 'tts') });
+					mediaUrl = await generateTalkingHead(falKey, still, audio);
+					costEvents.push({ provider: 'fal', operation: 'talking_head', model: TALKINGHEAD_MODEL, usd: priceOf('fal', 'talking_head') });
+				} else if (falKey) {
+					const brollModel = resolveModel('video_i2v', content.generation?.selections?.videoModel);
+					mediaUrl = await generateBrollVideo(falKey, brollModel.id, still, motionPrompt);
+					costEvents.push({ provider: 'fal', operation: 'video', model: brollModel.label, usd: brollModel.usd });
+				} else {
+					mediaUrl = await openRouterBrollVideo(orKey!, userId, still, motionPrompt);
+					costEvents.push({ provider: 'openrouter', operation: 'video', model: BROLL_MODEL_OPENROUTER, usd: priceOf('openrouter', 'video') });
+				}
+				mediaType = 'video';
+			} catch (e) {
+				const msg = (e as Error).message;
+				if (orKey && isFalOutage(msg)) {
+					console.warn(`[Refine] fal video failed (${msg.slice(0, 120)}) — OpenRouter Kling b-roll fallback.`);
+					mediaUrl = await openRouterBrollVideo(orKey, userId, still, motionPrompt);
+					costEvents.push({ provider: 'openrouter', operation: 'video', model: BROLL_MODEL_OPENROUTER, usd: priceOf('openrouter', 'video') });
+					mediaType = 'video';
+				} else {
+					throw e;
+				}
+			}
+		}
+
+		// ── Re-burn what the post had burned, persist to durable storage ──
+		let durableStill = still;
+		let durableMedia = mediaUrl;
+		let captionsApplied = false;
+		const svc = (() => {
+			try {
+				return getServiceSupabase();
+			} catch {
+				return null;
+			}
+		})();
+		if (svc) {
+			durableStill = await persistToStorage(svc, still, userId, 'png');
+			if (mediaType === 'video') {
+				const captioned = await burnCaptions(mediaUrl, {
+					badge: content.ai_badge,
+					hook: content.captions ? content.on_screen_text : ''
+				}).catch(() => null);
+				captionsApplied = captioned != null;
+				durableMedia = captioned
+					? await persistBufferToStorage(svc, captioned, userId, 'mp4', 'video/mp4')
+					: await persistToStorage(svc, mediaUrl, userId, 'mp4');
+			} else {
+				durableMedia = durableStill;
+			}
+		} else {
+			console.warn(
+				'[Refine] No service-role Supabase key configured — storing EPHEMERAL provider URLs (media is NOT backed up).'
+			);
+		}
+		if (durableMedia)
+			costEvents.push({ provider: 'storage', operation: 'persist', model: 'ugc-media', usd: 0, assetUrl: durableMedia });
+		if (durableStill && durableStill !== durableMedia)
+			costEvents.push({ provider: 'storage', operation: 'persist', model: 'ugc-media', usd: 0, assetUrl: durableStill });
+
+		// ── Merge the refine spend into the post's cost + provenance record ──
+		// The post's totals must reflect EVERYTHING it cost, original run included.
+		const refineRun = summarizeAspects(costEvents);
+		const prevAspects = content.generation?.aspects ?? {};
+		const mergedAspects: Record<string, { models: string[]; usd: number }> = {};
+		for (const [op, v] of Object.entries(prevAspects)) {
+			mergedAspects[op] = { models: [...(v?.models ?? [])], usd: Number(v?.usd ?? 0) };
+		}
+		for (const [op, v] of Object.entries(refineRun.aspects)) {
+			const prev = mergedAspects[op];
+			mergedAspects[op] = prev
+				? {
+						models: [...new Set([...prev.models, ...v.models])],
+						usd: +(prev.usd + v.usd).toFixed(6)
+					}
+				: v;
+		}
+		const refineCosts = summarizeCosts(costEvents);
+		const prevBreakdown = content.costBreakdown ?? { total: 0, byProvider: {} };
+		const mergedByProvider: Record<string, number> = { ...(prevBreakdown.byProvider ?? {}) };
+		for (const [provider, usd] of Object.entries(refineCosts.byProvider)) {
+			mergedByProvider[provider] = +((mergedByProvider[provider] ?? 0) + usd).toFixed(6);
+		}
+		const prevTotal = Number(content.generation?.total ?? prevBreakdown.total ?? 0);
+
+		const refined: UgcContent = {
+			...content,
+			dialogue: format === 'spokesperson' ? dialogue : content.dialogue,
+			script: format === 'spokesperson' ? dialogue : content.script,
+			// Actual burn outcome for THIS media, not the old video's flags.
+			captions:
+				Boolean(content.captions) && captionsApplied && Boolean((content.on_screen_text || '').trim()),
+			ai_badge: Boolean(content.ai_badge) && captionsApplied,
+			ugc_broll_prompt: scene,
+			media_url: durableMedia,
+			poster_url: durableStill,
+			media_type: mediaType,
+			media_generated: true,
+			costBreakdown: {
+				total: +(Number(prevBreakdown.total ?? 0) + refineCosts.total).toFixed(6),
+				byProvider: mergedByProvider
+			},
+			generation: {
+				...(content.generation ?? {}),
+				aspects: mergedAspects,
+				total: +(prevTotal + refineRun.total).toFixed(6),
+				images: content.generation?.images ?? {
+					character_ref: characterRef,
+					product_photo: productPhoto
+				},
+				prompts: {
+					...(content.generation?.prompts ?? {}),
+					scene,
+					script: format === 'spokesperson' ? dialogue : content.generation?.prompts?.script
+				}
+			}
+		};
+		// A previous failed refine's error must not survive a successful one.
+		delete (refined as any).refine_error;
+		return refined;
+	} finally {
+		await recordCostEvents(supabase, userId, input.agentId, costEvents, input.postId);
+	}
+}

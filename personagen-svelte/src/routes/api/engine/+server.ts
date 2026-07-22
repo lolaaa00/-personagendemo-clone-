@@ -26,6 +26,14 @@ import {
 	coerceAppearance,
 	stripLeadingAvatarName
 } from '$lib/persona-profile';
+import {
+	PLATFORM_BIO_SPECS,
+	BIO_PLATFORM_KEYS,
+	coerceBios,
+	coerceHandleCandidates,
+	coerceConfirmedHandles,
+	sanitizeHandle
+} from '$lib/persona-identity';
 import { pickVoiceForProfile } from '$lib/server/voices';
 import dns from 'node:dns/promises';
 import net from 'node:net';
@@ -1543,6 +1551,112 @@ Return ONLY JSON: {"niche":"","ageRanges":["25–34"],"archetype":"","contentFoc
 				} catch (err) {
 					const msg = (err as Error).message || 'unknown error';
 					console.error('[Engine] Persona profile generation failed:', msg);
+					return json(
+						{ success: false, error: `Generation failed via ${ai!.provider}: ${msg.slice(0, 200)}` },
+						{ status: 502 }
+					);
+				}
+			}
+
+			// ── ACTION: generate_identity_kit ──
+			// The persona's PUBLIC-FACING identity: display name, ~10 username
+			// candidates, and one bio per platform written to that platform's char
+			// limit + register. Username availability has NO API anywhere — the user
+			// confirms candidates manually at signup (mark taken → try next → confirm
+			// the winner). Deliberately a SEPARATE action from generate_persona_profile:
+			// it runs after the profile so the prompt can use the fresh niche/angle,
+			// and it can re-roll bios/handles without churning strategy or look.
+			if (action === 'generate_identity_kit') {
+				if (!hasAi) {
+					return json(
+						{ success: false, error: 'No AI provider configured. Add an OpenRouter or Gemini key in Settings.' },
+						{ status: 400 }
+					);
+				}
+				const agentId = typeof body.agentId === 'string' ? body.agentId : '';
+				if (!agentId) return json({ success: false, error: 'Missing agentId' }, { status: 400 });
+
+				const { data: agent } = await db.agents.get(agentId);
+				if (!agent || agent.user_id !== session.user.id) {
+					return json({ success: false, error: 'Agent not found' }, { status: 404 });
+				}
+				// Extended profile (archetype/angle/avatar…) lives in the market JSON.
+				let profile: any = {};
+				try {
+					if (typeof agent.market === 'string' && agent.market.startsWith('{')) {
+						profile = JSON.parse(agent.market);
+					}
+				} catch {
+					/* ignore unparseable market */
+				}
+				const brief = await loadBriefForAgent(
+					db,
+					session.user.id,
+					body.brandBriefId || agent.brand_brief_id || null
+				);
+				const b: any = brief?.data ?? {};
+
+				// Handles used or shortlisted by OTHER personas — candidates must not
+				// collide anywhere on the account.
+				const { data: allAgents } = await db.agents.list();
+				const takenHandles = new Set<string>();
+				for (const a of allAgents ?? []) {
+					if (a.id === agentId) continue;
+					const h = sanitizeHandle(a.handle);
+					if (h) takenHandles.add(h);
+					try {
+						const p =
+							typeof a.market === 'string' && a.market.startsWith('{') ? JSON.parse(a.market) : {};
+						for (const c of coerceHandleCandidates(p.handleCandidates)) takenHandles.add(c.handle);
+						for (const ch of Object.values(coerceConfirmedHandles(p.confirmedHandles))) {
+							takenHandles.add(ch);
+						}
+					} catch {
+						/* ignore unparseable market */
+					}
+				}
+
+				const bioRules = BIO_PLATFORM_KEYS.map(
+					(k) => `  "${k}": max ${PLATFORM_BIO_SPECS[k].limit} chars — ${PLATFORM_BIO_SPECS[k].style}`
+				).join('\n');
+
+				const prompt = `You are an elite social-media brand strategist. Create the public-facing identity kit for one UGC creator.
+
+CREATOR: ${agent.name || 'this creator'}. Niche: ${agent.niche || profile.niche || '—'}. Archetype: ${profile.archetype || '—'}. Content focus: ${profile.contentFocus || '—'}. Unique angle: ${profile.contentAngle || '—'}. Audience: ${profile.targetAvatar || '—'}. Personality/soul: ${String(agent.soul || '').slice(0, 500)}.
+BRAND they create for: ${b.brandName || b.name || '—'}${b.tagline ? ` — ${b.tagline}` : ''}. Mission: ${b.mission || '—'}. Products: ${Array.isArray(b.products) ? b.products.map((p: any) => p.name).filter(Boolean).join(', ') : '—'}.
+
+Return:
+1. "displayName": the profile display name — the creator's real name, optionally plus ONE emoji or a 2–3 word descriptor. Max 30 chars.
+2. "handles": exactly 10 username candidates, best first. Rules: lowercase letters, digits and underscores ONLY, 15 characters or fewer (so every candidate is valid on EVERY platform including X), no periods, rooted in the creator's name — catchy, memorable, unmistakably THIS creator (name + niche twists). Do NOT use any of these already-taken handles: ${[...takenHandles].join(', ') || '(none)'}.
+3. "bios": one bio per platform, keys EXACTLY as listed, each within its limit and register:
+${bioRules}
+Bio rules: first person, in the creator's voice; weave in the niche and what followers get; STRICTLY within each platform's character limit (count characters); no invented stats or follower counts; no proper names other than ${agent.name || 'the creator'}; use \\n for line breaks where the register calls for multiple lines; hashtags only where natural (TikTok/Instagram, max 2).
+
+Return ONLY JSON: {"displayName":"","handles":["",""],"bios":{${BIO_PLATFORM_KEYS.map((k) => `"${k}":""`).join(',')}}}`;
+
+				try {
+					const parsed: any = safeParseJson(await ai!.generate(prompt, { json: true }));
+					if (!parsed || typeof parsed !== 'object') {
+						return json(
+							{ success: false, error: `${ai!.provider} returned no usable identity kit — try again.` },
+							{ status: 502 }
+						);
+					}
+					// Sanitize/dedupe candidates and drop any collision with another
+					// persona that the LLM ignored despite the prompt.
+					const handleCandidates = coerceHandleCandidates(parsed.handles).filter(
+						(c) => !takenHandles.has(c.handle)
+					);
+					const data = {
+						displayName:
+							typeof parsed.displayName === 'string' ? parsed.displayName.trim().slice(0, 40) : '',
+						handleCandidates,
+						bios: coerceBios(parsed.bios)
+					};
+					return json({ success: true, data });
+				} catch (err) {
+					const msg = (err as Error).message || 'unknown error';
+					console.error('[Engine] Identity kit generation failed:', msg);
 					return json(
 						{ success: false, error: `Generation failed via ${ai!.provider}: ${msg.slice(0, 200)}` },
 						{ status: 502 }

@@ -29,6 +29,10 @@ export interface AgentRow {
 	// Null until provisioned on first connect (api/accounts writes it,
 	// publisher.ts reads it to route). See zernio_profile_routing_migration.sql.
 	zernio_profile_id?: string | null;
+	// Optional managed Zernio key (zernio_keys row) this persona routes through.
+	// Null = the user's default key. Profile ids are per Zernio account, so
+	// changing this clears zernio_profile_id. See zernio_key_manager_migration.sql.
+	zernio_key_id?: string | null;
 	created_at: string;
 	updated_at: string;
 }

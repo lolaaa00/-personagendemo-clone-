@@ -841,24 +841,53 @@
 	 * the 202 carries no `result.post` the card never appeared. Now it goes through
 	 * the same confirm-first composer as the persona page and actually polls the job.
 	 */
+	// The composer's target persona. Owned separately from the rail filter
+	// (selectedAgentId) because the user can retarget INSIDE the composer —
+	// confirm must generate for the persona shown in the dialog, not whatever
+	// the rail happened to be on.
+	let genAgentId = $state('');
+
+	/** The date the user is looking at, as a schedule prefill (never the past). */
+	function calendarPrefillDate(): string | null {
+		if (calendarView === 'day') {
+			const ds = fmtDate(anchorDate);
+			if (ds >= todayStr) return ds;
+		}
+		return null;
+	}
+
+	function buildGenSpec(agentId: string): ComposerSpec {
+		const agent = data.agents.find((a: Agent) => a.id === agentId);
+		const prefill = calendarPrefillDate();
+		return {
+			endpoint: `/api/agent/${agentId}/generate-post`,
+			...(prefill ? { baseBody: { scheduled_date: prefill } } : {}),
+			title: `Generate a post for ${agent?.name ?? 'this persona'}`,
+			subtitle: 'Everything below is what will actually be sent. Edit anything before approving.',
+			confirmLabel: 'Approve & generate'
+		};
+	}
+
 	function requestGeneratePost() {
 		const targetAgentId = selectedAgentId || (data.agents.length > 0 ? data.agents[0].id : '');
 		if (!targetAgentId) {
 			showToast('Please select or configure an agent first', 'warning');
 			return;
 		}
-		const agent = data.agents.find((a: any) => a.id === targetAgentId);
-		composerSpec = {
-			endpoint: `/api/agent/${targetAgentId}/generate-post`,
-			title: `Generate a post for ${agent?.name ?? 'this persona'}`,
-			subtitle: 'Everything below is what will actually be sent. Edit anything before approving.',
-			confirmLabel: 'Approve & generate'
-		};
+		genAgentId = targetAgentId;
+		composerSpec = buildGenSpec(targetAgentId);
 		composerOpen = true;
 	}
 
+	/** Persona switched inside the composer: rebuild the spec so it re-resolves. */
+	function handleComposerAgentChange(id: string) {
+		genAgentId = id;
+		composerSpec = buildGenSpec(id);
+	}
+
 	async function generatePostNow(approved: Record<string, unknown> = {}) {
-		const targetAgentId = selectedAgentId || (data.agents.length > 0 ? data.agents[0].id : '');
+		const targetAgentId =
+			genAgentId || selectedAgentId || (data.agents.length > 0 ? data.agents[0].id : '');
 		if (!targetAgentId) {
 			showToast('Please select or configure an agent first', 'warning');
 			return;
@@ -1641,6 +1670,9 @@
 <GenerationComposer
 	open={composerOpen}
 	spec={composerSpec}
+	agents={data.agents}
+	agentId={genAgentId}
+	onAgentChange={handleComposerAgentChange}
 	onClose={() => (composerOpen = false)}
 	onConfirm={(body) => {
 		composerOpen = false;
