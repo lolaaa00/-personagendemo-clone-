@@ -38,3 +38,46 @@ export function platformColor(key: string | undefined | null): string {
 export function platformLabel(key: string | undefined | null): string {
 	return PLATFORMS[key?.toLowerCase() ?? '']?.label || (key ?? '');
 }
+
+/**
+ * Public profile URL for a connected handle, or `null` when we can't build one
+ * (empty handle, or a platform with no canonical per-handle URL). Strips any
+ * leading `@` so both "@user" and "user" resolve the same. Used to turn the
+ * displayed handles on the persona Connections tab into real, clickable links.
+ */
+export function platformProfileUrl(
+	key: string | undefined | null,
+	handle: string | undefined | null
+): string | null {
+	const h = (handle ?? '').trim().replace(/^@+/, '');
+	if (!h) return null;
+	switch (key?.toLowerCase() ?? '') {
+		case 'instagram':
+			return `https://instagram.com/${h}`;
+		case 'tiktok':
+			return `https://tiktok.com/@${h}`;
+		case 'youtube':
+			return `https://youtube.com/@${h}`;
+		case 'facebook':
+			return `https://facebook.com/${h}`;
+		case 'x':
+			return `https://x.com/${h}`;
+		case 'threads':
+			return `https://threads.net/@${h}`;
+		case 'linkedin':
+			return `https://linkedin.com/in/${h}`;
+		case 'bluesky':
+			return `https://bsky.app/profile/${h}`;
+		case 'pinterest':
+			return `https://pinterest.com/${h}`;
+		case 'reddit':
+			return `https://reddit.com/user/${h}`;
+		case 'telegram':
+			return `https://t.me/${h}`;
+		case 'snapchat':
+			return `https://snapchat.com/add/${h}`;
+		// Google Business has no canonical public @handle URL.
+		default:
+			return null;
+	}
+}

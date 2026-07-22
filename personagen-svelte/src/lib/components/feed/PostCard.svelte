@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { getPostDisplay, getPostErrorSummary } from './postDisplay';
+	import { getPostDisplay, getPostErrorSummary, summarizeGenError } from './postDisplay';
 	import { platformColor } from '$lib/platforms';
 
 	let {
@@ -21,15 +21,14 @@
 	let isGenerating = $derived(post.status === 'generating');
 	let isFailed = $derived(post.status === 'failed');
 
-	let genError = $derived.by(() => {
-		if (!isFailed) return null;
-		try {
-			const c = typeof post.content === 'string' ? JSON.parse(post.content) : post.content;
-			return c?.error || 'Generation failed.';
-		} catch {
-			return 'Generation failed.';
-		}
-	});
+	// One safe, short sentence — never the raw provider payload (it leaks key ids
+	// and reads as noise). See summarizeGenError().
+	let genError = $derived(isFailed ? summarizeGenError(post) : null);
+
+	// Video tiles stay static (poster only) until the user explicitly hits play,
+	// so the feed pays zero metadata-fetch cost on load. One click mounts a real
+	// <video> for THIS tile and plays it inline — no drawer needed.
+	let playingInline = $state(false);
 
 	let genTopic = $derived.by(() => {
 		try {
@@ -79,11 +78,46 @@
 	});
 
 	let plat = $derived((post.platforms?.[0] ?? 'instagram').toLowerCase());
+
+	// Warm the browser cache for the FULL media the instant the user shows intent to
+	// open a tile, so the drawer renders from cache instead of a cold fetch. Videos
+	// are the big win: the tile only ever loads the poster image, so the clip is
+	// otherwise fetched for the very first time on click. The prefetch is low
+	// priority (won't fight the visible feed) and deduped, so a hover-sweep across
+	// the mosaic costs at most one lazy fetch per distinct clip.
+	let warmed = false;
+	function warmMedia() {
+		const url = display.mediaUrl;
+		if (warmed || !url || isGenerating || isGenFail) return;
+		warmed = true;
+		const link = document.createElement('link');
+		link.rel = 'prefetch';
+		link.as = display.mediaType === 'video' ? 'video' : 'image';
+		link.href = url;
+		document.head.appendChild(link);
+	}
 </script>
 
 <!-- Media-first mosaic tile: the media IS the card. Everything else lives in
-     the drawer that opens on click — tags stay as light overlays. -->
-<button type="button" class="post-tile" onclick={() => onOpen(post)} aria-label="Open post details">
+     the drawer that opens on click — tags stay as light overlays.
+     It's a role=button DIV, not a <button>, so the inline video play control
+     (a real <button>) and the <video> can nest legally inside it. -->
+<!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
+<div
+	class="post-tile"
+	role="button"
+	tabindex="0"
+	onclick={() => onOpen(post)}
+	onkeydown={(e) => {
+		if (e.key === 'Enter' || e.key === ' ') {
+			e.preventDefault();
+			onOpen(post);
+		}
+	}}
+	onpointerenter={warmMedia}
+	onfocus={warmMedia}
+	aria-label="Open post details"
+>
 	{#if isGenerating}
 		<div class="tile-gen">
 			<span class="tile-gen-spin"></span>
@@ -118,16 +152,38 @@
 		</div>
 	{:else if display.mediaUrl}
 		{#if display.mediaType === 'video'}
-			<!-- Grid tiles are static (never play inline) — show the POSTER image, not
-			     a <video>. A <video preload="metadata"> here fired a metadata range
-			     request for every tile (incl. off-screen) on page open, which made the
-			     feed slow. The real <video> loads only in the drawer, on click. -->
-			{#if display.posterUrl}
-				<img src={display.posterUrl} loading="lazy" alt="Video poster" />
+			<!-- Tiles start as a static POSTER (no <video>) so the feed pays zero
+			     metadata-fetch cost on load. The real <video> mounts only after the
+			     user clicks play — inline, right here, no drawer. -->
+			{#if playingInline}
+				<!-- svelte-ignore a11y_media_has_caption -->
+				<video
+					src={display.mediaUrl}
+					poster={display.posterUrl || undefined}
+					controls
+					autoplay
+					playsinline
+					preload="metadata"
+					onclick={(e) => e.stopPropagation()}
+				></video>
 			{:else}
-				<div class="tile-video-placeholder"></div>
+				{#if display.posterUrl}
+					<img src={display.posterUrl} loading="lazy" alt="Video poster" />
+				{:else}
+					<div class="tile-video-placeholder"></div>
+				{/if}
+				<button
+					type="button"
+					class="tile-video-play"
+					aria-label="Play video"
+					onclick={(e) => {
+						e.stopPropagation();
+						playingInline = true;
+					}}
+				>
+					<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
+				</button>
 			{/if}
-			<span class="tile-video-badge">▶</span>
 		{:else}
 			<img src={display.mediaUrl} loading="lazy" alt="Post media" />
 		{/if}
@@ -181,7 +237,7 @@
 			{#if analytics.likes}<span>♥ {analytics.likes}</span>{/if}
 		</div>
 	{/if}
-</button>
+</div>
 
 <style>
 	.post-tile {
@@ -332,20 +388,38 @@
 		background: #fff;
 	}
 
-	.tile-video-badge {
+	/* Centered play control — the ONE spot that plays inline. Clicking anywhere
+	   else on the tile still opens the drawer (this stops propagation). */
+	.tile-video-play {
 		position: absolute;
-		bottom: 8px;
-		right: 8px;
-		width: 28px;
-		height: 28px;
+		top: 50%;
+		left: 50%;
+		transform: translate(-50%, -50%);
+		width: 52px;
+		height: 52px;
+		padding: 0;
+		padding-left: 3px; /* optically center the triangle */
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		background: rgba(0, 0, 0, 0.65);
+		background: rgba(0, 0, 0, 0.55);
 		color: #fff;
-		font-size: 11px;
+		border: 1.5px solid rgba(255, 255, 255, 0.85);
 		border-radius: 999px;
-		pointer-events: none;
+		cursor: pointer;
+		backdrop-filter: blur(2px);
+		box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+		transition: background 0.15s ease, transform 0.15s ease;
+	}
+	.tile-video-play:hover {
+		background: rgba(0, 0, 0, 0.78);
+		transform: translate(-50%, -50%) scale(1.08);
+	}
+
+	.post-tile video {
+		aspect-ratio: 4 / 5;
+		background: #000;
+		object-fit: contain;
 	}
 
 	/* Fallback for legacy video posts with no poster still — a neutral tile

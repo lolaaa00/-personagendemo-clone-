@@ -29,6 +29,61 @@ export function truncateError(msg: string): string {
 }
 
 /**
+ * Turns a raw, provider-shaped GENERATION error into one short, safe sentence.
+ *
+ * The stored error is untrusted noise: it can be a nested JSON string, carry
+ * provider URLs, and leak key identifiers (e.g. `.../keys/<id>`). We never want
+ * any of that on screen — it reads as garbage and exposes secrets. So we dig out
+ * the human message, classify it into a known failure mode, and return a single
+ * actionable line. Falls back to a generic sentence, never the raw payload.
+ */
+export function summarizeGenError(post: any): string {
+	const GENERIC = 'Generation failed. Try again, or check your key in Settings.';
+
+	let raw: unknown = null;
+	try {
+		const c = typeof post?.content === 'string' ? JSON.parse(post.content) : post?.content;
+		raw = c?.error ?? c?.last_error ?? null;
+	} catch {
+		raw = null;
+	}
+
+	// The error is sometimes itself a JSON string, or a {error:{message}} tree —
+	// peel it down to the innermost human string.
+	const dig = (v: any, depth = 0): string => {
+		if (v == null || depth > 5) return '';
+		if (typeof v === 'string') {
+			const t = v.trim();
+			if (t.startsWith('{') || t.startsWith('[')) {
+				try {
+					return dig(JSON.parse(t), depth + 1);
+				} catch {
+					return t;
+				}
+			}
+			return t;
+		}
+		if (typeof v === 'object') return dig(v.message ?? v.error ?? v.detail ?? v.reason ?? '', depth + 1);
+		return String(v);
+	};
+
+	const low = dig(raw).toLowerCase();
+	if (!low) return GENERIC;
+
+	if (/credit|insufficient|can only afford|requires more|quota|balance/.test(low))
+		return 'The generation key ran out of credits. Top it up and try again.';
+	if (/rate.?limit|too many requests|\b429\b/.test(low))
+		return 'Rate limited by the provider. Try again in a few minutes.';
+	if (/timeout|timed out|deadline|took too long/.test(low))
+		return 'The model timed out. Try again.';
+	if (/content policy|safety|nsfw|flagged|moderat|blocked/.test(low))
+		return 'Blocked by the model’s content policy. Adjust the prompt and retry.';
+	if (/invalid.*key|unauthor|forbidden|\b401\b|\b403\b|api key/.test(low))
+		return 'The generation key was rejected. Check it in Settings.';
+	return GENERIC;
+}
+
+/**
  * Human-readable summary of why a post failed (or partially failed) to
  * publish: per-platform errors from publication_results when available,
  * falling back to the post-level _post.error / _post.last_error.

@@ -45,7 +45,7 @@ import { DEFAULT_VOICE, VOICE_CATALOG } from '$lib/server/voices';
 import { getServiceSupabase } from '$lib/server/service-supabase';
 import { resolveModel, getModel, type ModelOption } from '$lib/models';
 import { persistToStorage, persistBufferToStorage } from '$lib/server/storage';
-import { burnCaptions } from '$lib/server/video';
+import { burnCaptions, remuxFaststart } from '$lib/server/video';
 import { fetchWithTimeout } from '$lib/server/social/http';
 import { assertWithinBudget } from '$lib/server/budget';
 
@@ -64,6 +64,26 @@ const GEN_FETCH_TIMEOUT_MS = 120_000;
 // clean. Name it explicitly and call it explicitly, as ai-client.ts does.
 const genFetch = (input: string | URL, init?: RequestInit) =>
 	fetchWithTimeout(input, init, GEN_FETCH_TIMEOUT_MS);
+
+/**
+ * Persists a generated (un-captioned) clip to durable storage as a web-optimised
+ * mp4. We first try a lossless `+faststart` remux so the browser can begin
+ * playback after a small opening request instead of downloading the whole file to
+ * find its metadata — the main cause of slow drawer video loads. If ffmpeg isn't
+ * available or the remux fails, we fall back to persisting the provider clip
+ * unchanged (correctness over optimisation). Captioned clips skip this because
+ * burnCaptions already emits +faststart output.
+ */
+async function persistVideoDurable(
+	svc: Parameters<typeof persistToStorage>[0],
+	sourceUrl: string,
+	userId: string
+): Promise<string> {
+	const fast = await remuxFaststart(sourceUrl).catch(() => null);
+	return fast
+		? persistBufferToStorage(svc, fast, userId, 'mp4', 'video/mp4')
+		: persistToStorage(svc, sourceUrl, userId, 'mp4');
+}
 
 // ── Model slugs (env-overridable so quality/provider is a one-line swap) ─────
 // Re-verified against fal.ai's live docs/OpenAPI specs as of 2026-07-01 —
@@ -1337,7 +1357,7 @@ export async function generateCinematicUgcPack(input: UgcPackInput): Promise<Ugc
 	}).catch(() => null);
 	const durableMedia = captioned
 		? await persistBufferToStorage(svc, captioned, userId, 'mp4', 'video/mp4')
-		: await persistToStorage(svc, videoUrl, userId, 'mp4');
+		: await persistVideoDurable(svc, videoUrl, userId);
 
 	// Record the durable asset URLs in the ledger (flushed in finally, even on a
 	// later throw) so this spend is always recoverable from the DB.
@@ -1450,15 +1470,18 @@ export async function loadBriefForAgent(
 	userId: string,
 	brandBriefId: string | null
 ): Promise<any | null> {
-	if (brandBriefId) {
-		const { data } = await db.brandBriefs.getById(brandBriefId, userId);
-		if (data) return data;
-		console.warn(
-			`[UGC] Persona's selected brand brief ${brandBriefId} not found — falling back to newest brief.`
-		);
-	}
-	const { data } = await db.brandBriefs.get(userId);
-	return data ?? null;
+	// Pinned-only: a persona uses ONLY the brand brief explicitly selected on its
+	// Profile tab. With nothing pinned (or a pinned brief that's since been
+	// deleted) it generates with NO brand context — there is deliberately no
+	// silent fall-back to the account's newest brief. A brand kit is opt-in per
+	// persona, not applied by magic.
+	if (!brandBriefId) return null;
+	const { data } = await db.brandBriefs.getById(brandBriefId, userId);
+	if (data) return data;
+	console.warn(
+		`[UGC] Persona's selected brand brief ${brandBriefId} not found — generating with no brand context.`
+	);
+	return null;
 }
 
 export interface UgcPackInput {
@@ -2724,7 +2747,7 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 			captionsApplied = captioned != null;
 			durableMedia = captioned
 				? await persistBufferToStorage(svc, captioned, userId, 'mp4', 'video/mp4')
-				: await persistToStorage(svc, mediaUrl, userId, 'mp4');
+				: await persistVideoDurable(svc, mediaUrl, userId);
 		} else {
 			durableMedia = durableStill;
 		}
@@ -2950,7 +2973,7 @@ export async function refineUgcMedia(input: RefineMediaInput): Promise<UgcConten
 				captionsApplied = captioned != null;
 				durableMedia = captioned
 					? await persistBufferToStorage(svc, captioned, userId, 'mp4', 'video/mp4')
-					: await persistToStorage(svc, mediaUrl, userId, 'mp4');
+					: await persistVideoDurable(svc, mediaUrl, userId);
 			} else {
 				durableMedia = durableStill;
 			}

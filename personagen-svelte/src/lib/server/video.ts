@@ -74,6 +74,44 @@ function escDrawtext(s: string): string {
 }
 
 /**
+ * Stream-copies a video into a web-optimised mp4 (moov atom moved to the front,
+ * a.k.a. `+faststart`) so a browser `<video>` can start showing/playing after a
+ * tiny opening range request instead of pulling much of the file to find metadata
+ * that providers often leave at the very end. This is the single biggest reason a
+ * generated clip "takes forever to load" in the drawer.
+ *
+ * `-c copy` means NO re-encode — it just rewrites the container, so it's fast and
+ * lossless. Returns the remuxed bytes, or null if ffmpeg is unavailable or the
+ * remux failed (caller then persists the original clip unchanged). Videos that go
+ * through burnCaptions already get +faststart there, so this only covers the
+ * common no-overlay path.
+ */
+export async function remuxFaststart(videoUrl: string): Promise<Buffer | null> {
+	if (!(await hasFfmpeg())) return null;
+
+	let dir: string | null = null;
+	try {
+		dir = await mkdtemp(join(tmpdir(), 'ugc-fs-'));
+		const inName = 'in.mp4';
+		const outName = 'out.mp4';
+
+		const res = await fetch(videoUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+		if (!res.ok) return null;
+		const buf = Buffer.from(await res.arrayBuffer());
+		if (buf.length === 0) return null;
+		await writeFile(join(dir, inName), buf);
+
+		await runFfmpeg(['-y', '-i', inName, '-c', 'copy', '-movflags', '+faststart', outName], dir);
+		return await readFile(join(dir, outName));
+	} catch (e) {
+		console.warn('[Video] faststart remux skipped:', (e as Error).message);
+		return null;
+	} finally {
+		if (dir) await rm(dir, { recursive: true, force: true }).catch(() => {});
+	}
+}
+
+/**
  * Returns captioned mp4 bytes, or null if captions couldn't be applied
  * (ffmpeg/font missing, or any failure — caller keeps the original).
  */

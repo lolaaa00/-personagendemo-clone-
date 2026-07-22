@@ -55,6 +55,9 @@
 	// Generation details start collapsed so the media stays in view; the user
 	// expands them on demand. Reset per post (the drawer DOM persists across posts).
 	let genDetailsOpen = $state(false);
+	// Set when the <video> fires `error` (codec/content-type/network) so the drawer
+	// shows a tap-through fallback instead of a silent black box.
+	let videoError = $state(false);
 	let bodyEl = $state<HTMLDivElement | null>(null);
 	$effect(() => {
 		// Reset edit mode whenever a different post opens.
@@ -67,6 +70,7 @@
 		confirmingDelete = false;
 		confirmingPostNow = false;
 		genDetailsOpen = false;
+		videoError = false;
 		livePost = null;
 		refineOpen = false;
 		refineError = null;
@@ -422,10 +426,26 @@
 					{#if display.mediaType === 'video'}
 						<!-- svelte-ignore a11y_media_has_caption -->
 						{#key display.mediaUrl}
-							<video src={display.mediaUrl} poster={display.posterUrl || undefined} controls playsinline preload="metadata"></video>
+							<video
+								src={display.mediaUrl}
+								poster={display.posterUrl || undefined}
+								controls
+								playsinline
+								preload="metadata"
+								onerror={() => (videoError = true)}
+							></video>
 						{/key}
+						{#if videoError}
+							<!-- Playback failed (common on mobile for older non-faststart clips, or a
+							     bad content-type). Don't leave a dead black box — say so and give a
+							     direct route to the file, which always opens in the OS player. -->
+							<div class="video-fallback" role="status">
+								<p>This clip wouldn't play inline.</p>
+								<a href={display.mediaUrl} target="_blank" rel="noopener noreferrer">Open video ↗</a>
+							</div>
+						{/if}
 					{:else}
-						<img src={display.mediaUrl} alt="Post media" />
+						<img src={display.mediaUrl} alt="Post media" fetchpriority="high" decoding="async" />
 					{/if}
 					{#if refining}
 						<div class="refine-overlay" role="status">
@@ -704,7 +724,7 @@
 			{/if}
 			{#if onReject && (post.status === 'draft' || post.status === 'scheduled')}
 				<button type="button" class="btn-drawer-delete" onclick={() => onReject?.(post)}>
-					✕ {post.status === 'scheduled' ? 'Unschedule' : 'Reject'}
+					{post.status === 'scheduled' ? 'Unschedule' : 'Reject'}
 				</button>
 			{/if}
 			{#if canRefine}
@@ -717,18 +737,18 @@
 					onclick={() => (refineOpen ? (refineOpen = false) : openRefine())}
 					title="Edit the visual prompt and regenerate the media"
 				>
-					{refining ? '↻ Refining…' : '✨ Refine'}
+					{refining ? 'Refining…' : 'Refine'}
 				</button>
 			{/if}
 			{#if post.status === 'draft'}
 				<button type="button" class="btn-drawer-approve" disabled={approving || refining} onclick={() => onApprove(post)}>
-					{approving ? 'Approving…' : '✓ Approve & Schedule'}
+					{approving ? 'Approving…' : 'Approve & Schedule'}
 				</button>
 			{:else if canRepublish}
 				<!-- Media generated fine; only publishing failed. Re-send to a platform
 				     that IS connected — the user picks which. No auto-retry. -->
 				<button type="button" class="btn-drawer-approve" onclick={() => onPublishFallback?.(post)}>
-					📤 Publish to a connected platform
+					Publish to a connected platform
 				</button>
 			{/if}
 			{#if canPostNow}
@@ -742,7 +762,7 @@
 					onclick={handlePostNowClick}
 					title="Publish immediately, overriding the schedule"
 				>
-					{#if posting}Posting…{:else if confirmingPostNow}Post live now?{:else}⚡ Post Now{/if}
+					{#if posting}Posting…{:else if confirmingPostNow}Post live now?{:else}Post Now{/if}
 				</button>
 			{/if}
 			<button type="button" class="btn-drawer-close" onclick={onClose}>Close</button>
@@ -920,6 +940,35 @@
 		overflow: hidden;
 		border: 1px solid var(--border);
 		background: #000;
+	}
+
+	/* Shown over the poster when inline playback fails — offers the raw file, which
+	   always opens in the device's native player. */
+	.video-fallback {
+		position: absolute;
+		inset: 0;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 0.6rem;
+		padding: 1rem;
+		text-align: center;
+		background: rgba(10, 14, 24, 0.72);
+		backdrop-filter: blur(2px);
+		color: #fff;
+		font-size: 0.8rem;
+	}
+	.video-fallback p {
+		margin: 0;
+	}
+	.video-fallback a {
+		font-weight: 700;
+		color: #fff;
+		text-decoration: underline;
+		padding: 0.4rem 0.9rem;
+		border: 1px solid rgba(255, 255, 255, 0.5);
+		border-radius: 8px;
 	}
 
 	/* ── Refine (regenerate media in place) ── */
@@ -1249,99 +1298,84 @@
 		background: var(--surface-2);
 	}
 
-	.btn-drawer-delete {
-		background: var(--error-soft);
-		color: var(--error);
+	/* One congruent footer button. Every action shares the same geometry and
+	   weight; only the semantic tint differs (soft fill + colored label at rest,
+	   solid fill on hover) so the row reads as a single, restrained set — matching
+	   the Delete/Close pair, with no per-button icons. */
+	.btn-drawer-delete,
+	.btn-drawer-refine,
+	.btn-drawer-approve,
+	.btn-drawer-postnow,
+	.btn-drawer-close {
 		border: 1px solid transparent;
 		border-radius: 6px;
 		padding: 0.5rem 1rem;
 		font-size: 0.78rem;
 		font-weight: 600;
+		line-height: 1.2;
 		cursor: pointer;
 		transition: all 0.15s ease;
 	}
 
+	.btn-drawer-delete {
+		background: var(--error-soft);
+		color: var(--error);
+	}
 	.btn-drawer-delete:hover:not(:disabled),
 	.btn-drawer-delete.confirming {
 		background: var(--error);
 		color: #fff;
 	}
 
-	.btn-drawer-approve {
-		background: var(--success-soft);
-		color: var(--success);
-		border: 1px solid transparent;
-		border-radius: 6px;
-		padding: 0.5rem 1rem;
-		font-size: 0.78rem;
-		font-weight: 600;
-		cursor: pointer;
-		transition: all 0.15s ease;
-	}
-
-	.btn-drawer-approve:hover:not(:disabled) {
-		background: var(--success);
-		color: #fff;
-	}
-
-	.btn-drawer-approve:disabled,
-	.btn-drawer-delete:disabled,
-	.btn-drawer-refine:disabled,
-	.btn-drawer-postnow:disabled {
-		opacity: 0.6;
-		cursor: not-allowed;
-	}
-
 	.btn-drawer-refine {
-		background: transparent;
+		background: var(--accent-soft);
 		color: var(--accent, #7c6aed);
-		border: 1px solid var(--accent-mid, var(--accent, #7c6aed));
-		border-radius: 6px;
-		padding: 0.5rem 1rem;
-		font-size: 0.78rem;
-		font-weight: 600;
-		cursor: pointer;
-		transition: all 0.15s ease;
 	}
 	.btn-drawer-refine:hover:not(:disabled) {
 		background: var(--accent, #7c6aed);
 		color: #fff;
 	}
 
-	.btn-drawer-postnow {
-		background: var(--accent, #7c6aed);
+	.btn-drawer-approve {
+		background: var(--success-soft);
+		color: var(--success);
+	}
+	.btn-drawer-approve:hover:not(:disabled) {
+		background: var(--success);
 		color: #fff;
-		border: 1px solid transparent;
-		border-radius: 6px;
-		padding: 0.5rem 1rem;
-		font-size: 0.78rem;
-		font-weight: 600;
-		cursor: pointer;
-		transition: all 0.15s ease;
+	}
+
+	.btn-drawer-postnow {
+		background: var(--cyan-soft);
+		color: var(--cyan);
 	}
 	.btn-drawer-postnow:hover:not(:disabled) {
-		filter: brightness(1.08);
+		background: var(--cyan);
+		color: #fff;
 	}
 	/* Second click state — amber to signal this publishes live, right now. */
 	.btn-drawer-postnow.confirming {
 		background: var(--warning, #f59e0b);
+		color: #fff;
 	}
 
 	.btn-drawer-close {
 		margin-left: auto;
 		background: var(--surface);
 		color: var(--text-muted);
-		border: 1px solid var(--border);
-		border-radius: 6px;
-		padding: 0.5rem 1rem;
-		font-size: 0.78rem;
-		font-weight: 500;
-		cursor: pointer;
+		border-color: var(--border);
 	}
-
 	.btn-drawer-close:hover {
 		border-color: var(--accent-mid);
 		color: var(--text);
+	}
+
+	.btn-drawer-delete:disabled,
+	.btn-drawer-refine:disabled,
+	.btn-drawer-approve:disabled,
+	.btn-drawer-postnow:disabled {
+		opacity: 0.6;
+		cursor: not-allowed;
 	}
 
 	@media (max-width: 520px) {

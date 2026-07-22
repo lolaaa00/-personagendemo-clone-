@@ -155,12 +155,12 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		// unpinned persona no longer silently defaults to a male face.
 		const gender = resolvePersonaGender(agent, cfg?.ugc_voice);
 
-		// Persona's selected brand brief first (multi-brand users), newest as fallback.
+		// Pinned-only: use the persona's explicitly selected brand brief, or no
+		// brand context at all — never a silent fall-back to the newest brief.
 		const { data: selectedBrief } = cfg?.brand_brief_id
 			? await db.brandBriefs.getById(cfg.brand_brief_id, user.id)
 			: { data: null };
-		const { data: fallbackBrief } = selectedBrief ? { data: null } : await db.brandBriefs.get(user.id);
-		const briefData = (selectedBrief ?? fallbackBrief)?.data || null;
+		const briefData = selectedBrief?.data || null;
 
 		// The REAL prompt this generation will send — built by the same function the
 		// generator uses, so the preview can never drift from what actually runs.

@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { platformProfileUrl } from '$lib/platforms';
+
 	interface PlatformStatus {
 		connected: boolean;
 		handle?: string;
@@ -28,6 +30,7 @@
 			followers: number;
 			engagement: number;
 			handle: string;
+			url: string | null;
 		}> = [];
 
 		for (const p of platforms) {
@@ -46,7 +49,8 @@
 					color: p.color,
 					followers,
 					engagement,
-					handle: status.handle || '@connected'
+					handle: status.handle || '@connected',
+					url: platformProfileUrl(p.key, status.handle)
 				});
 			}
 		}
@@ -125,7 +129,17 @@
 						<div class="plat-info">
 							<span class="plat-bullet" style="background-color: {platform.color};"></span>
 							<span class="plat-name">{platform.name}</span>
-							<span class="plat-handle">{platform.handle}</span>
+							{#if platform.url}
+								<a
+									class="plat-handle plat-handle-link"
+									href={platform.url}
+									target="_blank"
+									rel="noopener noreferrer"
+									title="Open {platform.name} profile ↗"
+								>{platform.handle}</a>
+							{:else}
+								<span class="plat-handle">{platform.handle}</span>
+							{/if}
 						</div>
 						<div class="plat-metrics">
 							<div class="plat-metric">
@@ -377,6 +391,26 @@
 		font-size: 11px;
 		color: var(--text-dim);
 		font-family: var(--font-mono);
+	}
+
+	/* Handle links: same muted look until hovered, then adopt the platform's
+	   brand color with an underline so it's obviously clickable. */
+	.plat-handle-link {
+		text-decoration: none;
+		border-radius: 4px;
+		transition: color 0.15s ease;
+		cursor: pointer;
+	}
+
+	.plat-handle-link:hover {
+		color: var(--plat-color, var(--accent));
+		text-decoration: underline;
+		text-underline-offset: 2px;
+	}
+
+	.plat-handle-link:focus-visible {
+		outline: 2px solid var(--accent-mid);
+		outline-offset: 2px;
 	}
 
 	.plat-metrics {

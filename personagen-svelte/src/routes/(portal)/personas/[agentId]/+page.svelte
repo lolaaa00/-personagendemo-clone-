@@ -13,7 +13,7 @@
 	import { getPostDisplay } from '$lib/components/feed/postDisplay';
 	import type { AutonomyLevel } from '$lib/types';
 	import { AUTONOMY_LABELS } from '$lib/types';
-	import { PLATFORMS as PLATFORM_REGISTRY, platformLabel } from '$lib/platforms';
+	import { PLATFORMS as PLATFORM_REGISTRY, platformLabel, platformProfileUrl } from '$lib/platforms';
 	import GenerationComposer from '$lib/components/generation/GenerationComposer.svelte';
 	import type { ComposerSpec } from '$lib/components/generation/types';
 	import { NICHE_OPTIONS, APPEARANCE_FIELDS, stripLeadingAvatarName } from '$lib/persona-profile';
@@ -167,7 +167,12 @@
 	}
 	let personaProfile = $state<Record<string, any>>(parsePersonaProfile(agent));
 	// Multi-brand: which of the user's brand briefs this persona generates for.
+	// `savedBrandBriefId` mirrors what's actually persisted so the Brand card can
+	// show an unsaved-change indicator and confirm precisely on apply.
 	let selectedBrandBriefId = $state<string>(agent?.brand_brief_id ?? '');
+	let savedBrandBriefId = $state<string>(agent?.brand_brief_id ?? '');
+	let savingBrand = $state(false);
+	let brandDirty = $derived(selectedBrandBriefId !== savedBrandBriefId);
 	let brandBriefs = $derived<Array<{ id: string; name: string }>>(data.brandBriefs ?? []);
 	// Age targeting as selectable buckets (multi-select) instead of dual sliders.
 	const AGE_RANGES = [
@@ -426,6 +431,7 @@
 		editSupervisorId = fresh.supervisor_agent_id ?? null;
 		editRuntimeOwner = fresh.runtime_owner ?? 'svelte-gemini';
 		selectedBrandBriefId = fresh.brand_brief_id ?? '';
+		savedBrandBriefId = fresh.brand_brief_id ?? '';
 
 		// Reset persona profile from new agent
 		const freshProfile = parsePersonaProfile(fresh);
@@ -655,8 +661,30 @@
 	let showGenerateConfirm = $state(false);
 	let confirmSkipNext = $state(false);
 	let skipGenerateConfirm = $state(false);
+	// ── Hero scroll-fade ────────────────────────────────────────────
+	// The identity hero sits directly above the sticky tab-nav. As the user
+	// scrolls into a long tab, fade + lift the hero out so the sticky nav docks
+	// cleanly at the top instead of the hero smearing behind its backdrop blur.
+	let heroEl = $state<HTMLElement | null>(null);
+	let scrollParent: HTMLElement | null = null;
+	let heroFade = $state(0); // 0 = fully visible, 1 = fully hidden
+	function updateHeroFade() {
+		if (!scrollParent || !heroEl) return;
+		// Fully faded a touch before the hero fully scrolls away, so the handoff
+		// to the sticky nav feels intentional rather than abruptly clipped.
+		const fadeOver = Math.max(1, heroEl.offsetHeight * 0.8);
+		heroFade = Math.min(1, Math.max(0, scrollParent.scrollTop / fadeOver));
+	}
+
 	onMount(() => {
 		skipGenerateConfirm = localStorage.getItem('pg-skip-generate-confirm') === '1';
+
+		// The persona page scrolls inside the portal content column, not the window.
+		scrollParent = heroEl?.closest('.portal-content') ?? null;
+		if (scrollParent) {
+			scrollParent.addEventListener('scroll', updateHeroFade, { passive: true });
+			updateHeroFade();
+		}
 
 		// Returning from a provider OAuth flow (Zernio appends ?connected=platform
 		// to our callback): confirm, refresh statuses (which auto-imports the new
@@ -683,7 +711,10 @@
 	let genProductPhotoUrl = $state('');
 	let genCharacterRefUrl = $state('');
 	let briefProducts = $state<any[]>([]);
-	let briefLoaded = $state(false);
+	// Which brief id the product list was last loaded for (null = the unpinned/none
+	// state). Re-loads when the persona's pinned brief changes so the composer's
+	// product picker always reflects the CURRENT pin, not a stale first load.
+	let briefLoadedFor = $state<string | null | undefined>(undefined);
 
 	let genEstimate = $derived.by(() => {
 		const llm = 3 * priceOf('openrouter', 'llm');
@@ -712,13 +743,19 @@
 	async function openComposer() {
 		genPlatforms = [...connectedKeys];
 		showGenerateConfirm = true;
-		if (!briefLoaded) {
-			briefLoaded = true;
-			try {
-				const res = await BrandBrief.get();
-				if (res.success && Array.isArray(res.data?.products)) briefProducts = res.data.products;
-			} catch {
-				/* composer works without the product list */
+		// Pinned-only: pull products from the persona's SELECTED brief, or none when
+		// nothing is pinned. Cached per brief id so switching the pin re-loads.
+		const pin = selectedBrandBriefId || null;
+		if (briefLoadedFor !== pin) {
+			briefLoadedFor = pin;
+			briefProducts = [];
+			if (pin) {
+				try {
+					const res = await BrandBrief.getById(pin);
+					if (res.success && Array.isArray(res.data?.products)) briefProducts = res.data.products;
+				} catch {
+					/* composer works without the product list */
+				}
 			}
 		}
 	}
@@ -797,6 +834,23 @@
 	// field (except gender) with values tailored to that brand and differentiated
 	// from every other persona on the account. Populates the form; the user
 	// reviews and Saves through the normal saveProfile() flow.
+	// Apply just the brand-kit choice. Persists through the normal profile save
+	// (so any other in-progress edits go with it) and confirms precisely with the
+	// brand's name — or that the persona now runs with NO brand kit.
+	async function applyBrandKit() {
+		if (savingBrand || !brandDirty) return;
+		savingBrand = true;
+		const chosen = brandBriefs.find((b) => b.id === selectedBrandBriefId);
+		const msg = selectedBrandBriefId
+			? `Brand kit applied — this persona now creates for “${chosen?.name ?? 'the selected brand'}”.`
+			: 'Brand kit cleared — this persona now generates with no brand kit.';
+		try {
+			await saveProfile(msg);
+		} finally {
+			savingBrand = false;
+		}
+	}
+
 	let generatingProfile = $state(false);
 	async function generatePersonaProfile() {
 		if (!agent?.id || generatingProfile) return;
@@ -1292,6 +1346,12 @@
 		const inFlight = p.status === 'generating' || p.status === 'failed';
 		const display = getPostDisplay(p);
 		if (!inFlight && !display.mediaUrl) return false;
+		// A failed row with NO media is a dead generation — pure noise in the
+		// default feed. Keep it out of every view except an explicit "Failed"
+		// filter, where the user is deliberately triaging errors. (Publish-fails
+		// keep their media, so they stay visible as real, recoverable content.)
+		const isGenFailed = p.status === 'failed' && !display.mediaUrl;
+		if (isGenFailed && feedFilter !== 'failed') return false;
 		if (feedFilter !== 'all' && p.status !== feedFilter) return false;
 		// The media-type filter can't apply to a post whose media doesn't exist yet.
 		if (inFlight) return true;
@@ -1306,6 +1366,12 @@
 		}
 		return true;
 	}));
+
+	// Dead generations hidden from the default view — surfaced only as a count so
+	// the user knows they exist and can jump to them via the Failed filter.
+	let genFailedCount = $derived(
+		feedPosts.filter((p: any) => p.status === 'failed' && !getPostDisplay(p).mediaUrl).length
+	);
 
 	// ── Assets: every generated visual for this persona in one grid ──
 	// Lives inside the Feed tab as an alternate view (feedView toggle) — same
@@ -1451,7 +1517,11 @@
 			if (!res.ok || !d.success) throw new Error(d.error || 'Server error');
 			// Update local agent state optimistically… (market included so a later
 			// read of agent.market reflects the just-saved persona profile).
-			agent = { ...agent, name: editName, handle: editHandle, status: editStatus, niche: editNiche, gradient: editGradient, initial: editInitial, market: JSON.stringify(payload.personaProfile), soul: soulText, skills: skillsText, tools: toolsText, timezone, posts_per_day: postsPerDay, active_hours_start: activeHoursStart, active_hours_end: activeHoursEnd, autonomy_level: autonomyLevel, rss_url: rssUrl, rss_active: rssActive, ugc_voice: selectedVoice };
+			agent = { ...agent, name: editName, handle: editHandle, status: editStatus, niche: editNiche, gradient: editGradient, initial: editInitial, market: JSON.stringify(payload.personaProfile), soul: soulText, skills: skillsText, tools: toolsText, timezone, posts_per_day: postsPerDay, active_hours_start: activeHoursStart, active_hours_end: activeHoursEnd, autonomy_level: autonomyLevel, rss_url: rssUrl, rss_active: rssActive, ugc_voice: selectedVoice, brand_brief_id: selectedBrandBriefId || null };
+			// The brand pin is now persisted — clear the unsaved-change indicator and
+			// let the composer re-pull products for the new pin on next open.
+			savedBrandBriefId = selectedBrandBriefId;
+			briefLoadedFor = undefined;
 			// …then re-fetch layout data so the sidebar roster + header (which read
 			// server-loaded sidebarAgents) reflect the new name/avatar immediately.
 			await invalidateAll();
@@ -1771,6 +1841,7 @@
 	let pageDestroyed = false;
 	onDestroy(() => {
 		pageDestroyed = true;
+		scrollParent?.removeEventListener('scroll', updateHeroFade);
 		// Leaving the page with a kit edit still debouncing — save it now.
 		flushPendingKitSave();
 	});
@@ -2172,7 +2243,12 @@
 	<!-- ── Hero header ─────────────────────────────────────────── -->
 	<!-- Compact identity header — the banner image was removed on request:
 	     the character photo shows ONCE (avatar), not stretched behind the name. -->
-	<header class="persona-hero">
+	<header
+		class="persona-hero"
+		bind:this={heroEl}
+		style="opacity: {1 - heroFade}; transform: translateY({(-heroFade * 16).toFixed(1)}px); pointer-events: {heroFade > 0.98 ? 'none' : 'auto'};"
+		aria-hidden={heroFade > 0.98}
+	>
 		<div class="hero-row">
 			{#if agent.ugc_character_ref}
 				<!-- Clickable → enlarge (same lightbox as the profile-picture/kit thumbnails),
@@ -2352,6 +2428,19 @@
 					</div>
 					{#if feedView === 'posts'}
 					<div class="feed-filters">
+						{#if genFailedCount > 0 && feedFilter !== 'failed'}
+							<!-- Errors are hidden from the default view; this is the only
+							     nudge that they exist and need a look. -->
+							<button
+								type="button"
+								class="filter-alert"
+								onclick={() => (feedFilter = 'failed')}
+								title="{genFailedCount} failed generation{genFailedCount === 1 ? '' : 's'} are hidden from this view — click to review"
+							>
+								<span class="filter-alert-dot"></span>
+								{genFailedCount} failed
+							</button>
+						{/if}
 						<select class="filter-select" bind:value={feedFilter}>
 							<option value="all">All statuses</option>
 							<option value="published">Published</option>
@@ -2359,7 +2448,7 @@
 							<option value="publishing">Publishing</option>
 							<option value="draft">Draft</option>
 							<option value="partial">Partial</option>
-							<option value="failed">Failed</option>
+							<option value="failed">Failed{genFailedCount > 0 ? ` (${genFailedCount})` : ''}</option>
 						</select>
 						<select class="filter-select" bind:value={mediaTypeFilter}>
 							<option value="all">Images + videos</option>
@@ -2499,29 +2588,48 @@
 				     grounded in the brief selected here. -->
 				<section class="profile-section">
 					<div class="section-header">
-						<h2 class="section-title">Brand</h2>
+						<h2 class="section-title">Brand Kit</h2>
 						<p class="section-desc">
-							The brand brief this persona creates content for — products, voice, and audience all
-							come from it.
+							Choose the brand brief this persona creates content for — its products, voice, and
+							audience ground every asset. Selection is opt-in: with <strong>None</strong> selected,
+							the persona generates with no brand kit (no brand is applied automatically).
 						</p>
 					</div>
 					<div class="fields-grid">
 						<div class="field-group col-span-2">
-							<label for="p-brief">Brand Brief</label>
-							<select id="p-brief" bind:value={selectedBrandBriefId}>
-								<option value="">— Newest brief (default) —</option>
-								{#each brandBriefs as b (b.id)}
-									<option value={b.id}>{b.name}</option>
-								{/each}
-							</select>
+							<label for="p-brief">Brand Kit</label>
+							<div class="brand-kit-row">
+								<select id="p-brief" bind:value={selectedBrandBriefId}>
+									<option value="">— None (no brand kit) —</option>
+									{#each brandBriefs as b (b.id)}
+										<option value={b.id}>{b.name}</option>
+									{/each}
+								</select>
+								<button
+									type="button"
+									class="btn-primary btn-apply-brand"
+									onclick={applyBrandKit}
+									disabled={!brandDirty || savingBrand}
+									title={brandDirty ? 'Save this brand-kit choice' : 'No unsaved brand-kit change'}
+								>
+									{savingBrand ? 'Applying…' : brandDirty ? 'Apply brand kit' : 'Applied'}
+								</button>
+							</div>
 							{#if brandBriefs.length === 0}
 								<p class="field-hint">
 									No brand briefs saved yet — create one in <a href="/brand-brief">Brand Brief</a>, then
 									select it here.
 								</p>
+							{:else if brandDirty}
+								<p class="field-hint brand-dirty-hint">
+									Unsaved change — click <strong>Apply brand kit</strong> to confirm.
+								</p>
 							{:else}
 								<p class="field-hint">
-									Save the profile to apply. Manage briefs in <a href="/brand-brief">Brand Brief</a>.
+									{savedBrandBriefId
+										? `Applied: this persona creates for “${brandBriefs.find((b) => b.id === savedBrandBriefId)?.name ?? 'the selected brand'}”.`
+										: 'No brand kit applied — content generates without brand context.'}
+									Manage briefs in <a href="/brand-brief">Brand Brief</a>.
 								</p>
 							{/if}
 						</div>
@@ -3578,7 +3686,17 @@
 									{#if !collapsedPlatforms[platform.key]}
 										<div class="platform-body" transition:slide={{ duration: 200 }}>
 											<div class="handle-row">
-												<span class="platform-handle">{status?.handle ?? '@connected'}</span>
+												{#if platformProfileUrl(platform.key, status?.handle)}
+													<a
+														class="platform-handle platform-handle-link"
+														href={platformProfileUrl(platform.key, status?.handle)}
+														target="_blank"
+														rel="noopener noreferrer"
+														title="Open {platform.name} profile ↗"
+													>{status?.handle}</a>
+												{:else}
+													<span class="platform-handle">{status?.handle ?? '@connected'}</span>
+												{/if}
 												{#if status?.verified}
 													<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--cyan)" stroke-width="2"><path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 12c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
 												{/if}
@@ -4298,6 +4416,9 @@
 		border-radius: var(--radius-lg);
 		margin-bottom: 1.5rem;
 		overflow: hidden;
+		/* opacity + transform are driven per-scroll-frame (see updateHeroFade) —
+		   hint the compositor so the fade stays smooth. */
+		will-change: opacity, transform;
 	}
 
 	/* Row that holds avatar + info + stats */
@@ -4600,7 +4721,43 @@
 
 	.feed-filters {
 		display: flex;
+		align-items: center;
 		gap: 0.5rem;
+	}
+
+	/* Quiet-but-present alert: errors are hidden by default, so this is the only
+	   signal they exist. Click jumps to the Failed filter. */
+	.filter-alert {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		padding: 0.42rem 0.7rem;
+		border-radius: 8px;
+		border: 1px solid color-mix(in srgb, var(--error) 45%, transparent);
+		background: color-mix(in srgb, var(--error) 12%, transparent);
+		color: var(--error);
+		font-size: 0.78rem;
+		font-weight: 600;
+		font-family: var(--font-body);
+		cursor: pointer;
+		white-space: nowrap;
+		transition: background 0.15s ease;
+	}
+	.filter-alert:hover {
+		background: color-mix(in srgb, var(--error) 20%, transparent);
+	}
+	.filter-alert-dot {
+		width: 7px;
+		height: 7px;
+		border-radius: 999px;
+		background: var(--error);
+		box-shadow: 0 0 0 0 color-mix(in srgb, var(--error) 60%, transparent);
+		animation: filter-alert-pulse 2s ease-out infinite;
+	}
+	@keyframes filter-alert-pulse {
+		0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--error) 55%, transparent); }
+		70% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--error) 0%, transparent); }
+		100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--error) 0%, transparent); }
 	}
 
 	.filter-select {
@@ -4772,6 +4929,33 @@
 		font-size: 0.72rem;
 		color: var(--text-dim);
 		margin: 0;
+	}
+
+	/* Brand-kit selector + inline apply button. */
+	.brand-kit-row {
+		display: flex;
+		gap: 0.5rem;
+		align-items: stretch;
+	}
+
+	.brand-kit-row select {
+		flex: 1;
+		min-width: 0;
+	}
+
+	.btn-apply-brand {
+		flex-shrink: 0;
+		white-space: nowrap;
+		padding: 0 1rem;
+	}
+
+	.btn-apply-brand:disabled {
+		opacity: 0.55;
+		cursor: default;
+	}
+
+	.brand-dirty-hint {
+		color: var(--accent);
 	}
 
 	/* Appearance / wardrobe dynamic-variable grid. */
@@ -5608,6 +5792,26 @@
 		font-weight: 600;
 		color: var(--text);
 		font-family: var(--font-mono);
+	}
+
+	/* Connected handles link out to the live profile. Keep the resting look
+	   identical to the plain span, reveal affordance (accent + underline) on hover. */
+	.platform-handle-link {
+		text-decoration: none;
+		transition: color 0.15s ease;
+		cursor: pointer;
+	}
+
+	.platform-handle-link:hover {
+		color: var(--accent);
+		text-decoration: underline;
+		text-underline-offset: 3px;
+	}
+
+	.platform-handle-link:focus-visible {
+		outline: 2px solid var(--accent-mid);
+		outline-offset: 2px;
+		border-radius: 4px;
 	}
 
 	.btn-star {

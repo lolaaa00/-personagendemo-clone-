@@ -141,11 +141,12 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 			.eq('agent_id', agentId)
 			.maybeSingle();
 
+		// Pinned-only: use the persona's explicitly selected brand brief, or no
+		// brand context at all — never a silent fall-back to the newest brief.
 		const { data: selectedBrief } = cfgRow?.brand_brief_id
 			? await db.brandBriefs.getById(cfgRow.brand_brief_id, user.id)
 			: { data: null };
-		const { data: fallbackBrief } = selectedBrief ? { data: null } : await db.brandBriefs.get(user.id);
-		const briefData = (selectedBrief ?? fallbackBrief)?.data || null;
+		const briefData = selectedBrief?.data || null;
 		const products = Array.isArray(briefData?.products) ? briefData.products : [];
 		const product =
 			products.find((p: any) => p.id === genInput.productId) ||
