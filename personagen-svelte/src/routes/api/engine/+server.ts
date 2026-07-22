@@ -174,6 +174,92 @@ function isBrandNameGrounded(brandName: unknown, content: string, storeUrl: stri
 	return tokens.every((t) => new RegExp(`\\b${t}\\b`).test(contentLower));
 }
 
+/** Resolves an image/link URL (absolute, protocol-relative, or root-relative) against a base. */
+function resolveHttpUrl(raw: string, base: string): string | null {
+	try {
+		const u = new URL(raw.trim(), base);
+		return u.protocol === 'http:' || u.protocol === 'https:' ? u.toString() : null;
+	} catch {
+		return null;
+	}
+}
+
+/** First content value of a named/property meta tag, tolerating either attribute order. */
+function metaContent(html: string, key: string): string {
+	const attr = `(?:property|name)=["']${key}["']`;
+	return (
+		html.match(new RegExp(`<meta[^>]+${attr}[^>]*content=["']([^"']+)["']`, 'i'))?.[1] ||
+		html.match(new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]*${attr}`, 'i'))?.[1] ||
+		''
+	);
+}
+
+/**
+ * Harvests image URLs from raw HTML. Storefront themes (Shopify especially)
+ * ship protocol-relative src ("//cdn.shopify.com/…") and lazy-load through
+ * srcset/data-src — an https?:-only <img src> regex sees ZERO images on such
+ * pages, which is exactly why scraped products arrived photoless.
+ */
+function harvestImageUrls(html: string, baseUrl: string, cap = 30): string[] {
+	const found: string[] = [];
+	const push = (raw: string) => {
+		const u = resolveHttpUrl(raw, baseUrl);
+		// Skip vectors (icons/sprites) and inline data — products need photos.
+		if (u && !/\.svg(\?|$)/i.test(u) && !u.startsWith('data:') && !found.includes(u)) {
+			found.push(u);
+		}
+	};
+	for (const m of html.matchAll(/<img[^>]+(?:src|data-src)=["']([^"']+)["']/gi)) {
+		push(m[1]);
+		if (found.length >= cap) return found;
+	}
+	for (const m of html.matchAll(/(?:srcset|data-srcset)=["']([^"']+)["']/gi)) {
+		// srcset is comma-separated "url width" pairs — take the last (largest).
+		const parts = m[1]
+			.split(',')
+			.map((s) => s.trim().split(/\s+/)[0])
+			.filter(Boolean);
+		if (parts.length) push(parts[parts.length - 1]);
+		if (found.length >= cap) return found;
+	}
+	return found;
+}
+
+/**
+ * Harvests genuine logo candidates from HTML: favicon/apple-touch <link> icons
+ * and images whose URL names a logo. og:image is deliberately NOT included —
+ * it is usually a hero/campaign banner (the "sitewide sale" banner that got
+ * saved as a brand logo), so it belongs at the END of the candidate list only.
+ */
+function harvestLogoUrls(html: string, baseUrl: string): string[] {
+	const found: string[] = [];
+	const push = (raw: string) => {
+		const u = resolveHttpUrl(raw, baseUrl);
+		if (!u || found.includes(u)) return;
+		// Icon URLs often carry tiny resize params (width=32) — offer the
+		// original file first where the CDN pattern allows it.
+		if (/[?&](?:width|height|crop)=/i.test(u)) {
+			const bare = u.split('?')[0];
+			if (!found.includes(bare)) found.push(bare);
+		}
+		found.push(u);
+	};
+	for (const m of html.matchAll(/<img[^>]+(?:src|data-src)=["']([^"']*logo[^"']*)["']/gi)) {
+		push(m[1]);
+	}
+	for (const m of html.matchAll(
+		/<link[^>]+rel=["'][^"']*(?:apple-touch-icon|icon)[^"']*["'][^>]*href=["']([^"']+)["']/gi
+	)) {
+		push(m[1]);
+	}
+	for (const m of html.matchAll(
+		/<link[^>]+href=["']([^"']+)["'][^>]*rel=["'][^"']*(?:apple-touch-icon|icon)[^"']*["']/gi
+	)) {
+		push(m[1]);
+	}
+	return found.slice(0, 6);
+}
+
 export const POST: RequestHandler = async ({ url, request, locals, fetch }) => {
 	// 1. Authenticate user
 	const { session } = await locals.safeGetSession();
@@ -1139,7 +1225,11 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 												);
 											}
 											if (typeof fcJson.data.rawHtml === 'string') {
-												harvestFonts(fcJson.data.rawHtml.slice(0, 300000));
+												const raw = fcJson.data.rawHtml.slice(0, 300000);
+												harvestFonts(raw);
+												// Real logos (favicon/apple-touch/logo-named images) beat
+												// the og:image hero banner already in the candidate list.
+												logoCandidates.unshift(...harvestLogoUrls(raw, storeUrl));
 											}
 											// Firecrawl Branding format: the structured brand guide
 											// (logo, hex colors, fonts, personality) — deterministic
@@ -1259,10 +1349,13 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 											const content = tag.match(/content=["']([^"']*)["']/i)?.[1]?.trim();
 											if (!content) continue;
 											metaLines.push(`${key}: ${content}`);
-											if (key === 'og:image' && content.startsWith('http'))
-												logoCandidates.push(content);
 											if (metaLines.length >= 12) break;
 										}
+										// Real logos (favicon/apple-touch/logo-named images) go FIRST;
+										// og:image is usually a hero banner, so it goes last.
+										logoCandidates.unshift(...harvestLogoUrls(html, storeUrl));
+										const ogImage = resolveHttpUrl(metaContent(html, 'og:image') || '', storeUrl);
+										if (ogImage) logoCandidates.push(ogImage);
 										// Give the product-page sub-scraper links to chew on (Firecrawl
 										// normally supplies these) and the extractor real image URLs.
 										for (const m of html.matchAll(/href=["']((?:https?:\/\/|\/)[^"'\s>]+)["']/gi)) {
@@ -1273,18 +1366,12 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 											}
 											if (discoveredLinks.length >= 200) break;
 										}
-										const imgUrls = new Set<string>();
-										for (const m of html.matchAll(
-											/<img[^>]+(?:src|data-src)=["'](https?:[^"'\s>]+)["']/gi
-										)) {
-											imgUrls.add(m[1]);
-											if (imgUrls.size >= 25) break;
-										}
+										const imgUrls = harvestImageUrls(html, storeUrl, 30);
 										contentToParse = [
 											titleText ? `PAGE TITLE: ${titleText}` : '',
 											metaLines.length ? `PAGE METADATA:\n${metaLines.join('\n')}` : '',
 											`VISIBLE PAGE TEXT:\n${visibleText.slice(0, 15000)}`,
-											imgUrls.size ? `IMAGE URLS ON PAGE:\n${[...imgUrls].join('\n')}` : ''
+											imgUrls.length ? `IMAGE URLS ON PAGE:\n${imgUrls.join('\n')}` : ''
 										]
 											.filter(Boolean)
 											.join('\n\n')
@@ -1309,55 +1396,150 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 						}
 
 						if (contentToParse && hasAi) {
+							// Shopify(-compatible) stores expose a public JSON catalog — the
+							// most reliable source of product names/prices/photos, immune to
+							// markup quirks and crawler throttling. Try it first.
+							type CatalogProduct = {
+								name: string;
+								price: string;
+								image: string;
+								description: string;
+							};
+							let catalogProducts: CatalogProduct[] = [];
+							try {
+								const catRes = await fetch(new URL('/products.json?limit=30', storeUrl).toString(), {
+									headers: {
+										'User-Agent':
+											'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+									}
+								});
+								if (catRes.ok) {
+									const cat = await catRes.json().catch(() => null);
+									if (Array.isArray(cat?.products)) {
+										catalogProducts = cat.products
+											.slice(0, 30)
+											.map((p: any) => ({
+												name: String(p.title || '').slice(0, 150),
+												price: String(p.variants?.[0]?.price ?? ''),
+												image: String(p.images?.[0]?.src || ''),
+												description: String(p.body_html || '')
+													.replace(/<[^>]+>/g, ' ')
+													.replace(/\s+/g, ' ')
+													.trim()
+													.slice(0, 200)
+											}))
+											.filter((p: CatalogProduct) => p.name);
+										console.log(
+											`[Engine] Shopify catalog found: ${catalogProducts.length} products (${catalogProducts.filter((p) => p.image).length} with images)`
+										);
+									}
+								}
+							} catch {
+								// not a Shopify-style store — fall back to page scraping below
+							}
+
 							// Scrape individual product pages for richer product data + photos.
-							// Filter product-like URLs from the discovered links and scrape up to 4.
-							const productLinks = discoveredLinks
-								.filter((l) => /\/(products?|shop|item)\//i.test(l))
-								.slice(0, 4);
+							// Dedupe product-like URLs (storefront homepages repeat each product
+							// link many times) and scrape up to 8. Skipped when the JSON catalog
+							// already delivered the products.
+							const productLinks = catalogProducts.length
+								? []
+								: [
+										...new Set(
+											discoveredLinks
+												.filter((l) => /\/(products?|shop|item)\//i.test(l))
+												.map((l) => l.split('#')[0].split('?')[0])
+										)
+									].slice(0, 8);
 
 							let productPageContent = '';
-							if (
-								firecrawlKey &&
-								!firecrawlKey.includes('placeholder') &&
-								productLinks.length > 0
-							) {
+							if (productLinks.length > 0) {
 								const productPageResults = await Promise.allSettled(
 									productLinks.map(async (link) => {
 										try {
 											await assertPublicHttpUrl(link);
-											const r = await fetch('https://api.firecrawl.dev/v1/scrape', {
-												method: 'POST',
+											// Firecrawl first, when configured…
+											if (firecrawlKey && !firecrawlKey.includes('placeholder')) {
+												try {
+													const r = await fetch('https://api.firecrawl.dev/v1/scrape', {
+														method: 'POST',
+														headers: {
+															'Content-Type': 'application/json',
+															Authorization: `Bearer ${firecrawlKey}`
+														},
+														body: JSON.stringify({
+															url: link,
+															formats: ['markdown'],
+															onlyMainContent: true
+														})
+													});
+													if (r.ok) {
+														const rj = await r.json();
+														// A throttled product page must not pollute the
+														// extraction context with error text — fall through
+														// to the direct fetch instead.
+														if (
+															rj.success &&
+															!scrapeContentProblem(
+																rj.data?.markdown || '',
+																Number(rj.data?.metadata?.statusCode) || undefined,
+																80
+															)
+														) {
+															const meta = rj.data?.metadata || {};
+															const img =
+																[meta.ogImage, meta['og:image'], meta.image]
+																	.flat()
+																	.find(
+																		(v: any) => typeof v === 'string' && v.startsWith('http')
+																	) || '';
+															return `PRODUCT PAGE: ${link}${img ? `\nPRODUCT IMAGE: ${img}` : ''}\n${(rj.data?.markdown || '').substring(0, 4000)}`;
+														}
+													}
+												} catch {
+													// fall through to direct fetch
+												}
+											}
+											// …direct fetch fallback: Shopify throttles Firecrawl's
+											// crawler but serves plain server fetches fine — the same
+											// story as the homepage. No redirect following (the URL was
+											// SSRF-validated; a redirect could escape that check).
+											const res = await fetch(link, {
+												redirect: 'manual',
 												headers: {
-													'Content-Type': 'application/json',
-													Authorization: `Bearer ${firecrawlKey}`
-												},
-												body: JSON.stringify({
-													url: link,
-													formats: ['markdown', 'links'],
-													onlyMainContent: true
-												})
+													'User-Agent':
+														'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+												}
 											});
-											if (!r.ok) return '';
-											const rj = await r.json();
-											if (!rj.success) return '';
-											// A throttled product page must not pollute the extraction
-											// context with error text — drop it entirely.
-											if (
-												scrapeContentProblem(
-													rj.data?.markdown || '',
-													Number(rj.data?.metadata?.statusCode) || undefined,
-													80
-												)
-											) {
-												return '';
-											}
-											// Collect image URLs from product page links/metadata
-											const meta = rj.data?.metadata || {};
-											for (const key of ['ogImage', 'og:image', 'image']) {
-												const v = meta[key];
-												if (typeof v === 'string' && v.startsWith('http')) logoCandidates.push(v);
-											}
-											return (rj.data?.markdown || '').substring(0, 5000);
+											if (!res.ok) return '';
+											const html = await res.text();
+											const visible = html
+												.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+												.replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
+												.replace(/<[^>]+>/g, ' ')
+												.replace(/\s+/g, ' ')
+												.trim();
+											if (scrapeContentProblem(visible, res.status, 80)) return '';
+											const title =
+												metaContent(html, 'og:title') ||
+												html.match(/<title[^>]*>([^<]{1,300})<\/title>/i)?.[1]?.trim() ||
+												'';
+											const img =
+												resolveHttpUrl(metaContent(html, 'og:image') || '', link) ||
+												harvestImageUrls(html, link, 1)[0] ||
+												'';
+											const price =
+												metaContent(html, 'og:price:amount') ||
+												metaContent(html, 'product:price:amount');
+											return [
+												`PRODUCT PAGE: ${link}`,
+												title ? `TITLE: ${title}` : '',
+												img ? `PRODUCT IMAGE: ${img}` : '',
+												price ? `PRICE: ${price}` : '',
+												visible.slice(0, 2500)
+											]
+												.filter(Boolean)
+												.join('\n');
 										} catch {
 											return '';
 										}
@@ -1372,6 +1554,16 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 							const logoHint = logoCandidates.length
 								? `\nLOGO CANDIDATES (pick the best brand logo for logoUrl; prefer the first): ${logoCandidates.slice(0, 5).join(', ')}`
 								: '';
+							// Names+prices only: the model needs the catalog for brand context
+							// (mission, competitors, audience), but must NOT echo it back —
+							// 30 products of CDN URLs overflow the response token cap and
+							// truncate the JSON. Products are attached verbatim after parsing.
+							const catalogHint = catalogProducts.length
+								? `\n\nPRODUCT CATALOG (the store's own product list, for context — do NOT return a "products" field, it is attached automatically): ${catalogProducts
+										.map((c) => `${c.name} (${c.price})`)
+										.join('; ')
+										.substring(0, 3000)}`
+								: '';
 							const productPagesHint = productPageContent
 								? `\n\nPRODUCT PAGES CONTENT (extract products from here with real image URLs):\n${productPageContent.substring(0, 15000)}`
 								: '';
@@ -1384,7 +1576,8 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 								: '';
 							const prompt = `You are a web scraper agent. Extract the brand brief details and all products (with name, description, price, and image URL) from this e-commerce storefront content.
 CRITICAL: Only extract what is actually present in the content. If the content is NOT a real brand storefront — e.g. a rate-limit or error message, a bot/captcha challenge, a parked domain, a login wall, or a near-empty page — return exactly {"error": "<short reason>"} and nothing else. NEVER invent, guess, or fabricate a brand from error text.
-Use the LOGO CANDIDATES for "logoUrl". Prefer real absolute image URLs (https://...) for every product "photoUrl" — look in the product pages content section. Never leave logoUrl empty if a candidate exists.${logoHint}${fontHint}${brandGuideHint}
+Use the LOGO CANDIDATES for "logoUrl" (prefer an actual logo/icon over hero or campaign banners). Never leave logoUrl empty if a candidate exists.
+PRODUCT PHOTOS: give every product a real absolute "photoUrl" from the content — use the PRODUCT IMAGE line of the matching PRODUCT PAGE block first, then any matching URL from IMAGE URLS ON PAGE (match by product name appearing in the URL). Use "" only when no plausible image URL exists for that product. Never invent an image URL.${logoHint}${fontHint}${brandGuideHint}
 COMPETITORS: identify 3-5 REAL direct competitors of this brand (same product category and audience — well-known brands count). Use any mentioned in the content first, then infer from the category. Never return fewer than 3.
 Return a JSON object matching this exact shape:
 {
@@ -1421,7 +1614,7 @@ Return a JSON object matching this exact shape:
   ]
 }
 Store Homepage Content:
-${contentToParse.substring(0, 20000)}${productPagesHint}`;
+${contentToParse.substring(0, 20000)}${catalogHint}${productPagesHint}`;
 
 							const resText = await ai!.generate(prompt, { json: true });
 							if (resText) {
@@ -1466,6 +1659,18 @@ ${contentToParse.substring(0, 20000)}${productPagesHint}`;
 										typeof f === 'string' ? f : f?.family || f?.name || '';
 									parsed.fontPrimary = coerceFont(parsed.fontPrimary);
 									parsed.fontSecondary = coerceFont(parsed.fontSecondary);
+									// Products come from the store's own JSON catalog VERBATIM when
+									// available — names, prices and photos are facts, not something
+									// to run through a language model.
+									if (catalogProducts.length) {
+										parsed.products = catalogProducts.map((c, i) => ({
+											id: `p${i + 1}`,
+											name: c.name,
+											description: c.description || '',
+											price: c.price && /^\d/.test(c.price) ? `$${c.price}` : c.price || '',
+											photoUrl: c.image || ''
+										}));
+									}
 									scrapedData = parsed;
 									scrapeSuccess = true;
 								}

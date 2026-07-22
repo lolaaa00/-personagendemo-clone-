@@ -669,6 +669,11 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 	let intelCompanyName = $state('');
 	let intelIndustry = $state('');
 	let intelTargetAudience = $state('');
+	// Which brief (id + brand name) the wizard was last seeded from. Wizard
+	// state persists in localStorage ACROSS briefs, so without this marker a
+	// brand switch keeps showing the previous brand's data (the "HoneyX data
+	// inside an Akhu Apothecary brief" bug).
+	let intelSeedKey = $state('');
 
 	interface IntelCompetitor {
 		url: string;
@@ -693,9 +698,53 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 	}
 	let intelStrategyResults = $state<IntelStrategyResults | null>(null);
 
+	// Infer the wizard's industry pick from the brief's own text — deterministic
+	// keyword mapping onto the INTEL_INDUSTRIES options, E-Commerce as the
+	// fallback for any scraped store.
+	function inferIntelIndustry(): string {
+		const text =
+			`${mission} ${interests} ${demographics} ${tagline} ${brandName} ${products.map((p) => p.name).join(' ')}`.toLowerCase();
+		const rules: [RegExp, string][] = [
+			[/wellness|health|supplement|herbal|apothecary|fitness|gym|yoga/, 'Fitness & Wellness'],
+			[/fashion|apparel|clothing|garment|streetwear|jewelr/, 'Fashion'],
+			[/food|beverage|coffee|tea|snack|drink|restaurant/, 'Food & Beverage'],
+			[/software|saas|tech|app\b|ai\b/, 'Technology'],
+			[/finance|invest|bank|crypto/, 'Finance'],
+			[/travel|tour|hotel/, 'Travel'],
+			[/real estate|property|realty/, 'Real Estate'],
+			[/game|gaming|music|film|entertainment/, 'Entertainment'],
+			[/education|course|tutor|learning/, 'Education'],
+			[/car\b|automotive|vehicle|motor/, 'Automotive']
+		];
+		for (const [re, label] of rules) if (re.test(text)) return label;
+		return products.length > 0 ? 'E-Commerce' : '';
+	}
+
 	// Synchronize brand brief data into the Intel Wizard whenever the tab is opened
 	$effect(() => {
 		if (activeTab === 'intel') {
+			// Re-seed EVERY brief-derived field when the active brief (or its
+			// brand) changes — fill-if-empty is not enough, because restored
+			// localStorage state from the previous brand is never empty.
+			const seedKey = `${currentBriefId || 'local'}::${brandName}`;
+			if (brandName && intelSeedKey !== seedKey) {
+				intelSeedKey = seedKey;
+				intelCompanyName = brandName;
+				intelIndustry = inferIntelIndustry() || intelIndustry;
+				intelTargetAudience = demographics || '';
+				intelInterests = (interests || '')
+					.split(/[,;|]+/)
+					.map((s) => s.trim())
+					.filter((s) => s.length > 0 && s.length < 50);
+				intelCompetitors = competitors
+					.filter((c) => c.url.trim())
+					.slice(0, 5)
+					.map((c) => ({ url: c.url, platform: 'instagram' }));
+				if (intelCompetitors.length === 0) intelCompetitors = [{ url: '', platform: 'youtube' }];
+				intelCurrentStep = 1;
+				intelStrategyResults = null;
+				saveIntelToStorage();
+			}
 			if (brandName && !intelCompanyName) intelCompanyName = brandName;
 			// Pre-populate target audience from brief
 			if (demographics && !intelTargetAudience) intelTargetAudience = demographics;
@@ -726,6 +775,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		if (!browser) return;
 		const data = {
 			intelCurrentStep,
+			intelSeedKey,
 			intelCompanyName,
 			intelIndustry,
 			intelTargetAudience,
@@ -747,6 +797,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 			if (!raw) return;
 			const data = JSON.parse(raw);
 			if (data.intelCurrentStep) intelCurrentStep = Math.min(data.intelCurrentStep, 5);
+			if (data.intelSeedKey) intelSeedKey = data.intelSeedKey;
 			if (data.intelCompanyName) intelCompanyName = data.intelCompanyName;
 			if (data.intelIndustry) intelIndustry = data.intelIndustry;
 			if (data.intelTargetAudience) intelTargetAudience = data.intelTargetAudience;
