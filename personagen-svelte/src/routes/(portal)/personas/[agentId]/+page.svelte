@@ -3519,7 +3519,10 @@
 								{:else}
 									Each additional account is
 									<strong>${accountMeter.nextAccountCostUsd}/mo</strong>. Manage billing on your
-									<a href={connectHub?.url ?? 'https://zernio.com/dashboard'} target="_blank" rel="noopener">Zernio dashboard</a>.
+									<a href={connectHub?.url ?? 'https://zernio.com/dashboard'} target="_blank" rel="noopener">Zernio dashboard</a>
+									— or add another Zernio key in the
+									<a href="/settings#zernio-keys">Key Manager</a> (every key is a separate
+									Zernio account with 2 more free slots).
 								{/if}
 								{#if !accountMeter.hasAnalyticsAccess}
 									<br /><span class="meter-warn">Live follower &amp; engagement stats need analytics enabled on your Zernio key.</span>

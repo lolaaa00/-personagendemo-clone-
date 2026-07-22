@@ -734,8 +734,9 @@
 			</div>
 		</div>
 
-		<!-- Zernio Key Manager -->
-		<div class="settings-card">
+		<!-- Zernio Key Manager. id anchors the "add another key" redirect from the
+		     persona Connections tab's slot meter (/settings#zernio-keys). -->
+		<div class="settings-card" id="zernio-keys">
 			<div class="card-header">
 				<div class="card-icon">
 					<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="2">
