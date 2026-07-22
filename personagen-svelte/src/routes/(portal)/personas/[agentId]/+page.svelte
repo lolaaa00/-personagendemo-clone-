@@ -403,6 +403,11 @@
 	$effect(() => {
 		const fresh = data.agent;
 		if (!fresh || fresh.id === loadedAgentId) return;
+		// A pending kit auto-save still belongs to the PREVIOUS persona — flush it
+		// against that persona's id before the state below is re-seeded, so the
+		// last keystrokes land instead of being cancelled into the void.
+		flushPendingKitSave(loadedAgentId ?? undefined);
+		kitSaveState = 'idle';
 		loadedAgentId = fresh.id;
 
 		agent = fresh;
@@ -866,18 +871,90 @@
 		if (d.bios && typeof d.bios === 'object') ppBios = { ...ppBios, ...d.bios };
 	}
 
-	// Standalone regenerate — re-rolls bios/handles/display name WITHOUT
-	// re-rolling the whole persona profile (which would churn the strategy and
-	// desync from an already-generated face).
-	let generatingKit = $state(false);
-	async function generateIdentityKitNow() {
-		if (!agent?.id || generatingKit) return;
-		generatingKit = true;
+	// ── Kit auto-save ───────────────────────────────────────────────────────
+	// Per-platform identity work must NEVER be lost by switching platform, tab,
+	// or persona without hitting Save — so kit edits persist on their own,
+	// debounced. Scoped to the personaProfile payload (the market JSON, which is
+	// stored wholesale); agents-table fields still go through the Save button.
+	let kitSaveState = $state<'idle' | 'saving' | 'saved' | 'error'>('idle');
+	let kitSaveTimer: ReturnType<typeof setTimeout> | null = null;
+
+	async function saveIdentityKit(forAgentId?: string): Promise<boolean> {
+		const id = forAgentId ?? agent?.id;
+		if (!id) return false;
+		kitSaveState = 'saving';
 		try {
-			const res = await BrandBrief.generateIdentityKit(agent.id, selectedBrandBriefId || null);
+			const res = await fetch('/api/agents/config', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ agentId: id, personaProfile: currentPersonaProfile() })
+			});
+			const d = await parseJsonResponse<any>(res);
+			if (!d.success) throw new Error(d.error || 'Save failed');
+			kitSaveState = 'saved';
+			return true;
+		} catch (e: any) {
+			kitSaveState = 'error';
+			showToast('Identity kit save failed: ' + (e.message || 'unknown'), 'error');
+			return false;
+		}
+	}
+
+	function queueKitSave() {
+		if (kitSaveTimer) clearTimeout(kitSaveTimer);
+		kitSaveState = 'saving';
+		kitSaveTimer = setTimeout(() => {
+			kitSaveTimer = null;
+			void saveIdentityKit();
+		}, 1200);
+	}
+
+	// Fires a pending debounced save NOW (payload built synchronously from the
+	// current state) — called before persona resync re-seeds the form and on
+	// page destroy, so the last keystrokes always land.
+	function flushPendingKitSave(forAgentId?: string) {
+		if (!kitSaveTimer) return;
+		clearTimeout(kitSaveTimer);
+		kitSaveTimer = null;
+		void saveIdentityKit(forAgentId);
+	}
+
+	// ── Kit generation — LEAN, scoped calls ─────────────────────────────────
+	// 'bio'     → ONLY the selected platform's bio (seconds-fast; the all-13
+	//             single call overflowed token caps and hit the LLM deadline).
+	// 'base'    → display name + username candidates only.
+	// 'starter' → base + bios for connected platforms (server-resolved) or a
+	//             starter trio. Used by first-run CTAs and the brand chain.
+	let generatingKit = $state(false);
+	let generatingKitBase = $state(false);
+	let generatingKitBio = $state(false);
+	let kitBusy = $derived(generatingKit || generatingKitBase || generatingKitBio);
+
+	async function generateKit(scope: 'starter' | 'base' | 'bio') {
+		if (!agent?.id || kitBusy) return;
+		const opts =
+			scope === 'base'
+				? { platforms: [] as string[], includeBase: true }
+				: scope === 'bio'
+					? // First bio ever also brings the base along so one click fills the card.
+						{ platforms: [kitPlatform], includeBase: ppHandleCandidates.length === 0 }
+					: undefined;
+		if (scope === 'starter') generatingKit = true;
+		else if (scope === 'base') generatingKitBase = true;
+		else generatingKitBio = true;
+		try {
+			const res = await BrandBrief.generateIdentityKit(agent.id, selectedBrandBriefId || null, opts);
 			if (res.success && res.data) {
 				applyIdentityKit(res.data);
-				await saveProfile('Identity kit generated and saved');
+				await saveIdentityKit();
+				showToast(
+					scope === 'bio'
+						? `${platformLabel(kitPlatform)} bio generated and saved`
+						: scope === 'base'
+							? 'Username ideas generated and saved'
+							: 'Starter identity kit generated and saved',
+					'success'
+				);
 			} else {
 				showToast(res.error || 'Identity kit generation failed', 'error');
 			}
@@ -885,16 +962,19 @@
 			showToast(e.message || 'Identity kit generation failed', 'error');
 		} finally {
 			generatingKit = false;
+			generatingKitBase = false;
+			generatingKitBio = false;
 		}
 	}
 
 	// Manual availability loop: ✗ marks a candidate as taken on the platforms the
 	// user tried (toggles back to untried), "Use" confirms it as the handle for
-	// the currently selected platform.
+	// the currently selected platform. Every mutation queues the auto-save.
 	function toggleCandidateTaken(handle: string) {
 		ppHandleCandidates = ppHandleCandidates.map((c) =>
 			c.handle === handle ? { ...c, status: c.status === 'taken' ? 'untried' : 'taken' } : c
 		);
+		queueKitSave();
 	}
 
 	function useCandidateFor(handle: string, platform: string) {
@@ -902,6 +982,7 @@
 		ppHandleCandidates = ppHandleCandidates.map((c) =>
 			c.handle === handle ? { ...c, status: 'confirmed' } : c
 		);
+		queueKitSave();
 	}
 
 	// Sanitizes live and prunes the key when cleared, so saved JSON never
@@ -912,6 +993,7 @@
 		if (h) next[platform] = h;
 		else delete next[platform];
 		ppConfirmedHandles = next;
+		queueKitSave();
 	}
 
 	function addOwnHandle() {
@@ -922,6 +1004,7 @@
 		}
 		if (!ppHandleCandidates.some((c) => c.handle === h)) {
 			ppHandleCandidates = [...ppHandleCandidates, { handle: h, status: 'untried' }];
+			queueKitSave();
 		}
 		newHandleInput = '';
 	}
@@ -1296,6 +1379,36 @@
 		return total;
 	});
 
+	// Single source for the market-JSON payload — shared by the full profile
+	// save and the identity-kit auto-save so the two can never drift. The market
+	// column is stored WHOLESALE from this object: any new pp* field must be
+	// added here (and to the resync effect) or it silently drops on save.
+	function currentPersonaProfile() {
+		return {
+			ageRanges: ppAgeRanges,
+			// Keep numeric min/max derived from the selected buckets so existing
+			// generation prompts that read ageMin/ageMax keep working.
+			ageMin: ppAgeRanges.length
+				? Math.min(...AGE_RANGES.filter((r) => ppAgeRanges.includes(r.key)).map((r) => r.lo))
+				: null,
+			ageMax: ppAgeRanges.length
+				? Math.max(...AGE_RANGES.filter((r) => ppAgeRanges.includes(r.key)).map((r) => r.hi))
+				: null,
+			gender: ppGender,
+			archetype: ppArchetype,
+			contentFocus: ppContentFocus,
+			psychProfile: ppPsychProfile,
+			contentAngle: ppContentAngle,
+			targetAvatar: ppTargetAvatar,
+			appearance: ppAppearance,
+			voiceProfile: ppVoiceProfile,
+			bios: ppBios,
+			handleCandidates: ppHandleCandidates,
+			confirmedHandles: ppConfirmedHandles,
+			displayName: ppDisplayName
+		};
+	}
+
 	async function saveProfile(successMessage?: string): Promise<boolean> {
 		if (!agent?.id) return false;
 		saving = true;
@@ -1323,29 +1436,7 @@
 			supervisorAgentId: editSupervisorId,
 			runtimeOwner: editRuntimeOwner,
 			brandBriefId: selectedBrandBriefId || null,
-			personaProfile: {
-				ageRanges: ppAgeRanges,
-				// Keep numeric min/max derived from the selected buckets so existing
-				// generation prompts that read ageMin/ageMax keep working.
-				ageMin: ppAgeRanges.length
-					? Math.min(...AGE_RANGES.filter((r) => ppAgeRanges.includes(r.key)).map((r) => r.lo))
-					: null,
-				ageMax: ppAgeRanges.length
-					? Math.max(...AGE_RANGES.filter((r) => ppAgeRanges.includes(r.key)).map((r) => r.hi))
-					: null,
-				gender: ppGender,
-				archetype: ppArchetype,
-				contentFocus: ppContentFocus,
-				psychProfile: ppPsychProfile,
-				contentAngle: ppContentAngle,
-				targetAvatar: ppTargetAvatar,
-				appearance: ppAppearance,
-				voiceProfile: ppVoiceProfile,
-				bios: ppBios,
-				handleCandidates: ppHandleCandidates,
-				confirmedHandles: ppConfirmedHandles,
-				displayName: ppDisplayName
-			}
+			personaProfile: currentPersonaProfile()
 		};
 		try {
 			const res = await fetch('/api/agents/config', {
@@ -1677,6 +1768,8 @@
 	let pageDestroyed = false;
 	onDestroy(() => {
 		pageDestroyed = true;
+		// Leaving the page with a kit edit still debouncing — save it now.
+		flushPendingKitSave();
 	});
 
 	async function fetchKitState(agentId: string): Promise<{ kit: any; avatarUrl: string | null }> {
@@ -2159,12 +2252,22 @@
 				>⧉ Copy bio</button>
 			{:else}
 				<p class="hero-bio hero-bio-empty">No {platformLabel(kitPlatform)} bio yet.</p>
+				<!-- First-ever generation seeds the whole starter kit; after that the
+				     CTA only generates the SELECTED platform's bio — small, fast calls
+				     that can't time out or touch other platforms' work. -->
 				<button
 					type="button"
 					class="kit-copy-btn"
-					onclick={generateIdentityKitNow}
-					disabled={generatingKit}
-				>{generatingKit ? 'Generating…' : '✨ Generate identity kit'}</button>
+					onclick={() =>
+						generateKit(
+							ppHandleCandidates.length === 0 && Object.keys(ppBios).length === 0 ? 'starter' : 'bio'
+						)}
+					disabled={kitBusy}
+				>{kitBusy
+						? 'Generating…'
+						: ppHandleCandidates.length === 0 && Object.keys(ppBios).length === 0
+							? '✨ Generate identity kit'
+							: `✨ Generate ${platformLabel(kitPlatform)} bio`}</button>
 			{/if}
 			{#if ppConfirmedHandles[kitPlatform]}
 				<button
@@ -2586,24 +2689,34 @@
 					<div class="section-header">
 						<div class="label-row">
 							<h2 class="section-title">Platform Identity Kit</h2>
+							{#if kitSaveState !== 'idle'}
+								<span class="kit-save-state" class:error={kitSaveState === 'error'}>
+									{kitSaveState === 'saving'
+										? 'Saving…'
+										: kitSaveState === 'saved'
+											? 'Saved ✓'
+											: 'Save failed'}
+								</span>
+							{/if}
 							<button
 								type="button"
 								class="btn-sync btn-xs"
-								onclick={generateIdentityKitNow}
-								disabled={generatingKit}
-								title="Generate display name, username candidates, and a bio per platform — tailored to this persona and the selected brand"
+								onclick={() => generateKit('starter')}
+								disabled={kitBusy}
+								title="One small call: display name + username candidates + bios for this persona's connected platforms (or a TikTok/Instagram/YouTube starter set)"
 							>
 								{generatingKit
 									? 'Generating…'
-									: `✨ ${ppHandleCandidates.length || Object.keys(ppBios).length ? 'Regenerate' : 'Generate'} kit`}
+									: `✨ ${ppHandleCandidates.length || Object.keys(ppBios).length ? 'Regenerate' : 'Generate'} starter kit`}
 							</button>
 						</div>
 						<p class="section-desc">
 							What goes ON the platform profile — display name, username, bio, picture. Platforms
-							don't allow profile edits via API, so copy-paste these during account setup. Usernames:
-							try the top candidate at signup; if it's taken, mark it ✗ and try the next; “Use”
-							records the winner for the selected platform. Connecting the account later shows the
-							real username as ground truth.
+							don't allow profile edits via API, so copy-paste these during account setup. Every edit
+							here <strong>saves automatically per platform</strong> — switch platforms freely, nothing
+							is lost. Usernames: try the top candidate at signup; if it's taken, mark it ✗ and try
+							the next; “Use” records the winner for the selected platform. Connecting the account
+							later shows the real username as ground truth.
 						</p>
 					</div>
 
@@ -2615,7 +2728,10 @@
 									id="kit-display"
 									type="text"
 									value={ppDisplayName}
-									oninput={(e) => (ppDisplayName = e.currentTarget.value)}
+									oninput={(e) => {
+										ppDisplayName = e.currentTarget.value;
+										queueKitSave();
+									}}
 									placeholder="e.g. Jenny Tran ✨"
 									maxlength="40"
 								/>
@@ -2654,14 +2770,25 @@
 						</div>
 
 						<div class="field-group col-span-2">
-							<label>Username Candidates</label>
+							<div class="label-row">
+								<label>Username Candidates</label>
+								<button
+									type="button"
+									class="btn-sync btn-xs"
+									onclick={() => generateKit('base')}
+									disabled={kitBusy}
+									title="Generate 10 fresh username candidates + display name — your taken/confirmed marks are kept"
+								>
+									{generatingKitBase ? 'Generating…' : '✨ More ideas'}
+								</button>
+							</div>
 							<p class="field-hint" style="margin: 0 0 0.6rem;">
 								One handle everywhere: candidates are ≤15 chars, letters/digits/underscores, so they
 								fit every platform (X is the strictest). Confirmations apply to
 								<strong>{platformLabel(kitPlatform)}</strong> — switch the platform in the bio picker below.
 							</p>
 							{#if ppHandleCandidates.length === 0}
-								<p class="field-hint">No candidates yet — hit “✨ Generate kit” above.</p>
+								<p class="field-hint">No candidates yet — hit “✨ More ideas” or the starter kit above.</p>
 							{:else}
 								<div class="kit-candidates">
 									{#each ppHandleCandidates as c (c.handle)}
@@ -2717,18 +2844,36 @@
 						<div class="field-group col-span-2">
 							<div class="label-row">
 								<label for="kit-bio">Bio — per platform</label>
-								<select class="kit-select" bind:value={kitPlatform} aria-label="Platform for bio">
-									{#each BIO_PLATFORM_KEYS as k (k)}
-										<option value={k}>{platformLabel(k)}</option>
-									{/each}
-								</select>
+								<span class="kit-bio-controls">
+									<select class="kit-select" bind:value={kitPlatform} aria-label="Platform for bio">
+										{#each BIO_PLATFORM_KEYS as k (k)}
+											<option value={k}>{platformLabel(k)}</option>
+										{/each}
+									</select>
+									<!-- Generates ONLY the selected platform's bio — a small, fast call
+									     that can't clobber other platforms' bios. -->
+									<button
+										type="button"
+										class="btn-sync btn-xs"
+										onclick={() => generateKit('bio')}
+										disabled={kitBusy}
+										title="Generate the {platformLabel(kitPlatform)} bio only — other platforms' bios are untouched"
+									>
+										{generatingKitBio
+											? 'Generating…'
+											: `✨ ${ppBios[kitPlatform] ? 'Regenerate' : 'Generate'} ${platformLabel(kitPlatform)} bio`}
+									</button>
+								</span>
 							</div>
 							<textarea
 								id="kit-bio"
 								rows="4"
 								value={ppBios[kitPlatform] ?? ''}
-								oninput={(e) => (ppBios = { ...ppBios, [kitPlatform]: e.currentTarget.value })}
-								placeholder={`No ${platformLabel(kitPlatform)} bio yet — generate the kit or write one`}
+								oninput={(e) => {
+									ppBios = { ...ppBios, [kitPlatform]: e.currentTarget.value };
+									queueKitSave();
+								}}
+								placeholder={`No ${platformLabel(kitPlatform)} bio yet — generate one or write your own`}
 							></textarea>
 							<div class="kit-bio-meta">
 								<span
@@ -2768,9 +2913,9 @@
 								{/if}
 							</div>
 							<p class="field-hint">
-								Fields save with the profile (Save below). The confirmed username is what you actually
-								registered on {platformLabel(kitPlatform)}; once the account is connected, the live
-								handle shows next to it as ground truth.
+								Bio and username save automatically per platform as you type. The confirmed username
+								is what you actually registered on {platformLabel(kitPlatform)}; once the account is
+								connected, the live handle shows next to it as ground truth.
 							</p>
 						</div>
 					</div>
@@ -5622,6 +5767,22 @@
 	}
 
 	/* Profile-tab card widgets */
+	/* Auto-save status — quiet confirmation that per-platform edits persist. */
+	.kit-save-state {
+		font-size: 0.72rem;
+		font-weight: 600;
+		color: #10b981;
+		margin-left: auto;
+		margin-right: 0.6rem;
+	}
+	.kit-save-state.error { color: #ef4444; }
+
+	.kit-bio-controls {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
 	.kit-inline {
 		display: flex;
 		align-items: center;

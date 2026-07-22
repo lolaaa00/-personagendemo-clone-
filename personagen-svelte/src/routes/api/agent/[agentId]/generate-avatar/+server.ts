@@ -16,7 +16,6 @@ import { priceOf } from '$lib/pricing';
 import { modelsFor, resolveModel } from '$lib/models';
 import { getServiceSupabase } from '$lib/server/service-supabase';
 import { persistBufferToStorage } from '$lib/server/storage';
-import { VOICE_CATALOG } from '$lib/server/voices';
 
 const MAX_REFERENCE_BYTES = 10 * 1024 * 1024; // 10MB
 
@@ -148,13 +147,13 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		// preserved) instead of generating a brand-new person from text.
 		const identityRef: string | null = cfg?.ugc_character_ref || null;
 		const editing = Boolean(identityRef);
-		const voiceGender = VOICE_CATALOG.find((v) => v.name === (cfg?.ugc_voice || 'Adam'))?.gender;
-
 		// Persona gender is authoritative: the explicit Profile field first, else
 		// inferred from the soul/name (shared with the content-generation path, so
-		// the hero face and the videos can't disagree on gender). Only falls back
-		// to the voice's gender when the persona gives no signal at all.
-		const profileGender = resolvePersonaGender(agent);
+		// the hero face and the videos can't disagree on gender). The resolver
+		// itself falls back to a deliberately PINNED voice's gender when the
+		// persona gives no signal — the 'Adam' column default carries none, so an
+		// unpinned persona no longer silently defaults to a male face.
+		const gender = resolvePersonaGender(agent, cfg?.ugc_voice);
 
 		// Persona's selected brand brief first (multi-brand users), newest as fallback.
 		const { data: selectedBrief } = cfg?.brand_brief_id
@@ -163,7 +162,6 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		const { data: fallbackBrief } = selectedBrief ? { data: null } : await db.brandBriefs.get(user.id);
 		const briefData = (selectedBrief ?? fallbackBrief)?.data || null;
 
-		const gender = profileGender || voiceGender;
 		// The REAL prompt this generation will send — built by the same function the
 		// generator uses, so the preview can never drift from what actually runs.
 		// Regeneration (a face already exists) EDITS that face to keep the same

@@ -29,6 +29,7 @@ import {
 import {
 	PLATFORM_BIO_SPECS,
 	BIO_PLATFORM_KEYS,
+	STARTER_BIO_PLATFORMS,
 	coerceBios,
 	coerceHandleCandidates,
 	coerceConfirmedHandles,
@@ -104,6 +105,73 @@ function isPrivateOrReservedIp(ip: string): boolean {
 		return false;
 	}
 	return true; // unrecognized format — fail closed
+}
+
+/**
+ * Guards the scrape → AI-extraction boundary. A transport-level "success"
+ * doesn't mean the storefront was returned: Shopify/Cloudflare throttle
+ * crawlers with tiny error bodies (e.g. "local_rate_limited", 26 chars,
+ * upstream status 429) that Firecrawl still relays as success:true markdown.
+ * Handing that to the extractor makes it fabricate a brand out of the error
+ * text, which then auto-saves over the user's brief. Returns a human-readable
+ * problem description, or null when the content is safe to extract from.
+ */
+function scrapeContentProblem(
+	content: string,
+	upstreamStatus?: number,
+	minChars = 400
+): string | null {
+	if (upstreamStatus && upstreamStatus >= 400) {
+		return `the site responded with HTTP ${upstreamStatus}`;
+	}
+	const text = content.trim();
+	if (text.length < minChars) {
+		return `page content too short to be a real storefront (${text.length} chars)`;
+	}
+	// Error/challenge pages are short and dominated by error text; a real
+	// storefront can legitimately mention "blocked" somewhere deep in a long
+	// page, so only pattern-match when the content is suspiciously small.
+	if (
+		text.length < 3000 &&
+		/rate.?limit|too many requests|access denied|forbidden|captcha|are you a robot|attention required|checking your browser|verify you are human|service unavailable|temporarily unavailable|error \d{3}/i.test(
+			text
+		)
+	) {
+		return 'page content looks like an error or bot-challenge page';
+	}
+	return null;
+}
+
+/**
+ * Hallucination guard for brand extraction: a genuinely extracted brand name
+ * comes FROM the page, so the whole name must appear in the scraped content
+ * (contiguously, ignoring punctuation/spacing), match the store's domain, or
+ * have every meaningful token present as a real word in the content. Any-token
+ * matching is NOT enough — the invented "Local Rate Limited" shared the
+ * generic word "local" with the genuine page and would slip through.
+ */
+function isBrandNameGrounded(brandName: unknown, content: string, storeUrl: string): boolean {
+	const name = String(brandName);
+	const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '');
+	const nameNorm = norm(name);
+	if (!nameNorm) return false;
+	if (norm(content).includes(nameNorm)) return true;
+	try {
+		const host = new URL(storeUrl).hostname.toLowerCase().replace(/^www\./, '');
+		const domainNorm = norm(host);
+		const domainCore = norm(host.split('.')[0]);
+		if (domainNorm.includes(nameNorm)) return true;
+		if (domainCore.length >= 4 && nameNorm.includes(domainCore)) return true;
+	} catch {
+		// unparseable URL — fall back to content-only grounding
+	}
+	const tokens = name
+		.toLowerCase()
+		.split(/[^a-z0-9]+/)
+		.filter((t) => t.length >= 3);
+	if (tokens.length === 0) return false;
+	const contentLower = content.toLowerCase();
+	return tokens.every((t) => new RegExp(`\\b${t}\\b`).test(contentLower));
 }
 
 export const POST: RequestHandler = async ({ url, request, locals, fetch }) => {
@@ -383,17 +451,17 @@ Platform: ${bp.platform || platform}
 				// doesn't reference a provider URL that 404s before it's ever published.
 				// Degrade (warn + keep provider URL) only if no service-role key exists.
 				const batchSvc = (() => {
-						try {
-							return getServiceSupabase();
-						} catch {
-							return null;
-						}
-					})();
-				if (!batchSvc) {
-						console.warn(
-							'[Engine] No service-role Supabase key — batch images will be stored as EPHEMERAL provider URLs (not backed up).'
-						);
+					try {
+						return getServiceSupabase();
+					} catch {
+						return null;
 					}
+				})();
+				if (!batchSvc) {
+					console.warn(
+						'[Engine] No service-role Supabase key — batch images will be stored as EPHEMERAL provider URLs (not backed up).'
+					);
+				}
 
 				const batchSystemInstruction = `${agentContext || 'You are a real person sharing authentic product experiences on social media.'}
 Write like a HUMAN — casual, punchy, first-person. Caption MAX 4 lines. BANNED words: "elevate", "premium quality", "transform", "game-changer". 1-3 emojis max. Hook lands in first 7 words. Hashtags in the hashtags array ONLY, never in text field.
@@ -618,7 +686,8 @@ Output ONLY the JSON.`;
 						published: publishSuccess,
 						draft: postStatus === 'draft',
 						platforms: targetPlatforms,
-						message: postStatus === 'draft' ? 'Saved as draft — connect a platform to publish.' : undefined
+						message:
+							postStatus === 'draft' ? 'Saved as draft — connect a platform to publish.' : undefined
 					}
 				});
 			}
@@ -709,14 +778,20 @@ Return JSON: { "type": "script", "platform": "${platform}", "content": "formatte
 						if (parsed?.content) return json({ success: true, data: parsed });
 					}
 					return json(
-						{ success: false, error: `${ai!.provider} returned an unusable script response — try again.` },
+						{
+							success: false,
+							error: `${ai!.provider} returned an unusable script response — try again.`
+						},
 						{ status: 502 }
 					);
 				} catch (err) {
 					const msg = (err as Error).message || 'unknown error';
 					console.error('[Engine] AI script forge failed:', msg);
 					return json(
-						{ success: false, error: `Script generation failed via ${ai!.provider}: ${msg.slice(0, 200)}` },
+						{
+							success: false,
+							error: `Script generation failed via ${ai!.provider}: ${msg.slice(0, 200)}`
+						},
 						{ status: 502 }
 					);
 				}
@@ -751,7 +826,10 @@ Return JSON: { "type": "titles", "platform": "${platform}", "titles": [string x 
 					const msg = (err as Error).message || 'unknown error';
 					console.error('[Engine] AI titles failed:', msg);
 					return json(
-						{ success: false, error: `Title generation failed via ${ai!.provider}: ${msg.slice(0, 200)}` },
+						{
+							success: false,
+							error: `Title generation failed via ${ai!.provider}: ${msg.slice(0, 200)}`
+						},
 						{ status: 502 }
 					);
 				}
@@ -779,14 +857,20 @@ Return JSON: { "type": "thumbnail", "platform": "${platform}", "thumbnailNotes":
 						if (parsed?.thumbnailNotes) return json({ success: true, data: parsed });
 					}
 					return json(
-						{ success: false, error: `${ai!.provider} returned no usable thumbnail brief — try again.` },
+						{
+							success: false,
+							error: `${ai!.provider} returned no usable thumbnail brief — try again.`
+						},
 						{ status: 502 }
 					);
 				} catch (err) {
 					const msg = (err as Error).message || 'unknown error';
 					console.error('[Engine] AI thumbnail brief failed:', msg);
 					return json(
-						{ success: false, error: `Thumbnail brief failed via ${ai!.provider}: ${msg.slice(0, 200)}` },
+						{
+							success: false,
+							error: `Thumbnail brief failed via ${ai!.provider}: ${msg.slice(0, 200)}`
+						},
 						{ status: 502 }
 					);
 				}
@@ -845,7 +929,10 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 					const msg = (err as Error).message || 'unknown error';
 					console.error('[Engine] AI content generation failed:', msg);
 					return json(
-						{ success: false, error: `Generation failed via ${ai?.provider ?? 'AI'}: ${msg.slice(0, 200)}` },
+						{
+							success: false,
+							error: `Generation failed via ${ai?.provider ?? 'AI'}: ${msg.slice(0, 200)}`
+						},
 						{ status: 502 }
 					);
 				}
@@ -875,8 +962,7 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 				if (!briefData || typeof briefData !== 'object') {
 					return json({ success: false, error: 'Missing brief data' }, { status: 400 });
 				}
-				const briefName =
-					String(body.name || briefData.brandName || '').trim() || 'Untitled Brand';
+				const briefName = String(body.name || briefData.brandName || '').trim() || 'Untitled Brand';
 
 				if (body.brief_id) {
 					const { data: existing } = await db.brandBriefs.getById(body.brief_id, session.user.id);
@@ -942,6 +1028,9 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 				// 1. Try real scraping if URL is provided
 				let scrapeSuccess = false;
 				let scrapedData: any = null;
+				// Specific, honest failure reason for the user — never let a failed
+				// scrape masquerade as generic mystery (or worse, fake success).
+				let scrapeFailReason = '';
 
 				if (storeUrl) {
 					try {
@@ -957,11 +1046,11 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 						);
 						const firecrawlKey = userFirecrawlKey || env.FIRECRAWL_API_KEY;
 						let contentToParse = '';
-							// Logo/product image URLs live in page metadata + links, not in the
-							// markdown text — capture them separately so the extractor can fill
-							// logoUrl and product photoUrl reliably.
-							const logoCandidates: string[] = [];
-							const discoveredLinks: string[] = [];
+						// Logo/product image URLs live in page metadata + links, not in the
+						// markdown text — capture them separately so the extractor can fill
+						// logoUrl and product photoUrl reliably.
+						const logoCandidates: string[] = [];
+						const discoveredLinks: string[] = [];
 						// Fonts live in <link>/inline CSS — they don't survive markdown.
 						const fontCandidates: string[] = [];
 						// Structured brand guide from Firecrawl's Branding format (when present).
@@ -995,87 +1084,110 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 							firecrawlKey.trim() !== ''
 						) {
 							console.log(`[Engine] Scrape using Firecrawl for: ${storeUrl}`);
-							try {
-								const fcRes = await fetch('https://api.firecrawl.dev/v1/scrape', {
-									method: 'POST',
-									headers: {
-										'Content-Type': 'application/json',
-										Authorization: `Bearer ${firecrawlKey}`
-									},
-									body: JSON.stringify({
-										url: storeUrl,
-										// Full data spectrum: markdown for copy, links for product
-										// discovery, and keep nav/footer (onlyMainContent:false) so the
-										// logo in the header is visible to the extractor.
-										formats: ['markdown', 'links', 'rawHtml', 'branding'],
-										onlyMainContent: false
-									})
-								});
-								if (fcRes.ok) {
-									const fcJson = await fcRes.json();
-									if (fcJson.success && fcJson.data?.markdown) {
-										contentToParse = fcJson.data.markdown.substring(0, 40000);
-										const meta = fcJson.data.metadata || {};
-										// Logo candidates from OpenGraph / favicon metadata.
-										for (const key of ['ogImage', 'og:image', 'image', 'favicon', 'logo']) {
-											const v = meta[key];
-											if (typeof v === 'string' && v.startsWith('http')) logoCandidates.push(v);
-											else if (Array.isArray(v))
-												v.filter((x) => typeof x === 'string' && x.startsWith('http')).forEach((x) => logoCandidates.push(x));
-										}
-										if (Array.isArray(fcJson.data.links)) {
-											discoveredLinks.push(
-												...fcJson.data.links
-													.filter((l: any) => typeof l === 'string')
-													.slice(0, 200)
+							// Shopify-style crawler throttling is transient, so give Firecrawl
+							// one bounded retry before degrading to the direct-fetch fallback.
+							for (let attempt = 0; attempt < 2 && !contentToParse; attempt++) {
+								if (attempt > 0) await new Promise((r) => setTimeout(r, 2500));
+								try {
+									const fcRes = await fetch('https://api.firecrawl.dev/v1/scrape', {
+										method: 'POST',
+										headers: {
+											'Content-Type': 'application/json',
+											Authorization: `Bearer ${firecrawlKey}`
+										},
+										body: JSON.stringify({
+											url: storeUrl,
+											// Full data spectrum: markdown for copy, links for product
+											// discovery, and keep nav/footer (onlyMainContent:false) so the
+											// logo in the header is visible to the extractor.
+											formats: ['markdown', 'links', 'rawHtml', 'branding'],
+											onlyMainContent: false
+										})
+									});
+									if (fcRes.ok) {
+										const fcJson = await fcRes.json();
+										if (fcJson.success && fcJson.data?.markdown) {
+											// Firecrawl reports success even when the SITE refused the
+											// crawl (throttle/challenge page) — validate what actually
+											// came back before letting the extractor see it.
+											const problem = scrapeContentProblem(
+												fcJson.data.markdown,
+												Number(fcJson.data.metadata?.statusCode) || undefined
+											);
+											if (problem) {
+												console.warn(
+													`[Engine] Firecrawl content rejected for ${storeUrl} (${problem}) — ${attempt === 0 ? 'retrying once' : 'falling back to direct fetch'}`
+												);
+												continue;
+											}
+											contentToParse = fcJson.data.markdown.substring(0, 40000);
+											const meta = fcJson.data.metadata || {};
+											// Logo candidates from OpenGraph / favicon metadata.
+											for (const key of ['ogImage', 'og:image', 'image', 'favicon', 'logo']) {
+												const v = meta[key];
+												if (typeof v === 'string' && v.startsWith('http')) logoCandidates.push(v);
+												else if (Array.isArray(v))
+													v.filter((x) => typeof x === 'string' && x.startsWith('http')).forEach(
+														(x) => logoCandidates.push(x)
+													);
+											}
+											if (Array.isArray(fcJson.data.links)) {
+												discoveredLinks.push(
+													...fcJson.data.links
+														.filter((l: any) => typeof l === 'string')
+														.slice(0, 200)
+												);
+											}
+											if (typeof fcJson.data.rawHtml === 'string') {
+												harvestFonts(fcJson.data.rawHtml.slice(0, 300000));
+											}
+											// Firecrawl Branding format: the structured brand guide
+											// (logo, hex colors, fonts, personality) — deterministic
+											// ground truth that outranks AI inference. Tolerant reads:
+											// the response schema isn't published, only the categories.
+											const b = fcJson.data.branding;
+											if (b && typeof b === 'object') {
+												// Fonts arrive as objects ({ family, role }) — verified live
+												// 2026-07-05 — so coerce every font-ish value to its name.
+												const fontName = (f: any): string | null =>
+													typeof f === 'string' ? f : f?.family || f?.name || null;
+												brandGuide = {
+													logo: b.images?.logo || b.logo || b.logoUrl || null,
+													favicon: b.images?.favicon || b.favicon || null,
+													primaryColor: b.colors?.primary || b.colors?.primaryColor || null,
+													secondaryColor: b.colors?.secondary || b.colors?.secondaryColor || null,
+													accentColor: b.colors?.accent || null,
+													fontPrimary:
+														fontName(b.typography?.heading) ||
+														fontName(b.typography?.primary) ||
+														fontName(b.fonts?.primary) ||
+														(Array.isArray(b.fonts) ? fontName(b.fonts[0]) : null),
+													fontSecondary:
+														fontName(b.typography?.body) ||
+														fontName(b.fonts?.secondary) ||
+														(Array.isArray(b.fonts) ? fontName(b.fonts[1]) : null),
+													tone: b.personality?.tone || null,
+													energy: b.personality?.energy || null,
+													audience: b.personality?.audience || null
+												};
+												console.log(
+													'[Engine] Firecrawl branding guide captured:',
+													JSON.stringify(brandGuide).slice(0, 300)
+												);
+											}
+											console.log(
+												`[Engine] Firecrawl success: markdown ${contentToParse.length} chars, ${logoCandidates.length} logo candidate(s), ${discoveredLinks.length} link(s), ${fontCandidates.length} font candidate(s)`
 											);
 										}
-										if (typeof fcJson.data.rawHtml === 'string') {
-											harvestFonts(fcJson.data.rawHtml.slice(0, 300000));
-										}
-										// Firecrawl Branding format: the structured brand guide
-										// (logo, hex colors, fonts, personality) — deterministic
-										// ground truth that outranks AI inference. Tolerant reads:
-										// the response schema isn't published, only the categories.
-										const b = fcJson.data.branding;
-										if (b && typeof b === 'object') {
-											// Fonts arrive as objects ({ family, role }) — verified live
-											// 2026-07-05 — so coerce every font-ish value to its name.
-											const fontName = (f: any): string | null =>
-												typeof f === 'string'
-													? f
-													: f?.family || f?.name || null;
-											brandGuide = {
-												logo: b.images?.logo || b.logo || b.logoUrl || null,
-												favicon: b.images?.favicon || b.favicon || null,
-												primaryColor: b.colors?.primary || b.colors?.primaryColor || null,
-												secondaryColor: b.colors?.secondary || b.colors?.secondaryColor || null,
-												accentColor: b.colors?.accent || null,
-												fontPrimary:
-													fontName(b.typography?.heading) || fontName(b.typography?.primary) ||
-													fontName(b.fonts?.primary) ||
-													(Array.isArray(b.fonts) ? fontName(b.fonts[0]) : null),
-												fontSecondary:
-													fontName(b.typography?.body) || fontName(b.fonts?.secondary) ||
-													(Array.isArray(b.fonts) ? fontName(b.fonts[1]) : null),
-												tone: b.personality?.tone || null,
-												energy: b.personality?.energy || null,
-												audience: b.personality?.audience || null
-											};
-											console.log('[Engine] Firecrawl branding guide captured:', JSON.stringify(brandGuide).slice(0, 300));
-										}
-										console.log(
-											`[Engine] Firecrawl success: markdown ${contentToParse.length} chars, ${logoCandidates.length} logo candidate(s), ${discoveredLinks.length} link(s), ${fontCandidates.length} font candidate(s)`
+									} else {
+										console.warn(
+											`[Engine] Firecrawl API error (status ${fcRes.status}):`,
+											await fcRes.text()
 										);
 									}
-								} else {
-									console.warn(
-										`[Engine] Firecrawl API error (status ${fcRes.status}):`,
-										await fcRes.text()
-									);
+								} catch (fcErr) {
+									console.warn('[Engine] Firecrawl API call failed:', fcErr);
 								}
-							} catch (fcErr) {
-								console.warn('[Engine] Firecrawl API call failed:', fcErr);
 							}
 						}
 
@@ -1107,11 +1219,81 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 								if (response?.ok) {
 									const html = await response.text();
 									harvestFonts(html.slice(0, 300000));
-									contentToParse = html
+									const stripped = html
 										.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
 										.replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
-										.replace(/<svg\b[^<]*(?:(?!<\/svg>)<[^<]*)*<\/svg>/gi, '')
-										.substring(0, 40000);
+										.replace(/<svg\b[^<]*(?:(?!<\/svg>)<[^<]*)*<\/svg>/gi, '');
+									// Judge the human-visible text: bot challenges arrive with a
+									// 200 status but carry almost no real copy. Meta-tag-only SPAs
+									// keep enough title/meta signal that the lower floor (200) passes.
+									const visibleText = stripped
+										.replace(/<[^>]+>/g, ' ')
+										.replace(/\s+/g, ' ')
+										.trim();
+									const problem = scrapeContentProblem(visibleText, response.status, 200);
+									if (problem) {
+										console.warn(
+											`[Engine] Direct fetch content rejected for ${storeUrl}: ${problem}`
+										);
+									} else {
+										// Distill the page rather than passing raw markup: the
+										// extractor only ever sees the first ~20k chars, and
+										// head-heavy storefront HTML fills that with tags before any
+										// copy appears (the raw-markup version of this page carried
+										// just ~700 chars of text in its first 40k).
+										const titleText =
+											html.match(/<title[^>]*>([^<]{1,300})<\/title>/i)?.[1]?.trim() || '';
+										const metaLines: string[] = [];
+										for (const m of html.matchAll(/<meta\s[^>]*?>/gi)) {
+											const tag = m[0];
+											const key = tag
+												.match(/(?:name|property)=["']([^"']+)["']/i)?.[1]
+												?.toLowerCase();
+											if (
+												!key ||
+												!/^(description|keywords|og:site_name|og:title|og:description|og:image|twitter:title|twitter:description)$/.test(
+													key
+												)
+											)
+												continue;
+											const content = tag.match(/content=["']([^"']*)["']/i)?.[1]?.trim();
+											if (!content) continue;
+											metaLines.push(`${key}: ${content}`);
+											if (key === 'og:image' && content.startsWith('http'))
+												logoCandidates.push(content);
+											if (metaLines.length >= 12) break;
+										}
+										// Give the product-page sub-scraper links to chew on (Firecrawl
+										// normally supplies these) and the extractor real image URLs.
+										for (const m of html.matchAll(/href=["']((?:https?:\/\/|\/)[^"'\s>]+)["']/gi)) {
+											try {
+												discoveredLinks.push(new URL(m[1], storeUrl).toString());
+											} catch {
+												// skip malformed hrefs
+											}
+											if (discoveredLinks.length >= 200) break;
+										}
+										const imgUrls = new Set<string>();
+										for (const m of html.matchAll(
+											/<img[^>]+(?:src|data-src)=["'](https?:[^"'\s>]+)["']/gi
+										)) {
+											imgUrls.add(m[1]);
+											if (imgUrls.size >= 25) break;
+										}
+										contentToParse = [
+											titleText ? `PAGE TITLE: ${titleText}` : '',
+											metaLines.length ? `PAGE METADATA:\n${metaLines.join('\n')}` : '',
+											`VISIBLE PAGE TEXT:\n${visibleText.slice(0, 15000)}`,
+											imgUrls.size ? `IMAGE URLS ON PAGE:\n${[...imgUrls].join('\n')}` : ''
+										]
+											.filter(Boolean)
+											.join('\n\n')
+											.substring(0, 40000);
+									}
+								} else if (response) {
+									console.warn(
+										`[Engine] Direct fetch failed for ${storeUrl}: HTTP ${response.status}`
+									);
 								}
 							} catch (ssrfErr) {
 								console.warn(
@@ -1119,6 +1301,11 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 									(ssrfErr as Error).message
 								);
 							}
+						}
+
+						if (!contentToParse) {
+							scrapeFailReason =
+								'Could not retrieve readable page content — the store may be rate-limiting or blocking automated access. Try again in a minute, or enter brand details manually.';
 						}
 
 						if (contentToParse && hasAi) {
@@ -1129,7 +1316,11 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 								.slice(0, 4);
 
 							let productPageContent = '';
-							if (firecrawlKey && !firecrawlKey.includes('placeholder') && productLinks.length > 0) {
+							if (
+								firecrawlKey &&
+								!firecrawlKey.includes('placeholder') &&
+								productLinks.length > 0
+							) {
 								const productPageResults = await Promise.allSettled(
 									productLinks.map(async (link) => {
 										try {
@@ -1140,19 +1331,33 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 													'Content-Type': 'application/json',
 													Authorization: `Bearer ${firecrawlKey}`
 												},
-												body: JSON.stringify({ url: link, formats: ['markdown', 'links'], onlyMainContent: true })
+												body: JSON.stringify({
+													url: link,
+													formats: ['markdown', 'links'],
+													onlyMainContent: true
+												})
 											});
 											if (!r.ok) return '';
 											const rj = await r.json();
-											// Collect image URLs from product page links/metadata
-											if (rj.success) {
-												const meta = rj.data?.metadata || {};
-												for (const key of ['ogImage', 'og:image', 'image']) {
-													const v = meta[key];
-													if (typeof v === 'string' && v.startsWith('http')) logoCandidates.push(v);
-												}
+											if (!rj.success) return '';
+											// A throttled product page must not pollute the extraction
+											// context with error text — drop it entirely.
+											if (
+												scrapeContentProblem(
+													rj.data?.markdown || '',
+													Number(rj.data?.metadata?.statusCode) || undefined,
+													80
+												)
+											) {
+												return '';
 											}
-											return rj.success ? (rj.data?.markdown || '').substring(0, 5000) : '';
+											// Collect image URLs from product page links/metadata
+											const meta = rj.data?.metadata || {};
+											for (const key of ['ogImage', 'og:image', 'image']) {
+												const v = meta[key];
+												if (typeof v === 'string' && v.startsWith('http')) logoCandidates.push(v);
+											}
+											return (rj.data?.markdown || '').substring(0, 5000);
 										} catch {
 											return '';
 										}
@@ -1178,6 +1383,7 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 								? `\nBRAND GUIDE (structured extraction — treat as ground truth): ${JSON.stringify(brandGuide)}`
 								: '';
 							const prompt = `You are a web scraper agent. Extract the brand brief details and all products (with name, description, price, and image URL) from this e-commerce storefront content.
+CRITICAL: Only extract what is actually present in the content. If the content is NOT a real brand storefront — e.g. a rate-limit or error message, a bot/captcha challenge, a parked domain, a login wall, or a near-empty page — return exactly {"error": "<short reason>"} and nothing else. NEVER invent, guess, or fabricate a brand from error text.
 Use the LOGO CANDIDATES for "logoUrl". Prefer real absolute image URLs (https://...) for every product "photoUrl" — look in the product pages content section. Never leave logoUrl empty if a candidate exists.${logoHint}${fontHint}${brandGuideHint}
 COMPETITORS: identify 3-5 REAL direct competitors of this brand (same product category and audience — well-known brands count). Use any mentioned in the content first, then infer from the category. Never return fewer than 3.
 Return a JSON object matching this exact shape:
@@ -1220,7 +1426,20 @@ ${contentToParse.substring(0, 20000)}${productPagesHint}`;
 							const resText = await ai!.generate(prompt, { json: true });
 							if (resText) {
 								const parsed = safeParseJson(resText);
-								if (parsed && parsed.brandName) {
+								if (parsed?.error && !parsed.brandName) {
+									scrapeFailReason = `The page did not look like a storefront (${String(parsed.error).slice(0, 200)}).`;
+									console.warn('[Engine] Extractor refused scrape content:', parsed.error);
+								} else if (
+									parsed &&
+									parsed.brandName &&
+									!isBrandNameGrounded(parsed.brandName, contentToParse, storeUrl)
+								) {
+									// Hallucination guard: a genuine extraction takes the brand
+									// name FROM the page, so some token of it must appear in the
+									// scraped content or the domain itself.
+									scrapeFailReason = `Extraction produced a brand name ("${String(parsed.brandName).slice(0, 80)}") that appears nowhere on the page — discarding it as unreliable.`;
+									console.warn('[Engine]', scrapeFailReason);
+								} else if (parsed && parsed.brandName) {
 									// Backfill the logo from metadata if the model didn't set one.
 									if (
 										(!parsed.logoUrl || !String(parsed.logoUrl).startsWith('http')) &&
@@ -1232,13 +1451,16 @@ ${contentToParse.substring(0, 20000)}${productPagesHint}`;
 									if (brandGuide) {
 										if (brandGuide.logo) parsed.logoUrl = brandGuide.logo;
 										if (brandGuide.primaryColor) parsed.primaryColor = brandGuide.primaryColor;
-										if (brandGuide.secondaryColor) parsed.secondaryColor = brandGuide.secondaryColor;
+										if (brandGuide.secondaryColor)
+											parsed.secondaryColor = brandGuide.secondaryColor;
 										if (brandGuide.fontPrimary) parsed.fontPrimary = brandGuide.fontPrimary;
 										if (brandGuide.fontSecondary) parsed.fontSecondary = brandGuide.fontSecondary;
 									}
 									// Backfill fonts from the harvested CSS candidates.
-									if (!parsed.fontPrimary && fontCandidates[0]) parsed.fontPrimary = fontCandidates[0];
-									if (!parsed.fontSecondary && fontCandidates[1]) parsed.fontSecondary = fontCandidates[1];
+									if (!parsed.fontPrimary && fontCandidates[0])
+										parsed.fontPrimary = fontCandidates[0];
+									if (!parsed.fontSecondary && fontCandidates[1])
+										parsed.fontSecondary = fontCandidates[1];
 									// Belt+braces: never let a font reach the UI as an object.
 									const coerceFont = (f: any) =>
 										typeof f === 'string' ? f : f?.family || f?.name || '';
@@ -1262,6 +1484,7 @@ ${contentToParse.substring(0, 20000)}${productPagesHint}`;
 					{
 						success: false,
 						error:
+							scrapeFailReason ||
 							'Failed to scrape the storefront page. Please verify the URL or enter brand details and products manually.'
 					},
 					{ status: 400 }
@@ -1285,9 +1508,11 @@ ${contentToParse.substring(0, 20000)}${productPagesHint}`;
 				try {
 					await assertPublicHttpUrl(productUrl);
 
-					const userFcKey = await getUserApiKey(locals.supabase, session.user.id, 'firecrawl').catch(
-						() => null
-					);
+					const userFcKey = await getUserApiKey(
+						locals.supabase,
+						session.user.id,
+						'firecrawl'
+					).catch(() => null);
 					const fcKey = userFcKey || env.FIRECRAWL_API_KEY;
 					let pageContent = '';
 					const imageCandidates: string[] = [];
@@ -1299,11 +1524,31 @@ ${contentToParse.substring(0, 20000)}${productPagesHint}`;
 								'Content-Type': 'application/json',
 								Authorization: `Bearer ${fcKey}`
 							},
-							body: JSON.stringify({ url: productUrl, formats: ['markdown'], onlyMainContent: false })
+							body: JSON.stringify({
+								url: productUrl,
+								formats: ['markdown'],
+								onlyMainContent: false
+							})
 						});
 						if (fcRes.ok) {
 							const fcJson = (await fcRes.json()) as any;
 							if (fcJson.success && fcJson.data?.markdown) {
+								// Same guard as scrape_store: Firecrawl relays throttle/challenge
+								// pages as success:true — never hand those to the extractor.
+								const problem = scrapeContentProblem(
+									fcJson.data.markdown,
+									Number(fcJson.data.metadata?.statusCode) || undefined,
+									80
+								);
+								if (problem) {
+									return json(
+										{
+											success: false,
+											error: `Could not read that product page (${problem}). The site may be rate-limiting scrapers — try again in a minute.`
+										},
+										{ status: 422 }
+									);
+								}
 								pageContent = fcJson.data.markdown.substring(0, 20000);
 								const meta = fcJson.data.metadata || {};
 								for (const key of ['ogImage', 'og:image', 'image']) {
@@ -1320,13 +1565,17 @@ ${contentToParse.substring(0, 20000)}${productPagesHint}`;
 
 					if (!pageContent) {
 						return json(
-							{ success: false, error: 'Could not fetch that product page (check the URL / Firecrawl key).' },
+							{
+								success: false,
+								error: 'Could not fetch that product page (check the URL / Firecrawl key).'
+							},
 							{ status: 400 }
 						);
 					}
 
 					const resText = await ai!.generate(
 						`Extract ONE product from this product page.
+If the content is NOT a real product page (error page, rate-limit notice, captcha/bot challenge, empty page), return exactly {"error": "<short reason>"} instead. NEVER invent a product.
 ${imageCandidates.length ? `IMAGE CANDIDATES (prefer the first for photoUrl): ${imageCandidates.slice(0, 4).join(', ')}` : ''}
 Return ONLY JSON: { "name": "Product name", "description": "1-2 sentence description", "price": "$Price as shown", "photoUrl": "absolute https image URL" }
 Page content:
@@ -1334,10 +1583,25 @@ ${pageContent}`,
 						{ json: true }
 					);
 					const parsed = safeParseJson(resText || '');
-					if (!parsed?.name) {
-						return json({ success: false, error: 'Could not extract a product from that page.' }, { status: 422 });
+					if (parsed?.error && !parsed.name) {
+						return json(
+							{
+								success: false,
+								error: `That page did not look like a product page (${String(parsed.error).slice(0, 200)}).`
+							},
+							{ status: 422 }
+						);
 					}
-					if ((!parsed.photoUrl || !String(parsed.photoUrl).startsWith('http')) && imageCandidates[0]) {
+					if (!parsed?.name) {
+						return json(
+							{ success: false, error: 'Could not extract a product from that page.' },
+							{ status: 422 }
+						);
+					}
+					if (
+						(!parsed.photoUrl || !String(parsed.photoUrl).startsWith('http')) &&
+						imageCandidates[0]
+					) {
 						parsed.photoUrl = imageCandidates[0];
 					}
 					return json({
@@ -1369,7 +1633,10 @@ ${pageContent}`,
 
 				if (!hasAi) {
 					return json(
-						{ success: false, error: 'No AI provider configured. Add an OpenRouter or Gemini key in Settings.' },
+						{
+							success: false,
+							error: 'No AI provider configured. Add an OpenRouter or Gemini key in Settings.'
+						},
 						{ status: 400 }
 					);
 				}
@@ -1399,7 +1666,10 @@ Input: "${fieldVal}"`;
 					// timeout) rather than the old misleading "configure a provider"
 					// message — the user has one; the call itself failed.
 					return json(
-						{ success: false, error: `Enrichment failed via ${ai!.provider}: ${msg.slice(0, 200)}` },
+						{
+							success: false,
+							error: `Enrichment failed via ${ai!.provider}: ${msg.slice(0, 200)}`
+						},
 						{ status: 502 }
 					);
 				}
@@ -1414,7 +1684,10 @@ Input: "${fieldVal}"`;
 			if (action === 'generate_persona_profile') {
 				if (!hasAi) {
 					return json(
-						{ success: false, error: 'No AI provider configured. Add an OpenRouter or Gemini key in Settings.' },
+						{
+							success: false,
+							error: 'No AI provider configured. Add an OpenRouter or Gemini key in Settings.'
+						},
 						{ status: 400 }
 					);
 				}
@@ -1450,12 +1723,20 @@ Input: "${fieldVal}"`;
 					.map((a: any) => {
 						let p: any = {};
 						try {
-							if (typeof a.market === 'string' && a.market.startsWith('{')) p = JSON.parse(a.market);
+							if (typeof a.market === 'string' && a.market.startsWith('{'))
+								p = JSON.parse(a.market);
 						} catch {
 							/* ignore unparseable market */
 						}
 						const ap = p.appearance || {};
-						const look = [ap.hairColor, ap.hairstyle, ap.eyeColor, ap.headwear, ap.wardrobe, ap.outfitColors]
+						const look = [
+							ap.hairColor,
+							ap.hairstyle,
+							ap.eyeColor,
+							ap.headwear,
+							ap.wardrobe,
+							ap.outfitColors
+						]
 							.filter(Boolean)
 							.join(', ');
 						return {
@@ -1476,7 +1757,14 @@ CREATOR: ${agent.name || 'this creator'} — gender: ${gender}. Personality/soul
 BRAND: ${b.brandName || b.name || 'the brand'}${b.tagline ? ` — ${b.tagline}` : ''}. Mission: ${b.mission || '—'}.
 AUDIENCE: ${b.demographics || '—'}. Pain points: ${b.painPoints || '—'}. Interests: ${Array.isArray(b.interests) ? b.interests.join(', ') : b.interests || '—'}.
 BRAND VOICE: ${b.commStyle || '—'}. Traits: ${Array.isArray(b.traits) ? b.traits.join(', ') : '—'}.
-PRODUCTS: ${Array.isArray(b.products) ? b.products.map((p: any) => p.name).filter(Boolean).join(', ') : '—'}.
+PRODUCTS: ${
+					Array.isArray(b.products)
+						? b.products
+								.map((p: any) => p.name)
+								.filter(Boolean)
+								.join(', ')
+						: '—'
+				}.
 
 This persona must be UNIQUE across the ENTIRE account — recognizably different from every other creator at a glance AND in positioning. Do NOT reuse another persona's content angle, target avatar, or visual look (hair color, hairstyle, eye color, headwear, wardrobe, colors). Prefer a niche/archetype/content-focus not already taken; only repeat one if it is unavoidable, and even then make the angle and look unmistakably distinct. Already used by other personas — avoid overlapping with any of these:
 ${JSON.stringify(taken).slice(0, 2500)}
@@ -1552,7 +1840,10 @@ Return ONLY JSON: {"niche":"","ageRanges":["25–34"],"archetype":"","contentFoc
 					const msg = (err as Error).message || 'unknown error';
 					console.error('[Engine] Persona profile generation failed:', msg);
 					return json(
-						{ success: false, error: `Generation failed via ${ai!.provider}: ${msg.slice(0, 200)}` },
+						{
+							success: false,
+							error: `Generation failed via ${ai!.provider}: ${msg.slice(0, 200)}`
+						},
 						{ status: 502 }
 					);
 				}
@@ -1569,7 +1860,10 @@ Return ONLY JSON: {"niche":"","ageRanges":["25–34"],"archetype":"","contentFoc
 			if (action === 'generate_identity_kit') {
 				if (!hasAi) {
 					return json(
-						{ success: false, error: 'No AI provider configured. Add an OpenRouter or Gemini key in Settings.' },
+						{
+							success: false,
+							error: 'No AI provider configured. Add an OpenRouter or Gemini key in Settings.'
+						},
 						{ status: 400 }
 					);
 				}
@@ -1596,69 +1890,139 @@ Return ONLY JSON: {"niche":"","ageRanges":["25–34"],"archetype":"","contentFoc
 				);
 				const b: any = brief?.data ?? {};
 
+				// LEAN CALLS by design: bios generate per platform (or a small batch),
+				// NEVER all 13 at once — a full-registry call overflows the client's
+				// max_tokens cap (truncated JSON) and flirts with the 120s LLM
+				// deadline, which surfaced to users as "generates then times out".
+				// body.platforms scopes the bios; body.includeBase adds display name +
+				// username candidates. Omitting platforms = the persona's connected
+				// platforms, else a starter trio.
+				const requested: string[] | null = Array.isArray(body.platforms)
+					? [
+							...new Set(
+								body.platforms.filter(
+									(k: any) => typeof k === 'string' && BIO_PLATFORM_KEYS.includes(k)
+								) as string[]
+							)
+						]
+					: null;
+				const includeBase =
+					body.includeBase === true || (body.includeBase === undefined && !requested);
+				let bioTargets: string[];
+				if (requested) {
+					bioTargets = requested.slice(0, 6);
+				} else {
+					const { data: conns } = await db.connections.listForAgent(agentId);
+					const connected = [
+						...new Set((conns ?? []).map((c: any) => String(c.platform || '').toLowerCase()))
+					].filter((k) => BIO_PLATFORM_KEYS.includes(k));
+					bioTargets = (connected.length ? connected : [...STARTER_BIO_PLATFORMS]).slice(0, 6);
+				}
+				if (bioTargets.length === 0 && !includeBase) {
+					return json(
+						{ success: false, error: 'Nothing to generate — pass platforms and/or includeBase.' },
+						{ status: 400 }
+					);
+				}
+
 				// Handles used or shortlisted by OTHER personas — candidates must not
-				// collide anywhere on the account.
-				const { data: allAgents } = await db.agents.list();
+				// collide anywhere on the account. Only needed when generating the base.
 				const takenHandles = new Set<string>();
-				for (const a of allAgents ?? []) {
-					if (a.id === agentId) continue;
-					const h = sanitizeHandle(a.handle);
-					if (h) takenHandles.add(h);
-					try {
-						const p =
-							typeof a.market === 'string' && a.market.startsWith('{') ? JSON.parse(a.market) : {};
-						for (const c of coerceHandleCandidates(p.handleCandidates)) takenHandles.add(c.handle);
-						for (const ch of Object.values(coerceConfirmedHandles(p.confirmedHandles))) {
-							takenHandles.add(ch);
+				if (includeBase) {
+					const { data: allAgents } = await db.agents.list();
+					for (const a of allAgents ?? []) {
+						if (a.id === agentId) continue;
+						const h = sanitizeHandle(a.handle);
+						if (h) takenHandles.add(h);
+						try {
+							const p =
+								typeof a.market === 'string' && a.market.startsWith('{') ? JSON.parse(a.market) : {};
+							for (const c of coerceHandleCandidates(p.handleCandidates)) takenHandles.add(c.handle);
+							for (const ch of Object.values(coerceConfirmedHandles(p.confirmedHandles))) {
+								takenHandles.add(ch);
+							}
+						} catch {
+							/* ignore unparseable market */
 						}
-					} catch {
-						/* ignore unparseable market */
 					}
 				}
 
-				const bioRules = BIO_PLATFORM_KEYS.map(
-					(k) => `  "${k}": max ${PLATFORM_BIO_SPECS[k].limit} chars — ${PLATFORM_BIO_SPECS[k].style}`
-				).join('\n');
+				const wants: string[] = [];
+				const contract: string[] = [];
+				if (includeBase) {
+					wants.push(
+						`"displayName": the profile display name — the creator's real name, optionally plus ONE emoji or a 2–3 word descriptor. Max 30 chars.`,
+						`"handles": exactly 10 username candidates, best first. Rules: lowercase letters, digits and underscores ONLY, 15 characters or fewer (so every candidate is valid on EVERY platform including X), no periods, rooted in the creator's name — catchy, memorable, unmistakably THIS creator (name + niche twists). Do NOT use any of these already-taken handles: ${[...takenHandles].join(', ') || '(none)'}.`
+					);
+					contract.push('"displayName":""', '"handles":["",""]');
+				}
+				if (bioTargets.length) {
+					const bioRules = bioTargets
+						.map(
+							(k) =>
+								`  "${k}": max ${PLATFORM_BIO_SPECS[k].limit} chars — ${PLATFORM_BIO_SPECS[k].style}`
+						)
+						.join('\n');
+					wants.push(
+						`"bios": one bio per platform, keys EXACTLY as listed, each within its limit and register:\n${bioRules}\nBio rules: first person, in the creator's voice; weave in the niche and what followers get; STRICTLY within each platform's character limit (count characters); no invented stats or follower counts; no proper names other than ${agent.name || 'the creator'}; use \\n for line breaks where the register calls for multiple lines; hashtags only where natural (TikTok/Instagram, max 2).`
+					);
+					contract.push(`"bios":{${bioTargets.map((k) => `"${k}":""`).join(',')}}`);
+				}
 
 				const prompt = `You are an elite social-media brand strategist. Create the public-facing identity kit for one UGC creator.
 
 CREATOR: ${agent.name || 'this creator'}. Niche: ${agent.niche || profile.niche || '—'}. Archetype: ${profile.archetype || '—'}. Content focus: ${profile.contentFocus || '—'}. Unique angle: ${profile.contentAngle || '—'}. Audience: ${profile.targetAvatar || '—'}. Personality/soul: ${String(agent.soul || '').slice(0, 500)}.
-BRAND they create for: ${b.brandName || b.name || '—'}${b.tagline ? ` — ${b.tagline}` : ''}. Mission: ${b.mission || '—'}. Products: ${Array.isArray(b.products) ? b.products.map((p: any) => p.name).filter(Boolean).join(', ') : '—'}.
+BRAND they create for: ${b.brandName || b.name || '—'}${b.tagline ? ` — ${b.tagline}` : ''}. Mission: ${b.mission || '—'}. Products: ${
+					Array.isArray(b.products)
+						? b.products
+								.map((p: any) => p.name)
+								.filter(Boolean)
+								.join(', ')
+						: '—'
+				}.
 
 Return:
-1. "displayName": the profile display name — the creator's real name, optionally plus ONE emoji or a 2–3 word descriptor. Max 30 chars.
-2. "handles": exactly 10 username candidates, best first. Rules: lowercase letters, digits and underscores ONLY, 15 characters or fewer (so every candidate is valid on EVERY platform including X), no periods, rooted in the creator's name — catchy, memorable, unmistakably THIS creator (name + niche twists). Do NOT use any of these already-taken handles: ${[...takenHandles].join(', ') || '(none)'}.
-3. "bios": one bio per platform, keys EXACTLY as listed, each within its limit and register:
-${bioRules}
-Bio rules: first person, in the creator's voice; weave in the niche and what followers get; STRICTLY within each platform's character limit (count characters); no invented stats or follower counts; no proper names other than ${agent.name || 'the creator'}; use \\n for line breaks where the register calls for multiple lines; hashtags only where natural (TikTok/Instagram, max 2).
+${wants.map((w, i) => `${i + 1}. ${w}`).join('\n')}
 
-Return ONLY JSON: {"displayName":"","handles":["",""],"bios":{${BIO_PLATFORM_KEYS.map((k) => `"${k}":""`).join(',')}}}`;
+Return ONLY JSON: {${contract.join(',')}}`;
 
 				try {
 					const parsed: any = safeParseJson(await ai!.generate(prompt, { json: true }));
 					if (!parsed || typeof parsed !== 'object') {
 						return json(
-							{ success: false, error: `${ai!.provider} returned no usable identity kit — try again.` },
+							{
+								success: false,
+								error: `${ai!.provider} returned no usable identity kit — try again.`
+							},
 							{ status: 502 }
 						);
 					}
-					// Sanitize/dedupe candidates and drop any collision with another
-					// persona that the LLM ignored despite the prompt.
-					const handleCandidates = coerceHandleCandidates(parsed.handles).filter(
-						(c) => !takenHandles.has(c.handle)
-					);
+					// Sanitize/dedupe candidates; drop collisions with other personas the
+					// LLM ignored. Bios are FILTERED to the requested targets so an
+					// over-eager model emitting extra platforms can never touch bios the
+					// user wrote or generated for other platforms.
+					const allBios = coerceBios(parsed.bios);
+					const bios: Record<string, string> = {};
+					for (const k of bioTargets) if (allBios[k]) bios[k] = allBios[k];
 					const data = {
 						displayName:
-							typeof parsed.displayName === 'string' ? parsed.displayName.trim().slice(0, 40) : '',
-						handleCandidates,
-						bios: coerceBios(parsed.bios)
+							includeBase && typeof parsed.displayName === 'string'
+								? parsed.displayName.trim().slice(0, 40)
+								: '',
+						handleCandidates: includeBase
+							? coerceHandleCandidates(parsed.handles).filter((c) => !takenHandles.has(c.handle))
+							: [],
+						bios
 					};
 					return json({ success: true, data });
 				} catch (err) {
 					const msg = (err as Error).message || 'unknown error';
 					console.error('[Engine] Identity kit generation failed:', msg);
 					return json(
-						{ success: false, error: `Generation failed via ${ai!.provider}: ${msg.slice(0, 200)}` },
+						{
+							success: false,
+							error: `Generation failed via ${ai!.provider}: ${msg.slice(0, 200)}`
+						},
 						{ status: 502 }
 					);
 				}
@@ -1673,14 +2037,18 @@ Return ONLY JSON: {"displayName":"","handles":["",""],"bios":{${BIO_PLATFORM_KEY
 			if (action === 'generate_full_persona') {
 				if (!hasAi) {
 					return json(
-						{ success: false, error: 'No AI provider configured. Add an OpenRouter or Gemini key in Settings.' },
+						{
+							success: false,
+							error: 'No AI provider configured. Add an OpenRouter or Gemini key in Settings.'
+						},
 						{ status: 400 }
 					);
 				}
 				const count = Math.min(Math.max(Number(body.count) || 1, 1), 3);
 				// Optional user-set creative direction — a steer every generated persona
 				// must honour (e.g. "a no-nonsense male strength coach for busy dads").
-				const direction = typeof body.direction === 'string' ? body.direction.trim().slice(0, 400) : '';
+				const direction =
+					typeof body.direction === 'string' ? body.direction.trim().slice(0, 400) : '';
 				const brief = await loadBriefForAgent(db, session.user.id, body.brandBriefId || null);
 				const b: any = brief?.data ?? {};
 
@@ -1695,7 +2063,14 @@ Return ONLY JSON: {"displayName":"","handles":["",""],"bios":{${BIO_PLATFORM_KEY
 						/* ignore */
 					}
 					const ap = p.appearance || {};
-					const look = [ap.ethnicity, ap.hairColor, ap.hairstyle, ap.eyeColor, ap.headwear, ap.wardrobe]
+					const look = [
+						ap.ethnicity,
+						ap.hairColor,
+						ap.hairstyle,
+						ap.eyeColor,
+						ap.headwear,
+						ap.wardrobe
+					]
 						.filter(Boolean)
 						.join(', ');
 					return {
@@ -1712,7 +2087,14 @@ Return ONLY JSON: {"displayName":"","handles":["",""],"bios":{${BIO_PLATFORM_KEY
 BRAND: ${b.brandName || b.name || 'the brand'}${b.tagline ? ` — ${b.tagline}` : ''}. Mission: ${b.mission || '—'}.
 AUDIENCE: ${b.demographics || '—'}. Pain points: ${b.painPoints || '—'}. Interests: ${Array.isArray(b.interests) ? b.interests.join(', ') : b.interests || '—'}.
 BRAND VOICE: ${b.commStyle || '—'}. Traits: ${Array.isArray(b.traits) ? b.traits.join(', ') : '—'}.
-PRODUCTS: ${Array.isArray(b.products) ? b.products.map((p: any) => p.name).filter(Boolean).join(', ') : '—'}.
+PRODUCTS: ${
+					Array.isArray(b.products)
+						? b.products
+								.map((p: any) => p.name)
+								.filter(Boolean)
+								.join(', ')
+						: '—'
+				}.
 ${direction ? `\nCREATIVE DIRECTION (agreed with the user — EVERY persona you return MUST be fine-tuned to this steer, on top of the brand): ${direction}\n` : ''}
 Each persona must be UNIQUE across the ENTIRE account${count > 1 ? ' AND distinct from every other persona you return in this batch' : ''} — recognizably different in name, niche, positioning, and visual look. Do NOT reuse another persona's name, content angle, or look. Already used by existing personas — avoid overlapping:
 ${JSON.stringify(taken).slice(0, 2200)}
@@ -1760,7 +2142,11 @@ Return ONLY JSON: {"personas":[{"name":"","gender":"","soul":"","niche":"","arch
 							let voiceMatch: 'exact' | 'fallback' | null = null;
 							if (vpGender) {
 								// Seed by name+index so a batch of 3 spreads across voices.
-								const picked = pickVoiceForProfile(vpGender, voiceProfile.accent, `${p.name || ''}-${i}`);
+								const picked = pickVoiceForProfile(
+									vpGender,
+									voiceProfile.accent,
+									`${p.name || ''}-${i}`
+								);
 								voice = picked.voice.name;
 								voiceMatch = picked.exact ? 'exact' : 'fallback';
 							}
@@ -1796,7 +2182,10 @@ Return ONLY JSON: {"personas":[{"name":"","gender":"","soul":"","niche":"","arch
 					const msg = (err as Error).message || 'unknown error';
 					console.error('[Engine] Full persona generation failed:', msg);
 					return json(
-						{ success: false, error: `Generation failed via ${ai!.provider}: ${msg.slice(0, 200)}` },
+						{
+							success: false,
+							error: `Generation failed via ${ai!.provider}: ${msg.slice(0, 200)}`
+						},
 						{ status: 502 }
 					);
 				}
@@ -1809,7 +2198,10 @@ Return ONLY JSON: {"personas":[{"name":"","gender":"","soul":"","niche":"","arch
 			if (action === 'suggest_directions') {
 				if (!hasAi) {
 					return json(
-						{ success: false, error: 'No AI provider configured. Add an OpenRouter or Gemini key in Settings.' },
+						{
+							success: false,
+							error: 'No AI provider configured. Add an OpenRouter or Gemini key in Settings.'
+						},
 						{ status: 400 }
 					);
 				}
@@ -1820,7 +2212,8 @@ Return ONLY JSON: {"personas":[{"name":"","gender":"","soul":"","niche":"","arch
 					.map((a: any) => {
 						let p: any = {};
 						try {
-							if (typeof a.market === 'string' && a.market.startsWith('{')) p = JSON.parse(a.market);
+							if (typeof a.market === 'string' && a.market.startsWith('{'))
+								p = JSON.parse(a.market);
 						} catch {
 							/* ignore */
 						}
@@ -1833,7 +2226,14 @@ Return ONLY JSON: {"personas":[{"name":"","gender":"","soul":"","niche":"","arch
 
 BRAND: ${b.brandName || b.name || 'the brand'}${b.tagline ? ` — ${b.tagline}` : ''}. Mission: ${b.mission || '—'}.
 AUDIENCE: ${b.demographics || '—'}. Pain points: ${b.painPoints || '—'}.
-PRODUCTS: ${Array.isArray(b.products) ? b.products.map((p: any) => p.name).filter(Boolean).join(', ') : '—'}.
+PRODUCTS: ${
+					Array.isArray(b.products)
+						? b.products
+								.map((p: any) => p.name)
+								.filter(Boolean)
+								.join(', ')
+						: '—'
+				}.
 
 Return ONLY JSON: {"directions":["","","","",""]}`;
 
@@ -1856,7 +2256,10 @@ Return ONLY JSON: {"directions":["","","","",""]}`;
 					const msg = (err as Error).message || 'unknown error';
 					console.error('[Engine] Direction suggestions failed:', msg);
 					return json(
-						{ success: false, error: `Suggestions failed via ${ai!.provider}: ${msg.slice(0, 200)}` },
+						{
+							success: false,
+							error: `Suggestions failed via ${ai!.provider}: ${msg.slice(0, 200)}`
+						},
 						{ status: 502 }
 					);
 				}
@@ -1869,7 +2272,10 @@ Return ONLY JSON: {"directions":["","","","",""]}`;
 			if (action === 'read_appearance_from_image') {
 				if (!hasAi) {
 					return json(
-						{ success: false, error: 'No AI provider configured. Add an OpenRouter or Gemini key in Settings.' },
+						{
+							success: false,
+							error: 'No AI provider configured. Add an OpenRouter or Gemini key in Settings.'
+						},
 						{ status: 400 }
 					);
 				}
@@ -1913,7 +2319,10 @@ Return ONLY JSON: {"ethnicity":"","wardrobe":"","outfitColors":"","hairstyle":""
 				const brandContext = body.brandContext || '';
 
 				if (!hasAi) {
-					return json({ success: false, error: 'No AI provider configured. Add an API key in Settings.' }, { status: 400 });
+					return json(
+						{ success: false, error: 'No AI provider configured. Add an API key in Settings.' },
+						{ status: 400 }
+					);
 				}
 
 				try {
@@ -1935,7 +2344,10 @@ Output ONLY the generated text for this field — no explanation, no label, no q
 					const msg = (err as Error).message || 'unknown error';
 					console.error('[Engine] AI field generation failed:', msg);
 					return json(
-						{ success: false, error: `Generation failed via ${ai!.provider}: ${msg.slice(0, 200)}` },
+						{
+							success: false,
+							error: `Generation failed via ${ai!.provider}: ${msg.slice(0, 200)}`
+						},
 						{ status: 502 }
 					);
 				}
@@ -1951,7 +2363,10 @@ Output ONLY the generated text for this field — no explanation, no label, no q
 					return json({ success: false, error: 'No text to spin' }, { status: 400 });
 				}
 				if (!hasAi) {
-					return json({ success: false, error: 'No AI provider configured. Add an API key in Settings.' }, { status: 400 });
+					return json(
+						{ success: false, error: 'No AI provider configured. Add an API key in Settings.' },
+						{ status: 400 }
+					);
 				}
 
 				try {

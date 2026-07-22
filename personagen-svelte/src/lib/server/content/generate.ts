@@ -1688,21 +1688,41 @@ function parsePersonaProfile(agentData: any): Record<string, any> {
  * plainly reads "a slim blond girl" is never mis-voiced as male just because
  * someone skipped the dropdown. Deterministic keyword scan (word-boundary), and
  * deliberately returns undefined on ambiguity rather than guessing.
+ *
+ * Two tiers, because UGC souls constantly describe the AUDIENCE alongside the
+ * persona ("helps busy moms", "for women 30+") — a flat keyword scan flipped
+ * every male creator with a female audience:
+ *   1. Pronouns (she/her vs he/him) — in persona copy these refer to the
+ *      persona itself, so they win outright.
+ *   2. SINGULAR identity nouns ("a 26-year-old woman", "family man").
+ * Plural nouns (women, men, girls, boys, ladies) are ignored entirely — in
+ * persona copy they name an audience, not the persona. A tier that matches
+ * both sides is contradictory and stops the scan (no falling through to a
+ * weaker signal).
  */
+const FEMALE_PRONOUNS = /\b(she|her|hers|herself)\b/;
+const MALE_PRONOUNS = /\b(he|him|his|himself)\b/;
+// \bman\b does NOT match "woman"/"human" — the word boundary protects the overlap.
+const FEMALE_NOUNS = /\b(woman|girl|female|lady|mother|mom|mum|feminine|actress|businesswoman|queen|sister|daughter|wife|girlfriend)\b/;
+const MALE_NOUNS = /\b(man|boy|male|gentleman|father|dad|masculine|actor|businessman|king|brother|son|husband|boyfriend|guy|dude|bloke)\b/;
+
 export function inferGenderFromText(
 	...texts: Array<string | undefined | null>
 ): 'male' | 'female' | undefined {
 	const t = texts.filter(Boolean).join(' ').toLowerCase();
 	if (!t) return undefined;
-	// \bman\b does NOT match "woman"/"human"; \bmen\b does NOT match "women" — the
-	// missing word boundary protects against those overlaps.
-	const female = /\b(she|her|hers|herself|woman|women|girl|girls|female|lady|ladies|mother|mom|mum|feminine|actress|businesswoman|queen|sister|daughter|wife|girlfriend)\b/;
-	const male = /\b(he|him|his|himself|man|men|boy|boys|male|gentleman|father|dad|masculine|actor|businessman|king|brother|son|husband|boyfriend|guy|dude|bloke)\b/;
-	const hasF = female.test(t);
-	const hasM = male.test(t);
-	if (hasF && !hasM) return 'female';
-	if (hasM && !hasF) return 'male';
-	return undefined; // none, or contradictory → don't guess
+	const tiers: Array<[RegExp, RegExp]> = [
+		[FEMALE_PRONOUNS, MALE_PRONOUNS],
+		[FEMALE_NOUNS, MALE_NOUNS]
+	];
+	for (const [female, male] of tiers) {
+		const hasF = female.test(t);
+		const hasM = male.test(t);
+		if (hasF && !hasM) return 'female';
+		if (hasM && !hasF) return 'male';
+		if (hasF && hasM) return undefined; // contradictory → don't guess
+	}
+	return undefined;
 }
 
 // First-name → gender lookup. A persona named "Aisha Noori" or "Marcus Chen"
@@ -1746,11 +1766,19 @@ function characterNameFromSoul(soul: string | undefined | null): string | undefi
 /**
  * Resolves a persona's authoritative gender: the explicit Profile-tab field
  * first, then its NAME (agent name + the character name in the soul heading),
- * then a pronoun/keyword scan of the soul/audience text. Name beats text scan
- * because "Aisha, a fashion curator" has no gendered keyword but an obvious
- * name. This is what both the voice and the on-camera character must agree with.
+ * then a pronoun/keyword scan of the soul text, then — as a last resort — the
+ * gender of a deliberately pinned voice. Name beats text scan because "Aisha,
+ * a fashion curator" has no gendered keyword but an obvious name. This is what
+ * both the voice and the on-camera character must agree with.
+ *
+ * `personaProfile.targetAvatar` is deliberately NOT scanned: it describes the
+ * CUSTOMER ("Sarah, 32, mother of two"), so scanning it misgendered every
+ * persona whose audience differs from the creator.
  */
-export function resolvePersonaGender(agentData: any): 'male' | 'female' | undefined {
+export function resolvePersonaGender(
+	agentData: any,
+	pinnedVoice?: string | null
+): 'male' | 'female' | undefined {
 	const explicit = parsePersonaProfile(agentData).gender;
 	if (explicit === 'male' || explicit === 'female') return explicit;
 
@@ -1759,11 +1787,17 @@ export function resolvePersonaGender(agentData: any): 'male' | 'female' | undefi
 		inferGenderFromName(agentData?.name);
 	if (byName) return byName;
 
-	return inferGenderFromText(
-		agentData?.soul,
-		agentData?.name,
-		parsePersonaProfile(agentData).targetAvatar
-	);
+	const byText = inferGenderFromText(agentData?.soul, agentData?.name);
+	if (byText) return byText;
+
+	// A pinned voice is an explicit user choice about how the persona sounds —
+	// trust its catalog gender when nothing else gives a signal. The column
+	// default ('Adam') is NOT a choice and carries no signal.
+	const voice = pinnedVoice ?? agentData?.ugc_voice;
+	if (typeof voice === 'string' && voice && voice !== DEFAULT_VOICE_SENTINEL) {
+		return VOICE_CATALOG.find((v) => v.name === voice)?.gender;
+	}
+	return undefined;
 }
 
 /** The ugc_voice column default — personas whose voice was never explicitly picked carry this. */
@@ -1794,7 +1828,7 @@ export function resolveVoiceForPersona(
 	cfgVoice: string,
 	agentData: any
 ): { voice: string; voiceGender: 'male' | 'female' | undefined } {
-	const personaGender = resolvePersonaGender(agentData);
+	const personaGender = resolvePersonaGender(agentData, cfgVoice);
 	const cfgGender = VOICE_CATALOG.find((v) => v.name === cfgVoice)?.gender;
 	const isPinned = !!cfgVoice && cfgVoice !== DEFAULT_VOICE_SENTINEL;
 

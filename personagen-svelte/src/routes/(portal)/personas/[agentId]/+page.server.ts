@@ -44,10 +44,11 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 			supervisors,
 			brandBriefs: briefsResult.data ?? [],
 			// Gender the server WILL use at generation time when the explicit
-			// field is blank (inferred from the soul/name). The Profile tab uses
-			// this to pre-fill the picker so what's shown matches what generates
-			// — no more "why is my female persona voiced as Adam".
-			inferredGender: resolvePersonaGender(agent) ?? null
+			// field is blank (inferred from the soul/name, else a pinned voice).
+			// The Profile tab uses this to pre-fill the picker so what's shown
+			// matches what generates — no more "why is my female persona voiced
+			// as Adam".
+			inferredGender: resolvePersonaGender(agent, config?.ugc_voice ?? null) ?? null
 		};
 	}
 

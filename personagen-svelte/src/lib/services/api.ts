@@ -218,15 +218,25 @@ export const BrandBrief = {
 			voiceMatch: 'exact' | 'fallback' | null;
 		}>(ENDPOINTS.brandBrief, 'generate_persona_profile', { agentId, brandBriefId, gender }),
 	// Platform identity kit: display name + username candidates (availability is
-	// confirmed manually by the user) + one bio per platform, each written to that
-	// platform's char limit. Separate from generatePersonaProfile so bios/handles
-	// can be re-rolled without churning the persona's strategy or look.
-	generateIdentityKit: (agentId: string, brandBriefId: string | null) =>
+	// confirmed manually by the user) + bios written to each platform's char limit.
+	// Calls are LEAN by design: `platforms` scopes which bios generate (one at a
+	// time from the UI); `includeBase` adds displayName + handle candidates.
+	// Omitting both = starter kit (base + connected platforms or a default trio).
+	generateIdentityKit: (
+		agentId: string,
+		brandBriefId: string | null,
+		opts?: { platforms?: string[]; includeBase?: boolean }
+	) =>
 		request<{
 			displayName: string;
 			handleCandidates: Array<{ handle: string; status: 'untried' | 'taken' | 'confirmed' }>;
 			bios: Record<string, string>;
-		}>(ENDPOINTS.brandBrief, 'generate_identity_kit', { agentId, brandBriefId }),
+		}>(ENDPOINTS.brandBrief, 'generate_identity_kit', {
+			agentId,
+			brandBriefId,
+			platforms: opts?.platforms,
+			includeBase: opts?.includeBase
+		}),
 	// Vision: read the appearance fields straight from a reference image so they
 	// match the actual character.
 	readAppearanceFromImage: (imageUrl: string) =>

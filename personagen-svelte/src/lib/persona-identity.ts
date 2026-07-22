@@ -51,6 +51,14 @@ export const PLATFORM_BIO_SPECS: Record<string, PlatformBioSpec> = {
 /** Platforms that get a generated bio — registry order, only known specs. */
 export const BIO_PLATFORM_KEYS = Object.keys(PLATFORMS).filter((k) => PLATFORM_BIO_SPECS[k]);
 
+/**
+ * Default bio set for a persona with no connected accounts yet. Kit generation
+ * is deliberately per-platform / small-batch: a single all-13-bios LLM call
+ * overflows response token caps (truncated JSON) and flirts with the 120s LLM
+ * deadline — the exact "generates then times out" failure.
+ */
+export const STARTER_BIO_PLATFORMS = ['tiktok', 'instagram', 'youtube'] as const;
+
 export function bioLimit(platform: string | null | undefined): number | null {
 	return PLATFORM_BIO_SPECS[platform ?? '']?.limit ?? null;
 }

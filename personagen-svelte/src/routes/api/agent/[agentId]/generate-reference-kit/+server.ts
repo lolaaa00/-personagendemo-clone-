@@ -99,7 +99,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 
 	const { data: cfg } = await locals.supabase
 		.from('agent_configs')
-		.select('ugc_reference_kit, ugc_character_ref')
+		.select('ugc_reference_kit, ugc_character_ref, ugc_voice')
 		.eq('agent_id', agentId)
 		.maybeSingle();
 	const kit = cfg?.ugc_reference_kit || {};
@@ -107,8 +107,9 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 
 	// Resolve the EXACT request this stage will send (prompt, model, reference
 	// images, aspect ratio). Prerequisite failures surface here as a fast-fail
-	// 400 — never as a detached failure.
-	const gender = resolvePersonaGender(agent);
+	// 400 — never as a detached failure. The pinned voice is the gender
+	// tiebreaker when the profile/soul give no signal.
+	const gender = resolvePersonaGender(agent, cfg?.ugc_voice);
 	const resolved = resolveKitStagePlan(stage, kit, characterRef, gender);
 	if ('error' in resolved) {
 		return json({ success: false, error: resolved.error }, { status: 400 });
