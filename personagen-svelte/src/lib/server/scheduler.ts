@@ -63,7 +63,7 @@ export async function publishSinglePost(supabase: any, post: any): Promise<boole
 	console.log(`[Scheduler] Publishing single post ${post.id} for agent ${post.agent_id}`);
 
 	const targetPlatforms: string[] = post.platforms || [];
-	let publishCount = 0;
+	let submittedCount = 0;
 	let failureCount = 0;
 	let skippedCount = 0;
 	let alreadyPublishedCount = 0;
@@ -189,29 +189,26 @@ export async function publishSinglePost(supabase: any, post: any): Promise<boole
 		}));
 
 		if (publishRes.success) {
-			console.log(`[Scheduler] Post ${post.id} successfully published to ${platform}.`);
-			publishCount++;
+			// Zernio ACCEPTED the post — that is submission, not publication. Zernio
+			// pushes to the platform asynchronously and only its post record (GET
+			// /posts/{id}) later carries the real platformPostUrl. This code used to
+			// stamp 'published' here and FABRICATE a permalink from Zernio's internal
+			// _id (instagram.com/p/<mongo-id>/ → 404), which showed users a live link
+			// that didn't exist. Record 'submitted' and let
+			// verifySubmittedZernioPosts() upgrade it with verified data.
+			console.log(
+				`[Scheduler] Post ${post.id} submitted to ${platform} — awaiting platform confirmation.`
+			);
+			submittedCount++;
 			if (publishRes.externalId) {
 				lastExternalId = publishRes.externalId;
 			}
-			let permalink = publishRes.permalink || null;
-			if (!permalink && publishRes.externalId) {
-				if (normalizedPlat === 'instagram') {
-					permalink = `https://www.instagram.com/p/${publishRes.externalId}/`;
-				} else if (normalizedPlat === 'youtube') {
-					permalink = `https://www.youtube.com/watch?v=${publishRes.externalId}`;
-				} else if (normalizedPlat === 'facebook') {
-					permalink = `https://www.facebook.com/${publishRes.externalId}`;
-				} else if (normalizedPlat === 'tiktok') {
-					permalink = `https://www.tiktok.com/video/${publishRes.externalId}`;
-				}
-			}
 			publicationResults[normalizedPlat] = {
-				status: 'published',
+				status: 'submitted',
 				provider: publishRes.provider,
 				external_id: publishRes.externalId || null,
-				permalink: permalink,
-				published_at: new Date().toISOString()
+				permalink: publishRes.permalink || null,
+				submitted_at: new Date().toISOString()
 			};
 		} else {
 			console.error(
@@ -252,7 +249,9 @@ export async function publishSinglePost(supabase: any, post: any): Promise<boole
 		}
 	}
 
-	const totalPublished = publishCount + alreadyPublishedCount;
+	// Only platforms VERIFIED published (by a prior confirmed run) count as
+	// published here — this run's submissions are still awaiting confirmation.
+	const totalPublished = alreadyPublishedCount;
 
 	// Retry path: every failure this run was transient (network/5xx/rate limit)
 	// and we still have attempts left → put the post back in the scheduled pool
@@ -262,7 +261,17 @@ export async function publishSinglePost(supabase: any, post: any): Promise<boole
 		failureCount > 0 && retriableFailureCount === failureCount && attempts < MAX_PUBLISH_ATTEMPTS;
 
 	let finalStatus: string;
-	if (shouldRetry) {
+	if (submittedCount > 0) {
+		// Submissions in flight: hold the row in 'publishing' until the verify
+		// sweep confirms platform-level results. Never revert to 'scheduled' from
+		// here — Zernio already has the post, and re-queueing would double-publish.
+		finalStatus = 'publishing';
+		publicationResults._post = {
+			...publicationResults._post,
+			attempts,
+			awaiting_confirmation_since: new Date().toISOString()
+		};
+	} else if (shouldRetry) {
 		finalStatus = 'scheduled';
 		publicationResults._post = {
 			...publicationResults._post,
@@ -313,7 +322,7 @@ export async function publishSinglePost(supabase: any, post: any): Promise<boole
 		return false;
 	}
 
-	return publishCount > 0;
+	return submittedCount > 0 || totalPublished > 0;
 }
 
 /**
@@ -419,6 +428,113 @@ async function reapStrandedKitJobs(supabase: any, nowMs: number): Promise<void> 
 	}
 }
 
+// How long a submitted-but-unconfirmed Zernio publish may stay pending before
+// we surface it as failed (observed confirmation latency is ~45s; 12 min means
+// something is genuinely wrong on Zernio's side).
+const ZERNIO_CONFIRM_TIMEOUT_MS = 12 * 60 * 1000;
+
+/**
+ * Confirms submitted Zernio publishes against Zernio's OWN post record.
+ *
+ * POST /posts acceptance only proves submission — Zernio pushes to the
+ * platform asynchronously and fills platforms[].platformPostUrl only once the
+ * platform publish really lands. Until then the post row stays 'publishing'
+ * with per-platform 'submitted' entries. This sweep (every tick) upgrades each
+ * entry to a VERIFIED 'published' — carrying the platform's real permalink,
+ * never one derived from an id — or to 'failed' with Zernio's reason, then
+ * resolves the post's final status. Unconfirmed entries past
+ * ZERNIO_CONFIRM_TIMEOUT_MS fail with guidance; they are never resubmitted.
+ */
+async function verifySubmittedZernioPosts(supabase: any, nowMs: number): Promise<void> {
+	const { data: rows, error } = await supabase
+		.from('posts')
+		.select('id, user_id, agent_id, published_at, publication_results')
+		.eq('status', 'publishing')
+		.limit(25);
+	if (error || !rows || rows.length === 0) return;
+
+	for (const row of rows) {
+		const results: Record<string, any> = { ...(row.publication_results || {}) };
+		const submitted = Object.entries(results).filter(
+			([k, v]: [string, any]) =>
+				!k.startsWith('_') && v && typeof v === 'object' && v.status === 'submitted'
+		) as Array<[string, any]>;
+		if (submitted.length === 0) continue; // freshly-claimed row mid-publish — not ours
+
+		let apiKey: string | null = null;
+		try {
+			({ apiKey } = await getAgentZernioRouting(supabase, row.user_id, row.agent_id));
+		} catch {
+			continue; // transient key-store error — retry next tick
+		}
+		if (!apiKey) continue;
+		const client = new ZernioClient(apiKey);
+
+		let changed = false;
+		for (const [plat, entry] of submitted) {
+			if (entry.external_id) {
+				const res = await client.getPost(entry.external_id);
+				if (res.success) {
+					const pr =
+						res.platforms?.find((p) => p.platform === plat) || res.platforms?.[0] || null;
+					if (pr && pr.status === 'published' && pr.platformPostUrl) {
+						results[plat] = {
+							status: 'published',
+							provider: 'zernio',
+							external_id: entry.external_id,
+							platform_post_id: pr.platformPostId,
+							permalink: pr.platformPostUrl,
+							published_at: new Date().toISOString()
+						};
+						changed = true;
+						console.log(
+							`[Scheduler] Post ${row.id} CONFIRMED live on ${plat}: ${pr.platformPostUrl}`
+						);
+						continue;
+					}
+					if (pr && /fail|error|reject|cancel/i.test(pr.status)) {
+						results[plat] = {
+							status: 'failed',
+							provider: 'zernio',
+							external_id: entry.external_id,
+							error: pr.error || `Zernio reported platform status "${pr.status}"`
+						};
+						changed = true;
+						continue;
+					}
+				}
+			}
+			// Still unconfirmed — fail after the timeout, but never resubmit:
+			// Zernio has the post, and re-queueing would double-publish.
+			const age = nowMs - Date.parse(entry.submitted_at || '');
+			if (Number.isFinite(age) && age > ZERNIO_CONFIRM_TIMEOUT_MS) {
+				results[plat] = {
+					...entry,
+					status: 'failed',
+					error:
+						'Zernio accepted the post but never confirmed the platform publish — check the Zernio dashboard before retrying (it may still go live).'
+				};
+				changed = true;
+			}
+		}
+		if (!changed) continue;
+
+		const entries = Object.entries(results).filter(
+			([k, v]: [string, any]) => !k.startsWith('_') && v && typeof v === 'object'
+		) as Array<[string, any]>;
+		const stillSubmitted = entries.some(([, v]) => v.status === 'submitted');
+		const update: Record<string, any> = { publication_results: results };
+		if (!stillSubmitted) {
+			const published = entries.filter(([, v]) => v.status === 'published').length;
+			const failed = entries.filter(([, v]) => v.status === 'failed').length;
+			update.status = published > 0 && failed > 0 ? 'partial' : published > 0 ? 'published' : 'failed';
+			if (published > 0 && !row.published_at) update.published_at = new Date().toISOString();
+		}
+		// Guarded on status so we never stomp a row something else already resolved.
+		await supabase.from('posts').update(update).eq('id', row.id).eq('status', 'publishing');
+	}
+}
+
 /**
  * Polling loop iteration
  */
@@ -446,6 +562,16 @@ async function pollScheduledPosts() {
 			.select('id, publication_results')
 			.eq('status', 'publishing');
 		for (const p of stale || []) {
+			// Rows with a 'submitted' platform entry are NOT orphans: Zernio already
+			// accepted the post, and the verify sweep owns them (its own timeout
+			// terminalizes). Releasing them back to 'scheduled' would resubmit and
+			// double-publish live content.
+			const resultEntries = Object.entries(p.publication_results || {});
+			const hasSubmitted = resultEntries.some(
+				([k, v]: [string, any]) =>
+					!k.startsWith('_') && v && typeof v === 'object' && v.status === 'submitted'
+			);
+			if (hasSubmitted) continue;
 			const claimedAt = Date.parse(p.publication_results?._post?.claimed_at || '');
 			// Only reap a claim we can PROVE is stale (finite timestamp past the
 			// lease). The old `!claimedAt` also fired on Date.parse('') === NaN,
@@ -491,6 +617,10 @@ async function pollScheduledPosts() {
 		// their progress in agent_configs.ugc_reference_kit, not in posts, so the
 		// posts sweep above can't see them.
 		await reapStrandedKitJobs(supabase, nowMs);
+
+		// Upgrade submitted Zernio publishes to VERIFIED published/failed using
+		// Zernio's own post records (real permalinks, real platform status).
+		await verifySubmittedZernioPosts(supabase, nowMs);
 
 		// Prefilter in SQL by a timezone-safe upper bound (+2 days UTC), then decide
 		// due-ness in JS using each agent's configured timezone. Drafts (status

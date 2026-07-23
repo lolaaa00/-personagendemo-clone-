@@ -200,6 +200,47 @@ export class ZernioClient {
 	}
 
 	/**
+	 * Reads back a Zernio post record to learn what ACTUALLY happened per
+	 * platform. POST /posts acceptance only proves submission — Zernio publishes
+	 * asynchronously and fills platforms[].platformPostUrl once the platform
+	 * publish really lands (observed ~45s). That field is the ONLY trustworthy
+	 * source for "published" + permalink; never derive a permalink from Zernio's
+	 * own _id (it's a Mongo id, not a platform shortcode).
+	 */
+	async getPost(postId: string): Promise<{
+		success: boolean;
+		platforms?: Array<{
+			platform: string;
+			status: string;
+			platformPostId: string | null;
+			platformPostUrl: string | null;
+			error: string | null;
+		}>;
+		error?: string;
+	}> {
+		const { ok, status, data } = await this.getJson(`/posts/${encodeURIComponent(postId)}`);
+		if (!ok) {
+			return { success: false, error: `Zernio getPost returned HTTP ${status}` };
+		}
+		const post = data?.post || data?.data?.post || data?.data || data;
+		const raw = Array.isArray(post?.platforms) ? post.platforms : [];
+		return {
+			success: true,
+			platforms: raw.map((p: any) => ({
+				platform: String(p?.platform || '').toLowerCase(),
+				status: String(p?.status || 'pending'),
+				platformPostId: p?.platformPostId ? String(p.platformPostId) : null,
+				platformPostUrl: p?.platformPostUrl ? String(p.platformPostUrl) : null,
+				error:
+					p?.error ||
+					p?.lastError ||
+					p?.platformSpecificData?.lastPublishError ||
+					null
+			}))
+		};
+	}
+
+	/**
 	 * Deletes a draft or scheduled post record from Zernio.
 	 * Per Zernio docs, published posts cannot be deleted here — use unpublish() instead.
 	 */
