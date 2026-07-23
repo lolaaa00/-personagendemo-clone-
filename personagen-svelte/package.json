@@ -16,7 +16,8 @@
 		"test:integration": "vitest run --project=integration",
 		"test:watch": "vitest --project=unit",
 		"test": "npm run test:unit && npm run test:e2e",
-		"test:e2e": "playwright install && playwright test"
+		"test:e2e": "playwright install && playwright test",
+		"backfill:faststart": "node --env-file=.env --experimental-strip-types scripts/backfill-faststart.ts"
 	},
 	"devDependencies": {
 		"@eslint/js": "^10.0.1",
