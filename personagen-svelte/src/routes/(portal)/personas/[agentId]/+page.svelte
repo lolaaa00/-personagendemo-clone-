@@ -1367,6 +1367,26 @@
 		return true;
 	}));
 
+	// Media type of a post for grouping/congruence. In-flight + failed rows have
+	// no media yet, so they're 'pending' and float to the top of the mosaic.
+	function postMediaType(p: any): 'pending' | 'image' | 'video' {
+		if (p.status === 'generating' || p.status === 'failed') return 'pending';
+		const d = getPostDisplay(p);
+		if (!d.mediaUrl) return 'pending';
+		const isVideo =
+			d.mediaType === 'video' || /\.(mp4|mov|webm|m4v)(\?|$)/i.test(d.mediaUrl ?? '');
+		return isVideo ? 'video' : 'image';
+	}
+
+	// The mosaic renders this: same set as filteredPosts, but grouped by media
+	// type (pending → images → videos) so the grid reads as congruent bands
+	// instead of interleaving short image tiles with tall video tiles. Array.sort
+	// is stable, so date order is preserved WITHIN each group.
+	let groupedPosts = $derived.by(() => {
+		const rank = { pending: 0, image: 1, video: 2 } as const;
+		return [...filteredPosts].sort((a, b) => rank[postMediaType(a)] - rank[postMediaType(b)]);
+	});
+
 	// Dead generations hidden from the default view — surfaced only as a count so
 	// the user knows they exist and can jump to them via the Failed filter.
 	let genFailedCount = $derived(
@@ -2518,7 +2538,7 @@
 					</div>
 				{:else}
 					<div class="post-mosaic">
-						{#each filteredPosts as post (post.id)}
+						{#each groupedPosts as post (post.id)}
 							<PostCard {post} onOpen={(p) => (modalPost = p)} onPublishFallback={openPublishFallback} />
 						{/each}
 					</div>

@@ -250,8 +250,6 @@
 		overflow: hidden;
 		background: var(--surface);
 		cursor: pointer;
-		break-inside: avoid;
-		margin-bottom: 1rem;
 		transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
 	}
 
@@ -266,6 +264,14 @@
 		width: 100%;
 		display: block;
 		object-fit: cover;
+	}
+
+	/* Every tile shares one portrait aspect ratio (matching the video/gen tiles)
+	   so the mosaic renders as a congruent grid instead of ragged rows. Images
+	   crop to fill the frame; the full, uncropped media shows in the drawer on
+	   click. */
+	.post-tile img {
+		aspect-ratio: 4 / 5;
 	}
 
 	.tile-text-fallback {
@@ -426,7 +432,7 @@
 	   instead of forcing a video-frame download. */
 	.tile-video-placeholder {
 		width: 100%;
-		height: 100%;
+		aspect-ratio: 4 / 5;
 		background: linear-gradient(135deg, #1f2433, #2b3247);
 	}
 
