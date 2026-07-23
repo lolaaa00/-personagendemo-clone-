@@ -67,7 +67,7 @@ export async function getAgentZernioRouting(
 	supabase: any,
 	userId: string,
 	agentId?: string | null
-): Promise<{ apiKey: string | null; profileId: string | null }> {
+): Promise<{ apiKey: string | null; profileId: string | null; keyRef: string }> {
 	let agent: AgentKeyRouting | null = null;
 	if (agentId) {
 		const { data } = await supabase
@@ -78,5 +78,27 @@ export async function getAgentZernioRouting(
 		agent = data || null;
 	}
 	const apiKey = await resolveZernioApiKeyForAgent(supabase, userId, agent);
-	return { apiKey, profileId: agent?.zernio_profile_id || null };
+	// keyRef identifies WHICH key this routing resolved ('default' or a
+	// zernio_keys id). Callers that create Zernio resources (publish!) must
+	// persist it next to the resource id: each managed key is a separate Zernio
+	// ACCOUNT, so any later read-back (publish verification, analytics,
+	// unpublish) must use the creating key — re-deriving routing later silently
+	// 403s if the persona's assignment changed in the meantime.
+	return {
+		apiKey,
+		profileId: agent?.zernio_profile_id || null,
+		keyRef: agent?.zernio_key_id || 'default'
+	};
+}
+
+/** Resolves a persisted key_ref ('default' | zernio_keys id) back to a secret. */
+export async function resolveZernioKeyByRef(
+	supabase: any,
+	userId: string,
+	keyRef: string | null | undefined
+): Promise<string | null> {
+	if (keyRef && keyRef !== 'default') {
+		return getZernioKeySecretById(supabase, userId, keyRef);
+	}
+	return getZernioApiKey(supabase, userId);
 }

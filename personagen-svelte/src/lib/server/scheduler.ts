@@ -1,7 +1,7 @@
 import { env } from '$env/dynamic/private';
 import { env as publicEnv } from '$env/dynamic/public';
 import { ZernioClient } from './social/zernio';
-import { getAgentZernioRouting } from './zernio-keys';
+import { getAgentZernioRouting, resolveZernioKeyByRef } from './zernio-keys';
 import { publishToPlatform } from './social/publisher';
 import { getServiceSupabase } from './service-supabase';
 import { getLocalParts, runAutopilotDraftGeneration, zonedWallTimeToEpoch } from './autopilot';
@@ -208,6 +208,10 @@ export async function publishSinglePost(supabase: any, post: any): Promise<boole
 				provider: publishRes.provider,
 				external_id: publishRes.externalId || null,
 				permalink: publishRes.permalink || null,
+				// The key that created this Zernio post — verification MUST read it
+				// back with this exact key. Managed keys are separate Zernio accounts,
+				// so re-deriving routing later 403s if the persona was reassigned.
+				key_ref: publishRes.keyRef || 'default',
 				submitted_at: new Date().toISOString()
 			};
 		} else {
@@ -461,18 +465,21 @@ async function verifySubmittedZernioPosts(supabase: any, nowMs: number): Promise
 		) as Array<[string, any]>;
 		if (submitted.length === 0) continue; // freshly-claimed row mid-publish — not ours
 
-		let apiKey: string | null = null;
-		try {
-			({ apiKey } = await getAgentZernioRouting(supabase, row.user_id, row.agent_id));
-		} catch {
-			continue; // transient key-store error — retry next tick
-		}
-		if (!apiKey) continue;
-		const client = new ZernioClient(apiKey);
-
 		let changed = false;
 		for (const [plat, entry] of submitted) {
-			if (entry.external_id) {
+			// Resolve the key that CREATED this submission (entry.key_ref). Legacy
+			// entries without one fall back to current routing. A wrong key here
+			// means Zernio 403s the read-back and the entry would rot to timeout.
+			let apiKey: string | null = null;
+			try {
+				apiKey = entry.key_ref
+					? await resolveZernioKeyByRef(supabase, row.user_id, entry.key_ref)
+					: (await getAgentZernioRouting(supabase, row.user_id, row.agent_id)).apiKey;
+			} catch {
+				continue; // transient key-store error — retry next tick
+			}
+			const client = apiKey ? new ZernioClient(apiKey) : null;
+			if (client && entry.external_id) {
 				const res = await client.getPost(entry.external_id);
 				if (res.success) {
 					const pr =
@@ -766,13 +773,25 @@ export async function syncPostAnalytics() {
 	// only exist in the Zernio account it was published through. null marks a
 	// routing with no key so we don't re-query it for every one of its posts.
 	const clientByRoute = new Map<string, ZernioClient | null>();
-	const getClient = async (userId: string, agentId?: string | null): Promise<ZernioClient | null> => {
-		const routeKey = `${userId}::${agentId || 'default'}`;
+	// keyRef ('default' | zernio_keys id) captured at publish time wins: managed
+	// keys are separate Zernio accounts, and a post's analytics only exist in the
+	// account that created it. Re-deriving routing (the fallback for legacy
+	// entries without key_ref) 403s if the persona was reassigned since.
+	const getClient = async (
+		userId: string,
+		agentId?: string | null,
+		keyRef?: string | null
+	): Promise<ZernioClient | null> => {
+		const routeKey = keyRef ? `${userId}::ref::${keyRef}` : `${userId}::${agentId || 'default'}`;
 		if (clientByRoute.has(routeKey)) return clientByRoute.get(routeKey)!;
-		const { apiKey } = await getAgentZernioRouting(supabase, userId, agentId).catch(() => ({
-			apiKey: null as string | null,
-			profileId: null
-		}));
+		let apiKey: string | null = null;
+		try {
+			apiKey = keyRef
+				? await resolveZernioKeyByRef(supabase, userId, keyRef)
+				: (await getAgentZernioRouting(supabase, userId, agentId)).apiKey;
+		} catch {
+			apiKey = null;
+		}
 		const client = apiKey ? new ZernioClient(apiKey) : null;
 		clientByRoute.set(routeKey, client);
 		return client;
@@ -825,7 +844,11 @@ export async function syncPostAnalytics() {
 				if (pubProvider === 'composio' || pubProvider === 'blotato') continue;
 
 				try {
-					const client = await getClient(post.user_id, post.agent_id);
+					const client = await getClient(
+						post.user_id,
+						post.agent_id,
+						publicationResults[platform]?.key_ref || null
+					);
 					if (!client) continue;
 
 					const metrics = await client.fetchPostMetrics(String(externalId));

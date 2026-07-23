@@ -21,6 +21,13 @@ export interface PublishPlatformResult {
 	data?: unknown;
 	error?: string;
 	provider: 'zernio';
+	/**
+	 * Which Zernio key created this resource ('default' | zernio_keys id).
+	 * Persisted with the submission so verification/analytics/unpublish read it
+	 * back with the SAME account — persona key reassignment must never orphan
+	 * already-created Zernio posts behind a 403.
+	 */
+	keyRef?: string;
 }
 
 function extractMediaItems(content: string): Array<{ type: 'image' | 'video'; url: string }> | undefined {
@@ -147,8 +154,13 @@ export async function publishToPlatform({
 	// or the user's default key, plus the persona's profile id under that key.
 	let apiKey: string | null;
 	let profileId: string | null;
+	let keyRef: string;
 	try {
-		({ apiKey, profileId } = await getAgentZernioRouting(supabase, post.user_id, post.agent_id));
+		({ apiKey, profileId, keyRef } = await getAgentZernioRouting(
+			supabase,
+			post.user_id,
+			post.agent_id
+		));
 	} catch (err) {
 		// Transient DB/key-store error — surface it (retriable) instead of masking
 		// it as "no key configured", which the scheduler would fail permanently.
@@ -217,7 +229,7 @@ export async function publishToPlatform({
 			// retry dedupes at Zernio instead of double-posting.
 			idempotencyKey: `${post.id}:${normalizedPlat}`
 		});
-		return { ...result, provider: 'zernio' };
+		return { ...result, provider: 'zernio', keyRef };
 	} catch (err) {
 		return { success: false, provider: 'zernio', error: (err as Error).message };
 	}
