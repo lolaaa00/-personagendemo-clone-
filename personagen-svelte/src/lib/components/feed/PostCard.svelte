@@ -166,6 +166,21 @@
 					preload="metadata"
 					onclick={(e) => e.stopPropagation()}
 				></video>
+				<!-- Native controls capture taps, so the tile can't be clicked to open
+				     the drawer while playing. This gives that exit back: stop the inline
+				     clip and open the details sidebar in one tap. -->
+				<button
+					type="button"
+					class="tile-video-details"
+					aria-label="Stop and open details"
+					onclick={(e) => {
+						e.stopPropagation();
+						playingInline = false;
+						onOpen(post);
+					}}
+				>
+					Details
+				</button>
 			{:else}
 				{#if display.posterUrl}
 					<img src={display.posterUrl} loading="lazy" alt="Video poster" />
@@ -250,6 +265,8 @@
 		overflow: hidden;
 		background: var(--surface);
 		cursor: pointer;
+		break-inside: avoid;
+		margin-bottom: 1rem;
 		transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
 	}
 
@@ -264,14 +281,6 @@
 		width: 100%;
 		display: block;
 		object-fit: cover;
-	}
-
-	/* Every tile shares one portrait aspect ratio (matching the video/gen tiles)
-	   so the mosaic renders as a congruent grid instead of ragged rows. Images
-	   crop to fill the frame; the full, uncropped media shows in the drawer on
-	   click. */
-	.post-tile img {
-		aspect-ratio: 4 / 5;
 	}
 
 	.tile-text-fallback {
@@ -398,17 +407,16 @@
 	   else on the tile still opens the drawer (this stops propagation). */
 	.tile-video-play {
 		position: absolute;
-		top: 50%;
-		left: 50%;
-		transform: translate(-50%, -50%);
-		width: 52px;
-		height: 52px;
+		bottom: 10px;
+		right: 10px;
+		width: 38px;
+		height: 38px;
 		padding: 0;
-		padding-left: 3px; /* optically center the triangle */
+		padding-left: 2px; /* optically center the triangle */
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		background: rgba(0, 0, 0, 0.55);
+		background: rgba(0, 0, 0, 0.6);
 		color: #fff;
 		border: 1.5px solid rgba(255, 255, 255, 0.85);
 		border-radius: 999px;
@@ -418,8 +426,29 @@
 		transition: background 0.15s ease, transform 0.15s ease;
 	}
 	.tile-video-play:hover {
-		background: rgba(0, 0, 0, 0.78);
-		transform: translate(-50%, -50%) scale(1.08);
+		background: rgba(0, 0, 0, 0.82);
+		transform: scale(1.08);
+	}
+
+	/* Escape hatch while a tile plays inline — sits clear of the video's own
+	   controls (top-right) so it never overlaps the scrubber. */
+	.tile-video-details {
+		position: absolute;
+		top: 8px;
+		right: 8px;
+		z-index: 2;
+		padding: 4px 10px;
+		font-size: 11px;
+		font-weight: 700;
+		color: #fff;
+		background: rgba(0, 0, 0, 0.62);
+		border: 1px solid rgba(255, 255, 255, 0.7);
+		border-radius: 999px;
+		cursor: pointer;
+		backdrop-filter: blur(4px);
+	}
+	.tile-video-details:hover {
+		background: rgba(0, 0, 0, 0.85);
 	}
 
 	.post-tile video {
@@ -432,7 +461,7 @@
 	   instead of forcing a video-frame download. */
 	.tile-video-placeholder {
 		width: 100%;
-		aspect-ratio: 4 / 5;
+		height: 100%;
 		background: linear-gradient(135deg, #1f2433, #2b3247);
 	}
 

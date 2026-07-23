@@ -423,10 +423,20 @@
 		<div class="drawer-body" bind:this={bodyEl}>
 			{#if display.mediaUrl}
 				<div class="drawer-media">
+					<!-- A blurred, scaled copy of the media fills the frame behind it, so a
+					     portrait clip in a wider panel reads as full-bleed instead of sitting
+					     in dead black bars. Poster for video (cheap), the image itself otherwise. -->
+					<div
+						class="media-blur"
+						style="background-image: url('{(display.mediaType === 'video'
+							? display.posterUrl || display.mediaUrl
+							: display.mediaUrl)?.replace(/'/g, '%27')}')"
+					></div>
 					{#if display.mediaType === 'video'}
 						<!-- svelte-ignore a11y_media_has_caption -->
 						{#key display.mediaUrl}
 							<video
+								class="media-el"
 								src={display.mediaUrl}
 								poster={display.posterUrl || undefined}
 								controls
@@ -445,7 +455,7 @@
 							</div>
 						{/if}
 					{:else}
-						<img src={display.mediaUrl} alt="Post media" fetchpriority="high" decoding="async" />
+						<img class="media-el" src={display.mediaUrl} alt="Post media" fetchpriority="high" decoding="async" />
 					{/if}
 					{#if refining}
 						<div class="refine-overlay" role="status">
@@ -940,6 +950,20 @@
 		overflow: hidden;
 		border: 1px solid var(--border);
 		background: #000;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+
+	/* Blurred fill behind the media so portrait clips never sit in flat black bars. */
+	.media-blur {
+		position: absolute;
+		inset: 0;
+		background-size: cover;
+		background-position: center;
+		filter: blur(34px) brightness(0.55) saturate(1.1);
+		transform: scale(1.2);
+		z-index: 0;
 	}
 
 	/* Shown over the poster when inline playback fails — offers the raw file, which
@@ -947,6 +971,7 @@
 	.video-fallback {
 		position: absolute;
 		inset: 0;
+		z-index: 2;
 		display: flex;
 		flex-direction: column;
 		align-items: center;
@@ -975,6 +1000,7 @@
 	.refine-overlay {
 		position: absolute;
 		inset: 0;
+		z-index: 2;
 		display: flex;
 		flex-direction: column;
 		align-items: center;
@@ -1042,17 +1068,18 @@
 		background: var(--warning, #f59e0b);
 	}
 
-	.drawer-media img,
-	.drawer-media video {
+	.drawer-media .media-el {
+		position: relative;
+		z-index: 1;
 		width: 100%;
-		max-height: 55vh;
+		max-height: 78vh;
 		object-fit: contain;
 		display: block;
 	}
 
 	/* Before metadata loads a <video> has no intrinsic size and collapses to a
 	   sliver; reserve a 9:16 box (our UGC clips) until the real ratio takes over. */
-	.drawer-media video {
+	.drawer-media video.media-el {
 		aspect-ratio: auto 9 / 16;
 	}
 
