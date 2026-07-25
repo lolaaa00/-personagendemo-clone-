@@ -11,11 +11,18 @@
 </script>
 
 <div class="modal-backdrop z-top" onclick={onClose} role="presentation">
-	<div class="notice-modal" onclick={(e) => e.stopPropagation()} role="dialog">
+	<div
+		class="notice-modal"
+		onclick={(e) => e.stopPropagation()}
+		role="dialog"
+		aria-modal="true"
+		aria-labelledby="manual-delete-title"
+		tabindex="-1"
+	>
 		<div class="modal-header">
-			<h3>Removed locally — {entries.length} step{entries.length !== 1 ? 's' : ''} left</h3>
+			<h3 id="manual-delete-title">Removed locally — {entries.length} step{entries.length !== 1 ? 's' : ''} left</h3>
 			<button class="modal-close" onclick={onClose} aria-label="Close">
-				<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18" /><path d="M6 6l12 12" /></svg>
+				<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6L6 18" /><path d="M6 6l12 12" /></svg>
 			</button>
 		</div>
 		<div class="modal-body">

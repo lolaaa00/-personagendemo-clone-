@@ -636,6 +636,9 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 
 	function removeTrait(t: string) {
 		traits = traits.filter((x) => x !== t);
+		// Persist immediately — without this the removal reappears on reload
+		// unless the user separately pressed Save.
+		saveAll();
 	}
 
 	function handleTraitKeydown(e: KeyboardEvent) {
@@ -1928,12 +1931,31 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 				<h3>Competitor Analysis</h3>
 				<p class="panel-desc">Track competitors and identify differentiators.</p>
 
+				{#if competitors.length > 0}
+					<SelectionToolbar
+						total={competitors.length}
+						selectedCount={selectedCompetitorIds.length}
+						noun="competitor"
+						onSelectAll={selectAllCompetitors}
+						onClear={clearCompetitorSelection}
+						onDelete={() => deleteCompetitors(selectedCompetitorIds)}
+					/>
+				{/if}
+
 				<div class="competitors-list">
 					{#each competitors as comp, i (comp.id)}
-						<div class="competitor-card">
+						<div class="competitor-card" class:selected={selectedCompetitorIds.includes(comp.id)}>
 							<div class="comp-header">
+								<label class="comp-select" title="Select for bulk actions">
+									<input
+										type="checkbox"
+										checked={selectedCompetitorIds.includes(comp.id)}
+										onchange={() => toggleCompetitorSelected(comp.id)}
+										aria-label="Select competitor {comp.name || i + 1}"
+									/>
+								</label>
 								<span class="comp-num">#{i + 1}</span>
-								<button class="comp-remove" onclick={() => removeCompetitor(comp.id)}>
+								<button class="comp-remove" onclick={() => deleteCompetitors([comp.id])}>
 									<svg
 										width="14"
 										height="14"
