@@ -85,8 +85,24 @@ export const Posts = {
 	get: (id: string) => request<any>(ENDPOINTS.posts, 'get', { id }),
 	update: (id: string, data: unknown) =>
 		request(ENDPOINTS.posts, 'update', { id, ...(data as Record<string, unknown>) }),
-	delete: (id: string) => request(ENDPOINTS.posts, 'delete', { id })
+	delete: (id: string) => request(ENDPOINTS.posts, 'delete', { id }),
+	/**
+	 * Multi-select bulk delete. Like the single `delete` action, the posts API puts
+	 * its result fields at the TOP level of the response (not under `data`), so the
+	 * return type spells that out rather than lying with ApiResponse<T>.
+	 */
+	deleteMany: (ids: string[]) =>
+		request(ENDPOINTS.posts, 'delete_many', { ids }) as Promise<
+			ApiResponse<never> & { deleted?: number; requested?: number; teardown?: TeardownSummary }
+		>
 };
+
+/** Platform teardown outcome returned by post deletion (Zernio unpublish vs manual). */
+export interface TeardownSummary {
+	unpublished: Array<{ platform: string; handle?: string | null }>;
+	manualDeletion: Array<{ platform: string; handle?: string | null; permalink?: string | null }>;
+	errors: Array<{ platform: string; error: string }>;
+}
 
 // ── Content Forge (8 actions — unified generation engine) ──────────────────
 

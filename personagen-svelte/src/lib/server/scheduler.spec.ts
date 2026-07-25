@@ -125,7 +125,7 @@ describe('publishSinglePost — exactly-once claim', () => {
 		expect(claim.payload.status).toBe('publishing');
 	});
 
-	it('WON CLAIM: publishes and marks the post published (positive control)', async () => {
+	it('WON CLAIM: submits and holds the post in publishing until verified (positive control)', async () => {
 		const supabase = schedulerDb({ data: [{ id: POST_ID }], error: null }, [
 			activeConn('instagram')
 		]);
@@ -139,9 +139,16 @@ describe('publishSinglePost — exactly-once claim', () => {
 
 		expect(result).toBe(true);
 		expect(publishToPlatform).toHaveBeenCalledTimes(1);
+		// Verified-publishing contract: Zernio ACCEPTING the post is submission,
+		// not publication. The row holds at 'publishing' with the platform entry
+		// 'submitted' (+ the key_ref that created it) until verifySubmittedZernioPosts
+		// upgrades it with the platform's own confirmation. Stamping 'published'
+		// here is exactly the fabricated-permalink bug this contract replaced.
 		const final = supabase.of('posts', 'update').at(-1)!;
-		expect(final.payload.status).toBe('published');
-		expect(final.payload.publication_results.instagram.status).toBe('published');
+		expect(final.payload.status).toBe('publishing');
+		expect(final.payload.publication_results.instagram.status).toBe('submitted');
+		expect(final.payload.publication_results.instagram.key_ref).toBe('default');
+		expect(final.payload.publication_results._post.awaiting_confirmation_since).toBeTruthy();
 		expect(final.payload.external_id).toBe('IG123');
 	});
 });
@@ -174,10 +181,13 @@ describe('publishSinglePost — no re-sending already-published platforms', () =
 		expect(claim.payload.publication_results.instagram.status).toBe('published');
 		expect(claim.payload.publication_results.x.status).toBe('publishing');
 
-		// Final state keeps the original Instagram evidence.
+		// Final state keeps the original Instagram evidence, and the row holds at
+		// 'publishing' while the fresh X submission awaits platform verification.
 		const final = supabase.of('posts', 'update').at(-1)!;
 		expect(final.payload.publication_results.instagram.external_id).toBe('IG-OLD');
-		expect(final.payload.status).toBe('published');
+		expect(final.payload.publication_results.instagram.status).toBe('published');
+		expect(final.payload.publication_results.x.status).toBe('submitted');
+		expect(final.payload.status).toBe('publishing');
 	});
 
 	it('a fully-published post re-run publishes nothing at all', async () => {
@@ -195,9 +205,10 @@ describe('publishSinglePost — no re-sending already-published platforms', () =
 		const result = await publishSinglePost(supabase, post);
 
 		expect(publishToPlatform).not.toHaveBeenCalled();
-		// Nothing NEW was published this run, but the post is still 'published'
-		// and its original published_at is preserved.
-		expect(result).toBe(false);
+		// Nothing NEW was sent this run; the return value reports "this post has
+		// live content" (true), and the row stays 'published' with its original
+		// published_at preserved — never re-stamped by a run that sent nothing.
+		expect(result).toBe(true);
 		const final = supabase.of('posts', 'update').at(-1)!;
 		expect(final.payload.status).toBe('published');
 		expect(final.payload.published_at).toBe('2026-07-01T00:00:00.000Z');

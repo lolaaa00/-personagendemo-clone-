@@ -1,6 +1,8 @@
 <script lang="ts">
 	import StatusBadge from './StatusBadge.svelte';
-	import { goto } from '$app/navigation';
+	import SelectionToolbar from '$lib/components/ui/SelectionToolbar.svelte';
+	import { goto, invalidateAll } from '$app/navigation';
+	import { SvelteSet } from 'svelte/reactivity';
 	import { showToast } from '$lib/stores/ui.svelte';
 	// Using any[] because agents data comes from raw JSON with camelCase fields
 	interface Props {
@@ -13,8 +15,15 @@
 
 	let currentFilter = $state<FilterType>('all');
 
+	/**
+	 * Ids deleted in this session. Their rows disappear immediately so the table
+	 * reflects the delete without a reload; each id is dropped again as soon as
+	 * the reloaded server data agrees the persona is gone.
+	 */
+	let removedIds = $state<string[]>([]);
+
 	let filteredAgents = $derived.by(() => {
-		let result = agents;
+		let result = agents.filter((a) => !removedIds.includes(a.id));
 		switch (currentFilter) {
 			case 'active':
 				return result.filter((a) => a.status === 'active');
@@ -28,6 +37,142 @@
 				return result;
 		}
 	});
+
+	// ── Multi-select ───────────────────────────────────────────────────────
+	const selected = new SvelteSet<string>();
+
+	// Only ids that are actually on screen count towards the toolbar and towards
+	// a bulk delete, so "N selected" never describes rows the filter is hiding.
+	let selectedVisible = $derived(
+		filteredAgents.filter((a) => selected.has(a.id)).map((a) => a.id as string)
+	);
+	let allVisibleSelected = $derived(
+		filteredAgents.length > 0 && selectedVisible.length === filteredAgents.length
+	);
+
+	// Prune ids for personas that no longer exist (deleted here or elsewhere).
+	$effect(() => {
+		const present = new Set(agents.map((a) => a.id));
+		for (const id of Array.from(selected)) {
+			if (!present.has(id)) selected.delete(id);
+		}
+	});
+
+	// Stop hiding rows once the reloaded data agrees they are gone.
+	$effect(() => {
+		if (removedIds.length === 0) return;
+		const stillReturned = removedIds.filter((id) => agents.some((a) => a.id === id));
+		if (stillReturned.length !== removedIds.length) removedIds = stillReturned;
+	});
+
+	function toggleSelect(id: string) {
+		if (selected.has(id)) selected.delete(id);
+		else selected.add(id);
+	}
+
+	function selectAllVisible() {
+		for (const a of filteredAgents) selected.add(a.id);
+	}
+
+	function clearSelection() {
+		selected.clear();
+	}
+
+	function nameOf(id: string): string {
+		return agents.find((a) => a.id === id)?.name || 'Persona';
+	}
+
+	// ── Delete (single + bulk) ─────────────────────────────────────────────
+	// Deleting a persona also destroys its posts, connections, memories and chat
+	// history, so both paths go through the typed-DELETE confirmation used by the
+	// account Danger Zone rather than a one-click confirm().
+	let deleting = $state(false);
+	let confirmOpen = $state(false);
+	let pendingIds = $state<string[]>([]);
+	let deleteConfirmText = $state('');
+
+	let pendingProtected = $derived(
+		pendingIds.filter((id) => agents.find((a) => a.id === id)?.is_overseer).length
+	);
+
+	function requestDelete(ids: string[]) {
+		if (ids.length === 0 || deleting) return;
+		pendingIds = ids;
+		deleteConfirmText = '';
+		confirmOpen = true;
+	}
+
+	function closeConfirm() {
+		if (deleting) return;
+		confirmOpen = false;
+		pendingIds = [];
+		deleteConfirmText = '';
+	}
+
+	function onKeydown(e: KeyboardEvent) {
+		if (e.key === 'Escape' && confirmOpen) closeConfirm();
+	}
+
+	async function confirmDelete() {
+		if (deleteConfirmText !== 'DELETE' || deleting || pendingIds.length === 0) return;
+		const ids = pendingIds.slice();
+		// Names must be captured up front — the rows vanish on success.
+		const names = new Map<string, string>(ids.map((id) => [id, nameOf(id)]));
+		deleting = true;
+		try {
+			const res = await fetch('/api/agents/config', {
+				method: 'DELETE',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(ids.length === 1 ? { agentId: ids[0] } : { agentIds: ids })
+			});
+			const data = await res.json().catch(() => ({}));
+			// The endpoint reports per-agent outcomes; never assume the whole batch went.
+			const deleted: string[] = Array.isArray(data?.deleted)
+				? data.deleted
+				: res.ok && data?.success
+					? ids
+					: [];
+			const failed: Array<{ agentId: string; error: string }> = Array.isArray(data?.failed)
+				? data.failed
+				: [];
+
+			if (deleted.length > 0) {
+				removedIds = removedIds.concat(deleted);
+				for (const id of deleted) selected.delete(id);
+				showToast(
+					deleted.length === 1
+						? `Deleted ${names.get(deleted[0]) ?? 'persona'}`
+						: `Deleted ${deleted.length} personas`,
+					'success'
+				);
+			}
+
+			if (failed.length > 0) {
+				const detail = failed
+					.slice(0, 3)
+					.map((f) => `${names.get(f.agentId) ?? f.agentId} — ${f.error}`)
+					.join('; ');
+				const more = failed.length > 3 ? ` (+${failed.length - 3} more)` : '';
+				showToast(
+					`${failed.length} persona${failed.length === 1 ? '' : 's'} could not be deleted: ${detail}${more}`,
+					'error'
+				);
+			} else if (deleted.length === 0) {
+				throw new Error(data?.error || 'Delete failed');
+			}
+
+			// Refresh the sidebar persona list and every other loader-backed view.
+			if (deleted.length > 0) await invalidateAll();
+		} catch (err) {
+			console.error('[AgentRoster] Failed to delete personas:', err);
+			showToast((err as Error).message || 'Failed to delete personas', 'error');
+		} finally {
+			deleting = false;
+			confirmOpen = false;
+			pendingIds = [];
+			deleteConfirmText = '';
+		}
+	}
 
 	const filters: { label: string; value: FilterType }[] = [
 		{ label: 'All', value: 'all' },
@@ -110,15 +255,37 @@
 		</div>
 	</div>
 
+	<SelectionToolbar
+		total={filteredAgents.length}
+		selectedCount={selectedVisible.length}
+		noun="persona"
+		busy={deleting}
+		onSelectAll={selectAllVisible}
+		onClear={clearSelection}
+		onDelete={() => requestDelete(selectedVisible.slice())}
+	/>
+
 	<div class="dash-table" role="table" aria-label="Agent roster table">
 		<!-- Header Row -->
 		<div class="dash-row row-header" role="row">
+			<span class="pick-cell" role="columnheader">
+				<input
+					type="checkbox"
+					class="pick-box"
+					aria-label="Select all personas in view"
+					checked={allVisibleSelected}
+					indeterminate={selectedVisible.length > 0 && !allVisibleSelected}
+					disabled={filteredAgents.length === 0 || deleting}
+					onchange={() => (allVisibleSelected ? clearSelection() : selectAllVisible())}
+				/>
+			</span>
 			<span role="columnheader">Agent</span>
 			<span role="columnheader">Followers</span>
 			<span role="columnheader">Engagement</span>
 			<span role="columnheader">Gen Spend</span>
 			<span role="columnheader">Performance</span>
 			<span role="columnheader">Active</span>
+			<span class="pick-cell" role="columnheader"><span class="sr-only">Delete</span></span>
 		</div>
 
 		<!-- Agent Rows -->
@@ -128,9 +295,26 @@
 			<div
 				onclick={() => goto(`/personas/${agent.id}`)}
 				class="dash-row"
+				class:is-selected={selected.has(agent.id)}
 				role="link"
 				tabindex="0"
 			>
+				<!-- svelte-ignore a11y_click_events_have_key_events -->
+				<label
+					class="pick-cell"
+					role="cell"
+					onclick={(e) => e.stopPropagation()}
+					title="Select {agent.name}"
+				>
+					<input
+						type="checkbox"
+						class="pick-box"
+						aria-label="Select {agent.name}"
+						checked={selected.has(agent.id)}
+						disabled={deleting}
+						onchange={() => toggleSelect(agent.id)}
+					/>
+				</label>
 				<div class="dash-agent-cell" role="cell">
 					<div class="dash-agent-avatar" style={agent.ugc_character_ref ? '' : `background: ${agent.gradient}`}>
 						{#if agent.ugc_character_ref}
@@ -209,6 +393,36 @@
 						</label>
 					{/if}
 				</span>
+				<span class="pick-cell" role="cell">
+					<button
+						type="button"
+						class="row-del"
+						aria-label="Delete {agent.name}"
+						title={agent.is_overseer
+							? 'The Hermes overseer is protected and cannot be deleted'
+							: `Delete ${agent.name}`}
+						disabled={agent.is_overseer || deleting}
+						onclick={(e) => {
+							e.stopPropagation();
+							requestDelete([agent.id]);
+						}}
+					>
+						<svg
+							width="14"
+							height="14"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							aria-hidden="true"
+						>
+							<polyline points="3 6 5 6 21 6" />
+							<path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+						</svg>
+					</button>
+				</span>
 			</div>
 		{/each}
 
@@ -219,6 +433,88 @@
 		{/if}
 	</div>
 </div>
+
+<svelte:window onkeydown={onKeydown} />
+
+<!-- Typed-DELETE confirmation, shared by the row action and the bulk action -->
+{#if confirmOpen}
+	<div class="pdel-overlay">
+		<button type="button" class="pdel-backdrop" aria-label="Cancel deletion" onclick={closeConfirm}
+		></button>
+		<div class="pdel-modal" role="dialog" aria-modal="true" aria-labelledby="pdel-title">
+			<div class="pdel-head">
+				<svg
+					width="22"
+					height="22"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="var(--error)"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					aria-hidden="true"
+				>
+					<path
+					d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"
+				/>
+					<line x1="12" y1="9" x2="12" y2="13" />
+					<line x1="12" y1="17" x2="12.01" y2="17" />
+				</svg>
+				<h3 id="pdel-title">
+					Delete {pendingIds.length === 1 ? 'persona' : `${pendingIds.length} personas`}
+				</h3>
+			</div>
+			<p class="pdel-text">
+				This also permanently destroys every post, platform connection, memory and chat message
+				belonging to {pendingIds.length === 1 ? 'this persona' : 'these personas'}. This action is
+				<strong>irreversible</strong>.
+			</p>
+			<ul class="pdel-list">
+				{#each pendingIds.slice(0, 5) as id (id)}
+					<li>{nameOf(id)}</li>
+				{/each}
+				{#if pendingIds.length > 5}
+					<li class="pdel-more">and {pendingIds.length - 5} more</li>
+				{/if}
+			</ul>
+			{#if pendingProtected > 0}
+				<p class="pdel-note">
+					{pendingProtected}
+					protected Hermes overseer {pendingProtected === 1 ? 'persona' : 'personas'} in this selection
+					will be skipped.
+				</p>
+			{/if}
+			<div class="pdel-field">
+				<label for="roster-delete-confirm">Type <strong>DELETE</strong> to confirm</label>
+				<input
+					id="roster-delete-confirm"
+					type="text"
+					autocomplete="off"
+					placeholder="DELETE"
+					disabled={deleting}
+					bind:value={deleteConfirmText}
+				/>
+			</div>
+			<div class="pdel-actions">
+				<button type="button" class="pdel-cancel" disabled={deleting} onclick={closeConfirm}>
+					Cancel
+				</button>
+				<button
+					type="button"
+					class="pdel-confirm"
+					disabled={deleteConfirmText !== 'DELETE' || deleting}
+					onclick={confirmDelete}
+				>
+					{#if deleting}
+						Deleting…
+					{:else}
+						Delete {pendingIds.length === 1 ? 'persona' : `${pendingIds.length} personas`}
+					{/if}
+				</button>
+			</div>
+		</div>
+	</div>
+{/if}
 
 <style>
 	.dash-table-wrap {
@@ -274,7 +570,7 @@
 
 	.dash-row {
 		display: grid;
-		grid-template-columns: 2.5fr 1fr 1fr 1fr 1.2fr 0.6fr;
+		grid-template-columns: 30px 2.5fr 1fr 1fr 1fr 1.2fr 0.6fr 34px;
 		align-items: center;
 		gap: 0.75rem;
 		padding: 0.65rem 0.5rem;
@@ -292,6 +588,12 @@
 
 	.dash-row:last-child {
 		border-bottom: none;
+	}
+
+	.dash-row.is-selected,
+	.dash-row.is-selected:hover:not(.row-header) {
+		background: var(--accent-soft);
+		box-shadow: inset 3px 0 0 var(--accent);
 	}
 
 	.dash-row.row-header {
@@ -400,6 +702,61 @@
 		font-family: var(--font-mono);
 	}
 
+	/* Multi-select checkbox + row delete */
+	.pick-cell {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		min-width: 0;
+	}
+
+	label.pick-cell {
+		cursor: pointer;
+		/* Negative margin keeps the wider hit area from shifting the grid. */
+		padding: 6px;
+		margin: -6px;
+	}
+
+	.pick-box {
+		width: 15px;
+		height: 15px;
+		margin: 0;
+		flex-shrink: 0;
+		accent-color: var(--accent);
+		cursor: pointer;
+	}
+
+	.pick-box:disabled {
+		cursor: not-allowed;
+		opacity: 0.4;
+	}
+
+	.row-del {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 26px;
+		height: 26px;
+		padding: 0;
+		border-radius: var(--radius-xs);
+		border: 1px solid transparent;
+		background: transparent;
+		color: var(--text-dim);
+		cursor: pointer;
+		transition: all 0.2s;
+	}
+
+	.row-del:hover:not(:disabled) {
+		color: var(--error);
+		border-color: color-mix(in srgb, var(--error) 45%, transparent);
+		background: color-mix(in srgb, var(--error) 12%, transparent);
+	}
+
+	.row-del:disabled {
+		opacity: 0.3;
+		cursor: not-allowed;
+	}
+
 	/* Toggle switch */
 	.toggle {
 		position: relative;
@@ -473,11 +830,175 @@
 		font-size: 0.85rem;
 	}
 
+	/* Typed-DELETE confirmation dialog */
+	.pdel-overlay {
+		position: fixed;
+		inset: 0;
+		z-index: var(--z-modal);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 1rem;
+	}
+
+	.pdel-backdrop {
+		position: absolute;
+		inset: 0;
+		border: none;
+		padding: 0;
+		background: rgba(0, 0, 0, 0.6);
+		backdrop-filter: blur(4px);
+		cursor: default;
+	}
+
+	.pdel-modal {
+		position: relative;
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		padding: 1.75rem;
+		max-width: 460px;
+		width: 100%;
+		max-height: 90vh;
+		overflow-y: auto;
+	}
+
+	.pdel-head {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+		margin-bottom: 0.9rem;
+	}
+
+	.pdel-head h3 {
+		font-size: 1rem;
+		font-family: var(--font-display);
+		color: var(--error);
+	}
+
+	.pdel-text {
+		font-size: 0.82rem;
+		color: var(--text-muted);
+		line-height: 1.6;
+		margin-bottom: 0.9rem;
+	}
+
+	.pdel-text strong {
+		color: var(--error);
+	}
+
+	.pdel-list {
+		list-style: none;
+		margin: 0 0 0.9rem;
+		padding: 0.6rem 0.75rem;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		background: var(--surface-2);
+		font-size: 0.78rem;
+		color: var(--text);
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+	}
+
+	.pdel-list .pdel-more {
+		color: var(--text-dim);
+		font-style: italic;
+	}
+
+	.pdel-note {
+		font-size: 0.75rem;
+		color: var(--warning);
+		line-height: 1.5;
+		margin-bottom: 0.9rem;
+	}
+
+	.pdel-field {
+		margin-bottom: 1.25rem;
+	}
+
+	.pdel-field label {
+		display: block;
+		font-size: 0.78rem;
+		color: var(--text-muted);
+		margin-bottom: 0.4rem;
+	}
+
+	.pdel-field label strong {
+		color: var(--error);
+		font-family: var(--font-mono);
+	}
+
+	.pdel-actions {
+		display: flex;
+		gap: 0.6rem;
+		justify-content: flex-end;
+	}
+
+	.pdel-cancel,
+	.pdel-confirm {
+		padding: 0.55rem 1.1rem;
+		border-radius: var(--radius-sm);
+		font-weight: 600;
+		font-size: 0.8rem;
+		cursor: pointer;
+		font-family: var(--font-body);
+		transition: all 0.2s;
+	}
+
+	.pdel-cancel {
+		background: var(--surface-2);
+		border: 1px solid var(--border-strong);
+		color: var(--text-muted);
+	}
+
+	.pdel-cancel:hover:not(:disabled) {
+		color: var(--text);
+		border-color: var(--accent-mid);
+	}
+
+	.pdel-confirm {
+		background: var(--error);
+		border: none;
+		color: #fff;
+	}
+
+	.pdel-confirm:hover:not(:disabled) {
+		opacity: 0.9;
+	}
+
+	.pdel-cancel:disabled,
+	.pdel-confirm:disabled {
+		opacity: 0.4;
+		cursor: not-allowed;
+	}
+
 	@media (max-width: 768px) {
+		/* Stacked card: checkbox / agent / delete on the first line, metrics
+		   underneath the agent cell. */
 		.dash-row {
-			grid-template-columns: 1fr;
-			gap: 0.5rem;
+			grid-template-columns: 30px 1fr 34px;
+			gap: 0.4rem 0.5rem;
 			padding: 0.75rem 0.5rem;
+		}
+
+		label.pick-cell {
+			grid-column: 1;
+			grid-row: 1;
+		}
+
+		.dash-agent-cell {
+			grid-column: 2;
+			grid-row: 1;
+		}
+
+		span.pick-cell {
+			grid-column: 3;
+			grid-row: 1;
+		}
+
+		.dash-cell {
+			grid-column: 2;
 		}
 
 		.dash-row.row-header {

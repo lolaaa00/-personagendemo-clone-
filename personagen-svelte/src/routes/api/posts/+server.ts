@@ -65,6 +65,17 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				return json({ success: false, error: 'Post not found or ownership mismatch' }, { status: 404 });
 			}
 
+			// A 'generating' row is owned by a detached generation/refine task that
+			// will overwrite content and status when it finishes — any edit accepted
+			// here (approve, caption save) would be silently lost or, worse, stomp
+			// the task's compare-and-swap. Fail loudly instead.
+			if (existingPost.status === 'generating') {
+				return json(
+					{ success: false, error: 'This post is still generating — wait for it to finish.' },
+					{ status: 409 }
+				);
+			}
+
 			const updateData: any = {};
 			if (content !== undefined)
 				updateData.content =
@@ -144,6 +155,42 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			const { error } = await db.posts.delete(id);
 			if (error) throw error;
 			return json({ success: true, teardown });
+		}
+
+		// Bulk delete for multi-select UIs. Each post is torn down on-platform
+		// first (best effort), then the whole set is removed in one query scoped
+		// to this user — a stray id from another account simply matches nothing.
+		if (action === 'delete_many') {
+			const ids: string[] = Array.isArray(body.ids) ? body.ids.filter((v: unknown) => !!v) : [];
+			if (ids.length === 0) {
+				return json({ success: false, error: 'No post ids supplied' }, { status: 400 });
+			}
+			if (ids.length > 200) {
+				return json({ success: false, error: 'Too many posts (max 200 per request)' }, { status: 400 });
+			}
+
+			const teardown: TeardownResult = { unpublished: [], manualDeletion: [], errors: [] };
+			const owned: string[] = [];
+			for (const id of ids) {
+				const { data: post, error: getErr } = await db.posts.get(id);
+				if (getErr || !post || post.user_id !== user.id) continue;
+				owned.push(id);
+				try {
+					const r = await teardownPost(locals.supabase, post);
+					teardown.unpublished.push(...r.unpublished);
+					teardown.manualDeletion.push(...r.manualDeletion);
+					teardown.errors.push(...r.errors);
+				} catch (e) {
+					console.error('[Posts API] Bulk teardown failed for', id, e);
+				}
+			}
+			if (owned.length === 0) {
+				return json({ success: false, error: 'No matching posts found' }, { status: 404 });
+			}
+
+			const { error } = await db.posts.deleteMany(owned, user.id);
+			if (error) throw error;
+			return json({ success: true, deleted: owned.length, requested: ids.length, teardown });
 		}
 
 		if (action === 'get') {

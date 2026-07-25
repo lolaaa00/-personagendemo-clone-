@@ -300,7 +300,11 @@ export function createDbService(supabase: SupabaseClient) {
 			update: (id: string, data: PostUpdate) =>
 				supabase.from('posts').update(data).eq('id', id).select().single(),
 
-			delete: (id: string) => supabase.from('posts').delete().eq('id', id)
+			delete: (id: string) => supabase.from('posts').delete().eq('id', id),
+
+			/** Bulk delete, scoped to one owner so a stray id can't touch another account. */
+			deleteMany: (ids: string[], userId: string) =>
+				supabase.from('posts').delete().in('id', ids).eq('user_id', userId)
 		},
 
 		// ── Connections ─────────────────────────

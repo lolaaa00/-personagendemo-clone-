@@ -58,6 +58,19 @@
 		text-align: left;
 	}
 
+	/* On a phone the right-anchored 420px max-width overflowed the left edge and
+	   clipped the message. Span the width instead and let the toast shrink to fit. */
+	@media (max-width: 480px) {
+		.toast-container {
+			left: var(--space-4, 1rem);
+			right: var(--space-4, 1rem);
+		}
+		.toast-item {
+			min-width: 0;
+			max-width: 100%;
+		}
+	}
+
 	.toast-success {
 		border-left: 3px solid var(--success, #34d399);
 	}

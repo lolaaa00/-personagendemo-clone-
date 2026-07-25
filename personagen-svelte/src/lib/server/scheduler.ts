@@ -294,7 +294,12 @@ export async function publishSinglePost(supabase: any, post: any): Promise<boole
 		finalStatus = 'failed';
 	}
 
-	if (totalPublished === 0 && failureCount === 0 && skippedCount === 0) {
+	// Safety net for a post with genuinely nothing to do. submittedCount MUST be
+	// part of this condition: the normal happy path (every platform cleanly
+	// submitted, zero failures/skips/prior-publishes) otherwise falls in here and
+	// gets stomped from 'publishing' to 'failed' — and since the verify sweep only
+	// scans status='publishing' rows, the live post would never be verified.
+	if (totalPublished === 0 && submittedCount === 0 && failureCount === 0 && skippedCount === 0) {
 		finalStatus = 'failed';
 		publicationResults._post = {
 			...publicationResults._post,
@@ -598,26 +603,56 @@ async function pollScheduledPosts() {
 		// 'generating' forever. Unlike 'publishing' there is no claim to release
 		// — the in-flight work is simply lost — so mark them failed with a
 		// user-facing reason (content.error is what the client surfaces).
-		const generatingCutoff = new Date(nowMs - GENERATION_LEASE_MS).toISOString();
-		const { data: staleGenerating } = await supabase
+		//
+		// REFINE rows are different in both dimensions. (1) The lease can't come
+		// from created_at: a refine flips a DAYS-old post to 'generating', so the
+		// whole-row age would instantly read as stale and fail a refine that
+		// started seconds ago. refine-post stamps content.refine_started_at for
+		// exactly this — the real job start. (2) An orphaned refine still has its
+		// ORIGINAL media intact in content, so the right recovery is to restore
+		// the post to its pre-refine status (content.refine_prev_status) with the
+		// interruption noted in refine_error — never 'failed', which would hide a
+		// perfectly publishable draft.
+		const staleQuery = await supabase
 			.from('posts')
-			.select('id, content')
-			.eq('status', 'generating')
-			.lt('created_at', generatingCutoff);
-		for (const p of staleGenerating || []) {
-			console.warn(`[Scheduler] Failing orphaned generating post ${p.id}.`);
+			.select('id, content, created_at')
+			.eq('status', 'generating');
+		for (const p of staleQuery.data || []) {
 			let content: Record<string, any> = {};
 			try {
 				content = JSON.parse(p.content || '{}') || {};
 			} catch {
 				/* unparseable content — the error message below is all that matters */
 			}
-			content.error = 'Generation interrupted by a server restart — try again.';
-			await supabase
-				.from('posts')
-				.update({ status: 'failed', content: JSON.stringify(content) })
-				.eq('id', p.id)
-				.eq('status', 'generating');
+			const isRefine = typeof content.refine_prev_status === 'string';
+			const startedAtMs = Date.parse(
+				(isRefine ? content.refine_started_at : null) || p.created_at || ''
+			);
+			// Only reap a job we can PROVE is stale — an unparseable start time
+			// must never yank an in-flight (paid) generation.
+			if (!Number.isFinite(startedAtMs) || nowMs - startedAtMs < GENERATION_LEASE_MS) continue;
+
+			if (isRefine) {
+				console.warn(`[Scheduler] Restoring orphaned refining post ${p.id} (original media kept).`);
+				const restoredStatus =
+					content.refine_prev_status === 'scheduled' ? 'scheduled' : 'draft';
+				delete content.refine_started_at;
+				delete content.refine_prev_status;
+				content.refine_error = 'Refine interrupted by a server restart — original media kept.';
+				await supabase
+					.from('posts')
+					.update({ status: restoredStatus, content: JSON.stringify(content) })
+					.eq('id', p.id)
+					.eq('status', 'generating');
+			} else {
+				console.warn(`[Scheduler] Failing orphaned generating post ${p.id}.`);
+				content.error = 'Generation interrupted by a server restart — try again.';
+				await supabase
+					.from('posts')
+					.update({ status: 'failed', content: JSON.stringify(content) })
+					.eq('id', p.id)
+					.eq('status', 'generating');
+			}
 		}
 
 		// Same orphan problem, different home: avatar/reference-kit jobs record

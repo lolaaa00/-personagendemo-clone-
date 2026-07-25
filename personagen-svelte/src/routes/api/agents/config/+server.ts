@@ -141,46 +141,68 @@ export const DELETE: RequestHandler = async ({ request, locals }) => {
 	}
 
 	try {
-		const { agentId } = (await request.json()) as any;
+		const body = (await request.json()) as any;
+		// Accepts a single agentId or `agentIds` for multi-select bulk deletion.
+		// Each id is ownership-checked independently and the outcome is reported
+		// per-agent, so one protected/foreign id can't fail the whole batch.
+		const requested: string[] = Array.isArray(body?.agentIds)
+			? body.agentIds.map((v: unknown) => String(v || '')).filter(Boolean)
+			: body?.agentId
+				? [String(body.agentId)]
+				: [];
 
-		if (!agentId) {
+		if (requested.length === 0) {
 			return json({ success: false, error: 'Missing agentId' }, { status: 400 });
+		}
+		if (requested.length > 50) {
+			return json({ success: false, error: 'Too many personas (max 50 per request)' }, { status: 400 });
 		}
 
 		const db = createDbService(locals.supabase);
+		const deleted: string[] = [];
+		const failed: Array<{ agentId: string; error: string }> = [];
 
-		const { data: agent, error: getErr } = await db.agents.get(agentId);
-		if (getErr) throw getErr;
-		if (!agent || agent.user_id !== user.id) {
-			return json({ success: false, error: 'Agent not found or ownership mismatch' }, { status: 404 });
+		for (const agentId of requested) {
+			const { data: agent, error: getErr } = await db.agents.get(agentId);
+			if (getErr || !agent || agent.user_id !== user.id) {
+				failed.push({ agentId, error: 'Agent not found or ownership mismatch' });
+				continue;
+			}
+			// Guard: check if the agent is an overseer
+			if (agent.is_overseer) {
+				failed.push({ agentId, error: 'Deleting the Hermes overseer agent is forbidden.' });
+				continue;
+			}
+
+			// Clean up dependant rows first to avoid foreign key violations
+			await locals.supabase.from('agent_configs').delete().eq('agent_id', agentId);
+			await locals.supabase.from('chat_messages').delete().eq('agent_id', agentId);
+			await locals.supabase.from('connections').delete().eq('agent_id', agentId);
+			await locals.supabase.from('agent_memories').delete().eq('agent_id', agentId);
+			await locals.supabase.from('posts').delete().eq('agent_id', agentId);
+
+			// PM Ticket Safety: Update assigned tickets to set assignee_agent_id = NULL to preserve them
+			await locals.supabase
+				.from('tickets')
+				.update({ assignee_agent_id: null })
+				.eq('assignee_agent_id', agentId);
+
+			const { error: agentErr } = await db.agents.delete(agentId);
+			if (agentErr) {
+				failed.push({ agentId, error: agentErr.message });
+				continue;
+			}
+			deleted.push(agentId);
 		}
 
-		// Guard: check if the agent is an overseer
-		if (agent.is_overseer) {
+		if (deleted.length === 0) {
 			return json(
-				{ success: false, error: 'Deleting the Hermes overseer agent is forbidden.' },
-				{ status: 403 }
+				{ success: false, error: failed[0]?.error || 'Nothing deleted', failed },
+				{ status: failed[0]?.error?.includes('forbidden') ? 403 : 404 }
 			);
 		}
 
-		// Clean up dependant rows first to avoid foreign key violations
-		await locals.supabase.from('agent_configs').delete().eq('agent_id', agentId);
-		await locals.supabase.from('chat_messages').delete().eq('agent_id', agentId);
-		await locals.supabase.from('connections').delete().eq('agent_id', agentId);
-		await locals.supabase.from('agent_memories').delete().eq('agent_id', agentId);
-		await locals.supabase.from('posts').delete().eq('agent_id', agentId);
-
-		// PM Ticket Safety: Update assigned tickets to set assignee_agent_id = NULL to preserve them
-		await locals.supabase
-			.from('tickets')
-			.update({ assignee_agent_id: null })
-			.eq('assignee_agent_id', agentId);
-
-		// Delete agent row
-		const { error: agentErr } = await db.agents.delete(agentId);
-		if (agentErr) throw agentErr;
-
-		return json({ success: true });
+		return json({ success: true, deleted, failed });
 	} catch (err) {
 		console.error('[Config API] Error deleting agent:', err);
 		return json({ success: false, error: (err as Error).message }, { status: 500 });

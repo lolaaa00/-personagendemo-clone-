@@ -2,6 +2,9 @@
 	import { onMount } from 'svelte';
 	import { platformLabel } from '$lib/platforms';
 	import PostDrawer from '$lib/components/feed/PostDrawer.svelte';
+	import ManualDeleteNotice from '$lib/components/feed/ManualDeleteNotice.svelte';
+	import ImageLightbox from '$lib/components/ui/ImageLightbox.svelte';
+	import { Posts } from '$lib/services/api';
 
 	interface ReviewItem {
 		id: string;
@@ -26,6 +29,26 @@
 	let error = $state('');
 	let selected = $state<Set<string>>(new Set());
 	let toast = $state('');
+
+	// ── Hard delete (permanent, plus best-effort live platform teardown) ──
+	// Kept separate from `working` (approve/reject) so the drawer's Approve
+	// button doesn't read as busy while a delete is in flight.
+	let deletingId = $state<string | null>(null);
+	let bulkDeleting = $state(false);
+	let deleteBusy = $derived(bulkDeleting || deletingId !== null);
+	// Platforms with no API deletion path (Instagram, TikTok, Snapchat) — the
+	// live post has to be removed by hand, so we tell the user which and where.
+	let manualDeleteNotice = $state<Array<{ platform: string; permalink: string | null }> | null>(
+		null
+	);
+
+	// Enlarge overlay on the card media (the drawer stays the primary click).
+	let lightbox = $state<{
+		url: string;
+		label: string;
+		type: 'image' | 'video';
+		poster: string | null;
+	} | null>(null);
 
 	// ── Filters (agent / platform / status), applied client-side ──
 	let filterAgent = $state('all');
@@ -127,6 +150,132 @@
 	function submitReject() {
 		const reason = rejectNote.trim() ? `${rejectReason}: ${rejectNote.trim()}` : rejectReason;
 		act('reject', [...selected], reason);
+	}
+
+	// ── Hard delete ────────────────────────────────────────────────────────
+	// Reject/Unschedule only changes status (the row survives, with a logged
+	// reason). Delete is the permanent one: the row is destroyed and anything
+	// already live is torn down on-platform where the API allows it.
+
+	/** The posts API puts `teardown` / `deleted` / `requested` at the TOP level of
+	 *  the response body, not under `data` — same read the calendar and persona
+	 *  feed do. Tolerates both shapes so it can't silently return undefined. */
+	type Teardown = {
+		unpublished: string[];
+		manualDeletion: Array<{ platform: string; permalink: string | null }>;
+		errors: string[];
+	};
+	function deleteBody(res: unknown) {
+		const body = (res as any) ?? {};
+		const nested = body.data ?? {};
+		return {
+			deleted: (body.deleted ?? nested.deleted) as number | undefined,
+			requested: (body.requested ?? nested.requested) as number | undefined,
+			teardown: (body.teardown ?? nested.teardown) as Teardown | undefined
+		};
+	}
+
+	/** Names the teardown outcome in the toast so "deleted" never over-claims. */
+	function deletedToast(count: number, teardown?: Teardown): string {
+		const noun = `${count} post${count === 1 ? '' : 's'}`;
+		if (teardown?.unpublished?.length) {
+			return `🗑 Deleted ${noun} — also removed from ${teardown.unpublished.join(', ')}`;
+		}
+		return `🗑 Deleted ${noun} permanently`;
+	}
+
+	/**
+	 * Single delete. `skipConfirm` is for the drawer, whose footer already has its
+	 * own two-click "Confirm delete?" — a second native prompt would be noise.
+	 */
+	async function deletePost(id: string, opts: { skipConfirm?: boolean } = {}) {
+		if (working || deleteBusy) return;
+		const item = items.find((i) => i.id === id);
+		if (!opts.skipConfirm) {
+			const snippet = (item?.text ?? '').trim().slice(0, 60);
+			const label = snippet
+				? `"${snippet}${(item?.text ?? '').trim().length > 60 ? '…' : ''}"`
+				: 'this post';
+			if (
+				!confirm(
+					`Permanently delete ${label}? Anything already published is removed from the platforms that support API deletion. This cannot be undone.`
+				)
+			)
+				return;
+		}
+		deletingId = id;
+		try {
+			const res = await Posts.delete(id);
+			if (!res.success) {
+				showToast(`⚠ ${res.error || 'Failed to delete post'}`);
+				return;
+			}
+			const { teardown } = deleteBody(res);
+			items = items.filter((i) => i.id !== id);
+			selected = new Set([...selected].filter((s) => s !== id));
+			if (drawerPost?.id === id) drawerPost = null;
+			showToast(deletedToast(1, teardown));
+			if (teardown?.manualDeletion?.length) manualDeleteNotice = teardown.manualDeletion;
+		} catch (e: any) {
+			showToast(`⚠ ${e.message}`);
+		} finally {
+			deletingId = null;
+		}
+	}
+
+	/** Bulk delete for the multi-select bar. */
+	async function deleteSelected() {
+		const ids = [...selected];
+		if (ids.length === 0 || working || deleteBusy) return;
+		if (
+			!confirm(
+				`Permanently delete ${ids.length} post${ids.length === 1 ? '' : 's'}? Anything already published is removed from the platforms that support API deletion. This cannot be undone.`
+			)
+		)
+			return;
+		bulkDeleting = true;
+		try {
+			const res = await Posts.deleteMany(ids);
+			if (!res.success) {
+				showToast(`⚠ ${res.error || 'Bulk delete failed'}`);
+				return;
+			}
+			const { deleted, requested, teardown } = deleteBody(res);
+			const gone = deleted ?? ids.length;
+			const asked = requested ?? ids.length;
+			if (teardown?.manualDeletion?.length) manualDeleteNotice = teardown.manualDeletion;
+
+			if (gone < asked) {
+				// The API returns counts, not which ids survived, so guessing which
+				// cards to drop would lie. Resync from the server instead.
+				showToast(
+					`⚠ Deleted ${gone} of ${asked} — the rest weren't found or aren't yours. Queue reloaded.`
+				);
+				await load();
+				return;
+			}
+			items = items.filter((i) => !ids.includes(i.id));
+			selected = new Set();
+			if (drawerPost && ids.includes(drawerPost.id)) drawerPost = null;
+			showToast(deletedToast(gone, teardown));
+		} catch (e: any) {
+			showToast(`⚠ ${e.message}`);
+		} finally {
+			bulkDeleting = false;
+		}
+	}
+
+	/** Enlarge the card media. Videos play in the lightbox (poster while buffering). */
+	function openLightbox(item: ReviewItem) {
+		const isVideo = item.media_type === 'video' && !!item.media_url;
+		const url = item.media_url || item.poster_url;
+		if (!url) return;
+		lightbox = {
+			url,
+			label: `${item.agent_name} · ${slotLabel(item)}`,
+			type: isVideo ? 'video' : 'image',
+			poster: isVideo ? item.poster_url : null
+		};
 	}
 
 	// ── Inline caption editing (persists via the same /api/posts 'update'
@@ -344,17 +493,25 @@
 			<div class="bulk-actions">
 				<button
 					class="btn-approve"
-					disabled={selected.size === 0 || working}
+					disabled={selected.size === 0 || working || deleteBusy}
 					onclick={() => act('approve', [...selected])}
 				>
 					✅ Approve & Schedule ({selected.size})
 				</button>
 				<button
 					class="btn-reject"
-					disabled={selected.size === 0 || working}
+					disabled={selected.size === 0 || working || deleteBusy}
 					onclick={() => (rejectPickerOpen = true)}
 				>
 					✕ Reject ({selected.size})
+				</button>
+				<button
+					class="btn-delete"
+					title="Permanently delete — also removes published copies where the platform API allows it"
+					disabled={selected.size === 0 || working || deleteBusy}
+					onclick={deleteSelected}
+				>
+					{bulkDeleting ? 'Deleting…' : `🗑 Delete selected (${selected.size})`}
 				</button>
 			</div>
 		</div>
@@ -397,6 +554,18 @@
 								<span class="media-loading">Opening…</span>
 							{/if}
 						</button>
+						{#if item.media_url || item.poster_url}
+							<button
+								type="button"
+								class="media-zoom"
+								title={item.media_type === 'video' ? 'Play full size' : 'Enlarge image'}
+								aria-label={item.media_type === 'video' ? 'Play full size' : 'Enlarge image'}
+								onclick={(e) => {
+									e.stopPropagation();
+									openLightbox(item);
+								}}>⤢</button
+							>
+						{/if}
 						<button
 							type="button"
 							class="pick"
@@ -440,7 +609,7 @@
 									class="edit-btn"
 									title="Edit caption"
 									aria-label="Edit caption"
-									disabled={working}
+									disabled={working || deleteBusy}
 									onclick={() => startEdit(item)}>✎</button
 								>
 							</div>
@@ -450,15 +619,22 @@
 						</div>
 						<div class="card-actions">
 							{#if item.status === 'draft'}
-								<button class="btn-approve sm" disabled={working} onclick={() => act('approve', [item.id])}>Approve</button>
+								<button class="btn-approve sm" disabled={working || deleteBusy} onclick={() => act('approve', [item.id])}>Approve</button>
 							{/if}
 							<button
 								class="btn-reject sm"
-								disabled={working}
+								disabled={working || deleteBusy}
 								onclick={() => {
 									selected = new Set([item.id]);
 									rejectPickerOpen = true;
 								}}>{item.status === 'scheduled' ? 'Unschedule' : 'Reject'}</button
+							>
+							<button
+								class="btn-delete sm"
+								title="Delete permanently — removes it from connected platforms where possible"
+								aria-label="Delete post permanently"
+								disabled={working || deleteBusy}
+								onclick={() => deletePost(item.id)}>{deletingId === item.id ? '…' : '🗑'}</button
 							>
 						</div>
 					</div>
@@ -472,6 +648,7 @@
 		onClose={() => (drawerPost = null)}
 		onApprove={(p) => act('approve', [p.id])}
 		onReject={drawerReject}
+		onDelete={(p) => deletePost(p.id, { skipConfirm: true })}
 		onSaveText={drawerSaveText}
 		onReschedule={drawerReschedule}
 		onRefined={(p) => {
@@ -480,6 +657,19 @@
 		}}
 		characterRef={drawerAvatar}
 		approving={working}
+		deleting={deletingId === drawerPost?.id}
+	/>
+
+	{#if manualDeleteNotice}
+		<ManualDeleteNotice entries={manualDeleteNotice} onClose={() => (manualDeleteNotice = null)} />
+	{/if}
+
+	<ImageLightbox
+		url={lightbox?.url ?? null}
+		label={lightbox?.label ?? ''}
+		type={lightbox?.type ?? null}
+		poster={lightbox?.poster ?? null}
+		onClose={() => (lightbox = null)}
 	/>
 </div>
 
@@ -574,6 +764,9 @@
 
 	.bulk-bar {
 		display: flex;
+		/* Wrap so the select-all label and the Approve/Reject bulk buttons stack
+		   instead of overflowing a phone (this page has no other breakpoints). */
+		flex-wrap: wrap;
 		justify-content: space-between;
 		align-items: center;
 		gap: 1rem;
@@ -685,6 +878,30 @@
 		font-size: 11px;
 		padding: 2px 8px;
 		border-radius: 999px;
+	}
+	/* Enlarge overlay — bottom-right so it clears .media-badge (top-left) and
+	   .pick (top-right). Sits above .media-open, which is unpositioned. */
+	.media-zoom {
+		position: absolute;
+		bottom: 8px;
+		right: 8px;
+		width: 26px;
+		height: 26px;
+		display: grid;
+		place-items: center;
+		border-radius: 7px;
+		background: rgba(0, 0, 0, 0.55);
+		color: rgba(255, 255, 255, 0.85);
+		border: 1px solid rgba(255, 255, 255, 0.35);
+		font-size: 13px;
+		line-height: 1;
+		padding: 0;
+		cursor: pointer;
+	}
+	.media-zoom:hover {
+		background: rgba(0, 0, 0, 0.75);
+		border-color: #fff;
+		color: #fff;
 	}
 	.pick {
 		position: absolute;
@@ -825,6 +1042,7 @@
 	}
 	.btn-approve,
 	.btn-reject,
+	.btn-delete,
 	.btn-ghost {
 		padding: 0.5rem 0.9rem;
 		border-radius: 9px;
@@ -842,6 +1060,18 @@
 		border-color: var(--danger, #f66);
 		color: var(--danger, #f66);
 	}
+	/* Delete is the destructive twin of Reject: Reject keeps the row (status +
+	   logged reason), Delete destroys it. Muted until hover so it can't be
+	   mistaken for the primary action. */
+	.btn-delete {
+		background: transparent;
+		border-color: var(--border, rgba(255, 255, 255, 0.15));
+		color: var(--text-dim, #99a);
+	}
+	.btn-delete:hover:not(:disabled) {
+		border-color: var(--danger, #f66);
+		color: var(--danger, #f66);
+	}
 	.btn-ghost {
 		background: transparent;
 		border-color: var(--border, rgba(255, 255, 255, 0.15));
@@ -851,6 +1081,11 @@
 	.btn-reject.sm {
 		flex: 1;
 		padding: 0.4rem 0.5rem;
+	}
+	/* Icon-width so Approve/Reject keep the room on a 260px card. */
+	.btn-delete.sm {
+		flex: 0 0 auto;
+		padding: 0.4rem 0.6rem;
 	}
 	.btn-ghost.sm {
 		padding: 0.4rem 0.7rem;

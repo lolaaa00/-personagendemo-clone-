@@ -79,6 +79,16 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 	const ctx = await ownedAgentAndPost(locals, params.agentId, postId);
 	if (ctx.err) return ctx.err;
 
+	// A 'generating' row is mid-generation or mid-refine: its media is about to
+	// be replaced by the detached task. Publishing NOW would push the stale clip
+	// live and then race the task's completion write. Fail loudly instead.
+	if (ctx.post.status === 'generating') {
+		return json(
+			{ success: false, error: 'This post is still generating — wait for it to finish before publishing.' },
+			{ status: 409 }
+		);
+	}
+
 	// Only allow platforms that are actually connected AND media-compatible — the
 	// user can't route an image to YouTube or send to an unconnected account.
 	const allowed = await connectedCompatible(locals, params.agentId!, ctx.post);

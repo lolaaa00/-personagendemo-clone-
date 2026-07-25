@@ -34,11 +34,45 @@
 	--text-muted: #334155; /* Smooth slate-700 for descriptions and sub-headers */
 	--text-dim: #64748b; /* Clear slate-500 for captions, labels, and helper text */
 
+	/* Legacy aliases: components referenced var(--muted) / var(--danger), which were
+	   never defined — every one of them silently fell back to a hardcoded literal and
+	   so never responded to the theme. Defined here so those call sites become
+	   theme-aware without touching each component. */
+	--muted: var(--text-dim);
+	--danger: var(--error);
+
+	/* Referenced by settings panels; previously undefined -> background resolved to none. */
+	--bg-card-dark: var(--surface-2);
+
 	/* ── Colour: Accents & Brand overrides (Dynamic color-mix formulas) ── */
 	--accent: #7c6aed;
 	--accent-soft: color-mix(in srgb, var(--accent) 10%, transparent);
 	--accent-mid: color-mix(in srgb, var(--accent) 22%, transparent);
 	--accent-dark: color-mix(in srgb, var(--accent) 85%, #000);
+	--accent-light: color-mix(in srgb, var(--accent) 45%, #fff);
+
+	/* ── Colour: AA-compliant TEXT variants ──
+	   The base tokens above are BRAND FILL colours (backgrounds, bars, strokes) and are
+	   intentionally left untouched so the dynamic brand-theme system keeps working.
+	   These `-text` variants are the ones to use whenever the colour carries TEXT or a
+	   small glyph on a light surface — the brand hues themselves fail WCAG AA there
+	   (accent 4.08:1, cyan 2.77:1, success 3.77:1, warning 3.19:1 on white).
+	   Dark mode remaps them back to the vivid hues, which already pass on #0e0e16. */
+	--accent-text: #6338d4; /* 6.89:1 on white */
+	--cyan-text: #0369a1; /* 5.93:1 */
+	--success-text: #047857; /* 5.48:1 */
+	--warning-text: #a04607; /* 6.22:1 */
+	--rose-text: #be185d; /* 6.04:1 */
+	--error-text: #b91c1c; /* 6.47:1 */
+	--info-text: #1d4ed8; /* 6.55:1 */
+
+	/* Darkened brand gradient for filled CTAs — white label needs 4.5:1 against BOTH
+	   stops, which the raw --accent/--cyan gradient never reached in either theme. */
+	--gradient-cta: linear-gradient(
+		135deg,
+		color-mix(in srgb, var(--accent) 70%, #000),
+		color-mix(in srgb, var(--accent) 55%, #000)
+	);
 
 	/* ── Colour: Cyan ── */
 	--cyan: #0ea5e9; /* Shifted slightly blue-cyan in Light mode for contrast */
@@ -116,6 +150,7 @@
 	--radius-xs: 6px;
 	--radius-sm: 10px;
 	--radius: 16px;
+	--radius-md: 14px; /* was referenced by 9 components but never defined -> radius collapsed to 0 */
 	--radius-lg: 20px;
 	--radius-xl: 28px;
 	--radius-full: 9999px;
@@ -172,11 +207,15 @@
 	--z-content: 1;
 	--z-sticky: 10;
 	--z-nav: 100;
-	--z-modal: 200;
-	--z-toast: 300;
 	--z-header: 50;
 	--z-drawer: 999;
-	--z-overlay: 1000;
+	--z-modal: 1000;
+	--z-overlay: 1100;
+	--z-lightbox: 1200;
+	/* Toasts must outrank every dialog layer. At the old value of 300 any toast raised
+	   from inside a modal, drawer or lightbox (all of which sit at 1000-1200) rendered
+	   behind it, so success and error feedback was invisible to the user. */
+	--z-toast: 2000;
 
 	/* ── Sidebar ── */
 	--sidebar-width: 240px;
@@ -229,6 +268,18 @@
 
 	/* ── Colour: Info / Blue ── */
 	--info: #3b82f6;
+
+	/* ── AA text variants: on #0e0e16 the vivid hues already clear 4.5:1, so the
+	   dark theme maps them straight back rather than carrying the darkened
+	   light-mode values (which would be unreadable here). ── */
+	--accent-text: #9d8ef5; /* 6.31:1 on --surface */
+	--cyan-text: var(--cyan);
+	--success-text: var(--success);
+	--warning-text: var(--warning);
+	--rose-text: var(--rose);
+	--error-text: var(--error);
+	--info-text: #60a5fa;
+	--accent-light: color-mix(in srgb, var(--accent) 55%, #fff);
 
 	/* ── Shadows (Dark Mode Override) ── */
 	--shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.25);
@@ -324,7 +375,16 @@ a {
 }
 
 a:hover {
-	color: var(--accent);
+	color: var(--accent-text); /* raw --accent is 4.08:1 on white — under AA for link text */
+}
+
+/* Removes the ~300ms tap delay without disabling pinch-zoom. */
+a,
+button,
+[role='button'],
+label,
+summary {
+	touch-action: manipulation;
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -420,6 +480,13 @@ pre {
 
 /* ═══════════════════════════════════════════════════════════════
    BUTTON STYLES
+
+   NOTE: every variant below used to be declared twice in this file — once here and
+   again in the "VANILLA-SHADCN" section further down. The later block won, so
+   .btn-secondary and .btn-danger rendered nothing like their definition here
+   (secondary was a transparent ghost, not an accent-tinted button; danger was solid
+   red, not a soft tint). The two have been merged into these rules — the computed
+   result is preserved, minus the contrast fixes noted inline.
    ═══════════════════════════════════════════════════════════════ */
 
 .btn-primary {
@@ -427,15 +494,19 @@ pre {
 	align-items: center;
 	justify-content: center;
 	gap: 8px;
+	min-height: 44px;
 	padding: 12px 28px;
 	border-radius: 12px;
-	background: var(--gradient-subtle);
+	/* was --gradient-subtle: white label measured 4.08:1 on the first stop, under AA
+	   in BOTH themes. --gradient-cta darkens whatever the brand accent currently is. */
+	background: var(--gradient-cta);
 	color: #fff;
 	font-weight: var(--weight-semi);
 	font-size: 0.9rem;
 	text-decoration: none;
 	border: none;
 	cursor: pointer;
+	box-shadow: var(--shadow-accent);
 	transition:
 		transform 0.2s ease,
 		box-shadow 0.3s ease;
@@ -443,9 +514,9 @@ pre {
 	white-space: nowrap;
 }
 
-.btn-primary:hover {
+.btn-primary:hover:not(:disabled) {
 	transform: translateY(-2px);
-	box-shadow: var(--shadow-accent);
+	box-shadow: 0 0 30px color-mix(in srgb, var(--accent) 30%, transparent);
 	color: #fff;
 }
 
@@ -470,10 +541,11 @@ pre {
 	align-items: center;
 	justify-content: center;
 	gap: 8px;
+	min-height: 44px;
 	padding: 12px 28px;
 	border-radius: 12px;
 	border: 1px solid var(--border-strong);
-	color: var(--text-muted);
+	color: var(--text-dim);
 	font-weight: var(--weight-semi);
 	font-size: 0.9rem;
 	text-decoration: none;
@@ -487,10 +559,10 @@ pre {
 	white-space: nowrap;
 }
 
-.btn-ghost:hover {
+.btn-ghost:hover:not(:disabled) {
 	border-color: var(--accent-mid);
 	color: var(--text);
-	background: rgba(255, 255, 255, 0.02);
+	background: var(--surface-2);
 }
 
 .btn-ghost:active {
@@ -513,25 +585,28 @@ pre {
 	align-items: center;
 	justify-content: center;
 	gap: 8px;
+	min-height: 44px;
 	padding: 10px 22px;
 	border-radius: var(--radius-sm);
-	background: var(--accent-soft);
-	border: 1px solid var(--accent-mid);
-	color: var(--accent);
+	background: transparent;
+	border: 1px solid var(--border-strong);
+	color: var(--text-muted);
 	font-weight: var(--weight-semi);
 	font-size: 0.85rem;
 	text-decoration: none;
 	cursor: pointer;
 	transition:
 		background 0.2s ease,
+		border-color 0.2s ease,
 		color 0.2s ease;
 	font-family: var(--font-body);
 	white-space: nowrap;
 }
 
-.btn-secondary:hover {
-	background: rgba(124, 106, 237, 0.25);
+.btn-secondary:hover:not(:disabled) {
+	border-color: var(--accent);
 	color: var(--text);
+	background: var(--surface-2);
 }
 
 .btn-secondary:focus-visible {
@@ -544,20 +619,39 @@ pre {
 	align-items: center;
 	justify-content: center;
 	gap: 8px;
+	min-height: 44px;
 	padding: 10px 22px;
 	border-radius: var(--radius-sm);
-	background: var(--error-soft);
+	/* Solid fill, darkened: white on the raw --error measured 3.76:1 in dark mode. */
+	background: color-mix(in srgb, var(--error) 78%, #000);
 	border: 1px solid rgba(239, 68, 68, 0.25);
-	color: var(--error);
+	color: #fff;
 	font-weight: var(--weight-semi);
 	font-size: 0.85rem;
 	cursor: pointer;
-	transition: background 0.2s ease;
+	box-shadow: 0 4px 14px rgba(220, 38, 38, 0.2);
+	transition:
+		background 0.2s ease,
+		transform 0.2s ease,
+		box-shadow 0.3s ease;
 	font-family: var(--font-body);
 }
 
-.btn-danger:hover {
-	background: rgba(239, 68, 68, 0.2);
+.btn-danger:hover:not(:disabled) {
+	transform: translateY(-2px);
+	box-shadow: 0 0 25px rgba(220, 38, 38, 0.35);
+}
+
+/* Destructive control had no focus ring in either of the two old blocks. */
+.btn-danger:focus-visible {
+	outline: 2px solid var(--error);
+	outline-offset: 2px;
+}
+
+.btn-danger:disabled {
+	opacity: 0.4;
+	cursor: not-allowed;
+	pointer-events: none;
 }
 
 .btn-full {
@@ -594,7 +688,10 @@ select {
 	padding: 10px 14px;
 	color: var(--text);
 	font-family: var(--font-body);
-	font-size: 0.88rem;
+	/* Must stay >=16px: iOS Safari force-zooms the viewport when a focused field is
+	   smaller, and never zooms back out. Was 0.88rem (14.08px). */
+	font-size: 1rem;
+	min-height: 44px;
 	outline: none;
 	transition:
 		border-color var(--ease-fast),
@@ -836,15 +933,45 @@ textarea {
 }
 
 .text-accent {
-	color: var(--accent);
+	color: var(--accent-text);
 }
 
 .text-success {
-	color: var(--success);
+	color: var(--success-text);
 }
 
 .text-error {
-	color: var(--error);
+	color: var(--error-text);
+}
+
+/* Data figures: without this, KPI values and axis labels change width as digits
+   change, so numbers visibly jitter while live counters tick. */
+.tabular-nums,
+.dash-kpi-value,
+.kpi-value {
+	font-variant-numeric: tabular-nums;
+	font-feature-settings: 'tnum' 1;
+}
+
+/* Keyboard users otherwise tab through the full sidebar (nav items + agent roster)
+   on every single page before reaching content. */
+.skip-link {
+	position: absolute;
+	left: var(--space-4);
+	top: -100px;
+	z-index: var(--z-toast);
+	padding: 12px 20px;
+	border-radius: var(--radius-sm);
+	background: var(--surface);
+	color: var(--text);
+	border: 2px solid var(--accent);
+	font-weight: var(--weight-semi);
+	box-shadow: var(--shadow-lg);
+	transition: top 0.15s ease;
+}
+
+.skip-link:focus {
+	top: var(--space-4);
 }
 
 .truncate {
@@ -882,7 +1009,8 @@ textarea {
 	color: var(--text);
 	border-radius: var(--radius-sm);
 	padding: 12px 16px;
-	font-size: var(--text-base);
+	font-size: 1rem; /* >=16px — see note on the base input rule (iOS zoom) */
+	min-height: 44px;
 	font-family: var(--font-body);
 	outline: none;
 	transition:
@@ -935,50 +1063,8 @@ textarea {
 	cursor: not-allowed;
 }
 
-/* Button Variants */
-.btn-primary {
-	background: var(--gradient-subtle);
-	color: #ffffff;
-	box-shadow: var(--shadow-accent);
-}
-
-.btn-primary:hover:not(:disabled) {
-	transform: translateY(-2px);
-	box-shadow: 0 0 30px color-mix(in srgb, var(--accent) 30%, transparent);
-}
-
-.btn-secondary {
-	border: 1px solid var(--border-strong);
-	background: transparent;
-	color: var(--text-muted);
-}
-
-.btn-secondary:hover:not(:disabled) {
-	border-color: var(--accent);
-	color: var(--text);
-	background: var(--surface-2);
-}
-
-.btn-danger {
-	background: var(--error);
-	color: #ffffff;
-	box-shadow: 0 4px 14px rgba(220, 38, 38, 0.2);
-}
-
-.btn-danger:hover:not(:disabled) {
-	transform: translateY(-2px);
-	box-shadow: 0 0 25px rgba(220, 38, 38, 0.35);
-}
-
-.btn-ghost {
-	background: transparent;
-	color: var(--text-dim);
-}
-
-.btn-ghost:hover:not(:disabled) {
-	background: var(--surface-2);
-	color: var(--text);
-}
+/* Button variants live in the BUTTON STYLES section above — the duplicate set that
+   used to sit here has been merged into it. Do not redeclare .btn-* below this line. */
 
 /* Premium Glass Cards (Enforcing dark-theme values inside dark contexts) */
 .glass-panel {
@@ -1031,27 +1117,30 @@ textarea {
 	border: 1px solid transparent;
 }
 
+/* Badge labels are the smallest text in the app (--text-xs, bold, uppercase) and sat
+   on a 10% tint of their own hue — every variant measured 2.86-4.13:1 in light mode.
+   The -text variants restore AA without changing the tint. */
 .badge-accent {
 	background: var(--accent-soft);
-	color: var(--accent);
+	color: var(--accent-text);
 	border-color: color-mix(in srgb, var(--accent) 20%, transparent);
 }
 
 .badge-success {
 	background: var(--success-soft);
-	color: var(--success);
+	color: var(--success-text);
 	border-color: color-mix(in srgb, var(--success) 20%, transparent);
 }
 
 .badge-warning {
 	background: var(--warning-soft);
-	color: var(--warning);
+	color: var(--warning-text);
 	border-color: color-mix(in srgb, var(--warning) 20%, transparent);
 }
 
 .badge-error {
 	background: var(--error-soft);
-	color: var(--error);
+	color: var(--error-text);
 	border-color: color-mix(in srgb, var(--error) 20%, transparent);
 }
 
@@ -1073,5 +1162,40 @@ textarea {
 		animation-iteration-count: 1 !important;
 		transition-duration: 0.01ms !important;
 		scroll-behavior: auto !important;
+	}
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   FORCED COLORS (Windows High Contrast)
+   Custom-property colours are discarded in this mode, so anything that relied on a
+   token for its boundary becomes invisible. Restore structure with system colours.
+   ═══════════════════════════════════════════════════════════════ */
+
+@media (forced-colors: active) {
+	.glass-card,
+	.glass-panel,
+	.badge-primitive,
+	.btn,
+	.btn-primary,
+	.btn-secondary,
+	.btn-danger,
+	.btn-ghost,
+	.input-field {
+		border: 1px solid CanvasText;
+	}
+
+	.btn-primary,
+	.btn-secondary,
+	.btn-danger,
+	.btn-ghost,
+	.input-field,
+	a:focus-visible,
+	button:focus-visible {
+		forced-color-adjust: none;
+	}
+
+	:focus-visible {
+		outline: 2px solid Highlight;
+		outline-offset: 2px;
 	}
 }

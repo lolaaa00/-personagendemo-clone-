@@ -2140,6 +2140,65 @@ async function mergeReferenceKit(
 export const RESTORABLE_KIT_STAGES = KIT_HISTORY_STAGES;
 
 /**
+ * Removes reference photos from a persona's kit: drops each url from its
+ * stage's history and, when that url is the stage's CURRENT pin, promotes the
+ * next surviving history image (or clears the stage outright).
+ *
+ * The bucket object is deliberately left in place — a published post may use
+ * the same image, and storage here is append-only by design, so "delete" means
+ * "no longer part of this persona's kit". Returns the fresh kit for the UI.
+ */
+export async function removeKitAssets(
+	supabase: any,
+	agentId: string,
+	targets: Array<{ stage: string; url: string }>
+): Promise<Record<string, any>> {
+	const { data } = await supabase
+		.from('agent_configs')
+		.select('ugc_reference_kit')
+		.eq('agent_id', agentId)
+		.maybeSingle();
+	const kit: Record<string, any> = { ...(data?.ugc_reference_kit || {}) };
+
+	let changed = false;
+	for (const target of targets) {
+		const stage = String(target?.stage || '');
+		const url = String(target?.url || '');
+		if (!url) continue;
+		// An unknown stage is not an error — the caller may be deleting the same
+		// url from every stage that happens to hold it.
+		if (!KIT_HISTORY_STAGES.includes(stage)) continue;
+
+		const historyKey = `${stage}_history`;
+		const prior: string[] = Array.isArray(kit[historyKey]) ? kit[historyKey] : [];
+		const history = prior.filter((u) => u !== url);
+		if (history.length !== prior.length) {
+			kit[historyKey] = history;
+			changed = true;
+		}
+		if (kit[stage] === url) {
+			const promoted = history[0];
+			if (promoted) kit[stage] = promoted;
+			else delete kit[stage];
+			changed = true;
+		}
+	}
+
+	if (changed) {
+		await supabase.from('agent_configs').update({ ugc_reference_kit: kit }).eq('agent_id', agentId);
+	}
+	return kit;
+}
+
+/**
+ * Unpins a persona's profile picture. The image remains in the user's library,
+ * so "Restore from history" can bring it back.
+ */
+export async function clearCharacterRef(supabase: any, agentId: string): Promise<void> {
+	await supabase.from('agent_configs').update({ ugc_character_ref: null }).eq('agent_id', agentId);
+}
+
+/**
  * Restore-from-history for a single kit stage: re-pin `<stage>` to `url`, which
  * must be one of that stage's past generations (in `<stage>_history`) or its
  * current value. Only moves the pointer — nothing is generated or deleted.
@@ -2776,7 +2835,11 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 		// when on_screen_text was empty. Observability must reflect what was drawn.
 		captions: Boolean(input.captions) && captionsApplied && Boolean((parsed.on_screen_text || '').trim()),
 		ai_badge: Boolean(input.aiBadge) && captionsApplied,
-		ugc_broll_prompt: parsed.scene_prompt || parsed.ugc_broll_prompt || '',
+		// The prompt ACTUALLY sent to the image model — scenePrompt already resolves
+		// the composer's scene override over the Director's scene_prompt, so storing
+		// the raw Director output here would show (and refine from) a prompt that
+		// never ran whenever the user pinned a scene.
+		ugc_broll_prompt: scenePrompt,
 		script: parsed.script || parsed.dialogue || '',
 		media_url: durableMedia,
 		poster_url: durableStill,
@@ -2858,6 +2921,12 @@ export async function refineUgcMedia(input: RefineMediaInput): Promise<UgcConten
 	const { supabase, userId, content } = input;
 	const scene = input.scene?.trim();
 	if (!scene) throw new Error('Refine needs a visual prompt');
+	// Cinematic posts are multi-shot Kling O3 Pro reference videos — this
+	// single-shot pipeline would silently downgrade them. The route rejects
+	// these up front; this is the defense-in-depth backstop.
+	if ((content as any).cinematic === true) {
+		throw new Error('Cinematic multi-shot posts cannot be refined through the standard pipeline.');
+	}
 
 	// Same fail-closed spend guard as a fresh generation — a refine is paid media.
 	await assertWithinBudget(supabase, userId, input.agentId);
@@ -2868,11 +2937,27 @@ export async function refineUgcMedia(input: RefineMediaInput): Promise<UgcConten
 			throw new Error('No media provider configured. Add a Fal AI or OpenRouter key in Settings.');
 		}
 
-		// The refs that actually produced this post — never the persona's CURRENT
-		// pins, which may have changed since (same rule the drawer's observability
-		// panel follows).
-		const characterRef = content.generation?.images?.character_ref || null;
-		const productPhoto = content.generation?.images?.product_photo || null;
+		// The refs that actually produced this post — preferred over the persona's
+		// CURRENT pins, which may have changed since (same rule the drawer's
+		// observability panel follows). Posts that predate full provenance capture
+		// have no stored refs, and regenerating with NONE would invent a brand-new
+		// person / generic product — the exact drift the anchors exist to prevent —
+		// so those fall back to the persona's pinned face and the brief's photo for
+		// the product this post was made for.
+		let characterRef = content.generation?.images?.character_ref || null;
+		let productPhoto = content.generation?.images?.product_photo || null;
+		if (!characterRef || !productPhoto) {
+			const cfg = await loadUgcConfig(supabase, input.agentId);
+			if (!characterRef) characterRef = cfg.characterRef;
+			if (!productPhoto) {
+				const brief = await loadBriefForAgent(createDbService(supabase), userId, cfg.brandBriefId);
+				const products = Array.isArray(brief?.data?.products) ? brief.data.products : [];
+				const byName = content.product?.name
+					? products.find((p: any) => p.name === content.product?.name && p.photoUrl)
+					: null;
+				productPhoto = byName?.photoUrl || products.find((p: any) => p.photoUrl)?.photoUrl || null;
+			}
+		}
 
 		// ── Still — identical routing/failover to generateUgcPack ──
 		let still: string;

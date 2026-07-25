@@ -562,6 +562,15 @@
 		opacity: 1;
 	}
 
+	/* Touch devices have no hover, so the hover-reveal above never fires — on a
+	   touch tablet (769–1024px, where the sidebar is still a fixed column) that
+	   left the only collapse control invisible. Show it outright there. */
+	@media (hover: none) {
+		.sidebar-collapse-btn {
+			opacity: 1;
+		}
+	}
+
 	.sidebar-collapse-btn:hover {
 		background: var(--surface-2);
 		color: var(--text);
@@ -768,8 +777,8 @@
 
 	.hamburger-btn {
 		display: none;
-		width: 36px;
-		height: 36px;
+		width: 42px;
+		height: 42px;
 		border-radius: var(--radius-xs);
 		border: 1px solid var(--border-strong);
 		background: transparent;
@@ -795,8 +804,8 @@
 	}
 
 	.theme-toggle-btn {
-		width: 36px;
-		height: 36px;
+		width: 42px;
+		height: 42px;
 		border-radius: var(--radius-full);
 		border: 1px solid var(--border);
 		background: var(--surface-2);

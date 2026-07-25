@@ -451,6 +451,8 @@
 	async function resyncPosts() {
 		await invalidateAll();
 		posts = data.realPosts ?? [];
+		const open = selectedPost;
+		if (open && !posts.some((p) => p.id === open.id)) selectedPost = null;
 		pruneSelection();
 	}
 

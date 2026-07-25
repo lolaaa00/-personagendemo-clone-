@@ -208,6 +208,14 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 				platforms: targetPool,
 				connectedPlatforms,
 				product: product ? { id: product.id, name: product.name, photoUrl: product.photoUrl || null } : null,
+				// The full brand-brief product set, so the composer can offer a picker
+				// instead of a raw URL. Same array the generator resolves product_id
+				// against — picking one here sends its id back verbatim.
+				products: products.map((p: any) => ({
+					id: p.id,
+					name: p.name,
+					photoUrl: p.photoUrl || null
+				})),
 				productPhotoUrl: productPhoto,
 				characterRefUrl: characterRef,
 				// Be honest: unless the user pins a scene, the Director LLM writes the

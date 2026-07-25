@@ -645,13 +645,46 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		}
 	}
 
-	// Competitors
+	// ── Competitors: same manageability contract as products ─────────────────
+	let selectedCompetitorIds = $state<string[]>([]);
+
 	function addCompetitor() {
 		competitors = [...competitors, { id: `c${Date.now()}`, name: '', url: '', notes: '' }];
 	}
 
-	function removeCompetitor(id: string) {
-		competitors = competitors.filter((c) => c.id !== id);
+	function toggleCompetitorSelected(id: string) {
+		selectedCompetitorIds = selectedCompetitorIds.includes(id)
+			? selectedCompetitorIds.filter((c) => c !== id)
+			: [...selectedCompetitorIds, id];
+	}
+	function selectAllCompetitors() {
+		selectedCompetitorIds = competitors.map((c) => c.id);
+	}
+	function clearCompetitorSelection() {
+		selectedCompetitorIds = [];
+	}
+
+	/**
+	 * Removes competitors and persists immediately. The old single-row remove
+	 * mutated state without saving, so a delete silently came back on reload
+	 * unless the user happened to press Save afterwards.
+	 */
+	function deleteCompetitors(ids: string[]) {
+		if (ids.length === 0) return;
+		const names = competitors
+			.filter((c) => ids.includes(c.id))
+			.map((c) => c.name.trim() || 'Untitled')
+			.slice(0, 3)
+			.join(', ');
+		const label =
+			ids.length === 1
+				? `"${names}"`
+				: `${ids.length} competitors (${names}${ids.length > 3 ? ', …' : ''})`;
+		if (!confirm(`Remove ${label} from this brand brief?`)) return;
+		competitors = competitors.filter((c) => !ids.includes(c.id));
+		selectedCompetitorIds = selectedCompetitorIds.filter((s) => !ids.includes(s));
+		saveAll();
+		showToast(ids.length === 1 ? 'Competitor removed' : `${ids.length} competitors removed`, 'success');
 	}
 
 	// Sample post preview
@@ -4435,6 +4468,17 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		display: grid;
 		grid-template-columns: 1fr 1fr;
 		gap: 1rem;
+	}
+
+	/* Collapse the multi-column brand-brief grids to a single column on phones so
+	   preset cards and the intel-wizard review/pillars panels aren't crushed into
+	   ~110–170px columns. */
+	@media (max-width: 640px) {
+		.presets-list,
+		.intel-wizard-panel .review-grid,
+		.intel-wizard-panel .pillars-grid {
+			grid-template-columns: 1fr;
+		}
 	}
 
 	.intel-wizard-panel .pillar-card {

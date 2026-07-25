@@ -6,13 +6,26 @@
 		post,
 		onOpen,
 		onRetry = null,
-		onPublishFallback = null
+		onPublishFallback = null,
+		selectable = false,
+		selected = false,
+		onToggleSelect = null,
+		onDelete = null,
+		onEnlarge = null
 	}: {
 		post: any;
 		onOpen: (post: any) => void;
 		onRetry?: ((post: any) => void) | null;
 		/** Publish an already-generated but unpublished post to a connected platform. */
 		onPublishFallback?: ((post: any) => void) | null;
+		/** Multi-select support — a checkbox overlay for bulk actions. */
+		selectable?: boolean;
+		selected?: boolean;
+		onToggleSelect?: ((post: any) => void) | null;
+		/** Per-card delete. Omit to hide the button. */
+		onDelete?: ((post: any) => void) | null;
+		/** Click-to-enlarge the tile's media in a lightbox. */
+		onEnlarge?: ((post: any) => void) | null;
 	} = $props();
 
 	// In-flight / failed state is read from the POST ROW, not a client flag, so a
@@ -85,6 +98,17 @@
 	// otherwise fetched for the very first time on click. The prefetch is low
 	// priority (won't fight the visible feed) and deduped, so a hover-sweep across
 	// the mosaic costs at most one lazy fetch per distinct clip.
+	// Kick playback imperatively the moment the <video> mounts (right after the
+	// user's tap), then swallow the promise rejection. Unmuted autoplay via the
+	// bare `autoplay` attribute is often blocked on iOS/Android when the element
+	// is inserted a tick after the gesture — calling play() ourselves plays inside
+	// the retained user-activation window, and if the browser still blocks it the
+	// native `controls` remain as the manual fallback. We keep sound (these are
+	// dialogue UGC clips) rather than muting to satisfy autoplay policy.
+	function playOnMount(node: HTMLVideoElement) {
+		node.play?.().catch(() => {});
+	}
+
 	let warmed = false;
 	function warmMedia() {
 		const url = display.mediaUrl;
@@ -105,6 +129,7 @@
 <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
 <div
 	class="post-tile"
+	class:selected
 	role="button"
 	tabindex="0"
 	onclick={() => onOpen(post)}
@@ -118,6 +143,61 @@
 	onfocus={warmMedia}
 	aria-label="Open post details"
 >
+	<!-- Management overlays: select for bulk actions, enlarge, delete. All stop
+	     propagation so they never open the drawer by accident. -->
+	{#if selectable}
+		<!-- svelte-ignore node_invalid_placement_ssr -->
+		<label
+			class="tile-select"
+			title="Select for bulk actions"
+			onclick={(e) => e.stopPropagation()}
+		>
+			<input
+				type="checkbox"
+				checked={selected}
+				onchange={() => onToggleSelect?.(post)}
+				aria-label="Select this post"
+			/>
+		</label>
+	{/if}
+	{#if onEnlarge || onDelete}
+		<div class="tile-manage">
+			{#if onEnlarge}
+				<!-- svelte-ignore node_invalid_placement_ssr -->
+				<button
+					type="button"
+					class="tile-manage-btn"
+					title="Enlarge media"
+					aria-label="Enlarge post media"
+					onclick={(e) => {
+						e.stopPropagation();
+						onEnlarge?.(post);
+					}}
+				>
+					<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"
+						><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" /></svg
+					>
+				</button>
+			{/if}
+			{#if onDelete}
+				<!-- svelte-ignore node_invalid_placement_ssr -->
+				<button
+					type="button"
+					class="tile-manage-btn danger"
+					title="Delete post"
+					aria-label="Delete post"
+					onclick={(e) => {
+						e.stopPropagation();
+						onDelete?.(post);
+					}}
+				>
+					<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"
+						><path d="M3 6h18M8 6V4h8v2m1 0v14a2 2 0 01-2 2H9a2 2 0 01-2-2V6h12" /></svg
+					>
+				</button>
+			{/if}
+		</div>
+	{/if}
 	{#if isGenerating}
 		<div class="tile-gen">
 			<span class="tile-gen-spin"></span>
@@ -161,9 +241,9 @@
 					src={display.mediaUrl}
 					poster={display.posterUrl || undefined}
 					controls
-					autoplay
 					playsinline
 					preload="metadata"
+					use:playOnMount
 					onclick={(e) => e.stopPropagation()}
 				></video>
 				<!-- Native controls capture taps, so the tile can't be clicked to open
@@ -276,11 +356,80 @@
 		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
 	}
 
+	.post-tile.selected {
+		border-color: var(--accent);
+		box-shadow: 0 0 0 2px var(--accent) inset;
+	}
+
+	/* ── Management overlays (select / enlarge / delete) ── */
+	.tile-select {
+		position: absolute;
+		top: 8px;
+		left: 8px;
+		z-index: 5;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 26px;
+		height: 26px;
+		border-radius: 7px;
+		background: rgba(12, 16, 30, 0.72);
+		backdrop-filter: blur(4px);
+		cursor: pointer;
+	}
+	.tile-select input {
+		width: 15px;
+		height: 15px;
+		margin: 0;
+		cursor: pointer;
+		accent-color: var(--accent);
+	}
+	.tile-manage {
+		position: absolute;
+		top: 8px;
+		right: 8px;
+		z-index: 5;
+		display: flex;
+		gap: 0.3rem;
+		opacity: 0;
+		transition: opacity 0.15s ease;
+	}
+	.post-tile:hover .tile-manage,
+	.post-tile:focus-within .tile-manage,
+	.post-tile.selected .tile-manage {
+		opacity: 1;
+	}
+	.tile-manage-btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 26px;
+		height: 26px;
+		padding: 0;
+		border-radius: 7px;
+		border: 1px solid rgba(255, 255, 255, 0.2);
+		background: rgba(12, 16, 30, 0.72);
+		backdrop-filter: blur(4px);
+		color: #fff;
+		cursor: pointer;
+	}
+	.tile-manage-btn:hover {
+		background: rgba(12, 16, 30, 0.94);
+	}
+	.tile-manage-btn.danger:hover {
+		border-color: #dc2626;
+		color: #f87171;
+	}
+
+	/* Every tile is normalized to one aspect ratio so the mosaic reads as an even
+	   grid — a failed/generating card is the SAME size as the image or video
+	   beside it, regardless of the media's native ratio. */
 	.post-tile img,
 	.post-tile video {
 		width: 100%;
 		display: block;
 		object-fit: cover;
+		aspect-ratio: 4 / 5;
 	}
 
 	.tile-text-fallback {
@@ -461,7 +610,7 @@
 	   instead of forcing a video-frame download. */
 	.tile-video-placeholder {
 		width: 100%;
-		height: 100%;
+		aspect-ratio: 4 / 5;
 		background: linear-gradient(135deg, #1f2433, #2b3247);
 	}
 

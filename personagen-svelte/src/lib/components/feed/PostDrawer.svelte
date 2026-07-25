@@ -3,6 +3,10 @@
 	import { getPostDisplay, truncateError } from './postDisplay';
 	import { platformColor } from '$lib/platforms';
 	import { OPERATION_LABELS, priceOf } from '$lib/pricing';
+	import ImageLightbox from '$lib/components/ui/ImageLightbox.svelte';
+
+	/** Full-screen zoom of the post image (video already has native fullscreen). */
+	let zoomOpen = $state(false);
 
 	let {
 		post,
@@ -127,12 +131,23 @@
 	let refineError = $state<string | null>(null);
 	let confirmingRefine = $state(false);
 	let refineConfirmTimeout: ReturnType<typeof setTimeout> | undefined;
+	// Cinematic posts are multi-shot Kling Pro reference videos — the single-shot
+	// refine pipeline would silently downgrade them, so the server rejects them
+	// and the button is not offered (regenerate those from the composer instead).
+	let isCinematic = $derived.by(() => {
+		try {
+			return JSON.parse(activePost?.content ?? '')?.cinematic === true;
+		} catch {
+			return false;
+		}
+	});
 	let canRefine = $derived(
 		Boolean(
 			activePost?.agent_id &&
 				(activePost.status === 'draft' || activePost.status === 'scheduled') &&
 				display?.mediaGenerated &&
-				display?.mediaUrl
+				display?.mediaUrl &&
+				!isCinematic
 		)
 	);
 	// A refine that failed server-side restores the original media and records
@@ -455,7 +470,16 @@
 							</div>
 						{/if}
 					{:else}
-						<img class="media-el" src={display.mediaUrl} alt="Post media" fetchpriority="high" decoding="async" />
+						<!-- Click to enlarge, matching every other image in the app. -->
+						<button
+							type="button"
+							class="media-zoom"
+							title="Click to enlarge"
+							aria-label="Enlarge post media"
+							onclick={() => (zoomOpen = true)}
+						>
+							<img class="media-el" src={display.mediaUrl} alt="Post media" fetchpriority="high" decoding="async" />
+						</button>
 					{/if}
 					{#if refining}
 						<div class="refine-overlay" role="status">
@@ -778,6 +802,13 @@
 			<button type="button" class="btn-drawer-close" onclick={onClose}>Close</button>
 		</div>
 	</aside>
+
+	<ImageLightbox
+		url={zoomOpen ? display.mediaUrl : null}
+		label={display.text ? String(display.text).slice(0, 80) : 'Post media'}
+		type="image"
+		onClose={() => (zoomOpen = false)}
+	/>
 {/if}
 
 <style>
@@ -1083,6 +1114,18 @@
 		aspect-ratio: auto 9 / 16;
 	}
 
+	/* Zoom affordance wrapper — must not alter the media's own layout. */
+	.media-zoom {
+		position: relative;
+		z-index: 1;
+		display: block;
+		width: 100%;
+		padding: 0;
+		border: none;
+		background: none;
+		cursor: zoom-in;
+	}
+
 	.drawer-stats {
 		display: flex;
 		gap: 1rem;
@@ -1319,6 +1362,11 @@
 	.drawer-footer {
 		display: flex;
 		align-items: center;
+		/* Wrap so the 4–5 action buttons a draft/review post can show (Reject ·
+		   Refine · Approve & Schedule · Post Now · Close, or the long "Publish to a
+		   connected platform") never overflow a ~390px phone — they flow onto a
+		   second row instead of scrolling sideways. */
+		flex-wrap: wrap;
 		gap: 0.5rem;
 		padding: 0.9rem 1.25rem;
 		border-top: 1px solid var(--border);
