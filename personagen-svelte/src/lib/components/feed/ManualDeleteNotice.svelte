@@ -78,12 +78,12 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		z-index: 1000;
+		z-index: var(--z-modal);
 		padding: 1.5rem;
 	}
 
 	.modal-backdrop.z-top {
-		z-index: 1100;
+		z-index: var(--z-overlay);
 	}
 
 	.notice-modal {
@@ -92,12 +92,12 @@
 		border-radius: var(--radius);
 		width: 100%;
 		max-width: 460px;
-		max-height: 80vh;
+		max-height: 80dvh;
 		display: flex;
 		flex-direction: column;
 		box-shadow:
 			0 20px 25px -5px rgba(0, 0, 0, 0.3),
-			0 0 50px rgba(124, 106, 237, 0.15);
+			0 0 50px color-mix(in srgb, var(--accent) 15%, transparent);
 		overflow: hidden;
 	}
 
@@ -118,6 +118,7 @@
 	}
 
 	.modal-close {
+		position: relative;
 		width: 32px;
 		height: 32px;
 		border-radius: 999px;
@@ -132,6 +133,19 @@
 			background 0.2s,
 			color 0.2s,
 			transform 0.2s;
+	}
+
+	/* Keeps the 32px visual circle while giving the button a full 44x44 tap area. */
+	.modal-close::after {
+		content: '';
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		transform: translate(-50%, -50%);
+		min-width: 44px;
+		min-height: 44px;
+		width: 100%;
+		height: 100%;
 	}
 
 	.modal-close:hover {
@@ -193,6 +207,8 @@
 	.notice-link {
 		display: inline-flex;
 		align-items: center;
+		align-self: flex-start;
+		min-height: 44px;
 		gap: 0.4rem;
 		font-size: 0.75rem;
 		font-weight: 700;
@@ -214,8 +230,11 @@
 	.btn-notice-dismiss {
 		display: inline-flex;
 		align-items: center;
+		justify-content: center;
+		min-height: 44px;
+		min-width: 44px;
 		gap: 0.5rem;
-		background: var(--gradient);
+		background: var(--gradient-cta);
 		color: #fff;
 		border: none;
 		border-radius: 8px;

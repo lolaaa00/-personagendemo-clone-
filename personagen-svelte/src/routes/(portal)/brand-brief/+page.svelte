@@ -2,6 +2,7 @@
 	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
 	import { showToast, applyBrandTheme, brandThemeState } from '$lib/stores/ui.svelte';
+	import SelectionToolbar from '$lib/components/ui/SelectionToolbar.svelte';
 	import { browser } from '$app/environment';
 	import { BrandBrief } from '$lib/services/api';
 
@@ -3381,11 +3382,32 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		border-color: var(--border-hover);
 	}
 
+	.competitor-card.selected {
+		border-color: var(--accent);
+		box-shadow: 0 0 0 1px var(--accent) inset;
+	}
+
 	.comp-header {
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
+		gap: 0.5rem;
 		margin-bottom: 0.75rem;
+	}
+	.comp-select {
+		display: inline-flex;
+		align-items: center;
+		cursor: pointer;
+	}
+	.comp-select input {
+		width: 14px;
+		height: 14px;
+		margin: 0;
+		cursor: pointer;
+		accent-color: var(--accent);
+	}
+	.comp-num {
+		margin-right: auto;
 	}
 	.comp-num {
 		font-size: var(--text-xs);
