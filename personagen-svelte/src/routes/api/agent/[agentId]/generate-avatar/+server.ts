@@ -6,6 +6,7 @@ import {
 	generateCharacterSheetFromReference,
 	resolvePersonaGender,
 	resolveImageKeys,
+	updateReferenceKit,
 	buildHeroPortraitPrompt,
 	buildPortraitEditPrompt,
 	buildUgcImagePrompt,
@@ -19,28 +20,10 @@ import { persistBufferToStorage } from '$lib/server/storage';
 
 const MAX_REFERENCE_BYTES = 10 * 1024 * 1024; // 10MB
 
-/**
- * Read-modify-write on `agent_configs.ugc_reference_kit` for the transient
- * `profile_status` polling key ('generating' / 'failed: …'). Runs on the
- * service client so a detached task can still clear its key after the user's
- * session token would have expired.
- */
-async function patchReferenceKit(
-	svc: any,
-	agentId: string,
-	set: Record<string, string>,
-	remove: string[] = []
-): Promise<void> {
-	const { data } = await svc
-		.from('agent_configs')
-		.select('ugc_reference_kit')
-		.eq('agent_id', agentId)
-		.maybeSingle();
-	const kit = { ...(data?.ugc_reference_kit || {}) };
-	for (const key of remove) delete kit[key];
-	Object.assign(kit, set);
-	await svc.from('agent_configs').update({ ugc_reference_kit: kit }).eq('agent_id', agentId);
-}
+// A 'generating' marker younger than this is trusted (the request is refused as
+// a duplicate); older ones mean the detached task died without clearing its
+// marker (deploy/restart mid-generation), so a retry self-heals by overwriting.
+const IN_FLIGHT_STALE_MS = 15 * 60 * 1000;
 
 /**
  * Generates (or regenerates) an agent's pinned AI character reference — the
@@ -224,21 +207,56 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 			);
 	}
 
+	// A second click while the detached avatar chain is still running is a
+	// duplicate PAID generation — refuse it while the marker is fresh; a stale
+	// marker (or one without a started_at) is a dead task, so proceed over it.
+	const { data: kitRow } = await svc
+		.from('agent_configs')
+		.select('ugc_reference_kit')
+		.eq('agent_id', agentId)
+		.maybeSingle();
+	const kit = kitRow?.ugc_reference_kit || {};
+	if (kit.profile_status === 'generating') {
+		const startedAt = Date.parse(String(kit.profile_started_at ?? ''));
+		const ageMs = Date.now() - startedAt;
+		if (Number.isFinite(startedAt) && ageMs < IN_FLIGHT_STALE_MS) {
+			return json(
+				{
+					success: false,
+					error: `This generation is already running — it started ${Math.max(1, Math.round(ageMs / 60000))} min ago. Wait for it to finish (or retry in 15 minutes if it never does).`
+				},
+				{ status: 409 }
+			);
+		}
+	}
+
 	// Mark the avatar in-flight BEFORE responding so the reference-kit GET
 	// poller (and a page reload) immediately sees a generation running.
-	await patchReferenceKit(svc, agentId, { profile_status: 'generating' });
+	// `profile_started_at` is what lets the guard above (and the scheduler
+	// reaper) age the marker.
+	await updateReferenceKit(svc, agentId, (k) => {
+		k.profile_status = 'generating';
+		k.profile_started_at = new Date().toISOString();
+		return k;
+	});
 
 	void (async () => {
 		try {
 			// Both generators pin the finished shot as ugc_character_ref and
 			// rebuild the kit foundation themselves — we only clear the marker.
 			await runGeneration();
-			await patchReferenceKit(svc, agentId, {}, ['profile_status']);
+			await updateReferenceKit(svc, agentId, (k) => {
+				delete k.profile_status;
+				delete k.profile_started_at;
+				return k;
+			});
 		} catch (err) {
 			console.error('[generate-avatar] Detached avatar generation failed:', err);
 			try {
-				await patchReferenceKit(svc, agentId, {
-					profile_status: `failed: ${(err as Error).message}`.slice(0, 200)
+				await updateReferenceKit(svc, agentId, (k) => {
+					k.profile_status = `failed: ${(err as Error).message}`.slice(0, 200);
+					delete k.profile_started_at;
+					return k;
 				});
 			} catch (patchErr) {
 				console.error('[generate-avatar] Failed to record avatar failure:', patchErr);

@@ -6,24 +6,34 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { createMockSupabase, type Handler, type RecordedQuery } from '../tests/mock-supabase';
 
-const { publishToPlatform } = vi.hoisted(() => ({ publishToPlatform: vi.fn() }));
+const { publishToPlatform, runAutopilotDraftGeneration, mockEnv, supabaseRef } = vi.hoisted(
+	() => ({
+		publishToPlatform: vi.fn(),
+		runAutopilotDraftGeneration: vi.fn(),
+		mockEnv: {} as Record<string, string>,
+		supabaseRef: { current: null as any }
+	})
+);
 
-vi.mock('$env/dynamic/private', () => ({ env: {} }));
+vi.mock('$env/dynamic/private', () => ({ env: mockEnv }));
 vi.mock('$env/dynamic/public', () => ({ env: {} }));
 vi.mock('./social/publisher', () => ({ publishToPlatform }));
 vi.mock('./social/zernio', () => ({
 	getZernioApiKey: vi.fn(async () => null),
 	ZernioClient: class {}
 }));
-vi.mock('./service-supabase', () => ({ getServiceSupabase: vi.fn() }));
-vi.mock('./scheduler-lock', () => ({ acquireSchedulerLease: vi.fn(async () => true) }));
+vi.mock('./service-supabase', () => ({ getServiceSupabase: () => supabaseRef.current }));
+vi.mock('./scheduler-lock', () => ({
+	acquireSchedulerLease: vi.fn(async () => true),
+	renewSchedulerLease: vi.fn(async () => true)
+}));
 vi.mock('./autopilot', () => ({
 	getLocalParts: vi.fn(() => ({ hour: 12 })),
 	zonedWallTimeToEpoch: vi.fn(() => 0),
-	runAutopilotDraftGeneration: vi.fn()
+	runAutopilotDraftGeneration
 }));
 
-const { publishSinglePost } = await import('./scheduler');
+const { publishSinglePost, pollScheduledPosts } = await import('./scheduler');
 
 const POST_ID = 'post-123';
 
@@ -67,6 +77,8 @@ const activeConn = (platform: string) => ({
 
 beforeEach(() => {
 	publishToPlatform.mockReset();
+	runAutopilotDraftGeneration.mockReset();
+	for (const k of Object.keys(mockEnv)) delete mockEnv[k];
 	vi.spyOn(console, 'log').mockImplementation(() => {});
 	vi.spyOn(console, 'warn').mockImplementation(() => {});
 	vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -257,5 +269,39 @@ describe('publishSinglePost — failure handling', () => {
 		expect(publishToPlatform).not.toHaveBeenCalled();
 		const final = supabase.of('posts', 'update').at(-1)!;
 		expect(final.payload.publication_results.instagram.status).toBe('skipped');
+	});
+});
+
+describe('pollScheduledPosts — detached autopilot (starvation fix)', () => {
+	const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+	it('the tick resolves while the autopilot run is still in flight, never starts a second one, and restarts after completion', async () => {
+		mockEnv.AUTOPILOT_RUN_INTERVAL_MS = '1'; // every tick passes the interval check
+		supabaseRef.current = schedulerDb({ data: [], error: null });
+
+		// A run that takes "forever" (2–5 min per post in production) — the old
+		// code awaited this inside the tick and starved publishing/verification.
+		let finishRun!: (v: { generated: number; agents: number }) => void;
+		runAutopilotDraftGeneration.mockReturnValue(new Promise((r) => (finishRun = r)));
+
+		// Tick 1 must RESOLVE while the run is still pending (detached task).
+		await pollScheduledPosts();
+		expect(runAutopilotDraftGeneration).toHaveBeenCalledTimes(1);
+		// The detached run got a lease heartbeat to stop itself on failover.
+		expect(runAutopilotDraftGeneration.mock.calls[0][0]?.shouldContinue).toBeTypeOf('function');
+
+		// Tick 2: interval elapsed but the run is still going — the
+		// isAutopilotRunning guard must prevent a second concurrent (double-spend) run.
+		await sleep(5);
+		await pollScheduledPosts();
+		expect(runAutopilotDraftGeneration).toHaveBeenCalledTimes(1);
+
+		// Once the run completes, the next tick starts a fresh one.
+		finishRun({ generated: 0, agents: 0 });
+		await sleep(5); // let the detached .finally clear the flag
+		await pollScheduledPosts();
+		expect(runAutopilotDraftGeneration).toHaveBeenCalledTimes(2);
+		// (The mock returns the same, now-resolved promise for run 2, so its
+		// detached chain settles on its own — nothing left pending.)
 	});
 });

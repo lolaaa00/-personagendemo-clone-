@@ -5,13 +5,18 @@ import { getAgentZernioRouting, resolveZernioKeyByRef } from './zernio-keys';
 import { publishToPlatform } from './social/publisher';
 import { getServiceSupabase } from './service-supabase';
 import { getLocalParts, runAutopilotDraftGeneration, zonedWallTimeToEpoch } from './autopilot';
-import { acquireSchedulerLease } from './scheduler-lock';
+import { acquireSchedulerLease, renewSchedulerLease } from './scheduler-lock';
 import { ALL_PLATFORM_KEYS } from '$lib/platforms';
 
 const DEFAULT_TZ = 'Australia/Sydney';
 
 let intervalId: NodeJS.Timeout | null = null;
 let isRunning = false;
+// Autopilot draft generation runs as a DETACHED task (2–5 min per post, up to
+// 24 posts) so it can never wedge the 60s publishing tick. This flag is its own
+// overlap guard: a tick never awaits the run, and no tick starts a second one
+// while the previous is still going.
+let isAutopilotRunning = false;
 let lastAnalyticsSyncTime = 0;
 let lastAutopilotRunTime = 0;
 
@@ -29,10 +34,10 @@ const CLAIM_LEASE_MS = 15 * 60 * 1000;
 const GENERATION_LEASE_MS = 30 * 60 * 1000;
 // Same idea for avatar / reference-kit jobs, whose in-flight markers live in
 // agent_configs.ugc_reference_kit. Deliberately longer than GENERATION_LEASE_MS:
-// staleness there can only be judged from agent_configs.updated_at (see
-// reapStrandedKitJobs), a coarser signal than a per-job start time, and clearing
-// a marker for a job that is genuinely still running would let the user fire a
-// second, duplicate PAID generation. Err long.
+// clearing a marker for a job that is genuinely still running would let the
+// user fire a second, duplicate PAID generation, and legacy markers (no
+// `<key>_started_at` stamp) can only be judged from the coarse
+// agent_configs.updated_at (see reapStrandedKitJobs). Err long.
 const KIT_GENERATION_LEASE_MS = 60 * 60 * 1000;
 
 function isRetriableError(message: string): boolean {
@@ -370,28 +375,36 @@ export async function publishPostById(postId: string): Promise<boolean> {
  * above, so: same treatment — flip to a terminal 'failed: …' the UI already
  * knows how to render, which unblocks a retry.
  *
- * STALENESS SIGNAL — the endpoints write NO `*_started_at` alongside the marker,
- * so there is no per-job start time to test. The only trustworthy timestamp is
- * `agent_configs.updated_at`, which is maintained by a BEFORE UPDATE trigger
- * (supabase/migration.sql) and therefore CANNOT be older than the marker write:
- * that write is itself an UPDATE of this row. So `updated_at` is an upper bound
- * on the marker's age — if the row hasn't been touched in a lease, the marker
- * has been sitting there at least that long. Its coarseness is one-directional
- * and safe: unrelated writes to the row (a settings save, a live job merging an
- * intermediate image into the kit) push `updated_at` FORWARD and merely make us
- * wait longer. It never lets us reap early.
- *
- * TODO(owners of generate-avatar / generate-reference-kit): write a
- * `<key>_started_at` ISO timestamp next to each `*_status: 'generating'` marker
- * and this can key off the real job start instead of a whole-row proxy.
+ * STALENESS SIGNAL — the endpoints now write a `<key>_started_at` ISO timestamp
+ * next to each `<key>_status: 'generating'` marker (and remove it when the
+ * marker clears). That is the real per-job start time, so a marker is stale
+ * when its `_started_at` is more than KIT_GENERATION_LEASE_MS ago — immune to
+ * the old resettable-clock bug where ANY row write (a settings save, a live job
+ * merging an intermediate image) pushed `updated_at` forward and restarted the
+ * 60-min clock. Legacy markers without a `_started_at` fall back to the old
+ * whole-row proxy: `agent_configs.updated_at` older than the lease. That proxy
+ * is maintained by a BEFORE UPDATE trigger (supabase/migration.sql) so it
+ * cannot be older than the marker write; its coarseness only ever delays a
+ * reap, never causes an early one.
  */
 async function reapStrandedKitJobs(supabase: any, nowMs: number): Promise<void> {
 	const cutoff = new Date(nowMs - KIT_GENERATION_LEASE_MS).toISOString();
+	// SCAN SHAPE: ideally the DB would pre-filter to kits that actually contain a
+	// 'generating' marker, but PostgREST offers no clean predicate for it —
+	// filters can't cast (`ugc_reference_kit::text=like.*` is rejected: casts are
+	// select-only), JSONB has no LIKE operator, and the marker keys are dynamic
+	// (`profile_status`, `<stage>_status`, …) so `->>key` / `cs` containment
+	// can't target them either. So: pull non-null kits only, bounded by
+	// .limit(500), oldest-touched first (most likely stranded), and filter in JS.
+	// NOTE: no `.lt('updated_at', cutoff)` on the scan anymore — a stranded
+	// marker on a row with a RECENT updated_at (user kept saving settings) is
+	// exactly the case the `_started_at` fix exists for.
 	const { data: configs, error } = await supabase
 		.from('agent_configs')
-		.select('agent_id, ugc_reference_kit')
-		.lt('updated_at', cutoff)
-		.not('ugc_reference_kit', 'is', null);
+		.select('agent_id, ugc_reference_kit, updated_at')
+		.not('ugc_reference_kit', 'is', null)
+		.order('updated_at', { ascending: true })
+		.limit(500);
 
 	if (error) {
 		console.error('[Scheduler] Error scanning for stranded reference-kit jobs:', error);
@@ -402,27 +415,42 @@ async function reapStrandedKitJobs(supabase: any, nowMs: number): Promise<void> 
 		const kit = cfg.ugc_reference_kit;
 		if (!kit || typeof kit !== 'object') continue;
 
-		const stranded = Object.keys(kit).filter(
-			(k) => k.endsWith('_status') && kit[k] === 'generating'
-		);
+		// Per-JOB staleness: `<key>_started_at` when present, else the legacy
+		// whole-row updated_at proxy. Keys judged fresh are left alone even when a
+		// sibling key on the same row is reaped.
+		const stranded = Object.keys(kit).filter((k) => {
+			if (!k.endsWith('_status') || kit[k] !== 'generating') return false;
+			const base = k.slice(0, -'_status'.length);
+			const startedAtMs = Date.parse(kit[`${base}_started_at`] || '');
+			if (Number.isFinite(startedAtMs)) return nowMs - startedAtMs > KIT_GENERATION_LEASE_MS;
+			return typeof cfg.updated_at === 'string' && cfg.updated_at < cutoff;
+		});
 		if (stranded.length === 0) continue;
 
-		const patched = { ...kit };
+		// Follow the kit's CAS convention: every write bumps the `rev` counter
+		// inside the JSONB blob (the endpoints' own compare-and-swap key).
+		const patched = {
+			...kit,
+			rev: (typeof kit.rev === 'number' && Number.isFinite(kit.rev) ? kit.rev : 0) + 1
+		};
 		for (const key of stranded) {
 			patched[key] = 'failed: Generation interrupted by a server restart — try again.';
+			delete patched[`${key.slice(0, -'_status'.length)}_started_at`];
 		}
 
-		// `.lt('updated_at', cutoff)` repeated on the UPDATE is a compare-and-swap:
-		// the predicate is evaluated against the row as it stands now, so if the job
-		// turned out to be alive and wrote anything between the scan and here (which
-		// bumps updated_at via the trigger), this matches zero rows and we leave its
-		// marker alone rather than clobbering a live job's kit — the read-modify-write
-		// on a JSONB blob would otherwise stomp whatever it just merged in.
+		// `.eq('updated_at', <as-read>)` is a compare-and-swap: the BEFORE UPDATE
+		// trigger bumps updated_at on EVERY write to the row (including a live
+		// job's marker/asset merges), so if anything touched the row between the
+		// scan and here this matches zero rows and we leave the kit alone rather
+		// than clobbering it — the read-modify-write on a JSONB blob would
+		// otherwise stomp whatever a live job just merged in. Strictly tighter
+		// than the old `.lt(cutoff)` guard, and unlike it, it also permits reaping
+		// rows whose updated_at is recent but whose `_started_at` proves stale.
 		const { error: updateErr } = await supabase
 			.from('agent_configs')
 			.update({ ugc_reference_kit: patched })
 			.eq('agent_id', cfg.agent_id)
-			.lt('updated_at', cutoff);
+			.eq('updated_at', cfg.updated_at);
 
 		if (updateErr) {
 			console.error(
@@ -548,9 +576,10 @@ async function verifySubmittedZernioPosts(supabase: any, nowMs: number): Promise
 }
 
 /**
- * Polling loop iteration
+ * Polling loop iteration. Exported for tests (the detached-autopilot guard);
+ * production entry is startScheduler().
  */
-async function pollScheduledPosts() {
+export async function pollScheduledPosts() {
 	if (isRunning) return;
 	isRunning = true;
 
@@ -750,6 +779,16 @@ async function pollScheduledPosts() {
 		if (duePosts.length > 0) {
 			console.log(`[Scheduler] Found ${duePosts.length} due posts to publish.`);
 			for (const post of duePosts) {
+				// A multi-post batch can outlive the ~70s lease. Renew before each
+				// publish; if another instance was elected mid-batch, stop — its own
+				// tick now owns these posts (the per-post atomic claim is the last
+				// line of defense either way).
+				if (!(await renewSchedulerLease(supabase))) {
+					console.warn(
+						'[Scheduler] Lost the leader lease mid-batch — stopping publishing for this tick.'
+					);
+					break;
+				}
 				await publishSinglePost(supabase, post);
 			}
 		}
@@ -779,11 +818,30 @@ async function pollScheduledPosts() {
 		}
 
 		if (nowTime - lastAutopilotRunTime >= autopilotInterval) {
-			lastAutopilotRunTime = nowTime;
-			try {
-				await runAutopilotDraftGeneration();
-			} catch (autoErr) {
-				console.error('[Scheduler] Autopilot run failed:', autoErr);
+			if (isAutopilotRunning) {
+				// Previous run (up to 24 serial 2–5 min generations) is still going.
+				// Never start a second one — and don't stamp lastAutopilotRunTime, so
+				// the next tick after it finishes starts the next run promptly.
+				console.log('[Scheduler] Autopilot run still in progress — not starting another.');
+			} else {
+				lastAutopilotRunTime = nowTime;
+				isAutopilotRunning = true;
+				// DETACHED on purpose: the tick must never await 50–120 min of draft
+				// generation (publishing/verification/reaping would starve). The run
+				// heartbeats the leader lease between paid generations and stops
+				// itself the moment another instance is elected.
+				void Promise.resolve()
+					.then(() =>
+						runAutopilotDraftGeneration({
+							shouldContinue: () => renewSchedulerLease(supabase)
+						})
+					)
+					.catch((autoErr) => {
+						console.error('[Scheduler] Autopilot run failed:', autoErr);
+					})
+					.finally(() => {
+						isAutopilotRunning = false;
+					});
 			}
 		}
 	} catch (err) {

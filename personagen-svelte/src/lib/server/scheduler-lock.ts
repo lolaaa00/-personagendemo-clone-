@@ -68,6 +68,23 @@ export async function acquireSchedulerLease(supabase: any): Promise<boolean> {
 	return acquireSchedulerLock();
 }
 
+/**
+ * Heartbeat for long-running work (publish batches, autopilot generation runs)
+ * that can outlive LEASE_MS. The lease is only held for ~70s, so a 2–5 min
+ * generation — let alone a 24-slot run — expires it mid-flight and lets a
+ * second instance get elected and DOUBLE-generate/double-publish. Callers must
+ * invoke this between units of work and STOP the moment it returns false.
+ *
+ * Implementation: the same `acquire_scheduler_lease` RPC (same table/row) — its
+ * SQL compares holder_id, so the call renews only while WE still hold the row
+ * (or re-takes it if it expired unclaimed, which is equally safe). The moment
+ * another instance holds a fresh lease it returns false. The file-lock fallback
+ * has identical holder-compare semantics via acquireSchedulerLock().
+ */
+export async function renewSchedulerLease(supabase: any): Promise<boolean> {
+	return acquireSchedulerLease(supabase);
+}
+
 /** Single-host file lease (OS temp dir, shared by all local instances). */
 export function acquireSchedulerLock(): boolean {
 	const now = Date.now();

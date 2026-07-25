@@ -354,13 +354,16 @@
 		return typeof msg === 'string' && msg ? truncateError(msg) : null;
 	});
 
+	// Both call sites use this as a `color:` on small badge/pill text, so it must return
+	// the AA `-text` variants — the raw brand hues measure 2.77-4.08:1 on a light
+	// surface. The tokens fall back to the vivid hues in dark mode, where those pass.
 	function statusColor(status: string): string {
-		if (status === 'published') return 'var(--success)';
-		if (status === 'failed') return 'var(--error)';
-		if (status === 'publishing') return 'var(--cyan)';
-		if (status === 'partial') return 'var(--warning)';
-		if (status === 'rejected') return 'var(--rose)';
-		if (status === 'scheduled') return 'var(--accent)';
+		if (status === 'published') return 'var(--success-text)';
+		if (status === 'failed') return 'var(--error-text)';
+		if (status === 'publishing') return 'var(--cyan-text)';
+		if (status === 'partial') return 'var(--warning-text)';
+		if (status === 'rejected') return 'var(--rose-text)';
+		if (status === 'scheduled') return 'var(--accent-text)';
 		return 'var(--text-dim)';
 	}
 
@@ -421,7 +424,7 @@
 
 {#if post && display}
 	<div class="drawer-backdrop" transition:fade={{ duration: 150 }} onclick={onClose} role="presentation"></div>
-	<aside class="post-drawer" transition:fly={{ x: 440, duration: 260, opacity: 1 }} role="dialog" aria-label="Post details" tabindex="-1">
+	<aside class="post-drawer" transition:fly={{ x: 440, duration: 260, opacity: 1 }} role="dialog" aria-modal="true" aria-label="Post details" tabindex="-1">
 		<div class="drawer-header">
 			<div class="drawer-header-meta">
 				<span class="drawer-date">{formatPostDate(post)}</span>
@@ -430,8 +433,8 @@
 					<span class="drawer-platform-pill" style="background: {platformColor(p)}">{p}</span>
 				{/each}
 			</div>
-			<button class="drawer-close" onclick={onClose} aria-label="Close details">
-				<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18" /><path d="M6 6l12 12" /></svg>
+			<button type="button" class="drawer-close" onclick={onClose} aria-label="Close details">
+				<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6L6 18" /><path d="M6 6l12 12" /></svg>
 			</button>
 		</div>
 
@@ -478,11 +481,11 @@
 							aria-label="Enlarge post media"
 							onclick={() => (zoomOpen = true)}
 						>
-							<img class="media-el" src={display.mediaUrl} alt="Post media" fetchpriority="high" decoding="async" />
+							<img class="media-el" src={display.mediaUrl} alt="Post media" width="1080" height="1350" fetchpriority="high" decoding="async" />
 						</button>
 					{/if}
 					{#if refining}
-						<div class="refine-overlay" role="status">
+						<div class="refine-overlay" role="status" aria-live="polite">
 							<span class="refine-spinner"></span>
 							Regenerating media — usually 1–3 minutes. Keep this open or check the feed later.
 						</div>
@@ -503,7 +506,8 @@
 
 			{#if editingText}
 				<div class="drawer-text-edit">
-					<textarea rows="6" bind:value={draftText}></textarea>
+					<label class="sr-only" for="drawer-caption-edit">Post caption</label>
+					<textarea id="drawer-caption-edit" rows="6" bind:value={draftText}></textarea>
 					<div class="drawer-text-edit-actions">
 						<button type="button" class="dt-btn" onclick={() => (editingText = false)} disabled={savingText}>Cancel</button>
 						<button type="button" class="dt-btn dt-save" onclick={saveTextEdit} disabled={savingText}>
@@ -515,7 +519,9 @@
 				<div class="drawer-text-row">
 					<p class="drawer-text">{display.text}</p>
 					{#if onSaveText}
-						<button type="button" class="dt-edit" onclick={startTextEdit} title="Edit caption" aria-label="Edit caption">✎</button>
+						<button type="button" class="dt-edit" onclick={startTextEdit} title="Edit caption" aria-label="Edit caption">
+							<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z" /></svg>
+						</button>
 					{/if}
 				</div>
 			{/if}
@@ -539,15 +545,21 @@
 			{/if}
 
 			{#if storedRefineError && !refineOpen}
-				<div class="drawer-error">
-					<strong>⚠ Last refine failed — original media kept</strong>
+				<div class="drawer-error" role="alert">
+					<strong
+						><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><path d="M12 9v4" /><path d="M12 17h.01" /></svg
+						> Last refine failed — original media kept</strong
+					>
 					<p>{storedRefineError}</p>
 				</div>
 			{/if}
 
 			{#if refineOpen && canRefine}
 				<div class="drawer-refine">
-					<span class="drawer-block-label">✨ Refine &amp; regenerate</span>
+					<span class="drawer-block-label"
+						><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8" /></svg
+						> Refine &amp; regenerate</span
+					>
 					<p class="refine-hint">
 						Edit the visual prompt to fix what the model got wrong (e.g. add "she holds the
 						sealed pouch — never opens, squeezes or pours it"), then regenerate. The caption,
@@ -555,7 +567,13 @@
 					</p>
 					<label class="refine-field">
 						<span class="drawer-block-label">Visual prompt</span>
-						<textarea rows="5" bind:value={refineScene} disabled={refining}></textarea>
+						<textarea
+							rows="5"
+							bind:value={refineScene}
+							disabled={refining}
+							aria-invalid={Boolean(refineError)}
+							aria-describedby={refineError ? 'refine-error-msg' : undefined}
+						></textarea>
 					</label>
 					{#if display.format === 'spokesperson' && display.mediaType === 'video'}
 						<label class="refine-field">
@@ -564,7 +582,11 @@
 						</label>
 					{/if}
 					{#if refineError}
-						<p class="refine-error">⚠ {truncateError(refineError)}</p>
+						<p class="refine-error" id="refine-error-msg" role="alert">
+							<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><path d="M12 9v4" /><path d="M12 17h.01" /></svg
+							>
+							{truncateError(refineError)}
+						</p>
 					{/if}
 					<div class="drawer-text-edit-actions">
 						<button type="button" class="dt-btn" onclick={() => (refineOpen = false)} disabled={refining}>
@@ -579,7 +601,8 @@
 							onclick={handleRefineClick}
 							disabled={refining || !refineScene.trim()}
 						>
-							{#if refining}Regenerating…{:else if confirmingRefine}Spend ~${refineEstimate.toFixed(2)}?{:else}↻ Regenerate (~${refineEstimate.toFixed(2)}){/if}
+							{#if refining}Regenerating…{:else if confirmingRefine}Spend ~${refineEstimate.toFixed(2)}?{:else}<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7" /><path d="M21 3v5h-5" /></svg
+								> Regenerate (~${refineEstimate.toFixed(2)}){/if}
 						</button>
 					</div>
 				</div>
@@ -598,11 +621,14 @@
 
 					{#if genImages.length}
 						<div>
-							<span class="drawer-block-label">🖼 {gen?.images ? 'Images sent to the model' : 'Reference image'}</span>
+							<span class="drawer-block-label"
+								><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><path d="m21 15-5-5L5 21" /></svg
+								> {gen?.images ? 'Images sent to the model' : 'Reference image'}</span
+							>
 							<div class="gen-imgs">
 								{#each genImages as img (img.url)}
 									<figure class="gen-img">
-										<img src={img.url} alt={img.label} loading="lazy" />
+										<img src={img.url} alt={img.label} width="72" height="72" loading="lazy" decoding="async" />
 										<figcaption>{img.label}</figcaption>
 									</figure>
 								{/each}
@@ -612,20 +638,29 @@
 
 					{#if display.ugcPrompt}
 						<div>
-							<span class="drawer-block-label">🎥 UGC prompt sent</span>
+							<span class="drawer-block-label"
+								><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m22 8-6 4 6 4V8z" /><rect x="2" y="6" width="14" height="12" rx="2" /></svg
+								> UGC prompt sent</span
+							>
 							<p class="gen-prompt">{display.ugcPrompt}</p>
 						</div>
 					{/if}
 					{#if display.script}
 						<div>
-							<span class="drawer-block-label">🎬 Script</span>
+							<span class="drawer-block-label"
+								><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="2" width="20" height="20" rx="2" /><path d="M7 2v20M17 2v20M2 12h20M2 7h5M2 17h5M17 17h5M17 7h5" /></svg
+								> Script</span
+							>
 							<p class="gen-prompt">{display.script}</p>
 						</div>
 					{/if}
 
 					{#if genAspects.length}
 						<div>
-							<span class="drawer-block-label">⚙ Models &amp; cost by aspect</span>
+							<span class="drawer-block-label"
+								><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg
+								> Models &amp; cost by aspect</span
+							>
 							<table class="gen-cost">
 								<tbody>
 									{#each genAspects as a (a.op)}
@@ -647,7 +682,10 @@
 						<!-- Fallback for posts without the full per-aspect record: the stored
 						     cost-by-provider breakdown (still real estimated spend). -->
 						<div>
-							<span class="drawer-block-label">💰 Estimated cost by provider</span>
+							<span class="drawer-block-label"
+								><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 1v22" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></svg
+								> Estimated cost by provider</span
+							>
 							<table class="gen-cost">
 								<tbody>
 									{#each costByProvider as c (c.provider)}
@@ -669,7 +707,10 @@
 
 					{#if display.format || display.mediaType}
 						<div>
-							<span class="drawer-block-label">🎬 Format</span>
+							<span class="drawer-block-label"
+								><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="2" width="20" height="20" rx="2" /><path d="M7 2v20M17 2v20M2 12h20M2 7h5M2 17h5M17 17h5M17 7h5" /></svg
+								> Format</span
+							>
 							<p class="gen-prompt">
 								{display.format ?? 'media'} · {display.mediaType}{display.mediaGenerated
 									? ' · generated'
@@ -680,7 +721,10 @@
 
 					{#if display.mediaType === 'video'}
 						<div>
-							<span class="drawer-block-label">💬 Captions & badge</span>
+							<span class="drawer-block-label"
+								><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg
+								> Captions &amp; badge</span
+							>
 							<p class="gen-prompt">
 								Captions: {display.captionsBurned
 									? `burned${display.onScreenText ? ` — “${display.onScreenText}”` : ''}`
@@ -704,7 +748,10 @@
 
 					{#if genSelections}
 						<div>
-							<span class="drawer-block-label">🎯 Selections at generation</span>
+							<span class="drawer-block-label"
+								><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="6" /><circle cx="12" cy="12" r="2" /></svg
+								> Selections at generation</span
+							>
 							<ul class="gen-sel">
 								{#if genSelections.platforms?.length}
 									<li><span>Platforms</span>{genSelections.platforms.join(', ')}</li>
@@ -722,8 +769,11 @@
 			{/if}
 
 			{#if postLevelError}
-				<div class="drawer-error">
-					<strong>⚠ Post-level error</strong>
+				<div class="drawer-error" role="alert">
+					<strong
+						><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><path d="M12 9v4" /><path d="M12 17h.01" /></svg
+						> Post-level error</strong
+					>
 					<p>{postLevelError}</p>
 				</div>
 			{/if}
@@ -817,7 +867,7 @@
 		inset: 0;
 		background: rgba(15, 23, 42, 0.55);
 		backdrop-filter: blur(4px);
-		z-index: 1000;
+		z-index: var(--z-drawer);
 	}
 
 	.drawer-text-row {
@@ -826,7 +876,11 @@
 		gap: 0.5rem;
 	}
 	.dt-edit {
+		position: relative;
 		flex-shrink: 0;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
 		width: 28px;
 		height: 28px;
 		border-radius: 8px;
@@ -835,16 +889,31 @@
 		color: var(--text-dim);
 		cursor: pointer;
 	}
+	/* Keep the small visual buttons, expand the tap area to 44x44. */
+	.dt-edit::after,
+	.drawer-close::after {
+		content: '';
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		transform: translate(-50%, -50%);
+		min-width: 44px;
+		min-height: 44px;
+		width: 100%;
+		height: 100%;
+	}
 	.dt-edit:hover { border-color: var(--accent-mid); color: var(--text); }
 	.drawer-text-edit textarea {
 		width: 100%;
-		background: var(--surface-2, rgba(255, 255, 255, 0.03));
+		background: var(--surface-2);
 		border: 1px solid var(--border);
 		border-radius: 8px;
 		color: var(--text);
 		padding: 0.6rem;
 		font: inherit;
-		font-size: 0.85rem;
+		/* 16px minimum — anything smaller makes iOS Safari zoom on focus. */
+		font-size: 1rem;
+		line-height: 1.5;
 	}
 	.drawer-text-edit-actions {
 		display: flex;
@@ -853,6 +922,12 @@
 		margin-top: 0.5rem;
 	}
 	.dt-btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.35rem;
+		min-height: 44px;
+		min-width: 44px;
 		padding: 0.4rem 0.85rem;
 		border-radius: 8px;
 		border: 1px solid var(--border);
@@ -862,7 +937,7 @@
 		cursor: pointer;
 	}
 	.dt-save {
-		background: var(--accent, #d4a017);
+		background: var(--accent);
 		border-color: transparent;
 		color: #fff;
 	}
@@ -881,13 +956,15 @@
 	}
 
 	.reschedule-row input {
-		background: var(--surface-2, rgba(255, 255, 255, 0.03));
+		background: var(--surface-2);
 		border: 1px solid var(--border);
 		border-radius: 8px;
 		color: var(--text);
 		padding: 0.4rem 0.6rem;
 		font: inherit;
-		font-size: 0.8rem;
+		/* 16px minimum — anything smaller makes iOS Safari zoom on focus. */
+		font-size: 1rem;
+		min-height: 44px;
 	}
 
 	.post-drawer {
@@ -898,7 +975,7 @@
 		width: min(580px, 100vw);
 		background: var(--surface);
 		border-left: 1px solid var(--border-strong);
-		z-index: 1001;
+		z-index: var(--z-modal);
 		display: flex;
 		flex-direction: column;
 		box-shadow: -18px 0 50px rgba(0, 0, 0, 0.35);
@@ -946,6 +1023,7 @@
 	}
 
 	.drawer-close {
+		position: relative;
 		flex-shrink: 0;
 		width: 32px;
 		height: 32px;
@@ -1019,6 +1097,10 @@
 		margin: 0;
 	}
 	.video-fallback a {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-height: 44px;
 		font-weight: 700;
 		color: #fff;
 		text-decoration: underline;
@@ -1078,32 +1160,36 @@
 	}
 	.refine-field textarea {
 		width: 100%;
-		background: var(--surface, rgba(255, 255, 255, 0.03));
+		background: var(--surface);
 		border: 1px solid var(--border);
 		border-radius: 8px;
 		color: var(--text);
 		padding: 0.6rem;
 		font: inherit;
-		font-size: 0.78rem;
+		/* 16px minimum — anything smaller makes iOS Safari zoom on focus. */
+		font-size: 1rem;
 		line-height: 1.5;
 		resize: vertical;
 	}
 	.refine-error {
 		margin: 0;
 		font-size: 0.75rem;
-		color: var(--error);
+		color: var(--error-text);
 		line-height: 1.5;
 	}
 	/* Second click state — amber to signal this spends real money right now. */
 	.dt-save.confirming {
-		background: var(--warning, #f59e0b);
+		background: var(--warning);
 	}
 
 	.drawer-media .media-el {
 		position: relative;
 		z-index: 1;
 		width: 100%;
-		max-height: 78vh;
+		/* `height: auto` keeps the intrinsic ratio in charge — without it the img's
+		   width/height attributes would apply as a presentational height hint. */
+		height: auto;
+		max-height: 78dvh;
 		object-fit: contain;
 		display: block;
 	}
@@ -1139,6 +1225,7 @@
 	.stat {
 		font-size: 0.78rem;
 		color: var(--text-muted);
+		font-variant-numeric: tabular-nums;
 	}
 
 	.stat strong {
@@ -1177,6 +1264,15 @@
 		display: block;
 	}
 
+	/* Inline SVG icons replacing the old emoji — sit on the text baseline. */
+	.drawer-block-label svg,
+	.drawer-error strong svg,
+	.refine-error svg,
+	.dt-btn svg {
+		vertical-align: -0.15em;
+		flex-shrink: 0;
+	}
+
 	.drawer-details-block {
 		background: var(--surface-2);
 		border: 1px solid var(--border);
@@ -1191,6 +1287,9 @@
 		font-weight: 600;
 		color: var(--text-muted);
 		font-size: 0.78rem;
+		/* 44px tap target without switching off the disclosure marker. */
+		min-height: 44px;
+		padding: 0.85rem 0;
 	}
 
 	.drawer-details-block div {
@@ -1294,7 +1393,7 @@
 		border-left: 3px solid var(--error);
 		border-radius: 6px;
 		padding: 0.6rem 0.85rem;
-		color: var(--error);
+		color: var(--error-text);
 	}
 
 	.drawer-error strong {
@@ -1342,15 +1441,18 @@
 
 	.breakdown-error {
 		font-size: 0.75rem;
-		color: var(--error);
+		color: var(--error-text);
 		margin: 0;
 		line-height: 1.5;
 	}
 
 	.breakdown-link {
+		display: inline-flex;
+		align-items: center;
+		min-height: 44px;
 		font-size: 0.75rem;
 		font-weight: 600;
-		color: var(--accent);
+		color: var(--accent-text);
 		text-decoration: none;
 		align-self: flex-start;
 	}
@@ -1382,6 +1484,11 @@
 	.btn-drawer-approve,
 	.btn-drawer-postnow,
 	.btn-drawer-close {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-height: 44px;
+		min-width: 44px;
 		border: 1px solid transparent;
 		border-radius: 6px;
 		padding: 0.5rem 1rem;
@@ -1394,7 +1501,7 @@
 
 	.btn-drawer-delete {
 		background: var(--error-soft);
-		color: var(--error);
+		color: var(--error-text);
 	}
 	.btn-drawer-delete:hover:not(:disabled),
 	.btn-drawer-delete.confirming {
@@ -1404,16 +1511,16 @@
 
 	.btn-drawer-refine {
 		background: var(--accent-soft);
-		color: var(--accent, #7c6aed);
+		color: var(--accent-text);
 	}
 	.btn-drawer-refine:hover:not(:disabled) {
-		background: var(--accent, #7c6aed);
+		background: var(--accent);
 		color: #fff;
 	}
 
 	.btn-drawer-approve {
 		background: var(--success-soft);
-		color: var(--success);
+		color: var(--success-text);
 	}
 	.btn-drawer-approve:hover:not(:disabled) {
 		background: var(--success);
@@ -1422,7 +1529,7 @@
 
 	.btn-drawer-postnow {
 		background: var(--cyan-soft);
-		color: var(--cyan);
+		color: var(--cyan-text);
 	}
 	.btn-drawer-postnow:hover:not(:disabled) {
 		background: var(--cyan);
@@ -1430,7 +1537,7 @@
 	}
 	/* Second click state — amber to signal this publishes live, right now. */
 	.btn-drawer-postnow.confirming {
-		background: var(--warning, #f59e0b);
+		background: var(--warning);
 		color: #fff;
 	}
 

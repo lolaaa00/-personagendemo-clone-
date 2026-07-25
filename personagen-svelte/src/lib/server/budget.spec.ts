@@ -61,6 +61,8 @@ describe('assertWithinBudget', () => {
 			const q = supabase.of('generation_events')[0] as RecordedQuery;
 			expect(q.has('eq', 'agent_id', AGENT)).toBe(true);
 			expect(q.has('select', 'est_cost')).toBe(true);
+			// Explicit high limit guards against PostgREST's silent max-rows truncation.
+			expect(q.chain.some((c) => c[0] === 'limit' && c[1] === 100000)).toBe(true);
 			const since = q.chain.find((c) => c[0] === 'gte' && c[1] === 'created_at')?.[2];
 			const expected = new Date();
 			expected.setUTCHours(0, 0, 0, 0);
@@ -124,14 +126,41 @@ describe('assertWithinBudget', () => {
 	});
 
 	describe('ledger read error FAILS OPEN', () => {
-		it('does not throw when the generation_events read errors (analytics down != stop shipping)', async () => {
+		it('does not throw when the generation_events read errors (analytics down != stop shipping) — but logs LOUDLY', async () => {
 			mockEnv.MAX_MONTHLY_SPEND_PER_USER_USD = '1'; // absurdly low: only a real sum could pass
 			mockEnv.MAX_DAILY_SPEND_PER_AGENT_USD = '1';
 			const supabase = ledger(null, { message: 'relation "generation_events" does not exist' });
+			const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-			await expect(assertWithinBudget(supabase as any, USER, AGENT)).resolves.toBeUndefined();
-			// It did try to read (both caps) — it just didn't block on the failure.
-			expect(supabase.of('generation_events')).toHaveLength(2);
+			try {
+				await expect(assertWithinBudget(supabase as any, USER, AGENT)).resolves.toBeUndefined();
+				// It did try to read (both caps) — it just didn't block on the failure.
+				expect(supabase.of('generation_events')).toHaveLength(2);
+				// Fail-open must not be SILENT: the operator needs to see that no
+				// spend cap was enforced, and why.
+				expect(errSpy).toHaveBeenCalledTimes(2);
+				expect(String(errSpy.mock.calls[0][0])).toMatch(/generation_events.*does not exist/s);
+			} finally {
+				errSpy.mockRestore();
+			}
+		});
+	});
+
+	describe('row-limit truncation guard', () => {
+		it('warns when the ledger returns exactly the query limit (sum may undercount)', async () => {
+			mockEnv.MAX_MONTHLY_SPEND_PER_USER_USD = '0';
+			mockEnv.MAX_DAILY_SPEND_PER_AGENT_USD = '1000000'; // high cap: we only care about the warning
+			const rows = Array.from({ length: 100000 }, () => ({ est_cost: 0.000001 }));
+			const supabase = ledger(rows);
+			const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+			try {
+				await expect(assertWithinBudget(supabase as any, USER, AGENT)).resolves.toBeUndefined();
+				expect(warnSpy).toHaveBeenCalledTimes(1);
+				expect(String(warnSpy.mock.calls[0][0])).toMatch(/undercount/i);
+			} finally {
+				warnSpy.mockRestore();
+			}
 		});
 	});
 

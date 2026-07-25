@@ -13,6 +13,7 @@
  * regenerating a slot that already has a post.
  */
 
+import { randomUUID } from 'node:crypto';
 import { env } from '$env/dynamic/private';
 import { getServiceSupabase } from './service-supabase';
 import { generateUgcPack, generateCinematicUgcPack } from './content/generate';
@@ -141,6 +142,14 @@ interface AgentConfig {
 interface GenerateOpts {
 	lookaheadDays: number;
 	maxToCreate: number;
+	/**
+	 * Leader-lease heartbeat. A full run is 2–5 min PER SLOT — far past the ~70s
+	 * scheduler lease — so between paid units of work the loop asks "do we still
+	 * lead?" and STOPS before the next paid generation when the answer is no
+	 * (another instance was elected and its own autopilot would double-generate
+	 * these same slots). Absent = no lease to maintain (manual "generate now").
+	 */
+	shouldContinue?: () => Promise<boolean> | boolean;
 }
 
 /** Fills missing future slots for a single agent. Returns the number created. */
@@ -263,9 +272,92 @@ async function generateDraftsForAgent(
 		// Only fill future slots — don't backfill times that already passed today.
 		if (zonedWallTimeToEpoch(slot.dateStr, slot.timeStr, tz) <= Date.now()) continue;
 
+		// Lease heartbeat BEFORE committing to the next paid generation.
+		if (opts.shouldContinue && !(await opts.shouldContinue())) {
+			console.warn(
+				`[Autopilot] Lost the scheduler lease — stopping agent ${agentId} before slot ${key} (no further paid generations this run).`
+			);
+			break;
+		}
+
 		attempted++;
 
 		const isCinematicSlot = slot.timeStr === firstSlotTimeStr;
+
+		// ── Atomic-ish slot claim (BEFORE any paid provider call) ──────────────
+		// The `taken` set above is a SNAPSHOT: two overlapping runs (lease
+		// failover, manual "generate now" racing the scheduler) both see the same
+		// free slots and both used to PAY to fill them. The claim is a placeholder
+		// posts row in status 'generating' — the same convention as async
+		// generate-post, so the scheduler's orphan sweep (GENERATION_LEASE_MS)
+		// fails it with a user-facing reason if we crash mid-generation.
+		//
+		// posts has no unique index on (agent_id, scheduled_date, scheduled_time),
+		// so this is a best-effort insert-then-verify: insert our placeholder,
+		// re-select the slot, and if another row also claimed it, delete OUR OWN
+		// row and skip. Worst case (a perfectly symmetric race) both runs back off
+		// and the slot fills on the next run — costing one run of latency, never a
+		// double payment.
+		const priorMarker = genFailures.get(key);
+		const placeholderId = priorMarker ? priorMarker.id : randomUUID();
+		const placeholderContent = JSON.stringify({ text: 'Autopilot: generating…' });
+		if (priorMarker) {
+			// Retriable failure marker already occupies the slot: claim it by
+			// CAS-updating the marker row itself to 'generating'. Zero rows updated
+			// means a concurrent run claimed it first — skip without paying.
+			const { data: claimedRows, error: claimErr } = await supabase
+				.from('posts')
+				.update({ status: 'generating', content: placeholderContent })
+				.eq('id', priorMarker.id)
+				.eq('status', 'failed')
+				.select('id');
+			if (claimErr || !claimedRows || claimedRows.length === 0) {
+				console.log(`[Autopilot] Slot ${key} claimed by a concurrent run — skipping.`);
+				continue;
+			}
+		} else {
+			const { error: claimErr } = await supabase.from('posts').insert({
+				id: placeholderId,
+				user_id: userId,
+				agent_id: agentId,
+				content: placeholderContent,
+				platforms: [],
+				status: 'generating',
+				scheduled_date: slot.dateStr,
+				scheduled_time: slot.timeStr,
+				published_at: null,
+				token_cost: 0,
+				publication_results: {}
+			});
+			if (claimErr) {
+				// Claim-first means a rejecting DB now costs $0 — but grinding the
+				// whole runway against a broken schema/RLS is still pointless noise.
+				console.error('[Autopilot] Failed to claim slot', key, claimErr);
+				if (++consecutiveInsertFailures >= MAX_CONSECUTIVE_INSERT_FAILURES) {
+					console.error(
+						`[Autopilot] ${consecutiveInsertFailures} consecutive insert failures for agent ${agentId} — aborting this agent's run.`
+					);
+					break;
+				}
+				continue;
+			}
+			// Verify the claim: if any OTHER row landed on this slot, both racers
+			// back off (delete own placeholder) — best-effort, documented above.
+			const { data: slotRows, error: verifyErr } = await supabase
+				.from('posts')
+				.select('id')
+				.eq('agent_id', agentId)
+				.eq('scheduled_date', slot.dateStr)
+				.eq('scheduled_time', slot.timeStr);
+			const others = (slotRows || []).filter((r: any) => r.id !== placeholderId);
+			if (verifyErr || others.length > 0) {
+				console.warn(
+					`[Autopilot] Slot ${key} double-claimed (or claim unverifiable) — backing off without paying.`
+				);
+				await supabase.from('posts').delete().eq('id', placeholderId).eq('status', 'generating');
+				continue;
+			}
+		}
 
 		try {
 			const genInput = { supabase, userId, agentId, platform: platforms[0], autopilot: true };
@@ -293,15 +385,13 @@ async function generateDraftsForAgent(
 					: platforms.filter((p: string) => !(VIDEO_ONLY_PLATFORMS as readonly string[]).includes(p.toLowerCase()));
 			if (slotPlatforms.length === 0) {
 				console.warn('[Autopilot] Slot skipped: image-only content, no image-capable platform connected for agent', agentId);
+				// Release the slot claim — nothing publishable to store in it.
+				await supabase.from('posts').delete().eq('id', placeholderId).eq('status', 'generating');
 				continue;
 			}
 
-			// If a prior attempt left a failure marker on this slot, REPLACE it rather
-			// than inserting a second row at the same slot.
-			const priorMarker = genFailures.get(key);
+			// Success: fill OUR placeholder row in place (it is the slot claim).
 			const row = {
-				user_id: userId,
-				agent_id: agentId,
 				content: JSON.stringify(pack.content),
 				platforms: slotPlatforms,
 				status,
@@ -309,11 +399,13 @@ async function generateDraftsForAgent(
 				scheduled_time: slot.timeStr,
 				published_at: null,
 				token_cost: pack.content?.costBreakdown?.total ?? 0,
-				publication_results: {} // clears the _gen failure marker
+				publication_results: {} // clears any _gen failure marker
 			};
-			const { error } = priorMarker
-				? await supabase.from('posts').update(row).eq('id', priorMarker.id)
-				: await supabase.from('posts').insert(row);
+			// No status guard on purpose: if a very long generation outlived
+			// GENERATION_LEASE_MS and the reaper flipped the placeholder to
+			// 'failed', overwriting that with the real (already paid-for) content
+			// is strictly better than losing it.
+			const { error } = await supabase.from('posts').update(row).eq('id', placeholderId);
 			if (!error) {
 				genFailures.delete(key);
 				created++;
@@ -323,8 +415,9 @@ async function generateDraftsForAgent(
 				// We already PAID for this generation and cannot persist it. If the DB
 				// keeps rejecting the write (schema/RLS/constraint), every further slot
 				// burns real money for nothing — stop this agent instead of grinding
-				// through the whole runway.
-				console.error('[Autopilot] Failed to insert draft for', key, error);
+				// through the whole runway. The stranded 'generating' placeholder is
+				// failed by the scheduler's orphan sweep after GENERATION_LEASE_MS.
+				console.error('[Autopilot] Failed to persist draft for', key, error);
 				if (++consecutiveInsertFailures >= MAX_CONSECUTIVE_INSERT_FAILURES) {
 					console.error(
 						`[Autopilot] ${consecutiveInsertFailures} consecutive insert failures for agent ${agentId} — aborting this agent's run to stop paying for un-persistable generations.`
@@ -339,16 +432,20 @@ async function generateDraftsForAgent(
 			// agent instead of burning LLM tokens on every remaining slot.
 			// "Exhausted balance"/"User is locked" = fal account lock (seen live).
 			// A budget-cap hit is a hard stop too: every further slot fails identically.
-			if (/No AI provider|No image generation|Exhausted balance|User is locked|budget/i.test(msg))
+			// Release the claim first: the slot stays free (old semantics), instead
+			// of a placeholder lingering in 'generating' until the orphan sweep.
+			if (/No AI provider|No image generation|Exhausted balance|User is locked|budget/i.test(msg)) {
+				await supabase.from('posts').delete().eq('id', placeholderId).eq('status', 'generating');
 				break;
+			}
 
-			// Bounded retry. Record (or increment) a generation-failure marker on the
-			// slot. Under the cap the slot stays retriable next tick — a transient
-			// provider blip must never cost a content slot. At the cap it dead-letters
-			// and is skipped, so a permanently-failing slot stops re-paying for
-			// LLM + image + TTS on every hourly run.
-			const prior = genFailures.get(key);
-			const attempts = (prior?.attempts ?? 0) + 1;
+			// Bounded retry. Turn OUR placeholder row into (or increment) a
+			// generation-failure marker on the slot. Under the cap the slot stays
+			// retriable next tick — a transient provider blip must never cost a
+			// content slot. At the cap it dead-letters and is skipped, so a
+			// permanently-failing slot stops re-paying for LLM + image + TTS on
+			// every hourly run.
+			const attempts = (priorMarker?.attempts ?? 0) + 1;
 			const marker = {
 				status: 'failed',
 				content: JSON.stringify({
@@ -357,25 +454,20 @@ async function generateDraftsForAgent(
 				}),
 				publication_results: { _gen: { attempts, last_error: msg.slice(0, 300) } }
 			};
-			const { error: markErr } = prior
-				? await supabase.from('posts').update(marker).eq('id', prior.id)
-				: await supabase.from('posts').insert({
-						user_id: userId,
-						agent_id: agentId,
-						platforms: [],
-						scheduled_date: slot.dateStr,
-						scheduled_time: slot.timeStr,
-						published_at: null,
-						token_cost: 0,
-						...marker
-					});
+			const { error: markErr } = await supabase
+				.from('posts')
+				.update(marker)
+				.eq('id', placeholderId);
 			if (markErr) {
 				console.error('[Autopilot] Could not record failure marker for', key, markErr);
-			} else if (attempts >= MAX_SLOT_ATTEMPTS) {
-				taken.add(key);
-				console.warn(
-					`[Autopilot] Slot ${key} dead-lettered after ${attempts} failed generation attempts — no further spend on it.`
-				);
+			} else {
+				genFailures.set(key, { id: placeholderId, attempts });
+				if (attempts >= MAX_SLOT_ATTEMPTS) {
+					taken.add(key);
+					console.warn(
+						`[Autopilot] Slot ${key} dead-lettered after ${attempts} failed generation attempts — no further spend on it.`
+					);
+				}
 			}
 		}
 	}
@@ -416,6 +508,8 @@ async function resolveAgentConfig(supabase: any, agentId: string): Promise<Agent
  */
 export async function runAutopilotDraftGeneration(opts?: {
 	agentId?: string;
+	/** Leader-lease heartbeat — see GenerateOpts.shouldContinue. */
+	shouldContinue?: () => Promise<boolean> | boolean;
 }): Promise<{ generated: number; agents: number }> {
 	const supabase = getServiceSupabase();
 	// 7-day runway of drafts ahead of the calendar (the review window), topped
@@ -442,9 +536,16 @@ export async function runAutopilotDraftGeneration(opts?: {
 	let totalGenerated = 0;
 	for (const cfg of configs) {
 		if (totalGenerated >= maxPerRun) break;
+		// Lease heartbeat between agents too — a multi-agent run is the longest
+		// path through here, and each agent is up to maxToCreate paid generations.
+		if (opts?.shouldContinue && !(await opts.shouldContinue())) {
+			console.warn('[Autopilot] Lost the scheduler lease — stopping before the next agent.');
+			break;
+		}
 		const created = await generateDraftsForAgent(supabase, cfg, {
 			lookaheadDays,
-			maxToCreate: maxPerRun - totalGenerated
+			maxToCreate: maxPerRun - totalGenerated,
+			shouldContinue: opts?.shouldContinue
 		});
 		totalGenerated += created;
 	}

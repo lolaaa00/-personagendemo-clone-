@@ -20,9 +20,10 @@
 </svelte:head>
 
 <div class="dashboard-page">
+	<h1 class="sr-only">Dashboard</h1>
 	<!-- Section Tag -->
 	<span class="section-tag tag-teal">Operations Center</span>
-	<h2 class="section-title">Agent Network Health & Status</h2>
+	<h2 class="section-title">Persona Roster Health & Status</h2>
 	<p class="section-lead">
 		Live status, metrics, and health scores for your autonomous creator roster.
 	</p>
@@ -33,7 +34,25 @@
 	{#if creatorAgents.length === 0}
 		<div class="onboarding-card">
 			<div class="onboarding-header">
-				<h3>🚀 Welcome to PersonaGen! Let's initialize your Agent Network</h3>
+				<h3>
+					<svg
+						width="18"
+						height="18"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
+					>
+						<path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z" />
+						<path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z" />
+						<path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0" />
+						<path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5" />
+					</svg>
+					Welcome to PersonaGen! Let's initialize your Persona Roster
+				</h3>
 				<p>Deploy your first autonomous creator and link them to social platforms to begin operations.</p>
 			</div>
 			
@@ -48,7 +67,7 @@
 					<div class="step-num">2</div>
 					<h4>Link Platforms</h4>
 					<p>Connect your persona to Instagram, TikTok, YouTube, and 12 more platforms via Zernio's hosted OAuth on the Connections tab.</p>
-					<span class="step-link disabled">Awaiting Agent Creation</span>
+					<span class="step-link disabled">Awaiting your first persona</span>
 				</div>
 				<div class="step-box">
 					<div class="step-num">3</div>
@@ -62,8 +81,48 @@
 
 	<!-- Quick Actions -->
 	<div class="quick-actions">
-		<a href="/calendar" class="btn-primary"> 📅 New Post </a>
-		<a href="/generator" class="btn-ghost"> ✨ Create Agent </a>
+		<a href="/calendar" class="btn-primary">
+			<svg
+				width="16"
+				height="16"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="2"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+				aria-hidden="true"
+			>
+				<path d="M8 2v4" />
+				<path d="M16 2v4" />
+				<rect width="18" height="18" x="3" y="4" rx="2" />
+				<path d="M3 10h18" />
+				<path d="M12 14v4" />
+				<path d="M10 16h4" />
+			</svg>
+			New Post
+		</a>
+		<a href="/generator" class="btn-ghost">
+			<svg
+				width="16"
+				height="16"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="2"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+				aria-hidden="true"
+			>
+				<path d="M9.94 14.06 3 21" />
+				<path d="M14 4.5 15.5 8l3.5 1.5-3.5 1.5L14 14.5 12.5 11 9 9.5 12.5 8 14 4.5z" />
+				<path d="M5 3v4" />
+				<path d="M3 5h4" />
+				<path d="M19 17v4" />
+				<path d="M17 19h4" />
+			</svg>
+			Create Persona
+		</a>
 	</div>
 
 	<!-- Agent Roster Table -->
@@ -115,9 +174,9 @@
 
 	/* Onboarding Card styling */
 	.onboarding-card {
-		background: linear-gradient(135deg, rgba(30, 41, 59, 0.7), rgba(15, 23, 42, 0.8));
+		background: linear-gradient(135deg, var(--surface), var(--surface-2));
 		backdrop-filter: blur(12px);
-		border: 1px solid rgba(99, 102, 241, 0.2);
+		border: 1px solid var(--accent-mid);
 		border-radius: var(--radius);
 		padding: 2rem;
 		margin-top: 1.5rem;
@@ -128,8 +187,16 @@
 		font-family: var(--font-display);
 		font-size: 1.25rem;
 		font-weight: 600;
-		color: #fff;
+		color: var(--text);
 		margin: 0 0 0.5rem 0;
+		display: flex;
+		align-items: center;
+		gap: 0.55rem;
+	}
+
+	.onboarding-header h3 svg {
+		flex-shrink: 0;
+		color: var(--accent-text);
 	}
 
 	.onboarding-header p {
@@ -157,7 +224,7 @@
 
 	.step-box:hover {
 		transform: translateY(-2px);
-		border-color: rgba(99, 102, 241, 0.4);
+		border-color: color-mix(in srgb, var(--accent) 40%, transparent);
 	}
 
 	.step-num {
@@ -167,7 +234,7 @@
 		font-size: 1.75rem;
 		font-weight: 900;
 		font-family: var(--font-mono);
-		color: rgba(99, 102, 241, 0.15);
+		color: color-mix(in srgb, var(--accent) 22%, transparent);
 		line-height: 1;
 	}
 
@@ -189,15 +256,17 @@
 	.step-link {
 		font-size: 0.75rem;
 		font-weight: 600;
-		color: var(--accent);
+		color: var(--accent-text);
 		text-decoration: none;
 		display: inline-flex;
 		align-items: center;
+		min-height: 44px;
 		transition: color 0.2s;
 	}
 
 	.step-link:hover:not(.disabled) {
-		color: #818cf8;
+		color: var(--accent);
+		text-decoration: underline;
 	}
 
 	.step-link.disabled {
@@ -252,8 +321,9 @@
 		align-items: center;
 		gap: 8px;
 		padding: 0.6rem 1.2rem;
-		border-radius: 12px;
-		background: linear-gradient(135deg, var(--accent), #6366f1);
+		min-height: 44px;
+		border-radius: var(--radius-sm);
+		background: var(--gradient-cta);
 		color: #fff;
 		font-weight: 600;
 		font-size: 0.82rem;
@@ -276,7 +346,8 @@
 		align-items: center;
 		gap: 8px;
 		padding: 0.6rem 1.2rem;
-		border-radius: 12px;
+		min-height: 44px;
+		border-radius: var(--radius-sm);
 		border: 1px solid var(--border-strong);
 		color: var(--text-muted);
 		font-weight: 600;

@@ -330,7 +330,7 @@
 
 <section class="page">
 	<header class="page-header">
-		<h1>Agent Generator</h1>
+		<h1>Create a Persona</h1>
 		<p class="subtitle">Create a new AI persona from scratch.</p>
 	</header>
 
@@ -351,7 +351,8 @@
 							fill="none"
 							stroke="currentColor"
 							stroke-width="3"
-							stroke-linecap="round"><polyline points="20 6 9 17 4 12" /></svg
+							stroke-linecap="round"
+							aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg
 						>
 					{:else}
 						<span>{step.num}</span>
@@ -382,6 +383,7 @@
 							stroke="var(--accent)"
 							stroke-width="2"
 							stroke-linecap="round"
+							aria-hidden="true"
 							><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" /><circle
 								cx="12"
 								cy="7"
@@ -403,6 +405,7 @@
 								viewBox="0 0 24 24"
 								fill="currentColor"
 								style="margin-right: 2px;"
+								aria-hidden="true"
 							>
 								<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
 							</svg>
@@ -445,8 +448,23 @@
 							class="dir-suggest-btn"
 							onclick={suggestDirections}
 							disabled={loadingIdeas || !data.brandBriefs?.length}
+							aria-busy={loadingIdeas}
 						>
-							{loadingIdeas ? '💡 Thinking…' : '💡 Suggest directions from this brand'}
+							<svg
+								width="14"
+								height="14"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								aria-hidden="true"
+								><path d="M9 18h6" /><path d="M10 22h4" /><path
+									d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0018 8 6 6 0 006 8c0 1 .23 2.23 1.5 3.5.76.76 1.23 1.52 1.41 2.5"
+								/></svg
+							>
+							{loadingIdeas ? 'Thinking…' : 'Suggest directions from this brand'}
 						</button>
 						{#if directionIdeas.length}
 							<div class="dir-chips">
@@ -469,40 +487,69 @@
 						class="brand-gen-btn"
 						onclick={generatePersonaForBrand}
 						disabled={generatingPersona || !data.brandBriefs?.length}
+						aria-busy={generatingPersona}
 					>
 						{#if generatingPersona}
 							<span class="spinner-sm"></span> Generating…
 						{:else}
-							✨ Generate persona for this brand
+							<svg
+								width="15"
+								height="15"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								aria-hidden="true"
+								><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z" /><path
+									d="M19 15l.7 1.8L21.5 18l-1.8.7L19 20.5l-.7-1.8L16.5 18l1.8-.7L19 15z"
+								/></svg
+							>
+							Generate persona for this brand
 						{/if}
 					</button>
+					<p class="sr-only" role="status" aria-live="polite">
+						{generatingPersona ? 'Generating a persona for this brand…' : ''}
+					</p>
 				</div>
 
 				<div class="form-grid">
 					<div class="field">
-						<label for="name">Agent Name</label>
+						<label for="name">Persona name</label>
 						<input
 							id="name"
 							type="text"
 							bind:value={agentName}
 							oninput={saveProgress}
+							autocomplete="off"
+							aria-invalid={agentName.length > 0 && agentName.trim().length < 2}
+							aria-describedby={agentName.length > 0 && agentName.trim().length < 2
+								? 'name-error'
+								: undefined}
 							placeholder="e.g. Luna Styles"
 						/>
 						{#if agentName.length > 0 && agentName.trim().length < 2}
-							<span class="field-error">At least 2 characters</span>
+							<span class="field-error" id="name-error" role="alert">At least 2 characters</span>
 						{/if}
 					</div>
 
 					<div class="field">
 						<label for="niche">Niche</label>
-						<select id="niche" bind:value={niche} onchange={saveProgress}>
+						<select
+							id="niche"
+							bind:value={niche}
+							onchange={saveProgress}
+							aria-invalid={niche === '' && agentName.length > 0}
+							aria-describedby={niche === '' && agentName.length > 0 ? 'niche-error' : undefined}
+						>
 							<option value="" disabled>Select a niche…</option>
 							{#each NICHES as n}
 								<option value={n}>{n}</option>
 							{/each}
 						</select>
 						{#if niche === '' && agentName.length > 0}
-							<span class="field-error">Required</span>
+							<span class="field-error" id="niche-error" role="alert">Required</span>
 						{/if}
 					</div>
 
@@ -527,25 +574,28 @@
 						stroke="var(--accent)"
 						stroke-width="2"
 						stroke-linecap="round"
+						aria-hidden="true"
 						><path d="M12 2L2 7l10 5 10-5-10-5z" /><path d="M2 17l10 5 10-5" /><path
 							d="M2 12l10 5 10-5"
 						/></svg
 					>
 					<h2>Persona</h2>
 				</div>
-				<p class="panel-desc">Define the soul, skills, and visual identity.</p>
+				<p class="panel-desc">Define the personality, content skills, and visual identity.</p>
 
 				<div class="form-stack">
 					<div class="field">
-						<label for="soul">Soul (Personality & Voice)</label>
+						<label for="soul">Personality & Voice</label>
 						<textarea
 							id="soul"
 							bind:value={soul}
 							oninput={saveProgress}
-							placeholder="Who is this agent? Their personality, tone, values, behavioral rules..."
+							aria-invalid={soul.length > 0 && soul.trim().length < 10}
+							aria-describedby="soul-count"
+							placeholder="Who is this persona? Their personality, tone, values, and how they speak..."
 							rows="6"
 						></textarea>
-						<span class="char-count"
+						<span class="char-count tabular-nums" id="soul-count"
 							>{soul.length} chars {soul.trim().length < 10 && soul.length > 0
 								? '— need at least 10'
 								: ''}</span
@@ -553,15 +603,17 @@
 					</div>
 
 					<div class="field">
-						<label for="skills">Skills & Capabilities</label>
+						<label for="skills">Content Skills</label>
 						<textarea
 							id="skills"
 							bind:value={skills}
 							oninput={saveProgress}
+							aria-invalid={skills.length > 0 && skills.trim().length < 10}
+							aria-describedby="skills-count"
 							placeholder="Content skills, scouting abilities, learning loops, platform expertise..."
 							rows="6"
 						></textarea>
-						<span class="char-count"
+						<span class="char-count tabular-nums" id="skills-count"
 							>{skills.length} chars {skills.trim().length < 10 && skills.length > 0
 								? '— need at least 10'
 								: ''}</span
@@ -571,9 +623,9 @@
 					<!-- Persona profile — generated from the brand, observable & editable here
 					     (mirrors the Profile tab). The avatar gradient is auto-picked, no UI. -->
 					<div class="profile-section">
-						<span class="profile-section-title"
-							>Persona profile <span class="pf-hint">— generated from the brand; edit anything</span></span
-						>
+						<h3 class="profile-section-title">
+							Persona profile <span class="pf-hint">— generated from the brand; edit anything</span>
+						</h3>
 						<div class="pf-row">
 							<div class="field">
 								<label for="pf-arch">Archetype</label>
@@ -647,8 +699,23 @@
 							></textarea>
 						</div>
 						{#if pinnedVoice}
-							<span class="pf-voice">🎙 Voice: <strong>{pinnedVoice}</strong> — auto-cast from the name</span
-							>
+							<span class="pf-voice">
+								<svg
+									width="13"
+									height="13"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									aria-hidden="true"
+									><rect x="9" y="2" width="6" height="11" rx="3" /><path
+										d="M19 10v1a7 7 0 01-14 0v-1"
+									/><line x1="12" y1="18" x2="12" y2="22" /></svg
+								>
+								Voice: <strong>{pinnedVoice}</strong> — auto-cast from the name
+							</span>
 						{/if}
 					</div>
 				</div>
@@ -664,20 +731,21 @@
 						stroke="var(--accent)"
 						stroke-width="2"
 						stroke-linecap="round"
+						aria-hidden="true"
 						><path d="M9 11l3 3L22 4" /><path
 							d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"
 						/></svg
 					>
 					<h2>Review & Create</h2>
 				</div>
-				<p class="panel-desc">Confirm everything looks good before creating your agent.</p>
+				<p class="panel-desc">Confirm everything looks good before creating your persona.</p>
 
 				<div class="review-card">
 					<div class="review-avatar" style="background: {GRADIENT_PRESETS[selectedGradient].value}">
 						<span>{initial}</span>
 					</div>
 					<div class="review-info">
-						<h3 class="review-name">{agentName || 'Unnamed Agent'}</h3>
+						<h3 class="review-name">{agentName || 'Unnamed Persona'}</h3>
 						<span class="review-handle">{displayHandle}</span>
 					</div>
 				</div>
@@ -696,17 +764,18 @@
 								viewBox="0 0 24 24"
 								fill="none"
 								stroke="currentColor"
-								stroke-width="2"><circle cx="12" cy="12" r="10" /></svg
+								stroke-width="2"
+								aria-hidden="true"><circle cx="12" cy="12" r="10" /></svg
 							>
 							{market}
 						</span>
 					</div>
 					<div class="review-item full">
-						<span class="review-label">Soul</span>
+						<span class="review-label">Personality & Voice</span>
 						<p class="review-text">{soul || '—'}</p>
 					</div>
 					<div class="review-item full">
-						<span class="review-label">Skills</span>
+						<span class="review-label">Content Skills</span>
 						<p class="review-text">{skills || '—'}</p>
 					</div>
 					<div class="review-item">
@@ -732,13 +801,30 @@
 							type="button"
 							class="btn-method-action"
 							disabled={isCreating || !step1Valid || !step2Valid}
+							aria-busy={isCreating}
 							onclick={createPersonaDirect}
-							style="background: var(--gradient-subtle); color: #fff; border: none; padding: 0.75rem; font-size: var(--text-xs); font-weight: 700; border-radius: var(--radius-xs); cursor: pointer; text-align: center; transition: all 0.2s;"
+							style="background: var(--gradient-cta); color: #fff; border: none; padding: 0.75rem; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; font-size: var(--text-xs); font-weight: 700; border-radius: var(--radius-xs); cursor: pointer; text-align: center; transition: all 0.2s;"
 						>
 							{#if isCreating}
 								Creating...
 							{:else}
-								👤 Create Persona
+								<svg
+									width="14"
+									height="14"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									aria-hidden="true"
+									><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" /><circle
+										cx="12"
+										cy="7"
+										r="4"
+									/></svg
+								>
+								Create Persona
 							{/if}
 						</button>
 					</div>
@@ -755,20 +841,39 @@
 							type="button"
 							class="btn-method-action"
 							disabled={isCreating || !step1Valid || !step2Valid}
+							aria-busy={isCreating}
 							onclick={createPersonaDirect}
-							style="background: var(--gradient); color: #fff; border: none; padding: 0.75rem; font-size: var(--text-xs); font-weight: 700; border-radius: var(--radius-xs); cursor: pointer; text-align: center; transition: all 0.2s;"
+							style="background: var(--gradient-cta); color: #fff; border: none; padding: 0.75rem; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; font-size: var(--text-xs); font-weight: 700; border-radius: var(--radius-xs); cursor: pointer; text-align: center; transition: all 0.2s;"
 						>
 							{#if isCreating}
 								Creating...
 							{:else}
-								🚀 Create &amp; Connect Later
+								<svg
+									width="14"
+									height="14"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									aria-hidden="true"
+									><path
+										d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 00-2.91-.09z"
+									/><path
+										d="M12 15l-3-3a22 22 0 012-3.95A12.88 12.88 0 0122 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 01-4 2z"
+									/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0" /><path
+										d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"
+									/></svg
+								>
+								Create &amp; Connect Later
 							{/if}
 						</button>
 					</div>
 				</div>
 
 				{#if createError}
-					<div class="error-banner">
+					<div class="error-banner" role="alert">
 						<svg
 							width="16"
 							height="16"
@@ -777,6 +882,7 @@
 							stroke="currentColor"
 							stroke-width="2"
 							stroke-linecap="round"
+							aria-hidden="true"
 							><circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line
 								x1="9"
 								y1="9"
@@ -803,6 +909,7 @@
 					stroke="currentColor"
 					stroke-width="2"
 					stroke-linecap="round"
+					aria-hidden="true"
 					><line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" /></svg
 				>
 				Back
@@ -826,6 +933,7 @@
 					stroke="currentColor"
 					stroke-width="2"
 					stroke-linecap="round"
+					aria-hidden="true"
 					><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></svg
 				>
 			</button>
@@ -841,6 +949,7 @@
 		onclick={() => (showVaultModal = false)}
 		role="button"
 		tabindex="0"
+		aria-label="Close the persona vault"
 		onkeydown={(e) => e.key === 'Escape' && (showVaultModal = false)}
 	>
 		<div class="modal-content glass-card" onclick={(e) => e.stopPropagation()} role="none">
@@ -852,17 +961,23 @@
 						viewBox="0 0 24 24"
 						fill="var(--accent)"
 						style="margin-top: 2px;"
+						aria-hidden="true"
 					>
 						<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
 					</svg>
 					<div>
-						<h3>Persona Vault</h3>
+						<h3 id="vault-title">Persona Vault</h3>
 						<p class="modal-subtitle">
 							3 unique personas tailored to your selected brand — pick one to load it.
 						</p>
 					</div>
 				</div>
-				<button type="button" class="close-btn" onclick={() => (showVaultModal = false)}>
+				<button
+					type="button"
+					class="close-btn"
+					aria-label="Close the persona vault"
+					onclick={() => (showVaultModal = false)}
+				>
 					<svg
 						width="18"
 						height="18"
@@ -870,6 +985,7 @@
 						fill="none"
 						stroke="currentColor"
 						stroke-width="2.5"
+						aria-hidden="true"
 					>
 						<line x1="18" y1="6" x2="6" y2="18"></line>
 						<line x1="6" y1="6" x2="18" y2="18"></line>
@@ -879,11 +995,15 @@
 
 			<div class="modal-toolbar vault-direction-bar">
 				<span class="vault-brand-label">
-					⚡ {data.brandBriefs?.find((b) => b.id === selectedBriefId)?.name ?? 'No brand selected'}
+					<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+						<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+					</svg>
+					{data.brandBriefs?.find((b) => b.id === selectedBriefId)?.name ?? 'No brand selected'}
 				</span>
 				<input
 					class="vault-direction-input"
 					type="text"
+					aria-label="Creative direction for the generated personas"
 					bind:value={direction}
 					placeholder="Direction (optional): steer all 3 options — e.g. 'Gen-Z wellness girl'"
 				/>
@@ -892,12 +1012,43 @@
 					class="randomize-btn"
 					onclick={generateVaultOptions}
 					disabled={vaultLoading || !data.brandBriefs?.length}
+					aria-busy={vaultLoading}
 				>
-					{vaultLoading
-						? 'Generating…'
-						: vaultOptions.length
-							? '🔄 Regenerate'
-							: '✨ Generate 3 options'}
+					{#if vaultLoading}
+						Generating…
+					{:else if vaultOptions.length}
+						<svg
+							width="14"
+							height="14"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							aria-hidden="true"
+							><path d="M23 4v6h-6" /><path d="M1 20v-6h6" /><path
+								d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"
+							/></svg
+						>
+						Regenerate
+					{:else}
+						<svg
+							width="14"
+							height="14"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							aria-hidden="true"
+							><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z" /><path
+								d="M19 15l.7 1.8L21.5 18l-1.8.7L19 20.5l-.7-1.8L16.5 18l1.8-.7L19 15z"
+							/></svg
+						>
+						Generate 3 options
+					{/if}
 				</button>
 			</div>
 
@@ -907,8 +1058,23 @@
 					class="dir-suggest-btn"
 					onclick={suggestDirections}
 					disabled={loadingIdeas || !data.brandBriefs?.length}
+					aria-busy={loadingIdeas}
 				>
-					{loadingIdeas ? '💡 Thinking…' : '💡 Suggest directions'}
+					<svg
+						width="14"
+						height="14"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
+						><path d="M9 18h6" /><path d="M10 22h4" /><path
+							d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0018 8 6 6 0 006 8c0 1 .23 2.23 1.5 3.5.76.76 1.23 1.52 1.41 2.5"
+						/></svg
+					>
+					{loadingIdeas ? 'Thinking…' : 'Suggest directions'}
 				</button>
 				{#if directionIdeas.length}
 					<div class="dir-chips">
@@ -927,6 +1093,8 @@
 			<div class="vault-grid">
 				{#if vaultLoading}
 					<div
+						role="status"
+						aria-live="polite"
 						style="grid-column: span 3; text-align: center; color: var(--text-dim); padding: 3rem 0;"
 					>
 						<span class="spinner-sm"></span> Generating 3 brand-tailored personas…
@@ -949,7 +1117,28 @@
 								<p class="card-desc">{p.soul}</p>
 								<div class="card-meta">
 									{#if p.appearance?.ethnicity}
-										<span class="badge-market-mini">🌍 {p.appearance.ethnicity}</span>
+										<span class="badge-market-mini">
+											<svg
+												width="11"
+												height="11"
+												viewBox="0 0 24 24"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="2"
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												aria-hidden="true"
+												><circle cx="12" cy="12" r="10" /><line
+													x1="2"
+													y1="12"
+													x2="22"
+													y2="12"
+												/><path
+													d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"
+												/></svg
+											>
+											{p.appearance.ethnicity}
+										</span>
 									{/if}
 									{#if p.gender}<span class="badge-market-mini">{p.gender}</span>{/if}
 								</div>
@@ -995,11 +1184,13 @@
 	}
 	.brand-gen-btn {
 		align-self: flex-start;
-		background: var(--gradient, linear-gradient(135deg, #7c6aed, #22d3ee));
+		/* Darkened brand gradient — the raw one never reached 4.5:1 behind a white label. */
+		background: var(--gradient-cta);
 		color: #fff;
 		border: none;
-		border-radius: var(--radius-xs, 8px);
+		border-radius: var(--radius-xs);
 		padding: 0.7rem 1.1rem;
+		min-height: 44px;
 		font-size: 0.82rem;
 		font-weight: 700;
 		cursor: pointer;
@@ -1018,13 +1209,16 @@
 	}
 	.opt-tag {
 		font-weight: 400;
-		color: var(--text-dim, #9ca3af);
+		color: var(--text-dim);
 		font-size: 0.72rem;
 	}
 	.vault-brand-label {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
 		font-weight: 700;
 		font-size: 0.85rem;
-		color: var(--text, #14172b);
+		color: var(--text);
 		white-space: nowrap;
 	}
 	.vault-direction-bar {
@@ -1036,11 +1230,13 @@
 		flex: 1;
 		min-width: 220px;
 		padding: 0.5rem 0.7rem;
-		border: 1px solid var(--border, #e6e8f0);
-		border-radius: var(--radius-xs, 8px);
-		background: var(--surface, #fff);
-		color: var(--text, #14172b);
-		font-size: 0.8rem;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-xs);
+		background: var(--surface);
+		color: var(--text);
+		/* >=16px or iOS Safari force-zooms the viewport on focus and never zooms back. */
+		font-size: 1rem;
+		min-height: 44px;
 	}
 
 	/* Brand-kit direction suggestions */
@@ -1054,19 +1250,23 @@
 	}
 	.dir-suggest-btn {
 		align-self: flex-start;
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
 		background: transparent;
-		border: 1px dashed var(--border, #cbd5e1);
-		color: var(--text-dim, #6b7280);
+		border: 1px dashed var(--border-strong);
+		color: var(--text-dim);
 		border-radius: 999px;
 		padding: 0.4rem 0.85rem;
+		min-height: 44px;
 		font-size: 0.76rem;
 		font-weight: 600;
 		cursor: pointer;
 		transition: all 0.15s ease;
 	}
 	.dir-suggest-btn:hover:not(:disabled) {
-		border-color: var(--accent, #7c6aed);
-		color: var(--accent, #7c6aed);
+		border-color: var(--accent);
+		color: var(--accent-text);
 	}
 	.dir-suggest-btn:disabled {
 		opacity: 0.5;
@@ -1078,21 +1278,25 @@
 		gap: 0.4rem;
 	}
 	.dir-chip {
-		background: var(--surface-2, #f3f4f6);
-		border: 1px solid var(--border, #e6e8f0);
-		color: var(--text, #14172b);
+		display: inline-flex;
+		align-items: center;
+		background: var(--surface-2);
+		border: 1px solid var(--border-strong);
+		color: var(--text);
 		border-radius: 999px;
 		padding: 0.35rem 0.7rem;
+		min-height: 44px;
 		font-size: 0.74rem;
 		cursor: pointer;
 		text-align: left;
 		transition: all 0.15s ease;
 	}
 	.dir-chip:hover {
-		border-color: var(--accent, #7c6aed);
+		border-color: var(--accent);
 	}
 	.dir-chip.on {
-		background: var(--accent, #7c6aed);
+		/* Darkened so the white label clears AA in both themes. */
+		background: var(--accent-dark);
 		color: #fff;
 		border-color: transparent;
 	}
@@ -1183,10 +1387,10 @@
 		transition: color 0.3s;
 	}
 	.step-item.active .step-label {
-		color: var(--accent);
+		color: var(--accent-text);
 	}
 	.step-item.completed .step-label {
-		color: var(--success);
+		color: var(--success-text);
 	}
 
 	.step-line {
@@ -1249,7 +1453,7 @@
 	}
 	.field-error {
 		font-size: 0.7rem;
-		color: var(--error);
+		color: var(--error-text);
 		margin-top: 0.25rem;
 	}
 
@@ -1272,7 +1476,7 @@
 	}
 	.handle-input-wrap:focus-within {
 		border-color: var(--accent-mid);
-		box-shadow: 0 0 0 3px rgba(124, 106, 237, 0.08);
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 8%, transparent);
 	}
 	.handle-prefix {
 		padding: 10px 0 10px 14px;
@@ -1297,7 +1501,7 @@
 		border-radius: var(--radius-sm);
 		background: var(--cyan-soft);
 		border: 1px solid var(--cyan-mid);
-		color: var(--cyan);
+		color: var(--cyan-text);
 		font-weight: 600;
 		font-size: 0.88rem;
 	}
@@ -1309,11 +1513,15 @@
 		gap: 1rem;
 		margin-top: 0.5rem;
 		padding-top: 1rem;
-		border-top: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+		border-top: 1px solid var(--border);
 	}
+	/* Promoted from a <span> to a real <h3> for the outline — the type stays a
+	   small uppercase label, so the display face is overridden back to body. */
 	.profile-section-title {
+		font-family: var(--font-body);
 		font-size: 0.72rem;
 		font-weight: 700;
+		line-height: inherit;
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
 		color: var(--text-dim);
@@ -1334,6 +1542,9 @@
 		min-width: 180px;
 	}
 	.pf-voice {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
 		font-size: var(--text-xs);
 		color: var(--text-dim);
 	}
@@ -1367,7 +1578,7 @@
 		font-family: var(--font-display);
 	}
 	.review-handle {
-		color: var(--accent);
+		color: var(--accent-text);
 		font-size: var(--text-base);
 		font-family: var(--font-mono);
 	}
@@ -1400,7 +1611,7 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 6px;
-		color: var(--cyan);
+		color: var(--cyan-text);
 	}
 	.review-text {
 		font-size: 0.82rem;
@@ -1424,8 +1635,8 @@
 		padding: 0.75rem 1rem;
 		border-radius: var(--radius-xs);
 		background: var(--error-soft);
-		border: 1px solid rgba(239, 68, 68, 0.2);
-		color: var(--error);
+		border: 1px solid color-mix(in srgb, var(--error) 20%, transparent);
+		color: var(--error-text);
 		font-size: 0.82rem;
 		margin-top: 1rem;
 	}
@@ -1443,6 +1654,7 @@
 		align-items: center;
 		gap: 6px;
 		padding: 10px 22px;
+		min-height: 44px;
 		border-radius: var(--radius-sm);
 		border: 1px solid var(--border-strong);
 		background: transparent;
@@ -1466,8 +1678,10 @@
 		align-items: center;
 		gap: 8px;
 		padding: 10px 28px;
+		min-height: 44px;
 		border-radius: var(--radius-sm);
-		background: var(--gradient-subtle);
+		/* Darkened brand gradient — the raw one never reached 4.5:1 behind a white label. */
+		background: var(--gradient-cta);
 		color: #fff;
 		border: none;
 		cursor: pointer;
@@ -1530,8 +1744,10 @@
 		align-items: center;
 		gap: 4px;
 		padding: 8px 14px;
+		min-height: 44px;
 		border-radius: var(--radius-xs);
-		background: var(--gradient);
+		/* Darkened brand gradient — the raw one never reached 4.5:1 behind a white label. */
+		background: var(--gradient-cta);
 		color: #fff;
 		border: none;
 		cursor: pointer;
@@ -1589,7 +1805,8 @@
 	.modal-content {
 		width: 100%;
 		max-width: 900px;
-		max-height: 85vh;
+		/* dvh so mobile browser chrome can't clip the modal's footer. */
+		max-height: 85dvh;
 		display: flex;
 		flex-direction: column;
 		overflow: hidden;
@@ -1628,12 +1845,17 @@
 	}
 
 	.close-btn {
+		display: grid;
+		place-items: center;
 		background: transparent;
 		border: none;
 		color: var(--text-dim);
 		cursor: pointer;
 		transition: color 0.2s;
 		padding: 4px;
+		/* Icon stays 18px; the box grows to a 44px target. */
+		min-width: 44px;
+		min-height: 44px;
 	}
 
 	.close-btn:hover {
@@ -1711,10 +1933,11 @@
 		align-items: center;
 		gap: 6px;
 		padding: 8px 16px;
+		min-height: 44px;
 		border-radius: var(--radius-xs);
 		background: var(--accent-soft);
 		border: 1px solid var(--accent-mid);
-		color: var(--accent);
+		color: var(--accent-text);
 		font-weight: 600;
 		font-size: 0.8rem;
 		cursor: pointer;
@@ -1724,7 +1947,7 @@
 	}
 
 	.randomize-btn:hover {
-		background: rgba(124, 106, 237, 0.25);
+		background: color-mix(in srgb, var(--accent) 25%, transparent);
 		color: var(--text);
 	}
 
@@ -1803,7 +2026,7 @@
 		padding: 2px 6px;
 		border-radius: var(--radius-full);
 		background: var(--accent-soft);
-		color: var(--accent);
+		color: var(--accent-text);
 		font-weight: 600;
 		white-space: nowrap;
 	}
@@ -1834,8 +2057,11 @@
 	}
 
 	.badge-market-mini {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
 		font-size: 0.65rem;
-		color: var(--cyan);
+		color: var(--cyan-text);
 		font-weight: 600;
 	}
 

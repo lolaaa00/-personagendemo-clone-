@@ -102,6 +102,10 @@ function db(existingPosts: Array<{ scheduled_date: string; scheduled_time: strin
 		if (q.table === 'posts' && q.op === 'select') {
 			// stale-draft lookup filters on status='draft'; the window lookup doesn't
 			if (q.has('eq', 'status', 'draft')) return { data: [], error: null };
+			// slot-claim VERIFY (eq on a single scheduled_date, not .in): no
+			// concurrent claimant by default — our own just-inserted placeholder is
+			// filtered out by id, so [] is equivalent to "only our row exists"
+			if (q.has('eq', 'scheduled_date')) return { data: [], error: null };
 			return { data: existingPosts, error: null };
 		}
 		if (q.table === 'posts' && q.op === 'insert') return { data: null, error: null };
@@ -257,7 +261,7 @@ describe('autopilot slot idempotency (no double spend)', () => {
 		expect(generateCinematicUgcPack).not.toHaveBeenCalled();
 	});
 
-	it('aborts the agent after repeated insert failures instead of paying for un-persistable generations', async () => {
+	it('aborts the agent after repeated insert failures — and pays NOTHING (claim precedes generation)', async () => {
 		const handler: Handler = (q: any) => {
 			if (q.table === 'agent_configs') return { data: CFG, error: null };
 			if (q.table === 'connections') return { data: [{ platform: 'instagram' }], error: null };
@@ -271,12 +275,12 @@ describe('autopilot slot idempotency (no double spend)', () => {
 		const res = await runAutopilotDraftGeneration({ agentId: AGENT });
 
 		expect(res.generated).toBe(0);
-		// Every attempt is a REAL paid generation. If the DB keeps rejecting the write,
-		// grinding the whole 6-slot runway would burn 6x the money for nothing — so the
-		// agent aborts after MAX_CONSECUTIVE_INSERT_FAILURES (3). This bounds the spend.
+		// The slot claim (placeholder insert) now happens BEFORE the paid call, so
+		// a DB that rejects every write costs $0 — and the agent still aborts after
+		// MAX_CONSECUTIVE_INSERT_FAILURES (3) instead of grinding the whole runway.
 		expect(supabaseRef.current.of('posts', 'insert')).toHaveLength(3);
 		expect(generateUgcPack.mock.calls.length + generateCinematicUgcPack.mock.calls.length).toBe(
-			3
+			0
 		);
 	});
 });
@@ -286,11 +290,22 @@ describe('autopilot draft status', () => {
 		supabaseRef.current = db([]);
 		await runAutopilotDraftGeneration({ agentId: AGENT });
 
-		const statuses = supabaseRef.current.of('posts', 'insert').map((q: any) => q.payload.status);
-		expect(new Set(statuses)).toEqual(new Set(['draft']));
+		// Claim-first flow: every insert is a 'generating' placeholder (the slot
+		// claim), and the paid content lands via an UPDATE that finalizes the row
+		// as a draft — never 'scheduled', never straight to live.
+		const insertStatuses = supabaseRef.current
+			.of('posts', 'insert')
+			.map((q: any) => q.payload.status);
+		expect(new Set(insertStatuses)).toEqual(new Set(['generating']));
+		const finalStatuses = supabaseRef.current
+			.of('posts', 'update')
+			.map((q: any) => q.payload.status)
+			.filter((s: any) => s !== undefined);
+		expect(finalStatuses.length).toBeGreaterThan(0);
+		expect(new Set(finalStatuses)).toEqual(new Set(['draft']));
 	});
 
-	it('image-only content is not booked onto a video-only platform', async () => {
+	it('image-only content is not booked onto a video-only platform (claim released)', async () => {
 		const handler: Handler = (q) => {
 			if (q.table === 'agent_configs') return { data: CFG, error: null };
 			if (q.table === 'connections') return { data: [{ platform: 'tiktok' }], error: null };
@@ -304,6 +319,82 @@ describe('autopilot draft status', () => {
 		const res = await runAutopilotDraftGeneration({ agentId: AGENT });
 
 		expect(res.generated).toBe(0);
-		expect(supabaseRef.current.of('posts', 'insert')).toHaveLength(0);
+		// Each unbookable slot's placeholder claim is deleted again — no stranded
+		// 'generating' rows, and no post ever finalized to draft/scheduled.
+		const inserts = supabaseRef.current.of('posts', 'insert');
+		const deletes = supabaseRef.current.of('posts', 'delete');
+		expect(deletes).toHaveLength(inserts.length);
+		const insertedIds = inserts.map((q: any) => q.payload.id);
+		for (const d of deletes) expect(insertedIds).toContain(d.eqOf('id'));
+		const finalized = supabaseRef.current
+			.of('posts', 'update')
+			.map((q: any) => q.payload.status)
+			.filter((s: any) => s === 'draft' || s === 'scheduled');
+		expect(finalized).toHaveLength(0);
+	});
+});
+
+// ── concurrency: lease heartbeat + atomic slot claims ───────────────────────
+
+describe('autopilot concurrency guards', () => {
+	it('stops BEFORE the next paid generation once shouldContinue (lease renewal) fails', async () => {
+		supabaseRef.current = db([]);
+		// Call order: 1 = outer per-agent check, then one check per slot BEFORE
+		// its paid generation. Calls 1–3 succeed (2 slots generate), then the
+		// lease is lost and every later renewal fails.
+		let calls = 0;
+		const shouldContinue = vi.fn(async () => ++calls <= 3);
+
+		const res = await runAutopilotDraftGeneration({ agentId: AGENT, shouldContinue });
+
+		expect(res.generated).toBe(2);
+		// The money assertion: NOTHING was paid after the lease was lost.
+		expect(generateUgcPack.mock.calls.length + generateCinematicUgcPack.mock.calls.length).toBe(
+			2
+		);
+	});
+
+	it('claims the slot with a generating placeholder BEFORE the paid generation call', async () => {
+		supabaseRef.current = db([]);
+		generateCinematicUgcPack.mockImplementation(async () => {
+			// At paid-call time the slot claim must already be in the DB.
+			const lastInsert = supabaseRef.current.of('posts', 'insert').at(-1);
+			expect(lastInsert?.payload.status).toBe('generating');
+			return pack();
+		});
+
+		await runAutopilotDraftGeneration({ agentId: AGENT });
+
+		expect(generateCinematicUgcPack).toHaveBeenCalled();
+	});
+
+	it('a slot double-claimed by a concurrent run is skipped WITHOUT paying (own row deleted)', async () => {
+		const handler: Handler = (q) => {
+			if (q.table === 'agent_configs') return { data: CFG, error: null };
+			if (q.table === 'connections') return { data: [{ platform: 'instagram' }], error: null };
+			if (q.table === 'posts' && q.op === 'select') {
+				if (q.has('eq', 'status', 'draft')) return { data: [], error: null };
+				// VERIFY select: another run's placeholder is also sitting on the slot.
+				if (q.has('eq', 'scheduled_date'))
+					return { data: [{ id: 'someone-elses-claim' }], error: null };
+				return { data: [], error: null };
+			}
+			return { data: null, error: null };
+		};
+		supabaseRef.current = createMockSupabase(handler);
+
+		const res = await runAutopilotDraftGeneration({ agentId: AGENT });
+
+		expect(res.generated).toBe(0);
+		// Backed off on every slot: zero paid calls, and every own placeholder was
+		// deleted (never the other run's row).
+		expect(generateUgcPack).not.toHaveBeenCalled();
+		expect(generateCinematicUgcPack).not.toHaveBeenCalled();
+		const inserts = supabaseRef.current.of('posts', 'insert');
+		const deletes = supabaseRef.current.of('posts', 'delete');
+		expect(inserts.length).toBeGreaterThan(0);
+		expect(deletes).toHaveLength(inserts.length);
+		const insertedIds = inserts.map((q: any) => q.payload.id);
+		for (const d of deletes) expect(insertedIds).toContain(d.eqOf('id'));
 	});
 });

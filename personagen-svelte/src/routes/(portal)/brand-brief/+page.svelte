@@ -1176,7 +1176,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 					{lastSaved ? `— Last saved: ${lastSaved}` : '— Not saved yet'}
 				</span>
 				<button class="action-btn" onclick={exportBrief}>
-					<svg
+					<svg aria-hidden="true"
 						width="14"
 						height="14"
 						viewBox="0 0 24 24"
@@ -1195,7 +1195,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 						disabled={deletingBrief}
 						title="Permanently delete this brief"
 					>
-						<svg
+						<svg aria-hidden="true"
 							width="14"
 							height="14"
 							viewBox="0 0 24 24"
@@ -1211,7 +1211,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 					</button>
 				{/if}
 				<button class="action-btn primary" onclick={(e) => saveAll(e)}>
-					<svg
+					<svg aria-hidden="true"
 						width="14"
 						height="14"
 						viewBox="0 0 24 24"
@@ -1230,14 +1230,19 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 	</header>
 
 	<!-- Tabs -->
-	<div class="tabs">
+	<div class="tabs" role="tablist" aria-label="Brand brief sections">
 		{#each TABS as tab}
 			<button
 				class="tab-btn"
 				class:active={activeTab === tab.key}
 				onclick={() => (activeTab = tab.key)}
+				role="tab"
+				id="brand-brief-tab-{tab.key}"
+				aria-selected={activeTab === tab.key}
+				aria-controls="brand-brief-tabpanel"
+				aria-label={tab.label}
 			>
-				<svg
+				<svg aria-hidden="true"
 					width="16"
 					height="16"
 					viewBox="0 0 24 24"
@@ -1253,13 +1258,19 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 	</div>
 
 	<!-- Tab Content -->
-	<div class="tab-body">
+	<div
+		class="tab-body"
+		id="brand-brief-tabpanel"
+		role="tabpanel"
+		tabindex="-1"
+		aria-labelledby="brand-brief-tab-{activeTab}"
+	>
 		{#if activeTab === 'overview'}
 			<div class="panel" style="animation: fadeUp 0.25s var(--ease-out);">
 				<!-- Scraper block -->
 				<div class="scrape-card">
 					<div class="scrape-card-header">
-						<svg
+						<svg aria-hidden="true"
 							class="scrape-badge-icon"
 							width="16"
 							height="16"
@@ -1271,19 +1282,28 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 						>
 						<span class="scrape-card-title">Firecrawl E-Commerce Scraper</span>
 					</div>
-					<p class="scrape-card-desc">
+					<p class="scrape-card-desc" id="scrape-store-desc">
 						Crawl any brand store (e.g. <code>honeyforx.com</code>) to automatically extract brand
 						voice details, mission statement, demographics, and active physical product listings
 						with photo references.
 					</p>
 					<div class="scrape-form">
+						<label class="sr-only" for="scrape-store-url">Store URL to crawl</label>
 						<input
+							id="scrape-store-url"
 							type="text"
 							bind:value={storeUrl}
 							class="scrape-input"
 							placeholder="e.g. honeyforx.com"
+							autocomplete="url"
+							aria-describedby="scrape-store-desc"
 						/>
-						<button class="scrape-submit-btn" onclick={runScrape} disabled={scraping}>
+						<button
+							class="scrape-submit-btn"
+							onclick={runScrape}
+							disabled={scraping}
+							aria-busy={scraping}
+						>
 							{#if scraping}
 								<div class="btn-spinner"></div>
 								Scraping Store...
@@ -1292,10 +1312,13 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 							{/if}
 						</button>
 					</div>
+					<p class="sr-only" role="status" aria-live="polite">
+						{scraping ? 'Scraping store, extracting brand details. Please wait.' : ''}
+					</p>
 				</div>
 
 				<div class="panel-header-row">
-					<h3>Brand Overview</h3>
+					<h2>Brand Overview</h2>
 				</div>
 				<p class="panel-desc">Core brand positioning and messaging.</p>
 
@@ -1314,10 +1337,10 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 							<label for="tagline">Tagline</label>
 							<div class="ai-btn-group">
 								<button class="enrich-btn" onclick={() => generateField('Tagline', (v) => (tagline = v))} disabled={generating['Tagline']}>
-									{#if generating['Tagline']}<div class="enrich-spinner"></div>Generating...{:else}✨ Generate{/if}
+									{#if generating['Tagline']}<div class="enrich-spinner"></div>Generating...{:else}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.7 4.6L18 9l-4.3 1.4L12 15l-1.7-4.6L6 9l4.3-1.4z" /><path d="M18.5 15l.6 1.6 1.6.6-1.6.6-.6 1.6-.6-1.6-1.6-.6 1.6-.6z" /></svg>Generate{/if}
 								</button>
 								<button class="enrich-btn spin" onclick={() => spinField('Tagline', tagline)} disabled={spinning['Tagline'] || !tagline.trim()}>
-									{#if spinning['Tagline']}<div class="enrich-spinner"></div>Spinning...{:else}↩ Spin{/if}
+									{#if spinning['Tagline']}<div class="enrich-spinner"></div>Spinning...{:else}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" /><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" /></svg>Spin{/if}
 								</button>
 							</div>
 						</div>
@@ -1338,13 +1361,13 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 							<label for="mission">Mission Statement</label>
 							<div class="ai-btn-group">
 								<button class="enrich-btn" onclick={() => generateField('Mission Statement', (v) => (mission = v))} disabled={generating['Mission Statement']}>
-									{#if generating['Mission Statement']}<div class="enrich-spinner"></div>Generating...{:else}✨ Generate{/if}
+									{#if generating['Mission Statement']}<div class="enrich-spinner"></div>Generating...{:else}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.7 4.6L18 9l-4.3 1.4L12 15l-1.7-4.6L6 9l4.3-1.4z" /><path d="M18.5 15l.6 1.6 1.6.6-1.6.6-.6 1.6-.6-1.6-1.6-.6 1.6-.6z" /></svg>Generate{/if}
 								</button>
 								<button class="enrich-btn" onclick={() => extendField('Mission Statement', mission, (v) => (mission = v))} disabled={extending['Mission Statement'] || !mission.trim()}>
 									{#if extending['Mission Statement']}<div class="enrich-spinner"></div>Enriching...{:else}AI Enrich{/if}
 								</button>
 								<button class="enrich-btn spin" onclick={() => spinField('Mission Statement', mission)} disabled={spinning['Mission Statement'] || !mission.trim()}>
-									{#if spinning['Mission Statement']}<div class="enrich-spinner"></div>Spinning...{:else}↩ Spin{/if}
+									{#if spinning['Mission Statement']}<div class="enrich-spinner"></div>Spinning...{:else}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" /><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" /></svg>Spin{/if}
 								</button>
 							</div>
 						</div>
@@ -1364,43 +1387,21 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 			</div>
 		{:else if activeTab === 'products'}
 			<div class="panel" style="animation: fadeUp 0.25s var(--ease-out);">
-				<h3>Active Store Products</h3>
+				<h2>Active Store Products</h2>
 				<p class="panel-desc">
 					Products scraped from your e-commerce store with physical reference photos for UGC
 					generation.
 				</p>
 
 				{#if products.length > 0}
-					<div class="products-toolbar">
-						<span class="products-count">
-							{products.length} product{products.length === 1 ? '' : 's'}
-							{#if selectedProductIds.length > 0}
-								· <strong>{selectedProductIds.length} selected</strong>
-							{/if}
-						</span>
-						<div class="products-toolbar-actions">
-							<button
-								type="button"
-								class="mini-btn"
-								onclick={selectAllProducts}
-								disabled={selectedProductIds.length === products.length}>Select all</button
-							>
-							<button
-								type="button"
-								class="mini-btn"
-								onclick={clearProductSelection}
-								disabled={selectedProductIds.length === 0}>Clear</button
-							>
-							<button
-								type="button"
-								class="mini-btn danger"
-								onclick={() => deleteProducts(selectedProductIds)}
-								disabled={selectedProductIds.length === 0}
-							>
-								Delete selected{selectedProductIds.length > 0 ? ` (${selectedProductIds.length})` : ''}
-							</button>
-						</div>
-					</div>
+					<SelectionToolbar
+						total={products.length}
+						selectedCount={selectedProductIds.length}
+						noun="product"
+						onSelectAll={selectAllProducts}
+						onClear={clearProductSelection}
+						onDelete={() => deleteProducts(selectedProductIds)}
+					/>
 				{/if}
 
 				<div class="products-grid">
@@ -1415,11 +1416,19 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 										title="Click to enlarge"
 										aria-label="Enlarge photo of {prod.name}"
 									>
-										<img src={prod.photoUrl} alt={prod.name} class="product-photo" />
+										<img
+											src={prod.photoUrl}
+											alt={prod.name}
+											class="product-photo"
+											width="320"
+											height="180"
+											loading="lazy"
+											decoding="async"
+										/>
 									</button>
 								{:else}
 									<div class="product-photo-fallback">
-										<svg
+										<svg aria-hidden="true"
 											width="24"
 											height="24"
 											viewBox="0 0 24 24"
@@ -1441,6 +1450,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 										type="checkbox"
 										checked={selectedProductIds.includes(prod.id)}
 										onchange={() => toggleProductSelected(prod.id)}
+										aria-label="Select {prod.name} for bulk actions"
 									/>
 								</label>
 								<div class="product-card-actions">
@@ -1451,7 +1461,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 										title="Edit product"
 										aria-label="Edit {prod.name}"
 									>
-										<svg
+										<svg aria-hidden="true"
 											width="14"
 											height="14"
 											viewBox="0 0 24 24"
@@ -1471,7 +1481,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 										title="Delete product"
 										aria-label="Delete {prod.name}"
 									>
-										<svg
+										<svg aria-hidden="true"
 											width="14"
 											height="14"
 											viewBox="0 0 24 24"
@@ -1507,7 +1517,14 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 											onclick={() => openImage(editDraft!.photoUrl, editDraft!.name)}
 											title="Click to enlarge"
 										>
-											<img src={editDraft.photoUrl} alt="New photo preview" />
+											<img
+												src={editDraft.photoUrl}
+												alt="Preview of the new photo for {editDraft.name}"
+												width="56"
+												height="56"
+												loading="lazy"
+												decoding="async"
+											/>
 										</button>
 									{/if}
 									<div class="pe-actions">
@@ -1519,7 +1536,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 								</div>
 							{:else}
 								<div class="product-details">
-									<h4 class="product-title">{prod.name}</h4>
+									<h3 class="product-title">{prod.name}</h3>
 									<p class="product-desc">{prod.description}</p>
 									<div class="product-id-badge">ID: {prod.id}</div>
 								</div>
@@ -1529,7 +1546,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 
 					{#if products.length === 0}
 						<div class="products-empty">
-							<svg
+							<svg aria-hidden="true"
 								width="48"
 								height="48"
 								viewBox="0 0 24 24"
@@ -1557,43 +1574,102 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 					margin-bottom: 1.5rem;
 					background: var(--surface-2);
 				">
-					<h4 style="margin: 0 0 0.75rem 0; font-size: 0.85rem; font-weight: 700; color: var(--accent);">🔗 Add Product by URL</h4>
+					<h3 style="margin: 0 0 0.75rem 0; font-size: 0.85rem; font-weight: 700; color: var(--accent); display: flex; align-items: center; gap: 0.4rem;">
+						<svg
+							width="14"
+							height="14"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							aria-hidden="true"
+							><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" /><path
+								d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"
+							/></svg
+						>
+						Add Product by URL
+					</h3>
 					<div style="display: flex; gap: 0.6rem; margin-bottom: 1.25rem; flex-wrap: wrap;">
+						<label class="sr-only" for="product-scrape-url">Product page URL</label>
 						<input
+							id="product-scrape-url"
 							type="url"
 							placeholder="https://yourstore.com/products/honey-sticks"
 							bind:value={productScrapeUrl}
-							style="flex: 1; min-width: 220px;"
+							autocomplete="url"
+							style="flex: 1; min-width: 220px; font-size: 1rem;"
 						/>
-						<button class="scrape-submit-btn" onclick={scrapeProductByUrl} disabled={scrapingProduct}>
-							{scrapingProduct ? 'Scraping…' : '🔥 Scrape Product'}
+						<button
+							class="scrape-submit-btn"
+							onclick={scrapeProductByUrl}
+							disabled={scrapingProduct}
+							aria-busy={scrapingProduct}
+						>
+							{#if scrapingProduct}
+								Scraping…
+							{:else}
+								<svg
+									width="14"
+									height="14"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									aria-hidden="true"
+									><path
+										d="M8.5 14.5A2.5 2.5 0 0011 12c0-1.38-.5-2-1-3-1.07-2.14-.22-4.05 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 11-14 0c0-1.15.43-2.29 1-3a2.5 2.5 0 002.5 2.5z"
+									/></svg
+								>
+								Scrape Product
+							{/if}
 						</button>
 					</div>
-					<h4 style="margin: 0 0 0.75rem 0; font-size: 0.85rem; font-weight: 700; color: var(--accent);">➕ Add Product Manually</h4>
+					<p class="sr-only" role="status" aria-live="polite">
+						{scrapingProduct ? 'Scraping product page. Please wait.' : ''}
+					</p>
+					<h3 style="margin: 0 0 0.75rem 0; font-size: 0.85rem; font-weight: 700; color: var(--accent); display: flex; align-items: center; gap: 0.4rem;">
+						<svg
+							width="14"
+							height="14"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2.5"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							aria-hidden="true"
+							><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg
+						>
+						Add Product Manually
+					</h3>
 					<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
 						<div class="field">
 							<label for="mp-name" style="font-size: 0.72rem; font-weight: 600; text-transform: uppercase; color: var(--text-dim);">Product Name</label>
-							<input id="mp-name" type="text" bind:value={newProductName} placeholder="e.g. Premium Honey Extract" style="width: 100%; padding: 0.5rem; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 0.82rem;" />
+							<input id="mp-name" type="text" bind:value={newProductName} placeholder="e.g. Premium Honey Extract" style="width: 100%; padding: 0.5rem; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 1rem;" />
 						</div>
 						<div class="field">
 							<label for="mp-price" style="font-size: 0.72rem; font-weight: 600; text-transform: uppercase; color: var(--text-dim);">Price</label>
-							<input id="mp-price" type="text" bind:value={newProductPrice} placeholder="e.g. Rs. 2,450" style="width: 100%; padding: 0.5rem; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 0.82rem;" />
+							<input id="mp-price" type="text" bind:value={newProductPrice} placeholder="e.g. Rs. 2,450" style="width: 100%; padding: 0.5rem; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 1rem;" />
 						</div>
 					</div>
 					<div class="field" style="margin-top: 0.75rem;">
 						<label for="mp-desc" style="font-size: 0.72rem; font-weight: 600; text-transform: uppercase; color: var(--text-dim);">Description</label>
-						<textarea id="mp-desc" bind:value={newProductDesc} placeholder="Brief product description for UGC content generation..." rows="2" style="width: 100%; padding: 0.5rem; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 0.82rem; resize: vertical;"></textarea>
+						<textarea id="mp-desc" bind:value={newProductDesc} placeholder="Brief product description for UGC content generation..." rows="2" style="width: 100%; padding: 0.5rem; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 1rem; resize: vertical;"></textarea>
 					</div>
 					<div class="field" style="margin-top: 0.75rem;">
 						<label for="mp-photo" style="font-size: 0.72rem; font-weight: 600; text-transform: uppercase; color: var(--text-dim);">Image URL (optional)</label>
-						<input id="mp-photo" type="url" bind:value={newProductPhoto} placeholder="https://example.com/product.jpg" style="width: 100%; padding: 0.5rem; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 0.82rem;" />
+						<input id="mp-photo" type="url" bind:value={newProductPhoto} placeholder="https://example.com/product.jpg" style="width: 100%; padding: 0.5rem; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 1rem;" />
 					</div>
 					<button
-						style="margin-top: 0.75rem; padding: 0.5rem 1.25rem; border-radius: 8px; background: var(--accent); color: #fff; border: none; font-size: 0.82rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 0.4rem; transition: all 0.2s;"
+						style="margin-top: 0.75rem; padding: 0.5rem 1.25rem; min-height: 44px; border-radius: 8px; background: var(--accent); color: #fff; border: none; font-size: 0.82rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 0.4rem; transition: all 0.2s;"
 						onclick={addManualProduct}
 						disabled={!newProductName.trim()}
 					>
-						<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+						<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
 						Add Product
 					</button>
 				</div>
@@ -1601,7 +1677,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 				<div class="ugc-presets-section">
 					<div class="divider-line"></div>
 					<div class="ugc-presets-header">
-						<h4>DTC UGC Meta-Prompt Presets</h4>
+						<h3>DTC UGC Meta-Prompt Presets</h3>
 						<p class="presets-desc">
 							Select an E-Commerce script style below to auto-populate your video format guidelines.
 						</p>
@@ -1621,13 +1697,13 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 							<label for="ugcGuidelines">UGC Formats & Script Guidelines</label>
 							<div class="ai-btn-group">
 								<button class="enrich-btn" onclick={() => generateField('UGC Video Script Guidelines and Formats for this brand', (v) => (ugcGuidelines = v))} disabled={generating['UGC Guidelines']}>
-									{#if generating['UGC Guidelines']}<div class="enrich-spinner"></div>Generating...{:else}✨ Generate{/if}
+									{#if generating['UGC Guidelines']}<div class="enrich-spinner"></div>Generating...{:else}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.7 4.6L18 9l-4.3 1.4L12 15l-1.7-4.6L6 9l4.3-1.4z" /><path d="M18.5 15l.6 1.6 1.6.6-1.6.6-.6 1.6-.6-1.6-1.6-.6 1.6-.6z" /></svg>Generate{/if}
 								</button>
 								<button class="enrich-btn" onclick={() => extendField('UGC Guidelines', ugcGuidelines, (v) => (ugcGuidelines = v))} disabled={extending['UGC Guidelines'] || !ugcGuidelines.trim()}>
 									{#if extending['UGC Guidelines']}<div class="enrich-spinner"></div>Enriching...{:else}AI Enrich{/if}
 								</button>
 								<button class="enrich-btn spin" onclick={() => spinField('UGC Guidelines', ugcGuidelines)} disabled={spinning['UGC Guidelines'] || !ugcGuidelines.trim()}>
-									{#if spinning['UGC Guidelines']}<div class="enrich-spinner"></div>...{:else}↩ Spin{/if}
+									{#if spinning['UGC Guidelines']}<div class="enrich-spinner"></div>...{:else}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" /><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" /></svg>Spin{/if}
 								</button>
 							</div>
 						</div>
@@ -1640,25 +1716,49 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 			</div>
 		{:else if activeTab === 'visual'}
 			<div class="panel" style="animation: fadeUp 0.25s var(--ease-out);">
-				<h3>Visual Identity</h3>
+				<h2>Visual Identity</h2>
 				<p class="panel-desc">Colors, typography, and visual assets.</p>
 
 				<div class="form-stack">
 					<div class="color-row">
 						<div class="color-field">
-							<label>Primary Color</label>
+							<label for="primaryColorPicker">Primary Color</label>
 							<div class="color-input-wrap">
-								<input type="color" bind:value={primaryColor} class="color-picker" />
-								<input type="text" bind:value={primaryColor} class="color-hex" />
-								<div class="color-preview" style="background: {primaryColor}"></div>
+								<input
+									id="primaryColorPicker"
+									type="color"
+									bind:value={primaryColor}
+									class="color-picker"
+								/>
+								<input
+									type="text"
+									bind:value={primaryColor}
+									class="color-hex"
+									aria-label="Primary colour hex value"
+								/>
+								<div class="color-preview" style="background: {primaryColor}" aria-hidden="true"></div>
 							</div>
 						</div>
 						<div class="color-field">
-							<label>Secondary Color</label>
+							<label for="secondaryColorPicker">Secondary Color</label>
 							<div class="color-input-wrap">
-								<input type="color" bind:value={secondaryColor} class="color-picker" />
-								<input type="text" bind:value={secondaryColor} class="color-hex" />
-								<div class="color-preview" style="background: {secondaryColor}"></div>
+								<input
+									id="secondaryColorPicker"
+									type="color"
+									bind:value={secondaryColor}
+									class="color-picker"
+								/>
+								<input
+									type="text"
+									bind:value={secondaryColor}
+									class="color-hex"
+									aria-label="Secondary colour hex value"
+								/>
+								<div
+									class="color-preview"
+									style="background: {secondaryColor}"
+									aria-hidden="true"
+								></div>
 							</div>
 						</div>
 					</div>
@@ -1678,7 +1778,8 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 								type="url"
 								bind:value={logoUrl}
 								placeholder="https://example.com/logo.svg"
-								style="flex: 1; border: none !important; background: transparent !important; box-shadow: none !important; padding: 4px 0 !important;"
+								autocomplete="url"
+								style="flex: 1; border: none !important; background: transparent !important; box-shadow: none !important; padding: 4px 0 !important; font-size: 1rem;"
 							/>
 							{#if logoUrl}
 								<button
@@ -1688,7 +1789,15 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 									title="Click to enlarge"
 									aria-label="Enlarge logo preview"
 								>
-									<img src={logoUrl} alt="Logo Preview" class="logo-badge-img" />
+									<img
+										src={logoUrl}
+										alt="Logo preview for {brandName || 'this brand'}"
+										class="logo-badge-img"
+										width="44"
+										height="44"
+										loading="lazy"
+										decoding="async"
+									/>
 								</button>
 							{/if}
 						</div>
@@ -1699,7 +1808,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 							<div class="label-row">
 								<label for="fontPrimary">Primary Font</label>
 								<button class="enrich-btn" onclick={() => generateField('Primary Font (suggest a Google Font name matching the brand personality)', (v) => (fontPrimary = v))} disabled={generating['Primary Font']}>
-									{#if generating['Primary Font']}<div class="enrich-spinner"></div>...{:else}✨ Suggest{/if}
+									{#if generating['Primary Font']}<div class="enrich-spinner"></div>...{:else}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.7 4.6L18 9l-4.3 1.4L12 15l-1.7-4.6L6 9l4.3-1.4z" /><path d="M18.5 15l.6 1.6 1.6.6-1.6.6-.6 1.6-.6-1.6-1.6-.6 1.6-.6z" /></svg>Suggest{/if}
 								</button>
 							</div>
 							<input id="fontPrimary" type="text" bind:value={fontPrimary} placeholder="e.g. Inter, Playfair Display" />
@@ -1708,7 +1817,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 							<div class="label-row">
 								<label for="fontSecondary">Secondary Font</label>
 								<button class="enrich-btn" onclick={() => generateField('Secondary Font (a complementary Google Font to pair with ' + (fontPrimary || 'the primary font') + ')', (v) => (fontSecondary = v))} disabled={generating['Secondary Font']}>
-									{#if generating['Secondary Font']}<div class="enrich-spinner"></div>...{:else}✨ Suggest{/if}
+									{#if generating['Secondary Font']}<div class="enrich-spinner"></div>...{:else}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.7 4.6L18 9l-4.3 1.4L12 15l-1.7-4.6L6 9l4.3-1.4z" /><path d="M18.5 15l.6 1.6 1.6.6-1.6.6-.6 1.6-.6-1.6-1.6-.6 1.6-.6z" /></svg>Suggest{/if}
 								</button>
 							</div>
 							<input id="fontSecondary" type="text" bind:value={fontSecondary} placeholder="e.g. IBM Plex Mono" />
@@ -1718,13 +1827,13 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 			</div>
 		{:else if activeTab === 'voice'}
 			<div class="panel" style="animation: fadeUp 0.25s var(--ease-out);">
-				<h3>Voice & Tone</h3>
+				<h2>Voice & Tone</h2>
 				<p class="panel-desc">How the brand communicates with its audience.</p>
 
 				<div class="form-stack">
 					<div class="field">
 						<div class="label-row">
-							<label>Personality Traits</label>
+							<label for="traitInput">Personality Traits</label>
 							<button class="enrich-btn" onclick={async () => {
 								generating = { ...generating, 'Traits': true };
 								try {
@@ -1740,7 +1849,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 								} catch { showToast('Trait suggestion failed', 'error'); }
 								finally { generating = { ...generating, 'Traits': false }; }
 							}} disabled={generating['Traits']}>
-								{#if generating['Traits']}<div class="enrich-spinner"></div>...{:else}✨ Suggest{/if}
+								{#if generating['Traits']}<div class="enrich-spinner"></div>...{:else}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.7 4.6L18 9l-4.3 1.4L12 15l-1.7-4.6L6 9l4.3-1.4z" /><path d="M18.5 15l.6 1.6 1.6.6-1.6.6-.6 1.6-.6-1.6-1.6-.6 1.6-.6z" /></svg>Suggest{/if}
 							</button>
 						</div>
 						<div class="tag-input-wrap">
@@ -1748,8 +1857,12 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 								{#each traits as trait}
 									<span class="tag">
 										{trait}
-										<button class="tag-remove" onclick={() => removeTrait(trait)}>
-											<svg
+										<button
+												class="tag-remove"
+												aria-label="Remove trait {trait}"
+												onclick={() => removeTrait(trait)}
+											>
+											<svg aria-hidden="true"
 												width="12"
 												height="12"
 												viewBox="0 0 24 24"
@@ -1770,6 +1883,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 							</div>
 							<div class="tag-add-row">
 								<input
+									id="traitInput"
 									type="text"
 									bind:value={traitInput}
 									onkeydown={handleTraitKeydown}
@@ -1784,8 +1898,8 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 					</div>
 
 					<div class="field">
-						<label>Communication Style</label>
-						<div class="radio-group">
+						<label id="commStyleLabel">Communication Style</label>
+						<div class="radio-group" role="radiogroup" aria-labelledby="commStyleLabel">
 							{#each COMM_STYLES as style}
 								<label class="radio-card" class:selected={commStyle === style}>
 									<input type="radio" name="commStyle" value={style} bind:group={commStyle} />
@@ -1800,10 +1914,10 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 							<label for="samplePost">Custom Sample Post</label>
 							<div class="ai-btn-group">
 								<button class="enrich-btn" onclick={() => generateField('Sample Social Media Post (write a realistic brand post in the brand voice described above)', (v) => (samplePost = v))} disabled={generating['Sample Post']}>
-									{#if generating['Sample Post']}<div class="enrich-spinner"></div>Generating...{:else}✨ Generate{/if}
+									{#if generating['Sample Post']}<div class="enrich-spinner"></div>Generating...{:else}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.7 4.6L18 9l-4.3 1.4L12 15l-1.7-4.6L6 9l4.3-1.4z" /><path d="M18.5 15l.6 1.6 1.6.6-1.6.6-.6 1.6-.6-1.6-1.6-.6 1.6-.6z" /></svg>Generate{/if}
 								</button>
 								<button class="enrich-btn spin" onclick={() => spinField('Sample Post', samplePost)} disabled={spinning['Sample Post'] || !samplePost.trim()}>
-									{#if spinning['Sample Post']}<div class="enrich-spinner"></div>Spinning...{:else}↩ Spin{/if}
+									{#if spinning['Sample Post']}<div class="enrich-spinner"></div>Spinning...{:else}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" /><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" /></svg>Spin{/if}
 								</button>
 							</div>
 						</div>
@@ -1844,7 +1958,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 			</div>
 		{:else if activeTab === 'audience'}
 			<div class="panel" style="animation: fadeUp 0.25s var(--ease-out);">
-				<h3>Target Audience</h3>
+				<h2>Target Audience</h2>
 				<p class="panel-desc">Who the brand is trying to reach.</p>
 
 				<div class="form-stack">
@@ -1853,13 +1967,13 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 							<label for="demographics">Demographics</label>
 							<div class="ai-btn-group">
 								<button class="enrich-btn" onclick={() => generateField('Target Audience Demographics', (v) => (demographics = v))} disabled={generating['Demographics']}>
-									{#if generating['Demographics']}<div class="enrich-spinner"></div>Generating...{:else}✨ Generate{/if}
+									{#if generating['Demographics']}<div class="enrich-spinner"></div>Generating...{:else}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.7 4.6L18 9l-4.3 1.4L12 15l-1.7-4.6L6 9l4.3-1.4z" /><path d="M18.5 15l.6 1.6 1.6.6-1.6.6-.6 1.6-.6-1.6-1.6-.6 1.6-.6z" /></svg>Generate{/if}
 								</button>
 								<button class="enrich-btn" onclick={() => extendField('Demographics', demographics, (v) => (demographics = v))} disabled={extending['Demographics'] || !demographics.trim()}>
 									{#if extending['Demographics']}<div class="enrich-spinner"></div>Enriching...{:else}AI Enrich{/if}
 								</button>
 								<button class="enrich-btn spin" onclick={() => spinField('Demographics', demographics)} disabled={spinning['Demographics'] || !demographics.trim()}>
-									{#if spinning['Demographics']}<div class="enrich-spinner"></div>...{:else}↩ Spin{/if}
+									{#if spinning['Demographics']}<div class="enrich-spinner"></div>...{:else}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" /><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" /></svg>Spin{/if}
 								</button>
 							</div>
 						</div>
@@ -1873,13 +1987,13 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 							<label for="interests">Interests & Behaviors</label>
 							<div class="ai-btn-group">
 								<button class="enrich-btn" onclick={() => generateField('Audience Interests & Behaviors', (v) => (interests = v))} disabled={generating['Interests']}>
-									{#if generating['Interests']}<div class="enrich-spinner"></div>Generating...{:else}✨ Generate{/if}
+									{#if generating['Interests']}<div class="enrich-spinner"></div>Generating...{:else}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.7 4.6L18 9l-4.3 1.4L12 15l-1.7-4.6L6 9l4.3-1.4z" /><path d="M18.5 15l.6 1.6 1.6.6-1.6.6-.6 1.6-.6-1.6-1.6-.6 1.6-.6z" /></svg>Generate{/if}
 								</button>
 								<button class="enrich-btn" onclick={() => extendField('Interests & Behaviors', interests, (v) => (interests = v))} disabled={extending['Interests & Behaviors'] || !interests.trim()}>
 									{#if extending['Interests & Behaviors']}<div class="enrich-spinner"></div>Enriching...{:else}AI Enrich{/if}
 								</button>
 								<button class="enrich-btn spin" onclick={() => spinField('Interests', interests)} disabled={spinning['Interests'] || !interests.trim()}>
-									{#if spinning['Interests']}<div class="enrich-spinner"></div>...{:else}↩ Spin{/if}
+									{#if spinning['Interests']}<div class="enrich-spinner"></div>...{:else}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" /><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" /></svg>Spin{/if}
 								</button>
 							</div>
 						</div>
@@ -1893,10 +2007,10 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 							<label for="platforms">Primary Platforms</label>
 							<div class="ai-btn-group">
 								<button class="enrich-btn" onclick={() => generateField('Primary Social Media Platforms for target audience', (v) => (platforms = v))} disabled={generating['Platforms']}>
-									{#if generating['Platforms']}<div class="enrich-spinner"></div>Generating...{:else}✨ Generate{/if}
+									{#if generating['Platforms']}<div class="enrich-spinner"></div>Generating...{:else}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.7 4.6L18 9l-4.3 1.4L12 15l-1.7-4.6L6 9l4.3-1.4z" /><path d="M18.5 15l.6 1.6 1.6.6-1.6.6-.6 1.6-.6-1.6-1.6-.6 1.6-.6z" /></svg>Generate{/if}
 								</button>
 								<button class="enrich-btn spin" onclick={() => spinField('Platforms', platforms)} disabled={spinning['Platforms'] || !platforms.trim()}>
-									{#if spinning['Platforms']}<div class="enrich-spinner"></div>...{:else}↩ Spin{/if}
+									{#if spinning['Platforms']}<div class="enrich-spinner"></div>...{:else}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" /><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" /></svg>Spin{/if}
 								</button>
 							</div>
 						</div>
@@ -1910,13 +2024,13 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 							<label for="painPoints">Pain Points</label>
 							<div class="ai-btn-group">
 								<button class="enrich-btn" onclick={() => generateField('Customer Pain Points this brand solves', (v) => (painPoints = v))} disabled={generating['Pain Points']}>
-									{#if generating['Pain Points']}<div class="enrich-spinner"></div>Generating...{:else}✨ Generate{/if}
+									{#if generating['Pain Points']}<div class="enrich-spinner"></div>Generating...{:else}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.7 4.6L18 9l-4.3 1.4L12 15l-1.7-4.6L6 9l4.3-1.4z" /><path d="M18.5 15l.6 1.6 1.6.6-1.6.6-.6 1.6-.6-1.6-1.6-.6 1.6-.6z" /></svg>Generate{/if}
 								</button>
 								<button class="enrich-btn" onclick={() => extendField('Pain Points', painPoints, (v) => (painPoints = v))} disabled={extending['Pain Points'] || !painPoints.trim()}>
 									{#if extending['Pain Points']}<div class="enrich-spinner"></div>Enriching...{:else}AI Enrich{/if}
 								</button>
 								<button class="enrich-btn spin" onclick={() => spinField('Pain Points', painPoints)} disabled={spinning['Pain Points'] || !painPoints.trim()}>
-									{#if spinning['Pain Points']}<div class="enrich-spinner"></div>...{:else}↩ Spin{/if}
+									{#if spinning['Pain Points']}<div class="enrich-spinner"></div>...{:else}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" /><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" /></svg>Spin{/if}
 								</button>
 							</div>
 						</div>
@@ -1929,7 +2043,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 			</div>
 		{:else if activeTab === 'competitors'}
 			<div class="panel" style="animation: fadeUp 0.25s var(--ease-out);">
-				<h3>Competitor Analysis</h3>
+				<h2>Competitor Analysis</h2>
 				<p class="panel-desc">Track competitors and identify differentiators.</p>
 
 				{#if competitors.length > 0}
@@ -1956,8 +2070,12 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 									/>
 								</label>
 								<span class="comp-num">#{i + 1}</span>
-								<button class="comp-remove" onclick={() => deleteCompetitors([comp.id])}>
-									<svg
+								<button
+									class="comp-remove"
+									aria-label="Remove competitor {comp.name || i + 1}"
+									onclick={() => deleteCompetitors([comp.id])}
+								>
+									<svg aria-hidden="true"
 										width="14"
 										height="14"
 										viewBox="0 0 24 24"
@@ -1976,16 +2094,28 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 							</div>
 							<div class="comp-fields">
 								<div class="field">
-									<label>Name</label>
-									<input type="text" bind:value={comp.name} placeholder="Competitor name" />
+									<label for="comp-name-{comp.id}">Name</label>
+									<input
+										id="comp-name-{comp.id}"
+										type="text"
+										bind:value={comp.name}
+										placeholder="Competitor name"
+									/>
 								</div>
 								<div class="field">
-									<label>URL</label>
-									<input type="url" bind:value={comp.url} placeholder="https://competitor.com" />
+									<label for="comp-url-{comp.id}">URL</label>
+									<input
+										id="comp-url-{comp.id}"
+										type="url"
+										bind:value={comp.url}
+										placeholder="https://competitor.com"
+										autocomplete="url"
+									/>
 								</div>
 								<div class="field full">
-									<label>Notes</label>
+									<label for="comp-notes-{comp.id}">Notes</label>
 									<textarea
+										id="comp-notes-{comp.id}"
 										bind:value={comp.notes}
 										placeholder="Strengths, weaknesses, positioning, content strategy…"
 										rows="3"
@@ -1997,7 +2127,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 
 					{#if competitors.length === 0}
 						<div class="empty-state">
-							<svg
+							<svg aria-hidden="true"
 								width="32"
 								height="32"
 								viewBox="0 0 24 24"
@@ -2015,7 +2145,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 					{/if}
 
 					<button class="add-comp-btn" onclick={addCompetitor}>
-						<svg
+						<svg aria-hidden="true"
 							width="14"
 							height="14"
 							viewBox="0 0 24 24"
@@ -2032,7 +2162,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		{:else if activeTab === 'intel'}
 			<div class="panel intel-wizard-panel" style="animation: fadeUp 0.25s var(--ease-out);">
 				<div class="intel-wizard-header">
-					<h3>Content Intelligence & Strategy Wizard</h3>
+					<h2>Content Intelligence & Strategy Wizard</h2>
 					<p class="panel-desc">
 						6-step wizard to analyze competitors, map audiences, and generate customized content
 						strategies.
@@ -2040,40 +2170,45 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 				</div>
 
 				<!-- ─── Progress Steps ─── -->
-				<div class="progress-steps">
+				<ol class="progress-steps" aria-label="Content intelligence wizard steps">
 					{#each INTEL_STEPS as s, i}
-						<button
-							type="button"
-							class="step-dot-group"
-							class:active={intelCurrentStep === s.id}
-							class:completed={intelCurrentStep > s.id}
-							class:disabled={s.id > intelCurrentStep + 1}
-							onclick={() => goToIntelStep(s.id)}
-							disabled={s.id > intelCurrentStep + 1}
-						>
-							<div class="step-dot">
-								{#if intelCurrentStep > s.id}
-									<svg
-										width="14"
-										height="14"
-										viewBox="0 0 24 24"
-										fill="none"
-										stroke="currentColor"
-										stroke-width="3"
-										stroke-linecap="round"
-										stroke-linejoin="round"><polyline points="20 6 9 17 4 12" /></svg
-									>
-								{:else}
-									<span>{s.id}</span>
-								{/if}
-							</div>
-							<span class="step-label">{s.label}</span>
-						</button>
+						<li class="step-item">
+							<button
+								type="button"
+								class="step-dot-group"
+								class:active={intelCurrentStep === s.id}
+								class:completed={intelCurrentStep > s.id}
+								class:disabled={s.id > intelCurrentStep + 1}
+								onclick={() => goToIntelStep(s.id)}
+								disabled={s.id > intelCurrentStep + 1}
+								aria-current={intelCurrentStep === s.id ? 'step' : undefined}
+							>
+								<div class="step-dot">
+									{#if intelCurrentStep > s.id}
+										<svg
+											width="14"
+											height="14"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="3"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg
+										>
+										<span class="sr-only">Completed:</span>
+									{:else}
+										<span>{s.id}</span>
+									{/if}
+								</div>
+								<span class="step-label">{s.label}</span>
+							</button>
+						</li>
 						{#if i < INTEL_STEPS.length - 1}
-							<div class="step-line" class:filled={intelCurrentStep > s.id}></div>
+							<li class="step-line" class:filled={intelCurrentStep > s.id} aria-hidden="true"></li>
 						{/if}
 					{/each}
-				</div>
+				</ol>
 
 				<!-- ─── Step Content ─── -->
 				<div class="step-container">
@@ -2081,9 +2216,24 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 					{#if intelCurrentStep === 1}
 						<div class="step-card" style="animation: fadeUp 0.4s var(--ease-out)">
 							<div class="step-card-header">
-								<span class="step-icon">🏢</span>
+								<span class="step-icon">
+									<svg
+										width="28"
+										height="28"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="1.8"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										aria-hidden="true"
+										><rect x="4" y="2" width="16" height="20" rx="2" /><path
+											d="M9 22v-4h6v4"
+										/><path d="M8 6h.01M16 6h.01M8 10h.01M16 10h.01M8 14h.01M16 14h.01" /></svg
+									>
+								</span>
 								<div>
-									<h4>Brand Discovery</h4>
+									<h3>Brand Discovery</h3>
 									<p>Tell us about your brand and target market</p>
 								</div>
 							</div>
@@ -2091,19 +2241,31 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 							<div class="form-fields">
 								<div class="field">
 									<label for="intel-company-name"
-										>Company / Brand Name <span class="req">*</span></label
+										>Company / Brand Name <span class="req" aria-hidden="true">*</span></label
 									>
 									<input
 										id="intel-company-name"
 										type="text"
 										bind:value={intelCompanyName}
 										placeholder="e.g. PersonaGen"
+										autocomplete="organization"
+										aria-required="true"
+										aria-invalid={!intelCompanyName.trim()}
+										aria-describedby="intel-step1-hint"
 									/>
 								</div>
 
 								<div class="field">
-									<label for="intel-industry-select">Industry <span class="req">*</span></label>
-									<select id="intel-industry-select" bind:value={intelIndustry}>
+									<label for="intel-industry-select"
+										>Industry <span class="req" aria-hidden="true">*</span></label
+									>
+									<select
+										id="intel-industry-select"
+										bind:value={intelIndustry}
+										aria-required="true"
+										aria-invalid={!intelIndustry}
+										aria-describedby="intel-step1-hint"
+									>
 										<option value="">Select industry...</option>
 										{#each INTEL_INDUSTRIES as ind}
 											<option value={ind}>{ind}</option>
@@ -2120,6 +2282,10 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 										rows="4"
 									></textarea>
 								</div>
+
+								<p class="step-hint" id="intel-step1-hint">
+									Fields marked with an asterisk are required before you can continue.
+								</p>
 							</div>
 						</div>
 
@@ -2127,9 +2293,22 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 					{:else if intelCurrentStep === 2}
 						<div class="step-card" style="animation: fadeUp 0.4s var(--ease-out)">
 							<div class="step-card-header">
-								<span class="step-icon">🔍</span>
+								<span class="step-icon">
+									<svg
+										width="28"
+										height="28"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="1.8"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										aria-hidden="true"
+										><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg
+									>
+								</span>
 								<div>
-									<h4>Competitor Analysis</h4>
+									<h3>Competitor Analysis</h3>
 									<p>Add up to 5 competitor channels to analyze</p>
 								</div>
 							</div>
@@ -2137,14 +2316,26 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 							<div class="competitors-list">
 								{#each intelCompetitors as comp, i}
 									<div class="competitor-row">
-										<span class="comp-num">{i + 1}</span>
+										<span class="comp-num" aria-hidden="true">{i + 1}</span>
+										<label class="sr-only" for="intel-comp-url-{i}"
+											>Competitor {i + 1} channel URL</label
+										>
 										<input
+											id="intel-comp-url-{i}"
 											type="url"
 											bind:value={comp.url}
 											placeholder="https://youtube.com/@competitor"
 											class="comp-url"
+											autocomplete="url"
 										/>
-										<select bind:value={comp.platform} class="comp-platform">
+										<label class="sr-only" for="intel-comp-platform-{i}"
+											>Competitor {i + 1} platform</label
+										>
+										<select
+											id="intel-comp-platform-{i}"
+											bind:value={comp.platform}
+											class="comp-platform"
+										>
 											{#each INTEL_PLATFORMS_LIST as p}
 												<option value={p.id}>{p.label}</option>
 											{/each}
@@ -2155,8 +2346,9 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 											onclick={() => removeIntelCompetitor(i)}
 											disabled={intelCompetitors.length <= 1}
 											title="Remove"
+											aria-label="Remove competitor {i + 1}"
 										>
-											<svg
+											<svg aria-hidden="true"
 												width="16"
 												height="16"
 												viewBox="0 0 24 24"
@@ -2179,7 +2371,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 
 							{#if intelCompetitors.length < 5}
 								<button type="button" class="add-comp-btn" onclick={addIntelCompetitor}>
-									<svg
+									<svg aria-hidden="true"
 										width="16"
 										height="16"
 										viewBox="0 0 24 24"
@@ -2204,9 +2396,24 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 					{:else if intelCurrentStep === 3}
 						<div class="step-card" style="animation: fadeUp 0.4s var(--ease-out)">
 							<div class="step-card-header">
-								<span class="step-icon">📋</span>
+								<span class="step-icon">
+									<svg
+										width="28"
+										height="28"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="1.8"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										aria-hidden="true"
+										><rect x="8" y="2" width="8" height="4" rx="1" /><path
+											d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"
+										/><path d="M9 12h6M9 16h6" /></svg
+									>
+								</span>
 								<div>
-									<h4>Content Audit</h4>
+									<h3>Content Audit</h3>
 									<p>Share your existing content for analysis</p>
 								</div>
 							</div>
@@ -2225,14 +2432,19 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 								</div>
 
 								<div class="field">
-									<label>Content Types You Currently Produce</label>
-									<div class="content-type-grid">
+									<label id="intel-content-types-label">Content Types You Currently Produce</label>
+									<div
+										class="content-type-grid"
+										role="group"
+										aria-labelledby="intel-content-types-label"
+									>
 										{#each INTEL_CONTENT_TYPES_LIST as ct}
 											<button
 												type="button"
 												class="ct-btn"
 												class:active={intelContentTypes.includes(ct)}
 												onclick={() => toggleIntelContentType(ct)}
+												aria-pressed={intelContentTypes.includes(ct)}
 											>
 												{ct}
 											</button>
@@ -2246,25 +2458,47 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 					{:else if intelCurrentStep === 4}
 						<div class="step-card" style="animation: fadeUp 0.4s var(--ease-out)">
 							<div class="step-card-header">
-								<span class="step-icon">🎯</span>
+								<span class="step-icon">
+									<svg
+										width="28"
+										height="28"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="1.8"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										aria-hidden="true"
+										><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="6" /><circle
+											cx="12"
+											cy="12"
+											r="2"
+										/></svg
+									>
+								</span>
 								<div>
-									<h4>Audience Mapping</h4>
+									<h3>Audience Mapping</h3>
 									<p>Define your ideal audience demographics and interests</p>
 								</div>
 							</div>
 
 							<div class="form-fields">
 								<div class="field">
-									<label>Age Range: {intelAgeMin} — {intelAgeMax}</label>
+									<label id="intel-age-range-label" for="intel-age-min"
+										>Age Range: {intelAgeMin} — {intelAgeMax}</label
+									>
 									<div class="range-group">
 										<div class="range-row">
-											<span class="range-label">Min</span>
+											<span class="range-label" id="intel-age-min-label">Min</span>
 											<input
+												id="intel-age-min"
 												type="range"
 												min="13"
 												max="65"
 												bind:value={intelAgeMin}
 												class="slider"
+												aria-label="Minimum audience age"
+												aria-valuetext="{intelAgeMin} years"
 												oninput={() => {
 													if (intelAgeMin > intelAgeMax) intelAgeMax = intelAgeMin;
 												}}
@@ -2272,13 +2506,16 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 											<span class="range-val">{intelAgeMin}</span>
 										</div>
 										<div class="range-row">
-											<span class="range-label">Max</span>
+											<span class="range-label" id="intel-age-max-label">Max</span>
 											<input
+												id="intel-age-max"
 												type="range"
 												min="13"
 												max="65"
 												bind:value={intelAgeMax}
 												class="slider"
+												aria-label="Maximum audience age"
+												aria-valuetext="{intelAgeMax} years"
 												oninput={() => {
 													if (intelAgeMax < intelAgeMin) intelAgeMin = intelAgeMax;
 												}}
@@ -2298,7 +2535,24 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 													<button
 														type="button"
 														class="tag-remove"
-														onclick={() => removeIntelInterest(tag)}>×</button
+														aria-label="Remove interest {tag}"
+														onclick={() => removeIntelInterest(tag)}
+														><svg
+															width="12"
+															height="12"
+															viewBox="0 0 24 24"
+															fill="none"
+															stroke="currentColor"
+															stroke-width="2.5"
+															stroke-linecap="round"
+															aria-hidden="true"
+															><line x1="18" y1="6" x2="6" y2="18" /><line
+																x1="6"
+																y1="6"
+																x2="18"
+																y2="18"
+															/></svg
+														></button
 													>
 												</span>
 											{/each}
@@ -2314,24 +2568,30 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 											/>
 										</div>
 									</div>
-									<div class="suggestions">
+									<div class="suggestions" role="group" aria-label="Suggested interest tags">
 										{#each INTEL_INTEREST_SUGGESTIONS.filter((s) => !intelInterests.includes(s)) as sug}
-											<button type="button" class="sug-btn" onclick={() => addIntelInterest(sug)}
-												>{sug}</button
+											<button
+												type="button"
+												class="sug-btn"
+												aria-label="Add interest {sug}"
+												onclick={() => addIntelInterest(sug)}>{sug}</button
 											>
 										{/each}
 									</div>
 								</div>
 
 								<div class="field">
-									<label>Locations <span class="req">*</span></label>
-									<div class="location-grid">
+									<label id="intel-locations-label"
+										>Locations <span class="req" aria-hidden="true">*</span></label
+									>
+									<div class="location-grid" role="group" aria-labelledby="intel-locations-label">
 										{#each INTEL_LOCATIONS as loc}
 											<button
 												type="button"
 												class="loc-btn"
 												class:active={intelLocations.includes(loc)}
 												onclick={() => toggleIntelLocation(loc)}
+												aria-pressed={intelLocations.includes(loc)}
 											>
 												{loc}
 											</button>
@@ -2345,16 +2605,29 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 					{:else if intelCurrentStep === 5}
 						<div class="step-card" style="animation: fadeUp 0.4s var(--ease-out)">
 							<div class="step-card-header">
-								<span class="step-icon">⚡</span>
+								<span class="step-icon">
+									<svg
+										width="28"
+										height="28"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="1.8"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										aria-hidden="true"
+										><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" /></svg
+									>
+								</span>
 								<div>
-									<h4>Strategy Generation</h4>
+									<h3>Strategy Generation</h3>
 									<p>Review your inputs and generate a custom strategy</p>
 								</div>
 							</div>
 
 							<div class="review-grid">
 								<div class="review-item">
-									<h4>Brand</h4>
+									<h3>Brand</h3>
 									<p><strong>{intelCompanyName || '—'}</strong> • {intelIndustry || '—'}</p>
 									{#if intelTargetAudience}
 										<p class="review-sub">{intelTargetAudience}</p>
@@ -2362,7 +2635,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 								</div>
 
 								<div class="review-item">
-									<h4>Competitors</h4>
+									<h3>Competitors</h3>
 									{#each intelCompetitors.filter((c) => c.url.trim()) as comp}
 										<p class="review-url">
 											{comp.url}
@@ -2377,7 +2650,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 								</div>
 
 								<div class="review-item">
-									<h4>Content Types</h4>
+									<h3>Content Types</h3>
 									<div class="review-tags">
 										{#each intelContentTypes as ct}
 											<span class="review-tag">{ct}</span>
@@ -2389,7 +2662,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 								</div>
 
 								<div class="review-item">
-									<h4>Audience</h4>
+									<h3>Audience</h3>
 									<p>Ages {intelAgeMin}–{intelAgeMax} • {intelLocations.join(', ') || '—'}</p>
 									{#if intelInterests.length > 0}
 										<div class="review-tags">
@@ -2406,12 +2679,13 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 								class="generate-btn"
 								onclick={generateIntelStrategy}
 								disabled={intelGenerating}
+								aria-busy={intelGenerating}
 							>
 								{#if intelGenerating}
 									<div class="gen-spinner"></div>
 									Generating Strategy...
 								{:else}
-									<svg
+									<svg aria-hidden="true"
 										width="20"
 										height="20"
 										viewBox="0 0 24 24"
@@ -2426,12 +2700,14 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 								{/if}
 							</button>
 
-							{#if intelGenerating}
-								<div class="gen-progress" style="animation: fadeUp 0.3s var(--ease-out)">
-									<div class="gen-bar"><div class="gen-fill"></div></div>
-									<p>Analyzing competitors, mapping audience, building strategy...</p>
-								</div>
-							{/if}
+							<div class="gen-progress-live" role="status" aria-live="polite">
+								{#if intelGenerating}
+									<div class="gen-progress" style="animation: fadeUp 0.3s var(--ease-out)">
+										<div class="gen-bar" aria-hidden="true"><div class="gen-fill"></div></div>
+										<p>Analyzing competitors, mapping audience, building strategy...</p>
+									</div>
+								{/if}
+							</div>
 						</div>
 
 						<!-- STEP 6: Results -->
@@ -2439,11 +2715,11 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 						<div class="results-container" style="animation: fadeUp 0.4s var(--ease-out)">
 							<div class="results-header-card">
 								<div class="results-title">
-									<h4>Strategy Report Generated</h4>
+									<h3>Strategy Report Generated</h3>
 									<p>{intelCompanyName} • {intelIndustry}</p>
 								</div>
 								<button type="button" class="start-over-btn" onclick={startIntelOver}>
-									<svg
+									<svg aria-hidden="true"
 										width="16"
 										height="16"
 										viewBox="0 0 24 24"
@@ -2462,8 +2738,8 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 
 							<!-- Content Pillars -->
 							<div class="result-section">
-								<h4 class="section-title">
-									<svg
+								<h3 class="section-title">
+									<svg aria-hidden="true"
 										width="20"
 										height="20"
 										viewBox="0 0 24 24"
@@ -2485,12 +2761,12 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 										/></svg
 									>
 									Content Pillars
-								</h4>
+								</h3>
 								<div class="pillars-grid">
 									{#each intelStrategyResults.pillars as pillar, i}
 										<div class="pillar-card" style="animation-delay: {i * 0.08}s">
 											<div class="pillar-header">
-												<h5>{pillar.name}</h5>
+												<h4>{pillar.name}</h4>
 												<span
 													class="priority-tag"
 													class:primary={pillar.priority === 'Primary'}
@@ -2505,8 +2781,8 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 
 							<!-- Posting Schedule -->
 							<div class="result-section">
-								<h4 class="section-title">
-									<svg
+								<h3 class="section-title">
+									<svg aria-hidden="true"
 										width="20"
 										height="20"
 										viewBox="0 0 24 24"
@@ -2528,7 +2804,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 										/></svg
 									>
 									Posting Schedule
-								</h4>
+								</h3>
 								<div class="schedule-table">
 									<div class="table-header">
 										<span>Day</span><span>Time</span><span>Content Type</span><span>Platform</span>
@@ -2546,8 +2822,8 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 
 							<!-- Platform Priority -->
 							<div class="result-section">
-								<h4 class="section-title">
-									<svg
+								<h3 class="section-title">
+									<svg aria-hidden="true"
 										width="20"
 										height="20"
 										viewBox="0 0 24 24"
@@ -2559,22 +2835,28 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 										><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" /></svg
 									>
 									Platform Priority
-								</h4>
+								</h3>
 								<div class="platform-cards">
 									{#each intelStrategyResults.platformPriority as plat, i}
 										<div class="plat-card" style="animation-delay: {i * 0.06}s">
 											<div class="plat-card-header">
 												<span class="plat-name">{plat.platform}</span>
-												<div class="plat-score-bar">
+												<div
+													class="plat-score-bar"
+													role="img"
+													aria-label="{plat.platform} priority score {plat.score} out of 100"
+												>
 													<div
 														class="plat-score-fill"
-														style="width: {plat.score}%; background: {getIntelScoreColor(
+														style="transform: scaleX({plat.score / 100}); background: {getIntelScoreColor(
 															plat.score
 														)}"
 													></div>
 												</div>
-												<span class="plat-score-num" style="color: {getIntelScoreColor(plat.score)}"
-													>{plat.score}</span
+												<span
+													class="plat-score-num"
+													style="color: {getIntelScoreColor(plat.score)}"
+													aria-hidden="true">{plat.score}</span
 												>
 											</div>
 											<p class="plat-reason">{plat.reason}</p>
@@ -2585,8 +2867,8 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 
 							<!-- Growth Targets -->
 							<div class="result-section">
-								<h4 class="section-title">
-									<svg
+								<h3 class="section-title">
+									<svg aria-hidden="true"
 										width="20"
 										height="20"
 										viewBox="0 0 24 24"
@@ -2603,7 +2885,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 										/><line x1="6" y1="20" x2="6" y2="16" /></svg
 									>
 									Growth Targets
-								</h4>
+								</h3>
 								<div class="targets-table">
 									<div class="table-header targets-header">
 										<span>Metric</span><span>Current</span><span>30 Days</span><span>90 Days</span>
@@ -2631,7 +2913,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 							onclick={prevIntelStep}
 							disabled={intelCurrentStep === 1}
 						>
-							<svg
+							<svg aria-hidden="true"
 								width="16"
 								height="16"
 								viewBox="0 0 24 24"
@@ -2652,7 +2934,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 								disabled={!canIntelProceed(intelCurrentStep)}
 							>
 								Next
-								<svg
+								<svg aria-hidden="true"
 									width="16"
 									height="16"
 									viewBox="0 0 24 24"
@@ -2686,12 +2968,28 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 			class="lightbox-content"
 			onclick={(e) => e.stopPropagation()}
 			role="dialog"
+			aria-modal="true"
 			aria-label={imageLightbox.label}
 		>
-			<img src={imageLightbox.url} alt={imageLightbox.label} />
+			<img src={imageLightbox.url} alt={imageLightbox.label} loading="eager" decoding="async" />
 			<div class="lightbox-bar">
 				<span>{imageLightbox.label}</span>
-				<a href={imageLightbox.url} target="_blank" rel="noopener noreferrer">Open original ↗</a>
+				<a href={imageLightbox.url} target="_blank" rel="noopener noreferrer"
+					>Open original<svg
+						width="12"
+						height="12"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
+						><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" /><polyline
+							points="15 3 21 3 21 9"
+						/><line x1="10" y1="14" x2="21" y2="3" /></svg
+					></a
+				>
 				<button type="button" onclick={() => (imageLightbox = null)}>Close</button>
 			</div>
 		</div>
@@ -2714,12 +3012,12 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		z-index: 1100;
+		z-index: var(--z-lightbox);
 		padding: 1.5rem;
 	}
 	.lightbox-content {
 		max-width: min(920px, 94vw);
-		max-height: 90vh;
+		max-height: 90dvh;
 		display: flex;
 		flex-direction: column;
 		border-radius: var(--radius);
@@ -2729,9 +3027,9 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 	}
 	.lightbox-content img {
 		max-width: 100%;
-		max-height: calc(90vh - 52px);
+		max-height: calc(90dvh - 52px);
 		object-fit: contain;
-		background: #0b0f1a;
+		background: var(--bg-card-dark);
 	}
 	.lightbox-bar {
 		display: flex;
@@ -2749,6 +3047,10 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		white-space: nowrap;
 	}
 	.lightbox-bar a {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		min-height: 44px;
 		color: var(--accent);
 		text-decoration: none;
 		font-weight: 600;
@@ -2758,6 +3060,8 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		border: 1px solid var(--border);
 		border-radius: 6px;
 		padding: 0.35rem 0.8rem;
+		min-width: 44px;
+		min-height: 44px;
 		font-size: 0.72rem;
 		font-weight: 600;
 		color: var(--text);
@@ -2787,6 +3091,8 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		border: 1px solid var(--border);
 		border-radius: 6px;
 		padding: 0.35rem 0.7rem;
+		min-width: 44px;
+		min-height: 44px;
 		font-size: 0.72rem;
 		font-weight: 600;
 		color: var(--text);
@@ -2806,10 +3112,10 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		color: #fff;
 	}
 	.mini-btn.danger:not(:disabled) {
-		color: #dc2626;
+		color: var(--error-text);
 	}
 	.mini-btn.danger:hover:not(:disabled) {
-		border-color: #dc2626;
+		border-color: var(--danger);
 	}
 	.product-card.selected {
 		border-color: var(--accent);
@@ -2837,6 +3143,16 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		background: rgba(15, 20, 35, 0.72);
 		cursor: pointer;
 	}
+	/* Keep the visual chip at 24px but give it a 44x44 pointer target. */
+	.product-select::after {
+		content: '';
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		width: 44px;
+		height: 44px;
+		transform: translate(-50%, -50%);
+	}
 	.product-select input {
 		width: 14px;
 		height: 14px;
@@ -2849,7 +3165,8 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		top: 8px;
 		right: 8px;
 		display: flex;
-		gap: 0.3rem;
+		/* 0.75rem keeps the two 44x44 pointer targets below from overlapping. */
+		gap: 0.75rem;
 		opacity: 0;
 		transition: opacity 0.15s;
 	}
@@ -2858,6 +3175,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		opacity: 1;
 	}
 	.card-icon-btn {
+		position: relative;
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
@@ -2869,12 +3187,23 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		color: #fff;
 		cursor: pointer;
 	}
+	/* Visual chip stays 26px; the pointer target is expanded to 44x44. */
+	.card-icon-btn::after {
+		content: '';
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		width: 44px;
+		height: 44px;
+		transform: translate(-50%, -50%);
+	}
 	.card-icon-btn:hover {
 		background: rgba(15, 20, 35, 0.92);
 	}
 	.card-icon-btn.danger:hover {
-		border-color: #dc2626;
-		color: #f87171;
+		border-color: var(--danger);
+		/* Chip sits on a fixed dark scrim in both themes, so lighten the token. */
+		color: color-mix(in srgb, var(--danger) 55%, #fff);
 	}
 
 	/* ── Inline product editor ── */
@@ -2899,7 +3228,8 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		border: 1px solid var(--border);
 		background: var(--surface);
 		color: var(--text);
-		font-size: 0.78rem;
+		/* 1rem = 16px: anything smaller makes iOS Safari force-zoom on focus. */
+		font-size: 1rem;
 		font-family: var(--font-body);
 		resize: vertical;
 	}
@@ -2977,6 +3307,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		border: 1px solid var(--border);
 		border-radius: var(--radius-sm);
 		max-width: 220px;
+		min-height: 44px;
 		cursor: pointer;
 	}
 
@@ -2988,8 +3319,10 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 	.action-btn {
 		display: inline-flex;
 		align-items: center;
+		justify-content: center;
 		gap: 6px;
 		padding: 8px 16px;
+		min-height: 44px;
 		border-radius: var(--radius-xs);
 		border: 1px solid var(--border-strong);
 		background: transparent;
@@ -3018,8 +3351,8 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		box-shadow: var(--shadow-accent);
 	}
 	.action-btn.danger:hover {
-		border-color: #dc2626;
-		color: #dc2626;
+		border-color: var(--danger);
+		color: var(--error-text);
 	}
 	.action-btn.danger:disabled {
 		opacity: 0.6;
@@ -3038,8 +3371,11 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 	.tab-btn {
 		display: inline-flex;
 		align-items: center;
+		justify-content: center;
 		gap: 6px;
 		padding: 0.75rem 1rem;
+		min-width: 44px;
+		min-height: 44px;
 		border: none;
 		background: none;
 		color: var(--text-dim);
@@ -3069,7 +3405,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		border-radius: var(--radius);
 		padding: 1.75rem;
 	}
-	.panel h3 {
+	.panel h2 {
 		font-size: var(--text-xl);
 		font-family: var(--font-display);
 		margin-bottom: 0.25rem;
@@ -3122,8 +3458,10 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		padding: 6px 10px;
 	}
 	.color-picker {
-		width: 32px;
-		height: 32px;
+		/* Replaced element — pseudo-element hit areas don't render, so the swatch
+		   itself carries the 44x44 target. */
+		width: 44px;
+		height: 44px;
 		border: none;
 		cursor: pointer;
 		background: none;
@@ -3134,8 +3472,9 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		background: transparent !important;
 		box-shadow: none !important;
 		font-family: var(--font-mono);
-		font-size: 0.82rem;
-		width: 90px;
+		/* 1rem = 16px: anything smaller makes iOS Safari force-zoom on focus. */
+		font-size: 1rem;
+		width: 105px;
 		padding: 4px !important;
 	}
 	.color-preview {
@@ -3155,8 +3494,9 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		padding: 6px 12px;
 	}
 	.logo-preview-badge {
-		width: 32px;
-		height: 32px;
+		/* overflow:hidden below clips a pseudo hit area, so the badge itself is 44x44. */
+		width: 44px;
+		height: 44px;
 		padding: 0;
 		border-radius: var(--radius-xs);
 		background: rgba(255, 255, 255, 0.05);
@@ -3212,7 +3552,9 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 	.tags-list {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 0.4rem;
+		/* 0.75rem so the 44x44 remove targets below bleed into the gap, not
+		   into the neighbouring chip. */
+		gap: 0.75rem;
 		margin-bottom: 0.5rem;
 	}
 	.tag {
@@ -3228,6 +3570,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		font-weight: 600;
 	}
 	.tag-remove {
+		position: relative;
 		display: flex;
 		background: none;
 		border: none;
@@ -3236,6 +3579,16 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		padding: 0;
 		opacity: 0.6;
 		transition: opacity 0.2s;
+	}
+	/* Glyph stays 12px; pointer target is 44x44. */
+	.tag-remove::after {
+		content: '';
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		width: 44px;
+		height: 44px;
+		transform: translate(-50%, -50%);
 	}
 	.tag-remove:hover {
 		opacity: 1;
@@ -3251,10 +3604,13 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		background: transparent !important;
 		box-shadow: none !important;
 		padding: 6px 0 !important;
-		font-size: 0.85rem;
+		/* 1rem = 16px: anything smaller makes iOS Safari force-zoom on focus. */
+		font-size: 1rem;
 	}
 	.tag-add-btn {
 		padding: 4px 14px;
+		min-width: 44px;
+		min-height: 44px;
 		border-radius: var(--radius-xs);
 		background: var(--accent-soft);
 		border: 1px solid var(--accent-mid);
@@ -3283,6 +3639,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		display: flex;
 		align-items: center;
 		justify-content: center;
+		min-height: 44px;
 		padding: 0.75rem;
 		border-radius: var(--radius-sm);
 		background: var(--surface-2);
@@ -3399,6 +3756,19 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		align-items: center;
 		cursor: pointer;
 	}
+	.comp-select {
+		position: relative;
+	}
+	/* Checkbox stays 14px; pointer target is 44x44. */
+	.comp-select::after {
+		content: '';
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		width: 44px;
+		height: 44px;
+		transform: translate(-50%, -50%);
+	}
 	.comp-select input {
 		width: 14px;
 		height: 14px;
@@ -3417,11 +3787,15 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 	}
 	.comp-remove {
 		display: flex;
+		align-items: center;
+		justify-content: center;
 		background: none;
 		border: none;
 		cursor: pointer;
 		color: var(--text-dim);
 		padding: 4px;
+		min-width: 44px;
+		min-height: 44px;
 		border-radius: 4px;
 		transition:
 			color 0.2s,
@@ -3457,6 +3831,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		justify-content: center;
 		gap: 6px;
 		padding: 10px;
+		min-height: 44px;
 		border-radius: var(--radius-sm);
 		border: 1px dashed var(--border-strong);
 		background: transparent;
@@ -3478,8 +3853,12 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 
 	/* Scrape Card */
 	.scrape-card {
-		background: linear-gradient(135deg, rgba(234, 179, 8, 0.08), rgba(249, 115, 22, 0.04));
-		border: 1px solid rgba(234, 179, 8, 0.2);
+		background: linear-gradient(
+			135deg,
+			color-mix(in srgb, var(--gold) 8%, transparent),
+			color-mix(in srgb, var(--warning) 4%, transparent)
+		);
+		border: 1px solid color-mix(in srgb, var(--gold) 20%, transparent);
 		border-radius: var(--radius-sm);
 		padding: 1.5rem;
 		margin-bottom: 2rem;
@@ -3488,10 +3867,10 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 	}
 	@keyframes pulseGlow {
 		0% {
-			box-shadow: 0 0 10px rgba(234, 179, 8, 0.02);
+			box-shadow: 0 0 10px color-mix(in srgb, var(--gold) 2%, transparent);
 		}
 		100% {
-			box-shadow: 0 0 25px rgba(234, 179, 8, 0.1);
+			box-shadow: 0 0 25px color-mix(in srgb, var(--gold) 10%, transparent);
 		}
 	}
 	.scrape-card-header {
@@ -3501,7 +3880,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		margin-bottom: 0.5rem;
 	}
 	.scrape-badge-icon {
-		color: #eab308;
+		color: var(--gold);
 	}
 	.scrape-card-title {
 		font-size: 1.05rem;
@@ -3525,7 +3904,8 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		border: 1px solid var(--border-strong) !important;
 		border-radius: var(--radius-xs) !important;
 		padding: 0.75rem 1rem !important;
-		font-size: 0.85rem;
+		/* 1rem = 16px: anything smaller makes iOS Safari force-zoom on focus. */
+		font-size: 1rem;
 		color: var(--text);
 	}
 	.scrape-submit-btn {
@@ -3533,11 +3913,12 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		align-items: center;
 		justify-content: center;
 		gap: 0.5rem;
-		background: #eab308;
-		color: #0b0713;
+		background: var(--gold);
+		color: var(--bg);
 		border: none;
 		border-radius: var(--radius-xs);
 		padding: 0.75rem 1.5rem;
+		min-height: 44px;
 		font-size: 0.85rem;
 		font-weight: 700;
 		cursor: pointer;
@@ -3546,7 +3927,9 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 			background 0.2s;
 	}
 	.scrape-submit-btn:hover:not(:disabled) {
-		background: #ca8a04;
+		/* brightness keeps the label/fill contrast valid in both themes, which a
+		   fixed darker hex could not. */
+		filter: brightness(0.92);
 		transform: translateY(-1px);
 	}
 	.scrape-submit-btn:disabled {
@@ -3565,6 +3948,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		margin-bottom: 0 !important;
 	}
 	.enrich-btn {
+		position: relative;
 		display: inline-flex;
 		align-items: center;
 		gap: 4px;
@@ -3573,12 +3957,20 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		color: var(--accent);
 		border-radius: var(--radius-full);
 		padding: 3px 10px;
+		min-height: 28px;
 		font-size: 0.7rem;
 		font-weight: 700;
 		cursor: pointer;
 		transition:
 			background 0.2s,
 			transform 0.2s;
+	}
+	/* The pill stays visually small inside a dense label row; the pointer target
+	   is stretched vertically to 44px (its width already exceeds 44px). */
+	.enrich-btn::after {
+		content: '';
+		position: absolute;
+		inset: -8px 0;
 	}
 	.enrich-btn:hover:not(:disabled) {
 		background: var(--accent-mid);
@@ -3592,7 +3984,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 	.enrich-btn.spin {
 		border-color: var(--cyan);
 		color: var(--cyan);
-		background: rgba(34, 211, 238, 0.06);
+		background: var(--cyan-soft);
 	}
 	.enrich-btn.spin:hover:not(:disabled) {
 		background: var(--cyan);
@@ -3626,6 +4018,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		border: 1px solid var(--border);
 		border-radius: var(--radius-xs);
 		padding: 0.4rem 0.6rem;
+		min-height: 44px;
 		cursor: pointer;
 		text-align: left;
 		transition: border-color 0.2s, background 0.2s;
@@ -3655,6 +4048,8 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		color: var(--text-dim);
 		cursor: pointer;
 		padding: 2px 6px;
+		min-width: 44px;
+		min-height: 44px;
 	}
 	.spin-dismiss:hover { color: var(--text-muted); }
 
@@ -3712,7 +4107,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		background: rgba(11, 7, 19, 0.85);
 		border: 1px solid var(--border-strong);
 		backdrop-filter: blur(4px);
-		color: #eab308;
+		color: color-mix(in srgb, var(--gold) 70%, #fff);
 		border-radius: var(--radius-xs);
 		padding: 4px 10px;
 		font-size: 0.75rem;
@@ -3780,7 +4175,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 	.ugc-presets-header {
 		margin-bottom: 1.25rem;
 	}
-	.ugc-presets-header h4 {
+	.ugc-presets-header h3 {
 		font-size: 1.05rem;
 		font-family: var(--font-display);
 		color: var(--text);
@@ -3802,6 +4197,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		border: 1px solid var(--border);
 		border-radius: var(--radius-sm);
 		padding: 1rem;
+		min-height: 44px;
 		text-align: left;
 		cursor: pointer;
 		font-family: var(--font-body);
@@ -3835,15 +4231,15 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 	.btn-spinner {
 		width: 14px;
 		height: 14px;
-		border: 2px solid rgba(11, 7, 19, 0.3);
-		border-top-color: #0b0713;
+		border: 2px solid color-mix(in srgb, var(--bg) 30%, transparent);
+		border-top-color: var(--bg);
 		border-radius: 50%;
 		animation: spin 0.8s linear infinite;
 	}
 	.enrich-spinner {
 		width: 10px;
 		height: 10px;
-		border: 1.5px solid rgba(124, 106, 237, 0.3);
+		border: 1.5px solid var(--accent-mid);
 		border-top-color: var(--accent);
 		border-radius: 50%;
 		animation: spin 0.8s linear infinite;
@@ -3851,8 +4247,8 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 	.scrape-spinner {
 		width: 14px;
 		height: 14px;
-		border: 2px solid rgba(11, 7, 19, 0.3);
-		border-top-color: #0b0713;
+		border: 2px solid color-mix(in srgb, var(--bg) 30%, transparent);
+		border-top-color: var(--bg);
 		border-radius: 50%;
 		animation: spin 0.8s linear infinite;
 	}
@@ -3913,12 +4309,20 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		align-items: center;
 		justify-content: center;
 		gap: 0;
-		margin-bottom: 2.5rem;
+		margin: 0 0 2.5rem;
 		padding: 1.5rem;
+		list-style: none;
 		background: var(--surface);
 		border: 1px solid var(--border);
 		border-radius: var(--radius);
 		overflow-x: auto;
+	}
+
+	/* <li> wrappers give the wizard a real list structure for assistive tech;
+	   they pass the flex row straight through to the step button. */
+	.intel-wizard-panel .step-item {
+		display: flex;
+		align-items: center;
 	}
 
 	.intel-wizard-panel .step-dot-group {
@@ -3958,7 +4362,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		background: var(--accent-soft);
 		border-color: var(--accent);
 		color: var(--accent);
-		box-shadow: 0 0 20px rgba(124, 106, 237, 0.2);
+		box-shadow: var(--shadow-accent);
 	}
 
 	.intel-wizard-panel .step-dot-group.completed .step-dot {
@@ -4011,10 +4415,13 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 	}
 
 	.intel-wizard-panel .step-icon {
-		font-size: 2rem;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		color: var(--accent);
 	}
 
-	.intel-wizard-panel .step-card-header h4 {
+	.intel-wizard-panel .step-card-header h3 {
 		font-family: var(--font-display);
 		font-size: 1.3rem;
 		color: var(--text);
@@ -4038,7 +4445,13 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 	}
 
 	.intel-wizard-panel .req {
-		color: var(--rose);
+		color: var(--rose-text);
+	}
+
+	.intel-wizard-panel .step-hint {
+		margin: 0;
+		font-size: 0.75rem;
+		color: var(--text-dim);
 	}
 
 	.intel-wizard-panel .competitors-list {
@@ -4078,8 +4491,8 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 	}
 
 	.intel-wizard-panel .comp-remove {
-		width: 32px;
-		height: 32px;
+		width: 44px;
+		height: 44px;
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -4109,6 +4522,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		justify-content: center;
 		gap: 0.5rem;
 		padding: 0.65rem;
+		min-height: 44px;
 		border: 1px dashed var(--border-strong);
 		border-radius: var(--radius-sm);
 		background: transparent;
@@ -4132,6 +4546,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 
 	.intel-wizard-panel .ct-btn {
 		padding: 0.5rem 1rem;
+		min-height: 44px;
 		background: var(--surface-2);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-full);
@@ -4192,7 +4607,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		background: var(--accent);
 		cursor: pointer;
 		border: 2px solid var(--bg);
-		box-shadow: 0 0 10px rgba(124, 106, 237, 0.3);
+		box-shadow: 0 0 10px var(--accent-mid);
 	}
 
 	.intel-wizard-panel .slider::-moz-range-thumb {
@@ -4224,7 +4639,9 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 	.intel-wizard-panel .tags-display {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 0.4rem;
+		/* 0.75rem so the 44x44 remove targets below bleed into the gap, not
+		   into the neighbouring chip. */
+		gap: 0.75rem;
 		align-items: center;
 	}
 
@@ -4241,6 +4658,9 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 	}
 
 	.intel-wizard-panel .tag-remove {
+		position: relative;
+		display: inline-flex;
+		align-items: center;
 		background: none;
 		border: none;
 		color: var(--accent);
@@ -4251,6 +4671,17 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		transition: color 0.2s ease;
 	}
 
+	/* Glyph stays 12px; pointer target is 44x44. */
+	.intel-wizard-panel .tag-remove::after {
+		content: '';
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		width: 44px;
+		height: 44px;
+		transform: translate(-50%, -50%);
+	}
+
 	.intel-wizard-panel .tag-remove:hover {
 		color: var(--error);
 	}
@@ -4259,7 +4690,8 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		border: none !important;
 		background: transparent !important;
 		padding: 0.3rem 0.5rem !important;
-		font-size: 0.85rem;
+		/* 1rem = 16px: anything smaller makes iOS Safari force-zoom on focus. */
+		font-size: 1rem;
 		flex: 1;
 		min-width: 120px;
 		outline: none;
@@ -4270,10 +4702,12 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		display: flex;
 		flex-wrap: wrap;
 		gap: 0.35rem;
+		align-items: center;
 	}
 
 	.intel-wizard-panel .sug-btn {
 		padding: 0.25rem 0.6rem;
+		min-height: 44px;
 		background: transparent;
 		border: 1px solid var(--border);
 		border-radius: var(--radius-full);
@@ -4296,6 +4730,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 
 	.intel-wizard-panel .loc-btn {
 		padding: 0.5rem 1rem;
+		min-height: 44px;
 		background: var(--surface-2);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-full);
@@ -4330,7 +4765,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		padding: 1.25rem;
 	}
 
-	.intel-wizard-panel .review-item h4 {
+	.intel-wizard-panel .review-item h3 {
 		font-family: var(--font-display);
 		font-size: 0.85rem;
 		color: var(--text);
@@ -4406,7 +4841,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 
 	.intel-wizard-panel .generate-btn:hover:not(:disabled) {
 		transform: translateY(-2px);
-		box-shadow: 0 8px 30px rgba(124, 106, 237, 0.3);
+		box-shadow: var(--shadow-accent);
 	}
 
 	.intel-wizard-panel .generate-btn:disabled {
@@ -4461,7 +4896,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		margin-bottom: 1.5rem;
 	}
 
-	.intel-wizard-panel .results-title h4 {
+	.intel-wizard-panel .results-title h3 {
 		font-family: var(--font-display);
 		font-size: 1.4rem;
 		color: var(--text);
@@ -4479,6 +4914,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		align-items: center;
 		gap: 0.5rem;
 		padding: 0.6rem 1.2rem;
+		min-height: 44px;
 		background: transparent;
 		border: 1px solid var(--border-strong);
 		border-radius: var(--radius-sm);
@@ -4545,7 +4981,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		margin-bottom: 0.75rem;
 	}
 
-	.intel-wizard-panel .pillar-header h5 {
+	.intel-wizard-panel .pillar-header h4 {
 		font-family: var(--font-display);
 		font-size: 0.95rem;
 		color: var(--text);
@@ -4634,6 +5070,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 	.intel-wizard-panel .time-cell {
 		font-family: var(--font-mono);
 		font-size: 0.78rem;
+		font-variant-numeric: tabular-nums;
 	}
 	.intel-wizard-panel .plat-cell {
 		color: var(--accent);
@@ -4645,14 +5082,17 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 	}
 	.intel-wizard-panel .current-cell {
 		color: var(--text-dim);
+		font-variant-numeric: tabular-nums;
 	}
 	.intel-wizard-panel .t30-cell {
 		color: var(--gold);
 		font-weight: 600;
+		font-variant-numeric: tabular-nums;
 	}
 	.intel-wizard-panel .t90-cell {
 		color: var(--success);
 		font-weight: 600;
+		font-variant-numeric: tabular-nums;
 	}
 
 	.intel-wizard-panel .platform-cards {
@@ -4698,14 +5138,19 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 
 	.intel-wizard-panel .plat-score-fill {
 		height: 100%;
+		/* Full width + scaleX keeps the meter on the compositor: animating `width`
+		   forced a layout pass on every frame. */
+		width: 100%;
+		transform-origin: left center;
 		border-radius: var(--radius-full);
-		transition: width 0.5s var(--ease-out);
+		transition: transform 0.25s var(--ease-out);
 	}
 
 	.intel-wizard-panel .plat-score-num {
 		font-family: var(--font-mono);
 		font-size: 0.85rem;
 		font-weight: 700;
+		font-variant-numeric: tabular-nums;
 		min-width: 30px;
 		text-align: right;
 	}
@@ -4728,6 +5173,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		align-items: center;
 		gap: 0.5rem;
 		padding: 0.75rem 1.5rem;
+		min-height: 44px;
 		border-radius: var(--radius-sm);
 		font-weight: 600;
 		font-size: 0.88rem;

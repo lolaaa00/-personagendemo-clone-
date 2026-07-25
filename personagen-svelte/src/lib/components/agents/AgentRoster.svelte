@@ -188,10 +188,12 @@
 		return 'neutral';
 	}
 
+	// Semantic tokens rather than literals so the bars follow the theme (and the brand
+	// theme feature) instead of staying frozen at one palette.
 	function perfColor(p: number): string {
-		if (p >= 70) return '#22c55e';
-		if (p >= 40) return '#f59e0b';
-		return '#ef4444';
+		if (p >= 70) return 'var(--success)';
+		if (p >= 40) return 'var(--warning)';
+		return 'var(--error)';
 	}
 
 	function engagementClass(eng: number): string {
@@ -239,8 +241,8 @@
 
 <div class="dash-table-wrap">
 	<div class="dash-table-header">
-		<h3>Agent Roster</h3>
-		<div class="dash-table-filters" role="tablist" aria-label="Filter agents">
+		<h3>Your Personas</h3>
+		<div class="dash-table-filters" role="tablist" aria-label="Filter personas">
 			{#each filters as filter}
 				<button
 					class="dash-filter"
@@ -265,7 +267,7 @@
 		onDelete={() => requestDelete(selectedVisible.slice())}
 	/>
 
-	<div class="dash-table" role="table" aria-label="Agent roster table">
+	<div class="dash-table" role="table" aria-label="Persona roster table">
 		<!-- Header Row -->
 		<div class="dash-row row-header" role="row">
 			<span class="pick-cell" role="columnheader">
@@ -279,7 +281,7 @@
 					onchange={() => (allVisibleSelected ? clearSelection() : selectAllVisible())}
 				/>
 			</span>
-			<span role="columnheader">Agent</span>
+			<span role="columnheader">Persona</span>
 			<span role="columnheader">Followers</span>
 			<span role="columnheader">Engagement</span>
 			<span role="columnheader">Gen Spend</span>
@@ -290,10 +292,19 @@
 
 		<!-- Agent Rows -->
 		{#each filteredAgents as agent (agent.id)}
-			<!-- svelte-ignore a11y_click_events_have_key_events -->
 			<!-- svelte-ignore a11y_no_noninteractive_element_to_interactive_role -->
 			<div
 				onclick={() => goto(`/personas/${agent.id}`)}
+				onkeydown={(e) => {
+					// The row is focusable but was mouse-only. Enter matches link semantics;
+					// the target guard stops the row from swallowing Enter aimed at the
+					// checkbox, toggle or delete button nested inside it.
+					if (e.target !== e.currentTarget) return;
+					if (e.key === 'Enter') {
+						e.preventDefault();
+						goto(`/personas/${agent.id}`);
+					}
+				}}
 				class="dash-row"
 				class:is-selected={selected.has(agent.id)}
 				role="link"
@@ -327,16 +338,31 @@
 						<span class="dash-agent-name" style="display: flex; align-items: center; gap: 0.5rem;">
 							{agent.name}
 							{#if agent.is_overseer}
+								<!-- Gradient darkened: the original mint/cyan pair carried white 9px
+								     text at ~2.5:1. These stops clear 4.5:1 in both themes. -->
 								<span
-									style="font-size: 9px; background: linear-gradient(135deg, #10B981, #06B6D4); color: white; padding: 2px 6px; border-radius: 4px; font-weight: 700; text-transform: uppercase; line-height: 1;"
+									class="hermes-badge"
 									>Hermes</span
 								>
 							{:else if agent.managed_by_overseer}
 								<span
-									style="font-size: 9px; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.2); color: #10B981; padding: 1px 5px; border-radius: 4px; font-weight: 600; display: inline-flex; align-items: center; gap: 2px; line-height: 1;"
+									class="managed-badge"
 									title="Orchestrated and monitored by Hermes"
 								>
-									🛡️ Managed
+									<svg
+										width="10"
+										height="10"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="2"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										aria-hidden="true"
+									>
+										<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+									</svg>
+									Managed
 								</span>
 							{/if}
 						</span>
@@ -360,10 +386,11 @@
 				</span>
 				<span class="dash-cell" role="cell">
 					<div class="perf-bar-wrap">
-						<div class="perf-bar-bg">
+						<div class="perf-bar-bg" aria-hidden="true">
 							<div
 								class="perf-bar"
-								style="width: {agent.perf}%; background: {perfColor(agent.perf)}"
+								style="--perf-pct: {Math.max(0, Math.min(100, agent.perf)) /
+									100}; background: {perfColor(agent.perf)}"
 							></div>
 						</div>
 						<span class="perf-val">{agent.perf}</span>
@@ -428,7 +455,7 @@
 
 		{#if filteredAgents.length === 0}
 			<div class="dash-empty">
-				<p>No agents match this filter.</p>
+				<p>No personas match this filter.</p>
 			</div>
 		{/if}
 	</div>
@@ -545,6 +572,7 @@
 	}
 
 	.dash-filter {
+		position: relative;
 		padding: 5px 14px;
 		border-radius: var(--radius-xs);
 		border: 1px solid var(--border);
@@ -557,6 +585,18 @@
 		font-family: var(--font-body);
 	}
 
+	/* Filter pills render ~26px tall. The visual size is deliberate, so the tap target is
+	   grown to 44px with an invisible overlay child instead of padding the pill out. */
+	.dash-filter::after {
+		content: '';
+		position: absolute;
+		left: 0;
+		right: 0;
+		top: 50%;
+		height: 44px;
+		transform: translateY(-50%);
+	}
+
 	.dash-filter:hover {
 		color: var(--text-muted);
 		border-color: var(--border-strong);
@@ -564,7 +604,8 @@
 
 	.dash-filter.active {
 		border-color: var(--accent-mid);
-		color: var(--accent);
+		/* raw --accent is 4.08:1 on the tinted pill — under AA for this 12px label. */
+		color: var(--accent-text);
 		background: var(--accent-soft);
 	}
 
@@ -584,6 +625,13 @@
 
 	.dash-row:hover:not(.row-header) {
 		background: rgba(255, 255, 255, 0.02);
+	}
+
+	/* The row is tabbable, so keyboard users need to see where they are. */
+	.dash-row:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: -2px;
+		border-radius: var(--radius-xs);
 	}
 
 	.dash-row:last-child {
@@ -650,6 +698,39 @@
 		text-overflow: ellipsis;
 	}
 
+	/* Was two inline style strings with hardcoded #10B981/#06B6D4, which never repainted
+	   with the brand theme and failed contrast on the light surface. */
+	.hermes-badge {
+		font-size: 9px;
+		background: linear-gradient(
+			135deg,
+			color-mix(in srgb, var(--success) 75%, #000),
+			color-mix(in srgb, var(--cyan) 75%, #000)
+		);
+		color: #fff;
+		padding: 2px 6px;
+		border-radius: 4px;
+		font-weight: 700;
+		text-transform: uppercase;
+		line-height: 1;
+		flex-shrink: 0;
+	}
+
+	.managed-badge {
+		font-size: 9px;
+		background: color-mix(in srgb, var(--success) 10%, transparent);
+		border: 1px solid color-mix(in srgb, var(--success) 20%, transparent);
+		color: var(--success-text);
+		padding: 1px 5px;
+		border-radius: 4px;
+		font-weight: 600;
+		display: inline-flex;
+		align-items: center;
+		gap: 3px;
+		line-height: 1;
+		flex-shrink: 0;
+	}
+
 	.dash-agent-niche {
 		font-size: 0.7rem;
 		color: var(--text-dim);
@@ -664,14 +745,18 @@
 	.dash-cell {
 		font-size: 0.82rem;
 		color: var(--text-muted);
+		font-variant-numeric: tabular-nums;
+		font-feature-settings: 'tnum' 1;
 	}
 
+	/* `-text` variants: the fill hues are 3.8:1 and 4.2:1 on the white card, under AA
+	   for this 13px body text. */
 	.dash-cell.positive {
-		color: var(--success);
+		color: var(--success-text);
 	}
 
 	.dash-cell.negative {
-		color: var(--rose);
+		color: var(--rose-text);
 	}
 
 	.perf-bar-wrap {
@@ -688,10 +773,21 @@
 		overflow: hidden;
 	}
 
+	/* scaleX rather than width: the bar holds no text (`.perf-val` is a flex sibling),
+	   so nothing is squashed and the meter no longer relayouts the row every frame. */
 	.perf-bar {
+		width: 100%;
 		height: 5px;
 		border-radius: 3px;
-		transition: width 0.5s ease;
+		transform-origin: left center;
+		transform: scaleX(var(--perf-pct, 0));
+		transition: transform 0.25s ease;
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.perf-bar {
+			transition: none;
+		}
 	}
 
 	.perf-val {
@@ -700,6 +796,8 @@
 		text-align: right;
 		color: var(--text-dim);
 		font-family: var(--font-mono);
+		font-variant-numeric: tabular-nums;
+		font-feature-settings: 'tnum' 1;
 	}
 
 	/* Multi-select checkbox + row delete */
@@ -711,10 +809,23 @@
 	}
 
 	label.pick-cell {
+		position: relative;
 		cursor: pointer;
 		/* Negative margin keeps the wider hit area from shifting the grid. */
 		padding: 6px;
 		margin: -6px;
+	}
+
+	/* Padding alone leaves a 27px target; this overlay takes it to 44x44 without
+	   resizing the native box or disturbing the grid. */
+	label.pick-cell::before {
+		content: '';
+		position: absolute;
+		left: 50%;
+		top: 50%;
+		width: 44px;
+		height: 44px;
+		transform: translate(-50%, -50%);
 	}
 
 	.pick-box {
@@ -732,6 +843,7 @@
 	}
 
 	.row-del {
+		position: relative;
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
@@ -744,6 +856,21 @@
 		color: var(--text-dim);
 		cursor: pointer;
 		transition: all 0.2s;
+	}
+
+	/* 26px button keeps its look; the tap target reaches 44x44 via an overlay child. */
+	.row-del::after {
+		content: '';
+		position: absolute;
+		left: 50%;
+		top: 50%;
+		width: 44px;
+		height: 44px;
+		transform: translate(-50%, -50%);
+	}
+
+	.row-del:disabled::after {
+		display: none;
 	}
 
 	.row-del:hover:not(:disabled) {
@@ -765,6 +892,19 @@
 		cursor: pointer;
 		width: 36px;
 		height: 20px;
+	}
+
+	/* The switch stays 36x20 visually; this invisible overlay lifts the tap target to
+	   44x44. It is the first positioned child, so the track and thumb still paint over
+	   it, and clicks land on the label exactly as before. */
+	.toggle::before {
+		content: '';
+		position: absolute;
+		left: 50%;
+		top: 50%;
+		width: 44px;
+		height: 44px;
+		transform: translate(-50%, -50%);
 	}
 
 	.toggle input {
@@ -804,23 +944,36 @@
 
 	/* Connect CTA */
 	.agent-connect-cta {
+		position: relative;
 		display: inline-flex;
 		align-items: center;
 		gap: 4px;
 		padding: 4px 10px;
 		border-radius: var(--radius-xs);
-		background: rgba(245, 158, 11, 0.1);
-		border: 1px solid rgba(245, 158, 11, 0.3);
-		color: #f59e0b;
+		background: color-mix(in srgb, var(--warning) 10%, transparent);
+		border: 1px solid color-mix(in srgb, var(--warning) 30%, transparent);
+		color: var(--warning-text);
 		font-size: 0.72rem;
 		font-weight: 600;
 		cursor: pointer;
 		text-decoration: none;
 		transition: all 0.2s;
+		min-height: 28px;
+	}
+
+	/* Pill reads ~28px tall; grow the tap target to 44px without inflating the design. */
+	.agent-connect-cta::after {
+		content: '';
+		position: absolute;
+		left: 0;
+		right: 0;
+		top: 50%;
+		height: 44px;
+		transform: translateY(-50%);
 	}
 
 	.agent-connect-cta:hover {
-		background: rgba(245, 158, 11, 0.2);
+		background: color-mix(in srgb, var(--warning) 20%, transparent);
 	}
 
 	.dash-empty {
@@ -859,7 +1012,8 @@
 		padding: 1.75rem;
 		max-width: 460px;
 		width: 100%;
-		max-height: 90vh;
+		/* dvh so mobile browser chrome can't clip the confirm field or the buttons. */
+		max-height: 90dvh;
 		overflow-y: auto;
 	}
 
@@ -908,7 +1062,7 @@
 
 	.pdel-note {
 		font-size: 0.75rem;
-		color: var(--warning);
+		color: var(--warning-text);
 		line-height: 1.5;
 		margin-bottom: 0.9rem;
 	}
@@ -938,6 +1092,8 @@
 	.pdel-cancel,
 	.pdel-confirm {
 		padding: 0.55rem 1.1rem;
+		/* Dialog actions render ~37px tall; primary actions get the full 44px box. */
+		min-height: 44px;
 		border-radius: var(--radius-sm);
 		font-weight: 600;
 		font-size: 0.8rem;
@@ -958,7 +1114,10 @@
 	}
 
 	.pdel-confirm {
-		background: var(--error);
+		/* Raw --error carries white at 3.7:1 in dark mode — under AA for this 12.8px
+		   label. Darkening the fill keeps the destructive red and clears 4.5:1 in both
+		   themes. */
+		background: color-mix(in srgb, var(--error) 85%, #000);
 		border: none;
 		color: #fff;
 	}
@@ -1016,9 +1175,12 @@
 	}
 
 	.token-cost-cell {
-		color: #f59e0b !important;
+		/* #f59e0b was 2.15:1 on the white card — the AA text variant is 6.2:1. */
+		color: var(--warning-text) !important;
 		font-family: var(--font-mono);
 		font-weight: 500;
+		font-variant-numeric: tabular-nums;
+		font-feature-settings: 'tnum' 1;
 	}
 
 	.token-count {

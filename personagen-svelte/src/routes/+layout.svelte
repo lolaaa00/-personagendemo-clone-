@@ -13,6 +13,10 @@
 		href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
 		rel="stylesheet"
 	/>
+	<meta
+		name="description"
+		content="HoneyX — autonomous AI agents managing your UGC creator roster, content calendar, and analytics."
+	/>
 	<!-- Open Graph -->
 	<meta property="og:type" content="website" />
 	<meta property="og:title" content="HoneyX — AI Agent-Powered UGC Creator Management" />

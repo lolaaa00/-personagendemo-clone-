@@ -29,7 +29,9 @@
 		youtube: 'linear-gradient(90deg,#ff0000,#cc0000)',
 		threads: 'linear-gradient(90deg,#000,#333)'
 	};
-	const defaultPlatformColor = 'linear-gradient(90deg,#6366f1,#818cf8)';
+	// Platform-brand gradients above stay literal — they are those companies' identities.
+	// The fallback is ours, so it follows the brand theme.
+	const defaultPlatformColor = 'linear-gradient(90deg,var(--accent),var(--accent-light))';
 
 	async function loadAnalytics(agentId: string) {
 		loading = true;
@@ -113,16 +115,19 @@
 	let stats = $derived.by(() => {
 		if (!analytics) return [];
 		const t = analytics.totals;
+		// Stat tiles are TEXT, so they use the AA `-text` token variants — the raw brand
+		// hues sit between 1.7:1 and 2.8:1 on the white card. Tokens also mean these
+		// repaint when the brand theme changes.
 		return [
-			{ label: 'Published Posts', value: formatNum(t.posts), color: '#6366f1' },
-			{ label: 'Views', value: formatNum(t.views), color: '#22d3ee' },
-			{ label: 'Likes', value: formatNum(t.likes), color: '#f472b6' },
-			{ label: 'Comments', value: formatNum(t.comments), color: '#34d399' },
-			{ label: 'Shares', value: formatNum(t.shares), color: '#fbbf24' },
+			{ label: 'Published Posts', value: formatNum(t.posts), color: 'var(--accent-text)' },
+			{ label: 'Views', value: formatNum(t.views), color: 'var(--cyan-text)' },
+			{ label: 'Likes', value: formatNum(t.likes), color: 'var(--rose-text)' },
+			{ label: 'Comments', value: formatNum(t.comments), color: 'var(--success-text)' },
+			{ label: 'Shares', value: formatNum(t.shares), color: 'var(--warning-text)' },
 			{
 				label: 'Engagement Rate',
 				value: analytics.totals.views > 0 ? analytics.engagementRate + '%' : '—',
-				color: '#818cf8'
+				color: 'var(--info-text)'
 			}
 		];
 	});
@@ -168,11 +173,11 @@
 			<span>Create a persona and connect social accounts to start collecting performance data.</span>
 		</div>
 	{:else if loading}
-		<div class="panel-empty subtle">
+		<div class="panel-empty subtle" role="status" aria-live="polite">
 			<p>Loading analytics…</p>
 		</div>
 	{:else if error}
-		<div class="panel-empty">
+		<div class="panel-empty" role="alert">
 			<p class="error-text">Couldn't load analytics</p>
 			<span>{error}</span>
 		</div>
@@ -226,10 +231,13 @@
 						{#each platformRows as row (row.name)}
 							<div class="platform-row">
 								<span class="platform-label">{row.name}</span>
-								<div class="platform-track">
+								<!-- Redundant visual of the label + figures below it, so it is not
+								     announced a second time. -->
+								<div class="platform-track" aria-hidden="true">
 									<div
 										class="platform-fill"
-										style="width: {row.pct}%; background: {row.color}"
+										style="--platform-pct: {Math.max(0, Math.min(100, row.pct)) /
+											100}; background: {row.color}"
 									></div>
 								</div>
 								<span class="platform-val">
@@ -297,6 +305,7 @@
 	}
 
 	.agent-tab {
+		position: relative;
 		padding: 5px 14px;
 		border-radius: var(--radius-xs);
 		border: 1px solid var(--border);
@@ -309,6 +318,18 @@
 		font-family: var(--font-body);
 	}
 
+	/* The pill reads ~26px tall. Rather than inflating the design, the hit area is grown
+	   to 44px with an overlay child so the tap target clears the minimum. */
+	.agent-tab::after {
+		content: '';
+		position: absolute;
+		left: 0;
+		right: 0;
+		top: 50%;
+		height: 44px;
+		transform: translateY(-50%);
+	}
+
 	.agent-tab:hover {
 		color: var(--text-muted);
 		border-color: var(--border-strong);
@@ -316,7 +337,8 @@
 
 	.agent-tab.active {
 		border-color: var(--accent-mid);
-		color: var(--accent);
+		/* raw --accent is 4.08:1 on the tinted pill — under AA for this 12px label. */
+		color: var(--accent-text);
 		background: var(--accent-soft);
 	}
 
@@ -343,6 +365,8 @@
 		font-family: var(--font-display);
 		color: var(--stat-color, var(--text));
 		line-height: 1.2;
+		font-variant-numeric: tabular-nums;
+		font-feature-settings: 'tnum' 1;
 	}
 
 	.stat-label {
@@ -402,11 +426,22 @@
 		overflow: hidden;
 	}
 
+	/* Animating `width` relayouts every frame; scaleX composites instead. The fill has no
+	   children and `.platform-val` is a grid sibling, so no text is squashed. */
 	.platform-fill {
+		width: 100%;
 		height: 14px;
 		border-radius: 6px;
-		transition: width 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+		transform-origin: left center;
+		transform: scaleX(var(--platform-pct, 0));
+		transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
 		box-shadow: 0 0 8px rgba(255, 255, 255, 0.06);
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.platform-fill {
+			transition: none;
+		}
 	}
 
 	.platform-val {
@@ -414,6 +449,8 @@
 		font-size: 0.7rem;
 		color: var(--text-dim);
 		font-family: var(--font-mono);
+		font-variant-numeric: tabular-nums;
+		font-feature-settings: 'tnum' 1;
 	}
 
 	.panel-empty {
@@ -451,7 +488,8 @@
 	}
 
 	.error-text {
-		color: var(--rose, #f43f5e) !important;
+		/* `-text` variant: raw --rose is 4.59:1 on the white card, the error token is 6.5:1. */
+		color: var(--error-text) !important;
 	}
 
 	@media (max-width: 1024px) {

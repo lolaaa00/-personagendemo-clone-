@@ -5,7 +5,8 @@ import {
 	executeKitStage,
 	resolveKitStagePlan,
 	resolvePersonaGender,
-	resolveImageKeys
+	resolveImageKeys,
+	updateReferenceKit
 } from '$lib/server/content/generate';
 import { getServiceSupabase } from '$lib/server/service-supabase';
 import { priceOf } from '$lib/pricing';
@@ -13,28 +14,10 @@ import { modelsFor, resolveModel } from '$lib/models';
 
 const VALID_STAGES = ['full_body', 'side_profiles', 'face_closeup', 'feature_grid'] as const;
 
-/**
- * Read-modify-write on `agent_configs.ugc_reference_kit` for the transient
- * `<stage>_status` polling keys ('generating' / 'failed: …'). Runs on the
- * service client so a detached task can still clear its key after the user's
- * session token would have expired.
- */
-async function patchReferenceKit(
-	svc: any,
-	agentId: string,
-	set: Record<string, string>,
-	remove: string[] = []
-): Promise<void> {
-	const { data } = await svc
-		.from('agent_configs')
-		.select('ugc_reference_kit')
-		.eq('agent_id', agentId)
-		.maybeSingle();
-	const kit = { ...(data?.ugc_reference_kit || {}) };
-	for (const key of remove) delete kit[key];
-	Object.assign(kit, set);
-	await svc.from('agent_configs').update({ ugc_reference_kit: kit }).eq('agent_id', agentId);
-}
+// A 'generating' marker younger than this is trusted (the request is refused as
+// a duplicate); older ones mean the detached task died without clearing its
+// marker (deploy/restart mid-generation), so a retry self-heals by overwriting.
+const IN_FLIGHT_STALE_MS = 15 * 60 * 1000;
 
 /**
  * Drives stages 3 (side-profile composite), 4 (facial close-up), and 5
@@ -155,21 +138,51 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 	const userId = user.id;
 	const runStage = () => executeKitStage(svc, svc, userId, agentId, falKey, stage, plan);
 
+	// A second click (or second tab) while the detached task is still running is
+	// a duplicate PAID generation — refuse it while the marker is fresh; a stale
+	// marker (or one without a started_at) is a dead task, so proceed over it.
+	const statusKey = `${stage}_status`;
+	const startedKey = `${stage}_started_at`;
+	if (kit[statusKey] === 'generating') {
+		const startedAt = Date.parse(String(kit[startedKey] ?? ''));
+		const ageMs = Date.now() - startedAt;
+		if (Number.isFinite(startedAt) && ageMs < IN_FLIGHT_STALE_MS) {
+			return json(
+				{
+					success: false,
+					error: `This generation is already running — it started ${Math.max(1, Math.round(ageMs / 60000))} min ago. Wait for it to finish (or retry in 15 minutes if it never does).`
+				},
+				{ status: 409 }
+			);
+		}
+	}
+
 	// Mark the stage in-flight BEFORE responding so the GET poller (and a page
-	// reload) immediately sees a generation running.
-	await patchReferenceKit(svc, agentId, { [`${stage}_status`]: 'generating' });
+	// reload) immediately sees a generation running. `_started_at` is what lets
+	// the guard above (and the scheduler reaper) age the marker.
+	await updateReferenceKit(svc, agentId, (k) => {
+		k[statusKey] = 'generating';
+		k[startedKey] = new Date().toISOString();
+		return k;
+	});
 
 	void (async () => {
 		try {
 			// The stage function itself merges the finished URL into the kit —
 			// we only clear the in-flight marker afterwards.
 			await runStage();
-			await patchReferenceKit(svc, agentId, {}, [`${stage}_status`]);
+			await updateReferenceKit(svc, agentId, (k) => {
+				delete k[statusKey];
+				delete k[startedKey];
+				return k;
+			});
 		} catch (err) {
 			console.error(`[generate-reference-kit] Detached ${stage} generation failed:`, err);
 			try {
-				await patchReferenceKit(svc, agentId, {
-					[`${stage}_status`]: `failed: ${(err as Error).message}`.slice(0, 200)
+				await updateReferenceKit(svc, agentId, (k) => {
+					k[statusKey] = `failed: ${(err as Error).message}`.slice(0, 200);
+					delete k[startedKey];
+					return k;
 				});
 			} catch (patchErr) {
 				console.error('[generate-reference-kit] Failed to record stage failure:', patchErr);

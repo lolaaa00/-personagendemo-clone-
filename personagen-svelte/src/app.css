@@ -58,8 +58,15 @@
 	   small glyph on a light surface — the brand hues themselves fail WCAG AA there
 	   (accent 4.08:1, cyan 2.77:1, success 3.77:1, warning 3.19:1 on white).
 	   Dark mode remaps them back to the vivid hues, which already pass on #0e0e16. */
-	--accent-text: #6338d4; /* 6.89:1 on white */
-	--cyan-text: #0369a1; /* 5.93:1 */
+	/* --accent and --cyan are the ONLY tokens applyBrandTheme() rewrites at runtime
+	   (ui.svelte.ts sets them via style.setProperty). Their -text variants must
+	   therefore be DERIVED, not pinned: a static hex here would look correct on the
+	   default palette and then silently stop repainting the moment a brand theme is
+	   applied — reintroducing the exact AA failure this token exists to prevent.
+	   55% toward black clears 4.5:1 on white, --surface-2 and the 10% badge tint for
+	   every brand hue tested (worst case 5.14:1). */
+	--accent-text: color-mix(in srgb, var(--accent) 55%, #000);
+	--cyan-text: color-mix(in srgb, var(--cyan) 55%, #000);
 	--success-text: #047857; /* 5.48:1 */
 	--warning-text: #a04607; /* 6.22:1 */
 	--rose-text: #be185d; /* 6.04:1 */
@@ -107,7 +114,14 @@
 	--gradient: linear-gradient(135deg, var(--accent), var(--cyan));
 	--gradient-warm: linear-gradient(135deg, var(--rose), var(--gold));
 	--gradient-full: linear-gradient(135deg, var(--accent) 0%, var(--cyan) 50%, var(--rose) 100%);
-	--gradient-subtle: linear-gradient(135deg, var(--accent), #6366f1);
+	/* Second stop was a hardcoded #6366f1, so this gradient never repainted under a
+	   selected brand theme. Derived from --accent + --info it keeps the same indigo
+	   drift (#7c6aed -> ~#6a69ec at the default accent) while following the brand. */
+	--gradient-subtle: linear-gradient(
+		135deg,
+		var(--accent),
+		color-mix(in srgb, var(--accent) 80%, var(--info))
+	);
 
 	/* ── Typography: Font Families ── */
 	--font-display: 'Playfair Display', Georgia, serif;
@@ -216,6 +230,9 @@
 	   from inside a modal, drawer or lightbox (all of which sit at 1000-1200) rendered
 	   behind it, so success and error feedback was invisible to the user. */
 	--z-toast: 2000;
+	/* Brand-theme transition overlay — the one layer above toasts. It is
+	   pointer-events: none and transient, so it never blocks interaction. */
+	--z-celebration: 2001;
 
 	/* ── Sidebar ── */
 	--sidebar-width: 240px;
@@ -272,8 +289,10 @@
 	/* ── AA text variants: on #0e0e16 the vivid hues already clear 4.5:1, so the
 	   dark theme maps them straight back rather than carrying the darkened
 	   light-mode values (which would be unreadable here). ── */
-	--accent-text: #9d8ef5; /* 6.31:1 on --surface */
-	--cyan-text: var(--cyan);
+	/* Derived for the same reason as the light-mode pair — see the note there.
+	   75% toward white clears 4.5:1 on --surface and --surface-2 for every brand hue. */
+	--accent-text: color-mix(in srgb, var(--accent) 75%, #fff);
+	--cyan-text: color-mix(in srgb, var(--cyan) 75%, #fff);
 	--success-text: var(--success);
 	--warning-text: var(--warning);
 	--rose-text: var(--rose);

@@ -25,6 +25,12 @@ function usdFromEnv(name: string, fallback: number): number {
 const DAILY_PER_AGENT_USD = () => usdFromEnv('MAX_DAILY_SPEND_PER_AGENT_USD', 15);
 const MONTHLY_PER_USER_USD = () => usdFromEnv('MAX_MONTHLY_SPEND_PER_USER_USD', 300);
 
+// PostgREST silently truncates result sets at the server's max-rows setting
+// (often 1000) — a truncated ledger read would silently UNDERCOUNT spend. An
+// explicit high limit makes the ceiling ours and detectable: if we get exactly
+// this many rows back, the sum may be short and we log it.
+const LEDGER_ROW_LIMIT = 100000;
+
 async function sumSpend(
 	supabase: any,
 	column: 'user_id' | 'agent_id',
@@ -35,11 +41,26 @@ async function sumSpend(
 		.from('generation_events')
 		.select('est_cost')
 		.eq(column, value)
-		.gte('created_at', sinceIso);
+		.gte('created_at', sinceIso)
+		.limit(LEDGER_ROW_LIMIT);
 	// Fail OPEN on a ledger read error (don't block generation because analytics
 	// is down) — but the caps still catch the sustained-spend case on later ticks.
-	if (error) return 0;
-	return (data || []).reduce((s: number, r: any) => s + (Number(r.est_cost) || 0), 0);
+	// Log LOUDLY so a broken ledger (= no budget enforcement) is diagnosable.
+	if (error) {
+		console.error(
+			`[budget] generation_events ledger read FAILED for ${column}=${value} — failing OPEN (no spend cap enforced this call): ${
+				error.message ?? JSON.stringify(error)
+			}`
+		);
+		return 0;
+	}
+	const rows = data || [];
+	if (rows.length >= LEDGER_ROW_LIMIT) {
+		console.warn(
+			`[budget] ledger returned ${rows.length} rows for ${column}=${value}, equal to the query limit — the spend sum may UNDERCOUNT (rows beyond the limit were truncated).`
+		);
+	}
+	return rows.reduce((s: number, r: any) => s + (Number(r.est_cost) || 0), 0);
 }
 
 /**
@@ -53,27 +74,36 @@ export async function assertWithinBudget(
 	agentId?: string
 ): Promise<void> {
 	const monthlyCap = MONTHLY_PER_USER_USD();
-	if (monthlyCap > 0 && userId) {
-		const since = new Date();
-		since.setUTCDate(1);
-		since.setUTCHours(0, 0, 0, 0);
-		const spent = await sumSpend(supabase, 'user_id', userId, since.toISOString());
-		if (spent >= monthlyCap) {
-			throw new Error(
-				`Monthly generation budget reached ($${spent.toFixed(2)} of $${monthlyCap} cap). Raise MAX_MONTHLY_SPEND_PER_USER_USD to continue.`
-			);
-		}
+	const dailyCap = DAILY_PER_AGENT_USD();
+	const checkMonthly = monthlyCap > 0 && !!userId;
+	const checkDaily = dailyCap > 0 && !!agentId;
+
+	const monthlySince = new Date();
+	monthlySince.setUTCDate(1);
+	monthlySince.setUTCHours(0, 0, 0, 0);
+	const dailySince = new Date();
+	dailySince.setUTCHours(0, 0, 0, 0);
+
+	// The two ledger sums are independent — run them concurrently rather than
+	// serialising two round-trips on the hot generation path.
+	const [monthlySpent, dailySpent] = await Promise.all([
+		checkMonthly
+			? sumSpend(supabase, 'user_id', userId, monthlySince.toISOString())
+			: Promise.resolve(0),
+		checkDaily
+			? sumSpend(supabase, 'agent_id', agentId!, dailySince.toISOString())
+			: Promise.resolve(0)
+	]);
+
+	if (checkMonthly && monthlySpent >= monthlyCap) {
+		throw new Error(
+			`Monthly generation budget reached ($${monthlySpent.toFixed(2)} of $${monthlyCap} cap). Raise MAX_MONTHLY_SPEND_PER_USER_USD to continue.`
+		);
 	}
 
-	const dailyCap = DAILY_PER_AGENT_USD();
-	if (dailyCap > 0 && agentId) {
-		const since = new Date();
-		since.setUTCHours(0, 0, 0, 0);
-		const spent = await sumSpend(supabase, 'agent_id', agentId, since.toISOString());
-		if (spent >= dailyCap) {
-			throw new Error(
-				`Daily generation budget reached for this persona ($${spent.toFixed(2)} of $${dailyCap} cap). Raise MAX_DAILY_SPEND_PER_AGENT_USD to continue.`
-			);
-		}
+	if (checkDaily && dailySpent >= dailyCap) {
+		throw new Error(
+			`Daily generation budget reached for this persona ($${dailySpent.toFixed(2)} of $${dailyCap} cap). Raise MAX_DAILY_SPEND_PER_AGENT_USD to continue.`
+		);
 	}
 }

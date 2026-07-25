@@ -252,7 +252,7 @@
 			.filter(([, v]) => v)
 			.map(([k]) => k);
 		if (!composerAgentId) {
-			showToast('Select an agent', 'warning');
+			showToast('Select a persona', 'warning');
 			return;
 		}
 		if (!composerText.trim()) {
@@ -286,7 +286,7 @@
 					{
 						id: created.id,
 						agentId: created.agent_id,
-						agentName: agent?.name || 'Agent',
+						agentName: agent?.name || 'Persona',
 						text: created.content,
 						platforms: created.platforms || [],
 						date: created.scheduled_date,
@@ -603,7 +603,7 @@
 		const selectedPlatforms = Object.entries(composerPlatforms)
 			.filter(([, v]) => v)
 			.map(([k]) => k);
-		if (!composerAgentId) { showToast('Select an agent', 'warning'); return; }
+		if (!composerAgentId) { showToast('Select a persona', 'warning'); return; }
 		if (!composerText.trim()) { showToast('Write some content', 'warning'); return; }
 		if (selectedPlatforms.length === 0) { showToast('Select at least one platform', 'warning'); return; }
 
@@ -626,7 +626,7 @@
 					{
 						id: created.id,
 						agentId: created.agent_id,
-						agentName: agent?.name || 'Agent',
+						agentName: agent?.name || 'Persona',
 						text: created.content,
 						platforms: created.platforms || [],
 						date: created.scheduled_date,
@@ -743,7 +743,7 @@
 	function requestGeneratePost(dateStr?: string | null) {
 		const targetAgentId = selectedAgentId || (data.agents.length > 0 ? data.agents[0].id : '');
 		if (!targetAgentId) {
-			showToast('Please select or configure an agent first', 'warning');
+			showToast('Please select or configure a persona first', 'warning');
 			return;
 		}
 		// The header button passes a MouseEvent; only the calendar passes a date.
@@ -763,7 +763,7 @@
 		const targetAgentId =
 			genAgentId || selectedAgentId || (data.agents.length > 0 ? data.agents[0].id : '');
 		if (!targetAgentId) {
-			showToast('Please select or configure an agent first', 'warning');
+			showToast('Please select or configure a persona first', 'warning');
 			return;
 		}
 		generatingPost = true;
@@ -817,7 +817,7 @@
 						{
 							id: result.post.id,
 							agentId: result.post.agent_id,
-							agentName: agent?.name || 'Agent',
+							agentName: agent?.name || 'Persona',
 							text: result.post.content,
 							platforms: result.post.platforms || [],
 							date: result.post.scheduled_date,
@@ -850,18 +850,32 @@
 	<header class="page-header">
 		<div>
 			<h1>Content Calendar</h1>
-			<p class="subtitle">Schedule and manage posts across all agents and platforms</p>
+			<p class="subtitle">Schedule and manage posts across all personas and platforms</p>
 		</div>
 		<button
 			class="btn-primary"
 			disabled={generatingPost}
 			onclick={() => requestGeneratePost()}
-			style="display: inline-flex; align-items: center; gap: 0.5rem; background: var(--gradient-subtle); border-color: transparent; white-space: nowrap;"
+			style="display: inline-flex; align-items: center; gap: 0.5rem; background: var(--gradient-cta); border-color: transparent; white-space: nowrap;"
 		>
 			{#if generatingPost}
 				<span class="spinner"></span> Generating...
 			{:else}
-				✨ Generate Post Now
+				<svg
+					width="16"
+					height="16"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					aria-hidden="true"
+					><path d="M9.94 14.06 3 21" /><path
+						d="M14 4.5 15.5 8l3.5 1.5-3.5 1.5L14 14.5 12.5 11 9 9.5 12.5 8 14 4.5z"
+					/><path d="M5 3v4" /><path d="M3 5h4" /><path d="M19 17v4" /><path d="M17 19h4" /></svg
+				>
+				Generate Post Now
 			{/if}
 		</button>
 	</header>
@@ -870,11 +884,39 @@
 	     bulk delete / approve and enlarge live on the page next to it. -->
 	<div class="manage-bar">
 		<button
+			type="button"
 			class="btn-ghost btn-sm"
 			onclick={() => (manageOpen = !manageOpen)}
 			aria-expanded={manageOpen}
 		>
-			{manageOpen ? '✕ Close manage' : '☑ Manage posts'}
+			{#if manageOpen}
+				<svg
+					width="14"
+					height="14"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					aria-hidden="true"><path d="M18 6L6 18" /><path d="M6 6l12 12" /></svg
+				>
+				Close manage
+			{:else}
+				<svg
+					width="14"
+					height="14"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					aria-hidden="true"
+					><rect x="3" y="3" width="18" height="18" rx="2" /><path d="m9 12 2 2 4-4" /></svg
+				>
+				Manage posts
+			{/if}
 			{#if manageSelectedIds.length > 0}<span class="manage-count"
 					>{manageSelectedIds.length} selected</span
 				>{/if}
@@ -917,9 +959,22 @@
 							onclick={bulkApproveSelected}
 							disabled={bulkApproving || bulkDeleting}
 						>
+							{#if !bulkApproving}
+								<svg
+									width="14"
+									height="14"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg
+								>
+							{/if}
 							{bulkApproving
 								? 'Approving…'
-								: `✓ Approve ${manageSelectedDrafts.length} draft${manageSelectedDrafts.length === 1 ? '' : 's'}`}
+								: `Approve ${manageSelectedDrafts.length} draft${manageSelectedDrafts.length === 1 ? '' : 's'}`}
 						</button>
 					{/if}
 				{/snippet}
@@ -947,11 +1002,48 @@
 								title="Enlarge"
 								aria-label="Enlarge this post's image"
 							>
-								<img class="manage-thumb" src={thumb} alt="" loading="lazy" />
-								<span class="thumb-zoom-badge">⤢</span>
+								<img
+									class="manage-thumb"
+									src={thumb}
+									alt=""
+									width="44"
+									height="44"
+									loading="lazy"
+								/>
+								<span class="thumb-zoom-badge">
+									<svg
+										width="10"
+										height="10"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="2.5"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										aria-hidden="true"
+										><path d="M15 3h6v6" /><path d="M9 21H3v-6" /><path d="M21 3l-7 7" /><path
+											d="M3 21l7-7"
+										/></svg
+									>
+								</span>
 							</button>
 						{:else}
-							<div class="manage-thumb manage-thumb-empty">📝</div>
+							<div class="manage-thumb manage-thumb-empty">
+								<svg
+									width="18"
+									height="18"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									aria-hidden="true"
+									><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z" /><path
+										d="M14 2v5h5"
+									/><path d="M8 13h8" /><path d="M8 17h5" /></svg
+								>
+							</div>
 						{/if}
 						<button
 							type="button"
@@ -1015,12 +1107,25 @@
 
 		<!-- Manual Deletion Notice (platforms with no API teardown, e.g. Instagram) -->
 		{#if manualDeleteNotice !== null}
-			<div class="modal-backdrop z-top" onclick={() => (manualDeleteNotice = null)} role="presentation">
-				<div class="day-modal" onclick={(e) => e.stopPropagation()} role="dialog" style="max-width: 460px;">
+			<div class="modal-backdrop z-top">
+				<button
+					type="button"
+					class="overlay-dismiss"
+					aria-label="Close the manual deletion notice"
+					onclick={() => (manualDeleteNotice = null)}
+				></button>
+				<div
+					class="day-modal"
+					role="dialog"
+					aria-modal="true"
+					aria-labelledby="manual-delete-title"
+					tabindex="-1"
+					style="max-width: 460px;"
+				>
 					<div class="modal-header">
-						<h3>Removed locally — 1 step left</h3>
-						<button class="modal-close" onclick={() => (manualDeleteNotice = null)} aria-label="Close">
-							<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18" /><path d="M6 6l12 12" /></svg>
+						<h2 id="manual-delete-title">Removed locally — 1 step left</h2>
+						<button type="button" class="modal-close" onclick={() => (manualDeleteNotice = null)} aria-label="Close">
+							<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6L6 18" /><path d="M6 6l12 12" /></svg>
 						</button>
 					</div>
 					<div class="modal-body" style="padding: 1.25rem 1.5rem; display: flex; flex-direction: column; gap: 1rem;">
@@ -1043,9 +1148,24 @@
 											href={entry.permalink}
 											target="_blank"
 											rel="noopener noreferrer"
-											style="display: inline-flex; align-items: center; gap: 0.4rem; font-size: var(--text-sm); font-weight: 700; text-decoration: none; color: {platformColor(entry.platform)};"
+											style="display: inline-flex; align-items: center; gap: 0.4rem; min-height: 44px; font-size: var(--text-sm); font-weight: 700; text-decoration: none; color: {platformColor(entry.platform)};"
 										>
-											Open {platformLabel(entry.platform)} post to delete ↗
+											Open {platformLabel(entry.platform)} post to delete
+											<svg
+												width="14"
+												height="14"
+												viewBox="0 0 24 24"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="2"
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												aria-hidden="true"
+												><path d="M15 3h6v6" /><path d="M10 14 21 3" /><path
+													d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"
+												/></svg
+											>
+											<span class="sr-only">(opens in a new tab)</span>
 										</a>
 									{:else}
 										<span style="font-size: var(--text-xs); color: var(--text-dim);">No direct link available — open {platformLabel(entry.platform)} and remove it manually.</span>
@@ -1071,22 +1191,31 @@
 			stroke="currentColor"
 			stroke-width="2.5"
 			stroke-linecap="round"
-			stroke-linejoin="round"><path d="M12 5v14" /><path d="M5 12h14" /></svg
+			stroke-linejoin="round"
+			aria-hidden="true"><path d="M12 5v14" /><path d="M5 12h14" /></svg
 		>
 	</button>
 
 	<!-- Composer overlay -->
 	{#if showComposer}
-		<div class="composer-overlay" onclick={closeComposer} role="presentation">
+		<div class="composer-overlay">
+			<button
+				type="button"
+				class="overlay-dismiss"
+				aria-label="Close the new post composer"
+				onclick={closeComposer}
+			></button>
 			<div
 				class="composer"
-				onclick={(e) => e.stopPropagation()}
 				role="dialog"
+				aria-modal="true"
+				aria-labelledby="composer-title"
+				tabindex="-1"
 				style="max-width: 600px;"
 			>
 				<div class="composer-header">
-					<h3>Schedule New Post</h3>
-					<button class="panel-close" onclick={closeComposer}>
+					<h2 id="composer-title">Schedule New Post</h2>
+					<button type="button" class="panel-close" onclick={closeComposer} aria-label="Close the composer">
 						<svg
 							width="18"
 							height="18"
@@ -1095,27 +1224,28 @@
 							stroke="currentColor"
 							stroke-width="2"
 							stroke-linecap="round"
-							stroke-linejoin="round"><path d="M18 6L6 18" /><path d="M6 6l12 12" /></svg
+							stroke-linejoin="round"
+							aria-hidden="true"><path d="M18 6L6 18" /><path d="M6 6l12 12" /></svg
 						>
 					</button>
 				</div>
 
 				<div
 					class="composer-body"
-					style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem; max-height: 70vh; overflow-y: auto;"
+					style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem; max-height: 70dvh; overflow-y: auto;"
 				>
-					<!-- Target Agent -->
+					<!-- Persona -->
 					<div class="field" style="display: flex; flex-direction: column; gap: 0.25rem;">
 						<label
 							for="comp-agent"
 							style="font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; color: var(--text-dim);"
-							>Target Agent</label
+							>Persona</label
 						>
 						<select
 							id="comp-agent"
 							bind:value={composerAgentId}
 							onchange={resetPlatforms}
-							style="font-size: var(--text-sm); padding: 0.5rem; border-radius: var(--radius-xs); border: 1px solid var(--border); background: var(--surface); color: var(--text);"
+							style="font-size: 1rem; padding: 0.5rem; border-radius: var(--radius-xs); border: 1px solid var(--border); background: var(--surface); color: var(--text);"
 						>
 							{#each data.agents as agent}
 								<option value={agent.id}>{agent.name}</option>
@@ -1128,11 +1258,25 @@
 						class="forge-collapsible glass-card"
 						style="border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 1rem; display: flex; flex-direction: column; gap: 0.75rem; background: var(--surface-2);"
 					>
-						<h4
-							style="margin: 0; font-size: var(--text-xs); text-transform: uppercase; letter-spacing: var(--tracking-wider); color: var(--accent);"
+						<h3
+							style="margin: 0; display: flex; align-items: center; gap: 0.4rem; font-size: var(--text-xs); text-transform: uppercase; letter-spacing: var(--tracking-wider); color: var(--accent-text);"
 						>
-							✨ Optional: Forge with Competitor Blueprint
-						</h4>
+							<svg
+								width="14"
+								height="14"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								aria-hidden="true"
+								><path d="M9.94 14.06 3 21" /><path
+									d="M14 4.5 15.5 8l3.5 1.5-3.5 1.5L14 14.5 12.5 11 9 9.5 12.5 8 14 4.5z"
+								/><path d="M5 3v4" /><path d="M3 5h4" /></svg
+							>
+							Optional: Forge with Competitor Blueprint
+						</h3>
 
 						<div class="field" style="display: flex; flex-direction: column; gap: 0.25rem;">
 							<label
@@ -1144,7 +1288,7 @@
 								id="comp-blueprint"
 								value={selectedBlueprintId}
 								onchange={handleBlueprintSelect}
-								style="font-size: var(--text-xs); padding: 0.4rem; border-radius: var(--radius-xs); border: 1px solid var(--border); background: var(--surface); color: var(--text);"
+								style="font-size: 1rem; padding: 0.4rem; border-radius: var(--radius-xs); border: 1px solid var(--border); background: var(--surface); color: var(--text);"
 							>
 								<option value="">No blueprint selected</option>
 								{#each dbBlueprints as bp}
@@ -1167,7 +1311,7 @@
 									type="text"
 									bind:value={forgeTopic}
 									placeholder="e.g. Swapping pre-workout for adaptogenic honey..."
-									style="font-size: var(--text-xs); padding: 0.4rem 0.6rem; border-radius: var(--radius-xs); border: 1px solid var(--border); background: var(--surface); color: var(--text);"
+									style="font-size: 1rem; padding: 0.4rem 0.6rem; border-radius: var(--radius-xs); border: 1px solid var(--border); background: var(--surface); color: var(--text);"
 								/>
 							</div>
 
@@ -1180,7 +1324,7 @@
 								<select
 									id="comp-product"
 									bind:value={forgeProductId}
-									style="font-size: var(--text-xs); padding: 0.4rem; border-radius: var(--radius-xs); border: 1px solid var(--border); background: var(--surface); color: var(--text);"
+									style="font-size: 1rem; padding: 0.4rem; border-radius: var(--radius-xs); border: 1px solid var(--border); background: var(--surface); color: var(--text);"
 								>
 									<option value="">No product focus</option>
 									{#each products as product}
@@ -1194,7 +1338,7 @@
 								class="btn-forge-action"
 								disabled={forging || !forgeTopic.trim()}
 								onclick={runForge}
-								style="background: var(--gradient-subtle); color: #fff; border: none; padding: 0.45rem; font-size: var(--text-xs); font-weight: 700; border-radius: var(--radius-xs); cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.5rem; margin-top: 0.25rem;"
+								style="background: var(--gradient-cta); color: #fff; border: none; padding: 0.45rem; min-height: 44px; font-size: var(--text-xs); font-weight: 700; border-radius: var(--radius-xs); cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.5rem; margin-top: 0.25rem;"
 							>
 								{#if forging}
 									<span
@@ -1202,7 +1346,21 @@
 										style="width: 12px; height: 12px; border: 2px solid rgba(255,255,255,0.3); border-top-color:#fff; border-radius:50%; animation: spin 0.6s linear infinite;"
 									></span> Forging...
 								{:else}
-									✨ Forge Copy
+									<svg
+										width="14"
+										height="14"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="2"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										aria-hidden="true"
+										><path d="M9.94 14.06 3 21" /><path
+											d="M14 4.5 15.5 8l3.5 1.5-3.5 1.5L14 14.5 12.5 11 9 9.5 12.5 8 14 4.5z"
+										/><path d="M5 3v4" /><path d="M3 5h4" /></svg
+									>
+									Forge Copy
 								{/if}
 							</button>
 						{/if}
@@ -1220,15 +1378,21 @@
 							bind:value={composerText}
 							rows="5"
 							placeholder="Write your post content here directly, or use a blueprint above to auto-forge..."
-							style="font-size: var(--text-sm); padding: 0.6rem 0.75rem; border-radius: var(--radius-xs); border: 1px solid var(--border); background: var(--surface); color: var(--text); resize: vertical; line-height: 1.5;"
+							style="font-size: 1rem; padding: 0.6rem 0.75rem; border-radius: var(--radius-xs); border: 1px solid var(--border); background: var(--surface); color: var(--text); resize: vertical; line-height: 1.5;"
 						></textarea>
 					</div>
 
 					<!-- Target Platforms -->
-					<div class="field" style="display: flex; flex-direction: column; gap: 0.25rem;">
-						<label
+					<div
+						class="field"
+						role="group"
+						aria-labelledby="comp-platforms-label"
+						style="display: flex; flex-direction: column; gap: 0.25rem;"
+					>
+						<span
+							id="comp-platforms-label"
 							style="font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; color: var(--text-dim);"
-							>Target Platforms</label
+							>Target Platforms</span
 						>
 						<div
 							class="platform-checkboxes"
@@ -1238,7 +1402,7 @@
 								{@const color = platformColor(key)}
 								<label
 									class="platform-checkbox"
-									style="--p-color: {color}; display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.35rem 0.65rem; border: 1px solid var(--border); border-radius: var(--radius-xs); background: var(--surface-2); cursor: pointer; font-size: var(--text-xs); font-weight: 600;"
+									style="--p-color: {color}; display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.35rem 0.65rem; min-height: 44px; border: 1px solid var(--border); border-radius: var(--radius-xs); background: var(--surface-2); cursor: pointer; font-size: var(--text-xs); font-weight: 600;"
 								>
 									<input type="checkbox" bind:checked={composerPlatforms[key]} />
 									<span class="checkbox-label" style="text-transform: capitalize;">{key}</span>
@@ -1259,7 +1423,7 @@
 								id="comp-date"
 								type="date"
 								bind:value={composerDate}
-								style="font-size: var(--text-sm); padding: 0.5rem; border-radius: var(--radius-xs); border: 1px solid var(--border); background: var(--surface); color: var(--text);"
+								style="font-size: 1rem; padding: 0.5rem; border-radius: var(--radius-xs); border: 1px solid var(--border); background: var(--surface); color: var(--text);"
 							/>
 						</div>
 						<div class="field" style="display: flex; flex-direction: column; gap: 0.25rem;">
@@ -1272,7 +1436,7 @@
 								id="comp-time"
 								type="time"
 								bind:value={composerTime}
-								style="font-size: var(--text-sm); padding: 0.5rem; border-radius: var(--radius-xs); border: 1px solid var(--border); background: var(--surface); color: var(--text);"
+								style="font-size: 1rem; padding: 0.5rem; border-radius: var(--radius-xs); border: 1px solid var(--border); background: var(--surface); color: var(--text);"
 							/>
 						</div>
 					</div>
@@ -1282,15 +1446,29 @@
 					class="composer-footer"
 					style="padding: 1rem 1.5rem; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 0.75rem; background: var(--surface-2);"
 				>
-					<button class="btn-ghost btn-sm" onclick={closeComposer}>Cancel</button>
-					<button class="btn-ghost btn-sm" style="border: 1px solid var(--warning); color: var(--warning);" onclick={saveAsDraft} disabled={composerSubmitting}>
+					<button type="button" class="btn-ghost btn-sm" onclick={closeComposer}>Cancel</button>
+					<button type="button" class="btn-ghost btn-sm" style="border: 1px solid var(--warning); color: var(--warning-text);" onclick={saveAsDraft} disabled={composerSubmitting}>
 						{#if composerSubmitting}
 							<span class="spinner"></span> Saving…
 						{:else}
-							📝 Save as Draft
+							<svg
+								width="14"
+								height="14"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								aria-hidden="true"
+								><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z" /><path
+									d="M14 2v5h5"
+								/><path d="M8 13h8" /><path d="M8 17h5" /></svg
+							>
+							Save as Draft
 						{/if}
 					</button>
-					<button class="btn-primary btn-sm" onclick={schedulePost} disabled={composerSubmitting}>
+					<button type="button" class="btn-primary btn-sm" onclick={schedulePost} disabled={composerSubmitting}>
 						{#if composerSubmitting}
 							<span class="spinner"></span> Scheduling…
 						{:else}
@@ -1303,6 +1481,7 @@
 								stroke-width="2.5"
 								stroke-linecap="round"
 								stroke-linejoin="round"
+								aria-hidden="true"
 								><rect x="3" y="4" width="18" height="18" rx="2" /><line
 									x1="16"
 									y1="2"
@@ -1376,28 +1555,42 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		z-index: 1000;
+		z-index: var(--z-modal);
 		animation: fadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 		padding: 1.5rem;
 	}
 
 	.modal-backdrop.z-top {
-		z-index: 1100;
+		z-index: var(--z-overlay);
+	}
+
+	/* A real button behind the dialog: clicking outside stays dismissible without
+	   hanging a click handler off a plain <div>, and it is keyboard reachable. */
+	.overlay-dismiss {
+		position: absolute;
+		inset: 0;
+		width: 100%;
+		border: none;
+		padding: 0;
+		background: transparent;
+		cursor: default;
 	}
 
 	.day-modal {
+		position: relative;
+		z-index: 1;
 		background: var(--surface);
 		border: 1px solid var(--border-strong);
 		border-radius: var(--radius);
 		width: 100%;
 		max-width: 550px;
-		max-height: 80vh;
+		max-height: 80dvh;
 		display: flex;
 		flex-direction: column;
 		box-shadow:
 			var(--shadow-lg),
 			0 20px 25px -5px rgba(0, 0, 0, 0.3),
-			0 0 50px rgba(124, 106, 237, 0.15);
+			0 0 50px color-mix(in srgb, var(--accent) 15%, transparent);
 		animation: scaleUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 		overflow: hidden;
 	}
@@ -1411,7 +1604,7 @@
 		background: var(--surface-2);
 	}
 
-	.modal-header h3 {
+	.modal-header h2 {
 		font-size: var(--text-md);
 		font-family: var(--font-display);
 		font-weight: 600;
@@ -1419,9 +1612,11 @@
 		color: var(--text);
 	}
 
+	/* 44x44 hit area; the glyph inside stays 18px. */
 	.modal-close {
-		width: 32px;
-		height: 32px;
+		width: 44px;
+		height: 44px;
+		flex-shrink: 0;
 		border-radius: var(--radius-full);
 		border: none;
 		background: var(--surface-3);
@@ -1458,7 +1653,7 @@
 		font-weight: 600;
 		text-transform: capitalize;
 		padding: 4px 10px;
-		border-radius: 6px;
+		border-radius: var(--radius-xs);
 	}
 
 	/* Animations */
@@ -1475,7 +1670,7 @@
 		width: 56px;
 		height: 56px;
 		border-radius: var(--radius-full);
-		background: var(--gradient-subtle);
+		background: var(--gradient-cta);
 		border: none;
 		color: #fff;
 		display: flex;
@@ -1493,7 +1688,7 @@
 		transform: translateY(-3px) scale(1.05);
 		box-shadow:
 			var(--shadow-lg),
-			0 0 40px rgba(124, 106, 237, 0.3);
+			0 0 40px color-mix(in srgb, var(--accent) 30%, transparent);
 	}
 
 	/* ── Composer overlay ── */
@@ -1511,12 +1706,14 @@
 	}
 
 	.composer {
+		position: relative;
+		z-index: 1;
 		background: var(--surface);
 		border: 1px solid var(--border);
 		border-radius: var(--radius);
 		width: 100%;
 		max-width: 1000px;
-		max-height: 90vh;
+		max-height: 90dvh;
 		display: flex;
 		flex-direction: column;
 		animation: fadeDown 0.3s var(--ease-out);
@@ -1531,10 +1728,33 @@
 		border-bottom: 1px solid var(--border);
 	}
 
-	.composer-header h3 {
+	.composer-header h2 {
 		margin: 0;
 		font-family: var(--font-display);
 		font-size: var(--text-lg);
+	}
+
+	/* Was an unstyled default button; 44x44 hit area, 18px glyph. */
+	.panel-close {
+		width: 44px;
+		height: 44px;
+		flex-shrink: 0;
+		border-radius: var(--radius-full);
+		border: none;
+		background: var(--surface-3);
+		color: var(--text-muted);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		cursor: pointer;
+		transition:
+			background 0.2s,
+			color 0.2s;
+	}
+
+	.panel-close:hover {
+		color: var(--text);
+		background: var(--border-strong);
 	}
 
 	.composer-body {
@@ -1569,6 +1789,7 @@
 		align-items: center;
 		gap: 0.35rem;
 		padding: 0.35rem 0.65rem;
+		min-height: 44px;
 		border-radius: var(--radius-xs);
 		background: var(--surface-2);
 		border: 1px solid var(--border);
@@ -1715,12 +1936,13 @@
 
 	.manage-count {
 		margin-left: 0.45rem;
-		color: var(--accent);
+		color: var(--accent-text);
 		font-weight: var(--weight-bold);
 	}
 
 	.manage-filter {
-		font-size: var(--text-xs);
+		/* Must stay >=16px — iOS Safari force-zooms a focused control below that. */
+		font-size: 1rem;
 		padding: 0.35rem 0.5rem;
 		border-radius: var(--radius-xs);
 		border: 1px solid var(--border);
@@ -1745,7 +1967,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 0.4rem;
-		max-height: 55vh;
+		max-height: 55dvh;
 		overflow-y: auto;
 	}
 
@@ -1771,9 +1993,13 @@
 		background: color-mix(in srgb, var(--accent) 8%, transparent);
 	}
 
+	/* The 16px box stays 16px; the label around it carries the 44x44 hit area. */
 	.row-pick {
 		display: flex;
 		align-items: center;
+		justify-content: center;
+		min-width: 44px;
+		min-height: 44px;
 		flex-shrink: 0;
 		cursor: pointer;
 	}
@@ -1803,7 +2029,10 @@
 		position: absolute;
 		right: 2px;
 		bottom: 2px;
-		padding: 0 3px;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		padding: 2px 3px;
 		border-radius: 4px;
 		background: rgba(10, 14, 26, 0.72);
 		color: #fff;
@@ -1829,6 +2058,7 @@
 		display: grid;
 		place-items: center;
 		background: var(--surface-3);
+		color: var(--text-dim);
 		font-size: 1rem;
 	}
 
@@ -1891,33 +2121,35 @@
 		letter-spacing: 0.04em;
 	}
 
+	/* Status is carried by the label text; colour is a redundant cue, and the -text
+	   variants keep it legible in both themes. */
 	.manage-status.status-draft {
-		color: #f59e0b;
-		border-color: #f59e0b;
+		color: var(--warning-text);
+		border-color: var(--warning);
 	}
 	.manage-status.status-scheduled {
-		color: #38bdf8;
-		border-color: #38bdf8;
+		color: var(--info-text);
+		border-color: var(--info);
 	}
 	.manage-status.status-publishing {
-		color: #22d3ee;
-		border-color: #22d3ee;
+		color: var(--cyan-text);
+		border-color: var(--cyan);
 	}
 	.manage-status.status-published {
-		color: #10b981;
-		border-color: #10b981;
+		color: var(--success-text);
+		border-color: var(--success);
 	}
 	.manage-status.status-partial {
-		color: #f97316;
-		border-color: #f97316;
+		color: var(--gold);
+		border-color: var(--gold);
 	}
 	.manage-status.status-rejected {
-		color: #f43f5e;
-		border-color: #f43f5e;
+		color: var(--rose-text);
+		border-color: var(--rose);
 	}
 	.manage-status.status-failed {
-		color: #ef4444;
-		border-color: #ef4444;
+		color: var(--error-text);
+		border-color: var(--error);
 	}
 
 	.manage-empty {

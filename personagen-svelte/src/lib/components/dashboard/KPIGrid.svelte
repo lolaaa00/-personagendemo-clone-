@@ -51,26 +51,28 @@
 				icon: 'agents',
 				value: String(activeCount),
 				label: 'Active Agents',
-				color: '#6366f1',
+				// Token variants so the icon chips repaint with the brand theme and stay
+				// legible on the light surface (the raw brand hues washed out on white).
+				color: 'var(--accent-text)',
 				subtitle: `${connectedCount} of ${totalCount} connected`
 			},
 			{
 				icon: 'engagement',
 				value: avgEngText,
 				label: 'Avg Engagement',
-				color: '#22d3ee'
+				color: 'var(--cyan-text)'
 			},
 			{
 				icon: 'posts',
 				value: postsText,
 				label: 'Posts This Week',
-				color: '#34d399'
+				color: 'var(--success-text)'
 			},
 			{
 				icon: 'reach',
 				value: reachText,
 				label: 'Total Reach',
-				color: '#f472b6'
+				color: 'var(--rose-text)'
 			}
 		];
 	});
@@ -179,7 +181,9 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		background: rgba(255, 255, 255, 0.04);
+		/* A flat white alpha is invisible on the light card; tinting with the KPI colour
+		   gives the chip a visible shape in both themes. */
+		background: color-mix(in srgb, var(--kpi-color, var(--accent)) 12%, transparent);
 		color: var(--kpi-color, var(--accent));
 		flex-shrink: 0;
 	}
@@ -195,6 +199,8 @@
 		font-weight: 700;
 		font-family: var(--font-display);
 		line-height: 1.2;
+		font-variant-numeric: tabular-nums;
+		font-feature-settings: 'tnum' 1;
 	}
 
 	.dash-kpi-label {
@@ -209,6 +215,8 @@
 		font-size: 0.65rem;
 		color: var(--text-dim);
 		margin-top: 2px;
+		font-variant-numeric: tabular-nums;
+		font-feature-settings: 'tnum' 1;
 	}
 
 	@media (max-width: 1024px) {

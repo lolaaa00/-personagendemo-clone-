@@ -1,11 +1,13 @@
 <script lang="ts">
 	import { toasts, dismissToast } from '$lib/stores/ui.svelte';
 
+	/** Lucide-style path data, one `d` per status — rendered as an inline SVG below. */
 	const iconMap: Record<string, string> = {
-		success: '✓',
-		error: '✕',
-		info: 'ℹ',
-		warning: '⚠'
+		success: 'M20 6 9 17l-5-5',
+		error: 'M18 6 6 18M6 6l12 12',
+		info: 'M12 22a10 10 0 1 1 0-20 10 10 0 0 1 0 20M12 16v-4M12 8h.01',
+		warning:
+			'm10.29 3.86-8.47 14.14A2 2 0 0 0 3.53 21h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0M12 9v4M12 17h.01'
 	};
 </script>
 
@@ -17,7 +19,21 @@
 				onclick={() => dismissToast(toast.id)}
 				aria-label="Dismiss notification"
 			>
-				<span class="toast-icon toast-icon-{toast.type}">{iconMap[toast.type]}</span>
+				<span class="toast-icon toast-icon-{toast.type}">
+					<svg
+						width="14"
+						height="14"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
+					>
+						<path d={iconMap[toast.type]} />
+					</svg>
+				</span>
 				<span class="toast-message">{toast.message}</span>
 			</button>
 		{/each}

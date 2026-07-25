@@ -2,13 +2,29 @@
 	import { goto } from '$app/navigation';
 	import { showToast, themeState } from '$lib/stores/ui.svelte';
 	import Button from '$lib/components/ui/Button.svelte';
-	import Input from '$lib/components/ui/Input.svelte';
 	import Card from '$lib/components/ui/Card.svelte';
 
 	let email = $state('');
 	let password = $state('');
 	let loading = $state(false);
 	let error = $state('');
+
+	// ── Presentation-only state: drives ARIA attributes and focus management ──
+	let showPassword = $state(false);
+	let emailEl: HTMLInputElement | null = $state(null);
+	let passwordEl: HTMLInputElement | null = $state(null);
+
+	// Svelte forbids a dynamic `type` attribute on an input that uses bind:value,
+	// so the show/hide toggle is reflected onto the element imperatively.
+	$effect(() => {
+		if (passwordEl) passwordEl.type = showPassword ? 'text' : 'password';
+	});
+
+	// After a failed submit, move focus to the first field the user must correct.
+	$effect(() => {
+		if (!error) return;
+		emailEl?.focus();
+	});
 
 	async function handleLogin(e: SubmitEvent) {
 		e.preventDefault();
@@ -84,8 +100,103 @@
 			{/snippet}
 
 			<form onsubmit={handleLogin} class="login-form">
+				<p class="login-required-note" id="login-required-note">
+					Fields marked <span class="login-req" aria-hidden="true">*</span>
+					<span class="sr-only">with an asterisk</span> are required.
+				</p>
+
+				<div class="login-field">
+					<label for="email">
+						Email address <span class="login-req" aria-hidden="true">*</span><span class="sr-only"
+							>(required)</span
+						>
+					</label>
+					<input
+						id="email"
+						class="input-field"
+						type="email"
+						inputmode="email"
+						bind:value={email}
+						bind:this={emailEl}
+						placeholder="you@example.com"
+						required
+						aria-required="true"
+						autocomplete="email"
+						aria-invalid={error ? 'true' : 'false'}
+						aria-describedby={error ? 'login-error' : undefined}
+					/>
+				</div>
+
+				<div class="login-field">
+					<label for="password">
+						Password <span class="login-req" aria-hidden="true">*</span><span class="sr-only"
+							>(required)</span
+						>
+					</label>
+					<div class="login-input-wrap">
+						<input
+							id="password"
+							class="input-field login-input-toggleable"
+							type="password"
+							bind:value={password}
+							bind:this={passwordEl}
+							placeholder="••••••••"
+							required
+							aria-required="true"
+							autocomplete="current-password"
+							aria-invalid={error ? 'true' : 'false'}
+							aria-describedby={error ? 'login-password-help login-error' : 'login-password-help'}
+						/>
+						<button
+							type="button"
+							class="login-pw-toggle"
+							aria-pressed={showPassword}
+							aria-controls="password"
+							aria-label={showPassword ? 'Hide password' : 'Show password'}
+							onclick={() => (showPassword = !showPassword)}
+						>
+							{#if showPassword}
+								<svg
+									width="18"
+									height="18"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									aria-hidden="true"
+								>
+									<path d="M9.88 9.88a3 3 0 1 0 4.24 4.24" />
+									<path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68" />
+									<path d="M6.61 6.61A13.53 13.53 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61" />
+									<line x1="2" y1="2" x2="22" y2="22" />
+								</svg>
+							{:else}
+								<svg
+									width="18"
+									height="18"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									aria-hidden="true"
+								>
+									<path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z" />
+									<circle cx="12" cy="12" r="3" />
+								</svg>
+							{/if}
+						</button>
+					</div>
+					<p class="login-hint" id="login-password-help">
+						Passwords are case-sensitive.
+					</p>
+				</div>
+
 				{#if error}
-					<div class="login-error" role="alert">
+					<div class="login-error" id="login-error" role="alert">
 						<svg
 							width="16"
 							height="16"
@@ -93,6 +204,7 @@
 							fill="none"
 							stroke="currentColor"
 							stroke-width="2"
+							aria-hidden="true"
 						>
 							<circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line
 								x1="9"
@@ -101,36 +213,18 @@
 								y2="15"
 							/>
 						</svg>
-						{error}
+						<span class="login-error-body">
+							<strong class="login-error-message">{error}</strong>
+							<span class="login-error-help">
+								Re-enter your email address and password — passwords are case-sensitive — then try
+								again. If the problem continues, create an account or contact your administrator.
+							</span>
+						</span>
 					</div>
 				{/if}
 
-				<div class="login-field">
-					<label for="email">Email address</label>
-					<Input
-						id="email"
-						type="email"
-						bind:value={email}
-						placeholder="you@example.com"
-						required
-						autocomplete="email"
-					/>
-				</div>
-
-				<div class="login-field">
-					<label for="password">Password</label>
-					<Input
-						id="password"
-						type="password"
-						bind:value={password}
-						placeholder="••••••••"
-						required
-						autocomplete="current-password"
-					/>
-				</div>
-
 				<Button type="submit" variant="primary" {loading} class="login-submit">
-					Sign In
+					{loading ? 'Signing in…' : 'Sign In'}
 					<svg
 						width="16"
 						height="16"
@@ -140,10 +234,15 @@
 						stroke-width="2.5"
 						stroke-linecap="round"
 						stroke-linejoin="round"
+						aria-hidden="true"
 					>
 						<path d="M5 12h14" /><path d="M12 5l7 7-7 7" />
 					</svg>
 				</Button>
+
+				<p class="sr-only" role="status" aria-live="polite">
+					{loading ? 'Signing in, please wait…' : ''}
+				</p>
 			</form>
 
 			<!-- Signup link -->
@@ -155,7 +254,7 @@
 			{#snippet footer()}
 				<div class="login-footer">
 					<span>Managed by PersonaGen</span>
-					<span class="login-pulse"></span>
+					<span class="login-pulse" aria-hidden="true"></span>
 					<span>Portal Active</span>
 				</div>
 			{/snippet}
@@ -249,6 +348,13 @@
 		}
 	}
 
+	@media (prefers-reduced-motion: reduce) {
+		.login-orb,
+		.login-pulse {
+			animation: none;
+		}
+	}
+
 	.login-grid {
 		position: fixed;
 		inset: 0;
@@ -288,7 +394,7 @@
 		align-items: center;
 		justify-content: center;
 		color: #fff;
-		box-shadow: 0 0 30px rgba(124, 106, 237, 0.35);
+		box-shadow: 0 0 30px color-mix(in srgb, var(--accent) 35%, transparent);
 	}
 
 	.login-wordmark {
@@ -309,13 +415,19 @@
 		gap: var(--space-5);
 	}
 
+	.login-required-note {
+		font-size: var(--text-sm);
+		color: var(--text-dim);
+		margin: 0;
+	}
+
 	.login-field {
 		display: flex;
 		flex-direction: column;
 	}
 
 	.login-field label {
-		font-size: var(--text-xs);
+		font-size: var(--text-sm);
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: var(--tracking-wider);
@@ -323,19 +435,96 @@
 		margin-bottom: var(--space-2);
 	}
 
+	.login-req {
+		color: var(--error-text);
+		font-weight: 700;
+	}
+
+	.login-hint {
+		font-size: var(--text-sm);
+		color: var(--text-dim);
+		margin: var(--space-2) 0 0;
+	}
+
+	/* Password show/hide */
+	.login-input-wrap {
+		position: relative;
+		display: flex;
+		align-items: center;
+	}
+
+	.login-input-toggleable {
+		padding-right: 52px;
+	}
+
+	.login-pw-toggle {
+		position: absolute;
+		right: 0;
+		top: 50%;
+		transform: translateY(-50%);
+		min-width: 44px;
+		min-height: 44px;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		background: none;
+		border: none;
+		padding: 0;
+		border-radius: var(--radius-xs);
+		color: var(--text-dim);
+		cursor: pointer;
+		transition: color var(--ease-fast);
+	}
+
+	.login-pw-toggle:hover {
+		color: var(--text);
+	}
+
+	.login-pw-toggle:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
+	}
+
 	/* Error */
 	.login-error {
 		display: flex;
-		align-items: center;
+		align-items: flex-start;
 		gap: var(--space-2);
 		padding: var(--space-3) var(--space-4);
 		border-radius: var(--radius-xs);
-		background: rgba(239, 68, 68, 0.15);
-		border: 1px solid rgba(239, 68, 68, 0.2);
-		color: var(--error);
-		font-size: var(--text-sm);
+		background: color-mix(in srgb, var(--error) 15%, transparent);
+		border: 1px solid color-mix(in srgb, var(--error) 35%, transparent);
+		color: var(--error-text);
+		font-size: var(--text-base);
 		font-weight: 500;
 		animation: fadeDown 0.3s ease;
+	}
+
+	.login-error svg {
+		flex-shrink: 0;
+		margin-top: 2px;
+	}
+
+	.login-error-body {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-1);
+	}
+
+	.login-error-message {
+		font-weight: 700;
+	}
+
+	.login-error-help {
+		font-weight: 500;
+		color: var(--text);
+		line-height: var(--leading-snug);
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.login-error {
+			animation: none;
+		}
 	}
 
 	/* Primitives class overrides */
@@ -355,18 +544,28 @@
 		justify-content: center;
 		gap: var(--space-2);
 		margin-top: var(--space-6);
-		font-size: var(--text-sm);
+		font-size: var(--text-base);
 		color: var(--text-dim);
 	}
 
 	.login-alt a {
-		color: var(--accent);
+		display: inline-flex;
+		align-items: center;
+		min-height: 44px;
+		padding: 0 var(--space-2);
+		color: var(--accent-text);
 		font-weight: 600;
 		transition: color 0.2s ease;
 	}
 
 	.login-alt a:hover {
 		color: var(--text);
+	}
+
+	.login-alt a:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
+		border-radius: var(--radius-xs);
 	}
 
 	@keyframes fadeDown {
@@ -398,7 +597,7 @@
 		height: 6px;
 		border-radius: 50%;
 		background: var(--success);
-		box-shadow: 0 0 8px rgba(52, 211, 153, 0.6);
+		box-shadow: 0 0 8px color-mix(in srgb, var(--success) 60%, transparent);
 		animation: pulse 2s ease-in-out infinite;
 	}
 

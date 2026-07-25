@@ -27,19 +27,35 @@
 {#if visible}
 	<div class="ai-wrap">
 		{#if open}
-			<div class="ai-panel">
+			<div
+				class="ai-panel"
+				id="ai-activity-panel"
+				role="region"
+				aria-labelledby="ai-activity-title"
+				aria-live="polite"
+			>
 				<header>
-					<strong>Generation activity</strong>
-					<button onclick={() => (open = false)} aria-label="Collapse">✕</button>
+					<strong id="ai-activity-title">Generation activity</strong>
+					<button onclick={() => (open = false)} aria-label="Collapse generation activity">
+						<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" /></svg>
+					</button>
 				</header>
 
 				{#each active as job (job.id)}
+					{@const jobPct = Math.round(progressOf(job, now) * 100)}
 					<div class="ai-row">
-						<span class="ai-spin"></span>
+						<span class="ai-spin" aria-hidden="true"></span>
 						<div class="ai-main">
 							<span class="ai-label">{job.label}</span>
-							<div class="ai-bar">
-								<div class="ai-fill" style="width:{Math.round(progressOf(job, now) * 100)}%"></div>
+							<div
+								class="ai-bar"
+								role="progressbar"
+								aria-valuenow={jobPct}
+								aria-valuemin="0"
+								aria-valuemax="100"
+								aria-label="{job.label} progress"
+							>
+								<div class="ai-fill" style="transform:scaleX({jobPct / 100})"></div>
 							</div>
 						</div>
 						<span class="ai-time">{Math.round((now - job.startedAt) / 1000)}s</span>
@@ -48,7 +64,7 @@
 
 				{#each failed as job (job.id)}
 					<div class="ai-row err">
-						<span class="ai-x">!</span>
+						<span class="ai-x" aria-hidden="true">!</span>
 						<div class="ai-main">
 							<span class="ai-label">{job.label} failed</span>
 							<span class="ai-err">{job.error}</span>
@@ -59,12 +75,18 @@
 			</div>
 		{/if}
 
-		<button class="ai-pill" class:has-err={failed.length > 0} onclick={() => (open = !open)}>
+		<button
+			class="ai-pill"
+			class:has-err={failed.length > 0}
+			onclick={() => (open = !open)}
+			aria-expanded={open}
+			aria-controls="ai-activity-panel"
+		>
 			{#if active.length}
-				<span class="ai-spin"></span>
+				<span class="ai-spin" aria-hidden="true"></span>
 				{active.length} generating
 			{:else}
-				<span class="ai-x">!</span>
+				<span class="ai-x" aria-hidden="true">!</span>
 				{failed.length} failed
 			{/if}
 		</button>
@@ -76,7 +98,9 @@
 		position: fixed;
 		right: 1rem;
 		bottom: 1rem;
-		z-index: 900;
+		/* Floats above page content and drawers-adjacent chrome, but deliberately
+		   below --z-modal (dialogs must cover it) and far below --z-toast. */
+		z-index: var(--z-drawer);
 		display: flex;
 		flex-direction: column;
 		align-items: flex-end;
@@ -85,32 +109,35 @@
 	.ai-pill {
 		display: flex;
 		align-items: center;
+		justify-content: center;
 		gap: 0.5rem;
-		background: var(--surface, #fff);
-		border: 1px solid var(--border, #e6e8f0);
+		min-height: 44px;
+		min-width: 44px;
+		background: var(--surface);
+		border: 1px solid var(--border);
 		box-shadow: 0 8px 26px rgba(15, 18, 32, 0.16);
 		border-radius: 999px;
 		padding: 0.5rem 0.9rem;
 		font-size: 0.8rem;
 		font-weight: 600;
 		cursor: pointer;
-		color: var(--text, #14172b);
+		color: var(--text);
 	}
 	.ai-pill.has-err {
-		border-color: #fecaca;
-		color: #991b1b;
+		border-color: color-mix(in srgb, var(--error) 40%, transparent);
+		color: var(--error-text);
 	}
 	.ai-panel {
 		width: min(360px, calc(100vw - 2rem));
-		background: var(--surface, #fff);
-		border: 1px solid var(--border, #e6e8f0);
+		background: var(--surface);
+		border: 1px solid var(--border);
 		border-radius: 14px;
 		box-shadow: 0 16px 44px rgba(15, 18, 32, 0.2);
 		padding: 0.75rem;
 		display: flex;
 		flex-direction: column;
 		gap: 0.6rem;
-		max-height: 60vh;
+		max-height: 60dvh;
 		overflow-y: auto;
 	}
 	.ai-panel header {
@@ -120,10 +147,20 @@
 		font-size: 0.85rem;
 	}
 	.ai-panel header button {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		/* 44×44 hit area; the glyph itself stays 16px. Negative margin keeps the
+		   header's visual height unchanged. */
+		width: 44px;
+		height: 44px;
+		margin: -0.7rem -0.7rem -0.7rem 0;
+		flex: none;
 		background: none;
 		border: none;
+		border-radius: 999px;
 		cursor: pointer;
-		color: var(--muted, #6b7280);
+		color: var(--muted);
 	}
 	.ai-row {
 		display: flex;
@@ -146,7 +183,7 @@
 	}
 	.ai-err {
 		font-size: 0.7rem;
-		color: #991b1b;
+		color: var(--error-text);
 		display: -webkit-box;
 		-webkit-line-clamp: 2;
 		line-clamp: 2;
@@ -155,26 +192,30 @@
 	}
 	.ai-bar {
 		height: 5px;
-		background: var(--surface-2, #eef0f6);
+		background: var(--surface-2);
 		border-radius: 999px;
 		overflow: hidden;
 	}
+	/* Full-width fill driven by scaleX — this re-renders on a 500ms interval for
+	   every in-flight job, so animating `width` relayouts the whole panel. */
 	.ai-fill {
+		width: 100%;
 		height: 100%;
-		background: linear-gradient(90deg, var(--accent, #7c6aed), var(--cyan, #22d3ee));
-		transition: width 0.5s ease-out;
+		background: linear-gradient(90deg, var(--accent), var(--cyan));
+		transform-origin: left center;
+		transition: transform 0.3s ease-out;
 	}
 	.ai-time {
 		font-size: 0.7rem;
-		color: var(--muted, #6b7280);
+		color: var(--muted);
 		font-variant-numeric: tabular-nums;
 	}
 	.ai-spin {
 		width: 13px;
 		height: 13px;
 		flex: none;
-		border: 2px solid var(--border, #e6e8f0);
-		border-top-color: var(--accent, #7c6aed);
+		border: 2px solid var(--border);
+		border-top-color: var(--accent);
 		border-radius: 50%;
 		animation: spin 0.8s linear infinite;
 	}
@@ -188,7 +229,7 @@
 		height: 15px;
 		flex: none;
 		border-radius: 50%;
-		background: #dc2626;
+		background: var(--error);
 		color: #fff;
 		font-size: 0.68rem;
 		font-weight: 800;
@@ -196,12 +237,18 @@
 		place-items: center;
 	}
 	.ai-dismiss {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		flex: none;
+		min-height: 44px;
+		min-width: 44px;
 		font-size: 0.7rem;
 		background: none;
-		border: 1px solid var(--border, #e6e8f0);
+		border: 1px solid var(--border);
 		border-radius: 8px;
 		padding: 0.2rem 0.45rem;
 		cursor: pointer;
-		color: var(--muted, #6b7280);
+		color: var(--muted);
 	}
 </style>

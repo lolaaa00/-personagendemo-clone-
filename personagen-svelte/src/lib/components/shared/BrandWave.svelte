@@ -74,14 +74,19 @@
         "
 			>
 				<!-- Sparkle Star Icon -->
-				<svg viewBox="0 0 24 24" fill="currentColor" style="width: 100%; height: 100%;">
+				<svg
+					viewBox="0 0 24 24"
+					fill="currentColor"
+					style="width: 100%; height: 100%;"
+					aria-hidden="true"
+				>
 					<path d="M12 0L14.6 9.4L24 12L14.6 14.6L12 24L9.4 14.6L0 12L9.4 9.4L12 0Z" />
 				</svg>
 			</div>
 		{/each}
 
 		<!-- Elegant overlay message card -->
-		<div class="magical-toast-card">
+		<div class="magical-toast-card" role="status">
 			<div class="magical-toast-icon">
 				<svg
 					width="24"
@@ -90,6 +95,7 @@
 					fill="none"
 					stroke="currentColor"
 					stroke-width="2"
+					aria-hidden="true"
 				>
 					<path d="M12 3v18M5.636 5.636l12.728 12.728M3 12h18M5.636 18.364L18.364 5.636" />
 				</svg>
@@ -106,7 +112,11 @@
 	.brand-transform-overlay {
 		position: fixed;
 		inset: 0;
-		z-index: 999999;
+		/* Deliberately the topmost layer in the app: this is a pointer-events:none
+		   celebration overlay that must paint over even the toast layer. Expressed
+		   relative to the scale (was a bare 999999) — nothing else in the app sits
+		   above --z-toast, so the stacking result is unchanged. */
+		z-index: var(--z-celebration);
 		pointer-events: none;
 		overflow: hidden;
 		display: flex;
@@ -201,12 +211,12 @@
 	/* ── Magical Celebration Card ── */
 	.magical-toast-card {
 		background: rgba(255, 255, 255, 0.85);
-		border: 1px solid rgba(124, 106, 237, 0.2);
+		border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
 		backdrop-filter: blur(20px) saturate(180%);
 		-webkit-backdrop-filter: blur(20px) saturate(180%);
 		box-shadow:
 			0 20px 50px rgba(10, 5, 30, 0.15),
-			0 0 30px rgba(124, 106, 237, 0.15);
+			0 0 30px color-mix(in srgb, var(--accent) 15%, transparent);
 		border-radius: 20px;
 		padding: 16px 24px;
 		display: flex;
@@ -216,15 +226,15 @@
 		width: 380px;
 		animation: magical-toast-anim 1.5s cubic-bezier(0.19, 1, 0.22, 1) forwards;
 		pointer-events: auto;
-		z-index: 1000;
+		z-index: var(--z-modal);
 	}
 
 	:global([data-theme='dark']) .magical-toast-card {
 		background: rgba(15, 12, 28, 0.85);
-		border-color: rgba(124, 106, 237, 0.3);
+		border-color: color-mix(in srgb, var(--accent) 30%, transparent);
 		box-shadow:
 			0 20px 50px rgba(0, 0, 0, 0.5),
-			0 0 30px rgba(124, 106, 237, 0.2);
+			0 0 30px color-mix(in srgb, var(--accent) 20%, transparent);
 	}
 
 	.magical-toast-icon {
@@ -277,12 +287,12 @@
 	@keyframes pulse-glow {
 		0%,
 		100% {
-			box-shadow: 0 0 10px rgba(124, 106, 237, 0.3);
+			box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 30%, transparent);
 		}
 		50% {
 			box-shadow:
-				0 0 20px rgba(124, 106, 237, 0.6),
-				0 0 30px rgba(34, 211, 238, 0.4);
+				0 0 20px color-mix(in srgb, var(--accent) 60%, transparent),
+				0 0 30px color-mix(in srgb, var(--cyan) 40%, transparent);
 		}
 	}
 </style>

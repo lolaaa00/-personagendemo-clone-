@@ -79,6 +79,12 @@
 		padding: 0 var(--space-8) var(--space-8) var(--space-8);
 	}
 
+	/* A header-less card had no top padding at all — its content sat flush against
+	   the panel edge. Restore it only when the content leads. */
+	.card-content:first-child {
+		padding-top: var(--space-8);
+	}
+
 	.card-footer {
 		padding: var(--space-5) var(--space-8);
 		border-top: 1px solid var(--border);

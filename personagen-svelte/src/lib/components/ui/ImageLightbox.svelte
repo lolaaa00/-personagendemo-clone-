@@ -25,13 +25,58 @@
 	const isVideo = $derived(
 		type === 'video' || (type == null && !!url && /\.(mp4|webm|mov|m4v)(\?|$)/i.test(url))
 	);
+
+	// Element ref used purely for focus management (a11y).
+	let contentEl = $state<HTMLDivElement | null>(null);
+
+	const FOCUSABLE =
+		'a[href], button:not([disabled]), video[controls], [tabindex]:not([tabindex="-1"])';
+
+	function onKeydown(e: KeyboardEvent) {
+		if (!url) return;
+		if (e.key === 'Escape') {
+			onClose();
+			return;
+		}
+		const root = contentEl;
+		if (e.key !== 'Tab' || !root) return;
+		// A full-screen viewer must not leak focus to the page behind it.
+		const items = Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
+			(el) => el.offsetWidth > 0 || el.offsetHeight > 0 || el === document.activeElement
+		);
+		if (items.length === 0) {
+			e.preventDefault();
+			root.focus();
+			return;
+		}
+		const active = document.activeElement as HTMLElement | null;
+		const idx = active ? items.indexOf(active) : -1;
+		if (e.shiftKey) {
+			if (idx <= 0) {
+				e.preventDefault();
+				items[items.length - 1].focus();
+			}
+		} else if (idx === -1 || idx === items.length - 1) {
+			e.preventDefault();
+			items[0].focus();
+		}
+	}
+
+	// Focus in on open, hand focus back to the thumbnail that opened it on close.
+	$effect(() => {
+		if (!url || !contentEl) return;
+		const el = contentEl;
+		const returnTo = document.activeElement as HTMLElement | null;
+		el.focus({ preventScroll: true });
+		return () => {
+			if (returnTo && typeof returnTo.focus === 'function' && returnTo.isConnected) {
+				returnTo.focus({ preventScroll: true });
+			}
+		};
+	});
 </script>
 
-<svelte:window
-	onkeydown={(e) => {
-		if (e.key === 'Escape' && url) onClose();
-	}}
-/>
+<svelte:window onkeydown={url ? onKeydown : undefined} />
 
 {#if url}
 	<div class="lb-backdrop" onclick={onClose} role="presentation">
@@ -41,6 +86,8 @@
 			role="dialog"
 			aria-modal="true"
 			aria-label={label || 'Enlarged media'}
+			tabindex="-1"
+			bind:this={contentEl}
 		>
 			{#if isVideo}
 				<!-- svelte-ignore a11y_media_has_caption -->
@@ -50,8 +97,23 @@
 			{/if}
 			<div class="lb-bar">
 				<span>{label}</span>
-				<a href={url} target="_blank" rel="noopener noreferrer">Open original ↗</a>
-				<button type="button" onclick={onClose}>Close</button>
+				<a href={url} target="_blank" rel="noopener noreferrer">
+					Open original
+					<svg
+						width="12"
+						height="12"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
+					>
+						<path d="M7 17 17 7M9 7h8v8" />
+					</svg>
+				</a>
+				<button type="button" onclick={onClose} aria-label="Close enlarged media">Close</button>
 			</div>
 		</div>
 	</div>
@@ -66,12 +128,12 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		z-index: 1200;
+		z-index: var(--z-lightbox);
 		padding: 1.5rem;
 	}
 	.lb-content {
 		max-width: min(1000px, 94vw);
-		max-height: 92vh;
+		max-height: 92dvh;
 		display: flex;
 		flex-direction: column;
 		border-radius: var(--radius, 12px);
@@ -79,10 +141,18 @@
 		background: var(--surface, #fff);
 		border: 1px solid var(--border-strong, #d8dbe8);
 	}
+	.lb-content:focus {
+		outline: none;
+	}
+	.lb-content:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
+	}
 	.lb-content img,
 	.lb-content video {
 		max-width: 100%;
-		max-height: calc(92vh - 52px);
+		/* 64px = the bar's 44px min touch target plus its 0.6rem vertical padding. */
+		max-height: calc(92dvh - 64px);
 		object-fit: contain;
 		background: #0b0f1a;
 	}
@@ -101,11 +171,17 @@
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
+	/* Both bar controls keep their compact look but carry a 44px-tall hit area. */
 	.lb-bar a {
-		color: var(--accent, #7c6aed);
+		color: var(--accent-text, #6338d4);
 		text-decoration: none;
 		font-weight: 600;
 		white-space: nowrap;
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+		min-height: 44px;
+		padding: 0 0.25rem;
 	}
 	.lb-bar button {
 		background: var(--surface-2, #f3f4f6);
@@ -116,5 +192,15 @@
 		font-weight: 600;
 		color: var(--text, #14172b);
 		cursor: pointer;
+		min-height: 44px;
+		min-width: 44px;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+	}
+	.lb-bar a:focus-visible,
+	.lb-bar button:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
 	}
 </style>

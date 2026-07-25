@@ -402,6 +402,27 @@
 	}
 </script>
 
+<!-- Shared inline icons. Snippets rather than emoji so they inherit currentColor,
+     scale with the surrounding text, and stay invisible to screen readers. -->
+{#snippet iconEye()}
+	<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" /><circle cx="12" cy="12" r="3" /></svg>
+{/snippet}
+{#snippet iconHeart()}
+	<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" /></svg>
+{/snippet}
+{#snippet iconComment()}
+	<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" /></svg>
+{/snippet}
+{#snippet iconPlus()}
+	<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14" /><path d="M12 5v14" /></svg>
+{/snippet}
+{#snippet iconCheck()}
+	<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>
+{/snippet}
+{#snippet iconNote()}
+	<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" /><path d="M14 2v5h5" /><path d="M8 13h8M8 17h5" /></svg>
+{/snippet}
+
 <!-- ── Toolbar: date nav + Today (left) · view switch (right) ── -->
 <div class="cal-toolbar">
 	<div class="toolbar-left">
@@ -409,7 +430,12 @@
 			<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
 		</button>
 		<div class="month-selector-wrapper">
-			<button class="month-selector-btn" onclick={toggleDatePicker} aria-label="Jump to a specific date">
+			<button
+				class="month-selector-btn"
+				onclick={toggleDatePicker}
+				aria-label="Jump to a specific date. Currently showing {toolbarLabel}"
+				aria-expanded={showDatePicker}
+			>
 				<span>{toolbarLabel}</span>
 				<svg class="dropdown-icon" class:open={showDatePicker} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
 			</button>
@@ -456,36 +482,36 @@
 		<button class="today-btn" onclick={goToday}>Today</button>
 	</div>
 
-	<div class="view-toggle" role="group" aria-label="Calendar view">
-		<button class="view-btn" class:active={calendarView === 'day'} onclick={() => setView('day')}>Day</button>
-		<button class="view-btn" class:active={calendarView === 'week'} onclick={() => setView('week')}>Week</button>
-		<button class="view-btn" class:active={calendarView === 'month'} onclick={() => setView('month')}>Month</button>
+	<div class="view-toggle" role="radiogroup" aria-label="Calendar view">
+		<button class="view-btn" class:active={calendarView === 'day'} role="radio" aria-checked={calendarView === 'day'} onclick={() => setView('day')}>Day</button>
+		<button class="view-btn" class:active={calendarView === 'week'} role="radio" aria-checked={calendarView === 'week'} onclick={() => setView('week')}>Week</button>
+		<button class="view-btn" class:active={calendarView === 'month'} role="radio" aria-checked={calendarView === 'month'} onclick={() => setView('month')}>Month</button>
 	</div>
 </div>
 
 <!-- ── Analytics strip: range metrics that double as the status filter ── -->
 <div class="summary-strip" role="group" aria-label="Range summary and status filter">
-	<button class="stat-chip" class:on={statusChip === 'published'} onclick={() => toggleChip('published')}>
-		<span class="stat-dot" style="background: var(--success)"></span>
+	<button class="stat-chip" class:on={statusChip === 'published'} aria-pressed={statusChip === 'published'} onclick={() => toggleChip('published')}>
+		<span class="stat-dot" style="background: var(--success)" aria-hidden="true"></span>
 		<strong>{rangeStats.published}</strong> published
 		{#if rangeStats.views > 0}
-			<span class="stat-metric">👁 {fmtNum(rangeStats.views)}</span>
+			<span class="stat-metric">{@render iconEye()} <span class="sr-only">views</span>{fmtNum(rangeStats.views)}</span>
 		{/if}
 		{#if rangeStats.likes > 0}
-			<span class="stat-metric">❤ {fmtNum(rangeStats.likes)}</span>
+			<span class="stat-metric">{@render iconHeart()} <span class="sr-only">likes</span>{fmtNum(rangeStats.likes)}</span>
 		{/if}
 	</button>
-	<button class="stat-chip" class:on={statusChip === 'scheduled'} onclick={() => toggleChip('scheduled')}>
-		<span class="stat-dot" style="background: var(--accent)"></span>
+	<button class="stat-chip" class:on={statusChip === 'scheduled'} aria-pressed={statusChip === 'scheduled'} onclick={() => toggleChip('scheduled')}>
+		<span class="stat-dot" style="background: var(--accent)" aria-hidden="true"></span>
 		<strong>{rangeStats.scheduled}</strong> scheduled
 	</button>
-	<button class="stat-chip" class:on={statusChip === 'draft'} onclick={() => toggleChip('draft')}>
-		<span class="stat-dot" style="background: var(--warning)"></span>
+	<button class="stat-chip" class:on={statusChip === 'draft'} aria-pressed={statusChip === 'draft'} onclick={() => toggleChip('draft')}>
+		<span class="stat-dot" style="background: var(--warning)" aria-hidden="true"></span>
 		<strong>{rangeStats.draft}</strong> drafts
 	</button>
 	{#if rangeStats.failed > 0}
-		<button class="stat-chip chip-failed" class:on={statusChip === 'failed'} onclick={() => toggleChip('failed')}>
-			<span class="stat-dot" style="background: var(--error)"></span>
+		<button class="stat-chip chip-failed" class:on={statusChip === 'failed'} aria-pressed={statusChip === 'failed'} onclick={() => toggleChip('failed')}>
+			<span class="stat-dot" style="background: var(--error)" aria-hidden="true"></span>
 			<strong>{rangeStats.failed}</strong> failed
 		</button>
 	{/if}
@@ -500,17 +526,20 @@
 		<aside class="personas-rail" aria-label="Filter by persona">
 			<h3 class="rail-title">Personas</h3>
 			<div class="rail-list">
-				<button class="agent-item" class:active={!selectedAgentId} onclick={() => (selectedAgentId = '')}>
-					<span class="agent-dot"></span>
+				<button class="agent-item" class:active={!selectedAgentId} aria-pressed={!selectedAgentId} onclick={() => (selectedAgentId = '')}>
+					<span class="agent-dot" aria-hidden="true"></span>
 					<span class="agent-name">All Personas</span>
 				</button>
 				{#each agents as agent}
 					<button
 						class="agent-item"
 						class:active={selectedAgentId === agent.id}
+						aria-pressed={selectedAgentId === agent.id}
 						onclick={() => (selectedAgentId = agent.id)}
 					>
-						<span class="agent-dot" style="background: {agent.gradient || 'var(--accent)'}"></span>
+						<!-- The dot repeats the persona's brand colour; the name beside it
+						     carries the same identity as text, so it's decorative here. -->
+						<span class="agent-dot" style="background: {agent.gradient || 'var(--accent)'}" aria-hidden="true"></span>
 						<span class="agent-name">{agent.name}</span>
 					</button>
 				{/each}
@@ -538,6 +567,9 @@
 									class="cell-day-btn"
 									onclick={() => (selectedDay = cell.day)}
 									title="Open this day's posts"
+									aria-label="{MONTHS[currentMonth]} {cell.day}, {currentYear}{cell.isToday
+										? ' (today)'
+										: ''} — {dayPosts.length} post{dayPosts.length === 1 ? '' : 's'}"
 								>
 									{cell.day}
 								</button>
@@ -547,7 +579,7 @@
 										onclick={() => onGenerateForDate(cell.dateStr)}
 										title="Generate a post for this day"
 										aria-label="Generate a post for {cell.dateStr}"
-									>+</button>
+									>{@render iconPlus()}</button>
 								{/if}
 							</div>
 							{#if dayPosts.length > 0}
@@ -559,18 +591,25 @@
 											onclick={() => onOpenPost(post)}
 											title={postErrorHint(post)}
 										>
-											<div class="event-status-bar" style="background: {STATUS_COLORS[post.status]}"></div>
+											<!-- Status is carried by the colour stripe visually; the sr-only
+											     text below is the non-colour equivalent. -->
+											<div class="event-status-bar" style="background: {STATUS_COLORS[post.status]}" aria-hidden="true"></div>
 											<div class="event-content">
+												<span class="sr-only">{post.status} · {post.time}</span>
 												<span class="event-agent">
 													{post.agentName.split(' ')[0]}
-													{#if views > 0}<span class="event-views">👁 {fmtNum(views)}</span>{/if}
+													{#if views > 0}<span class="event-views">{@render iconEye()} <span class="sr-only">views</span>{fmtNum(views)}</span>{/if}
 												</span>
 												<span class="event-text">{getPostDisplay(post).text}</span>
 											</div>
 										</button>
 									{/each}
 									{#if dayPosts.length > 3}
-										<button class="event-overflow" onclick={() => (selectedDay = cell.day)}>
+										<button
+											class="event-overflow"
+											onclick={() => (selectedDay = cell.day)}
+											aria-label="Show all {dayPosts.length} posts for {MONTHS[currentMonth]} {cell.day}"
+										>
 											+{dayPosts.length - 3} more
 										</button>
 									{/if}
@@ -588,9 +627,9 @@
 					{@const thumb = getPostThumb(post)}
 					<button class="mobile-post-item" onclick={() => onOpenPost(post)}>
 						{#if thumb}
-							<img class="mobile-post-thumb" src={thumb} alt="" loading="lazy" />
+							<img class="mobile-post-thumb" src={thumb} alt="" width="64" height="80" loading="lazy" />
 						{:else}
-							<div class="mobile-post-thumb mobile-post-thumb-empty">📝</div>
+							<div class="mobile-post-thumb mobile-post-thumb-empty">{@render iconNote()}</div>
 						{/if}
 						<div class="mobile-post-body">
 							<div class="mobile-post-date">
@@ -619,7 +658,16 @@
 					{@const dayPosts = postsForDateSorted(dateStr)}
 					<div class="week-col" class:today={dateStr === todayStr}>
 						<div class="week-col-head">
-							<button class="week-head-btn" onclick={() => openDayView(wd)} title="Open day view">
+							<button
+								class="week-head-btn"
+								onclick={() => openDayView(wd)}
+								title="Open day view"
+								aria-label="Open day view for {WEEKDAYS_FULL[wd.getDay()]}, {MONTHS[
+									wd.getMonth()
+								]} {wd.getDate()}, {wd.getFullYear()} — {dayPosts.length} post{dayPosts.length === 1
+									? ''
+									: 's'}"
+							>
 								<span class="week-dow">{DAYS[i]}</span>
 								<span class="week-num">{wd.getDate()}</span>
 							</button>
@@ -629,19 +677,20 @@
 									onclick={() => onGenerateForDate(dateStr)}
 									title="Generate a post for this day"
 									aria-label="Generate a post for {dateStr}"
-								>+</button>
+								>{@render iconPlus()}</button>
 							{/if}
 						</div>
 						<div class="week-col-body">
 							{#each dayPosts as post}
 								{@const views = post.analytics?.views ?? 0}
 								<div class="event-block week-event">
-									<div class="event-status-bar" style="background: {STATUS_COLORS[post.status]}"></div>
+									<div class="event-status-bar" style="background: {STATUS_COLORS[post.status]}" aria-hidden="true"></div>
 									<button class="event-main" onclick={() => onOpenPost(post)} title={postErrorHint(post)}>
+										<span class="sr-only">{post.status}</span>
 										<span class="event-time">{post.time}</span>
 										<span class="event-agent">
 											{post.agentName.split(' ')[0]}
-											{#if views > 0}<span class="event-views">👁 {fmtNum(views)}</span>{/if}
+											{#if views > 0}<span class="event-views">{@render iconEye()} <span class="sr-only">views</span>{fmtNum(views)}</span>{/if}
 										</span>
 										<span class="event-text">{getPostDisplay(post).text}</span>
 									</button>
@@ -651,8 +700,9 @@
 											onclick={() => approveOne(post)}
 											disabled={approvingIds.has(post.id)}
 											title="Approve — publishes at its scheduled time"
+											aria-label="Approve draft at {post.time} by {post.agentName} — publishes at its scheduled time"
 										>
-											{approvingIds.has(post.id) ? '…' : '✓'}
+											{#if approvingIds.has(post.id)}…{:else}{@render iconCheck()}{/if}
 										</button>
 									{/if}
 								</div>
@@ -665,7 +715,8 @@
 			<div class="day-view">
 				{#if onGenerateForDate && fmtDate(anchorDate) >= todayStr}
 					<button class="day-generate" onclick={() => onGenerateForDate(fmtDate(anchorDate))}>
-						＋ Generate a post for this day
+						{@render iconPlus()}
+						Generate a post for this day
 					</button>
 				{/if}
 				{#each dayViewPosts as post}
@@ -674,9 +725,10 @@
 					<div class="day-post">
 						<button class="day-post-main" onclick={() => onOpenPost(post)} title={postErrorHint(post)}>
 							<span class="day-post-time">{post.time}</span>
-							<div class="day-post-bar" style="background: {STATUS_COLORS[post.status]}"></div>
+							<!-- Colour-only status stripe; .status-badge below states it in words. -->
+							<div class="day-post-bar" style="background: {STATUS_COLORS[post.status]}" aria-hidden="true"></div>
 							{#if thumb}
-								<img class="day-post-thumb" src={thumb} alt="" loading="lazy" />
+								<img class="day-post-thumb" src={thumb} alt="" width="56" height="56" loading="lazy" />
 							{/if}
 							<div class="day-post-body">
 								<div class="day-post-top">
@@ -695,9 +747,9 @@
 									</div>
 									{#if a && (a.views || a.likes || a.comments)}
 										<div class="day-post-metrics">
-											<span>👁 {fmtNum(a.views ?? 0)}</span>
-											<span>❤ {fmtNum(a.likes ?? 0)}</span>
-											<span>💬 {fmtNum(a.comments ?? 0)}</span>
+											<span>{@render iconEye()} <span class="sr-only">views</span>{fmtNum(a.views ?? 0)}</span>
+											<span>{@render iconHeart()} <span class="sr-only">likes</span>{fmtNum(a.likes ?? 0)}</span>
+											<span>{@render iconComment()} <span class="sr-only">comments</span>{fmtNum(a.comments ?? 0)}</span>
 										</div>
 									{/if}
 								</div>
@@ -709,8 +761,14 @@
 								onclick={() => approveOne(post)}
 								disabled={approvingIds.has(post.id)}
 								title="Approve — publishes at its scheduled time"
+								aria-label="Approve draft at {post.time} by {post.agentName} — publishes at its scheduled time"
 							>
-								{approvingIds.has(post.id) ? 'Approving…' : '✓ Approve'}
+								{#if approvingIds.has(post.id)}
+									Approving…
+								{:else}
+									{@render iconCheck()}
+									Approve
+								{/if}
 							</button>
 						{/if}
 					</div>
@@ -727,9 +785,19 @@
 <!-- ── Day modal (month view): all of one day's posts + approve-all ── -->
 {#if selectedDay !== null}
 	<div class="modal-backdrop" onclick={() => (selectedDay = null)} role="presentation">
-		<div class="day-modal" onclick={(e) => e.stopPropagation()} role="dialog">
+		<!-- The click handler is a backdrop-dismiss guard, not an interaction, so
+		     there is no keyboard equivalent to add. -->
+		<!-- svelte-ignore a11y_click_events_have_key_events -->
+		<div
+			class="day-modal"
+			onclick={(e) => e.stopPropagation()}
+			role="dialog"
+			aria-modal="true"
+			aria-labelledby="cal-day-modal-title"
+			tabindex="-1"
+		>
 			<div class="modal-header">
-				<h3>{MONTHS[currentMonth]} {selectedDay}, {currentYear}</h3>
+				<h3 id="cal-day-modal-title">{MONTHS[currentMonth]} {selectedDay}, {currentYear}</h3>
 				<button class="modal-close" onclick={() => (selectedDay = null)} aria-label="Close modal">
 					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18" /><path d="M6 6l12 12" /></svg>
 				</button>
@@ -746,9 +814,9 @@
 							{@const dp = getPostDisplay(post)}
 							{@const thumb = getPostThumb(post)}
 							<button class="modal-post-card" onclick={() => onOpenPost(post)}>
-								<div class="post-card-status" style="background: {STATUS_COLORS[post.status] || 'var(--accent)'}"></div>
+								<div class="post-card-status" style="background: {STATUS_COLORS[post.status] || 'var(--accent)'}" aria-hidden="true"></div>
 								{#if thumb}
-									<img class="post-card-thumb" src={thumb} alt="" loading="lazy" />
+									<img class="post-card-thumb" src={thumb} alt="" width="52" height="52" loading="lazy" />
 								{/if}
 								<div class="post-card-body">
 									<div class="post-card-time-row">
@@ -764,7 +832,9 @@
 										<span class="post-card-agent">{post.agentName}</span>
 										<div class="post-card-platforms">
 											{#each post.platforms as p}
-												<span class="platform-dot" style="background: {platformColor(p)}" title={p}></span>
+												<!-- Platform is encoded by colour alone here, so each dot
+												     carries the platform name as its accessible name. -->
+												<span class="platform-dot" style="background: {platformColor(p)}" title={p} role="img" aria-label={p}></span>
 											{/each}
 										</div>
 									</div>
@@ -782,9 +852,12 @@
 							onclick={() => approveAllDrafts(selectedDayPosts)}
 							disabled={approvingAll}
 						>
-							{approvingAll
-								? 'Approving…'
-								: `✓ Approve all drafts (${selectedDayPosts.filter((p) => p.status === 'draft').length})`}
+							{#if approvingAll}
+								Approving…
+							{:else}
+								{@render iconCheck()}
+								Approve all drafts ({selectedDayPosts.filter((p) => p.status === 'draft').length})
+							{/if}
 						</button>
 					{/if}
 					<button class="btn-ghost btn-sm" onclick={() => (selectedDay = null)}>Close</button>
@@ -812,8 +885,8 @@
 	}
 
 	.nav-btn {
-		width: 36px;
-		height: 36px;
+		width: 44px;
+		height: 44px;
 		border-radius: var(--radius-full);
 		border: 1px solid var(--border);
 		background: var(--surface);
@@ -835,6 +908,11 @@
 	}
 
 	.today-btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-height: 44px;
+		min-width: 44px;
 		border: 1px solid var(--border);
 		border-radius: var(--radius-xs);
 		background: var(--surface);
@@ -854,13 +932,17 @@
 		color: var(--text);
 	}
 
+	/* Lifts the jump-to-date popover above ordinary page content while staying
+	   below the app nav, drawers and modals. The 1/2 values on the backdrop and
+	   dropdown below are LOCAL to this stacking context, not global scale values. */
 	.month-selector-wrapper {
 		position: relative;
 		display: inline-block;
-		z-index: 80;
+		z-index: var(--z-header);
 	}
 
 	.month-selector-btn {
+		min-height: 44px;
 		font-family: var(--font-display);
 		font-size: var(--text-lg);
 		font-weight: var(--weight-semi);
@@ -905,7 +987,7 @@
 	.datepicker-backdrop {
 		position: fixed;
 		inset: 0;
-		z-index: 85;
+		z-index: 1;
 		background: transparent;
 	}
 
@@ -914,7 +996,7 @@
 		top: 100%;
 		left: 50%;
 		transform: translateX(-50%) translateY(8px);
-		z-index: 90;
+		z-index: 2;
 		min-width: 320px;
 		background: var(--surface);
 		border: 1px solid var(--border-strong);
@@ -953,6 +1035,7 @@
 	}
 
 	.datepicker-field select {
+		min-height: 44px;
 		padding: 6px 20px 6px 8px;
 		font-size: var(--text-xs);
 		border-radius: var(--radius-xs);
@@ -976,6 +1059,11 @@
 	}
 
 	.view-btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-height: 44px;
+		min-width: 44px;
 		padding: 0.5rem 0.85rem;
 		background: transparent;
 		border: none;
@@ -1009,6 +1097,8 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 0.45rem;
+		min-height: 44px;
+		min-width: 44px;
 		padding: 0.4rem 0.75rem;
 		background: var(--surface);
 		border: 1px solid var(--border);
@@ -1045,6 +1135,9 @@
 	}
 
 	.stat-metric {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
 		color: var(--text-dim);
 		font-variant-numeric: tabular-nums;
 	}
@@ -1054,9 +1147,14 @@
 	}
 
 	.stat-clear {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-height: 44px;
+		min-width: 44px;
 		border: none;
 		background: transparent;
-		color: var(--accent);
+		color: var(--accent-text);
 		font-size: var(--text-xs);
 		font-weight: 600;
 		cursor: pointer;
@@ -1081,7 +1179,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 0.5rem;
-		max-height: calc(100vh - 140px);
+		max-height: calc(100dvh - 140px);
 		overflow-y: auto;
 	}
 
@@ -1105,6 +1203,7 @@
 		display: flex;
 		align-items: center;
 		gap: 0.6rem;
+		min-height: 44px;
 		padding: 0.55rem 0.6rem;
 		background: transparent;
 		border: 1px solid transparent;
@@ -1185,7 +1284,9 @@
 		flex-direction: column;
 		align-items: stretch;
 		gap: 0.3rem;
-		min-height: 120px;
+		/* Taller than before so a 44px day-number row still leaves room for two
+		   event chips — the touch-target floor has to come out of somewhere. */
+		min-height: 140px;
 		color: var(--text);
 		overflow: hidden;
 		transition: border-color 0.2s;
@@ -1210,14 +1311,21 @@
 		align-items: center;
 		justify-content: space-between;
 		gap: 0.25rem;
+		/* Bounds the 44px targets inside it so neither bleeds over the events list. */
+		min-height: 44px;
 	}
 
 	.cell-day-btn {
+		display: inline-flex;
+		align-items: center;
+		min-width: 44px;
+		min-height: 44px;
 		border: none;
 		background: transparent;
 		font: inherit;
 		font-size: var(--text-sm);
 		font-weight: var(--weight-semi);
+		font-variant-numeric: tabular-nums;
 		color: var(--text);
 		cursor: pointer;
 		padding: 0.1rem 0.35rem;
@@ -1235,8 +1343,10 @@
 
 	/* Hover-revealed one-click generate for a specific day */
 	.cell-add {
+		position: relative;
 		width: 22px;
 		height: 22px;
+		flex: none;
 		border-radius: var(--radius-full);
 		border: 1px solid var(--border);
 		background: var(--surface-2);
@@ -1252,6 +1362,19 @@
 			opacity 0.15s,
 			border-color 0.15s,
 			color 0.15s;
+	}
+
+	/* The visible affordance stays a 22px dot (a 44px circle would swallow a
+	   narrow month cell); this invisible overlay supplies the 44×44 tap target.
+	   .cell-top's 44px min-height keeps it from covering any event chip. */
+	.cell-add::before {
+		content: '';
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		transform: translate(-50%, -50%);
+		width: 44px;
+		height: 44px;
 	}
 
 	.cell:hover .cell-add,
@@ -1279,6 +1402,7 @@
 		display: flex;
 		align-items: stretch;
 		gap: 0;
+		min-height: 44px;
 		background: var(--surface-2);
 		border: 1px solid var(--border);
 		border-radius: var(--radius-xs);
@@ -1327,9 +1451,12 @@
 	}
 
 	.event-views {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.2rem;
 		text-transform: none;
 		letter-spacing: 0;
-		color: var(--success);
+		color: var(--success-text);
 		font-variant-numeric: tabular-nums;
 	}
 
@@ -1348,6 +1475,10 @@
 	}
 
 	.event-overflow {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		min-height: 44px;
 		border: none;
 		background: transparent;
 		padding: 0.3rem 0.45rem;
@@ -1399,7 +1530,9 @@
 		display: flex;
 		flex-direction: column;
 		align-items: center;
+		justify-content: center;
 		gap: 2px;
+		min-height: 44px;
 		padding: 0.55rem 0;
 		background: transparent;
 		border: none;
@@ -1423,6 +1556,7 @@
 	.week-num {
 		font-size: var(--text-md);
 		font-weight: var(--weight-semi);
+		font-variant-numeric: tabular-nums;
 	}
 
 	.week-col.today .week-num {
@@ -1449,7 +1583,9 @@
 		min-width: 0;
 		display: flex;
 		flex-direction: column;
+		justify-content: center;
 		gap: 0.1rem;
+		min-height: 44px;
 		padding: 0.35rem 0.45rem;
 		background: transparent;
 		border: none;
@@ -1460,6 +1596,7 @@
 	}
 
 	.event-approve {
+		position: relative;
 		flex-shrink: 0;
 		align-self: center;
 		width: 22px;
@@ -1468,7 +1605,7 @@
 		border-radius: var(--radius-full);
 		border: 1px solid var(--success);
 		background: transparent;
-		color: var(--success);
+		color: var(--success-text);
 		font-size: 0.75rem;
 		line-height: 1;
 		display: flex;
@@ -1478,6 +1615,18 @@
 		transition:
 			background 0.15s,
 			color 0.15s;
+	}
+
+	/* Same trick as .cell-add: keep the 22px pip, expand the target to 44×44.
+	   The parent chip is min-height 44 so nothing outside the chip is covered. */
+	.event-approve::before {
+		content: '';
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		transform: translate(-50%, -50%);
+		width: 44px;
+		height: 44px;
 	}
 
 	.event-approve:hover:not(:disabled) {
@@ -1499,6 +1648,11 @@
 
 	.day-generate {
 		align-self: flex-start;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.4rem;
+		min-height: 44px;
 		border: 1px dashed var(--border-strong);
 		background: transparent;
 		color: var(--text-muted);
@@ -1628,12 +1782,24 @@
 		font-variant-numeric: tabular-nums;
 	}
 
+	.day-post-metrics span {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
+	}
+
 	.day-approve {
 		flex-shrink: 0;
 		align-self: center;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.3rem;
+		min-height: 44px;
+		min-width: 44px;
 		border: 1px solid var(--success);
 		background: transparent;
-		color: var(--success);
+		color: var(--success-text);
 		font-size: var(--text-xs);
 		font-weight: 700;
 		padding: 0.45rem 0.75rem;
@@ -1693,7 +1859,7 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		z-index: 1000;
+		z-index: var(--z-modal);
 		padding: 1.5rem;
 	}
 
@@ -1703,7 +1869,7 @@
 		border-radius: var(--radius);
 		width: 100%;
 		max-width: 550px;
-		max-height: 80vh;
+		max-height: 80dvh;
 		display: flex;
 		flex-direction: column;
 		box-shadow:
@@ -1730,8 +1896,9 @@
 	}
 
 	.modal-close {
-		width: 32px;
-		height: 32px;
+		width: 44px;
+		height: 44px;
+		flex: none;
 		border-radius: var(--radius-full);
 		border: none;
 		background: var(--surface-3);
@@ -1880,6 +2047,12 @@
 
 	.btn-ghost,
 	.btn-primary {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.35rem;
+		min-height: 44px;
+		min-width: 44px;
 		border-radius: var(--radius-xs);
 		padding: 0.45rem 0.85rem;
 		font-weight: 600;
@@ -1946,6 +2119,7 @@
 		display: grid;
 		place-items: center;
 		background: var(--surface-2);
+		color: var(--text-dim);
 		font-size: 1.25rem;
 	}
 
@@ -1964,13 +2138,16 @@
 		letter-spacing: 0.04em;
 	}
 
-	.mobile-post-status.status-draft { color: #f59e0b; border-color: #f59e0b; }
-	.mobile-post-status.status-scheduled { color: #38bdf8; border-color: #38bdf8; }
-	.mobile-post-status.status-publishing { color: #22d3ee; border-color: #22d3ee; }
-	.mobile-post-status.status-published { color: #10b981; border-color: #10b981; }
-	.mobile-post-status.status-partial { color: #f97316; border-color: #f97316; }
-	.mobile-post-status.status-rejected { color: #f43f5e; border-color: #f43f5e; }
-	.mobile-post-status.status-failed { color: #ef4444; border-color: #ef4444; }
+	/* Mirrors STATUS_COLORS above, but through the theme tokens so the Brand Theme
+	   repaints these too. Text uses the AA `-text` variants; the ring keeps the
+	   saturated brand fill. */
+	.mobile-post-status.status-draft { color: var(--warning-text); border-color: var(--warning); }
+	.mobile-post-status.status-scheduled { color: var(--accent-text); border-color: var(--accent); }
+	.mobile-post-status.status-publishing { color: var(--cyan-text); border-color: var(--cyan); }
+	.mobile-post-status.status-published { color: var(--success-text); border-color: var(--success); }
+	.mobile-post-status.status-partial { color: var(--gold); border-color: var(--gold); }
+	.mobile-post-status.status-rejected { color: var(--rose-text); border-color: var(--rose); }
+	.mobile-post-status.status-failed { color: var(--error-text); border-color: var(--error); }
 
 	.mobile-list-empty {
 		color: var(--text-dim);
@@ -2066,7 +2243,9 @@
 		}
 
 		.cell {
-			min-height: 85px;
+			/* 44px header row + one event chip; the grid is replaced by .mobile-list
+			   below 640px anyway. */
+			min-height: 110px;
 			font-size: var(--text-xs);
 		}
 

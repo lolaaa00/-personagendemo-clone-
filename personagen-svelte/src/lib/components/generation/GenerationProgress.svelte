@@ -32,33 +32,46 @@
 	let elapsed = $derived(Math.max(0, Math.round((now - job.startedAt) / 1000)));
 </script>
 
-<div class="gp gp-{variant}" class:failed={!!job.error}>
+<div class="gp gp-{variant}" class:failed={!!job.error} aria-live="polite">
 	{#if job.error}
 		<div class="gp-head">
-			<span class="gp-icon err">!</span>
+			<span class="gp-icon err" aria-hidden="true">!</span>
 			<span class="gp-label">{job.label} failed</span>
 		</div>
-		<p class="gp-err" title={job.error}>{job.error}</p>
+		<p class="gp-err" title={job.error} role="alert">{job.error}</p>
 		<div class="gp-actions">
-			{#if onRetry}<button class="gp-btn" onclick={onRetry}>↺ Retry</button>{/if}
+			{#if onRetry}<button class="gp-btn" onclick={onRetry}>
+					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /><path d="M3 3v5h5" /></svg>
+					Retry
+				</button>{/if}
 			{#if onDismiss}<button class="gp-btn ghost" onclick={onDismiss}>Dismiss</button>{/if}
 		</div>
 	{:else}
 		<div class="gp-head">
-			<span class="gp-spinner"></span>
+			<span class="gp-spinner" aria-hidden="true"></span>
 			<span class="gp-label">{job.label}</span>
 			<span class="gp-time">{elapsed}s</span>
 		</div>
-		<div class="gp-bar"><div class="gp-fill" style="width:{pct}%"></div></div>
+		<div
+			class="gp-bar"
+			role="progressbar"
+			aria-valuenow={pct}
+			aria-valuemin="0"
+			aria-valuemax="100"
+			aria-valuetext="{pct}% — {elapsed} seconds elapsed"
+			aria-label="{job.label} progress"
+		>
+			<div class="gp-fill" style="transform:scaleX({pct / 100})"></div>
+		</div>
 		<p class="gp-note">Generating — this keeps running if you navigate away.</p>
 	{/if}
 </div>
 
 <style>
 	.gp {
-		border: 1px solid var(--border, #e6e8f0);
+		border: 1px solid var(--border);
 		border-radius: 12px;
-		background: var(--surface, #fff);
+		background: var(--surface);
 		padding: 0.8rem;
 		display: flex;
 		flex-direction: column;
@@ -72,12 +85,12 @@
 		position: absolute;
 		inset: 0;
 		justify-content: center;
-		background: rgba(255, 255, 255, 0.92);
+		background: color-mix(in srgb, var(--surface) 92%, transparent);
 		backdrop-filter: blur(2px);
 	}
 	.gp.failed {
-		border-color: #fecaca;
-		background: #fef2f2;
+		border-color: color-mix(in srgb, var(--error) 40%, transparent);
+		background: var(--error-soft);
 	}
 	.gp-head {
 		display: flex;
@@ -87,7 +100,7 @@
 	.gp-label {
 		font-size: 0.82rem;
 		font-weight: 600;
-		color: var(--text, #14172b);
+		color: var(--text);
 		flex: 1;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -95,15 +108,15 @@
 	}
 	.gp-time {
 		font-size: 0.72rem;
-		color: var(--muted, #6b7280);
+		color: var(--muted);
 		font-variant-numeric: tabular-nums;
 	}
 	.gp-spinner {
 		width: 14px;
 		height: 14px;
 		flex: none;
-		border: 2px solid var(--border, #e6e8f0);
-		border-top-color: var(--accent, #7c6aed);
+		border: 2px solid var(--border);
+		border-top-color: var(--accent);
 		border-radius: 50%;
 		animation: spin 0.8s linear infinite;
 	}
@@ -117,7 +130,7 @@
 		height: 16px;
 		flex: none;
 		border-radius: 50%;
-		background: #dc2626;
+		background: var(--error);
 		color: #fff;
 		font-size: 0.7rem;
 		font-weight: 800;
@@ -127,24 +140,28 @@
 	.gp-bar {
 		height: 6px;
 		border-radius: 999px;
-		background: var(--surface-2, #eef0f6);
+		background: var(--surface-2);
 		overflow: hidden;
 	}
+	/* Full-width fill driven by scaleX — animating `width` would relayout the bar
+	   on every one of the 400ms ticks; a transform stays on the compositor. */
 	.gp-fill {
+		width: 100%;
 		height: 100%;
 		border-radius: 999px;
-		background: linear-gradient(90deg, var(--accent, #7c6aed), var(--cyan, #22d3ee));
-		transition: width 0.4s ease-out;
+		background: linear-gradient(90deg, var(--accent), var(--cyan));
+		transform-origin: left center;
+		transition: transform 0.25s ease-out;
 	}
 	.gp-note {
 		margin: 0;
 		font-size: 0.7rem;
-		color: var(--muted, #6b7280);
+		color: var(--muted);
 	}
 	.gp-err {
 		margin: 0;
 		font-size: 0.74rem;
-		color: #991b1b;
+		color: var(--error-text);
 		display: -webkit-box;
 		-webkit-line-clamp: 3;
 		line-clamp: 3;
@@ -156,18 +173,24 @@
 		gap: 0.4rem;
 	}
 	.gp-btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.35rem;
+		min-height: 44px;
+		min-width: 44px;
 		font-size: 0.74rem;
 		font-weight: 600;
 		padding: 0.28rem 0.6rem;
 		border-radius: 8px;
 		cursor: pointer;
-		border: 1px solid var(--accent, #7c6aed);
-		background: var(--accent, #7c6aed);
+		border: 1px solid var(--accent);
+		background: var(--accent);
 		color: #fff;
 	}
 	.gp-btn.ghost {
 		background: transparent;
-		color: var(--muted, #6b7280);
-		border-color: var(--border, #e6e8f0);
+		color: var(--muted);
+		border-color: var(--border);
 	}
 </style>

@@ -3,7 +3,6 @@ import { redirect } from '@sveltejs/kit';
 import { env } from '$env/dynamic/public';
 import { env as privateEnv } from '$env/dynamic/private';
 import { checkConfigStatus } from '$lib/server/config-check';
-import { createDbService } from '$lib/server/db';
 
 export const load: LayoutServerLoad = async ({ locals }) => {
 	const supabaseUrl = env.PUBLIC_SUPABASE_URL ?? '';
@@ -19,8 +18,17 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 
 		let sidebarAgents: any[] = [];
 		if (locals.supabase) {
-			const db = createDbService(locals.supabase);
-			const { data: agents } = await db.agents.list();
+			// Lean projection: the sidebar roster only renders these fields (see
+			// +layout.svelte) — never the large soul/skills/tools/market text, so
+			// don't ship every agent's full row on every navigation. Pages that
+			// need full agent rows load them in their own server loads.
+			// `is_overseer IS NOT TRUE` matches the old `!a.is_overseer` filter
+			// (keeps rows where the column is false OR null).
+			const { data: agents } = await locals.supabase
+				.from('agents')
+				.select('id, name, handle, initial, gradient, status, is_overseer')
+				.not('is_overseer', 'is', true)
+				.order('created_at', { ascending: false });
 			const creatorAgents = (agents ?? []).filter((a: any) => !a.is_overseer);
 
 			const agentIds = creatorAgents.map((a: any) => a.id);

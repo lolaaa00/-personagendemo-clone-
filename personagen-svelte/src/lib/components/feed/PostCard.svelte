@@ -174,7 +174,7 @@
 						onEnlarge?.(post);
 					}}
 				>
-					<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"
+					<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"
 						><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" /></svg
 					>
 				</button>
@@ -191,7 +191,7 @@
 						onDelete?.(post);
 					}}
 				>
-					<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"
+					<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"
 						><path d="M3 6h18M8 6V4h8v2m1 0v14a2 2 0 01-2 2H9a2 2 0 01-2-2V6h12" /></svg
 					>
 				</button>
@@ -203,7 +203,16 @@
 			<span class="tile-gen-spin"></span>
 			<span class="tile-gen-title">Generating…</span>
 			{#if genTopic}<span class="tile-gen-topic">{genTopic}</span>{/if}
-			<div class="tile-gen-bar"><div class="tile-gen-fill" style="width:{pct}%"></div></div>
+			<div
+				class="tile-gen-bar"
+				role="progressbar"
+				aria-label="Generation progress"
+				aria-valuemin="0"
+				aria-valuemax="100"
+				aria-valuenow={pct}
+			>
+				<div class="tile-gen-fill" style="transform:scaleX({pct / 100})"></div>
+			</div>
 			<span class="tile-gen-time">{elapsedS}s · keeps running if you leave</span>
 		</div>
 	{:else if isGenFail}
@@ -226,7 +235,9 @@
 							e.stopPropagation();
 							onRetry?.(post);
 						}
-					}}>↺ Retry</span
+					}}
+					><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7" /><path d="M3 3v5h5" /></svg
+					> Retry</span
 				>
 			{/if}
 		</div>
@@ -263,7 +274,14 @@
 				</button>
 			{:else}
 				{#if display.posterUrl}
-					<img src={display.posterUrl} loading="lazy" alt="Video poster" />
+					<img
+						src={display.posterUrl}
+						width="800"
+						height="1000"
+						loading="lazy"
+						decoding="async"
+						alt="Video poster frame for this post"
+					/>
 				{:else}
 					<div class="tile-video-placeholder"></div>
 				{/if}
@@ -280,7 +298,14 @@
 				</button>
 			{/if}
 		{:else}
-			<img src={display.mediaUrl} loading="lazy" alt="Post media" />
+			<img
+				src={display.mediaUrl}
+				width="800"
+				height="1000"
+				loading="lazy"
+				decoding="async"
+				alt="Post media"
+			/>
 		{/if}
 	{:else}
 		<!-- Defensive: media-less posts are purged, but render sanely if one appears -->
@@ -299,7 +324,8 @@
 		     and offer a one-tap route to a platform that IS connected. -->
 		<div class="tile-postfail-banner">
 			<span class="tile-postfail-msg" title={postErrorLabel ?? 'Failed to post'}>
-				⚠ Failed to post{postErrorLabel ? ` — ${postErrorLabel.split('\n')[0]}` : ''}
+				<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><path d="M12 9v4" /><path d="M12 17h.01" /></svg
+				> Failed to post{postErrorLabel ? ` — ${postErrorLabel.split('\n')[0]}` : ''}
 			</span>
 			{#if onPublishFallback}
 				<!-- svelte-ignore node_invalid_placement_ssr -->
@@ -316,20 +342,34 @@
 							e.stopPropagation();
 							onPublishFallback?.(post);
 						}
-					}}>📤 Publish to a connected platform</span
+					}}
+					><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5" /><path d="m5 12 7-7 7 7" /></svg
+					> Publish to a connected platform</span
 				>
 			{/if}
 		</div>
 	{:else if hasError}
-		<span class="tile-error-dot" title="This post has an error — open for details">⚠</span>
+		<span class="tile-error-dot" title="This post has an error — open for details">
+			<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="This post has an error"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><path d="M12 9v4" /><path d="M12 17h.01" /></svg>
+		</span>
 	{/if}
 
 	{#if hasRealStats}
 		<div class="tile-stats">
 			{#if analytics.views}
-				<span>👁 {analytics.views >= 1000 ? (analytics.views / 1000).toFixed(1) + 'K' : analytics.views}</span>
+				<span
+					><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" /><circle cx="12" cy="12" r="3" /></svg
+					>
+					<span class="sr-only">Views:</span>
+					{analytics.views >= 1000 ? (analytics.views / 1000).toFixed(1) + 'K' : analytics.views}</span
+				>
 			{/if}
-			{#if analytics.likes}<span>♥ {analytics.likes}</span>{/if}
+			{#if analytics.likes}<span
+					><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" /></svg
+					>
+					<span class="sr-only">Likes:</span>
+					{analytics.likes}</span
+				>{/if}
 		</div>
 	{/if}
 </div>
@@ -377,6 +417,23 @@
 		backdrop-filter: blur(4px);
 		cursor: pointer;
 	}
+	/* Keep the 26px visual chip, but give the control a full 44x44 tap area. */
+	.tile-select::after,
+	.tile-manage-btn::after,
+	.tile-video-play::after,
+	.tile-video-details::after,
+	.tile-gen-retry::after,
+	.tile-postfail-cta::after {
+		content: '';
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		transform: translate(-50%, -50%);
+		min-width: 44px;
+		min-height: 44px;
+		width: 100%;
+		height: 100%;
+	}
 	.tile-select input {
 		width: 15px;
 		height: 15px;
@@ -390,7 +447,9 @@
 		right: 8px;
 		z-index: 5;
 		display: flex;
-		gap: 0.3rem;
+		/* >= 18px so the two 44x44 tap areas below never overlap — a stray tap on
+		   Enlarge must never land on Delete. */
+		gap: 1.15rem;
 		opacity: 0;
 		transition: opacity 0.15s ease;
 	}
@@ -400,6 +459,7 @@
 		opacity: 1;
 	}
 	.tile-manage-btn {
+		position: relative;
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
@@ -417,8 +477,9 @@
 		background: rgba(12, 16, 30, 0.94);
 	}
 	.tile-manage-btn.danger:hover {
-		border-color: #dc2626;
-		color: #f87171;
+		border-color: var(--error);
+		/* The chip is always dark, so lighten the token rather than hardcoding a red. */
+		color: color-mix(in srgb, var(--error) 60%, #fff);
 	}
 
 	/* Every tile is normalized to one aspect ratio so the mosaic reads as an even
@@ -427,6 +488,9 @@
 	.post-tile img,
 	.post-tile video {
 		width: 100%;
+		/* `height: auto` keeps aspect-ratio in charge — without it the img's
+		   width/height attributes would apply as a presentational height hint. */
+		height: auto;
 		display: block;
 		object-fit: cover;
 		aspect-ratio: 4 / 5;
@@ -533,7 +597,13 @@
 		-webkit-box-orient: vertical;
 		overflow: hidden;
 	}
+	.tile-postfail-msg svg,
+	.tile-postfail-cta svg,
+	.tile-gen-retry svg {
+		vertical-align: -0.15em;
+	}
 	.tile-postfail-cta {
+		position: relative;
 		align-self: flex-start;
 		pointer-events: auto;
 		background: rgba(255, 255, 255, 0.95);
@@ -550,6 +620,11 @@
 	}
 	.tile-postfail-cta:hover {
 		background: #fff;
+	}
+	/* The CTA sits inside a pointer-events:none banner, so its expanded tap area
+	   has to opt back in explicitly. */
+	.tile-postfail-cta::after {
+		pointer-events: auto;
 	}
 
 	/* Centered play control — the ONE spot that plays inline. Clicking anywhere
@@ -642,7 +717,13 @@
 		color: #fff;
 		font-size: 0.72rem;
 		font-weight: 600;
+		font-variant-numeric: tabular-nums;
 		pointer-events: none;
+	}
+	.tile-stats span {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
 	}
 
 	/* In-flight / failed generation states (driven by the post row's status).
@@ -658,17 +739,17 @@
 		justify-content: center;
 		gap: 0.4rem;
 		padding: 0.9rem;
-		background: var(--surface, #fff);
+		background: var(--surface);
 		text-align: center;
 	}
 	.tile-gen.failed {
-		background: #fef2f2;
+		background: var(--error-soft);
 	}
 	.tile-gen-spin {
 		width: 22px;
 		height: 22px;
-		border: 2px solid var(--border, #e6e8f0);
-		border-top-color: var(--accent, #7c6aed);
+		border: 2px solid var(--border);
+		border-top-color: var(--accent);
 		border-radius: 50%;
 		animation: tile-spin 0.8s linear infinite;
 	}
@@ -681,7 +762,7 @@
 		width: 22px;
 		height: 22px;
 		border-radius: 50%;
-		background: #dc2626;
+		background: var(--error);
 		color: #fff;
 		font-weight: 800;
 		font-size: 0.8rem;
@@ -691,11 +772,11 @@
 	.tile-gen-title {
 		font-size: 0.82rem;
 		font-weight: 700;
-		color: var(--text, #14172b);
+		color: var(--text);
 	}
 	.tile-gen-topic {
 		font-size: 0.72rem;
-		color: var(--muted, #6b7280);
+		color: var(--muted);
 		display: -webkit-box;
 		-webkit-line-clamp: 2;
 		line-clamp: 2;
@@ -704,7 +785,7 @@
 	}
 	.tile-gen-err {
 		font-size: 0.7rem;
-		color: #991b1b;
+		color: var(--error-text);
 		display: -webkit-box;
 		-webkit-line-clamp: 3;
 		line-clamp: 3;
@@ -715,26 +796,32 @@
 		width: 80%;
 		height: 5px;
 		border-radius: 999px;
-		background: var(--surface-2, #eef0f6);
+		background: var(--surface-2);
 		overflow: hidden;
 	}
+	/* Full-width fill driven by scaleX so progress never triggers layout — the bar
+	   has no text child, so the scale is visually identical to animating width. */
 	.tile-gen-fill {
+		width: 100%;
 		height: 100%;
 		border-radius: 999px;
-		background: linear-gradient(90deg, var(--accent, #7c6aed), var(--cyan, #22d3ee));
-		transition: width 0.5s ease-out;
+		background: linear-gradient(90deg, var(--accent), var(--cyan));
+		transform-origin: left center;
+		transition: transform 0.25s ease-out;
 	}
 	.tile-gen-time {
 		font-size: 0.66rem;
-		color: var(--muted, #6b7280);
+		color: var(--muted);
+		font-variant-numeric: tabular-nums;
 	}
 	.tile-gen-retry {
+		position: relative;
 		margin-top: 0.2rem;
 		font-size: 0.72rem;
 		font-weight: 600;
 		padding: 0.25rem 0.6rem;
 		border-radius: 8px;
-		background: #dc2626;
+		background: var(--error);
 		color: #fff;
 		cursor: pointer;
 	}

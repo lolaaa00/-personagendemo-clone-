@@ -153,14 +153,14 @@
 		{
 			provider: 'gemini',
 			label: 'Gemini',
-			description: 'Google Gemini for agent/chat generation — used if no OpenRouter key is set below.',
+			description: 'Google Gemini for persona/chat generation — used if no OpenRouter key is set below.',
 			optional: true,
 			placeholder: 'Paste your Gemini API key'
 		},
 		{
 			provider: 'openrouter',
 			label: 'OpenRouter',
-			description: 'Optional model routing for agent/chat generation through OpenRouter.',
+			description: 'Optional model routing for persona/chat generation through OpenRouter.',
 			placeholder: 'Paste your OpenRouter API key'
 		},
 		{
@@ -629,11 +629,12 @@
 						height="20"
 						viewBox="0 0 24 24"
 						fill="none"
-						stroke="var(--accent)"
-						stroke-width="2"><circle cx="12" cy="8" r="4" /><path d="M20 21a8 8 0 10-16 0" /></svg
+						stroke="var(--accent-text)"
+						stroke-width="2"
+						aria-hidden="true"><circle cx="12" cy="8" r="4" /><path d="M20 21a8 8 0 10-16 0" /></svg
 					>
 				</div>
-				<h3>Profile</h3>
+				<h2>Profile</h2>
 			</div>
 			<div class="card-body">
 				<div class="avatar-row">
@@ -647,12 +648,18 @@
 				</div>
 				<div class="field">
 					<label for="profile-name">Display Name</label>
-					<input id="profile-name" type="text" bind:value={profileName} />
+					<input id="profile-name" type="text" autocomplete="name" bind:value={profileName} />
 				</div>
 				<div class="field">
 					<label for="profile-email">Email Address</label>
 					<div class="readonly-field">
-						<input id="profile-email" type="email" value={profileEmail} readonly />
+						<input
+							id="profile-email"
+							type="email"
+							autocomplete="email"
+							value={profileEmail}
+							readonly
+						/>
 						<span class="readonly-badge">
 							<svg
 								width="12"
@@ -661,6 +668,7 @@
 								fill="none"
 								stroke="currentColor"
 								stroke-width="2"
+								aria-hidden="true"
 								><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path
 									d="M7 11V7a5 5 0 0110 0v4"
 								/></svg
@@ -688,24 +696,32 @@
 						height="20"
 						viewBox="0 0 24 24"
 						fill="none"
-						stroke="var(--cyan)"
+						stroke="var(--cyan-text)"
 						stroke-width="2"
+						aria-hidden="true"
 						><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" /><path
 							d="M13.73 21a2 2 0 01-3.46 0"
 						/></svg
 					>
 				</div>
-				<h3>Notifications</h3>
+				<h2>Notifications</h2>
 			</div>
 			<div class="card-body">
 				<div class="toggle-row">
 					<div class="toggle-info">
-						<span class="toggle-label">Email Alerts</span>
-						<span class="toggle-desc">Receive alerts about agent activity and engagement</span>
+						<span class="toggle-label" id="toggle-email-alerts-label">Email Alerts</span>
+						<span class="toggle-desc" id="toggle-email-alerts-desc"
+							>Receive alerts about persona activity and engagement</span
+						>
 					</div>
 					<button
 						class="toggle"
 						class:on={emailAlerts}
+						type="button"
+						role="switch"
+						aria-checked={emailAlerts}
+						aria-labelledby="toggle-email-alerts-label"
+						aria-describedby="toggle-email-alerts-desc"
 						onclick={() => toggleNotification('emailAlerts')}
 					>
 						<span class="toggle-knob"></span>
@@ -713,12 +729,19 @@
 				</div>
 				<div class="toggle-row">
 					<div class="toggle-info">
-						<span class="toggle-label">Push Notifications</span>
-						<span class="toggle-desc">Browser push for real-time engagement events</span>
+						<span class="toggle-label" id="toggle-push-label">Push Notifications</span>
+						<span class="toggle-desc" id="toggle-push-desc"
+							>Browser push for real-time engagement events</span
+						>
 					</div>
 					<button
 						class="toggle"
 						class:on={pushNotifications}
+						type="button"
+						role="switch"
+						aria-checked={pushNotifications}
+						aria-labelledby="toggle-push-label"
+						aria-describedby="toggle-push-desc"
 						onclick={() => toggleNotification('pushNotifications')}
 					>
 						<span class="toggle-knob"></span>
@@ -726,12 +749,19 @@
 				</div>
 				<div class="toggle-row">
 					<div class="toggle-info">
-						<span class="toggle-label">Weekly Reports</span>
-						<span class="toggle-desc">Performance digest every Monday at 9am</span>
+						<span class="toggle-label" id="toggle-weekly-label">Weekly Reports</span>
+						<span class="toggle-desc" id="toggle-weekly-desc"
+							>Performance digest every Monday at 9am</span
+						>
 					</div>
 					<button
 						class="toggle"
 						class:on={weeklyReports}
+						type="button"
+						role="switch"
+						aria-checked={weeklyReports}
+						aria-labelledby="toggle-weekly-label"
+						aria-describedby="toggle-weekly-desc"
 						onclick={() => toggleNotification('weeklyReports')}
 					>
 						<span class="toggle-knob"></span>
@@ -749,8 +779,9 @@
 						height="20"
 						viewBox="0 0 24 24"
 						fill="none"
-						stroke="var(--cyan)"
+						stroke="var(--cyan-text)"
 						stroke-width="2"
+						aria-hidden="true"
 						><circle cx="13.5" cy="6.5" r="2.5" /><circle cx="19" cy="13" r="2.5" /><circle
 							cx="6"
 							cy="12"
@@ -760,7 +791,7 @@
 						/></svg
 					>
 				</div>
-				<h3>Brand Theme</h3>
+				<h2>Brand Theme</h2>
 			</div>
 			<div class="card-body">
 				<p class="card-hint">
@@ -781,9 +812,19 @@
 						{/each}
 					</select>
 				</div>
-				<div class="brand-theme-preview">
-					<span class="bt-swatch" style="background: {brandColorsState.primary}"></span>
-					<span class="bt-swatch" style="background: {brandColorsState.secondary}"></span>
+				<div class="brand-theme-preview" aria-live="polite">
+					<span
+						class="bt-swatch"
+						role="img"
+						aria-label="Primary colour {brandColorsState.primary}"
+						style="background: {brandColorsState.primary}"
+					></span>
+					<span
+						class="bt-swatch"
+						role="img"
+						aria-label="Secondary colour {brandColorsState.secondary}"
+						style="background: {brandColorsState.secondary}"
+					></span>
 					<span class="bt-current">
 						{brandThemeState.briefId
 							? `Following "${brandThemeState.name}"`
@@ -817,12 +858,13 @@
 						fill="none"
 						stroke="var(--gold)"
 						stroke-width="2"
+						aria-hidden="true"
 						><path
 							d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.778 7.778 5.5 5.5 0 017.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"
 						/></svg
 					>
 				</div>
-				<h3>Provider API Keys</h3>
+				<h2>Provider API Keys</h2>
 			</div>
 			<div class="card-body">
 				<p class="key-hint">
@@ -839,13 +881,17 @@
 									<span>{config.description}</span>
 								</div>
 								{#if savedKey}
-									<span class="status-pill" class:valid={savedKey.status === 'valid'} class:error={savedKey.status === 'invalid' || savedKey.status === 'error'}>
-										{savedKey.status}
+									<span class="status-pill" aria-live="polite" class:valid={savedKey.status === 'valid'} class:error={savedKey.status === 'invalid' || savedKey.status === 'error'}>
+										<span class="sr-only">{config.label} key status: </span>{savedKey.status}
 									</span>
 								{:else if apiKeysLoading}
-									<span class="status-pill">loading</span>
+									<span class="status-pill" aria-live="polite"
+										><span class="sr-only">{config.label} key status: </span>loading</span
+									>
 								{:else}
-									<span class="status-pill">not saved</span>
+									<span class="status-pill" aria-live="polite"
+										><span class="sr-only">{config.label} key status: </span>not saved</span
+									>
 								{/if}
 							</div>
 
@@ -854,7 +900,9 @@
 									<code class="key-value">{savedKey.masked_value}</code>
 								</div>
 								{#if savedKey.last_error}
-									<p class="key-error">{savedKey.last_error}</p>
+									<p class="key-error" role="alert" id={`${config.provider}-api-key-error`}>
+										{savedKey.last_error}
+									</p>
 								{/if}
 							{/if}
 
@@ -866,6 +914,10 @@
 									bind:value={apiKeyInputs[config.provider]}
 									placeholder={savedKey ? 'Paste a new key to replace the saved one' : config.placeholder}
 									autocomplete="off"
+									aria-invalid={savedKey?.last_error ? 'true' : undefined}
+									aria-describedby={savedKey?.last_error
+										? `${config.provider}-api-key-error`
+										: undefined}
 								/>
 							</div>
 
@@ -903,16 +955,16 @@
 		<div class="settings-card" id="zernio-keys">
 			<div class="card-header">
 				<div class="card-icon">
-					<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="2">
+					<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="2" aria-hidden="true">
 						<rect x="3" y="11" width="18" height="10" rx="2" />
 						<path d="M7 11V7a5 5 0 0110 0v4" />
 					</svg>
 				</div>
-				<h3>Zernio Key Manager</h3>
+				<h2>Zernio Key Manager</h2>
 			</div>
 			<div class="card-body">
 				<p class="key-hint">
-					Add extra Zernio accounts (one per agent email) and assign them to personas. Each key is
+					Add extra Zernio accounts (one per persona email) and assign them to personas. Each key is
 					a separate Zernio account with its own <strong>2 free connected-account slots</strong> and
 					its own bill. Personas without an assignment use the default Zernio key above. Moving a
 					persona to a different key requires reconnecting its social accounts under that key.
@@ -920,9 +972,9 @@
 
 				<div class="provider-key-list">
 					{#if zernioKeysLoading && zernioKeys.length === 0}
-						<p class="key-hint">Loading Zernio keys…</p>
+						<p class="key-hint" aria-live="polite">Loading Zernio keys…</p>
 					{:else if zernioKeys.length === 0}
-						<p class="key-hint">No extra Zernio keys yet — add one below.</p>
+						<p class="key-hint" aria-live="polite">No extra Zernio keys yet — add one below.</p>
 					{/if}
 
 					{#each zernioKeys as key (key.id)}
@@ -939,17 +991,18 @@
 								</div>
 								<span
 									class="status-pill"
+									aria-live="polite"
 									class:valid={key.status === 'valid'}
 									class:error={key.status === 'invalid' || key.status === 'error'}
 								>
-									{key.status}
+									<span class="sr-only">{key.label} status: </span>{key.status}
 								</span>
 							</div>
 							<div class="key-display">
 								<code class="key-value">{key.masked_value}</code>
 							</div>
 							{#if key.last_error}
-								<p class="key-error">{key.last_error}</p>
+								<p class="key-error" role="alert">{key.last_error}</p>
 							{/if}
 							<div class="provider-actions">
 								<button
@@ -988,7 +1041,7 @@
 								id="zernio-key-label"
 								type="text"
 								bind:value={zernioKeyLabel}
-								placeholder="e.g. mia.agent@gmail.com"
+								placeholder="e.g. mia.persona@gmail.com"
 								autocomplete="off"
 							/>
 						</div>
@@ -1035,6 +1088,7 @@
 										</div>
 										<select
 											class="assign-select"
+											aria-label="Zernio key for {agent.name}"
 											value={agent.zernio_key_id || ''}
 											disabled={zernioAssigning[agent.id] || zernioKeys.length === 0}
 											onchange={(e) => assignZernioKey(agent, e.currentTarget as HTMLSelectElement)}
@@ -1057,18 +1111,18 @@
 		<div class="settings-card">
 			<div class="card-header">
 				<div class="card-icon billing-icon">
-					<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2">
+					<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent-text)" stroke-width="2" aria-hidden="true">
 						<rect x="1" y="4" width="22" height="16" rx="2" ry="2" />
 						<line x1="1" y1="10" x2="23" y2="10" />
 					</svg>
 				</div>
-				<h3>Billing &amp; Plan</h3>
+				<h2>Billing &amp; Plan</h2>
 				<span class="coming-soon-badge">Coming Soon</span>
 			</div>
 			<div class="card-body">
 				<div class="billing-coming-soon">
 					<div class="billing-icon-wrap">
-						<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+						<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
 							<path d="M12 2L2 7l10 5 10-5-10-5z" />
 							<path d="M2 17l10 5 10-5" />
 							<path d="M2 12l10 5 10-5" />
@@ -1094,8 +1148,9 @@
 						height="20"
 						viewBox="0 0 24 24"
 						fill="none"
-						stroke="var(--error)"
+						stroke="var(--error-text)"
 						stroke-width="2"
+						aria-hidden="true"
 						><path
 							d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"
 						/><line x1="12" y1="9" x2="12" y2="13" /><line
@@ -1106,14 +1161,14 @@
 						/></svg
 					>
 				</div>
-				<h3>Danger Zone</h3>
+				<h2>Danger Zone</h2>
 			</div>
 			<div class="card-body">
 				<p class="danger-text">
-					Permanently delete your account and all associated agents, posts, and data. This action
+					Permanently delete your account and all associated personas, posts, and data. This action
 					cannot be undone.
 				</p>
-				<button class="delete-btn" onclick={() => (showDeleteModal = true)}>
+				<button class="delete-btn" type="button" onclick={() => (showDeleteModal = true)}>
 					<svg
 						width="16"
 						height="16"
@@ -1121,6 +1176,7 @@
 						fill="none"
 						stroke="currentColor"
 						stroke-width="2"
+						aria-hidden="true"
 						><polyline points="3 6 5 6 21 6" /><path
 							d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"
 						/></svg
@@ -1132,26 +1188,49 @@
 	</div>
 </section>
 
+<svelte:window
+	onkeydown={(e) => {
+		if (e.key === 'Escape' && showDeleteModal && !deleteInProgress) {
+			showDeleteModal = false;
+			deleteConfirmText = '';
+		}
+	}}
+/>
+
 <!-- Delete Modal -->
 {#if showDeleteModal}
-	<div class="modal-overlay" onclick={() => (showDeleteModal = false)} role="dialog">
-		<div class="modal" onclick={(e) => e.stopPropagation()}>
+	<div class="modal-overlay">
+		<button
+			type="button"
+			class="modal-backdrop"
+			aria-label="Close the delete account dialog"
+			onclick={() => (showDeleteModal = false)}
+		></button>
+		<div
+			class="modal"
+			role="dialog"
+			aria-modal="true"
+			aria-labelledby="delete-modal-title"
+			aria-describedby="delete-modal-desc"
+			tabindex="-1"
+		>
 			<div class="modal-header">
 				<svg
 					width="24"
 					height="24"
 					viewBox="0 0 24 24"
 					fill="none"
-					stroke="var(--error)"
+					stroke="var(--error-text)"
 					stroke-width="2"
+					aria-hidden="true"
 					><path
 						d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"
 					/><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></svg
 				>
-				<h3>Delete Account</h3>
+				<h2 id="delete-modal-title">Delete Account</h2>
 			</div>
-			<p class="modal-text">
-				This will permanently delete your account, all agents, posts, connections, and analytics
+			<p class="modal-text" id="delete-modal-desc">
+				This will permanently delete your account, all personas, posts, connections, and analytics
 				data. This action is <strong>irreversible</strong>.
 			</p>
 			<div class="modal-field">
@@ -1161,11 +1240,18 @@
 					type="text"
 					bind:value={deleteConfirmText}
 					placeholder="DELETE"
+					autocomplete="off"
+					autocapitalize="characters"
+					aria-describedby="delete-confirm-hint"
 				/>
+				<p class="sr-only" id="delete-confirm-hint">
+					The delete button stays disabled until you type DELETE in capital letters.
+				</p>
 			</div>
 			<div class="modal-actions">
 				<button
 					class="cancel-btn"
+					type="button"
 					disabled={deleteInProgress}
 					onclick={() => {
 						showDeleteModal = false;
@@ -1174,6 +1260,7 @@
 				>
 				<button
 					class="confirm-delete-btn"
+					type="button"
 					onclick={confirmDelete}
 					disabled={deleteConfirmText !== 'DELETE' || deleteInProgress}
 				>
@@ -1224,7 +1311,7 @@
 	}
 
 	.danger-card {
-		border-color: rgba(239, 68, 68, 0.15);
+		border-color: color-mix(in srgb, var(--error) 15%, transparent);
 	}
 
 	.card-header {
@@ -1242,14 +1329,14 @@
 		align-items: center;
 		justify-content: center;
 		background: var(--accent-soft);
-		border-radius: 10px;
+		border-radius: var(--radius-sm);
 	}
 
 	.danger-icon {
 		background: var(--error-soft);
 	}
 
-	.card-header h3 {
+	.card-header h2 {
 		font-size: var(--text-lg);
 		font-family: var(--font-display);
 	}
@@ -1271,7 +1358,7 @@
 	.profile-avatar {
 		width: 56px;
 		height: 56px;
-		border-radius: 14px;
+		border-radius: var(--radius-md);
 		background: var(--gradient);
 		display: flex;
 		align-items: center;
@@ -1332,7 +1419,8 @@
 		align-items: center;
 		gap: 0.5rem;
 		padding: 0.7rem 1.5rem;
-		background: var(--gradient-subtle);
+		min-height: 44px;
+		background: var(--gradient-cta);
 		color: #fff;
 		border: none;
 		border-radius: var(--radius-sm);
@@ -1417,6 +1505,18 @@
 		padding: 0;
 	}
 
+	/* The visible track stays 48x26; this pseudo-element grows the tap target to
+	   48x44 without making the switch look bigger. */
+	.toggle::after {
+		content: '';
+		position: absolute;
+		left: 0;
+		right: 0;
+		top: 50%;
+		height: 44px;
+		transform: translateY(-50%);
+	}
+
 	.toggle.on {
 		background: var(--accent);
 	}
@@ -1460,7 +1560,7 @@
 	.bt-swatch {
 		width: 22px;
 		height: 22px;
-		border-radius: 6px;
+		border-radius: var(--radius-xs);
 		border: 1px solid var(--border-strong);
 		flex-shrink: 0;
 	}
@@ -1471,9 +1571,12 @@
 	}
 	.bt-reset {
 		margin-left: auto;
+		display: inline-flex;
+		align-items: center;
+		min-height: 44px;
 		background: var(--surface-2);
 		border: 1px solid var(--border);
-		border-radius: 6px;
+		border-radius: var(--radius-xs);
 		padding: 0.35rem 0.75rem;
 		font-size: var(--text-xs);
 		font-weight: 600;
@@ -1546,7 +1649,7 @@
 
 	.status-pill {
 		padding: 0.25rem 0.55rem;
-		border-radius: 999px;
+		border-radius: var(--radius-full);
 		border: 1px solid var(--border);
 		color: var(--text-muted);
 		font-size: var(--text-xs);
@@ -1557,18 +1660,18 @@
 
 	.status-pill.valid {
 		border-color: var(--success);
-		color: var(--success);
+		color: var(--success-text);
 	}
 
 	.status-pill.error {
 		border-color: var(--error);
-		color: var(--error);
+		color: var(--error-text);
 	}
 
 	.key-error {
 		margin: -0.35rem 0 1rem;
 		font-size: var(--text-xs);
-		color: var(--error);
+		color: var(--error-text);
 		line-height: 1.5;
 	}
 
@@ -1625,7 +1728,8 @@
 		border: 1px solid var(--border-strong);
 		border-radius: var(--radius-sm);
 		color: var(--text);
-		font-size: var(--text-sm);
+		/* Must stay >=16px — iOS Safari force-zooms a focused control below that. */
+		font-size: 1rem;
 		font-family: var(--font-body);
 		cursor: pointer;
 	}
@@ -1641,6 +1745,7 @@
 		align-items: center;
 		gap: 0.5rem;
 		padding: 0.7rem 1.1rem;
+		min-height: 44px;
 		border-radius: var(--radius-sm);
 		font-size: var(--text-sm);
 		font-weight: 600;
@@ -1666,12 +1771,12 @@
 
 	.danger-inline-btn {
 		background: transparent;
-		border: 1px solid rgba(239, 68, 68, 0.35);
-		color: var(--error);
+		border: 1px solid color-mix(in srgb, var(--error) 35%, transparent);
+		color: var(--error-text);
 	}
 
 	.danger-inline-btn:hover:not(:disabled) {
-		background: rgba(239, 68, 68, 0.08);
+		background: color-mix(in srgb, var(--error) 8%, transparent);
 		border-color: var(--error);
 	}
 
@@ -1689,9 +1794,9 @@
 	.coming-soon-badge {
 		margin-left: auto;
 		padding: 0.2rem 0.6rem;
-		border-radius: 999px;
+		border-radius: var(--radius-full);
 		border: 1px solid var(--accent-mid);
-		color: var(--accent);
+		color: var(--accent-text);
 		font-size: 0.65rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -1712,13 +1817,13 @@
 	.billing-icon-wrap {
 		width: 52px;
 		height: 52px;
-		border-radius: 14px;
+		border-radius: var(--radius-md);
 		background: var(--accent-soft);
 		border: 1px solid var(--accent-mid);
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		color: var(--accent);
+		color: var(--accent-text);
 		flex-shrink: 0;
 	}
 
@@ -1755,10 +1860,11 @@
 		align-items: center;
 		gap: 0.5rem;
 		padding: 0.7rem 1.5rem;
+		min-height: 44px;
 		background: var(--error-soft);
-		border: 1px solid rgba(239, 68, 68, 0.25);
+		border: 1px solid color-mix(in srgb, var(--error) 25%, transparent);
 		border-radius: var(--radius-sm);
-		color: var(--error);
+		color: var(--error-text);
 		font-weight: 600;
 		font-size: var(--text-base);
 		cursor: pointer;
@@ -1767,7 +1873,7 @@
 	}
 
 	.delete-btn:hover {
-		background: rgba(239, 68, 68, 0.2);
+		background: color-mix(in srgb, var(--error) 20%, transparent);
 	}
 
 	/* Modal */
@@ -1793,13 +1899,29 @@
 		}
 	}
 
+	/* A real button as the backdrop: dismissing by clicking outside is then
+	   keyboard-reachable and needs no click handler on a plain <div>. */
+	.modal-backdrop {
+		position: absolute;
+		inset: 0;
+		width: 100%;
+		border: none;
+		padding: 0;
+		background: transparent;
+		cursor: default;
+	}
+
 	.modal {
+		position: relative;
+		z-index: 1;
 		background: var(--surface);
 		border: 1px solid var(--border);
 		border-radius: var(--radius);
 		padding: 2rem;
 		max-width: 460px;
 		width: 100%;
+		max-height: 90dvh;
+		overflow-y: auto;
 		animation: modalIn 0.25s ease;
 	}
 
@@ -1821,10 +1943,10 @@
 		margin-bottom: 1rem;
 	}
 
-	.modal-header h3 {
+	.modal-header h2 {
 		font-size: var(--text-lg);
 		font-family: var(--font-display);
-		color: var(--error);
+		color: var(--error-text);
 	}
 
 	.modal-text {
@@ -1835,7 +1957,7 @@
 	}
 
 	.modal-text strong {
-		color: var(--error);
+		color: var(--error-text);
 	}
 
 	.modal-field {
@@ -1843,7 +1965,7 @@
 	}
 
 	.modal-field label strong {
-		color: var(--error);
+		color: var(--error-text);
 		font-family: var(--font-mono);
 	}
 
@@ -1855,6 +1977,7 @@
 
 	.cancel-btn {
 		padding: 0.6rem 1.25rem;
+		min-height: 44px;
 		background: var(--surface-2);
 		border: 1px solid var(--border-strong);
 		border-radius: var(--radius-sm);
@@ -1879,6 +2002,7 @@
 		justify-content: center;
 		gap: 0.5rem;
 		padding: 0.6rem 1.25rem;
+		min-height: 44px;
 		background: var(--error);
 		border: none;
 		border-radius: var(--radius-sm);

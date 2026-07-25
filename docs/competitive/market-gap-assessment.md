@@ -1,392 +1,555 @@
-# PersonaGen — Competitive Teardown, Gap Analysis & Viability Assessment
+# PersonaGen — Competitive Teardown, Terminology & UX Standards Audit, Gap Analysis, Viability Assessment
 
 **Date:** 2026-07-25
-**Subjects:** `createpersona.ai` ("Persona AI"), `higgsfield.ai/ai-influencer` (Higgsfield AI Influencer Studio)
-**Purpose:** establish what we must match, what we already beat, and what our landing page must claim.
+**Subjects analysed:**
+- `theinfluencer.ai` — **the category benchmark** (UX, terminology, workflow)
+- `higgsfield.ai/ai-influencer` — the craft leader (Soul ID, motion)
+- `createpersona.ai` — the packaging play (thin product, good funnel)
+
+**Purpose:** establish the industry-standard vocabulary and interface pattern for this exact niche, measure PersonaGen against it, and define the highest-viable product and landing page.
 
 ---
 
 ## 0. Executive verdict
 
-The two competitors sit at **opposite ends of the same market**, and neither occupies the position PersonaGen was actually built for.
+Four things are now clear.
 
-| | Higgsfield | createpersona.ai | **PersonaGen** |
-|---|---|---|---|
-| What it really is | A **creative studio** — best-in-class character consistency, no distribution | A **thin SaaS wrapper** — decent packaging, shallow product | An **operations platform** — brand-tied personas that run themselves |
-| Ends at | Download button | Instagram scheduler | Verified multi-platform publish + analytics + spend ledger |
-| Scale | 25M+ claimed users | Unknown, likely tiny | Pre-launch |
-| Real moat | Soul ID (trained identity) | None | Autonomy + brand grounding + publish verification |
+1. **`theinfluencer.ai` is the standard.** Their trait picker, their vocabulary, their three-step build loop, and their time-estimates-per-step are what a buyer in this niche now expects. Everything we present should be measured against them, not against the weaker two.
+2. **We are ahead of all three on everything that happens *after* the image exists** — brand grounding, 13-platform publishing, verified delivery, autonomy, approval, cost accounting. None of them can run an account.
+3. **We are behind all three on everything that happens *before* the image exists** — trait selection UX, preview-and-lock loop, trained identity, pre-made personas, try-on, motion transfer, languages.
+4. **Our vocabulary is wrong.** We say *agent*, *soul*, *market*, *heartbeat*, *overseer*, *reference kit*, *UGC pack*. The industry says *persona*, *traits*, *locked identity*, *private model*, *batch*, *try-on*, *motion transfer*. This is not cosmetic — a buyer landing on our product will not recognise it as belonging to this category.
 
-**The strategic read:** Higgsfield wins on *image quality and identity lock*. createpersona wins on *packaging and go-to-market*. **Nobody wins on "the persona actually runs a business account without a human babysitting it."** That is our lane, and our codebase is already ~70% of the way there while our marketing surface is at 0%.
-
-**The single most dangerous gap is not a feature — it is that `/` redirects to `/dashboard`. We have no landing page, no pricing, no signup funnel, no billing.** ([+page.svelte:9](../../personagen-svelte/src/routes/+page.svelte#L9))
+**The single highest-leverage correction:** adopt the industry's *front end* (vocabulary + trait wizard + preview/lock loop) while keeping our *back end* (the operations layer nobody else has). That combination is the highest viable product available in this market.
 
 ---
 
-## 1. Teardown A — createpersona.ai
+## 1. Teardown A — theinfluencer.ai ★ the benchmark
 
-### 1.1 What they sell
+**Company:** Thunderbus Pte. Ltd. **Proof:** 10,000+ creators · 1,600+ AI influencers built · 65,000+ assets generated · 190+ countries. Featured in Unite.AI, Futurepedia, There's An AI For That, Product Hunt.
 
-**Hero:** "Create AI Influencers. Generate Content 10x Faster."
-**Sub:** "Build consistent AI influencers with our AI avatar creator, generate photos & UGC videos, recreate any Instagram shot, and schedule posts—all from one platform. No models, no photoshoots, no delays."
-**CTA:** "Create Your First AI Influencer — Free" · no credit card required
+### 1.1 Positioning
 
-**Three-step narrative:** Create Your Influencer → Generate Content → Schedule & Scale.
+> **H1:** "Create your own AI influencer."
+> **Sub:** "Pick traits or upload your selfies — our AI influencer generator builds a photorealistic persona that stays consistent across every photo, video, and reel."
+> **CTA:** Create AI Influencer · *Free to start · Build your first influencer in minutes*
 
-### 1.2 Feature inventory
+Note the structure: **verb + noun in five words**, then a subhead that names *both input paths* and the *one promise that matters* (consistency). No adjectives. This is the copy pattern to follow.
 
-| Feature | Their claim |
+### 1.2 The trait wizard — the interface we must match
+
+The screenshot you provided is the most important artifact in this document. Deconstructed:
+
+**Layout:** two panes. Left = `● PICK THE TRAITS · STEP 1 OF 2`. Right = `● PREVIEW · STEP 2 OF 2`. Both step headers visible simultaneously — the user sees the whole journey at once, which is why it feels short.
+
+**Each trait row:**
+```
+LABEL (small caps, letterspaced, muted)   [Selected] [Option] [Option] [ +N more ]
+```
+- Selected chip: solid 2px dark border, bold label, white fill
+- Unselected chips: 1px light border, regular weight
+- Overflow chip: **dashed** border, `+5 more` — signals "more exists" without a dropdown
+- Rows separated by hairline dividers; label column fixed-width so all chip rows left-align
+
+**The ten guided fields:** Gender · Ethnicity · Age · Skin tone · Eye colour · Body · Hair length · Hair style · Hair colour *(+1)*
+
+**The critical idea we are missing entirely — "Best Fit":**
+> "Ten guided fields. Set the ones that matter, leave the rest on **Best Fit**. No prompt writing required."
+
+Every field has a valid unset state that the model resolves intelligently. **Zero required decisions to reach a preview.** This is why their build takes ~30 seconds.
+
+**The preview pane:** a real render with a badge reading `● SIRA · GENERATED IN 8S`, and beneath it a soft bar: *"Don't love the look? Regenerate the preview."* Under the traits: *"Regenerate the preview as many times as you want, then lock in the look you love."*
+
+**Free regeneration before commitment is the entire trust mechanic of this category.** You do not spend, choose, or commit until you have seen the face and approved it.
+
+### 1.3 The stated workflow — with times
+
+| # | Step | Time shown | Copy |
+|---|---|---|---|
+| 01 | **Pick the traits** | `~30 SEC` | "Ten guided fields. Set the ones that matter, leave the rest on Best Fit. No prompt writing required." |
+| 02 | **See the preview** | `8–30 SEC` | "A frontier-model render of your persona — on-brief, neutral, lit cleanly. Regenerate the preview as many times as you want until you love the look." |
+| 03 | **Lock them in** | `YOURS FOREVER` | "Confirm and your persona becomes a **private model**. Same face on every photo, video, try-on, and motion clip you ship." |
+
+**Publishing a time estimate on every step is a confidence signal.** It says *we know exactly how long our own pipeline takes*. We have that data (fal queue timings) and show none of it.
+
+### 1.4 Second creation path — AI Clone
+
+| # | Step | Time | Detail |
+|---|---|---|---|
+| 01 | Upload 8–12 photos | ~2 min | Different days, lighting, outfits; face clearly visible |
+| 02 | We train your model | ~10 min | Personal model fine-tuned on your likeness, **locked to your account, never reused** |
+| 03 | Generate as you | Yours forever | Reels, ads, product shots, voiceovers, lip-sync |
+
+Plus **unlimited pre-made influencers** on every tier — instant activation with zero build.
+
+### 1.5 Full capability set
+
+| Surface | Specifics |
 |---|---|
-| AI influencer creator | "100% face consistency across all content"; from scratch or from reference photos |
-| UGC video generator | Talking-head with lip-sync audio; Reels/TikTok/ads; **product-in-hand** demos |
-| Product & lifestyle photos | Text-prompt product shots |
-| **Recreate any Instagram shot** | Paste an IG link → replicate exact scene, pose, styling with your influencer |
-| Auto-schedule & post | Content calendar, batch weekly generation, **Instagram only** (TikTok & X "coming soon") |
-| Resolution | 2K on Starter, 4K on Pro/Creator |
-| Watermarks | "No watermarks" — sold as a *feature* on every tier |
+| **Photos** | Text prompt or reference image · 5 aspect ratios · **batch up to 32 per prompt** · up to 2 props/outfits/backgrounds |
+| **Videos** | Prompt up to 3,500 chars · **native audio** · 3–15s clips · custom element image |
+| **Edits** | Any edit as a prompt · **undo/redo per edit** · originals preserved · edits saved as new photos |
+| **Try-On** | Upload garment → select top/bottom/one-piece → saved as new photo |
+| **Motion Transfer** | Upload 4–30s reference video → motion applied to persona → **voice replacement with lip-sync** |
+| **Languages** | **40+** — English, Spanish, German, French, Hindi, Arabic, Portuguese, Italian, Dutch, Polish, Turkish, Swedish… |
+| Tools | AI Photo Editor · Image Upscaler · Virtual Try-On · Motion Transfer (each an SEO landing page) |
 
-**Use cases marketed:** DTC/e-commerce, agencies, creators, affiliate marketers, course creators, faceless accounts.
+### 1.6 Pricing
 
-### 1.3 Pricing and the margin they're taking
+| Tier | $/mo | Credits | Yield | Custom personas | Video len | Clone |
+|---|---|---|---|---|---|---|
+| Starter | **$19** | 100 | ~100 photos or 10–20 × 5s videos | 1/mo | 5s | ✗ |
+| Creator ★ | **$39** | 250 | ~250 photos or 12–25 × 10s videos | 3/mo | 10s | ✓ |
+| Professional | **$99** | 700 | ~700 photos or 23–46 × 15s videos | 8/mo | 15s | ✓ |
+| Enterprise | **$199** | 1,500 | ~1,500 photos or 50–100 × 15s videos | 16/mo | 15s | ✓ |
 
-| Tier | Price/mo | Credits | Yield | Influencers | Extras |
-|---|---|---|---|---|---|
-| Starter | **$29** | 150 | ~50 images **or** ~2 videos | 3 | HD 2K, 1GB, email support |
-| Pro | **$49** | 350 | ~116 images **or** ~5 videos | 7 | 4K, 3GB, custom branding |
-| Creator | **$79** | 700 | ~233 images **or** ~10 videos | Unlimited | 4K, 5GB, **API access**, dedicated manager |
+**3-day free trial · 10 free credits · card required (stated as anti-abuse) · Stripe · top-ups at 24¢/credit.**
 
-**Implied retail rate vs. our verified provider cost** ([pricing.ts](../../personagen-svelte/src/lib/pricing.ts)):
+*All plans include:* unlimited pre-made influencers, photos/videos/lip-sync, edits & background changes, try-on & hold-products, motion transfer, the Influencer Builder.
 
-| Unit | Their retail (Starter) | Their retail (Creator) | Our true cost | Markup |
-|---|---|---|---|---|
-| Image | $0.58 | $0.34 | **$0.08** (nano-banana-2) | **4×–7×** |
-| Video | $14.50 | $7.90 | **$0.61** (Kling o3 std + TTS + still) | **13×–24×** |
-| Cinematic multi-shot | n/a — can't do it | n/a | $1.95 | — |
-| Talking head ~5s | included in "video" | | $0.81 (OmniHuman v1.5) | |
+### 1.7 Their sharpest marketing weapon — the "slop" comparison
 
-**This is the most important commercial finding in the document.** Their entire pricing architecture assumes low-volume, hand-driven creation. **A single PersonaGen persona on autopilot at 6 posts/day = 180 posts/month.** On their *top* $79 tier that is 233 images — one persona, images only, no video, and you're out. Five personas at our default cadence = 900 posts/month, which does not exist anywhere on their price sheet at any price.
+| **Generic AI output** | **The Influencer AI** |
+|---|---|
+| Different face every prompt | Same persona, every output |
+| Last-gen model, six months stale | Latest frontier models |
+| Plastic skin, dead eyes, eight fingers | Real textured skin, lifelike eyes, all five fingers |
+| Looks like a stock photo | Looks shot, not generated |
+| Content nobody asked for | Content the audience saves and shares |
 
-> **They cannot sell the product we built. Their unit economics forbid it.**
+Concrete, visual, slightly funny, and it makes every competitor look like the left column. **We should build the equivalent table — but ours compares *studios* to an *operating system*, not slop to quality.**
 
-### 1.4 Credibility problems (exploitable)
+They also run **head-on comparison pages** ("Higgsfield Alternative", "Arcads Alternative") — cheap, high-intent SEO.
 
-- **Testimonials read as fabricated.** "Sarah Mitchell, Marketing Director at Glow Beauty… engagement is up 340%"; "Marcus Chen, Founder at TechGadgets DTC"; "Emily Rodriguez, Social Media Manager at FitLife." Generic composite names, round-number lift claims, no linkable accounts, no screenshots.
-- **`/features` is boilerplate.** The deep-link features page returns generic template copy ("Advanced AI Generation", "Collaboration Tools", "Analytics & Insights") that does not match the specific, real-sounding homepage copy — a strong signal those sections are aspirational, not shipped.
-- **`/pricing` 404s.** Pricing exists only as homepage cards.
-- **"Recreate any Instagram shot"** invites users to replicate other people's copyrighted photographs. That is a legal exposure they are advertising as a headline feature.
-- **"No watermarks" as a selling point** ages badly (see §5.3).
+### 1.8 What they cannot do
 
-### 1.5 What they do genuinely better than us today
-
-1. **A funnel exists.** Landing → free signup → credits → paywall. Ours: none.
-2. **Free-tool SEO play.** IG Bio Generator, IG Caption Generator, IG Hashtag Generator, TikTok Hook Generator, UGC Script Generator — five keyword-bait pages feeding the funnel. We have zero SEO surface.
-3. **Zero-config first run.** No API keys required. Ours refuses to generate anything until the user pastes a fal.ai key ([generate.ts:213](../../personagen-svelte/src/lib/server/content/generate.ts#L213)).
-4. **Instagram-shot recreation.** We have vision-based *appearance* reading ([engine:2498](../../personagen-svelte/src/routes/api/engine/+server.ts#L2498)) but no "paste a link, rebuild that scene" flow.
-5. **A gallery.** Proof-of-output is the #1 conversion asset in this category and we have none.
-6. **Legal/trust page furniture.** Privacy, Terms, Cookie, Refund policies. Affiliate program. Discord.
+**They stop at the download.** No connected accounts. No scheduling. No autopilot. No approval queue. No verified publish. No analytics. No brand brief. No product ingestion. No spend ledger. No multi-persona differentiation. Video capped at 15 seconds, and the cap is a paywall.
 
 ---
 
 ## 2. Teardown B — higgsfield.ai/ai-influencer
 
-### 2.1 What they sell
+**Hero:** "Create Your AI Influencer" / "Turn your ideas into a 24/7 content machine… without ever facing a camera."
+**Scale:** 25M+ claimed users, 5,000+ businesses, 40+ footer tool pages.
 
-**Hero:** "Create Your AI Influencer"
-**Sub:** "Turn your ideas into a 24/7 content machine. Create a consistent digital influencer and generate endless viral videos for TikTok, Reels, and Shorts without ever facing a camera."
-**Steps:** Create Your Star → Make it Move → Generate & Dominate (**download** ready-to-post content).
+**Soul ID** — trains on **20+ photos in 3–5 minutes**, then holds identity across every generation. A trained embedding, not prompt conditioning. **This is the strongest consistency tech in the market.**
 
-### 2.2 The one thing that genuinely beats us: Soul ID
-
-Soul ID **trains on 20+ photos of the character in 3–5 minutes** and then locks that identity across every subsequent generation — new outfits, scenes, angles, lighting. It is a trained identity embedding, not prompt conditioning.
-
-**Our approach is architecturally weaker.** PersonaGen holds consistency through a 5-stage reference kit (character sheet → full body → side profiles → face close-up → feature grid) fed as multi-image references to nano-banana-2 edit ([generate-reference-kit](../../personagen-svelte/src/routes/api/agent/%5BagentId%5D/generate-reference-kit/+server.ts), [models.ts](../../personagen-svelte/src/lib/models.ts)). This is genuinely good — good enough that we flag single-reference models as `multiRef: false` so they can't silently drop the sheet — but **reference conditioning drifts where a trained ID does not.** Over hundreds of autopilot posts, drift compounds.
-
-**This is our #1 technical gap and it is the one competitors will point at.**
-
-### 2.3 Their other differentiators
-
-| Capability | What it does | Do we have it? |
+| Capability | Notes | Us |
 |---|---|---|
-| **Motion Transfer** | Upload a reference video → transfer exact choreography onto your character | ❌ |
-| **Detail Tuning** | Prompt-level micro-edits: scars, tears, posture, heterochromia, skin texture | ⚠️ partial — appearance fields, no live tuning |
-| **Brand Collabs** | Insert brand products with correct lighting → shoppable posts | ✅ product photo compositing |
-| **Scenario Placement** | Any setting, outfit, makeup, health-state | ✅ scene/topic steer in composer |
-| **App ecosystem** | Style Snap, Plushies, Angles, Recast, Transitions | ❌ |
-| **Motion Control + Kling** | Proprietary camera/motion layer over Kling | ⚠️ we use Kling o3 directly, no motion layer |
+| Soul ID trained identity | 20+ imgs, 3–5 min | ❌ |
+| Motion Transfer | Reference video → choreography | ❌ |
+| Detail Tuning | Scars, tears, posture, heterochromia, skin texture | ⚠️ |
+| Brand Collabs | Product insertion with correct lighting | ✅ |
+| Scenario Placement | Outfit/makeup/setting/health-state | ✅ |
+| Apps | Style Snap, Plushies, Angles, Recast, Transitions | ❌ |
 
-### 2.4 Pricing
+**Pricing (annual):** Starter $15 / 200 credits · Plus $39 / 1,000 · Ultra $99 / 3,000. Top-ups ~$5/100 credits. **Credits don't roll over; top-ups expire in 90 days.**
 
-| Tier | Price/mo (annual) | Credits/mo |
-|---|---|---|
-| Starter | **$15** | 200 |
-| Plus | **$39** | 1,000 |
-| Ultra | **$99** | 3,000 |
-
-Top-ups ~**$5 / 100 credits**. **Credits do not roll over**, and top-up credits **expire in 90 days**. Ultra effectively ≈ $0.033/credit; top-ups ≈ $0.05/credit — a 50% penalty for burst usage.
-
-### 2.5 Their structural weakness — and it is large
-
-**Higgsfield stops at the download button.** No connected accounts. No scheduling. No publishing. No analytics. No approval queue. No brand grounding. No multi-persona strategy differentiation. No cost ledger. It is a *generation studio*, and the operator still has to do all the actual work of running the accounts.
-
-They also market to a scattered creative audience (Amphibian/Elf/Beetle character categories sit next to the influencer studio) — **they are not a business tool and are not trying to be.**
-
-### 2.6 Social proof we cannot match on volume
-
-25M+ claimed users, 5,000+ businesses, extensive testimonial wall, 40+ tool pages in the footer for SEO. We will not out-scale this. We must out-*specify* it.
+**Weakness:** a generation studio with no distribution, marketed to a scattered creative audience (their influencer studio sits next to Elf/Beetle/Amphibian character categories). Not a business tool.
 
 ---
 
-## 3. Positioning map
+## 3. Teardown C — createpersona.ai
 
-```
-                    HIGH AUTOMATION / OPERATIONS
-                              │
-                    ★ PersonaGen (unoccupied)
-                              │
-                    createpersona.ai
-                    (IG scheduling only)
-                              │
-LOW CRAFT ────────────────────┼──────────────────── HIGH CRAFT
-                              │
-                              │              Higgsfield
-                              │           (Soul ID, motion,
-                              │            download & go)
-                              │
-                     MANUAL / STUDIO
-```
+**Hero:** "Create AI Influencers. Generate Content 10x Faster." **CTA:** free, no card.
 
-**The wedge sentence:** *Higgsfield makes the best-looking character. createpersona schedules it to Instagram. PersonaGen is the only one that runs the account.*
+**Features:** avatar creator ("100% face consistency"), UGC video with lip-sync, product/lifestyle photos, **"Recreate any Instagram shot"** (paste an IG link), auto-schedule to **Instagram only** (TikTok & X "coming soon"), 2K/4K, "No watermarks" on all tiers.
+
+**Pricing:** Starter $29 / 150 credits (~50 images *or* ~2 videos) / 3 influencers · Pro $49 / 350 / 7 · Creator $79 / 700 / unlimited + API.
+
+**Credibility problems (exploitable):**
+- Testimonials read as fabricated — "Sarah Mitchell, Glow Beauty… engagement up 340%", "Marcus Chen, TechGadgets DTC", "Emily Rodriguez, FitLife". Composite names, round-number lifts, no linkable accounts.
+- `/features` returns generic boilerplate ("Collaboration Tools", "Analytics & Insights") that contradicts the specific homepage copy — those sections are aspirational.
+- `/pricing` **404s**.
+- "Recreate any Instagram shot" invites replication of third-party copyrighted photographs, as a headline feature.
+- "No watermarks" as a tier benefit ages badly — see §7.3.
+
+**Their pricing cannot serve our product.** One PersonaGen persona on autopilot at 6 posts/day = **180 posts/month**. Their top $79 tier is 233 images — one persona, images only, then you're out. Five personas = 900 posts/month, which does not exist on their sheet at any price.
 
 ---
 
-## 4. Full parity matrix
+## 4. Terminology audit — this is the fix the product needs most
 
-Legend: ✅ shipped · ⚠️ partial · ❌ absent · 🏆 we are clearly ahead
+The niche has settled on a vocabulary. We are using an agent-framework vocabulary from a different category. Every one of these appears in user-facing UI today.
 
-### 4.1 Persona creation & identity
+### 4.1 Rename table
 
-| Capability | Higgsfield | createpersona | PersonaGen | Notes |
+| Ours today | Where | **Industry standard** | Why it matters |
+|---|---|---|---|
+| **Agent** | `Agent` type, `agents` table, `AgentRoster`, `agentId`, **"Agent Generator"** page heading | **Persona** (secondary: *AI influencer*, *creator*) | All three competitors say persona/influencer. "Agent" reads as devtools, not marketing. Our own route is `/personas/[agentId]` — we're already inconsistent with ourselves. |
+| **Soul** | `agent.soul`, "Soul (Personality & Voice)" | **Personality & Voice** (field), or *Persona brief* | "Soul" is charming internally and meaningless to a buyer. |
+| **Market** | `agent.market` (JSON blob holding the whole profile) | **Persona profile** | A column named `market` holding appearance + psychology is a maintenance hazard and an onboarding hazard. |
+| **Appearance fields** | `APPEARANCE_FIELDS` | **Traits** | The word the entire category uses. Non-negotiable. |
+| **Reference kit** / `ugc_reference_kit` | persona page | **Locked identity** (user-facing) / *identity set* (internal) | "Kit" undersells it. "Locked" is the promise buyers respond to. |
+| **Character ref** | `ugc_character_ref` | **Private model** (once trained) / *master image* | Higgsfield says master image; theinfluencer says private model. |
+| **UGC pack** | `generateUgcPack` | **Post** / *asset* | |
+| **Skills & Capabilities**, **Tools**, **Heartbeat** | generator, agent config | *(remove from UI)* | Agent-framework jargon with no meaning in this niche. |
+| **Overseer**, **Hermes daemon**, **runtime_owner** | types, README | *(internal only — never surface)* | |
+| **Blueprint** | engine actions | **Template** | |
+| **Autonomy level** | persona config | **Autonomy level** ✅ keep | Genuinely ours, genuinely good, nobody else has it. |
+| **Brand brief** | route | **Brand brief** ✅ keep | Correct and differentiating. |
+| — | not present | **Batch**, **Try-on**, **Motion transfer**, **Lip-sync**, **Frontier models**, **Commercial rights**, **Best Fit**, **Regenerate**, **Lock in** | Terms buyers now search for and expect to see. |
+
+**Recommendation:** keep `agent*` as the database/internal identifier (renaming tables is risk with no user benefit), but **purge "agent", "soul", "skills", "tools", "heartbeat", "overseer" from every user-visible string.** Start with the `Agent Generator` H1 — that heading alone signals wrong category to every visitor.
+
+### 4.2 Phrases to adopt verbatim (proven in-market)
+
+- "Same face on every photo, video, try-on, and motion clip you ship."
+- "No prompt writing required."
+- "Set the ones that matter, leave the rest on Best Fit."
+- "Regenerate as many times as you want, then lock in the look you love."
+- "Yours forever. Full commercial rights."
+- "Looks shot, not generated."
+
+---
+
+## 5. UI / UX standards audit — where our interface is off-standard
+
+You asked specifically that our interface not be far off the industry's. Here is exactly where it is.
+
+### 5.1 The traits problem (P0)
+
+**Ours today** ([persona-profile.ts:67](../../personagen-svelte/src/lib/persona-profile.ts#L67)): nine **free-text inputs** with `e.g.` placeholders —
+`Ethnicity / heritage` → *"e.g. Vietnamese, Nigerian, Brazilian, Korean-American"*, `Wardrobe / outfit` → *"e.g. cream linen sets, minimal gold jewelry"*, `Hairstyle` → *"e.g. long loose waves / sleek bun / bald"* …
+
+**That is prompt writing.** Their headline promise is that you never have to do it. A user comparing the two screens will conclude ours is the technical/expert tool and theirs is the product — the exact opposite of what we want.
+
+**Trait dimension coverage:**
+
+| Trait | theinfluencer.ai | PersonaGen today | Action |
+|---|---|---|---|
+| Gender | chips (F/M) | select, on a different tab | move into Traits |
+| Ethnicity | chips + `+5 more` | **free text** | → chips |
+| **Age** (of the persona) | chips 25–29, 30–35, 36–44 `+4` | **❌ MISSING** — our `ageRanges` is the *audience's* age, a different thing entirely | **add** |
+| **Skin tone** | chips Fair/Light, Medium, Dark | **❌ MISSING** | **add** |
+| Eye colour | chips + `+3` | free text | → chips |
+| **Body** | chips Athletic, Slim, Curvy `+3` | **❌ MISSING** | **add** |
+| **Hair length** | chips Long, Medium, Short `+3` | ❌ conflated into "Hairstyle" | **split** |
+| Hair style | chips Curly, Wavy, Straight `+3` | free text | → chips |
+| Hair colour | chips + `+5` | free text | → chips |
+| Wardrobe / outfit colours / headwear / distinctive features / styling | *(handled at generation time)* | free text | keep as **Advanced**, collapsed |
+
+**Four missing dimensions (persona age, skin tone, body, hair length) and five that need converting from text to chips.**
+
+### 5.2 Component spec — `TraitPicker.svelte`
+
+To be built as a reusable component, used in the persona wizard and the persona edit page.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ ● PICK THE TRAITS · STEP 1 OF 3                             │
+├─────────────────────────────────────────────────────────────┤
+│ GENDER      (Best Fit) [Female] [Male]                      │
+│ ─────────────────────────────────────────────────────────── │
+│ ETHNICITY   (Best Fit) [Mixed] [Hispanic] [White] [ +6 ⌄ ]  │
+│ ─────────────────────────────────────────────────────────── │
+│ AGE         (Best Fit) [25–29] [30–35] [36–44] [ +4 ⌄ ]     │
+│ …                                                            │
+│                                                              │
+│ ⟳ Regenerate the preview as many times as you want,          │
+│   then lock in the look you love.                            │
+│                                              ▸ Advanced (5)  │
+└─────────────────────────────────────────────────────────────┘
+```
+
+Behaviour contract:
+- Every row **defaults to `Best Fit`** — a real selectable chip, not an empty state. Zero required input to reach a preview.
+- `Best Fit` values are resolved by our existing `generate_persona_profile` call, which already infers ethnicity from the persona's name — **we do this better than they do and currently show none of it.**
+- `+N more` expands the row inline. Never a `<select>`. `<select>` is the single most off-standard control in our current UI.
+- Chips are keyboard-navigable, `role="radiogroup"`, arrow keys move, Enter selects.
+- Advanced group (wardrobe, outfit colours, headwear, distinctive features, styling) stays free text, collapsed by default.
+
+Styling against our existing tokens ([app.css](../../personagen-svelte/src/app.css)): unselected `1px solid var(--border)` on `var(--surface)`; selected `2px solid var(--accent)` + `var(--accent-soft)` fill + 600 weight; overflow chip `1px dashed var(--border-strong)`; labels `var(--text-sm)`, uppercase, `letter-spacing: .08em`, `var(--text-dim)`; hairline row dividers; `border-radius: 999px`; `transition: all .15s ease`.
+
+### 5.3 The preview-and-lock loop (P0)
+
+**Ours today:** a 3-step wizard — Identity → Persona → **Review & Create** ([generator](../../personagen-svelte/src/routes/(portal)/generator/+page.svelte#L312)) — that commits on **text**. The face is generated *after* creation, on a different page.
+
+**Standard:** you never commit until you have seen the face and approved it.
+
+**Target flow:**
+
+| # | Step | Time to show | Content |
+|---|---|---|---|
+| 01 | **Pick the traits** | `~30 SEC` | Ten guided chip rows, all defaulted to Best Fit |
+| 02 | **See the preview** | `8–30 SEC` | Live render + `● NAME · GENERATED IN 8S` badge + *"Don't love the look? Regenerate."* — unlimited free regens |
+| 03 | **Lock them in** | `YOURS FOREVER` | Confirm → runs our 5-stage identity set → **"Locked. Same face on every photo, video and clip you ship."** |
+| 04 | **Ground it in your brand** ★ | `~60 SEC` | *(ours alone)* attach brand brief, scrape products, set niche/angle |
+| 05 | **Connect & set autonomy** ★ | `~90 SEC` | *(ours alone)* connect accounts, choose Advisor / Semi / Fully autonomous, set cadence |
+
+Steps 04–05 exist in no competitor product. **Presenting them as steps 4 and 5 of the same wizard is how we show, in ten seconds, that we do more than they do.**
+
+Show a real elapsed-time badge on every generated asset. We have the timings; surfacing them is nearly free and reads as confidence.
+
+### 5.4 Other off-standard interface gaps
+
+| Gap | Standard | Ours |
+|---|---|---|
+| **Pre-made personas** | Unlimited, on every tier — instant activation | ❌ none — every user starts from a blank form |
+| **Batch generation** | 32 photos/prompt; "100 reels in minutes" | ⚠️ `batch_generate` exists in the engine, not surfaced as a first-class UI |
+| **Aspect ratios** | 5, explicit | ⚠️ resolved internally, not user-facing |
+| **Edit with history** | Prompt-based edit, undo/redo, originals preserved | ⚠️ `refine-post` + `restore-kit-stage` exist — no undo/redo UI |
+| **Elapsed-time badges** | On every asset and step | ❌ |
+| **Gallery / proof** | Same face across 6–12 labelled scenes (Studio, Street, Café, Travel, Gym, Night out) | ❌ |
+| **Comparison table** | "Generic slop vs us" | ❌ |
+| **Aspirational free tier** | 3-day trial + 10 free credits | ❌ — we demand the user's own fal.ai key before anything renders ([generate.ts:213](../../personagen-svelte/src/lib/server/content/generate.ts#L213)) |
+
+---
+
+## 6. Full parity matrix
+
+✅ shipped · ⚠️ partial · ❌ absent · 🏆 clearly ahead of all three
+
+### 6.1 Persona creation & identity
+
+| Capability | theinfluencer | Higgsfield | createpersona | **PersonaGen** |
 |---|---|---|---|---|
-| Visual persona builder | ✅ | ✅ | ✅ | [generator](../../personagen-svelte/src/routes/(portal)/generator/+page.svelte) |
-| Build from reference photos | ✅ Soul ID (20+ imgs) | ✅ | ⚠️ single-image vision read | **GAP** |
-| **Trained identity lock** | ✅ **Soul ID** | ⚠️ claims "100%" | ❌ multi-ref conditioning | **P0 GAP** |
-| Multi-stage reference kit | ❌ | ❌ | 🏆 5 stages, restorable | |
-| Backstory / personality / fears | ⚠️ | ⚠️ | 🏆 soul + archetype + psych profile + ownable angle | [engine:1910](../../personagen-svelte/src/routes/api/engine/+server.ts#L1910) |
-| **Cross-persona differentiation** | ❌ | ❌ | 🏆 actively prevents two personas converging on the same look/angle | Nobody else does this |
-| Voice identity (TTS) | ⚠️ | ⚠️ | 🏆 accent/nationality-matched, seeded to avoid collision | |
-| Ethnicity/name coherence | ❌ | ❌ | 🏆 gender inferred from name, corrects stale values | |
-| Multi-language / fluency | ❌ | ❌ | ❌ | Nobody has it — **opportunity** |
-| Identity kit (bios, handles) | ❌ | ❌ | 🏆 per-platform bios to char limits + username candidates | |
+| **Trait chip picker** | ✅ 10 fields | ✅ visual | ✅ | ❌ free text — **P0** |
+| **"Best Fit" defaults** | ✅ | ⚠️ | ⚠️ | ❌ **P0** |
+| **Preview → regenerate → lock** | ✅ | ✅ | ✅ | ❌ **P0** |
+| **Trained identity / private model** | ✅ AI Clone | ✅ Soul ID | ⚠️ claimed | ❌ multi-ref only — **P0** |
+| **Pre-made personas** | ✅ unlimited | ✅ | ❌ | ❌ **P1** |
+| Clone from user's own photos | ✅ 8–12 | ✅ 20+ | ✅ | ❌ **P1** |
+| Multi-stage identity set | ❌ | ❌ | ❌ | 🏆 5 stages, restorable |
+| Backstory / psychology / ownable angle | ⚠️ | ❌ | ⚠️ | 🏆 archetype + psych profile + POV |
+| **Cross-persona differentiation** | ❌ | ❌ | ❌ | 🏆 forced distinct look **and** angle across the roster |
+| Voice identity | ⚠️ | ⚠️ | ⚠️ | 🏆 accent/nationality-matched, seeded |
+| Name→ethnicity coherence | ❌ | ❌ | ❌ | 🏆 |
+| Per-platform bios + handle candidates | ❌ | ❌ | ❌ | 🏆 identity kit |
 
-### 4.2 Content generation
+### 6.2 Content generation
 
-| Capability | Higgsfield | createpersona | PersonaGen |
-|---|---|---|---|
-| Text-to-image lifestyle | ✅ | ✅ | ✅ |
-| Product-in-hand UGC | ✅ | ✅ | ✅ |
-| Talking-head lip-sync | ⚠️ | ✅ | ✅ OmniHuman v1.5 |
-| Multi-shot cinematic video | ⚠️ | ❌ | 🏆 LLM director → storyboard → parallel stills → Kling |
-| **Hook-quality gate** | ❌ | ❌ | 🏆 scripts scored, below-floor killed **before** paying for video |
-| Motion transfer from video | ✅ | ❌ | ❌ **GAP** |
-| Recreate an Instagram shot | ⚠️ | ✅ | ❌ **GAP** |
-| Model choice / cost control | ❌ | ❌ | 🏆 full catalog, tier + USD per call shown in UI |
-| 4K output | ✅ | ✅ | ⚠️ **verify/expose** |
+| Capability | theinfluencer | Higgsfield | createpersona | **PersonaGen** |
+|---|---|---|---|---|
+| Photos from prompt/reference | ✅ | ✅ | ✅ | ✅ |
+| **Batch (32/prompt)** | ✅ | ✅ | ⚠️ | ⚠️ engine-only |
+| Talking-head lip-sync | ✅ | ⚠️ | ✅ | ✅ OmniHuman v1.5 |
+| Video length | 3–15s (paywalled) | ~5–10s | ~5s | ✅ 5s + **multi-shot cinematic** |
+| Multi-shot storyboarded video | ❌ | ⚠️ | ❌ | 🏆 director → storyboard → parallel stills → Kling |
+| **Hook-quality gate** | ❌ | ❌ | ❌ | 🏆 weak scripts killed **before** paying for video |
+| **Try-on** | ✅ | ⚠️ | ❌ | ❌ **P1** |
+| **Motion transfer** | ✅ 4–30s | ✅ | ❌ | ❌ **P2** |
+| **40+ languages** | ✅ | ⚠️ | ❌ | ❌ **P1** |
+| Edit w/ undo, originals kept | ✅ | ⚠️ | ⚠️ | ⚠️ no UI |
+| Upscaler | ✅ | ✅ | ⚠️ | ❌ |
+| Model choice + $/call shown | ❌ | ❌ | ❌ | 🏆 full catalog, tiered, priced in-UI |
 
-### 4.3 Distribution — our strongest ground
+### 6.3 Distribution & operations — uncontested ground
 
-| Capability | Higgsfield | createpersona | PersonaGen |
-|---|---|---|---|
-| Platforms | **0** (download) | **1** (Instagram) | 🏆 **13** — IG, TikTok, YouTube, FB, X, Threads, LinkedIn, Bluesky, Pinterest, Reddit, Google Business, Telegram, Snapchat ([platforms.ts](../../personagen-svelte/src/lib/platforms.ts#L15)) |
-| Scheduling calendar | ❌ | ✅ basic | 🏆 Day/Week/Month, per-persona rail |
-| **Autonomy levels** | ❌ | ❌ | 🏆 advisor / semi / fully autonomous |
-| **Autopilot** | ❌ | ⚠️ batch weekly | 🏆 tz-aware slot filling, idempotent, cost-capped, dead-letters after 3 failures |
-| Approval queue | ❌ | ❌ | 🏆 [review](../../personagen-svelte/src/routes/(portal)/review/+page.svelte) |
-| **Verified publish** | ❌ | ❌ | 🏆 never reports published without platform confirmation |
-| Honest deletion | ❌ | ❌ | 🏆 manual-delete notice for IG/TikTok/Snapchat with permalink |
-| Analytics | ❌ | ⚠️ claimed | ✅ views/likes/comments/shares per post |
-| **Per-persona spend ledger** | ❌ | ❌ | 🏆 every generation costed and recorded |
+| Capability | theinfluencer | Higgsfield | createpersona | **PersonaGen** |
+|---|---|---|---|---|
+| Platforms published to | **0** (download) | **0** (download) | **1** (Instagram) | 🏆 **13** ([platforms.ts](../../personagen-svelte/src/lib/platforms.ts#L15)) |
+| Scheduling calendar | ❌ | ❌ | ✅ basic | 🏆 Day/Week/Month + persona rail |
+| **Autonomy levels** | ❌ | ❌ | ❌ | 🏆 Advisor / Semi / Fully |
+| **Autopilot** | ❌ | ❌ | ⚠️ batch weekly | 🏆 tz-aware slots, idempotent, cost-capped, dead-letters after 3 fails |
+| Approval queue | ❌ | ❌ | ❌ | 🏆 |
+| **Verified publish** | ❌ | ❌ | ❌ | 🏆 never "published" without platform confirmation |
+| Honest deletion | ❌ | ❌ | ❌ | 🏆 manual-delete notice + permalink |
+| Analytics | ❌ | ❌ | ⚠️ claimed | ✅ views/likes/comments/shares |
+| **Per-persona spend ledger** | ❌ | ❌ | ❌ | 🏆 every generation costed |
 
-### 4.4 Business grounding — uncontested
+### 6.4 Brand grounding — uncontested
 
-| Capability | Higgsfield | createpersona | PersonaGen |
-|---|---|---|---|
-| Brand brief | ❌ | ❌ | 🏆 mission, voice, traits, audience, pain points, competitors |
-| **Product scraping** | ❌ | ❌ | 🏆 scrape store/product → structured products |
-| UGC guidelines / presets | ❌ | ❌ | 🏆 |
-| Brand theme | ❌ | ⚠️ "custom branding" | 🏆 opt-in palette |
-| Multi-brand / multi-client | ❌ | ⚠️ implied | ✅ multiple briefs |
+| Capability | Any competitor | **PersonaGen** |
+|---|---|---|
+| Brand brief (mission, voice, traits, audience, pain points, competitors) | ❌ | 🏆 |
+| **Product scraping from a store URL** | ❌ | 🏆 |
+| UGC guideline presets | ❌ | 🏆 |
+| Multi-brand / multi-client | ⚠️ implied | ✅ |
 
-### 4.5 Commercial surface — where we are at zero
+### 6.5 Commercial surface — we are at zero
 
-| Capability | Higgsfield | createpersona | PersonaGen |
-|---|---|---|---|
-| **Landing page** | ✅ | ✅ | ❌ **P0** |
-| **Pricing page** | ✅ | ✅ (cards) | ❌ **P0** |
-| **Billing / subscriptions** | ✅ | ✅ | ❌ "coming soon" ([settings:1069](../../personagen-svelte/src/routes/(portal)/settings/+page.svelte#L1069)) |
-| **Free / no-key first run** | ✅ | ✅ | ❌ **P0** — blocked on user's own fal key |
-| Gallery / proof | ✅ | ✅ | ❌ |
-| Free SEO tools | ✅ 40+ | ✅ 5 | ❌ |
-| Legal pages | ✅ | ✅ | ❌ |
-| Team / collaboration | ⚠️ Teams plan | ⚠️ claimed | ❌ |
-| Affiliate program | ✅ | ✅ | ❌ |
-| Discord / community | ✅ | ✅ | ❌ |
+| Capability | theinfluencer | Higgsfield | createpersona | **PersonaGen** |
+|---|---|---|---|---|
+| **Landing page** | ✅ | ✅ | ✅ | ❌ root redirects to `/dashboard` ([+page.svelte:9](../../personagen-svelte/src/routes/+page.svelte#L9)) |
+| **Pricing page** | ✅ | ✅ | ⚠️ 404 | ❌ |
+| **Billing** | ✅ Stripe | ✅ | ✅ | ❌ "coming soon" ([settings:1069](../../personagen-svelte/src/routes/(portal)/settings/+page.svelte#L1069)) |
+| **Free trial, no keys** | ✅ 3-day + 10 credits | ✅ | ✅ | ❌ demands user's fal key |
+| Gallery | ✅ | ✅ | ✅ | ❌ |
+| SEO tool pages | ✅ ~14 | ✅ 40+ | ✅ 5 | ❌ |
+| Competitor-alternative pages | ✅ | ⚠️ | ❌ | ❌ |
+| Legal pages | ✅ | ✅ | ✅ | ❌ |
+| Affiliate program | ✅ | ✅ | ✅ | ❌ |
+| Teams | ⚠️ | ✅ | ⚠️ | ❌ |
 
 ---
 
-## 5. Viability assessment
+## 7. Viability assessment
 
-### 5.1 Is the market real? — Yes, and it is stratifying
+### 7.1 The market is real and it is stratifying
 
-Higgsfield's 25M+ user claim and the density of competitors (Creatify, Picsart Persona, The Influencer AI, createpersona) prove demand. But the market is splitting:
+Four credible competitors, one with 25M+ users, another with 10,000+ paying creators and real third-party press. Demand is proven. The tiers:
 
-- **Toy tier** ($0–15) — hobbyists making a pretty face. Race to zero. Avoid.
-- **Creator tier** ($29–99) — where createpersona and Higgsfield both fight. Credit-metered, low switching cost, undifferentiated.
-- **Operator tier** ($200–2,000+) — brands and agencies who need *volume, consistency, approval, publishing, and an audit trail*. **Nobody is serving it. This is where PersonaGen's architecture already lives.**
+- **Toy** ($0–19) — hobbyists. Race to zero. Avoid.
+- **Creator** ($19–99) — where all three fight. Credit-metered, undifferentiated, low switching cost.
+- **Operator** ($200–2,000+) — brands and agencies needing volume, consistency, approval, publishing, audit trail. **Empty. Our architecture already lives here.**
 
-### 5.2 Unit economics — our structural advantage
+### 7.2 Unit economics — our structural advantage
 
-At our verified provider costs, one persona posting 6×/day for a month:
+At verified provider costs ([pricing.ts](../../personagen-svelte/src/lib/pricing.ts)): image **$0.08** · standard video **$0.61** · cinematic **$1.95** · talking head **$0.81**.
 
-| Content mix | Monthly provider cost |
+One persona, 6 posts/day, 30 days = **180 posts**:
+
+| Mix | Our provider cost |
 |---|---|
-| All images | **~$15** |
-| 50/50 image + standard video | **~$62** |
-| Heavy cinematic | **~$200** |
+| All images | ~$15/mo |
+| 50/50 image + video | ~$62/mo |
+| Heavy cinematic | ~$200/mo |
 
-Against createpersona's top tier ($79 → 233 images or 10 videos) and Higgsfield's Ultra ($99 → 3,000 credits, non-rolling), **we can serve an always-on account at 1/5 to 1/20 of credit-model retail.** A defensible offer:
+Retail comparison at the same volume:
 
-> **$299/mo per brand — 5 personas, unlimited posts, all 13 platforms, you approve everything.**
+| Vendor | Cost of 180 images/mo | Cost of 90 videos/mo |
+|---|---|---|
+| theinfluencer.ai | ~$39 (Creator, 250cr) | **not purchasable** — top tier is 50–100 × 15s at $199 |
+| createpersona | ~$79 (Creator, 233 imgs) | **not purchasable** — 10 videos max |
+| Higgsfield | ~$39–99 + top-ups | expensive, credits expire |
+| **PersonaGen** | **~$15 cost** | **~$55 cost** |
 
-That is ~$60/persona at 180 posts each — roughly **$0.33/post** all-in against a $15–200 cost base. Margin holds at every mix; it is impossible for a credit-metered competitor to match without cannibalising their own pricing.
+**Defensible offer:** **$299/mo per brand — 10 personas, unlimited posts, 13 platforms, you approve everything.** ≈ $30/persona at 180 posts each ≈ **$0.17/post**, against a $15–200 cost base across the account. Margin holds at every mix, and no credit-metered competitor can match it without cannibalising their own price list.
 
-**But:** we currently capture **none** of that because there is no billing and users bring their own keys. BYO-key is a great *enterprise* option and a terrible *default*. See P0-3.
+**But we capture none of it today** — no billing, and users bring their own keys. BYO-key is an excellent *enterprise* option and a fatal *default*.
 
-### 5.3 Risk register
+### 7.3 Risk register
 
 | Risk | Severity | Assessment |
 |---|---|---|
-| **Regulatory — synthetic content disclosure** | **HIGH** | EU AI Act transparency obligations for synthetic/deepfake content come into application **2 Aug 2026 — one week from today.** Verify current text with counsel. **This inverts the market:** createpersona sells "No Watermarks" on all three tiers as a *benefit*. We already burn an `AI GENERATED` badge into video ([video.ts:145](../../personagen-svelte/src/lib/server/video.ts#L145)). **Turn our compliance into the headline; their feature becomes their liability.** |
-| **Platform ToS / account bans** | **HIGH** | Meta and TikTok both restrict undisclosed synthetic personas. Mitigation is *disclosure + brand-owned accounts*, not stealth. The README's stealth account-factory / residential-node architecture is a **strategic liability for a legitimate B2B product** — it is the wrong story for the operator tier and should be de-emphasised in all public material. |
-| **IG auto-posting is harder than anyone admits** | MED-HIGH | Real IG publishing needs a Business/Creator account linked to a Facebook Page. createpersona's "auto-post to Instagram" carries the same constraint they don't mention. Our Zernio path is honest about it. Do not over-claim. |
-| **Consistency gap vs Soul ID** | MED-HIGH | Directly attackable in a side-by-side. Closing it is P0. |
-| **Model cost drift** | LOW | Already abstracted behind [pricing.ts](../../personagen-svelte/src/lib/pricing.ts) + `UGC_PRICING_JSON` env override. |
-| **Zernio single-vendor dependency** | MED | 13 platforms all flow through one vendor whose pricing already changed once (verified 2026-07-08). Needs a second publishing path eventually. |
-| **No funnel** | **CRITICAL** | Best product loses to worst product with a signup button. |
+| **No commercial surface** | **CRITICAL** | The best product loses to the worst product with a signup button. Everything else in this document is secondary to this. |
+| **Synthetic-content disclosure regulation** | **HIGH → opportunity** | EU AI Act transparency obligations for synthetic/deepfake content are understood to apply from **2 Aug 2026 — one week out.** *Verify current text with counsel before publishing claims.* This **inverts** the market: createpersona sells "No Watermarks" as a tier benefit; we already burn an `AI GENERATED` marker into video ([video.ts:145](../../personagen-svelte/src/lib/server/video.ts#L145)). Notably, theinfluencer.ai already answers the ethics question in their FAQ and *recommends* disclosure — the smartest player is hedging. **We should lead with it.** |
+| **Platform ToS / bans** | **HIGH** | Meta and TikTok restrict undisclosed synthetic personas. Mitigation is disclosure + brand-owned accounts, not stealth. **The README's stealth account-factory / residential-node architecture is the wrong story for a legitimate B2B product and must be de-emphasised in all public material.** |
+| **IG auto-posting reality** | MED-HIGH | Real IG publishing needs a Business/Creator account linked to a Facebook Page. createpersona's "auto-post to Instagram" carries the same constraint unmentioned. Stay honest; it's a trust asset. |
+| **Consistency gap vs Soul ID / AI Clone** | **HIGH** | Two of three competitors ship trained identity. Directly attackable in a side-by-side. **P0.** |
+| **Terminology mismatch** | MED-HIGH | Cheap to fix, expensive to leave. A visitor who doesn't recognise the category bounces. |
+| **Zernio single-vendor dependency** | MED | 13 platforms through one vendor whose pricing already changed once (verified 2026-07-08). |
+| **Model cost drift** | LOW | Already abstracted behind `pricing.ts` + `UGC_PRICING_JSON`. |
 
-### 5.4 Viability verdict
+### 7.4 Verdict
 
-**Viable, with a narrow and defensible position — conditional on shipping a commercial surface.**
+**Viable, with a defensible and currently unoccupied position — conditional on shipping a commercial surface and adopting the category's front end.**
 
-The product risk is largely retired: the hard engineering (consistency pipeline, verified publishing, autopilot, brand grounding, cost accounting) is done and is genuinely ahead of both competitors on everything except trained identity lock. The remaining risk is **entirely go-to-market**. We are competing with a 25M-user incumbent and a well-packaged thin wrapper while having no front door.
+Product risk is largely retired: the operations layer is genuinely ahead of all three competitors and would take each of them 6–12 months to replicate. The remaining risk is entirely go-to-market and presentation. We are competing against a 25M-user incumbent and a 10,000-creator benchmark while having **no front door, no price, no free trial, and a vocabulary from a different industry.**
 
 ---
 
-## 6. Gap closure plan
+## 8. Gap closure plan
 
 ### P0 — blocking launch (weeks 1–4)
 
-1. **Landing page + pricing + gallery.** Root currently redirects to `/dashboard`. Full spec in §7.
-2. **Trained identity lock (Soul ID parity).** Add a LoRA/identity-training path (fal supports FLUX LoRA training) fed by the reference kit we already generate — we produce the 20+ consistent images Soul ID asks users to supply, so **our onboarding for this is better than theirs**: they make you upload 20 photos, we *generate* them. Ship as "Locked Identity."
-3. **Managed keys + billing.** Platform-provisioned provider keys with metered markup as the default; BYO-key becomes a Pro/agency toggle. Stripe subscriptions. Without this there is no business.
-4. **Free first run.** N free generations on our keys, no card. Non-negotiable for conversion.
+1. **`TraitPicker.svelte`** — ten chip rows, Best Fit defaults, `+N more` inline expansion, Advanced collapsed. Add the four missing dimensions (persona age, skin tone, body, hair length); split hair length from hair style. Spec in §5.2.
+2. **Preview → regenerate → lock wizard.** Rebuild the generator around the five steps in §5.3. Elapsed-time badges throughout.
+3. **Terminology purge.** Remove *agent, soul, skills, tools, heartbeat, overseer* from every user-visible string. Start with the `Agent Generator` H1. §4.1.
+4. **Landing page + pricing + gallery.** §9.
+5. **Trained identity ("Locked Identity").** LoRA training on fal, fed by the reference kit we already generate. **Our onboarding beats theirs structurally: they make the user upload 8–20 photos; we *generate* a consistent set from a single approved preview.** That is a real, ownable advantage — sell it.
+6. **Managed keys + Stripe billing + free first run.** Platform keys with metered markup as default; BYO-key becomes a Pro/agency toggle. 10 free generations, no key, no card until the paywall.
 
-### P1 — competitive parity (weeks 5–10)
+### P1 — parity (weeks 5–10)
 
-5. **Recreate-a-shot.** Paste a URL/upload → vision decompose → rebuild with our persona. *Frame it as "recreate a look/style," never "clone this creator's photo"* — sidesteps the legal exposure createpersona walked into.
-6. **Expose resolution tiers.** 2K/4K as an explicit, priced control.
-7. **Public gallery** driven by real outputs.
-8. **Free-tool SEO pages.** UGC Script Generator, TikTok Hook Generator, IG Caption/Bio/Hashtag — we already have the LLM plumbing; these are thin route wrappers with enormous funnel value.
-9. **Legal pages** — Privacy, Terms, Refund, Cookie, plus an **AI Disclosure Policy** page nobody else has.
+7. **Pre-made personas library** — highest-ROI activation feature in the category; every competitor has one.
+8. **Clone from user photos** (8–12 uploads) — completes the two-path standard.
+9. **Multi-language + fluency.** theinfluencer ships 40+; it is table stakes, not a differentiator. Pairs with our accent-matched TTS. *One persona → eight markets* is a story none of them tell well.
+10. **Virtual try-on** — garment upload + category.
+11. **Batch generation surfaced** as first-class UI (32/prompt), with aspect-ratio control.
+12. **Recreate-a-look** — paste URL/upload → vision decompose → rebuild with our persona. Frame as *"recreate a look/style,"* never *"clone this creator's photo"* — sidesteps the exposure createpersona walked into.
+13. **SEO tool pages** — UGC Script Generator, TikTok Hook Generator, IG Caption/Bio/Hashtag, plus **"Higgsfield Alternative"** / **"The Influencer AI Alternative"** comparison pages. We already have the LLM plumbing; these are thin route wrappers with large funnel value.
+14. **Legal pages** + an **AI Disclosure Policy** page nobody else has.
 
 ### P2 — extend the lead (weeks 11+)
 
-10. **Motion transfer** (Higgsfield's remaining edge).
-11. **Multi-language + fluency levels** — *nobody has this*, and it is the highest-leverage untouched feature in the category. One persona → 8 markets. Pairs perfectly with our accent-matched TTS.
-12. **Teams/agency workspaces** — required for the $299+ tier.
-13. **Comment/DM engagement layer** — the honest version of "auto-growing."
-14. **Second publishing vendor** to de-risk Zernio.
+15. Motion transfer · 16. Edit history with undo/redo · 17. Image upscaler · 18. Teams/agency workspaces (required for $299+) · 19. Comment & DM engagement — the honest version of "auto-growing" · 20. Second publishing vendor to de-risk Zernio.
 
 ---
 
-## 7. Landing page blueprint
+## 9. Landing page blueprint
 
-**Design direction:** take createpersona's *structure* (proven, scannable) and Higgsfield's *confidence* (dark, cinematic, motion-led). Use our existing tokens — accent `#7c6aed`, cyan `#0ea5e9`, dark `#0b0713`, Playfair Display headlines over Inter body ([app.css](../../personagen-svelte/src/app.css)) — so the marketing page and the product are visibly the same object.
+**Design direction:** theinfluencer.ai's *structure and restraint* (light, generous whitespace, chip-and-card components, time estimates, comparison table), Higgsfield's *confidence* in the hero. Use our existing tokens — accent `#7c6aed`, cyan `#0ea5e9`, dark `#0b0713`, Playfair Display over Inter ([app.css](../../personagen-svelte/src/app.css)) — so the marketing page and the product are visibly the same object.
 
 ### Section order
 
-1. **Hero** — dark, animated, one persona's grid of visibly-identical outputs behind the copy
-2. **Logo/proof strip** — 13 platform marks (our loudest single differentiator)
-3. **The 3-step** — Build the persona → Ground it in your brand → Let it run
-4. **Comparison table** — "Generation studio vs. content scheduler vs. **operating system**"
-5. **Feature deep-dives** — 6 blocks (§7.2)
-6. **Gallery** — real outputs, same face across 12 scenes
-7. **Use cases** — DTC, agencies, faceless accounts, course creators, affiliates
-8. **Trust & disclosure** — the section nobody else has (§7.3)
-9. **Pricing**
-10. **FAQ**
-11. **Footer** — product, free tools, company, legal, social
+1. Hero (live trait-picker preview as the hero visual — *show the product doing its trick*)
+2. Platform strip — 13 marks, our loudest differentiator
+3. How it works — **five** steps with time estimates (theirs stops at three)
+4. Comparison table — studios vs schedulers vs **operating system**
+5. Feature deep-dives (§9.2)
+6. Gallery — same face, 12 labelled scenes
+7. Use cases — Brands · Agencies · Sellers · Creators
+8. Trust & disclosure — the section nobody else has
+9. Pricing — **per brand, not per credit**
+10. FAQ
+11. Footer — product, free tools, comparisons, company, legal, social
 
-### 7.1 Hero copy
+### 9.1 Hero
 
-> **Eyebrow:** The AI creator platform that actually runs the account
+> **Eyebrow:** The AI persona platform that runs the account
 >
-> **H1:** Your AI creators. Posting on 13 platforms. While you sleep.
+> **H1:** Create your AI personas. We'll run their accounts.
 >
-> **Sub:** Build photorealistic AI creators with a locked face and voice, ground them in your real brand and products, and let them generate, schedule, and publish — with you approving every post, and every dollar accounted for.
+> **Sub:** Pick traits, lock the face, and let your personas post to 13 platforms on their own — grounded in your real products, approved by you, every dollar accounted for.
 >
-> **CTA:** Build Your First Creator — Free · *No credit card. No API keys. Live in 4 minutes.*
->
-> **Sub-CTA:** See the gallery →
+> **CTA:** Create Your Persona — Free · *No credit card. No API keys. First persona live in 4 minutes.*
+> **Secondary:** See the gallery →
 
-**Why this beats theirs:** createpersona's "Generate Content 10x Faster" is a *speed* claim in a market where everyone is fast. Higgsfield's "24/7 content machine" is a *volume* claim that ends at a download button. **"Posting on 13 platforms while you sleep" is the only claim on this page that neither of them can make.**
+Everyone in this market sells *making a face*. The second sentence of our H1 is the only claim on the page that none of the three can print.
 
-### 7.2 Feature blocks
+### 9.2 Feature blocks
 
 | # | Heading | Copy |
 |---|---|---|
-| 1 | **One face. Ten thousand posts.** | A five-stage reference kit — character sheet, full body, profiles, close-up, feature grid — trains a locked identity. Not a prompt that hopes. An identity that holds. |
-| 2 | **Publishes to 13 platforms. Proves it landed.** | Instagram, TikTok, YouTube, Facebook, X, Threads, LinkedIn, Bluesky, Pinterest, Reddit, Google Business, Telegram, Snapchat. And we never mark a post published until the platform confirms it. |
-| 3 | **It knows your actual business.** | Point it at your store. It reads your products, prices, and photos, and builds every creator's angle around what you actually sell. |
-| 4 | **Three levels of autonomy. You choose.** | Advisor suggests. Semi-autonomous drafts and you approve. Fully autonomous runs inside your guardrails. Change it per creator, any time. |
-| 5 | **No two creators look or sound alike.** | Run five and they won't converge. Every new creator is checked against your whole roster — look, angle, audience, voice — and forced to be different. |
-| 6 | **Every cent, on the record.** | Per-creator, per-post spend, by provider. Pick your quality tier and see the cost before you spend it. No credits. No expiry. No guessing. |
+| 1 | **Pick the traits. Lock the face.** | Ten guided fields, everything else on Best Fit. No prompt writing. Regenerate the preview until you love it, then lock it in — same face on every photo, video and clip you ship. |
+| 2 | **Publishes to 13 platforms. Proves it landed.** | Instagram, TikTok, YouTube, Facebook, X, Threads, LinkedIn, Bluesky, Pinterest, Reddit, Google Business, Telegram, Snapchat. We never mark a post published until the platform confirms it. |
+| 3 | **It knows your actual business.** | Point it at your store. It reads your products, prices and photos, and builds every persona's angle around what you actually sell. |
+| 4 | **Three levels of autonomy. Your call.** | Advisor suggests. Semi-autonomous drafts and waits for you. Fully autonomous runs inside your guardrails. Per persona, changeable any time. |
+| 5 | **No two personas look or sound alike.** | Run ten and they won't converge. Every new persona is checked against your whole roster — look, angle, audience, voice — and forced to be different. |
+| 6 | **Every cent, on the record.** | Per-persona, per-post spend by provider. Pick your quality tier and see the cost before you spend it. **No credits. No expiry. No guessing.** |
 
-### 7.3 Trust & disclosure section — our unique asset
+### 9.3 Comparison table (our answer to their "slop" table)
+
+| | Generation studios | Schedulers | **PersonaGen** |
+|---|---|---|---|
+| Consistent face | ✓ | ~ | ✓ |
+| Video with lip-sync | ✓ | ✓ | ✓ |
+| Knows your products | — | — | ✓ |
+| Publishes for you | — | 1 platform | **13 platforms** |
+| Confirms it published | — | — | ✓ |
+| You approve before it posts | — | — | ✓ |
+| Runs on a schedule, unattended | — | — | ✓ |
+| Shows you the cost | — | credits | **exact USD** |
+| Ends at | a download | Instagram | **your analytics** |
+
+### 9.4 Trust & disclosure — our unique section
 
 > **Built for brands that have to answer for what they post.**
-> Every generated video carries an AI-generated marker. Every post is approved before it goes out unless you say otherwise. Every publish is verified against the platform, and when a platform makes deletion impossible we tell you plainly instead of pretending. Synthetic content disclosure rules are arriving — we shipped for them first.
+> Every generated video carries an AI-generated marker. Every post is approved before it goes out unless you say otherwise. Every publish is verified against the platform — and where a platform makes deletion impossible, we tell you plainly instead of pretending. Disclosure rules for synthetic content are arriving. We built for them first.
 
-Competitors sell "**No Watermarks**" as a feature on every tier. Put that contrast on the page.
+Competitors sell **"No Watermarks"** as a tier benefit. Put that contrast on the page.
 
-### 7.4 Pricing frame
+### 9.5 Pricing frame
 
-Price **per brand, not per credit** — it is our structural advantage and it reframes the comparison entirely.
+Price **per brand, not per credit** — the structural advantage, and it reframes every comparison.
 
-| | **Studio** | **Brand** *(popular)* | **Agency** |
+| | **Studio** | **Brand** ★ | **Agency** |
 |---|---|---|---|
-| Price | $79/mo | $299/mo | $899/mo |
-| Creators | 3 | 10 | Unlimited |
+| $/mo | 79 | **299** | 899 |
+| Personas | 3 | 10 | Unlimited |
 | Posts | 500/mo | **Unlimited** | **Unlimited** |
 | Platforms | 13 | 13 | 13 |
 | Brand briefs | 1 | 3 | Unlimited |
 | Autonomy | Advisor + Semi | All three | All three |
-| Video | Standard | Cinematic + talking head | + priority queue |
-| Extras | — | Spend ledger, verified publishing | Teams, BYO keys at cost, API, manager |
+| Video | Standard + lip-sync | + cinematic multi-shot | + priority queue |
+| Extras | — | Spend ledger, verified publishing, approval queue | Teams, BYO keys at cost, API, dedicated manager |
 
-Add a comparison line: *"createpersona's top plan gives you 233 images a month. One PersonaGen creator posts 180 times a month — and you can run ten."*
+Comparison line for the pricing section:
+> *"The best-known tool in this category gives you 250 photos a month for $39. One PersonaGen persona posts 180 times a month — and on Brand you run ten of them, with no credit meter at all."*
 
-### 7.5 FAQ (must answer, because they do)
+### 9.6 FAQ (must answer — they all do)
 
-Commercial rights · How consistency actually works (and why locked identity beats prompting) · Which platforms are live *today* · **Why we don't sell credits** · Whether AI creators are allowed on these platforms (honest answer + disclosure stance) · Whether you can import an existing account · What happens if a generation fails (dead-lettering) · Cancel/pause.
+What is an AI persona? · Commercial rights (**"Yours forever"**) · How locked identity works and why it beats prompting · Which platforms are live **today** · **Why we don't sell credits** · Are AI personas allowed on these platforms (honest answer + our disclosure stance) · Can I clone myself? · Can I import an existing account? · What happens if a generation fails (dead-lettering) · Cancel/pause.
 
 ---
 
-## 8. Bottom line
+## 10. Bottom line
 
-**Feature-for-feature we already beat createpersona.ai on everything that matters after the image is generated**, and we beat Higgsfield on everything after the download button. Our only real product deficit is **trained identity lock**, and our only real *business* deficit is that **we have no front door, no price, and no way to take money.**
+**After the image exists, we beat all three — and it isn't close.** Brand grounding, 13-platform verified publishing, autonomy levels, approval queue, spend ledger, cross-persona differentiation: none of them have any of it, and it is the expensive half of the problem.
 
-Recommended sequence: **landing page + pricing → managed keys and billing → free first run → locked identity → recreate-a-shot → free SEO tools.** Nothing in P0 is research; it is all execution against a product that already works.
+**Before the image exists, we are behind all three** — on trait UX, the preview-and-lock loop, trained identity, pre-made personas, try-on, motion, and languages. And we speak the wrong language, have no front door, and cannot take money.
 
-The claim to own, on the landing page and everywhere else:
+The good news is the ordering: **everything in P0 is presentation and packaging over a product that already works.** Adopt the category's vocabulary and interface, put a door on the building, and the operations layer we already own becomes the thing nobody can answer.
 
 > **Everyone else sells you a face. We run the account.**

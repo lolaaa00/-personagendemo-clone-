@@ -9,4 +9,7 @@
 	});
 </script>
 
-{@render children()}
+<!-- Auth screens have no global nav, so the page itself is the single main landmark. -->
+<main id="main-content">
+	{@render children()}
+</main>

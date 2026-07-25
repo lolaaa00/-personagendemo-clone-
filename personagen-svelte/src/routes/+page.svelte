@@ -11,10 +11,10 @@
 </script>
 
 <svelte:head>
-	<title>PersonaGen — AI Agent-Powered UGC Creator Management</title>
+	<title>PersonaGen — AI Personas That Run Your Accounts</title>
 	<meta
 		name="description"
-		content="Autonomous AI agents managing your UGC creator roster, content calendar, and analytics."
+		content="Create AI personas with a locked identity and run their content, calendar, and analytics from one place."
 	/>
 </svelte:head>
 

@@ -36,7 +36,7 @@
 </script>
 
 <div class="sel-toolbar" class:has-selection={selectedCount > 0}>
-	<span class="sel-count">
+	<span class="sel-count" aria-live="polite" aria-atomic="true">
 		{total}
 		{total === 1 ? noun : plural}
 		{#if selectedCount > 0}
@@ -58,6 +58,7 @@
 			type="button"
 			class="sel-btn danger"
 			onclick={onDelete}
+			aria-busy={busy}
 			disabled={busy || selectedCount === 0}
 		>
 			{busy ? 'Deleting…' : deleteLabel}{selectedCount > 0 ? ` (${selectedCount})` : ''}
@@ -94,6 +95,7 @@
 		gap: 0.4rem;
 		flex-wrap: wrap;
 	}
+	/* Labels stay compact; the box carries the 44px minimum touch target. */
 	.sel-btn {
 		background: var(--surface, #fff);
 		border: 1px solid var(--border, #e6e8f0);
@@ -104,18 +106,35 @@
 		color: var(--text, #14172b);
 		cursor: pointer;
 		font-family: var(--font-body, inherit);
+		min-height: 44px;
+		min-width: 44px;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
 	}
 	.sel-btn:hover:not(:disabled) {
-		border-color: var(--accent, #7c6aed);
+		border-color: var(--accent);
+	}
+	.sel-btn:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
 	}
 	.sel-btn:disabled {
 		opacity: 0.45;
 		cursor: not-allowed;
 	}
+	/* Destructive action sits apart from the benign ones so it isn't mis-tapped. */
+	.sel-btn.danger {
+		margin-left: 0.5rem;
+	}
 	.sel-btn.danger:not(:disabled) {
-		color: #dc2626;
+		color: var(--error-text);
 	}
 	.sel-btn.danger:hover:not(:disabled) {
-		border-color: #dc2626;
+		border-color: var(--danger);
+		background: color-mix(in srgb, var(--danger) 8%, var(--surface, #fff));
+	}
+	.sel-btn.danger:focus-visible {
+		outline-color: var(--danger);
 	}
 </style>

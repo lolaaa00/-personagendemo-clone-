@@ -12,7 +12,11 @@
 	const PAD_R = 16;
 	const PAD_T = 16;
 	const PAD_B = 28;
-	const COLORS = ['#6366f1', '#34d399', '#fbbf24'];
+	// Series palette re-checked against BOTH portal surfaces. The previous mint/amber pair
+	// (#34d399, #fbbf24) sat at ~1.9:1 and ~1.7:1 on the light card — well under the 3:1
+	// floor for data lines. These three all land between 3:1 (on #ffffff) and 4:1 (on
+	// #0e0e16), and match the AnalyticsChart palette so the dashboard reads as one system.
+	const COLORS = ['#6366f1', '#059669', '#d97706'];
 	const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 	let chartW = W - PAD_L - PAD_R;
@@ -60,12 +64,56 @@
 			return { name: shortName, color: COLORS[i] };
 		})
 	);
+
+	let hasData = $derived(sparkData.length > 0 && sparkData.some((d) => d.length > 0));
+
+	// The chart carries real data, so it needs a spoken equivalent of the trend lines.
+	let chartSummary = $derived.by(() => {
+		if (!hasData) return 'Engagement trend over the last 7 days — no data yet';
+		const parts = sparkData.map((d, i) => {
+			const name = legendItems[i]?.name ?? `Series ${i + 1}`;
+			const first = d[0] ?? 0;
+			const last = d[d.length - 1] ?? 0;
+			const delta = last - first;
+			const dir = delta > 0 ? 'up' : delta < 0 ? 'down' : 'flat';
+			return `${name} ${dir} from ${first.toFixed(1)}% to ${last.toFixed(1)}%`;
+		});
+		return `Engagement trend over the last 7 days, Monday to Sunday. ${parts.join('. ')}.`;
+	});
 </script>
 
 <div class="dash-chart-card">
 	<h4>Engagement Trend (7 Days)</h4>
+	{#if !hasData}
+		<div class="spark-empty">
+			<svg
+				aria-hidden="true"
+				width="28"
+				height="28"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="1.5"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+			>
+				<path d="M3 3v18h18" />
+				<path d="M7 14l4-4 3 3 5-6" />
+			</svg>
+			<p>No engagement data yet</p>
+			<span>
+				The 7-day trend appears once your personas have published posts with reported
+				engagement.
+			</span>
+		</div>
+	{:else}
 	<div class="spark-chart">
-		<svg viewBox="0 0 {W} {H}" preserveAspectRatio="xMidYMid meet">
+		<svg
+			viewBox="0 0 {W} {H}"
+			preserveAspectRatio="xMidYMid meet"
+			role="img"
+			aria-label={chartSummary}
+		>
 			<!-- Gradient defs -->
 			<defs>
 				{#each COLORS as color, i}
@@ -79,22 +127,21 @@
 			<!-- Grid lines & Y-axis labels -->
 			{#each gridSteps as step, i}
 				<line
+					class="spark-grid"
 					x1={PAD_L}
 					y1={step.y}
 					x2={W - PAD_R}
 					y2={step.y}
-					stroke="rgba(255,255,255,0.06)"
 					stroke-width="1"
 					stroke-dasharray={i === 0 ? 'none' : '3,4'}
 				/>
 				<text
+					class="spark-axis spark-axis-y"
 					x={PAD_L - 8}
 					y={step.y + 4}
-					fill="rgba(255,255,255,0.35)"
 					font-size="10"
 					font-weight="500"
 					text-anchor="end"
-					font-family="var(--font-mono, monospace)"
 				>
 					{step.label}
 				</text>
@@ -129,13 +176,12 @@
 			<!-- Day labels -->
 			{#each DAYS as day, i}
 				<text
+					class="spark-axis spark-axis-x"
 					x={scaleX(i)}
 					y={H - 6}
-					fill="rgba(255,255,255,0.35)"
 					font-size="10"
 					font-weight="500"
 					text-anchor="middle"
-					font-family="var(--font-body, sans-serif)"
 				>
 					{day}
 				</text>
@@ -151,6 +197,7 @@
 			</span>
 		{/each}
 	</div>
+	{/if}
 </div>
 
 <style>
@@ -196,6 +243,55 @@
 		height: 100%;
 		overflow: visible;
 		display: block;
+	}
+
+	/* Axis furniture was hardcoded white alphas — invisible on the light surface. */
+	.spark-grid {
+		stroke: var(--border);
+	}
+
+	.spark-axis {
+		fill: var(--text-dim);
+		font-variant-numeric: tabular-nums;
+		font-feature-settings: 'tnum' 1;
+	}
+
+	.spark-axis-y {
+		font-family: var(--font-mono, monospace);
+	}
+
+	.spark-axis-x {
+		font-family: var(--font-body, sans-serif);
+	}
+
+	.spark-empty {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		text-align: center;
+		padding: 2.25rem 1rem;
+		gap: 0.4rem;
+		color: var(--text-dim);
+	}
+
+	.spark-empty svg {
+		opacity: 0.4;
+		margin-bottom: 0.35rem;
+	}
+
+	.spark-empty p {
+		font-size: 0.9rem;
+		font-weight: 600;
+		color: var(--text-muted);
+		margin: 0;
+	}
+
+	.spark-empty span {
+		font-size: 0.75rem;
+		color: var(--text-dim);
+		line-height: 1.5;
+		max-width: 340px;
 	}
 
 	.spark-legend {

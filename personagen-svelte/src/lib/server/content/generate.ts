@@ -254,18 +254,30 @@ async function falQueueJson(
 	}
 	const { status_url, response_url } = (await sub.json()) as any;
 	const deadline = Date.now() + timeoutMs;
+	// Poll immediately, sleep BETWEEN attempts — fast jobs (image edits) finish in
+	// well under the old unconditional 5s head-start.
 	while (Date.now() < deadline) {
-		await new Promise((r) => setTimeout(r, 5000));
 		const s = await genFetch(status_url, { headers: { Authorization: `Key ${falKey}` } });
-		if (!s.ok) continue;
-		const st = (await s.json()) as any;
-		if (st.status === 'COMPLETED') {
-			const r = await genFetch(response_url, { headers: { Authorization: `Key ${falKey}` } });
-			return r.json();
+		if (s.ok) {
+			const st = (await s.json()) as any;
+			if (st.status === 'COMPLETED') {
+				const r = await genFetch(response_url, { headers: { Authorization: `Key ${falKey}` } });
+				if (!r.ok) {
+					throw new Error(
+						`${model} result fetch failed (${r.status}): ${(await r.text()).slice(0, 200)}`
+					);
+				}
+				return r.json();
+			}
+			if (['FAILED', 'ERROR', 'CANCELLED'].includes(st.status)) {
+				throw new Error(`${model} job ${st.status}`);
+			}
+		} else if (s.status !== 429 && s.status < 500) {
+			// 401/403/404 mean the key was revoked or the job is gone — polling
+			// again can only burn the deadline. Only 429/5xx are transient.
+			throw new Error(`${model} status poll failed (${s.status}) — key revoked or job gone`);
 		}
-		if (['FAILED', 'ERROR', 'CANCELLED'].includes(st.status)) {
-			throw new Error(`${model} job ${st.status}`);
-		}
+		await new Promise((r) => setTimeout(r, 5000));
 	}
 	throw new Error(`${model} timed out`);
 }
@@ -938,21 +950,29 @@ async function openRouterBrollVideo(
 	}
 
 	const deadline = Date.now() + timeoutMs;
+	// Poll immediately, sleep BETWEEN attempts (same shape as falQueueJson).
 	while (Date.now() < deadline) {
-		await new Promise((r) => setTimeout(r, 5000));
 		const res = await genFetch(pollingUrl, { headers: { Authorization: `Bearer ${orKey}` } });
-		if (!res.ok) continue;
-		const st = (await res.json()) as any;
-		if (st.status === 'completed') {
-			const url = st.unsigned_urls?.[0] || st.urls?.[0] || st.video?.url;
-			if (!url) throw new Error('OpenRouter video completed but returned no URL');
-			// Persist NOW, with the Bearer header only we have, to a permanent URL.
-			const svc = getServiceSupabase();
-			return persistToStorage(svc, url, userId, 'mp4', { Authorization: `Bearer ${orKey}` });
+		if (res.ok) {
+			const st = (await res.json()) as any;
+			if (st.status === 'completed') {
+				const url = st.unsigned_urls?.[0] || st.urls?.[0] || st.video?.url;
+				if (!url) throw new Error('OpenRouter video completed but returned no URL');
+				// Persist NOW, with the Bearer header only we have, to a permanent URL.
+				const svc = getServiceSupabase();
+				return persistToStorage(svc, url, userId, 'mp4', { Authorization: `Bearer ${orKey}` });
+			}
+			if (st.status === 'failed') {
+				throw new Error(`OpenRouter video job failed: ${JSON.stringify(st).slice(0, 200)}`);
+			}
+		} else if (res.status !== 429 && res.status < 500) {
+			// 401/403/404 mean the key was revoked or the job is gone — polling
+			// again can only burn the deadline. Only 429/5xx are transient.
+			throw new Error(
+				`OpenRouter video status poll failed (${res.status}) — key revoked or job gone`
+			);
 		}
-		if (st.status === 'failed') {
-			throw new Error(`OpenRouter video job failed: ${JSON.stringify(st).slice(0, 200)}`);
-		}
+		await new Promise((r) => setTimeout(r, 5000));
 	}
 	throw new Error('OpenRouter video job timed out');
 }
@@ -965,7 +985,9 @@ export interface CinematicShot {
 }
 
 const CINEMATIC_MAX_TOTAL_SECONDS = parseInt(env.UGC_CINEMATIC_DURATION || '15', 10);
-const CINEMATIC_MIN_SHOT_SECONDS = 2;
+// 3 matches Kling's DurationEnum minimum ("3"-"15", per CinematicShot above) —
+// a clamp floor below what the endpoint accepts just moves the rejection to fal.
+const CINEMATIC_MIN_SHOT_SECONDS = 3;
 const CINEMATIC_MAX_SHOT_SECONDS = 10;
 const CINEMATIC_MIN_SHOT_COUNT = 2;
 
@@ -2019,7 +2041,16 @@ export async function generateCharacterPortrait(
 		model: `${portraitModel.label} (hero portrait${editing ? ' edit' : ''})`,
 		usd: portraitModel.usd
 	});
-	await supabase.from('agent_configs').update({ ugc_character_ref: durable }).eq('agent_id', agentId);
+	// A silently failed pin leaves ugc_character_ref empty, and ensureCharacterRef
+	// then regenerates (and pays for) a brand-new face on every single slot.
+	const { data: pinned, error: pinErr } = await supabase
+		.from('agent_configs')
+		.update({ ugc_character_ref: durable })
+		.eq('agent_id', agentId)
+		.select('agent_id');
+	if (pinErr) throw new Error(`Failed to pin character reference: ${pinErr.message}`);
+	if (!Array.isArray(pinned) || pinned.length === 0)
+		throw new Error(`Failed to pin character reference: no agent_configs row for ${agentId}`);
 
 	// 2. Build a REAL reference-kit foundation from that portrait — a character
 	//    turnaround sheet plus a distinct full-body shot — so the kit stages
@@ -2044,15 +2075,22 @@ export async function generateCharacterPortrait(
 		const sheetUrl = sheetData.images?.[0]?.url;
 		if (!sheetUrl) throw new Error('Nano Banana returned no character sheet');
 
-		const durableSheet = await persistToStorage(svc, sheetUrl, userId, 'png');
-
-		const heroShotUrl = await generateAvatarHeroShot(falKey, sheetUrl);
-		costEvents.push({
-			provider: 'fal',
-			operation: 'image',
-			model: 'nano-banana-2 (avatar hero shot)',
-			usd: priceOf('fal', 'image', 'nano')
-		});
+		// The hero shot conditions on the EPHEMERAL sheet URL, not the persisted
+		// copy — the two are independent, so the persist must not serialize in
+		// front of the paid fal call. The cost event rides the fal promise so the
+		// spend is recorded even if the persist half rejects.
+		const [durableSheet, heroShotUrl] = await Promise.all([
+			persistToStorage(svc, sheetUrl, userId, 'png'),
+			generateAvatarHeroShot(falKey, sheetUrl).then((url) => {
+				costEvents.push({
+					provider: 'fal',
+					operation: 'image',
+					model: 'nano-banana-2 (avatar hero shot)',
+					usd: priceOf('fal', 'image', 'nano')
+				});
+				return url;
+			})
+		]);
 		const durableFull = await persistToStorage(svc, heroShotUrl, userId, 'png');
 
 		await mergeReferenceKit(supabase, agentId, { sheet: durableSheet, full_body: durableFull }, true);
@@ -2076,15 +2114,6 @@ export async function generateCharacterPortrait(
  */
 const CHARACTER_SHEET_PROMPT = `This is for upscale 4k hyper realistic UGC generation. Create a professional character turnaround and reference sheet based on the reference image. Use the uploaded image as the primary visual reference for the character's identity, proportions, facial features, body shape, hairstyle, and overall design language, while translating it into a clean, neutral, reusable presentation board. The final image should be arranged like a polished concept art sheet on a pure white studio background. Show the same character in four full-body views: front view, side profile, back view, and three-quarter view. On the right side, include multiple clean detail panels with close-ups of the eyes, upper face, lower face lips, skin texture, hair detail, and one small clothing or material detail. Keep the styling neutral and generic so the sheet can be reused as a base template for future adaptations. Simplify anything overly specific, thematic, fantasy-based, branded, culturally tied, or heavily ornamental from the source image into a more universal version while preserving the essence of the character. The outfit should become a clean neutral base outfit with minimal detailing, soft solid tones, and a refined silhouette. No excessive accessories, no dramatic headpieces, no strong lore-specific elements, no heavy decoration unless they are essential to the base identity. The character should feel balanced, elegant, realistic, and adaptable. Expression should be calm and neutral. Makeup should be subtle and natural. Lighting should be soft, even, and studio-clean. The layout should feel like a premium design presentation board used for model sheets, character development, or production reference. Preserve the core identity from the reference, but present it in a simplified, neutral, production-ready format that can serve as a universal template for future redesigns.`;
 
-/**
- * Reads-modifies-writes `agent_configs.ugc_reference_kit`, merging in one new
- * stage's asset. Pass `replace: true` when `patch` establishes a new identity
- * (a fresh from-scratch portrait, or a newly uploaded reference photo) — the
- * later kit stages (side_profiles/face_closeup/feature_grid) are all derived
- * from a specific full_body+sheet pair, so keeping them around after that
- * pair changes would silently mix two different faces into one "reference
- * kit" sent to the video model as a single character.
- */
 /** Stages that keep a per-stage "restore from history" pool (a `<stage>_history`
  *  array in ugc_reference_kit). Every stage image ever generated is retained
  *  here so it can be re-pinned later; nothing is deleted from the bucket. */
@@ -2092,48 +2121,128 @@ const KIT_HISTORY_STAGES = ['sheet', 'full_body', 'side_profiles', 'face_closeup
 /** Cap each stage's history so the JSONB row can't grow without bound. */
 const KIT_HISTORY_CAP = 24;
 
+// CAS bounds: 5 attempts rides out the realistic contention here (a handful of
+// detached kit jobs + a user click), and the backoff stays small enough that a
+// route handler waiting on a marker write never feels it.
+const KIT_CAS_MAX_ATTEMPTS = 5;
+const KIT_CAS_BACKOFF_MS = 120;
+
+/**
+ * The ONLY writer for `agent_configs.ugc_reference_kit`. Four code paths used
+ * to read-modify-write this JSONB independently, so a finished paid kit-stage
+ * image could be overwritten by whichever stale snapshot wrote last. Every
+ * write now goes through a compare-and-swap on an internal `rev` counter
+ * stored inside the JSONB itself: read → mutate a copy → write guarded on the
+ * rev we read. 0 rows matched = someone else wrote first → re-read and re-apply
+ * `mutate` against the fresh kit.
+ *
+ * `mutate` receives a mutable copy of the current kit and must return the kit
+ * to store; it may be called several times, once per CAS attempt, so it must
+ * not have side effects beyond the kit itself. `rev` is stamped AFTER mutate
+ * runs, so a mutate that rebuilds the object from scratch (replace semantics)
+ * can't lose the counter. Returns the kit as written.
+ */
+export async function updateReferenceKit(
+	client: any,
+	agentId: string,
+	mutate: (kit: Record<string, any>) => Record<string, any>
+): Promise<Record<string, any>> {
+	for (let attempt = 0; attempt < KIT_CAS_MAX_ATTEMPTS; attempt++) {
+		const { data, error } = await client
+			.from('agent_configs')
+			.select('ugc_reference_kit')
+			.eq('agent_id', agentId)
+			.maybeSingle();
+		if (error) throw new Error(`Failed to read ugc_reference_kit: ${error.message}`);
+		// No config row at all: the guarded update below would match 0 rows forever,
+		// which is indistinguishable from CAS contention — fail loud instead. (Rows
+		// are created with the agent, so this is a genuinely broken state.)
+		if (!data) throw new Error(`No agent_configs row for agent ${agentId} — cannot update kit`);
+		const prior: Record<string, any> = data.ugc_reference_kit || {};
+
+		const priorRev = typeof prior.rev === 'number' && Number.isFinite(prior.rev) ? prior.rev : null;
+		if (priorRev === null) {
+			// Pre-rev kit: `->>rev` can't guard against a missing key, so seed the
+			// counter first with a write that changes NOTHING else, itself guarded on
+			// the key still being absent, then loop back into the CAS path proper.
+			const { error: seedErr } = await client
+				.from('agent_configs')
+				.update({ ugc_reference_kit: { ...prior, rev: 0 } })
+				.eq('agent_id', agentId)
+				.is('ugc_reference_kit->rev', null);
+			if (seedErr) throw new Error(`Failed to seed ugc_reference_kit rev: ${seedErr.message}`);
+			continue;
+		}
+
+		const next = mutate({ ...prior });
+		next.rev = priorRev + 1;
+		const { data: written, error: casErr } = await client
+			.from('agent_configs')
+			.update({ ugc_reference_kit: next })
+			.eq('agent_id', agentId)
+			.eq('ugc_reference_kit->>rev', String(priorRev))
+			.select('agent_id');
+		if (casErr) throw new Error(`Failed to update ugc_reference_kit: ${casErr.message}`);
+		if (Array.isArray(written) && written.length > 0) return next;
+
+		// Lost the race — another writer bumped rev between our read and write.
+		await new Promise((r) => setTimeout(r, KIT_CAS_BACKOFF_MS * (attempt + 1)));
+	}
+	throw new Error(
+		`ugc_reference_kit update for agent ${agentId} kept conflicting after ${KIT_CAS_MAX_ATTEMPTS} attempts`
+	);
+}
+
+/**
+ * Merges one new stage's asset into `agent_configs.ugc_reference_kit` (via the
+ * CAS writer above). Pass `replace: true` when `patch` establishes a new
+ * identity (a fresh from-scratch portrait, or a newly uploaded reference
+ * photo) — the later kit stages (side_profiles/face_closeup/feature_grid) are
+ * all derived from a specific full_body+sheet pair, so keeping them around
+ * after that pair changes would silently mix two different faces into one
+ * "reference kit" sent to the video model as a single character.
+ */
 async function mergeReferenceKit(
 	supabase: any,
 	agentId: string,
 	patch: Record<string, string>,
 	replace = false
-): Promise<void> {
-	// Always read the existing kit — even on replace — so we can maintain the
-	// per-stage `<stage>_history` arrays that power each stage's restore picker.
-	const { data } = await supabase
-		.from('agent_configs')
-		.select('ugc_reference_kit')
-		.eq('agent_id', agentId)
-		.maybeSingle();
-	const existing: Record<string, any> = data?.ugc_reference_kit || {};
+): Promise<Record<string, any>> {
+	// The history/replace logic runs INSIDE the CAS mutate so a retry recomputes
+	// against the fresh kit — even on replace we need the existing kit to
+	// maintain the per-stage `<stage>_history` arrays behind the restore picker.
+	return updateReferenceKit(supabase, agentId, (existing) => {
+		// For every stage URL in this patch, prepend it to that stage's history
+		// (newest first, de-duped, capped). Seed with the stage's current value the
+		// first time we track it so history is never empty for an existing stage.
+		const historyPatch: Record<string, string[]> = {};
+		for (const stage of KIT_HISTORY_STAGES) {
+			const url = patch[stage];
+			if (typeof url !== 'string' || !url) continue;
+			const key = `${stage}_history`;
+			const prior: string[] = Array.isArray(existing[key]) ? existing[key] : [];
+			const seed = typeof existing[stage] === 'string' && existing[stage] ? [existing[stage]] : [];
+			const next = [url, ...prior, ...seed].filter((u, i, arr) => arr.indexOf(u) === i);
+			historyPatch[key] = next.slice(0, KIT_HISTORY_CAP);
+		}
 
-	// For every stage URL in this patch, prepend it to that stage's history
-	// (newest first, de-duped, capped). Seed with the stage's current value the
-	// first time we track it so history is never empty for an existing stage.
-	const historyPatch: Record<string, string[]> = {};
-	for (const stage of KIT_HISTORY_STAGES) {
-		const url = patch[stage];
-		if (typeof url !== 'string' || !url) continue;
-		const key = `${stage}_history`;
-		const prior: string[] = Array.isArray(existing[key]) ? existing[key] : [];
-		const seed = typeof existing[stage] === 'string' && existing[stage] ? [existing[stage]] : [];
-		const next = [url, ...prior, ...seed].filter((u, i, arr) => arr.indexOf(u) === i);
-		historyPatch[key] = next.slice(0, KIT_HISTORY_CAP);
-	}
-
-	let merged: Record<string, any>;
-	if (replace) {
-		// New identity: drop the derived stages' CURRENT values (a fresh face
-		// invalidates them), but PRESERVE every `<stage>_history` array — history
-		// is just the pool of past images the user can re-pin, never load-bearing
-		// for what's sent to the video model.
-		const preservedHistory: Record<string, any> = {};
-		for (const k of Object.keys(existing)) if (k.endsWith('_history')) preservedHistory[k] = existing[k];
-		merged = { ...preservedHistory, ...patch, ...historyPatch };
-	} else {
-		merged = { ...existing, ...patch, ...historyPatch };
-	}
-	await supabase.from('agent_configs').update({ ugc_reference_kit: merged }).eq('agent_id', agentId);
+		if (replace) {
+			// New identity: drop the derived stages' CURRENT values (a fresh face
+			// invalidates them), but PRESERVE every `<stage>_history` array — history
+			// is just the pool of past images the user can re-pin, never load-bearing
+			// for what's sent to the video model — AND the transient `<key>_status` /
+			// `<key>_started_at` markers, which belong to concurrently running
+			// detached jobs, not to the identity being replaced.
+			const preserved: Record<string, any> = {};
+			for (const k of Object.keys(existing)) {
+				if (k.endsWith('_history') || k.endsWith('_status') || k.endsWith('_started_at')) {
+					preserved[k] = existing[k];
+				}
+			}
+			return { ...preserved, ...patch, ...historyPatch };
+		}
+		return { ...existing, ...patch, ...historyPatch };
+	});
 }
 
 /** Kit stages a client is allowed to restore-from-history. */
@@ -2153,41 +2262,47 @@ export async function removeKitAssets(
 	agentId: string,
 	targets: Array<{ stage: string; url: string }>
 ): Promise<Record<string, any>> {
+	const applyRemovals = (kit: Record<string, any>): boolean => {
+		let changed = false;
+		for (const target of targets) {
+			const stage = String(target?.stage || '');
+			const url = String(target?.url || '');
+			if (!url) continue;
+			// An unknown stage is not an error — the caller may be deleting the same
+			// url from every stage that happens to hold it.
+			if (!KIT_HISTORY_STAGES.includes(stage)) continue;
+
+			const historyKey = `${stage}_history`;
+			const prior: string[] = Array.isArray(kit[historyKey]) ? kit[historyKey] : [];
+			const history = prior.filter((u) => u !== url);
+			if (history.length !== prior.length) {
+				kit[historyKey] = history;
+				changed = true;
+			}
+			if (kit[stage] === url) {
+				const promoted = history[0];
+				if (promoted) kit[stage] = promoted;
+				else delete kit[stage];
+				changed = true;
+			}
+		}
+		return changed;
+	};
+
+	// Probe against the current snapshot first so a no-op delete doesn't burn a
+	// rev bump; a real change goes through the CAS writer (removals recompute
+	// against the fresh kit on each retry).
 	const { data } = await supabase
 		.from('agent_configs')
 		.select('ugc_reference_kit')
 		.eq('agent_id', agentId)
 		.maybeSingle();
-	const kit: Record<string, any> = { ...(data?.ugc_reference_kit || {}) };
-
-	let changed = false;
-	for (const target of targets) {
-		const stage = String(target?.stage || '');
-		const url = String(target?.url || '');
-		if (!url) continue;
-		// An unknown stage is not an error — the caller may be deleting the same
-		// url from every stage that happens to hold it.
-		if (!KIT_HISTORY_STAGES.includes(stage)) continue;
-
-		const historyKey = `${stage}_history`;
-		const prior: string[] = Array.isArray(kit[historyKey]) ? kit[historyKey] : [];
-		const history = prior.filter((u) => u !== url);
-		if (history.length !== prior.length) {
-			kit[historyKey] = history;
-			changed = true;
-		}
-		if (kit[stage] === url) {
-			const promoted = history[0];
-			if (promoted) kit[stage] = promoted;
-			else delete kit[stage];
-			changed = true;
-		}
-	}
-
-	if (changed) {
-		await supabase.from('agent_configs').update({ ugc_reference_kit: kit }).eq('agent_id', agentId);
-	}
-	return kit;
+	const probe: Record<string, any> = { ...(data?.ugc_reference_kit || {}) };
+	if (!applyRemovals(probe)) return probe;
+	return updateReferenceKit(supabase, agentId, (kit) => {
+		applyRemovals(kit);
+		return kit;
+	});
 }
 
 /**
@@ -2215,13 +2330,8 @@ export async function repinKitStage(
 	// THIS user's own bucket images, so a stage can be re-pinned either from its
 	// own tagged history OR from the full image library (the fallback for personas
 	// generated before per-stage history existed). No history-membership gate here.
-	await mergeReferenceKit(supabase, agentId, { [stage]: url });
-	const { data: fresh } = await supabase
-		.from('agent_configs')
-		.select('ugc_reference_kit')
-		.eq('agent_id', agentId)
-		.maybeSingle();
-	return fresh?.ugc_reference_kit || {};
+	// The CAS writer returns the kit exactly as written — no read-back needed.
+	return mergeReferenceKit(supabase, agentId, { [stage]: url });
 }
 
 /**
@@ -2282,19 +2392,35 @@ export async function generateCharacterSheetFromReference(
 	const sheetUrl = data.images?.[0]?.url;
 	if (!sheetUrl) throw new Error('Nano Banana returned no image');
 
-	const durableSheet = await persistToStorage(svc, sheetUrl, userId, 'png');
-
-	const heroShotUrl = await generateAvatarHeroShot(falKey, sheetUrl);
-	costEvents.push({
-		provider: 'fal',
-		operation: 'image',
-		model: 'nano-banana-2 (avatar hero shot)',
-		usd: priceOf('fal', 'image', 'nano')
-	});
+	// The hero shot conditions on the EPHEMERAL sheet URL, not the persisted
+	// copy — the two are independent, so the persist must not serialize in front
+	// of the paid fal call. The cost event rides the fal promise so the spend is
+	// recorded (ledger flushes in the job's finally) even if the persist rejects.
+	const [durableSheet, heroShotUrl] = await Promise.all([
+		persistToStorage(svc, sheetUrl, userId, 'png'),
+		generateAvatarHeroShot(falKey, sheetUrl).then((url) => {
+			costEvents.push({
+				provider: 'fal',
+				operation: 'image',
+				model: 'nano-banana-2 (avatar hero shot)',
+				usd: priceOf('fal', 'image', 'nano')
+			});
+			return url;
+		})
+	]);
 
 	const durable = await persistToStorage(svc, heroShotUrl, userId, 'png');
 
-	await supabase.from('agent_configs').update({ ugc_character_ref: durable }).eq('agent_id', agentId);
+	// A silently failed pin leaves ugc_character_ref empty, and ensureCharacterRef
+	// then regenerates (and pays for) a brand-new face on every single slot.
+	const { data: pinned, error: pinErr } = await supabase
+		.from('agent_configs')
+		.update({ ugc_character_ref: durable })
+		.eq('agent_id', agentId)
+		.select('agent_id');
+	if (pinErr) throw new Error(`Failed to pin character reference: ${pinErr.message}`);
+	if (!Array.isArray(pinned) || pinned.length === 0)
+		throw new Error(`Failed to pin character reference: no agent_configs row for ${agentId}`);
 	// Replace, not merge: a newly uploaded photo is a new identity, so any
 	// side_profiles/face_closeup/feature_grid derived from a previous photo
 	// (or a previous from-scratch face) no longer depict the same person.
@@ -2466,7 +2592,11 @@ async function ensureCharacterRef(
 			agentData,
 			voiceGender
 		);
-	} catch {
+	} catch (err) {
+		// Swallowing a budget-cap rejection here would defeat the fail-closed
+		// spend guard — the run must stop, not proceed face-less. Everything else
+		// stays best-effort: a post without a pinned face beats no post.
+		if (/budget/i.test((err as Error)?.message ?? '')) throw err;
 		return null;
 	}
 }
@@ -2481,21 +2611,26 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 	const topic = input.topic || 'Sharing an honest experience with this product';
 	const wantVideo = input.video !== false;
 
-	const rawAi = await resolveAiClient(supabase, userId);
+	const db = createDbService(supabase);
+	// Independent pre-director lookups run concurrently (same shape as
+	// generateCinematicUgcPack). The fail-closed spend guard rides in the same
+	// Promise.all — it's a read, so it can overlap the other reads, and awaiting
+	// it here still means no PAID call (the Director LLM is the first) can start
+	// before the cap check has passed.
+	const [rawAi, cfg, agentResult] = await Promise.all([
+		resolveAiClient(supabase, userId),
+		loadUgcConfig(supabase, input.agentId),
+		input.agentId ? db.agents.get(input.agentId) : Promise.resolve({ data: null as any }),
+		assertWithinBudget(supabase, userId, input.agentId)
+	]);
 	if (!rawAi)
 		throw new Error('No AI provider configured. Add an OpenRouter or Gemini key in Settings.');
 	// Every text call (director, retries, grader) self-records into the ledger.
 	const costEvents: CostEvent[] = [];
 	const ai = trackAi(rawAi, costEvents);
 
-	// Fail-closed spend guard: refuse to start a paid generation once this agent's
-	// daily or the user's monthly estimated spend has crossed the configured cap.
-	await assertWithinBudget(supabase, userId, input.agentId);
-
 	try {
 
-	const db = createDbService(supabase);
-	const cfg = await loadUgcConfig(supabase, input.agentId);
 	// The composer can force this run's format; 'auto' (or unset) defers to the
 	// persona's ugc_format, which the Director resolves from the content. This one
 	// value drives both the Director's brief and the final spokesperson/broll branch.
@@ -2507,12 +2642,10 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 	// ── Load agent persona ──────────────────────────────────────────────
 	let agentContext = '';
 	let agentData: any = null;
-	if (input.agentId) {
-		const { data: agent } = await db.agents.get(input.agentId);
-		if (agent) {
-			agentData = agent;
-			agentContext = buildRichAgentContext(agent);
-		}
+	const agent = agentResult?.data;
+	if (agent) {
+		agentData = agent;
+		agentContext = buildRichAgentContext(agent);
 	}
 
 	// The on-camera character's depicted gender must match the voice actually
@@ -2644,6 +2777,34 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 	const falKey = pref === 'openrouter' ? null : resolvedKeys.falKey;
 	const orKey = pref === 'fal' ? null : resolvedKeys.orKey;
 
+	// ── Spokesperson TTS — kicked off NOW, in parallel with the still ──
+	// The audio depends only on the script + voice, never on the still; the two
+	// paid calls only join at generateTalkingHead, so serializing them was pure
+	// added latency. The promise settles into a value (never rejects) so a throw
+	// on the still path can't leave an unhandled rejection — the error resurfaces
+	// at the await inside the video try-block, where the existing fal-outage
+	// fallback applies unchanged, and the cost event rides the success handler so
+	// the spend is recorded (ledger flushes in finally) even if the still fails.
+	const dialogue = parsed.dialogue || parsed.text || topic;
+	const spokenAudio: Promise<{ url: string } | { err: Error }> | null =
+		wantVideo && format === 'spokesperson' && falKey
+			? generateVoiceAudio(
+					falKey,
+					resolvedVoice,
+					dialogue,
+					// Adam/Rachel are the original ElevenLabs voices — universally
+					// fal-supported, so a rejected exotic voice degrades to a
+					// same-gender classic, never a failure.
+					voiceGender === 'female' ? 'Rachel' : 'Adam'
+				).then(
+					(url) => {
+						costEvents.push({ provider: 'fal', operation: 'tts', model: 'elevenlabs-turbo-v2.5', usd: priceOf('fal', 'tts') });
+						return { url };
+					},
+					(err) => ({ err: err as Error })
+				)
+			: null;
+
 	// ── Pinned creator face → consistent character across ALL posts ──
 	// Composer override wins; when present we also skip lazy face generation.
 	// Runs for every format, not just spokesperson video: b-roll stills feature
@@ -2738,17 +2899,13 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 	if (wantVideo && (falKey || orKey)) {
 		try {
 			if (format === 'spokesperson' && falKey) {
-				const dialogue = parsed.dialogue || parsed.text || topic;
-				// Adam/Rachel are the original ElevenLabs voices — universally fal-supported,
-				// so a rejected exotic voice degrades to a same-gender classic, never a failure.
-				const audio = await generateVoiceAudio(
-					falKey,
-					resolvedVoice,
-					dialogue,
-					voiceGender === 'female' ? 'Rachel' : 'Adam'
-				);
-				costEvents.push({ provider: 'fal', operation: 'tts', model: 'elevenlabs-turbo-v2.5', usd: priceOf('fal', 'tts') });
-				mediaUrl = await generateTalkingHead(falKey, still, audio);
+				// TTS was launched in parallel with the still (see spokenAudio above) —
+				// non-null here because this branch's condition matches its launch
+				// condition. A TTS failure rethrows HERE so the fal-outage fallback
+				// below still degrades the post to OpenRouter b-roll.
+				const settledAudio = await spokenAudio!;
+				if ('err' in settledAudio) throw settledAudio.err;
+				mediaUrl = await generateTalkingHead(falKey, still, settledAudio.url);
 				costEvents.push({ provider: 'fal', operation: 'talking_head', model: TALKINGHEAD_MODEL, usd: priceOf('fal', 'talking_head') });
 			} else if (falKey) {
 				// The user picked this tier in the composer (Wan $0.10 → Veo $1.50); bill

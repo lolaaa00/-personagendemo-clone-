@@ -43,8 +43,12 @@
 		border-radius: 50%;
 	}
 
+	/* Status is never colour-only — the word itself is always rendered beside the dot,
+	   and the dot is aria-hidden. The label uses the AA `-text` token variants because
+	   at 0.65rem the raw fill hues fall under 4.5:1 on the light surface; the dots keep
+	   the vivid fill colours, which only need 3:1 as non-text. */
 	.dash-status.active {
-		color: var(--success);
+		color: var(--success-text);
 	}
 	.dash-status.active .dash-status-dot {
 		background: var(--success);
@@ -58,15 +62,21 @@
 	}
 
 	.dash-status.pending {
-		color: #f59e0b;
+		color: var(--warning-text);
 	}
 	.dash-status.pending .dash-status-dot {
-		background: #f59e0b;
+		background: var(--warning);
 		animation: pulse-amber 2s infinite;
 	}
 
+	@media (prefers-reduced-motion: reduce) {
+		.dash-status.pending .dash-status-dot {
+			animation: none;
+		}
+	}
+
 	.dash-status.failing {
-		color: var(--rose);
+		color: var(--rose-text);
 	}
 	.dash-status.failing .dash-status-dot {
 		background: var(--rose);

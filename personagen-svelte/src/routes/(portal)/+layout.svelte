@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/stores';
-	import { goto } from '$app/navigation';
+	import { goto, afterNavigate } from '$app/navigation';
 	import {
 		sidebarState,
 		toggleSidebar,
@@ -20,6 +20,15 @@
 	});
 
 	let userDropdownOpen = $state(false);
+
+	// a11y: on SPA navigation the focus ring is otherwise stranded on the previous
+	// page's link, so screen readers keep announcing the old context.
+	let mainContentEl: HTMLElement | null = $state(null);
+
+	afterNavigate((nav) => {
+		if (nav.type === 'enter') return; // initial load — leave focus at document start
+		mainContentEl?.focus();
+	});
 
 	function toggleUserDropdown(event: MouseEvent) {
 		event.stopPropagation();
@@ -87,6 +96,8 @@
 
 <svelte:window onclick={closeUserDropdown} />
 
+<a href="#main-content" class="skip-link">Skip to main content</a>
+
 <div class="portal-layout" class:sidebar-collapsed={sidebarState.collapsed}>
 	<!-- Sidebar overlay (mobile) -->
 	{#if sidebarState.open}
@@ -95,7 +106,7 @@
 	{/if}
 
 	<!-- Sidebar -->
-	<aside class="sidebar" class:open={sidebarState.open} aria-label="Main navigation">
+	<aside class="sidebar" class:open={sidebarState.open} aria-label="Sidebar">
 		<!-- Brand -->
 		<div class="sidebar-brand">
 			<a href="/dashboard" class="sidebar-logo-link">
@@ -124,6 +135,7 @@
 				aria-label={sidebarState.collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
 			>
 				<svg
+					aria-hidden="true"
 					width="16"
 					height="16"
 					viewBox="0 0 24 24"
@@ -151,7 +163,7 @@
 		{/if}
 
 		<!-- Navigation -->
-		<nav class="sidebar-nav">
+		<nav class="sidebar-nav" aria-label="Main navigation">
 			<!-- NETWORK -->
 			{#if !sidebarState.collapsed}
 				<span class="sidebar-section-label">Network</span>
@@ -161,12 +173,14 @@
 					href={item.href}
 					class="sidebar-nav-item"
 					class:active={isActive(item.href, $page.url.pathname)}
+					aria-current={isActive(item.href, $page.url.pathname) ? 'page' : undefined}
 					onclick={closeSidebar}
 					title={sidebarState.collapsed ? item.label : undefined}
+					aria-label={sidebarState.collapsed ? item.label : undefined}
 				>
 					<span class="sidebar-nav-icon">
 						{#if item.icon === 'grid'}
-							<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+							<svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
 								><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></svg>
 						{/if}
 					</span>
@@ -184,7 +198,7 @@
 			{/if}
 			{#if !sidebarState.collapsed && sidebarAgents.length > 4}
 				<div class="sidebar-persona-search">
-					<svg class="sidebar-persona-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+					<svg aria-hidden="true" class="sidebar-persona-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
 						><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
 					<input
 						type="search"
@@ -198,11 +212,14 @@
 			<a
 				href="/generator"
 				class="sidebar-nav-item sidebar-new-persona"
+				class:active={isActive('/generator', $page.url.pathname)}
+				aria-current={isActive('/generator', $page.url.pathname) ? 'page' : undefined}
 				onclick={closeSidebar}
 				title={sidebarState.collapsed ? 'New Persona' : undefined}
+				aria-label={sidebarState.collapsed ? 'New Persona' : undefined}
 			>
 				<span class="sidebar-nav-icon sidebar-new-icon">
-					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+					<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
 				</span>
 				{#if !sidebarState.collapsed}
 					<span class="sidebar-nav-label">New Persona</span>
@@ -213,12 +230,15 @@
 					href="/personas/{agent.id}"
 					class="sidebar-nav-item sidebar-persona-item"
 					class:active={isAgentActive(agent.id, $page.url.pathname)}
+					aria-current={isAgentActive(agent.id, $page.url.pathname) ? 'page' : undefined}
 					onclick={closeSidebar}
 					title={sidebarState.collapsed ? agent.name : undefined}
+					aria-label={sidebarState.collapsed ? agent.name : undefined}
 				>
 					<span class="sidebar-persona-avatar" style={agent.ugc_character_ref ? '' : `background: ${agent.gradient ?? 'var(--gradient)'}`}>
 						{#if agent.ugc_character_ref}
-							<img src={agent.ugc_character_ref} alt={agent.name} />
+							<!-- decorative: the persona name is announced by the link label beside it -->
+							<img src={agent.ugc_character_ref} alt="" width="28" height="28" loading="lazy" />
 						{:else}
 							{agent.initial ?? (agent.name?.[0] ?? '?').toUpperCase()}
 						{/if}
@@ -227,6 +247,10 @@
 						<span class="sidebar-nav-label">
 							{agent.name}
 							<span class="sidebar-persona-status" class:status-active={agent.status === 'active'} class:status-paused={agent.status === 'paused'}></span>
+							<!-- the dot encodes status by colour alone — name it for AT -->
+							{#if agent.status === 'active' || agent.status === 'paused'}
+								<span class="sr-only">({agent.status === 'active' ? 'Active' : 'Paused'})</span>
+							{/if}
 						</span>
 					{/if}
 				</a>
@@ -245,15 +269,17 @@
 					href={item.href}
 					class="sidebar-nav-item"
 					class:active={isActive(item.href, $page.url.pathname)}
+					aria-current={isActive(item.href, $page.url.pathname) ? 'page' : undefined}
 					onclick={closeSidebar}
 					title={sidebarState.collapsed ? item.label : undefined}
+					aria-label={sidebarState.collapsed ? item.label : undefined}
 				>
 					<span class="sidebar-nav-icon">
 						{#if item.icon === 'calendar'}
-							<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+							<svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
 								><rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
 						{:else if item.icon === 'check'}
-							<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+							<svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
 								><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>
 						{/if}
 					</span>
@@ -274,14 +300,16 @@
 					href={item.href}
 					class="sidebar-nav-item"
 					class:active={isActive(item.href, $page.url.pathname)}
+					aria-current={isActive(item.href, $page.url.pathname) ? 'page' : undefined}
 					onclick={closeSidebar}
 					title={sidebarState.collapsed ? item.label : undefined}
+					aria-label={sidebarState.collapsed ? item.label : undefined}
 				>
 					<span class="sidebar-nav-icon">
 						{#if item.icon === 'bolt'}
-							<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" /></svg>
+							<svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" /></svg>
 						{:else if item.icon === 'settings'}
-							<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+							<svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
 								><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>
 						{/if}
 					</span>
@@ -310,6 +338,7 @@
 			<div class="portal-header-left">
 				<button class="hamburger-btn" onclick={toggleSidebar} aria-label="Toggle navigation menu">
 					<svg
+						aria-hidden="true"
 						width="20"
 						height="20"
 						viewBox="0 0 24 24"
@@ -324,7 +353,11 @@
 						<line x1="3" y1="18" x2="21" y2="18" />
 					</svg>
 				</button>
-				<h2 class="portal-header-title">
+				<!-- Deliberately NOT a heading. This shell chrome renders above every page's
+				     own <h1>, so as an <h2> it put a level-2 heading before the level-1 on
+				     all six portal pages. .portal-header-title sets font/size/weight/colour
+				     explicitly, so a <div> is pixel-identical. -->
+				<div class="portal-header-title">
 					{(() => {
 						const path = $page.url.pathname;
 						if (path.startsWith('/personas/')) {
@@ -339,7 +372,7 @@
 						if (path === '/dashboard' || path === '/') return 'Dashboard';
 						return 'Dashboard';
 					})()}
-				</h2>
+				</div>
 			</div>
 			<div class="portal-header-right">
 				<!-- Gorgeous Light/Dark Mode Switcher -->
@@ -352,6 +385,7 @@
 					{#if themeState.current === 'light'}
 						<!-- Moon Icon -->
 						<svg
+							aria-hidden="true"
 							class="theme-icon moon-icon"
 							width="18"
 							height="18"
@@ -367,6 +401,7 @@
 					{:else}
 						<!-- Sun Icon -->
 						<svg
+							aria-hidden="true"
 							class="theme-icon sun-icon"
 							width="18"
 							height="18"
@@ -415,7 +450,7 @@
 							</div>
 							<hr class="dropdown-divider" />
 							<button class="dropdown-item logout-btn" role="menuitem" onclick={handleLogout}>
-								<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+								<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
 									<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
 									<polyline points="16 17 21 12 16 7" />
 									<line x1="21" y1="12" x2="9" y2="12" />
@@ -429,7 +464,7 @@
 		</header>
 
 		<!-- Page content -->
-		<main class="portal-content">
+		<main class="portal-content" id="main-content" tabindex="-1" bind:this={mainContentEl}>
 			{@render children()}
 		</main>
 	</div>
@@ -509,6 +544,7 @@
 		color: inherit;
 		flex: 1;
 		min-width: 0;
+		min-height: 44px;
 	}
 
 	.sidebar-logo-link:hover {
@@ -524,7 +560,7 @@
 		align-items: center;
 		justify-content: center;
 		color: #fff;
-		box-shadow: 0 0 20px rgba(124, 106, 237, 0.3);
+		box-shadow: 0 0 20px color-mix(in srgb, var(--accent) 30%, transparent);
 		flex-shrink: 0;
 	}
 
@@ -552,10 +588,23 @@
 		justify-content: center;
 		flex-shrink: 0;
 		opacity: 0;
+		position: relative;
 		transition:
 			opacity 0.2s ease,
 			background 0.2s ease,
 			color 0.2s ease;
+	}
+
+	/* The chevron is deliberately a small 28px affordance; expand only the hit area
+	   so it clears the 44px touch-target minimum without growing visually. */
+	.sidebar-collapse-btn::after {
+		content: '';
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		width: 44px;
+		height: 44px;
+		transform: translate(-50%, -50%);
 	}
 
 	.sidebar:hover .sidebar-collapse-btn {
@@ -593,7 +642,7 @@
 		height: 6px;
 		border-radius: 50%;
 		background: var(--success);
-		box-shadow: 0 0 6px rgba(52, 211, 153, 0.5);
+		box-shadow: 0 0 6px color-mix(in srgb, var(--success) 50%, transparent);
 		flex-shrink: 0;
 	}
 
@@ -631,6 +680,7 @@
 		align-items: center;
 		gap: 12px;
 		padding: 9px 12px;
+		min-height: 44px;
 		border-radius: 8px;
 		color: var(--text-muted);
 		font-size: 0.85rem;
@@ -645,10 +695,12 @@
 	.sidebar-collapsed .sidebar-nav-item {
 		justify-content: center;
 		padding: 9px;
+		min-width: 44px;
 	}
 
 	.sidebar-nav-item:hover {
-		background: rgba(255, 255, 255, 0.04);
+		/* was rgba(255,255,255,.04) — invisible on the light theme's pale surface */
+		background: color-mix(in srgb, var(--text) 5%, transparent);
 		color: var(--text);
 	}
 
@@ -718,7 +770,7 @@
 		height: 6px;
 		border-radius: 50%;
 		background: var(--success);
-		box-shadow: 0 0 6px rgba(52, 211, 153, 0.5);
+		box-shadow: 0 0 6px color-mix(in srgb, var(--success) 50%, transparent);
 		flex-shrink: 0;
 		animation: pulse-dot 2s ease-in-out infinite;
 	}
@@ -777,8 +829,8 @@
 
 	.hamburger-btn {
 		display: none;
-		width: 42px;
-		height: 42px;
+		width: 44px;
+		height: 44px;
 		border-radius: var(--radius-xs);
 		border: 1px solid var(--border-strong);
 		background: transparent;
@@ -804,8 +856,8 @@
 	}
 
 	.theme-toggle-btn {
-		width: 42px;
-		height: 42px;
+		width: 44px;
+		height: 44px;
 		border-radius: var(--radius-full);
 		border: 1px solid var(--border);
 		background: var(--surface-2);
@@ -840,6 +892,7 @@
 		align-items: center;
 		gap: 8px;
 		padding: 5px 14px 5px 5px;
+		min-height: 44px;
 		border-radius: var(--radius-full);
 		background: var(--surface-2);
 		border: 1px solid var(--border);
@@ -886,7 +939,7 @@
 		padding: 8px;
 		display: flex;
 		flex-direction: column;
-		z-index: 100;
+		z-index: var(--z-nav);
 		animation: dropdown-fade-in 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 	}
 
@@ -924,6 +977,7 @@
 		align-items: center;
 		gap: 8px;
 		padding: 8px 12px;
+		min-height: 44px;
 		border-radius: 6px;
 		color: var(--text-muted);
 		font-size: 0.82rem;
@@ -959,7 +1013,7 @@
 
 	.logout-btn:hover {
 		background: var(--error-soft);
-		color: #ff6b6b;
+		color: var(--error-text);
 	}
 
 	/* ── Content ── */
@@ -968,6 +1022,12 @@
 		overflow-y: auto;
 		overflow-x: hidden;
 		padding: var(--space-8);
+	}
+
+	/* Programmatic focus target for the skip link and post-navigation focus move —
+	   it must not paint a ring for mouse users. */
+	.portal-content:focus {
+		outline: none;
 	}
 
 	/* ═══════════════════════════════════════════════════════════════
@@ -1025,6 +1085,8 @@
 
 		.portal-user-badge {
 			padding: 4px;
+			min-width: 44px;
+			justify-content: center;
 		}
 	}
 
@@ -1081,7 +1143,7 @@
 
 	.sidebar-persona-status.status-active {
 		background: var(--success);
-		box-shadow: 0 0 4px rgba(52, 211, 153, 0.6);
+		box-shadow: 0 0 4px color-mix(in srgb, var(--success) 60%, transparent);
 	}
 
 	.sidebar-persona-status.status-paused {
@@ -1111,7 +1173,8 @@
 		border: 1px solid var(--border);
 		background: var(--surface-2);
 		color: var(--text);
-		font-size: 0.78rem;
+		/* must stay >=16px — iOS Safari force-zooms the viewport on smaller inputs */
+		font-size: 1rem;
 		font-family: inherit;
 		transition:
 			border-color 0.15s ease,
