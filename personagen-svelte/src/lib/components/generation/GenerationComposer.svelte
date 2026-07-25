@@ -56,6 +56,10 @@
 	let platforms = $state<string[]>([]);
 	let productId = $state('');
 	let productPhotoUrl = $state('');
+	// The persona's brand-kit products, resolved server-side from the brand brief
+	// selected in its Profile. Drives the product picker below; empty when the
+	// persona has no brief selected (then the URL field is the only route).
+	let products = $state<Array<{ id: string; name: string; photoUrl: string | null }>>([]);
 	let characterRefUrl = $state('');
 	let scheduledDate = $state('');
 	let scheduledTime = $state('');
@@ -161,6 +165,7 @@
 			provider = preview.provider ?? 'auto';
 			platforms = [...(preview.platforms ?? [])];
 			productId = preview.product?.id ?? '';
+			products = Array.isArray(preview.products) ? preview.products : [];
 			productPhotoUrl = preview.productPhotoUrl ?? '';
 			characterRefUrl = preview.characterRefUrl ?? '';
 			scheduledDate = preview.scheduledDate ?? '';
@@ -181,6 +186,17 @@
 
 	function togglePlatform(p: string) {
 		platforms = platforms.includes(p) ? platforms.filter((x) => x !== p) : [...platforms, p];
+	}
+
+	// Picking a brand-kit product pins its id (the server resolves the photo from
+	// it) and mirrors its photo into the URL field so the thumbnail updates and
+	// stays editable. "Custom / none" clears the id and leaves the URL for manual
+	// entry — the raw-URL route is never removed.
+	function onProductPick(e: Event) {
+		const id = (e.currentTarget as HTMLSelectElement).value;
+		productId = id;
+		const picked = products.find((x) => x.id === id);
+		if (picked?.photoUrl) productPhotoUrl = picked.photoUrl;
 	}
 
 	function confirm() {
@@ -401,9 +417,25 @@
 				<span class="hint">{preview.sceneNote}</span>
 			</label>
 
+			{#if products.length}
+				<label class="fld">
+					<span class="fld-label">Product</span>
+					<select value={productId} onchange={onProductPick}>
+						<option value="">Custom / none — use the URL below</option>
+						{#each products as p}
+							<option value={p.id}>{p.name}{p.photoUrl ? '' : ' (no photo)'}</option>
+						{/each}
+					</select>
+					<span class="hint">
+						Pick a product from this persona's brand kit — its photo fills the URL below. Products
+						come from the brand brief selected in the persona's <strong>Profile</strong>.
+					</span>
+				</label>
+			{/if}
+
 			<div class="row">
 				<label class="fld">
-					<span class="fld-label">Product photo URL</span>
+					<span class="fld-label">Product photo URL{products.length ? ' (override)' : ''}</span>
 					<input bind:value={productPhotoUrl} placeholder="https://…" />
 					{#if productPhotoUrl}
 						<img class="url-preview" src={productPhotoUrl} alt="Product preview" onload={showImg} onerror={hideOnError} />

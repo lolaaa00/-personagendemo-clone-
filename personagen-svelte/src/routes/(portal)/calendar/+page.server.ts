@@ -100,7 +100,9 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 		agentName: p.agents?.name || 'Agent',
 		text: p.content,
 		platforms: p.platforms || [],
-		date: p.scheduled_date || '',
+		// Place by schedule; posts published without one (Post Now) fall back to
+		// their publish/creation date so they don't vanish from the calendar.
+		date: p.scheduled_date || (p.published_at || p.created_at || '').slice(0, 10),
 		time: p.scheduled_time ? p.scheduled_time.substring(0, 5) : '10:00',
 		// Pass the real status through — remapping draft/rejected/etc. to
 		// 'scheduled' hid drafts from the approve flow after a reload.

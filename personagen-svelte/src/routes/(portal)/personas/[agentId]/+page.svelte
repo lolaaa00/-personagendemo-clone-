@@ -9,7 +9,10 @@
 	import { PRICING_MATRIX, priceOf } from '$lib/pricing';
 	import PostCard from '$lib/components/feed/PostCard.svelte';
 	import PostDrawer from '$lib/components/feed/PostDrawer.svelte';
+	import CalendarView from '$lib/components/calendar/CalendarView.svelte';
 	import ManualDeleteNotice from '$lib/components/feed/ManualDeleteNotice.svelte';
+	import SelectionToolbar from '$lib/components/ui/SelectionToolbar.svelte';
+	import ImageLightbox from '$lib/components/ui/ImageLightbox.svelte';
 	import { getPostDisplay } from '$lib/components/feed/postDisplay';
 	import type { AutonomyLevel } from '$lib/types';
 	import { AUTONOMY_LABELS } from '$lib/types';
@@ -77,16 +80,17 @@
 	let loadedAgentId: string | null = data.agent?.id ?? null;
 
 	// ── Tab state ──────────────────────────────────────────────────
-	function initialTab(): 'feed' | 'profile' | 'connections' {
+	function initialTab(): 'feed' | 'calendar' | 'profile' | 'connections' {
 		const t = $page.url.searchParams.get('tab');
 		// Legacy ?tab=assets links land on the Feed tab in assets view — the
 		// Assets tab was merged into Feed as a view toggle. Profile is the
-		// default landing tab; Feed/Connections require an explicit ?tab.
+		// default landing tab; Feed/Calendar/Connections require an explicit ?tab.
 		if (t === 'feed' || t === 'assets') return 'feed';
+		if (t === 'calendar') return 'calendar';
 		if (t === 'connections') return 'connections';
 		return 'profile';
 	}
-	let activeTab = $state<'feed' | 'profile' | 'connections'>(initialTab());
+	let activeTab = $state<'feed' | 'calendar' | 'profile' | 'connections'>(initialTab());
 	// Feed tab renders one dataset through two lenses: the post mosaic, or the
 	// flat grid of every generated visual (former Assets tab).
 	let feedView = $state<'posts' | 'assets'>(
@@ -489,8 +493,8 @@
 
 	// ── Tab init effects ───────────────────────────────────────────
 	$effect(() => {
-		// Both feed views (posts mosaic + assets grid) derive from the same posts data.
-		if (activeTab === 'feed' && agent?.id) loadFeed();
+		// Feed views AND the calendar tab all derive from the same posts data.
+		if ((activeTab === 'feed' || activeTab === 'calendar') && agent?.id) loadFeed();
 	});
 
 	$effect(() => {
@@ -793,11 +797,15 @@
 	 * "skip the composer" shortcut is gone deliberately: it existed to skip a form
 	 * that was only a guess, and this one isn't.
 	 */
-	function requestGeneratePost() {
+	function requestGeneratePost(dateStr?: string | null) {
 		if (!agent?.id) return;
+		// Toolbar buttons pass a MouseEvent; only the Calendar tab passes a date,
+		// which prefills the composer's schedule for that day.
+		const scheduledDate = typeof dateStr === 'string' ? dateStr : null;
 		askToGenerate(
 			{
 				endpoint: `/api/agent/${agent.id}/generate-post`,
+				...(scheduledDate ? { baseBody: { scheduled_date: scheduledDate } } : {}),
 				title: `Generate a post for ${agent.name}`,
 				subtitle: 'Everything below is what will actually be sent. Edit anything before approving.',
 				confirmLabel: 'Approve & generate'
@@ -1066,6 +1074,17 @@
 		newHandleInput = '';
 	}
 
+	/**
+	 * Drops a username candidate. Previously the list was append-only — a bad
+	 * suggestion could only be marked "taken", never removed. A candidate that is
+	 * already confirmed on a platform is kept in confirmedHandles; only the
+	 * suggestion row goes away.
+	 */
+	function removeHandleCandidate(handle: string) {
+		ppHandleCandidates = ppHandleCandidates.filter((c) => c.handle !== handle);
+		queueKitSave();
+	}
+
 	async function copyKitText(text: string, label: string) {
 		try {
 			await navigator.clipboard.writeText(text);
@@ -1316,6 +1335,72 @@
 		}
 	}
 
+	// ── Post manageability: multi-select + bulk delete + media enlarge ───────
+	let selectedPostIds = $state<string[]>([]);
+	let bulkDeletingPosts = $state(false);
+	let postMediaLightbox = $state<{ url: string; label: string; poster: string | null } | null>(null);
+
+	function togglePostSelected(id: string) {
+		selectedPostIds = selectedPostIds.includes(id)
+			? selectedPostIds.filter((p) => p !== id)
+			: [...selectedPostIds, id];
+	}
+	function selectAllPosts() {
+		selectedPostIds = groupedPosts.map((p: any) => p.id);
+	}
+	function clearPostSelection() {
+		selectedPostIds = [];
+	}
+
+	/** Opens a post's media full-size. Videos play in the lightbox. */
+	function openPostMedia(post: any) {
+		try {
+			const c = typeof post.content === 'string' ? JSON.parse(post.content) : post.content;
+			const url = c?.media_url || c?.mediaUrl;
+			if (!url) {
+				showToast('This post has no media yet', 'info');
+				return;
+			}
+			postMediaLightbox = {
+				url,
+				label: c?.topic || c?.caption?.slice(0, 80) || 'Post media',
+				poster: c?.poster_url || null
+			};
+		} catch {
+			showToast('This post has no media yet', 'info');
+		}
+	}
+
+	async function deleteSelectedPosts() {
+		const ids = [...selectedPostIds];
+		if (ids.length === 0 || bulkDeletingPosts) return;
+		if (!confirm(`Delete ${ids.length} post${ids.length === 1 ? '' : 's'}? This cannot be undone.`))
+			return;
+		bulkDeletingPosts = true;
+		try {
+			const res = await Posts.deleteMany(ids);
+			if (!res.success) {
+				showToast(res.error || 'Failed to delete posts', 'error');
+				return;
+			}
+			feedPosts = feedPosts.filter((p: any) => !ids.includes(p.id));
+			if (modalPost && ids.includes(modalPost.id)) modalPost = null;
+			selectedPostIds = [];
+			if (res.teardown?.manualDeletion?.length) manualDeleteNotice = res.teardown.manualDeletion as any;
+			const deleted = res.deleted ?? ids.length;
+			showToast(
+				deleted < ids.length
+					? `Deleted ${deleted} of ${ids.length} posts — the rest could not be found`
+					: `Deleted ${deleted} post${deleted === 1 ? '' : 's'}`,
+				deleted < ids.length ? 'warning' : 'success'
+			);
+		} catch (err) {
+			showToast('Error deleting posts: ' + (err as Error).message, 'error');
+		} finally {
+			bulkDeletingPosts = false;
+		}
+	}
+
 	async function handleApprovePost(post: any) {
 		if (!post?.id) return;
 		approvingPostId = post.id;
@@ -1402,7 +1487,41 @@
 		label: string;
 		/** Poster still for video assets — without it a video tile renders blank. */
 		poster?: string | null;
+		/**
+		 * Where this asset lives, so "delete" can do the right thing: a post asset
+		 * means deleting that post, a kit asset unpins it from the reference kit,
+		 * and the avatar is cleared back to the gradient fallback.
+		 */
+		source: 'post' | 'kit' | 'avatar';
+		postId?: string | null;
+		stage?: string | null;
 	}
+	// ── Calendar tab: this persona's posts in the shared calendar shape ──
+	let calendarPosts = $derived(
+		feedPosts
+			.map((r: any) => ({
+				id: r.id,
+				agentId: r.agent_id ?? agent?.id ?? '',
+				agentName: agent?.name ?? 'Persona',
+				text: r.content,
+				platforms: r.platforms ?? [],
+				// Place by schedule; posts published without one fall back to their
+				// publish/creation date so nothing vanishes from the calendar.
+				date: r.scheduled_date || String(r.published_at || r.created_at || '').slice(0, 10),
+				time: r.scheduled_time ? String(r.scheduled_time).slice(0, 5) : '10:00',
+				status: r.status,
+				publication_results: r.publication_results ?? null,
+				analytics: r.analytics ?? null
+			}))
+			// In-flight generations have no meaningful slot yet — the feed shows them.
+			.filter((p: any) => !!p.date && p.status !== 'generating')
+	);
+
+	/** Calendar events → the ORIGINAL feed row, which the drawer/mutations expect. */
+	function feedRowFor(p: { id: string }) {
+		return feedPosts.find((r: any) => r.id === p.id) ?? null;
+	}
+
 	let assetItems = $derived.by(() => {
 		const seen = new Set<string>();
 		const items: AssetItem[] = [];
@@ -1410,36 +1529,171 @@
 			url: string | null | undefined,
 			type: 'image' | 'video',
 			label: string,
-			poster?: string | null
+			poster: string | null,
+			source: AssetItem['source'],
+			extra: { postId?: string | null; stage?: string | null } = {}
 		) => {
 			if (!url || typeof url !== 'string' || seen.has(url)) return;
 			seen.add(url);
-			items.push({ url, type, label, poster: poster ?? null });
+			items.push({
+				url,
+				type,
+				label,
+				poster: poster ?? null,
+				source,
+				postId: extra.postId ?? null,
+				stage: extra.stage ?? null
+			});
 		};
 		for (const p of feedPosts) {
 			try {
 				const c = JSON.parse(p.content);
 				const isVideo = c.media_type === 'video';
-				add(c.media_url || c.mediaUrl, isVideo ? 'video' : 'image', 'Post media', isVideo ? c.poster_url : null);
-				add(c.poster_url, 'image', 'Poster still');
+				add(
+					c.media_url || c.mediaUrl,
+					isVideo ? 'video' : 'image',
+					'Post media',
+					isVideo ? c.poster_url : null,
+					'post',
+					{ postId: p.id }
+				);
+				add(c.poster_url, 'image', 'Poster still', null, 'post', { postId: p.id });
 				if (Array.isArray(c.storyboard)) {
-					for (const s of c.storyboard) add(s, 'image', 'Storyboard still');
+					for (const s of c.storyboard)
+						add(s, 'image', 'Storyboard still', null, 'post', { postId: p.id });
 				}
 			} catch {
 				/* non-JSON content has no assets */
 			}
 		}
-		add(characterRef, 'image', 'Profile picture');
+		add(characterRef, 'image', 'Profile picture', null, 'avatar');
 		for (const [k, v] of Object.entries(referenceKit ?? {})) {
 			// The kit doubles as the async-job board: it carries transient
 			// `<stage>_status` keys whose values are 'generating' / 'failed: …',
 			// not URLs. Rendering those as <img src> produced broken tiles.
 			if (k.endsWith('_status')) continue;
-			add(v as string, 'image', `Reference kit — ${k.replace(/_/g, ' ')}`);
+			// `<stage>_history` values are arrays, skipped by add()'s string guard.
+			add(v as string, 'image', `Reference kit — ${k.replace(/_/g, ' ')}`, null, 'kit', {
+				stage: k
+			});
 		}
 		return items;
 	});
+
+	// ── Asset manageability: multi-select + delete ───────────────────────────
+	let selectedAssetUrls = $state<string[]>([]);
+	let deletingAssets = $state(false);
+
+	function toggleAssetSelected(url: string) {
+		selectedAssetUrls = selectedAssetUrls.includes(url)
+			? selectedAssetUrls.filter((u) => u !== url)
+			: [...selectedAssetUrls, url];
+	}
+	function selectAllAssets() {
+		selectedAssetUrls = assetItems.map((a) => a.url);
+	}
+	function clearAssetSelection() {
+		selectedAssetUrls = [];
+	}
+
+	/**
+	 * Deletes any mix of assets. Post media can't be removed without its post, so
+	 * that is spelled out in the confirmation rather than done silently. Kit
+	 * images are unpinned (and dropped from that stage's history); the bucket
+	 * object survives so a published post never loses its media.
+	 */
+	async function deleteAssets(items: AssetItem[]) {
+		if (items.length === 0 || deletingAssets) return;
+		const postIds = [...new Set(items.filter((i) => i.source === 'post' && i.postId).map((i) => i.postId as string))];
+		const kitItems = items.filter((i) => i.source === 'kit');
+		const avatarItems = items.filter((i) => i.source === 'avatar');
+
+		const lines: string[] = [];
+		if (postIds.length)
+			lines.push(
+				`${postIds.length} post${postIds.length === 1 ? '' : 's'} (the post is deleted along with its media)`
+			);
+		if (kitItems.length)
+			lines.push(
+				`${kitItems.length} reference photo${kitItems.length === 1 ? '' : 's'} (unpinned from the kit; still restorable from your library)`
+			);
+		if (avatarItems.length) lines.push('the profile picture (cleared back to the gradient)');
+		if (!confirm(`Delete:\n\n• ${lines.join('\n• ')}\n\nThis cannot be undone for posts.`)) return;
+
+		deletingAssets = true;
+		try {
+			let removed = 0;
+			if (postIds.length) {
+				const res = await Posts.deleteMany(postIds);
+				if (res.success) {
+					removed += res.deleted ?? postIds.length;
+					feedPosts = feedPosts.filter((p: any) => !postIds.includes(p.id));
+					const manual = res.teardown?.manualDeletion;
+					if (Array.isArray(manual) && manual.length > 0) manualDeleteNotice = manual as any;
+				} else {
+					showToast(res.error || 'Failed to delete posts', 'error');
+				}
+			}
+			if (kitItems.length || avatarItems.length) {
+				const payload = [
+					...kitItems.map((i) => ({ kind: 'kit', stage: i.stage, url: i.url })),
+					...avatarItems.map((i) => ({ kind: 'avatar', url: i.url }))
+				];
+				const res = await fetch(`/api/agent/${agent.id}/delete-assets`, {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ items: payload })
+				});
+				const result = await res.json();
+				if (res.ok && result.success) {
+					if (result.kit) referenceKit = result.kit;
+					if (result.avatarCleared) characterRef = null;
+					removed += payload.length;
+				} else {
+					showToast(result.error || 'Failed to delete reference photos', 'error');
+				}
+			}
+			selectedAssetUrls = [];
+			if (removed > 0) showToast(`Deleted ${removed} asset${removed === 1 ? '' : 's'}`, 'success');
+		} catch (err) {
+			showToast((err as Error).message || 'Delete failed', 'error');
+		} finally {
+			deletingAssets = false;
+		}
+	}
+
+	function deleteSelectedAssets() {
+		void deleteAssets(assetItems.filter((a) => selectedAssetUrls.includes(a.url)));
+	}
+
+	/** Removes one past image from a kit stage's restore history. */
+	async function deleteKitHistoryImage(stage: string, url: string) {
+		if (!confirm('Remove this photo from the restore history?')) return;
+		try {
+			const res = await fetch(`/api/agent/${agent.id}/delete-assets`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ items: [{ kind: 'kit', stage, url }] })
+			});
+			const result = await res.json();
+			if (res.ok && result.success) {
+				if (result.kit) referenceKit = result.kit;
+				showToast('Photo removed from history', 'success');
+			} else {
+				showToast(result.error || 'Could not remove that photo', 'error');
+			}
+		} catch (err) {
+			showToast((err as Error).message || 'Could not remove that photo', 'error');
+		}
+	}
 	let assetLightbox = $state<AssetItem | null>(null);
+	// Play the lightbox clip imperatively on mount (inside the tap's activation
+	// window) and swallow a blocked-autoplay rejection — unmuted `autoplay` on a
+	// just-mounted element is often refused on mobile; `controls` remain as the
+	// manual fallback. See the same pattern in PostCard.
+	function playOnMount(node: HTMLVideoElement) {
+		node.play?.().catch(() => {});
+	}
 
 	// ── Profile save ───────────────────────────────────────────────
 	// ── Generation cost tracking ────────────────────────────────────────────
@@ -2409,6 +2663,10 @@
 				<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
 				Feed
 			</button>
+			<button class="tab-btn" class:active={activeTab === 'calendar'} onclick={() => (activeTab = 'calendar')}>
+				<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+				Calendar
+			</button>
 			<button class="tab-btn" class:active={activeTab === 'connections'} onclick={() => (activeTab = 'connections')}>
 				<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
 				Connections
@@ -2484,7 +2742,7 @@
 					</div>
 					{/if}
 					<div class="feed-actions">
-						<button class="btn-generate" onclick={requestGeneratePost} disabled={generatingPost || feedLoading}>
+						<button class="btn-generate" onclick={() => requestGeneratePost()} disabled={generatingPost || feedLoading}>
 							{#if generatingPost}
 								<span class="spinner-sm"></span> Generating…
 							{:else}
@@ -2527,7 +2785,7 @@
 						<p>{feedFilter !== 'all' || platformFilter !== 'all' ? 'No posts match these filters.' : 'Generate your first post — drafts save even without a connected platform.'}</p>
 						{#if feedFilter === 'all' && platformFilter === 'all'}
 							<div class="feed-empty-actions">
-								<button class="btn-generate" onclick={requestGeneratePost} disabled={generatingPost}>
+								<button class="btn-generate" onclick={() => requestGeneratePost()} disabled={generatingPost}>
 									{generatingPost ? 'Generating…' : '✨ Generate First Post'}
 								</button>
 								<button type="button" class="btn-sync" onclick={() => (activeTab = 'connections')}>
@@ -2537,9 +2795,27 @@
 						{/if}
 					</div>
 				{:else}
+					<SelectionToolbar
+						total={groupedPosts.length}
+						selectedCount={selectedPostIds.length}
+						noun="post"
+						busy={bulkDeletingPosts}
+						onSelectAll={selectAllPosts}
+						onClear={clearPostSelection}
+						onDelete={deleteSelectedPosts}
+					/>
 					<div class="post-mosaic">
 						{#each groupedPosts as post (post.id)}
-							<PostCard {post} onOpen={(p) => (modalPost = p)} onPublishFallback={openPublishFallback} />
+							<PostCard
+								{post}
+								onOpen={(p) => (modalPost = p)}
+								onPublishFallback={openPublishFallback}
+								selectable
+								selected={selectedPostIds.includes(post.id)}
+								onToggleSelect={(p) => togglePostSelected(p.id)}
+								onDelete={handleDeletePost}
+								onEnlarge={openPostMedia}
+							/>
 						{/each}
 					</div>
 				{/if}
@@ -2556,18 +2832,60 @@
 							<p>Every image and video generated for this persona will collect here — post media, poster stills, storyboards, the profile picture, and the reference kit.</p>
 						</div>
 					{:else}
+						<SelectionToolbar
+							total={assetItems.length}
+							selectedCount={selectedAssetUrls.length}
+							noun="asset"
+							busy={deletingAssets}
+							onSelectAll={selectAllAssets}
+							onClear={clearAssetSelection}
+							onDelete={deleteSelectedAssets}
+						/>
 						<div class="assets-grid">
 							{#each assetItems as asset (asset.url)}
-								<button type="button" class="asset-tile" onclick={() => (assetLightbox = asset)} aria-label="View {asset.label}">
-									{#if asset.type === 'video'}
-										<!-- Poster keeps video tiles from rendering blank while unbuffered. -->
-										<video src={asset.url} poster={asset.poster || undefined} muted playsinline preload="metadata"></video>
-										<span class="asset-video-badge">▶</span>
-									{:else}
-										<img src={asset.url} loading="lazy" alt={asset.label} />
-									{/if}
-									<span class="asset-label">{asset.label}</span>
-								</button>
+								<div class="asset-cell" class:selected={selectedAssetUrls.includes(asset.url)}>
+									<button type="button" class="asset-tile" onclick={() => (assetLightbox = asset)} aria-label="View {asset.label}">
+										{#if asset.type === 'video'}
+											<!-- Static preview only (the real clip plays in the lightbox on tap), so
+											     show the poster as a plain lazy <img> — no <video preload> per tile,
+											     which otherwise fired a metadata range request for every clip on load.
+											     Fall back to a no-preload <video> only when a poster is missing. -->
+											{#if asset.poster}
+												<img src={asset.poster} loading="lazy" alt={asset.label} />
+											{:else}
+												<video src={asset.url} muted playsinline preload="none"></video>
+											{/if}
+											<span class="asset-video-badge">▶</span>
+										{:else}
+											<img src={asset.url} loading="lazy" alt={asset.label} />
+										{/if}
+										<span class="asset-label">{asset.label}</span>
+									</button>
+									<label class="asset-select" title="Select for bulk actions">
+										<input
+											type="checkbox"
+											checked={selectedAssetUrls.includes(asset.url)}
+											onchange={() => toggleAssetSelected(asset.url)}
+											aria-label="Select {asset.label}"
+										/>
+									</label>
+									<button
+										type="button"
+										class="asset-del"
+										title={asset.source === 'post'
+											? 'Delete the post this media belongs to'
+											: asset.source === 'avatar'
+												? 'Clear the profile picture'
+												: 'Remove from the reference kit'}
+										aria-label="Delete {asset.label}"
+										disabled={deletingAssets}
+										onclick={() => deleteAssets([asset])}
+									>
+										<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"
+											><path d="M3 6h18M8 6V4h8v2m1 0v14a2 2 0 01-2 2H9a2 2 0 01-2-2V6h12" /></svg
+										>
+									</button>
+								</div>
 							{/each}
 						</div>
 					{/if}
@@ -2598,6 +2916,12 @@
 			{#if manualDeleteNotice}
 				<ManualDeleteNotice entries={manualDeleteNotice} onClose={() => (manualDeleteNotice = null)} />
 			{/if}
+			<ImageLightbox
+				url={postMediaLightbox?.url ?? null}
+				label={postMediaLightbox?.label ?? ''}
+				poster={postMediaLightbox?.poster ?? null}
+				onClose={() => (postMediaLightbox = null)}
+			/>
 
 		<!-- PROFILE TAB -->
 		{:else if activeTab === 'profile'}
@@ -2606,15 +2930,18 @@
 				     generates for. One client can run several brands (Just Kids
 				     Honey, HoneyX Manly Plus…) — every asset this persona makes is
 				     grounded in the brief selected here. -->
-				<section class="profile-section">
-					<div class="section-header">
-						<h2 class="section-title">Brand Kit</h2>
-						<p class="section-desc">
-							Choose the brand brief this persona creates content for — its products, voice, and
-							audience ground every asset. Selection is opt-in: with <strong>None</strong> selected,
-							the persona generates with no brand kit (no brand is applied automatically).
-						</p>
-					</div>
+				<details class="profile-section" open>
+					<summary class="section-summary">
+						<div class="section-header">
+							<h2 class="section-title">Brand Kit</h2>
+							<p class="section-desc">
+								Choose the brand brief this persona creates content for — its products, voice, and
+								audience ground every asset. Selection is opt-in: with <strong>None</strong> selected,
+								the persona generates with no brand kit (no brand is applied automatically).
+							</p>
+						</div>
+						<svg class="section-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+					</summary>
 					<div class="fields-grid">
 						<div class="field-group col-span-2">
 							<label for="p-brief">Brand Kit</label>
@@ -2654,17 +2981,18 @@
 							{/if}
 						</div>
 					</div>
-				</section>
+				</details>
 
 				<!-- Persona Profile — above Identity: these fields feed generation prompts -->
-				<section class="profile-section">
-					<div class="section-header">
+				<details class="profile-section" open>
+					<summary class="section-summary">
+						<div class="section-header">
 						<div class="label-row">
 							<h2 class="section-title">Persona Profile</h2>
 							<button
 								type="button"
 								class="btn-sync btn-xs"
-								onclick={generatePersonaProfile}
+								onclick={(e) => { e.preventDefault(); e.stopPropagation(); generatePersonaProfile(); }}
 								disabled={generatingProfile}
 								title="Generate a unique profile tailored to the selected brand and this persona's gender"
 							>
@@ -2676,7 +3004,9 @@
 							prompts. “Generate for brand” fills a unique, brand-tailored profile (aligned to this
 							persona's gender) and saves it automatically — review and tweak anytime.
 						</p>
-					</div>
+						</div>
+						<svg class="section-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+					</summary>
 
 					<div class="fields-grid">
 						<!-- Identity fields, moved up into the profile: the NAME stays constant;
@@ -2810,14 +3140,15 @@
 							</div>
 						</div>
 					</div>
-				</section>
+				</details>
 
 				<!-- Platform Identity Kit: the persona's public-facing profile per
 				     platform. Copy-paste tooling by design — no platform (nor Zernio)
 				     accepts profile-field updates via API; availability of a username
 				     is confirmed manually at signup. -->
-				<section class="profile-section">
-					<div class="section-header">
+				<details class="profile-section">
+					<summary class="section-summary">
+						<div class="section-header">
 						<div class="label-row">
 							<h2 class="section-title">Platform Identity Kit</h2>
 							{#if kitSaveState !== 'idle'}
@@ -2832,7 +3163,7 @@
 							<button
 								type="button"
 								class="btn-sync btn-xs"
-								onclick={() => generateKit('starter')}
+								onclick={(e) => { e.preventDefault(); e.stopPropagation(); generateKit('starter'); }}
 								disabled={kitBusy}
 								title="One small call: display name + username candidates + bios for this persona's connected platforms (or a TikTok/Instagram/YouTube starter set)"
 							>
@@ -2849,7 +3180,9 @@
 							the next; “Use” records the winner for the selected platform. Connecting the account
 							later shows the real username as ground truth.
 						</p>
-					</div>
+						</div>
+						<svg class="section-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+					</summary>
 
 					<div class="fields-grid">
 						<div class="field-group">
@@ -2884,7 +3217,16 @@
 							<label>Profile Picture</label>
 							{#if characterRef}
 								<div class="kit-avatar-row">
-									<img class="kit-avatar-thumb" src={characterRef} alt={editName} />
+									<!-- Enlargeable like every other image in the app. -->
+									<button
+										type="button"
+										class="kit-avatar-zoom"
+										onclick={() => openPreview(characterRef, 'Profile picture', requestGenerateAvatar)}
+										title="Click to enlarge"
+										aria-label="Enlarge profile picture"
+									>
+										<img class="kit-avatar-thumb" src={characterRef} alt={editName} />
+									</button>
 									<button type="button" class="btn-sync btn-xs" onclick={downloadAvatar}>
 										⬇ Download for upload
 									</button>
@@ -2955,6 +3297,13 @@
 													disabled={c.status === 'taken'}
 													onclick={() => useCandidateFor(c.handle, kitPlatform)}
 												>Use</button>
+												<button
+													type="button"
+													class="kit-del-btn"
+													title="Remove this candidate from the list"
+													aria-label="Remove @{c.handle}"
+													onclick={() => removeHandleCandidate(c.handle)}
+												>🗑</button>
 											</span>
 										</div>
 									{/each}
@@ -3050,14 +3399,17 @@
 							</p>
 						</div>
 					</div>
-				</section>
+				</details>
 
 				<!-- Identity section -->
-				<section class="profile-section">
-					<div class="section-header">
-						<h2 class="section-title">Character & Visuals</h2>
-						<p class="section-desc">The persona's generated face and multi-angle reference kit, plus its personality, skills, and tools. Name, niche, and appearance now live in the Persona Profile above.</p>
-					</div>
+				<details class="profile-section">
+					<summary class="section-summary">
+						<div class="section-header">
+							<h2 class="section-title">Character & Visuals</h2>
+							<p class="section-desc">The persona's generated face and multi-angle reference kit, plus its personality, skills, and tools. Name, niche, and appearance now live in the Persona Profile above.</p>
+						</div>
+						<svg class="section-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+					</summary>
 
 					<div class="fields-grid">
 						<div class="field-group col-span-2">
@@ -3113,7 +3465,17 @@
 									<button type="button" class="btn-sync" onclick={openRestore} disabled={generatingAvatar}>
 										🕑 Restore from history
 									</button>
-									{#if !characterRef}
+									{#if characterRef}
+										<button
+											type="button"
+											class="btn-sync danger"
+											onclick={() => deleteAssets([{ url: characterRef!, type: 'image', label: 'Profile picture', poster: null, source: 'avatar' }])}
+											disabled={deletingAssets || generatingAvatar}
+											title="Clear the profile picture — the image stays in your library and can be restored"
+										>
+											🗑 Remove photo
+										</button>
+									{:else}
 										<p class="field-hint">No photo yet — falls back to the gradient below until generated.</p>
 									{/if}
 									<p class="field-hint">~$0.08 per generation (Nano Banana 2 image call). Restore re-pins a past image free.</p>
@@ -3214,6 +3576,15 @@
 												>
 													🕑 Restore
 												</button>
+												<button
+													type="button"
+													class="btn-sync kit-stage-generate danger"
+													onclick={() => deleteAssets([{ url: referenceKit.sheet, type: 'image', label: '0. Character sheet', poster: null, source: 'kit', stage: 'sheet' }])}
+													disabled={deletingAssets || generatingAvatar || generatingKitStage !== null || generatingAllKit}
+													title="Remove this character sheet from the kit"
+												>
+													🗑 Delete
+												</button>
 											</div>
 											<span class="field-hint">Regenerates with the profile picture</span>
 										</div>
@@ -3258,6 +3629,15 @@
 											>
 												🕑 Restore
 											</button>
+											<button
+												type="button"
+												class="btn-sync kit-stage-generate danger"
+												onclick={() => deleteAssets([{ url: referenceKit.full_body, type: 'image', label: '1. Full body', poster: null, source: 'kit', stage: 'full_body' }])}
+												disabled={deletingAssets || generatingKitStage !== null || generatingAllKit || generatingAvatar}
+												title="Remove this full-body reference from the kit"
+											>
+												🗑 Delete
+											</button>
 										</div>
 									</div>
 									{#each [{ key: 'side_profiles' as const, n: 2, label: 'Side profiles', alt: 'Side profile composite', wide: true }, { key: 'face_closeup' as const, n: 3, label: 'Facial close-up', alt: 'Facial close-up', wide: false }, { key: 'feature_grid' as const, n: 4, label: 'Feature grid', alt: 'Feature grid', wide: false }] as st (st.key)}
@@ -3299,6 +3679,15 @@
 													>
 														🕑 Restore
 													</button>
+													<button
+														type="button"
+														class="btn-sync kit-stage-generate danger"
+														onclick={() => deleteAssets([{ url: referenceKit[st.key], type: 'image', label: st.label, poster: null, source: 'kit', stage: st.key }])}
+														disabled={deletingAssets || generatingKitStage !== null || generatingAllKit}
+														title="Remove this {st.label.toLowerCase()} from the kit"
+													>
+														🗑 Delete
+													</button>
 												{/if}
 											</div>
 											{#if blocked && !referenceKit[st.key]}
@@ -3330,9 +3719,19 @@
 							{:else}
 								<div class="item-chips">
 									{#each skillsList as s (s.id)}
-										<button type="button" class="item-chip" onclick={() => (editingSkill = { ...s })}>
-											📘 {s.name}
-										</button>
+										<span class="item-chip-wrap">
+											<button type="button" class="item-chip" onclick={() => (editingSkill = { ...s })}>
+												📘 {s.name}
+											</button>
+											<!-- Row-level delete: previously you had to open the editor to remove one. -->
+											<button
+												type="button"
+												class="item-chip-del"
+												title="Delete skill"
+												aria-label="Delete skill {s.name}"
+												onclick={() => confirm(`Delete the skill "${s.name}"?`) && deleteSkill(s.id)}
+											>✕</button>
+										</span>
 									{/each}
 								</div>
 							{/if}
@@ -3348,16 +3747,25 @@
 							{:else}
 								<div class="item-chips">
 									{#each toolsList as t (t.id)}
-										<button type="button" class="item-chip" onclick={() => (editingTool = { ...t })}>
-											🔌 {t.label} <span class="chip-kind">{t.kind}</span>
-										</button>
+										<span class="item-chip-wrap">
+											<button type="button" class="item-chip" onclick={() => (editingTool = { ...t })}>
+												🔌 {t.label} <span class="chip-kind">{t.kind}</span>
+											</button>
+											<button
+												type="button"
+												class="item-chip-del"
+												title="Delete integration"
+												aria-label="Delete integration {t.label}"
+												onclick={() => confirm(`Delete the integration "${t.label}"?`) && deleteTool(t.id)}
+											>✕</button>
+										</span>
 									{/each}
 								</div>
 							{/if}
 						</div>
 
 					</div>
-				</section>
+				</details>
 
 				{#if editingSkill}
 					<div class="gen-confirm-overlay" role="dialog" aria-modal="true" aria-label="Edit skill">
@@ -3413,11 +3821,14 @@
 
 				<!-- Persona Profile section -->
 				<!-- Automation section -->
-				<section class="profile-section">
-					<div class="section-header">
-						<h2 class="section-title">Automation</h2>
-						<p class="section-desc">Posting schedule and content sourcing mode.</p>
-					</div>
+				<details class="profile-section">
+					<summary class="section-summary">
+						<div class="section-header">
+							<h2 class="section-title">Automation</h2>
+							<p class="section-desc">Posting schedule and content sourcing mode.</p>
+						</div>
+						<svg class="section-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+					</summary>
 
 					<div class="fields-grid">
 						<div class="field-group">
@@ -3517,14 +3928,17 @@
 							{/if}
 						</div>
 					</div>
-				</section>
+				</details>
 
 				<!-- Spend & Pricing section -->
-				<section class="profile-section">
-					<div class="section-header">
-						<h2 class="section-title">Spend &amp; Pricing</h2>
-						<p class="section-desc">Estimated generation credits used by this persona, split by provider — plus the rate card behind the numbers.</p>
-					</div>
+				<details class="profile-section">
+					<summary class="section-summary">
+						<div class="section-header">
+							<h2 class="section-title">Spend &amp; Pricing</h2>
+							<p class="section-desc">Estimated generation credits used by this persona, split by provider — plus the rate card behind the numbers.</p>
+						</div>
+						<svg class="section-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+					</summary>
 
 					{#if agentSpend && agentSpend.total > 0}
 						<div class="spend-chips">
@@ -3567,7 +3981,7 @@
 							</table>
 						</div>
 					</details>
-				</section>
+				</details>
 
 				<!-- Save + Danger zone -->
 				<div class="profile-footer">
@@ -3581,6 +3995,25 @@
 					<p>Permanently delete this agent and all associated data. This cannot be undone.</p>
 					<button type="button" class="btn-danger" onclick={deleteAgent}>Delete Agent</button>
 				</div>
+			</div>
+
+		<!-- CALENDAR TAB — the same shared calendar as the global page, scoped to
+		     this persona: schedule, drafts to approve, and analytics in one place. -->
+		{:else if activeTab === 'calendar'}
+			<div class="persona-calendar-tab">
+				{#if feedLoading && calendarPosts.length === 0}
+					<div class="feed-loading"><span class="spinner-lg"></span><p>Loading posts…</p></div>
+				{:else}
+					<CalendarView
+						posts={calendarPosts}
+						onOpenPost={(p) => (modalPost = feedRowFor(p))}
+						onApprove={async (p) => {
+							const row = feedRowFor(p);
+							if (row) await handleApprovePost(row);
+						}}
+						onGenerateForDate={(d) => requestGeneratePost(d)}
+					/>
+				{/if}
 			</div>
 
 		<!-- CONNECTIONS TAB -->
@@ -3825,7 +4258,7 @@
 		<div class="lightbox-content" onclick={(e) => e.stopPropagation()} role="dialog" aria-label={assetLightbox.label}>
 			{#if assetLightbox.type === 'video'}
 				<!-- svelte-ignore a11y_media_has_caption -->
-				<video src={assetLightbox.url} poster={assetLightbox.poster || undefined} controls autoplay playsinline></video>
+				<video src={assetLightbox.url} poster={assetLightbox.poster || undefined} controls playsinline use:playOnMount></video>
 			{:else}
 				<img src={assetLightbox.url} alt={assetLightbox.label} />
 			{/if}
@@ -3946,20 +4379,33 @@
 				{:else}
 					<div class="restore-grid">
 						{#each kitRestoreImages as url (url)}
-							<button
-								type="button"
-								class="restore-tile"
-								class:current={url === referenceKit[kitRestoreStage]}
-								onclick={() => restoreKitStage(url)}
-								disabled={kitRestoringUrl !== null}
-							>
-								<img src={url} loading="lazy" alt="Past generation" />
-								{#if url === referenceKit[kitRestoreStage]}
-									<span class="restore-badge">Current</span>
-								{:else if kitRestoringUrl === url}
-									<span class="restore-badge">Restoring…</span>
-								{/if}
-							</button>
+							<div class="restore-cell">
+								<button
+									type="button"
+									class="restore-tile"
+									class:current={url === referenceKit[kitRestoreStage]}
+									onclick={() => restoreKitStage(url)}
+									disabled={kitRestoringUrl !== null}
+								>
+									<img src={url} loading="lazy" alt="Past generation" />
+									{#if url === referenceKit[kitRestoreStage]}
+										<span class="restore-badge">Current</span>
+									{:else if kitRestoringUrl === url}
+										<span class="restore-badge">Restoring…</span>
+									{/if}
+								</button>
+								<!-- Prune a past generation you never want offered again. -->
+								<button
+									type="button"
+									class="restore-del"
+									title="Remove from this stage's history"
+									aria-label="Remove this photo from history"
+									disabled={kitRestoringUrl !== null}
+									onclick={() => kitRestoreStage && deleteKitHistoryImage(kitRestoreStage, url)}
+								>
+									✕
+								</button>
+							</div>
 						{/each}
 					</div>
 				{/if}
@@ -4267,6 +4713,118 @@
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
 		gap: 0.75rem;
+	}
+
+	/* ── Asset management overlays (select + delete) ── */
+	.asset-cell {
+		position: relative;
+		display: block;
+	}
+	.asset-cell .asset-tile {
+		width: 100%;
+	}
+	.asset-cell.selected .asset-tile {
+		border-color: var(--accent);
+		box-shadow: 0 0 0 2px var(--accent) inset;
+	}
+	.asset-select {
+		position: absolute;
+		top: 6px;
+		left: 6px;
+		z-index: 3;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 24px;
+		height: 24px;
+		border-radius: 6px;
+		background: rgba(12, 16, 30, 0.72);
+		backdrop-filter: blur(4px);
+		cursor: pointer;
+	}
+	.asset-select input {
+		width: 14px;
+		height: 14px;
+		margin: 0;
+		cursor: pointer;
+		accent-color: var(--accent);
+	}
+	.asset-del {
+		position: absolute;
+		top: 6px;
+		right: 6px;
+		z-index: 3;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 24px;
+		height: 24px;
+		padding: 0;
+		border-radius: 6px;
+		border: 1px solid rgba(255, 255, 255, 0.2);
+		background: rgba(12, 16, 30, 0.72);
+		backdrop-filter: blur(4px);
+		color: #fff;
+		cursor: pointer;
+		opacity: 0;
+		transition: opacity 0.15s ease;
+	}
+	.asset-cell:hover .asset-del,
+	.asset-cell:focus-within .asset-del,
+	.asset-cell.selected .asset-del {
+		opacity: 1;
+	}
+	.asset-del:hover:not(:disabled) {
+		border-color: #dc2626;
+		color: #f87171;
+	}
+	.asset-del:disabled {
+		cursor: not-allowed;
+		opacity: 0.4;
+	}
+
+	/* Destructive variant of the kit/avatar action buttons. */
+	.btn-sync.danger:not(:disabled) {
+		color: #dc2626;
+		border-color: color-mix(in srgb, #dc2626 40%, transparent);
+	}
+	.btn-sync.danger:hover:not(:disabled) {
+		border-color: #dc2626;
+		background: color-mix(in srgb, #dc2626 10%, transparent);
+	}
+
+	/* Restore-picker tiles get a prune (✕) control. */
+	.restore-cell {
+		position: relative;
+	}
+	.restore-cell .restore-tile {
+		width: 100%;
+	}
+	.restore-del {
+		position: absolute;
+		top: 4px;
+		right: 4px;
+		z-index: 3;
+		width: 22px;
+		height: 22px;
+		padding: 0;
+		border-radius: 6px;
+		border: 1px solid rgba(255, 255, 255, 0.22);
+		background: rgba(12, 16, 30, 0.75);
+		color: #fff;
+		font-size: 0.7rem;
+		line-height: 1;
+		cursor: pointer;
+		opacity: 0;
+		transition: opacity 0.15s ease;
+	}
+	.restore-cell:hover .restore-del,
+	.restore-cell:focus-within .restore-del {
+		opacity: 1;
+	}
+	.restore-del:hover:not(:disabled) {
+		border-color: #dc2626;
+		color: #f87171;
 	}
 
 	.asset-tile {
@@ -4882,6 +5440,43 @@
 		margin-bottom: 1.5rem;
 	}
 
+	/* Collapsible sections: each .profile-section is a <details>; the summary is
+	   the always-visible header + a chevron, the body shows only when open. All
+	   inputs keep working — <details> just hides the subtree, it doesn't unmount. */
+	.section-summary {
+		list-style: none;
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: 1rem;
+		cursor: pointer;
+		margin-bottom: 0;
+	}
+	.section-summary::-webkit-details-marker {
+		display: none;
+	}
+	.section-summary > .section-header {
+		margin-bottom: 0;
+		flex: 1;
+		min-width: 0;
+	}
+	/* Restore the header→body gap only when the section is actually open. */
+	.profile-section[open] > .section-summary {
+		margin-bottom: 1.5rem;
+	}
+	.section-chevron {
+		flex-shrink: 0;
+		margin-top: 0.15rem;
+		color: var(--text-dim);
+		transition: transform 0.2s ease;
+	}
+	.profile-section[open] > .section-summary .section-chevron {
+		transform: rotate(180deg);
+	}
+	.section-summary:hover .section-chevron {
+		color: var(--text);
+	}
+
 	.section-title {
 		font-size: 1rem;
 		font-weight: 700;
@@ -5427,6 +6022,11 @@
 	.editor-modal .mono { font-family: var(--font-mono, monospace); font-size: 0.8rem; }
 	.opt { font-weight: 400; color: var(--text-dim); font-size: var(--text-xs); }
 	.composer-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.9rem; }
+	/* Inside the generate/editor modal these paired fields hit ~150px each on a
+	   phone — stack them. */
+	@media (max-width: 640px) {
+		.composer-grid-2 { grid-template-columns: 1fr; }
+	}
 	.composer-advanced summary {
 		cursor: pointer;
 		font-size: var(--text-sm);
@@ -6099,6 +6699,53 @@
 	}
 	.kit-candidate-actions button:disabled { opacity: 0.45; cursor: not-allowed; }
 	.kit-use-btn { font-weight: 600; }
+	.kit-candidate-actions .kit-del-btn:hover:not(:disabled) {
+		border-color: #dc2626;
+		color: #dc2626;
+	}
+
+	/* Enlarge affordance for the identity-kit avatar thumb. */
+	.kit-avatar-zoom {
+		padding: 0;
+		border: none;
+		background: none;
+		cursor: zoom-in;
+		line-height: 0;
+		border-radius: 50%;
+	}
+	.kit-avatar-zoom:hover .kit-avatar-thumb {
+		border-color: var(--accent);
+	}
+
+	/* Chip rows (skills / tools) get an inline delete without opening the editor. */
+	.item-chip-wrap {
+		position: relative;
+		display: inline-flex;
+		align-items: center;
+	}
+	.item-chip-del {
+		margin-left: -0.35rem;
+		width: 22px;
+		height: 22px;
+		padding: 0;
+		border-radius: 50%;
+		border: 1px solid var(--border);
+		background: var(--surface);
+		color: var(--text-muted);
+		font-size: 0.7rem;
+		line-height: 1;
+		cursor: pointer;
+		opacity: 0;
+		transition: opacity 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+	}
+	.item-chip-wrap:hover .item-chip-del,
+	.item-chip-wrap:focus-within .item-chip-del {
+		opacity: 1;
+	}
+	.item-chip-del:hover {
+		border-color: #dc2626;
+		color: #dc2626;
+	}
 
 	.kit-bio-meta {
 		display: flex;
