@@ -62,6 +62,40 @@
 		showToast('New brief — fill it in and Save to create', 'info');
 	}
 
+	let deletingBrief = $state(false);
+	async function deleteBrief() {
+		if (!currentBriefId || deletingBrief) return;
+		const name =
+			briefList.find((b) => b.id === currentBriefId)?.name || brandName || 'this brief';
+		const ok = confirm(
+			`Permanently delete "${name}"? Personas pinned to it will be unpinned. This cannot be undone.`
+		);
+		if (!ok) return;
+		deletingBrief = true;
+		try {
+			const res = await BrandBrief.delete(currentBriefId);
+			if (!res.success) {
+				showToast(res.error || 'Failed to delete brief', 'error');
+				return;
+			}
+			showToast(`Deleted "${name}"`, 'success');
+			briefList = briefList.filter((b) => b.id !== currentBriefId);
+			currentBriefId = null;
+			// Land on the next remaining brief, or a blank slate if none left.
+			if (briefList.length > 0) {
+				await switchBrief(briefList[0].id);
+			} else {
+				hydrate({});
+				localStorage.removeItem(LS_KEY);
+			}
+			void refreshBriefList();
+		} catch (err: any) {
+			showToast('Failed to delete brief: ' + err.message, 'error');
+		} finally {
+			deletingBrief = false;
+		}
+	}
+
 	type TabKey = 'overview' | 'products' | 'visual' | 'voice' | 'audience' | 'competitors' | 'intel';
 
 	const TABS: { key: TabKey; label: string; icon: string }[] = [
@@ -1072,6 +1106,28 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 					>
 					Export
 				</button>
+				{#if currentBriefId}
+					<button
+						class="action-btn danger"
+						onclick={deleteBrief}
+						disabled={deletingBrief}
+						title="Permanently delete this brief"
+					>
+						<svg
+							width="14"
+							height="14"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							><path
+								d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14"
+							/></svg
+						>
+						{deletingBrief ? 'Deleting…' : 'Delete'}
+					</button>
+				{/if}
 				<button class="action-btn primary" onclick={(e) => saveAll(e)}>
 					<svg
 						width="14"
@@ -2484,6 +2540,14 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 	.action-btn.primary:hover {
 		transform: translateY(-1px);
 		box-shadow: var(--shadow-accent);
+	}
+	.action-btn.danger:hover {
+		border-color: #dc2626;
+		color: #dc2626;
+	}
+	.action-btn.danger:disabled {
+		opacity: 0.6;
+		cursor: not-allowed;
 	}
 
 	/* Tabs */

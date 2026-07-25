@@ -199,6 +199,9 @@ export const BrandBrief = {
 		request<any>(ENDPOINTS.brandBrief, 'save_brief', { data, brief_id: briefId || undefined, name }),
 	list: () => request<Array<{ id: string; name: string; updated_at: string }>>(ENDPOINTS.brandBrief, 'list_briefs', {}),
 	getById: (briefId: string) => request<any>(ENDPOINTS.brandBrief, 'get_brief', { brief_id: briefId }),
+	// Permanent: personas pinned to this brief are unpinned server-side.
+	delete: (briefId: string) =>
+		request<{ id: string; name: string }>(ENDPOINTS.brandBrief, 'delete_brief', { brief_id: briefId }),
 	// Generate a unique, brand-tailored persona profile for competitive influencer
 	// positioning. Server resolves name/soul/siblings and drives gender from the NAME
 	// (returned as `gender`) so a mis-set gender is corrected in place.

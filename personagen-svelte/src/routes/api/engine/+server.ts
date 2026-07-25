@@ -1089,6 +1089,27 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 				return json({ success: true, data: briefs ?? [] });
 			}
 
+			// ── ACTION: delete_brief — permanently removes one of the user's
+			//    briefs. Personas that pinned it are unpinned automatically
+			//    (agent_configs.brand_brief_id is ON DELETE SET NULL) and fall
+			//    back to the newest remaining brief. ───────────────────────────────
+			if (action === 'delete_brief') {
+				const briefId = String(body.brief_id || '').trim();
+				if (!briefId) {
+					return json({ success: false, error: 'Missing brief_id' }, { status: 400 });
+				}
+				const { data: existing } = await db.brandBriefs.getById(briefId, session.user.id);
+				if (!existing) {
+					return json({ success: false, error: 'Brief not found' }, { status: 404 });
+				}
+				const { error } = await db.brandBriefs.deleteById(briefId, session.user.id);
+				if (error) {
+					console.error('[Engine] Failed to delete brand brief:', error);
+					return json({ success: false, error: error.message }, { status: 500 });
+				}
+				return json({ success: true, data: { id: briefId, name: existing.name } });
+			}
+
 			// ── ACTION: get_brief (read-only — powers the generation composer;
 			//    body.brief_id selects a specific brief, else newest) ──────────────
 			if (action === 'get_brief') {
