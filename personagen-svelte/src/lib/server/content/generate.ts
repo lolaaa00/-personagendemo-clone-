@@ -2250,8 +2250,14 @@ export const RESTORABLE_KIT_STAGES = KIT_HISTORY_STAGES;
 
 /**
  * Removes reference photos from a persona's kit: drops each url from its
- * stage's history and, when that url is the stage's CURRENT pin, promotes the
- * next surviving history image (or clears the stage outright).
+ * stage's history and, when that url is the stage's CURRENT pin, CLEARS the
+ * stage.
+ *
+ * Deliberately no auto-promotion of the next history image: silently pinning a
+ * different photo makes "delete" look like it did nothing (the grid count is
+ * unchanged) and swaps the identity reference behind the user's back. An empty
+ * stage is honest and recoverable — Restore-from-history and Regenerate both
+ * refill it.
  *
  * The bucket object is deliberately left in place — a published post may use
  * the same image, and storage here is append-only by design, so "delete" means
@@ -2280,9 +2286,10 @@ export async function removeKitAssets(
 				changed = true;
 			}
 			if (kit[stage] === url) {
-				const promoted = history[0];
-				if (promoted) kit[stage] = promoted;
-				else delete kit[stage];
+				// Clear, never auto-promote another history image: substituting a
+				// different photo makes "delete" look like a no-op and swaps the
+				// identity reference silently. Restore/Regenerate refill the stage.
+				delete kit[stage];
 				changed = true;
 			}
 		}

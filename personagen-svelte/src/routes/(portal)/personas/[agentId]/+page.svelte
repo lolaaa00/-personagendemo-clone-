@@ -4647,11 +4647,11 @@
 		border: 1px solid var(--border-strong);
 		border-radius: var(--radius);
 		width: min(920px, 94vw);
-		max-height: 86vh;
+		max-height: 86dvh;
 		display: flex;
 		flex-direction: column;
 		overflow: hidden;
-		z-index: 1101;
+		z-index: var(--z-overlay);
 	}
 	.restore-head {
 		display: flex;
@@ -4674,11 +4674,25 @@
 		border: none;
 		background: var(--surface-2);
 		color: var(--text-muted);
+		/* Visual dot stays small; the tap target is a full 44×44 (§2). */
 		width: 30px;
 		height: 30px;
 		border-radius: 999px;
 		cursor: pointer;
 		flex-shrink: 0;
+		position: relative;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+	}
+	.restore-close::after {
+		content: '';
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		width: 44px;
+		height: 44px;
+		transform: translate(-50%, -50%);
 	}
 	.restore-tabs {
 		display: flex;
@@ -4694,11 +4708,12 @@
 		font-size: 0.8rem;
 		font-weight: 600;
 		cursor: pointer;
+		min-height: 44px;
 	}
 	.restore-tab.on {
-		background: var(--accent-mid, #7c6aed);
-		border-color: var(--accent-mid, #7c6aed);
-		color: #fff;
+		background: var(--accent-mid);
+		border-color: var(--accent);
+		color: var(--text);
 	}
 	.restore-grid {
 		display: grid;
@@ -4769,19 +4784,20 @@
 		text-transform: capitalize;
 		cursor: pointer;
 		transition: background 0.15s, border-color 0.15s;
+		min-height: 44px;
 	}
 	.pubfb-chip.on {
-		background: var(--accent-mid, #7c6aed);
-		border-color: var(--accent-mid, #7c6aed);
-		color: #fff;
+		background: var(--accent-mid);
+		border-color: var(--accent);
+		color: var(--text);
 	}
 	.pubfb-actions {
 		display: flex;
 		justify-content: flex-end;
 	}
 	.btn-primary-cta {
-		background: var(--accent-mid, #7c6aed);
-		border: 1px solid var(--accent-mid, #7c6aed);
+		background: var(--gradient-cta);
+		border: 1px solid transparent;
 		color: #fff;
 		border-radius: 10px;
 		padding: 0.55rem 1.1rem;
@@ -4790,7 +4806,9 @@
 		cursor: pointer;
 		display: inline-flex;
 		align-items: center;
+		justify-content: center;
 		gap: 0.4rem;
+		min-height: 44px;
 	}
 	.btn-primary-cta:disabled {
 		opacity: 0.55;
@@ -4833,11 +4851,12 @@
 		padding: 0.45rem 0.9rem;
 		cursor: pointer;
 		transition: background 0.15s ease, color 0.15s ease;
+		min-height: 44px;
 	}
 
 	.view-toggle-btn.active {
-		background: var(--accent-soft, rgba(124, 106, 237, 0.12));
-		color: var(--accent);
+		background: var(--accent-soft);
+		color: var(--accent-text);
 	}
 
 	/* ── Assets view ── */
@@ -4880,6 +4899,17 @@
 		backdrop-filter: blur(4px);
 		cursor: pointer;
 	}
+	/* Chip stays 24px; the tap target underneath is a full 44×44 (§2). */
+	.asset-select::after,
+	.asset-del::after {
+		content: '';
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		width: 44px;
+		height: 44px;
+		transform: translate(-50%, -50%);
+	}
 	.asset-select input {
 		width: 14px;
 		height: 14px;
@@ -4913,8 +4943,8 @@
 		opacity: 1;
 	}
 	.asset-del:hover:not(:disabled) {
-		border-color: #dc2626;
-		color: #f87171;
+		border-color: var(--error);
+		color: color-mix(in srgb, var(--error) 55%, #fff);
 	}
 	.asset-del:disabled {
 		cursor: not-allowed;
@@ -4923,15 +4953,15 @@
 
 	/* Destructive variant of the kit/avatar action buttons. */
 	.btn-sync.danger:not(:disabled) {
-		color: #dc2626;
-		border-color: color-mix(in srgb, #dc2626 40%, transparent);
+		color: var(--error-text);
+		border-color: color-mix(in srgb, var(--error) 40%, transparent);
 	}
 	.btn-sync.danger:hover:not(:disabled) {
-		border-color: #dc2626;
-		background: color-mix(in srgb, #dc2626 10%, transparent);
+		border-color: var(--error);
+		background: color-mix(in srgb, var(--error) 10%, transparent);
 	}
 
-	/* Restore-picker tiles get a prune (✕) control. */
+	/* Restore-picker tiles get a prune (close) control. */
 	.restore-cell {
 		position: relative;
 	}
@@ -4955,14 +4985,27 @@
 		cursor: pointer;
 		opacity: 0;
 		transition: opacity 0.15s ease;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+	}
+	/* Chip stays 22px; the tap target underneath is a full 44×44 (§2). */
+	.restore-del::after {
+		content: '';
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		width: 44px;
+		height: 44px;
+		transform: translate(-50%, -50%);
 	}
 	.restore-cell:hover .restore-del,
 	.restore-cell:focus-within .restore-del {
 		opacity: 1;
 	}
 	.restore-del:hover:not(:disabled) {
-		border-color: #dc2626;
-		color: #f87171;
+		border-color: var(--error);
+		color: color-mix(in srgb, var(--error) 55%, #fff);
 	}
 
 	.asset-tile {
@@ -5031,14 +5074,14 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		z-index: 1100;
+		z-index: var(--z-modal);
 		padding: 1.5rem;
 	}
 
 	.confirm-card {
-		background: var(--surface, #fff);
-		border: 1px solid var(--border, #e6e8f0);
-		border-radius: 14px;
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-md);
 		padding: 1.4rem 1.5rem;
 		max-width: min(440px, 94vw);
 		box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
@@ -5046,13 +5089,13 @@
 	.confirm-card h3 {
 		margin: 0 0 0.6rem;
 		font-size: 1.05rem;
-		color: var(--text, #14172b);
+		color: var(--text);
 	}
 	.confirm-card p {
 		margin: 0 0 1.2rem;
 		font-size: 0.85rem;
 		line-height: 1.5;
-		color: var(--muted, #6b7280);
+		color: var(--muted);
 	}
 	.confirm-actions {
 		display: flex;
@@ -5060,19 +5103,20 @@
 		gap: 0.6rem;
 	}
 	.btn-cancel {
-		background: var(--surface-2, #f3f4f6);
-		border: 1px solid var(--border, #e6e8f0);
-		color: var(--text, #14172b);
+		background: var(--surface-2);
+		border: 1px solid var(--border);
+		color: var(--text);
 		border-radius: 8px;
 		padding: 0.55rem 1rem;
 		font-size: 0.82rem;
 		font-weight: 600;
 		cursor: pointer;
+		min-height: 44px;
 	}
 
 	.lightbox-content {
 		max-width: min(920px, 94vw);
-		max-height: 90vh;
+		max-height: 90dvh;
 		display: flex;
 		flex-direction: column;
 		border-radius: var(--radius);
@@ -5084,7 +5128,7 @@
 	.lightbox-content img,
 	.lightbox-content video {
 		max-width: 100%;
-		max-height: calc(90vh - 52px);
+		max-height: calc(90dvh - 52px);
 		object-fit: contain;
 		background: #000;
 	}
@@ -5104,9 +5148,13 @@
 	}
 
 	.lightbox-bar a {
-		color: var(--accent);
+		color: var(--accent-text);
 		text-decoration: none;
 		font-weight: 600;
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+		min-height: 44px;
 	}
 
 	.lightbox-bar button {
@@ -5117,6 +5165,10 @@
 		padding: 0.3rem 0.8rem;
 		font-size: 0.72rem;
 		cursor: pointer;
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
+		min-height: 44px;
 	}
 
 	.no-agent {
@@ -5172,6 +5224,20 @@
 		cursor: zoom-in;
 	}
 
+	/* The 26px nav avatar keeps its size; its tap target reaches 44×44 (§2). */
+	.tab-nav-avatar-btn {
+		position: relative;
+	}
+	.tab-nav-avatar-btn::after {
+		content: '';
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		width: 44px;
+		height: 44px;
+		transform: translate(-50%, -50%);
+	}
+
 	.hero-avatar img,
 	.tab-nav-avatar img {
 		width: 100%;
@@ -5223,7 +5289,7 @@
 	}
 
 	.hero-sep { color: var(--border-strong); }
-	.hero-niche { color: var(--accent); font-weight: 600; }
+	.hero-niche { color: var(--accent-text); font-weight: 600; }
 
 	.hero-stats {
 		display: flex;
@@ -5243,23 +5309,24 @@
 	}
 
 	.stat-chip-spend {
-		border-color: rgba(251, 191, 36, 0.35);
-		background: rgba(251, 191, 36, 0.06);
+		border-color: color-mix(in srgb, var(--warning) 35%, transparent);
+		background: color-mix(in srgb, var(--warning) 6%, transparent);
 	}
 
 	.stat-chip-spend .stat-val {
-		color: #f59e0b;
+		color: var(--warning-text);
 	}
 
 	/* Queued = drafts + scheduled, not yet published — muted so it reads as pending. */
 	.stat-chip-queued .stat-val {
-		color: var(--muted, #6b7280);
+		color: var(--muted);
 	}
 
 	.stat-val {
 		font-size: 1.1rem;
 		font-weight: 700;
 		color: var(--text);
+		font-variant-numeric: tabular-nums;
 	}
 
 	.stat-label {
@@ -5279,22 +5346,23 @@
 	.age-chip {
 		padding: 0.4rem 0.85rem;
 		border-radius: 999px;
-		border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
-		background: rgba(255, 255, 255, 0.03);
-		color: var(--text-dim, #9aa);
-		font-size: var(--text-sm, 0.85rem);
+		border: 1px solid var(--border);
+		background: var(--surface-2);
+		color: var(--text-dim);
+		font-size: var(--text-sm);
 		font-weight: 600;
 		cursor: pointer;
 		transition: all 0.15s ease;
+		min-height: 44px;
 	}
 	.age-chip:hover {
-		border-color: var(--accent-mid, #7c6aed);
-		color: var(--text, #fff);
+		border-color: var(--accent-mid);
+		color: var(--text);
 	}
 	.age-chip.selected {
-		background: var(--accent-mid, #7c6aed);
-		border-color: var(--accent-mid, #7c6aed);
-		color: #fff;
+		background: var(--accent-mid);
+		border-color: var(--accent-mid);
+		color: var(--text);
 	}
 	.age-chip-all {
 		font-style: italic;
@@ -5338,7 +5406,7 @@
 		margin-bottom: 1.5rem;
 		position: sticky;
 		top: 0;
-		z-index: 20;
+		z-index: var(--z-header);
 		backdrop-filter: blur(16px) saturate(180%);
 		-webkit-backdrop-filter: blur(16px) saturate(180%);
 	}
@@ -5408,12 +5476,13 @@
 
 	.tab-btn.active {
 		background: var(--accent-soft);
-		color: var(--accent);
+		color: var(--accent-text);
 		font-weight: 600;
 	}
 
 	.tab-badge {
-		background: var(--success);
+		/* Darkened so the white count stays AA-legible on the light-mode green too. */
+		background: color-mix(in srgb, var(--success) 80%, #000);
 		color: #fff;
 		font-size: 10px;
 		font-weight: 700;
@@ -5451,13 +5520,14 @@
 		border-radius: 8px;
 		border: 1px solid color-mix(in srgb, var(--error) 45%, transparent);
 		background: color-mix(in srgb, var(--error) 12%, transparent);
-		color: var(--error);
+		color: var(--error-text);
 		font-size: 0.78rem;
 		font-weight: 600;
 		font-family: var(--font-body);
 		cursor: pointer;
 		white-space: nowrap;
 		transition: background 0.15s ease;
+		min-height: 44px;
 	}
 	.filter-alert:hover {
 		background: color-mix(in srgb, var(--error) 20%, transparent);
@@ -5482,10 +5552,12 @@
 		border-radius: 8px;
 		padding: 0.45rem 0.75rem;
 		color: var(--text);
-		font-size: 0.8rem;
+		/* 1rem keeps iOS from force-zooming when the select is focused (§8). */
+		font-size: 1rem;
 		font-family: var(--font-body);
 		cursor: pointer;
 		outline: none;
+		min-height: 44px;
 	}
 
 	.feed-actions {
@@ -5497,7 +5569,7 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 0.5rem;
-		background: var(--gradient);
+		background: var(--gradient-cta);
 		color: #fff;
 		border: none;
 		border-radius: 8px;
@@ -5506,6 +5578,7 @@
 		font-weight: 600;
 		cursor: pointer;
 		transition: opacity 0.15s ease, transform 0.15s ease;
+		min-height: 44px;
 	}
 
 	.btn-generate:hover:not(:disabled) { opacity: 0.9; transform: translateY(-1px); }
@@ -5524,6 +5597,7 @@
 		font-weight: 500;
 		cursor: pointer;
 		transition: all 0.15s ease;
+		min-height: 44px;
 	}
 
 	.btn-sync:hover:not(:disabled) { border-color: var(--accent-mid); color: var(--text); }
@@ -5547,8 +5621,8 @@
 		gap: 0.75rem;
 	}
 
-	.feed-empty .empty-icon { font-size: 2.5rem; }
-	.feed-empty h3 { font-size: 1rem; font-weight: 600; color: var(--text); margin: 0; }
+	.feed-empty .empty-icon { color: var(--text-dim); line-height: 0; }
+	.feed-empty h2 { font-size: 1rem; font-weight: 600; color: var(--text); margin: 0; }
 	.feed-empty p { font-size: 0.82rem; max-width: 340px; margin: 0; }
 
 	/* Uniform asset-style tile grid (the masonry/mosaic columns are retired —
@@ -5642,7 +5716,10 @@
 
 	.col-span-2 { grid-column: span 2; }
 
-	.field-group label {
+	/* `.field-label` is the same treatment for group captions that have no single
+	   control to point a <label for> at (chip groups, media pickers, chip lists). */
+	.field-group label,
+	.field-group .field-label {
 		font-size: 0.72rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -5661,11 +5738,13 @@
 		padding: 0.7rem 0.9rem;
 		color: var(--text);
 		font-family: var(--font-body);
-		font-size: 0.85rem;
+		/* 1rem minimum — anything smaller makes iOS Safari zoom on focus (§8). */
+		font-size: 1rem;
 		outline: none;
 		transition: border-color 0.2s ease, box-shadow 0.2s ease;
 		width: 100%;
 		box-sizing: border-box;
+		min-height: 44px;
 	}
 
 	.field-group input:focus,
@@ -5673,7 +5752,11 @@
 	.field-group textarea:focus,
 	.field-input:focus {
 		border-color: var(--accent-mid);
-		box-shadow: 0 0 0 3px rgba(124, 106, 237, 0.08);
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 8%, transparent);
+	}
+
+	.field-group [aria-invalid='true'] {
+		border-color: var(--error);
 	}
 
 	.field-group textarea { resize: vertical; }
@@ -5708,7 +5791,7 @@
 	}
 
 	.brand-dirty-hint {
-		color: var(--accent);
+		color: var(--accent-text);
 	}
 
 	/* Appearance / wardrobe dynamic-variable grid. */
@@ -5764,7 +5847,7 @@
 	.status-btn.selected {
 		border-color: var(--accent);
 		background: var(--accent-soft);
-		color: var(--accent);
+		color: var(--accent-text);
 		font-weight: 700;
 	}
 
@@ -5872,6 +5955,9 @@
 	}
 
 	.kit-stage-label {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
 		font-size: 0.7rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -5908,12 +5994,14 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
+		gap: 0.35rem;
 		text-align: center;
 		font-size: 0.75rem;
 		padding: 0.45rem 0.9rem;
 		cursor: pointer;
 		color: var(--text-muted);
 		transition: border-color 0.15s, color 0.15s;
+		min-height: 44px;
 	}
 
 	.kit-stage-generate:hover:not(:disabled) {
@@ -5968,7 +6056,7 @@
 
 	.gradient-swatch.selected {
 		border-color: var(--accent);
-		box-shadow: 0 0 10px rgba(124, 106, 237, 0.4);
+		box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 40%, transparent);
 	}
 
 	.gradient-swatch:hover { transform: scale(1.1); }
@@ -6079,7 +6167,7 @@
 		background: var(--accent);
 	}
 
-	.autonomy-icon { grid-column: 2; grid-row: 1; font-size: 1rem; }
+	.autonomy-icon { grid-column: 2; grid-row: 1; display: inline-flex; align-items: center; color: var(--text-muted); }
 	.autonomy-label { grid-column: 3; grid-row: 1; font-size: 0.85rem; font-weight: 600; color: var(--text); }
 	.autonomy-desc { grid-column: 2 / 4; grid-row: 2; font-size: 0.75rem; color: var(--text-dim); margin: 0; line-height: 1.4; }
 
@@ -6090,7 +6178,7 @@
 		background: rgba(0, 0, 0, 0.55);
 		display: grid;
 		place-items: center;
-		z-index: 1100;
+		z-index: var(--z-modal);
 		padding: 1rem;
 	}
 	.gen-confirm {
@@ -6100,7 +6188,7 @@
 		border-radius: var(--radius-md);
 		padding: 1.25rem 1.4rem;
 		box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
-		max-height: 90vh;
+		max-height: 90dvh;
 		overflow-y: auto;
 	}
 	.gen-confirm h3 { margin: 0 0 0.9rem; }
@@ -6132,7 +6220,24 @@
 		gap: 0.75rem;
 		margin-bottom: 0.4rem;
 	}
-	.btn-xs { padding: 0.3rem 0.7rem; font-size: var(--text-xs); }
+	/* Dense inline action buttons: the pill stays compact, but a centred 44×44
+	   pseudo-element gives it a real tap target (§2). */
+	.btn-xs {
+		padding: 0.3rem 0.7rem;
+		font-size: var(--text-xs);
+		position: relative;
+		min-height: 0;
+		gap: 0.3rem;
+	}
+	.btn-xs::after {
+		content: '';
+		position: absolute;
+		top: 50%;
+		left: 0;
+		right: 0;
+		height: 44px;
+		transform: translateY(-50%);
+	}
 	.item-chips { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 	.item-chip {
 		display: inline-flex;
@@ -6141,11 +6246,12 @@
 		padding: 0.45rem 0.85rem;
 		border-radius: 10px;
 		border: 1px solid var(--border);
-		background: var(--surface-2, rgba(255, 255, 255, 0.03));
+		background: var(--surface-2);
 		color: var(--text);
 		font-size: var(--text-sm);
 		cursor: pointer;
 		transition: border-color 0.15s ease;
+		min-height: 44px;
 	}
 	.item-chip:hover { border-color: var(--accent-mid); }
 	.chip-kind {
@@ -6157,7 +6263,7 @@
 		border-radius: 999px;
 		padding: 1px 6px;
 	}
-	.editor-modal .mono { font-family: var(--font-mono, monospace); font-size: 0.8rem; }
+	.editor-modal .mono { font-family: var(--font-mono, monospace); font-size: 1rem; }
 	.opt { font-weight: 400; color: var(--text-dim); font-size: var(--text-xs); }
 	.composer-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.9rem; }
 	/* Inside the generate/editor modal these paired fields hit ~150px each on a
@@ -6176,11 +6282,12 @@
 		margin-right: auto;
 		padding: 0.5rem 0.9rem;
 		border-radius: 9px;
-		border: 1px solid var(--danger, #ef4444);
-		color: var(--danger, #ef4444);
+		border: 1px solid var(--danger);
+		color: var(--error-text);
 		background: transparent;
 		font-size: var(--text-sm);
 		cursor: pointer;
+		min-height: 44px;
 	}
 
 	/* ── Spend & Pricing ── */
@@ -6196,11 +6303,11 @@
 		gap: 2px;
 		padding: 0.5rem 0.9rem;
 		border-radius: 10px;
-		border: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+		border: 1px solid var(--border);
 		min-width: 84px;
 	}
 	.spend-chip.spend-total {
-		border-color: var(--accent-mid, #7c6aed);
+		border-color: var(--accent-mid);
 	}
 	.spend-chip.spend-op {
 		opacity: 0.75;
@@ -6209,18 +6316,21 @@
 		font-size: 10px;
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
-		color: var(--text-dim, #99a);
+		color: var(--text-dim);
 	}
 	.spend-val {
 		font-family: var(--font-mono, monospace);
 		font-weight: 700;
-		font-size: var(--text-sm, 0.9rem);
+		font-size: var(--text-sm);
 	}
 	.pricing-details summary {
 		cursor: pointer;
-		font-size: var(--text-sm, 0.85rem);
-		color: var(--text-dim, #99a);
+		font-size: var(--text-sm);
+		color: var(--text-dim);
 		margin-bottom: 0.5rem;
+		min-height: 44px;
+		display: flex;
+		align-items: center;
 	}
 	.pricing-table-wrap {
 		overflow-x: auto;
@@ -6228,16 +6338,16 @@
 	.pricing-table {
 		width: 100%;
 		border-collapse: collapse;
-		font-size: var(--text-xs, 0.78rem);
+		font-size: var(--text-xs);
 	}
 	.pricing-table th,
 	.pricing-table td {
 		text-align: left;
 		padding: 0.4rem 0.6rem;
-		border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.06));
+		border-bottom: 1px solid var(--border);
 	}
 	.pricing-table th {
-		color: var(--text-dim, #99a);
+		color: var(--text-dim);
 		text-transform: uppercase;
 		font-size: 10px;
 		letter-spacing: 0.05em;
@@ -6252,7 +6362,7 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 0.5rem;
-		background: var(--gradient);
+		background: var(--gradient-cta);
 		color: #fff;
 		border: none;
 		border-radius: 8px;
@@ -6261,19 +6371,20 @@
 		font-weight: 600;
 		cursor: pointer;
 		transition: opacity 0.15s ease;
+		min-height: 44px;
 	}
 
 	.btn-save:disabled { opacity: 0.6; cursor: not-allowed; }
 
 	.danger-zone {
-		background: rgba(239, 68, 68, 0.04);
-		border: 1px solid rgba(239, 68, 68, 0.2);
+		background: color-mix(in srgb, var(--danger) 4%, transparent);
+		border: 1px solid color-mix(in srgb, var(--danger) 20%, transparent);
 		border-radius: var(--radius-md);
 		padding: 1.25rem 1.5rem;
 	}
 
-	.danger-zone h4 {
-		color: var(--error);
+	.danger-zone h3 {
+		color: var(--error-text);
 		font-size: 0.78rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -6288,20 +6399,21 @@
 	}
 
 	.btn-danger {
-		background: rgba(239, 68, 68, 0.08);
-		border: 1px solid rgba(239, 68, 68, 0.3);
-		color: #f87171;
+		background: color-mix(in srgb, var(--danger) 8%, transparent);
+		border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
+		color: var(--error-text);
 		border-radius: var(--radius-sm);
 		padding: 0.6rem 1.1rem;
 		font-size: 0.8rem;
 		font-weight: 600;
 		cursor: pointer;
 		transition: all 0.15s ease;
+		min-height: 44px;
 	}
 
 	.btn-danger:hover {
-		background: rgba(239, 68, 68, 0.15);
-		border-color: rgba(239, 68, 68, 0.5);
+		background: color-mix(in srgb, var(--danger) 15%, transparent);
+		border-color: color-mix(in srgb, var(--danger) 50%, transparent);
 	}
 
 	/* ── Connections ── */
@@ -6321,7 +6433,7 @@
 
 	.conn-count-badge {
 		background: var(--accent-soft);
-		color: var(--accent);
+		color: var(--accent-text);
 		font-size: 11px;
 		font-weight: 700;
 		padding: 2px 8px;
@@ -6337,8 +6449,8 @@
 		margin-bottom: 1.25rem;
 	}
 	.zernio-meter.over-free {
-		border-color: color-mix(in srgb, #f59e0b 45%, var(--border));
-		background: color-mix(in srgb, #f59e0b 5%, var(--surface));
+		border-color: color-mix(in srgb, var(--warning) 45%, var(--border));
+		background: color-mix(in srgb, var(--warning) 5%, var(--surface));
 	}
 	.meter-head {
 		display: flex;
@@ -6365,16 +6477,16 @@
 		width: 22px;
 		height: 6px;
 		border-radius: 999px;
-		background: var(--surface-2, var(--border));
+		background: var(--surface-2);
 		border: 1px solid var(--border);
 	}
 	.meter-pip.filled.free {
-		background: #10b981;
-		border-color: #10b981;
+		background: var(--success);
+		border-color: var(--success);
 	}
 	.meter-pip.filled.billable {
-		background: #f59e0b;
-		border-color: #f59e0b;
+		background: var(--warning);
+		border-color: var(--warning);
 	}
 	.meter-overflow {
 		font-size: 0.7rem;
@@ -6387,16 +6499,17 @@
 		gap: 1rem;
 		font-size: 0.8rem;
 		color: var(--text-muted);
+		font-variant-numeric: tabular-nums;
 	}
 	.meter-stats strong {
 		color: var(--text);
 	}
 	.meter-good {
-		color: #10b981;
+		color: var(--success-text);
 		font-weight: 600;
 	}
 	.meter-bill strong {
-		color: #f59e0b;
+		color: var(--warning-text);
 	}
 	.meter-note {
 		font-size: 0.74rem;
@@ -6405,11 +6518,11 @@
 		line-height: 1.5;
 	}
 	.meter-note a {
-		color: var(--accent);
+		color: var(--accent-text);
 		text-decoration: underline;
 	}
 	.meter-warn {
-		color: #f59e0b;
+		color: var(--warning-text);
 	}
 
 	.conn-count-label {
@@ -6435,11 +6548,22 @@
 		color: var(--text-muted);
 		cursor: pointer;
 		transition: all 0.15s ease;
+		position: relative;
+	}
+	/* Compact pill, full-size tap target (§2). */
+	.btn-connect-inline::after {
+		content: '';
+		position: absolute;
+		top: 50%;
+		left: 0;
+		right: 0;
+		height: 44px;
+		transform: translateY(-50%);
 	}
 
 	.btn-connect-inline:hover:not(:disabled) {
 		border-color: var(--accent);
-		color: var(--accent);
+		color: var(--accent-text);
 		background: var(--accent-soft);
 	}
 
@@ -6459,7 +6583,7 @@
 		font-size: 0.85rem;
 	}
 
-	.conn-empty span { font-size: 1.75rem; }
+	.conn-empty span { display: inline-flex; line-height: 0; }
 
 	.platforms-grid {
 		display: grid;
@@ -6516,8 +6640,8 @@
 		border-radius: 999px;
 	}
 
-	.conn-badge.error { color: var(--error); background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); }
-	.conn-badge.warn { color: var(--warning); background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.3); }
+	.conn-badge.error { color: var(--error-text); background: color-mix(in srgb, var(--error) 10%, transparent); border: 1px solid color-mix(in srgb, var(--error) 30%, transparent); }
+	.conn-badge.warn { color: var(--warning-text); background: color-mix(in srgb, var(--warning) 10%, transparent); border: 1px solid color-mix(in srgb, var(--warning) 30%, transparent); }
 
 	.btn-collapse {
 		background: none;
@@ -6527,7 +6651,10 @@
 		padding: 4px;
 		display: flex;
 		align-items: center;
+		justify-content: center;
 		transition: color 0.15s ease, transform 0.2s ease;
+		min-width: 44px;
+		min-height: 44px;
 	}
 
 	.btn-collapse:hover { color: var(--text); }
@@ -6561,7 +6688,7 @@
 	}
 
 	.platform-handle-link:hover {
-		color: var(--accent);
+		color: var(--accent-text);
 		text-decoration: underline;
 		text-underline-offset: 3px;
 	}
@@ -6579,7 +6706,10 @@
 		padding: 2px;
 		display: inline-flex;
 		align-items: center;
+		justify-content: center;
 		transition: transform 0.15s ease;
+		min-width: 44px;
+		min-height: 44px;
 	}
 
 	.btn-star:hover { transform: scale(1.2); }
@@ -6596,12 +6726,15 @@
 	}
 
 	.stat-badge {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
 		font-size: 11px;
-		background: rgba(255,255,255,0.04);
+		background: var(--surface-2);
 		color: var(--text-dim);
 		padding: 2px 6px;
 		border-radius: 4px;
-		border: 1px solid rgba(255,255,255,0.08);
+		border: 1px solid var(--border);
 		font-weight: 500;
 	}
 
@@ -6611,20 +6744,21 @@
 		gap: 0.4rem;
 		font-size: 0.75rem;
 		font-weight: 600;
-		color: var(--error);
-		background: rgba(239,68,68,0.06);
-		border: 1px solid rgba(239,68,68,0.25);
+		color: var(--error-text);
+		background: color-mix(in srgb, var(--error) 6%, transparent);
+		border: 1px solid color-mix(in srgb, var(--error) 25%, transparent);
 		border-radius: 6px;
 		padding: 0.35rem 0.75rem;
 		cursor: pointer;
 		transition: all 0.15s ease;
 		align-self: flex-start;
 		margin-top: 0.25rem;
+		min-height: 44px;
 	}
 
 	.btn-disconnect:hover {
-		background: rgba(239,68,68,0.12);
-		border-color: rgba(239,68,68,0.45);
+		background: color-mix(in srgb, var(--error) 12%, transparent);
+		border-color: color-mix(in srgb, var(--error) 45%, transparent);
 	}
 
 	/* ── Spinners ── */
@@ -6632,8 +6766,10 @@
 		display: inline-block;
 		width: 12px;
 		height: 12px;
-		border: 2px solid rgba(255,255,255,0.3);
-		border-top-color: #fff;
+		/* currentColor so the spinner is visible in BOTH the white-on-gradient
+		   buttons and the muted-on-surface ones (it was invisible in the latter). */
+		border: 2px solid color-mix(in srgb, currentColor 30%, transparent);
+		border-top-color: currentColor;
 		border-radius: 50%;
 		animation: spin 0.6s linear infinite;
 	}
@@ -6652,8 +6788,10 @@
 	@keyframes spin { to { transform: rotate(360deg); } }
 
 	.btn-primary {
-		display: inline-block;
-		background: var(--gradient);
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		background: var(--gradient-cta);
 		color: #fff;
 		padding: 0.65rem 1.5rem;
 		border-radius: 8px;
@@ -6661,6 +6799,7 @@
 		font-size: 0.88rem;
 		text-decoration: none;
 		margin-top: 1rem;
+		min-height: 44px;
 	}
 
 	/* ── Platform Identity Kit ── */
@@ -6685,9 +6824,11 @@
 		border: 1px solid var(--border);
 		border-radius: 8px;
 		padding: 0.35rem 0.6rem;
-		font-size: 0.78rem;
+		/* 1rem minimum — anything smaller makes iOS Safari zoom on focus (§8). */
+		font-size: 1rem;
 		font-weight: 600;
 		cursor: pointer;
+		min-height: 44px;
 	}
 
 	.hero-bio {
@@ -6705,10 +6846,14 @@
 		white-space: pre-line;
 	}
 
-	.hero-bio-empty { font-style: italic; color: var(--text-dim, #9aa); }
+	.hero-bio-empty { font-style: italic; color: var(--text-dim); }
 
 	.kit-copy-btn {
 		flex-shrink: 0;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.35rem;
 		background: var(--surface);
 		color: var(--text-muted);
 		border: 1px solid var(--border);
@@ -6718,32 +6863,37 @@
 		font-weight: 500;
 		cursor: pointer;
 		transition: all 0.15s ease;
+		min-height: 44px;
 	}
-	.kit-copy-btn:hover:not(:disabled) { border-color: var(--accent-mid, #7c6aed); color: var(--text); }
+	.kit-copy-btn:hover:not(:disabled) { border-color: var(--accent-mid); color: var(--text); }
 	.kit-copy-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
 	.hero-handle-chip {
 		flex-shrink: 0;
-		background: rgba(124, 106, 237, 0.1);
-		border: 1px solid var(--accent-mid, #7c6aed);
-		color: var(--accent);
+		background: var(--accent-soft);
+		border: 1px solid var(--accent-mid);
+		color: var(--accent-text);
 		border-radius: 999px;
 		padding: 0.3rem 0.8rem;
 		font-size: 0.78rem;
 		font-weight: 600;
 		cursor: pointer;
+		min-height: 44px;
 	}
 
 	/* Profile-tab card widgets */
 	/* Auto-save status — quiet confirmation that per-platform edits persist. */
 	.kit-save-state {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
 		font-size: 0.72rem;
 		font-weight: 600;
-		color: #10b981;
+		color: var(--success-text);
 		margin-left: auto;
 		margin-right: 0.6rem;
 	}
-	.kit-save-state.error { color: #ef4444; }
+	.kit-save-state.error { color: var(--error-text); }
 
 	.kit-bio-controls {
 		display: flex;
@@ -6793,10 +6943,10 @@
 
 	.kit-candidate.taken .kit-candidate-handle {
 		text-decoration: line-through;
-		color: var(--text-dim, #9aa);
+		color: var(--text-dim);
 	}
 
-	.kit-candidate.confirmed { border-color: rgba(16, 185, 129, 0.5); }
+	.kit-candidate.confirmed { border-color: color-mix(in srgb, var(--success) 50%, transparent); }
 
 	.kit-candidate-handle {
 		font-weight: 600;
@@ -6806,13 +6956,25 @@
 
 	.kit-compat {
 		font-size: 0.7rem;
-		color: #f59e0b;
+		color: var(--warning-text);
 	}
 
 	.kit-confirmed-badge {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.2rem;
 		font-size: 0.7rem;
 		font-weight: 700;
-		color: #10b981;
+		color: var(--success-text);
+	}
+
+	/* "taken" was signalled by strike-through + colour alone — this spells it out (§10). */
+	.kit-taken-badge {
+		font-size: 0.7rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		color: var(--text-dim);
 	}
 
 	.kit-candidate-actions {
@@ -6822,6 +6984,9 @@
 	}
 
 	.kit-candidate-actions button {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
 		background: var(--surface);
 		color: var(--text-muted);
 		border: 1px solid var(--border);
@@ -6830,16 +6995,18 @@
 		font-size: 0.75rem;
 		cursor: pointer;
 		transition: all 0.15s ease;
+		min-width: 44px;
+		min-height: 44px;
 	}
 	.kit-candidate-actions button:hover:not(:disabled) {
-		border-color: var(--accent-mid, #7c6aed);
+		border-color: var(--accent-mid);
 		color: var(--text);
 	}
 	.kit-candidate-actions button:disabled { opacity: 0.45; cursor: not-allowed; }
 	.kit-use-btn { font-weight: 600; }
 	.kit-candidate-actions .kit-del-btn:hover:not(:disabled) {
-		border-color: #dc2626;
-		color: #dc2626;
+		border-color: var(--error);
+		color: var(--error-text);
 	}
 
 	/* Enlarge affordance for the identity-kit avatar thumb. */
@@ -6862,6 +7029,7 @@
 		align-items: center;
 	}
 	.item-chip-del {
+		position: relative;
 		margin-left: -0.35rem;
 		width: 22px;
 		height: 22px;
@@ -6875,14 +7043,28 @@
 		cursor: pointer;
 		opacity: 0;
 		transition: opacity 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+	}
+	/* Chip stays 22px; the tap target underneath is a full 44×44 (§2). Anchored to
+	   the button's left edge so it grows into the gap, never over the chip itself. */
+	.item-chip-del::after {
+		content: '';
+		position: absolute;
+		top: 50%;
+		left: 0;
+		width: 44px;
+		height: 44px;
+		transform: translateY(-50%);
 	}
 	.item-chip-wrap:hover .item-chip-del,
 	.item-chip-wrap:focus-within .item-chip-del {
 		opacity: 1;
 	}
 	.item-chip-del:hover {
-		border-color: #dc2626;
-		color: #dc2626;
+		border-color: var(--error);
+		color: var(--error-text);
 	}
 
 	.kit-bio-meta {
@@ -6899,12 +7081,12 @@
 		font-variant-numeric: tabular-nums;
 	}
 	/* Over the platform's limit — the ONE thing that must not be missed before pasting. */
-	.kit-bio-count.over { color: #ef4444; font-weight: 700; }
+	.kit-bio-count.over { color: var(--error-text); font-weight: 700; }
 
 	.kit-confirmed-row { margin-top: 0.6rem; }
 
 	.kit-at {
-		color: var(--text-dim, #9aa);
+		color: var(--text-dim);
 		font-weight: 700;
 	}
 
@@ -6912,15 +7094,15 @@
 		flex-shrink: 0;
 		font-size: 0.72rem;
 		font-weight: 600;
-		color: #10b981;
-		border: 1px solid rgba(16, 185, 129, 0.4);
+		color: var(--success-text);
+		border: 1px solid color-mix(in srgb, var(--success) 40%, transparent);
 		border-radius: 999px;
 		padding: 0.25rem 0.7rem;
 	}
 	/* Confirmed handle disagrees with the live connected account — surface it. */
 	.kit-connected-chip.mismatch {
-		color: #f59e0b;
-		border-color: rgba(245, 158, 11, 0.5);
+		color: var(--warning-text);
+		border-color: color-mix(in srgb, var(--warning) 50%, transparent);
 	}
 
 	/* ── Mobile ── */
