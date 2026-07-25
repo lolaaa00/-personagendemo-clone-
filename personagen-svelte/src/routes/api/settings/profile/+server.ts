@@ -13,6 +13,13 @@ const PREFERENCE_KEYS: Array<keyof NotificationPreferences> = [
 	'weeklyReports'
 ];
 
+/**
+ * Which brand brief dresses the app palette (Settings → Brand Theme), or null
+ * for the stock PersonaGen colors. Stored alongside the notification prefs so
+ * the choice follows the user across devices.
+ */
+const BRAND_THEME_KEY = 'brandThemeBriefId';
+
 export const GET: RequestHandler = async ({ locals }) => {
 	const { session, user } = await locals.safeGetSession();
 	if (!session || !user) {
@@ -49,10 +56,18 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	}
 
 	if (body.preferences && typeof body.preferences === 'object') {
-		const preferences: Partial<NotificationPreferences> = {};
+		const preferences: Record<string, unknown> = {};
 		for (const key of PREFERENCE_KEYS) {
 			if (typeof body.preferences[key] === 'boolean') {
 				preferences[key] = body.preferences[key];
+			}
+		}
+		// Explicit null is meaningful here — it resets the app to the stock
+		// palette — so only `undefined` means "leave unchanged".
+		if (BRAND_THEME_KEY in body.preferences) {
+			const value = body.preferences[BRAND_THEME_KEY];
+			if (value === null || typeof value === 'string') {
+				preferences[BRAND_THEME_KEY] = value ? String(value).slice(0, 64) : null;
 			}
 		}
 		const existing = (user.user_metadata?.preferences || {}) as Record<string, unknown>;

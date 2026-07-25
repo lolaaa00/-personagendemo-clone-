@@ -1,5 +1,15 @@
 <script lang="ts">
-	import { showToast } from '$lib/stores/ui.svelte';
+	import {
+		showToast,
+		applyBrandTheme,
+		clearBrandTheme,
+		brandThemeState,
+		brandColorsState,
+		triggerBrandTransform,
+		DEFAULT_BRAND_PRIMARY,
+		DEFAULT_BRAND_SECONDARY
+	} from '$lib/stores/ui.svelte';
+	import { BrandBrief } from '$lib/services/api';
 	import { onMount } from 'svelte';
 
 	let { data } = $props<{
@@ -11,6 +21,7 @@
 					emailAlerts: boolean | null;
 					pushNotifications: boolean | null;
 					weeklyReports: boolean | null;
+					brandThemeBriefId: string | null;
 				};
 			};
 		};
@@ -28,6 +39,92 @@
 	let emailAlerts = $state(data.profile?.preferences?.emailAlerts ?? true);
 	let pushNotifications = $state(data.profile?.preferences?.pushNotifications ?? false);
 	let weeklyReports = $state(data.profile?.preferences?.weeklyReports ?? true);
+
+	// ── Brand Theme: which brand brief's colors dress the app ────────────────
+	// Opt-in and reversible. The Brand Brief editor no longer hijacks the
+	// palette while you type, so this select is the ONLY place the app takes
+	// on a brand's colors.
+	let brandBriefs = $state<Array<{ id: string; name: string; updated_at: string }>>([]);
+	let brandThemeChoice = $state<string>(
+		data.profile?.preferences?.brandThemeBriefId ?? brandThemeState.briefId ?? ''
+	);
+	let brandThemeBusy = $state(false);
+
+	async function loadBrandBriefs() {
+		try {
+			const res = await BrandBrief.list();
+			if (res.success && Array.isArray(res.data)) brandBriefs = res.data;
+			// A brief chosen on another device (or since deleted) — resolve it
+			// against the real list so the select never shows a phantom entry.
+			if (brandThemeChoice && !brandBriefs.some((b) => b.id === brandThemeChoice)) {
+				brandThemeChoice = '';
+				if (brandThemeState.briefId) clearBrandTheme();
+			} else if (brandThemeChoice && brandThemeState.briefId !== brandThemeChoice) {
+				await applyBriefTheme(brandThemeChoice, null, false);
+			}
+		} catch {
+			/* the picker degrades to "PersonaGen default" only */
+		}
+	}
+
+	/** Loads a brief's colors and dresses the app in them. */
+	async function applyBriefTheme(briefId: string, event: MouseEvent | null, celebrate: boolean) {
+		const res = await BrandBrief.getById(briefId);
+		if (!res.success || !res.data) {
+			showToast(res.error || 'Could not load that brand brief', 'error');
+			return false;
+		}
+		const name = (res as any).name || brandBriefs.find((b) => b.id === briefId)?.name || 'Brand';
+		const primary = res.data.primaryColor || DEFAULT_BRAND_PRIMARY;
+		const secondary = res.data.secondaryColor || DEFAULT_BRAND_SECONDARY;
+		applyBrandTheme(briefId, name, primary, secondary);
+		if (celebrate) {
+			// The sparkle burst that used to fire unbidden on every brief save —
+			// now it only plays when someone deliberately picks a theme.
+			const x = event ? event.clientX : window.innerWidth / 2;
+			const y = event ? event.clientY : window.innerHeight / 2;
+			triggerBrandTransform(x, y, primary, secondary);
+		}
+		return true;
+	}
+
+	async function changeBrandTheme(briefId: string, event: MouseEvent | null) {
+		if (brandThemeBusy) return;
+		brandThemeBusy = true;
+		const previous = brandThemeChoice;
+		brandThemeChoice = briefId;
+		try {
+			if (briefId) {
+				const ok = await applyBriefTheme(briefId, event, true);
+				if (!ok) {
+					brandThemeChoice = previous;
+					return;
+				}
+			} else {
+				clearBrandTheme();
+			}
+			const res = await fetch('/api/settings/profile', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ preferences: { brandThemeBriefId: briefId || null } })
+			});
+			const result = await res.json();
+			if (!res.ok || !result.success) {
+				showToast(result.error || 'Theme applied locally — could not sync to your account', 'warning');
+				return;
+			}
+			showToast(
+				briefId
+					? `App theme now follows "${brandThemeState.name}"`
+					: 'Back to the default PersonaGen theme',
+				'success'
+			);
+		} catch (err) {
+			showToast((err as Error).message || 'Failed to update brand theme', 'error');
+		} finally {
+			brandThemeBusy = false;
+		}
+	}
 
 	interface ApiKeyMetadata {
 		provider: ApiKeyProvider;
@@ -315,6 +412,7 @@
 		}
 		loadApiKeys();
 		loadZernioKeys();
+		loadBrandBriefs();
 	});
 
 	function persistSettings() {
@@ -639,6 +737,72 @@
 						<span class="toggle-knob"></span>
 					</button>
 				</div>
+			</div>
+		</div>
+
+		<!-- Brand Theme — the app palette follows a brand brief only if asked -->
+		<div class="settings-card">
+			<div class="card-header">
+				<div class="card-icon">
+					<svg
+						width="20"
+						height="20"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="var(--cyan)"
+						stroke-width="2"
+						><circle cx="13.5" cy="6.5" r="2.5" /><circle cx="19" cy="13" r="2.5" /><circle
+							cx="6"
+							cy="12"
+							r="2.5"
+						/><circle cx="10" cy="19" r="2.5" /><path
+							d="M12 2a10 10 0 000 20c1.1 0 2-.9 2-2 0-1.4-1-1.8-1-3 0-.8.7-1.5 1.5-1.5H17a5 5 0 005-5c0-4.9-4.5-8.5-10-8.5z"
+						/></svg
+					>
+				</div>
+				<h3>Brand Theme</h3>
+			</div>
+			<div class="card-body">
+				<p class="card-hint">
+					Dress PersonaGen in one of your brand briefs' colors. Off by default — editing or
+					scraping a brief no longer changes the app's look on its own.
+				</p>
+				<div class="field">
+					<label for="brand-theme-select">Theme source</label>
+					<select
+						id="brand-theme-select"
+						value={brandThemeChoice}
+						disabled={brandThemeBusy}
+						onchange={(e) => changeBrandTheme((e.currentTarget as HTMLSelectElement).value, null)}
+					>
+						<option value="">PersonaGen default</option>
+						{#each brandBriefs as b (b.id)}
+							<option value={b.id}>{b.name}</option>
+						{/each}
+					</select>
+				</div>
+				<div class="brand-theme-preview">
+					<span class="bt-swatch" style="background: {brandColorsState.primary}"></span>
+					<span class="bt-swatch" style="background: {brandColorsState.secondary}"></span>
+					<span class="bt-current">
+						{brandThemeState.briefId
+							? `Following "${brandThemeState.name}"`
+							: 'Default PersonaGen palette'}
+					</span>
+					{#if brandThemeState.briefId}
+						<button
+							type="button"
+							class="bt-reset"
+							disabled={brandThemeBusy}
+							onclick={() => changeBrandTheme('', null)}>Reset to default</button
+						>
+					{/if}
+				</div>
+				{#if brandBriefs.length === 0}
+					<p class="card-hint" style="margin-top: 0.6rem;">
+						No brand briefs saved yet — create one under Brand Brief to use it as a theme.
+					</p>
+				{/if}
 			</div>
 		</div>
 
@@ -1278,6 +1442,51 @@
 		font-size: var(--text-sm);
 		color: var(--text-muted);
 		margin-bottom: 1rem;
+	}
+
+	/* Brand Theme */
+	.card-hint {
+		font-size: var(--text-sm);
+		color: var(--text-muted);
+		margin: 0 0 1rem;
+		line-height: 1.55;
+	}
+	.brand-theme-preview {
+		display: flex;
+		align-items: center;
+		gap: 0.55rem;
+		flex-wrap: wrap;
+	}
+	.bt-swatch {
+		width: 22px;
+		height: 22px;
+		border-radius: 6px;
+		border: 1px solid var(--border-strong);
+		flex-shrink: 0;
+	}
+	.bt-current {
+		font-size: var(--text-xs);
+		color: var(--text-muted);
+		font-weight: 600;
+	}
+	.bt-reset {
+		margin-left: auto;
+		background: var(--surface-2);
+		border: 1px solid var(--border);
+		border-radius: 6px;
+		padding: 0.35rem 0.75rem;
+		font-size: var(--text-xs);
+		font-weight: 600;
+		color: var(--text);
+		cursor: pointer;
+		font-family: var(--font-body);
+	}
+	.bt-reset:hover:not(:disabled) {
+		border-color: var(--accent);
+	}
+	.bt-reset:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
 	}
 
 	.key-display {

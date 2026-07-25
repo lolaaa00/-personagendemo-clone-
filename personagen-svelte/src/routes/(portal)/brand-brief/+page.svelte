@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
-	import { showToast, updateBrandColors, triggerBrandTransform } from '$lib/stores/ui.svelte';
+	import { showToast, applyBrandTheme, brandThemeState } from '$lib/stores/ui.svelte';
 	import { browser } from '$app/environment';
 	import { BrandBrief } from '$lib/services/api';
 
@@ -253,35 +253,16 @@
 		}
 	});
 
-	// Live preview of primary/secondary colors in real-time as they edit
-	$effect(() => {
-		if (browser) {
-			updateBrandColors(primaryColor, secondaryColor);
-		}
-	});
+	// NOTE: the app palette is deliberately NOT touched from this page. Editing
+	// or scraping a brief used to repaint the whole UI live (and fire a sparkle
+	// animation on save); dressing the app in a brand's colors is now an
+	// explicit opt-in under Settings → Brand Theme. The gradient bar below
+	// previews these colors locally instead.
 
 	function saveAll(e?: MouseEvent, isManualClick = false) {
 		if (!browser) return;
 		const now = new Date().toLocaleString('en-AU', { dateStyle: 'medium', timeStyle: 'short' });
 		lastSaved = now;
-
-		// Detect if brand colors are changing compared to what's already saved
-		let colorsChanged = false;
-		try {
-			const saved = localStorage.getItem(LS_KEY);
-			if (saved) {
-				const d = JSON.parse(saved);
-				if (d.primaryColor !== primaryColor || d.secondaryColor !== secondaryColor) {
-					colorsChanged = true;
-				}
-			} else {
-				if (primaryColor !== '#7c6aed' || secondaryColor !== '#22d3ee') {
-					colorsChanged = true;
-				}
-			}
-		} catch {
-			colorsChanged = true;
-		}
 
 		const payload = {
 			brandName,
@@ -313,19 +294,11 @@
 		// Persist to the database so server-side generation & autopilot can tune to it.
 		void persistBriefToDb(payload);
 
-		// Only trigger magical transition on actual manual save or scrape complete
-		// if colors changed, and ONLY ONCE per session.
-		const sessionKey = 'personagen_brand_transformed_done';
-		const alreadyTransformed = sessionStorage.getItem(sessionKey) === 'true';
-
-		if (colorsChanged && !alreadyTransformed && (isManualClick || e)) {
-			const x = e ? e.clientX : window.innerWidth / 2;
-			const y = e ? e.clientY : window.innerHeight / 2;
-			triggerBrandTransform(x, y, primaryColor, secondaryColor);
-			sessionStorage.setItem(sessionKey, 'true');
-		} else {
-			// Otherwise update values smoothly and quietly
-			updateBrandColors(primaryColor, secondaryColor);
+		// If this brief is the one currently dressing the app (Settings → Brand
+		// Theme), keep that palette in step with the edit — otherwise the theme
+		// would silently drift from the brief it names.
+		if (currentBriefId && brandThemeState.briefId === currentBriefId) {
+			applyBrandTheme(currentBriefId, brandName || brandThemeState.name, primaryColor, secondaryColor);
 		}
 	}
 
@@ -420,6 +393,78 @@
 		} finally {
 			scrapingProduct = false;
 		}
+	}
+
+	// ── Image lightbox (logo + product photos, mirroring the persona page) ────
+	let imageLightbox = $state<{ url: string; label: string } | null>(null);
+	function openImage(url: string, label: string) {
+		if (url) imageLightbox = { url, label };
+	}
+
+	// ── Product editing / multi-select / deletion ────────────────────────────
+	let editingProductId = $state<string | null>(null);
+	let editDraft = $state<Product | null>(null);
+	let selectedProductIds = $state<string[]>([]);
+
+	function startEditProduct(prod: Product) {
+		editingProductId = prod.id;
+		editDraft = { ...prod };
+	}
+
+	function cancelEditProduct() {
+		editingProductId = null;
+		editDraft = null;
+	}
+
+	function saveEditProduct() {
+		if (!editDraft || !editingProductId) return;
+		const name = editDraft.name.trim();
+		if (!name) {
+			showToast('Product name cannot be empty', 'warning');
+			return;
+		}
+		const patch: Product = {
+			id: editingProductId,
+			name,
+			description: editDraft.description.trim(),
+			price: editDraft.price.trim(),
+			photoUrl: editDraft.photoUrl.trim()
+		};
+		products = products.map((p) => (p.id === editingProductId ? patch : p));
+		cancelEditProduct();
+		saveAll();
+		showToast(`Updated "${patch.name}"`, 'success');
+	}
+
+	function toggleProductSelected(id: string) {
+		selectedProductIds = selectedProductIds.includes(id)
+			? selectedProductIds.filter((s) => s !== id)
+			: [...selectedProductIds, id];
+	}
+
+	function selectAllProducts() {
+		selectedProductIds = products.map((p) => p.id);
+	}
+
+	function clearProductSelection() {
+		selectedProductIds = [];
+	}
+
+	function deleteProducts(ids: string[]) {
+		if (ids.length === 0) return;
+		const names = products
+			.filter((p) => ids.includes(p.id))
+			.map((p) => p.name)
+			.slice(0, 3)
+			.join(', ');
+		const label =
+			ids.length === 1 ? `"${names}"` : `${ids.length} products (${names}${ids.length > 3 ? ', …' : ''})`;
+		if (!confirm(`Remove ${label} from this brand brief?`)) return;
+		products = products.filter((p) => !ids.includes(p.id));
+		selectedProductIds = selectedProductIds.filter((s) => !ids.includes(s));
+		if (editingProductId && ids.includes(editingProductId)) cancelEditProduct();
+		saveAll();
+		showToast(ids.length === 1 ? 'Product removed' : `${ids.length} products removed`, 'success');
 	}
 
 	function addManualProduct() {
@@ -1288,12 +1333,53 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 					generation.
 				</p>
 
+				{#if products.length > 0}
+					<div class="products-toolbar">
+						<span class="products-count">
+							{products.length} product{products.length === 1 ? '' : 's'}
+							{#if selectedProductIds.length > 0}
+								· <strong>{selectedProductIds.length} selected</strong>
+							{/if}
+						</span>
+						<div class="products-toolbar-actions">
+							<button
+								type="button"
+								class="mini-btn"
+								onclick={selectAllProducts}
+								disabled={selectedProductIds.length === products.length}>Select all</button
+							>
+							<button
+								type="button"
+								class="mini-btn"
+								onclick={clearProductSelection}
+								disabled={selectedProductIds.length === 0}>Clear</button
+							>
+							<button
+								type="button"
+								class="mini-btn danger"
+								onclick={() => deleteProducts(selectedProductIds)}
+								disabled={selectedProductIds.length === 0}
+							>
+								Delete selected{selectedProductIds.length > 0 ? ` (${selectedProductIds.length})` : ''}
+							</button>
+						</div>
+					</div>
+				{/if}
+
 				<div class="products-grid">
-					{#each products as prod}
-						<div class="product-card">
+					{#each products as prod (prod.id)}
+						<div class="product-card" class:selected={selectedProductIds.includes(prod.id)}>
 							<div class="product-photo-wrap">
 								{#if prod.photoUrl}
-									<img src={prod.photoUrl} alt={prod.name} class="product-photo" />
+									<button
+										type="button"
+										class="product-photo-btn"
+										onclick={() => openImage(prod.photoUrl, prod.name)}
+										title="Click to enlarge"
+										aria-label="Enlarge photo of {prod.name}"
+									>
+										<img src={prod.photoUrl} alt={prod.name} class="product-photo" />
+									</button>
 								{:else}
 									<div class="product-photo-fallback">
 										<svg
@@ -1313,12 +1399,94 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 									</div>
 								{/if}
 								<span class="product-price-badge">{prod.price}</span>
+								<label class="product-select" title="Select for bulk actions">
+									<input
+										type="checkbox"
+										checked={selectedProductIds.includes(prod.id)}
+										onchange={() => toggleProductSelected(prod.id)}
+									/>
+								</label>
+								<div class="product-card-actions">
+									<button
+										type="button"
+										class="card-icon-btn"
+										onclick={() => startEditProduct(prod)}
+										title="Edit product"
+										aria-label="Edit {prod.name}"
+									>
+										<svg
+											width="14"
+											height="14"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+											><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" /><path
+												d="M18.5 2.5a2.12 2.12 0 013 3L12 15l-4 1 1-4 9.5-9.5z"
+											/></svg
+										>
+									</button>
+									<button
+										type="button"
+										class="card-icon-btn danger"
+										onclick={() => deleteProducts([prod.id])}
+										title="Delete product"
+										aria-label="Delete {prod.name}"
+									>
+										<svg
+											width="14"
+											height="14"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+											><path d="M3 6h18M8 6V4h8v2m1 0v14a2 2 0 01-2 2H9a2 2 0 01-2-2V6h12" /></svg
+										>
+									</button>
+								</div>
 							</div>
-							<div class="product-details">
-								<h4 class="product-title">{prod.name}</h4>
-								<p class="product-desc">{prod.description}</p>
-								<div class="product-id-badge">ID: {prod.id}</div>
-							</div>
+							{#if editingProductId === prod.id && editDraft}
+								<div class="product-edit">
+									<label class="pe-label" for="pe-name-{prod.id}">Name</label>
+									<input id="pe-name-{prod.id}" type="text" bind:value={editDraft.name} />
+									<label class="pe-label" for="pe-price-{prod.id}">Price</label>
+									<input id="pe-price-{prod.id}" type="text" bind:value={editDraft.price} />
+									<label class="pe-label" for="pe-desc-{prod.id}">Description</label>
+									<textarea id="pe-desc-{prod.id}" rows="3" bind:value={editDraft.description}
+									></textarea>
+									<label class="pe-label" for="pe-photo-{prod.id}">Photo URL</label>
+									<input
+										id="pe-photo-{prod.id}"
+										type="url"
+										bind:value={editDraft.photoUrl}
+										placeholder="https://…"
+									/>
+									{#if editDraft.photoUrl}
+										<button
+											type="button"
+											class="pe-photo-preview"
+											onclick={() => openImage(editDraft!.photoUrl, editDraft!.name)}
+											title="Click to enlarge"
+										>
+											<img src={editDraft.photoUrl} alt="New photo preview" />
+										</button>
+									{/if}
+									<div class="pe-actions">
+										<button type="button" class="mini-btn" onclick={cancelEditProduct}>Cancel</button>
+										<button type="button" class="mini-btn primary" onclick={saveEditProduct}
+											>Save</button
+										>
+									</div>
+								</div>
+							{:else}
+								<div class="product-details">
+									<h4 class="product-title">{prod.name}</h4>
+									<p class="product-desc">{prod.description}</p>
+									<div class="product-id-badge">ID: {prod.id}</div>
+								</div>
+							{/if}
 						</div>
 					{/each}
 
@@ -1476,9 +1644,15 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 								style="flex: 1; border: none !important; background: transparent !important; box-shadow: none !important; padding: 4px 0 !important;"
 							/>
 							{#if logoUrl}
-								<div class="logo-preview-badge">
+								<button
+									type="button"
+									class="logo-preview-badge"
+									onclick={() => openImage(logoUrl, `${brandName || 'Brand'} logo`)}
+									title="Click to enlarge"
+									aria-label="Enlarge logo preview"
+								>
 									<img src={logoUrl} alt="Logo Preview" class="logo-badge-img" />
-								</div>
+								</button>
 							{/if}
 						</div>
 					</div>
@@ -2444,11 +2618,257 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 	</div>
 </section>
 
+<!-- Image lightbox: logo + product photos enlarge like persona profile shots -->
+<svelte:window
+	onkeydown={(e) => {
+		if (e.key === 'Escape' && imageLightbox) imageLightbox = null;
+	}}
+/>
+{#if imageLightbox}
+	<div class="lightbox-backdrop" onclick={() => (imageLightbox = null)} role="presentation">
+		<div
+			class="lightbox-content"
+			onclick={(e) => e.stopPropagation()}
+			role="dialog"
+			aria-label={imageLightbox.label}
+		>
+			<img src={imageLightbox.url} alt={imageLightbox.label} />
+			<div class="lightbox-bar">
+				<span>{imageLightbox.label}</span>
+				<a href={imageLightbox.url} target="_blank" rel="noopener noreferrer">Open original ↗</a>
+				<button type="button" onclick={() => (imageLightbox = null)}>Close</button>
+			</div>
+		</div>
+	</div>
+{/if}
+
 <style>
 	.page {
 		padding: 2rem;
 		max-width: 960px;
 		margin: 0 auto;
+	}
+
+	/* ── Image lightbox ── */
+	.lightbox-backdrop {
+		position: fixed;
+		inset: 0;
+		background: rgba(10, 14, 26, 0.88);
+		backdrop-filter: blur(6px);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		z-index: 1100;
+		padding: 1.5rem;
+	}
+	.lightbox-content {
+		max-width: min(920px, 94vw);
+		max-height: 90vh;
+		display: flex;
+		flex-direction: column;
+		border-radius: var(--radius);
+		overflow: hidden;
+		background: var(--surface);
+		border: 1px solid var(--border-strong);
+	}
+	.lightbox-content img {
+		max-width: 100%;
+		max-height: calc(90vh - 52px);
+		object-fit: contain;
+		background: #0b0f1a;
+	}
+	.lightbox-bar {
+		display: flex;
+		align-items: center;
+		gap: 1rem;
+		padding: 0.6rem 1rem;
+		font-size: 0.75rem;
+		color: var(--text-muted);
+	}
+	.lightbox-bar span {
+		flex: 1;
+		font-weight: 600;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.lightbox-bar a {
+		color: var(--accent);
+		text-decoration: none;
+		font-weight: 600;
+	}
+	.lightbox-bar button {
+		background: var(--surface-2);
+		border: 1px solid var(--border);
+		border-radius: 6px;
+		padding: 0.35rem 0.8rem;
+		font-size: 0.72rem;
+		font-weight: 600;
+		color: var(--text);
+		cursor: pointer;
+	}
+
+	/* ── Product toolbar / card controls ── */
+	.products-toolbar {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.75rem;
+		flex-wrap: wrap;
+		margin-bottom: 0.9rem;
+	}
+	.products-count {
+		font-size: 0.76rem;
+		color: var(--text-muted);
+	}
+	.products-toolbar-actions {
+		display: flex;
+		gap: 0.4rem;
+		flex-wrap: wrap;
+	}
+	.mini-btn {
+		background: var(--surface-2);
+		border: 1px solid var(--border);
+		border-radius: 6px;
+		padding: 0.35rem 0.7rem;
+		font-size: 0.72rem;
+		font-weight: 600;
+		color: var(--text);
+		cursor: pointer;
+		font-family: var(--font-body);
+	}
+	.mini-btn:hover:not(:disabled) {
+		border-color: var(--accent-mid);
+	}
+	.mini-btn:disabled {
+		opacity: 0.45;
+		cursor: not-allowed;
+	}
+	.mini-btn.primary {
+		background: var(--accent);
+		border-color: transparent;
+		color: #fff;
+	}
+	.mini-btn.danger:not(:disabled) {
+		color: #dc2626;
+	}
+	.mini-btn.danger:hover:not(:disabled) {
+		border-color: #dc2626;
+	}
+	.product-card.selected {
+		border-color: var(--accent);
+		box-shadow: 0 0 0 1px var(--accent) inset;
+	}
+	.product-photo-btn {
+		width: 100%;
+		height: 100%;
+		padding: 0;
+		border: none;
+		background: none;
+		cursor: zoom-in;
+		display: block;
+	}
+	.product-select {
+		position: absolute;
+		top: 8px;
+		left: 8px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 24px;
+		height: 24px;
+		border-radius: 6px;
+		background: rgba(15, 20, 35, 0.72);
+		cursor: pointer;
+	}
+	.product-select input {
+		width: 14px;
+		height: 14px;
+		margin: 0;
+		cursor: pointer;
+		accent-color: var(--accent);
+	}
+	.product-card-actions {
+		position: absolute;
+		top: 8px;
+		right: 8px;
+		display: flex;
+		gap: 0.3rem;
+		opacity: 0;
+		transition: opacity 0.15s;
+	}
+	.product-card:hover .product-card-actions,
+	.product-card.selected .product-card-actions {
+		opacity: 1;
+	}
+	.card-icon-btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 26px;
+		height: 26px;
+		border-radius: 6px;
+		border: 1px solid rgba(255, 255, 255, 0.18);
+		background: rgba(15, 20, 35, 0.72);
+		color: #fff;
+		cursor: pointer;
+	}
+	.card-icon-btn:hover {
+		background: rgba(15, 20, 35, 0.92);
+	}
+	.card-icon-btn.danger:hover {
+		border-color: #dc2626;
+		color: #f87171;
+	}
+
+	/* ── Inline product editor ── */
+	.product-edit {
+		display: flex;
+		flex-direction: column;
+		gap: 0.3rem;
+		padding: 0.85rem;
+	}
+	.pe-label {
+		font-size: 0.66rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		color: var(--text-dim);
+	}
+	.product-edit input,
+	.product-edit textarea {
+		width: 100%;
+		padding: 0.42rem 0.5rem;
+		border-radius: 7px;
+		border: 1px solid var(--border);
+		background: var(--surface);
+		color: var(--text);
+		font-size: 0.78rem;
+		font-family: var(--font-body);
+		resize: vertical;
+	}
+	.pe-photo-preview {
+		margin-top: 0.35rem;
+		align-self: flex-start;
+		width: 56px;
+		height: 56px;
+		padding: 0;
+		border: 1px solid var(--border-strong);
+		border-radius: 8px;
+		overflow: hidden;
+		background: var(--surface-3);
+		cursor: zoom-in;
+	}
+	.pe-photo-preview img {
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+	}
+	.pe-actions {
+		display: flex;
+		justify-content: flex-end;
+		gap: 0.4rem;
+		margin-top: 0.5rem;
 	}
 
 	.page-header {
@@ -2681,6 +3101,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 	.logo-preview-badge {
 		width: 32px;
 		height: 32px;
+		padding: 0;
 		border-radius: var(--radius-xs);
 		background: rgba(255, 255, 255, 0.05);
 		border: 1px solid var(--border-strong);
@@ -2689,6 +3110,14 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		justify-content: center;
 		overflow: hidden;
 		flex-shrink: 0;
+		cursor: zoom-in;
+		transition:
+			border-color 0.15s,
+			transform 0.15s;
+	}
+	.logo-preview-badge:hover {
+		border-color: var(--accent);
+		transform: scale(1.06);
 	}
 	.logo-badge-img {
 		max-width: 100%;

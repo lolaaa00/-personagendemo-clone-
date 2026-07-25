@@ -17,7 +17,9 @@ export const load: PageServerLoad = async ({ locals }) => {
 				pushNotifications:
 					typeof preferences.pushNotifications === 'boolean' ? preferences.pushNotifications : null,
 				weeklyReports:
-					typeof preferences.weeklyReports === 'boolean' ? preferences.weeklyReports : null
+					typeof preferences.weeklyReports === 'boolean' ? preferences.weeklyReports : null,
+				brandThemeBriefId:
+					typeof preferences.brandThemeBriefId === 'string' ? preferences.brandThemeBriefId : null
 			}
 		}
 	};

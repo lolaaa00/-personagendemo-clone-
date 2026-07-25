@@ -61,9 +61,25 @@ export const themeState = $state<{ current: Theme }>({
 	current: 'light' // Default to light mode
 });
 
+export const DEFAULT_BRAND_PRIMARY = '#7c6aed';
+export const DEFAULT_BRAND_SECONDARY = '#22d3ee';
+
+/**
+ * Which brand brief (if any) dresses the app palette. Opt-in ONLY, chosen in
+ * Settings → Brand Theme: the Brand Brief editor used to hijack `--accent`/
+ * `--cyan` live while you typed and fire a sparkle animation on save, so
+ * merely scraping a store repainted the whole UI in that brand's colors.
+ */
+const BRAND_THEME_KEY = 'personagen_brand_theme';
+
 export const brandColorsState = $state({
-	primary: '#7c6aed',
-	secondary: '#22d3ee'
+	primary: DEFAULT_BRAND_PRIMARY,
+	secondary: DEFAULT_BRAND_SECONDARY
+});
+
+export const brandThemeState = $state<{ briefId: string | null; name: string }>({
+	briefId: null,
+	name: ''
 });
 
 // Sparkles / Radial wave transform state
@@ -89,13 +105,47 @@ export function setTheme(newTheme: Theme): void {
 }
 
 export function updateBrandColors(primary: string, secondary: string): void {
-	brandColorsState.primary = primary || '#7c6aed';
-	brandColorsState.secondary = secondary || '#22d3ee';
+	brandColorsState.primary = primary || DEFAULT_BRAND_PRIMARY;
+	brandColorsState.secondary = secondary || DEFAULT_BRAND_SECONDARY;
 	if (browser) {
 		const root = document.documentElement;
 		root.style.setProperty('--accent', brandColorsState.primary);
 		root.style.setProperty('--cyan', brandColorsState.secondary);
 	}
+}
+
+/**
+ * Dresses the app in a brief's colors and remembers the choice locally so the
+ * next page load paints correctly before any network call resolves.
+ */
+export function applyBrandTheme(
+	briefId: string,
+	name: string,
+	primary: string,
+	secondary: string
+): void {
+	brandThemeState.briefId = briefId;
+	brandThemeState.name = name;
+	updateBrandColors(primary, secondary);
+	if (browser) {
+		localStorage.setItem(
+			BRAND_THEME_KEY,
+			JSON.stringify({
+				briefId,
+				name,
+				primary: brandColorsState.primary,
+				secondary: brandColorsState.secondary
+			})
+		);
+	}
+}
+
+/** Back to the stock PersonaGen palette. */
+export function clearBrandTheme(): void {
+	brandThemeState.briefId = null;
+	brandThemeState.name = '';
+	updateBrandColors(DEFAULT_BRAND_PRIMARY, DEFAULT_BRAND_SECONDARY);
+	if (browser) localStorage.removeItem(BRAND_THEME_KEY);
 }
 
 export function triggerBrandTransform(
@@ -126,19 +176,21 @@ export function initializeThemeAndColors(): void {
 	const initialTheme = savedTheme || 'light';
 	setTheme(initialTheme);
 
-	// 2. Brand colors initialization
+	// 2. Brand palette — ONLY from an explicit Settings → Brand Theme choice.
+	//    Deliberately NOT read from the active brand brief: editing or scraping
+	//    a brief must never repaint the app.
 	try {
-		const savedBrief = localStorage.getItem('personagen_brand_brief');
-		if (savedBrief) {
-			const parsed = JSON.parse(savedBrief);
-			const primary = parsed.primaryColor || '#7c6aed';
-			const secondary = parsed.secondaryColor || '#22d3ee';
-			updateBrandColors(primary, secondary);
+		const saved = localStorage.getItem(BRAND_THEME_KEY);
+		if (saved) {
+			const parsed = JSON.parse(saved);
+			brandThemeState.briefId = parsed.briefId ?? null;
+			brandThemeState.name = parsed.name ?? '';
+			updateBrandColors(parsed.primary, parsed.secondary);
 		} else {
-			updateBrandColors('#7c6aed', '#22d3ee');
+			updateBrandColors(DEFAULT_BRAND_PRIMARY, DEFAULT_BRAND_SECONDARY);
 		}
 	} catch (err) {
-		console.error('Error initializing brand colors:', err);
-		updateBrandColors('#7c6aed', '#22d3ee');
+		console.error('Error initializing brand theme:', err);
+		clearBrandTheme();
 	}
 }
