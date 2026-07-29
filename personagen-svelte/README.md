@@ -4,101 +4,83 @@ Everything you need to build and deploy the PersonaGen portal, Svelte 5 + Supaba
 
 ---
 
-## 📚 Using PersonaGen — Walkthroughs
+## 📚 User Guide — your three creators
 
-PersonaGen turns your brand into a team of AI creators that generate, schedule, and publish social content — **with you approving everything before it goes live**. These walkthroughs cover everything you'll do day to day.
+> This section is for **users**, not developers. No technical knowledge needed — everything happens in the app at **[honeyx.monarchstack.com](https://honeyx.monarchstack.com)**.
 
-### 1 · The 5-minute daily routine
+PersonaGen gives you a team of AI creators who make, schedule, and publish social content for your brand — **and nothing goes live without your approval**. You have three creators ready to use right now:
 
-*Where: Review Queue → Calendar.* Everything else is setup — this is the loop you'll actually live in.
-
-1. Open **Review Queue** in the sidebar. New drafts the system generated are waiting here.
-2. For each draft: read the caption, look at the image or play the video. **Approve** the good ones, **edit** the almost-good ones, **reject** the misses (pick a reason — the system learns from your reasons).
-3. Glance at the **Calendar** to see when approved posts go out.
-4. Done. Approved posts publish themselves at their scheduled times, and each one links to the live post once the platform confirms it.
-
-> 💡 Nothing ever posts without your approval while a persona is in "Semi-Autonomous" mode (the default). Rejecting costs nothing — the system generates a replacement for that slot.
-
-### 2 · Teach it your brand
-
-*Where: Brand Brief (sidebar → Setup).* The brand brief is the source of truth — every caption's tone, every image's styling, and every product mention is generated from this page.
-
-1. Open **Brand Brief**. To build one from scratch, paste your website or a product page URL — voice, colors, products, audience, and pain points are pulled automatically.
-2. Read what it extracted: this is what the AI believes about your brand.
-3. Fix anything that's off directly in the fields. Small wording changes here shift **all** future content.
-4. Check **Products** — each product needs a photo; product photos are what personas hold and show on camera.
-5. Save. Every post generated from now on uses the corrected version.
-
-If captions ever feel off-brand, fix the brief first — it's one edit instead of many.
-
-### 3 · Meet your personas
-
-*Where: sidebar → Personas → pick one → Profile tab.* A persona is an AI creator with a consistent face, voice, and personality.
-
-1. **Personality** — the text here defines how they speak and what they care about. Edit it like you'd brief a human creator; ✨ **AI Enrich** expands a rough note into a full personality.
-2. **Profile picture & reference kit** — the reference kit keeps the persona's face consistent across every image and video. If tiles are empty, **⚡ Generate all remaining** builds them in order (a minute or two per tile, in the background).
-3. **Voice** — each persona has their own voice for spoken videos, matched to who they are. Preview with the play button; change it anytime.
-4. **Posting schedule** — posts per day, posting window (e.g. 8am–8pm), and timezone. Posts go out on the *persona's* local clock.
-5. **Autonomy** — "Semi-Autonomous" = everything waits for your approval (recommended). "Fully Autonomous" = posts publish without review; the app asks you to confirm before switching.
-
-> 💡 Want a post right now? The persona's Feed tab has a composer — pick a topic (or let it choose), image / video / cinematic, and it generates in the background with progress shown.
-
-### 4 · Approve, edit, or reject content
-
-*Where: sidebar → Review Queue.* Your quality gate — only what you approve moves forward.
-
-1. Each card shows the media, caption, persona, and target platform.
-2. **Approve** — the post moves to its scheduled slot and publishes automatically.
-3. **Edit first** — click the ✎ on the caption, change the words, save, then approve. Your edit is exactly what gets published.
-4. **Reject** — pick a reason ("Bad caption," "Wrong tone," …). Reasons are logged and steer future drafts.
-5. Bulk approve/reject handles a clearly-good (or clearly-bad) queue in one click.
-
-An automated quality check scores every draft before it reaches you — you're the final judgment, not the first.
-
-### 5 · Read and manage the calendar
-
-*Where: sidebar → Calendar.*
-
-1. Colored dots on each day are posts; the status filter narrows to Scheduled, Published, Drafts, etc.
-2. Click any post to open it: full caption, media, platform, status.
-3. **Move a post** — change the date/time in the panel and hit Reschedule.
-4. **Edit a caption** — the ✎ works here too, right up until publish time.
-5. Create a one-off post for any day with the composer — it flows through the same review process.
-
-A healthy calendar shows a few days of approved posts ahead. If it looks thin, drafts are probably waiting in the Review Queue.
-
-### 6 · Connect a social account
-
-*Where: persona → Connections tab.* Accounts connect per persona with a normal social-media login — 15 platforms including Instagram, TikTok, and YouTube.
-
-1. Click **+ Connect** on a platform and log in to the account in the window that opens. The connection appears with a green badge.
-2. Connected accounts show follower counts and status. If a platform needs re-linking (password change, expired session), a **Reconnect** badge appears — one click fixes it.
-3. Disconnecting an account stops its posting (and its per-account billing) immediately.
-
-### 7 · Confirm a post is really live
-
-*Where: persona → Feed, or Calendar → click a post.* "Published" is not a guess — the status flips only after the platform itself confirms the post exists.
-
-1. After a post's scheduled time it reads **Publishing…** — sent, awaiting the platform's confirmation.
-2. Within a minute or two the status flips to **Published** and a **View live post ↗** link appears — it opens the actual post on the platform.
-3. Multi-platform posts list each platform's result separately in the post panel.
-
-> 💡 Deleting a published post from PersonaGen removes it automatically on platforms that allow it. Instagram doesn't permit removal by software — for those, the panel gives you the direct link to delete it on Instagram itself.
-
-### 8 · What every status means
-
-| Status | Meaning | You need to… |
+| Creator | Focus | Ready today |
 |---|---|---|
-| `Generating` | The AI is creating this post (media takes a minute or two). | Nothing — it appears when ready. |
-| `Draft` | Generated, waiting in your Review Queue. | Approve, edit, or reject. |
-| `Scheduled` | Approved; publishes at its slot inside the persona's posting window. | Nothing — or reschedule it. |
-| `Publishing…` | Sent to the platform; awaiting confirmation. | Nothing — flips within minutes. |
-| `Published` | Confirmed live; "View live post" opens the real thing. | Enjoy. |
-| `Partial` | A multi-platform post landed on some platforms, not others. | Open it — each platform shows its reason. |
-| `Failed` | Didn't go out — the post shows the exact reason. | Fix the reason shown, then retry. |
-| `Rejected` | You declined it in review. | Nothing — the slot refills with a new draft. |
+| **[Lexy Connor](https://honeyx.monarchstack.com/personas/26bda125-98a4-437a-8ea1-4d5b501d1318)** | Parenting & Family | ✅ Fully live — Instagram + TikTok connected, drafts waiting, posts already published |
+| **[Chloe Miles](https://honeyx.monarchstack.com/personas/24e5442c-3d42-403f-96e7-536868598114)** | Sustainability & Eco | 📝 8 drafts made and waiting for your review |
+| **[Jenny Tran](https://honeyx.monarchstack.com/personas/d5233352-113c-4982-b447-7ac52ea0d8d3)** | Beauty & Wellness | ✨ Fresh start — make her first post in minutes |
 
-**The principle:** no status ever claims more than the platform has confirmed. If something goes wrong, you always see the reason — never a silent failure.
+Do the three walkthroughs in order — each takes about 10 minutes and teaches a different part of the app.
+
+---
+
+### Walkthrough 1 · Lexy Connor — approve a post and watch it go live
+
+Lexy is your working creator. Her Instagram and TikTok are already connected, and she has drafts waiting for you. This walkthrough shows you the core loop you'll use every day.
+
+1. Open **Review Queue** in the left sidebar. You'll see Lexy's waiting drafts — each card shows the picture or video, the caption, and where it will post.
+2. Pick a draft you like. Click the **✎** on the caption, change a couple of words to make it yours, and save. What you write is exactly what gets published.
+3. Click **Approve**. The post moves onto the schedule.
+4. Pick a weak draft and click **Reject** — choose a reason like "Bad caption." Rejecting is free: Lexy simply makes a replacement, and your reasons teach her what you like.
+5. Open **Calendar** in the sidebar. Your approved post is sitting on its day. Click it — you can change the date and time right here if you want it sooner.
+6. After its scheduled time passes, open the post again. It will briefly say **Publishing…**, then flip to **Published** with a **View live post ↗** link. Click the link — that's the real post, live on the real account. PersonaGen never says "Published" until the platform itself confirms it.
+
+> 💡 That's the whole job: check the queue, approve/edit/reject, done. Five minutes a day.
+
+### Walkthrough 2 · Chloe Miles — shape a creator with your taste
+
+Chloe has already made 8 drafts, but her social accounts aren't connected yet. Use her to practice curating — then connect her when you're happy with her style.
+
+1. Open **Review Queue** and find Chloe's cards (each card shows the creator's name).
+2. Go through all 8: approve the ones that feel right, **reject the rest with reasons**. Be picky — this is how you tune her voice before anything ever goes public.
+3. Want her captions punchier or softer overall? Open **[Chloe's page](https://honeyx.monarchstack.com/personas/24e5442c-3d42-403f-96e7-536868598114)** → **Profile** tab and edit her **Personality** text — write it like you're briefing a human creator. The ✨ **AI Enrich** button turns a rough note into a full personality.
+4. When you're happy with her content, click her **Connections** tab → **+ Connect** on Instagram (or any platform) → log in to the account in the window that opens. A green badge appears — that's it.
+5. Back on her **Profile** tab, set **Autonomy** to **Semi-Autonomous** and set her posts-per-day. From now on she drafts on schedule, and her approved posts publish to her connected accounts automatically.
+
+> 💡 Approved posts only publish once an account is connected — so you can safely approve Chloe's drafts today and connect her tomorrow.
+
+### Walkthrough 3 · Jenny Tran — create a post from scratch
+
+Jenny is brand new: face ready, no content yet. Use her to learn how posts get made on demand.
+
+1. Open **[Jenny's page](https://honeyx.monarchstack.com/personas/d5233352-113c-4982-b447-7ac52ea0d8d3)** → **Profile** tab. Read her Personality and tweak anything you'd like — who she is shapes everything she makes.
+2. Scroll to her **Reference Kit**. If any of the four tiles are empty, click **⚡ Generate all remaining** — this builds the assets that keep her face consistent in every image and video. It runs in the background; a minute or two per tile.
+3. Try her **Voice**: press play to hear it. Every creator has their own voice for spoken videos — no two sound alike.
+4. Go to her **Feed** tab and open the composer. Type a topic (or leave it blank and let her choose), pick **Image** or **Video**, and hit generate. You'll see progress while it works — takes a minute or two.
+5. Her first post appears in her feed as a **Draft**. Edit the caption if you like — this is your content now.
+6. When you're ready for Jenny to work on her own: Profile tab → **Autonomy → Semi-Autonomous** → set posts per day and her posting window. She'll start filling your Review Queue like Lexy does.
+
+---
+
+### Every day after that: the 5-minute routine
+
+1. Open **Review Queue** — approve, edit, or reject what your creators made.
+2. Glance at **Calendar** — see what's going out and when. Drag anything to a better time.
+3. That's it. Approved posts publish themselves, and every published post links to the live version.
+
+### If captions ever feel off-brand
+
+Open **Brand Brief** (sidebar → Setup). This page is what your creators believe about your brand — voice, products, audience. Fix it **here** once, and every future post from every creator uses the correction. Make sure each product has a photo — that's what creators hold and show on camera.
+
+### What the labels on posts mean
+
+| Label | Meaning | You need to… |
+|---|---|---|
+| `Generating` | Being created right now (a minute or two). | Nothing — it appears when ready. |
+| `Draft` | Waiting for you in the Review Queue. | Approve, edit, or reject. |
+| `Scheduled` | Approved; will go out at its time slot. | Nothing — or reschedule it. |
+| `Publishing…` | Sent; waiting for the platform to confirm. | Nothing — flips within minutes. |
+| `Published` | Confirmed live — "View live post" opens the real thing. | Enjoy. |
+| `Failed` | Didn't go out — the post shows the exact reason. | Fix what it says (usually a quick reconnect), then retry. |
+| `Rejected` | You said no in review. | Nothing — a new draft replaces it. |
+
+**One promise throughout:** no label ever claims more than the platform has confirmed, and nothing fails silently — you always see why.
 
 ---
 
