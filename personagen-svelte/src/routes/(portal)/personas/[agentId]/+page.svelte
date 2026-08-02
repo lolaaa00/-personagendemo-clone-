@@ -1548,6 +1548,46 @@
 		}
 	}
 
+	// ── Favorites (persona heart + per-post hearts) ────────────────────────
+	let togglingAgentFavorite = $state(false);
+
+	async function toggleAgentFavorite() {
+		if (!agent?.id || togglingAgentFavorite) return;
+		togglingAgentFavorite = true;
+		const next = !agent.is_favorite;
+		agent = { ...agent, is_favorite: next };
+		try {
+			const res = await fetch(`/api/agent/${agent.id}/favorite`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ value: next })
+			});
+			const d = await parseJsonResponse<any>(res);
+			if (!res.ok || !d.success) throw new Error(d.error || 'Server error');
+			// Sidebar and My Favorites read this flag from the server roster.
+			void invalidateAll();
+		} catch (err) {
+			agent = { ...agent, is_favorite: !next };
+			showToast('Could not update favorite: ' + (err as Error).message, 'error');
+		} finally {
+			togglingAgentFavorite = false;
+		}
+	}
+
+	async function togglePostFavorite(post: any) {
+		const next = !post.is_favorite;
+		feedPosts = feedPosts.map((p: any) => (p.id === post.id ? { ...p, is_favorite: next } : p));
+		if (modalPost?.id === post.id) modalPost = { ...modalPost, is_favorite: next };
+		const res = await Posts.favorite(post.id, next);
+		if (!res.success) {
+			feedPosts = feedPosts.map((p: any) =>
+				p.id === post.id ? { ...p, is_favorite: !next } : p
+			);
+			if (modalPost?.id === post.id) modalPost = { ...modalPost, is_favorite: !next };
+			showToast(res.error || 'Could not update favorite', 'error');
+		}
+	}
+
 	let mediaTypeFilter = $state<'all' | 'video' | 'image'>('all');
 
 	let filteredPosts = $derived(feedPosts.filter((p: any) => {
@@ -2703,6 +2743,20 @@
 					<span class="hero-handle">{agent.handle}</span>
 					<span class="hero-status-dot" style="background: {getStatusColor(agent.status)}" title={agent.status} aria-hidden="true"></span>
 					<span class="sr-only">Status: {agent.status}</span>
+					<button
+						type="button"
+						class="hero-fav-btn"
+						class:faved={agent.is_favorite}
+						title={agent.is_favorite ? 'Remove from favorites' : 'Add to favorites'}
+						aria-label={agent.is_favorite ? 'Remove from favorites' : 'Add to favorites'}
+						aria-pressed={Boolean(agent.is_favorite)}
+						disabled={togglingAgentFavorite}
+						onclick={toggleAgentFavorite}
+					>
+						<svg width="16" height="16" viewBox="0 0 24 24" fill={agent.is_favorite ? 'currentColor' : 'none'} stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"
+							><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" /></svg
+						>
+					</button>
 				</div>
 				<div class="hero-meta">
 					<span class="hero-niche">{agent.niche}</span>
@@ -3010,6 +3064,7 @@
 								onToggleSelect={(p) => togglePostSelected(p.id)}
 								onDelete={handleDeletePost}
 								onEnlarge={openPostMedia}
+								onToggleFavorite={togglePostFavorite}
 							/>
 						{/each}
 					</div>
@@ -5685,6 +5740,51 @@
 		height: 8px;
 		border-radius: 50%;
 		flex-shrink: 0;
+	}
+
+	.hero-fav-btn {
+		position: relative;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 30px;
+		height: 30px;
+		padding: 0;
+		border-radius: 999px;
+		border: 1px solid var(--border);
+		background: var(--surface-2);
+		color: var(--text-dim);
+		cursor: pointer;
+		flex-shrink: 0;
+		transition: color 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+	}
+
+	/* 44px tap area without growing the 30px chip. */
+	.hero-fav-btn::after {
+		content: '';
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		transform: translate(-50%, -50%);
+		min-width: 44px;
+		min-height: 44px;
+	}
+
+	.hero-fav-btn:hover:not(:disabled) {
+		color: var(--rose, #e84393);
+		border-color: color-mix(in srgb, var(--rose, #e84393) 45%, transparent);
+		transform: scale(1.08);
+	}
+
+	.hero-fav-btn.faved {
+		color: var(--rose, #e84393);
+		border-color: color-mix(in srgb, var(--rose, #e84393) 50%, transparent);
+		background: color-mix(in srgb, var(--rose, #e84393) 10%, transparent);
+	}
+
+	.hero-fav-btn:disabled {
+		opacity: 0.6;
+		cursor: default;
 	}
 
 	.hero-meta {

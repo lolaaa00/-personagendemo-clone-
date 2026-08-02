@@ -48,6 +48,7 @@ const ORDER = [
 	['multi_brand_briefs_migration.sql', 'multi-brand: brand_briefs.name + link'],
 	['apply_all_pending.sql', 'post_reviews, scheduler_leases, zernio_keys, status superset'],
 	['scheduler_indexes_and_provider_default_migration.sql', 'scheduler indexes + zernio default'],
+	['favorites_and_projects_migration.sql', 'favorite flags + persona_groups projects'],
 ];
 
 /** Rewrite a migration so every statement can be replayed against a DB that already has it. */

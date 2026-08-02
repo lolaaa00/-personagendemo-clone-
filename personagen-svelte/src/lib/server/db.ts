@@ -24,6 +24,10 @@ export interface AgentRow {
 	is_overseer?: boolean;
 	supervisor_agent_id?: string | null;
 	managed_by_overseer?: boolean;
+	/** Hearted persona — surfaces on the My Favorites page. */
+	is_favorite?: boolean;
+	/** Project (persona_groups row) this persona is filed under; null = ungrouped. */
+	group_id?: string | null;
 	runtime_owner?: 'svelte-gemini' | 'hermes-daemon' | 'hermes-orchestrated';
 	// Zernio profile that isolates this persona's connected social accounts.
 	// Null until provisioned on first connect (api/accounts writes it,
@@ -96,6 +100,8 @@ export interface PostRow {
 	publication_results?: Record<string, unknown> | null;
 	token_usage?: number | null;
 	token_cost?: number | null;
+	/** Hearted post — surfaces on the My Favorites page. */
+	is_favorite?: boolean;
 	created_at: string;
 	updated_at: string;
 }
@@ -141,6 +147,14 @@ export interface BrandBriefRow {
 	name: string;
 	data: Record<string, unknown>;
 	version: number;
+	created_at: string;
+	updated_at: string;
+}
+
+export interface PersonaGroupRow {
+	id: string;
+	user_id: string;
+	name: string;
 	created_at: string;
 	updated_at: string;
 }
@@ -373,6 +387,35 @@ export function createDbService(supabase: SupabaseClient) {
 
 			deleteById: (id: string, userId: string) =>
 				supabase.from('brand_briefs').delete().eq('id', id).eq('user_id', userId)
+		},
+
+		// ── Persona Groups (projects) ───────────
+		personaGroups: {
+			list: (userId: string) =>
+				supabase
+					.from('persona_groups')
+					.select('*')
+					.eq('user_id', userId)
+					.order('name', { ascending: true }),
+
+			get: (id: string, userId: string) =>
+				supabase.from('persona_groups').select('*').eq('id', id).eq('user_id', userId).maybeSingle(),
+
+			create: (userId: string, name: string) =>
+				supabase.from('persona_groups').insert({ user_id: userId, name }).select().single(),
+
+			rename: (id: string, userId: string, name: string) =>
+				supabase
+					.from('persona_groups')
+					.update({ name })
+					.eq('id', id)
+					.eq('user_id', userId)
+					.select()
+					.single(),
+
+			// agents.group_id has ON DELETE SET NULL, so members simply become ungrouped.
+			delete: (id: string, userId: string) =>
+				supabase.from('persona_groups').delete().eq('id', id).eq('user_id', userId)
 		},
 
 		// ── Processed RSS Items ─────────────────

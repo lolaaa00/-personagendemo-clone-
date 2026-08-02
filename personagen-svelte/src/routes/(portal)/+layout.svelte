@@ -12,6 +12,7 @@
 	} from '$lib/stores/ui.svelte';
 	import { onMount } from 'svelte';
 	import BrandWave from '$lib/components/shared/BrandWave.svelte';
+	import PersonaProjectsModal from '$lib/components/shared/PersonaProjectsModal.svelte';
 
 	let { children, data } = $props();
 
@@ -55,6 +56,10 @@
 
 	const staticSections = {
 		network: [{ href: '/dashboard', label: 'Dashboard', icon: 'grid' }],
+		library: [
+			{ href: '/generations', label: 'All Generations', icon: 'gallery' },
+			{ href: '/favorites', label: 'My Favorites', icon: 'heart' }
+		],
 		publish: [
 			{ href: '/review', label: 'Review Queue', icon: 'check' },
 			{ href: '/calendar', label: 'Calendar', icon: 'calendar' }
@@ -66,8 +71,20 @@
 	};
 
 	let sidebarAgents = $derived((data as any).sidebarAgents ?? []);
+	let personaGroups = $derived((data as any).personaGroups ?? []);
 
 	let personaSearch = $state('');
+	let projectsModalOpen = $state(false);
+
+	// Collapsed project sections (session-scoped; searching overrides collapse so
+	// matches are never hidden behind a folded header).
+	let collapsedGroups = $state<string[]>([]);
+
+	function toggleGroupCollapsed(groupId: string) {
+		collapsedGroups = collapsedGroups.includes(groupId)
+			? collapsedGroups.filter((id) => id !== groupId)
+			: [...collapsedGroups, groupId];
+	}
 
 	let filteredSidebarAgents = $derived.by(() => {
 		const query = personaSearch.trim().toLowerCase();
@@ -81,6 +98,24 @@
 			if (aActive !== bActive) return aActive - bActive;
 			return (a.name ?? '').localeCompare(b.name ?? '');
 		});
+	});
+
+	// Grouped rail: projects (with their matching members) first, then ungrouped.
+	// A project with zero matches disappears while searching but stays visible
+	// (empty) otherwise, so a freshly created project has somewhere to exist.
+	let groupedSidebar = $derived.by(() => {
+		const searching = personaSearch.trim().length > 0;
+		const sections = personaGroups
+			.map((group: any) => ({
+				group,
+				members: filteredSidebarAgents.filter((a: any) => a.group_id === group.id)
+			}))
+			.filter((s: any) => !searching || s.members.length > 0);
+		const groupIds = new Set(personaGroups.map((g: any) => g.id));
+		const ungrouped = filteredSidebarAgents.filter(
+			(a: any) => !a.group_id || !groupIds.has(a.group_id)
+		);
+		return { sections, ungrouped };
 	});
 
 	function isActive(href: string, pathname: string): boolean {
@@ -190,9 +225,52 @@
 				</a>
 			{/each}
 
+			<!-- LIBRARY -->
+			{#if !sidebarState.collapsed}
+				<span class="sidebar-section-label">Library</span>
+			{:else}
+				<div class="sidebar-section-divider"></div>
+			{/if}
+			{#each staticSections.library as item}
+				<a
+					href={item.href}
+					class="sidebar-nav-item"
+					class:active={isActive(item.href, $page.url.pathname)}
+					aria-current={isActive(item.href, $page.url.pathname) ? 'page' : undefined}
+					onclick={closeSidebar}
+					title={sidebarState.collapsed ? item.label : undefined}
+					aria-label={sidebarState.collapsed ? item.label : undefined}
+				>
+					<span class="sidebar-nav-icon">
+						{#if item.icon === 'gallery'}
+							<svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+								><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><path d="M21 15l-5-5L5 21" /></svg>
+						{:else if item.icon === 'heart'}
+							<svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+								><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" /></svg>
+						{/if}
+					</span>
+					{#if !sidebarState.collapsed}
+						<span class="sidebar-nav-label">{item.label}</span>
+					{/if}
+				</a>
+			{/each}
+
 			<!-- PERSONAS -->
 			{#if !sidebarState.collapsed}
-				<span class="sidebar-section-label">Personas</span>
+				<div class="sidebar-section-row">
+					<span class="sidebar-section-label">Personas</span>
+					<button
+						type="button"
+						class="sidebar-projects-btn"
+						onclick={() => (projectsModalOpen = true)}
+						aria-label="Manage projects"
+						title="Manage projects"
+					>
+						<svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+							><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" /><line x1="12" y1="10" x2="12" y2="16" /><line x1="9" y1="13" x2="15" y2="13" /></svg>
+					</button>
+				</div>
 			{:else}
 				<div class="sidebar-section-divider"></div>
 			{/if}
@@ -225,7 +303,7 @@
 					<span class="sidebar-nav-label">New Persona</span>
 				{/if}
 			</a>
-			{#each filteredSidebarAgents as agent (agent.id)}
+			{#snippet personaItem(agent: any)}
 				<a
 					href="/personas/{agent.id}"
 					class="sidebar-nav-item sidebar-persona-item"
@@ -254,9 +332,49 @@
 						</span>
 					{/if}
 				</a>
-			{/each}
-			{#if !sidebarState.collapsed && filteredSidebarAgents.length === 0 && personaSearch.trim()}
-				<div class="sidebar-persona-empty">No personas match "{personaSearch}"</div>
+			{/snippet}
+
+			{#if sidebarState.collapsed}
+				<!-- Icon rail: groups add nothing at 28px wide — flat list. -->
+				{#each filteredSidebarAgents as agent (agent.id)}
+					{@render personaItem(agent)}
+				{/each}
+			{:else}
+				<!-- Projects first, each a collapsible section; searching overrides collapse. -->
+				{#each groupedSidebar.sections as section (section.group.id)}
+					{@const folded = collapsedGroups.includes(section.group.id) && !personaSearch.trim()}
+					<button
+						type="button"
+						class="sidebar-group-head"
+						aria-expanded={!folded}
+						onclick={() => toggleGroupCollapsed(section.group.id)}
+					>
+						<svg aria-hidden="true" class="sidebar-group-chevron" class:folded width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"
+							><path d="M6 9l6 6 6-6" /></svg>
+						<span class="sidebar-group-name">{section.group.name}</span>
+						<span class="sidebar-group-count">{section.members.length}</span>
+					</button>
+					{#if !folded}
+						{#each section.members as agent (agent.id)}
+							{@render personaItem(agent)}
+						{/each}
+						{#if section.members.length === 0}
+							<div class="sidebar-persona-empty">No personas in this project yet.</div>
+						{/if}
+					{/if}
+				{/each}
+				{#if groupedSidebar.sections.length > 0 && groupedSidebar.ungrouped.length > 0}
+					<div class="sidebar-group-head is-static">
+						<span class="sidebar-group-name">Ungrouped</span>
+						<span class="sidebar-group-count">{groupedSidebar.ungrouped.length}</span>
+					</div>
+				{/if}
+				{#each groupedSidebar.ungrouped as agent (agent.id)}
+					{@render personaItem(agent)}
+				{/each}
+				{#if filteredSidebarAgents.length === 0 && personaSearch.trim()}
+					<div class="sidebar-persona-empty">No personas match "{personaSearch}"</div>
+				{/if}
 			{/if}
 			<!-- PUBLISH -->
 			{#if !sidebarState.collapsed}
@@ -368,6 +486,8 @@
 						if (path.startsWith('/brand-brief')) return 'Brand Brief';
 						if (path.startsWith('/settings')) return 'Settings';
 						if (path.startsWith('/generator')) return 'New Persona';
+						if (path.startsWith('/generations')) return 'All Generations';
+						if (path.startsWith('/favorites')) return 'My Favorites';
 						if (path.startsWith('/review')) return 'Review Queue';
 					if (path.startsWith('/calendar')) return 'Calendar';
 						if (path === '/dashboard' || path === '/') return 'Dashboard';
@@ -470,6 +590,13 @@
 		</main>
 	</div>
 </div>
+
+<PersonaProjectsModal
+	open={projectsModalOpen}
+	onClose={() => (projectsModalOpen = false)}
+	groups={personaGroups}
+	personas={sidebarAgents}
+/>
 
 <BrandWave />
 
@@ -1236,5 +1363,107 @@
 		height: 1px;
 		background: var(--border);
 		margin: var(--space-3) 6px;
+	}
+
+	/* ── Section row with an action (Personas + manage projects) ── */
+	.sidebar-section-row {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding-right: 6px;
+	}
+
+	.sidebar-projects-btn {
+		position: relative;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 24px;
+		height: 24px;
+		padding: 0;
+		border-radius: 6px;
+		border: 1px solid transparent;
+		background: transparent;
+		color: var(--text-dim);
+		cursor: pointer;
+		transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+	}
+
+	/* 44px tap area without growing the 24px chip. */
+	.sidebar-projects-btn::after {
+		content: '';
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		transform: translate(-50%, -50%);
+		min-width: 44px;
+		min-height: 44px;
+	}
+
+	.sidebar-projects-btn:hover {
+		color: var(--accent);
+		background: var(--accent-soft);
+		border-color: color-mix(in srgb, var(--accent) 25%, transparent);
+	}
+
+	/* ── Project group headers in the personas rail ── */
+	.sidebar-group-head {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		width: 100%;
+		min-height: 34px;
+		padding: 4px 10px;
+		margin-top: 2px;
+		border: none;
+		border-radius: 7px;
+		background: transparent;
+		color: var(--text-dim);
+		font-family: inherit;
+		font-size: 0.68rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+		cursor: pointer;
+		text-align: left;
+		transition: color 0.15s ease, background 0.15s ease;
+	}
+
+	.sidebar-group-head:not(.is-static):hover {
+		color: var(--text);
+		background: color-mix(in srgb, var(--text) 5%, transparent);
+	}
+
+	.sidebar-group-head.is-static {
+		cursor: default;
+	}
+
+	.sidebar-group-chevron {
+		flex-shrink: 0;
+		transition: transform 0.15s ease;
+	}
+
+	.sidebar-group-chevron.folded {
+		transform: rotate(-90deg);
+	}
+
+	.sidebar-group-name {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		min-width: 0;
+	}
+
+	.sidebar-group-count {
+		margin-left: auto;
+		font-size: 0.62rem;
+		font-weight: 700;
+		padding: 0 6px;
+		border-radius: 999px;
+		background: var(--surface-2);
+		border: 1px solid var(--border);
+		color: var(--text-dim);
+		font-variant-numeric: tabular-nums;
+		flex-shrink: 0;
 	}
 </style>

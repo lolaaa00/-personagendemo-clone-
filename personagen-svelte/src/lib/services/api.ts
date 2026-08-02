@@ -85,6 +85,8 @@ export const Posts = {
 	get: (id: string) => request<any>(ENDPOINTS.posts, 'get', { id }),
 	update: (id: string, data: unknown) =>
 		request(ENDPOINTS.posts, 'update', { id, ...(data as Record<string, unknown>) }),
+	/** Heart / unheart a post — it surfaces on the My Favorites page. */
+	favorite: (id: string, value: boolean) => request(ENDPOINTS.posts, 'favorite', { id, value }),
 	delete: (id: string) => request(ENDPOINTS.posts, 'delete', { id }),
 	/**
 	 * Multi-select bulk delete. Like the single `delete` action, the posts API puts

@@ -134,6 +134,21 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			return json({ success: true, data });
 		}
 
+		if (action === 'favorite') {
+			const { id, value } = body;
+			if (!id) return json({ success: false, error: 'Missing post id' }, { status: 400 });
+
+			// Verify post ownership
+			const { data: existingPost, error: getErr } = await db.posts.get(id);
+			if (getErr || !existingPost || existingPost.user_id !== user.id) {
+				return json({ success: false, error: 'Post not found or ownership mismatch' }, { status: 404 });
+			}
+
+			const { data, error } = await db.posts.update(id, { is_favorite: Boolean(value) });
+			if (error) throw error;
+			return json({ success: true, data });
+		}
+
 		if (action === 'delete') {
 			const { id } = body;
 			if (!id) return json({ success: false, error: 'Missing post id' }, { status: 400 });

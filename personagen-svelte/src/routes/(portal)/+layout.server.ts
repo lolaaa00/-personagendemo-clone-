@@ -9,7 +9,13 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 	const isPlaceholder = !supabaseUrl || supabaseUrl.includes('placeholder');
 
 	if (isPlaceholder) {
-		return { session: null, user: null, configStatus: checkConfigStatus(), sidebarAgents: [] };
+		return {
+			session: null,
+			user: null,
+			configStatus: checkConfigStatus(),
+			sidebarAgents: [],
+			personaGroups: []
+		};
 	}
 
 	try {
@@ -17,6 +23,7 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 		if (!session || !user) throw redirect(303, '/login');
 
 		let sidebarAgents: any[] = [];
+		let personaGroups: any[] = [];
 		if (locals.supabase) {
 			// Lean projection: the sidebar roster only renders these fields (see
 			// +layout.svelte) — never the large soul/skills/tools/market text, so
@@ -24,11 +31,19 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 			// need full agent rows load them in their own server loads.
 			// `is_overseer IS NOT TRUE` matches the old `!a.is_overseer` filter
 			// (keeps rows where the column is false OR null).
-			const { data: agents } = await locals.supabase
-				.from('agents')
-				.select('id, name, handle, initial, gradient, status, is_overseer')
-				.not('is_overseer', 'is', true)
-				.order('created_at', { ascending: false });
+			const [{ data: agents }, { data: groups }] = await Promise.all([
+				locals.supabase
+					.from('agents')
+					.select('id, name, handle, initial, gradient, status, is_overseer, group_id, is_favorite')
+					.not('is_overseer', 'is', true)
+					.order('created_at', { ascending: false }),
+				locals.supabase
+					.from('persona_groups')
+					.select('id, name')
+					.eq('user_id', user.id)
+					.order('name', { ascending: true })
+			]);
+			personaGroups = groups ?? [];
 			const creatorAgents = (agents ?? []).filter((a: any) => !a.is_overseer);
 
 			const agentIds = creatorAgents.map((a: any) => a.id);
@@ -44,6 +59,8 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 				initial: a.initial,
 				gradient: a.gradient,
 				status: a.status,
+				group_id: a.group_id ?? null,
+				is_favorite: a.is_favorite ?? false,
 				ugc_character_ref: characterRefById.get(a.id) ?? null
 			}));
 		}
@@ -52,7 +69,8 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 			session,
 			user,
 			configStatus: checkConfigStatus(),
-			sidebarAgents
+			sidebarAgents,
+			personaGroups
 		};
 	} catch (e) {
 		if ((e as any)?.status === 303) throw e;
@@ -61,7 +79,8 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 			session: null,
 			user: null,
 			configStatus: checkConfigStatus(),
-			sidebarAgents: []
+			sidebarAgents: [],
+			personaGroups: []
 		};
 	}
 };

@@ -11,7 +11,8 @@
 		selected = false,
 		onToggleSelect = null,
 		onDelete = null,
-		onEnlarge = null
+		onEnlarge = null,
+		onToggleFavorite = null
 	}: {
 		post: any;
 		onOpen: (post: any) => void;
@@ -26,6 +27,8 @@
 		onDelete?: ((post: any) => void) | null;
 		/** Click-to-enlarge the tile's media in a lightbox. */
 		onEnlarge?: ((post: any) => void) | null;
+		/** Heart toggle — reads post.is_favorite, host persists and refreshes the row. */
+		onToggleFavorite?: ((post: any) => void) | null;
 	} = $props();
 
 	// In-flight / failed state is read from the POST ROW, not a client flag, so a
@@ -130,6 +133,7 @@
 <div
 	class="post-tile"
 	class:selected
+	class:has-fav={Boolean(onToggleFavorite)}
 	role="button"
 	tabindex="0"
 	onclick={() => onOpen(post)}
@@ -352,6 +356,28 @@
 		<span class="tile-error-dot" title="This post has an error — open for details">
 			<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="This post has an error"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><path d="M12 9v4" /><path d="M12 17h.01" /></svg>
 		</span>
+	{/if}
+
+	{#if onToggleFavorite && !isGenerating && !isGenFail}
+		<!-- Favorite is STATE, not just an action — a hearted tile keeps its heart
+		     visible at rest; unhearted tiles reveal it on hover/focus (always on touch). -->
+		<!-- svelte-ignore node_invalid_placement_ssr -->
+		<button
+			type="button"
+			class="tile-fav"
+			class:faved={post.is_favorite}
+			title={post.is_favorite ? 'Remove from favorites' : 'Add to favorites'}
+			aria-label={post.is_favorite ? 'Remove from favorites' : 'Add to favorites'}
+			aria-pressed={Boolean(post.is_favorite)}
+			onclick={(e) => {
+				e.stopPropagation();
+				onToggleFavorite?.(post);
+			}}
+		>
+			<svg width="14" height="14" viewBox="0 0 24 24" fill={post.is_favorite ? 'currentColor' : 'none'} stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"
+				><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" /></svg
+			>
+		</button>
 	{/if}
 
 	{#if hasRealStats}
@@ -689,6 +715,57 @@
 		background: linear-gradient(135deg, #1f2433, #2b3247);
 	}
 
+	/* ── Favorite heart ── */
+	.tile-fav {
+		position: absolute;
+		bottom: 8px;
+		left: 8px;
+		z-index: 6;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 26px;
+		height: 26px;
+		padding: 0;
+		border-radius: 999px;
+		border: 1px solid rgba(255, 255, 255, 0.25);
+		background: rgba(12, 16, 30, 0.72);
+		backdrop-filter: blur(4px);
+		color: #fff;
+		cursor: pointer;
+		opacity: 0;
+		transition: opacity 0.15s ease, color 0.15s ease, transform 0.15s ease;
+	}
+	/* Same expanded 44px tap area as the other tile chips. */
+	.tile-fav::after {
+		content: '';
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		transform: translate(-50%, -50%);
+		min-width: 44px;
+		min-height: 44px;
+	}
+	.post-tile:hover .tile-fav,
+	.post-tile:focus-within .tile-fav,
+	.tile-fav.faved {
+		opacity: 1;
+	}
+	/* No hover on touch — the heart must always be reachable there. */
+	@media (hover: none) {
+		.tile-fav {
+			opacity: 1;
+		}
+	}
+	.tile-fav:hover {
+		background: rgba(12, 16, 30, 0.94);
+		transform: scale(1.08);
+	}
+	.tile-fav.faved {
+		color: var(--rose, #e84393);
+		border-color: color-mix(in srgb, var(--rose, #e84393) 60%, transparent);
+	}
+
 	.tile-error-dot {
 		position: absolute;
 		bottom: 8px;
@@ -703,6 +780,11 @@
 		font-size: 12px;
 		border-radius: 999px;
 		pointer-events: none;
+	}
+
+	/* When a heart occupies bottom-left, the error dot slides right of it. */
+	.post-tile.has-fav .tile-error-dot {
+		left: 42px;
 	}
 
 	.tile-stats {
