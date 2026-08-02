@@ -63,15 +63,19 @@ export const GET: RequestHandler = async ({ locals }) => {
 		(cfgs || []).map((c: any) => [c.agent_id, c.ugc_character_ref])
 	);
 
-	const items = (drafts || []).map((d: any) => {
+	const items = (drafts || []).flatMap((d: any) => {
 		let parsed: any = {};
 		try {
 			parsed = JSON.parse(d.content);
 		} catch {
 			parsed = { text: d.content };
 		}
+		// Standalone Studio assets are drafts by storage but not by intent — they
+		// were generated as media, not as posts awaiting approval. Keep them out
+		// of the queue; they live in the persona's Assets lens instead.
+		if (parsed?.studio?.standalone === true) return [];
 		const agent = agentById.get(d.agent_id);
-		return {
+		return [{
 			id: d.id,
 			agent_id: d.agent_id,
 			agent_name: agent?.name ?? 'Unknown',
@@ -87,7 +91,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 			scheduled_date: d.scheduled_date,
 			scheduled_time: d.scheduled_time,
 			created_at: d.created_at
-		};
+		}];
 	});
 
 	return json({ success: true, items, total: items.length });

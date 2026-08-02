@@ -16,6 +16,12 @@
 	import SelectionToolbar from '$lib/components/ui/SelectionToolbar.svelte';
 	import ImageLightbox from '$lib/components/ui/ImageLightbox.svelte';
 	import { getPostDisplay } from '$lib/components/feed/postDisplay';
+	import {
+		STUDIO_TEMPLATES,
+		STUDIO_CATEGORIES,
+		type StudioTemplate,
+		type StudioCategory
+	} from '$lib/studio-templates';
 	import type { AutonomyLevel } from '$lib/types';
 	import { AUTONOMY_LABELS } from '$lib/types';
 	import { PLATFORMS as PLATFORM_REGISTRY, platformLabel, platformProfileUrl } from '$lib/platforms';
@@ -82,27 +88,63 @@
 	let loadedAgentId: string | null = data.agent?.id ?? null;
 
 	// ── Tab state ──────────────────────────────────────────────────
-	function initialTab(): 'feed' | 'calendar' | 'profile' | 'connections' {
+	// Two top-level tabs, each with lenses (view-switcher pattern from the review
+	// queue). Legacy ?tab= values map onto tab+lens so every old deep link still
+	// lands exactly where it used to:
+	//   profile → Profile·Overview      connections → Profile·Connections
+	//   feed → Content·Posts   assets → Content·Assets   calendar → Content·Calendar
+	function initialTab(): 'feed' | 'calendar' | 'profile' | 'connections' | 'studio' {
+		// 'posts' guards against any stray write of the new lens name.
 		const t = $page.url.searchParams.get('tab');
+		if (t === 'studio') return 'studio';
 		// Legacy ?tab=assets links land on the Feed tab in assets view — the
 		// Assets tab was merged into Feed as a view toggle. Profile is the
 		// default landing tab; Feed/Calendar/Connections require an explicit ?tab.
-		if (t === 'feed' || t === 'assets') return 'feed';
+		if (t === 'feed' || t === 'assets' || t === 'posts') return 'feed';
 		if (t === 'calendar') return 'calendar';
 		if (t === 'connections') return 'connections';
 		return 'profile';
 	}
-	let activeTab = $state<'feed' | 'calendar' | 'profile' | 'connections'>(initialTab());
+	const legacyTab = initialTab();
+	let activeTab = $state<'profile' | 'content' | 'studio'>(
+		legacyTab === 'studio'
+			? 'studio'
+			: legacyTab === 'feed' || legacyTab === 'calendar'
+				? 'content'
+				: 'profile'
+	);
+	let profileView = $state<'overview' | 'connections'>(
+		legacyTab === 'connections' ? 'connections' : 'overview'
+	);
 	// The page already *read* ?tab= on load but never wrote it, so switching tabs
 	// left the URL stale and Back/refresh/share all snapped to Profile.
-	// `assets` is the legacy alias for Feed's asset lens — preserve it on write.
+	// The URL keeps the LEGACY vocabulary (profile/connections/feed/assets/calendar)
+	// even though the UI is now two tabs with lenses — existing shared links and
+	// bookmarks keep meaning exactly what they meant.
 	$effect(() =>
-		syncParam('tab', activeTab === 'feed' && feedView === 'assets' ? 'assets' : activeTab, 'profile')
+		syncParam(
+			'tab',
+			activeTab === 'studio'
+				? 'studio'
+				: activeTab === 'profile'
+					? profileView === 'connections'
+						? 'connections'
+						: 'profile'
+					: feedView === 'posts'
+						? 'feed' // legacy name for the posts lens — initialTab() only knows this one
+						: feedView,
+			'profile'
+		)
 	);
-	// Feed tab renders one dataset through two lenses: the post mosaic, or the
-	// flat grid of every generated visual (former Assets tab).
-	let feedView = $state<'posts' | 'assets'>(
-		$page.url.searchParams.get('tab') === 'assets' ? 'assets' : 'posts'
+	// Content tab renders one dataset through three lenses: the post mosaic, the
+	// flat grid of every generated visual (former Assets tab), or the calendar
+	// (former Calendar tab).
+	let feedView = $state<'posts' | 'assets' | 'calendar'>(
+		$page.url.searchParams.get('tab') === 'assets'
+			? 'assets'
+			: legacyTab === 'calendar'
+				? 'calendar'
+				: 'posts'
 	);
 
 	// ── Feed state ─────────────────────────────────────────────────
@@ -517,16 +559,17 @@
 
 	// ── Tab init effects ───────────────────────────────────────────
 	$effect(() => {
-		// Feed views AND the calendar tab all derive from the same posts data.
-		if ((activeTab === 'feed' || activeTab === 'calendar') && agent?.id) loadFeed();
+		// Every Content lens (posts / assets / calendar) derives from the same posts
+		// data — and Studio reads it too, for template preview thumbnails.
+		if ((activeTab === 'content' || activeTab === 'studio') && agent?.id) loadFeed();
 	});
 
 	$effect(() => {
-		if (activeTab === 'connections' && agent?.id) checkStatuses();
+		if (activeTab === 'profile' && profileView === 'connections' && agent?.id) checkStatuses();
 	});
 
 	$effect(() => {
-		if (activeTab === 'profile') loadVoiceCatalog();
+		if (activeTab === 'profile' && profileView === 'overview') loadVoiceCatalog();
 	});
 
 	// ── UGC voice picker ───────────────────────────────────────────
@@ -830,6 +873,56 @@
 	 * "skip the composer" shortcut is gone deliberately: it existed to skip a form
 	 * that was only a guess, and this one isn't.
 	 */
+	// ── Studio: template gallery → prefilled composer ──────────────────────
+	// A template is nothing but a baseBody for the same generate-post endpoint;
+	// the composer's preview echoes topic/scene back as editable fields and
+	// resolves real prompt/models/cost server-side. Same approval, same budget
+	// tracking, same draft output as every other generate action.
+	let studioCategory = $state<StudioCategory | 'all'>('all');
+	let studioTemplates = $derived(
+		studioCategory === 'all'
+			? STUDIO_TEMPLATES
+			: STUDIO_TEMPLATES.filter((t) => t.category === studioCategory)
+	);
+	// Where Studio output goes. 'review' → draft in the review queue (default);
+	// 'asset' → standalone media that skips the queue and lives in Assets.
+	// Both pin a DRAFT server-side — Studio never publishes directly.
+	let studioDeliver = $state<'review' | 'asset'>('review');
+	// Real generations as template previews: any post tagged with a template id
+	// becomes that card's thumbnail — the honest version of stock example clips.
+	let studioPreviews = $derived.by(() => {
+		const byTemplate = new Map<string, { url: string; type: 'image' | 'video' }>();
+		for (const r of feedPosts) {
+			try {
+				const c = JSON.parse(r.content);
+				const id = c?.studio?.template;
+				const url = c?.poster_url || c?.media_url;
+				if (id && url && !byTemplate.has(id)) {
+					byTemplate.set(id, { url, type: c?.media_type === 'video' ? 'video' : 'image' });
+				}
+			} catch {
+				/* non-JSON content rows have no studio tag */
+			}
+		}
+		return byTemplate;
+	});
+	function useStudioTemplate(t: StudioTemplate) {
+		if (!agent?.id) return;
+		askToGenerate(
+			{
+				endpoint: `/api/agent/${agent.id}/generate-post`,
+				baseBody: { ...t.baseBody, studio_template: t.id, deliver: studioDeliver },
+				title: `${t.title} — ${agent.name}`,
+				subtitle:
+					studioDeliver === 'asset'
+						? 'Template scaffold filled in below. Edit anything before approving. Output is saved as a standalone asset — it will not enter the review queue.'
+						: 'Template scaffold filled in below. Edit anything — topic, scene, product, schedule — before approving. Output lands as a draft in the review queue.',
+				confirmLabel: 'Approve & generate'
+			},
+			(body) => generatePostNow(body)
+		);
+	}
+
 	function requestGeneratePost(dateStr?: string | null) {
 		if (!agent?.id) return;
 		// Toolbar buttons pass a MouseEvent; only the Calendar tab passes a date,
@@ -2722,20 +2815,13 @@
 				<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 1 0-16 0"/></svg>
 				Profile
 			</button>
-			<button type="button" class="tab-btn" class:active={activeTab === 'feed'} aria-current={activeTab === 'feed' ? 'true' : undefined} onclick={() => (activeTab = 'feed')}>
+			<button type="button" class="tab-btn" class:active={activeTab === 'content'} aria-current={activeTab === 'content' ? 'true' : undefined} onclick={() => (activeTab = 'content')}>
 				<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
-				Feed
+				Content
 			</button>
-			<button type="button" class="tab-btn" class:active={activeTab === 'calendar'} aria-current={activeTab === 'calendar' ? 'true' : undefined} onclick={() => (activeTab = 'calendar')}>
-				<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-				Calendar
-			</button>
-			<button type="button" class="tab-btn" class:active={activeTab === 'connections'} aria-current={activeTab === 'connections' ? 'true' : undefined} onclick={() => (activeTab = 'connections')}>
-				<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-				Connections
-				{#if computedMetrics.connectedCount > 0}
-					<span class="tab-badge">{computedMetrics.connectedCount}</span>
-				{/if}
+			<button type="button" class="tab-btn" class:active={activeTab === 'studio'} aria-current={activeTab === 'studio' ? 'true' : undefined} onclick={() => (activeTab = 'studio')}>
+				<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.7 4.6L18 9.3l-4.3 1.7L12 15.6l-1.7-4.6L6 9.3l4.3-1.7L12 3z"/><path d="M18.5 14.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2z"/></svg>
+				Studio
 			</button>
 		</div>
 	</nav>
@@ -2743,13 +2829,38 @@
 	<!-- ── Tab content ────────────────────────────────────────── -->
 	<div class="tab-body">
 
-		<!-- FEED TAB -->
-		{#if activeTab === 'feed'}
+		{#if activeTab === 'profile'}
+			<!-- Lens switcher shared by both Profile lenses — mirrors the Content
+			     tab's toggle so switching feels identical everywhere. -->
+			<div class="feed-view-toggle profile-lens" role="group" aria-label="Profile view">
+				<button
+					type="button"
+					class="view-toggle-btn"
+					class:active={profileView === 'overview'}
+					aria-pressed={profileView === 'overview'}
+					onclick={() => (profileView = 'overview')}
+				>
+					Profile
+				</button>
+				<button
+					type="button"
+					class="view-toggle-btn"
+					class:active={profileView === 'connections'}
+					aria-pressed={profileView === 'connections'}
+					onclick={() => (profileView = 'connections')}
+				>
+					Connections{#if computedMetrics.connectedCount > 0}&nbsp;({computedMetrics.connectedCount}){/if}
+				</button>
+			</div>
+		{/if}
+
+		<!-- CONTENT TAB -->
+		{#if activeTab === 'content'}
 			<div class="feed-tab">
 				<!-- Toolbar -->
 				<div class="feed-toolbar">
-					<!-- One dataset, two lenses: the post mosaic or the flat assets grid. -->
-					<div class="feed-view-toggle" role="group" aria-label="Feed view">
+					<!-- One dataset, three lenses: post mosaic, flat assets grid, or calendar. -->
+					<div class="feed-view-toggle" role="group" aria-label="Content view">
 						<button
 							type="button"
 							class="view-toggle-btn"
@@ -2767,6 +2878,15 @@
 							onclick={() => (feedView = 'assets')}
 						>
 							Assets{#if assetItems.length > 0}&nbsp;({assetItems.length}){/if}
+						</button>
+						<button
+							type="button"
+							class="view-toggle-btn"
+							class:active={feedView === 'calendar'}
+							aria-pressed={feedView === 'calendar'}
+							onclick={() => (feedView = 'calendar')}
+						>
+							Calendar
 						</button>
 					</div>
 					{#if feedView === 'posts'}
@@ -2856,7 +2976,14 @@
 								<button type="button" class="btn-generate" onclick={() => requestGeneratePost()} disabled={generatingPost}>
 									{#if generatingPost}Generating…{:else}<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.7 4.6L18 9.3l-4.3 1.7L12 15.6l-1.7-4.6L6 9.3l4.3-1.7L12 3z"/><path d="M18.5 14.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2z"/></svg> Generate First Post{/if}
 								</button>
-								<button type="button" class="btn-sync" onclick={() => (activeTab = 'connections')}>
+								<button
+									type="button"
+									class="btn-sync"
+									onclick={() => {
+										activeTab = 'profile';
+										profileView = 'connections';
+									}}
+								>
 									Manage Connections
 								</button>
 							</div>
@@ -2958,41 +3085,27 @@
 						</div>
 					{/if}
 				{/if}
+
+				{#if feedView === 'calendar'}
+					<!-- Calendar lens (former Calendar tab) — same posts, placed in time. -->
+					{#if feedLoading && calendarPosts.length === 0}
+						<div class="feed-loading" role="status" aria-live="polite"><span class="spinner-lg" aria-hidden="true"></span><p>Loading posts…</p></div>
+					{:else}
+						<CalendarView
+							posts={calendarPosts}
+							onOpenPost={(p) => (modalPost = feedRowFor(p))}
+							onApprove={async (p) => {
+								const row = feedRowFor(p);
+								if (row) await handleApprovePost(row);
+							}}
+							onGenerateForDate={(d) => requestGeneratePost(d)}
+						/>
+					{/if}
+				{/if}
 			</div>
 
-
-			<PostDrawer
-				post={modalPost}
-				onClose={() => (modalPost = null)}
-				onDelete={handleDeletePost}
-				onApprove={handleApprovePost}
-				onSaveText={handleSaveText}
-				onRefined={(p) => {
-					modalPost = p;
-					void loadFeed();
-				}}
-				{characterRef}
-				onPublishFallback={(p) => {
-					modalPost = null;
-					openPublishFallback(p);
-				}}
-				onPostNow={postNow}
-				posting={postingNowId === modalPost?.id}
-				approving={approvingPostId === modalPost?.id}
-				deleting={deletingPostId === modalPost?.id}
-			/>
-			{#if manualDeleteNotice}
-				<ManualDeleteNotice entries={manualDeleteNotice} onClose={() => (manualDeleteNotice = null)} />
-			{/if}
-			<ImageLightbox
-				url={postMediaLightbox?.url ?? null}
-				label={postMediaLightbox?.label ?? ''}
-				poster={postMediaLightbox?.poster ?? null}
-				onClose={() => (postMediaLightbox = null)}
-			/>
-
-		<!-- PROFILE TAB -->
-		{:else if activeTab === 'profile'}
+		<!-- PROFILE TAB · Overview lens -->
+		{:else if activeTab === 'profile' && profileView === 'overview'}
 			<div class="profile-tab">
 				<!-- Brand section: which of the user's brand briefs this persona
 				     generates for. One client can run several brands (Just Kids
@@ -3052,7 +3165,7 @@
 				</details>
 
 				<!-- Persona Profile — above Identity: these fields feed generation prompts -->
-				<details class="profile-section" open>
+				<details class="profile-section">  <!-- starts collapsed: Brand Kit is the only section open by default -->
 					<summary class="section-summary">
 						<div class="section-header">
 						<div class="label-row">
@@ -4145,27 +4258,8 @@
 				</div>
 			</div>
 
-		<!-- CALENDAR TAB — the same shared calendar as the global page, scoped to
-		     this persona: schedule, drafts to approve, and analytics in one place. -->
-		{:else if activeTab === 'calendar'}
-			<div class="persona-calendar-tab">
-				{#if feedLoading && calendarPosts.length === 0}
-					<div class="feed-loading" role="status" aria-live="polite"><span class="spinner-lg" aria-hidden="true"></span><p>Loading posts…</p></div>
-				{:else}
-					<CalendarView
-						posts={calendarPosts}
-						onOpenPost={(p) => (modalPost = feedRowFor(p))}
-						onApprove={async (p) => {
-							const row = feedRowFor(p);
-							if (row) await handleApprovePost(row);
-						}}
-						onGenerateForDate={(d) => requestGeneratePost(d)}
-					/>
-				{/if}
-			</div>
-
-		<!-- CONNECTIONS TAB -->
-		{:else if activeTab === 'connections'}
+		<!-- PROFILE TAB · Connections lens -->
+		{:else if activeTab === 'profile' && profileView === 'connections'}
 			<div class="connections-tab">
 				{#if statusLoading}
 					<div class="feed-loading" role="status" aria-live="polite"><span class="spinner-lg" aria-hidden="true"></span><p>Checking connections…</p></div>
@@ -4349,9 +4443,133 @@
 				{/if}
 			</div>
 
+		<!-- STUDIO TAB — template gallery. Every card is a prefilled composer
+		     request; nothing generates without the same confirm-before-spend
+		     approval every other generate action gets. -->
+		{:else if activeTab === 'studio'}
+			<div class="studio-tab">
+				<div class="studio-head">
+					<div>
+						<h2 class="studio-title">Studio</h2>
+						<p class="studio-sub">
+							Pick an archetype — the scaffold opens prefilled with an editable topic and scene,
+							already aimed at {agent.name}'s voice and the applied brand kit.
+							{studioDeliver === 'asset'
+								? 'Results are saved as standalone assets (Content → Assets), skipping the review queue.'
+								: 'Results land as drafts in the review queue.'}
+						</p>
+					</div>
+					<div class="studio-deliver" role="radiogroup" aria-label="Output destination">
+						<span class="studio-deliver-label" id="studio-deliver-label">Output</span>
+						<button
+							type="button"
+							class="view-toggle-btn"
+							role="radio"
+							aria-checked={studioDeliver === 'review'}
+							class:active={studioDeliver === 'review'}
+							onclick={() => (studioDeliver = 'review')}
+						>
+							Review draft
+						</button>
+						<button
+							type="button"
+							class="view-toggle-btn"
+							role="radio"
+							aria-checked={studioDeliver === 'asset'}
+							class:active={studioDeliver === 'asset'}
+							onclick={() => (studioDeliver = 'asset')}
+						>
+							Asset only
+						</button>
+					</div>
+				</div>
+				<div class="feed-view-toggle studio-cats" role="group" aria-label="Template category">
+					{#each STUDIO_CATEGORIES as c (c.id)}
+						<button
+							type="button"
+							class="view-toggle-btn"
+							class:active={studioCategory === c.id}
+							aria-pressed={studioCategory === c.id}
+							onclick={() => (studioCategory = c.id)}
+						>
+							{c.label}
+						</button>
+					{/each}
+				</div>
+				<div class="studio-grid">
+					{#each studioTemplates as t (t.id)}
+						<div class="studio-card studio-{t.category}">
+							{#if studioPreviews.get(t.id)}
+								<!-- A real generation made with this template — the honest
+								     version of stock example clips. -->
+								<img
+									class="studio-preview"
+									src={studioPreviews.get(t.id)?.url}
+									alt="Your latest {t.title} generation"
+									width="220"
+									height="124"
+									loading="lazy"
+								/>
+							{/if}
+							<div class="studio-card-top">
+								<span class="studio-pipeline">{t.pipeline}</span>
+								{#if studioPreviews.get(t.id)}
+									<span class="studio-tried" title="You have generated with this template">Used</span>
+								{/if}
+							</div>
+							<h3 class="studio-card-title">{t.title}</h3>
+							<p class="studio-card-tag">{t.tagline}</p>
+							<button
+								type="button"
+								class="btn-generate studio-use"
+								disabled={generatingPost}
+								onclick={() => useStudioTemplate(t)}
+							>
+								<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.7 4.6L18 9.3l-4.3 1.7L12 15.6l-1.7-4.6L6 9.3l4.3-1.7L12 3z"/></svg>
+								Use template
+							</button>
+						</div>
+					{/each}
+				</div>
+			</div>
+
 		{/if}
 	</div>
 </div>
+
+<!-- Post drawer + delete notice + media lightbox live at PAGE level, not inside a
+     tab branch. They used to be mounted only inside the Feed branch, so the
+     Calendar lens set `modalPost` on click and nothing appeared — the drawer
+     didn't exist in that subtree. Any tab can now open a post. -->
+<PostDrawer
+	post={modalPost}
+	onClose={() => (modalPost = null)}
+	onDelete={handleDeletePost}
+	onApprove={handleApprovePost}
+	onSaveText={handleSaveText}
+	onRefined={(p) => {
+		modalPost = p;
+		void loadFeed();
+	}}
+	{characterRef}
+	onPublishFallback={(p) => {
+		modalPost = null;
+		openPublishFallback(p);
+	}}
+	onPostNow={postNow}
+	posting={postingNowId === modalPost?.id}
+	approving={approvingPostId === modalPost?.id}
+	deleting={deletingPostId === modalPost?.id}
+/>
+{#if manualDeleteNotice}
+	<ManualDeleteNotice entries={manualDeleteNotice} onClose={() => (manualDeleteNotice = null)} />
+{/if}
+<ImageLightbox
+	url={postMediaLightbox?.url ?? null}
+	label={postMediaLightbox?.label ?? ''}
+	poster={postMediaLightbox?.poster ?? null}
+	onClose={() => (postMediaLightbox = null)}
+/>
 
 <!-- Confirm-before-generate: resolves the REAL payload server-side, shows it
      editable, and only runs what the user approved. Used by every generate action. -->
@@ -4362,7 +4580,8 @@
 	onConfirm={(body) => onComposerConfirm(body)}
 	onGoToConnections={() => {
 		composerOpen = false;
-		activeTab = 'connections';
+		activeTab = 'profile';
+		profileView = 'connections';
 	}}
 />
 
@@ -4664,7 +4883,8 @@
 						class="btn-sync"
 						onclick={() => {
 							publishFallbackPost = null;
-							activeTab = 'connections';
+							activeTab = 'profile';
+							profileView = 'connections';
 						}}>Go to Connections <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg></button
 					>
 				</div>
@@ -4900,6 +5120,134 @@
 		border-radius: 8px;
 		overflow: hidden;
 		background: var(--surface);
+	}
+
+	/* Same switcher, rendered above the Profile lenses (outside any toolbar). */
+	.profile-lens {
+		margin-bottom: var(--space-4);
+	}
+
+	/* ── Studio tab ─────────────────────────────────────────────── */
+	.studio-head {
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: var(--space-4);
+		flex-wrap: wrap;
+		margin-bottom: var(--space-4);
+	}
+	.studio-deliver {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--space-2);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		padding: var(--space-1) var(--space-2);
+		background: var(--surface);
+		flex-shrink: 0;
+	}
+	.studio-deliver-label {
+		font-family: var(--font-mono);
+		font-size: 0.62rem;
+		text-transform: uppercase;
+		letter-spacing: 0.09em;
+		color: var(--text-dim);
+		padding: 0 var(--space-1);
+	}
+	.studio-preview {
+		width: calc(100% + 2 * var(--space-4));
+		margin: calc(-1 * var(--space-4)) calc(-1 * var(--space-4)) 0;
+		height: 124px;
+		object-fit: cover;
+		border-radius: calc(var(--radius-md) - 3px) calc(var(--radius-md) - 3px) 0 0;
+	}
+	.studio-tried {
+		font-family: var(--font-mono);
+		font-size: 0.6rem;
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+		color: var(--success-text);
+		background: var(--success-soft);
+		border-radius: var(--radius-full);
+		padding: 2px 8px;
+	}
+	.studio-title {
+		font-family: var(--font-display);
+		font-size: var(--text-xl);
+		margin-bottom: var(--space-1);
+	}
+	.studio-sub {
+		color: var(--muted);
+		font-size: 0.85rem;
+		max-width: 62ch;
+		line-height: 1.55;
+	}
+	.studio-cats {
+		margin-bottom: var(--space-5);
+	}
+	.studio-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+		gap: var(--space-4);
+	}
+	.studio-card {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-2);
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-md);
+		padding: var(--space-4);
+		border-top: 3px solid var(--accent);
+		transition: border-color 0.15s ease, transform 0.15s ease;
+	}
+	.studio-card:hover {
+		border-color: var(--accent-mid);
+		transform: translateY(-2px);
+	}
+	/* Category is encoded in the top stripe AND the pipeline chip text — never colour alone. */
+	.studio-product {
+		border-top-color: var(--cyan);
+	}
+	.studio-cinematic {
+		border-top-color: var(--gold);
+	}
+	.studio-stills {
+		border-top-color: var(--success);
+	}
+	.studio-card-top {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+	}
+	.studio-pipeline {
+		font-family: var(--font-mono);
+		font-size: 0.62rem;
+		text-transform: uppercase;
+		letter-spacing: 0.09em;
+		color: var(--text-dim);
+		border: 1px solid var(--border-strong);
+		border-radius: var(--radius-full);
+		padding: 2px 8px;
+	}
+	.studio-card-title {
+		font-family: var(--font-display);
+		font-size: var(--text-lg);
+	}
+	.studio-card-tag {
+		color: var(--muted);
+		font-size: 0.8rem;
+		line-height: 1.45;
+		flex: 1;
+	}
+	.studio-use {
+		align-self: flex-start;
+		min-height: 44px;
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.studio-card {
+			transition: none;
+		}
 	}
 
 	.view-toggle-btn {

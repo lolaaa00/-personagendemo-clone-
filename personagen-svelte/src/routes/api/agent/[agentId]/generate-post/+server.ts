@@ -127,6 +127,25 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		aiBadge: body.ai_badge === true
 	};
 
+	// ── Studio delivery contract ─────────────────────────────────────────────
+	// `studio_template` tags the output with the archetype that produced it (so
+	// the Studio gallery can surface real generations as template previews).
+	// `deliver` overrides the destination: 'review' pins the result as a DRAFT
+	// even when a platform is connected — without it, an unscheduled generate
+	// publishes immediately, which is right for "post now" but wrong for Studio —
+	// and 'asset' additionally marks it standalone so the review queue skips it.
+	const studioTemplate =
+		typeof body.studio_template === 'string' ? body.studio_template.slice(0, 64) : null;
+	const deliver: 'review' | 'asset' | null =
+		body.deliver === 'asset' || body.deliver === 'review' ? body.deliver : null;
+	const studioMeta =
+		studioTemplate || deliver
+			? {
+					...(studioTemplate ? { template: studioTemplate } : {}),
+					...(deliver === 'asset' ? { standalone: true } : {})
+				}
+			: null;
+
 	const scheduledDate = typeof body.scheduled_date === 'string' ? body.scheduled_date : null;
 	const scheduledTime = typeof body.scheduled_time === 'string' ? body.scheduled_time : null;
 
@@ -164,10 +183,16 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		// forks by format: a spokesperson clip runs voiceover + talking-head (OmniHuman),
 		// a b-roll clip runs the picked i2v model. The persona's ugc_format decides
 		// (auto → the Director picks, biased to spokesperson); the composer can override.
+		// Honor an explicit format in the request first (the REAL run already does,
+		// via formatOverride) — otherwise a Studio template or composer choice would
+		// preview as the persona's default pipeline while generating as the requested
+		// one, showing the wrong model stack and cost.
 		const personaFormat: 'auto' | 'spokesperson' | 'broll' =
-			cfgRow?.ugc_format === 'spokesperson' || cfgRow?.ugc_format === 'broll'
-				? cfgRow.ugc_format
-				: 'auto';
+			body.format === 'spokesperson' || body.format === 'broll'
+				? body.format
+				: cfgRow?.ugc_format === 'spokesperson' || cfgRow?.ugc_format === 'broll'
+					? cfgRow.ugc_format
+					: 'auto';
 		const { voice: previewVoice } = resolveVoiceForPersona(cfgRow?.ugc_voice || DEFAULT_VOICE, agent);
 		const voiceLabel = VOICE_CATALOG.find((v) => v.name === previewVoice)?.label || previewVoice;
 
@@ -298,7 +323,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 				const pack = wantCinematic
 					? await generateCinematicUgcPack({ supabase: taskSupabase, ...genInput, postId })
 					: await generateUgcPack({ supabase: taskSupabase, ...genInput, postId });
-				const content = pack.content;
+				const content = studioMeta ? { ...pack.content, studio: studioMeta } : pack.content;
 
 				// Which SELECTED platforms can actually accept this pack's media type?
 				let publishablePlatforms = targetPool;
@@ -310,7 +335,9 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 
 				// No publishable platform → keep the generated content as a DRAFT
 				// rather than failing. This is the "generate without a connection" path.
-				if (publishablePlatforms.length === 0) {
+				// A Studio `deliver` request pins a draft too — Studio output must
+				// never race straight to a live platform.
+				if (deliver || publishablePlatforms.length === 0) {
 					await taskDb.posts.update(postId, {
 						content: JSON.stringify(content),
 						platforms: targetPool,
@@ -368,7 +395,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		const pack = wantCinematic
 			? await generateCinematicUgcPack({ supabase: locals.supabase, ...genInput })
 			: await generateUgcPack({ supabase: locals.supabase, ...genInput });
-		content = pack.content;
+		content = studioMeta ? { ...pack.content, studio: studioMeta } : pack.content;
 	} catch (genErr) {
 		const msg = (genErr as Error).message;
 		const status = /image generation/i.test(msg) ? 502 : 500;
@@ -386,10 +413,14 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 	const now = new Date();
 
 	// No publishable platform → save the generated content as a DRAFT rather
-	// than erroring. This is the "generate without a connection" path.
-	if (publishablePlatforms.length === 0) {
-		const reason =
-			connectedPlatforms.length === 0
+	// than erroring. This is the "generate without a connection" path. A Studio
+	// `deliver` request pins a draft too (see the async path for why).
+	if (deliver || publishablePlatforms.length === 0) {
+		const reason = deliver
+			? deliver === 'asset'
+				? 'Saved as a standalone asset — it will not appear in the review queue.'
+				: 'Saved as a draft for review, as requested.'
+			: connectedPlatforms.length === 0
 				? 'No social account connected yet — saved as a draft.'
 				: `Content is image-only and the selected platform(s) (${targetPool.join(', ')}) don't accept image posts — saved as a draft.`;
 		const { data: draft, error: draftErr } = await db.posts.create({
