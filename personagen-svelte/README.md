@@ -13,7 +13,7 @@ PersonaGen gives you a team of AI creators who make, schedule, and publish socia
 | Creator | Focus | Ready today |
 |---|---|---|
 | **[Lexy Connor](https://honeyx.monarchstack.com/personas/26bda125-98a4-437a-8ea1-4d5b501d1318)** | Parenting & Family | ✅ Fully live — Instagram + TikTok connected, drafts waiting, posts already published |
-| **[Chloe Miles](https://honeyx.monarchstack.com/personas/24e5442c-3d42-403f-96e7-536868598114)** | Sustainability & Eco | 📝 8 drafts made and waiting for your review |
+| **[Chloe Miles](https://honeyx.monarchstack.com/personas/24e5442c-3d42-403f-96e7-536868598114)** | Sustainability & Eco | 📝 A batch of drafts made and waiting for your review |
 | **[Jenny Tran](https://honeyx.monarchstack.com/personas/d5233352-113c-4982-b447-7ac52ea0d8d3)** | Beauty & Wellness | ✨ Fresh start — make her first post in minutes |
 
 Do the three walkthroughs in order — each takes about 10 minutes and teaches a different part of the app.
@@ -35,13 +35,13 @@ Lexy is your working creator. Her Instagram and TikTok are already connected, an
 
 ### Walkthrough 2 · Chloe Miles — shape a creator with your taste
 
-Chloe has already made 8 drafts, but her social accounts aren't connected yet. Use her to practice curating — then connect her when you're happy with her style.
+Chloe has already made a batch of drafts, but her social accounts aren't connected yet. Use her to practice curating — then connect her when you're happy with her style.
 
 1. Open **Review Queue** and find Chloe's cards (each card shows the creator's name).
-2. Go through all 8: approve the ones that feel right, **reject the rest with reasons**. Be picky — this is how you tune her voice before anything ever goes public.
+2. Go through them all: approve the ones that feel right, **reject the rest with reasons**. Be picky — this is how you tune her voice before anything ever goes public.
 3. Want her captions punchier or softer overall? Open **[Chloe's page](https://honeyx.monarchstack.com/personas/24e5442c-3d42-403f-96e7-536868598114)** → **Profile** tab and edit her **Personality** text — write it like you're briefing a human creator. The ✨ **AI Enrich** button turns a rough note into a full personality.
-4. When you're happy with her content, click her **Connections** tab → **+ Connect** on Instagram (or any platform) → log in to the account in the window that opens. A green badge appears — that's it.
-5. Back on her **Profile** tab, set **Autonomy** to **Semi-Autonomous** and set her posts-per-day. From now on she drafts on schedule, and her approved posts publish to her connected accounts automatically.
+4. When you're happy with her content: on her **Profile** tab, switch the view from **Overview** to **Connections**, then click **+ Connect** on Instagram (or any platform) and log in to the account in the window that opens. A green badge appears — that's it.
+5. Still on **Profile**, set **Autonomy** to **Semi-Autonomous** and set her posts-per-day. From now on she drafts on schedule, and her approved posts publish to her connected accounts automatically.
 
 > 💡 Approved posts only publish once an account is connected — so you can safely approve Chloe's drafts today and connect her tomorrow.
 
@@ -52,9 +52,11 @@ Jenny is brand new: face ready, no content yet. Use her to learn how posts get m
 1. Open **[Jenny's page](https://honeyx.monarchstack.com/personas/d5233352-113c-4982-b447-7ac52ea0d8d3)** → **Profile** tab. Read her Personality and tweak anything you'd like — who she is shapes everything she makes.
 2. Scroll to her **Reference Kit**. If any of the four tiles are empty, click **⚡ Generate all remaining** — this builds the assets that keep her face consistent in every image and video. It runs in the background; a minute or two per tile.
 3. Try her **Voice**: press play to hear it. Every creator has their own voice for spoken videos — no two sound alike.
-4. Go to her **Feed** tab and open the composer. Type a topic (or leave it blank and let her choose), pick **Image** or **Video**, and hit generate. You'll see progress while it works — takes a minute or two.
-5. Her first post appears in her feed as a **Draft**. Edit the caption if you like — this is your content now.
+4. Go to her **Content** tab and open the composer. Type a topic (or leave it blank and let her choose), pick **Image** or **Video**, and hit generate. You'll see progress while it works — takes a minute or two.
+5. Her first post appears on her **Content** tab as a **Draft**. Edit the caption if you like — this is your content now.
 6. When you're ready for Jenny to work on her own: Profile tab → **Autonomy → Semi-Autonomous** → set posts per day and her posting window. She'll start filling your Review Queue like Lexy does.
+
+> 💡 Shortcut: her **Studio** tab has ready-made post templates — pick one and it pre-fills the composer for you. Everything Studio makes still lands as a **Draft** for your review; it never publishes on its own.
 
 ---
 
