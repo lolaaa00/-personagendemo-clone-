@@ -425,7 +425,114 @@
 			return false;
 		}
 	}
+
+	// ═══ View modes ════════════════════════════════════════════════════════
+	// Five ways to see the same queue, all driving the same handlers above.
+	// Preference persists per-browser; first visit defaults by pointer type
+	// (deck for phones, table for desktops).
+	type ViewMode = 'table' | 'split' | 'deck' | 'board' | 'grid';
+	const VIEW_STORE = 'pg-review-view';
+	const VIEWS: Array<{ id: ViewMode; label: string; hint: string }> = [
+		{ id: 'table', label: 'Table', hint: 'Sortable table — bulk-first' },
+		{ id: 'split', label: 'Split', hint: 'List + preview pane — j/k/a/r keyboard triage' },
+		{ id: 'deck', label: 'Deck', hint: 'One card at a time — built for phones' },
+		{ id: 'board', label: 'Board', hint: 'Pipeline lanes: needs review · scheduled · flagged' },
+		{ id: 'grid', label: 'Grid', hint: 'The original card grid' }
+	];
+	let viewMode = $state<ViewMode>('table');
+	onMount(() => {
+		const saved = localStorage.getItem(VIEW_STORE) as ViewMode | null;
+		if (saved && VIEWS.some((v) => v.id === saved)) viewMode = saved;
+		else if (window.matchMedia('(max-width: 767px)').matches) viewMode = 'deck';
+	});
+	function setView(v: ViewMode) {
+		viewMode = v;
+		try {
+			localStorage.setItem(VIEW_STORE, v);
+		} catch {
+			/* private browsing — preference just won't stick */
+		}
+	}
+
+	// ── Sort (table headers; split/deck/board follow the same order) ──
+	let sortKey = $state<'slot' | 'qc' | 'agent'>('slot');
+	let sortDir = $state<1 | -1>(1);
+	function setSort(k: 'slot' | 'qc' | 'agent') {
+		if (sortKey === k) sortDir = sortDir === 1 ? -1 : 1;
+		else {
+			sortKey = k;
+			sortDir = 1; // qc ascending = worst first, the sweep-the-bottom workflow
+		}
+	}
+	let sortedItems = $derived.by(() => {
+		const arr = [...filteredItems];
+		arr.sort((a, b) => {
+			let cmp = 0;
+			if (sortKey === 'qc') cmp = (a.quality_score ?? 11) - (b.quality_score ?? 11);
+			else if (sortKey === 'agent') cmp = a.agent_name.localeCompare(b.agent_name);
+			else
+				cmp = `${a.scheduled_date ?? '9999'} ${a.scheduled_time ?? ''}`.localeCompare(
+					`${b.scheduled_date ?? '9999'} ${b.scheduled_time ?? ''}`
+				);
+			return cmp * sortDir;
+		});
+		return arr;
+	});
+
+	// ── Cursor: the "current" item in split and deck ──
+	let cursor = $state(0);
+	$effect(() => {
+		// Approving/rejecting removes the row; keep the cursor on a real item so
+		// the next card slides into place instead of the pane going blank.
+		if (cursor > sortedItems.length - 1) cursor = Math.max(0, sortedItems.length - 1);
+	});
+	let current = $derived(sortedItems[cursor] ?? null);
+
+	// ── Board lanes ──
+	const isFlagged = (i: ReviewItem) => i.quality_score != null && i.quality_score < 6;
+	let laneFlagged = $derived(sortedItems.filter(isFlagged));
+	let laneNeeds = $derived(sortedItems.filter((i) => i.status === 'draft' && !isFlagged(i)));
+	let laneScheduled = $derived(sortedItems.filter((i) => i.status !== 'draft' && !isFlagged(i)));
+
+	// ── Keyboard triage (split / deck / table) ──
+	function overlayOpen() {
+		return (
+			!!drawerPost || !!lightbox || !!manualDeleteNotice || rejectPickerOpen || editingId !== null
+		);
+	}
+	function rejectOne(item: ReviewItem) {
+		selected = new Set([item.id]);
+		rejectPickerOpen = true;
+	}
+	function onQueueKeydown(e: KeyboardEvent) {
+		if (loading || working || deleteBusy || overlayOpen()) return;
+		if (viewMode === 'board' || viewMode === 'grid') return;
+		const t = e.target as HTMLElement | null;
+		if (t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
+		const k = e.key;
+		if (k === 'j' || k === 'ArrowDown' || (viewMode === 'deck' && k === 'ArrowRight')) {
+			e.preventDefault();
+			if (cursor < sortedItems.length - 1) cursor++;
+		} else if (k === 'k' || k === 'ArrowUp' || (viewMode === 'deck' && k === 'ArrowLeft')) {
+			e.preventDefault();
+			if (cursor > 0) cursor--;
+		} else if (k === 'a' && current) {
+			e.preventDefault();
+			if (current.status === 'draft') act('approve', [current.id]);
+		} else if (k === 'r' && current) {
+			e.preventDefault();
+			rejectOne(current);
+		} else if ((k === 'o' || k === 'Enter') && current) {
+			e.preventDefault();
+			openDrawer(current);
+		} else if (k === 'z' && current) {
+			e.preventDefault();
+			openLightbox(current);
+		}
+	}
 </script>
+
+<svelte:window onkeydown={onQueueKeydown} />
 
 <div class="review-page">
 	<header class="review-header">
@@ -514,6 +621,39 @@
 				</select>
 			</label>
 			<span class="filt-count" aria-live="polite">{filteredItems.length} of {items.length} shown</span>
+		</div>
+
+		<h2 class="sr-only">Queue view</h2>
+		<div class="view-switch" role="group" aria-label="Queue view">
+			{#each VIEWS as v (v.id)}
+				<button
+					type="button"
+					class="vs-btn"
+					class:on={viewMode === v.id}
+					aria-pressed={viewMode === v.id}
+					title={v.hint}
+					onclick={() => setView(v.id)}
+				>
+					{#if v.id === 'table'}
+						<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" /></svg>
+					{:else if v.id === 'split'}
+						<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" /><line x1="10" y1="3" x2="10" y2="21" /></svg>
+					{:else if v.id === 'deck'}
+						<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="4" width="12" height="16" rx="2" /><path d="M3 8v10a2 2 0 002 2" /><path d="M21 8v10a2 2 0 01-2 2" /></svg>
+					{:else if v.id === 'board'}
+						<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="5" height="18" rx="1" /><rect x="10" y="3" width="5" height="12" rx="1" /><rect x="17" y="3" width="5" height="8" rx="1" /></svg>
+					{:else}
+						<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></svg>
+					{/if}
+					{v.label}
+				</button>
+			{/each}
+			{#if viewMode === 'split' || viewMode === 'deck' || viewMode === 'table'}
+				<span class="kbd-hints" aria-hidden="true">
+					<kbd>j</kbd>/<kbd>k</kbd> move · <kbd>a</kbd> approve · <kbd>r</kbd> reject ·
+					<kbd>o</kbd> open · <kbd>z</kbd> zoom
+				</span>
+			{/if}
 		</div>
 
 		<h2 class="sr-only">Bulk actions</h2>
@@ -635,7 +775,8 @@
 		{/if}
 
 		<h2 class="sr-only">Pending posts</h2>
-		<div class="queue-grid">
+		{#if viewMode === 'grid'}
+			<div class="queue-grid">
 			{#each filteredItems as item (item.id)}
 				<div class="queue-card" class:selected={selected.has(item.id)}>
 					<div class="card-media">
@@ -878,7 +1019,368 @@
 					</div>
 				</div>
 			{/each}
-		</div>
+			</div>
+		{:else if viewMode === 'table'}
+			<!-- ═══ TABLE — bulk-first, sortable. Row click opens the drawer (the
+			     preview-beside pattern); everything routes through the same handlers. ═══ -->
+			<div class="tbl-wrap">
+				<table class="queue-tbl">
+					<thead>
+						<tr>
+							<th class="th-check">
+								<input
+									type="checkbox"
+									class="tbl-check"
+									checked={filteredItems.length > 0 && filteredItems.every((i) => selected.has(i.id))}
+									onchange={toggleAll}
+									aria-label="Select all shown"
+								/>
+							</th>
+							<th><span class="sr-only">Media</span></th>
+							<th>
+								<button class="th-sort" class:on={sortKey === 'agent'} onclick={() => setSort('agent')}>
+									Persona{sortKey === 'agent' ? (sortDir === 1 ? ' ↑' : ' ↓') : ''}
+								</button>
+							</th>
+							<th class="th-cap">Caption</th>
+							<th class="th-plat">Platforms</th>
+							<th>
+								<button class="th-sort" class:on={sortKey === 'qc'} onclick={() => setSort('qc')}>
+									QC{sortKey === 'qc' ? (sortDir === 1 ? ' ↑' : ' ↓') : ''}
+								</button>
+							</th>
+							<th>
+								<button class="th-sort" class:on={sortKey === 'slot'} onclick={() => setSort('slot')}>
+									Slot{sortKey === 'slot' ? (sortDir === 1 ? ' ↑' : ' ↓') : ''}
+								</button>
+							</th>
+							<th class="th-status">Status</th>
+							<th><span class="sr-only">Actions</span></th>
+						</tr>
+					</thead>
+					<tbody>
+						{#each sortedItems as item, i (item.id)}
+							<tr class:checked={selected.has(item.id)} class:cursor-row={i === cursor}>
+								<td>
+									<input
+										type="checkbox"
+										class="tbl-check"
+										checked={selected.has(item.id)}
+										onchange={() => toggle(item.id)}
+										aria-label="Select post by {item.agent_name}"
+									/>
+								</td>
+								<td>
+									<button
+										type="button"
+										class="tbl-thumb"
+										onclick={() => {
+											cursor = i;
+											openDrawer(item);
+										}}
+										aria-label="Open post details for {item.agent_name}"
+									>
+										{#if item.poster_url || item.media_url}
+											<img src={item.poster_url || item.media_url} alt="" width="40" height="50" loading="lazy" />
+										{:else}
+											<span class="tbl-nomedia" aria-hidden="true"></span>
+										{/if}
+									</button>
+								</td>
+								<td class="td-agent">
+									{#if item.agent_avatar}<img src={item.agent_avatar} alt="" width="22" height="22" loading="lazy" />{/if}
+									<span>{item.agent_name}</span>
+								</td>
+								<td class="td-cap">
+									<button
+										type="button"
+										class="cap-open"
+										title="Open post details"
+										onclick={() => {
+											cursor = i;
+											openDrawer(item);
+										}}>{item.text}</button>
+								</td>
+								<td class="td-plat">
+									{#each item.platforms as p}<span class="plat-chip">{platformLabel(p)}</span>{/each}
+								</td>
+								<td class="td-qc">
+									{#if item.quality_score != null}
+										<span
+											class="qc-badge"
+											class:qc-high={item.quality_score >= 7.5}
+											class:qc-low={item.quality_score < 6}
+											title={item.quality_issue || 'Independent QC grade'}>QC {item.quality_score.toFixed(1)}</span>
+									{:else}
+										<span class="td-dash" aria-label="No QC score">—</span>
+									{/if}
+								</td>
+								<td class="td-slot">{slotLabel(item)}</td>
+								<td class="td-status"><span class="status-badge status-{item.status}">{item.status}</span></td>
+								<td class="td-act">
+									{#if item.status === 'draft'}
+										<button
+											type="button"
+											class="row-btn row-ok"
+											disabled={working || deleteBusy}
+											title="Approve & schedule"
+											aria-label="Approve post by {item.agent_name}"
+											onclick={() => act('approve', [item.id])}
+											><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg></button>
+									{/if}
+									<button
+										type="button"
+										class="row-btn row-no"
+										disabled={working || deleteBusy}
+										title={item.status === 'draft' ? 'Reject with a reason' : 'Unschedule with a reason'}
+										aria-label="Reject post by {item.agent_name}"
+										onclick={() => rejectOne(item)}
+										><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg></button>
+									<button
+										type="button"
+										class="row-btn row-del"
+										disabled={working || deleteBusy}
+										title="Delete permanently"
+										aria-label="Delete post by {item.agent_name} permanently"
+										onclick={() => deletePost(item.id)}
+										><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" /></svg></button>
+								</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			</div>
+		{:else if viewMode === 'split'}
+			<!-- ═══ SPLIT — dense list left, full preview right, j/k/a/r triage ═══ -->
+			<div class="split">
+				<div class="split-list">
+					{#each sortedItems as item, i (item.id)}
+						<div class="sp-row" class:active={i === cursor}>
+							<input
+								type="checkbox"
+								class="tbl-check"
+								checked={selected.has(item.id)}
+								onchange={() => toggle(item.id)}
+								aria-label="Select post by {item.agent_name}"
+							/>
+							<button
+								type="button"
+								class="sp-main"
+								aria-current={i === cursor ? 'true' : undefined}
+								onclick={() => (cursor = i)}
+							>
+								{#if item.poster_url || item.media_url}
+									<img class="sp-thumb" src={item.poster_url || item.media_url} alt="" width="34" height="42" loading="lazy" />
+								{:else}
+									<span class="sp-thumb tbl-nomedia" aria-hidden="true"></span>
+								{/if}
+								<span class="sp-meta">
+									<span class="sp-who">{item.agent_name} · {item.platforms.map(platformLabel).join(', ')}</span>
+									<span class="sp-cap">{item.text}</span>
+								</span>
+								{#if item.quality_score != null}
+									<span
+										class="qc-badge sp-qc"
+										class:qc-high={item.quality_score >= 7.5}
+										class:qc-low={item.quality_score < 6}>{item.quality_score.toFixed(1)}</span>
+								{/if}
+							</button>
+						</div>
+					{/each}
+				</div>
+				{#if current}
+					<div class="split-detail">
+						<button
+							type="button"
+							class="sd-media"
+							title={current.media_type === 'video' ? 'Play full size' : 'Enlarge image'}
+							aria-label={current.media_type === 'video' ? 'Play full size' : 'Enlarge image'}
+							onclick={() => openLightbox(current!)}
+						>
+							{#if current.poster_url || current.media_url}
+								<img src={current.poster_url || current.media_url} alt="Draft media for {current.agent_name}" width="800" height="1000" />
+								{#if current.media_type === 'video'}
+									<span class="media-badge"><svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><polygon points="6 3 20 12 6 21 6 3" /></svg> video</span>
+								{/if}
+							{:else}
+								<div class="no-media">no media</div>
+							{/if}
+						</button>
+						<div class="sd-body">
+							<div class="card-agent">
+								{#if current.agent_avatar}<img src={current.agent_avatar} alt="" width="40" height="40" loading="lazy" />{/if}
+								<span class="agent-name">{current.agent_name}</span>
+								{#if current.quality_score != null}
+									<span
+										class="qc-badge"
+										class:qc-high={current.quality_score >= 7.5}
+										class:qc-low={current.quality_score < 6}
+										title={current.quality_issue || 'Independent QC grade'}>QC {current.quality_score.toFixed(1)}</span>
+								{/if}
+								<span class="slot">{slotLabel(current)}</span>
+								<span class="status-badge status-{current.status}">{current.status}</span>
+							</div>
+							{#if current.quality_issue}
+								<p class="sd-issue">QC note: {current.quality_issue}</p>
+							{/if}
+							<p class="sd-caption">{current.text}</p>
+							<div class="sd-actions">
+								{#if current.status === 'draft'}
+									<button class="btn-approve" disabled={working || deleteBusy} onclick={() => act('approve', [current!.id])}>
+										Approve &amp; schedule
+									</button>
+								{/if}
+								<button class="btn-reject" disabled={working || deleteBusy} onclick={() => rejectOne(current!)}>
+									{current.status === 'draft' ? 'Reject…' : 'Unschedule…'}
+								</button>
+								<button class="btn-ghost" onclick={() => openDrawer(current!)}>
+									{drawerLoadingId === current.id ? 'Opening…' : 'Full details'}
+								</button>
+								<button
+									class="btn-delete sm"
+									disabled={working || deleteBusy}
+									aria-label="Delete post permanently"
+									onclick={() => deletePost(current!.id)}
+									><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" /></svg></button>
+							</div>
+							<p class="sd-pos">{cursor + 1} of {sortedItems.length}</p>
+						</div>
+					</div>
+				{/if}
+			</div>
+		{:else if viewMode === 'deck'}
+			<!-- ═══ DECK — one post, full attention. Approve/reject advances. ═══ -->
+			{#if current}
+				<div class="deck">
+					<div class="deck-stack">
+						{#if sortedItems[cursor + 2]}<div class="deck-under u2" aria-hidden="true"></div>{/if}
+						{#if sortedItems[cursor + 1]}<div class="deck-under u1" aria-hidden="true"></div>{/if}
+						<div class="deck-card">
+							<button
+								type="button"
+								class="deck-media"
+								title={current.media_type === 'video' ? 'Play full size' : 'Enlarge image'}
+								aria-label={current.media_type === 'video' ? 'Play full size' : 'Enlarge image'}
+								onclick={() => openLightbox(current!)}
+							>
+								{#if current.poster_url || current.media_url}
+									<img src={current.poster_url || current.media_url} alt="Draft media for {current.agent_name}" width="800" height="1000" />
+								{:else}
+									<div class="no-media">no media</div>
+								{/if}
+								{#if current.quality_score != null}
+									<span class="deck-qc" class:dk-low={current.quality_score < 6}>QC {current.quality_score.toFixed(1)}</span>
+								{/if}
+								{#if current.media_type === 'video'}
+									<span class="media-badge"><svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><polygon points="6 3 20 12 6 21 6 3" /></svg> video</span>
+								{/if}
+							</button>
+							<div class="deck-body">
+								<div class="card-agent">
+									{#if current.agent_avatar}<img src={current.agent_avatar} alt="" width="40" height="40" loading="lazy" />{/if}
+									<span class="agent-name">{current.agent_name}</span>
+									<span class="slot">{slotLabel(current)}</span>
+								</div>
+								<p class="deck-cap">{current.text}</p>
+								<div class="plat-row">
+									{#each current.platforms as p}<span class="plat-chip">{platformLabel(p)}</span>{/each}
+								</div>
+							</div>
+						</div>
+					</div>
+					<div class="deck-controls">
+						<button
+							type="button"
+							class="dk-round dk-nav"
+							disabled={cursor === 0}
+							aria-label="Previous post"
+							onclick={() => cursor--}
+							><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6" /></svg></button>
+						<button
+							type="button"
+							class="dk-round dk-no"
+							disabled={working || deleteBusy}
+							aria-label={current.status === 'draft' ? 'Reject with a reason' : 'Unschedule with a reason'}
+							onclick={() => rejectOne(current!)}
+							><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg></button>
+						<button
+							type="button"
+							class="dk-round dk-info"
+							aria-label="Open full details"
+							onclick={() => openDrawer(current!)}
+							><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" /></svg></button>
+						<button
+							type="button"
+							class="dk-round dk-yes"
+							disabled={working || deleteBusy || current.status !== 'draft'}
+							title={current.status === 'draft' ? 'Approve & schedule' : 'Already scheduled'}
+							aria-label="Approve and schedule"
+							onclick={() => act('approve', [current!.id])}
+							><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg></button>
+						<button
+							type="button"
+							class="dk-round dk-nav"
+							disabled={cursor >= sortedItems.length - 1}
+							aria-label="Next post"
+							onclick={() => cursor++}
+							><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6" /></svg></button>
+					</div>
+					<p class="deck-progress" aria-live="polite">
+						{cursor + 1} of {sortedItems.length}
+						<span class="deck-track" aria-hidden="true"><i style="width: {((cursor + 1) / Math.max(1, sortedItems.length)) * 100}%"></i></span>
+					</p>
+				</div>
+			{/if}
+		{:else if viewMode === 'board'}
+			<!-- ═══ BOARD — pipeline lanes. Flagged (QC < 6) gets its own lane so
+			     low-quality drafts stop hiding among good ones. ═══ -->
+			<div class="board">
+				{#each [{ title: 'Needs review', cls: 'needs', list: laneNeeds }, { title: 'Scheduled', cls: 'sched', list: laneScheduled }, { title: 'Flagged · QC < 6.0', cls: 'flag', list: laneFlagged }] as lane (lane.cls)}
+					<section class="lane {lane.cls}">
+						<header class="lane-head">
+							<h3 class="lane-title">{lane.title}</h3>
+							<span class="lane-count">{lane.list.length}</span>
+						</header>
+						{#each lane.list as item (item.id)}
+							<div class="lane-card" class:flagged={lane.cls === 'flag'}>
+								<button
+									type="button"
+									class="lane-thumb"
+									onclick={() => openDrawer(item)}
+									aria-label="Open post details for {item.agent_name}"
+								>
+									{#if item.poster_url || item.media_url}
+										<img src={item.poster_url || item.media_url} alt="" width="46" height="58" loading="lazy" />
+									{:else}
+										<span class="tbl-nomedia" aria-hidden="true"></span>
+									{/if}
+								</button>
+								<div class="lane-info">
+									<span class="lane-who">{item.agent_name}</span>
+									<span class="lane-cap">{item.text}</span>
+									<span class="lane-foot">
+										{#each item.platforms as p}<span class="plat-chip">{platformLabel(p)}</span>{/each}
+										<span class="slot">{slotLabel(item)}</span>
+										{#if lane.cls === 'flag' && item.quality_score != null}
+											<span class="qc-badge qc-low">QC {item.quality_score.toFixed(1)}{item.quality_issue ? ` · ${item.quality_issue}` : ''}</span>
+										{/if}
+									</span>
+									<span class="lane-quick">
+										{#if item.status === 'draft'}
+											<button type="button" class="lq-btn lq-ok" disabled={working || deleteBusy} onclick={() => act('approve', [item.id])}>Approve</button>
+										{/if}
+										<button type="button" class="lq-btn" onclick={() => openDrawer(item)}>Open</button>
+									</span>
+								</div>
+							</div>
+						{/each}
+						{#if lane.list.length === 0}
+							<p class="lane-empty">Nothing here</p>
+						{/if}
+					</section>
+				{/each}
+			</div>
+		{/if}
 	{/if}
 
 	<PostDrawer
@@ -1405,5 +1907,730 @@
 	button:disabled {
 		opacity: 0.5;
 		cursor: not-allowed;
+	}
+
+	/* ═══════════════════════════════════════════════════════════════
+	   VIEW SWITCHER
+	   ═══════════════════════════════════════════════════════════════ */
+	.view-switch {
+		display: flex;
+		align-items: center;
+		flex-wrap: wrap;
+		gap: 0.35rem;
+		margin-bottom: var(--space-4);
+	}
+	.vs-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		min-height: 44px;
+		padding: 0 0.85rem;
+		border-radius: var(--radius-sm);
+		border: 1px solid var(--border-strong);
+		background: transparent;
+		color: var(--text-dim);
+		font-size: 0.8rem;
+		font-weight: var(--weight-semi);
+		cursor: pointer;
+	}
+	.vs-btn:hover:not(:disabled) {
+		border-color: var(--accent-mid);
+		color: var(--text);
+		background: var(--surface-2);
+	}
+	.vs-btn.on {
+		background: var(--accent-soft);
+		border-color: var(--accent-mid);
+		color: var(--accent-text);
+	}
+	.vs-btn:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
+	}
+	.kbd-hints {
+		margin-left: auto;
+		font-size: 0.7rem;
+		color: var(--text-dim);
+	}
+	.kbd-hints kbd {
+		font-family: var(--font-mono);
+		font-size: 0.66rem;
+		border: 1px solid var(--border-strong);
+		border-bottom-width: 2px;
+		border-radius: 5px;
+		padding: 1px 5px;
+		background: var(--surface-2);
+	}
+	@media (hover: none), (max-width: 900px) {
+		.kbd-hints {
+			display: none;
+		}
+	}
+
+	/* ═══════════════════════════════════════════════════════════════
+	   TABLE VIEW
+	   ═══════════════════════════════════════════════════════════════ */
+	.tbl-wrap {
+		overflow-x: auto;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		background: var(--surface);
+	}
+	.queue-tbl {
+		width: 100%;
+		border-collapse: collapse;
+		font-size: 0.82rem;
+	}
+	.queue-tbl thead th {
+		text-align: left;
+		font-family: var(--font-mono);
+		font-size: 0.62rem;
+		text-transform: uppercase;
+		letter-spacing: 0.09em;
+		color: var(--text-dim);
+		font-weight: var(--weight-semi);
+		padding: 0.35rem 0.6rem;
+		border-bottom: 1px solid var(--border-strong);
+		white-space: nowrap;
+	}
+	.th-sort {
+		font: inherit;
+		color: inherit;
+		text-transform: inherit;
+		letter-spacing: inherit;
+		background: none;
+		border: none;
+		cursor: pointer;
+		min-height: 44px;
+		padding: 0;
+	}
+	.th-sort:hover,
+	.th-sort.on {
+		color: var(--accent-text);
+	}
+	.th-sort:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
+	}
+	.queue-tbl tbody td {
+		padding: 0.45rem 0.6rem;
+		border-bottom: 1px solid var(--border);
+		vertical-align: middle;
+	}
+	.queue-tbl tbody tr:last-child td {
+		border-bottom: none;
+	}
+	.queue-tbl tbody tr:hover {
+		background: color-mix(in srgb, var(--accent) 5%, transparent);
+	}
+	.queue-tbl tbody tr.checked {
+		background: var(--accent-soft);
+	}
+	.queue-tbl tbody tr.cursor-row {
+		box-shadow: inset 3px 0 0 var(--accent);
+	}
+	.tbl-check {
+		width: 17px;
+		height: 17px;
+		accent-color: var(--accent);
+		cursor: pointer;
+	}
+	.tbl-thumb {
+		display: block;
+		padding: 0;
+		border: none;
+		background: none;
+		cursor: pointer;
+		border-radius: 5px;
+		overflow: hidden;
+		min-width: 44px;
+		min-height: 50px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+	.tbl-thumb img {
+		width: 40px;
+		height: 50px;
+		object-fit: cover;
+		border-radius: 5px;
+		display: block;
+	}
+	.tbl-thumb:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
+	}
+	.tbl-nomedia {
+		display: inline-block;
+		width: 40px;
+		height: 50px;
+		border-radius: 5px;
+		background: var(--surface-3);
+	}
+	.td-agent {
+		white-space: nowrap;
+	}
+	.td-agent img {
+		width: 22px;
+		height: 22px;
+		border-radius: 50%;
+		object-fit: cover;
+		vertical-align: middle;
+		margin-right: 0.4rem;
+	}
+	.td-agent span {
+		font-weight: var(--weight-semi);
+	}
+	.td-cap {
+		max-width: 320px;
+	}
+	.cap-open {
+		display: block;
+		width: 100%;
+		max-width: 320px;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		text-align: left;
+		background: none;
+		border: none;
+		padding: 0;
+		font: inherit;
+		color: var(--text-muted);
+		cursor: pointer;
+		min-height: 44px;
+	}
+	.cap-open:hover {
+		color: var(--text);
+	}
+	.cap-open:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
+	}
+	.td-plat {
+		white-space: nowrap;
+	}
+	.td-qc,
+	.td-slot {
+		white-space: nowrap;
+		font-variant-numeric: tabular-nums;
+	}
+	.td-slot {
+		font-family: var(--font-mono);
+		font-size: 0.72rem;
+		color: var(--text-dim);
+	}
+	.td-dash {
+		color: var(--text-dim);
+	}
+	.td-act {
+		white-space: nowrap;
+	}
+	.row-btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-width: 44px;
+		min-height: 44px;
+		border-radius: 8px;
+		border: 1px solid transparent;
+		background: none;
+		cursor: pointer;
+		color: var(--text-dim);
+	}
+	.row-btn:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
+	}
+	.row-ok:hover:not(:disabled) {
+		background: var(--success-soft);
+		color: var(--success-text);
+		border-color: var(--success);
+	}
+	.row-no:hover:not(:disabled),
+	.row-del:hover:not(:disabled) {
+		background: var(--error-soft);
+		color: var(--error-text);
+		border-color: var(--error);
+	}
+	@media (max-width: 900px) {
+		.th-cap,
+		.td-cap,
+		.th-plat,
+		.td-plat,
+		.th-status,
+		.td-status {
+			display: none;
+		}
+	}
+
+	/* ═══════════════════════════════════════════════════════════════
+	   SPLIT VIEW
+	   ═══════════════════════════════════════════════════════════════ */
+	.split {
+		display: grid;
+		grid-template-columns: minmax(280px, 360px) 1fr;
+		gap: var(--space-4);
+		align-items: start;
+	}
+	.split-list {
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		background: var(--surface);
+		max-height: 72vh;
+		max-height: 72dvh;
+		overflow-y: auto;
+	}
+	.sp-row {
+		display: flex;
+		align-items: center;
+		gap: 0.45rem;
+		padding: 0.3rem 0.45rem 0.3rem 0.6rem;
+		border-bottom: 1px solid var(--border);
+	}
+	.sp-row:last-child {
+		border-bottom: none;
+	}
+	.sp-row.active {
+		background: var(--accent-soft);
+		box-shadow: inset 3px 0 0 var(--accent);
+	}
+	.sp-main {
+		flex: 1;
+		display: flex;
+		align-items: center;
+		gap: 0.55rem;
+		min-width: 0;
+		min-height: 52px;
+		background: none;
+		border: none;
+		padding: 0.2rem 0;
+		cursor: pointer;
+		text-align: left;
+		font: inherit;
+		color: inherit;
+	}
+	.sp-main:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: -2px;
+	}
+	.sp-thumb {
+		width: 34px;
+		height: 42px;
+		border-radius: 5px;
+		object-fit: cover;
+		flex-shrink: 0;
+	}
+	.sp-meta {
+		display: flex;
+		flex-direction: column;
+		min-width: 0;
+		gap: 1px;
+	}
+	.sp-who {
+		font-size: 0.74rem;
+		font-weight: var(--weight-semi);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.sp-cap {
+		font-size: 0.7rem;
+		color: var(--text-dim);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.sp-qc {
+		margin-left: auto;
+		flex-shrink: 0;
+	}
+	.split-detail {
+		display: grid;
+		grid-template-columns: minmax(200px, 300px) 1fr;
+		gap: var(--space-5);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		background: var(--surface);
+		padding: var(--space-5);
+		position: sticky;
+		top: calc(var(--header-height, 60px) + var(--space-4));
+	}
+	.sd-media {
+		position: relative;
+		padding: 0;
+		border: none;
+		background: var(--surface-3);
+		border-radius: var(--radius-sm);
+		overflow: hidden;
+		cursor: zoom-in;
+		aspect-ratio: 4 / 5;
+	}
+	.sd-media img {
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+		display: block;
+	}
+	.sd-media:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
+	}
+	.sd-body {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-3);
+		min-width: 0;
+	}
+	.sd-issue {
+		font-size: 0.78rem;
+		color: var(--warning-text);
+		background: var(--warning-soft);
+		border-radius: 8px;
+		padding: 0.4rem 0.6rem;
+	}
+	.sd-caption {
+		font-size: 0.9rem;
+		color: var(--text-muted);
+		line-height: 1.55;
+	}
+	.sd-actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+		align-items: center;
+		margin-top: auto;
+	}
+	.sd-pos {
+		font-family: var(--font-mono);
+		font-size: 0.7rem;
+		color: var(--text-dim);
+		font-variant-numeric: tabular-nums;
+	}
+	@media (max-width: 900px) {
+		.split {
+			grid-template-columns: 1fr;
+		}
+		.split-detail {
+			position: static;
+			order: -1;
+			grid-template-columns: 1fr;
+		}
+		.sd-media {
+			max-width: 320px;
+		}
+		.split-list {
+			max-height: 45vh;
+			max-height: 45dvh;
+		}
+	}
+
+	/* ═══════════════════════════════════════════════════════════════
+	   DECK VIEW
+	   ═══════════════════════════════════════════════════════════════ */
+	.deck {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		padding-top: var(--space-2);
+	}
+	.deck-stack {
+		position: relative;
+		width: min(340px, 92vw);
+		display: grid;
+		place-items: center;
+	}
+	.deck-under {
+		position: absolute;
+		inset: 0 0 6% 0;
+		border-radius: var(--radius);
+		background: var(--surface);
+		border: 1px solid var(--border);
+	}
+	.deck-under.u1 {
+		transform: translateX(12px) rotate(2deg);
+		opacity: 0.65;
+	}
+	.deck-under.u2 {
+		transform: translateX(-12px) rotate(-1.6deg);
+		opacity: 0.4;
+	}
+	.deck-card {
+		position: relative;
+		z-index: 2;
+		width: 100%;
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		box-shadow: var(--shadow-lg);
+		overflow: hidden;
+	}
+	.deck-media {
+		position: relative;
+		display: block;
+		width: 100%;
+		padding: 0;
+		border: none;
+		background: var(--surface-3);
+		cursor: zoom-in;
+		aspect-ratio: 4 / 5;
+	}
+	.deck-media img {
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+		display: block;
+	}
+	.deck-media:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: -3px;
+	}
+	.deck-qc {
+		position: absolute;
+		top: 10px;
+		right: 10px;
+		font-family: var(--font-mono);
+		font-size: 0.68rem;
+		font-variant-numeric: tabular-nums;
+		color: #fff;
+		background: rgba(10, 10, 16, 0.55);
+		backdrop-filter: blur(6px);
+		border-radius: 999px;
+		padding: 3px 9px;
+	}
+	.deck-qc.dk-low {
+		background: color-mix(in srgb, var(--error) 75%, #000);
+	}
+	.deck-body {
+		padding: 0.75rem 0.9rem 0.9rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+	.deck-cap {
+		font-size: 0.84rem;
+		color: var(--text-muted);
+		line-height: 1.5;
+		display: -webkit-box;
+		-webkit-line-clamp: 3;
+		line-clamp: 3;
+		-webkit-box-orient: vertical;
+		overflow: hidden;
+	}
+	.deck-controls {
+		display: flex;
+		gap: 0.7rem;
+		align-items: center;
+		padding: var(--space-5) 0 var(--space-2);
+	}
+	.dk-round {
+		width: 50px;
+		height: 50px;
+		border-radius: 50%;
+		border: 1.5px solid var(--border-strong);
+		background: var(--surface);
+		color: var(--text-muted);
+		cursor: pointer;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		transition: transform 0.15s ease;
+	}
+	.dk-round:hover:not(:disabled) {
+		transform: scale(1.07);
+	}
+	.dk-round:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
+	}
+	.dk-yes {
+		width: 62px;
+		height: 62px;
+		border-color: var(--success);
+		color: var(--success-text);
+		background: var(--success-soft);
+	}
+	.dk-no {
+		border-color: var(--error);
+		color: var(--error-text);
+		background: var(--error-soft);
+	}
+	.dk-nav {
+		width: 44px;
+		height: 44px;
+	}
+	.deck-progress {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.35rem;
+		font-family: var(--font-mono);
+		font-size: 0.72rem;
+		color: var(--text-dim);
+		font-variant-numeric: tabular-nums;
+	}
+	.deck-track {
+		width: 180px;
+		height: 3px;
+		border-radius: 2px;
+		background: var(--surface-3);
+		overflow: hidden;
+	}
+	.deck-track i {
+		display: block;
+		height: 100%;
+		background: var(--accent);
+		border-radius: 2px;
+		transition: width 0.25s ease;
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.dk-round,
+		.deck-track i {
+			transition: none;
+		}
+	}
+
+	/* ═══════════════════════════════════════════════════════════════
+	   BOARD VIEW
+	   ═══════════════════════════════════════════════════════════════ */
+	.board {
+		display: grid;
+		grid-template-columns: repeat(3, 1fr);
+		gap: var(--space-4);
+		align-items: start;
+	}
+	.lane {
+		background: var(--surface-2);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		padding: 0.65rem;
+	}
+	.lane-head {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 0 0.25rem 0.55rem;
+	}
+	.lane-title {
+		font-family: var(--font-mono);
+		font-size: 0.66rem;
+		text-transform: uppercase;
+		letter-spacing: 0.1em;
+		font-weight: var(--weight-semi);
+	}
+	.lane.needs .lane-title {
+		color: var(--warning-text);
+	}
+	.lane.sched .lane-title {
+		color: var(--success-text);
+	}
+	.lane.flag .lane-title {
+		color: var(--error-text);
+	}
+	.lane-count {
+		font-family: var(--font-mono);
+		font-size: 0.68rem;
+		color: var(--text-dim);
+		font-variant-numeric: tabular-nums;
+	}
+	.lane-card {
+		display: grid;
+		grid-template-columns: 46px 1fr;
+		gap: 0.55rem;
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		padding: 0.55rem;
+		margin-bottom: 0.55rem;
+		box-shadow: var(--shadow-sm, none);
+	}
+	.lane-card:hover {
+		border-color: var(--accent-mid);
+	}
+	.lane-card.flagged {
+		border-left: 3px solid var(--error);
+	}
+	.lane-thumb {
+		padding: 0;
+		border: none;
+		background: none;
+		cursor: pointer;
+		border-radius: 6px;
+		overflow: hidden;
+		align-self: start;
+	}
+	.lane-thumb img {
+		width: 46px;
+		height: 58px;
+		object-fit: cover;
+		display: block;
+		border-radius: 6px;
+	}
+	.lane-thumb:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
+	}
+	.lane-info {
+		display: flex;
+		flex-direction: column;
+		gap: 3px;
+		min-width: 0;
+	}
+	.lane-who {
+		font-size: 0.74rem;
+		font-weight: var(--weight-semi);
+	}
+	.lane-cap {
+		font-size: 0.68rem;
+		color: var(--text-dim);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.lane-foot {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		flex-wrap: wrap;
+	}
+	.lane-quick {
+		display: flex;
+		gap: 0.35rem;
+		margin-top: 0.3rem;
+	}
+	.lq-btn {
+		flex: 1;
+		font-size: 0.66rem;
+		font-weight: var(--weight-semi);
+		min-height: 34px;
+		border-radius: 7px;
+		border: 1px solid var(--border-strong);
+		background: transparent;
+		color: var(--text-muted);
+		cursor: pointer;
+	}
+	.lq-btn:hover:not(:disabled) {
+		background: var(--surface-2);
+		color: var(--text);
+	}
+	.lq-btn.lq-ok:hover:not(:disabled) {
+		background: var(--success-soft);
+		color: var(--success-text);
+		border-color: var(--success);
+	}
+	.lq-btn:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
+	}
+	.lane-empty {
+		font-size: 0.74rem;
+		color: var(--text-dim);
+		text-align: center;
+		padding: 1rem 0;
+	}
+	@media (max-width: 900px) {
+		.board {
+			grid-template-columns: 1fr;
+		}
 	}
 </style>
