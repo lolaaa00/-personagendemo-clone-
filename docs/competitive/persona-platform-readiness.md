@@ -290,3 +290,41 @@ The real risks are elsewhere, and all three are fixable this week:
 3. **The `market` column is a typed-field-turned-untyped-blob** with 18 hand-rolled parse sites and a known silent-data-loss failure mode — and it is exactly where the new trait fields would land.
 
 Fix those three first. Then the persona upgrade is additive, reversible, and safe at every step.
+
+---
+
+## 9. Re-assessment — 2026-07-28
+
+### 9.1 Platform health: green, verified
+
+| Check | 2026-07-25 | **Now** |
+|---|---|---|
+| `npm run test:unit` | 🔴 4 failed / 69 passed | 🟢 **77 passed / 77** |
+| `npm run check` | 🔴 1 error, 168 warnings | 🟢 **0 errors**, 148 warnings |
+| Uncommitted | 🟠 41 files, ~4,700 lines | 🟢 clean (6 stray scripts only) |
+
+**Phase 0 complete.** **Phase 1 complete** — ~30 user-visible strings converted across 8 files; a full sweep for rendered "agent" text now returns zero hits.
+
+### 9.2 Concurrent session — still active
+
+Branch is `ux-makeover` (was `main`). Two further commits since Phase 1 landed: `50004df` (manageability contract) and `3fe6a53` (README walkthroughs). That session also cleaned up its own `probe-*-tmp.mjs` files. Six new untracked scripts are in the tree (`drive-verify*.mjs`, `verify-tmp.mjs`, `supabase/build-bootstrap.mjs`, `supabase/client_bootstrap.sql`).
+
+**Unchanged conclusion:** Phase 2 (the `market` → `personas_profile JSONB` migration) must not run on a shared tree with an active second writer.
+
+### 9.3 NEW — Higgsfield is now reachable as a supplier, not just a competitor
+
+A Higgsfield MCP connector came online in this session. Verified read-only:
+
+- **Soul 2.0 (`soul_2`)** — trained identity, `soul_id` parameter. Training is **5–20 reference images, ~10 min** (fewer than the 20+ their marketing states). Usable *only* with `text2image_soul_v2` and `soul_cinema_studio`; **one `soul_id` per generation** — multi-character shots require their separate Reference Elements path.
+- **Seedance 2.0** (ByteDance) — identity-consistent video, **4–15s, up to 4K, native audio**, image/video/audio reference roles. This materially outclasses our current Kling o3 ~5s path.
+- **Wan 2.7** — synchronised audio, character-consistent, 2–15s.
+- Account state: **free plan, 3 credits.** No budget to validate at scale.
+
+**Buy-vs-build reframe for P0 "trained identity":** the assumption was that we build LoRA training on fal. Two cheaper options now exist — (a) use this MCP to *benchmark* Soul 2.0 against our 5-stage reference kit before committing engineering, and (b) check whether Seedance 2.0 is exposed on **fal**, where we already hold server-side keys.
+
+**Two constraints that bound this hard:**
+
+1. **The MCP cannot power autopilot.** It is an interactively-authenticated claude.ai connector; it is not available to our SvelteKit server process or to scheduled/headless runs. Autopilot is server-side and unattended. So this is viable for evaluation and possibly a manual-mode feature — **never** for the always-on path that is our actual differentiator.
+2. **Strategic dependency risk.** Higgsfield is a direct competitor in the exact category. Routing our identity pipeline through their rails gives them a kill switch and full visibility into our volume.
+
+**Recommendation:** treat the MCP as a **free benchmarking instrument**, not a supply line. Use it to answer "how much better is a trained Soul than our reference kit, really?" before spending weeks on LoRA training. Separately, probe fal's live spec for Seedance 2.0 — a 4–15s, 4K, native-audio, identity-consistent model on infrastructure we already own would be a larger and safer win than anything in the Higgsfield path.

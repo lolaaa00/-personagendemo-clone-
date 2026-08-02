@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { dialog } from '$lib/actions/dialog';
 	import { platformColor, platformLabel } from '$lib/platforms';
 
 	let {
@@ -18,6 +19,7 @@
 		aria-modal="true"
 		aria-labelledby="manual-delete-title"
 		tabindex="-1"
+		use:dialog={{ onClose }}
 	>
 		<div class="modal-header">
 			<h3 id="manual-delete-title">Removed locally — {entries.length} step{entries.length !== 1 ? 's' : ''} left</h3>

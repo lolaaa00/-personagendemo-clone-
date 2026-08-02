@@ -52,8 +52,18 @@
 	let pinEl: HTMLInputElement | null = $state(null);
 	let summaryEl: HTMLDivElement | null = $state(null);
 
+	// Email format is checked on blur, independent of submit — otherwise a typo'd
+	// address stayed aria-invalid="false" until the form was submitted, while the
+	// confirm-password field (whose check is submit-independent) reported correctly.
+	// Screen-reader users got no on-blur signal for the one field most likely to
+	// be mistyped.
+	let emailTouched = $state(false);
+	let emailMalformed = $derived(
+		emailTouched && email.trim().length > 0 && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
+	);
+
 	let nameInvalid = $derived(!!error && fullName.trim().length === 0);
-	let emailInvalid = $derived(!!error && email.trim().length === 0);
+	let emailInvalid = $derived(emailMalformed || (!!error && email.trim().length === 0));
 	let passwordInvalid = $derived(!!error && password.length < 6);
 	let confirmInvalid = $derived(!passwordsMatch || (!!error && confirmPassword.length === 0));
 	let hasFieldError = $derived(nameInvalid || emailInvalid || passwordInvalid || confirmInvalid);
@@ -295,12 +305,15 @@
 						required
 						aria-required="true"
 						autocomplete="email"
+						onblur={() => (emailTouched = true)}
 						aria-invalid={emailInvalid ? 'true' : 'false'}
 						aria-describedby={emailDescribedBy}
 					/>
 					{#if emailInvalid}
 						<span class="field-hint error" id="email-error" role="alert">
-							Enter the email address you will sign in with, for example you@example.com.
+							{emailMalformed
+								? `“${email.trim()}” is not a valid email address — check for a missing @ or domain.`
+								: 'Enter the email address you will sign in with, for example you@example.com.'}
 						</span>
 					{/if}
 				</div>

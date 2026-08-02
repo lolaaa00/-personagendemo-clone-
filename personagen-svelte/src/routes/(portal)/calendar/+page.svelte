@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { dialog } from '$lib/actions/dialog';
 	import { onMount } from 'svelte';
 	import type { Agent } from '$lib/types';
 	import { showToast } from '$lib/stores/ui.svelte';
@@ -1121,6 +1122,7 @@
 					aria-labelledby="manual-delete-title"
 					tabindex="-1"
 					style="max-width: 460px;"
+					use:dialog={{ onClose: () => (manualDeleteNotice = null) }}
 				>
 					<div class="modal-header">
 						<h2 id="manual-delete-title">Removed locally — 1 step left</h2>
@@ -1212,6 +1214,7 @@
 				aria-labelledby="composer-title"
 				tabindex="-1"
 				style="max-width: 600px;"
+				use:dialog={{ onClose: closeComposer }}
 			>
 				<div class="composer-header">
 					<h2 id="composer-title">Schedule New Post</h2>

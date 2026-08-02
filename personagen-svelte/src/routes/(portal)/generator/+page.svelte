@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { dialog } from '$lib/actions/dialog';
 	import { showToast } from '$lib/stores/ui.svelte';
 	import { onMount } from 'svelte';
 	import { Personas, BrandBrief, type GeneratedPersona } from '$lib/services/api';
@@ -944,15 +945,18 @@
 </section>
 
 {#if showVaultModal}
-	<div
-		class="modal-overlay"
-		onclick={() => (showVaultModal = false)}
-		role="button"
-		tabindex="0"
-		aria-label="Close the persona vault"
-		onkeydown={(e) => e.key === 'Escape' && (showVaultModal = false)}
-	>
-		<div class="modal-content glass-card" onclick={(e) => e.stopPropagation()} role="none">
+	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+	<div class="modal-overlay" onclick={() => (showVaultModal = false)} role="presentation">
+		<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+		<div
+			class="modal-content glass-card"
+			onclick={(e) => e.stopPropagation()}
+			role="dialog"
+			aria-modal="true"
+			aria-label="Persona Vault"
+			tabindex="-1"
+			use:dialog={{ onClose: () => (showVaultModal = false) }}
+		>
 			<header class="modal-header">
 				<div class="header-left">
 					<svg

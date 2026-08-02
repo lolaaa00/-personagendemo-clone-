@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { dialog } from '$lib/actions/dialog';
+	import { syncParam } from '$lib/url-state';
 	import { onMount, onDestroy } from 'svelte';
 	import { showToast } from '$lib/stores/ui.svelte';
 	import { goto, invalidateAll } from '$app/navigation';
@@ -91,6 +93,12 @@
 		return 'profile';
 	}
 	let activeTab = $state<'feed' | 'calendar' | 'profile' | 'connections'>(initialTab());
+	// The page already *read* ?tab= on load but never wrote it, so switching tabs
+	// left the URL stale and Back/refresh/share all snapped to Profile.
+	// `assets` is the legacy alias for Feed's asset lens — preserve it on write.
+	$effect(() =>
+		syncParam('tab', activeTab === 'feed' && feedView === 'assets' ? 'assets' : activeTab, 'profile')
+	);
 	// Feed tab renders one dataset through two lenses: the post mosaic, or the
 	// flat grid of every generated visual (former Assets tab).
 	let feedView = $state<'posts' | 'assets'>(
@@ -3890,7 +3898,14 @@
 				</details>
 
 				{#if editingSkill}
-					<div class="gen-confirm-overlay" role="dialog" aria-modal="true" aria-label="Edit skill">
+					<div
+						class="gen-confirm-overlay"
+						role="dialog"
+						aria-modal="true"
+						aria-label="Edit skill"
+						tabindex="-1"
+						use:dialog={{ onClose: () => (editingSkill = null) }}
+					>
 						<div class="gen-confirm editor-modal">
 							<h3>{skillsList.some((s) => s.id === editingSkill?.id) ? 'Edit skill' : 'New skill'}</h3>
 							<div class="field-group">
@@ -3913,7 +3928,14 @@
 				{/if}
 
 				{#if editingTool}
-					<div class="gen-confirm-overlay" role="dialog" aria-modal="true" aria-label="Edit integration">
+					<div
+						class="gen-confirm-overlay"
+						role="dialog"
+						aria-modal="true"
+						aria-label="Edit integration"
+						tabindex="-1"
+						use:dialog={{ onClose: () => (editingTool = null) }}
+					>
 						<div class="gen-confirm editor-modal">
 							<h3>{toolsList.some((t) => t.id === editingTool?.id) ? 'Edit integration' : 'New integration'}</h3>
 							<div class="field-group">
@@ -4352,7 +4374,10 @@
 			class="confirm-card"
 			onclick={(e) => e.stopPropagation()}
 			role="dialog"
+			aria-modal="true"
 			aria-label="Generate drafts"
+			tabindex="-1"
+			use:dialog={{ onClose: () => (confirmDraftsOpen = false) }}
 		>
 			<h3>Generate drafts for {agent?.name}?</h3>
 			<p>
@@ -4390,7 +4415,15 @@
 
 {#if assetLightbox}
 	<div class="lightbox-backdrop" onclick={() => (assetLightbox = null)} role="presentation">
-		<div class="lightbox-content" onclick={(e) => e.stopPropagation()} role="dialog" aria-label={assetLightbox.label}>
+		<div
+			class="lightbox-content"
+			onclick={(e) => e.stopPropagation()}
+			role="dialog"
+			aria-modal="true"
+			aria-label={assetLightbox.label}
+			tabindex="-1"
+			use:dialog={{ onClose: () => (assetLightbox = null) }}
+		>
 			{#if assetLightbox.type === 'video'}
 				<!-- svelte-ignore a11y_media_has_caption -->
 				<video src={assetLightbox.url} poster={assetLightbox.poster || undefined} controls playsinline use:playOnMount></video>
@@ -4412,7 +4445,15 @@
      plus an optional Regenerate for the stage it came from. -->
 {#if previewOpen && previewUrl}
 	<div class="lightbox-backdrop" onclick={() => (previewOpen = false)} role="presentation">
-		<div class="lightbox-content" onclick={(e) => e.stopPropagation()} role="dialog" aria-label={previewTitle}>
+		<div
+			class="lightbox-content"
+			onclick={(e) => e.stopPropagation()}
+			role="dialog"
+			aria-modal="true"
+			aria-label={previewTitle}
+			tabindex="-1"
+			use:dialog={{ onClose: () => (previewOpen = false) }}
+		>
 			<img src={previewUrl} alt={previewTitle} width="920" height="920" />
 			<div class="lightbox-bar">
 				<span>{previewTitle}</span>
@@ -4437,7 +4478,15 @@
      as this persona's profile picture. Nothing here is ever deleted. -->
 {#if restoreOpen}
 	<div class="lightbox-backdrop" onclick={() => (restoreOpen = false)} role="presentation">
-		<div class="restore-modal" onclick={(e) => e.stopPropagation()} role="dialog" aria-label="Restore profile picture">
+		<div
+			class="restore-modal"
+			onclick={(e) => e.stopPropagation()}
+			role="dialog"
+			aria-modal="true"
+			aria-label="Restore profile picture"
+			tabindex="-1"
+			use:dialog={{ onClose: () => (restoreOpen = false) }}
+		>
 			<div class="restore-head">
 				<div>
 					<h3>Restore a profile picture</h3>
@@ -4478,7 +4527,15 @@
      side profiles, close-up, feature grid), click to re-pin for that stage. -->
 {#if kitRestoreStage}
 	<div class="lightbox-backdrop" onclick={() => (kitRestoreStage = null)} role="presentation">
-		<div class="restore-modal" onclick={(e) => e.stopPropagation()} role="dialog" aria-label="Restore reference-kit stage">
+		<div
+			class="restore-modal"
+			onclick={(e) => e.stopPropagation()}
+			role="dialog"
+			aria-modal="true"
+			aria-label="Restore reference-kit stage"
+			tabindex="-1"
+			use:dialog={{ onClose: () => (kitRestoreStage = null) }}
+		>
 			<div class="restore-head">
 				<div>
 					<h3>Restore {KIT_STAGE_RESTORE_LABELS[kitRestoreStage] ?? kitRestoreStage}</h3>
@@ -4582,7 +4639,10 @@
 			class="restore-modal pubfb-modal"
 			onclick={(e) => e.stopPropagation()}
 			role="dialog"
+			aria-modal="true"
 			aria-label="Publish to a connected platform"
+			tabindex="-1"
+			use:dialog={{ onClose: () => (publishFallbackPost = null) }}
 		>
 			<div class="restore-head">
 				<div>

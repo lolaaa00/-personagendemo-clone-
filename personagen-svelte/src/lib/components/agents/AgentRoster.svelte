@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { dialog } from '$lib/actions/dialog';
 	import StatusBadge from './StatusBadge.svelte';
 	import SelectionToolbar from '$lib/components/ui/SelectionToolbar.svelte';
 	import { goto, invalidateAll } from '$app/navigation';
@@ -411,6 +412,13 @@
 							class="toggle"
 							onclick={(e) => {
 								e.stopPropagation();
+								// preventDefault is load-bearing: without it the browser forwards the
+								// click to the labelled <input>, that synthetic click bubbles back to
+								// this same <label>, and the handler runs a SECOND time. toggleAgent
+								// flips (`agent.active = !agent.active`), so two runs cancel out — the
+								// switch appeared dead and fired two racing POSTs to /api/agents/config.
+								// Verified 2x-vs-1x in a browser before/after this line.
+								e.preventDefault();
 								toggleAgent(agent);
 							}}
 						>
@@ -468,7 +476,14 @@
 	<div class="pdel-overlay">
 		<button type="button" class="pdel-backdrop" aria-label="Cancel deletion" onclick={closeConfirm}
 		></button>
-		<div class="pdel-modal" role="dialog" aria-modal="true" aria-labelledby="pdel-title">
+		<div
+			class="pdel-modal"
+			role="dialog"
+			aria-modal="true"
+			aria-labelledby="pdel-title"
+			tabindex="-1"
+			use:dialog={{ onClose: closeConfirm }}
+		>
 			<div class="pdel-head">
 				<svg
 					width="22"

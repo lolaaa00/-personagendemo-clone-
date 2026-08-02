@@ -11,6 +11,7 @@
 	} from '$lib/stores/ui.svelte';
 	import { BrandBrief } from '$lib/services/api';
 	import { onMount } from 'svelte';
+	import { dialog } from '$lib/actions/dialog';
 
 	let { data } = $props<{
 		data: {
@@ -1213,6 +1214,7 @@
 			aria-labelledby="delete-modal-title"
 			aria-describedby="delete-modal-desc"
 			tabindex="-1"
+			use:dialog={{ onClose: () => (showDeleteModal = false) }}
 		>
 			<div class="modal-header">
 				<svg

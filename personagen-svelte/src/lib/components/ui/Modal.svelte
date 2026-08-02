@@ -6,6 +6,7 @@
 	 * background scroll-lock right, so new dialogs don't each reinvent it.
 	 */
 	import type { Snippet } from 'svelte';
+	import { dialog } from '$lib/actions/dialog';
 
 	interface Props {
 		open: boolean;
@@ -20,74 +21,10 @@
 
 	let { open, title, subtitle, size = 'md', onClose, children, footer }: Props = $props();
 
-	// Element refs used purely for focus management (a11y) — no behaviour beyond that.
-	let dialogEl = $state<HTMLDivElement | null>(null);
-
-	const FOCUSABLE =
-		'a[href], area[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"]), [contenteditable="true"]';
-
-	function focusables(): HTMLElement[] {
-		const root = dialogEl;
-		if (!root) return [];
-		return Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
-			(el) => el.offsetWidth > 0 || el.offsetHeight > 0 || el === document.activeElement
-		);
-	}
-
-	function onKeydown(e: KeyboardEvent) {
-		if (e.key === 'Escape') {
-			onClose();
-			return;
-		}
-		const root = dialogEl;
-		if (e.key !== 'Tab' || !root) return;
-		// Trap Tab / Shift+Tab inside the dialog.
-		const items = focusables();
-		if (items.length === 0) {
-			e.preventDefault();
-			root.focus();
-			return;
-		}
-		const active = document.activeElement as HTMLElement | null;
-		const idx = active ? items.indexOf(active) : -1;
-		if (e.shiftKey) {
-			if (idx <= 0) {
-				e.preventDefault();
-				items[items.length - 1].focus();
-			}
-		} else if (idx === -1 || idx === items.length - 1) {
-			e.preventDefault();
-			items[0].focus();
-		}
-	}
-
-	// Move focus into the dialog on open and hand it back to whatever opened it on
-	// close, so keyboard users aren't dumped at the top of the document.
-	$effect(() => {
-		if (!open || !dialogEl) return;
-		const el = dialogEl;
-		const returnTo = document.activeElement as HTMLElement | null;
-		el.focus({ preventScroll: true });
-		return () => {
-			if (returnTo && typeof returnTo.focus === 'function' && returnTo.isConnected) {
-				returnTo.focus({ preventScroll: true });
-			}
-		};
-	});
-
-	// Lock background scroll while open, and always release it on unmount — a
-	// modal that closes via navigation must not leave the page unscrollable.
-	$effect(() => {
-		if (!open) return;
-		const prev = document.body.style.overflow;
-		document.body.style.overflow = 'hidden';
-		return () => {
-			document.body.style.overflow = prev;
-		};
-	});
+	// Focus trap, initial focus, focus restore, Escape and scroll lock all live in
+	// the shared `use:dialog` action so this component and the ~17 hand-rolled
+	// dialogs elsewhere in the app share one implementation.
 </script>
-
-<svelte:window onkeydown={open ? onKeydown : undefined} />
 
 {#if open}
 	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
@@ -99,7 +36,7 @@
 			aria-modal="true"
 			aria-label={title ?? 'Dialog'}
 			tabindex="-1"
-			bind:this={dialogEl}
+			use:dialog={{ onClose }}
 			onclick={(e) => e.stopPropagation()}
 		>
 			{#if title}

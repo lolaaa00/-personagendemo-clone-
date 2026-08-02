@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { dialog } from '$lib/actions/dialog';
+	import { syncParam, readParam } from '$lib/url-state';
 	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
 	import { showToast, applyBrandTheme, brandThemeState } from '$lib/stores/ui.svelte';
@@ -139,7 +141,10 @@
 
 	const COMM_STYLES = ['Casual', 'Professional', 'Bold', 'Minimal'];
 
-	let activeTab = $state<TabKey>('overview');
+	let activeTab = $state<TabKey>(
+		readParam('tab', TABS.map((t) => t.key) as TabKey[], 'overview')
+	);
+	$effect(() => syncParam('tab', activeTab, 'overview'));
 
 	// Auto-select tab from query param
 	$effect(() => {
@@ -2970,6 +2975,8 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 			role="dialog"
 			aria-modal="true"
 			aria-label={imageLightbox.label}
+			tabindex="-1"
+			use:dialog={{ onClose: () => (imageLightbox = null) }}
 		>
 			<img src={imageLightbox.url} alt={imageLightbox.label} loading="eager" decoding="async" />
 			<div class="lightbox-bar">

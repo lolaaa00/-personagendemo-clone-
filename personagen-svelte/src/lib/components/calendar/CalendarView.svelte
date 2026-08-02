@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { dialog } from '$lib/actions/dialog';
+	import { syncParam, readParam } from '$lib/url-state';
 	/**
 	 * Shared content calendar — one component behind BOTH the global /calendar
 	 * page and each persona's Calendar tab.
@@ -60,7 +62,12 @@
 	let showRail = $derived(agents.length > 1);
 
 	// ── View + cursor state ────────────────────────────────────────────────
-	let calendarView = $state<'day' | 'week' | 'month'>('month');
+	let calendarView = $state<'day' | 'week' | 'month'>(
+		readParam('view', ['day', 'week', 'month'] as const, 'month')
+	);
+	// Keep ?view= in step with the switcher so a refresh, Back or a shared link
+	// lands on the view the user was actually looking at.
+	$effect(() => syncParam('view', calendarView, 'month'));
 	let currentYear = $state(new Date().getFullYear());
 	let currentMonth = $state(new Date().getMonth()); // 0-indexed
 	let cursorDay = $state(new Date().getDate());
@@ -795,6 +802,7 @@
 			aria-modal="true"
 			aria-labelledby="cal-day-modal-title"
 			tabindex="-1"
+			use:dialog={{ onClose: () => (selectedDay = null) }}
 		>
 			<div class="modal-header">
 				<h3 id="cal-day-modal-title">{MONTHS[currentMonth]} {selectedDay}, {currentYear}</h3>
@@ -1381,6 +1389,15 @@
 	.cell-add:focus-visible,
 	.week-col:hover .cell-add {
 		opacity: 1;
+	}
+
+	/* Touch devices have no hover, so the reveal above never fires and the only
+	   add-post control on the grid is invisible — the same trap the sidebar
+	   collapse button already guards against. Show it outright there. */
+	@media (hover: none) {
+		.cell-add {
+			opacity: 1;
+		}
 	}
 
 	.cell-add:hover {

@@ -4,6 +4,7 @@
 	import { platformColor } from '$lib/platforms';
 	import { OPERATION_LABELS, priceOf } from '$lib/pricing';
 	import ImageLightbox from '$lib/components/ui/ImageLightbox.svelte';
+	import { dialog } from '$lib/actions/dialog';
 
 	/** Full-screen zoom of the post image (video already has native fullscreen). */
 	let zoomOpen = $state(false);
@@ -415,16 +416,21 @@
 		}
 	}
 
-	function onKeydown(e: KeyboardEvent) {
-		if (e.key === 'Escape') onClose();
-	}
+	// Escape, the focus trap and the background scroll lock all come from
+	// `use:dialog` — this drawer declares aria-modal, so it must honour it.
 </script>
-
-<svelte:window onkeydown={post ? onKeydown : undefined} />
 
 {#if post && display}
 	<div class="drawer-backdrop" transition:fade={{ duration: 150 }} onclick={onClose} role="presentation"></div>
-	<aside class="post-drawer" transition:fly={{ x: 440, duration: 260, opacity: 1 }} role="dialog" aria-modal="true" aria-label="Post details" tabindex="-1">
+	<aside
+		class="post-drawer"
+		transition:fly={{ x: 440, duration: 260, opacity: 1 }}
+		role="dialog"
+		aria-modal="true"
+		aria-label="Post details"
+		tabindex="-1"
+		use:dialog={{ onClose }}
+	>
 		<div class="drawer-header">
 			<div class="drawer-header-meta">
 				<span class="drawer-date">{formatPostDate(post)}</span>

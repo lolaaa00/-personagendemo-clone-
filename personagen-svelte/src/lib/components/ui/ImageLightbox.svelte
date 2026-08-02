@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { dialog } from '$lib/actions/dialog';
 	/**
 	 * One lightbox for every enlargeable image/video in the app. Before this,
 	 * five pages hand-rolled their own `.lightbox-backdrop` markup with
@@ -88,6 +89,7 @@
 			aria-label={label || 'Enlarged media'}
 			tabindex="-1"
 			bind:this={contentEl}
+			use:dialog={{ onClose }}
 		>
 			{#if isVideo}
 				<!-- svelte-ignore a11y_media_has_caption -->
