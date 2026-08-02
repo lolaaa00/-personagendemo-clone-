@@ -1,8 +1,18 @@
+import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 import { createDbService } from '$lib/server/db';
 import { env } from '$env/dynamic/public';
 
-export const load: PageServerLoad = async ({ locals }) => {
+export const load: PageServerLoad = async ({ locals, url }) => {
+	// The Intelligence wizard used to be `?tab=intel` on this page. Old links,
+	// bookmarks and back-button entries must land on the wizard's own route
+	// rather than on a tab that no longer exists.
+	if (url.searchParams.get('tab') === 'intel') {
+		const target = new URL(url);
+		target.searchParams.delete('tab');
+		redirect(307, `/brand-brief/intel${target.search}`);
+	}
+
 	const supabaseUrl = env.PUBLIC_SUPABASE_URL ?? '';
 	const isPlaceholder = !supabaseUrl || supabaseUrl.includes('placeholder');
 	const empty = { brief: null, briefId: null, briefName: null, briefs: [] as any[] };

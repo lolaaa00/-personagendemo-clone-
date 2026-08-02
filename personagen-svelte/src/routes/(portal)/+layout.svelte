@@ -364,6 +364,7 @@
 							const agent = sidebarAgents.find((a: any) => path.startsWith(`/personas/${a.id}`));
 							return agent ? agent.name : 'Persona';
 						}
+						if (path.startsWith('/brand-brief/intel')) return 'Intel Wizard';
 						if (path.startsWith('/brand-brief')) return 'Brand Brief';
 						if (path.startsWith('/settings')) return 'Settings';
 						if (path.startsWith('/generator')) return 'New Persona';
