@@ -12,6 +12,7 @@
 	import { BrandBrief } from '$lib/services/api';
 	import { onMount } from 'svelte';
 	import { dialog } from '$lib/actions/dialog';
+	import { syncParam, readParam } from '$lib/url-state';
 
 	let { data } = $props<{
 		data: {
@@ -27,6 +28,79 @@
 			};
 		};
 	}>();
+
+	// ── Sub-nav ─────────────────────────────────────────────────────────────
+	// Seven always-open cards meant scrolling ~1,800px of unrelated settings to
+	// reach the Danger Zone. One section is shown at a time, chosen from a rail,
+	// and the choice round-trips through `?section=` so a link or a refresh lands
+	// where you were.
+	const SECTIONS = [
+		{
+			key: 'profile',
+			label: 'Profile',
+			icon: 'M20 21a8 8 0 10-16 0M12 12a4 4 0 100-8 4 4 0 000 8'
+		},
+		{
+			key: 'notifications',
+			label: 'Notifications',
+			icon: 'M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0'
+		},
+		{
+			key: 'theme',
+			label: 'Brand Theme',
+			icon: 'M12 2a10 10 0 000 20c1.1 0 2-.9 2-2 0-1.4-1-1.8-1-3 0-.8.7-1.5 1.5-1.5H17a5 5 0 005-5c0-4.9-4.5-8.5-10-8.5z'
+		},
+		{
+			key: 'api-keys',
+			label: 'Provider API Keys',
+			icon: 'M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.778 7.778 5.5 5.5 0 017.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4'
+		},
+		{
+			key: 'zernio-keys',
+			label: 'Zernio Keys',
+			icon: 'M5 11h14v10H5zM7 11V7a5 5 0 0110 0v4'
+		},
+		{ key: 'billing', label: 'Billing & Plan', icon: 'M2 5h20v14H2zM2 10h20' },
+		{
+			key: 'danger',
+			label: 'Danger Zone',
+			icon: 'M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01'
+		}
+	] as const;
+
+	type SectionKey = (typeof SECTIONS)[number]['key'];
+	const SECTION_KEYS = SECTIONS.map((s) => s.key) as SectionKey[];
+
+	/**
+	 * `/settings#zernio-keys` is linked from the persona Connections slot meter.
+	 * That anchor used to scroll to an always-rendered card; now it has to pick
+	 * the section instead, or the link lands on Profile with nothing to see.
+	 */
+	function initialSection(): SectionKey {
+		if (typeof window !== 'undefined') {
+			const hash = window.location.hash.replace('#', '') as SectionKey;
+			if (SECTION_KEYS.includes(hash)) return hash;
+		}
+		return readParam('section', SECTION_KEYS, 'profile');
+	}
+
+	let activeSection = $state<SectionKey>(initialSection());
+	$effect(() => syncParam('section', activeSection, 'profile'));
+
+	/**
+	 * Following `#zernio-keys` while already on /settings is a same-document
+	 * navigation — nothing remounts, so `initialSection()` never runs again.
+	 * Consume the hash here too, then strip it so it can't fight `?section=`
+	 * on a later reload.
+	 */
+	function consumeHash() {
+		const hash = window.location.hash.replace('#', '') as SectionKey;
+		if (!SECTION_KEYS.includes(hash)) return;
+		activeSection = hash;
+		const url = new URL(window.location.href);
+		url.hash = '';
+		window.history.replaceState({}, '', url.pathname + url.search);
+	}
 
 	// Profile — email comes from auth session; name + notification preferences
 	// are persisted in Supabase user metadata (localStorage is only a cache).
@@ -397,6 +471,9 @@
 	// Server metadata is the source of truth; localStorage only fills gaps for
 	// values that were never persisted server-side (pre-migration installs).
 	onMount(() => {
+		consumeHash();
+		window.addEventListener('hashchange', consumeHash);
+
 		const stored = localStorage.getItem('personagen_settings');
 		if (stored) {
 			try {
@@ -414,6 +491,8 @@
 		loadApiKeys();
 		loadZernioKeys();
 		loadBrandBriefs();
+
+		return () => window.removeEventListener('hashchange', consumeHash);
 	});
 
 	function persistSettings() {
@@ -620,7 +699,39 @@
 		<p class="subtitle">Manage your profile, notifications, API keys, and account.</p>
 	</header>
 
-	<div class="settings-grid">
+	<div class="settings-layout">
+		<nav class="settings-nav" aria-label="Settings sections">
+			<ul>
+				{#each SECTIONS as section (section.key)}
+					<li>
+						<button
+							type="button"
+							class="nav-item"
+							class:active={activeSection === section.key}
+							class:danger={section.key === 'danger'}
+							aria-current={activeSection === section.key ? 'true' : undefined}
+							onclick={() => (activeSection = section.key)}
+						>
+							<svg
+								width="16"
+								height="16"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="1.8"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								aria-hidden="true"><path d={section.icon} /></svg
+							>
+							<span>{section.label}</span>
+						</button>
+					</li>
+				{/each}
+			</ul>
+		</nav>
+
+		<div class="settings-grid">
+		{#if activeSection === 'profile'}
 		<!-- Profile -->
 		<div class="settings-card">
 			<div class="card-header">
@@ -688,6 +799,7 @@
 			</div>
 		</div>
 
+		{:else if activeSection === 'notifications'}
 		<!-- Notifications -->
 		<div class="settings-card">
 			<div class="card-header">
@@ -771,6 +883,7 @@
 			</div>
 		</div>
 
+		{:else if activeSection === 'theme'}
 		<!-- Brand Theme — the app palette follows a brand brief only if asked -->
 		<div class="settings-card">
 			<div class="card-header">
@@ -848,6 +961,7 @@
 			</div>
 		</div>
 
+		{:else if activeSection === 'api-keys'}
 		<!-- Provider API Keys -->
 		<div class="settings-card">
 			<div class="card-header">
@@ -951,8 +1065,10 @@
 			</div>
 		</div>
 
+		{:else if activeSection === 'zernio-keys'}
 		<!-- Zernio Key Manager. id anchors the "add another key" redirect from the
-		     persona Connections tab's slot meter (/settings#zernio-keys). -->
+		     persona Connections tab's slot meter (/settings#zernio-keys), which
+		     `initialSection()` maps onto this section. -->
 		<div class="settings-card" id="zernio-keys">
 			<div class="card-header">
 				<div class="card-icon">
@@ -1108,6 +1224,7 @@
 			</div>
 		</div>
 
+		{:else if activeSection === 'billing'}
 		<!-- Billing -->
 		<div class="settings-card">
 			<div class="card-header">
@@ -1140,6 +1257,7 @@
 			</div>
 		</div>
 
+		{:else if activeSection === 'danger'}
 		<!-- Danger Zone -->
 		<div class="settings-card danger-card">
 			<div class="card-header">
@@ -1185,6 +1303,8 @@
 					Delete Account
 				</button>
 			</div>
+		</div>
+		{/if}
 		</div>
 	</div>
 </section>
@@ -1280,7 +1400,7 @@
 <style>
 	.page {
 		padding: 2rem;
-		max-width: 1000px;
+		max-width: 1240px;
 		margin: 0 auto;
 	}
 
@@ -1299,10 +1419,102 @@
 		font-size: var(--text-base);
 	}
 
+	/* Sub-nav rail + one panel. `minmax(0, 1fr)` on the panel column stops a wide
+	   child (the masked key <code>, a long select) from blowing the grid past the
+	   viewport, which is what would produce a horizontal scrollbar. */
+	.settings-layout {
+		display: grid;
+		grid-template-columns: 232px minmax(0, 1fr);
+		gap: 2rem;
+		align-items: start;
+	}
+
+	.settings-nav {
+		position: sticky;
+		top: 0;
+	}
+
+	.settings-nav ul {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+	}
+
+	.nav-item {
+		display: flex;
+		align-items: center;
+		gap: 0.65rem;
+		width: 100%;
+		min-height: 44px;
+		padding: 0.6rem 0.85rem;
+		background: transparent;
+		border: 1px solid transparent;
+		border-radius: var(--radius-sm);
+		color: var(--text-muted);
+		font-size: var(--text-sm);
+		font-weight: 600;
+		font-family: var(--font-body);
+		text-align: left;
+		cursor: pointer;
+		transition:
+			background 0.18s ease,
+			color 0.18s ease,
+			border-color 0.18s ease;
+	}
+
+	.nav-item svg {
+		flex-shrink: 0;
+	}
+
+	.nav-item span {
+		min-width: 0;
+	}
+
+	.nav-item:hover {
+		color: var(--text);
+		background: var(--surface-2);
+	}
+
+	.nav-item.active {
+		color: var(--accent-text);
+		background: var(--accent-soft);
+		border-color: var(--accent-mid);
+	}
+
+	/* Danger Zone stays visually distinct in the rail as well as in the panel,
+	   so it never reads as just another settings group. */
+	.nav-item.danger {
+		color: var(--error-text);
+		margin-top: 0.5rem;
+		border-top: 1px solid var(--border);
+		border-top-left-radius: 0;
+		border-top-right-radius: 0;
+		padding-top: 0.85rem;
+	}
+
+	.nav-item.danger:hover {
+		background: color-mix(in srgb, var(--error) 8%, transparent);
+	}
+
+	.nav-item.danger.active {
+		background: var(--error-soft);
+		border-color: color-mix(in srgb, var(--error) 35%, transparent);
+		border-top-color: color-mix(in srgb, var(--error) 35%, transparent);
+	}
+
+	.nav-item:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
+	}
+
 	.settings-grid {
 		display: flex;
 		flex-direction: column;
 		gap: 1.5rem;
+		min-width: 0;
 	}
 
 	.settings-card {
@@ -2023,6 +2235,41 @@
 	.confirm-delete-btn:disabled {
 		opacity: 0.4;
 		cursor: not-allowed;
+	}
+
+	/* Below the two-column threshold the rail folds into a wrapping chip row.
+	   Wrapping (not overflow-x) is deliberate: a scrolling strip hides sections
+	   and is the classic source of a horizontally scrolling page at 375px. */
+	@media (max-width: 900px) {
+		.settings-layout {
+			grid-template-columns: minmax(0, 1fr);
+			gap: 1.25rem;
+		}
+
+		.settings-nav {
+			position: static;
+			padding-bottom: 1.25rem;
+			border-bottom: 1px solid var(--border);
+		}
+
+		.settings-nav ul {
+			flex-direction: row;
+			flex-wrap: wrap;
+			gap: 0.5rem;
+		}
+
+		.nav-item {
+			width: auto;
+			border-color: var(--border);
+			background: var(--surface);
+		}
+
+		.nav-item.danger {
+			margin-top: 0;
+			padding-top: 0.6rem;
+			border-radius: var(--radius-sm);
+			border-color: color-mix(in srgb, var(--error) 35%, transparent);
+		}
 	}
 
 	@media (max-width: 768px) {
