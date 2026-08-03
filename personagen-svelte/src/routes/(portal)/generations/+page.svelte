@@ -89,7 +89,12 @@
 			add(kit?.ugc_character_ref, 'Profile picture');
 			for (const [k, v] of Object.entries(kit?.ugc_reference_kit ?? {})) {
 				// The kit doubles as an async-job board — skip its bookkeeping keys.
-				if (k === 'rev' || k.endsWith('_status') || k.endsWith('_history') || k.endsWith('_started_at'))
+				if (
+					k === 'rev' ||
+					k.endsWith('_status') ||
+					k.endsWith('_history') ||
+					k.endsWith('_started_at')
+				)
 					continue;
 				add(v, KIT_LABELS[k] ?? k.replace(/_/g, ' '));
 			}
@@ -143,7 +148,12 @@
 	}
 
 	// ── Lightbox ─────────────────────────────────────────────────────────────
-	let lightbox = $state<{ url: string; label: string; type: 'image' | 'video'; poster: string | null } | null>(null);
+	let lightbox = $state<{
+		url: string;
+		label: string;
+		type: 'image' | 'video';
+		poster: string | null;
+	} | null>(null);
 
 	function openPostMedia(post: any) {
 		const display = getPostDisplay(post);
@@ -187,8 +197,19 @@
 			aria-selected={lens === 'content'}
 			onclick={() => (lens = 'content')}
 		>
-			<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"
-				><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><path d="M21 15l-5-5L5 21" /></svg
+			<svg
+				width="15"
+				height="15"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="2"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+				aria-hidden="true"
+				><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><path
+					d="M21 15l-5-5L5 21"
+				/></svg
 			>
 			Content outputs
 			<span class="lens-count">{contentPosts.length}</span>
@@ -201,7 +222,16 @@
 			aria-selected={lens === 'profile'}
 			onclick={() => (lens = 'profile')}
 		>
-			<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"
+			<svg
+				width="15"
+				height="15"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="2"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+				aria-hidden="true"
 				><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg
 			>
 			Profile assets
@@ -242,8 +272,19 @@
 				aria-pressed={favOnly}
 				onclick={() => (favOnly = !favOnly)}
 			>
-				<svg width="14" height="14" viewBox="0 0 24 24" fill={favOnly ? 'currentColor' : 'none'} stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"
-					><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" /></svg
+				<svg
+					width="14"
+					height="14"
+					viewBox="0 0 24 24"
+					fill={favOnly ? 'currentColor' : 'none'}
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					aria-hidden="true"
+					><path
+						d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"
+					/></svg
 				>
 				Favorites only
 			</button>
@@ -254,8 +295,21 @@
 		{#if contentPosts.length === 0}
 			<div class="gen-empty">
 				<span class="empty-icon">
-					<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"
-						><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><path d="M21 15l-5-5L5 21" /></svg
+					<svg
+						width="40"
+						height="40"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="1.6"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
+						><rect x="3" y="3" width="18" height="18" rx="2" /><circle
+							cx="8.5"
+							cy="8.5"
+							r="1.5"
+						/><path d="M21 15l-5-5L5 21" /></svg
 					>
 				</span>
 				<h2>No generations here yet</h2>
@@ -280,8 +334,16 @@
 							onEnlarge={openPostMedia}
 							onToggleFavorite={toggleFavorite}
 						/>
-						<a class="gen-cell-persona" href="/personas/{post.agent_id}" title="Open {post.agents?.name ?? personaName(post.agent_id)}">
-							<span class="cell-avatar" style={`background: ${post.agents?.gradient ?? 'var(--gradient)'}`}>{post.agents?.initial ?? '?'}</span>
+						<a
+							class="gen-cell-persona"
+							href="/personas/{post.agent_id}"
+							title="Open {post.agents?.name ?? personaName(post.agent_id)}"
+						>
+							<span
+								class="cell-avatar"
+								style={`background: ${post.agents?.gradient ?? 'var(--gradient)'}`}
+								>{post.agents?.initial ?? '?'}</span
+							>
 							<span class="cell-name">{post.agents?.name ?? personaName(post.agent_id)}</span>
 						</a>
 					</div>
@@ -291,8 +353,21 @@
 	{:else if profileSections.length === 0}
 		<div class="gen-empty">
 			<span class="empty-icon">
-				<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"
-					><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg
+				<svg
+					width="40"
+					height="40"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="1.6"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					aria-hidden="true"
+					><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle
+						cx="12"
+						cy="7"
+						r="4"
+					/></svg
 				>
 			</span>
 			<h2>No profile assets yet</h2>
@@ -305,17 +380,29 @@
 		{#each profileSections as section (section.persona.id)}
 			<section class="profile-section">
 				<a class="profile-section-head" href="/personas/{section.persona.id}">
-					<span class="cell-avatar lg" style={`background: ${section.persona.gradient ?? 'var(--gradient)'}`}>{section.persona.initial ?? section.persona.name?.[0] ?? '?'}</span>
+					<span
+						class="cell-avatar lg"
+						style={`background: ${section.persona.gradient ?? 'var(--gradient)'}`}
+						>{section.persona.initial ?? section.persona.name?.[0] ?? '?'}</span
+					>
 					<span class="profile-section-name">{section.persona.name}</span>
 					<span class="profile-section-handle">{section.persona.handle}</span>
-					<span class="profile-section-count">{section.assets.length} asset{section.assets.length !== 1 ? 's' : ''}</span>
+					<span class="profile-section-count"
+						>{section.assets.length} asset{section.assets.length !== 1 ? 's' : ''}</span
+					>
 				</a>
 				<div class="profile-grid">
 					{#each section.assets as asset (asset.url)}
 						<button
 							type="button"
 							class="profile-tile"
-							onclick={() => (lightbox = { url: asset.url, label: `${section.persona.name} — ${asset.label}`, type: 'image', poster: null })}
+							onclick={() =>
+								(lightbox = {
+									url: asset.url,
+									label: `${section.persona.name} — ${asset.label}`,
+									type: 'image',
+									poster: null
+								})}
 							aria-label="View {asset.label} for {section.persona.name}"
 						>
 							<img src={asset.url} loading="lazy" width="400" height="400" alt="" />
@@ -393,7 +480,9 @@
 		font-size: 0.83rem;
 		font-weight: 600;
 		cursor: pointer;
-		transition: background 0.15s ease, color 0.15s ease;
+		transition:
+			background 0.15s ease,
+			color 0.15s ease;
 	}
 
 	.lens-btn:hover {
@@ -481,7 +570,9 @@
 		font-size: 0.8rem;
 		font-weight: 600;
 		cursor: pointer;
-		transition: background 0.15s ease, color 0.15s ease;
+		transition:
+			background 0.15s ease,
+			color 0.15s ease;
 	}
 
 	.seg-btn + .seg-btn {
@@ -511,7 +602,9 @@
 		font-size: 0.8rem;
 		font-weight: 600;
 		cursor: pointer;
-		transition: color 0.15s ease, border-color 0.15s ease;
+		transition:
+			color 0.15s ease,
+			border-color 0.15s ease;
 	}
 
 	.toolbar-fav:hover {
@@ -643,7 +736,9 @@
 		overflow: hidden;
 		background: var(--surface);
 		cursor: zoom-in;
-		transition: border-color 0.15s ease, transform 0.15s ease;
+		transition:
+			border-color 0.15s ease,
+			transform 0.15s ease;
 	}
 
 	.profile-tile:hover {

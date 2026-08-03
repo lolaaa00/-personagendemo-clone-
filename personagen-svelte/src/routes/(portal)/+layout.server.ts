@@ -48,9 +48,14 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 
 			const agentIds = creatorAgents.map((a: any) => a.id);
 			const { data: configs } = agentIds.length
-				? await locals.supabase.from('agent_configs').select('agent_id, ugc_character_ref').in('agent_id', agentIds)
+				? await locals.supabase
+						.from('agent_configs')
+						.select('agent_id, ugc_character_ref')
+						.in('agent_id', agentIds)
 				: { data: [] };
-			const characterRefById = new Map((configs ?? []).map((c: any) => [c.agent_id, c.ugc_character_ref]));
+			const characterRefById = new Map(
+				(configs ?? []).map((c: any) => [c.agent_id, c.ugc_character_ref])
+			);
 
 			sidebarAgents = creatorAgents.map((a: any) => ({
 				id: a.id,

@@ -17,7 +17,9 @@ export const load: PageServerLoad = async ({ locals }) => {
 			.limit(500),
 		supabase
 			.from('agents')
-			.select('id, name, handle, niche, gradient, initial, status, is_favorite, group_id, is_overseer')
+			.select(
+				'id, name, handle, niche, gradient, initial, status, is_favorite, group_id, is_overseer'
+			)
 			.eq('user_id', user.id)
 			.eq('is_favorite', true)
 			.not('is_overseer', 'is', true)

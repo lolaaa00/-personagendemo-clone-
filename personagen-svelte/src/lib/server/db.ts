@@ -179,7 +179,9 @@ export type AgentUpdate = Partial<Omit<AgentRow, 'id' | 'user_id' | 'created_at'
 // goes through mergeUpsert (see below), which merges onto the existing row —
 // any field genuinely can be omitted and will keep its current DB value
 // rather than needing a caller-supplied default.
-export type AgentConfigInsert = Partial<Omit<AgentConfigRow, 'id' | 'created_at' | 'updated_at'>> & {
+export type AgentConfigInsert = Partial<
+	Omit<AgentConfigRow, 'id' | 'created_at' | 'updated_at'>
+> & {
 	id?: string;
 	user_id: string;
 	agent_id: string;
@@ -376,7 +378,11 @@ export function createDbService(supabase: SupabaseClient) {
 			create: (data: BrandBriefInsert) =>
 				supabase.from('brand_briefs').insert(data).select().single(),
 
-			updateById: (id: string, userId: string, patch: Partial<Omit<BrandBriefRow, 'id' | 'user_id' | 'created_at'>>) =>
+			updateById: (
+				id: string,
+				userId: string,
+				patch: Partial<Omit<BrandBriefRow, 'id' | 'user_id' | 'created_at'>>
+			) =>
 				supabase
 					.from('brand_briefs')
 					.update(patch)
@@ -399,7 +405,12 @@ export function createDbService(supabase: SupabaseClient) {
 					.order('name', { ascending: true }),
 
 			get: (id: string, userId: string) =>
-				supabase.from('persona_groups').select('*').eq('id', id).eq('user_id', userId).maybeSingle(),
+				supabase
+					.from('persona_groups')
+					.select('*')
+					.eq('id', id)
+					.eq('user_id', userId)
+					.maybeSingle(),
 
 			create: (userId: string, name: string) =>
 				supabase.from('persona_groups').insert({ user_id: userId, name }).select().single(),

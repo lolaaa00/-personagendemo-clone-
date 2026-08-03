@@ -207,19 +207,42 @@ export const BrandBrief = {
 	scrapeStore: (url: string) => request<any>(ENDPOINTS.brandBrief, 'scrape_store', { url }),
 	scrapeProduct: (url: string) => request<any>(ENDPOINTS.brandBrief, 'scrape_product', { url }),
 	extendField: (fieldName: string, fieldVal: string, brandContext?: string) =>
-		request<{ enriched: string }>(ENDPOINTS.brandBrief, 'extend_field', { fieldName, fieldVal, brandContext }),
+		request<{ enriched: string }>(ENDPOINTS.brandBrief, 'extend_field', {
+			fieldName,
+			fieldVal,
+			brandContext
+		}),
 	generateField: (fieldName: string, brandContext?: string) =>
-		request<{ generated: string }>(ENDPOINTS.brandBrief, 'generate_field', { fieldName, brandContext }),
+		request<{ generated: string }>(ENDPOINTS.brandBrief, 'generate_field', {
+			fieldName,
+			brandContext
+		}),
 	spinField: (fieldName: string, fieldVal: string, brandContext?: string) =>
-		request<{ variations: string[] }>(ENDPOINTS.brandBrief, 'spin_field', { fieldName, fieldVal, brandContext }),
+		request<{ variations: string[] }>(ENDPOINTS.brandBrief, 'spin_field', {
+			fieldName,
+			fieldVal,
+			brandContext
+		}),
 	// Multi-brand: briefId targets an existing brief; omitted = create new.
 	save: (data: Record<string, unknown>, briefId?: string | null, name?: string) =>
-		request<any>(ENDPOINTS.brandBrief, 'save_brief', { data, brief_id: briefId || undefined, name }),
-	list: () => request<Array<{ id: string; name: string; updated_at: string }>>(ENDPOINTS.brandBrief, 'list_briefs', {}),
-	getById: (briefId: string) => request<any>(ENDPOINTS.brandBrief, 'get_brief', { brief_id: briefId }),
+		request<any>(ENDPOINTS.brandBrief, 'save_brief', {
+			data,
+			brief_id: briefId || undefined,
+			name
+		}),
+	list: () =>
+		request<Array<{ id: string; name: string; updated_at: string }>>(
+			ENDPOINTS.brandBrief,
+			'list_briefs',
+			{}
+		),
+	getById: (briefId: string) =>
+		request<any>(ENDPOINTS.brandBrief, 'get_brief', { brief_id: briefId }),
 	// Permanent: personas pinned to this brief are unpinned server-side.
 	delete: (briefId: string) =>
-		request<{ id: string; name: string }>(ENDPOINTS.brandBrief, 'delete_brief', { brief_id: briefId }),
+		request<{ id: string; name: string }>(ENDPOINTS.brandBrief, 'delete_brief', {
+			brief_id: briefId
+		}),
 	// Generate a unique, brand-tailored persona profile for competitive influencer
 	// positioning. Server resolves name/soul/siblings and drives gender from the NAME
 	// (returned as `gender`) so a mis-set gender is corrected in place.
@@ -261,9 +284,13 @@ export const BrandBrief = {
 	// Vision: read the appearance fields straight from a reference image so they
 	// match the actual character.
 	readAppearanceFromImage: (imageUrl: string) =>
-		request<{ appearance: Record<string, string> }>(ENDPOINTS.brandBrief, 'read_appearance_from_image', {
-			imageUrl
-		}),
+		request<{ appearance: Record<string, string> }>(
+			ENDPOINTS.brandBrief,
+			'read_appearance_from_image',
+			{
+				imageUrl
+			}
+		),
 	// Agent Generator: invent `count` COMPLETE brand-tailored personas from scratch
 	// (name + gender + soul + full profile), each unique across the account.
 	generateFullPersona: (brandBriefId: string | null, count = 1, direction = '') =>

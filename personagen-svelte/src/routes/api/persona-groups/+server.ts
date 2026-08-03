@@ -30,9 +30,13 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 		if (action === 'create') {
 			const name = String(body.name ?? '').trim();
-			if (!name) return json({ success: false, error: 'Project name is required' }, { status: 400 });
+			if (!name)
+				return json({ success: false, error: 'Project name is required' }, { status: 400 });
 			if (name.length > NAME_MAX) {
-				return json({ success: false, error: `Project name must be ${NAME_MAX} characters or fewer` }, { status: 400 });
+				return json(
+					{ success: false, error: `Project name must be ${NAME_MAX} characters or fewer` },
+					{ status: 400 }
+				);
 			}
 			const { data, error } = await db.personaGroups.create(user.id, name);
 			if (error) throw error;
@@ -43,9 +47,13 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			const { id } = body;
 			const name = String(body.name ?? '').trim();
 			if (!id) return json({ success: false, error: 'Missing project id' }, { status: 400 });
-			if (!name) return json({ success: false, error: 'Project name is required' }, { status: 400 });
+			if (!name)
+				return json({ success: false, error: 'Project name is required' }, { status: 400 });
 			if (name.length > NAME_MAX) {
-				return json({ success: false, error: `Project name must be ${NAME_MAX} characters or fewer` }, { status: 400 });
+				return json(
+					{ success: false, error: `Project name must be ${NAME_MAX} characters or fewer` },
+					{ status: 400 }
+				);
 			}
 			const { data, error } = await db.personaGroups.rename(id, user.id, name);
 			if (error) throw error;
@@ -74,7 +82,10 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				return json({ success: false, error: 'No personas supplied' }, { status: 400 });
 			}
 			if (agentIds.length > 100) {
-				return json({ success: false, error: 'Too many personas (max 100 per request)' }, { status: 400 });
+				return json(
+					{ success: false, error: 'Too many personas (max 100 per request)' },
+					{ status: 400 }
+				);
 			}
 
 			if (groupId) {

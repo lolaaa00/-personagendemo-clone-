@@ -67,7 +67,9 @@
 	});
 	let startedAt = $derived(post.created_at ? new Date(post.created_at).getTime() : Date.now());
 	let pct = $derived(
-		Math.round(Math.min(0.95, 1 - Math.exp(-Math.max(0, now - startedAt) / (EXPECTED_MS * 0.6))) * 100)
+		Math.round(
+			Math.min(0.95, 1 - Math.exp(-Math.max(0, now - startedAt) / (EXPECTED_MS * 0.6))) * 100
+		)
 	);
 	let elapsedS = $derived(Math.max(0, Math.round((now - startedAt) / 1000)));
 
@@ -151,11 +153,7 @@
 	     propagation so they never open the drawer by accident. -->
 	{#if selectable}
 		<!-- svelte-ignore node_invalid_placement_ssr -->
-		<label
-			class="tile-select"
-			title="Select for bulk actions"
-			onclick={(e) => e.stopPropagation()}
-		>
+		<label class="tile-select" title="Select for bulk actions" onclick={(e) => e.stopPropagation()}>
 			<input
 				type="checkbox"
 				checked={selected}
@@ -178,8 +176,16 @@
 						onEnlarge?.(post);
 					}}
 				>
-					<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"
-						><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" /></svg
+					<svg
+						width="13"
+						height="13"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2.2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" /></svg
 					>
 				</button>
 			{/if}
@@ -195,7 +201,16 @@
 						onDelete?.(post);
 					}}
 				>
-					<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"
+					<svg
+						width="13"
+						height="13"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2.2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
 						><path d="M3 6h18M8 6V4h8v2m1 0v14a2 2 0 01-2 2H9a2 2 0 01-2-2V6h12" /></svg
 					>
 				</button>
@@ -240,7 +255,16 @@
 							onRetry?.(post);
 						}
 					}}
-					><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7" /><path d="M3 3v5h5" /></svg
+					><svg
+						width="13"
+						height="13"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7" /><path d="M3 3v5h5" /></svg
 					> Retry</span
 				>
 			{/if}
@@ -298,7 +322,9 @@
 						playingInline = true;
 					}}
 				>
-					<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
+					<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"
+						><path d="M8 5v14l11-7z" /></svg
+					>
 				</button>
 			{/if}
 		{:else}
@@ -328,8 +354,21 @@
 		     and offer a one-tap route to a platform that IS connected. -->
 		<div class="tile-postfail-banner">
 			<span class="tile-postfail-msg" title={postErrorLabel ?? 'Failed to post'}>
-				<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><path d="M12 9v4" /><path d="M12 17h.01" /></svg
-				> Failed to post{postErrorLabel ? ` — ${postErrorLabel.split('\n')[0]}` : ''}
+				<svg
+					width="12"
+					height="12"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					aria-hidden="true"
+					><path
+						d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"
+					/><path d="M12 9v4" /><path d="M12 17h.01" /></svg
+				>
+				Failed to post{postErrorLabel ? ` — ${postErrorLabel.split('\n')[0]}` : ''}
 			</span>
 			{#if onPublishFallback}
 				<!-- svelte-ignore node_invalid_placement_ssr -->
@@ -347,14 +386,37 @@
 							onPublishFallback?.(post);
 						}
 					}}
-					><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5" /><path d="m5 12 7-7 7 7" /></svg
+					><svg
+						width="12"
+						height="12"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"><path d="M12 19V5" /><path d="m5 12 7-7 7 7" /></svg
 					> Publish to a connected platform</span
 				>
 			{/if}
 		</div>
 	{:else if hasError}
 		<span class="tile-error-dot" title="This post has an error — open for details">
-			<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="This post has an error"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><path d="M12 9v4" /><path d="M12 17h.01" /></svg>
+			<svg
+				width="13"
+				height="13"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="2.2"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+				role="img"
+				aria-label="This post has an error"
+				><path
+					d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"
+				/><path d="M12 9v4" /><path d="M12 17h.01" /></svg
+			>
 		</span>
 	{/if}
 
@@ -374,8 +436,19 @@
 				onToggleFavorite?.(post);
 			}}
 		>
-			<svg width="14" height="14" viewBox="0 0 24 24" fill={post.is_favorite ? 'currentColor' : 'none'} stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"
-				><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" /></svg
+			<svg
+				width="14"
+				height="14"
+				viewBox="0 0 24 24"
+				fill={post.is_favorite ? 'currentColor' : 'none'}
+				stroke="currentColor"
+				stroke-width="2"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+				aria-hidden="true"
+				><path
+					d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"
+				/></svg
 			>
 		</button>
 	{/if}
@@ -384,14 +457,42 @@
 		<div class="tile-stats">
 			{#if analytics.views}
 				<span
-					><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" /><circle cx="12" cy="12" r="3" /></svg
+					><svg
+						width="13"
+						height="13"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
+						><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" /><circle
+							cx="12"
+							cy="12"
+							r="3"
+						/></svg
 					>
 					<span class="sr-only">Views:</span>
-					{analytics.views >= 1000 ? (analytics.views / 1000).toFixed(1) + 'K' : analytics.views}</span
+					{analytics.views >= 1000
+						? (analytics.views / 1000).toFixed(1) + 'K'
+						: analytics.views}</span
 				>
 			{/if}
 			{#if analytics.likes}<span
-					><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" /></svg
+					><svg
+						width="13"
+						height="13"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
+						><path
+							d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"
+						/></svg
 					>
 					<span class="sr-only">Likes:</span>
 					{analytics.likes}</span
@@ -413,7 +514,10 @@
 		cursor: pointer;
 		break-inside: avoid;
 		margin-bottom: 1rem;
-		transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+		transition:
+			border-color 0.15s ease,
+			transform 0.15s ease,
+			box-shadow 0.15s ease;
 	}
 
 	.post-tile:hover {
@@ -673,7 +777,9 @@
 		cursor: pointer;
 		backdrop-filter: blur(2px);
 		box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
-		transition: background 0.15s ease, transform 0.15s ease;
+		transition:
+			background 0.15s ease,
+			transform 0.15s ease;
 	}
 	.tile-video-play:hover {
 		background: rgba(0, 0, 0, 0.82);
@@ -734,7 +840,10 @@
 		color: #fff;
 		cursor: pointer;
 		opacity: 0;
-		transition: opacity 0.15s ease, color 0.15s ease, transform 0.15s ease;
+		transition:
+			opacity 0.15s ease,
+			color 0.15s ease,
+			transform 0.15s ease;
 	}
 	/* Same expanded 44px tap area as the other tile chips. */
 	.tile-fav::after {

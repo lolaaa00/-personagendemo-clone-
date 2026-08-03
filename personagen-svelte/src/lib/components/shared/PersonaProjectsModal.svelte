@@ -153,7 +153,16 @@
 				aria-label="New project name"
 			/>
 			<button type="submit" class="proj-btn primary" disabled={busy || !newName.trim()}>
-				<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"
+				<svg
+					width="13"
+					height="13"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2.5"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					aria-hidden="true"
 					><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg
 				>
 				Create
@@ -162,7 +171,9 @@
 
 		<!-- Existing projects -->
 		{#if groups.length === 0}
-			<p class="proj-empty">No projects yet — create one above, then file personas into it below.</p>
+			<p class="proj-empty">
+				No projects yet — create one above, then file personas into it below.
+			</p>
 		{:else}
 			<ul class="proj-list">
 				{#each groups as group (group.id)}
@@ -176,19 +187,40 @@
 									bind:value={renameValue}
 									aria-label="Rename project"
 								/>
-								<button type="submit" class="proj-btn primary" disabled={busy || !renameValue.trim()}>Save</button>
-								<button type="button" class="proj-btn" onclick={() => (renamingId = null)}>Cancel</button>
+								<button
+									type="submit"
+									class="proj-btn primary"
+									disabled={busy || !renameValue.trim()}>Save</button
+								>
+								<button type="button" class="proj-btn" onclick={() => (renamingId = null)}
+									>Cancel</button
+								>
 							</form>
 						{:else}
 							<span class="proj-icon" aria-hidden="true">
-								<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-									><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" /></svg
+								<svg
+									width="14"
+									height="14"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									><path
+										d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"
+									/></svg
 								>
 							</span>
 							<span class="proj-name">{group.name}</span>
 							<span class="proj-count">{memberCount(group.id)}</span>
 							<div class="proj-actions">
-								<button type="button" class="proj-btn" onclick={() => startRename(group)} aria-label="Rename {group.name}">
+								<button
+									type="button"
+									class="proj-btn"
+									onclick={() => startRename(group)}
+									aria-label="Rename {group.name}"
+								>
 									Rename
 								</button>
 								<button
@@ -216,7 +248,12 @@
 			<ul class="assign-list">
 				{#each personas as persona (persona.id)}
 					<li class="assign-row">
-						<span class="assign-avatar" style={persona.ugc_character_ref ? '' : `background: ${persona.gradient ?? 'var(--gradient)'}`}>
+						<span
+							class="assign-avatar"
+							style={persona.ugc_character_ref
+								? ''
+								: `background: ${persona.gradient ?? 'var(--gradient)'}`}
+						>
 							{#if persona.ugc_character_ref}
 								<img src={persona.ugc_character_ref} alt="" width="24" height="24" loading="lazy" />
 							{:else}
@@ -293,7 +330,10 @@
 		font-weight: 600;
 		cursor: pointer;
 		white-space: nowrap;
-		transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+		transition:
+			background 0.15s ease,
+			color 0.15s ease,
+			border-color 0.15s ease;
 	}
 
 	.proj-btn:hover:not(:disabled) {

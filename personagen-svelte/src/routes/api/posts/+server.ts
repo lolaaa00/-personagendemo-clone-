@@ -29,7 +29,10 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			// Verify agent ownership
 			const { data: agent, error: agentErr } = await db.agents.get(agentId);
 			if (agentErr || !agent || agent.user_id !== user.id) {
-				return json({ success: false, error: 'Agent not found or ownership mismatch' }, { status: 404 });
+				return json(
+					{ success: false, error: 'Agent not found or ownership mismatch' },
+					{ status: 404 }
+				);
 			}
 
 			// Format platforms as PostgreSQL array
@@ -62,7 +65,10 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			// Verify post ownership
 			const { data: existingPost, error: getErr } = await db.posts.get(id);
 			if (getErr || !existingPost || existingPost.user_id !== user.id) {
-				return json({ success: false, error: 'Post not found or ownership mismatch' }, { status: 404 });
+				return json(
+					{ success: false, error: 'Post not found or ownership mismatch' },
+					{ status: 404 }
+				);
 			}
 
 			// A 'generating' row is owned by a detached generation/refine task that
@@ -105,16 +111,25 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				);
 			}
 			if (scheduled_date !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(String(scheduled_date))) {
-				return json({ success: false, error: 'Invalid scheduled_date (YYYY-MM-DD)' }, { status: 400 });
+				return json(
+					{ success: false, error: 'Invalid scheduled_date (YYYY-MM-DD)' },
+					{ status: 400 }
+				);
 			}
 			if (scheduled_time !== undefined && !/^\d{2}:\d{2}(:\d{2})?$/.test(String(scheduled_time))) {
-				return json({ success: false, error: 'Invalid scheduled_time (HH:MM[:SS])' }, { status: 400 });
+				return json(
+					{ success: false, error: 'Invalid scheduled_time (HH:MM[:SS])' },
+					{ status: 400 }
+				);
 			}
 
 			// Verify post ownership
 			const { data: existingPost, error: getErr } = await db.posts.get(id);
 			if (getErr || !existingPost || existingPost.user_id !== user.id) {
-				return json({ success: false, error: 'Post not found or ownership mismatch' }, { status: 404 });
+				return json(
+					{ success: false, error: 'Post not found or ownership mismatch' },
+					{ status: 404 }
+				);
 			}
 
 			// Only pending posts can move — publishing/published/failed history stays put.
@@ -141,7 +156,10 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			// Verify post ownership
 			const { data: existingPost, error: getErr } = await db.posts.get(id);
 			if (getErr || !existingPost || existingPost.user_id !== user.id) {
-				return json({ success: false, error: 'Post not found or ownership mismatch' }, { status: 404 });
+				return json(
+					{ success: false, error: 'Post not found or ownership mismatch' },
+					{ status: 404 }
+				);
 			}
 
 			const { data, error } = await db.posts.update(id, { is_favorite: Boolean(value) });
@@ -156,7 +174,10 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			// Verify post ownership
 			const { data: existingPost, error: getErr } = await db.posts.get(id);
 			if (getErr || !existingPost || existingPost.user_id !== user.id) {
-				return json({ success: false, error: 'Post not found or ownership mismatch' }, { status: 404 });
+				return json(
+					{ success: false, error: 'Post not found or ownership mismatch' },
+					{ status: 404 }
+				);
 			}
 
 			// Best-effort live teardown (Zernio unpublish where supported); never blocks the DB delete
@@ -181,7 +202,10 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				return json({ success: false, error: 'No post ids supplied' }, { status: 400 });
 			}
 			if (ids.length > 200) {
-				return json({ success: false, error: 'Too many posts (max 200 per request)' }, { status: 400 });
+				return json(
+					{ success: false, error: 'Too many posts (max 200 per request)' },
+					{ status: 400 }
+				);
 			}
 
 			const teardown: TeardownResult = { unpublished: [], manualDeletion: [], errors: [] };
@@ -215,7 +239,10 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			// Verify post ownership
 			const { data: existingPost, error: getErr } = await db.posts.get(id);
 			if (getErr || !existingPost || existingPost.user_id !== user.id) {
-				return json({ success: false, error: 'Post not found or ownership mismatch' }, { status: 404 });
+				return json(
+					{ success: false, error: 'Post not found or ownership mismatch' },
+					{ status: 404 }
+				);
 			}
 
 			return json({ success: true, data: existingPost });
@@ -226,7 +253,10 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			if (agent_id) {
 				const { data: agent, error: agentErr } = await db.agents.get(agent_id);
 				if (agentErr || !agent || agent.user_id !== user.id) {
-					return json({ success: false, error: 'Agent not found or ownership mismatch' }, { status: 404 });
+					return json(
+						{ success: false, error: 'Agent not found or ownership mismatch' },
+						{ status: 404 }
+					);
 				}
 			}
 			const { data, error } = await db.posts.list({ agent_id });
@@ -243,7 +273,10 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			if (persona_id) {
 				const { data: agent, error: agentErr } = await db.agents.get(persona_id);
 				if (agentErr || !agent || agent.user_id !== user.id) {
-					return json({ success: false, error: 'Agent not found or ownership mismatch' }, { status: 404 });
+					return json(
+						{ success: false, error: 'Agent not found or ownership mismatch' },
+						{ status: 404 }
+					);
 				}
 			}
 

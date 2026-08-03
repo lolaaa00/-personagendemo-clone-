@@ -92,7 +92,12 @@
 	}
 
 	// ── Lightbox ─────────────────────────────────────────────────────────────
-	let lightbox = $state<{ url: string; label: string; type: 'image' | 'video'; poster: string | null } | null>(null);
+	let lightbox = $state<{
+		url: string;
+		label: string;
+		type: 'image' | 'video';
+		poster: string | null;
+	} | null>(null);
 
 	function openPostMedia(post: any) {
 		const display = getPostDisplay(post);
@@ -114,7 +119,9 @@
 	<header class="fav-header">
 		<div>
 			<h1>My Favorites</h1>
-			<p class="fav-sub">Everything you've hearted — best posts and go-to personas, one tap away.</p>
+			<p class="fav-sub">
+				Everything you've hearted — best posts and go-to personas, one tap away.
+			</p>
 		</div>
 	</header>
 
@@ -147,12 +154,25 @@
 		{#if posts.length === 0}
 			<div class="fav-empty">
 				<span class="empty-icon">
-					<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"
-						><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" /></svg
+					<svg
+						width="40"
+						height="40"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="1.6"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
+						><path
+							d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"
+						/></svg
 					>
 				</span>
 				<h2>No favorite posts yet</h2>
-				<p>Tap the heart on any post — in a persona's feed or All Generations — and it lands here.</p>
+				<p>
+					Tap the heart on any post — in a persona's feed or All Generations — and it lands here.
+				</p>
 				<a class="fav-empty-cta" href="/generations">Browse All Generations</a>
 			</div>
 		{:else}
@@ -165,8 +185,16 @@
 							onEnlarge={openPostMedia}
 							onToggleFavorite={unfavoritePost}
 						/>
-						<a class="fav-cell-persona" href="/personas/{post.agent_id}" title="Open {post.agents?.name ?? 'persona'}">
-							<span class="cell-avatar" style={`background: ${post.agents?.gradient ?? 'var(--gradient)'}`}>{post.agents?.initial ?? '?'}</span>
+						<a
+							class="fav-cell-persona"
+							href="/personas/{post.agent_id}"
+							title="Open {post.agents?.name ?? 'persona'}"
+						>
+							<span
+								class="cell-avatar"
+								style={`background: ${post.agents?.gradient ?? 'var(--gradient)'}`}
+								>{post.agents?.initial ?? '?'}</span
+							>
 							<span class="cell-name">{post.agents?.name ?? 'Persona'}</span>
 						</a>
 					</div>
@@ -176,8 +204,21 @@
 	{:else if personas.length === 0}
 		<div class="fav-empty">
 			<span class="empty-icon">
-				<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"
-					><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg
+				<svg
+					width="40"
+					height="40"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="1.6"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					aria-hidden="true"
+					><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle
+						cx="12"
+						cy="7"
+						r="4"
+					/></svg
 				>
 			</span>
 			<h2>No favorite personas yet</h2>
@@ -188,9 +229,20 @@
 			{#each personas as persona (persona.id)}
 				<div class="persona-card">
 					<a class="persona-card-link" href="/personas/{persona.id}">
-						<span class="persona-avatar" style={characterRefFor(persona.id) ? '' : `background: ${persona.gradient ?? 'var(--gradient)'}`}>
+						<span
+							class="persona-avatar"
+							style={characterRefFor(persona.id)
+								? ''
+								: `background: ${persona.gradient ?? 'var(--gradient)'}`}
+						>
 							{#if characterRefFor(persona.id)}
-								<img src={characterRefFor(persona.id)} alt="" width="56" height="56" loading="lazy" />
+								<img
+									src={characterRefFor(persona.id)}
+									alt=""
+									width="56"
+									height="56"
+									loading="lazy"
+								/>
 							{:else}
 								{persona.initial ?? (persona.name?.[0] ?? '?').toUpperCase()}
 							{/if}
@@ -212,8 +264,19 @@
 								{persona.niche}
 								{#if groupName(persona.group_id)}
 									<span class="persona-group-chip">
-										<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"
-											><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" /></svg
+										<svg
+											width="10"
+											height="10"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											aria-hidden="true"
+											><path
+												d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"
+											/></svg
 										>
 										{groupName(persona.group_id)}
 									</span>
@@ -229,8 +292,19 @@
 						disabled={togglingPersonaId === persona.id}
 						onclick={() => unfavoritePersona(persona)}
 					>
-						<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"
-							><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" /></svg
+						<svg
+							width="15"
+							height="15"
+							viewBox="0 0 24 24"
+							fill="currentColor"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							aria-hidden="true"
+							><path
+								d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"
+							/></svg
 						>
 					</button>
 				</div>
@@ -303,7 +377,9 @@
 		font-size: 0.85rem;
 		font-weight: 600;
 		cursor: pointer;
-		transition: background 0.15s ease, color 0.15s ease;
+		transition:
+			background 0.15s ease,
+			color 0.15s ease;
 	}
 
 	.fav-tab:hover {
@@ -401,7 +477,10 @@
 		border: 1px solid var(--border);
 		border-radius: var(--radius-md);
 		background: var(--surface);
-		transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+		transition:
+			border-color 0.15s ease,
+			transform 0.15s ease,
+			box-shadow 0.15s ease;
 	}
 
 	.persona-card:hover {
@@ -526,7 +605,9 @@
 		background: var(--surface-2);
 		color: var(--rose, #e84393);
 		cursor: pointer;
-		transition: transform 0.15s ease, border-color 0.15s ease;
+		transition:
+			transform 0.15s ease,
+			border-color 0.15s ease;
 	}
 
 	/* 44px tap area without growing the 32px chip. */
