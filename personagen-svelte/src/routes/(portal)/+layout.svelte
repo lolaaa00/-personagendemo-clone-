@@ -66,6 +66,8 @@
 		],
 		setup: [
 			{ href: '/brand-brief', label: 'Brand Brief', icon: 'bolt' },
+			{ href: '/models', label: 'Model Manager', icon: 'sliders' },
+			{ href: '/guides', label: 'Guides', icon: 'book' },
 			{ href: '/settings', label: 'Settings', icon: 'settings' }
 		]
 	};
@@ -553,7 +555,35 @@
 					aria-label={sidebarState.collapsed ? item.label : undefined}
 				>
 					<span class="sidebar-nav-icon">
-						{#if item.icon === 'bolt'}
+						{#if item.icon === 'sliders'}
+							<svg
+								aria-hidden="true"
+								width="18"
+								height="18"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								><line x1="4" y1="21" x2="4" y2="14" /><line x1="4" y1="10" x2="4" y2="3" /><line
+									x1="12"
+									y1="21"
+									x2="12"
+									y2="12"
+								/><line x1="12" y1="8" x2="12" y2="3" /><line
+									x1="20"
+									y1="21"
+									x2="20"
+									y2="16"
+								/><line x1="20" y1="12" x2="20" y2="3" /><line x1="1" y1="14" x2="7" y2="14" /><line
+									x1="9"
+									y1="8"
+									x2="15"
+									y2="8"
+								/><line x1="17" y1="16" x2="23" y2="16" /></svg
+							>
+						{:else if item.icon === 'bolt'}
 							<svg
 								aria-hidden="true"
 								width="18"
@@ -564,6 +594,21 @@
 								stroke-width="2"
 								stroke-linecap="round"
 								stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" /></svg
+							>
+						{:else if item.icon === 'book'}
+							<svg
+								aria-hidden="true"
+								width="18"
+								height="18"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path
+									d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"
+								/></svg
 							>
 						{:else if item.icon === 'settings'}
 							<svg
@@ -638,6 +683,8 @@
 						if (path.startsWith('/settings')) return 'Settings';
 						if (path.startsWith('/generator')) return 'New Persona';
 						if (path.startsWith('/generations')) return 'All Generations';
+						if (path.startsWith('/models')) return 'Model Manager';
+						if (path.startsWith('/guides')) return 'Guides';
 						if (path.startsWith('/favorites')) return 'My Favorites';
 						if (path.startsWith('/review')) return 'Review Queue';
 						if (path.startsWith('/calendar')) return 'Calendar';
