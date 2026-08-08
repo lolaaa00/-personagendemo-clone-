@@ -2,7 +2,22 @@
 	import { onMount } from 'svelte';
 
 	// ── Guide catalog ────────────────────────────────────────────────────────
-	// Static, code-defined how-tos with real app screenshots (static/guide-shots,
+	// Screenshots are imported through Vite's asset pipeline so every capture
+	// gets a CONTENT-HASHED immutable URL — a changed image is a changed URL,
+	// which makes stale browser/edge caches structurally impossible.
+	const SHOT_URLS = import.meta.glob('$lib/assets/guide-shots/*.png', {
+		eager: true,
+		query: '?url',
+		import: 'default'
+	}) as Record<string, string>;
+	function shotUrl(name: string): string {
+		for (const [path, url] of Object.entries(SHOT_URLS)) {
+			if (path.endsWith(`/${name}.png`)) return url;
+		}
+		return '';
+	}
+
+	// Static, code-defined how-tos with real app screenshots (src/lib/assets/guide-shots,
 	// captured against the monarchstackteam account so every image shows the real
 	// workspace users see in these docs). Every step names the REAL buttons and
 	// tabs as they appear in the app; screenshots are re-captured with Playwright
@@ -881,14 +896,14 @@
 						{#if step.img}
 							<a
 								class="step-shot-link"
-								href={`/guide-shots/${step.img}.png`}
+								href={shotUrl(step.img)}
 								target="_blank"
 								rel="noopener"
 								title="Open screenshot full size"
 							>
 								<img
 									class="step-shot"
-									src={`/guide-shots/${step.img}.png`}
+									src={shotUrl(step.img)}
 									alt={step.alt ?? 'App screenshot for this step'}
 									loading="lazy"
 								/>
