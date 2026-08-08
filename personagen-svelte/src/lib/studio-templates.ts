@@ -21,7 +21,7 @@
  *   image        → still only (body.media = 'image')
  */
 
-export type StudioCategory = 'ugc' | 'product' | 'cinematic' | 'stills';
+export type StudioCategory = 'ugc' | 'product' | 'cinematic' | 'stills' | 'social';
 
 export interface StudioTemplate {
 	id: string;
@@ -44,7 +44,8 @@ export const STUDIO_CATEGORIES: Array<{ id: StudioCategory | 'all'; label: strin
 	{ id: 'ugc', label: 'UGC' },
 	{ id: 'product', label: 'Product' },
 	{ id: 'cinematic', label: 'Cinematic' },
-	{ id: 'stills', label: 'Stills' }
+	{ id: 'stills', label: 'Stills' },
+	{ id: 'social', label: 'Social & Quotes' }
 ];
 
 export const STUDIO_TEMPLATES: StudioTemplate[] = [
@@ -227,6 +228,96 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 				'A polished flat-lay hero image of the featured product surrounded by a few props that explain its world at a glance — composed for a pinned post or profile grid anchor.',
 			scene:
 				'Top-down flat-lay on a textured neutral surface, the featured product centered, 3-4 supporting props arranged with generous negative space, soft shadowless light.',
+			media: 'image'
+		}
+	},
+
+	// ── Social & Quotes · alternative content, built to be SHARED ──────────
+	// Not everything is a video. These are the save-and-send formats: quote
+	// cards, text graphics, split-frames — the posts people forward to a friend.
+	// All run the still-image pipeline (Nano Banana renders clean typography),
+	// so they cost cents and generate in seconds.
+	{
+		id: 'quote-card',
+		title: 'Quote Card',
+		tagline: 'A shareable typographic quote in the brand voice',
+		category: 'social',
+		pipeline: 'Still image',
+		baseBody: {
+			topic:
+				"A quote card built to be reshared: one short, punchy line in the persona's voice that captures why the featured product matters — a truth the audience already feels but hasn't put into words. The caption expands on the line and invites people to send it to someone who needs it.",
+			scene:
+				'Minimal typographic quote card: the quote set LARGE in an elegant modern typeface, perfectly legible, centered on a clean solid or softly textured background in brand-adjacent tones, small handle credit at the bottom. Flawless spelling, no extra graphics, museum-poster restraint.',
+			media: 'image'
+		}
+	},
+	{
+		id: 'hot-take',
+		title: 'Hot Take',
+		tagline: 'A bold text post that starts arguments in the comments',
+		category: 'social',
+		pipeline: 'Still image',
+		baseBody: {
+			topic:
+				"A deliberately spicy-but-defensible opinion from the persona about their niche (not a product pitch) — the kind of one-liner people screenshot, quote-post, and argue with. The caption doubles down and asks where people stand.",
+			scene:
+				'Bold text-only graphic: the take set in heavy condensed type filling the frame, high-contrast two-color palette, slight offset composition like a protest poster, zero imagery, perfectly legible, flawless spelling.',
+			media: 'image'
+		}
+	},
+	{
+		id: 'stat-shock',
+		title: 'Stat That Stops the Scroll',
+		tagline: 'One surprising number, designed like a headline',
+		category: 'social',
+		pipeline: 'Still image',
+		baseBody: {
+			topic:
+				'A single surprising, true-to-the-niche statistic or comparison that reframes why the featured product category matters — the number IS the hook. Caption gives the context and the source framing, then ties it to the product in one line.',
+			scene:
+				'Editorial data-headline graphic: the number rendered HUGE in a display typeface, one short supporting line beneath it, restrained single-accent color on a clean ground, broadsheet-front-page energy, flawless spelling and digits.',
+			media: 'image'
+		}
+	},
+	{
+		id: 'before-after-still',
+		title: 'Before / After Split',
+		tagline: 'The transformation in one frame — no video needed',
+		category: 'social',
+		pipeline: 'Still image',
+		baseBody: {
+			topic:
+				'A split-frame before/after image showing the honest transformation the featured product delivers — same subject, same framing, only the result changed. Caption names how long it took and what actually did the work.',
+			scene:
+				'Single image split into two equal vertical panels labeled BEFORE and AFTER in small clean type, identical camera angle and lighting in both panels, the only difference being the product’s result, photorealistic, no exaggeration.',
+			media: 'image'
+		}
+	},
+	{
+		id: 'mantra-card',
+		title: 'Mantra / Lyric Card',
+		tagline: 'Poetic lines people repost to say something about themselves',
+		category: 'social',
+		pipeline: 'Still image',
+		baseBody: {
+			topic:
+				"Three to five short poetic lines — a mantra, almost lyrics — expressing the lifestyle and identity the persona's audience aspires to (the product's world, never the product by name). Caption is a single line inviting people to save it.",
+			scene:
+				'Aesthetic text card: the lines set in a refined serif with generous line spacing, stacked left-aligned, on a dreamy atmospheric background (soft gradient sky, film-grain texture), muted poetic palette, flawless spelling.',
+			media: 'image'
+		}
+	},
+	{
+		id: 'caption-this',
+		title: 'Caption This',
+		tagline: 'An image engineered for comments and shares',
+		category: 'social',
+		pipeline: 'Still image',
+		baseBody: {
+			topic:
+				"An intentionally funny, oddly relatable scene from the persona's daily life with the featured product visible but not the point — designed so the audience supplies the joke. The caption just says 'caption this' with a first attempt from the persona.",
+			scene:
+				'Candid comedic photo: the persona mid-mundane-disaster or absurdly relatable moment, featured product somewhere in frame, sitcom timing frozen at the perfect frame, natural light, meme-ready composition with clear space at top.',
 			media: 'image'
 		}
 	}

@@ -662,9 +662,9 @@
 	<!-- ── Discovered: staged models from the fal catalog ──────────────────── -->
 	<h2 class="mm-section-title">Discovered on fal</h2>
 	<p class="mm-section-sub">
-		Newest releases in this category, synced from the live catalog. Staged: they're visible with
-		dates and pricing so you can track what's out there — probe a model's request schema to see
-		whether auto-wiring can adopt it. Adoption ships in the next phase.
+		Newest releases in this category, synced from the live catalog. Probe a model's request
+		schema: schema-OK models can swap straight into any roster slot; models with gaps show a
+		field-by-field adapter plan instead.
 	</p>
 	{#if discovered.length === 0}
 		<div class="mm-discover-empty">
@@ -1503,6 +1503,96 @@
 	.mm-discover-why {
 		font-size: 0.74rem;
 		color: var(--warning);
+	}
+
+	/* fal title didn't mention part of the endpoint path (e.g. "keyframes") —
+	   the chip is what stops two cards reading as the same model. */
+	.pill-variant {
+		background: color-mix(in srgb, var(--cyan, #22d3ee) 14%, transparent);
+		color: var(--cyan, #0891b2);
+		text-transform: uppercase;
+	}
+
+	/* ── Adapter plan (needs-review models) ── */
+	.mm-adapter {
+		margin-top: 4px;
+	}
+
+	.mm-adapter-summary {
+		display: inline-flex;
+		align-items: center;
+		gap: 5px;
+		font-size: 0.74rem;
+		font-weight: 600;
+		color: var(--warning);
+		cursor: pointer;
+		list-style: none;
+		min-height: 32px;
+	}
+
+	.mm-adapter-summary::-webkit-details-marker {
+		display: none;
+	}
+
+	.mm-adapter-summary svg {
+		transition: transform 0.15s ease;
+		flex-shrink: 0;
+	}
+
+	.mm-adapter[open] .mm-adapter-summary svg {
+		transform: rotate(90deg);
+	}
+
+	.mm-adapter-body {
+		margin-top: 6px;
+		border: 1px solid var(--border);
+		border-radius: 10px;
+		background: var(--surface-2);
+		padding: 10px 12px;
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+		max-width: 640px;
+	}
+
+	.mm-adapter-row {
+		display: grid;
+		grid-template-columns: minmax(110px, auto) auto 1fr;
+		gap: 10px;
+		align-items: baseline;
+		font-size: 0.76rem;
+		color: var(--text-muted);
+	}
+
+	.mm-adapter-row.head {
+		font-size: 0.62rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.07em;
+		color: var(--text-dim);
+	}
+
+	.mm-adapter-row code {
+		font-family: var(--font-mono, monospace);
+		font-size: 0.72rem;
+		color: var(--text);
+		word-break: break-all;
+	}
+
+	.mm-adapter-note {
+		margin: 4px 0 0;
+		font-size: 0.74rem;
+		color: var(--text-dim);
+		line-height: 1.45;
+	}
+
+	@media (max-width: 640px) {
+		.mm-adapter-row {
+			grid-template-columns: 1fr;
+			gap: 2px;
+			padding-bottom: 6px;
+			border-bottom: 1px solid var(--border);
+		}
 	}
 
 	.mm-discover-side {
