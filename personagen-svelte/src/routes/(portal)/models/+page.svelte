@@ -131,6 +131,20 @@
 		return best;
 	}
 	let candidateCount = $derived(discovered.filter((d: any) => replaces(d) != null).length);
+
+	// Every wired slot in this kind is a valid swap target — deliberately NOT
+	// filtered by the view filters, since narrowing the list you're browsing
+	// shouldn't narrow where a model can be wired.
+	let wiredSlots = $derived(
+		rows.filter((r: any) => r.kind === kind && r.wired && r.status === 'active')
+	);
+	// Explicit per-row slot choice; falls back to the recommended target.
+	let swapChoice = $state<Record<string, string>>({});
+	function chosenTarget(d: any): any | null {
+		const explicit = swapChoice[d.id];
+		if (explicit) return wiredSlots.find((w: any) => w.model_id === explicit) ?? null;
+		return replaces(d);
+	}
 	let maxValue = $derived(Math.max(...wired.map((r: any) => valueScore(r) ?? 0), 0));
 	let bestValueId = $derived.by(() => {
 		let best: any = null;
@@ -637,22 +651,42 @@
 								<span class="pill pill-quar">NO PRICE DATA</span>
 							{/if}
 						</span>
-					{#if target}
+					{#if wiredSlots.length}
+							{@const pick = chosenTarget(row)}
 							{#if row.probe?.ok}
+								<select
+									class="mm-slot-pick"
+									aria-label="Slot for {row.label} to take over"
+									value={pick?.model_id ?? ''}
+									onchange={(e) =>
+										(swapChoice = {
+											...swapChoice,
+											[row.id]: (e.currentTarget as HTMLSelectElement).value
+										})}
+								>
+									<option value="" disabled>Choose a slot…</option>
+									{#each wiredSlots as w (w.id)}
+										<option value={w.model_id}
+											>{w.tier ? `${w.tier} — ` : ''}{w.label}</option
+										>
+									{/each}
+								</select>
 								<button
 									type="button"
 									class="mm-swap-btn"
 									class:confirming={confirmSwapId === row.id}
-									disabled={swappingId === row.id}
-									title={`Give ${row.label} the ${target.tier ?? 'wired'} slot currently held by ${target.label}`}
-									onclick={() => requestSwap(row, target)}
+									disabled={swappingId === row.id || !pick}
+									title={pick
+										? `Give ${row.label} the ${pick.tier ?? 'wired'} slot currently held by ${pick.label}`
+										: 'Choose which slot this model should take over'}
+									onclick={() => pick && requestSwap(row, pick)}
 								>
 									{#if swappingId === row.id}
 										Swapping…
 									{:else if confirmSwapId === row.id}
-										Confirm — replace {target.label}
+										Confirm — replace {pick?.label}
 									{:else}
-										Swap in for {target.label}
+										Swap in
 									{/if}
 								</button>
 							{:else}
@@ -660,7 +694,7 @@
 									type="button"
 									class="mm-swap-btn mm-swap-gated"
 									disabled={probingId === row.id}
-									title={`Check ${row.label}'s request schema before it can take over the ${target.tier ?? 'wired'} slot`}
+									title={`Check ${row.label}'s request schema before it can take over a slot`}
 									onclick={() => probe(row)}
 								>
 									{probingId === row.id ? 'Probing…' : 'Probe to enable swap'}
@@ -1009,6 +1043,16 @@
 		background: var(--success-soft, rgba(52, 211, 153, 0.12));
 		color: var(--success, #34d399);
 		border: 1px solid var(--success, #34d399);
+	}
+
+	.mm-slot-pick {
+		max-width: 190px;
+		font-size: 0.78rem;
+		padding: 0.35rem 0.5rem;
+		border-radius: 8px;
+		border: 1px solid var(--border);
+		background: var(--surface-2);
+		color: var(--text);
 	}
 
 	.mm-swap-btn {
