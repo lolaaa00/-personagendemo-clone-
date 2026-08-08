@@ -3,7 +3,7 @@
 	import { syncParam } from '$lib/url-state';
 	import { onMount, onDestroy } from 'svelte';
 	import { showToast } from '$lib/stores/ui.svelte';
-	import { goto, invalidateAll } from '$app/navigation';
+	import { goto, invalidateAll, beforeNavigate } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { slide } from 'svelte/transition';
 	import { Accounts, Autopilot, Posts, BrandBrief, parseJsonResponse } from '$lib/services/api';
@@ -1076,6 +1076,10 @@
 			const res = await fetch('/api/agents/config', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
+				// keepalive lets a save fired during pagehide/unload finish instead of
+				// being aborted with the document. The payload is well under the 64KB
+				// keepalive ceiling.
+				keepalive: true,
 				body: JSON.stringify({ agentId: id, personaProfile: currentPersonaProfile() })
 			});
 			const d = await parseJsonResponse<any>(res);
@@ -1107,6 +1111,26 @@
 		kitSaveTimer = null;
 		void saveIdentityKit(forAgentId);
 	}
+
+	// The debounce is 1200ms, so any exit inside that window used to drop the last
+	// edits silently — a reload mid-debounce aborted the in-flight POST outright.
+	// Every way out of this page now flushes first:
+	//   beforeNavigate  → SvelteKit client navigation (tab, persona, sidebar link)
+	//   pagehide        → reload, back/forward, tab close, external navigation
+	//   visibilitychange→ mobile backgrounding, which may never fire pagehide
+	beforeNavigate(() => flushPendingKitSave());
+	onMount(() => {
+		const flush = () => flushPendingKitSave();
+		const onHidden = () => {
+			if (document.visibilityState === 'hidden') flushPendingKitSave();
+		};
+		window.addEventListener('pagehide', flush);
+		document.addEventListener('visibilitychange', onHidden);
+		return () => {
+			window.removeEventListener('pagehide', flush);
+			document.removeEventListener('visibilitychange', onHidden);
+		};
+	});
 
 	// ── Kit generation — LEAN, scoped calls ─────────────────────────────────
 	// 'bio'     → ONLY the selected platform's bio (seconds-fast; the all-13
@@ -4704,40 +4728,11 @@
 	</div>
 {/if}
 
-<!-- Reference-kit / profile-picture preview. openPreview() sets these; without
-     this block the thumbnails' click handlers were no-ops (set previewOpen=true
-     with nothing rendering it). Mirrors the assets lightbox for consistency,
-     plus an optional Regenerate for the stage it came from. -->
-{#if previewOpen && previewUrl}
-	<div class="lightbox-backdrop" onclick={() => (previewOpen = false)} role="presentation">
-		<div
-			class="lightbox-content"
-			onclick={(e) => e.stopPropagation()}
-			role="dialog"
-			aria-modal="true"
-			aria-label={previewTitle}
-			tabindex="-1"
-			use:dialog={{ onClose: () => (previewOpen = false) }}
-		>
-			<img src={previewUrl} alt={previewTitle} width="920" height="920" />
-			<div class="lightbox-bar">
-				<span>{previewTitle}</span>
-				<a href={previewUrl} target="_blank" rel="noopener noreferrer">Open original<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6"/><path d="M10 14L21 3"/></svg><span class="sr-only">(opens in a new tab)</span></a>
-				{#if previewRegenerate}
-					<button
-						type="button"
-						onclick={() => {
-							const fn = previewRegenerate;
-							previewOpen = false;
-							fn?.();
-						}}
-					><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg> Regenerate</button>
-				{/if}
-				<button type="button" onclick={() => (previewOpen = false)}>Close</button>
-			</div>
-		</div>
-	</div>
-{/if}
+<!-- Reference-kit / profile-picture preview is rendered by <MediaPreviewModal>
+     above. A second hand-rolled lightbox used to live here bound to the same
+     previewOpen flag, so both mounted at once — two stacked dialogs for one
+     click. MediaPreviewModal already carries Open original + Regenerate, so the
+     duplicate was removed rather than the shared component. -->
 
 <!-- Restore-from-history picker: every past generated image, click to re-pin
      as this persona's profile picture. Nothing here is ever deleted. -->

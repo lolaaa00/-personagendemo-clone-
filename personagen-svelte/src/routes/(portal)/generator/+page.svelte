@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { syncParam, readParam } from '$lib/url-state';
 	import { dialog } from '$lib/actions/dialog';
 	import { showToast } from '$lib/stores/ui.svelte';
 	import { onMount } from 'svelte';
@@ -11,7 +12,9 @@
 	const LS_KEY = 'personagen_generator_progress';
 
 	// Steps
-	let currentStep = $state(1);
+	// Step in the URL so a refresh mid-wizard doesn't dump you back at step 1.
+	let currentStep = $state(Number(readParam('step', ['1', '2', '3'] as const, '1')));
+	$effect(() => syncParam('step', String(currentStep), '1'));
 	const TOTAL_STEPS = 3;
 
 	// Step 1 — Identity

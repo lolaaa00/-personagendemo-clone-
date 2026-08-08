@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { syncParam, readParam } from '$lib/url-state';
 	import { onMount } from 'svelte';
 	import { platformLabel } from '$lib/platforms';
 	import PostDrawer from '$lib/components/feed/PostDrawer.svelte';
@@ -51,9 +52,19 @@
 	} | null>(null);
 
 	// ── Filters (agent / platform / status), applied client-side ──
-	let filterAgent = $state('all');
-	let filterPlatform = $state('all');
-	let filterStatus = $state('all');
+	// Filters live in the URL so a narrowed queue survives a refresh and can be
+	// handed to someone else. Agent/platform are open-ended (they come from the
+	// data), so they are read raw; status has a known set.
+	const qp = (k: string) =>
+		typeof window === 'undefined'
+			? null
+			: new URL(window.location.href).searchParams.get(k);
+	let filterAgent = $state(qp('agent') ?? 'all');
+	let filterPlatform = $state(qp('platform') ?? 'all');
+	let filterStatus = $state(readParam('status', ['all', 'draft', 'scheduled'] as const, 'all'));
+	$effect(() => syncParam('agent', filterAgent, 'all'));
+	$effect(() => syncParam('platform', filterPlatform, 'all'));
+	$effect(() => syncParam('status', filterStatus, 'all'));
 
 	// Options built from whatever is actually in the queue.
 	let agentOptions = $derived(

@@ -9,6 +9,15 @@
 	let loading = $state(false);
 	let error = $state('');
 
+	// Email format is checked on blur, independently of the submit error. Both
+	// fields previously keyed aria-invalid off `error` alone, which meant a wrong
+	// *password* also marked the email invalid, and a malformed address was never
+	// flagged at all until submit. Mirrors the signup page's treatment.
+	let emailTouched = $state(false);
+	let emailMalformed = $derived(
+		emailTouched && email.trim().length > 0 && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
+	);
+
 	// ── Presentation-only state: drives ARIA attributes and focus management ──
 	let showPassword = $state(false);
 	let emailEl: HTMLInputElement | null = $state(null);
@@ -122,9 +131,19 @@
 						required
 						aria-required="true"
 						autocomplete="email"
-						aria-invalid={error ? 'true' : 'false'}
-						aria-describedby={error ? 'login-error' : undefined}
+						onblur={() => (emailTouched = true)}
+						aria-invalid={emailMalformed || error ? 'true' : 'false'}
+						aria-describedby={emailMalformed
+							? 'login-email-error'
+							: error
+								? 'login-error'
+								: undefined}
 					/>
+					{#if emailMalformed}
+						<span class="field-hint error" id="login-email-error" role="alert">
+							“{email.trim()}” is not a valid email address — check for a missing @ or domain.
+						</span>
+					{/if}
 				</div>
 
 				<div class="login-field">
@@ -609,5 +628,21 @@
 		50% {
 			opacity: 0.3;
 		}
+	}
+
+	/* Matches the signup page's field-level error treatment. */
+	.field-hint {
+		display: block;
+		font-size: var(--text-sm);
+		margin-top: var(--space-1);
+		margin-bottom: 0;
+		font-weight: 500;
+		color: var(--text-dim);
+		line-height: var(--leading-snug);
+	}
+
+	.field-hint.error {
+		color: var(--error-text);
+		font-weight: 600;
 	}
 </style>
