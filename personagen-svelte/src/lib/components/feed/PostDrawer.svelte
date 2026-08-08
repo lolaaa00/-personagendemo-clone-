@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { thumbUrl, restoreOriginal } from '$lib/image-url';
 	import { fly, fade } from 'svelte/transition';
 	import { getPostDisplay, truncateError } from './postDisplay';
 	import { platformColor } from '$lib/platforms';
@@ -487,7 +488,7 @@
 							aria-label="Enlarge post media"
 							onclick={() => (zoomOpen = true)}
 						>
-							<img class="media-el" src={display.mediaUrl} alt="Post media" width="1080" height="1350" fetchpriority="high" decoding="async" />
+							<img class="media-el" src={thumbUrl(display.mediaUrl, 1080)} onerror={(e) => restoreOriginal(e, display.mediaUrl)} alt="Post media" width="1080" height="1350" fetchpriority="high" decoding="async" />
 						</button>
 					{/if}
 					{#if refining}
@@ -634,7 +635,7 @@
 							<div class="gen-imgs">
 								{#each genImages as img (img.url)}
 									<figure class="gen-img">
-										<img src={img.url} alt={img.label} width="72" height="72" loading="lazy" decoding="async" />
+										<img src={thumbUrl(img.url, 160)} onerror={(e) => restoreOriginal(e, img.url)} alt={img.label} width="72" height="72" loading="lazy" decoding="async" />
 										<figcaption>{img.label}</figcaption>
 									</figure>
 								{/each}

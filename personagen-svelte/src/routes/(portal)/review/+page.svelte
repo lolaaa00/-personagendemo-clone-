@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { thumbUrl, restoreOriginal } from '$lib/image-url';
 	import { syncParam, readParam } from '$lib/url-state';
 	import { onMount } from 'svelte';
 	import { platformLabel } from '$lib/platforms';
@@ -800,11 +801,13 @@
 						>
 							{#if item.media_type === 'video' && (item.poster_url || item.media_url)}
 								<img
-									src={item.poster_url || item.media_url}
+									src={thumbUrl(item.poster_url || item.media_url, 480)}
+									onerror={(e) => restoreOriginal(e, item.poster_url || item.media_url)}
 									alt="Video draft preview for {item.agent_name}"
 									width="800"
 									height="1000"
 									loading="lazy"
+									decoding="async"
 								/>
 								<span class="media-badge">
 									<svg
@@ -819,11 +822,13 @@
 								</span>
 							{:else if item.media_url}
 								<img
-									src={item.media_url}
+									src={thumbUrl(item.media_url, 480)}
+									onerror={(e) => restoreOriginal(e, item.media_url)}
 									alt="Image draft preview for {item.agent_name}"
 									width="800"
 									height="1000"
 									loading="lazy"
+									decoding="async"
 								/>
 							{:else}
 								<div class="no-media">no media</div>
@@ -884,7 +889,7 @@
 					<div class="card-body">
 						<div class="card-agent">
 							{#if item.agent_avatar}<img
-									src={item.agent_avatar}
+									src={thumbUrl(item.agent_avatar, 96)}
 									alt=""
 									width="40"
 									height="40"
@@ -1092,14 +1097,22 @@
 										aria-label="Open post details for {item.agent_name}"
 									>
 										{#if item.poster_url || item.media_url}
-											<img src={item.poster_url || item.media_url} alt="" width="40" height="50" loading="lazy" />
+											<img
+												src={thumbUrl(item.poster_url || item.media_url, 96)}
+												onerror={(e) => restoreOriginal(e, item.poster_url || item.media_url)}
+												alt=""
+												width="40"
+												height="50"
+												loading="lazy"
+												decoding="async"
+											/>
 										{:else}
 											<span class="tbl-nomedia" aria-hidden="true"></span>
 										{/if}
 									</button>
 								</td>
 								<td class="td-agent">
-									{#if item.agent_avatar}<img src={item.agent_avatar} alt="" width="22" height="22" loading="lazy" />{/if}
+									{#if item.agent_avatar}<img src={thumbUrl(item.agent_avatar, 64)} onerror={(e) => restoreOriginal(e, item.agent_avatar)} alt="" width="22" height="22" loading="lazy" decoding="async" />{/if}
 									<span>{item.agent_name}</span>
 								</td>
 								<td class="td-cap">
@@ -1181,7 +1194,7 @@
 								onclick={() => (cursor = i)}
 							>
 								{#if item.poster_url || item.media_url}
-									<img class="sp-thumb" src={item.poster_url || item.media_url} alt="" width="34" height="42" loading="lazy" />
+									<img class="sp-thumb" src={thumbUrl(item.poster_url || item.media_url, 96)} onerror={(e) => restoreOriginal(e, item.poster_url || item.media_url)} alt="" width="34" height="42" loading="lazy" decoding="async" />
 								{:else}
 									<span class="sp-thumb tbl-nomedia" aria-hidden="true"></span>
 								{/if}
@@ -1209,7 +1222,7 @@
 							onclick={() => openLightbox(current!)}
 						>
 							{#if current.poster_url || current.media_url}
-								<img src={current.poster_url || current.media_url} alt="Draft media for {current.agent_name}" width="800" height="1000" />
+								<img src={thumbUrl(current.poster_url || current.media_url, 800)} onerror={(e) => restoreOriginal(e, current.poster_url || current.media_url)} alt="Draft media for {current.agent_name}" width="800" height="1000" decoding="async" />
 								{#if current.media_type === 'video'}
 									<span class="media-badge"><svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><polygon points="6 3 20 12 6 21 6 3" /></svg> video</span>
 								{/if}
@@ -1219,7 +1232,7 @@
 						</button>
 						<div class="sd-body">
 							<div class="card-agent">
-								{#if current.agent_avatar}<img src={current.agent_avatar} alt="" width="40" height="40" loading="lazy" />{/if}
+								{#if current.agent_avatar}<img src={thumbUrl(current.agent_avatar, 96)} onerror={(e) => restoreOriginal(e, current.agent_avatar)} alt="" width="40" height="40" loading="lazy" decoding="async" />{/if}
 								<span class="agent-name">{current.agent_name}</span>
 								{#if current.quality_score != null}
 									<span
@@ -1275,7 +1288,7 @@
 								onclick={() => openLightbox(current!)}
 							>
 								{#if current.poster_url || current.media_url}
-									<img src={current.poster_url || current.media_url} alt="Draft media for {current.agent_name}" width="800" height="1000" />
+									<img src={thumbUrl(current.poster_url || current.media_url, 800)} onerror={(e) => restoreOriginal(e, current.poster_url || current.media_url)} alt="Draft media for {current.agent_name}" width="800" height="1000" decoding="async" />
 								{:else}
 									<div class="no-media">no media</div>
 								{/if}
@@ -1288,7 +1301,7 @@
 							</button>
 							<div class="deck-body">
 								<div class="card-agent">
-									{#if current.agent_avatar}<img src={current.agent_avatar} alt="" width="40" height="40" loading="lazy" />{/if}
+									{#if current.agent_avatar}<img src={thumbUrl(current.agent_avatar, 96)} onerror={(e) => restoreOriginal(e, current.agent_avatar)} alt="" width="40" height="40" loading="lazy" decoding="async" />{/if}
 									<span class="agent-name">{current.agent_name}</span>
 									<span class="slot">{slotLabel(current)}</span>
 								</div>
@@ -1361,7 +1374,7 @@
 									aria-label="Open post details for {item.agent_name}"
 								>
 									{#if item.poster_url || item.media_url}
-										<img src={item.poster_url || item.media_url} alt="" width="46" height="58" loading="lazy" />
+										<img src={thumbUrl(item.poster_url || item.media_url, 120)} onerror={(e) => restoreOriginal(e, item.poster_url || item.media_url)} alt="" width="46" height="58" loading="lazy" decoding="async" />
 									{:else}
 										<span class="tbl-nomedia" aria-hidden="true"></span>
 									{/if}

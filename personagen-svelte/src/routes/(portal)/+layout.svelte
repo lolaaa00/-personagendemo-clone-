@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { thumbUrl, restoreOriginal } from '$lib/image-url';
 	import { page } from '$app/stores';
 	import { goto, afterNavigate } from '$app/navigation';
 	import {
@@ -405,7 +406,17 @@
 					>
 						{#if agent.ugc_character_ref}
 							<!-- decorative: the persona name is announced by the link label beside it -->
-							<img src={agent.ugc_character_ref} alt="" width="28" height="28" loading="lazy" />
+							<!-- 64px covers the 28px box at 2x DPR; these were pulling the full
+							     1.5MB original for a 24px avatar, on every portal page. -->
+							<img
+								src={thumbUrl(agent.ugc_character_ref, 64)}
+								onerror={(e) => restoreOriginal(e, agent.ugc_character_ref)}
+								alt=""
+								width="28"
+								height="28"
+								loading="lazy"
+								decoding="async"
+							/>
 						{:else}
 							{agent.initial ?? (agent.name?.[0] ?? '?').toUpperCase()}
 						{/if}
