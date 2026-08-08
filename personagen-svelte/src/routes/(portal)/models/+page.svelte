@@ -72,14 +72,33 @@
 	let kindCount = $derived((k: Kind) => rows.filter((r: any) => r.kind === k).length);
 
 	// ── Age pill ─────────────────────────────────────────────────────────────
-	function ageOf(released: string | null): { label: string; cls: string } | null {
+	// Returns the age as a real duration ALWAYS. It used to return the string
+	// 'NEW'/'RECENT' *instead of* a duration for anything under 120 days, which is
+	// why freshly discovered models showed a NEW chip but no age — the one place
+	// you most want to know how old something is. Freshness is now a separate
+	// qualifier so a row can read "3w · NEW".
+	function ageOf(
+		released: string | null
+	): { label: string; cls: string; fresh: string | null; days: number } | null {
 		if (!released) return null;
-		const days = Math.floor((Date.now() - new Date(released).getTime()) / 86_400_000);
-		if (days <= 45) return { label: 'NEW', cls: 'age-new' };
-		if (days <= 120) return { label: 'RECENT', cls: 'age-recent' };
-		if (days <= 365) return { label: `${Math.round(days / 30)}mo`, cls: 'age-aging' };
-		return { label: `${(days / 365).toFixed(1)}y`, cls: 'age-old' };
+		const days = Math.max(0, Math.floor((Date.now() - new Date(released).getTime()) / 86_400_000));
+		const label =
+			days < 7
+				? `${days}d`
+				: days < 60
+					? `${Math.round(days / 7)}w`
+					: days < 365
+						? `${Math.round(days / 30)}mo`
+						: `${(days / 365).toFixed(1)}y`;
+		const cls =
+			days <= 45 ? 'age-new' : days <= 120 ? 'age-recent' : days <= 365 ? 'age-aging' : 'age-old';
+		const fresh = days <= 45 ? 'NEW' : days <= 120 ? 'RECENT' : null;
+		return { label, cls, fresh, days };
 	}
+
+	// Price/latency/quality are reference values, not form fields — they render as
+	// text and only become inputs for the one row you explicitly put in edit mode.
+	let editingRowId = $state<string | null>(null);
 
 	// ── API plumbing ─────────────────────────────────────────────────────────
 	async function call(payload: Record<string, unknown>): Promise<any> {
@@ -259,6 +278,7 @@
 					<th>Latency</th>
 					<th>Quality</th>
 					<th>Value</th>
+					<th><span class="sr-only">Edit values</span></th>
 					<th>Default</th>
 					<th>Enabled</th>
 				</tr>
@@ -282,53 +302,69 @@
 							{#if row.released_at}
 								<span class="mm-date">{row.released_at}</span>
 								{#if age}<span class="pill age {age.cls}">{age.label}</span>{/if}
+								{#if age?.fresh}<span class="pill age {age.cls}">{age.fresh}</span>{/if}
 							{:else}
 								<span class="mm-dim">—</span>
 							{/if}
 						</td>
 						<td>
-							<span class="mm-price-edit">
-								$<input
-									type="number"
-									class="mm-input mm-input-price"
-									min="0"
-									step="0.001"
-									value={row.price_usd ?? ''}
-									aria-label="Price per call for {row.label} in USD"
-									onchange={(e) => saveField(row, { price_usd: numInput(e) })}
-								/>
-							</span>
+							{#if editingRowId === row.id}
+								<span class="mm-price-edit">
+									$<input
+										type="number"
+										class="mm-input mm-input-price"
+										min="0"
+										step="0.001"
+										value={row.price_usd ?? ''}
+										aria-label="Price per call for {row.label} in USD"
+										onchange={(e) => saveField(row, { price_usd: numInput(e) })}
+									/>
+								</span>
+							{:else}
+								<span class="mm-readonly"
+									>{row.price_usd != null ? `$${row.price_usd}` : '—'}</span
+								>
+							{/if}
 							{#if row.price_source === 'manual'}<span class="mm-dim mm-src">edited</span
 								>{:else if row.price_source === 'parsed'}<span class="mm-dim mm-src">from fal</span
 								>{/if}
 						</td>
 						<td>
-							<span class="mm-latency-edit">
-								~<input
-									type="number"
-									class="mm-input mm-input-lat"
-									min="0"
-									step="1"
-									value={row.latency_s ?? ''}
-									aria-label="Typical latency for {row.label} in seconds"
-									onchange={(e) => saveField(row, { latency_s: numInput(e) })}
-								/>s
-							</span>
+							{#if editingRowId === row.id}
+								<span class="mm-latency-edit">
+									~<input
+										type="number"
+										class="mm-input mm-input-lat"
+										min="0"
+										step="1"
+										value={row.latency_s ?? ''}
+										aria-label="Typical latency for {row.label} in seconds"
+										onchange={(e) => saveField(row, { latency_s: numInput(e) })}
+									/>s
+								</span>
+							{:else}
+								<span class="mm-readonly">{row.latency_s != null ? `~${row.latency_s}s` : '—'}</span>
+							{/if}
 						</td>
 						<td>
-							<select
-								class="mm-input mm-input-q"
-								value={row.quality ?? ''}
-								aria-label="Quality score for {row.label}"
-								onchange={(e) =>
-									saveField(row, { quality: Number((e.currentTarget as HTMLSelectElement).value) })}
-							>
-								<option value="" disabled>—</option>
-								{#each [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as q}
-									<option value={q}>{q}</option>
-								{/each}
-							</select>
-							<span class="mm-dim">/10</span>
+							{#if editingRowId === row.id}
+								<select
+									class="mm-input mm-input-q"
+									value={row.quality ?? ''}
+									aria-label="Quality score for {row.label}"
+									onchange={(e) =>
+										saveField(row, { quality: Number((e.currentTarget as HTMLSelectElement).value) })}
+								>
+									<option value="" disabled>—</option>
+									{#each [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as q}
+										<option value={q}>{q}</option>
+									{/each}
+								</select>
+								<span class="mm-dim">/10</span>
+							{:else}
+								<span class="mm-readonly">{row.quality ?? '—'}</span>
+								<span class="mm-dim">/10</span>
+							{/if}
 						</td>
 						<td class="mm-value-cell">
 							{#if value != null}
@@ -342,6 +378,27 @@
 							{:else}
 								<span class="mm-dim" title="Needs both a quality score and a price">—</span>
 							{/if}
+						</td>
+						<td>
+							<button
+								type="button"
+								class="mm-edit-btn"
+								class:editing={editingRowId === row.id}
+								title={editingRowId === row.id
+									? 'Done editing'
+									: 'Edit price, latency and quality'}
+								aria-label={editingRowId === row.id
+									? `Done editing ${row.label}`
+									: `Edit values for ${row.label}`}
+								aria-pressed={editingRowId === row.id}
+								onclick={() => (editingRowId = editingRowId === row.id ? null : row.id)}
+							>
+								{#if editingRowId === row.id}
+									<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>
+								{:else}
+									<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
+								{/if}
+							</button>
 						</td>
 						<td>
 							<button
@@ -416,6 +473,7 @@
 						<span class="mm-model-name">
 							{row.label}
 							{#if age}<span class="pill age {age.cls}">{age.label}</span>{/if}
+							{#if age?.fresh}<span class="pill age {age.cls}">{age.fresh}</span>{/if}
 							{#if row.deprecated}<span class="pill pill-dep">DEPRECATED</span>{/if}
 							{#if row.status === 'quarantined'}<span class="pill pill-quar">NEEDS REVIEW</span
 								>{/if}
@@ -757,6 +815,47 @@
 		padding: 1px 7px;
 		white-space: nowrap;
 		vertical-align: middle;
+	}
+
+	/* Reference values render as text; only the row you put in edit mode shows inputs. */
+	.mm-readonly {
+		font-variant-numeric: tabular-nums;
+		color: var(--text);
+		font-weight: 600;
+	}
+
+	.mm-edit-btn {
+		width: 30px;
+		height: 30px;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		border-radius: 8px;
+		border: 1px solid var(--border);
+		background: transparent;
+		color: var(--text-dim);
+		cursor: pointer;
+		transition:
+			background 0.15s ease,
+			color 0.15s ease,
+			border-color 0.15s ease;
+	}
+
+	.mm-edit-btn:hover {
+		background: var(--surface-2);
+		color: var(--text);
+		border-color: var(--border-hover);
+	}
+
+	.mm-edit-btn.editing {
+		background: var(--accent-soft);
+		border-color: var(--accent-mid);
+		color: var(--accent);
+	}
+
+	.mm-edit-btn:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
 	}
 
 	.pill.age.age-new {
