@@ -203,6 +203,77 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			return json({ success: true, data, probe });
 		}
 
+		// Swap: hand a wired slot's ROLE to a discovered model. The model_id on a
+		// registry row is its identity (its probe, price history and scores hang
+		// off it), so we move the role rather than rewrite the id: the incoming
+		// model takes the outgoing one's tier and default flag, and the outgoing
+		// model drops back into the discovered pool. That makes the swap
+		// reversible by running it in the opposite direction — no extra state.
+		if (action === 'swap') {
+			const { from_model_id, to_model_id } = body;
+			if (!from_model_id || !to_model_id) {
+				return json(
+					{ success: false, error: 'Missing from_model_id or to_model_id' },
+					{ status: 400 }
+				);
+			}
+			const { data: pair } = await locals.supabase
+				.from('model_registry')
+				.select('id, model_id, kind, label, tier, is_default, wired, status, probe')
+				.eq('user_id', user.id)
+				.in('model_id', [from_model_id, to_model_id]);
+
+			const from = (pair ?? []).find((r: any) => r.model_id === from_model_id);
+			const to = (pair ?? []).find((r: any) => r.model_id === to_model_id);
+			if (!from || !to) {
+				return json({ success: false, error: 'Model not found' }, { status: 404 });
+			}
+			if (from.kind !== to.kind) {
+				return json(
+					{ success: false, error: 'Cannot swap models of different kinds' },
+					{ status: 400 }
+				);
+			}
+			if (!from.wired) {
+				return json({ success: false, error: `${from.label} is not wired` }, { status: 400 });
+			}
+			if (to.wired) {
+				return json({ success: false, error: `${to.label} is already wired` }, { status: 400 });
+			}
+			// The gate: an unprobed or odd-shaped model would break generation the
+			// moment something asked this slot for output.
+			if (!(to.probe as any)?.ok) {
+				return json(
+					{
+						success: false,
+						error: `${to.label} has not passed a schema probe — probe it first so the pipeline can drive it.`
+					},
+					{ status: 400 }
+				);
+			}
+
+			const { error: inErr } = await locals.supabase
+				.from('model_registry')
+				.update({ wired: true, status: 'active', tier: from.tier, is_default: from.is_default })
+				.eq('id', to.id)
+				.eq('user_id', user.id);
+			if (inErr) throw inErr;
+
+			const { error: outErr } = await locals.supabase
+				.from('model_registry')
+				.update({ wired: false, status: 'available', is_default: false })
+				.eq('id', from.id)
+				.eq('user_id', user.id);
+			if (outErr) throw outErr;
+
+			const { data: fresh, error: reloadErr } = await locals.supabase
+				.from('model_registry')
+				.select('*')
+				.eq('user_id', user.id);
+			if (reloadErr) throw reloadErr;
+			return json({ success: true, data: fresh, swapped: { from: from.label, to: to.label } });
+		}
+
 		return json({ success: false, error: `Invalid action: ${action}` }, { status: 400 });
 	} catch (err) {
 		console.error('[Models API] Error:', err);

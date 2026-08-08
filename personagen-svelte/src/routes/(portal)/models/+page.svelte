@@ -29,6 +29,57 @@
 	);
 	$effect(() => syncParam('sort', sort, 'newest'));
 
+	// ── Filters ──────────────────────────────────────────────────────────────
+	// Provider is a free-form list (it grows as the catalog syncs), so it is read
+	// raw rather than through readParam's allow-list.
+	type Age = 'any' | '30d' | '90d' | '1y' | 'older';
+	type MinQ = 'any' | '4' | '6' | '8';
+	let provider = $state(
+		typeof window === 'undefined'
+			? ''
+			: (new URL(window.location.href).searchParams.get('provider') ?? '')
+	);
+	let ageFilter = $state<Age>(readParam('age', ['any', '30d', '90d', '1y', 'older'] as const, 'any'));
+	let minQuality = $state<MinQ>(readParam('minq', ['any', '4', '6', '8'] as const, 'any'));
+	$effect(() => syncParam('provider', provider, ''));
+	$effect(() => syncParam('age', ageFilter, 'any'));
+	$effect(() => syncParam('minq', minQuality, 'any'));
+
+	let providers = $derived(
+		[...new Set(rows.filter((r: any) => r.kind === kind && r.lab).map((r: any) => r.lab))].sort(
+			(a: any, b: any) => String(a).localeCompare(String(b))
+		)
+	);
+
+	function daysOld(r: any): number | null {
+		if (!r.released_at) return null;
+		return Math.floor((Date.now() - new Date(r.released_at).getTime()) / 86_400_000);
+	}
+
+	function matchesFilters(r: any): boolean {
+		if (provider && r.lab !== provider) return false;
+		if (ageFilter !== 'any') {
+			const d = daysOld(r);
+			if (d == null) return false;
+			if (ageFilter === '30d' && d > 30) return false;
+			if (ageFilter === '90d' && d > 90) return false;
+			if (ageFilter === '1y' && d > 365) return false;
+			if (ageFilter === 'older' && d <= 365) return false;
+		}
+		// Quality only exists once someone has scored a model, so a quality floor
+		// necessarily excludes unscored (newly discovered) rows rather than
+		// silently treating them as 0.
+		if (minQuality !== 'any' && (r.quality ?? -1) < Number(minQuality)) return false;
+		return true;
+	}
+
+	let filtersActive = $derived(provider !== '' || ageFilter !== 'any' || minQuality !== 'any');
+	function clearFilters() {
+		provider = '';
+		ageFilter = 'any';
+		minQuality = 'any';
+	}
+
 	// ── Derived views ────────────────────────────────────────────────────────
 	function valueScore(r: any): number | null {
 		if (r.quality == null || r.price_usd == null || r.price_usd <= 0) return null;
@@ -46,12 +97,40 @@
 		return s;
 	}
 
-	let wired = $derived(sortRows(rows.filter((r: any) => r.kind === kind && r.wired)));
+	let wired = $derived(
+		sortRows(rows.filter((r: any) => r.kind === kind && r.wired && matchesFilters(r)))
+	);
 	let discovered = $derived(
-		[...rows.filter((r: any) => r.kind === kind && !r.wired)].sort((a, b) =>
+		[...rows.filter((r: any) => r.kind === kind && !r.wired && matchesFilters(r))].sort((a, b) =>
 			(b.released_at ?? '').localeCompare(a.released_at ?? '')
 		)
 	);
+	let wiredTotal = $derived(rows.filter((r: any) => r.kind === kind && r.wired).length);
+	let discoveredTotal = $derived(rows.filter((r: any) => r.kind === kind && !r.wired).length);
+
+	// ── Replacement candidates ───────────────────────────────────────────────
+	// Deliberately conservative. Discovered models carry no quality score (nobody
+	// has rated them yet), so claiming one is "better" on quality would be
+	// fiction. A candidate must be adoptable (schema probe passed), newer, and
+	// cheaper than the wired model it would displace — all three verifiable.
+	// Note: this deliberately does NOT require a passing probe. Gating the
+	// recommendation on probe.ok meant nothing was ever recommended — models are
+	// unprobed until you click Probe on each one individually, so across 75 rows
+	// the feature would read as broken. Being newer and cheaper is verifiable
+	// without a probe; the probe gates the *swap*, not the observation.
+	function replaces(d: any): any | null {
+		if (d.price_usd == null || !d.released_at) return null;
+		let best: any = null;
+		for (const w of rows) {
+			if (w.kind !== d.kind || !w.wired || w.status !== 'active') continue;
+			if (w.price_usd == null || !w.released_at) continue;
+			if (!(d.released_at > w.released_at)) continue;
+			if (!(d.price_usd < w.price_usd)) continue;
+			if (best == null || (w.price_usd ?? 0) > (best.price_usd ?? 0)) best = w;
+		}
+		return best;
+	}
+	let candidateCount = $derived(discovered.filter((d: any) => replaces(d) != null).length);
 	let maxValue = $derived(Math.max(...wired.map((r: any) => valueScore(r) ?? 0), 0));
 	let bestValueId = $derived.by(() => {
 		let best: any = null;
@@ -99,6 +178,36 @@
 	// Price/latency/quality are reference values, not form fields — they render as
 	// text and only become inputs for the one row you explicitly put in edit mode.
 	let editingRowId = $state<string | null>(null);
+
+	// Swap a discovered model into a wired slot. Two-click confirm: this changes
+	// what actually generates content, so a stray click must not repoint a slot.
+	let swappingId = $state<string | null>(null);
+	let confirmSwapId = $state<string | null>(null);
+	let confirmSwapTimer: ReturnType<typeof setTimeout> | undefined;
+
+	function requestSwap(d: any, target: any) {
+		if (confirmSwapId === d.id) {
+			clearTimeout(confirmSwapTimer);
+			confirmSwapId = null;
+			void doSwap(d, target);
+		} else {
+			confirmSwapId = d.id;
+			confirmSwapTimer = setTimeout(() => (confirmSwapId = null), 4000);
+		}
+	}
+
+	async function doSwap(d: any, target: any) {
+		swappingId = d.id;
+		try {
+			const res = await call({ action: 'swap', from_model_id: target.model_id, to_model_id: d.model_id });
+			if (Array.isArray(res.data)) rows = res.data;
+			showToast(`${d.label} now fills the ${target.tier ?? 'wired'} slot — ${target.label} moved back to discovered`, 'success');
+		} catch (e) {
+			showToast((e as Error).message || 'Swap failed', 'error');
+		} finally {
+			swappingId = null;
+		}
+	}
 
 	// ── API plumbing ─────────────────────────────────────────────────────────
 	async function call(payload: Record<string, unknown>): Promise<any> {
@@ -253,6 +362,30 @@
 		</div>
 		<label class="mm-sort">
 			<span>Sort</span>
+			<select bind:value={provider} aria-label="Filter by provider" class="mm-filter">
+				<option value="">All providers</option>
+				{#each providers as lab}
+					<option value={lab}>{lab}</option>
+				{/each}
+			</select>
+			<select bind:value={ageFilter} aria-label="Filter by age" class="mm-filter">
+				<option value="any">Any age</option>
+				<option value="30d">Last 30 days</option>
+				<option value="90d">Last 90 days</option>
+				<option value="1y">Last year</option>
+				<option value="older">Over a year old</option>
+			</select>
+			<select bind:value={minQuality} aria-label="Filter by minimum quality" class="mm-filter">
+				<option value="any">Any quality</option>
+				<option value="8">Quality 8+</option>
+				<option value="6">Quality 6+</option>
+				<option value="4">Quality 4+</option>
+			</select>
+			{#if filtersActive}
+				<button type="button" class="mm-clear-filters" onclick={clearFilters}>
+					Clear filters ({wired.length + discovered.length} of {wiredTotal + discoveredTotal})
+				</button>
+			{/if}
 			<select bind:value={sort} aria-label="Sort models">
 				<option value="newest">Newest first</option>
 				<option value="price">Cheapest first</option>
@@ -468,6 +601,7 @@
 		<div class="mm-discover-list">
 			{#each discovered as row (row.id)}
 				{@const age = ageOf(row.released_at)}
+				{@const target = replaces(row)}
 				<div class="mm-discover-row" class:quarantined={row.status === 'quarantined'}>
 					<div class="mm-discover-main">
 						<span class="mm-model-name">
@@ -478,6 +612,9 @@
 							{#if row.status === 'quarantined'}<span class="pill pill-quar">NEEDS REVIEW</span
 								>{/if}
 							{#if row.probe?.ok}<span class="pill pill-ok">SCHEMA OK</span>{/if}
+							{#if target}<span class="pill pill-swap"
+									>CHEAPER + NEWER THAN {target.label.toUpperCase()}</span
+								>{/if}
 						</span>
 						<span class="mm-model-id"
 							>{row.model_id}{#if row.lab}&ensp;·&ensp;{row.lab}{/if}{#if row.released_at}&ensp;·&ensp;{row.released_at}{/if}</span
@@ -500,6 +637,36 @@
 								<span class="pill pill-quar">NO PRICE DATA</span>
 							{/if}
 						</span>
+					{#if target}
+							{#if row.probe?.ok}
+								<button
+									type="button"
+									class="mm-swap-btn"
+									class:confirming={confirmSwapId === row.id}
+									disabled={swappingId === row.id}
+									title={`Give ${row.label} the ${target.tier ?? 'wired'} slot currently held by ${target.label}`}
+									onclick={() => requestSwap(row, target)}
+								>
+									{#if swappingId === row.id}
+										Swapping…
+									{:else if confirmSwapId === row.id}
+										Confirm — replace {target.label}
+									{:else}
+										Swap in for {target.label}
+									{/if}
+								</button>
+							{:else}
+								<button
+									type="button"
+									class="mm-swap-btn mm-swap-gated"
+									disabled={probingId === row.id}
+									title={`Check ${row.label}'s request schema before it can take over the ${target.tier ?? 'wired'} slot`}
+									onclick={() => probe(row)}
+								>
+									{probingId === row.id ? 'Probing…' : 'Probe to enable swap'}
+								</button>
+							{/if}
+						{/if}
 						<button
 							type="button"
 							class="mm-probe-btn"
@@ -818,6 +985,72 @@
 	}
 
 	/* Reference values render as text; only the row you put in edit mode shows inputs. */
+	.mm-filter {
+		max-width: 170px;
+	}
+
+	.mm-clear-filters {
+		border: 1px solid var(--border);
+		background: var(--surface-2);
+		color: var(--text-muted);
+		border-radius: 8px;
+		padding: 0.35rem 0.7rem;
+		font-size: 0.78rem;
+		cursor: pointer;
+		white-space: nowrap;
+	}
+
+	.mm-clear-filters:hover {
+		color: var(--text);
+		border-color: var(--border-hover);
+	}
+
+	.pill-swap {
+		background: var(--success-soft, rgba(52, 211, 153, 0.12));
+		color: var(--success, #34d399);
+		border: 1px solid var(--success, #34d399);
+	}
+
+	.mm-swap-btn {
+		border: 1px solid var(--accent-mid, var(--border));
+		background: var(--accent-soft, transparent);
+		color: var(--accent);
+		border-radius: 8px;
+		padding: 0.45rem 0.8rem;
+		font-size: 0.8rem;
+		font-weight: 600;
+		cursor: pointer;
+		white-space: nowrap;
+		min-height: 36px;
+	}
+
+	.mm-swap-btn:hover:not(:disabled) {
+		background: var(--accent);
+		color: #fff;
+	}
+
+	.mm-swap-btn.confirming {
+		background: var(--warning, #f59e0b);
+		border-color: var(--warning, #f59e0b);
+		color: #1a1205;
+	}
+
+	.mm-swap-btn.mm-swap-gated {
+		border-color: var(--border);
+		background: transparent;
+		color: var(--text-muted);
+	}
+
+	.mm-swap-btn.mm-swap-gated:hover:not(:disabled) {
+		background: var(--surface-2);
+		color: var(--text);
+	}
+
+	.mm-swap-btn:disabled {
+		opacity: 0.6;
+		cursor: default;
+	}
+
 	.mm-readonly {
 		font-variant-numeric: tabular-nums;
 		color: var(--text);
