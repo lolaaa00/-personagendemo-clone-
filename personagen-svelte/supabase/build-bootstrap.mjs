@@ -49,6 +49,7 @@ const ORDER = [
 	['apply_all_pending.sql', 'post_reviews, scheduler_leases, zernio_keys, status superset'],
 	['scheduler_indexes_and_provider_default_migration.sql', 'scheduler indexes + zernio default'],
 	['favorites_and_projects_migration.sql', 'favorite flags + persona_groups projects'],
+	['model_registry_migration.sql', 'model_registry — Model Manager backing table'],
 ];
 
 /** Rewrite a migration so every statement can be replayed against a DB that already has it. */

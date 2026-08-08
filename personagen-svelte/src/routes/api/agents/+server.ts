@@ -1,5 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { profileToMarketString, type PersonaProfile } from '$lib/persona-profile-store';
+import { writeWithProfileFallback } from '$lib/server/personas-profile-column';
 
 export const POST: RequestHandler = async ({ request, locals }) => {
 	// 1. Authenticate user
@@ -24,27 +26,38 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		const agentGradient = gradient || defaultGradient;
 		const agentInitial = initial || name.charAt(0).toUpperCase();
 		const skillsText = typeof skills === 'string' ? skills : '';
-		// The full persona profile (archetype/avatar/appearance/voiceProfile) is stored
-		// as JSON in agents.market, same shape the persona editor reads/writes.
-		const marketJson =
-			personaProfile && typeof personaProfile === 'object' ? JSON.stringify(personaProfile) : undefined;
+		// The full persona profile (archetype/avatar/appearance/voiceProfile) is
+		// DUAL-WRITTEN: the new personas_profile JSONB column plus the legacy
+		// agents.market JSON string, which services/mcp-bridge and any
+		// not-yet-migrated reader still depend on. Same shape either way.
+		const profileToStore: PersonaProfile | undefined =
+			personaProfile && typeof personaProfile === 'object' ? (personaProfile as PersonaProfile) : undefined;
 
-		const { data: newAgent, error: agentError } = await locals.supabase
-			.from('agents')
-			.insert({
-				user_id: session.user.id,
-				name: name,
-				handle: agentHandle,
-				niche: niche || 'Lifestyle',
-				status: 'active',
-				soul: bio || `Autonomous ${niche || 'lifestyle'} creator.`,
-				gradient: agentGradient,
-				initial: agentInitial,
-				skills: skillsText,
-				...(marketJson ? { market: marketJson } : {})
-			})
-			.select()
-			.single();
+		const insertPayload = {
+			user_id: session.user.id,
+			name: name,
+			handle: agentHandle,
+			niche: niche || 'Lifestyle',
+			status: 'active',
+			soul: bio || `Autonomous ${niche || 'lifestyle'} creator.`,
+			gradient: agentGradient,
+			initial: agentInitial,
+			skills: skillsText,
+			...(profileToStore
+				? {
+						personas_profile: profileToStore,
+						market: profileToMarketString(profileToStore)
+					}
+				: {})
+		};
+
+		// Survives a build that ships before personas_profile_migration.sql is
+		// applied: on a missing-column error the insert retries without that key and
+		// the profile still lands in `market`, which readPersonaProfile falls back to.
+		const { data: newAgent, error: agentError } = await writeWithProfileFallback(
+			insertPayload,
+			(p) => locals.supabase.from('agents').insert(p).select().single()
+		);
 
 		if (agentError) {
 			console.error('[API Agents] Agent insertion failed:', agentError);

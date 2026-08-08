@@ -1,6 +1,13 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { createDbService, type AgentConfigInsert } from '$lib/server/db';
+import {
+	mergePersonaProfile,
+	profileToMarketString,
+	readPersonaProfile,
+	type PersonaProfile
+} from '$lib/persona-profile-store';
+import { writeWithProfileFallback } from '$lib/server/personas-profile-column';
 
 export const POST: RequestHandler = async ({ request, locals }) => {
 	const { session, user } = await locals.safeGetSession();
@@ -48,7 +55,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		const { data: agent, error: getErr } = await db.agents.get(agentId);
 		if (getErr) throw getErr;
 		if (!agent || agent.user_id !== user.id) {
-			return json({ success: false, error: 'Agent not found or ownership mismatch' }, { status: 404 });
+			return json({ success: false, error: 'Persona not found or ownership mismatch' }, { status: 404 });
 		}
 
 		// 1. Update the agent's core texts and presentation in agents table
@@ -73,15 +80,34 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		if (runtimeOwner !== undefined) {
 			agentUpdatePayload.runtime_owner = runtimeOwner;
 		}
-		// Extended persona profile stored as JSON string in the market field.
+		// Extended persona profile — DUAL-WRITE to the personas_profile JSONB
+		// column and the legacy agents.market JSON string (services/mcp-bridge and
+		// any not-yet-migrated reader still read `market`).
+		//
+		// MERGED against what's already stored, never overwritten wholesale: a
+		// caller that patches only bios used to wipe appearance/archetype off the
+		// row, because the old path stringified whatever literal it was handed.
+		// mergePersonaProfile keeps every field the patch doesn't mention.
 		if (personaProfile !== undefined) {
-			agentUpdatePayload.market = typeof personaProfile === 'string'
-				? personaProfile
-				: JSON.stringify(personaProfile);
+			// A string body is the legacy transport — the client already stringified
+			// the profile. Parse it back through the accessor so it merges like any
+			// other patch instead of replacing the stored object as opaque text.
+			const patch = readPersonaProfile(
+				typeof personaProfile === 'string'
+					? { market: personaProfile }
+					: { personas_profile: personaProfile }
+			) as PersonaProfile;
+			const merged = mergePersonaProfile(readPersonaProfile(agent), patch);
+			agentUpdatePayload.personas_profile = merged;
+			agentUpdatePayload.market = profileToMarketString(merged);
 		}
 
 		if (Object.keys(agentUpdatePayload).length > 0) {
-			const { error: agentErr } = await db.agents.update(agentId, agentUpdatePayload);
+			// Retries without personas_profile if the migration hasn't been applied
+			// yet — `market` still carries the merged profile, so nothing is lost.
+			const { error: agentErr } = await writeWithProfileFallback(agentUpdatePayload, (p) =>
+				db.agents.update(agentId, p)
+			);
 			if (agentErr) throw agentErr;
 		}
 
@@ -165,12 +191,12 @@ export const DELETE: RequestHandler = async ({ request, locals }) => {
 		for (const agentId of requested) {
 			const { data: agent, error: getErr } = await db.agents.get(agentId);
 			if (getErr || !agent || agent.user_id !== user.id) {
-				failed.push({ agentId, error: 'Agent not found or ownership mismatch' });
+				failed.push({ agentId, error: 'Persona not found or ownership mismatch' });
 				continue;
 			}
 			// Guard: check if the agent is an overseer
 			if (agent.is_overseer) {
-				failed.push({ agentId, error: 'Deleting the Hermes overseer agent is forbidden.' });
+				failed.push({ agentId, error: 'Deleting the overseer persona is forbidden.' });
 				continue;
 			}
 

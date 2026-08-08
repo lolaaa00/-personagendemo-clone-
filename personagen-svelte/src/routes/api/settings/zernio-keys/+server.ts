@@ -166,7 +166,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				.eq('id', agentId)
 				.maybeSingle();
 			if (agentErr) throw agentErr;
-			if (!agent) return json({ success: false, error: 'Agent not found.' }, { status: 404 });
+			if (!agent) return json({ success: false, error: 'Persona not found.' }, { status: 404 });
 			if (agent.user_id !== user.id) return json({ success: false, error: 'Forbidden' }, { status: 403 });
 
 			if (keyId) {

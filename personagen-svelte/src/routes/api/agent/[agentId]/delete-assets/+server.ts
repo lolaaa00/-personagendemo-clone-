@@ -34,7 +34,7 @@ async function requireOwnedAgent(locals: any, agentId: string | undefined) {
 	if (error || !agent || agent.user_id !== user.id) {
 		return {
 			ok: false as const,
-			res: json({ success: false, error: 'Agent not found or ownership mismatch' }, { status: 404 })
+			res: json({ success: false, error: 'Persona not found or ownership mismatch' }, { status: 404 })
 		};
 	}
 	return { ok: true as const, user, agent };

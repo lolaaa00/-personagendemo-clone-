@@ -97,7 +97,7 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 	const realPosts = dbPosts.map((p: any) => ({
 		id: p.id,
 		agentId: p.agent_id,
-		agentName: p.agents?.name || 'Agent',
+		agentName: p.agents?.name || 'Persona',
 		text: p.content,
 		platforms: p.platforms || [],
 		// Place by schedule; posts published without one (Post Now) fall back to

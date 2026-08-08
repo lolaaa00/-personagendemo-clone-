@@ -40,6 +40,7 @@ import {
 	type GenerationProvenance
 } from '$lib/pricing';
 import { appearanceToPromptClause, stripLeadingAvatarName } from '$lib/persona-profile';
+import { readPersonaProfile } from '$lib/persona-profile-store';
 import { createDbService } from '$lib/server/db';
 import { DEFAULT_VOICE, VOICE_CATALOG } from '$lib/server/voices';
 import { getServiceSupabase } from '$lib/server/service-supabase';
@@ -134,8 +135,7 @@ export const TALKINGHEAD_LABEL = TALKINGHEAD_MODEL.includes('omnihuman')
 //     endpoint's own spec, not the family's marketing page, before trusting
 //     any capability claim for these models). Same per-second price as plain
 //     image-to-video Pro, so this is a strict upgrade for the cinematic path.
-const BROLL_MODEL_STANDARD =
-	env.UGC_BROLL_MODEL || 'fal-ai/kling-video/o3/standard/image-to-video';
+const BROLL_MODEL_STANDARD = env.UGC_BROLL_MODEL || 'fal-ai/kling-video/o3/standard/image-to-video';
 const BROLL_MODEL_CINEMATIC =
 	env.UGC_BROLL_MODEL_CINEMATIC || 'fal-ai/kling-video/o3/pro/reference-to-video';
 // Veo 3.1 (still Google's latest as of this date — no Veo 4 released despite
@@ -432,11 +432,11 @@ function classifyContentIntent(topic: string, platform: string): ContentIntent {
 	const motionLevel: MotionLevel =
 		type === 'unboxing' ? 'dynamic' : type === 'lifestyle' ? 'gentle' : 'gentle';
 
-	const setting: 'indoor' | 'outdoor' =
-		type === 'lifestyle' ? 'outdoor' : 'indoor';
+	const setting: 'indoor' | 'outdoor' = type === 'lifestyle' ? 'outdoor' : 'indoor';
 
 	const voiceMap: Record<string, string> = {
-		tiktok: 'Gen-Z casual energy, trending-aware, watch-till-end hook in first 1.5 seconds, fast-paced',
+		tiktok:
+			'Gen-Z casual energy, trending-aware, watch-till-end hook in first 1.5 seconds, fast-paced',
 		instagram:
 			'Aspirational yet real, lifestyle-forward, slightly polished but never stiff, community warmth',
 		youtube:
@@ -466,16 +466,56 @@ interface HookFramework {
 }
 
 const HOOK_FRAMEWORKS: HookFramework[] = [
-	{ name: 'Confession', pattern: `Admit something vulnerable/counterintuitive: "I was wrong about…", "I almost returned this…"`, bestFor: ['testimonial', 'review'] },
-	{ name: 'Contrarian', pattern: `Attack the accepted belief: "Everyone tells you to X. That's exactly why you're stuck."`, bestFor: ['review', 'tutorial'] },
-	{ name: 'Cost of inaction', pattern: `Name what ignoring this costs: "Every week you skip this, you're paying for it in…"`, bestFor: ['tutorial', 'testimonial'] },
-	{ name: 'Specific number', pattern: `Oddly precise stat/result: "17 days. That's how long it took before…"`, bestFor: ['testimonial', 'review', 'tutorial'] },
-	{ name: 'POV switch', pattern: `Speak as/to the skeptic: "To the person who scrolled past this twice already…"`, bestFor: ['testimonial', 'lifestyle'] },
-	{ name: 'Before/after tease', pattern: `State the after, withhold the how: "My mornings look nothing like they did in March."`, bestFor: ['lifestyle', 'testimonial'] },
-	{ name: 'Forbidden knowledge', pattern: `Insider framing: "Nobody in [industry] wants you to figure this out."`, bestFor: ['review', 'tutorial'] },
-	{ name: 'Pattern break', pattern: `Open mid-story, no context: "So the second jar arrived and my husband hid it."`, bestFor: ['unboxing', 'lifestyle', 'testimonial'] },
-	{ name: 'Stakes-first', pattern: `Lead with what was at risk: "I had one week before the wedding and zero plan."`, bestFor: ['lifestyle', 'testimonial'] },
-	{ name: 'Anti-sell', pattern: `Disqualify buyers: "Honestly? Don't buy this if you only want…"`, bestFor: ['review', 'unboxing'] }
+	{
+		name: 'Confession',
+		pattern: `Admit something vulnerable/counterintuitive: "I was wrong about…", "I almost returned this…"`,
+		bestFor: ['testimonial', 'review']
+	},
+	{
+		name: 'Contrarian',
+		pattern: `Attack the accepted belief: "Everyone tells you to X. That's exactly why you're stuck."`,
+		bestFor: ['review', 'tutorial']
+	},
+	{
+		name: 'Cost of inaction',
+		pattern: `Name what ignoring this costs: "Every week you skip this, you're paying for it in…"`,
+		bestFor: ['tutorial', 'testimonial']
+	},
+	{
+		name: 'Specific number',
+		pattern: `Oddly precise stat/result: "17 days. That's how long it took before…"`,
+		bestFor: ['testimonial', 'review', 'tutorial']
+	},
+	{
+		name: 'POV switch',
+		pattern: `Speak as/to the skeptic: "To the person who scrolled past this twice already…"`,
+		bestFor: ['testimonial', 'lifestyle']
+	},
+	{
+		name: 'Before/after tease',
+		pattern: `State the after, withhold the how: "My mornings look nothing like they did in March."`,
+		bestFor: ['lifestyle', 'testimonial']
+	},
+	{
+		name: 'Forbidden knowledge',
+		pattern: `Insider framing: "Nobody in [industry] wants you to figure this out."`,
+		bestFor: ['review', 'tutorial']
+	},
+	{
+		name: 'Pattern break',
+		pattern: `Open mid-story, no context: "So the second jar arrived and my husband hid it."`,
+		bestFor: ['unboxing', 'lifestyle', 'testimonial']
+	},
+	{
+		name: 'Stakes-first',
+		pattern: `Lead with what was at risk: "I had one week before the wedding and zero plan."`,
+		bestFor: ['lifestyle', 'testimonial']
+	},
+	{
+		name: 'Anti-sell',
+		pattern: `Disqualify buyers: "Honestly? Don't buy this if you only want…"`,
+		bestFor: ['review', 'unboxing']
+	}
 ];
 
 /** Deterministic-ish rotation: same seed → same picks, different posts → different picks. */
@@ -608,7 +648,7 @@ async function logAutoReject(
 
 /**
  * Builds a rich agent context string from the agent row, pulling extended
- * persona profile from agent.market (stored as JSON by the persona editor).
+ * persona profile off the agent row via the typed accessor.
  */
 function buildRichAgentContext(agent: any): string {
 	const lines: string[] = [
@@ -620,14 +660,7 @@ function buildRichAgentContext(agent: any): string {
 		`Core personality: ${agent.soul || 'authentic and relatable'}.`
 	];
 
-	let pp: Record<string, any> = {};
-	try {
-		if (agent.market && typeof agent.market === 'string' && agent.market.startsWith('{')) {
-			pp = JSON.parse(agent.market);
-		}
-	} catch {
-		/* ignore malformed market field */
-	}
+	const pp: Record<string, any> = readPersonaProfile(agent);
 
 	if (pp.archetype)
 		lines.push(
@@ -635,12 +668,15 @@ function buildRichAgentContext(agent: any): string {
 		);
 	if (pp.contentFocus) lines.push(`Primary content focus: ${pp.contentFocus}.`);
 	if (pp.contentAngle)
-		lines.push(`Signature content angle / POV: "${pp.contentAngle}" — this is the unique lens through which all content is filtered.`);
+		lines.push(
+			`Signature content angle / POV: "${pp.contentAngle}" — this is the unique lens through which all content is filtered.`
+		);
 	if (Array.isArray(pp.ageRanges) && pp.ageRanges.length)
 		lines.push(`Target age demographic: ${pp.ageRanges.join(', ')}.`);
 	else if (pp.ageMin && pp.ageMax)
 		lines.push(`Target age demographic: ${pp.ageMin}–${pp.ageMax} year olds.`);
-	if (pp.targetAvatar) lines.push(`Ideal viewer profile: ${stripLeadingAvatarName(pp.targetAvatar)}.`);
+	if (pp.targetAvatar)
+		lines.push(`Ideal viewer profile: ${stripLeadingAvatarName(pp.targetAvatar)}.`);
 	if (pp.psychProfile)
 		lines.push(
 			`Audience psychology (use to tune emotional hooks and pain-point language): ${pp.psychProfile}.`
@@ -748,7 +784,11 @@ async function generateProductStill(
 		.filter(Boolean)
 		.join('\n');
 
-	const data = await falSyncJson(NANO_MODEL, { prompt, image_urls: refs, aspect_ratio: '9:16' }, falKey);
+	const data = await falSyncJson(
+		NANO_MODEL,
+		{ prompt, image_urls: refs, aspect_ratio: '9:16' },
+		falKey
+	);
 	const url = data.images?.[0]?.url;
 	if (!url) throw new Error('Nano Banana returned no image');
 	return url;
@@ -934,9 +974,7 @@ async function openRouterBrollVideo(
 			duration: parseInt(VIDEO_DURATION, 10) || 5,
 			aspect_ratio: '9:16',
 			generate_audio: BROLL_AUDIO_ENABLED,
-			frame_images: [
-				{ type: 'image_url', image_url: { url: stillUrl }, frame_type: 'first_frame' }
-			]
+			frame_images: [{ type: 'image_url', image_url: { url: stillUrl }, frame_type: 'first_frame' }]
 		})
 	});
 	if (!submit.ok) {
@@ -946,7 +984,9 @@ async function openRouterBrollVideo(
 	const job = (await submit.json()) as any;
 	const pollingUrl = job.polling_url || `https://openrouter.ai/api/v1/videos/${job.id}`;
 	if (!job.id && !job.polling_url) {
-		throw new Error(`OpenRouter video submit returned no job: ${JSON.stringify(job).slice(0, 200)}`);
+		throw new Error(
+			`OpenRouter video submit returned no job: ${JSON.stringify(job).slice(0, 200)}`
+		);
 	}
 
 	const deadline = Date.now() + timeoutMs;
@@ -1152,294 +1192,341 @@ export async function generateCinematicUgcPack(input: UgcPackInput): Promise<Ugc
 	await assertWithinBudget(supabase, userId, input.agentId);
 
 	try {
-
-	let agentContext = '';
-	let agentData: any = null;
-	const agent = agentResult?.data;
-	if (agent) {
-		agentData = agent;
-		agentContext = buildRichAgentContext(agent);
-	}
-
-	// Persona gender is authoritative: overrides a contradicting configured voice.
-	const { voice: resolvedVoice, voiceGender } = resolveVoiceForPersona(cfg.voice, agentData);
-
-	let selectedProduct: any = null;
-	let briefData: any = null;
-	const brandBrief = await loadBriefForAgent(db, userId, cfg.brandBriefId);
-	if (brandBrief?.data) {
-		briefData = brandBrief.data;
-		const products = Array.isArray(briefData.products) ? briefData.products : [];
-		selectedProduct = input.productId
-			? products.find((p: any) => p.id === input.productId)
-			: products.find((p: any) => p.photoUrl) || products[0];
-	}
-	if (!selectedProduct?.photoUrl) {
-		throw new Error('Cinematic mode needs a product photo — add one in the Brand Brief first.');
-	}
-
-	const cinematicIntent = classifyContentIntent(topic, platform);
-	const cinematicBrandVisualCtx = buildBrandVisualContext(briefData);
-
-	const buildCinematicPrompt = () =>
-		[
-			agentContext,
-			`Product: "${selectedProduct.name}" — ${selectedProduct.description || 'no description'}. Price: ${selectedProduct.price || 'N/A'}.`,
-			briefData
-				? [
-						`Brand: ${briefData.brandName || '(unnamed)'}.`,
-						`Voice: ${briefData.commStyle || 'authentic'}.`,
-						`Audience: ${briefData.demographics || 'general'}.`,
-						`Pain points: ${briefData.painPoints || 'N/A'}.`,
-						cinematicBrandVisualCtx
-					]
-						.filter(Boolean)
-						.join(' ')
-				: '',
-			`Content type: ${cinematicIntent.type}. Platform: ${platform}. Platform voice: ${cinematicIntent.platformVoice}.`,
-			buildHookGuidance(cinematicIntent, `${topic}|${platform}|cinematic`),
-			voiceGender ? `The on-camera character (@Element1) must present as ${voiceGender}, matching the pinned voice.` : '',
-			`Angle for this post: "${topic}". Output ONLY the JSON.`
-		]
-			.filter(Boolean)
-			.join('\n');
-
-	const prompt = buildCinematicPrompt();
-
-	const raw =
-		(await ai.generate(prompt, { systemInstruction: CINEMATIC_DIRECTOR_SYSTEM, json: true })) ||
-		'{}';
-	let parsed = safeParseJson(raw);
-	if (!parsed) throw new Error('AI returned unparseable response');
-
-	// Hook quality gate — same threshold as the standard path
-	if (typeof parsed.hookScore === 'number' && parsed.hookScore < HOOK_SCORE_THRESHOLD) {
-		console.warn(
-			`[Cinematic Director] hookScore ${parsed.hookScore} below threshold — retrying with stronger hook instruction.`
-		);
-		const retryHookRaw =
-			(await ai.generate(
-				`${buildCinematicPrompt()}\n\nYour previous hook scored ${parsed.hookScore}/99. The hook must stop mid-scroll cold — a real confession or bold claim, not a description. Aim for 85+. Rewrite the full JSON.`,
-				{ systemInstruction: CINEMATIC_DIRECTOR_SYSTEM, json: true }
-			)) || '{}';
-		const hookRetryParsed = safeParseJson(retryHookRaw);
-		if (hookRetryParsed && (hookRetryParsed.hookScore ?? 0) > (parsed.hookScore ?? 0)) {
-			parsed = hookRetryParsed;
+		let agentContext = '';
+		let agentData: any = null;
+		const agent = agentResult?.data;
+		if (agent) {
+			agentData = agent;
+			agentContext = buildRichAgentContext(agent);
 		}
-	}
 
-	// Pre-media quality gate — cinematic is the expensive path (~3x standard),
-	// so a below-floor script must die HERE, before storyboard stills + Kling.
-	// Placed BEFORE shot derivation so an accepted rewrite replaces the shots
-	// too. One improvement-guided rewrite, then abandon (autopilot falls back
-	// to the standard path, which runs its own gate).
-	const cinematicFloor = qualityFloor();
-	let cinematicGrade = await gradeDraftWithRetry(ai, parsed, selectedProduct?.name ?? null, platform);
-	if (cinematicFloor > 0 && cinematicGrade && cinematicGrade.overall < cinematicFloor) {
-		console.warn(
-			`[Cinematic QC] Draft graded ${cinematicGrade.overall}/10 (< floor ${cinematicFloor}) — one rewrite: ${cinematicGrade.fix}`
-		);
-		const rewriteRaw =
-			(await ai.generate(
-				`${buildCinematicPrompt()}\n\nAn independent QC reviewer graded your draft ${cinematicGrade.overall}/10. Top issue: ${cinematicGrade.topIssue}. Required fix: ${cinematicGrade.fix}. Rewrite the ENTIRE JSON applying that fix.`,
-				{ systemInstruction: CINEMATIC_DIRECTOR_SYSTEM, json: true }
-			)) || '{}';
-		const rewritten = safeParseJson(rewriteRaw);
-		if (rewritten?.text && Array.isArray(rewritten.shots) && rewritten.shots.length > 0) {
-			const regrade = await gradeDraft(ai, rewritten, selectedProduct?.name ?? null, platform);
-			if (!regrade || regrade.overall >= (cinematicGrade?.overall ?? 0)) {
-				parsed = rewritten;
-				cinematicGrade = regrade ?? cinematicGrade;
+		// Persona gender is authoritative: overrides a contradicting configured voice.
+		const { voice: resolvedVoice, voiceGender } = resolveVoiceForPersona(cfg.voice, agentData);
+
+		let selectedProduct: any = null;
+		let briefData: any = null;
+		const brandBrief = await loadBriefForAgent(db, userId, cfg.brandBriefId);
+		if (brandBrief?.data) {
+			briefData = brandBrief.data;
+			const products = Array.isArray(briefData.products) ? briefData.products : [];
+			selectedProduct = input.productId
+				? products.find((p: any) => p.id === input.productId)
+				: products.find((p: any) => p.photoUrl) || products[0];
+		}
+		if (!selectedProduct?.photoUrl) {
+			throw new Error('Cinematic mode needs a product photo — add one in the Brand Brief first.');
+		}
+
+		const cinematicIntent = classifyContentIntent(topic, platform);
+		const cinematicBrandVisualCtx = buildBrandVisualContext(briefData);
+
+		const buildCinematicPrompt = () =>
+			[
+				agentContext,
+				`Product: "${selectedProduct.name}" — ${selectedProduct.description || 'no description'}. Price: ${selectedProduct.price || 'N/A'}.`,
+				briefData
+					? [
+							`Brand: ${briefData.brandName || '(unnamed)'}.`,
+							`Voice: ${briefData.commStyle || 'authentic'}.`,
+							`Audience: ${briefData.demographics || 'general'}.`,
+							`Pain points: ${briefData.painPoints || 'N/A'}.`,
+							cinematicBrandVisualCtx
+						]
+							.filter(Boolean)
+							.join(' ')
+					: '',
+				`Content type: ${cinematicIntent.type}. Platform: ${platform}. Platform voice: ${cinematicIntent.platformVoice}.`,
+				buildHookGuidance(cinematicIntent, `${topic}|${platform}|cinematic`),
+				voiceGender
+					? `The on-camera character (@Element1) must present as ${voiceGender}, matching the pinned voice.`
+					: '',
+				`Angle for this post: "${topic}". Output ONLY the JSON.`
+			]
+				.filter(Boolean)
+				.join('\n');
+
+		const prompt = buildCinematicPrompt();
+
+		const raw =
+			(await ai.generate(prompt, { systemInstruction: CINEMATIC_DIRECTOR_SYSTEM, json: true })) ||
+			'{}';
+		let parsed = safeParseJson(raw);
+		if (!parsed) throw new Error('AI returned unparseable response');
+
+		// Hook quality gate — same threshold as the standard path
+		if (typeof parsed.hookScore === 'number' && parsed.hookScore < HOOK_SCORE_THRESHOLD) {
+			console.warn(
+				`[Cinematic Director] hookScore ${parsed.hookScore} below threshold — retrying with stronger hook instruction.`
+			);
+			const retryHookRaw =
+				(await ai.generate(
+					`${buildCinematicPrompt()}\n\nYour previous hook scored ${parsed.hookScore}/99. The hook must stop mid-scroll cold — a real confession or bold claim, not a description. Aim for 85+. Rewrite the full JSON.`,
+					{ systemInstruction: CINEMATIC_DIRECTOR_SYSTEM, json: true }
+				)) || '{}';
+			const hookRetryParsed = safeParseJson(retryHookRaw);
+			if (hookRetryParsed && (hookRetryParsed.hookScore ?? 0) > (parsed.hookScore ?? 0)) {
+				parsed = hookRetryParsed;
 			}
 		}
-		if (cinematicGrade && cinematicGrade.overall < cinematicFloor) {
-			await logAutoReject(supabase, userId, input.agentId, cinematicGrade, parsed);
-			throw new Error(
-				`Cinematic draft quality ${cinematicGrade.overall}/10 below floor ${cinematicFloor} (${cinematicGrade.topIssue}) — no media generated.`
-			);
-		}
-	}
 
-	let directorShots: any[] = Array.isArray(parsed.shots) ? parsed.shots : [];
-
-	if (directorShots.length > 0 && directorShots.length < CINEMATIC_MIN_SHOT_COUNT) {
-		// A 1-shot "cinematic" post still pays the full Kling Pro
-		// reference-to-video multi-shot price for content indistinguishable
-		// from the cheap standard path — retry once with a more insistent
-		// instruction before accepting the degenerate output.
-		console.warn(
-			`[Cinematic] Director returned ${directorShots.length} shot(s) (need >=${CINEMATIC_MIN_SHOT_COUNT}), retrying once.`
+		// Pre-media quality gate — cinematic is the expensive path (~3x standard),
+		// so a below-floor script must die HERE, before storyboard stills + Kling.
+		// Placed BEFORE shot derivation so an accepted rewrite replaces the shots
+		// too. One improvement-guided rewrite, then abandon (autopilot falls back
+		// to the standard path, which runs its own gate).
+		const cinematicFloor = qualityFloor();
+		let cinematicGrade = await gradeDraftWithRetry(
+			ai,
+			parsed,
+			selectedProduct?.name ?? null,
+			platform
 		);
-		const retryRaw =
-			(await ai.generate(
-				`${prompt}\n\nYour previous response had too few shots. You MUST return at least ${CINEMATIC_MIN_SHOT_COUNT} shots (3-5 is ideal).`,
-				{ systemInstruction: CINEMATIC_DIRECTOR_SYSTEM, json: true }
-			)) || '{}';
-		const retryParsed = safeParseJson(retryRaw);
-		if (Array.isArray(retryParsed?.shots) && retryParsed.shots.length >= CINEMATIC_MIN_SHOT_COUNT) {
-			directorShots = retryParsed.shots;
-		} else {
+		if (cinematicFloor > 0 && cinematicGrade && cinematicGrade.overall < cinematicFloor) {
 			console.warn(
-				`[Cinematic] Retry still returned ${retryParsed?.shots?.length ?? 0} shot(s) — proceeding with what we have.`
+				`[Cinematic QC] Draft graded ${cinematicGrade.overall}/10 (< floor ${cinematicFloor}) — one rewrite: ${cinematicGrade.fix}`
 			);
+			const rewriteRaw =
+				(await ai.generate(
+					`${buildCinematicPrompt()}\n\nAn independent QC reviewer graded your draft ${cinematicGrade.overall}/10. Top issue: ${cinematicGrade.topIssue}. Required fix: ${cinematicGrade.fix}. Rewrite the ENTIRE JSON applying that fix.`,
+					{ systemInstruction: CINEMATIC_DIRECTOR_SYSTEM, json: true }
+				)) || '{}';
+			const rewritten = safeParseJson(rewriteRaw);
+			if (rewritten?.text && Array.isArray(rewritten.shots) && rewritten.shots.length > 0) {
+				const regrade = await gradeDraft(ai, rewritten, selectedProduct?.name ?? null, platform);
+				if (!regrade || regrade.overall >= (cinematicGrade?.overall ?? 0)) {
+					parsed = rewritten;
+					cinematicGrade = regrade ?? cinematicGrade;
+				}
+			}
+			if (cinematicGrade && cinematicGrade.overall < cinematicFloor) {
+				await logAutoReject(supabase, userId, input.agentId, cinematicGrade, parsed);
+				throw new Error(
+					`Cinematic draft quality ${cinematicGrade.overall}/10 below floor ${cinematicFloor} (${cinematicGrade.topIssue}) — no media generated.`
+				);
+			}
 		}
-	}
 
-	const rawShots: CinematicShot[] = directorShots.length > 0
-		? directorShots
-				.slice(0, 5)
-				.map((s: any) => ({
-					prompt: String(s.prompt || '').slice(0, 800),
-					duration: String(s.duration || '3')
-				}))
-		: [{ prompt: topic, duration: '5' }];
-	// The Director is only prompt-instructed to keep shots at 3-6s summing to
-	// <=15s — that's a request, not a guarantee, so clamp defensively before
-	// this ever reaches Kling's API (which will reject an invalid/out-of-range
-	// total rather than silently truncating it for us).
-	const shots = clampCinematicShots(rawShots);
+		let directorShots: any[] = Array.isArray(parsed.shots) ? parsed.shots : [];
 
-	const { falKey } = await resolveImageKeys(supabase, userId);
-	if (!falKey) throw new Error('No fal.ai key configured. Add one in Settings.');
+		if (directorShots.length > 0 && directorShots.length < CINEMATIC_MIN_SHOT_COUNT) {
+			// A 1-shot "cinematic" post still pays the full Kling Pro
+			// reference-to-video multi-shot price for content indistinguishable
+			// from the cheap standard path — retry once with a more insistent
+			// instruction before accepting the degenerate output.
+			console.warn(
+				`[Cinematic] Director returned ${directorShots.length} shot(s) (need >=${CINEMATIC_MIN_SHOT_COUNT}), retrying once.`
+			);
+			const retryRaw =
+				(await ai.generate(
+					`${prompt}\n\nYour previous response had too few shots. You MUST return at least ${CINEMATIC_MIN_SHOT_COUNT} shots (3-5 is ideal).`,
+					{ systemInstruction: CINEMATIC_DIRECTOR_SYSTEM, json: true }
+				)) || '{}';
+			const retryParsed = safeParseJson(retryRaw);
+			if (
+				Array.isArray(retryParsed?.shots) &&
+				retryParsed.shots.length >= CINEMATIC_MIN_SHOT_COUNT
+			) {
+				directorShots = retryParsed.shots;
+			} else {
+				console.warn(
+					`[Cinematic] Retry still returned ${retryParsed?.shots?.length ?? 0} shot(s) — proceeding with what we have.`
+				);
+			}
+		}
 
-	let svc: any;
-	try {
-		svc = getServiceSupabase();
-	} catch {
-		throw new Error('Storage service is not configured on this server.');
-	}
+		const rawShots: CinematicShot[] =
+			directorShots.length > 0
+				? directorShots.slice(0, 5).map((s: any) => ({
+						prompt: String(s.prompt || '').slice(0, 800),
+						duration: String(s.duration || '3')
+					}))
+				: [{ prompt: topic, duration: '5' }];
+		// The Director is only prompt-instructed to keep shots at 3-6s summing to
+		// <=15s — that's a request, not a guarantee, so clamp defensively before
+		// this ever reaches Kling's API (which will reject an invalid/out-of-range
+		// total rather than silently truncating it for us).
+		const shots = clampCinematicShots(rawShots);
 
-	// Pinned character face — same consistency anchor as the standard spokesperson
-	// path. A composer-supplied Character Reference URL wins (this path previously
-	// ignored it); otherwise use the DB pin, lazily generating one if none exists.
-	const characterRef =
-		input.characterRefOverride?.trim() ||
-		(await ensureCharacterRef(
-			supabase,
-			svc,
-			userId,
-			input.agentId,
-			cfg.characterRef,
-			falKey,
-			briefData,
-			agentData,
-			voiceGender
-		));
+		const { falKey } = await resolveImageKeys(supabase, userId);
+		if (!falKey) throw new Error('No fal.ai key configured. Add one in Settings.');
 
-	// All storyboard stills generated simultaneously — every one composites the
-	// same character + product references, just with that shot's own framing.
-	// (Still valuable even though the video call below no longer depends on
-	// stitching from the first one — this is the fast, cheap preview the user
-	// reviews before the video generation call runs.) Isolated per-shot: these
-	// are a preview, not load-bearing for the video call below, so one shot's
-	// still failing shouldn't sink the whole cinematic post.
-	const storyboard = (
-		await Promise.all(
-			shots.map((shot, i) =>
-				generateProductStill(falKey, shot.prompt, selectedProduct.photoUrl, characterRef, cinematicBrandVisualCtx).catch((err) => {
-					console.warn(`[Cinematic] Storyboard still ${i + 1}/${shots.length} failed, skipping:`, err);
-					return null;
-				})
+		let svc: any;
+		try {
+			svc = getServiceSupabase();
+		} catch {
+			throw new Error('Storage service is not configured on this server.');
+		}
+
+		// Pinned character face — same consistency anchor as the standard spokesperson
+		// path. A composer-supplied Character Reference URL wins (this path previously
+		// ignored it); otherwise use the DB pin, lazily generating one if none exists.
+		const characterRef =
+			input.characterRefOverride?.trim() ||
+			(await ensureCharacterRef(
+				supabase,
+				svc,
+				userId,
+				input.agentId,
+				cfg.characterRef,
+				falKey,
+				briefData,
+				agentData,
+				voiceGender
+			));
+
+		// All storyboard stills generated simultaneously — every one composites the
+		// same character + product references, just with that shot's own framing.
+		// (Still valuable even though the video call below no longer depends on
+		// stitching from the first one — this is the fast, cheap preview the user
+		// reviews before the video generation call runs.) Isolated per-shot: these
+		// are a preview, not load-bearing for the video call below, so one shot's
+		// still failing shouldn't sink the whole cinematic post.
+		const storyboard = (
+			await Promise.all(
+				shots.map((shot, i) =>
+					generateProductStill(
+						falKey,
+						shot.prompt,
+						selectedProduct.photoUrl,
+						characterRef,
+						cinematicBrandVisualCtx
+					).catch((err) => {
+						console.warn(
+							`[Cinematic] Storyboard still ${i + 1}/${shots.length} failed, skipping:`,
+							err
+						);
+						return null;
+					})
+				)
 			)
-		)
-	).filter((url): url is string => Boolean(url));
+		).filter((url): url is string => Boolean(url));
 
-	for (let i = 0; i < storyboard.length; i++) {
-		costEvents.push({ provider: 'fal', operation: 'image', model: 'nano-banana-2 (storyboard)', usd: priceOf('fal', 'image', 'nano') });
-	}
-
-	// Archive the previews too — but a still that genuinely can't be persisted is
-	// dropped (null → filtered) rather than stored as an ephemeral URL that would
-	// 404 later. These are non-load-bearing previews, so a missing one is harmless.
-	const durableStoryboard = (
-		await Promise.all(
-			storyboard.map((url) => persistToStorage(svc, url, userId, 'png').catch(() => null))
-		)
-	).filter((url): url is string => Boolean(url));
-
-	// Reference-kit angles (if the user has generated them from the Profile tab)
-	// give the video model far richer character grounding than a single portrait —
-	// falls back to just the plain characterRef when the kit isn't populated yet.
-	const kit = cfg.referenceKit || {};
-	const cinematicRefs: CinematicReferences = {
-		characterFrontal: kit.full_body || characterRef || durableStoryboard[0],
-		characterAngles: [kit.side_profiles, kit.face_closeup, kit.feature_grid].filter(
-			(url): url is string => Boolean(url)
-		),
-		productPhotoUrl: selectedProduct.photoUrl
-	};
-
-	const videoUrl = await generateCinematicVideo(falKey, cinematicRefs, shots);
-	costEvents.push({ provider: 'fal', operation: 'video', model: 'kling-o3-pro reference (cinematic)', usd: priceOf('fal', 'video', 'pro') });
-
-	// Captions + AI badge are both opt-in and independent (default off → clean clip).
-	const captioned = await burnCaptions(videoUrl, {
-		badge: input.aiBadge,
-		hook: input.captions ? parsed.on_screen_text : ''
-	}).catch(() => null);
-	const durableMedia = captioned
-		? await persistBufferToStorage(svc, captioned, userId, 'mp4', 'video/mp4')
-		: await persistVideoDurable(svc, videoUrl, userId);
-
-	// Record the durable asset URLs in the ledger (flushed in finally, even on a
-	// later throw) so this spend is always recoverable from the DB.
-	costEvents.push({ provider: 'storage', operation: 'persist', model: 'ugc-media', usd: 0, assetUrl: durableMedia });
-	if (durableStoryboard[0])
-		costEvents.push({ provider: 'storage', operation: 'persist', model: 'ugc-media', usd: 0, assetUrl: durableStoryboard[0] });
-
-	const content: UgcContent & { storyboard?: string[]; cinematic?: boolean } = {
-		text: parsed.text || '',
-		hashtags: Array.isArray(parsed.hashtags) ? parsed.hashtags : [],
-		hookScore: parsed.hookScore,
-		on_screen_text: parsed.on_screen_text || '',
-		// Actual burn outcome — captioned is non-null only when ffmpeg really ran; the
-		// caption flag also requires real hook text (a badge-only burn returns a buffer
-		// too, but no caption was drawn), so we never claim an overlay that wasn't made.
-		captions: Boolean(input.captions) && captioned != null && Boolean((parsed.on_screen_text || '').trim()),
-		ai_badge: Boolean(input.aiBadge) && captioned != null,
-		ugc_broll_prompt: shots.map((s, i) => `Shot ${i + 1} (${s.duration}s): ${s.prompt}`).join('\n\n'),
-		media_url: durableMedia,
-		poster_url: durableStoryboard[0],
-		media_type: 'video',
-		media_generated: true,
-		format: 'broll',
-		voice: resolvedVoice,
-		product: {
-			name: selectedProduct.name,
-			price: selectedProduct.price,
-			description: selectedProduct.description
-		},
-		platform,
-		storyboard: durableStoryboard,
-		cinematic: true,
-		qualityGrade: cinematicGrade,
-		qc_status: cinematicGrade ? 'graded' : 'ungraded',
-		costBreakdown: summarizeCosts(costEvents)
-	};
-	if (input.autopilot) content.autopilot = true;
-
-	// Observability record (cinematic): models per aspect + cost, the reference
-	// images actually SENT (character + kit angles), the shot prompts, selections.
-	content.generation = {
-		...summarizeAspects(costEvents),
-		images: {
-			character_ref: characterRef || null,
-			product_photo: selectedProduct?.photoUrl || null,
-			reference_kit: [kit.full_body, kit.side_profiles, kit.face_closeup, kit.feature_grid].filter(
-				Boolean
-			) as string[]
-		},
-		prompts: { scene: content.ugc_broll_prompt, script: content.script },
-		selections: {
-			platforms: [platform],
-			brand: briefData?.name ?? briefData?.brandName ?? briefData?.data?.brandName ?? null,
-			videoModel: 'cinematic (Kling O3 Pro reference)',
-			provider: input.providerPreference ?? null,
-			mediaType: 'video'
+		for (let i = 0; i < storyboard.length; i++) {
+			costEvents.push({
+				provider: 'fal',
+				operation: 'image',
+				model: 'nano-banana-2 (storyboard)',
+				usd: priceOf('fal', 'image', 'nano')
+			});
 		}
-	};
 
-	return { content, selectedProduct, briefData, agentData };
+		// Archive the previews too — but a still that genuinely can't be persisted is
+		// dropped (null → filtered) rather than stored as an ephemeral URL that would
+		// 404 later. These are non-load-bearing previews, so a missing one is harmless.
+		const durableStoryboard = (
+			await Promise.all(
+				storyboard.map((url) => persistToStorage(svc, url, userId, 'png').catch(() => null))
+			)
+		).filter((url): url is string => Boolean(url));
+
+		// Reference-kit angles (if the user has generated them from the Profile tab)
+		// give the video model far richer character grounding than a single portrait —
+		// falls back to just the plain characterRef when the kit isn't populated yet.
+		const kit = cfg.referenceKit || {};
+		const cinematicRefs: CinematicReferences = {
+			characterFrontal: kit.full_body || characterRef || durableStoryboard[0],
+			characterAngles: [kit.side_profiles, kit.face_closeup, kit.feature_grid].filter(
+				(url): url is string => Boolean(url)
+			),
+			productPhotoUrl: selectedProduct.photoUrl
+		};
+
+		const videoUrl = await generateCinematicVideo(falKey, cinematicRefs, shots);
+		costEvents.push({
+			provider: 'fal',
+			operation: 'video',
+			model: 'kling-o3-pro reference (cinematic)',
+			usd: priceOf('fal', 'video', 'pro')
+		});
+
+		// Captions + AI badge are both opt-in and independent (default off → clean clip).
+		const captioned = await burnCaptions(videoUrl, {
+			badge: input.aiBadge,
+			hook: input.captions ? parsed.on_screen_text : ''
+		}).catch(() => null);
+		const durableMedia = captioned
+			? await persistBufferToStorage(svc, captioned, userId, 'mp4', 'video/mp4')
+			: await persistVideoDurable(svc, videoUrl, userId);
+
+		// Record the durable asset URLs in the ledger (flushed in finally, even on a
+		// later throw) so this spend is always recoverable from the DB.
+		costEvents.push({
+			provider: 'storage',
+			operation: 'persist',
+			model: 'ugc-media',
+			usd: 0,
+			assetUrl: durableMedia
+		});
+		if (durableStoryboard[0])
+			costEvents.push({
+				provider: 'storage',
+				operation: 'persist',
+				model: 'ugc-media',
+				usd: 0,
+				assetUrl: durableStoryboard[0]
+			});
+
+		const content: UgcContent & { storyboard?: string[]; cinematic?: boolean } = {
+			text: parsed.text || '',
+			hashtags: Array.isArray(parsed.hashtags) ? parsed.hashtags : [],
+			hookScore: parsed.hookScore,
+			on_screen_text: parsed.on_screen_text || '',
+			// Actual burn outcome — captioned is non-null only when ffmpeg really ran; the
+			// caption flag also requires real hook text (a badge-only burn returns a buffer
+			// too, but no caption was drawn), so we never claim an overlay that wasn't made.
+			captions:
+				Boolean(input.captions) &&
+				captioned != null &&
+				Boolean((parsed.on_screen_text || '').trim()),
+			ai_badge: Boolean(input.aiBadge) && captioned != null,
+			ugc_broll_prompt: shots
+				.map((s, i) => `Shot ${i + 1} (${s.duration}s): ${s.prompt}`)
+				.join('\n\n'),
+			media_url: durableMedia,
+			poster_url: durableStoryboard[0],
+			media_type: 'video',
+			media_generated: true,
+			format: 'broll',
+			voice: resolvedVoice,
+			product: {
+				name: selectedProduct.name,
+				price: selectedProduct.price,
+				description: selectedProduct.description
+			},
+			platform,
+			storyboard: durableStoryboard,
+			cinematic: true,
+			qualityGrade: cinematicGrade,
+			qc_status: cinematicGrade ? 'graded' : 'ungraded',
+			costBreakdown: summarizeCosts(costEvents)
+		};
+		if (input.autopilot) content.autopilot = true;
+
+		// Observability record (cinematic): models per aspect + cost, the reference
+		// images actually SENT (character + kit angles), the shot prompts, selections.
+		content.generation = {
+			...summarizeAspects(costEvents),
+			images: {
+				character_ref: characterRef || null,
+				product_photo: selectedProduct?.photoUrl || null,
+				reference_kit: [
+					kit.full_body,
+					kit.side_profiles,
+					kit.face_closeup,
+					kit.feature_grid
+				].filter(Boolean) as string[]
+			},
+			prompts: { scene: content.ugc_broll_prompt, script: content.script },
+			selections: {
+				platforms: [platform],
+				brand: briefData?.name ?? briefData?.brandName ?? briefData?.data?.brandName ?? null,
+				videoModel: 'cinematic (Kling O3 Pro reference)',
+				provider: input.providerPreference ?? null,
+				mediaType: 'video'
+			}
+		};
+
+		return { content, selectedProduct, briefData, agentData };
 	} finally {
 		// Flush the ledger even if generation threw partway through — otherwise
 		// every failed/retried generation is silent spend the cap never sees.
@@ -1527,6 +1614,9 @@ export interface UgcPackInput {
 	characterRefOverride?: string;
 	/** Model picks from the composer — the user's budget-vs-quality decision. */
 	videoModel?: string;
+	/** Registry price override for that model (Model Manager edit). The ledger
+	 *  bills this when present; the static catalog rate otherwise. */
+	videoModelUsd?: number;
 	/** Opt-in: burn the on-screen caption hook onto the video. OFF by default. */
 	captions?: boolean;
 	/** Opt-in: burn a small "AI GENERATED" disclosure badge (top-left). OFF by
@@ -1645,12 +1735,15 @@ async function recordCostEvents(
 		// If it isn't applied yet, the insert fails for an unknown column — retry
 		// WITHOUT asset_url so the ledger (and cap accounting) keeps working rather
 		// than silently dropping every cost row until the migration lands.
-		if (/asset_url/i.test(error.message ?? '') || error.code === 'PGRST204' || error.code === '42703') {
+		if (
+			/asset_url/i.test(error.message ?? '') ||
+			error.code === 'PGRST204' ||
+			error.code === '42703'
+		) {
 			const { error: retryErr } = await supabase
 				.from('generation_events')
 				.insert(rows.map(({ asset_url, ...rest }) => rest));
-			if (retryErr)
-				console.warn('[Cost] Failed to record generation events:', retryErr.message);
+			if (retryErr) console.warn('[Cost] Failed to record generation events:', retryErr.message);
 			else
 				console.warn(
 					'[Cost] Recorded generation events without asset_url — apply generation_events_asset_url_migration.sql to enable asset recovery.'
@@ -1716,15 +1809,9 @@ Respond with ONLY valid JSON. No markdown fences, no extra keys, no preamble:
   "motion_prompt": "camera move type + speed + subject action + reveal moment"
 }`;
 
-/** Persona-profile JSON stored in agents.market (gender/archetype/target avatar/etc. from the Profile tab). */
+/** Persona profile (gender/archetype/target avatar/etc. from the Profile tab). */
 function parsePersonaProfile(agentData: any): Record<string, any> {
-	try {
-		const m = agentData?.market;
-		if (typeof m === 'string' && m.trim().startsWith('{')) return JSON.parse(m);
-	} catch {
-		/* legacy plain-text market value */
-	}
-	return {};
+	return readPersonaProfile(agentData);
 }
 
 /**
@@ -1748,8 +1835,10 @@ function parsePersonaProfile(agentData: any): Record<string, any> {
 const FEMALE_PRONOUNS = /\b(she|her|hers|herself)\b/;
 const MALE_PRONOUNS = /\b(he|him|his|himself)\b/;
 // \bman\b does NOT match "woman"/"human" — the word boundary protects the overlap.
-const FEMALE_NOUNS = /\b(woman|girl|female|lady|mother|mom|mum|feminine|actress|businesswoman|queen|sister|daughter|wife|girlfriend)\b/;
-const MALE_NOUNS = /\b(man|boy|male|gentleman|father|dad|masculine|actor|businessman|king|brother|son|husband|boyfriend|guy|dude|bloke)\b/;
+const FEMALE_NOUNS =
+	/\b(woman|girl|female|lady|mother|mom|mum|feminine|actress|businesswoman|queen|sister|daughter|wife|girlfriend)\b/;
+const MALE_NOUNS =
+	/\b(man|boy|male|gentleman|father|dad|masculine|actor|businessman|king|brother|son|husband|boyfriend|guy|dude|bloke)\b/;
 
 export function inferGenderFromText(
 	...texts: Array<string | undefined | null>
@@ -1777,34 +1866,113 @@ export function inferGenderFromText(
 // unknown names fall through to the text scan, never a wrong guess.
 const NAME_GENDER: Record<string, 'male' | 'female'> = {
 	// female
-	aisha: 'female', sofia: 'female', sophia: 'female', veronica: 'female', chloe: 'female',
-	aria: 'female', elena: 'female', jenny: 'female', jennifer: 'female', lexy: 'female', lexi: 'female',
-	alexa: 'female', emma: 'female', olivia: 'female', ava: 'female', isabella: 'female', mia: 'female',
-	amelia: 'female', harper: 'female', evelyn: 'female', charlotte: 'female', luna: 'female',
-	grace: 'female', chloé: 'female', maya: 'female', zoe: 'female', zoey: 'female', nora: 'female',
-	lily: 'female', hannah: 'female', layla: 'female', aaliyah: 'female', fatima: 'female', noor: 'female',
-	sara: 'female', sarah: 'female', priya: 'female', ananya: 'female', mei: 'female', yuki: 'female',
-	kayla: 'female', mila: 'female', ivy: 'female', ruby: 'female', jade: 'female', bella: 'female',
+	aisha: 'female',
+	sofia: 'female',
+	sophia: 'female',
+	veronica: 'female',
+	chloe: 'female',
+	aria: 'female',
+	elena: 'female',
+	jenny: 'female',
+	jennifer: 'female',
+	lexy: 'female',
+	lexi: 'female',
+	alexa: 'female',
+	emma: 'female',
+	olivia: 'female',
+	ava: 'female',
+	isabella: 'female',
+	mia: 'female',
+	amelia: 'female',
+	harper: 'female',
+	evelyn: 'female',
+	charlotte: 'female',
+	luna: 'female',
+	grace: 'female',
+	chloé: 'female',
+	maya: 'female',
+	zoe: 'female',
+	zoey: 'female',
+	nora: 'female',
+	lily: 'female',
+	hannah: 'female',
+	layla: 'female',
+	aaliyah: 'female',
+	fatima: 'female',
+	noor: 'female',
+	sara: 'female',
+	sarah: 'female',
+	priya: 'female',
+	ananya: 'female',
+	mei: 'female',
+	yuki: 'female',
+	kayla: 'female',
+	mila: 'female',
+	ivy: 'female',
+	ruby: 'female',
+	jade: 'female',
+	bella: 'female',
 	// male
-	marcus: 'male', kai: 'male', ryan: 'male', james: 'male', liam: 'male', noah: 'male', oliver: 'male',
-	elijah: 'male', william: 'male', henry: 'male', lucas: 'male', mason: 'male', ethan: 'male',
-	logan: 'male', jack: 'male', aiden: 'male', jackson: 'male', david: 'male', joseph: 'male',
-	samuel: 'male', omar: 'male', ali: 'male', hassan: 'male', raj: 'male', arjun: 'male', chen: 'male',
-	hiro: 'male', kenji: 'male', diego: 'male', mateo: 'male', leo: 'male', max: 'male', adam: 'male',
-	brian: 'male', josh: 'male', joshua: 'male', tyler: 'male', dylan: 'male', nathan: 'male'
+	marcus: 'male',
+	kai: 'male',
+	ryan: 'male',
+	james: 'male',
+	liam: 'male',
+	noah: 'male',
+	oliver: 'male',
+	elijah: 'male',
+	william: 'male',
+	henry: 'male',
+	lucas: 'male',
+	mason: 'male',
+	ethan: 'male',
+	logan: 'male',
+	jack: 'male',
+	aiden: 'male',
+	jackson: 'male',
+	david: 'male',
+	joseph: 'male',
+	samuel: 'male',
+	omar: 'male',
+	ali: 'male',
+	hassan: 'male',
+	raj: 'male',
+	arjun: 'male',
+	chen: 'male',
+	hiro: 'male',
+	kenji: 'male',
+	diego: 'male',
+	mateo: 'male',
+	leo: 'male',
+	max: 'male',
+	adam: 'male',
+	brian: 'male',
+	josh: 'male',
+	joshua: 'male',
+	tyler: 'male',
+	dylan: 'male',
+	nathan: 'male'
 };
 
 /** Gender from a name's first token (e.g. "Aisha Noori" → female), else undefined. */
-export function inferGenderFromName(name: string | undefined | null): 'male' | 'female' | undefined {
+export function inferGenderFromName(
+	name: string | undefined | null
+): 'male' | 'female' | undefined {
 	if (!name) return undefined;
-	const first = name.trim().toLowerCase().split(/[\s._-]+/)[0]?.replace(/[^a-zà-ÿ]/g, '');
+	const first = name
+		.trim()
+		.toLowerCase()
+		.split(/[\s._-]+/)[0]
+		?.replace(/[^a-zà-ÿ]/g, '');
 	return first ? NAME_GENDER[first] : undefined;
 }
 
 /** Extracts the character's name from a soul doc's "— Name" / "soul.md — Name" heading, if present. */
 function characterNameFromSoul(soul: string | undefined | null): string | undefined {
 	if (!soul) return undefined;
-	const m = String(soul).match(/(?:soul(?:\.md)?\s*)?[—–-]\s*([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'\-]+(?:\s+[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'\-]+){0,2})/);
+	const m = String(soul).match(
+		/(?:soul(?:\.md)?\s*)?[—–-]\s*([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'\-]+(?:\s+[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'\-]+){0,2})/
+	);
 	return m?.[1]?.trim();
 }
 
@@ -1914,7 +2082,9 @@ export function buildHeroPortraitPrompt(
 	// The soul often carries the persona's PHYSICAL identity ("Emirati fashion
 	// curator, 26, Dubai") — clamping it to 120 chars was dropping exactly the
 	// details the pinned face must reflect. 600 keeps identity + vibe intact.
-	const persona = agentData?.soul ? ` Personality vibe: ${String(agentData.soul).slice(0, 600)}.` : '';
+	const persona = agentData?.soul
+		? ` Personality vibe: ${String(agentData.soul).slice(0, 600)}.`
+		: '';
 	const profile = parsePersonaProfile(agentData);
 	// Ethnicity is the single strongest identity + uniqueness signal, so it leads the
 	// SUBJECT (stronger than a trailing clause) with an explicit authenticity directive.
@@ -1923,12 +2093,16 @@ export function buildHeroPortraitPrompt(
 	// the model collapses to one generic "UGC creator" face. Gender rides in the subject
 	// too (the pinned face must match the configured voice gender up front).
 	const ethnicity = (profile.appearance?.ethnicity || '').trim();
-	const subject = [ethnicity, voiceGender, 'relatable UGC content creator'].filter(Boolean).join(' ');
+	const subject = [ethnicity, voiceGender, 'relatable UGC content creator']
+		.filter(Boolean)
+		.join(' ');
 	const ethnicityEmphasis = ethnicity
 		? ` The creator is authentically ${ethnicity} — render accurate, respectful ${ethnicity} facial features, skin tone, and hair; this is essential and must not be generic or ambiguous.`
 		: '';
 	const archetypeLine = profile.archetype ? ` Their creator archetype: ${profile.archetype}.` : '';
-	const avatarLine = profile.targetAvatar ? ` They make content for: ${String(profile.targetAvatar).slice(0, 120)}.` : '';
+	const avatarLine = profile.targetAvatar
+		? ` They make content for: ${String(profile.targetAvatar).slice(0, 120)}.`
+		: '';
 	// Wardrobe/hair/eyes/distinctive-features directives from the persona profile — so the
 	// pinned face reflects the exact look the user configured (and "Generate for brand"
 	// filled), instead of a generic person.
@@ -1967,7 +2141,8 @@ async function generateHeroPortraitImage(
 	promptOverride?: string,
 	modelId?: string | null
 ): Promise<string> {
-	const heroPrompt = promptOverride?.trim() || buildHeroPortraitPrompt(briefData, agentData, voiceGender);
+	const heroPrompt =
+		promptOverride?.trim() || buildHeroPortraitPrompt(briefData, agentData, voiceGender);
 
 	// Portraits are 3:4. orKey stays null on purpose: routing to OpenRouter would
 	// silently ignore the model the user picked (and billed for) in the composer.
@@ -2006,103 +2181,108 @@ export async function generateCharacterPortrait(
 	const portraitModel = resolveModel(editing ? 'image_edit' : 'image_t2i', modelId);
 	const costEvents: CostEvent[] = [];
 	return await runBudgetedAssetJob(supabase, userId, agentId, costEvents, async () => {
-	// 1. Hero portrait → pinned as the profile picture. When a face already exists
-	//    we EDIT it (feed the existing image back in) so the persona stays the SAME
-	//    person — only the shot and any configured styling change. This is the fix
-	//    for "regenerate produced a whole new person / new facial features". With no
-	//    existing face we create one from scratch (first generation).
-	let durable: string;
-	if (editing) {
-		const editPrompt = promptOverride?.trim() || buildPortraitEditPrompt(agentData);
-		const editData = await falSyncJson(
-			portraitModel.id,
-			buildEditInput(portraitModel, editPrompt, [identityRef!], '3:4'),
-			falKey
-		);
-		const editUrl = editData.images?.[0]?.url;
-		if (!editUrl) throw new Error(`${portraitModel.label} returned no portrait`);
-		durable = await persistToStorage(svc, editUrl, userId, 'png');
-	} else {
-		durable = await generateHeroPortraitImage(
-			svc,
-			userId,
-			falKey,
-			briefData,
-			agentData,
-			voiceGender,
-			promptOverride,
-			portraitModel.id
-		);
-	}
-	// Bill the model we actually ran, not a hard-coded flux-schnell rate.
-	costEvents.push({
-		provider: 'fal',
-		operation: 'image',
-		model: `${portraitModel.label} (hero portrait${editing ? ' edit' : ''})`,
-		usd: portraitModel.usd
-	});
-	// A silently failed pin leaves ugc_character_ref empty, and ensureCharacterRef
-	// then regenerates (and pays for) a brand-new face on every single slot.
-	const { data: pinned, error: pinErr } = await supabase
-		.from('agent_configs')
-		.update({ ugc_character_ref: durable })
-		.eq('agent_id', agentId)
-		.select('agent_id');
-	if (pinErr) throw new Error(`Failed to pin character reference: ${pinErr.message}`);
-	if (!Array.isArray(pinned) || pinned.length === 0)
-		throw new Error(`Failed to pin character reference: no agent_configs row for ${agentId}`);
-
-	// 2. Build a REAL reference-kit foundation from that portrait — a character
-	//    turnaround sheet plus a distinct full-body shot — so the kit stages
-	//    (side profiles / facial close-up / feature grid) work WITHOUT requiring
-	//    a separately uploaded reference photo. Previously `full_body` was just
-	//    the portrait reused and no `sheet` existed, which left the kit unusable
-	//    for from-scratch personas. Best-effort: on failure we still leave a
-	//    valid pinned profile picture and fall back to the portrait as full_body.
-	//    Replace (not merge): a fresh face invalidates any prior derived stages.
-	try {
-		const sheetData = await falSyncJson(
-			NANO_MODEL,
-			{ prompt: CHARACTER_SHEET_PROMPT, image_urls: [durable], aspect_ratio: '16:9' },
-			falKey
-		);
+		// 1. Hero portrait → pinned as the profile picture. When a face already exists
+		//    we EDIT it (feed the existing image back in) so the persona stays the SAME
+		//    person — only the shot and any configured styling change. This is the fix
+		//    for "regenerate produced a whole new person / new facial features". With no
+		//    existing face we create one from scratch (first generation).
+		let durable: string;
+		if (editing) {
+			const editPrompt = promptOverride?.trim() || buildPortraitEditPrompt(agentData);
+			const editData = await falSyncJson(
+				portraitModel.id,
+				buildEditInput(portraitModel, editPrompt, [identityRef!], '3:4'),
+				falKey
+			);
+			const editUrl = editData.images?.[0]?.url;
+			if (!editUrl) throw new Error(`${portraitModel.label} returned no portrait`);
+			durable = await persistToStorage(svc, editUrl, userId, 'png');
+		} else {
+			durable = await generateHeroPortraitImage(
+				svc,
+				userId,
+				falKey,
+				briefData,
+				agentData,
+				voiceGender,
+				promptOverride,
+				portraitModel.id
+			);
+		}
+		// Bill the model we actually ran, not a hard-coded flux-schnell rate.
 		costEvents.push({
 			provider: 'fal',
 			operation: 'image',
-			model: 'nano-banana-2 (character sheet)',
-			usd: priceOf('fal', 'image', 'nano')
+			model: `${portraitModel.label} (hero portrait${editing ? ' edit' : ''})`,
+			usd: portraitModel.usd
 		});
-		const sheetUrl = sheetData.images?.[0]?.url;
-		if (!sheetUrl) throw new Error('Nano Banana returned no character sheet');
+		// A silently failed pin leaves ugc_character_ref empty, and ensureCharacterRef
+		// then regenerates (and pays for) a brand-new face on every single slot.
+		const { data: pinned, error: pinErr } = await supabase
+			.from('agent_configs')
+			.update({ ugc_character_ref: durable })
+			.eq('agent_id', agentId)
+			.select('agent_id');
+		if (pinErr) throw new Error(`Failed to pin character reference: ${pinErr.message}`);
+		if (!Array.isArray(pinned) || pinned.length === 0)
+			throw new Error(`Failed to pin character reference: no agent_configs row for ${agentId}`);
 
-		// The hero shot conditions on the EPHEMERAL sheet URL, not the persisted
-		// copy — the two are independent, so the persist must not serialize in
-		// front of the paid fal call. The cost event rides the fal promise so the
-		// spend is recorded even if the persist half rejects.
-		const [durableSheet, heroShotUrl] = await Promise.all([
-			persistToStorage(svc, sheetUrl, userId, 'png'),
-			generateAvatarHeroShot(falKey, sheetUrl).then((url) => {
-				costEvents.push({
-					provider: 'fal',
-					operation: 'image',
-					model: 'nano-banana-2 (avatar hero shot)',
-					usd: priceOf('fal', 'image', 'nano')
-				});
-				return url;
-			})
-		]);
-		const durableFull = await persistToStorage(svc, heroShotUrl, userId, 'png');
+		// 2. Build a REAL reference-kit foundation from that portrait — a character
+		//    turnaround sheet plus a distinct full-body shot — so the kit stages
+		//    (side profiles / facial close-up / feature grid) work WITHOUT requiring
+		//    a separately uploaded reference photo. Previously `full_body` was just
+		//    the portrait reused and no `sheet` existed, which left the kit unusable
+		//    for from-scratch personas. Best-effort: on failure we still leave a
+		//    valid pinned profile picture and fall back to the portrait as full_body.
+		//    Replace (not merge): a fresh face invalidates any prior derived stages.
+		try {
+			const sheetData = await falSyncJson(
+				NANO_MODEL,
+				{ prompt: CHARACTER_SHEET_PROMPT, image_urls: [durable], aspect_ratio: '16:9' },
+				falKey
+			);
+			costEvents.push({
+				provider: 'fal',
+				operation: 'image',
+				model: 'nano-banana-2 (character sheet)',
+				usd: priceOf('fal', 'image', 'nano')
+			});
+			const sheetUrl = sheetData.images?.[0]?.url;
+			if (!sheetUrl) throw new Error('Nano Banana returned no character sheet');
 
-		await mergeReferenceKit(supabase, agentId, { sheet: durableSheet, full_body: durableFull }, true);
-	} catch (err) {
-		console.warn(
-			'[Content] Character-sheet foundation generation failed; kit stages will need a reference photo:',
-			(err as Error).message
-		);
-		await mergeReferenceKit(supabase, agentId, { full_body: durable }, true);
-	}
+			// The hero shot conditions on the EPHEMERAL sheet URL, not the persisted
+			// copy — the two are independent, so the persist must not serialize in
+			// front of the paid fal call. The cost event rides the fal promise so the
+			// spend is recorded even if the persist half rejects.
+			const [durableSheet, heroShotUrl] = await Promise.all([
+				persistToStorage(svc, sheetUrl, userId, 'png'),
+				generateAvatarHeroShot(falKey, sheetUrl).then((url) => {
+					costEvents.push({
+						provider: 'fal',
+						operation: 'image',
+						model: 'nano-banana-2 (avatar hero shot)',
+						usd: priceOf('fal', 'image', 'nano')
+					});
+					return url;
+				})
+			]);
+			const durableFull = await persistToStorage(svc, heroShotUrl, userId, 'png');
 
-	return durable;
+			await mergeReferenceKit(
+				supabase,
+				agentId,
+				{ sheet: durableSheet, full_body: durableFull },
+				true
+			);
+		} catch (err) {
+			console.warn(
+				'[Content] Character-sheet foundation generation failed; kit stages will need a reference photo:',
+				(err as Error).message
+			);
+			await mergeReferenceKit(supabase, agentId, { full_body: durable }, true);
+		}
+
+		return durable;
 	});
 }
 
@@ -2332,7 +2512,8 @@ export async function repinKitStage(
 	stage: string,
 	url: string
 ): Promise<Record<string, any>> {
-	if (!RESTORABLE_KIT_STAGES.includes(stage)) throw new Error(`Unknown reference-kit stage: ${stage}`);
+	if (!RESTORABLE_KIT_STAGES.includes(stage))
+		throw new Error(`Unknown reference-kit stage: ${stage}`);
 	// The caller (restore-kit-stage route) already enforces that `url` is one of
 	// THIS user's own bucket images, so a stage can be re-pinned either from its
 	// own tagged history OR from the full image library (the fallback for personas
@@ -2385,54 +2566,54 @@ export async function generateCharacterSheetFromReference(
 ): Promise<string> {
 	const costEvents: CostEvent[] = [];
 	return await runBudgetedAssetJob(supabase, userId, agentId, costEvents, async () => {
-	const data = await falSyncJson(
-		NANO_MODEL,
-		{ prompt: CHARACTER_SHEET_PROMPT, image_urls: [referenceImageUrl], aspect_ratio: '16:9' },
-		falKey
-	);
-	costEvents.push({
-		provider: 'fal',
-		operation: 'image',
-		model: 'nano-banana-2 (character sheet)',
-		usd: priceOf('fal', 'image', 'nano')
-	});
-	const sheetUrl = data.images?.[0]?.url;
-	if (!sheetUrl) throw new Error('Nano Banana returned no image');
+		const data = await falSyncJson(
+			NANO_MODEL,
+			{ prompt: CHARACTER_SHEET_PROMPT, image_urls: [referenceImageUrl], aspect_ratio: '16:9' },
+			falKey
+		);
+		costEvents.push({
+			provider: 'fal',
+			operation: 'image',
+			model: 'nano-banana-2 (character sheet)',
+			usd: priceOf('fal', 'image', 'nano')
+		});
+		const sheetUrl = data.images?.[0]?.url;
+		if (!sheetUrl) throw new Error('Nano Banana returned no image');
 
-	// The hero shot conditions on the EPHEMERAL sheet URL, not the persisted
-	// copy — the two are independent, so the persist must not serialize in front
-	// of the paid fal call. The cost event rides the fal promise so the spend is
-	// recorded (ledger flushes in the job's finally) even if the persist rejects.
-	const [durableSheet, heroShotUrl] = await Promise.all([
-		persistToStorage(svc, sheetUrl, userId, 'png'),
-		generateAvatarHeroShot(falKey, sheetUrl).then((url) => {
-			costEvents.push({
-				provider: 'fal',
-				operation: 'image',
-				model: 'nano-banana-2 (avatar hero shot)',
-				usd: priceOf('fal', 'image', 'nano')
-			});
-			return url;
-		})
-	]);
+		// The hero shot conditions on the EPHEMERAL sheet URL, not the persisted
+		// copy — the two are independent, so the persist must not serialize in front
+		// of the paid fal call. The cost event rides the fal promise so the spend is
+		// recorded (ledger flushes in the job's finally) even if the persist rejects.
+		const [durableSheet, heroShotUrl] = await Promise.all([
+			persistToStorage(svc, sheetUrl, userId, 'png'),
+			generateAvatarHeroShot(falKey, sheetUrl).then((url) => {
+				costEvents.push({
+					provider: 'fal',
+					operation: 'image',
+					model: 'nano-banana-2 (avatar hero shot)',
+					usd: priceOf('fal', 'image', 'nano')
+				});
+				return url;
+			})
+		]);
 
-	const durable = await persistToStorage(svc, heroShotUrl, userId, 'png');
+		const durable = await persistToStorage(svc, heroShotUrl, userId, 'png');
 
-	// A silently failed pin leaves ugc_character_ref empty, and ensureCharacterRef
-	// then regenerates (and pays for) a brand-new face on every single slot.
-	const { data: pinned, error: pinErr } = await supabase
-		.from('agent_configs')
-		.update({ ugc_character_ref: durable })
-		.eq('agent_id', agentId)
-		.select('agent_id');
-	if (pinErr) throw new Error(`Failed to pin character reference: ${pinErr.message}`);
-	if (!Array.isArray(pinned) || pinned.length === 0)
-		throw new Error(`Failed to pin character reference: no agent_configs row for ${agentId}`);
-	// Replace, not merge: a newly uploaded photo is a new identity, so any
-	// side_profiles/face_closeup/feature_grid derived from a previous photo
-	// (or a previous from-scratch face) no longer depict the same person.
-	await mergeReferenceKit(supabase, agentId, { sheet: durableSheet, full_body: durable }, true);
-	return durable;
+		// A silently failed pin leaves ugc_character_ref empty, and ensureCharacterRef
+		// then regenerates (and pays for) a brand-new face on every single slot.
+		const { data: pinned, error: pinErr } = await supabase
+			.from('agent_configs')
+			.update({ ugc_character_ref: durable })
+			.eq('agent_id', agentId)
+			.select('agent_id');
+		if (pinErr) throw new Error(`Failed to pin character reference: ${pinErr.message}`);
+		if (!Array.isArray(pinned) || pinned.length === 0)
+			throw new Error(`Failed to pin character reference: no agent_configs row for ${agentId}`);
+		// Replace, not merge: a newly uploaded photo is a new identity, so any
+		// side_profiles/face_closeup/feature_grid derived from a previous photo
+		// (or a previous from-scratch face) no longer depict the same person.
+		await mergeReferenceKit(supabase, agentId, { sheet: durableSheet, full_body: durable }, true);
+		return durable;
 	});
 }
 
@@ -2489,7 +2670,9 @@ export function resolveKitStagePlan(
 	kit: Record<string, any>,
 	characterRef: string | null,
 	gender?: 'male' | 'female'
-): { prompt: string; model: string; image_urls: string[]; aspect_ratio: string } | { error: string } {
+):
+	| { prompt: string; model: string; image_urls: string[]; aspect_ratio: string }
+	| { error: string } {
 	if (stage === 'full_body') {
 		// The full-body shot is regenerated FROM the existing profile picture (the
 		// pinned face) — so the composer shows that face as the reference and only
@@ -2637,411 +2820,506 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 	const ai = trackAi(rawAi, costEvents);
 
 	try {
+		// The composer can force this run's format; 'auto' (or unset) defers to the
+		// persona's ugc_format, which the Director resolves from the content. This one
+		// value drives both the Director's brief and the final spokesperson/broll branch.
+		const formatPref: 'auto' | 'spokesperson' | 'broll' =
+			input.formatOverride === 'spokesperson' || input.formatOverride === 'broll'
+				? input.formatOverride
+				: cfg.format;
 
-	// The composer can force this run's format; 'auto' (or unset) defers to the
-	// persona's ugc_format, which the Director resolves from the content. This one
-	// value drives both the Director's brief and the final spokesperson/broll branch.
-	const formatPref: 'auto' | 'spokesperson' | 'broll' =
-		input.formatOverride === 'spokesperson' || input.formatOverride === 'broll'
-			? input.formatOverride
-			: cfg.format;
-
-	// ── Load agent persona ──────────────────────────────────────────────
-	let agentContext = '';
-	let agentData: any = null;
-	const agent = agentResult?.data;
-	if (agent) {
-		agentData = agent;
-		agentContext = buildRichAgentContext(agent);
-	}
-
-	// The on-camera character's depicted gender must match the voice actually
-	// used — and the persona's configured gender (Profile tab) is authoritative
-	// over a contradicting voice pick (e.g. the 'Adam' column default on a
-	// female persona). Threaded through explicitly so the Director/character-ref
-	// prompts and the TTS call all agree.
-	const { voice: resolvedVoice, voiceGender } = resolveVoiceForPersona(cfg.voice, agentData);
-
-	// ── Brand brief + product (persona's selected brief, newest as fallback) ──
-	let selectedProduct: any = null;
-	let briefData: any = null;
-	const brandBrief = await loadBriefForAgent(db, userId, cfg.brandBriefId);
-	if (brandBrief?.data) {
-		briefData = brandBrief.data;
-		const products = Array.isArray(briefData.products) ? briefData.products : [];
-		selectedProduct = input.productId
-			? products.find((p: any) => p.id === input.productId)
-			: products.find((p: any) => p.photoUrl) || products[0];
-	}
-
-	// ── Content intent classification ───────────────────────────────────
-	const intent = classifyContentIntent(topic, platform);
-	const brandVisualCtx = buildBrandVisualContext(briefData);
-
-	// ── Director (LLM) ──────────────────────────────────────────────────
-	const buildDirectorPrompt = () => [
-		agentContext,
-		selectedProduct
-			? `Product: "${selectedProduct.name}" — ${selectedProduct.description || 'no description'}. Price: ${selectedProduct.price || 'N/A'}.`
-			: `Topic: "${topic}"`,
-		briefData
-			? [
-					`Brand: ${briefData.brandName || '(unnamed)'}.`,
-					`Voice/tone: ${briefData.commStyle || 'authentic and direct'}.`,
-					`Target audience: ${briefData.demographics || 'general'}.`,
-					`Audience pain points: ${briefData.painPoints || 'N/A'}.`,
-					briefData.samplePost ? `Reference post style: "${briefData.samplePost}".` : '',
-					brandVisualCtx
-				]
-					.filter(Boolean)
-					.join(' ')
-			: '',
-		`Content type detected: ${intent.type}. Platform: ${platform}. Platform voice guide: ${intent.platformVoice}.`,
-		buildHookGuidance(intent, `${topic}|${platform}|${input.agentId || ''}`),
-		`Requested format: ${formatPref === 'auto' ? 'choose spokesperson or broll based on what will perform best for this content type' : formatPref}.`,
-		voiceGender
-			? `If the scene shows a person on camera, they must present as ${voiceGender} — the pinned voice is ${voiceGender} and the on-camera character must match.`
-			: '',
-		`Creative angle for this post: "${topic}". Output ONLY the JSON.`
-	]
-		.filter(Boolean)
-		.join('\n');
-
-	const raw =
-		(await ai.generate(buildDirectorPrompt(), { systemInstruction: DIRECTOR_SYSTEM, json: true })) ||
-		'{}';
-	let parsed = safeParseJson(raw);
-	if (!parsed) throw new Error('AI returned unparseable response');
-	if (parsed.text && typeof parsed.text === 'string' && parsed.text.trim().startsWith('{')) {
-		try {
-			parsed = { ...parsed, ...JSON.parse(parsed.text) };
-		} catch {
-			/* ignore */
+		// ── Load agent persona ──────────────────────────────────────────────
+		let agentContext = '';
+		let agentData: any = null;
+		const agent = agentResult?.data;
+		if (agent) {
+			agentData = agent;
+			agentContext = buildRichAgentContext(agent);
 		}
-	}
 
-	// ── Hook quality gate — retry once if score is below threshold ──────
-	if (typeof parsed.hookScore === 'number' && parsed.hookScore < HOOK_SCORE_THRESHOLD) {
-		console.warn(
-			`[Director] hookScore ${parsed.hookScore} below threshold ${HOOK_SCORE_THRESHOLD} — retrying with stronger hook instruction.`
-		);
-		const retryRaw =
-			(await ai.generate(
-				`${buildDirectorPrompt()}\n\nYour previous hook scored ${parsed.hookScore}/99. The hook must be a genuine pattern-interrupt or confession that stops the scroll cold — not a description or question. Aim for 85+. Rewrite the entire JSON with a stronger hook.`,
-				{ systemInstruction: DIRECTOR_SYSTEM, json: true }
-			)) || '{}';
-		const retryParsed = safeParseJson(retryRaw);
-		if (retryParsed && (retryParsed.hookScore ?? 0) > (parsed.hookScore ?? 0)) {
-			parsed = retryParsed;
+		// The on-camera character's depicted gender must match the voice actually
+		// used — and the persona's configured gender (Profile tab) is authoritative
+		// over a contradicting voice pick (e.g. the 'Adam' column default on a
+		// female persona). Threaded through explicitly so the Director/character-ref
+		// prompts and the TTS call all agree.
+		const { voice: resolvedVoice, voiceGender } = resolveVoiceForPersona(cfg.voice, agentData);
+
+		// ── Brand brief + product (persona's selected brief, newest as fallback) ──
+		let selectedProduct: any = null;
+		let briefData: any = null;
+		const brandBrief = await loadBriefForAgent(db, userId, cfg.brandBriefId);
+		if (brandBrief?.data) {
+			briefData = brandBrief.data;
+			const products = Array.isArray(briefData.products) ? briefData.products : [];
+			selectedProduct = input.productId
+				? products.find((p: any) => p.id === input.productId)
+				: products.find((p: any) => p.photoUrl) || products[0];
 		}
-	}
 
-	// ── Pre-media quality gate: independent grader, improvement-guided retry ──
-	// Text grading is ~free; media is the expensive step. A draft below the
-	// floor gets ONE targeted rewrite; still below → the slot is abandoned
-	// BEFORE any image/video spend, and the rejection is logged as QC data.
-	const floor = qualityFloor();
-	let qualityGrade = await gradeDraftWithRetry(ai, parsed, selectedProduct?.name ?? null, platform);
-	if (floor > 0 && qualityGrade && qualityGrade.overall < floor) {
-		console.warn(
-			`[QC] Draft graded ${qualityGrade.overall}/10 (< floor ${floor}) — one improvement-guided rewrite: ${qualityGrade.fix}`
-		);
-		const rewriteRaw =
-			(await ai.generate(
-				`${buildDirectorPrompt()}\n\nAn independent QC reviewer graded your draft ${qualityGrade.overall}/10. Top issue: ${qualityGrade.topIssue}. Required fix: ${qualityGrade.fix}. Rewrite the ENTIRE JSON applying that fix without losing the persona voice.`,
-				{ systemInstruction: DIRECTOR_SYSTEM, json: true }
-			)) || '{}';
-		const rewritten = safeParseJson(rewriteRaw);
-		if (rewritten?.text) {
-			const regrade = await gradeDraft(ai, rewritten, selectedProduct?.name ?? null, platform);
-			if (!regrade || regrade.overall >= (qualityGrade?.overall ?? 0)) {
-				parsed = rewritten;
-				qualityGrade = regrade ?? qualityGrade;
-			}
-		}
-		if (qualityGrade && qualityGrade.overall < floor) {
-			await logAutoReject(supabase, userId, input.agentId, qualityGrade, parsed);
-			throw new Error(
-				`Draft quality ${qualityGrade.overall}/10 below floor ${floor} after rewrite (${qualityGrade.topIssue}) — no media generated.`
-			);
-		}
-	}
+		// ── Content intent classification ───────────────────────────────────
+		const intent = classifyContentIntent(topic, platform);
+		const brandVisualCtx = buildBrandVisualContext(briefData);
 
-	const format: 'spokesperson' | 'broll' =
-		formatPref === 'auto' ? (parsed.format === 'broll' ? 'broll' : 'spokesperson') : formatPref;
-	// A composer-edited visual brief outranks the Director's scene.
-	const scenePrompt =
-		input.sceneOverride?.trim() || parsed.scene_prompt || parsed.ugc_broll_prompt || topic;
-	const baseMotion =
-		parsed.motion_prompt || 'Slow gimbal dolly-in, natural ambient light, product label in focus.';
-	const motionPrompt = enhanceMotionPrompt(baseMotion, intent, format);
-
-	// Provider preference from the composer: pinning 'fal' disables the
-	// OpenRouter media failover; pinning 'openrouter' skips fal media entirely.
-	// (Text/LLM routing is unaffected — this governs media only.)
-	const resolvedKeys = await resolveImageKeys(supabase, userId);
-	const pref = input.providerPreference || 'auto';
-	const falKey = pref === 'openrouter' ? null : resolvedKeys.falKey;
-	const orKey = pref === 'fal' ? null : resolvedKeys.orKey;
-
-	// ── Spokesperson TTS — kicked off NOW, in parallel with the still ──
-	// The audio depends only on the script + voice, never on the still; the two
-	// paid calls only join at generateTalkingHead, so serializing them was pure
-	// added latency. The promise settles into a value (never rejects) so a throw
-	// on the still path can't leave an unhandled rejection — the error resurfaces
-	// at the await inside the video try-block, where the existing fal-outage
-	// fallback applies unchanged, and the cost event rides the success handler so
-	// the spend is recorded (ledger flushes in finally) even if the still fails.
-	const dialogue = parsed.dialogue || parsed.text || topic;
-	const spokenAudio: Promise<{ url: string } | { err: Error }> | null =
-		wantVideo && format === 'spokesperson' && falKey
-			? generateVoiceAudio(
-					falKey,
-					resolvedVoice,
-					dialogue,
-					// Adam/Rachel are the original ElevenLabs voices — universally
-					// fal-supported, so a rejected exotic voice degrades to a
-					// same-gender classic, never a failure.
-					voiceGender === 'female' ? 'Rachel' : 'Adam'
-				).then(
-					(url) => {
-						costEvents.push({ provider: 'fal', operation: 'tts', model: 'elevenlabs-turbo-v2.5', usd: priceOf('fal', 'tts') });
-						return { url };
-					},
-					(err) => ({ err: err as Error })
-				)
-			: null;
-
-	// ── Pinned creator face → consistent character across ALL posts ──
-	// Composer override wins; when present we also skip lazy face generation.
-	// Runs for every format, not just spokesperson video: b-roll stills feature
-	// the persona too, and without a pinned face each still invents a brand-new
-	// person (three posts, three different "influencers" — the exact identity
-	// drift this anchor exists to prevent). First generation for an agent
-	// creates + pins the hero portrait; everything after reuses it.
-	let characterRef = input.characterRefOverride?.trim() || cfg.characterRef;
-	if (input.agentId && !input.characterRefOverride) {
-		let svcForRef: any = null;
-		try {
-			svcForRef = getServiceSupabase();
-		} catch {
-			svcForRef = null;
-		}
-		if (svcForRef) {
-			characterRef = await ensureCharacterRef(
-				supabase,
-				svcForRef,
-				userId,
-				input.agentId,
-				cfg.characterRef,
-				falKey,
-				briefData,
-				agentData,
+		// ── Director (LLM) ──────────────────────────────────────────────────
+		const buildDirectorPrompt = () =>
+			[
+				agentContext,
+				selectedProduct
+					? `Product: "${selectedProduct.name}" — ${selectedProduct.description || 'no description'}. Price: ${selectedProduct.price || 'N/A'}.`
+					: `Topic: "${topic}"`,
+				briefData
+					? [
+							`Brand: ${briefData.brandName || '(unnamed)'}.`,
+							`Voice/tone: ${briefData.commStyle || 'authentic and direct'}.`,
+							`Target audience: ${briefData.demographics || 'general'}.`,
+							`Audience pain points: ${briefData.painPoints || 'N/A'}.`,
+							briefData.samplePost ? `Reference post style: "${briefData.samplePost}".` : '',
+							brandVisualCtx
+						]
+							.filter(Boolean)
+							.join(' ')
+					: '',
+				`Content type detected: ${intent.type}. Platform: ${platform}. Platform voice guide: ${intent.platformVoice}.`,
+				buildHookGuidance(intent, `${topic}|${platform}|${input.agentId || ''}`),
+				`Requested format: ${formatPref === 'auto' ? 'choose spokesperson or broll based on what will perform best for this content type' : formatPref}.`,
 				voiceGender
+					? `If the scene shows a person on camera, they must present as ${voiceGender} — the pinned voice is ${voiceGender} and the on-camera character must match.`
+					: '',
+				`Creative angle for this post: "${topic}". Output ONLY the JSON.`
+			]
+				.filter(Boolean)
+				.join('\n');
+
+		const raw =
+			(await ai.generate(buildDirectorPrompt(), {
+				systemInstruction: DIRECTOR_SYSTEM,
+				json: true
+			})) || '{}';
+		let parsed = safeParseJson(raw);
+		if (!parsed) throw new Error('AI returned unparseable response');
+		if (parsed.text && typeof parsed.text === 'string' && parsed.text.trim().startsWith('{')) {
+			try {
+				parsed = { ...parsed, ...JSON.parse(parsed.text) };
+			} catch {
+				/* ignore */
+			}
+		}
+
+		// ── Hook quality gate — retry once if score is below threshold ──────
+		if (typeof parsed.hookScore === 'number' && parsed.hookScore < HOOK_SCORE_THRESHOLD) {
+			console.warn(
+				`[Director] hookScore ${parsed.hookScore} below threshold ${HOOK_SCORE_THRESHOLD} — retrying with stronger hook instruction.`
+			);
+			const retryRaw =
+				(await ai.generate(
+					`${buildDirectorPrompt()}\n\nYour previous hook scored ${parsed.hookScore}/99. The hook must be a genuine pattern-interrupt or confession that stops the scroll cold — not a description or question. Aim for 85+. Rewrite the entire JSON with a stronger hook.`,
+					{ systemInstruction: DIRECTOR_SYSTEM, json: true }
+				)) || '{}';
+			const retryParsed = safeParseJson(retryRaw);
+			if (retryParsed && (retryParsed.hookScore ?? 0) > (parsed.hookScore ?? 0)) {
+				parsed = retryParsed;
+			}
+		}
+
+		// ── Pre-media quality gate: independent grader, improvement-guided retry ──
+		// Text grading is ~free; media is the expensive step. A draft below the
+		// floor gets ONE targeted rewrite; still below → the slot is abandoned
+		// BEFORE any image/video spend, and the rejection is logged as QC data.
+		const floor = qualityFloor();
+		let qualityGrade = await gradeDraftWithRetry(
+			ai,
+			parsed,
+			selectedProduct?.name ?? null,
+			platform
+		);
+		if (floor > 0 && qualityGrade && qualityGrade.overall < floor) {
+			console.warn(
+				`[QC] Draft graded ${qualityGrade.overall}/10 (< floor ${floor}) — one improvement-guided rewrite: ${qualityGrade.fix}`
+			);
+			const rewriteRaw =
+				(await ai.generate(
+					`${buildDirectorPrompt()}\n\nAn independent QC reviewer graded your draft ${qualityGrade.overall}/10. Top issue: ${qualityGrade.topIssue}. Required fix: ${qualityGrade.fix}. Rewrite the ENTIRE JSON applying that fix without losing the persona voice.`,
+					{ systemInstruction: DIRECTOR_SYSTEM, json: true }
+				)) || '{}';
+			const rewritten = safeParseJson(rewriteRaw);
+			if (rewritten?.text) {
+				const regrade = await gradeDraft(ai, rewritten, selectedProduct?.name ?? null, platform);
+				if (!regrade || regrade.overall >= (qualityGrade?.overall ?? 0)) {
+					parsed = rewritten;
+					qualityGrade = regrade ?? qualityGrade;
+				}
+			}
+			if (qualityGrade && qualityGrade.overall < floor) {
+				await logAutoReject(supabase, userId, input.agentId, qualityGrade, parsed);
+				throw new Error(
+					`Draft quality ${qualityGrade.overall}/10 below floor ${floor} after rewrite (${qualityGrade.topIssue}) — no media generated.`
+				);
+			}
+		}
+
+		const format: 'spokesperson' | 'broll' =
+			formatPref === 'auto' ? (parsed.format === 'broll' ? 'broll' : 'spokesperson') : formatPref;
+		// A composer-edited visual brief outranks the Director's scene.
+		const scenePrompt =
+			input.sceneOverride?.trim() || parsed.scene_prompt || parsed.ugc_broll_prompt || topic;
+		const baseMotion =
+			parsed.motion_prompt ||
+			'Slow gimbal dolly-in, natural ambient light, product label in focus.';
+		const motionPrompt = enhanceMotionPrompt(baseMotion, intent, format);
+
+		// Provider preference from the composer: pinning 'fal' disables the
+		// OpenRouter media failover; pinning 'openrouter' skips fal media entirely.
+		// (Text/LLM routing is unaffected — this governs media only.)
+		const resolvedKeys = await resolveImageKeys(supabase, userId);
+		const pref = input.providerPreference || 'auto';
+		const falKey = pref === 'openrouter' ? null : resolvedKeys.falKey;
+		const orKey = pref === 'fal' ? null : resolvedKeys.orKey;
+
+		// ── Spokesperson TTS — kicked off NOW, in parallel with the still ──
+		// The audio depends only on the script + voice, never on the still; the two
+		// paid calls only join at generateTalkingHead, so serializing them was pure
+		// added latency. The promise settles into a value (never rejects) so a throw
+		// on the still path can't leave an unhandled rejection — the error resurfaces
+		// at the await inside the video try-block, where the existing fal-outage
+		// fallback applies unchanged, and the cost event rides the success handler so
+		// the spend is recorded (ledger flushes in finally) even if the still fails.
+		const dialogue = parsed.dialogue || parsed.text || topic;
+		const spokenAudio: Promise<{ url: string } | { err: Error }> | null =
+			wantVideo && format === 'spokesperson' && falKey
+				? generateVoiceAudio(
+						falKey,
+						resolvedVoice,
+						dialogue,
+						// Adam/Rachel are the original ElevenLabs voices — universally
+						// fal-supported, so a rejected exotic voice degrades to a
+						// same-gender classic, never a failure.
+						voiceGender === 'female' ? 'Rachel' : 'Adam'
+					).then(
+						(url) => {
+							costEvents.push({
+								provider: 'fal',
+								operation: 'tts',
+								model: 'elevenlabs-turbo-v2.5',
+								usd: priceOf('fal', 'tts')
+							});
+							return { url };
+						},
+						(err) => ({ err: err as Error })
+					)
+				: null;
+
+		// ── Pinned creator face → consistent character across ALL posts ──
+		// Composer override wins; when present we also skip lazy face generation.
+		// Runs for every format, not just spokesperson video: b-roll stills feature
+		// the persona too, and without a pinned face each still invents a brand-new
+		// person (three posts, three different "influencers" — the exact identity
+		// drift this anchor exists to prevent). First generation for an agent
+		// creates + pins the hero portrait; everything after reuses it.
+		let characterRef = input.characterRefOverride?.trim() || cfg.characterRef;
+		if (input.agentId && !input.characterRefOverride) {
+			let svcForRef: any = null;
+			try {
+				svcForRef = getServiceSupabase();
+			} catch {
+				svcForRef = null;
+			}
+			if (svcForRef) {
+				characterRef = await ensureCharacterRef(
+					supabase,
+					svcForRef,
+					userId,
+					input.agentId,
+					cfg.characterRef,
+					falKey,
+					briefData,
+					agentData,
+					voiceGender
+				);
+			}
+		}
+
+		// ── Still (Nano Banana with real product + pinned face, else flux fallback) ──
+		// Failover: a fal OUTAGE (balance lock, 5xx) degrades to the OpenRouter
+		// text-to-image path — loses product-photo compositing but keeps the slot
+		// alive — rather than killing generation outright.
+		let still: string;
+		const productPhoto = input.productPhotoUrlOverride?.trim() || selectedProduct?.photoUrl || null;
+		if (falKey && productPhoto) {
+			try {
+				still = await generateProductStill(
+					falKey,
+					scenePrompt,
+					productPhoto,
+					characterRef,
+					brandVisualCtx
+				);
+				costEvents.push({
+					provider: 'fal',
+					operation: 'image',
+					model: 'nano-banana-2',
+					usd: priceOf('fal', 'image', 'nano')
+				});
+			} catch (e) {
+				const msg = (e as Error).message;
+				if (orKey && isFalOutage(msg)) {
+					// True composite failover: OpenRouter serves the same Nano-Banana
+					// model family with image input, so the REAL product (and pinned
+					// face) stay in-frame — flux text-to-image is only the last resort.
+					try {
+						const refs = [characterRef, productPhoto].filter(Boolean) as string[];
+						const compositePrompt = `${scenePrompt}\n\nVertical 9:16 photorealistic UGC photo. Keep the product's exact label, shape and colors from the reference image — do not redesign it.${characterRef ? ' Keep the same person/face as the first reference image.' : ''} Authentic, slightly imperfect, real — not a studio ad.`;
+						console.warn(
+							`[Failover] fal still failed (${msg.slice(0, 120)}) — OpenRouter Nano-Banana composite fallback.`
+						);
+						still = await openRouterImageEdit(orKey, userId, compositePrompt, refs);
+						costEvents.push({
+							provider: 'openrouter',
+							operation: 'image',
+							model: IMAGE_EDIT_MODEL_OPENROUTER,
+							usd: priceOf('openrouter', 'image')
+						});
+					} catch (editErr) {
+						console.warn(
+							`[Failover] OpenRouter composite also failed (${(editErr as Error).message.slice(0, 120)}) — flux text-to-image last resort.`
+						);
+						still = await generateUgcImage(scenePrompt, orKey, null);
+						costEvents.push({
+							provider: 'openrouter',
+							operation: 'image',
+							model: 'flux-schnell',
+							usd: priceOf('openrouter', 'image')
+						});
+					}
+				} else {
+					throw e;
+				}
+			}
+		} else if (orKey && productPhoto) {
+			// OpenRouter-pinned (or fal-less) WITH a product photo → real composite
+			// via Nano Banana on OpenRouter, not a generic text-to-image scene.
+			try {
+				const refs = [characterRef, productPhoto].filter(Boolean) as string[];
+				const compositePrompt = `${scenePrompt}\n\nVertical 9:16 photorealistic UGC photo. Keep the product's exact label, shape and colors from the reference image — do not redesign it.${characterRef ? ' Keep the same person/face as the first reference image.' : ''} Authentic, slightly imperfect, real — not a studio ad.`;
+				still = await openRouterImageEdit(orKey, userId, compositePrompt, refs);
+				costEvents.push({
+					provider: 'openrouter',
+					operation: 'image',
+					model: IMAGE_EDIT_MODEL_OPENROUTER,
+					usd: priceOf('openrouter', 'image')
+				});
+			} catch (e) {
+				console.warn(
+					`[Composer] OpenRouter composite failed (${(e as Error).message.slice(0, 120)}) — flux fallback.`
+				);
+				still = await generateUgcImage(scenePrompt, orKey, null);
+				costEvents.push({
+					provider: 'openrouter',
+					operation: 'image',
+					model: 'flux-schnell',
+					usd: priceOf('openrouter', 'image')
+				});
+			}
+		} else {
+			still = await generateUgcImage(scenePrompt, orKey, falKey);
+			costEvents.push(
+				orKey
+					? {
+							provider: 'openrouter',
+							operation: 'image',
+							model: 'flux-schnell',
+							usd: priceOf('openrouter', 'image')
+						}
+					: {
+							provider: 'fal',
+							operation: 'image',
+							model: 'flux-schnell',
+							usd: priceOf('fal', 'image', 'flux')
+						}
 			);
 		}
-	}
 
-	// ── Still (Nano Banana with real product + pinned face, else flux fallback) ──
-	// Failover: a fal OUTAGE (balance lock, 5xx) degrades to the OpenRouter
-	// text-to-image path — loses product-photo compositing but keeps the slot
-	// alive — rather than killing generation outright.
-	let still: string;
-	const productPhoto = input.productPhotoUrlOverride?.trim() || selectedProduct?.photoUrl || null;
-	if (falKey && productPhoto) {
-		try {
-			still = await generateProductStill(falKey, scenePrompt, productPhoto, characterRef, brandVisualCtx);
-			costEvents.push({ provider: 'fal', operation: 'image', model: 'nano-banana-2', usd: priceOf('fal', 'image', 'nano') });
-		} catch (e) {
-			const msg = (e as Error).message;
-			if (orKey && isFalOutage(msg)) {
-				// True composite failover: OpenRouter serves the same Nano-Banana
-				// model family with image input, so the REAL product (and pinned
-				// face) stay in-frame — flux text-to-image is only the last resort.
-				try {
-					const refs = [characterRef, productPhoto].filter(Boolean) as string[];
-					const compositePrompt = `${scenePrompt}\n\nVertical 9:16 photorealistic UGC photo. Keep the product's exact label, shape and colors from the reference image — do not redesign it.${characterRef ? ' Keep the same person/face as the first reference image.' : ''} Authentic, slightly imperfect, real — not a studio ad.`;
-					console.warn(`[Failover] fal still failed (${msg.slice(0, 120)}) — OpenRouter Nano-Banana composite fallback.`);
-					still = await openRouterImageEdit(orKey, userId, compositePrompt, refs);
-					costEvents.push({ provider: 'openrouter', operation: 'image', model: IMAGE_EDIT_MODEL_OPENROUTER, usd: priceOf('openrouter', 'image') });
-				} catch (editErr) {
-					console.warn(`[Failover] OpenRouter composite also failed (${(editErr as Error).message.slice(0, 120)}) — flux text-to-image last resort.`);
-					still = await generateUgcImage(scenePrompt, orKey, null);
-					costEvents.push({ provider: 'openrouter', operation: 'image', model: 'flux-schnell', usd: priceOf('openrouter', 'image') });
+		// ── Video — fal primary, OpenRouter video API failover ──────────────
+		// Verified 2026-07-04: OpenRouter's /api/v1/videos carries Kling v3.0, so a
+		// fal outage degrades b-roll to OpenRouter Kling instead of an image-only
+		// post. Spokesperson (TTS + talking-head) is fal-exclusive — on outage it
+		// degrades to OpenRouter b-roll format rather than failing the slot.
+		const brollModel = resolveModel('video_i2v', input.videoModel);
+		let mediaUrl = still;
+		let mediaType: 'image' | 'video' = 'image';
+		if (wantVideo && (falKey || orKey)) {
+			try {
+				if (format === 'spokesperson' && falKey) {
+					// TTS was launched in parallel with the still (see spokenAudio above) —
+					// non-null here because this branch's condition matches its launch
+					// condition. A TTS failure rethrows HERE so the fal-outage fallback
+					// below still degrades the post to OpenRouter b-roll.
+					const settledAudio = await spokenAudio!;
+					if ('err' in settledAudio) throw settledAudio.err;
+					mediaUrl = await generateTalkingHead(falKey, still, settledAudio.url);
+					costEvents.push({
+						provider: 'fal',
+						operation: 'talking_head',
+						model: TALKINGHEAD_MODEL,
+						usd: priceOf('fal', 'talking_head')
+					});
+				} else if (falKey) {
+					// The user picked this tier in the composer (Wan $0.10 → Veo $1.50); bill
+					// what actually ran rather than a hard-coded Kling Standard rate.
+					mediaUrl = await generateBrollVideo(falKey, brollModel.id, still, motionPrompt);
+					costEvents.push({
+						provider: 'fal',
+						operation: 'video',
+						model: brollModel.label,
+						usd: input.videoModelUsd ?? brollModel.usd
+					});
+				} else {
+					// No fal at all — straight to OpenRouter video.
+					mediaUrl = await openRouterBrollVideo(orKey!, userId, still, motionPrompt);
+					costEvents.push({
+						provider: 'openrouter',
+						operation: 'video',
+						model: BROLL_MODEL_OPENROUTER,
+						usd: priceOf('openrouter', 'video')
+					});
 				}
-			} else {
-				throw e;
-			}
-		}
-	} else if (orKey && productPhoto) {
-		// OpenRouter-pinned (or fal-less) WITH a product photo → real composite
-		// via Nano Banana on OpenRouter, not a generic text-to-image scene.
-		try {
-			const refs = [characterRef, productPhoto].filter(Boolean) as string[];
-			const compositePrompt = `${scenePrompt}\n\nVertical 9:16 photorealistic UGC photo. Keep the product's exact label, shape and colors from the reference image — do not redesign it.${characterRef ? ' Keep the same person/face as the first reference image.' : ''} Authentic, slightly imperfect, real — not a studio ad.`;
-			still = await openRouterImageEdit(orKey, userId, compositePrompt, refs);
-			costEvents.push({ provider: 'openrouter', operation: 'image', model: IMAGE_EDIT_MODEL_OPENROUTER, usd: priceOf('openrouter', 'image') });
-		} catch (e) {
-			console.warn(`[Composer] OpenRouter composite failed (${(e as Error).message.slice(0, 120)}) — flux fallback.`);
-			still = await generateUgcImage(scenePrompt, orKey, null);
-			costEvents.push({ provider: 'openrouter', operation: 'image', model: 'flux-schnell', usd: priceOf('openrouter', 'image') });
-		}
-	} else {
-		still = await generateUgcImage(scenePrompt, orKey, falKey);
-		costEvents.push(
-			orKey
-				? { provider: 'openrouter', operation: 'image', model: 'flux-schnell', usd: priceOf('openrouter', 'image') }
-				: { provider: 'fal', operation: 'image', model: 'flux-schnell', usd: priceOf('fal', 'image', 'flux') }
-		);
-	}
-
-	// ── Video — fal primary, OpenRouter video API failover ──────────────
-	// Verified 2026-07-04: OpenRouter's /api/v1/videos carries Kling v3.0, so a
-	// fal outage degrades b-roll to OpenRouter Kling instead of an image-only
-	// post. Spokesperson (TTS + talking-head) is fal-exclusive — on outage it
-	// degrades to OpenRouter b-roll format rather than failing the slot.
-	const brollModel = resolveModel('video_i2v', input.videoModel);
-	let mediaUrl = still;
-	let mediaType: 'image' | 'video' = 'image';
-	if (wantVideo && (falKey || orKey)) {
-		try {
-			if (format === 'spokesperson' && falKey) {
-				// TTS was launched in parallel with the still (see spokenAudio above) —
-				// non-null here because this branch's condition matches its launch
-				// condition. A TTS failure rethrows HERE so the fal-outage fallback
-				// below still degrades the post to OpenRouter b-roll.
-				const settledAudio = await spokenAudio!;
-				if ('err' in settledAudio) throw settledAudio.err;
-				mediaUrl = await generateTalkingHead(falKey, still, settledAudio.url);
-				costEvents.push({ provider: 'fal', operation: 'talking_head', model: TALKINGHEAD_MODEL, usd: priceOf('fal', 'talking_head') });
-			} else if (falKey) {
-				// The user picked this tier in the composer (Wan $0.10 → Veo $1.50); bill
-				// what actually ran rather than a hard-coded Kling Standard rate.
-				mediaUrl = await generateBrollVideo(falKey, brollModel.id, still, motionPrompt);
-				costEvents.push({ provider: 'fal', operation: 'video', model: brollModel.label, usd: brollModel.usd });
-			} else {
-				// No fal at all — straight to OpenRouter video.
-				mediaUrl = await openRouterBrollVideo(orKey!, userId, still, motionPrompt);
-				costEvents.push({ provider: 'openrouter', operation: 'video', model: BROLL_MODEL_OPENROUTER, usd: priceOf('openrouter', 'video') });
-			}
-			mediaType = 'video';
-		} catch (e) {
-			const msg = (e as Error).message;
-			if (orKey && isFalOutage(msg)) {
-				console.warn(`[Failover] fal video failed (${msg.slice(0, 120)}) — OpenRouter Kling b-roll fallback.`);
-				mediaUrl = await openRouterBrollVideo(orKey, userId, still, motionPrompt);
-				costEvents.push({ provider: 'openrouter', operation: 'video', model: BROLL_MODEL_OPENROUTER, usd: priceOf('openrouter', 'video') });
 				mediaType = 'video';
-			} else {
-				throw e;
+			} catch (e) {
+				const msg = (e as Error).message;
+				if (orKey && isFalOutage(msg)) {
+					console.warn(
+						`[Failover] fal video failed (${msg.slice(0, 120)}) — OpenRouter Kling b-roll fallback.`
+					);
+					mediaUrl = await openRouterBrollVideo(orKey, userId, still, motionPrompt);
+					costEvents.push({
+						provider: 'openrouter',
+						operation: 'video',
+						model: BROLL_MODEL_OPENROUTER,
+						usd: priceOf('openrouter', 'video')
+					});
+					mediaType = 'video';
+				} else {
+					throw e;
+				}
 			}
 		}
-	}
 
-	// ── Burn captions + AI badge, then persist to durable storage ──
-	// Every generation MUST be archived in our own bucket so the paid-for media
-	// survives provider URL expiry. If we own storage (service key present) a
-	// persist failure is LOUD — we throw rather than store an ephemeral provider
-	// URL that will 404 later (the exact bug that lost earlier videos).
-	let durableStill = still;
-	let durableMedia = mediaUrl;
-	// Did ffmpeg actually burn the requested caption/badge overlay? burnCaptions
-	// returns null when it no-ops (nothing requested) OR silently can't run (no
-	// ffmpeg/font in the deploy image, or the video fetch failed) — in which case
-	// the clean original is kept. We record the ACTUAL outcome below, not the
-	// request, so the post's observability never claims a burn that didn't happen.
-	let captionsApplied = false;
-	const svc = (() => {
-		try {
-			return getServiceSupabase();
-		} catch {
-			return null; // No service-role key configured at all.
-		}
-	})();
-	if (svc) {
-		durableStill = await persistToStorage(svc, still, userId, 'png');
-		if (mediaType === 'video') {
-			// Captions and the AI badge are BOTH opt-in and independent. With neither,
-			// burnCaptions no-ops and the clean original video is kept.
-			const captioned = await burnCaptions(mediaUrl, {
-				badge: input.aiBadge,
-				hook: input.captions ? parsed.on_screen_text : ''
-			}).catch(() => null);
-			captionsApplied = captioned != null;
-			durableMedia = captioned
-				? await persistBufferToStorage(svc, captioned, userId, 'mp4', 'video/mp4')
-				: await persistVideoDurable(svc, mediaUrl, userId);
+		// ── Burn captions + AI badge, then persist to durable storage ──
+		// Every generation MUST be archived in our own bucket so the paid-for media
+		// survives provider URL expiry. If we own storage (service key present) a
+		// persist failure is LOUD — we throw rather than store an ephemeral provider
+		// URL that will 404 later (the exact bug that lost earlier videos).
+		let durableStill = still;
+		let durableMedia = mediaUrl;
+		// Did ffmpeg actually burn the requested caption/badge overlay? burnCaptions
+		// returns null when it no-ops (nothing requested) OR silently can't run (no
+		// ffmpeg/font in the deploy image, or the video fetch failed) — in which case
+		// the clean original is kept. We record the ACTUAL outcome below, not the
+		// request, so the post's observability never claims a burn that didn't happen.
+		let captionsApplied = false;
+		const svc = (() => {
+			try {
+				return getServiceSupabase();
+			} catch {
+				return null; // No service-role key configured at all.
+			}
+		})();
+		if (svc) {
+			durableStill = await persistToStorage(svc, still, userId, 'png');
+			if (mediaType === 'video') {
+				// Captions and the AI badge are BOTH opt-in and independent. With neither,
+				// burnCaptions no-ops and the clean original video is kept.
+				const captioned = await burnCaptions(mediaUrl, {
+					badge: input.aiBadge,
+					hook: input.captions ? parsed.on_screen_text : ''
+				}).catch(() => null);
+				captionsApplied = captioned != null;
+				durableMedia = captioned
+					? await persistBufferToStorage(svc, captioned, userId, 'mp4', 'video/mp4')
+					: await persistVideoDurable(svc, mediaUrl, userId);
+			} else {
+				durableMedia = durableStill;
+			}
 		} else {
-			durableMedia = durableStill;
+			console.warn(
+				'[generate] No service-role Supabase key configured — storing EPHEMERAL provider URLs (media is NOT backed up).'
+			);
 		}
-	} else {
-		console.warn(
-			'[generate] No service-role Supabase key configured — storing EPHEMERAL provider URLs (media is NOT backed up).'
-		);
-	}
 
-	// Record durable asset URLs in the ledger (flushed in finally) so this spend
-	// is always recoverable from the DB even if a later step throws.
-	if (durableMedia)
-		costEvents.push({ provider: 'storage', operation: 'persist', model: 'ugc-media', usd: 0, assetUrl: durableMedia });
-	if (durableStill && durableStill !== durableMedia)
-		costEvents.push({ provider: 'storage', operation: 'persist', model: 'ugc-media', usd: 0, assetUrl: durableStill });
+		// Record durable asset URLs in the ledger (flushed in finally) so this spend
+		// is always recoverable from the DB even if a later step throws.
+		if (durableMedia)
+			costEvents.push({
+				provider: 'storage',
+				operation: 'persist',
+				model: 'ugc-media',
+				usd: 0,
+				assetUrl: durableMedia
+			});
+		if (durableStill && durableStill !== durableMedia)
+			costEvents.push({
+				provider: 'storage',
+				operation: 'persist',
+				model: 'ugc-media',
+				usd: 0,
+				assetUrl: durableStill
+			});
 
-	const content: UgcContent = {
-		text: parsed.text || '',
-		hashtags: Array.isArray(parsed.hashtags) ? parsed.hashtags : [],
-		hookScore: parsed.hookScore,
-		dialogue: parsed.dialogue || '',
-		on_screen_text: parsed.on_screen_text || '',
-		// Actual burn outcome (see captionsApplied) — not merely what was requested.
-		// The caption flag ALSO requires real hook text: a badge-only burn returns a
-		// buffer too, so gating on captionsApplied alone would falsely claim a caption
-		// when on_screen_text was empty. Observability must reflect what was drawn.
-		captions: Boolean(input.captions) && captionsApplied && Boolean((parsed.on_screen_text || '').trim()),
-		ai_badge: Boolean(input.aiBadge) && captionsApplied,
-		// The prompt ACTUALLY sent to the image model — scenePrompt already resolves
-		// the composer's scene override over the Director's scene_prompt, so storing
-		// the raw Director output here would show (and refine from) a prompt that
-		// never ran whenever the user pinned a scene.
-		ugc_broll_prompt: scenePrompt,
-		script: parsed.script || parsed.dialogue || '',
-		media_url: durableMedia,
-		poster_url: durableStill,
-		media_type: mediaType,
-		media_generated: true,
-		format,
-		voice: resolvedVoice,
-		product: selectedProduct
-			? {
-					name: selectedProduct.name,
-					price: selectedProduct.price,
-					description: selectedProduct.description
-				}
-			: null,
-		platform,
-		qualityGrade,
-		qc_status: qualityGrade ? 'graded' : 'ungraded',
-		costBreakdown: summarizeCosts(costEvents)
-	};
-	if (input.autopilot) content.autopilot = true;
+		const content: UgcContent = {
+			text: parsed.text || '',
+			hashtags: Array.isArray(parsed.hashtags) ? parsed.hashtags : [],
+			hookScore: parsed.hookScore,
+			dialogue: parsed.dialogue || '',
+			on_screen_text: parsed.on_screen_text || '',
+			// Actual burn outcome (see captionsApplied) — not merely what was requested.
+			// The caption flag ALSO requires real hook text: a badge-only burn returns a
+			// buffer too, so gating on captionsApplied alone would falsely claim a caption
+			// when on_screen_text was empty. Observability must reflect what was drawn.
+			captions:
+				Boolean(input.captions) && captionsApplied && Boolean((parsed.on_screen_text || '').trim()),
+			ai_badge: Boolean(input.aiBadge) && captionsApplied,
+			// The prompt ACTUALLY sent to the image model — scenePrompt already resolves
+			// the composer's scene override over the Director's scene_prompt, so storing
+			// the raw Director output here would show (and refine from) a prompt that
+			// never ran whenever the user pinned a scene.
+			ugc_broll_prompt: scenePrompt,
+			script: parsed.script || parsed.dialogue || '',
+			media_url: durableMedia,
+			poster_url: durableStill,
+			media_type: mediaType,
+			media_generated: true,
+			format,
+			voice: resolvedVoice,
+			product: selectedProduct
+				? {
+						name: selectedProduct.name,
+						price: selectedProduct.price,
+						description: selectedProduct.description
+					}
+				: null,
+			platform,
+			qualityGrade,
+			qc_status: qualityGrade ? 'graded' : 'ungraded',
+			costBreakdown: summarizeCosts(costEvents)
+		};
+		if (input.autopilot) content.autopilot = true;
 
-	// Observability record: exactly which models ran for which aspect, what each
-	// aspect cost, the input images actually SENT, the prompts, and the selections
-	// made — so the post drawer can show what produced this result and why.
-	content.generation = {
-		...summarizeAspects(costEvents),
-		images: { character_ref: characterRef || null, product_photo: productPhoto || null },
-		prompts: { scene: scenePrompt, script: content.script },
-		selections: {
-			platforms: [platform],
-			brand: briefData?.name ?? briefData?.brandName ?? briefData?.data?.brandName ?? null,
-			videoModel: input.videoModel ?? null,
-			provider: input.providerPreference ?? null,
-			mediaType
-		}
-	};
+		// Observability record: exactly which models ran for which aspect, what each
+		// aspect cost, the input images actually SENT, the prompts, and the selections
+		// made — so the post drawer can show what produced this result and why.
+		content.generation = {
+			...summarizeAspects(costEvents),
+			images: { character_ref: characterRef || null, product_photo: productPhoto || null },
+			prompts: { scene: scenePrompt, script: content.script },
+			selections: {
+				platforms: [platform],
+				brand: briefData?.name ?? briefData?.brandName ?? briefData?.data?.brandName ?? null,
+				videoModel: input.videoModel ?? null,
+				provider: input.providerPreference ?? null,
+				mediaType
+			}
+		};
 
-	return { content, selectedProduct, briefData, agentData };
+		return { content, selectedProduct, briefData, agentData };
 	} finally {
 		// Flush the ledger even if generation threw partway through — otherwise
 		// every failed/retried generation is silent spend the cap never sees.
@@ -3128,36 +3406,78 @@ export async function refineUgcMedia(input: RefineMediaInput): Promise<UgcConten
 		if (falKey && productPhoto) {
 			try {
 				still = await generateProductStill(falKey, scene, productPhoto, characterRef);
-				costEvents.push({ provider: 'fal', operation: 'image', model: 'nano-banana-2', usd: priceOf('fal', 'image', 'nano') });
+				costEvents.push({
+					provider: 'fal',
+					operation: 'image',
+					model: 'nano-banana-2',
+					usd: priceOf('fal', 'image', 'nano')
+				});
 			} catch (e) {
 				const msg = (e as Error).message;
 				if (orKey && isFalOutage(msg)) {
-					console.warn(`[Refine] fal still failed (${msg.slice(0, 120)}) — OpenRouter Nano-Banana composite fallback.`);
+					console.warn(
+						`[Refine] fal still failed (${msg.slice(0, 120)}) — OpenRouter Nano-Banana composite fallback.`
+					);
 					const refs = [characterRef, productPhoto].filter(Boolean) as string[];
-					still = await openRouterImageEdit(orKey, userId, buildCompositeFallbackPrompt(scene, !!characterRef), refs);
-					costEvents.push({ provider: 'openrouter', operation: 'image', model: IMAGE_EDIT_MODEL_OPENROUTER, usd: priceOf('openrouter', 'image') });
+					still = await openRouterImageEdit(
+						orKey,
+						userId,
+						buildCompositeFallbackPrompt(scene, !!characterRef),
+						refs
+					);
+					costEvents.push({
+						provider: 'openrouter',
+						operation: 'image',
+						model: IMAGE_EDIT_MODEL_OPENROUTER,
+						usd: priceOf('openrouter', 'image')
+					});
 				} else {
 					throw e;
 				}
 			}
 		} else if (orKey && (productPhoto || characterRef)) {
 			const refs = [characterRef, productPhoto].filter(Boolean) as string[];
-			still = await openRouterImageEdit(orKey, userId, buildCompositeFallbackPrompt(scene, !!characterRef), refs);
-			costEvents.push({ provider: 'openrouter', operation: 'image', model: IMAGE_EDIT_MODEL_OPENROUTER, usd: priceOf('openrouter', 'image') });
+			still = await openRouterImageEdit(
+				orKey,
+				userId,
+				buildCompositeFallbackPrompt(scene, !!characterRef),
+				refs
+			);
+			costEvents.push({
+				provider: 'openrouter',
+				operation: 'image',
+				model: IMAGE_EDIT_MODEL_OPENROUTER,
+				usd: priceOf('openrouter', 'image')
+			});
 		} else {
 			still = await generateUgcImage(scene, orKey, falKey);
 			costEvents.push(
 				orKey
-					? { provider: 'openrouter', operation: 'image', model: 'flux-schnell', usd: priceOf('openrouter', 'image') }
-					: { provider: 'fal', operation: 'image', model: 'flux-schnell', usd: priceOf('fal', 'image', 'flux') }
+					? {
+							provider: 'openrouter',
+							operation: 'image',
+							model: 'flux-schnell',
+							usd: priceOf('openrouter', 'image')
+						}
+					: {
+							provider: 'fal',
+							operation: 'image',
+							model: 'flux-schnell',
+							usd: priceOf('fal', 'image', 'flux')
+						}
 			);
 		}
 
 		// ── Video — same format the post already has ──
 		const wantVideo = content.media_type === 'video';
 		const format: 'spokesperson' | 'broll' = content.format === 'broll' ? 'broll' : 'spokesperson';
-		const dialogue =
-			(input.dialogue?.trim() || content.dialogue || content.script || content.text || '').trim();
+		const dialogue = (
+			input.dialogue?.trim() ||
+			content.dialogue ||
+			content.script ||
+			content.text ||
+			''
+		).trim();
 		let mediaUrl = still;
 		let mediaType: 'image' | 'video' = 'image';
 		if (wantVideo && (falKey || orKey)) {
@@ -3176,24 +3496,51 @@ export async function refineUgcMedia(input: RefineMediaInput): Promise<UgcConten
 						dialogue,
 						voiceGender === 'female' ? 'Rachel' : 'Adam'
 					);
-					costEvents.push({ provider: 'fal', operation: 'tts', model: 'elevenlabs-turbo-v2.5', usd: priceOf('fal', 'tts') });
+					costEvents.push({
+						provider: 'fal',
+						operation: 'tts',
+						model: 'elevenlabs-turbo-v2.5',
+						usd: priceOf('fal', 'tts')
+					});
 					mediaUrl = await generateTalkingHead(falKey, still, audio);
-					costEvents.push({ provider: 'fal', operation: 'talking_head', model: TALKINGHEAD_MODEL, usd: priceOf('fal', 'talking_head') });
+					costEvents.push({
+						provider: 'fal',
+						operation: 'talking_head',
+						model: TALKINGHEAD_MODEL,
+						usd: priceOf('fal', 'talking_head')
+					});
 				} else if (falKey) {
 					const brollModel = resolveModel('video_i2v', content.generation?.selections?.videoModel);
 					mediaUrl = await generateBrollVideo(falKey, brollModel.id, still, motionPrompt);
-					costEvents.push({ provider: 'fal', operation: 'video', model: brollModel.label, usd: brollModel.usd });
+					costEvents.push({
+						provider: 'fal',
+						operation: 'video',
+						model: brollModel.label,
+						usd: brollModel.usd
+					});
 				} else {
 					mediaUrl = await openRouterBrollVideo(orKey!, userId, still, motionPrompt);
-					costEvents.push({ provider: 'openrouter', operation: 'video', model: BROLL_MODEL_OPENROUTER, usd: priceOf('openrouter', 'video') });
+					costEvents.push({
+						provider: 'openrouter',
+						operation: 'video',
+						model: BROLL_MODEL_OPENROUTER,
+						usd: priceOf('openrouter', 'video')
+					});
 				}
 				mediaType = 'video';
 			} catch (e) {
 				const msg = (e as Error).message;
 				if (orKey && isFalOutage(msg)) {
-					console.warn(`[Refine] fal video failed (${msg.slice(0, 120)}) — OpenRouter Kling b-roll fallback.`);
+					console.warn(
+						`[Refine] fal video failed (${msg.slice(0, 120)}) — OpenRouter Kling b-roll fallback.`
+					);
 					mediaUrl = await openRouterBrollVideo(orKey, userId, still, motionPrompt);
-					costEvents.push({ provider: 'openrouter', operation: 'video', model: BROLL_MODEL_OPENROUTER, usd: priceOf('openrouter', 'video') });
+					costEvents.push({
+						provider: 'openrouter',
+						operation: 'video',
+						model: BROLL_MODEL_OPENROUTER,
+						usd: priceOf('openrouter', 'video')
+					});
 					mediaType = 'video';
 				} else {
 					throw e;
@@ -3232,9 +3579,21 @@ export async function refineUgcMedia(input: RefineMediaInput): Promise<UgcConten
 			);
 		}
 		if (durableMedia)
-			costEvents.push({ provider: 'storage', operation: 'persist', model: 'ugc-media', usd: 0, assetUrl: durableMedia });
+			costEvents.push({
+				provider: 'storage',
+				operation: 'persist',
+				model: 'ugc-media',
+				usd: 0,
+				assetUrl: durableMedia
+			});
 		if (durableStill && durableStill !== durableMedia)
-			costEvents.push({ provider: 'storage', operation: 'persist', model: 'ugc-media', usd: 0, assetUrl: durableStill });
+			costEvents.push({
+				provider: 'storage',
+				operation: 'persist',
+				model: 'ugc-media',
+				usd: 0,
+				assetUrl: durableStill
+			});
 
 		// ── Merge the refine spend into the post's cost + provenance record ──
 		// The post's totals must reflect EVERYTHING it cost, original run included.
@@ -3267,7 +3626,9 @@ export async function refineUgcMedia(input: RefineMediaInput): Promise<UgcConten
 			script: format === 'spokesperson' ? dialogue : content.script,
 			// Actual burn outcome for THIS media, not the old video's flags.
 			captions:
-				Boolean(content.captions) && captionsApplied && Boolean((content.on_screen_text || '').trim()),
+				Boolean(content.captions) &&
+				captionsApplied &&
+				Boolean((content.on_screen_text || '').trim()),
 			ai_badge: Boolean(content.ai_badge) && captionsApplied,
 			ugc_broll_prompt: scene,
 			media_url: durableMedia,

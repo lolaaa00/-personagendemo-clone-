@@ -259,7 +259,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 			const { data: agent, error: agentCheckErr } = await db.agents.get(persona_id);
 			if (agentCheckErr || !agent) {
-				return json({ success: false, error: 'Agent not found' }, { status: 404 });
+				return json({ success: false, error: 'Persona not found' }, { status: 404 });
 			}
 			if (agent.user_id !== user.id) {
 				return json({ success: false, error: 'Forbidden' }, { status: 403 });
@@ -374,7 +374,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 			const { data: agent, error: agentErr } = await db.agents.get(persona_id);
 			if (agentErr || !agent) {
-				return json({ success: false, error: 'Agent not found' }, { status: 404 });
+				return json({ success: false, error: 'Persona not found' }, { status: 404 });
 			}
 			if (agent.user_id !== user.id) {
 				return json({ success: false, error: 'Forbidden' }, { status: 403 });
@@ -435,7 +435,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 			const { data: agent, error: agentErr } = await db.agents.get(persona_id);
 			if (agentErr || !agent) {
-				return json({ success: false, error: 'Agent not found' }, { status: 404 });
+				return json({ success: false, error: 'Persona not found' }, { status: 404 });
 			}
 			if (agent.user_id !== user.id) {
 				return json({ success: false, error: 'Forbidden' }, { status: 403 });
@@ -504,7 +504,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 			const { data: agent, error: agentErr } = await db.agents.get(persona_id);
 			if (agentErr || !agent) {
-				return json({ success: false, error: 'Agent not found' }, { status: 404 });
+				return json({ success: false, error: 'Persona not found' }, { status: 404 });
 			}
 			if (agent.user_id !== user.id) {
 				return json({ success: false, error: 'Forbidden' }, { status: 403 });

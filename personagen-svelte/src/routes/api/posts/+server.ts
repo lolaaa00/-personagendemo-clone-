@@ -30,7 +30,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			const { data: agent, error: agentErr } = await db.agents.get(agentId);
 			if (agentErr || !agent || agent.user_id !== user.id) {
 				return json(
-					{ success: false, error: 'Agent not found or ownership mismatch' },
+					{ success: false, error: 'Persona not found or ownership mismatch' },
 					{ status: 404 }
 				);
 			}
@@ -254,7 +254,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				const { data: agent, error: agentErr } = await db.agents.get(agent_id);
 				if (agentErr || !agent || agent.user_id !== user.id) {
 					return json(
-						{ success: false, error: 'Agent not found or ownership mismatch' },
+						{ success: false, error: 'Persona not found or ownership mismatch' },
 						{ status: 404 }
 					);
 				}
@@ -274,7 +274,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				const { data: agent, error: agentErr } = await db.agents.get(persona_id);
 				if (agentErr || !agent || agent.user_id !== user.id) {
 					return json(
-						{ success: false, error: 'Agent not found or ownership mismatch' },
+						{ success: false, error: 'Persona not found or ownership mismatch' },
 						{ status: 404 }
 					);
 				}

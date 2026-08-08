@@ -36,9 +36,9 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 			// isn't ours) → 404, preserving the old find()-miss semantics. Any
 			// other error is a real DB failure → 500, like the old list() guard.
 			if (agentRes.error && (agentRes.error as any).code !== 'PGRST116') {
-				throw error(500, 'Failed to load agents');
+				throw error(500, 'Failed to load personas');
 			}
-			throw error(404, 'Agent not found');
+			throw error(404, 'Persona not found');
 		}
 
 		const supervisors = supervisorsRes.data ?? [];

@@ -10,7 +10,12 @@ import {
 } from '$lib/server/content/generate';
 import { getServiceSupabase } from '$lib/server/service-supabase';
 import { priceOf } from '$lib/pricing';
-import { modelsFor, resolveModel } from '$lib/models';
+import {
+	loadRegistry,
+	effectiveOptions,
+	effectiveResolve,
+	type RegistryRow
+} from '$lib/server/model-registry';
 
 const VALID_STAGES = ['full_body', 'side_profiles', 'face_closeup', 'feature_grid'] as const;
 
@@ -48,7 +53,10 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 	const stage = body.stage;
 	if (!VALID_STAGES.includes(stage)) {
 		return json(
-			{ success: false, error: `Invalid stage: ${stage}. Expected one of: ${VALID_STAGES.join(', ')}.` },
+			{
+				success: false,
+				error: `Invalid stage: ${stage}. Expected one of: ${VALID_STAGES.join(', ')}.`
+			},
 			{ status: 400 }
 		);
 	}
@@ -57,7 +65,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 	const { data: agent, error: agentErr } = await db.agents.get(agentId);
 	if (agentErr || !agent || agent.user_id !== user.id) {
 		return json(
-			{ success: false, error: 'Agent not found or ownership mismatch' },
+			{ success: false, error: 'Persona not found or ownership mismatch' },
 			{ status: 404 }
 		);
 	}
@@ -78,6 +86,14 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 			{ success: false, error: 'Storage service is not configured on this server.' },
 			{ status: 500 }
 		);
+	}
+
+	// Model Manager: honor registry enable/disable + defaults; static fallback.
+	let registryRows: RegistryRow[] = [];
+	try {
+		registryRows = await loadRegistry(locals.supabase, user.id);
+	} catch (e) {
+		console.error('[Reference Kit] Registry unavailable, using static catalog:', e);
 	}
 
 	const { data: cfg } = await locals.supabase
@@ -102,7 +118,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 	// the resolved payload so the composer can show the user exactly what is
 	// about to be sent, and let them edit it before approving.
 	if (body.preview === true) {
-		const selected = resolveModel('image_edit', body.model);
+		const selected = effectiveResolve(registryRows, 'image_edit', body.model);
 		return json({
 			success: true,
 			stage,
@@ -110,7 +126,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 				...resolved,
 				modelKind: 'image_edit',
 				model: selected.id,
-				modelOptions: modelsFor('image_edit'),
+				modelOptions: effectiveOptions(registryRows, 'image_edit'),
 				// This stage feeds TWO references (the shot + the character sheet). A
 				// single-reference model would quietly drop the sheet, so say so instead
 				// of letting facial consistency degrade without explanation.
@@ -125,7 +141,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 	// server-resolved, so what runs is what they approved.
 	const plan = {
 		...resolved,
-		model: resolveModel('image_edit', body.model).id,
+		model: effectiveResolve(registryRows, 'image_edit', body.model).id,
 		prompt:
 			typeof body.prompt === 'string' && body.prompt.trim()
 				? String(body.prompt).slice(0, 2000)
@@ -214,7 +230,7 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 	const { data: agent, error: agentErr } = await db.agents.get(agentId);
 	if (agentErr || !agent || agent.user_id !== user.id) {
 		return json(
-			{ success: false, error: 'Agent not found or ownership mismatch' },
+			{ success: false, error: 'Persona not found or ownership mismatch' },
 			{ status: 404 }
 		);
 	}

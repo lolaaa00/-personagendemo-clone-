@@ -541,7 +541,7 @@
 			<p class="sub">
 				Pending content from every persona — drafts to approve <em>and</em> scheduled posts not
 				yet published. Approve to schedule, reject with a reason (reasons train the future QC
-				agent).
+				reviewer).
 			</p>
 		</div>
 		<div class="header-actions">

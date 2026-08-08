@@ -14,7 +14,12 @@ import {
 	UGC_IMAGE_MODEL_OPENROUTER
 } from '$lib/server/content/generate';
 import { priceOf } from '$lib/pricing';
-import { modelsFor, resolveModel } from '$lib/models';
+import {
+	loadRegistry,
+	effectiveOptions,
+	effectiveResolve,
+	type RegistryRow
+} from '$lib/server/model-registry';
 import { getServiceSupabase } from '$lib/server/service-supabase';
 import { persistBufferToStorage } from '$lib/server/storage';
 
@@ -62,7 +67,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 	const { data: agent, error: agentErr } = await db.agents.get(agentId);
 	if (agentErr || !agent || agent.user_id !== user.id) {
 		return json(
-			{ success: false, error: 'Agent not found or ownership mismatch' },
+			{ success: false, error: 'Persona not found or ownership mismatch' },
 			{ status: 404 }
 		);
 	}
@@ -73,6 +78,14 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 			{ success: false, error: 'No fal.ai key configured. Add one in Settings.' },
 			{ status: 400 }
 		);
+	}
+
+	// Model Manager: honor registry enable/disable + defaults; static fallback.
+	let registryRows: RegistryRow[] = [];
+	try {
+		registryRows = await loadRegistry(locals.supabase, user.id);
+	} catch (e) {
+		console.error('[Generate Avatar] Registry unavailable, using static catalog:', e);
 	}
 
 	let svc: any;
@@ -159,7 +172,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		// resolved payload so the composer can show exactly what is about to be
 		// sent and let the user edit it before approving.
 		if (body.preview === true) {
-			const selected = resolveModel(modelKind, body.model);
+			const selected = effectiveResolve(registryRows, modelKind, body.model);
 			return json({
 				success: true,
 				preview: {
@@ -176,7 +189,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 					// than a fixed model they can only accept.
 					modelKind,
 					model: selected.id,
-					modelOptions: modelsFor(modelKind),
+					modelOptions: effectiveOptions(registryRows, modelKind),
 					editable: ['prompt', 'model'],
 					estimatedCostUsd: selected.usd
 				}
@@ -189,7 +202,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 				? String(body.prompt).slice(0, 2000)
 				: undefined;
 
-		const chosenModel = resolveModel(modelKind, body.model).id;
+		const chosenModel = effectiveResolve(registryRows, modelKind, body.model).id;
 
 		runGeneration = () =>
 			generateCharacterPortrait(

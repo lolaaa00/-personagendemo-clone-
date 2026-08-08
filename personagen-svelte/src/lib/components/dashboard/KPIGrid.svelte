@@ -50,7 +50,7 @@
 			{
 				icon: 'agents',
 				value: String(activeCount),
-				label: 'Active Agents',
+				label: 'Active Personas',
 				// Token variants so the icon chips repaint with the brand theme and stay
 				// legible on the light surface (the raw brand hues washed out on white).
 				color: 'var(--accent-text)',

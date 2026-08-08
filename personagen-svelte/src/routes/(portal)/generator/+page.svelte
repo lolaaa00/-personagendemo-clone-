@@ -326,7 +326,7 @@
 </script>
 
 <svelte:head>
-	<title>Generator — PersonaGen</title>
+	<title>Create a Persona — PersonaGen</title>
 </svelte:head>
 
 <section class="page">

@@ -35,9 +35,54 @@ import {
 	coerceConfirmedHandles,
 	sanitizeHandle
 } from '$lib/persona-identity';
+import { readPersonaProfile } from '$lib/persona-profile-store';
 import { pickVoiceForProfile } from '$lib/server/voices';
 import dns from 'node:dns/promises';
 import net from 'node:net';
+
+/**
+ * The `appearance` JSON contract handed to the persona-generation prompts, derived
+ * from APPEARANCE_FIELDS so a newly added trait can never be silently omitted.
+ *
+ * Curated traits (`options.length > 0`) list their ALLOWED OPTIONS rather than a
+ * free-text hint: the persona page renders those traits as chips, so a value the
+ * model invented ("late twenties") is preserved but has no chip to select, and the
+ * trait reads as unset / "Best Fit". Free-text traits keep their placeholder hint
+ * (minus its `e.g. ` prefix). Off-list values still degrade gracefully — the prompt
+ * only steers, `coerceAppearance()` never snaps a value onto the list.
+ */
+const APPEARANCE_CONTRACT = APPEARANCE_FIELDS.map((f) =>
+	f.options.length > 0
+		? `${f.key} (pick EXACTLY one of: ${f.options.join(' | ')})`
+		: `${f.key} (${f.placeholder.replace(/^e\.g\.\s*/, '')})`
+).join('; ');
+
+/** The `appearance` skeleton for the prompts' "Return ONLY JSON" example — every key. */
+const APPEARANCE_JSON_SKELETON = `{${APPEARANCE_FIELDS.map((f) => `"${f.key}":""`).join(',')}}`;
+
+/**
+ * Cross-persona LOOK fingerprint: the visual dimensions a new persona must differ on.
+ * Must cover every trait that meaningfully changes the face/body, otherwise two
+ * personas converge through whichever dimension is missing here.
+ */
+function appearanceFingerprint(appearance: any): string {
+	const ap = appearance || {};
+	return [
+		ap.ethnicity,
+		ap.personaAge,
+		ap.skinTone,
+		ap.bodyType,
+		ap.hairColor,
+		ap.hairLength,
+		ap.hairstyle,
+		ap.eyeColor,
+		ap.headwear,
+		ap.wardrobe,
+		ap.outfitColors
+	]
+		.filter(Boolean)
+		.join(', ');
+}
 
 /**
  * SSRF guard for the storefront-scrape fallback below: an authenticated user
@@ -785,7 +830,7 @@ Output ONLY the JSON.`;
 				}
 				if (!agentData) {
 					const { data: agent } = await db.agents.get(agentId);
-					if (!agent) return json({ success: false, error: 'Agent not found' }, { status: 404 });
+					if (!agent) return json({ success: false, error: 'Persona not found' }, { status: 404 });
 					agentData = agent;
 				}
 
@@ -1922,7 +1967,7 @@ Input: "${fieldVal}"`;
 
 				const { data: agent } = await db.agents.get(agentId);
 				if (!agent || agent.user_id !== session.user.id) {
-					return json({ success: false, error: 'Agent not found' }, { status: 404 });
+					return json({ success: false, error: 'Persona not found' }, { status: 404 });
 				}
 				const gender = typeof body.gender === 'string' && body.gender ? body.gender : 'unspecified';
 				// Gender is driven by the persona's NAME (its identity), NOT a possibly-stale
@@ -1947,24 +1992,8 @@ Input: "${fieldVal}"`;
 				const taken = (allAgents ?? [])
 					.filter((a: any) => a.id !== agentId)
 					.map((a: any) => {
-						let p: any = {};
-						try {
-							if (typeof a.market === 'string' && a.market.startsWith('{'))
-								p = JSON.parse(a.market);
-						} catch {
-							/* ignore unparseable market */
-						}
-						const ap = p.appearance || {};
-						const look = [
-							ap.hairColor,
-							ap.hairstyle,
-							ap.eyeColor,
-							ap.headwear,
-							ap.wardrobe,
-							ap.outfitColors
-						]
-							.filter(Boolean)
-							.join(', ');
+						const p: any = readPersonaProfile(a);
+						const look = appearanceFingerprint(p.appearance);
 						return {
 							name: a.name,
 							niche: a.niche || undefined,
@@ -1992,7 +2021,7 @@ PRODUCTS: ${
 						: '—'
 				}.
 
-This persona must be UNIQUE across the ENTIRE account — recognizably different from every other creator at a glance AND in positioning. Do NOT reuse another persona's content angle, target avatar, or visual look (hair color, hairstyle, eye color, headwear, wardrobe, colors). Prefer a niche/archetype/content-focus not already taken; only repeat one if it is unavoidable, and even then make the angle and look unmistakably distinct. Already used by other personas — avoid overlapping with any of these:
+This persona must be UNIQUE across the ENTIRE account — recognizably different from every other creator at a glance AND in positioning. Do NOT reuse another persona's content angle, target avatar, or visual look (ethnicity, age, skin tone, body type, hair color/length/style, eye color, headwear, wardrobe, colors). Prefer a niche/archetype/content-focus not already taken; only repeat one if it is unavoidable, and even then make the angle and look unmistakably distinct. Already used by other personas — avoid overlapping with any of these:
 ${JSON.stringify(taken).slice(0, 2500)}
 
 Rules:
@@ -2003,12 +2032,12 @@ Rules:
 - "targetAvatar": one vivid sentence describing the ideal audience member by their traits, situation, and mindset — do NOT give them a proper name (write "a 36-year-old molecular-biologist mom who audits every ingredient", NEVER "Beatrice, a 36-year-old…").
 - "psychProfile": 2-3 sentences on audience motivations, fears, desires, identity hooks.
 - "contentAngle": the unique, ownable point of view that differentiates THIS creator competitively — first-person and specific, and unlike any other persona's angle above.
-- "appearance": an object giving this creator a DISTINCT, ownable look that does NOT match any other persona's look above. "ethnicity" is REQUIRED and must be a specific, real heritage faithful to the creator's NAME and consistent with voiceProfile.nationality (e.g. "Jenny Tran" → "Vietnamese"; "Ratio Ramadan" → "Middle Eastern / Arab"; "Elena Washington" → "African-American"; "Chen Kai" → "Chinese") — never blank, never generic, never default everyone to the same ethnicity. Vary the ethnicity, hair color/style, eye color, distinctive facial features, headwear, wardrobe, and colors so each creator is visually UNMISTAKABLE from every other persona above. Keys — ${APPEARANCE_FIELDS.map((f) => `${f.key} (${f.placeholder.replace(/^e\.g\.\s*/, '')})`).join('; ')}. Use "none" for headwear if not applicable.
+- "appearance": an object giving this creator a DISTINCT, ownable look that does NOT match any other persona's look above. "ethnicity" is REQUIRED and must be a specific, real heritage faithful to the creator's NAME and consistent with voiceProfile.nationality (e.g. "Jenny Tran" → "Vietnamese"; "Ratio Ramadan" → "Middle Eastern / Arab"; "Elena Washington" → "African-American"; "Chen Kai" → "Chinese") — never blank, never generic, never default everyone to the same ethnicity. Vary the ethnicity, age, skin tone, body type, hair color/length/style, eye color, distinctive facial features, headwear, wardrobe, and colors so each creator is visually UNMISTAKABLE from every other persona above. Emit ALL of these keys — ${APPEARANCE_CONTRACT}. Where an ALLOWED OPTION LIST is given you MUST copy one of those strings VERBATIM (exact spelling, casing and en-dash) — never invent your own wording for those keys. Use "none" for headwear if not applicable.
 - "voiceProfile": read the creator's NAME (and soul) like a casting director — infer the heritage the name suggests and the spoken voice that fits the character. Keys: gender ("male"|"female"${nameGender ? ` — MUST be "${nameGender}", inferred from the creator's name` : " — infer STRICTLY from the creator's NAME; NEVER default to female"}), nationality (e.g. "American", "Indian", "Vietnamese-American", "British"), accent (the accent that voice would have, e.g. "American", "Indian", "British"). Examples: "Lexy Connor" → female American; "Ratio Ramadan" → male, Indian/South-Asian accent; "Jenny Tran" → female, Vietnamese-American; "Elena Washington" → female. Be faithful to the name — never default everyone to American.
 - Tailor everything to the brand and keep it consistent with the creator's gender and personality.
 - NAMES: the ONLY person with a proper name is the creator, ${agent.name || 'this creator'}. Never invent or use any other proper name ANYWHERE in the output — targetAvatar, psychProfile, and contentAngle must describe people by their traits/role, never by a made-up first name. A stray name here leaks into generated scripts and breaks character consistency.
 
-Return ONLY JSON: {"niche":"","ageRanges":["25–34"],"archetype":"","contentFocus":"","targetAvatar":"","psychProfile":"","contentAngle":"","appearance":{"ethnicity":"","wardrobe":"","outfitColors":"","hairstyle":"","hairColor":"","eyeColor":"","headwear":"","distinctiveFeatures":"","styling":""},"voiceProfile":{"gender":"","nationality":"","accent":""}}`;
+Return ONLY JSON: {"niche":"","ageRanges":["25–34"],"archetype":"","contentFocus":"","targetAvatar":"","psychProfile":"","contentAngle":"","appearance":${APPEARANCE_JSON_SKELETON},"voiceProfile":{"gender":"","nationality":"","accent":""}}`;
 
 				try {
 					const parsed: any = safeParseJson(await ai!.generate(prompt, { json: true }));
@@ -2098,17 +2127,10 @@ Return ONLY JSON: {"niche":"","ageRanges":["25–34"],"archetype":"","contentFoc
 
 				const { data: agent } = await db.agents.get(agentId);
 				if (!agent || agent.user_id !== session.user.id) {
-					return json({ success: false, error: 'Agent not found' }, { status: 404 });
+					return json({ success: false, error: 'Persona not found' }, { status: 404 });
 				}
-				// Extended profile (archetype/angle/avatar…) lives in the market JSON.
-				let profile: any = {};
-				try {
-					if (typeof agent.market === 'string' && agent.market.startsWith('{')) {
-						profile = JSON.parse(agent.market);
-					}
-				} catch {
-					/* ignore unparseable market */
-				}
+				// Extended profile (archetype/angle/avatar…) lives in the persona profile.
+				const profile: any = readPersonaProfile(agent);
 				const brief = await loadBriefForAgent(
 					db,
 					session.user.id,
@@ -2160,15 +2182,10 @@ Return ONLY JSON: {"niche":"","ageRanges":["25–34"],"archetype":"","contentFoc
 						if (a.id === agentId) continue;
 						const h = sanitizeHandle(a.handle);
 						if (h) takenHandles.add(h);
-						try {
-							const p =
-								typeof a.market === 'string' && a.market.startsWith('{') ? JSON.parse(a.market) : {};
-							for (const c of coerceHandleCandidates(p.handleCandidates)) takenHandles.add(c.handle);
-							for (const ch of Object.values(coerceConfirmedHandles(p.confirmedHandles))) {
-								takenHandles.add(ch);
-							}
-						} catch {
-							/* ignore unparseable market */
+						const p = readPersonaProfile(a);
+						for (const c of coerceHandleCandidates(p.handleCandidates)) takenHandles.add(c.handle);
+						for (const ch of Object.values(coerceConfirmedHandles(p.confirmedHandles))) {
+							takenHandles.add(ch);
 						}
 					}
 				}
@@ -2282,23 +2299,8 @@ Return ONLY JSON: {${contract.join(',')}}`;
 				// so the new one(s) don't overlap on positioning, look, OR name.
 				const { data: allAgents } = await db.agents.list();
 				const taken = (allAgents ?? []).map((a: any) => {
-					let p: any = {};
-					try {
-						if (typeof a.market === 'string' && a.market.startsWith('{')) p = JSON.parse(a.market);
-					} catch {
-						/* ignore */
-					}
-					const ap = p.appearance || {};
-					const look = [
-						ap.ethnicity,
-						ap.hairColor,
-						ap.hairstyle,
-						ap.eyeColor,
-						ap.headwear,
-						ap.wardrobe
-					]
-						.filter(Boolean)
-						.join(', ');
+					const p: any = readPersonaProfile(a);
+					const look = appearanceFingerprint(p.appearance);
 					return {
 						name: a.name,
 						niche: a.niche || undefined,
@@ -2336,11 +2338,11 @@ For EACH persona, produce these keys:
 - "targetAvatar": one vivid sentence DESCRIBING the ideal audience member by traits/situation — do NOT give them a proper name.
 - "psychProfile": 2-3 sentences on audience motivations, fears, desires.
 - "contentAngle": the unique, ownable first-person POV that differentiates THIS creator.
-- "appearance": a DISTINCT, ownable look. "ethnicity" is REQUIRED and must match the creator's NAME (e.g. "Priya Kapoor" → "Indian") — never blank or generic. Vary ethnicity, hair, eyes, wardrobe so each creator is visually unmistakable. Keys — ${APPEARANCE_FIELDS.map((f) => `${f.key} (${f.placeholder.replace(/^e\.g\.\s*/, '')})`).join('; ')}. Use "none" for headwear if not applicable.
+- "appearance": a DISTINCT, ownable look. "ethnicity" is REQUIRED and must match the creator's NAME (e.g. "Priya Kapoor" → "Indian") — never blank or generic. Vary ethnicity, age, skin tone, body type, hair, eyes, wardrobe so each creator is visually unmistakable. Emit ALL of these keys — ${APPEARANCE_CONTRACT}. Where an ALLOWED OPTION LIST is given you MUST copy one of those strings VERBATIM (exact spelling, casing and en-dash) — never invent your own wording for those keys. Use "none" for headwear if not applicable.
 - "voiceProfile": read the NAME like a casting director. Keys: gender ("male"|"female"), nationality (e.g. "American", "Indian", "Vietnamese-American"), accent.
 - NAMES: the ONLY proper name in each persona's output is that creator's own "name". Never invent any other proper name in targetAvatar/psychProfile/contentAngle.
 
-Return ONLY JSON: {"personas":[{"name":"","gender":"","soul":"","niche":"","archetype":"","contentFocus":"","ageRanges":["25–34"],"targetAvatar":"","psychProfile":"","contentAngle":"","appearance":{"ethnicity":"","wardrobe":"","outfitColors":"","hairstyle":"","hairColor":"","eyeColor":"","headwear":"","distinctiveFeatures":"","styling":""},"voiceProfile":{"gender":"","nationality":"","accent":""}}]}`;
+Return ONLY JSON: {"personas":[{"name":"","gender":"","soul":"","niche":"","archetype":"","contentFocus":"","ageRanges":["25–34"],"targetAvatar":"","psychProfile":"","contentAngle":"","appearance":${APPEARANCE_JSON_SKELETON},"voiceProfile":{"gender":"","nationality":"","accent":""}}]}`;
 
 				try {
 					const parsed: any = safeParseJson(await ai!.generate(prompt, { json: true }));
@@ -2436,13 +2438,7 @@ Return ONLY JSON: {"personas":[{"name":"","gender":"","soul":"","niche":"","arch
 				const { data: allAgents } = await db.agents.list();
 				const takenAngles = (allAgents ?? [])
 					.map((a: any) => {
-						let p: any = {};
-						try {
-							if (typeof a.market === 'string' && a.market.startsWith('{'))
-								p = JSON.parse(a.market);
-						} catch {
-							/* ignore */
-						}
+						const p: any = readPersonaProfile(a);
 						return p.contentAngle || p.archetype || undefined;
 					})
 					.filter(Boolean)

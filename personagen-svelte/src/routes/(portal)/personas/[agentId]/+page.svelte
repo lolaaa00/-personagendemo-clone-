@@ -27,7 +27,8 @@
 	import { PLATFORMS as PLATFORM_REGISTRY, platformLabel, platformProfileUrl } from '$lib/platforms';
 	import GenerationComposer from '$lib/components/generation/GenerationComposer.svelte';
 	import type { ComposerSpec } from '$lib/components/generation/types';
-	import { NICHE_OPTIONS, APPEARANCE_FIELDS, stripLeadingAvatarName } from '$lib/persona-profile';
+	import { NICHE_OPTIONS, stripLeadingAvatarName } from '$lib/persona-profile';
+	import TraitPicker from '$lib/components/persona/TraitPicker.svelte';
 	import {
 		BIO_PLATFORM_KEYS,
 		bioLimit,
@@ -37,6 +38,7 @@
 		handleCompatNote,
 		type HandleCandidate
 	} from '$lib/persona-identity';
+	import { readPersonaProfile } from '$lib/persona-profile-store';
 	import MediaPreviewModal from '$lib/components/generation/MediaPreviewModal.svelte';
 	import {
 		startGeneration,
@@ -210,14 +212,10 @@
 		agent?.runtime_owner ?? 'svelte-gemini'
 	);
 
-	// ── Extended persona profile (stored in agent.market as JSON) ──────────
+	// ── Extended persona profile (personas_profile JSONB, falling back to the
+	// legacy agents.market JSON string) ───────────────────────────────────
 	function parsePersonaProfile(agent: any): Record<string, any> {
-		try {
-			if (agent?.market && typeof agent.market === 'string' && agent.market.startsWith('{')) {
-				return JSON.parse(agent.market);
-			}
-		} catch { /* ignore */ }
-		return {};
+		return readPersonaProfile(agent);
 	}
 	let personaProfile = $state<Record<string, any>>(parsePersonaProfile(agent));
 	// Multi-brand: which of the user's brand briefs this persona generates for.
@@ -1975,7 +1973,7 @@
 			if (!res.ok || !d.success) throw new Error(d.error || 'Server error');
 			// Update local agent state optimistically… (market included so a later
 			// read of agent.market reflects the just-saved persona profile).
-			agent = { ...agent, name: editName, handle: editHandle, status: editStatus, niche: editNiche, gradient: editGradient, initial: editInitial, market: JSON.stringify(payload.personaProfile), soul: soulText, skills: skillsText, tools: toolsText, timezone, posts_per_day: postsPerDay, active_hours_start: activeHoursStart, active_hours_end: activeHoursEnd, autonomy_level: autonomyLevel, rss_url: rssUrl, rss_active: rssActive, ugc_voice: selectedVoice, brand_brief_id: selectedBrandBriefId || null };
+			agent = { ...agent, name: editName, handle: editHandle, status: editStatus, niche: editNiche, gradient: editGradient, initial: editInitial, personas_profile: payload.personaProfile, market: JSON.stringify(payload.personaProfile), soul: soulText, skills: skillsText, tools: toolsText, timezone, posts_per_day: postsPerDay, active_hours_start: activeHoursStart, active_hours_end: activeHoursEnd, autonomy_level: autonomyLevel, rss_url: rssUrl, rss_active: rssActive, ugc_voice: selectedVoice, brand_brief_id: selectedBrandBriefId || null };
 			// The brand pin is now persisted — clear the unsaved-change indicator and
 			// let the composer re-pull products for the new pin on next open.
 			savedBrandBriefId = selectedBrandBriefId;
@@ -2706,7 +2704,7 @@
 
 {#if !agent}
 	<div class="no-agent">
-		<p>Agent not found.</p>
+		<p>Persona not found.</p>
 		<a href="/dashboard" class="btn-primary">Back to Dashboard</a>
 	</div>
 {:else}
@@ -3248,7 +3246,7 @@
 						<!-- Identity fields, moved up into the profile: the NAME stays constant;
 						     NICHE (and everything below) is filled by "Generate for brand". -->
 						<div class="field-group">
-							<label for="p-name">Agent Name</label>
+							<label for="p-name">Persona Name</label>
 							<input id="p-name" type="text" bind:value={editName} placeholder="e.g. Veronica Active" />
 						</div>
 						<div class="field-group">
@@ -3368,14 +3366,7 @@
 								the profile-picture generation so the face and outfit match. Fill them from the brand
 								(“Generate for brand”) or read them from the current photo (“Read from photo”).
 							</p>
-							<div class="appearance-grid">
-								{#each APPEARANCE_FIELDS as f (f.key)}
-									<label class="appearance-field">
-										<span>{f.label}</span>
-										<input type="text" bind:value={ppAppearance[f.key]} placeholder={f.placeholder} />
-									</label>
-								{/each}
-							</div>
+							<TraitPicker bind:appearance={ppAppearance} />
 						</div>
 					</div>
 				</details>
@@ -4002,7 +3993,7 @@
 									{#if enrichingSoul}Enriching…{:else}<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.7 4.6L18 9.3l-4.3 1.7L12 15.6l-1.7-4.6L6 9.3l4.3-1.7L12 3z"/><path d="M18.5 14.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2z"/></svg> AI Enrich{/if}
 								</button>
 							</div>
-							<textarea id="p-soul" bind:value={soulText} rows="6" placeholder="Define your agent's personality, voice, and behavioral directives…"></textarea>
+							<textarea id="p-soul" bind:value={soulText} rows="6" placeholder="Define your persona's personality, voice, and behavioral directives…"></textarea>
 						</div>
 
 						<div class="field-group col-span-2">
@@ -4224,7 +4215,7 @@
 									<div class="autonomy-radio" aria-hidden="true"><div class="radio-outer">{#if rssActive}<div class="radio-inner"></div>{/if}</div></div>
 									<span class="autonomy-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"/><path d="M18 14h-8"/><path d="M15 18h-5"/><path d="M10 6h8v4h-8V6Z"/></svg></span>
 									<span class="autonomy-label">RSS Auto-Repurpose</span>
-									<p class="autonomy-desc">Monitor an RSS feed and spin items in the agent's voice.</p>
+									<p class="autonomy-desc">Monitor an RSS feed and spin items in the persona's voice.</p>
 								</button>
 							</div>
 							{#if rssActive}
@@ -4308,8 +4299,8 @@
 
 				<div class="danger-zone">
 					<h3>Danger Zone</h3>
-					<p>Permanently delete this agent and all associated data. This cannot be undone.</p>
-					<button type="button" class="btn-danger" onclick={deleteAgent}>Delete Agent</button>
+					<p>Permanently delete this persona and all associated data. This cannot be undone.</p>
+					<button type="button" class="btn-danger" onclick={deleteAgent}>Delete Persona</button>
 				</div>
 			</div>
 

@@ -26,7 +26,7 @@ export const GET: RequestHandler = async ({ params, url, locals }) => {
 	const db = createDbService(locals.supabase);
 	const { data: agent } = await db.agents.get(agentId);
 	if (!agent || agent.user_id !== user.id)
-		return json({ success: false, error: 'Agent not found' }, { status: 404 });
+		return json({ success: false, error: 'Persona not found' }, { status: 404 });
 	const { data: post } = await db.posts.get(postId);
 	if (!post || post.agent_id !== agentId)
 		return json({ success: false, error: 'Post not found for this persona' }, { status: 404 });

@@ -11,7 +11,12 @@ import {
 import { publishPostById } from '$lib/server/scheduler';
 import { getServiceSupabase } from '$lib/server/service-supabase';
 import { priceOf } from '$lib/pricing';
-import { modelsFor, resolveModel } from '$lib/models';
+import {
+	loadRegistry,
+	effectiveOptions,
+	effectiveResolve,
+	type RegistryRow
+} from '$lib/server/model-registry';
 import { VOICE_CATALOG, DEFAULT_VOICE } from '$lib/server/voices';
 import { VIDEO_ONLY_PLATFORMS } from '$lib/server/social/platforms';
 
@@ -46,7 +51,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 	const { data: agent, error: agentErr } = await db.agents.get(agentId);
 	if (agentErr || !agent || agent.user_id !== user.id) {
 		return json(
-			{ success: false, error: 'Agent not found or ownership mismatch' },
+			{ success: false, error: 'Persona not found or ownership mismatch' },
 			{ status: 404 }
 		);
 	}
@@ -57,6 +62,16 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		body = await request.json();
 	} catch {
 		/* an empty body is fine */
+	}
+
+	// Model Manager: resolve models against the user's registry (enable/disable,
+	// per-kind default, price overrides). Unreachable/empty registry falls back
+	// to the static catalog — the manager can refine generation, never brick it.
+	let registryRows: RegistryRow[] = [];
+	try {
+		registryRows = await loadRegistry(locals.supabase, user.id);
+	} catch (e) {
+		console.error('[Generate Post] Registry unavailable, using static catalog:', e);
 	}
 
 	// Resolve target platforms from the agent's active connections (used for
@@ -116,7 +131,10 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 				? body.character_ref_url
 				: undefined,
 		// The user's budget-vs-quality pick for the b-roll clip (Wan $0.10 → Veo $1.50).
-		videoModel: resolveModel('video_i2v', body.video_model).id,
+		videoModel: effectiveResolve(registryRows, 'video_i2v', body.video_model).id,
+		// Registry price (Model Manager edit) rides along so the cost ledger bills
+		// what the manager says, not the static catalog rate.
+		videoModelUsd: effectiveResolve(registryRows, 'video_i2v', body.video_model).usd,
 		// Composer format choice: spokesperson (TTS + talking-head) vs b-roll clip.
 		// 'auto' (or anything unrecognized) defers to the persona's ugc_format.
 		formatOverride: (['spokesperson', 'broll', 'auto'].includes(body.format)
@@ -177,7 +195,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		const characterRef = genInput.characterRefOverride || cfgRow?.ugc_character_ref || null;
 		const productPhoto = genInput.productPhotoUrlOverride || product?.photoUrl || null;
 
-		const videoModel = resolveModel('video_i2v', body.video_model);
+		const videoModel = effectiveResolve(registryRows, 'video_i2v', body.video_model);
 
 		// The model stack this run actually goes through, with per-call costs. A VIDEO
 		// forks by format: a spokesperson clip runs voiceover + talking-head (OmniHuman),
@@ -193,13 +211,26 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 				: cfgRow?.ugc_format === 'spokesperson' || cfgRow?.ugc_format === 'broll'
 					? cfgRow.ugc_format
 					: 'auto';
-		const { voice: previewVoice } = resolveVoiceForPersona(cfgRow?.ugc_voice || DEFAULT_VOICE, agent);
+		const { voice: previewVoice } = resolveVoiceForPersona(
+			cfgRow?.ugc_voice || DEFAULT_VOICE,
+			agent
+		);
 		const voiceLabel = VOICE_CATALOG.find((v) => v.name === previewVoice)?.label || previewVoice;
 
 		type Step = { step: string; provider: string; model: string; usd: number };
 		const baseSteps: Step[] = [
-			{ step: 'director (caption + scene)', provider: 'openrouter', model: 'gemini-3.5-flash', usd: priceOf('openrouter', 'llm') },
-			{ step: 'product still', provider: 'fal', model: 'nano-banana-2', usd: priceOf('fal', 'image', 'nano') }
+			{
+				step: 'director (caption + scene)',
+				provider: 'openrouter',
+				model: 'gemini-3.5-flash',
+				usd: priceOf('openrouter', 'llm')
+			},
+			{
+				step: 'product still',
+				provider: 'fal',
+				model: 'nano-banana-2',
+				usd: priceOf('fal', 'image', 'nano')
+			}
 		];
 		// Both video branches, so the composer's format selector can flip between them
 		// client-side (with the right cost) without a re-fetch that would clobber edits.
@@ -209,15 +240,33 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		];
 		const stepsSpokesperson: Step[] = [
 			...baseSteps,
-			{ step: 'voiceover', provider: 'fal', model: `elevenlabs (${voiceLabel})`, usd: priceOf('fal', 'tts') },
-			{ step: 'talking head', provider: 'fal', model: TALKINGHEAD_LABEL, usd: priceOf('fal', 'talking_head') }
+			{
+				step: 'voiceover',
+				provider: 'fal',
+				model: `elevenlabs (${voiceLabel})`,
+				usd: priceOf('fal', 'tts')
+			},
+			{
+				step: 'talking head',
+				provider: 'fal',
+				model: TALKINGHEAD_LABEL,
+				usd: priceOf('fal', 'talking_head')
+			}
 		];
 
 		// Initial pipeline shown = what this persona runs right now. For 'auto' that's
 		// the spokesperson default (the Director's runtime bias).
 		let steps: Step[];
 		if (mediaKind === 'cinematic') {
-			steps = [...baseSteps, { step: 'cinematic video', provider: 'fal', model: 'kling-o3-pro reference', usd: priceOf('fal', 'video', 'pro') }];
+			steps = [
+				...baseSteps,
+				{
+					step: 'cinematic video',
+					provider: 'fal',
+					model: 'kling-o3-pro reference',
+					usd: priceOf('fal', 'video', 'pro')
+				}
+			];
 		} else if (mediaKind === 'image') {
 			steps = baseSteps;
 		} else {
@@ -232,7 +281,9 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 				provider: genInput.providerPreference || 'auto',
 				platforms: targetPool,
 				connectedPlatforms,
-				product: product ? { id: product.id, name: product.name, photoUrl: product.photoUrl || null } : null,
+				product: product
+					? { id: product.id, name: product.name, photoUrl: product.photoUrl || null }
+					: null,
 				// The full brand-brief product set, so the composer can offer a picker
 				// instead of a raw URL. Same array the generator resolves product_id
 				// against — picking one here sends its id back verbatim.
@@ -255,7 +306,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 				// user pick the tier instead of silently billing the default.
 				videoModelKind: 'video_i2v',
 				videoModel: videoModel.id,
-				videoModelOptions: mediaKind === 'video' ? modelsFor('video_i2v') : [],
+				videoModelOptions: mediaKind === 'video' ? effectiveOptions(registryRows, 'video_i2v') : [],
 				// Video format: the persona's setting is the initial pick; the composer
 				// lets the user force spokesperson (OmniHuman) or b-roll for this run.
 				format: personaFormat,
@@ -264,7 +315,22 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 				// Captions + AI badge default OFF — the composer surfaces them as toggles.
 				captions: false,
 				aiBadge: false,
-				editable: ['topic', 'media', 'provider', 'platforms', 'product_id', 'product_photo_url', 'character_ref_url', 'scene', 'video_model', 'format', 'scheduled_date', 'scheduled_time', 'captions', 'ai_badge'],
+				editable: [
+					'topic',
+					'media',
+					'provider',
+					'platforms',
+					'product_id',
+					'product_photo_url',
+					'character_ref_url',
+					'scene',
+					'video_model',
+					'format',
+					'scheduled_date',
+					'scheduled_time',
+					'captions',
+					'ai_badge'
+				],
 				steps,
 				estimatedCostUsd: +steps.reduce((s, x) => s + x.usd, 0).toFixed(4)
 			}
@@ -387,7 +453,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 
 	// ── Legacy synchronous fallback (migration not applied yet) ───────────────
 	console.warn(
-		'[generate-post] posts_status_check rejected status \'generating\' — apply post_status_generating_migration.sql. Falling back to synchronous generation.'
+		"[generate-post] posts_status_check rejected status 'generating' — apply post_status_generating_migration.sql. Falling back to synchronous generation."
 	);
 
 	let content;

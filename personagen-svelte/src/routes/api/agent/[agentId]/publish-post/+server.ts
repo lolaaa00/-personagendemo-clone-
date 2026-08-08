@@ -33,7 +33,7 @@ async function ownedAgentAndPost(
 	const db = createDbService(locals.supabase);
 	const { data: agent, error: agentErr } = await db.agents.get(agentId);
 	if (agentErr || !agent || agent.user_id !== user.id)
-		return { err: json({ success: false, error: 'Agent not found or ownership mismatch' }, { status: 404 }) };
+		return { err: json({ success: false, error: 'Persona not found or ownership mismatch' }, { status: 404 }) };
 	const { data: post, error: postErr } = await db.posts.get(postId);
 	if (postErr || !post || post.agent_id !== agentId)
 		return { err: json({ success: false, error: 'Post not found for this persona' }, { status: 404 }) };

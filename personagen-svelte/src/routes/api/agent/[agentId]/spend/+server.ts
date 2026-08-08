@@ -20,7 +20,7 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 	const db = createDbService(locals.supabase);
 	const { data: agent, error: agentErr } = await db.agents.get(agentId);
 	if (agentErr || !agent || agent.user_id !== user.id) {
-		return json({ success: false, error: 'Agent not found' }, { status: 404 });
+		return json({ success: false, error: 'Persona not found' }, { status: 404 });
 	}
 
 	const { data: events, error } = await locals.supabase

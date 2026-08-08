@@ -15,23 +15,23 @@
 	/>
 	<meta
 		name="description"
-		content="HoneyX — autonomous AI agents managing your UGC creator roster, content calendar, and analytics."
+		content="HoneyX — autonomous AI personas managing your UGC creator roster, content calendar, and analytics."
 	/>
 	<!-- Open Graph -->
 	<meta property="og:type" content="website" />
-	<meta property="og:title" content="HoneyX — AI Agent-Powered UGC Creator Management" />
+	<meta property="og:title" content="HoneyX — AI Persona-Powered UGC Creator Management" />
 	<meta
 		property="og:description"
-		content="HoneyX — autonomous AI agents managing your UGC creator roster, content calendar, and analytics."
+		content="HoneyX — autonomous AI personas managing your UGC creator roster, content calendar, and analytics."
 	/>
 	<meta property="og:image" content="https://honeyx.monarchstack.com/assets/og-share.png" />
 	<meta property="og:url" content="https://honeyx.monarchstack.com" />
 	<!-- Twitter Card -->
 	<meta name="twitter:card" content="summary_large_image" />
-	<meta name="twitter:title" content="HoneyX — AI Agent-Powered UGC Creator Management" />
+	<meta name="twitter:title" content="HoneyX — AI Persona-Powered UGC Creator Management" />
 	<meta
 		name="twitter:description"
-		content="HoneyX — autonomous AI agents managing your UGC creator roster, content calendar, and analytics."
+		content="HoneyX — autonomous AI personas managing your UGC creator roster, content calendar, and analytics."
 	/>
 	<meta name="twitter:image" content="https://honeyx.monarchstack.com/assets/og-share.png" />
 </svelte:head>
