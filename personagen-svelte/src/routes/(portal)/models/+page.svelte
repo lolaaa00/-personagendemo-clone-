@@ -170,6 +170,66 @@
 	// why freshly discovered models showed a NEW chip but no age — the one place
 	// you most want to know how old something is. Freshness is now a separate
 	// qualifier so a row can read "3w · NEW".
+	// fal's catalog titles drift from endpoint reality — `flux-3/keyframes-to-video`
+	// ships titled "Flux 3 Image to Video", identical to the actual i2v endpoint.
+	// Surface any id segment the title doesn't mention so two cards never read as
+	// the same model.
+	function labelSuffix(row: any): string | null {
+		const title = String(row.label ?? '')
+			.toLowerCase()
+			.replace(/[^a-z0-9]+/g, ' ');
+		const segs = String(row.model_id)
+			.split('/')
+			.slice(1)
+			.join('-')
+			.split('-')
+			.filter((s) => s.length > 2 && !/^v?\d/.test(s));
+		const missing = [...new Set(segs)].filter((s) => !title.includes(s));
+		return missing.length ? missing.join(' · ') : null;
+	}
+
+	// Deterministic adapter plan for fields the pipeline doesn't produce — maps
+	// each gap to whether an adapter can realistically close it, and how.
+	const ADAPTER_PLANS: Record<string, { verdict: 'PLANNABLE' | 'UNSUPPORTED'; how: string }> = {
+		keyframes: {
+			verdict: 'PLANNABLE',
+			how: 'The cinematic pipeline already renders storyboard stills — an adapter can feed those in as keyframes.'
+		},
+		transcript: {
+			verdict: 'PLANNABLE',
+			how: "The Director already writes the script — an adapter passes it as this model's transcript."
+		},
+		text: {
+			verdict: 'PLANNABLE',
+			how: 'The caption/script text the pipeline already produces maps straight onto this field.'
+		},
+		voice: {
+			verdict: 'PLANNABLE',
+			how: "The persona's pinned voice id can map here once this model's voice catalog is verified."
+		},
+		mask_url: {
+			verdict: 'UNSUPPORTED',
+			how: "Needs a masking/segmentation step the pipeline doesn't run — out of scope for content generation."
+		},
+		reference_audio_url: {
+			verdict: 'UNSUPPORTED',
+			how: 'Voice-cloning input. Persona voices are deliberately pinned to the TTS catalog instead.'
+		},
+		path: {
+			verdict: 'UNSUPPORTED',
+			how: 'Expects custom LoRA weights — no trained weights exist in this stack.'
+		}
+	};
+
+	function adapterPlanFor(field: string): { verdict: string; how: string } {
+		return (
+			ADAPTER_PLANS[field] ?? {
+				verdict: 'REVIEW',
+			how: 'Unmapped input — needs a human read of the spec before an adapter can be planned.'
+			}
+		);
+	}
+
 	function ageOf(
 		released: string | null
 	): { label: string; cls: string; fresh: string | null; days: number } | null {
@@ -620,6 +680,7 @@
 					<div class="mm-discover-main">
 						<span class="mm-model-name">
 							{row.label}
+							{#if labelSuffix(row)}<span class="pill pill-variant">{labelSuffix(row)}</span>{/if}
 							{#if age}<span class="pill age {age.cls}">{age.label}</span>{/if}
 							{#if age?.fresh}<span class="pill age {age.cls}">{age.fresh}</span>{/if}
 							{#if row.deprecated}<span class="pill pill-dep">DEPRECATED</span>{/if}
@@ -635,11 +696,49 @@
 						>
 						{#if row.note}<span class="mm-discover-desc">{row.note}</span>{/if}
 						{#if row.probe && !row.probe.ok && row.probe.unknownRequired?.length}
-							<span class="mm-discover-why"
-								>Requires fields the pipeline doesn't produce: {row.probe.unknownRequired.join(
-									', '
-								)}</span
-							>
+							<details class="mm-adapter">
+								<summary class="mm-adapter-summary">
+									<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"
+										><path d="M9 18l6-6-6-6" /></svg>
+									Pipeline gap: {row.probe.unknownRequired.join(', ')} — view adapter plan
+								</summary>
+								<div class="mm-adapter-body">
+									<div class="mm-adapter-row head">
+										<span>Model input</span><span>Status</span><span>Adapter plan</span>
+									</div>
+									{#if row.probe.textParam}
+										<div class="mm-adapter-row">
+											<code>{row.probe.textParam}</code>
+											<span class="pill pill-ok">MAPPED</span>
+											<span>Filled from the Director's script/caption.</span>
+										</div>
+									{/if}
+									{#if row.probe.imageParam}
+										<div class="mm-adapter-row">
+											<code>{row.probe.imageParam}</code>
+											<span class="pill pill-ok">MAPPED</span>
+											<span>Filled from the persona face / product reference stills.</span>
+										</div>
+									{/if}
+									{#each row.probe.unknownRequired as field (field)}
+										{@const plan = adapterPlanFor(field)}
+										<div class="mm-adapter-row">
+											<code>{field}</code>
+											<span class="pill" class:pill-ok={plan.verdict === 'PLANNABLE'} class:pill-quar={plan.verdict !== 'PLANNABLE'}>{plan.verdict}</span>
+											<span>{plan.how}</span>
+										</div>
+									{/each}
+									<p class="mm-adapter-note">
+										{#if row.probe.unknownRequired.every((f: string) => adapterPlanFor(f).verdict === 'PLANNABLE')}
+											Every gap is plannable — this model becomes swappable once its adapter
+											ships. It stays visibly staged here so nothing gets adopted untested.
+										{:else}
+											This model asks for inputs the content pipeline deliberately doesn't
+											produce — it stays staged rather than generating broken content.
+										{/if}
+									</p>
+								</div>
+							</details>
 						{/if}
 					</div>
 					<div class="mm-discover-side">
@@ -898,6 +997,9 @@
 
 	/* ── Section headers ── */
 	.mm-section-title {
+		/* app.css sets ALL h2s to the display serif (Playfair/Georgia) — these are
+		   utilitarian section labels inside a tool page, not editorial headings. */
+		font-family: var(--font-body);
 		font-size: 1.02rem;
 		font-weight: 700;
 		margin: 0 0 4px;
