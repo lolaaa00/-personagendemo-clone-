@@ -39,7 +39,9 @@
 			? ''
 			: (new URL(window.location.href).searchParams.get('provider') ?? '')
 	);
-	let ageFilter = $state<Age>(readParam('age', ['any', '30d', '90d', '1y', 'older'] as const, 'any'));
+	let ageFilter = $state<Age>(
+		readParam('age', ['any', '30d', '90d', '1y', 'older'] as const, 'any')
+	);
 	let minQuality = $state<MinQ>(readParam('minq', ['any', '4', '6', '8'] as const, 'any'));
 	$effect(() => syncParam('provider', provider, ''));
 	$effect(() => syncParam('age', ageFilter, 'any'));
@@ -221,11 +223,20 @@
 		}
 	};
 
-	function adapterPlanFor(field: string): { verdict: string; how: string } {
+	function adapterPlanFor(field: string, row?: any): { verdict: string; how: string } {
+		// A schema default beats every hand-written plan: the generated adapter
+		// pins the model's own default value, so the gap is already closed.
+		const dflt = row?.probe?.requiredDefaults?.[field];
+		if (dflt !== undefined) {
+			return {
+				verdict: 'AUTO-DEFAULT',
+				how: `Closed automatically — the adapter pins this to the model's own default (${JSON.stringify(dflt)}).`
+			};
+		}
 		return (
 			ADAPTER_PLANS[field] ?? {
 				verdict: 'REVIEW',
-			how: 'Unmapped input — needs a human read of the spec before an adapter can be planned.'
+				how: 'Unmapped input — needs a human read of the spec before an adapter can be planned.'
 			}
 		);
 	}
@@ -273,9 +284,16 @@
 	async function doSwap(d: any, target: any) {
 		swappingId = d.id;
 		try {
-			const res = await call({ action: 'swap', from_model_id: target.model_id, to_model_id: d.model_id });
+			const res = await call({
+				action: 'swap',
+				from_model_id: target.model_id,
+				to_model_id: d.model_id
+			});
 			if (Array.isArray(res.data)) rows = res.data;
-			showToast(`${d.label} now fills the ${target.tier ?? 'wired'} slot — ${target.label} moved back to discovered`, 'success');
+			showToast(
+				`${d.label} now fills the ${target.tier ?? 'wired'} slot — ${target.label} moved back to discovered`,
+				'success'
+			);
 		} catch (e) {
 			showToast((e as Error).message || 'Swap failed', 'error');
 		} finally {
@@ -470,11 +488,16 @@
 	</div>
 
 	<!-- ── Active roster: wired models ─────────────────────────────────────── -->
-	<h2 class="mm-section-title">Your roster</h2>
-	<p class="mm-section-sub">
-		Wired models with a tested adapter. Edit price, latency, and quality scores inline — the value
-		ranking updates as you type. Prices flow into composer estimates.
-	</p>
+	<header class="mm-section-head">
+		<span class="mm-section-mark" aria-hidden="true"></span>
+		<div class="mm-section-text">
+			<h2 class="mm-section-title">Your roster</h2>
+			<p class="mm-section-sub">
+				Wired models with a tested adapter. Edit price, latency, and quality scores inline — the
+				value ranking updates as you type. Prices flow into composer estimates.
+			</p>
+		</div>
+	</header>
 	<div class="mm-tablewrap">
 		<table class="mm-table">
 			<thead>
@@ -528,9 +551,7 @@
 									/>
 								</span>
 							{:else}
-								<span class="mm-readonly"
-									>{row.price_usd != null ? `$${row.price_usd}` : '—'}</span
-								>
+								<span class="mm-readonly">{row.price_usd != null ? `$${row.price_usd}` : '—'}</span>
 							{/if}
 							{#if row.price_source === 'manual'}<span class="mm-dim mm-src">edited</span
 								>{:else if row.price_source === 'parsed'}<span class="mm-dim mm-src">from fal</span
@@ -550,7 +571,8 @@
 									/>s
 								</span>
 							{:else}
-								<span class="mm-readonly">{row.latency_s != null ? `~${row.latency_s}s` : '—'}</span>
+								<span class="mm-readonly">{row.latency_s != null ? `~${row.latency_s}s` : '—'}</span
+								>
 							{/if}
 						</td>
 						<td>
@@ -560,7 +582,9 @@
 									value={row.quality ?? ''}
 									aria-label="Quality score for {row.label}"
 									onchange={(e) =>
-										saveField(row, { quality: Number((e.currentTarget as HTMLSelectElement).value) })}
+										saveField(row, {
+											quality: Number((e.currentTarget as HTMLSelectElement).value)
+										})}
 								>
 									<option value="" disabled>—</option>
 									{#each [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as q}
@@ -591,9 +615,7 @@
 								type="button"
 								class="mm-edit-btn"
 								class:editing={editingRowId === row.id}
-								title={editingRowId === row.id
-									? 'Done editing'
-									: 'Edit price, latency and quality'}
+								title={editingRowId === row.id ? 'Done editing' : 'Edit price, latency and quality'}
 								aria-label={editingRowId === row.id
 									? `Done editing ${row.label}`
 									: `Edit values for ${row.label}`}
@@ -601,9 +623,32 @@
 								onclick={() => (editingRowId = editingRowId === row.id ? null : row.id)}
 							>
 								{#if editingRowId === row.id}
-									<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>
+									<svg
+										width="15"
+										height="15"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="2.2"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg
+									>
 								{:else}
-									<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
+									<svg
+										width="15"
+										height="15"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="2"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										aria-hidden="true"
+										><path d="M12 20h9" /><path
+											d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"
+										/></svg
+									>
 								{/if}
 							</button>
 						</td>
@@ -660,12 +705,18 @@
 	</div>
 
 	<!-- ── Discovered: staged models from the fal catalog ──────────────────── -->
-	<h2 class="mm-section-title">Discovered on fal</h2>
-	<p class="mm-section-sub">
-		Newest releases in this category, synced from the live catalog. Probe a model's request
-		schema: schema-OK models can swap straight into any roster slot; models with gaps show a
-		field-by-field adapter plan instead.
-	</p>
+	<header class="mm-section-head mm-section-gap">
+		<span class="mm-section-mark" aria-hidden="true"></span>
+		<div class="mm-section-text">
+			<h2 class="mm-section-title">Discovered on fal</h2>
+			<p class="mm-section-sub">
+				Newest releases in this category, synced from the live catalog. <b>Probe</b> reads a
+				model's request schema and builds its adapter automatically — once the adapter exists,
+				the model can swap into any roster slot. Models the pipeline can't drive stay staged,
+				with a field-by-field plan explaining why.
+			</p>
+		</div>
+	</header>
 	{#if discovered.length === 0}
 		<div class="mm-discover-empty">
 			Nothing synced yet for this category — hit <b>Check for new models</b> above to pull the latest
@@ -687,6 +738,7 @@
 							{#if row.status === 'quarantined'}<span class="pill pill-quar">NEEDS REVIEW</span
 								>{/if}
 							{#if row.probe?.ok}<span class="pill pill-ok">SCHEMA OK</span>{/if}
+							{#if row.probe?.adapterReady && !row.probe?.ok}<span class="pill pill-ready">ADAPTER READY</span>{/if}
 							{#if target}<span class="pill pill-swap"
 									>CHEAPER + NEWER THAN {target.label.toUpperCase()}</span
 								>{/if}
@@ -698,8 +750,17 @@
 						{#if row.probe && !row.probe.ok && row.probe.unknownRequired?.length}
 							<details class="mm-adapter">
 								<summary class="mm-adapter-summary">
-									<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"
-										><path d="M9 18l6-6-6-6" /></svg>
+									<svg
+										width="12"
+										height="12"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="2.2"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										aria-hidden="true"><path d="M9 18l6-6-6-6" /></svg
+									>
 									Pipeline gap: {row.probe.unknownRequired.join(', ')} — view adapter plan
 								</summary>
 								<div class="mm-adapter-body">
@@ -721,20 +782,28 @@
 										</div>
 									{/if}
 									{#each row.probe.unknownRequired as field (field)}
-										{@const plan = adapterPlanFor(field)}
+										{@const plan = adapterPlanFor(field, row)}
 										<div class="mm-adapter-row">
 											<code>{field}</code>
-											<span class="pill" class:pill-ok={plan.verdict === 'PLANNABLE'} class:pill-quar={plan.verdict !== 'PLANNABLE'}>{plan.verdict}</span>
+											<span
+												class="pill"
+												class:pill-ok={plan.verdict === 'PLANNABLE' || plan.verdict === 'AUTO-DEFAULT'}
+												class:pill-quar={plan.verdict !== 'PLANNABLE' && plan.verdict !== 'AUTO-DEFAULT'}>{plan.verdict}</span
+											>
 											<span>{plan.how}</span>
 										</div>
 									{/each}
 									<p class="mm-adapter-note">
-										{#if row.probe.unknownRequired.every((f: string) => adapterPlanFor(f).verdict === 'PLANNABLE')}
-											Every gap is plannable — this model becomes swappable once its adapter
-											ships. It stays visibly staged here so nothing gets adopted untested.
+										{#if row.probe.adapterReady}
+											Adapter generated — every required input is mapped or pinned to the model's own
+											default. This model can swap into a roster slot right now.
+										{:else if row.probe.unknownRequired.every((f: string) => adapterPlanFor(f, row).verdict === 'PLANNABLE' || adapterPlanFor(f, row).verdict === 'AUTO-DEFAULT')}
+											Every gap is plannable, but the schema declares no default for at least one
+											required field — the adapter can't be generated safely. Re-probe after fal
+											updates the spec.
 										{:else}
-											This model asks for inputs the content pipeline deliberately doesn't
-											produce — it stays staged rather than generating broken content.
+											This model asks for inputs the content pipeline deliberately doesn't produce —
+											it stays staged rather than generating broken content.
 										{/if}
 									</p>
 								</div>
@@ -750,9 +819,9 @@
 								<span class="pill pill-quar">NO PRICE DATA</span>
 							{/if}
 						</span>
-					{#if wiredSlots.length}
+						{#if wiredSlots.length}
 							{@const pick = chosenTarget(row)}
-							{#if row.probe?.ok}
+							{#if row.probe?.ok || row.probe?.adapterReady}
 								<select
 									class="mm-slot-pick"
 									aria-label="Slot for {row.label} to take over"
@@ -765,9 +834,7 @@
 								>
 									<option value="" disabled>Choose a slot…</option>
 									{#each wiredSlots as w (w.id)}
-										<option value={w.model_id}
-											>{w.tier ? `${w.tier} — ` : ''}{w.label}</option
-										>
+										<option value={w.model_id}>{w.tier ? `${w.tier} — ` : ''}{w.label}</option>
 									{/each}
 								</select>
 								<button
@@ -788,17 +855,9 @@
 										Swap in
 									{/if}
 								</button>
-							{:else}
-								<button
-									type="button"
-									class="mm-swap-btn mm-swap-gated"
-									disabled={probingId === row.id}
-									title={`Check ${row.label}'s request schema before it can take over a slot`}
-									onclick={() => probe(row)}
-								>
-									{probingId === row.id ? 'Probing…' : 'Probe to enable swap'}
-								</button>
 							{/if}
+							<!-- No gated placeholder here: the probe button below is the same
+							     action, and two identical CTAs side by side read as a bug. -->
 						{/if}
 						<button
 							type="button"
@@ -811,7 +870,7 @@
 							{:else if row.probe}
 								Re-probe schema
 							{:else}
-								Probe schema
+								Probe & build adapter
 							{/if}
 						</button>
 					</div>
@@ -1557,11 +1616,26 @@
 
 	.mm-adapter-row {
 		display: grid;
-		grid-template-columns: minmax(110px, auto) auto 1fr;
+		/* FIXED tracks: with `auto` the Status column sized per-row, so the header
+		   labels never lined up with the content below them — the "misconfigured"
+		   look. Every row now shares the same three column edges. */
+		grid-template-columns: 150px 108px 1fr;
 		gap: 10px;
-		align-items: baseline;
+		align-items: start;
 		font-size: 0.76rem;
 		color: var(--text-muted);
+	}
+	.mm-adapter-row.head {
+		font-family: var(--font-mono);
+		font-size: 0.6rem;
+		text-transform: uppercase;
+		letter-spacing: 0.09em;
+		color: var(--text-dim);
+		padding-bottom: 4px;
+		border-bottom: 1px solid var(--border-strong);
+	}
+	.mm-adapter-row code {
+		word-break: break-all;
 	}
 
 	.mm-adapter-row.head {

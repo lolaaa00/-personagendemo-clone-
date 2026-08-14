@@ -6,7 +6,8 @@ import {
 	generateCinematicUgcPack,
 	resolveImageKeys,
 	resolveVoiceForPersona,
-	TALKINGHEAD_LABEL
+	TALKINGHEAD_LABEL,
+	type UgcPackInput
 } from '$lib/server/content/generate';
 import { publishPostById } from '$lib/server/scheduler';
 import { getServiceSupabase } from '$lib/server/service-supabase';
@@ -135,6 +136,15 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		// Registry price (Model Manager edit) rides along so the cost ledger bills
 		// what the manager says, not the static catalog rate.
 		videoModelUsd: effectiveResolve(registryRows, 'video_i2v', body.video_model).usd,
+		// Generated adapter for the resolved video model (present on swapped-in
+		// discovered models). Without this the pipeline can only drive models it
+		// has hand-written shapes for — the whole point of the Model Manager swap.
+		videoAdapter: (() => {
+			const id = effectiveResolve(registryRows, 'video_i2v', body.video_model).id;
+			const row = registryRows.find((r) => r.kind === 'video_i2v' && r.model_id === id);
+			// Stored as JSON at probe time; shape is guaranteed by adapterFromProbe.
+			return (((row?.probe as any)?.adapter as UgcPackInput['videoAdapter']) ?? null);
+		})(),
 		// Composer format choice: spokesperson (TTS + talking-head) vs b-roll clip.
 		// 'auto' (or anything unrecognized) defers to the persona's ugc_format.
 		formatOverride: (['spokesperson', 'broll', 'auto'].includes(body.format)

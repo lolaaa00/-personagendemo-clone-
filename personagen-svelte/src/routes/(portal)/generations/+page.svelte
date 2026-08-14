@@ -32,6 +32,13 @@
 	let favOnly = $state(readParam('fav', ['1', '0'] as const, '0') === '1');
 	$effect(() => syncParam('fav', favOnly ? '1' : '0', '0'));
 
+	// Shareability is the platform's north-star metric — surface a shares-first
+	// ordering right where the whole library is browsed.
+	let orderBy = $state<'newest' | 'shared'>(
+		readParam('order', ['newest', 'shared'] as const, 'newest')
+	);
+	$effect(() => syncParam('order', orderBy, 'newest'));
+
 	// Persona filter holds dynamic ids, so it can't go through readParam's allowlist.
 	let personaFilter = $state(
 		typeof window !== 'undefined'
@@ -41,8 +48,8 @@
 	$effect(() => syncParam('persona', personaFilter, 'all'));
 
 	// ── Content lens: actual generation outputs (posts) ──────────────────────
-	let contentPosts = $derived(
-		posts.filter((p: any) => {
+	let contentPosts = $derived.by(() => {
+		const filtered = posts.filter((p: any) => {
 			// In-flight / failed rows are shown (same rule as the persona feed) so a
 			// generation kicked off elsewhere is visible here immediately.
 			const inFlight = p.status === 'generating' || p.status === 'failed';
@@ -54,8 +61,16 @@
 			}
 			if (favOnly && !p.is_favorite) return false;
 			return true;
-		})
-	);
+		});
+		if (orderBy === 'shared') {
+			// Most-shared first; ties (and never-published drafts, shares 0) keep
+			// the server's newest-first order beneath the winners.
+			return [...filtered].sort(
+				(a: any, b: any) => (b.analytics?.shares ?? 0) - (a.analytics?.shares ?? 0)
+			);
+		}
+		return filtered;
+	});
 
 	// ── Profile lens: persona-building assets (avatar + identity kit) ────────
 	const KIT_LABELS: Record<string, string> = {
@@ -288,6 +303,49 @@
 				>
 				Favorites only
 			</button>
+
+			<div class="toolbar-seg" role="group" aria-label="Order">
+				<button
+					type="button"
+					class="seg-btn"
+					class:active={orderBy === 'newest'}
+					aria-pressed={orderBy === 'newest'}
+					onclick={() => (orderBy = 'newest')}
+				>
+					Newest
+				</button>
+				<button
+					type="button"
+					class="seg-btn"
+					class:active={orderBy === 'shared'}
+					aria-pressed={orderBy === 'shared'}
+					title="Shareability is the metric that matters — most-forwarded posts first"
+					onclick={() => (orderBy = 'shared')}
+				>
+					<svg
+						width="13"
+						height="13"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
+						><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle
+							cx="18"
+							cy="19"
+							r="3"
+						/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49" /><line
+							x1="15.41"
+							y1="6.51"
+							x2="8.59"
+							y2="10.49"
+						/></svg
+					>
+					Most shared
+				</button>
+			</div>
 		{/if}
 	</div>
 
@@ -561,6 +619,9 @@
 	}
 
 	.seg-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 5px;
 		padding: 8px 12px;
 		min-height: 44px;
 		border: none;

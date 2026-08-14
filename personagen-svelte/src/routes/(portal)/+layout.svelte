@@ -68,7 +68,7 @@
 		setup: [
 			{ href: '/brand-brief', label: 'Brand Brief', icon: 'bolt' },
 			{ href: '/models', label: 'Model Manager', icon: 'sliders' },
-			{ href: '/guides', label: 'Guides', icon: 'book' },
+			{ href: '/guides', label: 'Docs', icon: 'book' },
 			{ href: '/settings', label: 'Settings', icon: 'settings' }
 		]
 	};
@@ -695,7 +695,7 @@
 						if (path.startsWith('/generator')) return 'New Persona';
 						if (path.startsWith('/generations')) return 'All Generations';
 						if (path.startsWith('/models')) return 'Model Manager';
-						if (path.startsWith('/guides')) return 'Guides';
+						if (path.startsWith('/guides')) return 'Docs';
 						if (path.startsWith('/favorites')) return 'My Favorites';
 						if (path.startsWith('/review')) return 'Review Queue';
 						if (path.startsWith('/calendar')) return 'Calendar';

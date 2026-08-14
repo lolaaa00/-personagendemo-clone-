@@ -855,8 +855,29 @@ async function generateBrollVideo(
 	falKey: string,
 	model: string,
 	stillUrl: string,
-	motionPrompt: string
+	motionPrompt: string,
+	adapter?: UgcPackInput['videoAdapter']
 ): Promise<string> {
+	// A generated adapter (Model Manager swap-in) takes precedence: it carries the
+	// model's REAL param names, schema-default constants for required fields the
+	// pipeline doesn't produce, and the output path — all derived from the live
+	// OpenAPI probe. This is the path that makes discovered models actually run;
+	// before it, an unknown id fell through to the name-guessing below and either
+	// 422'd or wasn't called at all.
+	if (adapter?.text) {
+		const input: any = { ...(adapter.constants ?? {}) };
+		input[adapter.text] = motionPrompt;
+		if (adapter.image) input[adapter.image] = adapter.imageIsArray ? [stillUrl] : stillUrl;
+		// Optional knobs only when the schema declares them AND the probe didn't
+		// already pin them as required constants.
+		if (adapter.duration && !(adapter.duration in input)) input[adapter.duration] = VIDEO_DURATION;
+		if (adapter.audio && !(adapter.audio in input)) input[adapter.audio] = BROLL_AUDIO_ENABLED;
+		const data = await falQueueJson(model, input, falKey);
+		const url = adapter.output === 'videos[].url' ? data.videos?.[0]?.url : data.video?.url;
+		if (!url) throw new Error('B-roll model returned no video (adapter path)');
+		return url;
+	}
+
 	// Every i2v model here takes `image_url` as the start frame (verified against
 	// the live OpenAPI specs — the older v3/pro `start_image_url` shape is NOT in
 	// them and fails validation). Beyond that they diverge, and fal rejects params a
@@ -1617,6 +1638,19 @@ export interface UgcPackInput {
 	/** Registry price override for that model (Model Manager edit). The ledger
 	 *  bills this when present; the static catalog rate otherwise. */
 	videoModelUsd?: number;
+	/** Generated adapter for a swapped-in discovered video model: param names,
+	 *  required-field constants, and output shape, derived from its schema probe.
+	 *  When present the b-roll builder drives the model through it instead of the
+	 *  hand-written shapes — this is what makes Model Manager swaps real. */
+	videoAdapter?: {
+		text: string;
+		image: string | null;
+		imageIsArray: boolean;
+		duration: string | null;
+		audio: string | null;
+		constants: Record<string, unknown>;
+		output: 'video.url' | 'videos[].url' | null;
+	} | null;
 	/** Opt-in: burn the on-screen caption hook onto the video. OFF by default. */
 	captions?: boolean;
 	/** Opt-in: burn a small "AI GENERATED" disclosure badge (top-left). OFF by
@@ -3165,11 +3199,22 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 				} else if (falKey) {
 					// The user picked this tier in the composer (Wan $0.10 → Veo $1.50); bill
 					// what actually ran rather than a hard-coded Kling Standard rate.
-					mediaUrl = await generateBrollVideo(falKey, brollModel.id, still, motionPrompt);
+					// With an adapter, run the REQUESTED id: resolveModel() only knows the
+					// static catalog, so a swapped-in discovered model used to silently
+					// resolve to the default here — the swap never actually ran.
+					const runModelId =
+						input.videoAdapter && input.videoModel ? input.videoModel : brollModel.id;
+					mediaUrl = await generateBrollVideo(
+						falKey,
+						runModelId,
+						still,
+						motionPrompt,
+						input.videoAdapter ?? undefined
+					);
 					costEvents.push({
 						provider: 'fal',
 						operation: 'video',
-						model: brollModel.label,
+						model: input.videoAdapter && input.videoModel ? runModelId : brollModel.label,
 						usd: input.videoModelUsd ?? brollModel.usd
 					});
 				} else {

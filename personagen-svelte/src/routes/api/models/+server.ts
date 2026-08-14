@@ -5,6 +5,7 @@ import {
 	syncFromFal,
 	probeModelSchema,
 	parsePriceText,
+	adapterFromProbe,
 	type RegistryKind
 } from '$lib/server/model-registry';
 
@@ -174,16 +175,21 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			if (!row) return json({ success: false, error: 'Model not found' }, { status: 404 });
 
 			const probe = await probeModelSchema(model_id, row.kind);
+			// Adapter generation is part of the probe: if every required input is
+			// either synonym-mapped or covered by the schema's own default, the
+			// adapter exists and the model is genuinely swappable — no human step.
+			const adapter = adapterFromProbe(probe, row.kind);
 			const patch: Record<string, unknown> = {
-				probe,
+				probe: { ...probe, adapter, adapterReady: adapter != null },
 				size_param: probe.sizeParam,
 				multi_ref: probe.imageParam ? probe.imageIsArray : null,
 				supports_audio: probe.audioParam != null,
 				supports_duration: probe.durationParam != null
 			};
-			// A clean probe keeps a discovered row 'available'; an odd shape
-			// quarantines it so the tile explains itself.
-			if (!row.wired) patch.status = probe.ok ? 'available' : 'quarantined';
+			// A row with a generated adapter is 'available' even when the raw shape
+			// had gaps (the adapter closes them); only truly unmappable models stay
+			// quarantined so the tile explains itself.
+			if (!row.wired) patch.status = probe.ok || adapter != null ? 'available' : 'quarantined';
 			// Opportunistic price refresh alongside the probe (manual wins).
 			if (!row.wired && row.price_source !== 'manual') {
 				const parsed = parsePriceText(row.pricing_text);
@@ -240,16 +246,32 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			if (to.wired) {
 				return json({ success: false, error: `${to.label} is already wired` }, { status: 400 });
 			}
-			// The gate: an unprobed or odd-shaped model would break generation the
-			// moment something asked this slot for output.
-			if (!(to.probe as any)?.ok) {
+			// The gate: swapping requires a generated adapter (a clean probe yields
+			// one automatically). Without it the pipeline literally cannot shape a
+			// request for this model, and the old probe-only gate let models into
+			// the roster that then silently fell back to the default at generation
+			// time — the swap looked done but never actually ran the new model.
+			const toProbe = to.probe as any;
+			if (!toProbe?.adapter && !toProbe?.ok) {
 				return json(
 					{
 						success: false,
-						error: `${to.label} has not passed a schema probe — probe it first so the pipeline can drive it.`
+						error: `${to.label} has no generated adapter — run Probe first; the adapter builds automatically when the schema allows it.`
 					},
 					{ status: 400 }
 				);
+			}
+			// Legacy rows probed before adapter generation existed: derive one now
+			// from the stored probe so old SCHEMA OK rows swap correctly too.
+			if (!toProbe.adapter && toProbe.ok) {
+				const derived = adapterFromProbe(toProbe, to.kind);
+				if (derived) {
+					await locals.supabase
+						.from('model_registry')
+						.update({ probe: { ...toProbe, adapter: derived, adapterReady: true } })
+						.eq('id', to.id)
+						.eq('user_id', user.id);
+				}
 			}
 
 			const { error: inErr } = await locals.supabase

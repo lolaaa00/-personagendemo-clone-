@@ -216,12 +216,20 @@ function rowToOption(row: RegistryRow): ModelOption {
 		kind: row.kind as ModelKind,
 		tier: row.tier ?? staticEntry?.tier ?? 'balanced',
 		usd: row.price_usd ?? staticEntry?.usd ?? 0,
-		sizeParam: staticEntry?.sizeParam,
-		multiRef: staticEntry?.multiRef,
+		// The row's own probed capabilities win over the static entry — for a
+		// discovered (swapped-in) model there IS no static entry, and ignoring the
+		// probe here silently stripped the flags the request builder relies on.
+		// ModelOption's sizeParam is a closed union; the probe stores the raw param
+		// name, so only pass it through when it IS one of the driveable values.
+		sizeParam:
+			row.size_param === 'image_size' || row.size_param === 'aspect_ratio'
+				? row.size_param
+				: staticEntry?.sizeParam,
+		multiRef: row.multi_ref ?? staticEntry?.multiRef,
 		note: row.note ?? staticEntry?.note ?? '',
 		caveat: staticEntry?.caveat,
-		supportsAudio: staticEntry?.supportsAudio,
-		supportsDuration: staticEntry?.supportsDuration
+		supportsAudio: row.supports_audio ?? staticEntry?.supportsAudio,
+		supportsDuration: row.supports_duration ?? staticEntry?.supportsDuration
 	};
 }
 
@@ -457,8 +465,55 @@ export interface ProbeResult {
 	durationParam: string | null;
 	audioParam: string | null;
 	unknownRequired: string[];
+	/** Schema defaults for unknownRequired fields — each one found here is a gap
+	 *  the adapter can close automatically by sending the model's own default. */
+	requiredDefaults: Record<string, unknown>;
 	outputShape: string | null;
 	probedAt: string;
+}
+
+/**
+ * A generated adapter: everything the request builder needs to drive a model it
+ * has no hand-written integration for. Derived mechanically from the probe —
+ * param names from the synonym match, constants from the schema's own defaults,
+ * output from the response shape. Stored inside the row's `probe` JSON so the
+ * adapter travels with the evidence it was built from.
+ */
+export interface ModelAdapter {
+	text: string;
+	image: string | null;
+	imageIsArray: boolean;
+	duration: string | null;
+	audio: string | null;
+	constants: Record<string, unknown>;
+	output: 'video.url' | 'videos[].url' | null;
+}
+
+export function adapterFromProbe(probe: ProbeResult, kind: RegistryKind): ModelAdapter | null {
+	if (!probe.textParam) return null;
+	const needsImage = kind === 'video_i2v' || kind === 'image_edit';
+	if (needsImage && !probe.imageParam) return null;
+	// Every required field the synonym match didn't cover must have a schema
+	// default we can pin — otherwise there is no honest adapter, only a guess.
+	const constants: Record<string, unknown> = {};
+	for (const f of probe.unknownRequired) {
+		if (!(f in probe.requiredDefaults)) return null;
+		constants[f] = probe.requiredDefaults[f];
+	}
+	const output =
+		probe.outputShape === 'video.url' || probe.outputShape === 'videos[].url'
+			? probe.outputShape
+			: null;
+	if (kind === 'video_i2v' && !output) return null;
+	return {
+		text: probe.textParam,
+		image: probe.imageParam,
+		imageIsArray: probe.imageIsArray,
+		duration: probe.durationParam,
+		audio: probe.audioParam,
+		constants,
+		output
+	};
 }
 
 /**
@@ -541,6 +596,13 @@ export async function probeModelSchema(
 		Boolean(outputShape) &&
 		!String(outputShape).startsWith('other');
 
+	// Harvest the schema's own defaults for the fields we couldn't map — they're
+	// what let a generated adapter close gaps without a human writing constants.
+	const requiredDefaults: Record<string, unknown> = {};
+	for (const f of unknownRequired) {
+		if (props[f]?.default !== undefined) requiredDefaults[f] = props[f].default;
+	}
+
 	return {
 		ok,
 		textParam,
@@ -550,6 +612,7 @@ export async function probeModelSchema(
 		durationParam,
 		audioParam,
 		unknownRequired,
+		requiredDefaults,
 		outputShape,
 		probedAt: new Date().toISOString()
 	};

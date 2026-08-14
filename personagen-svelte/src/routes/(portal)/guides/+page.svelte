@@ -1,5 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { syncParam } from '$lib/url-state';
+	import { CHANGELOG, type ChangeEntry } from '$lib/changelog';
+	import { ROADMAP, ROADMAP_STATUSES } from '$lib/roadmap';
 
 	// ── Guide catalog ────────────────────────────────────────────────────────
 	// Screenshots are imported through Vite's asset pipeline so every capture
@@ -59,7 +62,7 @@
 				'Sidebar groups: Network · Library · Personas · Publish · Setup',
 				'Home base is the Dashboard',
 				'Moon button (top right) switches dark / light',
-				'Lost? Setup → Guides + the search box',
+				'Lost? Setup → Docs + the search box',
 			],
 			steps: [
 				{
@@ -73,7 +76,7 @@
 					alt: 'The Dashboard page with KPIs and the persona roster'
 				},
 				{ t: 'The moon/sun button in the top-right switches dark and light mode. Your name next to it opens the menu with Log Out.' },
-				{ t: 'Stuck anywhere? Come back to this Guides page (Setup → Guides) and use the search box.' }
+				{ t: 'Stuck anywhere? Come back to this Docs page (Setup → Docs): Guides for how-tos, Changelog for what changed, Roadmap for what is coming.' }
 			]
 		},
 		{
@@ -157,6 +160,46 @@
 					alt: 'The Studio tab template gallery'
 				}
 			]
+		},
+		{
+			id: 'docs-hub',
+			category: 'Getting started',
+			title: 'Use this Docs page (guides, changelog, roadmap)',
+			when: 'You want to know how something works, what changed, or what is coming next.',
+			facts: [
+				'Where: sidebar → Setup → Docs',
+				'Four tabs across the top',
+				'Guides = how-tos · Changelog = what changed',
+				'Roadmap = what is next · User Voice = your requests',
+			],
+			steps: [
+				{ t: 'Guides (this tab) — step-by-step how-tos for every feature, with real screenshots. Pick a guide on the left; each one opens with Quick facts (the short answer) before the numbered steps.' },
+				{ t: 'Changelog — every change ever made to PersonaGen, newest first, grouped by month. It is generated from the project’s real development history, so it can never drift from what actually shipped. Tick “Major changes only” to see just the big ones, or search for a feature by name.' },
+				{ t: 'Roadmap — three columns: In progress, Planned, and Exploring. This is what the team is building next; nothing here is a promise with a date, it is an honest ordering.' },
+				{ t: 'User Voice — request a feature and vote on everyone else’s. See the “Request a feature” guide for how voting works.' },
+				{ t: 'Every tab has its own web address, so you can bookmark or share a direct link (for example the Changelog tab, or one specific guide).' }
+			],
+			tip: 'Searching only looks inside the tab you are on — the Guides search finds how-tos, the Changelog search finds changes.'
+		},
+		{
+			id: 'user-voice',
+			category: 'Getting started',
+			title: 'Request a feature & vote (User Voice)',
+			when: 'PersonaGen is missing something you need, or you want to back someone else’s idea.',
+			facts: [
+				'Where: Docs → User Voice',
+				'Upvote what you want built',
+				'Anyone can add a request',
+				'The team sets each request’s status',
+			],
+			steps: [
+				{ t: 'Open Docs (sidebar → Setup) and click the User Voice tab. Requests are sorted by score, so the most-wanted ideas sit at the top.' },
+				{ t: 'Vote with the ▲ and ▼ buttons on the left of each request. Click the same arrow again to take your vote back. One vote per person per request.' },
+				{ t: 'To add your own: click “+ Request a feature”, write one clear sentence as the title, and add detail about the problem it solves. Your request starts with your own upvote.' },
+				{ t: 'Each request carries a status: Under review → Planned → In progress → Shipped (or Declined). Switch to the Board view to see everything sorted into those columns at a glance.' },
+				{ t: 'Requests you wrote are marked “yours” and can be deleted by you. Only the team can change a status — so scores stay honest.' }
+			],
+			tip: 'Detail beats volume: a request that explains when you last needed the feature is far more likely to get built than one that just names it.'
 		},
 		{
 			id: 'new-persona',
@@ -788,27 +831,273 @@
 		const hash = location.hash.replace('#', '');
 		if (hash && GUIDES.some((g) => g.id === hash)) selectedId = hash;
 	});
+
+	// ── Docs hub: Guides | Changelog | Roadmap | User Voice ──────────────────
+	type DocView = 'guides' | 'changelog' | 'roadmap' | 'uservoice';
+	let docView = $state<DocView>('guides');
+	onMount(() => {
+		const v = new URLSearchParams(location.search).get('view');
+		if (v === 'changelog' || v === 'roadmap' || v === 'uservoice') docView = v;
+	});
+	$effect(() => syncParam('view', docView, 'guides'));
+
+	// Changelog: newest first, grouped by month, with a majors-only lens.
+	let clQuery = $state('');
+	let clMajorsOnly = $state(false);
+	let clFiltered = $derived.by(() => {
+		const q = clQuery.trim().toLowerCase();
+		let list = [...CHANGELOG].reverse();
+		if (clMajorsOnly) list = list.filter((e) => e.type === 'feat' || e.milestone);
+		if (q)
+			list = list.filter(
+				(e) =>
+					e.title.toLowerCase().includes(q) ||
+					(e.scope ?? '').toLowerCase().includes(q) ||
+					(e.milestone ?? '').toLowerCase().includes(q) ||
+					e.date.includes(q)
+			);
+		return list;
+	});
+	let clMonths = $derived.by(() => {
+		const groups: Array<{ month: string; label: string; entries: ChangeEntry[] }> = [];
+		for (const e of clFiltered) {
+			const month = e.date.slice(0, 7);
+			let g = groups[groups.length - 1];
+			if (!g || g.month !== month) {
+				const d = new Date(month + '-15');
+				g = {
+					month,
+					label: d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+					entries: []
+				};
+				groups.push(g);
+			}
+			g.entries.push(e);
+		}
+		return groups;
+	});
+	const CL_FIRST = CHANGELOG[0]?.date ?? '';
+	const CL_LAST = CHANGELOG[CHANGELOG.length - 1]?.date ?? '';
+	const CL_MILESTONES = CHANGELOG.filter((e) => e.milestone).length;
+
+	const TYPE_LABEL: Record<string, string> = {
+		feat: 'Feature',
+		fix: 'Fix',
+		perf: 'Performance',
+		docs: 'Docs',
+		chore: 'Chore',
+		refactor: 'Refactor',
+		redesign: 'Redesign',
+		polish: 'Polish',
+		deploy: 'Deploy',
+		test: 'Tests',
+		style: 'Style',
+		other: 'Change'
+	};
+
+	let roadmapByStatus = $derived(
+		ROADMAP_STATUSES.map((st) => ({
+			...st,
+			items: ROADMAP.filter((r) => r.status === st.id)
+		}))
+	);
+
+	// ── User Voice ───────────────────────────────────────────────────────────
+	interface UvItem {
+		id: string;
+		title: string;
+		detail: string;
+		status: string;
+		created_at: string;
+		mine: boolean;
+		score: number;
+		up: number;
+		down: number;
+		myVote: number;
+	}
+	const UV_STATUSES: Array<{ id: string; label: string }> = [
+		{ id: 'under-review', label: 'Under review' },
+		{ id: 'planned', label: 'Planned' },
+		{ id: 'in-progress', label: 'In progress' },
+		{ id: 'shipped', label: 'Shipped' },
+		{ id: 'declined', label: 'Declined' }
+	];
+	let uvItems = $state<UvItem[]>([]);
+	let uvLoading = $state(false);
+	let uvError = $state('');
+	let uvNeedsMigration = $state(false);
+	let uvMode = $state<'list' | 'board'>('list');
+	let uvQuery = $state('');
+	let uvTitle = $state('');
+	let uvDetail = $state('');
+	let uvSubmitting = $state(false);
+	let uvFormOpen = $state(false);
+
+	async function uvApi(body: Record<string, unknown>) {
+		const res = await fetch('/api/feature-requests', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify(body)
+		});
+		return await res.json();
+	}
+
+	async function uvLoad() {
+		uvLoading = true;
+		uvError = '';
+		try {
+			const d = await uvApi({ action: 'list' });
+			if (d.needsMigration) {
+				uvNeedsMigration = true;
+				uvError = d.error;
+			} else if (!d.success) {
+				uvError = d.error || 'Failed to load requests';
+			} else {
+				uvNeedsMigration = false;
+				uvItems = d.items;
+			}
+		} catch (e: any) {
+			uvError = e.message;
+		} finally {
+			uvLoading = false;
+		}
+	}
+	$effect(() => {
+		if (docView === 'uservoice') void uvLoad();
+	});
+
+	let uvFiltered = $derived.by(() => {
+		const q = uvQuery.trim().toLowerCase();
+		const list = q
+			? uvItems.filter(
+					(i) => i.title.toLowerCase().includes(q) || i.detail.toLowerCase().includes(q)
+				)
+			: [...uvItems];
+		// Highest support first; ties by newest.
+		return list.sort((a, b) => b.score - a.score || b.created_at.localeCompare(a.created_at));
+	});
+	let uvLanes = $derived(
+		UV_STATUSES.map((st) => ({ ...st, items: uvFiltered.filter((i) => i.status === st.id) }))
+	);
+
+	async function uvVote(item: UvItem, dir: 1 | -1) {
+		// Clicking your current vote clears it; otherwise it sets/flips.
+		const next = item.myVote === dir ? 0 : dir;
+		// Optimistic: reflect instantly, reconcile with a reload on failure.
+		const prev = { myVote: item.myVote, score: item.score, up: item.up, down: item.down };
+		item.score += next - item.myVote;
+		if (item.myVote === 1) item.up--;
+		if (item.myVote === -1) item.down--;
+		if (next === 1) item.up++;
+		if (next === -1) item.down++;
+		item.myVote = next;
+		const d = await uvApi({ action: 'vote', id: item.id, value: next });
+		if (!d.success) {
+			Object.assign(item, prev);
+			uvError = d.error || 'Vote failed';
+		}
+	}
+
+	async function uvSubmit() {
+		if (uvSubmitting || uvTitle.trim().length < 3) return;
+		uvSubmitting = true;
+		uvError = '';
+		try {
+			const d = await uvApi({ action: 'create', title: uvTitle, detail: uvDetail });
+			if (!d.success) {
+				uvError = d.error || 'Could not add the request';
+				return;
+			}
+			uvTitle = '';
+			uvDetail = '';
+			uvFormOpen = false;
+			await uvLoad();
+		} finally {
+			uvSubmitting = false;
+		}
+	}
+
+	async function uvDelete(item: UvItem) {
+		if (!confirm(`Delete your request “${item.title}”? Its votes go with it.`)) return;
+		const d = await uvApi({ action: 'delete', id: item.id });
+		if (!d.success) uvError = d.error || 'Delete failed';
+		else uvItems = uvItems.filter((i) => i.id !== item.id);
+	}
 </script>
 
 <svelte:head>
-	<title>Guides — PersonaGen</title>
+	<title>Docs — PersonaGen</title>
 </svelte:head>
 
 <div class="guides-page">
 	<!-- Slim sticky top bar: title + search, full width. -->
 	<header class="gd-top">
 		<div class="gd-top-titles">
-			<h1>Guides</h1>
-			<p>How to do everything in PersonaGen — plain English, step by step, with pictures.</p>
+			<h1>Docs</h1>
+			<p>
+				{#if docView === 'guides'}
+					How to do everything in PersonaGen — plain English, step by step, with pictures.
+				{:else if docView === 'changelog'}
+					Every change since the first commit — {CHANGELOG.length} entries from {CL_FIRST} to
+					{CL_LAST}, {CL_MILESTONES} milestones.
+				{:else if docView === 'roadmap'}
+					What's being built, what's next, and what's under consideration — the honest ledger.
+				{:else}
+					Request features, vote on what matters — the most-wanted ideas rise to the top.
+				{/if}
+			</p>
 		</div>
-		<input
-			type="search"
-			placeholder="Search guides… (try: credits, connect, voice)"
-			bind:value={query}
-			aria-label="Search guides"
-		/>
+		<nav class="gd-docs-nav" aria-label="Documentation section">
+			<button
+				type="button"
+				class="gd-docs-tab"
+				class:active={docView === 'guides'}
+				aria-current={docView === 'guides' ? 'true' : undefined}
+				onclick={() => (docView = 'guides')}>Guides</button>
+			<button
+				type="button"
+				class="gd-docs-tab"
+				class:active={docView === 'changelog'}
+				aria-current={docView === 'changelog' ? 'true' : undefined}
+				onclick={() => (docView = 'changelog')}>Changelog</button>
+			<button
+				type="button"
+				class="gd-docs-tab"
+				class:active={docView === 'roadmap'}
+				aria-current={docView === 'roadmap' ? 'true' : undefined}
+				onclick={() => (docView = 'roadmap')}>Roadmap</button>
+			<button
+				type="button"
+				class="gd-docs-tab"
+				class:active={docView === 'uservoice'}
+				aria-current={docView === 'uservoice' ? 'true' : undefined}
+				onclick={() => (docView = 'uservoice')}>User Voice</button>
+		</nav>
+		{#if docView === 'guides'}
+			<input
+				type="search"
+				placeholder="Search guides… (try: credits, connect, voice)"
+				bind:value={query}
+				aria-label="Search guides"
+			/>
+		{:else if docView === 'changelog'}
+			<input
+				type="search"
+				placeholder="Search changes… (try: studio, calendar, fix)"
+				bind:value={clQuery}
+				aria-label="Search the changelog"
+			/>
+		{:else if docView === 'uservoice'}
+			<input
+				type="search"
+				placeholder="Search requests…"
+				bind:value={uvQuery}
+				aria-label="Search feature requests"
+			/>
+		{/if}
 	</header>
 
+	{#if docView === 'guides'}
 	<div class="gd-body">
 		<!-- ── Left: nested index — category ▸ guide ▸ steps of the open guide ── -->
 		<nav class="gd-nav" aria-label="Guide list">
@@ -947,6 +1236,204 @@
 			</ol>
 		</aside>
 	</div>
+
+	{:else if docView === 'changelog'}
+		<div class="cl-body">
+			<div class="cl-controls">
+				<label class="cl-majors">
+					<input type="checkbox" bind:checked={clMajorsOnly} />
+					Major changes only
+				</label>
+				<span class="cl-count" aria-live="polite">{clFiltered.length} of {CHANGELOG.length} changes</span>
+			</div>
+			{#if clFiltered.length === 0}
+				<p class="cl-empty">No changes match “{clQuery}”.</p>
+			{/if}
+			{#each clMonths as group (group.month)}
+				<section class="cl-month">
+					<h2 class="cl-month-title">{group.label}</h2>
+					<ol class="cl-list">
+						{#each group.entries as e (e.hash)}
+							<li class="cl-entry" class:milestone={!!e.milestone}>
+								<!-- Day only — the month lives in the sticky group header above. -->
+								<span class="cl-date">{new Date(e.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+								<span class="cl-type cl-type-{e.type}">{TYPE_LABEL[e.type] ?? e.type}</span>
+								<span class="cl-text">
+									{#if e.scope}<span class="cl-scope">{e.scope}</span>{/if}
+									{e.title}
+									{#if e.milestone}
+										<span class="cl-milestone-note">★ {e.milestone}</span>
+									{/if}
+								</span>
+							</li>
+						{/each}
+					</ol>
+				</section>
+			{/each}
+		</div>
+
+	{:else if docView === 'roadmap'}
+		<div class="rm-body">
+			{#each roadmapByStatus as lane (lane.id)}
+				<section class="rm-lane rm-{lane.id}">
+					<header class="rm-lane-head">
+						<h2 class="rm-lane-title">{lane.label}</h2>
+						<span class="rm-lane-hint">{lane.hint}</span>
+						<span class="rm-lane-count">{lane.items.length}</span>
+					</header>
+					{#each lane.items as item (item.title)}
+						<article class="rm-card">
+							<span class="rm-area">{item.area}</span>
+							<h3 class="rm-card-title">{item.title}</h3>
+							<p class="rm-card-detail">{item.detail}</p>
+						</article>
+					{/each}
+				</section>
+			{/each}
+		</div>
+
+	{:else}
+		<div class="uv-body">
+			<div class="uv-controls">
+				<div class="feed-view-toggle" role="group" aria-label="User Voice view">
+					<button
+						type="button"
+						class="view-toggle-btn"
+						class:active={uvMode === 'list'}
+						aria-pressed={uvMode === 'list'}
+						onclick={() => (uvMode = 'list')}>List</button>
+					<button
+						type="button"
+						class="view-toggle-btn"
+						class:active={uvMode === 'board'}
+						aria-pressed={uvMode === 'board'}
+						onclick={() => (uvMode = 'board')}>Board</button>
+				</div>
+				<span class="uv-count" aria-live="polite">{uvFiltered.length} request{uvFiltered.length === 1 ? '' : 's'}</span>
+				<button type="button" class="uv-add-btn" onclick={() => (uvFormOpen = !uvFormOpen)} aria-expanded={uvFormOpen}>
+					{uvFormOpen ? 'Close' : '+ Request a feature'}
+				</button>
+			</div>
+
+			{#if uvFormOpen}
+				<form
+					class="uv-form"
+					onsubmit={(e) => {
+						e.preventDefault();
+						void uvSubmit();
+					}}
+				>
+					<label class="uv-label" for="uv-title">What should we build or fix?</label>
+					<input
+						id="uv-title"
+						type="text"
+						bind:value={uvTitle}
+						minlength="3"
+						maxlength="120"
+						required
+						placeholder="One clear sentence — e.g. “Bulk-reschedule posts by dragging on the calendar”"
+					/>
+					<label class="uv-label" for="uv-detail">Why / details <span class="uv-optional">(optional)</span></label>
+					<textarea
+						id="uv-detail"
+						bind:value={uvDetail}
+						maxlength="2000"
+						rows="3"
+						placeholder="What problem does it solve? When did you last need it?"
+					></textarea>
+					<div class="uv-form-foot">
+						<span class="uv-hint">Your request starts with your own upvote. Statuses are set by the team.</span>
+						<button type="submit" class="uv-submit" disabled={uvSubmitting || uvTitle.trim().length < 3}>
+							{uvSubmitting ? 'Adding…' : 'Add request'}
+						</button>
+					</div>
+				</form>
+			{/if}
+
+			{#if uvError}
+				<div class="uv-error" role="alert">
+					{uvError}
+					{#if !uvNeedsMigration}
+						<button type="button" class="uv-retry" onclick={() => void uvLoad()}>Retry</button>
+					{/if}
+				</div>
+			{/if}
+
+			{#if uvLoading && uvItems.length === 0}
+				<p class="uv-empty" role="status">Loading requests…</p>
+			{:else if !uvNeedsMigration && uvFiltered.length === 0 && !uvLoading}
+				<div class="uv-empty">
+					{#if uvQuery.trim()}
+						No requests match “{uvQuery}”.
+					{:else}
+						No feature requests yet — yours can be the first. Click <b>+ Request a feature</b>.
+					{/if}
+				</div>
+			{:else if uvMode === 'list'}
+				<ol class="uv-list">
+					{#each uvFiltered as item (item.id)}
+						<li class="uv-row">
+							<div class="uv-votes">
+								<button
+									type="button"
+									class="uv-vote up"
+									class:on={item.myVote === 1}
+									aria-pressed={item.myVote === 1}
+									aria-label="Upvote {item.title}"
+									onclick={() => void uvVote(item, 1)}
+									><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 15l-6-6-6 6" /></svg></button>
+								<span class="uv-score" class:neg={item.score < 0}>{item.score}</span>
+								<button
+									type="button"
+									class="uv-vote down"
+									class:on={item.myVote === -1}
+									aria-pressed={item.myVote === -1}
+									aria-label="Downvote {item.title}"
+									onclick={() => void uvVote(item, -1)}
+									><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg></button>
+							</div>
+							<div class="uv-main">
+								<span class="uv-title-row">
+									<b class="uv-title">{item.title}</b>
+									<span class="uv-status uv-status-{item.status}">{UV_STATUSES.find((st) => st.id === item.status)?.label ?? item.status}</span>
+									{#if item.mine}<span class="uv-mine">yours</span>{/if}
+								</span>
+								{#if item.detail}<p class="uv-detail">{item.detail}</p>{/if}
+								<span class="uv-meta">
+									{new Date(item.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+									· ▲ {item.up} · ▼ {item.down}
+									{#if item.mine}
+										<button type="button" class="uv-del" onclick={() => void uvDelete(item)}>Delete</button>
+									{/if}
+								</span>
+							</div>
+						</li>
+					{/each}
+				</ol>
+			{:else}
+				<div class="uv-board">
+					{#each uvLanes as lane (lane.id)}
+						<section class="uv-lane">
+							<header class="uv-lane-head">
+								<h2 class="uv-lane-title uv-status-{lane.id}">{lane.label}</h2>
+								<span class="uv-lane-count">{lane.items.length}</span>
+							</header>
+							{#each lane.items as item (item.id)}
+								<article class="uv-card">
+									<span class="uv-card-score" class:neg={item.score < 0}>{item.score > 0 ? '+' : ''}{item.score}</span>
+									<b class="uv-card-title">{item.title}</b>
+									{#if item.detail}<p class="uv-card-detail">{item.detail}</p>{/if}
+								</article>
+							{/each}
+							{#if lane.items.length === 0}
+								<p class="uv-lane-empty">Empty</p>
+							{/if}
+						</section>
+					{/each}
+				</div>
+			{/if}
+		</div>
+	{/if}
 </div>
 
 <style>
@@ -1398,6 +1885,359 @@
 			padding: var(--space-5);
 		}
 	}
+
+	/* ── Docs hub nav ─────────────────────────────────────────────── */
+	.gd-docs-nav {
+		display: inline-flex;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		overflow: hidden;
+		background: var(--surface);
+	}
+	.gd-docs-tab {
+		border: none;
+		background: none;
+		cursor: pointer;
+		font-size: 0.85rem;
+		font-weight: var(--weight-semi);
+		color: var(--text-dim);
+		padding: 0 1.1rem;
+		min-height: 44px;
+	}
+	.gd-docs-tab:hover {
+		color: var(--text);
+		background: var(--surface-2);
+	}
+	.gd-docs-tab.active {
+		color: var(--accent-text);
+		background: var(--accent-soft);
+	}
+	.gd-docs-tab:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: -2px;
+	}
+
+	/* ── Changelog ────────────────────────────────────────────────── */
+	.cl-body {
+		max-width: 980px;
+		margin: 0 auto;
+		padding: var(--space-6) var(--space-8) var(--space-16);
+		width: 100%;
+	}
+	.cl-controls {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--space-4);
+		margin-bottom: var(--space-5);
+	}
+	.cl-majors {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.5rem;
+		font-size: 0.85rem;
+		color: var(--text-muted);
+		text-transform: none;
+		letter-spacing: normal;
+		font-weight: var(--weight-medium);
+		cursor: pointer;
+		min-height: 44px;
+	}
+	.cl-majors input {
+		width: 17px;
+		height: 17px;
+		accent-color: var(--accent);
+	}
+	.cl-count {
+		font-family: var(--font-mono);
+		font-size: 0.72rem;
+		color: var(--text-dim);
+		font-variant-numeric: tabular-nums;
+	}
+	.cl-empty {
+		color: var(--text-dim);
+		padding: var(--space-6) 0;
+	}
+	.cl-month {
+		margin-bottom: var(--space-6);
+	}
+	.cl-month-title {
+		font-family: var(--font-body);
+		font-size: 0.95rem;
+		font-weight: 700;
+		color: var(--text);
+		margin: 0 0 var(--space-3);
+		padding-bottom: 6px;
+		border-bottom: 1px solid var(--border-strong);
+		position: sticky;
+		top: 118px;
+		background: var(--bg);
+		z-index: var(--z-content);
+	}
+	.cl-list {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: flex;
+		flex-direction: column;
+	}
+	.cl-entry {
+		display: grid;
+		grid-template-columns: 64px 92px 1fr;
+		gap: var(--space-3);
+		align-items: baseline;
+		padding: 0.42rem 0.5rem;
+		border-radius: var(--radius-xs);
+		font-size: 0.86rem;
+	}
+	.cl-entry:nth-child(even) {
+		background: color-mix(in srgb, var(--surface-2) 55%, transparent);
+	}
+	.cl-entry.milestone {
+		background: var(--accent-soft);
+		border-left: 3px solid var(--accent);
+		padding-left: calc(0.5rem - 3px);
+	}
+	.cl-date {
+		font-family: var(--font-mono);
+		font-size: 0.7rem;
+		color: var(--text-dim);
+		font-variant-numeric: tabular-nums;
+		white-space: nowrap;
+	}
+	.cl-date-sep {
+		opacity: 0.5;
+	}
+	.cl-type {
+		font-family: var(--font-mono);
+		font-size: 0.62rem;
+		text-transform: uppercase;
+		letter-spacing: 0.07em;
+		border-radius: var(--radius-full);
+		padding: 2px 8px;
+		text-align: center;
+		white-space: nowrap;
+		background: var(--surface-3);
+		color: var(--text-muted);
+	}
+	.cl-type-feat {
+		background: var(--success-soft);
+		color: var(--success-text);
+	}
+	.cl-type-fix {
+		background: var(--warning-soft);
+		color: var(--warning-text);
+	}
+	.cl-type-perf {
+		background: var(--cyan-soft);
+		color: var(--cyan-text);
+	}
+	.cl-type-redesign,
+	.cl-type-polish {
+		background: var(--accent-soft);
+		color: var(--accent-text);
+	}
+	.cl-text {
+		color: var(--text);
+		line-height: 1.5;
+		min-width: 0;
+	}
+	.cl-scope {
+		font-family: var(--font-mono);
+		font-size: 0.72rem;
+		color: var(--accent-text);
+		margin-right: 0.45rem;
+	}
+	.cl-milestone-note {
+		display: block;
+		font-size: 0.78rem;
+		color: var(--accent-text);
+		font-weight: var(--weight-semi);
+		margin-top: 2px;
+	}
+	@media (max-width: 700px) {
+		.cl-entry {
+			grid-template-columns: 56px 1fr;
+		}
+		.cl-type {
+			display: none;
+		}
+	}
+
+	/* ── Roadmap ──────────────────────────────────────────────────── */
+	.rm-body {
+		display: grid;
+		grid-template-columns: repeat(3, 1fr);
+		gap: var(--space-5);
+		align-items: start;
+		padding: var(--space-6) var(--space-8) var(--space-16);
+		width: 100%;
+	}
+	.rm-lane {
+		background: var(--surface-2);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		padding: var(--space-4);
+	}
+	.rm-lane-head {
+		display: flex;
+		align-items: baseline;
+		gap: 0.5rem;
+		flex-wrap: wrap;
+		margin-bottom: var(--space-4);
+		padding-bottom: var(--space-2);
+		border-bottom: 1px solid var(--border-strong);
+	}
+	.rm-lane-title {
+		font-family: var(--font-body);
+		font-size: 0.9rem;
+		font-weight: 700;
+		margin: 0;
+	}
+	.rm-in-progress .rm-lane-title {
+		color: var(--cyan-text);
+	}
+	.rm-planned .rm-lane-title {
+		color: var(--accent-text);
+	}
+	.rm-exploring .rm-lane-title {
+		color: var(--text-muted);
+	}
+	.rm-lane-hint {
+		font-size: 0.72rem;
+		color: var(--text-dim);
+	}
+	.rm-lane-count {
+		margin-left: auto;
+		font-family: var(--font-mono);
+		font-size: 0.72rem;
+		color: var(--text-dim);
+		font-variant-numeric: tabular-nums;
+	}
+	.rm-card {
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		padding: var(--space-4);
+		margin-bottom: var(--space-3);
+	}
+	.rm-area {
+		font-family: var(--font-mono);
+		font-size: 0.6rem;
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+		color: var(--text-dim);
+		border: 1px solid var(--border-strong);
+		border-radius: var(--radius-full);
+		padding: 2px 8px;
+	}
+	.rm-card-title {
+		font-family: var(--font-body);
+		font-size: 0.92rem;
+		font-weight: 700;
+		color: var(--text);
+		margin: 0.55rem 0 0.3rem;
+	}
+	.rm-card-detail {
+		font-size: 0.82rem;
+		color: var(--text-muted);
+		line-height: 1.55;
+		margin: 0;
+	}
+	@media (max-width: 1000px) {
+		.rm-body {
+			grid-template-columns: 1fr;
+		}
+	}
+
+
+	/* The List/Board switch reuses the persona page's class names, but Svelte
+	   scopes styles per component — without these it rendered as bare default
+	   buttons. Same visual contract as the Docs tabs above it. */
+	.feed-view-toggle {
+		display: inline-flex;
+		border: 1px solid var(--border-strong);
+		border-radius: var(--radius-sm);
+		overflow: hidden;
+		background: var(--surface);
+	}
+	.view-toggle-btn {
+		border: none;
+		background: none;
+		cursor: pointer;
+		font-size: 0.82rem;
+		font-weight: var(--weight-semi);
+		color: var(--text-dim);
+		padding: 0 1rem;
+		min-height: 44px;
+	}
+	.view-toggle-btn:hover {
+		color: var(--text);
+		background: var(--surface-2);
+	}
+	.view-toggle-btn.active {
+		color: var(--accent-text);
+		background: var(--accent-soft);
+	}
+	.view-toggle-btn:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: -2px;
+	}
+	/* ── User Voice ───────────────────────────────────────────────── */
+	.uv-body { max-width: 1080px; margin: 0 auto; padding: var(--space-6) var(--space-8) var(--space-16); width: 100%; }
+	.uv-controls { display: flex; align-items: center; gap: var(--space-4); margin-bottom: var(--space-4); flex-wrap: wrap; }
+	.uv-count { font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+	.uv-add-btn { margin-left: auto; min-height: 44px; padding: 0 1.1rem; border-radius: var(--radius-sm); border: none; background: var(--gradient-cta); color: #fff; font-weight: var(--weight-semi); font-size: 0.85rem; cursor: pointer; }
+	.uv-add-btn:hover { box-shadow: var(--shadow-accent); }
+	.uv-add-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+	.uv-form { background: var(--surface); border: 1px solid var(--accent-mid); border-radius: var(--radius-sm); padding: var(--space-5); margin-bottom: var(--space-5); display: flex; flex-direction: column; gap: var(--space-2); }
+	.uv-label { font-size: var(--text-sm); text-transform: none; letter-spacing: normal; font-weight: var(--weight-semi); color: var(--text-muted); margin-bottom: 0; }
+	.uv-optional { font-weight: var(--weight-normal); color: var(--text-dim); }
+	.uv-form-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; margin-top: var(--space-2); }
+	.uv-hint { font-size: 0.76rem; color: var(--text-dim); }
+	.uv-submit { min-height: 44px; padding: 0 1.3rem; border-radius: var(--radius-sm); border: none; background: var(--gradient-cta); color: #fff; font-weight: var(--weight-semi); cursor: pointer; }
+	.uv-submit:disabled { opacity: 0.5; cursor: not-allowed; }
+	.uv-submit:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+	.uv-error { background: var(--warning-soft); color: var(--warning-text); border-radius: var(--radius-sm); padding: var(--space-3) var(--space-4); font-size: 0.85rem; margin-bottom: var(--space-4); line-height: 1.55; }
+	.uv-retry { margin-left: 0.6rem; border: 1px solid var(--warning); background: none; color: var(--warning-text); border-radius: var(--radius-xs); padding: 2px 10px; min-height: 32px; cursor: pointer; font-weight: var(--weight-semi); }
+	.uv-empty { color: var(--text-dim); padding: var(--space-8) 0; text-align: center; }
+	.uv-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-3); }
+	.uv-row { display: grid; grid-template-columns: 56px 1fr; gap: var(--space-4); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: var(--space-4); }
+	.uv-votes { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+	.uv-vote { width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--border-strong); background: transparent; color: var(--text-dim); border-radius: var(--radius-xs); cursor: pointer; }
+	.uv-vote:hover { color: var(--text); background: var(--surface-2); }
+	.uv-vote.up.on { background: var(--success-soft); color: var(--success-text); border-color: var(--success); }
+	.uv-vote.down.on { background: var(--error-soft); color: var(--error-text); border-color: var(--error); }
+	.uv-vote:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+	.uv-score { font-family: var(--font-mono); font-weight: 700; font-size: 0.95rem; font-variant-numeric: tabular-nums; color: var(--success-text); }
+	.uv-score.neg { color: var(--error-text); }
+	.uv-main { min-width: 0; }
+	.uv-title-row { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+	.uv-title { font-size: 0.95rem; color: var(--text); }
+	.uv-status { font-family: var(--font-mono); font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.08em; border-radius: var(--radius-full); padding: 2px 8px; background: var(--surface-3); color: var(--text-muted); }
+	.uv-status-planned { background: var(--accent-soft); color: var(--accent-text); }
+	.uv-status-in-progress { background: var(--cyan-soft); color: var(--cyan-text); }
+	.uv-status-shipped { background: var(--success-soft); color: var(--success-text); }
+	.uv-status-declined { background: var(--error-soft); color: var(--error-text); }
+	.uv-mine { font-family: var(--font-mono); font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--gold); border: 1px solid color-mix(in srgb, var(--gold) 40%, transparent); border-radius: var(--radius-full); padding: 2px 8px; }
+	.uv-detail { margin: 0.35rem 0 0; font-size: 0.84rem; color: var(--text-muted); line-height: 1.55; max-width: 78ch; }
+	.uv-meta { display: inline-flex; align-items: center; gap: 0.45rem; margin-top: 0.45rem; font-size: 0.72rem; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+	.uv-del { border: none; background: none; color: var(--error-text); font-size: 0.72rem; font-weight: var(--weight-semi); cursor: pointer; min-height: 32px; padding: 0 0.4rem; }
+	.uv-del:focus-visible { outline: 2px solid var(--error); outline-offset: 2px; }
+	.uv-board { display: grid; grid-template-columns: repeat(5, 1fr); gap: var(--space-3); align-items: start; }
+	.uv-lane { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: var(--space-3); }
+	.uv-lane-head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; margin-bottom: var(--space-3); padding-bottom: var(--space-2); border-bottom: 1px solid var(--border-strong); }
+	.uv-lane-title { font-family: var(--font-mono); font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.08em; margin: 0; background: none; padding: 0; }
+	.uv-lane-count { font-family: var(--font-mono); font-size: 0.68rem; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+	.uv-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-xs); padding: var(--space-3); margin-bottom: var(--space-2); }
+	.uv-card-score { font-family: var(--font-mono); font-size: 0.7rem; font-weight: 700; color: var(--success-text); font-variant-numeric: tabular-nums; }
+	.uv-card-score.neg { color: var(--error-text); }
+	.uv-card-title { display: block; font-size: 0.8rem; color: var(--text); margin-top: 2px; line-height: 1.4; }
+	.uv-card-detail { margin: 0.3rem 0 0; font-size: 0.72rem; color: var(--text-dim); line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+	.uv-lane-empty { font-size: 0.72rem; color: var(--text-dim); text-align: center; padding: 0.6rem 0; }
+	@media (max-width: 1100px) { .uv-board { grid-template-columns: repeat(2, 1fr); } }
+	@media (max-width: 640px) { .uv-board { grid-template-columns: 1fr; } }
+
 	@media (prefers-reduced-motion: reduce) {
 		.nav-chevron {
 			transition: none;

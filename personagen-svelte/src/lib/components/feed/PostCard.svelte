@@ -84,7 +84,11 @@
 	let postErrorLabel = $derived(getPostErrorSummary(post));
 
 	let analytics = $derived(post.analytics ?? null);
-	let hasRealStats = $derived(Boolean(analytics && (analytics.views || analytics.likes)));
+	// Shares are the platform's north-star metric — a tile with ONLY shares
+	// still shows its stats bar.
+	let hasRealStats = $derived(
+		Boolean(analytics && (analytics.views || analytics.likes || analytics.shares))
+	);
 
 	let hasError = $derived.by(() => {
 		const results = post.publication_results;
@@ -496,6 +500,33 @@
 					>
 					<span class="sr-only">Likes:</span>
 					{analytics.likes}</span
+				>{/if}
+			{#if analytics.shares}<span class="tile-stat-shares"
+					><svg
+						width="13"
+						height="13"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
+						><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle
+							cx="18"
+							cy="19"
+							r="3"
+						/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49" /><line
+							x1="15.41"
+							y1="6.51"
+							x2="8.59"
+							y2="10.49"
+						/></svg
+					>
+					<span class="sr-only">Shares:</span>
+					{analytics.shares >= 1000
+						? (analytics.shares / 1000).toFixed(1) + 'K'
+						: analytics.shares}</span
 				>{/if}
 		</div>
 	{/if}
@@ -915,6 +946,12 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 0.25rem;
+	}
+
+	/* Shares get the visual emphasis — shareability is the metric that matters. */
+	.tile-stat-shares {
+		color: #7ee8c7;
+		font-weight: 700;
 	}
 
 	/* In-flight / failed generation states (driven by the post row's status).
