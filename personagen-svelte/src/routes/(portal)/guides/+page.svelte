@@ -1,7 +1,12 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { syncParam } from '$lib/url-state';
-	import { CHANGELOG, type ChangeEntry } from '$lib/changelog';
+	import {
+		CHANGELOG,
+		CHANGE_GROUPS,
+		type ChangeGroup,
+		type ChangeCategory
+	} from '$lib/changelog';
 	import { ROADMAP, ROADMAP_STATUSES } from '$lib/roadmap';
 
 	// ── Guide catalog ────────────────────────────────────────────────────────
@@ -797,16 +802,19 @@
 	}
 
 	// ── Nav nesting ──────────────────────────────────────────────────────────
-	// Categories collapse; the group holding the open guide stays open, and an
-	// active search opens everything so matches are never hidden behind a fold.
-	let collapsedCats = $state<Record<string, boolean>>({});
+	// Categories are CLOSED by default: every group open at once turned the index
+	// into a wall of links you had to read past to find anything. Two exceptions
+	// stay open because closing them would hide what you are looking at — an
+	// active search (matches must never sit behind a fold) and the category
+	// holding the guide you are currently reading, which also carries its steps.
+	let expandedCats = $state<Record<string, boolean>>({});
 	function toggleCat(cat: string) {
-		collapsedCats[cat] = !collapsedCats[cat];
+		expandedCats = { ...expandedCats, [cat]: !expandedCats[cat] };
 	}
 	function catOpen(cat: string): boolean {
 		if (query.trim()) return true;
 		if (selected.category === cat) return true;
-		return !collapsedCats[cat];
+		return !!expandedCats[cat];
 	}
 
 	/** Short label for a step's nested nav anchor — first words, no markup. */
@@ -836,46 +844,96 @@
 	type DocView = 'guides' | 'changelog' | 'roadmap' | 'uservoice';
 	let docView = $state<DocView>('guides');
 	onMount(() => {
-		const v = new URLSearchParams(location.search).get('view');
+		const params = new URLSearchParams(location.search);
+		const v = params.get('view');
 		if (v === 'changelog' || v === 'roadmap' || v === 'uservoice') docView = v;
+		// The category filter wrote itself to the URL but never read itself back,
+		// so a shared or reloaded link silently dropped to "Everything". Validate
+		// against the categories that actually exist rather than a hardcoded list.
+		const c = params.get('changes');
+		if (c && CHANGE_GROUPS.some((g) => g.categories.includes(c as ChangeCategory))) {
+			clCategory = c as ChangeCategory;
+		}
 	});
 	$effect(() => syncParam('view', docView, 'guides'));
 
-	// Changelog: newest first, grouped by month, with a majors-only lens.
+	// Changelog: intent-sized releases, newest first. The raw commit list is still
+	// there — it just lives one click down, inside the release it belongs to,
+	// because 302 individual commits is a ledger, not something you can read.
 	let clQuery = $state('');
 	let clMajorsOnly = $state(false);
-	let clFiltered = $derived.by(() => {
+	let clCategory = $state<'all' | ChangeCategory>('all');
+	let clExpanded = $state<Record<string, boolean>>({});
+	const clToggle = (id: string) => (clExpanded = { ...clExpanded, [id]: !clExpanded[id] });
+
+	$effect(() => syncParam('changes', clCategory, 'all'));
+
+	/** Every category actually present, with how many releases touch it. */
+	let clCategories = $derived.by(() => {
+		const tally = new Map<ChangeCategory, number>();
+		for (const g of CHANGE_GROUPS)
+			for (const c of g.categories) tally.set(c, (tally.get(c) ?? 0) + 1);
+		return [...tally.entries()].sort((a, b) => b[1] - a[1]);
+	});
+
+	let clGroups = $derived.by(() => {
 		const q = clQuery.trim().toLowerCase();
-		let list = [...CHANGELOG].reverse();
-		if (clMajorsOnly) list = list.filter((e) => e.type === 'feat' || e.milestone);
+		let list = [...CHANGE_GROUPS].reverse();
+		if (clMajorsOnly) list = list.filter((g) => g.major);
+		if (clCategory !== 'all') list = list.filter((g) => g.categories.includes(clCategory));
 		if (q)
 			list = list.filter(
-				(e) =>
-					e.title.toLowerCase().includes(q) ||
-					(e.scope ?? '').toLowerCase().includes(q) ||
-					(e.milestone ?? '').toLowerCase().includes(q) ||
-					e.date.includes(q)
+				(g) =>
+					g.title.toLowerCase().includes(q) ||
+					g.summary.toLowerCase().includes(q) ||
+					g.entries.some(
+						(e) => e.title.toLowerCase().includes(q) || (e.scope ?? '').toLowerCase().includes(q)
+					)
 			);
 		return list;
 	});
+	let clShownChanges = $derived(clGroups.reduce((n, g) => n + g.entries.length, 0));
+
+	/** Month headings still frame the timeline; a release is filed under its last day. */
 	let clMonths = $derived.by(() => {
-		const groups: Array<{ month: string; label: string; entries: ChangeEntry[] }> = [];
-		for (const e of clFiltered) {
-			const month = e.date.slice(0, 7);
-			let g = groups[groups.length - 1];
-			if (!g || g.month !== month) {
-				const d = new Date(month + '-15');
-				g = {
+		const out: Array<{ month: string; label: string; groups: ChangeGroup[] }> = [];
+		for (const g of clGroups) {
+			const month = g.to.slice(0, 7);
+			let bucket = out[out.length - 1];
+			if (!bucket || bucket.month !== month) {
+				bucket = {
 					month,
-					label: d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
-					entries: []
+					label: new Date(month + '-15').toLocaleDateString('en-US', {
+						month: 'long',
+						year: 'numeric'
+					}),
+					groups: []
 				};
-				groups.push(g);
+				out.push(bucket);
 			}
-			g.entries.push(e);
+			bucket.groups.push(g);
 		}
-		return groups;
+		return out;
 	});
+
+	const CAT_LABEL: Record<string, string> = {
+		feature: 'New features',
+		fix: 'Fixes',
+		security: 'Security',
+		automation: 'Automation',
+		publishing: 'Publishing',
+		generation: 'Creating content',
+		performance: 'Speed',
+		design: 'Look & feel',
+		docs: 'Help & docs',
+		infrastructure: 'Behind the scenes',
+		maintenance: 'Housekeeping'
+	};
+
+	const dayLabel = (d: string) =>
+		new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+	const rangeLabel = (g: ChangeGroup) =>
+		g.from === g.to ? dayLabel(g.to) : `${dayLabel(g.from)} – ${dayLabel(g.to)}`;
 	const CL_FIRST = CHANGELOG[0]?.date ?? '';
 	const CL_LAST = CHANGELOG[CHANGELOG.length - 1]?.date ?? '';
 	const CL_MILESTONES = CHANGELOG.filter((e) => e.milestone).length;
@@ -1038,8 +1096,9 @@
 				{#if docView === 'guides'}
 					How to do everything in PersonaGen — plain English, step by step, with pictures.
 				{:else if docView === 'changelog'}
-					Every change since the first commit — {CHANGELOG.length} entries from {CL_FIRST} to
-					{CL_LAST}, {CL_MILESTONES} milestones.
+					{CHANGE_GROUPS.length} releases covering every change since the first commit —
+					{CHANGELOG.length} of them, from {CL_FIRST} to {CL_LAST}. Open a release to read the
+					individual changes inside it.
 				{:else if docView === 'roadmap'}
 					What's being built, what's next, and what's under consideration — the honest ledger.
 				{:else}
@@ -1240,34 +1299,100 @@
 	{:else if docView === 'changelog'}
 		<div class="cl-body">
 			<div class="cl-controls">
-				<label class="cl-majors">
-					<input type="checkbox" bind:checked={clMajorsOnly} />
-					Major changes only
-				</label>
-				<span class="cl-count" aria-live="polite">{clFiltered.length} of {CHANGELOG.length} changes</span>
+				<div class="cl-cats" role="group" aria-label="Filter changes by what they affected">
+					<button
+						type="button"
+						class="cl-cat"
+						class:active={clCategory === 'all'}
+						aria-pressed={clCategory === 'all'}
+						onclick={() => (clCategory = 'all')}>Everything</button>
+					{#each clCategories as [cat, n] (cat)}
+						<button
+							type="button"
+							class="cl-cat cl-cat-{cat}"
+							class:active={clCategory === cat}
+							aria-pressed={clCategory === cat}
+							onclick={() => (clCategory = cat)}>{CAT_LABEL[cat] ?? cat}<span class="cl-cat-n">{n}</span></button>
+					{/each}
+				</div>
+				<div class="cl-controls-right">
+					<label class="cl-majors">
+						<input type="checkbox" bind:checked={clMajorsOnly} />
+						Big releases only
+					</label>
+					<span class="cl-count" aria-live="polite"
+						>{clGroups.length} of {CHANGE_GROUPS.length} releases · {clShownChanges} changes</span>
+				</div>
 			</div>
-			{#if clFiltered.length === 0}
-				<p class="cl-empty">No changes match “{clQuery}”.</p>
+
+			{#if clGroups.length === 0}
+				<p class="cl-empty">
+					No releases match{clQuery ? ` “${clQuery}”` : ''}{clCategory !== 'all'
+						? ` in ${CAT_LABEL[clCategory] ?? clCategory}`
+						: ''}.
+				</p>
 			{/if}
-			{#each clMonths as group (group.month)}
+
+			{#each clMonths as month (month.month)}
 				<section class="cl-month">
-					<h2 class="cl-month-title">{group.label}</h2>
-					<ol class="cl-list">
-						{#each group.entries as e (e.hash)}
-							<li class="cl-entry" class:milestone={!!e.milestone}>
-								<!-- Day only — the month lives in the sticky group header above. -->
-								<span class="cl-date">{new Date(e.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
-								<span class="cl-type cl-type-{e.type}">{TYPE_LABEL[e.type] ?? e.type}</span>
-								<span class="cl-text">
-									{#if e.scope}<span class="cl-scope">{e.scope}</span>{/if}
-									{e.title}
-									{#if e.milestone}
-										<span class="cl-milestone-note">★ {e.milestone}</span>
-									{/if}
-								</span>
-							</li>
-						{/each}
-					</ol>
+					<h2 class="cl-month-title">{month.label}</h2>
+					{#each month.groups as g (g.id)}
+						{@const open = !!clExpanded[g.id]}
+						<article class="cl-rel" class:major={g.major}>
+							<div class="cl-rel-head">
+								<span class="cl-rel-date">{rangeLabel(g)}</span>
+								<div class="cl-rel-main">
+									<h3 class="cl-rel-title">{g.title}</h3>
+									<p class="cl-rel-summary">{g.summary}</p>
+									<div class="cl-rel-cats">
+										{#each g.categories as c (c)}
+											<span class="cl-chip cl-cat-{c}">{CAT_LABEL[c] ?? c}</span>
+										{/each}
+									</div>
+								</div>
+							</div>
+							<button
+								type="button"
+								class="cl-rel-toggle"
+								aria-expanded={open}
+								aria-controls="cl-detail-{g.id}"
+								onclick={() => clToggle(g.id)}
+							>
+								<svg
+									class="cl-rel-chevron"
+									class:open
+									width="13"
+									height="13"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2.5"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									aria-hidden="true"><path d="M9 18l6-6-6-6" /></svg>
+								{open ? 'Hide' : 'Show'} the {g.entries.length} change{g.entries.length === 1
+									? ''
+									: 's'} in this release
+							</button>
+							{#if open}
+								<ol class="cl-list" id="cl-detail-{g.id}">
+									{#each g.entries as e (e.hash)}
+										<li class="cl-entry" class:milestone={!!e.milestone}>
+											<span class="cl-date">{dayLabel(e.date)}</span>
+											<span class="cl-type cl-type-{e.type}">{TYPE_LABEL[e.type] ?? e.type}</span>
+											<span class="cl-text">
+												{#if e.scope}<span class="cl-scope">{e.scope}</span>{/if}
+												{e.title}
+												{#if e.milestone}
+													<span class="cl-milestone-note">★ {e.milestone}</span>
+												{/if}
+											</span>
+										</li>
+									{/each}
+								</ol>
+							{/if}
+						</article>
+					{/each}
 				</section>
 			{/each}
 		</div>
@@ -1924,6 +2049,174 @@
 		padding: var(--space-6) var(--space-8) var(--space-16);
 		width: 100%;
 	}
+	/* ── Release cards ─────────────────────────────────────────────────── */
+	.cl-cats {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.4rem;
+	}
+
+	.cl-cat {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
+		min-height: 32px;
+		padding: 0.3rem 0.7rem;
+		border-radius: var(--radius-full, 999px);
+		border: 1px solid var(--border);
+		background: var(--surface-2);
+		color: var(--text-muted);
+		font-size: 0.78rem;
+		font-weight: 600;
+		cursor: pointer;
+		transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+	}
+
+	.cl-cat:hover {
+		color: var(--text);
+		border-color: var(--border-hover);
+	}
+
+	.cl-cat.active {
+		background: var(--accent);
+		border-color: var(--accent);
+		color: #fff;
+	}
+
+	.cl-cat:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
+	}
+
+	.cl-cat-n {
+		font-variant-numeric: tabular-nums;
+		opacity: 0.65;
+		font-weight: 700;
+	}
+
+	.cl-controls-right {
+		display: flex;
+		align-items: center;
+		gap: 1rem;
+		flex-wrap: wrap;
+	}
+
+	.cl-rel {
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm, 10px);
+		background: var(--surface);
+		padding: 0.9rem 1rem;
+		margin-bottom: 0.7rem;
+	}
+
+	.cl-rel.major {
+		border-color: var(--accent-mid, var(--border-hover));
+		box-shadow: inset 3px 0 0 var(--accent);
+	}
+
+	.cl-rel-head {
+		display: flex;
+		gap: 1rem;
+		align-items: flex-start;
+	}
+
+	.cl-rel-date {
+		flex: none;
+		min-width: 6.5rem;
+		padding-top: 0.15rem;
+		font-size: 0.76rem;
+		font-variant-numeric: tabular-nums;
+		color: var(--text-dim);
+	}
+
+	.cl-rel-main {
+		min-width: 0;
+		flex: 1;
+	}
+
+	.cl-rel-title {
+		margin: 0 0 0.25rem;
+		font-size: 1rem;
+		font-weight: 700;
+		color: var(--text);
+		line-height: 1.3;
+	}
+
+	.cl-rel-summary {
+		margin: 0 0 0.5rem;
+		font-size: 0.88rem;
+		line-height: 1.55;
+		color: var(--text-muted);
+		max-width: 68ch;
+	}
+
+	.cl-rel-cats {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.3rem;
+	}
+
+	.cl-chip {
+		font-size: 0.68rem;
+		font-weight: 700;
+		letter-spacing: 0.02em;
+		text-transform: uppercase;
+		padding: 0.15rem 0.45rem;
+		border-radius: 6px;
+		background: var(--surface-2);
+		border: 1px solid var(--border);
+		color: var(--text-dim);
+	}
+
+	.cl-rel-toggle {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		min-height: 36px;
+		margin-top: 0.6rem;
+		padding: 0.3rem 0.1rem;
+		background: none;
+		border: none;
+		color: var(--accent);
+		font-size: 0.8rem;
+		font-weight: 600;
+		cursor: pointer;
+	}
+
+	.cl-rel-toggle:hover {
+		text-decoration: underline;
+	}
+
+	.cl-rel-toggle:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
+		border-radius: 6px;
+	}
+
+	.cl-rel-chevron {
+		transition: transform 0.18s ease;
+	}
+
+	.cl-rel-chevron.open {
+		transform: rotate(90deg);
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.cl-rel-chevron {
+			transition: none;
+		}
+	}
+
+	@media (max-width: 640px) {
+		.cl-rel-head {
+			flex-direction: column;
+			gap: 0.35rem;
+		}
+		.cl-rel-date {
+			min-width: 0;
+		}
+	}
+
 	.cl-controls {
 		display: flex;
 		align-items: center;
