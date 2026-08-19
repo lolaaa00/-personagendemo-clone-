@@ -71,7 +71,7 @@
 			],
 			steps: [
 				{
-					t: 'Everything lives in the left sidebar, in five groups: Network (Dashboard) · Library (All Generations, My Favorites) · Personas (your creators + New Persona) · Publish (Review Queue, Calendar) · Setup (Brand Brief, Model Manager, Guides, Settings).',
+					t: 'Everything lives in the left sidebar, in five groups: Network (Dashboard) · Library (All Generations, My Favorites) · Personas (your creators + New Persona) · Publish (Review Queue, Calendar) · Setup (Brand Brief, Model Manager, Docs, Settings).',
 					img: 'sidebar-guides',
 					alt: 'The PersonaGen sidebar with its five navigation groups'
 				},
@@ -661,8 +661,9 @@
 				},
 				{ t: 'Your roster shows each model’s release age, price per call, latency, and a 1–10 quality score — with a Value ranking (quality ÷ price) and a BEST VALUE pill.' },
 				{ t: 'The Enabled switch controls which models appear in the composer; the ★ star sets the default.' },
-				{ t: 'Sort by "Best value" to find cheap-but-good; price and quality are editable inline if your experience differs.' },
-				{ t: '"Check for new models" scans for newly released models; discovered ones can be probed for compatibility before adoption.' }
+				{ t: 'Sort by "Best value" to find cheap-but-good; price and quality are editable inline if your experience differs. Filters narrow the list by provider, release age, or quality.' },
+				{ t: '"Check for new models" scans for newly released models; discovered ones can be probed for compatibility before adoption.' },
+				{ t: 'Found something better in the discovered list? Click Probe & build adapter (a quick compatibility check), then Choose a slot… and Swap in — a second click confirms, and the new model takes that slot everywhere it’s used. The old model stays in the roster, so you can always swap back.' }
 			]
 		},
 		{
