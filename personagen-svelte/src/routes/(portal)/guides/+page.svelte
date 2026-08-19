@@ -881,7 +881,10 @@
 		const q = clQuery.trim().toLowerCase();
 		let list = [...CHANGE_GROUPS].reverse();
 		if (clMajorsOnly) list = list.filter((g) => g.major);
-		if (clCategory !== 'all') list = list.filter((g) => g.categories.includes(clCategory));
+		// Snapshot before the closure: TS can't carry the !== 'all' narrowing on a
+		// mutable $state binding into the filter callback.
+		const cat = clCategory;
+		if (cat !== 'all') list = list.filter((g) => g.categories.includes(cat));
 		if (q)
 			list = list.filter(
 				(g) =>
