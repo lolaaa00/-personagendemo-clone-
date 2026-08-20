@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { dialog } from '$lib/actions/dialog';
-	import { syncParam } from '$lib/url-state';
+	import { syncParam, readParam } from '$lib/url-state';
 	import { onMount, onDestroy } from 'svelte';
 	import { showToast } from '$lib/stores/ui.svelte';
 	import { goto, invalidateAll, beforeNavigate } from '$app/navigation';
@@ -148,6 +148,17 @@
 				? 'calendar'
 				: 'posts'
 	);
+
+	// ── Profile layout: an OPTIONAL alternate arrangement ──────────────────
+	// Classic stays the default and is byte-for-byte what it always was. Bento
+	// re-places the very same <details> sections into a grid — no section is
+	// rewritten, no state is duplicated, and every control behaves identically in
+	// both. The switch is purely where the boxes sit.
+	type ProfileLayout = 'classic' | 'bento';
+	let profileLayout = $state<ProfileLayout>(
+		readParam('layout', ['classic', 'bento'] as const, 'classic')
+	);
+	$effect(() => syncParam('layout', profileLayout, 'classic'));
 
 	// ── Feed state ─────────────────────────────────────────────────
 	let feedPosts = $state<any[]>([]);
@@ -2732,7 +2743,7 @@
 		<a href="/dashboard" class="btn-primary">Back to Dashboard</a>
 	</div>
 {:else}
-<div class="persona-page">
+<div class="persona-page" class:wide={activeTab === 'profile' && profileView === 'overview' && profileLayout === 'bento'}>
 	<!-- ── Hero header ─────────────────────────────────────────── -->
 	<!-- Compact identity header — the banner image was removed on request:
 	     the character photo shows ONCE (avatar), not stretched behind the name. -->
@@ -2928,6 +2939,23 @@
 					Connections{#if computedMetrics.connectedCount > 0}&nbsp;({computedMetrics.connectedCount}){/if}
 				</button>
 			</div>
+				{#if profileView === 'overview'}
+					<!-- Optional layout switch. Default is Classic; nothing changes unless
+					     you press this. -->
+					<button
+						type="button"
+						class="layout-switch"
+						class:on={profileLayout === 'bento'}
+						aria-pressed={profileLayout === 'bento'}
+						title={profileLayout === 'bento'
+							? 'Back to the classic stacked layout'
+							: 'Try the bento layout — same sections, arranged in a grid'}
+						onclick={() => (profileLayout = profileLayout === 'bento' ? 'classic' : 'bento')}
+					>
+						<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="8" height="12" rx="1"/><rect x="13" y="3" width="8" height="6" rx="1"/><rect x="13" y="11" width="8" height="10" rx="1"/><rect x="3" y="17" width="8" height="4" rx="1"/></svg>
+						{profileLayout === 'bento' ? 'Classic view' : 'Bento view'}
+					</button>
+				{/if}
 		{/if}
 
 		<!-- CONTENT TAB -->
@@ -3183,7 +3211,7 @@
 
 		<!-- PROFILE TAB · Overview lens -->
 		{:else if activeTab === 'profile' && profileView === 'overview'}
-			<div class="profile-tab">
+			<div class="profile-tab" class:bento={profileLayout === 'bento'}>
 				<!-- Brand section: which of the user's brand briefs this persona
 				     generates for. One client can run several brands (Just Kids
 				     Honey, HoneyX Manly Plus…) — every asset this persona makes is
@@ -6133,6 +6161,93 @@
 		display: flex;
 		flex-direction: column;
 		gap: 2rem;
+	}
+
+	/* ── Bento: OPTIONAL alternate placement of the same six sections ───────
+	   Nothing here changes a section's contents or behaviour — only where it
+	   sits. The six <details> already collapse independently (details elements
+	   never chained); stacking them in one column is what made opening one push
+	   the rest down. In the grid each owns a cell, and align-items:start means a
+	   collapsing section shrinks its own cell and leaves its neighbours put.
+
+	   Order in markup: 1 Brand Kit · 2 Persona Profile · 3 Platform Identity Kit
+	   · 4 Character & Visuals · 5 Automation · 6 Spend & Pricing. */
+	.profile-tab.bento {
+		display: grid;
+		grid-template-columns: 1.5fr 1fr 1fr;
+		align-items: start;
+		gap: 1.25rem;
+	}
+
+	/* Identity Kit is the heaviest workspace here, so it gets the tall column. */
+	.profile-tab.bento .profile-section:nth-of-type(3) { grid-column: 1; grid-row: 1 / span 2; }
+	.profile-tab.bento .profile-section:nth-of-type(2) { grid-column: 2 / span 2; grid-row: 1; }
+	.profile-tab.bento .profile-section:nth-of-type(4) { grid-column: 2; grid-row: 2; }
+	.profile-tab.bento .profile-section:nth-of-type(1) { grid-column: 3; grid-row: 2; }
+	.profile-tab.bento .profile-section:nth-of-type(5) { grid-column: 1; grid-row: 3; }
+	.profile-tab.bento .profile-section:nth-of-type(6) { grid-column: 2 / span 2; grid-row: 3; }
+
+	/* The page is capped at 900px, which is what leaves ~500px empty either side
+	   on a wide screen. The cap lifts only while bento is showing — classic keeps
+	   its comfortable reading measure exactly as it was. (A :has() selector would
+	   express this more directly, but the Svelte CSS compiler rejects it inside
+	   :global(), so the state is carried as a class instead.) */
+	.persona-page.wide {
+		max-width: 1440px;
+	}
+
+	/* Below three-column territory the grid would crush each cell, so it becomes
+	   the ordinary stack again — same sections, same order, no placement. */
+	@media (max-width: 1100px) {
+		.profile-tab.bento {
+			grid-template-columns: 1fr;
+		}
+		.profile-tab.bento .profile-section:nth-of-type(1),
+		.profile-tab.bento .profile-section:nth-of-type(2),
+		.profile-tab.bento .profile-section:nth-of-type(3),
+		.profile-tab.bento .profile-section:nth-of-type(4),
+		.profile-tab.bento .profile-section:nth-of-type(5),
+		.profile-tab.bento .profile-section:nth-of-type(6) {
+			grid-column: auto;
+			grid-row: auto;
+		}
+	}
+
+	.layout-switch {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		min-height: 36px;
+		padding: 0.4rem 0.75rem;
+		margin-left: 0.5rem;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-full, 999px);
+		background: var(--surface-2);
+		color: var(--text-muted);
+		font-size: 0.8rem;
+		font-weight: 600;
+		font-family: inherit;
+		cursor: pointer;
+		transition:
+			background 0.15s ease,
+			color 0.15s ease,
+			border-color 0.15s ease;
+	}
+
+	.layout-switch:hover {
+		color: var(--text);
+		border-color: var(--border-hover);
+	}
+
+	.layout-switch.on {
+		background: var(--accent-soft);
+		border-color: var(--accent-mid, var(--accent));
+		color: var(--accent);
+	}
+
+	.layout-switch:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
 	}
 
 	.profile-section {
