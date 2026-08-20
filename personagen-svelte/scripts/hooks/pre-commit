@@ -1,0 +1,28 @@
+#!/bin/sh
+# Keeps src/lib/changelog.ts in step with git history on every commit.
+#
+# Why here and not in the build: the Docker build context is personagen-svelte/,
+# .git lives one level up at the repo root, and node:22-alpine ships no git
+# binary — so `npm run changelog` during `docker build` finds no history, hits
+# its graceful fallback, and silently changes nothing. Generating at commit time
+# means the repository the deploy pulls from is always already current, with no
+# runtime work and no deploy lag.
+set -e
+
+REPO_ROOT=$(git rev-parse --show-toplevel)
+APP="$REPO_ROOT/personagen-svelte"
+[ -f "$APP/scripts/generate-changelog.mjs" ] || exit 0
+
+# Regenerate against the history as it stands. The commit being written is not
+# in the log yet, so the entry for it lands on the NEXT commit — the changelog
+# trails by exactly one, which is the same behaviour as any build-time
+# generator and is corrected on the following commit.
+node "$APP/scripts/generate-changelog.mjs" >/dev/null 2>&1 || {
+  echo "[pre-commit] changelog generation failed — committing without regenerating." >&2
+  exit 0
+}
+
+if ! git diff --quiet -- "$APP/src/lib/changelog.ts"; then
+  git add "$APP/src/lib/changelog.ts"
+  echo "[pre-commit] changelog.ts regenerated and staged."
+fi

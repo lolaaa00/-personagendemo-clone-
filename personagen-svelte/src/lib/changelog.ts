@@ -335,7 +335,12 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-08-08", hash: "224ca57", type: "feat", category: "generation", scope: null, title: "introduce studio template system and catalog for automated content generation workflows", milestone: "Studio template system — one-click archetype scaffolds for every persona." },
 	{ date: "2026-08-08", hash: "35e94de", type: "perf", category: "performance", scope: "images", title: "serve resized WebP thumbnails instead of full-size originals" },
 	{ date: "2026-08-08", hash: "27109bb", type: "fix", category: "docs", scope: null, title: "content-hashed guide screenshots — stale caches structurally impossible" },
-	{ date: "2026-08-13", hash: "14f9073", type: "feat", category: "generation", scope: null, title: "implement post feed UI and backend infrastructure for content generation, model management, and feature requests" }
+	{ date: "2026-08-13", hash: "14f9073", type: "feat", category: "generation", scope: null, title: "implement post feed UI and backend infrastructure for content generation, model management, and feature requests" },
+	{ date: "2026-08-16", hash: "2656159", type: "feat", category: "feature", scope: "changelog", title: "generate from git, group by intent, write it in plain English" },
+	{ date: "2026-08-16", hash: "5f97f7e", type: "feat", category: "docs", scope: "docs", title: "changelog reads as releases, and the guides index starts collapsed" },
+	{ date: "2026-08-18", hash: "27952df", type: "docs", category: "generation", scope: null, title: "align guides with current state — Docs label, model swap flow, fresh Model Manager shot" },
+	{ date: "2026-08-18", hash: "04d2837", type: "fix", category: "docs", scope: null, title: "changelog category filter type narrowing (snapshot before closure)" },
+	{ date: "2026-08-18", hash: "ae0bb2a", type: "docs", category: "docs", scope: null, title: "fresh sidebar screenshot — Docs label, persona groups, full nav" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -604,13 +609,13 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 		entries: [CHANGELOG[298], CHANGELOG[299], CHANGELOG[300]]
 	},
 	{
-		id: "14f9073", from: "2026-08-13", to: "2026-08-13",
-		category: "generation", categories: ["generation"],
+		id: "14f9073", from: "2026-08-13", to: "2026-08-18",
+		category: "docs", categories: ["generation","feature","docs"],
 		title: "Your posts now have a home",
 		summary: "Everything a persona has made appears in one feed you can scroll through, with the behind-the-scenes work needed to keep it current.",
-		major: false, curated: true,
-		entries: [CHANGELOG[301]]
+		major: true, curated: true,
+		entries: [CHANGELOG[301], CHANGELOG[302], CHANGELOG[303], CHANGELOG[304], CHANGELOG[305], CHANGELOG[306]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "14f9073";
+export const CHANGELOG_GENERATED_FROM = "ae0bb2a";
