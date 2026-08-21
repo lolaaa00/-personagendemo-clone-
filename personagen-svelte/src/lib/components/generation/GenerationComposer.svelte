@@ -73,6 +73,20 @@
 	let isPromptKind = $derived(!!preview && typeof preview.prompt === 'string');
 	let isPostKind = $derived(!!preview && Array.isArray(preview.steps));
 
+	// The composition contract from the server: which reference fields this run
+	// will actually feed, and whether the still is a typographic card. Absent on
+	// legacy previews → show everything (that pipeline feeds both refs).
+	// Cinematic is the exception: its multi-shot pack always composites both
+	// references, so switching the Media select to cinematic suspends the
+	// contract here exactly like the run would.
+	let composition = $derived<{ still?: string; character?: boolean; product?: boolean } | null>(
+		preview?.composition ?? null
+	);
+	let activeComposition = $derived(media === 'cinematic' ? null : composition);
+	let usesCharacterRef = $derived(!activeComposition || activeComposition.character !== false);
+	let usesProductRef = $derived(!activeComposition || activeComposition.product !== false);
+	let isGraphicCard = $derived(activeComposition?.still === 'graphic');
+
 	let modelOptions = $derived<ModelOption[]>(preview?.modelOptions ?? []);
 	let selectedModel = $derived(modelOptions.find((m) => m.id === model) ?? null);
 
@@ -85,13 +99,17 @@
 	let videoModelOptions = $derived<ModelOption[]>(preview?.videoModelOptions ?? []);
 	let selectedVideoModel = $derived(videoModelOptions.find((m) => m.id === videoModel) ?? null);
 
-	// The pipeline actually shown/priced, driven by the format selector. A video forks
-	// between the spokesperson and b-roll step arrays the server resolved; non-video
-	// (image/cinematic) has a single stack. 'auto' shows the spokesperson default.
+	// The pipeline actually shown/priced, driven by the Media + format selectors.
+	// Every media kind's step array comes from the server, so switching Media here
+	// re-derives the real stack — it never keeps showing the original kind's steps.
 	let activeSteps = $derived.by(() => {
 		if (!isPostKind) return [] as any[];
-		if (media !== 'video') return (preview.steps ?? []) as any[];
-		if (format === 'broll') return (preview.stepsBroll ?? preview.steps ?? []) as any[];
+		if (media === 'image') return (preview.stepsImage ?? preview.steps ?? []) as any[];
+		if (media === 'cinematic') return (preview.stepsCinematic ?? preview.steps ?? []) as any[];
+		// A graphic card has no face to animate — the server coerces spokesperson
+		// to b-roll on these, so the pipeline shown must be b-roll's too.
+		if (format === 'broll' || isGraphicCard)
+			return (preview.stepsBroll ?? preview.steps ?? []) as any[];
 		return (preview.stepsSpokesperson ?? preview.steps ?? []) as any[];
 	});
 
@@ -390,8 +408,10 @@
 			<div class="row">
 				<div class="fld">
 					<label class="fld-label" for="gc-media">Media</label>
+					<!-- "video" covers BOTH spokesperson and b-roll — the Video format
+					     chips below decide which — so the label must not claim b-roll. -->
 					<select id="gc-media" bind:value={media}>
-						<option value="video">Video (b-roll)</option>
+						<option value="video">Video</option>
 						<option value="image">Image only</option>
 						<option value="cinematic">Cinematic (multi-shot)</option>
 					</select>
@@ -405,6 +425,29 @@
 					</select>
 				</div>
 			</div>
+
+			{#if composition && (isGraphicCard || !usesCharacterRef || !usesProductRef)}
+				<!-- The contract, stated up front: which references this run feeds.
+				     Fields for unused references are not rendered at all below. -->
+				<p class="comp-note" role="note">
+					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" /></svg>
+					<span>
+						{#if isGraphicCard}
+							<strong>Typographic card.</strong> The model renders the card's text as the
+							artwork. No reference images are sent — no persona face, no product photo.
+						{:else if !usesCharacterRef && !usesProductRef}
+							<strong>No reference images.</strong> This composition includes neither the
+							persona nor a product — the scene is generated purely from the prompt.
+						{:else if !usesCharacterRef}
+							<strong>Product reference only.</strong> The persona does not appear in this
+							composition, so no face reference is sent (and none is generated).
+						{:else}
+							<strong>Face reference only.</strong> Product-free channel content — the
+							brand-kit product photo is not attached.
+						{/if}
+					</span>
+				</p>
+			{/if}
 
 			{#if media !== 'image'}
 				<label class="captions-toggle">
@@ -489,7 +532,7 @@
 				<span class="hint" id="gc-scene-hint">{preview.sceneNote}</span>
 			</div>
 
-			{#if products.length}
+			{#if usesProductRef && products.length}
 				<div class="fld">
 					<label class="fld-label" for="gc-product">Product</label>
 					<select
@@ -510,37 +553,45 @@
 				</div>
 			{/if}
 
-			<div class="row">
-				<div class="fld">
-					<label class="fld-label" for="gc-product-url"
-						>Product photo URL{products.length ? ' (override)' : ''}</label
-					>
-					<input id="gc-product-url" inputmode="url" bind:value={productPhotoUrl} placeholder="https://…" />
-					{#if productPhotoUrl}
-						<img class="url-preview" src={productPhotoUrl} alt="Product preview" width="84" height="84" loading="lazy" onload={showImg} onerror={hideOnError} />
+			{#if usesProductRef || usesCharacterRef}
+				<!-- Only the reference fields this composition actually feeds. A field
+				     for a reference the run won't use would be a lie — it's not shown. -->
+				<div class="row">
+					{#if usesProductRef}
+						<div class="fld">
+							<label class="fld-label" for="gc-product-url"
+								>Product photo URL{products.length ? ' (override)' : ''}</label
+							>
+							<input id="gc-product-url" inputmode="url" bind:value={productPhotoUrl} placeholder="https://…" />
+							{#if productPhotoUrl}
+								<img class="url-preview" src={productPhotoUrl} alt="Product preview" width="84" height="84" loading="lazy" onload={showImg} onerror={hideOnError} />
+							{/if}
+						</div>
+					{/if}
+					{#if usesCharacterRef}
+						<div class="fld">
+							<label class="fld-label" for="gc-character-url">Character reference URL</label>
+							<input
+								id="gc-character-url"
+								inputmode="url"
+								aria-describedby={characterRefUrl ? undefined : 'gc-character-hint'}
+								bind:value={characterRefUrl}
+								placeholder="https://…"
+							/>
+							{#if characterRefUrl}
+								<img class="url-preview" src={characterRefUrl} alt="Character reference preview" width="84" height="84" loading="lazy" onload={showImg} onerror={hideOnError} />
+							{:else}
+								<!-- Blank ≠ no face. The server sends the persona's PINNED face (or
+								     generates one on the fly) so the character stays consistent. -->
+								<span class="hint char-auto" id="gc-character-hint">
+									Blank uses the persona's pinned face — a consistent face is still sent (generated
+									automatically the first time). Paste a URL only to override it for this post.
+								</span>
+							{/if}
+						</div>
 					{/if}
 				</div>
-				<div class="fld">
-					<label class="fld-label" for="gc-character-url">Character reference URL</label>
-					<input
-						id="gc-character-url"
-						inputmode="url"
-						aria-describedby={characterRefUrl ? undefined : 'gc-character-hint'}
-						bind:value={characterRefUrl}
-						placeholder="https://…"
-					/>
-					{#if characterRefUrl}
-						<img class="url-preview" src={characterRefUrl} alt="Character reference preview" width="84" height="84" loading="lazy" onload={showImg} onerror={hideOnError} />
-					{:else}
-						<!-- Blank ≠ no face. The server sends the persona's PINNED face (or
-						     generates one on the fly) so the character stays consistent. -->
-						<span class="hint char-auto" id="gc-character-hint">
-							Blank uses the persona's pinned face — a consistent face is still sent (generated
-							automatically the first time). Paste a URL only to override it for this post.
-						</span>
-					{/if}
-				</div>
-			</div>
+			{/if}
 
 			<div class="row">
 				<div class="fld">
@@ -562,7 +613,7 @@
 						aria-labelledby="gc-format-label"
 						aria-describedby="gc-format-hint"
 					>
-						<button type="button" class="chip" class:on={format === 'spokesperson'} role="radio" aria-checked={format === 'spokesperson'} onclick={() => (format = 'spokesperson')}>
+						<button type="button" class="chip" class:on={format === 'spokesperson' && !isGraphicCard} role="radio" aria-checked={format === 'spokesperson' && !isGraphicCard} disabled={isGraphicCard} title={isGraphicCard ? 'A graphic card has no face to animate — video runs as b-roll motion.' : undefined} onclick={() => (format = 'spokesperson')}>
 							<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" x2="12" y1="19" y2="22" /></svg>
 							Spokesperson
 						</button>
@@ -576,7 +627,9 @@
 						</button>
 					</div>
 					<span class="hint" id="gc-format-hint">
-						{#if format === 'spokesperson'}
+						{#if isGraphicCard}
+							A graphic card has no face to animate — video always runs as b-roll motion of the card.
+						{:else if format === 'spokesperson'}
 							The character speaks on camera — voiceover + talking head (OmniHuman). The b-roll model picker below doesn't apply to this run.
 						{:else if format === 'broll'}
 							A silent product/lifestyle clip from the b-roll model below. No voiceover.
@@ -725,6 +778,27 @@
 	}
 	.btn-retry:hover {
 		background: var(--error-soft);
+	}
+	.comp-note {
+		display: flex;
+		gap: 0.5rem;
+		align-items: flex-start;
+		margin: 0;
+		padding: 0.6rem 0.75rem;
+		border: 1px solid var(--border);
+		border-radius: 10px;
+		background: var(--surface);
+		color: var(--muted);
+		font-size: 0.82rem;
+		line-height: 1.45;
+	}
+	.comp-note svg {
+		flex-shrink: 0;
+		margin-top: 2px;
+		color: var(--accent);
+	}
+	.comp-note strong {
+		color: var(--text);
 	}
 	.fld {
 		display: block;

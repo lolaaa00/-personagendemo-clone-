@@ -99,6 +99,15 @@ export interface GenerationProvenance {
 		product_photo?: string | null;
 		reference_kit?: string[];
 	};
+	/** How the still was composed: photorealistic UGC composite vs a typographic
+	 *  card whose text IS the artwork (no references, no photorealism). */
+	still_style?: 'photo' | 'graphic';
+	/** The composition contract obeyed — a null ref under `false` here is
+	 *  deliberate ("no product in this composition"), not lost provenance.
+	 *  Refine reads this to avoid resurrecting refs the template excluded. */
+	refs_policy?: { character: boolean; product: boolean };
+	/** The exact line rendered onto a graphic card (still_style 'graphic'). */
+	card_text?: string;
 	/** The prompts sent to the models. */
 	prompts?: { scene?: string; script?: string };
 	/** What was selected during generation. */

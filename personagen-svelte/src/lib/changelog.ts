@@ -344,7 +344,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-08-20", hash: "53f1521", type: "other", category: "docs", scope: null, title: "regenerate the changelog at commit time, not build time" },
 	{ date: "2026-08-20", hash: "175c3b8", type: "feat", category: "design", scope: "personas", title: "optional Bento layout for the profile — classic stays default" },
 	{ date: "2026-08-20", hash: "23ef90c", type: "fix", category: "design", scope: null, title: "env-driven share branding, OS-level dark mode, request-level guards on new routes" },
-	{ date: "2026-08-20", hash: "c3ac2b3", type: "feat", category: "feature", scope: "studio", title: "format shelves, 80/20 intent split, tiles that show their output" }
+	{ date: "2026-08-20", hash: "c3ac2b3", type: "feat", category: "feature", scope: "studio", title: "format shelves, 80/20 intent split, tiles that show their output" },
+	{ date: "2026-08-20", hash: "37c3d80", type: "other", category: "maintenance", scope: null, title: "skills" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -614,12 +615,12 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 	},
 	{
 		id: "14f9073", from: "2026-08-13", to: "2026-08-20",
-		category: "docs", categories: ["generation","feature","docs","design"],
+		category: "docs", categories: ["generation","feature","docs","design","maintenance"],
 		title: "Your posts now have a home",
 		summary: "Everything a persona has made appears in one feed you can scroll through, with the behind-the-scenes work needed to keep it current.",
 		major: true, curated: true,
-		entries: [CHANGELOG[301], CHANGELOG[302], CHANGELOG[303], CHANGELOG[304], CHANGELOG[305], CHANGELOG[306], CHANGELOG[307], CHANGELOG[308], CHANGELOG[309], CHANGELOG[310]]
+		entries: [CHANGELOG[301], CHANGELOG[302], CHANGELOG[303], CHANGELOG[304], CHANGELOG[305], CHANGELOG[306], CHANGELOG[307], CHANGELOG[308], CHANGELOG[309], CHANGELOG[310], CHANGELOG[311]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "c3ac2b3";
+export const CHANGELOG_GENERATED_FROM = "37c3d80";

@@ -288,13 +288,17 @@ async function falQueueJson(
  */
 export const UGC_IMAGE_PREFIX =
 	'UGC lifestyle photo, candid and authentic, shot on iPhone, natural lighting, real person not staged. ';
+/** Variant for compositions that exclude the persona (mood boards, POV shots,
+ *  behind-the-scenes) — the default prefix's "real person" would put one in. */
+export const UGC_IMAGE_PREFIX_NO_PEOPLE =
+	'Authentic lifestyle photo, candid framing, shot on iPhone, natural lighting, no people in frame. ';
 /** The text-to-image models this helper actually calls -- surfaced so the UI shows the truth. */
 export const UGC_IMAGE_MODEL_FAL = 'fal-ai/flux/schnell';
 export const UGC_IMAGE_MODEL_OPENROUTER = 'black-forest-labs/flux-schnell';
 
 /** The full string the provider receives, prefix included, so a preview can never lie. */
-export function buildUgcImagePrompt(ugcPrompt: string): string {
-	return `${UGC_IMAGE_PREFIX}${ugcPrompt}`;
+export function buildUgcImagePrompt(ugcPrompt: string, people: boolean = true): string {
+	return `${people ? UGC_IMAGE_PREFIX : UGC_IMAGE_PREFIX_NO_PEOPLE}${ugcPrompt}`;
 }
 
 /**
@@ -348,9 +352,10 @@ export async function generateUgcImage(
 	orKey: string | null,
 	falKey: string | null,
 	modelId?: string | null,
-	aspect: string = '3:4'
+	aspect: string = '3:4',
+	people: boolean = true
 ): Promise<string> {
-	const imagePrompt = buildUgcImagePrompt(ugcPrompt);
+	const imagePrompt = buildUgcImagePrompt(ugcPrompt, people);
 
 	// An explicitly chosen model is a budget/quality decision the user made and
 	// confirmed. It must win over the "OpenRouter first" default routing, which
@@ -757,7 +762,11 @@ function enhanceMotionPrompt(
 	return `${basePrompt}\n\nCamera: ${cameraByLevel[intent.motionLevel]}\n${subjectByFormat}\nTechnical: smooth motion, no compression artifacts, no overexposed highlights, no jump cuts.`;
 }
 
-/** Nano Banana: composite the real product (+ optional pinned face) into a UGC scene. */
+/** Nano Banana: composite the references this composition actually uses into a
+ *  UGC scene — product + face, face only (product-free channel content), or
+ *  product only (persona-free product shots). Every instruction line is
+ *  conditional on the ref it describes, so the model is never told to preserve
+ *  a product that isn't attached (which conjures a generic one). */
 async function generateProductStill(
 	falKey: string,
 	scenePrompt: string,
@@ -766,6 +775,7 @@ async function generateProductStill(
 	brandVisualContext?: string
 ): Promise<string> {
 	const refs = [characterRef, productPhotoUrl].filter(Boolean) as string[];
+	if (refs.length === 0) throw new Error('Composite still needs at least one reference image');
 	const brandLine = brandVisualContext ? `\n\nBrand visual direction: ${brandVisualContext}` : '';
 	const prompt = [
 		scenePrompt,
@@ -773,8 +783,10 @@ async function generateProductStill(
 		'Vertical 9:16 photorealistic UGC photo. Shoot quality: shot on iPhone 15 Pro with ProRAW, 24mm equivalent, natural light, real environment — NOT a studio ad or stock photo.',
 		// Image models love adding promo captions to ad-style scenes — this produced
 		// ugly baked-in text that collided with our real captions. Forbid it outright.
-		'ABSOLUTELY NO text, captions, subtitles, words, letters, numbers, logos, watermarks, or graphic/UI overlays anywhere in the frame. A clean photographic image only — the ONLY text allowed is the real product label already on the packaging.',
-		'Product accuracy: preserve the exact label typography, packaging shape, color, and material from the reference. Never redesign, genericize, or omit the product.',
+		`ABSOLUTELY NO text, captions, subtitles, words, letters, numbers, logos, watermarks, or graphic/UI overlays anywhere in the frame. A clean photographic image only${productPhotoUrl ? ' — the ONLY text allowed is the real product label already on the packaging' : ''}.`,
+		productPhotoUrl
+			? 'Product accuracy: preserve the exact label typography, packaging shape, color, and material from the reference. Never redesign, genericize, or omit the product.'
+			: 'No commercial products in frame — this is organic channel content, not an ad.',
 		characterRef
 			? 'Character consistency: the person must be IDENTICAL to the first reference image — same facial bone structure, skin tone, hair color, and texture. Not a similar person. The exact same person.'
 			: '',
@@ -789,6 +801,41 @@ async function generateProductStill(
 		{ prompt, image_urls: refs, aspect_ratio: '9:16' },
 		falKey
 	);
+	const url = data.images?.[0]?.url;
+	if (!url) throw new Error('Nano Banana returned no image');
+	return url;
+}
+
+/** The exact string a graphic card sends — exported so previews/tests show the truth. */
+export function buildGraphicStillPrompt(
+	cardText: string,
+	artDirection: string,
+	brandVisualContext?: string
+): string {
+	return [
+		`Flat graphic-design social card, NOT a photograph. Render EXACTLY this text, verbatim, with flawless spelling, as the composition's message: "${cardText}"`,
+		artDirection,
+		'Typography is the artwork: clean kerning, deliberate hierarchy, high contrast between type and ground. No people, no products, no photographic elements, no watermarks — type and simple graphic shapes only.',
+		brandVisualContext ? `Brand visual direction: ${brandVisualContext}` : ''
+	]
+		.filter(Boolean)
+		.join('\n\n');
+}
+
+/** Text-to-image sibling of the edit endpoint — graphic cards feed no references. */
+const NANO_T2I_MODEL = NANO_MODEL.replace(/\/edit$/, '');
+
+/** Typographic card: the inverse contract of generateProductStill. The
+ *  Director's line IS the artwork — no reference images, no photorealism.
+ *  Nano Banana stays primary because it renders type far better than flux. */
+async function generateGraphicStill(
+	falKey: string,
+	cardText: string,
+	artDirection: string,
+	brandVisualContext?: string
+): Promise<string> {
+	const prompt = buildGraphicStillPrompt(cardText, artDirection, brandVisualContext);
+	const data = await falSyncJson(NANO_T2I_MODEL, { prompt, aspect_ratio: '9:16' }, falKey);
 	const url = data.images?.[0]?.url;
 	if (!url) throw new Error('Nano Banana returned no image');
 	return url;
@@ -1633,6 +1680,18 @@ export interface UgcPackInput {
 	/** Reference-photo overrides from the generation composer. */
 	productPhotoUrlOverride?: string;
 	characterRefOverride?: string;
+	/** 'graphic' renders a typographic card — the Director's line IS the artwork:
+	 *  no photography, no reference images, no photorealism suffix. Default 'photo'
+	 *  (the UGC composite). Studio's typographic templates set this. */
+	stillStyle?: 'photo' | 'graphic';
+	/** false = this composition does not include the persona. Skips the face ref
+	 *  AND the lazy first-run face generation it would otherwise trigger and pay
+	 *  for. An explicit characterRefOverride still wins. Default true. */
+	useCharacterRef?: boolean;
+	/** false = no product compositing — the brand-kit photo is NOT auto-attached
+	 *  (channel content is product-free by design). An explicit
+	 *  productPhotoUrlOverride still wins. Default true. */
+	useProductRef?: boolean;
 	/** Model picks from the composer — the user's budget-vs-quality decision. */
 	videoModel?: string;
 	/** Registry price override for that model (Model Manager edit). The ledger
@@ -2991,11 +3050,25 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 			}
 		}
 
-		const format: 'spokesperson' | 'broll' =
+		let format: 'spokesperson' | 'broll' =
 			formatPref === 'auto' ? (parsed.format === 'broll' ? 'broll' : 'spokesperson') : formatPref;
+		// A graphic card has no face to animate — a talking head cannot run on it.
+		// (Reachable only when the composer switches a graphic template to video.)
+		if (input.stillStyle === 'graphic' && format === 'spokesperson') {
+			console.warn('[Composer] Graphic still cannot drive a talking head — coercing to b-roll.');
+			format = 'broll';
+		}
 		// A composer-edited visual brief outranks the Director's scene.
 		const scenePrompt =
 			input.sceneOverride?.trim() || parsed.scene_prompt || parsed.ugc_broll_prompt || topic;
+		// Graphic cards render a LINE, not a scene: the Director's on-screen hook is
+		// written for exactly this job; the caption's first line is the fallback.
+		const isGraphicStill = input.stillStyle === 'graphic';
+		const cardText = isGraphicStill
+			? String(parsed.on_screen_text || String(parsed.text || '').split('\n')[0] || topic)
+					.trim()
+					.slice(0, 220)
+			: null;
 		const baseMotion =
 			parsed.motion_prompt ||
 			'Slow gimbal dolly-in, natural ambient light, product label in focus.';
@@ -3044,13 +3117,18 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 
 		// ── Pinned creator face → consistent character across ALL posts ──
 		// Composer override wins; when present we also skip lazy face generation.
-		// Runs for every format, not just spokesperson video: b-roll stills feature
-		// the persona too, and without a pinned face each still invents a brand-new
+		// Runs for every format the persona APPEARS in: b-roll stills feature the
+		// persona too, and without a pinned face each still invents a brand-new
 		// person (three posts, three different "influencers" — the exact identity
 		// drift this anchor exists to prevent). First generation for an agent
 		// creates + pins the hero portrait; everything after reuses it.
-		let characterRef = input.characterRefOverride?.trim() || cfg.characterRef;
-		if (input.agentId && !input.characterRefOverride) {
+		// A composition that EXCLUDES the persona (refs.character=false — product
+		// macros, mood boards, POV shots, graphic cards) skips all of this,
+		// including the first-run face generation it would otherwise pay for.
+		const wantCharacterRef = input.useCharacterRef !== false && !isGraphicStill;
+		let characterRef =
+			input.characterRefOverride?.trim() || (wantCharacterRef ? cfg.characterRef : null);
+		if (wantCharacterRef && input.agentId && !input.characterRefOverride) {
 			let svcForRef: any = null;
 			try {
 				svcForRef = getServiceSupabase();
@@ -3072,13 +3150,66 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 			}
 		}
 
-		// ── Still (Nano Banana with real product + pinned face, else flux fallback) ──
+		// ── Still — routed by the composition contract ──
+		// graphic → typographic card, NO references (the text is the artwork).
+		// photo   → Nano Banana composite of whichever refs this composition uses
+		//           (product+face, face only, or product only), flux last resort.
 		// Failover: a fal OUTAGE (balance lock, 5xx) degrades to the OpenRouter
-		// text-to-image path — loses product-photo compositing but keeps the slot
-		// alive — rather than killing generation outright.
+		// path — keeping the slot alive — rather than killing generation outright.
 		let still: string;
-		const productPhoto = input.productPhotoUrlOverride?.trim() || selectedProduct?.photoUrl || null;
-		if (falKey && productPhoto) {
+		const wantProductRef = input.useProductRef !== false && !isGraphicStill;
+		const productPhoto =
+			input.productPhotoUrlOverride?.trim() ||
+			(wantProductRef ? selectedProduct?.photoUrl || null : null);
+		if (isGraphicStill) {
+			if (falKey) {
+				try {
+					still = await generateGraphicStill(falKey, cardText!, scenePrompt, brandVisualCtx);
+					costEvents.push({
+						provider: 'fal',
+						operation: 'image',
+						model: 'nano-banana-2',
+						usd: priceOf('fal', 'image', 'nano')
+					});
+				} catch (e) {
+					const msg = (e as Error).message;
+					if (orKey && isFalOutage(msg)) {
+						console.warn(
+							`[Failover] fal graphic still failed (${msg.slice(0, 120)}) — OpenRouter Nano-Banana t2i fallback.`
+						);
+						still = await openRouterImageEdit(
+							orKey,
+							userId,
+							buildGraphicStillPrompt(cardText!, scenePrompt, brandVisualCtx),
+							[]
+						);
+						costEvents.push({
+							provider: 'openrouter',
+							operation: 'image',
+							model: IMAGE_EDIT_MODEL_OPENROUTER,
+							usd: priceOf('openrouter', 'image')
+						});
+					} else {
+						throw e;
+					}
+				}
+			} else if (orKey) {
+				still = await openRouterImageEdit(
+					orKey,
+					userId,
+					buildGraphicStillPrompt(cardText!, scenePrompt, brandVisualCtx),
+					[]
+				);
+				costEvents.push({
+					provider: 'openrouter',
+					operation: 'image',
+					model: IMAGE_EDIT_MODEL_OPENROUTER,
+					usd: priceOf('openrouter', 'image')
+				});
+			} else {
+				throw new Error('No media provider configured. Add a Fal AI or OpenRouter key in Settings.');
+			}
+		} else if (falKey && (productPhoto || characterRef)) {
 			try {
 				still = await generateProductStill(
 					falKey,
@@ -3097,15 +3228,19 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 				const msg = (e as Error).message;
 				if (orKey && isFalOutage(msg)) {
 					// True composite failover: OpenRouter serves the same Nano-Banana
-					// model family with image input, so the REAL product (and pinned
-					// face) stay in-frame — flux text-to-image is only the last resort.
+					// model family with image input, so the attached refs stay
+					// in-frame — flux text-to-image is only the last resort.
 					try {
 						const refs = [characterRef, productPhoto].filter(Boolean) as string[];
-						const compositePrompt = `${scenePrompt}\n\nVertical 9:16 photorealistic UGC photo. Keep the product's exact label, shape and colors from the reference image — do not redesign it.${characterRef ? ' Keep the same person/face as the first reference image.' : ''} Authentic, slightly imperfect, real — not a studio ad.`;
 						console.warn(
 							`[Failover] fal still failed (${msg.slice(0, 120)}) — OpenRouter Nano-Banana composite fallback.`
 						);
-						still = await openRouterImageEdit(orKey, userId, compositePrompt, refs);
+						still = await openRouterImageEdit(
+							orKey,
+							userId,
+							buildCompositeFallbackPrompt(scenePrompt, !!characterRef, !!productPhoto),
+							refs
+						);
 						costEvents.push({
 							provider: 'openrouter',
 							operation: 'image',
@@ -3116,7 +3251,7 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 						console.warn(
 							`[Failover] OpenRouter composite also failed (${(editErr as Error).message.slice(0, 120)}) — flux text-to-image last resort.`
 						);
-						still = await generateUgcImage(scenePrompt, orKey, null);
+						still = await generateUgcImage(scenePrompt, orKey, null, null, '3:4', wantCharacterRef);
 						costEvents.push({
 							provider: 'openrouter',
 							operation: 'image',
@@ -3128,13 +3263,17 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 					throw e;
 				}
 			}
-		} else if (orKey && productPhoto) {
-			// OpenRouter-pinned (or fal-less) WITH a product photo → real composite
-			// via Nano Banana on OpenRouter, not a generic text-to-image scene.
+		} else if (orKey && (productPhoto || characterRef)) {
+			// OpenRouter-pinned (or fal-less) WITH refs → real composite via Nano
+			// Banana on OpenRouter, not a generic text-to-image scene.
 			try {
 				const refs = [characterRef, productPhoto].filter(Boolean) as string[];
-				const compositePrompt = `${scenePrompt}\n\nVertical 9:16 photorealistic UGC photo. Keep the product's exact label, shape and colors from the reference image — do not redesign it.${characterRef ? ' Keep the same person/face as the first reference image.' : ''} Authentic, slightly imperfect, real — not a studio ad.`;
-				still = await openRouterImageEdit(orKey, userId, compositePrompt, refs);
+				still = await openRouterImageEdit(
+					orKey,
+					userId,
+					buildCompositeFallbackPrompt(scenePrompt, !!characterRef, !!productPhoto),
+					refs
+				);
 				costEvents.push({
 					provider: 'openrouter',
 					operation: 'image',
@@ -3145,7 +3284,7 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 				console.warn(
 					`[Composer] OpenRouter composite failed (${(e as Error).message.slice(0, 120)}) — flux fallback.`
 				);
-				still = await generateUgcImage(scenePrompt, orKey, null);
+				still = await generateUgcImage(scenePrompt, orKey, null, null, '3:4', wantCharacterRef);
 				costEvents.push({
 					provider: 'openrouter',
 					operation: 'image',
@@ -3154,7 +3293,7 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 				});
 			}
 		} else {
-			still = await generateUgcImage(scenePrompt, orKey, falKey);
+			still = await generateUgcImage(scenePrompt, orKey, falKey, null, '3:4', wantCharacterRef);
 			costEvents.push(
 				orKey
 					? {
@@ -3354,6 +3493,12 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 		content.generation = {
 			...summarizeAspects(costEvents),
 			images: { character_ref: characterRef || null, product_photo: productPhoto || null },
+			// The composition contract this run obeyed. Refine honors it (a null ref
+			// under policy=false is deliberate, not lost provenance), and the drawer
+			// can say WHY a ref is absent.
+			still_style: isGraphicStill ? 'graphic' : 'photo',
+			refs_policy: { character: wantCharacterRef, product: wantProductRef },
+			...(isGraphicStill && cardText ? { card_text: cardText } : {}),
 			prompts: { scene: scenePrompt, script: content.script },
 			selections: {
 				platforms: [platform],
@@ -3389,8 +3534,12 @@ export interface RefineMediaInput {
 }
 
 /** The OpenRouter Nano-Banana composite prompt (fal-outage fallback), shared verbatim with generateUgcPack's failover. */
-function buildCompositeFallbackPrompt(scenePrompt: string, hasCharacter: boolean): string {
-	return `${scenePrompt}\n\nVertical 9:16 photorealistic UGC photo. Keep the product's exact label, shape and colors from the reference image — do not redesign it.${hasCharacter ? ' Keep the same person/face as the first reference image.' : ''} Authentic, slightly imperfect, real — not a studio ad.`;
+function buildCompositeFallbackPrompt(
+	scenePrompt: string,
+	hasCharacter: boolean,
+	hasProduct: boolean = true
+): string {
+	return `${scenePrompt}\n\nVertical 9:16 photorealistic UGC photo.${hasProduct ? " Keep the product's exact label, shape and colors from the reference image — do not redesign it." : ''}${hasCharacter ? ' Keep the same person/face as the first reference image.' : ''} Authentic, slightly imperfect, real — not a studio ad.`;
 }
 
 /**
@@ -3431,12 +3580,24 @@ export async function refineUgcMedia(input: RefineMediaInput): Promise<UgcConten
 		// person / generic product — the exact drift the anchors exist to prevent —
 		// so those fall back to the persona's pinned face and the brief's photo for
 		// the product this post was made for.
+		// BUT: a null under refs_policy=false is DELIBERATE ("no product in this
+		// composition"), not lost provenance — backfilling it would composite a
+		// product into a product-free post. Only refs the policy allows get filled.
+		const gen: any = (content as any).generation || {};
+		const refsPolicy = {
+			character: gen.refs_policy?.character !== false,
+			product: gen.refs_policy?.product !== false
+		};
+		const isGraphicRefine = gen.still_style === 'graphic';
 		let characterRef = content.generation?.images?.character_ref || null;
 		let productPhoto = content.generation?.images?.product_photo || null;
-		if (!characterRef || !productPhoto) {
+		if (
+			!isGraphicRefine &&
+			((!characterRef && refsPolicy.character) || (!productPhoto && refsPolicy.product))
+		) {
 			const cfg = await loadUgcConfig(supabase, input.agentId);
-			if (!characterRef) characterRef = cfg.characterRef;
-			if (!productPhoto) {
+			if (!characterRef && refsPolicy.character) characterRef = cfg.characterRef;
+			if (!productPhoto && refsPolicy.product) {
 				const brief = await loadBriefForAgent(createDbService(supabase), userId, cfg.brandBriefId);
 				const products = Array.isArray(brief?.data?.products) ? brief.data.products : [];
 				const byName = content.product?.name
@@ -3448,7 +3609,56 @@ export async function refineUgcMedia(input: RefineMediaInput): Promise<UgcConten
 
 		// ── Still — identical routing/failover to generateUgcPack ──
 		let still: string;
-		if (falKey && productPhoto) {
+		if (isGraphicRefine) {
+			// Re-render the typographic card: the stored line is the artwork, the
+			// user's edited visual prompt is the art direction. No references.
+			const cardText = String(gen.card_text || String(content.text || '').split('\n')[0] || '')
+				.trim()
+				.slice(0, 220);
+			if (!cardText) throw new Error('This graphic card has no stored text to re-render.');
+			if (falKey) {
+				try {
+					still = await generateGraphicStill(falKey, cardText, scene);
+					costEvents.push({
+						provider: 'fal',
+						operation: 'image',
+						model: 'nano-banana-2',
+						usd: priceOf('fal', 'image', 'nano')
+					});
+				} catch (e) {
+					const msg = (e as Error).message;
+					if (orKey && isFalOutage(msg)) {
+						console.warn(
+							`[Refine] fal graphic still failed (${msg.slice(0, 120)}) — OpenRouter t2i fallback.`
+						);
+						still = await openRouterImageEdit(
+							orKey,
+							userId,
+							buildGraphicStillPrompt(cardText, scene),
+							[]
+						);
+						costEvents.push({
+							provider: 'openrouter',
+							operation: 'image',
+							model: IMAGE_EDIT_MODEL_OPENROUTER,
+							usd: priceOf('openrouter', 'image')
+						});
+					} else {
+						throw e;
+					}
+				}
+			} else if (orKey) {
+				still = await openRouterImageEdit(orKey, userId, buildGraphicStillPrompt(cardText, scene), []);
+				costEvents.push({
+					provider: 'openrouter',
+					operation: 'image',
+					model: IMAGE_EDIT_MODEL_OPENROUTER,
+					usd: priceOf('openrouter', 'image')
+				});
+			} else {
+				throw new Error('No media provider configured. Add a Fal AI or OpenRouter key in Settings.');
+			}
+		} else if (falKey && (productPhoto || characterRef)) {
 			try {
 				still = await generateProductStill(falKey, scene, productPhoto, characterRef);
 				costEvents.push({
@@ -3467,7 +3677,7 @@ export async function refineUgcMedia(input: RefineMediaInput): Promise<UgcConten
 					still = await openRouterImageEdit(
 						orKey,
 						userId,
-						buildCompositeFallbackPrompt(scene, !!characterRef),
+						buildCompositeFallbackPrompt(scene, !!characterRef, !!productPhoto),
 						refs
 					);
 					costEvents.push({
@@ -3485,7 +3695,7 @@ export async function refineUgcMedia(input: RefineMediaInput): Promise<UgcConten
 			still = await openRouterImageEdit(
 				orKey,
 				userId,
-				buildCompositeFallbackPrompt(scene, !!characterRef),
+				buildCompositeFallbackPrompt(scene, !!characterRef, !!productPhoto),
 				refs
 			);
 			costEvents.push({
@@ -3495,7 +3705,7 @@ export async function refineUgcMedia(input: RefineMediaInput): Promise<UgcConten
 				usd: priceOf('openrouter', 'image')
 			});
 		} else {
-			still = await generateUgcImage(scene, orKey, falKey);
+			still = await generateUgcImage(scene, orKey, falKey, null, '3:4', refsPolicy.character);
 			costEvents.push(
 				orKey
 					? {

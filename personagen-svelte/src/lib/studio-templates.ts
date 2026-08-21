@@ -61,6 +61,20 @@ export interface StudioTemplate {
 		scene?: string;
 		format?: 'spokesperson' | 'broll';
 		media?: 'image' | 'cinematic';
+		/**
+		 * How the still is composed. 'graphic' = a typographic/flat-design card:
+		 * the image model RENDERS the Director's line as the artwork — no
+		 * photography, no reference images. Omitted = 'photo' (the UGC default).
+		 */
+		still?: 'photo' | 'graphic';
+		/**
+		 * Which reference images this composition actually feeds the model.
+		 * Omitted = both (legacy UGC behavior). The pipeline and the composer both
+		 * honor this — a template that claims "no product" must not silently
+		 * composite the brand's product photo in, and the composer must not show
+		 * reference fields the run won't use.
+		 */
+		refs?: { character: boolean; product: boolean };
 	};
 }
 
@@ -175,7 +189,8 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 				'A high-energy hero clip built entirely around the featured product: fast kinetic beats, ingredients or elements bursting around it, dramatic speed ramps, ending frozen on the product as the hero frame.',
 			scene:
 				'Macro studio shot of the featured product center frame, saturated complementary color backdrop, dynamic particles and splashes orbiting it, punchy commercial lighting, crisp product label legible in the final beat.',
-			format: 'broll'
+			format: 'broll',
+			refs: { character: false, product: true }
 		}
 	},
 	{
@@ -192,7 +207,8 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 				'An oddly-satisfying sensory clip: the featured product filmed through one tactile moment — a slow pour, squeeze, tear or crunch — captured so the texture is the star. No people, no words, pure sensation.',
 			scene:
 				'Extreme macro, shallow depth of field, slow-motion feel, single hard key light raking across the featured product to exaggerate texture, dark clean backdrop.',
-			format: 'broll'
+			format: 'broll',
+			refs: { character: false, product: true }
 		}
 	},
 	{
@@ -209,7 +225,8 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 				'A theatrical unboxing beat: hands lift the lid, tissue parts, and the featured product is revealed in its packaging like a gift — one continuous reveal building to a clean hero shot.',
 			scene:
 				'Top-down table shot, warm spotlight tightening on the box as it opens, the featured product nested in packaging, subtle dust motes in the light beam, rich shadows.',
-			format: 'broll'
+			format: 'broll',
+			refs: { character: false, product: true }
 		}
 	},
 	{
@@ -226,7 +243,8 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 				'A quiet aesthetic ritual: a hand places the featured product into a curated arrangement — shelf, vanity or countertop — nudges it half a degree, and the camera settles. Serene, ASMR-adjacent, no dialogue.',
 			scene:
 				'Eye-level medium-close shot of a styled shelf in soft morning light, muted tones except the featured product, gentle slow push-in, everything unhurried.',
-			format: 'broll'
+			format: 'broll',
+			refs: { character: false, product: true }
 		}
 	},
 	// ── Cinematic · multi-shot ────────────────────────────────────────────
@@ -292,7 +310,8 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 				'A polished flat-lay hero image of the featured product surrounded by a few props that explain its world at a glance — composed for a pinned post or profile grid anchor.',
 			scene:
 				'Top-down flat-lay on a textured neutral surface, the featured product centered, 3-4 supporting props arranged with generous negative space, soft shadowless light.',
-			media: 'image'
+			media: 'image',
+			refs: { character: false, product: true }
 		}
 	},
 
@@ -315,7 +334,9 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 				"A quote card built to be reshared: one short, punchy line in the persona's voice that captures why the featured product matters — a truth the audience already feels but hasn't put into words. The caption expands on the line and invites people to send it to someone who needs it.",
 			scene:
 				'Minimal typographic quote card: the quote set LARGE in an elegant modern typeface, perfectly legible, centered on a clean solid or softly textured background in brand-adjacent tones, small handle credit at the bottom. Flawless spelling, no extra graphics, museum-poster restraint.',
-			media: 'image'
+			media: 'image',
+			still: 'graphic',
+			refs: { character: false, product: false }
 		}
 	},
 	{
@@ -332,7 +353,9 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 				'A deliberately spicy-but-defensible opinion from the persona about their niche (not a product pitch) — the kind of one-liner people screenshot, quote-post, and argue with. The caption doubles down and asks where people stand.',
 			scene:
 				'Bold text-only graphic: the take set in heavy condensed type filling the frame, high-contrast two-color palette, slight offset composition like a protest poster, zero imagery, perfectly legible, flawless spelling.',
-			media: 'image'
+			media: 'image',
+			still: 'graphic',
+			refs: { character: false, product: false }
 		}
 	},
 	{
@@ -349,7 +372,9 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 				'A single surprising, true-to-the-niche statistic or comparison that reframes why the featured product category matters — the number IS the hook. Caption gives the context and the source framing, then ties it to the product in one line.',
 			scene:
 				'Editorial data-headline graphic: the number rendered HUGE in a display typeface, one short supporting line beneath it, restrained single-accent color on a clean ground, broadsheet-front-page energy, flawless spelling and digits.',
-			media: 'image'
+			media: 'image',
+			still: 'graphic',
+			refs: { character: false, product: false }
 		}
 	},
 	{
@@ -366,7 +391,8 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 				'A split-frame before/after image showing the honest transformation the featured product delivers — same subject, same framing, only the result changed. Caption names how long it took and what actually did the work.',
 			scene:
 				'Single image split into two equal vertical panels labeled BEFORE and AFTER in small clean type, identical camera angle and lighting in both panels, the only difference being the product’s result, photorealistic, no exaggeration.',
-			media: 'image'
+			media: 'image',
+			refs: { character: false, product: true }
 		}
 	},
 	{
@@ -383,7 +409,9 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 				"Three to five short poetic lines — a mantra, almost lyrics — expressing the lifestyle and identity the persona's audience aspires to (the product's world, never the product by name). Caption is a single line inviting people to save it.",
 			scene:
 				'Aesthetic text card: the lines set in a refined serif with generous line spacing, stacked left-aligned, on a dreamy atmospheric background (soft gradient sky, film-grain texture), muted poetic palette, flawless spelling.',
-			media: 'image'
+			media: 'image',
+			still: 'graphic',
+			refs: { character: false, product: false }
 		}
 	},
 	{
@@ -422,7 +450,9 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 		baseBody: {
 			topic: 'A genuinely contrarian but defensible opinion from the persona’s niche, stated flatly in one or two lines. No hedging, no "just my opinion" softener. It should make a knowledgeable reader either nod hard or want to argue — never shrug.',
 			scene: 'Bold typographic still, high-contrast brand colours, generous margins, one short line of type as the entire composition, no photography.',
-			media: 'image'
+			media: 'image',
+			still: 'graphic',
+			refs: { character: false, product: false }
 		}
 	},
 	{
@@ -437,7 +467,9 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 		baseBody: {
 			topic: 'One widely believed myth in the persona’s niche stated plainly, then corrected with the actual mechanism in one sentence. Confident and specific, never smug.',
 			scene: 'Split typographic still: the myth struck through in muted tone on the upper half, the correction in brand colour on the lower half, strong type hierarchy, no photography.',
-			media: 'image'
+			media: 'image',
+			still: 'graphic',
+			refs: { character: false, product: false }
 		}
 	},
 	{
@@ -452,7 +484,9 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 		baseBody: {
 			topic: 'A tight numbered list of three to five specific, non-obvious items from the persona’s niche under a headline worth screenshotting. Each item is a few words, not a sentence. No filler entries.',
 			scene: 'Clean typographic list card, numbered items with clear vertical rhythm, headline at top, brand background, no photography.',
-			media: 'image'
+			media: 'image',
+			still: 'graphic',
+			refs: { character: false, product: false }
 		}
 	},
 	{
@@ -467,7 +501,9 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 		baseBody: {
 			topic: 'One open question in the persona’s niche that is easy to answer in four words and hard to scroll past. Specific and a little playful — never a generic "what do you think?".',
 			scene: 'Single large question set in brand type, centred, plenty of negative space, no photography.',
-			media: 'image'
+			media: 'image',
+			still: 'graphic',
+			refs: { character: false, product: false }
 		}
 	},
 	{
@@ -482,7 +518,9 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 		baseBody: {
 			topic: 'Invent a dictionary-style definition for a very specific experience in the persona’s niche that the audience will recognise instantly but has never had a word for. Dry, deadpan, precise.',
 			scene: 'Dictionary-entry typographic still: invented headword, part of speech in italics, definition beneath, restrained palette, no photography.',
-			media: 'image'
+			media: 'image',
+			still: 'graphic',
+			refs: { character: false, product: false }
 		}
 	},
 	{
@@ -497,7 +535,9 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 		baseBody: {
 			topic: 'Two statements from the persona’s niche that appear to contradict each other but are both true, joined so the tension is the point. Warm and reassuring rather than clever.',
 			scene: 'Two-line typographic still with a dividing rule between the halves, soft brand palette, no photography.',
-			media: 'image'
+			media: 'image',
+			still: 'graphic',
+			refs: { character: false, product: false }
 		}
 	},
 
@@ -514,7 +554,8 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 		baseBody: {
 			topic: 'A single unremarkable moment from the persona’s ordinary day, framed like it mattered. No product, no message, no caption-bait — just presence.',
 			scene: 'Candid phone-camera realism, natural window light, shallow depth of field, lived-in setting with real clutter, persona present but not posing.',
-			media: 'image'
+			media: 'image',
+			refs: { character: true, product: false }
 		}
 	},
 	{
@@ -529,7 +570,8 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 		baseBody: {
 			topic: 'The messy in-progress reality behind something the persona makes or does — the draft, the failed attempt, the cluttered desk at hour six. Honest, not styled.',
 			scene: 'Available light, slightly imperfect framing, work-in-progress materials visible, nothing tidied for the camera.',
-			media: 'image'
+			media: 'image',
+			refs: { character: false, product: false }
 		}
 	},
 	{
@@ -544,7 +586,8 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 		baseBody: {
 			topic: 'A collection of textures, colours and objects that communicate the persona’s taste in the niche without naming anything. Should feel curated by a person, not assembled by a search.',
 			scene: 'Flat-lay grid of materials and swatches, soft diffuse light, cohesive palette, no product branding, no text.',
-			media: 'image'
+			media: 'image',
+			refs: { character: false, product: false }
 		}
 	},
 	{
@@ -559,7 +602,8 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 		baseBody: {
 			topic: 'A first-person point-of-view moment from the persona’s world that the audience will recognise as their own. The viewer should feel placed inside it, not shown it.',
 			scene: 'First-person camera angle, hands or feet in lower frame, natural light, real environment, no eye contact with camera.',
-			media: 'image'
+			media: 'image',
+			refs: { character: false, product: false }
 		}
 	},
 
@@ -576,7 +620,8 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 		baseBody: {
 			topic: 'The persona argues one strongly held position from their niche straight to camera. Builds, lands a clear point, and stops. No product mentioned at any stage.',
 			scene: 'Straight-to-camera selfie framing, handheld, natural light, mid-thought opening with no intro, slightly animated delivery.',
-			format: 'spokesperson'
+			format: 'spokesperson',
+			refs: { character: true, product: false }
 		}
 	},
 	{
@@ -591,7 +636,8 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 		baseBody: {
 			topic: 'A short first-person story from the persona’s life that turns on one surprising detail and ends on a thought rather than a lesson. Nothing is sold and no moral is stated outright.',
 			scene: 'Close selfie framing, opens mid-story with no setup, natural light, relaxed and conversational, small honest reactions.',
-			format: 'spokesperson'
+			format: 'spokesperson',
+			refs: { character: true, product: false }
 		}
 	},
 	{
@@ -606,7 +652,8 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 		baseBody: {
 			topic: 'The persona answers a question their audience genuinely keeps asking in their niche, thoroughly and without deflecting. Useful enough to be saved.',
 			scene: 'Straight-to-camera, sitting, natural light, opens by restating the question, unhurried explanatory delivery.',
-			format: 'spokesperson'
+			format: 'spokesperson',
+			refs: { character: true, product: false }
 		}
 	},
 	{
@@ -621,7 +668,8 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 		baseBody: {
 			topic: 'The persona names one common piece of bad advice in their niche, explains precisely why it fails, and gives the better alternative. Direct and evidence-led, never condescending.',
 			scene: 'Straight-to-camera, natural light, opens on the myth itself with no preamble, firm and clear delivery.',
-			format: 'spokesperson'
+			format: 'spokesperson',
+			refs: { character: true, product: false }
 		}
 	}
 ];

@@ -152,7 +152,13 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 			: 'auto') as 'auto' | 'spokesperson' | 'broll',
 		// Captions + AI badge are OFF unless the composer explicitly opts in.
 		captions: body.captions === true,
-		aiBadge: body.ai_badge === true
+		aiBadge: body.ai_badge === true,
+		// Composition contract from Studio templates: how the still is composed
+		// ('graphic' = typographic card, no refs) and which references a 'photo'
+		// still actually feeds. Absent (plain composer flows) = legacy behavior.
+		stillStyle: (body.still === 'graphic' ? 'graphic' : 'photo') as 'photo' | 'graphic',
+		useCharacterRef: !(body.refs && body.refs.character === false),
+		useProductRef: !(body.refs && body.refs.product === false)
 	};
 
 	// ── Studio delivery contract ─────────────────────────────────────────────
@@ -202,8 +208,19 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 			null;
 
 		const mediaKind = wantCinematic ? 'cinematic' : genInput.video === false ? 'image' : 'video';
-		const characterRef = genInput.characterRefOverride || cfgRow?.ugc_character_ref || null;
-		const productPhoto = genInput.productPhotoUrlOverride || product?.photoUrl || null;
+		// The composition contract decides which refs this run will actually feed —
+		// the preview must show ONLY those. A ref nulled by policy is deliberate,
+		// and the composer hides its field entirely (cinematic runs its own pack
+		// and always composites both, so the contract applies to image/video only).
+		const stillStyle = wantCinematic ? 'photo' : genInput.stillStyle;
+		const useCharacter =
+			wantCinematic || (genInput.useCharacterRef !== false && stillStyle !== 'graphic');
+		const useProduct =
+			wantCinematic || (genInput.useProductRef !== false && stillStyle !== 'graphic');
+		const characterRef =
+			genInput.characterRefOverride || (useCharacter ? cfgRow?.ugc_character_ref || null : null);
+		const productPhoto =
+			genInput.productPhotoUrlOverride || (useProduct ? product?.photoUrl || null : null);
 
 		const videoModel = effectiveResolve(registryRows, 'video_i2v', body.video_model);
 
@@ -228,6 +245,34 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		const voiceLabel = VOICE_CATALOG.find((v) => v.name === previewVoice)?.label || previewVoice;
 
 		type Step = { step: string; provider: string; model: string; usd: number };
+		// The still step named for what THIS composition does — not a generic
+		// "product still" on runs that composite no product at all.
+		const stillStep: Step =
+			stillStyle === 'graphic'
+				? {
+						step: 'typographic card (text render)',
+						provider: 'fal',
+						model: 'nano-banana-2',
+						usd: priceOf('fal', 'image', 'nano')
+					}
+				: useCharacter || useProduct
+					? {
+							step:
+								useCharacter && useProduct
+									? 'still (product + face composite)'
+									: useCharacter
+										? 'still (face composite)'
+										: 'still (product composite)',
+							provider: 'fal',
+							model: 'nano-banana-2',
+							usd: priceOf('fal', 'image', 'nano')
+						}
+					: {
+							step: 'still (text-to-image)',
+							provider: 'fal',
+							model: 'flux-schnell',
+							usd: priceOf('fal', 'image', 'flux')
+						};
 		const baseSteps: Step[] = [
 			{
 				step: 'director (caption + scene)',
@@ -235,12 +280,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 				model: 'gemini-3.5-flash',
 				usd: priceOf('openrouter', 'llm')
 			},
-			{
-				step: 'product still',
-				provider: 'fal',
-				model: 'nano-banana-2',
-				usd: priceOf('fal', 'image', 'nano')
-			}
+			stillStep
 		];
 		// Both video branches, so the composer's format selector can flip between them
 		// client-side (with the right cost) without a re-fetch that would clobber edits.
@@ -264,19 +304,32 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 			}
 		];
 
+		// Every media kind's step array ships to the composer, so its Media select
+		// can flip between them client-side and the "pipeline that will run" stays
+		// true — previously a media switch kept showing the ORIGINAL kind's steps.
+		// Cinematic ignores the composition contract (its multi-shot pack always
+		// composites character + product elements), so its still step says so even
+		// when the template's own still is graphic or ref-less.
+		const stepsCinematic: Step[] = [
+			baseSteps[0],
+			{
+				step: 'still (product + face composite)',
+				provider: 'fal',
+				model: 'nano-banana-2',
+				usd: priceOf('fal', 'image', 'nano')
+			},
+			{
+				step: 'cinematic video',
+				provider: 'fal',
+				model: 'kling-o3-pro reference',
+				usd: priceOf('fal', 'video', 'pro')
+			}
+		];
 		// Initial pipeline shown = what this persona runs right now. For 'auto' that's
 		// the spokesperson default (the Director's runtime bias).
 		let steps: Step[];
 		if (mediaKind === 'cinematic') {
-			steps = [
-				...baseSteps,
-				{
-					step: 'cinematic video',
-					provider: 'fal',
-					model: 'kling-o3-pro reference',
-					usd: priceOf('fal', 'video', 'pro')
-				}
-			];
+			steps = stepsCinematic;
 		} else if (mediaKind === 'image') {
 			steps = baseSteps;
 		} else {
@@ -307,21 +360,33 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 				// Be honest: unless the user pins a scene, the Director LLM writes the
 				// visual prompt at run time — we cannot show a prompt that doesn't exist yet.
 				scene: genInput.sceneOverride || null,
-				sceneNote: genInput.sceneOverride
-					? 'This exact scene prompt will be sent to the image/video model.'
-					: 'Left blank: the Director model will write the scene prompt. Type one here to pin it exactly.',
+				sceneNote:
+					stillStyle === 'graphic'
+						? genInput.sceneOverride
+							? 'Art direction for the typographic card. The Director writes the card’s exact line at run time — the model renders that text as the artwork.'
+							: 'Left blank: the Director writes the card’s line AND its art direction. Type here to pin the art direction exactly.'
+						: genInput.sceneOverride
+							? 'This exact scene prompt will be sent to the image/video model.'
+							: 'Left blank: the Director model will write the scene prompt. Type one here to pin it exactly.',
+				// The composition contract this run obeys — the composer shows ONLY the
+				// reference fields the pipeline will actually feed.
+				composition: { still: stillStyle, character: useCharacter, product: useProduct },
 				scheduledDate,
 				scheduledTime,
 				// Budget control: the clip is by far the biggest line item, so let the
 				// user pick the tier instead of silently billing the default.
 				videoModelKind: 'video_i2v',
 				videoModel: videoModel.id,
-				videoModelOptions: mediaKind === 'video' ? effectiveOptions(registryRows, 'video_i2v') : [],
+				// Always shipped (not just for video) so the composer's Media switch to
+				// video has real options to price with.
+				videoModelOptions: effectiveOptions(registryRows, 'video_i2v'),
 				// Video format: the persona's setting is the initial pick; the composer
 				// lets the user force spokesperson (OmniHuman) or b-roll for this run.
 				format: personaFormat,
 				stepsSpokesperson,
 				stepsBroll,
+				stepsImage: baseSteps,
+				stepsCinematic,
 				// Captions + AI badge default OFF — the composer surfaces them as toggles.
 				captions: false,
 				aiBadge: false,
