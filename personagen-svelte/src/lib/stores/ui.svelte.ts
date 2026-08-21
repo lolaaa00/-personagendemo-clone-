@@ -171,10 +171,16 @@ export function triggerBrandTransform(
 export function initializeThemeAndColors(): void {
 	if (!browser) return;
 
-	// 1. Theme initialization (Default to light)
-	const savedTheme = localStorage.getItem('personagen_theme') as Theme;
-	const initialTheme = savedTheme || 'light';
-	setTheme(initialTheme);
+	// 1. Theme initialization.
+	//    An explicit choice always wins. With nothing stored we follow the OS
+	//    rather than forcing light: the dark palette is fully defined under
+	//    [data-theme='dark'] but nothing ever set that attribute for a first-time
+	//    visitor, so a dark-mode user was served the light theme — most visibly on
+	//    the marketing page, which renders before any toggle is reachable.
+	const savedTheme = localStorage.getItem('personagen_theme') as Theme | null;
+	const prefersDark =
+		typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: dark)').matches;
+	setTheme(savedTheme || (prefersDark ? 'dark' : 'light'));
 
 	// 2. Brand palette — ONLY from an explicit Settings → Brand Theme choice.
 	//    Deliberately NOT read from the active brand brief: editing or scraping

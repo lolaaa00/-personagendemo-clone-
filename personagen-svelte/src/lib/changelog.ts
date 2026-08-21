@@ -341,7 +341,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-08-18", hash: "27952df", type: "docs", category: "generation", scope: null, title: "align guides with current state — Docs label, model swap flow, fresh Model Manager shot" },
 	{ date: "2026-08-18", hash: "04d2837", type: "fix", category: "docs", scope: null, title: "changelog category filter type narrowing (snapshot before closure)" },
 	{ date: "2026-08-18", hash: "ae0bb2a", type: "docs", category: "docs", scope: null, title: "fresh sidebar screenshot — Docs label, persona groups, full nav" },
-	{ date: "2026-08-20", hash: "53f1521", type: "other", category: "docs", scope: null, title: "regenerate the changelog at commit time, not build time" }
+	{ date: "2026-08-20", hash: "53f1521", type: "other", category: "docs", scope: null, title: "regenerate the changelog at commit time, not build time" },
+	{ date: "2026-08-20", hash: "175c3b8", type: "feat", category: "design", scope: "personas", title: "optional Bento layout for the profile — classic stays default" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -611,12 +612,12 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 	},
 	{
 		id: "14f9073", from: "2026-08-13", to: "2026-08-20",
-		category: "docs", categories: ["generation","feature","docs"],
+		category: "docs", categories: ["generation","feature","docs","design"],
 		title: "Your posts now have a home",
 		summary: "Everything a persona has made appears in one feed you can scroll through, with the behind-the-scenes work needed to keep it current.",
 		major: true, curated: true,
-		entries: [CHANGELOG[301], CHANGELOG[302], CHANGELOG[303], CHANGELOG[304], CHANGELOG[305], CHANGELOG[306], CHANGELOG[307]]
+		entries: [CHANGELOG[301], CHANGELOG[302], CHANGELOG[303], CHANGELOG[304], CHANGELOG[305], CHANGELOG[306], CHANGELOG[307], CHANGELOG[308]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "53f1521";
+export const CHANGELOG_GENERATED_FROM = "175c3b8";

@@ -19,13 +19,28 @@ if (!building && privateEnv.RUN_SCHEDULER !== 'false') {
 	}
 }
 
+/**
+ * Request-level auth gate. Every one of these also sits behind the (portal)
+ * layout load, which redirects on a missing session — this list is the outer
+ * layer, rejecting before any page load runs.
+ *
+ * Keep it in sync when adding a route under (portal): the layout guard alone
+ * still protects a missing entry, but its catch block swallows auth errors and
+ * returns a null session instead of redirecting, so a route that is only
+ * guarded there degrades to a blank page rather than a clean bounce to /login.
+ */
 const PROTECTED_PREFIXES = [
 	'/dashboard',
 	'/calendar',
 	'/generator',
 	'/personas',
 	'/brand-brief',
-	'/settings'
+	'/settings',
+	'/models',
+	'/generations',
+	'/favorites',
+	'/guides',
+	'/review'
 ];
 
 export const handle: Handle = async ({ event, resolve }) => {
