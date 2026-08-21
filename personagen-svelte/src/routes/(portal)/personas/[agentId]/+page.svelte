@@ -18,9 +18,11 @@
 	import { getPostDisplay } from '$lib/components/feed/postDisplay';
 	import {
 		STUDIO_TEMPLATES,
-		STUDIO_CATEGORIES,
+		STUDIO_SURFACES,
+		PIPELINE_META,
 		type StudioTemplate,
-		type StudioCategory
+		type StudioSurface,
+		type StudioIntent
 	} from '$lib/studio-templates';
 	import type { AutonomyLevel } from '$lib/types';
 	import { AUTONOMY_LABELS } from '$lib/types';
@@ -887,12 +889,24 @@
 	// the composer's preview echoes topic/scene back as editable fields and
 	// resolves real prompt/models/cost server-side. Same approval, same budget
 	// tracking, same draft output as every other generate action.
-	let studioCategory = $state<StudioCategory | 'all'>('all');
+	// Browse axis is the SURFACE (what the output looks like), not the old genre
+	// category — "what's the difference between text, image and video?" is the
+	// question the grid must answer structurally. Intent (brand vs channel) is a
+	// section split rather than a filter so the 20/80 shape of a healthy account
+	// is visible every time the tab opens.
+	let studioSurface = $state<StudioSurface | 'all'>('all');
 	let studioTemplates = $derived(
-		studioCategory === 'all'
+		studioSurface === 'all'
 			? STUDIO_TEMPLATES
-			: STUDIO_TEMPLATES.filter((t) => t.category === studioCategory)
+			: STUDIO_TEMPLATES.filter((t) => t.surface === studioSurface)
 	);
+	/** Shelves for one intent: [surfaceDef, templates[]] pairs, empty shelves dropped. */
+	function studioShelves(intent: StudioIntent) {
+		return STUDIO_SURFACES.map(
+			(s) =>
+				[s, studioTemplates.filter((t) => t.intent === intent && t.surface === s.id)] as const
+		).filter(([, list]) => list.length > 0);
+	}
 	// Where Studio output goes. 'review' → draft in the review queue (default);
 	// 'asset' → standalone media that skips the queue and lives in Assets.
 	// Both pin a DRAFT server-side — Studio never publishes directly.
@@ -4581,54 +4595,112 @@
 						</button>
 					</div>
 				</div>
-				<div class="feed-view-toggle studio-cats" role="group" aria-label="Template category">
-					{#each STUDIO_CATEGORIES as c (c.id)}
+				<!-- Format filter: the axis a user actually thinks in (text / photo /
+				     video / cinematic), replacing the old genre chips. -->
+				<div class="feed-view-toggle studio-cats" role="group" aria-label="Output format">
+					<button
+						type="button"
+						class="view-toggle-btn"
+						class:active={studioSurface === 'all'}
+						aria-pressed={studioSurface === 'all'}
+						onclick={() => (studioSurface = 'all')}
+					>
+						All formats
+					</button>
+					{#each STUDIO_SURFACES as s (s.id)}
 						<button
 							type="button"
 							class="view-toggle-btn"
-							class:active={studioCategory === c.id}
-							aria-pressed={studioCategory === c.id}
-							onclick={() => (studioCategory = c.id)}
+							class:active={studioSurface === s.id}
+							aria-pressed={studioSurface === s.id}
+							title={s.hint}
+							onclick={() => (studioSurface = s.id)}
 						>
-							{c.label}
+							{s.label}
 						</button>
 					{/each}
 				</div>
-				<div class="studio-grid">
-					{#each studioTemplates as t (t.id)}
-						<div class="studio-card studio-{t.category}">
-							{#if studioPreviews.get(t.id)}
-								<!-- A real generation made with this template — the honest
-								     version of stock example clips. -->
-								<img
-									class="studio-preview"
-									src={studioPreviews.get(t.id)?.url}
-									alt="Your latest {t.title} generation"
-									width="220"
-									height="124"
-									loading="lazy"
-								/>
-							{/if}
-							<div class="studio-card-top">
-								<span class="studio-pipeline">{t.pipeline}</span>
-								{#if studioPreviews.get(t.id)}
-									<span class="studio-tried" title="You have generated with this template">Used</span>
-								{/if}
+
+				<!-- Intent split: channel content leads because it IS the job — a real
+				     account is ~80% this. Brand promos sit below, clearly labelled, so
+				     the healthy shape of an account is readable from the layout itself. -->
+				{#each [['channel', 'Channel content', 'The ~80% — what the account is followed for between promos'], ['brand', 'Brand & product', 'The ~20% — promos, spaced out so they land']] as [intent, heading, hint] (intent)}
+					{#if studioShelves(intent as StudioIntent).length > 0}
+						<section class="studio-intent studio-intent-{intent}" aria-label={heading}>
+							<div class="studio-intent-head">
+								<h3 class="studio-intent-title">{heading}</h3>
+								<span class="studio-intent-hint">{hint}</span>
 							</div>
-							<h3 class="studio-card-title">{t.title}</h3>
-							<p class="studio-card-tag">{t.tagline}</p>
-							<button
-								type="button"
-								class="btn-generate studio-use"
-								disabled={generatingPost}
-								onclick={() => useStudioTemplate(t)}
-							>
-								<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.7 4.6L18 9.3l-4.3 1.7L12 15.6l-1.7-4.6L6 9.3l4.3-1.7L12 3z"/></svg>
-								Use template
-							</button>
-						</div>
-					{/each}
-				</div>
+							{#each studioShelves(intent as StudioIntent) as [shelf, list] (shelf.id)}
+								<div class="studio-shelf">
+									<div class="studio-shelf-head">
+										<span class="studio-shelf-label">{shelf.label}</span>
+										<span class="studio-shelf-hint">{shelf.hint}</span>
+									</div>
+									<div class="studio-rail" role="list">
+										{#each list as t (t.id)}
+											{@const preview = studioPreviews.get(t.id)}
+											{@const meta = PIPELINE_META[t.pipeline]}
+											<div class="studio-tile studio-sf-{t.surface}" role="listitem">
+												<!-- The tile's face is the OUTPUT: a real prior generation
+												     when one exists, else the template's sample line styled
+												     like the asset it produces — never a blank card. -->
+												<div class="studio-face">
+													{#if preview}
+														<img
+															class="studio-face-img"
+															src={preview.url}
+															alt="Your latest {t.title} generation"
+															loading="lazy"
+														/>
+														{#if t.surface === 'motion' || t.surface === 'cinematic'}
+															<span class="studio-play" aria-hidden="true">
+																<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+															</span>
+														{/if}
+														<span class="studio-tried">Yours</span>
+													{:else if t.surface === 'typographic'}
+														<span class="studio-face-quote">{t.sample}</span>
+													{:else}
+														<span class="studio-face-sample">
+															{#if t.surface === 'motion' || t.surface === 'cinematic'}
+																<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="5" width="14" height="14" rx="2"/><path d="M22 8l-6 4 6 4V8z"/></svg>
+															{:else}
+																<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+															{/if}
+															<em>{t.sample}</em>
+														</span>
+													{/if}
+												</div>
+												<div class="studio-tile-body">
+													<div class="studio-tile-top">
+														<h4 class="studio-tile-title">{t.title}</h4>
+														<span class="studio-format studio-fmt-{t.surface}">
+															{t.surface === 'typographic' ? 'TEXT' : t.surface === 'photo' ? 'IMAGE' : 'VIDEO'}
+														</span>
+													</div>
+													<p class="studio-tile-tag">{t.tagline}</p>
+													<div class="studio-tile-meta">
+														<span class="studio-cost" title="Estimated generation cost">{meta.usd}</span>
+														<span class="studio-time" title="Typical generation time">{meta.time}</span>
+														<button
+															type="button"
+															class="btn-generate studio-use"
+															disabled={generatingPost}
+															onclick={() => useStudioTemplate(t)}
+														>
+															Use
+														</button>
+													</div>
+												</div>
+											</div>
+										{/each}
+									</div>
+								</div>
+							{/each}
+						</section>
+					{/if}
+				{/each}
 			</div>
 
 		{/if}
@@ -5223,23 +5295,6 @@
 		color: var(--text-dim);
 		padding: 0 var(--space-1);
 	}
-	.studio-preview {
-		width: calc(100% + 2 * var(--space-4));
-		margin: calc(-1 * var(--space-4)) calc(-1 * var(--space-4)) 0;
-		height: 124px;
-		object-fit: cover;
-		border-radius: calc(var(--radius-md) - 3px) calc(var(--radius-md) - 3px) 0 0;
-	}
-	.studio-tried {
-		font-family: var(--font-mono);
-		font-size: 0.6rem;
-		text-transform: uppercase;
-		letter-spacing: 0.08em;
-		color: var(--success-text);
-		background: var(--success-soft);
-		border-radius: var(--radius-full);
-		padding: 2px 8px;
-	}
 	.studio-title {
 		font-family: var(--font-display);
 		font-size: var(--text-xl);
@@ -5254,67 +5309,232 @@
 	.studio-cats {
 		margin-bottom: var(--space-5);
 	}
-	.studio-grid {
-		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
-		gap: var(--space-4);
+
+	/* ── Intent sections: channel (the 80%) leads, brand (the 20%) follows ── */
+	.studio-intent {
+		margin-bottom: var(--space-6);
 	}
-	.studio-card {
+	.studio-intent-head {
 		display: flex;
-		flex-direction: column;
-		gap: var(--space-2);
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-md);
-		padding: var(--space-4);
-		border-top: 3px solid var(--accent);
-		transition: border-color 0.15s ease, transform 0.15s ease;
+		align-items: baseline;
+		gap: var(--space-3);
+		flex-wrap: wrap;
+		margin-bottom: var(--space-3);
+		padding-bottom: var(--space-2);
+		border-bottom: 1px solid var(--border);
 	}
-	.studio-card:hover {
-		border-color: var(--accent-mid);
-		transform: translateY(-2px);
-	}
-	/* Category is encoded in the top stripe AND the pipeline chip text — never colour alone. */
-	.studio-product {
-		border-top-color: var(--cyan);
-	}
-	.studio-cinematic {
-		border-top-color: var(--gold);
-	}
-	.studio-stills {
-		border-top-color: var(--success);
-	}
-	.studio-card-top {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-	}
-	.studio-pipeline {
-		font-family: var(--font-mono);
-		font-size: 0.62rem;
-		text-transform: uppercase;
-		letter-spacing: 0.09em;
-		color: var(--text-dim);
-		border: 1px solid var(--border-strong);
-		border-radius: var(--radius-full);
-		padding: 2px 8px;
-	}
-	.studio-card-title {
+	.studio-intent-title {
 		font-family: var(--font-display);
 		font-size: var(--text-lg);
 	}
-	.studio-card-tag {
-		color: var(--muted);
-		font-size: 0.8rem;
-		line-height: 1.45;
+	.studio-intent-hint {
+		color: var(--text-dim);
+		font-size: 0.78rem;
+	}
+	.studio-intent-brand .studio-intent-title {
+		color: var(--gold);
+	}
+
+	/* ── Shelves: one row per output format, horizontally scrollable ── */
+	.studio-shelf {
+		margin-bottom: var(--space-4);
+	}
+	.studio-shelf-head {
+		display: flex;
+		align-items: baseline;
+		gap: var(--space-2);
+		margin-bottom: var(--space-2);
+	}
+	.studio-shelf-label {
+		font-family: var(--font-mono);
+		font-size: 0.66rem;
+		text-transform: uppercase;
+		letter-spacing: 0.1em;
+		color: var(--accent-text);
+	}
+	.studio-shelf-hint {
+		color: var(--text-dim);
+		font-size: 0.74rem;
+	}
+	.studio-rail {
+		display: grid;
+		grid-auto-flow: column;
+		grid-auto-columns: 236px;
+		gap: var(--space-3);
+		overflow-x: auto;
+		padding-bottom: var(--space-2);
+		scroll-snap-type: x proximity;
+		/* Rail scrolls inside itself — the page must never pan sideways. */
+		max-width: 100%;
+	}
+	.studio-rail::-webkit-scrollbar {
+		height: 6px;
+	}
+	.studio-rail::-webkit-scrollbar-thumb {
+		background: var(--border-strong);
+		border-radius: var(--radius-full);
+	}
+
+	/* ── Tiles: the face IS the output ── */
+	.studio-tile {
+		display: flex;
+		flex-direction: column;
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-md);
+		overflow: hidden;
+		scroll-snap-align: start;
+		transition:
+			border-color 0.15s ease,
+			transform 0.15s ease;
+	}
+	.studio-tile:hover {
+		border-color: var(--accent-mid);
+		transform: translateY(-2px);
+	}
+	.studio-face {
+		position: relative;
+		height: 132px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: var(--space-3);
+		background: var(--surface-2);
+	}
+	/* Typographic tiles render their sample AS the asset — type on a brand field. */
+	.studio-sf-typographic .studio-face {
+		background: linear-gradient(
+			135deg,
+			color-mix(in srgb, var(--accent) 14%, var(--surface-2)),
+			color-mix(in srgb, var(--cyan) 10%, var(--surface-2))
+		);
+	}
+	.studio-face-quote {
+		font-family: var(--font-display);
+		font-size: 0.95rem;
+		line-height: 1.35;
+		text-align: center;
+		color: var(--text);
+		display: -webkit-box;
+		-webkit-line-clamp: 4;
+		-webkit-box-orient: vertical;
+		overflow: hidden;
+	}
+	.studio-face-sample {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: var(--space-2);
+		text-align: center;
+		color: var(--text-dim);
+		font-size: 0.78rem;
+		line-height: 1.4;
+	}
+	.studio-face-sample em {
+		font-style: italic;
+		display: -webkit-box;
+		-webkit-line-clamp: 3;
+		-webkit-box-orient: vertical;
+		overflow: hidden;
+	}
+	.studio-face-img {
+		position: absolute;
+		inset: 0;
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+	}
+	.studio-play {
+		position: relative;
+		z-index: 1;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 40px;
+		height: 40px;
+		border-radius: var(--radius-full);
+		background: color-mix(in srgb, #000 45%, transparent);
+		color: #fff;
+	}
+	.studio-tried {
+		position: absolute;
+		top: var(--space-2);
+		right: var(--space-2);
+		z-index: 1;
+		font-family: var(--font-mono);
+		font-size: 0.6rem;
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+		color: var(--success-text);
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-full);
+		padding: 2px 8px;
+	}
+	.studio-tile-body {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-1);
+		padding: var(--space-3);
 		flex: 1;
 	}
+	.studio-tile-top {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--space-2);
+	}
+	.studio-tile-title {
+		font-family: var(--font-display);
+		font-size: var(--text-base);
+	}
+	/* Format badge: TEXT / IMAGE / VIDEO — colour + label, never colour alone. */
+	.studio-format {
+		font-family: var(--font-mono);
+		font-size: 0.58rem;
+		letter-spacing: 0.1em;
+		border-radius: var(--radius-full);
+		padding: 2px 7px;
+		flex-shrink: 0;
+	}
+	.studio-fmt-typographic {
+		color: var(--accent-text);
+		background: var(--accent-soft);
+	}
+	.studio-fmt-photo {
+		color: var(--success-text);
+		background: var(--success-soft);
+	}
+	.studio-fmt-motion,
+	.studio-fmt-cinematic {
+		color: var(--rose-text);
+		background: var(--rose-soft);
+	}
+	.studio-tile-tag {
+		color: var(--muted);
+		font-size: 0.76rem;
+		line-height: 1.4;
+		flex: 1;
+	}
+	.studio-tile-meta {
+		display: flex;
+		align-items: center;
+		gap: var(--space-2);
+		margin-top: var(--space-1);
+	}
+	.studio-cost,
+	.studio-time {
+		font-family: var(--font-mono);
+		font-size: 0.66rem;
+		color: var(--text-dim);
+	}
 	.studio-use {
-		align-self: flex-start;
-		min-height: 44px;
+		margin-left: auto;
+		min-height: 36px;
+		padding-block: 0.35rem;
 	}
 	@media (prefers-reduced-motion: reduce) {
-		.studio-card {
+		.studio-tile {
 			transition: none;
 		}
 	}
