@@ -109,7 +109,16 @@ node scripts/verify-seed.mjs destroy    # ALWAYS, even if the run failed
 
 It creates one fixed-address user (re-running `create` recycles it) preloaded with 3 personas,
 5 draft posts with media, a reference kit + avatar, and a brand brief with products and
-competitors — enough to exercise every list surface. Log in normally:
+competitors — enough to exercise every list surface.
+
+**The fixed address is shared state across concurrent sessions.** A parallel verify run's
+`destroy` (or recycle) yanks the account mid-drive — logins start failing with
+"Invalid login credentials" for no app reason, and recycling mints **new** user/agent ids, so
+any hardcoded `agentA` goes stale. On sudden auth failure: re-run `create`, take the fresh ids
+from its output, resume. Same applies to `node_modules/.verify-tmp/` — another session's
+teardown may sweep your harness files; keep filenames distinct and re-write if gone.
+
+Log in normally:
 
 ```js
 await p.fill('input[type="email"]', email);
@@ -168,8 +177,13 @@ More of the same family, each of which produced a wrong result before being caug
 
 ## Portal map (where the list surfaces actually are)
 
-- **Persona page tabs**: `Profile` · `Feed` · `Calendar` · `Connections` (`.tab-btn`). The
-  Feed tab holds a `Posts` / `Assets (N)` toggle — the assets grid is *inside* Feed, not a tab.
+- **Persona page tabs**: as of 2026-08-20 the `.tab-btn` row renders `Profile` · `Content` ·
+  `Studio` (Feed/Calendar/Connections no longer appear as top-level tabs — look inside
+  `Content` and the left nav). Studio holds the template shelves: format chips
+  (`.studio-cats`), intent sections (`.studio-intent-title`), tiles `.studio-tile` with a
+  `button.studio-use` CTA labeled just "Use".
+- The old map said `Profile · Feed · Calendar · Connections`, and Feed held a `Posts` /
+  `Assets (N)` toggle with the assets grid *inside* Feed — if tabs regress, check there.
 - **Assets grid de-dupes by image URL**, so fixtures sharing one URL collapse to a single tile.
 - **Reference kit + avatar controls** live on `Profile`, inside the collapsed `<details>` above.
 - **Roster multi-select** is on `/dashboard` (`.pick-cell input`); bulk delete opens a
