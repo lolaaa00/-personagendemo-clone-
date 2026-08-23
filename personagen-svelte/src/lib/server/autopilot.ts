@@ -200,6 +200,12 @@ async function generateDraftsForAgent(
 	// post and stays taken — we must never regenerate over it.
 	const taken = new Set<string>();
 	const genFailures = new Map<string, { id: string; attempts: number }>();
+	// Posts per DAY, not just per exact slot. Campaign slots carry jittered
+	// times (09:47) that never collide with autopilot's computed grid (09:00) —
+	// keyed only by exact time, autopilot would stack its full quota on top of
+	// a campaign day: double spend and an overposting feed. A day already at
+	// posts_per_day density is full, whoever filled it.
+	const dayCount = new Map<string, number>();
 	for (const p of (existing || []) as any[]) {
 		const k = `${p.scheduled_date}T${(p.scheduled_time || '').slice(0, 5)}`;
 		const attempts = Number(p.publication_results?._gen?.attempts) || 0;
@@ -209,6 +215,7 @@ async function generateDraftsForAgent(
 			continue;
 		}
 		taken.add(k);
+		dayCount.set(p.scheduled_date, (dayCount.get(p.scheduled_date) ?? 0) + 1);
 	}
 
 	// ── Roll stale drafts forward ────────────────────────────────────────────
@@ -243,6 +250,8 @@ async function generateDraftsForAgent(
 			.eq('status', 'draft'); // guard: don't move it if it was approved mid-run
 		if (!rollErr) {
 			taken.add(`${nextFree.dateStr}T${nextFree.timeStr.slice(0, 5)}`);
+			// The moved draft now occupies its new day's density too.
+			dayCount.set(nextFree.dateStr, (dayCount.get(nextFree.dateStr) ?? 0) + 1);
 			console.log(
 				`[Autopilot] Rolled stale draft ${draft.id} forward to ${nextFree.dateStr} ${nextFree.timeStr}`
 			);
@@ -265,10 +274,14 @@ async function generateDraftsForAgent(
 	let consecutiveInsertFailures = 0;
 	const MAX_CONSECUTIVE_INSERT_FAILURES = 3;
 
+	const perDayQuota = cfg.posts_per_day ?? 3;
 	for (const slot of slots) {
 		if (attempted >= opts.maxToCreate) break;
 		const key = `${slot.dateStr}T${slot.timeStr.slice(0, 5)}`;
 		if (taken.has(key)) continue;
+		// A day at quota is full regardless of WHO filled it or at what exact
+		// times — campaign slots land off-grid and must still count.
+		if ((dayCount.get(slot.dateStr) ?? 0) >= perDayQuota) continue;
 		// Only fill future slots — don't backfill times that already passed today.
 		if (zonedWallTimeToEpoch(slot.dateStr, slot.timeStr, tz) <= Date.now()) continue;
 
@@ -410,6 +423,7 @@ async function generateDraftsForAgent(
 				genFailures.delete(key);
 				created++;
 				taken.add(key);
+				dayCount.set(slot.dateStr, (dayCount.get(slot.dateStr) ?? 0) + 1);
 				consecutiveInsertFailures = 0;
 			} else {
 				// We already PAID for this generation and cannot persist it. If the DB

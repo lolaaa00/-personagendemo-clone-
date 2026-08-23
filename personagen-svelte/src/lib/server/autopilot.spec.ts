@@ -207,6 +207,26 @@ describe('autopilot slot idempotency (no double spend)', () => {
 		expect(generateCinematicUgcPack).toHaveBeenCalledTimes(1); // only 2026-07-16
 	});
 
+	it('campaign posts at OFF-GRID times fill the day — autopilot must not stack its quota on top', async () => {
+		// A campaign books jittered times (09:47) that never equal autopilot's
+		// computed grid (08:00/14:00/20:00). Keyed only by exact slot, autopilot
+		// would add its full 3/day on top of these 3 → 6 posts and double spend.
+		supabaseRef.current = db([
+			{ scheduled_date: '2026-07-15', scheduled_time: '09:47:00' },
+			{ scheduled_date: '2026-07-15', scheduled_time: '13:12:00' },
+			{ scheduled_date: '2026-07-15', scheduled_time: '19:03:00' }
+		]);
+
+		const res = await runAutopilotDraftGeneration({ agentId: AGENT });
+
+		// Day 1 is at quota (3 campaign posts) — only day 2's three slots fill.
+		expect(res.generated).toBe(3);
+		const day1Inserts = insertedSlots(supabaseRef.current).filter((s: string) =>
+			s.startsWith('2026-07-15')
+		);
+		expect(day1Inserts).toHaveLength(0);
+	});
+
 	it('a fully-booked runway spends NOTHING (zero generator calls, zero inserts)', async () => {
 		supabaseRef.current = db(
 			['2026-07-15', '2026-07-16'].flatMap((d) =>
