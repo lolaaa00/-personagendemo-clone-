@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { getPostDisplay, getPostErrorSummary, summarizeGenError, SURFACE_LABEL } from './postDisplay';
 	import { platformColor } from '$lib/platforms';
+	import { thumbUrl, restoreOriginal } from '$lib/image-url';
 
 	let {
 		post,
@@ -306,8 +307,13 @@
 				</button>
 			{:else}
 				{#if display.posterUrl}
+					<!-- Resized render, not the original: tiles are ~320px wide, but the
+					     stored poster is a ~1.8MB full-res PNG — at the storage host's
+					     few-hundred-KB/s that's seconds PER TILE. The render endpoint
+					     serves the same frame as ~30KB WebP. -->
 					<img
-						src={display.posterUrl}
+						src={thumbUrl(display.posterUrl, 640)}
+						onerror={(e) => restoreOriginal(e, display.posterUrl)}
 						width="800"
 						height="1000"
 						loading="lazy"
@@ -332,8 +338,10 @@
 				</button>
 			{/if}
 		{:else}
+			<!-- Same full-res→thumb swap as the poster above. -->
 			<img
-				src={display.mediaUrl}
+				src={thumbUrl(display.mediaUrl, 640)}
+				onerror={(e) => restoreOriginal(e, display.mediaUrl)}
 				width="800"
 				height="1000"
 				loading="lazy"

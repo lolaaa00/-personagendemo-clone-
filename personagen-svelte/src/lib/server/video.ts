@@ -22,7 +22,7 @@ function ffmpegBin(): string {
 	return env.FFMPEG_PATH || 'ffmpeg';
 }
 
-async function hasFfmpeg(): Promise<boolean> {
+export async function hasFfmpeg(): Promise<boolean> {
 	if (ffmpegChecked) return ffmpegOk;
 	ffmpegChecked = true;
 	ffmpegOk = await new Promise((resolve) => {
@@ -37,11 +37,15 @@ async function hasFfmpeg(): Promise<boolean> {
 	return ffmpegOk;
 }
 
-function findFont(): string | null {
+export function findFont(): string | null {
 	if (env.UGC_FONT_FILE && existsSync(env.UGC_FONT_FILE)) return env.UGC_FONT_FILE;
 	const candidates =
 		process.platform === 'win32'
-			? ['C:/Windows/Fonts/arialbd.ttf', 'C:/Windows/Fonts/arial.ttf', 'C:/Windows/Fonts/segoeui.ttf']
+			? [
+					'C:/Windows/Fonts/arialbd.ttf',
+					'C:/Windows/Fonts/arial.ttf',
+					'C:/Windows/Fonts/segoeui.ttf'
+				]
 			: [
 					// Alpine (our Docker runtime) — `font-dejavu` installs here.
 					'/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf',
@@ -56,7 +60,7 @@ function findFont(): string | null {
 	return candidates.find((f) => existsSync(f)) || null;
 }
 
-function runFfmpeg(args: string[], cwd: string): Promise<void> {
+export function runFfmpeg(args: string[], cwd: string): Promise<void> {
 	return new Promise((resolve, reject) => {
 		const p = spawn(ffmpegBin(), args, { cwd });
 		let err = '';
@@ -73,18 +77,108 @@ function escDrawtext(s: string): string {
 	return s.replace(/\\/g, '\\\\').replace(/:/g, '\\:').replace(/'/g, "\\'");
 }
 
+// ── Web-delivery encode settings ─────────────────────────────────────────────
+// Providers hand back clips at absurd delivery bitrates for their size — Kling's
+// 716×1284 output measures ~7.7 Mbps, i.e. ~5 MB for a FIVE-SECOND clip. Our
+// self-hosted storage serves at a few hundred KB/s, so that encoding is the
+// difference between "plays in 2s" and "minutes of spinner". A CRF re-encode at
+// feed resolution lands ~4–6× smaller with no visible difference on a phone.
+const WEB_MAX_WIDTH = 720; // never upscale — min(720, iw)
+function webCrf(): number {
+	const n = Number(env.UGC_VIDEO_CRF);
+	return Number.isFinite(n) && n >= 18 && n <= 35 ? Math.round(n) : 27;
+}
+function compressionEnabled(): boolean {
+	return env.UGC_VIDEO_COMPRESS !== 'false';
+}
+/** Shared x264 delivery args: capped width, sane pixel format, faststart. */
+function webEncodeArgs(extraFilters: string[] = []): string[] {
+	// `\,` keeps the comma inside min() from splitting the filtergraph.
+	const filters = [`scale=w=min(${WEB_MAX_WIDTH}\\,iw):h=-2`, ...extraFilters];
+	return [
+		'-vf',
+		filters.join(','),
+		'-c:v',
+		'libx264',
+		'-crf',
+		String(webCrf()),
+		'-preset',
+		'veryfast',
+		'-pix_fmt',
+		'yuv420p',
+		'-movflags',
+		'+faststart'
+	];
+}
+
 /**
- * Stream-copies a video into a web-optimised mp4 (moov atom moved to the front,
- * a.k.a. `+faststart`) so a browser `<video>` can start showing/playing after a
- * tiny opening range request instead of pulling much of the file to find metadata
- * that providers often leave at the very end. This is the single biggest reason a
- * generated clip "takes forever to load" in the drawer.
+ * Downloads a clip once and returns web-optimised mp4 bytes:
  *
- * `-c copy` means NO re-encode — it just rewrites the container, so it's fast and
- * lossless. Returns the remuxed bytes, or null if ffmpeg is unavailable or the
- * remux failed (caller then persists the original clip unchanged). Videos that go
- * through burnCaptions already get +faststart there, so this only covers the
- * common no-overlay path.
+ *   1. CRF re-encode at feed resolution (see webEncodeArgs) — typically 4–6×
+ *      smaller than the provider master, which is what actually makes clips
+ *      load fast over our un-CDN'd storage host.
+ *   2. If the encode fails, or somehow isn't meaningfully smaller than the
+ *      source (already-tiny clip), falls back to a lossless `-c copy`
+ *      `+faststart` remux so the browser can still start playback off a small
+ *      opening range request.
+ *
+ * Returns null when ffmpeg is missing or the source can't be fetched — the
+ * caller then persists the original clip unchanged (correctness over
+ * optimisation). Set UGC_VIDEO_COMPRESS=false to skip step 1 (remux only);
+ * UGC_VIDEO_CRF tunes quality/size (default 27).
+ */
+export async function optimizeForWeb(
+	videoUrl: string,
+	extraHeaders?: Record<string, string>
+): Promise<Buffer | null> {
+	if (!(await hasFfmpeg())) return null;
+
+	let dir: string | null = null;
+	try {
+		dir = await mkdtemp(join(tmpdir(), 'ugc-fs-'));
+		const inName = 'in.mp4';
+
+		const res = await fetch(videoUrl, {
+			headers: { 'User-Agent': 'Mozilla/5.0', ...(extraHeaders || {}) }
+		});
+		if (!res.ok) return null;
+		const buf = Buffer.from(await res.arrayBuffer());
+		if (buf.length === 0) return null;
+		await writeFile(join(dir, inName), buf);
+
+		if (compressionEnabled()) {
+			try {
+				await runFfmpeg(
+					['-y', '-i', inName, ...webEncodeArgs(), '-c:a', 'aac', '-b:a', '96k', 'enc.mp4'],
+					dir
+				);
+				const enc = await readFile(join(dir, 'enc.mp4'));
+				// Keep the encode only when it actually pays for itself.
+				if (enc.length > 0 && enc.length < buf.length * 0.85) {
+					console.log(
+						`[Video] web encode ${(buf.length / 1e6).toFixed(1)}MB → ${(enc.length / 1e6).toFixed(1)}MB`
+					);
+					return enc;
+				}
+			} catch (e) {
+				console.warn('[Video] web encode failed, falling back to remux:', (e as Error).message);
+			}
+		}
+
+		await runFfmpeg(['-y', '-i', inName, '-c', 'copy', '-movflags', '+faststart', 'out.mp4'], dir);
+		return await readFile(join(dir, 'out.mp4'));
+	} catch (e) {
+		console.warn('[Video] optimize skipped:', (e as Error).message);
+		return null;
+	} finally {
+		if (dir) await rm(dir, { recursive: true, force: true }).catch(() => {});
+	}
+}
+
+/**
+ * Back-compat alias for the lossless-only path. Prefer optimizeForWeb, which
+ * also compresses; kept because "remux faststart" is referenced by older docs
+ * and scripts.
  */
 export async function remuxFaststart(videoUrl: string): Promise<Buffer | null> {
 	if (!(await hasFfmpeg())) return null;
@@ -120,7 +214,10 @@ export async function burnCaptions(
 	opts: { badge?: boolean; hook?: string }
 ): Promise<Buffer | null> {
 	const wantBadge = opts.badge === true;
-	const hookText = (opts.hook || '').replace(/[\r\n]+/g, ' ').trim().slice(0, 90);
+	const hookText = (opts.hook || '')
+		.replace(/[\r\n]+/g, ' ')
+		.trim()
+		.slice(0, 90);
 	// Nothing requested → don't re-encode; the caller keeps the clean original.
 	if (!wantBadge && !hookText) return null;
 	if (!(await hasFfmpeg())) return null;
@@ -155,10 +252,11 @@ export async function burnCaptions(
 			);
 		}
 
-		await runFfmpeg(
-			['-y', '-i', inName, '-vf', filters.join(','), '-c:a', 'copy', '-movflags', '+faststart', outName],
-			dir
-		);
+		// The overlay pass re-encodes anyway, so encode straight to delivery
+		// settings (capped width + CRF) — a full-bitrate captioned master would
+		// undo everything optimizeForWeb buys. Scale runs FIRST so the drawtext
+		// pixel coordinates land on the final frame size.
+		await runFfmpeg(['-y', '-i', inName, ...webEncodeArgs(filters), '-c:a', 'copy', outName], dir);
 		return await readFile(join(dir, outName));
 	} catch (e) {
 		console.warn('[Video] caption burn-in skipped:', (e as Error).message);

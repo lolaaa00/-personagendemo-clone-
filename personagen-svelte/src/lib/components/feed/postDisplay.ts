@@ -1,4 +1,5 @@
 import { STUDIO_TEMPLATES } from '$lib/studio-templates';
+import { proxiedMediaUrl } from '$lib/image-url';
 
 /**
  * Which Studio shelf an output belongs on — the SAME four-word vocabulary the
@@ -196,14 +197,22 @@ export function getPostDisplay(post: any): PostDisplay {
 						: 'photo'));
 
 	return {
-		text: parsed?.text || content || '',
-		mediaUrl: parsed?.media_url || parsed?.mediaUrl || legacyMedia?.media_url || null,
+		// Placeholder/failed rows have parsed JSON but no text — that must render
+		// as empty, never as the raw JSON payload (internal prompt scaffolding).
+		text: parsed ? parsed.text || '' : content || '',
+		// Display URLs route through the same-origin /media proxy (Cloudflare-
+		// fronted). The RAW storage URL stays in the DB — publishing reads that,
+		// platforms need an absolute public URL.
+		mediaUrl:
+			(proxiedMediaUrl(
+				parsed?.media_url || parsed?.mediaUrl || legacyMedia?.media_url || null
+			) as string | null) ?? null,
 		mediaType,
 		surface,
 		templateTitle: template?.title ?? null,
 		cinematic: isCinematic,
 		standalone: parsed?.studio?.standalone === true,
-		posterUrl: parsed?.poster_url || null,
+		posterUrl: (proxiedMediaUrl(parsed?.poster_url || null) as string | null) ?? null,
 		ugcPrompt: parsed?.ugc_broll_prompt || parsed?.ugcPrompt || null,
 		script: parsed?.script || null,
 		product: parsed?.product || null,

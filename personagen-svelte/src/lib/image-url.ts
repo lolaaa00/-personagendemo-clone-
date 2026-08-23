@@ -9,8 +9,33 @@
  *   render webp width=320      20,774 bytes
  *   render webp width=640      61,486 bytes
  */
+import { env as publicEnv } from '$env/dynamic/public';
+
 const OBJECT_MARKER = '/storage/v1/object/public/';
 const VIDEO_RE = /\.(mp4|webm|mov|m4v)(\?|$)/i;
+
+/**
+ * Rewrite a URL on OUR storage host to the same-origin `/media/...` proxy
+ * (src/routes/media/[...path]). The app domain sits behind Cloudflare while the
+ * storage host does not — measured at a few hundred KB/s direct — so serving
+ * media through the app origin is what puts it behind the CDN. Only the two
+ * public read paths of our own bucket are rewritten; anything else (external
+ * hosts, data URIs, other buckets) is returned untouched, mirroring the proxy
+ * route's own allow-list.
+ */
+export function proxiedMediaUrl<T extends string | null | undefined>(url: T): T | string {
+	if (!url || typeof url !== 'string') return url;
+	const base = (publicEnv.PUBLIC_SUPABASE_URL || '').trim().replace(/\/+$/, '');
+	if (!base || !url.startsWith(`${base}/storage/v1/`)) return url;
+	const rest = url.slice(`${base}/storage/v1/`.length);
+	if (
+		!rest.startsWith('object/public/ugc-media/') &&
+		!rest.startsWith('render/image/public/ugc-media/')
+	) {
+		return url;
+	}
+	return `/media/${rest}`;
+}
 
 /**
  * Rewrite a public Supabase storage URL to a resized render URL.
@@ -23,7 +48,14 @@ export function thumbUrl(
 	quality = 70
 ): string | null | undefined {
 	if (!url || typeof url !== 'string') return url;
-	if (VIDEO_RE.test(url)) return url;
+	// Accept already-proxied /media/... URLs too (e.g. display.mediaUrl from
+	// getPostDisplay): map back to the storage form so the resize logic below
+	// applies, then the final return re-proxies.
+	if (url.startsWith('/media/')) {
+		const base = (publicEnv.PUBLIC_SUPABASE_URL || '').trim().replace(/\/+$/, '');
+		if (base) url = `${base}/storage/v1/${url.slice('/media/'.length)}`;
+	}
+	if (VIDEO_RE.test(url)) return proxiedMediaUrl(url);
 	const i = url.indexOf(OBJECT_MARKER);
 	if (i === -1) return url;
 
@@ -33,7 +65,7 @@ export function thumbUrl(
 	const q = new URLSearchParams(existingQuery);
 	q.set('width', String(width));
 	q.set('quality', String(quality));
-	return `${origin}/storage/v1/render/image/public/${path}?${q.toString()}`;
+	return proxiedMediaUrl(`${origin}/storage/v1/render/image/public/${path}?${q.toString()}`);
 }
 
 /**

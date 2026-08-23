@@ -46,7 +46,7 @@ import { DEFAULT_VOICE, VOICE_CATALOG } from '$lib/server/voices';
 import { getServiceSupabase } from '$lib/server/service-supabase';
 import { resolveModel, getModel, type ModelOption } from '$lib/models';
 import { persistToStorage, persistBufferToStorage } from '$lib/server/storage';
-import { burnCaptions, remuxFaststart } from '$lib/server/video';
+import { burnCaptions, optimizeForWeb } from '$lib/server/video';
 import { fetchWithTimeout } from '$lib/server/social/http';
 import { assertWithinBudget } from '$lib/server/budget';
 
@@ -68,22 +68,24 @@ const genFetch = (input: string | URL, init?: RequestInit) =>
 
 /**
  * Persists a generated (un-captioned) clip to durable storage as a web-optimised
- * mp4. We first try a lossless `+faststart` remux so the browser can begin
- * playback after a small opening request instead of downloading the whole file to
- * find its metadata — the main cause of slow drawer video loads. If ffmpeg isn't
- * available or the remux fails, we fall back to persisting the provider clip
- * unchanged (correctness over optimisation). Captioned clips skip this because
- * burnCaptions already emits +faststart output.
+ * mp4: a CRF re-encode at feed resolution (~4–6× smaller than the provider
+ * master — the thing that actually makes clips load fast off our un-CDN'd
+ * storage host), falling back to a lossless `+faststart` remux, falling back to
+ * the untouched provider clip when ffmpeg is unavailable (correctness over
+ * optimisation). Captioned clips skip this because burnCaptions already encodes
+ * to the same delivery settings. `extraHeaders` carries provider auth for
+ * sources that need it (e.g. OpenRouter's Bearer-guarded video URLs).
  */
 async function persistVideoDurable(
 	svc: Parameters<typeof persistToStorage>[0],
 	sourceUrl: string,
-	userId: string
+	userId: string,
+	extraHeaders?: Record<string, string>
 ): Promise<string> {
-	const fast = await remuxFaststart(sourceUrl).catch(() => null);
-	return fast
-		? persistBufferToStorage(svc, fast, userId, 'mp4', 'video/mp4')
-		: persistToStorage(svc, sourceUrl, userId, 'mp4');
+	const optimized = await optimizeForWeb(sourceUrl, extraHeaders).catch(() => null);
+	return optimized
+		? persistBufferToStorage(svc, optimized, userId, 'mp4', 'video/mp4')
+		: persistToStorage(svc, sourceUrl, userId, 'mp4', extraHeaders);
 }
 
 // ── Model slugs (env-overridable so quality/provider is a one-line swap) ─────
@@ -1068,7 +1070,7 @@ async function openRouterBrollVideo(
 				if (!url) throw new Error('OpenRouter video completed but returned no URL');
 				// Persist NOW, with the Bearer header only we have, to a permanent URL.
 				const svc = getServiceSupabase();
-				return persistToStorage(svc, url, userId, 'mp4', { Authorization: `Bearer ${orKey}` });
+				return persistVideoDurable(svc, url, userId, { Authorization: `Bearer ${orKey}` });
 			}
 			if (st.status === 'failed') {
 				throw new Error(`OpenRouter video job failed: ${JSON.stringify(st).slice(0, 200)}`);
