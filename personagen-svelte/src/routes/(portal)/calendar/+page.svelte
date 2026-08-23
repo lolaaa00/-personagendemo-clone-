@@ -733,6 +733,17 @@
 
 	// Campaign planner: fill a horizon with a content-mix of drafts in one pass.
 	let campaignOpen = $state(false);
+	// Deep entry from Studio's "Plan a campaign" button: /calendar?campaign=1
+	// opens the planner immediately, then drops the param so refresh/back
+	// doesn't re-open it.
+	onMount(() => {
+		const url = new URL(window.location.href);
+		if (url.searchParams.get('campaign') === '1') {
+			campaignOpen = true;
+			url.searchParams.delete('campaign');
+			history.replaceState(history.state, '', url);
+		}
+	});
 	async function handleCampaignLaunched(queued: number) {
 		if (queued > 0) {
 			showToast(

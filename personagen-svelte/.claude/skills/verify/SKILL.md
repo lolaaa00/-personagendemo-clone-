@@ -169,6 +169,10 @@ More of the same family, each of which produced a wrong result before being caug
 - **`.btn-delete` matches two different things** on `/review` — the disabled bulk
   "Delete selected (0)" button *and* the per-card ones. `.first()` grabs the disabled one and
   the click times out. Scope it: `.queue-card .btn-delete`.
+- **`/review` defaults to TABLE view** (viewMode 'table', persisted in localStorage;
+  board/grid/deck are alternates). `.queue-card` exists ONLY in grid mode — count
+  `tbody tr` in the default view, or switch to grid first, or a populated queue
+  reads as empty.
 - **`.row-pick input, .row-pick`** double-counts (label + input), so "4 rows" is really 2.
   Count the inputs only.
 - **The reference-kit controls sit inside a collapsed `<details class="profile-section">`.**

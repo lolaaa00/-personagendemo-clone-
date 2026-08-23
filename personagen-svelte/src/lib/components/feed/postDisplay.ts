@@ -26,6 +26,8 @@ export interface PostDisplay {
 	templateTitle: string | null;
 	/** Multi-shot cinematic post (its own pipeline, not the single-still one). */
 	cinematic: boolean;
+	/** Studio "Asset only" output — deliberately NOT in the review queue. */
+	standalone: boolean;
 	posterUrl: string | null;
 	ugcPrompt: string | null;
 	script: string | null;
@@ -200,6 +202,7 @@ export function getPostDisplay(post: any): PostDisplay {
 		surface,
 		templateTitle: template?.title ?? null,
 		cinematic: isCinematic,
+		standalone: parsed?.studio?.standalone === true,
 		posterUrl: parsed?.poster_url || null,
 		ugcPrompt: parsed?.ugc_broll_prompt || parsed?.ugcPrompt || null,
 		script: parsed?.script || null,

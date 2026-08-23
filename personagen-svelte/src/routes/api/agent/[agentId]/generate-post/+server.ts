@@ -412,6 +412,21 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		});
 	}
 
+	// ── Budget precheck, SYNCHRONOUS ─────────────────────────────────────────
+	// The caps also assert inside the detached task (fail-closed, before any
+	// paid call) — but by then this request has already 202'd, so a bulk
+	// campaign launch reported "42 queued" while over-cap slots quietly flipped
+	// to failed minutes later. Checking here turns an over-cap slot into an
+	// immediate 400 the CampaignPlanner counts truthfully ("N failed to queue"),
+	// and a doomed slot never creates a placeholder row at all. The detached
+	// assert stays: two requests can pass this precheck concurrently, and the
+	// inner one is what actually guards the money.
+	try {
+		await assertWithinBudget(locals.supabase, user.id, agentId);
+	} catch (err) {
+		return json({ success: false, error: (err as Error).message }, { status: 400 });
+	}
+
 	// ── Async job path ───────────────────────────────────────────────────────
 	// Create the post row up front so the client has an id to poll. A caller-
 	// supplied schedule slot is kept; otherwise the completion task stamps

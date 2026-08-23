@@ -364,9 +364,22 @@
 				{SURFACE_LABEL[display.surface]}
 			</span>
 		{/if}
-		<span class="tile-status" data-status={isPublishFail ? 'post-failed' : post.status}>
-			{isPublishFail ? 'not posted' : post.status}
-		</span>
+		<!-- "Asset only" Studio output is a different THING than a review draft —
+		     same row status, different destination — so it wears its own chip
+		     instead of masquerading as a draft awaiting approval. -->
+		{#if display.standalone && post.status === 'draft'}
+			<span
+				class="tile-status"
+				data-status="asset"
+				title="Standalone asset — deliberately not in the review queue"
+			>
+				asset
+			</span>
+		{:else}
+			<span class="tile-status" data-status={isPublishFail ? 'post-failed' : post.status}>
+				{isPublishFail ? 'not posted' : post.status}
+			</span>
+		{/if}
 	</div>
 
 	{#if isPublishFail}
@@ -764,6 +777,10 @@
 	.tile-status[data-status='draft'] {
 		color: #d9dbe3;
 		border-color: rgba(255, 255, 255, 0.45);
+	}
+	.tile-status[data-status='asset'] {
+		color: #c9b8ff;
+		border-color: #c9b8ff;
 	}
 	.tile-status[data-status='failed'] {
 		color: var(--error);

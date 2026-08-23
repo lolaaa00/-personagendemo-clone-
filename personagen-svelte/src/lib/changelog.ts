@@ -348,7 +348,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-08-20", hash: "37c3d80", type: "other", category: "maintenance", scope: null, title: "skills" },
 	{ date: "2026-08-20", hash: "586a7ec", type: "feat", category: "generation", scope: "studio", title: "composition contract — the composer and the pipeline tell the same story" },
 	{ date: "2026-08-23", hash: "30aecc9", type: "feat", category: "feature", scope: "library", title: "one format vocabulary everywhere, and campaigns that fill the calendar" },
-	{ date: "2026-08-23", hash: "87edf53", type: "feat", category: "feature", scope: "studio", title: "selfie-first realism registers (front-cam / mirror / propped) and 80/20 channel-weighted campaign rotation" }
+	{ date: "2026-08-23", hash: "87edf53", type: "feat", category: "feature", scope: "studio", title: "selfie-first realism registers (front-cam / mirror / propped) and 80/20 channel-weighted campaign rotation" },
+	{ date: "2026-08-23", hash: "7b53e8a", type: "fix", category: "fix", scope: "personas", title: "both views fill the screen, and bento stops leaving holes" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -623,7 +624,15 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 		summary: "Everything a persona has made appears in one feed you can scroll through, with the behind-the-scenes work needed to keep it current.",
 		major: true, curated: true,
 		entries: [CHANGELOG[301], CHANGELOG[302], CHANGELOG[303], CHANGELOG[304], CHANGELOG[305], CHANGELOG[306], CHANGELOG[307], CHANGELOG[308], CHANGELOG[309], CHANGELOG[310], CHANGELOG[311], CHANGELOG[312], CHANGELOG[313], CHANGELOG[314]]
+	},
+	{
+		id: "7b53e8a", from: "2026-08-23", to: "2026-08-23",
+		category: "fix", categories: ["fix"],
+		title: "Fixed: both views fill the screen, and bento stops leaving…",
+		summary: "Both views fill the screen, and bento stops leaving holes.",
+		major: false, curated: false,
+		entries: [CHANGELOG[315]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "87edf53";
+export const CHANGELOG_GENERATED_FROM = "7b53e8a";
