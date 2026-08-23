@@ -55,6 +55,13 @@ export interface StudioTemplate {
 	surface: StudioSurface;
 	/** One line of representative output, shown ON the card so it is never blank. */
 	sample: string;
+	/**
+	 * 'selfie' = the persona shot this themself (front camera / mirror / propped
+	 * phone) — the realism register social feeds actually run on. Channel photo
+	 * and video default HERE; third-person "photoshoot" looks read as ads and are
+	 * reserved for deliberate set-piece templates. Surfaced as a FRONT-CAM chip.
+	 */
+	framing?: 'selfie';
 	/** Fields sent as the composer spec's baseBody (all editable in preview). */
 	baseBody: {
 		topic: string;
@@ -86,6 +93,31 @@ export const STUDIO_CATEGORIES: Array<{ id: StudioCategory | 'all'; label: strin
 	{ id: 'stills', label: 'Stills' },
 	{ id: 'social', label: 'Social & Quotes' }
 ];
+
+/**
+ * The front-camera realism cues that kill the "photoshoot" look. Spliced into
+ * every selfie-framed scene so the vocabulary stays identical across templates
+ * (and bulk runs) instead of drifting per author. Third-person set-piece
+ * templates deliberately do NOT use this.
+ */
+export const SELFIE_LOOK =
+	'Shot by the persona themself on a phone front camera, CLOSE: face filling most of the frame, chin-to-forehead framing, direct eye contact with the lens, slight wide-angle distortion, natural imperfect light (bedroom lamp, car interior, bathroom), casual real clothes, authentic environment visible only at the edges, NO studio lighting, NO professional composition, NO photoshoot polish.';
+
+/**
+ * Back-camera mirror selfie — the second great self-shot register. Sharper than
+ * front-cam (rear lens), and the PHONE IS VISIBLE in the mirror, usually
+ * covering part of the face: that visible phone is the authenticity signal.
+ */
+export const MIRROR_LOOK =
+	'Back-camera mirror selfie taken by the persona themself: phone clearly visible in the mirror covering part of their face, sharper rear-camera image quality, honest mirror smudges acceptable, real room reflected behind them, casual stance with weight on one hip or leaning, NO studio lighting, NO professional composition — the composition a person makes in ten seconds before leaving.';
+
+/**
+ * Propped-phone self-timer shot — the third register: phone leaned against a
+ * water bottle / books / wall, timer fired. Reads as "no one took this photo",
+ * which is exactly why it reads as real. Mid-distance, slightly wrong angle.
+ */
+export const PROPPED_LOOK =
+	'Self-timer photo from a phone propped against an object at mid-distance: full or three-quarter body in frame, camera angle slightly low or tilted the way a leaned phone sits, the persona mid-action rather than posing at the lens, natural light, real environment fully visible, faint timer-shot stiffness-then-motion candidness, NO studio lighting, NO professional composition, nobody behind the camera.';
 
 export const STUDIO_TEMPLATES: StudioTemplate[] = [
 	// ── UGC · talking head ────────────────────────────────────────────────
@@ -281,19 +313,19 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 	// ── Stills ────────────────────────────────────────────────────────────
 	{
 		id: 'lifestyle-still',
-		title: 'Lifestyle Still',
-		tagline: 'In-context photo with the persona',
+		title: 'Mirror Check',
+		tagline: 'Mirror selfie — the outfit, the room, the phone',
 		category: 'stills',
 		pipeline: 'Still image',
 		intent: 'channel',
 		surface: 'photo',
+		framing: 'selfie',
 		sample: 'A Tuesday that happens to look good.',
 		baseBody: {
-			topic:
-				'A single lifestyle photo: the persona using the featured product in a believable everyday moment, composed like a strong organic feed post rather than an ad.',
-			scene:
-				'Candid documentary-style photo, natural light, persona mid-action with the featured product, environment telling a story, editorial color grade.',
-			media: 'image'
+			topic: 'A back-camera mirror selfie of the persona on an ordinary day that happens to look good — outfit worth posting, room honestly lived-in. Feed-real, not editorial. No product.',
+			scene: MIRROR_LOOK + ' Full-length framing showing the outfit; mirror location varied across runs — bedroom mirror, gym mirror, elevator, fitting room, hallway.',
+			media: 'image',
+			refs: { character: true, product: false }
 		}
 	},
 	{
@@ -417,18 +449,18 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 	{
 		id: 'caption-this',
 		title: 'Caption This',
-		tagline: 'An image engineered for comments and shares',
+		tagline: 'Front-cam chaos, engineered for the comments',
 		category: 'social',
 		pipeline: 'Still image',
 		intent: 'channel',
 		surface: 'photo',
+		framing: 'selfie',
 		sample: 'No caption. That’s the point — they’ll write it.',
 		baseBody: {
-			topic:
-				"An intentionally funny, oddly relatable scene from the persona's daily life with the featured product visible but not the point — designed so the audience supplies the joke. The caption just says 'caption this' with a first attempt from the persona.",
-			scene:
-				'Candid comedic photo: the persona mid-mundane-disaster or absurdly relatable moment, featured product somewhere in frame, sitcom timing frozen at the perfect frame, natural light, meme-ready composition with clear space at top.',
-			media: 'image'
+			topic: 'A comedic self-shot photo of the persona mid-mundane-disaster or absurdly relatable moment, posted without explanation so the comments write the caption. No product.',
+			scene: SELFIE_LOOK + ' Front-camera at an unflattering-but-funny angle, genuine caught-in-the-act expression, chaotic real surroundings clearly legible in frame.',
+			media: 'image',
+			refs: { character: true, product: false }
 		}
 	},
 	// ══════════════════════════════════════════════════════════════════════
@@ -545,15 +577,16 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 	{
 		id: 'day-in-the-life',
 		title: 'A Frame From Today',
-		tagline: 'Ordinary moment, composed well',
+		tagline: 'Arm’s-length selfie in an ordinary moment',
 		category: 'stills',
 		pipeline: 'Still image',
 		intent: 'channel',
 		surface: 'photo',
+		framing: 'selfie',
 		sample: 'Coffee, half a notebook page, morning light.',
 		baseBody: {
-			topic: 'A single unremarkable moment from the persona’s ordinary day, framed like it mattered. No product, no message, no caption-bait — just presence.',
-			scene: 'Candid phone-camera realism, natural window light, shallow depth of field, lived-in setting with real clutter, persona present but not posing.',
+			topic: 'A single unremarkable moment from the persona’s ordinary day, captured by them in the moment. No product, no message, no caption-bait — just presence.',
+			scene: SELFIE_LOOK + ' Arm’s-length morning selfie — kitchen counter or desk edge in frame behind, unbrushed-hair honesty, soft window light, slightly imperfect angle.',
 			media: 'image',
 			refs: { character: true, product: false }
 		}
@@ -561,17 +594,18 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 	{
 		id: 'behind-the-scenes',
 		title: 'Behind the Scenes',
-		tagline: 'The unglamorous middle of the work',
+		tagline: 'Selfie with the mess of the work behind you',
 		category: 'stills',
 		pipeline: 'Still image',
 		intent: 'channel',
 		surface: 'photo',
+		framing: 'selfie',
 		sample: 'The version nobody was supposed to see.',
 		baseBody: {
-			topic: 'The messy in-progress reality behind something the persona makes or does — the draft, the failed attempt, the cluttered desk at hour six. Honest, not styled.',
-			scene: 'Available light, slightly imperfect framing, work-in-progress materials visible, nothing tidied for the camera.',
+			topic: 'The persona mid-work, showing the unglamorous middle of something they make or do — tired but in it. Honest, not styled.',
+			scene: SELFIE_LOOK + ' Selfie held high or propped, the actual work-in-progress mess visible and in focus behind them — desk chaos, materials, screens — hour-six energy, available light.',
 			media: 'image',
-			refs: { character: false, product: false }
+			refs: { character: true, product: false }
 		}
 	},
 	{
@@ -611,15 +645,16 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 	{
 		id: 'the-rant',
 		title: 'The Rant',
-		tagline: 'Ninety seconds of genuine opinion',
+		tagline: 'Front-cam, pacing the kitchen, one strong take',
 		category: 'ugc',
 		pipeline: 'Talking head',
 		intent: 'channel',
 		surface: 'motion',
+		framing: 'selfie',
 		sample: 'Right, I need to talk about this for a second.',
 		baseBody: {
-			topic: 'The persona argues one strongly held position from their niche straight to camera. Builds, lands a clear point, and stops. No product mentioned at any stage.',
-			scene: 'Straight-to-camera selfie framing, handheld, natural light, mid-thought opening with no intro, slightly animated delivery.',
+			topic: 'The persona argues one strongly held position from their niche straight into their front camera, like voice-noting a friend who is wrong. Builds, lands a clear point, stops. No product mentioned at any stage.',
+			scene: SELFIE_LOOK + ' Handheld and slightly moving — pacing the kitchen or living room, mid-thought opening with no intro, animated but genuine delivery.',
 			format: 'spokesperson',
 			refs: { character: true, product: false }
 		}
@@ -627,15 +662,16 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 	{
 		id: 'story-time',
 		title: 'Story Time',
-		tagline: 'A short personal story with a turn',
+		tagline: 'Close front-cam on the couch, lights low',
 		category: 'ugc',
 		pipeline: 'Talking head',
 		intent: 'channel',
 		surface: 'motion',
+		framing: 'selfie',
 		sample: 'So this happened and I still think about it.',
 		baseBody: {
-			topic: 'A short first-person story from the persona’s life that turns on one surprising detail and ends on a thought rather than a lesson. Nothing is sold and no moral is stated outright.',
-			scene: 'Close selfie framing, opens mid-story with no setup, natural light, relaxed and conversational, small honest reactions.',
+			topic: 'A short first-person story from the persona’s life that turns on one surprising detail and ends on a thought rather than a lesson. Told like a secret. Nothing is sold and no moral is stated outright.',
+			scene: SELFIE_LOOK + ' Close intimate framing, evening — couch or bed, lamp light, hoodie or sleep shirt, opens mid-story with no setup, small honest reactions.',
 			format: 'spokesperson',
 			refs: { character: true, product: false }
 		}
@@ -643,15 +679,16 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 	{
 		id: 'answer-a-comment',
 		title: 'Answer a Comment',
-		tagline: 'Reply to the thing people keep asking',
+		tagline: 'Parked-car front-cam reply, classic creator format',
 		category: 'ugc',
 		pipeline: 'Talking head',
 		intent: 'channel',
 		surface: 'motion',
+		framing: 'selfie',
 		sample: 'Someone asked this again, so — properly this time.',
 		baseBody: {
 			topic: 'The persona answers a question their audience genuinely keeps asking in their niche, thoroughly and without deflecting. Useful enough to be saved.',
-			scene: 'Straight-to-camera, sitting, natural light, opens by restating the question, unhurried explanatory delivery.',
+			scene: SELFIE_LOOK + ' Sitting in a parked car, phone propped on the dash, daylight through the windshield, seatbelt off, opens by restating the question, unhurried and direct.',
 			format: 'spokesperson',
 			refs: { character: true, product: false }
 		}
@@ -659,16 +696,164 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 	{
 		id: 'myth-bust-video',
 		title: 'Myth-Bust to Camera',
-		tagline: 'Correct the record out loud',
+		tagline: 'Walk-and-talk selfie, outside, correcting the record',
 		category: 'ugc',
 		pipeline: 'Talking head',
 		intent: 'channel',
 		surface: 'motion',
+		framing: 'selfie',
 		sample: 'This keeps getting repeated and it is just wrong.',
 		baseBody: {
 			topic: 'The persona names one common piece of bad advice in their niche, explains precisely why it fails, and gives the better alternative. Direct and evidence-led, never condescending.',
-			scene: 'Straight-to-camera, natural light, opens on the myth itself with no preamble, firm and clear delivery.',
+			scene: SELFIE_LOOK + ' Walking outside — sidewalk or park, arm’s-length handheld with natural bounce, jacket weather, opens on the myth itself with no preamble.',
 			format: 'spokesperson',
+			refs: { character: true, product: false }
+		}
+	},
+	// ── Selfie-native additions — the realism register feeds actually run on.
+	//    'selfie-listicle' encodes the counted front-cam format (hook title →
+	//    numbered beats → sharp close) popularized by commentary creators;
+	//    campaign-eligible like everything else, and written so every bulk run
+	//    produces a DIFFERENT list, not the same three items N times.
+	{
+		id: 'selfie-listicle',
+		title: 'Selfie Listicle',
+		tagline: 'Front-cam countdown — three things, no filler',
+		category: 'ugc',
+		pipeline: 'Talking head',
+		intent: 'channel',
+		surface: 'motion',
+		framing: 'selfie',
+		sample: 'Three things I refuse to do anymore — number two matters most.',
+		baseBody: {
+			topic: 'A counted selfie video: the persona opens with a compressed, slightly cautionary hook naming the list (“Three things I’d never do again”, “Three signs you’re doing it wrong”), then delivers each numbered item in one tight line with a half-beat of reaction between, and closes on the sharpest item, not a summary. Deadpan, self-aware, specific to the persona’s niche. IMPORTANT for repeat runs: invent a fresh list and angle each time — never reuse a previous list’s items or hook.',
+			scene: SELFIE_LOOK + ' Front camera held slightly below eye level, persona counting on fingers, one consistent location per video but varied across runs — kitchen, car, bathroom mirror, street — delivery paced for on-screen number overlays.',
+			format: 'spokesperson',
+			refs: { character: true, product: false }
+		}
+	},
+	{
+		id: 'grwm',
+		title: 'Get Ready With Me',
+		tagline: 'Propped phone, real routine, talking through a topic',
+		category: 'ugc',
+		pipeline: 'Talking head',
+		intent: 'channel',
+		surface: 'motion',
+		framing: 'selfie',
+		sample: 'Okay so while I do this — let me tell you what happened.',
+		baseBody: {
+			topic: 'The persona talks through one interesting niche topic or mild story while getting ready — the routine is the backdrop, the talking is the content. Intimate, unhurried, like a friend on speakerphone. No product pitch.',
+			scene: SELFIE_LOOK + ' Phone propped against the bathroom or bedroom mirror, persona doing hair or skincare motions while talking to the reflection camera, morning light, towel or robe realism.',
+			format: 'spokesperson',
+			refs: { character: true, product: false }
+		}
+	},
+	{
+		id: 'hot-mic-checkin',
+		title: 'Unfiltered Check-In',
+		tagline: 'Thirty honest seconds, front cam, no agenda',
+		category: 'ugc',
+		pipeline: 'Talking head',
+		intent: 'channel',
+		surface: 'motion',
+		framing: 'selfie',
+		sample: 'No script today — just checking in.',
+		baseBody: {
+			topic: 'A short unpolished check-in: how the week is actually going in the persona’s world, one real observation from their niche, one small honest admission. The anti-performance post that makes the polished ones believable.',
+			scene: SELFIE_LOOK + ' Wherever they are — couch, parked car, walking — one take energy, pauses left in, soft real light, no setup whatsoever.',
+			format: 'spokesperson',
+			refs: { character: true, product: false }
+		}
+	},
+	// Hook FRANCHISES — one recognizable pattern, a fresh payload every run.
+	// This is how a feed stays coherent in bulk without repeating itself: the
+	// format is the brand, the payload changes. Modeled on the counted-commentary
+	// register of close-framed selfie channels (hook text doubles as the burned-in
+	// overlay the video pipeline already applies).
+	{
+		id: 'dont-search-this',
+		title: 'Don’t Search This',
+		tagline: 'Curiosity-gap franchise — same hook, new payload every run',
+		category: 'ugc',
+		pipeline: 'Talking head',
+		intent: 'channel',
+		surface: 'motion',
+		framing: 'selfie',
+		sample: 'Do NOT look up what this actually means.',
+		baseBody: {
+			topic: 'A curiosity-gap franchise video: the persona opens with a “Do NOT look up / search [payload]” warning-hook about something specific in their niche, then — while insisting they warned you — explains just enough of what it is and why it got them, ending on the exact phrase to (not) search. The opening warning line doubles as the on-screen hook text. Playful conspiratorial dread, never actual harm. IMPORTANT for repeat runs: a completely fresh payload every time — the hook pattern is the franchise, the payload must never repeat.',
+			scene: SELFIE_LOOK + ' One micro-setting per video, varied across runs — lying on a pillow, wrapped in a bathrobe, parked car at night with dashboard glow — hushed leaning-in delivery.',
+			format: 'spokesperson',
+			refs: { character: true, product: false }
+		}
+	},
+	{
+		id: 'the-real-reason',
+		title: 'The Real Reason',
+		tagline: 'Psychological observation franchise — names what people feel',
+		category: 'ugc',
+		pipeline: 'Talking head',
+		intent: 'channel',
+		surface: 'motion',
+		framing: 'selfie',
+		sample: 'The real reason you feel invisible.',
+		baseBody: {
+			topic: 'An observation-commentary franchise video: the persona opens with “The real reason you [specific feeling or behavior in their niche]” — the line doubles as the on-screen hook — then unpacks the actual mechanism behind it in two or three plain sentences that make the viewer feel precisely seen, closing on one reframing thought rather than advice. IMPORTANT for repeat runs: a different feeling or behavior each time; never reuse a prior hook.',
+			scene: SELFIE_LOOK + ' Still, close and quiet — soft lamp or window light, minimal movement, steady eye contact, the pacing of someone saying something they mean.',
+			format: 'spokesperson',
+			refs: { character: true, product: false }
+		}
+	},
+	{
+		id: 'selfie-checkin-photo',
+		title: 'The Check-In Selfie',
+		tagline: 'Arm’s-length, flash or golden hour, zero polish',
+		category: 'stills',
+		pipeline: 'Still image',
+		intent: 'channel',
+		surface: 'photo',
+		framing: 'selfie',
+		sample: 'Proof of life. That’s the post.',
+		baseBody: {
+			topic: 'A plain arm’s-length face selfie — the persona as they actually look today, small true smile or deadpan, nothing arranged. The post that keeps a feed feeling human between everything else.',
+			scene: SELFIE_LOOK + ' Tight arm’s-length face framing, direct flash indoors OR golden hour outdoors (vary across runs), honest skin texture, background incidental and slightly cropped.',
+			media: 'image',
+			refs: { character: true, product: false }
+		}
+	},
+	// ── The other two self-shot registers: propped timer + 0.5 ultrawide ──
+	{
+		id: 'propped-timer',
+		title: 'Set the Timer',
+		tagline: 'Phone propped, timer fired, nobody behind the camera',
+		category: 'stills',
+		pipeline: 'Still image',
+		intent: 'channel',
+		surface: 'photo',
+		framing: 'selfie',
+		sample: 'Balanced the phone on a water bottle for this.',
+		baseBody: {
+			topic: 'A self-timer photo of the persona mid-ordinary-action — stretching, pouring coffee, leaning in a doorway, mid-laugh at nothing. The propped-phone look that reads as real precisely because no one took it. No product.',
+			scene: PROPPED_LOOK + ' Prop and setting varied across runs — phone leaning on a water bottle in the kitchen, against books on a shelf, on a ledge outdoors at golden hour.',
+			media: 'image',
+			refs: { character: true, product: false }
+		}
+	},
+	{
+		id: 'zero-five',
+		title: 'The 0.5',
+		tagline: 'Ultrawide back-cam chaos — arms in, world bent',
+		category: 'stills',
+		pipeline: 'Still image',
+		intent: 'channel',
+		surface: 'photo',
+		framing: 'selfie',
+		sample: 'The 0.5 does not lie. Unfortunately.',
+		baseBody: {
+			topic: 'A 0.5x ultrawide back-camera selfie — the persona holds the phone high or low, face and surroundings comically stretched at the edges, genuine mid-moment expression. The deliberately unflattering-but-fun register that makes a feed feel alive. No product.',
+			scene: 'Shot by the persona themself on a phone BACK camera at 0.5x ultrawide: arm visibly extended into frame, strong fisheye edge distortion bending the room or sky, face slightly warped and close, spontaneous caught-moment energy, natural light, real environment wrapping the frame, NO studio lighting, NO professional composition, NO photoshoot polish.',
+			media: 'image',
 			refs: { character: true, product: false }
 		}
 	}
@@ -709,4 +894,5 @@ export const STUDIO_SURFACES: Array<{
 	{ id: 'photo', label: 'Photo', hint: 'Image-led stills in the persona’s world' },
 	{ id: 'motion', label: 'Video', hint: 'Talking head and product motion' },
 	{ id: 'cinematic', label: 'Cinematic', hint: 'Multi-shot, directed, ad-grade' }
+
 ];

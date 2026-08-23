@@ -123,6 +123,28 @@
 		const clamped = Math.max(8 * 60, Math.min(20 * 60 - 1, t));
 		return `${pad(Math.floor(clamped / 60))}:${pad(clamped % 60)}:00`;
 	};
+	/**
+	 * ~80/20 channel:brand rotation. A uniform shuffle over the pool made a bulk
+	 * campaign roughly half promo (the video pool is ~9 brand / 9 channel), which
+	 * is the exact account-killing ratio the Studio's intent split exists to
+	 * prevent. The cycle is patterned 4 channel : 1 brand — shuffled within each
+	 * intent so runs still vary — and degrades to a plain shuffle when a pool has
+	 * only one intent.
+	 */
+	const channelWeightedCycle = (pool: StudioTemplate[]): StudioTemplate[] => {
+		const ch = shuffle(pool.filter((t) => t.intent === 'channel'));
+		const br = shuffle(pool.filter((t) => t.intent === 'brand'));
+		if (!ch.length || !br.length) return shuffle(pool);
+		const out: StudioTemplate[] = [];
+		let bi = 0;
+		const rounds = Math.max(ch.length, br.length * 4);
+		for (let i = 0; i < rounds; i++) {
+			out.push(ch[i % ch.length]);
+			if ((i + 1) % 4 === 0) out.push(br[bi++ % br.length]);
+		}
+		return out;
+	};
+
 	const shuffle = <T,>(arr: T[]): T[] => {
 		const a = [...arr];
 		for (let i = a.length - 1; i > 0; i--) {
@@ -147,10 +169,10 @@
 		// Per-class template rotation (shuffled cycle) so a campaign uses the
 		// breadth of the catalog instead of hammering one archetype.
 		const cycles: Record<FormatClass, StudioTemplate[]> = {
-			typographic: shuffle(POOLS.typographic),
-			photo: shuffle(POOLS.photo),
-			video: shuffle(POOLS.video),
-			cinematic: shuffle(POOLS.cinematic)
+			typographic: channelWeightedCycle(POOLS.typographic),
+			photo: channelWeightedCycle(POOLS.photo),
+			video: channelWeightedCycle(POOLS.video),
+			cinematic: channelWeightedCycle(POOLS.cinematic)
 		};
 		const cursor: Record<FormatClass, number> = { typographic: 0, photo: 0, video: 0, cinematic: 0 };
 

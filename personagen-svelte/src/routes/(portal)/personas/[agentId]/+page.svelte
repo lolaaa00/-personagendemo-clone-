@@ -2757,7 +2757,7 @@
 		<a href="/dashboard" class="btn-primary">Back to Dashboard</a>
 	</div>
 {:else}
-<div class="persona-page" class:wide={activeTab === 'profile' && profileView === 'overview' && profileLayout === 'bento'}>
+<div class="persona-page">
 	<!-- ── Hero header ─────────────────────────────────────────── -->
 	<!-- Compact identity header — the banner image was removed on request:
 	     the character photo shows ONCE (avatar), not stretched behind the name. -->
@@ -4646,6 +4646,11 @@
 												     when one exists, else the template's sample line styled
 												     like the asset it produces — never a blank card. -->
 												<div class="studio-face">
+													{#if t.framing === 'selfie'}
+														<!-- The realism register a social feed runs on — flagged so
+														     the selfie share of the catalog is visible at a glance. -->
+														<span class="studio-framing">Front-cam</span>
+													{/if}
 													{#if preview}
 														<img
 															class="studio-face-img"
@@ -5248,9 +5253,14 @@
 		font-size: 0.9rem;
 	}
 
-	/* ── Page ── */
+	/* ── Page ──
+	   Was capped at 900px, which on a wide monitor left the whole profile as a
+	   narrow column stranded in the middle with ~800px of nothing either side.
+	   It now fills the portal content area in BOTH views. Readability is
+	   protected where it actually matters — the prose measure below — rather
+	   than by starving the whole page of width. */
 	.persona-page {
-		max-width: 900px;
+		max-width: 100%;
 		margin: 0 auto;
 	}
 
@@ -5455,6 +5465,21 @@
 		border-radius: var(--radius-full);
 		background: color-mix(in srgb, #000 45%, transparent);
 		color: #fff;
+	}
+	.studio-framing {
+		position: absolute;
+		top: var(--space-2);
+		left: var(--space-2);
+		z-index: 1;
+		font-family: var(--font-mono);
+		font-size: 0.58rem;
+		text-transform: uppercase;
+		letter-spacing: 0.09em;
+		color: var(--accent-text);
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-full);
+		padding: 2px 7px;
 	}
 	.studio-tried {
 		position: absolute;
@@ -6392,44 +6417,34 @@
 
 	   Order in markup: 1 Brand Kit · 2 Persona Profile · 3 Platform Identity Kit
 	   · 4 Character & Visuals · 5 Automation · 6 Spend & Pricing. */
+	/* ── Bento: OPTIONAL alternate placement of the same six sections ───────
+	   Placement is fully automatic. The first version pinned each section to an
+	   explicit grid-row, which assumed Platform Identity Kit was expanded: with
+	   it collapsed, its reserved two-row cell stayed empty and left a large hole
+	   in the left column. Tiles here change height constantly — that is the whole
+	   point of collapsing — so any hard-coded row is wrong in some state.
+
+	   Auto-flow with `dense` lets every tile take the next free cell and lets
+	   later tiles backfill gaps, so no collapse combination can leave a void.
+	   align-items:start keeps a collapsed tile at its header height instead of
+	   stretching to match its row. */
 	.profile-tab.bento {
 		display: grid;
-		grid-template-columns: 1.5fr 1fr 1fr;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		grid-auto-flow: row dense;
 		align-items: start;
 		gap: 1.25rem;
 	}
 
-	/* Identity Kit is the heaviest workspace here, so it gets the tall column. */
-	.profile-tab.bento .profile-section:nth-of-type(3) { grid-column: 1; grid-row: 1 / span 2; }
-	.profile-tab.bento .profile-section:nth-of-type(2) { grid-column: 2 / span 2; grid-row: 1; }
-	.profile-tab.bento .profile-section:nth-of-type(4) { grid-column: 2; grid-row: 2; }
-	.profile-tab.bento .profile-section:nth-of-type(1) { grid-column: 3; grid-row: 2; }
-	.profile-tab.bento .profile-section:nth-of-type(5) { grid-column: 1; grid-row: 3; }
-	.profile-tab.bento .profile-section:nth-of-type(6) { grid-column: 2 / span 2; grid-row: 3; }
-
-	/* The page is capped at 900px, which is what leaves ~500px empty either side
-	   on a wide screen. The cap lifts only while bento is showing — classic keeps
-	   its comfortable reading measure exactly as it was. (A :has() selector would
-	   express this more directly, but the Svelte CSS compiler rejects it inside
-	   :global(), so the state is carried as a class instead.) */
-	.persona-page.wide {
-		max-width: 1440px;
+	@media (max-width: 1500px) {
+		.profile-tab.bento {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
 	}
 
-	/* Below three-column territory the grid would crush each cell, so it becomes
-	   the ordinary stack again — same sections, same order, no placement. */
 	@media (max-width: 1100px) {
 		.profile-tab.bento {
 			grid-template-columns: 1fr;
-		}
-		.profile-tab.bento .profile-section:nth-of-type(1),
-		.profile-tab.bento .profile-section:nth-of-type(2),
-		.profile-tab.bento .profile-section:nth-of-type(3),
-		.profile-tab.bento .profile-section:nth-of-type(4),
-		.profile-tab.bento .profile-section:nth-of-type(5),
-		.profile-tab.bento .profile-section:nth-of-type(6) {
-			grid-column: auto;
-			grid-row: auto;
 		}
 	}
 
@@ -6529,6 +6544,10 @@
 		font-size: 0.8rem;
 		color: var(--text-dim);
 		margin: 0;
+		/* The old 900px page cap kept these readable by accident. Now that the
+		   page fills the screen, cap the text itself — a description running the
+		   full width of a 2560px monitor is unreadable however wide the card is. */
+		max-width: 90ch;
 	}
 
 	.fields-grid {
