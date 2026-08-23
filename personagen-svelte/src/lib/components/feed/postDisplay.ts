@@ -1,7 +1,31 @@
+import { STUDIO_TEMPLATES } from '$lib/studio-templates';
+
+/**
+ * Which Studio shelf an output belongs on — the SAME four-word vocabulary the
+ * Studio browses by (Text & Type / Photo / Video / Cinematic), so a tile in the
+ * feed, the library, favorites, or the calendar reads as the thing that made it.
+ */
+export type PostSurface = 'typographic' | 'photo' | 'video' | 'cinematic';
+
+export const SURFACE_LABEL: Record<PostSurface, string> = {
+	typographic: 'Text',
+	photo: 'Photo',
+	video: 'Video',
+	cinematic: 'Cinematic'
+};
+
+const TEMPLATE_BY_ID = new Map(STUDIO_TEMPLATES.map((t) => [t.id, t]));
+
 export interface PostDisplay {
 	text: string;
 	mediaUrl: string | null;
 	mediaType: string;
+	/** Output class, Studio-shelf vocabulary — drives tile badges + format filters. */
+	surface: PostSurface;
+	/** Title of the Studio template that produced this, when one did. */
+	templateTitle: string | null;
+	/** Multi-shot cinematic post (its own pipeline, not the single-still one). */
+	cinematic: boolean;
 	posterUrl: string | null;
 	ugcPrompt: string | null;
 	script: string | null;
@@ -136,10 +160,46 @@ export function getPostDisplay(post: any): PostDisplay {
 			? legacyResults
 			: null;
 
+	const mediaType =
+		parsed?.media_type ||
+		parsed?.mediaType ||
+		(legacyMedia ? legacyMedia.media_type?.toLowerCase() : null) ||
+		'image';
+	const isCinematic = parsed?.cinematic === true;
+	const template = parsed?.studio?.template ? TEMPLATE_BY_ID.get(parsed.studio.template) : undefined;
+	// The template's own shelf, mapped to output vocabulary ('motion' → video).
+	const templateSurface: PostSurface | null = template
+		? template.surface === 'motion'
+			? 'video'
+			: (template.surface as PostSurface)
+		: null;
+	const hasMedia = Boolean(parsed?.media_url || parsed?.mediaUrl || legacyMedia?.media_url);
+	// Delivered rows: classify what was ACTUALLY produced (media_type is truth —
+	// a degraded video template that delivered a still is a photo). In-flight /
+	// failed rows have no media yet, so the template says what the slot IS —
+	// that's what makes a generating campaign slot a typed placeholder.
+	const surface: PostSurface = isCinematic
+		? 'cinematic'
+		: hasMedia
+			? mediaType === 'video'
+				? 'video'
+				: parsed?.generation?.still_style === 'graphic' || templateSurface === 'typographic'
+					? 'typographic'
+					: 'photo'
+			: (templateSurface ??
+				(mediaType === 'video'
+					? 'video'
+					: parsed?.generation?.still_style === 'graphic'
+						? 'typographic'
+						: 'photo'));
+
 	return {
 		text: parsed?.text || content || '',
 		mediaUrl: parsed?.media_url || parsed?.mediaUrl || legacyMedia?.media_url || null,
-		mediaType: parsed?.media_type || parsed?.mediaType || (legacyMedia ? legacyMedia.media_type?.toLowerCase() : null) || 'image',
+		mediaType,
+		surface,
+		templateTitle: template?.title ?? null,
+		cinematic: isCinematic,
 		posterUrl: parsed?.poster_url || null,
 		ugcPrompt: parsed?.ugc_broll_prompt || parsed?.ugcPrompt || null,
 		script: parsed?.script || null,

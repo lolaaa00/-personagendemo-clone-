@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { getPostDisplay, getPostErrorSummary, summarizeGenError } from './postDisplay';
+	import { getPostDisplay, getPostErrorSummary, summarizeGenError, SURFACE_LABEL } from './postDisplay';
 	import { platformColor } from '$lib/platforms';
 
 	let {
@@ -348,6 +348,22 @@
 
 	<div class="tile-chips-top">
 		<span class="tile-platform" style="background: {platformColor(plat)}">{plat}</span>
+		<!-- Format chip: Studio-shelf vocabulary, so every tile names what KIND of
+		     asset it is (and which template made it) wherever it appears. While a
+		     row is still generating the surface is only KNOWN when a template is
+		     attached (campaign/Studio slots) — a generic generate could still fork
+		     image/video, so those stay unlabeled instead of guessing. -->
+		{#if !isGenerating || display.templateTitle}
+			<span
+				class="tile-format"
+				data-surface={display.surface}
+				title={display.templateTitle
+					? `${SURFACE_LABEL[display.surface]} · from “${display.templateTitle}”`
+					: SURFACE_LABEL[display.surface]}
+			>
+				{SURFACE_LABEL[display.surface]}
+			</span>
+		{/if}
 		<span class="tile-status" data-status={isPublishFail ? 'post-failed' : post.status}>
 			{isPublishFail ? 'not posted' : post.status}
 		</span>
@@ -703,6 +719,34 @@
 		background: rgba(10, 14, 26, 0.72);
 		backdrop-filter: blur(4px);
 		border: 1px solid;
+	}
+
+	/* Same chip anatomy as .tile-status; hue = output class (Studio vocabulary). */
+	.tile-format {
+		font-size: 9px;
+		font-weight: 700;
+		text-transform: uppercase;
+		padding: 2px 7px;
+		border-radius: 4px;
+		background: rgba(10, 14, 26, 0.72);
+		backdrop-filter: blur(4px);
+		border: 1px solid;
+	}
+	.tile-format[data-surface='typographic'] {
+		color: #c9b8ff;
+		border-color: #c9b8ff;
+	}
+	.tile-format[data-surface='photo'] {
+		color: #d9dbe3;
+		border-color: rgba(255, 255, 255, 0.45);
+	}
+	.tile-format[data-surface='video'] {
+		color: var(--cyan);
+		border-color: var(--cyan);
+	}
+	.tile-format[data-surface='cinematic'] {
+		color: #ffd58a;
+		border-color: #ffd58a;
 	}
 
 	.tile-status[data-status='published'] {

@@ -8,6 +8,7 @@
 	import { page } from '$app/stores';
 	import { goto, invalidateAll } from '$app/navigation';
 	import GenerationComposer from '$lib/components/generation/GenerationComposer.svelte';
+	import CampaignPlanner from '$lib/components/generation/CampaignPlanner.svelte';
 	import type { ComposerSpec } from '$lib/components/generation/types';
 	import { startGeneration, finishGeneration, failGeneration } from '$lib/stores/generations.svelte';
 	import PostDrawer from '$lib/components/feed/PostDrawer.svelte';
@@ -730,6 +731,18 @@
 	// Date context from the calendar's day "+" buttons; null = no prefill.
 	let genDate = $state<string | null>(null);
 
+	// Campaign planner: fill a horizon with a content-mix of drafts in one pass.
+	let campaignOpen = $state(false);
+	async function handleCampaignLaunched(queued: number) {
+		if (queued > 0) {
+			showToast(
+				`${queued} draft${queued === 1 ? '' : 's'} queued — they appear on their slots as they generate`,
+				'success'
+			);
+			await invalidateAll();
+		}
+	}
+
 	function buildGenSpec(agentId: string): ComposerSpec {
 		const agent = data.agents.find((a: Agent) => a.id === agentId);
 		return {
@@ -853,15 +866,13 @@
 			<h1>Content Calendar</h1>
 			<p class="subtitle">Schedule and manage posts across all personas and platforms</p>
 		</div>
-		<button
-			class="btn-primary"
-			disabled={generatingPost}
-			onclick={() => requestGeneratePost()}
-			style="display: inline-flex; align-items: center; gap: 0.5rem; background: var(--gradient-cta); border-color: transparent; white-space: nowrap;"
-		>
-			{#if generatingPost}
-				<span class="spinner"></span> Generating...
-			{:else}
+		<div class="header-actions">
+			<button
+				class="btn-ghost btn-campaign"
+				disabled={data.agents.length === 0}
+				title="Fill the calendar with a mix of content — drafts for your review"
+				onclick={() => (campaignOpen = true)}
+			>
 				<svg
 					width="16"
 					height="16"
@@ -872,13 +883,41 @@
 					stroke-linecap="round"
 					stroke-linejoin="round"
 					aria-hidden="true"
-					><path d="M9.94 14.06 3 21" /><path
-						d="M14 4.5 15.5 8l3.5 1.5-3.5 1.5L14 14.5 12.5 11 9 9.5 12.5 8 14 4.5z"
-					/><path d="M5 3v4" /><path d="M3 5h4" /><path d="M19 17v4" /><path d="M17 19h4" /></svg
+					><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4" /><path
+						d="M8 2v4"
+					/><path d="M3 10h18" /><path d="M8 14h.01" /><path d="M12 14h.01" /><path
+						d="M16 14h.01"
+					/><path d="M8 18h.01" /><path d="M12 18h.01" /></svg
 				>
-				Generate Post Now
-			{/if}
-		</button>
+				Plan Campaign
+			</button>
+			<button
+				class="btn-primary"
+				disabled={generatingPost}
+				onclick={() => requestGeneratePost()}
+				style="display: inline-flex; align-items: center; gap: 0.5rem; background: var(--gradient-cta); border-color: transparent; white-space: nowrap;"
+			>
+				{#if generatingPost}
+					<span class="spinner"></span> Generating...
+				{:else}
+					<svg
+						width="16"
+						height="16"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
+						><path d="M9.94 14.06 3 21" /><path
+							d="M14 4.5 15.5 8l3.5 1.5-3.5 1.5L14 14.5 12.5 11 9 9.5 12.5 8 14 4.5z"
+						/><path d="M5 3v4" /><path d="M3 5h4" /><path d="M19 17v4" /><path d="M17 19h4" /></svg
+					>
+					Generate Post Now
+				{/if}
+			</button>
+		</div>
 	</header>
 
 	<!-- Bulk manage: the calendar grid is read-only presentation, so multi-select,
@@ -1516,6 +1555,14 @@
 	}}
 />
 
+<CampaignPlanner
+	open={campaignOpen}
+	agents={data.agents}
+	initialAgentId={selectedAgentId || data.agents[0]?.id || ''}
+	onClose={() => (campaignOpen = false)}
+	onLaunched={handleCampaignLaunched}
+/>
+
 <style>
 	.page {
 		padding: 2rem;
@@ -1541,6 +1588,21 @@
 		font-family: var(--font-display);
 		font-size: var(--text-xl);
 		margin: 0 0 0.3rem;
+	}
+
+	.header-actions {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+		flex-wrap: wrap;
+	}
+
+	.btn-campaign {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.5rem;
+		min-height: 44px;
+		white-space: nowrap;
 	}
 
 	.subtitle {
@@ -1885,6 +1947,15 @@
 
 		.page-header .btn-primary {
 			width: 100%;
+			justify-content: center;
+		}
+
+		.header-actions {
+			width: 100%;
+		}
+
+		.header-actions .btn-campaign {
+			flex: 1;
 			justify-content: center;
 		}
 	}

@@ -419,7 +419,14 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 	const { data: pending, error: pendingErr } = await db.posts.create({
 		user_id: user.id,
 		agent_id: agentId,
-		content: JSON.stringify({ topic: body.topic || null }),
+		// Studio provenance rides from birth, not just completion — a campaign
+		// slot that is still generating (or whose worker died) must already say
+		// WHAT it is becoming, so the calendar and library can show a typed
+		// placeholder instead of an anonymous spinner.
+		content: JSON.stringify({
+			topic: body.topic || null,
+			...(studioMeta ? { studio: studioMeta } : {})
+		}),
 		platforms: targetPool,
 		// Not in PostRow's status union (db.ts is owned by the posts feature) —
 		// the DB CHECK constraint is the real gate here.
@@ -512,9 +519,12 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 				try {
 					await taskDb.posts.update(postId, {
 						status: 'failed',
+						// Keep the studio provenance on failure — a failed campaign slot
+						// must still say WHAT it was going to be (format badge, retry).
 						content: JSON.stringify({
 							topic: body.topic || null,
-							error: (genErr as Error).message || 'Generation failed'
+							error: (genErr as Error).message || 'Generation failed',
+							...(studioMeta ? { studio: studioMeta } : {})
 						})
 					});
 				} catch (updateErr) {

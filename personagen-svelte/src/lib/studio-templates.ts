@@ -690,6 +690,14 @@ export const PIPELINE_META: Record<
 	Cinematic: { usd: '~$1.95', time: '3–6 min' }
 };
 
+/** The same estimates as numbers — campaign budgeting math. Keep in sync. */
+export const PIPELINE_USD: Record<StudioTemplate['pipeline'], number> = {
+	'Still image': 0.08,
+	'Talking head': 0.81,
+	'Product motion': 0.61,
+	Cinematic: 1.95
+};
+
 /** Shelf definitions, in display order. Typographic leads — it is the cheapest,
  * fastest, most under-used kind, and the heart of the channel 80%. */
 export const STUDIO_SURFACES: Array<{
