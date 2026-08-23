@@ -1,9 +1,10 @@
 <script lang="ts">
 	import { thumbUrl, restoreOriginal } from '$lib/image-url';
 	import { fly, fade } from 'svelte/transition';
-	import { getPostDisplay, truncateError } from './postDisplay';
+	import { getPostDisplay, truncateError, summarizeGenError } from './postDisplay';
 	import { platformColor } from '$lib/platforms';
 	import { OPERATION_LABELS, priceOf } from '$lib/pricing';
+	import { resolveModel } from '$lib/models';
 	import ImageLightbox from '$lib/components/ui/ImageLightbox.svelte';
 	import { dialog } from '$lib/actions/dialog';
 
@@ -133,16 +134,11 @@
 	let refineError = $state<string | null>(null);
 	let confirmingRefine = $state(false);
 	let refineConfirmTimeout: ReturnType<typeof setTimeout> | undefined;
-	// Cinematic posts are multi-shot Kling Pro reference videos — the single-shot
-	// refine pipeline would silently downgrade them, so the server rejects them
-	// and the button is not offered (regenerate those from the composer instead).
-	let isCinematic = $derived.by(() => {
-		try {
-			return JSON.parse(activePost?.content ?? '')?.cinematic === true;
-		} catch {
-			return false;
-		}
-	});
+	// Cinematic posts are multi-shot reference videos — the single-shot refine
+	// pipeline would silently downgrade them, so the server rejects them and the
+	// button is not offered (regenerate those from the composer instead). Read
+	// from the shared classifier so every surface answers this identically.
+	let isCinematic = $derived(display?.cinematic === true);
 	let canRefine = $derived(
 		Boolean(
 			activePost?.agent_id &&
@@ -162,12 +158,18 @@
 			return null;
 		}
 	});
-	// Estimated cost of the re-roll — mirrors the pipeline the post's format runs.
+	// Estimated cost of the re-roll — mirrors the refine pipeline EXACTLY: the
+	// server re-rolls b-roll with resolveModel(selections.videoModel), so the
+	// number the user consents to must be that model's tier (Wan $0.10 → Veo
+	// $1.50), never a hardcoded Standard rate that can be 3x off.
 	let refineEstimate = $derived.by(() => {
 		if (!display) return 0;
 		const img = priceOf('fal', 'image', 'nano');
 		if (display.mediaType !== 'video') return img;
-		if (display.format === 'broll') return img + priceOf('fal', 'video', 'standard');
+		if (display.format === 'broll') {
+			const clip = resolveModel('video_i2v', display.generation?.selections?.videoModel);
+			return img + clip.usd;
+		}
 		return img + priceOf('fal', 'tts') + priceOf('fal', 'talking_head');
 	});
 
@@ -304,7 +306,13 @@
 			usd: Number(v?.usd ?? 0)
 		}));
 	});
-	let aspectsTotal = $derived(Number(gen?.total ?? obs?.total ?? 0));
+	// Total for the aspect table: the recorded total, else the sum of the rows
+	// actually shown — never $0.000 under visibly non-zero rows.
+	let aspectsTotal = $derived.by(() => {
+		const recorded = Number(gen?.total ?? obs?.total ?? 0);
+		if (recorded > 0) return recorded;
+		return genAspects.reduce((s, a) => s + a.usd, 0);
+	});
 	// Input images: the recorded ones (new posts) or the real product reference
 	// from the brief (older posts). No hallucinated character pin.
 	let genImages = $derived.by(() => {
@@ -330,6 +338,38 @@
 	let costTotal = $derived(
 		Number(gen?.total ?? obs?.total ?? display?.costBreakdown?.total ?? 0)
 	);
+	// Human statement of WHAT this output is — derived from outcome truth
+	// (media_type / cinematic / surface), never from the raw request field:
+	// content.format says 'broll' on typographic cards and cinematic packs,
+	// where no b-roll pipeline was involved at all.
+	let formatLine = $derived.by(() => {
+		if (!display) return '';
+		const parts: string[] = [];
+		if (display.cinematic) parts.push('cinematic (multi-shot)', 'video');
+		else if (display.mediaType === 'video')
+			parts.push(
+				display.format === 'spokesperson' ? 'spokesperson (talking head)' : 'b-roll clip',
+				'video'
+			);
+		else parts.push(display.surface === 'typographic' ? 'typographic card' : 'photo still', 'image');
+		if (display.mediaGenerated) parts.push('generated');
+		return parts.join(' · ');
+	});
+	// The composition contract the run obeyed — why a reference is (or isn't) there.
+	let compositionLine = $derived.by(() => {
+		const g = gen;
+		if (!g || (!g.refs_policy && !g.still_style)) return null;
+		if (g.still_style === 'graphic')
+			return `Typographic card — the text is the artwork; no reference images were sent.${g.card_text ? ` Card line: “${g.card_text}”` : ''}`;
+		const rp = g.refs_policy;
+		if (rp && !rp.character && !rp.product)
+			return 'No reference images by design — the scene was generated purely from the prompt.';
+		if (rp && !rp.character)
+			return 'Product reference only — the persona does not appear in this composition.';
+		if (rp && !rp.product)
+			return 'Face reference only — no product photo attached (product-free channel content).';
+		return null;
+	});
 	// A failed post that still has media only failed to PUBLISH — it can be re-sent.
 	let canRepublish = $derived(
 		Boolean(onPublishFallback && post && post.status === 'failed' && display?.mediaUrl)
@@ -494,7 +534,8 @@
 					{#if refining}
 						<div class="refine-overlay" role="status" aria-live="polite">
 							<span class="refine-spinner"></span>
-							Regenerating media — usually 1–3 minutes. Keep this open or check the feed later.
+							Regenerating media — usually 1–3 minutes, up to 10 for premium video models. Keep
+							this open or check the feed later.
 						</div>
 					{/if}
 				</div>
@@ -548,6 +589,19 @@
 							{savingSchedule ? 'Saving…' : 'Reschedule'}
 						</button>
 					</div>
+				</div>
+			{/if}
+
+			{#if post.status === 'failed' && !display.mediaUrl}
+				<!-- A failed generation has no media and no caption. Say WHY, in one
+				     safe sentence — never the raw provider payload (which leaks key ids
+				     and used to render as JSON noise right here). -->
+				<div class="drawer-error" role="alert">
+					<strong
+						><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><path d="M12 9v4" /><path d="M12 17h.01" /></svg
+						> Generation failed — nothing was produced</strong
+					>
+					<p>{summarizeGenError(post)}</p>
 				</div>
 			{/if}
 
@@ -666,7 +720,7 @@
 						<div>
 							<span class="drawer-block-label"
 								><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg
-								> Models &amp; cost by aspect</span
+								> Models &amp; estimated cost by aspect</span
 							>
 							<table class="gen-cost">
 								<tbody>
@@ -712,21 +766,46 @@
 						</div>
 					{/if}
 
-					{#if display.format || display.mediaType}
+					{#if formatLine}
 						<div>
 							<span class="drawer-block-label"
 								><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="2" width="20" height="20" rx="2" /><path d="M7 2v20M17 2v20M2 12h20M2 7h5M2 17h5M17 17h5M17 7h5" /></svg
 								> Format</span
 							>
 							<p class="gen-prompt">
-								{display.format ?? 'media'} · {display.mediaType}{display.mediaGenerated
-									? ' · generated'
+								{formatLine}{display.templateTitle ? ` · “${display.templateTitle}” template` : ''}
+							</p>
+						</div>
+					{/if}
+
+					{#if compositionLine}
+						<div>
+							<span class="drawer-block-label"
+								><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 9h18" /><path d="M9 21V9" /></svg
+								> Composition</span
+							>
+							<p class="gen-prompt">{compositionLine}</p>
+						</div>
+					{/if}
+
+					{#if display.voice && display.mediaType === 'video' && display.format === 'spokesperson'}
+						<div>
+							<span class="drawer-block-label"
+								><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" x2="12" y1="19" y2="22" /></svg
+								> Voice</span
+							>
+							<p class="gen-prompt">
+								{display.voice}{gen?.voice_fallback
+									? ` — “${gen.voice_fallback.requested}” wasn’t accepted by the TTS endpoint, so ${gen.voice_fallback.used} spoke this clip`
 									: ''}
 							</p>
 						</div>
 					{/if}
 
-					{#if display.mediaType === 'video'}
+					{#if display.mediaType === 'video' && display.captionsKnown}
+						<!-- Only assert burn state when it was actually RECORDED — legacy clips
+						     predate the field, and claiming "off" for a video with visible
+						     burned captions would be a false statement about the media. -->
 						<div>
 							<span class="drawer-block-label"
 								><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg
@@ -831,7 +910,16 @@
 					{refining ? 'Refining…' : 'Refine'}
 				</button>
 			{/if}
-			{#if post.status === 'draft'}
+			{#if post.status === 'draft' && display.standalone}
+				<!-- Studio "Asset only" output is deliberately excluded from the review
+				     queue — offering Approve & Schedule here would defeat that promise
+				     one click later. -->
+				<span
+					class="drawer-asset-note"
+					title="Saved as a standalone asset — it stays out of the review queue and does not publish. Generate a post version from Studio to publish this concept."
+					>Standalone asset — not queued for publishing</span
+				>
+			{:else if post.status === 'draft'}
 				<button type="button" class="btn-drawer-approve" disabled={approving || refining} onclick={() => onApprove(post)}>
 					{approving ? 'Approving…' : 'Approve & Schedule'}
 				</button>
@@ -1525,6 +1613,17 @@
 		color: #fff;
 	}
 
+	.drawer-asset-note {
+		display: inline-flex;
+		align-items: center;
+		min-height: 44px;
+		padding: 0.5rem 0.8rem;
+		font-size: 0.78rem;
+		font-weight: 600;
+		color: var(--muted);
+		border: 1px dashed var(--border);
+		border-radius: 10px;
+	}
 	.btn-drawer-approve {
 		background: var(--success-soft);
 		color: var(--success-text);

@@ -7,8 +7,12 @@ import {
 	resolveImageKeys,
 	resolveVoiceForPersona,
 	TALKINGHEAD_LABEL,
+	NANO_STILL_LABEL,
+	CINEMATIC_VIDEO_LABEL,
 	type UgcPackInput
 } from '$lib/server/content/generate';
+import { resolveAiClient } from '$lib/server/ai-client';
+import { isCardRendererAvailable, CARD_RENDERER_LABEL } from '$lib/server/content/card-renderer';
 import { publishPostById } from '$lib/server/scheduler';
 import { assertWithinBudget } from '$lib/server/budget';
 import { getServiceSupabase } from '$lib/server/service-supabase';
@@ -90,12 +94,16 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 
 	// Composer platform selection: an explicit subset wins (validated against
 	// the agent's connections so a stray value can't route to a dead platform).
-	const requestedPlatforms: string[] = Array.isArray(body.platforms)
+	// An explicit EMPTY array means "publish nowhere" (→ draft) — the composer
+	// shows toggled-off chips as off, so treating [] as "all connected" would
+	// publish to every account the user just deselected. Only an ABSENT field
+	// defaults to all connected platforms.
+	const requestedPlatforms: string[] | null = Array.isArray(body.platforms)
 		? body.platforms
 				.map((p: string) => String(p).toLowerCase())
 				.filter((p: string) => connectedPlatforms.includes(p))
-		: [];
-	const targetPool = requestedPlatforms.length > 0 ? requestedPlatforms : connectedPlatforms;
+		: null;
+	const targetPool = requestedPlatforms === null ? connectedPlatforms : requestedPlatforms;
 
 	// Cinematic mode is fal-exclusive (Kling O3 Pro reference-to-video) — check
 	// the key up front so a missing key fails fast, BEFORE any LLM spend.
@@ -107,6 +115,38 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 				{ success: false, error: 'Cinematic video requires a Fal AI key — add one in Settings.' },
 				{ status: 400 }
 			);
+		}
+		// Cinematic composites the brand product into every shot — without a product
+		// photo the pipeline is doomed. Fail HERE, before any spend and before the
+		// 202 a bulk campaign would count as "queued", not minutes later in the
+		// detached task where the failure is silent.
+		const hasOverridePhoto =
+			typeof body.product_photo_url === 'string' && /^https?:\/\//i.test(body.product_photo_url);
+		if (!hasOverridePhoto) {
+			const { data: cinCfg } = await locals.supabase
+				.from('agent_configs')
+				.select('brand_brief_id')
+				.eq('agent_id', agentId)
+				.maybeSingle();
+			const { data: cinBrief } = cinCfg?.brand_brief_id
+				? await db.brandBriefs.getById(cinCfg.brand_brief_id, user.id)
+				: { data: null };
+			const cinProducts = Array.isArray(cinBrief?.data?.products) ? cinBrief.data.products : [];
+			// Same selection order the pipeline uses: requested id, else first with a photo.
+			const cinProduct =
+				cinProducts.find((p: any) => p.id === (body.product_id || body.productId)) ||
+				cinProducts.find((p: any) => p.photoUrl) ||
+				cinProducts[0] ||
+				null;
+			if (!cinProduct?.photoUrl) {
+				return json(
+					{
+						success: false,
+						error: 'Cinematic mode needs a product photo — add one in the Brand Brief first.'
+					},
+					{ status: 400 }
+				);
+			}
 		}
 	}
 
@@ -144,7 +184,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 			const id = effectiveResolve(registryRows, 'video_i2v', body.video_model).id;
 			const row = registryRows.find((r) => r.kind === 'video_i2v' && r.model_id === id);
 			// Stored as JSON at probe time; shape is guaranteed by adapterFromProbe.
-			return (((row?.probe as any)?.adapter as UgcPackInput['videoAdapter']) ?? null);
+			return ((row?.probe as any)?.adapter as UgcPackInput['videoAdapter']) ?? null;
 		})(),
 		// Composer format choice: spokesperson (TTS + talking-head) vs b-roll clip.
 		// 'auto' (or anything unrecognized) defers to the persona's ugc_format.
@@ -245,17 +285,37 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		);
 		const voiceLabel = VOICE_CATALOG.find((v) => v.name === previewVoice)?.label || previewVoice;
 
+		// The LLM the Director will ACTUALLY run on — resolved with the same
+		// precedence the run uses (user OpenRouter key → user Gemini key → env),
+		// so the preview never claims OpenRouter for a native-Gemini run.
+		const previewAi = await resolveAiClient(locals.supabase, user.id).catch(() => null);
+		const directorProvider = previewAi?.provider ?? 'openrouter';
+		const directorModel = previewAi?.model ?? 'gemini-3.5-flash';
+
 		type Step = { step: string; provider: string; model: string; usd: number };
 		// The still step named for what THIS composition does — not a generic
 		// "product still" on runs that composite no product at all.
+		// Text cards typeset server-side for $0 when this host can render them
+		// (ffmpeg + font present, renderer not env-disabled) — the preview quotes
+		// free ONLY when the run will actually be free, and quotes the model
+		// fallback price otherwise, so the composer never promises what the run
+		// won't deliver.
+		const freeCardRender = stillStyle === 'graphic' && (await isCardRendererAvailable());
 		const stillStep: Step =
 			stillStyle === 'graphic'
-				? {
-						step: 'typographic card (text render)',
-						provider: 'fal',
-						model: 'nano-banana-2',
-						usd: priceOf('fal', 'image', 'nano')
-					}
+				? freeCardRender
+					? {
+							step: 'typographic card (server-rendered)',
+							provider: 'local',
+							model: CARD_RENDERER_LABEL,
+							usd: 0
+						}
+					: {
+							step: 'typographic card (text render)',
+							provider: 'fal',
+							model: NANO_STILL_LABEL,
+							usd: priceOf('fal', 'image', 'nano')
+						}
 				: useCharacter || useProduct
 					? {
 							step:
@@ -265,7 +325,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 										? 'still (face composite)'
 										: 'still (product composite)',
 							provider: 'fal',
-							model: 'nano-banana-2',
+							model: NANO_STILL_LABEL,
 							usd: priceOf('fal', 'image', 'nano')
 						}
 					: {
@@ -277,9 +337,9 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		const baseSteps: Step[] = [
 			{
 				step: 'director (caption + scene)',
-				provider: 'openrouter',
-				model: 'gemini-3.5-flash',
-				usd: priceOf('openrouter', 'llm')
+				provider: directorProvider,
+				model: directorModel,
+				usd: priceOf(directorProvider, 'llm')
 			},
 			stillStep
 		];
@@ -314,15 +374,18 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		const stepsCinematic: Step[] = [
 			baseSteps[0],
 			{
-				step: 'still (product + face composite)',
+				// The run generates ONE composited still PER SHOT (the Director writes
+				// 2–5). Priced at the 4-shot midpoint — a single-still line here would
+				// under-quote the real spend by up to ~$0.32.
+				step: 'storyboard stills (2–5 shots, product + face composite)',
 				provider: 'fal',
-				model: 'nano-banana-2',
-				usd: priceOf('fal', 'image', 'nano')
+				model: NANO_STILL_LABEL,
+				usd: +(4 * priceOf('fal', 'image', 'nano')).toFixed(4)
 			},
 			{
-				step: 'cinematic video',
+				step: 'cinematic video (multi-shot)',
 				provider: 'fal',
-				model: 'kling-o3-pro reference',
+				model: CINEMATIC_VIDEO_LABEL,
 				usd: priceOf('fal', 'video', 'pro')
 			}
 		];
@@ -428,6 +491,19 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		return json({ success: false, error: (err as Error).message }, { status: 400 });
 	}
 
+	// What this run is SET OUT to produce — media kind, format, still style.
+	// Stamped on the placeholder row (and kept on failure) so every surface can
+	// type the slot truthfully while it generates or after it dies, instead of
+	// defaulting to "photo" for a video/cinematic run. Templates aren't the only
+	// source of type anymore — plain composer and campaign slots carry it too.
+	const intended = {
+		media: wantCinematic ? 'cinematic' : body.media === 'image' ? 'image' : 'video',
+		...(genInput.formatOverride !== 'auto' && !wantCinematic && body.media !== 'image'
+			? { format: genInput.formatOverride }
+			: {}),
+		...(genInput.stillStyle === 'graphic' ? { still: 'graphic' } : {})
+	};
+
 	// ── Async job path ───────────────────────────────────────────────────────
 	// Create the post row up front so the client has an id to poll. A caller-
 	// supplied schedule slot is kept; otherwise the completion task stamps
@@ -441,6 +517,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		// placeholder instead of an anonymous spinner.
 		content: JSON.stringify({
 			topic: body.topic || null,
+			intended,
 			...(studioMeta ? { studio: studioMeta } : {})
 		}),
 		platforms: targetPool,
@@ -535,10 +612,12 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 				try {
 					await taskDb.posts.update(postId, {
 						status: 'failed',
-						// Keep the studio provenance on failure — a failed campaign slot
-						// must still say WHAT it was going to be (format badge, retry).
+						// Keep the studio provenance AND the intended type on failure — a
+						// failed slot must still say WHAT it was going to be (format badge,
+						// retry), not fall back to a default "photo" classification.
 						content: JSON.stringify({
 							topic: body.topic || null,
+							intended,
 							error: (genErr as Error).message || 'Generation failed',
 							...(studioMeta ? { studio: studioMeta } : {})
 						})

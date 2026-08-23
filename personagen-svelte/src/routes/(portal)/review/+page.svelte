@@ -7,6 +7,7 @@
 	import ManualDeleteNotice from '$lib/components/feed/ManualDeleteNotice.svelte';
 	import ImageLightbox from '$lib/components/ui/ImageLightbox.svelte';
 	import { Posts } from '$lib/services/api';
+	import { SURFACE_LABEL, type PostSurface } from '$lib/components/feed/postDisplay';
 
 	interface ReviewItem {
 		id: string;
@@ -18,11 +19,21 @@
 		media_url: string | null;
 		poster_url: string | null;
 		media_type: 'image' | 'video';
+		/** Output class from the SHARED classifier (same vocabulary as the library). */
+		surface: PostSurface;
+		template_title: string | null;
 		quality_score: number | null;
 		quality_issue: string | null;
 		platforms: string[];
 		scheduled_date: string | null;
 		scheduled_time: string | null;
+	}
+
+	/** Thumbnail-safe source: a video's mp4 URL must never land in an <img> —
+	 * poster only for videos; images may fall back to their media URL. */
+	function cardThumb(item: ReviewItem): string {
+		if (item.media_type === 'video') return item.poster_url ?? '';
+		return cardThumb(item) || '';
 	}
 
 	let items = $state<ReviewItem[]>([]);
@@ -799,10 +810,10 @@
 							aria-label="Open post details for {item.agent_name}"
 							onclick={() => openDrawer(item)}
 						>
-							{#if item.media_type === 'video' && (item.poster_url || item.media_url)}
+							{#if item.media_type === 'video' && cardThumb(item)}
 								<img
-									src={thumbUrl(item.poster_url || item.media_url, 480)}
-									onerror={(e) => restoreOriginal(e, item.poster_url || item.media_url)}
+									src={thumbUrl(cardThumb(item), 480)}
+									onerror={(e) => restoreOriginal(e, cardThumb(item))}
 									alt="Video draft preview for {item.agent_name}"
 									width="800"
 									height="1000"
@@ -841,8 +852,8 @@
 							<button
 								type="button"
 								class="media-zoom"
-								title={item.media_type === 'video' ? 'Play full size' : 'Enlarge image'}
-								aria-label={item.media_type === 'video' ? 'Play full size' : 'Enlarge image'}
+								title={item.media_type === 'video' && item.media_url ? 'Play full size' : 'Enlarge image'}
+								aria-label={item.media_type === 'video' && item.media_url ? 'Play full size' : 'Enlarge image'}
 								onclick={(e) => {
 									e.stopPropagation();
 									openLightbox(item);
@@ -1096,10 +1107,10 @@
 										}}
 										aria-label="Open post details for {item.agent_name}"
 									>
-										{#if item.poster_url || item.media_url}
+										{#if cardThumb(item)}
 											<img
-												src={thumbUrl(item.poster_url || item.media_url, 96)}
-												onerror={(e) => restoreOriginal(e, item.poster_url || item.media_url)}
+												src={thumbUrl(cardThumb(item), 96)}
+												onerror={(e) => restoreOriginal(e, cardThumb(item))}
 												alt=""
 												width="40"
 												height="50"
@@ -1193,8 +1204,8 @@
 								aria-current={i === cursor ? 'true' : undefined}
 								onclick={() => (cursor = i)}
 							>
-								{#if item.poster_url || item.media_url}
-									<img class="sp-thumb" src={thumbUrl(item.poster_url || item.media_url, 96)} onerror={(e) => restoreOriginal(e, item.poster_url || item.media_url)} alt="" width="34" height="42" loading="lazy" decoding="async" />
+								{#if cardThumb(item)}
+									<img class="sp-thumb" src={thumbUrl(cardThumb(item), 96)} onerror={(e) => restoreOriginal(e, cardThumb(item))} alt="" width="34" height="42" loading="lazy" decoding="async" />
 								{:else}
 									<span class="sp-thumb tbl-nomedia" aria-hidden="true"></span>
 								{/if}
@@ -1217,14 +1228,14 @@
 						<button
 							type="button"
 							class="sd-media"
-							title={current.media_type === 'video' ? 'Play full size' : 'Enlarge image'}
-							aria-label={current.media_type === 'video' ? 'Play full size' : 'Enlarge image'}
+							title={current.media_type === 'video' && current.media_url ? 'Play full size' : 'Enlarge image'}
+							aria-label={current.media_type === 'video' && current.media_url ? 'Play full size' : 'Enlarge image'}
 							onclick={() => openLightbox(current!)}
 						>
-							{#if current.poster_url || current.media_url}
-								<img src={thumbUrl(current.poster_url || current.media_url, 800)} onerror={(e) => restoreOriginal(e, current.poster_url || current.media_url)} alt="Draft media for {current.agent_name}" width="800" height="1000" decoding="async" />
+							{#if cardThumb(current)}
+								<img src={thumbUrl(cardThumb(current), 800)} onerror={(e) => restoreOriginal(e, cardThumb(current))} alt="Draft media for {current.agent_name}" width="800" height="1000" decoding="async" />
 								{#if current.media_type === 'video'}
-									<span class="media-badge"><svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><polygon points="6 3 20 12 6 21 6 3" /></svg> video</span>
+									<span class="media-badge"><svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><polygon points="6 3 20 12 6 21 6 3" /></svg> {SURFACE_LABEL[current.surface] ?? 'Video'}</span>
 								{/if}
 							{:else}
 								<div class="no-media">no media</div>
@@ -1283,12 +1294,12 @@
 							<button
 								type="button"
 								class="deck-media"
-								title={current.media_type === 'video' ? 'Play full size' : 'Enlarge image'}
-								aria-label={current.media_type === 'video' ? 'Play full size' : 'Enlarge image'}
+								title={current.media_type === 'video' && current.media_url ? 'Play full size' : 'Enlarge image'}
+								aria-label={current.media_type === 'video' && current.media_url ? 'Play full size' : 'Enlarge image'}
 								onclick={() => openLightbox(current!)}
 							>
-								{#if current.poster_url || current.media_url}
-									<img src={thumbUrl(current.poster_url || current.media_url, 800)} onerror={(e) => restoreOriginal(e, current.poster_url || current.media_url)} alt="Draft media for {current.agent_name}" width="800" height="1000" decoding="async" />
+								{#if cardThumb(current)}
+									<img src={thumbUrl(cardThumb(current), 800)} onerror={(e) => restoreOriginal(e, cardThumb(current))} alt="Draft media for {current.agent_name}" width="800" height="1000" decoding="async" />
 								{:else}
 									<div class="no-media">no media</div>
 								{/if}
@@ -1296,7 +1307,7 @@
 									<span class="deck-qc" class:dk-low={current.quality_score < 6}>QC {current.quality_score.toFixed(1)}</span>
 								{/if}
 								{#if current.media_type === 'video'}
-									<span class="media-badge"><svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><polygon points="6 3 20 12 6 21 6 3" /></svg> video</span>
+									<span class="media-badge"><svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><polygon points="6 3 20 12 6 21 6 3" /></svg> {SURFACE_LABEL[current.surface] ?? 'Video'}</span>
 								{/if}
 							</button>
 							<div class="deck-body">
@@ -1373,8 +1384,8 @@
 									onclick={() => openDrawer(item)}
 									aria-label="Open post details for {item.agent_name}"
 								>
-									{#if item.poster_url || item.media_url}
-										<img src={thumbUrl(item.poster_url || item.media_url, 120)} onerror={(e) => restoreOriginal(e, item.poster_url || item.media_url)} alt="" width="46" height="58" loading="lazy" decoding="async" />
+									{#if cardThumb(item)}
+										<img src={thumbUrl(cardThumb(item), 120)} onerror={(e) => restoreOriginal(e, cardThumb(item))} alt="" width="46" height="58" loading="lazy" decoding="async" />
 									{:else}
 										<span class="tbl-nomedia" aria-hidden="true"></span>
 									{/if}

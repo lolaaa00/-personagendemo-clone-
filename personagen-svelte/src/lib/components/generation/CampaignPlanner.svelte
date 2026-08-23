@@ -13,11 +13,7 @@
 	 * until the user approves it; the spend that happens now is generation only.
 	 */
 	import Modal from '$lib/components/ui/Modal.svelte';
-	import {
-		STUDIO_TEMPLATES,
-		PIPELINE_USD,
-		type StudioTemplate
-	} from '$lib/studio-templates';
+	import { STUDIO_TEMPLATES, PIPELINE_USD, type StudioTemplate } from '$lib/studio-templates';
 
 	let {
 		open,
@@ -37,7 +33,11 @@
 	// ── Format classes (Studio-shelf vocabulary) ─────────────────────────────
 	type FormatClass = 'typographic' | 'photo' | 'video' | 'cinematic';
 	const CLASSES: Array<{ id: FormatClass; label: string; hint: string }> = [
-		{ id: 'typographic', label: 'Text & Type', hint: 'Quote cards, takes, lists — cheap, fast, shareable' },
+		{
+			id: 'typographic',
+			label: 'Text & Type',
+			hint: 'Quote cards, takes, lists — free, rendered without an image model'
+		},
 		{ id: 'photo', label: 'Photo', hint: 'Lifestyle stills, flat-lays, POV frames' },
 		{ id: 'video', label: 'Video', hint: 'Talking heads and product motion' },
 		{ id: 'cinematic', label: 'Cinematic', hint: 'Multi-shot, ad-grade — the expensive one' }
@@ -53,8 +53,19 @@
 		),
 		cinematic: STUDIO_TEMPLATES.filter((t) => t.pipeline === 'Cinematic')
 	};
-	const poolAvgUsd = (c: FormatClass) =>
-		POOLS[c].reduce((s, t) => s + PIPELINE_USD[t.pipeline], 0) / Math.max(1, POOLS[c].length);
+	// Price with the SAME 4:1 channel:brand rotation buildPlan runs — a flat pool
+	// average priced a distribution the planner doesn't produce (e.g. every
+	// channel video template is a Talking head; all Product motion is brand).
+	const poolAvgUsd = (c: FormatClass) => {
+		const pool = POOLS[c];
+		if (!pool.length) return 0;
+		const avg = (l: StudioTemplate[]) =>
+			l.reduce((s, t) => s + PIPELINE_USD[t.pipeline], 0) / Math.max(1, l.length);
+		const ch = pool.filter((t) => t.intent === 'channel');
+		const br = pool.filter((t) => t.intent === 'brand');
+		if (!ch.length || !br.length) return avg(pool);
+		return 0.8 * avg(ch) + 0.2 * avg(br);
+	};
 
 	// ── Plan inputs ──────────────────────────────────────────────────────────
 	let agentId = $state('');
@@ -82,6 +93,10 @@
 	let requested = $derived(days * perDay);
 	let totalPosts = $derived(Math.min(requested, MAX_POSTS));
 	let capped = $derived(requested > MAX_POSTS);
+	// Slots are laid down date-first, so a capped plan covers only the FIRST
+	// ceil(total/perDay) days — the summary must claim those days, not the horizon
+	// the user picked ("60 posts over 30 days" was really 20 covered days).
+	let coveredDays = $derived(Math.min(days, Math.ceil(totalPosts / Math.max(1, perDay))));
 
 	// Largest-remainder allocation: counts per class sum EXACTLY to totalPosts.
 	let allocation = $derived.by<Record<FormatClass, number>>(() => {
@@ -104,9 +119,7 @@
 		return out;
 	});
 
-	let estimatedUsd = $derived(
-		CLASSES.reduce((s, c) => s + allocation[c.id] * poolAvgUsd(c.id), 0)
-	);
+	let estimatedUsd = $derived(CLASSES.reduce((s, c) => s + allocation[c.id] * poolAvgUsd(c.id), 0));
 
 	// ── Slot + assignment plan ───────────────────────────────────────────────
 	// Posting window 8:00–20:00; anchors per cadence, jittered so a month of
@@ -174,7 +187,12 @@
 			video: channelWeightedCycle(POOLS.video),
 			cinematic: channelWeightedCycle(POOLS.cinematic)
 		};
-		const cursor: Record<FormatClass, number> = { typographic: 0, photo: 0, video: 0, cinematic: 0 };
+		const cursor: Record<FormatClass, number> = {
+			typographic: 0,
+			photo: 0,
+			video: 0,
+			cinematic: 0
+		};
 
 		const slots: PlannedSlot[] = [];
 		const start = new Date();
@@ -281,8 +299,9 @@
 			<p>
 				Each one is generating now and lands in the <strong>Review Queue</strong> as a draft on its
 				calendar slot. Approve what you like — approved posts publish at their scheduled time.
-				{#if failCount > 0}<span class="cp-fail">{failCount} failed to queue — the calendar shows
-						exactly which slots are missing.</span>{/if}
+				{#if failCount > 0}<span class="cp-fail"
+						>{failCount} failed to queue — the calendar shows exactly which slots are missing.</span
+					>{/if}
 			</p>
 		</div>
 	{:else}
@@ -294,7 +313,9 @@
 						<option value={a.id}>{a.name}</option>
 					{/each}
 				</select>
-				<span class="cp-hint">The whole campaign belongs to this persona — voice, face, brand kit.</span>
+				<span class="cp-hint"
+					>The whole campaign belongs to this persona — voice, face, brand kit.</span
+				>
 			</label>
 
 			<div class="cp-field">
@@ -368,12 +389,17 @@
 
 		<div class="cp-summary" aria-live="polite">
 			<div class="cp-summary-main">
-				<strong>{totalPosts} posts</strong> over {days} days · est. <strong>{usd(estimatedUsd)}</strong>
+				<strong>{totalPosts} posts</strong> over {coveredDays} day{coveredDays === 1 ? '' : 's'} · est.
+				<strong>{usd(estimatedUsd)}</strong>
 			</div>
 			<p class="cp-summary-note">
 				Generation spend happens at launch; publishing waits for your approval in the Review Queue.
-				{#if capped}<span class="cp-warn-inline">Capped at {MAX_POSTS} per launch — run another
-						campaign for the rest.</span>{/if}
+				Estimated at the default model prices — each slot's exact pipeline and cost follow your
+				Model Manager settings.
+				{#if capped}<span class="cp-warn-inline"
+						>Capped at {MAX_POSTS} per launch, so only the first {coveredDays} of {days} days get slots
+						— run another campaign for the rest.</span
+					>{/if}
 			</p>
 		</div>
 

@@ -8,7 +8,7 @@
 	import { slide } from 'svelte/transition';
 	import { Accounts, Autopilot, Posts, BrandBrief, parseJsonResponse } from '$lib/services/api';
 	import AgentConnectionStats from '$lib/components/agents/AgentConnectionStats.svelte';
-	import { PRICING_MATRIX, priceOf } from '$lib/pricing';
+	import { PRICING_MATRIX } from '$lib/pricing';
 	import PostCard from '$lib/components/feed/PostCard.svelte';
 	import PostDrawer from '$lib/components/feed/PostDrawer.svelte';
 	import CalendarView from '$lib/components/calendar/CalendarView.svelte';
@@ -748,10 +748,6 @@
 		syncingFeed = false;
 	}
 
-	// ── Generation composer — every API-bound field is editable before send ──
-	let showGenerateConfirm = $state(false);
-	let confirmSkipNext = $state(false);
-	let skipGenerateConfirm = $state(false);
 	// ── Hero scroll-fade ────────────────────────────────────────────
 	// The identity hero sits directly above the sticky tab-nav. As the user
 	// scrolls into a long tab, fade + lift the hero out so the sticky nav docks
@@ -768,8 +764,6 @@
 	}
 
 	onMount(() => {
-		skipGenerateConfirm = localStorage.getItem('pg-skip-generate-confirm') === '1';
-
 		// The persona page scrolls inside the portal content column, not the window.
 		scrollParent = heroEl?.closest('.portal-content') ?? null;
 		if (scrollParent) {
@@ -792,90 +786,6 @@
 			history.replaceState({}, '', clean.toString());
 		}
 	});
-
-	let genTopic = $state('');
-	let genScene = $state('');
-	let genMedia = $state<'video' | 'image' | 'cinematic'>('video');
-	let genProvider = $state<'auto' | 'fal' | 'openrouter'>('auto');
-	let genPlatforms = $state<string[]>([]);
-	let genProductId = $state('');
-	let genProductPhotoUrl = $state('');
-	let genCharacterRefUrl = $state('');
-	let briefProducts = $state<any[]>([]);
-	// Which brief id the product list was last loaded for (null = the unpinned/none
-	// state). Re-loads when the persona's pinned brief changes so the composer's
-	// product picker always reflects the CURRENT pin, not a stale first load.
-	let briefLoadedFor = $state<string | null | undefined>(undefined);
-
-	let genEstimate = $derived.by(() => {
-		const llm = 3 * priceOf('openrouter', 'llm');
-		if (genMedia === 'image') {
-			const img = genProvider === 'openrouter' ? priceOf('openrouter', 'image') : priceOf('fal', 'image', 'nano');
-			return { low: +(img + llm).toFixed(2), high: +(img + llm).toFixed(2) };
-		}
-		if (genMedia === 'cinematic') {
-			// fal-exclusive: 3-5 storyboard stills (Nano Banana) + one Kling O3 Pro
-			// multi-shot reference video.
-			const still = priceOf('fal', 'image', 'nano');
-			const vid = priceOf('fal', 'video', 'pro');
-			return { low: +(3 * still + vid + llm).toFixed(2), high: +(5 * still + vid + llm).toFixed(2) };
-		}
-		const img = genProvider === 'openrouter' ? priceOf('openrouter', 'image') : priceOf('fal', 'image', 'nano');
-		const vidLow = genProvider === 'openrouter' ? priceOf('openrouter', 'video') : priceOf('fal', 'tts') + priceOf('fal', 'talking_head');
-		const vidHigh = genProvider === 'openrouter' ? priceOf('openrouter', 'video') : priceOf('fal', 'video', 'standard');
-		return {
-			low: +(img + llm + Math.min(vidLow, vidHigh)).toFixed(2),
-			high: +(img + llm + Math.max(vidLow, vidHigh)).toFixed(2)
-		};
-	});
-
-	let connectedKeys = $derived(PLATFORMS.filter((p) => platformStatuses[p.key]?.connected).map((p) => p.key));
-
-	async function openComposer() {
-		genPlatforms = [...connectedKeys];
-		showGenerateConfirm = true;
-		// Pinned-only: pull products from the persona's SELECTED brief, or none when
-		// nothing is pinned. Cached per brief id so switching the pin re-loads.
-		const pin = selectedBrandBriefId || null;
-		if (briefLoadedFor !== pin) {
-			briefLoadedFor = pin;
-			briefProducts = [];
-			if (pin) {
-				try {
-					const res = await BrandBrief.getById(pin);
-					if (res.success && Array.isArray(res.data?.products)) briefProducts = res.data.products;
-				} catch {
-					/* composer works without the product list */
-				}
-			}
-		}
-	}
-
-	function toggleGenPlatform(key: string) {
-		genPlatforms = genPlatforms.includes(key)
-			? genPlatforms.filter((k) => k !== key)
-			: [...genPlatforms, key];
-	}
-
-	/**
-	 * Composer "✨ Generate" handler: bundles exactly what the user set in the
-	 * dialog and sends it to generatePostNow (which posts it verbatim to
-	 * /generate-post). Keys match what that endpoint reads — topic/media/
-	 * provider/platforms/scene/product_id/photo/face.
-	 */
-	async function confirmGenerate() {
-		showGenerateConfirm = false;
-		await generatePostNow({
-			topic: genTopic || undefined,
-			media: genMedia,
-			provider: genProvider,
-			platforms: genPlatforms,
-			scene: genScene || undefined,
-			product_id: genProductId || undefined,
-			product_photo_url: genProductPhotoUrl || undefined,
-			character_ref_url: genCharacterRefUrl || undefined
-		});
-	}
 
 	/**
 	 * Post generation always confirms now. The server resolves the real pipeline
@@ -2028,7 +1938,6 @@
 			// The brand pin is now persisted — clear the unsaved-change indicator and
 			// let the composer re-pull products for the new pin on next open.
 			savedBrandBriefId = selectedBrandBriefId;
-			briefLoadedFor = undefined;
 			// …then re-fetch layout data so the sidebar roster + header (which read
 			// server-loaded sidebarAgents) reflect the new name/avatar immediately.
 			await invalidateAll();

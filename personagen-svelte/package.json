@@ -18,6 +18,7 @@
     "test": "npm run test:unit && npm run test:e2e",
     "test:e2e": "playwright install && playwright test",
     "backfill:faststart": "node --env-file=.env --experimental-strip-types scripts/backfill-faststart.ts",
+    "backfill:compress": "node --env-file=.env --experimental-strip-types scripts/backfill-compress.ts",
     "changelog": "node scripts/generate-changelog.mjs",
     "changelog:check": "node scripts/generate-changelog.mjs --check",
     "changelog:list": "node scripts/generate-changelog.mjs --list"

@@ -46,7 +46,8 @@ import { DEFAULT_VOICE, VOICE_CATALOG } from '$lib/server/voices';
 import { getServiceSupabase } from '$lib/server/service-supabase';
 import { resolveModel, getModel, type ModelOption } from '$lib/models';
 import { persistToStorage, persistBufferToStorage } from '$lib/server/storage';
-import { burnCaptions, remuxFaststart } from '$lib/server/video';
+import { burnCaptions, optimizeForWeb } from '$lib/server/video';
+import { renderTypographicCard, CARD_RENDERER_LABEL } from './card-renderer';
 import { fetchWithTimeout } from '$lib/server/social/http';
 import { assertWithinBudget } from '$lib/server/budget';
 
@@ -68,22 +69,24 @@ const genFetch = (input: string | URL, init?: RequestInit) =>
 
 /**
  * Persists a generated (un-captioned) clip to durable storage as a web-optimised
- * mp4. We first try a lossless `+faststart` remux so the browser can begin
- * playback after a small opening request instead of downloading the whole file to
- * find its metadata — the main cause of slow drawer video loads. If ffmpeg isn't
- * available or the remux fails, we fall back to persisting the provider clip
- * unchanged (correctness over optimisation). Captioned clips skip this because
- * burnCaptions already emits +faststart output.
+ * mp4: a CRF re-encode at feed resolution (~4–6× smaller than the provider
+ * master — the thing that actually makes clips load fast off our un-CDN'd
+ * storage host), falling back to a lossless `+faststart` remux, falling back to
+ * the untouched provider clip when ffmpeg is unavailable (correctness over
+ * optimisation). Captioned clips skip this because burnCaptions already encodes
+ * to the same delivery settings. `extraHeaders` carries provider auth for
+ * sources that need it (e.g. OpenRouter's Bearer-guarded video URLs).
  */
 async function persistVideoDurable(
 	svc: Parameters<typeof persistToStorage>[0],
 	sourceUrl: string,
-	userId: string
+	userId: string,
+	extraHeaders?: Record<string, string>
 ): Promise<string> {
-	const fast = await remuxFaststart(sourceUrl).catch(() => null);
-	return fast
-		? persistBufferToStorage(svc, fast, userId, 'mp4', 'video/mp4')
-		: persistToStorage(svc, sourceUrl, userId, 'mp4');
+	const optimized = await optimizeForWeb(sourceUrl, extraHeaders).catch(() => null);
+	return optimized
+		? persistBufferToStorage(svc, optimized, userId, 'mp4', 'video/mp4')
+		: persistToStorage(svc, sourceUrl, userId, 'mp4', extraHeaders);
 }
 
 // ── Model slugs (env-overridable so quality/provider is a one-line swap) ─────
@@ -138,6 +141,16 @@ export const TALKINGHEAD_LABEL = TALKINGHEAD_MODEL.includes('omnihuman')
 const BROLL_MODEL_STANDARD = env.UGC_BROLL_MODEL || 'fal-ai/kling-video/o3/standard/image-to-video';
 const BROLL_MODEL_CINEMATIC =
 	env.UGC_BROLL_MODEL_CINEMATIC || 'fal-ai/kling-video/o3/pro/reference-to-video';
+
+// Ledger/preview display labels DERIVED from the env-selected slugs, so cost
+// events and the composer preview keep naming the model that actually runs even
+// after an env override — a hardcoded "nano-banana-2" next to an overridden
+// UGC_NANO_MODEL is exactly the kind of silent misreport this app must not make.
+export const NANO_STILL_LABEL = NANO_MODEL.replace(/^fal-ai\//, '').replace(/\/edit$/, '');
+const TTS_LABEL = TTS_MODEL.replace(/^fal-ai\//, '').replace(/\//g, ' ');
+export const CINEMATIC_VIDEO_LABEL = BROLL_MODEL_CINEMATIC.includes('kling-video/o3/pro/reference')
+	? 'kling-o3-pro reference'
+	: BROLL_MODEL_CINEMATIC;
 // Veo 3.1 (still Google's latest as of this date — no Veo 4 released despite
 // plenty of speculation) is intentionally NOT wired into any active
 // generation path right now (no multi-shot/elements support via fal, and
@@ -294,7 +307,13 @@ export const UGC_IMAGE_PREFIX_NO_PEOPLE =
 	'Authentic lifestyle photo, candid framing, shot on iPhone, natural lighting, no people in frame. ';
 /** The text-to-image models this helper actually calls -- surfaced so the UI shows the truth. */
 export const UGC_IMAGE_MODEL_FAL = 'fal-ai/flux/schnell';
-export const UGC_IMAGE_MODEL_OPENROUTER = 'black-forest-labs/flux-schnell';
+// OpenRouter's image route runs the VERIFIED Gemini image model (same one the
+// composite/edit paths use, env-overridable together). The old id here —
+// 'black-forest-labs/flux-schnell' — does not exist on OpenRouter and 404'd
+// ("No model found"), which killed every no-reference still for accounts that
+// only have an OpenRouter key.
+export const UGC_IMAGE_MODEL_OPENROUTER =
+	env.UGC_IMAGE_EDIT_MODEL_OR || 'google/gemini-3.1-flash-image';
 
 /** The full string the provider receives, prefix included, so a preview can never lie. */
 export function buildUgcImagePrompt(ugcPrompt: string, people: boolean = true): string {
@@ -347,6 +366,14 @@ function buildEditInput(model: ModelOption, prompt: string, imageUrls: string[],
 	return withSize(model, input, aspect);
 }
 
+/** What generateUgcImage actually ran — callers record THIS in the cost ledger
+ *  and observability panel instead of guessing from which key was non-null. */
+export interface UgcImageResult {
+	url: string;
+	provider: 'fal' | 'openrouter';
+	model: string;
+}
+
 export async function generateUgcImage(
 	ugcPrompt: string,
 	orKey: string | null,
@@ -354,7 +381,7 @@ export async function generateUgcImage(
 	modelId?: string | null,
 	aspect: string = '3:4',
 	people: boolean = true
-): Promise<string> {
+): Promise<UgcImageResult> {
 	const imagePrompt = buildUgcImagePrompt(ugcPrompt, people);
 
 	// An explicitly chosen model is a budget/quality decision the user made and
@@ -365,11 +392,25 @@ export async function generateUgcImage(
 		const falData = await falSyncJson(model.id, buildT2iInput(model, imagePrompt, aspect), falKey);
 		const url = falData.images?.[0]?.url;
 		if (!url) throw new Error(`${model.label} returned no image`);
-		return url;
+		return { url, provider: 'fal', model: model.id };
 	}
 
-	if (orKey) {
-		const orRes = await genFetch('https://openrouter.ai/api/v1/images/generations', {
+	const viaFal = async (): Promise<UgcImageResult> => {
+		const falData = await falSyncJson(
+			UGC_IMAGE_MODEL_FAL,
+			{ prompt: imagePrompt, image_size: fluxImageSize(aspect), num_images: 1 },
+			falKey!
+		);
+		const url = falData.images?.[0]?.url;
+		if (!url) throw new Error('fal image returned no URL');
+		return { url, provider: 'fal', model: UGC_IMAGE_MODEL_FAL };
+	};
+
+	const viaOpenRouter = async (): Promise<UgcImageResult> => {
+		// Same verified chat/completions image route the composite path uses —
+		// OpenRouter's /images/generations rejected our previous model id outright.
+		const content: any[] = [{ type: 'text', text: imagePrompt }];
+		const res = await genFetch('https://openrouter.ai/api/v1/chat/completions', {
 			method: 'POST',
 			headers: {
 				Authorization: `Bearer ${orKey}`,
@@ -379,29 +420,35 @@ export async function generateUgcImage(
 			},
 			body: JSON.stringify({
 				model: UGC_IMAGE_MODEL_OPENROUTER,
-				prompt: imagePrompt,
-				n: 1,
-				size: '1024x1024'
+				messages: [{ role: 'user', content }],
+				modalities: ['image', 'text']
 			})
 		});
-		if (!orRes.ok)
+		if (!res.ok)
 			throw new Error(
-				`OpenRouter image failed (${orRes.status}): ${(await orRes.text()).slice(0, 200)}`
+				`OpenRouter image failed (${res.status}): ${(await res.text()).slice(0, 200)}`
 			);
-		const url = ((await orRes.json()) as any).data?.[0]?.url;
+		const data = (await res.json()) as any;
+		const img = data.choices?.[0]?.message?.images?.[0];
+		const url: string | undefined = img?.image_url?.url || img?.url;
 		if (!url) throw new Error('OpenRouter image returned no URL');
-		return url;
+		return { url, provider: 'openrouter', model: UGC_IMAGE_MODEL_OPENROUTER };
+	};
+
+	// One provider failing must not kill the slot when the other key exists —
+	// a still is a still; degrade across providers instead of failing outright.
+	if (orKey && falKey) {
+		try {
+			return await viaOpenRouter();
+		} catch (e) {
+			console.warn(
+				`[UGC image] OpenRouter still failed (${(e as Error).message.slice(0, 120)}) — retrying on fal.`
+			);
+			return viaFal();
+		}
 	}
-	if (falKey) {
-		const falData = await falSyncJson(
-			UGC_IMAGE_MODEL_FAL,
-			{ prompt: imagePrompt, image_size: 'square_hd', num_images: 1 },
-			falKey
-		);
-		const url = falData.images?.[0]?.url;
-		if (!url) throw new Error('fal image returned no URL');
-		return url;
-	}
+	if (orKey) return viaOpenRouter();
+	if (falKey) return viaFal();
 	throw new Error(
 		'No image generation provider configured. Add an OpenRouter key or set FAL_API_KEY.'
 	);
@@ -846,10 +893,11 @@ async function generateVoiceAudio(
 	voice: string,
 	text: string,
 	fallbackVoice?: string
-): Promise<string> {
+): Promise<{ url: string; voiceUsed: string }> {
 	const call = (v: string) =>
 		falSyncJson(TTS_MODEL, { text, voice: v, stability: 0.5, similarity_boost: 0.75 }, falKey);
 	let data: any;
+	let voiceUsed = voice;
 	try {
 		data = await call(voice);
 	} catch (e) {
@@ -864,13 +912,16 @@ async function generateVoiceAudio(
 				`[TTS] Voice '${voice}' rejected by fal (${msg.slice(0, 100)}) — falling back to '${fallbackVoice}'.`
 			);
 			data = await call(fallbackVoice);
+			voiceUsed = fallbackVoice;
 		} else {
 			throw e;
 		}
 	}
 	const url = data.audio?.url;
 	if (!url) throw new Error('TTS returned no audio');
-	return url;
+	// The caller records voiceUsed on the post — the display must name the voice
+	// that actually spoke, not the one that was merely requested.
+	return { url, voiceUsed };
 }
 
 async function generateTalkingHead(
@@ -1068,7 +1119,7 @@ async function openRouterBrollVideo(
 				if (!url) throw new Error('OpenRouter video completed but returned no URL');
 				// Persist NOW, with the Bearer header only we have, to a permanent URL.
 				const svc = getServiceSupabase();
-				return persistToStorage(svc, url, userId, 'mp4', { Authorization: `Bearer ${orKey}` });
+				return persistVideoDurable(svc, url, userId, { Authorization: `Bearer ${orKey}` });
 			}
 			if (st.status === 'failed') {
 				throw new Error(`OpenRouter video job failed: ${JSON.stringify(st).slice(0, 200)}`);
@@ -1281,7 +1332,12 @@ export async function generateCinematicUgcPack(input: UgcPackInput): Promise<Ugc
 				? products.find((p: any) => p.id === input.productId)
 				: products.find((p: any) => p.photoUrl) || products[0];
 		}
-		if (!selectedProduct?.photoUrl) {
+		// The composer's Product photo URL override wins here exactly as it does on
+		// the standard pipeline — an editable field the run then ignored would make
+		// the confirm dialog a lie.
+		const productPhoto: string | null =
+			input.productPhotoUrlOverride?.trim() || selectedProduct?.photoUrl || null;
+		if (!productPhoto) {
 			throw new Error('Cinematic mode needs a product photo — add one in the Brand Brief first.');
 		}
 
@@ -1455,7 +1511,7 @@ export async function generateCinematicUgcPack(input: UgcPackInput): Promise<Ugc
 					generateProductStill(
 						falKey,
 						shot.prompt,
-						selectedProduct.photoUrl,
+						productPhoto,
 						characterRef,
 						cinematicBrandVisualCtx
 					).catch((err) => {
@@ -1473,7 +1529,7 @@ export async function generateCinematicUgcPack(input: UgcPackInput): Promise<Ugc
 			costEvents.push({
 				provider: 'fal',
 				operation: 'image',
-				model: 'nano-banana-2 (storyboard)',
+				model: `${NANO_STILL_LABEL} (storyboard)`,
 				usd: priceOf('fal', 'image', 'nano')
 			});
 		}
@@ -1496,14 +1552,14 @@ export async function generateCinematicUgcPack(input: UgcPackInput): Promise<Ugc
 			characterAngles: [kit.side_profiles, kit.face_closeup, kit.feature_grid].filter(
 				(url): url is string => Boolean(url)
 			),
-			productPhotoUrl: selectedProduct.photoUrl
+			productPhotoUrl: productPhoto
 		};
 
 		const videoUrl = await generateCinematicVideo(falKey, cinematicRefs, shots);
 		costEvents.push({
 			provider: 'fal',
 			operation: 'video',
-			model: 'kling-o3-pro reference (cinematic)',
+			model: `${CINEMATIC_VIDEO_LABEL} (cinematic)`,
 			usd: priceOf('fal', 'video', 'pro')
 		});
 
@@ -1576,7 +1632,7 @@ export async function generateCinematicUgcPack(input: UgcPackInput): Promise<Ugc
 			...summarizeAspects(costEvents),
 			images: {
 				character_ref: characterRef || null,
-				product_photo: selectedProduct?.photoUrl || null,
+				product_photo: productPhoto,
 				reference_kit: [
 					kit.full_body,
 					kit.side_profiles,
@@ -1584,11 +1640,15 @@ export async function generateCinematicUgcPack(input: UgcPackInput): Promise<Ugc
 					kit.feature_grid
 				].filter(Boolean) as string[]
 			},
+			// Cinematic always composites both references — stated explicitly so the
+			// drawer's composition note has the same contract data as standard runs.
+			still_style: 'photo',
+			refs_policy: { character: true, product: true },
 			prompts: { scene: content.ugc_broll_prompt, script: content.script },
 			selections: {
 				platforms: [platform],
 				brand: briefData?.name ?? briefData?.brandName ?? briefData?.data?.brandName ?? null,
-				videoModel: 'cinematic (Kling O3 Pro reference)',
+				videoModel: BROLL_MODEL_CINEMATIC,
 				provider: input.providerPreference ?? null,
 				mediaType: 'video'
 			}
@@ -1759,11 +1819,14 @@ export interface UgcContent {
 function trackAi(ai: AiClient, costEvents: CostEvent[]): AiClient {
 	return {
 		provider: ai.provider,
+		model: ai.model,
 		async generate(prompt, opts) {
 			costEvents.push({
 				provider: ai.provider,
 				operation: 'llm',
-				model: 'text-generation',
+				// The real model id, so the observability panel names what actually
+				// wrote the script — not a 'text-generation' placeholder.
+				model: ai.model,
 				usd: priceOf(ai.provider, 'llm')
 			});
 			return ai.generate(prompt, opts);
@@ -2239,10 +2302,10 @@ async function generateHeroPortraitImage(
 
 	// Portraits are 3:4. orKey stays null on purpose: routing to OpenRouter would
 	// silently ignore the model the user picked (and billed for) in the composer.
-	const heroUrl = await generateUgcImage(heroPrompt, null, falKey, modelId, '3:4');
+	const hero = await generateUgcImage(heroPrompt, null, falKey, modelId, '3:4');
 	// Loud persist: pinned reusable face fed as grounding to every future video
 	// -- never return the ephemeral provider URL, which would expire and break it.
-	return await persistToStorage(svc, heroUrl, userId, 'png');
+	return await persistToStorage(svc, hero.url, userId, 'png');
 }
 
 /**
@@ -3091,6 +3154,9 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 		// fallback applies unchanged, and the cost event rides the success handler so
 		// the spend is recorded (ledger flushes in finally) even if the still fails.
 		const dialogue = parsed.dialogue || parsed.text || topic;
+		// The voice that ACTUALLY spoke this run — updated when TTS degrades to the
+		// classic fallback, so the stored post never claims a voice that didn't run.
+		let ttsVoiceUsed = resolvedVoice;
 		const spokenAudio: Promise<{ url: string } | { err: Error }> | null =
 			wantVideo && format === 'spokesperson' && falKey
 				? generateVoiceAudio(
@@ -3102,11 +3168,12 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 						// same-gender classic, never a failure.
 						voiceGender === 'female' ? 'Rachel' : 'Adam'
 					).then(
-						(url) => {
+						({ url, voiceUsed }) => {
+							ttsVoiceUsed = voiceUsed;
 							costEvents.push({
 								provider: 'fal',
 								operation: 'tts',
-								model: 'elevenlabs-turbo-v2.5',
+								model: TTS_LABEL,
 								usd: priceOf('fal', 'tts')
 							});
 							return { url };
@@ -3162,13 +3229,63 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 			input.productPhotoUrlOverride?.trim() ||
 			(wantProductRef ? selectedProduct?.photoUrl || null : null);
 		if (isGraphicStill) {
-			if (falKey) {
+			// ── $0 deterministic render first (server-side ffmpeg typography) ──
+			// The text IS the artwork, and the Director already wrote it — so the
+			// default is to typeset it locally for free. The model providers below
+			// are the FALLBACK: no ffmpeg/font on this host, glyphs the system font
+			// can't draw (emoji), no durable storage, or a persist failure all fall
+			// through to exactly the pre-renderer paths. UGC_CARD_RENDERER=model
+			// restores model-only rendering.
+			let renderedCardUrl: string | null = null;
+			const svcForCard = (() => {
+				try {
+					return getServiceSupabase();
+				} catch {
+					return null; // No service key — a local PNG would have nowhere durable to live.
+				}
+			})();
+			if (svcForCard) {
+				const card = await renderTypographicCard({
+					cardText: cardText!,
+					artDirection: scenePrompt,
+					brand: { primary: briefData?.primaryColor, secondary: briefData?.secondaryColor },
+					handle: agentData?.handle ? `@${agentData.handle}` : null
+				});
+				if (card) {
+					try {
+						renderedCardUrl = await persistBufferToStorage(
+							svcForCard,
+							card.buffer,
+							userId,
+							'png',
+							'image/png'
+						);
+						// $0 by construction — recorded so the ledger/provenance/drawer all
+						// say this post's image cost nothing, not that it went unaccounted.
+						costEvents.push({
+							provider: 'local',
+							operation: 'image',
+							model: CARD_RENDERER_LABEL,
+							usd: 0
+						});
+					} catch (e) {
+						console.warn(
+							'[CardRenderer] Persist failed — model path will run:',
+							(e as Error).message
+						);
+						renderedCardUrl = null;
+					}
+				}
+			}
+			if (renderedCardUrl) {
+				still = renderedCardUrl;
+			} else if (falKey) {
 				try {
 					still = await generateGraphicStill(falKey, cardText!, scenePrompt, brandVisualCtx);
 					costEvents.push({
 						provider: 'fal',
 						operation: 'image',
-						model: 'nano-banana-2',
+						model: NANO_STILL_LABEL,
 						usd: priceOf('fal', 'image', 'nano')
 					});
 				} catch (e) {
@@ -3207,7 +3324,9 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 					usd: priceOf('openrouter', 'image')
 				});
 			} else {
-				throw new Error('No media provider configured. Add a Fal AI or OpenRouter key in Settings.');
+				throw new Error(
+					'No media provider configured. Add a Fal AI or OpenRouter key in Settings.'
+				);
 			}
 		} else if (falKey && (productPhoto || characterRef)) {
 			try {
@@ -3221,7 +3340,7 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 				costEvents.push({
 					provider: 'fal',
 					operation: 'image',
-					model: 'nano-banana-2',
+					model: NANO_STILL_LABEL,
 					usd: priceOf('fal', 'image', 'nano')
 				});
 			} catch (e) {
@@ -3251,12 +3370,20 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 						console.warn(
 							`[Failover] OpenRouter composite also failed (${(editErr as Error).message.slice(0, 120)}) — flux text-to-image last resort.`
 						);
-						still = await generateUgcImage(scenePrompt, orKey, null, null, '3:4', wantCharacterRef);
+						const t2i = await generateUgcImage(
+							scenePrompt,
+							orKey,
+							null,
+							null,
+							'3:4',
+							wantCharacterRef
+						);
+						still = t2i.url;
 						costEvents.push({
-							provider: 'openrouter',
+							provider: t2i.provider,
 							operation: 'image',
-							model: 'flux-schnell',
-							usd: priceOf('openrouter', 'image')
+							model: t2i.model,
+							usd: priceOf(t2i.provider, 'image')
 						});
 					}
 				} else {
@@ -3284,31 +3411,24 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 				console.warn(
 					`[Composer] OpenRouter composite failed (${(e as Error).message.slice(0, 120)}) — flux fallback.`
 				);
-				still = await generateUgcImage(scenePrompt, orKey, null, null, '3:4', wantCharacterRef);
+				const t2i = await generateUgcImage(scenePrompt, orKey, null, null, '3:4', wantCharacterRef);
+				still = t2i.url;
 				costEvents.push({
-					provider: 'openrouter',
+					provider: t2i.provider,
 					operation: 'image',
-					model: 'flux-schnell',
-					usd: priceOf('openrouter', 'image')
+					model: t2i.model,
+					usd: priceOf(t2i.provider, 'image')
 				});
 			}
 		} else {
-			still = await generateUgcImage(scenePrompt, orKey, falKey, null, '3:4', wantCharacterRef);
-			costEvents.push(
-				orKey
-					? {
-							provider: 'openrouter',
-							operation: 'image',
-							model: 'flux-schnell',
-							usd: priceOf('openrouter', 'image')
-						}
-					: {
-							provider: 'fal',
-							operation: 'image',
-							model: 'flux-schnell',
-							usd: priceOf('fal', 'image', 'flux')
-						}
-			);
+			const t2i = await generateUgcImage(scenePrompt, orKey, falKey, null, '3:4', wantCharacterRef);
+			still = t2i.url;
+			costEvents.push({
+				provider: t2i.provider,
+				operation: 'image',
+				model: t2i.model,
+				usd: priceOf(t2i.provider, 'image', t2i.provider === 'fal' ? 'flux' : undefined)
+			});
 		}
 
 		// ── Video — fal primary, OpenRouter video API failover ──────────────
@@ -3319,6 +3439,10 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 		const brollModel = resolveModel('video_i2v', input.videoModel);
 		let mediaUrl = still;
 		let mediaType: 'image' | 'video' = 'image';
+		// The i2v model that ACTUALLY produced the clip (null = none ran: image-only
+		// posts and talking-head runs). Recorded in selections so the drawer's
+		// "Video model" line names the run, not the request — failovers included.
+		let videoModelRan: string | null = null;
 		if (wantVideo && (falKey || orKey)) {
 			try {
 				if (format === 'spokesperson' && falKey) {
@@ -3350,15 +3474,26 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 						motionPrompt,
 						input.videoAdapter ?? undefined
 					);
+					videoModelRan = runModelId;
 					costEvents.push({
 						provider: 'fal',
 						operation: 'video',
 						model: input.videoAdapter && input.videoModel ? runModelId : brollModel.label,
-						usd: input.videoModelUsd ?? brollModel.usd
+						// Bill the model that RAN. A discovered model with no adapter falls
+						// back to the catalog default — billing the requested model's price
+						// there would charge for a model that never executed.
+						usd:
+							runModelId === input.videoModel
+								? (input.videoModelUsd ?? brollModel.usd)
+								: brollModel.usd
 					});
 				} else {
-					// No fal at all — straight to OpenRouter video.
+					// No fal at all — straight to OpenRouter video. TTS + talking head are
+					// fal-exclusive, so a spokesperson request runs as b-roll here — record
+					// that, or the post would claim a talking head the viewer never gets.
+					if (format === 'spokesperson') format = 'broll';
 					mediaUrl = await openRouterBrollVideo(orKey!, userId, still, motionPrompt);
+					videoModelRan = BROLL_MODEL_OPENROUTER;
 					costEvents.push({
 						provider: 'openrouter',
 						operation: 'video',
@@ -3373,7 +3508,11 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 					console.warn(
 						`[Failover] fal video failed (${msg.slice(0, 120)}) — OpenRouter Kling b-roll fallback.`
 					);
+					// The delivered clip is silent b-roll whatever was requested — the
+					// recorded format must describe what the viewer actually watches.
+					if (format === 'spokesperson') format = 'broll';
 					mediaUrl = await openRouterBrollVideo(orKey, userId, still, motionPrompt);
+					videoModelRan = BROLL_MODEL_OPENROUTER;
 					costEvents.push({
 						provider: 'openrouter',
 						operation: 'video',
@@ -3472,7 +3611,9 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 			media_type: mediaType,
 			media_generated: true,
 			format,
-			voice: resolvedVoice,
+			// The voice that actually spoke (TTS can degrade to a classic fallback) —
+			// never the merely-requested one.
+			voice: ttsVoiceUsed,
 			product: selectedProduct
 				? {
 						name: selectedProduct.name,
@@ -3499,11 +3640,21 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 			still_style: isGraphicStill ? 'graphic' : 'photo',
 			refs_policy: { character: wantCharacterRef, product: wantProductRef },
 			...(isGraphicStill && cardText ? { card_text: cardText } : {}),
+			// When TTS degraded to the classic fallback, say so — the post's voice
+			// field alone can't explain why it differs from the persona's pick.
+			...(ttsVoiceUsed !== resolvedVoice
+				? { voice_fallback: { requested: resolvedVoice, used: ttsVoiceUsed } }
+				: {}),
 			prompts: { scene: scenePrompt, script: content.script },
 			selections: {
 				platforms: [platform],
 				brand: briefData?.name ?? briefData?.brandName ?? briefData?.data?.brandName ?? null,
-				videoModel: input.videoModel ?? null,
+				// The i2v model that RAN (null when none did: image posts, talking heads).
+				// The request is kept separately so a failover stays explainable.
+				videoModel: videoModelRan,
+				...(input.videoModel && input.videoModel !== videoModelRan
+					? { videoModelRequested: input.videoModel }
+					: {}),
 				provider: input.providerPreference ?? null,
 				mediaType
 			}
@@ -3616,13 +3767,74 @@ export async function refineUgcMedia(input: RefineMediaInput): Promise<UgcConten
 				.trim()
 				.slice(0, 220);
 			if (!cardText) throw new Error('This graphic card has no stored text to re-render.');
-			if (falKey) {
+			// ── $0 deterministic re-render first — same contract as the original
+			// generation, so a free card stays free through refine. Palette derives
+			// from text + brand, so an unchanged line keeps its exact look; brand
+			// colors and the handle credit are re-read best-effort (they're cosmetic,
+			// so a read failure renders on the curated palette rather than billing
+			// the model path).
+			let renderedCardUrl: string | null = null;
+			const svcForCard = (() => {
+				try {
+					return getServiceSupabase();
+				} catch {
+					return null;
+				}
+			})();
+			if (svcForCard) {
+				let cardBrand: { primary?: string | null; secondary?: string | null } | null = null;
+				let cardHandle: string | null = null;
+				try {
+					const cfg = await loadUgcConfig(supabase, input.agentId);
+					const db = createDbService(supabase);
+					const brief = await loadBriefForAgent(db, userId, cfg.brandBriefId);
+					cardBrand = brief?.data
+						? { primary: brief.data.primaryColor, secondary: brief.data.secondaryColor }
+						: null;
+					const agentRow = input.agentId ? (await db.agents.get(input.agentId)).data : null;
+					cardHandle = agentRow?.handle ? `@${agentRow.handle}` : null;
+				} catch {
+					/* cosmetic only — curated palette still renders */
+				}
+				const card = await renderTypographicCard({
+					cardText,
+					artDirection: scene,
+					brand: cardBrand,
+					handle: cardHandle
+				});
+				if (card) {
+					try {
+						renderedCardUrl = await persistBufferToStorage(
+							svcForCard,
+							card.buffer,
+							userId,
+							'png',
+							'image/png'
+						);
+						costEvents.push({
+							provider: 'local',
+							operation: 'image',
+							model: CARD_RENDERER_LABEL,
+							usd: 0
+						});
+					} catch (e) {
+						console.warn(
+							'[CardRenderer] Refine persist failed — model path will run:',
+							(e as Error).message
+						);
+						renderedCardUrl = null;
+					}
+				}
+			}
+			if (renderedCardUrl) {
+				still = renderedCardUrl;
+			} else if (falKey) {
 				try {
 					still = await generateGraphicStill(falKey, cardText, scene);
 					costEvents.push({
 						provider: 'fal',
 						operation: 'image',
-						model: 'nano-banana-2',
+						model: NANO_STILL_LABEL,
 						usd: priceOf('fal', 'image', 'nano')
 					});
 				} catch (e) {
@@ -3648,7 +3860,12 @@ export async function refineUgcMedia(input: RefineMediaInput): Promise<UgcConten
 					}
 				}
 			} else if (orKey) {
-				still = await openRouterImageEdit(orKey, userId, buildGraphicStillPrompt(cardText, scene), []);
+				still = await openRouterImageEdit(
+					orKey,
+					userId,
+					buildGraphicStillPrompt(cardText, scene),
+					[]
+				);
 				costEvents.push({
 					provider: 'openrouter',
 					operation: 'image',
@@ -3656,7 +3873,9 @@ export async function refineUgcMedia(input: RefineMediaInput): Promise<UgcConten
 					usd: priceOf('openrouter', 'image')
 				});
 			} else {
-				throw new Error('No media provider configured. Add a Fal AI or OpenRouter key in Settings.');
+				throw new Error(
+					'No media provider configured. Add a Fal AI or OpenRouter key in Settings.'
+				);
 			}
 		} else if (falKey && (productPhoto || characterRef)) {
 			try {
@@ -3664,7 +3883,7 @@ export async function refineUgcMedia(input: RefineMediaInput): Promise<UgcConten
 				costEvents.push({
 					provider: 'fal',
 					operation: 'image',
-					model: 'nano-banana-2',
+					model: NANO_STILL_LABEL,
 					usd: priceOf('fal', 'image', 'nano')
 				});
 			} catch (e) {
@@ -3705,27 +3924,19 @@ export async function refineUgcMedia(input: RefineMediaInput): Promise<UgcConten
 				usd: priceOf('openrouter', 'image')
 			});
 		} else {
-			still = await generateUgcImage(scene, orKey, falKey, null, '3:4', refsPolicy.character);
-			costEvents.push(
-				orKey
-					? {
-							provider: 'openrouter',
-							operation: 'image',
-							model: 'flux-schnell',
-							usd: priceOf('openrouter', 'image')
-						}
-					: {
-							provider: 'fal',
-							operation: 'image',
-							model: 'flux-schnell',
-							usd: priceOf('fal', 'image', 'flux')
-						}
-			);
+			const t2i = await generateUgcImage(scene, orKey, falKey, null, '3:4', refsPolicy.character);
+			still = t2i.url;
+			costEvents.push({
+				provider: t2i.provider,
+				operation: 'image',
+				model: t2i.model,
+				usd: priceOf(t2i.provider, 'image', t2i.provider === 'fal' ? 'flux' : undefined)
+			});
 		}
 
 		// ── Video — same format the post already has ──
 		const wantVideo = content.media_type === 'video';
-		const format: 'spokesperson' | 'broll' = content.format === 'broll' ? 'broll' : 'spokesperson';
+		let format: 'spokesperson' | 'broll' = content.format === 'broll' ? 'broll' : 'spokesperson';
 		const dialogue = (
 			input.dialogue?.trim() ||
 			content.dialogue ||
@@ -3735,6 +3946,10 @@ export async function refineUgcMedia(input: RefineMediaInput): Promise<UgcConten
 		).trim();
 		let mediaUrl = still;
 		let mediaType: 'image' | 'video' = 'image';
+		// Truth trackers for the refined record: the voice that actually spoke and
+		// the i2v model that actually ran — mirrors generateUgcPack's bookkeeping.
+		let refineVoiceUsed: string | null = null;
+		let videoModelRan: string | null = null;
 		if (wantVideo && (falKey || orKey)) {
 			// The original Director motion_prompt isn't stored on the post, and the
 			// user's edited brief is the ground truth now — so motion guidance is
@@ -3745,19 +3960,20 @@ export async function refineUgcMedia(input: RefineMediaInput): Promise<UgcConten
 				if (format === 'spokesperson' && falKey) {
 					const voice = content.voice || DEFAULT_VOICE;
 					const voiceGender = VOICE_CATALOG.find((v) => v.name === voice)?.gender;
-					const audio = await generateVoiceAudio(
+					const { url: audioUrl, voiceUsed } = await generateVoiceAudio(
 						falKey,
 						voice,
 						dialogue,
 						voiceGender === 'female' ? 'Rachel' : 'Adam'
 					);
+					refineVoiceUsed = voiceUsed;
 					costEvents.push({
 						provider: 'fal',
 						operation: 'tts',
-						model: 'elevenlabs-turbo-v2.5',
+						model: TTS_LABEL,
 						usd: priceOf('fal', 'tts')
 					});
-					mediaUrl = await generateTalkingHead(falKey, still, audio);
+					mediaUrl = await generateTalkingHead(falKey, still, audioUrl);
 					costEvents.push({
 						provider: 'fal',
 						operation: 'talking_head',
@@ -3767,6 +3983,7 @@ export async function refineUgcMedia(input: RefineMediaInput): Promise<UgcConten
 				} else if (falKey) {
 					const brollModel = resolveModel('video_i2v', content.generation?.selections?.videoModel);
 					mediaUrl = await generateBrollVideo(falKey, brollModel.id, still, motionPrompt);
+					videoModelRan = brollModel.id;
 					costEvents.push({
 						provider: 'fal',
 						operation: 'video',
@@ -3774,7 +3991,11 @@ export async function refineUgcMedia(input: RefineMediaInput): Promise<UgcConten
 						usd: brollModel.usd
 					});
 				} else {
+					// TTS + talking head are fal-exclusive — a spokesperson refine without
+					// a fal key runs as b-roll, and the record must say so.
+					if (format === 'spokesperson') format = 'broll';
 					mediaUrl = await openRouterBrollVideo(orKey!, userId, still, motionPrompt);
+					videoModelRan = BROLL_MODEL_OPENROUTER;
 					costEvents.push({
 						provider: 'openrouter',
 						operation: 'video',
@@ -3789,7 +4010,10 @@ export async function refineUgcMedia(input: RefineMediaInput): Promise<UgcConten
 					console.warn(
 						`[Refine] fal video failed (${msg.slice(0, 120)}) — OpenRouter Kling b-roll fallback.`
 					);
+					// Degraded to a silent clip — record the format that actually delivered.
+					if (format === 'spokesperson') format = 'broll';
 					mediaUrl = await openRouterBrollVideo(orKey, userId, still, motionPrompt);
+					videoModelRan = BROLL_MODEL_OPENROUTER;
 					costEvents.push({
 						provider: 'openrouter',
 						operation: 'video',
@@ -3867,6 +4091,13 @@ export async function refineUgcMedia(input: RefineMediaInput): Promise<UgcConten
 					}
 				: v;
 		}
+		// A pre-observability post has spend but no per-aspect record. Seed that
+		// spend as an explicit 'prior' row, so the aspect table's visible rows
+		// always sum to the Total beneath them instead of silently under-adding.
+		if (Object.keys(prevAspects).length === 0) {
+			const priorSpend = Number(content.generation?.total ?? content.costBreakdown?.total ?? 0);
+			if (priorSpend > 0) mergedAspects.prior = { models: [], usd: +priorSpend.toFixed(6) };
+		}
 		const refineCosts = summarizeCosts(costEvents);
 		const prevBreakdown = content.costBreakdown ?? { total: 0, byProvider: {} };
 		const mergedByProvider: Record<string, number> = { ...(prevBreakdown.byProvider ?? {}) };
@@ -3877,6 +4108,10 @@ export async function refineUgcMedia(input: RefineMediaInput): Promise<UgcConten
 
 		const refined: UgcContent = {
 			...content,
+			// What THIS media actually is: a degraded refine records b-roll, and a
+			// TTS voice fallback records the voice that really spoke.
+			format,
+			...(refineVoiceUsed ? { voice: refineVoiceUsed } : {}),
 			dialogue: format === 'spokesperson' ? dialogue : content.dialogue,
 			script: format === 'spokesperson' ? dialogue : content.script,
 			// Actual burn outcome for THIS media, not the old video's flags.
@@ -3901,6 +4136,12 @@ export async function refineUgcMedia(input: RefineMediaInput): Promise<UgcConten
 				images: content.generation?.images ?? {
 					character_ref: characterRef,
 					product_photo: productPhoto
+				},
+				selections: {
+					...(content.generation?.selections ?? {}),
+					// The clip model THIS media came from (null = none ran on it).
+					videoModel: videoModelRan,
+					mediaType
 				},
 				prompts: {
 					...(content.generation?.prompts ?? {}),

@@ -1,4 +1,5 @@
 import { STUDIO_TEMPLATES } from '$lib/studio-templates';
+import { proxiedMediaUrl } from '$lib/image-url';
 
 /**
  * Which Studio shelf an output belongs on — the SAME four-word vocabulary the
@@ -44,6 +45,14 @@ export interface PostDisplay {
 	captionsBurned: boolean;
 	/** Whether the "AI GENERATED" disclosure badge was burned on (opt-in). */
 	aiBadgeBurned: boolean;
+	/** True only when the burn outcome was actually RECORDED. Legacy posts predate
+	 *  the fields — asserting "off" for them would misstate a clip that visibly
+	 *  has captions, so surfaces must stay silent when this is false. */
+	captionsKnown: boolean;
+	/** The TTS voice that actually spoke (spokesperson posts), if recorded. */
+	voice: string | null;
+	/** In-flight/failed rows: what the run SET OUT to produce, when recorded. */
+	intended: { media?: string; format?: string; still?: string } | null;
 }
 
 const ERROR_SNIPPET_MAX = 140;
@@ -143,13 +152,20 @@ export function getPostErrorSummary(post: any): string | null {
 export function getPostDisplay(post: any): PostDisplay {
 	const content = post?.content;
 	let parsed: any = null;
-	try {
-		const trimmed = content?.trim() ?? '';
-		if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
-			parsed = JSON.parse(trimmed);
+	if (content && typeof content === 'object') {
+		// Some write paths store the object directly — same contract as the
+		// stringified form (summarizeGenError already tolerates this; the display
+		// classifier must too, or an object-content post loses its whole record).
+		parsed = content;
+	} else {
+		try {
+			const trimmed = typeof content === 'string' ? content.trim() : '';
+			if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+				parsed = JSON.parse(trimmed);
+			}
+		} catch {
+			/* not JSON — plain-text legacy post */
 		}
-	} catch {
-		/* not JSON — plain-text legacy post */
 	}
 
 	// Legacy flat shape only (no platform-name key) — the current per-platform
@@ -162,11 +178,16 @@ export function getPostDisplay(post: any): PostDisplay {
 			? legacyResults
 			: null;
 
+	const mediaUrl = parsed?.media_url || parsed?.mediaUrl || legacyMedia?.media_url || null;
 	const mediaType =
 		parsed?.media_type ||
 		parsed?.mediaType ||
 		(legacyMedia ? legacyMedia.media_type?.toLowerCase() : null) ||
-		'image';
+		// Legacy rows recorded no media_type; sniffing the URL beats asserting
+		// "image" for what is plainly a clip (a video rendered in an <img> tag).
+		(typeof mediaUrl === 'string' && /\.(mp4|webm|mov|m4v)(\?|$)/i.test(mediaUrl)
+			? 'video'
+			: 'image');
 	const isCinematic = parsed?.cinematic === true;
 	const template = parsed?.studio?.template ? TEMPLATE_BY_ID.get(parsed.studio.template) : undefined;
 	// The template's own shelf, mapped to output vocabulary ('motion' → video).
@@ -175,11 +196,26 @@ export function getPostDisplay(post: any): PostDisplay {
 			? 'video'
 			: (template.surface as PostSurface)
 		: null;
-	const hasMedia = Boolean(parsed?.media_url || parsed?.mediaUrl || legacyMedia?.media_url);
+	// What the run SET OUT to make — stamped on placeholder/failed rows by the
+	// generate endpoint so a type exists before (or without) any delivered media.
+	const intended = parsed?.intended && typeof parsed.intended === 'object' ? parsed.intended : null;
+	const intendedSurface: PostSurface | null = intended
+		? intended.media === 'cinematic'
+			? 'cinematic'
+			: intended.media === 'video'
+				? 'video'
+				: intended.still === 'graphic'
+					? 'typographic'
+					: intended.media === 'image'
+						? 'photo'
+						: null
+		: null;
+	const hasMedia = Boolean(mediaUrl);
 	// Delivered rows: classify what was ACTUALLY produced (media_type is truth —
 	// a degraded video template that delivered a still is a photo). In-flight /
-	// failed rows have no media yet, so the template says what the slot IS —
-	// that's what makes a generating campaign slot a typed placeholder.
+	// failed rows have no media yet, so the recorded INTENT says what the slot
+	// is becoming (template shelf as the legacy fallback) — that's what makes a
+	// generating campaign slot a typed placeholder instead of a default "photo".
 	const surface: PostSurface = isCinematic
 		? 'cinematic'
 		: hasMedia
@@ -188,7 +224,8 @@ export function getPostDisplay(post: any): PostDisplay {
 				: parsed?.generation?.still_style === 'graphic' || templateSurface === 'typographic'
 					? 'typographic'
 					: 'photo'
-			: (templateSurface ??
+			: (intendedSurface ??
+				templateSurface ??
 				(mediaType === 'video'
 					? 'video'
 					: parsed?.generation?.still_style === 'graphic'
@@ -196,14 +233,19 @@ export function getPostDisplay(post: any): PostDisplay {
 						: 'photo'));
 
 	return {
-		text: parsed?.text || content || '',
-		mediaUrl: parsed?.media_url || parsed?.mediaUrl || legacyMedia?.media_url || null,
+		// Placeholder/failed rows have parsed JSON but no text — that must render
+		// as empty, never as the raw JSON payload (internal prompt scaffolding).
+		text: parsed ? parsed.text || '' : content || '',
+		// Display URLs route through the same-origin /media proxy (Cloudflare-
+		// fronted). The RAW storage URL stays in the DB — publishing reads that,
+		// platforms need an absolute public URL.
+		mediaUrl: (proxiedMediaUrl(mediaUrl) as string | null) ?? null,
 		mediaType,
 		surface,
 		templateTitle: template?.title ?? null,
 		cinematic: isCinematic,
 		standalone: parsed?.studio?.standalone === true,
-		posterUrl: parsed?.poster_url || null,
+		posterUrl: (proxiedMediaUrl(parsed?.poster_url || null) as string | null) ?? null,
 		ugcPrompt: parsed?.ugc_broll_prompt || parsed?.ugcPrompt || null,
 		script: parsed?.script || null,
 		product: parsed?.product || null,
@@ -213,6 +255,9 @@ export function getPostDisplay(post: any): PostDisplay {
 		mediaGenerated: parsed?.media_generated ?? false,
 		onScreenText: parsed?.on_screen_text || null,
 		captionsBurned: parsed?.captions === true,
-		aiBadgeBurned: parsed?.ai_badge === true
+		aiBadgeBurned: parsed?.ai_badge === true,
+		captionsKnown: parsed ? parsed.captions !== undefined || parsed.ai_badge !== undefined : false,
+		voice: typeof parsed?.voice === 'string' ? parsed.voice : null,
+		intended
 	};
 }

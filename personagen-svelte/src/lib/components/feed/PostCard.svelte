@@ -99,7 +99,10 @@
 		);
 	});
 
-	let plat = $derived((post.platforms?.[0] ?? 'instagram').toLowerCase());
+	// No platform chip when the post has no platforms (standalone assets, runs
+	// whose targets were filtered away) — a default "instagram" chip would claim
+	// a destination that doesn't exist.
+	let plat = $derived(post.platforms?.[0] ? String(post.platforms[0]).toLowerCase() : null);
 
 	// Warm the browser cache for the FULL media the instant the user shows intent to
 	// open a tile, so the drawer renders from cache instead of a cold fetch. Videos
@@ -233,6 +236,7 @@
 				aria-valuemin="0"
 				aria-valuemax="100"
 				aria-valuenow={pct}
+				aria-valuetext="{elapsedS} seconds elapsed — progress is estimated, not reported by the provider"
 			>
 				<div class="tile-gen-fill" style="transform:scaleX({pct / 100})"></div>
 			</div>
@@ -347,27 +351,31 @@
 	{/if}
 
 	<div class="tile-chips-top">
-		<span class="tile-platform" style="background: {platformColor(plat)}">{plat}</span>
+		{#if plat}
+			<span class="tile-platform" style="background: {platformColor(plat)}">{plat}</span>
+		{/if}
 		<!-- Format chip: Studio-shelf vocabulary, so every tile names what KIND of
-		     asset it is (and which template made it) wherever it appears. While a
-		     row is still generating the surface is only KNOWN when a template is
-		     attached (campaign/Studio slots) — a generic generate could still fork
-		     image/video, so those stay unlabeled instead of guessing. -->
-		{#if !isGenerating || display.templateTitle}
+		     asset it is (and which template made it) wherever it appears. Pre-
+		     delivery rows (generating/failed) are typed from the recorded INTENT
+		     (template or the run's own intended stamp); rows with neither stay
+		     unlabeled instead of guessing. -->
+		{#if !isGenerating || display.templateTitle || display.intended}
 			<span
 				class="tile-format"
 				data-surface={display.surface}
-				title={display.templateTitle
-					? `${SURFACE_LABEL[display.surface]} · from “${display.templateTitle}”`
-					: SURFACE_LABEL[display.surface]}
+				title={isGenerating
+					? `Generating — output will be ${SURFACE_LABEL[display.surface]}`
+					: display.templateTitle
+						? `${SURFACE_LABEL[display.surface]} · from “${display.templateTitle}”`
+						: SURFACE_LABEL[display.surface]}
 			>
 				{SURFACE_LABEL[display.surface]}
 			</span>
 		{/if}
 		<!-- "Asset only" Studio output is a different THING than a review draft —
-		     same row status, different destination — so it wears its own chip
-		     instead of masquerading as a draft awaiting approval. -->
-		{#if display.standalone && post.status === 'draft'}
+		     same row status, different destination — so it wears its own chip at
+		     EVERY status instead of masquerading as a draft awaiting approval. -->
+		{#if display.standalone}
 			<span
 				class="tile-status"
 				data-status="asset"

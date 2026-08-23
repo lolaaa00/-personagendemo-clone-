@@ -8,7 +8,7 @@
  */
 
 export interface PriceEntry {
-	provider: 'fal' | 'openrouter' | 'gemini' | 'zernio';
+	provider: 'fal' | 'openrouter' | 'gemini' | 'zernio' | 'local';
 	operation: string;
 	model: string;
 	/** Estimated USD per call. */
@@ -17,21 +17,63 @@ export interface PriceEntry {
 }
 
 export const PRICING_MATRIX: PriceEntry[] = [
+	// ── local (server-side, no AI model) ───────────────────────────────────
+	{
+		provider: 'local',
+		operation: 'image',
+		model: 'typographic card (server-rendered)',
+		usd: 0,
+		note: 'deterministic ffmpeg typesetting — text cards generate for free'
+	},
 	// ── fal.ai (primary media) ──────────────────────────────────────────────
-	{ provider: 'fal', operation: 'image', model: 'nano-banana-2 (product still / avatar)', usd: 0.08 },
+	{
+		provider: 'fal',
+		operation: 'image',
+		model: 'nano-banana-2 (product still / avatar)',
+		usd: 0.08
+	},
 	{ provider: 'fal', operation: 'image', model: 'flux-schnell (scene fallback)', usd: 0.003 },
-	{ provider: 'fal', operation: 'video', model: 'kling-o3-standard i2v ~5s (b-roll)', usd: 0.5 },
-	{ provider: 'fal', operation: 'video', model: 'kling-o3-pro reference (cinematic, per shot-set)', usd: 1.6 },
+	// 0.42 matches the models.ts catalog + registry default — the ledger bills the
+	// catalog/registry rate, so a different number here would put two "truths" on
+	// screen for the same clip.
+	{ provider: 'fal', operation: 'video', model: 'kling-o3-standard i2v ~5s (b-roll)', usd: 0.42 },
+	{
+		provider: 'fal',
+		operation: 'video',
+		model: 'kling-o3-pro reference (cinematic, per shot-set)',
+		usd: 1.6
+	},
 	{ provider: 'fal', operation: 'tts', model: 'elevenlabs turbo-v2.5', usd: 0.03 },
-	{ provider: 'fal', operation: 'talking_head', model: 'bytedance omnihuman v1.5 (~5s @ $0.14/s)', usd: 0.7 },
+	{
+		provider: 'fal',
+		operation: 'talking_head',
+		model: 'bytedance omnihuman v1.5 (~5s @ $0.14/s)',
+		usd: 0.7
+	},
 	// ── OpenRouter (text primary + media failover) ─────────────────────────
-	{ provider: 'openrouter', operation: 'llm', model: 'gemini-3.5-flash (director/grader/captions)', usd: 0.002 },
+	{
+		provider: 'openrouter',
+		operation: 'llm',
+		model: 'gemini-3.5-flash (director/grader/captions)',
+		usd: 0.002
+	},
 	{ provider: 'openrouter', operation: 'image', model: 'flux-schnell', usd: 0.02 },
-	{ provider: 'openrouter', operation: 'video', model: 'kling-v3.0-std i2v ~5s (failover)', usd: 0.35 },
+	{
+		provider: 'openrouter',
+		operation: 'video',
+		model: 'kling-v3.0-std i2v ~5s (failover)',
+		usd: 0.35
+	},
 	// ── Gemini direct (env-key text fallback) ──────────────────────────────
 	{ provider: 'gemini', operation: 'llm', model: 'gemini-3.5-flash', usd: 0.002 },
 	// ── Zernio (posting; pay-per-connected-account, not per-call) ──────────
-	{ provider: 'zernio', operation: 'publish', model: 'pay-per-account: 2 free, then $6/$3/$1 per account/mo', usd: 0, note: 'per connected account/mo, not per-call' }
+	{
+		provider: 'zernio',
+		operation: 'publish',
+		model: 'pay-per-account: 2 free, then $6/$3/$1 per account/mo',
+		usd: 0,
+		note: 'per connected account/mo, not per-call'
+	}
 ];
 
 /** Looks up the estimated USD for a provider+operation (first match). */
@@ -62,8 +104,8 @@ export function summarizeCosts(events: CostEvent[]): {
 	const byProvider: Record<string, number> = {};
 	let total = 0;
 	for (const e of events) {
-		byProvider[e.provider] = +(((byProvider[e.provider] ?? 0) + e.usd).toFixed(6));
-		total = +((total + e.usd).toFixed(6));
+		byProvider[e.provider] = +((byProvider[e.provider] ?? 0) + e.usd).toFixed(6);
+		total = +(total + e.usd).toFixed(6);
 	}
 	return { total, byProvider };
 }
@@ -71,11 +113,17 @@ export function summarizeCosts(events: CostEvent[]): {
 /** Human labels for cost/provenance operations, for the observability panel. */
 export const OPERATION_LABELS: Record<string, string> = {
 	llm: 'Script & caption (LLM)',
-	image: 'Product still (image)',
+	// Neutral on purpose: this row also covers typographic cards, face-only and
+	// no-reference stills — "Product still" would claim a product that many
+	// compositions deliberately exclude.
+	image: 'Still (image)',
 	video: 'Motion clip (video)',
 	tts: 'Voiceover (TTS)',
 	talking_head: 'Talking head',
-	persist: 'Media storage'
+	persist: 'Media storage',
+	// Seeded by refine when a pre-observability post carries spend with no
+	// per-aspect record — keeps the aspect table summing to its own Total.
+	prior: 'Earlier run (details not recorded)'
 };
 
 /** One aspect of a generation: which model(s) ran and what it cost. */

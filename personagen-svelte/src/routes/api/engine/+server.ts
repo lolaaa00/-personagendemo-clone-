@@ -617,13 +617,13 @@ Output ONLY the JSON.`;
 								const parsed = safeParseJson(raw);
 								if (!parsed || !parsed.text || !parsed.ugc_broll_prompt) return null;
 								// Generate a unique UGC image for this copy — no product-photo fallback
-								const genUrl = await generateUgcImage(parsed.ugc_broll_prompt, orKey, falKey);
+								const gen = await generateUgcImage(parsed.ugc_broll_prompt, orKey, falKey);
 								// Archive it now. With a service key, a persist failure throws →
 								// this item drops to a failure rather than scheduling a post with a
 								// dead media_url. Without one, we fall back to the provider URL.
 								parsed.media_url = batchSvc
-									? await persistToStorage(batchSvc, genUrl, session.user.id, 'png')
-									: genUrl;
+									? await persistToStorage(batchSvc, gen.url, session.user.id, 'png')
+									: gen.url;
 								parsed.media_generated = true;
 								parsed.product = selectedProduct
 									? {
