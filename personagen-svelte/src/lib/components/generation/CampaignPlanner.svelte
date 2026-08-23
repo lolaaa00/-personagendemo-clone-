@@ -235,6 +235,12 @@
 					headers: { 'Content-Type': 'application/json' },
 					body: JSON.stringify({
 						...t.baseBody,
+						// Per-slot variance seed. The Director is stateless, so ten slots
+						// from one franchise template would otherwise get the IDENTICAL
+						// prompt — and "never reuse a previous payload" is unenforceable
+						// without knowing which slot this is. Slot index + date give each
+						// run a distinct identity to diverge from.
+						topic: `${t.baseBody.topic} (Campaign context: this is slot ${i + 1} of ${plan.length}, scheduled ${plan[i].date}. Other slots in this campaign may use this same archetype — choose an angle, payload and specifics DISTINCT from what any other slot would most obviously pick.)`,
 						studio_template: t.id,
 						deliver: 'review',
 						scheduled_date: plan[i].date,

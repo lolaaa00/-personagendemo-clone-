@@ -349,7 +349,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-08-20", hash: "586a7ec", type: "feat", category: "generation", scope: "studio", title: "composition contract — the composer and the pipeline tell the same story" },
 	{ date: "2026-08-23", hash: "30aecc9", type: "feat", category: "feature", scope: "library", title: "one format vocabulary everywhere, and campaigns that fill the calendar" },
 	{ date: "2026-08-23", hash: "87edf53", type: "feat", category: "feature", scope: "studio", title: "selfie-first realism registers (front-cam / mirror / propped) and 80/20 channel-weighted campaign rotation" },
-	{ date: "2026-08-23", hash: "7b53e8a", type: "fix", category: "fix", scope: "personas", title: "both views fill the screen, and bento stops leaving holes" }
+	{ date: "2026-08-23", hash: "7b53e8a", type: "fix", category: "fix", scope: "personas", title: "both views fill the screen, and bento stops leaving holes" },
+	{ date: "2026-08-23", hash: "c843241", type: "fix", category: "generation", scope: "studio", title: "the Output toggle shows its consequences, and campaigns are discoverable from Studio" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -627,12 +628,12 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 	},
 	{
 		id: "7b53e8a", from: "2026-08-23", to: "2026-08-23",
-		category: "fix", categories: ["fix"],
+		category: "fix", categories: ["fix","generation"],
 		title: "Fixed: both views fill the screen, and bento stops leaving…",
-		summary: "Both views fill the screen, and bento stops leaving holes.",
+		summary: "Both views fill the screen, and bento stops leaving holes. Plus 1 more change, touching making posts, images and video.",
 		major: false, curated: false,
-		entries: [CHANGELOG[315]]
+		entries: [CHANGELOG[315], CHANGELOG[316]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "7b53e8a";
+export const CHANGELOG_GENERATED_FROM = "c843241";

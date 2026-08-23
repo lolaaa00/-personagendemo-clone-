@@ -10,6 +10,7 @@ import {
 	type UgcPackInput
 } from '$lib/server/content/generate';
 import { publishPostById } from '$lib/server/scheduler';
+import { assertWithinBudget } from '$lib/server/budget';
 import { getServiceSupabase } from '$lib/server/service-supabase';
 import { priceOf } from '$lib/pricing';
 import {
