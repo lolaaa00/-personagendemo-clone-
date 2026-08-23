@@ -1767,7 +1767,9 @@
 				add(
 					c.media_url || c.mediaUrl,
 					isVideo ? 'video' : 'image',
-					'Post media',
+					// "Asset only" Studio output IS the promised destination of that
+					// toggle — name it so the grid shows the toggle actually worked.
+					c.studio?.standalone === true ? 'Studio asset' : 'Post media',
 					isVideo ? c.poster_url : null,
 					'post',
 					{ postId: p.id }
@@ -4565,13 +4567,21 @@
 						<h2 class="studio-title">Studio</h2>
 						<p class="studio-sub">
 							Pick an archetype — the scaffold opens prefilled with an editable topic and scene,
-							already aimed at {agent.name}'s voice and the applied brand kit.
-							{studioDeliver === 'asset'
-								? 'Results are saved as standalone assets (Content → Assets), skipping the review queue.'
-								: 'Results land as drafts in the review queue.'}
+							already aimed at {agent.name}'s voice and the applied brand kit. For bulk
+							generation across a week or a month, plan a campaign.
 						</p>
 					</div>
-					<div class="studio-deliver" role="radiogroup" aria-label="Output destination">
+					<div class="studio-head-actions">
+						<button
+							type="button"
+							class="studio-campaign-btn"
+							title="Bulk-generate a content mix onto the calendar — drafts for your review"
+							onclick={() => goto('/calendar?campaign=1')}
+						>
+							<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4" /><path d="M8 2v4" /><path d="M3 10h18" /><path d="M8 14h.01" /><path d="M12 14h.01" /><path d="M16 14h.01" /></svg>
+							Plan a campaign
+						</button>
+					<div class="studio-deliver" role="radiogroup" aria-label="Output destination" aria-describedby="studio-deliver-hint">
 						<span class="studio-deliver-label" id="studio-deliver-label">Output</span>
 						<button
 							type="button"
@@ -4593,6 +4603,19 @@
 						>
 							Asset only
 						</button>
+					</div>
+					<!-- The control states its own consequence — the destination is the
+					     toggle's entire meaning, so it lives ON the control, not in prose
+					     three lines away. Delivered posts wear a matching chip. -->
+					<p class="studio-deliver-hint" id="studio-deliver-hint" aria-live="polite">
+						{#if studioDeliver === 'asset'}
+							→ Saved to <strong>Content → Assets</strong> with an <strong>asset</strong> chip.
+							Skips the review queue entirely.
+						{:else}
+							→ Lands in the <strong>Review Queue</strong> as a draft on this persona; publishes
+							only after you approve it.
+						{/if}
+					</p>
 					</div>
 				</div>
 				<!-- Format filter: the axis a user actually thinks in (text / photo /
@@ -5296,6 +5319,52 @@
 		padding: var(--space-1) var(--space-2);
 		background: var(--surface);
 		flex-shrink: 0;
+	}
+	.studio-head-actions {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-end;
+		gap: var(--space-2);
+		max-width: 340px;
+	}
+	.studio-campaign-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.45rem;
+		min-height: 44px;
+		padding: 0.4rem 0.9rem;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		background: var(--surface);
+		color: var(--text);
+		font-size: 0.85rem;
+		font-weight: 600;
+		cursor: pointer;
+		white-space: nowrap;
+	}
+	.studio-campaign-btn:hover {
+		border-color: var(--accent);
+		color: var(--accent);
+	}
+	.studio-deliver-hint {
+		margin: 0;
+		font-size: 0.75rem;
+		line-height: 1.45;
+		color: var(--text-dim);
+		text-align: right;
+	}
+	.studio-deliver-hint strong {
+		color: var(--text);
+		font-weight: 600;
+	}
+	@media (max-width: 720px) {
+		.studio-head-actions {
+			align-items: flex-start;
+			max-width: none;
+		}
+		.studio-deliver-hint {
+			text-align: left;
+		}
 	}
 	.studio-deliver-label {
 		font-family: var(--font-mono);
@@ -6409,42 +6478,44 @@
 	}
 
 	/* ── Bento: OPTIONAL alternate placement of the same six sections ───────
-	   Nothing here changes a section's contents or behaviour — only where it
-	   sits. The six <details> already collapse independently (details elements
-	   never chained); stacking them in one column is what made opening one push
-	   the rest down. In the grid each owns a cell, and align-items:start means a
-	   collapsing section shrinks its own cell and leaves its neighbours put.
+	   Uses multi-column, not grid, and that choice is the whole trick.
 
-	   Order in markup: 1 Brand Kit · 2 Persona Profile · 3 Platform Identity Kit
-	   · 4 Character & Visuals · 5 Automation · 6 Spend & Pricing. */
-	/* ── Bento: OPTIONAL alternate placement of the same six sections ───────
-	   Placement is fully automatic. The first version pinned each section to an
-	   explicit grid-row, which assumed Platform Identity Kit was expanded: with
-	   it collapsed, its reserved two-row cell stayed empty and left a large hole
-	   in the left column. Tiles here change height constantly — that is the whole
-	   point of collapsing — so any hard-coded row is wrong in some state.
+	   CSS Grid cannot do masonry. Its rows are uniform, so a short tile beside a
+	   tall one parks at the top of the row (align-items:start) and leaves the
+	   rest of that row empty underneath it — measured at up to 1676px of dead
+	   space with these sections. `grid-auto-flow: dense` does not help: it
+	   backfills empty CELLS, never the slack inside an occupied row. Since these
+	   tiles collapse and expand constantly, every grid arrangement is wrong in
+	   some state.
 
-	   Auto-flow with `dense` lets every tile take the next free cell and lets
-	   later tiles backfill gaps, so no collapse combination can leave a void.
-	   align-items:start keeps a collapsed tile at its header height instead of
-	   stretching to match its row. */
+	   Multi-column packs items vertically and reflows as heights change, so no
+	   collapse combination can leave a void. The cost is reading order: columns
+	   run top-to-bottom then across, rather than left-to-right. For six
+	   independent cards that is a fair trade for never showing a hole. */
 	.profile-tab.bento {
-		display: grid;
-		grid-template-columns: repeat(3, minmax(0, 1fr));
-		grid-auto-flow: row dense;
-		align-items: start;
-		gap: 1.25rem;
+		display: block;
+		column-count: 3;
+		column-gap: 1.25rem;
+	}
+
+	.profile-tab.bento .profile-section {
+		/* Keep a card whole — without this a section can be split down the middle
+		   across two columns. */
+		break-inside: avoid;
+		-webkit-column-break-inside: avoid;
+		width: 100%;
+		margin: 0 0 1.25rem;
 	}
 
 	@media (max-width: 1500px) {
 		.profile-tab.bento {
-			grid-template-columns: repeat(2, minmax(0, 1fr));
+			column-count: 2;
 		}
 	}
 
 	@media (max-width: 1100px) {
 		.profile-tab.bento {
-			grid-template-columns: 1fr;
+			column-count: 1;
 		}
 	}
 
