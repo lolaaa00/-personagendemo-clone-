@@ -26,6 +26,7 @@
 		getPostErrorSummary
 	} from '$lib/components/feed/postDisplay';
 	import { platformColor } from '$lib/platforms';
+	import { thumbUrl } from '$lib/image-url';
 	import type { CalendarPost } from './types';
 
 	interface RailAgent {
@@ -375,9 +376,10 @@
 
 	function getPostThumb(p: CalendarPost): string | null {
 		const d = getPostDisplay(p);
-		if (d.posterUrl) return d.posterUrl;
-		if (d.mediaUrl && d.mediaType !== 'video') return d.mediaUrl;
-		return null;
+		// Small chips only ever render this at ≤64px, so ask the render endpoint
+		// for a 160w thumb (covers 2× screens) instead of the full-res original.
+		const raw = d.posterUrl || (d.mediaType !== 'video' ? d.mediaUrl : null);
+		return raw ? (thumbUrl(raw, 160) ?? null) : null;
 	}
 
 	function postErrorHint(p: CalendarPost): string | undefined {
@@ -604,6 +606,7 @@
 								<div class="cell-events">
 									{#each dayPosts.slice(0, 3) as post}
 										{@const views = post.analytics?.views ?? 0}
+										{@const thumb = getPostThumb(post)}
 										<button
 											class="event-block"
 											onclick={() => onOpenPost(post)}
@@ -612,13 +615,21 @@
 											<!-- Status is carried by the colour stripe visually; the sr-only
 											     text below is the non-colour equivalent. -->
 											<div class="event-status-bar" style="background: {STATUS_COLORS[post.status]}" aria-hidden="true"></div>
+											<!-- Media-first chip: the generated visual IS the preview; the text
+											     snippet only carries chips that have no media (generating slots,
+											     legacy text posts). -->
+											{#if thumb}
+												<img class="event-thumb" src={thumb} alt="" width="44" height="55" loading="lazy" decoding="async" />
+											{/if}
 											<div class="event-content">
 												<span class="sr-only">{post.status} · {post.time}</span>
 												<span class="event-agent">
 													{post.agentName.split(' ')[0]}
 													{#if views > 0}<span class="event-views">{@render iconEye()} <span class="sr-only">views</span>{fmtNum(views)}</span>{/if}
 												</span>
-												<span class="event-text">{getPostDisplay(post).text}</span>
+												{#if !thumb}
+													<span class="event-text">{getPostDisplay(post).text}</span>
+												{/if}
 											</div>
 										</button>
 									{/each}
@@ -701,8 +712,12 @@
 						<div class="week-col-body">
 							{#each dayPosts as post}
 								{@const views = post.analytics?.views ?? 0}
+								{@const thumb = getPostThumb(post)}
 								<div class="event-block week-event">
 									<div class="event-status-bar" style="background: {STATUS_COLORS[post.status]}" aria-hidden="true"></div>
+									{#if thumb}
+										<img class="event-thumb" src={thumb} alt="" width="44" height="55" loading="lazy" decoding="async" />
+									{/if}
 									<button class="event-main" onclick={() => onOpenPost(post)} title={postErrorHint(post)}>
 										<span class="sr-only">{post.status}</span>
 										<span class="event-time">{post.time}</span>
@@ -710,7 +725,9 @@
 											{post.agentName.split(' ')[0]}
 											{#if views > 0}<span class="event-views">{@render iconEye()} <span class="sr-only">views</span>{fmtNum(views)}</span>{/if}
 										</span>
-										<span class="event-text">{getPostDisplay(post).text}</span>
+										{#if !thumb}
+											<span class="event-text">{getPostDisplay(post).text}</span>
+										{/if}
 									</button>
 									{#if post.status === 'draft' && onApprove}
 										<button
@@ -1455,6 +1472,17 @@
 	.event-status-bar {
 		width: 3px;
 		flex-shrink: 0;
+	}
+
+	/* Media-first chip preview: a small 4:5 crop of the post's visual, stretched
+	   to the chip's full height so the chip reads as the content itself. */
+	.event-thumb {
+		width: 44px;
+		align-self: stretch;
+		min-height: 44px;
+		object-fit: cover;
+		flex-shrink: 0;
+		background: var(--surface-3);
 	}
 
 	.event-content {
