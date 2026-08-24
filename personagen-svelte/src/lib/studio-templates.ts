@@ -306,7 +306,10 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 		tagline: 'Over-the-top concept, your call',
 		category: 'cinematic',
 		pipeline: 'Cinematic',
-		intent: 'channel',
+		// Brand, not channel: the concept STARS the featured product, and the
+		// cinematic pipeline hard-requires a product photo — advertising it as
+		// product-free channel content was a lie the composer then inherited.
+		intent: 'brand',
 		surface: 'cinematic',
 		sample: 'Something nobody asked for and everybody reposts.',
 		baseBody: {
@@ -372,7 +375,7 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 		sample: 'You don’t need a bigger feed. You need a sharper one.',
 		baseBody: {
 			topic:
-				"A quote card built to be reshared: one short, punchy line in the persona's voice that captures why the featured product matters — a truth the audience already feels but hasn't put into words. The caption expands on the line and invites people to send it to someone who needs it.",
+				"A quote card built to be reshared: one short, punchy line in the persona's voice that names a truth about their niche the audience already feels but hasn't put into words. The caption expands on the line and invites people to send it to someone who needs it.",
 			scene:
 				'Minimal typographic quote card: the quote set LARGE in an elegant modern typeface, perfectly legible, centered on a clean solid or softly textured background in brand-adjacent tones, small handle credit at the bottom. Flawless spelling, no extra graphics, museum-poster restraint.',
 			media: 'image',
@@ -410,7 +413,7 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 		sample: '73% never make it past the first line.',
 		baseBody: {
 			topic:
-				'A single surprising, true-to-the-niche statistic or comparison that reframes why the featured product category matters — the number IS the hook. Caption gives the context and the source framing, then ties it to the product in one line.',
+				'A single surprising, true-to-the-niche statistic or comparison that reframes how the audience sees the persona’s niche — the number IS the hook. Caption gives the context and the source framing in the persona’s voice.',
 			scene:
 				'Editorial data-headline graphic: the number rendered HUGE in a display typeface, one short supporting line beneath it, restrained single-accent color on a clean ground, broadsheet-front-page energy, flawless spelling and digits.',
 			media: 'image',
@@ -424,7 +427,9 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 		tagline: 'The transformation in one frame — no video needed',
 		category: 'social',
 		pipeline: 'Still image',
-		intent: 'channel',
+		// Brand: the frame shows the featured product's result and composites
+		// its reference photo — that is promotion, not channel content.
+		intent: 'brand',
 		surface: 'photo',
 		sample: 'Left: the problem. Right: ten minutes later.',
 		baseBody: {

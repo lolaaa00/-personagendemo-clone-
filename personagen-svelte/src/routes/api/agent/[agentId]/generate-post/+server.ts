@@ -25,6 +25,12 @@ import {
 } from '$lib/server/model-registry';
 import { VOICE_CATALOG, DEFAULT_VOICE } from '$lib/server/voices';
 import { VIDEO_ONLY_PLATFORMS } from '$lib/server/social/platforms';
+import {
+	normalizeGenerationBody,
+	normalizePlatforms,
+	selectRunProduct,
+	operationProvenance
+} from '$lib/generation/contracts';
 
 /**
  * Generate a fresh UGC post (caption + AI image tuned to the brand brief / product)
@@ -70,6 +76,19 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		/* an empty body is fine */
 	}
 
+	// ── Operation contract — ONE resolution path for preview and POST ────────
+	// A Studio template stays the operation clicked: its catalog contract
+	// overrides the locked fields (media/format/still/refs) and strips stale
+	// hidden client state (product ids on product-free compositions, video
+	// models on runs that feed none). Generic requests resolve an explicit
+	// generic contract and keep their flexibility.
+	const normalized = normalizeGenerationBody(body);
+	const contract = normalized.contract;
+	// The explicit delivery outcome. 'publish-flow' is the legacy behavior
+	// (schedule/publish per platforms + slot); everything else pins a draft.
+	const deliveryPolicy = normalized.delivery;
+	body = normalized.body;
+
 	// Model Manager: resolve models against the user's registry (enable/disable,
 	// per-kind default, price overrides). Unreachable/empty registry falls back
 	// to the static catalog — the manager can refine generation, never brick it.
@@ -98,16 +117,12 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 	// shows toggled-off chips as off, so treating [] as "all connected" would
 	// publish to every account the user just deselected. Only an ABSENT field
 	// defaults to all connected platforms.
-	const requestedPlatforms: string[] | null = Array.isArray(body.platforms)
-		? body.platforms
-				.map((p: string) => String(p).toLowerCase())
-				.filter((p: string) => connectedPlatforms.includes(p))
-		: null;
+	const requestedPlatforms = normalizePlatforms(body.platforms, connectedPlatforms);
 	const targetPool = requestedPlatforms === null ? connectedPlatforms : requestedPlatforms;
 
 	// Cinematic mode is fal-exclusive (Kling O3 Pro reference-to-video) — check
 	// the key up front so a missing key fails fast, BEFORE any LLM spend.
-	const wantCinematic = body.media === 'cinematic';
+	const wantCinematic = contract.media === 'cinematic';
 	if (wantCinematic) {
 		const { falKey } = await resolveImageKeys(locals.supabase, user.id);
 		if (!falKey) {
@@ -132,12 +147,9 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 				? await db.brandBriefs.getById(cinCfg.brand_brief_id, user.id)
 				: { data: null };
 			const cinProducts = Array.isArray(cinBrief?.data?.products) ? cinBrief.data.products : [];
-			// Same selection order the pipeline uses: requested id, else first with a photo.
-			const cinProduct =
-				cinProducts.find((p: any) => p.id === (body.product_id || body.productId)) ||
-				cinProducts.find((p: any) => p.photoUrl) ||
-				cinProducts[0] ||
-				null;
+			// The EXACT selection the pipeline will run — one shared seam, so the
+			// precheck can never pass a product the run would then fail to find.
+			const cinProduct = selectRunProduct(cinProducts, body.product_id || body.productId, true);
 			if (!cinProduct?.photoUrl) {
 				return json(
 					{
@@ -194,25 +206,32 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		// Captions + AI badge are OFF unless the composer explicitly opts in.
 		captions: body.captions === true,
 		aiBadge: body.ai_badge === true,
-		// Composition contract from Studio templates: how the still is composed
-		// ('graphic' = typographic card, no refs) and which references a 'photo'
-		// still actually feeds. Absent (plain composer flows) = legacy behavior.
-		stillStyle: (body.still === 'graphic' ? 'graphic' : 'photo') as 'photo' | 'graphic',
-		useCharacterRef: !(body.refs && body.refs.character === false),
-		useProductRef: !(body.refs && body.refs.product === false)
+		// Composition contract: how the still is composed ('graphic' =
+		// typographic card, no refs) and which references this run actually
+		// feeds — all read from the resolved operation contract, so preview,
+		// POST, and the generator can never disagree about the policy.
+		stillStyle: contract.media === 'cinematic' ? ('photo' as const) : contract.still,
+		useCharacterRef: contract.characterRef,
+		useProductRef: contract.productRef,
+		// Semantic policy, separate from the image reference: a channel
+		// operation never gets a product auto-selected into its Director prompt.
+		useProductContext: contract.productContext
 	};
 
 	// ── Studio delivery contract ─────────────────────────────────────────────
 	// `studio_template` tags the output with the archetype that produced it (so
 	// the Studio gallery can surface real generations as template previews).
-	// `deliver` overrides the destination: 'review' pins the result as a DRAFT
-	// even when a platform is connected — without it, an unscheduled generate
-	// publishes immediately, which is right for "post now" but wrong for Studio —
-	// and 'asset' additionally marks it standalone so the review queue skips it.
+	// deliveryPolicy is the explicit composer outcome resolved above: 'review'
+	// pins the result as a DRAFT even when a platform is connected, 'asset'
+	// additionally marks it standalone so the review queue skips it, and
+	// 'draft' saves without publishing. Only 'publish-flow' may publish.
 	const studioTemplate =
 		typeof body.studio_template === 'string' ? body.studio_template.slice(0, 64) : null;
 	const deliver: 'review' | 'asset' | null =
-		body.deliver === 'asset' || body.deliver === 'review' ? body.deliver : null;
+		deliveryPolicy === 'review' || deliveryPolicy === 'asset' ? deliveryPolicy : null;
+	// Every non-publish outcome pins a draft; the publish flow alone may
+	// schedule or publish.
+	const forceDraft = deliveryPolicy !== 'publish-flow';
 	const studioMeta =
 		studioTemplate || deliver
 			? {
@@ -242,22 +261,19 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 			: { data: null };
 		const briefData = selectedBrief?.data || null;
 		const products = Array.isArray(briefData?.products) ? briefData.products : [];
-		const product =
-			products.find((p: any) => p.id === genInput.productId) ||
-			products.find((p: any) => p.photoUrl) ||
-			products[0] ||
-			null;
+		// A product is only RESOLVED when the operation may use one — as a
+		// reference image or as semantic context. A product-free composition
+		// gets none, so no hidden id can ride back through the composer.
+		const productApplies = contract.productRef || contract.productContext;
+		const product = selectRunProduct(products, genInput.productId, productApplies);
 
-		const mediaKind = wantCinematic ? 'cinematic' : genInput.video === false ? 'image' : 'video';
-		// The composition contract decides which refs this run will actually feed —
-		// the preview must show ONLY those. A ref nulled by policy is deliberate,
-		// and the composer hides its field entirely (cinematic runs its own pack
-		// and always composites both, so the contract applies to image/video only).
-		const stillStyle = wantCinematic ? 'photo' : genInput.stillStyle;
-		const useCharacter =
-			wantCinematic || (genInput.useCharacterRef !== false && stillStyle !== 'graphic');
-		const useProduct =
-			wantCinematic || (genInput.useProductRef !== false && stillStyle !== 'graphic');
+		const mediaKind = contract.media;
+		// The reference policy comes from the resolved operation contract — the
+		// preview shows ONLY what the run will feed (cinematic's own pack always
+		// composites both references, and its contract says exactly that).
+		const stillStyle = genInput.stillStyle;
+		const useCharacter = contract.characterRef;
+		const useProduct = contract.productRef;
 		const characterRef =
 			genInput.characterRefOverride || (useCharacter ? cfgRow?.ugc_character_ref || null : null);
 		const productPhoto =
@@ -435,6 +451,11 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 				// The composition contract this run obeys — the composer shows ONLY the
 				// reference fields the pipeline will actually feed.
 				composition: { still: stillStyle, character: useCharacter, product: useProduct },
+				// The full resolved operation contract + the explicit delivery
+				// outcome, so the composer renders from the same resolution the
+				// POST will enforce — never from client-side guesses.
+				contract,
+				deliver: deliveryPolicy,
 				scheduledDate,
 				scheduledTime,
 				// Budget control: the clip is by far the biggest line item, so let the
@@ -454,21 +475,21 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 				// Captions + AI badge default OFF — the composer surfaces them as toggles.
 				captions: false,
 				aiBadge: false,
+				// Only fields the resolved operation actually consumes are editable —
+				// a control that cannot change this run is not offered at all.
 				editable: [
 					'topic',
-					'media',
-					'provider',
-					'platforms',
-					'product_id',
-					'product_photo_url',
-					'character_ref_url',
 					'scene',
-					'video_model',
-					'format',
-					'scheduled_date',
-					'scheduled_time',
-					'captions',
-					'ai_badge'
+					...(contract.lockMedia ? [] : ['media']),
+					...(contract.lockFormat ? [] : ['format']),
+					...(contract.providerApplies ? ['provider'] : []),
+					...(productApplies ? ['product_id', 'product_photo_url'] : []),
+					...(contract.characterRef ? ['character_ref_url'] : []),
+					...(contract.videoModelApplies ? ['video_model'] : []),
+					...(contract.captionsApply ? ['captions', 'ai_badge'] : []),
+					...(deliveryPolicy === 'asset'
+						? []
+						: ['platforms', 'scheduled_date', 'scheduled_time'])
 				],
 				steps,
 				estimatedCostUsd: +steps.reduce((s, x) => s + x.usd, 0).toFixed(4)
@@ -497,12 +518,18 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 	// defaulting to "photo" for a video/cinematic run. Templates aren't the only
 	// source of type anymore — plain composer and campaign slots carry it too.
 	const intended = {
-		media: wantCinematic ? 'cinematic' : body.media === 'image' ? 'image' : 'video',
+		media: contract.media,
 		...(genInput.formatOverride !== 'auto' && !wantCinematic && body.media !== 'image'
 			? { format: genInput.formatOverride }
 			: {}),
 		...(genInput.stillStyle === 'graphic' ? { still: 'graphic' } : {})
 	};
+	// Full forensic stamp (operation id/version, expected result kind, expected
+	// reference policy, requested delivery) — persisted inside the content JSON
+	// on the placeholder, the final row, AND failures, so any result can be
+	// checked against the operation that was advertised. Older rows simply lack
+	// the key; every reader treats it as optional.
+	const operation = operationProvenance(contract, deliveryPolicy);
 
 	// ── Async job path ───────────────────────────────────────────────────────
 	// Create the post row up front so the client has an id to poll. A caller-
@@ -518,6 +545,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		content: JSON.stringify({
 			topic: body.topic || null,
 			intended,
+			operation,
 			...(studioMeta ? { studio: studioMeta } : {})
 		}),
 		platforms: targetPool,
@@ -564,7 +592,11 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 				const pack = wantCinematic
 					? await generateCinematicUgcPack({ supabase: taskSupabase, ...genInput, postId })
 					: await generateUgcPack({ supabase: taskSupabase, ...genInput, postId });
-				const content = studioMeta ? { ...pack.content, studio: studioMeta } : pack.content;
+				const content = {
+					...pack.content,
+					operation,
+					...(studioMeta ? { studio: studioMeta } : {})
+				};
 
 				// Which SELECTED platforms can actually accept this pack's media type?
 				let publishablePlatforms = targetPool;
@@ -576,9 +608,9 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 
 				// No publishable platform → keep the generated content as a DRAFT
 				// rather than failing. This is the "generate without a connection" path.
-				// A Studio `deliver` request pins a draft too — Studio output must
-				// never race straight to a live platform.
-				if (deliver || publishablePlatforms.length === 0) {
+				// Every explicit non-publish delivery (review/asset/draft) pins a
+				// draft too — those outcomes must never race to a live platform.
+				if (forceDraft || publishablePlatforms.length === 0) {
 					await taskDb.posts.update(postId, {
 						content: JSON.stringify(content),
 						platforms: targetPool,
@@ -618,6 +650,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 						content: JSON.stringify({
 							topic: body.topic || null,
 							intended,
+							operation,
 							error: (genErr as Error).message || 'Generation failed',
 							...(studioMeta ? { studio: studioMeta } : {})
 						})
@@ -641,7 +674,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		const pack = wantCinematic
 			? await generateCinematicUgcPack({ supabase: locals.supabase, ...genInput })
 			: await generateUgcPack({ supabase: locals.supabase, ...genInput });
-		content = studioMeta ? { ...pack.content, studio: studioMeta } : pack.content;
+		content = { ...pack.content, operation, ...(studioMeta ? { studio: studioMeta } : {}) };
 	} catch (genErr) {
 		const msg = (genErr as Error).message;
 		const status = /image generation/i.test(msg) ? 502 : 500;
@@ -659,13 +692,15 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 	const now = new Date();
 
 	// No publishable platform → save the generated content as a DRAFT rather
-	// than erroring. This is the "generate without a connection" path. A Studio
-	// `deliver` request pins a draft too (see the async path for why).
-	if (deliver || publishablePlatforms.length === 0) {
-		const reason = deliver
-			? deliver === 'asset'
+	// than erroring. This is the "generate without a connection" path. Every
+	// explicit non-publish delivery pins a draft too (see the async path).
+	if (forceDraft || publishablePlatforms.length === 0) {
+		const reason = forceDraft
+			? deliveryPolicy === 'asset'
 				? 'Saved as a standalone asset — it will not appear in the review queue.'
-				: 'Saved as a draft for review, as requested.'
+				: deliveryPolicy === 'review'
+					? 'Saved as a draft for review, as requested.'
+					: 'Saved as a draft — nothing publishes, as requested.'
 			: connectedPlatforms.length === 0
 				? 'No social account connected yet — saved as a draft.'
 				: `Content is image-only and the selected platform(s) (${targetPool.join(', ')}) don't accept image posts — saved as a draft.`;

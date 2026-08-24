@@ -50,6 +50,7 @@ import { burnCaptions, optimizeForWeb } from '$lib/server/video';
 import { renderTypographicCard, CARD_RENDERER_LABEL } from './card-renderer';
 import { fetchWithTimeout } from '$lib/server/social/http';
 import { assertWithinBudget } from '$lib/server/budget';
+import { selectRunProduct, resolveRunFormat } from '$lib/generation/contracts';
 
 // Every provider call in this file gets a hard PER-REQUEST deadline. The queue
 // pollers below bound total job time, but only a per-request timeout stops a
@@ -1328,9 +1329,9 @@ export async function generateCinematicUgcPack(input: UgcPackInput): Promise<Ugc
 		if (brandBrief?.data) {
 			briefData = brandBrief.data;
 			const products = Array.isArray(briefData.products) ? briefData.products : [];
-			selectedProduct = input.productId
-				? products.find((p: any) => p.id === input.productId)
-				: products.find((p: any) => p.photoUrl) || products[0];
+			// Cinematic is a product operation by contract — it composites the
+			// product into every shot, so product context is always allowed here.
+			selectedProduct = selectRunProduct(products, input.productId, true);
 		}
 		// The composer's Product photo URL override wins here exactly as it does on
 		// the standard pipeline — an editable field the run then ignored would make
@@ -1752,6 +1753,12 @@ export interface UgcPackInput {
 	 *  (channel content is product-free by design). An explicit
 	 *  productPhotoUrlOverride still wins. Default true. */
 	useProductRef?: boolean;
+	/** false = no product SEMANTIC context either: the Director/grader never
+	 *  see a product, and none is auto-selected from the brand brief. Separate
+	 *  from useProductRef (the image), because a channel composition must not
+	 *  quietly write product copy while hiding the product photo. Default true
+	 *  (legacy/brand behavior). */
+	useProductContext?: boolean;
 	/** Model picks from the composer — the user's budget-vs-quality decision. */
 	videoModel?: string;
 	/** Registry price override for that model (Model Manager edit). The ledger
@@ -3001,15 +3008,17 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 		const { voice: resolvedVoice, voiceGender } = resolveVoiceForPersona(cfg.voice, agentData);
 
 		// ── Brand brief + product (persona's selected brief, newest as fallback) ──
+		// Product selection obeys the operation's SEMANTIC-context policy: a
+		// channel/product-free composition gets no product at all — the Director
+		// writes to the Topic, the grader grades without one — even when the
+		// brief is full of products. Brand and legacy paths keep the old order.
 		let selectedProduct: any = null;
 		let briefData: any = null;
 		const brandBrief = await loadBriefForAgent(db, userId, cfg.brandBriefId);
 		if (brandBrief?.data) {
 			briefData = brandBrief.data;
 			const products = Array.isArray(briefData.products) ? briefData.products : [];
-			selectedProduct = input.productId
-				? products.find((p: any) => p.id === input.productId)
-				: products.find((p: any) => p.photoUrl) || products[0];
+			selectedProduct = selectRunProduct(products, input.productId, input.useProductContext !== false);
 		}
 
 		// ── Content intent classification ───────────────────────────────────
@@ -3113,13 +3122,23 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 			}
 		}
 
-		let format: 'spokesperson' | 'broll' =
-			formatPref === 'auto' ? (parsed.format === 'broll' ? 'broll' : 'spokesperson') : formatPref;
-		// A graphic card has no face to animate — a talking head cannot run on it.
-		// (Reachable only when the composer switches a graphic template to video.)
-		if (input.stillStyle === 'graphic' && format === 'spokesperson') {
+		// The talking-head branch requires a face contract: a graphic card has no
+		// face to animate, and a composition that EXCLUDES the persona
+		// (useCharacterRef === false — product macros, mood boards, POV) must not
+		// run a spokesperson either. Both coerce to b-roll, explicitly.
+		const resolvedFormat = resolveRunFormat(
+			formatPref,
+			typeof parsed.format === 'string' ? parsed.format : undefined,
+			input.stillStyle === 'graphic' ? 'graphic' : 'photo',
+			input.useCharacterRef !== false
+		);
+		let format: 'spokesperson' | 'broll' = resolvedFormat.format;
+		if (resolvedFormat.coerced === 'graphic-still') {
 			console.warn('[Composer] Graphic still cannot drive a talking head — coercing to b-roll.');
-			format = 'broll';
+		} else if (resolvedFormat.coerced === 'no-character') {
+			console.warn(
+				'[Composer] Composition excludes the persona — spokesperson coerced to b-roll.'
+			);
 		}
 		// A composer-edited visual brief outranks the Director's scene.
 		const scenePrompt =

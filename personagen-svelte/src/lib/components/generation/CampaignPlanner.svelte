@@ -14,6 +14,7 @@
 	 */
 	import Modal from '$lib/components/ui/Modal.svelte';
 	import { STUDIO_TEMPLATES, PIPELINE_USD, type StudioTemplate } from '$lib/studio-templates';
+	import { campaignEligibility } from '$lib/generation/contracts';
 
 	let {
 		open,
@@ -53,11 +54,66 @@
 		),
 		cinematic: STUDIO_TEMPLATES.filter((t) => t.pipeline === 'Cinematic')
 	};
+
+	// ── Reference preflight + explicit destinations ──────────────────────────
+	// One preview call (resolve-only, no spend, no row) tells the planner what
+	// this persona actually has: brand-kit products with photos, and connected
+	// platforms. Slots whose operation contract needs a product photo are
+	// excluded VISIBLY when none exists — never launched doomed, never silently
+	// swapped to a different reference policy — and every queued slot carries
+	// an explicit destination list instead of inheriting "all connected".
+	let refAvail = $state<{ hasProductPhoto: boolean; connected: string[] } | null>(null);
+	let preflightError = $state<string | null>(null);
+	let selectedPlatforms = $state<string[]>([]);
+	async function loadPreflight(id: string) {
+		refAvail = null;
+		preflightError = null;
+		try {
+			const res = await fetch(`/api/agent/${id}/generate-post`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ preview: true, media: 'image' })
+			});
+			const j = await res.json().catch(() => ({}));
+			if (!res.ok || !j?.success) throw new Error(j?.error || `HTTP ${res.status}`);
+			const products = Array.isArray(j.preview?.products) ? j.preview.products : [];
+			const connected = Array.isArray(j.preview?.connectedPlatforms)
+				? j.preview.connectedPlatforms
+				: [];
+			refAvail = { hasProductPhoto: products.some((p: any) => p.photoUrl), connected };
+			selectedPlatforms = [...connected];
+		} catch (e) {
+			preflightError = (e as Error).message || 'Could not check this persona’s brand kit.';
+		}
+	}
+	$effect(() => {
+		if (open && agentId) loadPreflight(agentId);
+	});
+	function toggleDestination(p: string) {
+		selectedPlatforms = selectedPlatforms.includes(p)
+			? selectedPlatforms.filter((x) => x !== p)
+			: [...selectedPlatforms, p];
+	}
+
+	// Pools this persona can actually run right now.
+	let availablePools = $derived.by<Record<FormatClass, StudioTemplate[]>>(() => {
+		const avail = { hasProductPhoto: refAvail?.hasProductPhoto ?? true };
+		const fit = (list: StudioTemplate[]) =>
+			list.filter((t) => campaignEligibility(t.id, avail).eligible);
+		return {
+			typographic: fit(POOLS.typographic),
+			photo: fit(POOLS.photo),
+			video: fit(POOLS.video),
+			cinematic: fit(POOLS.cinematic)
+		};
+	});
+	const classAvailable = (c: FormatClass) => availablePools[c].length > 0;
+
 	// Price with the SAME 4:1 channel:brand rotation buildPlan runs — a flat pool
 	// average priced a distribution the planner doesn't produce (e.g. every
 	// channel video template is a Talking head; all Product motion is brand).
 	const poolAvgUsd = (c: FormatClass) => {
-		const pool = POOLS[c];
+		const pool = availablePools[c];
 		if (!pool.length) return 0;
 		const avg = (l: StudioTemplate[]) =>
 			l.reduce((s, t) => s + PIPELINE_USD[t.pipeline], 0) / Math.max(1, l.length);
@@ -85,7 +141,10 @@
 		video: 30,
 		cinematic: 5
 	});
-	let weightSum = $derived(CLASSES.reduce((s, c) => s + (weights[c.id] || 0), 0));
+	// A class with no eligible templates contributes nothing — its weight must
+	// not siphon slots into a pool that cannot run.
+	const effectiveWeight = (c: FormatClass): number => (classAvailable(c) ? weights[c] || 0 : 0);
+	let weightSum = $derived(CLASSES.reduce((s, c) => s + effectiveWeight(c.id), 0));
 
 	// One launch is capped — a month at 3/day is 90 generations, which is a
 	// bill and a rate-limit risk nobody should trip by accident.
@@ -104,7 +163,7 @@
 		if (weightSum <= 0 || totalPosts <= 0) return out;
 		const exact = CLASSES.map((c) => ({
 			id: c.id,
-			raw: (totalPosts * (weights[c.id] || 0)) / weightSum
+			raw: (totalPosts * effectiveWeight(c.id)) / weightSum
 		}));
 		let used = 0;
 		for (const e of exact) {
@@ -180,12 +239,13 @@
 			CLASSES.flatMap((c) => Array<FormatClass>(allocation[c.id]).fill(c.id))
 		);
 		// Per-class template rotation (shuffled cycle) so a campaign uses the
-		// breadth of the catalog instead of hammering one archetype.
+		// breadth of the catalog instead of hammering one archetype. Only
+		// preflight-eligible templates enter the cycle.
 		const cycles: Record<FormatClass, StudioTemplate[]> = {
-			typographic: channelWeightedCycle(POOLS.typographic),
-			photo: channelWeightedCycle(POOLS.photo),
-			video: channelWeightedCycle(POOLS.video),
-			cinematic: channelWeightedCycle(POOLS.cinematic)
+			typographic: channelWeightedCycle(availablePools.typographic),
+			photo: channelWeightedCycle(availablePools.photo),
+			video: channelWeightedCycle(availablePools.video),
+			cinematic: channelWeightedCycle(availablePools.cinematic)
 		};
 		const cursor: Record<FormatClass, number> = {
 			typographic: 0,
@@ -236,7 +296,7 @@
 	});
 
 	async function launch() {
-		if (!agentId || launching || totalPosts <= 0 || weightSum <= 0) return;
+		if (!agentId || launching || totalPosts <= 0 || weightSum <= 0 || !refAvail) return;
 		const plan = buildPlan();
 		planSize = plan.length;
 		launching = true;
@@ -261,6 +321,10 @@
 						topic: `${t.baseBody.topic} (Campaign context: this is slot ${i + 1} of ${plan.length}, scheduled ${plan[i].date}. Other slots in this campaign may use this same archetype — choose an angle, payload and specifics DISTINCT from what any other slot would most obviously pick.)`,
 						studio_template: t.id,
 						deliver: 'review',
+						// Explicit destinations, chosen visibly above — an approved
+						// draft publishes ONLY where the user pointed this campaign,
+						// never implicitly to every connected account.
+						platforms: [...selectedPlatforms],
 						scheduled_date: plan[i].date,
 						scheduled_time: plan[i].time
 					})
@@ -351,13 +415,30 @@
 			</div>
 		</div>
 
+		{#if preflightError}
+			<div class="cp-preflight-error" role="alert">
+				<strong>Couldn’t check this persona’s brand kit and connections.</strong>
+				<p>{preflightError}</p>
+				<button type="button" class="cp-chip" onclick={() => agentId && loadPreflight(agentId)}>
+					Retry
+				</button>
+			</div>
+		{:else if refAvail && !refAvail.hasProductPhoto}
+			<p class="cp-preflight-note" role="note">
+				No product photo in this persona’s brand kit — product and cinematic templates are left
+				out of this campaign (their compositions composite the product photo). Add a product
+				photo in the Brand Brief to include them.
+			</p>
+		{/if}
+
 		<div class="cp-field">
 			<span class="cp-label">Content mix</span>
 			<span class="cp-hint">
 				Set the ratio with the sliders — they're weights, so they don't need to add up to 100.
 			</span>
 			{#each CLASSES as c (c.id)}
-				<div class="cp-mix-row">
+				{@const unavailable = !classAvailable(c.id)}
+				<div class="cp-mix-row" class:cp-mix-off={unavailable}>
 					<span class="cp-mix-name" title={c.hint}>{c.label}</span>
 					<input
 						type="range"
@@ -365,7 +446,7 @@
 						max="100"
 						step="5"
 						bind:value={weights[c.id]}
-						disabled={launching}
+						disabled={launching || unavailable}
 						aria-label={`${c.label} share`}
 					/>
 					<input
@@ -374,16 +455,48 @@
 						min="0"
 						max="100"
 						bind:value={weights[c.id]}
-						disabled={launching}
+						disabled={launching || unavailable}
 						aria-label={`${c.label} weight`}
 					/>
 					<span class="cp-mix-count" aria-live="polite">
-						{allocation[c.id]} post{allocation[c.id] === 1 ? '' : 's'}
+						{#if unavailable}needs product photo{:else}{allocation[c.id]} post{allocation[c.id] === 1 ? '' : 's'}{/if}
 					</span>
 				</div>
 			{/each}
 			{#if weightSum <= 0}
 				<p class="cp-warn" role="alert">Every format is at zero — give at least one a weight.</p>
+			{/if}
+		</div>
+
+		<div class="cp-field">
+			<span class="cp-label" id="cp-destinations">Destinations</span>
+			{#if refAvail === null && !preflightError}
+				<span class="cp-hint">Checking connected accounts…</span>
+			{:else if refAvail && refAvail.connected.length}
+				<div class="cp-chips" role="group" aria-labelledby="cp-destinations">
+					{#each refAvail.connected as p (p)}
+						<button
+							type="button"
+							class="cp-chip cp-chip-platform"
+							class:on={selectedPlatforms.includes(p)}
+							aria-pressed={selectedPlatforms.includes(p)}
+							disabled={launching}
+							onclick={() => toggleDestination(p)}>{p}</button
+						>
+					{/each}
+				</div>
+				<span class="cp-hint">
+					{#if selectedPlatforms.length}
+						Approved drafts publish to {selectedPlatforms.join(', ')} at their scheduled time.
+					{:else}
+						No destination selected — every slot stays a draft even after approval.
+					{/if}
+				</span>
+			{:else}
+				<span class="cp-hint">
+					No account connected — every slot is generated as a draft with nowhere to publish.
+					Connect a platform to give approved drafts a destination.
+				</span>
 			{/if}
 		</div>
 
@@ -420,7 +533,7 @@
 			<button class="btn-ghost" onclick={onClose}>Cancel</button>
 			<button
 				class="btn-primary"
-				disabled={!agentId || totalPosts <= 0 || weightSum <= 0}
+				disabled={!agentId || totalPosts <= 0 || weightSum <= 0 || !refAvail}
 				onclick={launch}
 			>
 				Generate {totalPosts} drafts · est. {usd(estimatedUsd)}
@@ -535,6 +648,35 @@
 		margin: 0.3rem 0 0;
 		font-size: 0.8rem;
 		color: var(--error-text, var(--error));
+	}
+	.cp-mix-off {
+		opacity: 0.55;
+	}
+	.cp-preflight-error {
+		border: 1px solid color-mix(in srgb, var(--error) 40%, transparent);
+		background: var(--error-soft);
+		color: var(--error-text);
+		border-radius: 10px;
+		padding: 0.75rem 0.9rem;
+		margin-bottom: 0.9rem;
+		font-size: 0.85rem;
+	}
+	.cp-preflight-error p {
+		margin: 0.3rem 0 0.5rem;
+		font-size: 0.8rem;
+	}
+	.cp-preflight-note {
+		margin: 0 0 0.9rem;
+		padding: 0.6rem 0.75rem;
+		border: 1px solid var(--border);
+		border-radius: 10px;
+		background: var(--surface);
+		color: var(--muted);
+		font-size: 0.8rem;
+		line-height: 1.45;
+	}
+	.cp-chip-platform {
+		text-transform: capitalize;
 	}
 	.cp-warn-inline {
 		color: var(--warning, #b45a0a);

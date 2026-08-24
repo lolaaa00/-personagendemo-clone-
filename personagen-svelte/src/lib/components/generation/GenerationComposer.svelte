@@ -15,6 +15,16 @@
 	import Modal from '$lib/components/ui/Modal.svelte';
 	import type { ComposerSpec } from './types';
 	import { TIER_LABEL, type ModelOption } from '$lib/models';
+	import {
+		resolveStudioContract,
+		resolveGenericContract,
+		type OperationContract
+	} from '$lib/generation/contracts';
+	import {
+		composerFieldPlan,
+		resolveComposerDelivery,
+		buildComposerPayload
+	} from '$lib/generation/composer-plan';
 
 	interface Props {
 		open: boolean;
@@ -73,19 +83,29 @@
 	let isPromptKind = $derived(!!preview && typeof preview.prompt === 'string');
 	let isPostKind = $derived(!!preview && Array.isArray(preview.steps));
 
-	// The composition contract from the server: which reference fields this run
-	// will actually feed, and whether the still is a typographic card. Absent on
-	// legacy previews → show everything (that pipeline feeds both refs).
-	// Cinematic is the exception: its multi-shot pack always composites both
-	// references, so switching the Media select to cinematic suspends the
-	// contract here exactly like the run would.
-	let composition = $derived<{ still?: string; character?: boolean; product?: boolean } | null>(
-		preview?.composition ?? null
+	// ── The operation contract this composer renders from ───────────────────
+	// A Studio template button resolves its catalog contract (locked: the
+	// composer must stay the operation clicked — studioContract?.lockMedia hides
+	// the media switch entirely). Everything else resolves an explicit generic
+	// contract from the CURRENT variant, so a media/format switch re-resolves
+	// the complete variant contract instead of reusing stale reference policy.
+	let studioContract = $derived<OperationContract | null>(
+		typeof spec?.baseBody?.studio_template === 'string'
+			? resolveStudioContract(spec.baseBody.studio_template)
+			: null
 	);
-	let activeComposition = $derived(media === 'cinematic' ? null : composition);
-	let usesCharacterRef = $derived(!activeComposition || activeComposition.character !== false);
-	let usesProductRef = $derived(!activeComposition || activeComposition.product !== false);
-	let isGraphicCard = $derived(activeComposition?.still === 'graphic');
+	let activeContract = $derived<OperationContract>(
+		studioContract ??
+			resolveGenericContract({
+				media,
+				format,
+				still: spec?.baseBody?.still as string | undefined,
+				refs: spec?.baseBody?.refs as { character?: boolean; product?: boolean } | undefined
+			})
+	);
+	let usesCharacterRef = $derived(activeContract.characterRef);
+	let usesProductRef = $derived(activeContract.productRef);
+	let isGraphicCard = $derived(activeContract.still === 'graphic');
 
 	let modelOptions = $derived<ModelOption[]>(preview?.modelOptions ?? []);
 	let selectedModel = $derived(modelOptions.find((m) => m.id === model) ?? null);
@@ -137,10 +157,20 @@
 	// Where approving SENDS this run. The consequence belongs ON the button —
 	// "Approve & generate" that quietly publishes live to a connected account the
 	// moment generation finishes is exactly the kind of surprise this dialog
-	// exists to prevent.
+	// exists to prevent. The server's resolved preview.deliver is authoritative;
+	// the spec's baseBody covers the moment before the preview lands.
 	let deliverMode = $derived(
-		typeof spec?.baseBody?.deliver === 'string' ? (spec.baseBody.deliver as string) : null
+		(typeof preview?.deliver === 'string' ? preview.deliver : null) ??
+			(typeof spec?.baseBody?.deliver === 'string' ? (spec.baseBody.deliver as string) : null)
 	);
+	// The explicit delivery policy this composer will SUBMIT — never inferred
+	// server-side from a missing field.
+	let delivery = $derived(
+		resolveComposerDelivery(spec?.baseBody?.deliver, activeContract, hasConnections, platforms.length)
+	);
+	// Which controls exist for this operation: rendered fields and the payload
+	// whitelist share one plan, so nothing hidden can be submitted.
+	let plan = $derived(composerFieldPlan(activeContract, delivery));
 	let destination = $derived.by(() => {
 		if (!isPostKind) return null; // prompt-kind flows keep their own label
 		if (deliverMode === 'asset')
@@ -290,28 +320,31 @@
 	}
 
 	function confirm() {
-		const body: Record<string, unknown> = { ...(spec?.baseBody ?? {}) };
-		if (isPromptKind) {
-			body.prompt = prompt;
-		}
-		if (model) body.model = model;
-		if (videoModel) body.video_model = videoModel;
-		if (isPostKind) {
-			body.topic = topic || undefined;
-			body.media = media;
-			body.provider = provider;
-			body.format = format;
-			body.captions = captions;
-			body.ai_badge = aiBadge;
-			body.platforms = platforms;
-			body.product_id = productId || undefined;
-			body.product_photo_url = productPhotoUrl || undefined;
-			body.character_ref_url = characterRefUrl || undefined;
-			body.scene = scene || undefined;
-			body.scheduled_date = scheduledDate || undefined;
-			body.scheduled_time = scheduledTime || undefined;
-		}
-		onConfirm(body);
+		// Whitelisted, contract-shaped payload: only fields the resolved
+		// operation actually consumes are submitted. Hidden or inapplicable UI
+		// state (a preview-picked product on a product-free composition, a stale
+		// video model, schedule fields on a standalone asset) never rides along.
+		onConfirm(
+			buildComposerPayload(spec?.baseBody ?? {}, activeContract, delivery, {
+				isPromptKind,
+				prompt,
+				topic,
+				scene,
+				media,
+				format,
+				provider,
+				captions,
+				aiBadge,
+				platforms,
+				productId,
+				productPhotoUrl,
+				characterRefUrl,
+				scheduledDate,
+				scheduledTime,
+				model,
+				videoModel
+			})
+		);
 	}
 
 	const usd = (n: number) => `$${Number(n ?? 0).toFixed(3)}`;
@@ -445,28 +478,41 @@
 				<input id="gc-topic" bind:value={topic} placeholder="Leave blank to let the persona pick" />
 			</div>
 
+			{#if plan.operationSummary}
+				<!-- A locked Studio operation stays the operation clicked: instead of
+				     selectors that could mutate it into a different pipeline, state
+				     truthfully what will run. -->
+				<p class="op-summary" role="note">
+					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
+					<span><strong>Operation:</strong> {plan.operationSummary}</span>
+				</p>
+			{/if}
 			<div class="row">
-				<div class="fld">
-					<label class="fld-label" for="gc-media">Media</label>
-					<!-- "video" covers BOTH spokesperson and b-roll — the Video format
-					     chips below decide which — so the label must not claim b-roll. -->
-					<select id="gc-media" bind:value={media}>
-						<option value="video">Video</option>
-						<option value="image">Image only</option>
-						<option value="cinematic">Cinematic (multi-shot)</option>
-					</select>
-				</div>
-				<div class="fld">
-					<label class="fld-label" for="gc-provider">Provider</label>
-					<select id="gc-provider" bind:value={provider}>
-						<option value="auto">Auto</option>
-						<option value="fal">fal.ai</option>
-						<option value="openrouter">OpenRouter</option>
-					</select>
-				</div>
+				{#if !studioContract?.lockMedia}
+					<div class="fld">
+						<label class="fld-label" for="gc-media">Media</label>
+						<!-- "video" covers BOTH spokesperson and b-roll — the Video format
+						     chips below decide which — so the label must not claim b-roll. -->
+						<select id="gc-media" bind:value={media}>
+							<option value="video">Video</option>
+							<option value="image">Image only</option>
+							<option value="cinematic">Cinematic (multi-shot)</option>
+						</select>
+					</div>
+				{/if}
+				{#if plan.provider}
+					<div class="fld">
+						<label class="fld-label" for="gc-provider">Provider</label>
+						<select id="gc-provider" bind:value={provider}>
+							<option value="auto">Auto</option>
+							<option value="fal">fal.ai</option>
+							<option value="openrouter">OpenRouter</option>
+						</select>
+					</div>
+				{/if}
 			</div>
 
-			{#if composition && (isGraphicCard || !usesCharacterRef || !usesProductRef)}
+			{#if isGraphicCard || !usesCharacterRef || !usesProductRef}
 				<!-- The contract, stated up front: which references this run feeds.
 				     Fields for unused references are not rendered at all below. -->
 				<p class="comp-note" role="note">
@@ -489,7 +535,7 @@
 				</p>
 			{/if}
 
-			{#if media !== 'image'}
+			{#if plan.captions}
 				<label class="captions-toggle">
 					<!-- The 16px control keeps its size; .cb-hit gives it a 44×44 target. -->
 					<span class="cb-hit">
@@ -516,7 +562,7 @@
 				</label>
 			{/if}
 
-			{#if preview.connectedPlatforms?.length}
+			{#if plan.platforms && preview.connectedPlatforms?.length}
 				<div class="fld">
 					<span class="fld-label" id="gc-platforms-label">Publish to (connected accounts only)</span>
 					<div
@@ -539,7 +585,7 @@
 						Only connected platforms are shown — a post only publishes where an account is connected.
 					</span>
 				</div>
-			{:else}
+			{:else if plan.platforms}
 				<!-- No connected account: a post can't be scheduled to publish. It can
 				     still be saved as a draft and posted later once a platform connects. -->
 				<div class="no-conn" role="alert">
@@ -633,18 +679,20 @@
 				</div>
 			{/if}
 
-			<div class="row">
-				<div class="fld">
-					<label class="fld-label" for="gc-date">Schedule date (optional)</label>
-					<input id="gc-date" type="date" bind:value={scheduledDate} />
+			{#if plan.schedule}
+				<div class="row">
+					<div class="fld">
+						<label class="fld-label" for="gc-date">Schedule date (optional)</label>
+						<input id="gc-date" type="date" bind:value={scheduledDate} />
+					</div>
+					<div class="fld">
+						<label class="fld-label" for="gc-time">Schedule time (optional)</label>
+						<input id="gc-time" type="time" bind:value={scheduledTime} />
+					</div>
 				</div>
-				<div class="fld">
-					<label class="fld-label" for="gc-time">Schedule time (optional)</label>
-					<input id="gc-time" type="time" bind:value={scheduledTime} />
-				</div>
-			</div>
+			{/if}
 
-			{#if media === 'video'}
+			{#if plan.formatChips}
 				<div class="fld">
 					<span class="fld-label" id="gc-format-label">Video format</span>
 					<div
@@ -653,7 +701,7 @@
 						aria-labelledby="gc-format-label"
 						aria-describedby="gc-format-hint"
 					>
-						<button type="button" class="chip" class:on={format === 'spokesperson' && !isGraphicCard} role="radio" aria-checked={format === 'spokesperson' && !isGraphicCard} disabled={isGraphicCard} title={isGraphicCard ? 'A graphic card has no face to animate — video runs as b-roll motion.' : undefined} onclick={() => (format = 'spokesperson')}>
+						<button type="button" class="chip" class:on={format === 'spokesperson' && plan.spokespersonOption} role="radio" aria-checked={format === 'spokesperson' && plan.spokespersonOption} disabled={!plan.spokespersonOption} title={!plan.spokespersonOption ? (isGraphicCard ? 'A graphic card has no face to animate — video runs as b-roll motion.' : 'This composition excludes the persona — there is no face to animate, so video runs as b-roll.') : undefined} onclick={() => (format = 'spokesperson')}>
 							<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" x2="12" y1="19" y2="22" /></svg>
 							Spokesperson
 						</button>
@@ -681,9 +729,10 @@
 			{/if}
 
 			<!-- Only for runs that will actually feed an i2v model: image-only runs
-			     never touch it, and cinematic runs use their own fixed pipeline —
-			     offering the picker there would imply a choice that has no effect. -->
-			{#if videoModelOptions.length && media === 'video' && format !== 'spokesperson'}
+			     never touch it, spokesperson runs animate with OmniHuman, and
+			     cinematic runs use their own fixed pipeline — offering the picker
+			     there would imply a choice that has no effect. -->
+			{#if videoModelOptions.length && plan.videoModel}
 				<div class="fld">
 					<span class="fld-label" id="gc-videomodel-label">Video model — the biggest cost in this run</span>
 					<div class="models" role="radiogroup" aria-labelledby="gc-videomodel-label">
@@ -824,6 +873,28 @@
 	}
 	.btn-retry:hover {
 		background: var(--error-soft);
+	}
+	/* Locked-operation summary: what a Studio button runs, stated read-only. */
+	.op-summary {
+		display: flex;
+		gap: 0.5rem;
+		align-items: flex-start;
+		margin: 0 0 0.9rem;
+		padding: 0.6rem 0.75rem;
+		border: 1px solid var(--border);
+		border-radius: 10px;
+		background: var(--surface-2);
+		color: var(--muted);
+		font-size: 0.82rem;
+		line-height: 1.45;
+	}
+	.op-summary svg {
+		flex-shrink: 0;
+		margin-top: 2px;
+		color: var(--accent);
+	}
+	.op-summary strong {
+		color: var(--text);
 	}
 	.comp-note {
 		display: flex;

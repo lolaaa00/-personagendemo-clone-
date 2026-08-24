@@ -1,188 +1,26 @@
 {
-  "generatedAt": "2026-08-23T23:08:35.290Z",
+  "generatedAt": "2026-08-23T23:47:32.982Z",
   "scope": "Static, deterministic, non-generating composer contract audit",
   "counts": {
     "templates": 41,
-    "channel": 30,
-    "brand": 11,
-    "cleanTemplateContracts": 37,
-    "templatesWithViolations": 4,
-    "systemFindings": 7,
+    "channel": 28,
+    "brand": 13,
+    "cleanTemplateContracts": 41,
+    "templatesWithViolations": 0,
+    "systemFindings": 0,
     "bySeverity": {
-      "P0": 3,
-      "P1": 4,
+      "P0": 0,
+      "P1": 0,
       "P2": 0
     }
   },
-  "systemFindings": [
-    {
-      "id": "C-TEMPLATE-MUTATION",
-      "severity": "P1",
-      "title": "Every Studio operation can be changed into a different media operation inside the generic composer",
-      "affected": "All 41 Studio template buttons",
-      "evidence": [
-        "C:/Users/nexal/personagendemo/personagen-svelte/src/lib/components/generation/GenerationComposer.svelte:453 — generic media switch is rendered for every post composer",
-        "C:/Users/nexal/personagendemo/personagen-svelte/src/routes/api/agent/[agentId]/generate-post/+server.ts:110 — server follows the changed media, not the advertised template surface"
-      ],
-      "consequence": "A “text card,” “photo,” “talking head,” or “cinematic” button is only a prefill, not an enforced composition contract."
-    },
-    {
-      "id": "C-HIDDEN-PRODUCT-ID",
-      "severity": "P0",
-      "title": "A product selected by preview is submitted even when the product UI is hidden",
-      "affected": "Every product-free/channel template on a persona with a pinned brand brief",
-      "evidence": [
-        "C:/Users/nexal/personagendemo/personagen-svelte/src/lib/components/generation/GenerationComposer.svelte:239 — preview product becomes local state unconditionally",
-        "C:/Users/nexal/personagendemo/personagen-svelte/src/lib/components/generation/GenerationComposer.svelte:307 — confirm submits it without reference-policy gating",
-        "C:/Users/nexal/personagendemo/personagen-svelte/src/routes/api/agent/[agentId]/generate-post/+server.ts:246 — preview chooses a product even for product-free compositions"
-      ],
-      "consequence": "A hidden value can steer copy and grading toward a product while the user sees a product-free channel composition."
-    },
-    {
-      "id": "C-CHANNEL-BRAND-LEAK",
-      "severity": "P0",
-      "title": "The generator automatically selects a product whenever a brand brief exists, regardless of refs.product=false",
-      "affected": "All channel templates and future niche-planner channel ideas",
-      "evidence": [
-        "C:/Users/nexal/personagendemo/personagen-svelte/src/lib/server/content/generate.ts:1333 — product selection occurs before the Director prompt",
-        "C:/Users/nexal/personagendemo/personagen-svelte/src/lib/server/content/generate.ts:1335 — missing product id still falls back to the first product",
-        "C:/Users/nexal/personagendemo/personagen-svelte/src/lib/server/content/generate.ts:3026 — Director receives Product instead of Topic when one is selected",
-        "C:/Users/nexal/personagendemo/personagen-svelte/src/lib/server/content/generate.ts:3229 — refs.product only controls the image reference later"
-      ],
-      "consequence": "The current “channel” contract removes a product photo but does not remove product strategy/copy context."
-    },
-    {
-      "id": "C-CINEMATIC-REFS",
-      "severity": "P1",
-      "title": "Cinematic mode overrides the template reference contract and always requires both face and product",
-      "affected": "Any product-free or persona-free template switched to cinematic; channel cinematic Wild Card",
-      "evidence": [
-        "C:/Users/nexal/personagendemo/personagen-svelte/src/routes/api/agent/[agentId]/generate-post/+server.ts:260 — cinematic forces product use",
-        "C:/Users/nexal/personagendemo/personagen-svelte/src/routes/api/agent/[agentId]/generate-post/+server.ts:258 — cinematic forces character use"
-      ],
-      "consequence": "Switching media can reveal and consume references that the clicked operation explicitly excluded."
-    },
-    {
-      "id": "C-SPOKESPERSON-NO-PERSON",
-      "severity": "P1",
-      "title": "Spokesperson remains selectable for photo compositions that exclude the persona",
-      "affected": "Product-only, POV, mood-board, room, macro, flat-lay, and similar templates after switching to video",
-      "evidence": [
-        "C:/Users/nexal/personagendemo/personagen-svelte/src/lib/components/generation/GenerationComposer.svelte:? — UI disables spokesperson only for graphic cards",
-        "C:/Users/nexal/personagendemo/personagen-svelte/src/lib/server/content/generate.ts:3122 — server coercion protects graphics only"
-      ],
-      "consequence": "The talking-head branch can be requested without a character/face contract."
-    },
-    {
-      "id": "C-DELIVERY-INFERRED",
-      "severity": "P0",
-      "title": "Generation delivery is inferred from a nullable hidden body field rather than an explicit composer outcome",
-      "affected": "Persona Generate Now, calendar Generate Post Now, Studio review/asset flows",
-      "evidence": [
-        "C:/Users/nexal/personagendemo/personagen-svelte/src/routes/api/agent/[agentId]/generate-post/+server.ts:215 — only review/asset override default behavior",
-        "C:/Users/nexal/personagendemo/personagen-svelte/src/routes/api/agent/[agentId]/generate-post/+server.ts:209 — route documents immediate publication when no override exists",
-        "C:/Users/nexal/personagendemo/personagen-svelte/src/lib/components/generation/GenerationComposer.svelte:312 — composer submits schedule fields but no explicit delivery policy"
-      ],
-      "consequence": "A button labelled Generate/Approve can publish immediately when a caller omits one hidden field."
-    },
-    {
-      "id": "C-ASSET-IRRELEVANT-FIELDS",
-      "severity": "P1",
-      "title": "Standalone-asset composers still show and submit publishing and schedule controls",
-      "affected": "Studio “Create standalone asset” mode",
-      "evidence": [
-        "C:/Users/nexal/personagendemo/personagen-svelte/src/lib/components/generation/GenerationComposer.svelte:311 — schedule is always submitted for post-kind specs",
-        "C:/Users/nexal/personagendemo/personagen-svelte/src/lib/components/generation/GenerationComposer.svelte:306 — destinations are always submitted",
-        "C:/Users/nexal/personagendemo/personagen-svelte/src/routes/api/agent/[agentId]/generate-post/+server.ts:220 — asset delivery overrides those controls"
-      ],
-      "consequence": "The composer asks for values that do not control standalone-asset delivery."
-    }
-  ],
-  "templateFindings": [
-    {
-      "id": "wild-card",
-      "title": "Wild Card",
-      "source": "C:/Users/nexal/personagendemo/personagen-svelte/src/lib/studio-templates.ts:304",
-      "intent": "channel",
-      "advertisedSurface": "cinematic",
-      "advertisedPipeline": "Cinematic",
-      "actualMedia": "cinematic",
-      "actualFormat": "persona default",
-      "actualStill": "photo",
-      "actualRefs": {
-        "character": true,
-        "product": true
-      },
-      "deliver": null,
-      "violations": [
-        "channel template feeds a product reference",
-        "channel template copy explicitly depends on a product"
-      ]
-    },
-    {
-      "id": "quote-card",
-      "title": "Quote Card",
-      "source": "C:/Users/nexal/personagendemo/personagen-svelte/src/lib/studio-templates.ts:362",
-      "intent": "channel",
-      "advertisedSurface": "typographic",
-      "advertisedPipeline": "Text card",
-      "actualMedia": "image",
-      "actualFormat": "persona default",
-      "actualStill": "graphic",
-      "actualRefs": {
-        "character": false,
-        "product": false
-      },
-      "deliver": null,
-      "violations": [
-        "channel template copy explicitly depends on a product"
-      ]
-    },
-    {
-      "id": "stat-shock",
-      "title": "Stat That Stops the Scroll",
-      "source": "C:/Users/nexal/personagendemo/personagen-svelte/src/lib/studio-templates.ts:400",
-      "intent": "channel",
-      "advertisedSurface": "typographic",
-      "advertisedPipeline": "Text card",
-      "actualMedia": "image",
-      "actualFormat": "persona default",
-      "actualStill": "graphic",
-      "actualRefs": {
-        "character": false,
-        "product": false
-      },
-      "deliver": null,
-      "violations": [
-        "channel template copy explicitly depends on a product"
-      ]
-    },
-    {
-      "id": "before-after-still",
-      "title": "Before / After Split",
-      "source": "C:/Users/nexal/personagendemo/personagen-svelte/src/lib/studio-templates.ts:419",
-      "intent": "channel",
-      "advertisedSurface": "photo",
-      "advertisedPipeline": "Still image",
-      "actualMedia": "image",
-      "actualFormat": "persona default",
-      "actualStill": "photo",
-      "actualRefs": {
-        "character": false,
-        "product": true
-      },
-      "deliver": null,
-      "violations": [
-        "channel template feeds a product reference",
-        "channel template copy explicitly depends on a product"
-      ]
-    }
-  ],
+  "systemFindings": [],
+  "templateFindings": [],
   "matrix": [
     {
       "id": "creator-recommendation",
       "title": "This Saved Me",
-      "source": "C:/Users/nexal/personagendemo/personagen-svelte/src/lib/studio-templates.ts:127",
+      "source": "C:/Users/nexal/personagendemo-claude-composer/personagen-svelte/src/lib/studio-templates.ts:127",
       "intent": "brand",
       "advertisedSurface": "motion",
       "advertisedPipeline": "Talking head",
@@ -199,7 +37,7 @@
     {
       "id": "secret-hack",
       "title": "Secret Hack Reveal",
-      "source": "C:/Users/nexal/personagendemo/personagen-svelte/src/lib/studio-templates.ts:144",
+      "source": "C:/Users/nexal/personagendemo-claude-composer/personagen-svelte/src/lib/studio-templates.ts:144",
       "intent": "brand",
       "advertisedSurface": "motion",
       "advertisedPipeline": "Talking head",
@@ -216,7 +54,7 @@
     {
       "id": "before-after",
       "title": "Before & After",
-      "source": "C:/Users/nexal/personagendemo/personagen-svelte/src/lib/studio-templates.ts:161",
+      "source": "C:/Users/nexal/personagendemo-claude-composer/personagen-svelte/src/lib/studio-templates.ts:161",
       "intent": "brand",
       "advertisedSurface": "motion",
       "advertisedPipeline": "Talking head",
@@ -233,7 +71,7 @@
     {
       "id": "tutorial",
       "title": "Quick Tutorial",
-      "source": "C:/Users/nexal/personagendemo/personagen-svelte/src/lib/studio-templates.ts:178",
+      "source": "C:/Users/nexal/personagendemo-claude-composer/personagen-svelte/src/lib/studio-templates.ts:178",
       "intent": "brand",
       "advertisedSurface": "motion",
       "advertisedPipeline": "Talking head",
@@ -250,7 +88,7 @@
     {
       "id": "obsession",
       "title": "Mild Obsession",
-      "source": "C:/Users/nexal/personagendemo/personagen-svelte/src/lib/studio-templates.ts:195",
+      "source": "C:/Users/nexal/personagendemo-claude-composer/personagen-svelte/src/lib/studio-templates.ts:195",
       "intent": "brand",
       "advertisedSurface": "motion",
       "advertisedPipeline": "Talking head",
@@ -267,7 +105,7 @@
     {
       "id": "hyper-motion",
       "title": "Hyper Motion",
-      "source": "C:/Users/nexal/personagendemo/personagen-svelte/src/lib/studio-templates.ts:213",
+      "source": "C:/Users/nexal/personagendemo-claude-composer/personagen-svelte/src/lib/studio-templates.ts:213",
       "intent": "brand",
       "advertisedSurface": "motion",
       "advertisedPipeline": "Product motion",
@@ -284,7 +122,7 @@
     {
       "id": "satisfying-test",
       "title": "Satisfying Test",
-      "source": "C:/Users/nexal/personagendemo/personagen-svelte/src/lib/studio-templates.ts:231",
+      "source": "C:/Users/nexal/personagendemo-claude-composer/personagen-svelte/src/lib/studio-templates.ts:231",
       "intent": "brand",
       "advertisedSurface": "motion",
       "advertisedPipeline": "Product motion",
@@ -301,7 +139,7 @@
     {
       "id": "unboxing-reveal",
       "title": "Unboxing Reveal",
-      "source": "C:/Users/nexal/personagendemo/personagen-svelte/src/lib/studio-templates.ts:249",
+      "source": "C:/Users/nexal/personagendemo-claude-composer/personagen-svelte/src/lib/studio-templates.ts:249",
       "intent": "brand",
       "advertisedSurface": "motion",
       "advertisedPipeline": "Product motion",
@@ -318,7 +156,7 @@
     {
       "id": "shelf-place",
       "title": "The Placement",
-      "source": "C:/Users/nexal/personagendemo/personagen-svelte/src/lib/studio-templates.ts:267",
+      "source": "C:/Users/nexal/personagendemo-claude-composer/personagen-svelte/src/lib/studio-templates.ts:267",
       "intent": "brand",
       "advertisedSurface": "motion",
       "advertisedPipeline": "Product motion",
@@ -335,7 +173,7 @@
     {
       "id": "tv-spot",
       "title": "TV Spot",
-      "source": "C:/Users/nexal/personagendemo/personagen-svelte/src/lib/studio-templates.ts:289",
+      "source": "C:/Users/nexal/personagendemo-claude-composer/personagen-svelte/src/lib/studio-templates.ts:289",
       "intent": "brand",
       "advertisedSurface": "cinematic",
       "advertisedPipeline": "Cinematic",
@@ -352,8 +190,8 @@
     {
       "id": "wild-card",
       "title": "Wild Card",
-      "source": "C:/Users/nexal/personagendemo/personagen-svelte/src/lib/studio-templates.ts:304",
-      "intent": "channel",
+      "source": "C:/Users/nexal/personagendemo-claude-composer/personagen-svelte/src/lib/studio-templates.ts:304",
+      "intent": "brand",
       "advertisedSurface": "cinematic",
       "advertisedPipeline": "Cinematic",
       "actualMedia": "cinematic",
@@ -364,15 +202,12 @@
         "product": true
       },
       "deliver": null,
-      "violations": [
-        "channel template feeds a product reference",
-        "channel template copy explicitly depends on a product"
-      ]
+      "violations": []
     },
     {
       "id": "lifestyle-still",
       "title": "Mirror Check",
-      "source": "C:/Users/nexal/personagendemo/personagen-svelte/src/lib/studio-templates.ts:320",
+      "source": "C:/Users/nexal/personagendemo-claude-composer/personagen-svelte/src/lib/studio-templates.ts:323",
       "intent": "channel",
       "advertisedSurface": "photo",
       "advertisedPipeline": "Still image",
@@ -389,7 +224,7 @@
     {
       "id": "product-flatlay",
       "title": "Product Flat-Lay",
-      "source": "C:/Users/nexal/personagendemo/personagen-svelte/src/lib/studio-templates.ts:337",
+      "source": "C:/Users/nexal/personagendemo-claude-composer/personagen-svelte/src/lib/studio-templates.ts:343",
       "intent": "brand",
       "advertisedSurface": "photo",
       "advertisedPipeline": "Still image",
@@ -406,7 +241,7 @@
     {
       "id": "quote-card",
       "title": "Quote Card",
-      "source": "C:/Users/nexal/personagendemo/personagen-svelte/src/lib/studio-templates.ts:362",
+      "source": "C:/Users/nexal/personagendemo-claude-composer/personagen-svelte/src/lib/studio-templates.ts:368",
       "intent": "channel",
       "advertisedSurface": "typographic",
       "advertisedPipeline": "Text card",
@@ -418,14 +253,12 @@
         "product": false
       },
       "deliver": null,
-      "violations": [
-        "channel template copy explicitly depends on a product"
-      ]
+      "violations": []
     },
     {
       "id": "hot-take",
       "title": "Hot Take",
-      "source": "C:/Users/nexal/personagendemo/personagen-svelte/src/lib/studio-templates.ts:381",
+      "source": "C:/Users/nexal/personagendemo-claude-composer/personagen-svelte/src/lib/studio-templates.ts:387",
       "intent": "channel",
       "advertisedSurface": "typographic",
       "advertisedPipeline": "Text card",
@@ -442,7 +275,7 @@
     {
       "id": "stat-shock",
       "title": "Stat That Stops the Scroll",
-      "source": "C:/Users/nexal/personagendemo/personagen-svelte/src/lib/studio-templates.ts:400",
+      "source": "C:/Users/nexal/personagendemo-claude-composer/personagen-svelte/src/lib/studio-templates.ts:406",
       "intent": "channel",
       "advertisedSurface": "typographic",
       "advertisedPipeline": "Text card",
@@ -454,15 +287,13 @@
         "product": false
       },
       "deliver": null,
-      "violations": [
-        "channel template copy explicitly depends on a product"
-      ]
+      "violations": []
     },
     {
       "id": "before-after-still",
       "title": "Before / After Split",
-      "source": "C:/Users/nexal/personagendemo/personagen-svelte/src/lib/studio-templates.ts:419",
-      "intent": "channel",
+      "source": "C:/Users/nexal/personagendemo-claude-composer/personagen-svelte/src/lib/studio-templates.ts:425",
+      "intent": "brand",
       "advertisedSurface": "photo",
       "advertisedPipeline": "Still image",
       "actualMedia": "image",
@@ -473,15 +304,12 @@
         "product": true
       },
       "deliver": null,
-      "violations": [
-        "channel template feeds a product reference",
-        "channel template copy explicitly depends on a product"
-      ]
+      "violations": []
     },
     {
       "id": "mantra-card",
       "title": "Mantra / Lyric Card",
-      "source": "C:/Users/nexal/personagendemo/personagen-svelte/src/lib/studio-templates.ts:437",
+      "source": "C:/Users/nexal/personagendemo-claude-composer/personagen-svelte/src/lib/studio-templates.ts:445",
       "intent": "channel",
       "advertisedSurface": "typographic",
       "advertisedPipeline": "Text card",
@@ -498,7 +326,7 @@
     {
       "id": "caption-this",
       "title": "Caption This",
-      "source": "C:/Users/nexal/personagendemo/personagen-svelte/src/lib/studio-templates.ts:456",
+      "source": "C:/Users/nexal/personagendemo-claude-composer/personagen-svelte/src/lib/studio-templates.ts:464",
       "intent": "channel",
       "advertisedSurface": "photo",
       "advertisedPipeline": "Still image",
@@ -515,7 +343,7 @@
     {
       "id": "unpopular-opinion",
       "title": "Unpopular Opinion",
-      "source": "C:/Users/nexal/personagendemo/personagen-svelte/src/lib/studio-templates.ts:480",
+      "source": "C:/Users/nexal/personagendemo-claude-composer/personagen-svelte/src/lib/studio-templates.ts:491",
       "intent": "channel",
       "advertisedSurface": "typographic",
       "advertisedPipeline": "Text card",
@@ -532,7 +360,7 @@
     {
       "id": "myth-vs-fact",
       "title": "Myth vs Fact",
-      "source": "C:/Users/nexal/personagendemo/personagen-svelte/src/lib/studio-templates.ts:497",
+      "source": "C:/Users/nexal/personagendemo-claude-composer/personagen-svelte/src/lib/studio-templates.ts:510",
       "intent": "channel",
       "advertisedSurface": "typographic",
       "advertisedPipeline": "Text card",
@@ -549,7 +377,7 @@
     {
       "id": "the-list",
       "title": "The List",
-      "source": "C:/Users/nexal/personagendemo/personagen-svelte/src/lib/studio-templates.ts:514",
+      "source": "C:/Users/nexal/personagendemo-claude-composer/personagen-svelte/src/lib/studio-templates.ts:529",
       "intent": "channel",
       "advertisedSurface": "typographic",
       "advertisedPipeline": "Text card",
@@ -566,7 +394,7 @@
     {
       "id": "question-bait",
       "title": "Ask the Room",
-      "source": "C:/Users/nexal/personagendemo/personagen-svelte/src/lib/studio-templates.ts:531",
+      "source": "C:/Users/nexal/personagendemo-claude-composer/personagen-svelte/src/lib/studio-templates.ts:548",
       "intent": "channel",
       "advertisedSurface": "typographic",
       "advertisedPipeline": "Text card",
@@ -583,7 +411,7 @@
     {
       "id": "definition-card",
       "title": "Define It",
-      "source": "C:/Users/nexal/personagendemo/personagen-svelte/src/lib/studio-templates.ts:548",
+      "source": "C:/Users/nexal/personagendemo-claude-composer/personagen-svelte/src/lib/studio-templates.ts:567",
       "intent": "channel",
       "advertisedSurface": "typographic",
       "advertisedPipeline": "Text card",
@@ -600,7 +428,7 @@
     {
       "id": "two-truths",
       "title": "Both Can Be True",
-      "source": "C:/Users/nexal/personagendemo/personagen-svelte/src/lib/studio-templates.ts:565",
+      "source": "C:/Users/nexal/personagendemo-claude-composer/personagen-svelte/src/lib/studio-templates.ts:586",
       "intent": "channel",
       "advertisedSurface": "typographic",
       "advertisedPipeline": "Text card",
@@ -617,7 +445,7 @@
     {
       "id": "day-in-the-life",
       "title": "A Frame From Today",
-      "source": "C:/Users/nexal/personagendemo/personagen-svelte/src/lib/studio-templates.ts:584",
+      "source": "C:/Users/nexal/personagendemo-claude-composer/personagen-svelte/src/lib/studio-templates.ts:607",
       "intent": "channel",
       "advertisedSurface": "photo",
       "advertisedPipeline": "Still image",
@@ -634,7 +462,7 @@
     {
       "id": "behind-the-scenes",
       "title": "Behind the Scenes",
-      "source": "C:/Users/nexal/personagendemo/personagen-svelte/src/lib/studio-templates.ts:601",
+      "source": "C:/Users/nexal/personagendemo-claude-composer/personagen-svelte/src/lib/studio-templates.ts:627",
       "intent": "channel",
       "advertisedSurface": "photo",
       "advertisedPipeline": "Still image",
@@ -651,7 +479,7 @@
     {
       "id": "mood-board",
       "title": "Mood Board",
-      "source": "C:/Users/nexal/personagendemo/personagen-svelte/src/lib/studio-templates.ts:618",
+      "source": "C:/Users/nexal/personagendemo-claude-composer/personagen-svelte/src/lib/studio-templates.ts:647",
       "intent": "channel",
       "advertisedSurface": "photo",
       "advertisedPipeline": "Still image",
@@ -668,7 +496,7 @@
     {
       "id": "pov-shot",
       "title": "POV",
-      "source": "C:/Users/nexal/personagendemo/personagen-svelte/src/lib/studio-templates.ts:634",
+      "source": "C:/Users/nexal/personagendemo-claude-composer/personagen-svelte/src/lib/studio-templates.ts:665",
       "intent": "channel",
       "advertisedSurface": "photo",
       "advertisedPipeline": "Still image",
@@ -685,7 +513,7 @@
     {
       "id": "the-rant",
       "title": "The Rant",
-      "source": "C:/Users/nexal/personagendemo/personagen-svelte/src/lib/studio-templates.ts:652",
+      "source": "C:/Users/nexal/personagendemo-claude-composer/personagen-svelte/src/lib/studio-templates.ts:685",
       "intent": "channel",
       "advertisedSurface": "motion",
       "advertisedPipeline": "Talking head",
@@ -702,7 +530,7 @@
     {
       "id": "story-time",
       "title": "Story Time",
-      "source": "C:/Users/nexal/personagendemo/personagen-svelte/src/lib/studio-templates.ts:669",
+      "source": "C:/Users/nexal/personagendemo-claude-composer/personagen-svelte/src/lib/studio-templates.ts:705",
       "intent": "channel",
       "advertisedSurface": "motion",
       "advertisedPipeline": "Talking head",
@@ -719,7 +547,7 @@
     {
       "id": "answer-a-comment",
       "title": "Answer a Comment",
-      "source": "C:/Users/nexal/personagendemo/personagen-svelte/src/lib/studio-templates.ts:686",
+      "source": "C:/Users/nexal/personagendemo-claude-composer/personagen-svelte/src/lib/studio-templates.ts:725",
       "intent": "channel",
       "advertisedSurface": "motion",
       "advertisedPipeline": "Talking head",
@@ -736,7 +564,7 @@
     {
       "id": "myth-bust-video",
       "title": "Myth-Bust to Camera",
-      "source": "C:/Users/nexal/personagendemo/personagen-svelte/src/lib/studio-templates.ts:703",
+      "source": "C:/Users/nexal/personagendemo-claude-composer/personagen-svelte/src/lib/studio-templates.ts:745",
       "intent": "channel",
       "advertisedSurface": "motion",
       "advertisedPipeline": "Talking head",
@@ -753,7 +581,7 @@
     {
       "id": "selfie-listicle",
       "title": "Selfie Listicle",
-      "source": "C:/Users/nexal/personagendemo/personagen-svelte/src/lib/studio-templates.ts:725",
+      "source": "C:/Users/nexal/personagendemo-claude-composer/personagen-svelte/src/lib/studio-templates.ts:770",
       "intent": "channel",
       "advertisedSurface": "motion",
       "advertisedPipeline": "Talking head",
@@ -770,7 +598,7 @@
     {
       "id": "grwm",
       "title": "Get Ready With Me",
-      "source": "C:/Users/nexal/personagendemo/personagen-svelte/src/lib/studio-templates.ts:742",
+      "source": "C:/Users/nexal/personagendemo-claude-composer/personagen-svelte/src/lib/studio-templates.ts:790",
       "intent": "channel",
       "advertisedSurface": "motion",
       "advertisedPipeline": "Talking head",
@@ -787,7 +615,7 @@
     {
       "id": "hot-mic-checkin",
       "title": "Unfiltered Check-In",
-      "source": "C:/Users/nexal/personagendemo/personagen-svelte/src/lib/studio-templates.ts:759",
+      "source": "C:/Users/nexal/personagendemo-claude-composer/personagen-svelte/src/lib/studio-templates.ts:810",
       "intent": "channel",
       "advertisedSurface": "motion",
       "advertisedPipeline": "Talking head",
@@ -804,7 +632,7 @@
     {
       "id": "dont-search-this",
       "title": "Don’t Search This",
-      "source": "C:/Users/nexal/personagendemo/personagen-svelte/src/lib/studio-templates.ts:781",
+      "source": "C:/Users/nexal/personagendemo-claude-composer/personagen-svelte/src/lib/studio-templates.ts:835",
       "intent": "channel",
       "advertisedSurface": "motion",
       "advertisedPipeline": "Talking head",
@@ -821,7 +649,7 @@
     {
       "id": "the-real-reason",
       "title": "The Real Reason",
-      "source": "C:/Users/nexal/personagendemo/personagen-svelte/src/lib/studio-templates.ts:798",
+      "source": "C:/Users/nexal/personagendemo-claude-composer/personagen-svelte/src/lib/studio-templates.ts:855",
       "intent": "channel",
       "advertisedSurface": "motion",
       "advertisedPipeline": "Talking head",
@@ -838,7 +666,7 @@
     {
       "id": "selfie-checkin-photo",
       "title": "The Check-In Selfie",
-      "source": "C:/Users/nexal/personagendemo/personagen-svelte/src/lib/studio-templates.ts:815",
+      "source": "C:/Users/nexal/personagendemo-claude-composer/personagen-svelte/src/lib/studio-templates.ts:875",
       "intent": "channel",
       "advertisedSurface": "photo",
       "advertisedPipeline": "Still image",
@@ -855,7 +683,7 @@
     {
       "id": "propped-timer",
       "title": "Set the Timer",
-      "source": "C:/Users/nexal/personagendemo/personagen-svelte/src/lib/studio-templates.ts:833",
+      "source": "C:/Users/nexal/personagendemo-claude-composer/personagen-svelte/src/lib/studio-templates.ts:896",
       "intent": "channel",
       "advertisedSurface": "photo",
       "advertisedPipeline": "Still image",
@@ -872,7 +700,7 @@
     {
       "id": "zero-five",
       "title": "The 0.5",
-      "source": "C:/Users/nexal/personagendemo/personagen-svelte/src/lib/studio-templates.ts:850",
+      "source": "C:/Users/nexal/personagendemo-claude-composer/personagen-svelte/src/lib/studio-templates.ts:916",
       "intent": "channel",
       "advertisedSurface": "photo",
       "advertisedPipeline": "Still image",
