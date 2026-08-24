@@ -329,6 +329,7 @@
 			scheduled: 0,
 			draft: 0,
 			failed: 0,
+			generating: 0,
 			views: 0,
 			likes: 0,
 			comments: 0
@@ -342,6 +343,7 @@
 				s.comments += p.analytics?.comments ?? 0;
 			} else if (STATUS_GROUPS.scheduled.includes(p.status)) s.scheduled++;
 			else if (p.status === 'draft') s.draft++;
+			else if (p.status === 'generating') s.generating++;
 			else if (STATUS_GROUPS.failed.includes(p.status)) s.failed++;
 		}
 		return s;
@@ -361,7 +363,10 @@
 		published: 'var(--success)',
 		partial: 'var(--gold)',
 		rejected: 'var(--rose)',
-		failed: 'var(--error)'
+		failed: 'var(--error)',
+		// Campaign/composer slots load while still generating — without a color
+		// their status stripe silently rendered as nothing.
+		generating: 'var(--cyan)'
 	};
 
 	function getPostDisplay(p: CalendarPost) {
@@ -516,6 +521,12 @@
 		<span class="stat-dot" style="background: var(--warning)" aria-hidden="true"></span>
 		<strong>{rangeStats.draft}</strong> drafts
 	</button>
+	{#if rangeStats.generating > 0}
+		<span class="stat-chip" title="Slots still generating">
+			<span class="stat-dot" style="background: var(--cyan)" aria-hidden="true"></span>
+			<strong>{rangeStats.generating}</strong> generating
+		</span>
+	{/if}
 	{#if rangeStats.failed > 0}
 		<button class="stat-chip chip-failed" class:on={statusChip === 'failed'} aria-pressed={statusChip === 'failed'} onclick={() => toggleChip('failed')}>
 			<span class="stat-dot" style="background: var(--error)" aria-hidden="true"></span>

@@ -4,7 +4,6 @@
 	import type { Agent } from '$lib/types';
 	import { showToast } from '$lib/stores/ui.svelte';
 	import { Posts, ContentForge, type AutopilotView } from '$lib/services/api';
-	import { priceOf } from '$lib/pricing';
 	import { page } from '$app/stores';
 	import { goto, invalidateAll } from '$app/navigation';
 	import GenerationComposer from '$lib/components/generation/GenerationComposer.svelte';
@@ -26,7 +25,7 @@
 		platforms: string[];
 		date: string; // YYYY-MM-DD
 		time: string;
-		status: 'scheduled' | 'draft' | 'published' | 'failed' | 'publishing' | 'partial' | 'rejected';
+		status: 'scheduled' | 'draft' | 'published' | 'failed' | 'publishing' | 'partial' | 'rejected' | 'generating';
 		external_id?: string | null;
 		publication_results?: Record<string, any> | null;
 		analytics?: { views: number; likes: number; comments: number; shares: number } | null;
@@ -161,8 +160,11 @@
 			);
 
 			if (res.success && res.data) {
-				const data = res.data as any;
-				composerText = data.content || '';
+				// The engine returns a full UgcContent pack — its caption field is
+				// `text`. Reading `.content` (always undefined) silently discarded a
+				// PAID generation while toasting success.
+				const forged = res.data as any;
+				composerText = forged.text || '';
 				showToast('Content forged successfully!', 'success');
 			} else {
 				showToast(`Failed to forge content: ${res.error || 'Unknown error'}`, 'error');
@@ -701,20 +703,10 @@
 	}
 
 	// ── Generate confirmation (no surprise generations, no surprise spend) ──
-	let showGenerateConfirm = $state(false);
+	// All cost/consequence claims live in GenerationComposer's server-resolved
+	// preview — this page keeps NO client-side price math that could drift.
 	let composerSpec = $state<ComposerSpec | null>(null);
 	let composerOpen = $state(false);
-	let skipGenerateConfirm = $state(false);
-	let confirmSkipNext = $state(false);
-	onMount(() => {
-		skipGenerateConfirm = localStorage.getItem('pg-skip-generate-confirm') === '1';
-	});
-	let confirmAgent = $derived(
-		data.agents.find((a: any) => a.id === (selectedAgentId || data.agents[0]?.id))
-	);
-	// Estimated cost range: image+llm (spokesperson adds tts+talking-head; b-roll adds video)
-	const EST_LOW = +(priceOf('fal', 'image', 'nano') + 3 * priceOf('openrouter', 'llm') + priceOf('fal', 'tts') + priceOf('fal', 'talking_head')).toFixed(2);
-	const EST_HIGH = +(priceOf('fal', 'image', 'nano') + 3 * priceOf('openrouter', 'llm') + priceOf('fal', 'video', 'standard')).toFixed(2);
 
 	/**
 	 * The calendar used to POST with NO body and treat any 2xx as "published" — so a
@@ -750,7 +742,7 @@
 				`${queued} draft${queued === 1 ? '' : 's'} queued — they appear on their slots as they generate`,
 				'success'
 			);
-			await invalidateAll();
+			await resyncPosts();
 		}
 	}
 
@@ -785,6 +777,7 @@
 	}
 
 	async function generatePostNow(approved: Record<string, unknown> = {}) {
+		if (generatingPost) return; // a second approve mid-poll would double-spend
 		const targetAgentId =
 			genAgentId || selectedAgentId || (data.agents.length > 0 ? data.agents[0].id : '');
 		if (!targetAgentId) {
@@ -824,7 +817,7 @@
 					}
 					finishGeneration(jobId);
 					showToast('Post generated', 'success');
-					await invalidateAll();
+					await resyncPosts();
 					return;
 				}
 				failGeneration(jobId, 'Timed out waiting for the generation to finish');
@@ -979,6 +972,7 @@
 				aria-label="Filter the manage list by status"
 			>
 				<option value="">All statuses</option>
+				<option value="generating">Generating</option>
 				<option value="draft">Draft</option>
 				<option value="scheduled">Scheduled</option>
 				<option value="publishing">Publishing</option>

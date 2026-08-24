@@ -1,5 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { getPostDisplay } from '$lib/components/feed/postDisplay';
 
 /**
  * Cross-persona review queue backend.
@@ -21,7 +22,14 @@ function snapshotOf(content: string): Record<string, unknown> {
 			text: parsed?.text ?? null,
 			media_url: parsed?.media_url ?? null,
 			media_type: parsed?.media_type ?? null,
-			hookScore: parsed?.hookScore ?? null
+			hookScore: parsed?.hookScore ?? null,
+			// Type dimensions for the QC training log — without these a rejected
+			// $1.95 cinematic and a rejected $0.08 quote card are indistinguishable.
+			format: parsed?.format ?? null,
+			cinematic: parsed?.cinematic === true,
+			still_style: parsed?.generation?.still_style ?? null,
+			studio_template: parsed?.studio?.template ?? null,
+			cost_total: parsed?.costBreakdown?.total ?? null
 		};
 	} catch {
 		return { text: String(content).slice(0, 500) };
@@ -75,16 +83,22 @@ export const GET: RequestHandler = async ({ locals }) => {
 		// of the queue; they live in the persona's Assets lens instead.
 		if (parsed?.studio?.standalone === true) return [];
 		const agent = agentById.get(d.agent_id);
+		// ONE classifier for the whole app: the same getPostDisplay the library and
+		// feed use, so a post never reads as "video" here and "Cinematic" there —
+		// hand-rolled parsing was how the two vocabularies drifted apart.
+		const display = getPostDisplay(d);
 		return [{
 			id: d.id,
 			agent_id: d.agent_id,
 			agent_name: agent?.name ?? 'Unknown',
 			agent_avatar: refByAgent.get(d.agent_id) ?? null,
 			status: d.status,
-			text: parsed?.text ?? '',
-			media_url: parsed?.media_url ?? null,
-			poster_url: parsed?.poster_url ?? null,
-			media_type: parsed?.media_type ?? 'image',
+			text: display.text,
+			media_url: display.mediaUrl,
+			poster_url: display.posterUrl,
+			media_type: display.mediaType,
+			surface: display.surface,
+			template_title: display.templateTitle,
 			quality_score: parsed?.qualityGrade?.overall ?? null,
 			quality_issue: parsed?.qualityGrade?.topIssue ?? null,
 			platforms: d.platforms ?? [],

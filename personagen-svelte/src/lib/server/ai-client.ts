@@ -73,6 +73,9 @@ async function fetchImageInlineData(
 
 export interface AiClient {
 	provider: 'openrouter' | 'gemini';
+	/** The exact model id this client sends — recorded in the cost ledger and
+	 *  echoed by generation previews, so the UI names the model that really runs. */
+	model: string;
 	generate(prompt: string, opts?: AiGenerateOptions): Promise<string>;
 }
 
@@ -116,6 +119,7 @@ export async function resolveAiClient(
 function createOpenRouterClient(apiKey: string): AiClient {
 	return {
 		provider: 'openrouter',
+		model: OPENROUTER_GEMINI_MODEL,
 		async generate(prompt: string, opts?: AiGenerateOptions): Promise<string> {
 			const messages: any[] = [];
 			if (opts?.systemInstruction) {
@@ -171,6 +175,7 @@ function createOpenRouterClient(apiKey: string): AiClient {
 function createGeminiClient(apiKey: string): AiClient {
 	return {
 		provider: 'gemini',
+		model: GEMINI_MODEL,
 		async generate(prompt: string, opts?: AiGenerateOptions): Promise<string> {
 			const ai = new GoogleGenAI({ apiKey });
 			const config: any = {};

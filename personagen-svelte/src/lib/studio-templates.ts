@@ -47,14 +47,22 @@ export interface StudioTemplate {
 	title: string;
 	tagline: string;
 	category: StudioCategory;
-	/** Chip label for the pipeline this runs. */
-	pipeline: 'Talking head' | 'Product motion' | 'Cinematic' | 'Still image';
+	/** Chip label for the pipeline this runs. 'Text card' is the still:'graphic'
+	 *  subset rendered server-side (ffmpeg typography) for $0 — the image model
+	 *  only runs as its fallback when the host can't render locally. */
+	pipeline: 'Talking head' | 'Product motion' | 'Cinematic' | 'Still image' | 'Text card';
 	/** Promotes the product ('brand') or feeds the audience ('channel'). */
 	intent: StudioIntent;
 	/** Shelf this sits on — what the output looks like, not how it is made. */
 	surface: StudioSurface;
 	/** One line of representative output, shown ON the card so it is never blank. */
 	sample: string;
+	/** Rotating placeholder pool: `sample` plus these, one picked per page view,
+	 *  so the shelf reads fresh instead of repeating the same 37 lines forever.
+	 *  Each entry is a BEST-CASE output of this archetype, not a description.
+	 *  Typographic entries deliberately exercise the $0 card renderer's layouts
+	 *  (\n makes stack/list/split) — the tile preview is a real render of them. */
+	samples?: string[];
 	/**
 	 * 'selfie' = the persona shot this themself (front camera / mirror / propped
 	 * phone) — the realism register social feeds actually run on. Channel photo
@@ -130,6 +138,10 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 		intent: 'brand',
 		surface: 'motion',
 		sample: 'I didn’t expect the refill cap to be the thing that sold me.',
+		samples: [
+			'Week three, and honestly? My 3pm crash just… stopped happening.',
+			'I bought it for the gym. It ended up fixing my mornings instead.'
+		],
 		baseBody: {
 			topic:
 				'A direct-to-camera recommendation: the persona explains the one specific problem the featured product solved for them this week, names the feature that did it, and ends with a low-pressure nudge to try it. Confident, specific, no hype words.',
@@ -147,6 +159,10 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 		intent: 'brand',
 		surface: 'motion',
 		sample: 'Nobody talks about this — try it at half the dose.',
+		samples: [
+			'Put it in the fridge first. That’s it. That’s the hack.',
+			'The label won’t tell you this — the comment section will.'
+		],
 		baseBody: {
 			topic:
 				"A conspiratorial 'nobody talks about this' reveal: the persona shares one non-obvious way to use the featured product, demonstrates it mid-video, and reacts to the result. Hushed, playful tone — like telling a friend a secret.",
@@ -164,6 +180,10 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 		intent: 'brand',
 		surface: 'motion',
 		sample: 'Three weeks. Same lighting. Same hoodie. Look.',
+		samples: [
+			'Day 1 vs day 30, filmed on the same phone in the same corner.',
+			'Left: February me. Right: me, 21 scoops later. No filter on either.'
+		],
 		baseBody: {
 			topic:
 				"A before/after story: the persona describes the 'before' problem in one blunt sentence, shows the featured product as the turning point, and lands on the 'after' with visible relief. Structure the script as wrong-way → right-way.",
@@ -181,6 +201,10 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 		intent: 'brand',
 		surface: 'motion',
 		sample: 'Thirty seconds, three steps, no mess. Here.',
+		samples: [
+			'Step two is where everyone goes wrong. Watch my hands.',
+			'One scoop, one shake, zero clumps — counted out loud.'
+		],
 		baseBody: {
 			topic:
 				'A three-step mini tutorial: the persona walks through using the featured product from open to result, counting the steps out loud, ending with the finished result held up to camera. Brisk, helpful, zero filler.',
@@ -198,6 +222,10 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 		intent: 'brand',
 		surface: 'motion',
 		sample: 'It’s a mild obsession at this point, honestly.',
+		samples: [
+			'Third jar this month. I don’t have a problem, I have a routine.',
+			'I reorganized an entire shelf so this could be seen. No regrets.'
+		],
 		baseBody: {
 			topic:
 				"A playful confession that the persona is slightly too into the featured product — self-aware humor about how often they reach for it, one concrete daily moment it fits into, and a shrugging 'no regrets' close.",
@@ -216,6 +244,10 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 		intent: 'brand',
 		surface: 'motion',
 		sample: 'Product spins into frame, catches the light, lands.',
+		samples: [
+			'Powder burst in slow-mo, label razor-sharp at the freeze frame.',
+			'Three speed ramps, one hero frame, zero words needed.'
+		],
 		baseBody: {
 			topic:
 				'A high-energy hero clip built entirely around the featured product: fast kinetic beats, ingredients or elements bursting around it, dramatic speed ramps, ending frozen on the product as the hero frame.',
@@ -234,6 +266,10 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 		intent: 'brand',
 		surface: 'motion',
 		sample: 'One clean pour. One clean result. No cuts.',
+		samples: [
+			'The scoop-drop everyone rewinds twice. Macro. Slow.',
+			'Just the swirl, filmed close enough to feel the texture.'
+		],
 		baseBody: {
 			topic:
 				'An oddly-satisfying sensory clip: the featured product filmed through one tactile moment — a slow pour, squeeze, tear or crunch — captured so the texture is the star. No people, no words, pure sensation.',
@@ -252,6 +288,10 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 		intent: 'brand',
 		surface: 'motion',
 		sample: 'Hands, tape, lid, reveal — one unbroken take.',
+		samples: [
+			'Tissue parts, the spotlight tightens, and there it is.',
+			'The lid lift IS the ad. Six seconds, dust motes and all.'
+		],
 		baseBody: {
 			topic:
 				'A theatrical unboxing beat: hands lift the lid, tissue parts, and the featured product is revealed in its packaging like a gift — one continuous reveal building to a clean hero shot.',
@@ -268,8 +308,15 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 		category: 'product',
 		pipeline: 'Product motion',
 		intent: 'brand',
-		surface: 'photo',
+		// Runs the b-roll VIDEO pipeline (format 'broll', no media:'image') — the
+		// shelf must say so. Under 'photo' the tile claimed IMAGE while pricing a
+		// motion clip, and delivered tiles flipped from Photo to Video.
+		surface: 'motion',
 		sample: 'It just sits there, and the shelf looks finished.',
+		samples: [
+			'Nudged half a degree. Now the vanity is complete.',
+			'Morning light, one hand, one perfect placement. Exhale.'
+		],
 		baseBody: {
 			topic:
 				'A quiet aesthetic ritual: a hand places the featured product into a curated arrangement — shelf, vanity or countertop — nudges it half a degree, and the camera settles. Serene, ASMR-adjacent, no dialogue.',
@@ -289,6 +336,10 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 		intent: 'brand',
 		surface: 'cinematic',
 		sample: 'Four shots. Six seconds. One promise.',
+		samples: [
+			'Kitchen at dawn, first scoop, city run, quiet logo. Done.',
+			'The spot that looks like it took a crew of twelve. It took one prompt.'
+		],
 		baseBody: {
 			topic:
 				'A cinematic lifestyle spot: the persona moves through one beautiful everyday scene with the featured product woven in naturally — no hard sell, just mood, ending on a quiet branded close.',
@@ -304,6 +355,10 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 		intent: 'channel',
 		surface: 'cinematic',
 		sample: 'Something nobody asked for and everybody reposts.',
+		samples: [
+			'The product as a 2001 monolith. Played completely straight.',
+			'Retro VHS infomercial energy — tracking lines, dead-serious voiceover.'
+		],
 		baseBody: {
 			topic:
 				'An intentionally over-the-top concept spot starring the featured product — pick one bold visual world (epic, surreal, retro, animated) and commit fully. Keep the product itself faithful to its reference photos.',
@@ -321,9 +376,16 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 		surface: 'photo',
 		framing: 'selfie',
 		sample: 'A Tuesday that happens to look good.',
+		samples: [
+			'Gym mirror, phone over face, the outfit doing all the work.',
+			'Elevator mirror. Forty-two seconds between floors. Worth it.'
+		],
 		baseBody: {
-			topic: 'A back-camera mirror selfie of the persona on an ordinary day that happens to look good — outfit worth posting, room honestly lived-in. Feed-real, not editorial. No product.',
-			scene: MIRROR_LOOK + ' Full-length framing showing the outfit; mirror location varied across runs — bedroom mirror, gym mirror, elevator, fitting room, hallway.',
+			topic:
+				'A back-camera mirror selfie of the persona on an ordinary day that happens to look good — outfit worth posting, room honestly lived-in. Feed-real, not editorial. No product.',
+			scene:
+				MIRROR_LOOK +
+				' Full-length framing showing the outfit; mirror location varied across runs — bedroom mirror, gym mirror, elevator, fitting room, hallway.',
 			media: 'image',
 			refs: { character: true, product: false }
 		}
@@ -337,6 +399,10 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 		intent: 'brand',
 		surface: 'photo',
 		sample: 'Top-down, three objects, one shadow, nothing else.',
+		samples: [
+			'Scoop, shaker, gym towel — the whole routine in one frame.',
+			'Negative space so generous it reads like a poster.'
+		],
 		baseBody: {
 			topic:
 				'A polished flat-lay hero image of the featured product surrounded by a few props that explain its world at a glance — composed for a pinned post or profile grid anchor.',
@@ -350,17 +416,22 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 	// ── Social & Quotes · alternative content, built to be SHARED ──────────
 	// Not everything is a video. These are the save-and-send formats: quote
 	// cards, text graphics, split-frames — the posts people forward to a friend.
-	// All run the still-image pipeline (Nano Banana renders clean typography),
-	// so they cost cents and generate in seconds.
+	// The typographic ones (still:'graphic') are typeset SERVER-SIDE for $0 —
+	// no image model runs unless the host can't render locally, in which case
+	// Nano Banana is the fallback. Photo-composed ones stay on the still pipeline.
 	{
 		id: 'quote-card',
 		title: 'Quote Card',
 		tagline: 'A shareable typographic quote in the brand voice',
 		category: 'social',
-		pipeline: 'Still image',
+		pipeline: 'Text card',
 		intent: 'channel',
 		surface: 'typographic',
 		sample: 'You don’t need a bigger feed. You need a sharper one.',
+		samples: [
+			'Discipline is just remembering what you actually wanted.',
+			'The algorithm rewards the person you already are. Choose wisely.'
+		],
 		baseBody: {
 			topic:
 				"A quote card built to be reshared: one short, punchy line in the persona's voice that captures why the featured product matters — a truth the audience already feels but hasn't put into words. The caption expands on the line and invites people to send it to someone who needs it.",
@@ -376,10 +447,14 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 		title: 'Hot Take',
 		tagline: 'A bold text post that starts arguments in the comments',
 		category: 'social',
-		pipeline: 'Still image',
+		pipeline: 'Text card',
 		intent: 'channel',
 		surface: 'typographic',
 		sample: 'Most morning routines are procrastination in a nice mug.',
+		samples: [
+			'Rest days build more muscle than your training program does.',
+			'If everything you eat is high-protein, nothing is.'
+		],
 		baseBody: {
 			topic:
 				'A deliberately spicy-but-defensible opinion from the persona about their niche (not a product pitch) — the kind of one-liner people screenshot, quote-post, and argue with. The caption doubles down and asks where people stand.',
@@ -395,10 +470,14 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 		title: 'Stat That Stops the Scroll',
 		tagline: 'One surprising number, designed like a headline',
 		category: 'social',
-		pipeline: 'Still image',
+		pipeline: 'Text card',
 		intent: 'channel',
 		surface: 'typographic',
 		sample: '73% never make it past the first line.',
+		samples: [
+			'30 grams. That’s the gap nobody tracks and everybody feels.',
+			'9 in 10 quit the week before it starts working.'
+		],
 		baseBody: {
 			topic:
 				'A single surprising, true-to-the-niche statistic or comparison that reframes why the featured product category matters — the number IS the hook. Caption gives the context and the source framing, then ties it to the product in one line.',
@@ -418,6 +497,10 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 		intent: 'channel',
 		surface: 'photo',
 		sample: 'Left: the problem. Right: ten minutes later.',
+		samples: [
+			'Same counter, same light — only the chaos changed sides.',
+			'BEFORE, stressed. AFTER, sorted. One honest frame.'
+		],
 		baseBody: {
 			topic:
 				'A split-frame before/after image showing the honest transformation the featured product delivers — same subject, same framing, only the result changed. Caption names how long it took and what actually did the work.',
@@ -432,10 +515,14 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 		title: 'Mantra / Lyric Card',
 		tagline: 'Poetic lines people repost to say something about themselves',
 		category: 'social',
-		pipeline: 'Still image',
+		pipeline: 'Text card',
 		intent: 'channel',
 		surface: 'typographic',
 		sample: 'Slow is a strategy, not a setback.',
+		samples: [
+			'Slow is a strategy.\nNot a setback.\nProtect what compounds.',
+			'Show up early.\nLeave loud rooms quietly.\nLet the work do the bragging.'
+		],
 		baseBody: {
 			topic:
 				"Three to five short poetic lines — a mantra, almost lyrics — expressing the lifestyle and identity the persona's audience aspires to (the product's world, never the product by name). Caption is a single line inviting people to save it.",
@@ -456,9 +543,16 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 		surface: 'photo',
 		framing: 'selfie',
 		sample: 'No caption. That’s the point — they’ll write it.',
+		samples: [
+			'Mid-sneeze, mid-spill, mid-Tuesday. Posted anyway.',
+			'The face I made when the timer went off a beat early.'
+		],
 		baseBody: {
-			topic: 'A comedic self-shot photo of the persona mid-mundane-disaster or absurdly relatable moment, posted without explanation so the comments write the caption. No product.',
-			scene: SELFIE_LOOK + ' Front-camera at an unflattering-but-funny angle, genuine caught-in-the-act expression, chaotic real surroundings clearly legible in frame.',
+			topic:
+				'A comedic self-shot photo of the persona mid-mundane-disaster or absurdly relatable moment, posted without explanation so the comments write the caption. No product.',
+			scene:
+				SELFIE_LOOK +
+				' Front-camera at an unflattering-but-funny angle, genuine caught-in-the-act expression, chaotic real surroundings clearly legible in frame.',
 			media: 'image',
 			refs: { character: true, product: false }
 		}
@@ -475,13 +569,19 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 		title: 'Unpopular Opinion',
 		tagline: 'A defensible stance that splits the room',
 		category: 'social',
-		pipeline: 'Still image',
+		pipeline: 'Text card',
 		intent: 'channel',
 		surface: 'typographic',
 		sample: 'Consistency is overrated if you are consistently boring.',
+		samples: [
+			'Cheat meals are just meals. Eat the meal.',
+			'Your niche is a cage, and you built it yourself.'
+		],
 		baseBody: {
-			topic: 'A genuinely contrarian but defensible opinion from the persona’s niche, stated flatly in one or two lines. No hedging, no "just my opinion" softener. It should make a knowledgeable reader either nod hard or want to argue — never shrug.',
-			scene: 'Bold typographic still, high-contrast brand colours, generous margins, one short line of type as the entire composition, no photography.',
+			topic:
+				'A genuinely contrarian but defensible opinion from the persona’s niche, stated flatly in one or two lines. No hedging, no "just my opinion" softener. It should make a knowledgeable reader either nod hard or want to argue — never shrug.',
+			scene:
+				'Bold typographic still, high-contrast brand colours, generous margins, one short line of type as the entire composition, no photography.',
 			media: 'image',
 			still: 'graphic',
 			refs: { character: false, product: false }
@@ -492,13 +592,19 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 		title: 'Myth vs Fact',
 		tagline: 'Correct something the audience believes',
 		category: 'social',
-		pipeline: 'Still image',
+		pipeline: 'Text card',
 		intent: 'channel',
 		surface: 'typographic',
 		sample: 'MYTH: more posting equals more reach.',
+		samples: [
+			'MYTH: more posting equals more reach.\nFACT: retention decides who gets shown.',
+			'MYTH: carbs at night make you gain.\nFACT: totals decide. Timing is garnish.'
+		],
 		baseBody: {
-			topic: 'One widely believed myth in the persona’s niche stated plainly, then corrected with the actual mechanism in one sentence. Confident and specific, never smug.',
-			scene: 'Split typographic still: the myth struck through in muted tone on the upper half, the correction in brand colour on the lower half, strong type hierarchy, no photography.',
+			topic:
+				'One widely believed myth in the persona’s niche stated plainly, then corrected with the actual mechanism in one sentence. Confident and specific, never smug.',
+			scene:
+				'Split typographic still: the myth struck through in muted tone on the upper half, the correction in brand colour on the lower half, strong type hierarchy, no photography.',
 			media: 'image',
 			still: 'graphic',
 			refs: { character: false, product: false }
@@ -509,13 +615,19 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 		title: 'The List',
 		tagline: 'Three to five things, screenshot-worthy',
 		category: 'social',
-		pipeline: 'Still image',
+		pipeline: 'Text card',
 		intent: 'channel',
 		surface: 'typographic',
 		sample: '4 things I stopped doing this year',
+		samples: [
+			'4 things I stopped doing this year\n1. Posting without a point\n2. Chasing every trend\n3. Doomscrolling at midnight\n4. Explaining myself twice',
+			'3 signs your routine is working\n1. You stopped counting days\n2. Rest feels earned\n3. Nobody had to ask'
+		],
 		baseBody: {
-			topic: 'A tight numbered list of three to five specific, non-obvious items from the persona’s niche under a headline worth screenshotting. Each item is a few words, not a sentence. No filler entries.',
-			scene: 'Clean typographic list card, numbered items with clear vertical rhythm, headline at top, brand background, no photography.',
+			topic:
+				'A tight numbered list of three to five specific, non-obvious items from the persona’s niche under a headline worth screenshotting. Each item is a few words, not a sentence. No filler entries.',
+			scene:
+				'Clean typographic list card, numbered items with clear vertical rhythm, headline at top, brand background, no photography.',
 			media: 'image',
 			still: 'graphic',
 			refs: { character: false, product: false }
@@ -526,13 +638,19 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 		title: 'Ask the Room',
 		tagline: 'A question people actually answer',
 		category: 'social',
-		pipeline: 'Still image',
+		pipeline: 'Text card',
 		intent: 'channel',
 		surface: 'typographic',
 		sample: 'What is the one you would never give up?',
+		samples: [
+			'What did you quit that instantly improved your life?',
+			'One meal, every day, forever. What is it?'
+		],
 		baseBody: {
-			topic: 'One open question in the persona’s niche that is easy to answer in four words and hard to scroll past. Specific and a little playful — never a generic "what do you think?".',
-			scene: 'Single large question set in brand type, centred, plenty of negative space, no photography.',
+			topic:
+				'One open question in the persona’s niche that is easy to answer in four words and hard to scroll past. Specific and a little playful — never a generic "what do you think?".',
+			scene:
+				'Single large question set in brand type, centred, plenty of negative space, no photography.',
 			media: 'image',
 			still: 'graphic',
 			refs: { character: false, product: false }
@@ -543,13 +661,19 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 		title: 'Define It',
 		tagline: 'Name a feeling the audience has but cannot articulate',
 		category: 'social',
-		pipeline: 'Still image',
+		pipeline: 'Text card',
 		intent: 'channel',
 		surface: 'typographic',
 		sample: 'noun — the tab you never close and never read.',
+		samples: [
+			'gymnesia, noun — forgetting every excuse the second you finish.',
+			'scrollmourning, noun — grief for the hour the feed just took.'
+		],
 		baseBody: {
-			topic: 'Invent a dictionary-style definition for a very specific experience in the persona’s niche that the audience will recognise instantly but has never had a word for. Dry, deadpan, precise.',
-			scene: 'Dictionary-entry typographic still: invented headword, part of speech in italics, definition beneath, restrained palette, no photography.',
+			topic:
+				'Invent a dictionary-style definition for a very specific experience in the persona’s niche that the audience will recognise instantly but has never had a word for. Dry, deadpan, precise.',
+			scene:
+				'Dictionary-entry typographic still: invented headword, part of speech in italics, definition beneath, restrained palette, no photography.',
 			media: 'image',
 			still: 'graphic',
 			refs: { character: false, product: false }
@@ -560,13 +684,19 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 		title: 'Both Can Be True',
 		tagline: 'Hold two opposing ideas at once',
 		category: 'social',
-		pipeline: 'Still image',
+		pipeline: 'Text card',
 		intent: 'channel',
 		surface: 'typographic',
 		sample: 'You can love the work and still need a break from it.',
+		samples: [
+			'You can be proud of the progress\nand still want more.',
+			'You can trust the process\nand still check the mirror.'
+		],
 		baseBody: {
-			topic: 'Two statements from the persona’s niche that appear to contradict each other but are both true, joined so the tension is the point. Warm and reassuring rather than clever.',
-			scene: 'Two-line typographic still with a dividing rule between the halves, soft brand palette, no photography.',
+			topic:
+				'Two statements from the persona’s niche that appear to contradict each other but are both true, joined so the tension is the point. Warm and reassuring rather than clever.',
+			scene:
+				'Two-line typographic still with a dividing rule between the halves, soft brand palette, no photography.',
 			media: 'image',
 			still: 'graphic',
 			refs: { character: false, product: false }
@@ -584,9 +714,16 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 		surface: 'photo',
 		framing: 'selfie',
 		sample: 'Coffee, half a notebook page, morning light.',
+		samples: [
+			'7:04am. Nothing interesting is happening. That’s the point.',
+			'Desk edge, cold brew, hair unbothered. Present.'
+		],
 		baseBody: {
-			topic: 'A single unremarkable moment from the persona’s ordinary day, captured by them in the moment. No product, no message, no caption-bait — just presence.',
-			scene: SELFIE_LOOK + ' Arm’s-length morning selfie — kitchen counter or desk edge in frame behind, unbrushed-hair honesty, soft window light, slightly imperfect angle.',
+			topic:
+				'A single unremarkable moment from the persona’s ordinary day, captured by them in the moment. No product, no message, no caption-bait — just presence.',
+			scene:
+				SELFIE_LOOK +
+				' Arm’s-length morning selfie — kitchen counter or desk edge in frame behind, unbrushed-hair honesty, soft window light, slightly imperfect angle.',
 			media: 'image',
 			refs: { character: true, product: false }
 		}
@@ -601,9 +738,16 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 		surface: 'photo',
 		framing: 'selfie',
 		sample: 'The version nobody was supposed to see.',
+		samples: [
+			'Hour six. The desk is lost. The draft is winning.',
+			'Cables, cold coffee, and the thing almost working.'
+		],
 		baseBody: {
-			topic: 'The persona mid-work, showing the unglamorous middle of something they make or do — tired but in it. Honest, not styled.',
-			scene: SELFIE_LOOK + ' Selfie held high or propped, the actual work-in-progress mess visible and in focus behind them — desk chaos, materials, screens — hour-six energy, available light.',
+			topic:
+				'The persona mid-work, showing the unglamorous middle of something they make or do — tired but in it. Honest, not styled.',
+			scene:
+				SELFIE_LOOK +
+				' Selfie held high or propped, the actual work-in-progress mess visible and in focus behind them — desk chaos, materials, screens — hour-six energy, available light.',
 			media: 'image',
 			refs: { character: true, product: false }
 		}
@@ -617,9 +761,15 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 		intent: 'channel',
 		surface: 'photo',
 		sample: 'Four textures that explain the whole aesthetic.',
+		samples: [
+			'Linen, brushed steel, matcha, grain. That’s the whole brand.',
+			'No words anywhere — the palette is the caption.'
+		],
 		baseBody: {
-			topic: 'A collection of textures, colours and objects that communicate the persona’s taste in the niche without naming anything. Should feel curated by a person, not assembled by a search.',
-			scene: 'Flat-lay grid of materials and swatches, soft diffuse light, cohesive palette, no product branding, no text.',
+			topic:
+				'A collection of textures, colours and objects that communicate the persona’s taste in the niche without naming anything. Should feel curated by a person, not assembled by a search.',
+			scene:
+				'Flat-lay grid of materials and swatches, soft diffuse light, cohesive palette, no product branding, no text.',
 			media: 'image',
 			refs: { character: false, product: false }
 		}
@@ -633,9 +783,15 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 		intent: 'channel',
 		surface: 'photo',
 		sample: 'You just sat down and nobody needs anything from you.',
+		samples: [
+			'Your hands, the first pour, steam doing its slow thing.',
+			'Feet up, laptop shut, the good kind of quiet.'
+		],
 		baseBody: {
-			topic: 'A first-person point-of-view moment from the persona’s world that the audience will recognise as their own. The viewer should feel placed inside it, not shown it.',
-			scene: 'First-person camera angle, hands or feet in lower frame, natural light, real environment, no eye contact with camera.',
+			topic:
+				'A first-person point-of-view moment from the persona’s world that the audience will recognise as their own. The viewer should feel placed inside it, not shown it.',
+			scene:
+				'First-person camera angle, hands or feet in lower frame, natural light, real environment, no eye contact with camera.',
 			media: 'image',
 			refs: { character: false, product: false }
 		}
@@ -652,9 +808,16 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 		surface: 'motion',
 		framing: 'selfie',
 		sample: 'Right, I need to talk about this for a second.',
+		samples: [
+			'No, because who decided this was normal? Sit down.',
+			'I’ve held this in for a week. Camera’s on. Go.'
+		],
 		baseBody: {
-			topic: 'The persona argues one strongly held position from their niche straight into their front camera, like voice-noting a friend who is wrong. Builds, lands a clear point, stops. No product mentioned at any stage.',
-			scene: SELFIE_LOOK + ' Handheld and slightly moving — pacing the kitchen or living room, mid-thought opening with no intro, animated but genuine delivery.',
+			topic:
+				'The persona argues one strongly held position from their niche straight into their front camera, like voice-noting a friend who is wrong. Builds, lands a clear point, stops. No product mentioned at any stage.',
+			scene:
+				SELFIE_LOOK +
+				' Handheld and slightly moving — pacing the kitchen or living room, mid-thought opening with no intro, animated but genuine delivery.',
 			format: 'spokesperson',
 			refs: { character: true, product: false }
 		}
@@ -669,9 +832,16 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 		surface: 'motion',
 		framing: 'selfie',
 		sample: 'So this happened and I still think about it.',
+		samples: [
+			'A stranger at the gym said one sentence and it rewired me.',
+			'I almost didn’t go that day. I’m so glad I went. Listen.'
+		],
 		baseBody: {
-			topic: 'A short first-person story from the persona’s life that turns on one surprising detail and ends on a thought rather than a lesson. Told like a secret. Nothing is sold and no moral is stated outright.',
-			scene: SELFIE_LOOK + ' Close intimate framing, evening — couch or bed, lamp light, hoodie or sleep shirt, opens mid-story with no setup, small honest reactions.',
+			topic:
+				'A short first-person story from the persona’s life that turns on one surprising detail and ends on a thought rather than a lesson. Told like a secret. Nothing is sold and no moral is stated outright.',
+			scene:
+				SELFIE_LOOK +
+				' Close intimate framing, evening — couch or bed, lamp light, hoodie or sleep shirt, opens mid-story with no setup, small honest reactions.',
 			format: 'spokesperson',
 			refs: { character: true, product: false }
 		}
@@ -686,9 +856,16 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 		surface: 'motion',
 		framing: 'selfie',
 		sample: 'Someone asked this again, so — properly this time.',
+		samples: [
+			'“How do you stay consistent?” Parked car. Real answer.',
+			'You keep asking about my mornings. Full answer, dashboard cam.'
+		],
 		baseBody: {
-			topic: 'The persona answers a question their audience genuinely keeps asking in their niche, thoroughly and without deflecting. Useful enough to be saved.',
-			scene: SELFIE_LOOK + ' Sitting in a parked car, phone propped on the dash, daylight through the windshield, seatbelt off, opens by restating the question, unhurried and direct.',
+			topic:
+				'The persona answers a question their audience genuinely keeps asking in their niche, thoroughly and without deflecting. Useful enough to be saved.',
+			scene:
+				SELFIE_LOOK +
+				' Sitting in a parked car, phone propped on the dash, daylight through the windshield, seatbelt off, opens by restating the question, unhurried and direct.',
 			format: 'spokesperson',
 			refs: { character: true, product: false }
 		}
@@ -703,9 +880,16 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 		surface: 'motion',
 		framing: 'selfie',
 		sample: 'This keeps getting repeated and it is just wrong.',
+		samples: [
+			'Walking and debunking: the 5am club is not a personality.',
+			'That advice cost me a year. Here’s the correction, mid-stride.'
+		],
 		baseBody: {
-			topic: 'The persona names one common piece of bad advice in their niche, explains precisely why it fails, and gives the better alternative. Direct and evidence-led, never condescending.',
-			scene: SELFIE_LOOK + ' Walking outside — sidewalk or park, arm’s-length handheld with natural bounce, jacket weather, opens on the myth itself with no preamble.',
+			topic:
+				'The persona names one common piece of bad advice in their niche, explains precisely why it fails, and gives the better alternative. Direct and evidence-led, never condescending.',
+			scene:
+				SELFIE_LOOK +
+				' Walking outside — sidewalk or park, arm’s-length handheld with natural bounce, jacket weather, opens on the myth itself with no preamble.',
 			format: 'spokesperson',
 			refs: { character: true, product: false }
 		}
@@ -725,9 +909,16 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 		surface: 'motion',
 		framing: 'selfie',
 		sample: 'Three things I refuse to do anymore — number two matters most.',
+		samples: [
+			'Three lies your feed tells you — counting down on fingers.',
+			'Three purchases I’d undo. Number one still hurts.'
+		],
 		baseBody: {
-			topic: 'A counted selfie video: the persona opens with a compressed, slightly cautionary hook naming the list (“Three things I’d never do again”, “Three signs you’re doing it wrong”), then delivers each numbered item in one tight line with a half-beat of reaction between, and closes on the sharpest item, not a summary. Deadpan, self-aware, specific to the persona’s niche. IMPORTANT for repeat runs: invent a fresh list and angle each time — never reuse a previous list’s items or hook.',
-			scene: SELFIE_LOOK + ' Front camera held slightly below eye level, persona counting on fingers, one consistent location per video but varied across runs — kitchen, car, bathroom mirror, street — delivery paced for on-screen number overlays.',
+			topic:
+				'A counted selfie video: the persona opens with a compressed, slightly cautionary hook naming the list (“Three things I’d never do again”, “Three signs you’re doing it wrong”), then delivers each numbered item in one tight line with a half-beat of reaction between, and closes on the sharpest item, not a summary. Deadpan, self-aware, specific to the persona’s niche. IMPORTANT for repeat runs: invent a fresh list and angle each time — never reuse a previous list’s items or hook.',
+			scene:
+				SELFIE_LOOK +
+				' Front camera held slightly below eye level, persona counting on fingers, one consistent location per video but varied across runs — kitchen, car, bathroom mirror, street — delivery paced for on-screen number overlays.',
 			format: 'spokesperson',
 			refs: { character: true, product: false }
 		}
@@ -742,9 +933,16 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 		surface: 'motion',
 		framing: 'selfie',
 		sample: 'Okay so while I do this — let me tell you what happened.',
+		samples: [
+			'Skincare and a story: the DM that changed my whole week.',
+			'Hair up, kettle on — let’s talk about quitting things.'
+		],
 		baseBody: {
-			topic: 'The persona talks through one interesting niche topic or mild story while getting ready — the routine is the backdrop, the talking is the content. Intimate, unhurried, like a friend on speakerphone. No product pitch.',
-			scene: SELFIE_LOOK + ' Phone propped against the bathroom or bedroom mirror, persona doing hair or skincare motions while talking to the reflection camera, morning light, towel or robe realism.',
+			topic:
+				'The persona talks through one interesting niche topic or mild story while getting ready — the routine is the backdrop, the talking is the content. Intimate, unhurried, like a friend on speakerphone. No product pitch.',
+			scene:
+				SELFIE_LOOK +
+				' Phone propped against the bathroom or bedroom mirror, persona doing hair or skincare motions while talking to the reflection camera, morning light, towel or robe realism.',
 			format: 'spokesperson',
 			refs: { character: true, product: false }
 		}
@@ -759,9 +957,16 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 		surface: 'motion',
 		framing: 'selfie',
 		sample: 'No script today — just checking in.',
+		samples: [
+			'Week’s been a six out of ten. Here’s the honest version.',
+			'One win, one flop, thirty seconds. Deal.'
+		],
 		baseBody: {
-			topic: 'A short unpolished check-in: how the week is actually going in the persona’s world, one real observation from their niche, one small honest admission. The anti-performance post that makes the polished ones believable.',
-			scene: SELFIE_LOOK + ' Wherever they are — couch, parked car, walking — one take energy, pauses left in, soft real light, no setup whatsoever.',
+			topic:
+				'A short unpolished check-in: how the week is actually going in the persona’s world, one real observation from their niche, one small honest admission. The anti-performance post that makes the polished ones believable.',
+			scene:
+				SELFIE_LOOK +
+				' Wherever they are — couch, parked car, walking — one take energy, pauses left in, soft real light, no setup whatsoever.',
 			format: 'spokesperson',
 			refs: { character: true, product: false }
 		}
@@ -781,9 +986,16 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 		surface: 'motion',
 		framing: 'selfie',
 		sample: 'Do NOT look up what this actually means.',
+		samples: [
+			'Do NOT search “protein absorption window”. You’ve been warned.',
+			'Whatever you do, don’t look up how your pre-workout works.'
+		],
 		baseBody: {
-			topic: 'A curiosity-gap franchise video: the persona opens with a “Do NOT look up / search [payload]” warning-hook about something specific in their niche, then — while insisting they warned you — explains just enough of what it is and why it got them, ending on the exact phrase to (not) search. The opening warning line doubles as the on-screen hook text. Playful conspiratorial dread, never actual harm. IMPORTANT for repeat runs: a completely fresh payload every time — the hook pattern is the franchise, the payload must never repeat.',
-			scene: SELFIE_LOOK + ' One micro-setting per video, varied across runs — lying on a pillow, wrapped in a bathrobe, parked car at night with dashboard glow — hushed leaning-in delivery.',
+			topic:
+				'A curiosity-gap franchise video: the persona opens with a “Do NOT look up / search [payload]” warning-hook about something specific in their niche, then — while insisting they warned you — explains just enough of what it is and why it got them, ending on the exact phrase to (not) search. The opening warning line doubles as the on-screen hook text. Playful conspiratorial dread, never actual harm. IMPORTANT for repeat runs: a completely fresh payload every time — the hook pattern is the franchise, the payload must never repeat.',
+			scene:
+				SELFIE_LOOK +
+				' One micro-setting per video, varied across runs — lying on a pillow, wrapped in a bathrobe, parked car at night with dashboard glow — hushed leaning-in delivery.',
 			format: 'spokesperson',
 			refs: { character: true, product: false }
 		}
@@ -798,9 +1010,16 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 		surface: 'motion',
 		framing: 'selfie',
 		sample: 'The real reason you feel invisible.',
+		samples: [
+			'The real reason you quit on week three.',
+			'The real reason mornings feel impossible lately.'
+		],
 		baseBody: {
-			topic: 'An observation-commentary franchise video: the persona opens with “The real reason you [specific feeling or behavior in their niche]” — the line doubles as the on-screen hook — then unpacks the actual mechanism behind it in two or three plain sentences that make the viewer feel precisely seen, closing on one reframing thought rather than advice. IMPORTANT for repeat runs: a different feeling or behavior each time; never reuse a prior hook.',
-			scene: SELFIE_LOOK + ' Still, close and quiet — soft lamp or window light, minimal movement, steady eye contact, the pacing of someone saying something they mean.',
+			topic:
+				'An observation-commentary franchise video: the persona opens with “The real reason you [specific feeling or behavior in their niche]” — the line doubles as the on-screen hook — then unpacks the actual mechanism behind it in two or three plain sentences that make the viewer feel precisely seen, closing on one reframing thought rather than advice. IMPORTANT for repeat runs: a different feeling or behavior each time; never reuse a prior hook.',
+			scene:
+				SELFIE_LOOK +
+				' Still, close and quiet — soft lamp or window light, minimal movement, steady eye contact, the pacing of someone saying something they mean.',
 			format: 'spokesperson',
 			refs: { character: true, product: false }
 		}
@@ -815,9 +1034,16 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 		surface: 'photo',
 		framing: 'selfie',
 		sample: 'Proof of life. That’s the post.',
+		samples: [
+			'Flash on, zero angle math. This is the face today.',
+			'Golden hour found me before the to-do list did.'
+		],
 		baseBody: {
-			topic: 'A plain arm’s-length face selfie — the persona as they actually look today, small true smile or deadpan, nothing arranged. The post that keeps a feed feeling human between everything else.',
-			scene: SELFIE_LOOK + ' Tight arm’s-length face framing, direct flash indoors OR golden hour outdoors (vary across runs), honest skin texture, background incidental and slightly cropped.',
+			topic:
+				'A plain arm’s-length face selfie — the persona as they actually look today, small true smile or deadpan, nothing arranged. The post that keeps a feed feeling human between everything else.',
+			scene:
+				SELFIE_LOOK +
+				' Tight arm’s-length face framing, direct flash indoors OR golden hour outdoors (vary across runs), honest skin texture, background incidental and slightly cropped.',
 			media: 'image',
 			refs: { character: true, product: false }
 		}
@@ -833,9 +1059,16 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 		surface: 'photo',
 		framing: 'selfie',
 		sample: 'Balanced the phone on a water bottle for this.',
+		samples: [
+			'Timer, three attempts, kept the one mid-laugh.',
+			'Phone leaned on two paperbacks. Art happened anyway.'
+		],
 		baseBody: {
-			topic: 'A self-timer photo of the persona mid-ordinary-action — stretching, pouring coffee, leaning in a doorway, mid-laugh at nothing. The propped-phone look that reads as real precisely because no one took it. No product.',
-			scene: PROPPED_LOOK + ' Prop and setting varied across runs — phone leaning on a water bottle in the kitchen, against books on a shelf, on a ledge outdoors at golden hour.',
+			topic:
+				'A self-timer photo of the persona mid-ordinary-action — stretching, pouring coffee, leaning in a doorway, mid-laugh at nothing. The propped-phone look that reads as real precisely because no one took it. No product.',
+			scene:
+				PROPPED_LOOK +
+				' Prop and setting varied across runs — phone leaning on a water bottle in the kitchen, against books on a shelf, on a ledge outdoors at golden hour.',
 			media: 'image',
 			refs: { character: true, product: false }
 		}
@@ -850,9 +1083,15 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 		surface: 'photo',
 		framing: 'selfie',
 		sample: 'The 0.5 does not lie. Unfortunately.',
+		samples: [
+			'Arms in, ceiling bent, chaos preserved at 0.5x.',
+			'The lens adds distortion. We add commitment.'
+		],
 		baseBody: {
-			topic: 'A 0.5x ultrawide back-camera selfie — the persona holds the phone high or low, face and surroundings comically stretched at the edges, genuine mid-moment expression. The deliberately unflattering-but-fun register that makes a feed feel alive. No product.',
-			scene: 'Shot by the persona themself on a phone BACK camera at 0.5x ultrawide: arm visibly extended into frame, strong fisheye edge distortion bending the room or sky, face slightly warped and close, spontaneous caught-moment energy, natural light, real environment wrapping the frame, NO studio lighting, NO professional composition, NO photoshoot polish.',
+			topic:
+				'A 0.5x ultrawide back-camera selfie — the persona holds the phone high or low, face and surroundings comically stretched at the edges, genuine mid-moment expression. The deliberately unflattering-but-fun register that makes a feed feel alive. No product.',
+			scene:
+				'Shot by the persona themself on a phone BACK camera at 0.5x ultrawide: arm visibly extended into frame, strong fisheye edge distortion bending the room or sky, face slightly warped and close, spontaneous caught-moment energy, natural light, real environment wrapping the frame, NO studio lighting, NO professional composition, NO photoshoot polish.',
 			media: 'image',
 			refs: { character: true, product: false }
 		}
@@ -861,25 +1100,31 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
 
 /**
  * Per-pipeline cost/time shown on every tile. Estimates aligned with
- * lib/pricing.ts (nano-banana still $0.08; talking head = still + TTS +
- * OmniHuman ~$0.81; product motion = still + Kling ~$0.61; cinematic
- * multi-shot ~$1.95). Times are observed queue-to-asset ranges, not promises.
+ * lib/pricing.ts + the models.ts catalog DEFAULTS (nano-banana still $0.08;
+ * talking head = still + TTS + OmniHuman ~$0.81; product motion = still +
+ * Kling O3 Standard $0.42 ≈ $0.51; cinematic = 2–5 storyboard stills + Kling
+ * Pro ≈ $1.95). The composer's server-resolved preview remains the exact
+ * number — these tiles are default-model estimates and say "~" for that
+ * reason (a Model Manager override changes the real price, which only the
+ * preview can know). Times are observed queue-to-asset ranges, not promises.
  */
-export const PIPELINE_META: Record<
-	StudioTemplate['pipeline'],
-	{ usd: string; time: string }
-> = {
+export const PIPELINE_META: Record<StudioTemplate['pipeline'], { usd: string; time: string }> = {
+	// 'Text card' is typeset server-side (no image model) — the only cost left is
+	// the ~$0.002 Director text call, which rounds to Free on a tile. The image
+	// model runs solely as a fallback when the host can't render locally.
+	'Text card': { usd: 'Free', time: '~10s' },
 	'Still image': { usd: '$0.08', time: '~30s' },
 	'Talking head': { usd: '~$0.81', time: '2–4 min' },
-	'Product motion': { usd: '~$0.61', time: '2–5 min' },
+	'Product motion': { usd: '~$0.51', time: '2–5 min' },
 	Cinematic: { usd: '~$1.95', time: '3–6 min' }
 };
 
 /** The same estimates as numbers — campaign budgeting math. Keep in sync. */
 export const PIPELINE_USD: Record<StudioTemplate['pipeline'], number> = {
+	'Text card': 0,
 	'Still image': 0.08,
 	'Talking head': 0.81,
-	'Product motion': 0.61,
+	'Product motion': 0.51,
 	Cinematic: 1.95
 };
 
@@ -894,5 +1139,4 @@ export const STUDIO_SURFACES: Array<{
 	{ id: 'photo', label: 'Photo', hint: 'Image-led stills in the persona’s world' },
 	{ id: 'motion', label: 'Video', hint: 'Talking head and product motion' },
 	{ id: 'cinematic', label: 'Cinematic', hint: 'Multi-shot, directed, ad-grade' }
-
 ];

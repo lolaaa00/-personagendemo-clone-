@@ -134,6 +134,46 @@
 	// confirm button so the outcome isn't a surprise.
 	let hasConnections = $derived(!!preview?.connectedPlatforms?.length);
 
+	// Where approving SENDS this run. The consequence belongs ON the button —
+	// "Approve & generate" that quietly publishes live to a connected account the
+	// moment generation finishes is exactly the kind of surprise this dialog
+	// exists to prevent.
+	let deliverMode = $derived(
+		typeof spec?.baseBody?.deliver === 'string' ? (spec.baseBody.deliver as string) : null
+	);
+	let destination = $derived.by(() => {
+		if (!isPostKind) return null; // prompt-kind flows keep their own label
+		if (deliverMode === 'asset')
+			return {
+				label: spec?.confirmLabel ?? 'Approve & generate',
+				hint: 'Output: standalone asset — skips the review queue and never publishes on its own.'
+			};
+		if (deliverMode === 'review')
+			return {
+				label: spec?.confirmLabel ?? 'Approve & generate',
+				hint: 'Output: draft in the review queue — publishes only when you approve it there.'
+			};
+		if (!hasConnections)
+			return {
+				label: 'Save as draft',
+				hint: 'Output: draft — no account is connected, so nothing can publish.'
+			};
+		if (platforms.length === 0)
+			return {
+				label: 'Save as draft',
+				hint: 'Output: draft — no platform selected, so nothing publishes.'
+			};
+		if (scheduledDate)
+			return {
+				label: 'Approve & schedule',
+				hint: `Output: scheduled post — publishes to ${platforms.join(', ')} on ${scheduledDate}${scheduledTime ? ` at ${scheduledTime}` : ''}.`
+			};
+		return {
+			label: 'Approve & publish now',
+			hint: `Output: LIVE post — publishes immediately to ${platforms.join(', ')} as soon as generation completes.`
+		};
+	});
+
 	// The literal string the provider will receive. generateUgcImage prepends a
 	// style prefix, so for those flows we show prefix + the (possibly edited)
 	// prompt rather than pretending the textarea is the whole request.
@@ -640,7 +680,10 @@
 				</div>
 			{/if}
 
-			{#if videoModelOptions.length && format !== 'spokesperson'}
+			<!-- Only for runs that will actually feed an i2v model: image-only runs
+			     never touch it, and cinematic runs use their own fixed pipeline —
+			     offering the picker there would imply a choice that has no effect. -->
+			{#if videoModelOptions.length && media === 'video' && format !== 'spokesperson'}
 				<div class="fld">
 					<span class="fld-label" id="gc-videomodel-label">Video model — the biggest cost in this run</span>
 					<div class="models" role="radiogroup" aria-labelledby="gc-videomodel-label">
@@ -709,6 +752,13 @@
 			</div>
 		{/if}
 
+		{#if destination}
+			<p class="dest-note" role="note" aria-live="polite">
+				<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 2 11 13" /><path d="M22 2 15 22l-4-9-9-4Z" /></svg>
+				<span>{destination.hint}</span>
+			</p>
+		{/if}
+
 		<div class="meta">
 			{#if preview.model}<span>Model <code>{preview.model}</code></span>{/if}
 			{#if preview.provider && isPromptKind}<span>via {preview.provider}</span>{/if}
@@ -719,11 +769,7 @@
 	{#snippet footer()}
 		<button class="btn-ghost" onclick={onClose}>Cancel</button>
 		<button class="btn-primary" disabled={loading || !!loadError || !preview} onclick={confirm}>
-			{#if isPostKind && !hasConnections}
-				Save as draft
-			{:else}
-				{spec?.confirmLabel ?? 'Approve & generate'}
-			{/if}
+			{destination?.label ?? spec?.confirmLabel ?? 'Approve & generate'}
 		</button>
 	{/snippet}
 </Modal>
@@ -997,6 +1043,25 @@
 		padding: 0.1rem 0.35rem;
 		border-radius: 6px;
 		font-size: 0.75rem;
+	}
+	/* The destination line: what approving actually DOES with the output. */
+	.dest-note {
+		display: flex;
+		gap: 0.45rem;
+		align-items: flex-start;
+		margin: 0.9rem 0 0;
+		padding: 0.55rem 0.7rem;
+		border: 1px solid var(--border);
+		border-radius: 10px;
+		background: var(--surface-2);
+		color: var(--text);
+		font-size: 0.8rem;
+		line-height: 1.4;
+	}
+	.dest-note svg {
+		flex: none;
+		margin-top: 2px;
+		color: var(--accent);
 	}
 	.meta {
 		display: flex;

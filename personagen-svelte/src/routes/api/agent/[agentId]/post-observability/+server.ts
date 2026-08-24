@@ -92,9 +92,11 @@ export const GET: RequestHandler = async ({ params, url, locals }) => {
 			const brief = await loadBriefForAgent(db, user.id, cfg?.brand_brief_id || null);
 			const products = brief?.data?.products;
 			if (Array.isArray(products)) {
-				const match =
-					products.find((p: any) => p?.name === productName) ||
-					products.find((p: any) => p?.photoUrl);
+				// EXACT name match only. Falling back to "any product with a photo"
+				// showed an arbitrary — possibly different — product as this post's
+				// reference the moment the original was renamed or removed, in the
+				// same figure grid as genuinely-sent images. Omission beats invention.
+				const match = products.find((p: any) => p?.name === productName);
 				productPhoto = match?.photoUrl || null;
 			}
 		}

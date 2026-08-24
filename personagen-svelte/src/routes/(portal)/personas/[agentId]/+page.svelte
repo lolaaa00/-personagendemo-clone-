@@ -8,7 +8,7 @@
 	import { slide } from 'svelte/transition';
 	import { Accounts, Autopilot, Posts, BrandBrief, parseJsonResponse } from '$lib/services/api';
 	import AgentConnectionStats from '$lib/components/agents/AgentConnectionStats.svelte';
-	import { PRICING_MATRIX, priceOf } from '$lib/pricing';
+	import { PRICING_MATRIX } from '$lib/pricing';
 	import PostCard from '$lib/components/feed/PostCard.svelte';
 	import PostDrawer from '$lib/components/feed/PostDrawer.svelte';
 	import CalendarView from '$lib/components/calendar/CalendarView.svelte';
@@ -26,7 +26,11 @@
 	} from '$lib/studio-templates';
 	import type { AutonomyLevel } from '$lib/types';
 	import { AUTONOMY_LABELS } from '$lib/types';
-	import { PLATFORMS as PLATFORM_REGISTRY, platformLabel, platformProfileUrl } from '$lib/platforms';
+	import {
+		PLATFORMS as PLATFORM_REGISTRY,
+		platformLabel,
+		platformProfileUrl
+	} from '$lib/platforms';
 	import GenerationComposer from '$lib/components/generation/GenerationComposer.svelte';
 	import type { ComposerSpec } from '$lib/components/generation/types';
 	import { NICHE_OPTIONS, stripLeadingAvatarName } from '$lib/persona-profile';
@@ -168,9 +172,7 @@
 	// Graduation signal: enough clean published posts + no recent failures →
 	// safe to promote this persona from Semi (review phase) to Fully Autonomous.
 	const GRADUATION_TARGET = 21; // ≈ 3/day × 7-day clean streak
-	let publishedCleanCount = $derived(
-		feedPosts.filter((p: any) => p.status === 'published').length
-	);
+	let publishedCleanCount = $derived(feedPosts.filter((p: any) => p.status === 'published').length);
 	let recentFailedCount = $derived(
 		feedPosts.filter((p: any) => p.status === 'failed' || p.status === 'partial').length
 	);
@@ -217,9 +219,9 @@
 	// Values are stage URLs (string) plus `<stage>_history` pools (string[]), so
 	// the type is widened from the old string-only shape.
 	let referenceKit = $state<Record<string, any>>(agent?.ugc_reference_kit ?? {});
-	let generatingKitStage = $state<'full_body' | 'side_profiles' | 'face_closeup' | 'feature_grid' | null>(
-		null
-	);
+	let generatingKitStage = $state<
+		'full_body' | 'side_profiles' | 'face_closeup' | 'feature_grid' | null
+	>(null);
 	let editSupervisorId = $state<string | null>(agent?.supervisor_agent_id ?? null);
 	let editRuntimeOwner = $state<'svelte-gemini' | 'hermes-daemon' | 'hermes-orchestrated'>(
 		agent?.runtime_owner ?? 'svelte-gemini'
@@ -308,14 +310,27 @@
 	let newHandleInput = $state('');
 
 	const PERSONA_ARCHETYPES = [
-		'The Creator', 'The Expert / Authority', 'The Relatable Friend', 'The Aspirational',
-		'The Storyteller', 'The Activist / Advocate', 'The Entertainer', 'The Educator',
-		'The Disruptor', 'The Community Builder'
+		'The Creator',
+		'The Expert / Authority',
+		'The Relatable Friend',
+		'The Aspirational',
+		'The Storyteller',
+		'The Activist / Advocate',
+		'The Entertainer',
+		'The Educator',
+		'The Disruptor',
+		'The Community Builder'
 	];
 	const CONTENT_FOCUS_OPTIONS = [
-		'Education & How-Tos', 'Entertainment & Humor', 'Lifestyle & Aesthetic',
-		'Product Reviews & UGC', 'Inspiration & Motivation', 'Behind-the-Scenes',
-		'News & Commentary', 'Tutorials & Demos', 'Personal Journey'
+		'Education & How-Tos',
+		'Entertainment & Humor',
+		'Lifestyle & Aesthetic',
+		'Product Reviews & UGC',
+		'Inspiration & Motivation',
+		'Behind-the-Scenes',
+		'News & Commentary',
+		'Tutorials & Demos',
+		'Personal Journey'
 	];
 
 	// NICHE_OPTIONS is imported from $lib/persona-profile (single source of truth,
@@ -415,12 +430,18 @@
 				connectedCount++;
 			}
 		}
-		const avgEngRate = connectedCount > 0 ? parseFloat((totalEngRate / connectedCount).toFixed(1)) : 0;
+		const avgEngRate =
+			connectedCount > 0 ? parseFloat((totalEngRate / connectedCount).toFixed(1)) : 0;
 		let followersStr = '0';
 		if (totalFollowers >= 1_000_000) followersStr = (totalFollowers / 1_000_000).toFixed(1) + 'M';
 		else if (totalFollowers >= 1000) followersStr = (totalFollowers / 1000).toFixed(1) + 'K';
 		else followersStr = String(totalFollowers);
-		return { followers: followersStr, followersRaw: totalFollowers, engagementRate: avgEngRate, connectedCount };
+		return {
+			followers: followersStr,
+			followersRaw: totalFollowers,
+			engagementRate: avgEngRate,
+			connectedCount
+		};
 	});
 
 	const timezones = [
@@ -453,7 +474,6 @@
 		{ value: 'Australia/Sydney', label: '(UTC+10) Sydney / Melbourne' },
 		{ value: 'Pacific/Auckland', label: '(UTC+12) Auckland' }
 	];
-
 
 	const GRADIENT_PRESETS = [
 		{ name: 'Purple Sunset', gradient: 'linear-gradient(135deg, #7C3AED, #4F46E5)' },
@@ -584,7 +604,15 @@
 	});
 
 	// ── UGC voice picker ───────────────────────────────────────────
-	let voiceCatalog = $state<Array<{ name: string; label: string; gender: 'male' | 'female'; style: string; accent?: string }>>([]);
+	let voiceCatalog = $state<
+		Array<{
+			name: string;
+			label: string;
+			gender: 'male' | 'female';
+			style: string;
+			accent?: string;
+		}>
+	>([]);
 	let previewingVoice = $state(false);
 	let previewAudio: HTMLAudioElement | null = null;
 
@@ -748,10 +776,6 @@
 		syncingFeed = false;
 	}
 
-	// ── Generation composer — every API-bound field is editable before send ──
-	let showGenerateConfirm = $state(false);
-	let confirmSkipNext = $state(false);
-	let skipGenerateConfirm = $state(false);
 	// ── Hero scroll-fade ────────────────────────────────────────────
 	// The identity hero sits directly above the sticky tab-nav. As the user
 	// scrolls into a long tab, fade + lift the hero out so the sticky nav docks
@@ -768,8 +792,6 @@
 	}
 
 	onMount(() => {
-		skipGenerateConfirm = localStorage.getItem('pg-skip-generate-confirm') === '1';
-
 		// The persona page scrolls inside the portal content column, not the window.
 		scrollParent = heroEl?.closest('.portal-content') ?? null;
 		if (scrollParent) {
@@ -792,90 +814,6 @@
 			history.replaceState({}, '', clean.toString());
 		}
 	});
-
-	let genTopic = $state('');
-	let genScene = $state('');
-	let genMedia = $state<'video' | 'image' | 'cinematic'>('video');
-	let genProvider = $state<'auto' | 'fal' | 'openrouter'>('auto');
-	let genPlatforms = $state<string[]>([]);
-	let genProductId = $state('');
-	let genProductPhotoUrl = $state('');
-	let genCharacterRefUrl = $state('');
-	let briefProducts = $state<any[]>([]);
-	// Which brief id the product list was last loaded for (null = the unpinned/none
-	// state). Re-loads when the persona's pinned brief changes so the composer's
-	// product picker always reflects the CURRENT pin, not a stale first load.
-	let briefLoadedFor = $state<string | null | undefined>(undefined);
-
-	let genEstimate = $derived.by(() => {
-		const llm = 3 * priceOf('openrouter', 'llm');
-		if (genMedia === 'image') {
-			const img = genProvider === 'openrouter' ? priceOf('openrouter', 'image') : priceOf('fal', 'image', 'nano');
-			return { low: +(img + llm).toFixed(2), high: +(img + llm).toFixed(2) };
-		}
-		if (genMedia === 'cinematic') {
-			// fal-exclusive: 3-5 storyboard stills (Nano Banana) + one Kling O3 Pro
-			// multi-shot reference video.
-			const still = priceOf('fal', 'image', 'nano');
-			const vid = priceOf('fal', 'video', 'pro');
-			return { low: +(3 * still + vid + llm).toFixed(2), high: +(5 * still + vid + llm).toFixed(2) };
-		}
-		const img = genProvider === 'openrouter' ? priceOf('openrouter', 'image') : priceOf('fal', 'image', 'nano');
-		const vidLow = genProvider === 'openrouter' ? priceOf('openrouter', 'video') : priceOf('fal', 'tts') + priceOf('fal', 'talking_head');
-		const vidHigh = genProvider === 'openrouter' ? priceOf('openrouter', 'video') : priceOf('fal', 'video', 'standard');
-		return {
-			low: +(img + llm + Math.min(vidLow, vidHigh)).toFixed(2),
-			high: +(img + llm + Math.max(vidLow, vidHigh)).toFixed(2)
-		};
-	});
-
-	let connectedKeys = $derived(PLATFORMS.filter((p) => platformStatuses[p.key]?.connected).map((p) => p.key));
-
-	async function openComposer() {
-		genPlatforms = [...connectedKeys];
-		showGenerateConfirm = true;
-		// Pinned-only: pull products from the persona's SELECTED brief, or none when
-		// nothing is pinned. Cached per brief id so switching the pin re-loads.
-		const pin = selectedBrandBriefId || null;
-		if (briefLoadedFor !== pin) {
-			briefLoadedFor = pin;
-			briefProducts = [];
-			if (pin) {
-				try {
-					const res = await BrandBrief.getById(pin);
-					if (res.success && Array.isArray(res.data?.products)) briefProducts = res.data.products;
-				} catch {
-					/* composer works without the product list */
-				}
-			}
-		}
-	}
-
-	function toggleGenPlatform(key: string) {
-		genPlatforms = genPlatforms.includes(key)
-			? genPlatforms.filter((k) => k !== key)
-			: [...genPlatforms, key];
-	}
-
-	/**
-	 * Composer "✨ Generate" handler: bundles exactly what the user set in the
-	 * dialog and sends it to generatePostNow (which posts it verbatim to
-	 * /generate-post). Keys match what that endpoint reads — topic/media/
-	 * provider/platforms/scene/product_id/photo/face.
-	 */
-	async function confirmGenerate() {
-		showGenerateConfirm = false;
-		await generatePostNow({
-			topic: genTopic || undefined,
-			media: genMedia,
-			provider: genProvider,
-			platforms: genPlatforms,
-			scene: genScene || undefined,
-			product_id: genProductId || undefined,
-			product_photo_url: genProductPhotoUrl || undefined,
-			character_ref_url: genCharacterRefUrl || undefined
-		});
-	}
 
 	/**
 	 * Post generation always confirms now. The server resolves the real pipeline
@@ -903,8 +841,7 @@
 	/** Shelves for one intent: [surfaceDef, templates[]] pairs, empty shelves dropped. */
 	function studioShelves(intent: StudioIntent) {
 		return STUDIO_SURFACES.map(
-			(s) =>
-				[s, studioTemplates.filter((t) => t.intent === intent && t.surface === s.id)] as const
+			(s) => [s, studioTemplates.filter((t) => t.intent === intent && t.surface === s.id)] as const
 		).filter(([, list]) => list.length > 0);
 	}
 	// Where Studio output goes. 'review' → draft in the review queue (default);
@@ -929,6 +866,29 @@
 		}
 		return byTemplate;
 	});
+	// Rotating placeholder pool: one entry from [sample, ...samples] picked per
+	// template PER PAGE VIEW — the shelf reads fresh on every visit instead of
+	// repeating the same 37 lines forever. Map-cached so the pick is stable
+	// within a view (tiles don't reshuffle on every rerender).
+	const studioSamplePick = new Map<string, { idx: number; text: string }>();
+	function studioSample(t: StudioTemplate): { idx: number; text: string } {
+		let pick = studioSamplePick.get(t.id);
+		if (!pick) {
+			const pool = [t.sample, ...(t.samples ?? [])];
+			const idx = Math.floor(Math.random() * pool.length);
+			pick = { idx, text: pool[idx] };
+			studioSamplePick.set(t.id, pick);
+		}
+		return pick;
+	}
+	// Typographic tiles show a card ACTUALLY produced by the $0 renderer (via
+	// /api/studio/card-sample) — the placeholder IS the expected output. A host
+	// that can't render (no ffmpeg/font) 404s → tile falls back to the styled
+	// text sample. Reassigned, not mutated, so the fallback is reactive.
+	let studioCardUnavailable = $state<ReadonlySet<string>>(new Set());
+	function markStudioCardUnavailable(id: string) {
+		studioCardUnavailable = new Set([...studioCardUnavailable, id]);
+	}
 	function useStudioTemplate(t: StudioTemplate) {
 		if (!agent?.id) return;
 		askToGenerate(
@@ -1032,7 +992,8 @@
 				// Voice: record the inferred profile (nationality/accent from the name)
 				// and pin the closest catalog voice. Explicit gender stays authoritative;
 				// it's only filled here when it was blank (inferred from the name).
-				if (d.voiceProfile && typeof d.voiceProfile === 'object') ppVoiceProfile = { ...d.voiceProfile };
+				if (d.voiceProfile && typeof d.voiceProfile === 'object')
+					ppVoiceProfile = { ...d.voiceProfile };
 				// Adopt the resolved (name-driven) gender — corrects a mis-set gender in place so
 				// the generated face, voice, and reference-kit prompts all realign to the real
 				// identity (fixes "Ratio Ramadan was Female → woman's-face regen + female voice").
@@ -1181,7 +1142,11 @@
 		else if (scope === 'base') generatingKitBase = true;
 		else generatingKitBio = true;
 		try {
-			const res = await BrandBrief.generateIdentityKit(agent.id, selectedBrandBriefId || null, opts);
+			const res = await BrandBrief.generateIdentityKit(
+				agent.id,
+				selectedBrandBriefId || null,
+				opts
+			);
 			if (res.success && res.data) {
 				applyIdentityKit(res.data);
 				await saveIdentityKit();
@@ -1237,7 +1202,10 @@
 	function addOwnHandle() {
 		const h = sanitizeHandle(newHandleInput);
 		if (!h) {
-			showToast('Usernames: lowercase letters, digits, underscores (periods where allowed)', 'warning');
+			showToast(
+				'Usernames: lowercase letters, digits, underscores (periods where allowed)',
+				'warning'
+			);
 			return;
 		}
 		if (!ppHandleCandidates.some((c) => c.handle === h)) {
@@ -1277,7 +1245,9 @@
 			if (!res.ok) throw new Error(String(res.status));
 			const blob = await res.blob();
 			const ext = (blob.type.split('/')[1] || 'png').replace('jpeg', 'jpg');
-			const base = (editHandle || editName || 'persona').replace(/[^a-z0-9_-]+/gi, '-').toLowerCase();
+			const base = (editHandle || editName || 'persona')
+				.replace(/[^a-z0-9_-]+/gi, '-')
+				.toLowerCase();
 			const url = URL.createObjectURL(blob);
 			const a = document.createElement('a');
 			a.href = url;
@@ -1320,20 +1290,33 @@
 
 	// ── Skills & Tools: structured editors (stored as JSON in the existing
 	//    text columns; legacy plain text becomes a single migratable card) ───
-	interface SkillItem { id: string; name: string; md: string }
-	interface ToolItem { id: string; kind: string; label: string; config: string }
+	interface SkillItem {
+		id: string;
+		name: string;
+		md: string;
+	}
+	interface ToolItem {
+		id: string;
+		kind: string;
+		label: string;
+		config: string;
+	}
 	function parseSkills(raw: string): SkillItem[] {
 		try {
 			const j = JSON.parse(raw);
 			if (Array.isArray(j)) return j.filter((s) => s && s.name);
-		} catch { /* legacy plain text */ }
+		} catch {
+			/* legacy plain text */
+		}
 		return raw.trim() ? [{ id: 'legacy', name: 'Legacy notes', md: raw }] : [];
 	}
 	function parseTools(raw: string): ToolItem[] {
 		try {
 			const j = JSON.parse(raw);
 			if (Array.isArray(j)) return j.filter((t) => t && t.label);
-		} catch { /* legacy plain text */ }
+		} catch {
+			/* legacy plain text */
+		}
 		return raw.trim() ? [{ id: 'legacy', kind: 'other', label: 'Legacy notes', config: raw }] : [];
 	}
 	let skillsList = $state<SkillItem[]>(parseSkills(agent?.skills ?? ''));
@@ -1344,11 +1327,15 @@
 
 	function saveSkill() {
 		if (!editingSkill) return;
-		if (!editingSkill.name.trim()) { showToast('Skill needs a name', 'warning'); return; }
+		if (!editingSkill.name.trim()) {
+			showToast('Skill needs a name', 'warning');
+			return;
+		}
 		const i = skillsList.findIndex((s) => s.id === editingSkill!.id);
-		skillsList = i >= 0
-			? skillsList.map((s) => (s.id === editingSkill!.id ? { ...editingSkill! } : s))
-			: [...skillsList, { ...editingSkill }];
+		skillsList =
+			i >= 0
+				? skillsList.map((s) => (s.id === editingSkill!.id ? { ...editingSkill! } : s))
+				: [...skillsList, { ...editingSkill }];
 		skillsText = JSON.stringify(skillsList);
 		editingSkill = null;
 	}
@@ -1359,11 +1346,15 @@
 	}
 	function saveTool() {
 		if (!editingTool) return;
-		if (!editingTool.label.trim()) { showToast('Integration needs a label', 'warning'); return; }
+		if (!editingTool.label.trim()) {
+			showToast('Integration needs a label', 'warning');
+			return;
+		}
 		const i = toolsList.findIndex((t) => t.id === editingTool!.id);
-		toolsList = i >= 0
-			? toolsList.map((t) => (t.id === editingTool!.id ? { ...editingTool! } : t))
-			: [...toolsList, { ...editingTool }];
+		toolsList =
+			i >= 0
+				? toolsList.map((t) => (t.id === editingTool!.id ? { ...editingTool! } : t))
+				: [...toolsList, { ...editingTool }];
 		toolsText = JSON.stringify(toolsList);
 		editingTool = null;
 	}
@@ -1427,7 +1418,10 @@
 						showToast(reason, 'error');
 						return;
 					}
-					showToast(status === 'published' ? 'Post generated and published!' : 'Post generated!', 'success');
+					showToast(
+						status === 'published' ? 'Post generated and published!' : 'Post generated!',
+						'success'
+					);
 					await loadFeed();
 					return;
 				}
@@ -1461,7 +1455,9 @@
 			const res = await Posts.update(post.id, { content: parsed });
 			if (res.success) {
 				const serialized = JSON.stringify(parsed);
-				feedPosts = feedPosts.map((p: any) => (p.id === post.id ? { ...p, content: serialized } : p));
+				feedPosts = feedPosts.map((p: any) =>
+					p.id === post.id ? { ...p, content: serialized } : p
+				);
 				if (modalPost?.id === post.id) modalPost = { ...modalPost, content: serialized };
 				showToast('Caption updated', 'success');
 				return true;
@@ -1492,7 +1488,10 @@
 				if (modalPost?.id === post.id) modalPost = null;
 
 				if (teardown?.unpublished?.length) {
-					showToast(`Removed from ${teardown.unpublished.join(', ')} and deleted locally`, 'success');
+					showToast(
+						`Removed from ${teardown.unpublished.join(', ')} and deleted locally`,
+						'success'
+					);
 				} else {
 					showToast('Post deleted', 'success');
 				}
@@ -1513,7 +1512,9 @@
 	// ── Post manageability: multi-select + bulk delete + media enlarge ───────
 	let selectedPostIds = $state<string[]>([]);
 	let bulkDeletingPosts = $state(false);
-	let postMediaLightbox = $state<{ url: string; label: string; poster: string | null } | null>(null);
+	let postMediaLightbox = $state<{ url: string; label: string; poster: string | null } | null>(
+		null
+	);
 
 	function togglePostSelected(id: string) {
 		selectedPostIds = selectedPostIds.includes(id)
@@ -1561,7 +1562,8 @@
 			feedPosts = feedPosts.filter((p: any) => !ids.includes(p.id));
 			if (modalPost && ids.includes(modalPost.id)) modalPost = null;
 			selectedPostIds = [];
-			if (res.teardown?.manualDeletion?.length) manualDeleteNotice = res.teardown.manualDeletion as any;
+			if (res.teardown?.manualDeletion?.length)
+				manualDeleteNotice = res.teardown.manualDeletion as any;
 			const deleted = res.deleted ?? ids.length;
 			showToast(
 				deleted < ids.length
@@ -1582,7 +1584,9 @@
 		try {
 			const res = await Posts.update(post.id, { status: 'scheduled' });
 			if (res.success) {
-				feedPosts = feedPosts.map((p: any) => (p.id === post.id ? { ...p, status: 'scheduled' } : p));
+				feedPosts = feedPosts.map((p: any) =>
+					p.id === post.id ? { ...p, status: 'scheduled' } : p
+				);
 				if (modalPost?.id === post.id) modalPost = { ...modalPost, status: 'scheduled' };
 				showToast('Approved — will auto-publish at its scheduled time', 'success');
 			} else {
@@ -1627,9 +1631,7 @@
 		if (modalPost?.id === post.id) modalPost = { ...modalPost, is_favorite: next };
 		const res = await Posts.favorite(post.id, next);
 		if (!res.success) {
-			feedPosts = feedPosts.map((p: any) =>
-				p.id === post.id ? { ...p, is_favorite: !next } : p
-			);
+			feedPosts = feedPosts.map((p: any) => (p.id === post.id ? { ...p, is_favorite: !next } : p));
 			if (modalPost?.id === post.id) modalPost = { ...modalPost, is_favorite: !next };
 			showToast(res.error || 'Could not update favorite', 'error');
 		}
@@ -1637,35 +1639,38 @@
 
 	let mediaTypeFilter = $state<'all' | 'video' | 'image'>('all');
 
-	let filteredPosts = $derived(feedPosts.filter((p: any) => {
-		// In-flight and failed generations have no media YET, but they are exactly
-		// what the user wants to see after clicking Generate — the old blanket
-		// "no media => hide" rule silently swallowed them, so the feed looked
-		// unchanged until the job finished. PostCard renders these as a progress
-		// (or failure) card instead.
-		const inFlight = p.status === 'generating' || p.status === 'failed';
-		const display = getPostDisplay(p);
-		if (!inFlight && !display.mediaUrl) return false;
-		// A failed row with NO media is a dead generation — pure noise in the
-		// default feed. Keep it out of every view except an explicit "Failed"
-		// filter, where the user is deliberately triaging errors. (Publish-fails
-		// keep their media, so they stay visible as real, recoverable content.)
-		const isGenFailed = p.status === 'failed' && !display.mediaUrl;
-		if (isGenFailed && feedFilter !== 'failed') return false;
-		if (feedFilter !== 'all' && p.status !== feedFilter) return false;
-		// The media-type filter can't apply to a post whose media doesn't exist yet.
-		if (inFlight) return true;
-		if (mediaTypeFilter !== 'all') {
-			const isVideo =
-				display.mediaType === 'video' || /\.(mp4|mov|webm|m4v)(\?|$)/i.test(display.mediaUrl ?? '');
-			if (mediaTypeFilter === 'video' ? !isVideo : isVideo) return false;
-		}
-		if (platformFilter !== 'all') {
-			const plats = (p.platforms ?? []).map((x: string) => x.toLowerCase());
-			if (!plats.includes(platformFilter)) return false;
-		}
-		return true;
-	}));
+	let filteredPosts = $derived(
+		feedPosts.filter((p: any) => {
+			// In-flight and failed generations have no media YET, but they are exactly
+			// what the user wants to see after clicking Generate — the old blanket
+			// "no media => hide" rule silently swallowed them, so the feed looked
+			// unchanged until the job finished. PostCard renders these as a progress
+			// (or failure) card instead.
+			const inFlight = p.status === 'generating' || p.status === 'failed';
+			const display = getPostDisplay(p);
+			if (!inFlight && !display.mediaUrl) return false;
+			// A failed row with NO media is a dead generation — pure noise in the
+			// default feed. Keep it out of every view except an explicit "Failed"
+			// filter, where the user is deliberately triaging errors. (Publish-fails
+			// keep their media, so they stay visible as real, recoverable content.)
+			const isGenFailed = p.status === 'failed' && !display.mediaUrl;
+			if (isGenFailed && feedFilter !== 'failed') return false;
+			if (feedFilter !== 'all' && p.status !== feedFilter) return false;
+			// The media-type filter can't apply to a post whose media doesn't exist yet.
+			if (inFlight) return true;
+			if (mediaTypeFilter !== 'all') {
+				const isVideo =
+					display.mediaType === 'video' ||
+					/\.(mp4|mov|webm|m4v)(\?|$)/i.test(display.mediaUrl ?? '');
+				if (mediaTypeFilter === 'video' ? !isVideo : isVideo) return false;
+			}
+			if (platformFilter !== 'all') {
+				const plats = (p.platforms ?? []).map((x: string) => x.toLowerCase());
+				if (!plats.includes(platformFilter)) return false;
+			}
+			return true;
+		})
+	);
 
 	// Media type of a post for grouping/congruence. In-flight + failed rows have
 	// no media yet, so they're 'pending' and float to the top of the mosaic.
@@ -1673,8 +1678,7 @@
 		if (p.status === 'generating' || p.status === 'failed') return 'pending';
 		const d = getPostDisplay(p);
 		if (!d.mediaUrl) return 'pending';
-		const isVideo =
-			d.mediaType === 'video' || /\.(mp4|mov|webm|m4v)(\?|$)/i.test(d.mediaUrl ?? '');
+		const isVideo = d.mediaType === 'video' || /\.(mp4|mov|webm|m4v)(\?|$)/i.test(d.mediaUrl ?? '');
 		return isVideo ? 'video' : 'image';
 	}
 
@@ -1830,7 +1834,11 @@
 	 */
 	async function deleteAssets(items: AssetItem[]) {
 		if (items.length === 0 || deletingAssets) return;
-		const postIds = [...new Set(items.filter((i) => i.source === 'post' && i.postId).map((i) => i.postId as string))];
+		const postIds = [
+			...new Set(
+				items.filter((i) => i.source === 'post' && i.postId).map((i) => i.postId as string)
+			)
+		];
 		const kitItems = items.filter((i) => i.source === 'kit');
 		const avatarItems = items.filter((i) => i.source === 'avatar');
 
@@ -1924,7 +1932,11 @@
 	// ── Profile save ───────────────────────────────────────────────
 	// ── Generation cost tracking ────────────────────────────────────────────
 	// Per-provider spend (estimates from the generation_events ledger).
-	let agentSpend = $state<{ total: number; byProvider: Record<string, number>; byOperation: Record<string, number> } | null>(null);
+	let agentSpend = $state<{
+		total: number;
+		byProvider: Record<string, number>;
+		byOperation: Record<string, number>;
+	} | null>(null);
 	async function loadSpend(agentId: string) {
 		try {
 			const res = await fetch(`/api/agent/${agentId}/spend`);
@@ -2024,11 +2036,32 @@
 			if (!res.ok || !d.success) throw new Error(d.error || 'Server error');
 			// Update local agent state optimistically… (market included so a later
 			// read of agent.market reflects the just-saved persona profile).
-			agent = { ...agent, name: editName, handle: editHandle, status: editStatus, niche: editNiche, gradient: editGradient, initial: editInitial, personas_profile: payload.personaProfile, market: JSON.stringify(payload.personaProfile), soul: soulText, skills: skillsText, tools: toolsText, timezone, posts_per_day: postsPerDay, active_hours_start: activeHoursStart, active_hours_end: activeHoursEnd, autonomy_level: autonomyLevel, rss_url: rssUrl, rss_active: rssActive, ugc_voice: selectedVoice, brand_brief_id: selectedBrandBriefId || null };
+			agent = {
+				...agent,
+				name: editName,
+				handle: editHandle,
+				status: editStatus,
+				niche: editNiche,
+				gradient: editGradient,
+				initial: editInitial,
+				personas_profile: payload.personaProfile,
+				market: JSON.stringify(payload.personaProfile),
+				soul: soulText,
+				skills: skillsText,
+				tools: toolsText,
+				timezone,
+				posts_per_day: postsPerDay,
+				active_hours_start: activeHoursStart,
+				active_hours_end: activeHoursEnd,
+				autonomy_level: autonomyLevel,
+				rss_url: rssUrl,
+				rss_active: rssActive,
+				ugc_voice: selectedVoice,
+				brand_brief_id: selectedBrandBriefId || null
+			};
 			// The brand pin is now persisted — clear the unsaved-change indicator and
 			// let the composer re-pull products for the new pin on next open.
 			savedBrandBriefId = selectedBrandBriefId;
-			briefLoadedFor = undefined;
 			// …then re-fetch layout data so the sidebar roster + header (which read
 			// server-loaded sidebarAgents) reflect the new name/avatar immediately.
 			await invalidateAll();
@@ -2641,11 +2674,15 @@
 			} else {
 				platformStatuses = {};
 				accountMeter = null;
-				PLATFORMS.forEach(p => { platformStatuses[p.key] = { connected: false }; });
+				PLATFORMS.forEach((p) => {
+					platformStatuses[p.key] = { connected: false };
+				});
 			}
 		} catch {
 			platformStatuses = {};
-			PLATFORMS.forEach(p => { platformStatuses[p.key] = { connected: false }; });
+			PLATFORMS.forEach((p) => {
+				platformStatuses[p.key] = { connected: false };
+			});
 		}
 		statusLoading = false;
 	}
@@ -2661,10 +2698,7 @@
 			if (res.success) {
 				const d = res.data as any;
 				if (d?.redirect_url) {
-					showToast(
-						d.note || `Opening ${platformLabel(platform)} authorization…`,
-						'info'
-					);
+					showToast(d.note || `Opening ${platformLabel(platform)} authorization…`, 'info');
 					window.open(d.redirect_url, '_blank', 'noopener');
 				}
 				await checkStatuses();
@@ -2759,202 +2793,317 @@
 		<a href="/dashboard" class="btn-primary">Back to Dashboard</a>
 	</div>
 {:else}
-<div class="persona-page">
-	<!-- ── Hero header ─────────────────────────────────────────── -->
-	<!-- Compact identity header — the banner image was removed on request:
+	<div class="persona-page">
+		<!-- ── Hero header ─────────────────────────────────────────── -->
+		<!-- Compact identity header — the banner image was removed on request:
 	     the character photo shows ONCE (avatar), not stretched behind the name. -->
-	<header
-		class="persona-hero"
-		bind:this={heroEl}
-		style="opacity: {1 - heroFade}; transform: translateY({(-heroFade * 16).toFixed(1)}px); pointer-events: {heroFade > 0.98 ? 'none' : 'auto'};"
-		aria-hidden={heroFade > 0.98}
-	>
-		<div class="hero-row">
-			{#if agent.ugc_character_ref}
-				<!-- Clickable → enlarge (same lightbox as the profile-picture/kit thumbnails),
+		<header
+			class="persona-hero"
+			bind:this={heroEl}
+			style="opacity: {1 - heroFade}; transform: translateY({(-heroFade * 16).toFixed(
+				1
+			)}px); pointer-events: {heroFade > 0.98 ? 'none' : 'auto'};"
+			aria-hidden={heroFade > 0.98}
+		>
+			<div class="hero-row">
+				{#if agent.ugc_character_ref}
+					<!-- Clickable → enlarge (same lightbox as the profile-picture/kit thumbnails),
 				     so every photo instance can be enlarged. -->
-				<button
-					type="button"
-					class="hero-avatar hero-avatar-btn"
-					onclick={() => openPreview(agent.ugc_character_ref, 'Profile picture', requestGenerateAvatar)}
-					aria-label="Enlarge {agent.name}'s profile picture"
-				>
-					<img src={agent.ugc_character_ref} alt="" width="80" height="80" />
-				</button>
-			{:else}
-				<div class="hero-avatar" style={`background: ${agent.gradient}`}>
-					{agent.initial ?? agent.name?.[0]?.toUpperCase() ?? '?'}
-				</div>
-			{/if}
-			<div class="hero-info">
-				<div class="hero-name-row">
-					<h1 class="hero-name">{agent.name}</h1>
-					<span class="hero-handle">{agent.handle}</span>
-					<span class="hero-status-dot" style="background: {getStatusColor(agent.status)}" title={agent.status} aria-hidden="true"></span>
-					<span class="sr-only">Status: {agent.status}</span>
 					<button
 						type="button"
-						class="hero-fav-btn"
-						class:faved={agent.is_favorite}
-						title={agent.is_favorite ? 'Remove from favorites' : 'Add to favorites'}
-						aria-label={agent.is_favorite ? 'Remove from favorites' : 'Add to favorites'}
-						aria-pressed={Boolean(agent.is_favorite)}
-						disabled={togglingAgentFavorite}
-						onclick={toggleAgentFavorite}
+						class="hero-avatar hero-avatar-btn"
+						onclick={() =>
+							openPreview(agent.ugc_character_ref, 'Profile picture', requestGenerateAvatar)}
+						aria-label="Enlarge {agent.name}'s profile picture"
 					>
-						<svg width="16" height="16" viewBox="0 0 24 24" fill={agent.is_favorite ? 'currentColor' : 'none'} stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"
-							><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" /></svg
-						>
+						<img src={agent.ugc_character_ref} alt="" width="80" height="80" />
 					</button>
-				</div>
-				<div class="hero-meta">
-					<span class="hero-niche">{agent.niche}</span>
-					<span class="hero-sep">·</span>
-					<span class="hero-autonomy">{AUTONOMY_LABELS[agent.autonomy_level as AutonomyLevel]?.label ?? agent.autonomy_level}</span>
-					{#if computedMetrics.connectedCount > 0}
+				{:else}
+					<div class="hero-avatar" style={`background: ${agent.gradient}`}>
+						{agent.initial ?? agent.name?.[0]?.toUpperCase() ?? '?'}
+					</div>
+				{/if}
+				<div class="hero-info">
+					<div class="hero-name-row">
+						<h1 class="hero-name">{agent.name}</h1>
+						<span class="hero-handle">{agent.handle}</span>
+						<span
+							class="hero-status-dot"
+							style="background: {getStatusColor(agent.status)}"
+							title={agent.status}
+							aria-hidden="true"
+						></span>
+						<span class="sr-only">Status: {agent.status}</span>
+						<button
+							type="button"
+							class="hero-fav-btn"
+							class:faved={agent.is_favorite}
+							title={agent.is_favorite ? 'Remove from favorites' : 'Add to favorites'}
+							aria-label={agent.is_favorite ? 'Remove from favorites' : 'Add to favorites'}
+							aria-pressed={Boolean(agent.is_favorite)}
+							disabled={togglingAgentFavorite}
+							onclick={toggleAgentFavorite}
+						>
+							<svg
+								width="16"
+								height="16"
+								viewBox="0 0 24 24"
+								fill={agent.is_favorite ? 'currentColor' : 'none'}
+								stroke="currentColor"
+								stroke-width="2"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								aria-hidden="true"
+								><path
+									d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"
+								/></svg
+							>
+						</button>
+					</div>
+					<div class="hero-meta">
+						<span class="hero-niche">{agent.niche}</span>
 						<span class="hero-sep">·</span>
-						<span class="hero-connections">{computedMetrics.connectedCount} platform{computedMetrics.connectedCount !== 1 ? 's' : ''} connected</span>
+						<span class="hero-autonomy"
+							>{AUTONOMY_LABELS[agent.autonomy_level as AutonomyLevel]?.label ??
+								agent.autonomy_level}</span
+						>
+						{#if computedMetrics.connectedCount > 0}
+							<span class="hero-sep">·</span>
+							<span class="hero-connections"
+								>{computedMetrics.connectedCount} platform{computedMetrics.connectedCount !== 1
+									? 's'
+									: ''} connected</span
+							>
+						{/if}
+					</div>
+				</div>
+				<div class="hero-stats">
+					<div class="stat-chip">
+						<span class="stat-val">{postedCount}</span>
+						<span class="stat-label">Posts</span>
+					</div>
+					{#if queuedCount > 0}
+						<div class="stat-chip stat-chip-queued" title="Drafts + scheduled — not yet published">
+							<span class="stat-val">{queuedCount}</span>
+							<span class="stat-label">Queued</span>
+						</div>
+					{/if}
+					{#if generationCost > 0}
+						<div class="stat-chip stat-chip-spend">
+							<span class="stat-val"
+								>${generationCost < 0.01
+									? generationCost.toFixed(4)
+									: generationCost.toFixed(2)}</span
+							>
+							<span class="stat-label">Spend</span>
+						</div>
+					{/if}
+					{#if computedMetrics.followersRaw > 0}
+						<div class="stat-chip">
+							<span class="stat-val">{computedMetrics.followers}</span>
+							<span class="stat-label">Followers</span>
+						</div>
+						<div class="stat-chip">
+							<span class="stat-val">{computedMetrics.engagementRate}%</span>
+							<span class="stat-label">Engagement</span>
+						</div>
 					{/if}
 				</div>
 			</div>
-			<div class="hero-stats">
-				<div class="stat-chip">
-					<span class="stat-val">{postedCount}</span>
-					<span class="stat-label">Posts</span>
-				</div>
-				{#if queuedCount > 0}
-					<div class="stat-chip stat-chip-queued" title="Drafts + scheduled — not yet published">
-						<span class="stat-val">{queuedCount}</span>
-						<span class="stat-label">Queued</span>
-					</div>
-				{/if}
-				{#if generationCost > 0}
-					<div class="stat-chip stat-chip-spend">
-						<span class="stat-val">${generationCost < 0.01 ? generationCost.toFixed(4) : generationCost.toFixed(2)}</span>
-						<span class="stat-label">Spend</span>
-					</div>
-				{/if}
-				{#if computedMetrics.followersRaw > 0}
-					<div class="stat-chip">
-						<span class="stat-val">{computedMetrics.followers}</span>
-						<span class="stat-label">Followers</span>
-					</div>
-					<div class="stat-chip">
-						<span class="stat-val">{computedMetrics.engagementRate}%</span>
-						<span class="stat-label">Engagement</span>
-					</div>
-				{/if}
-			</div>
-		</div>
 
-		<!-- Identity strip: the persona's public-facing bio, per platform. Fills
+			<!-- Identity strip: the persona's public-facing bio, per platform. Fills
 		     the formerly-blank hero and gives one-click copy for manual profile
 		     setup — no platform accepts bio/avatar updates via API, so copy-paste
 		     IS the publish path for profile fields. -->
-		<div class="hero-identity">
-			<select class="kit-select" bind:value={kitPlatform} aria-label="Platform for bio">
-				{#each BIO_PLATFORM_KEYS as k (k)}
-					<option value={k}>{platformLabel(k)}</option>
-				{/each}
-			</select>
-			{#if ppBios[kitPlatform]}
-				<p class="hero-bio" title={ppBios[kitPlatform]}>{ppBios[kitPlatform]}</p>
-				<button
-					type="button"
-					class="kit-copy-btn"
-					onclick={() => copyKitText(ppBios[kitPlatform], `${platformLabel(kitPlatform)} bio`)}
-				><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copy bio</button>
-			{:else}
-				<p class="hero-bio hero-bio-empty">No {platformLabel(kitPlatform)} bio yet.</p>
-				<!-- First-ever generation seeds the whole starter kit; after that the
+			<div class="hero-identity">
+				<select class="kit-select" bind:value={kitPlatform} aria-label="Platform for bio">
+					{#each BIO_PLATFORM_KEYS as k (k)}
+						<option value={k}>{platformLabel(k)}</option>
+					{/each}
+				</select>
+				{#if ppBios[kitPlatform]}
+					<p class="hero-bio" title={ppBios[kitPlatform]}>{ppBios[kitPlatform]}</p>
+					<button
+						type="button"
+						class="kit-copy-btn"
+						onclick={() => copyKitText(ppBios[kitPlatform], `${platformLabel(kitPlatform)} bio`)}
+						><svg
+							width="14"
+							height="14"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							aria-hidden="true"
+							><rect x="9" y="9" width="12" height="12" rx="2" /><path
+								d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
+							/></svg
+						> Copy bio</button
+					>
+				{:else}
+					<p class="hero-bio hero-bio-empty">No {platformLabel(kitPlatform)} bio yet.</p>
+					<!-- First-ever generation seeds the whole starter kit; after that the
 				     CTA only generates the SELECTED platform's bio — small, fast calls
 				     that can't time out or touch other platforms' work. -->
-				<button
-					type="button"
-					class="kit-copy-btn"
-					onclick={() =>
-						generateKit(
-							ppHandleCandidates.length === 0 && Object.keys(ppBios).length === 0 ? 'starter' : 'bio'
-						)}
-					disabled={kitBusy}
-				>{#if kitBusy}Generating…{:else}<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.7 4.6L18 9.3l-4.3 1.7L12 15.6l-1.7-4.6L6 9.3l4.3-1.7L12 3z"/><path d="M18.5 14.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2z"/></svg> {ppHandleCandidates.length === 0 && Object.keys(ppBios).length === 0
-						? 'Generate identity kit'
-						: `Generate ${platformLabel(kitPlatform)} bio`}{/if}</button>
-			{/if}
-			{#if ppConfirmedHandles[kitPlatform]}
-				<button
-					type="button"
-					class="hero-handle-chip"
-					title="Confirmed {platformLabel(kitPlatform)} username — click to copy"
-					onclick={() => copyKitText(ppConfirmedHandles[kitPlatform], 'Username')}
-				>@{ppConfirmedHandles[kitPlatform]}</button>
-			{/if}
-		</div>
-	</header>
+					<button
+						type="button"
+						class="kit-copy-btn"
+						onclick={() =>
+							generateKit(
+								ppHandleCandidates.length === 0 && Object.keys(ppBios).length === 0
+									? 'starter'
+									: 'bio'
+							)}
+						disabled={kitBusy}
+						>{#if kitBusy}Generating…{:else}<svg
+								width="14"
+								height="14"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								aria-hidden="true"
+								><path
+									d="M12 3l1.7 4.6L18 9.3l-4.3 1.7L12 15.6l-1.7-4.6L6 9.3l4.3-1.7L12 3z"
+								/><path d="M18.5 14.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2z" /></svg
+							>
+							{ppHandleCandidates.length === 0 && Object.keys(ppBios).length === 0
+								? 'Generate identity kit'
+								: `Generate ${platformLabel(kitPlatform)} bio`}{/if}</button
+					>
+				{/if}
+				{#if ppConfirmedHandles[kitPlatform]}
+					<button
+						type="button"
+						class="hero-handle-chip"
+						title="Confirmed {platformLabel(kitPlatform)} username — click to copy"
+						onclick={() => copyKitText(ppConfirmedHandles[kitPlatform], 'Username')}
+						>@{ppConfirmedHandles[kitPlatform]}</button
+					>
+				{/if}
+			</div>
+		</header>
 
-	<!-- ── Tab nav ────────────────────────────────────────────── -->
-	<!-- Sticky so identity stays visible while scrolling a long tab (fixes the
+		<!-- ── Tab nav ────────────────────────────────────────────── -->
+		<!-- Sticky so identity stays visible while scrolling a long tab (fixes the
 	     class of confusion where you lose track of which persona you're on). -->
-	<nav class="tab-nav">
-		<div class="tab-nav-identity" title="{agent.name} ({agent.handle})">
-			{#if agent.ugc_character_ref}
+		<nav class="tab-nav">
+			<div class="tab-nav-identity" title="{agent.name} ({agent.handle})">
+				{#if agent.ugc_character_ref}
+					<button
+						type="button"
+						class="tab-nav-avatar tab-nav-avatar-btn"
+						onclick={() =>
+							openPreview(agent.ugc_character_ref, 'Profile picture', requestGenerateAvatar)}
+						aria-label="Enlarge profile picture"
+					>
+						<img src={agent.ugc_character_ref} alt="" width="26" height="26" />
+					</button>
+				{:else}
+					<span class="tab-nav-avatar" style={`background: ${agent.gradient}`}>
+						{agent.initial ?? agent.name?.[0]?.toUpperCase() ?? '?'}
+					</span>
+				{/if}
+				<span class="tab-nav-name">{agent.name}</span>
+			</div>
+			<div class="tab-nav-buttons">
 				<button
 					type="button"
-					class="tab-nav-avatar tab-nav-avatar-btn"
-					onclick={() => openPreview(agent.ugc_character_ref, 'Profile picture', requestGenerateAvatar)}
-					aria-label="Enlarge profile picture"
+					class="tab-btn"
+					class:active={activeTab === 'profile'}
+					aria-current={activeTab === 'profile' ? 'true' : undefined}
+					onclick={() => (activeTab = 'profile')}
 				>
-					<img src={agent.ugc_character_ref} alt="" width="26" height="26" />
-				</button>
-			{:else}
-				<span class="tab-nav-avatar" style={`background: ${agent.gradient}`}>
-					{agent.initial ?? agent.name?.[0]?.toUpperCase() ?? '?'}
-				</span>
-			{/if}
-			<span class="tab-nav-name">{agent.name}</span>
-		</div>
-		<div class="tab-nav-buttons">
-			<button type="button" class="tab-btn" class:active={activeTab === 'profile'} aria-current={activeTab === 'profile' ? 'true' : undefined} onclick={() => (activeTab = 'profile')}>
-				<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 1 0-16 0"/></svg>
-				Profile
-			</button>
-			<button type="button" class="tab-btn" class:active={activeTab === 'content'} aria-current={activeTab === 'content' ? 'true' : undefined} onclick={() => (activeTab = 'content')}>
-				<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
-				Content
-			</button>
-			<button type="button" class="tab-btn" class:active={activeTab === 'studio'} aria-current={activeTab === 'studio' ? 'true' : undefined} onclick={() => (activeTab = 'studio')}>
-				<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.7 4.6L18 9.3l-4.3 1.7L12 15.6l-1.7-4.6L6 9.3l4.3-1.7L12 3z"/><path d="M18.5 14.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2z"/></svg>
-				Studio
-			</button>
-		</div>
-	</nav>
-
-	<!-- ── Tab content ────────────────────────────────────────── -->
-	<div class="tab-body">
-
-		{#if activeTab === 'profile'}
-			<!-- Lens switcher shared by both Profile lenses — mirrors the Content
-			     tab's toggle so switching feels identical everywhere. -->
-			<div class="feed-view-toggle profile-lens" role="group" aria-label="Profile view">
-				<button
-					type="button"
-					class="view-toggle-btn"
-					class:active={profileView === 'overview'}
-					aria-pressed={profileView === 'overview'}
-					onclick={() => (profileView = 'overview')}
-				>
+					<svg
+						width="15"
+						height="15"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
+						><circle cx="12" cy="8" r="4" /><path d="M20 21a8 8 0 1 0-16 0" /></svg
+					>
 					Profile
 				</button>
 				<button
 					type="button"
-					class="view-toggle-btn"
-					class:active={profileView === 'connections'}
-					aria-pressed={profileView === 'connections'}
-					onclick={() => (profileView = 'connections')}
+					class="tab-btn"
+					class:active={activeTab === 'content'}
+					aria-current={activeTab === 'content' ? 'true' : undefined}
+					onclick={() => (activeTab = 'content')}
 				>
-					Connections{#if computedMetrics.connectedCount > 0}&nbsp;({computedMetrics.connectedCount}){/if}
+					<svg
+						width="15"
+						height="15"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
+						><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 9h18M9 21V9" /></svg
+					>
+					Content
+				</button>
+				<button
+					type="button"
+					class="tab-btn"
+					class:active={activeTab === 'studio'}
+					aria-current={activeTab === 'studio' ? 'true' : undefined}
+					onclick={() => (activeTab = 'studio')}
+				>
+					<svg
+						width="15"
+						height="15"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
+						><path d="M12 3l1.7 4.6L18 9.3l-4.3 1.7L12 15.6l-1.7-4.6L6 9.3l4.3-1.7L12 3z" /><path
+							d="M18.5 14.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2z"
+						/></svg
+					>
+					Studio
 				</button>
 			</div>
+		</nav>
+
+		<!-- ── Tab content ────────────────────────────────────────── -->
+		<div class="tab-body">
+			{#if activeTab === 'profile'}
+				<!-- Lens switcher shared by both Profile lenses — mirrors the Content
+			     tab's toggle so switching feels identical everywhere. -->
+				<div class="feed-view-toggle profile-lens" role="group" aria-label="Profile view">
+					<button
+						type="button"
+						class="view-toggle-btn"
+						class:active={profileView === 'overview'}
+						aria-pressed={profileView === 'overview'}
+						onclick={() => (profileView = 'overview')}
+					>
+						Profile
+					</button>
+					<button
+						type="button"
+						class="view-toggle-btn"
+						class:active={profileView === 'connections'}
+						aria-pressed={profileView === 'connections'}
+						onclick={() => (profileView = 'connections')}
+					>
+						Connections{#if computedMetrics.connectedCount > 0}&nbsp;({computedMetrics.connectedCount}){/if}
+					</button>
+				</div>
 				{#if profileView === 'overview'}
 					<!-- Optional layout switch. Default is Classic; nothing changes unless
 					     you press this. -->
@@ -2968,2125 +3117,3538 @@
 							: 'Try the bento layout — same sections, arranged in a grid'}
 						onclick={() => (profileLayout = profileLayout === 'bento' ? 'classic' : 'bento')}
 					>
-						<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="8" height="12" rx="1"/><rect x="13" y="3" width="8" height="6" rx="1"/><rect x="13" y="11" width="8" height="10" rx="1"/><rect x="3" y="17" width="8" height="4" rx="1"/></svg>
+						<svg
+							width="14"
+							height="14"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							aria-hidden="true"
+							><rect x="3" y="3" width="8" height="12" rx="1" /><rect
+								x="13"
+								y="3"
+								width="8"
+								height="6"
+								rx="1"
+							/><rect x="13" y="11" width="8" height="10" rx="1" /><rect
+								x="3"
+								y="17"
+								width="8"
+								height="4"
+								rx="1"
+							/></svg
+						>
 						{profileLayout === 'bento' ? 'Classic view' : 'Bento view'}
 					</button>
 				{/if}
-		{/if}
+			{/if}
 
-		<!-- CONTENT TAB -->
-		{#if activeTab === 'content'}
-			<div class="feed-tab">
-				<!-- Toolbar -->
-				<div class="feed-toolbar">
-					<!-- One dataset, three lenses: post mosaic, flat assets grid, or calendar. -->
-					<div class="feed-view-toggle" role="group" aria-label="Content view">
-						<button
-							type="button"
-							class="view-toggle-btn"
-							class:active={feedView === 'posts'}
-							aria-pressed={feedView === 'posts'}
-							onclick={() => (feedView = 'posts')}
-						>
-							Posts
-						</button>
-						<button
-							type="button"
-							class="view-toggle-btn"
-							class:active={feedView === 'assets'}
-							aria-pressed={feedView === 'assets'}
-							onclick={() => (feedView = 'assets')}
-						>
-							Assets{#if assetItems.length > 0}&nbsp;({assetItems.length}){/if}
-						</button>
-						<button
-							type="button"
-							class="view-toggle-btn"
-							class:active={feedView === 'calendar'}
-							aria-pressed={feedView === 'calendar'}
-							onclick={() => (feedView = 'calendar')}
-						>
-							Calendar
-						</button>
-					</div>
-					{#if feedView === 'posts'}
-					<div class="feed-filters">
-						{#if genFailedCount > 0 && feedFilter !== 'failed'}
-							<!-- Errors are hidden from the default view; this is the only
-							     nudge that they exist and need a look. -->
+			<!-- CONTENT TAB -->
+			{#if activeTab === 'content'}
+				<div class="feed-tab">
+					<!-- Toolbar -->
+					<div class="feed-toolbar">
+						<!-- One dataset, three lenses: post mosaic, flat assets grid, or calendar. -->
+						<div class="feed-view-toggle" role="group" aria-label="Content view">
 							<button
 								type="button"
-								class="filter-alert"
-								onclick={() => (feedFilter = 'failed')}
-								title="{genFailedCount} failed generation{genFailedCount === 1 ? '' : 's'} are hidden from this view — click to review"
+								class="view-toggle-btn"
+								class:active={feedView === 'posts'}
+								aria-pressed={feedView === 'posts'}
+								onclick={() => (feedView = 'posts')}
 							>
-								<span class="filter-alert-dot" aria-hidden="true"></span>
-								{genFailedCount} failed
+								Posts
 							</button>
-						{/if}
-						<select class="filter-select" aria-label="Filter posts by status" bind:value={feedFilter}>
-							<option value="all">All statuses</option>
-							<option value="published">Published</option>
-							<option value="scheduled">Scheduled</option>
-							<option value="publishing">Publishing</option>
-							<option value="draft">Draft</option>
-							<option value="partial">Partial</option>
-							<option value="failed">Failed{genFailedCount > 0 ? ` (${genFailedCount})` : ''}</option>
-						</select>
-						<select class="filter-select" aria-label="Filter posts by media type" bind:value={mediaTypeFilter}>
-							<option value="all">Images + videos</option>
-							<option value="video">Videos only</option>
-							<option value="image">Images only</option>
-						</select>
-						<select class="filter-select" aria-label="Filter posts by platform" bind:value={platformFilter}>
-							<option value="all">All platforms</option>
-							{#each PLATFORMS as p}
-								<option value={p.key}>{p.name}</option>
-							{/each}
-						</select>
-					</div>
-					{/if}
-					<div class="feed-actions">
-						<button type="button" class="btn-generate" onclick={() => requestGeneratePost()} disabled={generatingPost || feedLoading}>
-							{#if generatingPost}
-								<span class="spinner-sm" aria-hidden="true"></span> Generating…
-							{:else}
-								<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.7 4.6L18 9.3l-4.3 1.7L12 15.6l-1.7-4.6L6 9.3l4.3-1.7L12 3z"/><path d="M18.5 14.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2z"/></svg>
-								Generate Now
-							{/if}
-						</button>
-						<button
-							type="button"
-							class="btn-sync"
-							onclick={() => (confirmDraftsOpen = true)}
-							disabled={fillingDrafts || feedLoading}
-							title="Top up this persona's review queue: autopilot fills the empty future slots with drafts"
-						>
-							{#if fillingDrafts}
-								<span class="spinner-sm" aria-hidden="true"></span> Filling drafts…
-							{:else}
-								<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
-								Generate Drafts
-							{/if}
-						</button>
-						<button type="button" class="btn-sync" onclick={syncFeed} disabled={syncingFeed || feedLoading}>
-							{#if syncingFeed}
-								<span class="spinner-sm" aria-hidden="true"></span> Syncing…
-							{:else}
-								<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38"/></svg>
-								Sync Feed
-							{/if}
-						</button>
-					</div>
-				</div>
-
-				{#if feedView === 'posts'}
-				{#if feedLoading}
-					<div class="feed-loading" role="status" aria-live="polite">
-						<span class="spinner-lg" aria-hidden="true"></span>
-						<p>Loading posts…</p>
-					</div>
-				{:else if filteredPosts.length === 0}
-					<div class="feed-empty">
-						<span class="empty-icon"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></svg></span>
-						<h2>No posts yet</h2>
-						<p>{feedFilter !== 'all' || platformFilter !== 'all' ? 'No posts match these filters.' : 'Generate your first post — drafts save even without a connected platform.'}</p>
-						{#if feedFilter === 'all' && platformFilter === 'all'}
-							<div class="feed-empty-actions">
-								<button type="button" class="btn-generate" onclick={() => requestGeneratePost()} disabled={generatingPost}>
-									{#if generatingPost}Generating…{:else}<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.7 4.6L18 9.3l-4.3 1.7L12 15.6l-1.7-4.6L6 9.3l4.3-1.7L12 3z"/><path d="M18.5 14.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2z"/></svg> Generate First Post{/if}
-								</button>
-								<button
-									type="button"
-									class="btn-sync"
-									onclick={() => {
-										activeTab = 'profile';
-										profileView = 'connections';
-									}}
-								>
-									Manage Connections
-								</button>
-							</div>
-						{/if}
-					</div>
-				{:else}
-					<SelectionToolbar
-						total={groupedPosts.length}
-						selectedCount={selectedPostIds.length}
-						noun="post"
-						busy={bulkDeletingPosts}
-						onSelectAll={selectAllPosts}
-						onClear={clearPostSelection}
-						onDelete={deleteSelectedPosts}
-					/>
-					<div class="post-mosaic">
-						{#each groupedPosts as post (post.id)}
-							<PostCard
-								{post}
-								onOpen={(p) => (modalPost = p)}
-								onPublishFallback={openPublishFallback}
-								selectable
-								selected={selectedPostIds.includes(post.id)}
-								onToggleSelect={(p) => togglePostSelected(p.id)}
-								onDelete={handleDeletePost}
-								onEnlarge={openPostMedia}
-								onToggleFavorite={togglePostFavorite}
-							/>
-						{/each}
-					</div>
-				{/if}
-				{/if}
-
-				{#if feedView === 'assets'}
-					<!-- Assets view: every generated visual in one flat grid (former Assets tab). -->
-					{#if feedLoading && assetItems.length === 0}
-						<div class="feed-loading" role="status" aria-live="polite"><span class="spinner" aria-hidden="true"></span> Loading assets…</div>
-					{:else if assetItems.length === 0}
-						<div class="feed-empty">
-							<span class="empty-icon"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></span>
-							<h2>No assets yet</h2>
-							<p>Every image and video generated for this persona will collect here — post media, poster stills, storyboards, the profile picture, and the reference kit.</p>
+							<button
+								type="button"
+								class="view-toggle-btn"
+								class:active={feedView === 'assets'}
+								aria-pressed={feedView === 'assets'}
+								onclick={() => (feedView = 'assets')}
+							>
+								Assets{#if assetItems.length > 0}&nbsp;({assetItems.length}){/if}
+							</button>
+							<button
+								type="button"
+								class="view-toggle-btn"
+								class:active={feedView === 'calendar'}
+								aria-pressed={feedView === 'calendar'}
+								onclick={() => (feedView = 'calendar')}
+							>
+								Calendar
+							</button>
 						</div>
-					{:else}
-						<SelectionToolbar
-							total={assetItems.length}
-							selectedCount={selectedAssetUrls.length}
-							noun="asset"
-							busy={deletingAssets}
-							onSelectAll={selectAllAssets}
-							onClear={clearAssetSelection}
-							onDelete={deleteSelectedAssets}
-						/>
-						<div class="assets-grid">
-							{#each assetItems as asset (asset.url)}
-								<div class="asset-cell" class:selected={selectedAssetUrls.includes(asset.url)}>
-									<button type="button" class="asset-tile" onclick={() => (assetLightbox = asset)} aria-label="View {asset.label}">
-										{#if asset.type === 'video'}
-											<!-- Static preview only (the real clip plays in the lightbox on tap), so
-											     show the poster as a plain lazy <img> — no <video preload> per tile,
-											     which otherwise fired a metadata range request for every clip on load.
-											     Fall back to a no-preload <video> only when a poster is missing. -->
-											{#if asset.poster}
-												<img src={asset.poster} loading="lazy" width="400" height="400" alt="" />
-											{:else}
-												<video src={asset.url} muted playsinline preload="none"></video>
-											{/if}
-											<span class="asset-video-badge"><svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg><span class="sr-only">Video</span></span>
-										{:else}
-											<img src={asset.url} loading="lazy" width="400" height="400" alt="" />
-										{/if}
-										<span class="asset-label">{asset.label}</span>
-									</button>
-									<label class="asset-select" title="Select for bulk actions">
-										<input
-											type="checkbox"
-											checked={selectedAssetUrls.includes(asset.url)}
-											onchange={() => toggleAssetSelected(asset.url)}
-											aria-label="Select {asset.label}"
-										/>
-									</label>
+						{#if feedView === 'posts'}
+							<div class="feed-filters">
+								{#if genFailedCount > 0 && feedFilter !== 'failed'}
+									<!-- Errors are hidden from the default view; this is the only
+							     nudge that they exist and need a look. -->
 									<button
 										type="button"
-										class="asset-del"
-										title={asset.source === 'post'
-											? 'Delete the post this media belongs to'
-											: asset.source === 'avatar'
-												? 'Clear the profile picture'
-												: 'Remove from the reference kit'}
-										aria-label="Delete {asset.label}"
-										disabled={deletingAssets}
-										onclick={() => deleteAssets([asset])}
+										class="filter-alert"
+										onclick={() => (feedFilter = 'failed')}
+										title="{genFailedCount} failed generation{genFailedCount === 1
+											? ''
+											: 's'} are hidden from this view — click to review"
 									>
-										<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"
-											><path d="M3 6h18M8 6V4h8v2m1 0v14a2 2 0 01-2 2H9a2 2 0 01-2-2V6h12" /></svg
-										>
+										<span class="filter-alert-dot" aria-hidden="true"></span>
+										{genFailedCount} failed
 									</button>
-								</div>
-							{/each}
-						</div>
-					{/if}
-				{/if}
-
-				{#if feedView === 'calendar'}
-					<!-- Calendar lens (former Calendar tab) — same posts, placed in time. -->
-					{#if feedLoading && calendarPosts.length === 0}
-						<div class="feed-loading" role="status" aria-live="polite"><span class="spinner-lg" aria-hidden="true"></span><p>Loading posts…</p></div>
-					{:else}
-						<CalendarView
-							posts={calendarPosts}
-							onOpenPost={(p) => (modalPost = feedRowFor(p))}
-							onApprove={async (p) => {
-								const row = feedRowFor(p);
-								if (row) await handleApprovePost(row);
-							}}
-							onGenerateForDate={(d) => requestGeneratePost(d)}
-						/>
-					{/if}
-				{/if}
-			</div>
-
-		<!-- PROFILE TAB · Overview lens -->
-		{:else if activeTab === 'profile' && profileView === 'overview'}
-			<div class="profile-tab" class:bento={profileLayout === 'bento'}>
-				<!-- Brand section: which of the user's brand briefs this persona
-				     generates for. One client can run several brands (Just Kids
-				     Honey, HoneyX Manly Plus…) — every asset this persona makes is
-				     grounded in the brief selected here. -->
-				<details class="profile-section" open>
-					<summary class="section-summary">
-						<div class="section-header">
-							<h2 class="section-title">Brand Kit</h2>
-							<p class="section-desc">
-								Choose the brand brief this persona creates content for — its products, voice, and
-								audience ground every asset. Selection is opt-in: with <strong>None</strong> selected,
-								the persona generates with no brand kit (no brand is applied automatically).
-							</p>
-						</div>
-						<svg class="section-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
-					</summary>
-					<div class="fields-grid">
-						<div class="field-group col-span-2">
-							<label for="p-brief">Brand Kit</label>
-							<div class="brand-kit-row">
-								<select id="p-brief" bind:value={selectedBrandBriefId}>
-									<option value="">— None (no brand kit) —</option>
-									{#each brandBriefs as b (b.id)}
-										<option value={b.id}>{b.name}</option>
+								{/if}
+								<select
+									class="filter-select"
+									aria-label="Filter posts by status"
+									bind:value={feedFilter}
+								>
+									<option value="all">All statuses</option>
+									<option value="published">Published</option>
+									<option value="scheduled">Scheduled</option>
+									<option value="publishing">Publishing</option>
+									<option value="draft">Draft</option>
+									<option value="partial">Partial</option>
+									<option value="failed"
+										>Failed{genFailedCount > 0 ? ` (${genFailedCount})` : ''}</option
+									>
+								</select>
+								<select
+									class="filter-select"
+									aria-label="Filter posts by media type"
+									bind:value={mediaTypeFilter}
+								>
+									<option value="all">Images + videos</option>
+									<option value="video">Videos only</option>
+									<option value="image">Images only</option>
+								</select>
+								<select
+									class="filter-select"
+									aria-label="Filter posts by platform"
+									bind:value={platformFilter}
+								>
+									<option value="all">All platforms</option>
+									{#each PLATFORMS as p}
+										<option value={p.key}>{p.name}</option>
 									{/each}
 								</select>
-								<button
-									type="button"
-									class="btn-primary btn-apply-brand"
-									onclick={applyBrandKit}
-									disabled={!brandDirty || savingBrand}
-									title={brandDirty ? 'Save this brand-kit choice' : 'No unsaved brand-kit change'}
-								>
-									{savingBrand ? 'Applying…' : brandDirty ? 'Apply brand kit' : 'Applied'}
-								</button>
 							</div>
-							{#if brandBriefs.length === 0}
-								<p class="field-hint">
-									No brand briefs saved yet — create one in <a href="/brand-brief">Brand Brief</a>, then
-									select it here.
-								</p>
-							{:else if brandDirty}
-								<p class="field-hint brand-dirty-hint">
-									Unsaved change — click <strong>Apply brand kit</strong> to confirm.
-								</p>
-							{:else}
-								<p class="field-hint">
-									{savedBrandBriefId
-										? `Applied: this persona creates for “${brandBriefs.find((b) => b.id === savedBrandBriefId)?.name ?? 'the selected brand'}”.`
-										: 'No brand kit applied — content generates without brand context.'}
-									Manage briefs in <a href="/brand-brief">Brand Brief</a>.
-								</p>
-							{/if}
-						</div>
-					</div>
-				</details>
-
-				<!-- Persona Profile — above Identity: these fields feed generation prompts -->
-				<details class="profile-section">  <!-- starts collapsed: Brand Kit is the only section open by default -->
-					<summary class="section-summary">
-						<div class="section-header">
-						<div class="label-row">
-							<h2 class="section-title">Persona Profile</h2>
+						{/if}
+						<div class="feed-actions">
 							<button
 								type="button"
-								class="btn-sync btn-xs"
-								onclick={(e) => { e.preventDefault(); e.stopPropagation(); generatePersonaProfile(); }}
-								disabled={generatingProfile}
-								title="Generate a unique profile tailored to the selected brand and this persona's gender"
+								class="btn-generate"
+								onclick={() => requestGeneratePost()}
+								disabled={generatingPost || feedLoading}
 							>
-								{#if generatingProfile}Generating…{:else}<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.7 4.6L18 9.3l-4.3 1.7L12 15.6l-1.7-4.6L6 9.3l4.3-1.7L12 3z"/><path d="M18.5 14.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2z"/></svg> Generate for brand{/if}
+								{#if generatingPost}
+									<span class="spinner-sm" aria-hidden="true"></span> Generating…
+								{:else}
+									<svg
+										width="14"
+										height="14"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="2"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										aria-hidden="true"
+										><path
+											d="M12 3l1.7 4.6L18 9.3l-4.3 1.7L12 15.6l-1.7-4.6L6 9.3l4.3-1.7L12 3z"
+										/><path d="M18.5 14.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2z" /></svg
+									>
+									Generate Now
+								{/if}
 							</button>
-						</div>
-						<p class="section-desc">
-							Psychological depth and content strategy — these feed directly into content generation
-							prompts. “Generate for brand” fills a unique, brand-tailored profile (aligned to this
-							persona's gender) and saves it automatically — review and tweak anytime.
-						</p>
-						</div>
-						<svg class="section-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
-					</summary>
-
-					<div class="fields-grid">
-						<!-- Identity fields, moved up into the profile: the NAME stays constant;
-						     NICHE (and everything below) is filled by "Generate for brand". -->
-						<div class="field-group">
-							<label for="p-name">Persona Name</label>
-							<input id="p-name" type="text" bind:value={editName} placeholder="e.g. Veronica Active" />
-						</div>
-						<div class="field-group">
-							<label for="p-niche">Niche</label>
-							<select id="p-niche" bind:value={editNiche}>
-								{#if editNiche && !(NICHE_OPTIONS as readonly string[]).includes(editNiche)}
-									<option value={editNiche}>{editNiche}</option>
-								{/if}
-								<option value="">— Select niche —</option>
-								{#each NICHE_OPTIONS as n}
-									<option value={n}>{n}</option>
-								{/each}
-							</select>
-						</div>
-						<div class="field-group">
-							<label for="p-status">Status</label>
-							<select id="p-status" bind:value={editStatus}>
-								{#each STATUS_OPTIONS as s}
-									<option value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
-								{/each}
-							</select>
-						</div>
-
-						<div class="field-group col-span-2">
-							<span class="field-label" id="pp-age-label">Target Age Range</span>
-							<div class="age-chips" role="group" aria-labelledby="pp-age-label">
-								<button
-									type="button"
-									class="age-chip age-chip-all"
-									class:selected={ppAgeRanges.length === AGE_RANGES.length}
-									aria-pressed={ppAgeRanges.length === AGE_RANGES.length}
-									onclick={toggleAllAgeRanges}
-								>All ages</button>
-								{#each AGE_RANGES as r}
-									<button
-										type="button"
-										class="age-chip"
-										class:selected={ppAgeRanges.includes(r.key)}
-										aria-pressed={ppAgeRanges.includes(r.key)}
-										onclick={() => toggleAgeRange(r.key)}
-									>{r.key}</button>
-								{/each}
-							</div>
-							<p class="field-hint">Select one or more audience age brackets (or all).</p>
-						</div>
-
-						<div class="field-group">
-							<label for="pp-gender">Gender</label>
-							<select id="pp-gender" bind:value={ppGender} onchange={() => alignVoiceToGender()}>
-								<option value="">— Select —</option>
-								<option value="female">Female</option>
-								<option value="male">Male</option>
-							</select>
-							<p class="field-hint">Drives the generated character's appearance and default voice.</p>
-						</div>
-
-						<div class="field-group">
-							<label for="pp-archetype">Persona Archetype</label>
-							<select id="pp-archetype" bind:value={ppArchetype}>
-								<option value="">— Select archetype —</option>
-								{#each PERSONA_ARCHETYPES as a}
-									<option value={a}>{a}</option>
-								{/each}
-							</select>
-							<p class="field-hint">Defines the persona's role and audience relationship style.</p>
-						</div>
-
-						<div class="field-group">
-							<label for="pp-focus">Content Focus</label>
-							<select id="pp-focus" bind:value={ppContentFocus}>
-								<option value="">— Select focus —</option>
-								{#each CONTENT_FOCUS_OPTIONS as f}
-									<option value={f}>{f}</option>
-								{/each}
-							</select>
-							<p class="field-hint">Primary category of content this persona produces.</p>
-						</div>
-
-						<div class="field-group col-span-2">
-							<label for="pp-target">Target Avatar</label>
-							<input id="pp-target" type="text" bind:value={ppTargetAvatar}
-								placeholder="e.g. Working moms 28-42, fitness-curious, short on time" />
-							<p class="field-hint">One-liner describing the ideal audience member this persona speaks to.</p>
-						</div>
-
-						<div class="field-group col-span-2">
-							<label for="pp-psych">Psychology Profile</label>
-							<textarea id="pp-psych" bind:value={ppPsychProfile} rows="4"
-								placeholder="Describe audience psychology — motivations, fears, desires, pain points, identity hooks…">
-							</textarea>
-							<p class="field-hint">Used to tune tone, hooks, and emotional framing in generated content.</p>
-						</div>
-
-						<div class="field-group col-span-2">
-							<label for="pp-angle">Content Angle / POV</label>
-							<textarea id="pp-angle" bind:value={ppContentAngle} rows="3"
-								placeholder="e.g. 'Real results, no fluff' — direct, relatable transformations told in first person…">
-							</textarea>
-							<p class="field-hint">The unique angle or point of view that differentiates this persona's content.</p>
-						</div>
-
-						<div class="field-group col-span-2">
-							<div class="label-row">
-								<span class="field-label">Appearance &amp; Wardrobe</span>
-								<button
-									type="button"
-									class="btn-sync btn-xs"
-									onclick={readAppearanceFromPhoto}
-									disabled={readingAppearance || !characterRef}
-									title="Read the wardrobe, hair, eyes, etc. from the current profile picture so they match the real character"
-								>
-									{#if readingAppearance}Reading…{:else}<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg> Read from photo{/if}
-								</button>
-							</div>
-							<p class="field-hint" style="margin: 0 0 0.6rem;">
-								Dynamic look variables — clothing, colors, hair, eyes, headwear, styling. They feed
-								the profile-picture generation so the face and outfit match. Fill them from the brand
-								(“Generate for brand”) or read them from the current photo (“Read from photo”).
-							</p>
-							<TraitPicker bind:appearance={ppAppearance} />
-						</div>
-					</div>
-				</details>
-
-				<!-- Platform Identity Kit: the persona's public-facing profile per
-				     platform. Copy-paste tooling by design — no platform (nor Zernio)
-				     accepts profile-field updates via API; availability of a username
-				     is confirmed manually at signup. -->
-				<details class="profile-section">
-					<summary class="section-summary">
-						<div class="section-header">
-						<div class="label-row">
-							<h2 class="section-title">Platform Identity Kit</h2>
-							<span class="kit-save-state" class:error={kitSaveState === 'error'} role="status" aria-live="polite">
-								{#if kitSaveState === 'saving'}
-									Saving…
-								{:else if kitSaveState === 'saved'}
-									Saved <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>
-								{:else if kitSaveState === 'error'}
-									Save failed
-								{/if}
-							</span>
 							<button
 								type="button"
-								class="btn-sync btn-xs"
-								onclick={(e) => { e.preventDefault(); e.stopPropagation(); generateKit('starter'); }}
-								disabled={kitBusy}
-								title="One small call: display name + username candidates + bios for this persona's connected platforms (or a TikTok/Instagram/YouTube starter set)"
+								class="btn-sync"
+								onclick={() => (confirmDraftsOpen = true)}
+								disabled={fillingDrafts || feedLoading}
+								title="Top up this persona's review queue: autopilot fills the empty future slots with drafts"
 							>
-								{#if generatingKit}Generating…{:else}<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.7 4.6L18 9.3l-4.3 1.7L12 15.6l-1.7-4.6L6 9.3l4.3-1.7L12 3z"/><path d="M18.5 14.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2z"/></svg> {ppHandleCandidates.length || Object.keys(ppBios).length ? 'Regenerate' : 'Generate'} starter kit{/if}
+								{#if fillingDrafts}
+									<span class="spinner-sm" aria-hidden="true"></span> Filling drafts…
+								{:else}
+									<svg
+										width="14"
+										height="14"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="2"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										aria-hidden="true"
+										><path d="M22 12h-6l-2 3h-4l-2-3H2" /><path
+											d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"
+										/></svg
+									>
+									Generate Drafts
+								{/if}
+							</button>
+							<button
+								type="button"
+								class="btn-sync"
+								onclick={syncFeed}
+								disabled={syncingFeed || feedLoading}
+							>
+								{#if syncingFeed}
+									<span class="spinner-sm" aria-hidden="true"></span> Syncing…
+								{:else}
+									<svg
+										width="14"
+										height="14"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="2"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										aria-hidden="true"
+										><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38" /></svg
+									>
+									Sync Feed
+								{/if}
 							</button>
 						</div>
-						<p class="section-desc">
-							What goes ON the platform profile — display name, username, bio, picture. Platforms
-							don't allow profile edits via API, so copy-paste these during account setup. Every edit
-							here <strong>saves automatically per platform</strong> — switch platforms freely, nothing
-							is lost. Usernames: try the top candidate at signup; if it's taken, mark it as taken and try
-							the next; “Use” records the winner for the selected platform. Connecting the account
-							later shows the real username as ground truth.
-						</p>
-						</div>
-						<svg class="section-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
-					</summary>
-
-					<div class="fields-grid">
-						<div class="field-group">
-							<label for="kit-display">Display Name</label>
-							<div class="kit-inline">
-								<input
-									id="kit-display"
-									type="text"
-									value={ppDisplayName}
-									oninput={(e) => {
-										ppDisplayName = e.currentTarget.value;
-										queueKitSave();
-									}}
-									placeholder="e.g. Jenny Tran ✨"
-									maxlength="40"
-								/>
-								<button
-									type="button"
-									class="btn-sync btn-xs"
-									onclick={() => copyKitText(ppDisplayName, 'Display name')}
-									disabled={!ppDisplayName}
-									title="Copy display name"
-									aria-label="Copy display name"
-								><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
-							</div>
-							<p class="field-hint">
-								The profile “name” line (TikTok nickname, Instagram name) — looser rules than the
-								username; spaces, caps, and an emoji are fine.
-							</p>
-						</div>
-
-						<div class="field-group">
-							<span class="field-label">Profile Picture</span>
-							{#if characterRef}
-								<div class="kit-avatar-row">
-									<!-- Enlargeable like every other image in the app. -->
-									<button
-										type="button"
-										class="kit-avatar-zoom"
-										onclick={() =>
-											characterRef &&
-											openPreview(characterRef, 'Profile picture', requestGenerateAvatar)}
-										title="Click to enlarge"
-										aria-label="Enlarge profile picture"
-									>
-										<img class="kit-avatar-thumb" src={characterRef} alt="" width="52" height="52" loading="lazy" />
-									</button>
-									<button type="button" class="btn-sync btn-xs" onclick={downloadAvatar}>
-										<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
-										Download for upload
-									</button>
-								</div>
-								<p class="field-hint">
-									Upload this same image on every platform so the persona is recognizable at a glance.
-								</p>
-							{:else}
-								<p class="field-hint">
-									No generated photo yet — create one in Character &amp; Visuals below; it becomes the
-									profile picture everywhere.
-								</p>
-							{/if}
-						</div>
-
-						<div class="field-group col-span-2">
-							<div class="label-row">
-								<span class="field-label">Username Candidates</span>
-								<button
-									type="button"
-									class="btn-sync btn-xs"
-									onclick={() => generateKit('base')}
-									disabled={kitBusy}
-									title="Generate 10 fresh username candidates + display name — your taken/confirmed marks are kept"
-								>
-									{#if generatingKitBase}Generating…{:else}<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.7 4.6L18 9.3l-4.3 1.7L12 15.6l-1.7-4.6L6 9.3l4.3-1.7L12 3z"/><path d="M18.5 14.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2z"/></svg> More ideas{/if}
-								</button>
-							</div>
-							<p class="field-hint" style="margin: 0 0 0.6rem;">
-								One handle everywhere: candidates are ≤15 chars, letters/digits/underscores, so they
-								fit every platform (X is the strictest). Confirmations apply to
-								<strong>{platformLabel(kitPlatform)}</strong> — switch the platform in the bio picker below.
-							</p>
-							{#if ppHandleCandidates.length === 0}
-								<p class="field-hint">No candidates yet — hit “More ideas” or the starter kit above.</p>
-							{:else}
-								<div class="kit-candidates">
-									{#each ppHandleCandidates as c (c.handle)}
-										<div
-											class="kit-candidate"
-											class:taken={c.status === 'taken'}
-											class:confirmed={c.status === 'confirmed'}
-										>
-											<span class="kit-candidate-handle">@{c.handle}</span>
-											{#if handleCompatNote(c.handle)}
-												<span class="kit-compat">{handleCompatNote(c.handle)}</span>
-											{/if}
-											{#if c.status === 'confirmed'}
-												<span class="kit-confirmed-badge"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg> in use</span>
-											{:else if c.status === 'taken'}
-												<span class="kit-taken-badge">taken</span>
-											{/if}
-											<span class="kit-candidate-actions">
-												<button
-													type="button"
-													title="Copy username"
-													aria-label="Copy username @{c.handle}"
-													onclick={() => copyKitText(c.handle, 'Username')}
-												><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
-												<button
-													type="button"
-													title={c.status === 'taken'
-														? 'Un-mark — it was available after all'
-														: 'Mark as taken (tried it, unavailable)'}
-													aria-label={c.status === 'taken'
-														? `Un-mark @${c.handle} as taken`
-														: `Mark @${c.handle} as taken`}
-													onclick={() => toggleCandidateTaken(c.handle)}
-												>{#if c.status === 'taken'}<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-4"/></svg>{:else}<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>{/if}</button>
-												<button
-													type="button"
-													class="kit-use-btn"
-													title="This one registered — record it as the {platformLabel(kitPlatform)} username"
-													disabled={c.status === 'taken'}
-													onclick={() => useCandidateFor(c.handle, kitPlatform)}
-												>Use</button>
-												<button
-													type="button"
-													class="kit-del-btn"
-													title="Remove this candidate from the list"
-													aria-label="Remove @{c.handle}"
-													onclick={() => removeHandleCandidate(c.handle)}
-												><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2m1 0v14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2V6h12"/></svg></button>
-											</span>
-										</div>
-									{/each}
-								</div>
-							{/if}
-							<div class="kit-inline kit-add-row">
-								<input
-									type="text"
-									bind:value={newHandleInput}
-									placeholder="add your own — e.g. jennytranglow"
-									aria-label="Add a username candidate"
-									onkeydown={(e) => e.key === 'Enter' && addOwnHandle()}
-								/>
-								<button type="button" class="btn-sync btn-xs" onclick={addOwnHandle}>+ Add</button>
-							</div>
-						</div>
-
-						<div class="field-group col-span-2">
-							<div class="label-row">
-								<label for="kit-bio">Bio — per platform</label>
-								<span class="kit-bio-controls">
-									<select class="kit-select" bind:value={kitPlatform} aria-label="Platform for bio">
-										{#each BIO_PLATFORM_KEYS as k (k)}
-											<option value={k}>{platformLabel(k)}</option>
-										{/each}
-									</select>
-									<!-- Generates ONLY the selected platform's bio — a small, fast call
-									     that can't clobber other platforms' bios. -->
-									<button
-										type="button"
-										class="btn-sync btn-xs"
-										onclick={() => generateKit('bio')}
-										disabled={kitBusy}
-										title="Generate the {platformLabel(kitPlatform)} bio only — other platforms' bios are untouched"
-									>
-										{#if generatingKitBio}Generating…{:else}<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.7 4.6L18 9.3l-4.3 1.7L12 15.6l-1.7-4.6L6 9.3l4.3-1.7L12 3z"/><path d="M18.5 14.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2z"/></svg> {ppBios[kitPlatform] ? 'Regenerate' : 'Generate'} {platformLabel(kitPlatform)} bio{/if}
-									</button>
-								</span>
-							</div>
-							<textarea
-								id="kit-bio"
-								rows="4"
-								value={ppBios[kitPlatform] ?? ''}
-								aria-describedby="kit-bio-count"
-								aria-invalid={(ppBios[kitPlatform] ?? '').length > (bioLimit(kitPlatform) ?? Infinity)}
-								oninput={(e) => {
-									ppBios = { ...ppBios, [kitPlatform]: e.currentTarget.value };
-									queueKitSave();
-								}}
-								placeholder={`No ${platformLabel(kitPlatform)} bio yet — generate one or write your own`}
-							></textarea>
-							<div class="kit-bio-meta">
-								<span
-									id="kit-bio-count"
-									class="kit-bio-count tabular-nums"
-									class:over={(ppBios[kitPlatform] ?? '').length > (bioLimit(kitPlatform) ?? Infinity)}
-									aria-live="polite"
-								>
-									{(ppBios[kitPlatform] ?? '').length}/{bioLimit(kitPlatform)}
-									{#if (ppBios[kitPlatform] ?? '').length > (bioLimit(kitPlatform) ?? Infinity)}
-										— over {platformLabel(kitPlatform)}'s limit, trim before pasting
-									{/if}
-								</span>
-								<button
-									type="button"
-									class="btn-sync btn-xs"
-									onclick={() => copyKitText(ppBios[kitPlatform] ?? '', `${platformLabel(kitPlatform)} bio`)}
-									disabled={!ppBios[kitPlatform]}
-								><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copy bio</button>
-							</div>
-							<div class="kit-inline kit-confirmed-row">
-								<span class="kit-at">@</span>
-								<input
-									type="text"
-									value={ppConfirmedHandles[kitPlatform] ?? ''}
-									oninput={(e) => setConfirmedHandle(kitPlatform, e.currentTarget.value)}
-									placeholder="confirmed username on {platformLabel(kitPlatform)}"
-									aria-label="Confirmed username on {platformLabel(kitPlatform)}"
-								/>
-								{#if platformStatuses[kitPlatform]?.connected && platformStatuses[kitPlatform]?.handle}
-									<span
-										class="kit-connected-chip"
-										class:mismatch={!!ppConfirmedHandles[kitPlatform] &&
-											sanitizeHandle(platformStatuses[kitPlatform].handle) !== ppConfirmedHandles[kitPlatform]}
-										title="Live username from the connected account (Zernio sync)"
-									>
-										connected as @{platformStatuses[kitPlatform].handle}
-									</span>
-								{/if}
-							</div>
-							<p class="field-hint">
-								Bio and username save automatically per platform as you type. The confirmed username
-								is what you actually registered on {platformLabel(kitPlatform)}; once the account is
-								connected, the live handle shows next to it as ground truth.
-							</p>
-						</div>
 					</div>
-				</details>
 
-				<!-- Identity section -->
-				<details class="profile-section">
-					<summary class="section-summary">
-						<div class="section-header">
-							<h2 class="section-title">Character & Visuals</h2>
-							<p class="section-desc">The persona's generated face and multi-angle reference kit, plus its personality, skills, and tools. Name, niche, and appearance now live in the Persona Profile above.</p>
-						</div>
-						<svg class="section-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
-					</summary>
-
-					<div class="fields-grid">
-						<div class="field-group col-span-2">
-							<span class="field-label">Profile Picture</span>
-							<p class="section-desc" style="margin-bottom: 0.75rem;">
-								The AI-generated character used to keep this persona's face consistent across its
-								spokesperson videos — used as the profile picture everywhere once generated.
-							</p>
-							<div class="avatar-gen-row">
-								<div
-									class="avatar-gen-preview"
-									class:clickable={!!characterRef}
-									style={characterRef ? '' : `background: ${editGradient}`}
-									role={characterRef ? 'button' : undefined}
-									tabindex={characterRef ? 0 : undefined}
-									aria-label={characterRef ? 'Enlarge profile picture' : undefined}
-									onclick={() =>
-										characterRef &&
-										openPreview(characterRef, 'Profile picture', requestGenerateAvatar)}
-									onkeydown={(e) =>
-										(e.key === 'Enter' || e.key === ' ') &&
-										characterRef &&
-										(e.preventDefault(),
-										openPreview(characterRef, 'Profile picture', requestGenerateAvatar))}
-								>
-									{#if characterRef}
-										<img src={characterRef} alt="" width="96" height="96" />
-									{:else}
-										{editInitial || editName?.[0]?.toUpperCase() || '?'}
-									{/if}
-								</div>
-								<div class="avatar-gen-actions">
-									<button
-										type="button"
-										class="btn-sync"
-										onclick={requestGenerateAvatar}
-										disabled={generatingAvatar}
-									>
-										{#if generatingAvatar}
-											<span class="spinner-sm" aria-hidden="true"></span> Generating…
-										{:else}
-											<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.7 4.6L18 9.3l-4.3 1.7L12 15.6l-1.7-4.6L6 9.3l4.3-1.7L12 3z"/><path d="M18.5 14.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2z"/></svg>
-											{characterRef ? 'Regenerate' : 'Generate'} Profile Picture
-										{/if}
-									</button>
-									<label class="btn-sync file-upload-btn" class:disabled={generatingAvatar} aria-disabled={generatingAvatar}>
-										<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
-										Upload Reference Photo
-										<input
-											type="file"
-											accept="image/*"
-											onchange={onReferenceFileChange}
-											disabled={generatingAvatar}
-											hidden
-										/>
-									</label>
-									<button type="button" class="btn-sync" onclick={openRestore} disabled={generatingAvatar}>
-										<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/></svg>
-										Restore from history
-									</button>
-									{#if characterRef}
-										<button
-											type="button"
-											class="btn-sync danger"
-											onclick={() => deleteAssets([{ url: characterRef!, type: 'image', label: 'Profile picture', poster: null, source: 'avatar' }])}
-											disabled={deletingAssets || generatingAvatar}
-											title="Clear the profile picture — the image stays in your library and can be restored"
-										>
-											<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2m1 0v14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2V6h12"/></svg>
-											Remove photo
-										</button>
-									{:else}
-										<p class="field-hint">No photo yet — falls back to the gradient below until generated.</p>
-									{/if}
-									<p class="field-hint">~$0.08 per generation (Nano Banana 2 image call). Restore re-pins a past image free.</p>
-								</div>
+					{#if feedView === 'posts'}
+						{#if feedLoading}
+							<div class="feed-loading" role="status" aria-live="polite">
+								<span class="spinner-lg" aria-hidden="true"></span>
+								<p>Loading posts…</p>
 							</div>
-
-							{#if referencePreviewUrl}
-								<div class="reference-preview-row">
-									<img src={referencePreviewUrl} alt="Reference upload preview" class="reference-preview-thumb" width="96" height="96" />
-									<div class="avatar-gen-actions">
+						{:else if filteredPosts.length === 0}
+							<div class="feed-empty">
+								<span class="empty-icon"
+									><svg
+										width="40"
+										height="40"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="1.6"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										aria-hidden="true"
+										><rect x="5" y="2" width="14" height="20" rx="2" /><path d="M12 18h.01" /></svg
+									></span
+								>
+								<h2>No posts yet</h2>
+								<p>
+									{feedFilter !== 'all' || platformFilter !== 'all'
+										? 'No posts match these filters.'
+										: 'Generate your first post — drafts save even without a connected platform.'}
+								</p>
+								{#if feedFilter === 'all' && platformFilter === 'all'}
+									<div class="feed-empty-actions">
 										<button
 											type="button"
 											class="btn-generate"
-											onclick={generateAvatarFromReference}
+											onclick={() => requestGeneratePost()}
+											disabled={generatingPost}
+										>
+											{#if generatingPost}Generating…{:else}<svg
+													width="14"
+													height="14"
+													viewBox="0 0 24 24"
+													fill="none"
+													stroke="currentColor"
+													stroke-width="2"
+													stroke-linecap="round"
+													stroke-linejoin="round"
+													aria-hidden="true"
+													><path
+														d="M12 3l1.7 4.6L18 9.3l-4.3 1.7L12 15.6l-1.7-4.6L6 9.3l4.3-1.7L12 3z"
+													/><path d="M18.5 14.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2z" /></svg
+												> Generate First Post{/if}
+										</button>
+										<button
+											type="button"
+											class="btn-sync"
+											onclick={() => {
+												activeTab = 'profile';
+												profileView = 'connections';
+											}}
+										>
+											Manage Connections
+										</button>
+									</div>
+								{/if}
+							</div>
+						{:else}
+							<SelectionToolbar
+								total={groupedPosts.length}
+								selectedCount={selectedPostIds.length}
+								noun="post"
+								busy={bulkDeletingPosts}
+								onSelectAll={selectAllPosts}
+								onClear={clearPostSelection}
+								onDelete={deleteSelectedPosts}
+							/>
+							<div class="post-mosaic">
+								{#each groupedPosts as post (post.id)}
+									<PostCard
+										{post}
+										onOpen={(p) => (modalPost = p)}
+										onPublishFallback={openPublishFallback}
+										selectable
+										selected={selectedPostIds.includes(post.id)}
+										onToggleSelect={(p) => togglePostSelected(p.id)}
+										onDelete={handleDeletePost}
+										onEnlarge={openPostMedia}
+										onToggleFavorite={togglePostFavorite}
+									/>
+								{/each}
+							</div>
+						{/if}
+					{/if}
+
+					{#if feedView === 'assets'}
+						<!-- Assets view: every generated visual in one flat grid (former Assets tab). -->
+						{#if feedLoading && assetItems.length === 0}
+							<div class="feed-loading" role="status" aria-live="polite">
+								<span class="spinner" aria-hidden="true"></span> Loading assets…
+							</div>
+						{:else if assetItems.length === 0}
+							<div class="feed-empty">
+								<span class="empty-icon"
+									><svg
+										width="40"
+										height="40"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="1.6"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										aria-hidden="true"
+										><rect x="3" y="3" width="18" height="18" rx="2" /><circle
+											cx="8.5"
+											cy="8.5"
+											r="1.5"
+										/><path d="M21 15l-5-5L5 21" /></svg
+									></span
+								>
+								<h2>No assets yet</h2>
+								<p>
+									Every image and video generated for this persona will collect here — post media,
+									poster stills, storyboards, the profile picture, and the reference kit.
+								</p>
+							</div>
+						{:else}
+							<SelectionToolbar
+								total={assetItems.length}
+								selectedCount={selectedAssetUrls.length}
+								noun="asset"
+								busy={deletingAssets}
+								onSelectAll={selectAllAssets}
+								onClear={clearAssetSelection}
+								onDelete={deleteSelectedAssets}
+							/>
+							<div class="assets-grid">
+								{#each assetItems as asset (asset.url)}
+									<div class="asset-cell" class:selected={selectedAssetUrls.includes(asset.url)}>
+										<button
+											type="button"
+											class="asset-tile"
+											onclick={() => (assetLightbox = asset)}
+											aria-label="View {asset.label}"
+										>
+											{#if asset.type === 'video'}
+												<!-- Static preview only (the real clip plays in the lightbox on tap), so
+											     show the poster as a plain lazy <img> — no <video preload> per tile,
+											     which otherwise fired a metadata range request for every clip on load.
+											     Fall back to a no-preload <video> only when a poster is missing. -->
+												{#if asset.poster}
+													<img src={asset.poster} loading="lazy" width="400" height="400" alt="" />
+												{:else}
+													<video src={asset.url} muted playsinline preload="none"></video>
+												{/if}
+												<span class="asset-video-badge"
+													><svg
+														width="10"
+														height="10"
+														viewBox="0 0 24 24"
+														fill="currentColor"
+														aria-hidden="true"><path d="M8 5v14l11-7z" /></svg
+													><span class="sr-only">Video</span></span
+												>
+											{:else}
+												<img src={asset.url} loading="lazy" width="400" height="400" alt="" />
+											{/if}
+											<span class="asset-label">{asset.label}</span>
+										</button>
+										<label class="asset-select" title="Select for bulk actions">
+											<input
+												type="checkbox"
+												checked={selectedAssetUrls.includes(asset.url)}
+												onchange={() => toggleAssetSelected(asset.url)}
+												aria-label="Select {asset.label}"
+											/>
+										</label>
+										<button
+											type="button"
+											class="asset-del"
+											title={asset.source === 'post'
+												? 'Delete the post this media belongs to'
+												: asset.source === 'avatar'
+													? 'Clear the profile picture'
+													: 'Remove from the reference kit'}
+											aria-label="Delete {asset.label}"
+											disabled={deletingAssets}
+											onclick={() => deleteAssets([asset])}
+										>
+											<svg
+												width="13"
+												height="13"
+												viewBox="0 0 24 24"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="2.2"
+												stroke-linecap="round"
+												aria-hidden="true"
+												><path d="M3 6h18M8 6V4h8v2m1 0v14a2 2 0 01-2 2H9a2 2 0 01-2-2V6h12" /></svg
+											>
+										</button>
+									</div>
+								{/each}
+							</div>
+						{/if}
+					{/if}
+
+					{#if feedView === 'calendar'}
+						<!-- Calendar lens (former Calendar tab) — same posts, placed in time. -->
+						{#if feedLoading && calendarPosts.length === 0}
+							<div class="feed-loading" role="status" aria-live="polite">
+								<span class="spinner-lg" aria-hidden="true"></span>
+								<p>Loading posts…</p>
+							</div>
+						{:else}
+							<CalendarView
+								posts={calendarPosts}
+								onOpenPost={(p) => (modalPost = feedRowFor(p))}
+								onApprove={async (p) => {
+									const row = feedRowFor(p);
+									if (row) await handleApprovePost(row);
+								}}
+								onGenerateForDate={(d) => requestGeneratePost(d)}
+							/>
+						{/if}
+					{/if}
+				</div>
+
+				<!-- PROFILE TAB · Overview lens -->
+			{:else if activeTab === 'profile' && profileView === 'overview'}
+				<div class="profile-tab" class:bento={profileLayout === 'bento'}>
+					<!-- Brand section: which of the user's brand briefs this persona
+				     generates for. One client can run several brands (Just Kids
+				     Honey, HoneyX Manly Plus…) — every asset this persona makes is
+				     grounded in the brief selected here. -->
+					<details class="profile-section" open>
+						<summary class="section-summary">
+							<div class="section-header">
+								<h2 class="section-title">Brand Kit</h2>
+								<p class="section-desc">
+									Choose the brand brief this persona creates content for — its products, voice, and
+									audience ground every asset. Selection is opt-in: with <strong>None</strong> selected,
+									the persona generates with no brand kit (no brand is applied automatically).
+								</p>
+							</div>
+							<svg
+								class="section-chevron"
+								width="18"
+								height="18"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2.5"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg
+							>
+						</summary>
+						<div class="fields-grid">
+							<div class="field-group col-span-2">
+								<label for="p-brief">Brand Kit</label>
+								<div class="brand-kit-row">
+									<select id="p-brief" bind:value={selectedBrandBriefId}>
+										<option value="">— None (no brand kit) —</option>
+										{#each brandBriefs as b (b.id)}
+											<option value={b.id}>{b.name}</option>
+										{/each}
+									</select>
+									<button
+										type="button"
+										class="btn-primary btn-apply-brand"
+										onclick={applyBrandKit}
+										disabled={!brandDirty || savingBrand}
+										title={brandDirty
+											? 'Save this brand-kit choice'
+											: 'No unsaved brand-kit change'}
+									>
+										{savingBrand ? 'Applying…' : brandDirty ? 'Apply brand kit' : 'Applied'}
+									</button>
+								</div>
+								{#if brandBriefs.length === 0}
+									<p class="field-hint">
+										No brand briefs saved yet — create one in <a href="/brand-brief">Brand Brief</a
+										>, then select it here.
+									</p>
+								{:else if brandDirty}
+									<p class="field-hint brand-dirty-hint">
+										Unsaved change — click <strong>Apply brand kit</strong> to confirm.
+									</p>
+								{:else}
+									<p class="field-hint">
+										{savedBrandBriefId
+											? `Applied: this persona creates for “${brandBriefs.find((b) => b.id === savedBrandBriefId)?.name ?? 'the selected brand'}”.`
+											: 'No brand kit applied — content generates without brand context.'}
+										Manage briefs in <a href="/brand-brief">Brand Brief</a>.
+									</p>
+								{/if}
+							</div>
+						</div>
+					</details>
+
+					<!-- Persona Profile — above Identity: these fields feed generation prompts -->
+					<details class="profile-section">
+						<!-- starts collapsed: Brand Kit is the only section open by default -->
+						<summary class="section-summary">
+							<div class="section-header">
+								<div class="label-row">
+									<h2 class="section-title">Persona Profile</h2>
+									<button
+										type="button"
+										class="btn-sync btn-xs"
+										onclick={(e) => {
+											e.preventDefault();
+											e.stopPropagation();
+											generatePersonaProfile();
+										}}
+										disabled={generatingProfile}
+										title="Generate a unique profile tailored to the selected brand and this persona's gender"
+									>
+										{#if generatingProfile}Generating…{:else}<svg
+												width="13"
+												height="13"
+												viewBox="0 0 24 24"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="2"
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												aria-hidden="true"
+												><path
+													d="M12 3l1.7 4.6L18 9.3l-4.3 1.7L12 15.6l-1.7-4.6L6 9.3l4.3-1.7L12 3z"
+												/><path d="M18.5 14.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2z" /></svg
+											> Generate for brand{/if}
+									</button>
+								</div>
+								<p class="section-desc">
+									Psychological depth and content strategy — these feed directly into content
+									generation prompts. “Generate for brand” fills a unique, brand-tailored profile
+									(aligned to this persona's gender) and saves it automatically — review and tweak
+									anytime.
+								</p>
+							</div>
+							<svg
+								class="section-chevron"
+								width="18"
+								height="18"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2.5"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg
+							>
+						</summary>
+
+						<div class="fields-grid">
+							<!-- Identity fields, moved up into the profile: the NAME stays constant;
+						     NICHE (and everything below) is filled by "Generate for brand". -->
+							<div class="field-group">
+								<label for="p-name">Persona Name</label>
+								<input
+									id="p-name"
+									type="text"
+									bind:value={editName}
+									placeholder="e.g. Veronica Active"
+								/>
+							</div>
+							<div class="field-group">
+								<label for="p-niche">Niche</label>
+								<select id="p-niche" bind:value={editNiche}>
+									{#if editNiche && !(NICHE_OPTIONS as readonly string[]).includes(editNiche)}
+										<option value={editNiche}>{editNiche}</option>
+									{/if}
+									<option value="">— Select niche —</option>
+									{#each NICHE_OPTIONS as n}
+										<option value={n}>{n}</option>
+									{/each}
+								</select>
+							</div>
+							<div class="field-group">
+								<label for="p-status">Status</label>
+								<select id="p-status" bind:value={editStatus}>
+									{#each STATUS_OPTIONS as s}
+										<option value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
+									{/each}
+								</select>
+							</div>
+
+							<div class="field-group col-span-2">
+								<span class="field-label" id="pp-age-label">Target Age Range</span>
+								<div class="age-chips" role="group" aria-labelledby="pp-age-label">
+									<button
+										type="button"
+										class="age-chip age-chip-all"
+										class:selected={ppAgeRanges.length === AGE_RANGES.length}
+										aria-pressed={ppAgeRanges.length === AGE_RANGES.length}
+										onclick={toggleAllAgeRanges}>All ages</button
+									>
+									{#each AGE_RANGES as r}
+										<button
+											type="button"
+											class="age-chip"
+											class:selected={ppAgeRanges.includes(r.key)}
+											aria-pressed={ppAgeRanges.includes(r.key)}
+											onclick={() => toggleAgeRange(r.key)}>{r.key}</button
+										>
+									{/each}
+								</div>
+								<p class="field-hint">Select one or more audience age brackets (or all).</p>
+							</div>
+
+							<div class="field-group">
+								<label for="pp-gender">Gender</label>
+								<select id="pp-gender" bind:value={ppGender} onchange={() => alignVoiceToGender()}>
+									<option value="">— Select —</option>
+									<option value="female">Female</option>
+									<option value="male">Male</option>
+								</select>
+								<p class="field-hint">
+									Drives the generated character's appearance and default voice.
+								</p>
+							</div>
+
+							<div class="field-group">
+								<label for="pp-archetype">Persona Archetype</label>
+								<select id="pp-archetype" bind:value={ppArchetype}>
+									<option value="">— Select archetype —</option>
+									{#each PERSONA_ARCHETYPES as a}
+										<option value={a}>{a}</option>
+									{/each}
+								</select>
+								<p class="field-hint">
+									Defines the persona's role and audience relationship style.
+								</p>
+							</div>
+
+							<div class="field-group">
+								<label for="pp-focus">Content Focus</label>
+								<select id="pp-focus" bind:value={ppContentFocus}>
+									<option value="">— Select focus —</option>
+									{#each CONTENT_FOCUS_OPTIONS as f}
+										<option value={f}>{f}</option>
+									{/each}
+								</select>
+								<p class="field-hint">Primary category of content this persona produces.</p>
+							</div>
+
+							<div class="field-group col-span-2">
+								<label for="pp-target">Target Avatar</label>
+								<input
+									id="pp-target"
+									type="text"
+									bind:value={ppTargetAvatar}
+									placeholder="e.g. Working moms 28-42, fitness-curious, short on time"
+								/>
+								<p class="field-hint">
+									One-liner describing the ideal audience member this persona speaks to.
+								</p>
+							</div>
+
+							<div class="field-group col-span-2">
+								<label for="pp-psych">Psychology Profile</label>
+								<textarea
+									id="pp-psych"
+									bind:value={ppPsychProfile}
+									rows="4"
+									placeholder="Describe audience psychology — motivations, fears, desires, pain points, identity hooks…"
+								>
+								</textarea>
+								<p class="field-hint">
+									Used to tune tone, hooks, and emotional framing in generated content.
+								</p>
+							</div>
+
+							<div class="field-group col-span-2">
+								<label for="pp-angle">Content Angle / POV</label>
+								<textarea
+									id="pp-angle"
+									bind:value={ppContentAngle}
+									rows="3"
+									placeholder="e.g. 'Real results, no fluff' — direct, relatable transformations told in first person…"
+								>
+								</textarea>
+								<p class="field-hint">
+									The unique angle or point of view that differentiates this persona's content.
+								</p>
+							</div>
+
+							<div class="field-group col-span-2">
+								<div class="label-row">
+									<span class="field-label">Appearance &amp; Wardrobe</span>
+									<button
+										type="button"
+										class="btn-sync btn-xs"
+										onclick={readAppearanceFromPhoto}
+										disabled={readingAppearance || !characterRef}
+										title="Read the wardrobe, hair, eyes, etc. from the current profile picture so they match the real character"
+									>
+										{#if readingAppearance}Reading…{:else}<svg
+												width="13"
+												height="13"
+												viewBox="0 0 24 24"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="2"
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												aria-hidden="true"
+												><path
+													d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"
+												/><circle cx="12" cy="13" r="3" /></svg
+											> Read from photo{/if}
+									</button>
+								</div>
+								<p class="field-hint" style="margin: 0 0 0.6rem;">
+									Dynamic look variables — clothing, colors, hair, eyes, headwear, styling. They
+									feed the profile-picture generation so the face and outfit match. Fill them from
+									the brand (“Generate for brand”) or read them from the current photo (“Read from
+									photo”).
+								</p>
+								<TraitPicker bind:appearance={ppAppearance} />
+							</div>
+						</div>
+					</details>
+
+					<!-- Platform Identity Kit: the persona's public-facing profile per
+				     platform. Copy-paste tooling by design — no platform (nor Zernio)
+				     accepts profile-field updates via API; availability of a username
+				     is confirmed manually at signup. -->
+					<details class="profile-section">
+						<summary class="section-summary">
+							<div class="section-header">
+								<div class="label-row">
+									<h2 class="section-title">Platform Identity Kit</h2>
+									<span
+										class="kit-save-state"
+										class:error={kitSaveState === 'error'}
+										role="status"
+										aria-live="polite"
+									>
+										{#if kitSaveState === 'saving'}
+											Saving…
+										{:else if kitSaveState === 'saved'}
+											Saved <svg
+												width="12"
+												height="12"
+												viewBox="0 0 24 24"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="2.5"
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												aria-hidden="true"><path d="M20 6L9 17l-5-5" /></svg
+											>
+										{:else if kitSaveState === 'error'}
+											Save failed
+										{/if}
+									</span>
+									<button
+										type="button"
+										class="btn-sync btn-xs"
+										onclick={(e) => {
+											e.preventDefault();
+											e.stopPropagation();
+											generateKit('starter');
+										}}
+										disabled={kitBusy}
+										title="One small call: display name + username candidates + bios for this persona's connected platforms (or a TikTok/Instagram/YouTube starter set)"
+									>
+										{#if generatingKit}Generating…{:else}<svg
+												width="13"
+												height="13"
+												viewBox="0 0 24 24"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="2"
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												aria-hidden="true"
+												><path
+													d="M12 3l1.7 4.6L18 9.3l-4.3 1.7L12 15.6l-1.7-4.6L6 9.3l4.3-1.7L12 3z"
+												/><path d="M18.5 14.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2z" /></svg
+											>
+											{ppHandleCandidates.length || Object.keys(ppBios).length
+												? 'Regenerate'
+												: 'Generate'} starter kit{/if}
+									</button>
+								</div>
+								<p class="section-desc">
+									What goes ON the platform profile — display name, username, bio, picture.
+									Platforms don't allow profile edits via API, so copy-paste these during account
+									setup. Every edit here <strong>saves automatically per platform</strong> — switch platforms
+									freely, nothing is lost. Usernames: try the top candidate at signup; if it's taken,
+									mark it as taken and try the next; “Use” records the winner for the selected platform.
+									Connecting the account later shows the real username as ground truth.
+								</p>
+							</div>
+							<svg
+								class="section-chevron"
+								width="18"
+								height="18"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2.5"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg
+							>
+						</summary>
+
+						<div class="fields-grid">
+							<div class="field-group">
+								<label for="kit-display">Display Name</label>
+								<div class="kit-inline">
+									<input
+										id="kit-display"
+										type="text"
+										value={ppDisplayName}
+										oninput={(e) => {
+											ppDisplayName = e.currentTarget.value;
+											queueKitSave();
+										}}
+										placeholder="e.g. Jenny Tran ✨"
+										maxlength="40"
+									/>
+									<button
+										type="button"
+										class="btn-sync btn-xs"
+										onclick={() => copyKitText(ppDisplayName, 'Display name')}
+										disabled={!ppDisplayName}
+										title="Copy display name"
+										aria-label="Copy display name"
+										><svg
+											width="13"
+											height="13"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											aria-hidden="true"
+											><rect x="9" y="9" width="12" height="12" rx="2" /><path
+												d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
+											/></svg
+										></button
+									>
+								</div>
+								<p class="field-hint">
+									The profile “name” line (TikTok nickname, Instagram name) — looser rules than the
+									username; spaces, caps, and an emoji are fine.
+								</p>
+							</div>
+
+							<div class="field-group">
+								<span class="field-label">Profile Picture</span>
+								{#if characterRef}
+									<div class="kit-avatar-row">
+										<!-- Enlargeable like every other image in the app. -->
+										<button
+											type="button"
+											class="kit-avatar-zoom"
+											onclick={() =>
+												characterRef &&
+												openPreview(characterRef, 'Profile picture', requestGenerateAvatar)}
+											title="Click to enlarge"
+											aria-label="Enlarge profile picture"
+										>
+											<img
+												class="kit-avatar-thumb"
+												src={characterRef}
+												alt=""
+												width="52"
+												height="52"
+												loading="lazy"
+											/>
+										</button>
+										<button type="button" class="btn-sync btn-xs" onclick={downloadAvatar}>
+											<svg
+												width="13"
+												height="13"
+												viewBox="0 0 24 24"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="2"
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												aria-hidden="true"
+												><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path
+													d="M7 10l5 5 5-5"
+												/><path d="M12 15V3" /></svg
+											>
+											Download for upload
+										</button>
+									</div>
+									<p class="field-hint">
+										Upload this same image on every platform so the persona is recognizable at a
+										glance.
+									</p>
+								{:else}
+									<p class="field-hint">
+										No generated photo yet — create one in Character &amp; Visuals below; it becomes
+										the profile picture everywhere.
+									</p>
+								{/if}
+							</div>
+
+							<div class="field-group col-span-2">
+								<div class="label-row">
+									<span class="field-label">Username Candidates</span>
+									<button
+										type="button"
+										class="btn-sync btn-xs"
+										onclick={() => generateKit('base')}
+										disabled={kitBusy}
+										title="Generate 10 fresh username candidates + display name — your taken/confirmed marks are kept"
+									>
+										{#if generatingKitBase}Generating…{:else}<svg
+												width="13"
+												height="13"
+												viewBox="0 0 24 24"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="2"
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												aria-hidden="true"
+												><path
+													d="M12 3l1.7 4.6L18 9.3l-4.3 1.7L12 15.6l-1.7-4.6L6 9.3l4.3-1.7L12 3z"
+												/><path d="M18.5 14.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2z" /></svg
+											> More ideas{/if}
+									</button>
+								</div>
+								<p class="field-hint" style="margin: 0 0 0.6rem;">
+									One handle everywhere: candidates are ≤15 chars, letters/digits/underscores, so
+									they fit every platform (X is the strictest). Confirmations apply to
+									<strong>{platformLabel(kitPlatform)}</strong> — switch the platform in the bio picker
+									below.
+								</p>
+								{#if ppHandleCandidates.length === 0}
+									<p class="field-hint">
+										No candidates yet — hit “More ideas” or the starter kit above.
+									</p>
+								{:else}
+									<div class="kit-candidates">
+										{#each ppHandleCandidates as c (c.handle)}
+											<div
+												class="kit-candidate"
+												class:taken={c.status === 'taken'}
+												class:confirmed={c.status === 'confirmed'}
+											>
+												<span class="kit-candidate-handle">@{c.handle}</span>
+												{#if handleCompatNote(c.handle)}
+													<span class="kit-compat">{handleCompatNote(c.handle)}</span>
+												{/if}
+												{#if c.status === 'confirmed'}
+													<span class="kit-confirmed-badge"
+														><svg
+															width="12"
+															height="12"
+															viewBox="0 0 24 24"
+															fill="none"
+															stroke="currentColor"
+															stroke-width="2.5"
+															stroke-linecap="round"
+															stroke-linejoin="round"
+															aria-hidden="true"><path d="M20 6L9 17l-5-5" /></svg
+														> in use</span
+													>
+												{:else if c.status === 'taken'}
+													<span class="kit-taken-badge">taken</span>
+												{/if}
+												<span class="kit-candidate-actions">
+													<button
+														type="button"
+														title="Copy username"
+														aria-label="Copy username @{c.handle}"
+														onclick={() => copyKitText(c.handle, 'Username')}
+														><svg
+															width="13"
+															height="13"
+															viewBox="0 0 24 24"
+															fill="none"
+															stroke="currentColor"
+															stroke-width="2"
+															stroke-linecap="round"
+															stroke-linejoin="round"
+															aria-hidden="true"
+															><rect x="9" y="9" width="12" height="12" rx="2" /><path
+																d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
+															/></svg
+														></button
+													>
+													<button
+														type="button"
+														title={c.status === 'taken'
+															? 'Un-mark — it was available after all'
+															: 'Mark as taken (tried it, unavailable)'}
+														aria-label={c.status === 'taken'
+															? `Un-mark @${c.handle} as taken`
+															: `Mark @${c.handle} as taken`}
+														onclick={() => toggleCandidateTaken(c.handle)}
+														>{#if c.status === 'taken'}<svg
+																width="13"
+																height="13"
+																viewBox="0 0 24 24"
+																fill="none"
+																stroke="currentColor"
+																stroke-width="2"
+																stroke-linecap="round"
+																stroke-linejoin="round"
+																aria-hidden="true"
+																><path d="M9 14L4 9l5-5" /><path
+																	d="M4 9h11a5 5 0 0 1 0 10h-4"
+																/></svg
+															>{:else}<svg
+																width="13"
+																height="13"
+																viewBox="0 0 24 24"
+																fill="none"
+																stroke="currentColor"
+																stroke-width="2"
+																stroke-linecap="round"
+																stroke-linejoin="round"
+																aria-hidden="true"><path d="M18 6L6 18M6 6l12 12" /></svg
+															>{/if}</button
+													>
+													<button
+														type="button"
+														class="kit-use-btn"
+														title="This one registered — record it as the {platformLabel(
+															kitPlatform
+														)} username"
+														disabled={c.status === 'taken'}
+														onclick={() => useCandidateFor(c.handle, kitPlatform)}>Use</button
+													>
+													<button
+														type="button"
+														class="kit-del-btn"
+														title="Remove this candidate from the list"
+														aria-label="Remove @{c.handle}"
+														onclick={() => removeHandleCandidate(c.handle)}
+														><svg
+															width="13"
+															height="13"
+															viewBox="0 0 24 24"
+															fill="none"
+															stroke="currentColor"
+															stroke-width="2"
+															stroke-linecap="round"
+															stroke-linejoin="round"
+															aria-hidden="true"
+															><path
+																d="M3 6h18M8 6V4h8v2m1 0v14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2V6h12"
+															/></svg
+														></button
+													>
+												</span>
+											</div>
+										{/each}
+									</div>
+								{/if}
+								<div class="kit-inline kit-add-row">
+									<input
+										type="text"
+										bind:value={newHandleInput}
+										placeholder="add your own — e.g. jennytranglow"
+										aria-label="Add a username candidate"
+										onkeydown={(e) => e.key === 'Enter' && addOwnHandle()}
+									/>
+									<button type="button" class="btn-sync btn-xs" onclick={addOwnHandle}>+ Add</button
+									>
+								</div>
+							</div>
+
+							<div class="field-group col-span-2">
+								<div class="label-row">
+									<label for="kit-bio">Bio — per platform</label>
+									<span class="kit-bio-controls">
+										<select
+											class="kit-select"
+											bind:value={kitPlatform}
+											aria-label="Platform for bio"
+										>
+											{#each BIO_PLATFORM_KEYS as k (k)}
+												<option value={k}>{platformLabel(k)}</option>
+											{/each}
+										</select>
+										<!-- Generates ONLY the selected platform's bio — a small, fast call
+									     that can't clobber other platforms' bios. -->
+										<button
+											type="button"
+											class="btn-sync btn-xs"
+											onclick={() => generateKit('bio')}
+											disabled={kitBusy}
+											title="Generate the {platformLabel(
+												kitPlatform
+											)} bio only — other platforms' bios are untouched"
+										>
+											{#if generatingKitBio}Generating…{:else}<svg
+													width="13"
+													height="13"
+													viewBox="0 0 24 24"
+													fill="none"
+													stroke="currentColor"
+													stroke-width="2"
+													stroke-linecap="round"
+													stroke-linejoin="round"
+													aria-hidden="true"
+													><path
+														d="M12 3l1.7 4.6L18 9.3l-4.3 1.7L12 15.6l-1.7-4.6L6 9.3l4.3-1.7L12 3z"
+													/><path d="M18.5 14.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2z" /></svg
+												>
+												{ppBios[kitPlatform] ? 'Regenerate' : 'Generate'}
+												{platformLabel(kitPlatform)} bio{/if}
+										</button>
+									</span>
+								</div>
+								<textarea
+									id="kit-bio"
+									rows="4"
+									value={ppBios[kitPlatform] ?? ''}
+									aria-describedby="kit-bio-count"
+									aria-invalid={(ppBios[kitPlatform] ?? '').length >
+										(bioLimit(kitPlatform) ?? Infinity)}
+									oninput={(e) => {
+										ppBios = { ...ppBios, [kitPlatform]: e.currentTarget.value };
+										queueKitSave();
+									}}
+									placeholder={`No ${platformLabel(kitPlatform)} bio yet — generate one or write your own`}
+								></textarea>
+								<div class="kit-bio-meta">
+									<span
+										id="kit-bio-count"
+										class="kit-bio-count tabular-nums"
+										class:over={(ppBios[kitPlatform] ?? '').length >
+											(bioLimit(kitPlatform) ?? Infinity)}
+										aria-live="polite"
+									>
+										{(ppBios[kitPlatform] ?? '').length}/{bioLimit(kitPlatform)}
+										{#if (ppBios[kitPlatform] ?? '').length > (bioLimit(kitPlatform) ?? Infinity)}
+											— over {platformLabel(kitPlatform)}'s limit, trim before pasting
+										{/if}
+									</span>
+									<button
+										type="button"
+										class="btn-sync btn-xs"
+										onclick={() =>
+											copyKitText(ppBios[kitPlatform] ?? '', `${platformLabel(kitPlatform)} bio`)}
+										disabled={!ppBios[kitPlatform]}
+										><svg
+											width="13"
+											height="13"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											aria-hidden="true"
+											><rect x="9" y="9" width="12" height="12" rx="2" /><path
+												d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
+											/></svg
+										> Copy bio</button
+									>
+								</div>
+								<div class="kit-inline kit-confirmed-row">
+									<span class="kit-at">@</span>
+									<input
+										type="text"
+										value={ppConfirmedHandles[kitPlatform] ?? ''}
+										oninput={(e) => setConfirmedHandle(kitPlatform, e.currentTarget.value)}
+										placeholder="confirmed username on {platformLabel(kitPlatform)}"
+										aria-label="Confirmed username on {platformLabel(kitPlatform)}"
+									/>
+									{#if platformStatuses[kitPlatform]?.connected && platformStatuses[kitPlatform]?.handle}
+										<span
+											class="kit-connected-chip"
+											class:mismatch={!!ppConfirmedHandles[kitPlatform] &&
+												sanitizeHandle(platformStatuses[kitPlatform].handle) !==
+													ppConfirmedHandles[kitPlatform]}
+											title="Live username from the connected account (Zernio sync)"
+										>
+											connected as @{platformStatuses[kitPlatform].handle}
+										</span>
+									{/if}
+								</div>
+								<p class="field-hint">
+									Bio and username save automatically per platform as you type. The confirmed
+									username is what you actually registered on {platformLabel(kitPlatform)}; once the
+									account is connected, the live handle shows next to it as ground truth.
+								</p>
+							</div>
+						</div>
+					</details>
+
+					<!-- Identity section -->
+					<details class="profile-section">
+						<summary class="section-summary">
+							<div class="section-header">
+								<h2 class="section-title">Character & Visuals</h2>
+								<p class="section-desc">
+									The persona's generated face and multi-angle reference kit, plus its personality,
+									skills, and tools. Name, niche, and appearance now live in the Persona Profile
+									above.
+								</p>
+							</div>
+							<svg
+								class="section-chevron"
+								width="18"
+								height="18"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2.5"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg
+							>
+						</summary>
+
+						<div class="fields-grid">
+							<div class="field-group col-span-2">
+								<span class="field-label">Profile Picture</span>
+								<p class="section-desc" style="margin-bottom: 0.75rem;">
+									The AI-generated character used to keep this persona's face consistent across its
+									spokesperson videos — used as the profile picture everywhere once generated.
+								</p>
+								<div class="avatar-gen-row">
+									<div
+										class="avatar-gen-preview"
+										class:clickable={!!characterRef}
+										style={characterRef ? '' : `background: ${editGradient}`}
+										role={characterRef ? 'button' : undefined}
+										tabindex={characterRef ? 0 : undefined}
+										aria-label={characterRef ? 'Enlarge profile picture' : undefined}
+										onclick={() =>
+											characterRef &&
+											openPreview(characterRef, 'Profile picture', requestGenerateAvatar)}
+										onkeydown={(e) =>
+											(e.key === 'Enter' || e.key === ' ') &&
+											characterRef &&
+											(e.preventDefault(),
+											openPreview(characterRef, 'Profile picture', requestGenerateAvatar))}
+									>
+										{#if characterRef}
+											<img src={characterRef} alt="" width="96" height="96" />
+										{:else}
+											{editInitial || editName?.[0]?.toUpperCase() || '?'}
+										{/if}
+									</div>
+									<div class="avatar-gen-actions">
+										<button
+											type="button"
+											class="btn-sync"
+											onclick={requestGenerateAvatar}
 											disabled={generatingAvatar}
 										>
 											{#if generatingAvatar}
-												<span class="spinner-sm" aria-hidden="true"></span> Generating (sheet + hero shot, ~30-60s)…
+												<span class="spinner-sm" aria-hidden="true"></span> Generating…
 											{:else}
-												<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.7 4.6L18 9.3l-4.3 1.7L12 15.6l-1.7-4.6L6 9.3l4.3-1.7L12 3z"/><path d="M18.5 14.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2z"/></svg>
-												Generate Character Sheet From This Photo
+												<svg
+													width="14"
+													height="14"
+													viewBox="0 0 24 24"
+													fill="none"
+													stroke="currentColor"
+													stroke-width="2"
+													stroke-linecap="round"
+													stroke-linejoin="round"
+													aria-hidden="true"
+													><path
+														d="M12 3l1.7 4.6L18 9.3l-4.3 1.7L12 15.6l-1.7-4.6L6 9.3l4.3-1.7L12 3z"
+													/><path d="M18.5 14.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2z" /></svg
+												>
+												{characterRef ? 'Regenerate' : 'Generate'} Profile Picture
 											{/if}
 										</button>
-										<button type="button" class="btn-clear-reference" onclick={clearReferenceFile} disabled={generatingAvatar}>
-											Cancel
+										<label
+											class="btn-sync file-upload-btn"
+											class:disabled={generatingAvatar}
+											aria-disabled={generatingAvatar}
+										>
+											<svg
+												width="14"
+												height="14"
+												viewBox="0 0 24 24"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="2"
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												aria-hidden="true"
+												><path
+													d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"
+												/><circle cx="12" cy="13" r="3" /></svg
+											>
+											Upload Reference Photo
+											<input
+												type="file"
+												accept="image/*"
+												onchange={onReferenceFileChange}
+												disabled={generatingAvatar}
+												hidden
+											/>
+										</label>
+										<button
+											type="button"
+											class="btn-sync"
+											onclick={openRestore}
+											disabled={generatingAvatar}
+										>
+											<svg
+												width="14"
+												height="14"
+												viewBox="0 0 24 24"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="2"
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												aria-hidden="true"
+												><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /><path
+													d="M12 7v5l3 2"
+												/></svg
+											>
+											Restore from history
 										</button>
+										{#if characterRef}
+											<button
+												type="button"
+												class="btn-sync danger"
+												onclick={() =>
+													deleteAssets([
+														{
+															url: characterRef!,
+															type: 'image',
+															label: 'Profile picture',
+															poster: null,
+															source: 'avatar'
+														}
+													])}
+												disabled={deletingAssets || generatingAvatar}
+												title="Clear the profile picture — the image stays in your library and can be restored"
+											>
+												<svg
+													width="14"
+													height="14"
+													viewBox="0 0 24 24"
+													fill="none"
+													stroke="currentColor"
+													stroke-width="2"
+													stroke-linecap="round"
+													stroke-linejoin="round"
+													aria-hidden="true"
+													><path
+														d="M3 6h18M8 6V4h8v2m1 0v14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2V6h12"
+													/></svg
+												>
+												Remove photo
+											</button>
+										{:else}
+											<p class="field-hint">
+												No photo yet — falls back to the gradient below until generated.
+											</p>
+										{/if}
 										<p class="field-hint">
-											Generates a full turnaround/reference sheet (multiple angles + detail close-ups) from this
-											photo, then pins it as the profile picture. ~$0.16 (2 Nano Banana 2 calls).
+											~$0.08 per generation (Nano Banana 2 image call). Restore re-pins a past image
+											free.
 										</p>
 									</div>
 								</div>
-							{/if}
-						</div>
 
-						{#if referenceKit.full_body}
-							<div class="field-group col-span-2">
-								<div class="label-row">
-									<span class="field-label">Reference Kit</span>
-									{#if missingKitStages.length > 0}
-										<button
-											type="button"
-											class="btn-sync btn-xs"
-											onclick={() => generateAllKitStages(false)}
-											disabled={generatingKitStage !== null || generatingAllKit}
-										>
-											{#if generatingAllKit}
-												<span class="spinner-sm" aria-hidden="true"></span> Building kit…
-											{:else}
-												<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-												Generate all remaining ({missingKitStages.length})
-											{/if}
-										</button>
-									{:else}
-										<!-- All stages exist — offer a full re-run of the whole kit. -->
-										<button
-											type="button"
-											class="btn-sync btn-xs"
-											onclick={() => generateAllKitStages(true)}
-											disabled={generatingKitStage !== null || generatingAllKit}
-										>
-											{#if generatingAllKit}
-												<span class="spinner-sm" aria-hidden="true"></span> Rebuilding kit…
-											{:else}
-												<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
-												Regenerate reference kit
-											{/if}
-										</button>
-									{/if}
-								</div>
-								<p class="section-desc" style="margin-bottom: 0.75rem;">
-									Each stage builds on the previous one — generate them in order (or use Generate all).
-									Every stage can be regenerated independently — ~$0.08 per stage (one Nano Banana 2 call).
-									{#if generatingKitStage || generatingAllKit}
-										Generating — takes a minute or two per stage.
-									{/if}
-								</p>
-								<div class="kit-stage-row">
-									{#if referenceKit.sheet}
-										<!-- Stage 0: the turnaround/character sheet generated WITH the
-										     profile picture — the hidden identity anchor behind stages 2-4.
-										     View/restore only: a new sheet only comes from regenerating
-										     the profile picture itself. -->
-										<div class="kit-stage">
-											<span class="kit-stage-label">0. Character sheet <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg><span class="sr-only">(generated)</span></span>
-											<img
-												src={referenceKit.sheet}
-												alt="Character turnaround sheet — click to enlarge"
-												class="kit-stage-thumb clickable wide"
-												width="200"
-												height="120"
-												loading="lazy"
-												role="button"
-												tabindex="0"
-												onclick={() => openPreview(referenceKit.sheet, '0. Character sheet')}
-												onkeydown={(e) => {
-													if (e.key === 'Enter' || e.key === ' ') {
-														e.preventDefault();
-														openPreview(referenceKit.sheet, '0. Character sheet');
-													}
-												}}
-											/>
-											<div class="kit-stage-actions">
-												<button
-													type="button"
-													class="btn-sync kit-stage-generate"
-													onclick={() => openKitRestore('sheet')}
-													disabled={generatingAvatar || generatingKitStage !== null || generatingAllKit}
-													title="Restore a previous character sheet — from this stage's history or your image library"
-												>
-													<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/></svg>
-													Restore
-												</button>
-												<button
-													type="button"
-													class="btn-sync kit-stage-generate danger"
-													onclick={() => deleteAssets([{ url: referenceKit.sheet, type: 'image', label: '0. Character sheet', poster: null, source: 'kit', stage: 'sheet' }])}
-													disabled={deletingAssets || generatingAvatar || generatingKitStage !== null || generatingAllKit}
-													title="Remove this character sheet from the kit"
-												>
-													<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2m1 0v14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2V6h12"/></svg>
-													Delete
-												</button>
-											</div>
-											<span class="field-hint">Regenerates with the profile picture</span>
-										</div>
-									{/if}
-									<div class="kit-stage">
-										<span class="kit-stage-label">1. Full body <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg><span class="sr-only">(generated)</span></span>
+								{#if referencePreviewUrl}
+									<div class="reference-preview-row">
 										<img
-											src={referenceKit.full_body}
-											alt="Full body reference — click to enlarge"
-											class="kit-stage-thumb clickable"
-											width="120"
-											height="120"
-											loading="lazy"
-											role="button"
-											tabindex="0"
-											onclick={() =>
-												openPreview(referenceKit.full_body, '1. Full body', () =>
-													requestGenerateKitStage('full_body')
-												)}
-											onkeydown={(e) => {
-												if (e.key === 'Enter' || e.key === ' ') {
-													e.preventDefault();
-													openPreview(referenceKit.full_body, '1. Full body', () =>
-														requestGenerateKitStage('full_body')
-													);
-												}
-											}}
+											src={referencePreviewUrl}
+											alt="Reference upload preview"
+											class="reference-preview-thumb"
+											width="96"
+											height="96"
 										/>
-										<!-- Full body regenerates on its OWN — a composer that shows the
-										     full-body prompt + the profile picture as the reference, and
-										     re-runs just this shot without touching the persona's identity.
-										     (The whole identity is regenerated from the Profile Picture card.) -->
-										<div class="kit-stage-actions">
+										<div class="avatar-gen-actions">
 											<button
 												type="button"
-												class="btn-sync kit-stage-generate"
-												onclick={() => requestGenerateKitStage('full_body')}
-												disabled={generatingKitStage !== null || generatingAllKit || generatingAvatar}
-												title="Regenerate just the full-body shot from the profile picture — opens a composer to review and edit"
+												class="btn-generate"
+												onclick={generateAvatarFromReference}
+												disabled={generatingAvatar}
 											>
-												{#if generatingKitStage === 'full_body'}
-													<span class="spinner-sm" aria-hidden="true"></span> Generating…
+												{#if generatingAvatar}
+													<span class="spinner-sm" aria-hidden="true"></span> Generating (sheet + hero
+													shot, ~30-60s)…
 												{:else}
-													<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
-													Regenerate
+													<svg
+														width="14"
+														height="14"
+														viewBox="0 0 24 24"
+														fill="none"
+														stroke="currentColor"
+														stroke-width="2"
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														aria-hidden="true"
+														><path
+															d="M12 3l1.7 4.6L18 9.3l-4.3 1.7L12 15.6l-1.7-4.6L6 9.3l4.3-1.7L12 3z"
+														/><path d="M18.5 14.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2z" /></svg
+													>
+													Generate Character Sheet From This Photo
 												{/if}
 											</button>
 											<button
 												type="button"
-												class="btn-sync kit-stage-generate"
-												onclick={() => openKitRestore('full_body')}
-												disabled={generatingAvatar || generatingKitStage !== null || generatingAllKit}
-												title="Restore a previous full-body — from this stage's history or your image library"
+												class="btn-clear-reference"
+												onclick={clearReferenceFile}
+												disabled={generatingAvatar}
 											>
-												<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/></svg>
-												Restore
+												Cancel
 											</button>
-											<button
-												type="button"
-												class="btn-sync kit-stage-generate danger"
-												onclick={() => deleteAssets([{ url: referenceKit.full_body, type: 'image', label: '1. Full body', poster: null, source: 'kit', stage: 'full_body' }])}
-												disabled={deletingAssets || generatingKitStage !== null || generatingAllKit || generatingAvatar}
-												title="Remove this full-body reference from the kit"
-											>
-												<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2m1 0v14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2V6h12"/></svg>
-												Delete
-											</button>
+											<p class="field-hint">
+												Generates a full turnaround/reference sheet (multiple angles + detail
+												close-ups) from this photo, then pins it as the profile picture. ~$0.16 (2
+												Nano Banana 2 calls).
+											</p>
 										</div>
 									</div>
-									{#each [{ key: 'side_profiles' as const, n: 2, label: 'Side profiles', alt: 'Side profile composite', wide: true }, { key: 'face_closeup' as const, n: 3, label: 'Facial close-up', alt: 'Facial close-up', wide: false }, { key: 'feature_grid' as const, n: 4, label: 'Feature grid', alt: 'Feature grid', wide: false }] as st (st.key)}
-										{@const blocked = kitStageBlockedReason(st.key)}
-										<div class="kit-stage">
-											<span class="kit-stage-label">{st.n}. {st.label}{#if referenceKit[st.key]} <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg><span class="sr-only">(generated)</span>{/if}</span>
-											{#if referenceKit[st.key]}
-								<img
-									src={referenceKit[st.key]}
-									alt="{st.alt} — click to enlarge"
-									class="kit-stage-thumb clickable{st.wide ? ' wide' : ''}"
-									width={st.wide ? 200 : 120}
-									height="120"
-									loading="lazy"
-									role="button"
-									tabindex="0"
-									onclick={() =>
-										openPreview(referenceKit[st.key], st.label, () => requestGenerateKitStage(st.key))}
-									onkeydown={(e) => {
-										if (e.key === 'Enter' || e.key === ' ') {
-											e.preventDefault();
-											openPreview(referenceKit[st.key], st.label, () => requestGenerateKitStage(st.key));
-										}
-									}}
-								/>
-											{/if}
-											<div class="kit-stage-actions">
-												<button
-													type="button"
-													class="btn-sync kit-stage-generate"
-													onclick={() => requestGenerateKitStage(st.key)}
-													disabled={generatingKitStage !== null || generatingAllKit || blocked !== null}
-													title={blocked ?? undefined}
+								{/if}
+							</div>
+
+							{#if referenceKit.full_body}
+								<div class="field-group col-span-2">
+									<div class="label-row">
+										<span class="field-label">Reference Kit</span>
+										{#if missingKitStages.length > 0}
+											<button
+												type="button"
+												class="btn-sync btn-xs"
+												onclick={() => generateAllKitStages(false)}
+												disabled={generatingKitStage !== null || generatingAllKit}
+											>
+												{#if generatingAllKit}
+													<span class="spinner-sm" aria-hidden="true"></span> Building kit…
+												{:else}
+													<svg
+														width="13"
+														height="13"
+														viewBox="0 0 24 24"
+														fill="none"
+														stroke="currentColor"
+														stroke-width="2"
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														aria-hidden="true"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" /></svg
+													>
+													Generate all remaining ({missingKitStages.length})
+												{/if}
+											</button>
+										{:else}
+											<!-- All stages exist — offer a full re-run of the whole kit. -->
+											<button
+												type="button"
+												class="btn-sync btn-xs"
+												onclick={() => generateAllKitStages(true)}
+												disabled={generatingKitStage !== null || generatingAllKit}
+											>
+												{#if generatingAllKit}
+													<span class="spinner-sm" aria-hidden="true"></span> Rebuilding kit…
+												{:else}
+													<svg
+														width="13"
+														height="13"
+														viewBox="0 0 24 24"
+														fill="none"
+														stroke="currentColor"
+														stroke-width="2"
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														aria-hidden="true"
+														><path d="M21 12a9 9 0 1 1-2.64-6.36" /><path d="M21 3v6h-6" /></svg
+													>
+													Regenerate reference kit
+												{/if}
+											</button>
+										{/if}
+									</div>
+									<p class="section-desc" style="margin-bottom: 0.75rem;">
+										Each stage builds on the previous one — generate them in order (or use Generate
+										all). Every stage can be regenerated independently — ~$0.08 per stage (one Nano
+										Banana 2 call).
+										{#if generatingKitStage || generatingAllKit}
+											Generating — takes a minute or two per stage.
+										{/if}
+									</p>
+									<div class="kit-stage-row">
+										{#if referenceKit.sheet}
+											<!-- Stage 0: the turnaround/character sheet generated WITH the
+										     profile picture — the hidden identity anchor behind stages 2-4.
+										     View/restore only: a new sheet only comes from regenerating
+										     the profile picture itself. -->
+											<div class="kit-stage">
+												<span class="kit-stage-label"
+													>0. Character sheet <svg
+														width="11"
+														height="11"
+														viewBox="0 0 24 24"
+														fill="none"
+														stroke="currentColor"
+														stroke-width="3"
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														aria-hidden="true"><path d="M20 6L9 17l-5-5" /></svg
+													><span class="sr-only">(generated)</span></span
 												>
-													{#if generatingKitStage === st.key}
-														<span class="spinner-sm" aria-hidden="true"></span> Generating…
-													{:else if referenceKit[st.key]}
-														<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
-														Regenerate
-													{:else}
-														Generate
-													{/if}
-												</button>
-												{#if referenceKit[st.key]}
+												<img
+													src={referenceKit.sheet}
+													alt="Character turnaround sheet — click to enlarge"
+													class="kit-stage-thumb clickable wide"
+													width="200"
+													height="120"
+													loading="lazy"
+													role="button"
+													tabindex="0"
+													onclick={() => openPreview(referenceKit.sheet, '0. Character sheet')}
+													onkeydown={(e) => {
+														if (e.key === 'Enter' || e.key === ' ') {
+															e.preventDefault();
+															openPreview(referenceKit.sheet, '0. Character sheet');
+														}
+													}}
+												/>
+												<div class="kit-stage-actions">
 													<button
 														type="button"
 														class="btn-sync kit-stage-generate"
-														onclick={() => openKitRestore(st.key)}
-														disabled={generatingKitStage !== null || generatingAllKit}
-														title="Restore a previous {st.label.toLowerCase()} — from this stage's history or your image library"
+														onclick={() => openKitRestore('sheet')}
+														disabled={generatingAvatar ||
+															generatingKitStage !== null ||
+															generatingAllKit}
+														title="Restore a previous character sheet — from this stage's history or your image library"
 													>
-														<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/></svg>
+														<svg
+															width="13"
+															height="13"
+															viewBox="0 0 24 24"
+															fill="none"
+															stroke="currentColor"
+															stroke-width="2"
+															stroke-linecap="round"
+															stroke-linejoin="round"
+															aria-hidden="true"
+															><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /><path
+																d="M12 7v5l3 2"
+															/></svg
+														>
 														Restore
 													</button>
 													<button
 														type="button"
 														class="btn-sync kit-stage-generate danger"
-														onclick={() => deleteAssets([{ url: referenceKit[st.key], type: 'image', label: st.label, poster: null, source: 'kit', stage: st.key }])}
-														disabled={deletingAssets || generatingKitStage !== null || generatingAllKit}
-														title="Remove this {st.label.toLowerCase()} from the kit"
+														onclick={() =>
+															deleteAssets([
+																{
+																	url: referenceKit.sheet,
+																	type: 'image',
+																	label: '0. Character sheet',
+																	poster: null,
+																	source: 'kit',
+																	stage: 'sheet'
+																}
+															])}
+														disabled={deletingAssets ||
+															generatingAvatar ||
+															generatingKitStage !== null ||
+															generatingAllKit}
+														title="Remove this character sheet from the kit"
 													>
-														<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2m1 0v14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2V6h12"/></svg>
+														<svg
+															width="13"
+															height="13"
+															viewBox="0 0 24 24"
+															fill="none"
+															stroke="currentColor"
+															stroke-width="2"
+															stroke-linecap="round"
+															stroke-linejoin="round"
+															aria-hidden="true"
+															><path
+																d="M3 6h18M8 6V4h8v2m1 0v14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2V6h12"
+															/></svg
+														>
 														Delete
 													</button>
-												{/if}
+												</div>
+												<span class="field-hint">Regenerates with the profile picture</span>
 											</div>
-											{#if blocked && !referenceKit[st.key]}
-												<span class="field-hint">{blocked}</span>
-											{/if}
+										{/if}
+										<div class="kit-stage">
+											<span class="kit-stage-label"
+												>1. Full body <svg
+													width="11"
+													height="11"
+													viewBox="0 0 24 24"
+													fill="none"
+													stroke="currentColor"
+													stroke-width="3"
+													stroke-linecap="round"
+													stroke-linejoin="round"
+													aria-hidden="true"><path d="M20 6L9 17l-5-5" /></svg
+												><span class="sr-only">(generated)</span></span
+											>
+											<img
+												src={referenceKit.full_body}
+												alt="Full body reference — click to enlarge"
+												class="kit-stage-thumb clickable"
+												width="120"
+												height="120"
+												loading="lazy"
+												role="button"
+												tabindex="0"
+												onclick={() =>
+													openPreview(referenceKit.full_body, '1. Full body', () =>
+														requestGenerateKitStage('full_body')
+													)}
+												onkeydown={(e) => {
+													if (e.key === 'Enter' || e.key === ' ') {
+														e.preventDefault();
+														openPreview(referenceKit.full_body, '1. Full body', () =>
+															requestGenerateKitStage('full_body')
+														);
+													}
+												}}
+											/>
+											<!-- Full body regenerates on its OWN — a composer that shows the
+										     full-body prompt + the profile picture as the reference, and
+										     re-runs just this shot without touching the persona's identity.
+										     (The whole identity is regenerated from the Profile Picture card.) -->
+											<div class="kit-stage-actions">
+												<button
+													type="button"
+													class="btn-sync kit-stage-generate"
+													onclick={() => requestGenerateKitStage('full_body')}
+													disabled={generatingKitStage !== null ||
+														generatingAllKit ||
+														generatingAvatar}
+													title="Regenerate just the full-body shot from the profile picture — opens a composer to review and edit"
+												>
+													{#if generatingKitStage === 'full_body'}
+														<span class="spinner-sm" aria-hidden="true"></span> Generating…
+													{:else}
+														<svg
+															width="13"
+															height="13"
+															viewBox="0 0 24 24"
+															fill="none"
+															stroke="currentColor"
+															stroke-width="2"
+															stroke-linecap="round"
+															stroke-linejoin="round"
+															aria-hidden="true"
+															><path d="M21 12a9 9 0 1 1-2.64-6.36" /><path d="M21 3v6h-6" /></svg
+														>
+														Regenerate
+													{/if}
+												</button>
+												<button
+													type="button"
+													class="btn-sync kit-stage-generate"
+													onclick={() => openKitRestore('full_body')}
+													disabled={generatingAvatar ||
+														generatingKitStage !== null ||
+														generatingAllKit}
+													title="Restore a previous full-body — from this stage's history or your image library"
+												>
+													<svg
+														width="13"
+														height="13"
+														viewBox="0 0 24 24"
+														fill="none"
+														stroke="currentColor"
+														stroke-width="2"
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														aria-hidden="true"
+														><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /><path
+															d="M12 7v5l3 2"
+														/></svg
+													>
+													Restore
+												</button>
+												<button
+													type="button"
+													class="btn-sync kit-stage-generate danger"
+													onclick={() =>
+														deleteAssets([
+															{
+																url: referenceKit.full_body,
+																type: 'image',
+																label: '1. Full body',
+																poster: null,
+																source: 'kit',
+																stage: 'full_body'
+															}
+														])}
+													disabled={deletingAssets ||
+														generatingKitStage !== null ||
+														generatingAllKit ||
+														generatingAvatar}
+													title="Remove this full-body reference from the kit"
+												>
+													<svg
+														width="13"
+														height="13"
+														viewBox="0 0 24 24"
+														fill="none"
+														stroke="currentColor"
+														stroke-width="2"
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														aria-hidden="true"
+														><path
+															d="M3 6h18M8 6V4h8v2m1 0v14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2V6h12"
+														/></svg
+													>
+													Delete
+												</button>
+											</div>
 										</div>
-									{/each}
-								</div>
-							</div>
-						{/if}
-
-						<div class="field-group col-span-2">
-							<div class="label-row">
-								<label for="p-soul">Soul / Personality</label>
-								<button type="button" class="btn-sync btn-xs" onclick={enrichSoul} disabled={enrichingSoul}>
-									{#if enrichingSoul}Enriching…{:else}<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.7 4.6L18 9.3l-4.3 1.7L12 15.6l-1.7-4.6L6 9.3l4.3-1.7L12 3z"/><path d="M18.5 14.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2z"/></svg> AI Enrich{/if}
-								</button>
-							</div>
-							<textarea id="p-soul" bind:value={soulText} rows="6" placeholder="Define your persona's personality, voice, and behavioral directives…"></textarea>
-						</div>
-
-						<div class="field-group col-span-2">
-							<div class="label-row">
-								<span class="field-label">Skills &amp; Capabilities</span>
-								<button type="button" class="btn-sync btn-xs" onclick={() => (editingSkill = { id: `s${Date.now()}`, name: '', md: '' })}>+ Add skill</button>
-							</div>
-							{#if skillsList.length === 0}
-								<p class="field-hint">No skills defined yet — each skill is a markdown playbook the persona follows.</p>
-							{:else}
-								<div class="item-chips">
-									{#each skillsList as s (s.id)}
-										<span class="item-chip-wrap">
-											<button type="button" class="item-chip" onclick={() => (editingSkill = { ...s })}>
-												<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
-												{s.name}
-											</button>
-											<!-- Row-level delete: previously you had to open the editor to remove one. -->
-											<button
-												type="button"
-												class="item-chip-del"
-												title="Delete skill"
-												aria-label="Delete skill {s.name}"
-												onclick={() => confirm(`Delete the skill "${s.name}"?`) && deleteSkill(s.id)}
-											><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
-										</span>
-									{/each}
-								</div>
-							{/if}
-						</div>
-
-						<div class="field-group col-span-2">
-							<div class="label-row">
-								<span class="field-label">Tools &amp; Integrations</span>
-								<button type="button" class="btn-sync btn-xs" onclick={() => (editingTool = { id: `t${Date.now()}`, kind: 'posting', label: '', config: '' })}>+ Add integration</button>
-							</div>
-							{#if toolsList.length === 0}
-								<p class="field-hint">Connect intents — posting targets, analytics, MCP servers, API calls this persona uses.</p>
-							{:else}
-								<div class="item-chips">
-									{#each toolsList as t (t.id)}
-										<span class="item-chip-wrap">
-											<button type="button" class="item-chip" onclick={() => (editingTool = { ...t })}>
-												<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8z"/></svg>
-												{t.label} <span class="chip-kind">{t.kind}</span>
-											</button>
-											<button
-												type="button"
-												class="item-chip-del"
-												title="Delete integration"
-												aria-label="Delete integration {t.label}"
-												onclick={() => confirm(`Delete the integration "${t.label}"?`) && deleteTool(t.id)}
-											><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
-										</span>
-									{/each}
-								</div>
-							{/if}
-						</div>
-
-					</div>
-				</details>
-
-				{#if editingSkill}
-					<div
-						class="gen-confirm-overlay"
-						role="dialog"
-						aria-modal="true"
-						aria-label="Edit skill"
-						tabindex="-1"
-						use:dialog={{ onClose: () => (editingSkill = null) }}
-					>
-						<div class="gen-confirm editor-modal">
-							<h3>{skillsList.some((s) => s.id === editingSkill?.id) ? 'Edit skill' : 'New skill'}</h3>
-							<div class="field-group">
-								<label for="skill-name">Skill name</label>
-								<input id="skill-name" type="text" bind:value={editingSkill.name} placeholder="e.g. Hook writing for Reels" />
-							</div>
-							<div class="field-group">
-								<label for="skill-md">Playbook (markdown)</label>
-								<textarea id="skill-md" class="mono" rows="12" bind:value={editingSkill.md} placeholder="## When to use&#10;- …&#10;&#10;## Steps&#10;1. …"></textarea>
-							</div>
-							<div class="gc-actions">
-								{#if skillsList.some((s) => s.id === editingSkill?.id)}
-									<button type="button" class="btn-danger-ghost" onclick={() => deleteSkill(editingSkill!.id)}>Delete</button>
-								{/if}
-								<button type="button" class="btn-sync" onclick={() => (editingSkill = null)}>Cancel</button>
-								<button type="button" class="btn-generate" onclick={saveSkill}>Save skill</button>
-							</div>
-						</div>
-					</div>
-				{/if}
-
-				{#if editingTool}
-					<div
-						class="gen-confirm-overlay"
-						role="dialog"
-						aria-modal="true"
-						aria-label="Edit integration"
-						tabindex="-1"
-						use:dialog={{ onClose: () => (editingTool = null) }}
-					>
-						<div class="gen-confirm editor-modal">
-							<h3>{toolsList.some((t) => t.id === editingTool?.id) ? 'Edit integration' : 'New integration'}</h3>
-							<div class="field-group">
-								<label for="tool-kind">Type</label>
-								<select id="tool-kind" bind:value={editingTool.kind}>
-									{#each TOOL_KINDS as k}<option value={k}>{k}</option>{/each}
-								</select>
-							</div>
-							<div class="field-group">
-								<label for="tool-label">Label</label>
-								<input id="tool-label" type="text" bind:value={editingTool.label} placeholder="e.g. Instagram via Zernio, Analytics webhook" />
-							</div>
-							<div class="field-group">
-								<label for="tool-config">Configuration / intent</label>
-								<textarea id="tool-config" class="mono" rows="8" bind:value={editingTool.config} placeholder={'{ "endpoint": "…", "notes": "what this persona uses it for" }'}></textarea>
-							</div>
-							<div class="gc-actions">
-								{#if toolsList.some((t) => t.id === editingTool?.id)}
-									<button type="button" class="btn-danger-ghost" onclick={() => deleteTool(editingTool!.id)}>Delete</button>
-								{/if}
-								<button type="button" class="btn-sync" onclick={() => (editingTool = null)}>Cancel</button>
-								<button type="button" class="btn-generate" onclick={saveTool}>Save integration</button>
-							</div>
-						</div>
-					</div>
-				{/if}
-
-				<!-- Persona Profile section -->
-				<!-- Automation section -->
-				<details class="profile-section">
-					<summary class="section-summary">
-						<div class="section-header">
-							<h2 class="section-title">Automation</h2>
-							<p class="section-desc">Posting schedule and content sourcing mode.</p>
-						</div>
-						<svg class="section-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
-					</summary>
-
-					<div class="fields-grid">
-						<div class="field-group">
-							<label for="p-tz">Timezone</label>
-							<select id="p-tz" bind:value={timezone}>
-								{#each timezones as tz}
-									<option value={tz.value}>{tz.label}</option>
-								{/each}
-							</select>
-						</div>
-						<div class="field-group">
-							<label for="p-voice">UGC Voice</label>
-							<div class="voice-picker-row">
-								<select id="p-voice" bind:value={selectedVoice}>
-									{#each voiceCatalog as v}
-										<option value={v.name}>{v.label} · {v.gender === 'male' ? '♂' : '♀'}{v.accent ? ` · ${v.accent}` : ''} · {v.style}</option>
-									{:else}
-										<option value={selectedVoice}>{selectedVoice}</option>
-									{/each}
-								</select>
-								<button type="button" class="btn-sync" onclick={previewVoice} disabled={previewingVoice}>
-									{#if previewingVoice}Playing…{:else}<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg> Preview{/if}
-								</button>
-							</div>
-							<p class="field-hint">
-								The video's spoken voice — pin one that matches this persona's on-camera character.
-								{#if ppVoiceProfile?.nationality || ppVoiceProfile?.accent}
-									Inferred from the name: {[ppVoiceProfile.nationality, ppVoiceProfile.accent && `${ppVoiceProfile.accent} accent`]
-										.filter(Boolean)
-										.join(' · ')}.
-								{/if}
-							</p>
-						</div>
-						<div class="field-group">
-							<label for="p-ppd">Posts Per Day</label>
-							<input
-								id="p-ppd"
-								type="number"
-								min="1"
-								max="10"
-								step="1"
-								class="field-input"
-								bind:value={postsPerDay}
-								oninput={() => {
-									if (postsPerDay > 10) postsPerDay = 10;
-									if (postsPerDay < 1) postsPerDay = 1;
-								}}
-							/>
-							<p class="field-hint">Max 10 per day.</p>
-						</div>
-
-						<div class="field-group">
-							<label for="p-autonomy">Autonomy</label>
-							<select id="p-autonomy" bind:value={autonomyLevel} onchange={handleAutonomyChange}>
-								<option value="advisor">Advisor — manual generate only</option>
-								<option value="semi_autonomous">Semi — drafts for review</option>
-								<option value="fully_autonomous">Fully — publishes unattended</option>
-							</select>
-							<p class="field-hint">
-								{#if autonomyLevel === 'fully_autonomous'}
-									Publishing without review — drop back to Semi if quality slips.
-								{:else if graduationEligible}
-									<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg>
-									Eligible to graduate: {publishedCleanCount} clean published posts. Switch to Fully when confident.
-								{:else}
-									Graduates to Fully after ~21 clean published posts ({publishedCleanCount} so far, {recentFailedCount} recent failure{recentFailedCount === 1 ? '' : 's'}).
-								{/if}
-							</p>
-						</div>
-
-						<div class="field-group col-span-2">
-							<span class="field-label" id="content-source-label">Content Source</span>
-							<div class="source-cards" role="group" aria-labelledby="content-source-label">
-								<button type="button" class="autonomy-card" class:selected={!rssActive} aria-pressed={!rssActive} onclick={() => (rssActive = false)}>
-									<div class="autonomy-radio" aria-hidden="true"><div class="radio-outer">{#if !rssActive}<div class="radio-inner"></div>{/if}</div></div>
-									<span class="autonomy-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.7 4.6L18 9.3l-4.3 1.7L12 15.6l-1.7-4.6L6 9.3l4.3-1.7L12 3z"/><path d="M18.5 14.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2z"/></svg></span>
-									<span class="autonomy-label">Dynamic Generation</span>
-									<p class="autonomy-desc">Original content from niche, trends, and persona directives.</p>
-								</button>
-								<button type="button" class="autonomy-card" class:selected={rssActive} aria-pressed={rssActive} onclick={() => (rssActive = true)}>
-									<div class="autonomy-radio" aria-hidden="true"><div class="radio-outer">{#if rssActive}<div class="radio-inner"></div>{/if}</div></div>
-									<span class="autonomy-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"/><path d="M18 14h-8"/><path d="M15 18h-5"/><path d="M10 6h8v4h-8V6Z"/></svg></span>
-									<span class="autonomy-label">RSS Auto-Repurpose</span>
-									<p class="autonomy-desc">Monitor an RSS feed and spin items in the persona's voice.</p>
-								</button>
-							</div>
-							{#if rssActive}
-								<div style="margin-top: 1rem;" transition:slide={{ duration: 250 }}>
-									<label class="field-label" for="p-rss-url">RSS feed URL</label>
-									<input
-										id="p-rss-url"
-										type="url"
-										class="field-input"
-										placeholder="https://example.com/feed.xml"
-										autocomplete="url"
-										bind:value={rssUrl}
-										style="width: 100%; margin-bottom: 0.5rem;"
-									/>
-									<p class="field-hint">Last polled: {rssLastPolledAt ? new Date(rssLastPolledAt).toLocaleString() : 'Never'}</p>
-								</div>
-							{/if}
-						</div>
-					</div>
-				</details>
-
-				<!-- Spend & Pricing section -->
-				<details class="profile-section">
-					<summary class="section-summary">
-						<div class="section-header">
-							<h2 class="section-title">Spend &amp; Pricing</h2>
-							<p class="section-desc">Estimated generation credits used by this persona, split by provider — plus the rate card behind the numbers.</p>
-						</div>
-						<svg class="section-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
-					</summary>
-
-					{#if agentSpend && agentSpend.total > 0}
-						<div class="spend-chips">
-							<div class="spend-chip spend-total">
-								<span class="spend-label">Total</span>
-								<span class="spend-val tabular-nums">${agentSpend.total.toFixed(2)}</span>
-							</div>
-							{#each Object.entries(agentSpend.byProvider) as [prov, amt]}
-								<div class="spend-chip">
-									<span class="spend-label">{prov}</span>
-									<span class="spend-val tabular-nums">${amt.toFixed(2)}</span>
-								</div>
-							{/each}
-							{#each Object.entries(agentSpend.byOperation) as [op, amt]}
-								<div class="spend-chip spend-op">
-									<span class="spend-label">{op}</span>
-									<span class="spend-val tabular-nums">${amt.toFixed(2)}</span>
-								</div>
-							{/each}
-						</div>
-					{:else}
-						<p class="field-hint">No tracked generation spend yet — the ledger starts recording with the next generation.</p>
-					{/if}
-
-					<details class="pricing-details">
-						<summary>Rate card (estimated USD per call)</summary>
-						<div class="pricing-table-wrap">
-							<table class="pricing-table">
-								<thead><tr><th>Provider</th><th>Operation</th><th>Model</th><th>Est. cost</th></tr></thead>
-								<tbody>
-									{#each PRICING_MATRIX as row}
-										<tr>
-											<td>{row.provider}</td>
-											<td>{row.operation}</td>
-											<td>{row.model}</td>
-											<td class="tabular-nums">{row.note ?? `$${row.usd}`}</td>
-										</tr>
-									{/each}
-								</tbody>
-							</table>
-						</div>
-					</details>
-				</details>
-
-				<!-- Save + Danger zone -->
-				<div class="profile-footer">
-					<button type="button" class="btn-save" onclick={() => saveProfile()} disabled={saving}>
-						{#if saving}<span class="spinner-sm" aria-hidden="true"></span> Saving…{:else}Save Profile{/if}
-					</button>
-				</div>
-
-				<div class="danger-zone">
-					<h3>Danger Zone</h3>
-					<p>Permanently delete this persona and all associated data. This cannot be undone.</p>
-					<button type="button" class="btn-danger" onclick={deleteAgent}>Delete Persona</button>
-				</div>
-			</div>
-
-		<!-- PROFILE TAB · Connections lens -->
-		{:else if activeTab === 'profile' && profileView === 'connections'}
-			<div class="connections-tab">
-				{#if statusLoading}
-					<div class="feed-loading" role="status" aria-live="polite"><span class="spinner-lg" aria-hidden="true"></span><p>Checking connections…</p></div>
-				{:else}
-					<!-- Summary bar -->
-					<div class="conn-summary">
-						<span class="conn-count-badge tabular-nums">{computedMetrics.connectedCount} / {PLATFORMS.length}</span>
-						<span class="conn-count-label">Active connections</span>
-						<div class="conn-quick-links">
-							{#each PLATFORMS as p}
-								{#if !platformStatuses[p.key]?.connected}
-									<!-- Every platform connects the same way: a Zernio hosted-OAuth
-									     link filed under this persona's profile. -->
-									<button
-										type="button"
-										class="btn-connect-inline"
-										disabled={connectingPlatform === p.key}
-										title={`Connect ${p.name} via Zernio`}
-										onclick={() => connectPlatform(p.key)}
-									>
-										{connectingPlatform === p.key ? 'Connecting…' : `+ ${p.name}`}
-									</button>
-								{/if}
-							{/each}
-						</div>
-					</div>
-
-					<!-- Pay-per-account meter — Zernio bills per connected account across
-					     your whole key (2 free, then $6/$3/$1 by volume), NOT per persona
-					     and NOT a plan tier. Shown so adding a platform is never a surprise
-					     charge. -->
-					{#if accountMeter}
-						<div class="zernio-meter" class:over-free={accountMeter.billable > 0}>
-							<div class="meter-head">
-								<span class="meter-title">Zernio accounts</span>
-								<span class="meter-sub">across your key · billed per connected account</span>
-							</div>
-							<div class="meter-track" role="img" aria-label="{accountMeter.total} accounts connected, {accountMeter.freeUsed} of 2 free used">
-								{#each Array(Math.min(Math.max(accountMeter.total, 2), 12)) as _, i}
-									<span
-										class="meter-pip"
-										class:free={i < 2}
-										class:filled={i < accountMeter.total}
-										class:billable={i >= 2 && i < accountMeter.total}
-									></span>
-								{/each}
-								{#if accountMeter.total > 12}
-									<span class="meter-overflow">+{accountMeter.total - 12}</span>
-								{/if}
-							</div>
-							<div class="meter-stats">
-								<span><strong>{accountMeter.total}</strong> connected</span>
-								{#if accountMeter.freeRemaining > 0}
-									<span class="meter-good">{accountMeter.freeRemaining} free {accountMeter.freeRemaining === 1 ? 'slot' : 'slots'} left</span>
-								{:else}
-									<span class="meter-bill"><strong>${accountMeter.monthlyCostUsd}</strong>/mo · {accountMeter.billable} billable</span>
-								{/if}
-							</div>
-							<p class="meter-note">
-								{#if accountMeter.freeRemaining > 0}
-									Your first 2 connected accounts are free. The next account adds
-									<strong>${accountMeter.nextAccountCostUsd}/mo</strong>.
-								{:else}
-									Each additional account is
-									<strong>${accountMeter.nextAccountCostUsd}/mo</strong>. Manage billing on your
-									<a href={connectHub?.url ?? 'https://zernio.com/dashboard'} target="_blank" rel="noopener">Zernio dashboard</a>
-									— or add another Zernio key in the
-									<a href="/settings#zernio-keys">Key Manager</a> (every key is a separate
-									Zernio account with 2 more free slots).
-								{/if}
-								{#if !accountMeter.hasAnalyticsAccess}
-									<br /><span class="meter-warn">Live follower &amp; engagement stats need analytics enabled on your Zernio key.</span>
-								{/if}
-							</p>
-						</div>
-					{/if}
-
-					{#if computedMetrics.connectedCount === 0}
-						<div class="conn-empty">
-							<span><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8z"/></svg></span>
-							<p>No platforms connected. Use the buttons above to link your first account.</p>
-						</div>
-					{:else}
-						<div class="platforms-grid">
-							{#each PLATFORMS.filter(p => platformStatuses[p.key]?.connected) as platform}
-								{@const status = platformStatuses[platform.key]}
-								<div class="platform-card" style="--platform-color: {platform.color}">
-									<div class="platform-card-header">
-										<!-- Platform icon -->
-										<div class="platform-icon">
-											{#if platform.key === 'tiktok'}
-												<svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.27 6.27 0 00-.79-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.33-6.34V8.89a8.1 8.1 0 004.77 1.54V7.01a4.85 4.85 0 01-1-.32z" fill={platform.color}/></svg>
-											{:else if platform.key === 'instagram'}
-												<svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="2" y="2" width="20" height="20" rx="5" stroke={platform.color} stroke-width="1.8"/><circle cx="12" cy="12" r="5" stroke={platform.color} stroke-width="1.8"/><circle cx="17.5" cy="6.5" r="1.5" fill={platform.color}/></svg>
-											{:else if platform.key === 'youtube'}
-												<svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M22.54 6.42a2.78 2.78 0 00-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 00-1.94 2A29.94 29.94 0 001 12a29.94 29.94 0 00.46 5.58 2.78 2.78 0 001.94 2C5.12 20 12 20 12 20s6.88 0 8.6-.46a2.78 2.78 0 001.94-2A29.94 29.94 0 0023 12a29.94 29.94 0 00-.46-5.58z" fill={platform.color}/><path d="M9.75 15.02l5.75-3.27-5.75-3.27v6.54z" fill="#fff"/></svg>
-											{:else if platform.key === 'facebook'}
-												<svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M24 12c0-6.627-5.373-12-12-12S0 5.373 0 12c0 5.99 4.388 10.954 10.125 11.854V15.47H7.078V12h3.047V9.356c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.875V12h3.328l-.532 3.47h-2.796v8.384C19.612 22.954 24 17.99 24 12z" fill={platform.color}/></svg>
-											{/if}
-										</div>
-										<div class="platform-name-block">
-											<span class="platform-name">{platform.name}</span>
-											{#if status?.status === 'reauth_required'}
-												<span class="conn-badge error">Reconnect</span>
-											{:else if status?.status === 'provider_unavailable'}
-												<span class="conn-badge warn">Stale</span>
-											{/if}
-										</div>
-										<button
-											type="button"
-											class="btn-collapse"
-											aria-expanded={!collapsedPlatforms[platform.key]}
-											aria-label="{collapsedPlatforms[platform.key] ? 'Show' : 'Hide'} {platform.name} details"
-											onclick={() => (collapsedPlatforms[platform.key] = !collapsedPlatforms[platform.key])}
-											style="transform: rotate({collapsedPlatforms[platform.key] ? '180deg' : '0deg'})"
-										>
-											<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="18 15 12 9 6 15"/></svg>
-										</button>
-									</div>
-
-									{#if !collapsedPlatforms[platform.key]}
-										<div class="platform-body" transition:slide={{ duration: 200 }}>
-											<div class="handle-row">
-												{#if platformProfileUrl(platform.key, status?.handle)}
-													<a
-														class="platform-handle platform-handle-link"
-														href={platformProfileUrl(platform.key, status?.handle)}
-														target="_blank"
-														rel="noopener noreferrer"
-														title="Open {platform.name} profile in a new tab"
-													>{status?.handle}</a>
-												{:else}
-													<span class="platform-handle">{status?.handle ?? '@connected'}</span>
+										{#each [{ key: 'side_profiles' as const, n: 2, label: 'Side profiles', alt: 'Side profile composite', wide: true }, { key: 'face_closeup' as const, n: 3, label: 'Facial close-up', alt: 'Facial close-up', wide: false }, { key: 'feature_grid' as const, n: 4, label: 'Feature grid', alt: 'Feature grid', wide: false }] as st (st.key)}
+											{@const blocked = kitStageBlockedReason(st.key)}
+											<div class="kit-stage">
+												<span class="kit-stage-label"
+													>{st.n}. {st.label}{#if referenceKit[st.key]}
+														<svg
+															width="11"
+															height="11"
+															viewBox="0 0 24 24"
+															fill="none"
+															stroke="currentColor"
+															stroke-width="3"
+															stroke-linecap="round"
+															stroke-linejoin="round"
+															aria-hidden="true"><path d="M20 6L9 17l-5-5" /></svg
+														><span class="sr-only">(generated)</span>{/if}</span
+												>
+												{#if referenceKit[st.key]}
+													<img
+														src={referenceKit[st.key]}
+														alt="{st.alt} — click to enlarge"
+														class="kit-stage-thumb clickable{st.wide ? ' wide' : ''}"
+														width={st.wide ? 200 : 120}
+														height="120"
+														loading="lazy"
+														role="button"
+														tabindex="0"
+														onclick={() =>
+															openPreview(referenceKit[st.key], st.label, () =>
+																requestGenerateKitStage(st.key)
+															)}
+														onkeydown={(e) => {
+															if (e.key === 'Enter' || e.key === ' ') {
+																e.preventDefault();
+																openPreview(referenceKit[st.key], st.label, () =>
+																	requestGenerateKitStage(st.key)
+																);
+															}
+														}}
+													/>
 												{/if}
-												{#if status?.verified}
-													<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--cyan)" stroke-width="2" role="img" aria-label="Verified account"><path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 12c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
-												{/if}
-												{#if status?.handle}
-													{@const isMain = agent.handle === status.handle}
+												<div class="kit-stage-actions">
 													<button
 														type="button"
-														class="btn-star"
-														title={isMain ? 'Main handle' : 'Set as main handle'}
-														aria-label={isMain
-															? `@${status.handle} is the main handle`
-															: `Set @${status.handle} as the main handle`}
-														aria-pressed={isMain}
-														onclick={() => setMainHandle(status.handle!)}
+														class="btn-sync kit-stage-generate"
+														onclick={() => requestGenerateKitStage(st.key)}
+														disabled={generatingKitStage !== null ||
+															generatingAllKit ||
+															blocked !== null}
+														title={blocked ?? undefined}
 													>
-														<svg width="14" height="14" viewBox="0 0 24 24" fill={isMain ? 'var(--warning)' : 'none'} stroke={isMain ? 'var(--warning)' : 'var(--text-dim)'} stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-													</button>
-												{/if}
-											</div>
-											<span class="last-sync">Last sync: {formatSyncTime(status?.lastSync)}</span>
-											{#if (status?.followers ?? 0) > 0 || (status?.engagement_rate ?? 0) > 0}
-												<div class="platform-stats">
-													{#if status?.followers}
-														<span class="stat-badge tabular-nums"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> {status.followers >= 1000 ? (status.followers / 1000).toFixed(1) + 'K' : status.followers} followers</span>
-													{/if}
-													{#if status?.engagement_rate}
-														<span class="stat-badge tabular-nums"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg> {status.engagement_rate}% eng</span>
-													{/if}
-												</div>
-											{/if}
-											<button type="button" class="btn-disconnect" aria-label="Disconnect {platform.name}" onclick={() => disconnectPlatform(platform.key)}>
-												<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></svg>
-												Disconnect
-											</button>
-										</div>
-									{/if}
-								</div>
-							{/each}
-						</div>
-					{/if}
-
-					<AgentConnectionStats
-						{platformStatuses}
-						{platformMetrics}
-						platforms={PLATFORMS}
-					/>
-				{/if}
-			</div>
-
-		<!-- STUDIO TAB — template gallery. Every card is a prefilled composer
-		     request; nothing generates without the same confirm-before-spend
-		     approval every other generate action gets. -->
-		{:else if activeTab === 'studio'}
-			<div class="studio-tab">
-				<div class="studio-head">
-					<div>
-						<h2 class="studio-title">Studio</h2>
-						<p class="studio-sub">
-							Pick an archetype — the scaffold opens prefilled with an editable topic and scene,
-							already aimed at {agent.name}'s voice and the applied brand kit. For bulk
-							generation across a week or a month, plan a campaign.
-						</p>
-					</div>
-					<div class="studio-head-actions">
-						<button
-							type="button"
-							class="studio-campaign-btn"
-							title="Bulk-generate a content mix onto the calendar — drafts for your review"
-							onclick={() => goto('/calendar?campaign=1')}
-						>
-							<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4" /><path d="M8 2v4" /><path d="M3 10h18" /><path d="M8 14h.01" /><path d="M12 14h.01" /><path d="M16 14h.01" /></svg>
-							Plan a campaign
-						</button>
-					<div class="studio-deliver" role="radiogroup" aria-label="Output destination" aria-describedby="studio-deliver-hint">
-						<span class="studio-deliver-label" id="studio-deliver-label">Output</span>
-						<button
-							type="button"
-							class="view-toggle-btn"
-							role="radio"
-							aria-checked={studioDeliver === 'review'}
-							class:active={studioDeliver === 'review'}
-							onclick={() => (studioDeliver = 'review')}
-						>
-							Review draft
-						</button>
-						<button
-							type="button"
-							class="view-toggle-btn"
-							role="radio"
-							aria-checked={studioDeliver === 'asset'}
-							class:active={studioDeliver === 'asset'}
-							onclick={() => (studioDeliver = 'asset')}
-						>
-							Asset only
-						</button>
-					</div>
-					<!-- The control states its own consequence — the destination is the
-					     toggle's entire meaning, so it lives ON the control, not in prose
-					     three lines away. Delivered posts wear a matching chip. -->
-					<p class="studio-deliver-hint" id="studio-deliver-hint" aria-live="polite">
-						{#if studioDeliver === 'asset'}
-							→ Saved to <strong>Content → Assets</strong> with an <strong>asset</strong> chip.
-							Skips the review queue entirely.
-						{:else}
-							→ Lands in the <strong>Review Queue</strong> as a draft on this persona; publishes
-							only after you approve it.
-						{/if}
-					</p>
-					</div>
-				</div>
-				<!-- Format filter: the axis a user actually thinks in (text / photo /
-				     video / cinematic), replacing the old genre chips. -->
-				<div class="feed-view-toggle studio-cats" role="group" aria-label="Output format">
-					<button
-						type="button"
-						class="view-toggle-btn"
-						class:active={studioSurface === 'all'}
-						aria-pressed={studioSurface === 'all'}
-						onclick={() => (studioSurface = 'all')}
-					>
-						All formats
-					</button>
-					{#each STUDIO_SURFACES as s (s.id)}
-						<button
-							type="button"
-							class="view-toggle-btn"
-							class:active={studioSurface === s.id}
-							aria-pressed={studioSurface === s.id}
-							title={s.hint}
-							onclick={() => (studioSurface = s.id)}
-						>
-							{s.label}
-						</button>
-					{/each}
-				</div>
-
-				<!-- Intent split: channel content leads because it IS the job — a real
-				     account is ~80% this. Brand promos sit below, clearly labelled, so
-				     the healthy shape of an account is readable from the layout itself. -->
-				{#each [['channel', 'Channel content', 'The ~80% — what the account is followed for between promos'], ['brand', 'Brand & product', 'The ~20% — promos, spaced out so they land']] as [intent, heading, hint] (intent)}
-					{#if studioShelves(intent as StudioIntent).length > 0}
-						<section class="studio-intent studio-intent-{intent}" aria-label={heading}>
-							<div class="studio-intent-head">
-								<h3 class="studio-intent-title">{heading}</h3>
-								<span class="studio-intent-hint">{hint}</span>
-							</div>
-							{#each studioShelves(intent as StudioIntent) as [shelf, list] (shelf.id)}
-								<div class="studio-shelf">
-									<div class="studio-shelf-head">
-										<span class="studio-shelf-label">{shelf.label}</span>
-										<span class="studio-shelf-hint">{shelf.hint}</span>
-									</div>
-									<div class="studio-rail" role="list">
-										{#each list as t (t.id)}
-											{@const preview = studioPreviews.get(t.id)}
-											{@const meta = PIPELINE_META[t.pipeline]}
-											<div class="studio-tile studio-sf-{t.surface}" role="listitem">
-												<!-- The tile's face is the OUTPUT: a real prior generation
-												     when one exists, else the template's sample line styled
-												     like the asset it produces — never a blank card. -->
-												<div class="studio-face">
-													{#if t.framing === 'selfie'}
-														<!-- The realism register a social feed runs on — flagged so
-														     the selfie share of the catalog is visible at a glance. -->
-														<span class="studio-framing">Front-cam</span>
-													{/if}
-													{#if preview}
-														<img
-															class="studio-face-img"
-															src={preview.url}
-															alt="Your latest {t.title} generation"
-															loading="lazy"
-														/>
-														{#if t.surface === 'motion' || t.surface === 'cinematic'}
-															<span class="studio-play" aria-hidden="true">
-																<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
-															</span>
+														{#if generatingKitStage === st.key}
+															<span class="spinner-sm" aria-hidden="true"></span> Generating…
+														{:else if referenceKit[st.key]}
+															<svg
+																width="13"
+																height="13"
+																viewBox="0 0 24 24"
+																fill="none"
+																stroke="currentColor"
+																stroke-width="2"
+																stroke-linecap="round"
+																stroke-linejoin="round"
+																aria-hidden="true"
+																><path d="M21 12a9 9 0 1 1-2.64-6.36" /><path d="M21 3v6h-6" /></svg
+															>
+															Regenerate
+														{:else}
+															Generate
 														{/if}
-														<span class="studio-tried">Yours</span>
-													{:else if t.surface === 'typographic'}
-														<span class="studio-face-quote">{t.sample}</span>
-													{:else}
-														<span class="studio-face-sample">
-															{#if t.surface === 'motion' || t.surface === 'cinematic'}
-																<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="5" width="14" height="14" rx="2"/><path d="M22 8l-6 4 6 4V8z"/></svg>
-															{:else}
-																<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
-															{/if}
-															<em>{t.sample}</em>
-														</span>
-													{/if}
-												</div>
-												<div class="studio-tile-body">
-													<div class="studio-tile-top">
-														<h4 class="studio-tile-title">{t.title}</h4>
-														<span class="studio-format studio-fmt-{t.surface}">
-															{t.surface === 'typographic' ? 'TEXT' : t.surface === 'photo' ? 'IMAGE' : 'VIDEO'}
-														</span>
-													</div>
-													<p class="studio-tile-tag">{t.tagline}</p>
-													<div class="studio-tile-meta">
-														<span class="studio-cost" title="Estimated generation cost">{meta.usd}</span>
-														<span class="studio-time" title="Typical generation time">{meta.time}</span>
+													</button>
+													{#if referenceKit[st.key]}
 														<button
 															type="button"
-															class="btn-generate studio-use"
-															disabled={generatingPost}
-															onclick={() => useStudioTemplate(t)}
+															class="btn-sync kit-stage-generate"
+															onclick={() => openKitRestore(st.key)}
+															disabled={generatingKitStage !== null || generatingAllKit}
+															title="Restore a previous {st.label.toLowerCase()} — from this stage's history or your image library"
 														>
-															Use
+															<svg
+																width="13"
+																height="13"
+																viewBox="0 0 24 24"
+																fill="none"
+																stroke="currentColor"
+																stroke-width="2"
+																stroke-linecap="round"
+																stroke-linejoin="round"
+																aria-hidden="true"
+																><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /><path
+																	d="M12 7v5l3 2"
+																/></svg
+															>
+															Restore
 														</button>
-													</div>
+														<button
+															type="button"
+															class="btn-sync kit-stage-generate danger"
+															onclick={() =>
+																deleteAssets([
+																	{
+																		url: referenceKit[st.key],
+																		type: 'image',
+																		label: st.label,
+																		poster: null,
+																		source: 'kit',
+																		stage: st.key
+																	}
+																])}
+															disabled={deletingAssets ||
+																generatingKitStage !== null ||
+																generatingAllKit}
+															title="Remove this {st.label.toLowerCase()} from the kit"
+														>
+															<svg
+																width="13"
+																height="13"
+																viewBox="0 0 24 24"
+																fill="none"
+																stroke="currentColor"
+																stroke-width="2"
+																stroke-linecap="round"
+																stroke-linejoin="round"
+																aria-hidden="true"
+																><path
+																	d="M3 6h18M8 6V4h8v2m1 0v14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2V6h12"
+																/></svg
+															>
+															Delete
+														</button>
+													{/if}
 												</div>
+												{#if blocked && !referenceKit[st.key]}
+													<span class="field-hint">{blocked}</span>
+												{/if}
 											</div>
 										{/each}
 									</div>
 								</div>
-							{/each}
-						</section>
+							{/if}
+
+							<div class="field-group col-span-2">
+								<div class="label-row">
+									<label for="p-soul">Soul / Personality</label>
+									<button
+										type="button"
+										class="btn-sync btn-xs"
+										onclick={enrichSoul}
+										disabled={enrichingSoul}
+									>
+										{#if enrichingSoul}Enriching…{:else}<svg
+												width="13"
+												height="13"
+												viewBox="0 0 24 24"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="2"
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												aria-hidden="true"
+												><path
+													d="M12 3l1.7 4.6L18 9.3l-4.3 1.7L12 15.6l-1.7-4.6L6 9.3l4.3-1.7L12 3z"
+												/><path d="M18.5 14.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2z" /></svg
+											> AI Enrich{/if}
+									</button>
+								</div>
+								<textarea
+									id="p-soul"
+									bind:value={soulText}
+									rows="6"
+									placeholder="Define your persona's personality, voice, and behavioral directives…"
+								></textarea>
+							</div>
+
+							<div class="field-group col-span-2">
+								<div class="label-row">
+									<span class="field-label">Skills &amp; Capabilities</span>
+									<button
+										type="button"
+										class="btn-sync btn-xs"
+										onclick={() => (editingSkill = { id: `s${Date.now()}`, name: '', md: '' })}
+										>+ Add skill</button
+									>
+								</div>
+								{#if skillsList.length === 0}
+									<p class="field-hint">
+										No skills defined yet — each skill is a markdown playbook the persona follows.
+									</p>
+								{:else}
+									<div class="item-chips">
+										{#each skillsList as s (s.id)}
+											<span class="item-chip-wrap">
+												<button
+													type="button"
+													class="item-chip"
+													onclick={() => (editingSkill = { ...s })}
+												>
+													<svg
+														width="13"
+														height="13"
+														viewBox="0 0 24 24"
+														fill="none"
+														stroke="currentColor"
+														stroke-width="2"
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														aria-hidden="true"
+														><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path
+															d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"
+														/></svg
+													>
+													{s.name}
+												</button>
+												<!-- Row-level delete: previously you had to open the editor to remove one. -->
+												<button
+													type="button"
+													class="item-chip-del"
+													title="Delete skill"
+													aria-label="Delete skill {s.name}"
+													onclick={() =>
+														confirm(`Delete the skill "${s.name}"?`) && deleteSkill(s.id)}
+													><svg
+														width="11"
+														height="11"
+														viewBox="0 0 24 24"
+														fill="none"
+														stroke="currentColor"
+														stroke-width="2.5"
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														aria-hidden="true"><path d="M18 6L6 18M6 6l12 12" /></svg
+													></button
+												>
+											</span>
+										{/each}
+									</div>
+								{/if}
+							</div>
+
+							<div class="field-group col-span-2">
+								<div class="label-row">
+									<span class="field-label">Tools &amp; Integrations</span>
+									<button
+										type="button"
+										class="btn-sync btn-xs"
+										onclick={() =>
+											(editingTool = {
+												id: `t${Date.now()}`,
+												kind: 'posting',
+												label: '',
+												config: ''
+											})}>+ Add integration</button
+									>
+								</div>
+								{#if toolsList.length === 0}
+									<p class="field-hint">
+										Connect intents — posting targets, analytics, MCP servers, API calls this
+										persona uses.
+									</p>
+								{:else}
+									<div class="item-chips">
+										{#each toolsList as t (t.id)}
+											<span class="item-chip-wrap">
+												<button
+													type="button"
+													class="item-chip"
+													onclick={() => (editingTool = { ...t })}
+												>
+													<svg
+														width="13"
+														height="13"
+														viewBox="0 0 24 24"
+														fill="none"
+														stroke="currentColor"
+														stroke-width="2"
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														aria-hidden="true"
+														><path d="M12 22v-5" /><path d="M9 8V2" /><path d="M15 8V2" /><path
+															d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8z"
+														/></svg
+													>
+													{t.label} <span class="chip-kind">{t.kind}</span>
+												</button>
+												<button
+													type="button"
+													class="item-chip-del"
+													title="Delete integration"
+													aria-label="Delete integration {t.label}"
+													onclick={() =>
+														confirm(`Delete the integration "${t.label}"?`) && deleteTool(t.id)}
+													><svg
+														width="11"
+														height="11"
+														viewBox="0 0 24 24"
+														fill="none"
+														stroke="currentColor"
+														stroke-width="2.5"
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														aria-hidden="true"><path d="M18 6L6 18M6 6l12 12" /></svg
+													></button
+												>
+											</span>
+										{/each}
+									</div>
+								{/if}
+							</div>
+						</div>
+					</details>
+
+					{#if editingSkill}
+						<div
+							class="gen-confirm-overlay"
+							role="dialog"
+							aria-modal="true"
+							aria-label="Edit skill"
+							tabindex="-1"
+							use:dialog={{ onClose: () => (editingSkill = null) }}
+						>
+							<div class="gen-confirm editor-modal">
+								<h3>
+									{skillsList.some((s) => s.id === editingSkill?.id) ? 'Edit skill' : 'New skill'}
+								</h3>
+								<div class="field-group">
+									<label for="skill-name">Skill name</label>
+									<input
+										id="skill-name"
+										type="text"
+										bind:value={editingSkill.name}
+										placeholder="e.g. Hook writing for Reels"
+									/>
+								</div>
+								<div class="field-group">
+									<label for="skill-md">Playbook (markdown)</label>
+									<textarea
+										id="skill-md"
+										class="mono"
+										rows="12"
+										bind:value={editingSkill.md}
+										placeholder="## When to use&#10;- …&#10;&#10;## Steps&#10;1. …"
+									></textarea>
+								</div>
+								<div class="gc-actions">
+									{#if skillsList.some((s) => s.id === editingSkill?.id)}
+										<button
+											type="button"
+											class="btn-danger-ghost"
+											onclick={() => deleteSkill(editingSkill!.id)}>Delete</button
+										>
+									{/if}
+									<button type="button" class="btn-sync" onclick={() => (editingSkill = null)}
+										>Cancel</button
+									>
+									<button type="button" class="btn-generate" onclick={saveSkill}>Save skill</button>
+								</div>
+							</div>
+						</div>
 					{/if}
-				{/each}
-			</div>
 
-		{/if}
+					{#if editingTool}
+						<div
+							class="gen-confirm-overlay"
+							role="dialog"
+							aria-modal="true"
+							aria-label="Edit integration"
+							tabindex="-1"
+							use:dialog={{ onClose: () => (editingTool = null) }}
+						>
+							<div class="gen-confirm editor-modal">
+								<h3>
+									{toolsList.some((t) => t.id === editingTool?.id)
+										? 'Edit integration'
+										: 'New integration'}
+								</h3>
+								<div class="field-group">
+									<label for="tool-kind">Type</label>
+									<select id="tool-kind" bind:value={editingTool.kind}>
+										{#each TOOL_KINDS as k}<option value={k}>{k}</option>{/each}
+									</select>
+								</div>
+								<div class="field-group">
+									<label for="tool-label">Label</label>
+									<input
+										id="tool-label"
+										type="text"
+										bind:value={editingTool.label}
+										placeholder="e.g. Instagram via Zernio, Analytics webhook"
+									/>
+								</div>
+								<div class="field-group">
+									<label for="tool-config">Configuration / intent</label>
+									<textarea
+										id="tool-config"
+										class="mono"
+										rows="8"
+										bind:value={editingTool.config}
+										placeholder={'{ "endpoint": "…", "notes": "what this persona uses it for" }'}
+									></textarea>
+								</div>
+								<div class="gc-actions">
+									{#if toolsList.some((t) => t.id === editingTool?.id)}
+										<button
+											type="button"
+											class="btn-danger-ghost"
+											onclick={() => deleteTool(editingTool!.id)}>Delete</button
+										>
+									{/if}
+									<button type="button" class="btn-sync" onclick={() => (editingTool = null)}
+										>Cancel</button
+									>
+									<button type="button" class="btn-generate" onclick={saveTool}
+										>Save integration</button
+									>
+								</div>
+							</div>
+						</div>
+					{/if}
+
+					<!-- Persona Profile section -->
+					<!-- Automation section -->
+					<details class="profile-section">
+						<summary class="section-summary">
+							<div class="section-header">
+								<h2 class="section-title">Automation</h2>
+								<p class="section-desc">Posting schedule and content sourcing mode.</p>
+							</div>
+							<svg
+								class="section-chevron"
+								width="18"
+								height="18"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2.5"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg
+							>
+						</summary>
+
+						<div class="fields-grid">
+							<div class="field-group">
+								<label for="p-tz">Timezone</label>
+								<select id="p-tz" bind:value={timezone}>
+									{#each timezones as tz}
+										<option value={tz.value}>{tz.label}</option>
+									{/each}
+								</select>
+							</div>
+							<div class="field-group">
+								<label for="p-voice">UGC Voice</label>
+								<div class="voice-picker-row">
+									<select id="p-voice" bind:value={selectedVoice}>
+										{#each voiceCatalog as v}
+											<option value={v.name}
+												>{v.label} · {v.gender === 'male' ? '♂' : '♀'}{v.accent
+													? ` · ${v.accent}`
+													: ''} · {v.style}</option
+											>
+										{:else}
+											<option value={selectedVoice}>{selectedVoice}</option>
+										{/each}
+									</select>
+									<button
+										type="button"
+										class="btn-sync"
+										onclick={previewVoice}
+										disabled={previewingVoice}
+									>
+										{#if previewingVoice}Playing…{:else}<svg
+												width="13"
+												height="13"
+												viewBox="0 0 24 24"
+												fill="currentColor"
+												aria-hidden="true"><path d="M8 5v14l11-7z" /></svg
+											> Preview{/if}
+									</button>
+								</div>
+								<p class="field-hint">
+									The video's spoken voice — pin one that matches this persona's on-camera
+									character.
+									{#if ppVoiceProfile?.nationality || ppVoiceProfile?.accent}
+										Inferred from the name: {[
+											ppVoiceProfile.nationality,
+											ppVoiceProfile.accent && `${ppVoiceProfile.accent} accent`
+										]
+											.filter(Boolean)
+											.join(' · ')}.
+									{/if}
+								</p>
+							</div>
+							<div class="field-group">
+								<label for="p-ppd">Posts Per Day</label>
+								<input
+									id="p-ppd"
+									type="number"
+									min="1"
+									max="10"
+									step="1"
+									class="field-input"
+									bind:value={postsPerDay}
+									oninput={() => {
+										if (postsPerDay > 10) postsPerDay = 10;
+										if (postsPerDay < 1) postsPerDay = 1;
+									}}
+								/>
+								<p class="field-hint">Max 10 per day.</p>
+							</div>
+
+							<div class="field-group">
+								<label for="p-autonomy">Autonomy</label>
+								<select id="p-autonomy" bind:value={autonomyLevel} onchange={handleAutonomyChange}>
+									<option value="advisor">Advisor — manual generate only</option>
+									<option value="semi_autonomous">Semi — drafts for review</option>
+									<option value="fully_autonomous">Fully — publishes unattended</option>
+								</select>
+								<p class="field-hint">
+									{#if autonomyLevel === 'fully_autonomous'}
+										Publishing without review — drop back to Semi if quality slips.
+									{:else if graduationEligible}
+										<svg
+											width="13"
+											height="13"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											aria-hidden="true"
+											><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><path
+												d="M22 4L12 14.01l-3-3"
+											/></svg
+										>
+										Eligible to graduate: {publishedCleanCount} clean published posts. Switch to Fully
+										when confident.
+									{:else}
+										Graduates to Fully after ~21 clean published posts ({publishedCleanCount} so far,
+										{recentFailedCount} recent failure{recentFailedCount === 1 ? '' : 's'}).
+									{/if}
+								</p>
+							</div>
+
+							<div class="field-group col-span-2">
+								<span class="field-label" id="content-source-label">Content Source</span>
+								<div class="source-cards" role="group" aria-labelledby="content-source-label">
+									<button
+										type="button"
+										class="autonomy-card"
+										class:selected={!rssActive}
+										aria-pressed={!rssActive}
+										onclick={() => (rssActive = false)}
+									>
+										<div class="autonomy-radio" aria-hidden="true">
+											<div class="radio-outer">
+												{#if !rssActive}<div class="radio-inner"></div>{/if}
+											</div>
+										</div>
+										<span class="autonomy-icon"
+											><svg
+												width="16"
+												height="16"
+												viewBox="0 0 24 24"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="2"
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												aria-hidden="true"
+												><path
+													d="M12 3l1.7 4.6L18 9.3l-4.3 1.7L12 15.6l-1.7-4.6L6 9.3l4.3-1.7L12 3z"
+												/><path d="M18.5 14.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2z" /></svg
+											></span
+										>
+										<span class="autonomy-label">Dynamic Generation</span>
+										<p class="autonomy-desc">
+											Original content from niche, trends, and persona directives.
+										</p>
+									</button>
+									<button
+										type="button"
+										class="autonomy-card"
+										class:selected={rssActive}
+										aria-pressed={rssActive}
+										onclick={() => (rssActive = true)}
+									>
+										<div class="autonomy-radio" aria-hidden="true">
+											<div class="radio-outer">
+												{#if rssActive}<div class="radio-inner"></div>{/if}
+											</div>
+										</div>
+										<span class="autonomy-icon"
+											><svg
+												width="16"
+												height="16"
+												viewBox="0 0 24 24"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="2"
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												aria-hidden="true"
+												><path
+													d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"
+												/><path d="M18 14h-8" /><path d="M15 18h-5" /><path
+													d="M10 6h8v4h-8V6Z"
+												/></svg
+											></span
+										>
+										<span class="autonomy-label">RSS Auto-Repurpose</span>
+										<p class="autonomy-desc">
+											Monitor an RSS feed and spin items in the persona's voice.
+										</p>
+									</button>
+								</div>
+								{#if rssActive}
+									<div style="margin-top: 1rem;" transition:slide={{ duration: 250 }}>
+										<label class="field-label" for="p-rss-url">RSS feed URL</label>
+										<input
+											id="p-rss-url"
+											type="url"
+											class="field-input"
+											placeholder="https://example.com/feed.xml"
+											autocomplete="url"
+											bind:value={rssUrl}
+											style="width: 100%; margin-bottom: 0.5rem;"
+										/>
+										<p class="field-hint">
+											Last polled: {rssLastPolledAt
+												? new Date(rssLastPolledAt).toLocaleString()
+												: 'Never'}
+										</p>
+									</div>
+								{/if}
+							</div>
+						</div>
+					</details>
+
+					<!-- Spend & Pricing section -->
+					<details class="profile-section">
+						<summary class="section-summary">
+							<div class="section-header">
+								<h2 class="section-title">Spend &amp; Pricing</h2>
+								<p class="section-desc">
+									Estimated generation credits used by this persona, split by provider — plus the
+									rate card behind the numbers.
+								</p>
+							</div>
+							<svg
+								class="section-chevron"
+								width="18"
+								height="18"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2.5"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg
+							>
+						</summary>
+
+						{#if agentSpend && agentSpend.total > 0}
+							<div class="spend-chips">
+								<div class="spend-chip spend-total">
+									<span class="spend-label">Total</span>
+									<span class="spend-val tabular-nums">${agentSpend.total.toFixed(2)}</span>
+								</div>
+								{#each Object.entries(agentSpend.byProvider) as [prov, amt]}
+									<div class="spend-chip">
+										<span class="spend-label">{prov}</span>
+										<span class="spend-val tabular-nums">${amt.toFixed(2)}</span>
+									</div>
+								{/each}
+								{#each Object.entries(agentSpend.byOperation) as [op, amt]}
+									<div class="spend-chip spend-op">
+										<span class="spend-label">{op}</span>
+										<span class="spend-val tabular-nums">${amt.toFixed(2)}</span>
+									</div>
+								{/each}
+							</div>
+						{:else}
+							<p class="field-hint">
+								No tracked generation spend yet — the ledger starts recording with the next
+								generation.
+							</p>
+						{/if}
+
+						<details class="pricing-details">
+							<summary>Rate card (estimated USD per call)</summary>
+							<div class="pricing-table-wrap">
+								<table class="pricing-table">
+									<thead
+										><tr><th>Provider</th><th>Operation</th><th>Model</th><th>Est. cost</th></tr
+										></thead
+									>
+									<tbody>
+										{#each PRICING_MATRIX as row}
+											<tr>
+												<td>{row.provider}</td>
+												<td>{row.operation}</td>
+												<td>{row.model}</td>
+												<td class="tabular-nums">{row.note ?? `$${row.usd}`}</td>
+											</tr>
+										{/each}
+									</tbody>
+								</table>
+							</div>
+						</details>
+					</details>
+
+					<!-- Save + Danger zone -->
+					<div class="profile-footer">
+						<button type="button" class="btn-save" onclick={() => saveProfile()} disabled={saving}>
+							{#if saving}<span class="spinner-sm" aria-hidden="true"></span> Saving…{:else}Save
+								Profile{/if}
+						</button>
+					</div>
+
+					<div class="danger-zone">
+						<h3>Danger Zone</h3>
+						<p>Permanently delete this persona and all associated data. This cannot be undone.</p>
+						<button type="button" class="btn-danger" onclick={deleteAgent}>Delete Persona</button>
+					</div>
+				</div>
+
+				<!-- PROFILE TAB · Connections lens -->
+			{:else if activeTab === 'profile' && profileView === 'connections'}
+				<div class="connections-tab">
+					{#if statusLoading}
+						<div class="feed-loading" role="status" aria-live="polite">
+							<span class="spinner-lg" aria-hidden="true"></span>
+							<p>Checking connections…</p>
+						</div>
+					{:else}
+						<!-- Summary bar -->
+						<div class="conn-summary">
+							<span class="conn-count-badge tabular-nums"
+								>{computedMetrics.connectedCount} / {PLATFORMS.length}</span
+							>
+							<span class="conn-count-label">Active connections</span>
+							<div class="conn-quick-links">
+								{#each PLATFORMS as p}
+									{#if !platformStatuses[p.key]?.connected}
+										<!-- Every platform connects the same way: a Zernio hosted-OAuth
+									     link filed under this persona's profile. -->
+										<button
+											type="button"
+											class="btn-connect-inline"
+											disabled={connectingPlatform === p.key}
+											title={`Connect ${p.name} via Zernio`}
+											onclick={() => connectPlatform(p.key)}
+										>
+											{connectingPlatform === p.key ? 'Connecting…' : `+ ${p.name}`}
+										</button>
+									{/if}
+								{/each}
+							</div>
+						</div>
+
+						<!-- Pay-per-account meter — Zernio bills per connected account across
+					     your whole key (2 free, then $6/$3/$1 by volume), NOT per persona
+					     and NOT a plan tier. Shown so adding a platform is never a surprise
+					     charge. -->
+						{#if accountMeter}
+							<div class="zernio-meter" class:over-free={accountMeter.billable > 0}>
+								<div class="meter-head">
+									<span class="meter-title">Zernio accounts</span>
+									<span class="meter-sub">across your key · billed per connected account</span>
+								</div>
+								<div
+									class="meter-track"
+									role="img"
+									aria-label="{accountMeter.total} accounts connected, {accountMeter.freeUsed} of 2 free used"
+								>
+									{#each Array(Math.min(Math.max(accountMeter.total, 2), 12)) as _, i}
+										<span
+											class="meter-pip"
+											class:free={i < 2}
+											class:filled={i < accountMeter.total}
+											class:billable={i >= 2 && i < accountMeter.total}
+										></span>
+									{/each}
+									{#if accountMeter.total > 12}
+										<span class="meter-overflow">+{accountMeter.total - 12}</span>
+									{/if}
+								</div>
+								<div class="meter-stats">
+									<span><strong>{accountMeter.total}</strong> connected</span>
+									{#if accountMeter.freeRemaining > 0}
+										<span class="meter-good"
+											>{accountMeter.freeRemaining} free {accountMeter.freeRemaining === 1
+												? 'slot'
+												: 'slots'} left</span
+										>
+									{:else}
+										<span class="meter-bill"
+											><strong>${accountMeter.monthlyCostUsd}</strong>/mo · {accountMeter.billable} billable</span
+										>
+									{/if}
+								</div>
+								<p class="meter-note">
+									{#if accountMeter.freeRemaining > 0}
+										Your first 2 connected accounts are free. The next account adds
+										<strong>${accountMeter.nextAccountCostUsd}/mo</strong>.
+									{:else}
+										Each additional account is
+										<strong>${accountMeter.nextAccountCostUsd}/mo</strong>. Manage billing on your
+										<a
+											href={connectHub?.url ?? 'https://zernio.com/dashboard'}
+											target="_blank"
+											rel="noopener">Zernio dashboard</a
+										>
+										— or add another Zernio key in the
+										<a href="/settings#zernio-keys">Key Manager</a> (every key is a separate Zernio account
+										with 2 more free slots).
+									{/if}
+									{#if !accountMeter.hasAnalyticsAccess}
+										<br /><span class="meter-warn"
+											>Live follower &amp; engagement stats need analytics enabled on your Zernio
+											key.</span
+										>
+									{/if}
+								</p>
+							</div>
+						{/if}
+
+						{#if computedMetrics.connectedCount === 0}
+							<div class="conn-empty">
+								<span
+									><svg
+										width="28"
+										height="28"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="1.6"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										aria-hidden="true"
+										><path d="M12 22v-5" /><path d="M9 8V2" /><path d="M15 8V2" /><path
+											d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8z"
+										/></svg
+									></span
+								>
+								<p>No platforms connected. Use the buttons above to link your first account.</p>
+							</div>
+						{:else}
+							<div class="platforms-grid">
+								{#each PLATFORMS.filter((p) => platformStatuses[p.key]?.connected) as platform}
+									{@const status = platformStatuses[platform.key]}
+									<div class="platform-card" style="--platform-color: {platform.color}">
+										<div class="platform-card-header">
+											<!-- Platform icon -->
+											<div class="platform-icon">
+												{#if platform.key === 'tiktok'}
+													<svg
+														width="22"
+														height="22"
+														viewBox="0 0 24 24"
+														fill="none"
+														aria-hidden="true"
+														><path
+															d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.27 6.27 0 00-.79-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.33-6.34V8.89a8.1 8.1 0 004.77 1.54V7.01a4.85 4.85 0 01-1-.32z"
+															fill={platform.color}
+														/></svg
+													>
+												{:else if platform.key === 'instagram'}
+													<svg
+														width="22"
+														height="22"
+														viewBox="0 0 24 24"
+														fill="none"
+														aria-hidden="true"
+														><rect
+															x="2"
+															y="2"
+															width="20"
+															height="20"
+															rx="5"
+															stroke={platform.color}
+															stroke-width="1.8"
+														/><circle
+															cx="12"
+															cy="12"
+															r="5"
+															stroke={platform.color}
+															stroke-width="1.8"
+														/><circle cx="17.5" cy="6.5" r="1.5" fill={platform.color} /></svg
+													>
+												{:else if platform.key === 'youtube'}
+													<svg
+														width="22"
+														height="22"
+														viewBox="0 0 24 24"
+														fill="none"
+														aria-hidden="true"
+														><path
+															d="M22.54 6.42a2.78 2.78 0 00-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 00-1.94 2A29.94 29.94 0 001 12a29.94 29.94 0 00.46 5.58 2.78 2.78 0 001.94 2C5.12 20 12 20 12 20s6.88 0 8.6-.46a2.78 2.78 0 001.94-2A29.94 29.94 0 0023 12a29.94 29.94 0 00-.46-5.58z"
+															fill={platform.color}
+														/><path d="M9.75 15.02l5.75-3.27-5.75-3.27v6.54z" fill="#fff" /></svg
+													>
+												{:else if platform.key === 'facebook'}
+													<svg
+														width="22"
+														height="22"
+														viewBox="0 0 24 24"
+														fill="none"
+														aria-hidden="true"
+														><path
+															d="M24 12c0-6.627-5.373-12-12-12S0 5.373 0 12c0 5.99 4.388 10.954 10.125 11.854V15.47H7.078V12h3.047V9.356c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.875V12h3.328l-.532 3.47h-2.796v8.384C19.612 22.954 24 17.99 24 12z"
+															fill={platform.color}
+														/></svg
+													>
+												{/if}
+											</div>
+											<div class="platform-name-block">
+												<span class="platform-name">{platform.name}</span>
+												{#if status?.status === 'reauth_required'}
+													<span class="conn-badge error">Reconnect</span>
+												{:else if status?.status === 'provider_unavailable'}
+													<span class="conn-badge warn">Stale</span>
+												{/if}
+											</div>
+											<button
+												type="button"
+												class="btn-collapse"
+												aria-expanded={!collapsedPlatforms[platform.key]}
+												aria-label="{collapsedPlatforms[platform.key]
+													? 'Show'
+													: 'Hide'} {platform.name} details"
+												onclick={() =>
+													(collapsedPlatforms[platform.key] = !collapsedPlatforms[platform.key])}
+												style="transform: rotate({collapsedPlatforms[platform.key]
+													? '180deg'
+													: '0deg'})"
+											>
+												<svg
+													width="16"
+													height="16"
+													viewBox="0 0 24 24"
+													fill="none"
+													stroke="currentColor"
+													stroke-width="2.5"
+													stroke-linecap="round"
+													stroke-linejoin="round"
+													aria-hidden="true"><polyline points="18 15 12 9 6 15" /></svg
+												>
+											</button>
+										</div>
+
+										{#if !collapsedPlatforms[platform.key]}
+											<div class="platform-body" transition:slide={{ duration: 200 }}>
+												<div class="handle-row">
+													{#if platformProfileUrl(platform.key, status?.handle)}
+														<a
+															class="platform-handle platform-handle-link"
+															href={platformProfileUrl(platform.key, status?.handle)}
+															target="_blank"
+															rel="noopener noreferrer"
+															title="Open {platform.name} profile in a new tab">{status?.handle}</a
+														>
+													{:else}
+														<span class="platform-handle">{status?.handle ?? '@connected'}</span>
+													{/if}
+													{#if status?.verified}
+														<svg
+															width="14"
+															height="14"
+															viewBox="0 0 24 24"
+															fill="none"
+															stroke="var(--cyan)"
+															stroke-width="2"
+															role="img"
+															aria-label="Verified account"
+															><path
+																d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 12c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
+															/></svg
+														>
+													{/if}
+													{#if status?.handle}
+														{@const isMain = agent.handle === status.handle}
+														<button
+															type="button"
+															class="btn-star"
+															title={isMain ? 'Main handle' : 'Set as main handle'}
+															aria-label={isMain
+																? `@${status.handle} is the main handle`
+																: `Set @${status.handle} as the main handle`}
+															aria-pressed={isMain}
+															onclick={() => setMainHandle(status.handle!)}
+														>
+															<svg
+																width="14"
+																height="14"
+																viewBox="0 0 24 24"
+																fill={isMain ? 'var(--warning)' : 'none'}
+																stroke={isMain ? 'var(--warning)' : 'var(--text-dim)'}
+																stroke-width="2"
+																stroke-linecap="round"
+																stroke-linejoin="round"
+																aria-hidden="true"
+																><polygon
+																	points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"
+																/></svg
+															>
+														</button>
+													{/if}
+												</div>
+												<span class="last-sync">Last sync: {formatSyncTime(status?.lastSync)}</span>
+												{#if (status?.followers ?? 0) > 0 || (status?.engagement_rate ?? 0) > 0}
+													<div class="platform-stats">
+														{#if status?.followers}
+															<span class="stat-badge tabular-nums"
+																><svg
+																	width="11"
+																	height="11"
+																	viewBox="0 0 24 24"
+																	fill="none"
+																	stroke="currentColor"
+																	stroke-width="2"
+																	stroke-linecap="round"
+																	stroke-linejoin="round"
+																	aria-hidden="true"
+																	><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle
+																		cx="9"
+																		cy="7"
+																		r="4"
+																	/><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path
+																		d="M16 3.13a4 4 0 0 1 0 7.75"
+																	/></svg
+																>
+																{status.followers >= 1000
+																	? (status.followers / 1000).toFixed(1) + 'K'
+																	: status.followers} followers</span
+															>
+														{/if}
+														{#if status?.engagement_rate}
+															<span class="stat-badge tabular-nums"
+																><svg
+																	width="11"
+																	height="11"
+																	viewBox="0 0 24 24"
+																	fill="none"
+																	stroke="currentColor"
+																	stroke-width="2"
+																	stroke-linecap="round"
+																	stroke-linejoin="round"
+																	aria-hidden="true"
+																	><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" /></svg
+																>
+																{status.engagement_rate}% eng</span
+															>
+														{/if}
+													</div>
+												{/if}
+												<button
+													type="button"
+													class="btn-disconnect"
+													aria-label="Disconnect {platform.name}"
+													onclick={() => disconnectPlatform(platform.key)}
+												>
+													<svg
+														width="12"
+														height="12"
+														viewBox="0 0 24 24"
+														fill="none"
+														stroke="currentColor"
+														stroke-width="2"
+														aria-hidden="true"><path d="M18 6L6 18" /><path d="M6 6l12 12" /></svg
+													>
+													Disconnect
+												</button>
+											</div>
+										{/if}
+									</div>
+								{/each}
+							</div>
+						{/if}
+
+						<AgentConnectionStats {platformStatuses} {platformMetrics} platforms={PLATFORMS} />
+					{/if}
+				</div>
+
+				<!-- STUDIO TAB — template gallery. Every card is a prefilled composer
+		     request; nothing generates without the same confirm-before-spend
+		     approval every other generate action gets. -->
+			{:else if activeTab === 'studio'}
+				<div class="studio-tab">
+					<div class="studio-head">
+						<div>
+							<h2 class="studio-title">Studio</h2>
+							<p class="studio-sub">
+								Pick an archetype — the scaffold opens prefilled with an editable topic and scene,
+								already aimed at {agent.name}'s voice and the applied brand kit. For bulk generation
+								across a week or a month, plan a campaign.
+							</p>
+						</div>
+						<div class="studio-head-actions">
+							<button
+								type="button"
+								class="studio-campaign-btn"
+								title="Bulk-generate a content mix onto the calendar — drafts for your review"
+								onclick={() => goto('/calendar?campaign=1')}
+							>
+								<svg
+									width="14"
+									height="14"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									aria-hidden="true"
+									><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4" /><path
+										d="M8 2v4"
+									/><path d="M3 10h18" /><path d="M8 14h.01" /><path d="M12 14h.01" /><path
+										d="M16 14h.01"
+									/></svg
+								>
+								Plan a campaign
+							</button>
+							<div
+								class="studio-deliver"
+								role="radiogroup"
+								aria-label="Output destination"
+								aria-describedby="studio-deliver-hint"
+							>
+								<span class="studio-deliver-label" id="studio-deliver-label">Output</span>
+								<button
+									type="button"
+									class="view-toggle-btn"
+									role="radio"
+									aria-checked={studioDeliver === 'review'}
+									class:active={studioDeliver === 'review'}
+									onclick={() => (studioDeliver = 'review')}
+								>
+									Review draft
+								</button>
+								<button
+									type="button"
+									class="view-toggle-btn"
+									role="radio"
+									aria-checked={studioDeliver === 'asset'}
+									class:active={studioDeliver === 'asset'}
+									onclick={() => (studioDeliver = 'asset')}
+								>
+									Asset only
+								</button>
+							</div>
+							<!-- The control states its own consequence — the destination is the
+					     toggle's entire meaning, so it lives ON the control, not in prose
+					     three lines away. Delivered posts wear a matching chip. -->
+							<p class="studio-deliver-hint" id="studio-deliver-hint" aria-live="polite">
+								{#if studioDeliver === 'asset'}
+									→ Saved to <strong>Content → Assets</strong> with an <strong>asset</strong> chip. Skips
+									the review queue entirely.
+								{:else}
+									→ Lands in the <strong>Review Queue</strong> as a draft on this persona; publishes only
+									after you approve it.
+								{/if}
+							</p>
+						</div>
+					</div>
+					<!-- Format filter: the axis a user actually thinks in (text / photo /
+				     video / cinematic), replacing the old genre chips. -->
+					<div class="feed-view-toggle studio-cats" role="group" aria-label="Output format">
+						<button
+							type="button"
+							class="view-toggle-btn"
+							class:active={studioSurface === 'all'}
+							aria-pressed={studioSurface === 'all'}
+							onclick={() => (studioSurface = 'all')}
+						>
+							All formats
+						</button>
+						{#each STUDIO_SURFACES as s (s.id)}
+							<button
+								type="button"
+								class="view-toggle-btn"
+								class:active={studioSurface === s.id}
+								aria-pressed={studioSurface === s.id}
+								title={s.hint}
+								onclick={() => (studioSurface = s.id)}
+							>
+								{s.label}
+							</button>
+						{/each}
+					</div>
+
+					<!-- Intent split: channel content leads because it IS the job — a real
+				     account is ~80% this. Brand promos sit below, clearly labelled, so
+				     the healthy shape of an account is readable from the layout itself. -->
+					{#each [['channel', 'Channel content', 'The ~80% — what the account is followed for between promos'], ['brand', 'Brand & product', 'The ~20% — promos, spaced out so they land']] as [intent, heading, hint] (intent)}
+						{#if studioShelves(intent as StudioIntent).length > 0}
+							<section class="studio-intent studio-intent-{intent}" aria-label={heading}>
+								<div class="studio-intent-head">
+									<h3 class="studio-intent-title">{heading}</h3>
+									<span class="studio-intent-hint">{hint}</span>
+								</div>
+								{#each studioShelves(intent as StudioIntent) as [shelf, list] (shelf.id)}
+									<div class="studio-shelf">
+										<div class="studio-shelf-head">
+											<span class="studio-shelf-label">{shelf.label}</span>
+											<span class="studio-shelf-hint">{shelf.hint}</span>
+										</div>
+										<div class="studio-rail" role="list">
+											{#each list as t (t.id)}
+												{@const preview = studioPreviews.get(t.id)}
+												{@const meta = PIPELINE_META[t.pipeline]}
+												<div class="studio-tile studio-sf-{t.surface}" role="listitem">
+													<!-- The tile's face is the OUTPUT: a real prior generation
+												     when one exists, else the template's sample line styled
+												     like the asset it produces — never a blank card. -->
+													<div class="studio-face">
+														{#if t.framing === 'selfie'}
+															<!-- The realism register a social feed runs on — flagged so
+														     the selfie share of the catalog is visible at a glance. -->
+															<span class="studio-framing">Front-cam</span>
+														{/if}
+														{#if preview}
+															<img
+																class="studio-face-img"
+																src={preview.url}
+																alt="Your latest {t.title} generation"
+																loading="lazy"
+															/>
+															{#if t.surface === 'motion' || t.surface === 'cinematic'}
+																<span class="studio-play" aria-hidden="true">
+																	<svg
+																		width="22"
+																		height="22"
+																		viewBox="0 0 24 24"
+																		fill="currentColor"
+																		aria-hidden="true"><path d="M8 5v14l11-7z" /></svg
+																	>
+																</span>
+															{/if}
+															<span class="studio-tried">Yours</span>
+														{:else if t.surface === 'typographic'}
+															<!-- The preview is a REAL render from the $0 card pipeline —
+														     what you browse is what a generation produces. Falls back
+														     to the styled sample line when the host can't render. -->
+															{#if !studioCardUnavailable.has(t.id)}
+																<img
+																	class="studio-face-img"
+																	src="/api/studio/card-sample/{t.id}/{studioSample(t).idx}"
+																	alt="Sample {t.title} card, rendered by the free card pipeline"
+																	loading="lazy"
+																	onerror={() => markStudioCardUnavailable(t.id)}
+																/>
+															{:else}
+																<span class="studio-face-quote">{studioSample(t).text}</span>
+															{/if}
+														{:else}
+															<span class="studio-face-sample">
+																{#if t.surface === 'motion' || t.surface === 'cinematic'}
+																	<svg
+																		width="20"
+																		height="20"
+																		viewBox="0 0 24 24"
+																		fill="none"
+																		stroke="currentColor"
+																		stroke-width="1.6"
+																		stroke-linecap="round"
+																		stroke-linejoin="round"
+																		aria-hidden="true"
+																		><rect x="2" y="5" width="14" height="14" rx="2" /><path
+																			d="M22 8l-6 4 6 4V8z"
+																		/></svg
+																	>
+																{:else}
+																	<svg
+																		width="20"
+																		height="20"
+																		viewBox="0 0 24 24"
+																		fill="none"
+																		stroke="currentColor"
+																		stroke-width="1.6"
+																		stroke-linecap="round"
+																		stroke-linejoin="round"
+																		aria-hidden="true"
+																		><rect x="3" y="3" width="18" height="18" rx="2" /><circle
+																			cx="8.5"
+																			cy="8.5"
+																			r="1.5"
+																		/><path d="M21 15l-5-5L5 21" /></svg
+																	>
+																{/if}
+																<em>{studioSample(t).text}</em>
+															</span>
+														{/if}
+													</div>
+													<div class="studio-tile-body">
+														<div class="studio-tile-top">
+															<h4 class="studio-tile-title">{t.title}</h4>
+															<span class="studio-format studio-fmt-{t.surface}">
+																{t.surface === 'typographic'
+																	? 'TEXT'
+																	: t.surface === 'photo'
+																		? 'IMAGE'
+																		: 'VIDEO'}
+															</span>
+														</div>
+														<p class="studio-tile-tag">{t.tagline}</p>
+														<div class="studio-tile-meta">
+															<span class="studio-cost" title="Estimated generation cost"
+																>{meta.usd}</span
+															>
+															<span class="studio-time" title="Typical generation time"
+																>{meta.time}</span
+															>
+															<button
+																type="button"
+																class="btn-generate studio-use"
+																disabled={generatingPost}
+																onclick={() => useStudioTemplate(t)}
+															>
+																Use
+															</button>
+														</div>
+													</div>
+												</div>
+											{/each}
+										</div>
+									</div>
+								{/each}
+							</section>
+						{/if}
+					{/each}
+				</div>
+			{/if}
+		</div>
 	</div>
-</div>
 
-<!-- Post drawer + delete notice + media lightbox live at PAGE level, not inside a
+	<!-- Post drawer + delete notice + media lightbox live at PAGE level, not inside a
      tab branch. They used to be mounted only inside the Feed branch, so the
      Calendar lens set `modalPost` on click and nothing appeared — the drawer
      didn't exist in that subtree. Any tab can now open a post. -->
-<PostDrawer
-	post={modalPost}
-	onClose={() => (modalPost = null)}
-	onDelete={handleDeletePost}
-	onApprove={handleApprovePost}
-	onSaveText={handleSaveText}
-	onRefined={(p) => {
-		modalPost = p;
-		void loadFeed();
-	}}
-	{characterRef}
-	onPublishFallback={(p) => {
-		modalPost = null;
-		openPublishFallback(p);
-	}}
-	onPostNow={postNow}
-	posting={postingNowId === modalPost?.id}
-	approving={approvingPostId === modalPost?.id}
-	deleting={deletingPostId === modalPost?.id}
-/>
-{#if manualDeleteNotice}
-	<ManualDeleteNotice entries={manualDeleteNotice} onClose={() => (manualDeleteNotice = null)} />
-{/if}
-<ImageLightbox
-	url={postMediaLightbox?.url ?? null}
-	label={postMediaLightbox?.label ?? ''}
-	poster={postMediaLightbox?.poster ?? null}
-	onClose={() => (postMediaLightbox = null)}
-/>
+	<PostDrawer
+		post={modalPost}
+		onClose={() => (modalPost = null)}
+		onDelete={handleDeletePost}
+		onApprove={handleApprovePost}
+		onSaveText={handleSaveText}
+		onRefined={(p) => {
+			modalPost = p;
+			void loadFeed();
+		}}
+		{characterRef}
+		onPublishFallback={(p) => {
+			modalPost = null;
+			openPublishFallback(p);
+		}}
+		onPostNow={postNow}
+		posting={postingNowId === modalPost?.id}
+		approving={approvingPostId === modalPost?.id}
+		deleting={deletingPostId === modalPost?.id}
+	/>
+	{#if manualDeleteNotice}
+		<ManualDeleteNotice entries={manualDeleteNotice} onClose={() => (manualDeleteNotice = null)} />
+	{/if}
+	<ImageLightbox
+		url={postMediaLightbox?.url ?? null}
+		label={postMediaLightbox?.label ?? ''}
+		poster={postMediaLightbox?.poster ?? null}
+		onClose={() => (postMediaLightbox = null)}
+	/>
 
-<!-- Confirm-before-generate: resolves the REAL payload server-side, shows it
+	<!-- Confirm-before-generate: resolves the REAL payload server-side, shows it
      editable, and only runs what the user approved. Used by every generate action. -->
-<GenerationComposer
-	open={composerOpen}
-	spec={composerSpec}
-	onClose={() => (composerOpen = false)}
-	onConfirm={(body) => onComposerConfirm(body)}
-	onGoToConnections={() => {
-		composerOpen = false;
-		activeTab = 'profile';
-		profileView = 'connections';
-	}}
-/>
+	<GenerationComposer
+		open={composerOpen}
+		spec={composerSpec}
+		onClose={() => (composerOpen = false)}
+		onConfirm={(body) => onComposerConfirm(body)}
+		onGoToConnections={() => {
+			composerOpen = false;
+			activeTab = 'profile';
+			profileView = 'connections';
+		}}
+	/>
 
-<!-- Confirm-before-spend for the autopilot draft top-up — it generates one post per
+	<!-- Confirm-before-spend for the autopilot draft top-up — it generates one post per
      empty review slot, so it must be approved like every other generate action. -->
-{#if confirmDraftsOpen}
-	<div class="lightbox-backdrop" onclick={() => (confirmDraftsOpen = false)} role="presentation">
-		<div
-			class="confirm-card"
-			onclick={(e) => e.stopPropagation()}
-			role="dialog"
-			aria-modal="true"
-			aria-label="Generate drafts"
-			tabindex="-1"
-			use:dialog={{ onClose: () => (confirmDraftsOpen = false) }}
-		>
-			<h3>Generate drafts for {agent?.name}?</h3>
-			<p>
-				This fills the empty upcoming slots in the review queue with autopilot drafts — about
-				<strong>{postsPerDay}/day</strong> across active hours — and spends one generation
-				<strong>per draft</strong>. Nothing publishes: each lands in the
-				<a href="/review">review queue</a> for your approval.
-			</p>
-			<div class="confirm-actions">
-				<button type="button" class="btn-cancel" onclick={() => (confirmDraftsOpen = false)}>Cancel</button>
-				<button type="button" class="btn-generate" onclick={fillDraftsNow}>
-					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
-					Generate drafts
-				</button>
+	{#if confirmDraftsOpen}
+		<div class="lightbox-backdrop" onclick={() => (confirmDraftsOpen = false)} role="presentation">
+			<div
+				class="confirm-card"
+				onclick={(e) => e.stopPropagation()}
+				role="dialog"
+				aria-modal="true"
+				aria-label="Generate drafts"
+				tabindex="-1"
+				use:dialog={{ onClose: () => (confirmDraftsOpen = false) }}
+			>
+				<h3>Generate drafts for {agent?.name}?</h3>
+				<p>
+					This fills the empty upcoming slots in the review queue with autopilot drafts — about
+					<strong>{postsPerDay}/day</strong> across active hours — and spends one generation
+					<strong>per draft</strong>. Nothing publishes: each lands in the
+					<a href="/review">review queue</a> for your approval.
+				</p>
+				<div class="confirm-actions">
+					<button type="button" class="btn-cancel" onclick={() => (confirmDraftsOpen = false)}
+						>Cancel</button
+					>
+					<button type="button" class="btn-generate" onclick={fillDraftsNow}>
+						<svg
+							width="14"
+							height="14"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							aria-hidden="true"
+							><path d="M22 12h-6l-2 3h-4l-2-3H2" /><path
+								d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"
+							/></svg
+						>
+						Generate drafts
+					</button>
+				</div>
 			</div>
 		</div>
-	</div>
-{/if}
+	{/if}
 
-<!-- Expand a generated asset full-size, with Regenerate right where the user
+	<!-- Expand a generated asset full-size, with Regenerate right where the user
      is judging the result. -->
-<MediaPreviewModal
-	open={previewOpen}
-	url={previewUrl}
-	title={previewTitle}
-	regenerating={generatingAvatar || generatingKitStage !== null}
-	onRegenerate={previewRegenerate
-		? () => {
-				previewOpen = false;
-				previewRegenerate?.();
-			}
-		: null}
-	onClose={() => (previewOpen = false)}
-/>
+	<MediaPreviewModal
+		open={previewOpen}
+		url={previewUrl}
+		title={previewTitle}
+		regenerating={generatingAvatar || generatingKitStage !== null}
+		onRegenerate={previewRegenerate
+			? () => {
+					previewOpen = false;
+					previewRegenerate?.();
+				}
+			: null}
+		onClose={() => (previewOpen = false)}
+	/>
 
-{#if assetLightbox}
-	<div class="lightbox-backdrop" onclick={() => (assetLightbox = null)} role="presentation">
-		<div
-			class="lightbox-content"
-			onclick={(e) => e.stopPropagation()}
-			role="dialog"
-			aria-modal="true"
-			aria-label={assetLightbox.label}
-			tabindex="-1"
-			use:dialog={{ onClose: () => (assetLightbox = null) }}
-		>
-			{#if assetLightbox.type === 'video'}
-				<!-- svelte-ignore a11y_media_has_caption -->
-				<video src={assetLightbox.url} poster={assetLightbox.poster || undefined} controls playsinline use:playOnMount></video>
-			{:else}
-				<img src={assetLightbox.url} alt={assetLightbox.label} width="920" height="920" />
-			{/if}
-			<div class="lightbox-bar">
-				<span>{assetLightbox.label}</span>
-				<a href={assetLightbox.url} target="_blank" rel="noopener noreferrer">Open original<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6"/><path d="M10 14L21 3"/></svg><span class="sr-only">(opens in a new tab)</span></a>
-				<button type="button" onclick={() => (assetLightbox = null)}>Close</button>
+	{#if assetLightbox}
+		<div class="lightbox-backdrop" onclick={() => (assetLightbox = null)} role="presentation">
+			<div
+				class="lightbox-content"
+				onclick={(e) => e.stopPropagation()}
+				role="dialog"
+				aria-modal="true"
+				aria-label={assetLightbox.label}
+				tabindex="-1"
+				use:dialog={{ onClose: () => (assetLightbox = null) }}
+			>
+				{#if assetLightbox.type === 'video'}
+					<!-- svelte-ignore a11y_media_has_caption -->
+					<video
+						src={assetLightbox.url}
+						poster={assetLightbox.poster || undefined}
+						controls
+						playsinline
+						use:playOnMount
+					></video>
+				{:else}
+					<img src={assetLightbox.url} alt={assetLightbox.label} width="920" height="920" />
+				{/if}
+				<div class="lightbox-bar">
+					<span>{assetLightbox.label}</span>
+					<a href={assetLightbox.url} target="_blank" rel="noopener noreferrer"
+						>Open original<svg
+							width="12"
+							height="12"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							aria-hidden="true"
+							><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /><path
+								d="M15 3h6v6"
+							/><path d="M10 14L21 3" /></svg
+						><span class="sr-only">(opens in a new tab)</span></a
+					>
+					<button type="button" onclick={() => (assetLightbox = null)}>Close</button>
+				</div>
 			</div>
 		</div>
-	</div>
-{/if}
+	{/if}
 
-<!-- Reference-kit / profile-picture preview is rendered by <MediaPreviewModal>
+	<!-- Reference-kit / profile-picture preview is rendered by <MediaPreviewModal>
      above. A second hand-rolled lightbox used to live here bound to the same
      previewOpen flag, so both mounted at once — two stacked dialogs for one
      click. MediaPreviewModal already carries Open original + Regenerate, so the
      duplicate was removed rather than the shared component. -->
 
-<!-- Restore-from-history picker: every past generated image, click to re-pin
+	<!-- Restore-from-history picker: every past generated image, click to re-pin
      as this persona's profile picture. Nothing here is ever deleted. -->
-{#if restoreOpen}
-	<div class="lightbox-backdrop" onclick={() => (restoreOpen = false)} role="presentation">
-		<div
-			class="restore-modal"
-			onclick={(e) => e.stopPropagation()}
-			role="dialog"
-			aria-modal="true"
-			aria-label="Restore profile picture"
-			tabindex="-1"
-			use:dialog={{ onClose: () => (restoreOpen = false) }}
-		>
-			<div class="restore-head">
-				<div>
-					<h3>Restore a profile picture</h3>
-					<p>Every image ever generated for your account — click one to make it {agent?.name}'s face. Nothing is deleted.</p>
+	{#if restoreOpen}
+		<div class="lightbox-backdrop" onclick={() => (restoreOpen = false)} role="presentation">
+			<div
+				class="restore-modal"
+				onclick={(e) => e.stopPropagation()}
+				role="dialog"
+				aria-modal="true"
+				aria-label="Restore profile picture"
+				tabindex="-1"
+				use:dialog={{ onClose: () => (restoreOpen = false) }}
+			>
+				<div class="restore-head">
+					<div>
+						<h3>Restore a profile picture</h3>
+						<p>
+							Every image ever generated for your account — click one to make it {agent?.name}'s
+							face. Nothing is deleted.
+						</p>
+					</div>
+					<button
+						type="button"
+						class="restore-close"
+						onclick={() => (restoreOpen = false)}
+						aria-label="Close"
+						><svg
+							width="14"
+							height="14"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2.2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							aria-hidden="true"><path d="M18 6L6 18M6 6l12 12" /></svg
+						></button
+					>
 				</div>
-				<button type="button" class="restore-close" onclick={() => (restoreOpen = false)} aria-label="Close"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
-			</div>
-			{#if restoreLoading}
-				<div class="feed-loading" role="status" aria-live="polite"><span class="spinner" aria-hidden="true"></span> Loading your image history…</div>
-			{:else if restoreImages.length === 0}
-				<p class="field-hint" style="padding: 2rem; text-align: center;">No stored images found yet.</p>
-			{:else}
-				<div class="restore-grid">
-					{#each restoreImages as img (img.url)}
-						<button
-							type="button"
-							class="restore-tile"
-							class:current={img.url === characterRef}
-							onclick={() => restoreAvatar(img.url)}
-							disabled={restoringUrl !== null}
-							title={img.createdAt ?? img.name}
-						>
-							<img src={img.url} loading="lazy" width="200" height="200" alt="Generated image" />
-							{#if img.url === characterRef}
-								<span class="restore-badge">Current</span>
-							{:else if restoringUrl === img.url}
-								<span class="restore-badge">Restoring…</span>
-							{/if}
-						</button>
-					{/each}
-				</div>
-			{/if}
-		</div>
-	</div>
-{/if}
-
-<!-- Per-stage reference-kit restore: past generations of ONE stage (full body,
-     side profiles, close-up, feature grid), click to re-pin for that stage. -->
-{#if kitRestoreStage}
-	<div class="lightbox-backdrop" onclick={() => (kitRestoreStage = null)} role="presentation">
-		<div
-			class="restore-modal"
-			onclick={(e) => e.stopPropagation()}
-			role="dialog"
-			aria-modal="true"
-			aria-label="Restore reference-kit stage"
-			tabindex="-1"
-			use:dialog={{ onClose: () => (kitRestoreStage = null) }}
-		>
-			<div class="restore-head">
-				<div>
-					<h3>Restore {KIT_STAGE_RESTORE_LABELS[kitRestoreStage] ?? kitRestoreStage}</h3>
-					<p>
-						Re-pin a past image for this stage — from {agent?.name}'s past
-						{(KIT_STAGE_RESTORE_LABELS[kitRestoreStage] ?? kitRestoreStage).toLowerCase()} generations, or
-						from your full image library. Nothing is deleted.
-					</p>
-				</div>
-				<button type="button" class="restore-close" onclick={() => (kitRestoreStage = null)} aria-label="Close"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
-			</div>
-			<div class="restore-tabs" role="group" aria-label="Restore source">
-				<button
-					type="button"
-					class="restore-tab"
-					class:on={kitRestoreMode === 'stage'}
-					aria-pressed={kitRestoreMode === 'stage'}
-					onclick={() => setKitRestoreMode('stage')}>This stage ({kitRestoreImages.length})</button
-				>
-				<button
-					type="button"
-					class="restore-tab"
-					class:on={kitRestoreMode === 'all'}
-					aria-pressed={kitRestoreMode === 'all'}
-					onclick={() => setKitRestoreMode('all')}>All images</button
-				>
-			</div>
-
-			{#if kitRestoreMode === 'stage'}
-				{#if kitRestoreImages.length === 0}
+				{#if restoreLoading}
+					<div class="feed-loading" role="status" aria-live="polite">
+						<span class="spinner" aria-hidden="true"></span> Loading your image history…
+					</div>
+				{:else if restoreImages.length === 0}
 					<p class="field-hint" style="padding: 2rem; text-align: center;">
-						No tagged history for this stage yet — switch to “All images” to pick from any past
-						generation.
+						No stored images found yet.
 					</p>
 				{:else}
 					<div class="restore-grid">
-						{#each kitRestoreImages as url (url)}
-							<div class="restore-cell">
-								<button
-									type="button"
-									class="restore-tile"
-									class:current={url === referenceKit[kitRestoreStage]}
-									onclick={() => restoreKitStage(url)}
-									disabled={kitRestoringUrl !== null}
-								>
-									<img src={url} loading="lazy" width="200" height="200" alt="Past generation" />
-									{#if url === referenceKit[kitRestoreStage]}
-										<span class="restore-badge">Current</span>
-									{:else if kitRestoringUrl === url}
-										<span class="restore-badge">Restoring…</span>
-									{/if}
-								</button>
-								<!-- Prune a past generation you never want offered again. -->
-								<button
-									type="button"
-									class="restore-del"
-									title="Remove from this stage's history"
-									aria-label="Remove this photo from history"
-									disabled={kitRestoringUrl !== null}
-									onclick={() => kitRestoreStage && deleteKitHistoryImage(kitRestoreStage, url)}
-								>
-									<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
-								</button>
-							</div>
+						{#each restoreImages as img (img.url)}
+							<button
+								type="button"
+								class="restore-tile"
+								class:current={img.url === characterRef}
+								onclick={() => restoreAvatar(img.url)}
+								disabled={restoringUrl !== null}
+								title={img.createdAt ?? img.name}
+							>
+								<img src={img.url} loading="lazy" width="200" height="200" alt="Generated image" />
+								{#if img.url === characterRef}
+									<span class="restore-badge">Current</span>
+								{:else if restoringUrl === img.url}
+									<span class="restore-badge">Restoring…</span>
+								{/if}
+							</button>
 						{/each}
 					</div>
 				{/if}
-			{:else if kitRestoreLoadingAll}
-				<div class="feed-loading" role="status" aria-live="polite"><span class="spinner" aria-hidden="true"></span> Loading your image library…</div>
-			{:else if kitRestoreAll.length === 0}
-				<p class="field-hint" style="padding: 2rem; text-align: center;">No stored images found yet.</p>
-			{:else}
-				<div class="restore-grid">
-					{#each kitRestoreAll as img (img.url)}
+			</div>
+		</div>
+	{/if}
+
+	<!-- Per-stage reference-kit restore: past generations of ONE stage (full body,
+     side profiles, close-up, feature grid), click to re-pin for that stage. -->
+	{#if kitRestoreStage}
+		<div class="lightbox-backdrop" onclick={() => (kitRestoreStage = null)} role="presentation">
+			<div
+				class="restore-modal"
+				onclick={(e) => e.stopPropagation()}
+				role="dialog"
+				aria-modal="true"
+				aria-label="Restore reference-kit stage"
+				tabindex="-1"
+				use:dialog={{ onClose: () => (kitRestoreStage = null) }}
+			>
+				<div class="restore-head">
+					<div>
+						<h3>Restore {KIT_STAGE_RESTORE_LABELS[kitRestoreStage] ?? kitRestoreStage}</h3>
+						<p>
+							Re-pin a past image for this stage — from {agent?.name}'s past
+							{(KIT_STAGE_RESTORE_LABELS[kitRestoreStage] ?? kitRestoreStage).toLowerCase()} generations,
+							or from your full image library. Nothing is deleted.
+						</p>
+					</div>
+					<button
+						type="button"
+						class="restore-close"
+						onclick={() => (kitRestoreStage = null)}
+						aria-label="Close"
+						><svg
+							width="14"
+							height="14"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2.2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							aria-hidden="true"><path d="M18 6L6 18M6 6l12 12" /></svg
+						></button
+					>
+				</div>
+				<div class="restore-tabs" role="group" aria-label="Restore source">
+					<button
+						type="button"
+						class="restore-tab"
+						class:on={kitRestoreMode === 'stage'}
+						aria-pressed={kitRestoreMode === 'stage'}
+						onclick={() => setKitRestoreMode('stage')}
+						>This stage ({kitRestoreImages.length})</button
+					>
+					<button
+						type="button"
+						class="restore-tab"
+						class:on={kitRestoreMode === 'all'}
+						aria-pressed={kitRestoreMode === 'all'}
+						onclick={() => setKitRestoreMode('all')}>All images</button
+					>
+				</div>
+
+				{#if kitRestoreMode === 'stage'}
+					{#if kitRestoreImages.length === 0}
+						<p class="field-hint" style="padding: 2rem; text-align: center;">
+							No tagged history for this stage yet — switch to “All images” to pick from any past
+							generation.
+						</p>
+					{:else}
+						<div class="restore-grid">
+							{#each kitRestoreImages as url (url)}
+								<div class="restore-cell">
+									<button
+										type="button"
+										class="restore-tile"
+										class:current={url === referenceKit[kitRestoreStage]}
+										onclick={() => restoreKitStage(url)}
+										disabled={kitRestoringUrl !== null}
+									>
+										<img src={url} loading="lazy" width="200" height="200" alt="Past generation" />
+										{#if url === referenceKit[kitRestoreStage]}
+											<span class="restore-badge">Current</span>
+										{:else if kitRestoringUrl === url}
+											<span class="restore-badge">Restoring…</span>
+										{/if}
+									</button>
+									<!-- Prune a past generation you never want offered again. -->
+									<button
+										type="button"
+										class="restore-del"
+										title="Remove from this stage's history"
+										aria-label="Remove this photo from history"
+										disabled={kitRestoringUrl !== null}
+										onclick={() => kitRestoreStage && deleteKitHistoryImage(kitRestoreStage, url)}
+									>
+										<svg
+											width="12"
+											height="12"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2.2"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											aria-hidden="true"><path d="M18 6L6 18M6 6l12 12" /></svg
+										>
+									</button>
+								</div>
+							{/each}
+						</div>
+					{/if}
+				{:else if kitRestoreLoadingAll}
+					<div class="feed-loading" role="status" aria-live="polite">
+						<span class="spinner" aria-hidden="true"></span> Loading your image library…
+					</div>
+				{:else if kitRestoreAll.length === 0}
+					<p class="field-hint" style="padding: 2rem; text-align: center;">
+						No stored images found yet.
+					</p>
+				{:else}
+					<div class="restore-grid">
+						{#each kitRestoreAll as img (img.url)}
+							<button
+								type="button"
+								class="restore-tile"
+								class:current={img.url === referenceKit[kitRestoreStage]}
+								onclick={() => restoreKitStage(img.url)}
+								disabled={kitRestoringUrl !== null}
+							>
+								<img src={img.url} loading="lazy" width="200" height="200" alt="Library image" />
+								{#if img.url === referenceKit[kitRestoreStage]}
+									<span class="restore-badge">Current</span>
+								{:else if kitRestoringUrl === img.url}
+									<span class="restore-badge">Restoring…</span>
+								{/if}
+							</button>
+						{/each}
+					</div>
+				{/if}
+			</div>
+		</div>
+	{/if}
+
+	<!-- Publish an already-generated post to a connected platform. Media is ready;
+     only publishing failed. User picks where — no auto-retry. -->
+	{#if publishFallbackPost}
+		<div class="lightbox-backdrop" onclick={() => (publishFallbackPost = null)} role="presentation">
+			<div
+				class="restore-modal pubfb-modal"
+				onclick={(e) => e.stopPropagation()}
+				role="dialog"
+				aria-modal="true"
+				aria-label="Publish to a connected platform"
+				tabindex="-1"
+				use:dialog={{ onClose: () => (publishFallbackPost = null) }}
+			>
+				<div class="restore-head">
+					<div>
+						<h3>Publish to a connected platform</h3>
+						<p>
+							This post's media is ready — only publishing failed. Pick where to send it. Only
+							connected, compatible platforms are shown, and nothing auto-retries.
+						</p>
+					</div>
+					<button
+						type="button"
+						class="restore-close"
+						onclick={() => (publishFallbackPost = null)}
+						aria-label="Close"
+						><svg
+							width="14"
+							height="14"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2.2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							aria-hidden="true"><path d="M18 6L6 18M6 6l12 12" /></svg
+						></button
+					>
+				</div>
+				{#if publishFallbackLoading}
+					<div class="feed-loading" role="status" aria-live="polite">
+						<span class="spinner" aria-hidden="true"></span> Checking your connections…
+					</div>
+				{:else if publishFallbackOptions.length === 0}
+					<div class="pubfb-empty">
+						<p>No connected account can accept this post yet — connect a platform first.</p>
 						<button
 							type="button"
-							class="restore-tile"
-							class:current={img.url === referenceKit[kitRestoreStage]}
-							onclick={() => restoreKitStage(img.url)}
-							disabled={kitRestoringUrl !== null}
+							class="btn-sync"
+							onclick={() => {
+								publishFallbackPost = null;
+								activeTab = 'profile';
+								profileView = 'connections';
+							}}
+							>Go to Connections <svg
+								width="13"
+								height="13"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								aria-hidden="true"><path d="M5 12h14" /><path d="M12 5l7 7-7 7" /></svg
+							></button
 						>
-							<img src={img.url} loading="lazy" width="200" height="200" alt="Library image" />
-							{#if img.url === referenceKit[kitRestoreStage]}
-								<span class="restore-badge">Current</span>
-							{:else if kitRestoringUrl === img.url}
-								<span class="restore-badge">Restoring…</span>
+					</div>
+				{:else}
+					<div class="pubfb-chips">
+						{#each publishFallbackOptions as p}
+							<button
+								type="button"
+								class="pubfb-chip"
+								class:on={publishFallbackSelected.includes(p)}
+								aria-pressed={publishFallbackSelected.includes(p)}
+								onclick={() => togglePublishFallback(p)}>{p}</button
+							>
+						{/each}
+					</div>
+					<div class="pubfb-actions">
+						<button
+							type="button"
+							class="btn-primary-cta"
+							disabled={publishFallbackPublishing || publishFallbackSelected.length === 0}
+							onclick={confirmPublishFallback}
+						>
+							{#if publishFallbackPublishing}
+								<span class="spinner-sm" aria-hidden="true"></span> Publishing…
+							{:else}
+								Publish now
 							{/if}
 						</button>
-					{/each}
-				</div>
-			{/if}
-		</div>
-	</div>
-{/if}
-
-<!-- Publish an already-generated post to a connected platform. Media is ready;
-     only publishing failed. User picks where — no auto-retry. -->
-{#if publishFallbackPost}
-	<div class="lightbox-backdrop" onclick={() => (publishFallbackPost = null)} role="presentation">
-		<div
-			class="restore-modal pubfb-modal"
-			onclick={(e) => e.stopPropagation()}
-			role="dialog"
-			aria-modal="true"
-			aria-label="Publish to a connected platform"
-			tabindex="-1"
-			use:dialog={{ onClose: () => (publishFallbackPost = null) }}
-		>
-			<div class="restore-head">
-				<div>
-					<h3>Publish to a connected platform</h3>
-					<p>
-						This post's media is ready — only publishing failed. Pick where to send it. Only
-						connected, compatible platforms are shown, and nothing auto-retries.
-					</p>
-				</div>
-				<button type="button" class="restore-close" onclick={() => (publishFallbackPost = null)} aria-label="Close"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+					</div>
+				{/if}
 			</div>
-			{#if publishFallbackLoading}
-				<div class="feed-loading" role="status" aria-live="polite"><span class="spinner" aria-hidden="true"></span> Checking your connections…</div>
-			{:else if publishFallbackOptions.length === 0}
-				<div class="pubfb-empty">
-					<p>No connected account can accept this post yet — connect a platform first.</p>
-					<button
-						type="button"
-						class="btn-sync"
-						onclick={() => {
-							publishFallbackPost = null;
-							activeTab = 'profile';
-							profileView = 'connections';
-						}}>Go to Connections <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg></button
-					>
-				</div>
-			{:else}
-				<div class="pubfb-chips">
-					{#each publishFallbackOptions as p}
-						<button
-							type="button"
-							class="pubfb-chip"
-							class:on={publishFallbackSelected.includes(p)}
-							aria-pressed={publishFallbackSelected.includes(p)}
-							onclick={() => togglePublishFallback(p)}>{p}</button
-						>
-					{/each}
-				</div>
-				<div class="pubfb-actions">
-					<button
-						type="button"
-						class="btn-primary-cta"
-						disabled={publishFallbackPublishing || publishFallbackSelected.length === 0}
-						onclick={confirmPublishFallback}
-					>
-						{#if publishFallbackPublishing}
-							<span class="spinner-sm" aria-hidden="true"></span> Publishing…
-						{:else}
-							Publish now
-						{/if}
-					</button>
-				</div>
-			{/if}
 		</div>
-	</div>
-{/if}
+	{/if}
 {/if}
 
 <style>
@@ -5180,7 +6742,9 @@
 		cursor: pointer;
 		background: var(--surface-2);
 		aspect-ratio: 1;
-		transition: border-color 0.15s ease, transform 0.15s ease;
+		transition:
+			border-color 0.15s ease,
+			transform 0.15s ease;
 	}
 	.restore-tile:hover:not(:disabled) {
 		border-color: var(--accent);
@@ -5232,7 +6796,9 @@
 		font-size: 0.85rem;
 		text-transform: capitalize;
 		cursor: pointer;
-		transition: background 0.15s, border-color 0.15s;
+		transition:
+			background 0.15s,
+			border-color 0.15s;
 		min-height: 44px;
 	}
 	.pubfb-chip.on {
@@ -5641,7 +7207,9 @@
 		font-weight: 600;
 		padding: 0.45rem 0.9rem;
 		cursor: pointer;
-		transition: background 0.15s ease, color 0.15s ease;
+		transition:
+			background 0.15s ease,
+			color 0.15s ease;
 		min-height: 44px;
 	}
 
@@ -5808,7 +7376,9 @@
 		background: var(--surface);
 		cursor: pointer;
 		aspect-ratio: 1;
-		transition: border-color 0.15s ease, transform 0.15s ease;
+		transition:
+			border-color 0.15s ease,
+			transform 0.15s ease;
 	}
 
 	.asset-tile:hover {
@@ -6001,7 +7571,7 @@
 		color: #fff;
 		flex-shrink: 0;
 		overflow: hidden;
-		box-shadow: 0 6px 24px rgba(0,0,0,0.4);
+		box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4);
 		border: 3px solid var(--surface);
 	}
 
@@ -6084,7 +7654,10 @@
 		color: var(--text-dim);
 		cursor: pointer;
 		flex-shrink: 0;
-		transition: color 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+		transition:
+			color 0.15s ease,
+			border-color 0.15s ease,
+			transform 0.15s ease;
 	}
 
 	/* 44px tap area without growing the 30px chip. */
@@ -6124,8 +7697,13 @@
 		flex-wrap: wrap;
 	}
 
-	.hero-sep { color: var(--border-strong); }
-	.hero-niche { color: var(--accent-text); font-weight: 600; }
+	.hero-sep {
+		color: var(--border-strong);
+	}
+	.hero-niche {
+		color: var(--accent-text);
+		font-weight: 600;
+	}
 
 	.hero-stats {
 		display: flex;
@@ -6218,7 +7796,7 @@
 		min-width: 180px;
 	}
 
-	.age-slider-group input[type="range"] {
+	.age-slider-group input[type='range'] {
 		flex: 1;
 	}
 
@@ -6329,7 +7907,8 @@
 	}
 
 	/* ── Feed ── */
-	.feed-tab {}
+	.feed-tab {
+	}
 
 	.feed-toolbar {
 		display: flex;
@@ -6377,9 +7956,15 @@
 		animation: filter-alert-pulse 2s ease-out infinite;
 	}
 	@keyframes filter-alert-pulse {
-		0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--error) 55%, transparent); }
-		70% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--error) 0%, transparent); }
-		100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--error) 0%, transparent); }
+		0% {
+			box-shadow: 0 0 0 0 color-mix(in srgb, var(--error) 55%, transparent);
+		}
+		70% {
+			box-shadow: 0 0 0 6px color-mix(in srgb, var(--error) 0%, transparent);
+		}
+		100% {
+			box-shadow: 0 0 0 0 color-mix(in srgb, var(--error) 0%, transparent);
+		}
 	}
 
 	.filter-select {
@@ -6413,12 +7998,20 @@
 		font-size: 0.82rem;
 		font-weight: 600;
 		cursor: pointer;
-		transition: opacity 0.15s ease, transform 0.15s ease;
+		transition:
+			opacity 0.15s ease,
+			transform 0.15s ease;
 		min-height: 44px;
 	}
 
-	.btn-generate:hover:not(:disabled) { opacity: 0.9; transform: translateY(-1px); }
-	.btn-generate:disabled { opacity: 0.6; cursor: not-allowed; }
+	.btn-generate:hover:not(:disabled) {
+		opacity: 0.9;
+		transform: translateY(-1px);
+	}
+	.btn-generate:disabled {
+		opacity: 0.6;
+		cursor: not-allowed;
+	}
 
 	.btn-sync {
 		display: inline-flex;
@@ -6436,8 +8029,14 @@
 		min-height: 44px;
 	}
 
-	.btn-sync:hover:not(:disabled) { border-color: var(--accent-mid); color: var(--text); }
-	.btn-sync:disabled { opacity: 0.6; cursor: not-allowed; }
+	.btn-sync:hover:not(:disabled) {
+		border-color: var(--accent-mid);
+		color: var(--text);
+	}
+	.btn-sync:disabled {
+		opacity: 0.6;
+		cursor: not-allowed;
+	}
 
 	.feed-empty-actions {
 		display: flex;
@@ -6446,7 +8045,8 @@
 		justify-content: center;
 	}
 
-	.feed-loading, .feed-empty {
+	.feed-loading,
+	.feed-empty {
 		display: flex;
 		flex-direction: column;
 		align-items: center;
@@ -6457,9 +8057,21 @@
 		gap: 0.75rem;
 	}
 
-	.feed-empty .empty-icon { color: var(--text-dim); line-height: 0; }
-	.feed-empty h2 { font-size: 1rem; font-weight: 600; color: var(--text); margin: 0; }
-	.feed-empty p { font-size: 0.82rem; max-width: 340px; margin: 0; }
+	.feed-empty .empty-icon {
+		color: var(--text-dim);
+		line-height: 0;
+	}
+	.feed-empty h2 {
+		font-size: 1rem;
+		font-weight: 600;
+		color: var(--text);
+		margin: 0;
+	}
+	.feed-empty p {
+		font-size: 0.82rem;
+		max-width: 340px;
+		margin: 0;
+	}
 
 	/* Uniform asset-style tile grid (the masonry/mosaic columns are retired —
 	   cards now match the Assets tab's clean, equal-sized tile look). */
@@ -6633,7 +8245,9 @@
 		gap: 0.4rem;
 	}
 
-	.col-span-2 { grid-column: span 2; }
+	.col-span-2 {
+		grid-column: span 2;
+	}
 
 	/* `.field-label` is the same treatment for group captions that have no single
 	   control to point a <label for> at (chip groups, media pickers, chip lists). */
@@ -6646,8 +8260,8 @@
 		color: var(--text-dim);
 	}
 
-	.field-group input[type="text"],
-	.field-group input[type="url"],
+	.field-group input[type='text'],
+	.field-group input[type='url'],
 	.field-group select,
 	.field-input,
 	.field-group textarea {
@@ -6660,7 +8274,9 @@
 		/* 1rem minimum — anything smaller makes iOS Safari zoom on focus (§8). */
 		font-size: 1rem;
 		outline: none;
-		transition: border-color 0.2s ease, box-shadow 0.2s ease;
+		transition:
+			border-color 0.2s ease,
+			box-shadow 0.2s ease;
 		width: 100%;
 		box-sizing: border-box;
 		min-height: 44px;
@@ -6678,7 +8294,9 @@
 		border-color: var(--error);
 	}
 
-	.field-group textarea { resize: vertical; }
+	.field-group textarea {
+		resize: vertical;
+	}
 
 	.field-hint {
 		font-size: 0.72rem;
@@ -6894,7 +8512,9 @@
 
 	.kit-stage-thumb.clickable {
 		cursor: zoom-in;
-		transition: border-color 0.15s ease, transform 0.15s ease;
+		transition:
+			border-color 0.15s ease,
+			transform 0.15s ease;
 	}
 
 	.kit-stage-thumb.clickable:hover {
@@ -6919,7 +8539,9 @@
 		padding: 0.45rem 0.9rem;
 		cursor: pointer;
 		color: var(--text-muted);
-		transition: border-color 0.15s, color 0.15s;
+		transition:
+			border-color 0.15s,
+			color 0.15s;
 		min-height: 44px;
 	}
 
@@ -6969,7 +8591,10 @@
 		border-radius: 10px;
 		border: 3px solid transparent;
 		cursor: pointer;
-		transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+		transition:
+			transform 0.15s ease,
+			border-color 0.15s ease,
+			box-shadow 0.15s ease;
 		outline: none;
 	}
 
@@ -6978,7 +8603,9 @@
 		box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 40%, transparent);
 	}
 
-	.gradient-swatch:hover { transform: scale(1.1); }
+	.gradient-swatch:hover {
+		transform: scale(1.1);
+	}
 
 	.gradient-preview {
 		width: 40px;
@@ -7006,7 +8633,7 @@
 		flex-shrink: 0;
 	}
 
-	.slider-row input[type="range"] {
+	.slider-row input[type='range'] {
 		flex: 1;
 		accent-color: var(--accent);
 	}
@@ -7038,7 +8665,8 @@
 		margin-top: 18px;
 	}
 
-	.autonomy-cards, .source-cards {
+	.autonomy-cards,
+	.source-cards {
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 		gap: 1rem;
@@ -7064,7 +8692,11 @@
 		background: var(--accent-soft);
 	}
 
-	.autonomy-radio { grid-column: 1; grid-row: 1 / 3; align-self: center; }
+	.autonomy-radio {
+		grid-column: 1;
+		grid-row: 1 / 3;
+		align-self: center;
+	}
 
 	.radio-outer {
 		width: 16px;
@@ -7077,7 +8709,9 @@
 		transition: border-color 0.15s ease;
 	}
 
-	.autonomy-card.selected .radio-outer { border-color: var(--accent); }
+	.autonomy-card.selected .radio-outer {
+		border-color: var(--accent);
+	}
 
 	.radio-inner {
 		width: 8px;
@@ -7086,9 +8720,28 @@
 		background: var(--accent);
 	}
 
-	.autonomy-icon { grid-column: 2; grid-row: 1; display: inline-flex; align-items: center; color: var(--text-muted); }
-	.autonomy-label { grid-column: 3; grid-row: 1; font-size: 0.85rem; font-weight: 600; color: var(--text); }
-	.autonomy-desc { grid-column: 2 / 4; grid-row: 2; font-size: 0.75rem; color: var(--text-dim); margin: 0; line-height: 1.4; }
+	.autonomy-icon {
+		grid-column: 2;
+		grid-row: 1;
+		display: inline-flex;
+		align-items: center;
+		color: var(--text-muted);
+	}
+	.autonomy-label {
+		grid-column: 3;
+		grid-row: 1;
+		font-size: 0.85rem;
+		font-weight: 600;
+		color: var(--text);
+	}
+	.autonomy-desc {
+		grid-column: 2 / 4;
+		grid-row: 2;
+		font-size: 0.75rem;
+		color: var(--text-dim);
+		margin: 0;
+		line-height: 1.4;
+	}
 
 	/* ── Confirm + editor modals / structured skills & tools ── */
 	.gen-confirm-overlay {
@@ -7110,10 +8763,26 @@
 		max-height: 90dvh;
 		overflow-y: auto;
 	}
-	.gen-confirm h3 { margin: 0 0 0.9rem; }
-	.editor-modal { width: min(620px, 100%); display: flex; flex-direction: column; gap: 0.9rem; }
-	.gc-rows { display: flex; flex-direction: column; gap: 0.55rem; margin-bottom: 1rem; }
-	.gc-row { display: flex; gap: 0.75rem; font-size: var(--text-sm); }
+	.gen-confirm h3 {
+		margin: 0 0 0.9rem;
+	}
+	.editor-modal {
+		width: min(620px, 100%);
+		display: flex;
+		flex-direction: column;
+		gap: 0.9rem;
+	}
+	.gc-rows {
+		display: flex;
+		flex-direction: column;
+		gap: 0.55rem;
+		margin-bottom: 1rem;
+	}
+	.gc-row {
+		display: flex;
+		gap: 0.75rem;
+		font-size: var(--text-sm);
+	}
 	.gc-label {
 		flex: 0 0 88px;
 		color: var(--text-dim);
@@ -7131,7 +8800,11 @@
 		margin-bottom: 1rem;
 		cursor: pointer;
 	}
-	.gc-actions { display: flex; justify-content: flex-end; gap: 0.6rem; }
+	.gc-actions {
+		display: flex;
+		justify-content: flex-end;
+		gap: 0.6rem;
+	}
 	.label-row {
 		display: flex;
 		align-items: center;
@@ -7157,7 +8830,11 @@
 		height: 44px;
 		transform: translateY(-50%);
 	}
-	.item-chips { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+	.item-chips {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+	}
 	.item-chip {
 		display: inline-flex;
 		align-items: center;
@@ -7172,7 +8849,9 @@
 		transition: border-color 0.15s ease;
 		min-height: 44px;
 	}
-	.item-chip:hover { border-color: var(--accent-mid); }
+	.item-chip:hover {
+		border-color: var(--accent-mid);
+	}
 	.chip-kind {
 		font-size: 10px;
 		text-transform: uppercase;
@@ -7182,13 +8861,26 @@
 		border-radius: 999px;
 		padding: 1px 6px;
 	}
-	.editor-modal .mono { font-family: var(--font-mono, monospace); font-size: 1rem; }
-	.opt { font-weight: 400; color: var(--text-dim); font-size: var(--text-xs); }
-	.composer-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.9rem; }
+	.editor-modal .mono {
+		font-family: var(--font-mono, monospace);
+		font-size: 1rem;
+	}
+	.opt {
+		font-weight: 400;
+		color: var(--text-dim);
+		font-size: var(--text-xs);
+	}
+	.composer-grid-2 {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 0.9rem;
+	}
 	/* Inside the generate/editor modal these paired fields hit ~150px each on a
 	   phone — stack them. */
 	@media (max-width: 640px) {
-		.composer-grid-2 { grid-template-columns: 1fr; }
+		.composer-grid-2 {
+			grid-template-columns: 1fr;
+		}
 	}
 	.composer-advanced summary {
 		cursor: pointer;
@@ -7196,7 +8888,9 @@
 		color: var(--text-dim);
 		margin: 0.25rem 0 0.75rem;
 	}
-	.composer-advanced .field-group { margin-bottom: 0.75rem; }
+	.composer-advanced .field-group {
+		margin-bottom: 0.75rem;
+	}
 	.btn-danger-ghost {
 		margin-right: auto;
 		padding: 0.5rem 0.9rem;
@@ -7293,7 +8987,10 @@
 		min-height: 44px;
 	}
 
-	.btn-save:disabled { opacity: 0.6; cursor: not-allowed; }
+	.btn-save:disabled {
+		opacity: 0.6;
+		cursor: not-allowed;
+	}
 
 	.danger-zone {
 		background: color-mix(in srgb, var(--danger) 4%, transparent);
@@ -7336,7 +9033,8 @@
 	}
 
 	/* ── Connections ── */
-	.connections-tab {}
+	.connections-tab {
+	}
 
 	.conn-summary {
 		display: flex;
@@ -7486,7 +9184,10 @@
 		background: var(--accent-soft);
 	}
 
-	.btn-connect-inline:disabled { opacity: 0.5; cursor: not-allowed; }
+	.btn-connect-inline:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
 
 	.conn-empty {
 		display: flex;
@@ -7502,7 +9203,10 @@
 		font-size: 0.85rem;
 	}
 
-	.conn-empty span { display: inline-flex; line-height: 0; }
+	.conn-empty span {
+		display: inline-flex;
+		line-height: 0;
+	}
 
 	.platforms-grid {
 		display: grid;
@@ -7530,7 +9234,7 @@
 		width: 36px;
 		height: 36px;
 		border-radius: 8px;
-		background: rgba(255,255,255,0.04);
+		background: rgba(255, 255, 255, 0.04);
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -7559,8 +9263,16 @@
 		border-radius: 999px;
 	}
 
-	.conn-badge.error { color: var(--error-text); background: color-mix(in srgb, var(--error) 10%, transparent); border: 1px solid color-mix(in srgb, var(--error) 30%, transparent); }
-	.conn-badge.warn { color: var(--warning-text); background: color-mix(in srgb, var(--warning) 10%, transparent); border: 1px solid color-mix(in srgb, var(--warning) 30%, transparent); }
+	.conn-badge.error {
+		color: var(--error-text);
+		background: color-mix(in srgb, var(--error) 10%, transparent);
+		border: 1px solid color-mix(in srgb, var(--error) 30%, transparent);
+	}
+	.conn-badge.warn {
+		color: var(--warning-text);
+		background: color-mix(in srgb, var(--warning) 10%, transparent);
+		border: 1px solid color-mix(in srgb, var(--warning) 30%, transparent);
+	}
 
 	.btn-collapse {
 		background: none;
@@ -7571,12 +9283,16 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		transition: color 0.15s ease, transform 0.2s ease;
+		transition:
+			color 0.15s ease,
+			transform 0.2s ease;
 		min-width: 44px;
 		min-height: 44px;
 	}
 
-	.btn-collapse:hover { color: var(--text); }
+	.btn-collapse:hover {
+		color: var(--text);
+	}
 
 	.platform-body {
 		padding: 1rem 1.1rem;
@@ -7631,7 +9347,9 @@
 		min-height: 44px;
 	}
 
-	.btn-star:hover { transform: scale(1.2); }
+	.btn-star:hover {
+		transform: scale(1.2);
+	}
 
 	.last-sync {
 		font-size: 0.72rem;
@@ -7704,7 +9422,11 @@
 		margin-bottom: 0.75rem;
 	}
 
-	@keyframes spin { to { transform: rotate(360deg); } }
+	@keyframes spin {
+		to {
+			transform: rotate(360deg);
+		}
+	}
 
 	.btn-primary {
 		display: inline-flex;
@@ -7765,7 +9487,10 @@
 		white-space: pre-line;
 	}
 
-	.hero-bio-empty { font-style: italic; color: var(--text-dim); }
+	.hero-bio-empty {
+		font-style: italic;
+		color: var(--text-dim);
+	}
 
 	.kit-copy-btn {
 		flex-shrink: 0;
@@ -7784,8 +9509,14 @@
 		transition: all 0.15s ease;
 		min-height: 44px;
 	}
-	.kit-copy-btn:hover:not(:disabled) { border-color: var(--accent-mid); color: var(--text); }
-	.kit-copy-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+	.kit-copy-btn:hover:not(:disabled) {
+		border-color: var(--accent-mid);
+		color: var(--text);
+	}
+	.kit-copy-btn:disabled {
+		opacity: 0.6;
+		cursor: not-allowed;
+	}
 
 	.hero-handle-chip {
 		flex-shrink: 0;
@@ -7812,7 +9543,9 @@
 		margin-left: auto;
 		margin-right: 0.6rem;
 	}
-	.kit-save-state.error { color: var(--error-text); }
+	.kit-save-state.error {
+		color: var(--error-text);
+	}
 
 	.kit-bio-controls {
 		display: flex;
@@ -7825,9 +9558,14 @@
 		align-items: center;
 		gap: 0.5rem;
 	}
-	.kit-inline input { flex: 1; min-width: 0; }
+	.kit-inline input {
+		flex: 1;
+		min-width: 0;
+	}
 
-	.kit-add-row { margin-top: 0.6rem; }
+	.kit-add-row {
+		margin-top: 0.6rem;
+	}
 
 	.kit-avatar-row {
 		display: flex;
@@ -7865,7 +9603,9 @@
 		color: var(--text-dim);
 	}
 
-	.kit-candidate.confirmed { border-color: color-mix(in srgb, var(--success) 50%, transparent); }
+	.kit-candidate.confirmed {
+		border-color: color-mix(in srgb, var(--success) 50%, transparent);
+	}
 
 	.kit-candidate-handle {
 		font-weight: 600;
@@ -7921,8 +9661,13 @@
 		border-color: var(--accent-mid);
 		color: var(--text);
 	}
-	.kit-candidate-actions button:disabled { opacity: 0.45; cursor: not-allowed; }
-	.kit-use-btn { font-weight: 600; }
+	.kit-candidate-actions button:disabled {
+		opacity: 0.45;
+		cursor: not-allowed;
+	}
+	.kit-use-btn {
+		font-weight: 600;
+	}
 	.kit-candidate-actions .kit-del-btn:hover:not(:disabled) {
 		border-color: var(--error);
 		color: var(--error-text);
@@ -7961,7 +9706,10 @@
 		line-height: 1;
 		cursor: pointer;
 		opacity: 0;
-		transition: opacity 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+		transition:
+			opacity 0.15s ease,
+			border-color 0.15s ease,
+			color 0.15s ease;
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
@@ -8000,9 +9748,14 @@
 		font-variant-numeric: tabular-nums;
 	}
 	/* Over the platform's limit — the ONE thing that must not be missed before pasting. */
-	.kit-bio-count.over { color: var(--error-text); font-weight: 700; }
+	.kit-bio-count.over {
+		color: var(--error-text);
+		font-weight: 700;
+	}
 
-	.kit-confirmed-row { margin-top: 0.6rem; }
+	.kit-confirmed-row {
+		margin-top: 0.6rem;
+	}
 
 	.kit-at {
 		color: var(--text-dim);
@@ -8026,16 +9779,41 @@
 
 	/* ── Mobile ── */
 	@media (max-width: 640px) {
-		.persona-hero { gap: 1rem; }
-		.hero-stats { display: none; }
-		.hero-identity { flex-wrap: wrap; padding: 0.65rem 1rem; }
-		.hero-bio { flex-basis: 100%; order: 3; }
-		.fields-grid { grid-template-columns: 1fr; }
-		.col-span-2 { grid-column: span 1; }
-		.platforms-grid { grid-template-columns: 1fr; }
-		.feed-toolbar { flex-direction: column; align-items: stretch; }
-		.feed-actions { justify-content: flex-end; }
-		.tab-nav-name { display: none; }
-		.post-mosaic { grid-template-columns: 1fr; }
+		.persona-hero {
+			gap: 1rem;
+		}
+		.hero-stats {
+			display: none;
+		}
+		.hero-identity {
+			flex-wrap: wrap;
+			padding: 0.65rem 1rem;
+		}
+		.hero-bio {
+			flex-basis: 100%;
+			order: 3;
+		}
+		.fields-grid {
+			grid-template-columns: 1fr;
+		}
+		.col-span-2 {
+			grid-column: span 1;
+		}
+		.platforms-grid {
+			grid-template-columns: 1fr;
+		}
+		.feed-toolbar {
+			flex-direction: column;
+			align-items: stretch;
+		}
+		.feed-actions {
+			justify-content: flex-end;
+		}
+		.tab-nav-name {
+			display: none;
+		}
+		.post-mosaic {
+			grid-template-columns: 1fr;
+		}
 	}
 </style>

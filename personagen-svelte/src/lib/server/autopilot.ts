@@ -18,6 +18,8 @@ import { env } from '$env/dynamic/private';
 import { getServiceSupabase } from './service-supabase';
 import { generateUgcPack, generateCinematicUgcPack } from './content/generate';
 import { VIDEO_ONLY_PLATFORMS } from './social/platforms';
+import { loadRegistry, effectiveResolve, type RegistryRow } from './model-registry';
+import type { UgcPackInput } from './content/generate';
 
 const DEFAULT_TZ = 'Australia/Sydney';
 
@@ -182,6 +184,25 @@ async function generateDraftsForAgent(
 	const status =
 		hasConnections && cfg.autonomy_level === 'fully_autonomous' ? 'scheduled' : 'draft';
 
+	// Model Manager parity: autopilot must run the SAME registry-resolved video
+	// model (and bill the manager's price) that every composer preview shows.
+	// Without this, a user who stars Veo sees Veo in every preview and silently
+	// gets the static catalog default on every autopilot post. Registry
+	// unreachable → static catalog, same never-brick rule as generate-post.
+	let registryRows: RegistryRow[] = [];
+	try {
+		registryRows = await loadRegistry(supabase, userId);
+	} catch (e) {
+		console.error('[Autopilot] Registry unavailable, using static catalog:', e);
+	}
+	const videoModelResolved = effectiveResolve(registryRows, 'video_i2v', undefined);
+	const videoAdapter = (() => {
+		const row = registryRows.find(
+			(r) => r.kind === 'video_i2v' && r.model_id === videoModelResolved.id
+		);
+		return (((row?.probe as any)?.adapter as UgcPackInput['videoAdapter']) ?? null);
+	})();
+
 	const slots = buildSlots(tz, opts.lookaheadDays, startH, endH, cfg.posts_per_day ?? 3);
 	const dateStrs = [...new Set(slots.map((s) => s.dateStr))];
 
@@ -313,7 +334,13 @@ async function generateDraftsForAgent(
 		// double payment.
 		const priorMarker = genFailures.get(key);
 		const placeholderId = priorMarker ? priorMarker.id : randomUUID();
-		const placeholderContent = JSON.stringify({ text: 'Autopilot: generating…' });
+		// `intended` types the placeholder (and any failure that survives it) so
+		// the library/calendar classify the slot as what it is BECOMING, instead
+		// of defaulting every in-flight autopilot row to "photo".
+		const placeholderContent = JSON.stringify({
+			text: 'Autopilot: generating…',
+			intended: { media: isCinematicSlot ? 'cinematic' : 'video' }
+		});
 		if (priorMarker) {
 			// Retriable failure marker already occupies the slot: claim it by
 			// CAS-updating the marker row itself to 'generating'. Zero rows updated
@@ -373,7 +400,17 @@ async function generateDraftsForAgent(
 		}
 
 		try {
-			const genInput = { supabase, userId, agentId, platform: platforms[0], autopilot: true };
+			const genInput = {
+				supabase,
+				userId,
+				agentId,
+				platform: platforms[0],
+				autopilot: true,
+				// Registry-resolved clip model + price + adapter — see the block above.
+				videoModel: videoModelResolved.id,
+				videoModelUsd: videoModelResolved.usd,
+				videoAdapter
+			};
 			let pack;
 			if (isCinematicSlot) {
 				try {
