@@ -797,6 +797,14 @@
 
 	function pick(id: string) {
 		selectedId = id;
+		// Navigating to a guide re-reveals its category even if it was explicitly
+		// collapsed — the steps sub-nav lives under it, and arriving via search or
+		// the prev/next pager must not leave the reader's own position folded away.
+		const cat = GUIDES.find((g) => g.id === id)?.category;
+		if (cat && expandedCats[cat] === false) {
+			const { [cat]: _drop, ...rest } = expandedCats;
+			expandedCats = rest;
+		}
 		// Deep-linkable: support /guides#openrouter-key style links for support.
 		history.replaceState(null, '', `#${id}`);
 		document.getElementById('guide-article')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
@@ -805,17 +813,26 @@
 	// ── Nav nesting ──────────────────────────────────────────────────────────
 	// Categories are CLOSED by default: every group open at once turned the index
 	// into a wall of links you had to read past to find anything. Two exceptions
-	// stay open because closing them would hide what you are looking at — an
+	// DEFAULT open because closing them would hide what you are looking at — an
 	// active search (matches must never sit behind a fold) and the category
 	// holding the guide you are currently reading, which also carries its steps.
+	// But an explicit click on the header ALWAYS wins over the reading-category
+	// default: the old `selected.category === cat → true` short-circuit made
+	// "Getting started" (home of the default guide) impossible to collapse — a
+	// header whose chevron toggles state the open-check then ignores is a broken
+	// control. Folding the nav never hides the article itself; it lives in the
+	// center pane. (undefined = no explicit choice yet → the defaults apply.)
 	let expandedCats = $state<Record<string, boolean>>({});
 	function toggleCat(cat: string) {
-		expandedCats = { ...expandedCats, [cat]: !expandedCats[cat] };
+		// Flip the EFFECTIVE state, not the raw flag — the first click on an
+		// auto-opened category (raw flag still undefined) must close it.
+		expandedCats = { ...expandedCats, [cat]: !catOpen(cat) };
 	}
 	function catOpen(cat: string): boolean {
 		if (query.trim()) return true;
-		if (selected.category === cat) return true;
-		return !!expandedCats[cat];
+		const explicit = expandedCats[cat];
+		if (explicit !== undefined) return explicit;
+		return selected.category === cat;
 	}
 
 	/** Short label for a step's nested nav anchor — first words, no markup. */
