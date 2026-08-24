@@ -355,7 +355,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-08-23", hash: "8b40a10", type: "other", category: "automation", scope: null, title: "autopilot" },
 	{ date: "2026-08-23", hash: "bc060ed", type: "perf", category: "performance", scope: "media", title: "videos load in ~2s instead of minutes" },
 	{ date: "2026-08-23", hash: "74af5a5", type: "other", category: "maintenance", scope: null, title: "memory" },
-	{ date: "2026-08-23", hash: "4d64cfc", type: "feat", category: "feature", scope: "calendar", title: "event chips preview the media, not the caption" }
+	{ date: "2026-08-23", hash: "4d64cfc", type: "feat", category: "feature", scope: "calendar", title: "event chips preview the media, not the caption" },
+	{ date: "2026-08-23", hash: "0698e91", type: "other", category: "maintenance", scope: null, title: "collapsible" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -635,10 +636,10 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 		id: "7b53e8a", from: "2026-08-23", to: "2026-08-23",
 		category: "maintenance", categories: ["fix","generation","maintenance","automation","performance","feature"],
 		title: "Tidying: both views fill the screen, and bento stops leaving…",
-		summary: "Both views fill the screen, and bento stops leaving holes. Plus 6 more changes, touching things that were broken and making posts, images and video and work the app does on its own.",
+		summary: "Both views fill the screen, and bento stops leaving holes. Plus 7 more changes, touching things that were broken and making posts, images and video and work the app does on its own.",
 		major: true, curated: false,
-		entries: [CHANGELOG[315], CHANGELOG[316], CHANGELOG[317], CHANGELOG[318], CHANGELOG[319], CHANGELOG[320], CHANGELOG[321]]
+		entries: [CHANGELOG[315], CHANGELOG[316], CHANGELOG[317], CHANGELOG[318], CHANGELOG[319], CHANGELOG[320], CHANGELOG[321], CHANGELOG[322]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "4d64cfc";
+export const CHANGELOG_GENERATED_FROM = "0698e91";

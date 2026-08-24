@@ -776,6 +776,20 @@
 		syncingFeed = false;
 	}
 
+	// ── Hydration gate for the Studio action chrome ─────────────────
+	// This page's SSR paints the Studio controls (Output toggle, template Use
+	// buttons, Plan a campaign) seconds before the — large — client bundle
+	// hydrates and attaches their handlers. In that window a click is silently
+	// eaten: the toggle looks live, does nothing, and reads as broken (verified
+	// with a real browser — early clicks on "Review draft"/"Use" vanish; the
+	// same clicks work after hydration). Render them disabled until the page
+	// can actually respond, so a too-early click shows a disabled control
+	// instead of lying.
+	let hydrated = $state(false);
+	onMount(() => {
+		hydrated = true;
+	});
+
 	// ── Hero scroll-fade ────────────────────────────────────────────
 	// The identity hero sits directly above the sticky tab-nav. As the user
 	// scrolls into a long tab, fade + lift the hero out so the sticky nav docks
@@ -5945,6 +5959,7 @@
 								type="button"
 								class="studio-campaign-btn"
 								title="Bulk-generate a content mix onto the calendar — drafts for your review"
+								disabled={!hydrated}
 								onclick={() => goto('/calendar?campaign=1')}
 							>
 								<svg
@@ -5978,6 +5993,7 @@
 									role="radio"
 									aria-checked={studioDeliver === 'review'}
 									class:active={studioDeliver === 'review'}
+									disabled={!hydrated}
 									onclick={() => (studioDeliver = 'review')}
 								>
 									Review draft
@@ -5988,6 +6004,7 @@
 									role="radio"
 									aria-checked={studioDeliver === 'asset'}
 									class:active={studioDeliver === 'asset'}
+									disabled={!hydrated}
 									onclick={() => (studioDeliver = 'asset')}
 								>
 									Asset only
@@ -6158,7 +6175,7 @@
 															<button
 																type="button"
 																class="btn-generate studio-use"
-																disabled={generatingPost}
+																disabled={generatingPost || !hydrated}
 																onclick={() => useStudioTemplate(t)}
 															>
 																Use
@@ -7216,6 +7233,14 @@
 	.view-toggle-btn.active {
 		background: var(--accent-soft);
 		color: var(--accent-text);
+	}
+
+	/* Pre-hydration (and mid-generation) gate: a dimmed control with a progress
+	   cursor, instead of a live-looking button that silently eats the click. */
+	.view-toggle-btn:disabled,
+	.studio-campaign-btn:disabled {
+		opacity: 0.55;
+		cursor: progress;
 	}
 
 	/* ── Assets view ── */

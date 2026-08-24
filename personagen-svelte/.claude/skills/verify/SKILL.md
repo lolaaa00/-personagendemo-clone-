@@ -178,6 +178,12 @@ More of the same family, each of which produced a wrong result before being caug
 - **The reference-kit controls sit inside a collapsed `<details class="profile-section">`.**
   They exist in the DOM with a 0×0 rect, so a click waits forever on visibility. Open them
   first: `await p.evaluate(() => document.querySelectorAll('details').forEach(d => d.open = true))`.
+- **The persona page SSR-paints seconds before hydration attaches handlers.** Clicks in that
+  window dispatch fine (no Playwright error) and are silently eaten — a working toggle reads
+  as broken. Waiting for the element to EXIST is not enough. The Studio action chrome
+  (Output toggle, `.studio-use`, Plan a campaign) now renders `disabled` until hydration —
+  wait for `isDisabled()` to go false and use that as the hydration signal; for other
+  controls, settle ~2–3s after the section appears before the first click.
 
 ## Portal map (where the list surfaces actually are)
 
