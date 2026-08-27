@@ -51,6 +51,9 @@ const ORDER = [
 	['favorites_and_projects_migration.sql', 'favorite flags + persona_groups projects'],
 	['model_registry_migration.sql', 'model_registry — Model Manager backing table'],
 	['feature_requests_migration.sql', 'User Voice — feature_requests + votes'],
+	['workspaces_migration.sql', 'Workspaces & seats — orgs, roles, agent_access_role()'],
+	['posts_soft_delete_migration.sql', 'Trash & restore — posts.deleted_at + partial indexes'],
+	['workspace_admin_role_migration.sql', "Workspace 'admin' seat tier — role_rank(), workspace_role()"],
 ];
 
 /** Rewrite a migration so every statement can be replayed against a DB that already has it. */

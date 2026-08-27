@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { createDbService } from '$lib/server/db';
+import { checkAgentAccess } from '$lib/server/workspaces';
 
 /**
  * Per-agent analytics for the persona Analytics tab.
@@ -16,11 +17,16 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 	const db = createDbService(locals.supabase);
 	const { data: agent, error: agentErr } = await db.agents.get(agentId);
-	if (agentErr || !agent || agent.user_id !== user.id) {
+	if (agentErr || !agent) {
 		return json(
 			{ success: false, error: 'Persona not found or ownership mismatch' },
 			{ status: 404 }
 		);
+	}
+	// Analytics is manager+ only, same tier as spend.
+	const access = await checkAgentAccess(locals.supabase, user.id, agentId, 'manager');
+	if (!access.ok) {
+		return json({ success: false, error: access.message }, { status: access.status });
 	}
 
 	const { data: posts, error } = await locals.supabase
@@ -29,6 +35,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			'id, status, platforms, analytics, publication_results, published_at, content, scheduled_date'
 		)
 		.eq('agent_id', agentId)
+		.is('deleted_at', null)
 		.eq('status', 'published')
 		.order('published_at', { ascending: false });
 	if (error) return json({ success: false, error: error.message }, { status: 500 });

@@ -8,6 +8,7 @@
 	import ImageLightbox from '$lib/components/ui/ImageLightbox.svelte';
 	import { Posts } from '$lib/services/api';
 	import { SURFACE_LABEL, type PostSurface } from '$lib/components/feed/postDisplay';
+	import { confirmDeletePosts } from '$lib/confirm-preview';
 
 	interface ReviewItem {
 		id: string;
@@ -198,34 +199,24 @@
 		};
 	}
 
-	/** Names the teardown outcome in the toast so "deleted" never over-claims. */
+	/** Names the teardown outcome in the toast so it never over-claims. */
 	function deletedToast(count: number, teardown?: Teardown): string {
 		const noun = `${count} post${count === 1 ? '' : 's'}`;
 		if (teardown?.unpublished?.length) {
-			return `🗑 Deleted ${noun} — also removed from ${teardown.unpublished.join(', ')}`;
+			return `🗑 Trashed ${noun} — also removed from ${teardown.unpublished.join(', ')}`;
 		}
-		return `🗑 Deleted ${noun} permanently`;
+		return `🗑 Moved ${noun} to Trash — restorable for 30 days`;
 	}
 
 	/**
-	 * Single delete. `skipConfirm` is for the drawer, whose footer already has its
-	 * own two-click "Confirm delete?" — a second native prompt would be noise.
+	 * Single delete. Every entry point (card trash can AND the drawer) goes through
+	 * the same dialog now — the drawer's old two-click footer confirm is gone, so
+	 * there is no longer a `skipConfirm` path that deletes without asking.
 	 */
-	async function deletePost(id: string, opts: { skipConfirm?: boolean } = {}) {
+	async function deletePost(id: string) {
 		if (working || deleteBusy) return;
 		const item = items.find((i) => i.id === id);
-		if (!opts.skipConfirm) {
-			const snippet = (item?.text ?? '').trim().slice(0, 60);
-			const label = snippet
-				? `"${snippet}${(item?.text ?? '').trim().length > 60 ? '…' : ''}"`
-				: 'this post';
-			if (
-				!confirm(
-					`Permanently delete ${label}? Anything already published is removed from the platforms that support API deletion. This cannot be undone.`
-				)
-			)
-				return;
-		}
+		if (!(await confirmDeletePosts([item ?? { id }]))) return;
 		deletingId = id;
 		try {
 			const res = await Posts.delete(id);
@@ -250,12 +241,8 @@
 	async function deleteSelected() {
 		const ids = [...selected];
 		if (ids.length === 0 || working || deleteBusy) return;
-		if (
-			!confirm(
-				`Permanently delete ${ids.length} post${ids.length === 1 ? '' : 's'}? Anything already published is removed from the platforms that support API deletion. This cannot be undone.`
-			)
-		)
-			return;
+		const targets = items.filter((i) => ids.includes(i.id));
+		if (!(await confirmDeletePosts(targets.length ? targets : ids.map((id) => ({ id }))))) return;
 		bulkDeleting = true;
 		try {
 			const res = await Posts.deleteMany(ids);
@@ -272,7 +259,7 @@
 				// The API returns counts, not which ids survived, so guessing which
 				// cards to drop would lie. Resync from the server instead.
 				showToast(
-					`⚠ Deleted ${gone} of ${asked} — the rest weren't found or aren't yours. Queue reloaded.`
+					`⚠ Trashed ${gone} of ${asked} — the rest weren't found or aren't yours. Queue reloaded.`
 				);
 				await load();
 				return;
@@ -1423,7 +1410,7 @@
 		onClose={() => (drawerPost = null)}
 		onApprove={(p) => act('approve', [p.id])}
 		onReject={drawerReject}
-		onDelete={(p) => deletePost(p.id, { skipConfirm: true })}
+		onDelete={(p) => deletePost(p.id)}
 		onSaveText={drawerSaveText}
 		onReschedule={drawerReschedule}
 		onRefined={(p) => {

@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { createDbService } from '$lib/server/db';
+import { checkAgentAccess } from '$lib/server/workspaces';
 import {
 	generateUgcPack,
 	generateCinematicUgcPack,
@@ -53,13 +54,17 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 
 	const db = createDbService(locals.supabase);
 
-	// Verify agent ownership
+	// Verify agent access — generating content is a "creator" action.
 	const { data: agent, error: agentErr } = await db.agents.get(agentId);
-	if (agentErr || !agent || agent.user_id !== user.id) {
+	if (agentErr || !agent) {
 		return json(
 			{ success: false, error: 'Persona not found or ownership mismatch' },
 			{ status: 404 }
 		);
+	}
+	const access = await checkAgentAccess(locals.supabase, user.id, agentId, 'creator');
+	if (!access.ok) {
+		return json({ success: false, error: access.message }, { status: access.status });
 	}
 
 	// Optional overrides (product focus, platform, topic)

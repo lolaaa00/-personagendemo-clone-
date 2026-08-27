@@ -8,6 +8,7 @@ import {
 	type PersonaProfile
 } from '$lib/persona-profile-store';
 import { writeWithProfileFallback } from '$lib/server/personas-profile-column';
+import { checkAgentAccess } from '$lib/server/workspaces';
 
 export const POST: RequestHandler = async ({ request, locals }) => {
 	const { session, user } = await locals.safeGetSession();
@@ -51,11 +52,18 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 		const db = createDbService(locals.supabase);
 
-		// Ownership Check
+		// Ownership / workspace-role check. Column-level enforcement (identity
+		// fields stay owner/manager-only) lives in the enforce_agent_update_scope
+		// DB trigger — this gate just keeps a viewer-only seat from reaching it
+		// at all, with a clean error instead of a raw trigger exception.
 		const { data: agent, error: getErr } = await db.agents.get(agentId);
 		if (getErr) throw getErr;
-		if (!agent || agent.user_id !== user.id) {
+		if (!agent) {
 			return json({ success: false, error: 'Persona not found or ownership mismatch' }, { status: 404 });
+		}
+		const access = await checkAgentAccess(locals.supabase, user.id, agentId, 'creator');
+		if (!access.ok) {
+			return json({ success: false, error: access.message }, { status: access.status });
 		}
 
 		// 1. Update the agent's core texts and presentation in agents table
@@ -134,7 +142,11 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			// (that would silently overwrite real settings, e.g. resetting
 			// autonomy_level to 'advisor' just because this save only touched
 			// soulText, quietly disabling autopilot the user had turned on).
-			const configPatch: AgentConfigInsert = { user_id: user.id, agent_id: agentId };
+			// Keyed to the PERSONA'S owner, not the acting session — agent_configs is
+			// one shared row per persona (UNIQUE(user_id, agent_id)); using the
+			// actor's own id here would fork a separate config row per workspace
+			// seat instead of everyone converging on the same settings.
+			const configPatch: AgentConfigInsert = { user_id: agent.user_id, agent_id: agentId };
 			if (soulText !== undefined) configPatch.soul = soulText;
 			if (skillsText !== undefined) configPatch.skills = skillsText;
 			if (toolsText !== undefined) configPatch.tools = toolsText;
@@ -190,6 +202,8 @@ export const DELETE: RequestHandler = async ({ request, locals }) => {
 
 		for (const agentId of requested) {
 			const { data: agent, error: getErr } = await db.agents.get(agentId);
+			// Deleting is owner-only — not even a workspace manager — since it's
+			// irreversible and takes the persona away from every seat at once.
 			if (getErr || !agent || agent.user_id !== user.id) {
 				failed.push({ agentId, error: 'Persona not found or ownership mismatch' });
 				continue;

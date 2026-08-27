@@ -8,6 +8,7 @@
 		type ChangeCategory
 	} from '$lib/changelog';
 	import { ROADMAP, ROADMAP_STATUSES } from '$lib/roadmap';
+	import { confirmAction } from '$lib/stores/confirm.svelte';
 
 	// ── Guide catalog ────────────────────────────────────────────────────────
 	// Screenshots are imported through Vite's asset pipeline so every capture
@@ -1097,7 +1098,14 @@
 	}
 
 	async function uvDelete(item: UvItem) {
-		if (!confirm(`Delete your request “${item.title}”? Its votes go with it.`)) return;
+		const ok = await confirmAction({
+			title: 'Delete your feature request?',
+			body: `“${item.title}” and every vote it has collected are removed.`,
+			warning: 'Votes cannot be recovered.',
+			confirmLabel: 'Delete request',
+			tone: 'danger'
+		});
+		if (!ok) return;
 		const d = await uvApi({ action: 'delete', id: item.id });
 		if (!d.success) uvError = d.error || 'Delete failed';
 		else uvItems = uvItems.filter((i) => i.id !== item.id);

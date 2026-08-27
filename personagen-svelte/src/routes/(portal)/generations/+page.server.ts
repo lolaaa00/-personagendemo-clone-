@@ -18,6 +18,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 			.from('posts')
 			.select('*, agents(name, handle, gradient, initial)')
 			.eq('user_id', user.id)
+			.is('deleted_at', null)
 			.order('created_at', { ascending: false })
 			.limit(500),
 		supabase

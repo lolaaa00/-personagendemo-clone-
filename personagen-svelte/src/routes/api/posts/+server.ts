@@ -2,6 +2,10 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { createDbService } from '$lib/server/db';
 import { teardownPost, type TeardownResult } from '$lib/server/social/publisher';
+import { checkAgentAccess, checkPostAccess, creatorMayNotSetStatus } from '$lib/server/workspaces';
+
+/** How long a trashed post stays restorable before the retention sweep purges it. */
+const TRASH_RETENTION_DAYS = 30;
 
 export const POST: RequestHandler = async ({ request, locals }) => {
 	const { session, user } = await locals.safeGetSession();
@@ -26,13 +30,10 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			const agentId = post.agent_id || post.agentId;
 			if (!agentId) return json({ success: false, error: 'Missing agentId' }, { status: 400 });
 
-			// Verify agent ownership
-			const { data: agent, error: agentErr } = await db.agents.get(agentId);
-			if (agentErr || !agent || agent.user_id !== user.id) {
-				return json(
-					{ success: false, error: 'Persona not found or ownership mismatch' },
-					{ status: 404 }
-				);
+			// Verify agent access — creating a draft is a "generate & draft" action.
+			const access = await checkAgentAccess(locals.supabase, user.id, agentId, 'creator');
+			if (!access.ok) {
+				return json({ success: false, error: access.message }, { status: access.status });
 			}
 
 			// Format platforms as PostgreSQL array
@@ -62,14 +63,20 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			const { id, content, status, scheduled_date, scheduled_time, published_at, platforms } = body;
 			if (!id) return json({ success: false, error: 'Missing post id' }, { status: 400 });
 
-			// Verify post ownership
-			const { data: existingPost, error: getErr } = await db.posts.get(id);
-			if (getErr || !existingPost || existingPost.user_id !== user.id) {
+			// Verify post access — creator+ can edit; setting status to a
+			// publish-adjacent value (approving) needs manager+, mirroring the
+			// enforce_post_status_scope() DB trigger that actually enforces it.
+			const access = await checkPostAccess(locals.supabase, user.id, id, 'creator');
+			if (!access.ok) {
+				return json({ success: false, error: access.message }, { status: access.status });
+			}
+			if (creatorMayNotSetStatus(access.role, status)) {
 				return json(
-					{ success: false, error: 'Post not found or ownership mismatch' },
-					{ status: 404 }
+					{ success: false, error: 'Approving or publishing this post requires manager access.' },
+					{ status: 403 }
 				);
 			}
+			const existingPost = access.post;
 
 			// A 'generating' row is owned by a detached generation/refine task that
 			// will overwrite content and status when it finishes — any edit accepted
@@ -123,14 +130,12 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				);
 			}
 
-			// Verify post ownership
-			const { data: existingPost, error: getErr } = await db.posts.get(id);
-			if (getErr || !existingPost || existingPost.user_id !== user.id) {
-				return json(
-					{ success: false, error: 'Post not found or ownership mismatch' },
-					{ status: 404 }
-				);
+			// Verify post access
+			const access = await checkPostAccess(locals.supabase, user.id, id, 'creator');
+			if (!access.ok) {
+				return json({ success: false, error: access.message }, { status: access.status });
 			}
+			const existingPost = access.post;
 
 			// Only pending posts can move — publishing/published/failed history stays put.
 			if (existingPost.status !== 'draft' && existingPost.status !== 'scheduled') {
@@ -153,13 +158,10 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			const { id, value } = body;
 			if (!id) return json({ success: false, error: 'Missing post id' }, { status: 400 });
 
-			// Verify post ownership
-			const { data: existingPost, error: getErr } = await db.posts.get(id);
-			if (getErr || !existingPost || existingPost.user_id !== user.id) {
-				return json(
-					{ success: false, error: 'Post not found or ownership mismatch' },
-					{ status: 404 }
-				);
+			// Verify post access
+			const access = await checkPostAccess(locals.supabase, user.id, id, 'creator');
+			if (!access.ok) {
+				return json({ success: false, error: access.message }, { status: access.status });
 			}
 
 			const { data, error } = await db.posts.update(id, { is_favorite: Boolean(value) });
@@ -171,14 +173,12 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			const { id } = body;
 			if (!id) return json({ success: false, error: 'Missing post id' }, { status: 400 });
 
-			// Verify post ownership
-			const { data: existingPost, error: getErr } = await db.posts.get(id);
-			if (getErr || !existingPost || existingPost.user_id !== user.id) {
-				return json(
-					{ success: false, error: 'Post not found or ownership mismatch' },
-					{ status: 404 }
-				);
+			// Deleting is manager+ — same tier as approving/publishing.
+			const access = await checkPostAccess(locals.supabase, user.id, id, 'manager');
+			if (!access.ok) {
+				return json({ success: false, error: access.message }, { status: access.status });
 			}
+			const existingPost = access.post;
 
 			// Best-effort live teardown (Zernio unpublish where supported); never blocks the DB delete
 			let teardown: TeardownResult = { unpublished: [], manualDeletion: [], errors: [] };
@@ -188,9 +188,14 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				console.error('[Posts API] Teardown failed (continuing with DB delete):', e);
 			}
 
-			const { error } = await db.posts.delete(id);
+			const { data: hit, error } = await db.posts.softDelete(id);
 			if (error) throw error;
-			return json({ success: true, teardown });
+			// Zero rows = already in the Trash (double-click, stale tab). Report it
+			// as a no-op rather than a second "deleted" the user never caused.
+			if (!hit || hit.length === 0) {
+				return json({ success: true, deleted: 0, alreadyTrashed: true, teardown });
+			}
+			return json({ success: true, deleted: 1, teardown });
 		}
 
 		// Bulk delete for multi-select UIs. Each post is torn down on-platform
@@ -211,8 +216,10 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			const teardown: TeardownResult = { unpublished: [], manualDeletion: [], errors: [] };
 			const owned: string[] = [];
 			for (const id of ids) {
-				const { data: post, error: getErr } = await db.posts.get(id);
-				if (getErr || !post || post.user_id !== user.id) continue;
+				// Bulk delete is manager+, same as the single-post delete action.
+				const access = await checkPostAccess(locals.supabase, user.id, id, 'manager');
+				if (!access.ok) continue;
+				const post = access.post;
 				owned.push(id);
 				try {
 					const r = await teardownPost(locals.supabase, post);
@@ -227,36 +234,159 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				return json({ success: false, error: 'No matching posts found' }, { status: 404 });
 			}
 
-			const { error } = await db.posts.deleteMany(owned, user.id);
+			const { data: hits, error } = await db.posts.softDeleteMany(owned);
 			if (error) throw error;
-			return json({ success: true, deleted: owned.length, requested: ids.length, teardown });
+			const deleted = hits?.length ?? 0;
+			return json({ success: true, deleted, requested: ids.length, teardown });
+		}
+
+		// ── Trash ────────────────────────────────────────────────────────────
+		// Deletes are soft: the row keeps its id, so every generation_events and
+		// post_reviews FK pointing at it survives and a restore is lossless.
+
+		/** Lists what's in the Trash, newest-deleted first. */
+		if (action === 'trash') {
+			const { agent_id } = body;
+			if (agent_id) {
+				const access = await checkAgentAccess(locals.supabase, user.id, agent_id, 'viewer');
+				if (!access.ok) {
+					return json({ success: false, error: access.message }, { status: access.status });
+				}
+			}
+			let q = locals.supabase
+				.from('posts')
+				.select('*, agents(name, handle, gradient, initial)')
+				.not('deleted_at', 'is', null)
+				.order('deleted_at', { ascending: false })
+				.limit(500);
+			if (agent_id) q = q.eq('agent_id', agent_id);
+			const { data, error } = await q;
+			if (error) throw error;
+			return json({ success: true, data, retentionDays: TRASH_RETENTION_DAYS });
+		}
+
+		/**
+		 * Restores posts out of the Trash.
+		 *
+		 * A scheduled post whose slot has already passed comes back as a DRAFT, not
+		 * as 'scheduled'. Otherwise restoring something from last week would hand
+		 * the scheduler a post that is instantly due and publish it live within the
+		 * minute — a surprise publish is a far worse outcome than an extra click.
+		 */
+		if (action === 'restore') {
+			const ids: string[] = Array.isArray(body.ids)
+				? body.ids.filter((v: unknown) => !!v)
+				: body.id
+					? [body.id]
+					: [];
+			if (ids.length === 0) {
+				return json({ success: false, error: 'No post ids supplied' }, { status: 400 });
+			}
+			if (ids.length > 200) {
+				return json({ success: false, error: 'Too many posts (max 200 per request)' }, { status: 400 });
+			}
+
+			const owned: string[] = [];
+			const demoted: string[] = [];
+			const todayIso = new Date().toISOString().slice(0, 10);
+			for (const id of ids) {
+				// Restore is manager+, same tier as the delete it undoes.
+				const access = await checkPostAccess(locals.supabase, user.id, id, 'manager', {
+					includeTrashed: true
+				});
+				if (!access.ok) continue;
+				const post = access.post;
+				if (!post.deleted_at) continue; // already live — nothing to restore
+				owned.push(id);
+				if (post.status === 'scheduled' && (post.scheduled_date ?? '') <= todayIso) {
+					demoted.push(id);
+				}
+			}
+			if (owned.length === 0) {
+				return json({ success: false, error: 'Nothing to restore' }, { status: 404 });
+			}
+
+			const { data: hits, error } = await db.posts.restoreMany(owned);
+			if (error) throw error;
+
+			// Demote AFTER the restore: db.posts.update refuses to touch a trashed
+			// row, which is exactly the guard we want everywhere else.
+			if (demoted.length > 0) {
+				const { error: demoteErr } = await locals.supabase
+					.from('posts')
+					.update({ status: 'draft' })
+					.in('id', demoted)
+					.is('deleted_at', null)
+					.eq('status', 'scheduled');
+				if (demoteErr) {
+					console.error('[Posts API] Restore demote-to-draft failed:', demoteErr.message);
+				}
+			}
+
+			return json({
+				success: true,
+				restored: hits?.length ?? 0,
+				requested: ids.length,
+				demoted: demoted.length
+			});
+		}
+
+		/** Permanent delete from the Trash. No teardown — that already ran at delete time. */
+		if (action === 'purge') {
+			const ids: string[] = Array.isArray(body.ids)
+				? body.ids.filter((v: unknown) => !!v)
+				: body.id
+					? [body.id]
+					: [];
+			if (ids.length === 0) {
+				return json({ success: false, error: 'No post ids supplied' }, { status: 400 });
+			}
+			if (ids.length > 200) {
+				return json({ success: false, error: 'Too many posts (max 200 per request)' }, { status: 400 });
+			}
+
+			const owned: string[] = [];
+			for (const id of ids) {
+				const access = await checkPostAccess(locals.supabase, user.id, id, 'manager', {
+					includeTrashed: true
+				});
+				if (access.ok && access.post?.deleted_at) owned.push(id);
+			}
+			if (owned.length === 0) {
+				return json({ success: false, error: 'Nothing to purge' }, { status: 404 });
+			}
+
+			const { data: hits, error } = await db.posts.purgeMany(owned);
+			if (error) throw error;
+			return json({ success: true, purged: hits?.length ?? 0, requested: ids.length });
+		}
+
+		/** Empty Trash. RLS scopes it to rows this account can see. */
+		if (action === 'purge_all') {
+			const { data: hits, error } = await db.posts.purgeAllTrashed();
+			if (error) throw error;
+			return json({ success: true, purged: hits?.length ?? 0 });
 		}
 
 		if (action === 'get') {
 			const { id } = body;
 			if (!id) return json({ success: false, error: 'Missing post id' }, { status: 400 });
 
-			// Verify post ownership
-			const { data: existingPost, error: getErr } = await db.posts.get(id);
-			if (getErr || !existingPost || existingPost.user_id !== user.id) {
-				return json(
-					{ success: false, error: 'Post not found or ownership mismatch' },
-					{ status: 404 }
-				);
+			// Verify post access — viewer+ can read.
+			const access = await checkPostAccess(locals.supabase, user.id, id, 'viewer');
+			if (!access.ok) {
+				return json({ success: false, error: access.message }, { status: access.status });
 			}
 
-			return json({ success: true, data: existingPost });
+			return json({ success: true, data: access.post });
 		}
 
 		if (action === 'list') {
 			const { agent_id } = body;
 			if (agent_id) {
-				const { data: agent, error: agentErr } = await db.agents.get(agent_id);
-				if (agentErr || !agent || agent.user_id !== user.id) {
-					return json(
-						{ success: false, error: 'Persona not found or ownership mismatch' },
-						{ status: 404 }
-					);
+				const access = await checkAgentAccess(locals.supabase, user.id, agent_id, 'viewer');
+				if (!access.ok) {
+					return json({ success: false, error: access.message }, { status: access.status });
 				}
 			}
 			const { data, error } = await db.posts.list({ agent_id });
@@ -271,12 +401,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			}
 
 			if (persona_id) {
-				const { data: agent, error: agentErr } = await db.agents.get(persona_id);
-				if (agentErr || !agent || agent.user_id !== user.id) {
-					return json(
-						{ success: false, error: 'Persona not found or ownership mismatch' },
-						{ status: 404 }
-					);
+				const access = await checkAgentAccess(locals.supabase, user.id, persona_id, 'viewer');
+				if (!access.ok) {
+					return json({ success: false, error: access.message }, { status: access.status });
 				}
 			}
 
@@ -297,6 +424,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				.from('posts')
 				.select('*, agents(name, handle, gradient, initial)')
 				.eq('user_id', user.id)
+				.is('deleted_at', null)
 				.eq('status', 'scheduled')
 				.order('scheduled_date')
 				.order('scheduled_time')
@@ -313,6 +441,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				.from('posts')
 				.select('*, agents(name, handle, gradient, initial)')
 				.eq('user_id', user.id)
+				.is('deleted_at', null)
 				.eq('status', 'published')
 				.order('published_at', { ascending: false })
 				.limit(limit || 10);

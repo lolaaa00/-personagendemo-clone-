@@ -74,7 +74,7 @@ async function request<T>(
 	}
 }
 
-// ── Posts (3 actions) ──────────────────────────────────────────────────────────
+// ── Posts ──────────────────────────────────────────────────────────
 // list/get and the old Feed object (calendar/upcoming/recent) were removed —
 // zero callers; calendar and the persona Feed tab both load posts via their
 // own +page.server.ts, not this client-side service.
@@ -96,6 +96,38 @@ export const Posts = {
 	deleteMany: (ids: string[]) =>
 		request(ENDPOINTS.posts, 'delete_many', { ids }) as Promise<
 			ApiResponse<never> & { deleted?: number; requested?: number; teardown?: TeardownSummary }
+		>,
+
+	// ── Trash ────────────────────────────────────────────────────────────────
+	// `delete`/`deleteMany` above are SOFT — they move posts to the Trash, where
+	// these three act on them.
+
+	/** Everything currently in the Trash (optionally one persona's). */
+	trash: (agentId?: string) =>
+		request(ENDPOINTS.posts, 'trash', { agent_id: agentId }) as Promise<
+			ApiResponse<any[]> & { retentionDays?: number }
+		>,
+
+	/**
+	 * Puts posts back. `demoted` counts those that came back as drafts because
+	 * their scheduled slot had already passed — restoring them as 'scheduled'
+	 * would have published them live within the minute.
+	 */
+	restore: (ids: string[]) =>
+		request(ENDPOINTS.posts, 'restore', { ids }) as Promise<
+			ApiResponse<never> & { restored?: number; requested?: number; demoted?: number }
+		>,
+
+	/** Permanent. No teardown — that already ran when the post was trashed. */
+	purge: (ids: string[]) =>
+		request(ENDPOINTS.posts, 'purge', { ids }) as Promise<
+			ApiResponse<never> & { purged?: number; requested?: number }
+		>,
+
+	/** Empty Trash. */
+	purgeAll: () =>
+		request(ENDPOINTS.posts, 'purge_all', {}) as Promise<
+			ApiResponse<never> & { purged?: number }
 		>
 };
 

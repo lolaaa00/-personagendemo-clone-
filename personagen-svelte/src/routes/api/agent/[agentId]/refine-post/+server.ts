@@ -3,6 +3,7 @@ import type { RequestHandler } from './$types';
 import { createDbService } from '$lib/server/db';
 import { refineUgcMedia } from '$lib/server/content/generate';
 import { getServiceSupabase } from '$lib/server/service-supabase';
+import { checkAgentAccess } from '$lib/server/workspaces';
 
 /**
  * Refine an existing draft/scheduled post: regenerate ONLY its media from a
@@ -31,8 +32,12 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 
 	const db = createDbService(locals.supabase);
 	const { data: agent, error: agentErr } = await db.agents.get(agentId);
-	if (agentErr || !agent || agent.user_id !== user.id) {
+	if (agentErr || !agent) {
 		return json({ success: false, error: 'Persona not found or ownership mismatch' }, { status: 404 });
+	}
+	const access = await checkAgentAccess(locals.supabase, user.id, agentId, 'creator');
+	if (!access.ok) {
+		return json({ success: false, error: access.message }, { status: access.status });
 	}
 
 	let body: any = {};
@@ -48,7 +53,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 	if (!scene) return json({ success: false, error: 'Missing scene (the edited visual prompt)' }, { status: 400 });
 
 	const { data: post, error: postErr } = await db.posts.get(postId);
-	if (postErr || !post || post.user_id !== user.id || post.agent_id !== agentId) {
+	if (postErr || !post || post.agent_id !== agentId) {
 		return json({ success: false, error: 'Post not found or ownership mismatch' }, { status: 404 });
 	}
 	// Published/publishing media is live — refine only applies before publish.
@@ -142,6 +147,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 						token_cost: refined.costBreakdown?.total ?? post.token_cost ?? 0
 					})
 					.eq('id', postId)
+					.is('deleted_at', null) // don't spend the refine on a trashed post
 					.eq('status', 'generating')
 					.select('id');
 				if (applyErr) {

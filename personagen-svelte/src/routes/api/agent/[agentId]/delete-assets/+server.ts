@@ -3,6 +3,7 @@ import type { RequestHandler } from './$types';
 import { createDbService } from '$lib/server/db';
 import { getServiceSupabase } from '$lib/server/service-supabase';
 import { removeKitAssets, clearCharacterRef, RESTORABLE_KIT_STAGES } from '$lib/server/content/generate';
+import { checkAgentAccess } from '$lib/server/workspaces';
 
 /**
  * Deletes persona reference photos — the write side of asset manageability.
@@ -31,11 +32,15 @@ async function requireOwnedAgent(locals: any, agentId: string | undefined) {
 	}
 	const db = createDbService(locals.supabase);
 	const { data: agent, error } = await db.agents.get(agentId);
-	if (error || !agent || agent.user_id !== user.id) {
+	if (error || !agent) {
 		return {
 			ok: false as const,
 			res: json({ success: false, error: 'Persona not found or ownership mismatch' }, { status: 404 })
 		};
+	}
+	const access = await checkAgentAccess(locals.supabase, user.id, agentId, 'creator');
+	if (!access.ok) {
+		return { ok: false as const, res: json({ success: false, error: access.message }, { status: access.status }) };
 	}
 	return { ok: true as const, user, agent };
 }

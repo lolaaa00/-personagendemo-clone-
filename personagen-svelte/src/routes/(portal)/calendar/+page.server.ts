@@ -61,7 +61,8 @@ export const load: PageServerLoad = async ({ locals, fetch }) => {
 			// Fetch real database posts
 			const { data: postsRes, error } = await locals.supabase
 				.from('posts')
-				.select('*, agents(name)');
+				.select('*, agents(name)')
+				.is('deleted_at', null);
 
 			if (!error && postsRes) {
 				const activeAgentIds = new Set(agents.map((a: any) => a.id));

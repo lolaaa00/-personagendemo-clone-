@@ -117,6 +117,15 @@ class Builder implements PromiseLike<QueryResult> {
 		this.chain.push(['not', col, op, val]);
 		return this;
 	}
+	/**
+	 * PostgREST `IS` — the soft-delete filter every posts query carries
+	 * (`.is('deleted_at', null)`). Without it here the builder is not chainable
+	 * where production code is, and the test double diverges from the client.
+	 */
+	is(col: string, val: any) {
+		this.chain.push(['is', col, val]);
+		return this;
+	}
 	order(col: string, opts?: any) {
 		this.chain.push(['order', col, opts]);
 		return this;

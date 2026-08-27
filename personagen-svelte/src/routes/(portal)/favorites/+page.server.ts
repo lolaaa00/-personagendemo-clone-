@@ -12,6 +12,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 			.from('posts')
 			.select('*, agents(name, handle, gradient, initial)')
 			.eq('user_id', user.id)
+			.is('deleted_at', null)
 			.eq('is_favorite', true)
 			.order('created_at', { ascending: false })
 			.limit(500),

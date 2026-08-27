@@ -22,7 +22,8 @@ export const load: PageServerLoad = async ({ locals }) => {
 				// Fetch real database posts
 				const { data: dbPosts } = await locals.supabase
 					.from('posts')
-					.select('agent_id, token_usage, token_cost, analytics, status, published_at, created_at');
+					.select('agent_id, token_usage, token_cost, analytics, status, published_at, created_at')
+					.is('deleted_at', null);
 
 				const postsByAgent: Record<string, any[]> = {};
 				if (dbPosts) {
@@ -192,7 +193,8 @@ export const load: PageServerLoad = async ({ locals }) => {
 	if (hasDbAgents && locals.supabase) {
 		const dbPosts = await locals.supabase
 			.from('posts')
-			.select('agent_id, status, analytics, published_at, created_at');
+			.select('agent_id, status, analytics, published_at, created_at')
+			.is('deleted_at', null);
 
 		const postsByAgent: Record<string, any[]> = {};
 		if (dbPosts.data) {

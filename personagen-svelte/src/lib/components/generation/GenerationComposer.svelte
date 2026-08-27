@@ -13,6 +13,8 @@
 	 * one cannot — the preview and the request are produced by one code path.
 	 */
 	import Modal from '$lib/components/ui/Modal.svelte';
+	import { fly } from 'svelte/transition';
+	import { cubicOut } from 'svelte/easing';
 	import type { ComposerSpec } from './types';
 	import { TIER_LABEL, type ModelOption } from '$lib/models';
 
@@ -92,9 +94,7 @@
 
 	// Re-price live as the user trades quality for budget, instead of showing the
 	// cost of whatever the server happened to default to.
-	let liveCost = $derived(
-		selectedModel ? selectedModel.usd : (preview?.estimatedCostUsd ?? 0)
-	);
+	let liveCost = $derived(selectedModel ? selectedModel.usd : (preview?.estimatedCostUsd ?? 0));
 
 	let videoModelOptions = $derived<ModelOption[]>(preview?.videoModelOptions ?? []);
 	let selectedVideoModel = $derived(videoModelOptions.find((m) => m.id === videoModel) ?? null);
@@ -289,6 +289,108 @@
 		if (picked?.photoUrl) productPhotoUrl = picked.photoUrl;
 	}
 
+	// ── The journey ────────────────────────────────────────────────────────
+	// The composer used to be one long scroll: topic, media, captions, platforms,
+	// scene, product, refs, schedule, format, models and pipeline all stacked in a
+	// single pane, in an order that matched no decision anyone actually makes.
+	//
+	// It is now a sequence that mirrors the action being composed. A post really
+	// is four decisions, in this order — and each step asks the question rather
+	// than labelling a field:
+	//
+	//   subject → what are we making?      (topic, media kind, video format)
+	//   look    → how should it look?      (scene, product, refs, burn-ins)
+	//   craft   → what builds it?          (provider, models, pipeline, cost)
+	//   deliver → where does it go?        (platforms, schedule, destination)
+	//
+	// A prompt-kind run is ONE decision, so it gets one pane. Stepping a two-field
+	// dialog would be ceremony, not a journey — the step list is derived from what
+	// is actually being composed, never fixed.
+	interface Step {
+		id: 'single' | 'subject' | 'look' | 'craft' | 'deliver';
+		label: string;
+		question: string;
+		blurb: string;
+	}
+
+	let steps = $derived<Step[]>(
+		isPostKind
+			? [
+					{
+						id: 'subject',
+						label: 'Subject',
+						question: 'What are we posting?',
+						blurb:
+							'The topic and the kind of media. Everything after this adapts to what you pick here.'
+					},
+					{
+						id: 'look',
+						label: 'Look',
+						question: 'How should it look?',
+						blurb:
+							'The scene, the product in shot, and the face. Leave anything blank and the Director writes it.'
+					},
+					{
+						id: 'craft',
+						label: 'Craft',
+						question: 'What builds it?',
+						blurb:
+							'Your budget-vs-quality call. The pipeline below is exactly what will run, priced as you choose.'
+					},
+					{
+						id: 'deliver',
+						label: 'Deliver',
+						question: 'Where does it go?',
+						blurb: 'Pick the accounts and when. Nothing is spent until you approve on this step.'
+					}
+				]
+			: [
+					{
+						id: 'single',
+						label: 'Request',
+						question: spec?.title ?? 'Confirm this request',
+						blurb: 'This is the exact request that will be sent. Edit anything before approving.'
+					}
+				]
+	);
+
+	let stepIndex = $state(0);
+	// Clamp rather than reset: switching Media mid-flow must never strand the user
+	// on a step index that no longer exists.
+	let currentStep = $derived(steps[Math.min(stepIndex, steps.length - 1)]);
+	let isLastStep = $derived(stepIndex >= steps.length - 1);
+	let isFirstStep = $derived(stepIndex <= 0);
+
+	function goToStep(i: number) {
+		stepIndex = Math.max(0, Math.min(i, steps.length - 1));
+	}
+	function nextStep() {
+		if (!isLastStep) stepIndex += 1;
+	}
+	function prevStep() {
+		if (!isFirstStep) stepIndex -= 1;
+	}
+
+	// A fresh spec is a fresh journey — reopening the composer must not drop the
+	// user back on "Deliver" from last time.
+	$effect(() => {
+		if (open && spec) stepIndex = 0;
+	});
+
+	/**
+	 * Enter advances the journey instead of doing nothing. Deliberately NOT on the
+	 * last step: the final Enter would spend money, and that click must be aimed.
+	 * Textareas keep Enter for newlines.
+	 */
+	function onPaneKeydown(e: KeyboardEvent) {
+		if (e.key !== 'Enter' || e.shiftKey) return;
+		const el = e.target as HTMLElement | null;
+		if (el && (el.tagName === 'TEXTAREA' || el.tagName === 'BUTTON')) return;
+		if (isLastStep) return;
+		e.preventDefault();
+		nextStep();
+	}
+
 	function confirm() {
 		const body: Record<string, unknown> = { ...(spec?.baseBody ?? {}) };
 		if (isPromptKind) {
@@ -330,7 +432,8 @@
 	{open}
 	size="lg"
 	title={spec?.title ?? 'Confirm generation'}
-	subtitle={spec?.subtitle ?? 'Review and edit exactly what gets sent — nothing is spent until you approve.'}
+	subtitle={spec?.subtitle ??
+		'Review and edit exactly what gets sent — nothing is spent until you approve.'}
 	{onClose}
 >
 	{#if agents?.length && onAgentChange}
@@ -350,8 +453,8 @@
 				{/each}
 			</select>
 			<span class="hint" id="gc-persona-hint">
-				Switching re-resolves everything below for that persona — face, voice, connected
-				platforms, and cost are all persona-specific.
+				Switching re-resolves everything below for that persona — face, voice, connected platforms,
+				and cost are all persona-specific.
 			</span>
 		</div>
 	{/if}
@@ -367,397 +470,713 @@
 			<button type="button" class="btn-retry" onclick={() => loadPreview()}>Retry</button>
 		</div>
 	{:else if preview}
-		{#if modelOptions.length}
-			<div class="fld">
-				<span class="fld-label" id="gc-model-label">Model — pick your budget vs quality</span>
-				<div
-					class="models"
-					role="radiogroup"
-					aria-labelledby="gc-model-label"
-					aria-invalid={!!refWarning}
-					aria-describedby={refWarning ? 'gc-model-warn' : undefined}
-				>
-					{#each modelOptions as m}
-						<button
-							type="button"
-							class="model"
-							class:on={model === m.id}
-							role="radio"
-							aria-checked={model === m.id}
-							onclick={() => (model = m.id)}
-						>
-							<span class="model-top">
-								<span class="model-name">{m.label}</span>
-								<span class="model-usd">{usd(m.usd)}</span>
-							</span>
-							<span class="model-tier tier-{m.tier}">{TIER_LABEL[m.tier]}</span>
-							<span class="model-note">{m.note}</span>
-						</button>
-					{/each}
-				</div>
-				{#if refWarning}
-					<p class="model-warn" id="gc-model-warn" role="alert">
-						<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" /><line x1="12" x2="12" y1="9" y2="13" /><line x1="12" x2="12.01" y1="17" y2="17" /></svg>
-						<span>{refWarning}</span>
-					</p>
-				{/if}
-			</div>
-		{/if}
-
-		{#if isPromptKind}
-			<div class="fld">
-				<label class="fld-label" for="gc-prompt">Prompt sent to the model</label>
-				<textarea id="gc-prompt" bind:value={prompt} rows="6" spellcheck="false"></textarea>
-			</div>
-
-			{#if preview.finalPrompt}
-				<details class="raw">
-					<summary>Exact string the provider receives</summary>
-					<pre>{finalPromptPreview}</pre>
-					<p class="hint">
-						The pipeline prepends a fixed style prefix — shown here so what you approve is
-						literally what is sent.
-					</p>
-				</details>
-			{/if}
-
-			{#if preview.image_urls?.length}
-				<div class="fld">
-					<span class="fld-label">Reference images ({preview.image_urls.length})</span>
-					<div class="refs">
-						{#each preview.image_urls as url, i}
-							<img
-								src={url}
-								alt="Reference image {i + 1} of {preview.image_urls.length}"
-								width="72"
-								height="72"
-								loading="lazy"
-							/>
-						{/each}
-					</div>
-				</div>
-			{/if}
-		{/if}
-
-		{#if isPostKind}
-			<div class="fld">
-				<label class="fld-label" for="gc-topic">Topic</label>
-				<input id="gc-topic" bind:value={topic} placeholder="Leave blank to let the persona pick" />
-			</div>
-
-			<div class="row">
-				<div class="fld">
-					<label class="fld-label" for="gc-media">Media</label>
-					<!-- "video" covers BOTH spokesperson and b-roll — the Video format
-					     chips below decide which — so the label must not claim b-roll. -->
-					<select id="gc-media" bind:value={media}>
-						<option value="video">Video</option>
-						<option value="image">Image only</option>
-						<option value="cinematic">Cinematic (multi-shot)</option>
-					</select>
-				</div>
-				<div class="fld">
-					<label class="fld-label" for="gc-provider">Provider</label>
-					<select id="gc-provider" bind:value={provider}>
-						<option value="auto">Auto</option>
-						<option value="fal">fal.ai</option>
-						<option value="openrouter">OpenRouter</option>
-					</select>
-				</div>
-			</div>
-
-			{#if composition && (isGraphicCard || !usesCharacterRef || !usesProductRef)}
-				<!-- The contract, stated up front: which references this run feeds.
-				     Fields for unused references are not rendered at all below. -->
-				<p class="comp-note" role="note">
-					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" /></svg>
-					<span>
-						{#if isGraphicCard}
-							<strong>Typographic card.</strong> The model renders the card's text as the
-							artwork. No reference images are sent — no persona face, no product photo.
-						{:else if !usesCharacterRef && !usesProductRef}
-							<strong>No reference images.</strong> This composition includes neither the
-							persona nor a product — the scene is generated purely from the prompt.
-						{:else if !usesCharacterRef}
-							<strong>Product reference only.</strong> The persona does not appear in this
-							composition, so no face reference is sent (and none is generated).
-						{:else}
-							<strong>Face reference only.</strong> Product-free channel content — the
-							brand-kit product photo is not attached.
-						{/if}
-					</span>
-				</p>
-			{/if}
-
-			{#if media !== 'image'}
-				<label class="captions-toggle">
-					<!-- The 16px control keeps its size; .cb-hit gives it a 44×44 target. -->
-					<span class="cb-hit">
-						<input type="checkbox" bind:checked={captions} aria-describedby="gc-captions-hint" />
-					</span>
-					<span class="captions-copy">
-						<strong>Burn on-screen captions</strong>
-						<span class="hint" id="gc-captions-hint">
-							Off by default — the video stays clean. When on, a short hook caption is burned
-							onto the clip.
+		<!-- ── The journey ──────────────────────────────────────────────
+		     A post is four decisions in a real order — what it is, how it
+		     looks, what builds it, where it goes — so the composer asks them
+		     in that order instead of stacking every field into one scroll.
+		     A prompt-kind run is a single decision and stays on one pane; a
+		     wizard for two fields would be worse than the form it replaced. -->
+		{#if steps.length > 1}
+			<nav class="journey" aria-label="Composer steps">
+				{#each steps as s, i (s.id)}
+					<button
+						type="button"
+						class="journey-step"
+						class:current={i === stepIndex}
+						class:done={i < stepIndex}
+						aria-current={i === stepIndex ? 'step' : undefined}
+						onclick={() => goToStep(i)}
+					>
+						<span class="journey-dot" aria-hidden="true">
+							{#if i < stepIndex}
+								<svg
+									width="12"
+									height="12"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="3"
+									stroke-linecap="round"
+									stroke-linejoin="round"><path d="M20 6 9 17l-5-5" /></svg
+								>
+							{:else}{i + 1}{/if}
 						</span>
-					</span>
-				</label>
-				<label class="captions-toggle">
-					<span class="cb-hit">
-						<input type="checkbox" bind:checked={aiBadge} aria-describedby="gc-aibadge-hint" />
-					</span>
-					<span class="captions-copy">
-						<strong>“AI GENERATED” disclosure badge</strong>
-						<span class="hint" id="gc-aibadge-hint">
-							Off by default. When on, a small badge is burned top-left. Independent of captions.
-						</span>
-					</span>
-				</label>
-			{/if}
-
-			{#if preview.connectedPlatforms?.length}
-				<div class="fld">
-					<span class="fld-label" id="gc-platforms-label">Publish to (connected accounts only)</span>
-					<div
-						class="chips"
-						role="group"
-						aria-labelledby="gc-platforms-label"
-						aria-describedby="gc-platforms-hint"
-					>
-						{#each preview.connectedPlatforms as p}
-							<button
-								type="button"
-								class="chip"
-								class:on={platforms.includes(p)}
-								aria-pressed={platforms.includes(p)}
-								onclick={() => togglePlatform(p)}>{p}</button
-							>
-						{/each}
-					</div>
-					<span class="hint" id="gc-platforms-hint">
-						Only connected platforms are shown — a post only publishes where an account is connected.
-					</span>
-				</div>
-			{:else}
-				<!-- No connected account: a post can't be scheduled to publish. It can
-				     still be saved as a draft and posted later once a platform connects. -->
-				<div class="no-conn" role="alert">
-					<strong>
-						<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" /><line x1="12" x2="12" y1="9" y2="13" /><line x1="12" x2="12.01" y1="17" y2="17" /></svg>
-						<span>No connected account</span>
-					</strong>
-					<p>
-						This post can't be scheduled to publish — there's nowhere to send it yet. Connect a
-						platform first, then it can go out. You can still save it as a draft below.
-					</p>
-					{#if onGoToConnections}
-						<button type="button" class="no-conn-cta" onclick={onGoToConnections}>
-							Go to Connections
-							<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14" /><path d="m12 5 7 7-7 7" /></svg>
-						</button>
-					{/if}
-				</div>
-			{/if}
-
-			<div class="fld">
-				<label class="fld-label" for="gc-scene">Scene / visual prompt</label>
-				<textarea
-					id="gc-scene"
-					aria-describedby="gc-scene-hint"
-					bind:value={scene}
-					rows="4"
-					placeholder="Leave blank to let the Director write it"
-				></textarea>
-				<span class="hint" id="gc-scene-hint">{preview.sceneNote}</span>
-			</div>
-
-			{#if usesProductRef && products.length}
-				<div class="fld">
-					<label class="fld-label" for="gc-product">Product</label>
-					<select
-						id="gc-product"
-						aria-describedby="gc-product-hint"
-						value={productId}
-						onchange={onProductPick}
-					>
-						<option value="">Custom / none — use the URL below</option>
-						{#each products as p}
-							<option value={p.id}>{p.name}{p.photoUrl ? '' : ' (no photo)'}</option>
-						{/each}
-					</select>
-					<span class="hint" id="gc-product-hint">
-						Pick a product from this persona's brand kit — its photo fills the URL below. Products
-						come from the brand brief selected in the persona's <strong>Profile</strong>.
-					</span>
-				</div>
-			{/if}
-
-			{#if usesProductRef || usesCharacterRef}
-				<!-- Only the reference fields this composition actually feeds. A field
-				     for a reference the run won't use would be a lie — it's not shown. -->
-				<div class="row">
-					{#if usesProductRef}
-						<div class="fld">
-							<label class="fld-label" for="gc-product-url"
-								>Product photo URL{products.length ? ' (override)' : ''}</label
-							>
-							<input id="gc-product-url" inputmode="url" bind:value={productPhotoUrl} placeholder="https://…" />
-							{#if productPhotoUrl}
-								<img class="url-preview" src={productPhotoUrl} alt="Product preview" width="84" height="84" loading="lazy" onload={showImg} onerror={hideOnError} />
-							{/if}
-						</div>
-					{/if}
-					{#if usesCharacterRef}
-						<div class="fld">
-							<label class="fld-label" for="gc-character-url">Character reference URL</label>
-							<input
-								id="gc-character-url"
-								inputmode="url"
-								aria-describedby={characterRefUrl ? undefined : 'gc-character-hint'}
-								bind:value={characterRefUrl}
-								placeholder="https://…"
-							/>
-							{#if characterRefUrl}
-								<img class="url-preview" src={characterRefUrl} alt="Character reference preview" width="84" height="84" loading="lazy" onload={showImg} onerror={hideOnError} />
-							{:else}
-								<!-- Blank ≠ no face. The server sends the persona's PINNED face (or
-								     generates one on the fly) so the character stays consistent. -->
-								<span class="hint char-auto" id="gc-character-hint">
-									Blank uses the persona's pinned face — a consistent face is still sent (generated
-									automatically the first time). Paste a URL only to override it for this post.
-								</span>
-							{/if}
-						</div>
-					{/if}
-				</div>
-			{/if}
-
-			<div class="row">
-				<div class="fld">
-					<label class="fld-label" for="gc-date">Schedule date (optional)</label>
-					<input id="gc-date" type="date" bind:value={scheduledDate} />
-				</div>
-				<div class="fld">
-					<label class="fld-label" for="gc-time">Schedule time (optional)</label>
-					<input id="gc-time" type="time" bind:value={scheduledTime} />
-				</div>
-			</div>
-
-			{#if media === 'video'}
-				<div class="fld">
-					<span class="fld-label" id="gc-format-label">Video format</span>
-					<div
-						class="chips"
-						role="radiogroup"
-						aria-labelledby="gc-format-label"
-						aria-describedby="gc-format-hint"
-					>
-						<button type="button" class="chip" class:on={format === 'spokesperson' && !isGraphicCard} role="radio" aria-checked={format === 'spokesperson' && !isGraphicCard} disabled={isGraphicCard} title={isGraphicCard ? 'A graphic card has no face to animate — video runs as b-roll motion.' : undefined} onclick={() => (format = 'spokesperson')}>
-							<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" x2="12" y1="19" y2="22" /></svg>
-							Spokesperson
-						</button>
-						<button type="button" class="chip" class:on={format === 'broll'} role="radio" aria-checked={format === 'broll'} onclick={() => (format = 'broll')}>
-							<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="18" rx="2" /><path d="M7 3v18M17 3v18M2 9h5M2 15h5M17 9h5M17 15h5" /></svg>
-							B-roll
-						</button>
-						<button type="button" class="chip" class:on={format === 'auto'} role="radio" aria-checked={format === 'auto'} onclick={() => (format = 'auto')}>
-							<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z" /></svg>
-							Auto
-						</button>
-					</div>
-					<span class="hint" id="gc-format-hint">
-						{#if isGraphicCard}
-							A graphic card has no face to animate — video always runs as b-roll motion of the card.
-						{:else if format === 'spokesperson'}
-							The character speaks on camera — voiceover + talking head (OmniHuman). The b-roll model picker below doesn't apply to this run.
-						{:else if format === 'broll'}
-							A silent product/lifestyle clip from the b-roll model below. No voiceover.
-						{:else}
-							The Director picks spokesperson or b-roll per post (biased to spokesperson). Pick one to lock the exact pipeline.
-						{/if}
-					</span>
-				</div>
-			{/if}
-
-			<!-- Only for runs that will actually feed an i2v model: image-only runs
-			     never touch it, and cinematic runs use their own fixed pipeline —
-			     offering the picker there would imply a choice that has no effect. -->
-			{#if videoModelOptions.length && media === 'video' && format !== 'spokesperson'}
-				<div class="fld">
-					<span class="fld-label" id="gc-videomodel-label">Video model — the biggest cost in this run</span>
-					<div class="models" role="radiogroup" aria-labelledby="gc-videomodel-label">
-						{#each videoModelOptions as m}
-							<button
-								type="button"
-								class="model"
-								class:on={videoModel === m.id}
-								role="radio"
-								aria-checked={videoModel === m.id}
-								onclick={() => (videoModel = m.id)}
-							>
-								<span class="model-top">
-									<span class="model-name">{m.label}</span>
-									<span class="model-usd">{usd(m.usd)}</span>
-								</span>
-								<span class="model-tier tier-{m.tier}">{TIER_LABEL[m.tier]}</span>
-								<span class="model-note">{m.note}</span>
-							</button>
-						{/each}
-					</div>
-					{#if selectedVideoModel}
-						<!-- Params adjust to the picked model: what it actually supports. -->
-						<div class="model-params">
-							<span class="param" class:param-off={!selectedVideoModel.supportsAudio}>
-								{#if selectedVideoModel.supportsAudio}
-									<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4z" /><path d="M15.54 8.46a5 5 0 0 1 0 7.07" /><path d="M19.07 4.93a10 10 0 0 1 0 14.14" /></svg>
-									Audio track
-								{:else}
-									<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4z" /><line x1="22" x2="16" y1="9" y2="15" /><line x1="16" x2="22" y1="9" y2="15" /></svg>
-									Silent — no audio
-								{/if}
-							</span>
-							{#if selectedVideoModel.supportsDuration}
-								<span class="param">
-									<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
-									Custom duration
-								</span>
-							{:else}
-								<span class="param param-off">
-									<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
-									Fixed 5s
-								</span>
-							{/if}
-							{#if selectedVideoModel.caveat}
-								<span class="param param-warn">
-									<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" /><line x1="12" x2="12" y1="9" y2="13" /><line x1="12" x2="12.01" y1="17" y2="17" /></svg>
-									{selectedVideoModel.caveat}
-								</span>
-							{/if}
-						</div>
-					{/if}
-				</div>
-			{/if}
-
-			<div class="steps">
-				<span class="fld-label">Pipeline that will run</span>
-				{#each activeSteps as s}
-					{@const isVid = String(s.step).includes('b-roll') && selectedVideoModel}
-					<div class="step">
-						<span class="step-name">{s.step}</span>
-						<code>{isVid ? selectedVideoModel?.label : s.model}</code>
-						<span class="step-usd">{usd(isVid ? selectedVideoModel!.usd : s.usd)}</span>
-					</div>
+						<span class="journey-label">{s.label}</span>
+					</button>
 				{/each}
-			</div>
+			</nav>
 		{/if}
 
-		{#if destination}
-			<p class="dest-note" role="note" aria-live="polite">
-				<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 2 11 13" /><path d="M22 2 15 22l-4-9-9-4Z" /></svg>
-				<span>{destination.hint}</span>
-			</p>
-		{/if}
+		<!-- Keyed so each step animates in as its own pane rather than the
+		     fields silently swapping under a static heading. -->
+		{#key currentStep.id}
+			<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+			<section
+				class="pane"
+				aria-labelledby="gc-pane-title"
+				in:fly={{ x: 14, duration: 180, easing: cubicOut }}
+				onkeydown={onPaneKeydown}
+			>
+				<header class="pane-head">
+					<h4 id="gc-pane-title">{currentStep.question}</h4>
+					<p>{currentStep.blurb}</p>
+				</header>
+
+				<div class="pane-body">
+					{#if modelOptions.length && (!isPostKind || currentStep.id === 'craft')}
+						<div class="fld">
+							<span class="fld-label" id="gc-model-label">Model — pick your budget vs quality</span>
+							<div
+								class="models"
+								role="radiogroup"
+								aria-labelledby="gc-model-label"
+								aria-invalid={!!refWarning}
+								aria-describedby={refWarning ? 'gc-model-warn' : undefined}
+							>
+								{#each modelOptions as m}
+									<button
+										type="button"
+										class="model"
+										class:on={model === m.id}
+										role="radio"
+										aria-checked={model === m.id}
+										onclick={() => (model = m.id)}
+									>
+										<span class="model-top">
+											<span class="model-name">{m.label}</span>
+											<span class="model-usd">{usd(m.usd)}</span>
+										</span>
+										<span class="model-tier tier-{m.tier}">{TIER_LABEL[m.tier]}</span>
+										<span class="model-note">{m.note}</span>
+									</button>
+								{/each}
+							</div>
+							{#if refWarning}
+								<p class="model-warn" id="gc-model-warn" role="alert">
+									<svg
+										width="14"
+										height="14"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="2"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										aria-hidden="true"
+										><path
+											d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"
+										/><line x1="12" x2="12" y1="9" y2="13" /><line
+											x1="12"
+											x2="12.01"
+											y1="17"
+											y2="17"
+										/></svg
+									>
+									<span>{refWarning}</span>
+								</p>
+							{/if}
+						</div>
+					{/if}
+
+					{#if isPromptKind}
+						<div class="fld">
+							<label class="fld-label" for="gc-prompt">Prompt sent to the model</label>
+							<textarea id="gc-prompt" bind:value={prompt} rows="6" spellcheck="false"></textarea>
+						</div>
+
+						{#if preview.finalPrompt}
+							<details class="raw">
+								<summary>Exact string the provider receives</summary>
+								<pre>{finalPromptPreview}</pre>
+								<p class="hint">
+									The pipeline prepends a fixed style prefix — shown here so what you approve is
+									literally what is sent.
+								</p>
+							</details>
+						{/if}
+
+						{#if preview.image_urls?.length}
+							<div class="fld">
+								<span class="fld-label">Reference images ({preview.image_urls.length})</span>
+								<div class="refs">
+									{#each preview.image_urls as url, i}
+										<img
+											src={url}
+											alt="Reference image {i + 1} of {preview.image_urls.length}"
+											width="72"
+											height="72"
+											loading="lazy"
+										/>
+									{/each}
+								</div>
+							</div>
+						{/if}
+					{/if}
+
+					{#if isPostKind && currentStep.id === 'subject'}
+						<div class="fld">
+							<label class="fld-label" for="gc-topic">Topic</label>
+							<input
+								id="gc-topic"
+								bind:value={topic}
+								placeholder="Leave blank to let the persona pick"
+							/>
+						</div>
+
+						<div class="row">
+							<div class="fld">
+								<label class="fld-label" for="gc-media">Media</label>
+								<!-- "video" covers BOTH spokesperson and b-roll — the Video format
+							     chips below decide which — so the label must not claim b-roll. -->
+								<select id="gc-media" bind:value={media}>
+									<option value="video">Video</option>
+									<option value="image">Image only</option>
+									<option value="cinematic">Cinematic (multi-shot)</option>
+								</select>
+							</div>
+						</div>
+
+						{#if media === 'video'}
+							<div class="fld">
+								<span class="fld-label" id="gc-format-label">Video format</span>
+								<div
+									class="chips"
+									role="radiogroup"
+									aria-labelledby="gc-format-label"
+									aria-describedby="gc-format-hint"
+								>
+									<button
+										type="button"
+										class="chip"
+										class:on={format === 'spokesperson' && !isGraphicCard}
+										role="radio"
+										aria-checked={format === 'spokesperson' && !isGraphicCard}
+										disabled={isGraphicCard}
+										title={isGraphicCard
+											? 'A graphic card has no face to animate — video runs as b-roll motion.'
+											: undefined}
+										onclick={() => (format = 'spokesperson')}
+									>
+										<svg
+											width="14"
+											height="14"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											aria-hidden="true"
+											><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" /><path
+												d="M19 10v2a7 7 0 0 1-14 0v-2"
+											/><line x1="12" x2="12" y1="19" y2="22" /></svg
+										>
+										Spokesperson
+									</button>
+									<button
+										type="button"
+										class="chip"
+										class:on={format === 'broll'}
+										role="radio"
+										aria-checked={format === 'broll'}
+										onclick={() => (format = 'broll')}
+									>
+										<svg
+											width="14"
+											height="14"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											aria-hidden="true"
+											><rect x="2" y="3" width="20" height="18" rx="2" /><path
+												d="M7 3v18M17 3v18M2 9h5M2 15h5M17 9h5M17 15h5"
+											/></svg
+										>
+										B-roll
+									</button>
+									<button
+										type="button"
+										class="chip"
+										class:on={format === 'auto'}
+										role="radio"
+										aria-checked={format === 'auto'}
+										onclick={() => (format = 'auto')}
+									>
+										<svg
+											width="14"
+											height="14"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											aria-hidden="true"
+											><path
+												d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"
+											/></svg
+										>
+										Auto
+									</button>
+								</div>
+								<span class="hint" id="gc-format-hint">
+									{#if isGraphicCard}
+										A graphic card has no face to animate — video always runs as b-roll motion of
+										the card.
+									{:else if format === 'spokesperson'}
+										The character speaks on camera — voiceover + talking head (OmniHuman). The
+										b-roll model picker below doesn't apply to this run.
+									{:else if format === 'broll'}
+										A silent product/lifestyle clip from the b-roll model below. No voiceover.
+									{:else}
+										The Director picks spokesperson or b-roll per post (biased to spokesperson).
+										Pick one to lock the exact pipeline.
+									{/if}
+								</span>
+							</div>
+						{/if}
+
+						{#if composition && (isGraphicCard || !usesCharacterRef || !usesProductRef)}
+							<!-- The contract, stated up front: which references this run feeds.
+						     Fields for unused references are not rendered at all below. -->
+							<p class="comp-note" role="note">
+								<svg
+									width="14"
+									height="14"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									aria-hidden="true"
+									><circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path
+										d="M12 8h.01"
+									/></svg
+								>
+								<span>
+									{#if isGraphicCard}
+										<strong>Typographic card.</strong> The model renders the card's text as the artwork.
+										No reference images are sent — no persona face, no product photo.
+									{:else if !usesCharacterRef && !usesProductRef}
+										<strong>No reference images.</strong> This composition includes neither the persona
+										nor a product — the scene is generated purely from the prompt.
+									{:else if !usesCharacterRef}
+										<strong>Product reference only.</strong> The persona does not appear in this composition,
+										so no face reference is sent (and none is generated).
+									{:else}
+										<strong>Face reference only.</strong> Product-free channel content — the brand-kit
+										product photo is not attached.
+									{/if}
+								</span>
+							</p>
+						{/if}
+					{/if}
+
+					{#if isPostKind && currentStep.id === 'look'}
+						<div class="fld">
+							<label class="fld-label" for="gc-scene">Scene / visual prompt</label>
+							<textarea
+								id="gc-scene"
+								aria-describedby="gc-scene-hint"
+								bind:value={scene}
+								rows="4"
+								placeholder="Leave blank to let the Director write it"
+							></textarea>
+							<span class="hint" id="gc-scene-hint">{preview.sceneNote}</span>
+						</div>
+
+						{#if usesProductRef && products.length}
+							<div class="fld">
+								<label class="fld-label" for="gc-product">Product</label>
+								<select
+									id="gc-product"
+									aria-describedby="gc-product-hint"
+									value={productId}
+									onchange={onProductPick}
+								>
+									<option value="">Custom / none — use the URL below</option>
+									{#each products as p}
+										<option value={p.id}>{p.name}{p.photoUrl ? '' : ' (no photo)'}</option>
+									{/each}
+								</select>
+								<span class="hint" id="gc-product-hint">
+									Pick a product from this persona's brand kit — its photo fills the URL below.
+									Products come from the brand brief selected in the persona's <strong
+										>Profile</strong
+									>.
+								</span>
+							</div>
+						{/if}
+
+						{#if usesProductRef || usesCharacterRef}
+							<!-- Only the reference fields this composition actually feeds. A field
+						     for a reference the run won't use would be a lie — it's not shown. -->
+							<div class="row">
+								{#if usesProductRef}
+									<div class="fld">
+										<label class="fld-label" for="gc-product-url"
+											>Product photo URL{products.length ? ' (override)' : ''}</label
+										>
+										<input
+											id="gc-product-url"
+											inputmode="url"
+											bind:value={productPhotoUrl}
+											placeholder="https://…"
+										/>
+										{#if productPhotoUrl}
+											<img
+												class="url-preview"
+												src={productPhotoUrl}
+												alt="Product preview"
+												width="84"
+												height="84"
+												loading="lazy"
+												onload={showImg}
+												onerror={hideOnError}
+											/>
+										{/if}
+									</div>
+								{/if}
+								{#if usesCharacterRef}
+									<div class="fld">
+										<label class="fld-label" for="gc-character-url">Character reference URL</label>
+										<input
+											id="gc-character-url"
+											inputmode="url"
+											aria-describedby={characterRefUrl ? undefined : 'gc-character-hint'}
+											bind:value={characterRefUrl}
+											placeholder="https://…"
+										/>
+										{#if characterRefUrl}
+											<img
+												class="url-preview"
+												src={characterRefUrl}
+												alt="Character reference preview"
+												width="84"
+												height="84"
+												loading="lazy"
+												onload={showImg}
+												onerror={hideOnError}
+											/>
+										{:else}
+											<!-- Blank ≠ no face. The server sends the persona's PINNED face (or
+										     generates one on the fly) so the character stays consistent. -->
+											<span class="hint char-auto" id="gc-character-hint">
+												Blank uses the persona's pinned face — a consistent face is still sent
+												(generated automatically the first time). Paste a URL only to override it
+												for this post.
+											</span>
+										{/if}
+									</div>
+								{/if}
+							</div>
+						{/if}
+
+						{#if media !== 'image'}
+							<label class="captions-toggle">
+								<!-- The 16px control keeps its size; .cb-hit gives it a 44×44 target. -->
+								<span class="cb-hit">
+									<input
+										type="checkbox"
+										bind:checked={captions}
+										aria-describedby="gc-captions-hint"
+									/>
+								</span>
+								<span class="captions-copy">
+									<strong>Burn on-screen captions</strong>
+									<span class="hint" id="gc-captions-hint">
+										Off by default — the video stays clean. When on, a short hook caption is burned
+										onto the clip.
+									</span>
+								</span>
+							</label>
+							<label class="captions-toggle">
+								<span class="cb-hit">
+									<input
+										type="checkbox"
+										bind:checked={aiBadge}
+										aria-describedby="gc-aibadge-hint"
+									/>
+								</span>
+								<span class="captions-copy">
+									<strong>“AI GENERATED” disclosure badge</strong>
+									<span class="hint" id="gc-aibadge-hint">
+										Off by default. When on, a small badge is burned top-left. Independent of
+										captions.
+									</span>
+								</span>
+							</label>
+						{/if}
+					{/if}
+
+					{#if isPostKind && currentStep.id === 'craft'}
+						<div class="fld">
+							<label class="fld-label" for="gc-provider">Provider</label>
+							<select id="gc-provider" bind:value={provider}>
+								<option value="auto">Auto</option>
+								<option value="fal">fal.ai</option>
+								<option value="openrouter">OpenRouter</option>
+							</select>
+						</div>
+
+						<!-- Only for runs that will actually feed an i2v model: image-only runs
+					     never touch it, and cinematic runs use their own fixed pipeline —
+					     offering the picker there would imply a choice that has no effect. -->
+						{#if videoModelOptions.length && media === 'video' && format !== 'spokesperson'}
+							<div class="fld">
+								<span class="fld-label" id="gc-videomodel-label"
+									>Video model — the biggest cost in this run</span
+								>
+								<div class="models" role="radiogroup" aria-labelledby="gc-videomodel-label">
+									{#each videoModelOptions as m}
+										<button
+											type="button"
+											class="model"
+											class:on={videoModel === m.id}
+											role="radio"
+											aria-checked={videoModel === m.id}
+											onclick={() => (videoModel = m.id)}
+										>
+											<span class="model-top">
+												<span class="model-name">{m.label}</span>
+												<span class="model-usd">{usd(m.usd)}</span>
+											</span>
+											<span class="model-tier tier-{m.tier}">{TIER_LABEL[m.tier]}</span>
+											<span class="model-note">{m.note}</span>
+										</button>
+									{/each}
+								</div>
+								{#if selectedVideoModel}
+									<!-- Params adjust to the picked model: what it actually supports. -->
+									<div class="model-params">
+										<span class="param" class:param-off={!selectedVideoModel.supportsAudio}>
+											{#if selectedVideoModel.supportsAudio}
+												<svg
+													width="13"
+													height="13"
+													viewBox="0 0 24 24"
+													fill="none"
+													stroke="currentColor"
+													stroke-width="2"
+													stroke-linecap="round"
+													stroke-linejoin="round"
+													aria-hidden="true"
+													><path d="M11 5 6 9H2v6h4l5 4z" /><path
+														d="M15.54 8.46a5 5 0 0 1 0 7.07"
+													/><path d="M19.07 4.93a10 10 0 0 1 0 14.14" /></svg
+												>
+												Audio track
+											{:else}
+												<svg
+													width="13"
+													height="13"
+													viewBox="0 0 24 24"
+													fill="none"
+													stroke="currentColor"
+													stroke-width="2"
+													stroke-linecap="round"
+													stroke-linejoin="round"
+													aria-hidden="true"
+													><path d="M11 5 6 9H2v6h4l5 4z" /><line
+														x1="22"
+														x2="16"
+														y1="9"
+														y2="15"
+													/><line x1="16" x2="22" y1="9" y2="15" /></svg
+												>
+												Silent — no audio
+											{/if}
+										</span>
+										{#if selectedVideoModel.supportsDuration}
+											<span class="param">
+												<svg
+													width="13"
+													height="13"
+													viewBox="0 0 24 24"
+													fill="none"
+													stroke="currentColor"
+													stroke-width="2"
+													stroke-linecap="round"
+													stroke-linejoin="round"
+													aria-hidden="true"
+													><circle cx="12" cy="12" r="10" /><polyline
+														points="12 6 12 12 16 14"
+													/></svg
+												>
+												Custom duration
+											</span>
+										{:else}
+											<span class="param param-off">
+												<svg
+													width="13"
+													height="13"
+													viewBox="0 0 24 24"
+													fill="none"
+													stroke="currentColor"
+													stroke-width="2"
+													stroke-linecap="round"
+													stroke-linejoin="round"
+													aria-hidden="true"
+													><circle cx="12" cy="12" r="10" /><polyline
+														points="12 6 12 12 16 14"
+													/></svg
+												>
+												Fixed 5s
+											</span>
+										{/if}
+										{#if selectedVideoModel.caveat}
+											<span class="param param-warn">
+												<svg
+													width="13"
+													height="13"
+													viewBox="0 0 24 24"
+													fill="none"
+													stroke="currentColor"
+													stroke-width="2"
+													stroke-linecap="round"
+													stroke-linejoin="round"
+													aria-hidden="true"
+													><path
+														d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"
+													/><line x1="12" x2="12" y1="9" y2="13" /><line
+														x1="12"
+														x2="12.01"
+														y1="17"
+														y2="17"
+													/></svg
+												>
+												{selectedVideoModel.caveat}
+											</span>
+										{/if}
+									</div>
+								{/if}
+							</div>
+						{/if}
+
+						<div class="steps">
+							<span class="fld-label">Pipeline that will run</span>
+							{#each activeSteps as s}
+								{@const isVid = String(s.step).includes('b-roll') && selectedVideoModel}
+								<div class="step">
+									<span class="step-name">{s.step}</span>
+									<code>{isVid ? selectedVideoModel?.label : s.model}</code>
+									<span class="step-usd">{usd(isVid ? selectedVideoModel!.usd : s.usd)}</span>
+								</div>
+							{/each}
+						</div>
+					{/if}
+
+					{#if isPostKind && currentStep.id === 'deliver'}
+						{#if preview.connectedPlatforms?.length}
+							<div class="fld">
+								<span class="fld-label" id="gc-platforms-label"
+									>Publish to (connected accounts only)</span
+								>
+								<div
+									class="chips"
+									role="group"
+									aria-labelledby="gc-platforms-label"
+									aria-describedby="gc-platforms-hint"
+								>
+									{#each preview.connectedPlatforms as p}
+										<button
+											type="button"
+											class="chip"
+											class:on={platforms.includes(p)}
+											aria-pressed={platforms.includes(p)}
+											onclick={() => togglePlatform(p)}>{p}</button
+										>
+									{/each}
+								</div>
+								<span class="hint" id="gc-platforms-hint">
+									Only connected platforms are shown — a post only publishes where an account is
+									connected.
+								</span>
+							</div>
+						{:else}
+							<!-- No connected account: a post can't be scheduled to publish. It can
+						     still be saved as a draft and posted later once a platform connects. -->
+							<div class="no-conn" role="alert">
+								<strong>
+									<svg
+										width="15"
+										height="15"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="2"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										aria-hidden="true"
+										><path
+											d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"
+										/><line x1="12" x2="12" y1="9" y2="13" /><line
+											x1="12"
+											x2="12.01"
+											y1="17"
+											y2="17"
+										/></svg
+									>
+									<span>No connected account</span>
+								</strong>
+								<p>
+									This post can't be scheduled to publish — there's nowhere to send it yet. Connect
+									a platform first, then it can go out. You can still save it as a draft below.
+								</p>
+								{#if onGoToConnections}
+									<button type="button" class="no-conn-cta" onclick={onGoToConnections}>
+										Go to Connections
+										<svg
+											width="15"
+											height="15"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											aria-hidden="true"><path d="M5 12h14" /><path d="m12 5 7 7-7 7" /></svg
+										>
+									</button>
+								{/if}
+							</div>
+						{/if}
+
+						<div class="row">
+							<div class="fld">
+								<label class="fld-label" for="gc-date">Schedule date (optional)</label>
+								<input id="gc-date" type="date" bind:value={scheduledDate} />
+							</div>
+							<div class="fld">
+								<label class="fld-label" for="gc-time">Schedule time (optional)</label>
+								<input id="gc-time" type="time" bind:value={scheduledTime} />
+							</div>
+						</div>
+
+						{#if destination}
+							<p class="dest-note" role="note" aria-live="polite">
+								<svg
+									width="13"
+									height="13"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									aria-hidden="true"><path d="M22 2 11 13" /><path d="M22 2 15 22l-4-9-9-4Z" /></svg
+								>
+								<span>{destination.hint}</span>
+							</p>
+						{/if}
+					{/if}
+				</div>
+			</section>
+		{/key}
 
 		<div class="meta">
 			{#if preview.model}<span>Model <code>{preview.model}</code></span>{/if}
@@ -767,10 +1186,54 @@
 	{/if}
 
 	{#snippet footer()}
-		<button class="btn-ghost" onclick={onClose}>Cancel</button>
-		<button class="btn-primary" disabled={loading || !!loadError || !preview} onclick={confirm}>
-			{destination?.label ?? spec?.confirmLabel ?? 'Approve & generate'}
-		</button>
+		<!-- The running cost lives in the footer, visible on EVERY step. It is the
+		     one number that should never be a surprise at the end of a journey. -->
+		{#if preview}
+			<span class="foot-cost" aria-live="polite">
+				<span class="foot-cost-label">Est. cost</span>
+				<strong>{usd(isPostKind ? livePostTotal : liveCost)}</strong>
+			</span>
+		{/if}
+		{#if isFirstStep}
+			<button class="btn-ghost" onclick={onClose}>Cancel</button>
+		{:else}
+			<button class="btn-ghost" onclick={prevStep}>
+				<svg
+					width="14"
+					height="14"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg
+				>
+				Back
+			</button>
+		{/if}
+		{#if isLastStep}
+			<button class="btn-primary" disabled={loading || !!loadError || !preview} onclick={confirm}>
+				{destination?.label ?? spec?.confirmLabel ?? 'Approve & generate'}
+			</button>
+		{:else}
+			<!-- Next, never "Approve" — the money decision belongs on the last step
+			     only, so no intermediate button can spend by accident. -->
+			<button class="btn-primary" disabled={loading || !!loadError || !preview} onclick={nextStep}>
+				{steps[stepIndex + 1]?.label ?? 'Next'}
+				<svg
+					width="14"
+					height="14"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					aria-hidden="true"><path d="m9 18 6-6-6-6" /></svg
+				>
+			</button>
+		{/if}
 	{/snippet}
 </Modal>
 
@@ -1226,5 +1689,157 @@
 		color: var(--warning-text);
 		background: var(--warning-soft);
 		border-color: color-mix(in srgb, var(--warning) 40%, transparent);
+	}
+	/* ── The journey ──────────────────────────────────────────────────────
+	   Progress rail + one pane per decision. The rail is clickable in both
+	   directions: nothing here is required, so forcing a linear walk would
+	   just be a worse version of the scroll it replaced. */
+
+	.journey {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+		margin: -0.25rem 0 1.1rem;
+		padding-bottom: 0.9rem;
+		border-bottom: 1px solid var(--border);
+		overflow-x: auto;
+		scrollbar-width: none;
+	}
+
+	.journey::-webkit-scrollbar {
+		display: none;
+	}
+
+	.journey-step {
+		flex: 1 1 0;
+		min-width: 0;
+		display: flex;
+		align-items: center;
+		gap: 0.45rem;
+		padding: 0.4rem 0.5rem;
+		border: none;
+		border-radius: 8px;
+		background: transparent;
+		color: var(--muted);
+		font-size: 0.76rem;
+		font-weight: 600;
+		cursor: pointer;
+		white-space: nowrap;
+		transition:
+			color 0.18s,
+			background 0.18s;
+	}
+
+	.journey-step:hover {
+		background: var(--surface-2);
+		color: var(--text);
+	}
+
+	.journey-dot {
+		flex-shrink: 0;
+		display: grid;
+		place-items: center;
+		width: 22px;
+		height: 22px;
+		border-radius: 999px;
+		border: 1.5px solid var(--border-strong);
+		font-size: 0.68rem;
+		font-weight: 700;
+		transition:
+			background 0.18s,
+			border-color 0.18s,
+			color 0.18s;
+	}
+
+	.journey-step.current {
+		color: var(--text);
+	}
+
+	.journey-step.current .journey-dot {
+		border-color: var(--accent);
+		background: var(--accent);
+		color: #fff;
+	}
+
+	.journey-step.done {
+		color: var(--text);
+	}
+
+	.journey-step.done .journey-dot {
+		border-color: var(--accent);
+		color: var(--accent);
+		background: color-mix(in srgb, var(--accent) 14%, transparent);
+	}
+
+	/* The label is the first thing to go on a narrow modal — the numbered dot
+	   still carries the position, so the rail never wraps or clips mid-word. */
+	@media (max-width: 620px) {
+		.journey-label {
+			display: none;
+		}
+
+		.journey-step {
+			flex: 0 0 auto;
+			justify-content: center;
+		}
+	}
+
+	.pane {
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+	}
+
+	.pane-head h4 {
+		margin: 0 0 0.25rem;
+		font-size: 1.02rem;
+		font-weight: 650;
+		letter-spacing: -0.01em;
+		color: var(--text);
+	}
+
+	.pane-head p {
+		margin: 0;
+		font-size: 0.8rem;
+		line-height: 1.55;
+		color: var(--muted);
+		max-width: 60ch;
+	}
+
+	.pane-body {
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+	}
+
+	/* ── Footer: the running cost sits opposite the nav, on every step ──── */
+	.foot-cost {
+		margin-right: auto;
+		display: flex;
+		align-items: baseline;
+		gap: 0.4rem;
+		font-size: 0.78rem;
+		color: var(--muted);
+	}
+
+	.foot-cost strong {
+		font-size: 0.9rem;
+		font-weight: 700;
+		color: var(--text);
+		font-variant-numeric: tabular-nums;
+	}
+
+	.foot-cost-label {
+		font-size: 0.7rem;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+	}
+
+	/* The footer buttons carry chevrons now, so they need to be flex rows. */
+	:global(.modal-foot) .btn-ghost,
+	:global(.modal-foot) .btn-primary {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
 	}
 </style>

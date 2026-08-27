@@ -45,6 +45,8 @@
 		type HandleCandidate
 	} from '$lib/persona-identity';
 	import { readPersonaProfile } from '$lib/persona-profile-store';
+	import { confirmDeletePosts } from '$lib/confirm-preview';
+	import { confirmAction } from '$lib/stores/confirm.svelte';
 	import MediaPreviewModal from '$lib/components/generation/MediaPreviewModal.svelte';
 	import {
 		startGeneration,
@@ -349,14 +351,20 @@
 	let activeHoursEnd = $state(agent?.active_hours_end ?? 22);
 	let autonomyLevel = $state<AutonomyLevel>(agent?.autonomy_level ?? 'advisor');
 	// Switching to Fully Autonomous means posts publish WITHOUT review — gate it
-	// behind an explicit confirm (same native confirm pattern as persona delete),
-	// reverting the select when the user backs out.
+	// behind an explicit confirm, reverting the select when the user backs out.
 	let prevAutonomyLevel: AutonomyLevel = agent?.autonomy_level ?? 'advisor';
-	function handleAutonomyChange() {
+	async function handleAutonomyChange() {
 		if (autonomyLevel === 'fully_autonomous' && prevAutonomyLevel !== 'fully_autonomous') {
-			const ok = confirm(
-				`Switch ${agent?.name ?? 'this persona'} to Fully Autonomous?\n\nPosts will publish without review — the autopilot generates AND publishes them unattended. You can drop back to Semi at any time.`
-			);
+			const ok = await confirmAction({
+				title: `Switch ${agent?.name ?? 'this persona'} to Fully Autonomous?`,
+				body:
+					'The autopilot will generate AND publish posts unattended. Nothing waits for ' +
+					'your review first. You can drop back to Semi at any time.',
+				warning: 'Posts go live without you seeing them.',
+				confirmLabel: 'Switch to Fully Autonomous',
+				cancelLabel: 'Keep current level',
+				tone: 'danger'
+			});
 			if (!ok) {
 				autonomyLevel = prevAutonomyLevel;
 				return;
@@ -1486,6 +1494,10 @@
 
 	async function handleDeletePost(post: any) {
 		if (!post?.id) return;
+		// This is the per-card trash can (and the drawer's delete). It used to fire
+		// straight into Posts.delete with no prompt and no undo — one stray click
+		// on a scrolling feed and the post was gone for good.
+		if (!(await confirmDeletePosts([post]))) return;
 		deletingPostId = post.id;
 		try {
 			const res = await Posts.delete(post.id);
@@ -1503,11 +1515,11 @@
 
 				if (teardown?.unpublished?.length) {
 					showToast(
-						`Removed from ${teardown.unpublished.join(', ')} and deleted locally`,
+						`Removed from ${teardown.unpublished.join(', ')} and moved to Trash`,
 						'success'
 					);
 				} else {
-					showToast('Post deleted', 'success');
+					showToast('Moved to Trash — restorable for 30 days', 'success');
 				}
 
 				if (teardown?.manualDeletion?.length) {
@@ -1564,8 +1576,8 @@
 	async function deleteSelectedPosts() {
 		const ids = [...selectedPostIds];
 		if (ids.length === 0 || bulkDeletingPosts) return;
-		if (!confirm(`Delete ${ids.length} post${ids.length === 1 ? '' : 's'}? This cannot be undone.`))
-			return;
+		const targets = feedPosts.filter((p: any) => ids.includes(p.id));
+		if (!(await confirmDeletePosts(targets.length ? targets : ids.map((id) => ({ id }))))) return;
 		bulkDeletingPosts = true;
 		try {
 			const res = await Posts.deleteMany(ids);
@@ -1581,8 +1593,8 @@
 			const deleted = res.deleted ?? ids.length;
 			showToast(
 				deleted < ids.length
-					? `Deleted ${deleted} of ${ids.length} posts — the rest could not be found`
-					: `Deleted ${deleted} post${deleted === 1 ? '' : 's'}`,
+					? `Moved ${deleted} of ${ids.length} to Trash — the rest could not be found`
+					: `Moved ${deleted} post${deleted === 1 ? '' : 's'} to Trash — restorable for 30 days`,
 				deleted < ids.length ? 'warning' : 'success'
 			);
 		} catch (err) {
@@ -1859,14 +1871,34 @@
 		const lines: string[] = [];
 		if (postIds.length)
 			lines.push(
-				`${postIds.length} post${postIds.length === 1 ? '' : 's'} (the post is deleted along with its media)`
+				`${postIds.length} post${postIds.length === 1 ? '' : 's'} (trashed along with the media)`
 			);
 		if (kitItems.length)
 			lines.push(
 				`${kitItems.length} reference photo${kitItems.length === 1 ? '' : 's'} (unpinned from the kit; still restorable from your library)`
 			);
 		if (avatarItems.length) lines.push('the profile picture (cleared back to the gradient)');
-		if (!confirm(`Delete:\n\n• ${lines.join('\n• ')}\n\nThis cannot be undone for posts.`)) return;
+		const hasPosts = postIds.length > 0;
+		const ok = await confirmAction({
+			title: `Delete ${items.length} asset${items.length === 1 ? '' : 's'}?`,
+			body: lines.join(' · '),
+			warning: hasPosts
+				? `${postIds.length} post${postIds.length === 1 ? '' : 's'} go to Trash with their media — restorable for 30 days. Reference photos and the avatar are unpinned immediately.`
+				: 'Reference photos are unpinned from the kit; the underlying file is kept so no published post loses its media.',
+			preview: items.slice(0, 4).map((i) => ({
+				image: i.url,
+				label:
+					i.source === 'post'
+						? 'Post media'
+						: i.source === 'avatar'
+							? 'Profile picture'
+							: `Reference photo${i.stage ? ` — ${i.stage}` : ''}`,
+				meta: i.source === 'post' ? 'The post is trashed along with it' : null
+			})),
+			confirmLabel: 'Delete',
+			tone: hasPosts ? 'danger' : 'caution'
+		});
+		if (!ok) return;
 
 		deletingAssets = true;
 		try {
@@ -1916,7 +1948,14 @@
 
 	/** Removes one past image from a kit stage's restore history. */
 	async function deleteKitHistoryImage(stage: string, url: string) {
-		if (!confirm('Remove this photo from the restore history?')) return;
+		const ok = await confirmAction({
+			title: 'Remove this photo from the restore history?',
+			body: "You won't be able to roll this stage back to it afterwards.",
+			preview: [{ image: url, label: `Reference photo — ${stage}` }],
+			confirmLabel: 'Remove',
+			tone: 'caution'
+		});
+		if (!ok) return;
 		try {
 			const res = await fetch(`/api/agent/${agent.id}/delete-assets`, {
 				method: 'POST',
@@ -2658,7 +2697,27 @@
 
 	async function deleteAgent() {
 		if (!agent?.id) return;
-		const confirmed = confirm(`Permanently delete "${agent.name}"? This cannot be undone.`);
+		// Personas do NOT go to Trash — this really is permanent, so it earns the
+		// type-to-confirm that an everyday post delete does not.
+		const confirmed = await confirmAction({
+			title: `Permanently delete ${agent.name}?`,
+			body:
+				'The persona, its brand kit, its connections and every post it ever made are ' +
+				'removed. There is no Trash and no restore for a persona.',
+			warning: 'There is no undo for this.',
+			preview: [
+				{
+					image: characterRef || null,
+					gradient: agent.gradient || null,
+					initial: agent.initial || agent.name?.charAt(0) || null,
+					label: agent.name,
+					meta: agent.handle ? `@${agent.handle}` : (agent.niche ?? null)
+				}
+			],
+			confirmLabel: 'Delete persona',
+			tone: 'danger',
+			typeToConfirm: agent.name
+		});
 		if (!confirmed) return;
 		try {
 			const res = await fetch('/api/agents/config', {
@@ -5075,7 +5134,12 @@
 													title="Delete skill"
 													aria-label="Delete skill {s.name}"
 													onclick={() =>
-														confirm(`Delete the skill "${s.name}"?`) && deleteSkill(s.id)}
+														void confirmAction({
+															title: `Delete the skill "${s.name}"?`,
+															body: 'The persona stops using it on new posts.',
+															confirmLabel: 'Delete skill',
+															tone: 'caution'
+														}).then((ok) => ok && deleteSkill(s.id))}
 													><svg
 														width="11"
 														height="11"
@@ -5145,7 +5209,12 @@
 													title="Delete integration"
 													aria-label="Delete integration {t.label}"
 													onclick={() =>
-														confirm(`Delete the integration "${t.label}"?`) && deleteTool(t.id)}
+														void confirmAction({
+															title: `Delete the integration "${t.label}"?`,
+															body: 'The persona loses access to it on new posts.',
+															confirmLabel: 'Delete integration',
+															tone: 'caution'
+														}).then((ok) => ok && deleteTool(t.id))}
 													><svg
 														width="11"
 														height="11"

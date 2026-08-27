@@ -16,6 +16,7 @@
 	import SelectionToolbar from '$lib/components/ui/SelectionToolbar.svelte';
 	import { getPostDisplay as sharedGetPostDisplay } from '$lib/components/feed/postDisplay';
 	import { platformColor } from '$lib/platforms';
+	import { confirmDeletePosts } from '$lib/confirm-preview';
 
 	interface ScheduledPost {
 		id: string;
@@ -316,6 +317,9 @@
 
 	async function deletePost() {
 		if (!selectedPost) return;
+		// The drawer forwards its Delete straight here now — its old two-click
+		// footer confirm was replaced by this dialog, which shows what's going.
+		if (!(await confirmDeletePosts([selectedPost]))) return;
 		const targetId = selectedPost.id;
 		deletingPost = true;
 		try {
@@ -330,9 +334,12 @@
 				pruneSelection();
 
 				if (teardown?.unpublished?.length) {
-					showToast(`Removed from ${teardown.unpublished.join(', ')} and deleted locally`, 'success');
+					showToast(
+						`Removed from ${teardown.unpublished.join(', ')} and moved to Trash`,
+						'success'
+					);
 				} else {
-					showToast('Post deleted', 'success');
+					showToast('Moved to Trash — restorable for 30 days', 'success');
 				}
 
 				// Surface platforms that can't be removed via API (Instagram, etc.)
@@ -463,12 +470,8 @@
 	async function bulkDeleteSelected() {
 		const ids = manageSelectedIds;
 		if (ids.length === 0 || bulkDeleting) return;
-		if (
-			!confirm(
-				`Permanently delete ${ids.length} post${ids.length === 1 ? '' : 's'}? Anything already published is removed from the platforms whose API allows it. This cannot be undone.`
-			)
-		)
-			return;
+		const targets = posts.filter((p) => ids.includes(p.id));
+		if (!(await confirmDeletePosts(targets.length ? targets : ids.map((id) => ({ id }))))) return;
 
 		bulkDeleting = true;
 		try {
@@ -489,7 +492,7 @@
 				// The API answers with counts, not with which ids survived — dropping
 				// all of them locally would claim deletions that never happened.
 				showToast(
-					`Deleted ${gone} of ${asked} — the rest weren't found or aren't yours. Reloading the calendar.`,
+					`Trashed ${gone} of ${asked} — the rest weren't found or aren't yours. Reloading the calendar.`,
 					'warning'
 				);
 				await resyncPosts();
@@ -502,8 +505,8 @@
 			pruneSelection();
 			showToast(
 				teardown?.unpublished?.length
-					? `Deleted ${gone} post${gone === 1 ? '' : 's'} — also removed from ${teardown.unpublished.join(', ')}`
-					: `Deleted ${gone} post${gone === 1 ? '' : 's'}`,
+					? `Moved ${gone} post${gone === 1 ? '' : 's'} to Trash — also removed from ${teardown.unpublished.join(', ')}`
+					: `Moved ${gone} post${gone === 1 ? '' : 's'} to Trash — restorable for 30 days`,
 				'success'
 			);
 		} catch (err: any) {

@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { createDbService } from '$lib/server/db';
+import { checkAgentAccess } from '$lib/server/workspaces';
 
 /**
  * Per-persona spend analytics from the generation_events ledger:
@@ -19,8 +20,13 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 
 	const db = createDbService(locals.supabase);
 	const { data: agent, error: agentErr } = await db.agents.get(agentId);
-	if (agentErr || !agent || agent.user_id !== user.id) {
+	if (agentErr || !agent) {
 		return json({ success: false, error: 'Persona not found' }, { status: 404 });
+	}
+	// Spend is sensitive — manager+ only (viewer/creator seats don't see the bill).
+	const access = await checkAgentAccess(locals.supabase, user.id, agentId, 'manager');
+	if (!access.ok) {
+		return json({ success: false, error: access.message }, { status: access.status });
 	}
 
 	const { data: events, error } = await locals.supabase

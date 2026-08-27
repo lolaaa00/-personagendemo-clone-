@@ -3,6 +3,7 @@ import type { RequestHandler } from './$types';
 import { createDbService } from '$lib/server/db';
 import { getServiceSupabase } from '$lib/server/service-supabase';
 import { listUserImages, isOwnedBucketUrl } from '$lib/server/storage';
+import { checkAgentAccess } from '$lib/server/workspaces';
 
 /**
  * Profile-picture history / restore.
@@ -27,11 +28,15 @@ async function requireOwnedAgent(locals: any, agentId: string | undefined): Prom
 		return { ok: false, res: json({ success: false, error: 'Missing agentId' }, { status: 400 }) };
 	const db = createDbService(locals.supabase);
 	const { data: agent, error } = await db.agents.get(agentId);
-	if (error || !agent || agent.user_id !== user.id) {
+	if (error || !agent) {
 		return {
 			ok: false,
 			res: json({ success: false, error: 'Persona not found or ownership mismatch' }, { status: 404 })
 		};
+	}
+	const access = await checkAgentAccess(locals.supabase, user.id, agentId, 'creator');
+	if (!access.ok) {
+		return { ok: false, res: json({ success: false, error: access.message }, { status: access.status }) };
 	}
 	return { ok: true, user, agent, db };
 }

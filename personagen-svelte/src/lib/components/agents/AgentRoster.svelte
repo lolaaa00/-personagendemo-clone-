@@ -1,10 +1,10 @@
 <script lang="ts">
-	import { dialog } from '$lib/actions/dialog';
 	import StatusBadge from './StatusBadge.svelte';
 	import SelectionToolbar from '$lib/components/ui/SelectionToolbar.svelte';
 	import { goto, invalidateAll } from '$app/navigation';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { showToast } from '$lib/stores/ui.svelte';
+	import { confirmAction } from '$lib/stores/confirm.svelte';
 	// Using any[] because agents data comes from raw JSON with camelCase fields
 	interface Props {
 		agents: any[];
@@ -85,38 +85,46 @@
 
 	// ── Delete (single + bulk) ─────────────────────────────────────────────
 	// Deleting a persona also destroys its posts, connections, memories and chat
-	// history, so both paths go through the typed-DELETE confirmation used by the
-	// account Danger Zone rather than a one-click confirm().
+	// history — and unlike a post it does NOT go to Trash. Both paths therefore go
+	// through the app-wide ConfirmDialog with type-to-confirm. This used to be a
+	// bespoke modal here; it now shares the one every other destructive action uses.
 	let deleting = $state(false);
-	let confirmOpen = $state(false);
-	let pendingIds = $state<string[]>([]);
-	let deleteConfirmText = $state('');
 
-	let pendingProtected = $derived(
-		pendingIds.filter((id) => agents.find((a) => a.id === id)?.is_overseer).length
-	);
-
-	function requestDelete(ids: string[]) {
+	async function requestDelete(ids: string[]) {
 		if (ids.length === 0 || deleting) return;
-		pendingIds = ids;
-		deleteConfirmText = '';
-		confirmOpen = true;
+
+		const protectedCount = ids.filter((id) => agents.find((a) => a.id === id)?.is_overseer).length;
+		const ok = await confirmAction({
+			title: `Delete ${ids.length === 1 ? 'persona' : `${ids.length} personas`}?`,
+			body:
+				'This also permanently destroys every post, platform connection, memory and chat ' +
+				`message belonging to ${ids.length === 1 ? 'this persona' : 'these personas'}. ` +
+				'Personas do not go to Trash.',
+			warning:
+				protectedCount > 0
+					? `There is no undo for this. ${protectedCount} protected Hermes overseer ` +
+						`${protectedCount === 1 ? 'persona' : 'personas'} in this selection will be skipped.`
+					: 'There is no undo for this.',
+			preview: ids.map((id) => {
+				const a = agents.find((x) => x.id === id);
+				return {
+					gradient: a?.gradient ?? null,
+					initial: a?.initial ?? a?.name?.charAt(0) ?? null,
+					label: a?.name ?? 'Persona',
+					meta: a?.handle ? `@${a.handle}` : (a?.niche ?? null),
+					badge: a?.is_overseer ? 'Protected' : null
+				};
+			}),
+			confirmLabel: `Delete ${ids.length === 1 ? 'persona' : `${ids.length} personas`}`,
+			tone: 'danger',
+			typeToConfirm: 'DELETE'
+		});
+		if (!ok) return;
+		await runDelete(ids);
 	}
 
-	function closeConfirm() {
-		if (deleting) return;
-		confirmOpen = false;
-		pendingIds = [];
-		deleteConfirmText = '';
-	}
-
-	function onKeydown(e: KeyboardEvent) {
-		if (e.key === 'Escape' && confirmOpen) closeConfirm();
-	}
-
-	async function confirmDelete() {
-		if (deleteConfirmText !== 'DELETE' || deleting || pendingIds.length === 0) return;
-		const ids = pendingIds.slice();
+	async function runDelete(ids: string[]) {
+		if (deleting || ids.length === 0) return;
 		// Names must be captured up front — the rows vanish on success.
 		const names = new Map<string, string>(ids.map((id) => [id, nameOf(id)]));
 		deleting = true;
@@ -169,9 +177,6 @@
 			showToast((err as Error).message || 'Failed to delete personas', 'error');
 		} finally {
 			deleting = false;
-			confirmOpen = false;
-			pendingIds = [];
-			deleteConfirmText = '';
 		}
 	}
 
@@ -265,7 +270,7 @@
 		busy={deleting}
 		onSelectAll={selectAllVisible}
 		onClear={clearSelection}
-		onDelete={() => requestDelete(selectedVisible.slice())}
+		onDelete={() => void requestDelete(selectedVisible.slice())}
 	/>
 
 	<div class="dash-table" role="table" aria-label="Persona roster table">
@@ -328,7 +333,10 @@
 					/>
 				</label>
 				<div class="dash-agent-cell" role="cell">
-					<div class="dash-agent-avatar" style={agent.ugc_character_ref ? '' : `background: ${agent.gradient}`}>
+					<div
+						class="dash-agent-avatar"
+						style={agent.ugc_character_ref ? '' : `background: ${agent.gradient}`}
+					>
 						{#if agent.ugc_character_ref}
 							<img src={agent.ugc_character_ref} alt={agent.name} />
 						{:else}
@@ -341,15 +349,9 @@
 							{#if agent.is_overseer}
 								<!-- Gradient darkened: the original mint/cyan pair carried white 9px
 								     text at ~2.5:1. These stops clear 4.5:1 in both themes. -->
-								<span
-									class="hermes-badge"
-									>Hermes</span
-								>
+								<span class="hermes-badge">Hermes</span>
 							{:else if agent.managed_by_overseer}
-								<span
-									class="managed-badge"
-									title="Orchestrated and monitored by Hermes"
-								>
+								<span class="managed-badge" title="Orchestrated and monitored by Hermes">
 									<svg
 										width="10"
 										height="10"
@@ -439,7 +441,7 @@
 						disabled={agent.is_overseer || deleting}
 						onclick={(e) => {
 							e.stopPropagation();
-							requestDelete([agent.id]);
+							void requestDelete([agent.id]);
 						}}
 					>
 						<svg
@@ -468,95 +470,6 @@
 		{/if}
 	</div>
 </div>
-
-<svelte:window onkeydown={onKeydown} />
-
-<!-- Typed-DELETE confirmation, shared by the row action and the bulk action -->
-{#if confirmOpen}
-	<div class="pdel-overlay">
-		<button type="button" class="pdel-backdrop" aria-label="Cancel deletion" onclick={closeConfirm}
-		></button>
-		<div
-			class="pdel-modal"
-			role="dialog"
-			aria-modal="true"
-			aria-labelledby="pdel-title"
-			tabindex="-1"
-			use:dialog={{ onClose: closeConfirm }}
-		>
-			<div class="pdel-head">
-				<svg
-					width="22"
-					height="22"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="var(--error)"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					aria-hidden="true"
-				>
-					<path
-						d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"
-					/>
-					<line x1="12" y1="9" x2="12" y2="13" />
-					<line x1="12" y1="17" x2="12.01" y2="17" />
-				</svg>
-				<h3 id="pdel-title">
-					Delete {pendingIds.length === 1 ? 'persona' : `${pendingIds.length} personas`}
-				</h3>
-			</div>
-			<p class="pdel-text">
-				This also permanently destroys every post, platform connection, memory and chat message
-				belonging to {pendingIds.length === 1 ? 'this persona' : 'these personas'}. This action is
-				<strong>irreversible</strong>.
-			</p>
-			<ul class="pdel-list">
-				{#each pendingIds.slice(0, 5) as id (id)}
-					<li>{nameOf(id)}</li>
-				{/each}
-				{#if pendingIds.length > 5}
-					<li class="pdel-more">and {pendingIds.length - 5} more</li>
-				{/if}
-			</ul>
-			{#if pendingProtected > 0}
-				<p class="pdel-note">
-					{pendingProtected}
-					protected Hermes overseer {pendingProtected === 1 ? 'persona' : 'personas'} in this selection
-					will be skipped.
-				</p>
-			{/if}
-			<div class="pdel-field">
-				<label for="roster-delete-confirm">Type <strong>DELETE</strong> to confirm</label>
-				<input
-					id="roster-delete-confirm"
-					type="text"
-					autocomplete="off"
-					placeholder="DELETE"
-					disabled={deleting}
-					bind:value={deleteConfirmText}
-				/>
-			</div>
-			<div class="pdel-actions">
-				<button type="button" class="pdel-cancel" disabled={deleting} onclick={closeConfirm}>
-					Cancel
-				</button>
-				<button
-					type="button"
-					class="pdel-confirm"
-					disabled={deleteConfirmText !== 'DELETE' || deleting}
-					onclick={confirmDelete}
-				>
-					{#if deleting}
-						Deleting…
-					{:else}
-						Delete {pendingIds.length === 1 ? 'persona' : `${pendingIds.length} personas`}
-					{/if}
-				</button>
-			</div>
-		</div>
-	</div>
-{/if}
 
 <style>
 	.dash-table-wrap {
@@ -996,155 +909,6 @@
 		text-align: center;
 		color: var(--text-dim);
 		font-size: 0.85rem;
-	}
-
-	/* Typed-DELETE confirmation dialog */
-	.pdel-overlay {
-		position: fixed;
-		inset: 0;
-		z-index: var(--z-modal);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		padding: 1rem;
-	}
-
-	.pdel-backdrop {
-		position: absolute;
-		inset: 0;
-		border: none;
-		padding: 0;
-		background: rgba(0, 0, 0, 0.6);
-		backdrop-filter: blur(4px);
-		cursor: default;
-	}
-
-	.pdel-modal {
-		position: relative;
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: var(--radius);
-		padding: 1.75rem;
-		max-width: 460px;
-		width: 100%;
-		/* dvh so mobile browser chrome can't clip the confirm field or the buttons. */
-		max-height: 90dvh;
-		overflow-y: auto;
-	}
-
-	.pdel-head {
-		display: flex;
-		align-items: center;
-		gap: 0.6rem;
-		margin-bottom: 0.9rem;
-	}
-
-	.pdel-head h3 {
-		font-size: 1rem;
-		font-family: var(--font-display);
-		color: var(--error);
-	}
-
-	.pdel-text {
-		font-size: 0.82rem;
-		color: var(--text-muted);
-		line-height: 1.6;
-		margin-bottom: 0.9rem;
-	}
-
-	.pdel-text strong {
-		color: var(--error);
-	}
-
-	.pdel-list {
-		list-style: none;
-		margin: 0 0 0.9rem;
-		padding: 0.6rem 0.75rem;
-		border: 1px solid var(--border);
-		border-radius: var(--radius-sm);
-		background: var(--surface-2);
-		font-size: 0.78rem;
-		color: var(--text);
-		display: flex;
-		flex-direction: column;
-		gap: 0.25rem;
-	}
-
-	.pdel-list .pdel-more {
-		color: var(--text-dim);
-		font-style: italic;
-	}
-
-	.pdel-note {
-		font-size: 0.75rem;
-		color: var(--warning-text);
-		line-height: 1.5;
-		margin-bottom: 0.9rem;
-	}
-
-	.pdel-field {
-		margin-bottom: 1.25rem;
-	}
-
-	.pdel-field label {
-		display: block;
-		font-size: 0.78rem;
-		color: var(--text-muted);
-		margin-bottom: 0.4rem;
-	}
-
-	.pdel-field label strong {
-		color: var(--error);
-		font-family: var(--font-mono);
-	}
-
-	.pdel-actions {
-		display: flex;
-		gap: 0.6rem;
-		justify-content: flex-end;
-	}
-
-	.pdel-cancel,
-	.pdel-confirm {
-		padding: 0.55rem 1.1rem;
-		/* Dialog actions render ~37px tall; primary actions get the full 44px box. */
-		min-height: 44px;
-		border-radius: var(--radius-sm);
-		font-weight: 600;
-		font-size: 0.8rem;
-		cursor: pointer;
-		font-family: var(--font-body);
-		transition: all 0.2s;
-	}
-
-	.pdel-cancel {
-		background: var(--surface-2);
-		border: 1px solid var(--border-strong);
-		color: var(--text-muted);
-	}
-
-	.pdel-cancel:hover:not(:disabled) {
-		color: var(--text);
-		border-color: var(--accent-mid);
-	}
-
-	.pdel-confirm {
-		/* Raw --error carries white at 3.7:1 in dark mode — under AA for this 12.8px
-		   label. Darkening the fill keeps the destructive red and clears 4.5:1 in both
-		   themes. */
-		background: color-mix(in srgb, var(--error) 85%, #000);
-		border: none;
-		color: #fff;
-	}
-
-	.pdel-confirm:hover:not(:disabled) {
-		opacity: 0.9;
-	}
-
-	.pdel-cancel:disabled,
-	.pdel-confirm:disabled {
-		opacity: 0.4;
-		cursor: not-allowed;
 	}
 
 	@media (max-width: 768px) {

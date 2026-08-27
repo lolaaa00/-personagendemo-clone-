@@ -13,6 +13,7 @@
 	import { onMount } from 'svelte';
 	import { dialog } from '$lib/actions/dialog';
 	import { syncParam, readParam } from '$lib/url-state';
+	import { confirmAction } from '$lib/stores/confirm.svelte';
 
 	let { data } = $props<{
 		data: {
@@ -59,6 +60,11 @@
 			key: 'zernio-keys',
 			label: 'Zernio Keys',
 			icon: 'M5 11h14v10H5zM7 11V7a5 5 0 0110 0v4'
+		},
+		{
+			key: 'team',
+			label: 'Team',
+			icon: 'M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75'
 		},
 		{ key: 'billing', label: 'Billing & Plan', icon: 'M2 5h20v14H2zM2 10h20' },
 		{
@@ -389,10 +395,22 @@
 
 	async function deleteZernioKey(id: string) {
 		const assignedCount = zernioAgents.filter((a) => a.zernio_key_id === id).length;
-		const warning = assignedCount
-			? `Delete this key? ${assignedCount} persona${assignedCount === 1 ? '' : 's'} will revert to the default Zernio key and need their social accounts reconnected.`
-			: 'Delete this Zernio key?';
-		if (!confirm(warning)) return;
+		const ok = await confirmAction({
+			title: 'Delete this Zernio key?',
+			body: assignedCount
+				? `${assignedCount} persona${assignedCount === 1 ? '' : 's'} using it revert to the default Zernio key.`
+				: 'No personas are using it right now.',
+			warning: assignedCount
+				? 'Their connected social accounts live under this key and will need reconnecting.'
+				: undefined,
+			preview: zernioAgents
+				.filter((a) => a.zernio_key_id === id)
+				.slice(0, 4)
+				.map((a) => ({ label: a.name, meta: 'Reverts to the default key' })),
+			confirmLabel: 'Delete key',
+			tone: assignedCount ? 'danger' : 'caution'
+		});
+		if (!ok) return;
 
 		zernioKeyBusy = { ...zernioKeyBusy, [id]: true };
 		try {
@@ -426,11 +444,17 @@
 		// The <select> DOM value was changed by the user, not Svelte, so on cancel
 		// or failure it must be snapped back to the real assignment by hand.
 		const revert = () => (select.value = agent.zernio_key_id || '');
-		if (
-			!confirm(
-				`Move ${agent.name} to ${newKeyId ? `key "${zernioKeys.find((k) => k.id === newKeyId)?.label || 'selected'}"` : 'the default Zernio key'}? Its connected social accounts must be reconnected under that key.`
-			)
-		) {
+		const targetLabel = newKeyId
+			? `key "${zernioKeys.find((k) => k.id === newKeyId)?.label || 'selected'}"`
+			: 'the default Zernio key';
+		const ok = await confirmAction({
+			title: `Move ${agent.name} to ${targetLabel}?`,
+			body: 'A Zernio key IS the account, so the persona moves to a different one.',
+			warning: 'Its connected social accounts must be reconnected under that key.',
+			confirmLabel: 'Move persona',
+			tone: 'danger'
+		});
+		if (!ok) {
 			revert();
 			return;
 		}
@@ -468,6 +492,270 @@
 	let deleteConfirmText = $state('');
 	let deleteInProgress = $state(false);
 
+	// ── Team (workspaces & seats) ────────────────────────────────────────────
+	interface WorkspaceLite {
+		id: string;
+		name: string;
+		owner_id: string;
+	}
+	type SeatRole = 'admin' | 'manager' | 'creator' | 'viewer';
+	interface MembershipLite {
+		workspace_id: string;
+		role: SeatRole;
+		workspaces?: { id: string; name: string; owner_id: string };
+	}
+	interface PendingInviteLite {
+		id: string;
+		email: string;
+		workspace_id: string;
+		role: SeatRole;
+		status: string;
+		expires_at: string;
+		workspaces?: { name: string };
+	}
+	interface MemberLite {
+		user_id: string;
+		role: SeatRole;
+		email: string | null;
+	}
+	interface PersonaLite {
+		id: string;
+		name: string;
+		handle?: string | null;
+		group_id?: string | null;
+		persona_groups?: { name: string } | null;
+	}
+
+	let ownedWorkspaces = $state<WorkspaceLite[]>([]);
+	let memberships = $state<MembershipLite[]>([]);
+	let teamLoading = $state(false);
+	let newWorkspaceName = $state('');
+	let creatingWorkspace = $state(false);
+
+	// Per-workspace detail, keyed by workspace id — loaded lazily once a
+	// workspace exists, since a fresh account usually has exactly one.
+	let workspaceMembers = $state<Record<string, MemberLite[]>>({});
+	let workspaceInvites = $state<Record<string, PendingInviteLite[]>>({});
+	let workspacePersonas = $state<Record<string, { inWorkspace: PersonaLite[]; available: PersonaLite[] }>>({});
+	let inviteEmail = $state<Record<string, string>>({});
+	let inviteRole = $state<Record<string, SeatRole>>({});
+	let lastInviteLink = $state<Record<string, string>>({});
+	let teamBusy = $state<Record<string, boolean>>({});
+	// Persona-sharing picker: which brand is selected (per workspace) and
+	// which available personas are checked, keyed "workspaceId:agentId".
+	let brandFilter = $state<Record<string, string>>({});
+	let selectedPersonas = $state<Record<string, boolean>>({});
+
+	async function loadTeam() {
+		teamLoading = true;
+		try {
+			const res = await fetch('/api/workspaces');
+			const data = await res.json();
+			if (!data.success) throw new Error(data.error || 'Unable to load team info');
+			ownedWorkspaces = data.owned || [];
+			memberships = data.memberships || [];
+			for (const ws of ownedWorkspaces) {
+				await loadWorkspaceDetail(ws.id);
+			}
+		} catch (err) {
+			showToast((err as Error).message, 'error');
+		} finally {
+			teamLoading = false;
+		}
+	}
+
+	async function loadWorkspaceDetail(workspaceId: string) {
+		const [membersRes, invitesRes, personasRes] = await Promise.all([
+			fetch(`/api/workspaces/${workspaceId}/members`).then((r) => r.json()),
+			fetch(`/api/workspaces/${workspaceId}/invites`).then((r) => r.json()),
+			fetch(`/api/workspaces/${workspaceId}/personas`).then((r) => r.json())
+		]);
+		if (membersRes.success) workspaceMembers = { ...workspaceMembers, [workspaceId]: membersRes.members };
+		if (invitesRes.success)
+			workspaceInvites = {
+				...workspaceInvites,
+				[workspaceId]: (invitesRes.invites || []).filter((i: any) => i.status === 'pending')
+			};
+		if (personasRes.success)
+			workspacePersonas = {
+				...workspacePersonas,
+				[workspaceId]: { inWorkspace: personasRes.inWorkspace, available: personasRes.available }
+			};
+	}
+
+	async function createWorkspace() {
+		const name = newWorkspaceName.trim();
+		if (!name) {
+			showToast('Give the workspace a name first', 'warning');
+			return;
+		}
+		creatingWorkspace = true;
+		try {
+			const res = await fetch('/api/workspaces', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ name })
+			});
+			const data = await res.json();
+			if (!data.success) throw new Error(data.error || 'Failed to create workspace');
+			showToast(`Created ${data.workspace.name}`, 'success');
+			newWorkspaceName = '';
+			await loadTeam();
+		} catch (err) {
+			showToast((err as Error).message, 'error');
+		} finally {
+			creatingWorkspace = false;
+		}
+	}
+
+	async function sendInvite(workspaceId: string) {
+		const email = (inviteEmail[workspaceId] || '').trim();
+		const role = inviteRole[workspaceId] || 'creator';
+		if (!email) {
+			showToast('Enter an email to invite', 'warning');
+			return;
+		}
+		teamBusy = { ...teamBusy, [`invite-${workspaceId}`]: true };
+		try {
+			const res = await fetch(`/api/workspaces/${workspaceId}/invites`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ email, role })
+			});
+			const data = await res.json();
+			if (!data.success) throw new Error(data.error || 'Failed to send invite');
+			lastInviteLink = { ...lastInviteLink, [workspaceId]: `${location.origin}${data.acceptUrl}` };
+			inviteEmail = { ...inviteEmail, [workspaceId]: '' };
+			showToast(`Invite created for ${email} — copy the link below and send it to them`, 'success');
+			await loadWorkspaceDetail(workspaceId);
+		} catch (err) {
+			showToast((err as Error).message, 'error');
+		} finally {
+			teamBusy = { ...teamBusy, [`invite-${workspaceId}`]: false };
+		}
+	}
+
+	async function revokeInvite(workspaceId: string, inviteId: string) {
+		teamBusy = { ...teamBusy, [`revoke-${inviteId}`]: true };
+		try {
+			const res = await fetch(`/api/workspaces/${workspaceId}/invites`, {
+				method: 'DELETE',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ inviteId })
+			});
+			const data = await res.json();
+			if (!data.success) throw new Error(data.error || 'Failed to revoke invite');
+			await loadWorkspaceDetail(workspaceId);
+		} catch (err) {
+			showToast((err as Error).message, 'error');
+		} finally {
+			teamBusy = { ...teamBusy, [`revoke-${inviteId}`]: false };
+		}
+	}
+
+	async function changeMemberRole(workspaceId: string, userId: string, role: string) {
+		teamBusy = { ...teamBusy, [`role-${userId}`]: true };
+		try {
+			const res = await fetch(`/api/workspaces/${workspaceId}/members`, {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ userId, role })
+			});
+			const data = await res.json();
+			if (!data.success) throw new Error(data.error || 'Failed to update role');
+			showToast('Role updated', 'success');
+			await loadWorkspaceDetail(workspaceId);
+		} catch (err) {
+			showToast((err as Error).message, 'error');
+		} finally {
+			teamBusy = { ...teamBusy, [`role-${userId}`]: false };
+		}
+	}
+
+	async function removeMember(workspaceId: string, userId: string) {
+		teamBusy = { ...teamBusy, [`remove-${userId}`]: true };
+		try {
+			const res = await fetch(`/api/workspaces/${workspaceId}/members`, {
+				method: 'DELETE',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ userId })
+			});
+			const data = await res.json();
+			if (!data.success) throw new Error(data.error || 'Failed to remove member');
+			showToast('Removed from workspace', 'success');
+			await loadWorkspaceDetail(workspaceId);
+		} catch (err) {
+			showToast((err as Error).message, 'error');
+		} finally {
+			teamBusy = { ...teamBusy, [`remove-${userId}`]: false };
+		}
+	}
+
+	async function toggleWorkspacePersona(workspaceId: string, agentId: string, add: boolean) {
+		teamBusy = { ...teamBusy, [`persona-${agentId}`]: true };
+		try {
+			const res = await fetch(`/api/workspaces/${workspaceId}/personas`, {
+				method: add ? 'POST' : 'DELETE',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ agentId })
+			});
+			const data = await res.json();
+			if (!data.success) throw new Error(data.error || 'Failed to update persona');
+			await loadWorkspaceDetail(workspaceId);
+		} catch (err) {
+			showToast((err as Error).message, 'error');
+		} finally {
+			teamBusy = { ...teamBusy, [`persona-${agentId}`]: false };
+		}
+	}
+
+	/** Bulk-add every checked persona (see selectedPersonas) into the workspace, like picking several repos to share at once. */
+	async function addSelectedPersonas(workspaceId: string, agentIds: string[]) {
+		if (agentIds.length === 0) {
+			showToast('Select at least one persona first', 'warning');
+			return;
+		}
+		teamBusy = { ...teamBusy, [`bulk-${workspaceId}`]: true };
+		let failed = 0;
+		for (const agentId of agentIds) {
+			try {
+				const res = await fetch(`/api/workspaces/${workspaceId}/personas`, {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ agentId })
+				});
+				const data = await res.json();
+				if (!data.success) failed++;
+			} catch {
+				failed++;
+			}
+			selectedPersonas = { ...selectedPersonas, [`${workspaceId}:${agentId}`]: false };
+		}
+		showToast(
+			failed === 0
+				? `Added ${agentIds.length} persona${agentIds.length === 1 ? '' : 's'} to the workspace`
+				: `Added ${agentIds.length - failed}, ${failed} failed`,
+			failed === 0 ? 'success' : 'error'
+		);
+		await loadWorkspaceDetail(workspaceId);
+		teamBusy = { ...teamBusy, [`bulk-${workspaceId}`]: false };
+	}
+
+	async function leaveWorkspace(workspaceId: string) {
+		teamBusy = { ...teamBusy, [`leave-${workspaceId}`]: true };
+		try {
+			const res = await fetch(`/api/workspaces/${workspaceId}/members`, { method: 'DELETE' });
+			const data = await res.json();
+			if (!data.success) throw new Error(data.error || 'Failed to leave workspace');
+			showToast('Left workspace', 'success');
+			await loadTeam();
+		} catch (err) {
+			showToast((err as Error).message, 'error');
+		} finally {
+			teamBusy = { ...teamBusy, [`leave-${workspaceId}`]: false };
+		}
+	}
+
 	// Server metadata is the source of truth; localStorage only fills gaps for
 	// values that were never persisted server-side (pre-migration installs).
 	onMount(() => {
@@ -490,6 +778,7 @@
 		}
 		loadApiKeys();
 		loadZernioKeys();
+		loadTeam();
 		loadBrandBriefs();
 
 		return () => window.removeEventListener('hashchange', consumeHash);
@@ -1224,6 +1513,324 @@
 			</div>
 		</div>
 
+		{:else if activeSection === 'team'}
+		<div class="settings-card" id="team">
+			<div class="card-header">
+				<div class="card-icon">
+					<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="2" aria-hidden="true">
+						<path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" />
+					</svg>
+				</div>
+				<h2>Team</h2>
+			</div>
+			<div class="card-body">
+				<p class="key-hint">
+					A workspace is a shared home for a brand's personas — invite teammates as
+					<strong>viewer</strong> (read-only), <strong>creator</strong> (generate &amp; draft, can't
+					publish), <strong>manager</strong> (approve &amp; publish, connections, spend), or
+					<strong>admin</strong> (everything a manager can do, plus managing other seats — for a
+					developer/agency collaborator running this workspace day-to-day). Personas keep their
+					existing owner; filing one into a workspace only widens who can work on it.
+				</p>
+
+				{#if teamLoading && ownedWorkspaces.length === 0 && memberships.length === 0}
+					<p class="key-hint" aria-live="polite">Loading team info…</p>
+				{/if}
+
+				<div class="provider-key-list">
+					{#each ownedWorkspaces as ws (ws.id)}
+						{@const members = workspaceMembers[ws.id] || []}
+						{@const invites = workspaceInvites[ws.id] || []}
+						{@const personas = workspacePersonas[ws.id] || { inWorkspace: [], available: [] }}
+						<div class="provider-key-row">
+							<div class="provider-key-header">
+								<div>
+									<strong>{ws.name}</strong>
+									<span>You own this workspace</span>
+								</div>
+							</div>
+
+							<!-- Members -->
+							{#if members.length > 0}
+								<div class="assign-list">
+									{#each members as m (m.user_id)}
+										<div class="assign-row">
+											<div class="assign-agent">
+												<strong>{m.email || 'Pending email'}</strong>
+											</div>
+											<select
+												class="assign-select"
+												aria-label="Role for {m.email}"
+												value={m.role}
+												disabled={teamBusy[`role-${m.user_id}`]}
+												onchange={(e) =>
+													changeMemberRole(ws.id, m.user_id, (e.currentTarget as HTMLSelectElement).value)}
+											>
+												<option value="viewer">Viewer</option>
+												<option value="creator">Creator</option>
+												<option value="manager">Manager</option>
+												<option value="admin">Admin</option>
+											</select>
+											<button
+												class="danger-inline-btn"
+												onclick={() => removeMember(ws.id, m.user_id)}
+												disabled={teamBusy[`remove-${m.user_id}`]}
+											>
+												Remove
+											</button>
+										</div>
+									{/each}
+								</div>
+							{:else}
+								<p class="key-hint">No seats yet — invite someone below.</p>
+							{/if}
+
+							<!-- Pending invites -->
+							{#if invites.length > 0}
+								<div class="assign-list">
+									{#each invites as inv (inv.id)}
+										<div class="assign-row">
+											<div class="assign-agent">
+												<strong>{inv.email}</strong>
+												<span>invited as {inv.role}</span>
+											</div>
+											<button
+												class="danger-inline-btn"
+												onclick={() => revokeInvite(ws.id, inv.id)}
+												disabled={teamBusy[`revoke-${inv.id}`]}
+											>
+												Revoke
+											</button>
+										</div>
+									{/each}
+								</div>
+							{/if}
+
+							<!-- Invite form -->
+							<div class="field">
+								<label for="invite-email-{ws.id}">Invite by email</label>
+								<input
+									id="invite-email-{ws.id}"
+									type="email"
+									placeholder="teammate@example.com"
+									autocomplete="off"
+									value={inviteEmail[ws.id] || ''}
+									oninput={(e) =>
+										(inviteEmail = { ...inviteEmail, [ws.id]: (e.currentTarget as HTMLInputElement).value })}
+								/>
+							</div>
+							<div class="field">
+								<label for="invite-role-{ws.id}">Role</label>
+								<select
+									id="invite-role-{ws.id}"
+									value={inviteRole[ws.id] || 'creator'}
+									onchange={(e) =>
+										(inviteRole = {
+											...inviteRole,
+											[ws.id]: (e.currentTarget as HTMLSelectElement).value as any
+										})}
+								>
+									<option value="viewer">Viewer — read only</option>
+									<option value="creator">Creator — generate &amp; draft</option>
+									<option value="manager">Manager — approve &amp; publish</option>
+									<option value="admin">Admin — + manage seats (invite/remove teammates)</option>
+								</select>
+							</div>
+							<div class="provider-actions">
+								<button
+									class="save-btn"
+									onclick={() => sendInvite(ws.id)}
+									disabled={teamBusy[`invite-${ws.id}`]}
+								>
+									{#if teamBusy[`invite-${ws.id}`]}
+										<span class="spinner"></span> Sending…
+									{:else}
+										Send Invite
+									{/if}
+								</button>
+							</div>
+							{#if lastInviteLink[ws.id]}
+								<p class="key-hint">
+									Invite link (send it yourself — there's no email sender wired up):
+									<br /><code class="key-value">{lastInviteLink[ws.id]}</code>
+								</p>
+							{/if}
+
+							<!-- Persona assignment -->
+							<div class="provider-key-header" style="margin-top: 1rem;">
+								<div>
+									<strong>Personas in this workspace</strong>
+									<span>Every seat above can see and work on these.</span>
+								</div>
+							</div>
+							<div class="assign-list">
+								{#each personas.inWorkspace as p (p.id)}
+									<div class="assign-row">
+										<div class="assign-agent">
+											<strong>{p.name}</strong>
+											{#if p.handle}<span>{p.handle}</span>{/if}
+										</div>
+										<button
+											class="danger-inline-btn"
+											onclick={() => toggleWorkspacePersona(ws.id, p.id, false)}
+											disabled={teamBusy[`persona-${p.id}`]}
+										>
+											Remove
+										</button>
+									</div>
+								{/each}
+								{#if personas.available.length > 0}
+									{@const brands = Array.from(
+										new Set(personas.available.map((p) => p.persona_groups?.name).filter(Boolean))
+									) as string[]}
+									{@const activeBrand = brandFilter[ws.id] || 'all'}
+									{@const filtered = personas.available.filter(
+										(p) => activeBrand === 'all' || p.persona_groups?.name === activeBrand
+									)}
+									{@const filteredIds = filtered.map((p) => p.id)}
+									{@const checkedIds = filteredIds.filter((id) => selectedPersonas[`${ws.id}:${id}`])}
+									{@const allChecked = filteredIds.length > 0 && checkedIds.length === filteredIds.length}
+
+									<div class="persona-picker-toolbar">
+										{#if brands.length > 0}
+											<select
+												aria-label="Filter available personas by brand"
+												value={activeBrand}
+												onchange={(e) =>
+													(brandFilter = {
+														...brandFilter,
+														[ws.id]: (e.currentTarget as HTMLSelectElement).value
+													})}
+											>
+												<option value="all">All brands</option>
+												{#each brands as b}
+													<option value={b}>{b}</option>
+												{/each}
+											</select>
+										{/if}
+										<label class="select-all-label">
+											<input
+												type="checkbox"
+												checked={allChecked}
+												onchange={(e) => {
+													const checked = (e.currentTarget as HTMLInputElement).checked;
+													const next = { ...selectedPersonas };
+													for (const id of filteredIds) next[`${ws.id}:${id}`] = checked;
+													selectedPersonas = next;
+												}}
+											/>
+											Select all{activeBrand !== 'all' ? ` in ${activeBrand}` : ''} ({filteredIds.length})
+										</label>
+										<button
+											class="save-btn"
+											onclick={() => addSelectedPersonas(ws.id, checkedIds)}
+											disabled={checkedIds.length === 0 || teamBusy[`bulk-${ws.id}`]}
+										>
+											{#if teamBusy[`bulk-${ws.id}`]}
+												<span class="spinner"></span> Adding…
+											{:else}
+												Add {checkedIds.length || ''} selected
+											{/if}
+										</button>
+									</div>
+
+									{#each filtered as p (p.id)}
+										<div class="assign-row">
+											<label class="assign-agent" style="cursor: pointer;">
+												<input
+													type="checkbox"
+													checked={!!selectedPersonas[`${ws.id}:${p.id}`]}
+													onchange={(e) =>
+														(selectedPersonas = {
+															...selectedPersonas,
+															[`${ws.id}:${p.id}`]: (e.currentTarget as HTMLInputElement).checked
+														})}
+												/>
+												<strong>{p.name}</strong>
+												{#if p.persona_groups?.name}<span class="brand-chip">{p.persona_groups.name}</span>{/if}
+												{#if p.handle}<span>{p.handle}</span>{/if}
+											</label>
+											<button
+												class="secondary-btn"
+												onclick={() => toggleWorkspacePersona(ws.id, p.id, true)}
+												disabled={teamBusy[`persona-${p.id}`]}
+											>
+												Add to workspace
+											</button>
+										</div>
+									{/each}
+								{:else if personas.inWorkspace.length === 0}
+									<p class="key-hint">You don't have any personas to file into a workspace yet.</p>
+								{/if}
+							</div>
+						</div>
+					{/each}
+
+					<!-- Create a workspace -->
+					<div class="provider-key-row">
+						<div class="provider-key-header">
+							<div>
+								<strong>Create a workspace</strong>
+								<span>Name it after the brand — e.g. "HoneyX".</span>
+							</div>
+						</div>
+						<div class="field">
+							<label for="new-workspace-name">Workspace name</label>
+							<input
+								id="new-workspace-name"
+								type="text"
+								bind:value={newWorkspaceName}
+								placeholder="e.g. HoneyX"
+								autocomplete="off"
+							/>
+						</div>
+						<div class="provider-actions">
+							<button
+								class="save-btn"
+								onclick={createWorkspace}
+								disabled={creatingWorkspace || !newWorkspaceName.trim()}
+							>
+								{#if creatingWorkspace}
+									<span class="spinner"></span> Creating…
+								{:else}
+									Create Workspace
+								{/if}
+							</button>
+						</div>
+					</div>
+
+					<!-- Memberships in other workspaces -->
+					{#if memberships.length > 0}
+						<div class="provider-key-row">
+							<div class="provider-key-header">
+								<div>
+									<strong>Workspaces you've joined</strong>
+									<span>Seats where someone else is the admin.</span>
+								</div>
+							</div>
+							<div class="assign-list">
+								{#each memberships as m (m.workspace_id)}
+									<div class="assign-row">
+										<div class="assign-agent">
+											<strong>{m.workspaces?.name ?? 'Workspace'}</strong>
+											<span>{m.role}</span>
+										</div>
+										<button
+											class="danger-inline-btn"
+											onclick={() => leaveWorkspace(m.workspace_id)}
+											disabled={teamBusy[`leave-${m.workspace_id}`]}
+										>
+											Leave
+										</button>
+									</div>
+								{/each}
+							</div>
+						</div>
+					{/if}
+				</div>
+			</div>
+		</div>
+
 		{:else if activeSection === 'billing'}
 		<!-- Billing -->
 		<div class="settings-card">
@@ -1931,6 +2538,33 @@
 		color: var(--text-muted);
 		overflow: hidden;
 		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	/* Persona-sharing picker — brand filter + select-all, like picking repos to share */
+	.persona-picker-toolbar {
+		display: flex;
+		align-items: center;
+		flex-wrap: wrap;
+		gap: 0.75rem;
+		margin-bottom: 0.6rem;
+	}
+
+	.select-all-label {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		font-size: var(--text-sm);
+		color: var(--text-muted);
+		cursor: pointer;
+	}
+
+	.brand-chip {
+		font-size: var(--text-xs);
+		color: var(--accent-text);
+		background: var(--accent-soft);
+		border-radius: 999px;
+		padding: 0.1rem 0.55rem;
 		white-space: nowrap;
 	}
 

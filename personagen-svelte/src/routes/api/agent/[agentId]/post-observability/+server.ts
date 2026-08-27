@@ -2,6 +2,7 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { createDbService } from '$lib/server/db';
 import { loadBriefForAgent } from '$lib/server/content/generate';
+import { checkAgentAccess } from '$lib/server/workspaces';
 
 /**
  * Factual observability for one post: the ACTUAL models + costs that ran for its
@@ -25,8 +26,10 @@ export const GET: RequestHandler = async ({ params, url, locals }) => {
 
 	const db = createDbService(locals.supabase);
 	const { data: agent } = await db.agents.get(agentId);
-	if (!agent || agent.user_id !== user.id)
-		return json({ success: false, error: 'Persona not found' }, { status: 404 });
+	if (!agent) return json({ success: false, error: 'Persona not found' }, { status: 404 });
+	// Generation/cost observability is manager+ only, same tier as spend.
+	const access = await checkAgentAccess(locals.supabase, user.id, agentId, 'manager');
+	if (!access.ok) return json({ success: false, error: access.message }, { status: access.status });
 	const { data: post } = await db.posts.get(postId);
 	if (!post || post.agent_id !== agentId)
 		return json({ success: false, error: 'Post not found for this persona' }, { status: 404 });

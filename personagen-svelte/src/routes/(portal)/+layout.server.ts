@@ -14,7 +14,8 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 			user: null,
 			configStatus: checkConfigStatus(),
 			sidebarAgents: [],
-			personaGroups: []
+			personaGroups: [],
+			pendingInvites: []
 		};
 	}
 
@@ -24,6 +25,7 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 
 		let sidebarAgents: any[] = [];
 		let personaGroups: any[] = [];
+		let pendingInvites: any[] = [];
 		if (locals.supabase) {
 			// Lean projection: the sidebar roster only renders these fields (see
 			// +layout.svelte) — never the large soul/skills/tools/market text, so
@@ -68,6 +70,18 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 				is_favorite: a.is_favorite ?? false,
 				ugc_character_ref: characterRefById.get(a.id) ?? null
 			}));
+
+			// Surfaces "you've been invited to X" the moment a brand-new, otherwise
+			// blank account logs in — RLS scopes this to invites whose email matches
+			// the caller's own verified JWT email, nothing client-supplied.
+			const { data: invites } = await locals.supabase
+				.from('workspace_invites')
+				.select('id, token, role, expires_at, workspaces(name)')
+				.eq('status', 'pending')
+				.order('created_at', { ascending: false });
+			pendingInvites = (invites ?? []).filter(
+				(i: any) => !i.expires_at || new Date(i.expires_at).getTime() > Date.now()
+			);
 		}
 
 		return {
@@ -75,7 +89,8 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 			user,
 			configStatus: checkConfigStatus(),
 			sidebarAgents,
-			personaGroups
+			personaGroups,
+			pendingInvites
 		};
 	} catch (e) {
 		if ((e as any)?.status === 303) throw e;
@@ -85,7 +100,8 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 			user: null,
 			configStatus: checkConfigStatus(),
 			sidebarAgents: [],
-			personaGroups: []
+			personaGroups: [],
+			pendingInvites: []
 		};
 	}
 };

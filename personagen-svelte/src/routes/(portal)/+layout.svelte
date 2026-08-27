@@ -9,17 +9,47 @@
 		closeSidebar,
 		themeState,
 		toggleTheme,
-		initializeThemeAndColors
+		initializeThemeAndColors,
+		showToast
 	} from '$lib/stores/ui.svelte';
 	import { onMount } from 'svelte';
+	import { invalidateAll } from '$app/navigation';
 	import BrandWave from '$lib/components/shared/BrandWave.svelte';
 	import PersonaProjectsModal from '$lib/components/shared/PersonaProjectsModal.svelte';
+	import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
 
 	let { children, data } = $props();
 
 	onMount(() => {
 		initializeThemeAndColors();
 	});
+
+	// ── Pending workspace invites — "you've been invited" banner ────────────
+	// This is exactly the moment a brand-new, otherwise-blank account needs to
+	// see it: nothing else on the page has content yet to compete for attention.
+	let pendingInvites = $derived((data as any).pendingInvites ?? []);
+	let invitesBusy = $state<Record<string, boolean>>({});
+
+	async function respondToInvite(invite: { id: string; token: string }, accept: boolean) {
+		invitesBusy = { ...invitesBusy, [invite.id]: true };
+		try {
+			const res = await fetch(`/api/workspaces/invites/${invite.token}/${accept ? 'accept' : 'decline'}`, {
+				method: 'POST'
+			});
+			const result = await res.json();
+			if (!result.success) throw new Error(result.error || 'Something went wrong');
+
+			showToast(
+				accept ? `Joined ${result.workspace?.name ?? 'the workspace'}` : 'Invite declined',
+				'success'
+			);
+			await invalidateAll();
+		} catch (err) {
+			showToast((err as Error).message, 'error');
+		} finally {
+			invitesBusy = { ...invitesBusy, [invite.id]: false };
+		}
+	}
 
 	let userDropdownOpen = $state(false);
 
@@ -59,7 +89,8 @@
 		network: [{ href: '/dashboard', label: 'Dashboard', icon: 'grid' }],
 		library: [
 			{ href: '/generations', label: 'All Generations', icon: 'gallery' },
-			{ href: '/favorites', label: 'My Favorites', icon: 'heart' }
+			{ href: '/favorites', label: 'My Favorites', icon: 'heart' },
+			{ href: '/trash', label: 'Trash', icon: 'trash' }
 		],
 		publish: [
 			{ href: '/review', label: 'Review Queue', icon: 'check' },
@@ -283,6 +314,21 @@
 									cy="8.5"
 									r="1.5"
 								/><path d="M21 15l-5-5L5 21" /></svg
+							>
+						{:else if item.icon === 'trash'}
+							<svg
+								aria-hidden="true"
+								width="18"
+								height="18"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								><path d="M3 6h18" /><path
+									d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"
+								/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /></svg
 							>
 						{:else if item.icon === 'heart'}
 							<svg
@@ -697,6 +743,7 @@
 						if (path.startsWith('/models')) return 'Model Manager';
 						if (path.startsWith('/guides')) return 'Docs';
 						if (path.startsWith('/favorites')) return 'My Favorites';
+						if (path.startsWith('/trash')) return 'Trash';
 						if (path.startsWith('/review')) return 'Review Queue';
 						if (path.startsWith('/calendar')) return 'Calendar';
 						if (path === '/dashboard' || path === '/') return 'Dashboard';
@@ -805,6 +852,33 @@
 
 		<!-- Page content -->
 		<main class="portal-content" id="main-content" tabindex="-1" bind:this={mainContentEl}>
+			{#each pendingInvites as invite (invite.id)}
+				<div class="invite-banner" role="alert">
+					<div class="invite-banner-text">
+						<strong>You've been invited</strong> to join
+						<strong>{invite.workspaces?.name ?? 'a workspace'}</strong>
+						as {invite.role}.
+					</div>
+					<div class="invite-banner-actions">
+						<button
+							type="button"
+							class="invite-banner-btn accept"
+							disabled={invitesBusy[invite.id]}
+							onclick={() => respondToInvite(invite, true)}
+						>
+							{invitesBusy[invite.id] ? '…' : 'Accept'}
+						</button>
+						<button
+							type="button"
+							class="invite-banner-btn decline"
+							disabled={invitesBusy[invite.id]}
+							onclick={() => respondToInvite(invite, false)}
+						>
+							Decline
+						</button>
+					</div>
+				</div>
+			{/each}
 			{@render children()}
 		</main>
 	</div>
@@ -816,6 +890,10 @@
 	groups={personaGroups}
 	personas={sidebarAgents}
 />
+
+<!-- One confirmation dialog for the whole portal. Every destructive action
+     routes through confirmAction() in $lib/stores/confirm. -->
+<ConfirmDialog />
 
 <BrandWave />
 
@@ -1375,6 +1453,55 @@
 	   it must not paint a ring for mouse users. */
 	.portal-content:focus {
 		outline: none;
+	}
+
+	.invite-banner {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--space-4);
+		flex-wrap: wrap;
+		background: var(--accent-soft);
+		border: 1px solid var(--border-hover);
+		border-radius: 12px;
+		padding: 0.9rem 1.2rem;
+		margin-bottom: var(--space-6);
+	}
+	.invite-banner-text {
+		color: var(--text);
+		font-size: 0.94rem;
+	}
+	.invite-banner-actions {
+		display: flex;
+		gap: 0.5rem;
+		flex-shrink: 0;
+	}
+	.invite-banner-btn {
+		border: none;
+		border-radius: 8px;
+		padding: 0.45rem 1rem;
+		font-size: 0.88rem;
+		font-weight: 600;
+		cursor: pointer;
+	}
+	.invite-banner-btn.accept {
+		background: var(--accent);
+		color: #fff;
+	}
+	.invite-banner-btn.accept:hover:not(:disabled) {
+		background: var(--accent-dark);
+	}
+	.invite-banner-btn.decline {
+		background: var(--surface);
+		color: var(--text-muted);
+		border: 1px solid var(--border);
+	}
+	.invite-banner-btn.decline:hover:not(:disabled) {
+		background: var(--surface-2);
+	}
+	.invite-banner-btn:disabled {
+		opacity: 0.6;
+		cursor: default;
 	}
 
 	/* ═══════════════════════════════════════════════════════════════

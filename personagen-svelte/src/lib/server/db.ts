@@ -43,6 +43,8 @@ export interface AgentRow {
 	// Null = the user's default key. Profile ids are per Zernio account, so
 	// changing this clears zernio_profile_id. See zernio_key_manager_migration.sql.
 	zernio_key_id?: string | null;
+	/** Brand workspace this persona is filed under; null = personal persona (legacy behaviour). See workspaces_migration.sql. */
+	workspace_id?: string | null;
 	created_at: string;
 	updated_at: string;
 }
@@ -223,6 +225,13 @@ export interface PostListFilters {
 	agent_id?: string;
 	month?: number;
 	year?: number;
+	/**
+	 * Which side of the Trash to read. Defaults to 'live' — a caller that
+	 * forgets this gets the safe answer, never a deleted post leaking into a
+	 * feed or the scheduler. 'trashed' is the Trash view; 'all' is for the
+	 * purge job, which is the only thing that legitimately sees both.
+	 */
+	scope?: 'live' | 'trashed' | 'all';
 }
 
 // ═══════════════════════════════════════
@@ -271,6 +280,19 @@ export function createDbService(supabase: SupabaseClient) {
 			.single();
 	}
 
+	/**
+	 * Applies the Trash filter to a posts query. Every posts SELECT goes through
+	 * this so "which side of the trash am I reading" is one decision in one
+	 * place — the failure mode this guards against is a missed filter letting
+	 * the scheduler publish a post the user deleted.
+	 */
+	function applyScope<T>(q: T, scope: PostListFilters['scope']): T {
+		const query = q as any;
+		if (scope === 'all') return q;
+		if (scope === 'trashed') return query.not('deleted_at', 'is', null);
+		return query.is('deleted_at', null);
+	}
+
 	return {
 		// ── Agents ──────────────────────────────
 		agents: {
@@ -300,6 +322,9 @@ export function createDbService(supabase: SupabaseClient) {
 			list: (filters?: PostListFilters) => {
 				let q = supabase.from('posts').select('*, agents(name, handle, gradient, initial)');
 
+				// Trash filter FIRST so no later branch can forget it.
+				q = applyScope(q, filters?.scope);
+
 				if (filters?.agent_id) {
 					q = q.eq('agent_id', filters.agent_id);
 				}
@@ -315,18 +340,96 @@ export function createDbService(supabase: SupabaseClient) {
 				return q.order('scheduled_date').order('scheduled_time');
 			},
 
-			get: (id: string) => supabase.from('posts').select('*').eq('id', id).single(),
+			/** Live posts only. Use `getAny` when you need to see a trashed row. */
+			get: (id: string) =>
+				supabase.from('posts').select('*').eq('id', id).is('deleted_at', null).single(),
+
+			/** Reads a post regardless of trash state — for restore and purge. */
+			getAny: (id: string) => supabase.from('posts').select('*').eq('id', id).single(),
 
 			create: (data: PostInsert) => supabase.from('posts').insert(data).select().single(),
 
+			/**
+			 * Updates a LIVE post. The `deleted_at IS NULL` guard is what stops a
+			 * stale tab, a queued autopilot job, or the scheduler from mutating —
+			 * or publishing — something the user has already thrown away.
+			 */
 			update: (id: string, data: PostUpdate) =>
-				supabase.from('posts').update(data).eq('id', id).select().single(),
+				supabase
+					.from('posts')
+					.update(data)
+					.eq('id', id)
+					.is('deleted_at', null)
+					.select()
+					.single(),
 
-			delete: (id: string) => supabase.from('posts').delete().eq('id', id),
+			/**
+			 * Soft delete: the row stays, `deleted_at` is stamped. Restorable from
+			 * Trash for 30 days, then the purge sweep hard-deletes it.
+			 *
+			 * Deliberately NOT a real DELETE. generation_events.post_id and
+			 * post_reviews.post_id are FKs with ON DELETE SET NULL, so removing the
+			 * row would silently sever the generation lineage — and no restore
+			 * could ever put it back.
+			 *
+			 * Already-trashed rows are excluded so a double-click can't bump
+			 * deleted_at forward and quietly extend the retention window.
+			 */
+			softDelete: (id: string) =>
+				supabase
+					.from('posts')
+					.update({ deleted_at: new Date().toISOString() })
+					.eq('id', id)
+					.is('deleted_at', null)
+					.select('id'),
 
-			/** Bulk delete, scoped to one owner so a stray id can't touch another account. */
-			deleteMany: (ids: string[], userId: string) =>
-				supabase.from('posts').delete().in('id', ids).eq('user_id', userId)
+			/**
+			 * Bulk soft delete. Scoping to "a stray id can't touch another account"
+			 * is RLS's job (posts_update_own), not a redundant .eq('user_id', ...)
+			 * here — a workspace manager legitimately deletes posts a teammate
+			 * authored (different user_id, same accessible agent), and the caller
+			 * has already access-checked every id in `ids` before calling this.
+			 */
+			softDeleteMany: (ids: string[]) =>
+				supabase
+					.from('posts')
+					.update({ deleted_at: new Date().toISOString() })
+					.in('id', ids)
+					.is('deleted_at', null)
+					.select('id'),
+
+			/**
+			 * Restore out of Trash. Only rows that are actually trashed match, so
+			 * restoring twice is a no-op rather than a phantom success.
+			 */
+			restoreMany: (ids: string[]) =>
+				supabase
+					.from('posts')
+					.update({ deleted_at: null })
+					.in('id', ids)
+					.not('deleted_at', 'is', null)
+					.select('id'),
+
+			/** Permanent. Only ever called on rows already in Trash. */
+			purgeMany: (ids: string[]) =>
+				supabase
+					.from('posts')
+					.delete()
+					.in('id', ids)
+					.not('deleted_at', 'is', null)
+					.select('id'),
+
+			/** Empties the whole Trash for the rows RLS lets the caller see. */
+			purgeAllTrashed: () =>
+				supabase.from('posts').delete().not('deleted_at', 'is', null).select('id'),
+
+			/** Retention sweep: hard-delete anything trashed longer than `days`. */
+			purgeExpired: (days: number) =>
+				supabase
+					.from('posts')
+					.delete()
+					.lt('deleted_at', new Date(Date.now() - days * 86_400_000).toISOString())
+					.select('id')
 		},
 
 		// ── Connections ─────────────────────────

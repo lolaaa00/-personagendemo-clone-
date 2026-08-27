@@ -50,6 +50,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 		.from('posts')
 		.select('id, agent_id, content, platforms, status, scheduled_date, scheduled_time, created_at')
 		.eq('user_id', user.id)
+		.is('deleted_at', null)
 		.in('status', ['draft', 'scheduled'])
 		.order('scheduled_date', { ascending: true })
 		.order('scheduled_time', { ascending: true });
@@ -135,6 +136,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		.from('posts')
 		.select('id, agent_id, content, status')
 		.eq('user_id', user.id)
+		.is('deleted_at', null)
 		.in('status', reviewable)
 		.in('id', postIds);
 	if (fetchErr) return json({ success: false, error: fetchErr.message }, { status: 500 });
@@ -149,6 +151,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		.from('posts')
 		.update({ status: newStatus })
 		.eq('user_id', user.id)
+		.is('deleted_at', null)
 		.in('status', reviewable)
 		.in(
 			'id',

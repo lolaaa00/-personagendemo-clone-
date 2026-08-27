@@ -7,6 +7,8 @@ import {
 	type ZernioAccountMeter
 } from '$lib/server/social/zernio';
 import { resolveZernioApiKeyForAgent } from '$lib/server/zernio-keys';
+import { checkAgentAccess } from '$lib/server/workspaces';
+import { getServiceSupabase } from '$lib/server/service-supabase';
 import { ALL_PLATFORM_KEYS } from '$lib/platforms';
 
 // Platforms our connections table accepts — derived from the single platform
@@ -239,6 +241,14 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	const body = (await request.json()) as any;
 	const { action, persona_id, platform } = body;
 
+	// Zernio key rows are RLS-locked to their OWN user_id — a workspace manager
+	// acting on someone else's persona can never read the owner's key through
+	// their own session client, no matter what user_id we filter for. Resolving
+	// through the service client is what actually makes "manager can connect/
+	// publish through the workspace's shared credential" true rather than
+	// theoretical. The decrypted key never leaves the server either way.
+	const keySupabase = getServiceSupabase();
+
 	if (!action) {
 		return json({ success: false, error: 'Missing action' }, { status: 400 });
 	}
@@ -261,14 +271,18 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			if (agentCheckErr || !agent) {
 				return json({ success: false, error: 'Persona not found' }, { status: 404 });
 			}
-			if (agent.user_id !== user.id) {
-				return json({ success: false, error: 'Forbidden' }, { status: 403 });
+			{
+				const access = await checkAgentAccess(locals.supabase, user.id, persona_id, 'viewer');
+				if (!access.ok) return json({ success: false, error: access.message }, { status: access.status });
 			}
 
 			// Best-effort: import the persona's Zernio accounts before reading status,
 			// so connecting (in-app or in the Zernio dashboard) is all that's needed.
+			// Resolved through the PERSONA'S OWNER, not the acting viewer — the
+			// Zernio key is the workspace's shared publishing credential, and a
+			// viewer/creator seat has no key of their own to fall back to.
 			try {
-				await syncZernioAccounts(db, locals.supabase, user.id, agent);
+				await syncZernioAccounts(db, keySupabase, agent.user_id, agent);
 			} catch (e) {
 				console.warn('[Accounts API] Zernio account sync failed (continuing):', e);
 			}
@@ -276,7 +290,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			const { data: conns, error } = await db.connections.listForAgent(persona_id);
 			if (error) throw error;
 
-			const apiKey = await resolveZernioApiKeyForAgent(locals.supabase, user.id, agent).catch(
+			const apiKey = await resolveZernioApiKeyForAgent(keySupabase, agent.user_id, agent).catch(
 				() => null
 			);
 			const client = apiKey ? new ZernioClient(apiKey) : null;
@@ -376,11 +390,13 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			if (agentErr || !agent) {
 				return json({ success: false, error: 'Persona not found' }, { status: 404 });
 			}
-			if (agent.user_id !== user.id) {
-				return json({ success: false, error: 'Forbidden' }, { status: 403 });
+			{
+				// Connecting/syncing real social accounts is manager+.
+				const access = await checkAgentAccess(locals.supabase, user.id, persona_id, 'manager');
+				if (!access.ok) return json({ success: false, error: access.message }, { status: access.status });
 			}
 
-			const apiKey = await resolveZernioApiKeyForAgent(locals.supabase, user.id, agent);
+			const apiKey = await resolveZernioApiKeyForAgent(keySupabase, agent.user_id, agent);
 			if (!apiKey) {
 				return json(
 					{
@@ -397,7 +413,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			try {
 				// provision=true: manual sync is user-initiated, so create the persona's
 				// Zernio profile if it doesn't exist yet.
-				({ synced, skipped } = await syncZernioAccounts(db, locals.supabase, user.id, agent, true));
+				({ synced, skipped } = await syncZernioAccounts(db, keySupabase, agent.user_id, agent, true));
 			} catch (e) {
 				return json(
 					{ success: false, error: `Failed to sync Zernio accounts: ${(e as Error).message}` },
@@ -437,11 +453,13 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			if (agentErr || !agent) {
 				return json({ success: false, error: 'Persona not found' }, { status: 404 });
 			}
-			if (agent.user_id !== user.id) {
-				return json({ success: false, error: 'Forbidden' }, { status: 403 });
+			{
+				// Connecting a real social account is manager+.
+				const access = await checkAgentAccess(locals.supabase, user.id, persona_id, 'manager');
+				if (!access.ok) return json({ success: false, error: access.message }, { status: access.status });
 			}
 
-			const apiKey = await resolveZernioApiKeyForAgent(locals.supabase, user.id, agent).catch(
+			const apiKey = await resolveZernioApiKeyForAgent(keySupabase, agent.user_id, agent).catch(
 				() => null
 			);
 			if (!apiKey) {
@@ -506,8 +524,10 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			if (agentErr || !agent) {
 				return json({ success: false, error: 'Persona not found' }, { status: 404 });
 			}
-			if (agent.user_id !== user.id) {
-				return json({ success: false, error: 'Forbidden' }, { status: 403 });
+			{
+				// Disconnecting a real social account is manager+.
+				const access = await checkAgentAccess(locals.supabase, user.id, persona_id, 'manager');
+				if (!access.ok) return json({ success: false, error: access.message }, { status: access.status });
 			}
 
 			// Also disconnect in Zernio so the account stops accruing its per-account
@@ -516,7 +536,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			try {
 				const { data: existing } = await db.connections.listForAgent(persona_id);
 				const target = (existing || []).find((c) => c.platform === platform);
-				const apiKey = await resolveZernioApiKeyForAgent(locals.supabase, user.id, agent).catch(
+				const apiKey = await resolveZernioApiKeyForAgent(keySupabase, agent.user_id, agent).catch(
 					() => null
 				);
 				if (apiKey && target?.provider_account_id) {

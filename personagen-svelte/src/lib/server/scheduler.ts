@@ -104,6 +104,7 @@ export async function publishSinglePost(supabase: any, post: any): Promise<boole
 		.from('posts')
 		.update({ status: 'publishing', publication_results: publicationResults })
 		.eq('id', post.id)
+		.is('deleted_at', null) // trashed between the due-post scan and this claim
 		.eq('status', 'scheduled')
 		.select('id');
 
@@ -349,10 +350,11 @@ export async function publishPostById(postId: string): Promise<boolean> {
 		.from('posts')
 		.select('*')
 		.eq('id', postId)
+		.is('deleted_at', null) // never publish something sitting in the Trash
 		.maybeSingle();
 
 	if (error || !post) {
-		console.error(`[Scheduler] Post ${postId} not found:`, error);
+		console.error(`[Scheduler] Post ${postId} not found (or trashed):`, error);
 		return false;
 	}
 
@@ -483,6 +485,10 @@ const ZERNIO_CONFIRM_TIMEOUT_MS = 12 * 60 * 1000;
  * ZERNIO_CONFIRM_TIMEOUT_MS fail with guidance; they are never resubmitted.
  */
 async function verifySubmittedZernioPosts(supabase: any, nowMs: number): Promise<void> {
+	// Deliberately NOT filtered on deleted_at. If a post was trashed after Zernio
+	// accepted it, it still went live — the sweep must record that truth so the
+	// row carries a real permalink and the user gets the manual-deletion notice.
+	// Pretending it never published is the worse lie.
 	const { data: rows, error } = await supabase
 		.from('posts')
 		.select('id, user_id, agent_id, published_at, publication_results')
@@ -572,6 +578,40 @@ async function verifySubmittedZernioPosts(supabase: any, nowMs: number): Promise
 		}
 		// Guarded on status so we never stomp a row something else already resolved.
 		await supabase.from('posts').update(update).eq('id', row.id).eq('status', 'publishing');
+	}
+}
+
+/** Trashed posts stay restorable this long, then the sweep below removes them. */
+const TRASH_RETENTION_DAYS = 30;
+const TRASH_SWEEP_INTERVAL_MS = 60 * 60 * 1000;
+let lastTrashSweepMs = 0;
+
+/**
+ * Hard-deletes posts trashed longer than TRASH_RETENTION_DAYS. This is the only
+ * place in the app that issues a real DELETE on a user's post — everywhere else
+ * a delete just stamps deleted_at, which is what makes restore possible.
+ */
+async function purgeExpiredTrash(supabase: any, nowMs: number): Promise<void> {
+	if (nowMs - lastTrashSweepMs < TRASH_SWEEP_INTERVAL_MS) return;
+	lastTrashSweepMs = nowMs;
+
+	const cutoff = new Date(nowMs - TRASH_RETENTION_DAYS * 86_400_000).toISOString();
+	const { data, error } = await supabase
+		.from('posts')
+		.delete()
+		.not('deleted_at', 'is', null)
+		.lt('deleted_at', cutoff)
+		.select('id');
+
+	if (error) {
+		// Non-fatal: a failed sweep just means the rows linger one more hour.
+		console.error('[Scheduler] Trash retention sweep failed:', error.message);
+		return;
+	}
+	if (data?.length) {
+		console.log(
+			`[Scheduler] Purged ${data.length} post(s) trashed more than ${TRASH_RETENTION_DAYS} days ago.`
+		);
 	}
 }
 
@@ -693,6 +733,11 @@ export async function pollScheduledPosts() {
 		// Zernio's own post records (real permalinks, real platform status).
 		await verifySubmittedZernioPosts(supabase, nowMs);
 
+		// Retention: hard-delete anything that has sat in the Trash past the
+		// restore window. Hourly, not per-tick — it's a whole-table scan and
+		// nothing about it is time-critical.
+		await purgeExpiredTrash(supabase, nowMs);
+
 		// Prefilter in SQL by a timezone-safe upper bound (+2 days UTC), then decide
 		// due-ness in JS using each agent's configured timezone. Drafts (status
 		// !== 'scheduled') are excluded automatically — they await approval.
@@ -700,6 +745,7 @@ export async function pollScheduledPosts() {
 		const { data: posts, error } = await supabase
 			.from('posts')
 			.select('*')
+			.is('deleted_at', null) // a trashed post is never due
 			.eq('status', 'scheduled')
 			.lte('scheduled_date', upperBound);
 
@@ -896,6 +942,7 @@ export async function syncPostAnalytics() {
 		const { data: posts, error } = await supabase
 			.from('posts')
 			.select('*')
+			.is('deleted_at', null) // don't spend provider calls on trashed posts
 			.eq('status', 'published')
 			.not('external_id', 'is', null)
 			.gte('published_at', sevenDaysAgo);

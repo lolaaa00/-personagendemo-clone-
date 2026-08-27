@@ -211,6 +211,7 @@ async function generateDraftsForAgent(
 		.from('posts')
 		.select('id, status, scheduled_date, scheduled_time, publication_results')
 		.eq('agent_id', agentId)
+		.is('deleted_at', null) // a trashed post releases its slot back to autopilot
 		.in('scheduled_date', dateStrs);
 
 	// A slot holding any real post is taken. The one exception is a GENERATION
@@ -249,6 +250,7 @@ async function generateDraftsForAgent(
 		.from('posts')
 		.select('id, scheduled_date, scheduled_time')
 		.eq('agent_id', agentId)
+		.is('deleted_at', null)
 		.eq('status', 'draft')
 		.not('scheduled_date', 'is', null)
 		.lte('scheduled_date', getLocalParts(tz).dateStr);
@@ -268,6 +270,7 @@ async function generateDraftsForAgent(
 			.from('posts')
 			.update({ scheduled_date: nextFree.dateStr, scheduled_time: nextFree.timeStr })
 			.eq('id', draft.id)
+			.is('deleted_at', null) // ...or trashed mid-run
 			.eq('status', 'draft'); // guard: don't move it if it was approved mid-run
 		if (!rollErr) {
 			taken.add(`${nextFree.dateStr}T${nextFree.timeStr.slice(0, 5)}`);
@@ -349,6 +352,7 @@ async function generateDraftsForAgent(
 				.from('posts')
 				.update({ status: 'generating', content: placeholderContent })
 				.eq('id', priorMarker.id)
+				.is('deleted_at', null)
 				.eq('status', 'failed')
 				.select('id');
 			if (claimErr || !claimedRows || claimedRows.length === 0) {
@@ -387,6 +391,7 @@ async function generateDraftsForAgent(
 				.from('posts')
 				.select('id')
 				.eq('agent_id', agentId)
+				.is('deleted_at', null)
 				.eq('scheduled_date', slot.dateStr)
 				.eq('scheduled_time', slot.timeStr);
 			const others = (slotRows || []).filter((r: any) => r.id !== placeholderId);

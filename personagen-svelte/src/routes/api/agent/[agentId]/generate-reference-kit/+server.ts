@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { createDbService } from '$lib/server/db';
+import { checkAgentAccess } from '$lib/server/workspaces';
 import {
 	executeKitStage,
 	resolveKitStagePlan,
@@ -63,11 +64,15 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 
 	const db = createDbService(locals.supabase);
 	const { data: agent, error: agentErr } = await db.agents.get(agentId);
-	if (agentErr || !agent || agent.user_id !== user.id) {
+	if (agentErr || !agent) {
 		return json(
 			{ success: false, error: 'Persona not found or ownership mismatch' },
 			{ status: 404 }
 		);
+	}
+	const access = await checkAgentAccess(locals.supabase, user.id, agentId, 'creator');
+	if (!access.ok) {
+		return json({ success: false, error: access.message }, { status: access.status });
 	}
 
 	const { falKey } = await resolveImageKeys(locals.supabase, user.id);
@@ -228,11 +233,15 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 
 	const db = createDbService(locals.supabase);
 	const { data: agent, error: agentErr } = await db.agents.get(agentId);
-	if (agentErr || !agent || agent.user_id !== user.id) {
+	if (agentErr || !agent) {
 		return json(
 			{ success: false, error: 'Persona not found or ownership mismatch' },
 			{ status: 404 }
 		);
+	}
+	const access = await checkAgentAccess(locals.supabase, user.id, agentId, 'creator');
+	if (!access.ok) {
+		return json({ success: false, error: access.message }, { status: access.status });
 	}
 
 	const { data: cfg } = await locals.supabase

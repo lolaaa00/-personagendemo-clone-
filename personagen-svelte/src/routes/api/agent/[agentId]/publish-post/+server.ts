@@ -3,6 +3,7 @@ import type { RequestHandler } from './$types';
 import { createDbService } from '$lib/server/db';
 import { publishPostById } from '$lib/server/scheduler';
 import { VIDEO_ONLY_PLATFORMS } from '$lib/server/social/platforms';
+import { checkAgentAccess } from '$lib/server/workspaces';
 
 /**
  * Manual "publish this already-generated post to a connected platform".
@@ -32,8 +33,11 @@ async function ownedAgentAndPost(
 	if (!postId) return { err: json({ success: false, error: 'Missing postId' }, { status: 400 }) };
 	const db = createDbService(locals.supabase);
 	const { data: agent, error: agentErr } = await db.agents.get(agentId);
-	if (agentErr || !agent || agent.user_id !== user.id)
+	if (agentErr || !agent)
 		return { err: json({ success: false, error: 'Persona not found or ownership mismatch' }, { status: 404 }) };
+	// Publishing is manager+ — same tier as approving in the review queue.
+	const access = await checkAgentAccess(locals.supabase, user.id, agentId, 'manager');
+	if (!access.ok) return { err: json({ success: false, error: access.message }, { status: access.status }) };
 	const { data: post, error: postErr } = await db.posts.get(postId);
 	if (postErr || !post || post.agent_id !== agentId)
 		return { err: json({ success: false, error: 'Post not found for this persona' }, { status: 404 }) };

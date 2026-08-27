@@ -7,6 +7,8 @@
 	import { resolveModel } from '$lib/models';
 	import ImageLightbox from '$lib/components/ui/ImageLightbox.svelte';
 	import { dialog } from '$lib/actions/dialog';
+	import { confirmAction } from '$lib/stores/confirm.svelte';
+	import { postPreview } from '$lib/confirm-preview';
 
 	/** Full-screen zoom of the post image (video already has native fullscreen). */
 	let zoomOpen = $state(false);
@@ -74,8 +76,6 @@
 		schedDate = post?.scheduled_date ?? '';
 		schedTime = (post?.scheduled_time ?? '10:00:00').slice(0, 5);
 		savingSchedule = false;
-		confirmingDelete = false;
-		confirmingPostNow = false;
 		genDetailsOpen = false;
 		videoError = false;
 		livePost = null;
@@ -422,39 +422,41 @@
 		});
 	}
 
-	// ── Delete two-click confirm ──────────────────────────────────────
-	let confirmingDelete = $state(false);
-	let confirmTimeout: ReturnType<typeof setTimeout> | undefined;
-
+	// ── Delete ────────────────────────────────────────────────────────
+	// This used to be a two-click "Confirm delete?" on the button itself. It is
+	// now the app-wide ConfirmDialog: a fast double-click can't blow past it, and
+	// it actually shows the post you're about to lose.
+	//
+	// The HOST owns the confirmation (every caller routes through
+	// confirmDeletePosts), so this just forwards — a prompt here too would be a
+	// second dialog for one action.
 	function handleDeleteClick() {
 		if (!post || deleting) return;
-		if (confirmingDelete) {
-			clearTimeout(confirmTimeout);
-			confirmingDelete = false;
-			onDelete?.(post);
-		} else {
-			confirmingDelete = true;
-			confirmTimeout = setTimeout(() => {
-				confirmingDelete = false;
-			}, 3000);
-		}
+		onDelete?.(post);
 	}
 
-	// ── Post-Now two-click confirm (publishing live is irreversible) ──────
-	let confirmingPostNow = $state(false);
-	let postNowTimeout: ReturnType<typeof setTimeout> | undefined;
-	function handlePostNowClick() {
+	// ── Post Now (publishing live is irreversible) ────────────────────────
+	async function handlePostNowClick() {
 		if (!post || posting) return;
-		if (confirmingPostNow) {
-			clearTimeout(postNowTimeout);
-			confirmingPostNow = false;
-			onPostNow?.(post);
-		} else {
-			confirmingPostNow = true;
-			postNowTimeout = setTimeout(() => {
-				confirmingPostNow = false;
-			}, 3000);
-		}
+		const targets = (post.platforms ?? []).map(platformLabelOf).join(', ');
+		const ok = await confirmAction({
+			title: 'Publish this live now?',
+			body: targets
+				? `It goes out to ${targets} immediately, overriding its schedule.`
+				: 'It goes out to the connected platforms immediately, overriding its schedule.',
+			warning:
+				'Once it is live, deleting it here only takes it down from the platforms whose ' +
+				'API allows that — the rest have to be removed by hand.',
+			preview: [postPreview(post)],
+			confirmLabel: 'Publish now',
+			cancelLabel: 'Not yet',
+			tone: 'danger'
+		});
+		if (ok) onPostNow?.(post);
+	}
+
+	function platformLabelOf(p: string): string {
+		return p.charAt(0).toUpperCase() + p.slice(1);
 	}
 
 	// Escape, the focus trap and the background scroll lock all come from
@@ -888,8 +890,8 @@
 
 		<div class="drawer-footer">
 			{#if onDelete}
-				<button type="button" class="btn-drawer-delete" class:confirming={confirmingDelete} disabled={deleting} onclick={handleDeleteClick}>
-					{#if deleting}Deleting…{:else if confirmingDelete}Confirm delete?{:else}Delete{/if}
+				<button type="button" class="btn-drawer-delete" disabled={deleting} onclick={handleDeleteClick}>
+					{deleting ? 'Deleting…' : 'Delete'}
 				</button>
 			{/if}
 			{#if onReject && (post.status === 'draft' || post.status === 'scheduled')}
@@ -932,16 +934,16 @@
 			{/if}
 			{#if canPostNow}
 				<!-- Publish immediately to the post's connected platforms, overriding any
-				     schedule. Two-click confirm because posting live is irreversible. -->
+				     schedule. Confirmed through the app-wide dialog — going live is
+				     irreversible on the platforms that have no delete API. -->
 				<button
 					type="button"
 					class="btn-drawer-postnow"
-					class:confirming={confirmingPostNow}
 					disabled={posting || refining}
 					onclick={handlePostNowClick}
 					title="Publish immediately, overriding the schedule"
 				>
-					{#if posting}Posting…{:else if confirmingPostNow}Post live now?{:else}Post Now{/if}
+					{posting ? 'Posting…' : 'Post Now'}
 				</button>
 			{/if}
 			<button type="button" class="btn-drawer-close" onclick={onClose}>Close</button>
@@ -1598,8 +1600,7 @@
 		background: var(--error-soft);
 		color: var(--error-text);
 	}
-	.btn-drawer-delete:hover:not(:disabled),
-	.btn-drawer-delete.confirming {
+	.btn-drawer-delete:hover:not(:disabled) {
 		background: var(--error);
 		color: #fff;
 	}
@@ -1641,12 +1642,6 @@
 		background: var(--cyan);
 		color: #fff;
 	}
-	/* Second click state — amber to signal this publishes live, right now. */
-	.btn-drawer-postnow.confirming {
-		background: var(--warning);
-		color: #fff;
-	}
-
 	.btn-drawer-close {
 		margin-left: auto;
 		background: var(--surface);

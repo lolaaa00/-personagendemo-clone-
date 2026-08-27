@@ -7,6 +7,7 @@
 	import SelectionToolbar from '$lib/components/ui/SelectionToolbar.svelte';
 	import { browser } from '$app/environment';
 	import { BrandBrief } from '$lib/services/api';
+	import { confirmAction } from '$lib/stores/confirm.svelte';
 
 	let { data } = $props<{
 		data: {
@@ -70,9 +71,14 @@
 		if (!currentBriefId || deletingBrief) return;
 		const name =
 			briefList.find((b) => b.id === currentBriefId)?.name || brandName || 'this brief';
-		const ok = confirm(
-			`Permanently delete "${name}"? Personas pinned to it will be unpinned. This cannot be undone.`
-		);
+		const ok = await confirmAction({
+			title: `Permanently delete "${name}"?`,
+			body: 'Personas pinned to this brief are unpinned. There is no Trash for briefs.',
+			warning: 'There is no undo for this.',
+			confirmLabel: 'Delete brief',
+			tone: 'danger',
+			typeToConfirm: name
+		});
 		if (!ok) return;
 		deletingBrief = true;
 		try {
@@ -455,7 +461,7 @@
 		selectedProductIds = [];
 	}
 
-	function deleteProducts(ids: string[]) {
+	async function deleteProducts(ids: string[]) {
 		if (ids.length === 0) return;
 		const names = products
 			.filter((p) => ids.includes(p.id))
@@ -464,7 +470,17 @@
 			.join(', ');
 		const label =
 			ids.length === 1 ? `"${names}"` : `${ids.length} products (${names}${ids.length > 3 ? ', …' : ''})`;
-		if (!confirm(`Remove ${label} from this brand brief?`)) return;
+		const ok = await confirmAction({
+			title: `Remove ${label} from this brand brief?`,
+			body: 'Posts already generated with it keep their copy — only future generations change.',
+			preview: products
+				.filter((p) => ids.includes(p.id))
+				.slice(0, 4)
+				.map((p) => ({ image: p.photoUrl || null, label: p.name, meta: p.price || null })),
+			confirmLabel: 'Remove',
+			tone: 'caution'
+		});
+		if (!ok) return;
 		products = products.filter((p) => !ids.includes(p.id));
 		selectedProductIds = selectedProductIds.filter((s) => !ids.includes(s));
 		if (editingProductId && ids.includes(editingProductId)) cancelEditProduct();
@@ -677,7 +693,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 	 * mutated state without saving, so a delete silently came back on reload
 	 * unless the user happened to press Save afterwards.
 	 */
-	function deleteCompetitors(ids: string[]) {
+	async function deleteCompetitors(ids: string[]) {
 		if (ids.length === 0) return;
 		const names = competitors
 			.filter((c) => ids.includes(c.id))
@@ -688,7 +704,13 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 			ids.length === 1
 				? `"${names}"`
 				: `${ids.length} competitors (${names}${ids.length > 3 ? ', …' : ''})`;
-		if (!confirm(`Remove ${label} from this brand brief?`)) return;
+		const ok = await confirmAction({
+			title: `Remove ${label} from this brand brief?`,
+			body: 'Positioning already written into existing posts is unaffected.',
+			confirmLabel: 'Remove',
+			tone: 'caution'
+		});
+		if (!ok) return;
 		competitors = competitors.filter((c) => !ids.includes(c.id));
 		selectedCompetitorIds = selectedCompetitorIds.filter((s) => !ids.includes(s));
 		saveAll();
@@ -996,7 +1018,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 						noun="product"
 						onSelectAll={selectAllProducts}
 						onClear={clearProductSelection}
-						onDelete={() => deleteProducts(selectedProductIds)}
+						onDelete={() => void deleteProducts(selectedProductIds)}
 					/>
 				{/if}
 
@@ -1649,7 +1671,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 						noun="competitor"
 						onSelectAll={selectAllCompetitors}
 						onClear={clearCompetitorSelection}
-						onDelete={() => deleteCompetitors(selectedCompetitorIds)}
+						onDelete={() => void deleteCompetitors(selectedCompetitorIds)}
 					/>
 				{/if}
 
