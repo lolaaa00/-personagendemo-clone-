@@ -64,6 +64,67 @@ async function sumSpend(
 }
 
 /**
+ * Per-seat workspace cap: if this user generates against a workspace persona
+ * as a MEMBER seat (owners never have a membership row, so they're never
+ * capped here) and that seat has spend_limit_usd configured (Settings → Team),
+ * their calendar-month spend across the workspace's personas must stay under
+ * it. Fails OPEN on read errors, same policy as the env caps above.
+ */
+async function seatCapExceeded(
+	supabase: any,
+	userId: string,
+	agentId: string,
+	monthlySinceIso: string
+): Promise<string | null> {
+	try {
+		const { data: agent } = await supabase
+			.from('agents')
+			.select('workspace_id')
+			.eq('id', agentId)
+			.maybeSingle();
+		if (!agent?.workspace_id) return null;
+
+		const { data: seat } = await supabase
+			.from('workspace_members')
+			.select('spend_limit_usd')
+			.eq('workspace_id', agent.workspace_id)
+			.eq('user_id', userId)
+			.maybeSingle();
+		const cap = Number(seat?.spend_limit_usd);
+		if (!seat || seat.spend_limit_usd === null || !Number.isFinite(cap) || cap < 0) return null;
+
+		const { data: wsAgents } = await supabase
+			.from('agents')
+			.select('id')
+			.eq('workspace_id', agent.workspace_id);
+		const wsAgentIds = (wsAgents ?? []).map((a: any) => a.id);
+		if (wsAgentIds.length === 0) return null;
+
+		const { data: rows, error } = await supabase
+			.from('generation_events')
+			.select('est_cost')
+			.eq('user_id', userId)
+			.in('agent_id', wsAgentIds)
+			.gte('created_at', monthlySinceIso)
+			.limit(LEDGER_ROW_LIMIT);
+		if (error) {
+			console.error(
+				`[budget] seat-cap ledger read FAILED for user=${userId} — failing OPEN: ${error.message}`
+			);
+			return null;
+		}
+		const spent = (rows ?? []).reduce((s: number, r: any) => s + (Number(r.est_cost) || 0), 0);
+		if (spent >= cap) {
+			return `Your monthly generation budget for this workspace is used up ($${spent.toFixed(2)} of the $${cap.toFixed(2)} limit set by your workspace admin). Ask them to raise your limit in Settings → Team.`;
+		}
+		return null;
+	} catch (e) {
+		console.error('[budget] seat-cap check failed — failing OPEN:', (e as Error).message);
+		return null;
+	}
+}
+
+/**
  * Throws a "budget"-worded error when another paid generation would exceed the
  * per-user monthly or per-agent daily ceiling. The autopilot treats a "budget"
  * message as a hard stop for that agent this run (see autopilot.ts).
@@ -84,16 +145,23 @@ export async function assertWithinBudget(
 	const dailySince = new Date();
 	dailySince.setUTCHours(0, 0, 0, 0);
 
-	// The two ledger sums are independent — run them concurrently rather than
-	// serialising two round-trips on the hot generation path.
-	const [monthlySpent, dailySpent] = await Promise.all([
+	// The ledger sums are independent — run them concurrently rather than
+	// serialising round-trips on the hot generation path.
+	const [monthlySpent, dailySpent, seatCapMessage] = await Promise.all([
 		checkMonthly
 			? sumSpend(supabase, 'user_id', userId, monthlySince.toISOString())
 			: Promise.resolve(0),
 		checkDaily
 			? sumSpend(supabase, 'agent_id', agentId!, dailySince.toISOString())
-			: Promise.resolve(0)
+			: Promise.resolve(0),
+		userId && agentId
+			? seatCapExceeded(supabase, userId, agentId, monthlySince.toISOString())
+			: Promise.resolve(null)
 	]);
+
+	if (seatCapMessage) {
+		throw new Error(seatCapMessage);
+	}
 
 	if (checkMonthly && monthlySpent >= monthlyCap) {
 		throw new Error(

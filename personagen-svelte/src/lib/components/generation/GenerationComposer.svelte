@@ -1178,11 +1178,16 @@
 			</section>
 		{/key}
 
-		<div class="meta">
-			{#if preview.model}<span>Model <code>{preview.model}</code></span>{/if}
-			{#if preview.provider && isPromptKind}<span>via {preview.provider}</span>{/if}
-			<span class="cost" aria-live="polite">Est. {usd(isPostKind ? livePostTotal : liveCost)}</span>
-		</div>
+		<!-- Model/provider footnote for prompt-kind runs only. A post-kind run
+		     lists every model in the Craft step's pipeline, and the running cost
+		     is pinned in the footer on every step — repeating either here just
+		     printed the same number twice. -->
+		{#if !isPostKind && (preview.model || preview.provider)}
+			<div class="meta">
+				{#if preview.model}<span>Model <code>{preview.model}</code></span>{/if}
+				{#if preview.provider}<span>via {preview.provider}</span>{/if}
+			</div>
+		{/if}
 	{/if}
 
 	{#snippet footer()}
@@ -1536,12 +1541,6 @@
 		border-top: 1px solid var(--border);
 		font-size: 0.8rem;
 		color: var(--muted);
-	}
-	.cost {
-		margin-left: auto;
-		font-weight: 700;
-		font-variant-numeric: tabular-nums;
-		color: var(--text);
 	}
 	.btn-ghost,
 	.btn-primary {

@@ -517,6 +517,7 @@
 		user_id: string;
 		role: SeatRole;
 		email: string | null;
+		spend_limit_usd?: number | null;
 	}
 	interface PersonaLite {
 		id: string;
@@ -682,6 +683,32 @@
 		}
 	}
 
+	/** Set or clear (empty input) a seat's calendar-month USD generation cap. */
+	async function saveSpendLimit(workspaceId: string, userId: string, raw: string) {
+		const trimmed = raw.trim();
+		const value = trimmed === '' ? null : Number(trimmed);
+		if (value !== null && (!Number.isFinite(value) || value < 0)) {
+			showToast('Spend limit must be a dollar amount (or blank for unlimited)', 'warning');
+			return;
+		}
+		teamBusy = { ...teamBusy, [`limit-${userId}`]: true };
+		try {
+			const res = await fetch(`/api/workspaces/${workspaceId}/members`, {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ userId, spendLimitUsd: value })
+			});
+			const data = await res.json();
+			if (!data.success) throw new Error(data.error || 'Failed to update spend limit');
+			showToast(value === null ? 'Spend limit removed' : `Spend limit set to $${value}/month`, 'success');
+			await loadWorkspaceDetail(workspaceId);
+		} catch (err) {
+			showToast((err as Error).message, 'error');
+		} finally {
+			teamBusy = { ...teamBusy, [`limit-${userId}`]: false };
+		}
+	}
+
 	async function removeMember(workspaceId: string, userId: string) {
 		teamBusy = { ...teamBusy, [`remove-${userId}`]: true };
 		try {
@@ -831,6 +858,44 @@
 			showToast((err as Error).message || 'Failed to save profile', 'error');
 		} finally {
 			profileSaving = false;
+		}
+	}
+
+	// ── Change login email (placeholder → real address) ──────────────────────
+	// No mailer on this instance, so instead of a confirm-by-email round trip:
+	// type it twice + re-enter the password, applied immediately server-side.
+	let showEmailChange = $state(false);
+	let newEmail = $state('');
+	let confirmNewEmail = $state('');
+	let emailChangePassword = $state('');
+	let emailChangeSaving = $state(false);
+
+	async function changeEmail() {
+		emailChangeSaving = true;
+		try {
+			const res = await fetch('/api/settings/email', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					newEmail,
+					confirmEmail: confirmNewEmail,
+					currentPassword: emailChangePassword
+				})
+			});
+			const result = await res.json();
+			if (res.ok && result.success) {
+				showEmailChange = false;
+				newEmail = '';
+				confirmNewEmail = '';
+				emailChangePassword = '';
+				showToast('Email updated — log out and back in with the new address', 'success');
+			} else {
+				showToast(result.error || 'Failed to change email', 'error');
+			}
+		} catch (err) {
+			showToast((err as Error).message || 'Failed to change email', 'error');
+		} finally {
+			emailChangeSaving = false;
 		}
 	}
 
@@ -1071,23 +1136,49 @@
 							value={profileEmail}
 							readonly
 						/>
-						<span class="readonly-badge">
-							<svg
-								width="12"
-								height="12"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="2"
-								aria-hidden="true"
-								><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path
-									d="M7 11V7a5 5 0 0110 0v4"
-								/></svg
-							>
-							Read-only
-						</span>
+						<button
+							type="button"
+							class="secondary-btn"
+							onclick={() => (showEmailChange = !showEmailChange)}
+						>
+							{showEmailChange ? 'Cancel' : 'Change email'}
+						</button>
 					</div>
 				</div>
+				{#if showEmailChange}
+					<div class="field">
+						<label for="new-email">New email address</label>
+						<input id="new-email" type="email" autocomplete="off" bind:value={newEmail} placeholder="you@example.com" />
+					</div>
+					<div class="field">
+						<label for="confirm-new-email">Confirm new email</label>
+						<input id="confirm-new-email" type="email" autocomplete="off" bind:value={confirmNewEmail} placeholder="you@example.com" />
+					</div>
+					<div class="field">
+						<label for="email-change-password">Current password</label>
+						<input
+							id="email-change-password"
+							type="password"
+							autocomplete="current-password"
+							bind:value={emailChangePassword}
+						/>
+					</div>
+					<p class="key-hint">
+						Your login email changes immediately — no confirmation email is sent. You'll sign in
+						with the new address from then on.
+					</p>
+					<button
+						class="save-btn"
+						onclick={changeEmail}
+						disabled={emailChangeSaving || !newEmail.trim() || !confirmNewEmail.trim() || !emailChangePassword}
+					>
+						{#if emailChangeSaving}
+							<span class="spinner"></span> Updating…
+						{:else}
+							Update Email
+						{/if}
+					</button>
+				{/if}
 				<button class="save-btn" onclick={saveProfile} disabled={profileSaving}>
 					{#if profileSaving}
 						<span class="spinner"></span> Saving…
@@ -1583,6 +1674,19 @@
 												<option value="manager">Manager</option>
 												<option value="admin">Admin</option>
 											</select>
+											<input
+												class="spend-limit-input"
+												type="number"
+												min="0"
+												step="1"
+												placeholder="$/mo"
+												title="Monthly generation spend cap in USD — blank means unlimited. Applies on blur/Enter."
+												aria-label="Monthly spend limit for {m.email}"
+												value={m.spend_limit_usd ?? ''}
+												disabled={teamBusy[`limit-${m.user_id}`]}
+												onchange={(e) =>
+													saveSpendLimit(ws.id, m.user_id, (e.currentTarget as HTMLInputElement).value)}
+											/>
 											<button
 												class="danger-inline-btn"
 												onclick={() => removeMember(ws.id, m.user_id)}
@@ -2604,6 +2708,16 @@
 		border-radius: 999px;
 		padding: 0.1rem 0.55rem;
 		white-space: nowrap;
+	}
+
+	.spend-limit-input {
+		width: 5.5rem;
+		padding: 0.35rem 0.5rem;
+		font-size: var(--text-sm);
+		background: var(--surface);
+		border: 1px solid var(--border-strong);
+		border-radius: var(--radius-sm);
+		color: var(--text);
 	}
 
 	.assign-select {

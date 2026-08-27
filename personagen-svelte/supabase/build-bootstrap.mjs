@@ -54,6 +54,7 @@ const ORDER = [
 	['workspaces_migration.sql', 'Workspaces & seats — orgs, roles, agent_access_role()'],
 	['posts_soft_delete_migration.sql', 'Trash & restore — posts.deleted_at + partial indexes'],
 	['workspace_admin_role_migration.sql', "Workspace 'admin' seat tier — role_rank(), workspace_role()"],
+	['workspace_spend_limits_migration.sql', 'Per-seat monthly spend caps — workspace_members.spend_limit_usd'],
 ];
 
 /** Rewrite a migration so every statement can be replayed against a DB that already has it. */

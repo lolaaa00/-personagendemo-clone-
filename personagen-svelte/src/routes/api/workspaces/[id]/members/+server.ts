@@ -12,7 +12,7 @@ export const GET: RequestHandler = async ({ locals, params }) => {
 
 	const { data, error } = await locals.supabase
 		.from('workspace_members')
-		.select('workspace_id, user_id, role, invited_by, created_at')
+		.select('workspace_id, user_id, role, invited_by, created_at, spend_limit_usd')
 		.eq('workspace_id', params.id)
 		.order('created_at');
 
@@ -38,21 +38,49 @@ export const GET: RequestHandler = async ({ locals, params }) => {
 	return json({ success: true, members });
 };
 
-/** Change a seat's role. Owner or admin-tier seat (RLS). */
+/** Change a seat's role and/or monthly spend cap. Owner or admin-tier seat (RLS). */
 export const PATCH: RequestHandler = async ({ request, locals, params }) => {
 	const { session, user } = await locals.safeGetSession();
 	if (!session || !user) {
 		return json({ success: false, error: 'Unauthorized' }, { status: 401 });
 	}
 
-	const body = (await request.json().catch(() => ({}))) as { userId?: string; role?: string };
-	if (!body.userId || !body.role || !ROLES.has(body.role)) {
-		return json({ success: false, error: 'Missing or invalid userId/role' }, { status: 400 });
+	const body = (await request.json().catch(() => ({}))) as {
+		userId?: string;
+		role?: string;
+		spendLimitUsd?: number | null;
+	};
+	if (!body.userId) {
+		return json({ success: false, error: 'Missing userId' }, { status: 400 });
+	}
+
+	const patch: Record<string, unknown> = {};
+	if (body.role !== undefined) {
+		if (!ROLES.has(body.role)) {
+			return json({ success: false, error: 'Invalid role' }, { status: 400 });
+		}
+		patch.role = body.role;
+	}
+	// null clears the cap (back to unlimited); a number sets a calendar-month
+	// USD ceiling enforced by assertWithinBudget() on every paid generation.
+	if ('spendLimitUsd' in body) {
+		if (body.spendLimitUsd === null) {
+			patch.spend_limit_usd = null;
+		} else {
+			const cap = Number(body.spendLimitUsd);
+			if (!Number.isFinite(cap) || cap < 0 || cap > 100000) {
+				return json({ success: false, error: 'Spend limit must be a non-negative dollar amount' }, { status: 400 });
+			}
+			patch.spend_limit_usd = cap;
+		}
+	}
+	if (Object.keys(patch).length === 0) {
+		return json({ success: false, error: 'Nothing to update' }, { status: 400 });
 	}
 
 	const { data, error } = await locals.supabase
 		.from('workspace_members')
-		.update({ role: body.role })
+		.update(patch)
 		.eq('workspace_id', params.id)
 		.eq('user_id', body.userId)
 		.select()
