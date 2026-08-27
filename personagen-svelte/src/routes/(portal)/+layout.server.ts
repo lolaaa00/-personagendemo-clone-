@@ -16,7 +16,8 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 			sidebarAgents: [],
 			personaGroups: [],
 			pendingInvites: [],
-			badgeLabel: 'Personal account'
+			badgeLabel: 'Personal account',
+			mustChangePassword: false
 		};
 	}
 
@@ -115,7 +116,11 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 			sidebarAgents,
 			personaGroups,
 			pendingInvites,
-			badgeLabel
+			badgeLabel,
+			// Provisioned team accounts start on a shared throwaway password with
+			// this metadata flag set — the layout blocks with a change-password
+			// prompt until /api/settings/password clears it.
+			mustChangePassword: Boolean((user.user_metadata as any)?.must_change_password)
 		};
 	} catch (e) {
 		if ((e as any)?.status === 303) throw e;
@@ -127,7 +132,8 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 			sidebarAgents: [],
 			personaGroups: [],
 			pendingInvites: [],
-			badgeLabel: 'Personal account'
+			badgeLabel: 'Personal account',
+			mustChangePassword: false
 		};
 	}
 };

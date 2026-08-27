@@ -51,6 +51,36 @@
 		}
 	}
 
+	// ── Forced first-login password change ───────────────────────────────────
+	// Provisioned team accounts all start on one shared starter password; this
+	// blocks the whole portal until they've set their own.
+	let mustChangePassword = $derived(Boolean((data as any).mustChangePassword));
+	let pwNew = $state('');
+	let pwConfirm = $state('');
+	let pwSaving = $state(false);
+
+	async function submitPasswordChange(e: SubmitEvent) {
+		e.preventDefault();
+		pwSaving = true;
+		try {
+			const res = await fetch('/api/settings/password', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ newPassword: pwNew, confirmPassword: pwConfirm })
+			});
+			const result = await res.json();
+			if (!result.success) throw new Error(result.error || 'Failed to change password');
+			showToast('Password updated — welcome aboard', 'success');
+			pwNew = '';
+			pwConfirm = '';
+			await invalidateAll();
+		} catch (err) {
+			showToast((err as Error).message, 'error');
+		} finally {
+			pwSaving = false;
+		}
+	}
+
 	let userDropdownOpen = $state(false);
 
 	// a11y: on SPA navigation the focus ring is otherwise stranded on the previous
@@ -909,6 +939,41 @@
 	</div>
 </div>
 
+{#if mustChangePassword}
+	<div class="pw-gate" role="dialog" aria-modal="true" aria-labelledby="pw-gate-title">
+		<form class="pw-gate-card" onsubmit={submitPasswordChange}>
+			<h2 id="pw-gate-title">Set your password</h2>
+			<p>
+				You're on a shared starter password. Pick your own to continue — you'll use it for every
+				login from here on.
+			</p>
+			<label class="pw-gate-field">
+				New password
+				<input
+					type="password"
+					autocomplete="new-password"
+					minlength="8"
+					required
+					bind:value={pwNew}
+				/>
+			</label>
+			<label class="pw-gate-field">
+				Confirm password
+				<input
+					type="password"
+					autocomplete="new-password"
+					minlength="8"
+					required
+					bind:value={pwConfirm}
+				/>
+			</label>
+			<button type="submit" class="pw-gate-btn" disabled={pwSaving || !pwNew || !pwConfirm}>
+				{pwSaving ? 'Saving…' : 'Save password'}
+			</button>
+		</form>
+	</div>
+{/if}
+
 <PersonaProjectsModal
 	open={projectsModalOpen}
 	onClose={() => (projectsModalOpen = false)}
@@ -1525,6 +1590,77 @@
 		background: var(--surface-2);
 	}
 	.invite-banner-btn:disabled {
+		opacity: 0.6;
+		cursor: default;
+	}
+
+	/* ── Forced first-login password change (blocks the whole portal) ── */
+	.pw-gate {
+		position: fixed;
+		inset: 0;
+		z-index: 1000;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: color-mix(in srgb, var(--bg) 55%, transparent);
+		backdrop-filter: blur(8px);
+		-webkit-backdrop-filter: blur(8px);
+	}
+	.pw-gate-card {
+		width: min(400px, calc(100vw - 2rem));
+		background: var(--surface);
+		border: 1px solid var(--border-strong);
+		border-radius: var(--radius-lg);
+		padding: 1.75rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.9rem;
+		box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+	}
+	.pw-gate-card h2 {
+		font-size: 1.25rem;
+		color: var(--text);
+	}
+	.pw-gate-card p {
+		font-size: 0.9rem;
+		color: var(--text-muted);
+		line-height: 1.45;
+	}
+	.pw-gate-field {
+		display: flex;
+		flex-direction: column;
+		gap: 0.35rem;
+		font-size: 0.85rem;
+		font-weight: 600;
+		color: var(--text-muted);
+	}
+	.pw-gate-field input {
+		padding: 0.55rem 0.7rem;
+		font-size: 0.95rem;
+		background: var(--surface-2);
+		border: 1px solid var(--border-strong);
+		border-radius: 8px;
+		color: var(--text);
+	}
+	.pw-gate-field input:focus {
+		outline: none;
+		border-color: var(--accent);
+	}
+	.pw-gate-btn {
+		margin-top: 0.25rem;
+		border: none;
+		border-radius: 8px;
+		padding: 0.65rem 1rem;
+		font-size: 0.95rem;
+		font-weight: 600;
+		background: var(--accent);
+		color: #fff;
+		cursor: pointer;
+	}
+	.pw-gate-btn:hover:not(:disabled) {
+		background: var(--accent-dark);
+	}
+	.pw-gate-btn:disabled {
 		opacity: 0.6;
 		cursor: default;
 	}

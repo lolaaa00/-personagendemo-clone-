@@ -360,7 +360,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-08-23", hash: "b3ea9f2", type: "other", category: "maintenance", scope: null, title: "skill" },
 	{ date: "2026-08-27", hash: "0e3a1e4", type: "feat", category: "feature", scope: null, title: "workspace/seat access control, admin role tier, and Trash" },
 	{ date: "2026-08-27", hash: "12dabda", type: "fix", category: "fix", scope: "team", title: "admin-tier workspace members can actually manage the workspace" },
-	{ date: "2026-08-27", hash: "464f52a", type: "fix", category: "design", scope: null, title: "workspace-shared content now visible across the account, plus UI polish" }
+	{ date: "2026-08-27", hash: "464f52a", type: "fix", category: "design", scope: null, title: "workspace-shared content now visible across the account, plus UI polish" },
+	{ date: "2026-08-27", hash: "8e7c829", type: "feat", category: "security", scope: "team", title: "per-seat monthly spend caps + self-serve login email change" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -646,12 +647,12 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 	},
 	{
 		id: "0e3a1e4", from: "2026-08-27", to: "2026-08-27",
-		category: "feature", categories: ["feature","fix","design"],
+		category: "feature", categories: ["feature","fix","design","security"],
 		title: "New: workspace/seat access control, admin role tier, and…",
-		summary: "Workspace/seat access control, admin role tier, and Trash. Plus 2 more changes, touching things that were broken and layout, colours and readability.",
+		summary: "Workspace/seat access control, admin role tier, and Trash. Plus 3 more changes, touching things that were broken and layout, colours and readability and sign-in and account protection.",
 		major: false, curated: false,
-		entries: [CHANGELOG[324], CHANGELOG[325], CHANGELOG[326]]
+		entries: [CHANGELOG[324], CHANGELOG[325], CHANGELOG[326], CHANGELOG[327]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "464f52a";
+export const CHANGELOG_GENERATED_FROM = "8e7c829";
