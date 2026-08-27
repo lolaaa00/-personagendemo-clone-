@@ -525,14 +525,39 @@
 					{/if}
 				{/each}
 				{#if groupedSidebar.sections.length > 0 && groupedSidebar.ungrouped.length > 0}
-					<div class="sidebar-group-head is-static">
+					{@const ungroupedFolded = collapsedGroups.includes('__ungrouped__') && !personaSearch.trim()}
+					<button
+						type="button"
+						class="sidebar-group-head"
+						aria-expanded={!ungroupedFolded}
+						onclick={() => toggleGroupCollapsed('__ungrouped__')}
+					>
+						<svg
+							aria-hidden="true"
+							class="sidebar-group-chevron"
+							class:folded={ungroupedFolded}
+							width="12"
+							height="12"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2.5"
+							stroke-linecap="round"
+							stroke-linejoin="round"><path d="M6 9l6 6 6-6" /></svg
+						>
 						<span class="sidebar-group-name">Ungrouped</span>
 						<span class="sidebar-group-count">{groupedSidebar.ungrouped.length}</span>
-					</div>
+					</button>
+					{#if !ungroupedFolded}
+						{#each groupedSidebar.ungrouped as agent (agent.id)}
+							{@render personaItem(agent)}
+						{/each}
+					{/if}
+				{:else}
+					{#each groupedSidebar.ungrouped as agent (agent.id)}
+						{@render personaItem(agent)}
+					{/each}
 				{/if}
-				{#each groupedSidebar.ungrouped as agent (agent.id)}
-					{@render personaItem(agent)}
-				{/each}
 				{#if filteredSidebarAgents.length === 0 && personaSearch.trim()}
 					<div class="sidebar-persona-empty">No personas match "{personaSearch}"</div>
 				{/if}
@@ -696,7 +721,7 @@
 			{#if !sidebarState.collapsed}
 				<div class="sidebar-plan-badge">
 					<span class="sidebar-plan-dot"></span>
-					<span>Managed Plan · Active</span>
+					<span>{(data as any).badgeLabel ?? 'Personal account'}</span>
 				</div>
 			{/if}
 		</div>

@@ -15,7 +15,8 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 			configStatus: checkConfigStatus(),
 			sidebarAgents: [],
 			personaGroups: [],
-			pendingInvites: []
+			pendingInvites: [],
+			badgeLabel: 'Personal account'
 		};
 	}
 
@@ -84,13 +85,37 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 			);
 		}
 
+		// Replaces the old static "Managed Plan · Active" filler (never backed by
+		// real data — there's no plan/subscription system) with the one piece of
+		// account context that's actually true and useful: what this session
+		// IS, ownership-first since owning a workspace outranks any membership.
+		let badgeLabel = 'Personal account';
+		if (locals.supabase) {
+			const [{ data: owned }, { data: memberOf }] = await Promise.all([
+				locals.supabase.from('workspaces').select('id, name').eq('owner_id', user.id),
+				locals.supabase
+					.from('workspace_members')
+					.select('role, workspaces(name)')
+					.eq('user_id', user.id)
+			]);
+			if (owned && owned.length > 0) {
+				badgeLabel =
+					owned.length === 1 ? `Owner · ${owned[0].name}` : `Owner · ${owned.length} workspaces`;
+			} else if (memberOf && memberOf.length > 0) {
+				const m = memberOf[0] as any;
+				const role = String(m.role || '').replace(/^\w/, (c) => c.toUpperCase());
+				badgeLabel = `${role} · ${m.workspaces?.name ?? 'Workspace'}`;
+			}
+		}
+
 		return {
 			session,
 			user,
 			configStatus: checkConfigStatus(),
 			sidebarAgents,
 			personaGroups,
-			pendingInvites
+			pendingInvites,
+			badgeLabel
 		};
 	} catch (e) {
 		if ((e as any)?.status === 303) throw e;
@@ -101,7 +126,8 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 			configStatus: checkConfigStatus(),
 			sidebarAgents: [],
 			personaGroups: [],
-			pendingInvites: []
+			pendingInvites: [],
+			badgeLabel: 'Personal account'
 		};
 	}
 };

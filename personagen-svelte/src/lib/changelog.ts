@@ -358,7 +358,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-08-23", hash: "4d64cfc", type: "feat", category: "feature", scope: "calendar", title: "event chips preview the media, not the caption" },
 	{ date: "2026-08-23", hash: "0698e91", type: "other", category: "maintenance", scope: null, title: "collapsible" },
 	{ date: "2026-08-23", hash: "b3ea9f2", type: "other", category: "maintenance", scope: null, title: "skill" },
-	{ date: "2026-08-27", hash: "0e3a1e4", type: "feat", category: "feature", scope: null, title: "workspace/seat access control, admin role tier, and Trash" }
+	{ date: "2026-08-27", hash: "0e3a1e4", type: "feat", category: "feature", scope: null, title: "workspace/seat access control, admin role tier, and Trash" },
+	{ date: "2026-08-27", hash: "12dabda", type: "fix", category: "fix", scope: "team", title: "admin-tier workspace members can actually manage the workspace" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -644,12 +645,12 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 	},
 	{
 		id: "0e3a1e4", from: "2026-08-27", to: "2026-08-27",
-		category: "feature", categories: ["feature"],
+		category: "feature", categories: ["feature","fix"],
 		title: "New: workspace/seat access control, admin role tier, and…",
-		summary: "Workspace/seat access control, admin role tier, and Trash.",
+		summary: "Workspace/seat access control, admin role tier, and Trash. Plus 1 more change, touching things that were broken.",
 		major: false, curated: false,
-		entries: [CHANGELOG[324]]
+		entries: [CHANGELOG[324], CHANGELOG[325]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "0e3a1e4";
+export const CHANGELOG_GENERATED_FROM = "12dabda";
