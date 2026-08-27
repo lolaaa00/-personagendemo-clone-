@@ -545,6 +545,9 @@
 	// which available personas are checked, keyed "workspaceId:agentId".
 	let brandFilter = $state<Record<string, string>>({});
 	let selectedPersonas = $state<Record<string, boolean>>({});
+	// Admin-tier memberships get the full management card (see workspaceManagerCard
+	// below) instead of the plain "you joined this, here's Leave" row.
+	let nonAdminMemberships = $derived(memberships.filter((m) => m.role !== 'admin'));
 
 	async function loadTeam() {
 		teamLoading = true;
@@ -554,8 +557,15 @@
 			if (!data.success) throw new Error(data.error || 'Unable to load team info');
 			ownedWorkspaces = data.owned || [];
 			memberships = data.memberships || [];
+			// An admin-tier seat can manage the workspace (invite/re-role/remove
+			// other members, file its own personas in) exactly like the owner can
+			// — see workspace_admin_role_migration.sql — so it needs the same
+			// detail loaded, not just the plain "you joined this" membership view.
 			for (const ws of ownedWorkspaces) {
 				await loadWorkspaceDetail(ws.id);
+			}
+			for (const m of memberships) {
+				if (m.role === 'admin') await loadWorkspaceDetail(m.workspace_id);
 			}
 		} catch (err) {
 			showToast((err as Error).message, 'error');
@@ -1537,16 +1547,18 @@
 					<p class="key-hint" aria-live="polite">Loading team info…</p>
 				{/if}
 
-				<div class="provider-key-list">
-					{#each ownedWorkspaces as ws (ws.id)}
-						{@const members = workspaceMembers[ws.id] || []}
-						{@const invites = workspaceInvites[ws.id] || []}
-						{@const personas = workspacePersonas[ws.id] || { inWorkspace: [], available: [] }}
+				{#snippet workspaceManagerCard(
+					ws: { id: string; name: string },
+					members: MemberLite[],
+					invites: PendingInviteLite[],
+					personas: { inWorkspace: PersonaLite[]; available: PersonaLite[] },
+					isOwner: boolean
+				)}
 						<div class="provider-key-row">
 							<div class="provider-key-header">
 								<div>
 									<strong>{ws.name}</strong>
-									<span>You own this workspace</span>
+									<span>{isOwner ? 'You own this workspace' : 'You manage this workspace (admin seat)'}</span>
 								</div>
 							</div>
 
@@ -1764,6 +1776,31 @@
 								{/if}
 							</div>
 						</div>
+				{/snippet}
+
+				<div class="provider-key-list">
+					{#each ownedWorkspaces as ws (ws.id)}
+						{@const members = workspaceMembers[ws.id] || []}
+						{@const invites = workspaceInvites[ws.id] || []}
+						{@const personas = workspacePersonas[ws.id] || { inWorkspace: [], available: [] }}
+						{@render workspaceManagerCard(ws, members, invites, personas, true)}
+					{/each}
+
+					<!-- Workspaces where this account is an admin seat (not the owner) —
+					     same management card, since admin+ can invite/re-role/remove
+					     other seats and file its own personas in exactly like the owner. -->
+					{#each memberships.filter((m) => m.role === 'admin') as m (m.workspace_id)}
+						{@const wsId = m.workspace_id}
+						{@const members = workspaceMembers[wsId] || []}
+						{@const invites = workspaceInvites[wsId] || []}
+						{@const personas = workspacePersonas[wsId] || { inWorkspace: [], available: [] }}
+						{@render workspaceManagerCard(
+							{ id: wsId, name: m.workspaces?.name ?? 'Workspace' },
+							members,
+							invites,
+							personas,
+							false
+						)}
 					{/each}
 
 					<!-- Create a workspace -->
@@ -1799,17 +1836,18 @@
 						</div>
 					</div>
 
-					<!-- Memberships in other workspaces -->
-					{#if memberships.length > 0}
+					<!-- Memberships in other workspaces (admin-tier ones get the full
+					     management card above instead — this is just the plain seats). -->
+					{#if nonAdminMemberships.length > 0}
 						<div class="provider-key-row">
 							<div class="provider-key-header">
 								<div>
 									<strong>Workspaces you've joined</strong>
-									<span>Seats where someone else is the admin.</span>
+									<span>Seats where someone else manages the workspace.</span>
 								</div>
 							</div>
 							<div class="assign-list">
-								{#each memberships as m (m.workspace_id)}
+								{#each nonAdminMemberships as m (m.workspace_id)}
 									<div class="assign-row">
 										<div class="assign-agent">
 											<strong>{m.workspaces?.name ?? 'Workspace'}</strong>

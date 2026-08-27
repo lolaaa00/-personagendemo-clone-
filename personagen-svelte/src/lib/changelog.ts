@@ -357,7 +357,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-08-23", hash: "74af5a5", type: "other", category: "maintenance", scope: null, title: "memory" },
 	{ date: "2026-08-23", hash: "4d64cfc", type: "feat", category: "feature", scope: "calendar", title: "event chips preview the media, not the caption" },
 	{ date: "2026-08-23", hash: "0698e91", type: "other", category: "maintenance", scope: null, title: "collapsible" },
-	{ date: "2026-08-23", hash: "b3ea9f2", type: "other", category: "maintenance", scope: null, title: "skill" }
+	{ date: "2026-08-23", hash: "b3ea9f2", type: "other", category: "maintenance", scope: null, title: "skill" },
+	{ date: "2026-08-27", hash: "0e3a1e4", type: "feat", category: "feature", scope: null, title: "workspace/seat access control, admin role tier, and Trash" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -640,7 +641,15 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 		summary: "Both views fill the screen, and bento stops leaving holes. Plus 8 more changes, touching things that were broken and making posts, images and video and work the app does on its own.",
 		major: true, curated: false,
 		entries: [CHANGELOG[315], CHANGELOG[316], CHANGELOG[317], CHANGELOG[318], CHANGELOG[319], CHANGELOG[320], CHANGELOG[321], CHANGELOG[322], CHANGELOG[323]]
+	},
+	{
+		id: "0e3a1e4", from: "2026-08-27", to: "2026-08-27",
+		category: "feature", categories: ["feature"],
+		title: "New: workspace/seat access control, admin role tier, and…",
+		summary: "Workspace/seat access control, admin role tier, and Trash.",
+		major: false, curated: false,
+		entries: [CHANGELOG[324]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "b3ea9f2";
+export const CHANGELOG_GENERATED_FROM = "0e3a1e4";
