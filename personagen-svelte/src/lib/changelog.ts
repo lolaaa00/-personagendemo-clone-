@@ -361,7 +361,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-08-27", hash: "0e3a1e4", type: "feat", category: "feature", scope: null, title: "workspace/seat access control, admin role tier, and Trash" },
 	{ date: "2026-08-27", hash: "12dabda", type: "fix", category: "fix", scope: "team", title: "admin-tier workspace members can actually manage the workspace" },
 	{ date: "2026-08-27", hash: "464f52a", type: "fix", category: "design", scope: null, title: "workspace-shared content now visible across the account, plus UI polish" },
-	{ date: "2026-08-27", hash: "8e7c829", type: "feat", category: "security", scope: "team", title: "per-seat monthly spend caps + self-serve login email change" }
+	{ date: "2026-08-27", hash: "8e7c829", type: "feat", category: "security", scope: "team", title: "per-seat monthly spend caps + self-serve login email change" },
+	{ date: "2026-08-27", hash: "887fe69", type: "feat", category: "security", scope: "auth", title: "forced password change on first login for provisioned seats" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -647,12 +648,12 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 	},
 	{
 		id: "0e3a1e4", from: "2026-08-27", to: "2026-08-27",
-		category: "feature", categories: ["feature","fix","design","security"],
-		title: "New: workspace/seat access control, admin role tier, and…",
-		summary: "Workspace/seat access control, admin role tier, and Trash. Plus 3 more changes, touching things that were broken and layout, colours and readability and sign-in and account protection.",
-		major: false, curated: false,
-		entries: [CHANGELOG[324], CHANGELOG[325], CHANGELOG[326], CHANGELOG[327]]
+		category: "security", categories: ["feature","fix","design","security"],
+		title: "Safer: workspace/seat access control, admin role tier, and…",
+		summary: "Workspace/seat access control, admin role tier, and Trash. Plus 4 more changes, touching things you can now do and things that were broken and layout, colours and readability.",
+		major: true, curated: false,
+		entries: [CHANGELOG[324], CHANGELOG[325], CHANGELOG[326], CHANGELOG[327], CHANGELOG[328]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "8e7c829";
+export const CHANGELOG_GENERATED_FROM = "887fe69";
