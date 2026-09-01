@@ -365,7 +365,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-08-27", hash: "887fe69", type: "feat", category: "security", scope: "auth", title: "forced password change on first login for provisioned seats" },
 	{ date: "2026-09-01", hash: "ef5a6b1", type: "docs", category: "publishing", scope: null, title: "platform API reference for programmatic/agentic use" },
 	{ date: "2026-09-01", hash: "fca32a9", type: "feat", category: "docs", scope: "developer", title: "scoped API keys + in-app Developer page (docs + test console)" },
-	{ date: "2026-09-01", hash: "eec425c", type: "feat", category: "feature", scope: "admin", title: "Admin Console with activity logs; group provider keys by intent" }
+	{ date: "2026-09-01", hash: "eec425c", type: "feat", category: "feature", scope: "admin", title: "Admin Console with activity logs; group provider keys by intent" },
+	{ date: "2026-09-01", hash: "0167e10", type: "feat", category: "feature", scope: "settings", title: "collapse provider keys into a compact accordion with identity badges" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -659,12 +660,12 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 	},
 	{
 		id: "ef5a6b1", from: "2026-09-01", to: "2026-09-01",
-		category: "publishing", categories: ["publishing","docs","feature"],
-		title: "Publishing: platform API reference for programmatic/agentic use",
-		summary: "Platform API reference for programmatic/agentic use. Plus 2 more changes, touching guides and explanations and things you can now do.",
+		category: "feature", categories: ["publishing","docs","feature"],
+		title: "New: platform API reference for programmatic/agentic use",
+		summary: "Platform API reference for programmatic/agentic use. Plus 3 more changes, touching getting posts onto your accounts and guides and explanations.",
 		major: false, curated: false,
-		entries: [CHANGELOG[329], CHANGELOG[330], CHANGELOG[331]]
+		entries: [CHANGELOG[329], CHANGELOG[330], CHANGELOG[331], CHANGELOG[332]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "eec425c";
+export const CHANGELOG_GENERATED_FROM = "0167e10";

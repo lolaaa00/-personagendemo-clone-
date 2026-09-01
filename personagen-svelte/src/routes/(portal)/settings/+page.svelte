@@ -231,12 +231,12 @@
 		{
 			key: 'media',
 			title: 'Media Generation',
-			blurb: 'Creates the images and video your personas post.'
+			blurb: 'Creates the images, video and voiceover your personas post.'
 		},
 		{
 			key: 'language',
-			title: 'Language & Chat',
-			blurb: 'Writes captions, hooks and persona dialogue, and powers chat.'
+			title: 'Language, Reasoning & Routing',
+			blurb: 'Writes captions and persona dialogue — and routes media jobs on failover.'
 		},
 		{
 			key: 'research',
@@ -259,6 +259,13 @@
 		category: KeyCategory;
 		mark: string;
 		tint: string;
+		/** Every place in the platform this key is actually spent — audited from
+		 *  the call sites, not from the vendor's marketing. */
+		touchpoints: string[];
+		/** Set when the provider's real reach crosses its filed category. */
+		spans?: string;
+		/** Set when nothing in the codebase calls this provider yet. */
+		unused?: boolean;
 	}> = [
 		{
 			provider: 'zernio',
@@ -267,46 +274,62 @@
 			placeholder: 'Paste your Zernio API key',
 			category: 'publishing',
 			mark: 'Z',
-			tint: '#7c3aed'
+			tint: '#7c3aed',
+			touchpoints: [
+				'Publishing a post to any connected platform',
+				'Scheduled auto-publishing (the scheduler worker)',
+				'Connecting / disconnecting social accounts',
+				'Reading post analytics back into the dashboard',
+				'Per-persona key assignment (Zernio Key Manager)'
+			]
 		},
 		{
 			provider: 'fal_ai',
 			label: 'Fal AI',
-			description: 'Fast image and video generation — the main media engine for UGC posts.',
-			optional: true,
+			description: 'The primary media engine — images, video and voiceover for UGC posts.',
 			placeholder: 'Paste your Fal AI API key',
 			category: 'media',
 			mark: 'F',
-			tint: '#d946ef'
-		},
-		{
-			provider: 'kie_ai',
-			label: 'Kie AI',
-			description: 'Alternative video/image generation provider for creative assets.',
-			optional: true,
-			placeholder: 'Paste your Kie AI API key',
-			category: 'media',
-			mark: 'K',
-			tint: '#0ea5e9'
+			tint: '#d946ef',
+			touchpoints: [
+				'UGC image generation (posts, typographic cards)',
+				'Video generation — spokesperson, b-roll and cinematic',
+				'Voiceover / text-to-speech on spoken formats',
+				'Persona avatar hero shot',
+				'Reference-kit stages (full body, angles, close-up)'
+			]
 		},
 		{
 			provider: 'openrouter',
 			label: 'OpenRouter',
-			description: 'Model routing for captions, personas and chat — also the image fallback route.',
+			description: 'Model routing for text — and a full media failover path for images and video.',
 			placeholder: 'Paste your OpenRouter API key',
 			category: 'language',
 			mark: 'OR',
-			tint: '#6366f1'
+			tint: '#6366f1',
+			spans: 'also generates media',
+			touchpoints: [
+				'Captions, hooks and the Director’s visual prompts',
+				'Persona generation and chat',
+				'Brand-brief analysis (Intel engine)',
+				'Image generation — on failover, or when pinned as provider',
+				'Video generation — b-roll failover path'
+			]
 		},
 		{
 			provider: 'gemini',
 			label: 'Gemini',
-			description: 'Google Gemini for persona/chat generation — used if no OpenRouter key is set.',
+			description: 'Google Gemini for text and image understanding — the fallback when no OpenRouter key is set.',
 			optional: true,
 			placeholder: 'Paste your Gemini API key',
 			category: 'language',
 			mark: 'G',
-			tint: '#4285f4'
+			tint: '#4285f4',
+			touchpoints: [
+				'Captions and persona text (used when OpenRouter is unset)',
+				'Vision — reading reference images the model is shown',
+				'Brand-brief analysis (Intel engine)'
+			]
 		},
 		{
 			provider: 'firecrawl',
@@ -315,7 +338,23 @@
 			placeholder: 'Paste your Firecrawl API key',
 			category: 'research',
 			mark: 'FC',
-			tint: '#f97316'
+			tint: '#f97316',
+			touchpoints: [
+				'Scrape & Populate on the Brand Brief page',
+				'Competitor and storefront extraction (Intel engine)'
+			]
+		},
+		{
+			provider: 'kie_ai',
+			label: 'Kie AI',
+			description: 'Saved and credential-checked, but no generation path calls it yet — setting it changes nothing today.',
+			optional: true,
+			placeholder: 'Paste your Kie AI API key',
+			category: 'media',
+			mark: 'K',
+			tint: '#0ea5e9',
+			unused: true,
+			touchpoints: []
 		}
 	];
 
@@ -1463,7 +1502,9 @@
 											>
 											<span class="key-name">
 												{config.label}
-												{#if config.optional}<span class="key-optional">optional</span>{/if}
+												{#if config.spans}<span class="key-spans">{config.spans}</span>{/if}
+												{#if config.unused}<span class="key-unused">not wired up</span>
+												{:else if config.optional}<span class="key-optional">optional</span>{/if}
 											</span>
 											<span
 												class="key-state key-state-{state}"
@@ -1496,6 +1537,22 @@
 
 										<div class="key-body">
 											<p class="key-desc">{config.description}</p>
+
+										{#if config.touchpoints.length > 0}
+											<div class="touchpoints">
+												<span class="touchpoints-title">Where this key is used</span>
+												<ul class="touchpoints-list">
+													{#each config.touchpoints as tp (tp)}
+														<li>{tp}</li>
+													{/each}
+												</ul>
+											</div>
+										{:else}
+											<p class="touchpoints-none">
+												No feature in the platform calls this provider yet — a saved key is
+												validated but never spent.
+											</p>
+										{/if}
 
 											{#if savedKey}
 												<div class="key-display">
@@ -2992,6 +3049,60 @@
 		font-size: var(--text-xs);
 		color: var(--text-muted);
 		line-height: 1.5;
+	}
+
+	/* Audited call sites for the key — so it's obvious what stops working
+	   without it, and what it's costing you when it's set. */
+	.touchpoints {
+		background: var(--surface-2);
+		border-radius: 8px;
+		padding: 0.6rem 0.75rem;
+	}
+	.touchpoints-title {
+		display: block;
+		font-size: var(--text-xs);
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		color: var(--text-muted);
+		margin-bottom: 0.35rem;
+	}
+	.touchpoints-list {
+		margin: 0;
+		padding-left: 1rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.2rem;
+	}
+	.touchpoints-list li {
+		font-size: var(--text-xs);
+		color: var(--text);
+		line-height: 1.45;
+	}
+	.touchpoints-none {
+		font-size: var(--text-xs);
+		color: var(--text-muted);
+		background: var(--surface-2);
+		border-radius: 8px;
+		padding: 0.6rem 0.75rem;
+		line-height: 1.5;
+	}
+
+	.key-spans,
+	.key-unused {
+		font-size: var(--text-xs);
+		font-weight: 600;
+		padding: 0.05rem 0.4rem;
+		border-radius: 999px;
+		white-space: nowrap;
+	}
+	.key-spans {
+		background: color-mix(in srgb, var(--accent) 14%, transparent);
+		color: var(--accent-text);
+	}
+	.key-unused {
+		background: var(--surface-2);
+		color: var(--text-muted);
 	}
 
 	@media (prefers-reduced-motion: reduce) {
