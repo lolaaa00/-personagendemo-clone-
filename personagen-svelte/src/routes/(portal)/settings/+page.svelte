@@ -245,6 +245,11 @@
 		}
 	];
 
+	// `mark` + `tint` render a monogram identity badge per provider. Deliberately
+	// NOT the vendors' real logos: those are trademarked assets we'd have to
+	// ship and keep current, and hand-drawing them from memory produces subtly
+	// wrong marks. A tinted monogram reads as identity, stays on-brand with the
+	// app, and can't be wrong.
 	const providerConfigs: Array<{
 		provider: ApiKeyProvider;
 		label: string;
@@ -252,13 +257,17 @@
 		optional?: boolean;
 		placeholder: string;
 		category: KeyCategory;
+		mark: string;
+		tint: string;
 	}> = [
 		{
 			provider: 'zernio',
 			label: 'Zernio',
 			description: 'Publishing, connections, and analytics for all 15 platforms. Billed per connected account (2 free).',
 			placeholder: 'Paste your Zernio API key',
-			category: 'publishing'
+			category: 'publishing',
+			mark: 'Z',
+			tint: '#7c3aed'
 		},
 		{
 			provider: 'fal_ai',
@@ -266,7 +275,9 @@
 			description: 'Fast image and video generation — the main media engine for UGC posts.',
 			optional: true,
 			placeholder: 'Paste your Fal AI API key',
-			category: 'media'
+			category: 'media',
+			mark: 'F',
+			tint: '#d946ef'
 		},
 		{
 			provider: 'kie_ai',
@@ -274,14 +285,18 @@
 			description: 'Alternative video/image generation provider for creative assets.',
 			optional: true,
 			placeholder: 'Paste your Kie AI API key',
-			category: 'media'
+			category: 'media',
+			mark: 'K',
+			tint: '#0ea5e9'
 		},
 		{
 			provider: 'openrouter',
 			label: 'OpenRouter',
 			description: 'Model routing for captions, personas and chat — also the image fallback route.',
 			placeholder: 'Paste your OpenRouter API key',
-			category: 'language'
+			category: 'language',
+			mark: 'OR',
+			tint: '#6366f1'
 		},
 		{
 			provider: 'gemini',
@@ -289,14 +304,18 @@
 			description: 'Google Gemini for persona/chat generation — used if no OpenRouter key is set.',
 			optional: true,
 			placeholder: 'Paste your Gemini API key',
-			category: 'language'
+			category: 'language',
+			mark: 'G',
+			tint: '#4285f4'
 		},
 		{
 			provider: 'firecrawl',
 			label: 'Firecrawl',
 			description: 'Storefront scraping and JS-rendered page extraction for brand briefs.',
 			placeholder: 'Paste your Firecrawl API key',
-			category: 'research'
+			category: 'research',
+			mark: 'FC',
+			tint: '#f97316'
 		}
 	];
 
@@ -1412,93 +1431,145 @@
 				</p>
 				{#each KEY_CATEGORIES as cat (cat.key)}
 					{@const inCat = providerConfigs.filter((c) => c.category === cat.key)}
+					{@const setCount = inCat.filter((c) => !!getSavedKey(c.provider)).length}
 					{#if inCat.length > 0}
-						<div class="key-category">
+						<section class="key-category">
 							<div class="key-category-head">
-								<h3>{cat.title}</h3>
-								<span>{cat.blurb}</span>
+								<div class="key-category-title">
+									<h3>{cat.title}</h3>
+									<span class="key-category-count">{setCount}/{inCat.length} set</span>
+								</div>
+								<span class="key-category-blurb">{cat.blurb}</span>
 							</div>
-							<div class="provider-key-list">
+
+							<div class="key-accordion">
 								{#each inCat as config (config.provider)}
 									{@const savedKey = getSavedKey(config.provider)}
-						<div class="provider-key-row">
-							<div class="provider-key-header">
-								<div>
-									<strong>{config.label}{config.optional ? ' (Optional)' : ''}</strong>
-									<span>{config.description}</span>
-								</div>
-								{#if savedKey}
-									<span class="status-pill" aria-live="polite" class:valid={savedKey.status === 'valid'} class:error={savedKey.status === 'invalid' || savedKey.status === 'error'}>
-										<span class="sr-only">{config.label} key status: </span>{savedKey.status}
-									</span>
-								{:else if apiKeysLoading}
-									<span class="status-pill" aria-live="polite"
-										><span class="sr-only">{config.label} key status: </span>loading</span
-									>
-								{:else}
-									<span class="status-pill" aria-live="polite"
-										><span class="sr-only">{config.label} key status: </span>not saved</span
-									>
-								{/if}
-							</div>
+									{@const state = savedKey
+										? savedKey.status === 'valid'
+											? 'valid'
+											: savedKey.status === 'invalid' || savedKey.status === 'error'
+												? 'error'
+												: 'saved'
+										: apiKeysLoading
+											? 'loading'
+											: 'unset'}
+									<details class="key-item" class:has-key={!!savedKey}>
+										<summary class="key-summary">
+											<span
+												class="key-mark"
+												style="--mark-tint: {config.tint}"
+												aria-hidden="true">{config.mark}</span
+											>
+											<span class="key-name">
+												{config.label}
+												{#if config.optional}<span class="key-optional">optional</span>{/if}
+											</span>
+											<span
+												class="key-state key-state-{state}"
+												aria-live="polite"
+											>
+												<span class="sr-only">{config.label} key status: </span>
+												{state === 'valid'
+													? 'Valid'
+													: state === 'error'
+														? 'Check key'
+														: state === 'saved'
+															? 'Saved'
+															: state === 'loading'
+																? 'Loading'
+																: 'Not set'}
+											</span>
+											<svg
+												class="key-chevron"
+												aria-hidden="true"
+												width="14"
+												height="14"
+												viewBox="0 0 24 24"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="2.5"
+												stroke-linecap="round"
+												stroke-linejoin="round"><path d="M6 9l6 6 6-6" /></svg
+											>
+										</summary>
 
-							{#if savedKey}
-								<div class="key-display">
-									<code class="key-value">{savedKey.masked_value}</code>
-								</div>
-								{#if savedKey.last_error}
-									<p class="key-error" role="alert" id={`${config.provider}-api-key-error`}>
-										{savedKey.last_error}
-									</p>
-								{/if}
-							{/if}
+										<div class="key-body">
+											<p class="key-desc">{config.description}</p>
 
-							<div class="field">
-								<label for={`${config.provider}-api-key`}>{config.label} API Key</label>
-								<input
-									id={`${config.provider}-api-key`}
-									type="password"
-									bind:value={apiKeyInputs[config.provider]}
-									placeholder={savedKey ? 'Paste a new key to replace the saved one' : config.placeholder}
-									autocomplete="off"
-									aria-invalid={savedKey?.last_error ? 'true' : undefined}
-									aria-describedby={savedKey?.last_error
-										? `${config.provider}-api-key-error`
-										: undefined}
-								/>
-							</div>
+											{#if savedKey}
+												<div class="key-display">
+													<code class="key-value">{savedKey.masked_value}</code>
+												</div>
+												{#if savedKey.last_error}
+													<p class="key-error" role="alert" id={`${config.provider}-api-key-error`}>
+														{savedKey.last_error}
+													</p>
+												{/if}
+											{/if}
 
-							<div class="provider-actions">
-								<button class="save-btn" onclick={() => saveProviderKey(config.provider)} disabled={apiKeySaving[config.provider] || !apiKeyInputs[config.provider]?.trim()}>
-									{#if apiKeySaving[config.provider]}
-										<span class="spinner"></span> Saving…
-									{:else}
-										Save Key
-									{/if}
-								</button>
-								<button class="secondary-btn" onclick={() => testProviderKey(config.provider)} disabled={apiKeyTesting[config.provider] || !savedKey}>
-									{#if apiKeyTesting[config.provider]}
-										<span class="spinner"></span> Testing…
-									{:else}
-										Test Connection
-									{/if}
-								</button>
-								<button class="danger-inline-btn" onclick={() => deleteProviderKey(config.provider)} disabled={apiKeyDeleting[config.provider] || !savedKey}>
-									{#if apiKeyDeleting[config.provider]}
-										<span class="spinner"></span> Deleting…
-									{:else}
-										Delete Key
-									{/if}
-								</button>
+											<div class="field">
+												<label for={`${config.provider}-api-key`}>{config.label} API Key</label>
+												<input
+													id={`${config.provider}-api-key`}
+													type="password"
+													bind:value={apiKeyInputs[config.provider]}
+													placeholder={savedKey
+														? 'Paste a new key to replace the saved one'
+														: config.placeholder}
+													autocomplete="off"
+													aria-invalid={savedKey?.last_error ? 'true' : undefined}
+													aria-describedby={savedKey?.last_error
+														? `${config.provider}-api-key-error`
+														: undefined}
+												/>
+											</div>
+
+											<div class="provider-actions">
+												<button
+													class="save-btn"
+													onclick={() => saveProviderKey(config.provider)}
+													disabled={apiKeySaving[config.provider] ||
+														!apiKeyInputs[config.provider]?.trim()}
+												>
+													{#if apiKeySaving[config.provider]}
+														<span class="spinner"></span> Saving…
+													{:else}
+														Save Key
+													{/if}
+												</button>
+												<button
+													class="secondary-btn"
+													onclick={() => testProviderKey(config.provider)}
+													disabled={apiKeyTesting[config.provider] || !savedKey}
+												>
+													{#if apiKeyTesting[config.provider]}
+														<span class="spinner"></span> Testing…
+													{:else}
+														Test Connection
+													{/if}
+												</button>
+												<button
+													class="danger-inline-btn"
+													onclick={() => deleteProviderKey(config.provider)}
+													disabled={apiKeyDeleting[config.provider] || !savedKey}
+												>
+													{#if apiKeyDeleting[config.provider]}
+														<span class="spinner"></span> Deleting…
+													{:else}
+														Delete Key
+													{/if}
+												</button>
 											</div>
 										</div>
-									{/each}
-								</div>
+									</details>
+								{/each}
 							</div>
-						{/if}
-					{/each}
-				</div>
+						</section>
+					{/if}
+				{/each}
 			</div>
+		</div>
 
 		{:else if activeSection === 'zernio-keys'}
 		<!-- Zernio Key Manager. id anchors the "add another key" redirect from the
@@ -2765,29 +2836,168 @@
 		white-space: nowrap;
 	}
 
-	/* Provider keys grouped by what they're for (publishing / media / language /
-	   research) rather than one flat vendor list. */
+	/* Provider keys: grouped by intent, each provider a collapsed accordion row.
+	   Native <details>/<summary> so keyboard + screen-reader behaviour is free
+	   and no JS state is needed to track what's open. */
 	.key-category {
-		margin-bottom: 1.5rem;
+		margin-bottom: 1.4rem;
 	}
 	.key-category-head {
 		display: flex;
 		flex-direction: column;
-		gap: 0.15rem;
-		padding-bottom: 0.5rem;
-		margin-bottom: 0.75rem;
-		border-bottom: 1px solid var(--border);
+		gap: 0.1rem;
+		margin-bottom: 0.6rem;
+	}
+	.key-category-title {
+		display: flex;
+		align-items: baseline;
+		gap: 0.5rem;
 	}
 	.key-category-head h3 {
-		font-size: var(--text-sm);
+		font-size: var(--text-xs);
 		font-weight: 700;
-		color: var(--text);
+		color: var(--text-muted);
 		text-transform: uppercase;
-		letter-spacing: 0.04em;
+		letter-spacing: 0.06em;
 	}
-	.key-category-head span {
+	.key-category-count {
+		font-size: var(--text-xs);
+		color: var(--text-dim, var(--text-muted));
+		opacity: 0.8;
+	}
+	.key-category-blurb {
 		font-size: var(--text-xs);
 		color: var(--text-muted);
+	}
+
+	.key-accordion {
+		display: flex;
+		flex-direction: column;
+		gap: 0.4rem;
+	}
+
+	.key-item {
+		border: 1px solid var(--border);
+		border-radius: var(--radius-md, 10px);
+		background: var(--surface);
+		overflow: hidden;
+		transition: border-color 0.15s ease;
+	}
+	.key-item[open] {
+		border-color: var(--border-hover, var(--border-strong));
+	}
+	.key-item:hover {
+		border-color: var(--border-strong);
+	}
+
+	.key-summary {
+		display: flex;
+		align-items: center;
+		gap: 0.65rem;
+		padding: 0.6rem 0.8rem;
+		cursor: pointer;
+		list-style: none;
+		/* Comfortable hit target without the old card's bulk. */
+		min-height: 44px;
+	}
+	.key-summary::-webkit-details-marker {
+		display: none;
+	}
+	.key-summary:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: -2px;
+	}
+
+	.key-mark {
+		flex-shrink: 0;
+		width: 28px;
+		height: 28px;
+		border-radius: 7px;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		font-size: 0.7rem;
+		font-weight: 700;
+		letter-spacing: -0.02em;
+		color: #fff;
+		background: var(--mark-tint);
+	}
+
+	.key-name {
+		flex: 1 1 auto;
+		min-width: 0;
+		font-size: var(--text-sm);
+		font-weight: 600;
+		color: var(--text);
+		display: flex;
+		align-items: baseline;
+		gap: 0.4rem;
+	}
+	.key-optional {
+		font-size: var(--text-xs);
+		font-weight: 500;
+		color: var(--text-muted);
+		opacity: 0.75;
+	}
+
+	/* Status carries a word as well as a colour — colour alone fails for
+	   colour-blind users and in high-contrast modes. */
+	.key-state {
+		flex-shrink: 0;
+		font-size: var(--text-xs);
+		font-weight: 600;
+		padding: 0.12rem 0.5rem;
+		border-radius: 999px;
+		background: var(--surface-2);
+		color: var(--text-muted);
+		white-space: nowrap;
+	}
+	.key-state-valid {
+		background: color-mix(in srgb, #16a34a 16%, transparent);
+		color: #15803d;
+	}
+	.key-state-error {
+		background: color-mix(in srgb, #dc2626 16%, transparent);
+		color: #b91c1c;
+	}
+	.key-state-saved {
+		background: color-mix(in srgb, var(--accent) 16%, transparent);
+		color: var(--accent-text);
+	}
+	:global([data-theme='dark']) .key-state-valid {
+		color: #4ade80;
+	}
+	:global([data-theme='dark']) .key-state-error {
+		color: #f87171;
+	}
+
+	.key-chevron {
+		flex-shrink: 0;
+		color: var(--text-muted);
+		transition: transform 0.18s ease;
+	}
+	.key-item[open] .key-chevron {
+		transform: rotate(180deg);
+	}
+
+	.key-body {
+		padding: 0 0.8rem 0.8rem 0.8rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.6rem;
+		border-top: 1px solid var(--border);
+		padding-top: 0.75rem;
+	}
+	.key-desc {
+		font-size: var(--text-xs);
+		color: var(--text-muted);
+		line-height: 1.5;
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.key-chevron {
+			transition: none;
+		}
 	}
 
 	/* Member rows stack: the email gets a full line (never truncated), controls
