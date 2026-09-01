@@ -130,6 +130,7 @@
 			{ href: '/brand-brief', label: 'Brand Brief', icon: 'bolt' },
 			{ href: '/models', label: 'Model Manager', icon: 'sliders' },
 			{ href: '/guides', label: 'Docs', icon: 'book' },
+			{ href: '/developer', label: 'Developer API', icon: 'code' },
 			{ href: '/settings', label: 'Settings', icon: 'settings' }
 		]
 	};
@@ -707,6 +708,20 @@
 								stroke-linecap="round"
 								stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" /></svg
 							>
+						{:else if item.icon === 'code'}
+							<svg
+								aria-hidden="true"
+								width="18"
+								height="18"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+								stroke-linecap="round"
+								stroke-linejoin="round"><polyline points="16 18 22 12 16 6" /><polyline
+									points="8 6 2 12 8 18"
+								/></svg
+							>
 						{:else if item.icon === 'book'}
 							<svg
 								aria-hidden="true"
@@ -797,6 +812,7 @@
 						if (path.startsWith('/generations')) return 'All Generations';
 						if (path.startsWith('/models')) return 'Model Manager';
 						if (path.startsWith('/guides')) return 'Docs';
+						if (path.startsWith('/developer')) return 'Developer API';
 						if (path.startsWith('/favorites')) return 'My Favorites';
 						if (path.startsWith('/trash')) return 'Trash';
 						if (path.startsWith('/review')) return 'Review Queue';

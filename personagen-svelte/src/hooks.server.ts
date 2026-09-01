@@ -1,9 +1,12 @@
 import { createSupabaseServerClient } from '$lib/server/supabase';
+import { createClient } from '@supabase/supabase-js';
 import { redirect, type Handle } from '@sveltejs/kit';
 import { env } from '$env/dynamic/public';
 import { env as privateEnv } from '$env/dynamic/private';
 import { building } from '$app/environment';
 import { startScheduler } from '$lib/server/scheduler';
+import { isApiKey, resolveApiKey, mintUserJwt } from '$lib/server/api-keys';
+import { getServiceSupabase } from '$lib/server/service-supabase';
 
 // Start the scheduler at server boot (adapter-node runs module-level code on
 // startup), not lazily on first request — an idle deployment still publishes.
@@ -40,10 +43,68 @@ const PROTECTED_PREFIXES = [
 	'/generations',
 	'/favorites',
 	'/guides',
-	'/review'
+	'/review',
+	'/developer'
 ];
 
 export const handle: Handle = async ({ event, resolve }) => {
+	// ── API-key auth (agentic controller) ────────────────────────────────────
+	// A request carrying `Authorization: Bearer pg_live_…` authenticates as the
+	// seat that owns the key. We mint a short-lived user JWT and build the
+	// request's Supabase client with it, so RLS/roles apply exactly as for a
+	// browser session. Cookie-based auth (the normal path) runs below untouched.
+	const authHeader = event.request.headers.get('authorization') ?? '';
+	const bearer = authHeader.toLowerCase().startsWith('bearer ')
+		? authHeader.slice(7).trim()
+		: '';
+
+	if (bearer && isApiKey(bearer)) {
+		const apiHandled = await (async () => {
+			try {
+				const resolved = await resolveApiKey(bearer);
+				if (!resolved) return false;
+
+				const { data: userData } = await getServiceSupabase().auth.admin.getUserById(
+					resolved.userId
+				);
+				const user = userData?.user ?? null;
+				if (!user) return false;
+
+				const token = mintUserJwt(user.id, user.email ?? null);
+				// A client whose every PostgREST call carries the minted user JWT →
+				// auth.uid() = this seat inside RLS, identical to a real login.
+				event.locals.supabase = createClient(
+					env.PUBLIC_SUPABASE_URL ?? '',
+					env.PUBLIC_SUPABASE_ANON_KEY ?? '',
+					{
+						global: { headers: { Authorization: `Bearer ${token}` } },
+						auth: { persistSession: false, autoRefreshToken: false }
+					}
+				) as any;
+				// Routes call locals.safeGetSession() — hand them the resolved seat
+				// directly (there is no cookie session to read for a key request).
+				event.locals.safeGetSession = async () => ({
+					session: { access_token: token, token_type: 'bearer', user } as any,
+					user
+				});
+				return true;
+			} catch (e) {
+				console.error('[Hooks] API-key auth failed:', e);
+				return false;
+			}
+		})();
+
+		if (apiHandled) {
+			return resolve(event, {
+				filterSerializedResponseHeaders(name) {
+					return name === 'content-range' || name === 'x-supabase-api-version';
+				}
+			});
+		}
+		// Fall through to cookie auth on an unresolved/invalid key — the route's
+		// own 401 then reports it cleanly rather than us guessing intent here.
+	}
+
 	event.locals.supabase = createSupabaseServerClient(event.cookies);
 
 	event.locals.safeGetSession = async () => {

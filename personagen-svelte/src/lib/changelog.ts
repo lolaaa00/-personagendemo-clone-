@@ -362,7 +362,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-08-27", hash: "12dabda", type: "fix", category: "fix", scope: "team", title: "admin-tier workspace members can actually manage the workspace" },
 	{ date: "2026-08-27", hash: "464f52a", type: "fix", category: "design", scope: null, title: "workspace-shared content now visible across the account, plus UI polish" },
 	{ date: "2026-08-27", hash: "8e7c829", type: "feat", category: "security", scope: "team", title: "per-seat monthly spend caps + self-serve login email change" },
-	{ date: "2026-08-27", hash: "887fe69", type: "feat", category: "security", scope: "auth", title: "forced password change on first login for provisioned seats" }
+	{ date: "2026-08-27", hash: "887fe69", type: "feat", category: "security", scope: "auth", title: "forced password change on first login for provisioned seats" },
+	{ date: "2026-09-01", hash: "ef5a6b1", type: "docs", category: "publishing", scope: null, title: "platform API reference for programmatic/agentic use" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -653,7 +654,15 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 		summary: "Workspace/seat access control, admin role tier, and Trash. Plus 4 more changes, touching things you can now do and things that were broken and layout, colours and readability.",
 		major: true, curated: false,
 		entries: [CHANGELOG[324], CHANGELOG[325], CHANGELOG[326], CHANGELOG[327], CHANGELOG[328]]
+	},
+	{
+		id: "ef5a6b1", from: "2026-09-01", to: "2026-09-01",
+		category: "publishing", categories: ["publishing"],
+		title: "Publishing: platform API reference for programmatic/agentic use",
+		summary: "Platform API reference for programmatic/agentic use.",
+		major: false, curated: false,
+		entries: [CHANGELOG[329]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "887fe69";
+export const CHANGELOG_GENERATED_FROM = "ef5a6b1";
