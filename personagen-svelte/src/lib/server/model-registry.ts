@@ -27,9 +27,13 @@ import {
 
 export type RegistryKind = ModelKind | 'tts';
 
+export type RegistryProvider = 'fal' | 'openrouter';
+
 export interface RegistryRow {
 	id: string;
 	user_id: string;
+	/** Which API serves this model — decides the call adapter and the sync that owns it. */
+	provider: RegistryProvider;
 	model_id: string;
 	kind: RegistryKind;
 	label: string;
@@ -37,6 +41,8 @@ export interface RegistryRow {
 	released_at: string | null;
 	price_usd: number | null;
 	pricing_text: string | null;
+	/** How price_usd was derived — audit trail for token-billed providers. */
+	price_basis: string | null;
 	price_source: 'seed' | 'parsed' | 'manual';
 	quality: number | null;
 	tier: 'budget' | 'balanced' | 'premium' | null;
@@ -114,6 +120,7 @@ const WIRED_SEED: Record<
 };
 
 const TTS_SEED: Omit<RegistryRow, 'id' | 'user_id' | 'created_at' | 'updated_at'> = {
+	provider: 'fal',
 	model_id: 'fal-ai/elevenlabs/tts/turbo-v2.5',
 	kind: 'tts',
 	label: 'ElevenLabs Turbo v2.5',
@@ -121,6 +128,7 @@ const TTS_SEED: Omit<RegistryRow, 'id' | 'user_id' | 'created_at' | 'updated_at'
 	released_at: '2024-07-01',
 	price_usd: 0.03,
 	pricing_text: null,
+	price_basis: null,
 	price_source: 'seed',
 	quality: 8,
 	tier: 'balanced',
@@ -161,6 +169,9 @@ export async function loadRegistry(
 		const extra = WIRED_SEED[m.id];
 		return {
 			user_id: userId,
+			// The wired catalog is fal-only; OpenRouter rows arrive via
+			// syncFromOpenRouter, never through this seed.
+			provider: 'fal' as RegistryProvider,
 			model_id: m.id,
 			kind: m.kind as RegistryKind,
 			label: m.label,
@@ -168,6 +179,7 @@ export async function loadRegistry(
 			released_at: extra?.released ?? null,
 			price_usd: m.usd,
 			pricing_text: null as string | null,
+			price_basis: null as string | null,
 			price_source: 'seed',
 			quality: extra?.quality ?? null,
 			tier: m.tier,
@@ -266,6 +278,236 @@ export function effectiveResolve(
 	return (
 		options.find((m) => m.id === DEFAULT_MODEL[kind]) ?? options[0] ?? resolveModel(kind, requested)
 	);
+}
+
+// ── Discovery sync (OpenRouter catalog — no key required for /models) ───────
+
+/**
+ * Google documents every Gemini image generation as a flat 1290 output tokens,
+ * which is what turns OpenRouter's per-token rate into a per-image price. It is
+ * an ASSUMPTION for any non-Gemini image model, so the derivation is written
+ * into price_basis rather than buried — and a manual price always wins.
+ */
+const GEMINI_TOKENS_PER_IMAGE = 1290;
+/** Per-call accounting convention elsewhere in this app: one clip is ~5s. */
+const CLIP_SECONDS = 5;
+
+/**
+ * Turns an OpenRouter catalog entry into a per-call USD estimate.
+ *
+ * OpenRouter prices everything per TOKEN (strings, USD/token). Image-output
+ * models bill the image through `completion`, so a per-image figure needs the
+ * token count above. Returns the basis string alongside so the number can be
+ * audited instead of trusted.
+ */
+export function openRouterPerCallPrice(model: any): { usd: number | null; basis: string | null } {
+	const outputs: string[] = model?.architecture?.output_modalities ?? [];
+
+	if (outputs.includes('image')) {
+		// `image_output` is the rate that actually bills a generated image.
+		// NOT `completion` — that's the TEXT output rate and is ~20x lower on
+		// these models ($3/M vs $60/M on Nano Banana 2), so using it silently
+		// under-prices every image. Verified against OpenRouter's live response.
+		const imageOut = Number(model?.pricing?.image_output);
+		if (Number.isFinite(imageOut) && imageOut > 0) {
+			const perM = imageOut * 1_000_000;
+			return {
+				usd: +(imageOut * GEMINI_TOKENS_PER_IMAGE).toFixed(4),
+				basis: `$${perM.toFixed(2)}/M image-output tokens x ${GEMINI_TOKENS_PER_IMAGE} tokens/image`
+			};
+		}
+		// An image model with no image_output rate is unpriceable here — say so
+		// rather than substituting the text rate and being confidently wrong.
+		return { usd: null, basis: null };
+	}
+	// Video on OpenRouter is billed per second on the request price where present.
+	const request = Number(model?.pricing?.request);
+	if (outputs.includes('video') && Number.isFinite(request) && request > 0) {
+		return {
+			usd: +(request * CLIP_SECONDS).toFixed(4),
+			basis: `$${request}/s x ${CLIP_SECONDS}s clip`
+		};
+	}
+	// Text models: priced per token, genuinely variable per call — leave null so
+	// the manager shows "needs a price" rather than inventing one.
+	return { usd: null, basis: null };
+}
+
+/**
+ * The OpenRouter route actually in force for a kind: an ACTIVE, wired registry
+ * row wins; otherwise the caller's compiled-in default stands.
+ *
+ * This is the fix for the drift that motivated multi-provider support — the
+ * image route moved to Nano Banana 2 in code while pricing.ts still billed
+ * flux-schnell, because nothing tied the two together. Resolving through the
+ * registry means the id AND its price come from one row, and a re-sync
+ * refreshes the price from OpenRouter's own response.
+ *
+ * Never throws and never returns null: an empty/unreachable registry yields
+ * exactly today's behaviour.
+ */
+export function openRouterRoute(
+	rows: RegistryRow[],
+	kind: RegistryKind,
+	fallbackId: string,
+	fallbackUsd: number
+): { id: string; usd: number; fromRegistry: boolean } {
+	const row = rows.find(
+		(r) =>
+			r.provider === 'openrouter' &&
+			r.kind === kind &&
+			r.wired &&
+			r.status === 'active' &&
+			!r.deprecated
+	);
+	if (row && row.price_usd != null) {
+		return { id: row.model_id, usd: Number(row.price_usd), fromRegistry: true };
+	}
+	return { id: fallbackId, usd: fallbackUsd, fromRegistry: false };
+}
+
+/** Which registry kind (if any) an OpenRouter model belongs to. */
+export function openRouterKind(model: any): RegistryKind | null {
+	const outputs: string[] = model?.architecture?.output_modalities ?? [];
+	const inputs: string[] = model?.architecture?.input_modalities ?? [];
+	if (outputs.includes('video')) return 'video_i2v';
+	if (outputs.includes('image')) {
+		// These models are hybrid — Nano Banana 2 accepts BOTH text and image in.
+		// Classify by what the app resolves for: if it can start from text it can
+		// serve text-to-image, which is the still path. Image-input-ONLY models
+		// are true editors. (Filing every hybrid as image_edit was wrong: it left
+		// image_t2i with no OpenRouter row at all.)
+		return inputs.includes('text') ? 'image_t2i' : 'image_edit';
+	}
+	return null; // text/chat — not a generation model this registry governs
+}
+
+/**
+ * Pulls OpenRouter's public catalog and upserts the image/video models into the
+ * registry with prices taken from OpenRouter's own response.
+ *
+ * Same contract as syncFromFal: discovered rows land `wired: false` (visible and
+ * priced, but they cannot generate until an adapter ships), a `manual` price is
+ * never overwritten, and any failure returns errors rather than throwing — a
+ * dead catalog must never break the Model Manager.
+ */
+export async function syncFromOpenRouter(
+	supabase: SupabaseClient,
+	userId: string,
+	fetchFn: typeof fetch = fetch
+): Promise<SyncResult> {
+	const result: SyncResult = { discovered: 0, refreshed: 0, deprecatedFlagged: 0, errors: [] };
+
+	const { data: existingRows, error: readErr } = await supabase
+		.from('model_registry')
+		.select('id, model_id, deprecated, price_source, wired, pricing_text, released_at, lab')
+		.eq('user_id', userId)
+		.eq('provider', 'openrouter');
+	if (readErr) throw readErr;
+	const existing = new Map((existingRows ?? []).map((r: any) => [r.model_id, r]));
+
+	let models: any[] = [];
+	try {
+		const res = await fetchFn('https://openrouter.ai/api/v1/models', {
+			headers: { Accept: 'application/json' }
+		});
+		if (!res.ok) {
+			result.errors.push(`OpenRouter catalog HTTP ${res.status}`);
+			return result;
+		}
+		const body = (await res.json()) as any;
+		models = Array.isArray(body?.data) ? body.data : [];
+	} catch (e) {
+		result.errors.push(`OpenRouter catalog fetch failed: ${(e as Error).message}`);
+		return result;
+	}
+
+	const inserts: any[] = [];
+	for (const m of models) {
+		const kind = openRouterKind(m);
+		if (!kind) continue; // text-only: not a generation model
+
+		const { usd, basis } = openRouterPerCallPrice(m);
+		const prior = existing.get(m.id);
+		const released = m.created
+			? new Date(m.created * 1000).toISOString().slice(0, 10)
+			: null;
+		const lab = typeof m.id === 'string' && m.id.includes('/') ? m.id.split('/')[0] : null;
+
+		if (!prior) {
+			inserts.push({
+				user_id: userId,
+				provider: 'openrouter',
+				model_id: m.id,
+				kind,
+				label: m.name || m.id,
+				lab,
+				released_at: released,
+				price_usd: usd,
+				pricing_text: basis,
+				price_basis: basis,
+				price_source: usd == null ? 'seed' : 'parsed',
+				quality: null,
+				tier: null,
+				latency_s: null,
+				status: 'available',
+				wired: false,
+				is_default: false,
+				deprecated: false,
+				multi_ref: null,
+				supports_audio: (m?.architecture?.output_modalities ?? []).includes('audio'),
+				supports_duration: kind === 'video_i2v',
+				size_param: null,
+				probe: null,
+				note: null,
+				discovered_at: new Date().toISOString()
+			});
+			result.discovered++;
+			continue;
+		}
+
+		// Refresh price ONLY when the operator hasn't pinned one by hand.
+		if (prior.price_source !== 'manual' && usd != null) {
+			const { error: upErr } = await supabase
+				.from('model_registry')
+				.update({
+					price_usd: usd,
+					pricing_text: basis,
+					price_basis: basis,
+					price_source: 'parsed',
+					label: m.name || m.id,
+					released_at: released ?? prior.released_at,
+					lab: lab ?? prior.lab,
+					deprecated: false
+				})
+				.eq('id', prior.id);
+			if (upErr) result.errors.push(`${m.id}: ${upErr.message}`);
+			else result.refreshed++;
+		}
+	}
+
+	if (inserts.length > 0) {
+		const { error: insErr } = await supabase.from('model_registry').insert(inserts);
+		if (insErr) {
+			result.errors.push(`insert failed: ${insErr.message}`);
+			result.discovered -= inserts.length;
+		}
+	}
+
+	// A model that vanished from the catalog is flagged, never deleted — the
+	// ledger still references it historically.
+	const liveIds = new Set(models.map((m: any) => m.id));
+	for (const [modelId, row] of existing) {
+		if (!liveIds.has(modelId) && !row.deprecated) {
+			const { error } = await supabase
+				.from('model_registry')
+				.update({ deprecated: true })
+				.eq('id', row.id);
+			if (!error) result.deprecatedFlagged++;
+		}
+	}
+
+	return result;
 }
 
 // ── Discovery sync (fal catalog — no key required) ──────────────────────────
@@ -408,6 +650,7 @@ export async function syncFromFal(
 			const parsed = parsePriceText(pricingText);
 			inserts.push({
 				user_id: userId,
+				provider: 'fal' as RegistryProvider,
 				model_id: modelId,
 				kind,
 				label: item?.title || modelId,
@@ -415,6 +658,7 @@ export async function syncFromFal(
 				released_at: releasedAt,
 				price_usd: parsed.usd,
 				pricing_text: pricingText,
+				price_basis: parsed.basis,
 				price_source: parsed.usd != null ? 'parsed' : 'seed',
 				status: 'available',
 				wired: false,

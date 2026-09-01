@@ -3,6 +3,7 @@ import type { RequestHandler } from './$types';
 import {
 	loadRegistry,
 	syncFromFal,
+	syncFromOpenRouter,
 	probeModelSchema,
 	parsePriceText,
 	adapterFromProbe,
@@ -29,9 +30,36 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		}
 
 		if (action === 'sync') {
-			const result = await syncFromFal(locals.supabase, user.id);
+			// Both catalogs, independently: one provider being down must still let
+			// the other refresh, so failures are collected per-provider rather than
+			// thrown. `provider` in the body syncs just one.
+			const which = body.provider === 'fal' || body.provider === 'openrouter' ? body.provider : 'all';
+			const [fal, openrouter] = await Promise.all([
+				which === 'openrouter'
+					? Promise.resolve(null)
+					: syncFromFal(locals.supabase, user.id).catch((e) => ({
+							discovered: 0,
+							refreshed: 0,
+							deprecatedFlagged: 0,
+							errors: [`fal sync failed: ${(e as Error).message}`]
+						})),
+				which === 'fal'
+					? Promise.resolve(null)
+					: syncFromOpenRouter(locals.supabase, user.id).catch((e) => ({
+							discovered: 0,
+							refreshed: 0,
+							deprecatedFlagged: 0,
+							errors: [`openrouter sync failed: ${(e as Error).message}`]
+						}))
+			]);
 			const rows = await loadRegistry(locals.supabase, user.id);
-			return json({ success: true, sync: result, data: rows });
+			const merged = {
+				discovered: (fal?.discovered ?? 0) + (openrouter?.discovered ?? 0),
+				refreshed: (fal?.refreshed ?? 0) + (openrouter?.refreshed ?? 0),
+				deprecatedFlagged: (fal?.deprecatedFlagged ?? 0) + (openrouter?.deprecatedFlagged ?? 0),
+				errors: [...(fal?.errors ?? []), ...(openrouter?.errors ?? [])]
+			};
+			return json({ success: true, sync: merged, byProvider: { fal, openrouter }, data: rows });
 		}
 
 		if (action === 'update') {

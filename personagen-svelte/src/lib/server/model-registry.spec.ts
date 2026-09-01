@@ -7,9 +7,119 @@
  * was built against.
  */
 import { describe, it, expect } from 'vitest';
-import { parsePriceText, effectiveOptions, effectiveResolve } from './model-registry';
+import {
+	parsePriceText,
+	effectiveOptions,
+	effectiveResolve,
+	openRouterPerCallPrice,
+	openRouterKind,
+	openRouterRoute
+} from './model-registry';
 import type { RegistryRow } from './model-registry';
 import { modelsFor, DEFAULT_MODEL } from '$lib/models';
+
+/**
+ * VERBATIM entries from OpenRouter's live /api/v1/models (2026-09-01). These
+ * exist because the first cut of the derivation read `pricing.completion` —
+ * the TEXT output rate — and under-priced every image ~20x ($0.0039 vs the
+ * true $0.0774). Only `image_output` bills a generated image. If OpenRouter
+ * reshapes pricing, these fixtures are what the parser was built against.
+ */
+const OR_NANO_BANANA_2 = {
+	id: 'google/gemini-3.1-flash-image',
+	name: 'Google: Nano Banana 2',
+	architecture: {
+		input_modalities: ['image', 'text'],
+		output_modalities: ['image', 'text']
+	},
+	pricing: {
+		prompt: '0.0000005',
+		completion: '0.000003',
+		image_output: '0.00006',
+		web_search: '0.014'
+	}
+};
+const OR_NANO_BANANA_2_LITE = {
+	id: 'google/gemini-3.1-flash-lite-image',
+	architecture: { input_modalities: ['image', 'text'], output_modalities: ['image', 'text'] },
+	pricing: { prompt: '0.00000025', completion: '0.0000015', image_output: '0.00003' }
+};
+const OR_TEXT_ONLY = {
+	id: 'anthropic/claude-fable-5.1',
+	architecture: { input_modalities: ['text', 'image'], output_modalities: ['text'] },
+	pricing: { prompt: '0.00001', completion: '0.00005' }
+};
+
+describe('openRouterPerCallPrice', () => {
+	it('prices an image from image_output, NOT the text completion rate', () => {
+		const r = openRouterPerCallPrice(OR_NANO_BANANA_2);
+		// $60/M x 1290 tokens = $0.0774. Reading `completion` would give $0.0039.
+		expect(r.usd).toBeCloseTo(0.0774, 4);
+		expect(r.basis).toContain('image-output tokens');
+	});
+
+	it('matches the published per-image figure for the Lite tier', () => {
+		expect(openRouterPerCallPrice(OR_NANO_BANANA_2_LITE).usd).toBeCloseTo(0.0387, 4);
+	});
+
+	it('returns null rather than guessing when an image model has no image_output rate', () => {
+		const noRate = { ...OR_NANO_BANANA_2, pricing: { completion: '0.000003' } };
+		expect(openRouterPerCallPrice(noRate).usd).toBeNull();
+	});
+
+	it('leaves token-billed text models unpriced', () => {
+		expect(openRouterPerCallPrice(OR_TEXT_ONLY).usd).toBeNull();
+	});
+});
+
+describe('openRouterKind', () => {
+	it('files a text-capable image model as image_t2i (the still path resolves that kind)', () => {
+		expect(openRouterKind(OR_NANO_BANANA_2)).toBe('image_t2i');
+	});
+
+	it('files an image-input-only model as a true editor', () => {
+		const editOnly = {
+			architecture: { input_modalities: ['image'], output_modalities: ['image'] }
+		};
+		expect(openRouterKind(editOnly)).toBe('image_edit');
+	});
+
+	it('ignores text/chat models entirely', () => {
+		expect(openRouterKind(OR_TEXT_ONLY)).toBeNull();
+	});
+});
+
+describe('openRouterRoute', () => {
+	const base = {
+		provider: 'openrouter',
+		kind: 'image_t2i',
+		wired: true,
+		status: 'active',
+		deprecated: false,
+		price_usd: 0.0774,
+		model_id: 'google/gemini-3.1-flash-image'
+	} as unknown as RegistryRow;
+
+	it('prefers an active wired registry row over the compiled-in default', () => {
+		const r = openRouterRoute([base], 'image_t2i', 'fallback/model', 0.02);
+		expect(r).toMatchObject({ id: 'google/gemini-3.1-flash-image', usd: 0.0774, fromRegistry: true });
+	});
+
+	it('falls back to today’s behaviour on an empty registry — never bricks generation', () => {
+		const r = openRouterRoute([], 'image_t2i', 'fallback/model', 0.02);
+		expect(r).toMatchObject({ id: 'fallback/model', usd: 0.02, fromRegistry: false });
+	});
+
+	it('ignores unwired, disabled, deprecated and wrong-provider rows', () => {
+		const rows = [
+			{ ...base, wired: false },
+			{ ...base, status: 'disabled' },
+			{ ...base, deprecated: true },
+			{ ...base, provider: 'fal' }
+		] as unknown as RegistryRow[];
+		expect(openRouterRoute(rows, 'image_t2i', 'fallback/model', 0.02).fromRegistry).toBe(false);
+	});
+});
 
 describe('parsePriceText', () => {
 	it('parses per-image pricing (Nano Banana 2)', () => {
