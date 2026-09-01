@@ -44,7 +44,8 @@ const PROTECTED_PREFIXES = [
 	'/favorites',
 	'/guides',
 	'/review',
-	'/developer'
+	'/developer',
+	'/admin'
 ];
 
 export const handle: Handle = async ({ event, resolve }) => {

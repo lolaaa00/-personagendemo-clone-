@@ -218,51 +218,85 @@
 
 	type ApiKeyProvider = 'zernio' | 'gemini' | 'openrouter' | 'firecrawl' | 'kie_ai' | 'fal_ai';
 
+	// Keys are grouped by what they're FOR, not by vendor — someone setting the
+	// account up thinks "who publishes my posts / who makes my media / who
+	// writes the words", not "which SaaS is this".
+	type KeyCategory = 'publishing' | 'media' | 'language' | 'research';
+	const KEY_CATEGORIES: Array<{ key: KeyCategory; title: string; blurb: string }> = [
+		{
+			key: 'publishing',
+			title: 'Publishing & Distribution',
+			blurb: 'Pushes finished posts to the social platforms and reads back analytics.'
+		},
+		{
+			key: 'media',
+			title: 'Media Generation',
+			blurb: 'Creates the images and video your personas post.'
+		},
+		{
+			key: 'language',
+			title: 'Language & Chat',
+			blurb: 'Writes captions, hooks and persona dialogue, and powers chat.'
+		},
+		{
+			key: 'research',
+			title: 'Research & Scraping',
+			blurb: 'Pulls brand and competitor detail in from the live web.'
+		}
+	];
+
 	const providerConfigs: Array<{
 		provider: ApiKeyProvider;
 		label: string;
 		description: string;
 		optional?: boolean;
 		placeholder: string;
+		category: KeyCategory;
 	}> = [
 		{
 			provider: 'zernio',
 			label: 'Zernio',
 			description: 'Publishing, connections, and analytics for all 15 platforms. Billed per connected account (2 free).',
-			placeholder: 'Paste your Zernio API key'
-		},
-		{
-			provider: 'gemini',
-			label: 'Gemini',
-			description: 'Google Gemini for persona/chat generation — used if no OpenRouter key is set below.',
-			optional: true,
-			placeholder: 'Paste your Gemini API key'
-		},
-		{
-			provider: 'openrouter',
-			label: 'OpenRouter',
-			description: 'Optional model routing for persona/chat generation through OpenRouter.',
-			placeholder: 'Paste your OpenRouter API key'
-		},
-		{
-			provider: 'firecrawl',
-			label: 'Firecrawl',
-			description: 'Storefront scraping and JS-rendered page extraction.',
-			placeholder: 'Paste your Firecrawl API key'
-		},
-		{
-			provider: 'kie_ai',
-			label: 'Kie AI',
-			description: 'Optional video/image generation provider for creative assets.',
-			optional: true,
-			placeholder: 'Paste your Kie AI API key'
+			placeholder: 'Paste your Zernio API key',
+			category: 'publishing'
 		},
 		{
 			provider: 'fal_ai',
 			label: 'Fal AI',
-			description: 'Optional fast media generation provider for images/video workflows.',
+			description: 'Fast image and video generation — the main media engine for UGC posts.',
 			optional: true,
-			placeholder: 'Paste your Fal AI API key'
+			placeholder: 'Paste your Fal AI API key',
+			category: 'media'
+		},
+		{
+			provider: 'kie_ai',
+			label: 'Kie AI',
+			description: 'Alternative video/image generation provider for creative assets.',
+			optional: true,
+			placeholder: 'Paste your Kie AI API key',
+			category: 'media'
+		},
+		{
+			provider: 'openrouter',
+			label: 'OpenRouter',
+			description: 'Model routing for captions, personas and chat — also the image fallback route.',
+			placeholder: 'Paste your OpenRouter API key',
+			category: 'language'
+		},
+		{
+			provider: 'gemini',
+			label: 'Gemini',
+			description: 'Google Gemini for persona/chat generation — used if no OpenRouter key is set.',
+			optional: true,
+			placeholder: 'Paste your Gemini API key',
+			category: 'language'
+		},
+		{
+			provider: 'firecrawl',
+			label: 'Firecrawl',
+			description: 'Storefront scraping and JS-rendered page extraction for brand briefs.',
+			placeholder: 'Paste your Firecrawl API key',
+			category: 'research'
 		}
 	];
 
@@ -1376,9 +1410,17 @@
 					Store user-owned provider keys securely. Saved keys are encrypted on the server and
 					are never shown again after saving.
 				</p>
-				<div class="provider-key-list">
-					{#each providerConfigs as config}
-						{@const savedKey = getSavedKey(config.provider)}
+				{#each KEY_CATEGORIES as cat (cat.key)}
+					{@const inCat = providerConfigs.filter((c) => c.category === cat.key)}
+					{#if inCat.length > 0}
+						<div class="key-category">
+							<div class="key-category-head">
+								<h3>{cat.title}</h3>
+								<span>{cat.blurb}</span>
+							</div>
+							<div class="provider-key-list">
+								{#each inCat as config (config.provider)}
+									{@const savedKey = getSavedKey(config.provider)}
 						<div class="provider-key-row">
 							<div class="provider-key-header">
 								<div>
@@ -1448,12 +1490,15 @@
 										Delete Key
 									{/if}
 								</button>
+											</div>
+										</div>
+									{/each}
+								</div>
 							</div>
-						</div>
+						{/if}
 					{/each}
 				</div>
 			</div>
-		</div>
 
 		{:else if activeSection === 'zernio-keys'}
 		<!-- Zernio Key Manager. id anchors the "add another key" redirect from the
@@ -1657,10 +1702,11 @@
 							{#if members.length > 0}
 								<div class="assign-list">
 									{#each members as m (m.user_id)}
-										<div class="assign-row">
-											<div class="assign-agent">
+										<div class="assign-row member-row">
+											<div class="assign-agent member-email">
 												<strong>{m.email || 'Pending email'}</strong>
 											</div>
+											<div class="member-controls">
 											<select
 												class="assign-select"
 												aria-label="Role for {m.email}"
@@ -1694,6 +1740,7 @@
 											>
 												Remove
 											</button>
+											</div>
 										</div>
 									{/each}
 								</div>
@@ -2667,12 +2714,20 @@
 		display: flex;
 		align-items: baseline;
 		gap: 0.5rem;
+		/* Take the flexible space so the label/email column is the one that grows,
+		   not the role <select> — and truncate gracefully instead of forcing the
+		   row layout when an email is long. */
+		flex: 1 1 auto;
 		min-width: 0;
+		overflow: hidden;
 	}
 
 	.assign-agent strong {
 		font-size: var(--text-sm);
 		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		max-width: 100%;
 	}
 
 	.assign-agent span {
@@ -2710,6 +2765,56 @@
 		white-space: nowrap;
 	}
 
+	/* Provider keys grouped by what they're for (publishing / media / language /
+	   research) rather than one flat vendor list. */
+	.key-category {
+		margin-bottom: 1.5rem;
+	}
+	.key-category-head {
+		display: flex;
+		flex-direction: column;
+		gap: 0.15rem;
+		padding-bottom: 0.5rem;
+		margin-bottom: 0.75rem;
+		border-bottom: 1px solid var(--border);
+	}
+	.key-category-head h3 {
+		font-size: var(--text-sm);
+		font-weight: 700;
+		color: var(--text);
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+	}
+	.key-category-head span {
+		font-size: var(--text-xs);
+		color: var(--text-muted);
+	}
+
+	/* Member rows stack: the email gets a full line (never truncated), controls
+	   sit beneath it — the settings column is too narrow to fit a long address
+	   and three controls on one line. */
+	.member-row {
+		flex-direction: column;
+		align-items: stretch;
+		gap: 0.55rem;
+	}
+	.member-email strong {
+		white-space: normal;
+		overflow-wrap: anywhere;
+		font-size: var(--text-sm);
+	}
+	.member-controls {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		flex-wrap: wrap;
+	}
+	.member-controls .assign-select {
+		flex: 1 1 8.5rem;
+		min-width: 8.5rem;
+		width: auto;
+	}
+
 	.spend-limit-input {
 		width: 5.5rem;
 		padding: 0.35rem 0.5rem;
@@ -2721,8 +2826,10 @@
 	}
 
 	.assign-select {
-		flex-shrink: 0;
-		max-width: 55%;
+		/* Fixed, consistent width so the role dropdown never balloons across the
+		   row — the email column (.assign-agent) is what flexes now. */
+		flex: 0 0 auto;
+		width: 8.5rem;
 		padding: 0.5rem 0.75rem;
 		background: var(--bg-card-dark);
 		border: 1px solid var(--border-strong);

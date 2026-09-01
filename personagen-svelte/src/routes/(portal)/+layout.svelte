@@ -55,6 +55,8 @@
 	// Provisioned team accounts all start on one shared starter password; this
 	// blocks the whole portal until they've set their own.
 	let mustChangePassword = $derived(Boolean((data as any).mustChangePassword));
+	// Admin console entry — only rendered for workspace owners / admin seats.
+	let isWorkspaceAdmin = $derived(Boolean((data as any).isWorkspaceAdmin));
 	let pwNew = $state('');
 	let pwConfirm = $state('');
 	let pwSaving = $state(false);
@@ -763,6 +765,35 @@
 
 		<!-- Bottom -->
 		<div class="sidebar-bottom">
+			{#if isWorkspaceAdmin}
+				<a
+					href="/admin"
+					class="sidebar-nav-item admin-nav-item"
+					class:active={isActive('/admin', $page.url.pathname)}
+					aria-current={isActive('/admin', $page.url.pathname) ? 'page' : undefined}
+					onclick={closeSidebar}
+					title={sidebarState.collapsed ? 'Admin Console' : undefined}
+					aria-label={sidebarState.collapsed ? 'Admin Console' : undefined}
+				>
+					<span class="sidebar-nav-icon">
+						<svg
+							aria-hidden="true"
+							width="18"
+							height="18"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg
+						>
+					</span>
+					{#if !sidebarState.collapsed}
+						<span class="sidebar-nav-label">Admin Console</span>
+					{/if}
+				</a>
+			{/if}
 			{#if !sidebarState.collapsed}
 				<div class="sidebar-plan-badge">
 					<span class="sidebar-plan-dot"></span>
@@ -813,6 +844,7 @@
 						if (path.startsWith('/models')) return 'Model Manager';
 						if (path.startsWith('/guides')) return 'Docs';
 						if (path.startsWith('/developer')) return 'Developer API';
+						if (path.startsWith('/admin')) return 'Admin Console';
 						if (path.startsWith('/favorites')) return 'My Favorites';
 						if (path.startsWith('/trash')) return 'Trash';
 						if (path.startsWith('/review')) return 'Review Queue';
@@ -1608,6 +1640,18 @@
 	.invite-banner-btn:disabled {
 		opacity: 0.6;
 		cursor: default;
+	}
+
+	/* Admin console entry — visually distinct from the normal nav so it reads as
+	   elevated access, not another page. */
+	.admin-nav-item {
+		border: 1px solid var(--border-strong);
+		border-radius: 10px;
+		margin-bottom: 0.5rem;
+		color: var(--accent-text);
+	}
+	.admin-nav-item:hover {
+		border-color: var(--accent);
 	}
 
 	/* ── Forced first-login password change (blocks the whole portal) ── */

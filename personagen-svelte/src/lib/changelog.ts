@@ -363,7 +363,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-08-27", hash: "464f52a", type: "fix", category: "design", scope: null, title: "workspace-shared content now visible across the account, plus UI polish" },
 	{ date: "2026-08-27", hash: "8e7c829", type: "feat", category: "security", scope: "team", title: "per-seat monthly spend caps + self-serve login email change" },
 	{ date: "2026-08-27", hash: "887fe69", type: "feat", category: "security", scope: "auth", title: "forced password change on first login for provisioned seats" },
-	{ date: "2026-09-01", hash: "ef5a6b1", type: "docs", category: "publishing", scope: null, title: "platform API reference for programmatic/agentic use" }
+	{ date: "2026-09-01", hash: "ef5a6b1", type: "docs", category: "publishing", scope: null, title: "platform API reference for programmatic/agentic use" },
+	{ date: "2026-09-01", hash: "fca32a9", type: "feat", category: "docs", scope: "developer", title: "scoped API keys + in-app Developer page (docs + test console)" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -657,12 +658,12 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 	},
 	{
 		id: "ef5a6b1", from: "2026-09-01", to: "2026-09-01",
-		category: "publishing", categories: ["publishing"],
+		category: "publishing", categories: ["publishing","docs"],
 		title: "Publishing: platform API reference for programmatic/agentic use",
-		summary: "Platform API reference for programmatic/agentic use.",
+		summary: "Platform API reference for programmatic/agentic use. Plus 1 more change, touching guides and explanations.",
 		major: false, curated: false,
-		entries: [CHANGELOG[329]]
+		entries: [CHANGELOG[329], CHANGELOG[330]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "ef5a6b1";
+export const CHANGELOG_GENERATED_FROM = "fca32a9";

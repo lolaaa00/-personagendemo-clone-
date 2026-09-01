@@ -17,7 +17,8 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 			personaGroups: [],
 			pendingInvites: [],
 			badgeLabel: 'Personal account',
-			mustChangePassword: false
+			mustChangePassword: false,
+			isWorkspaceAdmin: false
 		};
 	}
 
@@ -91,6 +92,9 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 		// account context that's actually true and useful: what this session
 		// IS, ownership-first since owning a workspace outranks any membership.
 		let badgeLabel = 'Personal account';
+		// Drives the admin-only nav entry: owning a workspace, or holding an
+		// admin seat in one, is what unlocks /admin.
+		let isWorkspaceAdmin = false;
 		if (locals.supabase) {
 			const [{ data: owned }, { data: memberOf }] = await Promise.all([
 				locals.supabase.from('workspaces').select('id, name').eq('owner_id', user.id),
@@ -107,6 +111,8 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 				const role = String(m.role || '').replace(/^\w/, (c) => c.toUpperCase());
 				badgeLabel = `${role} · ${m.workspaces?.name ?? 'Workspace'}`;
 			}
+			isWorkspaceAdmin =
+				(owned?.length ?? 0) > 0 || (memberOf ?? []).some((m: any) => m.role === 'admin');
 		}
 
 		return {
@@ -117,6 +123,7 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 			personaGroups,
 			pendingInvites,
 			badgeLabel,
+			isWorkspaceAdmin,
 			// Provisioned team accounts start on a shared throwaway password with
 			// this metadata flag set — the layout blocks with a change-password
 			// prompt until /api/settings/password clears it.
@@ -133,7 +140,8 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 			personaGroups: [],
 			pendingInvites: [],
 			badgeLabel: 'Personal account',
-			mustChangePassword: false
+			mustChangePassword: false,
+			isWorkspaceAdmin: false
 		};
 	}
 };
