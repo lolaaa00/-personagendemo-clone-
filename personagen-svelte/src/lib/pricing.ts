@@ -57,7 +57,19 @@ export const PRICING_MATRIX: PriceEntry[] = [
 		model: 'gemini-3.5-flash (director/grader/captions)',
 		usd: 0.002
 	},
-	{ provider: 'openrouter', operation: 'image', model: 'flux-schnell', usd: 0.02 },
+	// Was recorded as 'flux-schnell' @ $0.02 — both wrong. That model id 404s on
+	// OpenRouter (see UGC_IMAGE_MODEL_OPENROUTER in content/generate.ts, which
+	// has called google/gemini-3.1-flash-image since the 404 fix). Nano Banana 2
+	// bills image output at $60/M tokens and Google emits 1290 tokens per image
+	// → $0.077. The old $0.02 under-billed every OpenRouter still by ~3.9x, which
+	// also under-counted it against the per-seat spend caps.
+	{
+		provider: 'openrouter',
+		operation: 'image',
+		model: 'gemini-3.1-flash-image (nano banana 2)',
+		usd: 0.077,
+		note: '$60/M output tokens x 1290 tokens/image'
+	},
 	{
 		provider: 'openrouter',
 		operation: 'video',
