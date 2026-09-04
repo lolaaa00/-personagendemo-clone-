@@ -368,7 +368,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-01", hash: "eec425c", type: "feat", category: "feature", scope: "admin", title: "Admin Console with activity logs; group provider keys by intent" },
 	{ date: "2026-09-01", hash: "0167e10", type: "feat", category: "feature", scope: "settings", title: "collapse provider keys into a compact accordion with identity badges" },
 	{ date: "2026-09-01", hash: "05a2da1", type: "fix", category: "fix", scope: "settings", title: "correct provider categories from a real call-site audit; show touchpoints" },
-	{ date: "2026-09-01", hash: "597cd7e", type: "fix", category: "generation", scope: "pricing", title: "OpenRouter image is Nano Banana 2 @ $0.077, not flux-schnell @ $0.02" }
+	{ date: "2026-09-01", hash: "597cd7e", type: "fix", category: "generation", scope: "pricing", title: "OpenRouter image is Nano Banana 2 @ $0.077, not flux-schnell @ $0.02" },
+	{ date: "2026-09-01", hash: "9c34135", type: "feat", category: "generation", scope: "models", title: "extend registry to OpenRouter with live, audited pricing" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -664,10 +665,10 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 		id: "ef5a6b1", from: "2026-09-01", to: "2026-09-01",
 		category: "feature", categories: ["publishing","docs","feature","fix","generation"],
 		title: "New: platform API reference for programmatic/agentic use",
-		summary: "Platform API reference for programmatic/agentic use. Plus 5 more changes, touching getting posts onto your accounts and guides and explanations and things that were broken.",
+		summary: "Platform API reference for programmatic/agentic use. Plus 6 more changes, touching getting posts onto your accounts and guides and explanations and things that were broken.",
 		major: true, curated: false,
-		entries: [CHANGELOG[329], CHANGELOG[330], CHANGELOG[331], CHANGELOG[332], CHANGELOG[333], CHANGELOG[334]]
+		entries: [CHANGELOG[329], CHANGELOG[330], CHANGELOG[331], CHANGELOG[332], CHANGELOG[333], CHANGELOG[334], CHANGELOG[335]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "597cd7e";
+export const CHANGELOG_GENERATED_FROM = "9c34135";

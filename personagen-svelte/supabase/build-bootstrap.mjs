@@ -57,6 +57,7 @@ const ORDER = [
 	['workspace_spend_limits_migration.sql', 'Per-seat monthly spend caps — workspace_members.spend_limit_usd'],
 	['api_keys_migration.sql', 'Programmatic API keys — machine auth for the agentic controller'],
 	['model_registry_provider_migration.sql', 'Model Registry multi-provider — provider + price_basis'],
+	['model_registry_multimode_migration.sql', 'Model Registry multi-mode — kinds[] + raw modalities'],
 ];
 
 /** Rewrite a migration so every statement can be replayed against a DB that already has it. */

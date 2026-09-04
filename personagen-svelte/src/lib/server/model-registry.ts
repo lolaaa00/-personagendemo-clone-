@@ -35,7 +35,13 @@ export interface RegistryRow {
 	/** Which API serves this model — decides the call adapter and the sync that owns it. */
 	provider: RegistryProvider;
 	model_id: string;
+	/** Primary mode — display, grouping and default selection. */
 	kind: RegistryKind;
+	/** Every mode this model serves. Superset of `kind`; what resolution matches on. */
+	kinds: RegistryKind[] | null;
+	/** Provider-declared capabilities, verbatim — lets an unmapped mode be recognised later. */
+	input_modalities: string[] | null;
+	output_modalities: string[] | null;
 	label: string;
 	lab: string | null;
 	released_at: string | null;
@@ -123,6 +129,9 @@ const TTS_SEED: Omit<RegistryRow, 'id' | 'user_id' | 'created_at' | 'updated_at'
 	provider: 'fal',
 	model_id: 'fal-ai/elevenlabs/tts/turbo-v2.5',
 	kind: 'tts',
+	kinds: ['tts'],
+	input_modalities: ['text'],
+	output_modalities: ['audio'],
 	label: 'ElevenLabs Turbo v2.5',
 	lab: 'ElevenLabs',
 	released_at: '2024-07-01',
@@ -174,6 +183,12 @@ export async function loadRegistry(
 			provider: 'fal' as RegistryProvider,
 			model_id: m.id,
 			kind: m.kind as RegistryKind,
+			// The wired catalog declares one mode per adapter — an adapter IS the
+			// mode-specific call. A fal model that also serves another mode gets a
+			// second catalog entry, so kinds mirrors kind here rather than widening.
+			kinds: [m.kind as RegistryKind],
+			input_modalities: null as string[] | null,
+			output_modalities: null as string[] | null,
 			label: m.label,
 			lab: extra?.lab ?? null,
 			released_at: extra?.released ?? null,
@@ -251,8 +266,18 @@ function rowToOption(row: RegistryRow): ModelOption {
  * or errored → full static list, so generation is never brickable from the
  * manager.
  */
+/**
+ * Does this row serve `kind`? Matches the full mode set, falling back to the
+ * primary `kind` for rows written before multi-mode (and for any row whose
+ * kinds[] didn't backfill) — so a legacy row keeps behaving exactly as before.
+ */
+export function servesKind(row: RegistryRow, kind: RegistryKind): boolean {
+	const modes = row.kinds && row.kinds.length > 0 ? row.kinds : [row.kind];
+	return modes.includes(kind);
+}
+
 export function effectiveOptions(rows: RegistryRow[], kind: ModelKind): ModelOption[] {
-	const active = rows.filter((r) => r.kind === kind && r.wired && r.status === 'active');
+	const active = rows.filter((r) => servesKind(r, kind) && r.wired && r.status === 'active');
 	if (active.length === 0) return modelsFor(kind);
 	return active.map(rowToOption).sort((a, b) => a.usd - b.usd);
 }
@@ -270,7 +295,9 @@ export function effectiveResolve(
 	const options = effectiveOptions(rows, kind);
 	const found = requested ? options.find((m) => m.id === requested) : undefined;
 	if (found) return found;
-	const def = rows.find((r) => r.kind === kind && r.wired && r.status === 'active' && r.is_default);
+	const def = rows.find(
+		(r) => servesKind(r, kind) && r.wired && r.status === 'active' && r.is_default
+	);
 	if (def) {
 		const opt = options.find((m) => m.id === def.model_id);
 		if (opt) return opt;
@@ -355,7 +382,7 @@ export function openRouterRoute(
 	const row = rows.find(
 		(r) =>
 			r.provider === 'openrouter' &&
-			r.kind === kind &&
+			servesKind(r, kind) &&
 			r.wired &&
 			r.status === 'active' &&
 			!r.deprecated
@@ -366,20 +393,40 @@ export function openRouterRoute(
 	return { id: fallbackId, usd: fallbackUsd, fromRegistry: false };
 }
 
-/** Which registry kind (if any) an OpenRouter model belongs to. */
+/** The PRIMARY mode — index 0 of openRouterKinds(). Null for text/chat models. */
 export function openRouterKind(model: any): RegistryKind | null {
+	return openRouterKinds(model)[0] ?? null;
+}
+
+/**
+ * EVERY mode an OpenRouter model can serve, not just its headline one.
+ *
+ * Modern image endpoints are genuinely multi-mode: Nano Banana 2 takes text OR
+ * image in and emits images, so it serves text-to-image AND editing from one
+ * id. Returning a single kind forced a pick and hid the rest — the reason
+ * hybrids filed as image_edit left image_t2i with no OpenRouter row at all.
+ *
+ * Order matters: index 0 becomes the row's primary `kind` (display + default
+ * selection), and the full array is what resolution matches against.
+ */
+export function openRouterKinds(model: any): RegistryKind[] {
 	const outputs: string[] = model?.architecture?.output_modalities ?? [];
 	const inputs: string[] = model?.architecture?.input_modalities ?? [];
-	if (outputs.includes('video')) return 'video_i2v';
+	const kinds: RegistryKind[] = [];
+
+	if (outputs.includes('video')) kinds.push('video_i2v');
 	if (outputs.includes('image')) {
-		// These models are hybrid — Nano Banana 2 accepts BOTH text and image in.
-		// Classify by what the app resolves for: if it can start from text it can
-		// serve text-to-image, which is the still path. Image-input-ONLY models
-		// are true editors. (Filing every hybrid as image_edit was wrong: it left
-		// image_t2i with no OpenRouter row at all.)
-		return inputs.includes('text') ? 'image_t2i' : 'image_edit';
+		// Text in → can start a still from a prompt.
+		if (inputs.includes('text')) kinds.push('image_t2i');
+		// Image in → can transform an existing still.
+		if (inputs.includes('image')) kinds.push('image_edit');
+		// Neither declared (rare/malformed): keep it visible under t2i rather
+		// than dropping a real image model on a missing metadata field.
+		if (kinds.length === 0) kinds.push('image_t2i');
 	}
-	return null; // text/chat — not a generation model this registry governs
+	if (outputs.includes('audio')) kinds.push('tts');
+
+	return kinds;
 }
 
 /**
@@ -424,8 +471,11 @@ export async function syncFromOpenRouter(
 
 	const inserts: any[] = [];
 	for (const m of models) {
-		const kind = openRouterKind(m);
-		if (!kind) continue; // text-only: not a generation model
+		const kinds = openRouterKinds(m);
+		if (kinds.length === 0) continue; // text-only: not a generation model
+		const kind = kinds[0];
+		const inputModalities: string[] = m?.architecture?.input_modalities ?? [];
+		const outputModalities: string[] = m?.architecture?.output_modalities ?? [];
 
 		const { usd, basis } = openRouterPerCallPrice(m);
 		const prior = existing.get(m.id);
@@ -440,6 +490,9 @@ export async function syncFromOpenRouter(
 				provider: 'openrouter',
 				model_id: m.id,
 				kind,
+				kinds,
+				input_modalities: inputModalities,
+				output_modalities: outputModalities,
 				label: m.name || m.id,
 				lab,
 				released_at: released,
@@ -478,6 +531,12 @@ export async function syncFromOpenRouter(
 					label: m.name || m.id,
 					released_at: released ?? prior.released_at,
 					lab: lab ?? prior.lab,
+					// Capabilities are re-read every sync: a model that gains a mode
+					// (image editing, native audio) starts serving it without a manual edit.
+					kind,
+					kinds,
+					input_modalities: inputModalities,
+					output_modalities: outputModalities,
 					deprecated: false
 				})
 				.eq('id', prior.id);
@@ -653,6 +712,13 @@ export async function syncFromFal(
 				provider: 'fal' as RegistryProvider,
 				model_id: modelId,
 				kind,
+				// fal's catalog categorises one model per category pull, so the
+				// discovered mode is the mode. Kept explicit because PostgREST unions
+				// keys across a bulk insert — an absent key here would write NULL and
+				// silently opt the row out of kinds-based resolution.
+				kinds: [kind],
+				input_modalities: null,
+				output_modalities: null,
 				label: item?.title || modelId,
 				lab,
 				released_at: releasedAt,

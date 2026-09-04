@@ -13,7 +13,9 @@ import {
 	effectiveResolve,
 	openRouterPerCallPrice,
 	openRouterKind,
-	openRouterRoute
+	openRouterKinds,
+	openRouterRoute,
+	servesKind
 } from './model-registry';
 import type { RegistryRow } from './model-registry';
 import { modelsFor, DEFAULT_MODEL } from '$lib/models';
@@ -72,20 +74,64 @@ describe('openRouterPerCallPrice', () => {
 	});
 });
 
-describe('openRouterKind', () => {
-	it('files a text-capable image model as image_t2i (the still path resolves that kind)', () => {
+describe('openRouterKind / openRouterKinds (multi-mode)', () => {
+	it('reports EVERY mode a hybrid image model serves, not just the headline one', () => {
+		// Nano Banana 2 takes text OR image in and emits images — it genuinely
+		// does both t2i and editing from one id. Collapsing that to one kind is
+		// what hid it from image_t2i resolution.
+		expect(openRouterKinds(OR_NANO_BANANA_2)).toEqual(['image_t2i', 'image_edit']);
+	});
+
+	it('keeps the primary kind as index 0 for display/back-compat', () => {
 		expect(openRouterKind(OR_NANO_BANANA_2)).toBe('image_t2i');
 	});
 
-	it('files an image-input-only model as a true editor', () => {
+	it('files an image-input-only model as a true editor only', () => {
 		const editOnly = {
 			architecture: { input_modalities: ['image'], output_modalities: ['image'] }
 		};
-		expect(openRouterKind(editOnly)).toBe('image_edit');
+		expect(openRouterKinds(editOnly)).toEqual(['image_edit']);
+	});
+
+	it('recognises audio output as tts even alongside other modes', () => {
+		const av = {
+			architecture: { input_modalities: ['text'], output_modalities: ['audio'] }
+		};
+		expect(openRouterKinds(av)).toEqual(['tts']);
+	});
+
+	it('keeps a real image model visible when modality metadata is missing', () => {
+		const malformed = { architecture: { output_modalities: ['image'] } };
+		expect(openRouterKinds(malformed)).toEqual(['image_t2i']);
 	});
 
 	it('ignores text/chat models entirely', () => {
+		expect(openRouterKinds(OR_TEXT_ONLY)).toEqual([]);
 		expect(openRouterKind(OR_TEXT_ONLY)).toBeNull();
+	});
+});
+
+describe('servesKind (multi-mode resolution)', () => {
+	const multi = {
+		kind: 'image_t2i',
+		kinds: ['image_t2i', 'image_edit']
+	} as unknown as RegistryRow;
+
+	it('matches any mode in the set, not just the primary', () => {
+		expect(servesKind(multi, 'image_t2i')).toBe(true);
+		expect(servesKind(multi, 'image_edit')).toBe(true);
+		expect(servesKind(multi, 'video_i2v')).toBe(false);
+	});
+
+	it('falls back to the primary kind for legacy rows with no kinds[]', () => {
+		const legacy = { kind: 'video_i2v', kinds: null } as unknown as RegistryRow;
+		expect(servesKind(legacy, 'video_i2v')).toBe(true);
+		expect(servesKind(legacy, 'image_t2i')).toBe(false);
+	});
+
+	it('treats an empty kinds[] as legacy rather than "serves nothing"', () => {
+		const empty = { kind: 'tts', kinds: [] } as unknown as RegistryRow;
+		expect(servesKind(empty, 'tts')).toBe(true);
 	});
 });
 
