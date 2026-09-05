@@ -3,8 +3,9 @@ import type { RequestHandler } from './$types';
 import { env as publicEnv } from '$env/dynamic/public';
 import { env as privateEnv } from '$env/dynamic/private';
 import { getServiceSupabase } from '$lib/server/service-supabase';
-import { creditsMode } from '$lib/server/flags';
+import { creditsMode, creditsSource } from '$lib/server/flags';
 import { activityStats } from '$lib/server/activity';
+import { settingsStatus } from '$lib/server/settings';
 import MIGRATION_ORDER from '../../../../supabase/migrations.json';
 
 export const GET: RequestHandler = async ({ locals }) => {
@@ -59,7 +60,13 @@ export const GET: RequestHandler = async ({ locals }) => {
 
 	// Billing + observability switches and the activity queue's loss counter —
 	// the system says when it is blind instead of pretending.
-	checks.credits = creditsMode();
+	checks.credits = `${creditsMode()} (${creditsSource()})`;
+	const st = settingsStatus();
+	checks.settings = !st.primed
+		? `unprimed${st.lastError ? `: ${st.lastError.slice(0, 80)}` : ''}`
+		: st.lastError
+			? `stale: ${st.lastError.slice(0, 80)}`
+			: 'ok';
 	const act = activityStats();
 	checks.activity = !act.enabled
 		? 'off'

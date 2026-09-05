@@ -1,32 +1,57 @@
 /**
  * Runtime switches for the monetization + observability rails.
  *
- * Every value is read at CALL time from $env/dynamic/private (never cached at
- * import), exactly like the spend caps in budget.ts, so an EasyPanel env change
- * plus container restart flips behaviour without a code deploy (durable plan, D5).
+ * Precedence for each switch: **env var (if set) → database (platform_settings,
+ * flipped from the Admin Console) → default.** The database is the normal
+ * control surface — no env change, no redeploy; the env var remains the
+ * host-level emergency override ("turn it all off with two variables").
+ * Values are read at CALL time (env) or from the settings cache (database,
+ * refreshed every 15 s, primed at boot), never cached at import.
  *
- *   CREDITS_ENFORCE   off     (default) no balance reads or writes — today's behaviour
- *                     shadow  debits are written, nothing is ever blocked
- *                     enforce fail-closed: insufficient credits block paid generation
- *   ACTIVITY_LOG      off (default) | on
- *   PLATFORM_ADMIN_EMAILS   comma-separated bootstrap list (in addition to platform_admins rows)
- *   ACTIVITY_PEPPER   secret used to hash IPs / subjects in the activity log
- *   ACTIVITY_RETENTION_DAYS  raw event retention (default 180)
+ *   CREDITS_ENFORCE / credits_mode   off (default) | shadow | enforce
+ *   ACTIVITY_LOG    / activity_log   off (default) | on
+ *   ACTIVITY_PEPPER / activity_pepper  hashing secret (generated in the DB on first migration)
+ *   PLATFORM_ADMIN_EMAILS   env-only bootstrap list (in addition to platform_admins rows)
+ *   ACTIVITY_RETENTION_DAYS env-only, default 180
  */
 
 import { env } from '$env/dynamic/private';
+import { getSettings } from './settings';
 
 export type CreditsMode = 'off' | 'shadow' | 'enforce';
+export type SwitchSource = 'env' | 'database' | 'default';
 
-export function creditsMode(): CreditsMode {
+function envCreditsMode(): CreditsMode | null {
 	const raw = (env.CREDITS_ENFORCE ?? '').trim().toLowerCase();
+	if (raw === '') return null;
 	if (raw === 'shadow' || raw === 'enforce') return raw;
 	return 'off';
 }
 
-export function activityLogEnabled(): boolean {
+export function creditsMode(): CreditsMode {
+	return envCreditsMode() ?? getSettings().credits_mode ?? 'off';
+}
+
+export function creditsSource(): SwitchSource {
+	if (envCreditsMode() !== null) return 'env';
+	return getSettings().credits_mode ? 'database' : 'default';
+}
+
+function envActivityLog(): boolean | null {
 	const raw = (env.ACTIVITY_LOG ?? '').trim().toLowerCase();
+	if (raw === '') return null;
 	return raw === 'on' || raw === 'true' || raw === '1';
+}
+
+export function activityLogEnabled(): boolean {
+	const e = envActivityLog();
+	if (e !== null) return e;
+	return getSettings().activity_log === true;
+}
+
+export function activitySource(): SwitchSource {
+	if (envActivityLog() !== null) return 'env';
+	return 'database';
 }
 
 export function platformAdminEmails(): string[] {
@@ -37,7 +62,9 @@ export function platformAdminEmails(): string[] {
 }
 
 export function activityPepper(): string {
-	return (env.ACTIVITY_PEPPER ?? '').trim();
+	const e = (env.ACTIVITY_PEPPER ?? '').trim();
+	if (e) return e;
+	return getSettings().activity_pepper ?? '';
 }
 
 export function activityRetentionDays(): number {

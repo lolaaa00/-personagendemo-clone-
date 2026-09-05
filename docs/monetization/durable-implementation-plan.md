@@ -191,13 +191,9 @@ node supabase/build-bootstrap.mjs      # regenerate client_bootstrap.sql after a
 
 **Production state:** platform admins seeded (`ratiogamo@gmail.com`, `monarchstackteam@gmail.com`); the five `@monarchstack.com` pilot wallets hold **5 000 credits each** (ledger kind `grant`, actor = ratiogamo, note "pilot cohort 1"). Both switches are still **off** in the container env, so nothing is debited or logged until they are set.
 
-**Go-live switches (EasyPanel → app service → Environment, then restart):**
-```
-CREDITS_ENFORCE=shadow        # day 1; flip to enforce after reconciliation (§5 C9)
-ACTIVITY_LOG=on
-ACTIVITY_PEPPER=<32+ random chars, e.g. `openssl rand -hex 32`>
-PLATFORM_ADMIN_EMAILS=ratiogamo@gmail.com   # optional bootstrap; table rows already grant it
-```
+**Go-live switches — superseded the same evening.** The switches now live in the database (`platform_settings`, migration `platform_settings_migration.sql`) and are flipped from **Admin Console → Controls & Health** with a mandatory note; each change lands in `platform_settings_history` and the activity log. The pepper was generated in the database on first apply and is rotatable from the console (never displayed). Precedence: env var if set → database → default, so the env vars above remain a host-level emergency override only. Current stored state: `credits_mode = shadow`, `activity_log = on` (set 2026-09-05 by ratiogamo with notes). Command-line equivalent: `node scripts/platform-setting.mjs --list | --as <admin> --note "…" <key> <value>`.
+
+**Admin Console layout (commit 4):** two groups — *Platform* (Controls & Health, Users & Credits, Model Manager, Live feed) for platform admins, *Workspace* (Overview, Activity Log, Seats, Spend, Access) for workspace owners/admin seats. The Model Manager left the user-facing Setup group and sits under the console in the sidebar.
 
 **Deferred, with reason:**
 - **C7 engine metering** (`/api/engine` batch image + LLM proxy in `ai-client.ts`): both files were under concurrent edit by another session during this work; touching them would have produced a conflicting commit. Do it as the next commit once that work lands. Until then persona-creation LLM calls are unmetered (cheap; the media paths that carry 96% of cost are metered).

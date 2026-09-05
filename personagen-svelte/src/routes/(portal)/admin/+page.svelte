@@ -1,9 +1,71 @@
 <script lang="ts">
 	let { data } = $props();
 
-	let tab = $state<'overview' | 'activity' | 'seats' | 'spend' | 'access' | 'platform'>(
-		data.isPlatformAdmin && data.workspaces.length === 0 ? 'platform' : 'overview'
-	);
+	type Tab = 'overview' | 'activity' | 'seats' | 'spend' | 'access' | 'platform' | 'controls';
+	let tab = $state<Tab>(data.isPlatformAdmin ? 'controls' : 'overview');
+
+	// ── Platform Controls (platform admins only) ─────────────────────────────
+	type Switches = {
+		credits_mode: { effective: 'off' | 'shadow' | 'enforce'; stored: string; source: 'env' | 'database' | 'default' };
+		activity_log: { effective: boolean; stored: boolean; source: 'env' | 'database' };
+		activity_pepper: { set: boolean; source: 'env' | 'database' };
+	};
+	let controls = $state<{
+		switches: Switches;
+		cache: { primed: boolean; lastRefreshAt: string | null; lastError: string | null; updatedAt: Record<string, string> };
+		migrations: { pending: string[] | null; applied: number; total: number };
+		activity: { enabled: boolean; queued: number; flushed: number; dropped: number; lastError: string | null; lastFlushAt: string | null };
+		history: Array<{ key: string; old_value: any; new_value: any; changed_by: string | null; note: string | null; changed_at: string }>;
+	} | null>(null);
+	let controlsLoading = $state(false);
+	let controlsError = $state<string | null>(null);
+	let controlsBusy = $state(false);
+
+	async function loadControls() {
+		controlsLoading = true;
+		controlsError = null;
+		try {
+			const res = await fetch('/api/admin/settings');
+			const body = await res.json();
+			if (!res.ok || !body.success) throw new Error(body.error || `HTTP ${res.status}`);
+			controls = body;
+		} catch (e) {
+			controlsError = (e as Error).message;
+		} finally {
+			controlsLoading = false;
+		}
+	}
+
+	async function setSwitch(key: 'credits_mode' | 'activity_log' | 'activity_pepper', value?: unknown) {
+		const label =
+			key === 'activity_pepper'
+				? 'Rotate the activity hashing secret? Cross-day correlation of IP hashes breaks for today (by design).'
+				: `Set ${key} → ${String(value)}. Why?`;
+		const note = window.prompt(`${label}\n\nA note is required (it is the audit trail).`);
+		if (note === null) return;
+		if (!note.trim()) return flash('A note is required.');
+		controlsBusy = true;
+		try {
+			const res = await fetch('/api/admin/settings', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(key === 'activity_pepper' ? { key, rotate: true, note } : { key, value, note })
+			});
+			const body = await res.json().catch(() => ({}));
+			if (!res.ok || !body.success) throw new Error(body.error || `HTTP ${res.status}`);
+			flash(key === 'activity_pepper' ? 'Pepper rotated' : `${key} = ${body.stored}${body.source === 'env' ? ' (stored — env override still wins)' : ''}`);
+			await loadControls();
+			if (platformLoaded) await loadPlatform();
+		} catch (e) {
+			flash(`Failed: ${(e as Error).message}`);
+		} finally {
+			controlsBusy = false;
+		}
+	}
+
+	$effect(() => {
+		if (tab === 'controls' && data.isPlatformAdmin && !controls && !controlsLoading) loadControls();
+	});
 
 	const money = (n: number) => `$${(Number(n) || 0).toFixed(2)}`;
 	const when = (iso: string) => {
@@ -233,11 +295,19 @@
 <div class="admin-page">
 	<header class="admin-head">
 		<h1>Admin Console</h1>
-		<p>
-			Oversight for {data.workspaces.map((w: any) => w.name).join(', ')} — who's in the workspace,
-			what they're doing, and what it costs. Managing seats and limits lives in
-			<a href="/settings?section=team">Settings → Team</a>.
-		</p>
+		{#if data.isPlatformAdmin}
+			<p>
+				Platform administration — switches, every account's wallet and behaviour, the model registry
+				{#if data.workspaces.length > 0}, plus oversight of {data.workspaces.map((w: any) => w.name).join(', ')}{/if}.
+				Seat management for a workspace still lives in <a href="/settings?section=team">Settings → Team</a>.
+			</p>
+		{:else}
+			<p>
+				Oversight for {data.workspaces.map((w: any) => w.name).join(', ')} — who's in the workspace,
+				what they're doing, and what it costs. Managing seats and limits lives in
+				<a href="/settings?section=team">Settings → Team</a>.
+			</p>
+		{/if}
 	</header>
 
 	<div class="stat-row">
@@ -248,14 +318,24 @@
 		<div class="stat"><span class="stat-n">{data.stats.personaCount}</span><span class="stat-l">Personas</span></div>
 	</div>
 
-	<div class="admin-tabs" role="tablist">
-		{#each [['overview', 'Overview'], ['activity', 'Activity Log'], ['seats', 'Seats'], ['spend', 'Spend'], ['access', 'Access & Keys']] as [k, label] (k)}
-			<button role="tab" class="admin-tab" class:active={tab === k} onclick={() => (tab = k as any)}>{label}</button>
-		{/each}
-		{#if data.isPlatformAdmin}
-			<button role="tab" class="admin-tab platform-tab" class:active={tab === 'platform'} onclick={() => (tab = 'platform')}>Platform · Credits</button>
-		{/if}
-	</div>
+	{#if data.isPlatformAdmin}
+		<div class="tab-group-label">Platform — every tenant</div>
+		<div class="admin-tabs" role="tablist">
+			{#each [['controls', 'Controls & Health'], ['platform', 'Users & Credits']] as [k, label] (k)}
+				<button role="tab" class="admin-tab platform-tab-item" class:active={tab === k} onclick={() => (tab = k as any)}>{label}</button>
+			{/each}
+			<a class="admin-tab platform-tab-item" href="/models">Model Manager ↗</a>
+			<button role="tab" class="admin-tab platform-tab-item" onclick={() => { tab = 'platform'; loadLive(); }}>Live feed</button>
+		</div>
+	{/if}
+	{#if data.workspaces.length > 0}
+		<div class="tab-group-label">Workspace{data.workspaces.length > 1 ? 's' : ''} — {data.workspaces.map((w: any) => w.name).join(', ')}</div>
+		<div class="admin-tabs" role="tablist">
+			{#each [['overview', 'Overview'], ['activity', 'Activity Log'], ['seats', 'Seats'], ['spend', 'Spend'], ['access', 'Access & Keys']] as [k, label] (k)}
+				<button role="tab" class="admin-tab" class:active={tab === k} onclick={() => (tab = k as any)}>{label}</button>
+			{/each}
+		</div>
+	{/if}
 
 	{#if toast}<div class="admin-toast" role="status">{toast}</div>{/if}
 
@@ -312,6 +392,127 @@
 					</tbody>
 				</table>
 				<button class="admin-link" onclick={() => (tab = 'activity')}>View full log →</button>
+			{/if}
+		</section>
+	{:else if tab === 'controls' && data.isPlatformAdmin}
+		<section class="admin-card">
+			<div class="platform-head">
+				<div>
+					<h2>Platform controls</h2>
+					<p class="admin-hint">
+						These switches live in the database and take effect on every server within 15 seconds — no
+						environment change, no redeploy. An environment variable of the same name, if set on the host,
+						overrides the stored value (emergency stop). Every change needs a note and is written to the
+						settings history and the activity log.
+					</p>
+				</div>
+				<button class="filter-btn" onclick={loadControls} disabled={controlsLoading}>{controlsLoading ? 'Loading…' : 'Refresh'}</button>
+			</div>
+			{#if controlsError}<p class="admin-error">{controlsError}</p>{/if}
+			{#if controls}
+				<div class="control-grid">
+					<div class="control">
+						<div class="control-head">
+							<strong>Credits</strong>
+							<span class="mode-pill mode-{controls.switches.credits_mode.effective}">{controls.switches.credits_mode.effective}</span>
+							<span class="muted small">source: {controls.switches.credits_mode.source}</span>
+						</div>
+						<p class="admin-hint">
+							<b>off</b> — wallets untouched (today's behaviour). <b>shadow</b> — every generation debits its
+							wallet, nothing is ever blocked; balances may go negative. <b>enforce</b> — an empty wallet blocks
+							paid generation before the first provider call. Recommended path: shadow for a day, reconcile, then enforce.
+						</p>
+						<div class="filter-row">
+							{#each ['off', 'shadow', 'enforce'] as m (m)}
+								<button class="filter-btn" class:active={controls.switches.credits_mode.stored === m} disabled={controlsBusy} onclick={() => setSwitch('credits_mode', m)}>{m}</button>
+							{/each}
+						</div>
+						{#if controls.switches.credits_mode.source === 'env'}
+							<p class="admin-warn">CREDITS_ENFORCE is set in the host environment and overrides the stored value. Remove it there to control this from here.</p>
+						{/if}
+					</div>
+
+					<div class="control">
+						<div class="control-head">
+							<strong>Activity log</strong>
+							<span class="mode-pill" class:mode-enforce={controls.switches.activity_log.effective} class:mode-off={!controls.switches.activity_log.effective}>{controls.switches.activity_log.effective ? 'on' : 'off'}</span>
+							<span class="muted small">source: {controls.switches.activity_log.source}</span>
+						</div>
+						<p class="admin-hint">
+							Records who did what, when, from which browser family and country, with outcome, duration and cost —
+							pseudonymously (no emails, IPs or content in the rows). Powers Users & Credits' last-seen, online,
+							timelines and the live feed.
+						</p>
+						<div class="filter-row">
+							<button class="filter-btn" class:active={controls.switches.activity_log.stored === true} disabled={controlsBusy} onclick={() => setSwitch('activity_log', true)}>on</button>
+							<button class="filter-btn" class:active={controls.switches.activity_log.stored === false} disabled={controlsBusy} onclick={() => setSwitch('activity_log', false)}>off</button>
+						</div>
+						{#if controls.switches.activity_log.source === 'env'}
+							<p class="admin-warn">ACTIVITY_LOG is set in the host environment and overrides the stored value.</p>
+						{/if}
+						<p class="admin-hint small">
+							Queue: {controls.activity.queued} waiting · {controls.activity.flushed} written since boot ·
+							<span class:neg={controls.activity.dropped > 0}>{controls.activity.dropped} dropped</span>
+							{#if controls.activity.lastError} · last error: {controls.activity.lastError}{/if}
+						</p>
+					</div>
+
+					<div class="control">
+						<div class="control-head">
+							<strong>Hashing secret (pepper)</strong>
+							<span class="mode-pill" class:mode-enforce={controls.switches.activity_pepper.set} class:mode-shadow={!controls.switches.activity_pepper.set}>{controls.switches.activity_pepper.set ? 'set' : 'MISSING'}</span>
+							<span class="muted small">source: {controls.switches.activity_pepper.source}</span>
+						</div>
+						<p class="admin-hint">
+							Salts the IP and subject hashes in the activity log. Never displayed. Rotating it breaks cross-day
+							correlation on purpose (today's hashes become inconsistent for the rest of the day).
+						</p>
+						<div class="filter-row">
+							<button class="filter-btn" disabled={controlsBusy} onclick={() => setSwitch('activity_pepper')}>Rotate</button>
+						</div>
+					</div>
+
+					<div class="control">
+						<div class="control-head">
+							<strong>Schema & cache</strong>
+							<span class="mode-pill" class:mode-enforce={controls.migrations.pending?.length === 0} class:mode-shadow={(controls.migrations.pending?.length ?? 1) > 0}>
+								{controls.migrations.pending === null ? 'ledger absent' : controls.migrations.pending.length === 0 ? `${controls.migrations.applied}/${controls.migrations.total} applied` : `${controls.migrations.pending.length} pending`}
+							</span>
+						</div>
+						{#if controls.migrations.pending && controls.migrations.pending.length > 0}
+							<p class="admin-warn">Pending: {controls.migrations.pending.join(', ')} — run <code>node scripts/apply-migration.mjs --all</code>.</p>
+						{/if}
+						<p class="admin-hint small">
+							Settings cache: {controls.cache.primed ? 'primed' : 'not primed'} · last refresh {controls.cache.lastRefreshAt ? when(controls.cache.lastRefreshAt) : '—'}
+							{#if controls.cache.lastError} · <span class="neg">error: {controls.cache.lastError}</span>{/if}
+						</p>
+					</div>
+				</div>
+
+				<h3 class="sub">Change history</h3>
+				{#if controls.history.length === 0}
+					<p class="admin-hint">No changes yet.</p>
+				{:else}
+					<div class="table-scroll">
+						<table class="admin-table">
+							<thead><tr><th>When</th><th>Setting</th><th>From</th><th>To</th><th>Note</th><th>By</th></tr></thead>
+							<tbody>
+								{#each controls.history as h (h.changed_at + h.key)}
+									<tr>
+										<td class="nowrap">{when(h.changed_at)}</td>
+										<td class="mono">{h.key}</td>
+										<td class="mono">{h.key === 'activity_pepper' ? '(secret)' : JSON.stringify(h.old_value)}</td>
+										<td class="mono">{h.key === 'activity_pepper' ? '(rotated)' : JSON.stringify(h.new_value)}</td>
+										<td>{h.note ?? ''}</td>
+										<td class="mono small">{h.changed_by ? h.changed_by.slice(0, 8) + '…' : 'system'}</td>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+				{/if}
+			{:else if !controlsError}
+				<p class="admin-hint">Loading…</p>
 			{/if}
 		</section>
 	{:else if tab === 'platform' && data.isPlatformAdmin}
@@ -750,8 +951,41 @@
 		color: var(--accent-text); font-weight: 600; font-size: 0.85rem; cursor: pointer; padding: 0;
 	}
 	/* ── Platform · Credits tab ─────────────────────────────────────────── */
-	.platform-tab {
-		margin-left: auto;
+	.tab-group-label {
+		font-size: 0.7rem;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		opacity: 0.55;
+		margin: 0.9rem 0 0.35rem;
+	}
+	.platform-tab-item {
+		border-color: rgba(99, 102, 241, 0.35);
+	}
+	a.admin-tab {
+		text-decoration: none;
+	}
+	.control-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+		gap: 0.9rem;
+		margin-top: 0.75rem;
+	}
+	.control {
+		border: 1px solid rgba(255, 255, 255, 0.1);
+		border-radius: 10px;
+		padding: 0.85rem;
+		background: rgba(255, 255, 255, 0.02);
+	}
+	.control-head {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		margin-bottom: 0.35rem;
+		flex-wrap: wrap;
+	}
+	.sub {
+		font-size: 0.95rem;
+		margin: 1.2rem 0 0.4rem;
 	}
 	.platform-head {
 		display: flex;

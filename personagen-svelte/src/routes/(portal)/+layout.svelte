@@ -660,7 +660,7 @@
 			{:else}
 				<div class="sidebar-section-divider"></div>
 			{/if}
-			{#each staticSections.setup.filter((i) => i.href !== '/models' || isPlatformAdmin) as item}
+			{#each staticSections.setup.filter((i) => i.href !== '/models') as item}
 				<a
 					href={item.href}
 					class="sidebar-nav-item"
@@ -792,6 +792,36 @@
 					</span>
 					{#if !sidebarState.collapsed}
 						<span class="sidebar-nav-label">Admin Console</span>
+					{/if}
+				</a>
+			{/if}
+			{#if isPlatformAdmin}
+				<!-- Platform-level tooling lives under the console, not in the user's Setup group. -->
+				<a
+					href="/models"
+					class="sidebar-nav-item admin-nav-item"
+					class:active={isActive('/models', $page.url.pathname)}
+					aria-current={isActive('/models', $page.url.pathname) ? 'page' : undefined}
+					onclick={closeSidebar}
+					title={sidebarState.collapsed ? 'Model Manager (platform)' : undefined}
+					aria-label={sidebarState.collapsed ? 'Model Manager (platform)' : undefined}
+				>
+					<span class="sidebar-nav-icon">
+						<svg
+							aria-hidden="true"
+							width="18"
+							height="18"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							><line x1="4" y1="21" x2="4" y2="14" /><line x1="4" y1="10" x2="4" y2="3" /><line x1="12" y1="21" x2="12" y2="12" /><line x1="12" y1="8" x2="12" y2="3" /><line x1="20" y1="21" x2="20" y2="16" /><line x1="20" y1="12" x2="20" y2="3" /><line x1="1" y1="14" x2="7" y2="14" /><line x1="9" y1="8" x2="15" y2="8" /><line x1="17" y1="16" x2="23" y2="16" /></svg
+						>
+					</span>
+					{#if !sidebarState.collapsed}
+						<span class="sidebar-nav-label">Model Manager</span>
 					{/if}
 				</a>
 			{/if}

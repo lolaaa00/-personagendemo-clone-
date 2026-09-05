@@ -80,6 +80,7 @@ export const ACTIVITY_ACTIONS = {
 	'admin.user.viewed': 'admin',
 	'admin.export.downloaded': 'admin',
 	'admin.models.changed': 'admin',
+	'admin.settings.changed': 'admin',
 	'engine.action': 'engine',
 	'api.request': 'api',
 	'api.key.created': 'api',

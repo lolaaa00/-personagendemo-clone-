@@ -18,10 +18,16 @@ import {
 	touchPresence
 } from '$lib/server/activity';
 import { activityLogEnabled } from '$lib/server/flags';
+import { startSettingsRefresh } from '$lib/server/settings';
 
 // SIGTERM/SIGINT → flush registered in-memory queues, then exit. Installed
 // before the scheduler so a redeploy mid-tick still drains cleanly.
 if (!building) installLifecycle();
+
+// Platform switches (credits mode, activity log, pepper) live in the database
+// and are flipped from the Admin Console: prime the cache now, refresh every
+// 15 s. Until the first prime every switch reads as "off".
+if (!building) startSettingsRefresh();
 
 // Start the scheduler at server boot (adapter-node runs module-level code on
 // startup), not lazily on first request — an idle deployment still publishes.
