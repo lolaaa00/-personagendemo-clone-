@@ -7,6 +7,11 @@ import { building } from '$app/environment';
 import { startScheduler } from '$lib/server/scheduler';
 import { isApiKey, resolveApiKey, mintUserJwt } from '$lib/server/api-keys';
 import { getServiceSupabase } from '$lib/server/service-supabase';
+import { installLifecycle } from '$lib/server/lifecycle';
+
+// SIGTERM/SIGINT → flush registered in-memory queues, then exit. Installed
+// before the scheduler so a redeploy mid-tick still drains cleanly.
+if (!building) installLifecycle();
 
 // Start the scheduler at server boot (adapter-node runs module-level code on
 // startup), not lazily on first request — an idle deployment still publishes.

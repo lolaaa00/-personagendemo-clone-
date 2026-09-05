@@ -3,6 +3,7 @@ import { redirect } from '@sveltejs/kit';
 import { env } from '$env/dynamic/public';
 import { env as privateEnv } from '$env/dynamic/private';
 import { checkConfigStatus } from '$lib/server/config-check';
+import { isPlatformAdmin as checkPlatformAdmin } from '$lib/server/platform-admin';
 
 export const load: LayoutServerLoad = async ({ locals }) => {
 	const supabaseUrl = env.PUBLIC_SUPABASE_URL ?? '';
@@ -18,7 +19,8 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 			pendingInvites: [],
 			badgeLabel: 'Personal account',
 			mustChangePassword: false,
-			isWorkspaceAdmin: false
+			isWorkspaceAdmin: false,
+			isPlatformAdmin: false
 		};
 	}
 
@@ -115,6 +117,10 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 				(owned?.length ?? 0) > 0 || (memberOf ?? []).some((m: any) => m.role === 'admin');
 		}
 
+		// Platform admin (cross-tenant operator) — unlocks the Platform tab on
+		// /admin and the Model Manager. Fails closed inside the helper.
+		const isPlatformAdmin = locals.supabase ? await checkPlatformAdmin(locals.supabase, user) : false;
+
 		return {
 			session,
 			user,
@@ -124,6 +130,7 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 			pendingInvites,
 			badgeLabel,
 			isWorkspaceAdmin,
+			isPlatformAdmin,
 			// Provisioned team accounts start on a shared throwaway password with
 			// this metadata flag set — the layout blocks with a change-password
 			// prompt until /api/settings/password clears it.
@@ -141,7 +148,8 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 			pendingInvites: [],
 			badgeLabel: 'Personal account',
 			mustChangePassword: false,
-			isWorkspaceAdmin: false
+			isWorkspaceAdmin: false,
+			isPlatformAdmin: false
 		};
 	}
 };

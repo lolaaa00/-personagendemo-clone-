@@ -9,15 +9,15 @@ import {
 	adapterFromProbe,
 	type RegistryKind
 } from '$lib/server/model-registry';
+import { requirePlatformAdmin } from '$lib/server/platform-admin';
 
 const KINDS: RegistryKind[] = ['image_t2i', 'image_edit', 'video_i2v', 'tts'];
 
-/** Model Manager API — list, sync, edit, set-default, probe. */
+/** Model Manager API — list, sync, edit, set-default, probe. Platform-admin only. */
 export const POST: RequestHandler = async ({ request, locals }) => {
-	const { session, user } = await locals.safeGetSession();
-	if (!session || !user) {
-		return json({ success: false, error: 'Unauthorized' }, { status: 401 });
-	}
+	const gate = await requirePlatformAdmin(locals);
+	if (!gate.ok) return json({ success: false, error: gate.message }, { status: gate.status });
+	const user = gate.user;
 
 	const body = (await request.json()) as any;
 	const { action } = body;

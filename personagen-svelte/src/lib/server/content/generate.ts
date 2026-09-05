@@ -50,6 +50,14 @@ import { burnCaptions, optimizeForWeb } from '$lib/server/video';
 import { renderTypographicCard, CARD_RENDERER_LABEL } from './card-renderer';
 import { fetchWithTimeout } from '$lib/server/social/http';
 import { assertWithinBudget } from '$lib/server/budget';
+import {
+	creditsFor,
+	keySourceFor,
+	resolveBillingAccount,
+	debitForEvents,
+	type KeySource
+} from '$lib/server/credits';
+import { creditsMode } from '$lib/server/flags';
 
 // Every provider call in this file gets a hard PER-REQUEST deadline. The queue
 // pollers below bound total job time, but only a per-request timeout stops a
@@ -1862,7 +1870,19 @@ async function runBudgetedAssetJob<T>(
 	}
 }
 
-/** Best-effort ledger write — spend analytics must never break generation. */
+/**
+ * Ledger write + credit debit.
+ *
+ * The receipt insert (generation_events) stays best-effort: analytics must
+ * never break generation. The DEBIT is different — with CREDITS_ENFORCE=enforce
+ * a failed debit throws CREDIT_DEBIT_FAILED so the caller marks the job failed
+ * (durable plan, D1); in shadow it is logged; off = not attempted.
+ *
+ * Attribution written on every row: billed_user_id (workspace owner for a
+ * workspace persona, else the persona owner), key_source (whose key paid the
+ * provider), credits (ceil(est_cost*100)). Debits are keyed to the event id so
+ * a retried write cannot charge twice.
+ */
 async function recordCostEvents(
 	supabase: any,
 	userId: string,
@@ -1871,44 +1891,94 @@ async function recordCostEvents(
 	postId?: string
 ): Promise<void> {
 	if (events.length === 0) return;
-	// Link every spent generation to the post it produced (was always null before)
-	// and record the durable asset URL, so no token spend is ever untraceable and
-	// every asset is recoverable from the DB.
-	const rows = events.map((e) => ({
-		user_id: userId,
-		agent_id: agentId ?? null,
-		post_id: postId ?? null,
-		provider: e.provider,
-		operation: e.operation,
-		model: e.model,
-		est_cost: e.usd,
-		asset_url: e.assetUrl ?? null
-	}));
-	try {
-		const { error } = await supabase.from('generation_events').insert(rows);
-		if (!error) return;
-		// The asset_url column is added by generation_events_asset_url_migration.sql.
-		// If it isn't applied yet, the insert fails for an unknown column — retry
-		// WITHOUT asset_url so the ledger (and cap accounting) keeps working rather
-		// than silently dropping every cost row until the migration lands.
-		if (
-			/asset_url/i.test(error.message ?? '') ||
-			error.code === 'PGRST204' ||
-			error.code === '42703'
-		) {
-			const { error: retryErr } = await supabase
+
+	const mode = creditsMode();
+	// Attribution lookups are cheap reads; skip them entirely when credits are
+	// off so today's behaviour (and query count) is unchanged.
+	const keyCache = new Map<string, KeySource>();
+	const billedUserId = mode === 'off' ? userId : await resolveBillingAccount(supabase, agentId, userId);
+	const enriched = await Promise.all(
+		events.map(async (e) => ({
+			user_id: userId,
+			agent_id: agentId ?? null,
+			post_id: postId ?? null,
+			provider: e.provider,
+			operation: e.operation,
+			model: e.model,
+			est_cost: e.usd,
+			asset_url: e.assetUrl ?? null,
+			billed_user_id: billedUserId,
+			key_source: (mode === 'off' ? 'platform' : await keySourceFor(supabase, userId, e.provider, keyCache)) as KeySource,
+			credits: creditsFor(e.usd)
+		}))
+	);
+
+	// Insert with the widest column set first; on an unknown-column error (a
+	// migration not yet applied on this database) fall back to narrower shapes
+	// so the ledger (and cap accounting) keeps working rather than silently
+	// dropping every cost row until the migration lands.
+	const shapes: Array<(r: (typeof enriched)[number]) => Record<string, unknown>> = [
+		(r) => r,
+		({ billed_user_id, key_source, credits, ...rest }) => rest,
+		({ billed_user_id, key_source, credits, asset_url, ...rest }) => rest
+	];
+	let inserted: Array<{ id: string }> | null = null;
+	let lastErr: any = null;
+	for (const shape of shapes) {
+		try {
+			const { data, error } = await supabase
 				.from('generation_events')
-				.insert(rows.map(({ asset_url, ...rest }) => rest));
-			if (retryErr) console.warn('[Cost] Failed to record generation events:', retryErr.message);
-			else
-				console.warn(
-					'[Cost] Recorded generation events without asset_url — apply generation_events_asset_url_migration.sql to enable asset recovery.'
-				);
-			return;
+				.insert(enriched.map(shape))
+				.select('id');
+			if (!error) {
+				inserted = data ?? [];
+				if (shape !== shapes[0]) {
+					console.warn(
+						'[Cost] Recorded generation events with a reduced column set — apply the pending generation_events migrations (asset_url / credits attribution).'
+					);
+				}
+				break;
+			}
+			lastErr = error;
+			const unknownColumn =
+				error.code === 'PGRST204' || error.code === '42703' || /column|schema cache/i.test(error.message ?? '');
+			if (!unknownColumn) break;
+		} catch (err) {
+			lastErr = err;
+			break;
 		}
-		console.warn('[Cost] Failed to record generation events:', error.message);
-	} catch (err) {
-		console.warn('[Cost] Failed to record generation events:', (err as Error).message);
+	}
+	if (!inserted) {
+		console.warn('[Cost] Failed to record generation events:', lastErr?.message ?? lastErr);
+		// No receipt rows → nothing to key a debit to. In enforce mode this is a
+		// billing failure, not an analytics blip.
+		if (mode === 'enforce') {
+			throw new Error(`CREDIT_DEBIT_FAILED: generation_events insert failed (${lastErr?.message ?? 'unknown'})`);
+		}
+		return;
+	}
+
+	if (mode === 'off') return;
+	// Rows come back in insert order; pair ids with the enriched rows.
+	const debitRows = inserted.map((row, i) => ({
+		id: row.id,
+		credits: enriched[i]?.credits ?? 0,
+		provider: enriched[i]?.provider ?? '',
+		operation: enriched[i]?.operation ?? '',
+		model: enriched[i]?.model ?? null,
+		key_source: enriched[i]?.key_source ?? 'platform'
+	}));
+	const outcome = await debitForEvents(supabase, {
+		billedUserId,
+		actorId: userId,
+		agentId: agentId ?? null,
+		postId: postId ?? null,
+		rows: debitRows
+	});
+	if (outcome.attempted > 0) {
+		console.log(
+			`[credits:${outcome.mode}] billed=${billedUserId} debited=${outcome.debited} events=${outcome.attempted}${outcome.skippedDuplicate ? ` dup=${outcome.skippedDuplicate}` : ''}`
+		);
 	}
 }
 

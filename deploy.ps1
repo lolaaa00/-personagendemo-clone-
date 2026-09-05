@@ -6,7 +6,11 @@
 param(
     [string]$m = "",
     [switch]$skipTests = $false,
-    [switch]$integration = $false
+    [switch]$integration = $false,
+    # Schema and code must not drift: a migration listed in supabase/migrations.json
+    # but not recorded in production's schema_migrations aborts the deploy. Pass
+    # this only when you have deliberately decided to ship code ahead of schema.
+    [switch]$allowPendingMigrations = $false
 )
 
 $ErrorActionPreference = "Stop"
@@ -16,6 +20,23 @@ Write-Host ""
 Write-Host "  [Deploy] PersonaGen Git-Ops & Verification Pipeline" -ForegroundColor Cyan
 Write-Host "  -------------------------------------------------" -ForegroundColor DarkGray
 Write-Host ""
+
+# ── Step 0: Migration ledger must match the code being shipped ──
+Set-Location (Join-Path $projectDir "personagen-svelte")
+Write-Host "  [0/3] Checking production migration ledger..." -ForegroundColor Yellow
+cmd.exe /c "node scripts/apply-migration.mjs --status --strict"
+if ($LASTEXITCODE -ne 0) {
+    if ($allowPendingMigrations) {
+        Write-Host "  [0/3] WARNING: pending/drifted migrations — continuing because -allowPendingMigrations was given." -ForegroundColor DarkYellow
+    } else {
+        Write-Host "  [0/3] ERROR: pending or drifted migrations. Apply them (node scripts/apply-migration.mjs --all) or pass -allowPendingMigrations." -ForegroundColor Red
+        Set-Location $projectDir
+        exit 1
+    }
+} else {
+    Write-Host "  [0/3] OK: schema ledger matches migrations.json." -ForegroundColor Green
+}
+Set-Location $projectDir
 
 # ── Step 1: Quality Checks & Tests ──
 Write-Host "  [1/3] Running Type checks & Svelte-Check..." -ForegroundColor Yellow
@@ -65,7 +86,8 @@ if ($status) {
         $m = "deploy: update & verify $timestamp"
     }
     Write-Host "  [2/3] Committing updated changes..." -ForegroundColor Yellow
-    git add -A
+    # Only the app, its docs, and the deploy tooling — never stray scratch files.
+    git add -A -- personagen-svelte docs deploy.ps1 README.md
     git commit -m $m
     Write-Host "  [2/3] OK Committed: $m" -ForegroundColor Green
 } else {

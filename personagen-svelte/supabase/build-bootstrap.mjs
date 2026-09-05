@@ -32,33 +32,9 @@ const here = dirname(fileURLToPath(import.meta.url));
 //     Net schema is identical without it.
 //   - The 8 migrations already folded into apply_all_pending.sql are omitted
 //     individually (see that file's header).
-const ORDER = [
-	['migration.sql', 'Base schema — 12 tables, RLS, signup trigger'],
-	['composio_hardening_migration.sql', 'connections state cols + posts.publication_results'],
-	['connections_provider_metadata_migration.sql', 'connections.provider + metadata'],
-	['social_analytics_migration.sql', 'posts analytics / token cost cols'],
-	['generation_events_migration.sql', 'generation_events ledger table'],
-	['generation_events_asset_url_migration.sql', 'generation_events.asset_url'],
-	['user_api_keys_migration.sql', 'user_api_keys BYOK table'],
-	['user_api_keys_providers_migration.sql', 'widen BYOK provider CHECK'],
-	['blotato_provider_migration.sql', 'allow blotato on connections + BYOK'],
-	['rss_migration.sql', 'agent_configs RSS cols + processed_rss_items'],
-	['agent_configs_ugc_migration.sql', 'per-agent UGC settings'],
-	['agent_reference_kit_migration.sql', 'agent_configs.ugc_reference_kit'],
-	['multi_brand_briefs_migration.sql', 'multi-brand: brand_briefs.name + link'],
-	['apply_all_pending.sql', 'post_reviews, scheduler_leases, zernio_keys, status superset'],
-	['scheduler_indexes_and_provider_default_migration.sql', 'scheduler indexes + zernio default'],
-	['favorites_and_projects_migration.sql', 'favorite flags + persona_groups projects'],
-	['model_registry_migration.sql', 'model_registry — Model Manager backing table'],
-	['feature_requests_migration.sql', 'User Voice — feature_requests + votes'],
-	['workspaces_migration.sql', 'Workspaces & seats — orgs, roles, agent_access_role()'],
-	['posts_soft_delete_migration.sql', 'Trash & restore — posts.deleted_at + partial indexes'],
-	['workspace_admin_role_migration.sql', "Workspace 'admin' seat tier — role_rank(), workspace_role()"],
-	['workspace_spend_limits_migration.sql', 'Per-seat monthly spend caps — workspace_members.spend_limit_usd'],
-	['api_keys_migration.sql', 'Programmatic API keys — machine auth for the agentic controller'],
-	['model_registry_provider_migration.sql', 'Model Registry multi-provider — provider + price_basis'],
-	['model_registry_multimode_migration.sql', 'Model Registry multi-mode — kinds[] + raw modalities'],
-];
+// ORDER lives in migrations.json — shared with scripts/apply-migration.mjs and
+// /api/health so the bootstrap, the runner, and the pending-count all agree.
+const ORDER = JSON.parse(readFileSync(join(here, 'migrations.json'), 'utf8'));
 
 /** Rewrite a migration so every statement can be replayed against a DB that already has it. */
 function makeReRunnable(sql) {

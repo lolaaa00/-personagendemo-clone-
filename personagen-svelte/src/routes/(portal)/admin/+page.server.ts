@@ -1,6 +1,7 @@
 import type { PageServerLoad } from './$types';
 import { redirect } from '@sveltejs/kit';
 import { getServiceSupabase } from '$lib/server/service-supabase';
+import { isPlatformAdmin } from '$lib/server/platform-admin';
 
 /**
  * Admin Console — the operator's view of a workspace: who's in it, what they're
@@ -36,7 +37,10 @@ export const load: PageServerLoad = async ({ locals }) => {
 			.map((m: any) => ({ ...m.workspaces, myRole: 'admin' as const }))
 	];
 
-	if (adminWorkspaces.length === 0) {
+	// Platform admins (cross-tenant operators) get in regardless of workspace
+	// role — the Platform tab is theirs even with zero workspaces of their own.
+	const platformAdmin = await isPlatformAdmin(locals.supabase, user);
+	if (adminWorkspaces.length === 0 && !platformAdmin) {
 		throw redirect(303, '/dashboard');
 	}
 
@@ -188,6 +192,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 		.order('created_at', { ascending: false });
 
 	return {
+		isPlatformAdmin: platformAdmin,
 		workspaces: adminWorkspaces,
 		seats,
 		personas: personas.map((p: any) => ({

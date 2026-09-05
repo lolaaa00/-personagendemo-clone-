@@ -56,7 +56,8 @@
 	// blocks the whole portal until they've set their own.
 	let mustChangePassword = $derived(Boolean((data as any).mustChangePassword));
 	// Admin console entry — only rendered for workspace owners / admin seats.
-	let isWorkspaceAdmin = $derived(Boolean((data as any).isWorkspaceAdmin));
+	let isPlatformAdmin = $derived(Boolean((data as any).isPlatformAdmin));
+	let isWorkspaceAdmin = $derived(Boolean((data as any).isWorkspaceAdmin) || isPlatformAdmin);
 	let pwNew = $state('');
 	let pwConfirm = $state('');
 	let pwSaving = $state(false);
@@ -659,7 +660,7 @@
 			{:else}
 				<div class="sidebar-section-divider"></div>
 			{/if}
-			{#each staticSections.setup as item}
+			{#each staticSections.setup.filter((i) => i.href !== '/models' || isPlatformAdmin) as item}
 				<a
 					href={item.href}
 					class="sidebar-nav-item"

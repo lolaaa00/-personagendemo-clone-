@@ -13,7 +13,40 @@
 -- ══════════════════════════════════════════════════════════════════════════
 
 -- ──────────────────────────────────────────────────────────────────────────
--- 01. migration.sql
+-- 01. 000_schema_migrations.sql
+--     Migration ledger — schema_migrations (applied first, records itself)
+-- ──────────────────────────────────────────────────────────────────────────
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- Migration ledger.
+--
+-- Every migration file in supabase/ (in the ORDER declared by
+-- build-bootstrap.mjs) is applied through scripts/apply-migration.mjs, which
+-- records the file's name and sha256 here inside the same transaction. The
+-- runner refuses to re-apply a file whose checksum has changed (write a NEW
+-- migration instead) and skips one whose checksum matches (idempotent).
+--
+-- /api/health reports how many ORDER files are not yet recorded, and
+-- deploy.ps1 aborts on a pending migration, so schema and code cannot drift
+-- apart silently. Service-role only: no RLS policies on purpose.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS public.schema_migrations (
+  name        TEXT PRIMARY KEY,
+  checksum    TEXT NOT NULL,
+  applied_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  applied_by  TEXT,
+  -- 'applied' = the runner executed the file; 'recorded' = the file was already
+  -- live before the ledger existed and was stamped with --record-existing.
+  mode        TEXT NOT NULL DEFAULT 'applied' CHECK (mode IN ('applied', 'recorded'))
+);
+
+ALTER TABLE public.schema_migrations ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.schema_migrations FROM anon, authenticated;
+
+
+-- ──────────────────────────────────────────────────────────────────────────
+-- 02. migration.sql
 --     Base schema — 12 tables, RLS, signup trigger
 -- ──────────────────────────────────────────────────────────────────────────
 
@@ -566,7 +599,7 @@ CREATE INDEX IF NOT EXISTS idx_agents_runtime_owner ON public.agents(runtime_own
 
 
 -- ──────────────────────────────────────────────────────────────────────────
--- 02. composio_hardening_migration.sql
+-- 03. composio_hardening_migration.sql
 --     connections state cols + posts.publication_results
 -- ──────────────────────────────────────────────────────────────────────────
 
@@ -593,7 +626,7 @@ ALTER TABLE public.posts
 
 
 -- ──────────────────────────────────────────────────────────────────────────
--- 03. connections_provider_metadata_migration.sql
+-- 04. connections_provider_metadata_migration.sql
 --     connections.provider + metadata
 -- ──────────────────────────────────────────────────────────────────────────
 
@@ -612,7 +645,7 @@ CREATE INDEX IF NOT EXISTS idx_connections_provider_account_id
 
 
 -- ──────────────────────────────────────────────────────────────────────────
--- 04. social_analytics_migration.sql
+-- 05. social_analytics_migration.sql
 --     posts analytics / token cost cols
 -- ──────────────────────────────────────────────────────────────────────────
 
@@ -632,7 +665,7 @@ ALTER TABLE public.posts ADD COLUMN IF NOT EXISTS token_cost NUMERIC(10, 6) DEFA
 
 
 -- ──────────────────────────────────────────────────────────────────────────
--- 05. generation_events_migration.sql
+-- 06. generation_events_migration.sql
 --     generation_events ledger table
 -- ──────────────────────────────────────────────────────────────────────────
 
@@ -668,7 +701,7 @@ CREATE POLICY "generation_events_insert_own" ON public.generation_events
 
 
 -- ──────────────────────────────────────────────────────────────────────────
--- 06. generation_events_asset_url_migration.sql
+-- 07. generation_events_asset_url_migration.sql
 --     generation_events.asset_url
 -- ──────────────────────────────────────────────────────────────────────────
 
@@ -686,7 +719,7 @@ CREATE INDEX IF NOT EXISTS idx_generation_events_post ON public.generation_event
 
 
 -- ──────────────────────────────────────────────────────────────────────────
--- 07. user_api_keys_migration.sql
+-- 08. user_api_keys_migration.sql
 --     user_api_keys BYOK table
 -- ──────────────────────────────────────────────────────────────────────────
 
@@ -737,7 +770,7 @@ CREATE TRIGGER user_api_keys_updated_at
 
 
 -- ──────────────────────────────────────────────────────────────────────────
--- 08. user_api_keys_providers_migration.sql
+-- 09. user_api_keys_providers_migration.sql
 --     widen BYOK provider CHECK
 -- ──────────────────────────────────────────────────────────────────────────
 
@@ -752,7 +785,7 @@ ALTER TABLE public.user_api_keys
 
 
 -- ──────────────────────────────────────────────────────────────────────────
--- 09. blotato_provider_migration.sql
+-- 10. blotato_provider_migration.sql
 --     allow blotato on connections + BYOK
 -- ──────────────────────────────────────────────────────────────────────────
 
@@ -770,7 +803,7 @@ ALTER TABLE public.user_api_keys
 
 
 -- ──────────────────────────────────────────────────────────────────────────
--- 10. rss_migration.sql
+-- 11. rss_migration.sql
 --     agent_configs RSS cols + processed_rss_items
 -- ──────────────────────────────────────────────────────────────────────────
 
@@ -807,7 +840,7 @@ CREATE POLICY "processed_rss_items_insert" ON public.processed_rss_items
 
 
 -- ──────────────────────────────────────────────────────────────────────────
--- 11. agent_configs_ugc_migration.sql
+-- 12. agent_configs_ugc_migration.sql
 --     per-agent UGC settings
 -- ──────────────────────────────────────────────────────────────────────────
 
@@ -832,7 +865,7 @@ ALTER TABLE public.agent_configs
 
 
 -- ──────────────────────────────────────────────────────────────────────────
--- 12. agent_reference_kit_migration.sql
+-- 13. agent_reference_kit_migration.sql
 --     agent_configs.ugc_reference_kit
 -- ──────────────────────────────────────────────────────────────────────────
 
@@ -849,7 +882,108 @@ ALTER TABLE public.agent_configs
 
 
 -- ──────────────────────────────────────────────────────────────────────────
--- 13. multi_brand_briefs_migration.sql
+-- 14. personas_profile_migration.sql
+--     agents.personas_profile JSONB + backfill from legacy market blob
+-- ──────────────────────────────────────────────────────────────────────────
+
+-- ============================================================
+-- agents.personas_profile — give the persona profile a real JSONB home
+--
+-- `agents.market` is declared `TEXT DEFAULT 'Australia'` (a country string) but
+-- has been storing the ENTIRE persona profile as a JSON string: archetype,
+-- contentFocus, targetAvatar, psychProfile, contentAngle, appearance{},
+-- voiceProfile{}, ageRanges[], bios{}, handleCandidates[], confirmedHandles{},
+-- displayName. No schema, no constraints, and every reader hand-rolls
+-- `market.startsWith('{')` + JSON.parse.
+--
+-- This migration is ADDITIVE ONLY. It adds the JSONB column and backfills it.
+-- It deliberately does NOT drop, rename, retype or clear `market`:
+--   * not-yet-migrated read sites in the engine/generator still parse it, and
+--   * the external `services/mcp-bridge` touches this table independently.
+-- The app dual-writes both columns and reads personas_profile FIRST (see
+-- src/lib/persona-profile-store.ts). `market` gets retired in a later,
+-- separate migration once every reader is on the accessor.
+--
+-- Written idempotent (IF NOT EXISTS + a NULL-guarded backfill) so it can be
+-- replayed directly AND concatenated by build-bootstrap.mjs.
+-- ============================================================
+
+-- ─────────────────────────────────────────────
+-- 1. The column
+-- ─────────────────────────────────────────────
+-- Nullable with no default on purpose: NULL means "never migrated / never
+-- saved", which is exactly the condition the backfill and the app-side
+-- fallback to `market` both key off. A '{}' default would erase that signal.
+ALTER TABLE public.agents
+  ADD COLUMN IF NOT EXISTS personas_profile JSONB;
+
+-- ─────────────────────────────────────────────
+-- 2. Backfill from the legacy market blob
+-- ─────────────────────────────────────────────
+-- Only rows where `market` actually looks like a JSON object are touched:
+-- personas that still hold a genuine country string ('Australia') keep
+-- personas_profile NULL, which is correct — they have no profile.
+--
+-- Done row-by-row inside an exception block rather than as one set-based
+-- UPDATE ... market::jsonb, because a single malformed blob (truncated LLM
+-- output, a stray '{' string) would abort the whole statement and fail the
+-- migration. A row that can't be cast is simply left NULL; the app's
+-- readPersonaProfile() fallback returns {} for it either way, so skipping is
+-- lossless rather than destructive.
+--
+-- Re-runnable: the WHERE clause only matches rows that are still NULL, so a
+-- second run is a no-op and can never clobber a profile saved since the first.
+DO $$
+DECLARE
+  r RECORD;
+  migrated INTEGER := 0;
+  skipped  INTEGER := 0;
+BEGIN
+  FOR r IN
+    SELECT id, market
+      FROM public.agents
+     WHERE personas_profile IS NULL
+       AND market LIKE '{%'
+  LOOP
+    BEGIN
+      UPDATE public.agents
+         SET personas_profile = r.market::jsonb
+       WHERE id = r.id;
+      migrated := migrated + 1;
+    EXCEPTION WHEN others THEN
+      -- Not valid JSON. Leave personas_profile NULL and let the app fall back.
+      skipped := skipped + 1;
+      RAISE NOTICE 'agents.market is not valid JSON for agent %, left unmigrated', r.id;
+    END;
+  END LOOP;
+  RAISE NOTICE 'personas_profile backfill: % migrated, % skipped', migrated, skipped;
+END $$;
+
+-- ─────────────────────────────────────────────
+-- 3. Indexes — intentionally none
+-- ─────────────────────────────────────────────
+-- No GIN index is created here. Every current read of the profile is by agent
+-- id (or by the user's agent list), already served by the primary key and
+-- idx_agents_user_id — a GIN index would be pure write overhead on the save
+-- path with no reader. When persona search by trait ships ("all personas with
+-- hair colour X", "archetype = The Educator"), add it then and size it to the
+-- query shape:
+--
+--   CREATE INDEX IF NOT EXISTS idx_agents_personas_profile
+--     ON public.agents USING GIN (personas_profile jsonb_path_ops);
+--
+-- (jsonb_path_ops, not the default jsonb_ops: containment `@>` is the only
+-- operator such a search needs, and it builds a materially smaller index.)
+
+-- ─────────────────────────────────────────────
+-- 4. RLS
+-- ─────────────────────────────────────────────
+-- Nothing to do: this is a new column on an existing table, and the agents
+-- policies are row-scoped by user_id, so it inherits them unchanged.
+
+
+-- ──────────────────────────────────────────────────────────────────────────
+-- 15. multi_brand_briefs_migration.sql
 --     multi-brand: brand_briefs.name + link
 -- ──────────────────────────────────────────────────────────────────────────
 
@@ -883,7 +1017,7 @@ CREATE INDEX IF NOT EXISTS idx_agent_configs_brand_brief_id
 
 
 -- ──────────────────────────────────────────────────────────────────────────
--- 14. apply_all_pending.sql
+-- 16. apply_all_pending.sql
 --     post_reviews, scheduler_leases, zernio_keys, status superset
 -- ──────────────────────────────────────────────────────────────────────────
 
@@ -1070,7 +1204,7 @@ COMMENT ON COLUMN public.agents.zernio_key_id IS
 
 
 -- ──────────────────────────────────────────────────────────────────────────
--- 15. scheduler_indexes_and_provider_default_migration.sql
+-- 17. scheduler_indexes_and_provider_default_migration.sql
 --     scheduler indexes + zernio default
 -- ──────────────────────────────────────────────────────────────────────────
 
@@ -1197,7 +1331,7 @@ ALTER TABLE public.posts ADD CONSTRAINT posts_status_check
 
 
 -- ──────────────────────────────────────────────────────────────────────────
--- 16. favorites_and_projects_migration.sql
+-- 18. favorites_and_projects_migration.sql
 --     favorite flags + persona_groups projects
 -- ──────────────────────────────────────────────────────────────────────────
 
@@ -1274,7 +1408,7 @@ CREATE INDEX IF NOT EXISTS idx_agents_group_id ON public.agents(group_id);
 
 
 -- ──────────────────────────────────────────────────────────────────────────
--- 17. model_registry_migration.sql
+-- 19. model_registry_migration.sql
 --     model_registry — Model Manager backing table
 -- ──────────────────────────────────────────────────────────────────────────
 
@@ -1359,7 +1493,7 @@ CREATE TRIGGER model_registry_updated_at
 
 
 -- ──────────────────────────────────────────────────────────────────────────
--- 18. feature_requests_migration.sql
+-- 20. feature_requests_migration.sql
 --     User Voice — feature_requests + votes
 -- ──────────────────────────────────────────────────────────────────────────
 
@@ -1470,7 +1604,7 @@ CREATE POLICY "feature_request_votes_delete_own" ON public.feature_request_votes
 
 
 -- ──────────────────────────────────────────────────────────────────────────
--- 19. workspaces_migration.sql
+-- 21. workspaces_migration.sql
 --     Workspaces & seats — orgs, roles, agent_access_role()
 -- ──────────────────────────────────────────────────────────────────────────
 
@@ -2091,7 +2225,7 @@ CREATE POLICY "brand_briefs_select_own" ON public.brand_briefs
 
 
 -- ──────────────────────────────────────────────────────────────────────────
--- 20. posts_soft_delete_migration.sql
+-- 22. posts_soft_delete_migration.sql
 --     Trash & restore — posts.deleted_at + partial indexes
 -- ──────────────────────────────────────────────────────────────────────────
 
@@ -2129,7 +2263,7 @@ COMMENT ON COLUMN public.posts.deleted_at IS
 
 
 -- ──────────────────────────────────────────────────────────────────────────
--- 21. workspace_admin_role_migration.sql
+-- 23. workspace_admin_role_migration.sql
 --     Workspace 'admin' seat tier — role_rank(), workspace_role()
 -- ──────────────────────────────────────────────────────────────────────────
 
@@ -2447,7 +2581,7 @@ CREATE POLICY "post_reviews_insert_own" ON public.post_reviews
 
 
 -- ──────────────────────────────────────────────────────────────────────────
--- 22. workspace_spend_limits_migration.sql
+-- 24. workspace_spend_limits_migration.sql
 --     Per-seat monthly spend caps — workspace_members.spend_limit_usd
 -- ──────────────────────────────────────────────────────────────────────────
 
@@ -2478,7 +2612,7 @@ COMMENT ON COLUMN public.workspace_members.spend_limit_usd IS
 
 
 -- ──────────────────────────────────────────────────────────────────────────
--- 23. api_keys_migration.sql
+-- 25. api_keys_migration.sql
 --     Programmatic API keys — machine auth for the agentic controller
 -- ──────────────────────────────────────────────────────────────────────────
 
@@ -2532,7 +2666,7 @@ CREATE POLICY "api_keys_delete_own" ON public.api_keys
 
 
 -- ──────────────────────────────────────────────────────────────────────────
--- 24. model_registry_provider_migration.sql
+-- 26. model_registry_provider_migration.sql
 --     Model Registry multi-provider — provider + price_basis
 -- ──────────────────────────────────────────────────────────────────────────
 
@@ -2584,7 +2718,7 @@ COMMENT ON COLUMN public.model_registry.price_basis IS
 
 
 -- ──────────────────────────────────────────────────────────────────────────
--- 25. model_registry_multimode_migration.sql
+-- 27. model_registry_multimode_migration.sql
 --     Model Registry multi-mode — kinds[] + raw modalities
 -- ──────────────────────────────────────────────────────────────────────────
 
@@ -2635,4 +2769,246 @@ COMMENT ON COLUMN public.model_registry.input_modalities IS
   'Provider-declared input modalities, verbatim (text/image/audio/video) — lets an unmapped mode be recognised later without a re-sync.';
 COMMENT ON COLUMN public.model_registry.output_modalities IS
   'Provider-declared output modalities, verbatim.';
+
+
+-- ──────────────────────────────────────────────────────────────────────────
+-- 28. platform_admins_migration.sql
+--     Platform admins — cross-tenant operator identity, is_platform_admin()
+-- ──────────────────────────────────────────────────────────────────────────
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- Platform admins — the operator identity that may act across tenants.
+--
+-- Distinct from workspace owners/admin seats (workspace_admin_role_migration):
+-- those manage ONE workspace. A platform admin grants credits, comps accounts,
+-- reads every user's activity, and manages the model registry. The table has
+-- no RLS policies (service-role only); the app asks "is this user an admin?"
+-- through is_platform_admin(), which is the only thing granted to authenticated.
+--
+-- Bootstrap: PLATFORM_ADMIN_EMAILS in the app env also confers admin, so the
+-- first operator exists before any row does. Rows are the durable record.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS public.platform_admins (
+  user_id    UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  granted_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  note       TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+ALTER TABLE public.platform_admins ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.platform_admins FROM anon, authenticated;
+
+CREATE OR REPLACE FUNCTION public.is_platform_admin(p_user UUID)
+RETURNS BOOLEAN
+LANGUAGE sql
+SECURITY DEFINER
+STABLE
+SET search_path = public
+AS $$
+  SELECT p_user IS NOT NULL AND EXISTS (SELECT 1 FROM public.platform_admins WHERE user_id = p_user);
+$$;
+
+GRANT EXECUTE ON FUNCTION public.is_platform_admin(UUID) TO authenticated;
+
+
+-- ──────────────────────────────────────────────────────────────────────────
+-- 29. credits_migration.sql
+--     Credits — credit_accounts, credit_ledger, credit_apply(), subscriptions RLS lockdown
+-- ──────────────────────────────────────────────────────────────────────────
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- Credits — the wallet the spend ledger debits.
+--
+-- generation_events is a RECEIPT (what ran, at what estimated USD). It never
+-- touched a balance because none existed. This migration adds:
+--   * credit_accounts   one wallet per BILLING user (workspace owner, else the
+--                       persona owner), cached balance, billing_mode
+--   * credit_ledger     append-only money trail; balance_after on every row
+--   * credit_apply()    the ONLY way a balance moves: SECURITY DEFINER, row
+--                       lock, fail-closed on insufficient funds, upserts the
+--                       wallet on first touch (no signup-trigger dependency —
+--                       one prod account predates the trigger)
+--   * generation_events.billed_user_id / key_source / credits — attribution
+--   * subscriptions RLS lockdown — users could UPDATE their own plan
+--
+-- Unit: 1 credit = 1 cent of ESTIMATED provider cost (ceil(est_cost * 100)).
+-- Margin lives in the Stripe price of a pack, never in this schema.
+-- See docs/monetization/credit-system-forensic-assessment-and-plan.md.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+-- ── wallets ─────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS public.credit_accounts (
+  user_id                 UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  balance_credits         BIGINT NOT NULL DEFAULT 0,
+  billing_mode            TEXT NOT NULL DEFAULT 'credits' CHECK (billing_mode IN ('credits', 'unmetered')),
+  stripe_customer_id      TEXT,
+  low_balance_notified_at TIMESTAMPTZ,
+  created_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at              TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_credit_accounts_stripe_customer
+  ON public.credit_accounts (stripe_customer_id) WHERE stripe_customer_id IS NOT NULL;
+
+ALTER TABLE public.credit_accounts ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "credit_accounts_select_own" ON public.credit_accounts;
+CREATE POLICY "credit_accounts_select_own" ON public.credit_accounts
+  FOR SELECT USING (auth.uid() = user_id);
+-- No INSERT/UPDATE/DELETE policies: the balance moves only through credit_apply().
+
+DROP TRIGGER IF EXISTS credit_accounts_updated_at ON public.credit_accounts;
+CREATE TRIGGER credit_accounts_updated_at
+  BEFORE UPDATE ON public.credit_accounts
+  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at();
+
+-- ── ledger (append-only) ────────────────────────────────────────────────────
+-- user_id is SET NULL on account deletion (not cascaded): financial history
+-- outlives the account. balance_after is the wallet's cached balance after
+-- this row, so SUM(delta) per user must always equal credit_accounts.balance.
+CREATE TABLE IF NOT EXISTS public.credit_ledger (
+  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id             UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  delta               BIGINT NOT NULL,
+  kind                TEXT NOT NULL CHECK (kind IN ('grant', 'purchase', 'debit', 'refund', 'adjustment', 'set')),
+  balance_after       BIGINT NOT NULL,
+  waived_credits      BIGINT NOT NULL DEFAULT 0,
+  generation_event_id UUID REFERENCES public.generation_events(id) ON DELETE SET NULL,
+  post_id             UUID REFERENCES public.posts(id) ON DELETE SET NULL,
+  agent_id            UUID REFERENCES public.agents(id) ON DELETE SET NULL,
+  stripe_event_id     TEXT,
+  actor_user_id       UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  note                TEXT,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_credit_ledger_user_created ON public.credit_ledger (user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_credit_ledger_kind_created ON public.credit_ledger (kind, created_at DESC);
+-- Idempotency: a webhook replay or a retried debit for the same generation
+-- event cannot apply twice.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_credit_ledger_stripe_event
+  ON public.credit_ledger (stripe_event_id) WHERE stripe_event_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_credit_ledger_debit_per_event
+  ON public.credit_ledger (generation_event_id) WHERE kind = 'debit' AND generation_event_id IS NOT NULL;
+
+ALTER TABLE public.credit_ledger ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "credit_ledger_select_own" ON public.credit_ledger;
+CREATE POLICY "credit_ledger_select_own" ON public.credit_ledger
+  FOR SELECT USING (auth.uid() = user_id);
+REVOKE INSERT, UPDATE, DELETE ON public.credit_ledger FROM anon, authenticated;
+
+-- ── attribution on the spend ledger ─────────────────────────────────────────
+ALTER TABLE public.generation_events ADD COLUMN IF NOT EXISTS billed_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL;
+ALTER TABLE public.generation_events ADD COLUMN IF NOT EXISTS key_source TEXT CHECK (key_source IN ('platform', 'byo', 'none'));
+ALTER TABLE public.generation_events ADD COLUMN IF NOT EXISTS credits BIGINT;
+CREATE INDEX IF NOT EXISTS idx_generation_events_billed ON public.generation_events (billed_user_id, created_at);
+
+COMMENT ON COLUMN public.generation_events.billed_user_id IS 'Wallet charged: workspace owner for workspace personas, else the persona owner. user_id remains the ACTOR.';
+COMMENT ON COLUMN public.generation_events.key_source IS 'platform = our key paid the provider (credits apply); byo = the user''s own key; none = no provider call (local/storage).';
+COMMENT ON COLUMN public.generation_events.credits IS 'ceil(est_cost * 100). 0 when waived (byo / unmetered / local).';
+
+-- ── the single balance mutator ──────────────────────────────────────────────
+CREATE OR REPLACE FUNCTION public.credit_apply(
+  p_user           UUID,
+  p_delta          BIGINT,
+  p_kind           TEXT,
+  p_note           TEXT    DEFAULT NULL,
+  p_actor          UUID    DEFAULT NULL,
+  p_event          UUID    DEFAULT NULL,
+  p_post           UUID    DEFAULT NULL,
+  p_agent          UUID    DEFAULT NULL,
+  p_stripe_event   TEXT    DEFAULT NULL,
+  p_waived         BIGINT  DEFAULT 0,
+  p_allow_negative BOOLEAN DEFAULT false
+) RETURNS BIGINT
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_bal  BIGINT;
+  v_mode TEXT;
+BEGIN
+  IF p_user IS NULL THEN
+    RAISE EXCEPTION 'credit_apply: p_user is required' USING ERRCODE = '22004';
+  END IF;
+  IF p_kind NOT IN ('grant', 'purchase', 'debit', 'refund', 'adjustment', 'set') THEN
+    RAISE EXCEPTION 'credit_apply: unknown kind %', p_kind USING ERRCODE = '22023';
+  END IF;
+
+  -- Wallet on first touch; then lock it for the rest of the transaction.
+  INSERT INTO public.credit_accounts (user_id) VALUES (p_user) ON CONFLICT (user_id) DO NOTHING;
+  SELECT balance_credits, billing_mode INTO v_bal, v_mode
+    FROM public.credit_accounts WHERE user_id = p_user FOR UPDATE;
+
+  -- 'set': the caller passes the TARGET balance in p_delta.
+  IF p_kind = 'set' THEN
+    p_delta := p_delta - v_bal;
+  END IF;
+
+  -- Comped accounts: record what it would have cost, charge nothing.
+  IF p_delta < 0 AND v_mode = 'unmetered' THEN
+    p_waived := COALESCE(p_waived, 0) + (-p_delta);
+    p_delta  := 0;
+  END IF;
+
+  IF p_delta < 0 AND NOT p_allow_negative AND v_bal + p_delta < 0 THEN
+    RAISE EXCEPTION 'INSUFFICIENT_CREDITS: balance % < required %', v_bal, -p_delta
+      USING ERRCODE = 'P0001';
+  END IF;
+
+  v_bal := v_bal + p_delta;
+  UPDATE public.credit_accounts SET balance_credits = v_bal WHERE user_id = p_user;
+
+  INSERT INTO public.credit_ledger
+    (user_id, delta, kind, balance_after, waived_credits, generation_event_id, post_id, agent_id, stripe_event_id, actor_user_id, note)
+  VALUES
+    (p_user, p_delta, p_kind, v_bal, COALESCE(p_waived, 0), p_event, p_post, p_agent, p_stripe_event, p_actor, p_note);
+
+  RETURN v_bal;
+END;
+$$;
+-- Deliberately NOT granted to authenticated/anon: every caller is a server
+-- route or the Stripe webhook using the service role.
+REVOKE ALL ON FUNCTION public.credit_apply(UUID, BIGINT, TEXT, TEXT, UUID, UUID, UUID, UUID, TEXT, BIGINT, BOOLEAN) FROM PUBLIC, anon, authenticated;
+
+-- Admin: switch billing mode. Service-role only (no grant).
+CREATE OR REPLACE FUNCTION public.credit_set_mode(p_user UUID, p_mode TEXT)
+RETURNS TEXT
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF p_mode NOT IN ('credits', 'unmetered') THEN
+    RAISE EXCEPTION 'credit_set_mode: unknown mode %', p_mode USING ERRCODE = '22023';
+  END IF;
+  INSERT INTO public.credit_accounts (user_id, billing_mode) VALUES (p_user, p_mode)
+    ON CONFLICT (user_id) DO UPDATE SET billing_mode = EXCLUDED.billing_mode;
+  RETURN p_mode;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.credit_set_mode(UUID, TEXT) FROM PUBLIC, anon, authenticated;
+
+-- ── lock the dormant subscriptions table (users could UPDATE their own plan) ─
+
+
+-- ──────────────────────────────────────────────────────────────────────────
+-- 30. credits_ledger_seq_migration.sql
+--     credit_ledger.seq — strict total order for ledger rows
+-- ──────────────────────────────────────────────────────────────────────────
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- credit_ledger.seq — a total order for the money trail.
+--
+-- created_at is the TRANSACTION timestamp, so several ledger rows written in
+-- one transaction (a grant then a set; four debits for one generation) share
+-- it exactly, and "the latest row" becomes ambiguous. An identity column gives
+-- every row a strictly increasing position regardless of clock or transaction
+-- boundaries. Readers order by seq; created_at stays for humans.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+ALTER TABLE public.credit_ledger
+  ADD COLUMN IF NOT EXISTS seq BIGINT GENERATED ALWAYS AS IDENTITY;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_credit_ledger_seq ON public.credit_ledger (seq);
+CREATE INDEX IF NOT EXISTS idx_credit_ledger_user_seq ON public.credit_ledger (user_id, seq DESC);
 
