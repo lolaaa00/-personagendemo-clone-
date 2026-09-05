@@ -182,6 +182,29 @@ node supabase/build-bootstrap.mjs      # regenerate client_bootstrap.sql after a
 
 ---
 
+## 5.1 Status — 2026-09-05 (end of day)
+
+| commit | what landed | verified |
+|---|---|---|
+| `cee7494` | C1 rails, C2 platform admin, C3 credit schema (+ `seq`), C4 attribution + shadow/enforce debit, C5 admin credits API + Platform tab, ops scripts | svelte-check 0 errors · 291 unit · 14/14 DB assertions · migrations applied & recorded |
+| `d816686` | C6 activity log (schema, queue, hooks capture, presence, health), C8 inner credit gate + preview credits + balance pill, admin activity API + timeline / live feed, autopilot system events + hard stop, account-delete anonymisation | svelte-check 0 errors · 324 unit · 9/9 DB assertions · migrations applied (31 in ORDER, 0 pending, 0 drifted) |
+
+**Production state:** platform admins seeded (`ratiogamo@gmail.com`, `monarchstackteam@gmail.com`); the five `@monarchstack.com` pilot wallets hold **5 000 credits each** (ledger kind `grant`, actor = ratiogamo, note "pilot cohort 1"). Both switches are still **off** in the container env, so nothing is debited or logged until they are set.
+
+**Go-live switches (EasyPanel → app service → Environment, then restart):**
+```
+CREDITS_ENFORCE=shadow        # day 1; flip to enforce after reconciliation (§5 C9)
+ACTIVITY_LOG=on
+ACTIVITY_PEPPER=<32+ random chars, e.g. `openssl rand -hex 32`>
+PLATFORM_ADMIN_EMAILS=ratiogamo@gmail.com   # optional bootstrap; table rows already grant it
+```
+
+**Deferred, with reason:**
+- **C7 engine metering** (`/api/engine` batch image + LLM proxy in `ai-client.ts`): both files were under concurrent edit by another session during this work; touching them would have produced a conflicting commit. Do it as the next commit once that work lands. Until then persona-creation LLM calls are unmetered (cheap; the media paths that carry 96% of cost are metered).
+- **Settings → Billing section**: `settings/+page.svelte` likewise under concurrent edit (2 000-line diff). The balance pill in the sidebar covers the pilot; the section is a UI-only follow-up.
+- **C10 per-route `logActivity` calls**: the hooks layer already records every mutation and page view with a route-derived action; explicit domain events are additive polish.
+- **C11 Stripe, C12 roll-up scheduling**: unchanged from the plan.
+
 ## 6. Definition of done
 
 | phase | done when |

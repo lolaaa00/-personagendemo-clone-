@@ -371,7 +371,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-01", hash: "597cd7e", type: "fix", category: "generation", scope: "pricing", title: "OpenRouter image is Nano Banana 2 @ $0.077, not flux-schnell @ $0.02" },
 	{ date: "2026-09-01", hash: "9c34135", type: "feat", category: "generation", scope: "models", title: "extend registry to OpenRouter with live, audited pricing" },
 	{ date: "2026-09-04", hash: "6d0a3bd", type: "feat", category: "generation", scope: "models", title: "multi-mode models — one model can serve several kinds" },
-	{ date: "2026-09-05", hash: "cee7494", type: "feat", category: "publishing", scope: "billing", title: "credits wallet, platform admin, migration ledger — durable rails for monetization" }
+	{ date: "2026-09-05", hash: "cee7494", type: "feat", category: "publishing", scope: "billing", title: "credits wallet, platform admin, migration ledger — durable rails for monetization" },
+	{ date: "2026-09-05", hash: "d816686", type: "feat", category: "feature", scope: "activity", title: "pseudonymous activity log, presence, credit gate, admin timeline" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -665,12 +666,12 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 	},
 	{
 		id: "ef5a6b1", from: "2026-09-01", to: "2026-09-05",
-		category: "generation", categories: ["publishing","docs","feature","fix","generation"],
-		title: "Creating: platform API reference for programmatic/agentic use",
-		summary: "Platform API reference for programmatic/agentic use. Plus 8 more changes, touching getting posts onto your accounts and guides and explanations and things you can now do.",
+		category: "feature", categories: ["publishing","docs","feature","fix","generation"],
+		title: "New: platform API reference for programmatic/agentic use",
+		summary: "Platform API reference for programmatic/agentic use. Plus 9 more changes, touching getting posts onto your accounts and guides and explanations and things that were broken.",
 		major: true, curated: false,
-		entries: [CHANGELOG[329], CHANGELOG[330], CHANGELOG[331], CHANGELOG[332], CHANGELOG[333], CHANGELOG[334], CHANGELOG[335], CHANGELOG[336], CHANGELOG[337]]
+		entries: [CHANGELOG[329], CHANGELOG[330], CHANGELOG[331], CHANGELOG[332], CHANGELOG[333], CHANGELOG[334], CHANGELOG[335], CHANGELOG[336], CHANGELOG[337], CHANGELOG[338]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "cee7494";
+export const CHANGELOG_GENERATED_FROM = "d816686";
