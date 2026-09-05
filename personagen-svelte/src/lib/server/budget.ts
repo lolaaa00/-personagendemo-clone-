@@ -12,6 +12,7 @@
  */
 
 import { env } from '$env/dynamic/private';
+import { assertCreditsAvailable, resolveBillingAccount } from './credits';
 
 function usdFromEnv(name: string, fallback: number): number {
 	const raw = env[name];
@@ -173,5 +174,16 @@ export async function assertWithinBudget(
 		throw new Error(
 			`Daily generation budget reached for this persona ($${dailySpent.toFixed(2)} of $${dailyCap} cap). Raise MAX_DAILY_SPEND_PER_AGENT_USD to continue.`
 		);
+	}
+
+	// Credits gate (CREDITS_ENFORCE): the billing account must hold a positive
+	// balance before any paid call starts. This is the inner, fail-closed check
+	// that every generation path reaches; the synchronous precheck in
+	// generate-post quotes the real estimate. No-op when credits are off; in
+	// shadow it only records who WOULD be blocked. Runs after the USD caps so a
+	// runaway loop is still stopped by them even with credits disabled.
+	if (userId) {
+		const billed = await resolveBillingAccount(supabase, agentId ?? null, userId);
+		await assertCreditsAvailable(supabase, billed, 1);
 	}
 }

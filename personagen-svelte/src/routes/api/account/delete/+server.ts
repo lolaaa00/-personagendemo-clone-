@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { getServiceSupabase } from '$lib/server/service-supabase';
+import { logActivity } from '$lib/server/activity';
 
 /**
  * Permanently deletes the authenticated user's account: all app rows first
@@ -74,6 +75,18 @@ export const POST: RequestHandler = async ({ locals }) => {
 		// Missing tables (migrations not applied) shouldn't block account deletion.
 		if (error && error.code !== '42P01') {
 			failedSteps.push(`${table}: ${error.message}`);
+		}
+	}
+
+	// Activity history is kept but de-identified: user_id → NULL, presence
+	// removed, subject_hash retained so aggregates stay stable. Recorded as the
+	// last event of this account BEFORE the hash-only rows lose their id.
+	logActivity(locals, null, { action: 'account.deleted', actorKind: 'user', hashUserId: userId });
+	{
+		const { error: anonErr } = await supabase.rpc('anonymize_user_activity', { p_user: userId });
+		// A missing function (migration not applied) must not block deletion.
+		if (anonErr && !/does not exist|schema cache|PGRST202/i.test(anonErr.message ?? '')) {
+			failedSteps.push(`anonymize activity: ${anonErr.message}`);
 		}
 	}
 

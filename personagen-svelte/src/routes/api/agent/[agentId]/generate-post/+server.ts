@@ -16,6 +16,8 @@ import { resolveAiClient } from '$lib/server/ai-client';
 import { isCardRendererAvailable, CARD_RENDERER_LABEL } from '$lib/server/content/card-renderer';
 import { publishPostById } from '$lib/server/scheduler';
 import { assertWithinBudget } from '$lib/server/budget';
+import { creditsFor } from '$lib/server/credits';
+import { creditsMode } from '$lib/server/flags';
 import { getServiceSupabase } from '$lib/server/service-supabase';
 import { priceOf } from '$lib/pricing';
 import {
@@ -476,7 +478,11 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 					'ai_badge'
 				],
 				steps,
-				estimatedCostUsd: +steps.reduce((s, x) => s + x.usd, 0).toFixed(4)
+				estimatedCostUsd: +steps.reduce((s, x) => s + x.usd, 0).toFixed(4),
+				// 1 credit = 1¢ of the estimate above, rounded up per step (the
+				// ledger rounds per event, so the quote matches what will be debited).
+				estimatedCredits: steps.reduce((s, x) => s + creditsFor(x.usd), 0),
+				creditsMode: creditsMode()
 			}
 		});
 	}

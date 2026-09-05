@@ -16,6 +16,7 @@
 import { randomUUID } from 'node:crypto';
 import { env } from '$env/dynamic/private';
 import { getServiceSupabase } from './service-supabase';
+import { logSystemActivity } from './activity';
 import { generateUgcPack, generateCinematicUgcPack } from './content/generate';
 import { VIDEO_ONLY_PLATFORMS } from './social/platforms';
 import { loadRegistry, effectiveResolve, type RegistryRow } from './model-registry';
@@ -462,6 +463,14 @@ async function generateDraftsForAgent(
 			// is strictly better than losing it.
 			const { error } = await supabase.from('posts').update(row).eq('id', placeholderId);
 			if (!error) {
+				logSystemActivity({
+					action: 'autopilot.slot.generated',
+					userId,
+					agentId,
+					postId: placeholderId,
+					estCostUsd: Number(pack.content?.costBreakdown?.total ?? 0) || null,
+					meta: { slot: key, platforms: slotPlatforms, cinematic: isCinematicSlot }
+				});
 				genFailures.delete(key);
 				created++;
 				taken.add(key);
@@ -490,7 +499,19 @@ async function generateDraftsForAgent(
 			// A budget-cap hit is a hard stop too: every further slot fails identically.
 			// Release the claim first: the slot stays free (old semantics), instead
 			// of a placeholder lingering in 'generating' until the orphan sweep.
-			if (/No AI provider|No image generation|Exhausted balance|User is locked|budget/i.test(msg)) {
+			// An empty credit wallet (INSUFFICIENT_CREDITS / CREDITS_UNAVAILABLE) is
+			// the same shape: nothing this run does will refill it.
+			const hardStop = /No AI provider|No image generation|Exhausted balance|User is locked|budget|INSUFFICIENT_CREDITS|Not enough credits|CREDITS_UNAVAILABLE|CREDIT_DEBIT_FAILED/i.test(msg);
+			logSystemActivity({
+				action: 'autopilot.slot.failed',
+				userId,
+				agentId,
+				postId: placeholderId,
+				outcome: /INSUFFICIENT_CREDITS|Not enough credits/i.test(msg) ? 'blocked' : 'error',
+				errorCode: hardStop ? 'HARD_STOP' : 'RETRYABLE',
+				meta: { slot: key, reason: msg.slice(0, 120) }
+			});
+			if (hardStop) {
 				await supabase.from('posts').delete().eq('id', placeholderId).eq('status', 'generating');
 				break;
 			}
@@ -589,6 +610,15 @@ export async function runAutopilotDraftGeneration(opts?: {
 
 	if (configs.length === 0) return { generated: 0, agents: 0 };
 
+	for (const cfg of configs) {
+		logSystemActivity({
+			action: 'autopilot.run.started',
+			userId: cfg.user_id,
+			agentId: cfg.agent_id,
+			meta: { level: cfg.autonomy_level, manual: Boolean(opts?.agentId) }
+		});
+	}
+
 	let totalGenerated = 0;
 	for (const cfg of configs) {
 		if (totalGenerated >= maxPerRun) break;
@@ -611,5 +641,11 @@ export async function runAutopilotDraftGeneration(opts?: {
 			`[Autopilot] Generated ${totalGenerated} post(s) across ${configs.length} agent(s).`
 		);
 	}
+	logSystemActivity({
+		action: 'autopilot.run.finished',
+		userId: configs.length === 1 ? configs[0].user_id : null,
+		agentId: configs.length === 1 ? configs[0].agent_id : null,
+		meta: { generated: totalGenerated, agents: configs.length, manual: Boolean(opts?.agentId) }
+	});
 	return { generated: totalGenerated, agents: configs.length };
 }

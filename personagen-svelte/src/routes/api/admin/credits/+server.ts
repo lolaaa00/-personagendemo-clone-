@@ -3,6 +3,7 @@ import type { RequestHandler } from './$types';
 import { requirePlatformAdmin } from '$lib/server/platform-admin';
 import { getServiceSupabase } from '$lib/server/service-supabase';
 import { creditsMode } from '$lib/server/flags';
+import { logActivity } from '$lib/server/activity';
 
 /**
  * Platform-admin credits API.
@@ -143,6 +144,12 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			p_note: `[mode → ${mode}] ${note}`,
 			p_actor: gate.user.id
 		});
+		logActivity(locals, gate.user.id, {
+			action: 'admin.mode.changed',
+			actorKind: 'admin',
+			targetUserId: userId,
+			meta: { mode, note }
+		});
 		return json({ success: true, mode: data });
 	}
 
@@ -166,7 +173,23 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	});
 	if (error) {
 		const status = /INSUFFICIENT_CREDITS/.test(error.message) ? 409 : 500;
+		logActivity(locals, gate.user.id, {
+			action: op === 'grant' ? 'admin.credits.granted' : op === 'set' ? 'admin.credits.set' : 'admin.credits.adjusted',
+			actorKind: 'admin',
+			targetUserId: userId,
+			outcome: 'error',
+			errorCode: status === 409 ? 'INSUFFICIENT_CREDITS' : 'DB_ERROR',
+			creditsDelta: credits,
+			meta: { note }
+		});
 		return json({ success: false, error: error.message }, { status });
 	}
+	logActivity(locals, gate.user.id, {
+		action: op === 'grant' ? 'admin.credits.granted' : op === 'set' ? 'admin.credits.set' : 'admin.credits.adjusted',
+		actorKind: 'admin',
+		targetUserId: userId,
+		creditsDelta: op === 'set' ? null : credits,
+		meta: { note, target_balance: op === 'set' ? credits : undefined, balance_after: Number(balance) }
+	});
 	return json({ success: true, balance_credits: Number(balance) });
 };

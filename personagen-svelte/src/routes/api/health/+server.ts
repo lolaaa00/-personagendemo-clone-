@@ -3,6 +3,8 @@ import type { RequestHandler } from './$types';
 import { env as publicEnv } from '$env/dynamic/public';
 import { env as privateEnv } from '$env/dynamic/private';
 import { getServiceSupabase } from '$lib/server/service-supabase';
+import { creditsMode } from '$lib/server/flags';
+import { activityStats } from '$lib/server/activity';
 import MIGRATION_ORDER from '../../../../supabase/migrations.json';
 
 export const GET: RequestHandler = async ({ locals }) => {
@@ -55,8 +57,23 @@ export const GET: RequestHandler = async ({ locals }) => {
 		}
 	}
 
+	// Billing + observability switches and the activity queue's loss counter —
+	// the system says when it is blind instead of pretending.
+	checks.credits = creditsMode();
+	const act = activityStats();
+	checks.activity = !act.enabled
+		? 'off'
+		: act.dropped > 0
+			? `dropped:${act.dropped}${act.lastError ? ` (${act.lastError.slice(0, 80)})` : ''}`
+			: 'ok';
+
 	return json(
-		{ status: healthy ? 'ok' : 'degraded', checks, ts: new Date().toISOString() },
+		{
+			status: healthy ? 'ok' : 'degraded',
+			checks,
+			activity: { queued: act.queued, flushed: act.flushed, dropped: act.dropped, lastFlushAt: act.lastFlushAt },
+			ts: new Date().toISOString()
+		},
 		{ status: healthy ? 200 : 503 }
 	);
 };

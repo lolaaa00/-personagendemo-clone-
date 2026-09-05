@@ -8,6 +8,16 @@ import { startScheduler } from '$lib/server/scheduler';
 import { isApiKey, resolveApiKey, mintUserJwt } from '$lib/server/api-keys';
 import { getServiceSupabase } from '$lib/server/service-supabase';
 import { installLifecycle } from '$lib/server/lifecycle';
+import {
+	enqueueActivity,
+	requestContext,
+	sessionHashOf,
+	shouldLog,
+	routeAction,
+	outcomeFor,
+	touchPresence
+} from '$lib/server/activity';
+import { activityLogEnabled } from '$lib/server/flags';
 
 // SIGTERM/SIGINT → flush registered in-memory queues, then exit. Installed
 // before the scheduler so a redeploy mid-tick still drains cleanly.
@@ -53,7 +63,76 @@ const PROTECTED_PREFIXES = [
 	'/admin'
 ];
 
+/**
+ * Activity capture around the real handler. Fail-soft by design: any throw in
+ * here is swallowed and the response is returned untouched — logging can never
+ * cost a user a request. The session is only read from the memoised result the
+ * route already produced (never a fresh network call), except on auth routes
+ * where the login just happened and the session is new.
+ */
 export const handle: Handle = async ({ event, resolve }) => {
+	const t0 = Date.now();
+	const requestId = crypto.randomUUID();
+	event.locals.requestId = requestId;
+	const logging = activityLogEnabled();
+	if (logging) {
+		try {
+			event.locals.activityContext = requestContext(event.request);
+		} catch {
+			event.locals.activityContext = null;
+		}
+	}
+
+	const response = await handleInner({ event, resolve });
+
+	if (logging) {
+		try {
+			const routeId = event.route.id;
+			const method = event.request.method;
+			if (shouldLog(routeId, method, event.url.pathname)) {
+				const status = response.status;
+				const isAuthRoute = !!routeId && routeId.startsWith('/api/auth/');
+				const sess = isAuthRoute
+					? await event.locals.safeGetSession().catch(() => ({ session: null, user: null }))
+					: memoisedSession(event) ?? { session: null, user: null };
+				const userId = sess.user?.id ?? null;
+				const sessionHash = sessionHashOf((sess.session as any)?.access_token ?? null);
+				event.locals.activitySessionHash = sessionHash;
+				const { action, meta } = routeAction(routeId!, method, status);
+				enqueueActivity({
+					action,
+					userId,
+					actorKind: userId ? ((event.locals as any).apiKeyAuth ? 'api_key' : 'user') : 'anonymous',
+					routeId,
+					method,
+					statusCode: status,
+					outcome: outcomeFor(status),
+					durationMs: Date.now() - t0,
+					requestId,
+					sessionHash,
+					context: event.locals.activityContext ?? null,
+					meta: { ...meta, data: event.url.pathname.endsWith('/__data.json') || undefined }
+				});
+				if (userId) touchPresence(userId, routeId, event.locals.activityContext ?? null, sessionHash);
+			}
+		} catch (e) {
+			console.warn('[activity] capture failed (ignored):', (e as Error).message);
+		}
+	}
+	try {
+		response.headers.set('x-request-id', requestId);
+	} catch {
+		/* immutable headers on some responses — fine */
+	}
+	return response;
+};
+
+/** Session result cached by the memoising wrapper below, if the route resolved it. */
+function memoisedSession(event: Parameters<Handle>[0]['event']) {
+	return (event.locals as any).__sessionMemo as { session: any; user: any } | undefined;
+}
+
+const handleInner: Handle = async ({ event, resolve }) => {
 	// ── API-key auth (agentic controller) ────────────────────────────────────
 	// A request carrying `Authorization: Bearer pg_live_…` authenticates as the
 	// seat that owns the key. We mint a short-lived user JWT and build the
@@ -93,6 +172,8 @@ export const handle: Handle = async ({ event, resolve }) => {
 					session: { access_token: token, token_type: 'bearer', user } as any,
 					user
 				});
+				(event.locals as any).__sessionMemo = { session: { access_token: token }, user };
+				(event.locals as any).apiKeyAuth = true;
 				return true;
 			} catch (e) {
 				console.error('[Hooks] API-key auth failed:', e);
@@ -113,24 +194,37 @@ export const handle: Handle = async ({ event, resolve }) => {
 
 	event.locals.supabase = createSupabaseServerClient(event.cookies);
 
+	// Memoised per request: the layout guard, the route, and the activity
+	// capture all ask for the session; only the first call pays for getUser().
+	// Auth routes (login/signup/logout) mutate the session mid-request, so the
+	// memo is bypassed for them (they are the only routes that change it).
+	let sessionMemo: Promise<{ session: any; user: any }> | null = null;
+	const isAuthMutation = event.url.pathname.startsWith('/api/auth/');
 	event.locals.safeGetSession = async () => {
-		try {
-			const {
-				data: { session }
-			} = await event.locals.supabase.auth.getSession();
-			if (!session) return { session: null, user: null };
+		const compute = async () => {
+			try {
+				const {
+					data: { session }
+				} = await event.locals.supabase.auth.getSession();
+				if (!session) return { session: null, user: null };
 
-			const {
-				data: { user },
-				error
-			} = await event.locals.supabase.auth.getUser();
-			if (error) return { session: null, user: null };
+				const {
+					data: { user },
+					error
+				} = await event.locals.supabase.auth.getUser();
+				if (error) return { session: null, user: null };
 
-			return { session, user };
-		} catch (e) {
-			console.error('Supabase session error:', e);
-			return { session: null, user: null };
-		}
+				return { session, user };
+			} catch (e) {
+				console.error('Supabase session error:', e);
+				return { session: null, user: null };
+			}
+		};
+		if (isAuthMutation) return compute();
+		if (!sessionMemo) sessionMemo = compute();
+		const result = await sessionMemo;
+		(event.locals as any).__sessionMemo = result;
+		return result;
 	};
 
 	const supabaseUrl = env.PUBLIC_SUPABASE_URL ?? '';

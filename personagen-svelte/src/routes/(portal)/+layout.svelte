@@ -799,6 +799,17 @@
 				<div class="sidebar-plan-badge">
 					<span class="sidebar-plan-dot"></span>
 					<span>{(data as any).badgeLabel ?? 'Personal account'}</span>
+					{#if (data as any).credits}
+						<span
+							class="credit-pill"
+							class:low={(data as any).credits.balance <= 0}
+							title={(data as any).credits.billing_mode === 'unmetered'
+								? 'Complimentary account — generations are not charged'
+								: `${(data as any).credits.balance.toLocaleString()} credits ≈ $${((data as any).credits.balance / 100).toFixed(2)} of generation`}
+						>
+							{(data as any).credits.billing_mode === 'unmetered' ? '∞' : (data as any).credits.balance.toLocaleString()} cr
+						</span>
+					{/if}
 				</div>
 			{/if}
 		</div>
@@ -2038,5 +2049,20 @@
 		color: var(--text-dim);
 		font-variant-numeric: tabular-nums;
 		flex-shrink: 0;
+	}
+	/* Credit balance pill beside the account badge (only when CREDITS_ENFORCE ≠ off). */
+	.credit-pill {
+		margin-left: auto;
+		font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+		font-size: 0.7rem;
+		padding: 0.1rem 0.45rem;
+		border-radius: 999px;
+		background: rgba(34, 197, 94, 0.14);
+		border: 1px solid rgba(34, 197, 94, 0.35);
+		white-space: nowrap;
+	}
+	.credit-pill.low {
+		background: rgba(239, 68, 68, 0.14);
+		border-color: rgba(239, 68, 68, 0.4);
 	}
 </style>

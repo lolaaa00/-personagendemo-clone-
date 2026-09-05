@@ -28,5 +28,6 @@
 	["model_registry_multimode_migration.sql", "Model Registry multi-mode — kinds[] + raw modalities"],
 	["platform_admins_migration.sql", "Platform admins — cross-tenant operator identity, is_platform_admin()"],
 	["credits_migration.sql", "Credits — credit_accounts, credit_ledger, credit_apply(), subscriptions RLS lockdown"],
-	["credits_ledger_seq_migration.sql", "credit_ledger.seq — strict total order for ledger rows"]
+	["credits_ledger_seq_migration.sql", "credit_ledger.seq — strict total order for ledger rows"],
+	["activity_log_migration.sql", "Activity log — user_activity_events (partitioned), user_presence, daily roll-up, admin_auth_events()"]
 ]

@@ -64,20 +64,90 @@
 			: platformUsers
 	);
 
+	// Activity overview (presence, logins) merged onto the users table, plus the
+	// per-user timeline drawer and the platform-wide live tail.
+	type Presence = { last_seen_at: string; last_route_id: string | null; last_device: string | null; last_country: string | null; online: boolean };
+	type LoginInfo = { last_login_at: string | null; login_count: number; last_device: string | null; last_country: string | null };
+	let presenceByUser = $state<Record<string, Presence>>({});
+	let loginsByUser = $state<Record<string, LoginInfo>>({});
+	let activityStats = $state<{ enabled: boolean; queued: number; flushed: number; dropped: number; lastError: string | null } | null>(null);
+	let timelineFor = $state<{ userId: string; email: string } | null>(null);
+	let timelineRows = $state<any[]>([]);
+	let timelineAuth = $state<any[]>([]);
+	let timelineLoading = $state(false);
+	let timelineFilter = $state<'all' | 'auth' | 'nav' | 'generation' | 'review' | 'publish' | 'scheduler' | 'admin' | 'errors'>('all');
+	let liveRows = $state<any[]>([]);
+	let liveOpen = $state(false);
+	let liveErrorsOnly = $state(false);
+
+	let filteredTimeline = $derived(
+		timelineFilter === 'all'
+			? timelineRows
+			: timelineFilter === 'errors'
+				? timelineRows.filter((r) => r.outcome !== 'ok')
+				: timelineRows.filter((r) => r.category === timelineFilter)
+	);
+	const onlineCount = $derived(Object.values(presenceByUser).filter((p) => p.online).length);
+	const ago = (iso: string | null | undefined) => {
+		if (!iso) return '—';
+		const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+		if (s < 60) return `${Math.floor(s)}s ago`;
+		if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+		if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+		return `${Math.floor(s / 86400)}d ago`;
+	};
+
 	async function loadPlatform() {
 		platformLoading = true;
 		platformError = null;
 		try {
-			const res = await fetch('/api/admin/credits');
+			const [res, actRes] = await Promise.all([fetch('/api/admin/credits'), fetch('/api/admin/activity')]);
 			const body = await res.json();
 			if (!res.ok || !body.success) throw new Error(body.error || `HTTP ${res.status}`);
 			platformUsers = body.users;
 			platformMode = body.mode;
 			platformLoaded = true;
+			const act = await actRes.json().catch(() => null);
+			if (actRes.ok && act?.success) {
+				presenceByUser = act.presence ?? {};
+				loginsByUser = act.logins ?? {};
+				activityStats = act.stats ?? null;
+			}
 		} catch (e) {
 			platformError = (e as Error).message;
 		} finally {
 			platformLoading = false;
+		}
+	}
+
+	async function openTimeline(u: PlatformUser) {
+		timelineFor = { userId: u.id, email: u.email ?? u.id };
+		timelineLoading = true;
+		timelineRows = [];
+		timelineAuth = [];
+		try {
+			const res = await fetch(`/api/admin/activity?userId=${encodeURIComponent(u.id)}`);
+			const body = await res.json();
+			if (!res.ok || !body.success) throw new Error(body.error || `HTTP ${res.status}`);
+			timelineRows = body.events;
+			timelineAuth = body.authEvents;
+		} catch (e) {
+			flash(`Timeline failed: ${(e as Error).message}`);
+		} finally {
+			timelineLoading = false;
+		}
+	}
+
+	async function loadLive() {
+		liveOpen = true;
+		try {
+			const res = await fetch(`/api/admin/activity?${liveErrorsOnly ? 'errors=1' : 'live=1'}`);
+			const body = await res.json();
+			if (!res.ok || !body.success) throw new Error(body.error || `HTTP ${res.status}`);
+			liveRows = body.events;
+			activityStats = body.stats ?? activityStats;
+		} catch (e) {
+			flash(`Live feed failed: ${(e as Error).message}`);
 		}
 	}
 
@@ -257,6 +327,12 @@
 				</div>
 				<div class="platform-mode">
 					<span class="mode-pill mode-{platformMode}">CREDITS_ENFORCE = {platformMode}</span>
+					{#if activityStats}
+						<span class="mode-pill" class:mode-enforce={activityStats.enabled && activityStats.dropped === 0} class:mode-shadow={activityStats.enabled && activityStats.dropped > 0} title={activityStats.lastError ?? ''}>
+							ACTIVITY_LOG = {activityStats.enabled ? `on · ${onlineCount} online · ${activityStats.dropped} dropped` : 'off'}
+						</span>
+					{/if}
+					<button class="filter-btn" onclick={loadLive}>Live feed</button>
 					<button class="filter-btn" onclick={loadPlatform} disabled={platformLoading}>{platformLoading ? 'Loading…' : 'Refresh'}</button>
 				</div>
 			</div>
@@ -289,6 +365,7 @@
 								<th>Account</th>
 								<th>Created</th>
 								<th>Last sign-in</th>
+								<th>Last seen</th>
 								<th>Balance</th>
 								<th>Mode</th>
 								<th>Debited (mo)</th>
@@ -305,6 +382,13 @@
 									<td class="nowrap">{when(u.created_at).split(',')[0]}</td>
 									<td class="nowrap">
 										{#if u.never_signed_in}<span class="kind-pill kind-never">never</span>{:else}{when(u.last_sign_in_at ?? '')}{/if}
+										{#if loginsByUser[u.id]}<span class="muted"> · {loginsByUser[u.id].login_count}× {loginsByUser[u.id].last_device ?? ''} {loginsByUser[u.id].last_country ?? ''}</span>{/if}
+									</td>
+									<td class="nowrap">
+										{#if presenceByUser[u.id]}
+											{#if presenceByUser[u.id].online}<span class="kind-pill kind-online">online</span>{:else}{ago(presenceByUser[u.id].last_seen_at)}{/if}
+											<span class="muted small">{(presenceByUser[u.id].last_route_id ?? '').replace('/(portal)', '')}</span>
+										{:else}—{/if}
 									</td>
 									<td class="nowrap balance">{fmtCredits(u.balance_credits)} <span class="muted">({usdOfCredits(u.balance_credits)})</span></td>
 									<td><span class="role-pill mode-{u.billing_mode}">{u.billing_mode}</span></td>
@@ -317,6 +401,7 @@
 										<button class="admin-link" onclick={() => openAction(u, 'adjust')}>Adjust</button>
 										<button class="admin-link" onclick={() => toggleMode(u)}>{u.billing_mode === 'unmetered' ? 'Un-comp' : 'Comp'}</button>
 										<button class="admin-link" onclick={() => openLedger(u)}>Ledger</button>
+										<button class="admin-link" onclick={() => openTimeline(u)}>Timeline</button>
 									</td>
 								</tr>
 							{/each}
@@ -338,6 +423,89 @@
 				</div>
 			{/if}
 		</section>
+
+		{#if liveOpen}
+			<section class="admin-card">
+				<div class="platform-head">
+					<h2>{liveErrorsOnly ? 'Errors' : 'Live feed'} — last 100 events, every account</h2>
+					<div class="platform-mode">
+						<label class="admin-hint"><input type="checkbox" bind:checked={liveErrorsOnly} onchange={loadLive} /> errors only</label>
+						<button class="filter-btn" onclick={loadLive}>Refresh</button>
+						<button class="filter-btn" onclick={() => (liveOpen = false)}>Close</button>
+					</div>
+				</div>
+				{#if liveRows.length === 0}
+					<p class="admin-hint">Nothing recorded yet{activityStats && !activityStats.enabled ? ' — ACTIVITY_LOG is off' : ''}.</p>
+				{:else}
+					<div class="table-scroll">
+						<table class="admin-table">
+							<thead><tr><th>When</th><th>Who</th><th>Action</th><th>Outcome</th><th>ms</th><th>Credits</th><th>Client</th><th>Detail</th></tr></thead>
+							<tbody>
+								{#each liveRows as r (r.id)}
+									<tr class:negative={r.outcome !== 'ok'}>
+										<td class="nowrap">{when(r.occurred_at)}</td>
+										<td class="mono">{r.actor}{r.target ? ` → ${r.target}` : ''}<span class="muted small"> {r.actor_kind}</span></td>
+										<td><span class="kind-pill kind-{r.category}">{r.category}</span> {r.action}</td>
+										<td>{r.outcome}{r.status_code ? ` ${r.status_code}` : ''}{r.error_code ? ` ${r.error_code}` : ''}</td>
+										<td class="nowrap">{r.duration_ms ?? '—'}</td>
+										<td class="nowrap">{r.credits_delta ?? (r.est_cost_usd ? money(r.est_cost_usd) : '—')}</td>
+										<td class="nowrap small">{r.device ?? ''} {r.country ?? ''}</td>
+										<td class="small mono">{r.route_id ?? ''} {Object.keys(r.meta ?? {}).length ? JSON.stringify(r.meta) : ''}</td>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+				{/if}
+			</section>
+		{/if}
+
+		{#if timelineFor}
+			<section class="admin-card">
+				<div class="platform-head">
+					<h2>Timeline — {timelineFor.email}</h2>
+					<button class="filter-btn" onclick={() => (timelineFor = null)}>Close</button>
+				</div>
+				<div class="filter-row">
+					{#each [['all', 'All'], ['auth', 'Auth'], ['nav', 'Pages'], ['generation', 'Generations'], ['review', 'Reviews'], ['publish', 'Publishing'], ['scheduler', 'Autopilot'], ['admin', 'Admin'], ['errors', 'Errors']] as [k, label] (k)}
+						<button class="filter-btn" class:active={timelineFilter === k} onclick={() => (timelineFilter = k as any)}>{label}</button>
+					{/each}
+				</div>
+				{#if timelineLoading}
+					<p class="admin-hint">Loading…</p>
+				{:else}
+					{#if timelineAuth.length > 0}
+						<p class="admin-hint">
+							Auth service trail: {timelineAuth.length} entries — last {timelineAuth[0]?.action} {when(timelineAuth[0]?.occurred_at)}.
+							{timelineAuth.filter((a: any) => a.action === 'login').length} logins on record.
+						</p>
+					{/if}
+					{#if filteredTimeline.length === 0}
+						<p class="admin-hint">No events match.</p>
+					{:else}
+						<div class="table-scroll">
+							<table class="admin-table">
+								<thead><tr><th>When</th><th>Action</th><th>Outcome</th><th>ms</th><th>Persona</th><th>Credits / cost</th><th>Client</th><th>Detail</th></tr></thead>
+								<tbody>
+									{#each filteredTimeline as r (r.id)}
+										<tr class:negative={r.outcome !== 'ok'}>
+											<td class="nowrap">{when(r.occurred_at)}</td>
+											<td><span class="kind-pill kind-{r.category}">{r.category}</span> {r.action}<span class="muted small"> {r.actor_kind !== 'user' ? r.actor_kind : ''}</span></td>
+											<td>{r.outcome}{r.status_code ? ` ${r.status_code}` : ''}{r.error_code ? ` ${r.error_code}` : ''}</td>
+											<td class="nowrap">{r.duration_ms ?? '—'}</td>
+											<td>{r.persona ?? '—'}</td>
+											<td class="nowrap">{r.credits_delta != null ? `${r.credits_delta} cr` : r.est_cost_usd ? money(r.est_cost_usd) : '—'}</td>
+											<td class="nowrap small">{r.device ?? ''} {r.country ?? ''}</td>
+											<td class="small mono">{(r.route_id ?? '').replace('/(portal)', '')} {Object.keys(r.meta ?? {}).length ? JSON.stringify(r.meta) : ''}</td>
+										</tr>
+									{/each}
+								</tbody>
+							</table>
+						</div>
+					{/if}
+				{/if}
+			</section>
+		{/if}
 
 		{#if ledgerFor}
 			<section class="admin-card">
@@ -671,6 +839,9 @@
 	}
 	.kind-never {
 		background: rgba(239, 68, 68, 0.18);
+	}
+	.kind-online {
+		background: rgba(34, 197, 94, 0.22);
 	}
 	.pos {
 		color: #4ade80;

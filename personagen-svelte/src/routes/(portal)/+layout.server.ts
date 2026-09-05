@@ -4,6 +4,7 @@ import { env } from '$env/dynamic/public';
 import { env as privateEnv } from '$env/dynamic/private';
 import { checkConfigStatus } from '$lib/server/config-check';
 import { isPlatformAdmin as checkPlatformAdmin } from '$lib/server/platform-admin';
+import { creditsMode } from '$lib/server/flags';
 
 export const load: LayoutServerLoad = async ({ locals }) => {
 	const supabaseUrl = env.PUBLIC_SUPABASE_URL ?? '';
@@ -121,6 +122,20 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 		// /admin and the Model Manager. Fails closed inside the helper.
 		const isPlatformAdmin = locals.supabase ? await checkPlatformAdmin(locals.supabase, user) : false;
 
+		// Credit balance for the top-bar pill. RLS lets a user read their own
+		// wallet row; a workspace SEAT sees no row (the owner is billed) → null.
+		// Off = no pill, no query.
+		const mode = creditsMode();
+		let credits: { balance: number; mode: string; billing_mode: string } | null = null;
+		if (mode !== 'off' && locals.supabase) {
+			const { data: wallet } = await locals.supabase
+				.from('credit_accounts')
+				.select('balance_credits, billing_mode')
+				.eq('user_id', user.id)
+				.maybeSingle();
+			if (wallet) credits = { balance: Number(wallet.balance_credits ?? 0), mode, billing_mode: wallet.billing_mode };
+		}
+
 		return {
 			session,
 			user,
@@ -131,6 +146,7 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 			badgeLabel,
 			isWorkspaceAdmin,
 			isPlatformAdmin,
+			credits,
 			// Provisioned team accounts start on a shared throwaway password with
 			// this metadata flag set — the layout blocks with a change-password
 			// prompt until /api/settings/password clears it.
