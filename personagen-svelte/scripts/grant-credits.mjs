@@ -71,8 +71,12 @@ const asEmail = (opt('--as') || '').toLowerCase();
 const note = opt('--note');
 const kind = args.includes('--grant') ? 'grant' : args.includes('--set') ? 'set' : args.includes('--adjust') ? 'adjustment' : null;
 const amount = Number(opt('--grant') ?? opt('--set') ?? opt('--adjust'));
-const consumed = new Set(['--as', asEmail && opt('--as'), '--note', note, '--grant', '--set', '--adjust', String(opt('--grant') ?? opt('--set') ?? opt('--adjust'))]);
-const targets = args.filter((a) => !consumed.has(a) && !a.startsWith('--')).map((e) => e.toLowerCase());
+// Consume option VALUES by position, not by value — otherwise an admin granting
+// to their own address (same string as --as) silently drops themselves.
+const valueOpts = new Set(['--as', '--note', '--grant', '--set', '--adjust']);
+const targets = args
+	.filter((a, i) => !a.startsWith('--') && !valueOpts.has(args[i - 1]))
+	.map((e) => e.toLowerCase());
 
 if (!asEmail || !note || !kind || !Number.isInteger(amount) || targets.length === 0) {
 	console.log('usage: grant-credits.mjs --as <admin email> --note "<why>" (--grant N | --set N | --adjust ±N) <email>... | --balances');

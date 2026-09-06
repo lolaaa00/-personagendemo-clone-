@@ -374,7 +374,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-05", hash: "cee7494", type: "feat", category: "publishing", scope: "billing", title: "credits wallet, platform admin, migration ledger — durable rails for monetization" },
 	{ date: "2026-09-05", hash: "d816686", type: "feat", category: "feature", scope: "activity", title: "pseudonymous activity log, presence, credit gate, admin timeline" },
 	{ date: "2026-09-05", hash: "3cd45eb", type: "docs", category: "docs", scope: "monetization", title: "record shipped state, go-live switches, deferred items" },
-	{ date: "2026-09-05", hash: "f9685c3", type: "feat", category: "publishing", scope: "admin", title: "database-backed platform switches + Admin Console restructure" }
+	{ date: "2026-09-05", hash: "f9685c3", type: "feat", category: "publishing", scope: "admin", title: "database-backed platform switches + Admin Console restructure" },
+	{ date: "2026-09-06", hash: "c5f083d", type: "feat", category: "feature", scope: "billing", title: "wallet shown as money in the visitor's currency + welcome credits at signup" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -667,13 +668,13 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 		entries: [CHANGELOG[324], CHANGELOG[325], CHANGELOG[326], CHANGELOG[327], CHANGELOG[328]]
 	},
 	{
-		id: "ef5a6b1", from: "2026-09-01", to: "2026-09-05",
-		category: "publishing", categories: ["publishing","docs","feature","fix","generation"],
-		title: "Publishing: platform API reference for programmatic/agentic use",
-		summary: "Platform API reference for programmatic/agentic use. Plus 11 more changes, touching guides and explanations and things you can now do and things that were broken.",
+		id: "ef5a6b1", from: "2026-09-01", to: "2026-09-06",
+		category: "feature", categories: ["publishing","docs","feature","fix","generation"],
+		title: "New: platform API reference for programmatic/agentic use",
+		summary: "Platform API reference for programmatic/agentic use. Plus 12 more changes, touching getting posts onto your accounts and guides and explanations and things that were broken.",
 		major: true, curated: false,
-		entries: [CHANGELOG[329], CHANGELOG[330], CHANGELOG[331], CHANGELOG[332], CHANGELOG[333], CHANGELOG[334], CHANGELOG[335], CHANGELOG[336], CHANGELOG[337], CHANGELOG[338], CHANGELOG[339], CHANGELOG[340]]
+		entries: [CHANGELOG[329], CHANGELOG[330], CHANGELOG[331], CHANGELOG[332], CHANGELOG[333], CHANGELOG[334], CHANGELOG[335], CHANGELOG[336], CHANGELOG[337], CHANGELOG[338], CHANGELOG[339], CHANGELOG[340], CHANGELOG[341]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "f9685c3";
+export const CHANGELOG_GENERATED_FROM = "c5f083d";
