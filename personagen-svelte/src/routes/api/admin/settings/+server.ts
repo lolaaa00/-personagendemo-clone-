@@ -7,6 +7,29 @@ import { getSettings, setSetting, settingsStatus, refreshSettings, SETTING_KEYS,
 import { creditsMode, creditsSource, activityLogEnabled, activitySource, activityPepper } from '$lib/server/flags';
 import { activityStats, logActivity } from '$lib/server/activity';
 import MIGRATION_ORDER from '../../../../../supabase/migrations.json';
+import { SUPPORTED_CURRENCIES, isSupportedCurrency, formatCredits, type FxRates } from '$lib/money';
+
+/**
+ * Display rates from the ECB via frankfurter.app (no key, no quota). Only the
+ * currencies we can display are kept; USD is always 1. A response that lacks
+ * the majors is rejected so a broken feed can never wipe the table.
+ */
+async function fetchFxRates(): Promise<FxRates> {
+	const res = await fetch(`https://api.frankfurter.app/latest?from=USD&to=${SUPPORTED_CURRENCIES.filter((c) => c !== 'USD').join(',')}`, {
+		signal: AbortSignal.timeout(10_000),
+		headers: { accept: 'application/json' }
+	});
+	if (!res.ok) throw new Error(`frankfurter.app ${res.status}`);
+	const body = (await res.json()) as { rates?: Record<string, number>; date?: string };
+	const rates: Record<string, number> = { USD: 1 };
+	for (const [k, v] of Object.entries(body.rates ?? {})) {
+		if (isSupportedCurrency(k) && Number.isFinite(v) && v > 0) rates[k] = +Number(v).toFixed(6);
+	}
+	for (const must of ['EUR', 'GBP', 'AUD']) {
+		if (!rates[must]) throw new Error(`rate feed missing ${must} — table left unchanged`);
+	}
+	return { base: 'USD', rates, updated_at: new Date().toISOString(), source: `frankfurter.app (ECB) ${body.date ?? ''}`.trim() };
+}
 
 /**
  * Platform Controls — the switches, from the Admin Console.
@@ -39,7 +62,16 @@ export const GET: RequestHandler = async ({ locals }) => {
 		switches: {
 			credits_mode: { effective: creditsMode(), stored: s.credits_mode, source: creditsSource() },
 			activity_log: { effective: activityLogEnabled(), stored: s.activity_log, source: activitySource() },
-			activity_pepper: { set: activityPepper().length >= 32, source: process.env.ACTIVITY_PEPPER ? 'env' : 'database' }
+			activity_pepper: { set: activityPepper().length >= 32, source: process.env.ACTIVITY_PEPPER ? 'env' : 'database' },
+			signup_credits: { stored: s.signup_credits, usd: formatCredits(s.signup_credits, 'USD', s.fx_rates, 'en-US') },
+			display_currency_default: { stored: s.display_currency_default, supported: SUPPORTED_CURRENCIES },
+			fx_rates: {
+				base: s.fx_rates.base,
+				count: Object.keys(s.fx_rates.rates).length,
+				updated_at: s.fx_rates.updated_at,
+				source: s.fx_rates.source,
+				sample: ['EUR', 'GBP', 'AUD', 'CAD', 'INR', 'JPY'].map((c) => ({ currency: c, rate: s.fx_rates.rates[c] ?? null }))
+			}
 		},
 		cache: settingsStatus(),
 		migrations: { pending, applied: appliedSet.size, total: MIGRATION_ORDER.length },
@@ -74,8 +106,29 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		if (!['off', 'shadow', 'enforce'].includes(value as string)) {
 			return json({ success: false, error: 'credits_mode must be off | shadow | enforce' }, { status: 400 });
 		}
-	} else {
+	} else if (key === 'activity_log') {
 		value = body.value === true || body.value === 'true' || body.value === 'on';
+	} else if (key === 'signup_credits') {
+		const n = Number(body.value);
+		if (!Number.isInteger(n) || n < 0 || n > 1_000_000) {
+			return json({ success: false, error: 'signup_credits must be an integer between 0 and 1,000,000 (100 = $1.00)' }, { status: 400 });
+		}
+		value = n;
+	} else if (key === 'display_currency_default') {
+		const c = String(body.value ?? 'auto').toUpperCase();
+		if (c !== 'AUTO' && !isSupportedCurrency(c)) {
+			return json({ success: false, error: `display_currency_default must be auto or one of ${SUPPORTED_CURRENCIES.join(', ')}` }, { status: 400 });
+		}
+		value = c === 'AUTO' ? 'auto' : c;
+	} else if (key === 'fx_rates') {
+		if (body.refresh !== true) return json({ success: false, error: 'fx_rates can only be refreshed (refresh: true) from the rate source' }, { status: 400 });
+		try {
+			value = await fetchFxRates();
+		} catch (e) {
+			return json({ success: false, error: `Rate refresh failed: ${(e as Error).message}` }, { status: 502 });
+		}
+	} else {
+		return json({ success: false, error: 'Unsupported key' }, { status: 400 });
 	}
 
 	const before = { ...getSettings() };
@@ -89,8 +142,8 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		actorKind: 'admin',
 		meta: {
 			key,
-			from: key === 'activity_pepper' ? '(secret)' : String((before as any)[key]),
-			to: key === 'activity_pepper' ? '(rotated)' : String(value),
+			from: key === 'activity_pepper' ? '(secret)' : key === 'fx_rates' ? String((before as any)[key]?.updated_at ?? 'seed') : String((before as any)[key]),
+			to: key === 'activity_pepper' ? '(rotated)' : key === 'fx_rates' ? String((value as FxRates).source) : String(value),
 			note
 		}
 	});
@@ -98,7 +151,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	return json({
 		success: true,
 		key,
-		stored: key === 'activity_pepper' ? '(rotated)' : (after as any)[key],
+		stored: key === 'activity_pepper' ? '(rotated)' : key === 'fx_rates' ? `${Object.keys((after as any).fx_rates.rates).length} rates · ${(after as any).fx_rates.source}` : (after as any)[key],
 		effective: key === 'credits_mode' ? creditsMode() : key === 'activity_log' ? activityLogEnabled() : undefined,
 		source: key === 'credits_mode' ? creditsSource() : key === 'activity_log' ? activitySource() : undefined
 	});

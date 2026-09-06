@@ -1,12 +1,13 @@
 import type { LayoutServerLoad } from './$types';
 import { redirect } from '@sveltejs/kit';
 import { env } from '$env/dynamic/public';
-import { env as privateEnv } from '$env/dynamic/private';
 import { checkConfigStatus } from '$lib/server/config-check';
 import { isPlatformAdmin as checkPlatformAdmin } from '$lib/server/platform-admin';
 import { creditsMode } from '$lib/server/flags';
+import { getSettings } from '$lib/server/settings';
+import { resolveDisplayCurrency, creditsToAmount, formatCredits, localeFromAcceptLanguage } from '$lib/money';
 
-export const load: LayoutServerLoad = async ({ locals }) => {
+export const load: LayoutServerLoad = async ({ locals, request }) => {
 	const supabaseUrl = env.PUBLIC_SUPABASE_URL ?? '';
 	const isPlaceholder = !supabaseUrl || supabaseUrl.includes('placeholder');
 
@@ -122,18 +123,45 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 		// /admin and the Model Manager. Fails closed inside the helper.
 		const isPlatformAdmin = locals.supabase ? await checkPlatformAdmin(locals.supabase, user) : false;
 
-		// Credit balance for the top-bar pill. RLS lets a user read their own
-		// wallet row; a workspace SEAT sees no row (the owner is billed) → null.
-		// Off = no pill, no query.
+		// Credit balance for the sidebar pill, shown as MONEY in the visitor's
+		// currency ("Credits $20.00"): saved preference → country header →
+		// Accept-Language → platform default → USD. Rates come from the stored
+		// FX table (display only; the wallet is always USD cents). RLS lets a
+		// user read their own wallet; no row yet = $0.00. Off = no pill, no query.
 		const mode = creditsMode();
-		let credits: { balance: number; mode: string; billing_mode: string } | null = null;
+		let credits: {
+			balance: number;
+			mode: string;
+			billing_mode: string;
+			currency: string;
+			amount: number;
+			formatted: string;
+			usd: string;
+		} | null = null;
 		if (mode !== 'off' && locals.supabase) {
-			const { data: wallet } = await locals.supabase
-				.from('credit_accounts')
-				.select('balance_credits, billing_mode')
-				.eq('user_id', user.id)
-				.maybeSingle();
-			if (wallet) credits = { balance: Number(wallet.balance_credits ?? 0), mode, billing_mode: wallet.billing_mode };
+			const [{ data: wallet }, { data: profile }] = await Promise.all([
+				locals.supabase.from('credit_accounts').select('balance_credits, billing_mode').eq('user_id', user.id).maybeSingle(),
+				locals.supabase.from('profiles').select('display_currency').eq('id', user.id).maybeSingle()
+			]);
+			const s = getSettings();
+			const acceptLanguage = request.headers.get('accept-language');
+			const currency = resolveDisplayCurrency({
+				preference: profile?.display_currency ?? null,
+				country: request.headers.get('cf-ipcountry'),
+				acceptLanguage,
+				platformDefault: s.display_currency_default
+			});
+			const locale = localeFromAcceptLanguage(acceptLanguage);
+			const balance = Number(wallet?.balance_credits ?? 0);
+			credits = {
+				balance,
+				mode,
+				billing_mode: wallet?.billing_mode ?? 'credits',
+				currency,
+				amount: creditsToAmount(balance, currency, s.fx_rates),
+				formatted: formatCredits(balance, currency, s.fx_rates, locale),
+				usd: formatCredits(balance, 'USD', s.fx_rates, 'en-US')
+			};
 		}
 
 		return {

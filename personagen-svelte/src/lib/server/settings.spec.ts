@@ -25,8 +25,24 @@ beforeEach(() => {
 
 describe('settings cache', () => {
 	it('defaults are all off before the first prime', () => {
-		expect(settings.getSettings()).toEqual({ credits_mode: 'off', activity_log: false, activity_pepper: '' });
+		expect(settings.getSettings()).toMatchObject({ credits_mode: 'off', activity_log: false, activity_pepper: '', signup_credits: 2000, display_currency_default: 'auto' });
+		expect(settings.getSettings().fx_rates.rates.USD).toBe(1);
 		expect(settings.settingsStatus().primed).toBe(false);
+	});
+
+	it('coerces money settings defensively', async () => {
+		settings._setSettingsClientFactory(() =>
+			client([
+				{ key: 'signup_credits', value: -5, updated_at: 't' },
+				{ key: 'display_currency_default', value: 'aud', updated_at: 't' },
+				{ key: 'fx_rates', value: { base: 'USD', rates: { AUD: 1.5 }, updated_at: 'x', source: 'test' }, updated_at: 't' }
+			])
+		);
+		await settings.refreshSettings();
+		const s = settings.getSettings();
+		expect(s.signup_credits).toBe(0);
+		expect(s.display_currency_default).toBe('auto');
+		expect(s.fx_rates.rates).toEqual({ USD: 1, AUD: 1.5 });
 	});
 
 	it('refresh loads and coerces rows; unknown keys ignored', async () => {
@@ -39,7 +55,7 @@ describe('settings cache', () => {
 			])
 		);
 		await settings.refreshSettings();
-		expect(settings.getSettings()).toEqual({ credits_mode: 'shadow', activity_log: true, activity_pepper: 'p'.repeat(40) });
+		expect(settings.getSettings()).toMatchObject({ credits_mode: 'shadow', activity_log: true, activity_pepper: 'p'.repeat(40) });
 		expect(settings.settingsStatus().primed).toBe(true);
 		expect(settings.settingsStatus().lastError).toBeNull();
 	});

@@ -9,7 +9,11 @@
 		credits_mode: { effective: 'off' | 'shadow' | 'enforce'; stored: string; source: 'env' | 'database' | 'default' };
 		activity_log: { effective: boolean; stored: boolean; source: 'env' | 'database' };
 		activity_pepper: { set: boolean; source: 'env' | 'database' };
+		signup_credits: { stored: number; usd: string };
+		display_currency_default: { stored: string; supported: string[] };
+		fx_rates: { base: string; count: number; updated_at: string | null; source: string | null; sample: Array<{ currency: string; rate: number | null }> };
 	};
+	let signupCreditsDraft = $state<number | null>(null);
 	let controls = $state<{
 		switches: Switches;
 		cache: { primed: boolean; lastRefreshAt: string | null; lastError: string | null; updatedAt: Record<string, string> };
@@ -36,11 +40,13 @@
 		}
 	}
 
-	async function setSwitch(key: 'credits_mode' | 'activity_log' | 'activity_pepper', value?: unknown) {
+	async function setSwitch(key: 'credits_mode' | 'activity_log' | 'activity_pepper' | 'signup_credits' | 'display_currency_default' | 'fx_rates', value?: unknown) {
 		const label =
 			key === 'activity_pepper'
 				? 'Rotate the activity hashing secret? Cross-day correlation of IP hashes breaks for today (by design).'
-				: `Set ${key} → ${String(value)}. Why?`;
+				: key === 'fx_rates'
+					? 'Refresh display exchange rates from the ECB feed (display only — wallets stay in USD cents)?'
+					: `Set ${key} → ${String(value)}. Why?`;
 		const note = window.prompt(`${label}\n\nA note is required (it is the audit trail).`);
 		if (note === null) return;
 		if (!note.trim()) return flash('A note is required.');
@@ -49,11 +55,12 @@
 			const res = await fetch('/api/admin/settings', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify(key === 'activity_pepper' ? { key, rotate: true, note } : { key, value, note })
+				body: JSON.stringify(key === 'activity_pepper' ? { key, rotate: true, note } : key === 'fx_rates' ? { key, refresh: true, note } : { key, value, note })
 			});
 			const body = await res.json().catch(() => ({}));
 			if (!res.ok || !body.success) throw new Error(body.error || `HTTP ${res.status}`);
-			flash(key === 'activity_pepper' ? 'Pepper rotated' : `${key} = ${body.stored}${body.source === 'env' ? ' (stored — env override still wins)' : ''}`);
+			flash(key === 'activity_pepper' ? 'Pepper rotated' : key === 'fx_rates' ? `Rates refreshed: ${body.stored}` : `${key} = ${body.stored}${body.source === 'env' ? ' (stored — env override still wins)' : ''}`);
+			signupCreditsDraft = null;
 			await loadControls();
 			if (platformLoaded) await loadPlatform();
 		} catch (e) {
@@ -469,6 +476,52 @@
 						</p>
 						<div class="filter-row">
 							<button class="filter-btn" disabled={controlsBusy} onclick={() => setSwitch('activity_pepper')}>Rotate</button>
+						</div>
+					</div>
+
+					<div class="control">
+						<div class="control-head">
+							<strong>Welcome credits</strong>
+							<span class="mode-pill" class:mode-enforce={controls.switches.signup_credits.stored > 0} class:mode-off={controls.switches.signup_credits.stored === 0}>
+								{controls.switches.signup_credits.stored > 0 ? `${controls.switches.signup_credits.usd} per new account` : 'off'}
+							</span>
+						</div>
+						<p class="admin-hint">
+							Granted automatically the moment an account is created (any signup path), as an audited ledger row.
+							100 credits = $1.00 of estimated generation. Set 0 to disable. Because signup is open, keep this modest.
+						</p>
+						<div class="filter-row">
+							<input class="admin-input narrow" type="number" min="0" step="100" value={signupCreditsDraft ?? controls.switches.signup_credits.stored} oninput={(e) => (signupCreditsDraft = Number((e.target as HTMLInputElement).value))} aria-label="Welcome credits" />
+							<span class="admin-hint">= ${(((signupCreditsDraft ?? controls.switches.signup_credits.stored) || 0) / 100).toFixed(2)}</span>
+							<button class="filter-btn active" disabled={controlsBusy || signupCreditsDraft === null || signupCreditsDraft === controls.switches.signup_credits.stored} onclick={() => setSwitch('signup_credits', signupCreditsDraft)}>Save</button>
+						</div>
+					</div>
+
+					<div class="control">
+						<div class="control-head">
+							<strong>Currency display</strong>
+							<span class="mode-pill">{controls.switches.display_currency_default.stored === 'auto' ? 'auto (visitor country)' : controls.switches.display_currency_default.stored}</span>
+						</div>
+						<p class="admin-hint">
+							Balances are shown as money in each visitor's currency — from their saved preference, else their
+							country, else their browser language, else this default. Wallets are always kept in USD cents;
+							rates only change what is displayed.
+						</p>
+						<div class="filter-row">
+							<select class="admin-input" value={controls.switches.display_currency_default.stored} onchange={(e) => setSwitch('display_currency_default', (e.target as HTMLSelectElement).value)} disabled={controlsBusy} aria-label="Default currency">
+								<option value="auto">auto (visitor's country)</option>
+								{#each controls.switches.display_currency_default.supported as c (c)}
+									<option value={c}>{c}</option>
+								{/each}
+							</select>
+						</div>
+						<p class="admin-hint small">
+							Rates: {controls.switches.fx_rates.count} currencies · {controls.switches.fx_rates.source ?? 'seed'} · updated {controls.switches.fx_rates.updated_at ? when(controls.switches.fx_rates.updated_at) : 'never (seed table)'}
+							<br />
+							{controls.switches.fx_rates.sample.map((s) => `${s.currency} ${s.rate ?? '—'}`).join(' · ')}
+						</p>
+						<div class="filter-row">
+							<button class="filter-btn" disabled={controlsBusy} onclick={() => setSwitch('fx_rates')}>Refresh rates (ECB)</button>
 						</div>
 					</div>
 

@@ -830,15 +830,17 @@
 					<span class="sidebar-plan-dot"></span>
 					<span>{(data as any).badgeLabel ?? 'Personal account'}</span>
 					{#if (data as any).credits}
-						<span
+						<a
+							href="/settings?section=billing"
 							class="credit-pill"
-							class:low={(data as any).credits.balance <= 0}
+							class:low={(data as any).credits.balance <= 0 && (data as any).credits.billing_mode !== 'unmetered'}
 							title={(data as any).credits.billing_mode === 'unmetered'
 								? 'Complimentary account — generations are not charged'
-								: `${(data as any).credits.balance.toLocaleString()} credits ≈ $${((data as any).credits.balance / 100).toFixed(2)} of generation`}
+								: `${(data as any).credits.usd} of generation credit${(data as any).credits.currency !== 'USD' ? ` (shown in ${(data as any).credits.currency})` : ''}`}
 						>
-							{(data as any).credits.billing_mode === 'unmetered' ? '∞' : (data as any).credits.balance.toLocaleString()} cr
-						</span>
+							<span class="credit-pill-label">Credits</span>
+							<span class="credit-pill-amount">{(data as any).credits.billing_mode === 'unmetered' ? '∞' : (data as any).credits.formatted}</span>
+						</a>
 					{/if}
 				</div>
 			{/if}
@@ -2080,19 +2082,34 @@
 		font-variant-numeric: tabular-nums;
 		flex-shrink: 0;
 	}
-	/* Credit balance pill beside the account badge (only when CREDITS_ENFORCE ≠ off). */
+	/* Wallet pill beside the account badge — "Credits $20.00" in the visitor's
+	   currency (only when credits mode ≠ off). */
 	.credit-pill {
 		margin-left: auto;
-		font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-		font-size: 0.7rem;
-		padding: 0.1rem 0.45rem;
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
+		font-size: 0.72rem;
+		padding: 0.15rem 0.6rem;
 		border-radius: 999px;
-		background: rgba(34, 197, 94, 0.14);
-		border: 1px solid rgba(34, 197, 94, 0.35);
+		background: rgba(255, 255, 255, 0.04);
+		border: 1px solid rgba(255, 255, 255, 0.14);
 		white-space: nowrap;
+		text-decoration: none;
+		color: inherit;
 	}
-	.credit-pill.low {
-		background: rgba(239, 68, 68, 0.14);
-		border-color: rgba(239, 68, 68, 0.4);
+	.credit-pill:hover {
+		border-color: rgba(255, 255, 255, 0.3);
+	}
+	.credit-pill-label {
+		opacity: 0.75;
+	}
+	.credit-pill-amount {
+		font-weight: 600;
+		color: #16a34a;
+		font-variant-numeric: tabular-nums;
+	}
+	.credit-pill.low .credit-pill-amount {
+		color: #ef4444;
 	}
 </style>

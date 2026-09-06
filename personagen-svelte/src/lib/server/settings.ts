@@ -17,6 +17,7 @@
 
 import { getServiceSupabase } from './service-supabase';
 import { onShutdown } from './lifecycle';
+import { FALLBACK_FX, type FxRates } from '$lib/money';
 
 export type CreditsModeSetting = 'off' | 'shadow' | 'enforce';
 
@@ -24,15 +25,24 @@ export interface PlatformSettings {
 	credits_mode: CreditsModeSetting;
 	activity_log: boolean;
 	activity_pepper: string;
+	/** Credits granted to every new account at signup; 0 = off. */
+	signup_credits: number;
+	/** 'auto' (visitor's country/locale) or an ISO-4217 code. */
+	display_currency_default: string;
+	/** USD-based display rates (display only — the wallet is USD cents). */
+	fx_rates: FxRates;
 }
 
 export const DEFAULT_SETTINGS: PlatformSettings = {
 	credits_mode: 'off',
 	activity_log: false,
-	activity_pepper: ''
+	activity_pepper: '',
+	signup_credits: 2000,
+	display_currency_default: 'auto',
+	fx_rates: FALLBACK_FX
 };
 
-export const SETTING_KEYS = ['credits_mode', 'activity_log', 'activity_pepper'] as const;
+export const SETTING_KEYS = ['credits_mode', 'activity_log', 'activity_pepper', 'signup_credits', 'display_currency_default', 'fx_rates'] as const;
 export type SettingKey = (typeof SETTING_KEYS)[number];
 
 const REFRESH_MS = 15_000;
@@ -70,6 +80,19 @@ function coerce(key: string, raw: unknown): unknown {
 			return raw === true || raw === 'true';
 		case 'activity_pepper':
 			return typeof raw === 'string' ? raw : '';
+		case 'signup_credits': {
+			const n = Number(raw);
+			return Number.isInteger(n) && n >= 0 ? n : 0;
+		}
+		case 'display_currency_default':
+			return typeof raw === 'string' && (raw === 'auto' || /^[A-Z]{3}$/.test(raw)) ? raw : 'auto';
+		case 'fx_rates': {
+			const r = raw as any;
+			if (r && typeof r === 'object' && r.rates && typeof r.rates === 'object' && Object.keys(r.rates).length > 0) {
+				return { base: 'USD', rates: { USD: 1, ...r.rates }, updated_at: r.updated_at ?? null, source: r.source ?? null } as FxRates;
+			}
+			return FALLBACK_FX;
+		}
 		default:
 			return raw;
 	}

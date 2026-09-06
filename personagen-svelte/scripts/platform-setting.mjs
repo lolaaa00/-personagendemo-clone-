@@ -7,6 +7,9 @@
 //   node scripts/platform-setting.mjs --as admin@example.com --note "why" credits_mode shadow
 //   node scripts/platform-setting.mjs --as admin@example.com --note "why" activity_log on
 //   node scripts/platform-setting.mjs --as admin@example.com --note "why" activity_pepper --rotate
+//   node scripts/platform-setting.mjs --as admin@example.com --note "why" signup_credits 2000
+//   node scripts/platform-setting.mjs --as admin@example.com --note "why" display_currency_default auto|AUD
+//   node scripts/platform-setting.mjs --as admin@example.com --note "why" fx_rates --refresh   (ECB via frankfurter.app)
 //
 // The pepper's value is never printed. Env vars of the same name on the host
 // still override stored values — the console shows which one is in effect.
@@ -90,6 +93,29 @@ if (key === 'activity_pepper') {
 	valueJson = JSON.stringify(rawValue === 'on' || rawValue === 'true');
 } else if (key === 'credits_mode') {
 	valueJson = JSON.stringify(String(rawValue).toLowerCase());
+} else if (key === 'signup_credits') {
+	valueJson = JSON.stringify(Number(rawValue));
+} else if (key === 'display_currency_default') {
+	valueJson = JSON.stringify(String(rawValue).toLowerCase() === 'auto' ? 'auto' : String(rawValue).toUpperCase());
+} else if (key === 'fx_rates') {
+	if (!args.includes('--refresh')) {
+		console.error('fx_rates can only be refreshed from the rate feed (--refresh)');
+		process.exit(1);
+	}
+	const want = ['EUR','GBP','AUD','NZD','CAD','SGD','INR','JPY','CHF','SEK','NOK','DKK','PLN','CZK','HUF','ZAR','BRL','MXN','HKD','KRW','PHP','MYR','THB','IDR','TRY','ILS'];
+	const res = await fetch(`https://api.frankfurter.app/latest?from=USD&to=${want.join(',')}`, { signal: AbortSignal.timeout(10000) });
+	if (!res.ok) {
+		console.error(`rate feed ${res.status}`);
+		process.exit(1);
+	}
+	const body = await res.json();
+	const rates = { USD: 1 };
+	for (const [k, v] of Object.entries(body.rates ?? {})) if (Number.isFinite(v) && v > 0) rates[k] = +Number(v).toFixed(6);
+	if (!rates.EUR || !rates.GBP || !rates.AUD) {
+		console.error('rate feed missing majors — table left unchanged');
+		process.exit(1);
+	}
+	valueJson = JSON.stringify({ base: 'USD', rates, updated_at: new Date().toISOString(), source: `frankfurter.app (ECB) ${body.date ?? ''}`.trim() });
 } else {
 	console.error(`unknown key ${key}`);
 	process.exit(1);

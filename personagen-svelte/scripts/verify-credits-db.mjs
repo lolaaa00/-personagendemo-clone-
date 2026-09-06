@@ -73,15 +73,22 @@ VALUES ('00000000-0000-4000-8000-00000000c0de', '00000000-0000-0000-0000-0000000
 
 DO $$
 DECLARE u UUID := '00000000-0000-4000-8000-00000000c0de'; b BIGINT; d BIGINT; raised BOOLEAN; ev UUID; ledger_sum BIGINT;
+        welcome BIGINT := COALESCE((SELECT (value #>> '{}')::bigint FROM public.platform_settings WHERE key = 'signup_credits'), 0);
 BEGIN
-  -- 1. first touch creates the wallet
+  -- 0. the signup trigger granted welcome credits to the throwaway user above
+  SELECT balance_credits INTO b FROM public.credit_accounts WHERE user_id = u;
+  INSERT INTO _v SELECT '0 signup trigger grants welcome credits (platform_settings.signup_credits)',
+    COALESCE(b, 0) = welcome AND (welcome = 0 OR EXISTS (SELECT 1 FROM public.credit_ledger WHERE user_id = u AND kind = 'grant' AND note LIKE 'welcome%')),
+    'welcome=' || welcome || ' balance=' || COALESCE(b, 0);
+
+  -- 1. a grant lands on top of the welcome balance
   b := public.credit_apply(u, 500, 'grant', 'verify grant', NULL);
-  INSERT INTO _v SELECT '1 grant creates wallet, balance 500', b = 500 AND EXISTS (SELECT 1 FROM public.credit_accounts WHERE user_id = u), 'balance=' || b;
+  INSERT INTO _v SELECT '1 grant adds 500 on top of welcome credits', b = welcome + 500 AND EXISTS (SELECT 1 FROM public.credit_accounts WHERE user_id = u), 'balance=' || b;
 
   -- 2. set targets a balance; ledger delta = target - previous
   b := public.credit_apply(u, 300, 'set', 'verify set', NULL);
   SELECT delta INTO d FROM public.credit_ledger WHERE user_id = u ORDER BY seq DESC LIMIT 1;
-  INSERT INTO _v SELECT '2 set → 300, ledger delta -200 (latest by seq)', b = 300 AND d = -200, 'balance=' || b || ' delta=' || d;
+  INSERT INTO _v SELECT '2 set → 300, ledger delta = 300 − previous (latest by seq)', b = 300 AND d = 300 - (welcome + 500), 'balance=' || b || ' delta=' || d;
 
   -- 3. insufficient funds RAISE (fail closed)
   raised := false;

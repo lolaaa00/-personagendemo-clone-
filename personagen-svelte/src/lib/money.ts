@@ -1,0 +1,153 @@
+/**
+ * Money display for credits — client-safe (no server imports).
+ *
+ * Credits are an internal unit: 1 credit = 1 US cent of estimated generation
+ * cost. Users never see "credits"; they see a money amount in THEIR currency,
+ * the way any wallet-style SaaS does ("Credits $20.00"). The currency comes
+ * from, in order: the user's saved preference → the visiting browser's country
+ * (Cloudflare header) → the Accept-Language locale → USD.
+ *
+ * Conversion uses the platform's stored FX table (platform_settings.fx_rates,
+ * refreshed by an admin from the console). Rates are display-only: the wallet
+ * itself is always USD cents, so a stale rate can never change what is charged.
+ */
+
+export type FxRates = { base: 'USD'; rates: Record<string, number>; updated_at: string | null; source: string | null };
+
+/** Seed table so display works before the first refresh. Approximate, 2026-09. */
+export const FALLBACK_FX: FxRates = {
+	base: 'USD',
+	rates: {
+		USD: 1,
+		EUR: 0.92,
+		GBP: 0.78,
+		AUD: 1.52,
+		NZD: 1.66,
+		CAD: 1.37,
+		SGD: 1.34,
+		INR: 84,
+		JPY: 150,
+		CHF: 0.88,
+		SEK: 10.6,
+		NOK: 10.8,
+		DKK: 6.9,
+		PLN: 3.95,
+		CZK: 23.2,
+		HUF: 365,
+		ZAR: 18.2,
+		BRL: 5.5,
+		MXN: 18.5,
+		AED: 3.67,
+		SAR: 3.75,
+		HKD: 7.8,
+		KRW: 1360,
+		PHP: 57,
+		MYR: 4.5,
+		THB: 35,
+		IDR: 15800,
+		VND: 25000,
+		TRY: 34,
+		ILS: 3.7,
+		NGN: 1600,
+		KES: 129,
+		EGP: 48,
+		ARS: 950,
+		CLP: 940,
+		COP: 4100
+	},
+	updated_at: null,
+	source: 'seed'
+};
+
+/** ISO 3166-1 alpha-2 → ISO 4217. Countries not listed fall back to USD. */
+const COUNTRY_CURRENCY: Record<string, string> = {
+	US: 'USD', PR: 'USD', EC: 'USD', SV: 'USD', PA: 'USD',
+	GB: 'GBP', IM: 'GBP', JE: 'GBP', GG: 'GBP',
+	AU: 'AUD', NZ: 'NZD', CA: 'CAD', SG: 'SGD', IN: 'INR', JP: 'JPY', CH: 'CHF', LI: 'CHF',
+	SE: 'SEK', NO: 'NOK', DK: 'DKK', PL: 'PLN', CZ: 'CZK', HU: 'HUF', ZA: 'ZAR', BR: 'BRL', MX: 'MXN',
+	AE: 'AED', SA: 'SAR', HK: 'HKD', KR: 'KRW', PH: 'PHP', MY: 'MYR', TH: 'THB', ID: 'IDR', VN: 'VND',
+	TR: 'TRY', IL: 'ILS', NG: 'NGN', KE: 'KES', EG: 'EGP', AR: 'ARS', CL: 'CLP', CO: 'COP',
+	// euro area
+	AT: 'EUR', BE: 'EUR', CY: 'EUR', DE: 'EUR', EE: 'EUR', ES: 'EUR', FI: 'EUR', FR: 'EUR', GR: 'EUR',
+	HR: 'EUR', IE: 'EUR', IT: 'EUR', LT: 'EUR', LU: 'EUR', LV: 'EUR', MT: 'EUR', NL: 'EUR', PT: 'EUR',
+	SI: 'EUR', SK: 'EUR', MC: 'EUR', SM: 'EUR', VA: 'EUR', AD: 'EUR', ME: 'EUR', XK: 'EUR'
+};
+
+export const SUPPORTED_CURRENCIES = Object.keys(FALLBACK_FX.rates);
+
+export function currencyForCountry(country: string | null | undefined): string | null {
+	if (!country) return null;
+	return COUNTRY_CURRENCY[country.toUpperCase()] ?? null;
+}
+
+/** "en-AU,en;q=0.9" → AUD; "de" (no region) → EUR is NOT assumed — null. */
+export function currencyForAcceptLanguage(header: string | null | undefined): string | null {
+	if (!header) return null;
+	for (const part of header.split(',')) {
+		const tag = part.split(';')[0].trim();
+		const region = tag.split(/[-_]/)[1];
+		const c = currencyForCountry(region);
+		if (c) return c;
+	}
+	return null;
+}
+
+export function isSupportedCurrency(code: string | null | undefined): code is string {
+	return !!code && Object.prototype.hasOwnProperty.call(FALLBACK_FX.rates, code.toUpperCase());
+}
+
+/**
+ * Resolve the display currency for a request.
+ *   preference (profile) → country header → Accept-Language → default ('auto' = USD)
+ */
+export function resolveDisplayCurrency(args: {
+	preference?: string | null;
+	country?: string | null;
+	acceptLanguage?: string | null;
+	platformDefault?: string | null;
+}): string {
+	const pref = args.preference?.toUpperCase();
+	if (isSupportedCurrency(pref)) return pref;
+	const byCountry = currencyForCountry(args.country);
+	if (byCountry) return byCountry;
+	const byLang = currencyForAcceptLanguage(args.acceptLanguage);
+	if (byLang) return byLang;
+	const def = args.platformDefault?.toUpperCase();
+	if (def && def !== 'AUTO' && isSupportedCurrency(def)) return def;
+	return 'USD';
+}
+
+export function rateFor(currency: string, fx: FxRates | null | undefined): number {
+	const table = fx?.rates && Object.keys(fx.rates).length ? fx.rates : FALLBACK_FX.rates;
+	const r = Number(table[currency.toUpperCase()]);
+	return Number.isFinite(r) && r > 0 ? r : 1;
+}
+
+/** Credits (USD cents) → amount in the display currency. */
+export function creditsToAmount(credits: number, currency: string, fx?: FxRates | null): number {
+	return (Number(credits) || 0) / 100 * rateFor(currency, fx);
+}
+
+/** Localised money string: 2 000 credits, AUD → "A$30.40"; JPY → "¥3,000". */
+export function formatMoney(amount: number, currency: string, locale?: string): string {
+	try {
+		return new Intl.NumberFormat(locale || undefined, {
+			style: 'currency',
+			currency,
+			currencyDisplay: 'narrowSymbol',
+			maximumFractionDigits: ['JPY', 'KRW', 'VND', 'IDR', 'HUF', 'CLP', 'COP'].includes(currency) ? 0 : 2
+		}).format(amount);
+	} catch {
+		return `${currency} ${amount.toFixed(2)}`;
+	}
+}
+
+export function formatCredits(credits: number, currency: string, fx?: FxRates | null, locale?: string): string {
+	return formatMoney(creditsToAmount(credits, currency, fx), currency, locale);
+}
+
+/** Best-effort Intl locale from Accept-Language (first tag). */
+export function localeFromAcceptLanguage(header: string | null | undefined): string | undefined {
+	const tag = header?.split(',')[0]?.split(';')[0]?.trim();
+	return tag && /^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/.test(tag) ? tag : undefined;
+}

@@ -30,5 +30,6 @@
 	["credits_migration.sql", "Credits — credit_accounts, credit_ledger, credit_apply(), subscriptions RLS lockdown"],
 	["credits_ledger_seq_migration.sql", "credit_ledger.seq — strict total order for ledger rows"],
 	["activity_log_migration.sql", "Activity log — user_activity_events (partitioned), user_presence, daily roll-up, admin_auth_events()"],
-	["platform_settings_migration.sql", "Platform settings — DB-backed operator switches (credits_mode, activity_log, activity_pepper) + history"]
+	["platform_settings_migration.sql", "Platform settings — DB-backed operator switches (credits_mode, activity_log, activity_pepper) + history"],
+	["welcome_credits_and_fx_migration.sql", "Welcome credits at signup (signup_credits), display currency + fx_rates settings, profiles.display_currency"]
 ]
