@@ -531,7 +531,7 @@ Platform: ${bp.platform || platform}
 				// Resolve image providers once for the whole batch — same per-user
 				// key resolution the rest of the pipeline uses (user's saved
 				// OpenRouter/fal keys first, env keys as the fallback).
-				const { orKey, falKey } = await resolveImageKeys(locals.supabase, session.user.id);
+				const { orKey, falKey, orRoutes } = await resolveImageKeys(locals.supabase, session.user.id);
 				if (!orKey && !falKey) {
 					return json(
 						{
@@ -584,7 +584,9 @@ Output ONLY the JSON.`;
 								// Generate a unique UGC image for this copy — no product-photo fallback
 								const gen = await meteredCall(
 									{ supabase: locals.supabase, userId: session.user.id },
-									() => generateUgcImage(parsed.ugc_broll_prompt, orKey, falKey),
+									// Positional defaults kept explicit so the registry-resolved t2i route
+									// lands in the trailing slot without changing model/aspect/people.
+									() => generateUgcImage(parsed.ugc_broll_prompt, orKey, falKey, undefined, '3:4', true, orRoutes.t2i),
 									{
 										estimateUsd: meteringPriceOf('fal', 'image', 'nano'),
 										event: (r) => ({ provider: r.provider, operation: 'image', model: r.model, usd: meteringPriceOf(r.provider, 'image', r.provider === 'fal' ? 'nano' : undefined) })

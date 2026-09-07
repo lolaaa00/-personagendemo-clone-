@@ -58,6 +58,7 @@ import {
 	type KeySource
 } from '$lib/server/credits';
 import { creditsMode } from '$lib/server/flags';
+import { loadRegistry, openRouterRoute, type RegistryRow } from '$lib/server/model-registry';
 
 // Every provider call in this file gets a hard PER-REQUEST deadline. The queue
 // pollers below bound total job time, but only a per-request timeout stops a
@@ -231,17 +232,51 @@ export function safeParseJson(text: string): any {
 }
 
 /** Resolves the OpenRouter + fal.ai keys available for media generation. */
+/** One resolved OpenRouter image route: the model id that will RUN and the price that will be BILLED, from the same registry row. */
+export interface OpenRouterImageRoute {
+	id: string;
+	usd: number;
+	/** false = no active wired registry row; the compiled-in constant is in force (today's behaviour). */
+	fromRegistry: boolean;
+}
+export interface OpenRouterImageRoutes {
+	t2i: OpenRouterImageRoute;
+	edit: OpenRouterImageRoute;
+}
+
 export async function resolveImageKeys(
 	supabase: any,
 	userId: string
-): Promise<{ orKey: string | null; falKey: string | null }> {
+): Promise<{ orKey: string | null; falKey: string | null; orRoutes: OpenRouterImageRoutes }> {
 	const userOrKey = await getUserApiKey(supabase, userId, 'openrouter').catch(() => null);
 	const envOrKey = env.OPENROUTER_API_KEY?.trim();
 	const orKey =
 		userOrKey || (envOrKey && !envOrKey.includes('placeholder') ? envOrKey : null) || null;
 	const userFalKey = await getUserApiKey(supabase, userId, 'fal_ai').catch(() => null);
 	const falKey = userFalKey || env.FAL_API_KEY || process.env.FAL_API_KEY || null;
-	return { orKey, falKey };
+
+	// OpenRouter image routes come from the Model Registry so the id that runs
+	// and the price that lands in the ledger are read from ONE row — this is
+	// what stopped the image route drifting ~4x (code moved to Nano Banana 2,
+	// the static price table kept billing flux-schnell). Fails OPEN to the
+	// compiled-in constants: this selects a model, it is not a money gate, so a
+	// registry read error must never block a generation. An empty registry is
+	// byte-for-byte today's behaviour.
+	let rows: RegistryRow[] = [];
+	try {
+		rows = await loadRegistry(supabase, userId);
+	} catch (e) {
+		console.warn(
+			'[Content] Model registry unavailable — OpenRouter image routes fall back to constants:',
+			(e as Error).message
+		);
+	}
+	const fallbackUsd = priceOf('openrouter', 'image');
+	const orRoutes: OpenRouterImageRoutes = {
+		t2i: openRouterRoute(rows, 'image_t2i', UGC_IMAGE_MODEL_OPENROUTER, fallbackUsd),
+		edit: openRouterRoute(rows, 'image_edit', IMAGE_EDIT_MODEL_OPENROUTER, fallbackUsd)
+	};
+	return { orKey, falKey, orRoutes };
 }
 
 // ── fal helpers ─────────────────────────────────────────────────────────────
@@ -380,6 +415,8 @@ export interface UgcImageResult {
 	url: string;
 	provider: 'fal' | 'openrouter';
 	model: string;
+	/** Per-call USD from the registry route that produced this still, when one was in force. Absent → callers price from the static table as before. */
+	usd?: number;
 }
 
 export async function generateUgcImage(
@@ -388,7 +425,9 @@ export async function generateUgcImage(
 	falKey: string | null,
 	modelId?: string | null,
 	aspect: string = '3:4',
-	people: boolean = true
+	people: boolean = true,
+	/** Registry-resolved OpenRouter t2i route (resolveImageKeys().orRoutes.t2i). Omitted → the compiled-in constant, as before. */
+	orRoute?: OpenRouterImageRoute
 ): Promise<UgcImageResult> {
 	const imagePrompt = buildUgcImagePrompt(ugcPrompt, people);
 
@@ -427,7 +466,7 @@ export async function generateUgcImage(
 				'X-Title': 'PersonaGen'
 			},
 			body: JSON.stringify({
-				model: UGC_IMAGE_MODEL_OPENROUTER,
+				model: orRoute?.id ?? UGC_IMAGE_MODEL_OPENROUTER,
 				messages: [{ role: 'user', content }],
 				modalities: ['image', 'text']
 			})
@@ -440,7 +479,12 @@ export async function generateUgcImage(
 		const img = data.choices?.[0]?.message?.images?.[0];
 		const url: string | undefined = img?.image_url?.url || img?.url;
 		if (!url) throw new Error('OpenRouter image returned no URL');
-		return { url, provider: 'openrouter', model: UGC_IMAGE_MODEL_OPENROUTER };
+		return {
+			url,
+			provider: 'openrouter',
+			model: orRoute?.id ?? UGC_IMAGE_MODEL_OPENROUTER,
+			usd: orRoute?.usd
+		};
 	};
 
 	// One provider failing must not kill the slot when the other key exists —
@@ -1027,7 +1071,9 @@ async function openRouterImageEdit(
 	orKey: string,
 	userId: string,
 	prompt: string,
-	imageUrls: string[]
+	imageUrls: string[],
+	/** Registry-resolved OpenRouter edit route (resolveImageKeys().orRoutes.edit). Omitted → the compiled-in constant, as before. */
+	route?: OpenRouterImageRoute
 ): Promise<string> {
 	const content: any[] = [{ type: 'text', text: prompt }];
 	for (const url of imageUrls.slice(0, 4)) {
@@ -1042,7 +1088,7 @@ async function openRouterImageEdit(
 			'X-Title': 'PersonaGen'
 		},
 		body: JSON.stringify({
-			model: IMAGE_EDIT_MODEL_OPENROUTER,
+			model: route?.id ?? IMAGE_EDIT_MODEL_OPENROUTER,
 			messages: [{ role: 'user', content }],
 			modalities: ['image', 'text']
 		})
@@ -3222,6 +3268,8 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 		// OpenRouter media failover; pinning 'openrouter' skips fal media entirely.
 		// (Text/LLM routing is unaffected — this governs media only.)
 		const resolvedKeys = await resolveImageKeys(supabase, userId);
+		// Same identifier as refineUgcMedia so the cost sites below read one name.
+		const orRoutes = resolvedKeys.orRoutes;
 		const pref = input.providerPreference || 'auto';
 		const falKey = pref === 'openrouter' ? null : resolvedKeys.falKey;
 		const orKey = pref === 'fal' ? null : resolvedKeys.orKey;
@@ -3379,13 +3427,14 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 							orKey,
 							userId,
 							buildGraphicStillPrompt(cardText!, scenePrompt, brandVisualCtx),
-							[]
+							[],
+							orRoutes.edit
 						);
 						costEvents.push({
 							provider: 'openrouter',
 							operation: 'image',
-							model: IMAGE_EDIT_MODEL_OPENROUTER,
-							usd: priceOf('openrouter', 'image')
+							model: orRoutes.edit.id,
+							usd: orRoutes.edit.usd
 						});
 					} else {
 						throw e;
@@ -3396,13 +3445,14 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 					orKey,
 					userId,
 					buildGraphicStillPrompt(cardText!, scenePrompt, brandVisualCtx),
-					[]
+					[],
+					orRoutes.edit
 				);
 				costEvents.push({
 					provider: 'openrouter',
 					operation: 'image',
-					model: IMAGE_EDIT_MODEL_OPENROUTER,
-					usd: priceOf('openrouter', 'image')
+					model: orRoutes.edit.id,
+					usd: orRoutes.edit.usd
 				});
 			} else {
 				throw new Error(
@@ -3439,13 +3489,14 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 							orKey,
 							userId,
 							buildCompositeFallbackPrompt(scenePrompt, !!characterRef, !!productPhoto),
-							refs
+							refs,
+							orRoutes.edit
 						);
 						costEvents.push({
 							provider: 'openrouter',
 							operation: 'image',
-							model: IMAGE_EDIT_MODEL_OPENROUTER,
-							usd: priceOf('openrouter', 'image')
+							model: orRoutes.edit.id,
+							usd: orRoutes.edit.usd
 						});
 					} catch (editErr) {
 						console.warn(
@@ -3457,14 +3508,15 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 							null,
 							null,
 							'3:4',
-							wantCharacterRef
+							wantCharacterRef,
+							orRoutes.t2i
 						);
 						still = t2i.url;
 						costEvents.push({
 							provider: t2i.provider,
 							operation: 'image',
 							model: t2i.model,
-							usd: priceOf(t2i.provider, 'image')
+							usd: t2i.usd ?? priceOf(t2i.provider, 'image')
 						});
 					}
 				} else {
@@ -3480,35 +3532,36 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 					orKey,
 					userId,
 					buildCompositeFallbackPrompt(scenePrompt, !!characterRef, !!productPhoto),
-					refs
+					refs,
+					orRoutes.edit
 				);
 				costEvents.push({
 					provider: 'openrouter',
 					operation: 'image',
-					model: IMAGE_EDIT_MODEL_OPENROUTER,
-					usd: priceOf('openrouter', 'image')
+					model: orRoutes.edit.id,
+					usd: orRoutes.edit.usd
 				});
 			} catch (e) {
 				console.warn(
 					`[Composer] OpenRouter composite failed (${(e as Error).message.slice(0, 120)}) — flux fallback.`
 				);
-				const t2i = await generateUgcImage(scenePrompt, orKey, null, null, '3:4', wantCharacterRef);
+				const t2i = await generateUgcImage(scenePrompt, orKey, null, null, '3:4', wantCharacterRef, orRoutes.t2i);
 				still = t2i.url;
 				costEvents.push({
 					provider: t2i.provider,
 					operation: 'image',
 					model: t2i.model,
-					usd: priceOf(t2i.provider, 'image')
+					usd: t2i.usd ?? priceOf(t2i.provider, 'image')
 				});
 			}
 		} else {
-			const t2i = await generateUgcImage(scenePrompt, orKey, falKey, null, '3:4', wantCharacterRef);
+			const t2i = await generateUgcImage(scenePrompt, orKey, falKey, null, '3:4', wantCharacterRef, orRoutes.t2i);
 			still = t2i.url;
 			costEvents.push({
 				provider: t2i.provider,
 				operation: 'image',
 				model: t2i.model,
-				usd: priceOf(t2i.provider, 'image', t2i.provider === 'fal' ? 'flux' : undefined)
+				usd: t2i.usd ?? priceOf(t2i.provider, 'image', t2i.provider === 'fal' ? 'flux' : undefined)
 			});
 		}
 
@@ -3800,7 +3853,7 @@ export async function refineUgcMedia(input: RefineMediaInput): Promise<UgcConten
 	await assertWithinBudget(supabase, userId, input.agentId);
 	const costEvents: CostEvent[] = [];
 	try {
-		const { orKey, falKey } = await resolveImageKeys(supabase, userId);
+		const { orKey, falKey, orRoutes } = await resolveImageKeys(supabase, userId);
 		if (!falKey && !orKey) {
 			throw new Error('No media provider configured. Add a Fal AI or OpenRouter key in Settings.');
 		}
@@ -3928,13 +3981,14 @@ export async function refineUgcMedia(input: RefineMediaInput): Promise<UgcConten
 							orKey,
 							userId,
 							buildGraphicStillPrompt(cardText, scene),
-							[]
+							[],
+							orRoutes.edit
 						);
 						costEvents.push({
 							provider: 'openrouter',
 							operation: 'image',
-							model: IMAGE_EDIT_MODEL_OPENROUTER,
-							usd: priceOf('openrouter', 'image')
+							model: orRoutes.edit.id,
+							usd: orRoutes.edit.usd
 						});
 					} else {
 						throw e;
@@ -3945,13 +3999,14 @@ export async function refineUgcMedia(input: RefineMediaInput): Promise<UgcConten
 					orKey,
 					userId,
 					buildGraphicStillPrompt(cardText, scene),
-					[]
+					[],
+					orRoutes.edit
 				);
 				costEvents.push({
 					provider: 'openrouter',
 					operation: 'image',
-					model: IMAGE_EDIT_MODEL_OPENROUTER,
-					usd: priceOf('openrouter', 'image')
+					model: orRoutes.edit.id,
+					usd: orRoutes.edit.usd
 				});
 			} else {
 				throw new Error(
@@ -3978,13 +4033,14 @@ export async function refineUgcMedia(input: RefineMediaInput): Promise<UgcConten
 						orKey,
 						userId,
 						buildCompositeFallbackPrompt(scene, !!characterRef, !!productPhoto),
-						refs
+						refs,
+						orRoutes.edit
 					);
 					costEvents.push({
 						provider: 'openrouter',
 						operation: 'image',
-						model: IMAGE_EDIT_MODEL_OPENROUTER,
-						usd: priceOf('openrouter', 'image')
+						model: orRoutes.edit.id,
+						usd: orRoutes.edit.usd
 					});
 				} else {
 					throw e;
@@ -3996,22 +4052,23 @@ export async function refineUgcMedia(input: RefineMediaInput): Promise<UgcConten
 				orKey,
 				userId,
 				buildCompositeFallbackPrompt(scene, !!characterRef, !!productPhoto),
-				refs
+				refs,
+				orRoutes.edit
 			);
 			costEvents.push({
 				provider: 'openrouter',
 				operation: 'image',
-				model: IMAGE_EDIT_MODEL_OPENROUTER,
-				usd: priceOf('openrouter', 'image')
+				model: orRoutes.edit.id,
+				usd: orRoutes.edit.usd
 			});
 		} else {
-			const t2i = await generateUgcImage(scene, orKey, falKey, null, '3:4', refsPolicy.character);
+			const t2i = await generateUgcImage(scene, orKey, falKey, null, '3:4', refsPolicy.character, orRoutes.t2i);
 			still = t2i.url;
 			costEvents.push({
 				provider: t2i.provider,
 				operation: 'image',
 				model: t2i.model,
-				usd: priceOf(t2i.provider, 'image', t2i.provider === 'fal' ? 'flux' : undefined)
+				usd: t2i.usd ?? priceOf(t2i.provider, 'image', t2i.provider === 'fal' ? 'flux' : undefined)
 			});
 		}
 
