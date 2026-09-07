@@ -49,13 +49,32 @@ describe('money — conversion and formatting', () => {
 		expect(rateFor('NOPE', fx)).toBe(1); // unknown currency → 1:1, never NaN
 	});
 
+	it('rounds converted amounts to whole units and keeps the .00', () => {
+		const fx = { base: 'USD' as const, rates: { USD: 1, AUD: 1.3882, EUR: 0.86044, GBP: 0.7391 }, updated_at: 't', source: 'test' };
+		expect(formatCredits(2000, 'AUD', fx, 'en-AU')).toBe('$28.00'); // 27.76 → 28
+		expect(formatCredits(2000, 'EUR', fx, 'en-IE')).toBe('€17.00'); // 17.21 → 17
+		expect(formatCredits(2000, 'GBP', fx, 'en-GB')).toBe('£15.00'); // 14.78 → 15
+		expect(formatCredits(1958, 'USD', fx, 'en-US')).toBe('$20.00'); // 19.58 → 20
+	});
+
+	it('a balance under one unit keeps its cents so it never shows as zero', () => {
+		expect(formatCredits(42, 'USD', FALLBACK_FX, 'en-US')).toBe('$0.42');
+		expect(formatCredits(0, 'USD', FALLBACK_FX, 'en-US')).toBe('$0.00');
+		expect(formatCredits(60, 'USD', FALLBACK_FX, 'en-US')).toBe('$1.00'); // 0.60 rounds to 1
+	});
+
+	it('exact mode is available for ledgers and admin views', () => {
+		expect(formatCredits(1958, 'USD', FALLBACK_FX, 'en-US', { whole: false })).toBe('$19.58');
+	});
+
 	it('formats zero-decimal currencies without cents', () => {
 		const fx = { base: 'USD' as const, rates: { JPY: 150 }, updated_at: null, source: null };
 		expect(formatCredits(2000, 'JPY', fx, 'en-US')).toBe('¥3,000');
 	});
 
-	it('negative balances format as negative money (shadow mode can overdraw)', () => {
-		expect(formatCredits(-350, 'USD', FALLBACK_FX, 'en-US')).toBe('-$3.50');
+	it('negative balances round the same way (shadow mode can overdraw)', () => {
+		expect(formatCredits(-350, 'USD', FALLBACK_FX, 'en-US')).toBe('-$4.00');
+		expect(formatCredits(-350, 'USD', FALLBACK_FX, 'en-US', { whole: false })).toBe('-$3.50');
 	});
 
 	it('locale from Accept-Language is a valid BCP-47 tag or undefined', () => {

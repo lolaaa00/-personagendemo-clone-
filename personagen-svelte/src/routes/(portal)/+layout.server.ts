@@ -159,8 +159,9 @@ export const load: LayoutServerLoad = async ({ locals, request }) => {
 				billing_mode: wallet?.billing_mode ?? 'credits',
 				currency,
 				amount: creditsToAmount(balance, currency, s.fx_rates),
+				// Pill: whole units with ".00" (A$28.00). Tooltip: the exact USD balance.
 				formatted: formatCredits(balance, currency, s.fx_rates, locale),
-				usd: formatCredits(balance, 'USD', s.fx_rates, 'en-US')
+				usd: formatCredits(balance, 'USD', s.fx_rates, 'en-US', { whole: false })
 			};
 		}
 

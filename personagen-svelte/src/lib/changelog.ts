@@ -375,7 +375,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-05", hash: "d816686", type: "feat", category: "feature", scope: "activity", title: "pseudonymous activity log, presence, credit gate, admin timeline" },
 	{ date: "2026-09-05", hash: "3cd45eb", type: "docs", category: "docs", scope: "monetization", title: "record shipped state, go-live switches, deferred items" },
 	{ date: "2026-09-05", hash: "f9685c3", type: "feat", category: "publishing", scope: "admin", title: "database-backed platform switches + Admin Console restructure" },
-	{ date: "2026-09-06", hash: "c5f083d", type: "feat", category: "feature", scope: "billing", title: "wallet shown as money in the visitor's currency + welcome credits at signup" }
+	{ date: "2026-09-06", hash: "c5f083d", type: "feat", category: "feature", scope: "billing", title: "wallet shown as money in the visitor's currency + welcome credits at signup" },
+	{ date: "2026-09-06", hash: "980f83c", type: "fix", category: "fix", scope: "scripts", title: "grant-credits no longer drops a target equal to the --as admin email" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -671,10 +672,10 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 		id: "ef5a6b1", from: "2026-09-01", to: "2026-09-06",
 		category: "feature", categories: ["publishing","docs","feature","fix","generation"],
 		title: "New: platform API reference for programmatic/agentic use",
-		summary: "Platform API reference for programmatic/agentic use. Plus 12 more changes, touching getting posts onto your accounts and guides and explanations and things that were broken.",
+		summary: "Platform API reference for programmatic/agentic use. Plus 13 more changes, touching getting posts onto your accounts and guides and explanations and things that were broken.",
 		major: true, curated: false,
-		entries: [CHANGELOG[329], CHANGELOG[330], CHANGELOG[331], CHANGELOG[332], CHANGELOG[333], CHANGELOG[334], CHANGELOG[335], CHANGELOG[336], CHANGELOG[337], CHANGELOG[338], CHANGELOG[339], CHANGELOG[340], CHANGELOG[341]]
+		entries: [CHANGELOG[329], CHANGELOG[330], CHANGELOG[331], CHANGELOG[332], CHANGELOG[333], CHANGELOG[334], CHANGELOG[335], CHANGELOG[336], CHANGELOG[337], CHANGELOG[338], CHANGELOG[339], CHANGELOG[340], CHANGELOG[341], CHANGELOG[342]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "c5f083d";
+export const CHANGELOG_GENERATED_FROM = "980f83c";

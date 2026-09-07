@@ -128,22 +128,49 @@ export function creditsToAmount(credits: number, currency: string, fx?: FxRates 
 	return (Number(credits) || 0) / 100 * rateFor(currency, fx);
 }
 
-/** Localised money string: 2 000 credits, AUD → "A$30.40"; JPY → "¥3,000". */
-export function formatMoney(amount: number, currency: string, locale?: string): string {
+const ZERO_DECIMAL = ['JPY', 'KRW', 'VND', 'IDR', 'HUF', 'CLP', 'COP'];
+
+/** Round half AWAY from zero (money convention). Math.round pulls -3.5 to -3. */
+function roundHalfAway(n: number): number {
+	return Math.sign(n) * Math.round(Math.abs(n));
+}
+
+export interface FormatOptions {
+	/**
+	 * Round to whole units of the currency and still print the ".00" — the wallet
+	 * pill reads "A$28.00", not "A$27.76". A balance under one unit keeps its
+	 * cents so a non-zero wallet never displays as zero. Default true.
+	 */
+	whole?: boolean;
+}
+
+/** Localised money string: 2 000 credits, AUD → "A$28.00"; JPY → "¥3,000". */
+export function formatMoney(amount: number, currency: string, locale?: string, opts: FormatOptions = {}): string {
+	const whole = opts.whole ?? true;
+	const zeroDecimal = ZERO_DECIMAL.includes(currency.toUpperCase());
+	let value = amount;
+	let fraction = zeroDecimal ? 0 : 2;
+	if (whole && !zeroDecimal) {
+		const rounded = roundHalfAway(amount);
+		// Keep cents only when rounding would hide a real balance (|amount| < 0.5).
+		if (rounded !== 0 || amount === 0) value = rounded;
+	}
+	if (zeroDecimal) value = roundHalfAway(amount);
 	try {
 		return new Intl.NumberFormat(locale || undefined, {
 			style: 'currency',
 			currency,
 			currencyDisplay: 'narrowSymbol',
-			maximumFractionDigits: ['JPY', 'KRW', 'VND', 'IDR', 'HUF', 'CLP', 'COP'].includes(currency) ? 0 : 2
-		}).format(amount);
+			minimumFractionDigits: fraction,
+			maximumFractionDigits: fraction
+		}).format(value);
 	} catch {
-		return `${currency} ${amount.toFixed(2)}`;
+		return `${currency} ${value.toFixed(fraction)}`;
 	}
 }
 
-export function formatCredits(credits: number, currency: string, fx?: FxRates | null, locale?: string): string {
-	return formatMoney(creditsToAmount(credits, currency, fx), currency, locale);
+export function formatCredits(credits: number, currency: string, fx?: FxRates | null, locale?: string, opts: FormatOptions = {}): string {
+	return formatMoney(creditsToAmount(credits, currency, fx), currency, locale, opts);
 }
 
 /** Best-effort Intl locale from Accept-Language (first tag). */
