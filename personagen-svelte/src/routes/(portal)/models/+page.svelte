@@ -10,6 +10,11 @@
 		rows = [...data.rows];
 	});
 
+	// Truth layers computed server-side: where the pipeline consults each row
+	// (by the pipeline's own resolvers) and what actually ran (platform ledger).
+	const usage = $derived(data.usage ?? { byRowId: {}, consultedKinds: [], kindNotes: {} });
+	const ledger = $derived(data.ledger ?? { byRowId: {}, unlisted: [], windowDays: 30 });
+
 	// ── Tabs (kind) + sort, both deep-linkable ───────────────────────────────
 	type Kind = 'image_t2i' | 'image_edit' | 'video_i2v' | 'tts';
 	const KIND_TABS: Array<{ id: Kind; label: string }> = [
@@ -25,6 +30,15 @@
 	}
 	// Host = who we call (fal / OpenRouter). Lab = who trained it (Google, Kling…).
 	type Host = '' | 'fal' | 'openrouter';
+	// Origin = how the row got into this registry. Stored on the row (migration
+	// model_registry_origin), never inferred here.
+	type Origin = '' | 'seed' | 'fal_catalog' | 'openrouter_catalog' | 'manual';
+	const ORIGIN_LABEL: Record<string, string> = {
+		seed: 'Seeded',
+		fal_catalog: 'fal catalog',
+		openrouter_catalog: 'OpenRouter catalog',
+		manual: 'Manual'
+	};
 	const HOST_LABEL: Record<string, string> = { fal: 'fal', openrouter: 'OpenRouter' };
 	function hostOf(r: any): string {
 		return r.provider ?? 'fal';
@@ -40,10 +54,12 @@
 		readParam('kind', ['image_t2i', 'image_edit', 'video_i2v', 'tts'] as const, 'video_i2v')
 	);
 	$effect(() => syncParam('kind', kind, 'video_i2v'));
+	// Does anything in the pipeline read this tab's star/toggle at all?
+	const consulted = $derived((usage.consultedKinds as string[]).includes(kind));
 
-	type Sort = 'newest' | 'price' | 'quality' | 'value';
+	type Sort = 'newest' | 'price' | 'quality' | 'value' | 'origin';
 	let sort = $state<Sort>(
-		readParam('sort', ['newest', 'price', 'quality', 'value'] as const, 'newest')
+		readParam('sort', ['newest', 'price', 'quality', 'value', 'origin'] as const, 'newest')
 	);
 	$effect(() => syncParam('sort', sort, 'newest'));
 
@@ -63,6 +79,10 @@
 	let minQuality = $state<MinQ>(readParam('minq', ['any', '4', '6', '8'] as const, 'any'));
 	let host = $state<Host>(readParam('host', ['', 'fal', 'openrouter'] as const, ''));
 	$effect(() => syncParam('host', host, ''));
+	let origin = $state<Origin>(
+		readParam('origin', ['', 'seed', 'fal_catalog', 'openrouter_catalog', 'manual'] as const, '')
+	);
+	$effect(() => syncParam('origin', origin, ''));
 	$effect(() => syncParam('provider', provider, ''));
 	$effect(() => syncParam('age', ageFilter, 'any'));
 	$effect(() => syncParam('minq', minQuality, 'any'));
@@ -81,6 +101,7 @@
 	function matchesFilters(r: any): boolean {
 		if (provider && r.lab !== provider) return false;
 		if (host && hostOf(r) !== host) return false;
+		if (origin && (r.origin ?? 'seed') !== origin) return false;
 		if (ageFilter !== 'any') {
 			const d = daysOld(r);
 			if (d == null) return false;
@@ -97,10 +118,11 @@
 	}
 
 	let filtersActive = $derived(
-		host !== '' || provider !== '' || ageFilter !== 'any' || minQuality !== 'any'
+		host !== '' || origin !== '' || provider !== '' || ageFilter !== 'any' || minQuality !== 'any'
 	);
 	function clearFilters() {
 		host = '';
+		origin = '';
 		provider = '';
 		ageFilter = 'any';
 		minQuality = 'any';
@@ -116,6 +138,12 @@
 		const s = [...list];
 		if (sort === 'newest')
 			s.sort((a, b) => (b.released_at ?? '').localeCompare(a.released_at ?? ''));
+		else if (sort === 'origin')
+			s.sort(
+				(a, b) =>
+					String(a.origin ?? 'seed').localeCompare(String(b.origin ?? 'seed')) ||
+					(b.released_at ?? '').localeCompare(a.released_at ?? '')
+			);
 		else if (sort === 'price')
 			s.sort((a, b) => (a.price_usd ?? Infinity) - (b.price_usd ?? Infinity));
 		else if (sort === 'quality') s.sort((a, b) => (b.quality ?? 0) - (a.quality ?? 0));
@@ -128,7 +156,10 @@
 	);
 	let discovered = $derived(
 		[...rows.filter((r: any) => serves(r, kind) && !r.wired && matchesFilters(r))].sort((a, b) =>
-			(b.released_at ?? '').localeCompare(a.released_at ?? '')
+			sort === 'origin'
+				? String(a.origin ?? 'seed').localeCompare(String(b.origin ?? 'seed')) ||
+					(b.released_at ?? '').localeCompare(a.released_at ?? '')
+				: (b.released_at ?? '').localeCompare(a.released_at ?? '')
 		)
 	);
 	let wiredTotal = $derived(rows.filter((r: any) => serves(r, kind) && r.wired).length);
@@ -435,14 +466,15 @@
 			<h1>Model Manager</h1>
 			<p class="mm-sub">
 				The generation models your personas run on — how recent, what they cost, how they score.
-				Enabled models appear in the composer; the starred one is the default.
+				Each row says where the pipeline consults it (“Runs as”) and whether it has run
+				(“Ran”). A star or toggle only changes behaviour where a Runs-as tag shows it.
 			</p>
 		</div>
 		<div class="mm-header-actions">
-			{#if lastSync}<span class="mm-sync-note">Catalog checked {lastSync}</span>{/if}
+			{#if lastSync}<span class="mm-sync-note">Last new model found {lastSync}</span>{/if}
 			<button type="button" class="mm-sync-btn" onclick={runSync} disabled={syncing}>
 				{#if syncing}
-					<span class="spin" aria-hidden="true"></span> Checking fal catalog…
+					<span class="spin" aria-hidden="true"></span> Checking fal and OpenRouter catalogs…
 				{:else}
 					<svg
 						width="14"
@@ -466,6 +498,18 @@
 	{/if}
 
 	<div class="mm-toolbar">
+		{#if data.ledgerError}
+			<p class="mm-kind-note">Ledger reconciliation unavailable right now ({data.ledgerError}).</p>
+		{/if}
+		{#if ledger.unlisted.length}
+			<div class="mm-unlisted" role="status">
+				<b>Ran in the last {ledger.windowDays} days but is not in this registry:</b>
+				{#each ledger.unlisted as u (u.provider + u.model)}
+					<span class="mm-unlisted-item">{u.provider} · {u.model} · {u.runs}× · ${u.usd.toFixed(2)}</span>
+				{/each}
+				<span class="mm-dim">Sync the catalogs to list them. A model that runs unlisted is priced from compiled constants, not from this page.</span>
+			</div>
+		{/if}
 		<div class="mm-tabs" role="tablist" aria-label="Model type">
 			{#each KIND_TABS as tab (tab.id)}
 				<button
@@ -487,6 +531,13 @@
 				<option value="">All hosts</option>
 				<option value="fal">fal</option>
 				<option value="openrouter">OpenRouter</option>
+			</select>
+			<select bind:value={origin} aria-label="Filter by origin" class="mm-filter">
+				<option value="">All origins</option>
+				<option value="seed">Seeded</option>
+				<option value="fal_catalog">fal catalog</option>
+				<option value="openrouter_catalog">OpenRouter catalog</option>
+				<option value="manual">Manual</option>
 			</select>
 			<select bind:value={provider} aria-label="Filter by lab" class="mm-filter">
 				<option value="">All labs</option>
@@ -517,6 +568,7 @@
 				<option value="price">Cheapest first</option>
 				<option value="quality">Highest quality</option>
 				<option value="value">Best value (quality ÷ price)</option>
+				<option value="origin">By origin</option>
 			</select>
 		</label>
 	</div>
@@ -527,8 +579,10 @@
 		<div class="mm-section-text">
 			<h2 class="mm-section-title">Your roster</h2>
 			<p class="mm-section-sub">
-				Wired models with a tested adapter. Edit price, latency, and quality scores inline — the
-				value ranking updates as you type. Prices flow into composer estimates.
+				Wired models with a tested adapter. Edit price, latency and quality inline. “Runs as” is
+				computed by the same resolvers the pipeline calls; “Ran” is the platform ledger for the
+				last {ledger.windowDays} days.
+				{#if usage.kindNotes[kind]}<br /><b>{usage.kindNotes[kind]}</b>{/if}
 			</p>
 		</div>
 	</header>
@@ -537,6 +591,8 @@
 			<thead>
 				<tr>
 					<th>Model</th>
+					<th>Runs as</th>
+					<th>Ran · {ledger.windowDays}d</th>
 					<th>Released</th>
 					<th>Price / call</th>
 					<th>Latency</th>
@@ -563,10 +619,32 @@
 							{#if row.lab}<span class="mm-model-lab">{row.lab}</span>{/if}
 							<span class="mm-model-meta">
 								<span class="mm-host" data-host={hostOf(row)}>via {hostLabel(row)}</span>
+								<span class="mm-origin" data-origin={row.origin ?? 'seed'}>{ORIGIN_LABEL[row.origin ?? 'seed'] ?? row.origin}</span>
 								{#if modeLabels(row).length > 1}<span class="mm-modes" title="One model, several modes"
 										>{modeLabels(row).join(' · ')}</span
 									>{/if}
 							</span>
+						</td>
+						<td class="mm-usage-cell">
+							{#if (usage.byRowId[row.id] ?? []).length}
+								{#each usage.byRowId[row.id] as u (u.site)}
+									<span class="mm-usage" data-role={u.role}>{u.site}</span>
+								{/each}
+							{:else}
+								<span class="mm-dim" title={usage.kindNotes[kind] ?? 'No pipeline path resolves this row today'}
+									>not consulted</span
+								>
+							{/if}
+						</td>
+						<td class="mm-ran-cell">
+							{#if ledger.byRowId[row.id]}
+								<b title={ledger.byRowId[row.id].match === 'name' ? 'Matched by model name (fal events record a label, not an id)' : 'Matched by model id'}
+									>{ledger.byRowId[row.id].runs}×</b
+								>
+								<span class="mm-dim">${ledger.byRowId[row.id].usd.toFixed(2)}</span>
+							{:else}
+								<span class="mm-dim">0</span>
+							{/if}
 						</td>
 						<td class="mm-date-cell">
 							{#if row.released_at}
@@ -699,12 +777,16 @@
 								type="button"
 								class="mm-star"
 								class:starred={row.is_default}
-								title={row.is_default ? 'Current default' : 'Make default'}
+								title={!consulted
+									? 'Nothing in the pipeline reads this tab’s default'
+									: row.is_default
+										? 'Current default'
+										: 'Make default'}
 								aria-label={row.is_default
 									? `${row.label} is the default`
 									: `Make ${row.label} the default`}
 								aria-pressed={row.is_default}
-								disabled={row.is_default || row.status !== 'active' || savingId === row.id}
+								disabled={!consulted || row.is_default || row.status !== 'active' || savingId === row.id}
 								onclick={() => makeDefault(row)}
 							>
 								<svg
@@ -731,7 +813,8 @@
 								role="switch"
 								aria-checked={row.status === 'active'}
 								aria-label="Enable {row.label}"
-								disabled={savingId === row.id}
+								disabled={!consulted || savingId === row.id}
+								title={!consulted ? 'Nothing in the pipeline reads this tab' : undefined}
 								onclick={() => toggleEnabled(row)}
 							>
 								<span class="mm-switch-knob"></span>
@@ -740,7 +823,7 @@
 					</tr>
 				{/each}
 				{#if wired.length === 0}
-					<tr><td colspan="8" class="mm-empty-row">No wired models for this type yet.</td></tr>
+					<tr><td colspan="10" class="mm-empty-row">No wired models for this type yet.</td></tr>
 				{/if}
 			</tbody>
 		</table>
@@ -751,10 +834,11 @@
 		<span class="mm-section-mark" aria-hidden="true"></span>
 		<div class="mm-section-text">
 			<h2 class="mm-section-title">
-				{host ? `Discovered on ${HOST_LABEL[host] ?? host}` : 'Discovered on fal and OpenRouter'}
+				{host ? `Catalog · ${HOST_LABEL[host] ?? host}` : 'Catalog'}
 			</h2>
 			<p class="mm-section-sub">
-				Newest releases in this category, synced from the live catalog. <b>Probe</b> reads a
+				Everything this account has pulled from the fal and OpenRouter catalogs — each row says
+				where it came from and whether it has run. <b>Probe</b> reads a
 				model's request schema and builds its adapter automatically — once the adapter exists,
 				the model can swap into any roster slot. Models the pipeline can't drive stay staged,
 				with a field-by-field plan explaining why. OpenRouter models need no adapter — the
@@ -790,7 +874,7 @@
 								>{/if}
 						</span>
 						<span class="mm-model-id"
-							>{row.model_id}{#if row.lab}&ensp;·&ensp;{row.lab}{/if}&ensp;·&ensp;via {hostLabel(row)}{#if modeLabels(row).length > 1}&ensp;·&ensp;{modeLabels(row).join(' + ')}{/if}{#if row.released_at}&ensp;·&ensp;{row.released_at}{/if}</span
+							>{row.model_id}{#if row.lab}&ensp;·&ensp;{row.lab}{/if}&ensp;·&ensp;via {hostLabel(row)}&ensp;·&ensp;{ORIGIN_LABEL[row.origin ?? 'seed'] ?? row.origin}{#if ledger.byRowId[row.id]}&ensp;·&ensp;<b>ran {ledger.byRowId[row.id].runs}× in {ledger.windowDays}d</b>{/if}{#if modeLabels(row).length > 1}&ensp;·&ensp;{modeLabels(row).join(' + ')}{/if}{#if row.released_at}&ensp;·&ensp;{row.released_at}{/if}</span
 						>
 						{#if row.note}<span class="mm-discover-desc">{row.note}</span>{/if}
 						{#if row.probe && !row.probe.ok && row.probe.unknownRequired?.length}
@@ -1218,6 +1302,70 @@
 	.mm-or-note {
 		font-size: 0.72rem;
 		white-space: nowrap;
+	}
+
+	.mm-origin {
+		font-size: 0.64rem;
+		line-height: 1;
+		padding: 0.18rem 0.4rem;
+		border-radius: 999px;
+		border: 1px dashed var(--border);
+		color: var(--text-muted);
+		white-space: nowrap;
+	}
+
+	.mm-usage-cell {
+		min-width: 11rem;
+		max-width: 16rem;
+	}
+
+	.mm-usage {
+		display: inline-block;
+		font-size: 0.66rem;
+		line-height: 1.2;
+		padding: 0.16rem 0.45rem;
+		margin: 0 0.25rem 0.25rem 0;
+		border-radius: 999px;
+		background: color-mix(in srgb, var(--accent) 12%, transparent);
+		color: var(--text);
+	}
+
+	.mm-usage[data-role='default'] {
+		background: color-mix(in srgb, var(--accent) 22%, transparent);
+		font-weight: 600;
+	}
+
+	.mm-usage[data-role='route'] {
+		background: color-mix(in srgb, var(--cyan, var(--accent)) 16%, transparent);
+	}
+
+	.mm-ran-cell {
+		white-space: nowrap;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.mm-unlisted {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.4rem 0.6rem;
+		align-items: baseline;
+		margin: 0 0 1rem;
+		padding: 0.7rem 0.9rem;
+		border: 1px solid color-mix(in srgb, var(--warning, #d97706) 45%, transparent);
+		border-radius: 10px;
+		background: color-mix(in srgb, var(--warning, #d97706) 8%, transparent);
+		font-size: 0.82rem;
+	}
+
+	.mm-unlisted-item {
+		font-family: var(--font-mono, ui-monospace, monospace);
+		font-size: 0.74rem;
+	}
+
+	.mm-kind-note {
+		margin: 0 0 0.8rem;
+		font-size: 0.82rem;
+		color: var(--text-muted);
 	}
 
 	.mm-host[data-host='openrouter'] {

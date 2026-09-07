@@ -28,12 +28,16 @@ import {
 export type RegistryKind = ModelKind | 'tts';
 
 export type RegistryProvider = 'fal' | 'openrouter';
+/** Where a row came from. Travels with the row; the page never infers it. */
+export type RegistryOrigin = 'seed' | 'fal_catalog' | 'openrouter_catalog' | 'manual';
 
 export interface RegistryRow {
 	id: string;
 	user_id: string;
 	/** Which API serves this model — decides the call adapter and the sync that owns it. */
 	provider: RegistryProvider;
+
+	origin: RegistryOrigin;
 	model_id: string;
 	/** Primary mode — display, grouping and default selection. */
 	kind: RegistryKind;
@@ -127,6 +131,7 @@ const WIRED_SEED: Record<
 
 const TTS_SEED: Omit<RegistryRow, 'id' | 'user_id' | 'created_at' | 'updated_at'> = {
 	provider: 'fal',
+	origin: 'seed',
 	model_id: 'fal-ai/elevenlabs/tts/turbo-v2.5',
 	kind: 'tts',
 	kinds: ['tts'],
@@ -209,6 +214,7 @@ export async function loadRegistry(
 			size_param: m.sizeParam ?? null,
 			probe: null as Record<string, unknown> | null,
 			note: m.caveat ? `${m.note} ⚠ ${m.caveat}` : m.note,
+			origin: 'seed' as RegistryOrigin,
 			discovered_at: null as string | null
 		};
 	});
@@ -277,7 +283,11 @@ export function servesKind(row: RegistryRow, kind: RegistryKind): boolean {
 }
 
 export function effectiveOptions(rows: RegistryRow[], kind: ModelKind): ModelOption[] {
-	const active = rows.filter((r) => servesKind(r, kind) && r.wired && r.status === 'active');
+	// fal call sites only: ModelOption.provider is 'fal' and these options are
+	// posted to fal endpoints. OpenRouter rows are routed by openRouterRoute().
+	const active = rows.filter(
+		(r) => r.provider !== 'openrouter' && servesKind(r, kind) && r.wired && r.status === 'active'
+	);
 	if (active.length === 0) return modelsFor(kind);
 	return active.map(rowToOption).sort((a, b) => a.usd - b.usd);
 }
@@ -296,7 +306,12 @@ export function effectiveResolve(
 	const found = requested ? options.find((m) => m.id === requested) : undefined;
 	if (found) return found;
 	const def = rows.find(
-		(r) => servesKind(r, kind) && r.wired && r.status === 'active' && r.is_default
+		(r) =>
+			r.provider !== 'openrouter' &&
+			servesKind(r, kind) &&
+			r.wired &&
+			r.status === 'active' &&
+			r.is_default
 	);
 	if (def) {
 		const opt = options.find((m) => m.id === def.model_id);
@@ -513,6 +528,7 @@ export async function syncFromOpenRouter(
 				size_param: null,
 				probe: null,
 				note: null,
+				origin: 'openrouter_catalog' as RegistryOrigin,
 				discovered_at: new Date().toISOString()
 			});
 			result.discovered++;
@@ -730,6 +746,7 @@ export async function syncFromFal(
 				wired: false,
 				deprecated,
 				note: item?.shortDescription ? String(item.shortDescription).slice(0, 300) : null,
+				origin: 'fal_catalog' as RegistryOrigin,
 				discovered_at: new Date().toISOString()
 			});
 		}
