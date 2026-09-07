@@ -58,6 +58,21 @@ export const GET: RequestHandler = async ({ locals }) => {
 		}
 	}
 
+	// Schema shape the billing path writes: every optional column of the widest
+	// generation_events insert must be visible THROUGH PostgREST (a column that
+	// exists in Postgres but not in the REST schema cache still fails inserts).
+	if (isConfigured) {
+		try {
+			const { error } = await getServiceSupabase()
+				.from('generation_events')
+				.select('asset_url, billed_user_id, key_source, credits')
+				.limit(0);
+			checks.schema = error ? `degraded: ${error.message.slice(0, 100)}` : 'ok';
+		} catch (e) {
+			checks.schema = `error: ${(e as Error).message}`;
+		}
+	}
+
 	// Billing + observability switches and the activity queue's loss counter —
 	// the system says when it is blind instead of pretending.
 	checks.credits = `${creditsMode()} (${creditsSource()})`;
