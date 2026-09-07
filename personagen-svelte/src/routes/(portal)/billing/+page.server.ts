@@ -22,7 +22,7 @@ export const load: PageServerLoad = async ({ locals, request, url }) => {
 	const acceptLanguage = request.headers.get('accept-language');
 	const locale = localeFromAcceptLanguage(acceptLanguage);
 
-	const [{ data: wallet }, { data: profile }, { data: ledger }] = await Promise.all([
+	const [{ data: wallet }, { data: profile }, { data: ledger }, { data: wsWallets }] = await Promise.all([
 		locals.supabase.from('credit_accounts').select('balance_credits, billing_mode, updated_at').eq('user_id', user.id).maybeSingle(),
 		locals.supabase.from('profiles').select('display_currency').eq('id', user.id).maybeSingle(),
 		locals.supabase
@@ -30,7 +30,10 @@ export const load: PageServerLoad = async ({ locals, request, url }) => {
 			.select('seq, delta, kind, balance_after, note, created_at')
 			.eq('user_id', user.id)
 			.order('seq', { ascending: false })
-			.limit(40)
+			.limit(40),
+		// Workspaces this user belongs to, with the OWNER's balance (owner pays):
+		// SECURITY DEFINER function, balance + mode only, never the owner's ledger.
+		locals.supabase.rpc('workspace_wallets')
 	]);
 
 	const currency = resolveDisplayCurrency({
@@ -70,6 +73,16 @@ export const load: PageServerLoad = async ({ locals, request, url }) => {
 			after: formatCredits(Number(r.balance_after), currency, s.fx_rates, locale, { whole: false })
 		})),
 		status: url.searchParams.get('status'),
-		markup
+		markup,
+		workspaces: ((wsWallets as any[]) ?? [])
+			.filter((w) => w.owner_id !== user.id)
+			.map((w) => ({
+				id: w.workspace_id,
+				name: w.workspace_name,
+				role: w.role,
+				billingMode: w.billing_mode,
+				balance: Number(w.balance_credits ?? 0),
+				formatted: w.billing_mode === 'unmetered' ? '∞' : formatCredits(Number(w.balance_credits ?? 0), currency, s.fx_rates, locale, { whole: false })
+			}))
 	};
 };

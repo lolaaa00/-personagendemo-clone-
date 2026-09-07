@@ -11,7 +11,7 @@
  * the try/finally around recordCostEvents in content/generate.ts.
  */
 
-import { creditsMode } from './flags';
+import { creditsMode, creditMarkup } from './flags';
 import { env } from '$env/dynamic/private';
 import { assertCreditsAvailable, resolveBillingAccount } from './credits';
 
@@ -117,7 +117,11 @@ async function seatCapExceeded(
 			);
 			return null;
 		}
-		const spent = (rows ?? []).reduce((s: number, r: any) => s + (Number(r.est_cost) || 0), 0);
+		// The owner sets and reads the limit in the same money the wallet shows:
+		// retail (provider estimate × markup). Raw provider cost would silently
+		// let a seat spend markup-times more of the owner's wallet than the cap.
+		const markup = creditMarkup();
+		const spent = (rows ?? []).reduce((s: number, r: any) => s + (Number(r.est_cost) || 0) * markup, 0);
 		if (spent >= cap) {
 			return `Your monthly generation budget for this workspace is used up ($${spent.toFixed(2)} of the $${cap.toFixed(2)} limit set by your workspace admin). Ask them to raise your limit in Settings → Team.`;
 		}

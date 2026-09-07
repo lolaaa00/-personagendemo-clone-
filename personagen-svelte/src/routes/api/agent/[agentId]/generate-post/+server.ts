@@ -16,7 +16,7 @@ import { resolveAiClient } from '$lib/server/ai-client';
 import { isCardRendererAvailable, CARD_RENDERER_LABEL } from '$lib/server/content/card-renderer';
 import { publishPostById } from '$lib/server/scheduler';
 import { assertWithinBudget } from '$lib/server/budget';
-import { creditsFor, isCreditsError } from '$lib/server/credits';
+import { creditsFor, isCreditsError, resolveBillingAccount } from '$lib/server/credits';
 import { creditsMode } from '$lib/server/flags';
 import { getServiceSupabase } from '$lib/server/service-supabase';
 import { priceOf } from '$lib/pricing';
@@ -513,8 +513,21 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		if (isCreditsError(err)) {
 			// 402 with a place to go: the composer shows the message, the pill is red,
 			// and /billing sells the top-up, so the "ran out" wall becomes a purchase.
+			// A seat generating against a workspace persona draws on the OWNER's
+			// wallet (owner pays) — say so, instead of sending them to top up a
+			// personal wallet that is not the one being checked.
+			const billed = await resolveBillingAccount(locals.supabase, agentId, user.id).catch(() => user.id);
+			const ownerPays = billed !== user.id;
 			return json(
-				{ success: false, code: 'INSUFFICIENT_CREDITS', error: `${(err as Error).message} Top up at /billing to continue.`, billingUrl: '/billing' },
+				{
+					success: false,
+					code: 'INSUFFICIENT_CREDITS',
+					billedTo: ownerPays ? 'workspace_owner' : 'self',
+					error: ownerPays
+						? `${(err as Error).message} This persona is billed to the workspace owner's wallet — ask them to top up. (Your Billing page lists the workspace wallets you draw on.)`
+						: `${(err as Error).message} Top up at /billing to continue.`,
+					billingUrl: '/billing'
+				},
 				{ status: 402 }
 			);
 		}

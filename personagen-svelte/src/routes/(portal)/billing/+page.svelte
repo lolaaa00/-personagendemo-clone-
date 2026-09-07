@@ -131,6 +131,25 @@
 		</section>
 	{/if}
 
+	{#if data.workspaces.length > 0}
+		<section class="workspaces">
+			<h2>Workspace wallets you draw on</h2>
+			<p class="muted">
+				Personas that belong to a workspace are billed to that workspace's owner, not to you. These are the
+				balances your generations there will use.
+			</p>
+			<div class="ws-grid">
+				{#each data.workspaces as w (w.id)}
+					<article class="ws" class:ws-low={w.billingMode !== 'unmetered' && w.balance < 300}>
+						<p class="ws-name">{w.name}</p>
+						<p class="ws-balance">{w.formatted}</p>
+						<p class="ws-meta">your seat: {w.role} · topped up by the owner</p>
+					</article>
+				{/each}
+			</div>
+		</section>
+	{/if}
+
 	<section class="ledger">
 		<h2>Recent activity</h2>
 		{#if data.ledger.length === 0}
@@ -409,6 +428,37 @@
 	.note {
 		color: var(--text-dim);
 		font-size: 0.82rem;
+	}
+	.ws-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+		gap: 0.75rem;
+		margin-top: 0.75rem;
+	}
+	.ws {
+		padding: 0.9rem 1rem;
+		border-radius: 12px;
+		background: var(--surface);
+		border: 1px solid var(--border);
+	}
+	.ws-name {
+		margin: 0;
+		font-weight: 600;
+	}
+	.ws-balance {
+		margin: 0.2rem 0 0;
+		font-size: 1.3rem;
+		font-weight: 700;
+		color: var(--success-text);
+		font-variant-numeric: tabular-nums;
+	}
+	.ws-low .ws-balance {
+		color: var(--warning-text);
+	}
+	.ws-meta {
+		margin: 0.2rem 0 0;
+		font-size: 0.78rem;
+		color: var(--text-dim);
 	}
 	.faq dl {
 		display: grid;
