@@ -189,3 +189,9 @@ Total: about two and a half engineering days after the three decisions. Steps 1�
 ## 8. What was not changed by this assessment
 
 Nothing. This document is read-only analysis. The production queries were SELECTs. No switch, wallet, code, or copy was modified.
+
+---
+
+## 9. Status update, same day
+
+Decisions 1–3 in §6 were taken as recommended and the first five steps of §7 shipped in commit `4aafbd9` (design in [conversion-and-margin-design.md](conversion-and-margin-design.md)): credit markup 3× live in production, welcome credit $10.00, real-estimate gate with a 402 to `/billing`, the billing page with packs at par, Stripe Checkout and webhook dormant until the two env keys are set, landing copy aligned. Still open: engine metering (§4.2), the shadow smoke test and enforce flip (§2), subscription plans.
