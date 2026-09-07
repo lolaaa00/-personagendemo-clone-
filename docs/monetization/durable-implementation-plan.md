@@ -212,3 +212,16 @@ node supabase/build-bootstrap.mjs      # regenerate client_bootstrap.sql after a
 | Steady state (C12) | Roll-ups and pruning run unattended; export works; public pricing copy matches the system |
 
 **Calendar:** Day 1 → C1–C5 (pilots provisioned by end of day, shadow). Day 2 → C6–C8 (activity live, gate visible). Day 3 → C9 (enforce) + C10. Day 4 → C11. Day 5 → C12. Each day ends on a green gate or the next day starts with the fix.
+
+## 7. Addendum 2026-09-07 — the "recorded" stamp trap, found by the live smoke
+
+The first end-to-end run of `scripts/e2e-smoke.mjs` against production showed every `generation_events` row landing with `billed_user_id`, `key_source` and `credits` NULL while the wallet was correctly debited. Cause: `generation_events.asset_url` did not exist in production. `generation_events_asset_url_migration.sql` had been stamped `recorded` on 2026-09-05 by `--record-existing`, which trusts the operator's word that a file was applied by hand. The wide insert failed on the missing column and the fallback ladder dropped the attribution columns along with it.
+
+Three stamped-but-never-applied files were found and applied for real: `generation_events_asset_url_migration.sql`, `personas_profile_migration.sql` (agents.personas_profile + backfill), `scheduler_indexes_and_provider_default_migration.sql` (five posts indexes, the status check constraint, connections.provider default).
+
+Durable fixes:
+- `scripts/verify-recorded-migrations.mjs [--strict]` parses every recorded file for the tables / columns / functions / indexes it creates and checks they exist. Run it whenever `--record-existing` has been used; it is read-only.
+- `recordCostEvents` now drops only the column an insert error names (bounded retries), so an unrelated optional column can never take the billing attribution down with it.
+- `apply-migration.mjs` sends `NOTIFY pgrst, 'reload schema'` after every apply, so a new column is visible to PostgREST at once.
+- `/api/health` gains `checks.schema`: the widest generation_events insert shape must be selectable through PostgREST.
+- `scripts/e2e-smoke.mjs` is the money path's live proof: throwaway account → welcome grant → login → pill → billing → closed checkout → persona → retail preview quote → real generation → attributed events → single debit per event → admin gating → enforce 402 → cleanup. Run it after every billing deploy.

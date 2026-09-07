@@ -1914,35 +1914,42 @@ async function recordCostEvents(
 	);
 
 	// Insert with the widest column set first; on an unknown-column error (a
-	// migration not yet applied on this database) fall back to narrower shapes
-	// so the ledger (and cap accounting) keeps working rather than silently
-	// dropping every cost row until the migration lands.
-	const shapes: Array<(r: (typeof enriched)[number]) => Record<string, unknown>> = [
-		(r) => r,
-		({ billed_user_id, key_source, credits, ...rest }) => rest,
-		({ billed_user_id, key_source, credits, asset_url, ...rest }) => rest
-	];
+	// migration not yet applied on this database, or a stale PostgREST schema
+	// cache) drop ONLY the column the error names and retry, so one missing
+	// optional column (asset_url) can never take the billing attribution
+	// (billed_user_id / key_source / credits) down with it. Bounded: at most
+	// one retry per optional column. Core columns are never dropped — if the
+	// error names one of those, the insert has genuinely failed.
+	const OPTIONAL = new Set(['asset_url', 'billed_user_id', 'key_source', 'credits']);
+	const dropped = new Set<string>();
 	let inserted: Array<{ id: string }> | null = null;
 	let lastErr: any = null;
-	for (const shape of shapes) {
+	for (let attempt = 0; attempt <= OPTIONAL.size; attempt++) {
 		try {
-			const { data, error } = await supabase
-				.from('generation_events')
-				.insert(enriched.map(shape))
-				.select('id');
+			const rows = enriched.map((r) => {
+				const out: Record<string, unknown> = { ...r };
+				for (const c of dropped) delete out[c];
+				return out;
+			});
+			const { data, error } = await supabase.from('generation_events').insert(rows).select('id');
 			if (!error) {
 				inserted = data ?? [];
-				if (shape !== shapes[0]) {
+				if (dropped.size > 0) {
 					console.warn(
-						'[Cost] Recorded generation events with a reduced column set — apply the pending generation_events migrations (asset_url / credits attribution).'
+						`[Cost] Recorded generation events without ${[...dropped].join(', ')} — apply the pending generation_events migration(s) or reload the PostgREST schema cache (NOTIFY pgrst, 'reload schema').`
 					);
 				}
 				break;
 			}
 			lastErr = error;
-			const unknownColumn =
-				error.code === 'PGRST204' || error.code === '42703' || /column|schema cache/i.test(error.message ?? '');
+			const msg = String(error.message ?? '');
+			const unknownColumn = error.code === 'PGRST204' || error.code === '42703' || /column|schema cache/i.test(msg);
 			if (!unknownColumn) break;
+			// "column generation_events.asset_url does not exist" (42703) or
+			// "Could not find the 'credits' column of 'generation_events' in the schema cache" (PGRST204)
+			const named = msg.match(/column (?:\w+\.)?(\w+) does not exist/i)?.[1] ?? msg.match(/'(\w+)' column/i)?.[1] ?? null;
+			if (!named || !OPTIONAL.has(named) || dropped.has(named)) break;
+			dropped.add(named);
 		} catch (err) {
 			lastErr = err;
 			break;

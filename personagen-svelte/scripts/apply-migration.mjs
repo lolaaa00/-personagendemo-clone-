@@ -115,7 +115,10 @@ function wrap(m, mode = 'applied') {
 		'BEGIN;',
 		m.sql,
 		`INSERT INTO public.schema_migrations (name, checksum, applied_by, mode) VALUES (${q(m.name)}, ${q(m.checksum)}, ${q(`${env.USERNAME || env.USER || 'unknown'}@${hostname()}`)}, ${q(mode)});`,
-		'COMMIT;'
+		'COMMIT;',
+		// PostgREST caches the schema; without this a column added here is
+		// invisible to the REST layer (PGRST204) until the service restarts.
+		"NOTIFY pgrst, 'reload schema';"
 	].join('\n');
 }
 
