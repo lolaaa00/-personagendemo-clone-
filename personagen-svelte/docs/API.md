@@ -93,7 +93,7 @@ API a different way cannot escalate. Ranked low→high:
 | `admin`   | + manage other seats (invite/re-role/remove), set seat spend caps |
 | `owner`   | + rename/delete the persona, move it in/out of a workspace, rename/delete the workspace (implicit — the account that owns the row; never a stored role) |
 
-Per-seat monthly spend caps (set by owner/admin) are enforced on every paid
+Per-seat monthly spend caps (set by owner/admin, in retail USD — the wallet's money at the platform markup, 1 credit = 1¢) are enforced on every paid
 generation; hitting one returns `400` with a "budget" message.
 
 ---
@@ -253,7 +253,7 @@ PATCH  /api/workspaces/{id}             { name }      // rename (owner only)
 DELETE /api/workspaces/{id}                           // delete (owner only)
 
 GET  /api/workspaces/{id}/members                     // roster (owner/admin)
-PATCH  /api/workspaces/{id}/members  { userId, role?, spendLimitUsd? }  // owner/admin; spendLimitUsd null = unlimited
+PATCH  /api/workspaces/{id}/members  { userId, role?, spendLimitUsd? }  // owner/admin; spendLimitUsd is retail USD (1 credit = 1¢); null = unlimited
 DELETE /api/workspaces/{id}/members  { userId }       // remove; a member may remove self (leave)
 
 GET  /api/workspaces/{id}/invites                     // pending (owner/admin)

@@ -785,7 +785,7 @@
 		}
 	}
 
-	/** Set or clear (empty input) a seat's calendar-month USD generation cap. */
+	/** Set or clear (empty input) a seat's calendar-month generation cap, in retail USD — the wallet's money (1 credit = 1¢), not raw provider cost. */
 	async function saveSpendLimit(workspaceId: string, userId: string, raw: string) {
 		const trimmed = raw.trim();
 		const value = trimmed === '' ? null : Number(trimmed);
@@ -1864,7 +1864,7 @@
 												min="0"
 												step="1"
 												placeholder="$/mo"
-												title="Monthly generation spend cap in USD — blank means unlimited. Applies on blur/Enter."
+												title="Monthly generation cap in retail USD — the same money the wallet shows (1 credit = 1¢), not raw provider cost. Blank means unlimited. Applies on blur/Enter."
 												aria-label="Monthly spend limit for {m.email}"
 												value={m.spend_limit_usd ?? ''}
 												disabled={teamBusy[`limit-${m.user_id}`]}
