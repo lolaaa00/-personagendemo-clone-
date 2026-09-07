@@ -397,7 +397,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-07", hash: "9b4af32", type: "feat", category: "generation", scope: "models", title: "Model Manager shows host, modes and price basis; OpenRouter rows stop borrowing fal's UI" },
 	{ date: "2026-09-07", hash: "83d669f", type: "fix", category: "fix", scope: "url-state", title: "an absent query param returns the fallback even when '' is an allowed value" },
 	{ date: "2026-09-07", hash: "f12bb72", type: "docs", category: "docs", scope: "audit", title: "record rail-set adoption 754a38f and live signup proof on 46a7cca" },
-	{ date: "2026-09-07", hash: "b30c7a8", type: "feat", category: "feature", scope: "models", title: "registry truth layers — row provenance, \"Runs as\" from the real resolvers, ledger reconciliation" }
+	{ date: "2026-09-07", hash: "b30c7a8", type: "feat", category: "feature", scope: "models", title: "registry truth layers — row provenance, \"Runs as\" from the real resolvers, ledger reconciliation" },
+	{ date: "2026-09-07", hash: "3ff72df", type: "feat", category: "security", scope: "persona-contract", title: "v2 schema, token enums, label registry (P0.1)" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -707,12 +708,12 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 	},
 	{
 		id: "52e574e", from: "2026-09-07", to: "2026-09-07",
-		category: "docs", categories: ["infrastructure","performance","docs","generation","fix","feature"],
+		category: "docs", categories: ["infrastructure","performance","docs","generation","fix","feature","security"],
 		title: "Help: close the phase-2 gaps — plans (dormant), Firecrawl…",
-		summary: "Close the phase-2 gaps — plans (dormant), Firecrawl metering, welcome-abuse guard, settings billing card, persona limit, deploy step-0 stamps check. Plus 6 more changes, touching setup and deployment and speed and size and making posts, images and video.",
+		summary: "Close the phase-2 gaps — plans (dormant), Firecrawl metering, welcome-abuse guard, settings billing card, persona limit, deploy step-0 stamps check. Plus 7 more changes, touching setup and deployment and speed and size and making posts, images and video.",
 		major: true, curated: false,
-		entries: [CHANGELOG[357], CHANGELOG[358], CHANGELOG[359], CHANGELOG[360], CHANGELOG[361], CHANGELOG[362], CHANGELOG[363]]
+		entries: [CHANGELOG[357], CHANGELOG[358], CHANGELOG[359], CHANGELOG[360], CHANGELOG[361], CHANGELOG[362], CHANGELOG[363], CHANGELOG[364]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "b30c7a8";
+export const CHANGELOG_GENERATED_FROM = "3ff72df";
