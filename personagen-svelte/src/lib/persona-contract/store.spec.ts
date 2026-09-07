@@ -1,0 +1,192 @@
+/**
+ * Persona Model v2 — store bridge, serialise gate, merge rule, provenance.
+ */
+import { describe, it, expect } from 'vitest';
+import { readPersonaProfileV2, serializePersonaProfileV2, mergePersonaProfileV2 } from './store';
+import { readPersonaProfile } from '../persona-profile-store';
+import type { PersonaProfileV2 } from './schema';
+
+const V1_BLOB = {
+	ageRanges: ['25–34'],
+	gender: 'female',
+	archetype: 'The Educator',
+	appearance: { hairColor: 'honey blonde', eyeColor: 'Hazel' },
+	displayName: 'Jenny Tran'
+};
+
+const V2_BLOB: PersonaProfileV2 = {
+	meta: { schemaVersion: 2, generator: 'manual', fieldSources: { 'strategy.archetype': 'user' } },
+	creator: { gender: 'female', displayName: 'Jenny Tran' },
+	look: { hair: { colorText: 'honey blonde' }, eyes: { color: 'hazel', colorText: 'Hazel' } },
+	audience: { ageRanges: ['25_34'] },
+	strategy: { archetype: 'educator' }
+};
+
+describe('dual-shape bridge', () => {
+	it('v2 reader upgrades a v1 blob in memory', () => {
+		const out = readPersonaProfileV2({ personas_profile: V1_BLOB });
+		expect(out.meta.schemaVersion).toBe(2);
+		expect(out.strategy?.archetype).toBe('educator');
+		expect(out.look?.hair?.colorText).toBe('honey blonde');
+		expect(out.audience?.ageRanges).toEqual(['25_34']);
+	});
+
+	it('v2 reader returns a v2 blob as-is', () => {
+		expect(readPersonaProfileV2({ personas_profile: V2_BLOB })).toBe(V2_BLOB);
+	});
+
+	it('v1 reader DOWNGRADES a v2 blob losslessly (legacy consumers keep working)', () => {
+		const v1 = readPersonaProfile({ personas_profile: V2_BLOB });
+		expect(v1).toEqual({
+			ageRanges: ['25–34'],
+			ageMin: 25,
+			ageMax: 34,
+			gender: 'female',
+			archetype: 'The Educator',
+			appearance: { hairColor: 'honey blonde', eyeColor: 'Hazel' },
+			displayName: 'Jenny Tran'
+		});
+	});
+
+	it('v1 reader returns a v1 blob exactly as stored (no normalisation round trip)', () => {
+		const stored = { archetype: '  the educator ', appearance: { hairColor: 'honey blonde' }, junk: 1 };
+		expect(readPersonaProfile({ personas_profile: stored })).toEqual(stored);
+	});
+
+	it('both readers honour the personas_profile-then-market precedence and never throw', () => {
+		expect(readPersonaProfileV2({ market: JSON.stringify(V1_BLOB) }).strategy?.archetype).toBe('educator');
+		expect(readPersonaProfileV2({ market: 'Australia' }).meta.schemaVersion).toBe(2);
+		expect(readPersonaProfileV2(null).meta.schemaVersion).toBe(2);
+	});
+});
+
+describe('serializePersonaProfileV2 — the normalising gate', () => {
+	it('strips unknown top-level keys, stamps the version, trims strings', () => {
+		const out = serializePersonaProfileV2({
+			meta: { schemaVersion: 2 },
+			creator: { displayName: '  Jenny  ' },
+			bogus: { x: 1 }
+		} as unknown as PersonaProfileV2);
+		expect(out).toEqual({ meta: { schemaVersion: 2 }, creator: { displayName: 'Jenny' } });
+	});
+
+	it('moves an off-list value into its verbatim companion and drops off-list values without one', () => {
+		const out = serializePersonaProfileV2({
+			meta: { schemaVersion: 2 },
+			strategy: { archetype: 'Mentor' },
+			look: { hair: { color: 'honey blonde' }, eyewear: 'monocle' },
+			creator: { gender: 'nonbinary' }
+		} as unknown as PersonaProfileV2);
+		expect(out.strategy).toEqual({ archetypeText: 'Mentor' });
+		expect(out.look).toEqual({ hair: { colorText: 'honey blonde' } });
+		expect(out.creator).toBeUndefined();
+	});
+
+	it('keeps valid tokens, de-duplicates and filters token arrays, preserves explicit clears', () => {
+		const out = serializePersonaProfileV2({
+			meta: { schemaVersion: 2 },
+			audience: { ageRanges: ['25_34', '25_34', 'nope', '35_44'] },
+			strategy: { archetype: '' },
+			creator: { neverDiscusses: ['politics', 'x'] }
+		} as unknown as PersonaProfileV2);
+		expect(out.audience?.ageRanges).toEqual(['25_34', '35_44']);
+		expect(out.strategy).toEqual({ archetype: '' });
+		expect(out.creator?.neverDiscusses).toEqual(['politics']);
+	});
+
+	it('clamps numbers and accepts numeric strings', () => {
+		const out = serializePersonaProfileV2({
+			meta: { schemaVersion: 2 },
+			creator: {
+				age: '134',
+				bigFive: { openness: 120, conscientiousness: -5, extraversion: 'x', agreeableness: 50.6, neuroticism: 10 },
+				household: { children: { count: 99, ageBands: ['toddler'] } }
+			},
+			look: { heightCm: 300 }
+		} as unknown as PersonaProfileV2);
+		expect(out.creator?.age).toBe(99);
+		expect(out.creator?.bigFive).toEqual({ openness: 100, conscientiousness: 0, agreeableness: 51, neuroticism: 10 });
+		expect(out.creator?.household?.children).toEqual({ count: 12, ageBands: ['toddler'] });
+		expect(out.look?.heightCm).toBe(230);
+	});
+
+	it('accepts a v1 patch (upgrades first) and is idempotent on its own output', () => {
+		const once = serializePersonaProfileV2(V1_BLOB);
+		expect(once.strategy?.archetype).toBe('educator');
+		expect(serializePersonaProfileV2(once)).toEqual(once);
+	});
+});
+
+describe('mergePersonaProfileV2 — THE MERGE RULE', () => {
+	const existing: PersonaProfileV2 = {
+		meta: { schemaVersion: 2, fieldSources: { 'look.hair.color': 'user', 'creator.age': 'sampled', 'creator.work.title': 'extracted' } },
+		creator: { age: 34, work: { title: 'Physiotherapist', domain: 'health_care' } },
+		look: { hair: { color: 'black', style: 'straight' } },
+		identityKit: { bios: { tiktok: 'hi' } }
+	};
+
+	it('absent and null/undefined preserve; one-level-deep nested records survive a sibling patch', () => {
+		const out = mergePersonaProfileV2(existing, {
+			meta: { schemaVersion: 2 },
+			look: { hair: { color: 'blonde' } },
+			identityKit: { bios: undefined as unknown as Record<string, string> }
+		});
+		expect(out.look).toEqual({ hair: { color: 'blonde', style: 'straight' } });
+		expect(out.identityKit).toEqual({ bios: { tiktok: 'hi' } });
+		expect(out.creator).toEqual(existing.creator);
+		expect(out.meta.fieldSources?.['look.hair.color']).toBe('user');
+	});
+
+	it('explicit empty clears the leaf and its provenance', () => {
+		const clear = { meta: { schemaVersion: 2 }, look: { hair: { color: '' } } } as unknown as PersonaProfileV2;
+		const out = mergePersonaProfileV2(existing, clear);
+		expect(out.look).toEqual({ hair: { style: 'straight' } });
+		expect(out.meta.fieldSources?.['look.hair.color']).toBeUndefined();
+	});
+
+	it('UI patches stamp user; sampler stamps sampled; backfill stamps its declared source', () => {
+		const ui = mergePersonaProfileV2(existing, { meta: { schemaVersion: 2 }, creator: { displayName: 'J' } });
+		expect(ui.meta.fieldSources?.['creator.displayName']).toBe('user');
+		const s = mergePersonaProfileV2(existing, { meta: { schemaVersion: 2 }, creator: { education: 'bachelor' } }, { origin: 'sampler' });
+		expect(s.meta.fieldSources?.['creator.education']).toBe('sampled');
+		const b = mergePersonaProfileV2(existing, { meta: { schemaVersion: 2 }, creator: { market: 'au' } }, { origin: 'backfill', source: 'extracted' });
+		expect(b.meta.fieldSources?.['creator.market']).toBe('extracted');
+	});
+
+	it('automation can NEVER overwrite a user or extracted leaf, but may overwrite sampled/derived/unknown', () => {
+		const out = mergePersonaProfileV2(
+			existing,
+			{ meta: { schemaVersion: 2 }, look: { hair: { color: 'blonde', style: 'wavy' } }, creator: { age: 40, work: { title: 'Nurse' } } },
+			{ origin: 'sampler' }
+		);
+		expect(out.look?.hair?.color).toBe('black'); // user — protected
+		expect(out.look?.hair?.style).toBe('wavy'); // unknown source — writable
+		expect(out.creator?.age).toBe(40); // sampled — writable
+		expect(out.creator?.work?.title).toBe('Physiotherapist'); // extracted — protected
+		expect(out.meta.fieldSources?.['look.hair.style']).toBe('sampled');
+	});
+
+	it('a human can clear a whole section; automation cannot', () => {
+		const human = mergePersonaProfileV2(existing, { meta: { schemaVersion: 2 }, look: {} });
+		expect(human.look).toBeUndefined();
+		expect(human.meta.fieldSources?.['look.hair.color']).toBeUndefined();
+		const bot = mergePersonaProfileV2(existing, { meta: { schemaVersion: 2 }, look: {} }, { origin: 'sampler' });
+		expect(bot.look).toEqual(existing.look);
+	});
+
+	it('is pure and never throws', () => {
+		const snapshot = JSON.stringify(existing);
+		mergePersonaProfileV2(existing, { meta: { schemaVersion: 2 }, creator: { age: 1 } });
+		expect(JSON.stringify(existing)).toBe(snapshot);
+		expect(mergePersonaProfileV2(null, null).meta.schemaVersion).toBe(2);
+		expect(mergePersonaProfileV2(undefined, { meta: { schemaVersion: 2 } }).meta.schemaVersion).toBe(2);
+	});
+
+	it('survives serialise → merge without clobbering untouched fields (the v1 data-loss guard, on v2)', () => {
+		const patch = serializePersonaProfileV2({ meta: { schemaVersion: 2 }, identityKit: { bios: { tiktok: 'new' } } } as PersonaProfileV2);
+		const out = mergePersonaProfileV2(existing, patch);
+		expect(out.creator).toEqual(existing.creator);
+		expect(out.look).toEqual(existing.look);
+		expect(out.identityKit).toEqual({ bios: { tiktok: 'new' } });
+	});
+});

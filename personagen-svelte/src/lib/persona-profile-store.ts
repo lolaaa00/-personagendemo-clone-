@@ -28,7 +28,6 @@
  * the engine, and Svelte components can all import the same accessor.
  */
 import {
-	AGE_RANGE_KEYS,
 	CONTENT_FOCUS_OPTIONS,
 	PERSONA_ARCHETYPES,
 	coerceAgeRanges,
@@ -42,6 +41,14 @@ import {
 	coerceHandleCandidates,
 	type HandleCandidate
 } from './persona-identity';
+import { AGE_RANGE_BOUNDS, ageBoundsFromRanges, deriveAgeRanges } from './persona-age';
+import { isPersonaProfileV2 } from './persona-contract/schema';
+import { downgradeV2toV1 } from './persona-contract/upgrade';
+
+// Re-exported so every existing importer keeps working; the helpers moved to a
+// leaf module (persona-age.ts) so the v2 contract can share them without an
+// import cycle through this file.
+export { AGE_RANGE_BOUNDS, ageBoundsFromRanges, deriveAgeRanges };
 
 /** The persona's own gender. `''` means "not chosen" — never `null`/`undefined` once set. */
 export type PersonaGender = '' | 'female' | 'male';
@@ -119,54 +126,6 @@ export const PERSONA_PROFILE_KEYS = [
 	'displayName'
 ] as const satisfies readonly (keyof PersonaProfile)[];
 
-/**
- * Numeric bounds for each audience bucket, keyed in `AGE_RANGE_KEYS` order.
- * `ageMin`/`ageMax` are DERIVED from the selected buckets — older generation
- * prompts read the numbers, the UI edits the buckets, and keeping the two in
- * sync here means a bucket edit can never leave stale numbers behind.
- */
-export const AGE_RANGE_BOUNDS: Record<string, { lo: number; hi: number }> = {
-	'13–17': { lo: 13, hi: 17 },
-	'18–24': { lo: 18, hi: 24 },
-	'25–34': { lo: 25, hi: 34 },
-	'35–44': { lo: 35, hi: 44 },
-	'45–54': { lo: 45, hi: 54 },
-	'55+': { lo: 55, hi: 99 }
-};
-
-/** Derives {ageMin, ageMax} from selected buckets; both null when none selected. */
-export function ageBoundsFromRanges(ranges: readonly string[] | null | undefined): {
-	ageMin: number | null;
-	ageMax: number | null;
-} {
-	const bounds = (ranges ?? [])
-		.map((k) => AGE_RANGE_BOUNDS[k])
-		.filter((b): b is { lo: number; hi: number } => !!b);
-	if (!bounds.length) return { ageMin: null, ageMax: null };
-	return {
-		ageMin: Math.min(...bounds.map((b) => b.lo)),
-		ageMax: Math.max(...bounds.map((b) => b.hi))
-	};
-}
-
-/**
- * Legacy shape support: profiles written before the bucket picker stored only
- * `ageMin`/`ageMax`. Recovers the buckets those numbers overlap so an old
- * persona shows its audience instead of a blank chip row.
- */
-export function deriveAgeRanges(profile: PersonaProfile | null | undefined): string[] {
-	const ranges = coerceAgeRanges(profile?.ageRanges);
-	if (ranges.length) return ranges;
-	const { ageMin, ageMax } = profile ?? {};
-	if (typeof ageMin === 'number' && typeof ageMax === 'number') {
-		return AGE_RANGE_KEYS.filter((k) => {
-			const b = AGE_RANGE_BOUNDS[k];
-			return b && b.hi >= ageMin && b.lo <= ageMax;
-		});
-	}
-	return [];
-}
-
 /** Parses a JSON object string, or returns null. Never throws. */
 function parseObject(value: unknown): Record<string, unknown> | null {
 	if (value && typeof value === 'object' && !Array.isArray(value)) {
@@ -214,8 +173,25 @@ function parseObject(value: unknown): Record<string, unknown> | null {
 export function readPersonaProfile(
 	agent: { personas_profile?: unknown; market?: unknown } | null | undefined
 ): PersonaProfile {
+	const raw = readStoredProfileObject(agent);
+	// v2 blob behind a v1 reader: downgrade losslessly (labels back, verbatim
+	// text preferred, unknown keys restored) so every legacy consumer keeps
+	// working the day the save path starts writing v2. A v1 blob is returned
+	// exactly as stored — no upgrade/downgrade round trip, no normalisation.
+	if (isPersonaProfileV2(raw)) return downgradeV2toV1(raw);
+	return raw as PersonaProfile;
+}
+
+/**
+ * The raw stored object, whatever its shape (v1 or v2), with the same dual-read
+ * precedence as `readPersonaProfile`. Never throws; `{}` for anything unusable.
+ * Shared with the v2 store (`persona-contract/store.ts`).
+ */
+export function readStoredProfileObject(
+	agent: { personas_profile?: unknown; market?: unknown } | null | undefined
+): Record<string, unknown> {
 	if (!agent || typeof agent !== 'object') return {};
-	return (parseObject(agent.personas_profile) ?? parseObject(agent.market) ?? {}) as PersonaProfile;
+	return parseObject(agent.personas_profile) ?? parseObject(agent.market) ?? {};
 }
 
 /** Keeps only the three known voice keys as trimmed non-empty strings. */

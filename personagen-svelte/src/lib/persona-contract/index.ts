@@ -7,3 +7,5 @@
 export * from './tokens';
 export * from './labels';
 export * from './schema';
+export * from './upgrade';
+export * from './store';

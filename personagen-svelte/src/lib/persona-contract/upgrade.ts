@@ -20,12 +20,8 @@
  *
  * Client-safe.
  */
-import {
-	AGE_RANGE_BOUNDS,
-	ageBoundsFromRanges,
-	deriveAgeRanges,
-	type PersonaProfile
-} from '../persona-profile-store';
+import { AGE_RANGE_BOUNDS, ageBoundsFromRanges, deriveAgeRanges } from '../persona-age';
+import type { PersonaProfile } from '../persona-profile-store';
 import { coerceHandleCandidates, coerceBios, coerceConfirmedHandles } from '../persona-identity';
 import { label, tokenForLabel } from './labels';
 import {
