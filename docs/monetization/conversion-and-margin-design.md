@@ -87,3 +87,53 @@ Plan economics (next, when subscriptions ship):
 4. **Plans.** Stripe subscription Checkout for Studio / Brand / Agency; monthly included wallet granted by the invoice-paid webhook as kind `grant` with a note; persona limits enforced from `subscriptions.plan`.
 5. **Settings → Billing** section replaced by a link to `/billing`; currency preference selector there.
 6. Reconciliation query updated for markup: `credits = ceil(est_cost × markup × 100)` per event.
+
+---
+
+## 7. Math audit (2026-09-07, second pass)
+
+Every figure below is asserted by `src/lib/economics.spec.ts` and `src/lib/server/stripe.spec.ts`, which derive it from the pricing matrix, the server's rounding rule, the pack table and the plan table. A price change that breaks a floor fails the build.
+
+**The unit.** `credits = ceil(raw_usd × markup × 100)` per event, float-noise safe (rounded to 6 dp before the ceil). Consequences: a debit is never below retail; the overshoot is under one credit per event; the pill's amber line (300 credits) and the packs are markup-invariant money, so changing the markup changes what a run costs, never what a credit is.
+
+**Retail price list at 3× (per-event ceils summed, exactly as the ledger debits).**
+
+| outcome | steps | raw | retail | margin | × raw |
+|---|---|---|---|---|---|
+| image post | director + grader + still | $0.084 | **$0.26** | 67.7% | 3.10 |
+| video post | + b-roll clip | $0.504 | **$1.52** | 66.8% | 3.02 |
+| talking-head post | + voice + OmniHuman | $0.814 | **$2.45** | 66.8% | 3.01 |
+| cinematic multi-shot | + 4 stills + pro shot-set | $1.924 | **$5.78** | 66.7% | 3.00 |
+| persona (avatar + 4-stage kit) | 6 stills | $0.48 | **$1.44** | 66.7% | 3.00 |
+| text card post | local render | $0 | $0 | — | — |
+
+The earlier draft of §4 quoted one LLM pass per post; the runtime records the director and the QC grader, so two are quoted here and in the billing page's "what it buys".
+
+**Welcome credit.** 1,000 credits = $10.00 retail = $3.33 raw. After a persona ($1.44) it buys 32 image posts or 5 video posts. Break-even: one $10 pack per three signups that generate.
+
+**Packs.** Each sells at par plus bonus. Margin if fully spent at 3×: $10 → 66.7%, $25 → 65.3%, $50 → 63.3%, $100 → 60.0% (exactly 2.5× raw). Blended across an even mix: 62%. The §1 target of "≥ 65% blended" is therefore met only on the two smaller packs; the honest floor is 60% and the design accepts that on the $100 pack in exchange for order value.
+
+**Plans (next).** Included wallet is 50–67% of price; margin floor if the wallet is fully used: Studio 83%, Brand 80%, Agency 78%.
+
+**Gate.** The pre-run quote covers every media step; the only thing it can under-quote is the grader's LLM pass, one credit at 3×, which `allow_negative` absorbs. B-roll runs are quoted at b-roll price, not talking-head price, so a wallet that can afford the run is not refused.
+
+**Corrections made in this pass.**
+
+1. Webhook: `allow_promotion_codes` would have made every discounted purchase fail the amount check. Validation now uses the pre-discount subtotal for USD sessions and accepts Adaptive-Pricing currencies; the pack comes from our own metadata.
+2. Webhook: refunds are cumulative in Stripe's payload. A second partial refund would have clawed back the full cumulative share again. Clawback is now target minus what earlier events took.
+3. Webhook: purchases are keyed by the Checkout Session id, so `completed` and `async_payment_succeeded` for one session cannot both credit.
+4. USD spend caps now fail closed while credits are enforced; they still fail open in off/shadow so analytics outages do not block generation before money is on.
+5. The billing page shows the exact balance; only the sidebar pill rounds to whole units.
+
+**Reconciliation (replaces credits plan §6 while markup ≠ 1).**
+
+```sql
+-- retail debits must equal ceil(est_cost × markup × 100) per platform-paid event
+WITH m AS (SELECT (value #>> '{}')::numeric AS markup FROM platform_settings WHERE key = 'credit_markup')
+SELECT e.id, e.est_cost, e.credits, ceil(e.est_cost * m.markup * 100) AS expected, l.delta
+FROM generation_events e CROSS JOIN m
+LEFT JOIN credit_ledger l ON l.generation_event_id = e.id AND l.kind = 'debit'
+WHERE e.key_source = 'platform' AND e.created_at > now() - interval '1 day'
+  AND (l.delta IS NULL OR -l.delta <> e.credits OR e.credits <> ceil(e.est_cost * m.markup * 100));
+-- zero rows expected. (Events recorded before a markup change keep the old rate: filter by created_at > the change.)
+```

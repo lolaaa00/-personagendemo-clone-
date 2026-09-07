@@ -153,3 +153,47 @@ export function signWebhookPayload(rawBody: string, secret: string, tsSec = Math
 	const sig = createHmac('sha256', secret).update(`${tsSec}.${rawBody}`, 'utf8').digest('hex');
 	return `t=${tsSec},v1=${sig}`;
 }
+
+// ── Pure wallet arithmetic for the webhook (unit-tested, no I/O) ─────────────
+
+export interface PackLike {
+	id: string;
+	usdCents: number;
+	credits: number;
+}
+
+/**
+ * Decide whether a Checkout Session may deliver a pack.
+ *
+ * Trust model: the session was created by OUR server with the pack in
+ * metadata, so metadata is authoritative for WHICH pack. Amount is a sanity
+ * check, not the source of truth — promotion codes lower amount_total, and
+ * Adaptive Pricing can present a non-USD currency, both legitimately. What
+ * must never pass: an unpaid session, or a USD session whose pre-discount
+ * subtotal is below the pack price (a tampered price).
+ */
+export function validatePaidSession(session: any, pack: PackLike): { ok: true } | { ok: false; reason: string } {
+	if (session?.payment_status !== 'paid') return { ok: false, reason: 'not paid' };
+	if (session?.metadata?.pack_id !== pack.id) return { ok: false, reason: 'pack mismatch' };
+	const currency = String(session?.currency ?? 'usd').toLowerCase();
+	if (currency === 'usd') {
+		const subtotal = Number(session?.amount_subtotal ?? session?.amount_total);
+		if (!Number.isFinite(subtotal) || subtotal < pack.usdCents) return { ok: false, reason: `subtotal ${subtotal} below pack price ${pack.usdCents}` };
+	}
+	return { ok: true };
+}
+
+/**
+ * Credits to claw back for a refund. Stripe's charge.refunded carries the
+ * CUMULATIVE amount_refunded, so the clawback is the difference between the
+ * proportional target and what earlier refund events already took.
+ *   credits: credits delivered for the charge
+ *   amount / amountRefunded: charge amount and cumulative refunded, in cents
+ *   alreadyBack: credits already clawed back for this charge (≥ 0)
+ */
+export function refundClawback(credits: number, amount: number, amountRefunded: number, alreadyBack: number): number {
+	if (!(credits > 0) || !(amount > 0) || !(amountRefunded > 0)) return 0;
+	const share = Math.min(1, amountRefunded / amount);
+	const target = Math.min(credits, Math.round(credits * share));
+	return Math.max(0, target - Math.max(0, alreadyBack));
+}

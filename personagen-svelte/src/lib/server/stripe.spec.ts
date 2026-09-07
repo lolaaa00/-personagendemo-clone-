@@ -103,3 +103,39 @@ describe('stripe — webhook signature', () => {
 		expect(() => stripe.verifyWebhookSignature(body, header, '', 1_700_000_010)).toThrow(/not configured/);
 	});
 });
+
+describe('stripe — pure wallet arithmetic', () => {
+	const pack = { id: 'pack_25', usdCents: 2500, credits: 2600 };
+
+	it('delivers only paid sessions for the pack in OUR metadata', () => {
+		const base = { payment_status: 'paid', metadata: { pack_id: 'pack_25' }, currency: 'usd', amount_subtotal: 2500, amount_total: 2500 };
+		expect(stripe.validatePaidSession(base, pack)).toEqual({ ok: true });
+		expect(stripe.validatePaidSession({ ...base, payment_status: 'unpaid' }, pack)).toEqual({ ok: false, reason: 'not paid' });
+		expect(stripe.validatePaidSession({ ...base, metadata: { pack_id: 'pack_10' } }, pack)).toEqual({ ok: false, reason: 'pack mismatch' });
+	});
+
+	it('tolerates promotion codes (lower total, same subtotal) and Adaptive Pricing (non-USD)', () => {
+		expect(stripe.validatePaidSession({ payment_status: 'paid', metadata: { pack_id: 'pack_25' }, currency: 'usd', amount_subtotal: 2500, amount_total: 2000 }, pack).ok).toBe(true);
+		expect(stripe.validatePaidSession({ payment_status: 'paid', metadata: { pack_id: 'pack_25' }, currency: 'aud', amount_subtotal: 3800, amount_total: 3800 }, pack).ok).toBe(true);
+	});
+
+	it('refuses a USD session whose pre-discount subtotal is below the pack price', () => {
+		const r = stripe.validatePaidSession({ payment_status: 'paid', metadata: { pack_id: 'pack_25' }, currency: 'usd', amount_subtotal: 100, amount_total: 100 }, pack);
+		expect(r.ok).toBe(false);
+	});
+
+	it('refund clawback is proportional and cumulative-safe', () => {
+		// full refund of a 2 600-credit $25 pack
+		expect(stripe.refundClawback(2600, 2500, 2500, 0)).toBe(2600);
+		// 40% partial → 1 040 back
+		expect(stripe.refundClawback(2600, 2500, 1000, 0)).toBe(1040);
+		// second event reports the cumulative 1 500 refunded → only the extra 520
+		expect(stripe.refundClawback(2600, 2500, 1500, 1040)).toBe(520);
+		// a replay of the same cumulative figure takes nothing more
+		expect(stripe.refundClawback(2600, 2500, 1500, 1560)).toBe(0);
+		// never more than delivered, never negative, never on garbage
+		expect(stripe.refundClawback(2600, 2500, 9999, 0)).toBe(2600);
+		expect(stripe.refundClawback(0, 2500, 2500, 0)).toBe(0);
+		expect(stripe.refundClawback(2600, 0, 2500, 0)).toBe(0);
+	});
+});

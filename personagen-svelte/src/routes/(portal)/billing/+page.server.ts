@@ -48,7 +48,8 @@ export const load: PageServerLoad = async ({ locals, request, url }) => {
 		currency,
 		locale: locale ?? null,
 		balance,
-		balanceFormatted: formatCredits(balance, currency, s.fx_rates, locale),
+		// Exact on the money page (the sidebar pill rounds to whole units by design).
+		balanceFormatted: formatCredits(balance, currency, s.fx_rates, locale, { whole: false }),
 		balanceUsd: formatCredits(balance, 'USD', s.fx_rates, 'en-US', { whole: false }),
 		buys: { imagePosts: buys.imagePosts, videoPosts: buys.videoPosts, talkingHeads: buys.talkingHeads },
 		paymentsOpen: stripeEnabled(),

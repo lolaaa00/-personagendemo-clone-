@@ -504,7 +504,9 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		? priceOf('openrouter', 'llm') + 4 * priceOf('fal', 'image', 'nano') + priceOf('fal', 'video', 'pro')
 		: body.media === 'image'
 			? priceOf('openrouter', 'llm') + priceOf('fal', 'image', 'nano')
-			: priceOf('openrouter', 'llm') + priceOf('fal', 'image', 'nano') + priceOf('fal', 'tts') + priceOf('fal', 'talking_head');
+			: genInput.formatOverride === 'broll'
+				? priceOf('openrouter', 'llm') + priceOf('fal', 'image', 'nano') + priceOf('fal', 'video', 'standard')
+				: priceOf('openrouter', 'llm') + priceOf('fal', 'image', 'nano') + priceOf('fal', 'tts') + priceOf('fal', 'talking_head');
 	try {
 		await assertWithinBudget(locals.supabase, user.id, agentId, creditsFor(roughUsd));
 	} catch (err) {

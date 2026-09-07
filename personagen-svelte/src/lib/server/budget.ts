@@ -11,6 +11,7 @@
  * the try/finally around recordCostEvents in content/generate.ts.
  */
 
+import { creditsMode } from './flags';
 import { env } from '$env/dynamic/private';
 import { assertCreditsAvailable, resolveBillingAccount } from './credits';
 
@@ -44,15 +45,17 @@ async function sumSpend(
 		.eq(column, value)
 		.gte('created_at', sinceIso)
 		.limit(LEDGER_ROW_LIMIT);
-	// Fail OPEN on a ledger read error (don't block generation because analytics
-	// is down) — but the caps still catch the sustained-spend case on later ticks.
-	// Log LOUDLY so a broken ledger (= no budget enforcement) is diagnosable.
+	// Ledger read error: fail OPEN while credits are off/shadow (don't block
+	// generation because analytics is down — the caps still catch the sustained
+	// case on later ticks), but fail CLOSED once money is enforced: a wallet
+	// that cannot be checked must not be spent. Log LOUDLY either way.
 	if (error) {
-		console.error(
-			`[budget] generation_events ledger read FAILED for ${column}=${value} — failing OPEN (no spend cap enforced this call): ${
-				error.message ?? JSON.stringify(error)
-			}`
-		);
+		const msg = error.message ?? JSON.stringify(error);
+		if (creditsMode() === 'enforce') {
+			console.error(`[budget] generation_events ledger read FAILED for ${column}=${value} — failing CLOSED (credits enforced): ${msg}`);
+			throw new Error('Spend ledger unavailable — generation paused until it recovers (budget).');
+		}
+		console.error(`[budget] generation_events ledger read FAILED for ${column}=${value} — failing OPEN (no spend cap enforced this call): ${msg}`);
 		return 0;
 	}
 	const rows = data || [];
