@@ -1883,7 +1883,7 @@ async function runBudgetedAssetJob<T>(
  * provider), credits (ceil(est_cost*100)). Debits are keyed to the event id so
  * a retried write cannot charge twice.
  */
-async function recordCostEvents(
+export async function recordCostEvents(
 	supabase: any,
 	userId: string,
 	agentId: string | undefined,

@@ -11,11 +11,15 @@
 		activity_pepper: { set: boolean; source: 'env' | 'database' };
 		signup_credits: { stored: number; usd: string };
 		credit_markup: { effective: number; stored: number; source: 'env' | 'database' | 'default' };
+		daily_platform_spend_usd: { stored: number };
+		signup_credits_hourly_cap: { stored: number };
 		display_currency_default: { stored: string; supported: string[] };
 		fx_rates: { base: string; count: number; updated_at: string | null; source: string | null; sample: Array<{ currency: string; rate: number | null }> };
 	};
 	let signupCreditsDraft = $state<number | null>(null);
 	let markupDraft = $state<number | null>(null);
+	let ceilingDraft = $state<number | null>(null);
+	let hourlyCapDraft = $state<number | null>(null);
 	let controls = $state<{
 		switches: Switches;
 		cache: { primed: boolean; lastRefreshAt: string | null; lastError: string | null; updatedAt: Record<string, string> };
@@ -42,7 +46,7 @@
 		}
 	}
 
-	async function setSwitch(key: 'credits_mode' | 'activity_log' | 'activity_pepper' | 'signup_credits' | 'display_currency_default' | 'fx_rates' | 'credit_markup', value?: unknown) {
+	async function setSwitch(key: 'credits_mode' | 'activity_log' | 'activity_pepper' | 'signup_credits' | 'display_currency_default' | 'fx_rates' | 'credit_markup' | 'daily_platform_spend_usd' | 'signup_credits_hourly_cap', value?: unknown) {
 		const label =
 			key === 'activity_pepper'
 				? 'Rotate the activity hashing secret? Cross-day correlation of IP hashes breaks for today (by design).'
@@ -64,6 +68,8 @@
 			flash(key === 'activity_pepper' ? 'Pepper rotated' : key === 'fx_rates' ? `Rates refreshed: ${body.stored}` : `${key} = ${body.stored}${body.source === 'env' ? ' (stored — env override still wins)' : ''}`);
 			signupCreditsDraft = null;
 			markupDraft = null;
+			ceilingDraft = null;
+			hourlyCapDraft = null;
 			await loadControls();
 			if (platformLoaded) await loadPlatform();
 		} catch (e) {
@@ -522,6 +528,41 @@
 						{#if controls.switches.credit_markup.source === 'env'}
 							<p class="admin-hint warn">CREDIT_MARKUP is set in the host environment and overrides the stored value.</p>
 						{/if}
+					</div>
+
+					<div class="control">
+						<div class="control-head">
+							<strong>Platform daily ceiling</strong>
+							<span class="mode-pill" class:mode-enforce={controls.switches.daily_platform_spend_usd.stored > 0} class:mode-off={controls.switches.daily_platform_spend_usd.stored === 0}>
+								{controls.switches.daily_platform_spend_usd.stored > 0 ? `$${controls.switches.daily_platform_spend_usd.stored.toFixed(2)} / day` : 'off'}
+							</span>
+						</div>
+						<p class="admin-hint">
+							Total estimated <em>provider</em> spend per UTC day across every account. The last line against a leaked
+							key or a runaway loop that per-user caps cannot see. Fails closed only while credits are enforced. 0 disables.
+						</p>
+						<div class="filter-row">
+							<input class="admin-input narrow" type="number" min="0" step="10" value={ceilingDraft ?? controls.switches.daily_platform_spend_usd.stored} oninput={(e) => (ceilingDraft = Number((e.target as HTMLInputElement).value))} aria-label="Platform daily ceiling (USD)" />
+							<span class="admin-hint">USD raw provider cost</span>
+							<button class="filter-btn active" disabled={controlsBusy || ceilingDraft === null || ceilingDraft === controls.switches.daily_platform_spend_usd.stored} onclick={() => setSwitch('daily_platform_spend_usd', ceilingDraft)}>Save</button>
+						</div>
+					</div>
+
+					<div class="control">
+						<div class="control-head">
+							<strong>Welcome grants per hour</strong>
+							<span class="mode-pill" class:mode-enforce={controls.switches.signup_credits_hourly_cap.stored > 0} class:mode-off={controls.switches.signup_credits_hourly_cap.stored === 0}>
+								{controls.switches.signup_credits_hourly_cap.stored > 0 ? `${controls.switches.signup_credits_hourly_cap.stored} / hour` : 'unlimited'}
+							</span>
+						</div>
+						<p class="admin-hint">
+							Signup abuse guard: once this many accounts have received welcome credit in the last hour, further
+							signups still succeed but receive none (the trigger logs it). Raise for launches, lower under attack.
+						</p>
+						<div class="filter-row">
+							<input class="admin-input narrow" type="number" min="0" step="1" value={hourlyCapDraft ?? controls.switches.signup_credits_hourly_cap.stored} oninput={(e) => (hourlyCapDraft = Number((e.target as HTMLInputElement).value))} aria-label="Welcome grants per hour" />
+							<button class="filter-btn active" disabled={controlsBusy || hourlyCapDraft === null || hourlyCapDraft === controls.switches.signup_credits_hourly_cap.stored} onclick={() => setSwitch('signup_credits_hourly_cap', hourlyCapDraft)}>Save</button>
+						</div>
 					</div>
 
 					<div class="control">

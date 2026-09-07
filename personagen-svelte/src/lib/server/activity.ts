@@ -85,7 +85,9 @@ export const ACTIVITY_ACTIONS = {
 	'api.request': 'api',
 	'api.key.created': 'api',
 	'api.key.revoked': 'api',
-	'system.activity.dropped': 'system'
+	'system.activity.dropped': 'system',
+	'system.reconciliation': 'system',
+	'system.maintenance': 'system'
 } as const;
 
 export type ActivityAction = keyof typeof ACTIVITY_ACTIONS;

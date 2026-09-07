@@ -6,6 +6,10 @@ import { stripeEnabled, createCheckoutSession } from '$lib/server/stripe';
 import { getServiceSupabase } from '$lib/server/service-supabase';
 import { packById } from '$lib/billing-packs';
 import { logActivity } from '$lib/server/activity';
+import { RateLimiter } from '$lib/server/rate-limit';
+
+/** A double-click opens one session (idempotency key); a script opening fifty gets a 429. */
+const checkoutLimiter = new RateLimiter(5, 60 * 1000);
 
 /**
  * POST /api/billing/checkout  { packId }
@@ -19,6 +23,10 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 	const { session, user } = await locals.safeGetSession();
 	if (!session || !user) return json({ success: false, error: 'Unauthorized' }, { status: 401 });
 	if (!stripeEnabled()) return json({ success: false, error: 'Payments are not open yet. Ask us for credits in the meantime.' }, { status: 503 });
+	const limit = checkoutLimiter.check(`checkout:${user.id}`);
+	if (!limit.allowed) {
+		return json({ success: false, error: `Too many checkout attempts — try again in ${limit.retryAfterSeconds}s.` }, { status: 429, headers: { 'Retry-After': String(limit.retryAfterSeconds) } });
+	}
 
 	let body: any = {};
 	try {

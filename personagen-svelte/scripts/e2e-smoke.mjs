@@ -150,6 +150,14 @@ async function main() {
 	const expectedCredits = steps.reduce((s, x) => s + ceilCredits(Number(x.usd), Number(markup)), 0);
 	check('preview quotes retail credits = Σ ceil(step × markup × 100)', pv.ok && steps.length > 0 && pvBody.preview.estimatedCredits === expectedCredits, `steps=${steps.map((s) => `${s.step}@$${s.usd}`).join(' + ')} → ${pvBody.preview?.estimatedCredits} credits (mode ${pvBody.preview?.creditsMode})`);
 
+	// 5b. engine LLM action is metered: one llm event with retail credits and one debit
+	const eng = await postJson('/api/engine', { action: 'generate_profile', agent_id: agentId });
+	const engBody = await eng.json().catch(() => ({}));
+	await sleep(1500);
+	const engEvents = await pg(`select provider, operation, est_cost, credits, key_source, (select count(*)::int from credit_ledger l where l.generation_event_id=e.id and l.kind='debit') as debits from generation_events e where e.user_id=${q(userId)} and e.agent_id is null and e.operation='llm' order by created_at desc limit 3`);
+	const engOk = eng.ok && engEvents.length >= 1 && engEvents.every((e) => Number(e.credits) === ceilCredits(Number(e.est_cost), Number(markup)) && (mode === 'off' || e.debits === 1));
+	check('engine LLM action is metered (event + debit)', engOk, `HTTP ${eng.status} ${engBody.error ?? ''} events=${engEvents.map((e) => `${e.provider}/${e.operation}→${e.credits}cr debits=${e.debits}`).join(' | ') || 'none'}`);
+
 	// 6. real generation → draft; events attributed; wallet debited once per event
 	const gen = await postJson(`/api/agent/${agentId}/generate-post`, { media: 'image', still: 'graphic', refs: { character: false, product: false }, topic: 'A short thank-you note to early testers', deliver: 'review' });
 	const genBody = await gen.json().catch(() => ({}));

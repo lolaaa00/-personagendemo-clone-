@@ -65,6 +65,8 @@ export const GET: RequestHandler = async ({ locals }) => {
 			activity_pepper: { set: activityPepper().length >= 32, source: process.env.ACTIVITY_PEPPER ? 'env' : 'database' },
 			signup_credits: { stored: s.signup_credits, usd: formatCredits(s.signup_credits, 'USD', s.fx_rates, 'en-US') },
 			credit_markup: { effective: creditMarkup(), stored: s.credit_markup, source: creditMarkupSource() },
+			daily_platform_spend_usd: { stored: s.daily_platform_spend_usd },
+			signup_credits_hourly_cap: { stored: s.signup_credits_hourly_cap },
 			display_currency_default: { stored: s.display_currency_default, supported: SUPPORTED_CURRENCIES },
 			fx_rates: {
 				base: s.fx_rates.base,
@@ -121,6 +123,18 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			return json({ success: false, error: 'credit_markup must be a number between 1 (at cost) and 20' }, { status: 400 });
 		}
 		value = +n.toFixed(2);
+	} else if (key === 'daily_platform_spend_usd') {
+		const n = Number(body.value);
+		if (!Number.isFinite(n) || n < 0 || n > 100_000) {
+			return json({ success: false, error: 'daily_platform_spend_usd must be between 0 (off) and 100,000' }, { status: 400 });
+		}
+		value = +n.toFixed(2);
+	} else if (key === 'signup_credits_hourly_cap') {
+		const n = Number(body.value);
+		if (!Number.isInteger(n) || n < 0 || n > 10_000) {
+			return json({ success: false, error: 'signup_credits_hourly_cap must be an integer between 0 (unlimited) and 10,000' }, { status: 400 });
+		}
+		value = n;
 	} else if (key === 'display_currency_default') {
 		const c = String(body.value ?? 'auto').toUpperCase();
 		if (c !== 'AUTO' && !isSupportedCurrency(c)) {

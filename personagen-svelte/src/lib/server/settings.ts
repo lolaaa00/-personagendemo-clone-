@@ -37,6 +37,14 @@ export interface PlatformSettings {
 	 * packs sell at par and the money pill shows what was paid for. 1 = at cost.
 	 */
 	credit_markup: number;
+	/**
+	 * Ceiling on TOTAL estimated provider spend per UTC day across all users;
+	 * 0 = off. Code default is OFF (today's behaviour, D5); the migration seeds
+	 * the database row at 200 so production has the guard from first boot.
+	 */
+	daily_platform_spend_usd: number;
+	/** Welcome-credit grants allowed per hour platform-wide (signup abuse guard); 0 = unlimited. */
+	signup_credits_hourly_cap: number;
 }
 
 export const DEFAULT_SETTINGS: PlatformSettings = {
@@ -46,10 +54,12 @@ export const DEFAULT_SETTINGS: PlatformSettings = {
 	signup_credits: 2000,
 	display_currency_default: 'auto',
 	fx_rates: FALLBACK_FX,
-	credit_markup: 1
+	credit_markup: 1,
+	daily_platform_spend_usd: 0,
+	signup_credits_hourly_cap: 20
 };
 
-export const SETTING_KEYS = ['credits_mode', 'activity_log', 'activity_pepper', 'signup_credits', 'display_currency_default', 'fx_rates', 'credit_markup'] as const;
+export const SETTING_KEYS = ['credits_mode', 'activity_log', 'activity_pepper', 'signup_credits', 'display_currency_default', 'fx_rates', 'credit_markup', 'daily_platform_spend_usd', 'signup_credits_hourly_cap'] as const;
 export type SettingKey = (typeof SETTING_KEYS)[number];
 
 const REFRESH_MS = 15_000;
@@ -103,6 +113,14 @@ function coerce(key: string, raw: unknown): unknown {
 		case 'credit_markup': {
 			const n = Number(raw);
 			return Number.isFinite(n) && n >= 1 && n <= 20 ? n : 1;
+		}
+		case 'daily_platform_spend_usd': {
+			const n = Number(raw);
+			return Number.isFinite(n) && n >= 0 ? n : 0;
+		}
+		case 'signup_credits_hourly_cap': {
+			const n = Number(raw);
+			return Number.isInteger(n) && n >= 0 ? n : 20;
 		}
 		default:
 			return raw;

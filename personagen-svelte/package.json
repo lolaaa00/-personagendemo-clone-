@@ -17,6 +17,8 @@
     "test:watch": "vitest --project=unit",
     "test": "npm run test:unit && npm run test:e2e",
     "test:e2e": "playwright install && playwright test",
+    "verify:money": "node scripts/apply-migration.mjs --status --strict && node scripts/verify-recorded-migrations.mjs --strict && node scripts/verify-credits-db.mjs && node scripts/verify-roles-db.mjs && node scripts/verify-activity-db.mjs",
+    "smoke:live": "node scripts/e2e-smoke.mjs",
     "backfill:faststart": "node --env-file=.env --experimental-strip-types scripts/backfill-faststart.ts",
     "backfill:compress": "node --env-file=.env --experimental-strip-types scripts/backfill-compress.ts",
     "switch:media-host": "node --env-file=.env --experimental-strip-types scripts/switch-media-host.ts",

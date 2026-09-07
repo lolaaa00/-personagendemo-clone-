@@ -5,6 +5,10 @@ import { createDbService } from '$lib/server/db';
 import { getUserApiKey } from '$lib/server/user-api-keys';
 import { publishPostById } from '$lib/server/scheduler';
 import { resolveAiClient } from '$lib/server/ai-client';
+import { meteredAiClient, meteredCall, meteringRefusal, BATCH_MAX } from '$lib/server/metering';
+import { assertWithinBudget } from '$lib/server/budget';
+import { creditsFor } from '$lib/server/credits';
+import { priceOf as meteringPriceOf } from '$lib/pricing';
 import {
 	generateUgcPack,
 	generateUgcImage,
@@ -321,7 +325,9 @@ export const POST: RequestHandler = async ({ url, request, locals, fetch }) => {
 	const action = body.action;
 
 	const db = createDbService(locals.supabase);
-	const ai = await resolveAiClient(locals.supabase, session.user.id);
+	// Every engine text call is metered through one wrapper: gated once per
+	// request, recorded + debited per call (D11). Nothing below changes.
+	const ai = meteredAiClient(await resolveAiClient(locals.supabase, session.user.id), { supabase: locals.supabase, userId: session.user.id });
 	const hasAi = !!ai;
 
 	console.log(
@@ -550,7 +556,15 @@ Platform: ${bp.platform || platform}
 
 			// ── ACTION: batch_generate (100 UGC copies in one click) ────────────
 			if (action === 'batch_generate') {
-				const count = Math.min(Math.max(body.count || 10, 1), 100);
+				const count = Math.min(Math.max(body.count || 10, 1), BATCH_MAX);
+				// Gate the WHOLE batch up front at retail (text + still per copy), so a
+				// thin wallet is refused before the first paid call instead of after copy 7.
+				try {
+					await assertWithinBudget(locals.supabase, session.user.id, undefined, creditsFor(count * (meteringPriceOf('openrouter', 'llm') + meteringPriceOf('fal', 'image', 'nano'))));
+				} catch (gateErr) {
+					const refusal = meteringRefusal(gateErr);
+					return json(refusal.body, { status: refusal.status });
+				}
 				const BATCH_SIZE = 10;
 
 				if (!hasAi) {
@@ -617,7 +631,14 @@ Output ONLY the JSON.`;
 								const parsed = safeParseJson(raw);
 								if (!parsed || !parsed.text || !parsed.ugc_broll_prompt) return null;
 								// Generate a unique UGC image for this copy — no product-photo fallback
-								const gen = await generateUgcImage(parsed.ugc_broll_prompt, orKey, falKey);
+								const gen = await meteredCall(
+									{ supabase: locals.supabase, userId: session.user.id },
+									() => generateUgcImage(parsed.ugc_broll_prompt, orKey, falKey),
+									{
+										estimateUsd: meteringPriceOf('fal', 'image', 'nano'),
+										event: (r) => ({ provider: r.provider, operation: 'image', model: r.model, usd: meteringPriceOf(r.provider, 'image', r.provider === 'fal' ? 'nano' : undefined) })
+									}
+								);
 								// Archive it now. With a service key, a persist failure throws →
 								// this item drops to a failure rather than scheduling a post with a
 								// dead media_url. Without one, we fall back to the provider URL.

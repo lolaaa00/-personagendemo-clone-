@@ -86,3 +86,9 @@ export function creditMarkupSource(): SwitchSource {
 	if (Number.isFinite(e) && e >= 1 && e <= 20) return 'env';
 	return getSettings().credit_markup ? 'database' : 'default';
 }
+
+/** Platform-wide ceiling on estimated provider spend per UTC day (0 = off). Console-only, no env; off until the database row says otherwise. */
+export function platformDailySpendUsd(): number {
+	const n = Number(getSettings().daily_platform_spend_usd);
+	return Number.isFinite(n) && n >= 0 ? n : 0;
+}

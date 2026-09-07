@@ -6,6 +6,7 @@ import { getServiceSupabase } from '$lib/server/service-supabase';
 import { creditsMode, creditsSource } from '$lib/server/flags';
 import { activityStats } from '$lib/server/activity';
 import { settingsStatus } from '$lib/server/settings';
+import { maintenanceStatus } from '$lib/server/maintenance';
 import MIGRATION_ORDER from '../../../../supabase/migrations.json';
 
 export const GET: RequestHandler = async ({ locals }) => {
@@ -88,6 +89,17 @@ export const GET: RequestHandler = async ({ locals }) => {
 		: act.dropped > 0
 			? `dropped:${act.dropped}${act.lastError ? ` (${act.lastError.slice(0, 80)})` : ''}`
 			: 'ok';
+
+	// Billing reconciliation (hourly, on the scheduler lease): says when it last
+	// ran and whether any platform-paid event lacks its single matching debit.
+	const m = maintenanceStatus();
+	checks.reconciliation = m.lastError
+		? `error: ${m.lastError.slice(0, 80)}`
+		: !m.lastReconcileAt
+			? 'pending (runs on the next scheduler tick)'
+			: (m.lastMismatches ?? 0) > 0
+				? `mismatches:${m.lastMismatches} (${m.lastReconcileAt})`
+				: `ok (${m.lastReconcileAt})`;
 
 	return json(
 		{

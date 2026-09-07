@@ -11,9 +11,38 @@
  * the try/finally around recordCostEvents in content/generate.ts.
  */
 
-import { creditsMode, creditMarkup } from './flags';
+import { creditsMode, creditMarkup, platformDailySpendUsd } from './flags';
 import { env } from '$env/dynamic/private';
 import { assertCreditsAvailable, resolveBillingAccount } from './credits';
+import { getServiceSupabase } from './service-supabase';
+
+/**
+ * Platform-wide daily ceiling: the sum of every user's estimated provider
+ * spend today must stay under the console setting. This is the last line
+ * against a compromised key or a runaway loop that per-user caps cannot see.
+ * Reads through the service client (RLS would hide other users' rows); fails
+ * OPEN in off/shadow like the per-user caps, CLOSED while credits are enforced.
+ */
+async function platformCeilingExceeded(fallbackClient: any, sinceIso: string): Promise<string | null> {
+	const cap = platformDailySpendUsd();
+	if (!(cap > 0)) return null;
+	let client: any = fallbackClient;
+	try {
+		client = getServiceSupabase();
+	} catch {
+		/* no service key (dev) — the session client sees only its own rows */
+	}
+	const { data, error } = await client.from('generation_events').select('est_cost').gte('created_at', sinceIso).limit(LEDGER_ROW_LIMIT);
+	if (error) {
+		if (creditsMode() === 'enforce') return 'Spend ledger unavailable — generation paused until it recovers (budget).';
+		console.error('[budget] platform ceiling read FAILED — failing OPEN:', error.message);
+		return null;
+	}
+	const spent = (data ?? []).reduce((s: number, r: any) => s + (Number(r.est_cost) || 0), 0);
+	return spent >= cap
+		? `Platform daily generation ceiling reached ($${spent.toFixed(2)} of $${cap.toFixed(2)}). An operator can raise it in Admin Console → Controls & Health.`
+		: null;
+}
 
 function usdFromEnv(name: string, fallback: number): number {
 	const raw = env[name];
@@ -162,7 +191,7 @@ export async function assertWithinBudget(
 
 	// The ledger sums are independent — run them concurrently rather than
 	// serialising round-trips on the hot generation path.
-	const [monthlySpent, dailySpent, seatCapMessage] = await Promise.all([
+	const [monthlySpent, dailySpent, seatCapMessage, platformMessage] = await Promise.all([
 		checkMonthly
 			? sumSpend(supabase, 'user_id', userId, monthlySince.toISOString())
 			: Promise.resolve(0),
@@ -171,8 +200,13 @@ export async function assertWithinBudget(
 			: Promise.resolve(0),
 		userId && agentId
 			? seatCapExceeded(supabase, userId, agentId, monthlySince.toISOString())
-			: Promise.resolve(null)
+			: Promise.resolve(null),
+		platformCeilingExceeded(supabase, dailySince.toISOString())
 	]);
+
+	if (platformMessage) {
+		throw new Error(platformMessage);
+	}
 
 	if (seatCapMessage) {
 		throw new Error(seatCapMessage);

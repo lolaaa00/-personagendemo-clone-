@@ -6,6 +6,7 @@ import { publishToPlatform } from './social/publisher';
 import { getServiceSupabase } from './service-supabase';
 import { getLocalParts, runAutopilotDraftGeneration, zonedWallTimeToEpoch } from './autopilot';
 import { acquireSchedulerLease, renewSchedulerLease } from './scheduler-lock';
+import { maybeRunMaintenance } from './maintenance';
 import { ALL_PLATFORM_KEYS } from '$lib/platforms';
 
 const DEFAULT_TZ = 'Australia/Sydney';
@@ -890,6 +891,10 @@ export async function pollScheduledPosts() {
 					});
 			}
 		}
+
+		// Unattended billing + activity maintenance (hourly reconciliation,
+		// nightly roll-ups) — leader-only by construction, decides its own cadence.
+		await maybeRunMaintenance(supabase, nowTime);
 	} catch (err) {
 		console.error('[Scheduler] Critical loop error:', err);
 	} finally {

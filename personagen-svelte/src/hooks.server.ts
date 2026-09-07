@@ -127,6 +127,14 @@ export const handle: Handle = async ({ event, resolve }) => {
 	}
 	try {
 		response.headers.set('x-request-id', requestId);
+		// Baseline browser hardening on every response. No CSP here: SvelteKit's
+		// inline hydration scripts would need nonces threaded through the app.
+		response.headers.set('X-Content-Type-Options', 'nosniff');
+		response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+		response.headers.set('X-Frame-Options', 'SAMEORIGIN');
+		response.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(self)');
+		const https = event.url.protocol === 'https:' || event.request.headers.get('x-forwarded-proto') === 'https';
+		if (https) response.headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
 	} catch {
 		/* immutable headers on some responses — fine */
 	}
