@@ -30,6 +30,19 @@ describe('flags — every switch defaults to today\'s behaviour', () => {
 		expect(flags.activityLogEnabled()).toBe(false);
 	});
 
+	it('CREDIT_MARKUP defaults to 1 (at cost) and only accepts 1–20', () => {
+		expect(flags.creditMarkup()).toBe(1);
+		mockEnv.CREDIT_MARKUP = '3';
+		expect(flags.creditMarkup()).toBe(3);
+		expect(flags.creditMarkupSource()).toBe('env');
+		mockEnv.CREDIT_MARKUP = '0.5';
+		expect(flags.creditMarkup()).toBe(1);
+		mockEnv.CREDIT_MARKUP = '99';
+		expect(flags.creditMarkup()).toBe(1);
+		mockEnv.CREDIT_MARKUP = 'lots';
+		expect(flags.creditMarkup()).toBe(1);
+	});
+
 	it('PLATFORM_ADMIN_EMAILS is a trimmed, lower-cased list', () => {
 		expect(flags.platformAdminEmails()).toEqual([]);
 		mockEnv.PLATFORM_ADMIN_EMAILS = ' Owner@Example.com, ops@example.com ,,';

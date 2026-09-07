@@ -9,6 +9,7 @@
 //   node scripts/platform-setting.mjs --as admin@example.com --note "why" activity_pepper --rotate
 //   node scripts/platform-setting.mjs --as admin@example.com --note "why" signup_credits 2000
 //   node scripts/platform-setting.mjs --as admin@example.com --note "why" display_currency_default auto|AUD
+//   node scripts/platform-setting.mjs --as admin@example.com --note "why" credit_markup 3
 //   node scripts/platform-setting.mjs --as admin@example.com --note "why" fx_rates --refresh   (ECB via frankfurter.app)
 //
 // The pepper's value is never printed. Env vars of the same name on the host
@@ -94,6 +95,8 @@ if (key === 'activity_pepper') {
 } else if (key === 'credits_mode') {
 	valueJson = JSON.stringify(String(rawValue).toLowerCase());
 } else if (key === 'signup_credits') {
+	valueJson = JSON.stringify(Number(rawValue));
+} else if (key === 'credit_markup') {
 	valueJson = JSON.stringify(Number(rawValue));
 } else if (key === 'display_currency_default') {
 	valueJson = JSON.stringify(String(rawValue).toLowerCase() === 'auto' ? 'auto' : String(rawValue).toUpperCase());

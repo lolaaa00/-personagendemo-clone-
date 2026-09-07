@@ -96,7 +96,7 @@
 		},
 		{
 			title: 'Every cent, on the record.',
-			body: 'Per-persona, per-post spend by provider. Pick your quality tier and see the cost before you spend it. No credits. No expiry. No guessing.'
+			body: 'Per-persona, per-post spend, shown in your currency before you confirm. Text posts are free. Your balance never expires. No guessing.'
 		}
 	];
 
@@ -108,7 +108,7 @@
 		{ label: 'Confirms it actually published', studio: false, scheduler: false, us: true },
 		{ label: 'You approve before it posts', studio: false, scheduler: false, us: true },
 		{ label: 'Runs on a schedule, unattended', studio: false, scheduler: false, us: true },
-		{ label: 'Shows you the real cost', studio: false, scheduler: 'credits', us: 'exact USD' },
+		{ label: 'Shows you the real cost', studio: false, scheduler: 'points', us: 'money, in your currency' },
 		{ label: 'Ends at', studio: 'a download', scheduler: 'Instagram', us: 'your analytics' }
 	];
 
@@ -119,7 +119,8 @@
 			blurb: 'For one brand finding its footing.',
 			features: [
 				'3 personas',
-				'500 posts / month',
+				'$40 / month of media generation included',
+				'Unlimited text posts',
 				'All 13 platforms',
 				'1 brand brief',
 				'Advisor + Semi-autonomous',
@@ -134,7 +135,8 @@
 			blurb: 'The account actually runs itself.',
 			features: [
 				'10 personas',
-				'Unlimited posts',
+				'$180 / month of media generation included',
+				'Unlimited text posts',
 				'All 13 platforms',
 				'3 brand briefs',
 				'All three autonomy levels',
@@ -151,12 +153,13 @@
 			blurb: 'Many brands, one console.',
 			features: [
 				'Unlimited personas',
-				'Unlimited posts',
+				'$600 / month of media generation included',
+				'Unlimited text posts',
 				'All 13 platforms',
 				'Unlimited brand briefs',
 				'Priority generation queue',
 				'Teams + shared workspaces',
-				'Bring your own keys at cost',
+				'Bring your own keys — generation at no charge',
 				'API access + dedicated manager'
 			],
 			cta: 'Talk to us',
@@ -166,8 +169,8 @@
 
 	const FAQS = [
 		{
-			q: 'Why don’t you sell credits?',
-			a: 'Because credits price the wrong thing. One persona posting six times a day is 180 posts a month — a number that does not exist on a credit sheet at any tier. We price per brand so the cadence you need is the cadence you get.'
+			q: 'How does the media wallet work?',
+			a: 'Every plan includes a monthly wallet for AI images, video and voice, shown as money in your currency. Text posts cost nothing, so a persona can post six times a day without touching it. Every generation shows its price before you confirm. Run low and you top up at par: $25 buys $25.00 of generation, and it never expires.'
 		},
 		{
 			q: 'How does the identity actually stay consistent?',
@@ -361,10 +364,10 @@
 	</section>
 
 	<section class="lp-section lp-section-alt" id="pricing">
-		<h2>Priced per brand. Not per credit.</h2>
+		<h2>Priced per brand. Not per seat.</h2>
 		<p class="lp-section-sub">
-			One persona on autopilot is about 180 posts a month. Credit-metered tools cannot sell you
-			that at any tier — so we don’t meter.
+			Every plan includes a monthly media wallet and unlimited text posts. Need more video this
+			month? Top up at par, in your currency, and it never expires.
 		</p>
 		<div class="lp-plans">
 			{#each PLANS as p}
@@ -417,7 +420,7 @@
 	<section class="lp-final">
 		<h2>Everyone else sells you a face.<br /><span class="lp-grad">We run the account.</span></h2>
 		<a class="lp-btn lp-btn-lg" href="/signup">Create your first persona — free</a>
-		<p class="lp-fineprint">No credit card. Cancel any time.</p>
+		<p class="lp-fineprint">No credit card. Free generation credit to start. Cancel any time.</p>
 	</section>
 
 	<footer class="lp-footer">

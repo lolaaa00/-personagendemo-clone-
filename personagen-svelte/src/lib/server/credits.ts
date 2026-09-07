@@ -1,8 +1,12 @@
 /**
  * Credits — the wallet layer on top of the generation_events receipt ledger.
  *
- * Unit: 1 credit = 1 cent of ESTIMATED provider cost. creditsFor() is the only
- * conversion; margin lives in what a Stripe pack costs, never here.
+ * Unit: 1 credit = 1 RETAIL cent. creditsFor() is the only conversion:
+ * ceil(estimated provider cost × credit_markup × 100). The markup is a
+ * platform setting (Admin Console → Controls), default 1 = at cost. Because
+ * the credit is a retail cent, packs sell at par ($20 → 2,000 credits) and the
+ * money pill always shows what the customer paid for. generation_events keeps
+ * est_cost (raw) and credits (retail) side by side, so margin is a query.
  *
  * Modes (flags.ts → CREDITS_ENFORCE):
  *   off      nothing here touches the database — today's behaviour
@@ -17,16 +21,25 @@
  */
 
 import { getServiceSupabase } from './service-supabase';
-import { creditsMode, type CreditsMode } from './flags';
+import { creditsMode, creditMarkup, type CreditsMode } from './flags';
 
 export const CREDITS_PER_USD = 100;
 
-/** ceil(usd × 100); non-positive or non-finite → 0. */
-export function creditsFor(usd: number): number {
+/**
+ * ceil(usd × markup × 100); non-positive or non-finite → 0. `markup` defaults
+ * to the live platform setting; pass it explicitly to quote at a known rate.
+ */
+export function creditsFor(usd: number, markup: number = creditMarkup()): number {
 	const n = Number(usd);
 	if (!Number.isFinite(n) || n <= 0) return 0;
+	const m = Number.isFinite(markup) && markup >= 1 ? markup : 1;
 	// Round to 6 dp first so 0.0800000001-style float noise doesn't add a credit.
-	return Math.ceil(+(n * CREDITS_PER_USD).toFixed(6));
+	return Math.ceil(+(n * m * CREDITS_PER_USD).toFixed(6));
+}
+
+/** Retail USD for a raw provider estimate at the live markup (for quotes). */
+export function retailUsdFor(usd: number, markup: number = creditMarkup()): number {
+	return creditsFor(usd, markup) / CREDITS_PER_USD;
 }
 
 export type KeySource = 'platform' | 'byo' | 'none';

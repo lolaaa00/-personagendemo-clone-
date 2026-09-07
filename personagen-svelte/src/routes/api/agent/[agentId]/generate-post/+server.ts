@@ -16,7 +16,7 @@ import { resolveAiClient } from '$lib/server/ai-client';
 import { isCardRendererAvailable, CARD_RENDERER_LABEL } from '$lib/server/content/card-renderer';
 import { publishPostById } from '$lib/server/scheduler';
 import { assertWithinBudget } from '$lib/server/budget';
-import { creditsFor } from '$lib/server/credits';
+import { creditsFor, isCreditsError } from '$lib/server/credits';
 import { creditsMode } from '$lib/server/flags';
 import { getServiceSupabase } from '$lib/server/service-supabase';
 import { priceOf } from '$lib/pricing';
@@ -496,9 +496,26 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 	// and a doomed slot never creates a placeholder row at all. The detached
 	// assert stays: two requests can pass this precheck concurrently, and the
 	// inner one is what actually guards the money.
+	// Conservative retail quote for the credit gate: the spokesperson pipeline
+	// (the dearer of the two video branches) or the cinematic pack, so a thin
+	// wallet is refused up front instead of overdrawing mid-run. The composer's
+	// preview above quotes the exact pipeline; this only has to be an upper bound.
+	const roughUsd = wantCinematic
+		? priceOf('openrouter', 'llm') + 4 * priceOf('fal', 'image', 'nano') + priceOf('fal', 'video', 'pro')
+		: body.media === 'image'
+			? priceOf('openrouter', 'llm') + priceOf('fal', 'image', 'nano')
+			: priceOf('openrouter', 'llm') + priceOf('fal', 'image', 'nano') + priceOf('fal', 'tts') + priceOf('fal', 'talking_head');
 	try {
-		await assertWithinBudget(locals.supabase, user.id, agentId);
+		await assertWithinBudget(locals.supabase, user.id, agentId, creditsFor(roughUsd));
 	} catch (err) {
+		if (isCreditsError(err)) {
+			// 402 with a place to go: the composer shows the message, the pill is red,
+			// and /billing sells the top-up, so the "ran out" wall becomes a purchase.
+			return json(
+				{ success: false, code: 'INSUFFICIENT_CREDITS', error: `${(err as Error).message} Top up at /billing to continue.`, billingUrl: '/billing' },
+				{ status: 402 }
+			);
+		}
 		return json({ success: false, error: (err as Error).message }, { status: 400 });
 	}
 

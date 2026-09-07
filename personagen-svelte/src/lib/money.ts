@@ -1,8 +1,9 @@
 /**
  * Money display for credits — client-safe (no server imports).
  *
- * Credits are an internal unit: 1 credit = 1 US cent of estimated generation
- * cost. Users never see "credits"; they see a money amount in THEIR currency,
+ * Credits are an internal unit: 1 credit = 1 US cent at RETAIL (estimated
+ * provider cost × the platform's credit_markup, see server/credits.ts).
+ * Users never see "credits"; they see a money amount in THEIR currency,
  * the way any wallet-style SaaS does ("Credits $20.00"). The currency comes
  * from, in order: the user's saved preference → the visiting browser's country
  * (Cloudflare header) → the Accept-Language locale → USD.

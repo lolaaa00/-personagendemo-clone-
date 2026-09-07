@@ -1,0 +1,74 @@
+import type { PageServerLoad } from './$types';
+import { redirect } from '@sveltejs/kit';
+import { creditsMode, creditMarkup } from '$lib/server/flags';
+import { getSettings } from '$lib/server/settings';
+import { stripeEnabled } from '$lib/server/stripe';
+import { CREDIT_PACKS, whatItBuys } from '$lib/billing-packs';
+import { resolveDisplayCurrency, creditsToAmount, formatCredits, formatMoney, localeFromAcceptLanguage } from '$lib/money';
+
+/**
+ * /billing — the wallet, in the visitor's money.
+ *
+ * Balance, what it buys, the packs (at par, USD, with the local equivalent
+ * beside each), and the recent ledger. RLS scopes the wallet and ledger reads
+ * to the caller; nothing here is service-role.
+ */
+export const load: PageServerLoad = async ({ locals, request, url }) => {
+	const { session, user } = await locals.safeGetSession();
+	if (!session || !user) throw redirect(303, '/login');
+
+	const s = getSettings();
+	const markup = creditMarkup();
+	const acceptLanguage = request.headers.get('accept-language');
+	const locale = localeFromAcceptLanguage(acceptLanguage);
+
+	const [{ data: wallet }, { data: profile }, { data: ledger }] = await Promise.all([
+		locals.supabase.from('credit_accounts').select('balance_credits, billing_mode, updated_at').eq('user_id', user.id).maybeSingle(),
+		locals.supabase.from('profiles').select('display_currency').eq('id', user.id).maybeSingle(),
+		locals.supabase
+			.from('credit_ledger')
+			.select('seq, delta, kind, balance_after, note, created_at')
+			.eq('user_id', user.id)
+			.order('seq', { ascending: false })
+			.limit(40)
+	]);
+
+	const currency = resolveDisplayCurrency({
+		preference: profile?.display_currency ?? null,
+		country: request.headers.get('cf-ipcountry'),
+		acceptLanguage,
+		platformDefault: s.display_currency_default
+	});
+	const balance = Number(wallet?.balance_credits ?? 0);
+	const buys = whatItBuys(Math.max(balance, 0), markup);
+
+	return {
+		mode: creditsMode(),
+		billingMode: wallet?.billing_mode ?? 'credits',
+		currency,
+		locale: locale ?? null,
+		balance,
+		balanceFormatted: formatCredits(balance, currency, s.fx_rates, locale),
+		balanceUsd: formatCredits(balance, 'USD', s.fx_rates, 'en-US', { whole: false }),
+		buys: { imagePosts: buys.imagePosts, videoPosts: buys.videoPosts, talkingHeads: buys.talkingHeads },
+		paymentsOpen: stripeEnabled(),
+		packs: CREDIT_PACKS.map((p) => ({
+			...p,
+			usd: formatMoney(p.usdCents / 100, 'USD', 'en-US'),
+			local: currency === 'USD' ? null : formatMoney(creditsToAmount(p.usdCents, currency, s.fx_rates), currency, locale),
+			worth: formatCredits(p.credits, currency, s.fx_rates, locale),
+			buys: whatItBuys(p.credits, markup)
+		})),
+		ledger: (ledger ?? []).map((r: any) => ({
+			seq: r.seq,
+			kind: r.kind,
+			note: r.note,
+			created_at: r.created_at,
+			delta: Number(r.delta),
+			deltaFormatted: formatCredits(Math.abs(Number(r.delta)), currency, s.fx_rates, locale, { whole: false }),
+			after: formatCredits(Number(r.balance_after), currency, s.fx_rates, locale, { whole: false })
+		})),
+		status: url.searchParams.get('status'),
+		markup
+	};
+};

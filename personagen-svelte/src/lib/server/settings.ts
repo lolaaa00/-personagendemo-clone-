@@ -31,6 +31,12 @@ export interface PlatformSettings {
 	display_currency_default: string;
 	/** USD-based display rates (display only — the wallet is USD cents). */
 	fx_rates: FxRates;
+	/**
+	 * Retail multiplier on the estimated provider cost when debiting:
+	 * credits = ceil(est × markup × 100). Makes 1 credit = 1 RETAIL cent so
+	 * packs sell at par and the money pill shows what was paid for. 1 = at cost.
+	 */
+	credit_markup: number;
 }
 
 export const DEFAULT_SETTINGS: PlatformSettings = {
@@ -39,10 +45,11 @@ export const DEFAULT_SETTINGS: PlatformSettings = {
 	activity_pepper: '',
 	signup_credits: 2000,
 	display_currency_default: 'auto',
-	fx_rates: FALLBACK_FX
+	fx_rates: FALLBACK_FX,
+	credit_markup: 1
 };
 
-export const SETTING_KEYS = ['credits_mode', 'activity_log', 'activity_pepper', 'signup_credits', 'display_currency_default', 'fx_rates'] as const;
+export const SETTING_KEYS = ['credits_mode', 'activity_log', 'activity_pepper', 'signup_credits', 'display_currency_default', 'fx_rates', 'credit_markup'] as const;
 export type SettingKey = (typeof SETTING_KEYS)[number];
 
 const REFRESH_MS = 15_000;
@@ -92,6 +99,10 @@ function coerce(key: string, raw: unknown): unknown {
 				return { base: 'USD', rates: { USD: 1, ...r.rates }, updated_at: r.updated_at ?? null, source: r.source ?? null } as FxRates;
 			}
 			return FALLBACK_FX;
+		}
+		case 'credit_markup': {
+			const n = Number(raw);
+			return Number.isFinite(n) && n >= 1 && n <= 20 ? n : 1;
 		}
 		default:
 			return raw;

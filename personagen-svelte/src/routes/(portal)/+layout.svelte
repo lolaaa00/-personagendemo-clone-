@@ -831,9 +831,10 @@
 					<span>{(data as any).badgeLabel ?? 'Personal account'}</span>
 					{#if (data as any).credits}
 						<a
-							href="/settings?section=billing"
+							href="/billing"
 							class="credit-pill"
 							class:low={(data as any).credits.balance <= 0 && (data as any).credits.billing_mode !== 'unmetered'}
+							class:warn={(data as any).credits.balance > 0 && (data as any).credits.balance < 300 && (data as any).credits.billing_mode !== 'unmetered'}
 							title={(data as any).credits.billing_mode === 'unmetered'
 								? 'Complimentary account — generations are not charged'
 								: `${(data as any).credits.usd} of generation credit${(data as any).credits.currency !== 'USD' ? ` (shown in ${(data as any).credits.currency})` : ''}`}
@@ -2111,5 +2112,9 @@
 	}
 	.credit-pill.low .credit-pill-amount {
 		color: #ef4444;
+	}
+	/* Under $3.00: amber, before the wall, the nudge to top up while a run still fits. */
+	.credit-pill.warn .credit-pill-amount {
+		color: #d97706;
 	}
 </style>

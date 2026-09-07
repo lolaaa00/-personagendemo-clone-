@@ -1,0 +1,432 @@
+<script lang="ts">
+	import { onMount } from 'svelte';
+	import { invalidateAll } from '$app/navigation';
+
+	let { data } = $props();
+
+	let buying = $state<string | null>(null);
+	let error = $state<string | null>(null);
+	let banner = $state<string | null>(
+		data.status === 'success'
+			? 'Payment received. Your balance updates within a few seconds.'
+			: data.status === 'cancel'
+				? 'Checkout cancelled. Nothing was charged.'
+				: null
+	);
+
+	// After a successful checkout the webhook lands a beat later than the
+	// redirect; poll the page data briefly so the new balance appears without
+	// a manual refresh.
+	onMount(() => {
+		if (data.status !== 'success') return;
+		let n = 0;
+		const t = setInterval(async () => {
+			n++;
+			await invalidateAll();
+			if (n >= 6) clearInterval(t);
+		}, 2000);
+		return () => clearInterval(t);
+	});
+
+	async function buy(packId: string) {
+		error = null;
+		buying = packId;
+		try {
+			const res = await fetch('/api/billing/checkout', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ packId })
+			});
+			const body = await res.json().catch(() => ({}));
+			if (!res.ok || !body.url) throw new Error(body.error || `HTTP ${res.status}`);
+			window.location.href = body.url;
+		} catch (e) {
+			error = (e as Error).message;
+			buying = null;
+		}
+	}
+
+	const when = (iso: string) =>
+		new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+
+	const kindLabel: Record<string, string> = {
+		grant: 'Credit added',
+		purchase: 'Purchase',
+		debit: 'Generation',
+		refund: 'Refund',
+		adjustment: 'Adjustment',
+		set: 'Balance set'
+	};
+
+	const low = $derived(data.billingMode !== 'unmetered' && data.balance < 300);
+	const empty = $derived(data.billingMode !== 'unmetered' && data.balance <= 0);
+</script>
+
+<svelte:head>
+	<title>Billing · PersonaGen</title>
+</svelte:head>
+
+<div class="billing">
+	{#if banner}
+		<div class="banner" class:ok={data.status === 'success'} role="status">
+			{banner}
+			<button class="banner-x" onclick={() => (banner = null)} aria-label="Dismiss">×</button>
+		</div>
+	{/if}
+
+	<section class="hero">
+		<div class="hero-main">
+			<p class="eyebrow">Your balance</p>
+			{#if data.billingMode === 'unmetered'}
+				<h1 class="amount">∞</h1>
+				<p class="sub">Complimentary account. Generations are not charged.</p>
+			{:else}
+				<h1 class="amount" class:low class:empty>{data.balanceFormatted}</h1>
+				<p class="sub">
+					{#if data.currency !== 'USD'}Shown in {data.currency} · exactly {data.balanceUsd} ·{/if}
+					{#if empty}
+						Your wallet is empty. Text posts still generate free; AI images and video need a top-up.
+					{:else}
+						≈ <strong>{data.buys.imagePosts}</strong> image posts, or <strong>{data.buys.videoPosts}</strong> video posts, or
+						<strong>{data.buys.talkingHeads}</strong> talking-head clips. Text posts are always free.
+					{/if}
+				</p>
+			{/if}
+		</div>
+		<ul class="promises">
+			<li><strong>Never expires.</strong> Credit sits in your wallet until you use it.</li>
+			<li><strong>Price before you spend.</strong> Every generation shows its cost first.</li>
+			<li><strong>Only what you start.</strong> Failed runs are not charged.</li>
+		</ul>
+	</section>
+
+	{#if data.billingMode !== 'unmetered'}
+		<section class="packs">
+			<div class="packs-head">
+				<h2>Top up</h2>
+				<p class="muted">
+					Charged in USD at par: $25 buys $25.00 of generation. Bigger packs include bonus credit.
+					{#if !data.paymentsOpen}<span class="soon">Payments open soon — message us and we'll load your wallet.</span>{/if}
+				</p>
+			</div>
+			{#if error}<p class="error" role="alert">{error}</p>{/if}
+			<div class="pack-grid">
+				{#each data.packs as p (p.id)}
+					<article class="pack" class:featured={p.featured}>
+						{#if p.featured}<span class="badge">Most popular</span>{/if}
+						<h3>{p.label}</h3>
+						<p class="price">{p.usd}{#if p.local}<span class="local"> ≈ {p.local}</span>{/if}</p>
+						<p class="worth">
+							<strong>{p.worth}</strong> of generation
+							{#if p.bonus > 0}<span class="bonus">+{Math.round((p.bonus / (p.credits - p.bonus)) * 100)}% bonus</span>{/if}
+						</p>
+						<p class="buys">≈ {p.buys.imagePosts} image posts · {p.buys.videoPosts} video posts</p>
+						<button class="buy" class:ghost={!p.featured} disabled={!data.paymentsOpen || buying !== null} onclick={() => buy(p.id)}>
+							{buying === p.id ? 'Opening checkout…' : data.paymentsOpen ? `Buy ${p.usd}` : 'Coming soon'}
+						</button>
+					</article>
+				{/each}
+			</div>
+			<p class="fineprint">Secure checkout by Stripe. Prices in USD; your bank converts at its rate. Receipts by email.</p>
+		</section>
+	{/if}
+
+	<section class="ledger">
+		<h2>Recent activity</h2>
+		{#if data.ledger.length === 0}
+			<p class="muted">Nothing yet. Your first generation will show here with what it cost.</p>
+		{:else}
+			<div class="table-wrap">
+				<table>
+					<thead>
+						<tr><th>When</th><th>What</th><th class="num">Amount</th><th class="num">Balance</th></tr>
+					</thead>
+					<tbody>
+						{#each data.ledger as r (r.seq)}
+							<tr>
+								<td class="muted">{when(r.created_at)}</td>
+								<td>
+									<span class="kind kind-{r.kind}">{kindLabel[r.kind] ?? r.kind}</span>
+									{#if r.note}<span class="note">{r.note}</span>{/if}
+								</td>
+								<td class="num" class:neg={r.delta < 0} class:pos={r.delta > 0}>{r.delta < 0 ? '−' : r.delta > 0 ? '+' : ''}{r.deltaFormatted}</td>
+								<td class="num muted">{r.after}</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			</div>
+		{/if}
+	</section>
+
+	<section class="faq">
+		<h2>How it works</h2>
+		<dl>
+			<dt>What costs money?</dt>
+			<dd>AI images, video, voice and talking-head clips. Text posts, scheduling, publishing and analytics are free on every account.</dd>
+			<dt>Why is the balance in {data.currency}?</dt>
+			<dd>We show your wallet in the currency of where you are. Change it any time in Settings. Charges are made in USD.</dd>
+			<dt>What if I bring my own provider keys?</dt>
+			<dd>Generations made with your own keys are never charged to your wallet. You pay the provider directly.</dd>
+			<dt>Do credits expire?</dt>
+			<dd>No. Purchased and welcome credit stays until you use it.</dd>
+		</dl>
+	</section>
+</div>
+
+<style>
+	.billing {
+		max-width: 1040px;
+		margin: 0 auto;
+		padding: 1.5rem 1.25rem 4rem;
+		display: grid;
+		gap: 2rem;
+	}
+	.banner {
+		display: flex;
+		align-items: center;
+		gap: 1rem;
+		padding: 0.75rem 1rem;
+		border-radius: 10px;
+		background: var(--surface-2);
+		border: 1px solid var(--border);
+		color: var(--text);
+	}
+	.banner.ok {
+		border-color: color-mix(in srgb, var(--success-text) 40%, transparent);
+		background: color-mix(in srgb, var(--success-text) 8%, var(--surface));
+	}
+	.banner-x {
+		margin-left: auto;
+		background: none;
+		border: 0;
+		font-size: 1.1rem;
+		cursor: pointer;
+		color: var(--text-dim);
+	}
+	.hero {
+		display: grid;
+		grid-template-columns: 1.4fr 1fr;
+		gap: 2rem;
+		padding: 2rem;
+		border-radius: 16px;
+		background: var(--surface);
+		border: 1px solid var(--border);
+	}
+	.eyebrow {
+		margin: 0 0 0.25rem;
+		font-size: 0.78rem;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: var(--text-dim);
+	}
+	.amount {
+		margin: 0;
+		font-size: clamp(2.4rem, 6vw, 3.6rem);
+		font-weight: 700;
+		letter-spacing: -0.02em;
+		color: var(--success-text);
+		font-variant-numeric: tabular-nums;
+	}
+	.amount.low {
+		color: var(--warning-text);
+	}
+	.amount.empty {
+		color: var(--error-text);
+	}
+	.sub {
+		margin: 0.5rem 0 0;
+		color: var(--text-muted);
+		line-height: 1.5;
+	}
+	.promises {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: grid;
+		gap: 0.6rem;
+		align-content: center;
+		color: var(--text-muted);
+		font-size: 0.92rem;
+	}
+	.promises strong {
+		color: var(--text);
+	}
+	h2 {
+		margin: 0 0 0.25rem;
+		font-size: 1.15rem;
+	}
+	.muted {
+		color: var(--text-dim);
+	}
+	.soon {
+		display: block;
+		margin-top: 0.25rem;
+		color: var(--warning-text);
+		font-weight: 500;
+	}
+	.error {
+		color: var(--error-text);
+	}
+	.pack-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+		gap: 1rem;
+		margin-top: 1rem;
+	}
+	.pack {
+		position: relative;
+		display: grid;
+		gap: 0.35rem;
+		padding: 1.25rem;
+		border-radius: 14px;
+		background: var(--surface);
+		border: 1px solid var(--border);
+	}
+	.pack.featured {
+		border-color: var(--accent);
+		box-shadow: 0 0 0 3px var(--accent-soft);
+	}
+	.badge {
+		position: absolute;
+		top: -0.65rem;
+		left: 1rem;
+		padding: 0.15rem 0.6rem;
+		border-radius: 999px;
+		background: var(--accent);
+		color: #fff;
+		font-size: 0.7rem;
+		font-weight: 600;
+	}
+	.pack h3 {
+		margin: 0;
+		font-size: 0.95rem;
+		color: var(--text-dim);
+		font-weight: 600;
+	}
+	.price {
+		margin: 0;
+		font-size: 1.7rem;
+		font-weight: 700;
+		letter-spacing: -0.01em;
+	}
+	.local {
+		font-size: 0.85rem;
+		font-weight: 500;
+		color: var(--text-dim);
+	}
+	.worth {
+		margin: 0;
+		color: var(--text-muted);
+	}
+	.bonus {
+		margin-left: 0.4rem;
+		padding: 0.1rem 0.45rem;
+		border-radius: 999px;
+		background: color-mix(in srgb, var(--success-text) 12%, transparent);
+		color: var(--success-text);
+		font-size: 0.72rem;
+		font-weight: 600;
+	}
+	.buys {
+		margin: 0;
+		font-size: 0.8rem;
+		color: var(--text-dim);
+	}
+	.buy {
+		margin-top: 0.5rem;
+		padding: 0.6rem 0.9rem;
+		border-radius: 10px;
+		border: 1px solid var(--accent);
+		background: var(--accent);
+		color: #fff;
+		font-weight: 600;
+		cursor: pointer;
+	}
+	.buy.ghost {
+		background: transparent;
+		color: var(--accent-text);
+	}
+	.buy:disabled {
+		opacity: 0.55;
+		cursor: not-allowed;
+	}
+	.fineprint {
+		margin: 0.75rem 0 0;
+		font-size: 0.78rem;
+		color: var(--text-dim);
+	}
+	.table-wrap {
+		overflow-x: auto;
+		border: 1px solid var(--border);
+		border-radius: 12px;
+		background: var(--surface);
+	}
+	table {
+		width: 100%;
+		border-collapse: collapse;
+		font-size: 0.9rem;
+	}
+	th,
+	td {
+		padding: 0.6rem 0.9rem;
+		text-align: left;
+		border-bottom: 1px solid var(--border);
+		white-space: nowrap;
+	}
+	th {
+		font-size: 0.75rem;
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+		color: var(--text-dim);
+	}
+	tr:last-child td {
+		border-bottom: 0;
+	}
+	.num {
+		text-align: right;
+		font-variant-numeric: tabular-nums;
+	}
+	.neg {
+		color: var(--text);
+	}
+	.pos {
+		color: var(--success-text);
+	}
+	.kind {
+		display: inline-block;
+		padding: 0.1rem 0.5rem;
+		border-radius: 999px;
+		background: var(--surface-2);
+		font-size: 0.75rem;
+		margin-right: 0.5rem;
+	}
+	.kind-purchase,
+	.kind-grant {
+		background: color-mix(in srgb, var(--success-text) 12%, transparent);
+		color: var(--success-text);
+	}
+	.note {
+		color: var(--text-dim);
+		font-size: 0.82rem;
+	}
+	.faq dl {
+		display: grid;
+		gap: 0.9rem;
+		margin: 0.5rem 0 0;
+	}
+	.faq dt {
+		font-weight: 600;
+	}
+	.faq dd {
+		margin: 0.15rem 0 0;
+		color: var(--text-muted);
+		line-height: 1.5;
+	}
+	@media (max-width: 720px) {
+		.hero {
+			grid-template-columns: 1fr;
+			padding: 1.25rem;
+		}
+	}
+</style>

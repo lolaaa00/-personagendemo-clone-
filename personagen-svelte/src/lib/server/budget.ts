@@ -133,7 +133,14 @@ async function seatCapExceeded(
 export async function assertWithinBudget(
 	supabase: any,
 	userId: string,
-	agentId?: string
+	agentId?: string,
+	/**
+	 * Retail credits this run is expected to cost. Callers that can quote
+	 * (generate-post's synchronous precheck) pass the real estimate so a thin
+	 * wallet cannot start a $3.50 cinematic pack; the inner gate inside the
+	 * generation path passes nothing and only rejects an empty wallet.
+	 */
+	requiredCredits: number = 1
 ): Promise<void> {
 	const monthlyCap = MONTHLY_PER_USER_USD();
 	const dailyCap = DAILY_PER_AGENT_USD();
@@ -184,6 +191,7 @@ export async function assertWithinBudget(
 	// runaway loop is still stopped by them even with credits disabled.
 	if (userId) {
 		const billed = await resolveBillingAccount(supabase, agentId ?? null, userId);
-		await assertCreditsAvailable(supabase, billed, 1);
+		const need = Number.isFinite(requiredCredits) && requiredCredits > 1 ? Math.ceil(requiredCredits) : 1;
+		await assertCreditsAvailable(supabase, billed, need);
 	}
 }

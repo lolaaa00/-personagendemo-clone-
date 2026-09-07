@@ -377,7 +377,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-05", hash: "f9685c3", type: "feat", category: "publishing", scope: "admin", title: "database-backed platform switches + Admin Console restructure" },
 	{ date: "2026-09-06", hash: "c5f083d", type: "feat", category: "feature", scope: "billing", title: "wallet shown as money in the visitor's currency + welcome credits at signup" },
 	{ date: "2026-09-06", hash: "980f83c", type: "fix", category: "fix", scope: "scripts", title: "grant-credits no longer drops a target equal to the --as admin email" },
-	{ date: "2026-09-07", hash: "87ddd78", type: "feat", category: "feature", scope: "billing", title: "wallet pill rounds to whole currency units with .00" }
+	{ date: "2026-09-07", hash: "87ddd78", type: "feat", category: "feature", scope: "billing", title: "wallet pill rounds to whole currency units with .00" },
+	{ date: "2026-09-07", hash: "e845be7", type: "docs", category: "docs", scope: "monetization", title: "viability assessment vs production reality and competitor benchmark" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -679,12 +680,12 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 	},
 	{
 		id: "87ddd78", from: "2026-09-07", to: "2026-09-07",
-		category: "feature", categories: ["feature"],
+		category: "feature", categories: ["feature","docs"],
 		title: "New: wallet pill rounds to whole currency units with .00",
-		summary: "Wallet pill rounds to whole currency units with .00.",
+		summary: "Wallet pill rounds to whole currency units with .00. Plus 1 more change, touching guides and explanations.",
 		major: false, curated: false,
-		entries: [CHANGELOG[343]]
+		entries: [CHANGELOG[343], CHANGELOG[344]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "87ddd78";
+export const CHANGELOG_GENERATED_FROM = "e845be7";

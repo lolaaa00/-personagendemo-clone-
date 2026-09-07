@@ -10,10 +10,12 @@
 		activity_log: { effective: boolean; stored: boolean; source: 'env' | 'database' };
 		activity_pepper: { set: boolean; source: 'env' | 'database' };
 		signup_credits: { stored: number; usd: string };
+		credit_markup: { effective: number; stored: number; source: 'env' | 'database' | 'default' };
 		display_currency_default: { stored: string; supported: string[] };
 		fx_rates: { base: string; count: number; updated_at: string | null; source: string | null; sample: Array<{ currency: string; rate: number | null }> };
 	};
 	let signupCreditsDraft = $state<number | null>(null);
+	let markupDraft = $state<number | null>(null);
 	let controls = $state<{
 		switches: Switches;
 		cache: { primed: boolean; lastRefreshAt: string | null; lastError: string | null; updatedAt: Record<string, string> };
@@ -40,7 +42,7 @@
 		}
 	}
 
-	async function setSwitch(key: 'credits_mode' | 'activity_log' | 'activity_pepper' | 'signup_credits' | 'display_currency_default' | 'fx_rates', value?: unknown) {
+	async function setSwitch(key: 'credits_mode' | 'activity_log' | 'activity_pepper' | 'signup_credits' | 'display_currency_default' | 'fx_rates' | 'credit_markup', value?: unknown) {
 		const label =
 			key === 'activity_pepper'
 				? 'Rotate the activity hashing secret? Cross-day correlation of IP hashes breaks for today (by design).'
@@ -61,6 +63,7 @@
 			if (!res.ok || !body.success) throw new Error(body.error || `HTTP ${res.status}`);
 			flash(key === 'activity_pepper' ? 'Pepper rotated' : key === 'fx_rates' ? `Rates refreshed: ${body.stored}` : `${key} = ${body.stored}${body.source === 'env' ? ' (stored — env override still wins)' : ''}`);
 			signupCreditsDraft = null;
+			markupDraft = null;
 			await loadControls();
 			if (platformLoaded) await loadPlatform();
 		} catch (e) {
@@ -488,13 +491,37 @@
 						</div>
 						<p class="admin-hint">
 							Granted automatically the moment an account is created (any signup path), as an audited ledger row.
-							100 credits = $1.00 of estimated generation. Set 0 to disable. Because signup is open, keep this modest.
+							100 credits = $1.00 at retail (provider cost × markup). Set 0 to disable. Because signup is open, keep this modest:
+							enough for one persona and a handful of posts, never a video budget.
 						</p>
 						<div class="filter-row">
 							<input class="admin-input narrow" type="number" min="0" step="100" value={signupCreditsDraft ?? controls.switches.signup_credits.stored} oninput={(e) => (signupCreditsDraft = Number((e.target as HTMLInputElement).value))} aria-label="Welcome credits" />
 							<span class="admin-hint">= ${(((signupCreditsDraft ?? controls.switches.signup_credits.stored) || 0) / 100).toFixed(2)}</span>
 							<button class="filter-btn active" disabled={controlsBusy || signupCreditsDraft === null || signupCreditsDraft === controls.switches.signup_credits.stored} onclick={() => setSwitch('signup_credits', signupCreditsDraft)}>Save</button>
 						</div>
+					</div>
+
+					<div class="control">
+						<div class="control-head">
+							<strong>Margin (credit markup)</strong>
+							<span class="mode-pill" class:mode-enforce={controls.switches.credit_markup.effective > 1} class:mode-shadow={controls.switches.credit_markup.effective <= 1}>
+								{controls.switches.credit_markup.effective}× {controls.switches.credit_markup.effective <= 1 ? '(at cost, no margin)' : ''}
+							</span>
+							<span class="muted small">source: {controls.switches.credit_markup.source}</span>
+						</div>
+						<p class="admin-hint">
+							Every debit is <em>estimated provider cost × markup</em>, so one credit is one retail cent: packs sell at par,
+							the wallet pill shows exactly what was paid for, and margin is this one number. Persona/UGC tools run 3–10×;
+							general AI wallets 1.2–2.5×. Takes effect on the next generation; balances are not changed.
+						</p>
+						<div class="filter-row">
+							<input class="admin-input narrow" type="number" min="1" max="20" step="0.25" value={markupDraft ?? controls.switches.credit_markup.stored} oninput={(e) => (markupDraft = Number((e.target as HTMLInputElement).value))} aria-label="Credit markup" />
+							<span class="admin-hint">× · a $0.42 video clip costs the customer ${(0.42 * ((markupDraft ?? controls.switches.credit_markup.stored) || 1)).toFixed(2)}; an $0.08 still ${(0.08 * ((markupDraft ?? controls.switches.credit_markup.stored) || 1)).toFixed(2)}</span>
+							<button class="filter-btn active" disabled={controlsBusy || markupDraft === null || markupDraft === controls.switches.credit_markup.stored} onclick={() => setSwitch('credit_markup', markupDraft)}>Save</button>
+						</div>
+						{#if controls.switches.credit_markup.source === 'env'}
+							<p class="admin-hint warn">CREDIT_MARKUP is set in the host environment and overrides the stored value.</p>
+						{/if}
 					</div>
 
 					<div class="control">

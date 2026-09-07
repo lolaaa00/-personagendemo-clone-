@@ -498,6 +498,7 @@ export function routeAction(
 	if (routeId.startsWith('/api/workspaces/[id]/members')) return { action: method === 'DELETE' ? 'team.seat.removed' : 'team.seat.updated', meta: {} };
 	if (routeId === '/api/workspaces' && method === 'POST') return { action: 'team.workspace.created', meta: {} };
 	if (routeId === '/api/admin/credits' && method === 'POST') return { action: 'admin.credits.adjusted', meta: {} };
+	if (routeId === '/api/billing/checkout') return { action: 'billing.checkout.started', meta: {} };
 	if (routeId === '/api/admin/credits') return { action: 'admin.user.viewed', meta: {} };
 	if (routeId === '/api/models') return { action: 'admin.models.changed', meta: {} };
 	if (routeId === '/api/developer/keys') return { action: method === 'DELETE' ? 'api.key.revoked' : 'api.key.created', meta: {} };

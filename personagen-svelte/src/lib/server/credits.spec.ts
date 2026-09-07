@@ -31,6 +31,24 @@ describe('creditsFor — 1 credit = 1 cent of estimate, rounded UP per event', (
 	])('%s USD → %s credits', (usd, want) => {
 		expect(credits.creditsFor(usd)).toBe(want);
 	});
+
+	it('applies the retail markup: 1 credit = 1 retail cent', () => {
+		expect(credits.creditsFor(0.08, 3)).toBe(24);
+		expect(credits.creditsFor(0.42, 3)).toBe(126);
+		expect(credits.creditsFor(0.002, 3)).toBe(1);
+		expect(credits.creditsFor(0.1 + 0.2, 2)).toBe(60);
+		expect(credits.retailUsdFor(0.42, 3)).toBe(1.26);
+		// a markup below 1 or non-finite is treated as at-cost, never a discount
+		expect(credits.creditsFor(0.42, 0.5)).toBe(42);
+		expect(credits.creditsFor(0.42, NaN)).toBe(42);
+	});
+
+	it('reads the live markup from flags when none is passed', () => {
+		mockEnv.CREDIT_MARKUP = '3';
+		expect(credits.creditsFor(0.08)).toBe(24);
+		delete mockEnv.CREDIT_MARKUP;
+		expect(credits.creditsFor(0.08)).toBe(8);
+	});
 });
 
 describe('keySourceFor', () => {

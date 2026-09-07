@@ -4,7 +4,7 @@ import { randomBytes } from 'node:crypto';
 import { requirePlatformAdmin } from '$lib/server/platform-admin';
 import { getServiceSupabase } from '$lib/server/service-supabase';
 import { getSettings, setSetting, settingsStatus, refreshSettings, SETTING_KEYS, type SettingKey } from '$lib/server/settings';
-import { creditsMode, creditsSource, activityLogEnabled, activitySource, activityPepper } from '$lib/server/flags';
+import { creditsMode, creditsSource, activityLogEnabled, activitySource, activityPepper, creditMarkup, creditMarkupSource } from '$lib/server/flags';
 import { activityStats, logActivity } from '$lib/server/activity';
 import MIGRATION_ORDER from '../../../../../supabase/migrations.json';
 import { SUPPORTED_CURRENCIES, isSupportedCurrency, formatCredits, type FxRates } from '$lib/money';
@@ -64,6 +64,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 			activity_log: { effective: activityLogEnabled(), stored: s.activity_log, source: activitySource() },
 			activity_pepper: { set: activityPepper().length >= 32, source: process.env.ACTIVITY_PEPPER ? 'env' : 'database' },
 			signup_credits: { stored: s.signup_credits, usd: formatCredits(s.signup_credits, 'USD', s.fx_rates, 'en-US') },
+			credit_markup: { effective: creditMarkup(), stored: s.credit_markup, source: creditMarkupSource() },
 			display_currency_default: { stored: s.display_currency_default, supported: SUPPORTED_CURRENCIES },
 			fx_rates: {
 				base: s.fx_rates.base,
@@ -114,6 +115,12 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			return json({ success: false, error: 'signup_credits must be an integer between 0 and 1,000,000 (100 = $1.00)' }, { status: 400 });
 		}
 		value = n;
+	} else if (key === 'credit_markup') {
+		const n = Number(body.value);
+		if (!Number.isFinite(n) || n < 1 || n > 20) {
+			return json({ success: false, error: 'credit_markup must be a number between 1 (at cost) and 20' }, { status: 400 });
+		}
+		value = +n.toFixed(2);
 	} else if (key === 'display_currency_default') {
 		const c = String(body.value ?? 'auto').toUpperCase();
 		if (c !== 'AUTO' && !isSupportedCurrency(c)) {

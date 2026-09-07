@@ -11,6 +11,7 @@
  *   CREDITS_ENFORCE / credits_mode   off (default) | shadow | enforce
  *   ACTIVITY_LOG    / activity_log   off (default) | on
  *   ACTIVITY_PEPPER / activity_pepper  hashing secret (generated in the DB on first migration)
+ *   CREDIT_MARKUP   / credit_markup    retail multiplier on estimated cost (1 = at cost)
  *   PLATFORM_ADMIN_EMAILS   env-only bootstrap list (in addition to platform_admins rows)
  *   ACTIVITY_RETENTION_DAYS env-only, default 180
  */
@@ -70,4 +71,18 @@ export function activityPepper(): string {
 export function activityRetentionDays(): number {
 	const n = Number(env.ACTIVITY_RETENTION_DAYS);
 	return Number.isFinite(n) && n > 0 ? Math.floor(n) : 180;
+}
+
+/** Retail multiplier applied when debiting credits: 1 credit = 1 retail cent. */
+export function creditMarkup(): number {
+	const e = Number(env.CREDIT_MARKUP);
+	if (Number.isFinite(e) && e >= 1 && e <= 20) return e;
+	const s = Number(getSettings().credit_markup);
+	return Number.isFinite(s) && s >= 1 && s <= 20 ? s : 1;
+}
+
+export function creditMarkupSource(): SwitchSource {
+	const e = Number(env.CREDIT_MARKUP);
+	if (Number.isFinite(e) && e >= 1 && e <= 20) return 'env';
+	return getSettings().credit_markup ? 'database' : 'default';
 }
