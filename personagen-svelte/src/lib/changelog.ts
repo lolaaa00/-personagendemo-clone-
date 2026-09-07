@@ -392,7 +392,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-07", hash: "4ad3521", type: "fix", category: "generation", scope: "persona", title: "wire SSRF guard on user URLs; lossless profile serialize on both write paths; vision prompt from APPEARANCE_FIELDS; wizard selects; Settings seed-once; prompt regression snapshots; smoke-ssrf probe" },
 	{ date: "2026-09-07", hash: "dacfdd6", type: "feat", category: "generation", scope: "models", title: "OpenRouter image routes resolve from the registry, id and price together" },
 	{ date: "2026-09-07", hash: "52e574e", type: "feat", category: "infrastructure", scope: "billing", title: "close the phase-2 gaps — plans (dormant), Firecrawl metering, welcome-abuse guard, settings billing card, persona limit, deploy step-0 stamps check" },
-	{ date: "2026-09-07", hash: "754a38f", type: "chore", category: "performance", scope: "rails", title: "adopt the 2026-09-05 orphan sweep's guard rails onto main — deploy gates, pre-commit filename guard, lint ratchet, env/migration coverage specs, signup hardening, dependency bumps, graphify cache untracked" }
+	{ date: "2026-09-07", hash: "754a38f", type: "chore", category: "performance", scope: "rails", title: "adopt the 2026-09-05 orphan sweep's guard rails onto main — deploy gates, pre-commit filename guard, lint ratchet, env/migration coverage specs, signup hardening, dependency bumps, graphify cache untracked" },
+	{ date: "2026-09-07", hash: "46a7cca", type: "docs", category: "docs", scope: "billing", title: "seat spend cap is retail USD — say so where the owner sets it" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -702,12 +703,12 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 	},
 	{
 		id: "52e574e", from: "2026-09-07", to: "2026-09-07",
-		category: "infrastructure", categories: ["infrastructure","performance"],
+		category: "infrastructure", categories: ["infrastructure","performance","docs"],
 		title: "Behind the scenes: close the phase-2 gaps — plans (dormant), Firecrawl…",
-		summary: "Close the phase-2 gaps — plans (dormant), Firecrawl metering, welcome-abuse guard, settings billing card, persona limit, deploy step-0 stamps check. Plus 1 more change, touching speed and size.",
+		summary: "Close the phase-2 gaps — plans (dormant), Firecrawl metering, welcome-abuse guard, settings billing card, persona limit, deploy step-0 stamps check. Plus 2 more changes, touching speed and size and guides and explanations.",
 		major: false, curated: false,
-		entries: [CHANGELOG[357], CHANGELOG[358]]
+		entries: [CHANGELOG[357], CHANGELOG[358], CHANGELOG[359]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "754a38f";
+export const CHANGELOG_GENERATED_FROM = "46a7cca";

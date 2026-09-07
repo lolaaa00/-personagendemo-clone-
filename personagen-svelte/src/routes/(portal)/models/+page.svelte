@@ -18,6 +18,24 @@
 		{ id: 'video_i2v', label: 'Video' },
 		{ id: 'tts', label: 'Voice' }
 	];
+	// Multi-mode rows carry kinds[] (one OpenRouter model can do text-to-image AND
+	// editing); they appear under every tab they serve. Legacy rows fall back to kind.
+	function serves(r: any, k: Kind): boolean {
+		return Array.isArray(r.kinds) && r.kinds.length ? r.kinds.includes(k) : r.kind === k;
+	}
+	// Host = who we call (fal / OpenRouter). Lab = who trained it (Google, Kling…).
+	type Host = '' | 'fal' | 'openrouter';
+	const HOST_LABEL: Record<string, string> = { fal: 'fal', openrouter: 'OpenRouter' };
+	function hostOf(r: any): string {
+		return r.provider ?? 'fal';
+	}
+	function hostLabel(r: any): string {
+		return HOST_LABEL[hostOf(r)] ?? hostOf(r);
+	}
+	function modeLabels(r: any): string[] {
+		const ks: string[] = Array.isArray(r.kinds) && r.kinds.length ? r.kinds : [r.kind];
+		return ks.map((k) => KIND_TABS.find((t) => t.id === k)?.label ?? k);
+	}
 	let kind = $state<Kind>(
 		readParam('kind', ['image_t2i', 'image_edit', 'video_i2v', 'tts'] as const, 'video_i2v')
 	);
@@ -43,12 +61,14 @@
 		readParam('age', ['any', '30d', '90d', '1y', 'older'] as const, 'any')
 	);
 	let minQuality = $state<MinQ>(readParam('minq', ['any', '4', '6', '8'] as const, 'any'));
+	let host = $state<Host>(readParam('host', ['', 'fal', 'openrouter'] as const, ''));
+	$effect(() => syncParam('host', host, ''));
 	$effect(() => syncParam('provider', provider, ''));
 	$effect(() => syncParam('age', ageFilter, 'any'));
 	$effect(() => syncParam('minq', minQuality, 'any'));
 
 	let providers = $derived(
-		[...new Set(rows.filter((r: any) => r.kind === kind && r.lab).map((r: any) => r.lab))].sort(
+		[...new Set(rows.filter((r: any) => serves(r, kind) && r.lab).map((r: any) => r.lab))].sort(
 			(a: any, b: any) => String(a).localeCompare(String(b))
 		)
 	);
@@ -60,6 +80,7 @@
 
 	function matchesFilters(r: any): boolean {
 		if (provider && r.lab !== provider) return false;
+		if (host && hostOf(r) !== host) return false;
 		if (ageFilter !== 'any') {
 			const d = daysOld(r);
 			if (d == null) return false;
@@ -75,8 +96,11 @@
 		return true;
 	}
 
-	let filtersActive = $derived(provider !== '' || ageFilter !== 'any' || minQuality !== 'any');
+	let filtersActive = $derived(
+		host !== '' || provider !== '' || ageFilter !== 'any' || minQuality !== 'any'
+	);
 	function clearFilters() {
+		host = '';
 		provider = '';
 		ageFilter = 'any';
 		minQuality = 'any';
@@ -100,15 +124,15 @@
 	}
 
 	let wired = $derived(
-		sortRows(rows.filter((r: any) => r.kind === kind && r.wired && matchesFilters(r)))
+		sortRows(rows.filter((r: any) => serves(r, kind) && r.wired && matchesFilters(r)))
 	);
 	let discovered = $derived(
-		[...rows.filter((r: any) => r.kind === kind && !r.wired && matchesFilters(r))].sort((a, b) =>
+		[...rows.filter((r: any) => serves(r, kind) && !r.wired && matchesFilters(r))].sort((a, b) =>
 			(b.released_at ?? '').localeCompare(a.released_at ?? '')
 		)
 	);
-	let wiredTotal = $derived(rows.filter((r: any) => r.kind === kind && r.wired).length);
-	let discoveredTotal = $derived(rows.filter((r: any) => r.kind === kind && !r.wired).length);
+	let wiredTotal = $derived(rows.filter((r: any) => serves(r, kind) && r.wired).length);
+	let discoveredTotal = $derived(rows.filter((r: any) => serves(r, kind) && !r.wired).length);
 
 	// ── Replacement candidates ───────────────────────────────────────────────
 	// Deliberately conservative. Discovered models carry no quality score (nobody
@@ -124,7 +148,7 @@
 		if (d.price_usd == null || !d.released_at) return null;
 		let best: any = null;
 		for (const w of rows) {
-			if (w.kind !== d.kind || !w.wired || w.status !== 'active') continue;
+			if (!serves(w, kind) || hostOf(w) !== hostOf(d) || !w.wired || w.status !== 'active') continue;
 			if (w.price_usd == null || !w.released_at) continue;
 			if (!(d.released_at > w.released_at)) continue;
 			if (!(d.price_usd < w.price_usd)) continue;
@@ -137,7 +161,7 @@
 	// filtered by the view filters, since narrowing the list you're browsing
 	// shouldn't narrow where a model can be wired.
 	let wiredSlots = $derived(
-		rows.filter((r: any) => r.kind === kind && r.wired && r.status === 'active')
+		rows.filter((r: any) => serves(r, kind) && r.wired && r.status === 'active')
 	);
 	// Explicit per-row slot choice; falls back to the recommended target.
 	let swapChoice = $state<Record<string, string>>({});
@@ -145,6 +169,10 @@
 		const explicit = swapChoice[d.id];
 		if (explicit) return wiredSlots.find((w: any) => w.model_id === explicit) ?? null;
 		return replaces(d);
+	}
+	// Swap targets share the candidate's host: the adapter machinery is fal's.
+	function slotsFor(d: any): any[] {
+		return wiredSlots.filter((w: any) => hostOf(w) === hostOf(d));
 	}
 	let maxValue = $derived(Math.max(...wired.map((r: any) => valueScore(r) ?? 0), 0));
 	let bestValueId = $derived.by(() => {
@@ -163,7 +191,7 @@
 			.sort();
 		return dates.length ? dates[dates.length - 1].slice(0, 10) : null;
 	});
-	let kindCount = $derived((k: Kind) => rows.filter((r: any) => r.kind === k).length);
+	let kindCount = $derived((k: Kind) => rows.filter((r: any) => serves(r, k)).length);
 
 	// ── Age pill ─────────────────────────────────────────────────────────────
 	// Returns the age as a real duration ALWAYS. It used to return the string
@@ -326,8 +354,10 @@
 			const s = d.sync;
 			showToast(
 				`Catalog synced — ${s.discovered} new model${s.discovered !== 1 ? 's' : ''} discovered, ${s.refreshed} refreshed${s.deprecatedFlagged ? `, ${s.deprecatedFlagged} newly deprecated` : ''}`,
-				'success'
+				s.errors?.length ? 'info' : 'success'
 			);
+			// Both catalogs sync independently; a failed one is reported, not hidden.
+			for (const e of s.errors ?? []) showToast(e, 'error');
 		} catch (err) {
 			showToast('Sync failed: ' + (err as Error).message, 'error');
 		} finally {
@@ -453,8 +483,13 @@
 		</div>
 		<label class="mm-sort">
 			<span>Sort</span>
-			<select bind:value={provider} aria-label="Filter by provider" class="mm-filter">
-				<option value="">All providers</option>
+			<select bind:value={host} aria-label="Filter by host" class="mm-filter">
+				<option value="">All hosts</option>
+				<option value="fal">fal</option>
+				<option value="openrouter">OpenRouter</option>
+			</select>
+			<select bind:value={provider} aria-label="Filter by lab" class="mm-filter">
+				<option value="">All labs</option>
 				{#each providers as lab}
 					<option value={lab}>{lab}</option>
 				{/each}
@@ -526,6 +561,12 @@
 							</span>
 							<span class="mm-model-id">{row.model_id}</span>
 							{#if row.lab}<span class="mm-model-lab">{row.lab}</span>{/if}
+							<span class="mm-model-meta">
+								<span class="mm-host" data-host={hostOf(row)}>via {hostLabel(row)}</span>
+								{#if modeLabels(row).length > 1}<span class="mm-modes" title="One model, several modes"
+										>{modeLabels(row).join(' · ')}</span
+									>{/if}
+							</span>
 						</td>
 						<td class="mm-date-cell">
 							{#if row.released_at}
@@ -550,10 +591,12 @@
 									/>
 								</span>
 							{:else}
-								<span class="mm-readonly">{row.price_usd != null ? `$${row.price_usd}` : '—'}</span>
+								<span class="mm-readonly" title={row.price_basis ?? 'price per call'}
+									>{row.price_usd != null ? `$${row.price_usd}` : '—'}</span
+								>
 							{/if}
 							{#if row.price_source === 'manual'}<span class="mm-dim mm-src">edited</span
-								>{:else if row.price_source === 'parsed'}<span class="mm-dim mm-src">from fal</span
+								>{:else if row.price_source === 'parsed'}<span class="mm-dim mm-src" title={row.price_basis ?? ''}>from {hostLabel(row)}</span
 								>{/if}
 						</td>
 						<td>
@@ -707,12 +750,16 @@
 	<header class="mm-section-head mm-section-gap">
 		<span class="mm-section-mark" aria-hidden="true"></span>
 		<div class="mm-section-text">
-			<h2 class="mm-section-title">Discovered on fal</h2>
+			<h2 class="mm-section-title">
+				{host ? `Discovered on ${HOST_LABEL[host] ?? host}` : 'Discovered on fal and OpenRouter'}
+			</h2>
 			<p class="mm-section-sub">
 				Newest releases in this category, synced from the live catalog. <b>Probe</b> reads a
 				model's request schema and builds its adapter automatically — once the adapter exists,
 				the model can swap into any roster slot. Models the pipeline can't drive stay staged,
-				with a field-by-field plan explaining why.
+				with a field-by-field plan explaining why. OpenRouter models need no adapter — the
+				pipeline reaches them through one API, so image routing follows whichever OpenRouter
+				row is wired for that mode.
 			</p>
 		</div>
 	</header>
@@ -743,7 +790,7 @@
 								>{/if}
 						</span>
 						<span class="mm-model-id"
-							>{row.model_id}{#if row.lab}&ensp;·&ensp;{row.lab}{/if}{#if row.released_at}&ensp;·&ensp;{row.released_at}{/if}</span
+							>{row.model_id}{#if row.lab}&ensp;·&ensp;{row.lab}{/if}&ensp;·&ensp;via {hostLabel(row)}{#if modeLabels(row).length > 1}&ensp;·&ensp;{modeLabels(row).join(' + ')}{/if}{#if row.released_at}&ensp;·&ensp;{row.released_at}{/if}</span
 						>
 						{#if row.note}<span class="mm-discover-desc">{row.note}</span>{/if}
 						{#if row.probe && !row.probe.ok && row.probe.unknownRequired?.length}
@@ -813,12 +860,12 @@
 						<span class="mm-discover-price">
 							{#if row.price_usd != null}
 								<b>${row.price_usd}</b>
-								<span class="mm-dim">est / call</span>
+								<span class="mm-dim" title={row.price_basis ?? ''}>est / call</span>
 							{:else}
 								<span class="pill pill-quar">NO PRICE DATA</span>
 							{/if}
 						</span>
-						{#if wiredSlots.length}
+						{#if slotsFor(row).length}
 							{@const pick = chosenTarget(row)}
 							{#if row.probe?.ok || row.probe?.adapterReady}
 								<select
@@ -832,7 +879,7 @@
 										})}
 								>
 									<option value="" disabled>Choose a slot…</option>
-									{#each wiredSlots as w (w.id)}
+									{#each slotsFor(row) as w (w.id)}
 										<option value={w.model_id}>{w.tier ? `${w.tier} — ` : ''}{w.label}</option>
 									{/each}
 								</select>
@@ -858,6 +905,9 @@
 							<!-- No gated placeholder here: the probe button below is the same
 							     action, and two identical CTAs side by side read as a bug. -->
 						{/if}
+						{#if hostOf(row) === 'openrouter'}
+							<span class="mm-dim mm-or-note">No adapter needed on OpenRouter</span>
+						{:else}
 						<button
 							type="button"
 							class="mm-probe-btn"
@@ -872,6 +922,7 @@
 								Probe & build adapter
 							{/if}
 						</button>
+						{/if}
 					</div>
 				</div>
 			{/each}
@@ -1144,6 +1195,34 @@
 	.mm-model-lab {
 		font-size: 0.72rem;
 		color: var(--text-muted);
+	}
+
+	.mm-model-meta {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.3rem;
+		margin-top: 0.2rem;
+	}
+
+	.mm-host,
+	.mm-modes {
+		font-size: 0.64rem;
+		line-height: 1;
+		padding: 0.18rem 0.4rem;
+		border-radius: 999px;
+		border: 1px solid var(--border);
+		color: var(--text-muted);
+		white-space: nowrap;
+	}
+
+	.mm-or-note {
+		font-size: 0.72rem;
+		white-space: nowrap;
+	}
+
+	.mm-host[data-host='openrouter'] {
+		color: var(--accent);
+		border-color: color-mix(in srgb, var(--accent) 45%, transparent);
 	}
 
 	.mm-date-cell {
