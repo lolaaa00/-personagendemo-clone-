@@ -35,5 +35,8 @@ export function syncParam(key: string, value: string | null, defaultValue?: stri
 export function readParam<T extends string>(key: string, allowed: readonly T[], fallback: T): T {
 	if (typeof window === 'undefined') return fallback;
 	const raw = new URL(window.location.href).searchParams.get(key);
-	return (allowed as readonly string[]).includes(raw ?? '') ? (raw as T) : fallback;
+	// An absent param is the fallback, full stop. `includes(raw ?? '')` used to
+	// return the raw null whenever '' was itself an allowed value.
+	if (raw === null) return fallback;
+	return (allowed as readonly string[]).includes(raw) ? (raw as T) : fallback;
 }

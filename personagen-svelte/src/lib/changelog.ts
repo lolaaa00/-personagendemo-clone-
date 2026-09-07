@@ -393,7 +393,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-07", hash: "dacfdd6", type: "feat", category: "generation", scope: "models", title: "OpenRouter image routes resolve from the registry, id and price together" },
 	{ date: "2026-09-07", hash: "52e574e", type: "feat", category: "infrastructure", scope: "billing", title: "close the phase-2 gaps — plans (dormant), Firecrawl metering, welcome-abuse guard, settings billing card, persona limit, deploy step-0 stamps check" },
 	{ date: "2026-09-07", hash: "754a38f", type: "chore", category: "performance", scope: "rails", title: "adopt the 2026-09-05 orphan sweep's guard rails onto main — deploy gates, pre-commit filename guard, lint ratchet, env/migration coverage specs, signup hardening, dependency bumps, graphify cache untracked" },
-	{ date: "2026-09-07", hash: "46a7cca", type: "docs", category: "docs", scope: "billing", title: "seat spend cap is retail USD — say so where the owner sets it" }
+	{ date: "2026-09-07", hash: "46a7cca", type: "docs", category: "docs", scope: "billing", title: "seat spend cap is retail USD — say so where the owner sets it" },
+	{ date: "2026-09-07", hash: "9b4af32", type: "feat", category: "generation", scope: "models", title: "Model Manager shows host, modes and price basis; OpenRouter rows stop borrowing fal's UI" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -703,12 +704,12 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 	},
 	{
 		id: "52e574e", from: "2026-09-07", to: "2026-09-07",
-		category: "infrastructure", categories: ["infrastructure","performance","docs"],
+		category: "infrastructure", categories: ["infrastructure","performance","docs","generation"],
 		title: "Behind the scenes: close the phase-2 gaps — plans (dormant), Firecrawl…",
-		summary: "Close the phase-2 gaps — plans (dormant), Firecrawl metering, welcome-abuse guard, settings billing card, persona limit, deploy step-0 stamps check. Plus 2 more changes, touching speed and size and guides and explanations.",
+		summary: "Close the phase-2 gaps — plans (dormant), Firecrawl metering, welcome-abuse guard, settings billing card, persona limit, deploy step-0 stamps check. Plus 3 more changes, touching speed and size and guides and explanations and making posts, images and video.",
 		major: false, curated: false,
-		entries: [CHANGELOG[357], CHANGELOG[358], CHANGELOG[359]]
+		entries: [CHANGELOG[357], CHANGELOG[358], CHANGELOG[359], CHANGELOG[360]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "46a7cca";
+export const CHANGELOG_GENERATED_FROM = "9b4af32";
