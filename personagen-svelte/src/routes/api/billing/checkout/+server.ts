@@ -6,10 +6,10 @@ import { stripeEnabled, createCheckoutSession } from '$lib/server/stripe';
 import { getServiceSupabase } from '$lib/server/service-supabase';
 import { packById } from '$lib/billing-packs';
 import { logActivity } from '$lib/server/activity';
-import { RateLimiter } from '$lib/server/rate-limit';
+import { Throttle } from '$lib/server/throttle';
 
 /** A double-click opens one session (idempotency key); a script opening fifty gets a 429. */
-const checkoutLimiter = new RateLimiter(5, 60 * 1000);
+const checkoutLimiter = new Throttle(5, 60 * 1000);
 
 /**
  * POST /api/billing/checkout  { packId }

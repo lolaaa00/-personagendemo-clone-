@@ -386,7 +386,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-07", hash: "4f2bb07", type: "fix", category: "infrastructure", scope: "billing", title: "attribution survives a missing optional column; live e2e smoke; recorded-migration verifier" },
 	{ date: "2026-09-07", hash: "f073acd", type: "feat", category: "feature", scope: "health", title: "checks.schema — the widest generation_events insert shape must be selectable through PostgREST" },
 	{ date: "2026-09-07", hash: "eb6ae82", type: "feat", category: "design", scope: "billing", title: "credit policies per role — grant hygiene, caller-only is_platform_admin, workspace_wallets(), owner-pays UX" },
-	{ date: "2026-09-07", hash: "ad7d895", type: "docs", category: "docs", scope: "monetization", title: "durable action plan phase 2 — payments, enforce, metering, plans, unattended ops" }
+	{ date: "2026-09-07", hash: "ad7d895", type: "docs", category: "docs", scope: "monetization", title: "durable action plan phase 2 — payments, enforce, metering, plans, unattended ops" },
+	{ date: "2026-09-07", hash: "87ed887", type: "feat", category: "publishing", scope: "billing", title: "phase 2 — engine/voice metering, platform ceilings, signup abuse guard, security headers, unattended reconciliation" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -688,12 +689,12 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 	},
 	{
 		id: "87ddd78", from: "2026-09-07", to: "2026-09-07",
-		category: "feature", categories: ["feature","docs","design","fix","infrastructure"],
+		category: "feature", categories: ["feature","docs","design","fix","infrastructure","publishing"],
 		title: "New: wallet pill rounds to whole currency units with .00",
-		summary: "Wallet pill rounds to whole currency units with .00. Plus 9 more changes, touching guides and explanations and layout, colours and readability and things that were broken.",
+		summary: "Wallet pill rounds to whole currency units with .00. Plus 10 more changes, touching guides and explanations and layout, colours and readability and things that were broken.",
 		major: true, curated: false,
-		entries: [CHANGELOG[343], CHANGELOG[344], CHANGELOG[345], CHANGELOG[346], CHANGELOG[347], CHANGELOG[348], CHANGELOG[349], CHANGELOG[350], CHANGELOG[351], CHANGELOG[352]]
+		entries: [CHANGELOG[343], CHANGELOG[344], CHANGELOG[345], CHANGELOG[346], CHANGELOG[347], CHANGELOG[348], CHANGELOG[349], CHANGELOG[350], CHANGELOG[351], CHANGELOG[352], CHANGELOG[353]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "ad7d895";
+export const CHANGELOG_GENERATED_FROM = "87ed887";

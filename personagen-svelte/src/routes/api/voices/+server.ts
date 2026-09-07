@@ -3,7 +3,7 @@ import type { RequestHandler } from './$types';
 import { VOICE_CATALOG, SAMPLE_LINE, isValidVoice, DEFAULT_VOICE } from '$lib/server/voices';
 import { resolveImageKeys } from '$lib/server/content/generate';
 import { meteredCall, meteringRefusal } from '$lib/server/metering';
-import { RateLimiter } from '$lib/server/rate-limit';
+import { Throttle } from '$lib/server/throttle';
 import { priceOf } from '$lib/pricing';
 
 /**
@@ -16,7 +16,7 @@ import { priceOf } from '$lib/pricing';
  * Every press is a paid call: gated, recorded and debited like any other
  * generation, and rate-limited so a held-down button cannot run up a bill.
  */
-const previewLimiter = new RateLimiter(10, 60 * 1000);
+const previewLimiter = new Throttle(10, 60 * 1000);
 export const GET: RequestHandler = async ({ locals }) => {
 	const { session } = await locals.safeGetSession();
 	if (!session) return json({ success: false, error: 'Unauthorized' }, { status: 401 });
