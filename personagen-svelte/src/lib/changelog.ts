@@ -384,7 +384,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-07", hash: "6298b2a", type: "docs", category: "docs", scope: "monetization", title: "viability assessment status update" },
 	{ date: "2026-09-07", hash: "28a0402", type: "fix", category: "fix", scope: "billing", title: "money math proved in code; webhook tolerates promos/adaptive pricing and cumulative refunds; caps fail closed under enforce" },
 	{ date: "2026-09-07", hash: "4f2bb07", type: "fix", category: "infrastructure", scope: "billing", title: "attribution survives a missing optional column; live e2e smoke; recorded-migration verifier" },
-	{ date: "2026-09-07", hash: "f073acd", type: "feat", category: "feature", scope: "health", title: "checks.schema — the widest generation_events insert shape must be selectable through PostgREST" }
+	{ date: "2026-09-07", hash: "f073acd", type: "feat", category: "feature", scope: "health", title: "checks.schema — the widest generation_events insert shape must be selectable through PostgREST" },
+	{ date: "2026-09-07", hash: "eb6ae82", type: "feat", category: "design", scope: "billing", title: "credit policies per role — grant hygiene, caller-only is_platform_admin, workspace_wallets(), owner-pays UX" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -688,10 +689,10 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 		id: "87ddd78", from: "2026-09-07", to: "2026-09-07",
 		category: "feature", categories: ["feature","docs","design","fix","infrastructure"],
 		title: "New: wallet pill rounds to whole currency units with .00",
-		summary: "Wallet pill rounds to whole currency units with .00. Plus 7 more changes, touching guides and explanations and layout, colours and readability and things that were broken.",
+		summary: "Wallet pill rounds to whole currency units with .00. Plus 8 more changes, touching guides and explanations and layout, colours and readability and things that were broken.",
 		major: true, curated: false,
-		entries: [CHANGELOG[343], CHANGELOG[344], CHANGELOG[345], CHANGELOG[346], CHANGELOG[347], CHANGELOG[348], CHANGELOG[349], CHANGELOG[350]]
+		entries: [CHANGELOG[343], CHANGELOG[344], CHANGELOG[345], CHANGELOG[346], CHANGELOG[347], CHANGELOG[348], CHANGELOG[349], CHANGELOG[350], CHANGELOG[351]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "f073acd";
+export const CHANGELOG_GENERATED_FROM = "eb6ae82";
