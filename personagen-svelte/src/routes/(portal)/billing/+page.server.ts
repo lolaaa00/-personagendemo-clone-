@@ -1,9 +1,10 @@
 import type { PageServerLoad } from './$types';
 import { redirect } from '@sveltejs/kit';
-import { creditsMode, creditMarkup } from '$lib/server/flags';
+import { creditsMode, creditMarkup, plansEnabled } from '$lib/server/flags';
 import { getSettings } from '$lib/server/settings';
 import { stripeEnabled } from '$lib/server/stripe';
 import { CREDIT_PACKS, whatItBuys } from '$lib/billing-packs';
+import { loadPlanCatalog } from '$lib/server/plans';
 import { resolveDisplayCurrency, creditsToAmount, formatCredits, formatMoney, localeFromAcceptLanguage } from '$lib/money';
 
 /**
@@ -22,7 +23,7 @@ export const load: PageServerLoad = async ({ locals, request, url }) => {
 	const acceptLanguage = request.headers.get('accept-language');
 	const locale = localeFromAcceptLanguage(acceptLanguage);
 
-	const [{ data: wallet }, { data: profile }, { data: ledger }, { data: wsWallets }] = await Promise.all([
+	const [{ data: wallet }, { data: profile }, { data: ledger }, { data: wsWallets }, { data: subscription }, catalog] = await Promise.all([
 		locals.supabase.from('credit_accounts').select('balance_credits, billing_mode, updated_at').eq('user_id', user.id).maybeSingle(),
 		locals.supabase.from('profiles').select('display_currency').eq('id', user.id).maybeSingle(),
 		locals.supabase
@@ -33,7 +34,10 @@ export const load: PageServerLoad = async ({ locals, request, url }) => {
 			.limit(40),
 		// Workspaces this user belongs to, with the OWNER's balance (owner pays):
 		// SECURITY DEFINER function, balance + mode only, never the owner's ledger.
-		locals.supabase.rpc('workspace_wallets')
+		locals.supabase.rpc('workspace_wallets'),
+		// Own subscription row (RLS: select own) and the plan catalog (service-only table).
+		locals.supabase.from('subscriptions').select('plan, status, current_period_end, included_credits').eq('user_id', user.id).maybeSingle(),
+		loadPlanCatalog()
 	]);
 
 	const currency = resolveDisplayCurrency({
@@ -73,7 +77,25 @@ export const load: PageServerLoad = async ({ locals, request, url }) => {
 			after: formatCredits(Number(r.balance_after), currency, s.fx_rates, locale, { whole: false })
 		})),
 		status: url.searchParams.get('status'),
+		wantedPlan: url.searchParams.get('plan'),
 		markup,
+		plans: {
+			enabled: plansEnabled() && stripeEnabled(),
+			current: subscription && (subscription.status === 'active' || subscription.status === 'trialing') && subscription.plan !== 'free'
+				? { plan: subscription.plan, status: subscription.status, periodEnd: subscription.current_period_end, included: formatCredits(Number(subscription.included_credits ?? 0), currency, s.fx_rates, locale) }
+				: null,
+			catalog: catalog
+				.filter((p) => p.active && p.price_usd_cents > 0)
+				.map((p) => ({
+					plan: p.plan,
+					name: p.name,
+					usd: formatMoney(p.price_usd_cents / 100, 'USD', 'en-US'),
+					local: currency === 'USD' ? null : formatMoney(creditsToAmount(p.price_usd_cents, currency, s.fx_rates), currency, locale),
+					included: formatCredits(p.included_credits, currency, s.fx_rates, locale),
+					personaLimit: p.persona_limit,
+					features: p.features
+				}))
+		},
 		workspaces: ((wsWallets as any[]) ?? [])
 			.filter((w) => w.owner_id !== user.id)
 			.map((w) => ({

@@ -13,6 +13,7 @@
 		credit_markup: { effective: number; stored: number; source: 'env' | 'database' | 'default' };
 		daily_platform_spend_usd: { stored: number };
 		signup_credits_hourly_cap: { stored: number };
+		plans_enabled: { stored: boolean };
 		display_currency_default: { stored: string; supported: string[] };
 		fx_rates: { base: string; count: number; updated_at: string | null; source: string | null; sample: Array<{ currency: string; rate: number | null }> };
 	};
@@ -46,7 +47,7 @@
 		}
 	}
 
-	async function setSwitch(key: 'credits_mode' | 'activity_log' | 'activity_pepper' | 'signup_credits' | 'display_currency_default' | 'fx_rates' | 'credit_markup' | 'daily_platform_spend_usd' | 'signup_credits_hourly_cap', value?: unknown) {
+	async function setSwitch(key: 'credits_mode' | 'activity_log' | 'activity_pepper' | 'signup_credits' | 'display_currency_default' | 'fx_rates' | 'credit_markup' | 'daily_platform_spend_usd' | 'signup_credits_hourly_cap' | 'plans_enabled', value?: unknown) {
 		const label =
 			key === 'activity_pepper'
 				? 'Rotate the activity hashing secret? Cross-day correlation of IP hashes breaks for today (by design).'
@@ -545,6 +546,22 @@
 							<input class="admin-input narrow" type="number" min="0" step="10" value={ceilingDraft ?? controls.switches.daily_platform_spend_usd.stored} oninput={(e) => (ceilingDraft = Number((e.target as HTMLInputElement).value))} aria-label="Platform daily ceiling (USD)" />
 							<span class="admin-hint">USD raw provider cost</span>
 							<button class="filter-btn active" disabled={controlsBusy || ceilingDraft === null || ceilingDraft === controls.switches.daily_platform_spend_usd.stored} onclick={() => setSwitch('daily_platform_spend_usd', ceilingDraft)}>Save</button>
+						</div>
+					</div>
+
+					<div class="control">
+						<div class="control-head">
+							<strong>Plans (subscriptions)</strong>
+							<span class="mode-pill" class:mode-enforce={controls.switches.plans_enabled.stored} class:mode-off={!controls.switches.plans_enabled.stored}>{controls.switches.plans_enabled.stored ? 'on' : 'off'}</span>
+						</div>
+						<p class="admin-hint">
+							Offers Studio / Brand / Agency on the Billing page with an included monthly media wallet (reset each renewal,
+							purchased credit untouched). Needs the Stripe keys in the host environment. Existing subscriptions keep
+							renewing through the webhook whatever this says.
+						</p>
+						<div class="filter-row">
+							<button class="filter-btn" class:active={controls.switches.plans_enabled.stored === true} disabled={controlsBusy} onclick={() => setSwitch('plans_enabled', true)}>on</button>
+							<button class="filter-btn" class:active={controls.switches.plans_enabled.stored === false} disabled={controlsBusy} onclick={() => setSwitch('plans_enabled', false)}>off</button>
 						</div>
 					</div>
 

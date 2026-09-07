@@ -25,6 +25,11 @@ Write-Host ""
 Set-Location (Join-Path $projectDir "personagen-svelte")
 Write-Host "  [0/3] Checking production migration ledger..." -ForegroundColor Yellow
 cmd.exe /c "node scripts/apply-migration.mjs --status --strict"
+if ($LASTEXITCODE -eq 0) {
+    # A stamped migration must be a verified one (D12): every 'recorded' file's
+    # tables / columns / functions / indexes must exist in the target database.
+    cmd.exe /c "node scripts/verify-recorded-migrations.mjs --strict"
+}
 if ($LASTEXITCODE -ne 0) {
     if ($allowPendingMigrations) {
         Write-Host "  [0/3] WARNING: pending/drifted migrations — continuing because -allowPendingMigrations was given." -ForegroundColor DarkYellow

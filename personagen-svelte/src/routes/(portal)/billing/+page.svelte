@@ -9,16 +9,37 @@
 	let banner = $state<string | null>(
 		data.status === 'success'
 			? 'Payment received. Your balance updates within a few seconds.'
-			: data.status === 'cancel'
-				? 'Checkout cancelled. Nothing was charged.'
-				: null
+			: data.status === 'subscribed'
+				? 'Subscription active. Your included media credit lands within a few seconds.'
+				: data.status === 'cancel'
+					? 'Checkout cancelled. Nothing was charged.'
+					: null
 	);
+	let subscribing = $state<string | null>(null);
+
+	async function subscribe(plan: string) {
+		error = null;
+		subscribing = plan;
+		try {
+			const res = await fetch('/api/billing/subscribe', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ plan })
+			});
+			const body = await res.json().catch(() => ({}));
+			if (!res.ok || !body.url) throw new Error(body.error || `HTTP ${res.status}`);
+			window.location.href = body.url;
+		} catch (e) {
+			error = (e as Error).message;
+			subscribing = null;
+		}
+	}
 
 	// After a successful checkout the webhook lands a beat later than the
 	// redirect; poll the page data briefly so the new balance appears without
 	// a manual refresh.
 	onMount(() => {
-		if (data.status !== 'success') return;
+		if (data.status !== 'success' && data.status !== 'subscribed') return;
 		let n = 0;
 		const t = setInterval(async () => {
 			n++;
@@ -99,6 +120,36 @@
 			<li><strong>Only what you start.</strong> Failed runs are not charged.</li>
 		</ul>
 	</section>
+
+	{#if data.plans.enabled && data.billingMode !== 'unmetered'}
+		<section class="plans">
+			<div class="packs-head">
+				<h2>Plans</h2>
+				<p class="muted">
+					Priced per brand, not per seat. Every plan includes a monthly media wallet that resets at renewal; credit
+					you buy on top never expires.
+					{#if data.plans.current}<span class="soon">You are on the {data.plans.current.plan} plan{data.plans.current.periodEnd ? ` · renews ${new Date(data.plans.current.periodEnd).toLocaleDateString()}` : ''}.</span>{/if}
+				</p>
+			</div>
+			<div class="pack-grid">
+				{#each data.plans.catalog as p (p.plan)}
+					<article class="pack" class:featured={p.plan === 'brand' || p.plan === data.wantedPlan}>
+						{#if p.plan === 'brand'}<span class="badge">Most popular</span>{/if}
+						<h3>{p.name}</h3>
+						<p class="price">{p.usd}<span class="local"> / month{#if p.local} ≈ {p.local}{/if}</span></p>
+						<p class="worth"><strong>{p.included}</strong> of media generation every month</p>
+						<ul class="plan-features">
+							{#each p.features.slice(0, 5) as f (f)}<li>{f}</li>{/each}
+						</ul>
+						<button class="buy" class:ghost={p.plan !== 'brand'} disabled={subscribing !== null || data.plans.current?.plan === p.plan} onclick={() => subscribe(p.plan)}>
+							{data.plans.current?.plan === p.plan ? 'Current plan' : subscribing === p.plan ? 'Opening checkout…' : `Choose ${p.name}`}
+						</button>
+					</article>
+				{/each}
+			</div>
+			<p class="fineprint">Monthly, cancel any time. Included credit resets each renewal; purchased credit is never touched.</p>
+		</section>
+	{/if}
 
 	{#if data.billingMode !== 'unmetered'}
 		<section class="packs">
@@ -428,6 +479,14 @@
 	.note {
 		color: var(--text-dim);
 		font-size: 0.82rem;
+	}
+	.plan-features {
+		margin: 0.25rem 0 0;
+		padding-left: 1.1rem;
+		font-size: 0.82rem;
+		color: var(--text-muted);
+		display: grid;
+		gap: 0.15rem;
 	}
 	.ws-grid {
 		display: grid;

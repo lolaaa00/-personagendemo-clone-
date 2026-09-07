@@ -197,3 +197,61 @@ export function refundClawback(credits: number, amount: number, amountRefunded: 
 	const target = Math.min(credits, Math.round(credits * share));
 	return Math.max(0, target - Math.max(0, alreadyBack));
 }
+
+// ── Subscriptions ────────────────────────────────────────────────────────────
+
+export interface SubscriptionCheckoutInput {
+	userId: string;
+	email: string | null;
+	plan: string;
+	planName: string;
+	usdCents: number;
+	includedCredits: number;
+	successUrl: string;
+	cancelUrl: string;
+	customerId?: string | null;
+	idempotencyKey: string;
+	fetchImpl?: typeof fetch;
+}
+
+/**
+ * Hosted Checkout for a monthly plan. The price is created inline from the
+ * catalog (no dashboard Price objects to keep in sync); user and plan ride
+ * in metadata on the session AND the subscription, so every later invoice
+ * and status event maps back without a lookup table.
+ */
+export async function createSubscriptionCheckout(i: SubscriptionCheckoutInput): Promise<{ id: string; url: string }> {
+	const metadata = { user_id: i.userId, plan: i.plan, included_credits: String(i.includedCredits) };
+	const session = await stripePost<{ id: string; url: string }>(
+		'/checkout/sessions',
+		{
+			mode: 'subscription',
+			client_reference_id: i.userId,
+			...(i.customerId ? { customer: i.customerId } : i.email ? { customer_email: i.email } : {}),
+			line_items: [
+				{
+					quantity: 1,
+					price_data: {
+						currency: 'usd',
+						unit_amount: i.usdCents,
+						recurring: { interval: 'month' },
+						product_data: {
+							name: `${i.planName} plan`,
+							description: `Includes ${(i.includedCredits / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' })} of media generation every month. Text posts unlimited.`
+						}
+					}
+				}
+			],
+			metadata,
+			subscription_data: { metadata },
+			success_url: i.successUrl,
+			cancel_url: i.cancelUrl,
+			allow_promotion_codes: true,
+			billing_address_collection: 'auto'
+		},
+		i.idempotencyKey,
+		i.fetchImpl
+	);
+	if (!session?.url) throw new Error('Stripe returned no checkout URL');
+	return { id: session.id, url: session.url };
+}

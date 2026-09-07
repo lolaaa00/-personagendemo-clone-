@@ -179,3 +179,24 @@ node scripts/verify-recorded-migrations.mjs --strict
 | C7 | platform ceiling and welcome-abuse guard proven by the smoke |
 
 Each day ends on a green gate or the next day starts with the fix.
+
+---
+
+## 7. Status — 2026-09-07 (evening)
+
+| step | state | proof |
+|---|---|---|
+| S1 open payments | **waiting on the operator** (two Stripe env vars in the EasyPanel UI) | `/billing` shows "Coming soon"; webhook 503 |
+| S2 enforce | **done** 18:03 UTC via the audited setting | `/api/health` `credits: enforce (database)`; smoke 23/23 under enforce |
+| S3 close the free door | partial: welcome cap 20/h (trigger) + per-address withholding (hooks); PIN still the operator's call | `platform_guards_migration.sql`, `welcome-guard.ts` |
+| C1 engine metering | **done**: engine AI client wrapped, batch cap 12 + gate, batch stills, voice preview, three Firecrawl scrapes | smoke 24/24 incl. engine step; `metering-audit.spec.ts` |
+| C2 metering audit as code | **done** (vitest, not a script — it runs on every test run) | `src/lib/server/metering-audit.spec.ts` |
+| C3 deploy hardening | step 0 gains the recorded-stamp verifier; `npm run verify:money` bundles the DB verifiers | `deploy.ps1`, `package.json` |
+| C4 plans | **shipped dormant** behind `plans_enabled` (off): catalog, subscribe route, invoice webhook with reset, persona limit, Billing page Plans section, landing links | `plans_migration.sql`, `plans.spec.ts` (reset arithmetic), `stripe.spec.ts` |
+| C5 Settings billing card + owner naming | **done** | settings placeholder replaced; 402 names the workspace owner |
+| C6 unattended | **done**: hourly reconciliation, nightly roll-up/partition/prune, health check | `maintenance.ts`; health `reconciliation: ok (…)` |
+| C7 ceilings + abuse | **done**: platform daily ceiling $200, welcome cap 20/h, per-address withholding, checkout/voice throttles | `platform_guards_migration.sql`, `welcome-guard.ts`, `throttle.ts` |
+
+Lesson recorded: a panel build failed twice because two routes imported an orphaned, uncommitted file (`rate-limit.ts`) that only existed in the shared working tree. Before any push, build a `git archive HEAD` in a scratch directory — the working tree hides untracked dependencies.
+
+Open for the operator: Stripe keys (S1), then flip `plans_enabled` from Controls & Health and subscribe once with a test card and a Stripe test clock to watch the renewal reset; signup PIN if the free door should close fully.

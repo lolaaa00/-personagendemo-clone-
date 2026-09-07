@@ -34,5 +34,6 @@
 	["welcome_credits_and_fx_migration.sql", "Welcome credits at signup (signup_credits), display currency + fx_rates settings, profiles.display_currency"],
 	["credit_markup_migration.sql", "Credit markup — credit_markup setting makes the credit a retail cent (packs at par, margin from the console)"],
 	["credit_roles_policies_migration.sql", "Credit system × roles — grant hygiene, caller-only is_platform_admin, workspace_wallets(), owner-pays event policies"],
-	["platform_guards_migration.sql", "Platform guards — daily platform spend ceiling, welcome-grant hourly cap in the signup trigger, credit_reconcile_mismatches()"]
+	["platform_guards_migration.sql", "Platform guards — daily platform spend ceiling, welcome-grant hourly cap in the signup trigger, credit_reconcile_mismatches()"],
+	["plans_migration.sql", "Plans — plan_catalog, subscriptions wallet columns + widened plan check, plans_enabled setting"]
 ]

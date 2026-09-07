@@ -19,6 +19,7 @@ import {
 } from '$lib/server/activity';
 import { activityLogEnabled } from '$lib/server/flags';
 import { startSettingsRefresh } from '$lib/server/settings';
+import { maybeWithholdWelcome } from '$lib/server/welcome-guard';
 
 // SIGTERM/SIGINT → flush registered in-memory queues, then exit. Installed
 // before the scheduler so a redeploy mid-tick still drains cleanly.
@@ -120,6 +121,19 @@ export const handle: Handle = async ({ event, resolve }) => {
 					meta: { ...meta, data: event.url.pathname.endsWith('/__data.json') || undefined }
 				});
 				if (userId) touchPresence(userId, routeId, event.locals.activityContext ?? null, sessionHash);
+				// Welcome-credit abuse guard: a second signup from the same address
+				// today keeps the account but not the free credit. Runs after the
+				// response is on its way; never affects the signup itself.
+				if (routeId === '/api/auth/signup' && method === 'POST' && status < 400) {
+					void response
+						.clone()
+						.json()
+						.then((b: any) => {
+							const newId = b?.user?.id;
+							if (newId) return maybeWithholdWelcome(String(newId), event.locals.activityContext?.ipHash ?? null, requestId);
+						})
+						.catch(() => {});
+				}
 			}
 		} catch (e) {
 			console.warn('[activity] capture failed (ignored):', (e as Error).message);

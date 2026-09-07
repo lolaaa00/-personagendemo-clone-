@@ -2181,10 +2181,11 @@
 						</svg>
 					</div>
 					<div class="billing-text">
-						<p class="billing-title">Subscription management is on the way</p>
+						<p class="billing-title">Wallet, plans and invoices live on the Billing page</p>
 						<p class="billing-desc">
-							Billing, plan upgrades, and invoice history will be available here soon.
-							Your current access is fully active — no action needed.
+							Your balance is shown as money in your currency, every generation is priced before you
+							confirm, purchased credit never expires, and workspace personas draw on the workspace
+							owner's wallet. <a href="/billing">Open Billing →</a>
 						</p>
 					</div>
 				</div>

@@ -45,6 +45,8 @@ export interface PlatformSettings {
 	daily_platform_spend_usd: number;
 	/** Welcome-credit grants allowed per hour platform-wide (signup abuse guard); 0 = unlimited. */
 	signup_credits_hourly_cap: number;
+	/** Plans (subscriptions) offered on /billing; the webhook keeps existing subscriptions working either way. */
+	plans_enabled: boolean;
 }
 
 export const DEFAULT_SETTINGS: PlatformSettings = {
@@ -56,10 +58,11 @@ export const DEFAULT_SETTINGS: PlatformSettings = {
 	fx_rates: FALLBACK_FX,
 	credit_markup: 1,
 	daily_platform_spend_usd: 0,
-	signup_credits_hourly_cap: 20
+	signup_credits_hourly_cap: 20,
+	plans_enabled: false
 };
 
-export const SETTING_KEYS = ['credits_mode', 'activity_log', 'activity_pepper', 'signup_credits', 'display_currency_default', 'fx_rates', 'credit_markup', 'daily_platform_spend_usd', 'signup_credits_hourly_cap'] as const;
+export const SETTING_KEYS = ['credits_mode', 'activity_log', 'activity_pepper', 'signup_credits', 'display_currency_default', 'fx_rates', 'credit_markup', 'daily_platform_spend_usd', 'signup_credits_hourly_cap', 'plans_enabled'] as const;
 export type SettingKey = (typeof SETTING_KEYS)[number];
 
 const REFRESH_MS = 15_000;
@@ -122,6 +125,8 @@ function coerce(key: string, raw: unknown): unknown {
 			const n = Number(raw);
 			return Number.isInteger(n) && n >= 0 ? n : 20;
 		}
+		case 'plans_enabled':
+			return raw === true || raw === 'true';
 		default:
 			return raw;
 	}

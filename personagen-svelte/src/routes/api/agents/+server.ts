@@ -1,4 +1,5 @@
 import { json } from '@sveltejs/kit';
+import { personaLimitExceeded } from '$lib/server/plans';
 import type { RequestHandler } from './$types';
 import {
 	profileToMarketString,
@@ -33,6 +34,13 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 	if (!name) {
 		return json({ success: false, error: 'Missing name parameter' }, { status: 400 });
+	}
+
+	// Plan persona limit (plans.ts; null = unlimited, which is what 'free' is
+	// until the catalog says otherwise). 402 with a billing link, like credits.
+	const limitMsg = await personaLimitExceeded(session.user.id).catch(() => null);
+	if (limitMsg) {
+		return json({ success: false, code: 'PERSONA_LIMIT', error: limitMsg, billingUrl: '/billing' }, { status: 402 });
 	}
 
 	try {

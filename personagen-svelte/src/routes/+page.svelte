@@ -127,6 +127,7 @@
 				'Standard video + lip-sync'
 			],
 			cta: 'Start free',
+			href: '/billing?plan=studio',
 			featured: false
 		},
 		{
@@ -145,6 +146,7 @@
 				'Approval queue'
 			],
 			cta: 'Start free',
+			href: '/billing?plan=brand',
 			featured: true
 		},
 		{
@@ -163,6 +165,7 @@
 				'API access + dedicated manager'
 			],
 			cta: 'Talk to us',
+			href: '/billing?plan=agency',
 			featured: false
 		}
 	];
@@ -395,7 +398,7 @@
 							</li>
 						{/each}
 					</ul>
-					<a class="lp-btn lp-btn-block" class:lp-btn-ghost={!p.featured} href="/signup">{p.cta}</a>
+					<a class="lp-btn lp-btn-block" class:lp-btn-ghost={!p.featured} href={p.href ?? '/signup'}>{p.cta}</a>
 				</article>
 			{/each}
 		</div>

@@ -87,6 +87,11 @@ export function creditMarkupSource(): SwitchSource {
 	return getSettings().credit_markup ? 'database' : 'default';
 }
 
+/** Plans on /billing (subscriptions). Console-only; off until the database row says otherwise. */
+export function plansEnabled(): boolean {
+	return getSettings().plans_enabled === true;
+}
+
 /** Platform-wide ceiling on estimated provider spend per UTC day (0 = off). Console-only, no env; off until the database row says otherwise. */
 export function platformDailySpendUsd(): number {
 	const n = Number(getSettings().daily_platform_spend_usd);

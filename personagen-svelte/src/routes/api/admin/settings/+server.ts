@@ -67,6 +67,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 			credit_markup: { effective: creditMarkup(), stored: s.credit_markup, source: creditMarkupSource() },
 			daily_platform_spend_usd: { stored: s.daily_platform_spend_usd },
 			signup_credits_hourly_cap: { stored: s.signup_credits_hourly_cap },
+			plans_enabled: { stored: s.plans_enabled },
 			display_currency_default: { stored: s.display_currency_default, supported: SUPPORTED_CURRENCIES },
 			fx_rates: {
 				base: s.fx_rates.base,
@@ -109,7 +110,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		if (!['off', 'shadow', 'enforce'].includes(value as string)) {
 			return json({ success: false, error: 'credits_mode must be off | shadow | enforce' }, { status: 400 });
 		}
-	} else if (key === 'activity_log') {
+	} else if (key === 'activity_log' || key === 'plans_enabled') {
 		value = body.value === true || body.value === 'true' || body.value === 'on';
 	} else if (key === 'signup_credits') {
 		const n = Number(body.value);

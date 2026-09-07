@@ -389,7 +389,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-07", hash: "ad7d895", type: "docs", category: "docs", scope: "monetization", title: "durable action plan phase 2 — payments, enforce, metering, plans, unattended ops" },
 	{ date: "2026-09-07", hash: "87ed887", type: "feat", category: "publishing", scope: "billing", title: "phase 2 — engine/voice metering, platform ceilings, signup abuse guard, security headers, unattended reconciliation" },
 	{ date: "2026-09-07", hash: "1012f3b", type: "fix", category: "generation", scope: "build", title: "checkout and voice throttles use a committed module" },
-	{ date: "2026-09-07", hash: "4ad3521", type: "fix", category: "generation", scope: "persona", title: "wire SSRF guard on user URLs; lossless profile serialize on both write paths; vision prompt from APPEARANCE_FIELDS; wizard selects; Settings seed-once; prompt regression snapshots; smoke-ssrf probe" }
+	{ date: "2026-09-07", hash: "4ad3521", type: "fix", category: "generation", scope: "persona", title: "wire SSRF guard on user URLs; lossless profile serialize on both write paths; vision prompt from APPEARANCE_FIELDS; wizard selects; Settings seed-once; prompt regression snapshots; smoke-ssrf probe" },
+	{ date: "2026-09-07", hash: "dacfdd6", type: "feat", category: "generation", scope: "models", title: "OpenRouter image routes resolve from the registry, id and price together" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -693,10 +694,10 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 		id: "87ddd78", from: "2026-09-07", to: "2026-09-07",
 		category: "feature", categories: ["feature","docs","design","fix","infrastructure","publishing","generation"],
 		title: "New: wallet pill rounds to whole currency units with .00",
-		summary: "Wallet pill rounds to whole currency units with .00. Plus 12 more changes, touching guides and explanations and layout, colours and readability and things that were broken.",
+		summary: "Wallet pill rounds to whole currency units with .00. Plus 13 more changes, touching guides and explanations and layout, colours and readability and things that were broken.",
 		major: true, curated: false,
-		entries: [CHANGELOG[343], CHANGELOG[344], CHANGELOG[345], CHANGELOG[346], CHANGELOG[347], CHANGELOG[348], CHANGELOG[349], CHANGELOG[350], CHANGELOG[351], CHANGELOG[352], CHANGELOG[353], CHANGELOG[354], CHANGELOG[355]]
+		entries: [CHANGELOG[343], CHANGELOG[344], CHANGELOG[345], CHANGELOG[346], CHANGELOG[347], CHANGELOG[348], CHANGELOG[349], CHANGELOG[350], CHANGELOG[351], CHANGELOG[352], CHANGELOG[353], CHANGELOG[354], CHANGELOG[355], CHANGELOG[356]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "4ad3521";
+export const CHANGELOG_GENERATED_FROM = "dacfdd6";

@@ -151,7 +151,7 @@ async function main() {
 	check('preview quotes retail credits = Σ ceil(step × markup × 100)', pv.ok && steps.length > 0 && pvBody.preview.estimatedCredits === expectedCredits, `steps=${steps.map((s) => `${s.step}@$${s.usd}`).join(' + ')} → ${pvBody.preview?.estimatedCredits} credits (mode ${pvBody.preview?.creditsMode})`);
 
 	// 5b. engine LLM action is metered: one llm event with retail credits and one debit
-	const eng = await postJson('/api/engine', { action: 'generate_profile', agent_id: agentId });
+	const eng = await postJson('/api/engine?path=personagen-content-forge', { action: 'generate_profile', agent_id: agentId });
 	const engBody = await eng.json().catch(() => ({}));
 	await sleep(1500);
 	const engEvents = await pg(`select provider, operation, est_cost, credits, key_source, (select count(*)::int from credit_ledger l where l.generation_event_id=e.id and l.kind='debit') as debits from generation_events e where e.user_id=${q(userId)} and e.agent_id is null and e.operation='llm' order by created_at desc limit 3`);
@@ -177,9 +177,12 @@ async function main() {
 	const platformPaid = events.filter((e) => e.key_source === 'platform' && Number(e.credits) > 0);
 	const debitedOnce = platformPaid.every((e) => e.debits === 1);
 	const expectedDebit = platformPaid.reduce((s, e) => s + Number(e.credits), 0);
-	const [wal] = await pg(`select balance_credits from credit_accounts where user_id=${q(userId)}`);
+	const [wal] = await pg(`select balance_credits, (select coalesce(-sum(delta),0)::bigint from credit_ledger l where l.user_id=${q(userId)} and l.kind='debit') as debited from credit_accounts where user_id=${q(userId)}`);
 	const shadowOrEnforce = mode === 'shadow' || mode === 'enforce';
-	check(shadowOrEnforce ? 'wallet debited exactly once per platform-paid event' : 'credits off: no debit written', shadowOrEnforce ? debitedOnce && Number(wal.balance_credits) === Number(signup) - expectedDebit : Number(wal.balance_credits) === Number(signup), `balance ${wal.balance_credits} = ${signup} − ${expectedDebit}`);
+	// The wallet must equal welcome − every debit written (post + engine steps), and
+	// every platform-paid post event must carry exactly one debit.
+	const ledgerConsistent = Number(wal.balance_credits) === Number(signup) - Number(wal.debited) && Number(wal.debited) >= expectedDebit;
+	check(shadowOrEnforce ? 'wallet debited exactly once per platform-paid event' : 'credits off: no debit written', shadowOrEnforce ? debitedOnce && ledgerConsistent : Number(wal.balance_credits) === Number(signup), `balance ${wal.balance_credits} = ${signup} − ${wal.debited} (post events ${expectedDebit})`);
 	const activity = await pg(`select count(*)::int as n, count(distinct action)::int as actions from user_activity_events where user_id=${q(userId)}`);
 	check('activity log captured the session pseudonymously', activity[0].n > 0, `${activity[0].n} rows · ${activity[0].actions} distinct actions`);
 

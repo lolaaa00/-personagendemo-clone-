@@ -1215,7 +1215,7 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 							for (let attempt = 0; attempt < 2 && !contentToParse; attempt++) {
 								if (attempt > 0) await new Promise((r) => setTimeout(r, 2500));
 								try {
-									const fcRes = await fetch('https://api.firecrawl.dev/v1/scrape', {
+									const fcRes = await meteredCall({ supabase: locals.supabase, userId: session.user.id }, () => fetch('https://api.firecrawl.dev/v1/scrape', {
 										method: 'POST',
 										headers: {
 											'Content-Type': 'application/json',
@@ -1229,7 +1229,7 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 											formats: ['markdown', 'links', 'rawHtml', 'branding'],
 											onlyMainContent: false
 										})
-									});
+									}), { estimateUsd: meteringPriceOf('firecrawl', 'scrape'), event: () => ({ provider: 'firecrawl', operation: 'scrape', model: 'v1/scrape store', usd: meteringPriceOf('firecrawl', 'scrape') }) });
 									if (fcRes.ok) {
 										const fcJson = await fcRes.json();
 										if (fcJson.success && fcJson.data?.markdown) {
@@ -1501,7 +1501,7 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 											// Firecrawl first, when configured…
 											if (firecrawlKey && !firecrawlKey.includes('placeholder')) {
 												try {
-													const r = await fetch('https://api.firecrawl.dev/v1/scrape', {
+													const r = await meteredCall({ supabase: locals.supabase, userId: session.user.id }, () => fetch('https://api.firecrawl.dev/v1/scrape', {
 														method: 'POST',
 														headers: {
 															'Content-Type': 'application/json',
@@ -1512,7 +1512,7 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 															formats: ['markdown'],
 															onlyMainContent: true
 														})
-													});
+													}), { estimateUsd: meteringPriceOf('firecrawl', 'scrape'), event: () => ({ provider: 'firecrawl', operation: 'scrape', model: 'v1/scrape product page', usd: meteringPriceOf('firecrawl', 'scrape') }) });
 													if (r.ok) {
 														const rj = await r.json();
 														// A throttled product page must not pollute the
@@ -1763,7 +1763,7 @@ ${contentToParse.substring(0, 20000)}${catalogHint}${productPagesHint}`;
 					const imageCandidates: string[] = [];
 
 					if (fcKey && !fcKey.includes('placeholder') && fcKey.trim() !== '') {
-						const fcRes = await fetch('https://api.firecrawl.dev/v1/scrape', {
+						const fcRes = await meteredCall({ supabase: locals.supabase, userId: session.user.id }, () => fetch('https://api.firecrawl.dev/v1/scrape', {
 							method: 'POST',
 							headers: {
 								'Content-Type': 'application/json',
@@ -1774,7 +1774,7 @@ ${contentToParse.substring(0, 20000)}${catalogHint}${productPagesHint}`;
 								formats: ['markdown'],
 								onlyMainContent: false
 							})
-						});
+						}), { estimateUsd: meteringPriceOf('firecrawl', 'scrape'), event: () => ({ provider: 'firecrawl', operation: 'scrape', model: 'v1/scrape product', usd: meteringPriceOf('firecrawl', 'scrape') }) });
 						if (fcRes.ok) {
 							const fcJson = (await fcRes.json()) as any;
 							if (fcJson.success && fcJson.data?.markdown) {

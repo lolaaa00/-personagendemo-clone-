@@ -8,7 +8,7 @@
  */
 
 export interface PriceEntry {
-	provider: 'fal' | 'openrouter' | 'gemini' | 'zernio' | 'local';
+	provider: 'fal' | 'openrouter' | 'gemini' | 'zernio' | 'local' | 'firecrawl';
 	operation: string;
 	model: string;
 	/** Estimated USD per call. */
@@ -78,6 +78,10 @@ export const PRICING_MATRIX: PriceEntry[] = [
 	},
 	// ── Gemini direct (env-key text fallback) ──────────────────────────────
 	{ provider: 'gemini', operation: 'llm', model: 'gemini-3.5-flash', usd: 0.002 },
+	// ── Firecrawl (store / product page scrapes) ───────────────────────────
+	// Standard plan: $16 / 3,000 credits, 1 credit per scraped page → $0.0053.
+	// Rounded to a cent-fraction that survives the retail ceil at 3× (2 credits).
+	{ provider: 'firecrawl', operation: 'scrape', model: 'v1/scrape (per page)', usd: 0.0053 },
 	// ── Zernio (posting; pay-per-connected-account, not per-call) ──────────
 	{
 		provider: 'zernio',
