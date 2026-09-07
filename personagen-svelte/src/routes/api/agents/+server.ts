@@ -1,6 +1,10 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { profileToMarketString, type PersonaProfile } from '$lib/persona-profile-store';
+import {
+	profileToMarketString,
+	serializePersonaProfile,
+	type PersonaProfile
+} from '$lib/persona-profile-store';
 import { writeWithProfileFallback } from '$lib/server/personas-profile-column';
 
 export const POST: RequestHandler = async ({ request, locals }) => {
@@ -14,24 +18,38 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	// personaProfile/skills/ugcVoice/brandBriefId land here when the Agent Generator
 	// generated a full brand-tailored persona, so the new creator is born fully
 	// configured (profile + voice + brand link) instead of a bare shell.
-	const { name, niche, platform, bio, handle, gradient, initial, personaProfile, skills, ugcVoice, brandBriefId } = body;
+	const {
+		name,
+		niche,
+		bio,
+		handle,
+		gradient,
+		initial,
+		personaProfile,
+		skills,
+		ugcVoice,
+		brandBriefId
+	} = body;
 
 	if (!name) {
 		return json({ success: false, error: 'Missing name parameter' }, { status: 400 });
 	}
 
 	try {
-		const agentHandle = handle || ('@' + name.toLowerCase().replace(/[^a-z0-9]/g, '_'));
+		const agentHandle = handle || '@' + name.toLowerCase().replace(/[^a-z0-9]/g, '_');
 		const defaultGradient = `linear-gradient(135deg, hsl(${Math.floor(Math.random() * 360)}, 70%, 55%), hsl(${Math.floor(Math.random() * 360)}, 80%, 50%))`;
 		const agentGradient = gradient || defaultGradient;
 		const agentInitial = initial || name.charAt(0).toUpperCase();
 		const skillsText = typeof skills === 'string' ? skills : '';
-		// The full persona profile (archetype/avatar/appearance/voiceProfile) is
-		// DUAL-WRITTEN: the new personas_profile JSONB column plus the legacy
-		// agents.market JSON string, which services/mcp-bridge and any
-		// not-yet-migrated reader still depend on. Same shape either way.
+		// The full persona profile (archetype/avatar/appearance/voiceProfile) goes
+		// through the normalising gate at birth — same as every later save — then
+		// lands in personas_profile JSONB. `market` gets a copy ONLY as the
+		// never-brick fallback for a database without the JSONB column; no
+		// external service reads it (mcp-bridge verified 2026-09-05).
 		const profileToStore: PersonaProfile | undefined =
-			personaProfile && typeof personaProfile === 'object' ? (personaProfile as PersonaProfile) : undefined;
+			personaProfile && typeof personaProfile === 'object'
+				? serializePersonaProfile(personaProfile as PersonaProfile)
+				: undefined;
 
 		const insertPayload = {
 			user_id: session.user.id,
@@ -67,22 +85,22 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		// Create default agent_configs row (with the pinned voice + brand link when the
 		// generator supplied them).
 		try {
-			const { error: configError } = await locals.supabase
-				.from('agent_configs')
-				.insert({
-					user_id: session.user.id,
-					agent_id: newAgent.id,
-					soul: bio || `Autonomous ${niche || 'lifestyle'} creator.`,
-					skills: skillsText,
-					tools: '',
-					timezone: 'Australia/Sydney',
-					posts_per_day: 3,
-					active_hours_start: 8,
-					active_hours_end: 22,
-					autonomy_level: 'advisor',
-					...(typeof ugcVoice === 'string' && ugcVoice ? { ugc_voice: ugcVoice } : {}),
-					...(typeof brandBriefId === 'string' && brandBriefId ? { brand_brief_id: brandBriefId } : {})
-				});
+			const { error: configError } = await locals.supabase.from('agent_configs').insert({
+				user_id: session.user.id,
+				agent_id: newAgent.id,
+				soul: bio || `Autonomous ${niche || 'lifestyle'} creator.`,
+				skills: skillsText,
+				tools: '',
+				timezone: 'Australia/Sydney',
+				posts_per_day: 3,
+				active_hours_start: 8,
+				active_hours_end: 22,
+				autonomy_level: 'advisor',
+				...(typeof ugcVoice === 'string' && ugcVoice ? { ugc_voice: ugcVoice } : {}),
+				...(typeof brandBriefId === 'string' && brandBriefId
+					? { brand_brief_id: brandBriefId }
+					: {})
+			});
 			if (configError) throw configError;
 		} catch (configErr) {
 			console.error('[API Agents] Could not create agent_configs:', configErr);

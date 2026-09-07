@@ -1,0 +1,45 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`buildHeroPortraitPrompt — first portrait > full v1 profile 1`] = `"Photorealistic vertical portrait of one Vietnamese female relatable UGC content creator who fits this audience: Australian women 25–40 who read every skincare label. The creator is authentically Vietnamese — render accurate, respectful Vietnamese facial features, skin tone, and hair; this is essential and must not be generic or ambiguous. Personality vibe: soul.md — Jenny Tran. Gentle, precise, a chemist who explains the why.. Their creator archetype: The Expert / Authority. They make content for: A 32-year-old who has been burned by a viral serum. Appearance: 30–35 years old, Medium skin tone, Slim build, Black Shoulder-Length Straight hair, Dark Brown eyes, small beauty mark below left eye, dressed in cream linen sets, minimal gold jewelry, outfit in cream, tan, olive, quiet luxury, summer styling. Friendly, casual, natural window light, looking straight at the camera, authentic iPhone selfie style, clear visible face, upper body. Single person only — a unique, specific individual with their own distinct face, NOT a generic stock model."`;
+
+exports[`buildHeroPortraitPrompt — first portrait > legacy look profile 1`] = `"Photorealistic vertical portrait of one female relatable UGC content creator who fits this audience: Australian women 25–40 who read every skincare label. Personality vibe: Chaotic-good mum of two, zero patience for perfect-kitchen content.. Their creator archetype: The Relatable Friend. Appearance: honey blonde long loose waves hair, Hazel eyes. Friendly, casual, natural window light, looking straight at the camera, authentic iPhone selfie style, clear visible face, upper body. Single person only — a unique, specific individual with their own distinct face, NOT a generic stock model."`;
+
+exports[`buildHeroPortraitPrompt — first portrait > no brief, no gender — the bare fallback 1`] = `"Photorealistic vertical portrait of one relatable UGC content creator who fits this audience: a general lifestyle audience. Personality vibe: Warm, dry humour, allergic to greenwashing.. Their creator archetype: The Activist / Advocate. They make content for: A renter who composts and feels guilty about parcels. Friendly, casual, natural window light, looking straight at the camera, authentic iPhone selfie style, clear visible face, upper body. Single person only — a unique, specific individual with their own distinct face, NOT a generic stock model."`;
+
+exports[`buildHeroPortraitPrompt — first portrait > pre-bucket profile 1`] = `"Photorealistic vertical portrait of one female relatable UGC content creator who fits this audience: Australian women 25–40 who read every skincare label. Personality vibe: Warm, dry humour, allergic to greenwashing.. Their creator archetype: The Activist / Advocate. They make content for: A renter who composts and feels guilty about parcels. Friendly, casual, natural window light, looking straight at the camera, authentic iPhone selfie style, clear visible face, upper body. Single person only — a unique, specific individual with their own distinct face, NOT a generic stock model."`;
+
+exports[`buildPortraitEditPrompt — regenerate keeping the face > full v1 profile 1`] = `"Regenerate this exact person as a fresh photorealistic vertical portrait. Preserve their facial identity from the reference image — same bone structure, eye shape, nose, jaw, and hairline; do NOT turn them into a different person. This person is authentically Vietnamese; keep them recognizably the same individual while ensuring the depiction accurately reflects Vietnamese features and skin tone. Appearance: 30–35 years old, Medium skin tone, Slim build, Black Shoulder-Length Straight hair, Dark Brown eyes, small beauty mark below left eye, dressed in cream linen sets, minimal gold jewelry, outfit in cream, tan, olive, quiet luxury, summer styling. Friendly, casual, natural window light, looking straight at the camera, authentic iPhone selfie style, clear visible face, upper body. Single person only."`;
+
+exports[`buildPortraitEditPrompt — regenerate keeping the face > legacy look profile de-duplicates "long" against "long loose waves" 1`] = `"Regenerate this exact person as a fresh photorealistic vertical portrait. Preserve their facial identity from the reference image — same bone structure, eye shape, nose, jaw, and hairline; do NOT turn them into a different person. Appearance: honey blonde long loose waves hair, Hazel eyes. Friendly, casual, natural window light, looking straight at the camera, authentic iPhone selfie style, clear visible face, upper body. Single person only."`;
+
+exports[`buildRichAgentContext — script/caption persona context > full v1 profile 1`] = `
+"You are Jenny Tran (@jenny.tran), a Beauty & Wellness creator.
+Your name is ALWAYS Jenny Tran — never introduce yourself as, or invent, any other name, and never address the viewer by a personal name (the "Ideal viewer profile" below describes your audience, not a named character).
+Core personality: soul.md — Jenny Tran. Gentle, precise, a chemist who explains the why..
+Persona archetype: "The Expert / Authority" — let this archetype's energy, tone, and style govern every creative decision.
+Primary content focus: Education & How-Tos.
+Signature content angle / POV: "I read the label so you do not have to." — this is the unique lens through which all content is filtered.
+Target age demographic: 25–34, 35–44.
+Ideal viewer profile: A 32-year-old who has been burned by a viral serum.
+Audience psychology (use to tune emotional hooks and pain-point language): Wants proof, distrusts hype, shares wins with her group chat..
+Creator skills & capabilities: Ingredient breakdowns (Reads INCI lists on camera.); Before/after honesty (Never filters skin.)."
+`;
+
+exports[`buildRichAgentContext — script/caption persona context > legacy look profile 1`] = `
+"You are Lexy Connor (@lexy.connor), a Parenting & Family creator.
+Your name is ALWAYS Lexy Connor — never introduce yourself as, or invent, any other name, and never address the viewer by a personal name (the "Ideal viewer profile" below describes your audience, not a named character).
+Core personality: Chaotic-good mum of two, zero patience for perfect-kitchen content..
+Persona archetype: "The Relatable Friend" — let this archetype's energy, tone, and style govern every creative decision.
+Primary content focus: Entertainment & Humor.
+Target age demographic: 25–34.
+Creator skills & capabilities: street interviews at school pickup."
+`;
+
+exports[`buildRichAgentContext — script/caption persona context > pre-bucket profile 1`] = `
+"You are Chloe Miles (@chloe.miles), a Sustainability & Eco creator.
+Your name is ALWAYS Chloe Miles — never introduce yourself as, or invent, any other name, and never address the viewer by a personal name (the "Ideal viewer profile" below describes your audience, not a named character).
+Core personality: Warm, dry humour, allergic to greenwashing..
+Persona archetype: "The Activist / Advocate" — let this archetype's energy, tone, and style govern every creative decision.
+Target age demographic: 25–44 year olds.
+Ideal viewer profile: A renter who composts and feels guilty about parcels."
+`;

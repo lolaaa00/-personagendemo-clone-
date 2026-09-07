@@ -10,7 +10,7 @@
 		DEFAULT_BRAND_SECONDARY
 	} from '$lib/stores/ui.svelte';
 	import { BrandBrief } from '$lib/services/api';
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { dialog } from '$lib/actions/dialog';
 	import { syncParam, readParam } from '$lib/url-state';
 	import { confirmAction } from '$lib/stores/confirm.svelte';
@@ -110,16 +110,26 @@
 
 	// Profile — email comes from auth session; name + notification preferences
 	// are persisted in Supabase user metadata (localStorage is only a cache).
+	//
+	// The editable fields below are SEEDED ONCE from `data` on purpose: after a
+	// save, the handlers write the server's answer straight into this state and
+	// nothing calls invalidateAll(), so `data` never changes while the page is
+	// mounted. `untrack` states that intent explicitly (and clears the
+	// state_referenced_locally warning) instead of leaving a reader to wonder
+	// whether a later `data` update is silently ignored. If a save ever starts
+	// invalidating, re-seed these in an $effect keyed on `data.profile`.
 	let profileEmail = $derived(data.user?.email ?? '');
 	let profileName = $state(
-		data.profile?.displayName || data.user?.email?.split('@')[0] || 'Account'
+		untrack(() => data.profile?.displayName || data.user?.email?.split('@')[0] || 'Account')
 	);
 	let profileSaving = $state(false);
 
 	// Notifications
-	let emailAlerts = $state(data.profile?.preferences?.emailAlerts ?? true);
-	let pushNotifications = $state(data.profile?.preferences?.pushNotifications ?? false);
-	let weeklyReports = $state(data.profile?.preferences?.weeklyReports ?? true);
+	let emailAlerts = $state(untrack(() => data.profile?.preferences?.emailAlerts ?? true));
+	let pushNotifications = $state(
+		untrack(() => data.profile?.preferences?.pushNotifications ?? false)
+	);
+	let weeklyReports = $state(untrack(() => data.profile?.preferences?.weeklyReports ?? true));
 
 	// ── Brand Theme: which brand brief's colors dress the app ────────────────
 	// Opt-in and reversible. The Brand Brief editor no longer hijacks the
@@ -127,7 +137,7 @@
 	// on a brand's colors.
 	let brandBriefs = $state<Array<{ id: string; name: string; updated_at: string }>>([]);
 	let brandThemeChoice = $state<string>(
-		data.profile?.preferences?.brandThemeBriefId ?? brandThemeState.briefId ?? ''
+		untrack(() => data.profile?.preferences?.brandThemeBriefId ?? brandThemeState.briefId ?? '')
 	);
 	let brandThemeBusy = $state(false);
 

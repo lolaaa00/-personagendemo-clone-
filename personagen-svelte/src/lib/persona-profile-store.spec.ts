@@ -128,7 +128,11 @@ describe('mergePersonaProfile', () => {
 		contentAngle: 'Honey-first routines',
 		targetAvatar: 'A 28-year-old with sensitive skin',
 		appearance: { hairColor: 'honey blonde', ethnicity: 'Vietnamese' },
-		voiceProfile: { gender: 'female', nationality: 'Vietnamese-Australian', accent: 'soft Australian' },
+		voiceProfile: {
+			gender: 'female',
+			nationality: 'Vietnamese-Australian',
+			accent: 'soft Australian'
+		},
 		bios: { tiktok: 'Honey-first skincare 🍯' },
 		handleCandidates: [{ handle: 'jennytran', status: 'confirmed' }],
 		confirmedHandles: { tiktok: 'jennytran' },
@@ -216,7 +220,9 @@ describe('mergePersonaProfile', () => {
 
 	it('handles null/undefined existing and patch', () => {
 		expect(mergePersonaProfile(null, null)).toEqual({});
-		expect(mergePersonaProfile(undefined, { displayName: 'Jenny' })).toEqual({ displayName: 'Jenny' });
+		expect(mergePersonaProfile(undefined, { displayName: 'Jenny' })).toEqual({
+			displayName: 'Jenny'
+		});
 		expect(mergePersonaProfile({ archetype: 'The Creator' }, undefined)).toEqual({
 			archetype: 'The Creator'
 		});
@@ -257,9 +263,20 @@ describe('serializePersonaProfile', () => {
 		expect(Object.keys(out)).not.toContain('legacyKey');
 	});
 
-	it('coerces an off-list value to the empty string rather than dropping the key', () => {
-		const out = serializePersonaProfile({ archetype: 'Zzzzz', contentFocus: 42 } as never);
-		expect(out).toEqual({ archetype: '', contentFocus: '' });
+	it('keeps an off-list strategy value VERBATIM (stored values are sacred); non-strings become ""', () => {
+		// A legacy or wizard-typed archetype ("Mentor") must survive an ordinary
+		// save — blanking it here was silent data loss. The UI renders it as an
+		// extra select option; LLM output is snapped at the generator instead.
+		const out = serializePersonaProfile({
+			archetype: '  Mentor  ',
+			contentFocus: 42
+		} as never);
+		expect(out).toEqual({ archetype: 'Mentor', contentFocus: '' });
+	});
+
+	it('still snaps a matching strategy value onto its canonical option', () => {
+		const out = serializePersonaProfile({ archetype: 'educator', contentFocus: 'tutorials' });
+		expect(out).toEqual({ archetype: 'The Educator', contentFocus: 'Tutorials & Demos' });
 	});
 
 	it('preserves key PRESENCE exactly — an absent key stays absent', () => {
@@ -357,7 +374,12 @@ describe('age bucket helpers', () => {
 describe('coerceVoiceProfile', () => {
 	it('keeps only the three known keys as trimmed non-empty strings', () => {
 		expect(
-			coerceVoiceProfile({ gender: ' female ', nationality: '', accent: 'soft Australian', junk: 'x' })
+			coerceVoiceProfile({
+				gender: ' female ',
+				nationality: '',
+				accent: 'soft Australian',
+				junk: 'x'
+			})
 		).toEqual({ gender: 'female', accent: 'soft Australian' });
 	});
 

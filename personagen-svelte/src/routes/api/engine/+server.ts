@@ -41,8 +41,7 @@ import {
 } from '$lib/persona-identity';
 import { readPersonaProfile } from '$lib/persona-profile-store';
 import { pickVoiceForProfile } from '$lib/server/voices';
-import dns from 'node:dns/promises';
-import net from 'node:net';
+import { resolvePublicIps } from '$lib/server/safe-fetch';
 
 /**
  * The `appearance` JSON contract handed to the persona-generation prompts, derived
@@ -97,63 +96,15 @@ function appearanceFingerprint(appearance: any): string {
  * rejected — a bare hostname check alone doesn't stop that DNS-rebinding-style
  * bypass.
  */
+/**
+ * URL guard for every user-supplied URL this route hands to a fetcher (store
+ * scrape, product scrape, discovered links, vision image). One implementation,
+ * shared with `ai-client.ts`: `$lib/server/safe-fetch`. The private copy that
+ * used to live here lagged it (no carrier-grade-NAT range, no `::`), which is
+ * exactly how two guards drift into one weak one.
+ */
 async function assertPublicHttpUrl(rawUrl: string): Promise<void> {
-	let parsed: URL;
-	try {
-		parsed = new URL(rawUrl);
-	} catch {
-		throw new Error('Invalid URL');
-	}
-	if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-		throw new Error('Only http/https URLs are allowed');
-	}
-	const hostname = parsed.hostname.toLowerCase();
-	if (hostname === 'localhost' || hostname.endsWith('.localhost')) {
-		throw new Error('URL resolves to a disallowed host');
-	}
-
-	const candidateIps: string[] = [];
-	if (net.isIP(hostname)) {
-		candidateIps.push(hostname);
-	} else {
-		const records = await dns.lookup(hostname, { all: true }).catch(() => []);
-		candidateIps.push(...records.map((r) => r.address));
-	}
-	if (candidateIps.length === 0) {
-		throw new Error('Could not resolve URL host');
-	}
-
-	for (const ip of candidateIps) {
-		if (isPrivateOrReservedIp(ip)) {
-			throw new Error('URL resolves to a private/internal address');
-		}
-	}
-}
-
-function isPrivateOrReservedIp(ip: string): boolean {
-	if (net.isIPv4(ip)) {
-		const parts = ip.split('.').map(Number);
-		const [a, b] = parts;
-		if (a === 127) return true; // loopback
-		if (a === 10) return true; // private
-		if (a === 172 && b >= 16 && b <= 31) return true; // private
-		if (a === 192 && b === 168) return true; // private
-		if (a === 169 && b === 254) return true; // link-local (incl. cloud metadata: 169.254.169.254)
-		if (a === 0) return true; // "this network"
-		return false;
-	}
-	if (net.isIPv6(ip)) {
-		const lower = ip.toLowerCase();
-		if (lower === '::1') return true; // loopback
-		if (lower.startsWith('fe80:')) return true; // link-local
-		if (lower.startsWith('fc') || lower.startsWith('fd')) return true; // unique local (fc00::/7)
-		if (lower.startsWith('::ffff:')) {
-			// IPv4-mapped IPv6 — recheck the embedded IPv4 address.
-			return isPrivateOrReservedIp(lower.replace('::ffff:', ''));
-		}
-		return false;
-	}
-	return true; // unrecognized format — fail closed
+	await resolvePublicIps(rawUrl);
 }
 
 /**
@@ -2513,6 +2464,21 @@ Return ONLY JSON: {"directions":["","","","",""]}`;
 			// headwear, styling) straight from a reference image so the appearance
 			// variables MATCH the actual character instead of being invented.
 			if (action === 'read_appearance_from_image') {
+				const imageUrl = typeof body.imageUrl === 'string' ? body.imageUrl.trim() : '';
+				if (!imageUrl) return json({ success: false, error: 'No image provided' }, { status: 400 });
+				// User-supplied URL that a provider (or, on the Gemini path, THIS server)
+				// will fetch. Reject internal/private targets here so both provider paths
+				// behave the same and the rejection is a clean 400, not a vision failure.
+				// Runs BEFORE the provider gate on purpose: the guard must hold — and be
+				// provable by the live smoke probe — on a host with no AI key configured.
+				try {
+					await assertPublicHttpUrl(imageUrl);
+				} catch (e) {
+					return json(
+						{ success: false, error: `Image URL rejected: ${(e as Error).message}` },
+						{ status: 400 }
+					);
+				}
 				if (!hasAi) {
 					return json(
 						{
@@ -2522,20 +2488,17 @@ Return ONLY JSON: {"directions":["","","","",""]}`;
 						{ status: 400 }
 					);
 				}
-				const imageUrl = typeof body.imageUrl === 'string' ? body.imageUrl.trim() : '';
-				if (!imageUrl) return json({ success: false, error: 'No image provided' }, { status: 400 });
 
-				const prompt = `Look ONLY at the person in the provided image and describe their real appearance for a character config. Fill each field from what you actually SEE; use "" if genuinely unclear and "none" for headwear if there is none.
-- ethnicity: the person's apparent ethnicity / heritage (e.g. Vietnamese, Nigerian, Brazilian, Korean-American) — describe respectfully from visible features so the pinned face can be reproduced faithfully
-- wardrobe: their outfit / clothing
-- outfitColors: the main colors of the outfit
-- hairstyle: hair length and style
-- hairColor: hair color
-- eyeColor: eye color
-- headwear: any hat / turban / scarf, else "none"
-- distinctiveFeatures: notable facial features (freckles, dimples, jawline, smile, face shape)
-- styling: the overall vibe, season, or era of the look
-Return ONLY JSON: {"ethnicity":"","wardrobe":"","outfitColors":"","hairstyle":"","hairColor":"","eyeColor":"","headwear":"","distinctiveFeatures":"","styling":""}`;
+				// The contract is the SAME field list the profile generator and the
+				// TraitPicker use (APPEARANCE_FIELDS), so a read-back fills every key the
+				// portrait clause consumes — including the four that lead it (age, skin
+				// tone, body type, hair length), which the old hand-written list skipped.
+				// Length and style are asked for SEPARATELY: writing "long wavy" into
+				// hairstyle is the legacy combined value `hairDescriptor()` has to de-dup.
+				const prompt = `Look ONLY at the person in the provided image and describe their real appearance for a character config. Fill each field from what you actually SEE. Use "" if genuinely unclear; use "none" for headwear if there is none. Describe ethnicity/heritage respectfully from visible features so the pinned face can be reproduced faithfully.
+Fields — ${APPEARANCE_CONTRACT}.
+Where an option list is given you MUST copy one option VERBATIM (exact spelling, casing and en-dash). "hairstyle" is the STYLE ONLY (curly/wavy/straight/bun…) — put the length in "hairLength". "personaAge" is the person's apparent age bracket.
+Return ONLY JSON: ${APPEARANCE_JSON_SKELETON}`;
 
 				try {
 					const parsed: any = safeParseJson(await ai!.generate(prompt, { json: true, imageUrl }));
@@ -2545,7 +2508,17 @@ Return ONLY JSON: {"ethnicity":"","wardrobe":"","outfitColors":"","hairstyle":""
 							{ status: 502 }
 						);
 					}
-					return json({ success: true, data: { appearance: coerceAppearance(parsed) } });
+					// Vision output is LLM output, so snapping curated traits onto their
+					// option list is correct here (it is STORED values that must never be
+					// snapped). Off-list answers are kept verbatim — a legit description
+					// beats a blank.
+					const snapped: Record<string, string> = {};
+					for (const f of APPEARANCE_FIELDS) {
+						const v = parsed[f.key];
+						if (typeof v !== 'string') continue;
+						snapped[f.key] = f.options.length ? coerceToOption(v, f.options) || v : v;
+					}
+					return json({ success: true, data: { appearance: coerceAppearance(snapped) } });
 				} catch (err) {
 					const msg = (err as Error).message || 'unknown error';
 					console.error('[Engine] read_appearance_from_image failed:', msg);

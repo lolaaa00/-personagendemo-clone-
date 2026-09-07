@@ -5,6 +5,7 @@ import {
 	mergePersonaProfile,
 	profileToMarketString,
 	readPersonaProfile,
+	serializePersonaProfile,
 	type PersonaProfile
 } from '$lib/persona-profile-store';
 import { writeWithProfileFallback } from '$lib/server/personas-profile-column';
@@ -59,7 +60,10 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		const { data: agent, error: getErr } = await db.agents.get(agentId);
 		if (getErr) throw getErr;
 		if (!agent) {
-			return json({ success: false, error: 'Persona not found or ownership mismatch' }, { status: 404 });
+			return json(
+				{ success: false, error: 'Persona not found or ownership mismatch' },
+				{ status: 404 }
+			);
 		}
 		const access = await checkAgentAccess(locals.supabase, user.id, agentId, 'creator');
 		if (!access.ok) {
@@ -88,23 +92,27 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		if (runtimeOwner !== undefined) {
 			agentUpdatePayload.runtime_owner = runtimeOwner;
 		}
-		// Extended persona profile — DUAL-WRITE to the personas_profile JSONB
-		// column and the legacy agents.market JSON string (services/mcp-bridge and
-		// any not-yet-migrated reader still read `market`).
+		// Extended persona profile — written to the personas_profile JSONB column,
+		// with `market` still carrying a copy ONLY as the never-brick fallback for a
+		// database that hasn't run personas_profile_migration.sql (no external
+		// service reads `market`; mcp-bridge verified 2026-09-05).
 		//
-		// MERGED against what's already stored, never overwritten wholesale: a
-		// caller that patches only bios used to wipe appearance/archetype off the
-		// row, because the old path stringified whatever literal it was handed.
-		// mergePersonaProfile keeps every field the patch doesn't mention.
+		// SERIALISED then MERGED: serialize is the normalising gate (trims, snaps
+		// matching options onto canonical spelling, strips unknown keys, re-derives
+		// age bounds) and it preserves key presence, so merge still keeps every
+		// field the patch doesn't mention. A caller that patches only bios cannot
+		// wipe appearance/archetype off the row.
 		if (personaProfile !== undefined) {
 			// A string body is the legacy transport — the client already stringified
 			// the profile. Parse it back through the accessor so it merges like any
 			// other patch instead of replacing the stored object as opaque text.
-			const patch = readPersonaProfile(
-				typeof personaProfile === 'string'
-					? { market: personaProfile }
-					: { personas_profile: personaProfile }
-			) as PersonaProfile;
+			const patch = serializePersonaProfile(
+				readPersonaProfile(
+					typeof personaProfile === 'string'
+						? { market: personaProfile }
+						: { personas_profile: personaProfile }
+				) as PersonaProfile
+			);
 			const merged = mergePersonaProfile(readPersonaProfile(agent), patch);
 			agentUpdatePayload.personas_profile = merged;
 			agentUpdatePayload.market = profileToMarketString(merged);
@@ -158,7 +166,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			if (rssUrl !== undefined) configPatch.rss_url = rssUrl;
 			if (rssActive !== undefined) configPatch.rss_active = rssActive;
 			if (ugcVoice !== undefined) configPatch.ugc_voice = ugcVoice;
-		if (body.brandBriefId !== undefined) configPatch.brand_brief_id = body.brandBriefId || null;
+			if (body.brandBriefId !== undefined) configPatch.brand_brief_id = body.brandBriefId || null;
 
 			const { error: configErr } = await db.agentConfigs.upsert(configPatch);
 
@@ -193,7 +201,10 @@ export const DELETE: RequestHandler = async ({ request, locals }) => {
 			return json({ success: false, error: 'Missing agentId' }, { status: 400 });
 		}
 		if (requested.length > 50) {
-			return json({ success: false, error: 'Too many personas (max 50 per request)' }, { status: 400 });
+			return json(
+				{ success: false, error: 'Too many personas (max 50 per request)' },
+				{ status: 400 }
+			);
 		}
 
 		const db = createDbService(locals.supabase);

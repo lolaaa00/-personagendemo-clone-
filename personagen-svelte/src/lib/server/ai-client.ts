@@ -14,9 +14,10 @@
  */
 
 import { env } from '$env/dynamic/private';
-import { getUserApiKey, type UserKeyProvider } from './user-api-keys';
+import { getUserApiKey } from './user-api-keys';
 import { GoogleGenAI } from '@google/genai';
 import { fetchWithTimeout } from './social/http';
+import { safeFetch } from './safe-fetch';
 
 // LLM generation is slower than a provider REST ping, so it gets its own, more
 // generous per-request deadline — but a deadline nonetheless. Without it a hung
@@ -56,16 +57,41 @@ export interface AiGenerateOptions {
 	imageUrl?: string;
 }
 
-/** Fetches an image URL into base64 inline data for Gemini's vision input. */
-async function fetchImageInlineData(
+/**
+ * Hard ceiling on an inline vision image. Gemini's own inline limit is ~20 MB;
+ * anything larger is either not a photo or an attempt to make the server buffer
+ * arbitrary bytes. Checked on Content-Length AND on the actual body, because
+ * a hostile origin can lie about (or omit) the header.
+ */
+const MAX_INLINE_IMAGE_BYTES = 20 * 1024 * 1024;
+
+/**
+ * Fetches an image URL into base64 inline data for Gemini's vision input.
+ *
+ * The URL is USER-SUPPLIED (`read_appearance_from_image` passes whatever the
+ * client sends), so this is an SSRF surface: a plain fetch would happily pull
+ * `http://supabase-kong:8000/…` or the cloud metadata endpoint from inside the
+ * deployment network and hand the bytes back base64-encoded. `safeFetch`
+ * validates the scheme/host, resolves once, and pins the socket to a checked
+ * public IP so a DNS rebind between check and connect can't redirect it.
+ *
+ * Returns null (never throws) so a bad image degrades to a text-only prompt —
+ * the caller reports "couldn't read the image" from the model's answer.
+ * Exported for the unit test that pins this path to `safeFetch`.
+ */
+export async function fetchImageInlineData(
 	url: string
 ): Promise<{ mimeType: string; data: string } | null> {
 	try {
-		const res = await fetchWithTimeout(url, {}, LLM_TIMEOUT_MS);
+		const res = await safeFetch(url, { signal: AbortSignal.timeout(LLM_TIMEOUT_MS) });
 		if (!res.ok) return null;
+		const declared = Number(res.headers.get('content-length') || 0);
+		if (declared > MAX_INLINE_IMAGE_BYTES) return null;
 		const mimeType = res.headers.get('content-type') || 'image/png';
-		const data = Buffer.from(await res.arrayBuffer()).toString('base64');
-		return { mimeType, data };
+		if (!mimeType.toLowerCase().startsWith('image/')) return null;
+		const buf = Buffer.from(await res.arrayBuffer());
+		if (buf.byteLength > MAX_INLINE_IMAGE_BYTES) return null;
+		return { mimeType, data: buf.toString('base64') };
 	} catch {
 		return null;
 	}
@@ -83,10 +109,7 @@ export interface AiClient {
  * Resolves the best available AI client for the given user.
  * Returns null if no provider is configured.
  */
-export async function resolveAiClient(
-	supabase: any,
-	userId: string
-): Promise<AiClient | null> {
+export async function resolveAiClient(supabase: any, userId: string): Promise<AiClient | null> {
 	// 1. Check user's OpenRouter key first
 	const orKey = await getUserApiKey(supabase, userId, 'openrouter').catch(() => null);
 	if (orKey) {

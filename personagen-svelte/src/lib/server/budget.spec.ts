@@ -114,7 +114,10 @@ describe('assertWithinBudget', () => {
 			const supabase = ledger([{ est_cost: 99999 }]);
 
 			await expect(assertWithinBudget(supabase as any, USER, AGENT)).resolves.toBeUndefined();
-			expect(supabase.queries).toHaveLength(0);
+			// The env caps are off, so no LEDGER sum may run. The per-seat workspace cap
+			// (Settings → Team) is independent of the env caps and still does its cheap
+			// agents/workspace lookup — that is not a ledger read.
+			expect(supabase.of('generation_events')).toHaveLength(0);
 		});
 
 		it('a 0 daily cap still lets the monthly cap fire', async () => {
@@ -182,7 +185,10 @@ describe('assertWithinBudget', () => {
 			mockEnv.MAX_DAILY_SPEND_PER_AGENT_USD = '15';
 			const supabase = ledger([{ est_cost: 99999 }]);
 			await expect(assertWithinBudget(supabase as any, USER)).resolves.toBeUndefined();
-			expect(supabase.queries).toHaveLength(0);
+			// The env caps are off, so no LEDGER sum may run. The per-seat workspace cap
+			// (Settings → Team) is independent of the env caps and still does its cheap
+			// agents/workspace lookup — that is not a ledger read.
+			expect(supabase.of('generation_events')).toHaveLength(0);
 		});
 	});
 });

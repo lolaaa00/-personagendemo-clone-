@@ -3813,6 +3813,11 @@
 							<div class="field-group">
 								<label for="pp-archetype">Persona Archetype</label>
 								<select id="pp-archetype" bind:value={ppArchetype}>
+									<!-- Off-list legacy / wizard-typed value: keep it selectable so it is
+									     visible and survives a save instead of rendering as a blank select. -->
+									{#if ppArchetype && !(PERSONA_ARCHETYPES as readonly string[]).includes(ppArchetype)}
+										<option value={ppArchetype}>{ppArchetype}</option>
+									{/if}
 									<option value="">— Select archetype —</option>
 									{#each PERSONA_ARCHETYPES as a}
 										<option value={a}>{a}</option>
@@ -3826,6 +3831,9 @@
 							<div class="field-group">
 								<label for="pp-focus">Content Focus</label>
 								<select id="pp-focus" bind:value={ppContentFocus}>
+									{#if ppContentFocus && !(CONTENT_FOCUS_OPTIONS as readonly string[]).includes(ppContentFocus)}
+										<option value={ppContentFocus}>{ppContentFocus}</option>
+									{/if}
 									<option value="">— Select focus —</option>
 									{#each CONTENT_FOCUS_OPTIONS as f}
 										<option value={f}>{f}</option>

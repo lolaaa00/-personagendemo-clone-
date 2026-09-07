@@ -11,7 +11,9 @@ export interface Agent {
 	heartbeat: string;
 	/**
 	 * LEGACY home of the persona profile JSON (column is `TEXT DEFAULT 'Australia'`).
-	 * Still dual-written for back-compat — read it via `readPersonaProfile()`.
+	 * Still written as the never-brick fallback for a database without the
+	 * `personas_profile` column; nothing external reads it. Read via
+	 * `readPersonaProfile()` only — never parse this directly.
 	 */
 	market: string;
 	/** Persona profile JSONB (see supabase/personas_profile_migration.sql). */

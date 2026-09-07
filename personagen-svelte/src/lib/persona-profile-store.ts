@@ -18,9 +18,10 @@
  *      been bitten by this. `mergePersonaProfile` below is the fix.
  *
  * The migration (supabase/personas_profile_migration.sql) adds a real
- * `personas_profile JSONB` column alongside `market`, backfilled from it. For
- * one release both are written (dual-write) so anything still reading `market`
- * — including the external `services/mcp-bridge` — keeps working. Hence the
+ * `personas_profile JSONB` column alongside `market`, backfilled from it. Both
+ * are still written so a database that has NOT run the migration yet (client
+ * bootstraps) keeps working via the `market` fallback. No external service
+ * reads `market` (`services/mcp-bridge` verified 2026-09-05). Hence the
  * dual-READ order below.
  *
  * Client-safe on purpose: no `$env`, no `lib/server` imports, so API routes,
@@ -235,6 +236,15 @@ function coerceText(value: unknown): string {
 }
 
 /**
+ * Canonical option when the value matches one (exact or loose, case-insensitive),
+ * else the trimmed value itself, else ''. Lossless for anything a user actually
+ * typed; only non-strings become ''.
+ */
+function coerceStrategyPick(value: unknown, options: readonly string[]): string {
+	return coerceToOption(value, options) || coerceText(value);
+}
+
+/**
  * Normalises a profile for storage: coerces each known field through the same
  * helpers the UI and the generator already use, and STRIPS every unknown key.
  *
@@ -251,7 +261,9 @@ function coerceText(value: unknown): string {
  * Returns an object — the caller decides whether to stringify (see
  * `profileToMarketString` for the `market` back-compat write).
  */
-export function serializePersonaProfile(profile: PersonaProfile | null | undefined): PersonaProfile {
+export function serializePersonaProfile(
+	profile: PersonaProfile | null | undefined
+): PersonaProfile {
 	const p = (profile ?? {}) as Record<string, unknown>;
 	const out: PersonaProfile = {};
 	const has = (key: string) => Object.prototype.hasOwnProperty.call(p, key);
@@ -271,8 +283,14 @@ export function serializePersonaProfile(profile: PersonaProfile | null | undefin
 	if (has('gender')) {
 		out.gender = p.gender === 'female' || p.gender === 'male' ? p.gender : '';
 	}
-	if (has('archetype')) out.archetype = coerceToOption(p.archetype, PERSONA_ARCHETYPES);
-	if (has('contentFocus')) out.contentFocus = coerceToOption(p.contentFocus, CONTENT_FOCUS_OPTIONS);
+	// Strategy picks snap onto the canonical option when they match (case/partial),
+	// and are otherwise kept VERBATIM — same "stored values are sacred" rule as
+	// appearance. Blanking an off-list value here would silently erase a legacy
+	// archetype on the next ordinary save; the UI shows off-list values as an
+	// extra select option instead, and LLM output is snapped at the generator.
+	if (has('archetype')) out.archetype = coerceStrategyPick(p.archetype, PERSONA_ARCHETYPES);
+	if (has('contentFocus'))
+		out.contentFocus = coerceStrategyPick(p.contentFocus, CONTENT_FOCUS_OPTIONS);
 	if (has('psychProfile')) out.psychProfile = coerceText(p.psychProfile);
 	if (has('contentAngle')) out.contentAngle = coerceText(p.contentAngle);
 	// Strips a leading fictional proper name left by the old "name the audience"
@@ -339,10 +357,15 @@ export function mergePersonaProfile(
 }
 
 /**
- * Serialises for the legacy `agents.market` TEXT column. Kept for the dual-write
- * window: `services/mcp-bridge` and any not-yet-migrated read site still expect
- * the profile JSON to be there. Delete this once `market` is either restored to
- * a country string or dropped.
+ * Serialises for the legacy `agents.market` TEXT column. Kept ONLY as the
+ * never-brick fallback for a database where `personas_profile_migration.sql`
+ * has not been applied yet (see `personas-profile-column.ts`): the write retries
+ * without the JSONB key and `readPersonaProfile()` falls back to parsing this.
+ *
+ * No external service reads it. `services/mcp-bridge` was verified on
+ * 2026-09-05 to select only id/name/handle/niche/status/supervisor columns —
+ * earlier comments claiming otherwise were wrong. Retire via its own migration
+ * once every deployment (including client bootstraps) has the JSONB column.
  */
 export function profileToMarketString(profile: PersonaProfile | null | undefined): string {
 	try {

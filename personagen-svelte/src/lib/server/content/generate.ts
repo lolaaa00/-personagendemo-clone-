@@ -709,8 +709,12 @@ async function logAutoReject(
 /**
  * Builds a rich agent context string from the agent row, pulling extended
  * persona profile off the agent row via the typed accessor.
+ *
+ * Exported for `prompt-regression.spec.ts`, which pins this and the portrait
+ * builders byte-for-byte against fixed persona fixtures: any change to what the
+ * model is told about a persona must show up as a reviewed snapshot diff.
  */
-function buildRichAgentContext(agent: any): string {
+export function buildRichAgentContext(agent: any): string {
 	const lines: string[] = [
 		`You are ${agent.name} (@${agent.handle}), a ${agent.niche} creator.`,
 		// Identity anchor: some older persona profiles were generated with a NAMED

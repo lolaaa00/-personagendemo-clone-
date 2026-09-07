@@ -239,3 +239,21 @@ Each of these produced a confident, wrong FAIL before being caught:
   should collapse to `1e-05s`.
 - Native constraint validation is used for `required`/email format, so empty-submit errors are
   **native bubbles invisible to DOM queries** — screenshot to see them.
+
+## Additions 2026-09-05
+
+- **Login click can land before hydration.** With `goto('/login', { waitUntil: 'domcontentloaded' })`
+  the submit click fell through to a native form GET (`/login?` twice in the nav log, no POST)
+  and `waitForURL` timed out — reads exactly like bad credentials. Use
+  `waitUntil: 'networkidle'` on `/login` only (it does not poll) plus `waitForTimeout(1500)`
+  before filling.
+- **`/settings` sections are URL-addressed:** `?section=profile|notifications|theme`
+  (`#zernio-keys` hash also works). The notification `[role="switch"]` toggles exist only on
+  `section=notifications`; on the default profile section the locator never resolves.
+- **The Persona Profile `<details>` on the persona page is collapsed by default** (only Brand
+  Kit opens). `#p-niche`, `#pp-archetype`, `#pp-focus` exist with a 0×0 rect until you open
+  all `details` — same trick as the reference-kit controls.
+- **Engine URL guard is reachable without real spend:** export
+  `OPENROUTER_API_KEY="sk-or-v1-verify-fake-key-never-valid"` alongside the scrub. `hasAi`
+  becomes true, the guard runs first and returns 400 for internal targets; a public URL
+  proceeds to the provider and fails with a harmless 401.

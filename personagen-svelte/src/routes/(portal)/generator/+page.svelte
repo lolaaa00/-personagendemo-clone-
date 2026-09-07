@@ -4,6 +4,7 @@
 	import { showToast } from '$lib/stores/ui.svelte';
 	import { onMount } from 'svelte';
 	import { Personas, BrandBrief, type GeneratedPersona } from '$lib/services/api';
+	import { PERSONA_ARCHETYPES, CONTENT_FOCUS_OPTIONS } from '$lib/persona-profile';
 	import { goto } from '$app/navigation';
 	import { browser } from '$app/environment';
 
@@ -631,25 +632,43 @@
 							Persona profile <span class="pf-hint">— generated from the brand; edit anything</span>
 						</h3>
 						<div class="pf-row">
+							<!-- Archetype / focus are option-backed everywhere else (persona page
+							     selects, generator coercion). Free text here produced values the
+							     persona page could not display. Same option lists, same off-list
+							     guard, so a generated value that isn't on the list stays selectable. -->
 							<div class="field">
 								<label for="pf-arch">Archetype</label>
-								<input
+								<select
 									id="pf-arch"
-									type="text"
 									bind:value={generatedProfile.archetype}
-									oninput={saveProgress}
-									placeholder="e.g. The Educator"
-								/>
+									onchange={saveProgress}
+								>
+									{#if generatedProfile.archetype && !(PERSONA_ARCHETYPES as readonly string[]).includes(generatedProfile.archetype)}
+										<option value={generatedProfile.archetype}>{generatedProfile.archetype}</option>
+									{/if}
+									<option value="">— Select archetype —</option>
+									{#each PERSONA_ARCHETYPES as a}
+										<option value={a}>{a}</option>
+									{/each}
+								</select>
 							</div>
 							<div class="field">
 								<label for="pf-focus">Content focus</label>
-								<input
+								<select
 									id="pf-focus"
-									type="text"
 									bind:value={generatedProfile.contentFocus}
-									oninput={saveProgress}
-									placeholder="e.g. Education & How-Tos"
-								/>
+									onchange={saveProgress}
+								>
+									{#if generatedProfile.contentFocus && !(CONTENT_FOCUS_OPTIONS as readonly string[]).includes(generatedProfile.contentFocus)}
+										<option value={generatedProfile.contentFocus}
+											>{generatedProfile.contentFocus}</option
+										>
+									{/if}
+									<option value="">— Select focus —</option>
+									{#each CONTENT_FOCUS_OPTIONS as f}
+										<option value={f}>{f}</option>
+									{/each}
+								</select>
 							</div>
 						</div>
 						<div class="pf-row">
