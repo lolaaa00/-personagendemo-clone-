@@ -12,8 +12,21 @@
 
 	// Truth layers computed server-side: where the pipeline consults each row
 	// (by the pipeline's own resolvers) and what actually ran (platform ledger).
-	const usage = $derived(data.usage ?? { byRowId: {}, consultedKinds: [], kindNotes: {} });
-	const ledger = $derived(data.ledger ?? { byRowId: {}, unlisted: [], windowDays: 30 });
+	type UsageTag = { site: string; role: 'default' | 'option' | 'route' };
+	type UsageData = {
+		byRowId: Record<string, UsageTag[]>;
+		consultedKinds: string[];
+		kindNotes: Partial<Record<string, string>>;
+	};
+	type LedgerData = {
+		byRowId: Record<string, { runs: number; usd: number; match: 'exact' | 'name' }>;
+		unlisted: Array<{ provider: string; model: string; operation: string; runs: number; usd: number }>;
+		windowDays: number;
+	};
+	const usage = $derived<UsageData>(
+		data.usage ?? { byRowId: {}, consultedKinds: [], kindNotes: {} }
+	);
+	const ledger = $derived<LedgerData>(data.ledger ?? { byRowId: {}, unlisted: [], windowDays: 30 });
 
 	// ── Tabs (kind) + sort, both deep-linkable ───────────────────────────────
 	type Kind = 'image_t2i' | 'image_edit' | 'video_i2v' | 'tts';
@@ -55,7 +68,7 @@
 	);
 	$effect(() => syncParam('kind', kind, 'video_i2v'));
 	// Does anything in the pipeline read this tab's star/toggle at all?
-	const consulted = $derived((usage.consultedKinds as string[]).includes(kind));
+	const consulted = $derived(usage.consultedKinds.includes(kind));
 
 	type Sort = 'newest' | 'price' | 'quality' | 'value' | 'origin';
 	let sort = $state<Sort>(

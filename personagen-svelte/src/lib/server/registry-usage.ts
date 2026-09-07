@@ -28,6 +28,7 @@ import {
 	type RegistryKind,
 	type RegistryRow
 } from './model-registry';
+import type { ModelKind } from '$lib/models';
 
 export type UsageRole = 'default' | 'option' | 'route';
 export interface UsageTag {
@@ -88,8 +89,11 @@ export function describeUsage(rows: RegistryRow[]): RegistryUsage {
 				(r) => r.model_id === id && r.wired && r.status === 'active' && servesKind(r, kind)
 			);
 		if (s.defaultAt.length || s.optionAt) {
-			const def = effectiveResolve(rows, kind, undefined);
-			for (const opt of effectiveOptions(rows, kind)) {
+			// The fal resolvers are typed on ModelKind (no 'tts'); tts never reaches
+			// this branch because its SITES entry has no default or option sites.
+			const mk = kind as ModelKind;
+			const def = effectiveResolve(rows, mk, undefined);
+			for (const opt of effectiveOptions(rows, mk)) {
 				const row = wiredFor(opt.id);
 				if (!row) continue;
 				if (opt.id === def.id) {
