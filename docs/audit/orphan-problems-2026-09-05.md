@@ -80,6 +80,21 @@ PASS  cleanup: throwaway user removed                      — delete HTTP 200 �
 
 One change beyond the 09-05 fixes went in with it: in `read_appearance_from_image` the URL guard now runs **before** the "no AI provider" gate, so the guard holds, and the probe can prove it, on a host with no provider key. The probe was run locally in both provider states (12/12 each) before the push.
 
+### Rail-set adoption landed — 2026-09-07, commit `754a38f`, verified in production
+
+The dead 09-05 session's unowned rail work (finding #13) was adopted through a gated worktree pass on top of `52e574e`: deploy gates layered on billing's step-0 (`lint:ci` ratchet at 1,120 warnings, prod audit, warning ceilings, preflight `--warn-only`), pre-commit filename guard, eslint config, env-docs + migrations-coverage + signup specs, dependency bumps (`npm audit --omit=dev` 2 high → 0), signup hardening ported onto `throttle.ts`, ~20 lint edits, `graphify-out/cache/` ignored and 88 files untracked (#9 closed). Not adopted: `rate-limit.ts` (superseded, deleted), the Settings prettier residue (pure formatting, discarded). Gates on the branch: unit 441/441, typecheck 0 errors, mechanical revert check clean.
+
+Live proof on build `1788815901479` (`46a7cca`), one-off signup probe:
+
+```
+PASS  signup 200 returns { user: { id } } (welcome-guard contract)
+PASS  user exists in GoTrue with email confirmed (service-role path)
+PASS  duplicate email → 409 (hardened route)
+PASS  cleanup: probe user removed  — delete HTTP 200 · lookup HTTP 404
+```
+
+The billing session's live smoke passed 23/23 through the same route with the welcome grant still firing. Observation, not a defect: registration on the host is open (no `ADMIN_PIN` configured); the route and the deploy preflight both support the PIN gate, and `--warn-only` comes off once `GOTRUE_DISABLE_SIGNUP` is flipped on the Supabase project.
+
 ### New orphan findings from the landing (not yet in the table)
 
 | # | Problem | Evidence | Fix |
