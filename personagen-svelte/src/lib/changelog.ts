@@ -376,7 +376,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-05", hash: "3cd45eb", type: "docs", category: "docs", scope: "monetization", title: "record shipped state, go-live switches, deferred items" },
 	{ date: "2026-09-05", hash: "f9685c3", type: "feat", category: "publishing", scope: "admin", title: "database-backed platform switches + Admin Console restructure" },
 	{ date: "2026-09-06", hash: "c5f083d", type: "feat", category: "feature", scope: "billing", title: "wallet shown as money in the visitor's currency + welcome credits at signup" },
-	{ date: "2026-09-06", hash: "980f83c", type: "fix", category: "fix", scope: "scripts", title: "grant-credits no longer drops a target equal to the --as admin email" }
+	{ date: "2026-09-06", hash: "980f83c", type: "fix", category: "fix", scope: "scripts", title: "grant-credits no longer drops a target equal to the --as admin email" },
+	{ date: "2026-09-07", hash: "87ddd78", type: "feat", category: "feature", scope: "billing", title: "wallet pill rounds to whole currency units with .00" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -675,7 +676,15 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 		summary: "Platform API reference for programmatic/agentic use. Plus 13 more changes, touching getting posts onto your accounts and guides and explanations and things that were broken.",
 		major: true, curated: false,
 		entries: [CHANGELOG[329], CHANGELOG[330], CHANGELOG[331], CHANGELOG[332], CHANGELOG[333], CHANGELOG[334], CHANGELOG[335], CHANGELOG[336], CHANGELOG[337], CHANGELOG[338], CHANGELOG[339], CHANGELOG[340], CHANGELOG[341], CHANGELOG[342]]
+	},
+	{
+		id: "87ddd78", from: "2026-09-07", to: "2026-09-07",
+		category: "feature", categories: ["feature"],
+		title: "New: wallet pill rounds to whole currency units with .00",
+		summary: "Wallet pill rounds to whole currency units with .00.",
+		major: false, curated: false,
+		entries: [CHANGELOG[343]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "980f83c";
+export const CHANGELOG_GENERATED_FROM = "87ddd78";
