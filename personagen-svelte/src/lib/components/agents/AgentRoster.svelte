@@ -188,12 +188,6 @@
 		{ label: 'Top Performers', value: 'top' }
 	];
 
-	function trendClass(t: string): string {
-		if (t.startsWith('+')) return 'positive';
-		if (t.startsWith('-')) return 'negative';
-		return 'neutral';
-	}
-
 	// Semantic tokens rather than literals so the bars follow the theme (and the brand
 	// theme feature) instead of staying frozen at one palette.
 	function perfColor(p: number): string {

@@ -4,8 +4,7 @@
 	import type { Agent } from '$lib/types';
 	import { showToast } from '$lib/stores/ui.svelte';
 	import { Posts, ContentForge, type AutopilotView } from '$lib/services/api';
-	import { page } from '$app/stores';
-	import { goto, invalidateAll } from '$app/navigation';
+	import { invalidateAll } from '$app/navigation';
 	import GenerationComposer from '$lib/components/generation/GenerationComposer.svelte';
 	import CampaignPlanner from '$lib/components/generation/CampaignPlanner.svelte';
 	import type { ComposerSpec } from '$lib/components/generation/types';
@@ -84,7 +83,6 @@
 	let forgeProductId = $state('');
 	let forging = $state(false);
 
-	let brandName = $state('');
 	let products = $state<any[]>([]);
 	let ugcGuidelines = $state('');
 
@@ -94,7 +92,6 @@
 			const saved = localStorage.getItem(LS_KEY);
 			if (saved) {
 				const d = JSON.parse(saved);
-				brandName = d.brandName || '';
 				products = d.products || [];
 				ugcGuidelines = d.ugcGuidelines || '';
 				if (products.length > 0 && !forgeProductId) {
@@ -151,7 +148,6 @@
 		const platforms = activePlatforms.length > 0 ? activePlatforms : ['instagram'];
 
 		try {
-			const agent = data.agents.find((a: Agent) => a.id === composerAgentId);
 			const res = await ContentForge.generate(
 				composerAgentId,
 				enrichedTopic,
@@ -175,13 +171,6 @@
 		} finally {
 			forging = false;
 		}
-	}
-
-	function getScoreColor(score: number): string {
-		if (score >= 90) return 'var(--success)';
-		if (score >= 75) return 'var(--cyan)';
-		if (score >= 60) return 'var(--gold)';
-		return 'var(--rose)';
 	}
 
 	let currentComposerAgent = $derived(data.agents.find((a: any) => a.id === composerAgentId));

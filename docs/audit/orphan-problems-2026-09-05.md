@@ -62,6 +62,33 @@ Two sessions worked this list in the same tree. Ownership below is by who made t
 
 **Open:** #9 (graphify cache), persona-page stale-state, `npm run lint` red on `main` from pre-existing `no-explicit-any` (the other session's eslint config change may have moved this; re-measure before claiming).
 
+## Landed — 2026-09-07, commit `4ad3521` on `main`, verified in production
+
+Stream A (items 1, 3, 4, 6, 7, 8-Settings, 10, 11) was rebuilt in a clean worktree on top of `1012f3b`, gated (unit 400/400, typecheck 0 errors), fast-forwarded onto `main`, built on the panel, and proven on the live host with the new `scripts/smoke-ssrf.mjs` (build `1788804890975`):
+
+```
+PASS  cloud metadata endpoint (169.254.169.254) rejected  — HTTP 400 Image URL rejected: URL resolves to a private/internal address
+PASS  localhost rejected                                   — HTTP 400 Image URL rejected: URL resolves to a disallowed host
+PASS  RFC1918 address (10.0.0.5, PostgREST port) rejected  — HTTP 400 Image URL rejected: URL resolves to a private/internal address
+PASS  IPv6 loopback ([::1], Postgres port) rejected        — HTTP 400 Image URL rejected: URL resolves to a private/internal address
+PASS  non-http scheme (ftp://) rejected                    — HTTP 400 Image URL rejected: Only http/https URLs are allowed
+PASS  public image passes the guard                        — HTTP 200 {"appearance":{"headwear":"none"}}
+PASS  unauthenticated request is refused                   — HTTP 401
+PASS  cleanup: throwaway user removed                      — delete HTTP 200 · lookup HTTP 404
+12/12 checks passed against https://honeyx.monarchstack.com
+```
+
+One change beyond the 09-05 fixes went in with it: in `read_appearance_from_image` the URL guard now runs **before** the "no AI provider" gate, so the guard holds, and the probe can prove it, on a host with no provider key. The probe was run locally in both provider states (12/12 each) before the push.
+
+### New orphan findings from the landing (not yet in the table)
+
+| # | Problem | Evidence | Fix |
+|---|---|---|---|
+| 12 | **Migration checksum ledger is not line-ending normalised.** A fresh Windows checkout (`core.autocrlf=true`, `text=auto`) reports all 36 ORDER files as DRIFTED; the shared tree, whose files happen to be LF on disk, reports 0. Content is identical. | `node scripts/apply-migration.mjs --status --strict` in a new worktree → `36 drifted`; `git ls-files --eol supabase/000_schema_migrations.sql` → `i/lf w/crlf` | Hash the blob after normalising `\r\n` → `\n` (or hash `git hash-object` output) so the ledger is checkout-independent; add a spec that hashes a CRLF and an LF copy of one migration to the same value. |
+| 13 | **`main` was committed against an unowned working tree.** `87ed887` imported `$lib/server/rate-limit`, a file that existed only as an untracked leftover of a session that no longer runs; the panel build failed until `1012f3b` replaced the import. The same unowned set (deploy.ps1 gates, pre-commit filename guard, eslint config, `.env.example`, dependency bumps, ~15 lint-edited files, preflight/ceiling scripts, coverage/env specs, `migrations-excluded.json`) is still dirty and ownerless as of 09-07. | `git status` after the index reset; all three live sessions disowned it in writing | Decided 09-07 (G6): once the billing session lands its pending batch, adopt the remainder through a gated worktree pass with a reviewed diff summary, then push. Until then no session commits any of it. |
+| 14 | **`origin` points at a moved repository.** Every push prints `This repository moved. Please use the new location: https://github.com/hnyxuser3/personagendemo.git`; pushes still redirect. | push output 09-07 | `git remote set-url origin <new url>` once the owner confirms the move is intentional. |
+| 9 | (update) `.gitignore` edit is inside the unowned set above, so the `graphify-out/cache/` line and the `git rm -r --cached` of the 87 tracked cache files are folded into the same adoption pass. | — | — |
+
 ## Suggested order
 
 1 (security, S) → 3 (green the suite, XS) → 2 (bootstrap, S) → 6 + 9 + 10 (hygiene, XS each, one PR) → 5 (env docs, S) → 4 + 7 (persona write path + vision, S) → 11 (prompt snapshots, S) → 8 (stale state triage, M).

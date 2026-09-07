@@ -132,7 +132,6 @@
 		}
 		return best;
 	}
-	let candidateCount = $derived(discovered.filter((d: any) => replaces(d) != null).length);
 
 	// Every wired slot in this kind is a valid swap target — deliberately NOT
 	// filtered by the view filters, since narrowing the list you're browsing

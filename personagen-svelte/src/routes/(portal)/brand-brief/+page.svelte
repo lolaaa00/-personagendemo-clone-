@@ -270,6 +270,11 @@
 	// explicit opt-in under Settings → Brand Theme. The gradient bar below
 	// previews these colors locally instead.
 
+	// BUG, not dead code: two call sites pass `true` here to mark a deliberate
+	// save, and the body never reads it — a manual save is indistinguishable from
+	// an autosave. Kept so the intent at those call sites stays visible; either
+	// branch on it or drop the argument at both callers.
+	// eslint-disable-next-line @typescript-eslint/no-unused-vars
 	function saveAll(e?: MouseEvent, isManualClick = false) {
 		if (!browser) return;
 		const now = new Date().toLocaleString('en-AU', { dateStyle: 'medium', timeStyle: 'short' });

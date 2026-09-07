@@ -1447,12 +1447,15 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 							};
 							let catalogProducts: CatalogProduct[] = [];
 							try {
-								const catRes = await fetch(new URL('/products.json?limit=30', storeUrl).toString(), {
-									headers: {
-										'User-Agent':
-											'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+								const catRes = await fetch(
+									new URL('/products.json?limit=30', storeUrl).toString(),
+									{
+										headers: {
+											'User-Agent':
+												'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+										}
 									}
-								});
+								);
 								if (catRes.ok) {
 									const cat = await catRes.json().catch(() => null);
 									if (Array.isArray(cat?.products)) {

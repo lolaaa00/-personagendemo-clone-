@@ -147,6 +147,9 @@ export const TALKINGHEAD_LABEL = TALKINGHEAD_MODEL.includes('omnihuman')
 //     endpoint's own spec, not the family's marketing page, before trusting
 //     any capability claim for these models). Same per-second price as plain
 //     image-to-video Pro, so this is a strict upgrade for the cinematic path.
+// Parked, not dead: kept so swapping the standard b-roll path back to Kling
+// standard stays a one-line change. See the note above.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const BROLL_MODEL_STANDARD = env.UGC_BROLL_MODEL || 'fal-ai/kling-video/o3/standard/image-to-video';
 const BROLL_MODEL_CINEMATIC =
 	env.UGC_BROLL_MODEL_CINEMATIC || 'fal-ai/kling-video/o3/pro/reference-to-video';
@@ -165,6 +168,7 @@ export const CINEMATIC_VIDEO_LABEL = BROLL_MODEL_CINEMATIC.includes('kling-video
 // generation path right now (no multi-shot/elements support via fal, and
 // ~2x Kling's cost) — kept here, unused, so it's a one-line change to bring
 // back later rather than a re-integration from scratch.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- deliberately deferred, see the note above
 const BROLL_MODEL_VEO_DEFERRED = env.UGC_BROLL_MODEL_PREMIUM || 'fal-ai/veo3.1/image-to-video';
 const FABRIC_RES = env.UGC_FABRIC_RES || '720p';
 const VIDEO_DURATION = env.UGC_VIDEO_DURATION || '5';
@@ -2254,7 +2258,7 @@ export function inferGenderFromName(
 function characterNameFromSoul(soul: string | undefined | null): string | undefined {
 	if (!soul) return undefined;
 	const m = String(soul).match(
-		/(?:soul(?:\.md)?\s*)?[—–-]\s*([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'\-]+(?:\s+[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'\-]+){0,2})/
+		/(?:soul(?:\.md)?\s*)?[—–-]\s*([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'-]+(?:\s+[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ'-]+){0,2})/
 	);
 	return m?.[1]?.trim();
 }

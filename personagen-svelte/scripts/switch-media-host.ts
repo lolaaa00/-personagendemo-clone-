@@ -53,7 +53,8 @@ async function probeCdn(sampleObjectUrl: string): Promise<void> {
 		res = await fetch(probeUrl, { method: 'HEAD', signal: AbortSignal.timeout(15_000) });
 	} catch (e) {
 		throw new Error(
-			`${CDN_HOST} is not reachable (${(e as Error).message}). Add the Cloudflare DNS record first (A "media" → 72.60.125.183, proxied).`
+			`${CDN_HOST} is not reachable (${(e as Error).message}). Add the Cloudflare DNS record first (A "media" → 72.60.125.183, proxied).`,
+			{ cause: e }
 		);
 	}
 	if (!res.ok) {

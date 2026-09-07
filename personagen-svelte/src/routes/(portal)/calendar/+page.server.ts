@@ -1,16 +1,15 @@
 import type { PageServerLoad } from './$types';
 import { createDbService } from '$lib/server/db';
 import { env } from '$env/dynamic/public';
-import { env as privateEnv } from '$env/dynamic/private';
 
-export const load: PageServerLoad = async ({ locals, fetch }) => {
+export const load: PageServerLoad = async ({ locals }) => {
 	const supabaseUrl = env.PUBLIC_SUPABASE_URL ?? '';
 	const isPlaceholder = !supabaseUrl || supabaseUrl.includes('placeholder');
 
 	let blueprints: any[] = [];
 	let agents: any[] = [];
 	let dbPosts: any[] = [];
-	let autopilotConfigs: Record<string, any> = {};
+	const autopilotConfigs: Record<string, any> = {};
 	let hasDb = false;
 
 	if (!isPlaceholder && locals.supabase) {

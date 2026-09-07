@@ -24,6 +24,12 @@
 		onPostNow = undefined,
 		onReject = undefined,
 		onRefined = undefined,
+		// BUG, not dead code: three call sites (favorites, generations, review) pass
+		// characterRef, and this component never renders it — the caller's avatar is
+		// silently discarded. Kept declared so the prop keeps type-checking at those
+		// call sites; remove the prop, or start using it, once it is decided which
+		// was intended.
+		// eslint-disable-next-line @typescript-eslint/no-unused-vars
 		characterRef = null,
 		approving = false,
 		deleting = false,

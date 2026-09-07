@@ -10,7 +10,6 @@ import {
 	updateReferenceKit
 } from '$lib/server/content/generate';
 import { getServiceSupabase } from '$lib/server/service-supabase';
-import { priceOf } from '$lib/pricing';
 import {
 	loadRegistry,
 	effectiveOptions,

@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { brandTransformState } from '$lib/stores/ui.svelte';
-	import { onMount } from 'svelte';
 
 	interface Particle {
 		id: number;

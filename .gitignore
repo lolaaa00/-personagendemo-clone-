@@ -51,3 +51,15 @@ services/mail/node_modules/
 services/factory/src/data/
 services/mail/src/data/
 
+
+# graphify query-time stamp — rewritten on every /graphify query, pure churn
+graphify-out/cache/last_query_stamp
+
+# Scratch/temp artifacts that a broad `git add` would otherwise sweep into the
+# repo root. A file literally named with a Windows temp path was committed once
+# (2026-09-05); the pre-commit filename rule is the real guard, this is belt.
+*scratchpad*
+*AppData*Temp*
+
+# graphify query cache — rebuilt locally on every /graphify run; never ship it
+graphify-out/cache/

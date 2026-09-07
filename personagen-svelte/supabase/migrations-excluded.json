@@ -1,0 +1,10 @@
+[
+	[
+		"brand_briefs_unique_migration.sql",
+		"Adds UNIQUE(user_id) on brand_briefs that multi_brand_briefs_migration.sql immediately drops. Its bare ADD CONSTRAINT is the one non-idempotent statement in the set, and the net schema is identical without it. Kept on disk as history only."
+	],
+	[
+		"update_user.sql",
+		"MOVED to docs/archive/ on 2026-09-05. One-off rewrite of auth.users and auth.identities for a single named customer account; catastrophic if replayed against another project. This entry stays so the file cannot quietly return to supabase/."
+	]
+]

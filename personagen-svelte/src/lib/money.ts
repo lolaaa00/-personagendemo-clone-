@@ -150,7 +150,7 @@ export function formatMoney(amount: number, currency: string, locale?: string, o
 	const whole = opts.whole ?? true;
 	const zeroDecimal = ZERO_DECIMAL.includes(currency.toUpperCase());
 	let value = amount;
-	let fraction = zeroDecimal ? 0 : 2;
+	const fraction = zeroDecimal ? 0 : 2;
 	if (whole && !zeroDecimal) {
 		const rounded = roundHalfAway(amount);
 		// Keep cents only when rounding would hide a real balance (|amount| < 0.5).

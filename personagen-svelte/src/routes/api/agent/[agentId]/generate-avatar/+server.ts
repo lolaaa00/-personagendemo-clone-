@@ -10,11 +10,8 @@ import {
 	updateReferenceKit,
 	buildHeroPortraitPrompt,
 	buildPortraitEditPrompt,
-	buildUgcImagePrompt,
-	UGC_IMAGE_MODEL_FAL,
-	UGC_IMAGE_MODEL_OPENROUTER
+	buildUgcImagePrompt
 } from '$lib/server/content/generate';
-import { priceOf } from '$lib/pricing';
 import {
 	loadRegistry,
 	effectiveOptions,

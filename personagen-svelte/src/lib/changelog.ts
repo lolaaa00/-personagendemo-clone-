@@ -390,7 +390,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-07", hash: "87ed887", type: "feat", category: "publishing", scope: "billing", title: "phase 2 — engine/voice metering, platform ceilings, signup abuse guard, security headers, unattended reconciliation" },
 	{ date: "2026-09-07", hash: "1012f3b", type: "fix", category: "generation", scope: "build", title: "checkout and voice throttles use a committed module" },
 	{ date: "2026-09-07", hash: "4ad3521", type: "fix", category: "generation", scope: "persona", title: "wire SSRF guard on user URLs; lossless profile serialize on both write paths; vision prompt from APPEARANCE_FIELDS; wizard selects; Settings seed-once; prompt regression snapshots; smoke-ssrf probe" },
-	{ date: "2026-09-07", hash: "dacfdd6", type: "feat", category: "generation", scope: "models", title: "OpenRouter image routes resolve from the registry, id and price together" }
+	{ date: "2026-09-07", hash: "dacfdd6", type: "feat", category: "generation", scope: "models", title: "OpenRouter image routes resolve from the registry, id and price together" },
+	{ date: "2026-09-07", hash: "52e574e", type: "feat", category: "infrastructure", scope: "billing", title: "close the phase-2 gaps — plans (dormant), Firecrawl metering, welcome-abuse guard, settings billing card, persona limit, deploy step-0 stamps check" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -697,7 +698,15 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 		summary: "Wallet pill rounds to whole currency units with .00. Plus 13 more changes, touching guides and explanations and layout, colours and readability and things that were broken.",
 		major: true, curated: false,
 		entries: [CHANGELOG[343], CHANGELOG[344], CHANGELOG[345], CHANGELOG[346], CHANGELOG[347], CHANGELOG[348], CHANGELOG[349], CHANGELOG[350], CHANGELOG[351], CHANGELOG[352], CHANGELOG[353], CHANGELOG[354], CHANGELOG[355], CHANGELOG[356]]
+	},
+	{
+		id: "52e574e", from: "2026-09-07", to: "2026-09-07",
+		category: "infrastructure", categories: ["infrastructure"],
+		title: "Behind the scenes: close the phase-2 gaps — plans (dormant), Firecrawl…",
+		summary: "Close the phase-2 gaps — plans (dormant), Firecrawl metering, welcome-abuse guard, settings billing card, persona limit, deploy step-0 stamps check.",
+		major: false, curated: false,
+		entries: [CHANGELOG[357]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "dacfdd6";
+export const CHANGELOG_GENERATED_FROM = "52e574e";

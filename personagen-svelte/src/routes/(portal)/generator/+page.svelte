@@ -92,7 +92,11 @@
 	// Handle is auto-derived from the name ("Marcus Fit" → "@marcusfit"); the server
 	// falls back to the same rule, this just powers the review preview.
 	let displayHandle = $derived(
-		'@' + (agentName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '') || 'persona')
+		'@' +
+			(agentName
+				.trim()
+				.toLowerCase()
+				.replace(/[^a-z0-9]+/g, '') || 'persona')
 	);
 
 	// Computed initial
@@ -418,7 +422,9 @@
 						</button>
 					</div>
 				</div>
-				<p class="panel-desc">Pick a brand and generate a unique persona — or fill it in yourself.</p>
+				<p class="panel-desc">
+					Pick a brand and generate a unique persona — or fill it in yourself.
+				</p>
 
 				<!-- Primary path: brand-brief-driven generation of a complete, unique persona,
 				     fine-tuned to an optional creative direction the user sets first. -->
@@ -811,13 +817,26 @@
 				</div>
 
 				<!-- Selection Cards for Creation Methods -->
-				<div class="creation-methods-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin-top: 2rem;">
+				<div
+					class="creation-methods-grid"
+					style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin-top: 2rem;"
+				>
 					<!-- Method 1: DB Only -->
-					<div class="method-card glass-card" style="padding: 1.5rem; border: 1px solid var(--border); border-radius: var(--radius-sm); display: flex; flex-direction: column; justify-content: space-between; gap: 1rem; background: var(--surface-2);">
+					<div
+						class="method-card glass-card"
+						style="padding: 1.5rem; border: 1px solid var(--border); border-radius: var(--radius-sm); display: flex; flex-direction: column; justify-content: space-between; gap: 1rem; background: var(--surface-2);"
+					>
 						<div>
-							<h4 style="margin: 0; font-size: var(--text-base); font-weight: 700; color: var(--text);">Create Persona Direct</h4>
-							<p style="margin: 0.5rem 0 0 0; font-size: var(--text-xs); color: var(--text-dim); line-height: 1.5;">
-								Creates a persona directly in the database. Social media channels can be linked manually later using the dashboard.
+							<h4
+								style="margin: 0; font-size: var(--text-base); font-weight: 700; color: var(--text);"
+							>
+								Create Persona Direct
+							</h4>
+							<p
+								style="margin: 0.5rem 0 0 0; font-size: var(--text-xs); color: var(--text-dim); line-height: 1.5;"
+							>
+								Creates a persona directly in the database. Social media channels can be linked
+								manually later using the dashboard.
 							</p>
 						</div>
 						<button
@@ -853,11 +872,21 @@
 					</div>
 
 					<!-- Method 2: Account Factory Automation -->
-					<div class="method-card glass-card" style="padding: 1.5rem; border: 1px solid var(--border); border-radius: var(--radius-sm); display: flex; flex-direction: column; justify-content: space-between; gap: 1rem; background: var(--surface-2); position: relative;">
+					<div
+						class="method-card glass-card"
+						style="padding: 1.5rem; border: 1px solid var(--border); border-radius: var(--radius-sm); display: flex; flex-direction: column; justify-content: space-between; gap: 1rem; background: var(--surface-2); position: relative;"
+					>
 						<div>
-							<h4 style="margin: 0; font-size: var(--text-base); font-weight: 700; color: var(--text);">Register Automated Account</h4>
-							<p style="margin: 0.5rem 0 0 0; font-size: var(--text-xs); color: var(--text-dim); line-height: 1.5;">
-								Trigger automated account creation on Instagram, YouTube, etc. using the Account Factory service.
+							<h4
+								style="margin: 0; font-size: var(--text-base); font-weight: 700; color: var(--text);"
+							>
+								Register Automated Account
+							</h4>
+							<p
+								style="margin: 0.5rem 0 0 0; font-size: var(--text-xs); color: var(--text-dim); line-height: 1.5;"
+							>
+								Trigger automated account creation on Instagram, YouTube, etc. using the Account
+								Factory service.
 							</p>
 						</div>
 						<button
@@ -967,9 +996,9 @@
 </section>
 
 {#if showVaultModal}
-	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+	<!-- svelte-ignore a11y_click_events_have_key_events -->
 	<div class="modal-overlay" onclick={() => (showVaultModal = false)} role="presentation">
-		<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+		<!-- svelte-ignore a11y_click_events_have_key_events -->
 		<div
 			class="modal-content glass-card"
 			onclick={(e) => e.stopPropagation()}

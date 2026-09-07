@@ -770,16 +770,6 @@
 
 	// ── Quick fixes: symptom → guide, endpoint-style ─────────────────────────
 	// One-tap answers for the situations users actually arrive with.
-	const QUICK_FIXES: Array<{ label: string; id: string }> = [
-		{ label: '⚡ Out of credits', id: 'openrouter-key' },
-		{ label: '🚫 Post didn’t publish', id: 'publish-failing' },
-		{ label: '🔌 Reconnect an account', id: 'connect-account' },
-		{ label: '🖼️ Generation failed', id: 'generation-failing' },
-		{ label: '🏷️ What does this label mean?', id: 'status-glossary' },
-		{ label: '↩️ Undo a regenerated image', id: 'restore-history' },
-		{ label: '🗑️ Take a post down', id: 'delete-live' }
-	];
-
 	// ── Selection + search ───────────────────────────────────────────────────
 	let selectedId = $state(GUIDES[0].id);
 	let query = $state('');
@@ -958,8 +948,6 @@
 		g.from === g.to ? dayLabel(g.to) : `${dayLabel(g.from)} – ${dayLabel(g.to)}`;
 	const CL_FIRST = CHANGELOG[0]?.date ?? '';
 	const CL_LAST = CHANGELOG[CHANGELOG.length - 1]?.date ?? '';
-	const CL_MILESTONES = CHANGELOG.filter((e) => e.milestone).length;
-
 	const TYPE_LABEL: Record<string, string> = {
 		feat: 'Feature',
 		fix: 'Fix',

@@ -187,8 +187,8 @@ export const load: PageServerLoad = async ({ locals }) => {
 
 	// Engagement sparklines: built only from real analytics rows. Agents with no
 	// measured views in the window are excluded — no synthetic fallback values.
-	let sparkData: number[][] = [];
-	let sparkAgents: any[] = [];
+	const sparkData: number[][] = [];
+	const sparkAgents: any[] = [];
 
 	if (hasDbAgents && locals.supabase) {
 		const dbPosts = await locals.supabase

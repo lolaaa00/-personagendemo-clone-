@@ -11,6 +11,31 @@ set -e
 
 REPO_ROOT=$(git rev-parse --show-toplevel)
 APP="$REPO_ROOT/personagen-svelte"
+
+# ── Guard: non-portable staged filenames ───────────────────────────────────
+# A file literally named with a Windows temp path (carrying U+F03A, the
+# private-use colon Windows substitutes for ':') was committed to the repo root
+# on 2026-09-05 by a broad `git add`. Git on Windows then refuses to `git rm` it
+# by name, because it re-reads the name as a drive letter. Reject the whole
+# class at the gate rather than relying on anyone noticing it in a diff.
+# --diff-filter=d excludes deletions: REMOVING a badly-named file must always be
+# allowed, or the guard would trap the very file it is meant to keep out.
+# core.quotepath=false prints the real bytes instead of \357\200\272 escapes, so
+# the non-ASCII rule reports the actual cause.
+bad=$(git -c core.quotepath=false diff --cached --name-only --diff-filter=d | awk '
+  /[^\x20-\x7e]/   { print "  non-ASCII character: " $0; next }
+  /:/              { print "  colon in path:       " $0; next }
+  /\\/             { print "  backslash in path:   " $0; next }
+  length($0) > 200 { print "  path over 200 chars: " $0; next }
+')
+if [ -n "$bad" ]; then
+  echo "[pre-commit] REFUSED - non-portable filename(s) staged:" >&2
+  echo "$bad" >&2
+  echo "[pre-commit] These break checkout on other platforms and resist 'git rm'." >&2
+  echo "[pre-commit] Unstage with: git restore --staged <path>   (or rename the file)" >&2
+  exit 1
+fi
+
 [ -f "$APP/scripts/generate-changelog.mjs" ] || exit 0
 
 # Regenerate against the history as it stands. The commit being written is not

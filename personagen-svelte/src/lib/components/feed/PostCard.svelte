@@ -139,7 +139,7 @@
      the drawer that opens on click — tags stay as light overlays.
      It's a role=button DIV, not a <button>, so the inline video play control
      (a real <button>) and the <video> can nest legally inside it. -->
-<!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
+<!-- svelte-ignore a11y_click_events_have_key_events -->
 <div
 	class="post-tile"
 	class:selected
@@ -160,7 +160,6 @@
 	<!-- Management overlays: select for bulk actions, enlarge, delete. All stop
 	     propagation so they never open the drawer by accident. -->
 	{#if selectable}
-		<!-- svelte-ignore node_invalid_placement_ssr -->
 		<label class="tile-select" title="Select for bulk actions" onclick={(e) => e.stopPropagation()}>
 			<input
 				type="checkbox"
@@ -173,7 +172,6 @@
 	{#if onEnlarge || onDelete}
 		<div class="tile-manage">
 			{#if onEnlarge}
-				<!-- svelte-ignore node_invalid_placement_ssr -->
 				<button
 					type="button"
 					class="tile-manage-btn"
@@ -198,7 +196,6 @@
 				</button>
 			{/if}
 			{#if onDelete}
-				<!-- svelte-ignore node_invalid_placement_ssr -->
 				<button
 					type="button"
 					class="tile-manage-btn danger"
@@ -249,7 +246,6 @@
 			<span class="tile-gen-title">Generation failed</span>
 			<span class="tile-gen-err">{genError}</span>
 			{#if onRetry}
-				<!-- svelte-ignore node_invalid_placement_ssr -->
 				<span
 					class="tile-gen-retry"
 					role="button"
@@ -420,7 +416,6 @@
 				Failed to post{postErrorLabel ? ` — ${postErrorLabel.split('\n')[0]}` : ''}
 			</span>
 			{#if onPublishFallback}
-				<!-- svelte-ignore node_invalid_placement_ssr -->
 				<span
 					class="tile-postfail-cta"
 					role="button"
@@ -472,7 +467,6 @@
 	{#if onToggleFavorite && !isGenerating && !isGenFail}
 		<!-- Favorite is STATE, not just an action — a hearted tile keeps its heart
 		     visible at rest; unhearted tiles reveal it on hover/focus (always on touch). -->
-		<!-- svelte-ignore node_invalid_placement_ssr -->
 		<button
 			type="button"
 			class="tile-fav"

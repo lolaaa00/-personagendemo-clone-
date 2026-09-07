@@ -91,7 +91,6 @@
 	}
 
 	let agent = $state<any>(data.agent ?? null);
-	let supervisors = $derived(data.supervisors ?? []);
 	// Tracks which agent's data is currently loaded into `agent`/the editable
 	// fields below, so the resync effect (further down) can tell "navigated to
 	// a different persona" apart from "same persona's data merely refreshed."
@@ -481,14 +480,6 @@
 		{ value: 'Australia/Brisbane', label: '(UTC+10) Brisbane' },
 		{ value: 'Australia/Sydney', label: '(UTC+10) Sydney / Melbourne' },
 		{ value: 'Pacific/Auckland', label: '(UTC+12) Auckland' }
-	];
-
-	const GRADIENT_PRESETS = [
-		{ name: 'Purple Sunset', gradient: 'linear-gradient(135deg, #7C3AED, #4F46E5)' },
-		{ name: 'Ocean Cyan', gradient: 'linear-gradient(135deg, #06B6D4, #3B82F6)' },
-		{ name: 'Autumn Gold', gradient: 'linear-gradient(135deg, #F59E0B, #EF4444)' },
-		{ name: 'Forest Emerald', gradient: 'linear-gradient(135deg, #10B981, #059669)' },
-		{ name: 'Cosmic Magenta', gradient: 'linear-gradient(135deg, #EC4899, #8B5CF6)' }
 	];
 
 	// ── Resync when navigating to a different persona ──────────────
@@ -2841,12 +2832,6 @@
 		const diffHr = Math.floor(diffMin / 60);
 		if (diffHr < 24) return `${diffHr}h ago`;
 		return `${Math.floor(diffHr / 24)}d ago`;
-	}
-
-	function formatHour(h: number): string {
-		const ampm = h >= 12 ? 'PM' : 'AM';
-		const hour = h % 12 || 12;
-		return `${hour}:00 ${ampm}`;
 	}
 
 	function getStatusColor(s: string) {

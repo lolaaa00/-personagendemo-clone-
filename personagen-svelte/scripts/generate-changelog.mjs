@@ -192,7 +192,7 @@ function clip(text, max) {
 const sentence = (s) => `${s[0].toUpperCase()}${s.slice(1)}`.replace(/\.?$/, '.');
 
 function autoCopy(g) {
-	const [word, gloss] = CATEGORY_WORDS[g.category] ?? CATEGORY_WORDS.maintenance;
+	const [word] = CATEGORY_WORDS[g.category] ?? CATEGORY_WORDS.maintenance;
 	const n = g.entries.length;
 	const era = g.entries.find((e) => e.milestone)?.milestone;
 	const first = g.entries[0].title;
