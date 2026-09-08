@@ -17,7 +17,7 @@
  */
 
 import { env } from '$env/dynamic/private';
-import { getSettings } from './settings';
+import { getSettings, type PersonaBackboneSetting, type PersonaGeneratorSetting } from './settings';
 
 export type CreditsMode = 'off' | 'shadow' | 'enforce';
 export type SwitchSource = 'env' | 'database' | 'default';
@@ -96,4 +96,59 @@ export function plansEnabled(): boolean {
 export function platformDailySpendUsd(): number {
 	const n = Number(getSettings().daily_platform_spend_usd);
 	return Number.isFinite(n) && n >= 0 ? n : 0;
+}
+
+// ── Persona Model v2 ────────────────────────────────────────────────────────
+// Same precedence as everything above: env var (if set) → platform_settings row
+// flipped from the Admin Console → default. The console is the normal control
+// surface; the env var is the host-level emergency override.
+//
+// Two switches, deliberately separate, because they answer different questions:
+//   PERSONA_GENERATOR — how a NEW persona is built.
+//   PERSONA_BACKBONE  — how far the sampled life data is switched on for
+//                       EXISTING personas (computed → persisted → emitted).
+// Keeping them apart means a persona's stored data and what the model is told
+// can never change in the same move, which is what makes each step reversible.
+
+function envPersonaGenerator(): PersonaGeneratorSetting | null {
+	const raw = (env.PERSONA_GENERATOR ?? '').trim().toLowerCase();
+	if (raw === '') return null;
+	return raw === 'v2' ? 'v2' : 'v1';
+}
+
+/** Which generator builds a new persona. Default 'v1' — today's behaviour. */
+export function personaGenerator(): PersonaGeneratorSetting {
+	return envPersonaGenerator() ?? getSettings().persona_generator ?? 'v1';
+}
+
+export function personaGeneratorSource(): SwitchSource {
+	if (envPersonaGenerator() !== null) return 'env';
+	return getSettings().persona_generator ? 'database' : 'default';
+}
+
+function envPersonaBackbone(): PersonaBackboneSetting | null {
+	const raw = (env.PERSONA_BACKBONE ?? '').trim().toLowerCase();
+	if (raw === '') return null;
+	return raw === 'shadow' || raw === 'fill' || raw === 'on' ? raw : 'off';
+}
+
+/** How far the sampled life backbone is switched on. Default 'off'. */
+export function personaBackbone(): PersonaBackboneSetting {
+	return envPersonaBackbone() ?? getSettings().persona_backbone ?? 'off';
+}
+
+export function personaBackboneSource(): SwitchSource {
+	if (envPersonaBackbone() !== null) return 'env';
+	return getSettings().persona_backbone ? 'database' : 'default';
+}
+
+/** True once the backbone is persisted (fill or on). Readers use this to decide whether to show it. */
+export function personaBackbonePersists(): boolean {
+	const m = personaBackbone();
+	return m === 'fill' || m === 'on';
+}
+
+/** True ONLY at 'on' — the single gate on backbone facts reaching a prompt. */
+export function personaBackboneEmits(): boolean {
+	return personaBackbone() === 'on';
 }

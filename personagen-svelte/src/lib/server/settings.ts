@@ -20,6 +20,8 @@ import { onShutdown } from './lifecycle';
 import { FALLBACK_FX, type FxRates } from '$lib/money';
 
 export type CreditsModeSetting = 'off' | 'shadow' | 'enforce';
+export type PersonaGeneratorSetting = 'v1' | 'v2';
+export type PersonaBackboneSetting = 'off' | 'shadow' | 'fill' | 'on';
 
 export interface PlatformSettings {
 	credits_mode: CreditsModeSetting;
@@ -47,6 +49,24 @@ export interface PlatformSettings {
 	signup_credits_hourly_cap: number;
 	/** Plans (subscriptions) offered on /billing; the webhook keeps existing subscriptions working either way. */
 	plans_enabled: boolean;
+	/**
+	 * Persona Model v2 — which generator builds a new persona.
+	 * 'v1' = today's path (the LLM invents every field, values are coerced after).
+	 * 'v2' = skeleton first: facts sampled deterministically from the Trait
+	 * Registry, then the LLM writes prose conditioned on them and is filtered in
+	 * code from changing them. Default 'v1' until the shadow report is clean.
+	 */
+	persona_generator: PersonaGeneratorSetting;
+	/**
+	 * Persona Model v2 — how far the sampled life backbone is switched on.
+	 * 'off'    nothing computed, nothing shown, nothing emitted (today).
+	 * 'shadow' computed and diffed by the backfill script, never persisted.
+	 * 'fill'   persisted and visible in the UI, but NOT sent to any prompt.
+	 * 'on'     also emitted to prompts (set leaves only).
+	 * Each step is a separate decision, so a persona's stored data and what the
+	 * model is told can never change in the same move.
+	 */
+	persona_backbone: PersonaBackboneSetting;
 }
 
 export const DEFAULT_SETTINGS: PlatformSettings = {
@@ -59,10 +79,12 @@ export const DEFAULT_SETTINGS: PlatformSettings = {
 	credit_markup: 1,
 	daily_platform_spend_usd: 0,
 	signup_credits_hourly_cap: 20,
-	plans_enabled: false
+	plans_enabled: false,
+	persona_generator: 'v1',
+	persona_backbone: 'off'
 };
 
-export const SETTING_KEYS = ['credits_mode', 'activity_log', 'activity_pepper', 'signup_credits', 'display_currency_default', 'fx_rates', 'credit_markup', 'daily_platform_spend_usd', 'signup_credits_hourly_cap', 'plans_enabled'] as const;
+export const SETTING_KEYS = ['credits_mode', 'activity_log', 'activity_pepper', 'signup_credits', 'display_currency_default', 'fx_rates', 'credit_markup', 'daily_platform_spend_usd', 'signup_credits_hourly_cap', 'plans_enabled', 'persona_generator', 'persona_backbone'] as const;
 export type SettingKey = (typeof SETTING_KEYS)[number];
 
 const REFRESH_MS = 15_000;
@@ -96,6 +118,13 @@ function coerce(key: string, raw: unknown): unknown {
 	switch (key) {
 		case 'credits_mode':
 			return raw === 'shadow' || raw === 'enforce' ? raw : 'off';
+		// Both persona switches fail SAFE: any unrecognised value reads as the
+		// current behaviour, so a typo in the console can never turn on a
+		// half-configured generator.
+		case 'persona_generator':
+			return raw === 'v2' ? 'v2' : 'v1';
+		case 'persona_backbone':
+			return raw === 'shadow' || raw === 'fill' || raw === 'on' ? raw : 'off';
 		case 'activity_log':
 			return raw === true || raw === 'true';
 		case 'activity_pepper':

@@ -1,0 +1,3 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`lookToPromptClause > renders a fully populated look (snapshot — wording changes must be reviewed) 1`] = `" Appearance: 34 years old, about 165 cm tall, Olive skin tone, Athletic build, oval face, soft arch brows, salt-and-pepper Dark Brown Shoulder-Length thick Wavy hair, Hazel eyes, short beard, wearing glasses, freckles across the nose, wearing a flat cap, dressed in linen shirts and denim, outfit in sand and navy, relaxed coastal styling."`;
