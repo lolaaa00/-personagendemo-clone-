@@ -212,6 +212,38 @@ measurement read exit codes through a shell pipe, so `$?` reflected `tail` and
 every case appeared to exit 0. A refusal that exits 0 would sail through any
 script that chains on it. Re-measured directly. When verifying an exit code,
 never read it through a pipe.
+
+---
+
+## Finding 16 — the deploy gates were adopted, tested, and never executed
+
+**Found and closed 2026-09-08 by `60c5cab`.** The rail set adopted in `754a38f`
+added the real gates — migration ledger, warning ceilings, lint ratchet,
+production audit, auth preflight, guarded staging, visible bypass. Its unit tests
+and typecheck passed, so it was called landed. `deploy.ps1` could not run at all:
+
+1. The file has no BOM, and Windows PowerShell 5.1 reads a BOM-less file as ANSI.
+   With box drawing and em dashes in the banners it died with parse errors before
+   the first gate. Same content with a BOM: 0 errors.
+2. With `$ErrorActionPreference = 'Stop'`, a native command writing to stderr is a
+   terminating error, so one ordinary warning line from `svelte-check` killed the
+   run immediately after step 0 passed. Every gate already decides on
+   `$LASTEXITCODE`, so native calls now route through an `Invoke-Gate` helper that
+   prints stderr as text and returns the exit code.
+
+Neither cause is visible to a test, a typecheck, or a diff. Only execution finds
+them. The pipeline reached the end for the first time on 2026-09-08 with exit 0:
+ledger, registry truth, svelte-check, warning ceilings, lint (1103/1120), audit,
+531 unit tests, "Dry run complete."
+
+**The lesson, which generalises past this file:** *a gate is not landed until it
+has been watched running, and watched failing on purpose.* "The tests pass" and
+"the script exists" are not the same claim as "the pipeline runs". The same
+mistake in the other direction was caught the same day: a checksum repair guard
+written against a single line-ending rendering would have repaired its author's 38
+rows and refused the other session's 1 — found only because the reviewer
+re-derived the rule instead of accepting it. **Gates get reviewed by someone other
+than their author, and get run before they are called done.**
 | 9 | (update) `.gitignore` edit is inside the unowned set above, so the `graphify-out/cache/` line and the `git rm -r --cached` of the 87 tracked cache files are folded into the same adoption pass. | — | — |
 
 ## Suggested order
