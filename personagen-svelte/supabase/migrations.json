@@ -154,5 +154,9 @@
   [
     "market_restore_migration.sql",
     "Persona Model v2 P0.6 — agents.market returns to a market string; profile lives only in personas_profile (rows with NULL personas_profile untouched)"
+  ],
+  [
+    "model_registry_platform_migration.sql",
+    "Model registry — platform-owned rows (user_id NULL): owner_key uniqueness, read-all/admin-write RLS, one-time backfill from the richest per-user copy, one default per kind"
   ]
 ]

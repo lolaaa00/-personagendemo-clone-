@@ -1,6 +1,8 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import {
+	resolveScope,
+	scopeKey,
 	loadRegistry,
 	syncFromFal,
 	syncFromOpenRouter,
@@ -18,6 +20,11 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	const gate = await requirePlatformAdmin(locals);
 	if (!gate.ok) return json({ success: false, error: gate.message }, { status: gate.status });
 	const user = gate.user;
+
+	// One catalog for the platform when it exists, the caller's legacy rows
+	// otherwise. Resolved once so every query below filters identically.
+	const scope = await resolveScope(locals.supabase, user.id);
+	const ownerKey = scopeKey(scope);
 
 	const body = (await request.json()) as any;
 	const { action } = body;
@@ -114,7 +121,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				const { data: row } = await locals.supabase
 					.from('model_registry')
 					.select('wired, is_default, price_usd')
-					.eq('user_id', user.id)
+					.eq('owner_key', ownerKey)
 					.eq('model_id', model_id)
 					.maybeSingle();
 				if (!row) return json({ success: false, error: 'Model not found' }, { status: 404 });
@@ -145,7 +152,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			const { data, error } = await locals.supabase
 				.from('model_registry')
 				.update(clean)
-				.eq('user_id', user.id)
+				.eq('owner_key', ownerKey)
 				.eq('model_id', model_id)
 				.select('*')
 				.maybeSingle();
@@ -162,7 +169,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			const { data: row } = await locals.supabase
 				.from('model_registry')
 				.select('id, wired, status, kind')
-				.eq('user_id', user.id)
+				.eq('owner_key', ownerKey)
 				.eq('model_id', model_id)
 				.maybeSingle();
 			if (!row || row.kind !== kind) {
@@ -177,14 +184,14 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			const { error: clearErr } = await locals.supabase
 				.from('model_registry')
 				.update({ is_default: false })
-				.eq('user_id', user.id)
+				.eq('owner_key', ownerKey)
 				.eq('kind', kind);
 			if (clearErr) throw clearErr;
 			const { data, error } = await locals.supabase
 				.from('model_registry')
 				.update({ is_default: true })
 				.eq('id', row.id)
-				.eq('user_id', user.id)
+				.eq('owner_key', ownerKey)
 				.select('*')
 				.single();
 			if (error) throw error;
@@ -197,7 +204,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			const { data: row } = await locals.supabase
 				.from('model_registry')
 				.select('id, kind, pricing_text, price_source, wired')
-				.eq('user_id', user.id)
+				.eq('owner_key', ownerKey)
 				.eq('model_id', model_id)
 				.maybeSingle();
 			if (!row) return json({ success: false, error: 'Model not found' }, { status: 404 });
@@ -230,7 +237,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				.from('model_registry')
 				.update(patch)
 				.eq('id', row.id)
-				.eq('user_id', user.id)
+				.eq('owner_key', ownerKey)
 				.select('*')
 				.single();
 			if (error) throw error;
@@ -254,7 +261,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			const { data: pair } = await locals.supabase
 				.from('model_registry')
 				.select('id, model_id, kind, label, tier, is_default, wired, status, probe')
-				.eq('user_id', user.id)
+				.eq('owner_key', ownerKey)
 				.in('model_id', [from_model_id, to_model_id]);
 
 			const from = (pair ?? []).find((r: any) => r.model_id === from_model_id);
@@ -298,7 +305,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 						.from('model_registry')
 						.update({ probe: { ...toProbe, adapter: derived, adapterReady: true } })
 						.eq('id', to.id)
-						.eq('user_id', user.id);
+						.eq('owner_key', ownerKey);
 				}
 			}
 
@@ -306,20 +313,20 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				.from('model_registry')
 				.update({ wired: true, status: 'active', tier: from.tier, is_default: from.is_default })
 				.eq('id', to.id)
-				.eq('user_id', user.id);
+				.eq('owner_key', ownerKey);
 			if (inErr) throw inErr;
 
 			const { error: outErr } = await locals.supabase
 				.from('model_registry')
 				.update({ wired: false, status: 'available', is_default: false })
 				.eq('id', from.id)
-				.eq('user_id', user.id);
+				.eq('owner_key', ownerKey);
 			if (outErr) throw outErr;
 
 			const { data: fresh, error: reloadErr } = await locals.supabase
 				.from('model_registry')
 				.select('*')
-				.eq('user_id', user.id);
+				.eq('owner_key', ownerKey);
 			if (reloadErr) throw reloadErr;
 			return json({ success: true, data: fresh, swapped: { from: from.label, to: to.label } });
 		}

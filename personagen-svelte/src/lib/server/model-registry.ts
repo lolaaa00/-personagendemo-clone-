@@ -33,7 +33,8 @@ export type RegistryOrigin = 'seed' | 'fal_catalog' | 'openrouter_catalog' | 'ma
 
 export interface RegistryRow {
 	id: string;
-	user_id: string;
+	/** NULL on a platform-owned row (shared catalog); a user id on a legacy per-user row. */
+	user_id: string | null;
 	/** Which API serves this model — decides the call adapter and the sync that owns it. */
 	provider: RegistryProvider;
 
@@ -160,18 +161,72 @@ const TTS_SEED: Omit<RegistryRow, 'id' | 'user_id' | 'created_at' | 'updated_at'
 	discovered_at: null
 };
 
-/** Loads the user's registry, seeding it from the static catalog on first use. */
+/**
+ * Which copy of the catalog a request reads and writes.
+ *
+ * A row with user_id NULL is PLATFORM-owned: every authenticated user reads it,
+ * only a platform admin writes it (RLS). Per-user rows predate that and stay
+ * live for their owner, so the rollout breaks nothing. Once ANY platform row
+ * exists it IS the catalog — reading both would let a stale personal copy win
+ * over the shared one, which is the drift this replaces.
+ *
+ * Queries filter on owner_key, a stored generated column that maps NULL to
+ * PLATFORM_OWNER_KEY, so one .eq() covers both scopes and no call site has to
+ * branch. The sentinel is duplicated in model_registry_platform_migration.sql —
+ * change it in both or uniqueness and filtering disagree.
+ */
+export const PLATFORM_OWNER_KEY = '00000000-0000-0000-0000-000000000000';
+
+export interface RegistryScope {
+	platform: boolean;
+	userId: string;
+}
+
+export async function resolveScope(
+	supabase: SupabaseClient,
+	userId: string
+): Promise<RegistryScope> {
+	const { count, error } = await supabase
+		.from('model_registry')
+		.select('id', { count: 'exact', head: true })
+		.is('user_id', null);
+	if (error) throw error;
+	return { platform: (count ?? 0) > 0, userId };
+}
+
+/** The owner_key every read/write in this scope filters on. */
+export function scopeKey(scope: RegistryScope): string {
+	return scope.platform ? PLATFORM_OWNER_KEY : scope.userId;
+}
+
+/** The user_id an INSERT in this scope must carry (owner_key is generated). */
+export function scopeOwner(scope: RegistryScope): string | null {
+	return scope.platform ? null : scope.userId;
+}
+
+/** Loads the catalog for this user: the platform one when it exists, else the
+ *  user's own rows, seeding them from the static catalog on first use. */
 export async function loadRegistry(
 	supabase: SupabaseClient,
 	userId: string
 ): Promise<RegistryRow[]> {
+	// ONE round trip on a hot path: every generation resolves its model through
+	// here, so both scopes are fetched together and partitioned in memory rather
+	// than paying a scope probe before the read. Platform rows win outright when
+	// they exist — reading both would let a stale personal copy override the
+	// shared catalog.
 	const { data, error } = await supabase
 		.from('model_registry')
 		.select('*')
-		.eq('user_id', userId)
+		.or(`user_id.is.null,user_id.eq.${userId}`)
 		.order('released_at', { ascending: false, nullsFirst: false });
 	if (error) throw error;
-	if (data && data.length > 0) return data as RegistryRow[];
+	const rows = (data ?? []) as RegistryRow[];
+	const platform = rows.filter((r) => r.user_id === null);
+	if (platform.length > 0) return platform;
+	const own = rows.filter((r) => r.user_id === userId);
+	if (own.length > 0) return own;
+	const scope: RegistryScope = { platform: false, userId };
 
 	// First visit: seed the wired catalog so the manager opens populated and
 	// the resolve endpoints have rows to honor.
@@ -182,7 +237,7 @@ export async function loadRegistry(
 	const seeds = MODEL_CATALOG.map((m) => {
 		const extra = WIRED_SEED[m.id];
 		return {
-			user_id: userId,
+			user_id: scopeOwner(scope),
 			// The wired catalog is fal-only; OpenRouter rows arrive via
 			// syncFromOpenRouter, never through this seed.
 			provider: 'fal' as RegistryProvider,
@@ -224,15 +279,15 @@ export async function loadRegistry(
 	// the static catalog for that request.
 	const { error: insertErr } = await supabase
 		.from('model_registry')
-		.upsert([...seeds, { user_id: userId, ...TTS_SEED }], {
-			onConflict: 'user_id,model_id',
+		.upsert([...seeds, { user_id: scopeOwner(scope), ...TTS_SEED }], {
+			onConflict: 'owner_key,model_id',
 			ignoreDuplicates: true
 		});
 	if (insertErr) throw insertErr;
 	const { data: seeded, error: reselectErr } = await supabase
 		.from('model_registry')
 		.select('*')
-		.eq('user_id', userId)
+		.eq('owner_key', scopeKey(scope))
 		.order('released_at', { ascending: false, nullsFirst: false });
 	if (reselectErr) throw reselectErr;
 	return (seeded ?? []) as RegistryRow[];
@@ -459,11 +514,12 @@ export async function syncFromOpenRouter(
 	fetchFn: typeof fetch = fetch
 ): Promise<SyncResult> {
 	const result: SyncResult = { discovered: 0, refreshed: 0, deprecatedFlagged: 0, errors: [] };
+	const scope = await resolveScope(supabase, userId);
 
 	const { data: existingRows, error: readErr } = await supabase
 		.from('model_registry')
 		.select('id, model_id, deprecated, price_source, wired, pricing_text, released_at, lab')
-		.eq('user_id', userId)
+		.eq('owner_key', scopeKey(scope))
 		.eq('provider', 'openrouter');
 	if (readErr) throw readErr;
 	const existing = new Map((existingRows ?? []).map((r: any) => [r.model_id, r]));
@@ -501,7 +557,7 @@ export async function syncFromOpenRouter(
 
 		if (!prior) {
 			inserts.push({
-				user_id: userId,
+				user_id: scopeOwner(scope),
 				provider: 'openrouter',
 				model_id: m.id,
 				kind,
@@ -644,10 +700,11 @@ export async function syncFromFal(
 	fetchFn: typeof fetch = fetch
 ): Promise<SyncResult> {
 	const result: SyncResult = { discovered: 0, refreshed: 0, deprecatedFlagged: 0, errors: [] };
+	const scope = await resolveScope(supabase, userId);
 	const { data: existingRows, error: readErr } = await supabase
 		.from('model_registry')
 		.select('id, model_id, deprecated, price_source, wired, pricing_text, released_at, lab')
-		.eq('user_id', userId);
+		.eq('owner_key', scopeKey(scope));
 	if (readErr) throw readErr;
 	const existing = new Map((existingRows ?? []).map((r: any) => [r.model_id, r]));
 
@@ -712,8 +769,7 @@ export async function syncFromFal(
 				const { error } = await supabase
 					.from('model_registry')
 					.update(patch)
-					.eq('id', prior.id)
-					.eq('user_id', userId);
+					.eq('id', prior.id);
 				if (error) result.errors.push(`${modelId}: ${error.message}`);
 				else {
 					result.refreshed++;
@@ -724,7 +780,7 @@ export async function syncFromFal(
 
 			const parsed = parsePriceText(pricingText);
 			inserts.push({
-				user_id: userId,
+				user_id: scopeOwner(scope),
 				provider: 'fal' as RegistryProvider,
 				model_id: modelId,
 				kind,
@@ -758,7 +814,7 @@ export async function syncFromFal(
 		// no-op, not an error.
 		const { error } = await supabase
 			.from('model_registry')
-			.upsert(chunk, { onConflict: 'user_id,model_id', ignoreDuplicates: true });
+			.upsert(chunk, { onConflict: 'owner_key,model_id', ignoreDuplicates: true });
 		if (error) result.errors.push(`batch insert: ${error.message}`);
 		else result.discovered += chunk.length;
 	}
