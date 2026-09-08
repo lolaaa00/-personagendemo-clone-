@@ -194,6 +194,20 @@ async function main() {
 	const adminYes = await app('/api/admin/settings');
 	const adminBody = await adminYes.json().catch(() => ({}));
 	check('platform admin sees the controls incl. markup', adminYes.status === 200 && Number(adminBody.switches?.credit_markup?.effective) === Number(markup), `HTTP ${adminYes.status} markup=${adminBody.switches?.credit_markup?.effective} (${adminBody.switches?.credit_markup?.source}) migrations pending=${adminBody.migrations?.pending?.length}`);
+	// Every switch an operator is told about must be READABLE and WRITABLE, not
+	// merely present in the code. A key can be valid and still fall through the
+	// write path to "Unsupported key" (that happened to the two persona switches
+	// on 2026-09-08), so this exercises the operator's path: the GET reports it,
+	// and the POST reaches validation rather than refusing the key. The invalid
+	// value is deliberate — it is rejected before anything is written, so this
+	// proves the path is live without changing a production setting.
+	const switches = adminBody.switches ?? {};
+	const readable = ['credits_mode', 'credit_markup', 'signup_credits', 'plans_enabled', 'persona_generator', 'persona_backbone', 'daily_platform_spend_usd'].filter((k) => switches[k] === undefined);
+	check('every operator switch is reported by the console API', readable.length === 0, readable.length ? `missing: ${readable.join(', ')}` : `${Object.keys(switches).length} switches reported`);
+	const writeProbe = await postJson('/api/admin/settings', { key: 'persona_backbone', value: '__invalid__', note: 'e2e: write path reachable (rejected by design)' });
+	const writeBody = await writeProbe.json().catch(() => ({}));
+	check('a switch write reaches validation instead of "Unsupported key"', writeProbe.status === 400 && /off \| shadow \| fill \| on/.test(String(writeBody.error ?? '')), `HTTP ${writeProbe.status} ${writeBody.error ?? ''}`);
+
 	const adminUsers = await app('/api/admin/credits');
 	const auBody = await adminUsers.json().catch(() => ({}));
 	const me = (auBody.users ?? []).find((u) => u.id === userId || u.email === email);
