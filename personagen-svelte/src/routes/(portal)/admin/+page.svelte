@@ -14,6 +14,8 @@
 		daily_platform_spend_usd: { stored: number };
 		signup_credits_hourly_cap: { stored: number };
 		plans_enabled: { stored: boolean };
+		persona_generator: { effective: 'v1' | 'v2'; stored: string; source: 'env' | 'database' | 'default' };
+		persona_backbone: { effective: 'off' | 'shadow' | 'fill' | 'on'; stored: string; source: 'env' | 'database' | 'default' };
 		display_currency_default: { stored: string; supported: string[] };
 		fx_rates: { base: string; count: number; updated_at: string | null; source: string | null; sample: Array<{ currency: string; rate: number | null }> };
 	};
@@ -47,7 +49,7 @@
 		}
 	}
 
-	async function setSwitch(key: 'credits_mode' | 'activity_log' | 'activity_pepper' | 'signup_credits' | 'display_currency_default' | 'fx_rates' | 'credit_markup' | 'daily_platform_spend_usd' | 'signup_credits_hourly_cap' | 'plans_enabled', value?: unknown) {
+	async function setSwitch(key: 'credits_mode' | 'activity_log' | 'activity_pepper' | 'signup_credits' | 'display_currency_default' | 'fx_rates' | 'credit_markup' | 'daily_platform_spend_usd' | 'signup_credits_hourly_cap' | 'plans_enabled' | 'persona_generator' | 'persona_backbone', value?: unknown) {
 		const label =
 			key === 'activity_pepper'
 				? 'Rotate the activity hashing secret? Cross-day correlation of IP hashes breaks for today (by design).'
@@ -547,6 +549,49 @@
 							<span class="admin-hint">USD raw provider cost</span>
 							<button class="filter-btn active" disabled={controlsBusy || ceilingDraft === null || ceilingDraft === controls.switches.daily_platform_spend_usd.stored} onclick={() => setSwitch('daily_platform_spend_usd', ceilingDraft)}>Save</button>
 						</div>
+					</div>
+
+					<div class="control">
+						<div class="control-head">
+							<strong>Persona generator</strong>
+							<span class="mode-pill" class:mode-enforce={controls.switches.persona_generator.effective === 'v2'} class:mode-off={controls.switches.persona_generator.effective === 'v1'}>{controls.switches.persona_generator.effective}</span>
+							<span class="muted small">source: {controls.switches.persona_generator.source}</span>
+						</div>
+						<p class="admin-hint">
+							How a NEW persona is built. <strong>v1</strong> is today's path: the model invents every field and the
+							values are coerced afterwards. <strong>v2</strong> samples the facts first and lets the model write prose
+							around them. Existing personas are untouched either way.
+						</p>
+						<div class="filter-row">
+							{#each ['v1', 'v2'] as g (g)}
+								<button class="filter-btn" class:active={controls.switches.persona_generator.stored === g} disabled={controlsBusy} onclick={() => setSwitch('persona_generator', g)}>{g}</button>
+							{/each}
+						</div>
+						{#if controls.switches.persona_generator.source === 'env'}
+							<p class="admin-hint warn">PERSONA_GENERATOR is set in the host environment and overrides the stored value.</p>
+						{/if}
+					</div>
+
+					<div class="control">
+						<div class="control-head">
+							<strong>Persona backbone</strong>
+							<span class="mode-pill" class:mode-enforce={controls.switches.persona_backbone.effective === 'on'} class:mode-shadow={controls.switches.persona_backbone.effective === 'shadow' || controls.switches.persona_backbone.effective === 'fill'} class:mode-off={controls.switches.persona_backbone.effective === 'off'}>{controls.switches.persona_backbone.effective}</span>
+							<span class="muted small">source: {controls.switches.persona_backbone.source}</span>
+						</div>
+						<p class="admin-hint">
+							How far the sampled life facts are switched on, one reversible step at a time:
+							<strong>off</strong> nothing computed · <strong>shadow</strong> computed and compared, never saved ·
+							<strong>fill</strong> saved and shown, never sent to a prompt · <strong>on</strong> also sent to prompts.
+							Stored data and what the model is told never change in the same move.
+						</p>
+						<div class="filter-row">
+							{#each ['off', 'shadow', 'fill', 'on'] as b (b)}
+								<button class="filter-btn" class:active={controls.switches.persona_backbone.stored === b} disabled={controlsBusy} onclick={() => setSwitch('persona_backbone', b)}>{b}</button>
+							{/each}
+						</div>
+						{#if controls.switches.persona_backbone.source === 'env'}
+							<p class="admin-hint warn">PERSONA_BACKBONE is set in the host environment and overrides the stored value.</p>
+						{/if}
 					</div>
 
 					<div class="control">

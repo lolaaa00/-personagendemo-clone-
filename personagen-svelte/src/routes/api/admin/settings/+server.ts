@@ -4,7 +4,7 @@ import { randomBytes } from 'node:crypto';
 import { requirePlatformAdmin } from '$lib/server/platform-admin';
 import { getServiceSupabase } from '$lib/server/service-supabase';
 import { getSettings, setSetting, settingsStatus, refreshSettings, SETTING_KEYS, type SettingKey } from '$lib/server/settings';
-import { creditsMode, creditsSource, activityLogEnabled, activitySource, activityPepper, creditMarkup, creditMarkupSource } from '$lib/server/flags';
+import { creditsMode, creditsSource, activityLogEnabled, activitySource, activityPepper, creditMarkup, creditMarkupSource, personaGenerator, personaGeneratorSource, personaBackbone, personaBackboneSource } from '$lib/server/flags';
 import { activityStats, logActivity } from '$lib/server/activity';
 import MIGRATION_ORDER from '../../../../../supabase/migrations.json';
 import { SUPPORTED_CURRENCIES, isSupportedCurrency, formatCredits, type FxRates } from '$lib/money';
@@ -68,6 +68,8 @@ export const GET: RequestHandler = async ({ locals }) => {
 			daily_platform_spend_usd: { stored: s.daily_platform_spend_usd },
 			signup_credits_hourly_cap: { stored: s.signup_credits_hourly_cap },
 			plans_enabled: { stored: s.plans_enabled },
+			persona_generator: { effective: personaGenerator(), stored: s.persona_generator, source: personaGeneratorSource() },
+			persona_backbone: { effective: personaBackbone(), stored: s.persona_backbone, source: personaBackboneSource() },
 			display_currency_default: { stored: s.display_currency_default, supported: SUPPORTED_CURRENCIES },
 			fx_rates: {
 				base: s.fx_rates.base,
@@ -136,6 +138,14 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			return json({ success: false, error: 'signup_credits_hourly_cap must be an integer between 0 (unlimited) and 10,000' }, { status: 400 });
 		}
 		value = n;
+	} else if (key === 'persona_generator') {
+		const v = String(body.value ?? '').toLowerCase();
+		if (!['v1', 'v2'].includes(v)) return json({ success: false, error: 'persona_generator must be v1 | v2' }, { status: 400 });
+		value = v;
+	} else if (key === 'persona_backbone') {
+		const v = String(body.value ?? '').toLowerCase();
+		if (!['off', 'shadow', 'fill', 'on'].includes(v)) return json({ success: false, error: 'persona_backbone must be off | shadow | fill | on' }, { status: 400 });
+		value = v;
 	} else if (key === 'display_currency_default') {
 		const c = String(body.value ?? 'auto').toUpperCase();
 		if (c !== 'AUTO' && !isSupportedCurrency(c)) {

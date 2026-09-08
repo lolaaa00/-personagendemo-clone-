@@ -420,7 +420,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-08", hash: "66a9588", type: "refactor", category: "generation", scope: "models", title: "name the row type the Model Manager reads, clearing my lint debt" },
 	{ date: "2026-09-08", hash: "c47fa80", type: "refactor", category: "maintenance", scope: "persona", title: "type the persona save path properly — clears my 11 lint warnings, puts the ratchet back under its ceiling" },
 	{ date: "2026-09-08", hash: "7d3977a", type: "docs", category: "infrastructure", scope: "audit", title: "finding #16 — the deploy gates were adopted, tested, and never executed" },
-	{ date: "2026-09-08", hash: "1901201", type: "feat", category: "feature", scope: "persona-contract", title: "seeded RNG and the versioned local Trait Registry (P1.1)" }
+	{ date: "2026-09-08", hash: "1901201", type: "feat", category: "feature", scope: "persona-contract", title: "seeded RNG and the versioned local Trait Registry (P1.1)" },
+	{ date: "2026-09-08", hash: "7b1240b", type: "feat", category: "generation", scope: "persona", title: "the skeleton sampler, brief→constraints, look prompt clause, and the two v2 switches (P1.2, P1.3, P1.6, P2 clause)" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -746,12 +747,12 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 	},
 	{
 		id: "7d3977a", from: "2026-09-08", to: "2026-09-08",
-		category: "infrastructure", categories: ["infrastructure","feature"],
+		category: "infrastructure", categories: ["infrastructure","feature","generation"],
 		title: "Behind the scenes: finding #16 — the deploy gates were adopted…",
-		summary: "Finding #16 — the deploy gates were adopted, tested, and never executed. Plus 1 more change, touching things you can now do.",
+		summary: "Finding #16 — the deploy gates were adopted, tested, and never executed. Plus 2 more changes, touching things you can now do and making posts, images and video.",
 		major: false, curated: false,
-		entries: [CHANGELOG[385], CHANGELOG[386]]
+		entries: [CHANGELOG[385], CHANGELOG[386], CHANGELOG[387]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "1901201";
+export const CHANGELOG_GENERATED_FROM = "7b1240b";
