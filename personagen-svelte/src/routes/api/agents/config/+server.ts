@@ -86,10 +86,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		if (runtimeOwner !== undefined) {
 			agentUpdatePayload.runtime_owner = runtimeOwner;
 		}
-		// Extended persona profile — written to the personas_profile JSONB column,
-		// with `market` still carrying a copy ONLY as the never-brick fallback for a
-		// database that hasn't run personas_profile_migration.sql (no external
-		// service reads `market`; mcp-bridge verified 2026-09-05).
+		// Extended persona profile — written to the personas_profile JSONB column.
 		//
 		// Persona Model v2 (P0.5): the stored blob is v2 from this save on. The
 		// client still sends its v1 form (or the legacy stringified transport);
@@ -106,8 +103,9 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		}
 
 		if (Object.keys(agentUpdatePayload).length > 0) {
-			// Retries without personas_profile if the migration hasn't been applied
-			// yet — `market` still carries the merged profile, so nothing is lost.
+			// Retries without personas_profile only if the column is missing, so the
+			// rest of the row still saves; that case is reported at error level (see
+			// personas-profile-column.ts) — the profile itself is NOT persisted then.
 			const { error: agentErr } = await writeWithProfileFallback(agentUpdatePayload, (p) =>
 				db.agents.update(agentId, p)
 			);

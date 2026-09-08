@@ -134,6 +134,19 @@ Task-level deltas are marked **[09-07]** inline below.
 - **Test:** provenance invariants (UX doc §3). **Zero-regression snapshot:** three real v1 fixtures → `buildRichAgentContext`, `buildHeroPortraitPrompt`, `buildPortraitEditPrompt`, identity-kit prompt builder; snapshots captured on `main` **before** this PR and committed; the test asserts byte equality with `PERSONA_BACKBONE=off`. This file must stay green through every later phase.
 - **Commit:** `feat(persona-store): per-field provenance; byte-level prompt regression snapshots`
 
+### Phase 0 — status 2026-09-08
+
+| Task | Landed | Notes |
+|---|---|---|
+| P0.0 | `4ad3521`/`754a38f` | suite green |
+| P0.1 | `fe824cd` | contract module: tokens, labels (byte-identical to legacy lists), schema; 20 invariants |
+| P0.2 | `48bf0b7` | pure upgrade/downgrade, golden fixtures, 200-profile round trip |
+| P0.3 | `58b7206` | **dual-shape bridge** instead of a hard cut: v1 read downgrades v2 blobs; v2 read/serialize/merge beside it; provenance rule in merge; age helpers to a leaf module (no import cycle). Built + smoked live. |
+| P0.4 | deferred (G11) | page rewrite moved to Phase 5; the bridge made it unnecessary for the flip |
+| P0.5 | `d48fa5e` | save routes write v2 via `persona-contract/save.ts`; page untouched; `stored` vs `patch` modes so records at rest carry no clear markers; token/text pairs are one field. Browser-proven (edit → save → reload; blob inspected). Built + smoked live. |
+| P0.6 | `5f2aa33` | `market_restore_migration.sql` (ledger 39) applied to prod 2026-09-08: 0 rows still hold JSON in `market`; app no longer writes it |
+| P0.7 | this commit | provenance landed with P0.3/P0.5; **zero-regression proof**: a v2-stored persona produces byte-identical prompts to its v1 original for every bucketed profile; the pre-bucket shape converges to what the page would have saved (documented in the spec) |
+
 **Phase 0 definition of done:** suite green, typecheck green, a persona created before Phase 0 opens, edits, saves, regenerates portrait identically; `meta.schemaVersion: 2` visible on the next save of any persona.
 
 ---

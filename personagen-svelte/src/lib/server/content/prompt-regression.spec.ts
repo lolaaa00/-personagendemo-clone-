@@ -48,6 +48,8 @@ vi.mock('$lib/server/voices', () => ({
 
 const { buildRichAgentContext, buildHeroPortraitPrompt, buildPortraitEditPrompt } =
 	await import('./generate');
+const { upgradeV1toV2 } = await import('$lib/persona-contract/upgrade');
+const { deriveAgeRanges } = await import('$lib/persona-age');
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -175,6 +177,50 @@ describe('buildPortraitEditPrompt — regenerate keeping the face', () => {
 		expect(out).not.toMatch(/long long/i);
 		expect(out).toMatchSnapshot();
 	});
+});
+
+/**
+ * PHASE 0 EXIT GUARANTEE (Persona Model v2): a persona whose stored blob has
+ * flipped to v2 on save must produce BYTE-IDENTICAL prompts to the same persona
+ * stored as v1. Readers downgrade; this proves the downgrade is invisible to the
+ * model. If this ever fails, the storage flip changed what personas say.
+ */
+describe('v2-stored persona ⇒ identical prompts to its v1 original', () => {
+	const asV2 = (agent: Record<string, unknown>) => ({
+		...agent,
+		personas_profile: upgradeV1toV2(agent.personas_profile)
+	});
+	// The pre-bucket shape (ageMin/ageMax only, no ageRanges) is the one place v2
+	// is not byte-identical to the stored v1: the upgrade derives the buckets, and
+	// the script context prefers buckets ("25–34, 35–44") over bounds ("25–44 year
+	// olds"). That phrasing was already unstable in v1 — the persona page derives
+	// the same chips from the bounds and re-sends them on its next save — so the
+	// guarantee for this shape is equality with the profile AS THE PAGE WOULD HAVE
+	// SAVED IT. Every profile that already has buckets is byte-identical.
+	const PRE_BUCKET_AS_SAVED = {
+		...PRE_BUCKET,
+		personas_profile: {
+			...PRE_BUCKET.personas_profile,
+			ageRanges: deriveAgeRanges(PRE_BUCKET.personas_profile)
+		}
+	};
+	for (const [name, agent] of [
+		['pre-bucket (as the page would have saved it)', PRE_BUCKET_AS_SAVED],
+		['full v1', FULL_V1],
+		['legacy look', LEGACY_LOOK]
+	] as const) {
+		it(`${name}: script context`, () => {
+			expect(buildRichAgentContext(asV2(agent))).toBe(buildRichAgentContext(agent));
+		});
+		it(`${name}: hero portrait`, () => {
+			expect(buildHeroPortraitPrompt(BRIEF, asV2(agent), 'female')).toBe(
+				buildHeroPortraitPrompt(BRIEF, agent, 'female')
+			);
+		});
+		it(`${name}: portrait edit`, () => {
+			expect(buildPortraitEditPrompt(asV2(agent))).toBe(buildPortraitEditPrompt(agent));
+		});
+	}
 });
 
 describe('invariants that must hold regardless of snapshot churn', () => {
