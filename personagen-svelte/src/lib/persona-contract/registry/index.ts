@@ -36,8 +36,10 @@ import type {
  * golden snapshots are pinned to it.
  *
  * 1.0.0 — first tables (generic, au, us, uk). P1.1.
+ * 1.1.0 — archetype + contentFocus tables, so a persona created without an AI
+ *         provider is complete rather than half-blank. P1.4.
  */
-export const REGISTRY_VERSION = '1.0.0';
+export const REGISTRY_VERSION = '1.1.0';
 
 const MARKETS: Record<string, MarketRegistry> = { au: AU, us: US, uk: UK, generic: GENERIC };
 

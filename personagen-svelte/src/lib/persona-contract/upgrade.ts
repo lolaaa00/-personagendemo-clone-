@@ -32,7 +32,35 @@ import {
 	type PersonaProfileV2
 } from './schema';
 import { isToken, type TokenOf } from './tokens';
-import { stripEmptyLeaves } from './paths';
+import { setPath, stripEmptyLeaves } from './paths';
+
+/**
+ * The `look` leaves a v1 appearance form can express, and therefore the only
+ * ones an empty v1 appearance is allowed to clear. Everything else under `look`
+ * is v2-only: the form cannot send it, so it must not be able to delete it.
+ */
+const V1_CLEARABLE_LOOK_LEAVES = [
+	'look.skinTone',
+	'look.skinToneText',
+	'look.bodyType',
+	'look.bodyTypeText',
+	'look.hair.color',
+	'look.hair.colorText',
+	'look.hair.length',
+	'look.hair.lengthText',
+	'look.hair.style',
+	'look.hair.styleText',
+	'look.eyes.color',
+	'look.eyes.colorText',
+	'look.wardrobe',
+	'look.outfitColors',
+	'look.headwear',
+	'look.distinctiveFeatures',
+	'look.styling'
+] as const;
+
+/** Same, for voice: v1 owns these three; pinnedVoice and voiceMatch are v2-only. */
+const V1_CLEARABLE_VOICE_LEAVES = ['voice.gender', 'voice.nationality', 'voice.accent'] as const;
 
 /**
  * 'stored'  — the result describes a record at rest: no clear markers, token/
@@ -152,9 +180,25 @@ export function upgradeV1toV2(input: unknown, mode: UpgradeMode = 'stored'): Per
 	if (Object.keys(creator).length) out.creator = creator;
 
 	// ── look ─────────────────────────────────────────────────────────────────
-	// An explicit empty appearance object is "clear my look" in v1; pass the
-	// signal through as an empty section so the human-clear rule applies on merge.
-	if (isEmptyObject(v1.appearance)) out.look = {};
+	// An empty v1 `appearance` means "no appearance set" and, in a patch, is the
+	// nearest thing v1 has to "clear my look".
+	//
+	// It must NOT become an empty SECTION. The merge treats an empty section from
+	// a human as a whole-section clear, and `look` now holds v2-only siblings the
+	// v1 form cannot express or resend — heightCm, faceShape, browShape,
+	// facialHair, eyewear, hair.texture, hair.grayCoverage, promptCues. Passing
+	// the emptiness through at section level deletes all of them permanently on
+	// the first ordinary save of any persona that has them, because
+	// downgradeV2toV1 does not emit them for the form to send back.
+	//
+	// So the clear is expressed as empty LEAVES, and only for the fields v1 can
+	// actually see. A shape can only clear what it can describe.
+	if (mode === 'patch' && isEmptyObject(v1.appearance)) {
+		for (const path of V1_CLEARABLE_LOOK_LEAVES) {
+			setPath(out as unknown as Record<string, unknown>, path, '');
+			sources[path] = 'user';
+		}
+	}
 	const look: PersonaLook = {};
 	const skin = lookTrait('skinTone', appearance.skinTone);
 	put(look, 'skinTone', skin.token as never, 'look.skinTone', sources);
@@ -194,8 +238,14 @@ export function upgradeV1toV2(input: unknown, mode: UpgradeMode = 'stored'): Per
 		v1.voiceProfile && typeof v1.voiceProfile === 'object' && !Array.isArray(v1.voiceProfile)
 			? (v1.voiceProfile as Record<string, unknown>)
 			: null;
-	if (isEmptyObject(v1.voiceProfile)) out.voice = {};
-	else if (vp) {
+	// Same rule as the look above: clear the three fields v1 owns, never the
+	// section, which also holds the pinned voice and its match quality.
+	if (mode === 'patch' && isEmptyObject(v1.voiceProfile)) {
+		for (const path of V1_CLEARABLE_VOICE_LEAVES) {
+			setPath(out as unknown as Record<string, unknown>, path, '');
+			sources[path] = 'user';
+		}
+	} else if (vp) {
 		const voice: NonNullable<PersonaProfileV2['voice']> = {};
 		if (vp.gender === 'female' || vp.gender === 'male') put(voice, 'gender', vp.gender, 'voice.gender', sources);
 		else if (vp.gender === '') put(voice, 'gender', '' as never, 'voice.gender', sources);

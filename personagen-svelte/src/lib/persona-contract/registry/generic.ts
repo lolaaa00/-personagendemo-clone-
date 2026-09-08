@@ -346,6 +346,40 @@ export const GENERIC: MarketRegistry = {
 
 	languages: ['English'],
 
+	// Positioning defaults. The model normally writes these, but a persona
+	// created without a provider must still be complete rather than half-blank,
+	// so they are sampled like anything else — niche-gated where a pairing would
+	// otherwise read as nonsense (a Finance creator as "The Entertainer").
+	archetype: {
+		group: 'archetype',
+		entries: [
+			{ token: 'relatable_friend', weight: 18 },
+			{ token: 'educator', weight: 16 },
+			{ token: 'expert_authority', weight: 14 },
+			{ token: 'creator', weight: 12 },
+			{ token: 'storyteller', weight: 10 },
+			{ token: 'aspirational', weight: 9 },
+			{ token: 'entertainer', weight: 8, gates: { niches: ['entertainment_pop_culture', 'gaming_esports', 'food_cooking', 'lifestyle', 'sports'] } },
+			{ token: 'community_builder', weight: 6 },
+			{ token: 'activist_advocate', weight: 5, gates: { niches: ['sustainability_eco', 'parenting_family', 'education_learning', 'beauty_wellness'] } },
+			{ token: 'disruptor', weight: 4, gates: { niches: ['tech_ai', 'finance_business', 'automotive'] } }
+		]
+	},
+	contentFocus: {
+		group: 'contentFocus',
+		entries: [
+			{ token: 'education_how_tos', weight: 18 },
+			{ token: 'product_reviews_ugc', weight: 16 },
+			{ token: 'lifestyle_aesthetic', weight: 14 },
+			{ token: 'tutorials_demos', weight: 12 },
+			{ token: 'personal_journey', weight: 11 },
+			{ token: 'inspiration_motivation', weight: 10 },
+			{ token: 'behind_the_scenes', weight: 8 },
+			{ token: 'entertainment_humor', weight: 7, gates: { niches: ['entertainment_pop_culture', 'gaming_esports', 'lifestyle', 'food_cooking'] } },
+			{ token: 'news_commentary', weight: 4, gates: { niches: ['tech_ai', 'finance_business', 'sustainability_eco'] } }
+		]
+	},
+
 	// Heritage-conditioned look weights. `default` covers any heritage without an
 	// entry, so a new heritage token can never leave the sampler without a table.
 	look: {

@@ -464,6 +464,23 @@ export function samplePersonaSkeleton(
 	const niche: TokenOf<'niche'> = constraints.niche ?? r.fork('strategy.niche').pick(NICHE_TOKENS);
 	set('strategy.niche', niche);
 
+	// ── strategy: positioning ────────────────────────────────────────────────
+	// Archetype and content focus are SAMPLED, not left blank for a model to
+	// fill. A persona created with no provider key configured must be complete,
+	// not half-blank, and "the table always has an answer" is what makes the
+	// no-AI path a real path rather than a degraded one. When the prose pass does
+	// run it overwrites both — a model that has read the brief positions better
+	// than a weighted table — so this is a floor, never a ceiling.
+	const positioningCtx: GateContext = { age, gender, niche, market };
+	set(
+		'strategy.archetype',
+		registry.pick(resolved.archetype, r.fork('strategy.archetype'), positioningCtx)
+	);
+	set(
+		'strategy.contentFocus',
+		registry.pick(resolved.contentFocus, r.fork('strategy.contentFocus'), positioningCtx)
+	);
+
 	// ── work ─────────────────────────────────────────────────────────────────
 	const workCtx: GateContext = { age, gender, niche, education, market };
 	const occupationRegistry: ResolvedRegistry = avoidDomains.size

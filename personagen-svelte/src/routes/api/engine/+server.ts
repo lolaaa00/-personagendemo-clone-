@@ -42,6 +42,8 @@ import {
 import { readPersonaProfile } from '$lib/persona-profile-store';
 import { pickVoiceForProfile } from '$lib/server/voices';
 import { resolvePublicIps } from '$lib/server/safe-fetch';
+import { personaGenerator } from '$lib/server/flags';
+import { applyProseOnly, proseOnlyPrompt, skeletonFor, toV1Response } from '$lib/server/persona/generate-v2';
 
 /**
  * The `appearance` JSON contract handed to the persona-generation prompts, derived
@@ -1930,6 +1932,89 @@ Input: "${fieldVal}"`;
 			// an INPUT (never overwritten); everything else is generated for competitive
 			// influencer positioning and feeds content generation prompts.
 			if (action === 'generate_persona_profile') {
+				const agentId = typeof body.agentId === 'string' ? body.agentId : '';
+				if (!agentId) return json({ success: false, error: 'Missing agentId' }, { status: 400 });
+
+				const { data: agent } = await db.agents.get(agentId);
+				if (!agent || agent.user_id !== session.user.id) {
+					return json({ success: false, error: 'Persona not found' }, { status: 404 });
+				}
+
+				// ── Persona Model v2 (skeleton first) ──────────────────────────────
+				// A single early branch, so the entire v1 path below is untouched and
+				// the switch is a true revert. Facts are sampled deterministically from
+				// the Trait Registry; the model is asked for PROSE ONLY and anything
+				// else it returns is discarded in code (applyProseOnly), not merely
+				// discouraged by the prompt. The response is downgraded to the v1 shape
+				// the persona page already consumes, so no client change is needed.
+				//
+				// Without a provider the persona is still created — facts, look, voice
+				// and all — which the v1 path cannot do. That is the point of sampling
+				// first: a persona no longer requires an AI key to exist.
+				if (personaGenerator() === 'v2') {
+					const v2Brief = await loadBriefForAgent(
+						db,
+						session.user.id,
+						body.brandBriefId || agent.brand_brief_id || null
+					);
+					const { data: v2Agents } = await db.agents.list();
+					const v2Taken = (v2Agents ?? [])
+						.filter((a: any) => a.id !== agentId)
+						.map((a: any) => readPersonaProfile(a).contentAngle)
+						.filter((x: unknown): x is string => typeof x === 'string' && !!x)
+						.slice(0, 20);
+
+					const skeleton = skeletonFor({
+						seed: agentId,
+						name: agent.name,
+						gender: typeof body.gender === 'string' ? body.gender : null,
+						brief: (v2Brief?.data ?? {}) as Record<string, unknown>,
+						takenAngles: v2Taken,
+						direction: typeof body.direction === 'string' ? body.direction : undefined
+					});
+
+					let profile = skeleton;
+					if (hasAi) {
+						try {
+							const prose = safeParseJson(
+								await ai!.generate(
+									proseOnlyPrompt(
+										skeleton,
+										(v2Brief?.data ?? {}) as Record<string, unknown>,
+										v2Taken,
+										typeof body.direction === 'string' ? body.direction : undefined
+									),
+									{ json: true }
+								)
+							);
+							profile = applyProseOnly(skeleton, prose);
+						} catch (err) {
+							// A provider failure costs the prose, never the persona: the
+							// sampled skeleton is already a complete, coherent creator.
+							console.error(
+								'[Engine] v2 prose generation failed, keeping the sampled skeleton:',
+								(err as Error).message?.slice(0, 200)
+							);
+						}
+					}
+
+					const v2Data = toV1Response(profile) as Record<string, unknown>;
+					const vpGenderV2 =
+						profile.creator?.gender === 'male' || profile.creator?.gender === 'female'
+							? profile.creator.gender
+							: null;
+					if (vpGenderV2) {
+						const picked = pickVoiceForProfile(
+							vpGenderV2,
+							(v2Data.voiceProfile as { accent?: string } | undefined)?.accent,
+							agentId
+						);
+						v2Data.voice = picked.voice.name;
+						v2Data.voiceMatch = picked.exact ? 'exact' : 'fallback';
+					}
+					return json({ success: true, data: v2Data });
+				}
+
 				if (!hasAi) {
 					return json(
 						{
@@ -1938,13 +2023,6 @@ Input: "${fieldVal}"`;
 						},
 						{ status: 400 }
 					);
-				}
-				const agentId = typeof body.agentId === 'string' ? body.agentId : '';
-				if (!agentId) return json({ success: false, error: 'Missing agentId' }, { status: 400 });
-
-				const { data: agent } = await db.agents.get(agentId);
-				if (!agent || agent.user_id !== session.user.id) {
-					return json({ success: false, error: 'Persona not found' }, { status: 404 });
 				}
 				const gender = typeof body.gender === 'string' && body.gender ? body.gender : 'unspecified';
 				// Gender is driven by the persona's NAME (its identity), NOT a possibly-stale

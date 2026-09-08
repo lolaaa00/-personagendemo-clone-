@@ -105,6 +105,9 @@ export interface MarketRegistry {
 	transportMode?: RegistryTable<'transportMode'>;
 	dietaryStyle?: RegistryTable<'dietaryStyle'>;
 	languages?: string[];
+	/** Positioning defaults, so a persona built without a model is still complete. */
+	archetype?: RegistryTable<'archetype'>;
+	contentFocus?: RegistryTable<'contentFocus'>;
 	/** Look priors, keyed by heritage token; `default` applies when a heritage has no entry. */
 	look?: Record<string, LookPrior>;
 	skinTone?: RegistryTable<'skinTone'>;
