@@ -28,7 +28,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 	const limit = subscribeLimiter.check(`subscribe:${user.id}`);
 	if (!limit.allowed) return json({ success: false, error: `Too many attempts — try again in ${limit.retryAfterSeconds}s.` }, { status: 429, headers: { 'Retry-After': String(limit.retryAfterSeconds) } });
 
-	let body: any = {};
+	let body: Record<string, unknown> = {};
 	try {
 		body = await request.json();
 	} catch {

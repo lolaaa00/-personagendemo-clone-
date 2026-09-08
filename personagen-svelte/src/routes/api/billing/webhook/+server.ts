@@ -29,6 +29,7 @@ import { loadPlanCatalog, planFromCatalog, includedResetClawback, mapStripeStatu
 export const POST: RequestHandler = async ({ request }) => {
 	if (!stripeWebhookConfigured()) return json({ error: 'webhook not configured' }, { status: 503 });
 	const raw = await request.text();
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Stripe webhook payloads are dynamic by design; every field is validated before use
 	let event: any;
 	try {
 		event = verifyWebhookSignature(raw, request.headers.get('stripe-signature'), (env.STRIPE_WEBHOOK_SECRET ?? '').trim());
@@ -39,7 +40,7 @@ export const POST: RequestHandler = async ({ request }) => {
 	const svc = getServiceSupabase();
 	const type = String(event?.type ?? '');
 	const obj = event?.data?.object ?? {};
-	const dup = (error: any) => error?.code === '23505' || /duplicate key/i.test(error?.message ?? '');
+	const dup = (error: { code?: string; message?: string } | null) => error?.code === '23505' || /duplicate key/i.test(error?.message ?? '');
 	const apply = (args: Record<string, unknown>) =>
 		svc.rpc('credit_apply', { p_actor: null, p_event: null, p_post: null, p_agent: null, p_waived: 0, p_allow_negative: false, ...args });
 
@@ -166,7 +167,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		const refunded = Number(obj.amount_refunded);
 		if (!userId || !Number.isFinite(credits) || credits <= 0 || !amount || !refunded) return text('ignored: no wallet mapping');
 		const { data: prior } = await svc.from('credit_ledger').select('delta').eq('user_id', userId).eq('kind', 'refund').like('note', `%charge ${obj.id}%`);
-		const alreadyBack = (prior ?? []).reduce((s: number, r: any) => s + Math.abs(Number(r.delta) || 0), 0);
+		const alreadyBack = (prior ?? []).reduce((s: number, r: { delta?: number | string }) => s + Math.abs(Number(r.delta) || 0), 0);
 		const back = refundClawback(credits, amount, refunded, alreadyBack);
 		if (back <= 0) return text('ok: nothing further to claw back');
 		const { error } = await apply({

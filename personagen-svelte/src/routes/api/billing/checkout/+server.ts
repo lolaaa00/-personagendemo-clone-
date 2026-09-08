@@ -28,13 +28,13 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 		return json({ success: false, error: `Too many checkout attempts — try again in ${limit.retryAfterSeconds}s.` }, { status: 429, headers: { 'Retry-After': String(limit.retryAfterSeconds) } });
 	}
 
-	let body: any = {};
+	let body: Record<string, unknown> = {};
 	try {
 		body = await request.json();
 	} catch {
 		/* empty body → no pack */
 	}
-	const pack = packById(body?.packId);
+	const pack = packById(typeof body.packId === 'string' ? body.packId : null);
 	if (!pack) return json({ success: false, error: 'Unknown pack' }, { status: 400 });
 
 	// Reuse the Stripe customer once one exists so purchases stack on one

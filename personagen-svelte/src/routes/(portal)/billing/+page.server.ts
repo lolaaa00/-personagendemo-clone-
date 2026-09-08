@@ -14,6 +14,26 @@ import { resolveDisplayCurrency, creditsToAmount, formatCredits, formatMoney, lo
  * beside each), and the recent ledger. RLS scopes the wallet and ledger reads
  * to the caller; nothing here is service-role.
  */
+/** One row of the workspace_wallets() function (balance + mode only, never the owner's ledger). */
+interface WorkspaceWalletRow {
+	workspace_id: string;
+	workspace_name: string;
+	owner_id: string;
+	role: string;
+	balance_credits: number | string;
+	billing_mode: string;
+}
+
+/** One credit_ledger row as this page reads it. */
+interface LedgerRow {
+	seq: number;
+	delta: number | string;
+	kind: string;
+	balance_after: number | string;
+	note: string | null;
+	created_at: string;
+}
+
 export const load: PageServerLoad = async ({ locals, request, url }) => {
 	const { session, user } = await locals.safeGetSession();
 	if (!session || !user) throw redirect(303, '/login');
@@ -67,7 +87,7 @@ export const load: PageServerLoad = async ({ locals, request, url }) => {
 			worth: formatCredits(p.credits, currency, s.fx_rates, locale),
 			buys: whatItBuys(p.credits, markup)
 		})),
-		ledger: (ledger ?? []).map((r: any) => ({
+		ledger: (ledger ?? []).map((r: LedgerRow) => ({
 			seq: r.seq,
 			kind: r.kind,
 			note: r.note,
@@ -96,7 +116,7 @@ export const load: PageServerLoad = async ({ locals, request, url }) => {
 					features: p.features
 				}))
 		},
-		workspaces: ((wsWallets as any[]) ?? [])
+		workspaces: ((wsWallets as WorkspaceWalletRow[]) ?? [])
 			.filter((w) => w.owner_id !== user.id)
 			.map((w) => ({
 				id: w.workspace_id,

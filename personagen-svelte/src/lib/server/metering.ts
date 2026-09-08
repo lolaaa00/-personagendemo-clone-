@@ -29,6 +29,7 @@ import { priceOf, type CostEvent } from '$lib/pricing';
 export const BATCH_MAX = 12;
 
 export interface MeterScope {
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- the Supabase client is untyped across this codebase; narrowing it here alone would be a fiction
 	supabase: any;
 	userId: string;
 	agentId?: string | null;

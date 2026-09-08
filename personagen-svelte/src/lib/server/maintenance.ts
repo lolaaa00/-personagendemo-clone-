@@ -43,6 +43,7 @@ function utcDay(d: Date): string {
 }
 
 /** Called every tick by the lease holder; decides itself whether anything is due. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- the Supabase client is untyped across this codebase; narrowing it here alone would be a fiction
 export async function maybeRunMaintenance(supabase: any, now: number = Date.now()): Promise<void> {
 	if (state.running) return;
 	state.running = true;
@@ -61,7 +62,7 @@ export async function maybeRunMaintenance(supabase: any, now: number = Date.now(
 				userId: null,
 				action: 'system.reconciliation',
 				outcome: mismatches > 0 ? 'error' : 'ok',
-				meta: { mismatches, window_hours: 24, sample: Array.isArray(data) ? data.slice(0, 5).map((r: any) => r.event_id) : [] }
+				meta: { mismatches, window_hours: 24, sample: Array.isArray(data) ? data.slice(0, 5).map((r: { event_id?: string }) => r.event_id) : [] }
 			});
 			if (mismatches > 0) console.error(`[maintenance] billing reconciliation: ${mismatches} mismatch(es) in the last 24 h`);
 		}

@@ -51,7 +51,7 @@ export const sha256 = (s) => createHash('sha256').update(s).digest('hex');
  * @returns {string}
  */
 export function normalizeSql(text) {
-	return String(text).replace(/^﻿/, '').replace(/\r\n/g, '\n');
+	return String(text).replace(/^\uFEFF/, '').replace(/\r\n/g, '\n');
 }
 
 /**

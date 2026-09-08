@@ -12,6 +12,11 @@
  * silently — a green run must mean the invariants were checked, never that the
  * checker could not reach the database.
  *
+ * That is enough for a developer running it by hand, but not for a gate: with
+ * no key the run still exits 0, and anything chaining on it would deploy having
+ * checked nothing. Set REGISTRY_TRUTH_STRICT=1 (deploy.ps1 does) to turn "I
+ * could not check" into a failure.
+ *
  * READ-ONLY. It never writes a row.
  */
 import { describe, it, expect } from 'vitest';
@@ -30,6 +35,8 @@ import { describeUsage, reconcileLedger, type LedgerEvent } from './registry-usa
 const URL = process.env.PUBLIC_SUPABASE_URL || '';
 const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const HAVE_CREDS = Boolean(URL && KEY && !KEY.startsWith('disabled'));
+/** Gate mode: absent credentials are a failure, not a skip. */
+const STRICT = process.env.REGISTRY_TRUTH_STRICT === '1';
 const LEDGER_WINDOW_DAYS = 30;
 
 async function pg<T = any>(query: string): Promise<T[]> {
@@ -133,5 +140,12 @@ describe.skipIf(!HAVE_CREDS)('registry truth (live platform catalog)', () => {
 describe.skipIf(HAVE_CREDS)('registry truth (no credentials)', () => {
 	it('is skipped without a service-role key, and says so rather than passing quietly', () => {
 		expect(HAVE_CREDS).toBe(false);
+	});
+
+	it('fails instead of skipping when it is being used as a gate (REGISTRY_TRUTH_STRICT=1)', () => {
+		expect(
+			STRICT,
+			'REGISTRY_TRUTH_STRICT=1 was set, so this run is a gate — but PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are missing, so nothing was checked. Provide credentials or drop the strict flag.'
+		).toBe(false);
 	});
 });

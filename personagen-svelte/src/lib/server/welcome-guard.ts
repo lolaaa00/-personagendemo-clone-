@@ -14,6 +14,7 @@
 import { getServiceSupabase } from './service-supabase';
 import { logSystemActivity } from './activity';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- the Supabase client is untyped across this codebase; narrowing it here alone would be a fiction
 export async function maybeWithholdWelcome(newUserId: string, ipHash: string | null, requestId: string | null, client?: any): Promise<'kept' | 'withheld' | 'skipped'> {
 	if (!newUserId || !ipHash) return 'skipped';
 	try {

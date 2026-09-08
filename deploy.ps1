@@ -1,4 +1,4 @@
-# ═══════════════════════════════════════════════════════════════
+﻿# ═══════════════════════════════════════════════════════════════
 # PersonaGen — Clean Node/Docker Deployment Pipeline
 # Usage: .\deploy.ps1 [-m "commit message"] [-skipTests]
 # ═══════════════════════════════════════════════════════════════
@@ -17,6 +17,11 @@ param(
     [switch]$allowUntracked = $false,
     # Skip the eslint gate. Like -skipTests, this is recorded in the commit message.
     [switch]$skipLint = $false,
+    # The Model Manager's claims are checked against the LIVE catalog: at most one
+    # default per mode, every default wired/active/priced, every route the real
+    # resolvers return pointing at a runnable row. Read-only, ~1s. Pass this only
+    # when you are deliberately shipping with the catalog in a known-bad state.
+    [switch]$allowRegistryDrift = $false,
     # Run every gate and print what WOULD be staged, then stop. Commits nothing,
     # pushes nothing. This is how you test a change to this script.
     [switch]$dryRun = $false
@@ -29,6 +34,24 @@ $bypassed = @()
 $ErrorActionPreference = "Stop"
 $projectDir = $PSScriptRoot
 
+# Every gate below decides on the tool's own exit code. Windows PowerShell turns
+# a native command's stderr into ErrorRecords, so with ErrorActionPreference
+# "Stop" a single warning line aborts the whole pipeline — and svelte-check, npm
+# and vitest all write to stderr on a perfectly healthy run. (Before this helper
+# the script died at step 1 every time, right after the gates it had just
+# passed.) Run native commands with stderr as plain text and let $LASTEXITCODE
+# speak; cmdlet errors keep failing fast, since the preference is restored.
+function Invoke-Gate([string]$command) {
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        cmd.exe /c $command 2>&1 | ForEach-Object { Write-Host $_.ToString() }
+        return $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previous
+    }
+}
+
 Write-Host ""
 Write-Host "  [Deploy] PersonaGen Git-Ops & Verification Pipeline" -ForegroundColor Cyan
 Write-Host "  -------------------------------------------------" -ForegroundColor DarkGray
@@ -37,13 +60,13 @@ Write-Host ""
 # ── Step 0: Migration ledger must match the code being shipped ──
 Set-Location (Join-Path $projectDir "personagen-svelte")
 Write-Host "  [0/3] Checking production migration ledger..." -ForegroundColor Yellow
-cmd.exe /c "node scripts/apply-migration.mjs --status --strict"
-if ($LASTEXITCODE -eq 0) {
+$ledgerExit = Invoke-Gate "node scripts/apply-migration.mjs --status --strict"
+if ($ledgerExit -eq 0) {
     # A stamped migration must be a verified one (D12): every 'recorded' file's
     # tables / columns / functions / indexes must exist in the target database.
-    cmd.exe /c "node scripts/verify-recorded-migrations.mjs --strict"
+    $ledgerExit = Invoke-Gate "node scripts/verify-recorded-migrations.mjs --strict"
 }
-if ($LASTEXITCODE -ne 0) {
+if ($ledgerExit -ne 0) {
     if ($allowPendingMigrations) {
         Write-Host "  [0/3] WARNING: pending/drifted migrations — continuing because -allowPendingMigrations was given." -ForegroundColor DarkYellow
     } else {
@@ -54,14 +77,35 @@ if ($LASTEXITCODE -ne 0) {
 } else {
     Write-Host "  [0/3] OK: schema ledger matches migrations.json." -ForegroundColor Green
 }
+
+# Registry truth: what the Model Manager claims must match what the resolvers do
+# and what the live catalog holds. REGISTRY_TRUTH_STRICT=1 turns "I could not
+# reach the database" into a failure — without it the suite skips and exits 0,
+# which would let this gate pass having checked nothing.
+Write-Host "  [0/3] Checking model registry truth against the live catalog..." -ForegroundColor Yellow
+$env:REGISTRY_TRUTH_STRICT = "1"
+$registryExit = Invoke-Gate "npx vitest run --project integration"
+Remove-Item Env:\REGISTRY_TRUTH_STRICT -ErrorAction SilentlyContinue
+if ($registryExit -ne 0) {
+    if ($allowRegistryDrift) {
+        Write-Host "  [0/3] WARNING: registry truth check failed — continuing because -allowRegistryDrift was given." -ForegroundColor DarkYellow
+        $bypassed += "registry-truth"
+    } else {
+        Write-Host "  [0/3] ERROR: the live model catalog contradicts the code (or could not be read). Fix the catalog on /models, or pass -allowRegistryDrift." -ForegroundColor Red
+        Set-Location $projectDir
+        exit 1
+    }
+} else {
+    Write-Host "  [0/3] OK: model registry matches the resolvers." -ForegroundColor Green
+}
 Set-Location $projectDir
 
 # ── Step 1: Quality Checks & Tests ──
 Write-Host "  [1/3] Running Type checks & Svelte-Check..." -ForegroundColor Yellow
 Set-Location (Join-Path $projectDir "personagen-svelte")
 
-cmd.exe /c "npm run check"
-if ($LASTEXITCODE -ne 0) {
+$checkExit = Invoke-Gate "npm run check"
+if ($checkExit -ne 0) {
     Write-Host "  [1/3] ERROR: Svelte-check failed. Aborting deployment." -ForegroundColor Red
     Set-Location $projectDir
     exit 1
@@ -73,8 +117,8 @@ Write-Host "  [1/3] OK: Code type checks passed." -ForegroundColor Green
 # navigation to a different record the field is stale. The count may only go
 # down — the ceiling lives in scripts/warning-ceilings.json.
 Write-Host "  [1/3] Checking svelte warning ceilings..." -ForegroundColor Yellow
-cmd.exe /c "node scripts/check-warnings-ceiling.mjs"
-if ($LASTEXITCODE -ne 0) {
+$ceilingExit = Invoke-Gate "node scripts/check-warnings-ceiling.mjs"
+if ($ceilingExit -ne 0) {
     Write-Host "  [1/3] ERROR: svelte warning ceiling exceeded. Aborting deployment." -ForegroundColor Red
     Set-Location $projectDir
     exit 1
@@ -85,8 +129,8 @@ if ($LASTEXITCODE -ne 0) {
 # in the npm script. Both numbers may only go down.
 if (-not $skipLint) {
     Write-Host "  [1/3] Running ESLint..." -ForegroundColor Yellow
-    cmd.exe /c "npm run lint:ci"
-    if ($LASTEXITCODE -ne 0) {
+    $lintExit = Invoke-Gate "npm run lint:ci"
+    if ($lintExit -ne 0) {
         Write-Host "  [1/3] ERROR: Lint failed. Aborting deployment." -ForegroundColor Red
         Set-Location $projectDir
         exit 1
@@ -101,8 +145,8 @@ if (-not $skipLint) {
 # Only --omit=dev and only high/critical: a dev-only or moderate advisory must
 # never block a hotfix, but a high in a shipped dependency must.
 Write-Host "  [1/3] Auditing production dependencies..." -ForegroundColor Yellow
-cmd.exe /c "npm audit --omit=dev --audit-level=high"
-if ($LASTEXITCODE -ne 0) {
+$auditExit = Invoke-Gate "npm audit --omit=dev --audit-level=high"
+if ($auditExit -ne 0) {
     Write-Host "  [1/3] ERROR: high/critical vulnerability in a production dependency." -ForegroundColor Red
     Write-Host "  [1/3]        Fix with: npm audit fix   (then npm install - NEVER pass --omit=dev to audit fix," -ForegroundColor Red
     Write-Host "  [1/3]        it prunes devDependencies out of node_modules)." -ForegroundColor Red
@@ -117,8 +161,8 @@ Write-Host "  [1/3] OK: No high/critical production advisories." -ForegroundColo
 # open project can be registered against directly, bypassing the PIN entirely.
 Write-Host "  [1/3] Checking auth signup gate..." -ForegroundColor Yellow
 # --warn-only comes off once GOTRUE_DISABLE_SIGNUP is flipped on the Supabase project (today it still accepts public signups, so the strict probe exits 1).
-cmd.exe /c "node scripts/preflight-auth.mjs --warn-only"
-if ($LASTEXITCODE -ne 0) {
+$authExit = Invoke-Gate "node scripts/preflight-auth.mjs --warn-only"
+if ($authExit -ne 0) {
     Write-Host "  [1/3] ERROR: auth preflight failed. Aborting deployment." -ForegroundColor Red
     Set-Location $projectDir
     exit 1
@@ -126,8 +170,8 @@ if ($LASTEXITCODE -ne 0) {
 
 if (-not $skipTests) {
     Write-Host "  [1/3] Running Vitest Unit Tests..." -ForegroundColor Yellow
-    cmd.exe /c "npm run test:unit"
-    if ($LASTEXITCODE -ne 0) {
+    $unitExit = Invoke-Gate "npm run test:unit"
+    if ($unitExit -ne 0) {
         Write-Host "  [1/3] ERROR: Unit tests failed. Aborting deployment." -ForegroundColor Red
         Set-Location $projectDir
         exit 1
@@ -136,8 +180,8 @@ if (-not $skipTests) {
 
     if ($integration) {
         Write-Host "  [1/3] Running Live AI Sequential Integration Tests..." -ForegroundColor Yellow
-        cmd.exe /c "npm run test:integration"
-        if ($LASTEXITCODE -ne 0) {
+        $integrationExit = Invoke-Gate "npm run test:integration"
+        if ($integrationExit -ne 0) {
             Write-Host "  [1/3] ERROR: Integration tests failed. Aborting deployment." -ForegroundColor Red
             Set-Location $projectDir
             exit 1

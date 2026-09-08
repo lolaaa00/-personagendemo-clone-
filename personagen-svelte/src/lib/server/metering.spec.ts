@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 const { budget, record } = vi.hoisted(() => ({
-	budget: { assertWithinBudget: vi.fn<(...args: any[]) => Promise<void>>(async () => {}) },
-	record: { recordCostEvents: vi.fn<(...args: any[]) => Promise<void>>(async () => {}) }
+	budget: { assertWithinBudget: vi.fn<(...args: unknown[]) => Promise<void>>(async () => {}) },
+	record: { recordCostEvents: vi.fn<(...args: unknown[]) => Promise<void>>(async () => {}) }
 }));
 vi.mock('./budget', () => budget);
 vi.mock('./content/generate', () => record);

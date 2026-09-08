@@ -45,7 +45,7 @@ export function formEncode(obj: Record<string, unknown>, prefix = ''): string {
 	return parts.join('&');
 }
 
-async function stripePost<T = any>(path: string, body: Record<string, unknown>, idempotencyKey?: string, fetchImpl: typeof fetch = fetch): Promise<T> {
+async function stripePost<T = unknown>(path: string, body: Record<string, unknown>, idempotencyKey?: string, fetchImpl: typeof fetch = fetch): Promise<T> {
 	const key = (env.STRIPE_SECRET_KEY ?? '').trim();
 	if (!key) throw new Error('STRIPE_SECRET_KEY is not set');
 	const res = await fetchImpl(`${API}${path}`, {
@@ -60,7 +60,7 @@ async function stripePost<T = any>(path: string, body: Record<string, unknown>, 
 		signal: AbortSignal.timeout(15_000)
 	});
 	const text = await res.text();
-	let parsed: any = null;
+	let parsed: { error?: { message?: string } } | null = null;
 	try {
 		parsed = JSON.parse(text);
 	} catch {
@@ -125,6 +125,7 @@ export async function createCheckoutSession(i: CheckoutInput): Promise<{ id: str
  * Verify a Stripe-Signature header against the RAW request body.
  * Returns the parsed event on success, throws on any failure.
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Stripe webhook payloads are dynamic by design; every field is validated before use
 export function verifyWebhookSignature(rawBody: string, header: string | null, secret: string, nowSec = Math.floor(Date.now() / 1000), toleranceSec = 300): any {
 	if (!secret) throw new Error('webhook secret not configured');
 	if (!header) throw new Error('missing Stripe-Signature header');
@@ -172,6 +173,7 @@ export interface PackLike {
  * must never pass: an unpaid session, or a USD session whose pre-discount
  * subtotal is below the pack price (a tampered price).
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Stripe webhook payloads are dynamic by design; every field is validated before use
 export function validatePaidSession(session: any, pack: PackLike): { ok: true } | { ok: false; reason: string } {
 	if (session?.payment_status !== 'paid') return { ok: false, reason: 'not paid' };
 	if (session?.metadata?.pack_id !== pack.id) return { ok: false, reason: 'pack mismatch' };

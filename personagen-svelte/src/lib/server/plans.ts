@@ -45,12 +45,13 @@ export function isPaidPlan(p: unknown): p is PaidPlan {
 }
 
 /** Catalog from the database, falling back to the static table (never-brick). */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- the Supabase client is untyped across this codebase; narrowing it here alone would be a fiction
 export async function loadPlanCatalog(client?: any): Promise<PlanRow[]> {
 	try {
 		const svc = client ?? getServiceSupabase();
 		const { data, error } = await svc.from('plan_catalog').select('plan, name, price_usd_cents, included_credits, persona_limit, brand_brief_limit, features, sort, active').order('sort');
 		if (error || !data?.length) return PLAN_FALLBACK;
-		return data.map((r: any) => ({
+		return data.map((r: Record<string, unknown>) => ({
 			plan: r.plan,
 			name: r.name,
 			price_usd_cents: Number(r.price_usd_cents),
@@ -104,6 +105,7 @@ export function mapStripeStatus(s: string | null | undefined): 'active' | 'cance
  * the catalog through the service client (RLS would still allow own-row reads,
  * but the catalog is service-only). A user with no row is on 'free'.
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- the Supabase client is untyped across this codebase; narrowing it here alone would be a fiction
 export async function personaLimitFor(userId: string, client?: any): Promise<{ plan: string; limit: number | null }> {
 	const svc = client ?? getServiceSupabase();
 	const [{ data: sub }, catalog] = await Promise.all([
@@ -118,6 +120,7 @@ export async function personaLimitFor(userId: string, client?: any): Promise<{ p
 }
 
 /** Message when creating one more persona would exceed the plan; null when allowed. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- the Supabase client is untyped across this codebase; narrowing it here alone would be a fiction
 export async function personaLimitExceeded(userId: string, client?: any): Promise<string | null> {
 	const svc = client ?? getServiceSupabase();
 	const { plan, limit } = await personaLimitFor(userId, svc);
