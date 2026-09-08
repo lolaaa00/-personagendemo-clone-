@@ -109,6 +109,43 @@ describe('resolveImageKeys → OpenRouter image routes', () => {
 		expect(orRoutes.t2i.id).toBe(UGC_IMAGE_MODEL_OPENROUTER);
 	});
 
+	it('the OpenRouter video failover resolves from a wired row, and falls back to the constant otherwise', async () => {
+		const VIDEO_CONST = 'kwaivgi/kling-v3.0-std';
+		vi.mocked(loadRegistry).mockResolvedValue([]);
+		const empty = await resolveImageKeys(supabase, 'user-1');
+		expect(empty.orRoutes.video).toEqual({ id: VIDEO_CONST, usd: priceOf('openrouter', 'video'), fromRegistry: false });
+
+		// Seeded UNWIRED, as the migration lists it: visible in the catalog, not yet authoritative.
+		vi.mocked(loadRegistry).mockResolvedValue([
+			row({ model_id: VIDEO_CONST, kind: 'video_i2v', kinds: ['video_i2v'], wired: false, status: 'available', price_usd: 0.35 })
+		]);
+		const listed = await resolveImageKeys(supabase, 'user-1');
+		expect(listed.orRoutes.video.fromRegistry).toBe(false);
+
+		vi.mocked(loadRegistry).mockResolvedValue([
+			row({ model_id: 'kwaivgi/kling-v3.0-pro', kind: 'video_i2v', kinds: ['video_i2v'], price_usd: 0.7 })
+		]);
+		const wired = await resolveImageKeys(supabase, 'user-1');
+		expect(wired.orRoutes.video).toEqual({ id: 'kwaivgi/kling-v3.0-pro', usd: 0.7, fromRegistry: true });
+	});
+
+	it('the voiceover model resolves from the starred tts row, else the constant', async () => {
+		const TTS_CONST = 'fal-ai/elevenlabs/tts/turbo-v2.5';
+		vi.mocked(loadRegistry).mockResolvedValue([]);
+		const empty = await resolveImageKeys(supabase, 'user-1');
+		expect(empty.falRoutes.tts).toEqual({ id: TTS_CONST, usd: priceOf('fal', 'tts'), fromRegistry: false });
+
+		vi.mocked(loadRegistry).mockResolvedValue([
+			row({ provider: 'fal', model_id: 'fal-ai/elevenlabs/tts/multilingual-v2', kind: 'tts', kinds: ['tts'], is_default: true, price_usd: 0.05 })
+		]);
+		const starred = await resolveImageKeys(supabase, 'user-1');
+		expect(starred.falRoutes.tts).toEqual({
+			id: 'fal-ai/elevenlabs/tts/multilingual-v2',
+			usd: 0.05,
+			fromRegistry: true
+		});
+	});
+
 	it('a registry read failure falls OPEN to the constants and never throws — route selection is not a money gate', async () => {
 		vi.mocked(loadRegistry).mockRejectedValue(new Error('db down'));
 		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});

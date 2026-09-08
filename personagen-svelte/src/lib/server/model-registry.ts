@@ -130,6 +130,47 @@ const WIRED_SEED: Record<
 	}
 };
 
+/**
+ * The OpenRouter video failover, as a catalog row.
+ *
+ * It is the model the ledger showed running that the Model Manager could not
+ * name: OpenRouter's video API is separate from /api/v1/models, so no catalog
+ * sync can ever discover it. Seeded UNWIRED on purpose — listing it makes it
+ * visible, priceable and reconcilable against generation_events, while the
+ * route keeps resolving to the compiled-in constant until an admin wires it.
+ * Wiring it deliberately is what hands the registry authority over the id.
+ */
+const OR_VIDEO_SEED: Omit<RegistryRow, 'id' | 'user_id' | 'created_at' | 'updated_at'> = {
+	provider: 'openrouter',
+	origin: 'seed',
+	model_id: 'kwaivgi/kling-v3.0-std',
+	kind: 'video_i2v',
+	kinds: ['video_i2v'],
+	input_modalities: ['image', 'text'],
+	output_modalities: ['video'],
+	label: 'Kling v3.0 Standard (OpenRouter failover)',
+	lab: 'Kling',
+	released_at: null,
+	price_usd: 0.35,
+	pricing_text: null,
+	price_basis: 'OpenRouter video API, ~5s clip',
+	price_source: 'seed',
+	quality: 7,
+	tier: 'balanced',
+	latency_s: 180,
+	status: 'available',
+	wired: false,
+	is_default: false,
+	deprecated: false,
+	multi_ref: null,
+	supports_audio: null,
+	supports_duration: null,
+	size_param: null,
+	probe: null,
+	note: 'Runs only when fal is down. OpenRouter serves video from a separate API, so no catalog sync lists it — this row is how it stays visible and priced.',
+	discovered_at: null
+};
+
 const TTS_SEED: Omit<RegistryRow, 'id' | 'user_id' | 'created_at' | 'updated_at'> = {
 	provider: 'fal',
 	origin: 'seed',
@@ -279,10 +320,17 @@ export async function loadRegistry(
 	// the static catalog for that request.
 	const { error: insertErr } = await supabase
 		.from('model_registry')
-		.upsert([...seeds, { user_id: scopeOwner(scope), ...TTS_SEED }], {
-			onConflict: 'owner_key,model_id',
-			ignoreDuplicates: true
-		});
+		.upsert(
+			[
+				...seeds,
+				{ user_id: scopeOwner(scope), ...TTS_SEED },
+				{ user_id: scopeOwner(scope), ...OR_VIDEO_SEED }
+			],
+			{
+				onConflict: 'owner_key,model_id',
+				ignoreDuplicates: true
+			}
+		);
 	if (insertErr) throw insertErr;
 	const { data: seeded, error: reselectErr } = await supabase
 		.from('model_registry')
@@ -456,6 +504,41 @@ export function openRouterRoute(
 			r.wired &&
 			r.status === 'active' &&
 			!r.deprecated
+	);
+	if (row && row.price_usd != null) {
+		return { id: row.model_id, usd: Number(row.price_usd), fromRegistry: true };
+	}
+	return { id: fallbackId, usd: fallbackUsd, fromRegistry: false };
+}
+
+/**
+ * The model a pipeline mode runs on: the registry's starred, wired, active row
+ * for that mode, else the caller's compiled-in constant.
+ *
+ * openRouterRoute() answers the same question for OpenRouter failover routes
+ * and takes the first wired row because OpenRouter rows carry no star. This one
+ * honours the star, which is what makes the Model Manager's Default column mean
+ * something for fal modes — including tts, which effectiveResolve cannot serve
+ * (ModelKind has no 'tts'; the voice catalog is registry-only).
+ *
+ * Fails OPEN to the fallback on an empty registry or a priceless row: choosing a
+ * model must never block a generation.
+ */
+export function registryDefault(
+	rows: RegistryRow[],
+	kind: RegistryKind,
+	provider: RegistryProvider,
+	fallbackId: string,
+	fallbackUsd: number
+): { id: string; usd: number; fromRegistry: boolean } {
+	const row = rows.find(
+		(r) =>
+			r.provider === provider &&
+			servesKind(r, kind) &&
+			r.wired &&
+			r.status === 'active' &&
+			!r.deprecated &&
+			r.is_default
 	);
 	if (row && row.price_usd != null) {
 		return { id: row.model_id, usd: Number(row.price_usd), fromRegistry: true };

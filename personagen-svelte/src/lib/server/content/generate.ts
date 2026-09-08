@@ -58,7 +58,12 @@ import {
 	type KeySource
 } from '$lib/server/credits';
 import { creditsMode } from '$lib/server/flags';
-import { loadRegistry, openRouterRoute, type RegistryRow } from '$lib/server/model-registry';
+import {
+	loadRegistry,
+	openRouterRoute,
+	registryDefault,
+	type RegistryRow
+} from '$lib/server/model-registry';
 
 // Every provider call in this file gets a hard PER-REQUEST deadline. The queue
 // pollers below bound total job time, but only a per-request timeout stops a
@@ -115,7 +120,7 @@ const NANO_MODEL = env.UGC_NANO_MODEL || 'fal-ai/nano-banana-2/edit';
 // it's ~2x the cost per character, and its higher latency has no upside for
 // this app's async generation use case. Revisit once Adam's availability on
 // v3 is confirmed.
-const TTS_MODEL = env.UGC_TTS_MODEL || 'fal-ai/elevenlabs/tts/turbo-v2.5';
+export const TTS_MODEL = env.UGC_TTS_MODEL || 'fal-ai/elevenlabs/tts/turbo-v2.5';
 // Talking-head (spokesperson) model. Upgraded from VEED Fabric 1.0 — whose
 // lip-sync was visibly off — to ByteDance OmniHuman v1.5, the current SOTA
 // image+audio avatar (film-grade realism, tight audio↔motion correlation from
@@ -159,7 +164,6 @@ const BROLL_MODEL_CINEMATIC =
 // after an env override — a hardcoded "nano-banana-2" next to an overridden
 // UGC_NANO_MODEL is exactly the kind of silent misreport this app must not make.
 export const NANO_STILL_LABEL = NANO_MODEL.replace(/^fal-ai\//, '').replace(/\/edit$/, '');
-const TTS_LABEL = TTS_MODEL.replace(/^fal-ai\//, '').replace(/\//g, ' ');
 export const CINEMATIC_VIDEO_LABEL = BROLL_MODEL_CINEMATIC.includes('kling-video/o3/pro/reference')
 	? 'kling-o3-pro reference'
 	: BROLL_MODEL_CINEMATIC;
@@ -246,12 +250,19 @@ export interface OpenRouterImageRoute {
 export interface OpenRouterImageRoutes {
 	t2i: OpenRouterImageRoute;
 	edit: OpenRouterImageRoute;
+	video: OpenRouterImageRoute;
 }
 
 export async function resolveImageKeys(
 	supabase: any,
 	userId: string
-): Promise<{ orKey: string | null; falKey: string | null; orRoutes: OpenRouterImageRoutes }> {
+): Promise<{
+	orKey: string | null;
+	falKey: string | null;
+	orRoutes: OpenRouterImageRoutes;
+	/** Registry-resolved fal routes. Today: the voice model the run and the quote share. */
+	falRoutes: { tts: OpenRouterImageRoute };
+}> {
 	const userOrKey = await getUserApiKey(supabase, userId, 'openrouter').catch(() => null);
 	const envOrKey = env.OPENROUTER_API_KEY?.trim();
 	const orKey =
@@ -278,9 +289,22 @@ export async function resolveImageKeys(
 	const fallbackUsd = priceOf('openrouter', 'image');
 	const orRoutes: OpenRouterImageRoutes = {
 		t2i: openRouterRoute(rows, 'image_t2i', UGC_IMAGE_MODEL_OPENROUTER, fallbackUsd),
-		edit: openRouterRoute(rows, 'image_edit', IMAGE_EDIT_MODEL_OPENROUTER, fallbackUsd)
+		edit: openRouterRoute(rows, 'image_edit', IMAGE_EDIT_MODEL_OPENROUTER, fallbackUsd),
+		// The OpenRouter video failover used to run a compiled-in id at a static
+		// price with no row anywhere — the one model the ledger showed running
+		// that the Model Manager could not name.
+		video: openRouterRoute(
+			rows,
+			'video_i2v',
+			BROLL_MODEL_OPENROUTER,
+			priceOf('openrouter', 'video')
+		)
 	};
-	return { orKey, falKey, orRoutes };
+	// Voice is the registry's starred tts row; nothing read that star before.
+	const falRoutes = {
+		tts: registryDefault(rows, 'tts', 'fal', TTS_MODEL, priceOf('fal', 'tts'))
+	};
+	return { orKey, falKey, orRoutes, falRoutes };
 }
 
 // ── fal helpers ─────────────────────────────────────────────────────────────
@@ -952,10 +976,13 @@ async function generateVoiceAudio(
 	falKey: string,
 	voice: string,
 	text: string,
-	fallbackVoice?: string
+	fallbackVoice?: string,
+	/** Registry-resolved voice route. Omitted → the compiled-in constant, as before. */
+	route?: OpenRouterImageRoute
 ): Promise<{ url: string; voiceUsed: string }> {
+	const ttsModel = route?.id ?? TTS_MODEL;
 	const call = (v: string) =>
-		falSyncJson(TTS_MODEL, { text, voice: v, stability: 0.5, similarity_boost: 0.75 }, falKey);
+		falSyncJson(ttsModel, { text, voice: v, stability: 0.5, similarity_boost: 0.75 }, falKey);
 	let data: any;
 	let voiceUsed = voice;
 	try {
@@ -1139,7 +1166,9 @@ async function openRouterBrollVideo(
 	userId: string,
 	stillUrl: string,
 	motionPrompt: string,
-	timeoutMs = 270000
+	timeoutMs = 270000,
+	/** Registry-resolved OpenRouter video route. Omitted → the constant, as before. */
+	route?: OpenRouterImageRoute
 ): Promise<string> {
 	const submit = await genFetch('https://openrouter.ai/api/v1/videos', {
 		method: 'POST',
@@ -1150,7 +1179,7 @@ async function openRouterBrollVideo(
 			'X-Title': 'PersonaGen'
 		},
 		body: JSON.stringify({
-			model: BROLL_MODEL_OPENROUTER,
+			model: route?.id ?? BROLL_MODEL_OPENROUTER,
 			prompt: motionPrompt,
 			duration: parseInt(VIDEO_DURATION, 10) || 5,
 			aspect_ratio: '9:16',
@@ -3274,6 +3303,7 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 		const resolvedKeys = await resolveImageKeys(supabase, userId);
 		// Same identifier as refineUgcMedia so the cost sites below read one name.
 		const orRoutes = resolvedKeys.orRoutes;
+		const falRoutes = resolvedKeys.falRoutes;
 		const pref = input.providerPreference || 'auto';
 		const falKey = pref === 'openrouter' ? null : resolvedKeys.falKey;
 		const orKey = pref === 'fal' ? null : resolvedKeys.orKey;
@@ -3299,15 +3329,16 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 						// Adam/Rachel are the original ElevenLabs voices — universally
 						// fal-supported, so a rejected exotic voice degrades to a
 						// same-gender classic, never a failure.
-						voiceGender === 'female' ? 'Rachel' : 'Adam'
+						voiceGender === 'female' ? 'Rachel' : 'Adam',
+						falRoutes.tts
 					).then(
 						({ url, voiceUsed }) => {
 							ttsVoiceUsed = voiceUsed;
 							costEvents.push({
 								provider: 'fal',
 								operation: 'tts',
-								model: TTS_LABEL,
-								usd: priceOf('fal', 'tts')
+								model: falRoutes.tts.id,
+								usd: falRoutes.tts.usd
 							});
 							return { url };
 						},
@@ -3630,13 +3661,20 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 					// fal-exclusive, so a spokesperson request runs as b-roll here — record
 					// that, or the post would claim a talking head the viewer never gets.
 					if (format === 'spokesperson') format = 'broll';
-					mediaUrl = await openRouterBrollVideo(orKey!, userId, still, motionPrompt);
-					videoModelRan = BROLL_MODEL_OPENROUTER;
+					mediaUrl = await openRouterBrollVideo(
+						orKey!,
+						userId,
+						still,
+						motionPrompt,
+						undefined,
+						orRoutes.video
+					);
+					videoModelRan = orRoutes.video.id;
 					costEvents.push({
 						provider: 'openrouter',
 						operation: 'video',
-						model: BROLL_MODEL_OPENROUTER,
-						usd: priceOf('openrouter', 'video')
+						model: orRoutes.video.id,
+						usd: orRoutes.video.usd
 					});
 				}
 				mediaType = 'video';
@@ -3649,13 +3687,20 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 					// The delivered clip is silent b-roll whatever was requested — the
 					// recorded format must describe what the viewer actually watches.
 					if (format === 'spokesperson') format = 'broll';
-					mediaUrl = await openRouterBrollVideo(orKey, userId, still, motionPrompt);
-					videoModelRan = BROLL_MODEL_OPENROUTER;
+					mediaUrl = await openRouterBrollVideo(
+						orKey,
+						userId,
+						still,
+						motionPrompt,
+						undefined,
+						orRoutes.video
+					);
+					videoModelRan = orRoutes.video.id;
 					costEvents.push({
 						provider: 'openrouter',
 						operation: 'video',
-						model: BROLL_MODEL_OPENROUTER,
-						usd: priceOf('openrouter', 'video')
+						model: orRoutes.video.id,
+						usd: orRoutes.video.usd
 					});
 					mediaType = 'video';
 				} else {
@@ -3857,7 +3902,7 @@ export async function refineUgcMedia(input: RefineMediaInput): Promise<UgcConten
 	await assertWithinBudget(supabase, userId, input.agentId);
 	const costEvents: CostEvent[] = [];
 	try {
-		const { orKey, falKey, orRoutes } = await resolveImageKeys(supabase, userId);
+		const { orKey, falKey, orRoutes, falRoutes } = await resolveImageKeys(supabase, userId);
 		if (!falKey && !orKey) {
 			throw new Error('No media provider configured. Add a Fal AI or OpenRouter key in Settings.');
 		}
@@ -4106,14 +4151,15 @@ export async function refineUgcMedia(input: RefineMediaInput): Promise<UgcConten
 						falKey,
 						voice,
 						dialogue,
-						voiceGender === 'female' ? 'Rachel' : 'Adam'
+						voiceGender === 'female' ? 'Rachel' : 'Adam',
+						falRoutes.tts
 					);
 					refineVoiceUsed = voiceUsed;
 					costEvents.push({
 						provider: 'fal',
 						operation: 'tts',
-						model: TTS_LABEL,
-						usd: priceOf('fal', 'tts')
+						model: falRoutes.tts.id,
+						usd: falRoutes.tts.usd
 					});
 					mediaUrl = await generateTalkingHead(falKey, still, audioUrl);
 					costEvents.push({
@@ -4136,13 +4182,20 @@ export async function refineUgcMedia(input: RefineMediaInput): Promise<UgcConten
 					// TTS + talking head are fal-exclusive — a spokesperson refine without
 					// a fal key runs as b-roll, and the record must say so.
 					if (format === 'spokesperson') format = 'broll';
-					mediaUrl = await openRouterBrollVideo(orKey!, userId, still, motionPrompt);
-					videoModelRan = BROLL_MODEL_OPENROUTER;
+					mediaUrl = await openRouterBrollVideo(
+						orKey!,
+						userId,
+						still,
+						motionPrompt,
+						undefined,
+						orRoutes.video
+					);
+					videoModelRan = orRoutes.video.id;
 					costEvents.push({
 						provider: 'openrouter',
 						operation: 'video',
-						model: BROLL_MODEL_OPENROUTER,
-						usd: priceOf('openrouter', 'video')
+						model: orRoutes.video.id,
+						usd: orRoutes.video.usd
 					});
 				}
 				mediaType = 'video';
@@ -4154,13 +4207,20 @@ export async function refineUgcMedia(input: RefineMediaInput): Promise<UgcConten
 					);
 					// Degraded to a silent clip — record the format that actually delivered.
 					if (format === 'spokesperson') format = 'broll';
-					mediaUrl = await openRouterBrollVideo(orKey, userId, still, motionPrompt);
-					videoModelRan = BROLL_MODEL_OPENROUTER;
+					mediaUrl = await openRouterBrollVideo(
+						orKey,
+						userId,
+						still,
+						motionPrompt,
+						undefined,
+						orRoutes.video
+					);
+					videoModelRan = orRoutes.video.id;
 					costEvents.push({
 						provider: 'openrouter',
 						operation: 'video',
-						model: BROLL_MODEL_OPENROUTER,
-						usd: priceOf('openrouter', 'video')
+						model: orRoutes.video.id,
+						usd: orRoutes.video.usd
 					});
 					mediaType = 'video';
 				} else {

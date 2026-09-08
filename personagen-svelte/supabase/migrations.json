@@ -158,5 +158,9 @@
   [
     "model_registry_platform_migration.sql",
     "Model registry — platform-owned rows (user_id NULL): owner_key uniqueness, read-all/admin-write RLS, one-time backfill from the richest per-user copy, one default per kind"
+  ],
+  [
+    "model_registry_or_video_row_migration.sql",
+    "Model registry — list the OpenRouter video failover (kwaivgi/kling-v3.0-std, unwired) so the model the ledger shows running is visible and priced"
   ]
 ]

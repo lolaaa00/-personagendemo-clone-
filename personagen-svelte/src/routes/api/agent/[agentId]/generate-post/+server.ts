@@ -10,6 +10,7 @@ import {
 	TALKINGHEAD_LABEL,
 	NANO_STILL_LABEL,
 	CINEMATIC_VIDEO_LABEL,
+	TTS_MODEL,
 	type UgcPackInput
 } from '$lib/server/content/generate';
 import { resolveAiClient } from '$lib/server/ai-client';
@@ -24,6 +25,7 @@ import {
 	loadRegistry,
 	effectiveOptions,
 	effectiveResolve,
+	registryDefault,
 	type RegistryRow
 } from '$lib/server/model-registry';
 import { VOICE_CATALOG, DEFAULT_VOICE } from '$lib/server/voices';
@@ -271,6 +273,9 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 			genInput.productPhotoUrlOverride || (useProduct ? product?.photoUrl || null : null);
 
 		const videoModel = effectiveResolve(registryRows, 'video_i2v', body.video_model);
+		// The quote must price the row the pipeline will actually RUN, or the
+		// customer approves one number and the ledger records another.
+		const voiceModel = registryDefault(registryRows, 'tts', 'fal', TTS_MODEL, priceOf('fal', 'tts'));
 
 		// The model stack this run actually goes through, with per-call costs. A VIDEO
 		// forks by format: a spokesperson clip runs voiceover + talking-head (OmniHuman),
@@ -361,8 +366,8 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 			{
 				step: 'voiceover',
 				provider: 'fal',
-				model: `elevenlabs (${voiceLabel})`,
-				usd: priceOf('fal', 'tts')
+				model: `${voiceModel.id.replace(/^fal-ai\//, '')} (${voiceLabel})`,
+				usd: voiceModel.usd
 			},
 			{
 				step: 'talking head',

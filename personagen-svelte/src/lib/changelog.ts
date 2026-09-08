@@ -407,7 +407,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-08", hash: "051f4bb", type: "test", category: "maintenance", scope: "persona", title: "Phase 0 exit guarantee — a v2-stored persona yields byte-identical prompts to its v1 original (P0.7)" },
 	{ date: "2026-09-08", hash: "553290a", type: "docs", category: "docs", scope: "audit", title: "finding #12 proven in production — checksum ledger is line-ending sensitive" },
 	{ date: "2026-09-08", hash: "d4c9bfb", type: "feat", category: "publishing", scope: "models", title: "one platform-owned model registry instead of a private copy per user" },
-	{ date: "2026-09-08", hash: "f1d7593", type: "other", category: "maintenance", scope: null, title: "Merge remote-tracking branch 'origin/main'" }
+	{ date: "2026-09-08", hash: "f1d7593", type: "other", category: "maintenance", scope: null, title: "Merge remote-tracking branch 'origin/main'" },
+	{ date: "2026-09-08", hash: "42b531a", type: "fix", category: "fix", scope: "migrations", title: "the ledger checksum is a content hash, not a byte hash" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -725,12 +726,12 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 	},
 	{
 		id: "553290a", from: "2026-09-08", to: "2026-09-08",
-		category: "docs", categories: ["docs","publishing","maintenance"],
+		category: "docs", categories: ["docs","publishing","maintenance","fix"],
 		title: "Help: finding #12 proven in production — checksum ledger…",
-		summary: "Finding #12 proven in production — checksum ledger is line-ending sensitive. Plus 2 more changes, touching getting posts onto your accounts and internal cleanup.",
+		summary: "Finding #12 proven in production — checksum ledger is line-ending sensitive. Plus 3 more changes, touching getting posts onto your accounts and internal cleanup and things that were broken.",
 		major: false, curated: false,
-		entries: [CHANGELOG[371], CHANGELOG[372], CHANGELOG[373]]
+		entries: [CHANGELOG[371], CHANGELOG[372], CHANGELOG[373], CHANGELOG[374]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "f1d7593";
+export const CHANGELOG_GENERATED_FROM = "42b531a";

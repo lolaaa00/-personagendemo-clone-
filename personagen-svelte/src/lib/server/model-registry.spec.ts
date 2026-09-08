@@ -8,6 +8,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import {
+	registryDefault,
 	parsePriceText,
 	effectiveOptions,
 	effectiveResolve,
@@ -214,6 +215,10 @@ function row(over: Partial<RegistryRow>): RegistryRow {
 	return {
 		id: over.model_id ?? 'x',
 		user_id: 'u',
+		// Matches the column default: a row is fal's unless it says otherwise.
+		// Without this, provider-aware resolvers see undefined and skip the row.
+		provider: 'fal',
+		origin: 'seed',
 		model_id: 'fal-ai/test',
 		kind: 'video_i2v',
 		label: 'Test',
@@ -281,5 +286,44 @@ describe('effectiveOptions / effectiveResolve', () => {
 			row({ model_id: 'minimax/h3/image-to-video', wired: false, status: 'available' })
 		];
 		expect(effectiveOptions(rows, 'video_i2v').map((o) => o.id)).toEqual([kling]);
+	});
+});
+
+describe('registryDefault — the starred row a fal pipeline mode runs on', () => {
+	const TTS = 'fal-ai/elevenlabs/tts/turbo-v2.5';
+
+	it('returns the starred, wired, active row of that provider — id and price from one row', () => {
+		const rows = [
+			row({ model_id: 'fal-ai/other-voice', kind: 'tts', kinds: ['tts'], is_default: false, price_usd: 9 }),
+			row({ model_id: TTS, kind: 'tts', kinds: ['tts'], is_default: true, price_usd: 0.03 })
+		];
+		expect(registryDefault(rows, 'tts', 'fal', 'fallback-id', 0.99)).toEqual({
+			id: TTS,
+			usd: 0.03,
+			fromRegistry: true
+		});
+	});
+
+	it('falls back to the compiled-in constant when nothing is starred, wired, active or priced', () => {
+		const fallback = { id: 'fallback-id', usd: 0.99, fromRegistry: false };
+		expect(registryDefault([], 'tts', 'fal', 'fallback-id', 0.99)).toEqual(fallback);
+		expect(
+			registryDefault([row({ model_id: TTS, kind: 'tts', kinds: ['tts'], is_default: false })], 'tts', 'fal', 'fallback-id', 0.99)
+		).toEqual(fallback);
+		expect(
+			registryDefault([row({ model_id: TTS, kind: 'tts', kinds: ['tts'], is_default: true, wired: false })], 'tts', 'fal', 'fallback-id', 0.99)
+		).toEqual(fallback);
+		expect(
+			registryDefault([row({ model_id: TTS, kind: 'tts', kinds: ['tts'], is_default: true, status: 'disabled' })], 'tts', 'fal', 'fallback-id', 0.99)
+		).toEqual(fallback);
+		// A starred row with no price cannot be billed, so it cannot be run.
+		expect(
+			registryDefault([row({ model_id: TTS, kind: 'tts', kinds: ['tts'], is_default: true, price_usd: null })], 'tts', 'fal', 'fallback-id', 0.99)
+		).toEqual(fallback);
+	});
+
+	it('never hands an OpenRouter row to a fal call site', () => {
+		const rows = [row({ provider: 'openrouter', model_id: 'someone/voice', kind: 'tts', kinds: ['tts'], is_default: true, price_usd: 0.01 })];
+		expect(registryDefault(rows, 'tts', 'fal', 'fallback-id', 0.99).fromRegistry).toBe(false);
 	});
 });
