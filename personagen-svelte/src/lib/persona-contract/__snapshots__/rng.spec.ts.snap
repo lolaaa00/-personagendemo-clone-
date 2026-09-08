@@ -1,0 +1,9 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`determinism > is stable across runtimes — pinned values, not just self-consistency 1`] = `
+[
+  "0.902551",
+  "0.741254",
+  "0.961955",
+]
+`;

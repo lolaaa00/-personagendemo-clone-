@@ -418,7 +418,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-08", hash: "263c228", type: "other", category: "maintenance", scope: null, title: "Merge remote-tracking branch 'origin/main'" },
 	{ date: "2026-09-08", hash: "60c5cab", type: "fix", category: "infrastructure", scope: "deploy", title: "the pipeline can actually run — parse fix, stderr fix, registry gate" },
 	{ date: "2026-09-08", hash: "66a9588", type: "refactor", category: "generation", scope: "models", title: "name the row type the Model Manager reads, clearing my lint debt" },
-	{ date: "2026-09-08", hash: "c47fa80", type: "refactor", category: "maintenance", scope: "persona", title: "type the persona save path properly — clears my 11 lint warnings, puts the ratchet back under its ceiling" }
+	{ date: "2026-09-08", hash: "c47fa80", type: "refactor", category: "maintenance", scope: "persona", title: "type the persona save path properly — clears my 11 lint warnings, puts the ratchet back under its ceiling" },
+	{ date: "2026-09-08", hash: "7d3977a", type: "docs", category: "infrastructure", scope: "audit", title: "finding #16 — the deploy gates were adopted, tested, and never executed" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -741,7 +742,15 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 		summary: "Finding #12 proven in production — checksum ledger is line-ending sensitive. Plus 13 more changes, touching guides and explanations and getting posts onto your accounts and things that were broken.",
 		major: true, curated: false,
 		entries: [CHANGELOG[371], CHANGELOG[372], CHANGELOG[373], CHANGELOG[374], CHANGELOG[375], CHANGELOG[376], CHANGELOG[377], CHANGELOG[378], CHANGELOG[379], CHANGELOG[380], CHANGELOG[381], CHANGELOG[382], CHANGELOG[383], CHANGELOG[384]]
+	},
+	{
+		id: "7d3977a", from: "2026-09-08", to: "2026-09-08",
+		category: "infrastructure", categories: ["infrastructure"],
+		title: "Behind the scenes: finding #16 — the deploy gates were adopted…",
+		summary: "Finding #16 — the deploy gates were adopted, tested, and never executed.",
+		major: false, curated: false,
+		entries: [CHANGELOG[385]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "c47fa80";
+export const CHANGELOG_GENERATED_FROM = "7d3977a";

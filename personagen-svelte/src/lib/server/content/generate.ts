@@ -50,6 +50,7 @@ import { burnCaptions, optimizeForWeb } from '$lib/server/video';
 import { renderTypographicCard, CARD_RENDERER_LABEL } from './card-renderer';
 import { fetchWithTimeout } from '$lib/server/social/http';
 import { assertWithinBudget } from '$lib/server/budget';
+import { inferGenderFromName } from '$lib/name-gender';
 import {
 	creditsFor,
 	keySourceFor,
@@ -2180,108 +2181,13 @@ export function inferGenderFromText(
 // a female persona silently generates a male face/voice (the exact "Aisha but
 // male images" bug). Curated toward the app's own personas plus common names;
 // unknown names fall through to the text scan, never a wrong guess.
-const NAME_GENDER: Record<string, 'male' | 'female'> = {
-	// female
-	aisha: 'female',
-	sofia: 'female',
-	sophia: 'female',
-	veronica: 'female',
-	chloe: 'female',
-	aria: 'female',
-	elena: 'female',
-	jenny: 'female',
-	jennifer: 'female',
-	lexy: 'female',
-	lexi: 'female',
-	alexa: 'female',
-	emma: 'female',
-	olivia: 'female',
-	ava: 'female',
-	isabella: 'female',
-	mia: 'female',
-	amelia: 'female',
-	harper: 'female',
-	evelyn: 'female',
-	charlotte: 'female',
-	luna: 'female',
-	grace: 'female',
-	chloé: 'female',
-	maya: 'female',
-	zoe: 'female',
-	zoey: 'female',
-	nora: 'female',
-	lily: 'female',
-	hannah: 'female',
-	layla: 'female',
-	aaliyah: 'female',
-	fatima: 'female',
-	noor: 'female',
-	sara: 'female',
-	sarah: 'female',
-	priya: 'female',
-	ananya: 'female',
-	mei: 'female',
-	yuki: 'female',
-	kayla: 'female',
-	mila: 'female',
-	ivy: 'female',
-	ruby: 'female',
-	jade: 'female',
-	bella: 'female',
-	// male
-	marcus: 'male',
-	kai: 'male',
-	ryan: 'male',
-	james: 'male',
-	liam: 'male',
-	noah: 'male',
-	oliver: 'male',
-	elijah: 'male',
-	william: 'male',
-	henry: 'male',
-	lucas: 'male',
-	mason: 'male',
-	ethan: 'male',
-	logan: 'male',
-	jack: 'male',
-	aiden: 'male',
-	jackson: 'male',
-	david: 'male',
-	joseph: 'male',
-	samuel: 'male',
-	omar: 'male',
-	ali: 'male',
-	hassan: 'male',
-	raj: 'male',
-	arjun: 'male',
-	chen: 'male',
-	hiro: 'male',
-	kenji: 'male',
-	diego: 'male',
-	mateo: 'male',
-	leo: 'male',
-	max: 'male',
-	adam: 'male',
-	brian: 'male',
-	josh: 'male',
-	joshua: 'male',
-	tyler: 'male',
-	dylan: 'male',
-	nathan: 'male'
-};
 
 /** Gender from a name's first token (e.g. "Aisha Noori" → female), else undefined. */
-export function inferGenderFromName(
-	name: string | undefined | null
-): 'male' | 'female' | undefined {
-	if (!name) return undefined;
-	const first = name
-		.trim()
-		.toLowerCase()
-		.split(/[\s._-]+/)[0]
-		?.replace(/[^a-zà-ÿ]/g, '');
-	return first ? NAME_GENDER[first] : undefined;
-}
+// inferGenderFromName + NAME_GENDER moved to $lib/name-gender (client-safe) in
+// P1.1 so the persona sampler can share the table instead of duplicating it.
+// Imported (this module calls it internally, below) AND re-exported, so every
+// existing importer of this module is unaffected.
+export { inferGenderFromName };
 
 /** Extracts the character's name from a soul doc's "— Name" / "soul.md — Name" heading, if present. */
 function characterNameFromSoul(soul: string | undefined | null): string | undefined {
