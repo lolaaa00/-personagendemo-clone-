@@ -128,6 +128,73 @@ describe('assertWithinBudget', () => {
 		});
 	});
 
+	describe('per-seat workspace cap: read errors follow the credits mode', () => {
+		// A seat cap protects the WORKSPACE OWNER's wallet, not the seat's. An
+		// unreadable cap must not quietly become unlimited spending of someone
+		// else's money once credits are enforced. This mirrors the env caps above,
+		// which the doc comment used to claim parity with while behaving differently.
+		function seatWorkspace(ledgerError: any) {
+			return createMockSupabase((q) => {
+				if (q.table === 'agents') {
+					// The persona lookup, then the workspace's persona ids.
+					return q.eqOf('id') ? { data: { workspace_id: 'ws-1' }, error: null } : { data: [{ id: AGENT }], error: null };
+				}
+				if (q.table === 'workspace_members') return { data: { spend_limit_usd: 25 }, error: null };
+				if (q.table === 'generation_events') return { data: null, error: ledgerError };
+				return { data: null, error: null };
+			});
+		}
+
+		it('fails CLOSED under enforce — an unreadable seat cap pauses generation', async () => {
+			mockEnv.MAX_MONTHLY_SPEND_PER_USER_USD = '0';
+			mockEnv.MAX_DAILY_SPEND_PER_AGENT_USD = '0';
+			mockEnv.CREDITS_ENFORCE = 'enforce';
+			const supabase = seatWorkspace({ message: 'connection reset' });
+			const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+			try {
+				await expect(assertWithinBudget(supabase as any, USER, AGENT)).rejects.toThrow(/budget/i);
+				expect(String(errSpy.mock.calls[0][0])).toMatch(/failing CLOSED/);
+			} finally {
+				errSpy.mockRestore();
+			}
+		});
+
+		it('fails OPEN in shadow — analytics being down must not stop shipping before money is real', async () => {
+			mockEnv.MAX_MONTHLY_SPEND_PER_USER_USD = '0';
+			mockEnv.MAX_DAILY_SPEND_PER_AGENT_USD = '0';
+			mockEnv.CREDITS_ENFORCE = 'shadow';
+			const supabase = seatWorkspace({ message: 'connection reset' });
+			const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+			try {
+				await expect(assertWithinBudget(supabase as any, USER, AGENT)).resolves.toBeUndefined();
+				expect(String(errSpy.mock.calls[0][0])).toMatch(/failing OPEN/);
+			} finally {
+				errSpy.mockRestore();
+			}
+		});
+
+		it('still refuses a seat that is genuinely over its cap, in retail money', async () => {
+			mockEnv.MAX_MONTHLY_SPEND_PER_USER_USD = '0';
+			mockEnv.MAX_DAILY_SPEND_PER_AGENT_USD = '0';
+			// Shadow, not enforce: under enforce the wallet check refuses first with a
+			// credits message, so the seat cap's own refusal would never be observed.
+			mockEnv.CREDITS_ENFORCE = 'shadow';
+			const supabase = createMockSupabase((q) => {
+				if (q.table === 'agents') {
+					return q.eqOf('id') ? { data: { workspace_id: 'ws-1' }, error: null } : { data: [{ id: AGENT }], error: null };
+				}
+				if (q.table === 'workspace_members') return { data: { spend_limit_usd: 25 }, error: null };
+				// Retail = provider x credit_markup. With no platform_settings loaded in a
+				// unit test the markup is 1, so this is $30 retail against a $25 cap.
+				if (q.table === 'generation_events') return { data: [{ est_cost: 30 }], error: null };
+				return { data: null, error: null };
+			});
+			await expect(assertWithinBudget(supabase as any, USER, AGENT)).rejects.toThrow(
+				'($30.00 of the $25.00 limit set by your workspace admin)'
+			);
+		});
+	});
+
 	describe('ledger read error FAILS OPEN', () => {
 		it('does not throw when the generation_events read errors (analytics down != stop shipping) — but logs LOUDLY', async () => {
 			mockEnv.MAX_MONTHLY_SPEND_PER_USER_USD = '1'; // absurdly low: only a real sum could pass

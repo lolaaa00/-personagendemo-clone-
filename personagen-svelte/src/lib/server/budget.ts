@@ -101,7 +101,11 @@ async function sumSpend(
  * as a MEMBER seat (owners never have a membership row, so they're never
  * capped here) and that seat has spend_limit_usd configured (Settings → Team),
  * their calendar-month spend across the workspace's personas must stay under
- * it. Fails OPEN on read errors, same policy as the env caps above.
+ * Read errors follow the same rule as the env caps above: OPEN while credits
+ * are off/shadow, CLOSED once money is enforced. A cap that cannot be read is
+ * not a cap, and the wallet it protects belongs to the workspace owner, not to
+ * the seat being checked — so an unreadable cap must not silently become
+ * unlimited spending of someone else's money.
  */
 async function seatCapExceeded(
 	supabase: any,
@@ -141,8 +145,16 @@ async function seatCapExceeded(
 			.gte('created_at', monthlySinceIso)
 			.limit(LEDGER_ROW_LIMIT);
 		if (error) {
+			if (creditsMode() === 'enforce') {
+				console.error(
+					`[budget] seat-cap ledger read FAILED for user=${userId} — failing CLOSED (credits enforced): ${error.message}`
+				);
+				throw new Error(
+					'Your workspace spend limit could not be checked — generation is paused until it recovers (budget).'
+				);
+			}
 			console.error(
-				`[budget] seat-cap ledger read FAILED for user=${userId} — failing OPEN: ${error.message}`
+				`[budget] seat-cap ledger read FAILED for user=${userId} — failing OPEN (no seat cap enforced this call): ${error.message}`
 			);
 			return null;
 		}
@@ -156,7 +168,18 @@ async function seatCapExceeded(
 		}
 		return null;
 	} catch (e) {
-		console.error('[budget] seat-cap check failed — failing OPEN:', (e as Error).message);
+		const msg = (e as Error).message;
+		// Never swallow our own fail-closed refusal (or a credits-layer refusal)
+		// on the way out — rethrowing is the whole point of failing closed.
+		if (/budget|credits/i.test(msg)) throw e;
+		if (creditsMode() === 'enforce') {
+			console.error('[budget] seat-cap check failed — failing CLOSED (credits enforced):', msg);
+			throw new Error(
+				'Your workspace spend limit could not be checked — generation is paused until it recovers (budget).',
+				{ cause: e }
+			);
+		}
+		console.error('[budget] seat-cap check failed — failing OPEN:', msg);
 		return null;
 	}
 }
