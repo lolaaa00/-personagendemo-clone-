@@ -320,11 +320,12 @@ export function isCuratedTrait(key: string): boolean {
  * exactly as stored and is never snapped to a curated option. The only value that is
  * dropped is the `BEST_FIT` sentinel, which means "unset / let the model decide".
  */
-export function coerceAppearance(value: any): Record<string, string> {
+export function coerceAppearance(value: unknown): Record<string, string> {
 	const out: Record<string, string> = {};
 	if (value && typeof value === 'object') {
+		const source = value as Record<string, unknown>;
 		for (const f of APPEARANCE_FIELDS) {
-			const v = value[f.key];
+			const v = source[f.key];
 			if (typeof v !== 'string') continue;
 			const t = v.trim();
 			if (!t || t.toLowerCase() === BEST_FIT.toLowerCase()) continue;

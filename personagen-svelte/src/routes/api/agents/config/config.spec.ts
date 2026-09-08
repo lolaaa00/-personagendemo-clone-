@@ -7,6 +7,7 @@
  * of the data-loss regression guard that used to live only in the v1 store.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import type { PersonaProfileV2 } from '$lib/persona-contract/schema';
 
 const { updates, agentRow } = vi.hoisted(() => ({
 	updates: [] as Array<{ id: string; payload: Record<string, unknown> }>,
@@ -63,19 +64,19 @@ describe('POST /api/agents/config — personaProfile', () => {
 		const res = await POST(event({ agentId: 'agent-1', personaProfile: { bios: { tiktok: 'new bio' } } }));
 		expect(res.status).toBe(200);
 		expect(updates).toHaveLength(1);
-		const stored = updates[0].payload.personas_profile as Record<string, any>;
+		const stored = updates[0].payload.personas_profile as PersonaProfileV2;
 		expect(stored.meta.schemaVersion).toBe(2);
 		expect(stored.meta.generator).toBe('manual');
 		expect(typeof stored.meta.generatedAt).toBe('string');
 		// The patch landed…
-		expect(stored.identityKit.bios).toEqual({ tiktok: 'new bio' });
-		expect(stored.meta.fieldSources['identityKit.bios']).toBe('user');
+		expect(stored.identityKit?.bios).toEqual({ tiktok: 'new bio' });
+		expect(stored.meta.fieldSources?.['identityKit.bios']).toBe('user');
 		// …and NOTHING the patch didn't mention was lost (the original data-loss bug).
-		expect(stored.strategy.archetype).toBe('educator');
-		expect(stored.look.hair.colorText).toBe('honey blonde');
-		expect(stored.look.wardrobe).toBe('linen');
-		expect(stored.creator.displayName).toBe('Jenny Tran');
-		expect(stored.audience.ageRanges).toEqual(['25_34']);
+		expect(stored.strategy?.archetype).toBe('educator');
+		expect(stored.look?.hair?.colorText).toBe('honey blonde');
+		expect(stored.look?.wardrobe).toBe('linen');
+		expect(stored.creator?.displayName).toBe('Jenny Tran');
+		expect(stored.audience?.ageRanges).toEqual(['25_34']);
 		// P0.6: the profile lives ONLY in personas_profile — `market` is a market
 		// string again and a profile save must not touch it.
 		expect(updates[0].payload).not.toHaveProperty('market');
@@ -84,9 +85,9 @@ describe('POST /api/agents/config — personaProfile', () => {
 	it('accepts the legacy stringified transport', async () => {
 		const res = await POST(event({ agentId: 'agent-1', personaProfile: JSON.stringify({ archetype: '  the creator ' }) }));
 		expect(res.status).toBe(200);
-		const stored = updates[0].payload.personas_profile as Record<string, any>;
-		expect(stored.strategy.archetype).toBe('creator');
-		expect(stored.identityKit.bios).toEqual({ tiktok: 'old bio' });
+		const stored = updates[0].payload.personas_profile as PersonaProfileV2;
+		expect(stored.strategy?.archetype).toBe('creator');
+		expect(stored.identityKit?.bios).toEqual({ tiktok: 'old bio' });
 	});
 
 	it('keeps the v1 gate semantics: a named target avatar is stripped, an off-list archetype is kept verbatim', async () => {
@@ -96,10 +97,10 @@ describe('POST /api/agents/config — personaProfile', () => {
 				personaProfile: { targetAvatar: 'Beatrice, a 36-year-old mom who audits every ingredient', archetype: 'Mentor' }
 			})
 		);
-		const stored = updates[0].payload.personas_profile as Record<string, any>;
-		expect(stored.audience.targetAvatar).toBe('A 36-year-old mom who audits every ingredient');
-		expect(stored.strategy.archetype).toBeUndefined();
-		expect(stored.strategy.archetypeText).toBe('Mentor');
+		const stored = updates[0].payload.personas_profile as PersonaProfileV2;
+		expect(stored.audience?.targetAvatar).toBe('A 36-year-old mom who audits every ingredient');
+		expect(stored.strategy?.archetype).toBeUndefined();
+		expect(stored.strategy?.archetypeText).toBe('Mentor');
 	});
 
 	it('merges over an EXISTING v2 blob and preserves sampled provenance on unchanged values', async () => {
@@ -114,20 +115,20 @@ describe('POST /api/agents/config — personaProfile', () => {
 		};
 		// The page re-sends displayName unchanged and changes the archetype.
 		await POST(event({ agentId: 'agent-1', personaProfile: { displayName: 'Jenny', archetype: 'The Creator' } }));
-		const stored = updates[0].payload.personas_profile as Record<string, any>;
-		expect(stored.creator.age).toBe(34);
-		expect(stored.meta.fieldSources['creator.age']).toBe('sampled');
-		expect(stored.creator.work.title).toBe('Physiotherapist');
-		expect(stored.strategy.archetype).toBe('creator');
-		expect(stored.meta.fieldSources['strategy.archetype']).toBe('user');
-		expect(stored.meta.fieldSources['creator.displayName']).toBe('user');
+		const stored = updates[0].payload.personas_profile as PersonaProfileV2;
+		expect(stored.creator?.age).toBe(34);
+		expect(stored.meta.fieldSources?.['creator.age']).toBe('sampled');
+		expect(stored.creator?.work?.title).toBe('Physiotherapist');
+		expect(stored.strategy?.archetype).toBe('creator');
+		expect(stored.meta.fieldSources?.['strategy.archetype']).toBe('user');
+		expect(stored.meta.fieldSources?.['creator.displayName']).toBe('user');
 	});
 
 	it('an explicit empty clears; omitted personaProfile writes nothing to the profile', async () => {
 		await POST(event({ agentId: 'agent-1', personaProfile: { bios: {} } }));
-		const stored = updates[0].payload.personas_profile as Record<string, any>;
+		const stored = updates[0].payload.personas_profile as PersonaProfileV2;
 		expect(stored.identityKit).toBeUndefined();
-		expect(stored.strategy.archetype).toBe('educator');
+		expect(stored.strategy?.archetype).toBe('educator');
 
 		updates.length = 0;
 		await POST(event({ agentId: 'agent-1', name: 'Renamed' }));

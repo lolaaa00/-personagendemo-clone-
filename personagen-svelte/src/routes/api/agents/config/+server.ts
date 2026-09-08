@@ -4,6 +4,44 @@ import { createDbService, type AgentConfigInsert } from '$lib/server/db';
 import { buildStoredProfile } from '$lib/persona-contract/save';
 import { writeWithProfileFallback } from '$lib/server/personas-profile-column';
 import { checkAgentAccess } from '$lib/server/workspaces';
+import type { AutonomyLevel } from '$lib/types';
+
+/**
+ * The persona page's save payload. Everything is optional: the page sends the
+ * fields the user touched, and each is gated on `!== undefined` before it is
+ * written, so an absent key means "leave it alone" rather than "clear it".
+ */
+interface ConfigRequestBody {
+	agentId?: string;
+	soulText?: string;
+	skillsText?: string;
+	toolsText?: string;
+	timezone?: string;
+	postsPerDay?: number;
+	activeHoursStart?: number;
+	activeHoursEnd?: number;
+	/** Union, not string: `agent_configs.autonomy_level` is a CHECK-constrained column. */
+	autonomyLevel?: AutonomyLevel;
+	rssUrl?: string;
+	rssActive?: boolean;
+	ugcVoice?: string;
+	name?: string;
+	niche?: string;
+	gradient?: string;
+	initial?: string;
+	followers?: string | number;
+	engagementRate?: string | number;
+	handle?: string;
+	status?: string;
+	supervisorAgentId?: string | null;
+	runtimeOwner?: string;
+	brandBriefId?: string | null;
+	/** v1 form object, a v2 record, or the legacy stringified transport. */
+	personaProfile?: unknown;
+}
+
+/** Columns this route may write on `agents`. Keyed loosely: the DB is the schema. */
+type AgentUpdatePayload = Record<string, unknown>;
 
 export const POST: RequestHandler = async ({ request, locals }) => {
 	const { session, user } = await locals.safeGetSession();
@@ -12,7 +50,10 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	}
 
 	try {
-		const body = (await request.json()) as any;
+		// The persona page posts a wide, partly-optional form; every field is
+		// re-checked below with `!== undefined` before it reaches a payload, so
+		// `unknown` here costs nothing and stops a typo becoming a silent write.
+		const body = (await request.json()) as ConfigRequestBody;
 		const {
 			agentId,
 			soulText,
@@ -65,7 +106,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		}
 
 		// 1. Update the agent's core texts and presentation in agents table
-		const agentUpdatePayload: any = {};
+		const agentUpdatePayload: AgentUpdatePayload = {};
 
 		if (soulText !== undefined) agentUpdatePayload.soul = soulText;
 		if (skillsText !== undefined) agentUpdatePayload.skills = skillsText;
@@ -76,7 +117,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		if (initial !== undefined) agentUpdatePayload.initial = initial;
 		if (followers !== undefined) agentUpdatePayload.followers = String(followers);
 		if (engagementRate !== undefined)
-			agentUpdatePayload.engagement_rate = parseFloat(engagementRate as any) || 0;
+			agentUpdatePayload.engagement_rate = parseFloat(String(engagementRate)) || 0;
 		if (handle !== undefined) agentUpdatePayload.handle = handle;
 		if (status !== undefined) agentUpdatePayload.status = status;
 		if (supervisorAgentId !== undefined) {
@@ -172,7 +213,7 @@ export const DELETE: RequestHandler = async ({ request, locals }) => {
 	}
 
 	try {
-		const body = (await request.json()) as any;
+		const body = (await request.json()) as { agentId?: unknown; agentIds?: unknown };
 		// Accepts a single agentId or `agentIds` for multi-select bulk deletion.
 		// Each id is ownership-checked independently and the outcome is reported
 		// per-agent, so one protected/foreign id can't fail the whole batch.

@@ -110,8 +110,8 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			success: true,
 			data: newAgent
 		});
-	} catch (err: any) {
+	} catch (err) {
 		console.error('[API Agents] Critical error:', err);
-		return json({ success: false, error: err.message }, { status: 500 });
+		return json({ success: false, error: (err as Error).message }, { status: 500 });
 	}
 };
