@@ -404,7 +404,10 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-07", hash: "58b7206", type: "feat", category: "feature", scope: "persona-store", title: "dual-shape bridge — v1 read downgrades v2 blobs, v2 read/serialize/merge with provenance (P0.3)" },
 	{ date: "2026-09-08", hash: "d48fa5e", type: "feat", category: "generation", scope: "persona", title: "save routes write Persona Model v2 with provenance; page and readers unchanged (P0.5)" },
 	{ date: "2026-09-08", hash: "5f2aa33", type: "feat", category: "generation", scope: "schema", title: "agents.market returns to a market string; the persona profile lives only in personas_profile (P0.6)" },
-	{ date: "2026-09-08", hash: "051f4bb", type: "test", category: "maintenance", scope: "persona", title: "Phase 0 exit guarantee — a v2-stored persona yields byte-identical prompts to its v1 original (P0.7)" }
+	{ date: "2026-09-08", hash: "051f4bb", type: "test", category: "maintenance", scope: "persona", title: "Phase 0 exit guarantee — a v2-stored persona yields byte-identical prompts to its v1 original (P0.7)" },
+	{ date: "2026-09-08", hash: "553290a", type: "docs", category: "docs", scope: "audit", title: "finding #12 proven in production — checksum ledger is line-ending sensitive" },
+	{ date: "2026-09-08", hash: "d4c9bfb", type: "feat", category: "publishing", scope: "models", title: "one platform-owned model registry instead of a private copy per user" },
+	{ date: "2026-09-08", hash: "f1d7593", type: "other", category: "maintenance", scope: null, title: "Merge remote-tracking branch 'origin/main'" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -719,7 +722,15 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 		summary: "Close the phase-2 gaps — plans (dormant), Firecrawl metering, welcome-abuse guard, settings billing card, persona limit, deploy step-0 stamps check. Plus 13 more changes, touching setup and deployment and speed and size and guides and explanations.",
 		major: true, curated: false,
 		entries: [CHANGELOG[357], CHANGELOG[358], CHANGELOG[359], CHANGELOG[360], CHANGELOG[361], CHANGELOG[362], CHANGELOG[363], CHANGELOG[364], CHANGELOG[365], CHANGELOG[366], CHANGELOG[367], CHANGELOG[368], CHANGELOG[369], CHANGELOG[370]]
+	},
+	{
+		id: "553290a", from: "2026-09-08", to: "2026-09-08",
+		category: "docs", categories: ["docs","publishing","maintenance"],
+		title: "Help: finding #12 proven in production — checksum ledger…",
+		summary: "Finding #12 proven in production — checksum ledger is line-ending sensitive. Plus 2 more changes, touching getting posts onto your accounts and internal cleanup.",
+		major: false, curated: false,
+		entries: [CHANGELOG[371], CHANGELOG[372], CHANGELOG[373]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "051f4bb";
+export const CHANGELOG_GENERATED_FROM = "f1d7593";

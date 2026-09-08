@@ -9,6 +9,8 @@
 //                                                             stamp ORDER files up to <file> as already live
 //                                                             (first run on a DB that predates the ledger)
 //   node scripts/apply-migration.mjs --unrecord <name>...     remove a WRONG 'recorded' stamp (never an applied one)
+//   node scripts/apply-migration.mjs --rehash [--dry-run]     one-time: move ledger rows written under the old
+//                                                             byte-sensitive hash onto the content hash
 //   node scripts/apply-migration.mjs --all                    apply every pending ORDER file, in order
 //
 // Guarantees (see docs/monetization/durable-implementation-plan.md, D6):
@@ -16,14 +18,17 @@
 //     statement leaves neither the schema change nor the record;
 //   * a file whose checksum differs from the recorded one is REFUSED — edit
 //     history is never replayed, a new migration is written instead;
-//   * a file already recorded with the same checksum is a no-op.
+//   * a file already recorded with the same checksum is a no-op;
+//   * the checksum is a CONTENT hash: CRLF/CR are normalised to LF and a BOM is
+//     stripped before hashing, so a record written from a Windows checkout
+//     verifies from a Linux worktree or CI and vice versa.
 //
 // Transport: the same `${PUBLIC_SUPABASE_URL}/pg/query` endpoint the legacy
 // run-migrations.js used, authenticated with the service-role key from .env.
 // Read-only invocations (--status, --dry-run) never send anything but SELECTs.
 // ═══════════════════════════════════════════════════════════════════════════
 
-import { createHash } from 'node:crypto';
+import { hashSql, classifyChecksum } from './lib/migration-checksum.mjs';
 import { readFileSync, existsSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -58,7 +63,10 @@ async function loadOrder() {
 	return raw.map(([file, note]) => ({ file, note }));
 }
 
-const sha256 = (s) => createHash('sha256').update(s).digest('hex');
+// Checksums live in scripts/lib/migration-checksum.mjs: a CONTENT hash (CRLF
+// folded to LF, BOM stripped) so a record written from any checkout verifies
+// from every other one. `classifyChecksum` is the only drift authority here.
+const sha256 = hashSql;
 
 async function pgQuery(query) {
 	if (!SUPABASE_URL || !SERVICE_KEY) {
@@ -142,7 +150,16 @@ async function cmdStatus() {
 			rows.push(['pending', file, note]);
 			pending++;
 		} else if (rec.checksum !== checksum) {
-			rows.push(['DRIFTED', file, `recorded ${rec.checksum.slice(0, 8)} ≠ file ${checksum.slice(0, 8)}`]);
+			// A row written under the old byte-sensitive rule covers identical
+			// content — say so, so nobody re-applies or rewrites a file over it.
+			const legacy = classifyChecksum(readFileSync(path, 'utf8'), rec.checksum) === 'legacy';
+			rows.push([
+				legacy ? 'LEGACY-HASH' : 'DRIFTED',
+				file,
+				legacy
+					? `same content, hashed before line-ending normalisation — run --rehash`
+					: `recorded ${rec.checksum.slice(0, 8)} ≠ file ${checksum.slice(0, 8)}`
+			]);
 			drifted++;
 		} else {
 			rows.push([rec.mode === 'recorded' ? 'recorded' : 'applied', file, (rec.applied_at || '').slice(0, 19)]);
@@ -160,6 +177,10 @@ async function cmdApply(files, { dryRun }) {
 		const rec = ledger.get(m.name);
 		if (rec && rec.checksum === m.checksum) {
 			console.log(`skip     ${m.name} (already ${rec.mode}, checksum matches)`);
+			continue;
+		}
+		if (rec && classifyChecksum(m.sql, rec.checksum) === 'legacy') {
+			console.log(`skip     ${m.name} (already ${rec.mode}; recorded under the pre-normalisation hash — run --rehash to update the ledger)`);
 			continue;
 		}
 		if (rec && rec.checksum !== m.checksum) {
@@ -236,6 +257,51 @@ async function cmdUnrecord(names) {
 	}
 }
 
+/**
+ * One-time repair for rows written before the hash ignored line endings.
+ *
+ * ONLY rewrites a row whose recorded checksum equals the file's RAW hash — that
+ * is proof the row covers exactly these bytes under the old rule, so the update
+ * changes bookkeeping and nothing else. A row whose content genuinely differs is
+ * REFUSED and reported; that is real drift and still needs a human. No schema is
+ * touched: this writes checksums in schema_migrations only.
+ */
+async function cmdRehash({ dryRun }) {
+	if (!(await ledgerExists())) throw new Error('schema_migrations table missing');
+	const order = await loadOrder();
+	const ledger = await readLedger();
+	const updates = [];
+	const refused = [];
+	for (const { file } of order) {
+		const path = join(supabaseDir, file);
+		const rec = ledger.get(file);
+		if (!rec || !existsSync(path)) continue;
+		const sql = readFileSync(path, 'utf8');
+		const want = sha256(sql);
+		const state = classifyChecksum(sql, rec.checksum);
+		if (state === 'current') continue;
+		if (state === 'legacy') updates.push({ file, from: rec.checksum, to: want });
+		else refused.push({ file, recorded: rec.checksum, file_hash: want });
+	}
+	for (const r of refused) {
+		console.error(`REFUSED  ${r.file}: recorded ${r.recorded.slice(0, 8)} matches neither the normalised (${r.file_hash.slice(0, 8)}) nor the raw hash — real drift, not a line-ending artefact`);
+	}
+	if (updates.length === 0) {
+		console.log(refused.length ? 'nothing safe to rehash' : 'ledger already uses content hashes — nothing to do');
+		if (refused.length) process.exitCode = 2;
+		return;
+	}
+	for (const u of updates) console.log(`${dryRun ? 'would rehash' : 'rehash  '} ${u.file.padEnd(58)} ${u.from.slice(0, 8)} → ${u.to.slice(0, 8)}`);
+	if (dryRun) {
+		console.log(`\n${updates.length} row(s) would be updated · ${refused.length} refused · nothing was written`);
+		return;
+	}
+	const stmts = updates.map((u) => `UPDATE public.schema_migrations SET checksum = ${q(u.to)} WHERE name = ${q(u.file)} AND checksum = ${q(u.from)};`);
+	await pgQuery(['BEGIN;', ...stmts, 'COMMIT;'].join('\n'));
+	console.log(`\nrehashed ${updates.length} ledger row(s)${refused.length ? ` · ${refused.length} REFUSED` : ''}`);
+	if (refused.length) process.exitCode = 2;
+}
+
 async function cmdAll({ dryRun }) {
 	const order = await loadOrder();
 	const ledger = await readLedger();
@@ -256,11 +322,12 @@ try {
 		const i = args.indexOf('--through');
 		await cmdRecordExisting(i >= 0 ? args[i + 1] : null);
 	} else if (flags.has('--unrecord')) await cmdUnrecord(files);
+	else if (flags.has('--rehash')) await cmdRehash({ dryRun: flags.has('--dry-run') });
 	else if (flags.has('--all')) await cmdAll({ dryRun: flags.has('--dry-run') });
 	else if (files.length) await cmdApply(files, { dryRun: flags.has('--dry-run') });
 	else {
 		console.log(
-			'usage: apply-migration.mjs --status [--strict] | --record-existing --through <file> | --unrecord <name>... | --all [--dry-run] | [--dry-run] <file.sql>...'
+			'usage: apply-migration.mjs --status [--strict] | --record-existing --through <file> | --unrecord <name>... | --rehash [--dry-run] | --all [--dry-run] | [--dry-run] <file.sql>...'
 		);
 		process.exitCode = 1;
 	}
