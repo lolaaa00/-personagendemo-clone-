@@ -136,6 +136,53 @@ the population of rows that needs repair.
 and is implementing it there, with a dry-run list reviewed before the ~38-row
 ledger write. Regression test to ship with it: the same content as CRLF and as LF
 must hash equal, and a genuinely edited file must still be refused.
+
+**CLOSED 2026-09-08 by `42b531a`** ("the ledger checksum is a content hash, not a
+byte hash"). Verified from two checkouts of that same commit, which is the
+property that was broken:
+
+```
+shared tree   supabase/market_restore_migration.sql  w/crlf → 40 in ORDER · 0 pending · 0 drifted (exit 0)
+worktree      supabase/market_restore_migration.sql  w/lf   → 40 in ORDER · 0 pending · 0 drifted (exit 0)
+```
+
+Before the fix the same two commands disagreed 1 vs 38. `deploy.ps1` step 0 and
+`npm run verify:money` pass again from either tree.
+
+---
+
+## Finding 15 — a migration can reach production from a file nobody has committed
+
+**New, 2026-09-08. Not yet closed.** Twice today a migration was applied to the
+production database from a working-tree file that was untracked at the time:
+`market_restore_migration.sql` (mine, 14:19) and
+`model_registry_platform_migration.sql` (the models session, 16:08 — 347 rows
+backfilled, RLS rewritten, `user_id` made nullable). Both were committed
+afterwards (`5f2aa33`, `d4c9bfb`), so nothing is currently unreproducible, and
+the live app was checked and is unaffected: the deployed build still filters the
+registry by `user_id`, its 375 user-owned rows are intact, and the unique index
+its upsert targets (`model_registry_user_id_model_id_key`) still exists beside
+the new `model_registry_owner_model_key`.
+
+That both attempts landed safely is luck, not a control. In the window between
+apply and commit the only copy of a live schema change is one file on one
+machine, and this is the second time in four days that production state has been
+written by code that was not on `main` (finding #13 was the first, and it broke a
+build).
+
+**Gate to add — prevention at the point of the hazard, not detection after it.**
+`apply-migration.mjs` should refuse to apply a file that is untracked or modified
+relative to `HEAD`, with an explicit `--allow-uncommitted` escape for a genuine
+emergency that then prints a loud reminder to commit. Cheap (one `git status
+--porcelain -- <file>` per apply), impossible to forget, and it cannot break a
+correct workflow because the correct workflow commits first. `apply-migration.mjs`
+is owned by `personagendemo-12`; proposed to them 2026-09-08.
+
+**Secondary, same family:** the ledger row is written before the code that needs
+the schema reaches the host, so production briefly runs old code against new
+schema. That is survivable when a migration is additive (both of today's were,
+and both were verified so) and dangerous when it is not. Worth stating as a rule:
+**additive migrations may lead the deploy; destructive ones must follow it.**
 | 9 | (update) `.gitignore` edit is inside the unowned set above, so the `graphify-out/cache/` line and the `git rm -r --cached` of the 87 tracked cache files are folded into the same adoption pass. | — | — |
 
 ## Suggested order
