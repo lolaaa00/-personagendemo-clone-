@@ -411,7 +411,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-08", hash: "42b531a", type: "fix", category: "fix", scope: "migrations", title: "the ledger checksum is a content hash, not a byte hash" },
 	{ date: "2026-09-08", hash: "5e35685", type: "docs", category: "docs", scope: "audit", title: "close finding #12 with two-checkout proof; open finding #15 (migrations applied from uncommitted files)" },
 	{ date: "2026-09-08", hash: "9986109", type: "feat", category: "generation", scope: "models", title: "the video failover and the voiceover resolve from the registry" },
-	{ date: "2026-09-08", hash: "e8c7e9b", type: "other", category: "maintenance", scope: null, title: "Merge remote-tracking branch 'origin/main'" }
+	{ date: "2026-09-08", hash: "e8c7e9b", type: "other", category: "maintenance", scope: null, title: "Merge remote-tracking branch 'origin/main'" },
+	{ date: "2026-09-08", hash: "2578171", type: "feat", category: "infrastructure", scope: "migrations", title: "refuse to apply a migration that is not in the repository" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -729,12 +730,12 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 	},
 	{
 		id: "553290a", from: "2026-09-08", to: "2026-09-08",
-		category: "docs", categories: ["docs","publishing","maintenance","fix","generation"],
+		category: "docs", categories: ["docs","publishing","maintenance","fix","generation","infrastructure"],
 		title: "Help: finding #12 proven in production — checksum ledger…",
-		summary: "Finding #12 proven in production — checksum ledger is line-ending sensitive. Plus 6 more changes, touching getting posts onto your accounts and internal cleanup and things that were broken.",
+		summary: "Finding #12 proven in production — checksum ledger is line-ending sensitive. Plus 7 more changes, touching getting posts onto your accounts and internal cleanup and things that were broken.",
 		major: true, curated: false,
-		entries: [CHANGELOG[371], CHANGELOG[372], CHANGELOG[373], CHANGELOG[374], CHANGELOG[375], CHANGELOG[376], CHANGELOG[377]]
+		entries: [CHANGELOG[371], CHANGELOG[372], CHANGELOG[373], CHANGELOG[374], CHANGELOG[375], CHANGELOG[376], CHANGELOG[377], CHANGELOG[378]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "e8c7e9b";
+export const CHANGELOG_GENERATED_FROM = "2578171";

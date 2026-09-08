@@ -183,6 +183,35 @@ the schema reaches the host, so production briefly runs old code against new
 schema. That is survivable when a migration is additive (both of today's were,
 and both were verified so) and dangerous when it is not. Worth stating as a rule:
 **additive migrations may lead the deploy; destructive ones must follow it.**
+
+**CLOSED 2026-09-08 by `2578171`.** `apply-migration.mjs` now refuses a file that
+is not committed, with `--allow-uncommitted` as the loud escape; the classifier
+lives in `scripts/lib/migration-checksum.mjs` and is unit-tested. Two design
+choices worth keeping: it refuses when it *cannot* verify (no git, not a work
+tree) rather than passing silently, and `--dry-run` stays ungated because it
+writes nothing.
+
+Verified independently from a second checkout, against the real applier and the
+real production ledger, using a harmless `SELECT 1;` probe so that a gate failure
+could have written at most one ledger row:
+
+| case | result |
+|---|---|
+| untracked file → `apply` | REFUSED "the file is not tracked by git…", **exit 2** |
+| **staged, not committed** → `apply` | REFUSED "the file differs from HEAD…", **exit 2** |
+| untracked file → `--dry-run` | plan printed, exit 0 (correct: writes nothing) |
+| committed + already applied → `apply` | "skip … already applied, checksum matches", exit 0 (no false positive on the normal path) |
+| production ledger after all probes | 41 in ORDER · 0 pending · 0 drifted; `WHERE name LIKE '%probe%'` → 0 rows |
+
+The staged-but-uncommitted case was not in the author's own proof and is the one
+that matters most in practice: it is the state a person is in between `git add`
+and `git commit`, which is exactly when the work *feels* finished.
+
+**Method note, recorded because it nearly produced a false PASS:** the first
+measurement read exit codes through a shell pipe, so `$?` reflected `tail` and
+every case appeared to exit 0. A refusal that exits 0 would sail through any
+script that chains on it. Re-measured directly. When verifying an exit code,
+never read it through a pipe.
 | 9 | (update) `.gitignore` edit is inside the unowned set above, so the `graphify-out/cache/` line and the `git rm -r --cached` of the 87 tracked cache files are folded into the same adoption pass. | — | — |
 
 ## Suggested order
