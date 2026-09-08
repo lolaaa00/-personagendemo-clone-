@@ -21,14 +21,18 @@
 //   * a file already recorded with the same checksum is a no-op;
 //   * the checksum is a CONTENT hash: CRLF/CR are normalised to LF and a BOM is
 //     stripped before hashing, so a record written from a Windows checkout
-//     verifies from a Linux worktree or CI and vice versa.
+//     verifies from a Linux worktree or CI and vice versa;
+//   * a file that is untracked or differs from HEAD is REFUSED — a schema change
+//     that is live in production must exist in the repository first
+//     (--allow-uncommitted overrides, loudly; --dry-run is never gated).
 //
 // Transport: the same `${PUBLIC_SUPABASE_URL}/pg/query` endpoint the legacy
 // run-migrations.js used, authenticated with the service-role key from .env.
 // Read-only invocations (--status, --dry-run) never send anything but SELECTs.
 // ═══════════════════════════════════════════════════════════════════════════
 
-import { hashSql, classifyChecksum } from './lib/migration-checksum.mjs';
+import { execFileSync } from 'node:child_process';
+import { hashSql, classifyChecksum, classifyWorktreeState, provenanceRefusal } from './lib/migration-checksum.mjs';
 import { readFileSync, existsSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -115,6 +119,23 @@ function readMigration(fileArg) {
 	return { name: basename(path), path, sql, checksum: sha256(sql) };
 }
 
+/**
+ * Is this migration file committed and unmodified? Returns 'clean',
+ * 'untracked', 'modified', or 'unverifiable' (no git / not a work tree).
+ * "Cannot verify" is not "fine": it refuses too, and --allow-uncommitted is the
+ * one-flag escape.
+ */
+function worktreeState(path) {
+	try {
+		const dir = dirname(path);
+		execFileSync('git', ['rev-parse', '--is-inside-work-tree'], { cwd: dir, stdio: ['ignore', 'pipe', 'ignore'] });
+		const out = execFileSync('git', ['status', '--porcelain', '--', path], { cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+		return classifyWorktreeState(out);
+	} catch {
+		return 'unverifiable';
+	}
+}
+
 const q = (s) => `'${String(s).replace(/'/g, "''")}'`;
 
 function wrap(m, mode = 'applied') {
@@ -170,7 +191,7 @@ async function cmdStatus() {
 	return { pending, drifted };
 }
 
-async function cmdApply(files, { dryRun }) {
+async function cmdApply(files, { dryRun, allowUncommitted }) {
 	const ledger = await readLedger();
 	for (const f of files) {
 		const m = readMigration(f);
@@ -195,6 +216,18 @@ async function cmdApply(files, { dryRun }) {
 		if (dryRun) {
 			console.log(`--- would apply ${m.name} (${m.checksum.slice(0, 8)}) ---\n${sql}\n`);
 			continue;
+		}
+		// Provenance: what goes live must exist in the repository (see the note
+		// in lib/migration-checksum.mjs). Checked here, after the dry-run exit,
+		// so `--dry-run` on a work-in-progress file still prints its plan.
+		const state = worktreeState(m.path);
+		if (state !== 'clean') {
+			if (!allowUncommitted) {
+				console.error(provenanceRefusal(m.name, state));
+				process.exitCode = 2;
+				continue;
+			}
+			console.warn(`WARNING  ${m.name}: applying a file that ${state === 'untracked' ? 'is untracked' : state === 'modified' ? 'differs from HEAD' : 'could not be checked against git'} — --allow-uncommitted was given. Commit it immediately after; until you do, production depends on code that exists nowhere else.`);
 		}
 		process.stdout.write(`apply    ${m.name} (${m.checksum.slice(0, 8)}) … `);
 		await pgQuery(sql);
@@ -302,12 +335,12 @@ async function cmdRehash({ dryRun }) {
 	if (refused.length) process.exitCode = 2;
 }
 
-async function cmdAll({ dryRun }) {
+async function cmdAll({ dryRun, allowUncommitted }) {
 	const order = await loadOrder();
 	const ledger = await readLedger();
 	const pending = order.map((o) => o.file).filter((f) => !ledger.has(f) && existsSync(join(supabaseDir, f)));
 	if (pending.length === 0) return console.log('no pending migrations');
-	await cmdApply(pending, { dryRun });
+	await cmdApply(pending, { dryRun, allowUncommitted });
 }
 
 // ── main ─────────────────────────────────────────────────────────────────────
@@ -323,11 +356,11 @@ try {
 		await cmdRecordExisting(i >= 0 ? args[i + 1] : null);
 	} else if (flags.has('--unrecord')) await cmdUnrecord(files);
 	else if (flags.has('--rehash')) await cmdRehash({ dryRun: flags.has('--dry-run') });
-	else if (flags.has('--all')) await cmdAll({ dryRun: flags.has('--dry-run') });
-	else if (files.length) await cmdApply(files, { dryRun: flags.has('--dry-run') });
+	else if (flags.has('--all')) await cmdAll({ dryRun: flags.has('--dry-run'), allowUncommitted: flags.has('--allow-uncommitted') });
+	else if (files.length) await cmdApply(files, { dryRun: flags.has('--dry-run'), allowUncommitted: flags.has('--allow-uncommitted') });
 	else {
 		console.log(
-			'usage: apply-migration.mjs --status [--strict] | --record-existing --through <file> | --unrecord <name>... | --rehash [--dry-run] | --all [--dry-run] | [--dry-run] <file.sql>...'
+			'usage: apply-migration.mjs --status [--strict] | --record-existing --through <file> | --unrecord <name>... | --rehash [--dry-run] | --all [--dry-run] [--allow-uncommitted] | [--dry-run] [--allow-uncommitted] <file.sql>...'
 		);
 		process.exitCode = 1;
 	}

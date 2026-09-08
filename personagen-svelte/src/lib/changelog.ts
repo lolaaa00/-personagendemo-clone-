@@ -408,7 +408,10 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-08", hash: "553290a", type: "docs", category: "docs", scope: "audit", title: "finding #12 proven in production — checksum ledger is line-ending sensitive" },
 	{ date: "2026-09-08", hash: "d4c9bfb", type: "feat", category: "publishing", scope: "models", title: "one platform-owned model registry instead of a private copy per user" },
 	{ date: "2026-09-08", hash: "f1d7593", type: "other", category: "maintenance", scope: null, title: "Merge remote-tracking branch 'origin/main'" },
-	{ date: "2026-09-08", hash: "42b531a", type: "fix", category: "fix", scope: "migrations", title: "the ledger checksum is a content hash, not a byte hash" }
+	{ date: "2026-09-08", hash: "42b531a", type: "fix", category: "fix", scope: "migrations", title: "the ledger checksum is a content hash, not a byte hash" },
+	{ date: "2026-09-08", hash: "5e35685", type: "docs", category: "docs", scope: "audit", title: "close finding #12 with two-checkout proof; open finding #15 (migrations applied from uncommitted files)" },
+	{ date: "2026-09-08", hash: "9986109", type: "feat", category: "generation", scope: "models", title: "the video failover and the voiceover resolve from the registry" },
+	{ date: "2026-09-08", hash: "e8c7e9b", type: "other", category: "maintenance", scope: null, title: "Merge remote-tracking branch 'origin/main'" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -726,12 +729,12 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 	},
 	{
 		id: "553290a", from: "2026-09-08", to: "2026-09-08",
-		category: "docs", categories: ["docs","publishing","maintenance","fix"],
+		category: "docs", categories: ["docs","publishing","maintenance","fix","generation"],
 		title: "Help: finding #12 proven in production — checksum ledger…",
-		summary: "Finding #12 proven in production — checksum ledger is line-ending sensitive. Plus 3 more changes, touching getting posts onto your accounts and internal cleanup and things that were broken.",
-		major: false, curated: false,
-		entries: [CHANGELOG[371], CHANGELOG[372], CHANGELOG[373], CHANGELOG[374]]
+		summary: "Finding #12 proven in production — checksum ledger is line-ending sensitive. Plus 6 more changes, touching getting posts onto your accounts and internal cleanup and things that were broken.",
+		major: true, curated: false,
+		entries: [CHANGELOG[371], CHANGELOG[372], CHANGELOG[373], CHANGELOG[374], CHANGELOG[375], CHANGELOG[376], CHANGELOG[377]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "42b531a";
+export const CHANGELOG_GENERATED_FROM = "e8c7e9b";

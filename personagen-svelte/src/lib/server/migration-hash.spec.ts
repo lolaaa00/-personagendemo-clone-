@@ -15,7 +15,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 // Plain ESM helper, shared with scripts/apply-migration.mjs (typed by JSDoc).
-import { normalizeSql, hashSql, legacyVariantHashes, classifyChecksum } from '../../../scripts/lib/migration-checksum.mjs';
+import { normalizeSql, hashSql, legacyVariantHashes, classifyChecksum, classifyWorktreeState, provenanceRefusal } from '../../../scripts/lib/migration-checksum.mjs';
 
 const SQL_LF = 'ALTER TABLE public.agents\n  ADD COLUMN IF NOT EXISTS market TEXT;\n';
 const SQL_CRLF = SQL_LF.replace(/\n/g, '\r\n');
@@ -72,12 +72,54 @@ describe('classifyChecksum — what --rehash is allowed to repair', () => {
 	});
 });
 
+/**
+ * Provenance gate: twice on 2026-09-08 a migration reached production from a
+ * file that was untracked at the time. Both were committed afterwards, but in
+ * that window the only copy of a live schema change was one file on one machine.
+ */
+describe('classifyWorktreeState — what apply is allowed to run', () => {
+	it('empty porcelain output means tracked and identical to HEAD', () => {
+		expect(classifyWorktreeState('')).toBe('clean');
+		expect(classifyWorktreeState('\n')).toBe('clean');
+		expect(classifyWorktreeState(undefined as unknown as string)).toBe('clean');
+	});
+
+	it('?? is untracked', () => {
+		expect(classifyWorktreeState('?? personagen-svelte/supabase/new_migration.sql\n')).toBe('untracked');
+	});
+
+	it('every other status is a difference from HEAD — staged, unstaged or both', () => {
+		for (const xy of [' M', 'M ', 'MM', 'A ', 'AM', ' D', 'R ', 'UU']) {
+			expect(classifyWorktreeState(`${xy} personagen-svelte/supabase/x.sql\n`)).toBe('modified');
+		}
+	});
+
+	it('the refusal says what is wrong and how to override', () => {
+		expect(provenanceRefusal('x.sql', 'untracked')).toMatch(/not tracked by git/);
+		expect(provenanceRefusal('x.sql', 'modified')).toMatch(/differs from HEAD/);
+		expect(provenanceRefusal('x.sql', 'unverifiable')).toMatch(/could not be checked/);
+		for (const s of ['untracked', 'modified', 'unverifiable'] as const) {
+			expect(provenanceRefusal('x.sql', s)).toContain('--allow-uncommitted');
+			expect(provenanceRefusal('x.sql', s)).toMatch(/^REFUSED/);
+		}
+	});
+});
+
 describe('the runner delegates to that module', () => {
 	const script = readFileSync(join(__dirname, '..', '..', '..', 'scripts', 'apply-migration.mjs'), 'utf8');
 
 	it('imports the shared helper instead of hashing raw bytes itself', () => {
 		expect(script).toContain("from './lib/migration-checksum.mjs'");
 		expect(script).not.toMatch(/createHash\('sha256'\)/);
+	});
+
+	it('apply checks provenance after the dry-run exit, and --all passes the flag through', () => {
+		const apply = script.slice(script.indexOf('async function cmdApply'), script.indexOf('* Stamp migrations'));
+		expect(apply.indexOf('if (dryRun)')).toBeLessThan(apply.indexOf('const state = worktreeState'));
+		expect(apply).toContain('if (!allowUncommitted)');
+		expect(apply).toContain('provenanceRefusal(m.name, state)');
+		expect(script).toContain("allowUncommitted: flags.has('--allow-uncommitted')");
+		expect(script).toContain('await cmdApply(pending, { dryRun, allowUncommitted })');
 	});
 
 	it('--rehash only rewrites rows classified legacy, refuses changed, and can dry-run', () => {

@@ -104,3 +104,48 @@ export function classifyChecksum(text, recorded) {
 	if (recorded === canonical) return 'current';
 	return legacyVariantHashes(text).includes(recorded) ? 'legacy' : 'changed';
 }
+
+// ── Provenance: a live schema change must exist in the repository ───────────
+//
+// Twice on 2026-09-08 a migration reached production from a file that was
+// untracked at the time. Both were committed afterwards, so nothing became
+// unreproducible — but in that window the only copy of a live schema change was
+// one file on one machine, and a rollback or an audit would have had nothing to
+// read. `apply` therefore refuses a file that is untracked or modified against
+// HEAD unless --allow-uncommitted is passed. It cannot obstruct a correct
+// workflow, because the correct workflow commits first.
+
+/**
+ * Reads `git status --porcelain -- <file>` output for ONE path and says what it
+ * means. Empty output = tracked and identical to HEAD.
+ *
+ * @param {string} porcelain raw stdout of `git status --porcelain -- <file>`
+ * @returns {'clean' | 'untracked' | 'modified'}
+ */
+export function classifyWorktreeState(porcelain) {
+	const line = String(porcelain ?? '')
+		.split('\n')
+		.map((l) => l.trimEnd())
+		.find((l) => l.length > 0);
+	if (!line) return 'clean';
+	// Porcelain v1: XY <path>. '??' is untracked; anything else is a staged
+	// and/or unstaged difference from HEAD — both mean "not what HEAD says".
+	return line.startsWith('??') ? 'untracked' : 'modified';
+}
+
+/**
+ * The message shown when a migration is refused for provenance.
+ *
+ * @param {string} name migration file name
+ * @param {'untracked' | 'modified' | 'unverifiable'} state
+ * @returns {string}
+ */
+export function provenanceRefusal(name, state) {
+	const why =
+		state === 'untracked'
+			? 'is not tracked by git'
+			: state === 'modified'
+				? 'differs from HEAD'
+				: 'could not be checked against git (not a work tree, or git is unavailable)';
+	return `REFUSED  ${name}: the file ${why}. A schema change that is live in production must exist in the repository first — commit it, then apply. Pass --allow-uncommitted to override (recorded nowhere; you are on your own for reproducibility).`;
+}
