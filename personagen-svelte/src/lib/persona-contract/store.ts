@@ -32,7 +32,8 @@ import { coerceBios, coerceConfirmedHandles, coerceHandleCandidates } from '../p
 import { readStoredProfileObject } from '../persona-profile-store';
 import { PERSONA_SCHEMA_VERSION, PERSONA_V2_KEYS, isPersonaProfileV2, type FieldSource, type PersonaProfileV2 } from './schema';
 import { TOKEN_GROUPS, isToken, type TokenGroup } from './tokens';
-import { upgradeV1toV2 } from './upgrade';
+import { upgradeV1toV2, type UpgradeMode } from './upgrade';
+import { isObj, isEmptyValue, getPath, setPath, deletePath, leafPaths, pruneEmptyObjects, stripEmptyLeaves, type Obj } from './paths';
 
 export type MergeOrigin = 'ui' | 'sampler' | 'backfill';
 
@@ -113,64 +114,6 @@ const TOKEN_FIELDS: Record<string, { group: TokenGroup; text?: string }> = {
 /** Exported for the touchpoint map (P4.3) and for tests. */
 export const PERSONA_V2_TOKEN_FIELDS: Readonly<Record<string, { group: TokenGroup; text?: string }>> = TOKEN_FIELDS;
 
-// ── Small path helpers (no lodash; paths are shallow and known) ──────────────
-
-type Obj = Record<string, unknown>;
-const isObj = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v);
-
-function getPath(root: Obj, path: string): unknown {
-	let cur: unknown = root;
-	for (const seg of path.split('.')) {
-		if (!isObj(cur)) return undefined;
-		cur = cur[seg];
-	}
-	return cur;
-}
-
-function setPath(root: Obj, path: string, value: unknown): void {
-	const segs = path.split('.');
-	let cur: Obj = root;
-	for (const seg of segs.slice(0, -1)) {
-		if (!isObj(cur[seg])) cur[seg] = {};
-		cur = cur[seg] as Obj;
-	}
-	cur[segs[segs.length - 1]] = value;
-}
-
-function deletePath(root: Obj, path: string): void {
-	const segs = path.split('.');
-	let cur: unknown = root;
-	for (const seg of segs.slice(0, -1)) {
-		if (!isObj(cur)) return;
-		cur = cur[seg];
-	}
-	if (isObj(cur)) delete cur[segs[segs.length - 1]];
-}
-
-/** Every leaf path (dotted) of a nested plain object; arrays and non-objects are leaves. */
-function leafPaths(value: unknown, prefix = ''): string[] {
-	if (!isObj(value)) return prefix ? [prefix] : [];
-	const out: string[] = [];
-	for (const [k, v] of Object.entries(value)) {
-		const p = prefix ? `${prefix}.${k}` : k;
-		if (isObj(v) && Object.keys(v).length) out.push(...leafPaths(v, p));
-		else out.push(p);
-	}
-	return out;
-}
-
-const isEmptyValue = (v: unknown): boolean =>
-	v === '' || (Array.isArray(v) && v.length === 0) || (isObj(v) && Object.keys(v).length === 0);
-
-function pruneEmptyObjects(value: Obj): void {
-	for (const [k, v] of Object.entries(value)) {
-		if (isObj(v)) {
-			pruneEmptyObjects(v);
-			if (Object.keys(v).length === 0) delete value[k];
-		}
-	}
-}
-
 // ── Serialise ────────────────────────────────────────────────────────────────
 
 const clampInt = (v: unknown, lo: number, hi: number): number | undefined => {
@@ -184,8 +127,9 @@ const clampInt = (v: unknown, lo: number, hi: number): number | undefined => {
  * storage. Preserves key presence; empty values pass through untouched so
  * merge can treat them as "clear".
  */
-export function serializePersonaProfileV2(profile: unknown): PersonaProfileV2 {
-	const v2 = isPersonaProfileV2(profile) ? profile : upgradeV1toV2(profile);
+export function serializePersonaProfileV2(profile: unknown, mode: UpgradeMode = 'stored'): PersonaProfileV2 {
+	const patchMode = mode === 'patch';
+	const v2 = isPersonaProfileV2(profile) ? profile : upgradeV1toV2(profile, mode);
 	// Deep copy, then strip unknown top-level keys.
 	const out = JSON.parse(JSON.stringify(v2)) as Obj;
 	for (const k of Object.keys(out)) {
@@ -216,10 +160,25 @@ export function serializePersonaProfileV2(profile: unknown): PersonaProfileV2 {
 			setPath(out, path, Array.from(new Set(v.filter((x) => isToken(group, x)))));
 			continue;
 		}
-		if (v === '') continue; // explicit clear
-		if (isToken(group, v)) continue;
+		if (v === '') {
+			// Explicit clear of the token clears its verbatim companion too (patch mode).
+			if (patchMode && text && getPath(out, text) === undefined) setPath(out, text, '');
+			continue;
+		}
+		if (isToken(group, v)) {
+			// A token and its companion are ONE logical field: in a patch, a valid
+			// token with no companion clears any stale verbatim text on merge.
+			if (patchMode && text && getPath(out, text) === undefined) setPath(out, text, '');
+			continue;
+		}
 		// Off-list: keep verbatim in the companion when there is one, else drop.
-		if (text && typeof v === 'string' && v.trim() && getPath(out, text) === undefined) setPath(out, text, v.trim());
+		// In a patch, also clear the token so the pair cannot disagree after merge.
+		if (text && typeof v === 'string' && v.trim()) {
+			if (getPath(out, text) === undefined) setPath(out, text, v.trim());
+			if (patchMode) setPath(out, path, '');
+			else deletePath(out, path);
+			continue;
+		}
 		deletePath(out, path);
 	}
 
@@ -260,6 +219,10 @@ export function serializePersonaProfileV2(profile: unknown): PersonaProfileV2 {
 			kit.handleCandidates = coerceHandleCandidates(kit.handleCandidates);
 		if (kit.confirmedHandles !== undefined && !isEmptyValue(kit.confirmedHandles))
 			kit.confirmedHandles = coerceConfirmedHandles(kit.confirmedHandles);
+	}
+
+	if (!patchMode) {
+		stripEmptyLeaves(out, PERSONA_V2_KEYS.filter((k) => k !== 'meta' && k !== '_legacy'), isObj(out.meta) && isObj(out.meta.fieldSources) ? (out.meta.fieldSources as Record<string, unknown>) : undefined);
 	}
 
 	// A sub-object emptied by validation (every leaf dropped) is removed, EXCEPT
@@ -339,6 +302,14 @@ export function mergePersonaProfileV2(
 			if (isEmptyValue(value)) {
 				deletePath(out, leaf);
 				delete sources[leaf];
+				continue;
+			}
+			// An UNCHANGED value keeps its provenance. The persona page re-sends its
+			// whole form on every save; without this, one click would re-stamp every
+			// sampled/derived leaf as 'user' and lock automation out of it forever.
+			const current = getPath(out, leaf);
+			if (current !== undefined && JSON.stringify(current) === JSON.stringify(value)) {
+				if (!sources[leaf]) sources[leaf] = stamp;
 				continue;
 			}
 			setPath(out, leaf, JSON.parse(JSON.stringify(value)));

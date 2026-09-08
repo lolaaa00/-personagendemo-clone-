@@ -32,6 +32,16 @@ import {
 	type PersonaProfileV2
 } from './schema';
 import { isToken, type TokenOf } from './tokens';
+import { stripEmptyLeaves } from './paths';
+
+/**
+ * 'stored'  — the result describes a record at rest: no clear markers, token/
+ *             text pairs carry only the value-bearing side. Used by every reader.
+ * 'patch'   — the result is about to be merged: v1's explicit empties ('' / []
+ *             / {}) are passed through so the merge clears what the user cleared,
+ *             and token/text pairs carry '' on the side being replaced.
+ */
+export type UpgradeMode = 'stored' | 'patch';
 
 /** Midpoint used when only a v1 apparent-age bucket exists. `ageSource: 'bucket'` records the imprecision. */
 const PERSONA_AGE_MIDPOINT: Record<TokenOf<'personaAge'>, number> = {
@@ -63,11 +73,18 @@ const KNOWN_V1_KEYS = new Set([
 	'displayName'
 ]);
 
+/**
+ * Trimmed string, or undefined for a non-string. An EMPTY string is returned as
+ * '' on purpose: in v1 an explicit '' is "clear this field", and the v2 merge
+ * honours the same signal — dropping it here would turn a clear into a preserve.
+ */
 const text = (v: unknown): string | undefined => {
 	if (typeof v !== 'string') return undefined;
-	const t = v.trim();
-	return t ? t : undefined;
+	return v.trim();
 };
+
+const isEmptyObject = (v: unknown): boolean =>
+	!!v && typeof v === 'object' && !Array.isArray(v) && Object.keys(v as object).length === 0;
 
 /** Sets `obj[key] = value` only when value is defined; records the leaf path as user-owned. */
 function put<T extends object, K extends keyof T>(
@@ -89,14 +106,16 @@ function put<T extends object, K extends keyof T>(
 function lookTrait<G extends 'skinTone' | 'bodyType' | 'hairColor' | 'hairLength' | 'hairstyle' | 'eyeColor'>(
 	group: G,
 	raw: unknown
-): { token?: TokenOf<G>; text?: string } {
+): { token?: TokenOf<G> | ''; text?: string } {
 	const t = text(raw);
-	if (!t) return {};
-	const token = tokenForLabel(group, t) ?? undefined;
+	if (t === undefined) return {};
+	if (t === '') return { token: '', text: '' }; // explicit clear of the pair
+	// Token when it matches, else '' so the pair cannot disagree after merge.
+	const token = tokenForLabel(group, t) ?? '';
 	return { token, text: t };
 }
 
-export function upgradeV1toV2(input: unknown): PersonaProfileV2 {
+export function upgradeV1toV2(input: unknown, mode: UpgradeMode = 'stored'): PersonaProfileV2 {
 	if (isPersonaProfileV2(input)) return input;
 	const v1: Record<string, unknown> =
 		input && typeof input === 'object' && !Array.isArray(input) ? (input as Record<string, unknown>) : {};
@@ -109,6 +128,8 @@ export function upgradeV1toV2(input: unknown): PersonaProfileV2 {
 	// ── creator ──────────────────────────────────────────────────────────────
 	const creator: NonNullable<PersonaProfileV2['creator']> = {};
 	if (v1.gender === 'female' || v1.gender === 'male') put(creator, 'gender', v1.gender, 'creator.gender', sources);
+	// v1 '' gender = "not chosen" = clear.
+	else if (v1.gender === '') put(creator, 'gender', '' as never, 'creator.gender', sources);
 	put(creator, 'displayName', text(v1.displayName), 'creator.displayName', sources);
 
 	const appearance =
@@ -117,9 +138,10 @@ export function upgradeV1toV2(input: unknown): PersonaProfileV2 {
 			: {};
 
 	const heritageText = text(appearance.ethnicity);
-	if (heritageText) {
-		const token = tokenForLabel('heritage', heritageText);
-		if (token) put(creator, 'heritage', token, 'creator.heritage', sources);
+	if (heritageText !== undefined) {
+		const token = heritageText ? tokenForLabel('heritage', heritageText) : null;
+		// Token or '' — never both set and disagreeing; '' clears on merge.
+		put(creator, 'heritage', (token ?? '') as never, 'creator.heritage', sources);
 		put(creator, 'heritageText', heritageText, 'creator.heritageText', sources);
 	}
 	const personaAge = tokenForLabel('personaAge', text(appearance.personaAge));
@@ -130,30 +152,33 @@ export function upgradeV1toV2(input: unknown): PersonaProfileV2 {
 	if (Object.keys(creator).length) out.creator = creator;
 
 	// ── look ─────────────────────────────────────────────────────────────────
+	// An explicit empty appearance object is "clear my look" in v1; pass the
+	// signal through as an empty section so the human-clear rule applies on merge.
+	if (isEmptyObject(v1.appearance)) out.look = {};
 	const look: PersonaLook = {};
 	const skin = lookTrait('skinTone', appearance.skinTone);
-	put(look, 'skinTone', skin.token, 'look.skinTone', sources);
+	put(look, 'skinTone', skin.token as never, 'look.skinTone', sources);
 	put(look, 'skinToneText', skin.text, 'look.skinToneText', sources);
 	const body = lookTrait('bodyType', appearance.bodyType);
-	put(look, 'bodyType', body.token, 'look.bodyType', sources);
+	put(look, 'bodyType', body.token as never, 'look.bodyType', sources);
 	put(look, 'bodyTypeText', body.text, 'look.bodyTypeText', sources);
 
 	const hair: NonNullable<PersonaLook['hair']> = {};
 	const hc = lookTrait('hairColor', appearance.hairColor);
-	put(hair, 'color', hc.token, 'look.hair.color', sources);
+	put(hair, 'color', hc.token as never, 'look.hair.color', sources);
 	put(hair, 'colorText', hc.text, 'look.hair.colorText', sources);
 	const hl = lookTrait('hairLength', appearance.hairLength);
-	put(hair, 'length', hl.token, 'look.hair.length', sources);
+	put(hair, 'length', hl.token as never, 'look.hair.length', sources);
 	put(hair, 'lengthText', hl.text, 'look.hair.lengthText', sources);
 	const hs = lookTrait('hairstyle', appearance.hairstyle);
-	put(hair, 'style', hs.token, 'look.hair.style', sources);
+	put(hair, 'style', hs.token as never, 'look.hair.style', sources);
 	put(hair, 'styleText', hs.text, 'look.hair.styleText', sources);
 	if (Object.keys(hair).length) look.hair = hair;
 
 	const ec = lookTrait('eyeColor', appearance.eyeColor);
-	if (ec.text) {
+	if (ec.text !== undefined) {
 		const eyes: NonNullable<PersonaLook['eyes']> = {};
-		put(eyes, 'color', ec.token, 'look.eyes.color', sources);
+		put(eyes, 'color', ec.token as never, 'look.eyes.color', sources);
 		put(eyes, 'colorText', ec.text, 'look.eyes.colorText', sources);
 		look.eyes = eyes;
 	}
@@ -169,9 +194,11 @@ export function upgradeV1toV2(input: unknown): PersonaProfileV2 {
 		v1.voiceProfile && typeof v1.voiceProfile === 'object' && !Array.isArray(v1.voiceProfile)
 			? (v1.voiceProfile as Record<string, unknown>)
 			: null;
-	if (vp) {
+	if (isEmptyObject(v1.voiceProfile)) out.voice = {};
+	else if (vp) {
 		const voice: NonNullable<PersonaProfileV2['voice']> = {};
 		if (vp.gender === 'female' || vp.gender === 'male') put(voice, 'gender', vp.gender, 'voice.gender', sources);
+		else if (vp.gender === '') put(voice, 'gender', '' as never, 'voice.gender', sources);
 		put(voice, 'nationality', text(vp.nationality), 'voice.nationality', sources);
 		put(voice, 'accent', text(vp.accent), 'voice.accent', sources);
 		if (Object.keys(voice).length) out.voice = voice;
@@ -186,6 +213,8 @@ export function upgradeV1toV2(input: unknown): PersonaProfileV2 {
 			.map((r) => tokenForLabel('ageRange', r))
 			.filter((t): t is TokenOf<'ageRange'> => t !== null);
 		if (tokens.length) put(audience, 'ageRanges', tokens, 'audience.ageRanges', sources);
+	} else if (Array.isArray(v1.ageRanges) && v1.ageRanges.length === 0) {
+		put(audience, 'ageRanges', [], 'audience.ageRanges', sources); // explicit clear
 	}
 	put(audience, 'targetAvatar', text(v1.targetAvatar), 'audience.targetAvatar', sources);
 	put(audience, 'psychProfile', text(v1.psychProfile), 'audience.psychProfile', sources);
@@ -193,35 +222,32 @@ export function upgradeV1toV2(input: unknown): PersonaProfileV2 {
 
 	// ── strategy ─────────────────────────────────────────────────────────────
 	const strategy: NonNullable<PersonaProfileV2['strategy']> = {};
+	// Token/text pairs: exactly one carries the value; the other is '' so a merge
+	// can never leave the pair disagreeing. '' on both = explicit clear.
 	const arch = text(v1.archetype);
-	if (arch) {
-		const token = tokenForLabel('archetype', arch);
-		if (token) put(strategy, 'archetype', token, 'strategy.archetype', sources);
-		else put(strategy, 'archetypeText', arch, 'strategy.archetypeText', sources);
+	if (arch !== undefined) {
+		const token = arch ? tokenForLabel('archetype', arch) : null;
+		put(strategy, 'archetype', (token ?? '') as never, 'strategy.archetype', sources);
+		put(strategy, 'archetypeText', token ? '' : arch, 'strategy.archetypeText', sources);
 	}
 	const focus = text(v1.contentFocus);
-	if (focus) {
-		const token = tokenForLabel('contentFocus', focus);
-		if (token) put(strategy, 'contentFocus', token, 'strategy.contentFocus', sources);
-		else put(strategy, 'contentFocusText', focus, 'strategy.contentFocusText', sources);
+	if (focus !== undefined) {
+		const token = focus ? tokenForLabel('contentFocus', focus) : null;
+		put(strategy, 'contentFocus', (token ?? '') as never, 'strategy.contentFocus', sources);
+		put(strategy, 'contentFocusText', token ? '' : focus, 'strategy.contentFocusText', sources);
 	}
 	put(strategy, 'contentAngle', text(v1.contentAngle), 'strategy.contentAngle', sources);
 	if (Object.keys(strategy).length) out.strategy = strategy;
 
 	// ── identity kit ─────────────────────────────────────────────────────────
+	// An explicit empty value is a clear in v1; pass it through as an empty
+	// value so the merge clears it too (dropping it would silently preserve).
 	const kit: NonNullable<PersonaProfileV2['identityKit']> = {};
-	if (v1.bios !== undefined) {
-		const bios = coerceBios(v1.bios);
-		if (Object.keys(bios).length) put(kit, 'bios', bios, 'identityKit.bios', sources);
-	}
-	if (v1.handleCandidates !== undefined) {
-		const hc = coerceHandleCandidates(v1.handleCandidates);
-		if (hc.length) put(kit, 'handleCandidates', hc, 'identityKit.handleCandidates', sources);
-	}
-	if (v1.confirmedHandles !== undefined) {
-		const ch = coerceConfirmedHandles(v1.confirmedHandles);
-		if (Object.keys(ch).length) put(kit, 'confirmedHandles', ch, 'identityKit.confirmedHandles', sources);
-	}
+	if (v1.bios !== undefined) put(kit, 'bios', coerceBios(v1.bios), 'identityKit.bios', sources);
+	if (v1.handleCandidates !== undefined)
+		put(kit, 'handleCandidates', coerceHandleCandidates(v1.handleCandidates), 'identityKit.handleCandidates', sources);
+	if (v1.confirmedHandles !== undefined)
+		put(kit, 'confirmedHandles', coerceConfirmedHandles(v1.confirmedHandles), 'identityKit.confirmedHandles', sources);
 	if (Object.keys(kit).length) out.identityKit = kit;
 
 	// ── unknown keys: carried, never dropped ─────────────────────────────────
@@ -252,6 +278,13 @@ export function upgradeV1toV2(input: unknown): PersonaProfileV2 {
 	if (Object.keys(strayAppearance).length) legacy.appearance = strayAppearance;
 	if (Object.keys(legacy).length) out._legacy = legacy;
 
+	if (mode === 'stored') {
+		stripEmptyLeaves(
+			out as unknown as Record<string, unknown>,
+			['creator', 'look', 'voice', 'audience', 'strategy', 'identityKit', 'description'],
+			sources
+		);
+	}
 	if (Object.keys(sources).length) out.meta.fieldSources = sources;
 	return out;
 }

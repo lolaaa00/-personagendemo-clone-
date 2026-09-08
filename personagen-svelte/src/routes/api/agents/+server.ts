@@ -1,11 +1,9 @@
 import { json } from '@sveltejs/kit';
 import { personaLimitExceeded } from '$lib/server/plans';
 import type { RequestHandler } from './$types';
-import {
-	profileToMarketString,
-	serializePersonaProfile,
-	type PersonaProfile
-} from '$lib/persona-profile-store';
+import { profileToMarketString } from '$lib/persona-profile-store';
+import { buildStoredProfile } from '$lib/persona-contract/save';
+import type { PersonaProfileV2 } from '$lib/persona-contract/schema';
 import { writeWithProfileFallback } from '$lib/server/personas-profile-column';
 
 export const POST: RequestHandler = async ({ request, locals }) => {
@@ -50,13 +48,14 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		const agentInitial = initial || name.charAt(0).toUpperCase();
 		const skillsText = typeof skills === 'string' ? skills : '';
 		// The full persona profile (archetype/avatar/appearance/voiceProfile) goes
-		// through the normalising gate at birth — same as every later save — then
-		// lands in personas_profile JSONB. `market` gets a copy ONLY as the
-		// never-brick fallback for a database without the JSONB column; no
-		// external service reads it (mcp-bridge verified 2026-09-05).
-		const profileToStore: PersonaProfile | undefined =
+		// through the same gate as every later save (Persona Model v2, P0.5): v1
+		// normalising, upgrade, v2 validation, provenance — and lands as a v2 blob
+		// in personas_profile JSONB. `market` gets a copy ONLY as the never-brick
+		// fallback for a database without the JSONB column; no external service
+		// reads it (mcp-bridge verified 2026-09-05).
+		const profileToStore: PersonaProfileV2 | undefined =
 			personaProfile && typeof personaProfile === 'object'
-				? serializePersonaProfile(personaProfile as PersonaProfile)
+				? buildStoredProfile(null, personaProfile, { origin: 'ui' })
 				: undefined;
 
 		const insertPayload = {

@@ -189,6 +189,30 @@ describe('upgradeV1toV2 — invariants', () => {
 		expect(upgradeV1toV2({ gender: 'nonbinary' }).creator).toBeUndefined();
 	});
 
+	it("passes v1's explicit clears through as empty values (the merge turns them into deletions)", () => {
+		const v1 = {
+			gender: '',
+			ageRanges: [],
+			archetype: '',
+			targetAvatar: '',
+			appearance: {},
+			voiceProfile: {},
+			bios: {},
+			handleCandidates: [],
+			confirmedHandles: {}
+		} as unknown as PersonaProfile;
+		// Stored mode: a record at rest carries no clear markers at all.
+		expect(upgradeV1toV2(v1)).toEqual({ meta: { schemaVersion: 2, generator: 'manual', upgradedFrom: 1 } });
+		// Patch mode: the clears pass through.
+		const out = upgradeV1toV2(v1, 'patch');
+		expect(out.creator).toEqual({ gender: '' });
+		expect(out.audience).toEqual({ ageRanges: [], targetAvatar: '' });
+		expect(out.strategy).toEqual({ archetype: '', archetypeText: '' });
+		expect(out.look).toEqual({});
+		expect(out.voice).toEqual({});
+		expect(out.identityKit).toEqual({ bios: {}, handleCandidates: [], confirmedHandles: {} });
+	});
+
 	it('an empty v1 profile produces no sub-objects and no sources', () => {
 		expect(upgradeV1toV2({})).toEqual({ meta: { schemaVersion: 2, generator: 'manual', upgradedFrom: 1 } });
 	});

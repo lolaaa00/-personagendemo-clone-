@@ -343,7 +343,7 @@ export function mergePersonaProfile(
  * earlier comments claiming otherwise were wrong. Retire via its own migration
  * once every deployment (including client bootstraps) has the JSONB column.
  */
-export function profileToMarketString(profile: PersonaProfile | null | undefined): string {
+export function profileToMarketString(profile: object | null | undefined): string {
 	try {
 		return JSON.stringify(profile ?? {});
 	} catch {

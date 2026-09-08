@@ -400,7 +400,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-07", hash: "b30c7a8", type: "feat", category: "feature", scope: "models", title: "registry truth layers — row provenance, \"Runs as\" from the real resolvers, ledger reconciliation" },
 	{ date: "2026-09-07", hash: "b47915b", type: "fix", category: "fix", scope: "models", title: "registry truth layers type-check clean" },
 	{ date: "2026-09-07", hash: "fe824cd", type: "feat", category: "security", scope: "persona-contract", title: "v2 schema, token enums, label registry (P0.1)" },
-	{ date: "2026-09-07", hash: "48bf0b7", type: "feat", category: "infrastructure", scope: "persona-contract", title: "pure v1⇄v2 upgrade/downgrade with golden fixtures (P0.2)" }
+	{ date: "2026-09-07", hash: "48bf0b7", type: "feat", category: "infrastructure", scope: "persona-contract", title: "pure v1⇄v2 upgrade/downgrade with golden fixtures (P0.2)" },
+	{ date: "2026-09-07", hash: "58b7206", type: "feat", category: "feature", scope: "persona-store", title: "dual-shape bridge — v1 read downgrades v2 blobs, v2 read/serialize/merge with provenance (P0.3)" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -712,10 +713,10 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 		id: "52e574e", from: "2026-09-07", to: "2026-09-07",
 		category: "infrastructure", categories: ["infrastructure","performance","docs","generation","fix","feature","security"],
 		title: "Behind the scenes: close the phase-2 gaps — plans (dormant), Firecrawl…",
-		summary: "Close the phase-2 gaps — plans (dormant), Firecrawl metering, welcome-abuse guard, settings billing card, persona limit, deploy step-0 stamps check. Plus 9 more changes, touching speed and size and guides and explanations and making posts, images and video.",
+		summary: "Close the phase-2 gaps — plans (dormant), Firecrawl metering, welcome-abuse guard, settings billing card, persona limit, deploy step-0 stamps check. Plus 10 more changes, touching speed and size and guides and explanations and making posts, images and video.",
 		major: true, curated: false,
-		entries: [CHANGELOG[357], CHANGELOG[358], CHANGELOG[359], CHANGELOG[360], CHANGELOG[361], CHANGELOG[362], CHANGELOG[363], CHANGELOG[364], CHANGELOG[365], CHANGELOG[366]]
+		entries: [CHANGELOG[357], CHANGELOG[358], CHANGELOG[359], CHANGELOG[360], CHANGELOG[361], CHANGELOG[362], CHANGELOG[363], CHANGELOG[364], CHANGELOG[365], CHANGELOG[366], CHANGELOG[367]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "48bf0b7";
+export const CHANGELOG_GENERATED_FROM = "58b7206";

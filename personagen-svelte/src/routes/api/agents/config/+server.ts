@@ -1,13 +1,8 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { createDbService, type AgentConfigInsert } from '$lib/server/db';
-import {
-	mergePersonaProfile,
-	profileToMarketString,
-	readPersonaProfile,
-	serializePersonaProfile,
-	type PersonaProfile
-} from '$lib/persona-profile-store';
+import { profileToMarketString } from '$lib/persona-profile-store';
+import { buildStoredProfile } from '$lib/persona-contract/save';
 import { writeWithProfileFallback } from '$lib/server/personas-profile-column';
 import { checkAgentAccess } from '$lib/server/workspaces';
 
@@ -97,23 +92,17 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		// database that hasn't run personas_profile_migration.sql (no external
 		// service reads `market`; mcp-bridge verified 2026-09-05).
 		//
-		// SERIALISED then MERGED: serialize is the normalising gate (trims, snaps
-		// matching options onto canonical spelling, strips unknown keys, re-derives
-		// age bounds) and it preserves key presence, so merge still keeps every
-		// field the patch doesn't mention. A caller that patches only bios cannot
-		// wipe appearance/archetype off the row.
+		// Persona Model v2 (P0.5): the stored blob is v2 from this save on. The
+		// client still sends its v1 form (or the legacy stringified transport);
+		// buildStoredProfile runs the v1 normalising gate, upgrades, validates on
+		// the v2 contract, and merges over the stored record with provenance —
+		// absent keys preserve, explicit empties clear, unchanged values keep
+		// their source, and a UI save can never wipe a field it doesn't mention.
+		// Every reader is dual-shape (readPersonaProfile downgrades v2), so no
+		// consumer changes. `market` carries the same blob as the never-brick
+		// fallback for a database without the JSONB column.
 		if (personaProfile !== undefined) {
-			// A string body is the legacy transport — the client already stringified
-			// the profile. Parse it back through the accessor so it merges like any
-			// other patch instead of replacing the stored object as opaque text.
-			const patch = serializePersonaProfile(
-				readPersonaProfile(
-					typeof personaProfile === 'string'
-						? { market: personaProfile }
-						: { personas_profile: personaProfile }
-				) as PersonaProfile
-			);
-			const merged = mergePersonaProfile(readPersonaProfile(agent), patch);
+			const merged = buildStoredProfile(agent, personaProfile, { origin: 'ui' });
 			agentUpdatePayload.personas_profile = merged;
 			agentUpdatePayload.market = profileToMarketString(merged);
 		}

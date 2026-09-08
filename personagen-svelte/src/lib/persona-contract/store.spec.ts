@@ -82,16 +82,37 @@ describe('serializePersonaProfileV2 — the normalising gate', () => {
 		expect(out.creator).toBeUndefined();
 	});
 
-	it('keeps valid tokens, de-duplicates and filters token arrays, preserves explicit clears', () => {
-		const out = serializePersonaProfileV2({
+	it('a token and its verbatim companion are one field: setting either clears the other on merge', () => {
+		const stored: PersonaProfileV2 = {
+			meta: { schemaVersion: 2 },
+			strategy: { archetype: 'educator' },
+			look: { hair: { colorText: 'honey blonde' } }
+		};
+		// Off-list archetype → text set, token cleared (patch mode).
+		const a = mergePersonaProfileV2(stored, serializePersonaProfileV2({ meta: { schemaVersion: 2 }, strategy: { archetype: 'Mentor' } } as unknown as PersonaProfileV2, 'patch'));
+		expect(a.strategy).toEqual({ archetypeText: 'Mentor' });
+		// Valid token → token set, stale text cleared (patch mode).
+		const b = mergePersonaProfileV2(stored, serializePersonaProfileV2({ meta: { schemaVersion: 2 }, look: { hair: { color: 'blonde' } } } as PersonaProfileV2, 'patch'));
+		expect(b.look).toEqual({ hair: { color: 'blonde' } });
+		// Stored mode never writes clear markers: an off-list value simply lands in the companion.
+		const s = serializePersonaProfileV2({ meta: { schemaVersion: 2 }, strategy: { archetype: 'Mentor' } } as unknown as PersonaProfileV2);
+		expect(s.strategy).toEqual({ archetypeText: 'Mentor' });
+	});
+
+	it('keeps valid tokens, de-duplicates and filters token arrays; clears survive only in patch mode', () => {
+		const input = {
 			meta: { schemaVersion: 2 },
 			audience: { ageRanges: ['25_34', '25_34', 'nope', '35_44'] },
 			strategy: { archetype: '' },
 			creator: { neverDiscusses: ['politics', 'x'] }
-		} as unknown as PersonaProfileV2);
-		expect(out.audience?.ageRanges).toEqual(['25_34', '35_44']);
-		expect(out.strategy).toEqual({ archetype: '' });
-		expect(out.creator?.neverDiscusses).toEqual(['politics']);
+		} as unknown as PersonaProfileV2;
+		const patch = serializePersonaProfileV2(input, 'patch');
+		expect(patch.audience?.ageRanges).toEqual(['25_34', '35_44']);
+		expect(patch.strategy).toEqual({ archetype: '', archetypeText: '' }); // clear marker + its companion
+		expect(patch.creator?.neverDiscusses).toEqual(['politics']);
+		const stored = serializePersonaProfileV2(input);
+		expect(stored.strategy).toBeUndefined(); // a record at rest carries no clear markers
+		expect(stored.audience?.ageRanges).toEqual(['25_34', '35_44']);
 	});
 
 	it('clamps numbers and accepts numeric strings', () => {
@@ -164,6 +185,19 @@ describe('mergePersonaProfileV2 — THE MERGE RULE', () => {
 		expect(out.creator?.age).toBe(40); // sampled — writable
 		expect(out.creator?.work?.title).toBe('Physiotherapist'); // extracted — protected
 		expect(out.meta.fieldSources?.['look.hair.style']).toBe('sampled');
+	});
+
+	it('an UNCHANGED value keeps its provenance (a full-form UI save must not re-stamp sampled leaves)', () => {
+		// The page echoes creator.age = 34 (sampled) unchanged, and changes displayName.
+		const out = mergePersonaProfileV2(existing, {
+			meta: { schemaVersion: 2 },
+			creator: { age: 34, displayName: 'Jenny' }
+		});
+		expect(out.meta.fieldSources?.['creator.age']).toBe('sampled'); // untouched
+		expect(out.meta.fieldSources?.['creator.displayName']).toBe('user'); // changed → user
+		// A leaf with no recorded provenance that is echoed unchanged gets one, so it is no longer "unknown".
+		const seeded = mergePersonaProfileV2(existing, { meta: { schemaVersion: 2 }, look: { hair: { style: 'straight' } } });
+		expect(seeded.meta.fieldSources?.['look.hair.style']).toBe('user');
 	});
 
 	it('a human can clear a whole section; automation cannot', () => {
