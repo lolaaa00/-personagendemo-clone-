@@ -36,9 +36,36 @@
 		{ id: 'video_i2v', label: 'Video' },
 		{ id: 'tts', label: 'Voice' }
 	];
+	/**
+	 * The registry row as this page reads it. Deliberately a local, partial shape:
+	 * RegistryRow lives in $lib/server and must not cross into the client bundle,
+	 * and the page only ever touches these fields.
+	 */
+	type Row = {
+		id: string;
+		model_id: string;
+		label: string;
+		provider: string | null;
+		origin: string | null;
+		kind: string;
+		kinds: string[] | null;
+		lab: string | null;
+		wired: boolean;
+		status: string;
+		is_default: boolean;
+		deprecated: boolean;
+		price_usd: number | null;
+		price_basis: string | null;
+		price_source: string | null;
+		released_at: string | null;
+		quality: number | null;
+		latency_s: number | null;
+		tier: string | null;
+	};
+
 	// Multi-mode rows carry kinds[] (one OpenRouter model can do text-to-image AND
 	// editing); they appear under every tab they serve. Legacy rows fall back to kind.
-	function serves(r: any, k: Kind): boolean {
+	function serves(r: Row, k: Kind): boolean {
 		return Array.isArray(r.kinds) && r.kinds.length ? r.kinds.includes(k) : r.kind === k;
 	}
 	// Host = who we call (fal / OpenRouter). Lab = who trained it (Google, Kling…).
@@ -53,13 +80,13 @@
 		manual: 'Manual'
 	};
 	const HOST_LABEL: Record<string, string> = { fal: 'fal', openrouter: 'OpenRouter' };
-	function hostOf(r: any): string {
+	function hostOf(r: Row): string {
 		return r.provider ?? 'fal';
 	}
-	function hostLabel(r: any): string {
+	function hostLabel(r: Row): string {
 		return HOST_LABEL[hostOf(r)] ?? hostOf(r);
 	}
-	function modeLabels(r: any): string[] {
+	function modeLabels(r: Row): string[] {
 		const ks: string[] = Array.isArray(r.kinds) && r.kinds.length ? r.kinds : [r.kind];
 		return ks.map((k) => KIND_TABS.find((t) => t.id === k)?.label ?? k);
 	}
@@ -101,7 +128,7 @@
 	$effect(() => syncParam('minq', minQuality, 'any'));
 
 	let providers = $derived(
-		[...new Set(rows.filter((r: any) => serves(r, kind) && r.lab).map((r: any) => r.lab))].sort(
+		[...new Set(rows.filter((r: Row) => serves(r, kind) && r.lab).map((r: Row) => r.lab))].sort(
 			(a: any, b: any) => String(a).localeCompare(String(b))
 		)
 	);
@@ -165,18 +192,18 @@
 	}
 
 	let wired = $derived(
-		sortRows(rows.filter((r: any) => serves(r, kind) && r.wired && matchesFilters(r)))
+		sortRows(rows.filter((r: Row) => serves(r, kind) && r.wired && matchesFilters(r)))
 	);
 	let discovered = $derived(
-		[...rows.filter((r: any) => serves(r, kind) && !r.wired && matchesFilters(r))].sort((a, b) =>
+		[...rows.filter((r: Row) => serves(r, kind) && !r.wired && matchesFilters(r))].sort((a, b) =>
 			sort === 'origin'
 				? String(a.origin ?? 'seed').localeCompare(String(b.origin ?? 'seed')) ||
 					(b.released_at ?? '').localeCompare(a.released_at ?? '')
 				: (b.released_at ?? '').localeCompare(a.released_at ?? '')
 		)
 	);
-	let wiredTotal = $derived(rows.filter((r: any) => serves(r, kind) && r.wired).length);
-	let discoveredTotal = $derived(rows.filter((r: any) => serves(r, kind) && !r.wired).length);
+	let wiredTotal = $derived(rows.filter((r: Row) => serves(r, kind) && r.wired).length);
+	let discoveredTotal = $derived(rows.filter((r: Row) => serves(r, kind) && !r.wired).length);
 
 	// ── Replacement candidates ───────────────────────────────────────────────
 	// Deliberately conservative. Discovered models carry no quality score (nobody
@@ -205,7 +232,7 @@
 	// filtered by the view filters, since narrowing the list you're browsing
 	// shouldn't narrow where a model can be wired.
 	let wiredSlots = $derived(
-		rows.filter((r: any) => serves(r, kind) && r.wired && r.status === 'active')
+		rows.filter((r: Row) => serves(r, kind) && r.wired && r.status === 'active')
 	);
 	// Explicit per-row slot choice; falls back to the recommended target.
 	let swapChoice = $state<Record<string, string>>({});
@@ -215,8 +242,8 @@
 		return replaces(d);
 	}
 	// Swap targets share the candidate's host: the adapter machinery is fal's.
-	function slotsFor(d: any): any[] {
-		return wiredSlots.filter((w: any) => hostOf(w) === hostOf(d));
+	function slotsFor(d: Row): Row[] {
+		return wiredSlots.filter((w: Row) => hostOf(w) === hostOf(d));
 	}
 	let maxValue = $derived(Math.max(...wired.map((r: any) => valueScore(r) ?? 0), 0));
 	let bestValueId = $derived.by(() => {
@@ -235,7 +262,7 @@
 			.sort();
 		return dates.length ? dates[dates.length - 1].slice(0, 10) : null;
 	});
-	let kindCount = $derived((k: Kind) => rows.filter((r: any) => serves(r, k)).length);
+	let kindCount = $derived((k: Kind) => rows.filter((r: Row) => serves(r, k)).length);
 
 	// ── Age pill ─────────────────────────────────────────────────────────────
 	// Returns the age as a real duration ALWAYS. It used to return the string

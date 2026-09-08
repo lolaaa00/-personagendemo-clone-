@@ -39,7 +39,7 @@ const HAVE_CREDS = Boolean(URL && KEY && !KEY.startsWith('disabled'));
 const STRICT = process.env.REGISTRY_TRUTH_STRICT === '1';
 const LEDGER_WINDOW_DAYS = 30;
 
-async function pg<T = any>(query: string): Promise<T[]> {
+async function pg<T>(query: string): Promise<T[]> {
 	const res = await fetch(`${URL}/pg/query`, {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json', apikey: KEY, Authorization: `Bearer ${KEY}` },
