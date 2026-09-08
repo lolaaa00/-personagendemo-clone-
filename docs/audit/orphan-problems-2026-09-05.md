@@ -102,6 +102,40 @@ The billing session's live smoke passed 23/23 through the same route with the we
 | 12 | **Migration checksum ledger is not line-ending normalised.** A fresh Windows checkout (`core.autocrlf=true`, `text=auto`) reports all 36 ORDER files as DRIFTED; the shared tree, whose files happen to be LF on disk, reports 0. Content is identical. | `node scripts/apply-migration.mjs --status --strict` in a new worktree → `36 drifted`; `git ls-files --eol supabase/000_schema_migrations.sql` → `i/lf w/crlf` | Hash the blob after normalising `\r\n` → `\n` (or hash `git hash-object` output) so the ledger is checkout-independent; add a spec that hashes a CRLF and an LF copy of one migration to the same value. |
 | 13 | **`main` was committed against an unowned working tree.** `87ed887` imported `$lib/server/rate-limit`, a file that existed only as an untracked leftover of a session that no longer runs; the panel build failed until `1012f3b` replaced the import. The same unowned set (deploy.ps1 gates, pre-commit filename guard, eslint config, `.env.example`, dependency bumps, ~15 lint-edited files, preflight/ceiling scripts, coverage/env specs, `migrations-excluded.json`) is still dirty and ownerless as of 09-07. | `git status` after the index reset; all three live sessions disowned it in writing | Decided 09-07 (G6): once the billing session lands its pending batch, adopt the remainder through a gated worktree pass with a reviewed diff summary, then push. Until then no session commits any of it. |
 | 14 | **`origin` points at a moved repository.** Every push prints `This repository moved. Please use the new location: https://github.com/hnyxuser3/personagendemo.git`; pushes still redirect. | push output 09-07 | `git remote set-url origin <new url>` once the owner confirms the move is intentional. |
+
+### Finding 12 — proven and owned, 2026-09-08
+
+It bit for real. `market_restore_migration.sql` was applied from a worktree that
+checks out LF and recorded `ed669907`; the shared tree checks the same commit out
+as CRLF and hashes it `ddd40700`, so `--status` called it DRIFTED and
+`--status --strict` (deploy step 0, `npm run verify:money`) failed on a database
+that was correct — verified independently: 0 rows still hold JSON in `market`,
+all agents hold a market string, the column comment is present.
+
+```
+git ls-files --eol supabase/market_restore_migration.sql → i/lf  w/crlf
+sha256 as-is (CRLF)      ddd40700     ← what a CRLF checkout computes
+sha256 LF-normalised     ed669907     ← what an LF checkout computes = the git blob = the record
+```
+
+Mirror image, same cause: a fresh worktree of `main` reports **38 of 39 files
+drifted** while the shared tree reports **1**. The checksum was over bytes, not
+content, so a record was only valid for checkouts whose line endings matched the
+applier's.
+
+**Fix (approved 2026-09-08):** normalise `\r\n` → `\n` (and strip a BOM) before
+hashing, then re-stamp the legacy rows once. The re-stamp must rewrite a row
+**only when the recorded checksum equals the raw hash of one of the two
+line-ending renderings of the file now on disk** — that is proof the bytes differ
+by nothing but `\r`, so a genuine edit can never be laundered through it.
+Comparing against a single rendering is not enough: it silently fails from any
+checkout whose line endings differ from the original applier's, which is exactly
+the population of rows that needs repair.
+
+**Owner:** the billing session (`personagendemo-12`) owns `apply-migration.mjs`
+and is implementing it there, with a dry-run list reviewed before the ~38-row
+ledger write. Regression test to ship with it: the same content as CRLF and as LF
+must hash equal, and a genuinely edited file must still be refused.
 | 9 | (update) `.gitignore` edit is inside the unowned set above, so the `graphify-out/cache/` line and the `git rm -r --cached` of the 87 tracked cache files are folded into the same adoption pass. | — | — |
 
 ## Suggested order
