@@ -75,21 +75,26 @@ describe('writeWithProfileFallback', () => {
 		expect(write).toHaveBeenCalledWith(payload);
 	});
 
-	it('retries without the column when it is missing, keeping market', async () => {
+	it('retries without the column when it is missing so the rest of the row saves, and reports the loss as an error', async () => {
 		const write = vi
 			.fn()
 			.mockResolvedValueOnce({
 				error: { code: '42703', message: 'column "personas_profile" does not exist' }
 			})
 			.mockResolvedValueOnce({ error: null });
-		const payload = { name: 'Mia', market: '{"a":1}', personas_profile: { a: 1 } };
+		const payload = { name: 'Mia', niche: 'Lifestyle', personas_profile: { a: 1 } };
+		const err = vi.spyOn(console, 'error').mockImplementation(() => {});
 
 		const res = await writeWithProfileFallback(payload, write);
 
 		expect(res.error).toBeNull();
 		expect(write).toHaveBeenCalledTimes(2);
-		// The retry must still carry `market` — that is what makes the fallback lossless.
-		expect(write).toHaveBeenLastCalledWith({ name: 'Mia', market: '{"a":1}' });
+		expect(write).toHaveBeenLastCalledWith({ name: 'Mia', niche: 'Lifestyle' });
+		// Since P0.6 nothing mirrors the profile into `market`, so the retry is NOT
+		// lossless — it must say so at error level and name the migration to apply.
+		expect(err).toHaveBeenCalledTimes(1);
+		expect(String(err.mock.calls[0][0])).toMatch(/WITHOUT its profile.*personas_profile_migration\.sql/);
+		err.mockRestore();
 	});
 
 	it('surfaces unrelated errors without retrying', async () => {

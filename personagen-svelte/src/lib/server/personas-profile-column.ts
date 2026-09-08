@@ -9,10 +9,14 @@
  * paths least acceptable to break.
  *
  * So writes go out WITH the column, and on a missing-column error only, retry
- * without it. `market` is written either way, so nothing is lost in the fallback —
- * `readPersonaProfile()` falls back to parsing `market`, which is exactly the
- * pre-migration behaviour. Once the migration lands, the first attempt succeeds and
- * this costs nothing.
+ * without it so the persona's OTHER fields (name, niche, status…) still save.
+ *
+ * Since Persona Model v2 P0.6 (market_restore_migration.sql) the profile is NOT
+ * mirrored into `market` any more, so on that retry the profile itself is NOT
+ * persisted. That is reported as an error, not a warning: with the migration
+ * ledger in the deploy path (apply-migration.mjs, deploy.ps1 step 0) a missing
+ * column means a database that was never bootstrapped correctly, and the fix is
+ * to apply personas_profile_migration.sql, not to hide the loss.
  *
  * Detection is on the PostgREST error, not a schema probe: probing would add a
  * round-trip to every write, and the error is unambiguous (42703 = undefined_column).
@@ -59,8 +63,8 @@ export function withoutPersonasProfile<T extends Record<string, unknown>>(
 
 /**
  * Runs `write(payload)`; if it fails only because `personas_profile` is missing,
- * retries once with that key stripped and reports it. `market` still carries the
- * profile, so the retry is lossless.
+ * retries once with that key stripped so the rest of the row still saves, and
+ * reports LOUDLY that the profile was not persisted (see the module comment).
  */
 // `PromiseLike`, not `Promise`: Supabase query builders are thenables, not real
 // promises. `R extends { error: any }` preserves the caller's own error type, so
@@ -71,9 +75,10 @@ export async function writeWithProfileFallback<R extends { error: any }>(
 ): Promise<R> {
 	const first = await write(payload);
 	if (!first.error || !isMissingPersonasProfileColumn(first.error)) return first;
-	console.warn(
-		'[personas_profile] column missing — retrying without it and relying on `market`. ' +
-			'Apply supabase/personas_profile_migration.sql to enable the JSONB column.'
+	console.error(
+		'[personas_profile] column missing — the persona row was saved WITHOUT its profile. ' +
+			'This database was not bootstrapped correctly: apply supabase/personas_profile_migration.sql ' +
+			'(node scripts/apply-migration.mjs --all) and re-save the persona.'
 	);
 	return write(withoutPersonasProfile(payload));
 }

@@ -2078,8 +2078,9 @@
 			});
 			const d = await parseJsonResponse<any>(res);
 			if (!res.ok || !d.success) throw new Error(d.error || 'Server error');
-			// Update local agent state optimistically… (market included so a later
-			// read of agent.market reflects the just-saved persona profile).
+			// Update local agent state optimistically. personas_profile is the
+			// profile's only home (readPersonaProfile prefers it and accepts the v1
+			// form); `market` is a market string again since P0.6 and is not touched.
 			agent = {
 				...agent,
 				name: editName,
@@ -2089,7 +2090,6 @@
 				gradient: editGradient,
 				initial: editInitial,
 				personas_profile: payload.personaProfile,
-				market: JSON.stringify(payload.personaProfile),
 				soul: soulText,
 				skills: skillsText,
 				tools: toolsText,

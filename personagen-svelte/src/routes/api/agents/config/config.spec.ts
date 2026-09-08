@@ -76,8 +76,9 @@ describe('POST /api/agents/config — personaProfile', () => {
 		expect(stored.look.wardrobe).toBe('linen');
 		expect(stored.creator.displayName).toBe('Jenny Tran');
 		expect(stored.audience.ageRanges).toEqual(['25_34']);
-		// market carries the same blob (never-brick fallback).
-		expect(JSON.parse(updates[0].payload.market as string)).toEqual(stored);
+		// P0.6: the profile lives ONLY in personas_profile — `market` is a market
+		// string again and a profile save must not touch it.
+		expect(updates[0].payload).not.toHaveProperty('market');
 	});
 
 	it('accepts the legacy stringified transport', async () => {

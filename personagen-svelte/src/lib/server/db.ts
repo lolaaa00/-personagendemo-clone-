@@ -16,8 +16,9 @@ export interface AgentRow {
 	tools: string;
 	heartbeat: string;
 	/**
-	 * LEGACY home of the persona profile JSON (column is `TEXT DEFAULT 'Australia'`).
-	 * Still dual-written for back-compat — read it via `readPersonaProfile()`.
+	 * Market / country the persona operates in (`TEXT DEFAULT 'Australia'`).
+	 * No longer carries profile JSON (Persona Model v2 P0.6); read the profile
+	 * via `readPersonaProfile()`.
 	 */
 	market: string;
 	/** Persona profile JSONB (see supabase/personas_profile_migration.sql). */

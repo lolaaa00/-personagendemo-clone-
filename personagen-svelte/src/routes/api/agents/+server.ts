@@ -1,7 +1,6 @@
 import { json } from '@sveltejs/kit';
 import { personaLimitExceeded } from '$lib/server/plans';
 import type { RequestHandler } from './$types';
-import { profileToMarketString } from '$lib/persona-profile-store';
 import { buildStoredProfile } from '$lib/persona-contract/save';
 import type { PersonaProfileV2 } from '$lib/persona-contract/schema';
 import { writeWithProfileFallback } from '$lib/server/personas-profile-column';
@@ -50,9 +49,8 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		// The full persona profile (archetype/avatar/appearance/voiceProfile) goes
 		// through the same gate as every later save (Persona Model v2, P0.5): v1
 		// normalising, upgrade, v2 validation, provenance — and lands as a v2 blob
-		// in personas_profile JSONB. `market` gets a copy ONLY as the never-brick
-		// fallback for a database without the JSONB column; no external service
-		// reads it (mcp-bridge verified 2026-09-05).
+		// in personas_profile JSONB, its ONLY home since market_restore_migration.sql
+		// (P0.6). `market` keeps its column default (a market string).
 		const profileToStore: PersonaProfileV2 | undefined =
 			personaProfile && typeof personaProfile === 'object'
 				? buildStoredProfile(null, personaProfile, { origin: 'ui' })
@@ -68,12 +66,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			gradient: agentGradient,
 			initial: agentInitial,
 			skills: skillsText,
-			...(profileToStore
-				? {
-						personas_profile: profileToStore,
-						market: profileToMarketString(profileToStore)
-					}
-				: {})
+			...(profileToStore ? { personas_profile: profileToStore } : {})
 		};
 
 		// Survives a build that ships before personas_profile_migration.sql is

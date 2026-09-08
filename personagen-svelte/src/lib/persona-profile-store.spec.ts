@@ -16,7 +16,6 @@ import {
 	ageBoundsFromRanges,
 	deriveAgeRanges,
 	mergePersonaProfile,
-	profileToMarketString,
 	readPersonaProfile,
 	serializePersonaProfile,
 	coerceVoiceProfile,
@@ -313,35 +312,14 @@ describe('serializePersonaProfile', () => {
 	});
 });
 
-describe('profileToMarketString', () => {
-	it('round-trips through readPersonaProfile', () => {
-		const profile: PersonaProfile = {
-			ageRanges: ['25–34'],
-			ageMin: 25,
-			ageMax: 34,
-			gender: 'female',
-			archetype: 'The Creator',
-			appearance: { hairColor: 'honey blonde', ethnicity: 'Vietnamese' },
-			voiceProfile: { gender: 'female', accent: 'soft Australian' },
-			handleCandidates: [{ handle: 'jennytran', status: 'untried' }],
-			displayName: 'Jenny Tran'
-		};
-		const stored = profileToMarketString(profile);
-		expect(typeof stored).toBe('string');
-		expect(readPersonaProfile({ market: stored })).toEqual(profile);
-		expect(readPersonaProfile({ personas_profile: stored })).toEqual(profile);
+describe('legacy market read fallback (kept until every NULL personas_profile row has saved once)', () => {
+	it('still reads a JSON profile left in market when personas_profile is NULL', () => {
+		const legacy = { archetype: 'The Creator', appearance: { hairColor: 'honey blonde' } };
+		expect(readPersonaProfile({ personas_profile: null, market: JSON.stringify(legacy) })).toEqual(legacy);
 	});
 
-	it("writes '{}' for an empty/null profile, which reads back as {}", () => {
-		expect(profileToMarketString(null)).toBe('{}');
-		expect(profileToMarketString(undefined)).toBe('{}');
-		expect(readPersonaProfile({ market: profileToMarketString({}) })).toEqual({});
-	});
-
-	it("returns '{}' instead of throwing on a cyclic object", () => {
-		const cyclic: Record<string, unknown> = { displayName: 'Jenny' };
-		cyclic.self = cyclic;
-		expect(profileToMarketString(cyclic as unknown as PersonaProfile)).toBe('{}');
+	it('treats a restored market string as no profile', () => {
+		expect(readPersonaProfile({ personas_profile: null, market: 'Australia' })).toEqual({});
 	});
 });
 

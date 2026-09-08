@@ -332,22 +332,8 @@ export function mergePersonaProfile(
 	return out;
 }
 
-/**
- * Serialises for the legacy `agents.market` TEXT column. Kept ONLY as the
- * never-brick fallback for a database where `personas_profile_migration.sql`
- * has not been applied yet (see `personas-profile-column.ts`): the write retries
- * without the JSONB key and `readPersonaProfile()` falls back to parsing this.
- *
- * No external service reads it. `services/mcp-bridge` was verified on
- * 2026-09-05 to select only id/name/handle/niche/status/supervisor columns —
- * earlier comments claiming otherwise were wrong. Retire via its own migration
- * once every deployment (including client bootstraps) has the JSONB column.
- */
-export function profileToMarketString(profile: object | null | undefined): string {
-	try {
-		return JSON.stringify(profile ?? {});
-	} catch {
-		// Only reachable via a cyclic object — storing '{}' beats throwing inside a save.
-		return '{}';
-	}
-}
+// `profileToMarketString` was deleted in Persona Model v2 P0.6: nothing writes
+// profile JSON to `agents.market` any more (market_restore_migration.sql returned
+// the column to a market string). The READ fallback in readStoredProfileObject
+// stays for rows whose personas_profile is still NULL; it matches nothing once
+// those rows have saved once.

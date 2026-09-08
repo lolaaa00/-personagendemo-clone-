@@ -1,7 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { createDbService, type AgentConfigInsert } from '$lib/server/db';
-import { profileToMarketString } from '$lib/persona-profile-store';
 import { buildStoredProfile } from '$lib/persona-contract/save';
 import { writeWithProfileFallback } from '$lib/server/personas-profile-column';
 import { checkAgentAccess } from '$lib/server/workspaces';
@@ -99,12 +98,11 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		// absent keys preserve, explicit empties clear, unchanged values keep
 		// their source, and a UI save can never wipe a field it doesn't mention.
 		// Every reader is dual-shape (readPersonaProfile downgrades v2), so no
-		// consumer changes. `market` carries the same blob as the never-brick
-		// fallback for a database without the JSONB column.
+		// consumer changes. The profile lives ONLY in personas_profile: `market`
+		// went back to being a market string in market_restore_migration.sql
+		// (P0.6) and is never written here.
 		if (personaProfile !== undefined) {
-			const merged = buildStoredProfile(agent, personaProfile, { origin: 'ui' });
-			agentUpdatePayload.personas_profile = merged;
-			agentUpdatePayload.market = profileToMarketString(merged);
+			agentUpdatePayload.personas_profile = buildStoredProfile(agent, personaProfile, { origin: 'ui' });
 		}
 
 		if (Object.keys(agentUpdatePayload).length > 0) {

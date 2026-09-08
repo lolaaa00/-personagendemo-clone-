@@ -150,5 +150,9 @@
   [
     "model_registry_origin_migration.sql",
     "Model registry — origin column (seed | fal_catalog | openrouter_catalog | manual), backfilled from discovered_at/provider, NOT NULL, default manual"
+  ],
+  [
+    "market_restore_migration.sql",
+    "Persona Model v2 P0.6 — agents.market returns to a market string; profile lives only in personas_profile (rows with NULL personas_profile untouched)"
   ]
 ]
