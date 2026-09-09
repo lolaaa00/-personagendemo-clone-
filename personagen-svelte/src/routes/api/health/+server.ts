@@ -92,14 +92,19 @@ export const GET: RequestHandler = async ({ locals }) => {
 
 	// Billing reconciliation (hourly, on the scheduler lease): says when it last
 	// ran and whether any platform-paid event lacks its single matching debit.
+	// Says what it EXAMINED, not just what it found. A run over an empty window
+	// finds nothing and must not read as a clean bill of health: "idle" is the
+	// honest word for "there was nothing to check".
 	const m = maintenanceStatus();
 	checks.reconciliation = m.lastError
 		? `error: ${m.lastError.slice(0, 80)}`
 		: !m.lastReconcileAt
 			? 'pending (runs on the next scheduler tick)'
 			: (m.lastMismatches ?? 0) > 0
-				? `mismatches:${m.lastMismatches} (${m.lastReconcileAt})`
-				: `ok (${m.lastReconcileAt})`;
+				? `mismatches:${m.lastMismatches} of ${m.lastExamined ?? '?'} examined (${m.lastReconcileAt})`
+				: (m.lastExamined ?? 0) === 0
+					? `idle: no billable events in the last 24h (${m.lastReconcileAt})`
+					: `ok: ${m.lastExamined} events examined (${m.lastReconcileAt})`;
 
 	return json(
 		{

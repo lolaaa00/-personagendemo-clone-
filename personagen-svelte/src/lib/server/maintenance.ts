@@ -21,6 +21,16 @@ const HOUR_MS = 60 * 60 * 1000;
 const state = {
 	lastReconcileAt: null as string | null,
 	lastMismatches: null as number | null,
+	/**
+	 * How many platform-paid events the last run actually looked at.
+	 *
+	 * A reconciliation over an empty window reports 0 mismatches, which reads
+	 * exactly like a healthy one — and "0 mismatches" was cited as evidence the
+	 * wallet was sound when deciding to enforce credits, during a week in which
+	 * no generation happened at all. A check must say what it examined, and a run
+	 * that examined nothing must not be able to pass as a clean bill of health.
+	 */
+	lastExamined: null as number | null,
 	lastRollupDay: null as string | null,
 	lastError: null as string | null,
 	running: false
@@ -33,6 +43,7 @@ export function maintenanceStatus() {
 export function _resetMaintenanceForTests() {
 	state.lastReconcileAt = null;
 	state.lastMismatches = null;
+	state.lastExamined = null;
 	state.lastRollupDay = null;
 	state.lastError = null;
 	state.running = false;
@@ -53,16 +64,33 @@ export async function maybeRunMaintenance(supabase: any, now: number = Date.now(
 		const rollupDue = state.lastRollupDay !== today;
 
 		if (reconcileDue) {
-			const { data, error } = await supabase.rpc('credit_reconcile_mismatches', { p_hours: 24 });
+			const since = new Date(now - 24 * HOUR_MS).toISOString();
+			const [{ data, error }, { count, error: countErr }] = await Promise.all([
+				supabase.rpc('credit_reconcile_mismatches', { p_hours: 24 }),
+				// The denominator. Without it "0 mismatches" is unfalsifiable.
+				supabase
+					.from('generation_events')
+					.select('id', { count: 'exact', head: true })
+					.eq('key_source', 'platform')
+					.gt('credits', 0)
+					.gte('created_at', since)
+			]);
 			if (error) throw new Error(`reconcile: ${error.message}`);
+			if (countErr) throw new Error(`reconcile denominator: ${countErr.message}`);
 			const mismatches = Array.isArray(data) ? data.length : Number(data ?? 0);
 			state.lastReconcileAt = new Date(now).toISOString();
 			state.lastMismatches = mismatches;
+			state.lastExamined = Number(count ?? 0);
 			logSystemActivity({
 				userId: null,
 				action: 'system.reconciliation',
 				outcome: mismatches > 0 ? 'error' : 'ok',
-				meta: { mismatches, window_hours: 24, sample: Array.isArray(data) ? data.slice(0, 5).map((r: { event_id?: string }) => r.event_id) : [] }
+				meta: {
+					mismatches,
+					examined: state.lastExamined,
+					window_hours: 24,
+					sample: Array.isArray(data) ? data.slice(0, 5).map((r: { event_id?: string; reason?: string }) => `${r.reason ?? '?'}:${r.event_id}`) : []
+				}
 			});
 			if (mismatches > 0) console.error(`[maintenance] billing reconciliation: ${mismatches} mismatch(es) in the last 24 h`);
 		}

@@ -84,6 +84,17 @@ const postJson = (path, body) => app(path, { method: 'POST', headers: { 'Content
 
 // ── reporting ────────────────────────────────────────────────────────────────
 const results = [];
+/**
+ * Paths this run could NOT reach, with the reason.
+ *
+ * A green smoke gets cited as evidence a change is safe. On 2026-09-09 it passed
+ * 25/25 while the publish gate it was cited for was absent from the build:
+ * every generation here is requested with deliver:'review', so the run never
+ * enters the publish branch at all. Silence about coverage is what let a pass
+ * stand in for a proof, so the run now names its blind spots out loud.
+ */
+const uncovered = [];
+const notCovered = (what, why) => uncovered.push(`${what} — ${why}`);
 function check(name, ok, detail = '') {
 	results.push({ name, ok: !!ok, detail });
 	console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? `  — ${detail}` : ''}`);
@@ -159,6 +170,11 @@ async function main() {
 	check('engine LLM action is metered (event + debit)', engOk, `HTTP ${eng.status} ${engBody.error ?? ''} events=${engEvents.map((e) => `${e.provider}/${e.operation}→${e.credits}cr debits=${e.debits}`).join(' | ') || 'none'}`);
 
 	// 6. real generation → draft; events attributed; wallet debited once per event
+	// deliver:'review' keeps this run away from a real social account, which also
+	// means it never enters the publish branch — the autonomy gate that decides
+	// whether a persona may post by itself is NOT exercised here, and cannot be
+	// without connecting a live account to a throwaway persona.
+	notCovered('the publish path (autonomy gate)', 'this run requests deliver:review and the throwaway persona has no connected platform');
 	const gen = await postJson(`/api/agent/${agentId}/generate-post`, { media: 'image', still: 'graphic', refs: { character: false, product: false }, topic: 'A short thank-you note to early testers', deliver: 'review' });
 	const genBody = await gen.json().catch(() => ({}));
 	postId = genBody.post_id ?? null;
@@ -267,5 +283,10 @@ try {
 	await cleanup();
 	const failed = results.filter((r) => !r.ok);
 	console.log(`\n${results.length - failed.length}/${results.length} checks passed against ${BASE}`);
+	if (uncovered.length) {
+		console.log(`
+NOT COVERED by this run — a pass here says nothing about these:`);
+		for (const u of uncovered) console.log(`  · ${u}`);
+	}
 	process.exit(failed.length ? 1 : 0);
 }
