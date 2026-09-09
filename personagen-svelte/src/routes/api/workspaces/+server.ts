@@ -1,4 +1,5 @@
 import { json } from '@sveltejs/kit';
+import { entitlementsFor, planRefusal } from '$lib/server/entitlements';
 import type { RequestHandler } from './$types';
 
 /**
@@ -54,6 +55,11 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	if (!name || name.length > 120) {
 		return json({ success: false, error: 'Workspace name must be 1-120 characters' }, { status: 400 });
 	}
+
+	// "Teams + shared workspaces" is an Agency line. Creating a new shared
+	// workspace is gated; existing ones keep working for everyone in them.
+	const ent = await entitlementsFor(user.id);
+	if (!ent.teams) return json(planRefusal('Shared workspaces', ent.plan), { status: 403 });
 
 	const { data, error } = await locals.supabase
 		.from('workspaces')

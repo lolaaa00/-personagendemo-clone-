@@ -1,4 +1,5 @@
 import { json } from '@sveltejs/kit';
+import { entitlementsFor, planRefusal } from '$lib/server/entitlements';
 import type { RequestHandler } from './$types';
 import { createDbService, type AgentConfigInsert } from '$lib/server/db';
 import { buildStoredProfile } from '$lib/persona-contract/save';
@@ -39,6 +40,13 @@ interface ConfigRequestBody {
 	/** v1 form object, a v2 record, or the legacy stringified transport. */
 	personaProfile?: unknown;
 }
+
+const AUTONOMY_ORDER: Record<AutonomyLevel, number> = { advisor: 0, semi_autonomous: 1, fully_autonomous: 2 };
+const AUTONOMY_NAMES: Record<AutonomyLevel, string> = {
+	advisor: 'Advisor',
+	semi_autonomous: 'Semi-autonomous',
+	fully_autonomous: 'Fully autonomous'
+};
 
 /** Columns this route may write on `agents`. Keyed loosely: the DB is the schema. */
 type AgentUpdatePayload = Record<string, unknown>;
@@ -103,6 +111,23 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		const access = await checkAgentAccess(locals.supabase, user.id, agentId, 'creator');
 		if (!access.ok) {
 			return json({ success: false, error: access.message }, { status: access.status });
+		}
+
+		// Autonomy ceiling. Studio sells "Advisor + Semi-autonomous", Brand sells
+		// "All three autonomy levels" — until now nothing read either line, and
+		// this is the only door autonomy is written through. Checked against the
+		// PERSONA'S OWNER, not the acting seat: the owner is who pays. Only a
+		// request that actually RAISES the level is refused, so an unrelated save
+		// on a persona already above the ceiling still goes through.
+		if (autonomyLevel !== undefined) {
+			const ent = await entitlementsFor(agent.user_id);
+			if (AUTONOMY_ORDER[autonomyLevel] > AUTONOMY_ORDER[ent.maxAutonomy]) {
+				const { data: existing } = await db.agentConfigs.get(agentId);
+				const current = (existing?.autonomy_level ?? 'advisor') as AutonomyLevel;
+				if (AUTONOMY_ORDER[autonomyLevel] > AUTONOMY_ORDER[current]) {
+					return json(planRefusal(AUTONOMY_NAMES[autonomyLevel], ent.plan), { status: 403 });
+				}
+			}
 		}
 
 		// 1. Update the agent's core texts and presentation in agents table

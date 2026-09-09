@@ -3,6 +3,7 @@ import type { RequestHandler } from './$types';
 import { env } from '$env/dynamic/private';
 import { createDbService } from '$lib/server/db';
 import { getUserApiKey } from '$lib/server/user-api-keys';
+import { entitlementsFor, planRefusal } from '$lib/server/entitlements';
 import { publishPostById } from '$lib/server/scheduler';
 import { resolveAiClient } from '$lib/server/ai-client';
 import { meteredAiClient, meteredCall, meteringRefusal, BATCH_MAX } from '$lib/server/metering';
@@ -1090,6 +1091,22 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 						return json({ success: false, error: error.message }, { status: 500 });
 					}
 					return json({ success: true, data: saved });
+				}
+
+				// Brand-brief limit. The catalog has sold "1 brand brief" / "3 brand
+				// briefs" / "Unlimited" since plans were written and brand_brief_limit
+				// was read by nothing. Counted on CREATE only — updating an existing
+				// brief stays open, so a plan change never freezes work already done.
+				const ent = await entitlementsFor(session.user.id);
+				if (ent.brandBriefLimit !== null) {
+					const { data: mine } = await db.brandBriefs.list(session.user.id);
+					if ((mine?.length ?? 0) >= ent.brandBriefLimit) {
+						const n = ent.brandBriefLimit;
+						return json(
+							planRefusal(`More than ${n} brand brief${n === 1 ? '' : 's'}`, ent.plan),
+							{ status: 403 }
+						);
+					}
 				}
 
 				const { data: created, error } = await db.brandBriefs.create({

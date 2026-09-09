@@ -447,7 +447,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-09", hash: "7737d82", type: "fix", category: "infrastructure", scope: "copy", title: "two money claims of mine were false; the pipeline is right, the words were not" },
 	{ date: "2026-09-09", hash: "7f772ae", type: "docs", category: "docs", scope: null, title: "the promise audit as a method, its findings, and the API reference it caught" },
 	{ date: "2026-09-09", hash: "cfbad51", type: "feat", category: "automation", scope: "persona", title: "the backfill runs as an admin operation; portrait prompts hold the beard" },
-	{ date: "2026-09-09", hash: "8ad01c9", type: "feat", category: "feature", scope: "billing", title: "\"Cancel any time\" gets a line behind it" }
+	{ date: "2026-09-09", hash: "8ad01c9", type: "feat", category: "feature", scope: "billing", title: "\"Cancel any time\" gets a line behind it" },
+	{ date: "2026-09-09", hash: "688c3fc", type: "fix", category: "fix", scope: "billing", title: "don't offer cancellation where there is nothing to cancel" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -789,12 +790,12 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 	},
 	{
 		id: "8ad01c9", from: "2026-09-09", to: "2026-09-09",
-		category: "feature", categories: ["feature"],
+		category: "feature", categories: ["feature","fix"],
 		title: "New: \"Cancel any time\" gets a line behind it",
-		summary: "\"Cancel any time\" gets a line behind it.",
+		summary: "\"Cancel any time\" gets a line behind it. Plus 1 more change, touching things that were broken.",
 		major: false, curated: false,
-		entries: [CHANGELOG[413]]
+		entries: [CHANGELOG[413], CHANGELOG[414]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "8ad01c9";
+export const CHANGELOG_GENERATED_FROM = "688c3fc";

@@ -13,6 +13,7 @@
  * regenerating a slot that already has a post.
  */
 
+import { planRank } from './entitlements';
 import { randomUUID } from 'node:crypto';
 import { env } from '$env/dynamic/private';
 import { getServiceSupabase } from './service-supabase';
@@ -580,6 +581,35 @@ async function resolveAgentConfig(supabase: any, agentId: string): Promise<Agent
 }
 
 /**
+ * Highest-paying plans first, and stable within a plan so nobody is starved by
+ * a reshuffle. One query for every owner in the run, not one per persona.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- the Supabase client is untyped across this codebase
+async function orderByPlanPriority(supabase: any, configs: AgentConfig[]): Promise<AgentConfig[]> {
+	try {
+		const owners = [...new Set(configs.map((c) => c.user_id).filter(Boolean))];
+		if (owners.length < 2) return configs;
+		const { data } = await supabase
+			.from('subscriptions')
+			.select('user_id, plan, status')
+			.in('user_id', owners);
+		const rank = new Map<string, number>();
+		for (const r of data ?? []) {
+			const active = r.status === 'active' || r.status === 'trialing';
+			rank.set(r.user_id, active ? planRank(r.plan) : 0);
+		}
+		return configs
+			.map((c, i) => ({ c, i, r: rank.get(c.user_id) ?? 0 }))
+			.sort((a, b) => b.r - a.r || a.i - b.i)
+			.map((x) => x.c);
+	} catch {
+		// Ordering is a courtesy, never a gate: an unreadable subscriptions table
+		// must not stop the autopilot from running at all.
+		return configs;
+	}
+}
+
+/**
  * Top up drafts for all enabled agents (or a single agent when `agentId` is given,
  * regardless of its level — used by the "Generate drafts now" button).
  */
@@ -606,6 +636,12 @@ export async function runAutopilotDraftGeneration(opts?: {
 			)
 			.in('autonomy_level', ['semi_autonomous', 'fully_autonomous']);
 		configs = (data || []) as AgentConfig[];
+		// "Priority generation queue" is an Agency line, and THIS loop is what it
+		// means: a run stops at AUTOPILOT_MAX_PER_RUN, so when more personas are due
+		// than one run can serve, the order decides who waits until the next tick.
+		// Until now that order was whatever Postgres returned. Ordering is a no-op
+		// while demand sits under the cap, which is where it sits today.
+		configs = await orderByPlanPriority(supabase, configs);
 	}
 
 	if (configs.length === 0) return { generated: 0, agents: 0 };

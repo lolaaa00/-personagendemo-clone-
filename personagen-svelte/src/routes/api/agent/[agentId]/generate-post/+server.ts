@@ -1,4 +1,5 @@
 import { json } from '@sveltejs/kit';
+import { entitlementsFor, planRefusal } from '$lib/server/entitlements';
 import type { RequestHandler } from './$types';
 import { createDbService } from '$lib/server/db';
 import { checkAgentAccess } from '$lib/server/workspaces';
@@ -117,6 +118,13 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 	// Cinematic mode is fal-exclusive (Kling O3 Pro reference-to-video) — check
 	// the key up front so a missing key fails fast, BEFORE any LLM spend.
 	const wantCinematic = body.media === 'cinematic';
+	// "Cinematic multi-shot + talking head" is a Brand line; Studio sells
+	// "Standard video + lip-sync". Checked before the fal key so the answer is
+	// about the plan, not about a missing key.
+	if (wantCinematic) {
+		const ent = await entitlementsFor(user.id);
+		if (!ent.cinematic) return json(planRefusal('Cinematic video', ent.plan), { status: 403 });
+	}
 	if (wantCinematic) {
 		const { falKey } = await resolveImageKeys(locals.supabase, user.id);
 		if (!falKey) {
