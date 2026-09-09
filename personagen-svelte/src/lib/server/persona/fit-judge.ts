@@ -99,7 +99,18 @@ Answer with JSON only, no prose, no code fence:
 }
 
 function clampScore(value: unknown): number | undefined {
-	const n = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN;
+	// A BLANK STRING IS NOT A ZERO. `Number('')` is 0 and `Number('   ')` is 0, so
+	// a model that returned "" for a viewer it could not judge would have that
+	// viewer recorded as scoring zero — the worst possible reading of "I don't
+	// know", and it drags the mean down with it. This module's whole premise is
+	// that "no verdict" and "scored zero" are different facts; the parser has to
+	// honour that too.
+	const n =
+		typeof value === 'number'
+			? value
+			: typeof value === 'string' && value.trim() !== ''
+				? Number(value)
+				: NaN;
 	if (!Number.isFinite(n)) return undefined;
 	const rounded = Math.round(n);
 	if (rounded < MIN_SCORE || rounded > MAX_SCORE) return undefined;

@@ -66,10 +66,26 @@ import {
 	debitForEvents,
 	type KeySource
 } from '$lib/server/credits';
-import { creditsMode, personaBackboneEmits } from '$lib/server/flags';
+import {
+	creditsMode,
+	personaBackboneEmits,
+	personaFitJudgeRunsAutomatically
+} from '$lib/server/flags';
 import { readPersonaProfileV2 } from '$lib/persona-contract/store';
 import { label } from '$lib/persona-contract/labels';
 import { isObj } from '$lib/persona-contract/paths';
+import { sampleViewerPanel } from '$lib/persona-contract/panel';
+import {
+	fitColumnsFor,
+	fitJudgePrompt,
+	judgeablePanel,
+	parseFitVerdict,
+	type FitVerdictEntry
+} from '$lib/server/persona/fit-judge';
+// Cycle by design: metering.ts is the single gate→record→debit wrapper and it
+// records through recordCostEvents, which lives here. Both directions are used
+// inside function bodies only, so neither module reads the other at load time.
+import { meteredAiClient } from '$lib/server/metering';
 import {
 	loadRegistry,
 	openRouterRoute,
@@ -1954,6 +1970,21 @@ export async function generateCinematicUgcPack(input: UgcPackInput): Promise<Ugc
 			}
 		};
 
+		// Advisory, last, and unable to change anything above it — see judgeDraftFit.
+		const fit = await judgeDraftFit({
+			supabase,
+			userId,
+			agentId: input.agentId,
+			postId: input.postId,
+			ai: rawAi,
+			agent: agentData,
+			content
+		});
+		if (fit.fit_score !== null) {
+			content.fit_score = fit.fit_score;
+			if (fit.fit_notes) content.fit_notes = fit.fit_notes;
+		}
+
 		return { content, selectedProduct, briefData, agentData };
 	} finally {
 		// Flush the ledger even if generation threw partway through — otherwise
@@ -2113,6 +2144,11 @@ export interface UgcContent {
 	/** Full observability record — models per aspect, cost matrix, images sent,
 	 *  prompts, and the selections made. Rendered in the post drawer. */
 	generation?: GenerationProvenance;
+	/** Advisory viewer-panel fit (P3.3), mirrored from posts.fit_score. Present
+	 *  ONLY when the judge ran and returned a usable verdict — an absent key is
+	 *  the normal case and keeps the stored content identical to before. */
+	fit_score?: number;
+	fit_notes?: FitVerdictEntry[];
 }
 
 /**
@@ -2323,6 +2359,144 @@ export interface UgcPack {
 	selectedProduct: any | null;
 	briefData: any | null;
 	agentData: any | null;
+}
+
+// ── Fit judge (Persona Model v2, P3.3) ──────────────────────────────────────
+
+/**
+ * How long the advisory judge may hold up a finished post. A generation that has
+ * already paid for a video does not wait on an opinion: past this the verdict is
+ * abandoned and the post ships without one.
+ */
+const FIT_JUDGE_TIMEOUT_MS = 25_000;
+
+/**
+ * True when the audience is an actual STATED bracket rather than an empty shell.
+ *
+ * `sampleViewerPanel` deliberately never returns an empty panel — an audience of
+ * nothing still yields five strangers — so the gate has to be on the INPUT. A
+ * persona that has never said who it is for would otherwise be judged against
+ * five invented people and charged for the privilege. Mirrors the same gate the
+ * persona page applies before it mounts the panel section.
+ */
+function audienceIsStated(audience: unknown): boolean {
+	if (!isObj(audience)) return false;
+	const a = audience as Record<string, unknown>;
+	const str = (v: unknown) => typeof v === 'string' && !!v.trim();
+	const list = (v: unknown) => Array.isArray(v) && v.some(str);
+	if (list(a.ageRanges) || list(a.lifeStage)) return true;
+	if (str(a.genderMix) || str(a.incomeBand)) return true;
+	return isObj(a.decisioning) && Object.values(a.decisioning).some(str);
+}
+
+/** The text the judge reads: the caption as published, plus the spoken script. */
+function fitDraftText(content: Pick<UgcContent, 'text' | 'script' | 'dialogue'>): string {
+	const script = (content.script || content.dialogue || '').trim();
+	return [(content.text || '').trim(), script && `Script: ${script}`].filter(Boolean).join('\n\n');
+}
+
+export interface FitJudgeRun {
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- the Supabase client is untyped across this codebase
+	supabase: any;
+	userId: string;
+	agentId?: string;
+	postId?: string;
+	/** The UNWRAPPED client. Metering is applied here, so passing a tracked one double-bills. */
+	ai: AiClient | null;
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- agent rows are untyped throughout this file
+	agent: any;
+	content: Pick<UgcContent, 'text' | 'script' | 'dialogue'>;
+}
+
+/**
+ * Runs the fit judge for a finished draft and records the verdict on the post.
+ *
+ * WHERE IT SITS: after the caption, the script and the media are final and
+ * immediately before the pack is returned. It reads them; it cannot influence
+ * them. Nothing downstream of this call consumes its result except the two
+ * advisory columns.
+ *
+ * WHAT GUARDS IT:
+ *   · `personaFitJudgeRunsAutomatically()` — at 'off' and 'on_demand' this
+ *     returns before touching a provider, so an unflagged run is byte-identical
+ *     to the one that shipped before this existed;
+ *   · a stated audience and a panel with at least one judgeable viewer;
+ *   * `meteredAiClient` — the same gate → record → debit path as every other
+ *     paid call, so a refused wallet or a hit cap refuses HERE, not at the till;
+ *   · a timeout, because a hung provider must not hold a finished post;
+ *   · one catch around all of it.
+ *
+ * WHY IT CANNOT COST A POST: every failure mode — no provider, budget refusal,
+ * credit refusal, a malformed answer, a timeout, a posts UPDATE that is rejected
+ * because the column is not there yet — resolves to `{ fit_score: null,
+ * fit_notes: null }` and a logged warning. The function has no throw path, and
+ * the post row it writes to already exists (the composer claims it before
+ * generation starts), so the write is an UPDATE of two advisory columns and can
+ * never fail an insert. The status, the platforms and the content are not
+ * touched by it.
+ */
+export async function judgeDraftFit(run: FitJudgeRun): Promise<{
+	fit_score: number | null;
+	fit_notes: FitVerdictEntry[] | null;
+}> {
+	const noVerdict = fitColumnsFor(null);
+	try {
+		if (!personaFitJudgeRunsAutomatically()) return noVerdict;
+		if (!run.ai) return noVerdict;
+
+		const draft = fitDraftText(run.content);
+		if (!draft) return noVerdict;
+
+		const profile = readPersonaProfileV2(run.agent);
+		if (!audienceIsStated(profile?.audience)) return noVerdict;
+
+		// Same seed and same options as the persona page, so the viewers judged are
+		// the first four of the ones the user can already see — a verdict about
+		// strangers nobody was shown would be unreadable.
+		const panel = judgeablePanel(
+			sampleViewerPanel(String(run.agent?.id ?? ''), profile?.audience, {
+				market: profile?.creator?.market
+			})
+		);
+		if (!panel.length) return noVerdict;
+
+		const metered = meteredAiClient(run.ai, {
+			supabase: run.supabase,
+			userId: run.userId,
+			agentId: run.agentId ?? null,
+			postId: run.postId ?? null
+		});
+		if (!metered) return noVerdict;
+
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		const answer = await Promise.race([
+			metered.generate(fitJudgePrompt(draft, panel, profile), { json: true }),
+			new Promise<never>((_, reject) => {
+				timer = setTimeout(
+					() => reject(new Error(`fit judge timed out after ${FIT_JUDGE_TIMEOUT_MS}ms`)),
+					FIT_JUDGE_TIMEOUT_MS
+				);
+			})
+		]).finally(() => clearTimeout(timer));
+
+		const columns = fitColumnsFor(parseFitVerdict(safeParseJson(answer), panel));
+		if (columns.fit_score !== null && run.postId) {
+			// Best effort, and deliberately narrow: two advisory columns on a row that
+			// already exists. PostgREST returns its error rather than throwing, and a
+			// database that predates the migration is a warning, not a lost post.
+			const { error } = await run.supabase
+				.from('posts')
+				.update(columns)
+				.eq('id', run.postId)
+				.is('deleted_at', null);
+			if (error) console.warn('[FitJudge] verdict not stored:', error.message ?? error);
+		}
+		return columns;
+	} catch (err) {
+		// Advisory means advisory: this is the only exit an error takes.
+		console.warn('[FitJudge] skipped:', (err as Error)?.message ?? String(err));
+		return noVerdict;
+	}
 }
 
 const DIRECTOR_SYSTEM = `You are a world-class short-form UGC director and conversion copywriter. You write like a real person who genuinely discovered value — never like a brand running an ad.
@@ -4050,6 +4224,21 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 				mediaType
 			}
 		};
+
+		// Advisory, last, and unable to change anything above it — see judgeDraftFit.
+		const fit = await judgeDraftFit({
+			supabase,
+			userId,
+			agentId: input.agentId,
+			postId: input.postId,
+			ai: rawAi,
+			agent: agentData,
+			content
+		});
+		if (fit.fit_score !== null) {
+			content.fit_score = fit.fit_score;
+			if (fit.fit_notes) content.fit_notes = fit.fit_notes;
+		}
 
 		return { content, selectedProduct, briefData, agentData };
 	} finally {

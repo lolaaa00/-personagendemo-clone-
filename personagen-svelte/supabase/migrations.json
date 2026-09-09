@@ -186,5 +186,9 @@
 	[
 		"free_plan_credit_copy_migration.sql",
 		"Free plan says \"one free credit per person\": the welcome grant can be withheld by the hourly cap or the per-address clawback, and the catalog promised it unconditionally"
+	],
+	[
+		"post_fit_verdict_migration.sql",
+		"Persona Model v2 P3.3 — posts.fit_score / posts.fit_notes: somewhere to keep the viewer-panel fit verdict. Both nullable and advisory; NULL means no verdict and never a failed post."
 	]
 ]

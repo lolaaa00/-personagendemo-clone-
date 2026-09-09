@@ -125,7 +125,9 @@ describe('parseFitVerdict — the answer is validated against the panel', () => 
 	});
 
 	it('refuses a score that is not a score', () => {
-		for (const fit of [-1, 101, 1000, NaN, Infinity, null, undefined, 'high', {}]) {
+		// '' and '   ' are the ones that nearly got through: Number('') is 0, so a
+		// blank answer would have been recorded as a viewer who scored zero.
+		for (const fit of [-1, 101, 1000, NaN, Infinity, null, undefined, 'high', {}, '', '   ', true, []]) {
 			const verdict = parseFitVerdict(ok([{ viewerIndex: 0, fit }]), PANEL);
 			expect(verdict, JSON.stringify(fit)).toBeNull();
 		}

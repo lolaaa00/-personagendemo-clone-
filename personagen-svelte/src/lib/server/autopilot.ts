@@ -413,6 +413,11 @@ async function generateDraftsForAgent(
 				agentId,
 				platform: platforms[0],
 				autopilot: true,
+				// The claim row above already exists with this id, so anything the pack
+				// records against a post — today the fit verdict's two advisory columns —
+				// lands on the row this slot will actually publish. Without it an
+				// autopilot post silently misses what a composer-made post gets.
+				postId: placeholderId,
 				// Registry-resolved clip model + price + adapter — see the block above.
 				videoModel: videoModelResolved.id,
 				videoModelUsd: videoModelResolved.usd,

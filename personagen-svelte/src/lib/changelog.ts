@@ -476,7 +476,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-09", hash: "8aa4230", type: "feat", category: "feature", scope: "personas", title: "a portrait now records what it was made from, so the page can say when it stopped matching" },
 	{ date: "2026-09-09", hash: "7cd21ce", type: "docs", category: "docs", scope: "persona-v2", title: "Phase 1 closed but for the flip; Phases 2, 3 and 5 status" },
 	{ date: "2026-09-09", hash: "f1ce3a8", type: "test", category: "maintenance", scope: "personas", title: "the fingerprint must survive the page's own agent shape" },
-	{ date: "2026-09-09", hash: "490eea2", type: "feat", category: "design", scope: "personas", title: "the viewer panel and stale notices reach the page; viewers get their own buying style" }
+	{ date: "2026-09-09", hash: "490eea2", type: "feat", category: "design", scope: "personas", title: "the viewer panel and stale notices reach the page; viewers get their own buying style" },
+	{ date: "2026-09-09", hash: "04a640d", type: "feat", category: "feature", scope: "audience", title: "the fit judge — a draft judged by four specific people, not a bracket" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -834,12 +835,12 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 	},
 	{
 		id: "f1ce3a8", from: "2026-09-09", to: "2026-09-09",
-		category: "maintenance", categories: ["maintenance","design"],
+		category: "maintenance", categories: ["maintenance","design","feature"],
 		title: "Tidying: the fingerprint must survive the page's own agent…",
-		summary: "The fingerprint must survive the page's own agent shape. Plus 1 more change, touching layout, colours and readability.",
+		summary: "The fingerprint must survive the page's own agent shape. Plus 2 more changes, touching layout, colours and readability and things you can now do.",
 		major: false, curated: false,
-		entries: [CHANGELOG[441], CHANGELOG[442]]
+		entries: [CHANGELOG[441], CHANGELOG[442], CHANGELOG[443]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "490eea2";
+export const CHANGELOG_GENERATED_FROM = "04a640d";
