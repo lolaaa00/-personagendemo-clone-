@@ -474,7 +474,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-09", hash: "135cb2a", type: "feat", category: "security", scope: "ops", title: "one preflight for every deploy path, and the auth gate can fail again" },
 	{ date: "2026-09-09", hash: "cbd9112", type: "chore", category: "automation", scope: "changelog", title: "regenerate after rebasing onto the persona backfill work" },
 	{ date: "2026-09-09", hash: "8aa4230", type: "feat", category: "feature", scope: "personas", title: "a portrait now records what it was made from, so the page can say when it stopped matching" },
-	{ date: "2026-09-09", hash: "7cd21ce", type: "docs", category: "docs", scope: "persona-v2", title: "Phase 1 closed but for the flip; Phases 2, 3 and 5 status" }
+	{ date: "2026-09-09", hash: "7cd21ce", type: "docs", category: "docs", scope: "persona-v2", title: "Phase 1 closed but for the flip; Phases 2, 3 and 5 status" },
+	{ date: "2026-09-09", hash: "f1ce3a8", type: "test", category: "maintenance", scope: "personas", title: "the fingerprint must survive the page's own agent shape" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -829,7 +830,15 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 		summary: "Four claims the code does not make true. Plus 13 more changes, touching work the app does on its own and layout, colours and readability and internal cleanup.",
 		major: true, curated: false,
 		entries: [CHANGELOG[427], CHANGELOG[428], CHANGELOG[429], CHANGELOG[430], CHANGELOG[431], CHANGELOG[432], CHANGELOG[433], CHANGELOG[434], CHANGELOG[435], CHANGELOG[436], CHANGELOG[437], CHANGELOG[438], CHANGELOG[439], CHANGELOG[440]]
+	},
+	{
+		id: "f1ce3a8", from: "2026-09-09", to: "2026-09-09",
+		category: "maintenance", categories: ["maintenance"],
+		title: "Tidying: the fingerprint must survive the page's own agent…",
+		summary: "The fingerprint must survive the page's own agent shape.",
+		major: false, curated: false,
+		entries: [CHANGELOG[441]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "7cd21ce";
+export const CHANGELOG_GENERATED_FROM = "f1ce3a8";

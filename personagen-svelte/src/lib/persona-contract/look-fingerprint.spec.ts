@@ -172,10 +172,12 @@ describe('lookFingerprint — the two sides that must agree', () => {
 	it('is unchanged by a reference kit that records a previous run', () => {
 		const profile = sampled();
 		const before = readPersonaProfileV2({ personas_profile: profile });
+		// Cast because the reader's parameter type names only the fields it reads;
+		// the point of the test is that the EXTRA row fields change nothing.
 		const after = readPersonaProfileV2({
 			personas_profile: profile,
 			ugc_reference_kit: { profile_look_fingerprint: 'deadbeef', sheet_status: 'failed: nope' }
-		});
+		} as never);
 		expect(lookFingerprint(after)).toBe(lookFingerprint(before));
 	});
 });

@@ -40,8 +40,26 @@ const TABLE_FIELDS: Array<[keyof MarketRegistry, TokenGroup]> = [
 	['hairColor', 'hairColor'],
 	['hairTexture', 'hairTexture'],
 	['faceShape', 'faceShape'],
-	['browShape', 'browShape']
+	['browShape', 'browShape'],
+	['priceSensitivity', 'priceSensitivity'],
+	['purchaseChannel', 'purchaseChannel'],
+	['brandLoyalty', 'brandLoyalty'],
+	['promoResponsiveness', 'promoResponsiveness'],
+	['messageProcessingStyle', 'messageProcessingStyle'],
+	['communicationPreference', 'communicationPreference'],
+	['digitalCapability', 'digitalCapability']
 ];
+
+/** The decisioning tables, which carry gates the other tables do not need. */
+const DECISIONING_FIELDS = [
+	'priceSensitivity',
+	'purchaseChannel',
+	'brandLoyalty',
+	'promoResponsiveness',
+	'messageProcessingStyle',
+	'communicationPreference',
+	'digitalCapability'
+] as const;
 
 describe('version', () => {
 	it('is semver and pinned — a change here means every persona re-rolls differently', () => {
@@ -88,7 +106,9 @@ describe('resolution', () => {
 		const white = registry.namesFor(au, 'white');
 		const southAsian = registry.namesFor(au, 'south_asian');
 		expect(white.family).toContain('Whitlock'); // AU's own
-		expect(southAsian.family).toEqual(registry.namesFor(registry.for('generic'), 'south_asian').family);
+		expect(southAsian.family).toEqual(
+			registry.namesFor(registry.for('generic'), 'south_asian').family
+		);
 	});
 
 	it('resolution is cached (same object back), so tables are safe to compare by identity', () => {
@@ -117,7 +137,8 @@ describe('table contents', () => {
 				const table = r[field as keyof typeof r] as RegistryTable;
 				const tokens = table.entries.map((e) => e.token);
 				expect(new Set(tokens).size, `${m}.${String(field)} duplicates`).toBe(tokens.length);
-				for (const e of table.entries) expect(e.weight, `${m}.${String(field)}.${e.token}`).toBeGreaterThanOrEqual(0);
+				for (const e of table.entries)
+					expect(e.weight, `${m}.${String(field)}.${e.token}`).toBeGreaterThanOrEqual(0);
 			}
 		}
 	});
@@ -127,7 +148,10 @@ describe('table contents', () => {
 			const r = registry.for(m);
 			for (const [field] of TABLE_FIELDS) {
 				const table = r[field as keyof typeof r] as RegistryTable;
-				expect(table.entries.some((e) => e.weight > 0), `${m}.${String(field)}`).toBe(true);
+				expect(
+					table.entries.some((e) => e.weight > 0),
+					`${m}.${String(field)}`
+				).toBe(true);
 			}
 		}
 	});
@@ -135,14 +159,23 @@ describe('table contents', () => {
 	it('gates reference only known tokens', () => {
 		for (const m of MARKETS) {
 			const r = registry.for(m);
-			const check = (g: NonNullable<RegistryTable['entries'][number]['gates']> | undefined, where: string) => {
+			const check = (
+				g: NonNullable<RegistryTable['entries'][number]['gates']> | undefined,
+				where: string
+			) => {
 				if (!g) return;
-				for (const t of g.gender ?? []) expect(isToken('gender', t), `${where} gender ${t}`).toBe(true);
-				for (const t of g.niches ?? []) expect(isToken('niche', t), `${where} niche ${t}`).toBe(true);
-				for (const t of g.educations ?? []) expect(isToken('education', t), `${where} education ${t}`).toBe(true);
-				for (const t of g.incomeBands ?? []) expect(isToken('incomeBand', t), `${where} income ${t}`).toBe(true);
-				for (const t of g.seniorities ?? []) expect(isToken('seniority', t), `${where} seniority ${t}`).toBe(true);
-				for (const t of g.marketOnly ?? []) expect(isToken('market', t), `${where} market ${t}`).toBe(true);
+				for (const t of g.gender ?? [])
+					expect(isToken('gender', t), `${where} gender ${t}`).toBe(true);
+				for (const t of g.niches ?? [])
+					expect(isToken('niche', t), `${where} niche ${t}`).toBe(true);
+				for (const t of g.educations ?? [])
+					expect(isToken('education', t), `${where} education ${t}`).toBe(true);
+				for (const t of g.incomeBands ?? [])
+					expect(isToken('incomeBand', t), `${where} income ${t}`).toBe(true);
+				for (const t of g.seniorities ?? [])
+					expect(isToken('seniority', t), `${where} seniority ${t}`).toBe(true);
+				for (const t of g.marketOnly ?? [])
+					expect(isToken('market', t), `${where} market ${t}`).toBe(true);
 			};
 			for (const [field] of TABLE_FIELDS) {
 				const table = r[field as keyof typeof r] as RegistryTable;
@@ -164,7 +197,10 @@ describe('table contents', () => {
 			// Every heritage the market can draw must have names to draw from.
 			for (const e of r.heritage.entries) {
 				if (e.weight <= 0) continue;
-				expect(r.names.some((n) => n.heritage === e.token), `${m}: no names for ${e.token}`).toBe(true);
+				expect(
+					r.names.some((n) => n.heritage === e.token),
+					`${m}: no names for ${e.token}`
+				).toBe(true);
 			}
 		}
 	});
@@ -174,7 +210,9 @@ describe('table contents', () => {
 		for (const nicheLabel of NICHE_OPTIONS) {
 			const token = TOKEN_GROUPS.niche.find((t) => label('niche', t) === nicheLabel);
 			expect(token, `no token for niche "${nicheLabel}"`).toBeTruthy();
-			const suited = r.occupations.filter((o) => !o.gates?.niches || o.gates.niches.includes(token!));
+			const suited = r.occupations.filter(
+				(o) => !o.gates?.niches || o.gates.niches.includes(token!)
+			);
 			expect(suited.length, `niche ${token} has no occupation`).toBeGreaterThan(0);
 		}
 	});
@@ -196,13 +234,80 @@ describe('table contents', () => {
 		for (const m of MARKETS) {
 			const r = registry.for(m);
 			for (const [heritage, prior] of Object.entries(r.look)) {
-				if (heritage !== 'default') expect(isToken('heritage', heritage), `look.${heritage}`).toBe(true);
+				if (heritage !== 'default')
+					expect(isToken('heritage', heritage), `look.${heritage}`).toBe(true);
 				for (const [group, weights] of Object.entries(prior)) {
 					for (const token of Object.keys(weights as object)) {
-						expect(isToken(group as TokenGroup, token), `look.${heritage}.${group}.${token}`).toBe(true);
+						expect(isToken(group as TokenGroup, token), `look.${heritage}.${group}.${token}`).toBe(
+							true
+						);
 					}
 				}
 			}
+		}
+	});
+});
+
+describe('decisioning tables', () => {
+	it('every decisioning table keeps an UNGATED entry, so gating can never empty it', () => {
+		// registry.pick falls back to the ungated pool when every entry is gated
+		// out — which would hand a low-income viewer the very token its gate
+		// exists to forbid. One always-eligible entry per table prevents that.
+		for (const m of MARKETS) {
+			const r = registry.for(m);
+			for (const field of DECISIONING_FIELDS) {
+				const table = r[field] as RegistryTable;
+				expect(
+					table.entries.some((e) => e.weight > 0 && !e.gates),
+					`${m}.${field} has no ungated entry`
+				).toBe(true);
+			}
+		}
+	});
+
+	it('a low income can never draw price_insensitive or promo_averse — 500 picks', () => {
+		const r = registry.for('generic');
+		const gen = rng('low-income');
+		for (let i = 0; i < 500; i++) {
+			const age = 18 + (i % 63);
+			expect(registry.pick(r.priceSensitivity, gen, { incomeBand: 'low', age })).not.toBe(
+				'price_insensitive'
+			);
+			expect(registry.pick(r.promoResponsiveness, gen, { incomeBand: 'low', age })).not.toBe(
+				'promo_averse'
+			);
+		}
+	});
+
+	it('a high income can never draw price_led, and reaches price_insensitive', () => {
+		const r = registry.for('generic');
+		const gen = rng('high-income');
+		const seen = new Set<string>();
+		for (let i = 0; i < 500; i++) {
+			const token = registry.pick(r.priceSensitivity, gen, { incomeBand: 'high', age: 40 });
+			expect(token).not.toBe('price_led');
+			seen.add(token);
+		}
+		expect(seen.has('price_insensitive')).toBe(true);
+	});
+
+	it('every decisioning table spreads across more than one token for a plain context', () => {
+		const r = registry.for('generic');
+		for (const field of DECISIONING_FIELDS) {
+			const gen = rng(`spread-${field}`);
+			const seen = new Set<string>();
+			for (let i = 0; i < 300; i++)
+				seen.add(registry.pick(r[field] as RegistryTable, gen, { age: 38, incomeBand: 'middle' }));
+			expect(seen.size, `${field} is effectively constant`).toBeGreaterThan(1);
+		}
+	});
+
+	it('age gates hold: an older viewer draws neither peer_led nor advanced', () => {
+		const r = registry.for('generic');
+		const gen = rng('older');
+		for (let i = 0; i < 300; i++) {
+			expect(registry.pick(r.communicationPreference, gen, { age: 68 })).not.toBe('peer_led');
+			expect(registry.pick(r.digitalCapability, gen, { age: 68 })).not.toBe('advanced');
 		}
 	});
 });
@@ -259,7 +364,10 @@ describe('picking', () => {
 		const r = registry.for('au');
 		const draw = () => {
 			const gen = rng('same-seed');
-			return [registry.pick(r.heritage, gen), registry.pick(r.housingType, gen, { age: 30, incomeBand: 'middle' })];
+			return [
+				registry.pick(r.heritage, gen),
+				registry.pick(r.housingType, gen, { age: 30, incomeBand: 'middle' })
+			];
 		};
 		expect(draw()).toEqual(draw());
 	});
@@ -274,7 +382,8 @@ describe('picking', () => {
 		}
 		// A group the prior does not mention falls through to the base table.
 		const seen = new Set<string>();
-		for (let i = 0; i < 400; i++) seen.add(registry.pickLook(r.bodyType as never, whitePrior, 'bodyType' as never, gen));
+		for (let i = 0; i < 400; i++)
+			seen.add(registry.pickLook(r.bodyType as never, whitePrior, 'bodyType' as never, gen));
 		expect(seen.size).toBeGreaterThan(1);
 	});
 
@@ -325,14 +434,15 @@ describe('market character — the tables actually differ', () => {
 		const us = heritageMix('us');
 		const uk = heritageMix('uk');
 		// US has a large hispanic share; AU has almost none. UK leans south_asian.
-		expect((us.hispanic ?? 0)).toBeGreaterThan(120);
-		expect((au.hispanic ?? 0)).toBeLessThan(60);
-		expect((uk.south_asian ?? 0)).toBeGreaterThan((au.south_asian ?? 0));
+		expect(us.hispanic ?? 0).toBeGreaterThan(120);
+		expect(au.hispanic ?? 0).toBeLessThan(60);
+		expect(uk.south_asian ?? 0).toBeGreaterThan(au.south_asian ?? 0);
 		// AU has pacific_islander representation the others do not.
-		expect((au.pacific_islander ?? 0)).toBeGreaterThan(0);
-		expect((us.pacific_islander ?? 0)).toBe(0);
+		expect(au.pacific_islander ?? 0).toBeGreaterThan(0);
+		expect(us.pacific_islander ?? 0).toBe(0);
 
-		const cities = (m: string) => registry.for(m).regions.flatMap((r2) => r2.cities.map((c) => c.name));
+		const cities = (m: string) =>
+			registry.for(m).regions.flatMap((r2) => r2.cities.map((c) => c.name));
 		expect(cities('au')).toContain('Brisbane');
 		expect(cities('us')).toContain('Austin');
 		expect(cities('uk')).toContain('Manchester');
@@ -343,6 +453,7 @@ describe('market character — the tables actually differ', () => {
 		const uk = registry.for('uk');
 		expect(uk.heritage.entries.find((e) => e.token === 'pacific_islander')?.weight).toBe(0);
 		const gen = rng('uk-zero');
-		for (let i = 0; i < 500; i++) expect(registry.pick(uk.heritage, gen)).not.toBe('pacific_islander');
+		for (let i = 0; i < 500; i++)
+			expect(registry.pick(uk.heritage, gen)).not.toBe('pacific_islander');
 	});
 });

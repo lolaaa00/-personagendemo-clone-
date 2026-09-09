@@ -24,11 +24,11 @@
  *      normalised and every viewer is built inside a guard. The function
  *      always returns a usable panel.
  *
- * NOT SAMPLED HERE: `decisioning`. The Trait Registry has no tables for
- * priceSensitivity / purchaseChannel / brandLoyalty / promoResponsiveness /
- * messageProcessingStyle / communicationPreference / digitalCapability, and
- * inlining those lists would put trait values back in the sampler. Until those
- * tables exist, a viewer INHERITS the audience's own decisioning verbatim.
+ * DECISIONING is sampled per viewer, from the registry's decisioning tables and
+ * gated on that viewer's own income band and age — a panel whose five viewers
+ * shared one buying style could only ever raise one objection to a draft. A leaf
+ * the audience STATES still wins: that is what the customer said about their
+ * audience, and a sampled value must never overrule a stated one.
  *
  * Pure and client-safe: no `$env`, no `lib/server`, no clock, no Math.random.
  */
@@ -95,7 +95,12 @@ const LIFE_STAGE_CHILDREN: Record<TokenOf<'lifeStage'>, number> = {
 const GROWN_CHILD_BANDS: readonly TokenOf<'childAgeBand'>[] = ['teen', 'adult'];
 const GROWN_CHILD_STAGES: readonly TokenOf<'lifeStage'>[] = ['empty_nester', 'retired'];
 
-/** Decisioning leaf → token group, so an inherited value can be validated before it is copied. */
+/**
+ * Decisioning leaf → token group. A stated value is validated against the group
+ * before it is kept, and a missing one is sampled from the registry table of the
+ * SAME NAME — which is why this map is the whole of the panel's decisioning
+ * knowledge, and not one buying style is written down here.
+ */
 const DECISIONING_GROUPS = {
 	priceSensitivity: 'priceSensitivity',
 	purchaseChannel: 'purchaseChannel',
@@ -163,12 +168,16 @@ function normaliseAudience(audience: PersonaAudience | null | undefined): PanelS
 		genderMix: isToken('genderMix', a.genderMix) ? a.genderMix : undefined,
 		lifeStages,
 		incomeBand: isToken('incomeBand', a.incomeBand) ? a.incomeBand : undefined,
-		decisioning: inheritDecisioning(a.decisioning)
+		decisioning: statedDecisioning(a.decisioning)
 	};
 }
 
-/** Copies the audience's decisioning, keeping only leaves that are valid tokens. */
-function inheritDecisioning(source: unknown): AudienceDecisioning | undefined {
+/**
+ * The decisioning leaves the audience actually STATED, keeping only real tokens.
+ * These are facts about the audience, so they override the sampled value on
+ * every seat; a leaf dropped here (missing or malformed) is left to the registry.
+ */
+function statedDecisioning(source: unknown): AudienceDecisioning | undefined {
 	if (!source || typeof source !== 'object' || Array.isArray(source)) return undefined;
 	const from = source as Record<string, unknown>;
 	const out: Record<string, string> = {};
@@ -193,6 +202,39 @@ function restrictTable<G extends TokenGroup>(
 ): RegistryTable<G> {
 	const entries = table.entries.filter((entry) => allow(entry.token));
 	return entries.length ? { group: table.group, entries } : table;
+}
+
+/**
+ * One viewer's buying style: every leaf the audience states, and every other
+ * leaf drawn from the registry table of the same name under this viewer's own
+ * gates (income band, age, market).
+ *
+ * The gates are what keep the value coherent with the person wearing it — a
+ * 'low' income viewer cannot draw 'price_insensitive', because the entry is
+ * gated to the upper bands and every table keeps an ungated middle entry so
+ * gating can never empty the pool and fall back past that gate.
+ *
+ * One fork per leaf, named for the field, so adding an eighth leaf later cannot
+ * re-roll the seven already stored on somebody's persona.
+ */
+function sampleDecisioning(
+	r: Rng,
+	resolved: ResolvedRegistry,
+	ctx: RegistryGateContext,
+	stated: AudienceDecisioning | undefined
+): AudienceDecisioning | undefined {
+	const out: Record<string, string> = {};
+	for (const [leaf, group] of Object.entries(DECISIONING_GROUPS)) {
+		const said = stated?.[leaf as keyof AudienceDecisioning];
+		if (said !== undefined) {
+			out[leaf] = said;
+			continue;
+		}
+		const table = resolved[group as keyof ResolvedRegistry] as RegistryTable | undefined;
+		if (!table?.entries?.length) continue;
+		out[leaf] = registry.pick(table, r.fork(`viewer.decisioning.${leaf}`), ctx);
+	}
+	return Object.keys(out).length ? (out as AudienceDecisioning) : undefined;
 }
 
 /** Overlap of two closed ranges, or null when they do not meet. */
@@ -422,6 +464,10 @@ function sampleViewer(
 				})
 			: undefined;
 
+	// ── decisioning ──────────────────────────────────────────────────────────
+	// Last, because it is gated on the income band and age drawn above.
+	const decisioning = sampleDecisioning(r, resolved, { age, incomeBand, market }, spec.decisioning);
+
 	const viewer: ViewerSkeleton = {
 		seed: viewerSeed,
 		gender,
@@ -444,7 +490,7 @@ function sampleViewer(
 			housingType
 		},
 		economic: { incomeBand, priceFrame },
-		...(spec.decisioning ? { decisioning: { ...spec.decisioning } } : {})
+		...(decisioning ? { decisioning } : {})
 	};
 	viewer.summary = summarise(viewer);
 	return viewer;

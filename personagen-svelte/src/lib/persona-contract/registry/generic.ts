@@ -569,5 +569,95 @@ export const GENERIC: MarketRegistry = {
 			{ token: 'thick', weight: 18 },
 			{ token: 'thin', weight: 8 }
 		]
+	},
+	// ── decisioning ──────────────────────────────────────────────────────────
+	// CURATED PLAUSIBILITY WEIGHTS, NOT CONSUMER RESEARCH. They exist so a panel
+	// of viewers disagrees with a draft in several different ways, not so the
+	// spread matches any measured market. Nobody should cite these as data.
+	//
+	// The gates carry the one hard rule: a buying style must never contradict
+	// the viewer wearing it. A 'low' income cannot be 'price_insensitive' or
+	// 'promo_averse'. Every table keeps one UNGATED middle entry, so no income
+	// band or age can ever empty the table and fall back to the ungated pool —
+	// which is what would let a gated-out token be drawn after all.
+
+	priceSensitivity: {
+		group: 'priceSensitivity',
+		entries: [
+			{ token: 'price_led', weight: 26, gates: { incomeBands: ['low', 'lower_middle', 'middle'] } },
+			{ token: 'value_led', weight: 40 },
+			{
+				token: 'quality_led',
+				weight: 26,
+				gates: { incomeBands: ['middle', 'upper_middle', 'high'] }
+			},
+			{ token: 'price_insensitive', weight: 8, gates: { incomeBands: ['upper_middle', 'high'] } }
+		]
+	},
+
+	purchaseChannel: {
+		group: 'purchaseChannel',
+		entries: [
+			{ token: 'online_first', weight: 32 },
+			{ token: 'in_store_first', weight: 22, gates: { minAge: 30 } },
+			{
+				token: 'marketplace',
+				weight: 16,
+				gates: { incomeBands: ['low', 'lower_middle', 'middle'] }
+			},
+			{ token: 'social_commerce', weight: 16, gates: { maxAge: 44 } },
+			{ token: 'mixed', weight: 24 }
+		]
+	},
+
+	brandLoyalty: {
+		group: 'brandLoyalty',
+		entries: [
+			{ token: 'loyal', weight: 34, gates: { minAge: 30 } },
+			{ token: 'switcher', weight: 36 },
+			{ token: 'explorer', weight: 30, gates: { maxAge: 54 } }
+		]
+	},
+
+	promoResponsiveness: {
+		group: 'promoResponsiveness',
+		entries: [
+			{
+				token: 'deal_driven',
+				weight: 34,
+				gates: { incomeBands: ['low', 'lower_middle', 'middle'] }
+			},
+			{ token: 'occasional', weight: 46 },
+			{ token: 'promo_averse', weight: 14, gates: { incomeBands: ['upper_middle', 'high'] } }
+		]
+	},
+
+	messageProcessingStyle: {
+		group: 'messageProcessingStyle',
+		entries: [
+			{ token: 'analytical', weight: 24 },
+			{ token: 'intuitive', weight: 26 },
+			{ token: 'social_proof', weight: 28, gates: { maxAge: 59 } },
+			{ token: 'emotional', weight: 22 }
+		]
+	},
+
+	communicationPreference: {
+		group: 'communicationPreference',
+		entries: [
+			{ token: 'evidence_led', weight: 26 },
+			{ token: 'story_led', weight: 28 },
+			{ token: 'visual_led', weight: 26, gates: { maxAge: 59 } },
+			{ token: 'peer_led', weight: 20, gates: { maxAge: 49 } }
+		]
+	},
+
+	digitalCapability: {
+		group: 'digitalCapability',
+		entries: [
+			{ token: 'basic', weight: 18, gates: { minAge: 50 } },
+			{ token: 'confident', weight: 52 },
+			{ token: 'advanced', weight: 30, gates: { maxAge: 59 } }
+		]
 	}
 };

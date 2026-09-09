@@ -48,6 +48,10 @@
 	import { readPersonaProfileV2 } from '$lib/persona-contract';
 	import LifeDetails from '$lib/components/personas/LifeDetails.svelte';
 	import { buildLifeDetails } from '$lib/components/personas/life-details';
+	import StaleNotices from '$lib/components/personas/StaleNotices.svelte';
+	import { staleWarnings } from '$lib/components/personas/stale-state';
+	import ViewerPanel, { hasStatedAudience } from '$lib/components/personas/ViewerPanel.svelte';
+	import { sampleViewerPanel } from '$lib/persona-contract/panel';
 	import { confirmDeletePosts } from '$lib/confirm-preview';
 	import { confirmAction } from '$lib/stores/confirm.svelte';
 	import MediaPreviewModal from '$lib/components/generation/MediaPreviewModal.svelte';
@@ -246,6 +250,33 @@
 	// so the section is a view of the profile and has no path back into it.
 	// An empty array means the section is not mounted at all.
 	let lifeDetailGroups = $derived(buildLifeDetails(readPersonaProfileV2(agent)));
+
+	// ── Stale notices (READ-ONLY) ─────────────────────────────────────────
+	// What is on this page that no longer matches the persona it belongs to: a
+	// portrait job that failed or died, reference photos that never arrived, a
+	// voice cast for a different gender. `staleWarnings` keys every warning on
+	// evidence some code path actually WROTE, so an untouched persona yields `[]`
+	// and the strip is not mounted at all.
+	let staleNotices = $derived(staleWarnings(agent));
+
+	// ── Viewer panel (READ-ONLY) ──────────────────────────────────────────
+	// The audience is stored as a bracket; nobody writes a post for a bracket.
+	// `sampleViewerPanel` turns it into a handful of concrete viewers, seeded on
+	// the agent id so the panel is the same on every render rather than
+	// reshuffling under the reader. Sampled from the persona's own market so the
+	// places and jobs belong to the same world as the creator's.
+	//
+	// The sampler never returns an empty panel — an audience of nothing still
+	// yields five strangers — so the gate is on the INPUT: a persona that has
+	// never stated an audience gets `[]` here and no section is mounted.
+	let personaProfileV2 = $derived(readPersonaProfileV2(agent));
+	let viewerPanel = $derived(
+		hasStatedAudience(personaProfileV2?.audience)
+			? sampleViewerPanel(String(agent?.id ?? ''), personaProfileV2?.audience, {
+					market: personaProfileV2?.creator?.market
+				})
+			: []
+	);
 	// Multi-brand: which of the user's brand briefs this persona generates for.
 	// `savedBrandBriefId` mirrors what's actually persisted so the Brand card can
 	// show an unsaved-change indicator and confirm precisely on apply.
@@ -3193,6 +3224,14 @@
 
 		<!-- ── Tab content ────────────────────────────────────────── -->
 		<div class="tab-body">
+			<!-- Stale notices: what on this page no longer matches the persona.
+			     Mounted here — first thing in the tab body, above every section and
+			     below the sticky nav — because these are the one thing on the page
+			     that must not need scrolling or a disclosure to be seen, and
+			     because a failed portrait or a miscast voice is just as relevant
+			     while writing content as while editing the profile. Renders
+			     absolutely nothing when there is nothing wrong. -->
+			<StaleNotices warnings={staleNotices} />
 			{#if activeTab === 'profile'}
 				<!-- Lens switcher shared by both Profile lenses — mirrors the Content
 			     tab's toggle so switching feels identical everywhere. -->
@@ -3990,6 +4029,40 @@
 								>
 							</summary>
 							<LifeDetails groups={lifeDetailGroups} />
+						</details>
+					{/if}
+
+					<!-- Viewer panel: the audience bracket as a handful of concrete
+				     people. Sits directly after Life details — that section says who
+				     this persona IS, this one says who they are talking to, and the
+				     pair reads as one thought. Collapsed, read-only, and mounted
+				     ONLY when the persona actually states an audience the sampler
+				     can narrow on; otherwise the whole block, header included, does
+				     not exist. -->
+					{#if viewerPanel.length}
+						<details class="profile-section">
+							<summary class="section-summary">
+								<div class="section-header">
+									<h2 class="section-title">Who they’re talking to</h2>
+									<p class="section-desc">
+										Your audience settings, turned into a few specific people. Not real, not saved —
+										a way to picture who a post lands with instead of writing for a demographic.
+									</p>
+								</div>
+								<svg
+									class="section-chevron"
+									width="18"
+									height="18"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2.5"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg
+								>
+							</summary>
+							<ViewerPanel viewers={viewerPanel} />
 						</details>
 					{/if}
 

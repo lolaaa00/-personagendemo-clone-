@@ -105,6 +105,19 @@ export interface MarketRegistry {
 	transportMode?: RegistryTable<'transportMode'>;
 	dietaryStyle?: RegistryTable<'dietaryStyle'>;
 	languages?: string[];
+	/**
+	 * How a person decides and buys. Sampled per VIEWER on a panel, so five
+	 * viewers of one audience argue with a draft five different ways instead of
+	 * sharing a single buying style. Gated on income and age, which is what
+	 * stops a 'low' income viewer drawing 'price_insensitive'.
+	 */
+	priceSensitivity?: RegistryTable<'priceSensitivity'>;
+	purchaseChannel?: RegistryTable<'purchaseChannel'>;
+	brandLoyalty?: RegistryTable<'brandLoyalty'>;
+	promoResponsiveness?: RegistryTable<'promoResponsiveness'>;
+	messageProcessingStyle?: RegistryTable<'messageProcessingStyle'>;
+	communicationPreference?: RegistryTable<'communicationPreference'>;
+	digitalCapability?: RegistryTable<'digitalCapability'>;
 	/** Positioning defaults, so a persona built without a model is still complete. */
 	archetype?: RegistryTable<'archetype'>;
 	contentFocus?: RegistryTable<'contentFocus'>;
