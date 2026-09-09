@@ -78,6 +78,41 @@ export const POST: RequestHandler = async ({ locals }) => {
 		}
 	}
 
+	// Generated media lives in storage under `<userId>/…`, and storage does NOT
+	// cascade from auth.users — so a "delete my account" that skips this leaves
+	// every image and video the user ever made in a PUBLIC bucket, permanently.
+	// It has to happen BEFORE the auth row goes: the path prefix is the only
+	// link between a file and its owner (storage.objects.owner is NULL on every
+	// row in this project), so once the user is gone nothing can say whose files
+	// those were. A failure here is reported, not swallowed: the user asked for
+	// their data to be gone.
+	{
+		const bucket = 'ugc-media';
+		try {
+			let removed = 0;
+			// list() pages at 100 by default; keep going until a page is short.
+			for (let offset = 0; ; offset += 100) {
+				const { data: files, error: listErr } = await supabase.storage.from(bucket).list(userId, { limit: 100, offset });
+				if (listErr) {
+					failedSteps.push(`storage list: ${listErr.message}`);
+					break;
+				}
+				if (!files?.length) break;
+				const paths = files.map((f: { name: string }) => `${userId}/${f.name}`);
+				const { error: rmErr } = await supabase.storage.from(bucket).remove(paths);
+				if (rmErr) {
+					failedSteps.push(`storage remove: ${rmErr.message}`);
+					break;
+				}
+				removed += paths.length;
+				if (files.length < 100) break;
+			}
+			if (removed > 0) console.log(`[Account Delete] removed ${removed} stored file(s) for ${userId}`);
+		} catch (err) {
+			failedSteps.push(`storage: ${(err as Error).message}`);
+		}
+	}
+
 	// Activity history is kept but de-identified: user_id → NULL, presence
 	// removed, subject_hash retained so aggregates stay stable. Recorded as the
 	// last event of this account BEFORE the hash-only rows lose their id.
