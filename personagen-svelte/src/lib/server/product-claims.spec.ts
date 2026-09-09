@@ -4,7 +4,7 @@
  * Sibling of money-claims.spec.ts, same method: take a written claim, find the
  * line that must enforce it, and fail here when the two drift apart. A claim
  * with no enforcing line is either false or unverifiable. Applied to the
- * landing page and the in-app guides it found four:
+ * landing page and the in-app guides it found five:
  *
  *   "Every generated video carries an AI-generated marker."
  *        — the badge is opt-in and defaults OFF in all four places that set it
@@ -30,6 +30,19 @@
  *   "Instagram: manual"
  *        — MANUAL_DELETE_ONLY_PLATFORMS names three platforms, not one.
  *
+ *   "Free generation credit to start."
+ *        — printed unconditionally while welcome-guard.ts withholds it in two
+ *          cases. grantWelcomeCredit returns 'capped' and grants nothing once
+ *          signup_credits_hourly_cap welcome grants (default 20) have landed
+ *          platform-wide inside the last hour; maybeWithholdWelcome takes a
+ *          granted credit back when a second account appears from the same
+ *          daily-salted IP hash inside 24 hours. Both guards are right and
+ *          neither is going anywhere — the fault was that the promise carried
+ *          no qualifier at all, and the user's only notice of a withholding is
+ *          a billing.welcome.withheld row in an activity log they cannot open.
+ *          The copy now says "one per person": exactly what the clawback
+ *          enforces, and still the whole credit for a genuine first signup.
+ *
  * These assertions fail in BOTH directions. If the copy drifts back to the
  * absolutes, they go red. If the code moves under the corrected copy — someone
  * flips the aiBadge default ON, or lets advisor run unattended, or adds a
@@ -51,6 +64,7 @@ const composer = read('lib', 'components', 'generation', 'GenerationComposer.sve
 const autopilot = read('lib', 'server', 'autopilot.ts');
 const engine = read('routes', 'api', 'engine', '+server.ts');
 const zernio = read('lib', 'server', 'social', 'zernio.ts');
+const welcomeGuard = read('lib', 'server', 'welcome-guard.ts');
 
 /** The single guides entry about taking a post down, so a platform named
  *  somewhere else in the guide (the Connect step names Instagram and TikTok)
@@ -73,6 +87,22 @@ const manualDeletePlatforms = (() => {
 	return [...m[1].matchAll(/'([^']+)'/g)].map((x) => x[1]);
 })();
 
+/** The one landing sentence that promises a starting credit, sliced at its own
+ *  full stop so a qualifier sitting in a different section — or in a footnote —
+ *  cannot satisfy the assertion. Matches either wording the page might use. */
+const welcomeSentence = (
+	landing.match(/[^.<>\n]*(?:generation|welcome) credit[^.<>\n]*\./i) ?? ['']
+)[0].trim();
+
+/** The wallet FAQ answer alone. It is the neighbouring copy most likely to grow
+ *  the same unconditional promise, and the assertion below is what notices. */
+const WALLET_FAQ_START = landing.indexOf("q: 'How does the media wallet work?'");
+const walletFaq = (() => {
+	if (WALLET_FAQ_START < 0) return '';
+	const next = landing.indexOf("q: '", WALLET_FAQ_START + 20);
+	return landing.slice(WALLET_FAQ_START, next === -1 ? landing.length : next);
+})();
+
 describe('this spec is reading the files it claims to read', () => {
 	// Without this, an empty or moved file makes every `not.toMatch` below pass
 	// vacuously — the suite would stay green while asserting nothing at all.
@@ -85,7 +115,8 @@ describe('this spec is reading the files it claims to read', () => {
 			['GenerationComposer', composer, 'aiBadge'],
 			['autopilot.ts', autopilot, 'autonomy_level'],
 			['engine route', engine, 'appearanceFingerprint'],
-			['zernio.ts', zernio, 'MANUAL_DELETE_ONLY_PLATFORMS']
+			['zernio.ts', zernio, 'MANUAL_DELETE_ONLY_PLATFORMS'],
+			['welcome-guard.ts', welcomeGuard, 'grantWelcomeCredit']
 		];
 		for (const [name, body, fingerprint] of sources) {
 			expect(
@@ -107,6 +138,15 @@ describe('this spec is reading the files it claims to read', () => {
 	it('the undeleteable-platform list was parsed, not silently empty', () => {
 		expect(manualDeletePlatforms.length).toBeGreaterThanOrEqual(3);
 		expect(manualDeletePlatforms).toContain('instagram');
+	});
+
+	it('the starting-credit sentence and the wallet FAQ were located on the landing page', () => {
+		expect(
+			welcomeSentence.length,
+			'no landing sentence mentions a starting credit — if the promise was reworded rather than removed, re-check that the new wording is qualified'
+		).toBeGreaterThan(20);
+		expect(WALLET_FAQ_START).toBeGreaterThan(-1);
+		expect(walletFaq.length).toBeGreaterThan(200);
 	});
 });
 
@@ -230,5 +270,77 @@ describe('the deletion guide names every platform the code cannot delete', () =>
 		for (const platform of manualDeletePlatforms) {
 			expect(landing, `the landing FAQ never names ${platform}`).toMatch(new RegExp(platform, 'i'));
 		}
+	});
+});
+
+describe('the welcome credit is one per person, not an unconditional grant', () => {
+	const why =
+		'welcome-guard.ts is the only thing that makes "one per person" a true statement rather than a hedge — if this guard is gone, the landing sentence needs rewriting, not this test deleting';
+
+	it('no surface promises a starting credit with nothing attached to it', () => {
+		expect(landing, 'landing is back to the bare unconditional promise').not.toMatch(
+			/free generation credit to start/i
+		);
+		expect(landing, 'landing promises a welcome credit with no qualifier').not.toMatch(
+			/(?:a |an |the )?welcome credit to start/i
+		);
+	});
+
+	it('the promise it does make carries the qualifier in the same sentence', () => {
+		expect(
+			welcomeSentence,
+			`"${welcomeSentence}" no longer says the grant is one per person, which is the only part of it the code actually enforces`
+		).toMatch(/per person/i);
+	});
+
+	it('the qualifier stays a clause, not a disclaimer', () => {
+		// The correction was budgeted at one clause on a confident product page.
+		// A paragraph of conditions, or a marker pointing at one below the fold,
+		// is a different and worse fix; this is where that gets caught.
+		expect(
+			welcomeSentence.length,
+			`the starting-credit sentence grew into fine print: "${welcomeSentence}"`
+		).toBeLessThan(110);
+		expect(welcomeSentence, 'the qualifier became a footnote').not.toMatch(
+			/[*†‡]|subject to|terms apply|see below/i
+		);
+	});
+
+	it('the platform-wide hourly cap that withholds the whole grant still exists', () => {
+		expect(welcomeGuard, why).toMatch(/signup_credits_hourly_cap/);
+		expect(welcomeGuard, why).toMatch(/return 'capped'/);
+		// The cap is a setting, not a constant — the copy names no number, and
+		// must not, because an operator can move this without touching the page.
+		expect(welcomeGuard, why).toMatch(/s\.signup_credits_hourly_cap/);
+		expect(landing, 'the landing copy now quotes a cap number it does not control').not.toMatch(
+			/\d+\s+(?:welcome|free|signup) credits? (?:an|per) hour/i
+		);
+	});
+
+	it('the per-address clawback still exists, with the note the user never sees', () => {
+		expect(welcomeGuard, why).toContain(
+			'welcome credit withheld: another account was created from this address today'
+		);
+		expect(welcomeGuard, why).toContain("eq('ip_hash', ipHash)");
+		expect(welcomeGuard, why).toMatch(/24 \* 60 \* 60 \* 1000/);
+	});
+
+	it('both withholdings are still invisible to the user, which is why the copy carries the caveat', () => {
+		// A billing.welcome.withheld row in an activity log the account holder
+		// cannot open is not notice. If a user-facing surface ever explains the
+		// withholding at the moment it happens, the landing clause can be
+		// revisited — and this assertion is the reminder to do it.
+		expect(welcomeGuard, why).toContain("action: 'billing.welcome.withheld'");
+	});
+
+	it('the wallet FAQ makes no starting-credit promise, so it needs no qualifier', () => {
+		// Decided rather than assumed: the FAQ talks about the monthly wallet and
+		// topping up at par, never about a signup grant. Qualifying a promise it
+		// does not make would read as a warning about something else. If it ever
+		// does make the promise, this fails and the qualifier goes in too.
+		expect(
+			walletFaq,
+			'the wallet FAQ now promises a starting credit — give it the same "one per person" qualifier the closing line carries'
+		).not.toMatch(/(?:welcome|free|first|starting|signup) credit/i);
 	});
 });

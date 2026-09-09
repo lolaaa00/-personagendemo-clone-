@@ -182,5 +182,9 @@
 	[
 		"signup_welcome_grant_moves_migration.sql",
 		"The welcome grant moves to the signup route: GoTrue applies app_metadata after the insert, so the trigger can never see the invited marker"
+	],
+	[
+		"free_plan_credit_copy_migration.sql",
+		"Free plan says \"one free credit per person\": the welcome grant can be withheld by the hourly cap or the per-address clawback, and the catalog promised it unconditionally"
 	]
 ]

@@ -425,7 +425,9 @@
 	<section class="lp-final">
 		<h2>Everyone else sells you a face.<br /><span class="lp-grad">We run the account.</span></h2>
 		<a class="lp-btn lp-btn-lg" href="/signup">Create your first persona — free</a>
-		<p class="lp-fineprint">No credit card. Free generation credit to start. Cancel any time.</p>
+		<p class="lp-fineprint">
+			No credit card. One free generation credit per person to start. Cancel any time.
+		</p>
 	</section>
 
 	<footer class="lp-footer">

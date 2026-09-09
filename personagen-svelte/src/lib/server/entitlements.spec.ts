@@ -26,7 +26,7 @@ const PROMISES: Array<{
 	{ match: /Teams \+ shared workspaces/, gate: { file: ['routes', 'api', 'workspaces', '+server.ts'], needle: 'ent.teams' } },
 	{ match: /Bring your own keys/, gate: { file: ['routes', 'api', 'settings', 'api-keys', '+server.ts'], needle: 'ent.byok' } },
 	{ match: /API access/, gate: { file: ['routes', 'api', 'developer', 'keys', '+server.ts'], needle: 'ent.apiAccess' } },
-	{ match: /Welcome credit to start/, gate: { file: ['lib', 'server', 'welcome-guard.ts'], needle: 'export' } },
+	{ match: /free credit per person to start/, gate: { file: ['lib', 'server', 'welcome-guard.ts'], needle: 'maybeWithholdWelcome' } },
 	{ match: /Unlimited text posts/, universal: 'text costs only its writing; no plan restricts it' },
 	{ match: /All 13 platforms/, universal: 'publishing is on every plan, including free' },
 	{ match: /Spend ledger \+ verified publishing/, universal: 'the ledger and publish receipts are shown to every plan — listing it only under Brand overstates it, a copy decision, not a gate' },
