@@ -462,7 +462,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-09", hash: "dc73ef4", type: "fix", category: "fix", scope: "security", title: "the signup-gate check could not fail, and the console hid the switch" },
 	{ date: "2026-09-09", hash: "13ad7b8", type: "feat", category: "feature", scope: "ops", title: "nothing that can lose the data runs without a proved backup first" },
 	{ date: "2026-09-09", hash: "4f6caf1", type: "fix", category: "fix", scope: "copy", title: "four claims the code does not make true" },
-	{ date: "2026-09-09", hash: "c55c353", type: "fix", category: "fix", scope: "credits", title: "a provider call that threw was billed anyway" }
+	{ date: "2026-09-09", hash: "c55c353", type: "fix", category: "fix", scope: "credits", title: "a provider call that threw was billed anyway" },
+	{ date: "2026-09-09", hash: "911f86c", type: "fix", category: "fix", scope: "backfill", title: "Tier 1 now converges — it was rewriting the same rows forever" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -814,10 +815,10 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 		id: "4f6caf1", from: "2026-09-09", to: "2026-09-09",
 		category: "fix", categories: ["fix"],
 		title: "Fixed: four claims the code does not make true",
-		summary: "Four claims the code does not make true. Plus 1 more change.",
+		summary: "Four claims the code does not make true. Plus 2 more changes.",
 		major: false, curated: false,
-		entries: [CHANGELOG[427], CHANGELOG[428]]
+		entries: [CHANGELOG[427], CHANGELOG[428], CHANGELOG[429]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "c55c353";
+export const CHANGELOG_GENERATED_FROM = "911f86c";

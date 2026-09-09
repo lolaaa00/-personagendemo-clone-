@@ -48,8 +48,24 @@ if (MODE !== 'shadow' && MODE !== 'fill') {
 	console.error(`--mode must be 'shadow' or 'fill' (got '${MODE}')`);
 	process.exit(2);
 }
+const TIER = Number(opt('--tier') || 1);
+if (TIER !== 1 && TIER !== 2) {
+	console.error(`--tier must be 1 or 2 (got '${TIER}')`);
+	process.exit(2);
+}
 if (MODE === 'fill' && !flag('--yes')) {
-	console.error('fill PERSISTS to the agents table. Re-run with --yes once a shadow report is clean.');
+	console.error(
+		'fill PERSISTS to the agents table. Re-run with --yes once a shadow report is clean.'
+	);
+	process.exit(2);
+}
+// Tier 2 calls a model once per persona that has prose to read. That is real
+// money in BOTH modes: a shadow run has to make the call to know what it would
+// extract. Shadow is still safe on the data — it writes nothing — but it is not
+// free, and a flag that costs money should say so out loud.
+if (TIER === 2 && !flag('--yes')) {
+	console.error('tier 2 calls a model once per persona WITH PROSE, in shadow as well as fill,');
+	console.error('and each call is billed to that persona’s owner. Re-run with --yes.');
 	process.exit(2);
 }
 if (!EMAIL || !PASSWORD) {
@@ -73,7 +89,11 @@ async function app(path, init = {}) {
 	return res;
 }
 const post = (path, body) =>
-	app(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+	app(path, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(body)
+	});
 
 const login = await post('/api/auth/login', { email: EMAIL, password: PASSWORD });
 if (login.status !== 200) {
@@ -83,7 +103,7 @@ if (login.status !== 200) {
 
 const res = await post('/api/admin/persona-backfill', {
 	mode: MODE,
-	tier: 1,
+	tier: TIER,
 	limit: LIMIT,
 	...(AGENT ? { agentId: AGENT } : {})
 });
@@ -121,12 +141,21 @@ const lines = [
 	`| Rows written | ${d.written} |`,
 	`| Failed | ${d.failed} |`,
 	`| Stored as v1, upgraded on read | ${d.upgradedCount} |`,
+	...(d.tier === 2
+		? [
+				`| Facts read off the persona’s own prose | ${d.extractedCount ?? 0} |`,
+				`| Answer fields discarded as invalid | ${d.rejectedCount ?? 0} |`,
+				`| Personas no model ran for | ${d.noModelCount ?? 0} |`
+			]
+		: []),
 	`| Contract violations | ${d.violations.length} |`,
 	`| Portrait prompts that would change | ${d.promptDrift?.length ?? 0} |`,
 	'',
 	'## Leaves derived',
 	'',
-	pathRows.length ? '| Leaf | Personas |\n|---|---|' : '_Nothing to derive — every persona scanned already holds every Tier 1 leaf._',
+	pathRows.length
+		? '| Leaf | Personas |\n|---|---|'
+		: '_Nothing to derive — every persona scanned already holds every Tier 1 leaf._',
 	...pathRows.map(([p, n]) => `| \`${p}\` | ${n} |`),
 	''
 ];
@@ -160,7 +189,10 @@ if (d.violations.length) {
 if (samples.length) {
 	lines.push('## Sample of what would be added', '');
 	for (const s of samples) {
-		lines.push(`**${s.name ?? '(unnamed)'}** — \`${s.agentId}\`${s.upgraded ? ' _(stored as v1)_' : ''}`, '');
+		lines.push(
+			`**${s.name ?? '(unnamed)'}** — \`${s.agentId}\`${s.upgraded ? ' _(stored as v1)_' : ''}`,
+			''
+		);
 		for (const leaf of s.added.slice(0, 8)) {
 			const value = typeof leaf.value === 'string' ? leaf.value : JSON.stringify(leaf.value);
 			lines.push(`- \`${leaf.path}\` → ${String(value).slice(0, 200)}`);
@@ -171,11 +203,19 @@ if (samples.length) {
 
 const errors = (d.detail ?? []).filter((o) => o.error);
 if (errors.length) {
-	lines.push('## Failures', '', ...errors.slice(0, 25).map((e) => `- \`${e.agentId}\`: ${e.error}`), '');
+	lines.push(
+		'## Failures',
+		'',
+		...errors.slice(0, 25).map((e) => `- \`${e.agentId}\`: ${e.error}`),
+		''
+	);
 }
 
 if (d.detailTruncated) {
-	lines.push(`_Per-agent detail is capped at 200 rows; the counts above cover all ${d.scanned}._`, '');
+	lines.push(
+		`_Per-agent detail is capped at 200 rows; the counts above cover all ${d.scanned}._`,
+		''
+	);
 }
 
 await mkdir(dirname(report), { recursive: true });

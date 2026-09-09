@@ -7,6 +7,14 @@ import { readPersonaProfileV2, serializePersonaProfileV2 } from '$lib/persona-co
 import { leafPaths, getPath, type Obj } from '$lib/persona-contract/paths';
 import { backfillTier1, TIER_1_DERIVED_LEAVES } from '$lib/server/persona/backfill';
 import { hasV2OnlyLookAttributes, lookToPromptClause } from '$lib/persona-contract/look-prompt';
+import {
+	backfillTier2,
+	hasReconcilableProse,
+	reconciliationPrompt,
+	tier2AlreadyDone
+} from '$lib/server/persona/backfill-tier2';
+import { resolveAiClient } from '$lib/server/ai-client';
+import { meteredAiClient } from '$lib/server/metering';
 import type { PersonaProfileV2 } from '$lib/persona-contract/schema';
 
 /**
@@ -68,6 +76,12 @@ interface AgentOutcome {
 	/** True when the stored blob was v1 and reading it upgraded the shape. */
 	upgraded: boolean;
 	written: boolean;
+	/** Tier 2 only: leaves read off the persona's own prose. */
+	extracted?: string[];
+	/** Tier 2 only: answer fields discarded because they were not real values. */
+	rejected?: string[];
+	/** Tier 2 only: why no model ran for this persona, when none did. */
+	noModel?: string;
 	error?: string;
 }
 
@@ -93,6 +107,27 @@ function addedLeaves(
 	return out;
 }
 
+/**
+ * Parses a model's answer, tolerating the code fence it was told not to use.
+ * Returns undefined rather than throwing: an unparseable answer is a persona
+ * that gets no extraction, not a run that dies halfway through the table.
+ */
+function safeJson(text: string): unknown {
+	const cleaned = text
+		.trim()
+		.replace(/^```(?:json)?/i, '')
+		.replace(/```$/, '')
+		.trim();
+	const start = cleaned.indexOf('{');
+	const end = cleaned.lastIndexOf('}');
+	if (start < 0 || end <= start) return undefined;
+	try {
+		return JSON.parse(cleaned.slice(start, end + 1));
+	} catch {
+		return undefined;
+	}
+}
+
 export const POST: RequestHandler = async ({ locals, request }) => {
 	const gate = await requirePlatformAdmin(locals);
 	if (!gate.ok) return json({ success: false, error: gate.message }, { status: gate.status });
@@ -105,9 +140,12 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 	}
 
 	const tier = body.tier === undefined ? 1 : Number(body.tier);
-	if (tier !== 1) {
+	if (tier !== 1 && tier !== 2) {
 		return json(
-			{ success: false, error: `tier ${tier} is not implemented; only tier 1 exists today` },
+			{
+				success: false,
+				error: `tier ${tier} does not exist; tiers are 1 (free, derived) and 2 (paid, extraction)`
+			},
 			{ status: 400 }
 		);
 	}
@@ -163,7 +201,42 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 			// operator deserves both.
 			const before = readPersonaProfileV2(row);
 			const upgraded = before.meta?.upgradedFrom === 1;
-			const after = backfillTier1(before);
+
+			let after = backfillTier1(before);
+			let extracted: string[] | undefined;
+			let rejected: string[] | undefined;
+			let noModel: string | undefined;
+
+			if (tier === 2 && !tier2AlreadyDone(before)) {
+				// A persona with no prose has nothing to extract, so no call is made
+				// and nothing is spent. Tier 2 still completes it by sampling under
+				// the facts already on record.
+				let answer: unknown;
+				if (!hasReconcilableProse(before)) {
+					noModel = 'no prose to read';
+				} else {
+					// The persona's OWNER pays, with their own key when they have one —
+					// this is a paid generation like any other, not a platform freebie.
+					const raw = await resolveAiClient(svc, row.user_id);
+					const ai = meteredAiClient(raw, { supabase: svc, userId: row.user_id, agentId: row.id });
+					if (!ai) {
+						noModel = 'no AI provider configured for this persona’s owner';
+					} else {
+						// meteredAiClient gates on budget before the call and records +
+						// debits the event after it, so this call cannot escape the
+						// ledger or the wallet. A refusal is reported per persona and
+						// does not abort the run.
+						const text = await ai.generate(reconciliationPrompt(before));
+						answer = safeJson(text);
+						if (answer === undefined) noModel = 'the model did not return usable JSON';
+					}
+				}
+				const result = backfillTier2(after, { answer, seed: before.meta?.seed, now: startedAt });
+				after = result.profile;
+				extracted = result.extracted;
+				rejected = result.rejected;
+			}
+
 			const added = addedLeaves(before, after);
 
 			const beforeUsesV2 = hasV2OnlyLookAttributes(before.look);
@@ -206,7 +279,16 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 			}
 
 			if (outcomes.length < MAX_DETAIL) {
-				outcomes.push({ agentId: row.id, name: row.name, added, upgraded, written: didWrite });
+				outcomes.push({
+					agentId: row.id,
+					name: row.name,
+					added,
+					upgraded,
+					written: didWrite,
+					...(extracted?.length ? { extracted } : {}),
+					...(rejected?.length ? { rejected } : {}),
+					...(noModel ? { noModel } : {})
+				});
 			}
 		} catch (err) {
 			failed++;
@@ -260,6 +342,9 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 			promptDrift,
 			addedByPath,
 			upgradedCount: outcomes.filter((o) => o.upgraded).length,
+			extractedCount: outcomes.reduce((n, o) => n + (o.extracted?.length ?? 0), 0),
+			rejectedCount: outcomes.reduce((n, o) => n + (o.rejected?.length ?? 0), 0),
+			noModelCount: outcomes.filter((o) => o.noModel).length,
 			detail: outcomes,
 			detailTruncated: rows.length > MAX_DETAIL
 		}
