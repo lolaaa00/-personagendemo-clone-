@@ -22,8 +22,11 @@
  * with the service role.
  *
  * Usage:
- *   node scripts/preflight-auth.mjs              # enforce (exit 1 when the gate is bypassable)
+ *   node scripts/preflight-auth.mjs              # enforce (exit 1 when either door is open)
  *   node scripts/preflight-auth.mjs --warn-only  # report only (exit 0)
+ *
+ * There are TWO doors and this checks both: the Supabase project's own signup
+ * setting, and whether ADMIN_PIN gives /api/auth/signup anything to ask for.
  */
 import { readFileSync, existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -66,9 +69,15 @@ const url = (env.PUBLIC_SUPABASE_URL || '').replace(/\/+$/, '');
 const anon = env.PUBLIC_SUPABASE_ANON_KEY;
 const pin = env.ADMIN_PIN;
 
+// NOT an early exit any more. This said "ADMIN_PIN is not set — open
+// registration is the deliberate configuration. OK." and returned 0, which
+// meant the second gap silenced the check for the first: with no PIN the probe
+// never contacted GoTrue at all, so the deploy reported a clean signup gate
+// while BOTH doors stood open. That is the exact configuration production was
+// measured in on 2026-09-09. The probe now always asks GoTrue, and the verdict
+// is about the pair.
 if (!pin) {
-	console.log('  [preflight-auth] ADMIN_PIN is not set — open registration is the deliberate configuration. OK.');
-	process.exit(0);
+	console.warn('  [preflight-auth] ADMIN_PIN is NOT set — /api/auth/signup admits anyone who finds it.');
 }
 
 if (!url || !anon) {
@@ -93,16 +102,35 @@ try {
 	process.exit(0);
 }
 
-if (settings.disable_signup === false) {
-	fail([
-		'  [preflight-auth] ADMIN_PIN is set, but the Supabase project ACCEPTS PUBLIC SIGNUPS.',
-		`  [preflight-auth] ${url} reports disable_signup=false, mailer_autoconfirm=${settings.mailer_autoconfirm}.`,
-		'  [preflight-auth] The anon key is in the browser bundle, so the PIN can be bypassed with:',
-		`  [preflight-auth]     POST ${url}/auth/v1/signup`,
-		'  [preflight-auth] Fix: GOTRUE_DISABLE_SIGNUP=true on the auth service (self-hosted), or',
-		'  [preflight-auth]      Authentication > Providers > Email > "Allow new users to sign up" OFF.',
-		'  [preflight-auth] Registration keeps working: the route creates users with the service role.'
-	]);
+// The verdict is about BOTH doors. Either one open is a finding; naming only
+// the one that happens to be open is how this stayed quiet.
+const anonDoorOpen = settings.disable_signup === false;
+const routeDoorOpen = !pin;
+
+if (anonDoorOpen || routeDoorOpen) {
+	const lines = ['  [preflight-auth] REGISTRATION IS OPEN.'];
+	if (anonDoorOpen) {
+		lines.push(
+			`  [preflight-auth]   · ${url} reports disable_signup=false (mailer_autoconfirm=${settings.mailer_autoconfirm}).`,
+			'  [preflight-auth]     The anon key ships in the browser bundle, so anyone can POST straight to',
+			`  [preflight-auth]     ${url}/auth/v1/signup and get an account.`,
+			'  [preflight-auth]     Fix: GOTRUE_DISABLE_SIGNUP=true on the auth service (self-hosted), or',
+			'  [preflight-auth]          Authentication > Providers > Email > "Allow new users to sign up" OFF.'
+		);
+	}
+	if (routeDoorOpen) {
+		lines.push(
+			'  [preflight-auth]   · ADMIN_PIN is not set, so /api/auth/signup asks for nothing.',
+			'  [preflight-auth]     Fix: set ADMIN_PIN on the app service.'
+		);
+	}
+	if (anonDoorOpen && routeDoorOpen) {
+		lines.push('  [preflight-auth]   Both doors are open. Close the anon one FIRST — shutting only the');
+		lines.push('  [preflight-auth]   front door leaves the bypass, which is the worse half.');
+	}
+	lines.push('  [preflight-auth] Registration keeps working after the flip: the route creates users');
+	lines.push('  [preflight-auth] with the service role, which GOTRUE_DISABLE_SIGNUP does not affect.');
+	fail(lines);
 }
 
 console.log('  [preflight-auth] OK — ADMIN_PIN is set and the project refuses public signups.');

@@ -4,6 +4,7 @@ import { randomBytes } from 'node:crypto';
 import { requirePlatformAdmin } from '$lib/server/platform-admin';
 import { getServiceSupabase } from '$lib/server/service-supabase';
 import { getSettings, setSetting, settingsStatus, refreshSettings, SETTING_KEYS, type SettingKey } from '$lib/server/settings';
+import { refreshAdmission } from '$lib/server/admission';
 import { creditsMode, creditsSource, activityLogEnabled, activitySource, activityPepper, creditMarkup, creditMarkupSource, personaGenerator, personaGeneratorSource, personaBackbone, personaBackboneSource } from '$lib/server/flags';
 import { activityStats, logActivity } from '$lib/server/activity';
 import MIGRATION_ORDER from '../../../../../supabase/migrations.json';
@@ -83,6 +84,9 @@ export const GET: RequestHandler = async ({ locals }) => {
 		cache: settingsStatus(),
 		migrations: { pending, applied: appliedSet.size, total: MIGRATION_ORDER.length },
 		activity: activityStats(),
+		// Who can create an account, in full — this route requires a platform
+		// admin, so unlike /api/health it can name the door that is open.
+		posture: { admission: await refreshAdmission() },
 		history: history ?? []
 	});
 };

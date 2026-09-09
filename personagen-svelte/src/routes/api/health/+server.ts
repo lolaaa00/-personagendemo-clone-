@@ -7,6 +7,7 @@ import { creditsMode, creditsSource } from '$lib/server/flags';
 import { activityStats } from '$lib/server/activity';
 import { settingsStatus } from '$lib/server/settings';
 import { maintenanceStatus } from '$lib/server/maintenance';
+import { refreshAdmission, admissionSummary } from '$lib/server/admission';
 import MIGRATION_ORDER from '../../../../supabase/migrations.json';
 
 export const GET: RequestHandler = async ({ locals }) => {
@@ -105,6 +106,18 @@ export const GET: RequestHandler = async ({ locals }) => {
 				: (m.lastExamined ?? 0) === 0
 					? `idle: no billable events in the last 24h (${m.lastReconcileAt})`
 					: `ok: ${m.lastExamined} events examined (${m.lastReconcileAt})`;
+
+	// Who can create an account. Both doors were measured open on 2026-09-09 and
+	// only an operator can close them, so the question is asked here rather than
+	// only on the deploy path — a deploy-time probe says nothing about the weeks
+	// between deploys, nor about a setting that comes back on a re-provision.
+	//
+	// Deliberately COARSE: this route is unauthenticated, so naming the open door
+	// would hand a passer-by the finding. The Admin Console names it.
+	// Deliberately NOT part of `healthy`: an open door is an operator action, not
+	// a reason to answer 503 and drop out of a load balancer.
+	void refreshAdmission().catch(() => {});
+	checks.admission = admissionSummary();
 
 	return json(
 		{
