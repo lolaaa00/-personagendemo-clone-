@@ -40,6 +40,10 @@ import {
 	sanitizeHandle
 } from '$lib/persona-identity';
 import { readPersonaProfile } from '$lib/persona-profile-store';
+import { readPersonaProfileV2 } from '$lib/persona-contract/store';
+import { downgradeV2toV1 } from '$lib/persona-contract/upgrade';
+import { getPath, type Obj } from '$lib/persona-contract/paths';
+import { rerollField, rerollGroupFor, rerollableGroupKeys } from '$lib/server/persona/reroll';
 import { pickVoiceForProfile } from '$lib/server/voices';
 import { resolvePublicIps } from '$lib/server/safe-fetch';
 import { personaGenerator } from '$lib/server/flags';
@@ -2157,6 +2161,66 @@ Return ONLY JSON: {"niche":"","ageRanges":["25–34"],"archetype":"","contentFoc
 						{ status: 502 }
 					);
 				}
+			}
+
+			// ── ACTION: reroll_field ──
+			// Re-samples ONE part of a persona — the job, the household, the face —
+			// leaving every other fact exactly as it is. No model, no spend: the
+			// values come from the local Trait Registry, so this costs a draw.
+			//
+			// It RETURNS a patch and does not persist. The client decides whether to
+			// keep the new draw, which is what makes a re-roll button safe to press.
+			if (action === 'reroll_field') {
+				const agentId = typeof body.agentId === 'string' ? body.agentId : '';
+				if (!agentId) return json({ success: false, error: 'Missing agentId' }, { status: 400 });
+
+				const fieldPath = typeof body.fieldPath === 'string' ? body.fieldPath.trim() : '';
+				if (!fieldPath) return json({ success: false, error: 'Missing fieldPath' }, { status: 400 });
+
+				// A caller that omits the nonce gets a fresh draw each press, which is
+				// what a button wants; one that supplies it gets a reproducible result.
+				const nonce =
+					typeof body.nonce === 'string' || typeof body.nonce === 'number' ? body.nonce : Date.now();
+
+				const { data: agent } = await db.agents.get(agentId);
+				if (!agent || agent.user_id !== session.user.id) {
+					return json({ success: false, error: 'Persona not found' }, { status: 404 });
+				}
+
+				const before = readPersonaProfileV2(agent);
+				const group = rerollGroupFor(fieldPath);
+				if (!group) {
+					// A path nothing can re-roll is a NO-OP, not an error. rerollField is
+					// total, and answering a harmless UI mistake with a 4xx would turn it
+					// into a visible failure. The rerollable keys come back so a caller
+					// can see what it should have asked for.
+					return json({
+						success: true,
+						data: { rerolled: false, fieldPath, rerollable: rerollableGroupKeys(), profile: before }
+					});
+				}
+
+				const after = rerollField(before, fieldPath, nonce);
+				const watched = [...group.owns, 'description.short', 'description.frame'];
+				const changed = watched.filter(
+					(path) =>
+						JSON.stringify(getPath(before as unknown as Obj, path) ?? null) !==
+						JSON.stringify(getPath(after as unknown as Obj, path) ?? null)
+				);
+
+				return json({
+					success: true,
+					data: {
+						rerolled: true,
+						fieldPath,
+						group: group.key,
+						changed,
+						profile: after,
+						// The v1 shape too, so a page that has not learned v2 can still
+						// render the result of a re-roll.
+						v1: downgradeV2toV1(after)
+					}
+				});
 			}
 
 			// ── ACTION: generate_identity_kit ──

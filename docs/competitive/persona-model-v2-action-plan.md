@@ -149,6 +149,29 @@ Task-level deltas are marked **[09-07]** inline below.
 
 **Phase 0 definition of done:** suite green, typecheck green, a persona created before Phase 0 opens, edits, saves, regenerates portrait identically; `meta.schemaVersion: 2` visible on the next save of any persona.
 
+### Phase 1 — status 2026-09-08
+
+| Task | Landed | Notes |
+|---|---|---|
+| P1.1 | `7b1240b` | seeded PRNG with per-field `fork(label)` streams; local Trait Registry (generic + au/us/uk), `REGISTRY_VERSION` stamped into every persona. No external persona API, ever. |
+| P1.2 | `7b1240b` | `samplePersonaSkeleton` — facts drawn in dependency order; look priors are AUTHORITATIVE for the group they name, not a re-weighting (a 'white' heritage could otherwise still draw a deep skin tone at base weight) |
+| P1.3 | `7b1240b` | `briefToConstraints` reads what the brief already says; creator gender from the whole document, audience age and gender skew only from the audience fields |
+| P1.4 | `3bbff90` | **the flip**: `generate-v2.ts` samples first and asks the model for PROSE ONLY, then discards non-prose in code. Wired into `generate_persona_profile` behind a single early `personaGenerator() === 'v2'` branch, so v1 is untouched and the switch is a true revert. Registry 1.1.0 adds archetype + contentFocus so a persona created with no provider key is complete. |
+| P1.5 | `258b141` + this commit | `rerollField` re-samples one group, pinning the rest; blast radius is an explicit table, not a derived graph. Wired as the `reroll_field` engine action — no model, no spend, returns a patch and does not persist. `education` became a pinnable constraint because occupations are gated on it. |
+| P1.6 | pending | `personaGenerator()` exists and is flippable from the Admin Console (`fd276bc`); the DEFAULT is still `v1`. Gated on P1.7/P1.8 per the note in P1.8. |
+| P1.7 | `258b141` (Tier 1) | `backfillTier1` is a pure function of data the profile already holds — no sampling, no extraction, no model, so it can run on read without a flag, a key or a budget. Tier 2, the CLI script and the audit report are **not** written. |
+| P1.8 | partial | `personaBackbone()` exists with `off/shadow/fill/on` and is flippable; **no consumer reads it yet**, so the staged rollout is declared but not wired. |
+
+**Three defects the wiring exposed, all fixed in `3bbff90`:**
+
+1. A brief's age band, gender skew, life stage and price positioning describe the AUDIENCE and were being fed in as CREATOR constraints — "we sell to 45-54s" became a 49-year-old creator nobody asked for. The test guarding this had encoded the bug as expected behaviour.
+2. Model-written prose was marked `user` in `meta.fieldSources`, which under the store's own rule froze a model's guess against the customer's re-generate while telling the UI a person had chosen it.
+3. An empty v1 `appearance`/`voiceProfile` in a patch became an empty SECTION, which the merge read as a whole-section clear and used to delete v2-only siblings. A shape may only clear what it can describe.
+
+**Live proof, 2026-09-08**, against a running server with no AI provider configured: `generate_persona_profile` returns 200 with a coherent creator, deterministic across two calls; a brief stating "Australian women 45-54" yields `audience.ageRanges: ['45_54']` while the creator stays 32; `reroll_field` moves the job and its economics only, reproduces for a given nonce, and answers a non-rerollable path with a 200 no-op.
+
+**Phase 1 remaining:** P1.6 default flip, P1.7 Tier 2 + backfill script, P1.8 consumers reading the flag.
+
 ---
 
 ## Phase 1 — Skeleton sampler and the generator flip
