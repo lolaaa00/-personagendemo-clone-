@@ -13,6 +13,73 @@
 
 import { getServiceSupabase } from './service-supabase';
 import { logSystemActivity } from './activity';
+import { getSettings } from './settings';
+
+/** The note every welcome grant carries; maybeWithholdWelcome looks for it. */
+const WELCOME_NOTE = 'welcome credits (signup)';
+
+/**
+ * Grant the welcome credit for an account the SIGNUP ROUTE created.
+ *
+ * This used to be the trigger's job alone. It cannot be: GoTrue writes the
+ * auth.users row and only then applies app_metadata, so the trigger fires
+ * before the invited marker exists and can never see it. Measured, not
+ * assumed — an admin createUser with app_metadata lands the marker in
+ * raw_app_meta_data and still left the wallet empty.
+ *
+ * So the gated route grants, which is the stronger arrangement anyway: an
+ * account that never went through this route is never granted anything,
+ * whatever it manages to put in its own metadata.
+ *
+ * The hourly cap is re-checked here because it moved with the grant. The
+ * idempotency key means the trigger and this can never both land: whichever
+ * runs first wins and the other is a no-op on the unique index.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- the Supabase client is untyped across this codebase; narrowing it here alone would be a fiction
+export async function grantWelcomeCredit(newUserId: string, client?: any): Promise<'granted' | 'capped' | 'off' | 'failed'> {
+	const s = getSettings();
+	const credits = Number(s.signup_credits ?? 0);
+	if (!newUserId || credits <= 0) return 'off';
+	try {
+		const svc = client ?? getServiceSupabase();
+		const cap = Number(s.signup_credits_hourly_cap ?? 0);
+		if (cap > 0) {
+			const since = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+			const { count } = await svc
+				.from('credit_ledger')
+				.select('id', { count: 'exact', head: true })
+				.eq('kind', 'grant')
+				.like('note', 'welcome%')
+				.gte('created_at', since);
+			if (Number(count ?? 0) >= cap) {
+				logSystemActivity({ userId: newUserId, action: 'billing.welcome.withheld', outcome: 'ok', meta: { reason: 'hourly cap', cap, recent: Number(count ?? 0) } });
+				return 'capped';
+			}
+		}
+		const { error } = await svc.rpc('credit_apply', {
+			p_user: newUserId,
+			p_delta: credits,
+			p_kind: 'grant',
+			p_note: WELCOME_NOTE,
+			p_actor: null,
+			p_event: null,
+			p_post: null,
+			p_agent: null,
+			// Shared with the trigger: whoever lands first is the only one that does.
+			p_stripe_event: `welcome:${newUserId}`,
+			p_waived: 0,
+			p_allow_negative: false
+		});
+		if (error && !/duplicate key|23505/.test(error.message ?? error.code ?? '')) {
+			console.warn('[welcome] grant failed:', error.message);
+			return 'failed';
+		}
+		return 'granted';
+	} catch (e) {
+		console.warn('[welcome] grant skipped:', (e as Error).message);
+		return 'failed';
+	}
+}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- the Supabase client is untyped across this codebase; narrowing it here alone would be a fiction
 export async function maybeWithholdWelcome(newUserId: string, ipHash: string | null, requestId: string | null, client?: any): Promise<'kept' | 'withheld' | 'skipped'> {

@@ -178,5 +178,9 @@
 	[
 		"signup_invite_credit_guard_migration.sql",
 		"Welcome credit now requires the app-metadata marker only the signup route can write, so an account created straight against GoTrue gets no money"
+	],
+	[
+		"signup_welcome_grant_moves_migration.sql",
+		"The welcome grant moves to the signup route: GoTrue applies app_metadata after the insert, so the trigger can never see the invited marker"
 	]
 ]

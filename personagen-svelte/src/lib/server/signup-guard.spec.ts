@@ -30,6 +30,14 @@ vi.mock('$lib/server/supabase', () => ({
 	})
 }));
 
+const granted = vi.hoisted(() => ({ ids: [] as string[] }));
+vi.mock('$lib/server/welcome-guard', () => ({
+	grantWelcomeCredit: async (id: string) => {
+		granted.ids.push(id);
+		return 'granted' as const;
+	}
+}));
+
 const signup = await import('../../routes/api/auth/signup/+server');
 
 const locals = {
@@ -49,6 +57,7 @@ const call = (body: unknown) =>
 
 beforeEach(() => {
 	created.args = null;
+	granted.ids = [];
 	for (const k of Object.keys(mockEnv)) delete mockEnv[k];
 });
 
@@ -81,17 +90,30 @@ describe('signup — the invited marker', () => {
 		expect(res.status).toBe(200);
 		expect(created.args?.app_metadata).toEqual({ invited: true });
 	});
+
+	it('grants the welcome credit for the account it just created', async () => {
+		// The trigger cannot: GoTrue applies app_metadata after the insert.
+		await call({ email: 'a@b.co', password: 'longenough' });
+		expect(granted.ids).toEqual(['u-new']);
+	});
+
+	it('grants nothing when it refuses to create an account', async () => {
+		mockEnv.ADMIN_PIN = 'let-me-in';
+		await call({ email: 'a@b.co', password: 'longenough', pin: 'wrong' });
+		expect(granted.ids).toEqual([]);
+	});
 });
 
 describe('the trigger that reads the marker', () => {
 	const sql = readFileSync(
-		new URL('../../../supabase/signup_invite_credit_guard_migration.sql', import.meta.url),
+		new URL('../../../supabase/signup_welcome_grant_moves_migration.sql', import.meta.url),
 		'utf-8'
 	);
 
-	it('reads app metadata, never the client-controlled kind', () => {
-		expect(sql).toContain("NEW.raw_app_meta_data->>'invited'");
-		expect(sql).not.toMatch(/raw_user_meta_data->>'invited'/);
+	it('does not grant while the route is the granter', () => {
+		// GoTrue applies app_metadata AFTER the insert, so the trigger can never
+		// see the marker. It grants only when the operator has opened signups.
+		expect(sql).toContain('IF NOT v_require THEN');
 	});
 
 	it('still creates the profile and the free subscription for any account', () => {
@@ -101,13 +123,19 @@ describe('the trigger that reads the marker', () => {
 		expect(sql).toContain('INSERT INTO public.subscriptions');
 	});
 
-	it('keeps the hourly cap as well — the marker is not the only guard', () => {
+	it('keeps the hourly cap on the path it still owns', () => {
 		expect(sql).toContain('signup_credits_hourly_cap');
 	});
 
 	it('an absent or unreadable setting means the requirement is ON', () => {
 		expect(sql).toMatch(/COALESCE\(\(value #>> '\{\}'\) <> 'false', true\)/);
 		expect(sql).toContain('v_require := COALESCE(v_require, true)');
+	});
+
+	it('shares one idempotency key with the route, so a flip cannot double-grant', () => {
+		expect(sql).toContain("'welcome:' || NEW.id::text");
+		const guard = readFileSync(new URL('./welcome-guard.ts', import.meta.url), 'utf-8');
+		expect(guard).toContain('p_stripe_event: `welcome:${newUserId}`');
 	});
 });
 
