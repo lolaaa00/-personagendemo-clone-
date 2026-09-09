@@ -56,7 +56,7 @@ export const load: PageServerLoad = async ({ locals, request, url }) => {
 		// SECURITY DEFINER function, balance + mode only, never the owner's ledger.
 		locals.supabase.rpc('workspace_wallets'),
 		// Own subscription row (RLS: select own) and the plan catalog (service-only table).
-		locals.supabase.from('subscriptions').select('plan, status, current_period_end, included_credits').eq('user_id', user.id).maybeSingle(),
+		locals.supabase.from('subscriptions').select('plan, status, current_period_end, included_credits, cancel_at_period_end').eq('user_id', user.id).maybeSingle(),
 		loadPlanCatalog()
 	]);
 
@@ -102,7 +102,13 @@ export const load: PageServerLoad = async ({ locals, request, url }) => {
 		plans: {
 			enabled: plansEnabled() && stripeEnabled(),
 			current: subscription && (subscription.status === 'active' || subscription.status === 'trialing') && subscription.plan !== 'free'
-				? { plan: subscription.plan, status: subscription.status, periodEnd: subscription.current_period_end, included: formatCredits(Number(subscription.included_credits ?? 0), currency, s.fx_rates, locale) }
+				? {
+						plan: subscription.plan,
+						status: subscription.status,
+						periodEnd: subscription.current_period_end,
+						cancelAtPeriodEnd: subscription.cancel_at_period_end === true,
+						included: formatCredits(Number(subscription.included_credits ?? 0), currency, s.fx_rates, locale)
+					}
 				: null,
 			catalog: catalog
 				.filter((p) => p.active && p.price_usd_cents > 0)

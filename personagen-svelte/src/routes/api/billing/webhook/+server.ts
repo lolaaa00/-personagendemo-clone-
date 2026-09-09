@@ -85,6 +85,8 @@ export const POST: RequestHandler = async ({ request }) => {
 				status: 'active',
 				stripe_customer_id: obj.customer ? String(obj.customer) : null,
 				stripe_subscription_id: obj.subscription ? String(obj.subscription) : null,
+				// a re-subscribe reuses the row: without this it inherits the old plan's pending cancellation
+				cancel_at_period_end: false,
 				included_credits: row?.included_credits ?? 0,
 				persona_limit: row?.persona_limit ?? null,
 				updated_at: new Date().toISOString()
@@ -153,6 +155,10 @@ export const POST: RequestHandler = async ({ request }) => {
 		const status = type === 'customer.subscription.deleted' ? 'canceled' : mapStripeStatus(obj.status);
 		const patch: Record<string, unknown> = { status, updated_at: new Date().toISOString() };
 		if (obj.current_period_end) patch.current_period_end = new Date(obj.current_period_end * 1000).toISOString();
+		// Cancelling in Stripe's own portal emits this event and nothing else. Without
+		// mirroring the flag, /billing would keep promising a renewal that will not happen.
+		if (typeof obj.cancel_at_period_end === 'boolean') patch.cancel_at_period_end = obj.cancel_at_period_end;
+		if (type === 'customer.subscription.deleted') patch.cancel_at_period_end = false;
 		const { data: rows } = await svc.from('subscriptions').update(patch).eq('stripe_subscription_id', String(obj.id)).select('user_id, plan');
 		const row = rows?.[0];
 		if (row) logSystemActivity({ userId: row.user_id, action: status === 'canceled' ? 'billing.subscription.ended' : 'billing.subscription.renewed', outcome: status === 'past_due' ? 'error' : 'ok', meta: { plan: row.plan, status, stripe_event: String(event.id) } });

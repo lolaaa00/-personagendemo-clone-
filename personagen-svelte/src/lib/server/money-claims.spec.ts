@@ -72,3 +72,31 @@ describe('claims that ARE enforced stay enforced', () => {
 		expect(billing).toMatch(/\$25 buys \$25\.00/);
 	});
 });
+
+describe('"Cancel any time" has a line behind it', () => {
+	const route = read('routes', 'api', 'billing', 'cancel', '+server.ts');
+	const stripe = read('lib', 'server', 'stripe.ts');
+
+	it('the promise appears on the pricing page and on billing', () => {
+		expect(landing).toMatch(/cancel any time/i);
+		expect(billing).toMatch(/cancel any time/i);
+	});
+
+	it('a cancellation route exists and reaches Stripe', () => {
+		// It promised cancellation for months with no route, no portal link, and
+		// subscribe answering "Contact us to change plans".
+		expect(route).toContain('cancelSubscriptionAtPeriodEnd');
+		expect(stripe).toContain('cancel_at_period_end: true');
+	});
+
+	it('cancels at period end, not immediately — the month was paid for', () => {
+		expect(stripe).not.toMatch(/method:\s*'DELETE'[\s\S]{0,80}subscriptions/);
+		expect(route).toContain('resume');
+		expect(stripe).toContain('cancel_at_period_end: false');
+	});
+
+	it('the billing page offers it rather than hiding it behind support', () => {
+		expect(billing).toContain("setCancellation(false)");
+		expect(billing).toMatch(/Cancel plan/);
+	});
+});

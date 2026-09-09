@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
 
 const { mockEnv } = vi.hoisted(() => ({ mockEnv: {} as Record<string, string> }));
 vi.mock('$env/dynamic/private', () => ({ env: mockEnv }));
@@ -137,5 +138,59 @@ describe('stripe — pure wallet arithmetic', () => {
 		expect(stripe.refundClawback(2600, 2500, 9999, 0)).toBe(2600);
 		expect(stripe.refundClawback(0, 2500, 2500, 0)).toBe(0);
 		expect(stripe.refundClawback(2600, 0, 2500, 0)).toBe(0);
+	});
+});
+
+describe('stripe — cancellation', () => {
+	const capture = () => {
+		const calls: Array<{ url: string; body: string }> = [];
+		const fetchImpl = (async (url: string, init: RequestInit) => {
+			calls.push({ url: String(url), body: decodeURIComponent(String(init.body)) });
+			return new Response(JSON.stringify({ id: 'sub_1', cancel_at_period_end: true, current_period_end: 1790000000 }), { status: 200 });
+		}) as unknown as typeof fetch;
+		return { calls, fetchImpl };
+	};
+
+	it('cancels at the end of the paid period, never immediately', async () => {
+		mockEnv.STRIPE_SECRET_KEY = 'sk_test_x';
+		const { calls, fetchImpl } = capture();
+		const out = await stripe.cancelSubscriptionAtPeriodEnd('sub_1', fetchImpl);
+		expect(calls[0].url).toBe('https://api.stripe.com/v1/subscriptions/sub_1');
+		expect(calls[0].body).toBe('cancel_at_period_end=true');
+		// A DELETE would end it on the spot and burn the month the customer paid for.
+		expect(calls[0].url).not.toContain('DELETE');
+		expect((out as { current_period_end: number }).current_period_end).toBe(1790000000);
+	});
+
+	it('resumes a pending cancellation, so changing your mind needs no support ticket', async () => {
+		mockEnv.STRIPE_SECRET_KEY = 'sk_test_x';
+		const { calls, fetchImpl } = capture();
+		await stripe.resumeSubscription('sub_1', fetchImpl);
+		expect(calls[0].body).toBe('cancel_at_period_end=false');
+	});
+
+	it('refuses without a key rather than pretending the plan was cancelled', async () => {
+		await expect(stripe.cancelSubscriptionAtPeriodEnd('sub_1')).rejects.toThrow('STRIPE_SECRET_KEY is not set');
+	});
+});
+
+describe('billing webhook — Stripe is the authority on renewal', () => {
+	const webhook = readFileSync(new URL('../../routes/api/billing/webhook/+server.ts', import.meta.url), 'utf-8');
+
+	it('mirrors cancel_at_period_end from the subscription event', () => {
+		// Cancelling in Stripe's own portal emits ONLY this event. Reading status
+		// alone leaves /billing promising a renewal that will never happen.
+		expect(webhook).toContain("typeof obj.cancel_at_period_end === 'boolean'");
+		expect(webhook).toMatch(/patch\.cancel_at_period_end = obj\.cancel_at_period_end/);
+	});
+
+	it('clears the flag when the subscription actually ends', () => {
+		expect(webhook).toMatch(/customer\.subscription\.deleted'\) patch\.cancel_at_period_end = false/);
+	});
+
+	it('a fresh checkout does not inherit a pending cancellation from the previous plan', () => {
+		// The row is keyed by user_id and reused on re-subscribe.
+		const upsert = webhook.slice(webhook.indexOf("checkout.session.completed' && obj.mode === 'subscription'"));
+		expect(upsert.slice(0, upsert.indexOf('onConflict'))).toContain('cancel_at_period_end: false');
 	});
 });

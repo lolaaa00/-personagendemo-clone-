@@ -166,5 +166,9 @@
   [
     "reconcile_price_drift_migration.sql",
     "Reconciliation also checks the price: credits must equal ceil(est_cost x markup x 100) for events priced since the markup last changed; adds a reason column"
+  ],
+  [
+    "subscription_cancel_migration.sql",
+    "Cancel any time — subscriptions.cancel_at_period_end so \"active but not renewing\" is storable"
   ]
 ]
