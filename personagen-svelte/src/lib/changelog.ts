@@ -463,7 +463,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-09", hash: "13ad7b8", type: "feat", category: "feature", scope: "ops", title: "nothing that can lose the data runs without a proved backup first" },
 	{ date: "2026-09-09", hash: "4f6caf1", type: "fix", category: "fix", scope: "copy", title: "four claims the code does not make true" },
 	{ date: "2026-09-09", hash: "c55c353", type: "fix", category: "fix", scope: "credits", title: "a provider call that threw was billed anyway" },
-	{ date: "2026-09-09", hash: "911f86c", type: "fix", category: "fix", scope: "backfill", title: "Tier 1 now converges — it was rewriting the same rows forever" }
+	{ date: "2026-09-09", hash: "911f86c", type: "fix", category: "fix", scope: "backfill", title: "Tier 1 now converges — it was rewriting the same rows forever" },
+	{ date: "2026-09-09", hash: "b59bb58", type: "feat", category: "automation", scope: "persona", title: "backfill Tier 2, the viewer panel, stale-state warnings — and an audit that could not see its own bug" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -813,12 +814,12 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 	},
 	{
 		id: "4f6caf1", from: "2026-09-09", to: "2026-09-09",
-		category: "fix", categories: ["fix"],
+		category: "fix", categories: ["fix","automation"],
 		title: "Fixed: four claims the code does not make true",
-		summary: "Four claims the code does not make true. Plus 2 more changes.",
+		summary: "Four claims the code does not make true. Plus 3 more changes, touching work the app does on its own.",
 		major: false, curated: false,
-		entries: [CHANGELOG[427], CHANGELOG[428], CHANGELOG[429]]
+		entries: [CHANGELOG[427], CHANGELOG[428], CHANGELOG[429], CHANGELOG[430]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "911f86c";
+export const CHANGELOG_GENERATED_FROM = "b59bb58";

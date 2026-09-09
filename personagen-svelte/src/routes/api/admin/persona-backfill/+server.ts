@@ -255,7 +255,12 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 
 			for (const leaf of added) {
 				addedByPath[leaf.path] = (addedByPath[leaf.path] ?? 0) + 1;
-				if (!(TIER_1_DERIVED_LEAVES as readonly string[]).includes(leaf.path)) {
+				// The declared-leaf rule is TIER 1's. Tier 1 is a closed set of four
+				// derived leaves, so anything outside it is a defect. Tier 2 writes
+				// wherever the prose and the sampler reach, which is most of the
+				// record by design — judging it by Tier 1's list reports the feature
+				// as a fault, which is what the first run of this did.
+				if (tier === 1 && !(TIER_1_DERIVED_LEAVES as readonly string[]).includes(leaf.path)) {
 					violations.push(`${row.id}: ${leaf.path}`);
 				}
 			}

@@ -177,7 +177,7 @@ if (d.violations.length) {
 	lines.push(
 		'## CONTRACT VIOLATIONS',
 		'',
-		'Tier 1 wrote outside the leaves it declares in `TIER_1_DERIVED_LEAVES`.',
+		'Tier 1 wrote outside the four leaves it declares in `TIER_1_DERIVED_LEAVES`.',
 		'**This is a defect in the backfill, not a finding about these personas.**',
 		'Do not run `fill` until it is fixed.',
 		'',
