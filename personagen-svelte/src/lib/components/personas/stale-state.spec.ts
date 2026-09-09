@@ -15,6 +15,8 @@
 import { describe, expect, it } from 'vitest';
 import { samplePersonaSkeleton } from '$lib/persona-contract/sampler';
 import { staleWarnings, type StaleWarning } from './stale-state';
+import { lookFingerprint } from '$lib/persona-contract/look-fingerprint';
+import { readPersonaProfileV2 } from '$lib/persona-contract';
 
 /** Fixed clock so nothing here asserts on the wall time. */
 const NOW = Date.parse('2026-09-09T12:00:00.000Z');
@@ -356,6 +358,106 @@ describe('staleWarnings — a voice cast for a persona that has since changed', 
 });
 
 // ── Shape ────────────────────────────────────────────────────────────────────
+
+describe('staleWarnings — a portrait made before the appearance changed', () => {
+	/** The kit a successful portrait now leaves behind. */
+	const generatedFrom = (agent: ReturnType<typeof untouchedAgent>) => ({
+		profile_generated_at: minutesAgo(60),
+		profile_look_fingerprint: lookFingerprint(readPersonaProfileV2(agent as never))
+	});
+
+	it('says nothing while the recorded appearance still matches', () => {
+		const agent = untouchedAgent();
+		const withKit = untouchedAgent({ ugc_reference_kit: generatedFrom(agent) });
+		expect(keys(staleWarnings(withKit, NOW))).toEqual([]);
+	});
+
+	it('warns once the appearance has been edited since', () => {
+		const agent = untouchedAgent();
+		const kit = generatedFrom(agent);
+		const edited = untouchedAgent({
+			ugc_reference_kit: kit,
+			personas_profile: {
+				...agent.personas_profile,
+				look: { skinTone: 'deep', hair: { color: 'black' } }
+			}
+		});
+		expect(keys(staleWarnings(edited, NOW))).toContain('portrait-outdated');
+	});
+
+	/**
+	 * THE FALSE-ALARM GUARD, and the reason this keys on a fingerprint of the
+	 * appearance rather than on a timestamp. `meta.generatedAt` is bumped by every
+	 * save, so a timestamp comparison would tell a customer who fixed a typo that
+	 * their portrait was stale.
+	 */
+	it('stays silent when something that is not the face changes', () => {
+		const agent = untouchedAgent();
+		const kit = generatedFrom(agent);
+		for (const [what, profile] of [
+			[
+				'a later save',
+				{
+					...agent.personas_profile,
+					meta: { schemaVersion: 2, generatedAt: '2030-01-01T00:00:00.000Z' }
+				}
+			],
+			[
+				'the wardrobe',
+				{
+					...agent.personas_profile,
+					look: { ...agent.personas_profile.look, wardrobe: 'new jacket' }
+				}
+			],
+			[
+				'the angle',
+				{ ...agent.personas_profile, strategy: { contentAngle: 'completely rewritten' } }
+			]
+		] as const) {
+			const edited = untouchedAgent({ ugc_reference_kit: kit, personas_profile: profile });
+			expect(keys(staleWarnings(edited, NOW)), what as string).not.toContain('portrait-outdated');
+		}
+	});
+
+	/**
+	 * Every portrait taken before this shipped has no recorded fingerprint. They
+	 * must stay silent rather than all being declared stale at once on the
+	 * strength of a field that did not exist when they ran.
+	 */
+	it('says nothing about a portrait generated before any of this existed', () => {
+		const legacy = untouchedAgent({
+			ugc_reference_kit: { profile_generated_at: minutesAgo(9000) }
+		});
+		expect(keys(staleWarnings(legacy, NOW))).not.toContain('portrait-outdated');
+	});
+
+	it('does not pile on while a portrait is already running or has failed', () => {
+		const agent = untouchedAgent();
+		const stale = { skinTone: 'deep', hair: { color: 'black' } };
+		for (const status of ['generating', 'failed: provider said no']) {
+			const busy = untouchedAgent({
+				ugc_reference_kit: {
+					...generatedFrom(agent),
+					profile_status: status,
+					profile_started_at: minutesAgo(2)
+				},
+				personas_profile: { ...agent.personas_profile, look: stale }
+			});
+			expect(keys(staleWarnings(busy, NOW)), status).not.toContain('portrait-outdated');
+		}
+	});
+
+	it('says nothing about a persona with no appearance at all', () => {
+		const blank = untouchedAgent({
+			ugc_reference_kit: {
+				profile_generated_at: minutesAgo(60),
+				profile_look_fingerprint: 'deadbeef'
+			},
+			personas_profile: { meta: { schemaVersion: 2 } }
+		});
+		expect(keys(staleWarnings(blank, NOW))).not.toContain('portrait-outdated');
+	});
+});
 
 describe('staleWarnings — the shape the page can rely on', () => {
 	it('orders portrait, then reference photos, then voice, whatever the input order', () => {

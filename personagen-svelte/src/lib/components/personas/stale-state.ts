@@ -34,6 +34,7 @@
  * which is the correct answer rather than a failure.
  */
 import { isToken, label, readPersonaProfileV2 } from '$lib/persona-contract';
+import { hasDescribableLook, lookFingerprint } from '$lib/persona-contract/look-fingerprint';
 
 export interface StaleWarning {
 	/** Stable across renders and releases; used as the keyed-each key. */
@@ -153,6 +154,34 @@ export function staleWarnings(agent: unknown, now: number = Date.now()): StaleWa
 				'A portrait for this persona was started a while ago and never came back, so the picture here is still the previous one. Nothing is running now — it’s safe to start it again.',
 			severity: 'info'
 		});
+	}
+
+	// ── Portrait vs the appearance it was made from ──────────────────────────
+	// The headline case, and until now it could not be detected: nothing recorded
+	// what a portrait was rendered from, and `meta.generatedAt` is bumped by every
+	// save, so any timestamp comparison would have warned about someone who fixed
+	// a typo. The avatar route now stores a fingerprint of the appearance it fed
+	// the model; this recomputes it and compares.
+	//
+	// Only fires when there IS a recorded fingerprint, so every portrait taken
+	// before this shipped stays silent rather than being declared stale on the
+	// strength of a field that did not exist when it ran.
+	const renderedFrom = str(kit.profile_look_fingerprint);
+	if (
+		renderedFrom &&
+		!isFailed(str(kit.profile_status)) &&
+		str(kit.profile_status) !== 'generating'
+	) {
+		const profile = readPersonaProfileV2(isObj(agent) ? (agent as never) : undefined);
+		if (hasDescribableLook(profile) && lookFingerprint(profile) !== renderedFrom) {
+			out.push({
+				key: 'portrait-outdated',
+				title: 'This portrait was made before you changed how they look',
+				detail:
+					'The appearance on this persona has been edited since the picture was generated, so the face here no longer matches the description everything else uses. Generate the portrait again to bring them back together.',
+				severity: 'warn'
+			});
+		}
 	}
 
 	// ── Reference photos ─────────────────────────────────────────────────────
