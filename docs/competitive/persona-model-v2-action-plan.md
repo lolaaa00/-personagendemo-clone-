@@ -172,7 +172,23 @@ Task-level deltas are marked **[09-07]** inline below.
 
 **Kill switch proven, not assumed (2026-09-08).** Two dev servers, same request, same persona. With `PERSONA_GENERATOR=v2` the engine returns 200 and a complete sampled creator with no provider configured. With the flag at its DEFAULT (`v1`) the identical request takes the old path and fails at the provider — `502 Generation failed via openrouter: HTTP 401` against a deliberately fake key — with no `_v2` payload and no spend. That is what "a true revert" has to look like: not a claim about a single early branch, but the old failure mode reproduced on demand.
 
-**Phase 1 remaining:** P1.6 default flip, P1.7 Tier 2 + backfill script, P1.8 consumers reading the flag.
+**Phase 1 remaining:** P1.6 default flip only. P1.7 is complete — Tier 1 and Tier 2 both shipped, and the "backfill script" is `npm run backfill:persona-v2` driving `POST /api/admin/persona-backfill` (see the resolved blocker above). P1.8's consumer shipped with the backbone prompt block.
+
+### Phases 2, 3 and 5 — status 2026-09-09
+
+| Task | Landed | Notes |
+|---|---|---|
+| P1.7 Tier 1 | shipped + **RUN on production** | 18 personas scanned, 9 filled, 0 failures, 0 contract violations, 0 portrait-prompt drift, and the pass converges. It did NOT converge at first: the cached look clause is written with a leading space and the store trims every string leaf, so it re-derived forever. The idempotency test called the function twice IN MEMORY; production is read → backfill → SERIALIZE → store → read. |
+| P1.7 Tier 2 | shipped, **not run at scale** | Reconcile-then-complete. Live-proven on one throwaway persona: the credit gate refused at a zero balance, and with a balance the call read 9 facts off the prose and discarded none. |
+| P2.2 / P2.3 | shipped | The clause accepts a v2 look; the hero subject states facial hair and eyewear and the edit prompt says to keep them. Switches on PER-LOOK, never per schemaVersion — every v1 persona is upgraded on read, so keying on the version would flip the whole estate at once. |
+| P3.2 viewer panel | shipped (module) | Deterministic panel of concrete viewers. Age bands are cycled so a two-band audience yields both; gender is a panel QUOTA, because independent per-viewer draws let a "mixed" panel come out all-female. |
+| P0.4 / P5 stale state | shipped (module) | Only the cases something actually writes evidence for. Plus the portrait fingerprint below, which created the evidence for the one that mattered most. |
+
+**The portrait-staleness evidence gap is CLOSED.** Nothing recorded what a portrait was generated from, so "your portrait predates your appearance edits" could not be detected — and no timestamp could stand in, because `meta.generatedAt` is bumped by every save. The avatar route now fingerprints the appearance BEFORE the detached run starts and stores it on success only. The fingerprint covers the INPUTS, not the rendered prompt: hashing the prompt would make a wording improvement declare every portrait in the estate stale at once.
+
+**Still open:** P1.6 default flip (gated on backbone reaching fill/on); running Tier 2 across the estate (one paid call per persona with prose); the Phase 3 fit judge (P3.3); wiring the panel and stale notices into the persona page.
+
+
 
 **[09-09] The backfill CLI blocker is RESOLVED — by not writing that CLI.** The blocker was real: every script here runs under `node --experimental-strip-types`, which resolves no `$lib` alias, and no existing script imports app library code, so there was no pattern to copy. Both recorded options were bad — relative imports everywhere fights the SvelteKit convention, and adding `vite-node` puts a new dependency on an ops path. The third option is better than either: put the OPERATION where the code already lives. `POST /api/admin/persona-backfill` runs it behind `requirePlatformAdmin`, and `scripts/backfill-persona-v2.mjs` is a thin HTTP client like every other script in this repo (`npm run backfill:persona-v2 -- --mode shadow`). The app resolves its own aliases, already holds the service client, and — when Tier 2 lands — already holds the budget gate, the credit gate and the generation-events ledger that P1.7 requires every paid backfill call to pass through. A CLI would have had to reimplement all of that or reach around it.
 
