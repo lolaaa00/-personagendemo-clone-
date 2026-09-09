@@ -96,7 +96,7 @@
 		},
 		{
 			title: 'Every cent, on the record.',
-			body: 'Per-persona, per-post spend, shown in your currency before you confirm. Text posts are free. Your balance never expires. No guessing.'
+			body: 'Per-persona, per-post spend, shown in your currency before you confirm. A text post costs about two cents of writing and no image charge at all. Your balance never expires. No guessing.'
 		}
 	];
 
@@ -173,7 +173,7 @@
 	const FAQS = [
 		{
 			q: 'How does the media wallet work?',
-			a: 'Every plan includes a monthly wallet for AI images, video and voice, shown as money in your currency. Text posts cost nothing, so a persona can post six times a day without touching it. Every generation shows its price before you confirm. Run low and you top up at par: $25 buys $25.00 of generation, and it never expires.'
+			a: 'Every plan includes a monthly wallet for AI images, video and voice, shown as money in your currency. A text post only pays for the writing — about two cents — so a persona posting six times a day spends around a tenth of a dollar, against roughly $1.50 for a video post. Every generation shows its price before you confirm. Run low and you top up at par: $25 buys $25.00 of generation, and it never expires.'
 		},
 		{
 			q: 'How does the identity actually stay consistent?',

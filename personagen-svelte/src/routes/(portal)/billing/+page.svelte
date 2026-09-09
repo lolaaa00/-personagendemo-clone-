@@ -106,10 +106,10 @@
 				<p class="sub">
 					{#if data.currency !== 'USD'}Shown in {data.currency} · exactly {data.balanceUsd} ·{/if}
 					{#if empty}
-						Your wallet is empty. Text posts still generate free; AI images and video need a top-up.
+						Your wallet is empty. Nothing more can be generated — even a text post pays for its writing — so top up to continue.
 					{:else}
 						≈ <strong>{data.buys.imagePosts}</strong> image posts, or <strong>{data.buys.videoPosts}</strong> video posts, or
-						<strong>{data.buys.talkingHeads}</strong> talking-head clips. Text posts are always free.
+						<strong>{data.buys.talkingHeads}</strong> talking-head clips. A text post costs only its writing, about two cents.
 					{/if}
 				</p>
 			{/if}
@@ -117,7 +117,7 @@
 		<ul class="promises">
 			<li><strong>Never expires.</strong> Credit sits in your wallet until you use it.</li>
 			<li><strong>Price before you spend.</strong> Every generation shows its cost first.</li>
-			<li><strong>Only what you start.</strong> Failed runs are not charged.</li>
+			<li><strong>Only what actually ran.</strong> If a generation dies partway, you pay for the images it had already made and nothing for the rest.</li>
 		</ul>
 	</section>
 
@@ -233,7 +233,7 @@
 		<h2>How it works</h2>
 		<dl>
 			<dt>What costs money?</dt>
-			<dd>AI images, video, voice and talking-head clips. Text posts, scheduling, publishing and analytics are free on every account.</dd>
+			<dd>AI images, video, voice and talking-head clips, plus the writing behind every post — a text post is just the writing, about two cents. Scheduling, publishing and analytics are free on every account.</dd>
 			<dt>Why is the balance in {data.currency}?</dt>
 			<dd>We show your wallet in the currency of where you are. Change it any time in Settings. Charges are made in USD.</dd>
 			<dt>What if I bring my own provider keys?</dt>
