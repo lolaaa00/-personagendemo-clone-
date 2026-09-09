@@ -346,6 +346,22 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 							model: 'flux-schnell',
 							usd: priceOf('fal', 'image', 'flux')
 						};
+		// A persona with no pinned face builds one DURING this run:
+		// ensureCharacterRef() fires generateCharacterPortrait(), which is three
+		// paid image calls (hero portrait, character sheet, avatar hero shot), all
+		// billed to the wallet. They were never quoted, so a persona's FIRST image
+		// post quoted ~26 credits and debited ~97 — and every later post for that
+		// persona quoted correctly, which is what made it hard to notice. Quoted
+		// here under exactly the condition that triggers it: the run wants a
+		// character, and neither the composer nor the persona supplies one.
+		const needsIdentitySet = useCharacter && !characterRef;
+		const identitySteps: Step[] = needsIdentitySet
+			? [
+					{ step: 'identity: hero portrait (one-off)', provider: 'fal', model: NANO_STILL_LABEL, usd: priceOf('fal', 'image', 'nano') },
+					{ step: 'identity: character sheet (one-off)', provider: 'fal', model: NANO_STILL_LABEL, usd: priceOf('fal', 'image', 'nano') },
+					{ step: 'identity: avatar hero shot (one-off)', provider: 'fal', model: NANO_STILL_LABEL, usd: priceOf('fal', 'image', 'nano') }
+				]
+			: [];
 		const baseSteps: Step[] = [
 			{
 				step: 'director (caption + scene)',
@@ -353,6 +369,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 				model: directorModel,
 				usd: priceOf(directorProvider, 'llm')
 			},
+			...identitySteps,
 			stillStep
 		];
 		// Both video branches, so the composer's format selector can flip between them
@@ -505,13 +522,24 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 	// (the dearer of the two video branches) or the cinematic pack, so a thin
 	// wallet is refused up front instead of overdrawing mid-run. The composer's
 	// preview above quotes the exact pipeline; this only has to be an upper bound.
-	const roughUsd = wantCinematic
+	// The gate must cover the identity set too, or a thin wallet passes the check
+	// and then overdraws by the three image calls it was never asked about.
+	let identityUsd = 0;
+	if (!genInput.characterRefOverride && genInput.useCharacterRef !== false && genInput.stillStyle !== 'graphic') {
+		const { data: refRow } = await locals.supabase
+			.from('agent_configs')
+			.select('ugc_character_ref')
+			.eq('agent_id', agentId)
+			.maybeSingle();
+		if (!refRow?.ugc_character_ref) identityUsd = 3 * priceOf('fal', 'image', 'nano');
+	}
+	const roughUsd = identityUsd + (wantCinematic
 		? priceOf('openrouter', 'llm') + 4 * priceOf('fal', 'image', 'nano') + priceOf('fal', 'video', 'pro')
 		: body.media === 'image'
 			? priceOf('openrouter', 'llm') + priceOf('fal', 'image', 'nano')
 			: genInput.formatOverride === 'broll'
 				? priceOf('openrouter', 'llm') + priceOf('fal', 'image', 'nano') + priceOf('fal', 'video', 'standard')
-				: priceOf('openrouter', 'llm') + priceOf('fal', 'image', 'nano') + priceOf('fal', 'tts') + priceOf('fal', 'talking_head');
+				: priceOf('openrouter', 'llm') + priceOf('fal', 'image', 'nano') + priceOf('fal', 'tts') + priceOf('fal', 'talking_head'));
 	try {
 		await assertWithinBudget(locals.supabase, user.id, agentId, creditsFor(roughUsd));
 	} catch (err) {
