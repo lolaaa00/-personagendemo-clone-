@@ -58,3 +58,23 @@ describe('the route quotes and gates it', () => {
 		expect(gate).toContain("genInput.stillStyle !== 'graphic'");
 	});
 });
+
+describe('the text calls that always run are quoted', () => {
+	const route = readFileSync(
+		join(__dirname, '..', '..', 'routes', 'api', 'agent', '[agentId]', 'generate-post', '+server.ts'),
+		'utf8'
+	);
+
+	it('quotes the Director AND the pre-media grader, because both always run', () => {
+		// gradeDraftWithRetry() is called unconditionally before any media is
+		// bought; the plan counted only the Director, so every run was short one
+		// call. Retries stay unquoted on purpose — see the comment in the route.
+		expect(route).toContain("step: 'quality grader (pre-media gate)'");
+		const base = route.slice(route.indexOf('const baseSteps: Step[] = ['), route.indexOf('const stepsBroll'));
+		expect((base.match(/priceOf\(directorProvider, 'llm'\)/g) ?? []).length).toBe(2);
+	});
+
+	it('the gate counts both text calls as well', () => {
+		expect(route).toContain("2 * priceOf('openrouter', 'llm')");
+	});
+});

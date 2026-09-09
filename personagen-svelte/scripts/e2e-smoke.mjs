@@ -108,6 +108,26 @@ const password = `E2e!${randomBytes(9).toString('base64url')}`;
 let userId = null, agentId = null, postId = null, modeBefore = null, adminInserted = false;
 
 async function main() {
+	// A run that dies mid-way (a dropped connection, a 502) skips its cleanup and
+	// leaves a throwaway account behind; that happened twice on 2026-09-09. Sweep
+	// anything this script created more than 30 minutes ago before starting, so a
+	// failed run cannot quietly accumulate fixtures in a production database.
+	try {
+		const stale = await pg(`select id, email from auth.users where email like 'e2e-%@personagen.test' and created_at < now() - interval '30 minutes'`);
+		for (const u of stale ?? []) {
+			const agents = await pg(`select id from agents where user_id=${q(u.id)}`);
+			for (const a of agents ?? []) {
+				await pg(`delete from posts where agent_id=${q(a.id)}`);
+				await pg(`delete from agent_configs where agent_id=${q(a.id)}`);
+				await pg(`delete from agents where id=${q(a.id)}`);
+			}
+			await fetch(`${SB}/auth/v1/admin/users/${u.id}`, { method: 'DELETE', headers: { apikey: KEY, Authorization: `Bearer ${KEY}` } });
+			console.log(`swept stranded fixture from an earlier run: ${u.email}`);
+		}
+	} catch (e) {
+		console.warn('fixture sweep skipped:', e.message);
+	}
+
 	// 1. health
 	const health = await (await fetch(`${BASE}/api/health`)).json();
 	const version = await (await fetch(`${BASE}/_app/version.json`)).json();

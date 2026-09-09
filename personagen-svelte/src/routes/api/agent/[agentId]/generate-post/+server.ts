@@ -362,9 +362,24 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 					{ step: 'identity: avatar hero shot (one-off)', provider: 'fal', model: NANO_STILL_LABEL, usd: priceOf('fal', 'image', 'nano') }
 				]
 			: [];
+		// Two text calls ALWAYS run: the Director writes the draft, then an
+		// independent grader scores it before any media is bought. The plan used to
+		// count only the Director, so the quote was short by one call on every run.
+		// Retries are deliberately NOT quoted: a hook rewrite (when the model scores
+		// its own hook under threshold), a second grade attempt, an improvement
+		// rewrite and a regrade can add up to four more, but they are exceptions —
+		// quoting the worst case would overstate the price of every normal run. At
+		// 3x each is one credit, so the tail is ~4 credits, and the ledger records
+		// what actually ran.
 		const baseSteps: Step[] = [
 			{
 				step: 'director (caption + scene)',
+				provider: directorProvider,
+				model: directorModel,
+				usd: priceOf(directorProvider, 'llm')
+			},
+			{
+				step: 'quality grader (pre-media gate)',
 				provider: directorProvider,
 				model: directorModel,
 				usd: priceOf(directorProvider, 'llm')
@@ -534,12 +549,12 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		if (!refRow?.ugc_character_ref) identityUsd = 3 * priceOf('fal', 'image', 'nano');
 	}
 	const roughUsd = identityUsd + (wantCinematic
-		? priceOf('openrouter', 'llm') + 4 * priceOf('fal', 'image', 'nano') + priceOf('fal', 'video', 'pro')
+		? 2 * priceOf('openrouter', 'llm') + 4 * priceOf('fal', 'image', 'nano') + priceOf('fal', 'video', 'pro')
 		: body.media === 'image'
-			? priceOf('openrouter', 'llm') + priceOf('fal', 'image', 'nano')
+			? 2 * priceOf('openrouter', 'llm') + priceOf('fal', 'image', 'nano')
 			: genInput.formatOverride === 'broll'
 				? priceOf('openrouter', 'llm') + priceOf('fal', 'image', 'nano') + priceOf('fal', 'video', 'standard')
-				: priceOf('openrouter', 'llm') + priceOf('fal', 'image', 'nano') + priceOf('fal', 'tts') + priceOf('fal', 'talking_head'));
+				: 2 * priceOf('openrouter', 'llm') + priceOf('fal', 'image', 'nano') + priceOf('fal', 'tts') + priceOf('fal', 'talking_head'));
 	try {
 		await assertWithinBudget(locals.supabase, user.id, agentId, creditsFor(roughUsd));
 	} catch (err) {
