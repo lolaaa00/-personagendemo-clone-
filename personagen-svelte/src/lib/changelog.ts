@@ -478,7 +478,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-09", hash: "f1ce3a8", type: "test", category: "maintenance", scope: "personas", title: "the fingerprint must survive the page's own agent shape" },
 	{ date: "2026-09-09", hash: "490eea2", type: "feat", category: "design", scope: "personas", title: "the viewer panel and stale notices reach the page; viewers get their own buying style" },
 	{ date: "2026-09-09", hash: "04a640d", type: "feat", category: "feature", scope: "audience", title: "the fit judge — a draft judged by four specific people, not a bracket" },
-	{ date: "2026-09-09", hash: "fd9cf48", type: "feat", category: "infrastructure", scope: "audience", title: "the fit verdict reaches the pipeline and the review drawer" }
+	{ date: "2026-09-09", hash: "fd9cf48", type: "feat", category: "infrastructure", scope: "audience", title: "the fit verdict reaches the pipeline and the review drawer" },
+	{ date: "2026-09-09", hash: "bf062f6", type: "feat", category: "feature", scope: "persona-contract", title: "the touchpoint map — which parts of the product actually see each field" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -836,12 +837,12 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 	},
 	{
 		id: "f1ce3a8", from: "2026-09-09", to: "2026-09-09",
-		category: "maintenance", categories: ["maintenance","design","feature","infrastructure"],
-		title: "Tidying: the fingerprint must survive the page's own agent…",
-		summary: "The fingerprint must survive the page's own agent shape. Plus 3 more changes, touching layout, colours and readability and things you can now do and setup and deployment.",
-		major: false, curated: false,
-		entries: [CHANGELOG[441], CHANGELOG[442], CHANGELOG[443], CHANGELOG[444]]
+		category: "feature", categories: ["maintenance","design","feature","infrastructure"],
+		title: "New: the fingerprint must survive the page's own agent…",
+		summary: "The fingerprint must survive the page's own agent shape. Plus 4 more changes, touching internal cleanup and layout, colours and readability and setup and deployment.",
+		major: true, curated: false,
+		entries: [CHANGELOG[441], CHANGELOG[442], CHANGELOG[443], CHANGELOG[444], CHANGELOG[445]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "fd9cf48";
+export const CHANGELOG_GENERATED_FROM = "bf062f6";

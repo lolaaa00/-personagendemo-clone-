@@ -243,11 +243,7 @@ describe('the contract is honest about what the builders actually read', () => {
 			const haystack = files.map(sourceFor).join('\n');
 			const missing = fieldsFor(touchpoint).filter((path) => {
 				if (REACHES_VIA_DOWNGRADE[path]) return false;
-				const leaf =
-					path
-						.replace(/\\.\\*$/, '')
-						.split('.')
-						.pop() ?? '';
+				const leaf = path.replace(/\.\*$/, '').split('.').pop() ?? '';
 				if (leaf.length <= 2) return false;
 				// WORD BOUNDARY, not `includes`. A substring match called this honest
 				// while it was reading the word "educational" inside an unrelated prose
@@ -262,6 +258,28 @@ describe('the contract is honest about what the builders actually read', () => {
 			).toEqual([]);
 		}
 	);
+
+	/**
+	 * THE REVERSE CHECK — "does a builder read anything the contract has not
+	 * granted it" — was written, measured, and REMOVED. Recorded here so nobody
+	 * rebuilds it the same way.
+	 *
+	 * It cannot work at file granularity. `generate.ts` hosts the script builder,
+	 * both portrait builders and the fit judge's call site, so "this field name
+	 * appears in this file" cannot say WHICH consumer mentioned it: the reverse
+	 * check for `script` sees `look.eyewear` in the portrait builder and concludes
+	 * the script reads it. Run for real it produced 24 false positives for script
+	 * and 46 for portrait.
+	 *
+	 * Worse, the probe that first said it was clean was itself broken: it built
+	 * its matcher as `new RegExp(\`\b${leaf}\b\`)` inside a template literal,
+	 * where `` is a BACKSPACE escape rather than a word boundary, so it matched
+	 * nothing and reported zero. A measurement that cannot fail is not evidence.
+	 *
+	 * Doing it properly needs function-level granularity — slicing each builder's
+	 * own source out of the file — which is worth doing when a builder is
+	 * extracted, and not worth faking before then.
+	 */
 
 	it('the downgrade exemptions are few, named, and still in the contract', () => {
 		// An exemption list is where an honesty check goes to die. Keep it short,
