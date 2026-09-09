@@ -50,8 +50,15 @@ export interface CardRenderInput {
 	/** The Director's line — the artwork. */
 	cardText: string;
 	/** Art-direction string (template scene / composer edit). Reserved for future
-	 *  tone hints; layout+palette are currently derived from text + brand only. */
+	 *  tone hints; the palette is derived from brand + text. */
 	artDirection?: string | null;
+	/**
+	 * Pin the layout instead of deriving it from the text. The composer offers
+	 * this so a user who wants a list can have one even when their line reads
+	 * like a statement; absent (the normal case) keeps pickCardLayout()'s
+	 * heuristic, which is what every existing caller relies on.
+	 */
+	layout?: CardLayout | null;
 	/** Brand-brief colors; invalid/absent values fall back to curated palettes. */
 	brand?: { primary?: string | null; secondary?: string | null } | null;
 	/** Small "@handle" credit at the bottom of the card. */
@@ -450,7 +457,7 @@ export async function renderTypographicCard(input: CardRenderInput): Promise<Ren
 		if (!font) return null;
 
 		const palette = resolveCardPalette(text, input.brand);
-		const layout = pickCardLayout(text);
+		const layout = input.layout ?? pickCardLayout(text);
 		const { lines, boxes } = compose(layout, text, palette);
 
 		const handle = sanitizeCardText(input.handle || '');

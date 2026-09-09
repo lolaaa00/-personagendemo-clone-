@@ -6,6 +6,7 @@
 	import { Posts } from '$lib/services/api';
 	import { showToast } from '$lib/stores/ui.svelte';
 	import { readParam, syncParam } from '$lib/url-state';
+	import { countLabel } from '$lib/plural';
 
 	let { data } = $props();
 
@@ -489,9 +490,7 @@
 					>
 					<span class="profile-section-name">{section.persona.name}</span>
 					<span class="profile-section-handle">{section.persona.handle}</span>
-					<span class="profile-section-count"
-						>{section.assets.length} asset{section.assets.length !== 1 ? 's' : ''}</span
-					>
+					<span class="profile-section-count">{countLabel(section.assets.length, 'asset')}</span>
 				</a>
 				<div class="profile-grid">
 					{#each section.assets as asset (asset.url)}

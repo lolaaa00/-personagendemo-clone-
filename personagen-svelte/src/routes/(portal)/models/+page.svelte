@@ -2,6 +2,7 @@
 	import { showToast } from '$lib/stores/ui.svelte';
 	import { parseJsonResponse } from '$lib/services/api';
 	import { readParam, syncParam } from '$lib/url-state';
+	import { countLabel } from '$lib/plural';
 
 	let { data } = $props();
 
@@ -424,7 +425,7 @@
 			rows = d.data;
 			const s = d.sync;
 			showToast(
-				`Catalog synced — ${s.discovered} new model${s.discovered !== 1 ? 's' : ''} discovered, ${s.refreshed} refreshed${s.deprecatedFlagged ? `, ${s.deprecatedFlagged} newly deprecated` : ''}`,
+				`Catalog synced — ${countLabel(s.discovered, 'new model')} discovered, ${s.refreshed} refreshed${s.deprecatedFlagged ? `, ${s.deprecatedFlagged} newly deprecated` : ''}`,
 				s.errors?.length ? 'info' : 'success'
 			);
 			// Both catalogs sync independently; a failed one is reported, not hidden.
@@ -545,7 +546,13 @@
 			<div class="mm-unlisted" role="status">
 				<b>Ran in the last {ledger.windowDays} days but is not in this registry:</b>
 				{#each ledger.unlisted as u (u.provider + u.model)}
-					<span class="mm-unlisted-item">{u.provider} · {u.model} · {u.runs}× · ${u.usd.toFixed(2)}</span>
+					<!-- Provider cost on purpose. This page is platform-admin only and the ledger is
+					     platform-wide ("what did the platform run"), so this figure is COGS, not a
+					     customer charge — quoting it at retail would tell the operator we paid the
+					     markup to our own providers. Customer-facing spend lives on the persona page. -->
+					<span class="mm-unlisted-item" title="Provider cost, platform-wide"
+						>{u.provider} · {u.model} · {u.runs}× · ${u.usd.toFixed(2)}</span
+					>
 				{/each}
 				<span class="mm-dim">Sync the catalogs to list them. A model that runs unlisted is priced from compiled constants, not from this page.</span>
 			</div>
@@ -681,7 +688,10 @@
 								<b title={ledger.byRowId[row.id].match === 'name' ? 'Matched by model name (fal events record a label, not an id)' : 'Matched by model id'}
 									>{ledger.byRowId[row.id].runs}×</b
 								>
-								<span class="mm-dim">${ledger.byRowId[row.id].usd.toFixed(2)}</span>
+								<!-- Provider cost, platform-wide — see the note on the unlisted list above. -->
+								<span class="mm-dim" title="Provider cost, platform-wide"
+									>${ledger.byRowId[row.id].usd.toFixed(2)}</span
+								>
 							{:else}
 								<span class="mm-dim">0</span>
 							{/if}

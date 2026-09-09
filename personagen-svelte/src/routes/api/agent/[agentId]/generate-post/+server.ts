@@ -8,6 +8,7 @@ import {
 	resolveImageKeys,
 	resolveVoiceForPersona,
 	TALKINGHEAD_LABEL,
+	TALKINGHEAD_MODEL,
 	NANO_STILL_LABEL,
 	CINEMATIC_VIDEO_LABEL,
 	TTS_MODEL,
@@ -29,6 +30,14 @@ import {
 	type RegistryRow
 } from '$lib/server/model-registry';
 import { VOICE_CATALOG, DEFAULT_VOICE } from '$lib/server/voices';
+import {
+	formatFromRequest,
+	planPipeline,
+	planTotalUsd,
+	type StepKind,
+	type StepModel
+} from '$lib/formats';
+import type { ModelKind, ModelOption } from '$lib/models';
 import { VIDEO_ONLY_PLATFORMS } from '$lib/server/social/platforms';
 
 /**
@@ -208,7 +217,27 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		// still actually feeds. Absent (plain composer flows) = legacy behavior.
 		stillStyle: (body.still === 'graphic' ? 'graphic' : 'photo') as 'photo' | 'graphic',
 		useCharacterRef: !(body.refs && body.refs.character === false),
-		useProductRef: !(body.refs && body.refs.product === false)
+		useProductRef: !(body.refs && body.refs.product === false),
+		// ── Per-run controls the composer's Look step now pins ────────────────
+		// The Director still writes anything left blank; these only ever REPLACE a
+		// decision the user made explicitly, so an absent field is today's run.
+		/** The spoken line for a spokesperson run. Previously editable only on a refine. */
+		dialogueOverride: typeof body.script === 'string' && body.script.trim() ? body.script.slice(0, 1200) : undefined,
+		/** Per-run voice; the persona's pinned voice remains the default. */
+		voiceOverride: typeof body.voice === 'string' && body.voice.trim() ? body.voice.trim() : undefined,
+		/** Typographic card controls — the line, and how it is set. */
+		cardText: typeof body.card_text === 'string' && body.card_text.trim() ? body.card_text.slice(0, 400) : undefined,
+		cardLayout: ['statement', 'quote', 'stack', 'list', 'split'].includes(body.card_layout)
+			? body.card_layout
+			: undefined,
+		cardPalette: typeof body.card_palette === 'string' && body.card_palette !== 'auto' ? body.card_palette : undefined,
+		/** The realism register for photo compositions (front camera / mirror / third person). */
+		framing: ['front', 'mirror', 'third'].includes(body.framing) ? body.framing : undefined,
+		/** Budget-vs-quality for the still, the second largest line in most runs. */
+		stillModel: typeof body.still_model === 'string' ? body.still_model : undefined,
+		/** "Use my own still": skips still generation entirely, and its charge with it. */
+		stillUrlOverride:
+			typeof body.still_url === 'string' && /^https?:\/\//i.test(body.still_url) ? body.still_url : undefined
 	};
 
 	// ── Studio delivery contract ─────────────────────────────────────────────
@@ -251,11 +280,6 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 			: { data: null };
 		const briefData = selectedBrief?.data || null;
 		const products = Array.isArray(briefData?.products) ? briefData.products : [];
-		const product =
-			products.find((p: any) => p.id === genInput.productId) ||
-			products.find((p: any) => p.photoUrl) ||
-			products[0] ||
-			null;
 
 		const mediaKind = wantCinematic ? 'cinematic' : genInput.video === false ? 'image' : 'video';
 		// The composition contract decides which refs this run will actually feed —
@@ -267,20 +291,31 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 			wantCinematic || (genInput.useCharacterRef !== false && stillStyle !== 'graphic');
 		const useProduct =
 			wantCinematic || (genInput.useProductRef !== false && stillStyle !== 'graphic');
-		const characterRef =
-			genInput.characterRefOverride || (useCharacter ? cfgRow?.ugc_character_ref || null : null);
+
+		// Only resolve a product for a composition that FEEDS one. Resolving it
+		// unconditionally is how a product id ended up being submitted by
+		// product-free channel templates whose product field was hidden: the
+		// composer read it out of this payload and posted it back, and the
+		// Director then wrote copy about a product the user never saw offered.
+		const product = useProduct
+			? products.find((p: any) => p.id === genInput.productId) ||
+				products.find((p: any) => p.photoUrl) ||
+				products[0] ||
+				null
+			: null;
+		// The pinned face and the brand-brief product LIST are shipped whatever this
+		// run composites: the composer lets the user switch format client-side, and a
+		// switch into a composition that DOES feed a product must not find an empty
+		// picker. What stays gated is the resolved product for THIS run (below) and,
+		// in the composer, whether a product id is submitted at all.
+		const characterRef = genInput.characterRefOverride || cfgRow?.ugc_character_ref || null;
 		const productPhoto =
 			genInput.productPhotoUrlOverride || (useProduct ? product?.photoUrl || null : null);
 
-		const videoModel = effectiveResolve(registryRows, 'video_i2v', body.video_model);
 		// The quote must price the row the pipeline will actually RUN, or the
 		// customer approves one number and the ledger records another.
 		const voiceModel = registryDefault(registryRows, 'tts', 'fal', TTS_MODEL, priceOf('fal', 'tts'));
 
-		// The model stack this run actually goes through, with per-call costs. A VIDEO
-		// forks by format: a spokesperson clip runs voiceover + talking-head (OmniHuman),
-		// a b-roll clip runs the picked i2v model. The persona's ugc_format decides
-		// (auto → the Director picks, biased to spokesperson); the composer can override.
 		// Honor an explicit format in the request first (the REAL run already does,
 		// via formatOverride) — otherwise a Studio template or composer choice would
 		// preview as the persona's default pipeline while generating as the requested
@@ -292,7 +327,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 					? cfgRow.ugc_format
 					: 'auto';
 		const { voice: previewVoice } = resolveVoiceForPersona(
-			cfgRow?.ugc_voice || DEFAULT_VOICE,
+			body.voice || cfgRow?.ugc_voice || DEFAULT_VOICE,
 			agent
 		);
 		const voiceLabel = VOICE_CATALOG.find((v) => v.name === previewVoice)?.label || previewVoice;
@@ -304,128 +339,135 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		const directorProvider = previewAi?.provider ?? 'openrouter';
 		const directorModel = previewAi?.model ?? 'gemini-3.5-flash';
 
-		type Step = { step: string; provider: string; model: string; usd: number };
-		// The still step named for what THIS composition does — not a generic
-		// "product still" on runs that composite no product at all.
 		// Text cards typeset server-side for $0 when this host can render them
-		// (ffmpeg + font present, renderer not env-disabled) — the preview quotes
+		// (ffmpeg + font present, renderer not env-disabled). The preview quotes
 		// free ONLY when the run will actually be free, and quotes the model
 		// fallback price otherwise, so the composer never promises what the run
 		// won't deliver.
-		const freeCardRender = stillStyle === 'graphic' && (await isCardRendererAvailable());
-		const stillStep: Step =
-			stillStyle === 'graphic'
-				? freeCardRender
-					? {
-							step: 'typographic card (server-rendered)',
-							provider: 'local',
-							model: CARD_RENDERER_LABEL,
-							usd: 0
-						}
-					: {
-							step: 'typographic card (text render)',
-							provider: 'fal',
-							model: NANO_STILL_LABEL,
-							usd: priceOf('fal', 'image', 'nano')
-						}
-				: useCharacter || useProduct
-					? {
-							step:
-								useCharacter && useProduct
-									? 'still (product + face composite)'
-									: useCharacter
-										? 'still (face composite)'
-										: 'still (product composite)',
-							provider: 'fal',
-							model: NANO_STILL_LABEL,
-							usd: priceOf('fal', 'image', 'nano')
-						}
-					: {
-							step: 'still (text-to-image)',
-							provider: 'fal',
-							model: 'flux-schnell',
-							usd: priceOf('fal', 'image', 'flux')
-						};
-		const baseSteps: Step[] = [
-			{
-				step: 'director (caption + scene)',
-				provider: directorProvider,
-				model: directorModel,
-				usd: priceOf(directorProvider, 'llm')
-			},
-			stillStep
-		];
-		// Both video branches, so the composer's format selector can flip between them
-		// client-side (with the right cost) without a re-fetch that would clobber edits.
-		const stepsBroll: Step[] = [
-			...baseSteps,
-			{ step: 'b-roll video', provider: 'fal', model: videoModel.label, usd: videoModel.usd }
-		];
-		const stepsSpokesperson: Step[] = [
-			...baseSteps,
-			{
-				step: 'voiceover',
-				provider: 'fal',
-				model: `${voiceModel.id.replace(/^fal-ai\//, '')} (${voiceLabel})`,
-				usd: voiceModel.usd
-			},
-			{
-				step: 'talking head',
-				provider: 'fal',
-				model: TALKINGHEAD_LABEL,
-				usd: priceOf('fal', 'talking_head')
-			}
-		];
+		const freeCardRender = await isCardRendererAvailable();
 
-		// Every media kind's step array ships to the composer, so its Media select
-		// can flip between them client-side and the "pipeline that will run" stays
-		// true — previously a media switch kept showing the ORIGINAL kind's steps.
-		// Cinematic ignores the composition contract (its multi-shot pack always
-		// composites character + product elements), so its still step says so even
-		// when the template's own still is graphic or ref-less.
-		const stepsCinematic: Step[] = [
-			baseSteps[0],
-			{
-				// The run generates ONE composited still PER SHOT (the Director writes
-				// 2–5). Priced at the 4-shot midpoint — a single-still line here would
-				// under-quote the real spend by up to ~$0.32.
-				step: 'storyboard stills (2–5 shots, product + face composite)',
-				provider: 'fal',
-				model: NANO_STILL_LABEL,
-				usd: +(4 * priceOf('fal', 'image', 'nano')).toFixed(4)
+		// ── The plan ────────────────────────────────────────────────────────
+		// One catalog, one planner. The composer calls planPipeline() with THIS
+		// options/fixed pair on every change, so the pipeline it prices and the
+		// pipeline this endpoint would run are produced by the same function —
+		// which is the entire reason the preview round-trip exists. Previously
+		// the server shipped one pre-built array per media/format combination and
+		// the client re-derived cost by string-matching the step name.
+		const stillKind: ModelKind = useCharacter || useProduct ? 'image_edit' : 'image_t2i';
+		const toStepModel = (m: ModelOption): StepModel => ({
+			id: m.id,
+			label: m.label,
+			usd: m.usd,
+			provider: m.provider,
+			tier: m.tier,
+			note: m.note,
+			caveat: m.caveat,
+			supportsAudio: m.supportsAudio,
+			supportsDuration: m.supportsDuration,
+			multiRef: m.multiRef
+		});
+
+		const stillOptions = effectiveOptions(registryRows, stillKind).map(toStepModel);
+		const videoOptions = effectiveOptions(registryRows, 'video_i2v').map(toStepModel);
+		const defaultStill = effectiveResolve(registryRows, stillKind, body.still_model);
+		const defaultVideo = effectiveResolve(registryRows, 'video_i2v', body.video_model);
+
+		const planOptions: Partial<Record<StepKind, StepModel[]>> = {
+			still: stillOptions,
+			video: videoOptions
+		};
+		const planFixed: Partial<Record<StepKind, StepModel>> = {
+			director: {
+				id: directorModel,
+				label: directorModel,
+				usd: priceOf(directorProvider, 'llm'),
+				provider: directorProvider
 			},
-			{
-				step: 'cinematic video (multi-shot)',
-				provider: 'fal',
-				model: CINEMATIC_VIDEO_LABEL,
-				usd: priceOf('fal', 'video', 'pro')
+			still: toStepModel(defaultStill),
+			video: toStepModel(defaultVideo),
+			card: freeCardRender
+				? { id: 'local/typographic-card', label: CARD_RENDERER_LABEL, usd: 0, provider: 'local', tier: 'free' }
+				: {
+						id: NANO_STILL_LABEL,
+						label: `${NANO_STILL_LABEL} (renderer unavailable on this host)`,
+						usd: priceOf('fal', 'image', 'nano'),
+						provider: 'fal'
+					},
+			tts: {
+				id: voiceModel.id,
+				label: `${voiceModel.id.replace(/^fal-ai\//, '')} (${voiceLabel})`,
+				usd: voiceModel.usd,
+				provider: 'fal'
+			},
+			talkinghead: {
+				id: TALKINGHEAD_MODEL,
+				label: TALKINGHEAD_LABEL,
+				usd: priceOf('fal', 'talking_head'),
+				provider: 'fal'
+			},
+			// Per SHOT: planPipeline multiplies this by the shot count, so a 5-shot
+			// sequence is not quoted as a single still.
+			cine_stills: {
+				id: NANO_STILL_LABEL,
+				label: NANO_STILL_LABEL,
+				usd: priceOf('fal', 'image', 'nano'),
+				provider: 'fal'
+			},
+			cine_video: {
+				id: CINEMATIC_VIDEO_LABEL,
+				label: CINEMATIC_VIDEO_LABEL,
+				usd: priceOf('fal', 'video', 'pro'),
+				provider: 'fal'
 			}
-		];
-		// Initial pipeline shown = what this persona runs right now. For 'auto' that's
-		// the spokesperson default (the Director's runtime bias).
-		let steps: Step[];
-		if (mediaKind === 'cinematic') {
-			steps = stepsCinematic;
-		} else if (mediaKind === 'image') {
-			steps = baseSteps;
-		} else {
-			steps = personaFormat === 'broll' ? stepsBroll : stepsSpokesperson;
-		}
+		};
+
+		// Which format this request IS, in the vocabulary the composer now speaks.
+		// Derived from the same media/format/still fields the run will receive, so
+		// a Studio template that pins media:'image' + still:'graphic' opens on
+		// "Text card" without that template changing at all.
+		const formatId = formatFromRequest({
+			media: mediaKind,
+			format: personaFormat,
+			still: stillStyle
+		});
+
+		const shots = 4;
+		const previewPlan = planPipeline({
+			formatId,
+			options: planOptions,
+			fixed: planFixed,
+			picks: {
+				...(body.still_model ? { still: String(body.still_model) } : {}),
+				...(body.video_model ? { video: String(body.video_model) } : {})
+			},
+			shots
+		});
+		const planUsd = planTotalUsd(previewPlan);
 
 		return json({
 			success: true,
 			preview: {
+				kind: 'post',
 				topic: genInput.topic || null,
+				// The format the composer opens on, and everything it needs to plan
+				// any OTHER format the user switches to without a second round-trip.
+				formatId,
+				plan: { options: planOptions, fixed: planFixed, shots },
 				media: mediaKind,
 				provider: genInput.providerPreference || 'auto',
 				platforms: targetPool,
 				connectedPlatforms,
+				// Platforms that reject a still. The server has always filtered these
+				// AFTER generating (and then quietly saved a draft); the composer can
+				// now say so before the money is spent instead of promising a live
+				// post it cannot deliver.
+				videoOnlyPlatforms: [...VIDEO_ONLY_PLATFORMS],
 				product: product
 					? { id: product.id, name: product.name, photoUrl: product.photoUrl || null }
 					: null,
 				// The full brand-brief product set, so the composer can offer a picker
-				// instead of a raw URL. Same array the generator resolves product_id
-				// against — picking one here sends its id back verbatim.
+				// instead of a raw URL. Empty for a composition that feeds no product,
+				// so the picker cannot appear where the run would ignore it.
 				products: products.map((p: any) => ({
 					id: p.id,
 					name: p.name,
@@ -439,7 +481,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 				sceneNote:
 					stillStyle === 'graphic'
 						? genInput.sceneOverride
-							? 'Art direction for the typographic card. The Director writes the card’s exact line at run time — the model renders that text as the artwork.'
+							? 'Art direction for the card. The Director writes the card’s exact line at run time — the model renders that text as the artwork.'
 							: 'Left blank: the Director writes the card’s line AND its art direction. Type here to pin the art direction exactly.'
 						: genInput.sceneOverride
 							? 'This exact scene prompt will be sent to the image/video model.'
@@ -449,25 +491,28 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 				composition: { still: stillStyle, character: useCharacter, product: useProduct },
 				scheduledDate,
 				scheduledTime,
-				// Budget control: the clip is by far the biggest line item, so let the
-				// user pick the tier instead of silently billing the default.
+				// Voice is a per-run choice now, not only a persona setting.
+				voice: previewVoice,
+				voices: VOICE_CATALOG.map((v) => ({
+					name: v.name,
+					label: v.label,
+					gender: v.gender,
+					style: v.style,
+					accent: v.accent ?? null
+				})),
+				cardRendererFree: freeCardRender,
+				// Kept because the run body still speaks these, and the calendar's
+				// legacy callers read them back.
 				videoModelKind: 'video_i2v',
-				videoModel: videoModel.id,
-				// Always shipped (not just for video) so the composer's Media switch to
-				// video has real options to price with.
-				videoModelOptions: effectiveOptions(registryRows, 'video_i2v'),
-				// Video format: the persona's setting is the initial pick; the composer
-				// lets the user force spokesperson (OmniHuman) or b-roll for this run.
+				videoModel: defaultVideo.id,
+				stillModel: defaultStill.id,
 				format: personaFormat,
-				stepsSpokesperson,
-				stepsBroll,
-				stepsImage: baseSteps,
-				stepsCinematic,
 				// Captions + AI badge default OFF — the composer surfaces them as toggles.
 				captions: false,
 				aiBadge: false,
 				editable: [
 					'topic',
+					'format',
 					'media',
 					'provider',
 					'platforms',
@@ -475,18 +520,31 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 					'product_photo_url',
 					'character_ref_url',
 					'scene',
+					'script',
+					'voice',
+					'card_text',
+					'card_layout',
+					'card_palette',
+					'framing',
+					'shots',
+					'still_model',
+					'still_url',
 					'video_model',
-					'format',
 					'scheduled_date',
 					'scheduled_time',
 					'captions',
 					'ai_badge'
 				],
-				steps,
-				estimatedCostUsd: +steps.reduce((s, x) => s + x.usd, 0).toFixed(4),
-				// 1 credit = 1¢ of the estimate above, rounded up per step (the
-				// ledger rounds per event, so the quote matches what will be debited).
-				estimatedCredits: steps.reduce((s, x) => s + creditsFor(x.usd), 0),
+				steps: previewPlan.map((s) => ({
+					step: s.label,
+					provider: s.model.provider,
+					model: s.model.label,
+					usd: s.usd
+				})),
+				estimatedCostUsd: planUsd,
+				// 1 credit = 1¢ of RETAIL (cost × markup), rounded up per step the way
+				// the ledger rounds per event, so the quote matches the debit.
+				estimatedCredits: previewPlan.reduce((s, x) => s + creditsFor(x.usd), 0),
 				creditsMode: creditsMode()
 			}
 		});
@@ -510,7 +568,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		: body.media === 'image'
 			? priceOf('openrouter', 'llm') + priceOf('fal', 'image', 'nano')
 			: genInput.formatOverride === 'broll'
-				? priceOf('openrouter', 'llm') + priceOf('fal', 'image', 'nano') + priceOf('fal', 'video', 'standard')
+				? priceOf('openrouter', 'llm') + priceOf('fal', 'image', 'nano') + Math.max(genInput.videoModelUsd ?? 0, priceOf('fal', 'video', 'standard'))
 				: priceOf('openrouter', 'llm') + priceOf('fal', 'image', 'nano') + priceOf('fal', 'tts') + priceOf('fal', 'talking_head');
 	try {
 		await assertWithinBudget(locals.supabase, user.id, agentId, creditsFor(roughUsd));

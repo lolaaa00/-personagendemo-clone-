@@ -160,9 +160,22 @@
 		outline: 2px solid var(--accent);
 		outline-offset: 2px;
 	}
+	/* The head and foot are the title/close and the action buttons: they must
+	   never scroll away, so they are the two non-shrinking rows and the body is
+	   the only scroll container. `min-height: 0` keeps that true once the
+	   content is taller than the dialog — a column flex item otherwise refuses
+	   to shrink past its content and pushes the footer out of the box. */
+	.modal-head,
+	.modal-foot {
+		flex-shrink: 0;
+	}
 	.modal-body {
 		padding: 1.25rem;
 		overflow-y: auto;
+		min-height: 0;
+		/* Hitting the end of a long composer step shouldn't start scrolling the
+		   page behind the dialog on touch. */
+		overscroll-behavior: contain;
 	}
 	.modal-foot {
 		display: flex;
@@ -172,5 +185,62 @@
 		padding: 0.9rem 1.25rem;
 		border-top: 1px solid var(--border);
 		background: var(--surface-2);
+	}
+
+	/* ── Phone: bottom sheet ────────────────────────────────────────────────
+	   This component is the container for the four-step composer, the campaign
+	   planner and every confirmation in the product. Centred at 90dvh with a
+	   1.25rem gutter, a phone spends its scarcest resource — vertical space —
+	   on backdrop ABOVE and BELOW the dialog, while the step nav and the pinned
+	   footer fight over what is left. Anchoring to the bottom edge spends none
+	   of it: the sheet meets the thumb, grows to nearly the full viewport, and
+	   the leftover space collapses into one strip at the top that still reads
+	   as "there is a page behind this".
+	   480px is one of the three breakpoints this codebase is normalising to
+	   (480 / 768 / 1120) — don't introduce a fourth value here. */
+	@media (max-width: 480px) {
+		.modal-backdrop {
+			padding: 0;
+			align-items: flex-end;
+		}
+		.modal,
+		.modal-md,
+		.modal-lg,
+		.modal-xl {
+			/* Full-bleed: the size classes only decide the desktop width. */
+			max-width: none;
+			max-height: 94dvh;
+			border-radius: 18px 18px 0 0;
+			border-bottom: none;
+			animation: modal-sheet-rise 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+		}
+		.modal-head {
+			padding: 1rem 1rem 0.9rem;
+		}
+		.modal-body {
+			padding: 1rem;
+		}
+		/* Only when there is no footer — with one, the footer already owns the
+		   inset and this would add dead space to the end of the scroll. */
+		.modal-body:last-child {
+			padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+		}
+		/* Keeps the actions clear of the home indicator. */
+		.modal-foot {
+			padding: 0.9rem 1rem calc(0.9rem + env(safe-area-inset-bottom));
+		}
+	}
+
+	@keyframes modal-sheet-rise {
+		from {
+			transform: translateY(12px);
+			opacity: 0;
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.modal {
+			animation: none;
+		}
 	}
 </style>

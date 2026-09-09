@@ -22,19 +22,16 @@
 
 import { getServiceSupabase } from './service-supabase';
 import { creditsMode, creditMarkup, type CreditsMode } from './flags';
+import { CREDITS_PER_USD, creditsForUsd } from '$lib/money';
 
-export const CREDITS_PER_USD = 100;
+export { CREDITS_PER_USD };
 
 /**
  * ceil(usd × markup × 100); non-positive or non-finite → 0. `markup` defaults
  * to the live platform setting; pass it explicitly to quote at a known rate.
  */
 export function creditsFor(usd: number, markup: number = creditMarkup()): number {
-	const n = Number(usd);
-	if (!Number.isFinite(n) || n <= 0) return 0;
-	const m = Number.isFinite(markup) && markup >= 1 ? markup : 1;
-	// Round to 6 dp first so 0.0800000001-style float noise doesn't add a credit.
-	return Math.ceil(+(n * m * CREDITS_PER_USD).toFixed(6));
+	return creditsForUsd(usd, markup);
 }
 
 /** Retail USD for a raw provider estimate at the live markup (for quotes). */
@@ -179,7 +176,10 @@ export async function debitForEvents(
 			out.debited += r.credits;
 			continue;
 		}
-		if (error.code === '23505' || /duplicate key|idx_credit_ledger_debit_per_event/i.test(error.message ?? '')) {
+		if (
+			error.code === '23505' ||
+			/duplicate key|idx_credit_ledger_debit_per_event/i.test(error.message ?? '')
+		) {
 			out.skippedDuplicate++;
 			continue;
 		}
@@ -208,7 +208,10 @@ export class InsufficientCreditsError extends Error {
 
 /** True for the message text the gate throws (autopilot treats it as a hard stop). */
 export function isCreditsError(err: unknown): boolean {
-	return err instanceof InsufficientCreditsError || /INSUFFICIENT_CREDITS|Not enough credits/i.test(String((err as any)?.message ?? err));
+	return (
+		err instanceof InsufficientCreditsError ||
+		/INSUFFICIENT_CREDITS|Not enough credits/i.test(String((err as any)?.message ?? err))
+	);
 }
 
 /**
@@ -231,7 +234,9 @@ export async function assertCreditsAvailable(
 		.maybeSingle();
 	if (error) {
 		if (mode === 'enforce') {
-			throw new Error(`CREDITS_UNAVAILABLE: could not read the credit balance (${error.message}). Generation is paused until billing is reachable.`);
+			throw new Error(
+				`CREDITS_UNAVAILABLE: could not read the credit balance (${error.message}). Generation is paused until billing is reachable.`
+			);
 		}
 		console.error('[credits] balance read failed in shadow mode:', error.message);
 		return { balance: null, mode, wouldBlock: false };
@@ -240,9 +245,16 @@ export async function assertCreditsAvailable(
 	const balance = Number(data?.balance_credits ?? 0);
 	if (data?.billing_mode === 'unmetered') return { balance, mode, wouldBlock: false };
 	const required = Math.max(0, Math.ceil(requiredCredits || 0));
-	const wouldBlock = balance < required && required > 0 ? true : balance <= 0 && required === 0 ? false : balance < required;
+	const wouldBlock =
+		balance < required && required > 0
+			? true
+			: balance <= 0 && required === 0
+				? false
+				: balance < required;
 	if (!wouldBlock) return { balance, mode, wouldBlock: false };
 	if (mode === 'enforce') throw new InsufficientCreditsError(balance, required);
-	console.warn(`[credits] shadow: would block billed=${billedUserId} balance=${balance} required=${required}`);
+	console.warn(
+		`[credits] shadow: would block billed=${billedUserId} balance=${balance} required=${required}`
+	);
 	return { balance, mode, wouldBlock: true };
 }

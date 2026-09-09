@@ -3,7 +3,7 @@ import { redirect } from '@sveltejs/kit';
 import { env } from '$env/dynamic/public';
 import { checkConfigStatus } from '$lib/server/config-check';
 import { isPlatformAdmin as checkPlatformAdmin } from '$lib/server/platform-admin';
-import { creditsMode } from '$lib/server/flags';
+import { creditsMode, creditMarkup } from '$lib/server/flags';
 import { getSettings } from '$lib/server/settings';
 import { resolveDisplayCurrency, creditsToAmount, formatCredits, localeFromAcceptLanguage } from '$lib/money';
 
@@ -129,6 +129,25 @@ export const load: LayoutServerLoad = async ({ locals, request }) => {
 		// FX table (display only; the wallet is always USD cents). RLS lets a
 		// user read their own wallet; no row yet = $0.00. Off = no pill, no query.
 		const mode = creditsMode();
+		// Pricing context for every screen that quotes a generation BEFORE it runs.
+		// Resolved here (not per-component) so no screen can render a provider cost
+		// where the customer will be charged retail — see stores/pricing.svelte.ts.
+		const pricingSettings = getSettings();
+		const pricingAcceptLanguage = request.headers.get('accept-language');
+		const pricing = {
+			markup: creditMarkup(),
+			currency: resolveDisplayCurrency({
+				preference: null,
+				country: request.headers.get('cf-ipcountry'),
+				acceptLanguage: pricingAcceptLanguage,
+				platformDefault: pricingSettings.display_currency_default
+			}),
+			fx: pricingSettings.fx_rates ?? null,
+			locale: localeFromAcceptLanguage(pricingAcceptLanguage),
+			/** Credits are being written (shadow or enforce) — a quote is a real charge. */
+			metered: mode !== 'off',
+			enforced: mode === 'enforce'
+		};
 		let credits: {
 			balance: number;
 			mode: string;
@@ -152,6 +171,8 @@ export const load: LayoutServerLoad = async ({ locals, request }) => {
 				platformDefault: s.display_currency_default
 			});
 			const locale = localeFromAcceptLanguage(acceptLanguage);
+			pricing.currency = currency;
+			pricing.locale = locale;
 			const balance = Number(wallet?.balance_credits ?? 0);
 			credits = {
 				balance,
@@ -176,6 +197,7 @@ export const load: LayoutServerLoad = async ({ locals, request }) => {
 			isWorkspaceAdmin,
 			isPlatformAdmin,
 			credits,
+			pricing,
 			// Provisioned team accounts start on a shared throwaway password with
 			// this metadata flag set — the layout blocks with a change-password
 			// prompt until /api/settings/password clears it.

@@ -1013,7 +1013,7 @@
 	   document-level panning), the grid collapses: each row becomes a small card
 	   with its three verdicts inline. Nothing is hidden — the competitor columns
 	   stay, they just stack. */
-	@media (max-width: 660px) {
+	@media (max-width: 768px) {
 		.lp-table {
 			min-width: 0;
 		}

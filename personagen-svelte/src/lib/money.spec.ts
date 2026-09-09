@@ -7,7 +7,10 @@ import {
 	formatCredits,
 	rateFor,
 	FALLBACK_FX,
-	localeFromAcceptLanguage
+	localeFromAcceptLanguage,
+	creditsForUsd,
+	quoteCredits,
+	quoteMoney
 } from './money';
 
 describe('money — currency resolution', () => {
@@ -27,7 +30,9 @@ describe('money — currency resolution', () => {
 	});
 
 	it('precedence: preference → country → language → platform default → USD', () => {
-		expect(resolveDisplayCurrency({ preference: 'gbp', country: 'AU', acceptLanguage: 'en-US' })).toBe('GBP');
+		expect(
+			resolveDisplayCurrency({ preference: 'gbp', country: 'AU', acceptLanguage: 'en-US' })
+		).toBe('GBP');
 		expect(resolveDisplayCurrency({ country: 'AU', acceptLanguage: 'en-US' })).toBe('AUD');
 		expect(resolveDisplayCurrency({ acceptLanguage: 'en-NZ' })).toBe('NZD');
 		expect(resolveDisplayCurrency({ platformDefault: 'EUR' })).toBe('EUR');
@@ -43,14 +48,24 @@ describe('money — conversion and formatting', () => {
 	});
 
 	it('converts with the stored table and falls back to the seed', () => {
-		const fx = { base: 'USD' as const, rates: { USD: 1, AUD: 1.5 }, updated_at: 't', source: 'test' };
+		const fx = {
+			base: 'USD' as const,
+			rates: { USD: 1, AUD: 1.5 },
+			updated_at: 't',
+			source: 'test'
+		};
 		expect(creditsToAmount(2000, 'AUD', fx)).toBe(30);
 		expect(rateFor('AUD', null)).toBe(FALLBACK_FX.rates.AUD);
 		expect(rateFor('NOPE', fx)).toBe(1); // unknown currency → 1:1, never NaN
 	});
 
 	it('rounds converted amounts to whole units and keeps the .00', () => {
-		const fx = { base: 'USD' as const, rates: { USD: 1, AUD: 1.3882, EUR: 0.86044, GBP: 0.7391 }, updated_at: 't', source: 'test' };
+		const fx = {
+			base: 'USD' as const,
+			rates: { USD: 1, AUD: 1.3882, EUR: 0.86044, GBP: 0.7391 },
+			updated_at: 't',
+			source: 'test'
+		};
 		expect(formatCredits(2000, 'AUD', fx, 'en-AU')).toBe('$28.00'); // 27.76 → 28
 		expect(formatCredits(2000, 'EUR', fx, 'en-IE')).toBe('€17.00'); // 17.21 → 17
 		expect(formatCredits(2000, 'GBP', fx, 'en-GB')).toBe('£15.00'); // 14.78 → 15
@@ -81,5 +96,43 @@ describe('money — conversion and formatting', () => {
 		expect(localeFromAcceptLanguage('en-AU,en;q=0.9')).toBe('en-AU');
 		expect(localeFromAcceptLanguage('*')).toBeUndefined();
 		expect(localeFromAcceptLanguage(null)).toBeUndefined();
+	});
+});
+
+describe('money — retail conversion (the quote a screen shows)', () => {
+	it('is the same arithmetic the wallet debits: ceil(usd x markup x 100)', () => {
+		expect(creditsForUsd(0.42, 3)).toBe(126);
+		expect(creditsForUsd(0.08, 3)).toBe(24);
+		// The Director's $0.002 is a real charge; rounding it away would let a
+		// screen quote free for something the ledger bills.
+		expect(creditsForUsd(0.002, 3)).toBe(1);
+	});
+
+	it('float noise never buys an extra credit', () => {
+		// 0.08 * 3 * 100 is 24.000000000000004 in IEEE754; a naive ceil() bills 25.
+		expect(creditsForUsd(0.08, 3)).toBe(24);
+		expect(creditsForUsd(0.42, 1)).toBe(42);
+	});
+
+	it('nothing is charged for nothing, and a bad markup never undercharges', () => {
+		expect(creditsForUsd(0, 3)).toBe(0);
+		expect(creditsForUsd(-1, 3)).toBe(0);
+		expect(creditsForUsd(Number.NaN, 3)).toBe(0);
+		// A markup below 1 would quote under cost — clamped, never applied.
+		expect(creditsForUsd(0.42, 0.5)).toBe(42);
+		expect(creditsForUsd(0.42, Number.NaN)).toBe(42);
+	});
+
+	it('quotes a provider estimate as what the customer pays, in their currency', () => {
+		const usd = { markup: 3, currency: 'USD', fx: FALLBACK_FX, locale: 'en-US' };
+		// $0.42 of provider cost is $1.26 of customer money at a 3x markup — the
+		// screens that printed "$0.42" were understating every quote by the markup.
+		expect(quoteMoney(0.42, usd)).toBe('$1.26');
+		expect(quoteCredits(0.42, usd)).toBe(126);
+	});
+
+	it('a quote keeps its cents — "$0.00" for a real charge is the bug it replaces', () => {
+		const usd = { markup: 3, currency: 'USD', fx: FALLBACK_FX, locale: 'en-US' };
+		expect(quoteMoney(0.002, usd)).toBe('$0.01');
 	});
 });

@@ -72,7 +72,7 @@
 			],
 			steps: [
 				{
-					t: 'Everything lives in the left sidebar, in five groups: Network (Dashboard) · Library (All Generations, My Favorites) · Personas (your creators + New Persona) · Publish (Review Queue, Calendar) · Setup (Brand Brief, Model Manager, Docs, Settings).',
+					t: 'Everything lives in the left sidebar, in five groups: Network (Dashboard) · Library (All Generations, My Favorites) · Personas (every persona you have + New Persona) · Publish (Review Queue, Calendar) · Setup (Brand Brief, Model Manager, Docs, Settings).',
 					img: 'sidebar-guides',
 					alt: 'The PersonaGen sidebar with its five navigation groups'
 				},
@@ -86,10 +86,42 @@
 			]
 		},
 		{
+			// The composer makes people choose between words the rest of the product
+			// never defines — spokesperson vs b-roll is the FIRST question a new user
+			// is asked, and nothing else in the app explains either one. This is the
+			// page they land on when they don't know what they're picking, so every
+			// entry is one or two sentences in the user's language, not the model's.
+			id: 'glossary',
+			category: 'Getting started',
+			title: 'What the words mean (glossary)',
+			when: 'The app asks you to pick between spokesperson and b-roll, or shows a status you don’t recognise, and you want the one-line answer.',
+			facts: [
+				'Persona = the character · Brand Brief = the brand',
+				'Spokesperson talks · b-roll doesn’t',
+				'Cinematic = the multi-shot premium format',
+				'Draft → Scheduled → Published is the post’s life',
+			],
+			steps: [
+				{ t: 'Persona — one AI character: a face, a voice, a personality and its own social accounts. Everything in the app hangs off a persona; they live under Personas in the sidebar.' },
+				{ t: 'Brand Brief — what your brand is, in one place (Setup → Brand Brief): products and photos, visual identity, voice and tone, audience, competitors. Every persona you point at a brief writes from it, so one fix there changes every future post.' },
+				{ t: 'Platform Identity Kit — the persona’s public profile, per platform: display name, username candidates and a bio, ready to paste into Instagram or TikTok when you set the account up. It is text, not pictures.' },
+				{ t: 'Reference Kit — the staged set of images of the persona’s face and body (character sheet, full body, side profiles, close-up, feature grid). Every future image and video is generated against these, which is what keeps the same face across posts.' },
+				{ t: 'Pinned face — the reference image the persona is currently using. Leaving the composer’s character field blank does not mean "no face": the pinned face is sent anyway, which is why your persona still looks like themselves.' },
+				{ t: 'Spokesperson — a video where the persona speaks to camera: their voice, lip-synced, talking head. Pick it when the words are the point (a review, a tip, an announcement).' },
+				{ t: 'B-roll — a silent video with no talking: product motion, hands, lifestyle shots. No voiceover, so the caption carries the message. Pick it when the product is the point, or when you want something that works with the sound off.' },
+				{ t: 'Cinematic — the premium multi-shot format: several scenes cut together instead of one clip. It costs the most and takes the longest, so save it for hero content.' },
+				{ t: 'Text card — a still that is pure typography: your line IS the artwork, no photo, no face, no product. It is free and instant because it is typeset rather than generated, which makes it the cheap way to keep posting.' },
+				{ t: 'Draft — generated and waiting for you. Nothing has been published and nothing goes out until you approve it in the Review Queue.' },
+				{ t: 'Scheduled — approved, with a date and time. It publishes itself when that moment arrives; you can still move or cancel it from the Calendar.' },
+				{ t: 'Published — live on every account it was aimed at. Partial — live on some of them and failed on the rest, usually because one account needs re-linking; open the post to see which platform missed.' }
+			],
+			tip: 'The two you’ll be asked about most: spokesperson if you want the persona to say something, b-roll if you want the product to show something.'
+		},
+		{
 			id: 'daily-routine',
 			category: 'Getting started',
 			title: 'The 5-minute daily routine',
-			when: 'Every day. This is the whole job once your creators are set up.',
+			when: 'Every day. This is the whole job once your personas are set up.',
 			facts: [
 				'Where: Review Queue',
 				'Takes about 5 minutes',
@@ -98,20 +130,20 @@
 			],
 			steps: [
 				{
-					t: 'Open Review Queue in the left sidebar — your creators’ new drafts are waiting there.',
+					t: 'Open Review Queue in the left sidebar — your personas’ new drafts are waiting there.',
 					img: 'review-queue',
 					alt: 'The Review Queue page'
 				},
 				{ t: 'For each draft: read the caption, look at the image or play the video.' },
 				{ t: 'Approve the good ones. Use the caption’s edit control to reword it first if you want — what you write is exactly what gets published.' },
-				{ t: 'Reject the misses and pick a reason ("Bad caption", "Off-brand look"…). Rejecting is free — the creator makes a replacement, and your reasons teach it your taste.' },
+				{ t: 'Reject the misses and pick a reason ("Bad caption", "Off-brand look"…). Rejecting is free — the persona makes a replacement, and your reasons teach it your taste.' },
 				{
 					t: 'Glance at Calendar to see when approved posts go out. Done.',
 					img: 'calendar',
 					alt: 'The Content Calendar in month view'
 				}
 			],
-			tip: 'Nothing ever posts without your approval while a creator is in Semi-Autonomous mode (the default).'
+			tip: 'Nothing ever posts without your approval while a persona is in Semi-Autonomous mode (the default).'
 		},
 		{
 			id: 'brand-brief',
@@ -131,16 +163,16 @@
 					alt: 'The Brand Brief page with its tabs'
 				},
 				{ t: 'On Overview you can paste your store URL into the scraper card and click Scrape & Populate — it fills the brief from your website.' },
-				{ t: 'Read what’s written: this is what your creators believe about your brand. Edit anything that’s off. One fix here changes every future post from every creator.' },
+				{ t: 'Read what’s written: this is what your personas believe about your brand. Edit anything that’s off. One fix here changes every future post from every persona.' },
 				{ t: 'Most fields have Generate and Spin buttons — Spin offers numbered variations; click one to apply it.' },
-				{ t: 'Check Products & UGC: every product needs a photo — that’s what creators hold and show on camera.' },
+				{ t: 'Check Products & UGC: every product needs a photo — that’s what personas hold and show on camera.' },
 				{ t: 'Click Save (top right). New drafts use the corrected version immediately.' }
 			]
 		},
 		{
 			id: 'meet-creators',
 			category: 'Getting started',
-			title: 'Tour a creator’s page',
+			title: 'Tour a persona’s page',
 			when: 'You want to understand what a persona is and what each tab does.',
 			facts: [
 				'Three tabs: Profile · Content · Studio',
@@ -150,11 +182,11 @@
 			],
 			steps: [
 				{
-					t: 'Pick a creator under Personas in the sidebar. The top shows their identity, stats, and a ♥ to favorite them. Three tabs below: Profile · Content · Studio.',
+					t: 'Pick a persona under Personas in the sidebar. The top shows their identity, stats, and a ♥ to favorite them. Three tabs below: Profile · Content · Studio.',
 					img: 'persona-profile',
 					alt: 'A persona page open on the Profile tab'
 				},
-				{ t: 'Profile tab — who they are: Brand Kit, Persona Profile, Platform Identity Kit, Character & Visuals (picture + reference kit), Automation (schedule, voice, autonomy), and Spend. A toggle at the top switches to the Connections view (their linked social accounts).' },
+				{ t: 'Profile tab — who they are: Brand Brief, Persona Profile, Platform Identity Kit, Character & Visuals (picture + Reference Kit), Automation (schedule, voice, autonomy), and Spend. A toggle at the top switches to the Connections view (their linked social accounts).' },
 				{
 					t: 'Content tab — everything they’ve made, with a Posts | Assets | Calendar switch, filters, and the composer to make something new.',
 					img: 'persona-content',
@@ -211,12 +243,12 @@
 			id: 'new-persona',
 			category: 'Getting started',
 			title: 'Create a new persona',
-			when: 'You want another AI creator for a different audience or product line.',
+			when: 'You want another persona for a different audience or product line.',
 			facts: [
 				'Where: sidebar → New Persona',
 				'3 steps: Identity → Persona → Review',
 				'The Vault offers 3 ready-made options',
-				'Next: face kit, then connect an account',
+				'Next: Reference Kit, then connect an account',
 			],
 			steps: [
 				{
@@ -227,7 +259,7 @@
 				{ t: 'Step 1 — Identity: pick your brand brief, optionally type a direction ("busy mom, gentle humor"), and click Generate persona for this brand. Or open the Vault to get 3 ready-made options and pick one.' },
 				{ t: 'Step 2 — Persona: review and tweak the personality, voice, content skills, and audience fields.' },
 				{ t: 'Step 3 — Review & Create: check the summary and click Create Persona.' },
-				{ t: 'The new creator appears in the sidebar. Next: give them a face (reference kit guide) and connect an account when ready.' }
+				{ t: 'The new persona appears in the sidebar. Next: give them a face (Reference Kit guide) and connect an account when ready.' }
 			]
 		},
 
@@ -303,7 +335,7 @@
 				{ t: 'Publishing is billed per connected social account, metered daily — not per post.' },
 				{ t: 'Your first 2 connected accounts on a key are free; beyond that it’s about $6/account/month (cheaper at volume).' },
 				{
-					t: 'The Connections view (creator’s Profile tab → Connections toggle) shows a live meter of what your connected accounts cost.',
+					t: 'The Connections view (persona’s Profile tab → Connections toggle) shows a live meter of what your connected accounts cost.',
 					img: 'connections',
 					alt: 'The Connections view with the account meter'
 				},
@@ -326,7 +358,7 @@
 			],
 			steps: [
 				{
-					t: 'Open the creator’s page → Content tab, and click Generate Now. (The Calendar page’s Generate Post Now button works too.)',
+					t: 'Open the persona’s page → Content tab, and click Generate Now. (The Calendar page’s Generate Post Now button works too.)',
 					img: 'persona-content',
 					alt: 'The Content tab with the Generate Now button'
 				},
@@ -338,7 +370,7 @@
 				{ t: 'Click Approve & generate. It runs in the background with progress shown — a minute or two for images, a few minutes for video.' },
 				{ t: 'The finished post appears as a Draft. Edit the caption if you like, then approve it like any other draft.' }
 			],
-			tip: 'Video posts come with the creator’s own voice and sound. Cinematic is the premium multi-scene format — best for hero content.'
+			tip: 'Video posts come with the persona’s own voice and sound. Cinematic is the premium multi-scene format — best for hero content.'
 		},
 		{
 			id: 'composer-costs',
@@ -374,14 +406,14 @@
 			title: 'Use Studio templates',
 			when: 'You want proven post formats without writing a prompt.',
 			facts: [
-				'Where: creator page → Studio tab',
+				'Where: persona page → Studio tab',
 				'Ready-made formats in 4 categories',
 				'Output switch: Review draft or Asset only',
 				'Templates pre-fill the composer for you',
 			],
 			steps: [
 				{
-					t: 'Open the creator’s page → Studio tab. Thirteen ready-made templates — This Saved Me, Before & After, Unboxing Reveal, TV Spot, and more — filtered by UGC / Product / Cinematic / Stills.',
+					t: 'Open the persona’s page → Studio tab. Thirteen ready-made templates — This Saved Me, Before & After, Unboxing Reveal, TV Spot, and more — filtered by UGC / Product / Cinematic / Stills.',
 					img: 'studio',
 					alt: 'The Studio template gallery'
 				},
@@ -394,8 +426,8 @@
 		{
 			id: 'reference-kit',
 			category: 'Creating content',
-			title: 'Keep a creator’s face consistent (reference kit)',
-			when: 'A creator’s kit tiles are empty, or their look varies between posts.',
+			title: 'Keep a persona’s face consistent (Reference Kit)',
+			when: 'A persona’s kit tiles are empty, or their look varies between posts.',
 			facts: [
 				'Where: Profile tab → Character & Visuals',
 				'⚡ Generate all remaining builds the whole kit',
@@ -404,7 +436,7 @@
 			],
 			steps: [
 				{
-					t: 'Open the creator’s page → Profile tab → Character & Visuals section.',
+					t: 'Open the persona’s page → Profile tab → Character & Visuals section.',
 					img: 'reference-kit',
 					alt: 'The Reference Kit section with its staged tiles'
 				},
@@ -417,18 +449,18 @@
 		{
 			id: 'voice',
 			category: 'Creating content',
-			title: 'Choose a creator’s voice',
-			when: 'You want to hear or change how a creator sounds in videos.',
+			title: 'Choose a persona’s voice',
+			when: 'You want to hear or change how a persona sounds in videos.',
 			facts: [
 				'Where: Profile tab → Automation',
 				'The preview button plays the voice out loud',
-				'No two creators sound alike',
+				'No two personas sound alike',
 				'Save Profile applies it to new videos',
 			],
 			steps: [
-				{ t: 'Open the creator’s page → Profile tab → Automation section.' },
+				{ t: 'Open the persona’s page → Profile tab → Automation section.' },
 				{ t: 'The UGC Voice dropdown lists the catalog; press the preview button to hear the current one.' },
-				{ t: 'Pick a different voice if it doesn’t fit — voices are matched to the creator, and no two creators sound alike.' },
+				{ t: 'Pick a different voice if it doesn’t fit — voices are matched to the persona, and no two personas sound alike.' },
 				{ t: 'Save Profile. New videos use the new voice.' }
 			]
 		},
@@ -436,7 +468,7 @@
 			id: 'identity-kit',
 			category: 'Creating content',
 			title: 'Generate bios & usernames (Platform Identity Kit)',
-			when: 'You’re setting up a creator’s social profiles and want ready-to-paste bios and handle ideas.',
+			when: 'You’re setting up a persona’s social profiles and want ready-to-paste bios and handle ideas.',
 			facts: [
 				'Where: Profile tab → Platform Identity Kit',
 				'Writes names, usernames, and bios',
@@ -444,7 +476,7 @@
 				'Autosaves as you type',
 			],
 			steps: [
-				{ t: 'Open the creator’s page → Profile tab → Platform Identity Kit section.' },
+				{ t: 'Open the persona’s page → Profile tab → Platform Identity Kit section.' },
 				{ t: 'Click Generate starter kit — it writes a display name, a profile-picture suggestion, username candidates, and a bio.' },
 				{ t: 'Username Candidates: copy any, mark ones that are taken, or click Use to set your pick. Add your own ideas too.' },
 				{ t: 'Bios are per platform — pick the platform, then Generate/Regenerate that platform’s bio. Copy-paste into the real account.' },
@@ -458,7 +490,7 @@
 			id: 'connect-account',
 			category: 'Publishing',
 			title: 'Connect a social account',
-			when: 'A creator’s approved posts should start going to a real account.',
+			when: 'A persona’s approved posts should start going to a real account.',
 			facts: [
 				'Where: Profile tab → Connections toggle',
 				'15 platforms supported',
@@ -467,12 +499,12 @@
 			],
 			steps: [
 				{
-					t: 'Open the creator’s page → Profile tab → switch the toggle from Profile to Connections.',
+					t: 'Open the persona’s page → Profile tab → switch the toggle from Profile to Connections.',
 					img: 'connections',
 					alt: 'The Connections view of a persona'
 				},
 				{ t: 'Click + Connect on the platform (Instagram, TikTok, YouTube… 15 supported) and log in to the account in the window that opens — a normal social-media login, nothing technical.' },
-				{ t: 'A green badge appears with the handle, follower count, and last sync. From now on, this creator’s approved posts publish there automatically.' },
+				{ t: 'A green badge appears with the handle, follower count, and last sync. From now on, this persona’s approved posts publish there automatically.' },
 				{ t: 'If a platform ever needs re-linking (password change, expired session), a Reconnect badge appears here — one click fixes it.' }
 			],
 			tip: 'You can approve drafts before connecting — they simply wait, and publish once an account exists.'
@@ -481,7 +513,7 @@
 			id: 'schedule-autonomy',
 			category: 'Publishing',
 			title: 'Set the posting schedule & autonomy',
-			when: 'You want to control how often and when a creator posts.',
+			when: 'You want to control how often and when a persona posts.',
 			facts: [
 				'Where: Profile tab → Automation',
 				'Semi-Autonomous is the recommended mode',
@@ -489,10 +521,10 @@
 				'RSS mode turns articles into posts',
 			],
 			steps: [
-				{ t: 'Open the creator’s page → Profile tab → Automation section.' },
-				{ t: 'Set Posts Per Day and the Timezone — posts spread across the creator’s posting window on their local clock, so match it to the audience.' },
+				{ t: 'Open the persona’s page → Profile tab → Automation section.' },
+				{ t: 'Set Posts Per Day and the Timezone — posts spread across the persona’s posting window on their local clock, so match it to the audience.' },
 				{ t: 'Autonomy: Advisor = manual only · Semi-Autonomous = drafts wait for your approval (recommended) · Fully Autonomous = publishes unattended (the app asks you to confirm before switching).' },
-				{ t: 'Content Source: Dynamic Generation (the AI invents on-brand topics) or RSS Auto-Repurpose (paste a feed URL and the creator turns articles into posts).' },
+				{ t: 'Content Source: Dynamic Generation (the AI invents on-brand topics) or RSS Auto-Repurpose (paste a feed URL and the persona turns articles into posts).' },
 				{ t: 'Save Profile. The schedule starts filling from the next cycle.' }
 			]
 		},
@@ -508,7 +540,7 @@
 				'It never claims more than the platform confirmed',
 			],
 			steps: [
-				{ t: 'Open the post (Calendar or the creator’s Content tab).' },
+				{ t: 'Open the post (Calendar or the persona’s Content tab).' },
 				{ t: 'For a minute or two it reads Publishing… — sent, waiting for the platform to confirm.' },
 				{ t: 'When the platform confirms, it flips to Published with a View live post ↗ link — click it to open the actual post on the actual account.' },
 				{ t: 'Multi-platform posts list each platform’s result separately in the post panel.' }
@@ -527,7 +559,7 @@
 			],
 			steps: [
 				{
-					t: 'Open Calendar and click the post. Use ‹ › and the Day | Week | Month switch to find it; the Personas rail filters by creator.',
+					t: 'Open Calendar and click the post. Use ‹ › and the Day | Week | Month switch to find it; the Personas rail filters by persona.',
 					img: 'calendar',
 					alt: 'The Content Calendar'
 				},
@@ -556,8 +588,8 @@
 		{
 			id: 'all-generations',
 			category: 'Library & organization',
-			title: 'Browse everything your creators made',
-			when: 'You’re hunting for a specific image or video, across all creators.',
+			title: 'Browse everything your personas made',
+			when: 'You’re hunting for a specific image or video, across all personas.',
 			facts: [
 				'Where: Library → All Generations',
 				'Two lenses: Content outputs · Profile assets',
@@ -566,7 +598,7 @@
 			],
 			steps: [
 				{
-					t: 'Open All Generations (sidebar → Library). Two lenses at the top: Content outputs (posts) and Profile assets (profile pictures + reference-kit images — this is the only place those appear together).',
+					t: 'Open All Generations (sidebar → Library). Two lenses at the top: Content outputs (posts) and Profile assets (profile pictures + Reference Kit images — this is the only place those appear together).',
 					img: 'generations',
 					alt: 'The All Generations page'
 				},
@@ -579,16 +611,16 @@
 			id: 'favorites',
 			category: 'Library & organization',
 			title: 'Save your favorites',
-			when: 'You want your best posts and go-to creators one tap away.',
+			when: 'You want your best posts and go-to personas one tap away.',
 			facts: [
-				'♥ works on posts and on creators',
+				'♥ works on posts and on personas',
 				'Where: Library → My Favorites',
 				'Two tabs: Posts · Personas',
 				'Un-heart removes it on the spot',
 			],
 			steps: [
-				{ t: 'Tap the ♥ on any post card (in a creator’s Content tab or All Generations) to favorite the post.' },
-				{ t: 'Tap the ♥ next to a creator’s name at the top of their page to favorite the creator.' },
+				{ t: 'Tap the ♥ on any post card (in a persona’s Content tab or All Generations) to favorite the post.' },
+				{ t: 'Tap the ♥ next to a persona’s name at the top of their page to favorite the persona.' },
 				{
 					t: 'Open My Favorites (sidebar → Library): a Posts tab and a Personas tab hold everything you’ve hearted.',
 					img: 'favorites',
@@ -601,7 +633,7 @@
 			id: 'persona-projects',
 			category: 'Library & organization',
 			title: 'Organize personas into projects',
-			when: 'You have many creators and the sidebar list is getting long.',
+			when: 'You have many personas and the sidebar list is getting long.',
 			facts: [
 				'Folder icon sits next to the Personas label',
 				'Projects become collapsible sidebar folders',
@@ -647,7 +679,7 @@
 			id: 'model-manager',
 			category: 'Power tools',
 			title: 'Model Manager: control quality & cost',
-			when: 'You want to choose which AI models your creators use, or cut generation costs.',
+			when: 'You want to choose which AI models your personas use, or cut generation costs.',
 			facts: [
 				'Where: Setup → Model Manager',
 				'Value ranking = quality ÷ price',
@@ -685,7 +717,7 @@
 				},
 				{ t: 'Steps 1–4: confirm your brand & audience, add competitor URLs, paste any existing content, and tag audience interests.' },
 				{ t: 'Step 5: review the summary and click Generate Strategy.' },
-				{ t: 'Step 6: your report — Content Pillars, a Posting Schedule table, Platform Priority scores, and Growth Targets. Use it to set each creator’s cadence and topics.' }
+				{ t: 'Step 6: your report — Content Pillars, a Posting Schedule table, Platform Priority scores, and Growth Targets. Use it to set each persona’s cadence and topics.' }
 			]
 		},
 		{
@@ -699,9 +731,9 @@
 				'Two tabs in the picker: This stage · All images',
 			],
 			steps: [
-				{ t: 'Profile pictures and every reference-kit stage keep full history — nothing is lost when you regenerate.' },
-				{ t: 'On the creator’s Profile tab → Character & Visuals, click Restore on the profile picture or on any kit stage.' },
-				{ t: 'The picker has two tabs: "This stage" (that image’s history) and "All images" (everything the creator has). Click the one you want back.' },
+				{ t: 'Profile pictures and every Reference Kit stage keep full history — nothing is lost when you regenerate.' },
+				{ t: 'On the persona’s Profile tab → Character & Visuals, click Restore on the profile picture or on any kit stage.' },
+				{ t: 'The picker has two tabs: "This stage" (that image’s history) and "All images" (everything the persona has). Click the one you want back.' },
 				{ t: 'Deleted images stay in your library too — restore works on them the same way.' }
 			]
 		},
@@ -738,7 +770,7 @@
 			],
 			steps: [
 				{ t: 'Open the post — the exact reason is written on it, per platform.' },
-				{ t: 'Most common: the account needs re-linking. Creator’s Profile → Connections — a Reconnect badge marks the broken account; one click and a login fixes it.' },
+				{ t: 'Most common: the account needs re-linking. Persona’s Profile → Connections — a Reconnect badge marks the broken account; one click and a login fixes it.' },
 				{ t: 'Then approve/retry the post. Posts that failed for a temporary reason (network hiccup) retry themselves automatically.' }
 			],
 			tip: 'A Partial label on a multi-platform post means some platforms succeeded — only the listed ones failed.'
@@ -2365,7 +2397,7 @@
 		font-weight: var(--weight-semi);
 		margin-top: 2px;
 	}
-	@media (max-width: 700px) {
+	@media (max-width: 768px) {
 		.cl-entry {
 			grid-template-columns: 56px 1fr;
 		}

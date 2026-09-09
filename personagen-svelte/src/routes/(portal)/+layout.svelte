@@ -13,12 +13,19 @@
 		showToast
 	} from '$lib/stores/ui.svelte';
 	import { onMount } from 'svelte';
+	import { primePricing } from '$lib/stores/pricing.svelte';
 	import { invalidateAll } from '$app/navigation';
 	import BrandWave from '$lib/components/shared/BrandWave.svelte';
 	import PersonaProjectsModal from '$lib/components/shared/PersonaProjectsModal.svelte';
 	import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
 
 	let { children, data } = $props();
+
+	// Every screen that quotes a generation reads this — primed from the same
+	// server data the wallet pill uses, so a quote and the wallet can't disagree.
+	$effect.pre(() => {
+		primePricing((data as any)?.pricing);
+	});
 
 	onMount(() => {
 		initializeThemeAndColors();

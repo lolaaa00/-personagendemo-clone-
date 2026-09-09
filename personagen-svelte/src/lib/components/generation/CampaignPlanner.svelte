@@ -14,6 +14,8 @@
 	 */
 	import Modal from '$lib/components/ui/Modal.svelte';
 	import { STUDIO_TEMPLATES, PIPELINE_USD, type StudioTemplate } from '$lib/studio-templates';
+	import { quote } from '$lib/stores/pricing.svelte';
+	import { countLabel } from '$lib/plural';
 
 	let {
 		open,
@@ -119,6 +121,10 @@
 		return out;
 	});
 
+	// Provider USD — the unit PIPELINE_USD is denominated in. It stays raw cost all
+	// the way to the markup; only `quote()` turns it into the number the customer
+	// is actually charged. Rendering this figure with a `$` in front of it is how
+	// the launch button came to promise a third of the real debit.
 	let estimatedUsd = $derived(CLASSES.reduce((s, c) => s + allocation[c.id] * poolAvgUsd(c.id), 0));
 
 	// ── Slot + assignment plan ───────────────────────────────────────────────
@@ -279,7 +285,9 @@
 		onLaunched(okCount);
 	}
 
-	const usd = (n: number) => `$${n.toFixed(2)}`;
+	// Both money renders quote the SAME retail figure, so the summary and the
+	// launch button can never disagree about what a launch costs.
+	let estimatedPrice = $derived(quote(estimatedUsd));
 	let agentName = $derived(agents.find((a) => a.id === agentId)?.name ?? 'this persona');
 </script>
 
@@ -295,7 +303,7 @@
 >
 	{#if done}
 		<div class="cp-done" role="status">
-			<strong>{okCount} post{okCount === 1 ? '' : 's'} queued for {agentName}.</strong>
+			<strong>{countLabel(okCount, 'post')} queued for {agentName}.</strong>
 			<p>
 				Each one is generating now and lands in the <strong>Review Queue</strong> as a draft on its
 				calendar slot. Approve what you like — approved posts publish at their scheduled time.
@@ -314,7 +322,7 @@
 					{/each}
 				</select>
 				<span class="cp-hint"
-					>The whole campaign belongs to this persona — voice, face, brand kit.</span
+					>The whole campaign belongs to this persona — voice, face, Brand Brief.</span
 				>
 			</label>
 
@@ -378,7 +386,7 @@
 						aria-label={`${c.label} weight`}
 					/>
 					<span class="cp-mix-count" aria-live="polite">
-						{allocation[c.id]} post{allocation[c.id] === 1 ? '' : 's'}
+						{countLabel(allocation[c.id], 'post')}
 					</span>
 				</div>
 			{/each}
@@ -389,8 +397,8 @@
 
 		<div class="cp-summary" aria-live="polite">
 			<div class="cp-summary-main">
-				<strong>{totalPosts} posts</strong> over {coveredDays} day{coveredDays === 1 ? '' : 's'} · est.
-				<strong>{usd(estimatedUsd)}</strong>
+				<strong>{countLabel(totalPosts, 'post')}</strong> over {countLabel(coveredDays, 'day')} · est.
+				<strong>{estimatedPrice}</strong>
 			</div>
 			<p class="cp-summary-note">
 				Generation spend happens at launch; publishing waits for your approval in the Review Queue.
@@ -423,7 +431,7 @@
 				disabled={!agentId || totalPosts <= 0 || weightSum <= 0}
 				onclick={launch}
 			>
-				Generate {totalPosts} drafts · est. {usd(estimatedUsd)}
+				Generate {countLabel(totalPosts, 'draft')} · est. {estimatedPrice}
 			</button>
 		{/if}
 	{/snippet}

@@ -172,6 +172,13 @@ export interface GenerationProvenance {
 	refs_policy?: { character: boolean; product: boolean };
 	/** The exact line rendered onto a graphic card (still_style 'graphic'). */
 	card_text?: string;
+	/** The card layout that was pinned, when the user chose one instead of
+	 *  letting the renderer read the text. A refine reuses it so re-running for a
+	 *  better image cannot silently re-shape an approved card. */
+	card_layout?: 'statement' | 'quote' | 'stack' | 'list' | 'split';
+	/** 'supplied' means the user handed us the still and no image model ran —
+	 *  which is why this record has no image cost event and no images row. */
+	still_source?: 'generated' | 'supplied';
 	/** The prompts sent to the models. */
 	prompts?: { scene?: string; script?: string };
 	/** What was selected during generation. */
@@ -181,6 +188,14 @@ export interface GenerationProvenance {
 		videoModel?: string | null;
 		provider?: string | null;
 		mediaType?: string | null;
+		/** What the caller ASKED for. What actually ran is in `aspects` — the two
+		 *  differ whenever a failover kicked in, and both are worth keeping. */
+		videoModelRequested?: string | null;
+		stillModelRequested?: string | null;
+		/** The realism register pinned for this run ('third' = no clause added). */
+		framing?: 'front' | 'mirror' | 'third' | null;
+		/** The voice actually used, after persona-gender agreement. */
+		voice?: string | null;
 	};
 }
 

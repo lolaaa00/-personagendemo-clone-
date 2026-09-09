@@ -1,6 +1,10 @@
 <script lang="ts">
 	import { showToast } from '$lib/stores/ui.svelte';
 	import { invalidateAll } from '$app/navigation';
+	// The app's own confirmation, not the browser's: a native confirm() can't
+	// show WHICH key or WHICH request is about to fire, and this page's two
+	// prompts guard the most expensive mistakes in the product.
+	import { confirmAction } from '$lib/stores/confirm.svelte';
 
 	let { data } = $props();
 
@@ -34,7 +38,28 @@
 	}
 
 	async function revokeKey(id: string) {
-		if (!confirm('Revoke this key? Anything using it stops working immediately.')) return;
+		// A revoke can't be undone — the plaintext was only ever shown once, so
+		// "revoked by mistake" means minting a new key and redeploying whatever
+		// used it. Hence tone 'danger', and the preview names the key so you can
+		// see you're killing the controller you meant to.
+		const row = keys.find((k: { id: string }) => k.id === id);
+		const ok = await confirmAction({
+			title: 'Revoke this key?',
+			body: 'Anything using it stops working immediately.',
+			preview: row
+				? [
+						{
+							label: row.label,
+							meta: `${row.key_prefix}…`,
+							initial: 'K',
+							gradient: 'linear-gradient(135deg, #dc2626, #f97316)'
+						}
+				  ]
+				: undefined,
+			tone: 'danger',
+			confirmLabel: 'Revoke'
+		});
+		if (!ok) return;
 		try {
 			const res = await fetch('/api/developer/keys', {
 				method: 'DELETE',
@@ -235,7 +260,30 @@
 			}
 		}
 		if (risk && !safeMode) {
-			if (!confirm(`${risk.msg}\n\nRun it for real against production?`)) return;
+			// Safe mode is off, so this fires at production as the logged-in user.
+			// 'paid' only spends money; 'publish' and 'destructive' can't be taken
+			// back at all (Instagram in particular has no delete API), so those
+			// get the danger tone. The preview echoes the exact request line —
+			// the thing a native confirm() could never show.
+			const ok = await confirmAction({
+				title: 'Run it for real against production?',
+				body: risk.msg,
+				preview: [
+					{
+						label: `${cMethod} ${cPath}`,
+						meta: 'Live production · as your current login',
+						badge: risk.kind,
+						initial: cMethod.charAt(0),
+						gradient:
+							risk.kind === 'paid'
+								? 'linear-gradient(135deg, #d97706, #f59e0b)'
+								: 'linear-gradient(135deg, #dc2626, #f97316)'
+					}
+				],
+				tone: risk.kind === 'paid' ? 'caution' : 'danger',
+				confirmLabel: 'Run it'
+			});
+			if (!ok) return;
 		}
 
 		running = true;

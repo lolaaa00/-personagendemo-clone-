@@ -5,6 +5,8 @@
 	import { SvelteSet } from 'svelte/reactivity';
 	import { showToast } from '$lib/stores/ui.svelte';
 	import { confirmAction } from '$lib/stores/confirm.svelte';
+	import { quote } from '$lib/stores/pricing.svelte';
+	import { plural, countLabel } from '$lib/plural';
 	// Using any[] because agents data comes from raw JSON with camelCase fields
 	interface Props {
 		agents: any[];
@@ -95,7 +97,7 @@
 
 		const protectedCount = ids.filter((id) => agents.find((a) => a.id === id)?.is_overseer).length;
 		const ok = await confirmAction({
-			title: `Delete ${ids.length === 1 ? 'persona' : `${ids.length} personas`}?`,
+			title: `Delete ${ids.length === 1 ? 'persona' : countLabel(ids.length, 'persona')}?`,
 			body:
 				'This also permanently destroys every post, platform connection, memory and chat ' +
 				`message belonging to ${ids.length === 1 ? 'this persona' : 'these personas'}. ` +
@@ -103,7 +105,7 @@
 			warning:
 				protectedCount > 0
 					? `There is no undo for this. ${protectedCount} protected Hermes overseer ` +
-						`${protectedCount === 1 ? 'persona' : 'personas'} in this selection will be skipped.`
+						`${plural(protectedCount, 'persona')} in this selection will be skipped.`
 					: 'There is no undo for this.',
 			preview: ids.map((id) => {
 				const a = agents.find((x) => x.id === id);
@@ -115,7 +117,7 @@
 					badge: a?.is_overseer ? 'Protected' : null
 				};
 			}),
-			confirmLabel: `Delete ${ids.length === 1 ? 'persona' : `${ids.length} personas`}`,
+			confirmLabel: `Delete ${ids.length === 1 ? 'persona' : countLabel(ids.length, 'persona')}`,
 			tone: 'danger',
 			typeToConfirm: 'DELETE'
 		});
@@ -151,7 +153,7 @@
 				showToast(
 					deleted.length === 1
 						? `Deleted ${names.get(deleted[0]) ?? 'persona'}`
-						: `Deleted ${deleted.length} personas`,
+						: `Deleted ${countLabel(deleted.length, 'persona')}`,
 					'success'
 				);
 			}
@@ -163,7 +165,7 @@
 					.join('; ');
 				const more = failed.length > 3 ? ` (+${failed.length - 3} more)` : '';
 				showToast(
-					`${failed.length} persona${failed.length === 1 ? '' : 's'} could not be deleted: ${detail}${more}`,
+					`${countLabel(failed.length, 'persona')} could not be deleted: ${detail}${more}`,
 					'error'
 				);
 			} else if (deleted.length === 0) {
@@ -373,12 +375,16 @@
 				<span class="dash-cell {engagementClass(agent.engagementRate)}" role="cell">
 					{agent.engagementRate}%
 				</span>
+				<!-- total_token_cost is the ledger's PROVIDER spend. The wallet was debited
+				     at the platform markup, so rendering the raw figure with a `$` showed
+				     roughly a third of what the persona actually drew down. quote() puts
+				     it back in the same money the wallet pill speaks. -->
 				<span class="dash-cell token-cost-cell" role="cell">
 					{#if agent.total_token_cost !== undefined && agent.total_token_cost !== null && agent.total_token_cost > 0}
-						${agent.total_token_cost.toFixed(2)}
+						{quote(agent.total_token_cost)}
 						<span class="token-count">({formatTokens(agent.total_token_usage || 0)})</span>
 					{:else}
-						$0.00 <span class="token-count">(0)</span>
+						{quote(0)} <span class="token-count">(0)</span>
 					{/if}
 				</span>
 				<span class="dash-cell" role="cell">

@@ -2126,7 +2126,7 @@
 		}
 	}
 
-	@media (max-width: 600px) {
+	@media (max-width: 640px) {
 		.vault-grid {
 			grid-template-columns: 1fr;
 		}

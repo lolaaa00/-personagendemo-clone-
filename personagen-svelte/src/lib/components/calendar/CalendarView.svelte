@@ -27,6 +27,7 @@
 	} from '$lib/components/feed/postDisplay';
 	import { platformColor } from '$lib/platforms';
 	import { thumbUrl } from '$lib/image-url';
+	import { plural, countLabel } from '$lib/plural';
 	import type { CalendarPost } from './types';
 
 	interface RailAgent {
@@ -521,7 +522,7 @@
 	</button>
 	<button class="stat-chip" class:on={statusChip === 'draft'} aria-pressed={statusChip === 'draft'} onclick={() => toggleChip('draft')}>
 		<span class="stat-dot" style="background: var(--warning)" aria-hidden="true"></span>
-		<strong>{rangeStats.draft}</strong> drafts
+		<strong>{rangeStats.draft}</strong> {plural(rangeStats.draft, 'draft')}
 	</button>
 	{#if rangeStats.generating > 0}
 		<span class="stat-chip" title="Slots still generating">
@@ -589,7 +590,7 @@
 									title="Open this day's posts"
 									aria-label="{MONTHS[currentMonth]} {cell.day}, {currentYear}{cell.isToday
 										? ' (today)'
-										: ''} — {dayPosts.length} post{dayPosts.length === 1 ? '' : 's'}"
+										: ''} — {countLabel(dayPosts.length, 'post')}"
 								>
 									{cell.day}
 								</button>
@@ -637,7 +638,9 @@
 										<button
 											class="event-overflow"
 											onclick={() => (selectedDay = cell.day)}
-											aria-label="Show all {dayPosts.length} posts for {MONTHS[currentMonth]} {cell.day}"
+											aria-label="Show all {countLabel(dayPosts.length, 'post')} for {MONTHS[
+												currentMonth
+											]} {cell.day}"
 										>
 											+{dayPosts.length - 3} more
 										</button>
@@ -693,9 +696,7 @@
 								title="Open day view"
 								aria-label="Open day view for {WEEKDAYS_FULL[wd.getDay()]}, {MONTHS[
 									wd.getMonth()
-								]} {wd.getDate()}, {wd.getFullYear()} — {dayPosts.length} post{dayPosts.length === 1
-									? ''
-									: 's'}"
+								]} {wd.getDate()}, {wd.getFullYear()} — {countLabel(dayPosts.length, 'post')}"
 							>
 								<span class="week-dow">{DAYS[i]}</span>
 								<span class="week-num">{wd.getDate()}</span>

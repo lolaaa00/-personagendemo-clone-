@@ -16,6 +16,7 @@
 	import { getPostDisplay as sharedGetPostDisplay } from '$lib/components/feed/postDisplay';
 	import { platformColor } from '$lib/platforms';
 	import { confirmDeletePosts } from '$lib/confirm-preview';
+	import { countLabel } from '$lib/plural';
 
 	interface ScheduledPost {
 		id: string;
@@ -494,8 +495,8 @@
 			pruneSelection();
 			showToast(
 				teardown?.unpublished?.length
-					? `Moved ${gone} post${gone === 1 ? '' : 's'} to Trash — also removed from ${teardown.unpublished.join(', ')}`
-					: `Moved ${gone} post${gone === 1 ? '' : 's'} to Trash — restorable for 30 days`,
+					? `Moved ${countLabel(gone, 'post')} to Trash — also removed from ${teardown.unpublished.join(', ')}`
+					: `Moved ${countLabel(gone, 'post')} to Trash — restorable for 30 days`,
 				'success'
 			);
 		} catch (err: any) {
@@ -523,10 +524,10 @@
 					selectedPost = { ...selectedPost, status: 'scheduled' };
 			}
 			if (done.size === drafts.length) {
-				showToast(`Approved ${done.size} draft${done.size === 1 ? '' : 's'}`, 'success');
+				showToast(`Approved ${countLabel(done.size, 'draft')}`, 'success');
 			} else {
 				showToast(
-					`Approved ${done.size} of ${drafts.length} drafts — the rest failed and are still drafts`,
+					`Approved ${done.size} of ${countLabel(drafts.length, 'draft')} — the rest failed and are still drafts`,
 					'warning'
 				);
 			}
@@ -731,7 +732,7 @@
 	async function handleCampaignLaunched(queued: number) {
 		if (queued > 0) {
 			showToast(
-				`${queued} draft${queued === 1 ? '' : 's'} queued — they appear on their slots as they generate`,
+				`${countLabel(queued, 'draft')} queued — they appear on their slots as they generate`,
 				'success'
 			);
 			await resyncPosts();
@@ -1011,7 +1012,7 @@
 							{/if}
 							{bulkApproving
 								? 'Approving…'
-								: `Approve ${manageSelectedDrafts.length} draft${manageSelectedDrafts.length === 1 ? '' : 's'}`}
+								: `Approve ${countLabel(manageSelectedDrafts.length, 'draft')}`}
 						</button>
 					{/if}
 				{/snippet}
@@ -1549,6 +1550,13 @@
 	onConfirm={(body) => {
 		composerOpen = false;
 		void generatePostNow(body);
+	}}
+	onOpenPlanner={() => {
+		// A run of posts is a different question from one post — cadence, horizon
+		// and a format mix. The planner already asks it, so the composer hands off
+		// instead of growing a second, worse version of the same screen.
+		composerOpen = false;
+		campaignOpen = true;
 	}}
 />
 

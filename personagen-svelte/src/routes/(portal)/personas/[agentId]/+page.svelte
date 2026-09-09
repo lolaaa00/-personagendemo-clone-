@@ -9,6 +9,11 @@
 	import { Accounts, Autopilot, Posts, BrandBrief, parseJsonResponse } from '$lib/services/api';
 	import AgentConnectionStats from '$lib/components/agents/AgentConnectionStats.svelte';
 	import { PRICING_MATRIX } from '$lib/pricing';
+	// Money on this screen is what the customer pays, not what the provider
+	// charges us: quote() applies the live markup and renders in the viewer's
+	// own currency, the same numbers the sidebar wallet pill shows.
+	import { quote, pricingContext } from '$lib/stores/pricing.svelte';
+	import { countLabel, plural } from '$lib/plural';
 	import PostCard from '$lib/components/feed/PostCard.svelte';
 	import PostDrawer from '$lib/components/feed/PostDrawer.svelte';
 	import CalendarView from '$lib/components/calendar/CalendarView.svelte';
@@ -20,6 +25,7 @@
 		STUDIO_TEMPLATES,
 		STUDIO_SURFACES,
 		PIPELINE_META,
+		PIPELINE_USD,
 		type StudioTemplate,
 		type StudioSurface,
 		type StudioIntent
@@ -966,14 +972,14 @@
 	// reviews and Saves through the normal saveProfile() flow.
 	// Apply just the brand-kit choice. Persists through the normal profile save
 	// (so any other in-progress edits go with it) and confirms precisely with the
-	// brand's name — or that the persona now runs with NO brand kit.
+	// brand's name — or that the persona now runs with NO brand brief.
 	async function applyBrandKit() {
 		if (savingBrand || !brandDirty) return;
 		savingBrand = true;
 		const chosen = brandBriefs.find((b) => b.id === selectedBrandBriefId);
 		const msg = selectedBrandBriefId
-			? `Brand kit applied — this persona now creates for “${chosen?.name ?? 'the selected brand'}”.`
-			: 'Brand kit cleared — this persona now generates with no brand kit.';
+			? `Brand brief applied — this persona now creates for “${chosen?.name ?? 'the selected brand'}”.`
+			: 'Brand brief cleared — this persona now generates with no brand context.';
 		try {
 			await saveProfile(msg);
 		} finally {
@@ -1585,7 +1591,7 @@
 			showToast(
 				deleted < ids.length
 					? `Moved ${deleted} of ${ids.length} to Trash — the rest could not be found`
-					: `Moved ${deleted} post${deleted === 1 ? '' : 's'} to Trash — restorable for 30 days`,
+					: `Moved ${countLabel(deleted, 'post')} to Trash — restorable for 30 days`,
 				deleted < ids.length ? 'warning' : 'success'
 			);
 		} catch (err) {
@@ -1861,20 +1867,18 @@
 
 		const lines: string[] = [];
 		if (postIds.length)
-			lines.push(
-				`${postIds.length} post${postIds.length === 1 ? '' : 's'} (trashed along with the media)`
-			);
+			lines.push(`${countLabel(postIds.length, 'post')} (trashed along with the media)`);
 		if (kitItems.length)
 			lines.push(
-				`${kitItems.length} reference photo${kitItems.length === 1 ? '' : 's'} (unpinned from the kit; still restorable from your library)`
+				`${countLabel(kitItems.length, 'reference photo')} (unpinned from the kit; still restorable from your library)`
 			);
 		if (avatarItems.length) lines.push('the profile picture (cleared back to the gradient)');
 		const hasPosts = postIds.length > 0;
 		const ok = await confirmAction({
-			title: `Delete ${items.length} asset${items.length === 1 ? '' : 's'}?`,
+			title: `Delete ${countLabel(items.length, 'asset')}?`,
 			body: lines.join(' · '),
 			warning: hasPosts
-				? `${postIds.length} post${postIds.length === 1 ? '' : 's'} go to Trash with their media — restorable for 30 days. Reference photos and the avatar are unpinned immediately.`
+				? `${countLabel(postIds.length, 'post')} ${plural(postIds.length, 'goes', 'go')} to Trash with their media — restorable for 30 days. Reference photos and the avatar are unpinned immediately.`
 				: 'Reference photos are unpinned from the kit; the underlying file is kept so no published post loses its media.',
 			preview: items.slice(0, 4).map((i) => ({
 				image: i.url,
@@ -1925,7 +1929,7 @@
 				}
 			}
 			selectedAssetUrls = [];
-			if (removed > 0) showToast(`Deleted ${removed} asset${removed === 1 ? '' : 's'}`, 'success');
+			if (removed > 0) showToast(`Deleted ${countLabel(removed, 'asset')}`, 'success');
 		} catch (err) {
 			showToast((err as Error).message || 'Delete failed', 'error');
 		} finally {
@@ -1976,6 +1980,16 @@
 	// ── Profile save ───────────────────────────────────────────────
 	// ── Generation cost tracking ────────────────────────────────────────────
 	// Per-provider spend (estimates from the generation_events ledger).
+	// The ledger stores RAW PROVIDER USD; every render of it below goes through
+	// quote() so the screen shows what the wallet actually charges. When metering
+	// is off the wallet debits nothing, so a "Spend" label would claim a charge
+	// that never happened — read from the same primed context quote() uses.
+	const metered = $derived(Boolean(pricingContext().metered));
+	// The avatar/reference helper copy prices a Nano Banana 2 image call. It used
+	// to print the provider's $0.08 flat, which is a third of what the call is
+	// actually billed at — quote() puts the customer's number on the customer's
+	// screen. Matches the fal image row in PRICING_MATRIX.
+	const NANO_IMAGE_USD = 0.08;
 	let agentSpend = $state<{
 		total: number;
 		byProvider: Record<string, number>;
@@ -2693,7 +2707,7 @@
 		const confirmed = await confirmAction({
 			title: `Permanently delete ${agent.name}?`,
 			body:
-				'The persona, its brand kit, its connections and every post it ever made are ' +
+				'The persona, its brand brief, its connections and every post it ever made are ' +
 				'removed. There is no Trash and no restore for a persona.',
 			warning: 'There is no undo for this.',
 			preview: [
@@ -2928,9 +2942,7 @@
 						{#if computedMetrics.connectedCount > 0}
 							<span class="hero-sep">·</span>
 							<span class="hero-connections"
-								>{computedMetrics.connectedCount} platform{computedMetrics.connectedCount !== 1
-									? 's'
-									: ''} connected</span
+								>{countLabel(computedMetrics.connectedCount, 'platform')} connected</span
 							>
 						{/if}
 					</div>
@@ -2947,13 +2959,12 @@
 						</div>
 					{/if}
 					{#if generationCost > 0}
+						<!-- Retail, not provider cost. The old 4-vs-2 decimal dance existed because a
+						     sub-cent provider estimate rendered as "$0.00"; a quote is charged in whole
+						     credits (1 credit = 1 cent), so it can never round away to nothing. -->
 						<div class="stat-chip stat-chip-spend">
-							<span class="stat-val"
-								>${generationCost < 0.01
-									? generationCost.toFixed(4)
-									: generationCost.toFixed(2)}</span
-							>
-							<span class="stat-label">Spend</span>
+							<span class="stat-val">{quote(generationCost)}</span>
+							<span class="stat-label">{metered ? 'Spend' : 'Est. spend'}</span>
 						</div>
 					{/if}
 					{#if computedMetrics.followersRaw > 0}
@@ -3248,9 +3259,11 @@
 										type="button"
 										class="filter-alert"
 										onclick={() => (feedFilter = 'failed')}
-										title="{genFailedCount} failed generation{genFailedCount === 1
-											? ''
-											: 's'} are hidden from this view — click to review"
+										title="{countLabel(genFailedCount, 'failed generation')} {plural(
+											genFailedCount,
+											'is',
+											'are'
+										)} hidden from this view — click to review"
 									>
 										<span class="filter-alert-dot" aria-hidden="true"></span>
 										{genFailedCount} failed
@@ -3609,11 +3622,11 @@
 					<details class="profile-section" open>
 						<summary class="section-summary">
 							<div class="section-header">
-								<h2 class="section-title">Brand Kit</h2>
+								<h2 class="section-title">Brand Brief</h2>
 								<p class="section-desc">
 									Choose the brand brief this persona creates content for — its products, voice, and
 									audience ground every asset. Selection is opt-in: with <strong>None</strong> selected,
-									the persona generates with no brand kit (no brand is applied automatically).
+									the persona generates with no brand brief (no brand is applied automatically).
 								</p>
 							</div>
 							<svg
@@ -3631,10 +3644,10 @@
 						</summary>
 						<div class="fields-grid">
 							<div class="field-group col-span-2">
-								<label for="p-brief">Brand Kit</label>
+								<label for="p-brief">Brand Brief</label>
 								<div class="brand-kit-row">
 									<select id="p-brief" bind:value={selectedBrandBriefId}>
-										<option value="">— None (no brand kit) —</option>
+										<option value="">— None (no brand brief) —</option>
 										{#each brandBriefs as b (b.id)}
 											<option value={b.id}>{b.name}</option>
 										{/each}
@@ -3648,7 +3661,7 @@
 											? 'Save this brand-kit choice'
 											: 'No unsaved brand-kit change'}
 									>
-										{savingBrand ? 'Applying…' : brandDirty ? 'Apply brand kit' : 'Applied'}
+										{savingBrand ? 'Applying…' : brandDirty ? 'Apply brand brief' : 'Applied'}
 									</button>
 								</div>
 								{#if brandBriefs.length === 0}
@@ -3658,13 +3671,13 @@
 									</p>
 								{:else if brandDirty}
 									<p class="field-hint brand-dirty-hint">
-										Unsaved change — click <strong>Apply brand kit</strong> to confirm.
+										Unsaved change — click <strong>Apply brand brief</strong> to confirm.
 									</p>
 								{:else}
 									<p class="field-hint">
 										{savedBrandBriefId
 											? `Applied: this persona creates for “${brandBriefs.find((b) => b.id === savedBrandBriefId)?.name ?? 'the selected brand'}”.`
-											: 'No brand kit applied — content generates without brand context.'}
+											: 'No brand brief applied — content generates without brand context.'}
 										Manage briefs in <a href="/brand-brief">Brand Brief</a>.
 									</p>
 								{/if}
@@ -3674,7 +3687,7 @@
 
 					<!-- Persona Profile — above Identity: these fields feed generation prompts -->
 					<details class="profile-section">
-						<!-- starts collapsed: Brand Kit is the only section open by default -->
+						<!-- starts collapsed: Brand Brief is the only section open by default -->
 						<summary class="section-summary">
 							<div class="section-header">
 								<div class="label-row">
@@ -4548,8 +4561,8 @@
 											</p>
 										{/if}
 										<p class="field-hint">
-											~$0.08 per generation (Nano Banana 2 image call). Restore re-pins a past image
-											free.
+											~{quote(NANO_IMAGE_USD)} per generation (Nano Banana 2 image call). Restore re-pins
+											a past image free.
 										</p>
 									</div>
 								</div>
@@ -4601,8 +4614,9 @@
 											</button>
 											<p class="field-hint">
 												Generates a full turnaround/reference sheet (multiple angles + detail
-												close-ups) from this photo, then pins it as the profile picture. ~$0.16 (2
-												Nano Banana 2 calls).
+												close-ups) from this photo, then pins it as the profile picture. ~{quote(
+													NANO_IMAGE_USD * 2
+												)} (2 Nano Banana 2 calls).
 											</p>
 										</div>
 									</div>
@@ -4667,8 +4681,8 @@
 									</div>
 									<p class="section-desc" style="margin-bottom: 0.75rem;">
 										Each stage builds on the previous one — generate them in order (or use Generate
-										all). Every stage can be regenerated independently — ~$0.08 per stage (one Nano
-										Banana 2 call).
+										all). Every stage can be regenerated independently — ~{quote(NANO_IMAGE_USD)} per
+										stage (one Nano Banana 2 call).
 										{#if generatingKitStage || generatingAllKit}
 											Generating — takes a minute or two per stage.
 										{/if}
@@ -5452,11 +5466,11 @@
 												d="M22 4L12 14.01l-3-3"
 											/></svg
 										>
-										Eligible to graduate: {publishedCleanCount} clean published posts. Switch to Fully
-										when confident.
+										Eligible to graduate: {countLabel(publishedCleanCount, 'clean published post')}.
+										Switch to Fully when confident.
 									{:else}
 										Graduates to Fully after ~21 clean published posts ({publishedCleanCount} so far,
-										{recentFailedCount} recent failure{recentFailedCount === 1 ? '' : 's'}).
+										{countLabel(recentFailedCount, 'recent failure')}).
 									{/if}
 								</p>
 							</div>
@@ -5562,8 +5576,9 @@
 							<div class="section-header">
 								<h2 class="section-title">Spend &amp; Pricing</h2>
 								<p class="section-desc">
-									Estimated generation credits used by this persona, split by provider — plus the
-									rate card behind the numbers.
+									What this persona's generations {metered ? 'have cost you' : 'would cost you'},
+									split by provider — plus the rate card behind the numbers. Every figure here is
+									what you pay, in your own currency, not what the provider bills us.
 								</p>
 							</div>
 							<svg
@@ -5584,18 +5599,18 @@
 							<div class="spend-chips">
 								<div class="spend-chip spend-total">
 									<span class="spend-label">Total</span>
-									<span class="spend-val tabular-nums">${agentSpend.total.toFixed(2)}</span>
+									<span class="spend-val tabular-nums">{quote(agentSpend.total)}</span>
 								</div>
 								{#each Object.entries(agentSpend.byProvider) as [prov, amt]}
 									<div class="spend-chip">
 										<span class="spend-label">{prov}</span>
-										<span class="spend-val tabular-nums">${amt.toFixed(2)}</span>
+										<span class="spend-val tabular-nums">{quote(amt)}</span>
 									</div>
 								{/each}
 								{#each Object.entries(agentSpend.byOperation) as [op, amt]}
 									<div class="spend-chip spend-op">
 										<span class="spend-label">{op}</span>
-										<span class="spend-val tabular-nums">${amt.toFixed(2)}</span>
+										<span class="spend-val tabular-nums">{quote(amt)}</span>
 									</div>
 								{/each}
 							</div>
@@ -5607,11 +5622,11 @@
 						{/if}
 
 						<details class="pricing-details">
-							<summary>Rate card (estimated USD per call)</summary>
+							<summary>Rate card (estimated {metered ? 'charge' : 'cost'} per call)</summary>
 							<div class="pricing-table-wrap">
 								<table class="pricing-table">
 									<thead
-										><tr><th>Provider</th><th>Operation</th><th>Model</th><th>Est. cost</th></tr
+										><tr><th>Provider</th><th>Operation</th><th>Model</th><th>Your rate</th></tr
 										></thead
 									>
 									<tbody>
@@ -5620,7 +5635,10 @@
 												<td>{row.provider}</td>
 												<td>{row.operation}</td>
 												<td>{row.model}</td>
-												<td class="tabular-nums">{row.note ?? `$${row.usd}`}</td>
+												<!-- Quoted, like the totals above — a rate card that itemised provider
+												     cost under a retail total would never add up. Rows priced per-account
+												     rather than per-call carry a note instead of a number. -->
+												<td class="tabular-nums">{row.note ?? quote(row.usd)}</td>
 											</tr>
 										{/each}
 									</tbody>
@@ -5691,7 +5709,10 @@
 								<div
 									class="meter-track"
 									role="img"
-									aria-label="{accountMeter.total} accounts connected, {accountMeter.freeUsed} of 2 free used"
+									aria-label="{countLabel(
+										accountMeter.total,
+										'account'
+									)} connected, {accountMeter.freeUsed} of 2 free used"
 								>
 									{#each Array(Math.min(Math.max(accountMeter.total, 2), 12)) as _, i}
 										<span
@@ -5709,9 +5730,10 @@
 									<span><strong>{accountMeter.total}</strong> connected</span>
 									{#if accountMeter.freeRemaining > 0}
 										<span class="meter-good"
-											>{accountMeter.freeRemaining} free {accountMeter.freeRemaining === 1
-												? 'slot'
-												: 'slots'} left</span
+											>{accountMeter.freeRemaining} free {plural(
+												accountMeter.freeRemaining,
+												'slot'
+											)} left</span
 										>
 									{:else}
 										<span class="meter-bill"
@@ -6012,7 +6034,7 @@
 							<h2 class="studio-title">Studio</h2>
 							<p class="studio-sub">
 								Pick an archetype — the scaffold opens prefilled with an editable topic and scene,
-								already aimed at {agent.name}'s voice and the applied brand kit. For bulk generation
+								already aimed at {agent.name}'s voice and the applied brand brief. For bulk generation
 								across a week or a month, plan a campaign.
 							</p>
 						</div>
@@ -6132,6 +6154,7 @@
 											{#each list as t (t.id)}
 												{@const preview = studioPreviews.get(t.id)}
 												{@const meta = PIPELINE_META[t.pipeline]}
+												{@const pipelineUsd = PIPELINE_USD[t.pipeline]}
 												<div class="studio-tile studio-sf-{t.surface}" role="listitem">
 													<!-- The tile's face is the OUTPUT: a real prior generation
 												     when one exists, else the template's sample line styled
@@ -6228,8 +6251,15 @@
 														</div>
 														<p class="studio-tile-tag">{t.tagline}</p>
 														<div class="studio-tile-meta">
-															<span class="studio-cost" title="Estimated generation cost"
-																>{meta.usd}</span
+															<!-- PIPELINE_META.usd is the raw provider string ("~$0.81"); this tile
+															     is a pre-spend decision, so it quotes PIPELINE_USD instead. Zero-cost
+															     pipelines stay "Free" — the text card is typeset server-side. -->
+															<span
+																class="studio-cost"
+																title={metered
+																	? 'Estimated charge for this generation'
+																	: 'Estimated generation cost'}
+																>{pipelineUsd > 0 ? quote(pipelineUsd) : 'Free'}</span
 															>
 															<span class="studio-time" title="Typical generation time"
 																>{meta.time}</span

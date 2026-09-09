@@ -4,6 +4,8 @@
 	import { getPostDisplay, truncateError, summarizeGenError } from './postDisplay';
 	import { platformColor } from '$lib/platforms';
 	import { OPERATION_LABELS, priceOf } from '$lib/pricing';
+	import { quote, pricingContext } from '$lib/stores/pricing.svelte';
+	import { compactCountLabel } from '$lib/plural';
 	import { resolveModel } from '$lib/models';
 	import ImageLightbox from '$lib/components/ui/ImageLightbox.svelte';
 	import { dialog } from '$lib/actions/dialog';
@@ -178,6 +180,15 @@
 		}
 		return img + priceOf('fal', 'tts') + priceOf('fal', 'talking_head');
 	});
+	// The estimate above is PROVIDER cost; the wallet debits it at the platform
+	// markup. Consent has to be asked for the number that will actually be taken,
+	// so every render of it goes through quote() — the raw figure never reaches
+	// the button.
+	let refinePrice = $derived(quote(refineEstimate));
+	// "Spend X?" is only a true statement while credits are actually being
+	// written. With metering off the same figure is an estimate of what the run
+	// is worth, not a charge, so the confirm says so instead of claiming one.
+	let metered = $derived((pricingContext() as { metered?: boolean }).metered === true);
 
 	function openRefine() {
 		refineScene = display?.ugcPrompt ?? display?.generation?.prompts?.scene ?? '';
@@ -385,6 +396,23 @@
 		Boolean(onPostNow && post && (post.status === 'draft' || post.status === 'scheduled'))
 	);
 
+	/**
+	 * Intrinsic-size hint for the still, so the browser reserves the right box
+	 * before the file decodes. This was hardcoded 1080×1350 (4:5) for EVERY asset,
+	 * which is a shape nothing in this app produces — so every image reserved the
+	 * wrong box and then jumped to its real one on load.
+	 *
+	 * Nothing on the post row records delivered pixel dimensions, so the honest
+	 * box is the shape the pipeline actually emits: the free card renderer draws
+	 * typographic cards on a 1080×1920 canvas, and every still request in
+	 * server/content/generate.ts asks for aspect_ratio '9:16'. Both known cases
+	 * are 9:16, which makes it the neutral default too. `height: auto` plus
+	 * object-fit: contain still hand the true ratio back to the browser on decode,
+	 * so a legacy off-ratio upload costs the one reflow it always cost — instead
+	 * of every asset costing one.
+	 */
+	const STILL_BOX = { width: 1080, height: 1920 };
+
 	let analytics = $derived(post?.analytics ?? null);
 	let hasRealStats = $derived(
 		Boolean(analytics && (analytics.views || analytics.likes || analytics.comments || analytics.shares))
@@ -536,7 +564,7 @@
 							aria-label="Enlarge post media"
 							onclick={() => (zoomOpen = true)}
 						>
-							<img class="media-el" src={thumbUrl(display.mediaUrl, 1080)} onerror={(e) => restoreOriginal(e, display.mediaUrl)} alt="Post media" width="1080" height="1350" fetchpriority="high" decoding="async" />
+							<img class="media-el" src={thumbUrl(display.mediaUrl, 1080)} onerror={(e) => restoreOriginal(e, display.mediaUrl)} alt="Post media" width={STILL_BOX.width} height={STILL_BOX.height} fetchpriority="high" decoding="async" />
 						</button>
 					{/if}
 					{#if refining}
@@ -551,10 +579,13 @@
 
 			{#if hasRealStats}
 				<div class="drawer-stats">
-					{#if analytics.views}<span class="stat"><strong>{analytics.views >= 1000 ? (analytics.views / 1000).toFixed(1) + 'K' : analytics.views}</strong> views</span>{/if}
-					{#if analytics.likes}<span class="stat"><strong>{analytics.likes}</strong> likes</span>{/if}
-					{#if analytics.comments}<span class="stat"><strong>{analytics.comments}</strong> comments</span>{/if}
-					{#if analytics.shares}<span class="stat"><strong>{analytics.shares}</strong> shares</span>{/if}
+					<!-- compactCountLabel does the K/M abbreviation this row used to do inline,
+					     and agrees the noun with the REAL count — a post with one view read
+					     "1 views" here for as long as the row has existed. -->
+					{#if analytics.views}<span class="stat"><strong>{compactCountLabel(analytics.views, 'view')}</strong></span>{/if}
+					{#if analytics.likes}<span class="stat"><strong>{compactCountLabel(analytics.likes, 'like')}</strong></span>{/if}
+					{#if analytics.comments}<span class="stat"><strong>{compactCountLabel(analytics.comments, 'comment')}</strong></span>{/if}
+					{#if analytics.shares}<span class="stat"><strong>{compactCountLabel(analytics.shares, 'share')}</strong></span>{/if}
 				</div>
 			{:else if post.status === 'published'}
 				<p class="drawer-stats-pending">Stats pending first sync from the platform.</p>
@@ -670,8 +701,10 @@
 							onclick={handleRefineClick}
 							disabled={refining || !refineScene.trim()}
 						>
-							{#if refining}Regenerating…{:else if confirmingRefine}Spend ~${refineEstimate.toFixed(2)}?{:else}<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7" /><path d="M21 3v5h-5" /></svg
-								> Regenerate (~${refineEstimate.toFixed(2)}){/if}
+							{#if refining}Regenerating…{:else if confirmingRefine}{metered
+									? `Spend ~${refinePrice}?`
+									: `Regenerate — est. ${refinePrice}?`}{:else}<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7" /><path d="M21 3v5h-5" /></svg
+								> Regenerate (est. {refinePrice}){/if}
 						</button>
 					</div>
 				</div>
@@ -728,21 +761,31 @@
 						<div>
 							<span class="drawer-block-label"
 								><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg
-								> Models &amp; estimated cost by aspect</span
+								> Models &amp; estimated spend by aspect</span
 							>
+							<!-- Headline figure is what the run is worth against the balance; the
+							     raw provider USD stays underneath it because an operator reading
+							     this panel is diagnosing model choice, and the provider's own
+							     number is what a fal/OpenRouter invoice will show. -->
 							<table class="gen-cost">
 								<tbody>
 									{#each genAspects as a (a.op)}
 										<tr>
 											<td class="gen-op">{OPERATION_LABELS[a.op] ?? a.op}</td>
 											<td class="gen-model">{a.models.join(', ') || '—'}</td>
-											<td class="gen-usd">${a.usd.toFixed(3)}</td>
+											<td class="gen-usd"
+												>{quote(a.usd)}<span class="gen-cost-raw">${a.usd.toFixed(3)} at cost</span></td
+											>
 										</tr>
 									{/each}
 									<tr class="gen-total">
 										<td>Total</td>
 										<td></td>
-										<td class="gen-usd">${aspectsTotal.toFixed(3)}</td>
+										<td class="gen-usd"
+											>{quote(aspectsTotal)}<span class="gen-cost-raw"
+												>${aspectsTotal.toFixed(3)} at cost</span
+											></td
+										>
 									</tr>
 								</tbody>
 							</table>
@@ -753,7 +796,7 @@
 						<div>
 							<span class="drawer-block-label"
 								><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 1v22" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></svg
-								> Estimated cost by provider</span
+								> Estimated spend by provider</span
 							>
 							<table class="gen-cost">
 								<tbody>
@@ -761,13 +804,18 @@
 										<tr>
 											<td class="gen-op" style="text-transform: capitalize;">{c.provider}</td>
 											<td class="gen-model"></td>
-											<td class="gen-usd">${c.usd.toFixed(3)}</td>
+											<td class="gen-usd"
+												>{quote(c.usd)}<span class="gen-cost-raw">${c.usd.toFixed(3)} at cost</span></td
+											>
 										</tr>
 									{/each}
 									<tr class="gen-total">
 										<td>Total</td>
 										<td></td>
-										<td class="gen-usd">${costTotal.toFixed(3)}</td>
+										<td class="gen-usd"
+											>{quote(costTotal)}<span class="gen-cost-raw">${costTotal.toFixed(3)} at cost</span
+											></td
+										>
 									</tr>
 								</tbody>
 							</table>
@@ -1331,6 +1379,9 @@
 		font-variant-numeric: tabular-nums;
 	}
 
+	/* The count and its noun arrive from compactCountLabel as one agreed string, so
+	   the emphasis wraps both — splitting a formatted label back apart to bold only
+	   the number is how the "1 views" hardcoding got here in the first place. */
 	.stat strong {
 		color: var(--text);
 	}
@@ -1465,6 +1516,15 @@
 		font-variant-numeric: tabular-nums;
 		white-space: nowrap;
 		color: var(--text);
+	}
+	/* Provider cost, kept as a second line under the price so the table has one
+	   headline number (what it draws from the balance) and the operator detail
+	   can't be mistaken for it. */
+	.gen-cost-raw {
+		display: block;
+		font-size: 0.62rem;
+		font-weight: 400;
+		color: var(--text-dim);
 	}
 	.gen-total td {
 		border-top: 1px solid var(--border-strong);
@@ -1667,7 +1727,7 @@
 		cursor: not-allowed;
 	}
 
-	@media (max-width: 520px) {
+	@media (max-width: 640px) {
 		.post-drawer {
 			width: 100vw;
 			border-left: none;

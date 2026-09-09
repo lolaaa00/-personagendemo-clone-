@@ -4,19 +4,56 @@
 	 *
 	 * Nothing in here is guessed client-side. On open it calls the same endpoint it
 	 * will eventually generate with, passing `preview: true` — the server resolves
-	 * the REAL payload (actual prompt text, actual model id, actual reference
-	 * images, actual cost) and hands it back. We render that as an editable form,
-	 * and on confirm we POST the edited values to the same endpoint.
+	 * the REAL payload (actual references, actual model options, actual prices) and
+	 * hands it back. We render that as an editable form, and on confirm we POST the
+	 * edited values to the same endpoint.
 	 *
 	 * That round-trip is the whole point: a form built from client-side assumptions
-	 * drifts from what the server really sends the moment either side changes. This
-	 * one cannot — the preview and the request are produced by one code path.
+	 * drifts from what the server really sends the moment either side changes.
+	 *
+	 * ── The vocabulary ──────────────────────────────────────────────────────
+	 * A post used to be composed out of four overlapping fields — media, format,
+	 * still and refs — which is why a typographic card had to be assembled as
+	 * media:'image' + still:'graphic' + no refs, and why it could never be listed
+	 * anywhere sensible. There is now ONE axis: pick a kind (Image / Video /
+	 * Series), then a format inside it. Everything else is derived from
+	 * $lib/formats, and `requestFor()` turns the pick back into the media/format/
+	 * still/refs the API has always spoken, so no existing caller changed.
+	 *
+	 * ── The cascade ─────────────────────────────────────────────────────────
+	 * Each format declares what it NEEDS. Look renders exactly those controls,
+	 * Craft is the format's own step plan, and the journey itself grows or shrinks
+	 * — a text card has nothing to configure, so it has no Craft step rather than
+	 * an empty one. No pane in here knows what a "spokesperson" is.
+	 *
+	 * ── The money ───────────────────────────────────────────────────────────
+	 * Every price is `quote()`: the provider estimate converted to what the
+	 * customer is actually charged, in their own currency. This screen used to
+	 * print the raw provider cost, which at the production markup was a third of
+	 * the real charge.
 	 */
 	import Modal from '$lib/components/ui/Modal.svelte';
 	import { fly } from 'svelte/transition';
 	import { cubicOut } from 'svelte/easing';
 	import type { ComposerSpec } from './types';
 	import { TIER_LABEL, type ModelOption } from '$lib/models';
+	import {
+		FORMAT_KINDS,
+		formatsOfKind,
+		getFormat,
+		formatFromRequest,
+		requestFor,
+		planPipeline,
+		planTotalUsd,
+		craftMatters,
+		type FormatKind,
+		type FormatNeed,
+		type PipelineStep,
+		type StepKind,
+		type StepModel
+	} from '$lib/formats';
+	import { quote, pricingContext } from '$lib/stores/pricing.svelte';
+	import { STUDIO_TEMPLATES } from '$lib/studio-templates';
 
 	interface Props {
 		open: boolean;
@@ -26,6 +63,14 @@
 		onConfirm: (body: Record<string, unknown>) => void;
 		/** Optional: jump to the Connections tab from the no-connection notice. */
 		onGoToConnections?: () => void;
+		/**
+		 * Optional: hand off to the campaign planner. A run of posts is a different
+		 * question from one post (cadence, horizon, a mix of formats) and the planner
+		 * already asks it well. Without this callback the Series kind is not offered
+		 * at all — a kind whose only format cannot be produced from here would be
+		 * exactly the empty promise this dialog exists to prevent.
+		 */
+		onOpenPlanner?: () => void;
 		/**
 		 * Optional persona switcher (multi-persona surfaces like the calendar).
 		 * The parent rebuilds `spec` on change and the preview re-resolves for the
@@ -37,19 +82,30 @@
 		onAgentChange?: (id: string) => void;
 	}
 
-	let { open, spec, onClose, onConfirm, onGoToConnections, agents, agentId, onAgentChange }: Props =
-		$props();
+	let {
+		open,
+		spec,
+		onClose,
+		onConfirm,
+		onGoToConnections,
+		onOpenPlanner,
+		agents,
+		agentId,
+		onAgentChange
+	}: Props = $props();
 
 	let loading = $state(false);
 	let loadError = $state<string | null>(null);
 	let preview = $state<any>(null);
 
-	// Editable fields (populated from the server's resolved preview)
+	// ── Editable state (populated from the server's resolved preview) ────────
 	let prompt = $state('');
 	let topic = $state('');
 	let scene = $state('');
-	let media = $state('video');
 	let provider = $state('auto');
+	/** The one axis: which format this run is. Media/format/still are derived. */
+	let formatId = $state('auto');
+	let kind = $state<FormatKind>('video');
 	// Burn the on-screen caption hook onto the video. OFF by default — captions are
 	// never generated without this explicit opt-in.
 	let captions = $state(false);
@@ -58,91 +114,145 @@
 	let platforms = $state<string[]>([]);
 	let productId = $state('');
 	let productPhotoUrl = $state('');
-	// The persona's brand-kit products, resolved server-side from the brand brief
-	// selected in its Profile. Drives the product picker below; empty when the
-	// persona has no brief selected (then the URL field is the only route).
+	// The persona's brand-brief products, resolved server-side. Shipped whatever
+	// this run composites so switching format client-side never finds an empty
+	// picker; whether an id is SENT is gated on the composition below.
 	let products = $state<Array<{ id: string; name: string; photoUrl: string | null }>>([]);
 	let characterRefUrl = $state('');
 	let scheduledDate = $state('');
 	let scheduledTime = $state('');
-	// Budget-vs-quality: the model is a first-class, user-owned decision.
+	// Per-run controls the Look step pins when the format reads them.
+	let script = $state('');
+	let voice = $state('');
+	let voices = $state<Array<{ name: string; label: string; style: string; accent: string | null }>>(
+		[]
+	);
+	let cardText = $state('');
+	let cardLayout = $state('auto');
+	let cardPalette = $state('auto');
+	// Framing is only SENT when the user actually chooses one. Studio templates
+	// already bake a front-camera or mirror clause into their scene text, so
+	// posting a default on every run would splice the same instruction twice.
+	let framing = $state<'front' | 'mirror' | 'third'>('front');
+	let framingTouched = $state(false);
+	/** "Use my own still" — the URL replaces the generated frame and its charge. */
+	let stillUrl = $state('');
+	// Budget-vs-quality. The tier locks every stage at once; a per-stage pick
+	// overrides it for that stage and flips the lock to manual.
+	let tier = $state<'budget' | 'balanced' | 'premium' | 'manual'>('manual');
+	let picks = $state<Partial<Record<StepKind, string>>>({});
+	/** Prompt-kind (avatar / reference kit) model pick — unchanged flow. */
 	let model = $state('');
-	let videoModel = $state('');
-	// Video format for this run: 'spokesperson' (voiceover + talking-head/OmniHuman),
-	// 'broll' (the picked i2v clip), or 'auto' (Director decides, biased to spokesperson).
-	let format = $state('auto');
 
 	let isPromptKind = $derived(!!preview && typeof preview.prompt === 'string');
-	let isPostKind = $derived(!!preview && Array.isArray(preview.steps));
+	let isPostKind = $derived(!!preview && preview.kind === 'post');
 
-	// The composition contract from the server: which reference fields this run
-	// will actually feed, and whether the still is a typographic card. Absent on
-	// legacy previews → show everything (that pipeline feeds both refs).
-	// Cinematic is the exception: its multi-shot pack always composites both
-	// references, so switching the Media select to cinematic suspends the
-	// contract here exactly like the run would.
-	let composition = $derived<{ still?: string; character?: boolean; product?: boolean } | null>(
-		preview?.composition ?? null
-	);
-	let activeComposition = $derived(media === 'cinematic' ? null : composition);
-	let usesCharacterRef = $derived(!activeComposition || activeComposition.character !== false);
-	let usesProductRef = $derived(!activeComposition || activeComposition.product !== false);
-	let isGraphicCard = $derived(activeComposition?.still === 'graphic');
+	let format = $derived(getFormat(formatId));
+	let availableKinds = $derived(FORMAT_KINDS.filter((k) => k.id !== 'series' || !!onOpenPlanner));
+	let isSeries = $derived(format?.kind === 'series');
 
+	/**
+	 * The composition contract: which references this run feeds, and whether the
+	 * still is a typographic card. Derived from the FORMAT (so it stays true when
+	 * the user switches format without a re-resolve) falling back to whatever the
+	 * caller's own request pinned — a channel template that excludes the product
+	 * must keep excluding it.
+	 */
+	let baseRefs = $derived.by<{ character: boolean; product: boolean } | null>(() => {
+		// A typographic template turns both references off because a CARD has no
+		// references — that is an artifact of the format, not a content policy. If
+		// the user switches such a template to a photo, carrying those flags over
+		// would silently produce a faceless photo. Every other template's refs ARE
+		// policy (product-free channel content) and must survive a format change.
+		const base = spec?.baseBody as any;
+		if (!base || base.still === 'graphic') return null;
+		return base.refs ?? null;
+	});
+	let composition = $derived.by(() => {
+		const f = getFormat(formatId);
+		if (!f) return { still: 'photo' as const, character: true, product: true };
+		if (f.request.refs) return { still: f.request.still ?? 'photo', ...f.request.refs };
+		// Cinematic runs its own pack and always composites both references.
+		if (formatId === 'cinematic')
+			return { still: 'photo' as const, character: true, product: true };
+		return {
+			still: f.request.still ?? 'photo',
+			character: baseRefs ? baseRefs.character !== false : true,
+			product: baseRefs ? baseRefs.product !== false : true
+		};
+	});
+	let usesCharacterRef = $derived(composition.character !== false);
+	let usesProductRef = $derived(composition.product !== false);
+	let isGraphicCard = $derived(composition.still === 'graphic');
+
+	/** Does this format need a control? The whole Look pane is built from this. */
+	const needs = (n: FormatNeed) => !!format?.needs.includes(n);
+
+	// ── Prompt-kind model picker (avatar / reference kit) ────────────────────
 	let modelOptions = $derived<ModelOption[]>(preview?.modelOptions ?? []);
 	let selectedModel = $derived(modelOptions.find((m) => m.id === model) ?? null);
-
-	// Re-price live as the user trades quality for budget, instead of showing the
-	// cost of whatever the server happened to default to.
 	let liveCost = $derived(selectedModel ? selectedModel.usd : (preview?.estimatedCostUsd ?? 0));
-
-	let videoModelOptions = $derived<ModelOption[]>(preview?.videoModelOptions ?? []);
-	let selectedVideoModel = $derived(videoModelOptions.find((m) => m.id === videoModel) ?? null);
-
-	// The pipeline actually shown/priced, driven by the Media + format selectors.
-	// Every media kind's step array comes from the server, so switching Media here
-	// re-derives the real stack — it never keeps showing the original kind's steps.
-	let activeSteps = $derived.by(() => {
-		if (!isPostKind) return [] as any[];
-		if (media === 'image') return (preview.stepsImage ?? preview.steps ?? []) as any[];
-		if (media === 'cinematic') return (preview.stepsCinematic ?? preview.steps ?? []) as any[];
-		// A graphic card has no face to animate — the server coerces spokesperson
-		// to b-roll on these, so the pipeline shown must be b-roll's too.
-		if (format === 'broll' || isGraphicCard)
-			return (preview.stepsBroll ?? preview.steps ?? []) as any[];
-		return (preview.stepsSpokesperson ?? preview.steps ?? []) as any[];
-	});
-
-	// Re-price the whole pipeline as the user swaps format or clip tier — the video is
-	// the dominant line item, so a static total would misrepresent the decision.
-	let livePostTotal = $derived.by(() => {
-		if (!isPostKind) return 0;
-		return activeSteps.reduce((sum: number, st: any) => {
-			const isVideoStep = String(st.step).includes('b-roll');
-			if (isVideoStep && selectedVideoModel) return sum + selectedVideoModel.usd;
-			return sum + (st.usd ?? 0);
-		}, 0);
-	});
-
 	// This step feeds two references; a single-ref model silently drops one.
 	let refWarning = $derived(
 		preview?.multiRefNeeded && selectedModel && selectedModel.multiRef === false
 			? selectedModel.caveat
 			: null
 	);
-	// A post with no connected account can only be a draft — reflect that on the
-	// confirm button so the outcome isn't a surprise.
-	let hasConnections = $derived(!!preview?.connectedPlatforms?.length);
 
-	// Where approving SENDS this run. The consequence belongs ON the button —
-	// "Approve & generate" that quietly publishes live to a connected account the
-	// moment generation finishes is exactly the kind of surprise this dialog
-	// exists to prevent.
+	// ── The plan ─────────────────────────────────────────────────────────────
+	// planPipeline() is the SAME function the server called to build this preview.
+	// Switching format or model re-runs it here with the server's own options, so
+	// the pipeline shown and the pipeline that would run cannot drift apart, and
+	// no combination has to be pre-shipped.
+	let planOptions = $derived<Partial<Record<StepKind, StepModel[]>>>(preview?.plan?.options ?? {});
+	let planFixed = $derived<Partial<Record<StepKind, StepModel>>>(preview?.plan?.fixed ?? {});
+	let activePlan = $derived<PipelineStep[]>(
+		isPostKind
+			? planPipeline({
+					formatId,
+					options: planOptions,
+					fixed: planFixed,
+					picks,
+					supplied: { still: !!stillUrl },
+					tier,
+					shots: preview?.plan?.shots ?? 4
+				})
+			: []
+	);
+	let planUsd = $derived(planTotalUsd(activePlan));
+	let hasCraftStep = $derived(craftMatters(activePlan));
+
+	/** How far a tier lock can actually reach in this format — stated, not implied. */
+	let tierReach = $derived.by(() => {
+		const selectable = activePlan.filter((s) => s.selectable).length;
+		const paid = activePlan.filter((s) => s.usd > 0 || s.supplied).length;
+		return { selectable, paid };
+	});
+
+	// ── Destinations ─────────────────────────────────────────────────────────
+	let connectedPlatforms = $derived<string[]>(preview?.connectedPlatforms ?? []);
+	let videoOnlyPlatforms = $derived<string[]>(preview?.videoOnlyPlatforms ?? []);
+	/**
+	 * A platform that only accepts video cannot take a still. The server has
+	 * always known this and filtered those platforms AFTER generating, quietly
+	 * saving a draft; the composer promised a live post anyway. Now the chip says
+	 * so before the money is spent.
+	 */
+	const platformBlocked = (p: string) =>
+		!format?.video && videoOnlyPlatforms.includes(p.toLowerCase());
+	let selectablePlatforms = $derived(platforms.filter((p) => !platformBlocked(p)));
+	let hasConnections = $derived(connectedPlatforms.length > 0);
+
 	let deliverMode = $derived(
 		typeof spec?.baseBody?.deliver === 'string' ? (spec.baseBody.deliver as string) : null
 	);
 	let destination = $derived.by(() => {
 		if (!isPostKind) return null; // prompt-kind flows keep their own label
+		if (isSeries)
+			return {
+				label: 'Open the campaign planner',
+				hint: 'Nothing is generated here — the planner asks for a cadence and a mix, then queues the posts as drafts.'
+			};
 		if (deliverMode === 'asset')
 			return {
 				label: spec?.confirmLabel ?? 'Approve & generate',
@@ -158,19 +268,19 @@
 				label: 'Save as draft',
 				hint: 'Output: draft — no account is connected, so nothing can publish.'
 			};
-		if (platforms.length === 0)
+		if (selectablePlatforms.length === 0)
 			return {
 				label: 'Save as draft',
-				hint: 'Output: draft — no platform selected, so nothing publishes.'
+				hint: 'Output: draft — no platform can take this post, so nothing publishes.'
 			};
 		if (scheduledDate)
 			return {
 				label: 'Approve & schedule',
-				hint: `Output: scheduled post — publishes to ${platforms.join(', ')} on ${scheduledDate}${scheduledTime ? ` at ${scheduledTime}` : ''}.`
+				hint: `Output: scheduled post — publishes to ${selectablePlatforms.join(', ')} on ${scheduledDate}${scheduledTime ? ` at ${scheduledTime}` : ''}.`
 			};
 		return {
 			label: 'Approve & publish now',
-			hint: `Output: LIVE post — publishes immediately to ${platforms.join(', ')} as soon as generation completes.`
+			hint: `Output: LIVE post — publishes immediately to ${selectablePlatforms.join(', ')} as soon as generation completes.`
 		};
 	});
 
@@ -187,6 +297,29 @@
 			return prefix + prompt;
 		}
 		return prompt;
+	});
+
+	/**
+	 * Topic suggestions, free. The Studio archetypes are 42 topics somebody
+	 * already wrote and the app already ships — offering them here costs nothing
+	 * and beats a blank field. Deliberately a datalist, not a select: topic has
+	 * always been free text and taking that away would be a downgrade for anyone
+	 * who knows what they want to post.
+	 */
+	let topicSuggestions = $derived.by(() => {
+		const wantsVideo = format?.video ?? true;
+		const pool = STUDIO_TEMPLATES.filter((t) => {
+			const isVideoTemplate =
+				t.pipeline === 'Talking head' ||
+				t.pipeline === 'Product motion' ||
+				t.pipeline === 'Cinematic';
+			return isVideoTemplate === wantsVideo;
+		});
+		const seen = new Set<string>();
+		return pool
+			.map((t) => t.baseBody.topic)
+			.filter((t) => t && !seen.has(t) && seen.add(t))
+			.slice(0, 24);
 	});
 
 	// Guards against out-of-order responses when the user switches personas
@@ -230,20 +363,39 @@
 			prompt = preview.prompt ?? '';
 			topic = preview.topic ?? '';
 			scene = preview.scene ?? '';
-			media = preview.media ?? 'video';
-			format = preview.format ?? 'auto';
 			captions = preview.captions === true;
 			aiBadge = preview.aiBadge === true;
 			provider = preview.provider ?? 'auto';
 			platforms = [...(preview.platforms ?? [])];
-			productId = preview.product?.id ?? '';
 			products = Array.isArray(preview.products) ? preview.products : [];
 			productPhotoUrl = preview.productPhotoUrl ?? '';
 			characterRefUrl = preview.characterRefUrl ?? '';
 			scheduledDate = preview.scheduledDate ?? '';
 			scheduledTime = preview.scheduledTime ?? '';
 			model = preview.model ?? '';
-			videoModel = preview.videoModel ?? '';
+			voice = preview.voice ?? '';
+			voices = Array.isArray(preview.voices) ? preview.voices : [];
+			script = '';
+			cardText = '';
+			framingTouched = false;
+			cardLayout = 'auto';
+			cardPalette = 'auto';
+			stillUrl = '';
+			tier = 'manual';
+			// The server's resolved defaults become the starting picks, so the plan
+			// shown on open is the plan this request would run right now.
+			picks = {
+				...(preview.stillModel ? { still: preview.stillModel } : {}),
+				...(preview.videoModel ? { video: preview.videoModel } : {})
+			};
+			if (preview.kind === 'post') {
+				formatId = preview.formatId ?? formatFromRequest(spec?.baseBody ?? null);
+				kind = getFormat(formatId)?.kind ?? 'video';
+				// A product id is only adopted when this composition actually feeds
+				// one. Adopting it unconditionally is how product-free posts ended up
+				// submitting a hidden product the user was never shown.
+				productId = composition.product !== false ? (preview.product?.id ?? '') : '';
+			}
 		} catch (e) {
 			// A stale token means the abort was ours (superseded/closed) — silent.
 			// A timeout on the CURRENT request must say so, with Retry available.
@@ -275,7 +427,35 @@
 	});
 
 	function togglePlatform(p: string) {
+		if (platformBlocked(p)) return;
 		platforms = platforms.includes(p) ? platforms.filter((x) => x !== p) : [...platforms, p];
+	}
+
+	function pickKind(k: FormatKind) {
+		if (kind === k) return;
+		kind = k;
+		const first = formatsOfKind(k)[0];
+		if (first) pickFormat(first.id);
+	}
+
+	function pickFormat(id: string) {
+		formatId = id;
+		kind = getFormat(id)?.kind ?? kind;
+		// A format switch changes which references the run feeds. Drop a product id
+		// the new composition would ignore rather than submitting it invisibly.
+		if (composition.product === false) productId = '';
+	}
+
+	function pickStepModel(step: StepKind, id: string) {
+		picks = { ...picks, [step]: id };
+		// An explicit pick outranks the lock; saying so beats a lock that silently
+		// no longer describes the stack.
+		tier = 'manual';
+	}
+
+	function pickTier(t: typeof tier) {
+		tier = t;
+		if (t !== 'manual') picks = {};
 	}
 
 	// Picking a brand-kit product pins its id (the server resolves the photo from
@@ -290,22 +470,14 @@
 	}
 
 	// ── The journey ────────────────────────────────────────────────────────
-	// The composer used to be one long scroll: topic, media, captions, platforms,
-	// scene, product, refs, schedule, format, models and pipeline all stacked in a
-	// single pane, in an order that matched no decision anyone actually makes.
+	// A post is four decisions in a real order — what it is, how it looks, what
+	// builds it, where it goes — and the composer asks them in that order instead
+	// of stacking every field into one scroll.
 	//
-	// It is now a sequence that mirrors the action being composed. A post really
-	// is four decisions, in this order — and each step asks the question rather
-	// than labelling a field:
-	//
-	//   subject → what are we making?      (topic, media kind, video format)
-	//   look    → how should it look?      (scene, product, refs, burn-ins)
-	//   craft   → what builds it?          (provider, models, pipeline, cost)
-	//   deliver → where does it go?        (platforms, schedule, destination)
-	//
-	// A prompt-kind run is ONE decision, so it gets one pane. Stepping a two-field
-	// dialog would be ceremony, not a journey — the step list is derived from what
-	// is actually being composed, never fixed.
+	// The list is DERIVED, not fixed. A format whose whole stack is one free
+	// renderer has nothing to configure, so it has no Craft step at all; a
+	// prompt-kind run is a single decision and stays on one pane. A wizard for
+	// two fields would be worse than the form it replaced.
 	interface Step {
 		id: 'single' | 'subject' | 'look' | 'craft' | 'deliver';
 		label: string;
@@ -313,50 +485,52 @@
 		blurb: string;
 	}
 
-	let steps = $derived<Step[]>(
-		isPostKind
-			? [
-					{
-						id: 'subject',
-						label: 'Subject',
-						question: 'What are we posting?',
-						blurb:
-							'The topic and the kind of media. Everything after this adapts to what you pick here.'
-					},
-					{
-						id: 'look',
-						label: 'Look',
-						question: 'How should it look?',
-						blurb:
-							'The scene, the product in shot, and the face. Leave anything blank and the Director writes it.'
-					},
-					{
-						id: 'craft',
-						label: 'Craft',
-						question: 'What builds it?',
-						blurb:
-							'Your budget-vs-quality call. The pipeline below is exactly what will run, priced as you choose.'
-					},
-					{
-						id: 'deliver',
-						label: 'Deliver',
-						question: 'Where does it go?',
-						blurb: 'Pick the accounts and when. Nothing is spent until you approve on this step.'
-					}
-				]
-			: [
-					{
-						id: 'single',
-						label: 'Request',
-						question: spec?.title ?? 'Confirm this request',
-						blurb: 'This is the exact request that will be sent. Edit anything before approving.'
-					}
-				]
-	);
+	let steps = $derived.by<Step[]>(() => {
+		if (!isPostKind)
+			return [
+				{
+					id: 'single',
+					label: 'Request',
+					question: spec?.title ?? 'Confirm this request',
+					blurb: 'This is the exact request that will be sent. Edit anything before approving.'
+				}
+			];
+		const list: Step[] = [
+			{
+				id: 'subject',
+				label: 'Subject',
+				question: 'What are we posting?',
+				blurb:
+					'The topic, and the kind of thing this is. Everything after this adapts to what you pick here.'
+			},
+			{
+				id: 'look',
+				label: 'Look',
+				question: 'How should it look?',
+				blurb:
+					'Only the controls this format actually uses. Leave anything blank and the Director writes it.'
+			}
+		];
+		if (hasCraftStep)
+			list.push({
+				id: 'craft',
+				label: 'Craft',
+				question: 'What builds it?',
+				blurb:
+					'Every stage that will run, what it is for, and what it costs. Set one quality level, or choose stage by stage.'
+			});
+		list.push({
+			id: 'deliver',
+			label: 'Deliver',
+			question: 'Ready to make this?',
+			blurb: 'What you are about to generate, what it costs, and where it lands.'
+		});
+		return list;
+	});
 
 	let stepIndex = $state(0);
-	// Clamp rather than reset: switching Media mid-flow must never strand the user
-	// on a step index that no longer exists.
+	// Clamp rather than reset: switching format mid-flow must never strand the
+	// user on a step index that no longer exists.
 	let currentStep = $derived(steps[Math.min(stepIndex, steps.length - 1)]);
 	let isLastStep = $derived(stepIndex >= steps.length - 1);
 	let isFirstStep = $derived(stepIndex <= 0);
@@ -392,31 +566,61 @@
 	}
 
 	function confirm() {
+		if (isSeries) {
+			onOpenPlanner?.();
+			return;
+		}
 		const body: Record<string, unknown> = { ...(spec?.baseBody ?? {}) };
 		if (isPromptKind) {
 			body.prompt = prompt;
 		}
 		if (model) body.model = model;
-		if (videoModel) body.video_model = videoModel;
 		if (isPostKind) {
+			// The format is the request: media/format/still/refs come from ONE place,
+			// so the thing shown and the thing sent cannot describe different runs.
+			Object.assign(body, requestFor(formatId));
 			body.topic = topic || undefined;
-			body.media = media;
 			body.provider = provider;
-			body.format = format;
 			body.captions = captions;
 			body.ai_badge = aiBadge;
-			body.platforms = platforms;
-			body.product_id = productId || undefined;
-			body.product_photo_url = productPhotoUrl || undefined;
-			body.character_ref_url = characterRefUrl || undefined;
-			body.scene = scene || undefined;
+			body.platforms = selectablePlatforms;
+			// Only the references this composition feeds. A hidden field that is
+			// submitted anyway is how product-free posts were steered by a product
+			// the user never saw offered.
+			// Send the composition this dialog actually SHOWED. Leaving the caller's
+			// original refs in place would let a format switch generate against a
+			// contract the user never saw.
+			const chosen = getFormat(formatId);
+			body.refs = chosen?.request.refs
+				? { ...chosen.request.refs }
+				: { character: usesCharacterRef, product: usesProductRef };
+			body.product_id = usesProductRef && productId ? productId : undefined;
+			body.product_photo_url = usesProductRef && productPhotoUrl ? productPhotoUrl : undefined;
+			body.character_ref_url = usesCharacterRef && characterRefUrl ? characterRefUrl : undefined;
+			body.scene = needs('scene') && scene ? scene : undefined;
+			body.script = needs('script') && script.trim() ? script.trim() : undefined;
+			body.voice = needs('voice') && voice ? voice : undefined;
+			body.card_text = needs('cardText') && cardText.trim() ? cardText.trim() : undefined;
+			body.card_layout = needs('cardLayout') && cardLayout !== 'auto' ? cardLayout : undefined;
+			body.card_palette = needs('cardPalette') && cardPalette !== 'auto' ? cardPalette : undefined;
+			body.framing = needs('framing') && framingTouched ? framing : undefined;
+			body.still_model = picks.still || undefined;
+			body.video_model = picks.video || undefined;
+			body.still_url = stillUrl || undefined;
 			body.scheduled_date = scheduledDate || undefined;
 			body.scheduled_time = scheduledTime || undefined;
 		}
 		onConfirm(body);
 	}
 
-	const usd = (n: number) => `$${Number(n ?? 0).toFixed(3)}`;
+	/**
+	 * Money on this screen is always what the CUSTOMER pays — the provider
+	 * estimate converted at the platform markup, in their currency. Printing the
+	 * provider cost here (as this screen used to) understated every quote.
+	 */
+	const money = (usd: number) => quote(usd);
+	let metered = $derived(pricingContext().metered);
+	let costLabel = $derived(metered ? 'Est. charge' : 'Est. cost');
 
 	/** Hide a URL preview thumbnail if the image fails to load (bad/edited URL). */
 	function hideOnError(e: Event) {
@@ -471,11 +675,9 @@
 		</div>
 	{:else if preview}
 		<!-- ── The journey ──────────────────────────────────────────────
-		     A post is four decisions in a real order — what it is, how it
-		     looks, what builds it, where it goes — so the composer asks them
-		     in that order instead of stacking every field into one scroll.
-		     A prompt-kind run is a single decision and stays on one pane; a
-		     wizard for two fields would be worse than the form it replaced. -->
+		     Derived from what is actually being composed: four decisions for a
+		     post, three when the format has nothing to configure, one for a
+		     prompt-kind run. -->
 		{#if steps.length > 1}
 			<nav class="journey" aria-label="Composer steps">
 				{#each steps as s, i (s.id)}
@@ -523,62 +725,65 @@
 				</header>
 
 				<div class="pane-body">
-					{#if modelOptions.length && (!isPostKind || currentStep.id === 'craft')}
-						<div class="fld">
-							<span class="fld-label" id="gc-model-label">Model — pick your budget vs quality</span>
-							<div
-								class="models"
-								role="radiogroup"
-								aria-labelledby="gc-model-label"
-								aria-invalid={!!refWarning}
-								aria-describedby={refWarning ? 'gc-model-warn' : undefined}
-							>
-								{#each modelOptions as m}
-									<button
-										type="button"
-										class="model"
-										class:on={model === m.id}
-										role="radio"
-										aria-checked={model === m.id}
-										onclick={() => (model = m.id)}
-									>
-										<span class="model-top">
-											<span class="model-name">{m.label}</span>
-											<span class="model-usd">{usd(m.usd)}</span>
-										</span>
-										<span class="model-tier tier-{m.tier}">{TIER_LABEL[m.tier]}</span>
-										<span class="model-note">{m.note}</span>
-									</button>
-								{/each}
-							</div>
-							{#if refWarning}
-								<p class="model-warn" id="gc-model-warn" role="alert">
-									<svg
-										width="14"
-										height="14"
-										viewBox="0 0 24 24"
-										fill="none"
-										stroke="currentColor"
-										stroke-width="2"
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										aria-hidden="true"
-										><path
-											d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"
-										/><line x1="12" x2="12" y1="9" y2="13" /><line
-											x1="12"
-											x2="12.01"
-											y1="17"
-											y2="17"
-										/></svg
-									>
-									<span>{refWarning}</span>
-								</p>
-							{/if}
-						</div>
-					{/if}
-
+					<!-- ── Prompt-kind: one decision, one pane ─────────────────── -->
 					{#if isPromptKind}
+						{#if modelOptions.length}
+							<div class="fld">
+								<span class="fld-label" id="gc-model-label"
+									>Model — pick your budget vs quality</span
+								>
+								<div
+									class="models"
+									role="radiogroup"
+									aria-labelledby="gc-model-label"
+									aria-invalid={!!refWarning}
+									aria-describedby={refWarning ? 'gc-model-warn' : undefined}
+								>
+									{#each modelOptions as m}
+										<button
+											type="button"
+											class="model"
+											class:on={model === m.id}
+											role="radio"
+											aria-checked={model === m.id}
+											onclick={() => (model = m.id)}
+										>
+											<span class="model-top">
+												<span class="model-name">{m.label}</span>
+												<span class="model-usd">{money(m.usd)}</span>
+											</span>
+											<span class="model-tier tier-{m.tier}">{TIER_LABEL[m.tier]}</span>
+											<span class="model-note">{m.note}</span>
+										</button>
+									{/each}
+								</div>
+								{#if refWarning}
+									<p class="model-warn" id="gc-model-warn" role="alert">
+										<svg
+											width="14"
+											height="14"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											aria-hidden="true"
+											><path
+												d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"
+											/><line x1="12" x2="12" y1="9" y2="13" /><line
+												x1="12"
+												x2="12.01"
+												y1="17"
+												y2="17"
+											/></svg
+										>
+										<span>{refWarning}</span>
+									</p>
+								{/if}
+							</div>
+						{/if}
+
 						<div class="fld">
 							<label class="fld-label" for="gc-prompt">Prompt sent to the model</label>
 							<textarea id="gc-prompt" bind:value={prompt} rows="6" spellcheck="false"></textarea>
@@ -613,135 +818,87 @@
 						{/if}
 					{/if}
 
+					<!-- ── Subject: what are we posting? ───────────────────────── -->
 					{#if isPostKind && currentStep.id === 'subject'}
 						<div class="fld">
 							<label class="fld-label" for="gc-topic">Topic</label>
 							<input
 								id="gc-topic"
+								list="gc-topic-ideas"
+								autocomplete="off"
 								bind:value={topic}
 								placeholder="Leave blank to let the persona pick"
 							/>
+							<datalist id="gc-topic-ideas">
+								{#each topicSuggestions as t}
+									<option value={t}></option>
+								{/each}
+							</datalist>
+							<span class="hint">
+								Type anything, or start from one of the {topicSuggestions.length} archetypes this persona's
+								Studio already ships. Blank still lets the persona choose.
+							</span>
 						</div>
 
-						<div class="row">
-							<div class="fld">
-								<label class="fld-label" for="gc-media">Media</label>
-								<!-- "video" covers BOTH spokesperson and b-roll — the Video format
-							     chips below decide which — so the label must not claim b-roll. -->
-								<select id="gc-media" bind:value={media}>
-									<option value="video">Video</option>
-									<option value="image">Image only</option>
-									<option value="cinematic">Cinematic (multi-shot)</option>
-								</select>
+						<div class="fld">
+							<span class="fld-label" id="gc-kind-label">What kind of post?</span>
+							<div class="kinds" role="radiogroup" aria-labelledby="gc-kind-label">
+								{#each availableKinds as k}
+									<button
+										type="button"
+										class="kind"
+										class:on={kind === k.id}
+										role="radio"
+										aria-checked={kind === k.id}
+										onclick={() => pickKind(k.id)}
+									>
+										<span class="kind-name">{k.label}</span>
+										<span class="kind-sub">{k.sub}</span>
+									</button>
+								{/each}
 							</div>
 						</div>
 
-						{#if media === 'video'}
-							<div class="fld">
-								<span class="fld-label" id="gc-format-label">Video format</span>
-								<div
-									class="chips"
-									role="radiogroup"
-									aria-labelledby="gc-format-label"
-									aria-describedby="gc-format-hint"
-								>
+						<div class="fld">
+							<span class="fld-label" id="gc-format-label">Format</span>
+							<div class="formats" role="radiogroup" aria-labelledby="gc-format-label">
+								{#each formatsOfKind(kind) as f (f.id)}
+									{@const cost = planTotalUsd(
+										planPipeline({
+											formatId: f.id,
+											options: planOptions,
+											fixed: planFixed,
+											tier: tier === 'manual' ? undefined : tier,
+											shots: preview?.plan?.shots ?? 4
+										})
+									)}
 									<button
 										type="button"
-										class="chip"
-										class:on={format === 'spokesperson' && !isGraphicCard}
+										class="fmt"
+										class:on={formatId === f.id}
 										role="radio"
-										aria-checked={format === 'spokesperson' && !isGraphicCard}
-										disabled={isGraphicCard}
-										title={isGraphicCard
-											? 'A graphic card has no face to animate — video runs as b-roll motion.'
-											: undefined}
-										onclick={() => (format = 'spokesperson')}
+										aria-checked={formatId === f.id}
+										onclick={() => pickFormat(f.id)}
 									>
-										<svg
-											width="14"
-											height="14"
-											viewBox="0 0 24 24"
-											fill="none"
-											stroke="currentColor"
-											stroke-width="2"
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											aria-hidden="true"
-											><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" /><path
-												d="M19 10v2a7 7 0 0 1-14 0v-2"
-											/><line x1="12" x2="12" y1="19" y2="22" /></svg
-										>
-										Spokesperson
+										<span class="fmt-top">
+											<span class="fmt-name">{f.label}</span>
+											<span class="fmt-cost">{f.steps.length ? money(cost) : 'varies'}</span>
+										</span>
+										<span class="fmt-note">{f.note}</span>
 									</button>
-									<button
-										type="button"
-										class="chip"
-										class:on={format === 'broll'}
-										role="radio"
-										aria-checked={format === 'broll'}
-										onclick={() => (format = 'broll')}
-									>
-										<svg
-											width="14"
-											height="14"
-											viewBox="0 0 24 24"
-											fill="none"
-											stroke="currentColor"
-											stroke-width="2"
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											aria-hidden="true"
-											><rect x="2" y="3" width="20" height="18" rx="2" /><path
-												d="M7 3v18M17 3v18M2 9h5M2 15h5M17 9h5M17 15h5"
-											/></svg
-										>
-										B-roll
-									</button>
-									<button
-										type="button"
-										class="chip"
-										class:on={format === 'auto'}
-										role="radio"
-										aria-checked={format === 'auto'}
-										onclick={() => (format = 'auto')}
-									>
-										<svg
-											width="14"
-											height="14"
-											viewBox="0 0 24 24"
-											fill="none"
-											stroke="currentColor"
-											stroke-width="2"
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											aria-hidden="true"
-											><path
-												d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"
-											/></svg
-										>
-										Auto
-									</button>
-								</div>
-								<span class="hint" id="gc-format-hint">
-									{#if isGraphicCard}
-										A graphic card has no face to animate — video always runs as b-roll motion of
-										the card.
-									{:else if format === 'spokesperson'}
-										The character speaks on camera — voiceover + talking head (OmniHuman). The
-										b-roll model picker below doesn't apply to this run.
-									{:else if format === 'broll'}
-										A silent product/lifestyle clip from the b-roll model below. No voiceover.
-									{:else}
-										The Director picks spokesperson or b-roll per post (biased to spokesperson).
-										Pick one to lock the exact pipeline.
-									{/if}
+								{/each}
+							</div>
+							{#if kind === 'series'}
+								<span class="hint">
+									A run of posts is a different question from one post — cadence, horizon and a mix
+									of formats. Approving here opens the campaign planner, which asks those.
 								</span>
-							</div>
-						{/if}
+							{/if}
+						</div>
 
-						{#if composition && (isGraphicCard || !usesCharacterRef || !usesProductRef)}
+						{#if isGraphicCard || !usesCharacterRef || !usesProductRef}
 							<!-- The contract, stated up front: which references this run feeds.
-						     Fields for unused references are not rendered at all below. -->
+							     Fields for unused references are not rendered at all below. -->
 							<p class="comp-note" role="note">
 								<svg
 									width="14"
@@ -759,8 +916,8 @@
 								>
 								<span>
 									{#if isGraphicCard}
-										<strong>Typographic card.</strong> The model renders the card's text as the artwork.
-										No reference images are sent — no persona face, no product photo.
+										<strong>Typographic card.</strong> The card's text IS the artwork. No reference images
+										are sent — no persona face, no product photo.
 									{:else if !usesCharacterRef && !usesProductRef}
 										<strong>No reference images.</strong> This composition includes neither the persona
 										nor a product — the scene is generated purely from the prompt.
@@ -768,28 +925,160 @@
 										<strong>Product reference only.</strong> The persona does not appear in this composition,
 										so no face reference is sent (and none is generated).
 									{:else}
-										<strong>Face reference only.</strong> Product-free channel content — the brand-kit
-										product photo is not attached.
+										<strong>Face reference only.</strong> Product-free channel content — the brand product
+										photo is not attached.
 									{/if}
 								</span>
 							</p>
 						{/if}
 					{/if}
 
+					<!-- ── Look: rendered from format.needs, nothing else ──────── -->
 					{#if isPostKind && currentStep.id === 'look'}
-						<div class="fld">
-							<label class="fld-label" for="gc-scene">Scene / visual prompt</label>
-							<textarea
-								id="gc-scene"
-								aria-describedby="gc-scene-hint"
-								bind:value={scene}
-								rows="4"
-								placeholder="Leave blank to let the Director write it"
-							></textarea>
-							<span class="hint" id="gc-scene-hint">{preview.sceneNote}</span>
-						</div>
+						{#if needs('planner')}
+							<p class="comp-note" role="note">
+								<span>
+									The planner takes over from here — how many posts, over how long, in what mix.
+									This composer handles one post.
+								</span>
+							</p>
+						{/if}
 
-						{#if usesProductRef && products.length}
+						{#if needs('cardText')}
+							<div class="fld">
+								<label class="fld-label" for="gc-cardtext">Card text</label>
+								<textarea
+									id="gc-cardtext"
+									aria-describedby="gc-cardtext-hint"
+									bind:value={cardText}
+									rows="3"
+									placeholder="Leave blank and the Director writes the line"
+								></textarea>
+								<span class="hint" id="gc-cardtext-hint">
+									Line breaks decide the shape — one line reads as a statement, several become a
+									stack or a list.
+								</span>
+							</div>
+							<div class="row">
+								<div class="fld">
+									<label class="fld-label" for="gc-cardlayout">Layout</label>
+									<select id="gc-cardlayout" bind:value={cardLayout}>
+										<option value="auto">Auto — match the text</option>
+										<option value="statement">Statement</option>
+										<option value="quote">Quote</option>
+										<option value="stack">Stack</option>
+										<option value="list">List</option>
+										<option value="split">Split</option>
+									</select>
+								</div>
+								<div class="fld">
+									<label class="fld-label" for="gc-cardpalette">Palette</label>
+									<select id="gc-cardpalette" bind:value={cardPalette}>
+										<option value="auto">Auto — from the brand brief</option>
+										<option value="ink">Ink</option>
+										<option value="warm">Warm</option>
+										<option value="cool">Cool</option>
+										<option value="mono">Mono</option>
+									</select>
+								</div>
+							</div>
+						{/if}
+
+						{#if needs('script')}
+							<div class="fld">
+								<label class="fld-label" for="gc-script">Spoken line</label>
+								<textarea
+									id="gc-script"
+									aria-describedby="gc-script-hint"
+									bind:value={script}
+									rows="3"
+									placeholder="Leave blank and the Director writes it"
+								></textarea>
+								<span class="hint" id="gc-script-hint">
+									What the persona says on camera. Blank keeps the Director's line, which is written
+									from the topic and the brand voice.
+								</span>
+							</div>
+						{/if}
+
+						{#if needs('voice') && voices.length}
+							<div class="fld">
+								<label class="fld-label" for="gc-voice">Voice</label>
+								<select id="gc-voice" bind:value={voice}>
+									{#each voices as v}
+										<option value={v.name}
+											>{v.label} — {v.style}{v.accent ? ` (${v.accent})` : ''}</option
+										>
+									{/each}
+								</select>
+								<span class="hint">
+									Defaults to the persona's pinned voice. Changing it here applies to this post
+									only.
+								</span>
+							</div>
+						{/if}
+
+						{#if needs('scene')}
+							<div class="fld">
+								<label class="fld-label" for="gc-scene">Scene / visual prompt</label>
+								<textarea
+									id="gc-scene"
+									aria-describedby="gc-scene-hint"
+									bind:value={scene}
+									rows="4"
+									placeholder="Leave blank to let the Director write it"
+								></textarea>
+								<span class="hint" id="gc-scene-hint">{preview.sceneNote}</span>
+							</div>
+						{/if}
+
+						{#if needs('framing')}
+							<div class="fld">
+								<span class="fld-label" id="gc-framing-label">Framing</span>
+								<div class="chips" role="radiogroup" aria-labelledby="gc-framing-label">
+									<button
+										type="button"
+										class="chip"
+										class:on={framingTouched && framing === 'front'}
+										role="radio"
+										aria-checked={framingTouched && framing === 'front'}
+										onclick={() => {
+											framing = 'front';
+											framingTouched = true;
+										}}>Front camera</button
+									>
+									<button
+										type="button"
+										class="chip"
+										class:on={framing === 'mirror'}
+										role="radio"
+										aria-checked={framing === 'mirror'}
+										onclick={() => {
+											framing = 'mirror';
+											framingTouched = true;
+										}}>Mirror selfie</button
+									>
+									<button
+										type="button"
+										class="chip"
+										class:on={framing === 'third'}
+										role="radio"
+										aria-checked={framing === 'third'}
+										onclick={() => {
+											framing = 'third';
+											framingTouched = true;
+										}}>Third person</button
+									>
+								</div>
+								<span class="hint">
+									How the shot was supposedly taken. Leave it alone and this run keeps whatever the
+									template or the Director decides; front camera and mirror selfie read as real,
+									third person reads as an ad — which is sometimes what you want.
+								</span>
+							</div>
+						{/if}
+
+						{#if usesProductRef && needs('product') && products.length}
 							<div class="fld">
 								<label class="fld-label" for="gc-product">Product</label>
 								<select
@@ -804,19 +1093,16 @@
 									{/each}
 								</select>
 								<span class="hint" id="gc-product-hint">
-									Pick a product from this persona's brand kit — its photo fills the URL below.
-									Products come from the brand brief selected in the persona's <strong
-										>Profile</strong
-									>.
+									Products come from the <strong>Brand Brief</strong> selected in this persona's Profile.
 								</span>
 							</div>
 						{/if}
 
-						{#if usesProductRef || usesCharacterRef}
+						{#if (usesProductRef && needs('product')) || (usesCharacterRef && needs('face'))}
 							<!-- Only the reference fields this composition actually feeds. A field
-						     for a reference the run won't use would be a lie — it's not shown. -->
+							     for a reference the run won't use would be a lie — it's not shown. -->
 							<div class="row">
-								{#if usesProductRef}
+								{#if usesProductRef && needs('product')}
 									<div class="fld">
 										<label class="fld-label" for="gc-product-url"
 											>Product photo URL{products.length ? ' (override)' : ''}</label
@@ -841,13 +1127,13 @@
 										{/if}
 									</div>
 								{/if}
-								{#if usesCharacterRef}
+								{#if usesCharacterRef && needs('face')}
 									<div class="fld">
-										<label class="fld-label" for="gc-character-url">Character reference URL</label>
+										<label class="fld-label" for="gc-character-url">Face override URL</label>
 										<input
 											id="gc-character-url"
 											inputmode="url"
-											aria-describedby={characterRefUrl ? undefined : 'gc-character-hint'}
+											aria-describedby="gc-character-hint"
 											bind:value={characterRefUrl}
 											placeholder="https://…"
 										/>
@@ -855,28 +1141,27 @@
 											<img
 												class="url-preview"
 												src={characterRefUrl}
-												alt="Character reference preview"
+												alt="Face reference preview"
 												width="84"
 												height="84"
 												loading="lazy"
 												onload={showImg}
 												onerror={hideOnError}
 											/>
-										{:else}
-											<!-- Blank ≠ no face. The server sends the persona's PINNED face (or
-										     generates one on the fly) so the character stays consistent. -->
-											<span class="hint char-auto" id="gc-character-hint">
-												Blank uses the persona's pinned face — a consistent face is still sent
-												(generated automatically the first time). Paste a URL only to override it
-												for this post.
-											</span>
 										{/if}
+										<!-- Blank ≠ no face. The server sends the persona's pinned face (the
+										     same image the Profile tab calls the profile picture) so the
+										     character stays consistent. -->
+										<span class="hint char-auto" id="gc-character-hint">
+											Blank uses this persona's pinned face — the one set on their Profile. Paste a
+											URL only to override it for this post.
+										</span>
 									</div>
 								{/if}
 							</div>
 						{/if}
 
-						{#if media !== 'image'}
+						{#if needs('captions')}
 							<label class="captions-toggle">
 								<!-- The 16px control keeps its size; .cb-hit gives it a 44×44 target. -->
 								<span class="cb-hit">
@@ -913,164 +1198,219 @@
 						{/if}
 					{/if}
 
+					<!-- ── Craft: the format's own step plan, priced ───────────── -->
 					{#if isPostKind && currentStep.id === 'craft'}
-						<div class="fld">
-							<label class="fld-label" for="gc-provider">Provider</label>
-							<select id="gc-provider" bind:value={provider}>
-								<option value="auto">Auto</option>
-								<option value="fal">fal.ai</option>
-								<option value="openrouter">OpenRouter</option>
-							</select>
+						<div class="tierbar">
+							<span class="tier-label" id="gc-tier-label">Quality</span>
+							<div class="segs" role="radiogroup" aria-labelledby="gc-tier-label">
+								{#each ['budget', 'balanced', 'premium', 'manual'] as t}
+									<button
+										type="button"
+										class="seg"
+										class:on={tier === t}
+										role="radio"
+										aria-checked={tier === t}
+										onclick={() => pickTier(t as typeof tier)}
+									>
+										{t === 'manual' ? 'Choose per stage' : TIER_LABEL[t as 'budget']}
+									</button>
+								{/each}
+							</div>
+							<span class="tier-reach">
+								{#if tier === 'manual'}
+									Each stage below uses its default until you change it.
+								{:else}
+									Applies to <strong>{tierReach.selectable}</strong> of {tierReach.paid} paid stages in
+									this format — the rest have only one model wired.
+								{/if}
+							</span>
 						</div>
 
-						<!-- Only for runs that will actually feed an i2v model: image-only runs
-					     never touch it, and cinematic runs use their own fixed pipeline —
-					     offering the picker there would imply a choice that has no effect. -->
-						{#if videoModelOptions.length && media === 'video' && format !== 'spokesperson'}
-							<div class="fld">
-								<span class="fld-label" id="gc-videomodel-label"
-									>Video model — the biggest cost in this run</span
-								>
-								<div class="models" role="radiogroup" aria-labelledby="gc-videomodel-label">
-									{#each videoModelOptions as m}
-										<button
-											type="button"
-											class="model"
-											class:on={videoModel === m.id}
-											role="radio"
-											aria-checked={videoModel === m.id}
-											onclick={() => (videoModel = m.id)}
-										>
-											<span class="model-top">
-												<span class="model-name">{m.label}</span>
-												<span class="model-usd">{usd(m.usd)}</span>
+						<div class="stack">
+							{#each activePlan as s (s.kind)}
+								{@const options = planOptions[s.kind] ?? []}
+								<div class="stepcard" class:supplied={s.supplied}>
+									<div class="sc-top">
+										<div class="sc-id">
+											<span class="sc-name">
+												{s.label}
+												{#if s.model.tier}
+													<span class="model-tier tier-{s.model.tier}">
+														{s.model.tier === 'free' ? 'Free' : TIER_LABEL[s.model.tier]}
+													</span>
+												{/if}
 											</span>
-											<span class="model-tier tier-{m.tier}">{TIER_LABEL[m.tier]}</span>
-											<span class="model-note">{m.note}</span>
-										</button>
-									{/each}
-								</div>
-								{#if selectedVideoModel}
-									<!-- Params adjust to the picked model: what it actually supports. -->
-									<div class="model-params">
-										<span class="param" class:param-off={!selectedVideoModel.supportsAudio}>
-											{#if selectedVideoModel.supportsAudio}
-												<svg
-													width="13"
-													height="13"
-													viewBox="0 0 24 24"
-													fill="none"
-													stroke="currentColor"
-													stroke-width="2"
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													aria-hidden="true"
-													><path d="M11 5 6 9H2v6h4l5 4z" /><path
-														d="M15.54 8.46a5 5 0 0 1 0 7.07"
-													/><path d="M19.07 4.93a10 10 0 0 1 0 14.14" /></svg
-												>
-												Audio track
-											{:else}
-												<svg
-													width="13"
-													height="13"
-													viewBox="0 0 24 24"
-													fill="none"
-													stroke="currentColor"
-													stroke-width="2"
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													aria-hidden="true"
-													><path d="M11 5 6 9H2v6h4l5 4z" /><line
-														x1="22"
-														x2="16"
-														y1="9"
-														y2="15"
-													/><line x1="16" x2="22" y1="9" y2="15" /></svg
-												>
-												Silent — no audio
-											{/if}
+											<span class="sc-purpose">{s.purpose}</span>
+										</div>
+										<span class="sc-price">
+											<strong>{s.supplied ? money(0) : money(s.usd)}</strong>
 										</span>
-										{#if selectedVideoModel.supportsDuration}
-											<span class="param">
-												<svg
-													width="13"
-													height="13"
-													viewBox="0 0 24 24"
-													fill="none"
-													stroke="currentColor"
-													stroke-width="2"
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													aria-hidden="true"
-													><circle cx="12" cy="12" r="10" /><polyline
-														points="12 6 12 12 16 14"
-													/></svg
-												>
-												Custom duration
-											</span>
+									</div>
+									<div class="sc-ctl">
+										{#if s.supplied}
+											<span class="sc-note"
+												>Using the image you supplied — this stage won't run.</span
+											>
+										{:else if options.length > 1}
+											<select
+												aria-label="Model for the {s.label} stage"
+												value={s.model.id}
+												onchange={(e) =>
+													pickStepModel(s.kind, (e.currentTarget as HTMLSelectElement).value)}
+											>
+												{#each options as m}
+													<option value={m.id}>{m.label} — {money(m.usd)}</option>
+												{/each}
+											</select>
 										{:else}
-											<span class="param param-off">
-												<svg
-													width="13"
-													height="13"
-													viewBox="0 0 24 24"
-													fill="none"
-													stroke="currentColor"
-													stroke-width="2"
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													aria-hidden="true"
-													><circle cx="12" cy="12" r="10" /><polyline
-														points="12 6 12 12 16 14"
-													/></svg
-												>
-												Fixed 5s
-											</span>
+											<span class="sc-note"
+												>{s.model.label} — the only model wired for this stage.</span
+											>
 										{/if}
-										{#if selectedVideoModel.caveat}
-											<span class="param param-warn">
-												<svg
-													width="13"
-													height="13"
-													viewBox="0 0 24 24"
-													fill="none"
-													stroke="currentColor"
-													stroke-width="2"
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													aria-hidden="true"
-													><path
-														d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"
-													/><line x1="12" x2="12" y1="9" y2="13" /><line
-														x1="12"
-														x2="12.01"
-														y1="17"
-														y2="17"
-													/></svg
-												>
-												{selectedVideoModel.caveat}
-											</span>
+										{#if s.via === 'tier'}
+											<span class="sc-via">set by quality level</span>
+										{:else if s.via === 'nearest'}
+											<span class="sc-via warn">no {tier} model here — nearest used</span>
+										{:else if s.via === 'picked' && options.length > 1}
+											<span class="sc-via">your pick</span>
 										{/if}
 									</div>
-								{/if}
-							</div>
-						{/if}
-
-						<div class="steps">
-							<span class="fld-label">Pipeline that will run</span>
-							{#each activeSteps as s}
-								{@const isVid = String(s.step).includes('b-roll') && selectedVideoModel}
-								<div class="step">
-									<span class="step-name">{s.step}</span>
-									<code>{isVid ? selectedVideoModel?.label : s.model}</code>
-									<span class="step-usd">{usd(isVid ? selectedVideoModel!.usd : s.usd)}</span>
+									{#if s.model.caveat && !s.supplied}
+										<p class="model-warn" role="note">
+											<svg
+												width="14"
+												height="14"
+												viewBox="0 0 24 24"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="2"
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												aria-hidden="true"
+												><path
+													d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"
+												/><line x1="12" x2="12" y1="9" y2="13" /><line
+													x1="12"
+													x2="12.01"
+													y1="17"
+													y2="17"
+												/></svg
+											>
+											<span>{s.model.caveat}</span>
+										</p>
+									{/if}
 								</div>
 							{/each}
 						</div>
+
+						{#if activePlan.some((s) => s.kind === 'still')}
+							<!-- The only honest "skip a stage": supply its output. Unchecking a
+							     stage outright would build pipelines that cannot run (a talking
+							     head with no voiceover), so it isn't offered. -->
+							<div class="fld">
+								<label class="fld-label" for="gc-still-url">Use my own still (optional)</label>
+								<input
+									id="gc-still-url"
+									inputmode="url"
+									aria-describedby="gc-still-url-hint"
+									bind:value={stillUrl}
+									placeholder="https://…"
+								/>
+								<span class="hint" id="gc-still-url-hint">
+									Paste an image and the still stage doesn't run — everything after it uses your
+									image instead. The quote above drops accordingly.
+								</span>
+							</div>
+						{/if}
+
+						<div class="fld">
+							<label class="fld-label" for="gc-provider">Provider routing</label>
+							<select id="gc-provider" bind:value={provider}>
+								<option value="auto">Auto — fal, falling back to OpenRouter</option>
+								<option value="fal">fal.ai only</option>
+								<option value="openrouter">OpenRouter only</option>
+							</select>
+						</div>
 					{/if}
 
+					<!-- ── Deliver: what is about to be made, then where it goes ── -->
 					{#if isPostKind && currentStep.id === 'deliver'}
+						<div class="confirm">
+							<div class="confirm-preview">
+								{#if isGraphicCard}
+									<!-- A card is deterministic: this is genuinely what comes out. -->
+									<div class="frame frame-card">
+										<span>{cardText || 'The Director writes this line'}</span>
+									</div>
+									<span class="frame-cap">
+										{cardText
+											? 'The card that will be made'
+											: 'Layout preview — the line is written at run time'}
+									</span>
+								{:else}
+									<!-- Everything else is written by the Director at run time, so the
+									     honest preview is the INPUTS, labelled as inputs. A pretty
+									     stand-in frame would be the worst possible lie on this screen. -->
+									<div class="frame frame-refs">
+										<div class="frame-thumbs">
+											{#if usesCharacterRef && characterRefUrl}
+												<img
+													src={characterRefUrl}
+													alt="Face reference"
+													width="56"
+													height="56"
+													loading="lazy"
+													onerror={hideOnError}
+												/>
+											{/if}
+											{#if usesProductRef && productPhotoUrl}
+												<img
+													src={productPhotoUrl}
+													alt="Product reference"
+													width="56"
+													height="56"
+													loading="lazy"
+													onerror={hideOnError}
+												/>
+											{/if}
+											{#if !characterRefUrl && !productPhotoUrl}
+												<span class="frame-empty">No reference images</span>
+											{/if}
+										</div>
+										<span class="frame-meta">9:16 · {format?.video ? 'video' : 'still'}</span>
+									</div>
+									<span class="frame-cap">
+										The references this run feeds — not the result. The frame itself is written by
+										the Director when you approve.
+									</span>
+								{/if}
+							</div>
+
+							<dl class="summary">
+								<div class="sumrow">
+									<dt>Making</dt>
+									<dd><strong>{format?.label}</strong> — {format?.note}</dd>
+								</div>
+								<div class="sumrow">
+									<dt>About</dt>
+									<dd>{topic || 'whatever this persona feels like posting'}</dd>
+								</div>
+								<div class="sumrow">
+									<dt>Built by</dt>
+									<dd>{activePlan.map((s) => s.label).join(' → ') || '—'}</dd>
+								</div>
+								<div class="sumrow">
+									<dt>{costLabel}</dt>
+									<dd>
+										<strong>{money(planUsd)}</strong>
+										{metered
+											? ' — taken from your balance when you approve'
+											: ' — estimated, nothing is debited'}
+									</dd>
+								</div>
+							</dl>
+						</div>
+
 						{#if preview.connectedPlatforms?.length}
 							<div class="fld">
 								<span class="fld-label" id="gc-platforms-label"
@@ -1083,23 +1423,34 @@
 									aria-describedby="gc-platforms-hint"
 								>
 									{#each preview.connectedPlatforms as p}
+										{@const blocked = platformBlocked(p)}
 										<button
 											type="button"
 											class="chip"
-											class:on={platforms.includes(p)}
-											aria-pressed={platforms.includes(p)}
+											class:on={platforms.includes(p) && !blocked}
+											class:blocked
+											disabled={blocked}
+											aria-pressed={platforms.includes(p) && !blocked}
+											title={blocked
+												? `${p} only accepts video — this format makes a still.`
+												: undefined}
 											onclick={() => togglePlatform(p)}>{p}</button
 										>
 									{/each}
 								</div>
 								<span class="hint" id="gc-platforms-hint">
-									Only connected platforms are shown — a post only publishes where an account is
-									connected.
+									{#if preview.connectedPlatforms.some((p: string) => platformBlocked(p))}
+										Greyed accounts only accept video, and this format makes a still — they are left
+										out instead of failing after you've paid.
+									{:else}
+										Only connected platforms are shown — a post only publishes where an account is
+										connected.
+									{/if}
 								</span>
 							</div>
 						{:else}
 							<!-- No connected account: a post can't be scheduled to publish. It can
-						     still be saved as a draft and posted later once a platform connects. -->
+							     still be saved as a draft and posted later once a platform connects. -->
 							<div class="no-conn" role="alert">
 								<strong>
 									<svg
@@ -1179,8 +1530,8 @@
 		{/key}
 
 		<!-- Model/provider footnote for prompt-kind runs only. A post-kind run
-		     lists every model in the Craft step's pipeline, and the running cost
-		     is pinned in the footer on every step — repeating either here just
+		     lists every model in the Craft step's plan, and the running price is
+		     pinned in the footer on every step — repeating either here just
 		     printed the same number twice. -->
 		{#if !isPostKind && (preview.model || preview.provider)}
 			<div class="meta">
@@ -1191,12 +1542,13 @@
 	{/if}
 
 	{#snippet footer()}
-		<!-- The running cost lives in the footer, visible on EVERY step. It is the
-		     one number that should never be a surprise at the end of a journey. -->
+		<!-- The running price lives in the footer, visible on EVERY step. It is the
+		     one number that should never be a surprise at the end of a journey —
+		     and it is what the customer pays, not what the provider charges us. -->
 		{#if preview}
 			<span class="foot-cost" aria-live="polite">
-				<span class="foot-cost-label">Est. cost</span>
-				<strong>{usd(isPostKind ? livePostTotal : liveCost)}</strong>
+				<span class="foot-cost-label">{costLabel}</span>
+				<strong>{money(isPostKind ? planUsd : liveCost)}</strong>
 			</span>
 		{/if}
 		{#if isFirstStep}
@@ -1243,6 +1595,314 @@
 </Modal>
 
 <style>
+	/* ── Kind → format cascade (Subject) ────────────────────────────────── */
+	.kinds {
+		display: flex;
+		gap: 0.5rem;
+		flex-wrap: wrap;
+	}
+	.kind {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 0.1rem;
+		min-width: 116px;
+		padding: 0.55rem 0.85rem;
+		border: 1px solid var(--border-strong);
+		border-radius: 10px;
+		background: var(--surface);
+		color: var(--text);
+		cursor: pointer;
+		text-align: left;
+		font: inherit;
+	}
+	.kind:hover {
+		border-color: var(--border-hover);
+	}
+	.kind.on {
+		border-color: var(--accent);
+		background: var(--accent-soft);
+	}
+	.kind-name {
+		font-weight: 600;
+		font-size: 0.9rem;
+	}
+	.kind-sub {
+		font-size: 0.72rem;
+		color: var(--text-dim);
+	}
+	.formats {
+		display: grid;
+		gap: 0.5rem;
+	}
+	@media (min-width: 640px) {
+		.formats {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+	}
+	.fmt {
+		display: flex;
+		flex-direction: column;
+		gap: 0.15rem;
+		padding: 0.6rem 0.75rem;
+		border: 1px solid var(--border-strong);
+		border-radius: 10px;
+		background: var(--surface);
+		color: var(--text);
+		cursor: pointer;
+		text-align: left;
+		font: inherit;
+	}
+	.fmt:hover {
+		border-color: var(--border-hover);
+	}
+	.fmt.on {
+		border-color: var(--accent);
+		background: var(--accent-soft);
+	}
+	.fmt-top {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.6rem;
+	}
+	.fmt-name {
+		font-weight: 600;
+		font-size: 0.88rem;
+	}
+	.fmt-cost {
+		font-size: 0.78rem;
+		color: var(--text-muted);
+		font-variant-numeric: tabular-nums;
+		white-space: nowrap;
+	}
+	.fmt-note {
+		font-size: 0.75rem;
+		color: var(--text-dim);
+		line-height: 1.4;
+	}
+
+	/* ── Craft: quality level + the format's own stages ─────────────────── */
+	.tierbar {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+		flex-wrap: wrap;
+		padding: 0.7rem 0.8rem;
+		margin-bottom: 0.9rem;
+		background: var(--surface-2);
+		border: 1px solid var(--border);
+		border-radius: 10px;
+	}
+	.tier-label {
+		font-size: 0.8rem;
+		font-weight: 600;
+	}
+	.segs {
+		display: inline-flex;
+		gap: 2px;
+		padding: 2px;
+		background: var(--surface);
+		border: 1px solid var(--border-strong);
+		border-radius: 8px;
+		flex-wrap: wrap;
+	}
+	.seg {
+		font: inherit;
+		font-size: 0.78rem;
+		padding: 0.28rem 0.6rem;
+		border: 0;
+		border-radius: 6px;
+		background: transparent;
+		color: var(--text-dim);
+		cursor: pointer;
+	}
+	.seg.on {
+		background: var(--accent);
+		color: #fff;
+		font-weight: 600;
+	}
+	.tier-reach {
+		flex: 1 1 200px;
+		min-width: 180px;
+		font-size: 0.76rem;
+		color: var(--text-dim);
+	}
+	.stack {
+		display: grid;
+		gap: 0.5rem;
+	}
+	.stepcard {
+		display: grid;
+		gap: 0.45rem;
+		padding: 0.65rem 0.8rem;
+		border: 1px solid var(--border);
+		border-radius: 10px;
+		background: var(--surface);
+	}
+	.stepcard.supplied {
+		opacity: 0.65;
+	}
+	.sc-top {
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: 0.8rem;
+	}
+	.sc-id {
+		display: flex;
+		flex-direction: column;
+		gap: 0.1rem;
+		min-width: 0;
+	}
+	.sc-name {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		flex-wrap: wrap;
+		font-weight: 600;
+		font-size: 0.88rem;
+	}
+	.sc-purpose {
+		font-size: 0.76rem;
+		color: var(--text-dim);
+		line-height: 1.45;
+	}
+	.sc-price strong {
+		font-size: 0.92rem;
+		font-variant-numeric: tabular-nums;
+		white-space: nowrap;
+	}
+	.sc-ctl {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		flex-wrap: wrap;
+	}
+	.sc-ctl select {
+		max-width: 100%;
+		flex: 1 1 240px;
+	}
+	.sc-note {
+		font-size: 0.75rem;
+		color: var(--text-dim);
+	}
+	.sc-via {
+		font-size: 0.7rem;
+		color: var(--text-dim);
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+	}
+	.sc-via.warn {
+		color: var(--warning-text);
+	}
+	.model-tier.tier-free {
+		background: var(--surface-3, var(--surface-2));
+		color: var(--text-dim);
+	}
+
+	/* ── Deliver: what is about to be made ──────────────────────────────── */
+	.confirm {
+		display: grid;
+		gap: 0.9rem;
+		margin-bottom: 1rem;
+	}
+	@media (min-width: 640px) {
+		.confirm {
+			grid-template-columns: 170px minmax(0, 1fr);
+			align-items: start;
+		}
+	}
+	.confirm-preview {
+		display: grid;
+		gap: 0.35rem;
+	}
+	.frame {
+		aspect-ratio: 9 / 16;
+		border: 1px solid var(--border-strong);
+		border-radius: 10px;
+		overflow: hidden;
+		display: grid;
+		place-items: center;
+		padding: 0.8rem;
+		text-align: center;
+	}
+	.frame-card {
+		background: linear-gradient(150deg, var(--accent-dark, #2c2450), var(--accent));
+	}
+	.frame-card span {
+		color: #fff;
+		font-weight: 700;
+		font-size: 0.95rem;
+		line-height: 1.25;
+		white-space: pre-wrap;
+	}
+	.frame-refs {
+		background: var(--surface-2);
+		align-content: center;
+		gap: 0.5rem;
+	}
+	.frame-thumbs {
+		display: flex;
+		gap: 0.35rem;
+		justify-content: center;
+	}
+	.frame-thumbs img {
+		width: 56px;
+		height: 56px;
+		border-radius: 8px;
+		object-fit: cover;
+		border: 1px solid var(--border);
+	}
+	.frame-empty,
+	.frame-meta {
+		font-size: 0.72rem;
+		color: var(--text-dim);
+	}
+	.frame-cap {
+		font-size: 0.7rem;
+		color: var(--text-dim);
+		line-height: 1.4;
+	}
+	.summary {
+		margin: 0;
+		display: grid;
+		border: 1px solid var(--border);
+		border-radius: 10px;
+		overflow: hidden;
+	}
+	.sumrow {
+		display: grid;
+		grid-template-columns: 88px minmax(0, 1fr);
+		gap: 0.6rem;
+		padding: 0.5rem 0.7rem;
+		border-bottom: 1px solid var(--border);
+		font-size: 0.82rem;
+	}
+	.sumrow:last-child {
+		border-bottom: 0;
+	}
+	.sumrow dt {
+		color: var(--text-dim);
+		font-size: 0.75rem;
+	}
+	.sumrow dd {
+		margin: 0;
+	}
+	@media (max-width: 480px) {
+		.sumrow {
+			grid-template-columns: 1fr;
+			gap: 0.1rem;
+		}
+	}
+
+	/* A platform that cannot accept this format's media. Disabled rather than
+	   hidden: "YouTube is connected but can't take a still" is information. */
+	.chip.blocked {
+		opacity: 0.5;
+		cursor: not-allowed;
+		text-decoration: line-through;
+	}
 	.composer-loading {
 		display: flex;
 		align-items: center;
@@ -1351,7 +2011,7 @@
 		grid-template-columns: 1fr 1fr;
 		gap: 0.75rem;
 	}
-	@media (max-width: 560px) {
+	@media (max-width: 640px) {
 		.row {
 			grid-template-columns: 1fr;
 		}
@@ -1772,7 +2432,7 @@
 
 	/* The label is the first thing to go on a narrow modal — the numbered dot
 	   still carries the position, so the rail never wraps or clips mid-word. */
-	@media (max-width: 620px) {
+	@media (max-width: 640px) {
 		.journey-label {
 			display: none;
 		}

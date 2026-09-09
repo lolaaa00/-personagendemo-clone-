@@ -47,7 +47,16 @@ import { getServiceSupabase } from '$lib/server/service-supabase';
 import { resolveModel, getModel, type ModelOption } from '$lib/models';
 import { persistToStorage, persistBufferToStorage } from '$lib/server/storage';
 import { burnCaptions, optimizeForWeb } from '$lib/server/video';
-import { renderTypographicCard, CARD_RENDERER_LABEL } from './card-renderer';
+import {
+	renderTypographicCard,
+	CARD_RENDERER_LABEL,
+	sanitizeCardText,
+	type CardLayout
+} from './card-renderer';
+// The two self-shot realism registers the studio templates encode. The composer
+// can pin one per run, so the engine splices the SAME constant the templates use
+// rather than a paraphrase that would drift from them.
+import { SELFIE_LOOK, MIRROR_LOOK } from '$lib/studio-templates';
 import { fetchWithTimeout } from '$lib/server/social/http';
 import { assertWithinBudget } from '$lib/server/budget';
 import { inferGenderFromName } from '$lib/name-gender';
@@ -894,6 +903,77 @@ function enhanceMotionPrompt(
 	return `${basePrompt}\n\nCamera: ${cameraByLevel[intent.motionLevel]}\n${subjectByFormat}\nTechnical: smooth motion, no compression artifacts, no overexposed highlights, no jump cuts.`;
 }
 
+/**
+ * The realism register the composer pinned, as the exact template constant.
+ * 'third' resolves to nothing on purpose: "someone else took this photo" is the
+ * absence of a self-shot instruction, not another instruction. Returns '' when
+ * nothing was pinned so the caller can splice unconditionally.
+ */
+function framingClause(framing: UgcPackInput['framing']): string {
+	if (framing === 'front') return SELFIE_LOOK;
+	if (framing === 'mirror') return MIRROR_LOOK;
+	return '';
+}
+
+/**
+ * Composes the framing register ONTO a scene brief rather than replacing it —
+ * the user's visual brief says what is happening, framing says who is holding
+ * the camera, and dropping either one would make the composer's two controls
+ * fight each other.
+ */
+function withFraming(scenePrompt: string, framing: UgcPackInput['framing']): string {
+	const clause = framingClause(framing);
+	// Idempotent: the scene a refine edits is the PROMPT THAT RAN, which already
+	// carries the clause. Splicing it twice would double the instruction.
+	if (!clause || scenePrompt.includes(clause)) return scenePrompt;
+	return `${scenePrompt}\n\n${clause}`;
+}
+
+/**
+ * The only palette identifier resolveCardPalette() understands is a hex ground
+ * (it derives the ink from that color's luminance). Anything else — 'auto', a
+ * name, a typo — resolves to null so the brand brief's own colors survive
+ * instead of being replaced by an unparseable value.
+ */
+function cardGroundOverride(cardPalette: string | undefined): string | null {
+	const raw = (cardPalette || '').trim();
+	if (!raw || raw.toLowerCase() === 'auto') return null;
+	return /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.test(raw) ? raw : null;
+}
+
+/**
+ * Art direction for a pinned card layout, in the renderer's own CardLayout
+ * vocabulary. Used on the MODEL card path (the fallback renderer), which takes
+ * only a prompt — the $0 local renderer derives its layout from the line's shape
+ * inside card-renderer.ts and has no layout parameter to pin.
+ */
+const CARD_LAYOUT_DIRECTION: Record<string, string> = {
+	statement: 'Composition: a single huge centered statement — a few words filling the frame.',
+	quote: 'Composition: a pull-quote — the line set large with generous margins and a rule above it.',
+	stack: 'Composition: a vertical stack of short left-aligned lines, one thought per line.',
+	list: 'Composition: a numbered list, each item on its own line with the numeral as the accent.',
+	split: 'Composition: two contrasting halves of the frame — one claim per half.'
+};
+
+/** Splices a pinned card layout into the art direction; 'auto'/absent is a no-op.
+ *  Idempotent for the same reason withFraming is — a refine edits the prompt that
+ *  already ran. */
+function withCardLayout(artDirection: string, layout: UgcPackInput['cardLayout']): string {
+	const line = layout && layout !== 'auto' ? CARD_LAYOUT_DIRECTION[layout] : '';
+	if (!line || artDirection.includes(line)) return artDirection;
+	return `${artDirection}\n\n${line}`;
+}
+
+/**
+ * "Use my own still" gate. Only an http(s) URL is usable — the still is handed
+ * straight to fal/OpenRouter and to our own storage fetcher, and a data: or
+ * file: URL would fail there after the run had already spent on the Director.
+ */
+function suppliedStillUrl(raw: string | undefined): string | null {
+	const url = (raw || '').trim();
+	return /^https?:\/\//i.test(url) ? url : null;
+}
+
 /** Nano Banana: composite the references this composition actually uses into a
  *  UGC scene — product + face, face only (product-free channel content), or
  *  product only (persona-free product shots). Every instruction line is
@@ -904,7 +984,11 @@ async function generateProductStill(
 	scenePrompt: string,
 	productPhotoUrl: string | null,
 	characterRef: string | null,
-	brandVisualContext?: string
+	brandVisualContext?: string,
+	/** Composer's still-model pick, already resolved to a catalog entry (kind
+	 *  'image_edit' — this call composites references). Omitted → the compiled-in
+	 *  Nano Banana edit endpoint with its hand-written input shape, as before. */
+	model?: ModelOption | null
 ): Promise<string> {
 	const refs = [characterRef, productPhotoUrl].filter(Boolean) as string[];
 	if (refs.length === 0) throw new Error('Composite still needs at least one reference image');
@@ -928,13 +1012,17 @@ async function generateProductStill(
 		.filter(Boolean)
 		.join('\n');
 
+	// A picked model goes through buildEditInput so single-reference editors get
+	// `image_url` instead of the `image_urls` only Nano Banana accepts; with no
+	// pick the literal below is preserved byte-for-byte so the default path is
+	// unchanged.
 	const data = await falSyncJson(
-		NANO_MODEL,
-		{ prompt, image_urls: refs, aspect_ratio: '9:16' },
+		model ? model.id : NANO_MODEL,
+		model ? buildEditInput(model, prompt, refs, '9:16') : { prompt, image_urls: refs, aspect_ratio: '9:16' },
 		falKey
 	);
 	const url = data.images?.[0]?.url;
-	if (!url) throw new Error('Nano Banana returned no image');
+	if (!url) throw new Error(`${model?.label ?? 'Nano Banana'} returned no image`);
 	return url;
 }
 
@@ -964,12 +1052,20 @@ async function generateGraphicStill(
 	falKey: string,
 	cardText: string,
 	artDirection: string,
-	brandVisualContext?: string
+	brandVisualContext?: string,
+	/** Composer's still-model pick, resolved as 'image_t2i' (a card feeds no
+	 *  references). Omitted → Nano Banana t2i, which renders type far better than
+	 *  the cheap models and so stays the default here. */
+	model?: ModelOption | null
 ): Promise<string> {
 	const prompt = buildGraphicStillPrompt(cardText, artDirection, brandVisualContext);
-	const data = await falSyncJson(NANO_T2I_MODEL, { prompt, aspect_ratio: '9:16' }, falKey);
+	const data = await falSyncJson(
+		model ? model.id : NANO_T2I_MODEL,
+		model ? buildT2iInput(model, prompt, '9:16') : { prompt, aspect_ratio: '9:16' },
+		falKey
+	);
 	const url = data.images?.[0]?.url;
-	if (!url) throw new Error('Nano Banana returned no image');
+	if (!url) throw new Error(`${model?.label ?? 'Nano Banana'} returned no image`);
 	return url;
 }
 
@@ -1871,6 +1967,44 @@ export interface UgcPackInput {
 	 *  'broll' forces a b-roll clip; 'auto' (or unset) defers to the persona's
 	 *  ugc_format, which the Director then resolves. */
 	formatOverride?: 'auto' | 'spokesperson' | 'broll';
+	/** The spoken line for a spokesperson run, verbatim. Until now a script could
+	 *  only be edited on a REFINE (RefineMediaInput.dialogue) — a first run had to
+	 *  accept whatever the Director wrote, then pay a second time to change it.
+	 *  Ignored on b-roll (nothing speaks), so a stale pin can't rewrite a caption. */
+	dialogueOverride?: string;
+	/** The exact line to typeset on a `stillStyle: 'graphic'` card. Passes the same
+	 *  sanitizeCardText() glyph gate the Director's line does; a line the system
+	 *  font can't draw falls back to the Director's rather than failing the run. */
+	cardText?: string;
+	/** Pins the card composition. 'auto'/absent keeps pickCardLayout()'s shape
+	 *  heuristic — the layout vocabulary is the renderer's own CardLayout. */
+	cardLayout?: 'auto' | 'statement' | 'quote' | 'stack' | 'list' | 'split';
+	/** Card ground color, in the only palette vocabulary resolveCardPalette()
+	 *  accepts: a '#RRGGBB'/'#RGB' hex, which becomes the ground with a
+	 *  legibility-derived ink. Absent/'auto'/unparseable → the brand brief's
+	 *  colors, then the curated palettes, exactly as before. */
+	cardPalette?: string;
+	/** Realism register for photo compositions: 'front' splices the front-camera
+	 *  selfie look, 'mirror' the back-camera mirror selfie, 'third' neither (a
+	 *  photo someone else took). Composes WITH sceneOverride — the user's brief
+	 *  says what is happening, this says who is holding the camera. Absent leaves
+	 *  whatever the template/Director produced. */
+	framing?: 'front' | 'mirror' | 'third';
+	/** Voice name from VOICE_CATALOG for this run only. Still goes through
+	 *  resolveVoiceForPersona(), so the depicted-gender agreement holds; an
+	 *  unknown name falls back to the persona's configured voice rather than
+	 *  sending garbage to TTS. */
+	voiceOverride?: string;
+	/** Image model for the still step (the composer's budget-vs-quality pick,
+	 *  mirroring videoModel). Resolved through resolveModel() — 'image_edit' when
+	 *  references are being composited, 'image_t2i' when not — so an unknown id
+	 *  can never reach fal. Absent keeps the compiled-in Nano Banana routing. */
+	stillModel?: string;
+	/** "Use my own still": an http(s) image used AS the still. No image model
+	 *  runs, no still cost event is recorded, and every downstream step (talking
+	 *  head, i2v, caption burn) treats it exactly as a generated still. Wins over
+	 *  the graphic-card path too — a supplied image IS the artwork. */
+	stillUrlOverride?: string;
 	/** The post row this generation belongs to — links ledger rows to the post. */
 	postId?: string;
 }
@@ -3064,7 +3198,17 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 		// over a contradicting voice pick (e.g. the 'Adam' column default on a
 		// female persona). Threaded through explicitly so the Director/character-ref
 		// prompts and the TTS call all agree.
-		const { voice: resolvedVoice, voiceGender } = resolveVoiceForPersona(cfg.voice, agentData);
+		// A composer voice pick replaces the persona's CONFIGURED voice as the input
+		// to that agreement — never its output: a per-run pick that contradicted the
+		// persona's gender would put a male voice on a female character, which is
+		// the exact mismatch resolveVoiceForPersona exists to prevent. An unknown
+		// name is discarded here rather than handed to TTS.
+		const requestedVoice = input.voiceOverride?.trim();
+		const voiceIn =
+			requestedVoice && VOICE_CATALOG.some((v) => v.name === requestedVoice)
+				? requestedVoice
+				: cfg.voice;
+		const { voice: resolvedVoice, voiceGender } = resolveVoiceForPersona(voiceIn, agentData);
 
 		// ── Brand brief + product (persona's selected brief, newest as fallback) ──
 		let selectedProduct: any = null;
@@ -3082,12 +3226,30 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 		const intent = classifyContentIntent(topic, platform);
 		const brandVisualCtx = buildBrandVisualContext(briefData);
 
+		// The topic the USER actually asked for, as opposed to `topic`, which is
+		// defaulted to generic filler at the top of this function. The two must stay
+		// distinguishable: filler is worth defaulting into a prompt, an instruction
+		// the user never gave is not.
+		const explicitTopic = input.topic?.trim() || '';
+
 		// ── Director (LLM) ──────────────────────────────────────────────────
 		const buildDirectorPrompt = () =>
 			[
 				agentContext,
+				// Product and topic are NOT alternatives. The product is the subject;
+				// the topic is the angle taken on it. They used to be mutually
+				// exclusive here, and because a product always resolves on a persona
+				// with a brand brief (falling back to the first one), the user's
+				// picked topic was dropped on exactly the personas most likely to
+				// have one. Both go in now. With no explicit topic the subject line
+				// stands alone, as before — the generic filler is not an angle.
 				selectedProduct
 					? `Product: "${selectedProduct.name}" — ${selectedProduct.description || 'no description'}. Price: ${selectedProduct.price || 'N/A'}.`
+					: '',
+				selectedProduct
+					? explicitTopic
+						? `Angle to take on that product: "${explicitTopic}"`
+						: ''
 					: `Topic: "${topic}"`,
 				briefData
 					? [
@@ -3188,16 +3350,44 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 			format = 'broll';
 		}
 		// A composer-edited visual brief outranks the Director's scene.
-		const scenePrompt =
-			input.sceneOverride?.trim() || parsed.scene_prompt || parsed.ugc_broll_prompt || topic;
 		// Graphic cards render a LINE, not a scene: the Director's on-screen hook is
 		// written for exactly this job; the caption's first line is the fallback.
 		const isGraphicStill = input.stillStyle === 'graphic';
-		const cardText = isGraphicStill
+		// 'auto' means "let pickCardLayout() read the text", which is the default
+		// every existing caller relies on — only an explicit choice is passed on.
+		const pinnedCardLayout: CardLayout | null =
+			input.cardLayout && input.cardLayout !== 'auto' ? input.cardLayout : null;
+		// Framing is a photographic register — a typographic card has no camera, so
+		// pinning one there would tell the model to photograph a piece of type.
+		const scenePrompt = isGraphicStill
+			? // A pinned layout is art direction for the model card path; the local
+				// renderer takes the same string as its (currently advisory) artDirection.
+				withCardLayout(
+					input.sceneOverride?.trim() || parsed.scene_prompt || parsed.ugc_broll_prompt || topic,
+					input.cardLayout
+				)
+			: withFraming(
+					input.sceneOverride?.trim() || parsed.scene_prompt || parsed.ugc_broll_prompt || topic,
+					input.framing
+				);
+		const directorCardText = isGraphicStill
 			? String(parsed.on_screen_text || String(parsed.text || '').split('\n')[0] || topic)
 					.trim()
 					.slice(0, 220)
 			: null;
+		// A user-typed card line is the artwork when the font can actually draw it.
+		// sanitizeCardText is the same glyph gate the renderer applies to the
+		// Director's line, run HERE so a rejected line degrades to the Director's
+		// instead of failing a run the user has already paid the Director for.
+		const pinnedCardText = (() => {
+			if (!isGraphicStill) return null;
+			const raw = input.cardText?.trim().slice(0, 220);
+			if (!raw) return null;
+			if (sanitizeCardText(raw)) return raw;
+			console.warn('[Composer] Pinned card text lost too many glyphs — keeping the Director line.');
+			return null;
+		})();
+		const cardText = pinnedCardText ?? directorCardText;
 		const baseMotion =
 			parsed.motion_prompt ||
 			'Slow gimbal dolly-in, natural ambient light, product label in focus.';
@@ -3222,7 +3412,13 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 		// at the await inside the video try-block, where the existing fal-outage
 		// fallback applies unchanged, and the cost event rides the success handler so
 		// the spend is recorded (ledger flushes in finally) even if the still fails.
-		const dialogue = parsed.dialogue || parsed.text || topic;
+		// The composer's script pin — the first-run equivalent of refine's `dialogue`.
+		// Gated on format because only a spokesperson run speaks: a pin left over
+		// from a format switch must not end up recorded as this post's script when
+		// nothing said it. Resolved AFTER the format coercions above so it agrees
+		// with the branch that actually runs.
+		const pinnedLine = format === 'spokesperson' ? input.dialogueOverride?.trim() || '' : '';
+		const dialogue = pinnedLine || parsed.dialogue || parsed.text || topic;
 		// The voice that ACTUALLY spoke this run — updated when TTS degrades to the
 		// classic fallback, so the stored post never claims a voice that didn't run.
 		let ttsVoiceUsed = resolvedVoice;
@@ -3262,10 +3458,15 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 		// A composition that EXCLUDES the persona (refs.character=false — product
 		// macros, mood boards, POV shots, graphic cards) skips all of this,
 		// including the first-run face generation it would otherwise pay for.
+		// "Use my own still": resolved HERE, above the reference work, because the
+		// only consumer of a character/product reference is the still composite. If
+		// the user supplied the still, the lazy first-run face generation below
+		// would be a paid call for an image nothing in this run can use.
+		const suppliedStill = suppliedStillUrl(input.stillUrlOverride);
 		const wantCharacterRef = input.useCharacterRef !== false && !isGraphicStill;
 		let characterRef =
 			input.characterRefOverride?.trim() || (wantCharacterRef ? cfg.characterRef : null);
-		if (wantCharacterRef && input.agentId && !input.characterRefOverride) {
+		if (wantCharacterRef && input.agentId && !input.characterRefOverride && !suppliedStill) {
 			let svcForRef: any = null;
 			try {
 				svcForRef = getServiceSupabase();
@@ -3293,12 +3494,29 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 		//           (product+face, face only, or product only), flux last resort.
 		// Failover: a fal OUTAGE (balance lock, 5xx) degrades to the OpenRouter
 		// path — keeping the slot alive — rather than killing generation outright.
+		// Composer's still-model pick. Kept as a raw id and resolved PER BRANCH,
+		// because the same pick means 'image_edit' when references are composited
+		// and 'image_t2i' when they aren't — and because absent must mean "the
+		// compiled-in Nano Banana routing", not resolveModel's t2i default (Schnell),
+		// which would quietly downgrade every still that never asked for a model.
+		const stillModelId = input.stillModel?.trim() || null;
 		let still: string;
 		const wantProductRef = input.useProductRef !== false && !isGraphicStill;
 		const productPhoto =
 			input.productPhotoUrlOverride?.trim() ||
 			(wantProductRef ? selectedProduct?.photoUrl || null : null);
-		if (isGraphicStill) {
+		// What actually rendered the still is NOT tracked in a second variable here
+		// the way videoModelRan is: every still path already pushes the model it ran
+		// into the cost ledger, and summarizeAspects derives provenance from exactly
+		// those events — so aspects.image.models is the single truth, failovers
+		// included. Only the REQUEST is recorded separately, below.
+		if (suppliedStill) {
+			// No model call, so no cost event — a step that did not run records no
+			// spend. Everything downstream (talking head, i2v, caption burn, durable
+			// persist) treats this exactly as a generated still, and it wins over the
+			// card path: a supplied image IS the artwork.
+			still = suppliedStill;
+		} else if (isGraphicStill) {
 			// ── $0 deterministic render first (server-side ffmpeg typography) ──
 			// The text IS the artwork, and the Director already wrote it — so the
 			// default is to typeset it locally for free. The model providers below
@@ -3315,10 +3533,21 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 				}
 			})();
 			if (svcForCard) {
+				// A pinned palette enters through the one door resolveCardPalette has:
+				// the brand ground. The ink is still derived from its luminance, so a
+				// pick can't produce an illegible card.
+				const cardGround = cardGroundOverride(input.cardPalette);
 				const card = await renderTypographicCard({
 					cardText: cardText!,
 					artDirection: scenePrompt,
-					brand: { primary: briefData?.primaryColor, secondary: briefData?.secondaryColor },
+					// A pinned layout reaches the LOCAL renderer too. Without this the
+					// composer's Layout control only steered the model fallback, which
+					// is the path that almost never runs.
+					layout: pinnedCardLayout,
+					brand: {
+						primary: cardGround ?? briefData?.primaryColor,
+						secondary: briefData?.secondaryColor
+					},
 					handle: agentData?.handle ? `@${agentData.handle}` : null
 				});
 				if (card) {
@@ -3350,13 +3579,23 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 			if (renderedCardUrl) {
 				still = renderedCardUrl;
 			} else if (falKey) {
+				// A card feeds no references, so the pick resolves as text-to-image.
+				const cardModel = stillModelId ? resolveModel('image_t2i', stillModelId) : null;
 				try {
-					still = await generateGraphicStill(falKey, cardText!, scenePrompt, brandVisualCtx);
+					still = await generateGraphicStill(
+						falKey,
+						cardText!,
+						scenePrompt,
+						brandVisualCtx,
+						cardModel
+					);
 					costEvents.push({
 						provider: 'fal',
 						operation: 'image',
-						model: NANO_STILL_LABEL,
-						usd: priceOf('fal', 'image', 'nano')
+						// Bill and name the model that RAN — resolveModel already replaced
+						// an unknown pick, so this can never claim a model fal never saw.
+						model: cardModel ? cardModel.label : NANO_STILL_LABEL,
+						usd: cardModel ? cardModel.usd : priceOf('fal', 'image', 'nano')
 					});
 				} catch (e) {
 					const msg = (e as Error).message;
@@ -3401,19 +3640,23 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 				);
 			}
 		} else if (falKey && (productPhoto || characterRef)) {
+			// References are being composited, so the pick resolves as an image EDIT
+			// model — a t2i id here would drop the refs and invent a new person.
+			const compositeModel = stillModelId ? resolveModel('image_edit', stillModelId) : null;
 			try {
 				still = await generateProductStill(
 					falKey,
 					scenePrompt,
 					productPhoto,
 					characterRef,
-					brandVisualCtx
+					brandVisualCtx,
+					compositeModel
 				);
 				costEvents.push({
 					provider: 'fal',
 					operation: 'image',
-					model: NANO_STILL_LABEL,
-					usd: priceOf('fal', 'image', 'nano')
+					model: compositeModel ? compositeModel.label : NANO_STILL_LABEL,
+					usd: compositeModel ? compositeModel.usd : priceOf('fal', 'image', 'nano')
 				});
 			} catch (e) {
 				const msg = (e as Error).message;
@@ -3447,7 +3690,7 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 							scenePrompt,
 							orKey,
 							null,
-							null,
+							stillModelId,
 							'3:4',
 							wantCharacterRef,
 							orRoutes.t2i
@@ -3486,7 +3729,7 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 				console.warn(
 					`[Composer] OpenRouter composite failed (${(e as Error).message.slice(0, 120)}) — flux fallback.`
 				);
-				const t2i = await generateUgcImage(scenePrompt, orKey, null, null, '3:4', wantCharacterRef, orRoutes.t2i);
+				const t2i = await generateUgcImage(scenePrompt, orKey, null, stillModelId, '3:4', wantCharacterRef, orRoutes.t2i);
 				still = t2i.url;
 				costEvents.push({
 					provider: t2i.provider,
@@ -3496,7 +3739,9 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 				});
 			}
 		} else {
-			const t2i = await generateUgcImage(scenePrompt, orKey, falKey, null, '3:4', wantCharacterRef, orRoutes.t2i);
+			// No refs to composite — the pick is a plain text-to-image model, and
+			// generateUgcImage resolves it (and bills what it ran) internally.
+			const t2i = await generateUgcImage(scenePrompt, orKey, falKey, stillModelId, '3:4', wantCharacterRef, orRoutes.t2i);
 			still = t2i.url;
 			costEvents.push({
 				provider: t2i.provider,
@@ -3680,7 +3925,9 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 			text: parsed.text || '',
 			hashtags: Array.isArray(parsed.hashtags) ? parsed.hashtags : [],
 			hookScore: parsed.hookScore,
-			dialogue: parsed.dialogue || '',
+			// The line that was actually SPOKEN — a pinned script must be what the
+			// post records, or the drawer would show a script nobody said.
+			dialogue: pinnedLine || parsed.dialogue || '',
 			on_screen_text: parsed.on_screen_text || '',
 			// Actual burn outcome (see captionsApplied) — not merely what was requested.
 			// The caption flag ALSO requires real hook text: a badge-only burn returns a
@@ -3694,7 +3941,7 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 			// the raw Director output here would show (and refine from) a prompt that
 			// never ran whenever the user pinned a scene.
 			ugc_broll_prompt: scenePrompt,
-			script: parsed.script || parsed.dialogue || '',
+			script: pinnedLine || parsed.script || parsed.dialogue || '',
 			media_url: durableMedia,
 			poster_url: durableStill,
 			media_type: mediaType,
@@ -3722,13 +3969,25 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 		// made — so the post drawer can show what produced this result and why.
 		content.generation = {
 			...summarizeAspects(costEvents),
-			images: { character_ref: characterRef || null, product_photo: productPhoto || null },
+			// The images actually SENT to a model. A supplied still means none were:
+			// claiming refs here would show the drawer inputs that never left the app.
+			images: suppliedStill
+				? { character_ref: null, product_photo: null }
+				: { character_ref: characterRef || null, product_photo: productPhoto || null },
 			// The composition contract this run obeyed. Refine honors it (a null ref
 			// under policy=false is deliberate, not lost provenance), and the drawer
 			// can say WHY a ref is absent.
 			still_style: isGraphicStill ? 'graphic' : 'photo',
 			refs_policy: { character: wantCharacterRef, product: wantProductRef },
-			...(isGraphicStill && cardText ? { card_text: cardText } : {}),
+			// Only claim a typeset line when one was actually typeset: a supplied
+			// still replaced the card, so no card text was rendered on this post.
+			...(isGraphicStill && cardText && !suppliedStill ? { card_text: cardText } : {}),
+			// Where the still came from, so the drawer can explain a $0 image row
+			// that has no image model behind it at all.
+			...(suppliedStill ? { still_source: 'supplied' as const } : {}),
+			...(isGraphicStill && input.cardLayout && input.cardLayout !== 'auto'
+				? { card_layout: input.cardLayout }
+				: {}),
 			// When TTS degraded to the classic fallback, say so — the post's voice
 			// field alone can't explain why it differs from the persona's pick.
 			...(ttsVoiceUsed !== resolvedVoice
@@ -3744,6 +4003,11 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 				...(input.videoModel && input.videoModel !== videoModelRan
 					? { videoModelRequested: input.videoModel }
 					: {}),
+				// The still model REQUESTED. What ran is in aspects.image.models,
+				// derived from the ledger — recording a second "what ran" here is how
+				// the two would eventually disagree.
+				...(stillModelId ? { stillModelRequested: stillModelId } : {}),
+				...(input.framing ? { framing: input.framing } : {}),
 				provider: input.providerPreference ?? null,
 				mediaType
 			}
@@ -3771,6 +4035,26 @@ export interface RefineMediaInput {
 	scene: string;
 	/** Optionally edited spoken line (spokesperson posts). Blank → keep the stored one. */
 	dialogue?: string;
+	/** Re-typeset a graphic card with a different line. Same sanitizeCardText gate
+	 *  as a fresh run; a rejected line keeps the post's stored card text. */
+	cardText?: string;
+	/** Pins the card composition for this re-render ('auto'/absent = the shape
+	 *  heuristic). Same vocabulary as UgcPackInput.cardLayout. */
+	cardLayout?: 'auto' | 'statement' | 'quote' | 'stack' | 'list' | 'split';
+	/** Card ground hex — the only palette identifier resolveCardPalette accepts.
+	 *  Absent keeps the brand-derived look, so an unchanged line re-renders
+	 *  byte-identical. */
+	cardPalette?: string;
+	/** Realism register spliced onto the edited visual brief (photo posts). */
+	framing?: 'front' | 'mirror' | 'third';
+	/** Voice for this re-record. Unknown names keep the post's stored voice —
+	 *  a refine must never introduce a voice the original post never had. */
+	voiceOverride?: string;
+	/** Image model for the re-shot still, resolved through resolveModel(). */
+	stillModel?: string;
+	/** Replace the still with a supplied http(s) image instead of re-shooting it:
+	 *  no image model runs and no still cost event is recorded. */
+	stillUrlOverride?: string;
 }
 
 /** The OpenRouter Nano-Banana composite prompt (fal-outage fallback), shared verbatim with generateUgcPack's failover. */
@@ -3795,8 +4079,14 @@ function buildCompositeFallbackPrompt(
  */
 export async function refineUgcMedia(input: RefineMediaInput): Promise<UgcContent> {
 	const { supabase, userId, content } = input;
-	const scene = input.scene?.trim();
-	if (!scene) throw new Error('Refine needs a visual prompt');
+	const rawScene = input.scene?.trim();
+	if (!rawScene) throw new Error('Refine needs a visual prompt');
+	// Same still-model contract as generateUgcPack: keep the raw id and resolve it
+	// per branch, so absent means "the compiled-in Nano Banana routing" rather than
+	// resolveModel's t2i default.
+	const stillModelId = input.stillModel?.trim() || null;
+	// "Use my own still" on a refine: swap the image without paying to re-shoot it.
+	const suppliedStill = suppliedStillUrl(input.stillUrlOverride);
 	// Cinematic posts are multi-shot Kling O3 Pro reference videos — this
 	// single-shot pipeline would silently downgrade them. The route rejects
 	// these up front; this is the defense-in-depth backstop.
@@ -3829,6 +4119,20 @@ export async function refineUgcMedia(input: RefineMediaInput): Promise<UgcConten
 			product: gen.refs_policy?.product !== false
 		};
 		const isGraphicRefine = gen.still_style === 'graphic';
+		// The composer's register pins compose ONTO the user's edited brief rather
+		// than replacing it, and they're mutually exclusive by medium: a card has no
+		// camera to frame, a photo has no typographic layout.
+		const scene = isGraphicRefine
+			? withCardLayout(rawScene, input.cardLayout)
+			: withFraming(rawScene, input.framing);
+		// A refine re-renders an approved card. Keep the layout it was generated
+		// with unless this refine pins a different one, so re-running for a better
+		// image doesn't silently re-shape the card the user already signed off.
+		const storedCardLayout = (content.generation as any)?.card_layout as CardLayout | undefined;
+		const refineCardLayout: CardLayout | null =
+			input.cardLayout && input.cardLayout !== 'auto'
+				? input.cardLayout
+				: (storedCardLayout ?? null);
 		let characterRef = content.generation?.images?.character_ref || null;
 		let productPhoto = content.generation?.images?.product_photo || null;
 		if (
@@ -3848,14 +4152,36 @@ export async function refineUgcMedia(input: RefineMediaInput): Promise<UgcConten
 		}
 
 		// ── Still — identical routing/failover to generateUgcPack ──
+		// The line this refine actually typeset (null when no card was rendered) —
+		// the post's stored card_text is stale the moment the user retypes it.
+		let renderedCardText: string | null = null;
 		let still: string;
-		if (isGraphicRefine) {
+		if (suppliedStill) {
+			// A supplied still is the whole still step: no model runs, so no still
+			// cost event is recorded, and the video branch below re-animates it
+			// exactly as it would a re-shot one.
+			still = suppliedStill;
+		} else if (isGraphicRefine) {
 			// Re-render the typographic card: the stored line is the artwork, the
 			// user's edited visual prompt is the art direction. No references.
-			const cardText = String(gen.card_text || String(content.text || '').split('\n')[0] || '')
+			const storedCardText = String(
+				gen.card_text || String(content.text || '').split('\n')[0] || ''
+			)
 				.trim()
 				.slice(0, 220);
+			// A retyped line passes the same glyph gate a fresh run applies; a line
+			// the font can't draw keeps the stored one rather than failing a refine
+			// the user is already paying for.
+			const retypedCardText = (() => {
+				const raw = input.cardText?.trim().slice(0, 220);
+				if (!raw) return null;
+				if (sanitizeCardText(raw)) return raw;
+				console.warn('[Refine] Pinned card text lost too many glyphs — keeping the stored line.');
+				return null;
+			})();
+			const cardText = retypedCardText ?? storedCardText;
 			if (!cardText) throw new Error('This graphic card has no stored text to re-render.');
+			renderedCardText = cardText;
 			// ── $0 deterministic re-render first — same contract as the original
 			// generation, so a free card stays free through refine. Palette derives
 			// from text + brand, so an unchanged line keeps its exact look; brand
@@ -3885,10 +4211,16 @@ export async function refineUgcMedia(input: RefineMediaInput): Promise<UgcConten
 				} catch {
 					/* cosmetic only — curated palette still renders */
 				}
+				// A pinned ground overrides the brand's, through the one identifier
+				// resolveCardPalette accepts; the ink still derives from its luminance.
+				const cardGround = cardGroundOverride(input.cardPalette);
 				const card = await renderTypographicCard({
 					cardText,
 					artDirection: scene,
-					brand: cardBrand,
+					// Reuse the layout this post was generated with, so a refine does not
+					// silently re-shape a card the user already approved.
+					layout: refineCardLayout,
+					brand: cardGround ? { ...(cardBrand ?? {}), primary: cardGround } : cardBrand,
 					handle: cardHandle
 				});
 				if (card) {
@@ -3918,13 +4250,17 @@ export async function refineUgcMedia(input: RefineMediaInput): Promise<UgcConten
 			if (renderedCardUrl) {
 				still = renderedCardUrl;
 			} else if (falKey) {
+				// A card feeds no references, so the pick resolves as text-to-image.
+				const cardModel = stillModelId ? resolveModel('image_t2i', stillModelId) : null;
 				try {
-					still = await generateGraphicStill(falKey, cardText, scene);
+					still = await generateGraphicStill(falKey, cardText, scene, undefined, cardModel);
 					costEvents.push({
 						provider: 'fal',
 						operation: 'image',
-						model: NANO_STILL_LABEL,
-						usd: priceOf('fal', 'image', 'nano')
+						// Bill and name what ran — resolveModel already replaced an
+						// unknown pick, so this can't claim a model fal never saw.
+						model: cardModel ? cardModel.label : NANO_STILL_LABEL,
+						usd: cardModel ? cardModel.usd : priceOf('fal', 'image', 'nano')
 					});
 				} catch (e) {
 					const msg = (e as Error).message;
@@ -3969,13 +4305,23 @@ export async function refineUgcMedia(input: RefineMediaInput): Promise<UgcConten
 				);
 			}
 		} else if (falKey && (productPhoto || characterRef)) {
+			// References are composited here, so the pick resolves as an image EDIT
+			// model — a t2i id would drop the refs and invent a new person.
+			const compositeModel = stillModelId ? resolveModel('image_edit', stillModelId) : null;
 			try {
-				still = await generateProductStill(falKey, scene, productPhoto, characterRef);
+				still = await generateProductStill(
+					falKey,
+					scene,
+					productPhoto,
+					characterRef,
+					undefined,
+					compositeModel
+				);
 				costEvents.push({
 					provider: 'fal',
 					operation: 'image',
-					model: NANO_STILL_LABEL,
-					usd: priceOf('fal', 'image', 'nano')
+					model: compositeModel ? compositeModel.label : NANO_STILL_LABEL,
+					usd: compositeModel ? compositeModel.usd : priceOf('fal', 'image', 'nano')
 				});
 			} catch (e) {
 				const msg = (e as Error).message;
@@ -4017,7 +4363,9 @@ export async function refineUgcMedia(input: RefineMediaInput): Promise<UgcConten
 				usd: orRoutes.edit.usd
 			});
 		} else {
-			const t2i = await generateUgcImage(scene, orKey, falKey, null, '3:4', refsPolicy.character, orRoutes.t2i);
+			// Nothing to composite — a plain text-to-image model, resolved and billed
+			// inside generateUgcImage.
+			const t2i = await generateUgcImage(scene, orKey, falKey, stillModelId, '3:4', refsPolicy.character, orRoutes.t2i);
 			still = t2i.url;
 			costEvents.push({
 				provider: t2i.provider,
@@ -4051,7 +4399,14 @@ export async function refineUgcMedia(input: RefineMediaInput): Promise<UgcConten
 			const motionPrompt = enhanceMotionPrompt(scene, intent, format);
 			try {
 				if (format === 'spokesperson' && falKey) {
-					const voice = content.voice || DEFAULT_VOICE;
+					// A composer voice pick re-records this post in a different voice.
+					// Unknown names keep the post's own voice: a refine changes the
+					// media, it must not silently introduce a voice nobody chose.
+					const requestedVoice = input.voiceOverride?.trim();
+					const voice =
+						requestedVoice && VOICE_CATALOG.some((v) => v.name === requestedVoice)
+							? requestedVoice
+							: content.voice || DEFAULT_VOICE;
 					const voiceGender = VOICE_CATALOG.find((v) => v.name === voice)?.gender;
 					const { url: audioUrl, voiceUsed } = await generateVoiceAudio(
 						falKey,
@@ -4241,6 +4596,10 @@ export async function refineUgcMedia(input: RefineMediaInput): Promise<UgcConten
 				...(content.generation ?? {}),
 				aspects: mergedAspects,
 				total: +(prevTotal + refineRun.total).toFixed(6),
+				// The card line THIS media carries — a retyped line makes the stored
+				// one wrong, and a supplied still means no card was typeset at all.
+				...(renderedCardText ? { card_text: renderedCardText } : {}),
+				...(suppliedStill ? { still_source: 'supplied' as const } : {}),
 				images: content.generation?.images ?? {
 					character_ref: characterRef,
 					product_photo: productPhoto
