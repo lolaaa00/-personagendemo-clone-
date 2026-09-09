@@ -52,6 +52,7 @@ const ENFORCE_TEST = !args.includes('--no-enforce-test');
 const KEEP = args.includes('--keep');
 const SB = env.PUBLIC_SUPABASE_URL;
 const KEY = env.SUPABASE_SERVICE_ROLE_KEY;
+const ANON = env.PUBLIC_SUPABASE_ANON_KEY;
 if (!SB || !KEY) { console.error('PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY missing'); process.exit(1); }
 
 const q = (s) => (s === null || s === undefined ? 'NULL' : `'${String(s).replace(/'/g, "''")}'`);
@@ -101,6 +102,21 @@ async function app(path, init = {}) {
 	return res;
 }
 const postJson = (path, body) => app(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+
+/**
+ * SETTING_KEYS as the app declares it, read from source so this check cannot
+ * drift from the code it is checking.
+ */
+function settingKeysFromSource() {
+	try {
+		const src = readFileSync(new URL('../src/lib/server/settings.ts', import.meta.url), 'utf-8');
+		const m = src.match(/export const SETTING_KEYS = \[([^\]]+)\]/);
+		if (!m) return [];
+		return m[1].split(',').map((k) => k.trim().replace(/^'|'$/g, '')).filter(Boolean);
+	} catch {
+		return [];
+	}
+}
 
 // ── reporting ────────────────────────────────────────────────────────────────
 const results = [];
@@ -161,14 +177,42 @@ async function main() {
 	modeBefore = mode;
 	console.log(`settings: credit_markup=${markup} signup_credits=${signup} credits_mode=${mode}`);
 
-	// 2. throwaway user via GoTrue admin → welcome grant by trigger
-	const cu = await fetch(`${SB}/auth/v1/admin/users`, { method: 'POST', headers: { apikey: KEY, Authorization: `Bearer ${KEY}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password, email_confirm: true, user_metadata: { full_name: 'E2E Smoke' } }) });
-	const cuBody = await cu.json();
-	userId = cuBody.id;
-	if (!check('throwaway user created', cu.ok && userId, email)) return;
+	// 2. throwaway user through the REAL signup route.
+	//
+	// It used to go straight at GoTrue admin and assert the TRIGGER granted. The
+	// trigger cannot grant any more: GoTrue applies app_metadata after the row is
+	// inserted, so it never sees the invited marker, and the grant moved into the
+	// route. Creating the user the old way would have kept passing while testing
+	// a path no real user takes — and would now fail, because that path is
+	// deliberately unfunded.
+	const su = await postJson('/api/auth/signup', { email, password, full_name: 'E2E Smoke' });
+	const suBody = await su.json().catch(() => ({}));
+	userId = suBody?.user?.id;
+	if (!check('throwaway user created through /api/auth/signup', su.status === 200 && userId, `HTTP ${su.status} · ${email}`)) return;
+	await sleep(800);
+	const [g] = await pg(`select
+		(select count(*)::int from credit_ledger where user_id=${q(userId)} and kind='grant' and note like 'welcome%') as granted,
+		(select count(*)::int from credit_ledger where user_id=${q(userId)} and kind='adjustment' and note like 'welcome credit withheld%') as withheld,
+		coalesce((select raw_app_meta_data->>'invited' from auth.users where id=${q(userId)}),'-') as marker`) ?? [];
+	check('signup route grants the welcome credit and marks the account', g && g.granted === 1 && g.marker === 'true', `grants=${g?.granted} marker=${g?.marker}`);
+	if (g?.withheld) console.log('   note: the per-address guard took the welcome credit back — another account was created from this address today');
+
+	// An account created straight against GoTrue with the anon key gets no money.
+	// That is the whole point of moving the grant, so the smoke proves it rather
+	// than trusting it.
+	const sideEmail = `smoke-side-${Date.now()}@example.com`;
+	const side = await fetch(`${SB}/auth/v1/signup`, { method: 'POST', headers: { apikey: ANON, 'Content-Type': 'application/json' }, body: JSON.stringify({ email: sideEmail, password, app_metadata: { invited: true }, data: { invited: true } }) });
 	await sleep(500);
-	const [w] = await pg(`select a.balance_credits, (select count(*)::int from credit_ledger l where l.user_id=a.user_id and l.kind='grant' and l.note like 'welcome%') as welcome_rows from credit_accounts a where a.user_id=${q(userId)}`) ?? [];
-	check('welcome credit granted by signup trigger', w && Number(w.balance_credits) === Number(signup) && w.welcome_rows === 1, `balance=${w?.balance_credits} expected=${signup}`);
+	const [sideRow] = await pg(`select coalesce((select balance_credits from credit_accounts a join auth.users u on u.id=a.user_id where u.email=${q(sideEmail)}),-1) as credits`) ?? [];
+	check('an account created straight against GoTrue gets no credit', side.status === 200 && Number(sideRow?.credits) === -1, `HTTP ${side.status} · wallet=${sideRow?.credits}`);
+	for (const u of (await pg(`select id from auth.users where email=${q(sideEmail)}`) ?? [])) {
+		await fetch(`${SB}/auth/v1/admin/users/${u.id}`, { method: 'DELETE', headers: { apikey: KEY, Authorization: `Bearer ${KEY}` } });
+	}
+
+	// Fixture, not an assertion: level the wallet so the money-rendering checks
+	// below are about rendering, not about how many times this smoke has run from
+	// this address today.
+	await pg(`select credit_apply(${q(userId)}, ${Number(signup)}, 'set', 'e2e: wallet levelled for the rendering checks', NULL)`);
 
 	// 3. login through the app
 	const login = await postJson('/api/auth/login', { email, password });
@@ -259,8 +303,14 @@ async function main() {
 	// value is deliberate — it is rejected before anything is written, so this
 	// proves the path is live without changing a production setting.
 	const switches = adminBody.switches ?? {};
-	const readable = ['credits_mode', 'credit_markup', 'signup_credits', 'plans_enabled', 'persona_generator', 'persona_backbone', 'daily_platform_spend_usd'].filter((k) => switches[k] === undefined);
-	check('every operator switch is reported by the console API', readable.length === 0, readable.length ? `missing: ${readable.join(', ')}` : `${Object.keys(switches).length} switches reported`);
+	// Derived from the app's OWN key list, not hand-copied. A switch added to
+	// SETTING_KEYS and forgotten in the console's switches literal is exactly the
+	// miss this is for: it happened to signup_credits_require_invite on
+	// 2026-09-09, and the previous hand-written list of seven kept saying PASS
+	// while the console hid the new one.
+	const declared = settingKeysFromSource();
+	const readable = declared.filter((k) => switches[k] === undefined);
+	check('every operator switch is reported by the console API', readable.length === 0 && declared.length > 0, readable.length ? `missing: ${readable.join(', ')}` : `all ${declared.length} declared switches reported`);
 	const writeProbe = await postJson('/api/admin/settings', { key: 'persona_backbone', value: '__invalid__', note: 'e2e: write path reachable (rejected by design)' });
 	const writeBody = await writeProbe.json().catch(() => ({}));
 	check('a switch write reaches validation instead of "Unsupported key"', writeProbe.status === 400 && /off \| shadow \| fill \| on/.test(String(writeBody.error ?? '')), `HTTP ${writeProbe.status} ${writeBody.error ?? ''}`);

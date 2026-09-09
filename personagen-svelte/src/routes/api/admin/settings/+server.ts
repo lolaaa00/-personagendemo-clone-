@@ -67,6 +67,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 			credit_markup: { effective: creditMarkup(), stored: s.credit_markup, source: creditMarkupSource() },
 			daily_platform_spend_usd: { stored: s.daily_platform_spend_usd },
 			signup_credits_hourly_cap: { stored: s.signup_credits_hourly_cap },
+			signup_credits_require_invite: { stored: s.signup_credits_require_invite },
 			plans_enabled: { stored: s.plans_enabled },
 			persona_generator: { effective: personaGenerator(), stored: s.persona_generator, source: personaGeneratorSource() },
 			persona_backbone: { effective: personaBackbone(), stored: s.persona_backbone, source: personaBackboneSource() },

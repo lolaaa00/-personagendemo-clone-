@@ -453,7 +453,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-09", hash: "d3780c3", type: "test", category: "maintenance", scope: "plans", title: "prove each gate refuses, and prove what it must never refuse" },
 	{ date: "2026-09-09", hash: "c376d52", type: "docs", category: "docs", scope: "plans", title: "the feature-gate audit, the launch-day edit, and the two copy calls left open" },
 	{ date: "2026-09-09", hash: "83be119", type: "feat", category: "feature", scope: "ops", title: "the database gets a backup, and the backup gets proved" },
-	{ date: "2026-09-09", hash: "c3b0306", type: "fix", category: "fix", scope: "security", title: "an account that walks around the signup gate stops getting money" }
+	{ date: "2026-09-09", hash: "c3b0306", type: "fix", category: "fix", scope: "security", title: "an account that walks around the signup gate stops getting money" },
+	{ date: "2026-09-09", hash: "29e2b94", type: "fix", category: "fix", scope: "signup", title: "the welcome grant moves to the route, because the trigger cannot see the marker" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -797,10 +798,10 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 		id: "8ad01c9", from: "2026-09-09", to: "2026-09-09",
 		category: "feature", categories: ["feature","fix","maintenance","docs"],
 		title: "New: \"Cancel any time\" gets a line behind it",
-		summary: "\"Cancel any time\" gets a line behind it. Plus 6 more changes, touching things that were broken and internal cleanup and guides and explanations.",
+		summary: "\"Cancel any time\" gets a line behind it. Plus 7 more changes, touching things that were broken and internal cleanup and guides and explanations.",
 		major: true, curated: false,
-		entries: [CHANGELOG[413], CHANGELOG[414], CHANGELOG[415], CHANGELOG[416], CHANGELOG[417], CHANGELOG[418], CHANGELOG[419]]
+		entries: [CHANGELOG[413], CHANGELOG[414], CHANGELOG[415], CHANGELOG[416], CHANGELOG[417], CHANGELOG[418], CHANGELOG[419], CHANGELOG[420]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "c3b0306";
+export const CHANGELOG_GENERATED_FROM = "29e2b94";

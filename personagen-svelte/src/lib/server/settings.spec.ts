@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
 
 const { mockEnv } = vi.hoisted(() => ({ mockEnv: {} as Record<string, string> }));
 vi.mock('$env/dynamic/private', () => ({ env: mockEnv }));
@@ -116,5 +117,23 @@ describe('flags precedence: env → database → default', () => {
 		expect(flags.activityPepper()).toBe('db-pepper-'.repeat(4));
 		mockEnv.ACTIVITY_PEPPER = 'env-pepper';
 		expect(flags.activityPepper()).toBe('env-pepper');
+	});
+});
+
+describe('the Admin Console reports every switch it accepts', () => {
+	// A key can be valid on the WRITE path and invisible on the READ path. That
+	// happened to signup_credits_require_invite the day it was added: the POST
+	// validator took it, the console never showed it, and the live smoke passed
+	// because its expected list was hand-written and seven entries long.
+	const src = readFileSync(new URL('../../routes/api/admin/settings/+server.ts', import.meta.url), 'utf-8');
+	const switchesBlock = src.slice(src.indexOf('switches: {'), src.indexOf('cache: settingsStatus()'));
+
+	it.each([...settings.SETTING_KEYS])('%s appears in the switches the console returns', (key) => {
+		expect(switchesBlock).toContain(`${key}:`);
+	});
+
+	it('the block was actually found — an empty slice would pass every case above', () => {
+		expect(switchesBlock.length).toBeGreaterThan(200);
+		expect(switchesBlock).toContain('switches: {');
 	});
 });
