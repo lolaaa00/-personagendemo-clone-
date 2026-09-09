@@ -35,10 +35,29 @@
 		agents?: Array<{ id: string; name: string }>;
 		agentId?: string;
 		onAgentChange?: (id: string) => void;
+		/**
+		 * Why Cinematic is out of reach on this plan, or null when it is included.
+		 *
+		 * The server refuses `media: 'cinematic'` with 403 PLAN_FEATURE BEFORE the
+		 * preview branch, so without this the option looks available, the refusal
+		 * arrives as an unexplained failure, and — for a cinematic Studio template,
+		 * which posts its preview immediately — the composer renders a Retry button
+		 * that can never succeed.
+		 */
+		cinematicBlocked?: string | null;
 	}
 
-	let { open, spec, onClose, onConfirm, onGoToConnections, agents, agentId, onAgentChange }: Props =
-		$props();
+	let {
+		open,
+		spec,
+		onClose,
+		onConfirm,
+		onGoToConnections,
+		agents,
+		agentId,
+		onAgentChange,
+		cinematicBlocked = null
+	}: Props = $props();
 
 	let loading = $state(false);
 	let loadError = $state<string | null>(null);
@@ -196,6 +215,8 @@
 	// hang indefinitely. Abort covers three exits: superseded by a newer resolve,
 	// dialog closed, or the 30s timeout (which surfaces as a Retry-able error).
 	let previewAbort: AbortController | null = null;
+	/** The preview was refused by the plan, not by a hiccup — Retry is pointless. */
+	let loadBlockedByPlan = $state(false);
 	const PREVIEW_TIMEOUT_MS = 30_000;
 
 	async function loadPreview() {
@@ -211,6 +232,7 @@
 		}, PREVIEW_TIMEOUT_MS);
 		loading = true;
 		loadError = null;
+		loadBlockedByPlan = false;
 		preview = null;
 		try {
 			const res = await fetch(spec.endpoint, {
@@ -223,6 +245,11 @@
 			if (token !== previewToken) return; // superseded by a newer resolve
 			if (!res.ok || !data?.success) {
 				loadError = data?.error || `Could not resolve the request (HTTP ${res.status}).`;
+				// A plan refusal is not a transient failure: retrying it forever cannot
+				// help. Say so, and send them somewhere that can. This is the first
+				// place in the app that reads a server error CODE rather than only its
+				// sentence — the codes were being thrown away everywhere.
+				loadBlockedByPlan = data?.code === 'PLAN_FEATURE';
 				return;
 			}
 			preview = data.preview;
@@ -465,9 +492,13 @@
 		</div>
 	{:else if loadError}
 		<div class="composer-error" role="alert">
-			<strong>Can't prepare this generation</strong>
+			<strong>{loadBlockedByPlan ? 'Not included in your plan' : "Can't prepare this generation"}</strong>
 			<p>{loadError}</p>
-			<button type="button" class="btn-retry" onclick={() => loadPreview()}>Retry</button>
+			{#if loadBlockedByPlan}
+				<a class="btn-retry" href="/billing">Compare plans</a>
+			{:else}
+				<button type="button" class="btn-retry" onclick={() => loadPreview()}>Retry</button>
+			{/if}
 		</div>
 	{:else if preview}
 		<!-- ── The journey ──────────────────────────────────────────────
@@ -631,7 +662,13 @@
 								<select id="gc-media" bind:value={media}>
 									<option value="video">Video</option>
 									<option value="image">Image only</option>
-									<option value="cinematic">Cinematic (multi-shot)</option>
+									<option
+						value="cinematic"
+						disabled={cinematicBlocked !== null}
+						title={cinematicBlocked ?? undefined}
+					>
+						Cinematic (multi-shot){cinematicBlocked ? ' — not in your plan' : ''}
+					</option>
 								</select>
 							</div>
 						</div>

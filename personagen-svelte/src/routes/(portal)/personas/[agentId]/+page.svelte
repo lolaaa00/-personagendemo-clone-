@@ -361,6 +361,48 @@
 	let activeHoursStart = $state(agent?.active_hours_start ?? 8);
 	let activeHoursEnd = $state(agent?.active_hours_end ?? 22);
 	let autonomyLevel = $state<AutonomyLevel>(agent?.autonomy_level ?? 'advisor');
+	// What this plan includes. The server refuses a RAISE above the ceiling
+	// (api/agents/config) and ONLY a raise — a persona already above it stays
+	// saveable, including from the twenty other fields this form sends on every
+	// save. Mirror that exactly, or an unrelated edit starts failing for no
+	// visible reason.
+	const AUTONOMY_RANK: Record<AutonomyLevel, number> = {
+		advisor: 0,
+		semi_autonomous: 1,
+		fully_autonomous: 2
+	};
+	const AUTONOMY_CEILING_LABEL: Record<AutonomyLevel, string> = {
+		advisor: 'Advisor',
+		semi_autonomous: 'Semi-autonomous',
+		fully_autonomous: 'Fully autonomous'
+	};
+	// The SAVED level, not the in-flight one: the server compares against what is
+	// in the database.
+	let savedAutonomy = $derived((agent?.autonomy_level ?? 'advisor') as AutonomyLevel);
+	let autonomyCeiling = $derived(
+		(data?.entitlements?.maxAutonomy ?? 'fully_autonomous') as AutonomyLevel
+	);
+	/** A reason this level is out of reach, or null when it is allowed. */
+	function autonomyBlockedReason(level: AutonomyLevel): string | null {
+		if (AUTONOMY_RANK[level] <= AUTONOMY_RANK[autonomyCeiling]) return null;
+		if (AUTONOMY_RANK[level] <= AUTONOMY_RANK[savedAutonomy]) return null;
+		return `${AUTONOMY_CEILING_LABEL[level]} is not included in the ${data?.entitlements?.plan ?? 'free'} plan.`;
+	}
+	// {@const} may only be the immediate child of a block, and these sit inside a
+	// plain <div>, so they are derived here instead.
+	let semiBlocked = $derived(autonomyBlockedReason('semi_autonomous'));
+	let fullyBlocked = $derived(autonomyBlockedReason('fully_autonomous'));
+	/**
+	 * Why Cinematic is out of reach, or null. The server refuses it BEFORE the
+	 * preview branch, so a cinematic Studio template would otherwise resolve into
+	 * an error pane with a Retry that can never succeed.
+	 */
+	let cinematicBlocked = $derived(
+		data?.entitlements?.cinematic === false
+			? `Cinematic video is not included in the ${data?.entitlements?.plan ?? 'free'} plan.`
+			: null
+	);
+
 	// Switching to Fully Autonomous means posts publish WITHOUT review — gate it
 	// behind an explicit confirm, reverting the select when the user backs out.
 	let prevAutonomyLevel: AutonomyLevel = agent?.autonomy_level ?? 'advisor';
@@ -5477,8 +5519,20 @@
 								<label for="p-autonomy">Autonomy</label>
 								<select id="p-autonomy" bind:value={autonomyLevel} onchange={handleAutonomyChange}>
 									<option value="advisor">Advisor — manual generate only</option>
-									<option value="semi_autonomous">Semi — drafts for review</option>
-									<option value="fully_autonomous">Fully — publishes unattended</option>
+									<option
+										value="semi_autonomous"
+										disabled={semiBlocked !== null}
+										title={semiBlocked ?? undefined}
+									>
+										Semi — drafts for review{semiBlocked ? ' — not in your plan' : ''}
+									</option>
+									<option
+										value="fully_autonomous"
+										disabled={fullyBlocked !== null}
+										title={fullyBlocked ?? undefined}
+									>
+										Fully — publishes unattended{fullyBlocked ? ' — not in your plan' : ''}
+									</option>
 								</select>
 								<p class="field-hint">
 									{#if autonomyLevel === 'fully_autonomous'}
@@ -5501,10 +5555,16 @@
 										Eligible to graduate: {publishedCleanCount} clean published posts. Switch to Fully
 										when confident.
 									{:else}
-										Graduates to Fully after ~21 clean published posts ({publishedCleanCount} so far,
-										{recentFailedCount} recent failure{recentFailedCount === 1 ? '' : 's'}).
+										Ready for Fully at ~21 clean published posts — you make the switch; it never
+										happens on its own ({publishedCleanCount} so far, {recentFailedCount} recent failure{recentFailedCount ===
+										1
+											? ''
+											: 's'}).
 									{/if}
 								</p>
+								{#if fullyBlocked}
+									<p class="field-hint">{fullyBlocked} <a href="/billing">Compare plans</a></p>
+								{/if}
 							</div>
 
 							<div class="field-group col-span-2">
@@ -6283,7 +6343,12 @@
 															<button
 																type="button"
 																class="btn-generate studio-use"
-																disabled={generatingPost || !hydrated}
+																disabled={generatingPost ||
+																	!hydrated ||
+																	(t.baseBody?.media === 'cinematic' && cinematicBlocked !== null)}
+																title={t.baseBody?.media === 'cinematic'
+																	? (cinematicBlocked ?? undefined)
+																	: undefined}
 																onclick={() => useStudioTemplate(t)}
 															>
 																Use
@@ -6342,6 +6407,7 @@
 	<GenerationComposer
 		open={composerOpen}
 		spec={composerSpec}
+		{cinematicBlocked}
 		onClose={() => (composerOpen = false)}
 		onConfirm={(body) => onComposerConfirm(body)}
 		onGoToConnections={() => {

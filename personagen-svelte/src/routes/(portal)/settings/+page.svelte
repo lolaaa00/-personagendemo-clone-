@@ -27,6 +27,10 @@
 					brandThemeBriefId: string | null;
 				};
 			};
+			// From the portal layout load (merged into every page's data). Optional
+			// on purpose: a layout that could not resolve a plan must restrict
+			// nothing, so every gate below reads `=== false`, never `!`.
+			entitlements?: { plan?: string; teams?: boolean; byok?: boolean };
 		};
 	}>();
 
@@ -635,6 +639,17 @@
 	let newWorkspaceName = $state('');
 	let creatingWorkspace = $state(false);
 
+	// POST /api/workspaces refuses with 403 PLAN_FEATURE when the plan has no
+	// teams line, so mirror that ONE door: CREATING a shared workspace. Every
+	// other team control (invite, re-role, remove, filing personas) hits
+	// per-workspace routes the server leaves open, because existing workspaces
+	// must keep working for everyone already in them.
+	let createWorkspaceBlockedReason = $derived(
+		data.entitlements?.teams === false
+			? `Shared workspaces are not included in the ${data.entitlements?.plan ?? 'free'} plan. See Billing to compare plans.`
+			: null
+	);
+
 	// Per-workspace detail, keyed by workspace id — loaded lazily once a
 	// workspace exists, since a fresh account usually has exactly one.
 	let workspaceMembers = $state<Record<string, MemberLite[]>>({});
@@ -1052,6 +1067,23 @@
 		} finally {
 			apiKeysLoading = false;
 		}
+	}
+
+	// POST /api/settings/api-keys gates `action === 'save'` — and only for the
+	// GENERATION providers — with 403 PLAN_FEATURE when the plan has no BYOK
+	// line. Keep this list identical to the server's GENERATION_PROVIDERS.
+	// Zernio is how every plan publishes and Firecrawl is how briefs are
+	// researched, so neither is ever gated; and because only 'save' is gated,
+	// Test Connection and Delete Key stay enabled for every provider — a user
+	// keeps, can still test, and can still remove a key they already have.
+	const BYOK_GATED_PROVIDERS = ['openrouter', 'gemini', 'fal_ai', 'kie_ai'];
+
+	/** Reason this provider's Save is off, or null. Keyed on the PROVIDER, never
+	 *  on the category card — a category mixes gated and ungated providers. */
+	function saveKeyBlockedReason(provider: string): string | null {
+		if (data.entitlements?.byok !== false) return null;
+		if (!BYOK_GATED_PROVIDERS.includes(provider)) return null;
+		return `Your own generation keys are not included in the ${data.entitlements?.plan ?? 'free'} plan. See Billing to compare plans.`;
 	}
 
 	async function saveProviderKey(provider: ApiKeyProvider) {
@@ -1494,6 +1526,7 @@
 							<div class="key-accordion">
 								{#each inCat as config (config.provider)}
 									{@const savedKey = getSavedKey(config.provider)}
+									{@const saveBlocked = saveKeyBlockedReason(config.provider)}
 									{@const state = savedKey
 										? savedKey.status === 'valid'
 											? 'valid'
@@ -1585,6 +1618,8 @@
 														? 'Paste a new key to replace the saved one'
 														: config.placeholder}
 													autocomplete="off"
+													disabled={saveBlocked !== null}
+													title={saveBlocked ?? undefined}
 													aria-invalid={savedKey?.last_error ? 'true' : undefined}
 													aria-describedby={savedKey?.last_error
 														? `${config.provider}-api-key-error`
@@ -1597,7 +1632,9 @@
 													class="save-btn"
 													onclick={() => saveProviderKey(config.provider)}
 													disabled={apiKeySaving[config.provider] ||
-														!apiKeyInputs[config.provider]?.trim()}
+														!apiKeyInputs[config.provider]?.trim() ||
+														saveBlocked !== null}
+													title={saveBlocked ?? undefined}
 												>
 													{#if apiKeySaving[config.provider]}
 														<span class="spinner"></span> Saving…
@@ -1628,6 +1665,9 @@
 													{/if}
 												</button>
 											</div>
+											{#if saveBlocked}
+												<p class="plan-note">{saveBlocked}</p>
+											{/if}
 										</div>
 									</details>
 								{/each}
@@ -2108,13 +2148,18 @@
 								bind:value={newWorkspaceName}
 								placeholder="e.g. HoneyX"
 								autocomplete="off"
+								disabled={createWorkspaceBlockedReason !== null}
+								title={createWorkspaceBlockedReason ?? undefined}
 							/>
 						</div>
 						<div class="provider-actions">
 							<button
 								class="save-btn"
 								onclick={createWorkspace}
-								disabled={creatingWorkspace || !newWorkspaceName.trim()}
+								disabled={creatingWorkspace ||
+									!newWorkspaceName.trim() ||
+									createWorkspaceBlockedReason !== null}
+								title={createWorkspaceBlockedReason ?? undefined}
 							>
 								{#if creatingWorkspace}
 									<span class="spinner"></span> Creating…
@@ -2123,6 +2168,9 @@
 								{/if}
 							</button>
 						</div>
+						{#if createWorkspaceBlockedReason}
+							<p class="plan-note">{createWorkspaceBlockedReason}</p>
+						{/if}
 					</div>
 
 					<!-- Memberships in other workspaces (admin-tier ones get the full
@@ -2691,6 +2739,15 @@
 		font-size: var(--text-sm);
 		color: var(--text-muted);
 		margin-bottom: 1rem;
+	}
+
+	/* Why a control above is off — a plan limit, not a fault. Sits under the
+	   action row it explains, so the reason is next to the disabled button. */
+	.plan-note {
+		font-size: var(--text-sm);
+		color: var(--text-muted);
+		margin: 0.6rem 0 0;
+		line-height: 1.5;
 	}
 
 	/* Brand Theme */

@@ -15,6 +15,10 @@
 			briefId: string | null;
 			briefName: string | null;
 			briefs: Array<{ id: string; name: string; updated_at: string }>;
+			// From the portal layout load (merged into every page's data). Optional
+			// on purpose: a layout that could not resolve a plan must restrict
+			// nothing, so the gate below reads `!== null`, never a truthiness test.
+			entitlements?: { plan?: string; brandBriefLimit?: number | null };
 		};
 	}>();
 
@@ -58,6 +62,22 @@
 			switchingBrief = false;
 		}
 	}
+
+	// The engine counts brand briefs on CREATE only and refuses with 403
+	// PLAN_FEATURE past the plan's limit. "+ New Brief" is the only control that
+	// leads to a create (it blanks currentBriefId, and a save with no id is a
+	// create), so gate it and nothing else — Save stays open on every plan
+	// because updating an existing brief is deliberately never refused.
+	// null limit = unlimited; a missing entitlement restricts nothing.
+	let briefLimit = $derived(data.entitlements?.brandBriefLimit ?? null);
+	// briefList is the live mirror of the same server-side list the limit counts
+	// (seeded from data.briefs, refreshed after every create and delete), so the
+	// button re-arms the moment a brief is deleted.
+	let newBriefBlockedReason = $derived(
+		briefLimit !== null && briefList.length >= briefLimit
+			? `The ${data.entitlements?.plan ?? 'free'} plan includes ${briefLimit} brand brief${briefLimit === 1 ? '' : 's'}. See Billing to compare plans.`
+			: null
+	);
 
 	function newBrief() {
 		// Blank slate: next Save creates a new brand_briefs row.
@@ -318,19 +338,37 @@
 		}
 	}
 
+	const TRANSPORT_FAILURE =
+		/failed to fetch|network\s*error|load failed|connection|offline|took too long|aborted|timed? ?out|HTTP 5\d\d/i;
+
+	/**
+	 * "Saved locally — cloud sync failed" is only true when the request never
+	 * reached a working server. BrandBrief.save never throws — it funnels every
+	 * failure into `{ success: false, error }` — so the old code reported a plan
+	 * refusal, a validation error and a genuine outage identically, and threw the
+	 * server's explanation away. Say what the server said; keep the reassurance
+	 * for the one case that earns it.
+	 */
 	async function persistBriefToDb(payload: Record<string, unknown>) {
 		try {
 			// Targets the active brief; with no active id the server creates a new
 			// brand_briefs row (multi-brand) and we adopt its id for future saves.
 			const res = await BrandBrief.save(payload, currentBriefId, String(payload.brandName || ''));
 			if (!res.success) {
-				showToast('Saved locally — cloud sync failed', 'warning');
+				const message = (res.error || '').trim();
+				if (!message || TRANSPORT_FAILURE.test(message)) {
+					showToast('Saved locally — cloud sync failed', 'warning');
+				} else {
+					showToast(message, 'error');
+				}
 				return;
 			}
 			const savedId = (res.data as any)?.id;
 			if (savedId && savedId !== currentBriefId) currentBriefId = savedId;
 			void refreshBriefList();
 		} catch {
+			// Nothing above reports a server refusal by throwing, so a throw here is
+			// a genuinely local fault — the reassurance is the right answer.
 			showToast('Saved locally — cloud sync failed', 'warning');
 		}
 	}
@@ -758,9 +796,17 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 						{/each}
 					</select>
 				{/if}
-				<button class="action-btn" onclick={newBrief} title="Start a brief for another brand">
+				<button
+					class="action-btn"
+					onclick={newBrief}
+					disabled={newBriefBlockedReason !== null}
+					title={newBriefBlockedReason ?? 'Start a brief for another brand'}
+				>
 					+ New Brief
 				</button>
+				{#if newBriefBlockedReason}
+					<span class="plan-note">{newBriefBlockedReason}</span>
+				{/if}
 				<span class="version-badge">
 					v{version}
 					{lastSaved ? `— Last saved: ${lastSaved}` : '— Not saved yet'}
@@ -2189,6 +2235,23 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 	.action-btn.danger:disabled {
 		opacity: 0.6;
 		cursor: not-allowed;
+	}
+	.action-btn:disabled {
+		opacity: 0.6;
+		cursor: not-allowed;
+	}
+	/* Scoped off .danger so the existing delete-in-flight styling is untouched. */
+	.action-btn:disabled:not(.danger):hover {
+		border-color: var(--border-strong);
+		color: var(--text-muted);
+	}
+
+	/* Why "+ New Brief" is off — a plan limit, not a fault. */
+	.plan-note {
+		font-size: var(--text-xs);
+		color: var(--text-dim);
+		max-width: 26ch;
+		line-height: 1.45;
 	}
 
 	/* Tabs */
