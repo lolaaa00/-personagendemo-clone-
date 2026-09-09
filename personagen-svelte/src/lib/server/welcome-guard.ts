@@ -1,8 +1,8 @@
 /**
  * Welcome-credit abuse guard by address — no PII.
  *
- * The signup trigger grants welcome credit to every new account (capped per
- * hour platform-wide). This closes the per-address hole: when a second
+ * grantWelcomeCredit below funds every account the signup route creates
+ * (capped per hour platform-wide). This closes the per-address hole: when a second
  * account is created from the same daily-salted IP hash within the same
  * activity day, the new account's welcome credit is taken back as an
  * audited adjustment. The user still gets an account; text posts stay free.

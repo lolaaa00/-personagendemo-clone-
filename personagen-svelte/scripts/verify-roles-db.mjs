@@ -153,11 +153,11 @@ SELECT step, ok, detail FROM _v;
 ROLLBACK;
 `;
 
-// The signup trigger grants welcome credits to every user inserted above, so the
-// owner's balance is welcome + the 5 000 granted here.
-const welcomeRes = await pg(`SELECT COALESCE((value #>> '{}')::bigint, 0) AS w FROM public.platform_settings WHERE key = 'signup_credits'`);
-const WELCOME = Number(welcomeRes.data?.[0]?.w ?? 0);
-const r = await pg(SQL.replace(/__OWNER_EXPECTED__/g, String(5000 + WELCOME)));
+// Users inserted straight into auth.users are NOT funded: the welcome grant
+// lives in /api/auth/signup, because GoTrue applies app_metadata after the row
+// is inserted and no AFTER INSERT trigger can see it. So the owner's balance is
+// exactly the 5 000 granted here.
+const r = await pg(SQL.replace(/__OWNER_EXPECTED__/g, String(5000)));
 if (!r.ok) {
 	console.error('verification transaction failed:', JSON.stringify(r.data).slice(0, 800));
 	process.exit(1);

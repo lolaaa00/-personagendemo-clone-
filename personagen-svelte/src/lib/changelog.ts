@@ -455,7 +455,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-09", hash: "83be119", type: "feat", category: "feature", scope: "ops", title: "the database gets a backup, and the backup gets proved" },
 	{ date: "2026-09-09", hash: "c3b0306", type: "fix", category: "fix", scope: "security", title: "an account that walks around the signup gate stops getting money" },
 	{ date: "2026-09-09", hash: "29e2b94", type: "fix", category: "fix", scope: "signup", title: "the welcome grant moves to the route, because the trigger cannot see the marker" },
-	{ date: "2026-09-09", hash: "ef2174e", type: "fix", category: "fix", scope: "admin", title: "the console hid a switch it would happily accept, and the smoke said PASS anyway" }
+	{ date: "2026-09-09", hash: "ef2174e", type: "fix", category: "fix", scope: "admin", title: "the console hid a switch it would happily accept, and the smoke said PASS anyway" },
+	{ date: "2026-09-09", hash: "8a152e8", type: "docs", category: "docs", scope: "security", title: "who can create an account today, and the two switches only you can flip" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -799,10 +800,10 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 		id: "8ad01c9", from: "2026-09-09", to: "2026-09-09",
 		category: "fix", categories: ["feature","fix","maintenance","docs"],
 		title: "Fixed: \"Cancel any time\" gets a line behind it",
-		summary: "\"Cancel any time\" gets a line behind it. Plus 8 more changes, touching things you can now do and internal cleanup and guides and explanations.",
+		summary: "\"Cancel any time\" gets a line behind it. Plus 9 more changes, touching things you can now do and internal cleanup and guides and explanations.",
 		major: true, curated: false,
-		entries: [CHANGELOG[413], CHANGELOG[414], CHANGELOG[415], CHANGELOG[416], CHANGELOG[417], CHANGELOG[418], CHANGELOG[419], CHANGELOG[420], CHANGELOG[421]]
+		entries: [CHANGELOG[413], CHANGELOG[414], CHANGELOG[415], CHANGELOG[416], CHANGELOG[417], CHANGELOG[418], CHANGELOG[419], CHANGELOG[420], CHANGELOG[421], CHANGELOG[422]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "ef2174e";
+export const CHANGELOG_GENERATED_FROM = "8a152e8";

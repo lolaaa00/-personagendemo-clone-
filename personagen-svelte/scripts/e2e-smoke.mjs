@@ -9,7 +9,7 @@
 //
 // What it proves, in order:
 //   1. health + build version
-//   2. signup trigger grants the welcome credit (platform_settings.signup_credits)
+//   2. the signup ROUTE grants the welcome credit, and a GoTrue-created account gets none
 //   3. login through /api/auth/login sets a usable session
 //   4. the portal renders the wallet pill as money; /billing renders the balance,
 //      packs and the payments-closed state; checkout is refused while closed

@@ -73,17 +73,20 @@ VALUES ('00000000-0000-4000-8000-00000000c0de', '00000000-0000-0000-0000-0000000
 
 DO $$
 DECLARE u UUID := '00000000-0000-4000-8000-00000000c0de'; b BIGINT; d BIGINT; raised BOOLEAN; ev UUID; ledger_sum BIGINT;
-        welcome BIGINT := COALESCE((SELECT (value #>> '{}')::bigint FROM public.platform_settings WHERE key = 'signup_credits'), 0);
+        welcome BIGINT := 0;  -- a row inserted straight into auth.users is not funded; see check 0
 BEGIN
-  -- 0. the signup trigger granted welcome credits to the throwaway user above
+  -- 0. A row inserted straight into auth.users gets NO welcome credit. The grant
+  --    lives in /api/auth/signup, not in the trigger — GoTrue applies
+  --    app_metadata after the insert, so no AFTER INSERT trigger can tell an
+  --    invited account from one created against GoTrue with the public anon key.
   SELECT balance_credits INTO b FROM public.credit_accounts WHERE user_id = u;
-  INSERT INTO _v SELECT '0 signup trigger grants welcome credits (platform_settings.signup_credits)',
-    COALESCE(b, 0) = welcome AND (welcome = 0 OR EXISTS (SELECT 1 FROM public.credit_ledger WHERE user_id = u AND kind = 'grant' AND note LIKE 'welcome%')),
-    'welcome=' || welcome || ' balance=' || COALESCE(b, 0);
+  INSERT INTO _v SELECT '0 an account not created by the signup route is unfunded',
+    COALESCE(b, 0) = 0 AND NOT EXISTS (SELECT 1 FROM public.credit_ledger WHERE user_id = u AND kind = 'grant' AND note LIKE 'welcome%'),
+    'balance=' || COALESCE(b, 0);
 
-  -- 1. a grant lands on top of the welcome balance
+  -- 1. a grant lands on top of the starting balance
   b := public.credit_apply(u, 500, 'grant', 'verify grant', NULL);
-  INSERT INTO _v SELECT '1 grant adds 500 on top of welcome credits', b = welcome + 500 AND EXISTS (SELECT 1 FROM public.credit_accounts WHERE user_id = u), 'balance=' || b;
+  INSERT INTO _v SELECT '1 grant adds 500 on top of the starting balance', b = welcome + 500 AND EXISTS (SELECT 1 FROM public.credit_accounts WHERE user_id = u), 'balance=' || b;
 
   -- 2. set targets a balance; ledger delta = target - previous
   b := public.credit_apply(u, 300, 'set', 'verify set', NULL);
