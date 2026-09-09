@@ -2,6 +2,9 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { createDbService } from '$lib/server/db';
 import { runAutopilotDraftGeneration } from '$lib/server/autopilot';
+import { assertWithinBudget } from '$lib/server/budget';
+import { creditsFor, isCreditsError, resolveBillingAccount } from '$lib/server/credits';
+import { priceOf } from '$lib/pricing';
 
 const DEFAULT_TZ = 'Australia/Sydney';
 
@@ -81,6 +84,41 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		}
 
 		if (action === 'generate_now') {
+			// Quote ONE pack before dispatching. This is the only user-triggered
+			// generation path that had no quote at all: it 202s and detaches, and
+			// the run's only gate is the inner one, which rejects an empty wallet
+			// and nothing else — so a wallet holding a single credit could start a
+			// chain of packs and finish it overdrawn. The run self-limits after the
+			// first overdraft (autopilot treats a credits error as a hard stop for
+			// the agent), so gating a single pack is what makes this path behave
+			// like the interactive one.
+			const packUsd =
+				2 * priceOf('openrouter', 'llm') +
+				priceOf('fal', 'image', 'nano') +
+				priceOf('fal', 'tts') +
+				priceOf('fal', 'talking_head');
+			try {
+				await assertWithinBudget(locals.supabase, user.id, agentId, creditsFor(packUsd));
+			} catch (err) {
+				if (isCreditsError(err)) {
+					const billed = await resolveBillingAccount(locals.supabase, agentId, user.id).catch(() => user.id);
+					const ownerPays = billed !== user.id;
+					return json(
+						{
+							success: false,
+							code: 'INSUFFICIENT_CREDITS',
+							billedTo: ownerPays ? 'workspace_owner' : 'self',
+							error: ownerPays
+								? `${(err as Error).message} This persona is billed to the workspace owner's wallet — ask them to top up.`
+								: `${(err as Error).message} Top up at /billing to continue.`,
+							billingUrl: '/billing'
+						},
+						{ status: 402 }
+					);
+				}
+				return json({ success: false, error: (err as Error).message }, { status: 400 });
+			}
+
 			// A run chains one fal generation per empty slot (30s–5min each) —
 			// far past the reverse proxy's request timeout. Kick it off detached
 			// and 202 immediately; drafts land in the review queue as each slot

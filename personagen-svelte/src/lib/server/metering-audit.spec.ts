@@ -12,7 +12,10 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
 const ROOT = join(__dirname, '..', '..');
-const PROVIDER_HOSTS = [/fal\.run/, /queue\.fal\.run/, /fal\.ai\//, /openrouter\.ai/, /generativelanguage\.googleapis\.com/, /api\.firecrawl\.dev/, /api\.elevenlabs/];
+const PROVIDER_HOSTS = [/fal\.run/, /queue\.fal\.run/, /fal\.ai\//, /openrouter\.ai/, /generativelanguage\.googleapis\.com/, /api\.firecrawl\.dev/, /api\.elevenlabs/, /api\.kie\.ai/, /kie\.ai\//];
+// A host name is not the only way to reach a paid provider: an SDK reaches one
+// with no URL in sight, so the symbol counts as a call site too.
+const PROVIDER_SDKS = [/new GoogleGenAI\(/, /@google\/genai/];
 const METERED_MARKERS = [/assertWithinBudget\(/, /recordCostEvents\(/, /meteredCall\(/, /meteredAiClient\(/, /runBudgetedAssetJob\(/];
 
 /** path (posix, relative to src/) → why it is free */
@@ -38,7 +41,7 @@ describe('metering audit — every provider call site is metered or explicitly f
 	const files = walk(ROOT);
 	const talkers = files.filter((f) => {
 		const s = readFileSync(f, 'utf8');
-		return PROVIDER_HOSTS.some((h) => h.test(s));
+		return PROVIDER_HOSTS.some((h) => h.test(s)) || PROVIDER_SDKS.some((h) => h.test(s));
 	});
 
 	it('finds the provider call sites at all (guard against a silent regex miss)', () => {
@@ -50,6 +53,76 @@ describe('metering audit — every provider call site is metered or explicitly f
 		const metered = METERED_MARKERS.some((m) => m.test(s));
 		const free = FREE_PATHS[rel];
 		expect(metered || !!free, `${rel} calls a provider but is neither metered nor allow-listed in FREE_PATHS`).toBe(true);
+	});
+
+	// The check above is FILE-level: one metering marker anywhere clears the whole
+	// file. engine/+server.ts is ~2,800 lines and generate.ts is ~200 KB, so a new
+	// unmetered call added to either would have passed in silence — the invariant
+	// read as call-site coverage while only ever proving file presence. This
+	// counts instead: every paid call must have cost accounting near it.
+	const CALL = /(?:falSyncJson|falQueueJson|openRouterImageEdit|openRouterBrollVideo)\s*\(/;
+	// the declarations of those helpers, which are not call sites
+	const DECL = /(?:function|const)\s+(?:falSyncJson|falQueueJson|openRouterImageEdit|openRouterBrollVideo)/;
+	const NEAR = [/costEvents\.push\(/, /meteredCall\(/, /runBudgetedAssetJob\(/, /recordCostEvents\(/, /assertWithinBudget\(/];
+	const dense = ['lib/server/content/generate.ts', 'routes/api/engine/+server.ts'];
+
+	/**
+	 * Helpers that spend but do not price: each returns its result to a caller
+	 * that pushes the cost event. Adding a NEW one is a deliberate act — it has
+	 * to be named here, with the caller that prices it.
+	 */
+	const PRICED_BY_CALLER: Record<string, string> = {
+		generateUgcImage: 'callers push the image cost with the model that actually ran',
+		generateProductStill: 'priced by the pack that requested the still',
+		generateGraphicStill: 'priced by the pack; free when the card renderer handles it',
+		generateVoiceAudio: 'priced by the pack as fal/tts',
+		generateTalkingHead: 'priced by the pack as fal/talking_head',
+		generateBrollVideo: 'priced by the pack at the registry video rate',
+		generateCinematicVideo: 'priced by the cinematic pack at the pro video rate'
+	};
+
+	/** Name of the function a line sits inside, for the allow-list above. */
+	function enclosingFn(lines: string[], index: number): string {
+		for (let i = index; i >= 0; i--) {
+			const m = lines[i].match(/^(?:export )?(?:async )?function (\w+)|^const (\w+) = async/);
+			if (m) return m[1] ?? m[2] ?? '';
+		}
+		return '';
+	}
+
+	it.each(dense)('%s — every paid call is accounted for at its own call site', (rel) => {
+		const lines = readFileSync(join(ROOT, rel), 'utf8').split('\n');
+		const orphans: string[] = [];
+		lines.forEach((line, i) => {
+			if (!CALL.test(line) || DECL.test(line)) return;
+			const window = lines.slice(Math.max(0, i - 4), i + 40).join('\n');
+			if (NEAR.some((m) => m.test(window))) return;
+			const fn = enclosingFn(lines, i);
+			if (PRICED_BY_CALLER[fn]) return;
+			orphans.push(`${rel}:${i + 1} (in ${fn || 'top level'}) — ${line.trim().slice(0, 70)}`);
+		});
+		expect(
+			orphans,
+			`paid call with no cost accounting nearby and no PRICED_BY_CALLER entry: ${orphans.join(' | ')}`
+		).toEqual([]);
+	});
+
+	it('every PRICED_BY_CALLER helper still exists and still spends', () => {
+		// A stale allow-list is how this check would quietly stop meaning anything:
+		// a name left here after the function is gone excuses nothing, but it also
+		// hides that nobody is maintaining the list.
+		const src = readFileSync(join(ROOT, 'lib/server/content/generate.ts'), 'utf8');
+		for (const fn of Object.keys(PRICED_BY_CALLER)) {
+			expect(src, `${fn} is allow-listed but no longer defined`).toContain(`function ${fn}(`);
+		}
+	});
+
+	it('the call-site scan actually found calls (an empty scan would pass vacuously)', () => {
+		const found = dense.reduce(
+			(n, rel) => n + readFileSync(join(ROOT, rel), 'utf8').split('\n').filter((l) => CALL.test(l) && !DECL.test(l)).length,
+			0
+		);
+		expect(found).toBeGreaterThanOrEqual(10);
 	});
 
 	it('every FREE_PATHS entry still exists (no stale allow-list)', () => {

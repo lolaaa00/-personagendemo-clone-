@@ -11,6 +11,13 @@ vi.mock('./service-supabase', () => ({
 }));
 
 const credits = await import('./credits');
+const userKeys = await import('./user-api-keys');
+
+/** A row that really decrypts, built with the same code the resolvers use. */
+function storedKey(secret = 'sk-user-key') {
+	mockEnv.USER_SECRETS_ENCRYPTION_KEY = 'x'.repeat(32);
+	return { provider: 'fal_ai', ...userKeys.encryptSecret(secret) };
+}
 
 beforeEach(() => {
 	for (const k of Object.keys(mockEnv)) delete mockEnv[k];
@@ -59,12 +66,31 @@ describe('keySourceFor', () => {
 		expect(sb.queries).toHaveLength(0);
 	});
 
-	it('a stored user key → byo; none → platform; maps fal → fal_ai', async () => {
+	it('a USABLE stored key → byo; none → platform; maps fal → fal_ai', async () => {
+		const row = storedKey();
 		const sb = createMockSupabase((q) =>
-			q.table === 'user_api_keys' && q.eqOf('provider') === 'fal_ai' ? { data: { provider: 'fal_ai' } } : { data: null }
+			q.table === 'user_api_keys' && q.eqOf('provider') === 'fal_ai' ? { data: row } : { data: null }
 		);
 		expect(await credits.keySourceFor(sb, 'u1', 'fal')).toBe('byo');
 		expect(await credits.keySourceFor(sb, 'u1', 'openrouter')).toBe('platform');
+	});
+
+	it('a stored key that will NOT decrypt is platform, because the platform key is what runs', async () => {
+		// The leak this closes: the resolvers do `getUserApiKey(...).catch(() => null)`
+		// and fall back to env, so a rotated encryption key or a corrupt auth tag
+		// means WE pay. Stamping that event 'byo' made it both unbilled (charge()
+		// skips non-platform rows) and invisible to every reconciliation view.
+		mockEnv.USER_SECRETS_ENCRYPTION_KEY = 'x'.repeat(32);
+		const corrupt = { provider: 'fal_ai', encrypted_value: 'not-real', iv: 'nope', auth_tag: 'nope' };
+		const sb = createMockSupabase((q) => (q.table === 'user_api_keys' ? { data: corrupt } : { data: null }));
+		expect(await credits.keySourceFor(sb, 'u1', 'fal')).toBe('platform');
+	});
+
+	it('an unreadable key store is platform, not byo', async () => {
+		const sb = createMockSupabase(() => {
+			throw new Error('database down');
+		});
+		expect(await credits.keySourceFor(sb, 'u1', 'fal')).toBe('platform');
 	});
 
 	it('uses the cache and only hits the DB once per user+provider', async () => {

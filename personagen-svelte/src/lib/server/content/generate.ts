@@ -2152,9 +2152,19 @@ async function runBudgetedAssetJob<T>(
 	userId: string,
 	agentId: string,
 	costEvents: CostEvent[],
-	job: () => Promise<T>
+	job: () => Promise<T>,
+	/**
+	 * What this job is expected to spend, in provider USD.
+	 *
+	 * Without it the gate defaults to ONE credit, which only rejects an empty
+	 * wallet — so a wallet holding a single cent could start a multi-image
+	 * portrait job and finish it overdrawn, with only the NEXT run refused.
+	 * Every caller now quotes the models it is about to run. 0 keeps the old
+	 * behaviour for any caller that genuinely cannot quote.
+	 */
+	estimatedUsd = 0
 ): Promise<T> {
-	await assertWithinBudget(supabase, userId, agentId);
+	await assertWithinBudget(supabase, userId, agentId, estimatedUsd > 0 ? creditsFor(estimatedUsd) : 1);
 	try {
 		return await job();
 	} finally {
@@ -2227,9 +2237,20 @@ export async function recordCostEvents(
 			if (!error) {
 				inserted = data ?? [];
 				if (dropped.size > 0) {
-					console.warn(
-						`[Cost] Recorded generation events without ${[...dropped].join(', ')} — apply the pending generation_events migration(s) or reload the PostgREST schema cache (NOTIFY pgrst, 'reload schema').`
-					);
+					// asset_url going missing is cosmetic. billed_user_id, key_source and
+					// credits are not: the DEBIT still fires from the in-memory value, so
+					// money moves while the row it is keyed to cannot be attributed —
+					// invisible to every reconciliation view, which filters on
+					// key_source = 'platform', and to margin reporting with it.
+					const money = [...dropped].filter((c) => c === 'key_source' || c === 'credits' || c === 'billed_user_id');
+					const fix = `apply the pending generation_events migration(s) or reload the PostgREST schema cache (NOTIFY pgrst, 'reload schema')`;
+					if (money.length > 0 && mode !== 'off') {
+						console.error(
+							`[Cost] ATTRIBUTION LOST: recorded generation events without ${money.join(', ')} while credits are '${mode}'. The wallet was still debited, but these rows are invisible to reconciliation and margin. Fix now — ${fix}.`
+						);
+					} else {
+						console.warn(`[Cost] Recorded generation events without ${[...dropped].join(', ')} — ${fix}.`);
+					}
 				}
 				break;
 			}
@@ -2641,7 +2662,15 @@ export async function generateCharacterPortrait(
 	const editing = Boolean(identityRef);
 	const portraitModel = resolveModel(editing ? 'image_edit' : 'image_t2i', modelId);
 	const costEvents: CostEvent[] = [];
-	return await runBudgetedAssetJob(supabase, userId, agentId, costEvents, async () => {
+	// The portrait job runs three paid images: the hero portrait on the chosen
+	// model, then the character sheet and the avatar hero shot on nano.
+	const portraitQuoteUsd = portraitModel.usd + 2 * priceOf('fal', 'image', 'nano');
+	return await runBudgetedAssetJob(
+		supabase,
+		userId,
+		agentId,
+		costEvents,
+		async () => {
 		// 1. Hero portrait → pinned as the profile picture. When a face already exists
 		//    we EDIT it (feed the existing image back in) so the persona stays the SAME
 		//    person — only the shot and any configured styling change. This is the fix
@@ -2744,7 +2773,9 @@ export async function generateCharacterPortrait(
 		}
 
 		return durable;
-	});
+		},
+		portraitQuoteUsd
+	);
 }
 
 /**
@@ -3026,7 +3057,14 @@ export async function generateCharacterSheetFromReference(
 	referenceImageUrl: string
 ): Promise<string> {
 	const costEvents: CostEvent[] = [];
-	return await runBudgetedAssetJob(supabase, userId, agentId, costEvents, async () => {
+	// Two paid nano images: the character sheet, then the hero shot cut from it.
+	const sheetQuoteUsd = 2 * priceOf('fal', 'image', 'nano');
+	return await runBudgetedAssetJob(
+		supabase,
+		userId,
+		agentId,
+		costEvents,
+		async () => {
 		const data = await falSyncJson(
 			NANO_MODEL,
 			{ prompt: CHARACTER_SHEET_PROMPT, image_urls: [referenceImageUrl], aspect_ratio: '16:9' },
@@ -3075,7 +3113,9 @@ export async function generateCharacterSheetFromReference(
 		// (or a previous from-scratch face) no longer depict the same person.
 		await mergeReferenceKit(supabase, agentId, { sheet: durableSheet, full_body: durable }, true);
 		return durable;
-	});
+		},
+		sheetQuoteUsd
+	);
 }
 
 /**
@@ -3196,7 +3236,12 @@ export async function executeKitStage(
 	// models receive only the primary reference -- see buildEditInput.
 	const model = resolveModel('image_edit', plan.model);
 	const costEvents: CostEvent[] = [];
-	return await runBudgetedAssetJob(supabase, userId, agentId, costEvents, async () => {
+	return await runBudgetedAssetJob(
+		supabase,
+		userId,
+		agentId,
+		costEvents,
+		async () => {
 		const data = await falSyncJson(
 			model.id,
 			buildEditInput(model, plan.prompt, plan.image_urls, plan.aspect_ratio),
@@ -3215,7 +3260,9 @@ export async function executeKitStage(
 		const durable = await persistToStorage(svc, url, userId, 'png');
 		await mergeReferenceKit(supabase, agentId, { [stage]: durable });
 		return durable;
-	});
+		},
+		model.usd
+	);
 }
 
 async function ensureCharacterRef(
