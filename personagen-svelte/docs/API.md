@@ -15,47 +15,50 @@ without clicking the UI.
 
 ## Authentication
 
-**There is no machine API-key auth yet.** Every endpoint authenticates from the
-**Supabase session** attached to the request (cookie-based, read server-side via
-`safeGetSession()`). A controller authenticates the same way a browser does:
+**Use a scoped API key.** Mint one at **/developer**; it is shown once and
+stored only as a SHA-256 hash. Send it as a bearer token:
 
-1. `POST /api/auth/login` with `{ email, password }`.
-2. The response includes `session.access_token` (a JWT) and
-   `session.refresh_token`.
-3. Send the access token on every subsequent call as either:
-   - the Supabase auth **cookie** the login response sets, **or**
-   - an `Authorization: Bearer <access_token>` header.
-
-```jsonc
-// POST /api/auth/login
-{ "email": "kelvin@monarchstack.com", "password": "•••••••" }
-
-// 200
-{
-  "user":    { "id": "…", "email": "…", … },
-  "session": { "access_token": "eyJ…", "refresh_token": "…", "expires_at": 1234567890, … }
-}
-// 401 → { "error": "Invalid login credentials" }
+```
+Authorization: Bearer pg_live_…
 ```
 
-### Limits of session auth for automation (read before you build)
+The server resolves the key on **every request**, so revoking a key at
+/developer takes effect immediately — the only window is a request already in
+flight. It then mints a short-lived (10 minute) internal token and builds the
+request's database client with it, so row-level security and workspace roles
+apply exactly as they do for a browser session. Your controller never sees or
+handles that internal token.
 
-- **Tokens expire (~1 hour).** The controller must refresh via the
-  `refresh_token` (Supabase token endpoint) or re-login, and retry a `401`.
-- **A session IS a human seat.** Every call runs with that user's workspace
-  **role** (owner / admin / manager / creator / viewer — see § Roles). A
-  `creator` login literally cannot publish, by design; use an account whose role
-  matches what the controller needs to do.
-- **No per-machine scoping or revocation.** Rotating access means changing the
-  human account's password.
+```jsonc
+// Any endpoint in this document
+// Authorization: Bearer pg_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+// 401 → { "success": false, "error": "Unauthorized" }
+```
 
-> **Durable path (not built yet):** a first-class **scoped API-key / service
-> token** — non-expiring, tied to a workspace rather than a person, with its own
-> role. That's the right foundation for an agentic controller. Flagged as a
-> feature to spec; this doc will grow an `Authorization: ApiKey …` section when
-> it lands.
+### What a key is, and is not
+
+- **A key IS a seat.** It inherits the workspace **role** of the account that
+  minted it (owner / admin / manager / creator / viewer — see § Roles). A
+  `creator` key cannot publish, by design. Mint the key from an account whose
+  role matches what the controller needs to do.
+- **A key is not scoped below the seat.** There is no per-endpoint or
+  per-workspace scope yet, and a key can currently reach account-level routes
+  including minting further keys and changing the account password. Treat it as
+  a full credential for that seat, store it like a password, and give it its own
+  account rather than a person's.
+- **Revocation is per key**, so rotating one controller does not disturb others
+  or require changing anyone's password.
+
+### Session auth (browser, and the fallback)
+
+Cookie-based session auth still works and is what the app itself uses:
+`POST /api/auth/login` with `{ email, password }` returns a session whose
+access token may be sent as a cookie or as `Authorization: Bearer <jwt>`. For
+automation prefer an API key — session tokens expire in about an hour, must be
+refreshed, and rotating them means changing a human account's password.
 
 ---
+
 
 ## Conventions
 
