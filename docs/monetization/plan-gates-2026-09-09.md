@@ -38,7 +38,33 @@ Two rules in `src/lib/server/entitlements.ts`:
 
 ## The launch-day edit
 
-One row. Everything above starts binding the moment it runs:
+**Two edits, not one.** The `entitlements` JSONB arms six axes; the two LIMIT
+axes are separate columns and are not touched by it. Measured against
+production on 2026-09-09, with 11 accounts and 18 personas:
+
+| Axis | Armed by | Accounts affected today |
+|---|---|---|
+| cinematic, api, teams, priority | the JSONB edit | **none** — zero cinematic generations ever, `api_keys` is empty, one workspace exists and its 6 members are untouched, free already ranks 0 for priority |
+| max_autonomy | the JSONB edit | **one persona**, and only by preventing a future re-raise. 15 of 16 configs are already `advisor`; the gate refuses a RAISE only, so nothing running stops and unrelated saves still save |
+| byok | the JSONB edit | **two accounts** hold an OpenRouter key. They keep and can still test it; only re-saving or rotating is refused |
+| persona_limit, brand_brief_limit | **a separate UPDATE of those columns** | not armed by the edit below. Free is `NULL` = unlimited |
+
+Two consequences worth knowing before you decide:
+
+- While `free.brand_brief_limit` is NULL, `atLeast` propagates that null upward,
+  so the brief gate is inert for **Studio and Brand as well** — their advertised
+  "1 brand brief" and "3 brand briefs" cannot bind until free carries a number.
+- The persona limit has a second reader, `personaLimitExceeded` in `plans.ts`,
+  which goes straight to the catalog row and does not pass through `atLeast`.
+  That is the one that actually guards persona creation today.
+
+**No client code reads entitlements.** Every refusal is server-side, so a
+tightened plan produces a 403 on a button that still looks enabled — the
+autonomy select still offers all three levels, Settings still shows the
+generation-key fields, and the composer still offers Cinematic. Fix that before
+arming anything a user can see, or the gates will read as bugs.
+
+The JSONB edit — this is what arms the six feature axes:
 
 ```sql
 UPDATE public.plan_catalog SET entitlements =
@@ -47,9 +73,19 @@ UPDATE public.plan_catalog SET entitlements =
 WHERE plan = 'free';
 ```
 
-Decide first what Free should actually include — that UPDATE is a product
-decision, not a technical one. It takes autonomy, cinematic video, teams, API
-access and BYOK away from every current account.
+And, only if Free is meant to cap volume as well, the second edit:
+
+```sql
+UPDATE public.plan_catalog
+   SET persona_limit = <n>, brand_brief_limit = <n>
+ WHERE plan = 'free';
+```
+
+That second one is the edit with real blast radius: the three active accounts
+hold 11, 4 and 3 personas today. Both limit gates are create-only, so nothing
+already made breaks — but new creation stops for the accounts using the product
+most. Decide what Free should include before running either; that is a product
+decision, not a technical one.
 
 ## Two copy decisions left open
 

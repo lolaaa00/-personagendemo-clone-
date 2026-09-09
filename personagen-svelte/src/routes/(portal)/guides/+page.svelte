@@ -543,12 +543,12 @@
 			facts: [
 				'Delete always asks to confirm first',
 				'Most platforms: removed automatically',
-				'Instagram: manual — the panel gives the link',
+				'Instagram, TikTok and Snapchat: manual — the panel gives the link',
 			],
 			steps: [
 				{ t: 'Open the post and click Delete (it asks "Confirm delete?").' },
 				{ t: 'Platforms that allow removal by software are taken down automatically.' },
-				{ t: 'Instagram doesn’t allow apps to delete posts — for those the panel shows the direct link: open the post on Instagram → ⋯ → Delete. Ten seconds.' }
+				{ t: 'Instagram, TikTok and Snapchat don’t allow apps to delete posts — for those the panel shows the direct link: open the post in that app → ⋯ → Delete. Ten seconds.' }
 			]
 		},
 

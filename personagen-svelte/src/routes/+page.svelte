@@ -69,7 +69,7 @@
 			n: '05',
 			title: 'Connect and set autonomy',
 			time: '~90 sec',
-			body: 'Link the accounts, choose Advisor, Semi-autonomous or Fully autonomous, set the cadence. Then it runs.'
+			body: 'Link the accounts, then pick a level per persona: Advisor stays manual — you generate on demand — while Semi-autonomous and Fully autonomous run to the cadence you set.'
 		}
 	];
 
@@ -88,11 +88,11 @@
 		},
 		{
 			title: 'Three levels of autonomy. Your call.',
-			body: 'Advisor suggests. Semi-autonomous drafts and waits for you. Fully autonomous runs inside your guardrails. Per persona, changeable any time.'
+			body: 'Advisor is manual — nothing runs unattended; you generate on demand. Semi-autonomous drafts and waits for you. Fully autonomous runs inside your guardrails. Per persona, changeable any time.'
 		},
 		{
-			title: 'No two personas look or sound alike.',
-			body: 'Run ten and they will not converge. Every new persona is checked against your whole roster — look, angle, audience, voice — and forced to be different.'
+			title: 'No two personas look alike.',
+			body: 'Every new persona is generated with your whole roster in view — look, angle, audience — so it lands somewhere different. You build a cast, not ten variations of one face.'
 		},
 		{
 			title: 'Every cent, on the record.',
@@ -185,7 +185,7 @@
 		},
 		{
 			q: 'Are AI personas allowed on these platforms?',
-			a: 'Rules differ by platform and are tightening. Our position is that disclosure is the durable strategy, not stealth: generated video carries an AI-generated marker, and we would rather you pass a review than win a week.'
+			a: 'Rules differ by platform and are tightening. Our position is that disclosure is the durable strategy, not stealth. Every generation offers a one-tap “AI GENERATED” badge burned into the video — off by default, yours to set per post, and never switched on for you by an unattended autopilot run. Turn it on where a platform expects it: we would rather you pass a review than win a week.'
 		},
 		{
 			q: 'Do I own what it makes?',
@@ -359,10 +359,12 @@
 	<section class="lp-section lp-trust">
 		<h2>Built for brands that answer for what they post.</h2>
 		<p>
-			Every generated video carries an AI-generated marker. Every post is approved before it goes
-			out unless you say otherwise. Every publish is verified against the platform — and where a
-			platform makes deletion impossible, we tell you plainly instead of pretending. Disclosure
-			rules for synthetic content are arriving. We built for them first.
+			Disclosure is a switch you hold: one tap on any generation burns an “AI GENERATED” badge
+			into the video. It is off until you turn it on, and an unattended autopilot run will not
+			turn it on for you. Every post is approved before it goes out unless you say otherwise.
+			Every publish is verified against the platform — and where a platform makes deletion
+			impossible, we tell you plainly instead of pretending. Disclosure rules for synthetic
+			content are arriving. We shipped the switch before they did.
 		</p>
 	</section>
 
