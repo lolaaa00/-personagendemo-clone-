@@ -176,6 +176,10 @@ export interface GenerationProvenance {
 	 *  letting the renderer read the text. A refine reuses it so re-running for a
 	 *  better image cannot silently re-shape an approved card. */
 	card_layout?: 'statement' | 'quote' | 'stack' | 'list' | 'split';
+	/** false when a locally-assembled format (a motion card) could not be built on
+	 *  this host and shipped as a still instead — the record has to explain why a
+	 *  video format produced an image. */
+	motion_assembled?: boolean;
 	/** 'supplied' means the user handed us the still and no image model ran —
 	 *  which is why this record has no image cost event and no images row. */
 	still_source?: 'generated' | 'supplied';
@@ -192,6 +196,12 @@ export interface GenerationProvenance {
 		 *  differ whenever a failover kicked in, and both are worth keeping. */
 		videoModelRequested?: string | null;
 		stillModelRequested?: string | null;
+		/** The lip-sync model requested — the dearest single call in a spokesperson
+		 *  post, and now a user choice. */
+		talkingHeadModel?: string | null;
+		/** The Director LLM requested. Ignored at run time unless it matches the
+		 *  provider the user's keys resolve to. */
+		llmModel?: string | null;
 		/** The realism register pinned for this run ('third' = no clause added). */
 		framing?: 'front' | 'mirror' | 'third' | null;
 		/** The voice actually used, after persona-gender agreement. */

@@ -148,7 +148,16 @@
 	let isPostKind = $derived(!!preview && preview.kind === 'post');
 
 	let format = $derived(getFormat(formatId));
-	let availableKinds = $derived(FORMAT_KINDS.filter((k) => k.id !== 'series' || !!onOpenPlanner));
+	let ffmpegAvailable = $derived(preview?.ffmpegAvailable !== false);
+	const buildable = (f: { needsFfmpeg?: boolean }) => !f.needsFfmpeg || ffmpegAvailable;
+	let availableKinds = $derived(
+		FORMAT_KINDS.filter(
+			(k) =>
+				(k.id !== 'series' || !!onOpenPlanner) &&
+				// A kind whose every format is unbuildable here is not a choice.
+				formatsOfKind(k.id).some((f) => buildable(f) || k.id === 'series')
+		)
+	);
 	let isSeries = $derived(format?.kind === 'series');
 
 	/**
@@ -386,7 +395,11 @@
 			// shown on open is the plan this request would run right now.
 			picks = {
 				...(preview.stillModel ? { still: preview.stillModel } : {}),
-				...(preview.videoModel ? { video: preview.videoModel } : {})
+				...(preview.videoModel ? { video: preview.videoModel } : {}),
+				...(preview.plan?.fixed?.talkinghead?.id
+					? { talkinghead: preview.plan.fixed.talkinghead.id }
+					: {}),
+				...(preview.plan?.fixed?.director?.id ? { director: preview.plan.fixed.director.id } : {})
 			};
 			if (preview.kind === 'post') {
 				formatId = preview.formatId ?? formatFromRequest(spec?.baseBody ?? null);
@@ -606,6 +619,8 @@
 			body.framing = needs('framing') && framingTouched ? framing : undefined;
 			body.still_model = picks.still || undefined;
 			body.video_model = picks.video || undefined;
+			body.talking_head_model = picks.talkinghead || undefined;
+			body.llm_model = picks.director || undefined;
 			body.still_url = stillUrl || undefined;
 			body.scheduled_date = scheduledDate || undefined;
 			body.scheduled_time = scheduledTime || undefined;
@@ -862,7 +877,7 @@
 						<div class="fld">
 							<span class="fld-label" id="gc-format-label">Format</span>
 							<div class="formats" role="radiogroup" aria-labelledby="gc-format-label">
-								{#each formatsOfKind(kind) as f (f.id)}
+								{#each formatsOfKind(kind).filter(buildable) as f (f.id)}
 									{@const cost = planTotalUsd(
 										planPipeline({
 											formatId: f.id,

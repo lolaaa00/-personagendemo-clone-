@@ -25,7 +25,32 @@ import {
  * can only ever refine generation, never brick it.
  */
 
-export type RegistryKind = ModelKind | 'tts';
+/**
+ * The kinds a REGISTRY ROW can carry — the vocabulary of the `kind` column,
+ * pinned by a CHECK constraint in model_registry_migration.sql (and repeated in
+ * client_bootstrap.sql). Written out rather than derived from ModelKind, which
+ * it used to be (`ModelKind | 'tts'`).
+ *
+ * That derivation was only ever right by accident: the two sets answer
+ * different questions and now overlap without either containing the other.
+ * ModelKind is what the composer can select and resolve (talking_head and llm
+ * joined it; neither is in the DB's CHECK, so no row can name them until a
+ * migration widens it). RegistryKind is what a row may say (tts is registry-
+ * only — there is no ModelOption for a voice, and effectiveResolve cannot serve
+ * it). Deriving one from the other made adding a kind on either side silently
+ * claim the other side supported it — for the DB that means an INSERT that
+ * fails the CHECK, which is exactly what the seed below must never do.
+ */
+const REGISTRY_KINDS = ['image_t2i', 'image_edit', 'video_i2v', 'tts'] as const;
+export type RegistryKind = (typeof REGISTRY_KINDS)[number];
+
+/**
+ * Can a row of this kind exist at all? False for the catalog-only modes, which
+ * is what tells the seed and the resolvers to leave the database out of it.
+ */
+export function isRegistryKind(kind: string): kind is RegistryKind {
+	return (REGISTRY_KINDS as readonly string[]).includes(kind);
+}
 
 export type RegistryProvider = 'fal' | 'openrouter';
 /** Where a row came from. Travels with the row; the page never infers it. */
@@ -275,7 +300,13 @@ export async function loadRegistry(
 	// bulk insert into one statement over the union of columns, filling absent
 	// keys with NULL — which bypasses column defaults and violates NOT NULLs
 	// (this exact bug shipped once: seeds omitted `deprecated`, TTS didn't).
-	const seeds = MODEL_CATALOG.map((m) => {
+	// Catalog-only kinds (talking_head, llm) are filtered OUT: the `kind` column's
+	// CHECK constraint rejects them, and PostgREST sends this seed as ONE
+	// statement — a single rejected row fails the whole insert, throws here, and
+	// leaves a first-visit user with an empty Model Manager. They stay in
+	// MODEL_CATALOG and resolve statically instead, which is why the new stages
+	// ship with no migration.
+	const seeds = MODEL_CATALOG.filter((m) => isRegistryKind(m.kind)).map((m) => {
 		const extra = WIRED_SEED[m.id];
 		return {
 			user_id: scopeOwner(scope),
@@ -386,8 +417,15 @@ export function servesKind(row: RegistryRow, kind: RegistryKind): boolean {
 }
 
 export function effectiveOptions(rows: RegistryRow[], kind: ModelKind): ModelOption[] {
-	// fal call sites only: ModelOption.provider is 'fal' and these options are
-	// posted to fal endpoints. OpenRouter rows are routed by openRouterRoute().
+	// A kind the registry cannot hold has nothing to overlay: the static catalog
+	// IS the effective catalog. This is the whole no-migration story — on a
+	// production database that has never heard of talking_head or llm, these
+	// stages still list every model and still resolve.
+	if (!isRegistryKind(kind)) return modelsFor(kind);
+	// fal call sites only: rows served here are posted to fal endpoints, so
+	// OpenRouter rows are excluded and routed by openRouterRoute() instead. (The
+	// static llm entries name openrouter/gemini providers, but they never reach
+	// this branch — llm is not a RegistryKind.)
 	const active = rows.filter(
 		(r) => r.provider !== 'openrouter' && servesKind(r, kind) && r.wired && r.status === 'active'
 	);
@@ -405,6 +443,10 @@ export function effectiveResolve(
 	kind: ModelKind,
 	requested?: string | null
 ): ModelOption {
+	// Catalog-only kinds resolve exactly as they would with no registry at all —
+	// a requested id that isn't in the catalog becomes that kind's default, so an
+	// unknown model id never reaches a provider.
+	if (!isRegistryKind(kind)) return resolveModel(kind, requested);
 	const options = effectiveOptions(rows, kind);
 	const found = requested ? options.find((m) => m.id === requested) : undefined;
 	if (found) return found;
@@ -519,7 +561,9 @@ export function openRouterRoute(
  * and takes the first wired row because OpenRouter rows carry no star. This one
  * honours the star, which is what makes the Model Manager's Default column mean
  * something for fal modes — including tts, which effectiveResolve cannot serve
- * (ModelKind has no 'tts'; the voice catalog is registry-only).
+ * (ModelKind has no 'tts'; the voice catalog is registry-only). The reverse also
+ * holds: talking_head and llm never reach this function, because the `kind`
+ * column's CHECK constraint means no row can claim them.
  *
  * Fails OPEN to the fallback on an empty registry or a priceless row: choosing a
  * model must never block a generation.
@@ -633,9 +677,7 @@ export async function syncFromOpenRouter(
 
 		const { usd, basis } = openRouterPerCallPrice(m);
 		const prior = existing.get(m.id);
-		const released = m.created
-			? new Date(m.created * 1000).toISOString().slice(0, 10)
-			: null;
+		const released = m.created ? new Date(m.created * 1000).toISOString().slice(0, 10) : null;
 		const lab = typeof m.id === 'string' && m.id.includes('/') ? m.id.split('/')[0] : null;
 
 		if (!prior) {
@@ -849,10 +891,7 @@ export async function syncFromFal(
 					}
 				}
 				if (Object.keys(patch).length === 0) continue;
-				const { error } = await supabase
-					.from('model_registry')
-					.update(patch)
-					.eq('id', prior.id);
+				const { error } = await supabase.from('model_registry').update(patch).eq('id', prior.id);
 				if (error) result.errors.push(`${modelId}: ${error.message}`);
 				else {
 					result.refreshed++;

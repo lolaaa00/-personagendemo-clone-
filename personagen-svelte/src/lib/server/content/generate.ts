@@ -44,9 +44,9 @@ import { readPersonaProfile } from '$lib/persona-profile-store';
 import { createDbService } from '$lib/server/db';
 import { DEFAULT_VOICE, VOICE_CATALOG } from '$lib/server/voices';
 import { getServiceSupabase } from '$lib/server/service-supabase';
-import { resolveModel, getModel, type ModelOption } from '$lib/models';
+import { resolveModel, getModel, MODEL_CATALOG, type ModelOption } from '$lib/models';
 import { persistToStorage, persistBufferToStorage } from '$lib/server/storage';
-import { burnCaptions, optimizeForWeb } from '$lib/server/video';
+import { burnCaptions, optimizeForWeb, stillToMotion, muxVoiceover } from '$lib/server/video';
 import {
 	renderTypographicCard,
 	CARD_RENDERER_LABEL,
@@ -884,7 +884,9 @@ function buildBrandVisualContext(briefData: any): string {
 function enhanceMotionPrompt(
 	basePrompt: string,
 	intent: ContentIntent,
-	format: 'spokesperson' | 'broll'
+	// Only "is a person addressing the lens?" matters here. Narrated motion has
+	// nobody on camera, so it takes the product direction like plain b-roll.
+	format: 'spokesperson' | 'broll' | 'vo_broll' | 'motion_card'
 ): string {
 	const cameraByLevel: Record<MotionLevel, string> = {
 		static:
@@ -949,7 +951,8 @@ function cardGroundOverride(cardPalette: string | undefined): string | null {
  */
 const CARD_LAYOUT_DIRECTION: Record<string, string> = {
 	statement: 'Composition: a single huge centered statement — a few words filling the frame.',
-	quote: 'Composition: a pull-quote — the line set large with generous margins and a rule above it.',
+	quote:
+		'Composition: a pull-quote — the line set large with generous margins and a rule above it.',
 	stack: 'Composition: a vertical stack of short left-aligned lines, one thought per line.',
 	list: 'Composition: a numbered list, each item on its own line with the numeral as the accent.',
 	split: 'Composition: two contrasting halves of the frame — one claim per half.'
@@ -1018,7 +1021,9 @@ async function generateProductStill(
 	// unchanged.
 	const data = await falSyncJson(
 		model ? model.id : NANO_MODEL,
-		model ? buildEditInput(model, prompt, refs, '9:16') : { prompt, image_urls: refs, aspect_ratio: '9:16' },
+		model
+			? buildEditInput(model, prompt, refs, '9:16')
+			: { prompt, image_urls: refs, aspect_ratio: '9:16' },
 		falKey
 	);
 	const url = data.images?.[0]?.url;
@@ -1111,13 +1116,17 @@ async function generateVoiceAudio(
 async function generateTalkingHead(
 	falKey: string,
 	stillUrl: string,
-	audioUrl: string
+	audioUrl: string,
+	/** The composer's pick. Absent = the env-selected default, i.e. today's run. */
+	modelId: string = TALKINGHEAD_MODEL
 ): Promise<string> {
 	// Per-model input shape: VEED Fabric takes a `resolution`; OmniHuman and Kling
 	// AI-Avatar take only image+audio and reject (422) params they don't declare.
+	// The ID has to drive the shape rather than the module constant: a picked
+	// Fabric with no resolution 422s, and a picked OmniHuman WITH one does too.
 	const input: any = { image_url: stillUrl, audio_url: audioUrl };
-	if (TALKINGHEAD_MODEL.includes('veed/fabric')) input.resolution = FABRIC_RES;
-	const data = await falQueueJson(TALKINGHEAD_MODEL, input, falKey);
+	if (modelId.includes('veed/fabric')) input.resolution = FABRIC_RES;
+	const data = await falQueueJson(modelId, input, falKey);
 	const url = data.video?.url;
 	if (!url) throw new Error('Talking-head model returned no video');
 	return url;
@@ -1485,7 +1494,9 @@ export async function generateCinematicUgcPack(input: UgcPackInput): Promise<Ugc
 	// because WHICH brief to load depends on the persona's config
 	// (brand_brief_id — multi-brand users pin one brief per persona).
 	const [rawAi, cfg, agentResult] = await Promise.all([
-		resolveAiClient(supabase, userId),
+		// The composer's Director pick rides along with its provider so the client
+		// factory can ignore a model the user's key could never call.
+		resolveAiClient(supabase, userId, llmPickFor(input.llmModel)),
 		loadUgcConfig(supabase, input.agentId),
 		input.agentId ? db.agents.get(input.agentId) : Promise.resolve({ data: null as any })
 	]);
@@ -1854,7 +1865,7 @@ export async function generateCinematicUgcPack(input: UgcPackInput): Promise<Ugc
 
 interface UgcConfig {
 	voice: string;
-	format: 'auto' | 'spokesperson' | 'broll';
+	format: 'auto' | 'spokesperson' | 'broll' | 'vo_broll' | 'motion_card';
 	quality: 'mvp' | 'premium';
 	characterRef: string | null;
 	/** full_body/side_profiles/face_closeup/feature_grid, from the Profile tab's reference-kit flow. */
@@ -1964,9 +1975,12 @@ export interface UgcPackInput {
 	 *  default — independent of captions. */
 	aiBadge?: boolean;
 	/** Composer per-run format choice. 'spokesperson' forces TTS + talking-head,
-	 *  'broll' forces a b-roll clip; 'auto' (or unset) defers to the persona's
-	 *  ugc_format, which the Director then resolves. */
-	formatOverride?: 'auto' | 'spokesperson' | 'broll';
+	 *  'broll' a silent clip, 'vo_broll' a clip with our TTS mixed under it, and
+	 *  'motion_card' the typeset card animated locally; 'auto' (or unset) defers
+	 *  to the persona's ugc_format, which the Director then resolves.
+	 *  The two local formats need ffmpeg on the host — absent it, they degrade
+	 *  (see the video branch) rather than failing a paid run. */
+	formatOverride?: 'auto' | 'spokesperson' | 'broll' | 'vo_broll' | 'motion_card';
 	/** The spoken line for a spokesperson run, verbatim. Until now a script could
 	 *  only be edited on a REFINE (RefineMediaInput.dialogue) — a first run had to
 	 *  accept whatever the Director wrote, then pay a second time to change it.
@@ -2000,6 +2014,15 @@ export interface UgcPackInput {
 	 *  references are being composited, 'image_t2i' when not — so an unknown id
 	 *  can never reach fal. Absent keeps the compiled-in Nano Banana routing. */
 	stillModel?: string;
+	/** The lip-sync model — the single dearest call in a spokesperson post
+	 *  ($0.28 Kling AI-Avatar → $0.70 OmniHuman), so it is a real budget choice.
+	 *  Resolved through resolveModel('talking_head') so an unknown id can never
+	 *  reach fal; absent keeps the env-selected default. */
+	talkingHeadModel?: string;
+	/** The Director's LLM. Provider-matched inside resolveAiClient — a pick that
+	 *  does not match the key that resolves is ignored rather than sent to a
+	 *  provider that cannot serve it. */
+	llmModel?: string;
 	/** "Use my own still": an http(s) image used AS the still. No image model
 	 *  runs, no still cost event is recorded, and every downstream step (talking
 	 *  head, i2v, caption burn) treats it exactly as a generated still. Wins over
@@ -2025,7 +2048,7 @@ export interface UgcContent {
 	poster_url?: string;
 	media_type: 'image' | 'video';
 	media_generated: boolean;
-	format: 'spokesperson' | 'broll';
+	format: 'spokesperson' | 'broll' | 'vo_broll' | 'motion_card';
 	voice?: string;
 	product: { name: string; price?: string; description?: string } | null;
 	platform: string;
@@ -2114,7 +2137,8 @@ export async function recordCostEvents(
 	// Attribution lookups are cheap reads; skip them entirely when credits are
 	// off so today's behaviour (and query count) is unchanged.
 	const keyCache = new Map<string, KeySource>();
-	const billedUserId = mode === 'off' ? userId : await resolveBillingAccount(supabase, agentId, userId);
+	const billedUserId =
+		mode === 'off' ? userId : await resolveBillingAccount(supabase, agentId, userId);
 	const enriched = await Promise.all(
 		events.map(async (e) => ({
 			user_id: userId,
@@ -2126,7 +2150,9 @@ export async function recordCostEvents(
 			est_cost: e.usd,
 			asset_url: e.assetUrl ?? null,
 			billed_user_id: billedUserId,
-			key_source: (mode === 'off' ? 'platform' : await keySourceFor(supabase, userId, e.provider, keyCache)) as KeySource,
+			key_source: (mode === 'off'
+				? 'platform'
+				: await keySourceFor(supabase, userId, e.provider, keyCache)) as KeySource,
 			credits: creditsFor(e.usd)
 		}))
 	);
@@ -2161,11 +2187,15 @@ export async function recordCostEvents(
 			}
 			lastErr = error;
 			const msg = String(error.message ?? '');
-			const unknownColumn = error.code === 'PGRST204' || error.code === '42703' || /column|schema cache/i.test(msg);
+			const unknownColumn =
+				error.code === 'PGRST204' || error.code === '42703' || /column|schema cache/i.test(msg);
 			if (!unknownColumn) break;
 			// "column generation_events.asset_url does not exist" (42703) or
 			// "Could not find the 'credits' column of 'generation_events' in the schema cache" (PGRST204)
-			const named = msg.match(/column (?:\w+\.)?(\w+) does not exist/i)?.[1] ?? msg.match(/'(\w+)' column/i)?.[1] ?? null;
+			const named =
+				msg.match(/column (?:\w+\.)?(\w+) does not exist/i)?.[1] ??
+				msg.match(/'(\w+)' column/i)?.[1] ??
+				null;
 			if (!named || !OPTIONAL.has(named) || dropped.has(named)) break;
 			dropped.add(named);
 		} catch (err) {
@@ -2178,7 +2208,9 @@ export async function recordCostEvents(
 		// No receipt rows → nothing to key a debit to. In enforce mode this is a
 		// billing failure, not an analytics blip.
 		if (mode === 'enforce') {
-			throw new Error(`CREDIT_DEBIT_FAILED: generation_events insert failed (${lastErr?.message ?? 'unknown'})`);
+			throw new Error(
+				`CREDIT_DEBIT_FAILED: generation_events insert failed (${lastErr?.message ?? 'unknown'})`
+			);
 		}
 		return;
 	}
@@ -3151,6 +3183,23 @@ async function ensureCharacterRef(
  * Generates a single UGC post pack tuned to the agent persona, brand brief and product,
  * using the agent's pinned voice/format/quality. Throws on unrecoverable failures.
  */
+/**
+ * A Director pick, paired with the provider that can actually serve it.
+ *
+ * The composer only ever offers models for the provider this user's keys
+ * resolve to, but the request is user input: an id from the wrong provider (or
+ * one that is not an llm at all) must resolve to nothing rather than being
+ * posted to an endpoint that will 404 after the user has approved the run.
+ */
+function llmPickFor(
+	modelId?: string | null
+): { provider: 'openrouter' | 'gemini'; model: string } | null {
+	if (!modelId) return null;
+	const found = MODEL_CATALOG.find((m) => m.kind === 'llm' && m.id === modelId);
+	if (!found || (found.provider !== 'openrouter' && found.provider !== 'gemini')) return null;
+	return { provider: found.provider, model: found.id };
+}
+
 export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 	const { supabase, userId } = input;
 	const platform = input.platform || 'instagram';
@@ -3179,10 +3228,8 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 		// The composer can force this run's format; 'auto' (or unset) defers to the
 		// persona's ugc_format, which the Director resolves from the content. This one
 		// value drives both the Director's brief and the final spokesperson/broll branch.
-		const formatPref: 'auto' | 'spokesperson' | 'broll' =
-			input.formatOverride === 'spokesperson' || input.formatOverride === 'broll'
-				? input.formatOverride
-				: cfg.format;
+		const formatPref: 'auto' | 'spokesperson' | 'broll' | 'vo_broll' | 'motion_card' =
+			input.formatOverride && input.formatOverride !== 'auto' ? input.formatOverride : cfg.format;
 
 		// ── Load agent persona ──────────────────────────────────────────────
 		let agentContext = '';
@@ -3265,7 +3312,13 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 					: '',
 				`Content type detected: ${intent.type}. Platform: ${platform}. Platform voice guide: ${intent.platformVoice}.`,
 				buildHookGuidance(intent, `${topic}|${platform}|${input.agentId || ''}`),
-				`Requested format: ${formatPref === 'auto' ? 'choose spokesperson or broll based on what will perform best for this content type' : formatPref}.`,
+				formatPref === 'auto'
+					? 'Requested format: choose spokesperson or broll based on what will perform best for this content type.'
+					: formatPref === 'vo_broll'
+						? 'Requested format: vo_broll — a product/lifestyle clip with the persona NARRATING over it. Write BOTH a spoken line (dialogue) and a scene the camera can show without anyone talking to camera.'
+						: formatPref === 'motion_card'
+							? 'Requested format: motion_card — a typographic card that will be animated. The card line IS the artwork; no photography, no person on camera.'
+							: `Requested format: ${formatPref}.`,
 				voiceGender
 					? `If the scene shows a person on camera, they must present as ${voiceGender} — the pinned voice is ${voiceGender} and the on-camera character must match.`
 					: '',
@@ -3341,13 +3394,25 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 			}
 		}
 
-		let format: 'spokesperson' | 'broll' =
+		let format: 'spokesperson' | 'broll' | 'vo_broll' | 'motion_card' =
 			formatPref === 'auto' ? (parsed.format === 'broll' ? 'broll' : 'spokesperson') : formatPref;
 		// A graphic card has no face to animate — a talking head cannot run on it.
 		// (Reachable only when the composer switches a graphic template to video.)
 		if (input.stillStyle === 'graphic' && format === 'spokesperson') {
 			console.warn('[Composer] Graphic still cannot drive a talking head — coercing to b-roll.');
 			format = 'broll';
+		}
+		// A motion card animates a TYPESET card. Asked for on a photographic
+		// composition there is no card to animate, so it degrades to the clip the
+		// user would otherwise have got rather than producing nothing.
+		if (format === 'motion_card' && input.stillStyle !== 'graphic') {
+			console.warn('[Composer] motion_card needs a graphic still — coercing to b-roll.');
+			format = 'broll';
+		}
+		// Conversely a card cannot carry a narrated product clip.
+		if (format === 'vo_broll' && input.stillStyle === 'graphic') {
+			console.warn('[Composer] vo_broll on a graphic still — coercing to motion_card.');
+			format = 'motion_card';
 		}
 		// A composer-edited visual brief outranks the Director's scene.
 		// Graphic cards render a LINE, not a scene: the Director's on-screen hook is
@@ -3417,13 +3482,14 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 		// from a format switch must not end up recorded as this post's script when
 		// nothing said it. Resolved AFTER the format coercions above so it agrees
 		// with the branch that actually runs.
-		const pinnedLine = format === 'spokesperson' ? input.dialogueOverride?.trim() || '' : '';
+		const speaks = format === 'spokesperson' || format === 'vo_broll';
+		const pinnedLine = speaks ? input.dialogueOverride?.trim() || '' : '';
 		const dialogue = pinnedLine || parsed.dialogue || parsed.text || topic;
 		// The voice that ACTUALLY spoke this run — updated when TTS degrades to the
 		// classic fallback, so the stored post never claims a voice that didn't run.
 		let ttsVoiceUsed = resolvedVoice;
 		const spokenAudio: Promise<{ url: string } | { err: Error }> | null =
-			wantVideo && format === 'spokesperson' && falKey
+			wantVideo && speaks && falKey
 				? generateVoiceAudio(
 						falKey,
 						resolvedVoice,
@@ -3729,7 +3795,15 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 				console.warn(
 					`[Composer] OpenRouter composite failed (${(e as Error).message.slice(0, 120)}) — flux fallback.`
 				);
-				const t2i = await generateUgcImage(scenePrompt, orKey, null, stillModelId, '3:4', wantCharacterRef, orRoutes.t2i);
+				const t2i = await generateUgcImage(
+					scenePrompt,
+					orKey,
+					null,
+					stillModelId,
+					'3:4',
+					wantCharacterRef,
+					orRoutes.t2i
+				);
 				still = t2i.url;
 				costEvents.push({
 					provider: t2i.provider,
@@ -3741,7 +3815,15 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 		} else {
 			// No refs to composite — the pick is a plain text-to-image model, and
 			// generateUgcImage resolves it (and bills what it ran) internally.
-			const t2i = await generateUgcImage(scenePrompt, orKey, falKey, stillModelId, '3:4', wantCharacterRef, orRoutes.t2i);
+			const t2i = await generateUgcImage(
+				scenePrompt,
+				orKey,
+				falKey,
+				stillModelId,
+				'3:4',
+				wantCharacterRef,
+				orRoutes.t2i
+			);
 			still = t2i.url;
 			costEvents.push({
 				provider: t2i.provider,
@@ -3757,12 +3839,28 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 		// post. Spokesperson (TTS + talking-head) is fal-exclusive — on outage it
 		// degrades to OpenRouter b-roll format rather than failing the slot.
 		const brollModel = resolveModel('video_i2v', input.videoModel);
+		// An unknown id can never reach fal: resolveModel falls back to the kind's
+		// default rather than posting a slug the provider has never heard of.
+		const talkingHeadModel = resolveModel('talking_head', input.talkingHeadModel);
 		let mediaUrl = still;
 		let mediaType: 'image' | 'video' = 'image';
 		// The i2v model that ACTUALLY produced the clip (null = none ran: image-only
 		// posts and talking-head runs). Recorded in selections so the drawer's
 		// "Video model" line names the run, not the request — failovers included.
 		let videoModelRan: string | null = null;
+		// A motion card this host could not animate. Recorded so the post explains
+		// why a video format shipped a still.
+		let motionCardDegraded = false;
+		// Resolved BEFORE the video branch: the locally assembled formats produce a
+		// Buffer, and a Buffer has to reach storage before captions or the client
+		// can fetch it. Same getter the persist block below uses.
+		const svc = (() => {
+			try {
+				return getServiceSupabase();
+			} catch {
+				return null; // No service-role key configured at all.
+			}
+		})();
 		if (wantVideo && (falKey || orKey)) {
 			try {
 				if (format === 'spokesperson' && falKey) {
@@ -3772,14 +3870,39 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 					// below still degrades the post to OpenRouter b-roll.
 					const settledAudio = await spokenAudio!;
 					if ('err' in settledAudio) throw settledAudio.err;
-					mediaUrl = await generateTalkingHead(falKey, still, settledAudio.url);
+					mediaUrl = await generateTalkingHead(
+						falKey,
+						still,
+						settledAudio.url,
+						talkingHeadModel.id
+					);
 					costEvents.push({
 						provider: 'fal',
 						operation: 'talking_head',
-						model: TALKINGHEAD_MODEL,
-						usd: priceOf('fal', 'talking_head')
+						// Bill the model that RAN. Kling AI-Avatar is 40% of OmniHuman's
+						// price; charging the default rate for it would overcharge exactly
+						// the users who chose to spend less.
+						model: talkingHeadModel.id,
+						usd: talkingHeadModel.usd
 					});
-				} else if (falKey) {
+				} else if (format === 'motion_card') {
+					// The card is already typeset by our own renderer, so animating it is a
+					// local ffmpeg pass — the only video format in the product that costs
+					// nothing beyond the Director. No cost event: no provider was called.
+					const motion = await stillToMotion(still);
+					if (motion && svc) {
+						mediaUrl = await persistBufferToStorage(svc, motion, userId, 'mp4', 'video/mp4');
+					} else {
+						// ffmpeg missing, or no bucket to put a Buffer in. The composer hides
+						// this format on a host without ffmpeg, so this is the belt to that
+						// braces: deliver the card as a still rather than failing a run the
+						// user already approved, and let the record say what shipped.
+						console.warn(
+							'[generate] motion_card could not be assembled locally — delivering the still card.'
+						);
+						motionCardDegraded = true;
+					}
+				} else if ((format === 'broll' || format === 'vo_broll') && falKey) {
 					// The user picked this tier in the composer (Wan $0.10 → Veo $1.50); bill
 					// what actually ran rather than a hard-coded Kling Standard rate.
 					// With an adapter, run the REQUESTED id: resolveModel() only knows the
@@ -3828,7 +3951,28 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 						usd: orRoutes.video.usd
 					});
 				}
-				mediaType = 'video';
+				if (format === 'vo_broll' && mediaUrl !== still) {
+					// The clip exists; now lay the persona's voice under it. A failure here
+					// must NOT lose the clip that was just paid for, so it degrades to the
+					// silent version — and the recorded format becomes 'broll', because
+					// what the viewer actually watches is what the record has to say.
+					const settled = spokenAudio ? await spokenAudio : null;
+					const mixed =
+						settled && !('err' in settled)
+							? await muxVoiceover(mediaUrl, settled.url).catch(() => null)
+							: null;
+					if (mixed && svc) {
+						mediaUrl = await persistBufferToStorage(svc, mixed, userId, 'mp4', 'video/mp4');
+					} else {
+						console.warn(
+							'[generate] vo_broll narration could not be mixed — delivering the silent clip.'
+						);
+						format = 'broll';
+					}
+				}
+				// A motion card this host could not animate ships as the still it already
+				// is; every other path through this branch produced a clip.
+				mediaType = motionCardDegraded ? 'image' : 'video';
 			} catch (e) {
 				const msg = (e as Error).message;
 				if (orKey && isFalOutage(msg)) {
@@ -3837,7 +3981,7 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 					);
 					// The delivered clip is silent b-roll whatever was requested — the
 					// recorded format must describe what the viewer actually watches.
-					if (format === 'spokesperson') format = 'broll';
+					if (format !== 'broll') format = 'broll';
 					mediaUrl = await openRouterBrollVideo(
 						orKey,
 						userId,
@@ -3873,13 +4017,6 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 		// the clean original is kept. We record the ACTUAL outcome below, not the
 		// request, so the post's observability never claims a burn that didn't happen.
 		let captionsApplied = false;
-		const svc = (() => {
-			try {
-				return getServiceSupabase();
-			} catch {
-				return null; // No service-role key configured at all.
-			}
-		})();
 		if (svc) {
 			durableStill = await persistToStorage(svc, still, userId, 'png');
 			if (mediaType === 'video') {
@@ -3985,6 +4122,7 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 			// Where the still came from, so the drawer can explain a $0 image row
 			// that has no image model behind it at all.
 			...(suppliedStill ? { still_source: 'supplied' as const } : {}),
+			...(motionCardDegraded ? { motion_assembled: false as const } : {}),
 			...(isGraphicStill && input.cardLayout && input.cardLayout !== 'auto'
 				? { card_layout: input.cardLayout }
 				: {}),
@@ -4007,6 +4145,8 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 				// derived from the ledger — recording a second "what ran" here is how
 				// the two would eventually disagree.
 				...(stillModelId ? { stillModelRequested: stillModelId } : {}),
+				...(input.talkingHeadModel ? { talkingHeadModel: input.talkingHeadModel } : {}),
+				...(input.llmModel ? { llmModel: input.llmModel } : {}),
 				...(input.framing ? { framing: input.framing } : {}),
 				provider: input.providerPreference ?? null,
 				mediaType
@@ -4050,6 +4190,9 @@ export interface RefineMediaInput {
 	/** Voice for this re-record. Unknown names keep the post's stored voice —
 	 *  a refine must never introduce a voice the original post never had. */
 	voiceOverride?: string;
+	/** Lip-sync model for the re-run, resolved through resolveModel('talking_head').
+	 *  Absent keeps the model the post was originally made with. */
+	talkingHeadModel?: string;
 	/** Image model for the re-shot still, resolved through resolveModel(). */
 	stillModel?: string;
 	/** Replace the still with a supplied http(s) image instead of re-shooting it:
@@ -4365,7 +4508,15 @@ export async function refineUgcMedia(input: RefineMediaInput): Promise<UgcConten
 		} else {
 			// Nothing to composite — a plain text-to-image model, resolved and billed
 			// inside generateUgcImage.
-			const t2i = await generateUgcImage(scene, orKey, falKey, stillModelId, '3:4', refsPolicy.character, orRoutes.t2i);
+			const t2i = await generateUgcImage(
+				scene,
+				orKey,
+				falKey,
+				stillModelId,
+				'3:4',
+				refsPolicy.character,
+				orRoutes.t2i
+			);
 			still = t2i.url;
 			costEvents.push({
 				provider: t2i.provider,
@@ -4377,7 +4528,12 @@ export async function refineUgcMedia(input: RefineMediaInput): Promise<UgcConten
 
 		// ── Video — same format the post already has ──
 		const wantVideo = content.media_type === 'video';
-		let format: 'spokesperson' | 'broll' = content.format === 'broll' ? 'broll' : 'spokesperson';
+		let format: 'spokesperson' | 'broll' | 'vo_broll' | 'motion_card' =
+			content.format === 'broll' ||
+			content.format === 'vo_broll' ||
+			content.format === 'motion_card'
+				? content.format
+				: 'spokesperson';
 		const dialogue = (
 			input.dialogue?.trim() ||
 			content.dialogue ||
@@ -4391,6 +4547,17 @@ export async function refineUgcMedia(input: RefineMediaInput): Promise<UgcConten
 		// the i2v model that actually ran — mirrors generateUgcPack's bookkeeping.
 		let refineVoiceUsed: string | null = null;
 		let videoModelRan: string | null = null;
+		// A motion card this host could not re-animate — same posture as a fresh run.
+		let refineMotionDegraded = false;
+		// Resolved before the video branch: the locally assembled formats produce a
+		// Buffer, which has to reach storage before anything can fetch it.
+		const svc = (() => {
+			try {
+				return getServiceSupabase();
+			} catch {
+				return null; // No service-role key configured at all.
+			}
+		})();
 		if (wantVideo && (falKey || orKey)) {
 			// The original Director motion_prompt isn't stored on the post, and the
 			// user's edited brief is the ground truth now — so motion guidance is
@@ -4422,13 +4589,30 @@ export async function refineUgcMedia(input: RefineMediaInput): Promise<UgcConten
 						model: falRoutes.tts.id,
 						usd: falRoutes.tts.usd
 					});
-					mediaUrl = await generateTalkingHead(falKey, still, audioUrl);
+					const refineHead = resolveModel(
+						'talking_head',
+						input.talkingHeadModel ?? content.generation?.selections?.talkingHeadModel
+					);
+					mediaUrl = await generateTalkingHead(falKey, still, audioUrl, refineHead.id);
 					costEvents.push({
 						provider: 'fal',
 						operation: 'talking_head',
-						model: TALKINGHEAD_MODEL,
-						usd: priceOf('fal', 'talking_head')
+						model: refineHead.id,
+						usd: refineHead.usd
 					});
+				} else if (format === 'motion_card') {
+					// Re-typeset above, re-animated here — a refine of a motion card calls
+					// no provider at all, so it costs the Director's re-run and nothing
+					// more. A host that cannot animate keeps the card as a still.
+					const motion = await stillToMotion(still);
+					if (motion && svc) {
+						mediaUrl = await persistBufferToStorage(svc, motion, userId, 'mp4', 'video/mp4');
+					} else {
+						console.warn(
+							'[refine] motion_card could not be re-assembled — keeping the still card.'
+						);
+						refineMotionDegraded = true;
+					}
 				} else if (falKey) {
 					const brollModel = resolveModel('video_i2v', content.generation?.selections?.videoModel);
 					mediaUrl = await generateBrollVideo(falKey, brollModel.id, still, motionPrompt);
@@ -4439,10 +4623,46 @@ export async function refineUgcMedia(input: RefineMediaInput): Promise<UgcConten
 						model: brollModel.label,
 						usd: brollModel.usd
 					});
+					if (format === 'vo_broll') {
+						// Re-record the narration for the refreshed clip. As in a fresh run,
+						// a mixing failure keeps the clip and downgrades the record rather
+						// than losing what was just paid for.
+						const requestedVoice = input.voiceOverride?.trim();
+						const voice =
+							requestedVoice && VOICE_CATALOG.some((v) => v.name === requestedVoice)
+								? requestedVoice
+								: content.voice || DEFAULT_VOICE;
+						const voiceGender = VOICE_CATALOG.find((v) => v.name === voice)?.gender;
+						let mixed: Buffer | null = null;
+						try {
+							const { url: audioUrl, voiceUsed } = await generateVoiceAudio(
+								falKey,
+								voice,
+								dialogue,
+								voiceGender === 'female' ? 'Rachel' : 'Adam',
+								falRoutes.tts
+							);
+							refineVoiceUsed = voiceUsed;
+							costEvents.push({
+								provider: 'fal',
+								operation: 'tts',
+								model: falRoutes.tts.id,
+								usd: falRoutes.tts.usd
+							});
+							mixed = await muxVoiceover(mediaUrl, audioUrl);
+						} catch (voErr) {
+							console.warn('[refine] vo_broll narration failed:', (voErr as Error).message);
+						}
+						if (mixed && svc) {
+							mediaUrl = await persistBufferToStorage(svc, mixed, userId, 'mp4', 'video/mp4');
+						} else {
+							format = 'broll';
+						}
+					}
 				} else {
-					// TTS + talking head are fal-exclusive — a spokesperson refine without
-					// a fal key runs as b-roll, and the record must say so.
-					if (format === 'spokesperson') format = 'broll';
+					// TTS + talking head are fal-exclusive — a refine without a fal key
+					// runs as silent b-roll, and the record must say so.
+					if (format !== 'broll') format = 'broll';
 					mediaUrl = await openRouterBrollVideo(
 						orKey!,
 						userId,
@@ -4494,13 +4714,6 @@ export async function refineUgcMedia(input: RefineMediaInput): Promise<UgcConten
 		let durableStill = still;
 		let durableMedia = mediaUrl;
 		let captionsApplied = false;
-		const svc = (() => {
-			try {
-				return getServiceSupabase();
-			} catch {
-				return null;
-			}
-		})();
 		if (svc) {
 			durableStill = await persistToStorage(svc, still, userId, 'png');
 			if (mediaType === 'video') {
@@ -4575,6 +4788,7 @@ export async function refineUgcMedia(input: RefineMediaInput): Promise<UgcConten
 			// TTS voice fallback records the voice that really spoke.
 			format,
 			...(refineVoiceUsed ? { voice: refineVoiceUsed } : {}),
+			...(refineMotionDegraded ? { motion_assembled: false as const } : {}),
 			dialogue: format === 'spokesperson' ? dialogue : content.dialogue,
 			script: format === 'spokesperson' ? dialogue : content.script,
 			// Actual burn outcome for THIS media, not the old video's flags.

@@ -61,7 +61,9 @@ export type StepKind =
 	| 'talkinghead'
 	| 'video'
 	| 'cine_stills'
-	| 'cine_video';
+	| 'cine_video'
+	| 'motion'
+	| 'mux';
 
 export interface FormatEntry {
 	id: string;
@@ -76,7 +78,7 @@ export interface FormatEntry {
 	/** The request fields this format maps to — the API contract is unchanged. */
 	request: {
 		media?: 'image' | 'video' | 'cinematic';
-		format?: 'auto' | 'spokesperson' | 'broll';
+		format?: 'auto' | 'spokesperson' | 'broll' | 'vo_broll' | 'motion_card';
 		still?: 'photo' | 'graphic';
 		refs?: { character: boolean; product: boolean };
 	};
@@ -84,6 +86,13 @@ export interface FormatEntry {
 	video: boolean;
 	/** Needs a face on camera; a persona-free composition cannot run this. */
 	needsFace?: boolean;
+	/**
+	 * Assembled locally with ffmpeg, which is a SOFT dependency — the host may
+	 * not have it. A format flagged here is hidden where it cannot be built,
+	 * rather than offered and failed after the money is spent. Same gate the $0
+	 * card renderer already uses.
+	 */
+	needsFfmpeg?: boolean;
 }
 
 /**
@@ -114,6 +123,22 @@ export const FORMAT_CATALOG: FormatEntry[] = [
 		video: false
 	},
 	{
+		id: 'motion-card',
+		kind: 'video',
+		label: 'Motion text card',
+		note: 'The typeset card, put in motion. No image model, no video model.',
+		needs: ['cardText', 'cardLayout', 'cardPalette', 'captions'],
+		steps: ['director', 'card', 'motion'],
+		request: {
+			media: 'video',
+			format: 'motion_card',
+			still: 'graphic',
+			refs: { character: false, product: false }
+		},
+		video: true,
+		needsFfmpeg: true
+	},
+	{
 		id: 'spokesperson',
 		kind: 'video',
 		label: 'Spokesperson',
@@ -133,6 +158,17 @@ export const FORMAT_CATALOG: FormatEntry[] = [
 		steps: ['director', 'still', 'video'],
 		request: { media: 'video', format: 'broll' },
 		video: true
+	},
+	{
+		id: 'vo-broll',
+		kind: 'video',
+		label: 'Narrated product motion',
+		note: 'The persona talks over a product clip. Their voice, no face on camera.',
+		needs: ['script', 'voice', 'scene', 'product', 'face', 'captions'],
+		steps: ['director', 'still', 'tts', 'video', 'mux'],
+		request: { media: 'video', format: 'vo_broll' },
+		video: true,
+		needsFfmpeg: true
 	},
 	{
 		id: 'cinematic',
@@ -215,6 +251,8 @@ export function formatFromRequest(body: Record<string, any> | null | undefined):
 	if (!body) return 'auto';
 	if (body.media === 'cinematic') return 'cinematic';
 	if (body.media === 'image') return body.still === 'graphic' ? 'text-card' : 'photo';
+	if (body.format === 'motion_card') return 'motion-card';
+	if (body.format === 'vo_broll') return 'vo-broll';
 	// Anything else is a video. A graphic still has no face to animate — the
 	// server coerces those to b-roll — so it must not resolve to spokesperson.
 	if (body.still === 'graphic') return 'product-motion';
@@ -286,7 +324,9 @@ export const STEP_LABEL: Record<StepKind, string> = {
 	talkinghead: 'Talking head',
 	video: 'Motion clip',
 	cine_stills: 'Storyboard stills',
-	cine_video: 'Multi-shot clip'
+	cine_video: 'Multi-shot clip',
+	motion: 'Motion',
+	mux: 'Voiceover mix'
 };
 
 export const STEP_PURPOSE: Record<StepKind, string> = {
@@ -298,7 +338,9 @@ export const STEP_PURPOSE: Record<StepKind, string> = {
 	talkinghead: 'Lip-syncs the frame to the voiceover — this is the face on camera.',
 	video: 'Puts the frame in motion. Usually the largest single cost in a run.',
 	cine_stills: 'One composited still per shot in the sequence.',
-	cine_video: 'Builds the whole multi-shot clip in one call, anchored on the first still.'
+	cine_video: 'Builds the whole multi-shot clip in one call, anchored on the first still.',
+	motion: 'Animates the card on our own servers — a slow push, no video model, nothing to pay.',
+	mux: 'Lays the voiceover under the clip on our own servers.'
 };
 
 const TIER_RANK: Record<string, number> = { budget: 0, balanced: 1, premium: 2, free: 1 };

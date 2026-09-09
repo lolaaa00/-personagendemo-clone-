@@ -426,7 +426,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-08", hash: "0124ca2", type: "test", category: "maintenance", scope: "smoke", title: "prove every operator switch is readable and its write path is live" },
 	{ date: "2026-09-08", hash: "773a03a", type: "fix", category: "fix", scope: "budget", title: "the per-seat workspace cap fails CLOSED once credits are enforced" },
 	{ date: "2026-09-09", hash: "b6b4c27", type: "feat", category: "feature", scope: "composer", title: "one axis, one price — the format catalog, and the money it quotes" },
-	{ date: "2026-09-09", hash: "f7e46a8", type: "fix", category: "fix", scope: "publish", title: "a persona only posts by itself when its owner said it may; reconciliation checks the price too" }
+	{ date: "2026-09-09", hash: "f7e46a8", type: "fix", category: "fix", scope: "publish", title: "a persona only posts by itself when its owner said it may; reconciliation checks the price too" },
+	{ date: "2026-09-09", hash: "d82cb13", type: "fix", category: "generation", scope: "review", title: "the queue rendered nothing — cardThumb() recursed on every image" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -754,10 +755,10 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 		id: "7d3977a", from: "2026-09-08", to: "2026-09-09",
 		category: "feature", categories: ["infrastructure","feature","generation","maintenance","fix"],
 		title: "New: finding #16 — the deploy gates were adopted…",
-		summary: "Finding #16 — the deploy gates were adopted, tested, and never executed. Plus 7 more changes, touching setup and deployment and making posts, images and video and internal cleanup.",
+		summary: "Finding #16 — the deploy gates were adopted, tested, and never executed. Plus 8 more changes, touching setup and deployment and making posts, images and video and internal cleanup.",
 		major: true, curated: false,
-		entries: [CHANGELOG[385], CHANGELOG[386], CHANGELOG[387], CHANGELOG[388], CHANGELOG[389], CHANGELOG[390], CHANGELOG[391], CHANGELOG[392]]
+		entries: [CHANGELOG[385], CHANGELOG[386], CHANGELOG[387], CHANGELOG[388], CHANGELOG[389], CHANGELOG[390], CHANGELOG[391], CHANGELOG[392], CHANGELOG[393]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "f7e46a8";
+export const CHANGELOG_GENERATED_FROM = "d82cb13";

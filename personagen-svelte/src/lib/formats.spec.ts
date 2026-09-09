@@ -213,3 +213,45 @@ describe('craftMatters — the journey is derived, not fixed at four steps', () 
 		expect(craftMatters(plan('product-motion'))).toBe(true);
 	});
 });
+
+describe('locally-assembled formats', () => {
+	it('files the motion card as a video, not an image', () => {
+		// The card is typeset as a still and then animated, but what comes out is a
+		// video — and "what comes out" is the axis a user browses by.
+		expect(getFormat('motion-card')?.kind).toBe('video');
+		expect(getFormat('motion-card')?.video).toBe(true);
+	});
+
+	it('marks the ffmpeg-dependent formats so a host without it can hide them', () => {
+		// ffmpeg is a soft dependency. Offering a format the host cannot build is
+		// exactly the promise the composer exists to prevent.
+		expect(getFormat('motion-card')?.needsFfmpeg).toBe(true);
+		expect(getFormat('vo-broll')?.needsFfmpeg).toBe(true);
+		expect(getFormat('spokesperson')?.needsFfmpeg).toBeFalsy();
+		expect(getFormat('photo')?.needsFfmpeg).toBeFalsy();
+	});
+
+	it('assembles locally instead of paying a model for the expensive part', () => {
+		const card = plan('motion-card');
+		expect(card.map((s) => s.kind)).toEqual(['director', 'card', 'motion']);
+		// Director only: no image model, no video model.
+		expect(planTotalUsd(card)).toBeCloseTo(0.002, 4);
+
+		const vo = plan('vo-broll');
+		expect(vo.map((s) => s.kind)).toEqual(['director', 'still', 'tts', 'video', 'mux']);
+		// Narration over a clip costs the clip plus the voice — no talking head.
+		expect(planTotalUsd(vo)).toBeCloseTo(0.002 + 0.08 + 0.03 + 0.42, 4);
+		expect(planTotalUsd(vo)).toBeLessThan(planTotalUsd(plan('spokesperson')));
+	});
+
+	it('round-trips the new formats through the legacy request body', () => {
+		expect(requestFor('motion-card')).toMatchObject({
+			media: 'video',
+			format: 'motion_card',
+			still: 'graphic'
+		});
+		expect(requestFor('vo-broll')).toMatchObject({ media: 'video', format: 'vo_broll' });
+		expect(formatFromRequest(requestFor('motion-card'))).toBe('motion-card');
+		expect(formatFromRequest(requestFor('vo-broll'))).toBe('vo-broll');
+	});
+});

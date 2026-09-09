@@ -150,10 +150,10 @@
 	let canRefine = $derived(
 		Boolean(
 			activePost?.agent_id &&
-				(activePost.status === 'draft' || activePost.status === 'scheduled') &&
-				display?.mediaGenerated &&
-				display?.mediaUrl &&
-				!isCinematic
+			(activePost.status === 'draft' || activePost.status === 'scheduled') &&
+			display?.mediaGenerated &&
+			display?.mediaUrl &&
+			!isCinematic
 		)
 	);
 	// A refine that failed server-side restores the original media and records
@@ -254,7 +254,9 @@
 					}
 				}
 				if (!updated) {
-					throw new Error('Still regenerating after 10 minutes — it may finish in the background; check the feed shortly.');
+					throw new Error(
+						'Still regenerating after 10 minutes — it may finish in the background; check the feed shortly.'
+					);
 				}
 			}
 
@@ -352,9 +354,7 @@
 			usd: Number(usd ?? 0)
 		}));
 	});
-	let costTotal = $derived(
-		Number(gen?.total ?? obs?.total ?? display?.costBreakdown?.total ?? 0)
-	);
+	let costTotal = $derived(Number(gen?.total ?? obs?.total ?? display?.costBreakdown?.total ?? 0));
 	// Human statement of WHAT this output is — derived from outcome truth
 	// (media_type / cinematic / surface), never from the raw request field:
 	// content.format says 'broll' on typographic cards and cinematic packs,
@@ -365,10 +365,17 @@
 		if (display.cinematic) parts.push('cinematic (multi-shot)', 'video');
 		else if (display.mediaType === 'video')
 			parts.push(
-				display.format === 'spokesperson' ? 'spokesperson (talking head)' : 'b-roll clip',
+				display.format === 'spokesperson'
+					? 'spokesperson (talking head)'
+					: display.format === 'vo_broll'
+						? 'narrated product motion'
+						: display.format === 'motion_card'
+							? 'motion text card'
+							: 'b-roll clip',
 				'video'
 			);
-		else parts.push(display.surface === 'typographic' ? 'typographic card' : 'photo still', 'image');
+		else
+			parts.push(display.surface === 'typographic' ? 'typographic card' : 'photo still', 'image');
 		if (display.mediaGenerated) parts.push('generated');
 		return parts.join(' · ');
 	});
@@ -415,7 +422,9 @@
 
 	let analytics = $derived(post?.analytics ?? null);
 	let hasRealStats = $derived(
-		Boolean(analytics && (analytics.views || analytics.likes || analytics.comments || analytics.shares))
+		Boolean(
+			analytics && (analytics.views || analytics.likes || analytics.comments || analytics.shares)
+		)
 	);
 
 	let platformResults = $derived.by(() => {
@@ -498,7 +507,12 @@
 </script>
 
 {#if post && display}
-	<div class="drawer-backdrop" transition:fade={{ duration: 150 }} onclick={onClose} role="presentation"></div>
+	<div
+		class="drawer-backdrop"
+		transition:fade={{ duration: 150 }}
+		onclick={onClose}
+		role="presentation"
+	></div>
 	<aside
 		class="post-drawer"
 		transition:fly={{ x: 440, duration: 260, opacity: 1 }}
@@ -511,13 +525,27 @@
 		<div class="drawer-header">
 			<div class="drawer-header-meta">
 				<span class="drawer-date">{formatPostDate(post)}</span>
-				<span class="drawer-status-badge" style="color: {statusColor(post.status)}; border-color: {statusColor(post.status)}">{post.status}</span>
+				<span
+					class="drawer-status-badge"
+					style="color: {statusColor(post.status)}; border-color: {statusColor(post.status)}"
+					>{post.status}</span
+				>
 				{#each post.platforms ?? [] as p (p)}
 					<span class="drawer-platform-pill" style="background: {platformColor(p)}">{p}</span>
 				{/each}
 			</div>
 			<button type="button" class="drawer-close" onclick={onClose} aria-label="Close details">
-				<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6L6 18" /><path d="M6 6l12 12" /></svg>
+				<svg
+					width="18"
+					height="18"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					aria-hidden="true"><path d="M18 6L6 18" /><path d="M6 6l12 12" /></svg
+				>
 			</button>
 		</div>
 
@@ -531,7 +559,8 @@
 						class="media-blur"
 						style="background-image: url('{(display.mediaType === 'video'
 							? display.posterUrl || display.mediaUrl
-							: display.mediaUrl)?.replace(/'/g, '%27')}')"
+							: display.mediaUrl
+						)?.replace(/'/g, '%27')}')"
 					></div>
 					{#if display.mediaType === 'video'}
 						<!-- svelte-ignore a11y_media_has_caption -->
@@ -552,7 +581,8 @@
 							     direct route to the file, which always opens in the OS player. -->
 							<div class="video-fallback" role="status">
 								<p>This clip wouldn't play inline.</p>
-								<a href={display.mediaUrl} target="_blank" rel="noopener noreferrer">Open video ↗</a>
+								<a href={display.mediaUrl} target="_blank" rel="noopener noreferrer">Open video ↗</a
+								>
 							</div>
 						{/if}
 					{:else}
@@ -564,14 +594,23 @@
 							aria-label="Enlarge post media"
 							onclick={() => (zoomOpen = true)}
 						>
-							<img class="media-el" src={thumbUrl(display.mediaUrl, 1080)} onerror={(e) => restoreOriginal(e, display.mediaUrl)} alt="Post media" width={STILL_BOX.width} height={STILL_BOX.height} fetchpriority="high" decoding="async" />
+							<img
+								class="media-el"
+								src={thumbUrl(display.mediaUrl, 1080)}
+								onerror={(e) => restoreOriginal(e, display.mediaUrl)}
+								alt="Post media"
+								width={STILL_BOX.width}
+								height={STILL_BOX.height}
+								fetchpriority="high"
+								decoding="async"
+							/>
 						</button>
 					{/if}
 					{#if refining}
 						<div class="refine-overlay" role="status" aria-live="polite">
 							<span class="refine-spinner"></span>
-							Regenerating media — usually 1–3 minutes, up to 10 for premium video models. Keep
-							this open or check the feed later.
+							Regenerating media — usually 1–3 minutes, up to 10 for premium video models. Keep this open
+							or check the feed later.
 						</div>
 					{/if}
 				</div>
@@ -582,10 +621,18 @@
 					<!-- compactCountLabel does the K/M abbreviation this row used to do inline,
 					     and agrees the noun with the REAL count — a post with one view read
 					     "1 views" here for as long as the row has existed. -->
-					{#if analytics.views}<span class="stat"><strong>{compactCountLabel(analytics.views, 'view')}</strong></span>{/if}
-					{#if analytics.likes}<span class="stat"><strong>{compactCountLabel(analytics.likes, 'like')}</strong></span>{/if}
-					{#if analytics.comments}<span class="stat"><strong>{compactCountLabel(analytics.comments, 'comment')}</strong></span>{/if}
-					{#if analytics.shares}<span class="stat"><strong>{compactCountLabel(analytics.shares, 'share')}</strong></span>{/if}
+					{#if analytics.views}<span class="stat"
+							><strong>{compactCountLabel(analytics.views, 'view')}</strong></span
+						>{/if}
+					{#if analytics.likes}<span class="stat"
+							><strong>{compactCountLabel(analytics.likes, 'like')}</strong></span
+						>{/if}
+					{#if analytics.comments}<span class="stat"
+							><strong>{compactCountLabel(analytics.comments, 'comment')}</strong></span
+						>{/if}
+					{#if analytics.shares}<span class="stat"
+							><strong>{compactCountLabel(analytics.shares, 'share')}</strong></span
+						>{/if}
 				</div>
 			{:else if post.status === 'published'}
 				<p class="drawer-stats-pending">Stats pending first sync from the platform.</p>
@@ -596,8 +643,18 @@
 					<label class="sr-only" for="drawer-caption-edit">Post caption</label>
 					<textarea id="drawer-caption-edit" rows="6" bind:value={draftText}></textarea>
 					<div class="drawer-text-edit-actions">
-						<button type="button" class="dt-btn" onclick={() => (editingText = false)} disabled={savingText}>Cancel</button>
-						<button type="button" class="dt-btn dt-save" onclick={saveTextEdit} disabled={savingText}>
+						<button
+							type="button"
+							class="dt-btn"
+							onclick={() => (editingText = false)}
+							disabled={savingText}>Cancel</button
+						>
+						<button
+							type="button"
+							class="dt-btn dt-save"
+							onclick={saveTextEdit}
+							disabled={savingText}
+						>
 							{savingText ? 'Saving…' : 'Save caption'}
 						</button>
 					</div>
@@ -606,8 +663,25 @@
 				<div class="drawer-text-row">
 					<p class="drawer-text">{display.text}</p>
 					{#if onSaveText}
-						<button type="button" class="dt-edit" onclick={startTextEdit} title="Edit caption" aria-label="Edit caption">
-							<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z" /></svg>
+						<button
+							type="button"
+							class="dt-edit"
+							onclick={startTextEdit}
+							title="Edit caption"
+							aria-label="Edit caption"
+						>
+							<svg
+								width="14"
+								height="14"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								aria-hidden="true"
+								><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z" /></svg
+							>
 						</button>
 					{/if}
 				</div>
@@ -617,8 +691,18 @@
 				<div class="drawer-reschedule">
 					<span class="drawer-block-label">Scheduled for</span>
 					<div class="reschedule-row">
-						<input type="date" bind:value={schedDate} disabled={savingSchedule} aria-label="Scheduled date" />
-						<input type="time" bind:value={schedTime} disabled={savingSchedule} aria-label="Scheduled time" />
+						<input
+							type="date"
+							bind:value={schedDate}
+							disabled={savingSchedule}
+							aria-label="Scheduled date"
+						/>
+						<input
+							type="time"
+							bind:value={schedTime}
+							disabled={savingSchedule}
+							aria-label="Scheduled time"
+						/>
 						<button
 							type="button"
 							class="dt-btn dt-save"
@@ -637,7 +721,19 @@
 				     and used to render as JSON noise right here). -->
 				<div class="drawer-error" role="alert">
 					<strong
-						><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><path d="M12 9v4" /><path d="M12 17h.01" /></svg
+						><svg
+							width="14"
+							height="14"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							aria-hidden="true"
+							><path
+								d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"
+							/><path d="M12 9v4" /><path d="M12 17h.01" /></svg
 						> Generation failed — nothing was produced</strong
 					>
 					<p>{summarizeGenError(post)}</p>
@@ -647,7 +743,19 @@
 			{#if storedRefineError && !refineOpen}
 				<div class="drawer-error" role="alert">
 					<strong
-						><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><path d="M12 9v4" /><path d="M12 17h.01" /></svg
+						><svg
+							width="14"
+							height="14"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							aria-hidden="true"
+							><path
+								d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"
+							/><path d="M12 9v4" /><path d="M12 17h.01" /></svg
 						> Last refine failed — original media kept</strong
 					>
 					<p>{storedRefineError}</p>
@@ -657,13 +765,25 @@
 			{#if refineOpen && canRefine}
 				<div class="drawer-refine">
 					<span class="drawer-block-label"
-						><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8" /></svg
+						><svg
+							width="13"
+							height="13"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							aria-hidden="true"
+							><path
+								d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8"
+							/></svg
 						> Refine &amp; regenerate</span
 					>
 					<p class="refine-hint">
-						Edit the visual prompt to fix what the model got wrong (e.g. add "she holds the
-						sealed pouch — never opens, squeezes or pours it"), then regenerate. The caption,
-						schedule, face, product reference and voice all stay the same.
+						Edit the visual prompt to fix what the model got wrong (e.g. add "she holds the sealed
+						pouch — never opens, squeezes or pours it"), then regenerate. The caption, schedule,
+						face, product reference and voice all stay the same.
 					</p>
 					<label class="refine-field">
 						<span class="drawer-block-label">Visual prompt</span>
@@ -675,7 +795,7 @@
 							aria-describedby={refineError ? 'refine-error-msg' : undefined}
 						></textarea>
 					</label>
-					{#if display.format === 'spokesperson' && display.mediaType === 'video'}
+					{#if (display.format === 'spokesperson' || display.format === 'vo_broll') && display.mediaType === 'video'}
 						<label class="refine-field">
 							<span class="drawer-block-label">Spoken line</span>
 							<textarea rows="2" bind:value={refineDialogue} disabled={refining}></textarea>
@@ -683,13 +803,30 @@
 					{/if}
 					{#if refineError}
 						<p class="refine-error" id="refine-error-msg" role="alert">
-							<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><path d="M12 9v4" /><path d="M12 17h.01" /></svg
+							<svg
+								width="13"
+								height="13"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								aria-hidden="true"
+								><path
+									d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"
+								/><path d="M12 9v4" /><path d="M12 17h.01" /></svg
 							>
 							{truncateError(refineError)}
 						</p>
 					{/if}
 					<div class="drawer-text-edit-actions">
-						<button type="button" class="dt-btn" onclick={() => (refineOpen = false)} disabled={refining}>
+						<button
+							type="button"
+							class="dt-btn"
+							onclick={() => (refineOpen = false)}
+							disabled={refining}
+						>
 							Cancel
 						</button>
 						<!-- Two-click confirm: a refine re-bills the media pipeline, and drafts
@@ -703,8 +840,18 @@
 						>
 							{#if refining}Regenerating…{:else if confirmingRefine}{metered
 									? `Spend ~${refinePrice}?`
-									: `Regenerate — est. ${refinePrice}?`}{:else}<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7" /><path d="M21 3v5h-5" /></svg
-								> Regenerate (est. {refinePrice}){/if}
+									: `Regenerate — est. ${refinePrice}?`}{:else}<svg
+									width="13"
+									height="13"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7" /><path d="M21 3v5h-5" /></svg
+								>
+								Regenerate (est. {refinePrice}){/if}
 						</button>
 					</div>
 				</div>
@@ -713,7 +860,11 @@
 			{#if display.product?.name}
 				<div class="drawer-product">
 					<span class="drawer-block-label">Product</span>
-					<span>{display.product.name}{display.product.price ? ` — ${display.product.price}` : ''}</span>
+					<span
+						>{display.product.name}{display.product.price
+							? ` — ${display.product.price}`
+							: ''}</span
+					>
 				</div>
 			{/if}
 
@@ -724,13 +875,36 @@
 					{#if genImages.length}
 						<div>
 							<span class="drawer-block-label"
-								><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><path d="m21 15-5-5L5 21" /></svg
-								> {gen?.images ? 'Images sent to the model' : 'Reference image'}</span
+								><svg
+									width="13"
+									height="13"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									aria-hidden="true"
+									><rect x="3" y="3" width="18" height="18" rx="2" /><circle
+										cx="8.5"
+										cy="8.5"
+										r="1.5"
+									/><path d="m21 15-5-5L5 21" /></svg
+								>
+								{gen?.images ? 'Images sent to the model' : 'Reference image'}</span
 							>
 							<div class="gen-imgs">
 								{#each genImages as img (img.url)}
 									<figure class="gen-img">
-										<img src={thumbUrl(img.url, 160)} onerror={(e) => restoreOriginal(e, img.url)} alt={img.label} width="72" height="72" loading="lazy" decoding="async" />
+										<img
+											src={thumbUrl(img.url, 160)}
+											onerror={(e) => restoreOriginal(e, img.url)}
+											alt={img.label}
+											width="72"
+											height="72"
+											loading="lazy"
+											decoding="async"
+										/>
 										<figcaption>{img.label}</figcaption>
 									</figure>
 								{/each}
@@ -741,7 +915,23 @@
 					{#if display.ugcPrompt}
 						<div>
 							<span class="drawer-block-label"
-								><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m22 8-6 4 6 4V8z" /><rect x="2" y="6" width="14" height="12" rx="2" /></svg
+								><svg
+									width="13"
+									height="13"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									aria-hidden="true"
+									><path d="m22 8-6 4 6 4V8z" /><rect
+										x="2"
+										y="6"
+										width="14"
+										height="12"
+										rx="2"
+									/></svg
 								> UGC prompt sent</span
 							>
 							<p class="gen-prompt">{display.ugcPrompt}</p>
@@ -750,7 +940,19 @@
 					{#if display.script}
 						<div>
 							<span class="drawer-block-label"
-								><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="2" width="20" height="20" rx="2" /><path d="M7 2v20M17 2v20M2 12h20M2 7h5M2 17h5M17 17h5M17 7h5" /></svg
+								><svg
+									width="13"
+									height="13"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									aria-hidden="true"
+									><rect x="2" y="2" width="20" height="20" rx="2" /><path
+										d="M7 2v20M17 2v20M2 12h20M2 7h5M2 17h5M17 17h5M17 7h5"
+									/></svg
 								> Script</span
 							>
 							<p class="gen-prompt">{display.script}</p>
@@ -760,7 +962,19 @@
 					{#if genAspects.length}
 						<div>
 							<span class="drawer-block-label"
-								><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg
+								><svg
+									width="13"
+									height="13"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									aria-hidden="true"
+									><circle cx="12" cy="12" r="3" /><path
+										d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
+									/></svg
 								> Models &amp; estimated spend by aspect</span
 							>
 							<!-- Headline figure is what the run is worth against the balance; the
@@ -774,7 +988,8 @@
 											<td class="gen-op">{OPERATION_LABELS[a.op] ?? a.op}</td>
 											<td class="gen-model">{a.models.join(', ') || '—'}</td>
 											<td class="gen-usd"
-												>{quote(a.usd)}<span class="gen-cost-raw">${a.usd.toFixed(3)} at cost</span></td
+												>{quote(a.usd)}<span class="gen-cost-raw">${a.usd.toFixed(3)} at cost</span
+												></td
 											>
 										</tr>
 									{/each}
@@ -795,7 +1010,19 @@
 						     cost-by-provider breakdown (still real estimated spend). -->
 						<div>
 							<span class="drawer-block-label"
-								><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 1v22" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></svg
+								><svg
+									width="13"
+									height="13"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									aria-hidden="true"
+									><path d="M12 1v22" /><path
+										d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"
+									/></svg
 								> Estimated spend by provider</span
 							>
 							<table class="gen-cost">
@@ -805,7 +1032,8 @@
 											<td class="gen-op" style="text-transform: capitalize;">{c.provider}</td>
 											<td class="gen-model"></td>
 											<td class="gen-usd"
-												>{quote(c.usd)}<span class="gen-cost-raw">${c.usd.toFixed(3)} at cost</span></td
+												>{quote(c.usd)}<span class="gen-cost-raw">${c.usd.toFixed(3)} at cost</span
+												></td
 											>
 										</tr>
 									{/each}
@@ -813,7 +1041,8 @@
 										<td>Total</td>
 										<td></td>
 										<td class="gen-usd"
-											>{quote(costTotal)}<span class="gen-cost-raw">${costTotal.toFixed(3)} at cost</span
+											>{quote(costTotal)}<span class="gen-cost-raw"
+												>${costTotal.toFixed(3)} at cost</span
 											></td
 										>
 									</tr>
@@ -825,7 +1054,19 @@
 					{#if formatLine}
 						<div>
 							<span class="drawer-block-label"
-								><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="2" width="20" height="20" rx="2" /><path d="M7 2v20M17 2v20M2 12h20M2 7h5M2 17h5M17 17h5M17 7h5" /></svg
+								><svg
+									width="13"
+									height="13"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									aria-hidden="true"
+									><rect x="2" y="2" width="20" height="20" rx="2" /><path
+										d="M7 2v20M17 2v20M2 12h20M2 7h5M2 17h5M17 17h5M17 7h5"
+									/></svg
 								> Format</span
 							>
 							<p class="gen-prompt">
@@ -837,17 +1078,41 @@
 					{#if compositionLine}
 						<div>
 							<span class="drawer-block-label"
-								><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 9h18" /><path d="M9 21V9" /></svg
+								><svg
+									width="13"
+									height="13"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									aria-hidden="true"
+									><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 9h18" /><path
+										d="M9 21V9"
+									/></svg
 								> Composition</span
 							>
 							<p class="gen-prompt">{compositionLine}</p>
 						</div>
 					{/if}
 
-					{#if display.voice && display.mediaType === 'video' && display.format === 'spokesperson'}
+					{#if display.voice && display.mediaType === 'video' && (display.format === 'spokesperson' || display.format === 'vo_broll')}
 						<div>
 							<span class="drawer-block-label"
-								><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" x2="12" y1="19" y2="22" /></svg
+								><svg
+									width="13"
+									height="13"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									aria-hidden="true"
+									><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" /><path
+										d="M19 10v2a7 7 0 0 1-14 0v-2"
+									/><line x1="12" x2="12" y1="19" y2="22" /></svg
 								> Voice</span
 							>
 							<p class="gen-prompt">
@@ -864,7 +1129,17 @@
 						     burned captions would be a false statement about the media. -->
 						<div>
 							<span class="drawer-block-label"
-								><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg
+								><svg
+									width="13"
+									height="13"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									aria-hidden="true"
+									><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg
 								> Captions &amp; badge</span
 							>
 							<p class="gen-prompt">
@@ -891,7 +1166,21 @@
 					{#if genSelections}
 						<div>
 							<span class="drawer-block-label"
-								><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="6" /><circle cx="12" cy="12" r="2" /></svg
+								><svg
+									width="13"
+									height="13"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									aria-hidden="true"
+									><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="6" /><circle
+										cx="12"
+										cy="12"
+										r="2"
+									/></svg
 								> Selections at generation</span
 							>
 							<ul class="gen-sel">
@@ -902,8 +1191,12 @@
 								{#if genSelections.videoModel}
 									<li><span>Video model</span>{genSelections.videoModel}</li>
 								{/if}
-								{#if genSelections.provider}<li><span>Provider</span>{genSelections.provider}</li>{/if}
-								{#if genSelections.mediaType}<li><span>Media</span>{genSelections.mediaType}</li>{/if}
+								{#if genSelections.provider}<li>
+										<span>Provider</span>{genSelections.provider}
+									</li>{/if}
+								{#if genSelections.mediaType}<li>
+										<span>Media</span>{genSelections.mediaType}
+									</li>{/if}
 							</ul>
 						</div>
 					{/if}
@@ -913,7 +1206,19 @@
 			{#if postLevelError}
 				<div class="drawer-error" role="alert">
 					<strong
-						><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><path d="M12 9v4" /><path d="M12 17h.01" /></svg
+						><svg
+							width="14"
+							height="14"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							aria-hidden="true"
+							><path
+								d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"
+							/><path d="M12 9v4" /><path d="M12 17h.01" /></svg
 						> Post-level error</strong
 					>
 					<p>{postLevelError}</p>
@@ -927,14 +1232,27 @@
 						{@const r = result as any}
 						<div class="breakdown-item">
 							<div class="breakdown-head">
-								<span style="color: {platformColor(platform)}; font-weight: 700; text-transform: capitalize;">{platform}</span>
-								<span class="breakdown-pill" style="color: {statusColor(r.status)}; border-color: {statusColor(r.status)};">{r.status}</span>
+								<span
+									style="color: {platformColor(
+										platform
+									)}; font-weight: 700; text-transform: capitalize;">{platform}</span
+								>
+								<span
+									class="breakdown-pill"
+									style="color: {statusColor(r.status)}; border-color: {statusColor(r.status)};"
+									>{r.status}</span
+								>
 							</div>
 							{#if r.error && r.status !== 'published'}
 								<p class="breakdown-error">{truncateError(r.error)}</p>
 							{/if}
 							{#if r.permalink}
-								<a href={r.permalink} target="_blank" rel="noopener noreferrer" class="breakdown-link">View live post ↗</a>
+								<a
+									href={r.permalink}
+									target="_blank"
+									rel="noopener noreferrer"
+									class="breakdown-link">View live post ↗</a
+								>
 							{/if}
 						</div>
 					{/each}
@@ -944,7 +1262,12 @@
 
 		<div class="drawer-footer">
 			{#if onDelete}
-				<button type="button" class="btn-drawer-delete" disabled={deleting} onclick={handleDeleteClick}>
+				<button
+					type="button"
+					class="btn-drawer-delete"
+					disabled={deleting}
+					onclick={handleDeleteClick}
+				>
 					{deleting ? 'Deleting…' : 'Delete'}
 				</button>
 			{/if}
@@ -976,7 +1299,12 @@
 					>Standalone asset — not queued for publishing</span
 				>
 			{:else if post.status === 'draft'}
-				<button type="button" class="btn-drawer-approve" disabled={approving || refining} onclick={() => onApprove(post)}>
+				<button
+					type="button"
+					class="btn-drawer-approve"
+					disabled={approving || refining}
+					onclick={() => onApprove(post)}
+				>
 					{approving ? 'Approving…' : 'Approve & Schedule'}
 				</button>
 			{:else if canRepublish}
@@ -1053,7 +1381,10 @@
 		width: 100%;
 		height: 100%;
 	}
-	.dt-edit:hover { border-color: var(--accent-mid); color: var(--text); }
+	.dt-edit:hover {
+		border-color: var(--accent-mid);
+		color: var(--text);
+	}
 	.drawer-text-edit textarea {
 		width: 100%;
 		background: var(--surface-2);
@@ -1186,7 +1517,10 @@
 		align-items: center;
 		justify-content: center;
 		cursor: pointer;
-		transition: background 0.2s, color 0.2s, transform 0.2s;
+		transition:
+			background 0.2s,
+			color 0.2s,
+			transform 0.2s;
 	}
 
 	.drawer-close:hover {
@@ -1287,7 +1621,9 @@
 		animation: refine-spin 0.9s linear infinite;
 	}
 	@keyframes refine-spin {
-		to { transform: rotate(360deg); }
+		to {
+			transform: rotate(360deg);
+		}
 	}
 	.drawer-refine {
 		display: flex;

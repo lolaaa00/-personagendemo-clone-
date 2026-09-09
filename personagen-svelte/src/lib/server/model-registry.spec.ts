@@ -12,6 +12,8 @@ import {
 	parsePriceText,
 	effectiveOptions,
 	effectiveResolve,
+	isRegistryKind,
+	loadRegistry,
 	openRouterPerCallPrice,
 	openRouterKind,
 	openRouterKinds,
@@ -19,7 +21,8 @@ import {
 	servesKind
 } from './model-registry';
 import type { RegistryRow } from './model-registry';
-import { modelsFor, DEFAULT_MODEL } from '$lib/models';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { MODEL_CATALOG, modelsFor, DEFAULT_MODEL, type ModelKind } from '$lib/models';
 
 /**
  * VERBATIM entries from OpenRouter's live /api/v1/models (2026-09-01). These
@@ -149,7 +152,11 @@ describe('openRouterRoute', () => {
 
 	it('prefers an active wired registry row over the compiled-in default', () => {
 		const r = openRouterRoute([base], 'image_t2i', 'fallback/model', 0.02);
-		expect(r).toMatchObject({ id: 'google/gemini-3.1-flash-image', usd: 0.0774, fromRegistry: true });
+		expect(r).toMatchObject({
+			id: 'google/gemini-3.1-flash-image',
+			usd: 0.0774,
+			fromRegistry: true
+		});
 	});
 
 	it('falls back to today’s behaviour on an empty registry — never bricks generation', () => {
@@ -294,7 +301,13 @@ describe('registryDefault — the starred row a fal pipeline mode runs on', () =
 
 	it('returns the starred, wired, active row of that provider — id and price from one row', () => {
 		const rows = [
-			row({ model_id: 'fal-ai/other-voice', kind: 'tts', kinds: ['tts'], is_default: false, price_usd: 9 }),
+			row({
+				model_id: 'fal-ai/other-voice',
+				kind: 'tts',
+				kinds: ['tts'],
+				is_default: false,
+				price_usd: 9
+			}),
 			row({ model_id: TTS, kind: 'tts', kinds: ['tts'], is_default: true, price_usd: 0.03 })
 		];
 		expect(registryDefault(rows, 'tts', 'fal', 'fallback-id', 0.99)).toEqual({
@@ -308,22 +321,125 @@ describe('registryDefault — the starred row a fal pipeline mode runs on', () =
 		const fallback = { id: 'fallback-id', usd: 0.99, fromRegistry: false };
 		expect(registryDefault([], 'tts', 'fal', 'fallback-id', 0.99)).toEqual(fallback);
 		expect(
-			registryDefault([row({ model_id: TTS, kind: 'tts', kinds: ['tts'], is_default: false })], 'tts', 'fal', 'fallback-id', 0.99)
+			registryDefault(
+				[row({ model_id: TTS, kind: 'tts', kinds: ['tts'], is_default: false })],
+				'tts',
+				'fal',
+				'fallback-id',
+				0.99
+			)
 		).toEqual(fallback);
 		expect(
-			registryDefault([row({ model_id: TTS, kind: 'tts', kinds: ['tts'], is_default: true, wired: false })], 'tts', 'fal', 'fallback-id', 0.99)
+			registryDefault(
+				[row({ model_id: TTS, kind: 'tts', kinds: ['tts'], is_default: true, wired: false })],
+				'tts',
+				'fal',
+				'fallback-id',
+				0.99
+			)
 		).toEqual(fallback);
 		expect(
-			registryDefault([row({ model_id: TTS, kind: 'tts', kinds: ['tts'], is_default: true, status: 'disabled' })], 'tts', 'fal', 'fallback-id', 0.99)
+			registryDefault(
+				[row({ model_id: TTS, kind: 'tts', kinds: ['tts'], is_default: true, status: 'disabled' })],
+				'tts',
+				'fal',
+				'fallback-id',
+				0.99
+			)
 		).toEqual(fallback);
 		// A starred row with no price cannot be billed, so it cannot be run.
 		expect(
-			registryDefault([row({ model_id: TTS, kind: 'tts', kinds: ['tts'], is_default: true, price_usd: null })], 'tts', 'fal', 'fallback-id', 0.99)
+			registryDefault(
+				[row({ model_id: TTS, kind: 'tts', kinds: ['tts'], is_default: true, price_usd: null })],
+				'tts',
+				'fal',
+				'fallback-id',
+				0.99
+			)
 		).toEqual(fallback);
 	});
 
 	it('never hands an OpenRouter row to a fal call site', () => {
-		const rows = [row({ provider: 'openrouter', model_id: 'someone/voice', kind: 'tts', kinds: ['tts'], is_default: true, price_usd: 0.01 })];
+		const rows = [
+			row({
+				provider: 'openrouter',
+				model_id: 'someone/voice',
+				kind: 'tts',
+				kinds: ['tts'],
+				is_default: true,
+				price_usd: 0.01
+			})
+		];
 		expect(registryDefault(rows, 'tts', 'fal', 'fallback-id', 0.99).fromRegistry).toBe(false);
+	});
+});
+
+describe('catalog-only kinds (talking_head, llm) — no migration, no rows', () => {
+	// The `kind` column's CHECK constraint accepts exactly these four values, so
+	// production can never hold a row for the two new stages. Everything below
+	// pins the consequence: they resolve from the static catalog, on a database
+	// that knows nothing about them.
+	it('knows which kinds a row may claim', () => {
+		expect(isRegistryKind('tts')).toBe(true);
+		expect(isRegistryKind('video_i2v')).toBe(true);
+		expect(isRegistryKind('talking_head')).toBe(false);
+		expect(isRegistryKind('llm')).toBe(false);
+	});
+
+	for (const kind of ['talking_head', 'llm'] as ModelKind[]) {
+		it(`${kind}: an empty registry yields the full static catalog`, () => {
+			expect(effectiveOptions([], kind)).toEqual(modelsFor(kind));
+			expect(effectiveResolve([], kind, null).id).toBe(DEFAULT_MODEL[kind]);
+		});
+
+		it(`${kind}: a populated registry changes nothing`, () => {
+			// Rows exist for the other modes; none of them may leak into a stage
+			// the registry cannot describe.
+			const rows = [
+				row({ model_id: 'fal-ai/kling-video/o3/pro/image-to-video', is_default: true }),
+				row({ model_id: 'fal-ai/elevenlabs/tts/turbo-v2.5', kind: 'tts', kinds: ['tts'] })
+			];
+			expect(effectiveOptions(rows, kind)).toEqual(modelsFor(kind));
+			expect(effectiveResolve(rows, kind, null).id).toBe(DEFAULT_MODEL[kind]);
+		});
+
+		it(`${kind}: an unknown id resolves to the default instead of reaching a provider`, () => {
+			expect(effectiveResolve([], kind, 'someone/invented-model').id).toBe(DEFAULT_MODEL[kind]);
+			const requested = modelsFor(kind).find((m) => m.id !== DEFAULT_MODEL[kind])!;
+			expect(effectiveResolve([], kind, requested.id).id).toBe(requested.id);
+		});
+	}
+});
+
+describe('loadRegistry seeding stays inside the CHECK constraint', () => {
+	/** Minimal PostgREST-shaped stub: empty catalog, capture what gets seeded. */
+	function fakeSupabase(captured: Record<string, unknown>[]) {
+		const empty = () => Promise.resolve({ data: [], error: null });
+		return {
+			from: () => ({
+				select: () => ({
+					or: () => ({ order: empty }),
+					eq: () => ({ order: empty })
+				}),
+				upsert: (rows: Record<string, unknown>[]) => {
+					captured.push(...rows);
+					return Promise.resolve({ error: null });
+				}
+			})
+		} as unknown as SupabaseClient;
+	}
+
+	it('seeds every wired model EXCEPT the kinds the column would reject', async () => {
+		const captured: Record<string, unknown>[] = [];
+		await loadRegistry(fakeSupabase(captured), 'user-1');
+		const kinds = new Set(captured.map((r) => r.kind as string));
+		// PostgREST sends this as one statement: a single rejected row would fail
+		// the whole insert and leave a first-visit user with no catalog at all.
+		expect([...kinds].every(isRegistryKind)).toBe(true);
+		expect(kinds.has('talking_head')).toBe(false);
+		expect(kinds.has('llm')).toBe(false);
+		// The rest of the catalog still seeds — plus the tts and OpenRouter rows.
+		const seedable = MODEL_CATALOG.filter((m) => isRegistryKind(m.kind));
+		expect(captured.length).toBe(seedable.length + 2);
 	});
 });

@@ -109,17 +109,31 @@ export interface AiClient {
  * Resolves the best available AI client for the given user.
  * Returns null if no provider is configured.
  */
-export async function resolveAiClient(supabase: any, userId: string): Promise<AiClient | null> {
+export async function resolveAiClient(
+	supabase: any,
+	userId: string,
+	/**
+	 * Per-run model pick from the composer's Craft step. Applied ONLY to the
+	 * provider this user's keys actually resolve to: the picker is filtered by
+	 * provider server-side, and honouring a mismatched id here would send an
+	 * OpenRouter slug to Gemini (a 404 the user waits for and pays nothing for,
+	 * having already approved the run).
+	 */
+	modelOverride?: { provider: 'openrouter' | 'gemini'; model: string } | null
+): Promise<AiClient | null> {
+	const overrideFor = (p: 'openrouter' | 'gemini') =>
+		modelOverride && modelOverride.provider === p ? modelOverride.model : null;
+
 	// 1. Check user's OpenRouter key first
 	const orKey = await getUserApiKey(supabase, userId, 'openrouter').catch(() => null);
 	if (orKey) {
-		return createOpenRouterClient(orKey);
+		return createOpenRouterClient(orKey, overrideFor('openrouter'));
 	}
 
 	// 2. Check user's Gemini key
 	const userGeminiKey = await getUserApiKey(supabase, userId, 'gemini').catch(() => null);
 	if (userGeminiKey) {
-		return createGeminiClient(userGeminiKey);
+		return createGeminiClient(userGeminiKey, overrideFor('gemini'));
 	}
 
 	// 3. Fall back to server-wide env vars — OpenRouter first (matches the
@@ -139,10 +153,10 @@ export async function resolveAiClient(supabase: any, userId: string): Promise<Ai
 	return null;
 }
 
-function createOpenRouterClient(apiKey: string): AiClient {
+function createOpenRouterClient(apiKey: string, modelOverride?: string | null): AiClient {
 	return {
 		provider: 'openrouter',
-		model: OPENROUTER_GEMINI_MODEL,
+		model: modelOverride || OPENROUTER_GEMINI_MODEL,
 		async generate(prompt: string, opts?: AiGenerateOptions): Promise<string> {
 			const messages: any[] = [];
 			if (opts?.systemInstruction) {
@@ -195,10 +209,10 @@ function createOpenRouterClient(apiKey: string): AiClient {
 	};
 }
 
-function createGeminiClient(apiKey: string): AiClient {
+function createGeminiClient(apiKey: string, modelOverride?: string | null): AiClient {
 	return {
 		provider: 'gemini',
-		model: GEMINI_MODEL,
+		model: modelOverride || GEMINI_MODEL,
 		async generate(prompt: string, opts?: AiGenerateOptions): Promise<string> {
 			const ai = new GoogleGenAI({ apiKey });
 			const config: any = {};

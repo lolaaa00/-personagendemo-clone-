@@ -7,8 +7,6 @@ import {
 	generateCinematicUgcPack,
 	resolveImageKeys,
 	resolveVoiceForPersona,
-	TALKINGHEAD_LABEL,
-	TALKINGHEAD_MODEL,
 	NANO_STILL_LABEL,
 	CINEMATIC_VIDEO_LABEL,
 	TTS_MODEL,
@@ -225,22 +223,39 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		// The Director still writes anything left blank; these only ever REPLACE a
 		// decision the user made explicitly, so an absent field is today's run.
 		/** The spoken line for a spokesperson run. Previously editable only on a refine. */
-		dialogueOverride: typeof body.script === 'string' && body.script.trim() ? body.script.slice(0, 1200) : undefined,
+		dialogueOverride:
+			typeof body.script === 'string' && body.script.trim()
+				? body.script.slice(0, 1200)
+				: undefined,
 		/** Per-run voice; the persona's pinned voice remains the default. */
-		voiceOverride: typeof body.voice === 'string' && body.voice.trim() ? body.voice.trim() : undefined,
+		voiceOverride:
+			typeof body.voice === 'string' && body.voice.trim() ? body.voice.trim() : undefined,
 		/** Typographic card controls — the line, and how it is set. */
-		cardText: typeof body.card_text === 'string' && body.card_text.trim() ? body.card_text.slice(0, 400) : undefined,
+		cardText:
+			typeof body.card_text === 'string' && body.card_text.trim()
+				? body.card_text.slice(0, 400)
+				: undefined,
 		cardLayout: ['statement', 'quote', 'stack', 'list', 'split'].includes(body.card_layout)
 			? body.card_layout
 			: undefined,
-		cardPalette: typeof body.card_palette === 'string' && body.card_palette !== 'auto' ? body.card_palette : undefined,
+		cardPalette:
+			typeof body.card_palette === 'string' && body.card_palette !== 'auto'
+				? body.card_palette
+				: undefined,
 		/** The realism register for photo compositions (front camera / mirror / third person). */
 		framing: ['front', 'mirror', 'third'].includes(body.framing) ? body.framing : undefined,
 		/** Budget-vs-quality for the still, the second largest line in most runs. */
 		stillModel: typeof body.still_model === 'string' ? body.still_model : undefined,
+		/** The lip-sync model — the dearest single call in a spokesperson post. */
+		talkingHeadModel:
+			typeof body.talking_head_model === 'string' ? body.talking_head_model : undefined,
+		/** The Director's LLM; ignored unless it matches the provider that resolves. */
+		llmModel: typeof body.llm_model === 'string' ? body.llm_model : undefined,
 		/** "Use my own still": skips still generation entirely, and its charge with it. */
 		stillUrlOverride:
-			typeof body.still_url === 'string' && /^https?:\/\//i.test(body.still_url) ? body.still_url : undefined
+			typeof body.still_url === 'string' && /^https?:\/\//i.test(body.still_url)
+				? body.still_url
+				: undefined
 	};
 
 	// ── Studio delivery contract ─────────────────────────────────────────────
@@ -317,7 +332,13 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 
 		// The quote must price the row the pipeline will actually RUN, or the
 		// customer approves one number and the ledger records another.
-		const voiceModel = registryDefault(registryRows, 'tts', 'fal', TTS_MODEL, priceOf('fal', 'tts'));
+		const voiceModel = registryDefault(
+			registryRows,
+			'tts',
+			'fal',
+			TTS_MODEL,
+			priceOf('fal', 'tts')
+		);
 
 		// Honor an explicit format in the request first (the REAL run already does,
 		// via formatOverride) — otherwise a Studio template or composer choice would
@@ -378,9 +399,16 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		const defaultStill = effectiveResolve(registryRows, stillKind, body.still_model);
 		const defaultVideo = effectiveResolve(registryRows, 'video_i2v', body.video_model);
 
+		// The Director only ever runs on the provider this user's keys resolve to,
+		// so offering the other provider's models would be offering a 404.
+		const llmOptions = effectiveOptions(registryRows, 'llm')
+			.filter((m) => m.provider === directorProvider)
+			.map(toStepModel);
 		const planOptions: Partial<Record<StepKind, StepModel[]>> = {
 			still: stillOptions,
-			video: videoOptions
+			video: videoOptions,
+			talkinghead: effectiveOptions(registryRows, 'talking_head').map(toStepModel),
+			director: llmOptions
 		};
 		const planFixed: Partial<Record<StepKind, StepModel>> = {
 			director: {
@@ -392,7 +420,13 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 			still: toStepModel(defaultStill),
 			video: toStepModel(defaultVideo),
 			card: freeCardRender
-				? { id: 'local/typographic-card', label: CARD_RENDERER_LABEL, usd: 0, provider: 'local', tier: 'free' }
+				? {
+						id: 'local/typographic-card',
+						label: CARD_RENDERER_LABEL,
+						usd: 0,
+						provider: 'local',
+						tier: 'free'
+					}
 				: {
 						id: NANO_STILL_LABEL,
 						label: `${NANO_STILL_LABEL} (renderer unavailable on this host)`,
@@ -405,12 +439,9 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 				usd: voiceModel.usd,
 				provider: 'fal'
 			},
-			talkinghead: {
-				id: TALKINGHEAD_MODEL,
-				label: TALKINGHEAD_LABEL,
-				usd: priceOf('fal', 'talking_head'),
-				provider: 'fal'
-			},
+			talkinghead: toStepModel(
+				effectiveResolve(registryRows, 'talking_head', body.talking_head_model)
+			),
 			// Per SHOT: planPipeline multiplies this by the shot count, so a 5-shot
 			// sequence is not quoted as a single still.
 			cine_stills: {
@@ -458,7 +489,9 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 			fixed: planFixed,
 			picks: {
 				...(body.still_model ? { still: String(body.still_model) } : {}),
-				...(body.video_model ? { video: String(body.video_model) } : {})
+				...(body.video_model ? { video: String(body.video_model) } : {}),
+				...(body.talking_head_model ? { talkinghead: String(body.talking_head_model) } : {}),
+				...(body.llm_model ? { director: String(body.llm_model) } : {})
 			},
 			shots
 		});
@@ -553,6 +586,8 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 					'still_model',
 					'still_url',
 					'video_model',
+					'talking_head_model',
+					'llm_model',
 					'scheduled_date',
 					'scheduled_time',
 					'captions',
@@ -587,12 +622,19 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 	// wallet is refused up front instead of overdrawing mid-run. The composer's
 	// preview above quotes the exact pipeline; this only has to be an upper bound.
 	const roughUsd = wantCinematic
-		? priceOf('openrouter', 'llm') + 4 * priceOf('fal', 'image', 'nano') + priceOf('fal', 'video', 'pro')
+		? priceOf('openrouter', 'llm') +
+			4 * priceOf('fal', 'image', 'nano') +
+			priceOf('fal', 'video', 'pro')
 		: body.media === 'image'
 			? priceOf('openrouter', 'llm') + priceOf('fal', 'image', 'nano')
 			: genInput.formatOverride === 'broll'
-				? priceOf('openrouter', 'llm') + priceOf('fal', 'image', 'nano') + Math.max(genInput.videoModelUsd ?? 0, priceOf('fal', 'video', 'standard'))
-				: priceOf('openrouter', 'llm') + priceOf('fal', 'image', 'nano') + priceOf('fal', 'tts') + priceOf('fal', 'talking_head');
+				? priceOf('openrouter', 'llm') +
+					priceOf('fal', 'image', 'nano') +
+					Math.max(genInput.videoModelUsd ?? 0, priceOf('fal', 'video', 'standard'))
+				: priceOf('openrouter', 'llm') +
+					priceOf('fal', 'image', 'nano') +
+					priceOf('fal', 'tts') +
+					priceOf('fal', 'talking_head');
 	try {
 		await assertWithinBudget(locals.supabase, user.id, agentId, creditsFor(roughUsd));
 	} catch (err) {
@@ -602,7 +644,9 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 			// A seat generating against a workspace persona draws on the OWNER's
 			// wallet (owner pays) — say so, instead of sending them to top up a
 			// personal wallet that is not the one being checked.
-			const billed = await resolveBillingAccount(locals.supabase, agentId, user.id).catch(() => user.id);
+			const billed = await resolveBillingAccount(locals.supabase, agentId, user.id).catch(
+				() => user.id
+			);
 			const ownerPays = billed !== user.id;
 			return json(
 				{
