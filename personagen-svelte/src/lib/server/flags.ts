@@ -17,7 +17,12 @@
  */
 
 import { env } from '$env/dynamic/private';
-import { getSettings, type PersonaBackboneSetting, type PersonaGeneratorSetting } from './settings';
+import {
+	getSettings,
+	type PersonaBackboneSetting,
+	type PersonaFitJudgeSetting,
+	type PersonaGeneratorSetting
+} from './settings';
 
 export type CreditsMode = 'off' | 'shadow' | 'enforce';
 export type SwitchSource = 'env' | 'database' | 'default';
@@ -132,9 +137,36 @@ function envPersonaBackbone(): PersonaBackboneSetting | null {
 	return raw === 'shadow' || raw === 'fill' || raw === 'on' ? raw : 'off';
 }
 
+function envPersonaFitJudge(): PersonaFitJudgeSetting | null {
+	const raw = (env.PERSONA_FIT_JUDGE ?? '').trim().toLowerCase();
+	if (raw === 'off' || raw === 'on_demand' || raw === 'auto') return raw;
+	return null;
+}
+
 /** How far the sampled life backbone is switched on. Default 'off'. */
 export function personaBackbone(): PersonaBackboneSetting {
 	return envPersonaBackbone() ?? getSettings().persona_backbone ?? 'off';
+}
+
+/**
+ * Whether a draft is judged against the viewer panel. Same precedence as every
+ * other switch: env var, then the Admin Console, then the default.
+ *
+ * 'off' never calls. 'on_demand' calls only when somebody asks. 'auto' calls in
+ * the generation pipeline — the only setting that spends without being asked.
+ */
+export function personaFitJudge(): PersonaFitJudgeSetting {
+	return envPersonaFitJudge() ?? getSettings().persona_fit_judge ?? 'on_demand';
+}
+
+export function personaFitJudgeSource(): SwitchSource {
+	if (envPersonaFitJudge() !== null) return 'env';
+	return getSettings().persona_fit_judge ? 'database' : 'default';
+}
+
+/** True when the judge may run without anyone asking for it. */
+export function personaFitJudgeRunsAutomatically(): boolean {
+	return personaFitJudge() === 'auto';
 }
 
 export function personaBackboneSource(): SwitchSource {
