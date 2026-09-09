@@ -162,5 +162,9 @@
   [
     "model_registry_or_video_row_migration.sql",
     "Model registry — list the OpenRouter video failover (kwaivgi/kling-v3.0-std, unwired) so the model the ledger shows running is visible and priced"
+  ],
+  [
+    "reconcile_price_drift_migration.sql",
+    "Reconciliation also checks the price: credits must equal ceil(est_cost x markup x 100) for events priced since the markup last changed; adds a reason column"
   ]
 ]

@@ -39,6 +39,7 @@ import {
 } from '$lib/formats';
 import type { ModelKind, ModelOption } from '$lib/models';
 import { VIDEO_ONLY_PLATFORMS } from '$lib/server/social/platforms';
+import { hasFfmpeg } from '$lib/server/video';
 
 /**
  * Generate a fresh UGC post (caption + AI image tuned to the brand brief / product)
@@ -206,9 +207,11 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		})(),
 		// Composer format choice: spokesperson (TTS + talking-head) vs b-roll clip.
 		// 'auto' (or anything unrecognized) defers to the persona's ugc_format.
-		formatOverride: (['spokesperson', 'broll', 'auto'].includes(body.format)
+		formatOverride: (['spokesperson', 'broll', 'vo_broll', 'motion_card', 'auto'].includes(
+			body.format
+		)
 			? body.format
-			: 'auto') as 'auto' | 'spokesperson' | 'broll',
+			: 'auto') as UgcPackInput['formatOverride'],
 		// Captions + AI badge are OFF unless the composer explicitly opts in.
 		captions: body.captions === true,
 		aiBadge: body.ai_badge === true,
@@ -344,7 +347,10 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		// free ONLY when the run will actually be free, and quotes the model
 		// fallback price otherwise, so the composer never promises what the run
 		// won't deliver.
-		const freeCardRender = await isCardRendererAvailable();
+		const [freeCardRender, ffmpegAvailable] = await Promise.all([
+			isCardRendererAvailable(),
+			hasFfmpeg()
+		]);
 
 		// ── The plan ────────────────────────────────────────────────────────
 		// One catalog, one planner. The composer calls planPipeline() with THIS
@@ -412,6 +418,20 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 				label: NANO_STILL_LABEL,
 				usd: priceOf('fal', 'image', 'nano'),
 				provider: 'fal'
+			},
+			motion: {
+				id: 'local/ffmpeg-motion',
+				label: 'server motion renderer (no AI, $0)',
+				usd: 0,
+				provider: 'local',
+				tier: 'free'
+			},
+			mux: {
+				id: 'local/ffmpeg-mux',
+				label: 'server audio mix (no AI, $0)',
+				usd: 0,
+				provider: 'local',
+				tier: 'free'
 			},
 			cine_video: {
 				id: CINEMATIC_VIDEO_LABEL,
@@ -501,6 +521,9 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 					accent: v.accent ?? null
 				})),
 				cardRendererFree: freeCardRender,
+				// Formats that assemble locally are only offered where they can be
+				// built. Same posture as the $0 card renderer above.
+				ffmpegAvailable,
 				// Kept because the run body still speaks these, and the calendar's
 				// legacy callers read them back.
 				videoModelKind: 'video_i2v',
@@ -694,10 +717,39 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 					return;
 				}
 
-				// Have a publishable platform → schedule it. No caller-supplied slot
-				// means "now" — publish immediately, exactly like the old sync path.
-				// A supplied slot is left to the scheduler to fire when due.
+				// Have a publishable platform. What happens next is the persona's
+				// autonomy setting, which this route never used to read: it published
+				// the moment generation finished, so a persona set to "Advisor —
+				// suggests" or "Semi-autonomous — drafts and waits for you" posted to
+				// a live account before its owner ever saw the result. Every connected
+				// account in production is on one of those two levels, and the product
+				// promises approval on the pricing page. Only FULLY autonomous
+				// publishes by itself; an explicit publish_now from the caller is the
+				// deliberate "post this now" action.
+				//
+				// The unpublished case must be a DRAFT, not a 'scheduled' row dated
+				// today: the scheduler polls due slots every 60 s, so leaving it
+				// scheduled would publish it a minute later by another path.
+				const { data: cfgRow } = await taskSupabase
+					.from('agent_configs')
+					.select('autonomy_level')
+					.eq('agent_id', agentId)
+					.maybeSingle();
+				const autonomy = String(cfgRow?.autonomy_level ?? 'advisor');
+				const mayPublishItself = autonomy === 'fully_autonomous' || body.publish_now === true;
+
 				const now = new Date();
+				if (!scheduledDate && !mayPublishItself) {
+					await taskDb.posts.update(postId, {
+						content: JSON.stringify(content),
+						platforms: publishablePlatforms,
+						status: 'draft',
+						token_cost: content?.costBreakdown?.total ?? 0
+					});
+					console.log(`[generate-post] ${postId} held for review (autonomy=${autonomy})`);
+					return;
+				}
+
 				await taskDb.posts.update(postId, {
 					content: JSON.stringify(content),
 					platforms: publishablePlatforms,
