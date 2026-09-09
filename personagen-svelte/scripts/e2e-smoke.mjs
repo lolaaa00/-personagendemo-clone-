@@ -202,7 +202,7 @@ async function main() {
 	// value is deliberate — it is rejected before anything is written, so this
 	// proves the path is live without changing a production setting.
 	const switches = adminBody.switches ?? {};
-	const readable = ['credits_mode', 'credit_markup', 'signup_credits', 'plans_enabled', 'persona_generator', 'persona_backbone', 'daily_platform_spend_usd'].filter((k) => switches[k] === undefined);
+	const readable = ['credits_mode', 'credit_markup', 'signup_credits', 'plans_enabled', 'persona_generator', 'persona_backbone', 'daily_platform_spend_usd', 'video_ingest'].filter((k) => switches[k] === undefined);
 	check('every operator switch is reported by the console API', readable.length === 0, readable.length ? `missing: ${readable.join(', ')}` : `${Object.keys(switches).length} switches reported`);
 	const writeProbe = await postJson('/api/admin/settings', { key: 'persona_backbone', value: '__invalid__', note: 'e2e: write path reachable (rejected by design)' });
 	const writeBody = await writeProbe.json().catch(() => ({}));

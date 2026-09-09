@@ -46,8 +46,13 @@
 		planPipeline,
 		planTotalUsd,
 		craftMatters,
+		buildableWith,
+		MIN_ITEMS,
+		MAX_ITEMS,
+		type FormatEntry,
 		type FormatKind,
 		type FormatNeed,
+		type HostCapability,
 		type PipelineStep,
 		type StepKind,
 		type StepModel
@@ -137,6 +142,28 @@
 	let framingTouched = $state(false);
 	/** "Use my own still" — the URL replaces the generated frame and its charge. */
 	let stillUrl = $state('');
+	// ── The list (the listicle format) ───────────────────────────────────────
+	// Two values, because they answer two different questions and only one of them
+	// is money: HOW MANY beats — which the voiceover stage is billed per, so it
+	// moves the quote — and WHICH beats, which the Director writes unless the user
+	// names them. Both are optional; neither blocks the run. The count opens on
+	// whatever the server just priced (`plan.items`) rather than a second guess.
+	let listCount = $state(4);
+	/** The user's own beat labels, by index. A gap means "the Director writes that one". */
+	let listItems = $state<string[]>([]);
+	// ── The source clip (the video-to-video formats) ─────────────────────────
+	// Ingest is a round-trip of its own: the file is POSTed to /source-clip,
+	// which probes it and hands back a stored URL plus the MEASURED duration.
+	// That duration is the billing basis for the per-second transfer stage, so it
+	// is never taken from the filename, the file size, or a guess on this side —
+	// a clip the server could not measure is a clip that cannot be priced, and it
+	// is refused here rather than quoted at the pipeline's default length.
+	let sourceVideoUrl = $state('');
+	let sourceSeconds = $state<number | null>(null);
+	let sourceDims = $state<{ width: number; height: number } | null>(null);
+	let sourceName = $state('');
+	let sourceUploading = $state(false);
+	let sourceError = $state<string | null>(null);
 	// Budget-vs-quality. The tier locks every stage at once; a per-stage pick
 	// overrides it for that stage and flips the lock to manual.
 	let tier = $state<'budget' | 'balanced' | 'premium' | 'manual'>('manual');
@@ -149,7 +176,19 @@
 
 	let format = $derived(getFormat(formatId));
 	let ffmpegAvailable = $derived(preview?.ffmpegAvailable !== false);
-	const buildable = (f: { needsFfmpeg?: boolean }) => !f.needsFfmpeg || ffmpegAvailable;
+	// Fails CLOSED where ffmpeg fails open: an older server that has never heard
+	// of ingest omits the flag entirely, and offering a format that needs a clip
+	// on a host that cannot take one is exactly the empty promise the capability
+	// gate exists to prevent. ffmpeg can default the other way because its
+	// formats degrade; a v2v run has nothing to degrade to.
+	let videoIngestAvailable = $derived(preview?.videoIngestAvailable === true);
+	// What this host can actually do. Formats declare capabilities, not flags, so
+	// a new one is added to this set and nothing below changes.
+	let hostCapabilities = $derived<HostCapability[]>([
+		...(ffmpegAvailable ? (['ffmpeg'] as const) : []),
+		...(videoIngestAvailable ? (['videoIngest'] as const) : [])
+	]);
+	const buildable = (f: Pick<FormatEntry, 'requires'>) => buildableWith(f, hostCapabilities);
 	let availableKinds = $derived(
 		FORMAT_KINDS.filter(
 			(k) =>
@@ -194,6 +233,17 @@
 	let usesProductRef = $derived(composition.product !== false);
 	let isGraphicCard = $derived(composition.still === 'graphic');
 
+	/**
+	 * The beat counts a listicle can be. The whole range is offered because
+	 * $lib/formats clamps to exactly it — a chip outside it would quote one number
+	 * and run another.
+	 */
+	// DERIVED from the catalog's exported bounds, never typed out: a chip the
+	// engine would reject is a count this screen quoted and the run will not
+	// honour. The floor is 3 because a beat is the hook plus an item, so two
+	// beats is one item — not a list.
+	const BEAT_CHOICES = Array.from({ length: MAX_ITEMS - MIN_ITEMS + 1 }, (_, i) => MIN_ITEMS + i);
+
 	/** Does this format need a control? The whole Look pane is built from this. */
 	const needs = (n: FormatNeed) => !!format?.needs.includes(n);
 
@@ -215,20 +265,53 @@
 	// no combination has to be pre-shipped.
 	let planOptions = $derived<Partial<Record<StepKind, StepModel[]>>>(preview?.plan?.options ?? {});
 	let planFixed = $derived<Partial<Record<StepKind, StepModel>>>(preview?.plan?.fixed ?? {});
+	/**
+	 * The transfer stage has no picker — the FORMAT is the endpoint (Reel remake
+	 * runs Replace, Motion transfer runs Move). The server resolved both and sent
+	 * them with the plan, so switching format here re-pins the stage to the one
+	 * that would actually run instead of leaving it named after whichever the
+	 * request opened on. Keyed by the request `format` the catalog already
+	 * declares, so a third transfer would need nothing here.
+	 */
+	let v2vModels = $derived<Record<string, StepModel>>(preview?.plan?.v2vModels ?? {});
+	const fixedFor = (f: FormatEntry | undefined): Partial<Record<StepKind, StepModel>> => {
+		const m = f?.request.format ? v2vModels[f.request.format] : undefined;
+		return m ? { ...planFixed, v2v: m } : planFixed;
+	};
 	let activePlan = $derived<PipelineStep[]>(
 		isPostKind
 			? planPipeline({
 					formatId,
 					options: planOptions,
-					fixed: planFixed,
+					fixed: fixedFor(format),
 					picks,
 					supplied: { still: !!stillUrl },
 					tier,
-					shots: preview?.plan?.shots ?? 4
+					shots: preview?.plan?.shots ?? 4,
+					// The MEASURED length of the clip the user supplied. Absent, the
+					// planner quotes its own default duration — which is the honest
+					// answer before a clip exists, and wrong the moment one does.
+					seconds: sourceSeconds ?? undefined,
+					// The beat count, straight in — the voiceover stage is billed per beat
+					// and planPipeline owns that arithmetic. Computing it here would be a
+					// second multiplier no test ever sees.
+					items: listCount
 				})
 			: []
 	);
 	let planUsd = $derived(planTotalUsd(activePlan));
+	/**
+	 * A format whose run is a transformation OF something has nothing to
+	 * transform until that something is here. Blocking the submit is the whole
+	 * point: the pipeline degrades a clip-less transfer to a plain b-roll clip,
+	 * which would spend the user's money on a post they did not ask for.
+	 */
+	let missingSourceClip = $derived(needs('sourceVideo') && !sourceVideoUrl);
+	/** One row per beat. Shrinking the count hides labels rather than deleting them,
+	 *  so a nudge from 5 to 3 and back doesn't cost the user what they typed. */
+	let beatRows = $derived(Array.from({ length: listCount }, (_, i) => i));
+	let listLabels = $derived(beatRows.map((i) => (listItems[i] ?? '').trim()));
+	let namedBeats = $derived(listLabels.filter((l) => l.length > 0).length);
 	let hasCraftStep = $derived(craftMatters(activePlan));
 
 	/** How far a tier lock can actually reach in this format — stated, not implied. */
@@ -390,6 +473,13 @@
 			cardLayout = 'auto';
 			cardPalette = 'auto';
 			stillUrl = '';
+			// The beat count opens on the one the server quoted this preview with, so
+			// the footer's number and the plan behind it agree from the first paint.
+			listCount = Number(preview.plan?.items) || 4;
+			listItems = [];
+			// A clip belongs to the persona it was ingested for; a re-resolve is a
+			// different request (often a different persona) and must not inherit it.
+			clearSourceClip();
 			tier = 'manual';
 			// The server's resolved defaults become the starting picks, so the plan
 			// shown on open is the plan this request would run right now.
@@ -459,6 +549,20 @@
 		if (composition.product === false) productId = '';
 	}
 
+	/**
+	 * Labels are positional — beat 3 is index 2 whether or not beats 1 and 2 were
+	 * typed — so the array is padded rather than pushed onto. Written back whole
+	 * because a rune tracks the assignment, not the element.
+	 */
+	function setBeat(i: number, value: string) {
+		const next = Array.from(
+			{ length: Math.max(listItems.length, i + 1) },
+			(_, k) => listItems[k] ?? ''
+		);
+		next[i] = value;
+		listItems = next;
+	}
+
 	function pickStepModel(step: StepKind, id: string) {
 		picks = { ...picks, [step]: id };
 		// An explicit pick outranks the lock; saying so beats a lock that silently
@@ -469,6 +573,72 @@
 	function pickTier(t: typeof tier) {
 		tier = t;
 		if (t !== 'manual') picks = {};
+	}
+
+	/**
+	 * Ingest sits beside the generate endpoint this spec already targets, so it
+	 * is derived from that rather than built out of `agentId` — that prop is
+	 * optional and the single-persona surfaces never pass one.
+	 */
+	let sourceClipEndpoint = $derived(
+		spec?.endpoint ? spec.endpoint.replace(/\/generate-post\/?$/, '/source-clip') : ''
+	);
+
+	function clearSourceClip() {
+		sourceVideoUrl = '';
+		sourceSeconds = null;
+		sourceDims = null;
+		sourceName = '';
+		sourceError = null;
+	}
+
+	/**
+	 * Upload → probe → re-quote. The clip only becomes part of the run once the
+	 * server has MEASURED it: a probe that failed leaves nothing selected rather
+	 * than a clip whose per-second stage would be quoted at a default length and
+	 * billed at its real one. The server's own rejection text is surfaced
+	 * verbatim — it is the only thing that knows which limit was hit.
+	 */
+	async function uploadSourceClip(e: Event) {
+		const input = e.currentTarget as HTMLInputElement;
+		const file = input.files?.[0];
+		// Cleared immediately so re-picking the SAME file after a rejection still
+		// fires a change event — otherwise fix-and-retry silently does nothing.
+		input.value = '';
+		if (!file) return;
+		clearSourceClip();
+		if (!sourceClipEndpoint) {
+			sourceError = 'This surface has no clip endpoint to upload to.';
+			return;
+		}
+		sourceUploading = true;
+		sourceName = file.name;
+		try {
+			const form = new FormData();
+			form.append('clip', file);
+			const res = await fetch(sourceClipEndpoint, { method: 'POST', body: form });
+			const d = await res.json().catch(() => ({}));
+			if (!res.ok || d?.success !== true)
+				throw new Error(d?.error || `Could not accept that clip (HTTP ${res.status}).`);
+			const url = typeof d.url === 'string' ? d.url : '';
+			const secs = Number(d.durationSec);
+			if (!url) throw new Error('The clip was accepted but no stored URL came back.');
+			if (!Number.isFinite(secs) || secs <= 0)
+				throw new Error('That clip’s length could not be measured, so it cannot be priced.');
+			sourceVideoUrl = url;
+			sourceSeconds = secs;
+			sourceDims =
+				Number.isFinite(Number(d.width)) && Number.isFinite(Number(d.height))
+					? { width: Number(d.width), height: Number(d.height) }
+					: null;
+			sourceName = file.name;
+		} catch (err) {
+			const message = (err as Error).message;
+			clearSourceClip();
+			sourceError = message;
+		} finally {
+			sourceUploading = false;
+		}
 	}
 
 	// Picking a brand-kit product pins its id (the server resolves the photo from
@@ -583,6 +753,10 @@
 			onOpenPlanner?.();
 			return;
 		}
+		// Belt and braces with the disabled submit: a transfer posted without its
+		// clip is coerced server-side to a plain b-roll clip, which spends the
+		// money on a post nobody asked for.
+		if (missingSourceClip) return;
 		const body: Record<string, unknown> = { ...(spec?.baseBody ?? {}) };
 		if (isPromptKind) {
 			body.prompt = prompt;
@@ -622,6 +796,17 @@
 			body.talking_head_model = picks.talkinghead || undefined;
 			body.llm_model = picks.director || undefined;
 			body.still_url = stillUrl || undefined;
+			// The ingested clip and the duration the SERVER measured — sent only for
+			// a format that reads them, like every other need-gated field here, and
+			// re-validated on arrival because it is the basis of the bill.
+			body.source_video_url = needs('sourceVideo') && sourceVideoUrl ? sourceVideoUrl : undefined;
+			body.source_seconds = needs('sourceVideo') && sourceSeconds ? sourceSeconds : undefined;
+			// The beat count goes even when untouched: it is the number this screen
+			// quoted, and a run that used a different one would bill past it. The
+			// labels go only if the user wrote any — blanks included, because position
+			// IS the beat and a gap has to survive the trip.
+			body.list_count = needs('listItems') ? listCount : undefined;
+			body.list_items = needs('listItems') && namedBeats ? listLabels : undefined;
 			body.scheduled_date = scheduledDate || undefined;
 			body.scheduled_time = scheduledTime || undefined;
 		}
@@ -882,9 +1067,11 @@
 										planPipeline({
 											formatId: f.id,
 											options: planOptions,
-											fixed: planFixed,
+											fixed: fixedFor(f),
 											tier: tier === 'manual' ? undefined : tier,
-											shots: preview?.plan?.shots ?? 4
+											shots: preview?.plan?.shots ?? 4,
+											seconds: sourceSeconds ?? undefined,
+											items: listCount
 										})
 									)}
 									<button
@@ -959,6 +1146,64 @@
 							</p>
 						{/if}
 
+						{#if needs('sourceVideo')}
+							<!-- The one control whose value is not typed but UPLOADED, and the
+							     only Look field the run cannot proceed without: everything else
+							     here has a Director-written default, and a transfer has nothing
+							     to transform. -->
+							<div class="fld">
+								<label class="fld-label" for="gc-clip">
+									Source clip{sourceVideoUrl ? ' — replace' : ''}
+								</label>
+								{#if sourceVideoUrl}
+									<div class="clip-ok">
+										<video
+											class="clip-vid"
+											src={sourceVideoUrl}
+											preload="metadata"
+											controls
+											muted
+											playsinline
+										></video>
+										<div class="clip-facts">
+											<strong>{sourceName || 'Clip accepted'}</strong>
+											<span>
+												{sourceSeconds?.toFixed(1)}s{sourceDims
+													? ` · ${sourceDims.width}×${sourceDims.height}`
+													: ''} — measured on the server. This is the number the transfer stage is billed
+												on, and the quote below already uses it.
+											</span>
+										</div>
+									</div>
+								{/if}
+								{#if sourceUploading}
+									<div class="clip-busy" role="status" aria-live="polite">
+										<span class="spinner" aria-hidden="true"></span>
+										<span>Uploading {sourceName} and measuring it…</span>
+									</div>
+								{:else}
+									<input
+										id="gc-clip"
+										type="file"
+										class="clip-input"
+										accept="video/mp4,video/quicktime,video/webm,video/*"
+										aria-describedby="gc-clip-hint"
+										onchange={uploadSourceClip}
+									/>
+								{/if}
+								{#if sourceError}
+									<!-- The server's own words. It is the only party that knows which
+									     limit was hit, and paraphrasing it here would go stale the
+									     first time a limit moves. -->
+									<p class="clip-err" role="alert">{sourceError}</p>
+								{/if}
+								<span class="hint" id="gc-clip-hint">
+									MP4, MOV or WebM — up to 100MB and 30 seconds. Nothing is generated from it until
+									you approve; its measured length is what this run is priced per second on.
+								</span>
+							</div>
+						{/if}
+
 						{#if needs('cardText')}
 							<div class="fld">
 								<label class="fld-label" for="gc-cardtext">Card text</label>
@@ -1029,6 +1274,57 @@
 								<span class="hint">
 									Defaults to the persona's pinned voice. Changing it here applies to this post
 									only.
+								</span>
+							</div>
+						{/if}
+
+						{#if needs('listItems')}
+							<!-- The list itself. Rendered off the need like every other control here,
+							 and split in two because the count is a PRICE — the voiceover runs
+							 once per beat — while the labels are only content the Director would
+							 otherwise write. Neither is required to run. -->
+							<div class="fld">
+								<span class="fld-label" id="gc-beats-label">How many beats</span>
+								<div class="chips" role="radiogroup" aria-labelledby="gc-beats-label">
+									{#each BEAT_CHOICES as n}
+										<button
+											type="button"
+											class="chip"
+											class:on={listCount === n}
+											role="radio"
+											aria-checked={listCount === n}
+											aria-describedby="gc-beats-hint"
+											onclick={() => (listCount = n)}>{n}</button
+										>
+									{/each}
+								</div>
+								<span class="hint" id="gc-beats-hint">
+									The hook and the items it counts down. Each beat is voiced as its own take, so its
+									on-screen reveal lands on the words instead of on a guess — which is why the price
+									moves when this does.
+								</span>
+							</div>
+							<div class="fld">
+								<span class="fld-label" id="gc-beatlist-label">The list (optional)</span>
+								<div class="beats" role="group" aria-labelledby="gc-beatlist-label">
+									{#each beatRows as i (i)}
+										<label class="beat">
+											<span class="beat-n">{i + 1}</span>
+											<input
+												value={listItems[i] ?? ''}
+												aria-label="Beat {i + 1}"
+												placeholder={i === 0
+													? 'The hook — leave blank and the Director writes it'
+													: 'Leave blank and the Director writes this one'}
+												oninput={(e) => setBeat(i, (e.currentTarget as HTMLInputElement).value)}
+											/>
+										</label>
+									{/each}
+								</div>
+								<span class="hint">
+									What you type is the label that appears on screen for that beat and stays there.
+									Fill in none, some or all of them — a blank row is one the Director writes, and it
+									still gets its own beat.
 								</span>
 							</div>
 						{/if}
@@ -1410,6 +1706,30 @@
 									<dt>About</dt>
 									<dd>{topic || 'whatever this persona feels like posting'}</dd>
 								</div>
+								{#if needs('listItems')}
+									<div class="sumrow">
+										<dt>The list</dt>
+										<dd>
+											<strong>{listCount} beats</strong>{namedBeats
+												? ` — ${namedBeats} written by you, the rest by the Director.`
+												: ' — all written by the Director.'}
+											The voiceover runs once per beat, which is what the estimate below counts.
+										</dd>
+									</div>
+								{/if}
+								{#if needs('sourceVideo')}
+									<div class="sumrow">
+										<dt>From</dt>
+										<dd>
+											{#if sourceSeconds}
+												<strong>{sourceName || 'your clip'}</strong> — {sourceSeconds.toFixed(1)}s,
+												and the transfer is billed per second of it.
+											{:else}
+												No clip yet — this format transforms one, so it cannot run without it.
+											{/if}
+										</dd>
+									</div>
+								{/if}
 								<div class="sumrow">
 									<dt>Built by</dt>
 									<dd>{activePlan.map((s) => s.label).join(' → ') || '—'}</dd>
@@ -1585,7 +1905,14 @@
 			</button>
 		{/if}
 		{#if isLastStep}
-			<button class="btn-primary" disabled={loading || !!loadError || !preview} onclick={confirm}>
+			<button
+				class="btn-primary"
+				disabled={loading || !!loadError || !preview || missingSourceClip}
+				title={missingSourceClip
+					? 'Add a source clip on the Look step — this format transforms one.'
+					: undefined}
+				onclick={confirm}
+			>
 				{destination?.label ?? spec?.confirmLabel ?? 'Approve & generate'}
 			</button>
 		{:else}
@@ -2322,6 +2649,98 @@
 	.model-warn svg {
 		flex: none;
 		margin-top: 0.1rem;
+	}
+	/* ── The list (Look) ────────────────────────────────────────────────── */
+	.beats {
+		display: grid;
+		gap: 0.4rem;
+	}
+	.beat {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+	.beat-n {
+		flex: 0 0 auto;
+		display: grid;
+		place-items: center;
+		width: 1.6rem;
+		height: 1.6rem;
+		border: 1px solid var(--border-strong);
+		border-radius: 999px;
+		background: var(--surface);
+		color: var(--text-muted);
+		font-size: 0.72rem;
+		font-weight: 600;
+	}
+	.beat input {
+		flex: 1 1 auto;
+		min-width: 0;
+	}
+
+	/* ── Source clip (Look) ─────────────────────────────────────────────── */
+	/* The accepted clip is shown as a real, playable video rather than a poster
+	   frame: this format's whole promise is the timing of the thing you handed
+	   us, and a still cannot show timing. */
+	.clip-ok {
+		display: flex;
+		gap: 0.6rem;
+		align-items: flex-start;
+		padding: 0.6rem;
+		margin-bottom: 0.5rem;
+		border: 1px solid var(--border);
+		border-radius: 10px;
+		background: var(--surface);
+	}
+	.clip-vid {
+		width: 96px;
+		max-height: 140px;
+		border-radius: 8px;
+		border: 1px solid var(--border);
+		background: #000;
+		flex-shrink: 0;
+	}
+	.clip-facts {
+		display: flex;
+		flex-direction: column;
+		gap: 0.2rem;
+		min-width: 0;
+		font-size: 0.78rem;
+		color: var(--muted);
+		line-height: 1.45;
+	}
+	.clip-facts strong {
+		color: var(--text);
+		font-size: 0.85rem;
+		overflow-wrap: anywhere;
+	}
+	.clip-input {
+		display: block;
+		width: 100%;
+		font: inherit;
+		font-size: 0.82rem;
+		color: var(--text);
+	}
+	.clip-busy {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.6rem 0.7rem;
+		border: 1px solid var(--border);
+		border-radius: 10px;
+		background: var(--surface);
+		font-size: 0.82rem;
+		color: var(--muted);
+	}
+	.clip-err {
+		margin: 0.45rem 0 0;
+		padding: 0.5rem 0.65rem;
+		border: 1px solid color-mix(in srgb, var(--error) 40%, transparent);
+		border-radius: 8px;
+		background: var(--error-soft);
+		color: var(--error-text);
+		font-size: 0.8rem;
+		line-height: 1.45;
 	}
 	/* Inline preview thumbnails under the Product / Character URL inputs. */
 	.url-preview {

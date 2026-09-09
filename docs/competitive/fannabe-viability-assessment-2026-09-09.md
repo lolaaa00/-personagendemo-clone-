@@ -1,0 +1,393 @@
+# Fannabe — Deep Teardown & Cross-Referenced Viability Assessment
+
+**Date:** 2026-09-09
+**Subject:** `fannabe.com` (Zillatech Limited, Paralimni, Cyprus)
+**Measured against:** PersonaGen at `feat/composer-upgrade-and-ui-defects` (`b6b4c27`)
+**Companion docs:** [market-gap-assessment.md](market-gap-assessment.md) (2026-07-25, theinfluencer.ai / Higgsfield / createpersona), [viability-assessment-2026-09-07.md](../monetization/viability-assessment-2026-09-07.md), [persona-model-v2-action-plan.md](persona-model-v2-action-plan.md)
+
+---
+
+## 0. Executive verdict
+
+**Fannabe is not our competitor. It is our craft teacher.**
+
+That distinction is the whole assessment, and getting it wrong would be expensive. Fannabe sells **adult-creator monetization** — it is an 18+ platform, it says so, it routes payments through a high-risk processor specifically to support NSFW, its named integration is **Fanvue**, and its stated buyer is "OnlyFans models, OnlyFans agencies, AI creators." Its own review coverage names "NSFW positioning excludes brand-safe teams" as a limitation.
+
+PersonaGen sells **brand-safe, client-accountable account operation** — brand briefs, product scraping, approval queues, verified publishing to 13 platforms, a per-persona spend ledger. Our buyer answers to a client. Theirs answers to nobody.
+
+So there are two separate questions, and they have different answers:
+
+| Question | Answer |
+|---|---|
+| Should we copy Fannabe's **business**? | **No.** It is a different market with a different risk profile, a different payment stack, and a legal posture we cannot adopt without losing every brand customer we are building for. |
+| Should we copy Fannabe's **image craft**? | **Yes — urgently.** They are ahead of us on the thing you actually asked about, and the gap is specific, closable, and cheaper than it looks. |
+
+**The single most important finding of this teardown:**
+
+> Fannabe's hyper-realism does not come from a better base model. It comes from a **post-processing chain** — `Fix Face` → `AI Skin Enhancer` → `AI Image Upscale` — applied *after* generation. We have **none of these three stages**. Our pipeline ends at the base model's raw output.
+
+That is the gap. It is not a model-selection problem, not a prompt problem, and not a training problem. It is three missing pipeline stages. Verified absent by search across the whole codebase: no upscaler, no face restoration, no skin/detail pass exists anywhere in `src/`.
+
+**Scorecard (0–10, higher is better):**
+
+| Dimension | Fannabe | PersonaGen | Verdict |
+|---|---|---|---|
+| Per-image photorealism | **8** | 5 | **Behind — P0** |
+| Identity consistency | **8** | 6 | Behind — P0 |
+| Creation UX (time-to-first-face) | **9** | 4 | Behind — P0 |
+| Content-format breadth (carousel, trend-copy, swap) | **8** | 5 | Behind — P1 |
+| Distribution & operations | 0 | **9** | 🏆 Uncontested |
+| Brand grounding | 0 | **9** | 🏆 Uncontested |
+| Cost transparency & accounting | 2 | **9** | 🏆 Uncontested |
+| Legal integrity / ownership | **3** | 7 | Ahead — and exploitable |
+| Commercial surface (landing, pricing, billing) | 8 | 6 | Closing |
+
+**Weighted verdict: we are a stronger *product* and a weaker *studio*.** For a buyer whose first evaluation act is "make me one image and let me judge it," weaker studio loses the deal before stronger product is ever seen. That is why the realism work is P0 and not P2.
+
+---
+
+## 1. Fannabe teardown
+
+### 1.1 Positioning
+
+- **H1:** "Ultra Realistic AI Influencer Generator"
+- **Sub:** "Create AI influencers in minutes, grow their social media pages and turn their audience into revenue."
+- **Core claim:** "Fannabe helps you create hyper-realistic AI characters that you can monetize."
+
+Note the copy architecture: **realism is the headline, monetization is the subhead.** They lead with the artifact, not the outcome. We lead with the outcome ("We run the account"). Both are defensible — but theirs converts faster on a cold visitor because the proof is visual and immediate, and ours requires the visitor to already believe there is an operations problem worth solving.
+
+### 1.2 The full feature set (17 surfaces)
+
+| # | Feature | What it is |
+|---|---|---|
+| 1 | AI Character Creation | Chip-select ethnicity, age, hair, body, eye colour, traits |
+| 2 | Viral Trend Generator | Multi-image/video edits with caption, storyline, sound |
+| 3 | Niche Generator | Professional niche (police officer, teacher, boxer) → niche-tuned content |
+| 4 | Unique Features | Vitiligo, scars, heterochromia, two-headed |
+| 5 | **Viral Reels Copy** | "Copy any Reels or TikTok with a click" — their self-declared "killer feature of 2026" |
+| 6 | **Character Swap** | Swap the character onto an Instagram screenshot or a personal selfie |
+| 7 | **Carousel Creation** | One-click IG carousel, consistent outfit + background across frames |
+| 8 | AI Image Generator | Prompt → ultra-realistic image |
+| 9 | AI Video Generator | Image → motion, identity preserved |
+| 10 | AI Talking Video | Speech + synced lips |
+| 11 | **Easy Mode** | Pre-curated themes/outfits, zero prompt writing (Monaco, Flight Mode, Mirror Selfie) |
+| 12 | **Image to Prompt** | Upload an image → decoded into a prompt |
+| 13 | AI Image Editor | Backgrounds, composition, element removal |
+| 14 | **AI Skin Enhancer** | "Automatically refines the skin texture and appearance" |
+| 15 | **AI Image Upscale** | Resolution increase without quality loss |
+| 16 | Model Upload | Accept an existing likeness (**contradicted by their own terms — see §1.6**) |
+| 17 | Prebuilt Models | Ready-made influencers, instant start |
+
+Plus **"Fix Face"** technology, named on the homepage but not given its own feature card.
+
+### 1.3 The flow
+
+```
+1. CREATE      click attributes → influencer ready "in a few minutes"
+2. GENERATE    prompt, OR one-click copy from the Explore tab, OR AI Prompt Enhancer
+3. MONETIZE    post to IG / TikTok / X → grow → income
+```
+
+Two-tier interaction model, explicitly named:
+- **Easy Mode** — "pick a scene, such as Monaco, Flight Mode, or a Mirror Selfie"
+- **Expert Mode** — text prompting
+
+**The `Explore` tab is the piece we most underrate.** It is a gallery of other users' outputs with a one-click "copy this prompt/setup" action. It solves cold-start ("what do I even make?") without a single line of AI, and it compounds: every user who generates makes the tab better for the next user. It is a content flywheel disguised as a UI tab.
+
+### 1.4 Consistency claims
+
+- "100% consistent, same face and body across all images **and model engines**"
+- "we can keep the consistency across multiple different large image models"
+- Explicitly contrasted against competitors needing "2–3 hours just to train a model"
+
+**Read that carefully.** They are claiming consistency *without* per-user model training, held *across* different base engines. That is only achievable with a reference-conditioning + face-restoration architecture — a pinned master identity, passed as a reference into multi-reference edit models, then corrected by a dedicated face pass. **This is architecturally the same family as our reference kit** (`ugc_reference_kit`, 5 stages, `generate.ts:2656`) — we simply stop one stage earlier than they do.
+
+### 1.5 Pricing
+
+| Item | Value |
+|---|---|
+| Model | Prepaid **tokens/credits**, consumed per output |
+| Range | **Free → ~$29–$199/mo** (directional; they publish no plan table) |
+| Free tier | Monthly free credits + "a lot of options to get extra free credits"; enough for "a picture post every day" |
+| Top-ups | Packs for heavy months |
+| Per-generation costs | **Not published anywhere** |
+| Processor | High-risk (NSFW-permitting) |
+
+**Pricing opacity is a deliberate choice and a real weakness.** Third-party reviewers flag it directly: "Pricing visibility is a meaningful limitation when comparing total batch cost." A buyer cannot compute what a month costs before paying. We can beat this trivially — we already do, and don't get credit for it.
+
+### 1.6 Integrity problems — the exploitable seam
+
+This is where they are genuinely weak, and it maps precisely to your "high integrity" requirement.
+
+1. **The homepage contradicts the terms.** The site says you can upload your own model's likeness ("Yes! If you are an OnlyFans model, OnlyFans agency, or an AI creator..."). The terms and privacy policy state user uploads are **not** accepted. One of those is false on a page a buyer makes a decision from.
+2. **You do not own your output.** Zillatech **retains copyright**. You receive a licence — "exclusive, worldwide, perpetual, sublicensable, royalty-free" for paid outputs — and that licence **terminates on material breach or account termination**. Read plainly: cancel wrongly, lose your rights to your influencer's entire back catalogue.
+3. **They train on your work.** They retain a "worldwide, perpetual, royalty-free right" to analyse, train models on, and showcase outputs. Opt-out is buried in the privacy policy.
+4. **Billing model is described two different ways.** Marketing says subscription; legal says prepaid tokens.
+5. **"Viral Reels Copy" and "Character Swap" are a legal minefield sold as a headline.** Copy any Reel with one click; swap your character onto someone's Instagram screenshot. That is third-party copyrighted material and, in the swap case, potentially a real person's likeness. Marketed as feature #5 and #6.
+
+**None of this is survivable for a client-facing brand tool.** It is, however, a very sharp comparison table for ours.
+
+### 1.7 What Fannabe cannot do
+
+Identical to the July finding for the whole category — **they stop at the download.**
+
+No connected accounts. No scheduling. No autopilot. No approval queue. No verified publish. No analytics. No brand brief. No product ingestion. No spend ledger. No multi-client separation. No autonomy model. No cost accounting.
+
+They make assets. We run accounts. That has not changed and is still the whole thesis.
+
+---
+
+## 2. Where their realism actually comes from
+
+You asked to "upgrade our capabilities to match the ultra realistic aspect." Here is the honest mechanical answer, separated into what is **verified** and what is **inferred**.
+
+### Verified (stated on their site)
+
+Three named post-generation stages, each its own product surface:
+
+| Stage | Their name | Function |
+|---|---|---|
+| A | **Fix Face** | Facial identity/quality correction after generation |
+| B | **AI Skin Enhancer** | "Automatically refines the skin texture and appearance" |
+| C | **AI Image Upscale** | Resolution increase without quality loss |
+
+### Inferred (standard practice; not published by them — treat as a hypothesis to test, not fact)
+
+- **Fix Face** ≈ face-region detect → restore/re-inject identity from the pinned master image → blend. This is what makes cross-engine consistency possible without training: the base engine can drift, the face pass pulls it back.
+- **Skin Enhancer** ≈ a detail/texture pass that restores pore-level micro-detail the base model smooths away. The "AI glaze" they mock in competitors *is* that smoothing.
+- **Upscale** ≈ a detail-adding super-resolution pass, which is where "shot on a real camera" micro-texture is actually manufactured.
+
+### Why this matters more than model choice
+
+The three tells that make an image read as AI — **plastic skin, drifted face, soft/low-detail render** — are each addressed by exactly one of those stages. A better base model reduces all three a little. A post-chain removes them.
+
+**Our pipeline has none of the three.** What we do have is genuinely good and should not be thrown away:
+
+| Ours today | Evidence | Assessment |
+|---|---|---|
+| Realism register system (front-cam / mirror / propped selfie) | [studio-templates.ts:106](../../personagen-svelte/src/lib/studio-templates.ts#L106), `:897` | **Ahead of them.** They have "Easy Mode themes"; we have a theory of *why* a selfie register reads as authentic |
+| Anti-studio prompt scaffolding — "shot on iPhone 15 Pro with ProRAW, 24mm equivalent, natural light… NOT a studio ad or stock photo" | [generate.ts:999](../../personagen-svelte/src/lib/server/content/generate.ts#L999) | Strong, and correctly targeted |
+| "Imperfection is quality: slight skin texture visible, natural shadows, lived-in authentic setting — not retouched or plastic-looking" | [generate.ts:1009](../../personagen-svelte/src/lib/server/content/generate.ts#L1009) | **Right instinct, wrong lever.** You cannot prompt a model out of its own smoothing prior. This sentence is doing a job that belongs to stage B |
+| 5-stage reference kit (`sheet`, `full_body`, `side_profiles`, `face_closeup`, `feature_grid`), CAS-guarded, restorable | [generate.ts:2656](../../personagen-svelte/src/lib/server/content/generate.ts#L2656) | 🏆 **Better raw material than they have.** We build a richer identity asset and then use less of it |
+| Pinned character ref + multi-ref edit (`nano-banana-2/edit`, `multiRef: true`) | [models.ts:100](../../personagen-svelte/src/lib/models.ts#L100) | Correct architecture; single-ref models correctly flagged so consistency doesn't silently degrade |
+| Premium base models available | flux-pro/v1.1, nano-banana-2 | Competitive |
+
+**Conclusion: our front half is as good as or better than theirs. We are missing their back half entirely.** That is a far better position to be in than the reverse — the expensive, subtle work is done.
+
+---
+
+## 3. Cross-reference matrix
+
+✅ shipped · ⚠️ partial · ❌ absent · 🏆 clearly ahead
+
+### 3.1 Realism & image craft — **we are behind**
+
+| Capability | Fannabe | PersonaGen | Priority |
+|---|---|---|---|
+| **Face-fix / identity restoration pass** | ✅ | ❌ *(no match in codebase)* | **P0** |
+| **Skin-texture enhancement pass** | ✅ | ❌ prompt sentence only | **P0** |
+| **Upscale** | ✅ | ❌ *(only `video.ts:86` "never upscale")* | **P0** |
+| Anti-AI-tell prompt scaffolding | ⚠️ implied | 🏆 explicit registers + ProRAW clause | — |
+| Multi-stage identity asset | ⚠️ master image | 🏆 5 stages, restorable, CAS-safe | — |
+| Cross-engine consistency | ✅ claimed | ⚠️ multi-ref only, degrades on single-ref models | P1 |
+| Trained/private identity model | ❌ (they market *not* training as the win) | ❌ | — *(deprioritise — see §5)* |
+| Model choice with per-call price shown | ❌ | 🏆 full catalog, tiered, priced in-UI | — |
+
+### 3.2 Creation UX — **we are behind**
+
+| Capability | Fannabe | PersonaGen | Priority |
+|---|---|---|---|
+| Chip trait picker | ✅ 10 ethnicities, 6 age ranges | ⚠️ `TraitPicker.svelte` **exists but is only wired into the persona *edit* page** ([+page.svelte:3916](../../personagen-svelte/src/routes/(portal)/personas/[agentId]/+page.svelte#L3916)) | **P0** |
+| Preview → regenerate → **lock** wizard | ✅ | ❌ `createPersonaDirect()` creates without a preview loop ([generator/+page.svelte:299](../../personagen-svelte/src/routes/(portal)/generator/+page.svelte#L299)) — **and our landing page already promises this loop** | **P0** |
+| Time-to-first-face | "under a minute" | unmeasured, unpublished | P0 |
+| Easy Mode / preset scenes | ✅ named scenes | ⚠️ studio templates exist, not surfaced as one-click scenes | P1 |
+| Prebuilt personas | ✅ | ❌ | P1 |
+| **Explore gallery + one-click copy** | ✅ | ❌ | P1 |
+| Prompt enhancer | ✅ | ❌ | P1 |
+| Image → prompt | ✅ | ❌ | P2 |
+| Unique features (vitiligo, heterochromia, scars) | ✅ | ⚠️ free-text advanced fields | P2 |
+
+> **Correction — 2026-09-09, same day.** This table originally read `❌` for
+> both reel copy and motion transfer, and §5 below recommended refusing the
+> first. **The owner directed that reel copying ship, and it did.** Both
+> formats are in the tree: catalog-only `video_v2v` kind, per-second billing off
+> a measured clip duration, never-brick fallback to image-to-video. The
+> guardrails this document's refusal argument produced were kept and are the
+> terms on which it shipped: **no URL ingest — the user uploads a file, we never
+> fetch instagram.com on their behalf** — plus an upload-time ownership
+> attestation, a per-workspace operator switch, and the AI-disclosure badge. See
+> [video-to-video-implementation-plan.md §7b–§7c](video-to-video-implementation-plan.md#7b-decision-2026-09-09--reel-copying-is-in-scope-and-the-phases-invert).
+
+> **Integrity flag — fix this week.** [`src/routes/+page.svelte:52`](../../personagen-svelte/src/routes/+page.svelte#L52) sells "See the preview" and "Lock the identity" as steps 2 and 3. The product does not do this yet. That is our own version of Fannabe's homepage-vs-terms contradiction, and we should not be running it while criticising theirs.
+
+### 3.3 Content formats — **we are behind on breadth, ahead on depth**
+
+| Capability | Fannabe | PersonaGen | Priority |
+|---|---|---|---|
+| **Carousel (consistent multi-frame)** | ✅ one click | ❌ | **P1** |
+| Trend/reel copy — **from an upload, never a URL** | ✅ | ✅ **shipped 2026-09-09** — `reel-remake` (wan-animate `replace`) | ✅ done — see note below |
+| Motion transfer (source clip → persona) | ✅ | ✅ **shipped 2026-09-09** — `motion-transfer` (wan-animate `move`) | ✅ done |
+| Character swap onto a screenshot | ✅ | ❌ | ❌ **refuse** (§5) — *unchanged* |
+| Talking head / lip-sync | ✅ | ✅ OmniHuman v1.5 @ $0.70 | — |
+| Video | ✅ short-form | ✅ Kling O3 5s + 🏆 **multi-shot cinematic director** ([generate.ts:1431](../../personagen-svelte/src/lib/server/content/generate.ts#L1431)) | 🏆 |
+| **Hook-quality gate before paying for video** | ❌ | 🏆 threshold 80, adversarial grader ([generate.ts:703](../../personagen-svelte/src/lib/server/content/generate.ts#L703)) | 🏆 |
+| Niche-tuned content | ✅ generator | 🏆 brand brief + scraped products | 🏆 |
+| Batch generation | ⚠️ | ⚠️ engine-only | P1 |
+| Image editor with undo | ✅ | ⚠️ no UI | P2 |
+
+### 3.4 Operations & commerce — **uncontested, both ways**
+
+| Capability | Fannabe | PersonaGen |
+|---|---|---|
+| Platforms published to | **0** | 🏆 **13** |
+| Scheduling / calendar | ❌ | 🏆 Day/Week/Month |
+| Autopilot + autonomy levels | ❌ | 🏆 Advisor / Semi / Fully |
+| Approval queue | ❌ | 🏆 |
+| Verified publish | ❌ | 🏆 |
+| Brand brief + product scraping | ❌ | 🏆 |
+| Per-persona spend ledger | ❌ | 🏆 |
+| Published per-generation cost | ❌ | 🏆 `PRICING_MATRIX` |
+| **You own the output** | ❌ they retain copyright | ✅ — **and we don't say so anywhere** |
+| Landing page | ✅ | ✅ shipped |
+| Pricing page | ⚠️ opaque | ✅ `/billing` |
+| Live billing | ✅ | ⚠️ Stripe dormant pending env keys |
+| Free tier | ✅ generous, recurring | ⚠️ one-time 1,000-credit welcome |
+| **Explore/social proof gallery** | ✅ | ❌ |
+| Affiliate program | ✅ | ❌ |
+| SEO / comparison articles | ✅ | ❌ |
+
+---
+
+## 4. What to take — ranked
+
+### P0 — the realism chain (this is the whole ask)
+
+**P0.1 — Post-generation enhancement pipeline.** Three stages, behind one flag, applied after every persona-bearing image.
+
+```
+base generation  →  [face restore]  →  [skin/detail]  →  [upscale]  →  durable store
+                         ↑ pinned ugc_character_ref
+```
+
+Design constraints that follow from our existing rails:
+- Each stage is a **separately priced step** in `PRICING_MATRIX` ([pricing.ts:19](../../personagen-svelte/src/lib/pricing.ts#L19)), metered and debited like any other generation. Under `credits_mode=enforce`, an unmetered stage is a free path — the standing trap named in [the v2 plan](persona-model-v2-action-plan.md).
+- Flag through `flags.ts` (env → `platform_settings` → default), not the env-only card-renderer pattern. `UGC_ENHANCE_CHAIN=off|face|face+skin|full`.
+- **Never-brick fallback:** any stage that fails returns the previous stage's image. A realism pass must never cost the user a post. This is the same discipline as the card renderer.
+- Store the **pre-enhancement original** alongside the final. It is the A/B evidence, and it is the undo.
+
+**Sequence the stages by evidence, not by ambition.** Ship the upscale/detail pass first — it is the cheapest, the least likely to break identity, and it delivers the largest visible jump per dollar. Face restore is the highest-value and highest-risk (a bad blend is worse than no pass), so it ships second with a visible before/after in the UI.
+
+**P0.2 — Prove it or don't ship it.** Build a fixed 20-prompt benchmark set across our realism registers. Generate each with the chain off / partial / full. Judge blind. Publish the grid internally. We have a repo full of assertions about realism and zero measurements — this is the measurement.
+
+**P0.3 — Wire `TraitPicker` into a real creation wizard with preview → regenerate → lock.** The component exists. The copy is already live on the landing page. Only the wizard is missing. This closes both a competitive gap and a truth-in-advertising gap in one change.
+
+**P0.4 — Publish step timings.** We have fal queue data and show none of it. "Generated in 8s" is a confidence signal that costs nothing.
+
+### P1 — format breadth and cold-start
+
+- **Carousel generator** — consistent outfit/background across N frames. We already hold identity across a 5-stage kit; a carousel is the same problem with a scene lock added. Highest-value format gap.
+- **Explore gallery with one-click reuse** — solves "what do I make?", compounds with usage, and gives us the social proof surface we lack entirely.
+- **Prompt enhancer** — cheap LLM call, large perceived-quality gain for non-technical users.
+- **Prebuilt personas** — instant activation, zero build. Removes the cold-start wall.
+- **Easy Mode scenes** — surface the studio templates we already have as named one-click scenes.
+- **Cross-engine consistency hardening** — make the single-ref degradation ([models.ts](../../personagen-svelte/src/lib/models.ts) `multiRef: false`) impossible rather than warned.
+
+### P2 — opportunistic
+
+- Image → prompt.
+- Editor with undo history (originals already preserved server-side).
+- Unique-feature chips (vitiligo, heterochromia, scars) — genuinely good inclusive-representation surface, and it demos well.
+- Batch generation in the UI.
+- Comparison/SEO pages. Theirs rank; ours don't exist.
+
+---
+
+## 5. What to refuse — and why refusing is the strategy
+
+You asked for high integrity. These are the places where matching Fannabe would cost us the business we are actually building.
+
+| Their feature | Refuse | Reason |
+|---|---|---|
+| **NSFW / adult studio** | ❌ | It is their moat and it would be our poison. One adult-content incident ends every brand relationship simultaneously. It also forces a high-risk processor, which raises fees and puts Stripe at risk — and Stripe is our billing plan. |
+| **Character Swap onto someone's selfie/screenshot** | ❌ | Non-consensual likeness manipulation. There is no version of this a client-facing tool should ship. |
+| **"Copy any Reel with one click"** | ⚠️ ~~heavy legal review, or refuse~~ → **OVERRULED 2026-09-09, shipped with guardrails** | Wholesale replication of third-party copyrighted work, sold as a headline. A "trend *format* library" (structure, pacing, hook shape — not the source asset) gets most of the value with none of the exposure. That is the version to build. **The owner decided otherwise the same day and `reel-remake` shipped.** The reasoning above is left standing because it is what the guardrails were built out of: **no URL ingest at all** (the user uploads a clip they chose; we never scrape a platform — the scrape is exposure for *us* and buys nothing the upload doesn't), an ownership attestation recorded on upload, a per-workspace switch so a brand-client account cannot ship a copy by accident, and the AI-disclosure badge. The "trend format library" remains worth building — it is the one asset a competitor cannot copy — but it is no longer the *only* version we ship. |
+| **Retaining copyright on customer output** | ❌ | We should go the exact opposite direction and make it loud. |
+| **Training on customer outputs by default** | ❌ | Same. |
+| **Opaque pricing** | ❌ | We already have a per-generation cost matrix and a spend ledger. This is a fight we win by simply showing up. |
+
+**Turn the refusals into the pitch.** Our answer to their "realism" comparison table is an **integrity** table:
+
+| Them | Us |
+|---|---|
+| They keep the copyright; you get a licence that dies with your account | **You own every asset. Permanently.** |
+| Your outputs train their models by default | **We never train on your work.** |
+| Price per generation: unpublished | **Every generation priced before you run it, ledgered after.** |
+| Homepage says you can upload a model; terms say you can't | **What the page says is what the product does.** |
+| Adult content by design | **Brand-safe by design, with an approval queue that proves it.** |
+| Hands you a file | **Runs the account and proves the post landed.** |
+
+That table is defensible, checkable, and it is the wedge you asked for. It only works if row 4 is true of us too — hence P0.3.
+
+---
+
+## 6. Economics
+
+| | Fannabe | PersonaGen |
+|---|---|---|
+| Entry | Free + recurring monthly credits | Free + **one-time** 1,000-credit welcome |
+| Paid range | ~$29–$199/mo | $79 / $299 / $899 |
+| Unit | Opaque tokens | **1 credit = 1 retail cent**, 3× markup, published |
+| Top-ups | Unnamed packs | $10 / $25 / $50 / $100 with ladder bonuses ([billing-packs.ts:35](../../personagen-svelte/src/lib/billing-packs.ts#L35)) |
+| Cost visibility | None | Full `PRICING_MATRIX` |
+
+**Two economic observations.**
+
+1. **Our free tier is structurally weaker than theirs and it is costing us the top of the funnel.** They give recurring monthly credits — "enough to generate a picture post every day" — which keeps a non-paying user in the product long enough to form a habit. Ours is a one-time grant: spend it and the product goes dark. Given that text posts are already free at $0 marginal cost (the ffmpeg card renderer), a small **recurring** monthly media allowance is affordable and would materially change activation.
+
+2. **The enhancement chain has a real unit cost and must be priced, not absorbed.** Three extra passes per image at a 3× markup is a meaningful per-post increase. The right shape is a **quality tier** the user chooses and sees priced — "Standard / Realistic / Ultra" — mapping to `off / face / full`. That fits the existing model-picker pattern exactly and turns a cost into a product surface. Do not make it silent and do not make it free.
+
+---
+
+## 7. Risks
+
+| Risk | Severity | Mitigation |
+|---|---|---|
+| **Landing page promises a preview/lock loop that doesn't exist** | **High — live now** | P0.3, or pull the copy this week |
+| Enhancement chain triples per-image cost, invisibly | High | Price it as a visible quality tier; meter every stage |
+| Face-restore pass degrades identity instead of fixing it | Medium | Ship upscale first; before/after in UI; blind benchmark (P0.2) |
+| Chasing NSFW revenue "just as an option" | **High** | Settled policy: no. Brand-safe is the product |
+| Trend-copy feature invites a takedown | Medium | Build format library, not asset replication |
+| Realism work displaces the open monetization loops (engine metering, enforce flip) | Medium | The chain *requires* metering — sequence it after C7, not against it |
+| We benchmark against the wrong competitor | Medium | Fannabe is the craft benchmark; **theinfluencer.ai remains the UX/vocabulary benchmark** and this doc does not change that |
+
+---
+
+## 8. Bottom line
+
+**Viability: strong, with one specific and closable deficiency.**
+
+We are building a fundamentally more valuable product than Fannabe. Everything after the image exists — brand grounding, 13-platform verified publishing, autonomy, approval, cost accounting — is uncontested ground that they have not even attempted. Their legal posture is a liability we can attack, their pricing is opaque in a way ours is not, and their core market is one we should decline on purpose.
+
+But they beat us at the moment of evaluation, because the first thing any buyer does is generate one image and look at it. On that single act they win, and they win for a mechanical reason we can fix: **they run three post-processing stages we do not run at all.**
+
+The work, in order:
+
+1. **Ship the enhancement chain** — upscale/detail first, face restore second, metered, flagged, never-bricking, priced as a visible quality tier.
+2. **Prove it with a blind benchmark** before believing it.
+3. **Wire the trait picker into a real preview → regenerate → lock wizard** — closing the competitive gap and the honesty gap in the same change.
+4. **Give the free tier a recurring media allowance** so evaluation doesn't die on day two.
+5. **Ship the integrity table** on the landing page — the one thing they structurally cannot answer.
+
+Do those five and we are not competing with Fannabe. We are the platform that generates images as good as theirs *and then actually runs the account*, which is a category they are not in.
+
+---
+
+## Sources
+
+- [Fannabe — AI Influencer Generator](https://www.fannabe.com/)
+- [Fannabe — Best AI Influencer Generators 2026](https://www.fannabe.com/articles/best-ai-influencer-generators)
+- [Fannabe — Higgsfield vs Fannabe](https://www.fannabe.com/articles/higgsfield-vs-fannabe)
+- [Clout AI — Fannabe AI Review (2026): Features, Rights and Limits](https://www.tryclout.ai/blog/fannabe-ai-review)
+- [StartupHub.ai — Fannabe Review 2026](https://www.startuphub.ai/ai-news/ai-tools/2026/fannabe-review-2026-is-it-worth-it-features-pricing-and-honest-verdict)
+- [Shyft — Fannabe pricing, features, review](https://shyft.ai/tools/fannabe)
+- [There's An AI For That — Fannabe](https://theresanaiforthat.com/ai/fannabe/)

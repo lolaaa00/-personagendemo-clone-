@@ -34,7 +34,15 @@ vi.mock('$lib/server/storage', () => ({
 	persistToStorage: vi.fn(),
 	persistBufferToStorage: vi.fn()
 }));
-vi.mock('$lib/server/video', () => ({ burnCaptions: vi.fn(), optimizeForWeb: vi.fn() }));
+// Spread the REAL module and stub only the two functions that shell out to
+// ffmpeg. An exhaustive factory silently becomes wrong the moment video.ts
+// exports anything new — which it did (MAX_TIMED_CAPTIONS), breaking this file
+// from a change in another module that never mentioned it. Same idiom the
+// model-registry mock below already uses.
+vi.mock('$lib/server/video', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('$lib/server/video')>();
+	return { ...actual, burnCaptions: vi.fn(), optimizeForWeb: vi.fn() };
+});
 vi.mock('./card-renderer', () => ({
 	renderTypographicCard: vi.fn(),
 	CARD_RENDERER_LABEL: 'mock'

@@ -31,7 +31,15 @@ vi.mock('$lib/server/storage', () => ({
 	persistToStorage: vi.fn(),
 	persistBufferToStorage: vi.fn()
 }));
-vi.mock('$lib/server/video', () => ({ burnCaptions: vi.fn(), optimizeForWeb: vi.fn() }));
+// Spread the REAL module and stub only the two functions that shell out to
+// ffmpeg. An exhaustive factory silently becomes wrong the moment video.ts
+// exports anything new — which it did (MAX_TIMED_CAPTIONS), breaking this file
+// from a change in another module that never mentioned it. Same idiom the
+// model-registry mock below already uses.
+vi.mock('$lib/server/video', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('$lib/server/video')>();
+	return { ...actual, burnCaptions: vi.fn(), optimizeForWeb: vi.fn() };
+});
 vi.mock('./card-renderer', () => ({
 	renderTypographicCard: vi.fn(),
 	CARD_RENDERER_LABEL: 'mock'
@@ -80,7 +88,11 @@ describe('resolveImageKeys → OpenRouter image routes', () => {
 		vi.mocked(loadRegistry).mockResolvedValue([]);
 		const { orRoutes } = await resolveImageKeys(supabase, 'user-1');
 
-		expect(orRoutes.t2i).toEqual({ id: UGC_IMAGE_MODEL_OPENROUTER, usd: STATIC_USD, fromRegistry: false });
+		expect(orRoutes.t2i).toEqual({
+			id: UGC_IMAGE_MODEL_OPENROUTER,
+			usd: STATIC_USD,
+			fromRegistry: false
+		});
 		expect(orRoutes.edit).toEqual({ id: EDIT_DEFAULT, usd: STATIC_USD, fromRegistry: false });
 	});
 
@@ -88,7 +100,11 @@ describe('resolveImageKeys → OpenRouter image routes', () => {
 		vi.mocked(loadRegistry).mockResolvedValue([row({})]);
 		const { orRoutes } = await resolveImageKeys(supabase, 'user-1');
 
-		expect(orRoutes.t2i).toEqual({ id: 'google/gemini-3-pro-image', usd: 0.1548, fromRegistry: true });
+		expect(orRoutes.t2i).toEqual({
+			id: 'google/gemini-3-pro-image',
+			usd: 0.1548,
+			fromRegistry: true
+		});
 		// id and usd came from the SAME row — they cannot disagree.
 		expect(orRoutes.t2i.usd).not.toBe(STATIC_USD);
 	});
@@ -97,7 +113,11 @@ describe('resolveImageKeys → OpenRouter image routes', () => {
 		vi.mocked(loadRegistry).mockResolvedValue([row({})]);
 		const { orRoutes } = await resolveImageKeys(supabase, 'user-1');
 
-		expect(orRoutes.edit).toEqual({ id: 'google/gemini-3-pro-image', usd: 0.1548, fromRegistry: true });
+		expect(orRoutes.edit).toEqual({
+			id: 'google/gemini-3-pro-image',
+			usd: 0.1548,
+			fromRegistry: true
+		});
 		expect(orRoutes.edit.id).toBe(orRoutes.t2i.id);
 	});
 
@@ -113,30 +133,61 @@ describe('resolveImageKeys → OpenRouter image routes', () => {
 		const VIDEO_CONST = 'kwaivgi/kling-v3.0-std';
 		vi.mocked(loadRegistry).mockResolvedValue([]);
 		const empty = await resolveImageKeys(supabase, 'user-1');
-		expect(empty.orRoutes.video).toEqual({ id: VIDEO_CONST, usd: priceOf('openrouter', 'video'), fromRegistry: false });
+		expect(empty.orRoutes.video).toEqual({
+			id: VIDEO_CONST,
+			usd: priceOf('openrouter', 'video'),
+			fromRegistry: false
+		});
 
 		// Seeded UNWIRED, as the migration lists it: visible in the catalog, not yet authoritative.
 		vi.mocked(loadRegistry).mockResolvedValue([
-			row({ model_id: VIDEO_CONST, kind: 'video_i2v', kinds: ['video_i2v'], wired: false, status: 'available', price_usd: 0.35 })
+			row({
+				model_id: VIDEO_CONST,
+				kind: 'video_i2v',
+				kinds: ['video_i2v'],
+				wired: false,
+				status: 'available',
+				price_usd: 0.35
+			})
 		]);
 		const listed = await resolveImageKeys(supabase, 'user-1');
 		expect(listed.orRoutes.video.fromRegistry).toBe(false);
 
 		vi.mocked(loadRegistry).mockResolvedValue([
-			row({ model_id: 'kwaivgi/kling-v3.0-pro', kind: 'video_i2v', kinds: ['video_i2v'], price_usd: 0.7 })
+			row({
+				model_id: 'kwaivgi/kling-v3.0-pro',
+				kind: 'video_i2v',
+				kinds: ['video_i2v'],
+				price_usd: 0.7
+			})
 		]);
 		const wired = await resolveImageKeys(supabase, 'user-1');
-		expect(wired.orRoutes.video).toEqual({ id: 'kwaivgi/kling-v3.0-pro', usd: 0.7, fromRegistry: true });
+		expect(wired.orRoutes.video).toEqual({
+			id: 'kwaivgi/kling-v3.0-pro',
+			usd: 0.7,
+			fromRegistry: true
+		});
 	});
 
 	it('the voiceover model resolves from the starred tts row, else the constant', async () => {
 		const TTS_CONST = 'fal-ai/elevenlabs/tts/turbo-v2.5';
 		vi.mocked(loadRegistry).mockResolvedValue([]);
 		const empty = await resolveImageKeys(supabase, 'user-1');
-		expect(empty.falRoutes.tts).toEqual({ id: TTS_CONST, usd: priceOf('fal', 'tts'), fromRegistry: false });
+		expect(empty.falRoutes.tts).toEqual({
+			id: TTS_CONST,
+			usd: priceOf('fal', 'tts'),
+			fromRegistry: false
+		});
 
 		vi.mocked(loadRegistry).mockResolvedValue([
-			row({ provider: 'fal', model_id: 'fal-ai/elevenlabs/tts/multilingual-v2', kind: 'tts', kinds: ['tts'], is_default: true, price_usd: 0.05 })
+			row({
+				provider: 'fal',
+				model_id: 'fal-ai/elevenlabs/tts/multilingual-v2',
+				kind: 'tts',
+				kinds: ['tts'],
+				is_default: true,
+				price_usd: 0.05
+			})
 		]);
 		const starred = await resolveImageKeys(supabase, 'user-1');
 		expect(starred.falRoutes.tts).toEqual({

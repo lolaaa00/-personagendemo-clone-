@@ -166,5 +166,9 @@
   [
     "reconcile_price_drift_migration.sql",
     "Reconciliation also checks the price: credits must equal ceil(est_cost x markup x 100) for events priced since the markup last changed; adds a reason column"
+  ],
+  [
+    "source_clip_attestations_migration.sql",
+    "Source-clip attestations — append-only record of a user asserting they may use an uploaded clip; kept outside the switchable activity log so ingest can fail closed when it cannot be recorded"
   ]
 ]

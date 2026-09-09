@@ -43,6 +43,18 @@ export const PRICING_MATRIX: PriceEntry[] = [
 		model: 'kling-o3-pro reference (cinematic, per shot-set)',
 		usd: 1.6
 	},
+	// Video-to-video bills per VIDEO SECOND, not per call — this row is the
+	// PER-SECOND rate, and the ledger must multiply it by the probed duration of
+	// the source clip. Measured 2026-09-09: 2.6s at 720p billed ~$0.21, matching
+	// the published 480p $0.04 / 580p $0.06 / 720p $0.08 at a 16fps basis. 580p
+	// is the shipped default (see MODEL_CATALOG), so 0.06 is the number here.
+	{
+		provider: 'fal',
+		operation: 'video',
+		model: 'wan-2.2-animate replace/move (per source second)',
+		usd: 0.06,
+		note: 'per SECOND of the source clip at 580p — multiply by probed duration'
+	},
 	{ provider: 'fal', operation: 'tts', model: 'elevenlabs turbo-v2.5', usd: 0.03 },
 	{
 		provider: 'fal',
@@ -183,6 +195,55 @@ export interface GenerationProvenance {
 	/** 'supplied' means the user handed us the still and no image model ran —
 	 *  which is why this record has no image cost event and no images row. */
 	still_source?: 'generated' | 'supplied';
+	/**
+	 * The listicle's list, when one was written.
+	 *
+	 * Present whenever the Director produced items — even if the on-screen
+	 * reveals could not be burned. `assembled` is what separates the two, and it
+	 * needs its own field because `motion_assembled` cannot carry it: that flag
+	 * means "a motion card shipped as a still", i.e. a video format that produced
+	 * an IMAGE. A listicle whose reveals failed still shipped a video, with the
+	 * items spoken but never shown. Reusing one boolean for both would make a
+	 * reader unable to tell which of two quite different degradations happened.
+	 *
+	 * `beats` is the billing basis: one voiceover call per beat, which is the
+	 * only way the reveals can be timed to speech rather than guessed. Recording
+	 * it makes "why did this post cost 4x a spokesperson?" answerable.
+	 */
+	listicle?: {
+		/** The on-screen labels, in order. */
+		items?: string[];
+		/** Voiceover calls made: the framing line plus one per item. */
+		beats?: number;
+		/** False when the items were spoken but the reveals could not be burned. */
+		assembled?: boolean;
+	};
+	/**
+	 * The video-to-video transfer, when one ran. Present ONLY on a run that
+	 * actually reached the v2v provider — a run that fell back to image-to-video
+	 * must not carry it, because that is the whole point of the truth contract.
+	 *
+	 * `billed_seconds` is here rather than only inside a ledger model label
+	 * because this stage is the first whose price scales with a user-supplied
+	 * input: without a queryable number, "why did this post cost $1.80?" can only
+	 * be answered by parsing prose, and a per-second charge nobody can audit is
+	 * indistinguishable from a wrong one.
+	 */
+	v2v?: {
+		/** 'replace' inherits the source scene; 'move' keeps the persona's own. */
+		mode?: 'replace' | 'move';
+		/** The durable source clip the transfer re-performed. */
+		source_video?: string | null;
+		/** The MEASURED duration billed, including its fraction. */
+		billed_seconds?: number;
+		/** Rate actually applied, so a later catalog change cannot rewrite history. */
+		usd_per_second?: number;
+		/** Pinned at generation time; it sets the per-second rate. */
+		resolution?: string;
+		/** The full-body reference sent — never the pinned bust crop, which makes
+		 *  the model invent a lower body. Recorded so a bad output is diagnosable. */
+		reference?: string | null;
+	};
 	/** The prompts sent to the models. */
 	prompts?: { scene?: string; script?: string };
 	/** What was selected during generation. */

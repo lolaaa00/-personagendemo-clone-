@@ -956,6 +956,17 @@ const IMAGE_SYNONYMS = [
 	'input_image_url',
 	'reference_images'
 ];
+// A SOURCE clip the model transforms — the video-to-video family's first input
+// (fal's wan-animate move/replace take `video_url` + `image_url`). Distinct from
+// the output: nothing here names a result.
+//
+// Before this list existed, a required `video_url` matched no synonym, fell into
+// `unknownRequired`, had no schema default to pin (it is the user's input, so it
+// never has one) and therefore forced `ok: false` — the probe REJECTED every
+// video-to-video model it saw, rather than describing it. That was the right
+// answer while nothing could supply a clip, but it was reached for the wrong
+// reason: "I don't recognise this field", not "nothing here can feed it".
+const VIDEO_SYNONYMS = ['video_url', 'video', 'source_video_url', 'input_video_url', 'video_urls'];
 const SIZE_SYNONYMS = ['aspect_ratio', 'image_size', 'resolution', 'video_size', 'size'];
 const DURATION_SYNONYMS = ['duration', 'num_frames', 'video_length', 'duration_seconds'];
 const AUDIO_SYNONYMS = ['generate_audio', 'enable_audio', 'with_audio'];
@@ -966,6 +977,10 @@ export interface ProbeResult {
 	textParam: string | null;
 	imageParam: string | null;
 	imageIsArray: boolean;
+	/** The SOURCE-clip input, when the model takes one. Evidence, not permission:
+	 *  recording it is what lets a later step drive the model, but `ok` still
+	 *  refuses until some kind can actually supply a clip. */
+	videoParam: string | null;
 	sizeParam: string | null;
 	durationParam: string | null;
 	audioParam: string | null;
@@ -988,6 +1003,13 @@ export interface ModelAdapter {
 	text: string;
 	image: string | null;
 	imageIsArray: boolean;
+	/**
+	 * The param naming the SOURCE clip, for models that transform a video rather
+	 * than generate one. Non-null means this adapter CANNOT be driven by a stage
+	 * that has no clip to give it: a request built without this field 422s on a
+	 * required param, after the user has already waited. Callers must check it.
+	 */
+	video: string | null;
 	duration: string | null;
 	audio: string | null;
 	constants: Record<string, unknown>;
@@ -1010,10 +1032,18 @@ export function adapterFromProbe(probe: ProbeResult, kind: RegistryKind): ModelA
 			? probe.outputShape
 			: null;
 	if (kind === 'video_i2v' && !output) return null;
+	// A model that needs a source clip cannot be driven by any kind we can serve
+	// today — every current stage hands over a still, not a video. Refusing the
+	// adapter is what keeps such a model out of the wired set, so it can never be
+	// called with the one required param nobody can fill. The probe still RECORDS
+	// the param (see videoParam) so the row carries the evidence; the day a stage
+	// can supply a clip, this is the single line that lets it through.
+	if (probe.videoParam) return null;
 	return {
 		text: probe.textParam,
 		image: probe.imageParam,
 		imageIsArray: probe.imageIsArray,
+		video: probe.videoParam,
 		duration: probe.durationParam,
 		audio: probe.audioParam,
 		constants,
@@ -1070,12 +1100,20 @@ export async function probeModelSchema(
 
 	const textParam = find(TEXT_SYNONYMS);
 	const imageParam = find(IMAGE_SYNONYMS);
+	const videoParam = find(VIDEO_SYNONYMS);
 	const sizeParam = find(SIZE_SYNONYMS);
 	const durationParam = find(DURATION_SYNONYMS);
 	const audioParam = find(AUDIO_SYNONYMS);
 	const voiceParam = find(VOICE_SYNONYMS);
+	// `known` is "fields the pipeline knows how to fill", which is what makes the
+	// remainder honest: an unknown REQUIRED field is one only a schema default can
+	// close. videoParam belongs here now that it is recognised — otherwise a
+	// required source clip reads as an unmappable field, which is a different
+	// (and misleading) reason to reject the model.
 	const known = new Set(
-		[textParam, imageParam, sizeParam, durationParam, audioParam, voiceParam].filter(Boolean)
+		[textParam, imageParam, videoParam, sizeParam, durationParam, audioParam, voiceParam].filter(
+			Boolean
+		)
 	);
 	const unknownRequired = required.filter((r) => !known.has(r));
 
@@ -1097,6 +1135,11 @@ export async function probeModelSchema(
 	const ok =
 		Boolean(textParam) &&
 		(!needsImage || Boolean(imageParam)) &&
+		// A source clip is a required input no current stage can supply, so the
+		// model is not usable — stated as its own term rather than left to fall
+		// out of `unknownRequired`, which now recognises the field and would let
+		// it pass. Same verdict as before this list existed, for the true reason.
+		!videoParam &&
 		unknownRequired.length === 0 &&
 		Boolean(outputShape) &&
 		!String(outputShape).startsWith('other');
@@ -1113,6 +1156,7 @@ export async function probeModelSchema(
 		textParam,
 		imageParam,
 		imageIsArray: imageParam ? props[imageParam]?.type === 'array' : false,
+		videoParam,
 		sizeParam,
 		durationParam,
 		audioParam,

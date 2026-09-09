@@ -17,7 +17,7 @@ import { isCardRendererAvailable, CARD_RENDERER_LABEL } from '$lib/server/conten
 import { publishPostById } from '$lib/server/scheduler';
 import { assertWithinBudget } from '$lib/server/budget';
 import { creditsFor, isCreditsError, resolveBillingAccount } from '$lib/server/credits';
-import { creditsMode } from '$lib/server/flags';
+import { creditsMode, videoIngestEnabled } from '$lib/server/flags';
 import { getServiceSupabase } from '$lib/server/service-supabase';
 import { priceOf } from '$lib/pricing';
 import {
@@ -32,12 +32,31 @@ import {
 	formatFromRequest,
 	planPipeline,
 	planTotalUsd,
+	MIN_ITEMS,
+	MAX_ITEMS,
+	DEFAULT_ITEMS,
 	type StepKind,
 	type StepModel
 } from '$lib/formats';
 import type { ModelKind, ModelOption } from '$lib/models';
 import { VIDEO_ONLY_PLATFORMS } from '$lib/server/social/platforms';
-import { hasFfmpeg } from '$lib/server/video';
+import { hasFfmpeg, hasFfprobe, MAX_CLIP_SECONDS, MIN_CLIP_SECONDS } from '$lib/server/video';
+
+/**
+ * A listicle's beat bounds, and the count quoted when a request carries none.
+ *
+ * Restated here rather than imported because $lib/formats keeps them private —
+ * its planner clamps to the very same range on the way into the quote, so this
+ * gate can only ever be redundant, never a second source of truth. It exists
+ * because the beat count is a BILLING quantity: the voiceover stage is billed
+ * `per_item`, so an unchecked count multiplies a paid provider call by whatever
+ * a client happened to send.
+ */
+// Imported, never restated: the composer's chips, this gate and the engine all
+// clamp to the SAME range by construction.
+const MIN_LIST_ITEMS = MIN_ITEMS;
+const MAX_LIST_ITEMS = MAX_ITEMS;
+const DEFAULT_LIST_ITEMS = DEFAULT_ITEMS;
 
 /**
  * Generate a fresh UGC post (caption + AI image tuned to the brand brief / product)
@@ -167,6 +186,65 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		}
 	}
 
+	// ── The source clip, for the video-to-video formats ──────────────────────
+	// The clip itself was ingested by POST /source-clip, which is the only thing
+	// in the system allowed to MEASURE it. `sourceSeconds` is the billing basis
+	// for a per-second stage, so a duration that arrives here unvalidated is a
+	// bill the user never approved — it is re-checked against the very bounds
+	// ingest enforces (imported, not copied) and dropped outright if it isn't a
+	// finite number inside them, which quotes the pipeline's own default duration
+	// rather than a client's claim.
+	const rawSourceUrl = body.source_video_url ?? body.sourceVideoUrl;
+	const sourceVideoUrl =
+		typeof rawSourceUrl === 'string' && /^https?:\/\//i.test(rawSourceUrl)
+			? rawSourceUrl
+			: undefined;
+	const rawSourceSeconds = Number(body.source_seconds ?? body.sourceSeconds);
+	const sourceSeconds =
+		sourceVideoUrl &&
+		Number.isFinite(rawSourceSeconds) &&
+		rawSourceSeconds >= MIN_CLIP_SECONDS &&
+		rawSourceSeconds <= MAX_CLIP_SECONDS
+			? rawSourceSeconds
+			: undefined;
+	// WHICH Wan Animate endpoint runs is a property of the format the composer
+	// already sends, not a second field the two could disagree about: Reel remake
+	// IS Replace (keeps the source scene), Motion transfer IS Move (keeps only
+	// the motion).
+	const v2vMode: 'replace' | 'move' | undefined =
+		body.format === 'v2v_replace' || body.format === 'v2v_narrated'
+			? 'replace'
+			: body.format === 'v2v_move'
+				? 'move'
+				: undefined;
+
+	// ── The list, for the listicle format ────────────────────────────────────
+	// Same posture as the source clip above, for the same reason: the beat count
+	// is what the voiceover stage is multiplied by, so it is floored to an integer
+	// and clamped before it can reach either the quote or the ledger. A count that
+	// isn't a finite number is DROPPED rather than coerced to zero — an absent
+	// count quotes the catalog default, which is the honest answer, where a zero
+	// would quote a listicle with no list.
+	const rawListCount = Number(body.list_count ?? body.listCount);
+	const listItemCount = Number.isFinite(rawListCount)
+		? Math.min(MAX_LIST_ITEMS, Math.max(MIN_LIST_ITEMS, Math.round(rawListCount)))
+		: undefined;
+	// The user's own beat labels, POSITIONALLY: '' at index n means "the Director
+	// writes that one". Blanks are kept rather than filtered out — dropping them
+	// would slide every later label onto a beat the user never wrote it for. An
+	// all-blank array is nothing at all, so it is dropped whole.
+	const listLabels: string[] | undefined = Array.isArray(body.list_items)
+		? body.list_items
+				// Sliced by ITEMS, not beats. A beat count includes the framing line,
+				// so `listItemCount` is one MORE than the number of labels there can
+				// ever be; slicing by it lets one extra label through. The engine caps
+				// it anyway, but two layers disagreeing about what the array is indexed
+				// by is how an off-by-one becomes a mislabelled beat later.
+				.slice(0, (listItemCount ?? MAX_LIST_ITEMS) - 1)
+				.map((s: unknown) => (typeof s === 'string' ? s.trim().slice(0, 160) : ''))
+		: undefined;
+	const listItems = listLabels?.some((s) => s.length > 0) ? listLabels : undefined;
+
 	// Pipeline input, minus the supabase client — the detached task injects the
 	// service-role client, the synchronous fallback injects the session one.
 	const genInput = {
@@ -205,9 +283,24 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		})(),
 		// Composer format choice: spokesperson (TTS + talking-head) vs b-roll clip.
 		// 'auto' (or anything unrecognized) defers to the persona's ugc_format.
-		formatOverride: (['spokesperson', 'broll', 'vo_broll', 'motion_card', 'auto'].includes(
-			body.format
-		)
+		formatOverride: ([
+			'spokesperson',
+			'broll',
+			'vo_broll',
+			'motion_card',
+			'v2v_replace',
+			'v2v_move',
+			// Omitting this one does not fail loudly: the engine still sees the source
+			// clip, derives a plain Replace, and ships a SILENT remake of a run the
+			// user asked to be narrated — paid for in full, missing its voice.
+			'v2v_narrated',
+			// And once more, one format later: an unlisted 'listicle' coerces to
+			// 'auto' and ships an ordinary spokesperson post — the same script, the
+			// same face, none of the numbered reveals — to a user who is charged in
+			// full and told they bought a list.
+			'listicle',
+			'auto'
+		].includes(body.format)
 			? body.format
 			: 'auto') as UgcPackInput['formatOverride'],
 		// Captions + AI badge are OFF unless the composer explicitly opts in.
@@ -255,7 +348,25 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		stillUrlOverride:
 			typeof body.still_url === 'string' && /^https?:\/\//i.test(body.still_url)
 				? body.still_url
-				: undefined
+				: undefined,
+		/**
+		 * The ingested clip a video-to-video run transforms, its MEASURED length,
+		 * and which transfer runs. Passed straight through — this route validates
+		 * them (above) and owns nothing else about them; the pipeline decides what
+		 * to do with a clip, and refuses the run if one is missing.
+		 */
+		sourceVideoUrl,
+		sourceSeconds,
+		v2vMode,
+		/**
+		 * The list a listicle counts down. The count is the number of separate
+		 * voiceover calls the run makes — the only way each on-screen reveal can be
+		 * timed to speech instead of guessed — and the labels are the user's own,
+		 * positionally, blanks included. Both optional: the Director writes the
+		 * whole list when neither arrives, which is the normal case.
+		 */
+		listItemCount,
+		listItemsOverride: listItems
 	};
 
 	// ── Studio delivery contract ─────────────────────────────────────────────
@@ -344,8 +455,26 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		// via formatOverride) — otherwise a Studio template or composer choice would
 		// preview as the persona's default pipeline while generating as the requested
 		// one, showing the wrong model stack and cost.
-		const personaFormat: 'auto' | 'spokesperson' | 'broll' =
-			body.format === 'spokesperson' || body.format === 'broll'
+		// A video-to-video request is honored the same way: without this it would
+		// preview as the persona's default pipeline — the wrong stack, the wrong
+		// stage list and the wrong price for the run that would actually happen.
+		const personaFormat:
+			| 'auto'
+			| 'spokesperson'
+			| 'broll'
+			| 'v2v_replace'
+			| 'v2v_move'
+			| 'v2v_narrated'
+			| 'listicle' =
+			body.format === 'spokesperson' ||
+			body.format === 'broll' ||
+			body.format === 'v2v_replace' ||
+			body.format === 'v2v_move' ||
+			body.format === 'v2v_narrated' ||
+			// Without this the preview resolves to the persona's default pipeline:
+			// the listicle stack would be quoted as one flat voiceover instead of one
+			// per beat, and the user would approve a number the ledger then exceeds.
+			body.format === 'listicle'
 				? body.format
 				: cfgRow?.ugc_format === 'spokesperson' || cfgRow?.ugc_format === 'broll'
 					? cfgRow.ugc_format
@@ -368,10 +497,27 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		// free ONLY when the run will actually be free, and quotes the model
 		// fallback price otherwise, so the composer never promises what the run
 		// won't deliver.
-		const [freeCardRender, ffmpegAvailable] = await Promise.all([
+		// Two host capabilities, probed together and shipped as siblings: whether
+		// this host can assemble locally (ffmpeg) and whether it can accept a
+		// source clip at all (ffprobe — the ingest endpoint measures with it, and
+		// a duration it cannot measure is a per-second stage it cannot price). The
+		// composer turns these into the capability set `buildableWith` reads, so a
+		// host that cannot ingest never OFFERS the video-to-video formats rather
+		// than failing them after the money is spent.
+		// Ingest needs BOTH halves, and they fail for different reasons: the host
+		// must be able to measure a clip (ffprobe), and the operator must have
+		// turned the capability on. Checking only the host would offer the
+		// video-to-video formats on a deployment where the switch is off — the
+		// upload then 403s AFTER the user picked a format and chose a file, which
+		// is precisely the "offered and failed after the money is spent" failure
+		// this capability set exists to prevent. An off switch must read as
+		// "this deployment does not do this", i.e. the format is simply absent.
+		const [freeCardRender, ffmpegAvailable, hostCanProbe] = await Promise.all([
 			isCardRendererAvailable(),
-			hasFfmpeg()
+			hasFfmpeg(),
+			hasFfprobe()
 		]);
+		const videoIngestAvailable = hostCanProbe && videoIngestEnabled();
 
 		// ── The plan ────────────────────────────────────────────────────────
 		// One catalog, one planner. The composer calls planPipeline() with THIS
@@ -391,8 +537,38 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 			caveat: m.caveat,
 			supportsAudio: m.supportsAudio,
 			supportsDuration: m.supportsDuration,
-			multiRef: m.multiRef
+			multiRef: m.multiRef,
+			// Carried, not defaulted: a per-second model quoted as per-call is a
+			// flat price on a stage that bills by the second — wrong by however
+			// long the clip is. planPipeline reads this to decide the multiplier.
+			billing: m.billing
 		});
+
+		// The transfer stage has no picker: the FORMAT decides the endpoint (Reel
+		// remake = Replace, Motion transfer = Move). Both travel with the plan
+		// because the composer can switch format client-side without a second
+		// round-trip, and the stage must name the endpoint that will actually run
+		// — they price identically, so only the name is at stake.
+		const v2vOptions = effectiveOptions(registryRows, 'video_v2v');
+		const v2vFor = (mode: 'replace' | 'move'): StepModel =>
+			toStepModel(
+				// The id's last segment IS the mode — these two endpoints are the two
+				// modes, not two models that happen to serve one.
+				v2vOptions.find((m) => m.id.endsWith(`/${mode}`)) ??
+					effectiveResolve(registryRows, 'video_v2v', null)
+			);
+		// Keyed by the request `format` the catalog declares, so the composer can
+		// re-pin the transfer stage on a client-side format switch. EVERY v2v
+		// format needs a key: a missing one silently falls back to whichever
+		// endpoint the request happened to OPEN on, so switching from Motion
+		// transfer to a narrated remake would quote Move for a run that executes
+		// Replace. Identical rates today hide that; they are per-resolution and
+		// need not stay identical. A narrated remake IS a Replace, plus a voice.
+		const v2vModels = {
+			v2v_replace: v2vFor('replace'),
+			v2v_move: v2vFor('move'),
+			v2v_narrated: v2vFor('replace')
+		};
 
 		const stillOptions = effectiveOptions(registryRows, stillKind).map(toStepModel);
 		const videoOptions = effectiveOptions(registryRows, 'video_i2v').map(toStepModel);
@@ -469,7 +645,11 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 				label: CINEMATIC_VIDEO_LABEL,
 				usd: priceOf('fal', 'video', 'pro'),
 				provider: 'fal'
-			}
+			},
+			// Priced per SECOND of the clip the user supplies, so this entry is a
+			// rate and not a total — planPipeline multiplies it by the measured
+			// duration the composer feeds back after ingest.
+			v2v: v2vModels[v2vMode === 'move' ? 'v2v_move' : 'v2v_replace']
 		};
 
 		// Which format this request IS, in the vocabulary the composer now speaks.
@@ -483,10 +663,16 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		});
 
 		const shots = 4;
+		// The beat count this quote is built on, shipped with the plan so the
+		// composer opens on the number the server just priced rather than a second
+		// guess of its own. planPipeline multiplies the voiceover stage by it.
+		const items = listItemCount ?? DEFAULT_LIST_ITEMS;
 		const previewPlan = planPipeline({
 			formatId,
 			options: planOptions,
 			fixed: planFixed,
+			seconds: sourceSeconds,
+			items,
 			picks: {
 				...(body.still_model ? { still: String(body.still_model) } : {}),
 				...(body.video_model ? { video: String(body.video_model) } : {}),
@@ -505,7 +691,10 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 				// The format the composer opens on, and everything it needs to plan
 				// any OTHER format the user switches to without a second round-trip.
 				formatId,
-				plan: { options: planOptions, fixed: planFixed, shots },
+				// `v2vModels` rides along so a client-side format switch can re-pin the
+				// transfer stage to the endpoint that format runs, without inventing
+				// a model the server never resolved.
+				plan: { options: planOptions, fixed: planFixed, shots, items, v2vModels },
 				media: mediaKind,
 				provider: genInput.providerPreference || 'auto',
 				platforms: targetPool,
@@ -557,6 +746,10 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 				// Formats that assemble locally are only offered where they can be
 				// built. Same posture as the $0 card renderer above.
 				ffmpegAvailable,
+				// Whether this host can accept a source clip at all. Absent means NO —
+				// an older server that has never heard of ingest must not have the
+				// video-to-video formats offered on it.
+				videoIngestAvailable,
 				// Kept because the run body still speaks these, and the calendar's
 				// legacy callers read them back.
 				videoModelKind: 'video_i2v',
@@ -585,6 +778,10 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 					'shots',
 					'still_model',
 					'still_url',
+					'source_video_url',
+					'source_seconds',
+					'list_count',
+					'list_items',
 					'video_model',
 					'talking_head_model',
 					'llm_model',
@@ -627,14 +824,31 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 			priceOf('fal', 'video', 'pro')
 		: body.media === 'image'
 			? priceOf('openrouter', 'llm') + priceOf('fal', 'image', 'nano')
-			: genInput.formatOverride === 'broll'
+			: // A transfer bills per second, so its upper bound is the LONGEST clip
+				// ingest would have accepted whenever the run didn't carry a measured
+				// duration — otherwise a 30s clip sails through a gate sized for one
+				// flat call and overdraws mid-run.
+				v2vMode
 				? priceOf('openrouter', 'llm') +
-					priceOf('fal', 'image', 'nano') +
-					Math.max(genInput.videoModelUsd ?? 0, priceOf('fal', 'video', 'standard'))
-				: priceOf('openrouter', 'llm') +
-					priceOf('fal', 'image', 'nano') +
-					priceOf('fal', 'tts') +
-					priceOf('fal', 'talking_head');
+					effectiveResolve(registryRows, 'video_v2v', null).usd *
+						(sourceSeconds ?? MAX_CLIP_SECONDS)
+				: // A listicle voices every beat separately, so its TTS line is per beat,
+					// not per run. Sized at the CEILING because the count is a client value and
+					// this gate is only useful as an upper bound — a six-beat run waved through
+					// a gate sized for one voiceover overdraws mid-run.
+					genInput.formatOverride === 'listicle'
+					? priceOf('openrouter', 'llm') +
+						priceOf('fal', 'image', 'nano') +
+						MAX_LIST_ITEMS * priceOf('fal', 'tts') +
+						priceOf('fal', 'talking_head')
+					: genInput.formatOverride === 'broll'
+						? priceOf('openrouter', 'llm') +
+							priceOf('fal', 'image', 'nano') +
+							Math.max(genInput.videoModelUsd ?? 0, priceOf('fal', 'video', 'standard'))
+						: priceOf('openrouter', 'llm') +
+							priceOf('fal', 'image', 'nano') +
+							priceOf('fal', 'tts') +
+							priceOf('fal', 'talking_head');
 	try {
 		await assertWithinBudget(locals.supabase, user.id, agentId, creditsFor(roughUsd));
 	} catch (err) {

@@ -10,6 +10,7 @@
  *
  *   CREDITS_ENFORCE / credits_mode   off (default) | shadow | enforce
  *   ACTIVITY_LOG    / activity_log   off (default) | on
+ *   VIDEO_INGEST    / video_ingest   off (default) | on
  *   ACTIVITY_PEPPER / activity_pepper  hashing secret (generated in the DB on first migration)
  *   CREDIT_MARKUP   / credit_markup    retail multiplier on estimated cost (1 = at cost)
  *   PLATFORM_ADMIN_EMAILS   env-only bootstrap list (in addition to platform_admins rows)
@@ -151,4 +152,47 @@ export function personaBackbonePersists(): boolean {
 /** True ONLY at 'on' — the single gate on backbone facts reaching a prompt. */
 export function personaBackboneEmits(): boolean {
 	return personaBackbone() === 'on';
+}
+
+// ── Video-to-video (source-clip ingest) ─────────────────────────────────────
+// Same precedence as everything above: env var (if set) → platform_settings row
+// flipped from the Admin Console → default.
+//
+// Deliberately NOT the same thing as the `videoIngest` HOST capability that the
+// composer probes (ffprobe on the box). That one answers "can this deployment
+// measure a clip", this one answers "may it accept one" — a decision about the
+// account, not the machine. Collapsed into one signal, an operator's refusal
+// would read as a broken host, and repairing the host would silently switch the
+// capability back on.
+//
+// Defaults OFF: this path re-performs footage the account did not shoot, so it
+// is a decision somebody has to take per deployment, and a deployment that has
+// never taken it has not taken it in the affirmative.
+
+function envVideoIngest(): boolean | null {
+	const raw = (env.VIDEO_INGEST ?? '').trim().toLowerCase();
+	if (raw === '') return null;
+	return raw === 'on' || raw === 'true' || raw === '1';
+}
+
+/**
+ * Whether source clips may be uploaded / re-performed at all. Default false.
+ *
+ * This deliberately depends on NOTHING but the switch. An earlier version also
+ * required the activity log, because the rights attestation was recorded through
+ * it and that store is a no-op while ACTIVITY_LOG is off — an attestation that
+ * silently is not kept is worse than none. The attestation now has its own
+ * table (`source_clip_attestations`) and ingest fails closed when the row cannot
+ * be written, so the guarantee lives where the write happens rather than in a
+ * flag that could disable the feature for an unrelated reason.
+ */
+export function videoIngestEnabled(): boolean {
+	const e = envVideoIngest();
+	if (e !== null) return e;
+	return getSettings().video_ingest === true;
+}
+
+export function videoIngestSource(): SwitchSource {
+	if (envVideoIngest() !== null) return 'env';
+	return getSettings().video_ingest ? 'database' : 'default';
 }

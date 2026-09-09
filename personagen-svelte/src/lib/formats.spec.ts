@@ -2,13 +2,22 @@ import { describe, it, expect } from 'vitest';
 import {
 	FORMAT_CATALOG,
 	FORMAT_KINDS,
+	billedUnits,
+	billingFor,
+	buildableWith,
 	craftMatters,
+	MIN_ITEMS,
+	MAX_ITEMS,
+	MAX_SECONDS,
+	MIN_SECONDS,
 	formatFromRequest,
 	formatsOfKind,
 	getFormat,
 	planPipeline,
 	planTotalUsd,
 	requestFor,
+	type FormatEntry,
+	type HostCapability,
 	type StepKind,
 	type StepModel
 } from './formats';
@@ -225,10 +234,10 @@ describe('locally-assembled formats', () => {
 	it('marks the ffmpeg-dependent formats so a host without it can hide them', () => {
 		// ffmpeg is a soft dependency. Offering a format the host cannot build is
 		// exactly the promise the composer exists to prevent.
-		expect(getFormat('motion-card')?.needsFfmpeg).toBe(true);
-		expect(getFormat('vo-broll')?.needsFfmpeg).toBe(true);
-		expect(getFormat('spokesperson')?.needsFfmpeg).toBeFalsy();
-		expect(getFormat('photo')?.needsFfmpeg).toBeFalsy();
+		expect(getFormat('motion-card')?.requires).toEqual(['ffmpeg']);
+		expect(getFormat('vo-broll')?.requires).toEqual(['ffmpeg']);
+		expect(getFormat('spokesperson')?.requires).toBeFalsy();
+		expect(getFormat('photo')?.requires).toBeFalsy();
 	});
 
 	it('assembles locally instead of paying a model for the expensive part', () => {
@@ -253,5 +262,229 @@ describe('locally-assembled formats', () => {
 		expect(requestFor('vo-broll')).toMatchObject({ media: 'video', format: 'vo_broll' });
 		expect(formatFromRequest(requestFor('motion-card'))).toBe('motion-card');
 		expect(formatFromRequest(requestFor('vo-broll'))).toBe('vo-broll');
+	});
+});
+
+/**
+ * The two generalizations the quote depends on. Both replaced a special case,
+ * so the point of these is as much what they DON'T change: every format that
+ * billed per call before still quotes to the same number.
+ */
+describe('host capability gating', () => {
+	const ffmpegOnly: HostCapability[] = ['ffmpeg'];
+
+	it('hides a format whose capability the host lacks, and shows it when present', () => {
+		const motionCard = getFormat('motion-card')!;
+		expect(buildableWith(motionCard, [])).toBe(false);
+		expect(buildableWith(motionCard, ffmpegOnly)).toBe(true);
+	});
+
+	it('lets a format with no requirement run on a host with nothing', () => {
+		// The common case must not need a capability declaration to stay visible.
+		expect(buildableWith(getFormat('photo')!, [])).toBe(true);
+		expect(buildableWith({ requires: [] }, [])).toBe(true);
+	});
+
+	it('fails CLOSED when only part of a multi-capability format is available', () => {
+		// Why this is a list and not a boolean: partial support must hide the
+		// format, never sell a run that gets halfway and stops.
+		const both: Pick<FormatEntry, 'requires'> = { requires: ['ffmpeg', 'videoIngest'] };
+		expect(buildableWith(both, ffmpegOnly)).toBe(false);
+		expect(buildableWith(both, ['videoIngest'])).toBe(false);
+		expect(buildableWith(both, ['ffmpeg', 'videoIngest'])).toBe(true);
+	});
+});
+
+describe('billing basis', () => {
+	const perCall: StepModel = { id: 'm', label: 'M', usd: 0.1, provider: 'fal' };
+	const perSecond: StepModel = { ...perCall, billing: 'per_second' };
+
+	it('defaults every stage to per call, so nothing quotes differently', () => {
+		expect(billingFor('still', perCall)).toBe('per_call');
+		expect(billingFor('video', perCall)).toBe('per_call');
+		expect(billedUnits('video', perCall, { formatId: 'product-motion' })).toBe(1);
+	});
+
+	it('keeps the storyboard billing per shot — the case that used to be hardcoded', () => {
+		expect(billingFor('cine_stills', perCall)).toBe('per_shot');
+		const units = (shots?: number) =>
+			billedUnits('cine_stills', perCall, { formatId: 'cinematic', shots });
+		expect(units(3)).toBe(3);
+		expect(units()).toBe(4); // the Director's default shot count
+		expect(units(99)).toBe(5); // clamped to the storyboard ceiling
+		expect(units(0)).toBe(1); // never free
+	});
+
+	it('lets a model override its stage — billing is a fact about the provider', () => {
+		// A per-second clip model dropped into a stage whose other models bill per
+		// call must quote by duration, or the stage's basis silently misquotes it.
+		expect(billingFor('video', perSecond)).toBe('per_second');
+		expect(billedUnits('video', perSecond, { formatId: 'product-motion', seconds: 12 })).toBe(12);
+	});
+
+	it('quotes an unmeasured per-second stage at the pipeline default, never at zero', () => {
+		const units = (seconds?: number) =>
+			billedUnits('video', perSecond, { formatId: 'product-motion', seconds });
+		expect(units()).toBe(5); // matches UGC_VIDEO_DURATION
+		expect(units(0)).toBe(1);
+		expect(units(Number.NaN)).toBe(1);
+		expect(units(999)).toBe(30); // clamped to the ingest ceiling
+	});
+
+	it('multiplies the quoted price by the billed units', () => {
+		const steps = planPipeline({
+			formatId: 'cinematic',
+			shots: 5,
+			options: { cine_stills: [perCall] }
+		});
+		const stills = steps.find((s) => s.kind === 'cine_stills')!;
+		expect(stills.usd).toBeCloseTo(0.5, 4);
+		expect(stills.model.label).toContain('×5 shots');
+	});
+});
+
+/**
+ * The video-to-video formats. These are the first stages whose price scales with
+ * an input the USER supplies, so the invariants worth pinning are about honesty:
+ * what is quoted is what runs, and the quote moves with the real clip length.
+ */
+describe('video-to-video formats', () => {
+	const v2vModel: StepModel = {
+		id: 'fal-ai/wan/v2.2-14b/animate/replace',
+		label: 'Wan Animate · Replace',
+		usd: 0.06,
+		provider: 'fal',
+		billing: 'per_second'
+	};
+	const v2vPlan = (formatId: string, seconds?: number) =>
+		planPipeline({
+			formatId,
+			options: OPTIONS,
+			fixed: { ...FIXED, v2v: v2vModel },
+			seconds
+		});
+
+	it('quotes the still it actually runs', () => {
+		// The engine composites a still on every v2v run — poster frame, and the
+		// anchor the never-brick i2v fallback re-performs from. Dropping it from
+		// the steps would bill an image the quote never mentioned.
+		for (const id of ['reel-remake', 'motion-transfer']) {
+			expect(getFormat(id)!.steps).toContain('still');
+			expect(v2vPlan(id).map((s) => s.kind)).toEqual(['director', 'still', 'v2v']);
+		}
+	});
+
+	it('prices the transfer by the measured clip length, not per call', () => {
+		const at = (secs: number) => v2vPlan('reel-remake', secs).find((s) => s.kind === 'v2v')!.usd;
+		expect(at(10)).toBeCloseTo(0.6, 4);
+		expect(at(20)).toBeCloseTo(1.2, 4);
+		// Twice the clip is twice the money — the property a flat per-call quote
+		// would have got wrong by however long the clip is.
+		expect(at(20)).toBeCloseTo(at(10) * 2, 4);
+	});
+
+	it('clamps to the ingest bounds so a quote can never promise what ingest refuses', () => {
+		const at = (secs?: number) => v2vPlan('reel-remake', secs).find((s) => s.kind === 'v2v')!.usd;
+		expect(at(999)).toBeCloseTo(0.06 * MAX_SECONDS, 4);
+		expect(at(0)).toBeCloseTo(0.06 * MIN_SECONDS, 4);
+		// No measured duration yet (nothing uploaded) still quotes something real.
+		expect(at()).toBeGreaterThan(0);
+	});
+
+	it('never quotes LESS than the run will bill, at any clip length', () => {
+		// The engine charges the MEASURED duration including its fraction
+		// (12.4s x rate). The quote works in whole units, so it must round UP:
+		// rounding 12.4 down to 12 would quote $0.72 and then bill $0.744, and a
+		// bill that exceeds its own quote is the exact dishonesty the shared
+		// pipeline exists to prevent. This pins the INVARIANT (quote >= bill), not
+		// the arithmetic, so it still holds if either side changes how it rounds.
+		for (const secs of [0.4, 1, 2.6, 9.99, 10, 12.4, 12.5, 17.001, 29.7, 30, 45]) {
+			const quotedUnits = billedUnits('v2v', v2vModel, { formatId: 'reel-remake', seconds: secs });
+			const billedSecs = Math.min(Math.max(secs, MIN_SECONDS), MAX_SECONDS);
+			expect(quotedUnits).toBeGreaterThanOrEqual(billedSecs);
+		}
+	});
+
+	it('needs a source clip and the host capability to ingest one', () => {
+		for (const id of ['reel-remake', 'motion-transfer']) {
+			const f = getFormat(id)!;
+			expect(f.needs).toContain('sourceVideo');
+			expect(f.requires).toContain('videoIngest');
+			expect(buildableWith(f, ['ffmpeg'])).toBe(false);
+		}
+		// Move's output follows the REFERENCE aspect, so it needs a reframe pass
+		// that Replace does not — that is a real capability difference, not a copy
+		// of the same list.
+		expect(getFormat('motion-transfer')!.requires).toContain('ffmpeg');
+		expect(getFormat('reel-remake')!.requires).not.toContain('ffmpeg');
+		expect(buildableWith(getFormat('reel-remake')!, ['videoIngest'])).toBe(true);
+	});
+});
+
+describe('listicle — a format that makes one stage run many times', () => {
+	const tts: StepModel = { id: 'eleven', label: 'eleven', usd: 0.03, provider: 'fal' };
+	const lp = (items?: number) =>
+		planPipeline({ formatId: 'listicle', options: OPTIONS, fixed: { ...FIXED, tts }, items });
+
+	it('bills the voiceover per beat, not once for the whole script', () => {
+		// The reveals can only be TIMED if each beat is generated separately, so
+		// the run really does make N calls. Quoting one would under-charge every
+		// listicle by N-1 voiceovers.
+		expect(billingFor('tts', tts, getFormat('listicle'))).toBe('per_item');
+		expect(lp(4).find((s) => s.kind === 'tts')!.usd).toBeCloseTo(0.12, 4);
+		// Two beats is a hook plus ONE item — not a list — so the floor is three.
+		expect(lp(2).find((s) => s.kind === 'tts')!.usd).toBeCloseTo(0.03 * MIN_ITEMS, 4);
+	});
+
+	it('leaves every other format quoting the voiceover exactly as before', () => {
+		// The override is scoped to the format that needs it. Spokesperson shares
+		// the stage AND the model, and must be untouched.
+		expect(billingFor('tts', tts, getFormat('spokesperson'))).toBe('per_call');
+		const spoken = planPipeline({
+			formatId: 'spokesperson',
+			options: OPTIONS,
+			fixed: { ...FIXED, tts }
+		});
+		expect(spoken.find((s) => s.kind === 'tts')!.usd).toBeCloseTo(0.03, 4);
+	});
+
+	it('clamps the beat count so a quote is never zero or unbounded', () => {
+		expect(lp(99).find((s) => s.kind === 'tts')!.usd).toBeCloseTo(0.03 * MAX_ITEMS, 4);
+		expect(lp(0).find((s) => s.kind === 'tts')!.usd).toBeCloseTo(0.03 * MIN_ITEMS, 4);
+		expect(lp().find((s) => s.kind === 'tts')!.usd).toBeGreaterThan(0);
+	});
+
+	it('needs its list, and a host that can burn the reveals', () => {
+		const f = getFormat('listicle')!;
+		expect(f.needs).toContain('listItems');
+		expect(f.requires).toContain('ffmpeg');
+		// No ffmpeg means the list cannot be drawn — that is not a degraded
+		// listicle, it is a talking head reading numbers nobody can see.
+		expect(buildableWith(f, [])).toBe(false);
+		expect(buildableWith(f, ['ffmpeg'])).toBe(true);
+	});
+});
+
+describe('listicle bounds are one source of truth', () => {
+	it('a beat count is a hook PLUS items, so two is not a list', () => {
+		// The engine needs at least two ITEMS. Beats include the hook, so the
+		// floor is three. Offering a 2 that the engine then serves as a plain
+		// spokesperson is exactly the offered-then-degraded promise the catalog
+		// exists to prevent.
+		expect(MIN_ITEMS).toBe(3);
+		expect(MAX_ITEMS).toBeGreaterThan(MIN_ITEMS);
+	});
+
+	it('clamps to the exported range, which every caller shares', () => {
+		const units = (items?: number) =>
+			billedUnits(
+				'tts',
+				{ billing: undefined },
+				{ formatId: 'listicle', items },
+				getFormat('listicle')
+			);
+		expect(units(1)).toBe(MIN_ITEMS);
+		expect(units(999)).toBe(MAX_ITEMS);
+		expect(units(4)).toBe(4);
 	});
 });

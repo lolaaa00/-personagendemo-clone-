@@ -40,6 +40,7 @@ export const ACTIVITY_ACTIONS = {
 	'persona.avatar.generated': 'persona',
 	'persona.kit.generated': 'persona',
 	'persona.identity_kit.generated': 'persona',
+	'post.source_clip.attested': 'generation',
 	'post.generate.requested': 'generation',
 	'post.generate.completed': 'generation',
 	'post.generate.failed': 'generation',

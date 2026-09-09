@@ -374,19 +374,43 @@ describe('registryDefault — the starred row a fal pipeline mode runs on', () =
 	});
 });
 
-describe('catalog-only kinds (talking_head, llm) — no migration, no rows', () => {
-	// The `kind` column's CHECK constraint accepts exactly these four values, so
-	// production can never hold a row for the two new stages. Everything below
-	// pins the consequence: they resolve from the static catalog, on a database
-	// that knows nothing about them.
+/**
+ * Every kind the catalog offers that a registry row may NOT claim — DERIVED, not
+ * listed. A hardcoded list would silently stop covering the next catalog-only
+ * kind, and the failure mode that guards against is severe: PostgREST sends the
+ * seed as ONE statement, so a single row whose `kind` the CHECK constraint
+ * rejects fails the whole insert and leaves a first-visit user with no catalog
+ * at all. Adding a kind to ModelKind now enrols it in these tests automatically.
+ */
+const CATALOG_ONLY_KINDS = [...new Set(MODEL_CATALOG.map((m) => m.kind))].filter(
+	(k) => !isRegistryKind(k)
+);
+
+describe('catalog-only kinds — no migration, no rows', () => {
+	// The `kind` column's CHECK constraint accepts exactly four values, so
+	// production can never hold a row for these stages. Everything below pins the
+	// consequence: they resolve from the static catalog, on a database that knows
+	// nothing about them.
 	it('knows which kinds a row may claim', () => {
 		expect(isRegistryKind('tts')).toBe(true);
 		expect(isRegistryKind('video_i2v')).toBe(true);
 		expect(isRegistryKind('talking_head')).toBe(false);
 		expect(isRegistryKind('llm')).toBe(false);
+		// video-to-video ships the same way the two stages before it did: a new
+		// ModelKind, no migration, no row. If this ever flips to true it must be
+		// because a migration widened the CHECK — not because the union changed.
+		expect(isRegistryKind('video_v2v')).toBe(false);
 	});
 
-	for (const kind of ['talking_head', 'llm'] as ModelKind[]) {
+	it('covers every catalog-only kind, including the ones added after this test', () => {
+		// Guards the derivation itself: if CATALOG_ONLY_KINDS silently went empty,
+		// the loop below would vacuously pass and prove nothing.
+		expect(CATALOG_ONLY_KINDS).toEqual(
+			expect.arrayContaining(['talking_head', 'llm', 'video_v2v'])
+		);
+	});
+
+	for (const kind of CATALOG_ONLY_KINDS as ModelKind[]) {
 		it(`${kind}: an empty registry yields the full static catalog`, () => {
 			expect(effectiveOptions([], kind)).toEqual(modelsFor(kind));
 			expect(effectiveResolve([], kind, null).id).toBe(DEFAULT_MODEL[kind]);
@@ -436,8 +460,7 @@ describe('loadRegistry seeding stays inside the CHECK constraint', () => {
 		// PostgREST sends this as one statement: a single rejected row would fail
 		// the whole insert and leave a first-visit user with no catalog at all.
 		expect([...kinds].every(isRegistryKind)).toBe(true);
-		expect(kinds.has('talking_head')).toBe(false);
-		expect(kinds.has('llm')).toBe(false);
+		for (const k of CATALOG_ONLY_KINDS) expect(kinds.has(k)).toBe(false);
 		// The rest of the catalog still seeds — plus the tts and OpenRouter rows.
 		const seedable = MODEL_CATALOG.filter((m) => isRegistryKind(m.kind));
 		expect(captured.length).toBe(seedable.length + 2);

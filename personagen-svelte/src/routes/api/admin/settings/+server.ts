@@ -4,7 +4,7 @@ import { randomBytes } from 'node:crypto';
 import { requirePlatformAdmin } from '$lib/server/platform-admin';
 import { getServiceSupabase } from '$lib/server/service-supabase';
 import { getSettings, setSetting, settingsStatus, refreshSettings, SETTING_KEYS, type SettingKey } from '$lib/server/settings';
-import { creditsMode, creditsSource, activityLogEnabled, activitySource, activityPepper, creditMarkup, creditMarkupSource, personaGenerator, personaGeneratorSource, personaBackbone, personaBackboneSource } from '$lib/server/flags';
+import { creditsMode, creditsSource, activityLogEnabled, activitySource, activityPepper, creditMarkup, creditMarkupSource, videoIngestEnabled, videoIngestSource, personaGenerator, personaGeneratorSource, personaBackbone, personaBackboneSource } from '$lib/server/flags';
 import { activityStats, logActivity } from '$lib/server/activity';
 import MIGRATION_ORDER from '../../../../../supabase/migrations.json';
 import { SUPPORTED_CURRENCIES, isSupportedCurrency, formatCredits, type FxRates } from '$lib/money';
@@ -68,6 +68,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 			daily_platform_spend_usd: { stored: s.daily_platform_spend_usd },
 			signup_credits_hourly_cap: { stored: s.signup_credits_hourly_cap },
 			plans_enabled: { stored: s.plans_enabled },
+			video_ingest: { effective: videoIngestEnabled(), stored: s.video_ingest, source: videoIngestSource() },
 			persona_generator: { effective: personaGenerator(), stored: s.persona_generator, source: personaGeneratorSource() },
 			persona_backbone: { effective: personaBackbone(), stored: s.persona_backbone, source: personaBackboneSource() },
 			display_currency_default: { stored: s.display_currency_default, supported: SUPPORTED_CURRENCIES },
@@ -112,7 +113,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		if (!['off', 'shadow', 'enforce'].includes(value as string)) {
 			return json({ success: false, error: 'credits_mode must be off | shadow | enforce' }, { status: 400 });
 		}
-	} else if (key === 'activity_log' || key === 'plans_enabled') {
+	} else if (key === 'activity_log' || key === 'plans_enabled' || key === 'video_ingest') {
 		value = body.value === true || body.value === 'true' || body.value === 'on';
 	} else if (key === 'signup_credits') {
 		const n = Number(body.value);

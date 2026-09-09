@@ -49,6 +49,39 @@ export async function persistBufferToStorage(
 	return svc.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
 }
 
+/**
+ * Removes an object we just wrote, addressed by the public URL `persistToStorage`
+ * returned. Exists so a caller that must FAIL CLOSED after a successful upload —
+ * source-clip ingest, when the rights attestation cannot be recorded — is not
+ * left holding an addressable object it has decided to refuse.
+ *
+ * Best-effort and never throws: the caller is already on an error path, and a
+ * failed cleanup must not replace the real reason for the refusal. It returns
+ * whether the object went, so a caller that cares can say so.
+ *
+ * The bucket name and URL shape stay here rather than in the caller, because
+ * this module is the only place that knows either.
+ */
+export async function deleteFromStorage(svc: SupabaseClient, publicUrl: string): Promise<boolean> {
+	try {
+		const marker = `/storage/v1/object/public/${BUCKET}/`;
+		const i = publicUrl.indexOf(marker);
+		// Anything not in our bucket is not ours to delete.
+		if (i === -1) return false;
+		const path = publicUrl.slice(i + marker.length);
+		if (!path) return false;
+		const { error } = await svc.storage.from(BUCKET).remove([path]);
+		if (error) {
+			console.warn('[Storage] cleanup failed for', path, '-', error.message);
+			return false;
+		}
+		return true;
+	} catch (e) {
+		console.warn('[Storage] cleanup skipped:', (e as Error).message);
+		return false;
+	}
+}
+
 /** True once a URL already lives in our own public bucket (skip re-persisting). */
 export function isDurableBucketUrl(url: string | null | undefined): boolean {
 	return typeof url === 'string' && url.includes(`/storage/v1/object/public/${BUCKET}/`);

@@ -1,12 +1,18 @@
 <script lang="ts">
-	import { thumbUrl, restoreOriginal } from '$lib/image-url';
+	import { thumbUrl, restoreOriginal, proxiedMediaUrl } from '$lib/image-url';
 	import { fly, fade } from 'svelte/transition';
-	import { getPostDisplay, truncateError, summarizeGenError } from './postDisplay';
+	import {
+		getPostDisplay,
+		truncateError,
+		summarizeGenError,
+		refineFormatOf,
+		VIDEO_FORMAT_LABEL
+	} from './postDisplay';
 	import { platformColor } from '$lib/platforms';
 	import { OPERATION_LABELS, priceOf } from '$lib/pricing';
 	import { quote, pricingContext } from '$lib/stores/pricing.svelte';
 	import { compactCountLabel } from '$lib/plural';
-	import { resolveModel } from '$lib/models';
+	import { resolveModel, getModel } from '$lib/models';
 	import ImageLightbox from '$lib/components/ui/ImageLightbox.svelte';
 	import { dialog } from '$lib/actions/dialog';
 	import { confirmAction } from '$lib/stores/confirm.svelte';
@@ -170,16 +176,41 @@
 	// server re-rolls b-roll with resolveModel(selections.videoModel), so the
 	// number the user consents to must be that model's tier (Wan $0.10 → Veo
 	// $1.50), never a hardcoded Standard rate that can be 3x off.
+	//
+	// The branch is on the format the REFINE will run (refineFormatOf), not on the
+	// one this post was made with — the two diverge for every format the server
+	// cannot reproduce from a still alone. Branching on the stored format quoted a
+	// talking head for motion cards ($0 of providers), for narrated b-roll (clip +
+	// TTS, no lip-sync) and for performance transfers (a plain b-roll re-run).
 	let refineEstimate = $derived.by(() => {
 		if (!display) return 0;
 		const img = priceOf('fal', 'image', 'nano');
 		if (display.mediaType !== 'video') return img;
-		if (display.format === 'broll') {
-			const clip = resolveModel('video_i2v', display.generation?.selections?.videoModel);
-			return img + clip.usd;
-		}
-		return img + priceOf('fal', 'tts') + priceOf('fal', 'talking_head');
+		const refined = refineFormatOf(display.format);
+		// Re-typeset and re-assembled on this host: the still is the whole spend.
+		if (refined === 'motion_card') return img;
+		if (refined === 'spokesperson')
+			return img + priceOf('fal', 'tts') + priceOf('fal', 'talking_head');
+		// resolveModel's kind fallback is load-bearing HERE and nowhere else: the
+		// refine calls this same resolveModel('video_i2v', …), so when the recorded
+		// model is a v2v id — whose kind cannot match — the i2v default really is
+		// what will run and what will be billed. Quoting it is honest; NAMING it as
+		// the model that produced this post would not be (see modelName below).
+		const clip = resolveModel('video_i2v', display.generation?.selections?.videoModel);
+		// vo_broll re-records the narration over the fresh clip; the talking-head
+		// model is never involved.
+		return img + clip.usd + (refined === 'vo_broll' ? priceOf('fal', 'tts') : 0);
 	});
+	// A transfer refines into something OTHER than what the user is looking at:
+	// the ingested source clip is not stored on the post, so there is nothing left
+	// to re-perform. Saying so before the spend is the difference between a
+	// downgrade and a surprise.
+	let refineChangesFormat = $derived(
+		display?.mediaType === 'video' &&
+			typeof display.format === 'string' &&
+			display.format.startsWith('v2v_') &&
+			refineFormatOf(display.format) !== 'spokesperson'
+	);
 	// The estimate above is PROVIDER cost; the wallet debits it at the platform
 	// markup. Consent has to be asked for the number that will actually be taken,
 	// so every render of it goes through quote() — the raw figure never reaches
@@ -338,6 +369,13 @@
 		const im = gen?.images ?? {};
 		const list: { label: string; url: string }[] = [];
 		if (im.character_ref) list.push({ label: 'Character', url: im.character_ref });
+		// A transfer is driven off a FULL-BODY reference, never the pinned bust crop
+		// (from a crop the model invents a lower body). It is a different image from
+		// `character_ref` and it is the one that actually shaped the output, so a
+		// panel that showed only the pin would be naming the wrong input.
+		const fullBody = (gen as any)?.v2v?.reference;
+		if (typeof fullBody === 'string' && fullBody && fullBody !== im.character_ref)
+			list.push({ label: 'Full-body reference', url: fullBody });
 		if (im.product_photo) list.push({ label: 'Product', url: im.product_photo });
 		for (const u of im.reference_kit ?? []) if (u) list.push({ label: 'Reference', url: u });
 		if (!list.length && obs?.productPhoto)
@@ -345,6 +383,47 @@
 		return list;
 	});
 	let genSelections = $derived(gen?.selections ?? null);
+	/**
+	 * Names a RECORDED model id — whatever kind it is.
+	 *
+	 * By id only. resolveModel(kind, id) is the wrong primitive for a record: it
+	 * falls back to DEFAULT_MODEL[kind] the instant the id's kind doesn't match,
+	 * so the moment a second video kind existed (video_v2v) every transfer read
+	 * back through it as "Kling O3 Standard" — a model that never touched the
+	 * post, quoted at a flat per-call price for a stage billed per second. A model
+	 * the catalog has since dropped falls back to its raw id: less readable, still
+	 * true, and never another model's name.
+	 */
+	function modelName(id: unknown): string | null {
+		if (typeof id !== 'string' || !id) return null;
+		return getModel(id)?.label ?? id;
+	}
+	// The transfer record, present only on a run that actually reached the v2v
+	// provider (a run that fell back to i2v must not carry it). Read defensively:
+	// every post generated before this field existed has none.
+	let v2v = $derived.by(() => {
+		const v = (gen as any)?.v2v;
+		return v && typeof v === 'object' ? (v as Record<string, any>) : null;
+	});
+	// The per-second BASIS behind the video row, stated as the multiplication that
+	// produced it. Without it a $0.90 line against a $0.06 catalog price reads as
+	// a pricing bug; with it the charge is auditable from the post alone. Both
+	// numbers have to be recorded — a rate with no duration explains nothing, and
+	// inventing the missing half is exactly the guess this panel exists to avoid.
+	let v2vBasis = $derived.by(() => {
+		const secs = Number(v2v?.billed_seconds);
+		const rate = Number(v2v?.usd_per_second);
+		if (!Number.isFinite(secs) || !Number.isFinite(rate) || secs <= 0 || rate <= 0) return null;
+		return `${secs}s × $${rate}/s at cost`;
+	});
+	// Same /media proxy every other asset on this drawer goes through — the raw
+	// storage host is un-CDN'd, so a direct link is the slow path on a file that
+	// is, by definition, a video.
+	let v2vSourceUrl = $derived(
+		typeof v2v?.source_video === 'string' && v2v.source_video
+			? ((proxiedMediaUrl(v2v.source_video) as string | null) ?? v2v.source_video)
+			: null
+	);
 	// Cost by provider — the stored breakdown, shown only when no per-aspect data.
 	let costByProvider = $derived.by(() => {
 		const bp = display?.costBreakdown?.byProvider;
@@ -363,18 +442,14 @@
 		if (!display) return '';
 		const parts: string[] = [];
 		if (display.cinematic) parts.push('cinematic (multi-shot)', 'video');
-		else if (display.mediaType === 'video')
-			parts.push(
-				display.format === 'spokesperson'
-					? 'spokesperson (talking head)'
-					: display.format === 'vo_broll'
-						? 'narrated product motion'
-						: display.format === 'motion_card'
-							? 'motion text card'
-							: 'b-roll clip',
-				'video'
-			);
-		else
+		else if (display.mediaType === 'video') {
+			// A format token this build has no name for is NOT b-roll — that was the
+			// old fallback, and it is why performance transfers announced themselves
+			// as b-roll clips. Unnamed says only "video" rather than guessing.
+			const named = VIDEO_FORMAT_LABEL[display.format ?? 'broll'];
+			if (named) parts.push(named);
+			parts.push('video');
+		} else
 			parts.push(display.surface === 'typographic' ? 'typographic card' : 'photo still', 'image');
 		if (display.mediaGenerated) parts.push('generated');
 		return parts.join(' · ');
@@ -785,6 +860,14 @@
 						pouch — never opens, squeezes or pours it"), then regenerate. The caption, schedule,
 						face, product reference and voice all stay the same.
 					</p>
+					{#if refineChangesFormat}
+						<p class="refine-caveat">
+							This post was a performance transfer, and the source clip it re-performed isn't stored
+							on it — so a regenerate re-shoots the still and animates <em>that</em> instead. The result
+							is a b-roll clip, not another transfer. To keep the transfer, generate a fresh one from
+							the composer with the source file.
+						</p>
+					{/if}
 					<label class="refine-field">
 						<span class="drawer-block-label">Visual prompt</span>
 						<textarea
@@ -1163,6 +1246,56 @@
 						</p>
 					{/if}
 
+					{#if v2v}
+						<!-- Only a run that actually reached the v2v provider records this, so
+						     its presence is itself the proof the transfer happened rather than
+						     falling back to i2v. Every field is optional: render what was
+						     captured, claim nothing that wasn't. -->
+						<div>
+							<span class="drawer-block-label"
+								><svg
+									width="13"
+									height="13"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									aria-hidden="true"
+									><rect x="2" y="4" width="20" height="16" rx="2" /><path
+										d="M2 9h20M7 4v5M17 4v5M10 13l4 3-4 3z"
+									/></svg
+								> Performance transfer</span
+							>
+							<ul class="gen-sel">
+								{#if v2v.mode}
+									<li>
+										<span>Mode</span>{v2v.mode === 'move'
+											? 'Motion only — the persona stayed in their own scene'
+											: 'Replace — the source clip’s scene, framing and timing were kept'}
+									</li>
+								{/if}
+								{#if v2vBasis}
+									<!-- This stage is billed by output SECOND. The row in the table
+									     above is the money; this is the arithmetic behind it, so a
+									     per-second charge is auditable instead of merely asserted. -->
+									<li><span>Billed</span>{v2vBasis}</li>
+								{/if}
+								{#if v2v.resolution}<li><span>Resolution</span>{v2v.resolution}</li>{/if}
+								{#if v2vSourceUrl}
+									<li>
+										<span>Source clip</span><a
+											href={v2vSourceUrl}
+											target="_blank"
+											rel="noopener noreferrer">the clip this re-performed</a
+										>
+									</li>
+								{/if}
+							</ul>
+						</div>
+					{/if}
+
 					{#if genSelections}
 						<div>
 							<span class="drawer-block-label"
@@ -1189,7 +1322,15 @@
 								{/if}
 								{#if genSelections.brand}<li><span>Brand</span>{genSelections.brand}</li>{/if}
 								{#if genSelections.videoModel}
-									<li><span>Video model</span>{genSelections.videoModel}</li>
+									<li><span>Video model</span>{modelName(genSelections.videoModel)}</li>
+								{/if}
+								{#if genSelections.videoModelRequested}
+									<!-- Recorded ONLY when it differs from what ran: a failover, or a
+									     transfer that dropped to i2v. Hiding it is how a substitution
+									     becomes invisible — the exact failure this panel exists for. -->
+									<li>
+										<span>Requested</span>{modelName(genSelections.videoModelRequested)} — not what ran
+									</li>
 								{/if}
 								{#if genSelections.provider}<li>
 										<span>Provider</span>{genSelections.provider}
@@ -1639,6 +1780,17 @@
 		font-size: 0.72rem;
 		line-height: 1.5;
 		color: var(--text-muted);
+	}
+	/* Warning-toned, not muted: this one says the regenerate will deliver a
+	   different FORMAT, which is the kind of thing a user must not skim past. */
+	.refine-caveat {
+		margin: 0;
+		padding: 0.5rem 0.6rem;
+		border-radius: 6px;
+		background: var(--warning-soft);
+		color: var(--warning-text);
+		font-size: 0.72rem;
+		line-height: 1.5;
 	}
 	.refine-field {
 		display: flex;

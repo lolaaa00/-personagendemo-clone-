@@ -4,9 +4,13 @@ import { mkdtemp, writeFile, readFile, copyFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { env } from '$env/dynamic/private';
+// The quote and the ingest gate must clamp to the SAME clip length; $lib/formats
+// owns that number because it is the module the client and server already share.
+import { MAX_SECONDS, MIN_SECONDS } from '$lib/formats';
 
 /**
- * Burns a hook caption + "AI GENERATED" badge onto a generated video using ffmpeg.
+ * Burns a hook caption, an optional timed caption track, and an "AI GENERATED"
+ * badge onto a generated video using ffmpeg.
  *
  * Robust by design: if ffmpeg or a usable font isn't on the host, it returns null
  * and the caller keeps the un-captioned video — captions are an enhancement, never
@@ -27,6 +31,34 @@ let ffmpegProbe: Promise<boolean> | null = null;
 
 function ffmpegBin(): string {
 	return env.FFMPEG_PATH || 'ffmpeg';
+}
+
+/**
+ * Every asset download in this module goes through here, with a hard
+ * PER-REQUEST deadline.
+ *
+ * Without one, a single hung socket stalls the caller forever: these run inside
+ * scheduler ticks and detached generation tasks, which have no outer timeout of
+ * their own, so a provider that accepts a connection and then never sends a byte
+ * pins the task until the process restarts. Failing at 120s costs one clip;
+ * hanging costs the queue. (content/generate.ts makes the same argument for its
+ * own provider calls — this is that rule applied to the media fetches.)
+ *
+ * NEVER rename this to `fetch`. A module-level `const fetch` shadows the global,
+ * and once the SSR bundle hoists modules into one scope another module's call to
+ * the *global* fetch can bind to this local instead and recurse until the stack
+ * blows — a failure already suffered once in this codebase, documented at
+ * genFetch in content/generate.ts.
+ */
+const MEDIA_FETCH_TIMEOUT_MS = 120_000;
+function mediaFetch(url: string, init?: RequestInit): Promise<Response> {
+	return fetch(url, {
+		...init,
+		// Caller headers win over the default UA, and the deadline is not
+		// overridable — a call that opts out of it is the bug this exists to stop.
+		headers: { 'User-Agent': 'Mozilla/5.0', ...(init?.headers ?? {}) },
+		signal: AbortSignal.timeout(MEDIA_FETCH_TIMEOUT_MS)
+	});
 }
 
 export async function hasFfmpeg(): Promise<boolean> {
@@ -153,9 +185,7 @@ export async function optimizeForWeb(
 		dir = await mkdtemp(join(tmpdir(), 'ugc-fs-'));
 		const inName = 'in.mp4';
 
-		const res = await fetch(videoUrl, {
-			headers: { 'User-Agent': 'Mozilla/5.0', ...(extraHeaders || {}) }
-		});
+		const res = await mediaFetch(videoUrl, { headers: extraHeaders });
 		if (!res.ok) return null;
 		const buf = Buffer.from(await res.arrayBuffer());
 		if (buf.length === 0) return null;
@@ -204,7 +234,7 @@ export async function remuxFaststart(videoUrl: string): Promise<Buffer | null> {
 		const inName = 'in.mp4';
 		const outName = 'out.mp4';
 
-		const res = await fetch(videoUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+		const res = await mediaFetch(videoUrl);
 		if (!res.ok) return null;
 		const buf = Buffer.from(await res.arrayBuffer());
 		if (buf.length === 0) return null;
@@ -220,21 +250,210 @@ export async function remuxFaststart(videoUrl: string): Promise<Buffer | null> {
 	}
 }
 
+/** The font is always copied to this fixed name — see the module header. */
+const CAPTION_FONT_NAME = 'font.ttf';
+/** The hook's temp file. Fixed name; nothing user-supplied reaches a path. */
+const HOOK_FILE_NAME = 'hook.txt';
+
 /**
- * Returns captioned mp4 bytes, or null if captions couldn't be applied
- * (ffmpeg/font missing, or any failure — caller keeps the original).
+ * One line of the timed track: a label that appears at `at` and, unless `until`
+ * ends it, stays for the rest of the clip.
+ *
+ * The omitted-`until` case is the whole reason this exists. The numbered
+ * listicle — the format that outperforms everything else in short form — works
+ * because the items ACCUMULATE: item 3 lands while 1 and 2 are still on screen,
+ * so the viewer sees a list being built rather than a slideshow of single lines.
+ * A caption that always disappears cannot express that, which is why "no end" is
+ * the default rather than something a caller has to know to ask for.
  */
-export async function burnCaptions(
-	videoUrl: string,
-	opts: { badge?: boolean; hook?: string }
-): Promise<Buffer | null> {
-	const wantBadge = opts.badge === true;
+export interface TimedCaption {
+	/** One short label, e.g. "1. Sunrise Stare". */
+	text: string;
+	/** Seconds from clip start when it appears. */
+	at: number;
+	/** Seconds when it disappears. Omitted = stays to the end, so a list ACCUMULATES. */
+	until?: number;
+}
+
+export interface BurnCaptionsOptions {
+	badge?: boolean;
+	hook?: string;
+	/** Optional timed track. Omit it and the render is byte-identical to before. */
+	track?: TimedCaption[];
+}
+
+/**
+ * What one caption render needs: the temp text files to write, and the filter
+ * chain that reads them. Separated because the filters are pure (and therefore
+ * testable without ffmpeg or a media file) while the files are I/O.
+ */
+export interface CaptionPlan {
+	/** Written into the ffmpeg cwd before the run, in this order. */
+	files: Array<{ name: string; text: string }>;
+	/** drawbox/drawtext filters, in draw order. Empty = nothing was requested. */
+	filters: string[];
+}
+
+/**
+ * Type scale for a track item, as a divisor of the DELIVERY frame width: 720/15
+ * = 48px. Derived rather than hardcoded so the block survives a change to
+ * WEB_MAX_WIDTH — a fixed pixel size that is a third of the frame at 720 is a
+ * caption at 2160.
+ *
+ * 48 is not a taste call. An earlier build set these at 31px against a 44px left
+ * margin and the frames read as a footnote under the video — the eye went to the
+ * subject and never to the list, which is the one thing the format exists to
+ * deliver. The items ARE the content here (the hook is the framing), so they are
+ * deliberately larger than the hook's 46, not smaller.
+ */
+const TRACK_FONT_DIVISOR = 15;
+/**
+ * Row pitch as a multiple of the item's own font size. 1.4 leaves a descender's
+ * worth of air between rows: at 1.0 the heavy outlines of adjacent rows touch
+ * and the block reads as a solid slab.
+ */
+const TRACK_ROW_PITCH = 1.4;
+/** Clearance between the lowest row and the hook line, in item font sizes. */
+const TRACK_HOOK_GAP = 0.5;
+
+/**
+ * How many items are ever drawn. A track is model-generated, so "how long is
+ * it" is not a number we control: the cap is what stops a hallucinated 40-item
+ * list from either running off the top of the frame or building a filtergraph
+ * with 40 drawtext stages (each of which is a full-frame pass per frame). Six
+ * rows is also about where a listicle stops being readable in a feed.
+ */
+export const MAX_TIMED_CAPTIONS = 6;
+
+/**
+ * Per-item character cap. drawtext does NOT wrap, so an over-long label is drawn
+ * as one line running off both edges of the frame; truncating at least keeps the
+ * beginning of it legible. Shorter than the hook's 90 because these are labels.
+ */
+const TRACK_MAX_CHARS = 60;
+
+/**
+ * Seconds as a filter-safe literal: clamped non-negative (a negative `t` bound
+ * makes `between` never true) and rounded to milliseconds so a float artefact
+ * like 1.2000000000000002 doesn't end up in the expression.
+ */
+function captionSeconds(n: unknown): number {
+	const v = typeof n === 'number' ? n : Number(n);
+	if (!Number.isFinite(v) || v <= 0) return 0;
+	return Math.round(v * 1000) / 1000;
+}
+
+/**
+ * Builds the caption filter chain and the temp files it reads.
+ *
+ * Pure and exported for the same reason buildMotionArgs is: every caption bug
+ * this app has shipped was a wrong filter string, and asserting on the string
+ * costs nothing while installing ffmpeg in CI costs a platform.
+ *
+ * `frameWidth` is the DELIVERY width the pixel coordinates will land on — the
+ * scale filter runs first (see burnCaptions), so it is min(WEB_MAX_WIDTH, iw)
+ * and WEB_MAX_WIDTH is the right default for anything at or above the cap.
+ */
+export function buildCaptionPlan(
+	opts: BurnCaptionsOptions,
+	frameWidth: number = WEB_MAX_WIDTH
+): CaptionPlan {
+	const files: CaptionPlan['files'] = [];
+	const filters: string[] = [];
+
+	if (opts.badge === true) {
+		// "AI GENERATED" badge: translucent box + text, top-left
+		filters.push('drawbox=x=22:y=26:w=196:h=46:color=black@0.55:t=fill');
+		filters.push(
+			`drawtext=fontfile=${CAPTION_FONT_NAME}:text='${escDrawtext('AI GENERATED')}':fontcolor=white:fontsize=22:x=38:y=38`
+		);
+	}
+
 	const hookText = (opts.hook || '')
 		.replace(/[\r\n]+/g, ' ')
 		.trim()
 		.slice(0, 90);
+	if (hookText) {
+		files.push({ name: HOOK_FILE_NAME, text: hookText });
+		filters.push(
+			`drawtext=fontfile=${CAPTION_FONT_NAME}:textfile=${HOOK_FILE_NAME}:fontcolor=white:fontsize=46:borderw=4:bordercolor=black@0.9:x=(w-text_w)/2:y=h-(h/5):line_spacing=8`
+		);
+	}
+
+	// Normalise BEFORE laying out: the row maths is driven by how many items
+	// actually get drawn, so a blank entry in the middle of a model's list must
+	// not reserve a row and leave a hole in the stack.
+	const items = (Array.isArray(opts.track) ? opts.track : [])
+		.map((c) => ({
+			// Newlines are stripped exactly as the hook strips them, and for a
+			// harder reason: a literal newline inside a drawtext TEXTFILE is drawn
+			// as a stray glyph box mid-line on a real render, not as a line break.
+			text: String(c?.text ?? '')
+				.replace(/[\r\n]+/g, ' ')
+				.trim()
+				.slice(0, TRACK_MAX_CHARS),
+			at: captionSeconds(c?.at),
+			until: c?.until
+		}))
+		.filter((c) => c.text.length > 0)
+		// Order is the CALLER's, deliberately not sorted by `at`: the items are
+		// numbered ("1.", "2.") and sorting would let a mistimed entry print its
+		// number in the wrong row, which looks like our bug rather than theirs.
+		.slice(0, MAX_TIMED_CAPTIONS);
+
+	const fontSize = Math.max(12, Math.round(frameWidth / TRACK_FONT_DIVISOR));
+	const rowPitch = Math.round(fontSize * TRACK_ROW_PITCH);
+	const hookGap = Math.round(fontSize * TRACK_HOOK_GAP);
+
+	items.forEach((item, i) => {
+		// A per-item file, never interpolated text: the labels are model output,
+		// so they carry whatever ':' , '\' or quote the model felt like emitting,
+		// and textfile is the one drawtext input with no escaping surface at all.
+		const name = `cap${i}.txt`;
+		files.push({ name, text: item.text });
+
+		// The block is anchored to the hook line and grows UPWARD, so row N-1 is
+		// always the lowest. Top-anchoring is the obvious alternative and it
+		// overflows: six 67px rows started at 2h/3 run off the bottom of a 1280-tall
+		// delivery frame. Anchoring at the bottom means the row a viewer reads first
+		// simply starts higher on a longer list, and nothing can ever leave frame.
+		// The offset is a function of the item's INDEX, so no two rows can collide
+		// however many there are.
+		const offset = hookGap + (items.length - i) * rowPitch;
+
+		// Quoted, not comma-escaped: inside '' ffmpeg takes every character
+		// literally, so the `\,` form used by WEB_SCALE_FILTER would put a literal
+		// backslash into the expression and fail to parse. Quoting is what keeps
+		// the comma from splitting the filter chain.
+		const enable =
+			typeof item.until === 'number' &&
+			Number.isFinite(item.until) &&
+			captionSeconds(item.until) > item.at
+				? `between(t,${item.at},${captionSeconds(item.until)})`
+				: `gte(t,${item.at})`;
+
+		filters.push(
+			`drawtext=fontfile=${CAPTION_FONT_NAME}:textfile=${name}:fontcolor=white:fontsize=${fontSize}:borderw=6:bordercolor=black@0.92:x=(w-text_w)/2:y=h-(h/5)-${offset}:enable='${enable}'`
+		);
+	});
+
+	return { files, filters };
+}
+
+/**
+ * Returns captioned mp4 bytes, or null if captions couldn't be applied
+ * (ffmpeg/font missing, or any failure — caller keeps the original).
+ *
+ * `hook` and `track` compose: a listicle is a framing line plus the items that
+ * land under it as they are spoken.
+ */
+export async function burnCaptions(
+	videoUrl: string,
+	opts: BurnCaptionsOptions
+): Promise<Buffer | null> {
+	const plan = buildCaptionPlan(opts);
 	// Nothing requested → don't re-encode; the caller keeps the clean original.
-	if (!wantBadge && !hookText) return null;
+	if (plan.filters.length === 0) return null;
 	if (!(await hasFfmpeg())) return null;
 	const font = findFont();
 	if (!font) return null;
@@ -244,34 +463,22 @@ export async function burnCaptions(
 		dir = await mkdtemp(join(tmpdir(), 'ugc-'));
 		const inName = 'in.mp4';
 		const outName = 'out.mp4';
-		const fontName = 'font.ttf';
-		const hookName = 'hook.txt';
 
-		const res = await fetch(videoUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+		const res = await mediaFetch(videoUrl);
 		if (!res.ok) return null;
 		await writeFile(join(dir, inName), Buffer.from(await res.arrayBuffer()));
-		await copyFile(font, join(dir, fontName));
+		await copyFile(font, join(dir, CAPTION_FONT_NAME));
 
-		const filters: string[] = [];
-		if (wantBadge) {
-			// "AI GENERATED" badge: translucent box + text, top-left
-			filters.push('drawbox=x=22:y=26:w=196:h=46:color=black@0.55:t=fill');
-			filters.push(
-				`drawtext=fontfile=${fontName}:text='${escDrawtext('AI GENERATED')}':fontcolor=white:fontsize=22:x=38:y=38`
-			);
-		}
-		if (hookText) {
-			await writeFile(join(dir, hookName), hookText, 'utf8');
-			filters.push(
-				`drawtext=fontfile=${fontName}:textfile=${hookName}:fontcolor=white:fontsize=46:borderw=4:bordercolor=black@0.9:x=(w-text_w)/2:y=h-(h/5):line_spacing=8`
-			);
-		}
+		for (const f of plan.files) await writeFile(join(dir, f.name), f.text, 'utf8');
 
 		// The overlay pass re-encodes anyway, so encode straight to delivery
 		// settings (capped width + CRF) — a full-bitrate captioned master would
 		// undo everything optimizeForWeb buys. Scale runs FIRST so the drawtext
 		// pixel coordinates land on the final frame size.
-		await runFfmpeg(['-y', '-i', inName, ...webEncodeArgs(filters), '-c:a', 'copy', outName], dir);
+		await runFfmpeg(
+			['-y', '-i', inName, ...webEncodeArgs(plan.filters), '-c:a', 'copy', outName],
+			dir
+		);
 		return await readFile(join(dir, outName));
 	} catch (e) {
 		console.warn('[Video] caption burn-in skipped:', (e as Error).message);
@@ -477,7 +684,7 @@ export async function stillToMotion(
 		const inName = 'still.img';
 		const outName = 'out.mp4';
 
-		const res = await fetch(imageUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+		const res = await mediaFetch(imageUrl);
 		if (!res.ok) return null;
 		const buf = Buffer.from(await res.arrayBuffer());
 		if (buf.length === 0) return null;
@@ -648,12 +855,15 @@ export function buildVoiceoverArgs(
  * encode.
  */
 async function probeMedia(
-	dir: string,
+	dir: string | undefined,
 	fileName: string
 ): Promise<{ hasAudio: boolean; seconds: number | null }> {
 	const text = await new Promise<string>((resolve) => {
 		try {
-			const p = spawn(ffmpegBin(), ['-hide_banner', '-i', fileName], { cwd: dir });
+			// `dir` is optional so a caller holding an absolute path or a URL — as
+			// probeAudioSeconds does — need not invent a temp directory just to
+			// satisfy a cwd it will never use.
+			const p = spawn(ffmpegBin(), ['-hide_banner', '-i', fileName], dir ? { cwd: dir } : {});
 			let err = '';
 			p.stderr.on('data', (d) => (err += d.toString()));
 			p.on('error', () => resolve(''));
@@ -703,12 +913,12 @@ export async function muxVoiceover(
 
 		// Fetched one at a time, not under Promise.all: when both fetches reject,
 		// Promise.all reports the first and leaves the second unhandled.
-		const vRes = await fetch(videoUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+		const vRes = await mediaFetch(videoUrl);
 		if (!vRes.ok) return null;
 		const vBuf = Buffer.from(await vRes.arrayBuffer());
 		if (vBuf.length === 0) return null;
 
-		const aRes = await fetch(audioUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+		const aRes = await mediaFetch(audioUrl);
 		if (!aRes.ok) return null;
 		const aBuf = Buffer.from(await aRes.arrayBuffer());
 		if (aBuf.length === 0) return null;
@@ -735,4 +945,533 @@ export async function muxVoiceover(
 	} finally {
 		if (dir) await rm(dir, { recursive: true, force: true }).catch(() => {});
 	}
+}
+
+// ── Audio assembly ───────────────────────────────────────────────────────────
+// A format that must SHOW something at the moment it is SAID cannot guess where
+// that moment is; it has to speak one clip per beat and measure them. That
+// leaves a caller holding N audio files it needs as one track, plus the far more
+// valuable question "when does beat 3 start?". Both belong here, because the
+// answer is a temp dir and an ffmpeg decode, and this module is the only place
+// in the app that is allowed to know that — the listicle's first implementation
+// pulled node:fs/os/path into content/generate.ts to do it by hand.
+
+/**
+ * Length of an AUDIO file in seconds — the measurement `probeVideo` structurally
+ * cannot give.
+ *
+ * `probeVideo` selects the first stream with `codec_type === 'video'` and
+ * returns null without one, so it reports "unreadable" for every speech-only
+ * file handed to it. That is right for its own caller (a clip we cannot see is
+ * not a clip we can bill for) and useless to anyone measuring narration.
+ *
+ * Deliberately narrower than exporting the internal `probeMedia`: that one takes
+ * a directory plus a RELATIVE name — a shape only the temp-dir helpers in this
+ * file produce — and answers a second question (`hasAudio`) that exists purely
+ * to stop a filtergraph naming a stream the input lacks. This signature instead
+ * matches `probeVideo`: path/URL or Buffer in, one number or null out.
+ *
+ * Null when ffmpeg is missing, the bytes are unreadable, or the file carries no
+ * audio stream at all. That last case is deliberate: a container duration for a
+ * file with nothing to hear is not a length anything here should time against.
+ */
+export async function probeAudioSeconds(input: string | Buffer): Promise<number | null> {
+	if (!(await hasFfmpeg())) return null;
+
+	let dir: string | null = null;
+	try {
+		// Extension-free, as in stillToMotion: ffmpeg detects the container by
+		// content, and a guessed extension is the only thing that could confuse it.
+		const target = Buffer.isBuffer(input) ? 'in.audio' : input;
+		if (Buffer.isBuffer(input)) {
+			if (input.length === 0) return null;
+			dir = await mkdtemp(join(tmpdir(), 'ugc-aprobe-'));
+			await writeFile(join(dir, target), input);
+		} else if (!input) return null;
+
+		const { hasAudio, seconds } = await probeMedia(dir ?? undefined, target);
+		return hasAudio ? seconds : null;
+	} catch (e) {
+		console.warn('[Video] audio probe failed:', (e as Error).message);
+		return null;
+	} finally {
+		if (dir) await rm(dir, { recursive: true, force: true }).catch(() => {});
+	}
+}
+
+/**
+ * The intermediate every join passes through: signed 16-bit little-endian mono
+ * at 24 kHz.
+ *
+ * Raw PCM is what makes the returned timings EXACT rather than estimated —
+ * length is bytes / (rate x 2), with no container header to skip, no VBR frame
+ * table to trust and no second spawn to pay for. Nothing else available here is
+ * good enough: an mp3's own header duration is a guess the encoder wrote, and
+ * probeAudioSeconds above reads ffmpeg's `Duration:` line, which is rounded to
+ * centiseconds. A hundredth of a second per beat compounds down a list until the
+ * last reveal is visibly late.
+ */
+const CONCAT_PCM_RATE = 24000;
+const CONCAT_PCM_BYTES_PER_SEC = CONCAT_PCM_RATE * 2;
+/**
+ * Silence between beats. Long enough to read as a deliberate break before the
+ * next item, short enough that a five-item list does not gain two seconds of
+ * dead air it is paying lip-sync render time for.
+ */
+const DEFAULT_CONCAT_GAP_SEC = 0.35;
+/** Above this a "gap" is a bug in the caller, not a pause. */
+const MAX_CONCAT_GAP_SEC = 2;
+
+export interface ConcatAudioOptions {
+	/**
+	 * Silence inserted BETWEEN segments — never before the first or after the
+	 * last, so the track starts on the word. Clamped to 0–2s, rounded to whole
+	 * samples, defaults to 0.35s.
+	 */
+	gapSeconds?: number;
+}
+
+/** The joined track and, inseparably, where everything in it landed. */
+export interface ConcatenatedAudio {
+	/** The encoded m4a. */
+	bytes: Buffer;
+	/** Each segment's own length in seconds, in input order. */
+	seconds: number[];
+	/**
+	 * The offset at which each segment BEGINS in the joined track — the thing a
+	 * caption track is timed against, and the reason a caller asked for a join
+	 * instead of a concat filter. Returned WITH the bytes because only this
+	 * function knows where the gaps went; handing back audio alone would send the
+	 * caller off to measure a file we just measured, worse.
+	 */
+	startsAt: number[];
+}
+
+/**
+ * The timeline, from decoded byte counts. Pure and exported because this is the
+ * arithmetic that is easy to get wrong and impossible to SEE wrong: the gap
+ * belongs before every segment but the first, and it has to reach the cursor
+ * BEFORE that segment's start is recorded. Add it after and every start from the
+ * second on is one gap early, compounding down the list — which presents as
+ * "the captions drift", not as an off-by-one.
+ */
+export function planAudioTimeline(
+	pcmByteLengths: number[],
+	gapSeconds?: number
+): { gapBytes: number; seconds: number[]; startsAt: number[] } {
+	const requested = Number.isFinite(gapSeconds as number)
+		? (gapSeconds as number)
+		: DEFAULT_CONCAT_GAP_SEC;
+	// Whole SAMPLES, not bytes. An odd byte count shears every following sample
+	// by one byte and turns the remainder of the track into white noise.
+	const gapBytes = Math.round(clamp(requested, 0, MAX_CONCAT_GAP_SEC) * CONCAT_PCM_RATE) * 2;
+	const seconds: number[] = [];
+	const startsAt: number[] = [];
+	let cursor = 0;
+	for (let i = 0; i < pcmByteLengths.length; i++) {
+		if (i > 0) cursor += gapBytes / CONCAT_PCM_BYTES_PER_SEC;
+		startsAt.push(cursor);
+		const s = Math.max(0, pcmByteLengths[i] ?? 0) / CONCAT_PCM_BYTES_PER_SEC;
+		seconds.push(s);
+		cursor += s;
+	}
+	return { gapBytes, seconds, startsAt };
+}
+
+/**
+ * Decode one segment to the raw intermediate. `-vn` is not decorative: several
+ * TTS providers embed cover art, and a video stream reaching a headerless s16le
+ * muxer is written straight into the sample data as noise.
+ */
+export function buildPcmDecodeArgs(inName: string, outName: string): string[] {
+	return [
+		'-y',
+		'-i',
+		inName,
+		'-vn',
+		'-ac',
+		'1',
+		'-ar',
+		String(CONCAT_PCM_RATE),
+		'-f',
+		's16le',
+		outName
+	];
+}
+
+/**
+ * Encode the joined PCM.
+ *
+ * AAC through ffmpeg's NATIVE encoder, never libmp3lame: mp3 encoding needs an
+ * external library our Alpine runtime is not guaranteed to carry, so an mp3
+ * output fails on the deploy host and nowhere a developer would ever see it.
+ *
+ * The `-f s16le -ar -ac` triple must come BEFORE `-i`. Raw PCM has no header, so
+ * ffmpeg cannot infer any of it and falls back to 44.1 kHz stereo — which does
+ * not error, it just plays the narration fast, chipmunked, and out of sync with
+ * every offset we measured.
+ */
+export function buildPcmEncodeArgs(inName: string, outName: string): string[] {
+	return [
+		'-y',
+		'-f',
+		's16le',
+		'-ar',
+		String(CONCAT_PCM_RATE),
+		'-ac',
+		'1',
+		'-i',
+		inName,
+		'-c:a',
+		'aac',
+		'-b:a',
+		'128k',
+		outName
+	];
+}
+
+/**
+ * Fetches audio segments, joins them with a controlled silence gap, and returns
+ * the encoded bytes together with each segment's length and start offset.
+ *
+ * Returns null on ANY failure and never throws — no ffmpeg, an unfetchable or
+ * empty segment, a decode that produced nothing. The caller is expected to fall
+ * back to whatever un-segmented audio it can still produce, because a talking
+ * head with no reveals ships and a thrown error does not.
+ */
+export async function concatAudio(
+	urls: string[],
+	opts: ConcatAudioOptions = {}
+): Promise<ConcatenatedAudio | null> {
+	if (urls.length === 0) return null;
+	if (!(await hasFfmpeg())) return null;
+
+	let dir: string | null = null;
+	try {
+		dir = await mkdtemp(join(tmpdir(), 'ugc-concat-'));
+		const pcms: Buffer[] = [];
+		for (let i = 0; i < urls.length; i++) {
+			// One at a time, not under Promise.all: when several fetches reject,
+			// Promise.all reports the first and leaves the rest unhandled.
+			const res = await mediaFetch(urls[i]);
+			if (!res.ok) return null;
+			const buf = Buffer.from(await res.arrayBuffer());
+			if (buf.length === 0) return null;
+			const inName = `seg${i}.audio`;
+			const pcmName = `seg${i}.pcm`;
+			await writeFile(join(dir, inName), buf);
+			await runFfmpeg(buildPcmDecodeArgs(inName, pcmName), dir);
+			const pcm = await readFile(join(dir, pcmName));
+			// A zero-length decode is a hard stop, not a segment to skip: dropping it
+			// would remove words from the middle of the track while every LATER start
+			// stayed where it was, so the whole tail fires against speech that moved.
+			if (pcm.length === 0) return null;
+			pcms.push(pcm);
+		}
+
+		const plan = planAudioTimeline(
+			pcms.map((p) => p.length),
+			opts.gapSeconds
+		);
+		const gap = Buffer.alloc(plan.gapBytes);
+		const joined: Buffer[] = [];
+		for (let i = 0; i < pcms.length; i++) {
+			if (i > 0) joined.push(gap);
+			joined.push(pcms[i]);
+		}
+
+		const joinedName = 'joined.pcm';
+		const outName = 'out.m4a';
+		await writeFile(join(dir, joinedName), Buffer.concat(joined));
+		await runFfmpeg(buildPcmEncodeArgs(joinedName, outName), dir);
+		const bytes = await readFile(join(dir, outName));
+		if (bytes.length === 0) return null;
+		return { bytes, seconds: plan.seconds, startsAt: plan.startsAt };
+	} catch (e) {
+		console.warn('[Video] audio concat skipped:', (e as Error).message);
+		return null;
+	} finally {
+		if (dir) await rm(dir, { recursive: true, force: true }).catch(() => {});
+	}
+}
+
+// ── Source-clip ingest ───────────────────────────────────────────────────────
+// The video-to-video formats (see $lib/formats: 'reel-remake', 'motion-transfer')
+// re-perform a clip the USER supplies. fal's wan animate models bill per output
+// SECOND, so the clip's length is not metadata — it is the multiplier on the
+// bill. Everything below exists so that a clip is never stored, quoted or sent
+// without a measured duration behind it.
+
+/**
+ * ffprobe is a SEPARATE executable from ffmpeg, so a host that needed
+ * FFMPEG_PATH would break here if we just spawned a bare 'ffprobe'. Order:
+ * explicit FFPROBE_PATH, else the sibling of the configured ffmpeg (they ship
+ * in the same directory in every distribution and every static build), else the
+ * bare name off PATH.
+ *
+ * Exported so the unit suite can pin the derivation — the sibling rule is the
+ * only part of this file that can silently point at a binary that isn't there.
+ */
+export function ffprobeBin(): string {
+	if (env.FFPROBE_PATH) return env.FFPROBE_PATH;
+	const configured = env.FFMPEG_PATH;
+	if (configured) {
+		// Only the trailing basename is rewritten: a path like
+		// /opt/ffmpeg-builds/ffmpeg/bin/ffmpeg must not have its DIRECTORY renamed.
+		const m = /^(.*[\\/])?ffmpeg(\.exe)?$/i.exec(configured);
+		if (m) return `${m[1] ?? ''}ffprobe${m[2] ?? ''}`;
+	}
+	return 'ffprobe';
+}
+
+/**
+ * Same memoised-PROMISE pattern as hasFfmpeg, for the same reason: a boolean
+ * flag set before the await lets a concurrent caller read the not-yet-assigned
+ * `false` and conclude the host cannot ingest video when it can. Here that
+ * mistake costs more than it did for captions — it does not degrade one clip,
+ * it withholds a whole format from the composer.
+ */
+let ffprobeProbe: Promise<boolean> | null = null;
+
+export async function hasFfprobe(): Promise<boolean> {
+	ffprobeProbe ??= new Promise<boolean>((resolve) => {
+		try {
+			const p = spawn(ffprobeBin(), ['-version']);
+			p.on('error', () => resolve(false));
+			p.on('close', (code) => resolve(code === 0));
+		} catch {
+			resolve(false);
+		}
+	});
+	return ffprobeProbe;
+}
+
+export interface VideoProbe {
+	/** Wall-clock length. THE BILLING BASIS for the per-second video models. */
+	durationSec: number;
+	/** Display dimensions — rotation already applied (see probeVideo). */
+	width: number;
+	height: number;
+}
+
+/** Reads ffprobe's JSON report, or null if the spawn or the exit failed. */
+function runFfprobeJson(target: string, cwd?: string): Promise<string | null> {
+	return new Promise((resolve) => {
+		try {
+			// `-i` rather than a positional argument: a filename beginning with a
+			// dash would otherwise be parsed as an option.
+			const p = spawn(
+				ffprobeBin(),
+				['-v', 'error', '-print_format', 'json', '-show_format', '-show_streams', '-i', target],
+				cwd ? { cwd } : {}
+			);
+			let out = '';
+			p.stdout.on('data', (d) => (out += d.toString()));
+			// stderr is drained but ignored: `-v error` keeps it empty on success, and
+			// an unread pipe can fill and stall the child on a chatty build.
+			p.stderr.on('data', () => {});
+			p.on('error', () => resolve(null));
+			p.on('close', (code) => resolve(code === 0 ? out : null));
+		} catch {
+			resolve(null);
+		}
+	});
+}
+
+function finitePositive(v: unknown): number | null {
+	const n = typeof v === 'number' ? v : Number(v);
+	return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/**
+ * Rotation in degrees, from either place ffprobe reports it: the modern
+ * `side_data_list` displaymatrix entry, or the legacy `tags.rotate` string that
+ * older muxers (and plenty of Android phones) still write.
+ */
+function clipRotationDegrees(stream: Record<string, unknown>): number {
+	const sideData = stream.side_data_list;
+	if (Array.isArray(sideData)) {
+		for (const entry of sideData) {
+			const raw = Number((entry as Record<string, unknown>)?.rotation);
+			if (Number.isFinite(raw) && raw !== 0) return raw;
+		}
+	}
+	const tags = stream.tags as Record<string, unknown> | undefined;
+	const legacy = Number(tags?.rotate);
+	return Number.isFinite(legacy) ? legacy : 0;
+}
+
+/**
+ * Measures a clip: length in seconds and DISPLAY dimensions.
+ *
+ * Accepts a Buffer (an upload still in memory — written to a temp dir and
+ * cleaned up in `finally`, like every other helper here) or a path/URL string.
+ *
+ * Returns null on any failure and NEVER throws — but this is the one place in
+ * this file where the caller must not shrug that off. Captions, card motion and
+ * the voiceover mux are enhancements, so null there means "keep the original".
+ * A null HERE means the duration is unknown, and the duration is what the
+ * per-second video models bill on: storing the clip anyway would let a run be
+ * quoted at a length nobody measured. The ingest route therefore treats null as
+ * "reject the upload", never as "carry on without it".
+ */
+export async function probeVideo(input: string | Buffer): Promise<VideoProbe | null> {
+	if (!(await hasFfprobe())) return null;
+
+	let dir: string | null = null;
+	try {
+		let target: string;
+		let cwd: string | undefined;
+		if (Buffer.isBuffer(input)) {
+			if (input.length === 0) return null;
+			dir = await mkdtemp(join(tmpdir(), 'ugc-probe-'));
+			// Extension-free on purpose, as in stillToMotion: ffprobe detects the
+			// container by content, and a wrong extension is the only thing that
+			// could confuse it about a file it would otherwise read fine.
+			target = 'in.video';
+			cwd = dir;
+			await writeFile(join(dir, target), input);
+		} else {
+			if (!input) return null;
+			target = input;
+		}
+
+		const raw = await runFfprobeJson(target, cwd);
+		if (!raw) return null;
+		const report = JSON.parse(raw) as {
+			format?: { duration?: string | number };
+			streams?: Array<Record<string, unknown>>;
+		};
+
+		const streams = Array.isArray(report.streams) ? report.streams : [];
+		// The first VIDEO stream, not streams[0]: a phone clip carries audio, and
+		// often timecode and a cover-art stream, in no guaranteed order.
+		const v = streams.find((s) => s.codec_type === 'video');
+		if (!v) return null;
+
+		// Container duration first — a stream's own `duration` is absent in
+		// fragmented mp4 and in WebM, where only the container knows the length.
+		const durationSec = finitePositive(report.format?.duration) ?? finitePositive(v.duration);
+		const width = finitePositive(v.width);
+		const height = finitePositive(v.height);
+		if (durationSec === null || width === null || height === null) return null;
+
+		// Phones record LANDSCAPE frames plus a rotation matrix; the stream is
+		// 1920x1080 and every player shows it 1080x1920. Reporting the stored
+		// dimensions would tell the composer a portrait clip is a landscape one,
+		// and the run would be framed for the wrong aspect.
+		const quarterTurn = Math.abs(clipRotationDegrees(v)) % 180 === 90;
+
+		return {
+			durationSec,
+			width: Math.round(quarterTurn ? height : width),
+			height: Math.round(quarterTurn ? width : height)
+		};
+	} catch (e) {
+		console.warn('[Video] probe failed:', (e as Error).message);
+		return null;
+	} finally {
+		if (dir) await rm(dir, { recursive: true, force: true }).catch(() => {});
+	}
+}
+
+// ── Ingest policy ────────────────────────────────────────────────────────────
+// The bounds and the verdict for the source-clip upload route. They live here,
+// beside the probe that produces the numbers they judge, rather than in the
+// `+server.ts`: a route module cannot be imported by the unit suite (it pulls
+// `./$types` and the whole db/service-supabase chain into a node test), and a
+// bound that gates SPENDING is the last thing that should go unpinned.
+
+/**
+ * 100MB. Generous enough for 30s off a modern phone (4K HEVC lands ~60-80MB)
+ * and small enough that a mistaken 4GB screen recording is refused from its
+ * declared size instead of after we have buffered all of it into memory.
+ */
+export const MAX_CLIP_BYTES = 100 * 1024 * 1024;
+
+/**
+ * 30s. A ceiling on the BILL, not on taste: the v2v models charge per output
+ * second, so this is the only thing bounding what a single click can cost. It
+ * also sits past the length a feed actually watches.
+ */
+export const MAX_CLIP_SECONDS = MAX_SECONDS;
+
+/**
+ * 1s. Below this there is nothing to re-perform, and a sub-second upload is
+ * almost always a truncated or corrupt file that probed just well enough to
+ * look valid.
+ */
+export const MIN_CLIP_SECONDS = MIN_SECONDS;
+
+/**
+ * Smallest side we will accept. Under this the source carries less detail than
+ * the model needs to track a performer at all, and the output is mush that was
+ * still billed by the second.
+ */
+export const MIN_CLIP_DIMENSION = 128;
+
+/**
+ * Accepted containers, mapped to the extension the stored object gets. An
+ * allowlist by CONTAINER rather than a `startsWith('video/')` check because
+ * these are what fal's animate endpoints reliably decode; an .avi or .mkv would
+ * upload happily and then fail at the provider — after the quote.
+ *
+ * `video/x-m4v` and the `video/mov` some browsers report are aliases, not
+ * separate formats: both are mp4/QuickTime on the wire.
+ */
+export const ACCEPTED_CLIP_MIME: Record<string, string> = {
+	'video/mp4': 'mp4',
+	'video/x-m4v': 'm4v',
+	'video/quicktime': 'mov',
+	'video/mov': 'mov',
+	'video/webm': 'webm'
+};
+
+/**
+ * The stored extension for an upload's mime type, or null when we don't accept
+ * it. Browsers append codec parameters (`video/mp4; codecs="avc1.42E01E"`), so
+ * the type is normalised before the lookup — matching on the raw header string
+ * rejects perfectly good Chrome uploads.
+ */
+export function clipExtForMime(mimeType: string | null | undefined): string | null {
+	if (typeof mimeType !== 'string') return null;
+	const base = mimeType.split(';')[0].trim().toLowerCase();
+	return ACCEPTED_CLIP_MIME[base] ?? null;
+}
+
+/**
+ * The whole validation verdict for one upload: a human-readable reason to
+ * refuse it, or null when it may be stored. Pure and exported so the bounds
+ * that gate spending are held by tests rather than by review.
+ *
+ * `probe` is null when ffprobe could not read the file — see probeVideo. An
+ * unmeasured clip is refused, never stored on trust.
+ */
+export function clipRejectionReason(
+	bytes: number,
+	mimeType: string | null | undefined,
+	probe: VideoProbe | null
+): string | null {
+	if (!clipExtForMime(mimeType)) {
+		return 'That file type is not supported. Upload an MP4, MOV or WebM clip.';
+	}
+	if (!Number.isFinite(bytes) || bytes <= 0) {
+		return 'That file is empty.';
+	}
+	if (bytes > MAX_CLIP_BYTES) {
+		return `That clip is too large (max ${Math.round(MAX_CLIP_BYTES / (1024 * 1024))}MB).`;
+	}
+	if (!probe) {
+		return 'Could not read that video file. Re-export it as an MP4 (H.264) and try again.';
+	}
+	if (probe.durationSec > MAX_CLIP_SECONDS) {
+		return `That clip is ${probe.durationSec.toFixed(1)}s. Trim it to ${MAX_CLIP_SECONDS}s or less — this format is billed by the second.`;
+	}
+	if (probe.durationSec < MIN_CLIP_SECONDS) {
+		return `That clip is too short (minimum ${MIN_CLIP_SECONDS}s).`;
+	}
+	if (probe.width < MIN_CLIP_DIMENSION || probe.height < MIN_CLIP_DIMENSION) {
+		return `That clip is too small to re-perform (minimum ${MIN_CLIP_DIMENSION}px on each side).`;
+	}
+	return null;
 }

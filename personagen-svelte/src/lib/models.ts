@@ -29,8 +29,33 @@
  * wrong provider on the ledger.
  */
 
-export type ModelKind = 'image_t2i' | 'image_edit' | 'video_i2v' | 'talking_head' | 'llm';
+export type ModelKind =
+	| 'image_t2i'
+	| 'image_edit'
+	| 'video_i2v'
+	| 'video_v2v'
+	| 'talking_head'
+	| 'llm';
 export type QualityTier = 'budget' | 'balanced' | 'premium';
+
+/**
+ * What a model's `usd` buys ONE of.
+ *
+ * Lives here, not in $lib/formats, because it is a fact about the PROVIDER's
+ * price list rather than about a pipeline position: wan-animate bills per second
+ * of output wherever you call it from. formats.ts imports it to type a step's
+ * basis (and adds `per_shot`, which genuinely IS a pipeline fact — a stage that
+ * calls a per-call model once per storyboard shot).
+ *
+ * `per_item` is the odd one: it belongs to neither the model nor the pipeline
+ * position, but to the FORMAT. The same `tts` stage calls the same model once
+ * for a Spokesperson and once per beat for a Listicle, so only the format knows
+ * the count — which is why FormatEntry can override a step's basis.
+ *
+ * Omitted means `per_call`, so every model that existed before this did keeps
+ * quoting exactly as it did.
+ */
+export type Billing = 'per_call' | 'per_shot' | 'per_second' | 'per_item';
 
 export interface ModelOption {
 	id: string;
@@ -52,6 +77,19 @@ export interface ModelOption {
 	/** video_i2v only — verified per endpoint; fal 422s on params a model doesn't declare. */
 	supportsAudio?: boolean;
 	supportsDuration?: boolean;
+	/**
+	 * What `usd` buys one of. Omitted means `per_call`, which is every model in
+	 * this catalog except the video-to-video family — those bill by output
+	 * SECOND, so quoting them at a flat price is wrong by however long the clip
+	 * is. Read by the pipeline quote (see billedUnits in $lib/formats).
+	 */
+	billing?: Billing;
+	/**
+	 * This model transforms a SOURCE clip the user supplies, rather than
+	 * generating from a still. Formats that offer it must require the
+	 * `videoIngest` host capability, and the run must carry a source clip.
+	 */
+	needsSourceVideo?: boolean;
 }
 
 export const MODEL_CATALOG: ModelOption[] = [
@@ -203,6 +241,45 @@ export const MODEL_CATALOG: ModelOption[] = [
 		note: 'Best quality available. Expensive — reserve it for hero content.'
 	},
 
+	// ── Video-to-video: a source clip drives the persona ────────────────────
+	// Verified end-to-end against the live endpoints on 2026-09-09 (a real run,
+	// not a spec read — see docs/competitive/video-to-video-implementation-plan.md
+	// §7a). Both take `video_url` + `image_url` + `resolution` and return
+	// {video:{url}}. Billed per VIDEO SECOND at a 16fps basis:
+	// 480p $0.04 · 580p $0.06 · 720p $0.08. 580p is the default here because a
+	// measured run costs ~$0.21 for 2.6s at 720p and takes ~7 minutes — the
+	// latency, not the money, is what makes the cheaper rung the right default.
+	//
+	// BOTH REQUIRE A FULL-BODY REFERENCE. Driven from the pinned bust-crop face,
+	// the model invents a lower body, a wardrobe and a room to fill the frame —
+	// exactly the from-nothing invention this stage exists to avoid.
+	{
+		id: 'fal-ai/wan/v2.2-14b/animate/replace',
+		label: 'Wan Animate · Replace',
+		provider: 'fal',
+		kind: 'video_v2v',
+		tier: 'balanced',
+		usd: 0.06,
+		billing: 'per_second',
+		needsSourceVideo: true,
+		note: 'Keeps the source clip’s scene, framing and timing, and swaps in this persona. Output follows the source aspect, so a 9:16 clip stays 9:16.',
+		caveat:
+			'The hairstyle drifts toward the source performer’s silhouette under fast motion — the identity holds, the exact hair does not.'
+	},
+	{
+		id: 'fal-ai/wan/v2.2-14b/animate/move',
+		label: 'Wan Animate · Move',
+		provider: 'fal',
+		kind: 'video_v2v',
+		tier: 'balanced',
+		usd: 0.06,
+		billing: 'per_second',
+		needsSourceVideo: true,
+		note: 'Takes only the MOTION from the source clip; the persona stays in their own scene.',
+		caveat:
+			'Output aspect follows the reference image, not the source clip — a 3:4 reference yields a 3:4 clip, which needs a reframe before it is a Reel.'
+	},
+
 	// ── Talking head: the spokesperson stage (still + voiceover → lip-sync) ──
 	// All three take image_url + audio_url and return {video:{url}} — verified
 	// against each endpoint's live OpenAPI spec on 2026-09-09, which is also how
@@ -294,7 +371,11 @@ export const DEFAULT_MODEL: Record<ModelKind, string> = {
 	// server/ai-client.ts. Both are env-overridable there; the default here is
 	// the value that ships.
 	talking_head: 'fal-ai/bytedance/omnihuman',
-	llm: 'google/gemini-3.5-flash'
+	llm: 'google/gemini-3.5-flash',
+	// Replace, not Move: it inherits the source clip's scene AND its aspect, so
+	// a 9:16 source yields a 9:16 post with no reframe stage. Move is the
+	// deliberate pick, never the fallback.
+	video_v2v: 'fal-ai/wan/v2.2-14b/animate/replace'
 };
 
 export function modelsFor(kind: ModelKind): ModelOption[] {

@@ -1,6 +1,11 @@
 # PersonaGen — Competitive Teardown, Terminology & UX Standards Audit, Gap Analysis, Viability Assessment
 
 **Date:** 2026-07-25
+**Amended 2026-09-09:** the **motion transfer** gap this document records as open
+is **closed** — video-to-video shipped (`reel-remake`, `motion-transfer`,
+`narrated-reel`). The three rows that said otherwise are corrected in place and
+marked; nothing else in this teardown has been re-measured since July. See
+[video-to-video-implementation-plan.md §7c](video-to-video-implementation-plan.md#7c-what-actually-shipped--the-record).
 **Subjects analysed:**
 - `theinfluencer.ai` — **the category benchmark** (UX, terminology, workflow)
 - `higgsfield.ai/ai-influencer` — the craft leader (Soul ID, motion)
@@ -16,7 +21,7 @@ Four things are now clear.
 
 1. **`theinfluencer.ai` is the standard.** Their trait picker, their vocabulary, their three-step build loop, and their time-estimates-per-step are what a buyer in this niche now expects. Everything we present should be measured against them, not against the weaker two.
 2. **We are ahead of all three on everything that happens *after* the image exists** — brand grounding, 13-platform publishing, verified delivery, autonomy, approval, cost accounting. None of them can run an account.
-3. **We are behind all three on everything that happens *before* the image exists** — trait selection UX, preview-and-lock loop, trained identity, pre-made personas, try-on, motion transfer, languages.
+3. **We are behind all three on everything that happens *before* the image exists** — trait selection UX, preview-and-lock loop, trained identity, pre-made personas, try-on, ~~motion transfer~~, languages. *(motion transfer closed 2026-09-09)*
 4. **Our vocabulary is wrong.** We say *agent*, *soul*, *market*, *heartbeat*, *overseer*, *reference kit*, *UGC pack*. The industry says *persona*, *traits*, *locked identity*, *private model*, *batch*, *try-on*, *motion transfer*. This is not cosmetic — a buyer landing on our product will not recognise it as belonging to this category.
 
 **The single highest-leverage correction:** adopt the industry's *front end* (vocabulary + trait wizard + preview/lock loop) while keeping our *back end* (the operations layer nobody else has). That combination is the highest viable product available in this market.
@@ -136,7 +141,7 @@ They also run **head-on comparison pages** ("Higgsfield Alternative", "Arcads Al
 | Capability | Notes | Us |
 |---|---|---|
 | Soul ID trained identity | 20+ imgs, 3–5 min | ❌ |
-| Motion Transfer | Reference video → choreography | ❌ |
+| Motion Transfer | Reference video → choreography | ✅ *shipped 2026-09-09* — wan-animate `move`/`replace` |
 | Detail Tuning | Scars, tears, posture, heterochromia, skin texture | ⚠️ |
 | Brand Collabs | Product insertion with correct lighting | ✅ |
 | Scenario Placement | Outfit/makeup/setting/health-state | ✅ |
@@ -327,7 +332,7 @@ Show a real elapsed-time badge on every generated asset. We have the timings; su
 | Multi-shot storyboarded video | ❌ | ⚠️ | ❌ | 🏆 director → storyboard → parallel stills → Kling |
 | **Hook-quality gate** | ❌ | ❌ | ❌ | 🏆 weak scripts killed **before** paying for video |
 | **Try-on** | ✅ | ⚠️ | ❌ | ❌ **P1** |
-| **Motion transfer** | ✅ 4–30s | ✅ | ❌ | ❌ **P2** |
+| **Motion transfer** | ✅ 4–30s | ✅ | ❌ | ✅ *shipped 2026-09-09* — 1–30s upload, per-second billing off a measured duration |
 | **40+ languages** | ✅ | ⚠️ | ❌ | ❌ **P1** |
 | Edit w/ undo, originals kept | ✅ | ⚠️ | ⚠️ | ⚠️ no UI |
 | Upscaler | ✅ | ✅ | ⚠️ | ❌ |
@@ -453,7 +458,7 @@ Product risk is largely retired: the operations layer is genuinely ahead of all 
 
 ### P2 — extend the lead (weeks 11+)
 
-15. Motion transfer · 16. Edit history with undo/redo · 17. Image upscaler · 18. Teams/agency workspaces (required for $299+) · 19. Comment & DM engagement — the honest version of "auto-growing" · 20. Second publishing vendor to de-risk Zernio.
+15. ~~Motion transfer~~ **— done 2026-09-09, ahead of schedule** · 16. Edit history with undo/redo · 17. Image upscaler · 18. Teams/agency workspaces (required for $299+) · 19. Comment & DM engagement — the honest version of "auto-growing" · 20. Second publishing vendor to de-risk Zernio.
 
 ---
 

@@ -42,11 +42,26 @@ import {
 import { appearanceToPromptClause, stripLeadingAvatarName } from '$lib/persona-profile';
 import { readPersonaProfile } from '$lib/persona-profile-store';
 import { createDbService } from '$lib/server/db';
-import { DEFAULT_VOICE, VOICE_CATALOG } from '$lib/server/voices';
+import { DEFAULT_VOICE, VOICE_CATALOG, liveVoice } from '$lib/server/voices';
 import { getServiceSupabase } from '$lib/server/service-supabase';
 import { resolveModel, getModel, MODEL_CATALOG, type ModelOption } from '$lib/models';
+// The clip-length ceiling the ingest gate enforces. Imported rather than
+// restated so the gate, the quote and the meter cannot disagree about how long a
+// source clip may be — they are the same number by construction.
+// The listicle's beat bounds, imported for the same reason: the composer's
+// chips, the ingest gate, the quote and this engine all clamp to ONE range, so a
+// count that was offered can never be a count the run refuses.
+import { MAX_SECONDS, MIN_ITEMS, MAX_ITEMS, DEFAULT_ITEMS } from '$lib/formats';
 import { persistToStorage, persistBufferToStorage } from '$lib/server/storage';
-import { burnCaptions, optimizeForWeb, stillToMotion, muxVoiceover } from '$lib/server/video';
+import {
+	burnCaptions,
+	optimizeForWeb,
+	stillToMotion,
+	muxVoiceover,
+	concatAudio,
+	MAX_TIMED_CAPTIONS,
+	type TimedCaption
+} from '$lib/server/video';
 import {
 	renderTypographicCard,
 	CARD_RENDERER_LABEL,
@@ -65,6 +80,7 @@ import {
 	keySourceFor,
 	resolveBillingAccount,
 	debitForEvents,
+	isCreditsError,
 	type KeySource
 } from '$lib/server/credits';
 import { creditsMode } from '$lib/server/flags';
@@ -195,6 +211,51 @@ const VIDEO_DURATION = env.UGC_VIDEO_DURATION || '5';
 // Standard figure above is the audio-off rate) — see the cost-event note where
 // the b-roll video event is recorded in generateUgcPack.
 const BROLL_AUDIO_ENABLED = env.UGC_BROLL_AUDIO !== 'false';
+
+// ── Video-to-video (Wan Animate replace/move) ───────────────────────────────
+// Verified end-to-end on 2026-09-09 against the live endpoints (a real run, not
+// a spec read): both take video_url + image_url + resolution and return
+// {video:{url}} — the same output shape the b-roll path already reads.
+//
+// 580p, not 720p: this stage bills per SECOND OF SOURCE (480p $0.04 / 580p
+// $0.06 / 720p $0.08), and a measured 2.6s clip took ~7 MINUTES at 720p. The
+// latency, not the money, is what makes the middle rung the right default —
+// a 15s source at 720p would sit well past any reasonable job deadline.
+// Deliberately NOT env-overridable: the resolution is what the per-second price
+// in pricing.ts is quoted against, so a deploy that raised it would bill 580p
+// rates for 720p seconds. Moving the rung is a two-line change — here and there
+// — which is the point.
+const V2V_RESOLUTION = '580p';
+// falQueueJson's 270s default is tuned for a 5s i2v clip and would abandon a
+// v2v job that is still legitimately rendering — the same reason the cinematic
+// path raised it. ~7 min for 2.6s measured, so this is the ceiling for the
+// short clips the composer allows, not a target.
+const V2V_QUEUE_TIMEOUT_MS = 900000;
+// Billing basis when the caller could not probe the source clip. NEVER 0: an
+// unpriced second is a free generation the moment credits_mode=enforce, so an
+// unknown duration bills the same nominal clip length the i2v path assumes
+// rather than nothing at all.
+const V2V_ASSUMED_SECONDS = Number(VIDEO_DURATION) || 5;
+
+/**
+ * The number of source seconds a v2v run is BILLED for.
+ *
+ * Rounds nothing: a measured 2.6s clip billed 2.6 × the per-second rate, so
+ * ceiling it here would overcharge every short clip. The only thing it refuses
+ * is a duration that would bill zero — an unprobed clip is an unpriced provider
+ * call, which is a free generation path the moment credits are enforced.
+ */
+function v2vBillableSeconds(probed?: number | null): number {
+	const n = Number(probed);
+	if (!Number.isFinite(n) || n <= 0) return V2V_ASSUMED_SECONDS;
+	// Clamp to the SAME ceiling the ingest gate enforces (MAX_SECONDS, owned by
+	// $lib/formats so the quote and the gate cannot drift). This value arrives on
+	// the request body, and a per-second rate multiplied by an unbounded number
+	// is an unbounded bill: a forged `sourceSeconds: 9999` would charge ~$600 for
+	// a clip the ingest endpoint would never have accepted. The route validates
+	// too; this is the second lock, because the engine is what actually spends.
+	return Math.min(n, MAX_SECONDS);
+}
 
 /**
  * Tolerant JSON parse for AI responses: strips markdown fences, and when the
@@ -885,8 +946,18 @@ function enhanceMotionPrompt(
 	basePrompt: string,
 	intent: ContentIntent,
 	// Only "is a person addressing the lens?" matters here. Narrated motion has
-	// nobody on camera, so it takes the product direction like plain b-roll.
-	format: 'spokesperson' | 'broll' | 'vo_broll' | 'motion_card'
+	// nobody on camera, so it takes the product direction like plain b-roll — and
+	// so does a v2v run, which never sees this string at all (wan-animate takes no
+	// prompt): it is built anyway because the never-brick i2v fallback needs one.
+	format:
+		| 'spokesperson'
+		| 'broll'
+		| 'vo_broll'
+		| 'motion_card'
+		| 'v2v_replace'
+		| 'v2v_move'
+		| 'v2v_narrated'
+		| 'listicle'
 ): string {
 	const cameraByLevel: Record<MotionLevel, string> = {
 		static:
@@ -898,7 +969,9 @@ function enhanceMotionPrompt(
 	};
 
 	const subjectByFormat =
-		format === 'spokesperson'
+		// A listicle is spoken to the lens like any other spokesperson run — it
+		// belongs on this side of the branch, not with the product-only directions.
+		format === 'spokesperson' || format === 'listicle'
 			? 'Character: natural direct eye contact with lens, occasional glance to product, subtle head tilt on key spoken word. Real micro-expressions — not posed or frozen.'
 			: 'Product: slow rotation revealing texture, label, and material. Hand entering frame to pick up or use it. Real surface contact — not floating or artificially suspended.';
 
@@ -1113,6 +1186,165 @@ async function generateVoiceAudio(
 	return { url, voiceUsed };
 }
 
+// ── Listicle: the numbered countdown, timed to speech ───────────────────────
+// The format's whole value is that item N appears at the instant it is SPOKEN,
+// and nothing in a single TTS blob says when that instant is. Character counts,
+// words-per-minute estimates and "divide the clip into N" all drift within the
+// first two items — a rephrase that adds three syllables, or the half-second
+// pause the model inserts mid-phrase, and every later reveal is early. So the
+// voiceover is generated one segment PER BEAT and each segment is MEASURED; the
+// reveal times are then arithmetic on real durations rather than a guess.
+// That per-beat call is also what `$lib/formats` bills (`stepBilling.tts:
+// 'per_item'`) — the quote and the ledger both count beats, not posts.
+
+/** One beat of the list: what is drawn, and what is said while it is drawn. */
+export interface ListItem {
+	/** The on-screen label, unnumbered — the burn adds "1. ", "2. ". */
+	label: string;
+	/** The sentence spoken for this beat. Its own TTS call, its own duration. */
+	line: string;
+}
+
+/**
+ * ITEMS, from the shared BEAT bounds — the off-by-one is the whole reason this
+ * is written out rather than used inline. `$lib/formats` counts the framing line
+ * as beat one, because that is what the voiceover stage is billed per; the list
+ * is everything after it. Confusing the two either bills a call that never
+ * happened or speaks one nobody quoted.
+ *
+ * The ceiling is capped again by `MAX_TIMED_CAPTIONS`: the burn draws at most
+ * that many rows, and an item spoken with no row to land in is a beat the user
+ * paid for and cannot see.
+ */
+const LISTICLE_MIN_ITEMS = MIN_ITEMS - 1;
+const LISTICLE_MAX_ITEMS = Math.min(MAX_ITEMS - 1, MAX_TIMED_CAPTIONS);
+/**
+ * Items written when the request carries no count. `$lib/formats` quotes this
+ * same default, so the ledger and the quote agree on the ordinary run — which
+ * they would NOT if the Director were simply asked for "3-5" and handed back
+ * five against a four-beat quote.
+ */
+const LISTICLE_DEFAULT_ITEMS = DEFAULT_ITEMS - 1;
+/** Labels are read at a glance off a phone; four words is already generous. */
+const LIST_LABEL_MAX_WORDS = 4;
+/**
+ * Silence inserted between beats. Not cosmetic: back-to-back TTS segments join
+ * with no breath at all and the list runs together as one sentence, which is the
+ * opposite of the beat-by-beat rhythm the format is built on. It is also the
+ * only padding in the timeline, so it is counted into the reveal times below
+ * rather than assumed away.
+ */
+const LISTICLE_BEAT_GAP_SEC = 0.35;
+
+/**
+ * Reads the Director's `list_items` defensively.
+ *
+ * Model output, so nothing is trusted: a non-array, a string where an object
+ * belongs, a missing `line`, an empty `label` are all dropped rather than
+ * shipped as a blank row that reserves screen space and says nothing. Over-long
+ * labels are TRIMMED rather than dropped — a five-word label is a usable list
+ * item, and discarding it would silently shorten a list the user paid to have
+ * spoken.
+ *
+ * `maxItems` is the count the run was QUOTED for, so the cut is here rather than
+ * at the burn: an extra item that survived this far would be a paid voiceover
+ * call nobody priced. Coming back SHORT is the safe direction and is allowed —
+ * it bills less than quoted, never more.
+ *
+ * `labels` are the user's own, positionally: index i belongs to item i+1, and a
+ * blank at that index means "keep what the Director wrote". Blanks are kept for
+ * exactly that reason — filtering them would slide every later label onto an
+ * item the user never wrote it for.
+ */
+function parseListItems(raw: unknown, maxItems: number, labels?: string[]): ListItem[] {
+	if (!Array.isArray(raw)) return [];
+	const items: ListItem[] = [];
+	// One clamp for both sources. A user's pinned label goes through exactly the
+	// same gate as the model's: it is drawn into the same row, and a 160-character
+	// "label" runs off the frame whoever typed it.
+	const asLabel = (raw: unknown) =>
+		String(raw ?? '')
+			.replace(/\s+/g, ' ')
+			.trim()
+			.split(' ')
+			.slice(0, LIST_LABEL_MAX_WORDS)
+			.join(' ')
+			.slice(0, 48);
+
+	for (const entry of raw) {
+		if (!entry || typeof entry !== 'object') continue;
+		const label =
+			asLabel(labels?.[items.length]) || asLabel((entry as Record<string, unknown>).label);
+		const line = String((entry as Record<string, unknown>).line ?? '')
+			.replace(/[\r\n]+/g, ' ')
+			.trim()
+			.slice(0, 400);
+		if (!label || !line) continue;
+		items.push({ label, line });
+		if (items.length >= maxItems) break;
+	}
+	return items;
+}
+
+/**
+ * Fetches each voiceover segment, joins them into one track with `gapSec` of
+ * silence between beats, and returns the durable URL plus WHERE EACH SEGMENT
+ * STARTS in the joined timeline.
+ *
+ * The measuring and the ffmpeg are NOT here: `concatAudio` owns both, because
+ * $lib/server/video is the one module in this app allowed to know about temp
+ * dirs and codecs. What is left is the only part that is this module's business
+ * — hosting the result somewhere the lip-sync provider can reach it.
+ *
+ * The offsets are the entire point. concatAudio derives them from decoded sample
+ * counts, so they describe the audio that is actually handed to the lip-sync
+ * model, which in turn produces a clip exactly as long as its audio — which is
+ * why a caption timed here lands on the right frame there.
+ *
+ * Returns null on ANY failure and never throws: no ffmpeg, an unfetchable
+ * segment, a decode that produced nothing, no durable bucket to host the join.
+ * The caller then falls back to a single un-segmented voiceover, because a
+ * talking head with no reveals still ships and a failed run does not.
+ */
+async function joinVoiceSegments(
+	svc: any,
+	userId: string,
+	segmentUrls: string[],
+	gapSec: number
+): Promise<{ url: string; startsAt: number[] } | null> {
+	if (!svc || segmentUrls.length === 0) return null;
+	const joined = await concatAudio(segmentUrls, { gapSeconds: gapSec });
+	if (!joined) return null;
+	try {
+		// The lip-sync provider FETCHES this url itself, so it has to outlive the
+		// request — a temp file or a signed link that expires mid-job is a 7-minute
+		// wait ending in a download failure.
+		const url = await persistBufferToStorage(svc, joined.bytes, userId, 'm4a', 'audio/mp4');
+		return { url, startsAt: joined.startsAt };
+	} catch (e) {
+		console.warn('[Listicle] segment join failed:', (e as Error).message);
+		return null;
+	}
+}
+
+/**
+ * The caption track, from measured segment starts.
+ *
+ * `startsAt[0]` is the framing line, so item N is `startsAt[N]` — the reveal
+ * fires exactly as its own sentence begins. No `until` on any of them: the list
+ * ACCUMULATES, which is the whole reason the format holds attention (see
+ * TimedCaption in $lib/server/video).
+ */
+function buildListicleTrack(items: ListItem[], startsAt: number[]): TimedCaption[] {
+	return (
+		items
+			.map((item, i) => ({ text: `${i + 1}. ${item.label}`, at: startsAt[i + 1] }))
+			// A segment that produced no start (a shorter join than beats) would draw at
+			// NaN, which ffmpeg reads as 0 and dumps the whole list on frame one.
+			.filter((c) => Number.isFinite(c.at))
+	);
+}
+
 async function generateTalkingHead(
 	falKey: string,
 	stillUrl: string,
@@ -1155,7 +1387,12 @@ async function generateBrollVideo(
 	// OpenAPI probe. This is the path that makes discovered models actually run;
 	// before it, an unknown id fell through to the name-guessing below and either
 	// 422'd or wasn't called at all.
-	if (adapter?.text) {
+	// An adapter naming a source-clip param belongs to a video-to-video model, and
+	// this is the image-to-video path — there is no clip to hand it. Building the
+	// request anyway would omit a REQUIRED field and 422 after the user has waited
+	// through the still. Fall through to the verified-catalog path below, which is
+	// the never-brick behaviour every other adapter gap already gets.
+	if (adapter?.text && !adapter.video) {
 		const input: any = { ...(adapter.constants ?? {}) };
 		input[adapter.text] = motionPrompt;
 		if (adapter.image) input[adapter.image] = adapter.imageIsArray ? [stillUrl] : stillUrl;
@@ -1184,6 +1421,66 @@ async function generateBrollVideo(
 	const data = await falQueueJson(model, input, falKey);
 	const url = data.video?.url;
 	if (!url) throw new Error('B-roll model returned no video');
+	return url;
+}
+
+/**
+ * Video-to-video: re-performs a SOURCE clip as this persona (Wan Animate
+ * replace/move). The sibling of generateBrollVideo, and the inverse of it —
+ * there, the still is the only consistency anchor and the prompt supplies the
+ * motion; here the motion, timing and (for `replace`) the whole scene come from
+ * the source clip, and the reference image supplies only the identity. Wan
+ * Animate takes NO prompt at all: sending motion direction would be a param the
+ * endpoint doesn't declare, which fal rejects with a 422 the user waits for.
+ *
+ * `referenceImageUrl` must be a FULL-BODY shot. Handed the pinned bust-crop
+ * face, the model invents a lower body, a wardrobe and a room to fill frame —
+ * from-nothing anatomy on a paid clip. resolveFullBodyReference is the gate
+ * that guarantees this; do not call this function around it.
+ */
+async function generateV2vVideo(
+	falKey: string,
+	model: string,
+	sourceVideoUrl: string,
+	referenceImageUrl: string,
+	/** Only reaches an adapter that declares a text param — the verified
+	 *  catalog path below has nowhere to put it (see above). */
+	motionPrompt: string,
+	adapter?: UgcPackInput['videoAdapter']
+): Promise<string> {
+	// The mirror image of generateBrollVideo's adapter guard. There, an adapter
+	// naming a source-clip param is REFUSED because the i2v path has no clip to
+	// hand it and would 422 on a required field. Here the run HAS a clip, so
+	// `adapter.video` is precisely the field this path can fill — and the guard
+	// inverts: an adapter with no video slot cannot be a v2v model, so driving it
+	// would send the source clip nowhere and re-run i2v at v2v prices.
+	if (adapter?.video) {
+		const input: any = { ...(adapter.constants ?? {}) };
+		input[adapter.video] = sourceVideoUrl;
+		if (adapter.image)
+			input[adapter.image] = adapter.imageIsArray ? [referenceImageUrl] : referenceImageUrl;
+		// Some v2v models DO take an edit instruction; wan-animate does not. Only
+		// set it when the probe found one, and never as a required-constant override.
+		if (adapter.text && !(adapter.text in input)) input[adapter.text] = motionPrompt;
+		const data = await falQueueJson(model, input, falKey, V2V_QUEUE_TIMEOUT_MS);
+		const url = adapter.output === 'videos[].url' ? data.videos?.[0]?.url : data.video?.url;
+		if (!url) throw new Error('Video-to-video model returned no video (adapter path)');
+		return url;
+	}
+
+	// Verified request shape (2026-09-09, live run): video_url + image_url are
+	// REQUIRED, resolution is the only optional knob worth pinning — use_turbo /
+	// num_inference_steps / shift / guidance_scale / seed / video_quality /
+	// video_write_mode all have schema defaults that a real run confirmed are
+	// sane, and sending an undeclared param to a fal endpoint is a 422.
+	const data = await falQueueJson(
+		model,
+		{ video_url: sourceVideoUrl, image_url: referenceImageUrl, resolution: V2V_RESOLUTION },
+		falKey,
+		V2V_QUEUE_TIMEOUT_MS
+	);
+	const url = data.video?.url;
+	if (!url) throw new Error('Video-to-video model returned no video');
 	return url;
 }
 
@@ -1964,11 +2261,34 @@ export interface UgcPackInput {
 		text: string;
 		image: string | null;
 		imageIsArray: boolean;
+		/** Set when the model transforms a SOURCE clip. This path has no clip to
+		 *  give, so a non-null value means the adapter cannot be driven here. */
+		video?: string | null;
 		duration: string | null;
 		audio: string | null;
 		constants: Record<string, unknown>;
 		output: 'video.url' | 'videos[].url' | null;
 	} | null;
+	/** The ingested source clip a v2v run re-performs, as an http(s) URL the
+	 *  provider can fetch (an app-storage URL — fal downloads it itself, so a
+	 *  signed-but-expiring link will fail minutes into a ~7-minute job). Absent
+	 *  on a v2v format coerces the run to plain b-roll: there is nothing to
+	 *  re-perform, and the alternative is failing a run the user already paid the
+	 *  Director for. */
+	sourceVideoUrl?: string | null;
+	/** The PROBED duration of that clip, in seconds — the billing basis, not a
+	 *  display value. v2v bills per second of SOURCE (models.ts `billing:
+	 *  'per_second'`), so this number multiplied by the per-second rate is the
+	 *  cost event; a wrong or absent value under-bills a paid provider call.
+	 *  Absent falls back to V2V_ASSUMED_SECONDS rather than to zero. */
+	sourceSeconds?: number | null;
+	/** Which transfer this is, when the caller wants it stated independently of
+	 *  `formatOverride`: 'replace' keeps the SOURCE clip's scene and aspect and
+	 *  swaps the performer; 'move' keeps the REFERENCE's scene and takes only the
+	 *  motion (and follows the REFERENCE's aspect, so it needs a reframe before it
+	 *  is a Reel). The format override wins when both are present — it is the
+	 *  field the request actually carries. */
+	v2vMode?: 'replace' | 'move';
 	/** Opt-in: burn the on-screen caption hook onto the video. OFF by default. */
 	captions?: boolean;
 	/** Opt-in: burn a small "AI GENERATED" disclosure badge (top-left). OFF by
@@ -1979,8 +2299,43 @@ export interface UgcPackInput {
 	 *  'motion_card' the typeset card animated locally; 'auto' (or unset) defers
 	 *  to the persona's ugc_format, which the Director then resolves.
 	 *  The two local formats need ffmpeg on the host — absent it, they degrade
-	 *  (see the video branch) rather than failing a paid run. */
-	formatOverride?: 'auto' | 'spokesperson' | 'broll' | 'vo_broll' | 'motion_card';
+	 *  (see the video branch) rather than failing a paid run.
+	 *  'v2v_replace'/'v2v_move' re-perform an ingested SOURCE clip as this persona
+	 *  and are the only formats that need an input beyond the brief
+	 *  (`sourceVideoUrl`); they are per-run only — a persona's stored ugc_format
+	 *  can never be one, because no stored default can supply a clip.
+	 *  'v2v_narrated' is that same transfer with the vo_broll tail bolted on: TTS
+	 *  of the Director's script, muxed under the transferred clip locally. It
+	 *  needs BOTH inputs (a clip and a speakable line), which is why it degrades
+	 *  one stage at a time rather than all at once — see the coercions and the
+	 *  video branch.
+	 *  'listicle' is a spokesperson whose voiceover is generated one call PER
+	 *  BEAT so the on-screen items can be revealed on the frame each is spoken
+	 *  (see joinVoiceSegments). It is the only format that bills a stage more
+	 *  than once, which is why `$lib/formats` gives it `stepBilling.tts`. */
+	formatOverride?:
+		| 'auto'
+		| 'spokesperson'
+		| 'broll'
+		| 'vo_broll'
+		| 'motion_card'
+		| 'v2v_replace'
+		| 'v2v_move'
+		| 'v2v_narrated'
+		| 'listicle';
+	/** BEATS in a listicle — the framing line plus one per item, i.e. how many
+	 *  separate voiceover calls this run makes. It is a BILLING quantity: the
+	 *  quote multiplies the TTS stage by it, so the Director is asked for exactly
+	 *  `count - 1` items rather than a range, and the parse cuts anything past it.
+	 *  Absent quotes and writes the catalog default. */
+	listItemCount?: number;
+	/** The user's own on-screen labels, POSITIONALLY: index i is item i+1, and a
+	 *  blank means "keep the Director's". Blanks are therefore significant and
+	 *  must not be filtered out upstream — dropping one slides every later label
+	 *  onto an item it was never written for. Only the labels are pinnable; the
+	 *  spoken line stays the Director's, because it is what the beat is TIMED to
+	 *  and a line nobody wrote for the label would desync the reveal from speech. */
+	listItemsOverride?: string[];
 	/** The spoken line for a spokesperson run, verbatim. Until now a script could
 	 *  only be edited on a REFINE (RefineMediaInput.dialogue) — a first run had to
 	 *  accept whatever the Director wrote, then pay a second time to change it.
@@ -2048,7 +2403,30 @@ export interface UgcContent {
 	poster_url?: string;
 	media_type: 'image' | 'video';
 	media_generated: boolean;
-	format: 'spokesperson' | 'broll' | 'vo_broll' | 'motion_card';
+	/** What ACTUALLY ran, never what was requested — a v2v run whose provider call
+	 *  failed ships the i2v fallback clip and records 'broll', because that is
+	 *  what the viewer watches. The narrated remake obeys the same rule from both
+	 *  ends: a lost mux records 'v2v_replace' (the transfer shipped, the voice
+	 *  didn't), a lost transfer records 'vo_broll' — or 'broll' if the voice is
+	 *  then lost too.
+	 *  'listicle' obeys the same rule from a third direction: it is recorded ONLY
+	 *  when the timed reveals were actually burned onto the clip. A run whose
+	 *  segmented voiceover or caption burn was lost ships a talking head reading a
+	 *  list nobody can see, which is a spokesperson — so that is what it says. */
+	format:
+		| 'spokesperson'
+		| 'broll'
+		| 'vo_broll'
+		| 'motion_card'
+		| 'v2v_replace'
+		| 'v2v_move'
+		| 'v2v_narrated'
+		| 'listicle';
+	/** The beats of a listicle, in spoken order. Present whenever the list was
+	 *  SPOKEN — including a run that degraded to one un-segmented voiceover and
+	 *  therefore shows no reveals: the words were still said, and `format` (plus
+	 *  `generation.listicle.assembled`) is what says whether they were shown. */
+	list_items?: ListItem[];
 	voice?: string;
 	product: { name: string; price?: string; description?: string } | null;
 	platform: string;
@@ -2394,7 +2772,12 @@ export function resolvePersonaGender(
 	// A pinned voice is an explicit user choice about how the persona sounds —
 	// trust its catalog gender when nothing else gives a signal. The column
 	// default ('Adam') is NOT a choice and carries no signal.
-	const voice = pinnedVoice ?? agentData?.ugc_voice;
+	// Resolved through liveVoice so a persona pinned to a voice that has since
+	// been RETIRED keeps its gender signal. The choice was real when it was made;
+	// retiring the voice must not silently un-gender the persona and re-roll its
+	// whole look, which is what a bare catalog lookup would do the moment an
+	// entry is removed.
+	const voice = liveVoice(pinnedVoice ?? agentData?.ugc_voice);
 	if (typeof voice === 'string' && voice && voice !== DEFAULT_VOICE_SENTINEL) {
 		return VOICE_CATALOG.find((v) => v.name === voice)?.gender;
 	}
@@ -2429,6 +2812,18 @@ export function resolveVoiceForPersona(
 	cfgVoice: string,
 	agentData: any
 ): { voice: string; voiceGender: 'male' | 'female' | undefined } {
+	// A pick stored before a voice was retired still names the dead voice, and
+	// deleting the catalog line does not rewrite the database. Redirect FIRST, to
+	// the deliberate same-gender replacement rather than to whatever the gender
+	// hash below would land on — the operator chose that voice for its character,
+	// and the nearest live voice honours that better than a re-roll. Doing it
+	// here also means the retired name never reaches the provider, so these
+	// personas stop paying for a rejected call before every real one.
+	const requestedVoice = cfgVoice;
+	cfgVoice = liveVoice(cfgVoice);
+	if (cfgVoice !== requestedVoice) {
+		console.log(`[UGC] Voice '${requestedVoice}' is retired — using '${cfgVoice}'.`);
+	}
 	const personaGender = resolvePersonaGender(agentData, cfgVoice);
 	const cfgGender = VOICE_CATALOG.find((v) => v.name === cfgVoice)?.gender;
 	const isPinned = !!cfgVoice && cfgVoice !== DEFAULT_VOICE_SENTINEL;
@@ -3180,6 +3575,63 @@ async function ensureCharacterRef(
 }
 
 /**
+ * The FULL-BODY reference a video-to-video run has to be driven from.
+ *
+ * Measured 2026-09-09: handed the pinned `ugc_character_ref` — a bust crop —
+ * wan-animate invents a lower body, a wardrobe and a room to fill the frame,
+ * because the source clip's performer is full-frame and the model has to put
+ * something there. The result is a paid clip of a person the persona is not. So
+ * the bust crop is NEVER an acceptable substitute here, unlike everywhere else
+ * in this file where it is the identity anchor.
+ *
+ * Unlike `ensureCharacterRef` this THROWS rather than returning null: a v2v run
+ * with no reference cannot degrade into a slightly worse v2v run, only into a
+ * different format entirely — which is the caller's decision, made in the
+ * never-brick fallback, not a silent one made here.
+ *
+ * The kit stage is reused, never reimplemented: `resolveKitStagePlan` +
+ * `executeKitStage` are the same pair the Profile tab's reference-kit flow runs,
+ * so a full body generated here is persisted into `ugc_reference_kit.full_body`
+ * and every later run — v2v, cinematic, or a manual kit visit — finds it there
+ * instead of paying for it again. That stage bills and budget-checks itself
+ * (runBudgetedAssetJob), which is why no cost event for it appears at the call
+ * site.
+ */
+async function resolveFullBodyReference(
+	supabase: any,
+	userId: string,
+	agentId: string | undefined,
+	kit: Record<string, any> | null,
+	characterRef: string | null,
+	falKey: string | null,
+	gender: 'male' | 'female' | undefined
+): Promise<string> {
+	const existing = typeof kit?.full_body === 'string' ? kit.full_body.trim() : '';
+	if (existing) return existing;
+	if (!agentId || !falKey) {
+		throw new Error(
+			'V2V_NO_FULL_BODY: this persona has no full-body reference and one cannot be generated without a fal key.'
+		);
+	}
+	let svc: any;
+	try {
+		svc = getServiceSupabase();
+	} catch {
+		// The kit stage persists to our bucket before it merges the URL — with no
+		// service key there is nowhere durable to put it, and a provider URL would
+		// 404 out of the kit days later.
+		throw new Error(
+			'V2V_NO_FULL_BODY: a full-body reference must be generated first, and storage is not configured on this server.'
+		);
+	}
+	const plan = resolveKitStagePlan('full_body', kit ?? {}, characterRef, gender);
+	// The plan's own error is the honest one ("Generate a profile picture first."):
+	// with no face pinned there is nothing to build a body around.
+	if ('error' in plan) throw new Error(`V2V_NO_FULL_BODY: ${plan.error}`);
+	return await executeKitStage(supabase, svc, userId, agentId, falKey, 'full_body', plan);
+}
+
+/**
  * Generates a single UGC post pack tuned to the agent persona, brand brief and product,
  * using the agent's pinned voice/format/quality. Throws on unrecoverable failures.
  */
@@ -3228,8 +3680,38 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 		// The composer can force this run's format; 'auto' (or unset) defers to the
 		// persona's ugc_format, which the Director resolves from the content. This one
 		// value drives both the Director's brief and the final spokesperson/broll branch.
-		const formatPref: 'auto' | 'spokesperson' | 'broll' | 'vo_broll' | 'motion_card' =
+		const formatPref:
+			| 'auto'
+			| 'spokesperson'
+			| 'broll'
+			| 'vo_broll'
+			| 'motion_card'
+			| 'v2v_replace'
+			| 'v2v_move'
+			| 'v2v_narrated'
+			| 'listicle' =
 			input.formatOverride && input.formatOverride !== 'auto' ? input.formatOverride : cfg.format;
+
+		/**
+		 * How many list items this run is allowed to speak — the count the QUOTE was
+		 * built on, minus the framing line that is beat one.
+		 *
+		 * Resolved this early because it is the Director's instruction, not just a
+		 * post-hoc cut: asking for a RANGE and trimming afterwards means the model
+		 * writes five items for a four-beat quote and the last one is thrown away —
+		 * paid for in Director tokens, and (worse, if the cut ever slipped) in a
+		 * fifth voiceover call nobody priced. Asking for exactly N is the only shape
+		 * in which the ledger and the quote agree by construction.
+		 */
+		const listicleItemTarget = Math.max(
+			LISTICLE_MIN_ITEMS,
+			Math.min(
+				LISTICLE_MAX_ITEMS,
+				Number.isFinite(input.listItemCount as number)
+					? Math.round(input.listItemCount as number) - 1
+					: LISTICLE_DEFAULT_ITEMS
+			)
+		);
 
 		// ── Load agent persona ──────────────────────────────────────────────
 		let agentContext = '';
@@ -3318,7 +3800,23 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 						? 'Requested format: vo_broll — a product/lifestyle clip with the persona NARRATING over it. Write BOTH a spoken line (dialogue) and a scene the camera can show without anyone talking to camera.'
 						: formatPref === 'motion_card'
 							? 'Requested format: motion_card — a typographic card that will be animated. The card line IS the artwork; no photography, no person on camera.'
-							: `Requested format: ${formatPref}.`,
+							: formatPref === 'listicle'
+								? // The extra key is asked for HERE rather than in DIRECTOR_SYSTEM
+									// because that schema is shared by every format: adding
+									// list_items to it would have a photo post inventing a list
+									// nothing reads, and the "no extra keys" instruction it ends
+									// on would contradict itself on all seven other formats.
+									[
+										'Requested format: listicle — a numbered countdown spoken straight to camera. Each item is REVEALED on screen at the exact moment she says it, so the beats must be separable.',
+										`Add ONE extra key to the JSON: "list_items": [{"label":"<=4 words, drawn on screen","line":"the full sentence she speaks for this item"}]. Write EXACTLY ${listicleItemTarget} items — this run is priced for that many voiceover calls and any extra is discarded.`,
+										'"dialogue" is ONLY the framing line she says before item 1 — not the whole script. The items carry the rest, one sentence each.',
+										// Measured, not stylistic. A phrase the voice model has to
+										// think about — "longevity people" — came back with a 0.55s
+										// dead gap in the MIDDLE of it, which drags every later
+										// reveal off the word it was timed to.
+										'Every spoken line must read aloud cleanly in one breath: plain noun phrases, ordinary word order, no stacked compound modifiers and no coined two-word categories. Write what a person would actually say out loud.'
+									].join(' ')
+								: `Requested format: ${formatPref}.`,
 				voiceGender
 					? `If the scene shows a person on camera, they must present as ${voiceGender} — the pinned voice is ${voiceGender} and the on-camera character must match.`
 					: '',
@@ -3394,11 +3892,50 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 			}
 		}
 
-		let format: 'spokesperson' | 'broll' | 'vo_broll' | 'motion_card' =
+		let format:
+			| 'spokesperson'
+			| 'broll'
+			| 'vo_broll'
+			| 'motion_card'
+			| 'v2v_replace'
+			| 'v2v_move'
+			| 'v2v_narrated'
+			| 'listicle' =
 			formatPref === 'auto' ? (parsed.format === 'broll' ? 'broll' : 'spokesperson') : formatPref;
+		// The v2v formats are the only ones carrying an INPUT the brief can't
+		// invent. Asked for without an ingested clip there is nothing to
+		// re-perform, so the run degrades to the b-roll clip the same still would
+		// have produced rather than failing after the Director has been paid.
+		// `v2vMode` only names which transfer: the format is what the request
+		// carries, so it settles the branch and the mode fills in behind it.
+		const v2vRequested =
+			format === 'v2v_replace' ||
+			format === 'v2v_move' ||
+			format === 'v2v_narrated' ||
+			// A caller that pinned only the mode (no format) still means v2v — but
+			// only when it also handed us a clip, or this would coerce right back.
+			(Boolean(input.v2vMode) && Boolean(input.sourceVideoUrl?.trim()));
+		const sourceVideoUrl = input.sourceVideoUrl?.trim() || null;
+		if (v2vRequested) {
+			if (!sourceVideoUrl) {
+				// A narrated remake keeps the half of itself that never needed a clip:
+				// its other four stages ARE vo_broll (director, still, tts, mux), so
+				// coercing it to silent b-roll would drop a narration the user asked
+				// for and the Director has already been paid to write.
+				const narrated = format === 'v2v_narrated';
+				console.warn(
+					`[Composer] v2v asked for with no source clip — coercing to ${narrated ? 'narrated b-roll' : 'b-roll'}.`
+				);
+				format = narrated ? 'vo_broll' : 'broll';
+			} else if (format !== 'v2v_replace' && format !== 'v2v_move' && format !== 'v2v_narrated') {
+				format = input.v2vMode === 'move' ? 'v2v_move' : 'v2v_replace';
+			}
+		}
 		// A graphic card has no face to animate — a talking head cannot run on it.
 		// (Reachable only when the composer switches a graphic template to video.)
-		if (input.stillStyle === 'graphic' && format === 'spokesperson') {
+		// A listicle is a talking head with timed reveals, so it fails the same
+		// test for the same reason and degrades the same way.
+		if (input.stillStyle === 'graphic' && (format === 'spokesperson' || format === 'listicle')) {
 			console.warn('[Composer] Graphic still cannot drive a talking head — coercing to b-roll.');
 			format = 'broll';
 		}
@@ -3413,6 +3950,24 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 		if (format === 'vo_broll' && input.stillStyle === 'graphic') {
 			console.warn('[Composer] vo_broll on a graphic still — coercing to motion_card.');
 			format = 'motion_card';
+		}
+		// A v2v run re-performs the source clip AS THE PERSONA, and its only input
+		// besides the clip is a full-body reference OF that persona. A composition
+		// that excludes the persona (a typographic card, refs.character=false) has
+		// none and can never grow one, so this is a coercion rather than a fallback
+		// the provider call would discover seven minutes and one charge later.
+		if (
+			(format === 'v2v_replace' || format === 'v2v_move' || format === 'v2v_narrated') &&
+			(input.stillStyle === 'graphic' || input.useCharacterRef === false)
+		) {
+			// Same one-stage-at-a-time rule as the missing-clip coercion above: a
+			// voice needs no reference of anybody, so a narrated remake that loses the
+			// persona lands on vo_broll rather than on a silent clip. The typeset card
+			// is the exception in both directions — no camera and nowhere to put a
+			// voice — which is why vo_broll itself becomes motion_card a few lines up.
+			const narrated = format === 'v2v_narrated';
+			format = input.stillStyle === 'graphic' ? 'motion_card' : narrated ? 'vo_broll' : 'broll';
+			console.warn(`[Composer] v2v needs the persona on camera — coercing to ${format}.`);
 		}
 		// A composer-edited visual brief outranks the Director's scene.
 		// Graphic cards render a LINE, not a scene: the Director's on-screen hook is
@@ -3482,36 +4037,175 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 		// from a format switch must not end up recorded as this post's script when
 		// nothing said it. Resolved AFTER the format coercions above so it agrees
 		// with the branch that actually runs.
-		const speaks = format === 'spokesperson' || format === 'vo_broll';
+		// The narrated remake speaks, and it has to be counted HERE rather than in
+		// the video branch: this flag is what launches TTS in parallel with the
+		// still (and what lets a pinned script through). Left out, the mux below
+		// would have no audio to lay under the transferred clip and every single
+		// narrated run would degrade to a silent transfer.
+		// ── The list, validated before a single beat is paid for ────────────
+		// Nothing downstream can invent a list, so this is the last point at which
+		// a listicle can degrade for free. A Director that returned no usable items
+		// (wrong key, prose instead of objects, one item) becomes the plain
+		// spokesperson it already is: the alternative is billing N voiceover calls
+		// for a countdown with nothing to count.
+		const listItems =
+			format === 'listicle'
+				? parseListItems(parsed.list_items, listicleItemTarget, input.listItemsOverride)
+				: [];
+		if (format === 'listicle' && listItems.length < LISTICLE_MIN_ITEMS) {
+			console.warn(
+				`[Listicle] Director returned ${listItems.length} usable item(s) — running as a plain spokesperson.`
+			);
+			format = 'spokesperson';
+		}
+		// True only for a run that reached the video stage still meaning to be a
+		// listicle. Read at record time to explain a listicle request that shipped
+		// as something else — captured AFTER every coercion above, because a
+		// composition rule that ruled the format out is not an assembly failure.
+		const listicleRequested = format === 'listicle';
+
+		const speaks =
+			format === 'spokesperson' ||
+			format === 'vo_broll' ||
+			format === 'v2v_narrated' ||
+			format === 'listicle';
 		const pinnedLine = speaks ? input.dialogueOverride?.trim() || '' : '';
 		const dialogue = pinnedLine || parsed.dialogue || parsed.text || topic;
+		/**
+		 * The beats, in spoken order: the framing line, then one per item. Each
+		 * entry IS a billing unit — one TTS call — and this length is the same
+		 * number `$lib/formats` multiplied the voiceover stage by when it quoted
+		 * the run, which is what `listicleItemTarget` exists to guarantee.
+		 */
+		const listicleBeats = listicleRequested ? [dialogue, ...listItems.map((i) => i.line)] : null;
+		// Everything actually spoken this run, whether it left as one blob or as
+		// measured segments. Recorded as the script/dialogue so the drawer never
+		// shows only the framing line of a post that read out four more sentences.
+		const spokenScript = listicleBeats ? listicleBeats.join('\n') : '';
+		// The measured reveal track. Non-null ONLY when segmented TTS AND the local
+		// join both succeeded — i.e. only when the reveals can be timed to speech.
+		let listicleTrack: TimedCaption[] | null = null;
 		// The voice that ACTUALLY spoke this run — updated when TTS degrades to the
 		// classic fallback, so the stored post never claims a voice that didn't run.
 		let ttsVoiceUsed = resolvedVoice;
+		// The fal-supported classic this run degrades to if the picked voice is
+		// rejected. Hoisted so the segmented path below cannot drift from the
+		// single-call one — two lists of fallback voices is how a listicle ends up
+		// half in one voice and half in another.
+		const fallbackVoice = voiceGender === 'female' ? 'Rachel' : 'Adam';
+
+		/**
+		 * The listicle's voiceover: one call per beat, every one metered, then
+		 * joined locally so the reveal times are measurements rather than guesses.
+		 *
+		 * Degrades in exactly one step. If the segments cannot be produced or
+		 * joined, it speaks the WHOLE script as a single blob and leaves
+		 * `listicleTrack` null — a talking head with no reveals still ships, and
+		 * the record downgrades to 'spokesperson' because that is what it is. A
+		 * spend refusal is the one thing that is NOT degraded past: falling back
+		 * there would buy a second voiceover on the very run the cap rejected.
+		 */
+		const speakListicle = async (
+			key: string,
+			beats: string[]
+		): Promise<{ url: string } | { err: Error }> => {
+			try {
+				// allSettled, not all: a rejection mid-flight must not discard the
+				// segments that DID reach fal. Each one is a real provider call, so
+				// each one records its own cost event — the quote already bills this
+				// stage per beat (`stepBilling.tts`), and a single event here would
+				// leave the ledger reading one voiceover against a four-beat quote.
+				const settled = await Promise.allSettled(
+					beats.map((line) =>
+						generateVoiceAudio(key, resolvedVoice, line, fallbackVoice, falRoutes.tts)
+					)
+				);
+				const urls: string[] = [];
+				for (const s of settled) {
+					if (s.status !== 'fulfilled') continue;
+					ttsVoiceUsed = s.value.voiceUsed;
+					costEvents.push({
+						provider: 'fal',
+						operation: 'tts',
+						model: falRoutes.tts.id,
+						usd: falRoutes.tts.usd
+					});
+					urls.push(s.value.url);
+				}
+				const failed = settled.find((s) => s.status === 'rejected');
+				if (failed) throw (failed as PromiseRejectedResult).reason;
+
+				// Same getter as the video branch's `svc`, resolved here because the
+				// join runs BEFORE that branch — the joined audio has to be hosted
+				// somewhere fal can fetch it before the lip-sync call is even made.
+				const svcForVoice = (() => {
+					try {
+						return getServiceSupabase();
+					} catch {
+						return null;
+					}
+				})();
+				const joined = await joinVoiceSegments(svcForVoice, userId, urls, LISTICLE_BEAT_GAP_SEC);
+				if (!joined) throw new Error('segment join produced no audio');
+				listicleTrack = buildListicleTrack(listItems, joined.startsAt);
+				if (listicleTrack.length === 0) throw new Error('no reveal could be timed');
+				return { url: joined.url };
+			} catch (e) {
+				if (isCreditsError(e) || /budget/i.test((e as Error).message ?? '')) {
+					return { err: e as Error };
+				}
+				console.warn(
+					`[Listicle] segmented voiceover failed (${((e as Error).message ?? '').slice(0, 160)}) — speaking the whole script in one call, no reveals.`
+				);
+				listicleTrack = null;
+				try {
+					const { url, voiceUsed } = await generateVoiceAudio(
+						key,
+						resolvedVoice,
+						beats.join(' '),
+						fallbackVoice,
+						falRoutes.tts
+					);
+					ttsVoiceUsed = voiceUsed;
+					costEvents.push({
+						provider: 'fal',
+						operation: 'tts',
+						model: falRoutes.tts.id,
+						usd: falRoutes.tts.usd
+					});
+					return { url };
+				} catch (blobErr) {
+					return { err: blobErr as Error };
+				}
+			}
+		};
+
 		const spokenAudio: Promise<{ url: string } | { err: Error }> | null =
 			wantVideo && speaks && falKey
-				? generateVoiceAudio(
-						falKey,
-						resolvedVoice,
-						dialogue,
-						// Adam/Rachel are the original ElevenLabs voices — universally
-						// fal-supported, so a rejected exotic voice degrades to a
-						// same-gender classic, never a failure.
-						voiceGender === 'female' ? 'Rachel' : 'Adam',
-						falRoutes.tts
-					).then(
-						({ url, voiceUsed }) => {
-							ttsVoiceUsed = voiceUsed;
-							costEvents.push({
-								provider: 'fal',
-								operation: 'tts',
-								model: falRoutes.tts.id,
-								usd: falRoutes.tts.usd
-							});
-							return { url };
-						},
-						(err) => ({ err: err as Error })
-					)
+				? listicleBeats
+					? speakListicle(falKey, listicleBeats)
+					: generateVoiceAudio(
+							falKey,
+							resolvedVoice,
+							dialogue,
+							// Adam/Rachel are the original ElevenLabs voices — universally
+							// fal-supported, so a rejected exotic voice degrades to a
+							// same-gender classic, never a failure.
+							fallbackVoice,
+							falRoutes.tts
+						).then(
+							({ url, voiceUsed }) => {
+								ttsVoiceUsed = voiceUsed;
+								costEvents.push({
+									provider: 'fal',
+									operation: 'tts',
+									model: falRoutes.tts.id,
+									usd: falRoutes.tts.usd
+								});
+								return { url };
+							},
+							(err) => ({ err: err as Error })
+						)
 				: null;
 
 		// ── Pinned creator face → consistent character across ALL posts ──
@@ -3848,6 +4542,23 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 		// posts and talking-head runs). Recorded in selections so the drawer's
 		// "Video model" line names the run, not the request — failovers included.
 		let videoModelRan: string | null = null;
+		// The v2v endpoint this run SET OUT to drive, kept even when the run ends up
+		// on the i2v fallback — otherwise a composer that pinned no model at all
+		// would leave the record with no trace that a performance transfer was
+		// asked for, and the fallback clip would read as a plain b-roll request.
+		let v2vModelRequested: string | null = null;
+		// The image actually SENT to the v2v endpoint: a FULL-BODY reference, not
+		// the bust-crop characterRef the rest of the pipeline composites from. The
+		// images block below must name the file that left the app.
+		let v2vReferenceSent: string | null = null;
+		// The transfer's own record, and the whole of the truth contract for this
+		// stage: it is assigned ONLY after the v2v endpoint returned a clip, and
+		// cleared by every path that then replaces that clip with an i2v one. Its
+		// mere PRESENCE in the stored provenance is the claim "a performance
+		// transfer produced this video", so a run that fell back must leave it null
+		// rather than record it with a failure flag — a reader filtering on
+		// `generation.v2v` would otherwise count the fallbacks as transfers.
+		let v2vTransfer: NonNullable<GenerationProvenance['v2v']> | null = null;
 		// A motion card this host could not animate. Recorded so the post explains
 		// why a video format shipped a still.
 		let motionCardDegraded = false;
@@ -3863,7 +4574,158 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 		})();
 		if (wantVideo && (falKey || orKey)) {
 			try {
-				if (format === 'spokesperson' && falKey) {
+				if (
+					(format === 'v2v_replace' ||
+						format === 'v2v_move' ||
+						// The narrated remake's first stage IS this transfer — everything
+						// that separates it from Replace happens after the clip exists
+						// (TTS was already launched above; the mux runs below). Branching it
+						// off into its own copy of this block is how the two would drift.
+						format === 'v2v_narrated') &&
+					falKey &&
+					sourceVideoUrl
+				) {
+					// ── Performance transfer: the source clip IS the direction ──
+					// Everything this stage needs that the brief cannot supply: the
+					// ingested clip, and a FULL-BODY reference of the persona. The still
+					// generated above is not an input here at all — it stays as the
+					// poster, and as the anchor the never-brick i2v fallback runs from.
+					// Narrated inherits 'replace' from the default arm on purpose: a
+					// remake keeps the SOURCE clip's scene, and 'move' would put the
+					// persona back in their own scene — a different product entirely.
+					const mode = format === 'v2v_move' ? 'move' : 'replace';
+					// The FORMAT chooses the endpoint, never the model dropdown: replace
+					// and move are two different transfers with two different outputs
+					// (replace inherits the SOURCE's scene and aspect; move keeps the
+					// reference's). Running the picked model when it disagrees with the
+					// requested transfer would deliver a clip the record cannot describe.
+					const v2vModel =
+						MODEL_CATALOG.find((m) => m.kind === 'video_v2v' && m.id.endsWith(`/${mode}`)) ??
+						resolveModel('video_v2v', input.videoModel);
+					v2vModelRequested = v2vModel.id;
+					// The adapter riding on this request was probed for the i2v stage. It
+					// is usable here ONLY when it names a source-clip param and belongs to
+					// the id we are about to run — otherwise it would drive this endpoint
+					// with another model's param names, which is a 422 seven minutes in.
+					const v2vAdapter =
+						input.videoAdapter?.video && input.videoModel === v2vModel.id
+							? input.videoAdapter
+							: undefined;
+					try {
+						const fullBody = await resolveFullBodyReference(
+							supabase,
+							userId,
+							input.agentId,
+							cfg.referenceKit,
+							characterRef,
+							falKey,
+							voiceGender
+						);
+						v2vReferenceSent = fullBody;
+						mediaUrl = await generateV2vVideo(
+							falKey,
+							v2vModel.id,
+							sourceVideoUrl,
+							fullBody,
+							motionPrompt,
+							v2vAdapter
+						);
+						videoModelRan = v2vModel.id;
+						// ── Metering: a PER-SECOND rate, multiplied here ──
+						// priceOf() and every other cost site in this file quote a per-CALL
+						// number; this model's catalog `usd` is a per-SECOND rate (models.ts
+						// `billing: 'per_second'`, pricing.ts's "per source second" row), and
+						// priceOf's signature has nowhere to put a multiplier. So the
+						// multiplication happens at the call site — guarded on the model's own
+						// declared basis, so a catalog edit back to a flat price can never
+						// silently multiply a per-call rate by the clip length. Billing a flat
+						// rate instead would make a 20-second transfer a near-free path the
+						// moment credits_mode=enforce.
+						// The catalog rate, NEVER input.videoModelUsd: that number is resolved
+						// against the `video_i2v` registry kind by the caller, so on a v2v
+						// request it carries the i2v DEFAULT's per-CALL price (~$0.42).
+						// Multiplying that by the clip length would bill a 10-second remake
+						// at $4.20 instead of $0.60 — a 7x overcharge that would look like a
+						// price, not a bug. A registry override for this stage needs the
+						// caller to resolve it as 'video_v2v' first.
+						const perSecond = v2vModel.usd;
+						const billedSeconds = v2vBillableSeconds(input.sourceSeconds);
+						costEvents.push({
+							provider: 'fal',
+							operation: 'video',
+							// The basis rides in the label: a $0.90 video row against a $0.06
+							// catalog price is otherwise unexplainable in the ledger.
+							model: `${v2vModel.label} (${billedSeconds}s source @ $${perSecond}/s)`,
+							usd:
+								v2vModel.billing === 'per_second'
+									? +(perSecond * billedSeconds).toFixed(6)
+									: perSecond
+						});
+						// Built from the SAME two locals the ledger row above was computed
+						// from, deliberately: a provenance block that called
+						// v2vBillableSeconds() a second time would be a second answer to
+						// "what was billed", and the two would disagree the first time
+						// either the clamp or the assumed-duration rule changed — which is
+						// exactly the unauditable per-second charge this block exists to
+						// prevent.
+						v2vTransfer = {
+							mode,
+							source_video: sourceVideoUrl,
+							resolution: V2V_RESOLUTION,
+							// The full-body kit shot, never the pinned bust crop — see
+							// resolveFullBodyReference. A bad output is only diagnosable if the
+							// record names the image that actually left the app.
+							reference: fullBody,
+							// Mirrors the cost event's own guard: under a flat catalog price
+							// nothing is billed per second, and publishing a rate × duration
+							// the ledger never charged is a bill nobody can reconcile.
+							...(v2vModel.billing === 'per_second'
+								? { billed_seconds: billedSeconds, usd_per_second: perSecond }
+								: {})
+						};
+					} catch (v2vErr) {
+						const v2vMsg = (v2vErr as Error).message ?? '';
+						// A spend refusal is fail-closed everywhere in this file — falling
+						// back here would spend MORE money on the very run the cap rejected.
+						if (isCreditsError(v2vErr) || /budget/i.test(v2vMsg)) throw v2vErr;
+						// Never-brick: a failed transfer (no full-body reference, a source
+						// clip fal could not fetch, a job past its deadline) still ships the
+						// clip this still would have produced. The RECORD becomes 'broll'
+						// because that is what the viewer watches — the truth contract is
+						// about what ran, and a post claiming a performance transfer it did
+						// not perform is the exact lie that contract exists to prevent.
+						console.warn(
+							`[generate] v2v ${mode} failed (${v2vMsg.slice(0, 160)}) — falling back to the i2v b-roll clip.`
+						);
+						// A narrated remake keeps its narration through this rung: the voice
+						// never depended on the transfer, so the fallback clip still gets the
+						// voiceover mixed under it by the vo_broll block below, and only a
+						// mux failure after that drops it to silent 'broll'.
+						format = format === 'v2v_narrated' ? 'vo_broll' : 'broll';
+						v2vReferenceSent = null;
+						// Belt to the "only assigned on success" brace: nothing above can
+						// have set it on this path, and clearing it here is what keeps that
+						// true if the try block ever grows a second failure point.
+						v2vTransfer = null;
+						// falKey is non-null by this branch's own condition. If the i2v
+						// fallback ALSO fails it throws on into the outer catch, which owns
+						// the OpenRouter failover — one more rung, not a dead end.
+						mediaUrl = await generateBrollVideo(falKey, brollModel.id, still, motionPrompt);
+						videoModelRan = brollModel.id;
+						costEvents.push({
+							provider: 'fal',
+							operation: 'video',
+							model: brollModel.label,
+							usd: brollModel.usd
+						});
+					}
+				} else if ((format === 'spokesperson' || format === 'listicle') && falKey) {
+					// A listicle IS a spokesperson at this stage: same still, same
+					// lip-sync model, same price. Everything that makes it a listicle
+					// already happened (the voiceover arrives as one joined track with
+					// measured beat offsets) or happens after (the reveals are burned on
+					// below), so branching it off here would be a second copy of this
+					// call that could only ever drift from it.
 					// TTS was launched in parallel with the still (see spokenAudio above) —
 					// non-null here because this branch's condition matches its launch
 					// condition. A TTS failure rethrows HERE so the fal-outage fallback
@@ -3934,7 +4796,11 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 					// No fal at all — straight to OpenRouter video. TTS + talking head are
 					// fal-exclusive, so a spokesperson request runs as b-roll here — record
 					// that, or the post would claim a talking head the viewer never gets.
-					if (format === 'spokesperson') format = 'broll';
+					// The same holds for a performance transfer: OpenRouter's video API is
+					// image-to-video only, so the source clip is not re-performed at all.
+					// (motion_card can't reach here — it is handled above whether or not
+					// there is a key, since it calls no provider at all.)
+					if (format !== 'vo_broll') format = 'broll';
 					mediaUrl = await openRouterBrollVideo(
 						orKey!,
 						userId,
@@ -3951,23 +4817,41 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 						usd: orRoutes.video.usd
 					});
 				}
-				if (format === 'vo_broll' && mediaUrl !== still) {
+				if ((format === 'vo_broll' || format === 'v2v_narrated') && mediaUrl !== still) {
 					// The clip exists; now lay the persona's voice under it. A failure here
 					// must NOT lose the clip that was just paid for, so it degrades to the
 					// silent version — and the recorded format becomes 'broll', because
 					// what the viewer actually watches is what the record has to say.
+					// The narrated remake shares this tail rather than owning a copy: same
+					// TTS promise, same mux, same degradation — the only differences are
+					// the duration policy and which silent format it falls back to.
+					const narratedRemake = format === 'v2v_narrated';
 					const settled = spokenAudio ? await spokenAudio : null;
 					const mixed =
 						settled && !('err' in settled)
-							? await muxVoiceover(mediaUrl, settled.url).catch(() => null)
+							? await muxVoiceover(mediaUrl, settled.url, {
+									// A transferred clip is billed per SOURCE second, so the
+									// default 'audio' policy — which trims the video down to the
+									// narration — would throw away seconds the user was charged
+									// for whenever the line runs short. 'longest' cuts neither
+									// side. B-roll keeps the default: its clip is a fixed ~5s
+									// nobody paid for by the second.
+									...(narratedRemake ? { keep: 'longest' as const } : {})
+								}).catch(() => null)
 							: null;
 					if (mixed && svc) {
 						mediaUrl = await persistBufferToStorage(svc, mixed, userId, 'mp4', 'video/mp4');
 					} else {
 						console.warn(
-							'[generate] vo_broll narration could not be mixed — delivering the silent clip.'
+							`[generate] ${format} narration could not be mixed — delivering the ${
+								narratedRemake ? 'transferred clip without narration' : 'silent clip'
+							}.`
 						);
-						format = 'broll';
+						// What ships on a lost mux is a silent performance transfer, which is
+						// precisely the Replace format — so that is what the record says, and
+						// v2vTransfer stays: the transfer really did run and was really paid
+						// for. Only the local, $0 stage was lost.
+						format = narratedRemake ? 'v2v_replace' : 'broll';
 					}
 				}
 				// A motion card this host could not animate ships as the still it already
@@ -3982,6 +4866,12 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 					// The delivered clip is silent b-roll whatever was requested — the
 					// recorded format must describe what the viewer actually watches.
 					if (format !== 'broll') format = 'broll';
+					// The clip about to ship comes from an image-to-video model, so nothing
+					// of a transfer survives into the record — including a transfer that HAD
+					// succeeded before a later step in the same try block threw us here. The
+					// spend stays in the ledger (it was really incurred); the claim does not.
+					v2vTransfer = null;
+					v2vReferenceSent = null;
 					mediaUrl = await openRouterBrollVideo(
 						orKey,
 						userId,
@@ -4024,7 +4914,17 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 				// burnCaptions no-ops and the clean original video is kept.
 				const captioned = await burnCaptions(mediaUrl, {
 					badge: input.aiBadge,
-					hook: input.captions ? parsed.on_screen_text : ''
+					hook: input.captions ? parsed.on_screen_text : '',
+					// The track is NOT gated on `input.captions`. The hook is an optional
+					// overlay on any clip; the numbered reveals ARE the listicle, and a
+					// listicle that ships without them is a talking head reading numbers
+					// off a page nobody sees — the exact thing the format's ffmpeg
+					// requirement exists to refuse.
+					// Gated on `format` as well as on the track because a run that fell
+					// back to a 5-second b-roll clip (fal outage) still holds the offsets
+					// measured for a 20-second narration, and burning those onto it would
+					// dump the whole list on the first frame.
+					...(format === 'listicle' && listicleTrack ? { track: listicleTrack } : {})
 				}).catch(() => null);
 				captionsApplied = captioned != null;
 				durableMedia = captioned
@@ -4037,6 +4937,24 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 			console.warn(
 				'[generate] No service-role Supabase key configured — storing EPHEMERAL provider URLs (media is NOT backed up).'
 			);
+		}
+
+		// ── The listicle's truth test ───────────────────────────────────────
+		// A listicle is only a listicle if the reveals reached the file. Both halves
+		// have to have happened: the segments had to be measurable (listicleTrack)
+		// AND the burn had to run (captionsApplied — null from burnCaptions on a
+		// host with no ffmpeg or no font, or on a fetch failure). Either one missing
+		// and what ships is a talking head speaking a list with nothing on screen,
+		// so the record says 'spokesperson' — the same rule a lost mux follows when
+		// it records 'broll'. `generation.listicle.assembled` below is what keeps
+		// the downgrade explainable rather than merely silent — and it is a field of
+		// its own, not `motion_assembled`, because THIS run still shipped a video.
+		const listicleAssembled = format === 'listicle' && Boolean(listicleTrack) && captionsApplied;
+		if (format === 'listicle' && !listicleAssembled) {
+			console.warn(
+				'[Listicle] reveals were not burned onto the clip — recording this post as a spokesperson.'
+			);
+			format = 'spokesperson';
 		}
 
 		// Record durable asset URLs in the ledger (flushed in finally) so this spend
@@ -4063,8 +4981,10 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 			hashtags: Array.isArray(parsed.hashtags) ? parsed.hashtags : [],
 			hookScore: parsed.hookScore,
 			// The line that was actually SPOKEN — a pinned script must be what the
-			// post records, or the drawer would show a script nobody said.
-			dialogue: pinnedLine || parsed.dialogue || '',
+			// post records, or the drawer would show a script nobody said. On a
+			// listicle that is every beat, not just the framing line: the framing line
+			// alone would show a fifth of what the voice said.
+			dialogue: spokenScript || pinnedLine || parsed.dialogue || '',
 			on_screen_text: parsed.on_screen_text || '',
 			// Actual burn outcome (see captionsApplied) — not merely what was requested.
 			// The caption flag ALSO requires real hook text: a badge-only burn returns a
@@ -4078,7 +4998,11 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 			// the raw Director output here would show (and refine from) a prompt that
 			// never ran whenever the user pinned a scene.
 			ugc_broll_prompt: scenePrompt,
-			script: pinnedLine || parsed.script || parsed.dialogue || '',
+			script: spokenScript || pinnedLine || parsed.script || parsed.dialogue || '',
+			// Kept whenever the beats were spoken, INCLUDING a run that degraded to a
+			// single blob — the words were said either way. `format` says whether they
+			// were also shown.
+			...(listicleBeats ? { list_items: listItems } : {}),
 			media_url: durableMedia,
 			poster_url: durableStill,
 			media_type: mediaType,
@@ -4108,9 +5032,15 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 			...summarizeAspects(costEvents),
 			// The images actually SENT to a model. A supplied still means none were:
 			// claiming refs here would show the drawer inputs that never left the app.
+			// A v2v run is the one path whose character reference is NOT the pinned
+			// bust crop — the full-body kit shot is what left the app, so that is what
+			// this names (and it is null again when the transfer fell back to i2v).
 			images: suppliedStill
 				? { character_ref: null, product_photo: null }
-				: { character_ref: characterRef || null, product_photo: productPhoto || null },
+				: {
+						character_ref: v2vReferenceSent || characterRef || null,
+						product_photo: productPhoto || null
+					},
 			// The composition contract this run obeyed. Refine honors it (a null ref
 			// under policy=false is deliberate, not lost provenance), and the drawer
 			// can say WHY a ref is absent.
@@ -4122,7 +5052,37 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 			// Where the still came from, so the drawer can explain a $0 image row
 			// that has no image model behind it at all.
 			...(suppliedStill ? { still_source: 'supplied' as const } : {}),
+			// A motion card that shipped as a still: a VIDEO format that produced an
+			// IMAGE. Nothing else may borrow this flag — a listicle degradation is a
+			// different event entirely (the clip shipped; the reveals didn't), and
+			// one boolean covering both would leave a reader unable to say which
+			// happened. The listicle records its own, below.
 			...(motionCardDegraded ? { motion_assembled: false as const } : {}),
+			// The list, present ONLY on a run that still meant to be a listicle when
+			// it reached the video stage — `listicleRequested` is captured after
+			// every composition coercion, so a request that lost its items to a bad
+			// Director response, or was ruled out for a graphic still, carries no
+			// block at all rather than an empty one claiming a list that never
+			// existed. `assembled` then separates "the reveals were burned" from
+			// "the items were spoken and never shown".
+			// `beats` is COUNTED FROM THE LEDGER, not from listicleBeats.length: the
+			// quote bills one voiceover per beat, and the degraded path buys the
+			// segments that landed plus a whole-script blob on top. Recomputing the
+			// intended count here would print a number the invoice contradicts.
+			...(listicleRequested
+				? {
+						listicle: {
+							items: listItems.map((i) => i.label),
+							beats: costEvents.filter((e) => e.operation === 'tts').length,
+							assembled: listicleAssembled
+						}
+					}
+				: {}),
+			// Present ONLY when the v2v provider actually produced the clip that
+			// shipped. Every path that substitutes an i2v clip nulls v2vTransfer, so
+			// this spread is the difference between "a transfer was requested" (which
+			// lives in selections.videoModelRequested) and "a transfer ran".
+			...(v2vTransfer ? { v2v: v2vTransfer } : {}),
 			...(isGraphicStill && input.cardLayout && input.cardLayout !== 'auto'
 				? { card_layout: input.cardLayout }
 				: {}),
@@ -4138,9 +5098,15 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 				// The i2v model that RAN (null when none did: image posts, talking heads).
 				// The request is kept separately so a failover stays explainable.
 				videoModel: videoModelRan,
+				// What was asked for, when it differs from what ran. The v2v endpoint is
+				// included because a transfer that fell back to i2v is otherwise
+				// indistinguishable from a plain b-roll request in this record — and the
+				// composer need not have pinned any model for a transfer to be requested.
 				...(input.videoModel && input.videoModel !== videoModelRan
 					? { videoModelRequested: input.videoModel }
-					: {}),
+					: v2vModelRequested && v2vModelRequested !== videoModelRan
+						? { videoModelRequested: v2vModelRequested }
+						: {}),
 				// The still model REQUESTED. What ran is in aspects.image.models,
 				// derived from the ledger — recording a second "what ran" here is how
 				// the two would eventually disagree.
@@ -4528,12 +5494,25 @@ export async function refineUgcMedia(input: RefineMediaInput): Promise<UgcConten
 
 		// ── Video — same format the post already has ──
 		const wantVideo = content.media_type === 'video';
+		// A refine re-shoots the STILL and re-runs the clip from it — it has no
+		// source clip, because the ingested file is not part of the stored post. So a
+		// performance-transfer post refines as b-roll (what a still can actually
+		// produce) rather than as a spokesperson, which is what the old
+		// anything-else-is-spokesperson default would have made of it.
 		let format: 'spokesperson' | 'broll' | 'vo_broll' | 'motion_card' =
 			content.format === 'broll' ||
 			content.format === 'vo_broll' ||
 			content.format === 'motion_card'
 				? content.format
-				: 'spokesperson';
+				: content.format === 'v2v_narrated'
+					? // A narrated remake has no clip to re-transfer either, but its voice
+						// is fully reproducible from the stored script and voice — so it
+						// refines as the narrated b-roll clip rather than silently losing
+						// the narration the post is named for.
+						'vo_broll'
+					: content.format === 'v2v_replace' || content.format === 'v2v_move'
+						? 'broll'
+						: 'spokesperson';
 		const dialogue = (
 			input.dialogue?.trim() ||
 			content.dialogue ||

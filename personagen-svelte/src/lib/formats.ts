@@ -32,7 +32,7 @@
  * will run or what it costs.
  */
 
-import type { QualityTier } from '$lib/models';
+import type { Billing, QualityTier } from '$lib/models';
 
 /** What comes out. The axis a user browses by. */
 export type FormatKind = 'image' | 'video' | 'series';
@@ -50,7 +50,29 @@ export type FormatNeed =
 	| 'voice'
 	| 'shots'
 	| 'captions'
-	| 'planner';
+	| 'planner'
+	/** A source clip the user supplies; the run transforms it instead of a still. */
+	| 'sourceVideo'
+	/** The numbered beats of a listicle. Each becomes an on-screen label that
+	 *  appears on the beat it is spoken and stays. */
+	| 'listItems';
+
+/**
+ * Something the HOST must be able to do before a format can be offered — as
+ * opposed to something the persona or the brief must supply (`FormatNeed`).
+ *
+ * The distinction matters because the two fail at different times. A missing
+ * need is a control the user can fill in. A missing capability cannot be filled
+ * in at all, so the format is hidden rather than offered and failed after the
+ * money is spent — the rule the $0 card renderer already follows.
+ *
+ *   - `ffmpeg`      — a local assembly stage (card motion, voiceover mux). Soft
+ *                     dependency: our Docker runtime has it, a bare host may not.
+ *   - `videoIngest` — the host can accept, probe and store a source clip.
+ *                     Required by the video-to-video formats, which cannot run
+ *                     without a clip to transform.
+ */
+export type HostCapability = 'ffmpeg' | 'videoIngest';
 
 /** One paid or free stage of a run. */
 export type StepKind =
@@ -63,7 +85,8 @@ export type StepKind =
 	| 'cine_stills'
 	| 'cine_video'
 	| 'motion'
-	| 'mux';
+	| 'mux'
+	| 'v2v';
 
 export interface FormatEntry {
 	id: string;
@@ -78,7 +101,16 @@ export interface FormatEntry {
 	/** The request fields this format maps to — the API contract is unchanged. */
 	request: {
 		media?: 'image' | 'video' | 'cinematic';
-		format?: 'auto' | 'spokesperson' | 'broll' | 'vo_broll' | 'motion_card';
+		format?:
+			| 'auto'
+			| 'spokesperson'
+			| 'broll'
+			| 'vo_broll'
+			| 'motion_card'
+			| 'v2v_replace'
+			| 'v2v_move'
+			| 'v2v_narrated'
+			| 'listicle';
 		still?: 'photo' | 'graphic';
 		refs?: { character: boolean; product: boolean };
 	};
@@ -87,12 +119,42 @@ export interface FormatEntry {
 	/** Needs a face on camera; a persona-free composition cannot run this. */
 	needsFace?: boolean;
 	/**
-	 * Assembled locally with ffmpeg, which is a SOFT dependency — the host may
-	 * not have it. A format flagged here is hidden where it cannot be built,
-	 * rather than offered and failed after the money is spent. Same gate the $0
-	 * card renderer already uses.
+	 * What the HOST must be able to do to build this format. Absent or empty
+	 * means the format runs anywhere. A format whose capabilities aren't all
+	 * present is hidden, not offered and failed after the money is spent.
+	 *
+	 * A list rather than one flag per capability: the set grows (ingest is next),
+	 * and `buildableWith` should never need editing when it does.
 	 */
-	needsFfmpeg?: boolean;
+	requires?: HostCapability[];
+	/**
+	 * A stage whose cost basis this FORMAT changes.
+	 *
+	 * Billing is normally a fact about the provider (`ModelOption.billing`) or the
+	 * pipeline position (`STEP_BILLING`). A listicle is neither: it calls the very
+	 * same TTS model as a Spokesperson, at the same price, just once per beat —
+	 * because that is the only way to MEASURE where each on-screen reveal lands
+	 * instead of guessing. Only the format knows that, so only the format can say.
+	 *
+	 * Without this the quote shows one voiceover and the ledger charges four.
+	 */
+	stepBilling?: Partial<Record<StepKind, Billing>>;
+}
+
+/**
+ * Can this host build this format? The single place format visibility is
+ * decided, so a new capability is a member of `HostCapability` and nothing else.
+ *
+ * Fails CLOSED on an unknown capability: a format naming something this host
+ * hasn't been told about is hidden, because the alternative is selling a run
+ * that cannot complete.
+ */
+export function buildableWith(
+	format: Pick<FormatEntry, 'requires'>,
+	available: Iterable<HostCapability>
+): boolean {
+	const have = new Set(available);
+	return (format.requires ?? []).every((cap) => have.has(cap));
 }
 
 /**
@@ -136,7 +198,7 @@ export const FORMAT_CATALOG: FormatEntry[] = [
 			refs: { character: false, product: false }
 		},
 		video: true,
-		needsFfmpeg: true
+		requires: ['ffmpeg']
 	},
 	{
 		id: 'spokesperson',
@@ -148,6 +210,27 @@ export const FORMAT_CATALOG: FormatEntry[] = [
 		request: { media: 'video', format: 'spokesperson' },
 		video: true,
 		needsFace: true
+	},
+	{
+		id: 'listicle',
+		kind: 'video',
+		label: 'Listicle',
+		note: 'A numbered countdown to camera. Each item appears on screen as she says it.',
+		needs: ['script', 'voice', 'listItems', 'scene', 'framing', 'face', 'captions'],
+		// Identical stages to Spokesperson — the difference is what the Director
+		// writes and that the voiceover is generated PER ITEM, which is the only
+		// way the on-screen reveals can be timed to speech rather than guessed.
+		steps: ['director', 'still', 'tts', 'talkinghead'],
+		request: { media: 'video', format: 'listicle' },
+		video: true,
+		needsFace: true,
+		// One TTS call per beat (hook + each item), not one for the whole script.
+		stepBilling: { tts: 'per_item' },
+		// ffmpeg is REQUIRED here, unlike Spokesperson, because the timed reveals
+		// are burned locally. A listicle whose list cannot render is not a
+		// listicle — it is a talking head reading numbers off a page nobody sees,
+		// which is exactly the silent-degradation this gate exists to refuse.
+		requires: ['ffmpeg']
 	},
 	{
 		id: 'product-motion',
@@ -168,7 +251,55 @@ export const FORMAT_CATALOG: FormatEntry[] = [
 		steps: ['director', 'still', 'tts', 'video', 'mux'],
 		request: { media: 'video', format: 'vo_broll' },
 		video: true,
-		needsFfmpeg: true
+		requires: ['ffmpeg']
+	},
+	{
+		id: 'reel-remake',
+		kind: 'video',
+		label: 'Reel remake',
+		note: 'A clip you supply, performed by this persona — its scene, framing and timing, your face.',
+		needs: ['sourceVideo', 'face', 'captions'],
+		// The still is NOT decoration: the engine composites one on every v2v run —
+		// it is the post's poster frame and the anchor the never-brick i2v fallback
+		// re-performs from when the transfer fails. It runs, so it is quoted. A
+		// stage that bills but is not quoted is the same lie as one that is quoted
+		// but never runs, only harder to notice.
+		steps: ['director', 'still', 'v2v'],
+		request: { media: 'video', format: 'v2v_replace' },
+		video: true,
+		needsFace: true,
+		requires: ['videoIngest']
+	},
+	{
+		id: 'narrated-reel',
+		kind: 'video',
+		label: 'Narrated reel remake',
+		note: 'A clip you supply, performed by this persona and narrated in their voice.',
+		needs: ['sourceVideo', 'script', 'voice', 'face', 'captions'],
+		// Every one of these five stages already exists — this format is the
+		// composition, not new machinery. The mux lays the voiceover under the
+		// transferred clip, which is also why ffmpeg is required here and not on
+		// the silent Replace format.
+		steps: ['director', 'still', 'v2v', 'tts', 'mux'],
+		request: { media: 'video', format: 'v2v_narrated' },
+		video: true,
+		needsFace: true,
+		requires: ['videoIngest', 'ffmpeg']
+	},
+	{
+		id: 'motion-transfer',
+		kind: 'video',
+		label: 'Motion transfer',
+		note: 'Takes only the movement from a clip you supply. The persona stays in their own scene.',
+		needs: ['sourceVideo', 'scene', 'face', 'captions'],
+		steps: ['director', 'still', 'v2v'],
+		request: { media: 'video', format: 'v2v_move' },
+		video: true,
+		needsFace: true,
+		// ffmpeg as well as ingest: Move's output follows the REFERENCE aspect, not
+		// the source clip's, so a 3:4 reference yields a 3:4 clip that has to be
+		// reframed before it is a Reel. Replace needs no such pass.
+		requires: ['videoIngest', 'ffmpeg']
 	},
 	{
 		id: 'cinematic',
@@ -253,6 +384,10 @@ export function formatFromRequest(body: Record<string, any> | null | undefined):
 	if (body.media === 'image') return body.still === 'graphic' ? 'text-card' : 'photo';
 	if (body.format === 'motion_card') return 'motion-card';
 	if (body.format === 'vo_broll') return 'vo-broll';
+	if (body.format === 'v2v_replace') return 'reel-remake';
+	if (body.format === 'v2v_move') return 'motion-transfer';
+	if (body.format === 'v2v_narrated') return 'narrated-reel';
+	if (body.format === 'listicle') return 'listicle';
 	// Anything else is a video. A graphic still has no face to animate — the
 	// server coerces those to b-roll — so it must not resolve to spokesperson.
 	if (body.still === 'graphic') return 'product-motion';
@@ -270,9 +405,35 @@ export function formatFromRequest(body: Record<string, any> | null | undefined):
 // combinations, four arrays, and a price that broke silently if a label
 // changed. That cannot scale to formats × model choice × tier lock.
 
+/**
+ * What a stage's provider cost scales with — the quantity `StepModel.usd` buys
+ * ONE of.
+ *
+ * `per_call` is the assumption every stage made before this existed, and it is
+ * still right for almost all of them: one call, one price, regardless of how
+ * long the output is. The other two are the cases where that assumption quietly
+ * under-quotes:
+ *
+ *   - `per_shot`   — the stage runs its model once per storyboard shot, so a
+ *                    5-shot sequence costs 5×. This was a hardcoded
+ *                    `kind === 'cine_stills'` check inside planPipeline.
+ *   - `per_second` — the PROVIDER bills by output duration rather than by job
+ *                    (fal's wan-animate video-to-video family bills per video
+ *                    second at 16fps). `usd` is then USD per second, not per
+ *                    call, and quoting it as a flat price is wrong by however
+ *                    long the clip is.
+ *
+ * Kept as a declared basis rather than a chain of `if (kind === …)` because the
+ * second such branch is where a quote function starts to lie: every future
+ * per-unit stage would add one more, and none of them would be visible to the
+ * tests that check the total.
+ */
+export type { Billing };
+
 export interface StepModel {
 	id: string;
 	label: string;
+	/** USD per BILLED UNIT — per call unless the basis says otherwise. */
 	usd: number;
 	provider: string;
 	tier?: QualityTier | 'free';
@@ -281,6 +442,13 @@ export interface StepModel {
 	supportsAudio?: boolean;
 	supportsDuration?: boolean;
 	multiRef?: boolean;
+	/**
+	 * Overrides the stage's default basis. Billing is a fact about the PROVIDER's
+	 * price, not about the pipeline position, so a per-second model dropped into
+	 * a stage whose other models bill per call must be able to say so — otherwise
+	 * the stage's basis would silently misquote it.
+	 */
+	billing?: Billing;
 }
 
 export interface PipelineStep {
@@ -314,6 +482,19 @@ export interface PlanInput {
 	tier?: QualityTier | 'manual';
 	/** Cinematic shot count — the storyboard stills line is per shot. */
 	shots?: number;
+	/**
+	 * Output duration for stages billed `per_second`. MEASURED, not assumed:
+	 * for a source-driven stage this is the probed length of the clip the user
+	 * supplied. A per-second model quoted at an assumed duration is how a user
+	 * gets a bill they were never shown.
+	 */
+	seconds?: number;
+	/**
+	 * Beats in a listicle — the hook plus each item, i.e. how many separate
+	 * voiceover calls the run makes. Drives any stage the format marks
+	 * `per_item`.
+	 */
+	items?: number;
 }
 
 export const STEP_LABEL: Record<StepKind, string> = {
@@ -326,7 +507,8 @@ export const STEP_LABEL: Record<StepKind, string> = {
 	cine_stills: 'Storyboard stills',
 	cine_video: 'Multi-shot clip',
 	motion: 'Motion',
-	mux: 'Voiceover mix'
+	mux: 'Voiceover mix',
+	v2v: 'Performance transfer'
 };
 
 export const STEP_PURPOSE: Record<StepKind, string> = {
@@ -340,7 +522,107 @@ export const STEP_PURPOSE: Record<StepKind, string> = {
 	cine_stills: 'One composited still per shot in the sequence.',
 	cine_video: 'Builds the whole multi-shot clip in one call, anchored on the first still.',
 	motion: 'Animates the card on our own servers — a slow push, no video model, nothing to pay.',
-	mux: 'Lays the voiceover under the clip on our own servers.'
+	mux: 'Lays the voiceover under the clip on our own servers.',
+	v2v: 'Re-performs your source clip as this persona. Billed per second of that clip.'
+};
+
+/**
+ * The basis a stage bills on when its model doesn't override it. Absent means
+ * `per_call`, which is why this map holds one entry rather than ten.
+ */
+const STEP_BILLING: Partial<Record<StepKind, Billing>> = {
+	cine_stills: 'per_shot'
+};
+
+/** Storyboard bounds — the Director is asked for a shot list in this range. */
+const MIN_SHOTS = 1;
+const MAX_SHOTS = 5;
+/**
+ * Bounds for a per-second stage. The floor stops a zero/NaN duration quoting a
+ * stage at $0; the ceiling is the ingest cap, so a quote can never promise a
+ * clip longer than the pipeline will accept.
+ */
+/**
+ * The clip-length bounds, owned here because this module is the one both the
+ * client and the server already share — and because these two numbers must be
+ * the SAME number in two places that would otherwise drift apart silently.
+ *
+ * The ingest endpoint rejects a clip outside this range; the quote clamps to it.
+ * If ingest accepted 60s while the quote clamped at 30, we would bill half of a
+ * clip we had already agreed to process. `$lib/server/video` imports these
+ * rather than restating them, so there is one ceiling, not two.
+ */
+export const MIN_SECONDS = 1;
+export const MAX_SECONDS = 30;
+/**
+ * Quoted duration when a per-second stage has no measured one. Matches the
+ * pipeline's own clip default (`UGC_VIDEO_DURATION`, '5'), so an unmeasured
+ * quote is at worst the length we would have produced anyway — never $0.
+ */
+const DEFAULT_SECONDS = 5;
+/**
+ * Listicle BEATS — the hook plus one per item. Exported because the ingest
+ * route, the composer's chips and the engine all clamp to this range, and three
+ * private copies of "2..6" is three chances to disagree: a picker offering a
+ * count the engine then rejects is the offered-then-degraded promise this whole
+ * module exists to prevent.
+ *
+ * The floor is THREE, not two, and the off-by-one is the reason to be explicit:
+ * beats include the hook, so two beats is a hook plus a single item — which is
+ * not a list, and which the engine would quietly serve as a plain spokesperson.
+ */
+export const MIN_ITEMS = 3;
+export const MAX_ITEMS = 6;
+export const DEFAULT_ITEMS = 4;
+
+const clamp = (n: number, lo: number, hi: number) =>
+	Math.max(lo, Math.min(hi, Number.isFinite(n) ? n : lo));
+
+/** The basis in force for a stage: the model's own, else the stage's, else per call. */
+export function billingFor(
+	kind: StepKind,
+	model: Pick<StepModel, 'billing'>,
+	format?: Pick<FormatEntry, 'stepBilling'>
+): Billing {
+	// Format first: it is the only layer that knows a stage runs more than once
+	// in THIS composition while the model and the stage are unchanged.
+	return format?.stepBilling?.[kind] ?? model.billing ?? STEP_BILLING[kind] ?? 'per_call';
+}
+
+/**
+ * How many billed units this stage will consume — the multiplier on `usd`.
+ * Always ≥ 1: a stage that runs at all costs at least one unit.
+ */
+export function billedUnits(
+	kind: StepKind,
+	model: Pick<StepModel, 'billing'>,
+	input: PlanInput,
+	format?: Pick<FormatEntry, 'stepBilling'>
+): number {
+	switch (billingFor(kind, model, format)) {
+		case 'per_item':
+			return Math.round(clamp(input.items ?? DEFAULT_ITEMS, MIN_ITEMS, MAX_ITEMS));
+		case 'per_shot':
+			return Math.round(clamp(input.shots ?? 4, MIN_SHOTS, MAX_SHOTS));
+		case 'per_second':
+			// CEIL, not round. A clip is a real measured duration with a fraction,
+			// and the provider bills that fraction: the engine charges 12.4s × rate.
+			// Rounding 12.4 down to 12 quotes LESS than we then charge — which is
+			// true for every clip whose fractional part is under .5, i.e. about half
+			// of them. Ceiling keeps the quote an upper bound on the bill, so the
+			// number the user approved is never smaller than the one they pay.
+			return Math.ceil(clamp(input.seconds ?? DEFAULT_SECONDS, MIN_SECONDS, MAX_SECONDS));
+		default:
+			return 1;
+	}
+}
+
+/** The unit noun shown beside a multiplied stage, e.g. `×5 shots`. */
+const UNIT_NOUN: Record<Billing, string> = {
+	per_call: 'runs',
+	per_shot: 'shots',
+	per_second: 'seconds',
+	per_item: 'beats'
 };
 
 const TIER_RANK: Record<string, number> = { budget: 0, balanced: 1, premium: 2, free: 1 };
@@ -398,15 +680,24 @@ export function planPipeline(input: PlanInput): PipelineStep[] {
 	return format.steps.map((kind) => {
 		const { model, via, selectable } = resolveStepModel(kind, input);
 		const supplied = input.supplied?.[kind] === true;
-		// The storyboard bills per shot — quoting one still under-quotes a 5-shot
-		// sequence by four stills, which is real money at this stage's price.
-		const multiplier = kind === 'cine_stills' ? Math.max(1, Math.min(5, input.shots ?? 4)) : 1;
+		// Stages that bill on a quantity — the storyboard per shot, a per-second
+		// video model per second of output — are multiplied here. Quoting one unit
+		// for a 5-shot sequence under-quotes it by four stills, which is real money
+		// at that stage's price; the same is true of every second of a per-second
+		// clip. The basis is declared (see Billing), never inferred from the kind.
+		const multiplier = billedUnits(kind, model, input, format);
 		const usd = supplied ? 0 : +(model.usd * multiplier).toFixed(4);
 		return {
 			kind,
 			label: STEP_LABEL[kind],
 			purpose: STEP_PURPOSE[kind],
-			model: multiplier > 1 ? { ...model, label: `${model.label} · ×${multiplier} shots` } : model,
+			model:
+				multiplier > 1
+					? {
+							...model,
+							label: `${model.label} · ×${multiplier} ${UNIT_NOUN[billingFor(kind, model, format)]}`
+						}
+					: model,
 			usd,
 			via,
 			selectable,

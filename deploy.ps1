@@ -78,14 +78,20 @@ if ($ledgerExit -ne 0) {
     Write-Host "  [0/3] OK: schema ledger matches migrations.json." -ForegroundColor Green
 }
 
-# Registry truth: what the Model Manager claims must match what the resolvers do
-# and what the live catalog holds. REGISTRY_TRUTH_STRICT=1 turns "I could not
-# reach the database" into a failure — without it the suite skips and exits 0,
-# which would let this gate pass having checked nothing.
-Write-Host "  [0/3] Checking model registry truth against the live catalog..." -ForegroundColor Yellow
+# Provider truth: what our catalogs CLAIM must match what the providers actually
+# serve. Two checks ride this one run:
+#   - registry truth   — the Model Manager's rows vs the resolvers and live catalog
+#   - voices truth     — every voice in the picker must actually render audio
+# The *_STRICT flags turn "I could not reach the provider" into a failure —
+# without them the suite skips and exits 0, letting this gate pass having checked
+# nothing. That is exactly how 8 dead voices sat in the picker unnoticed: a
+# catalog nobody compares to the provider drifts silently and for free.
+Write-Host "  [0/3] Checking model registry + voice catalog truth against the live providers..." -ForegroundColor Yellow
 $env:REGISTRY_TRUTH_STRICT = "1"
+$env:VOICES_TRUTH_STRICT = "1"
 $registryExit = Invoke-Gate "npx vitest run --project integration"
 Remove-Item Env:\REGISTRY_TRUTH_STRICT -ErrorAction SilentlyContinue
+Remove-Item Env:\VOICES_TRUTH_STRICT -ErrorAction SilentlyContinue
 if ($registryExit -ne 0) {
     if ($allowRegistryDrift) {
         Write-Host "  [0/3] WARNING: registry truth check failed — continuing because -allowRegistryDrift was given." -ForegroundColor DarkYellow

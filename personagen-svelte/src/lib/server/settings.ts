@@ -50,6 +50,12 @@ export interface PlatformSettings {
 	/** Plans (subscriptions) offered on /billing; the webhook keeps existing subscriptions working either way. */
 	plans_enabled: boolean;
 	/**
+	 * Whether source clips may be uploaded for video-to-video ("reel remake").
+	 * The host capability (ffprobe) says the box CAN measure a clip; this says the
+	 * deployment MAY accept one. Off until an operator decides otherwise.
+	 */
+	video_ingest: boolean;
+	/**
 	 * Persona Model v2 — which generator builds a new persona.
 	 * 'v1' = today's path (the LLM invents every field, values are coerced after).
 	 * 'v2' = skeleton first: facts sampled deterministically from the Trait
@@ -80,11 +86,12 @@ export const DEFAULT_SETTINGS: PlatformSettings = {
 	daily_platform_spend_usd: 0,
 	signup_credits_hourly_cap: 20,
 	plans_enabled: false,
+	video_ingest: false,
 	persona_generator: 'v1',
 	persona_backbone: 'off'
 };
 
-export const SETTING_KEYS = ['credits_mode', 'activity_log', 'activity_pepper', 'signup_credits', 'display_currency_default', 'fx_rates', 'credit_markup', 'daily_platform_spend_usd', 'signup_credits_hourly_cap', 'plans_enabled', 'persona_generator', 'persona_backbone'] as const;
+export const SETTING_KEYS = ['credits_mode', 'activity_log', 'activity_pepper', 'signup_credits', 'display_currency_default', 'fx_rates', 'credit_markup', 'daily_platform_spend_usd', 'signup_credits_hourly_cap', 'plans_enabled', 'persona_generator', 'persona_backbone', 'video_ingest'] as const;
 export type SettingKey = (typeof SETTING_KEYS)[number];
 
 const REFRESH_MS = 15_000;
@@ -155,6 +162,10 @@ function coerce(key: string, raw: unknown): unknown {
 			return Number.isInteger(n) && n >= 0 ? n : 20;
 		}
 		case 'plans_enabled':
+			return raw === true || raw === 'true';
+		// Fails SAFE like the persona switches: anything that is not an explicit
+		// true reads as off, so a half-written row never opens ingest.
+		case 'video_ingest':
 			return raw === true || raw === 'true';
 		default:
 			return raw;

@@ -14,6 +14,7 @@
 		daily_platform_spend_usd: { stored: number };
 		signup_credits_hourly_cap: { stored: number };
 		plans_enabled: { stored: boolean };
+		video_ingest: { effective: boolean; stored: boolean; source: 'env' | 'database' | 'default' };
 		persona_generator: { effective: 'v1' | 'v2'; stored: string; source: 'env' | 'database' | 'default' };
 		persona_backbone: { effective: 'off' | 'shadow' | 'fill' | 'on'; stored: string; source: 'env' | 'database' | 'default' };
 		display_currency_default: { stored: string; supported: string[] };
@@ -49,7 +50,7 @@
 		}
 	}
 
-	async function setSwitch(key: 'credits_mode' | 'activity_log' | 'activity_pepper' | 'signup_credits' | 'display_currency_default' | 'fx_rates' | 'credit_markup' | 'daily_platform_spend_usd' | 'signup_credits_hourly_cap' | 'plans_enabled' | 'persona_generator' | 'persona_backbone', value?: unknown) {
+	async function setSwitch(key: 'credits_mode' | 'activity_log' | 'activity_pepper' | 'signup_credits' | 'display_currency_default' | 'fx_rates' | 'credit_markup' | 'daily_platform_spend_usd' | 'signup_credits_hourly_cap' | 'plans_enabled' | 'persona_generator' | 'persona_backbone' | 'video_ingest', value?: unknown) {
 		const label =
 			key === 'activity_pepper'
 				? 'Rotate the activity hashing secret? Cross-day correlation of IP hashes breaks for today (by design).'
@@ -608,6 +609,27 @@
 							<button class="filter-btn" class:active={controls.switches.plans_enabled.stored === true} disabled={controlsBusy} onclick={() => setSwitch('plans_enabled', true)}>on</button>
 							<button class="filter-btn" class:active={controls.switches.plans_enabled.stored === false} disabled={controlsBusy} onclick={() => setSwitch('plans_enabled', false)}>off</button>
 						</div>
+					</div>
+
+					<div class="control">
+						<div class="control-head">
+							<strong>Source clips (video-to-video)</strong>
+							<span class="mode-pill" class:mode-enforce={controls.switches.video_ingest.effective} class:mode-off={!controls.switches.video_ingest.effective}>{controls.switches.video_ingest.effective ? 'on' : 'off'}</span>
+							<span class="muted small">source: {controls.switches.video_ingest.source}</span>
+						</div>
+						<p class="admin-hint">
+							Whether an account may upload a clip for the persona to re-perform (reel remake, motion transfer).
+							Off refuses the upload endpoint outright, and says so as a policy answer rather than as a broken
+							host — whether the box has the video tools is probed separately. Every accepted upload records the
+							uploader's rights assertion in the activity log.
+						</p>
+						<div class="filter-row">
+							<button class="filter-btn" class:active={controls.switches.video_ingest.stored === true} disabled={controlsBusy} onclick={() => setSwitch('video_ingest', true)}>on</button>
+							<button class="filter-btn" class:active={controls.switches.video_ingest.stored === false} disabled={controlsBusy} onclick={() => setSwitch('video_ingest', false)}>off</button>
+						</div>
+						{#if controls.switches.video_ingest.source === 'env'}
+							<p class="admin-hint warn">VIDEO_INGEST is set in the host environment and overrides the stored value.</p>
+						{/if}
 					</div>
 
 					<div class="control">

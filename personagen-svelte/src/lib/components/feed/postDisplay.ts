@@ -55,6 +55,64 @@ export interface PostDisplay {
 	intended: { media?: string; format?: string; still?: string } | null;
 }
 
+/**
+ * Human names for the formats a DELIVERED clip can carry, keyed by the token
+ * stored on the post.
+ *
+ * A map, not a ternary chain, because the chain that used to do this ended in
+ * `: 'b-roll clip'` — so every format the catalog grew after it was written
+ * described itself as b-roll. That is how a performance transfer (`v2v_*`, a
+ * source clip re-performed by the persona, billed per second) rendered as
+ * "b-roll clip · video": a confident, wrong statement about what the post IS.
+ * A token that is absent from this map must therefore stay UNNAMED — callers
+ * say only "video" — rather than fall through to the most common answer.
+ *
+ * A missing format is genuinely b-roll: legacy rows predate the field, and the
+ * pipeline made nothing else back then.
+ */
+export const VIDEO_FORMAT_LABEL: Record<string, string> = {
+	broll: 'b-roll clip',
+	spokesperson: 'spokesperson (talking head)',
+	vo_broll: 'narrated product motion',
+	motion_card: 'motion text card',
+	v2v_replace: 'performance transfer (source scene kept)',
+	v2v_move: 'performance transfer (motion only)',
+	v2v_narrated: 'narrated performance transfer',
+	listicle: 'listicle (timed reveals)'
+};
+
+/** The only four formats a refine can actually DELIVER. */
+export type RefineFormat = 'spokesperson' | 'broll' | 'vo_broll' | 'motion_card';
+
+/**
+ * What a refine of this post will actually RUN — a mirror of the format branch
+ * at the top of refineUgcMedia's video stage (server/content/generate.ts).
+ *
+ * It has to be a mirror rather than a reading of the stored format, because the
+ * drawer quotes a price off it and that quote is what the user's two-click
+ * confirm consents to. The old "anything that isn't 'broll' is a talking head"
+ * reading was wrong three separate ways once the format catalog grew:
+ *
+ *   - a motion card is re-typeset and re-muxed locally, so no video provider is
+ *     called at all and the still is the entire spend;
+ *   - a narrated b-roll runs the CLIP model plus TTS — no lip-sync anywhere;
+ *   - a performance transfer cannot re-perform anything, because the ingested
+ *     source clip is not part of the stored post. The server re-shoots the still
+ *     and re-animates it as plain b-roll, so a v2v post was quoting ~$1.00 of
+ *     talking head against ~$0.55 of Kling.
+ *
+ * Over-quoting is not the safe direction either: a confirm that names a number
+ * the ledger then contradicts is the same broken consent as under-quoting.
+ *
+ * 'v2v_narrated' is deliberately absent from the transfer branch: it carries a
+ * voiceover, and the server's own mapping drops it through to spokesperson.
+ */
+export function refineFormatOf(format: string | null | undefined): RefineFormat {
+	if (format === 'broll' || format === 'vo_broll' || format === 'motion_card') return format;
+	if (format === 'v2v_replace' || format === 'v2v_move') return 'broll';
+	return 'spokesperson';
+}
+
 const ERROR_SNIPPET_MAX = 140;
 
 /** Clamps a stored provider error to a UI-safe length. */
@@ -98,7 +156,8 @@ export function summarizeGenError(post: any): string {
 			}
 			return t;
 		}
-		if (typeof v === 'object') return dig(v.message ?? v.error ?? v.detail ?? v.reason ?? '', depth + 1);
+		if (typeof v === 'object')
+			return dig(v.message ?? v.error ?? v.detail ?? v.reason ?? '', depth + 1);
 		return String(v);
 	};
 
@@ -174,7 +233,9 @@ export function getPostDisplay(post: any): PostDisplay {
 	// posting and stores it in `content` from the start.
 	const legacyResults = post?.publication_results;
 	const legacyMedia =
-		legacyResults && typeof legacyResults === 'object' && typeof legacyResults.media_url === 'string'
+		legacyResults &&
+		typeof legacyResults === 'object' &&
+		typeof legacyResults.media_url === 'string'
 			? legacyResults
 			: null;
 
@@ -189,7 +250,9 @@ export function getPostDisplay(post: any): PostDisplay {
 			? 'video'
 			: 'image');
 	const isCinematic = parsed?.cinematic === true;
-	const template = parsed?.studio?.template ? TEMPLATE_BY_ID.get(parsed.studio.template) : undefined;
+	const template = parsed?.studio?.template
+		? TEMPLATE_BY_ID.get(parsed.studio.template)
+		: undefined;
 	// The template's own shelf, mapped to output vocabulary ('motion' → video).
 	const templateSurface: PostSurface | null = template
 		? template.surface === 'motion'

@@ -1,5 +1,6 @@
 /**
- * ffmpeg ARGUMENT construction for the two local-assembly primitives.
+ * ffmpeg ARGUMENT construction for the local-assembly primitives and the
+ * caption burn-in.
  *
  * Deliberately not an encode test: this suite runs on plain node in CI, where
  * ffmpeg is not installed, and `video.ts` treats ffmpeg as a soft dependency
@@ -21,13 +22,34 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 // Type-only: erased at compile time, so it cannot load the module before the
 // env mock below is installed.
-import type { MuxSourceFacts, MuxVoiceoverOptions } from './video';
+import type { MuxSourceFacts, MuxVoiceoverOptions, TimedCaption, VideoProbe } from './video';
 
 const { mockEnv } = vi.hoisted(() => ({ mockEnv: {} as Record<string, string> }));
 vi.mock('$env/dynamic/private', () => ({ env: mockEnv }));
 
-const { buildMotionArgs, buildVoiceoverArgs, targetSeconds, stillToMotion, muxVoiceover } =
-	await import('./video');
+const {
+	buildMotionArgs,
+	buildVoiceoverArgs,
+	buildCaptionPlan,
+	targetSeconds,
+	planAudioTimeline,
+	buildPcmDecodeArgs,
+	buildPcmEncodeArgs,
+	concatAudio,
+	probeAudioSeconds,
+	stillToMotion,
+	muxVoiceover,
+	burnCaptions,
+	MAX_TIMED_CAPTIONS,
+	ffprobeBin,
+	probeVideo,
+	clipExtForMime,
+	clipRejectionReason,
+	MAX_CLIP_BYTES,
+	MAX_CLIP_SECONDS,
+	MIN_CLIP_SECONDS,
+	MIN_CLIP_DIMENSION
+} = await import('./video');
 
 beforeEach(() => {
 	for (const k of Object.keys(mockEnv)) delete mockEnv[k];
@@ -178,6 +200,206 @@ describe('buildMotionArgs — stills that are not 9:16', () => {
 			// A non-1 sample aspect ratio on a phone JPEG would survive the scale.
 			expect(vf).toContain('setsar=1');
 		}
+	});
+});
+
+/**
+ * Captions.
+ *
+ * The badge and the hook are LEGACY OUTPUT: three exact strings that have been
+ * rendering in production, pinned character-for-character below so that adding
+ * the timed track cannot have moved them by a pixel. Everything after that is
+ * the track itself, which is the part that can silently produce a frame nobody
+ * looks at — an off-frame row, an `enable` window that is never true, a `\n`
+ * drawn as a glyph box — none of which any encode-free test can see except by
+ * reading the filter string.
+ */
+const BADGE_BOX = 'drawbox=x=22:y=26:w=196:h=46:color=black@0.55:t=fill';
+const BADGE_TEXT =
+	"drawtext=fontfile=font.ttf:text='AI GENERATED':fontcolor=white:fontsize=22:x=38:y=38";
+const HOOK_FILTER =
+	'drawtext=fontfile=font.ttf:textfile=hook.txt:fontcolor=white:fontsize=46:borderw=4:bordercolor=black@0.9:x=(w-text_w)/2:y=h-(h/5):line_spacing=8';
+
+/** Only the track's drawtext stages, in draw order. */
+const trackOf = (filters: string[]) => filters.filter((f) => f.includes('textfile=cap'));
+const track = (...items: TimedCaption[]) => buildCaptionPlan({ track: items });
+const LIST: TimedCaption[] = [
+	{ text: '1. Sunrise Stare', at: 0 },
+	{ text: '2. The Cold Plunge', at: 2.5 },
+	{ text: '3. Nobody Claps', at: 5 }
+];
+
+describe('buildCaptionPlan — the pre-existing badge and hook, unchanged', () => {
+	it('emits the exact filters production has been rendering', () => {
+		const plan = buildCaptionPlan({ badge: true, hook: 'Watch this' });
+		expect(plan.filters).toEqual([BADGE_BOX, BADGE_TEXT, HOOK_FILTER]);
+		expect(plan.files).toEqual([{ name: 'hook.txt', text: 'Watch this' }]);
+	});
+
+	it('an absent track adds nothing at all — this change is additive or it is a bug', () => {
+		for (const opts of [
+			{ badge: true },
+			{ hook: 'Watch this' },
+			{ badge: true, hook: 'Watch this' }
+		]) {
+			expect(buildCaptionPlan(opts)).toEqual(buildCaptionPlan({ ...opts, track: [] }));
+			expect(buildCaptionPlan(opts).filters.some((f) => f.includes('enable='))).toBe(false);
+		}
+	});
+
+	it('asks for no re-encode when nothing was requested', () => {
+		// An empty filter list is what makes burnCaptions return null and the caller
+		// keep the untouched original, rather than paying a re-encode for a no-op.
+		expect(buildCaptionPlan({}).filters).toEqual([]);
+		expect(buildCaptionPlan({ hook: '   ' }).filters).toEqual([]);
+		expect(buildCaptionPlan({ track: [{ text: ' \n ', at: 1 }] }).filters).toEqual([]);
+	});
+
+	it('still strips newlines out of the hook', () => {
+		expect(buildCaptionPlan({ hook: 'two\nlines' }).files[0].text).toBe('two lines');
+	});
+});
+
+describe('buildCaptionPlan — a timed item is drawn as content, not as a footnote', () => {
+	it('is centred, large, and heavily outlined over live video', () => {
+		const [f] = trackOf(track(LIST[0]).filters);
+		expect(f).toContain('x=(w-text_w)/2');
+		// 720/15. The 31px-at-a-44px-left-margin version read as a caption under
+		// the subject instead of as the thing the viewer is meant to read.
+		expect(f).toContain('fontsize=48');
+		expect(f).toContain('borderw=6');
+		expect(f).toContain('bordercolor=black@0.92');
+		expect(f).toContain('fontcolor=white');
+	});
+
+	it('scales the type off the frame width instead of hardcoding 48', () => {
+		const [big] = trackOf(buildCaptionPlan({ track: [LIST[0]] }, 1080).filters);
+		expect(big).toContain('fontsize=72');
+		// ...and the row pitch follows it, or a bigger frame would overlap rows.
+		expect(big).toContain('y=h-(h/5)-137');
+	});
+
+	it('passes the text by file, never interpolated into the filter string', () => {
+		// Item text is model output: a ':' or a quote inside it would otherwise
+		// terminate the option or the filter.
+		const plan = track({ text: "3. It's 5:00 — go", at: 1 });
+		expect(plan.files).toContainEqual({ name: 'cap0.txt', text: "3. It's 5:00 — go" });
+		const [f] = trackOf(plan.filters);
+		expect(f).toContain('textfile=cap0.txt');
+		expect(f).not.toContain(':text=');
+	});
+
+	it('strips newlines from every item, which drawtext renders as a glyph box', () => {
+		const plan = track({ text: '1. Two\nWords', at: 0 }, { text: '2. Three\r\nMore', at: 1 });
+		for (const f of plan.files) expect(f.text).not.toMatch(/[\r\n]/);
+		expect(plan.files[0].text).toBe('1. Two Words');
+		expect(plan.files[1].text).toBe('2. Three More');
+	});
+});
+
+describe('buildCaptionPlan — when each item is on screen', () => {
+	it('accumulates by default: no end time means it stays to the last frame', () => {
+		const fs = trackOf(track(...LIST).filters);
+		expect(fs[0]).toContain("enable='gte(t,0)'");
+		expect(fs[1]).toContain("enable='gte(t,2.5)'");
+		expect(fs[2]).toContain("enable='gte(t,5)'");
+		// The listicle only works because item 1 is still up when item 3 lands.
+		expect(fs.some((f) => f.includes('between('))).toBe(false);
+	});
+
+	it('bounds the window when until is given', () => {
+		const [f] = trackOf(track({ text: 'flash', at: 1.25, until: 3.5 }).filters);
+		expect(f).toContain("enable='between(t,1.25,3.5)'");
+	});
+
+	it('quotes the expression so its comma cannot split the filter chain', () => {
+		// `\,` (the WEB_SCALE_FILTER trick) is wrong here: inside '' ffmpeg takes
+		// every character literally, so the backslash would reach the expression
+		// parser.
+		for (const f of trackOf(track({ text: 'x', at: 1, until: 2 }).filters)) {
+			expect(f).toMatch(/enable='[a-z]+\(t,[0-9.,]+\)'$/);
+			expect(f).not.toContain('\\,');
+		}
+	});
+
+	it('never emits a window that is empty or starts before the clip does', () => {
+		// A negative `at` or an until <= at is a model typo; both would render an
+		// item that is simply never visible, which looks like a dropped item.
+		expect(trackOf(track({ text: 'x', at: -4 }).filters)[0]).toContain("enable='gte(t,0)'");
+		expect(trackOf(track({ text: 'x', at: 3, until: 3 }).filters)[0]).toContain(
+			"enable='gte(t,3)'"
+		);
+		expect(trackOf(track({ text: 'x', at: 3, until: 1 }).filters)[0]).toContain(
+			"enable='gte(t,3)'"
+		);
+		expect(trackOf(track({ text: 'x', at: Number.NaN, until: Number.NaN }).filters)[0]).toContain(
+			"enable='gte(t,0)'"
+		);
+	});
+});
+
+describe('buildCaptionPlan — the stack', () => {
+	it('gives every item its own row, from its index, with no collisions', () => {
+		const ys = trackOf(track(...LIST).filters).map((f) => /y=(h-\(h\/5\)-\d+)/.exec(f)?.[1]);
+		expect(ys).toEqual(['h-(h/5)-225', 'h-(h/5)-158', 'h-(h/5)-91']);
+		expect(new Set(ys).size).toBe(ys.length);
+	});
+
+	it('lays out N items without collision for every N up to the cap', () => {
+		for (let n = 1; n <= MAX_TIMED_CAPTIONS; n++) {
+			const items = Array.from({ length: n }, (_, i) => ({ text: `${i + 1}. item`, at: i }));
+			const offsets = trackOf(track(...items).filters).map((f) =>
+				Number(/y=h-\(h\/5\)-(\d+)/.exec(f)?.[1])
+			);
+			expect(offsets).toHaveLength(n);
+			// One row pitch apart, descending — row 0 highest, row n-1 lowest, and
+			// the whole block bottom-anchored so it never leaves the frame.
+			for (let i = 1; i < n; i++) expect(offsets[i - 1] - offsets[i]).toBe(67);
+			// 48px of type inside a 67px pitch: the outlines cannot touch.
+			expect(Math.min(...offsets)).toBeGreaterThan(48);
+		}
+	});
+
+	it('keeps the caller ordering, so a numbered list is never re-shuffled', () => {
+		// Sorting by `at` would put "2." above "1." for a mistimed track — our bug
+		// to the viewer, not the model's.
+		const plan = track({ text: '1. first', at: 9 }, { text: '2. second', at: 1 });
+		expect(plan.files.map((f) => f.text)).toEqual(['1. first', '2. second']);
+		expect(trackOf(plan.filters)[0]).toContain("enable='gte(t,9)'");
+	});
+
+	it('closes the gap left by a blank item instead of reserving a hole', () => {
+		const plan = track(
+			{ text: '1. one', at: 0 },
+			{ text: '  ', at: 1 },
+			{ text: '3. three', at: 2 }
+		);
+		expect(plan.files.map((f) => f.name)).toEqual(['cap0.txt', 'cap1.txt']);
+		expect(trackOf(plan.filters)).toHaveLength(2);
+	});
+});
+
+describe('buildCaptionPlan — the runaway-list cap', () => {
+	const many = Array.from({ length: 20 }, (_, i) => ({ text: `${i + 1}. item`, at: i }));
+
+	it('draws at most MAX_TIMED_CAPTIONS rows, keeping the first ones', () => {
+		const plan = track(...many);
+		expect(trackOf(plan.filters)).toHaveLength(MAX_TIMED_CAPTIONS);
+		expect(plan.files.map((f) => f.text)).toEqual(
+			many.slice(0, MAX_TIMED_CAPTIONS).map((m) => m.text)
+		);
+	});
+
+	it('truncates an over-long label rather than drawing it off both edges', () => {
+		// drawtext does not wrap; a 400-char "label" is one line wider than the frame.
+		expect(track({ text: 'x'.repeat(400), at: 0 }).files[0].text).toHaveLength(60);
+	});
+
+	it('composes with the hook and the badge in one chain', () => {
+		const plan = buildCaptionPlan({ badge: true, hook: 'Watch this', track: LIST });
+		expect(plan.filters.slice(0, 3)).toEqual([BADGE_BOX, BADGE_TEXT, HOOK_FILTER]);
+		expect(plan.filters).toHaveLength(3 + LIST.length);
+		expect(plan.files.map((f) => f.name)).toEqual(['hook.txt', 'cap0.txt', 'cap1.txt', 'cap2.txt']);
 	});
 });
 
@@ -354,6 +576,93 @@ describe('buildVoiceoverArgs — termination invariants', () => {
 	});
 });
 
+/**
+ * The segmented-voiceover join.
+ *
+ * Two things can go wrong here and neither is visible in the output file. The
+ * timeline can be off by a gap — which reads as "the captions drift" and gets
+ * blamed on the lip-sync model — and the encode can name a codec our Alpine
+ * runtime does not carry, which fails on the deploy host and nowhere else. Both
+ * live in a pure function or an argument array, so both are pinned here.
+ */
+const SEC = 24000 * 2; // bytes of s16le@24k mono per second
+
+describe('planAudioTimeline — where each beat starts', () => {
+	it('starts the first segment at zero and gaps only BETWEEN', () => {
+		// The classic failure is a leading gap or a gap counted after the start is
+		// recorded; either way item one is the beat that gives it away.
+		const { startsAt, seconds } = planAudioTimeline([SEC, 2 * SEC, SEC], 0.35);
+		expect(startsAt).toEqual([0, 1.35, 3.7]);
+		expect(seconds).toEqual([1, 2, 1]);
+	});
+
+	it('defaults to the 0.35s beat gap when none is passed', () => {
+		expect(planAudioTimeline([SEC, SEC]).startsAt).toEqual([0, 1.35]);
+	});
+
+	it('keeps durations EXACT, not rounded to a probe centisecond', () => {
+		// The whole reason the join runs through raw PCM: a header duration would
+		// round this to 0.33 and every later reveal would inherit the error.
+		expect(planAudioTimeline([Math.round(0.333 * SEC)], 0).seconds[0]).toBeCloseTo(0.333, 6);
+	});
+
+	it('rounds the gap to a whole SAMPLE, never an odd byte count', () => {
+		// One stray byte shifts every following sample and the rest of the track is
+		// white noise — silent in the args, deafening in the file.
+		for (const g of [0.35, 0.1234, 0.0001, 1.999]) {
+			expect(planAudioTimeline([SEC, SEC], g).gapBytes % 2).toBe(0);
+		}
+	});
+
+	it('refuses a nonsense gap rather than allocating a nonsense buffer', () => {
+		// Buffer.alloc(NaN) throws, which would break the never-null contract of the
+		// only caller. Negative is clamped for the same reason: no overlap.
+		expect(planAudioTimeline([SEC, SEC], Number.NaN).startsAt).toEqual([0, 1.35]);
+		expect(planAudioTimeline([SEC, SEC], -5).startsAt).toEqual([0, 1]);
+		expect(planAudioTimeline([SEC, SEC], 999).startsAt).toEqual([0, 3]);
+	});
+
+	it('is empty for no segments', () => {
+		expect(planAudioTimeline([], 0.35)).toEqual({ gapBytes: 16800, seconds: [], startsAt: [] });
+	});
+});
+
+describe('buildPcmDecodeArgs / buildPcmEncodeArgs — the join flags', () => {
+	it('decodes to the exact raw format the timeline arithmetic assumes', () => {
+		const args = buildPcmDecodeArgs('seg0.audio', 'seg0.pcm');
+		expect(hasPair(args, '-f', 's16le')).toBe(true);
+		expect(hasPair(args, '-ar', '24000')).toBe(true);
+		expect(hasPair(args, '-ac', '1')).toBe(true);
+		// Any other rate or channel count makes bytes/(rate x 2) the wrong answer,
+		// so the reveals would be timed against a track nobody hears.
+		expect(args[args.length - 1]).toBe('seg0.pcm');
+	});
+
+	it('drops a cover-art stream before it becomes sample data', () => {
+		// TTS providers embed artwork; a video stream reaching a headerless s16le
+		// muxer is written straight into the audio as noise.
+		expect(buildPcmDecodeArgs('a', 'b')).toContain('-vn');
+	});
+
+	it('encodes with the NATIVE aac encoder, never libmp3lame', () => {
+		// libmp3lame is an external library our Alpine runtime is not guaranteed to
+		// carry: an mp3 output fails on the deploy host and passes everywhere else.
+		const args = buildPcmEncodeArgs('joined.pcm', 'out.m4a');
+		expect(hasPair(args, '-c:a', 'aac')).toBe(true);
+		expect(args.join(' ')).not.toContain('libmp3lame');
+	});
+
+	it('declares the raw input format BEFORE -i', () => {
+		// Raw PCM has no header. Behind -i these flags describe the OUTPUT and
+		// ffmpeg reads the file as 44.1k stereo: no error, just a chipmunked track
+		// that no longer matches a single measured offset.
+		const args = buildPcmEncodeArgs('joined.pcm', 'out.m4a');
+		const i = args.indexOf('-i');
+		for (const flag of ['-f', '-ar', '-ac']) expect(args.indexOf(flag)).toBeLessThan(i);
+		expect(args[i + 1]).toBe('joined.pcm');
+	});
+});
+
 describe('never-throw contract', () => {
 	// Not a network test: an unparseable URL makes fetch reject synchronously, so
 	// these finish in microseconds and cannot flake or hang in CI. (On a host
@@ -366,5 +675,201 @@ describe('never-throw contract', () => {
 
 	it('muxVoiceover returns null instead of throwing when an input is unfetchable', async () => {
 		await expect(muxVoiceover(BAD_URL, BAD_URL)).resolves.toBeNull();
+	});
+
+	it('burnCaptions returns null instead of throwing, track or no track', async () => {
+		// Captions are an enhancement: every failure here has to end with the caller
+		// holding the original clip, never with a rejected promise mid-generation.
+		await expect(burnCaptions(BAD_URL, { hook: 'hi' })).resolves.toBeNull();
+		await expect(burnCaptions(BAD_URL, { track: LIST })).resolves.toBeNull();
+	});
+
+	it('concatAudio returns null instead of throwing when a segment is unfetchable', async () => {
+		// The listicle's whole degradation story depends on this: a throw here would
+		// abort a run that could still have shipped as a plain talking head.
+		await expect(concatAudio([BAD_URL, BAD_URL])).resolves.toBeNull();
+	});
+
+	it('concatAudio declines an empty segment list without spawning anything', async () => {
+		await expect(concatAudio([])).resolves.toBeNull();
+	});
+
+	it('probeAudioSeconds returns null rather than throwing on anything unreadable', async () => {
+		// Same contract as probeVideo, and the same three shapes of failure: a path
+		// that cannot be opened, no bytes at all, and bytes that are not audio.
+		await expect(probeAudioSeconds('/definitely/not/a/file.mp3')).resolves.toBeNull();
+		await expect(probeAudioSeconds(Buffer.alloc(0))).resolves.toBeNull();
+		await expect(probeAudioSeconds(Buffer.from('this is not an mp3'))).resolves.toBeNull();
+	});
+
+	it('burnCaptions declines a no-op render without touching the network', async () => {
+		// Not a fetch that fails — a request that never happens, because an empty
+		// plan means there is nothing to burn and a re-encode would only cost quality.
+		await expect(burnCaptions(BAD_URL, {})).resolves.toBeNull();
+		await expect(burnCaptions(BAD_URL, { badge: false, track: [] })).resolves.toBeNull();
+	});
+});
+
+/**
+ * Source-clip ingest.
+ *
+ * Same discipline as the argument tests above — nothing here needs ffprobe
+ * installed — but the stakes are different. These are the bounds that decide
+ * what a single upload is allowed to cost: the v2v models bill per output
+ * second, so `clipRejectionReason` is the only thing standing between a
+ * 40-minute screen recording and a per-second invoice for it.
+ */
+describe('ffprobeBin — which binary gets spawned', () => {
+	it('defaults to the bare name on PATH', () => {
+		expect(ffprobeBin()).toBe('ffprobe');
+	});
+
+	it('prefers an explicit FFPROBE_PATH', () => {
+		mockEnv.FFPROBE_PATH = '/opt/bin/ffprobe';
+		mockEnv.FFMPEG_PATH = '/usr/local/bin/ffmpeg';
+		expect(ffprobeBin()).toBe('/opt/bin/ffprobe');
+	});
+
+	it('derives the sibling of a configured ffmpeg', () => {
+		// The whole point of the override: a host that had to point at a private
+		// ffmpeg build has ffprobe next to it, never on PATH.
+		mockEnv.FFMPEG_PATH = '/opt/ffmpeg-static/ffmpeg';
+		expect(ffprobeBin()).toBe('/opt/ffmpeg-static/ffprobe');
+	});
+
+	it('keeps the .exe suffix and the windows separators', () => {
+		mockEnv.FFMPEG_PATH = 'C:\\tools\\ffmpeg\\bin\\ffmpeg.exe';
+		expect(ffprobeBin()).toBe('C:\\tools\\ffmpeg\\bin\\ffprobe.exe');
+	});
+
+	it('renames only the basename, never a directory that says ffmpeg', () => {
+		mockEnv.FFMPEG_PATH = '/opt/ffmpeg/bin/ffmpeg';
+		expect(ffprobeBin()).not.toContain('/opt/ffprobe/');
+	});
+
+	it('falls back to PATH when FFMPEG_PATH is a wrapper we cannot reason about', () => {
+		// e.g. a shell shim called `av-encode` — guessing a sibling name from it
+		// would spawn something that does not exist; PATH at least might work.
+		mockEnv.FFMPEG_PATH = '/usr/local/bin/av-encode';
+		expect(ffprobeBin()).toBe('ffprobe');
+	});
+});
+
+describe('clipExtForMime — the container allowlist', () => {
+	it('accepts the four containers fal can decode', () => {
+		expect(clipExtForMime('video/mp4')).toBe('mp4');
+		expect(clipExtForMime('video/quicktime')).toBe('mov');
+		expect(clipExtForMime('video/webm')).toBe('webm');
+		expect(clipExtForMime('video/x-m4v')).toBe('m4v');
+	});
+
+	it('ignores the codec parameters browsers append', () => {
+		// Chrome sends this for a re-encoded upload; matching the raw header
+		// string would reject a perfectly good mp4.
+		expect(clipExtForMime('video/mp4; codecs="avc1.42E01E"')).toBe('mp4');
+		expect(clipExtForMime('VIDEO/MP4')).toBe('mp4');
+	});
+
+	it('rejects containers that would only fail later at the provider', () => {
+		expect(clipExtForMime('video/x-matroska')).toBeNull();
+		expect(clipExtForMime('video/avi')).toBeNull();
+	});
+
+	it('rejects non-video and missing types', () => {
+		expect(clipExtForMime('image/png')).toBeNull();
+		expect(clipExtForMime('application/octet-stream')).toBeNull();
+		expect(clipExtForMime('')).toBeNull();
+		expect(clipExtForMime(null)).toBeNull();
+		expect(clipExtForMime(undefined)).toBeNull();
+	});
+});
+
+describe('clipRejectionReason — what an upload is allowed to be', () => {
+	const ok: VideoProbe = { durationSec: 8.4, width: 1080, height: 1920 };
+
+	it('accepts a normal phone clip', () => {
+		expect(clipRejectionReason(4_000_000, 'video/mp4', ok)).toBeNull();
+	});
+
+	it('rejects an unaccepted container before anything else', () => {
+		const reason = clipRejectionReason(1000, 'video/x-matroska', ok);
+		expect(reason).toContain('not supported');
+	});
+
+	it('rejects an empty or oversized file', () => {
+		expect(clipRejectionReason(0, 'video/mp4', ok)).toContain('empty');
+		expect(clipRejectionReason(MAX_CLIP_BYTES + 1, 'video/mp4', ok)).toContain('too large');
+		// The cap itself is inclusive — a file exactly at the limit is fine.
+		expect(clipRejectionReason(MAX_CLIP_BYTES, 'video/mp4', ok)).toBeNull();
+	});
+
+	it('REFUSES an unprobed clip rather than storing it unmeasured', () => {
+		// The single most important line in this file: null probe = no duration =
+		// no billing basis. Everywhere else in video.ts a null means "carry on
+		// without the enhancement"; here it must mean "stop".
+		const reason = clipRejectionReason(4_000_000, 'video/mp4', null);
+		expect(reason).toContain('Could not read');
+	});
+
+	it('rejects a clip longer than the per-second bill we are willing to quote', () => {
+		const reason = clipRejectionReason(4_000_000, 'video/mp4', {
+			...ok,
+			durationSec: MAX_CLIP_SECONDS + 0.5
+		});
+		expect(reason).toContain('billed by the second');
+		// The boundary is inclusive: exactly the cap is still a legal clip.
+		expect(
+			clipRejectionReason(4_000_000, 'video/mp4', { ...ok, durationSec: MAX_CLIP_SECONDS })
+		).toBeNull();
+	});
+
+	it('rejects a sub-second stub', () => {
+		expect(
+			clipRejectionReason(4_000_000, 'video/mp4', { ...ok, durationSec: MIN_CLIP_SECONDS / 2 })
+		).toContain('too short');
+		expect(
+			clipRejectionReason(4_000_000, 'video/mp4', { ...ok, durationSec: MIN_CLIP_SECONDS })
+		).toBeNull();
+	});
+
+	it('rejects a frame too small to track a performer in', () => {
+		expect(
+			clipRejectionReason(4_000_000, 'video/mp4', { ...ok, width: MIN_CLIP_DIMENSION - 1 })
+		).toContain('too small');
+		expect(
+			clipRejectionReason(4_000_000, 'video/mp4', { ...ok, height: MIN_CLIP_DIMENSION - 1 })
+		).toContain('too small');
+	});
+
+	it('every rejection is a sentence a user can act on', () => {
+		// These strings go straight into the upload UI, so an empty or a stack-trace
+		// -shaped reason is a bug, not a cosmetic issue.
+		const reasons = [
+			clipRejectionReason(4_000_000, 'image/png', ok),
+			clipRejectionReason(0, 'video/mp4', ok),
+			clipRejectionReason(MAX_CLIP_BYTES + 1, 'video/mp4', ok),
+			clipRejectionReason(4_000_000, 'video/mp4', null),
+			clipRejectionReason(4_000_000, 'video/mp4', { ...ok, durationSec: 999 })
+		];
+		for (const r of reasons) {
+			expect(typeof r === 'string' && r.length > 10 && r.endsWith('.')).toBe(true);
+		}
+	});
+});
+
+describe('probeVideo — never-throw contract', () => {
+	// Not a media test: an unreadable path fails at the spawn or the exit, which
+	// is the same code path a corrupt upload takes. On a host without ffprobe it
+	// bails even earlier, at hasFfprobe. Either way the answer is null.
+	it('returns null instead of throwing on a path that cannot be read', async () => {
+		await expect(probeVideo('/definitely/not/a/file.mp4')).resolves.toBeNull();
+	});
+
+	it('returns null on an empty buffer without spawning anything', async () => {
+		await expect(probeVideo(Buffer.alloc(0))).resolves.toBeNull();
+	});
+
+	it('returns null on bytes that are not a video', async () => {
+		await expect(probeVideo(Buffer.from('this is not an mp4'))).resolves.toBeNull();
 	});
 });
