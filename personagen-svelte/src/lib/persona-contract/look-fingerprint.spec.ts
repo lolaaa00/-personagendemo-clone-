@@ -14,6 +14,7 @@ import { describe, it, expect } from 'vitest';
 import { hasDescribableLook, lookCanonicalForm, lookFingerprint } from './look-fingerprint';
 import { samplePersonaSkeleton } from './sampler';
 import { upgradeV1toV2 } from './upgrade';
+import { readPersonaProfileV2 } from './store';
 
 const NOW = '2026-01-01T00:00:00.000Z';
 const sampled = (seed = 'fp-1') => samplePersonaSkeleton(seed, {}, { now: NOW });
@@ -139,6 +140,43 @@ describe('lookFingerprint — v1 personas are covered too', () => {
 			skinTone: 'Fair'
 		}).personas_profile;
 		expect(lookFingerprint(upgradeV1toV2(raw))).toBe(lookFingerprint(upgradeV1toV2(copy(raw))));
+	});
+});
+
+describe('lookFingerprint — the two sides that must agree', () => {
+	/**
+	 * The server fingerprints from the raw agent row (avatar route); the page
+	 * fingerprints from `data.agent`, which is that row SPREAD together with a
+	 * dozen `agent_configs` fields. If those two ever disagreed, every portrait
+	 * in the estate would read as stale at once — the loudest possible false
+	 * alarm, and one nobody would think to look for.
+	 */
+	it('is unchanged by the config fields the page merges onto the row', () => {
+		const profile = sampled();
+		const bareRow = { personas_profile: profile };
+		const pageShaped = {
+			personas_profile: profile,
+			timezone: 'Australia/Sydney',
+			posts_per_day: 3,
+			autonomy_level: 'advisor',
+			ugc_voice: 'Adam',
+			ugc_character_ref: 'https://cdn.example/portrait.png',
+			ugc_reference_kit: { profile_generated_at: '2026-01-01T00:00:00.000Z' },
+			brand_brief_id: null
+		};
+		expect(lookFingerprint(readPersonaProfileV2(pageShaped))).toBe(
+			lookFingerprint(readPersonaProfileV2(bareRow))
+		);
+	});
+
+	it('is unchanged by a reference kit that records a previous run', () => {
+		const profile = sampled();
+		const before = readPersonaProfileV2({ personas_profile: profile });
+		const after = readPersonaProfileV2({
+			personas_profile: profile,
+			ugc_reference_kit: { profile_look_fingerprint: 'deadbeef', sheet_status: 'failed: nope' }
+		});
+		expect(lookFingerprint(after)).toBe(lookFingerprint(before));
 	});
 });
 
