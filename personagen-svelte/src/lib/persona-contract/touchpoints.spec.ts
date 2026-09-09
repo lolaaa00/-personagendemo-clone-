@@ -185,7 +185,26 @@ describe('the contract is honest about what the builders actually read', () => {
 	 * destructure (`const { facialHair } = look`). A loose check that runs beats a
 	 * precise one that is too brittle to keep.
 	 */
-	const sourceFor = (rel: string) => readFileSync(join(SRC, rel), 'utf8');
+	/**
+	 * The source WITH COMMENTS STRIPPED.
+	 *
+	 * Twice now this check has been fooled by English. First by `includes()`
+	 * matching "education" inside "educational"; then, after that was fixed, by
+	 * `creator.languages` appearing in a header comment that exists precisely to
+	 * explain why languages are NOT emitted. A doc comment saying "we deliberately
+	 * do not send X" was being read as evidence that X is sent.
+	 *
+	 * Block comments and whole-line `//` and `*` lines go; code keeps its URLs.
+	 */
+	const sourceFor = (rel: string) =>
+		readFileSync(join(SRC, rel), 'utf8')
+			.replace(/\/\*[\s\S]*?\*\//g, ' ')
+			.split('\n')
+			.filter((line) => {
+				const t = line.trim();
+				return !t.startsWith('//') && !t.startsWith('*');
+			})
+			.join('\n');
 
 	/**
 	 * Checked for the consumers that put a field in front of a MODEL. 'display'

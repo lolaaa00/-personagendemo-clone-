@@ -19,6 +19,14 @@ export interface VoiceOption {
 	style: string;
 	/** Accent tag shown in the picker (e.g. 'American', 'British', 'Australian'). */
 	accent?: string;
+	/**
+	 * OPTIONAL age tag (e.g. '18-24', '25-34', 'mature'). No built-in voice
+	 * carries one — ElevenLabs does not publish an age for these — so today this
+	 * field only exists so a client can tag a voice it adds via
+	 * UGC_EXTRA_VOICES. `pickVoiceForProfile` prefers a matching tag when one
+	 * exists and is a strict no-op against an untagged catalog.
+	 */
+	ageBand?: string;
 }
 
 const BUILTIN_VOICES: VoiceOption[] = [
@@ -81,7 +89,8 @@ function parseExtraVoices(): VoiceOption[] {
 			label: v.label || v.name,
 			gender: v.gender,
 			style: v.style || 'Custom voice',
-			accent: v.accent || undefined
+			accent: v.accent || undefined,
+			ageBand: typeof v.ageBand === 'string' && v.ageBand.trim() ? v.ageBand.trim() : undefined
 		}));
 	} catch {
 		console.warn('[Voices] UGC_EXTRA_VOICES is not valid JSON — ignoring.');
@@ -119,6 +128,16 @@ const ACCENT_ALIASES: Record<string, string> = {
 	'southern american': 'american-southern'
 };
 
+/** Age-band tags compared loosely: case, surrounding space, and an en/em dash
+ *  in '25–34' must not decide whether two bands are the same band. */
+function normalizeAgeBand(band: string | null | undefined): string {
+	return (band || '')
+		.trim()
+		.toLowerCase()
+		.replace(/[‐-―]/g, '-')
+		.replace(/\s+/g, ' ');
+}
+
 /** Stable string hash — same seed always lands on the same voice. */
 function voiceSeedHash(seed: string): number {
 	let h = 0;
@@ -135,16 +154,31 @@ function voiceSeedHash(seed: string): number {
  * gender) with `exact: false` so callers can say the real accent isn't in the
  * catalog yet. Voices added via UGC_EXTRA_VOICES (e.g. a Vietnamese accent from
  * the ElevenLabs Voice Library) are matched automatically by their accent tag.
+ *
+ * `ageBand` is an optional HINT (Persona Model v2, P4.2): when the catalog holds
+ * voices tagged with that band, the pick is narrowed to them before the seed
+ * chooses. No built-in voice is tagged, so an age hint against today's catalog
+ * narrows nothing and returns exactly the voice it returned before the parameter
+ * existed — `voices.spec.ts` guards that no-op. Accent still outranks age: an
+ * age hint never pulls the pick out of an exact accent match.
  */
 export function pickVoiceForProfile(
 	gender: 'male' | 'female',
 	accent?: string | null,
-	seed?: string
+	seed?: string,
+	ageBand?: string | null
 ): { voice: VoiceOption; exact: boolean } {
 	const pool = VOICE_CATALOG.filter((v) => v.gender === gender);
 	const fallbackPool = pool.length ? pool : VOICE_CATALOG;
 	const pick = (arr: VoiceOption[]) =>
 		arr[seed ? voiceSeedHash(seed) % arr.length : 0];
+	/** Narrows to the voices tagged for the wanted band — untagged pools pass through unchanged. */
+	const wantAge = normalizeAgeBand(ageBand);
+	const byAge = (arr: VoiceOption[]) => {
+		if (!wantAge) return arr;
+		const tagged = arr.filter((v) => normalizeAgeBand(v.ageBand) === wantAge);
+		return tagged.length ? tagged : arr;
+	};
 	const wantRaw = (accent || '').trim().toLowerCase();
 	const want = ACCENT_ALIASES[wantRaw] ?? wantRaw;
 	if (want) {
@@ -152,8 +186,8 @@ export function pickVoiceForProfile(
 			const tag = (v.accent || '').toLowerCase();
 			return tag && (tag === want || tag.includes(want) || want.includes(tag));
 		});
-		if (matches.length) return { voice: pick(matches), exact: true };
+		if (matches.length) return { voice: pick(byAge(matches)), exact: true };
 	}
 	const americans = fallbackPool.filter((v) => (v.accent || '').toLowerCase() === 'american');
-	return { voice: pick(americans.length ? americans : fallbackPool), exact: !want };
+	return { voice: pick(byAge(americans.length ? americans : fallbackPool)), exact: !want };
 }

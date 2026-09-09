@@ -86,11 +86,21 @@ export const PERSONA_TOUCHPOINTS: Record<string, readonly Touchpoint[] | 'never_
 	// Says whether the age is a real fact or a bucket midpoint. It never reaches a
 	// prompt itself; it decides whether the AGE may be stated as one.
 	'creator.ageSource': ['display'],
-	'creator.heritage': ['script', 'portrait', 'portrait_edit', 'uniqueness', 'display'],
+	// NOT script. Repeating heritage into a SCRIPT prompt buys nothing and invites
+	// the model to write an accent; the portrait pair is where it belongs.
+	'creator.heritage': ['portrait', 'portrait_edit', 'uniqueness', 'display'],
 	'creator.heritageText': ['portrait', 'portrait_edit', 'display'],
 	'creator.market': ['script', 'identity_kit', 'display'],
-	'creator.languages': ['script', 'display'],
+	// NOT script. The backbone's own header explains why it does not send them,
+	// and that comment was what fooled the honesty check into believing it did.
+	'creator.languages': ['display'],
 	'creator.education': ['display'],
+	// Typed, validated, labelled and RENDERED by the persona page — but nothing in
+	// the repo writes it. Listed with its real consumer rather than left out, so
+	// the day something does populate it, the contract already says who may read
+	// it. It reaches no prompt: a brand-safety denylist belongs in the guardrail
+	// block of a prompt, not among a persona's life facts.
+	'creator.neverDiscusses': ['display'],
 	'creator.traitLabels': ['script', 'display'],
 	// The RAW SCORES reach no prompt, deliberately: a model given
 	// "neuroticism: 71" writes a psychology report. `creator.traitLabels` is what
@@ -127,7 +137,10 @@ export const PERSONA_TOUCHPOINTS: Record<string, readonly Touchpoint[] | 'never_
 	'creator.lifestyle.transportMode': ['script', 'display'],
 	'creator.lifestyle.dietaryStyle': ['script', 'display'],
 	'creator.economic.incomeBand': ['script', 'display'],
-	'creator.economic.priceFrame': ['script', 'display'],
+	// The creator's own price frame reaches no prompt. Every price line in a
+	// script prompt is about the AUDIENCE's frame; emitting the creator's beside
+	// it would read as a contradiction.
+	'creator.economic.priceFrame': ['display'],
 
 	// ── how they look ───────────────────────────────────────────────────────
 	// The portrait pair, and nothing else: a script does not describe a face.
