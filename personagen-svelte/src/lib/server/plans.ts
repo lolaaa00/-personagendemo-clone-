@@ -46,14 +46,33 @@ export function isPaidPlan(p: unknown): p is PaidPlan {
 	return typeof p === 'string' && (PAID_PLANS as readonly string[]).includes(p);
 }
 
+/**
+ * Cache for the catalog. Four rows that change on launch day and almost never
+ * again, read on every request that resolves entitlements — including, now,
+ * every portal navigation. 30s is short enough that an operator editing a plan
+ * sees it take effect while they are still looking at the console, and long
+ * enough that the read stops being per-navigation.
+ *
+ * Only a SUCCESSFUL read is cached: caching the never-brick fallback would turn
+ * one failed query into 30 seconds of wrong answers.
+ */
+const CATALOG_TTL_MS = 30_000;
+let catalogCache: { rows: PlanRow[]; at: number } | null = null;
+
+/** Drop the cached catalog — for tests, and for an operator write that must show at once. */
+export function invalidatePlanCatalog(): void {
+	catalogCache = null;
+}
+
 /** Catalog from the database, falling back to the static table (never-brick). */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- the Supabase client is untyped across this codebase; narrowing it here alone would be a fiction
 export async function loadPlanCatalog(client?: any): Promise<PlanRow[]> {
+	if (catalogCache && Date.now() - catalogCache.at < CATALOG_TTL_MS) return catalogCache.rows;
 	try {
 		const svc = client ?? getServiceSupabase();
 		const { data, error } = await svc.from('plan_catalog').select('plan, name, price_usd_cents, included_credits, persona_limit, brand_brief_limit, features, sort, active, entitlements').order('sort');
 		if (error || !data?.length) return PLAN_FALLBACK;
-		return data.map((r: Record<string, unknown>) => ({
+		const rows: PlanRow[] = data.map((r: Record<string, unknown>) => ({
 			plan: r.plan,
 			name: r.name,
 			price_usd_cents: Number(r.price_usd_cents),
@@ -65,6 +84,8 @@ export async function loadPlanCatalog(client?: any): Promise<PlanRow[]> {
 			active: r.active !== false,
 			entitlements: r.entitlements && typeof r.entitlements === 'object' && !Array.isArray(r.entitlements) ? (r.entitlements as Record<string, unknown>) : {}
 		}));
+		catalogCache = { rows, at: Date.now() };
+		return rows;
 	} catch {
 		return PLAN_FALLBACK;
 	}
