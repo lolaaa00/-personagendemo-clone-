@@ -100,3 +100,29 @@ describe('"Cancel any time" has a line behind it', () => {
 		expect(billing).toMatch(/Cancel plan/);
 	});
 });
+
+describe('"Only what actually ran" — a call that threw did not run', () => {
+	const generate = read('lib', 'server', 'content', 'generate.ts');
+	const metering = read('lib', 'server', 'metering.ts');
+
+	it('the billing page still makes the promise', () => {
+		expect(billing).toMatch(/Only what actually ran/i);
+	});
+
+	it('both metering wrappers record AFTER the provider returns', () => {
+		// trackAi used to push the cost BEFORE awaiting, so a provider call that
+		// threw was billed anyway — the exact opposite of the sentence above, and
+		// a disagreement with meteredCall, which already recorded only on success.
+		const track = generate.slice(generate.indexOf('function trackAi'), generate.indexOf('function trackAi') + 900);
+		expect(track).toContain('const out = await ai.generate(prompt, opts);');
+		expect(track.indexOf('await ai.generate')).toBeLessThan(track.indexOf('costEvents.push'));
+		expect(metering).toContain('const out = await ai.generate(prompt, opts);');
+		expect(metering.indexOf('await ai.generate')).toBeLessThan(metering.indexOf('recordCostEvents('));
+	});
+
+	it('a call that succeeded is still recorded when a later step dies', () => {
+		// The other half of the promise: the ledger flushes in a finally, so work
+		// already paid for is billed even though the run failed overall.
+		expect(generate).toMatch(/finally \{[\s\S]{0,200}recordCostEvents\(/);
+	});
+});

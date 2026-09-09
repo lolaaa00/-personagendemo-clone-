@@ -2115,12 +2115,28 @@ export interface UgcContent {
 	generation?: GenerationProvenance;
 }
 
-/** Wraps an AiClient so every text call self-records into the cost ledger. */
+/**
+ * Wraps an AiClient so every text call self-records into the cost ledger.
+ *
+ * Records AFTER the call returns, not before. Pushing first meant a provider
+ * call that threw was still billed — and /billing promises the opposite in as
+ * many words: "Only what actually ran. If a generation dies partway, you pay
+ * for the images it had already made and nothing for the rest." A call that
+ * threw did not run. This also settles a disagreement between the two metering
+ * wrappers: meteredCall in metering.ts already records only on success, on the
+ * stated grounds that providers do not bill errors. Same operation, same
+ * policy now, whichever path the user took.
+ *
+ * A call that succeeds and is then abandoned further down still records, since
+ * the array is flushed in the caller's `finally` — which is the "you pay for
+ * what it had already made" half of the same promise.
+ */
 function trackAi(ai: AiClient, costEvents: CostEvent[]): AiClient {
 	return {
 		provider: ai.provider,
 		model: ai.model,
 		async generate(prompt, opts) {
+			const out = await ai.generate(prompt, opts);
 			costEvents.push({
 				provider: ai.provider,
 				operation: 'llm',
@@ -2129,7 +2145,7 @@ function trackAi(ai: AiClient, costEvents: CostEvent[]): AiClient {
 				model: ai.model,
 				usd: priceOf(ai.provider, 'llm')
 			});
-			return ai.generate(prompt, opts);
+			return out;
 		}
 	};
 }

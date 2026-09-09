@@ -460,7 +460,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-09", hash: "f2f32ec", type: "fix", category: "fix", scope: "verify", title: "the database verifiers still asserted the trigger grants" },
 	{ date: "2026-09-09", hash: "9564943", type: "fix", category: "fix", scope: "credits", title: "stop paying for runs we then record as someone else's" },
 	{ date: "2026-09-09", hash: "dc73ef4", type: "fix", category: "fix", scope: "security", title: "the signup-gate check could not fail, and the console hid the switch" },
-	{ date: "2026-09-09", hash: "13ad7b8", type: "feat", category: "feature", scope: "ops", title: "nothing that can lose the data runs without a proved backup first" }
+	{ date: "2026-09-09", hash: "13ad7b8", type: "feat", category: "feature", scope: "ops", title: "nothing that can lose the data runs without a proved backup first" },
+	{ date: "2026-09-09", hash: "4f6caf1", type: "fix", category: "fix", scope: "copy", title: "four claims the code does not make true" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -807,7 +808,15 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 		summary: "\"Cancel any time\" gets a line behind it. Plus 13 more changes, touching things you can now do and internal cleanup and guides and explanations.",
 		major: true, curated: false,
 		entries: [CHANGELOG[413], CHANGELOG[414], CHANGELOG[415], CHANGELOG[416], CHANGELOG[417], CHANGELOG[418], CHANGELOG[419], CHANGELOG[420], CHANGELOG[421], CHANGELOG[422], CHANGELOG[423], CHANGELOG[424], CHANGELOG[425], CHANGELOG[426]]
+	},
+	{
+		id: "4f6caf1", from: "2026-09-09", to: "2026-09-09",
+		category: "fix", categories: ["fix"],
+		title: "Fixed: four claims the code does not make true",
+		summary: "Four claims the code does not make true.",
+		major: false, curated: false,
+		entries: [CHANGELOG[427]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "13ad7b8";
+export const CHANGELOG_GENERATED_FROM = "4f6caf1";
