@@ -170,7 +170,11 @@ Task-level deltas are marked **[09-07]** inline below.
 
 **Live proof, 2026-09-08**, against a running server with no AI provider configured: `generate_persona_profile` returns 200 with a coherent creator, deterministic across two calls; a brief stating "Australian women 45-54" yields `audience.ageRanges: ['45_54']` while the creator stays 32; `reroll_field` moves the job and its economics only, reproduces for a given nonce, and answers a non-rerollable path with a 200 no-op.
 
+**Kill switch proven, not assumed (2026-09-08).** Two dev servers, same request, same persona. With `PERSONA_GENERATOR=v2` the engine returns 200 and a complete sampled creator with no provider configured. With the flag at its DEFAULT (`v1`) the identical request takes the old path and fails at the provider — `502 Generation failed via openrouter: HTTP 401` against a deliberately fake key — with no `_v2` payload and no spend. That is what "a true revert" has to look like: not a claim about a single early branch, but the old failure mode reproduced on demand.
+
 **Phase 1 remaining:** P1.6 default flip, P1.7 Tier 2 + backfill script, P1.8 consumers reading the flag.
+
+**[09-08] BLOCKER on the backfill CLI, found before starting it.** P1.7 assumes `scripts/backfill-persona-v2.ts` can import `backfillTier1`. It cannot today. Every existing TS script runs under `node --env-file=.env --experimental-strip-types`, which strips types but resolves NO `$lib` alias and requires explicit ESM extensions — and every one of them is self-contained, importing only node builtins and `@supabase/supabase-js`. No script in this repo imports app library code, so there is no pattern to copy. Decide the seam before writing the script: either (a) the contract and persona modules use relative imports throughout and the script imports them with explicit `.ts` extensions, or (b) the script is run through `vite-node` so the SvelteKit aliases resolve. Option (b) is smaller but adds a dev dependency to an ops path; option (a) is a one-off edit that keeps ops tooling dependency-free. Do not discover this halfway through writing the script.
 
 ---
 
@@ -254,6 +258,7 @@ Task-level deltas are marked **[09-07]** inline below.
 ### P2.2 Prompt clause
 - **Files:** `src/lib/persona-profile.ts` (`appearanceToPromptClause` → accepts v2 `look`, emits facial hair, eyewear, face shape, gray coverage, height in a fixed order; keeps legacy combined-hairstyle de-duplication), `persona-profile.spec.ts`
 - **Change:** `look.promptCues` cached by `serializePersonaProfile`.
+- **[09-08] TRAP, recorded before it can fire:** nothing reads `look.promptCues` today. It is WRITTEN by the Tier 1 backfill and CLEARED by a look re-roll, which is harmless only while no consumer exists. The moment this task makes it the portrait source, a re-rolled look emits no clause at all unless Tier 1 has a caller (P1.7/P1.8). Wire the reader and the recompute in the same commit, or read the clause live and treat the cached field as an optimisation rather than the source.
 - **Test:** snapshot for a fully populated look; empty look → empty clause; legacy `'long loose waves'` + `length: 'long'` → no duplicate word.
 
 ### P2.3 Portrait prompts assert drift-prone attributes

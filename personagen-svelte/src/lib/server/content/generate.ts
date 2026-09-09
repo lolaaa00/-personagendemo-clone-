@@ -58,7 +58,10 @@ import {
 	debitForEvents,
 	type KeySource
 } from '$lib/server/credits';
-import { creditsMode } from '$lib/server/flags';
+import { creditsMode, personaBackboneEmits } from '$lib/server/flags';
+import { readPersonaProfileV2 } from '$lib/persona-contract/store';
+import { label } from '$lib/persona-contract/labels';
+import { isObj } from '$lib/persona-contract/paths';
 import {
 	loadRegistry,
 	openRouterRoute,
@@ -780,6 +783,197 @@ async function logAutoReject(
 }
 
 /**
+ * Persona Model v2 — the life backbone, rendered as prompt facts.
+ *
+ * THE ONE CONSUMER of `personaBackboneEmits()`. Until this function existed the
+ * staged rollout `off → shadow → fill → on` was a declaration: the switch could
+ * be flipped all the way to `on` and nothing anywhere read it. This is the gate.
+ *
+ * Four rules, each load-bearing:
+ *
+ *  1. **`on` ONLY.** At `off`, `shadow` and `fill` this returns `[]` and the
+ *     caller's output is byte-identical to what it emitted before this function
+ *     was written. `fill` deliberately persists the backbone and still tells the
+ *     model nothing — storing a fact and speaking it are two separate decisions,
+ *     which is the whole reason the flag has four positions and not two.
+ *  2. **Set leaves only.** No placeholders, no "unknown", no blank labels. A
+ *     persona holding three facts contributes three facts. An unset leaf is
+ *     absent, never an empty row — a prompt that says "Pets: none specified"
+ *     has told the model something false about the person.
+ *  3. **`label()`, never a raw token.** `partnered` is a storage token;
+ *     "Partnered" is English. A token in a prompt is the en-dash incident
+ *     waiting to happen again.
+ *  4. **Fixed order, fixed shape.** The facts below are a hand-written list in
+ *     a fixed sequence, not an object walk, so the same profile produces the
+ *     same string on every call, in every process, forever.
+ *
+ * WHICH FACTS, AND WHY THESE SIX. The test is narrow: does the fact change how
+ * a 30-second script reads? Six do, and they are the six the rollout doc's fact
+ * strip already shows the user, so what the model is told and what the customer
+ * sees on the persona page cannot drift apart:
+ *
+ *   • **Age** — the single strongest register cue. A 24-year-old and a
+ *     46-year-old do not open a video the same way.
+ *   • **Home** — city, region, and urban/suburban/regional/rural. Decides what
+ *     is plausible to reference: a commute, a beach, a two-hour drive to a shop.
+ *   • **Work** — title, field, seniority, employment status, and on-site /
+ *     hybrid / remote. Decides what the person can plausibly be doing at 10am,
+ *     what they are expert in, and how time-poor they sound.
+ *   • **Household** — partner, children and their ages, housing, pets. This is
+ *     where most of a UGC script's incidental detail comes from: who is off
+ *     camera, whose toy is on the floor, whose kitchen this is.
+ *   • **Lifestyle** — activity level, transport, diet. Decides what they would
+ *     actually buy, eat, and complain about.
+ *   • **Character** — the derived Big Five trait labels ("Curious",
+ *     "Organised", "Blunt"). The five raw 0–100 scores are NOT emitted: a model
+ *     given "neuroticism: 71" writes a psychology report, a model given
+ *     "Sensitive" writes a person.
+ *
+ * DELIBERATELY NOT EMITTED, so the section stays six lines instead of forty:
+ *   • heritage / name / languages — identity, already carried by the portrait
+ *     builders and `agent.name`; repeating heritage into a *script* prompt buys
+ *     nothing and invites the model to write an accent.
+ *   • the raw `bigFive` scores, `birthday`, `timezone`, `socialPlatformsUsed`,
+ *     `clothingSizes` — operational or numeric; none of them change a sentence.
+ *   • `economic.incomeBand` / `priceFrame` — genuinely script-changing, but
+ *     they are the *audience's* price frame in every existing prompt line above,
+ *     and emitting the creator's alongside them would read as a contradiction.
+ *     Revisit when the audience block is rewritten (P3.x), not before.
+ *   • `neverDiscusses` — a brand-safety denylist, not a life fact. It belongs in
+ *     the guardrail block of the director prompt with the other prohibitions,
+ *     and nothing populates it today (the sampler never writes it), so emitting
+ *     it here would be a dead line with a live-looking test.
+ *
+ * A BUCKET AGE IS NOT AN AGE. `upgradeV1toV2` turns a v1 apparent-age bucket
+ * ("30–35") into `age: 32, ageSource: 'bucket'` so the number has *something* to
+ * sort by. That midpoint is a rendering convenience, not a fact about the
+ * person, and asserting "You are 32" to the model on the strength of it invents
+ * precision the customer never supplied. Only an `exact` age (or one stored with
+ * no `ageSource` at all, i.e. written as a real value) is emitted.
+ *
+ * Never throws: a malformed, empty or still-v1 profile contributes no lines,
+ * which is the correct answer rather than a failed generation.
+ */
+function personaBackboneLines(agent: any): string[] {
+	if (!personaBackboneEmits()) return [];
+
+	let creator: Record<string, unknown>;
+	try {
+		const profile = readPersonaProfileV2(agent) as unknown;
+		const c = isObj(profile) ? profile.creator : undefined;
+		if (!isObj(c)) return [];
+		creator = c;
+	} catch {
+		// A profile shape nobody anticipated must not take a generation down.
+		return [];
+	}
+
+	/** Trimmed non-empty string, else undefined. */
+	const str = (v: unknown): string | undefined =>
+		typeof v === 'string' && v.trim() ? v.trim() : undefined;
+	/** A token rendered through the registry; unset and unknown-blank both drop. */
+	const lbl = (group: Parameters<typeof label>[0], v: unknown): string | undefined => {
+		const token = str(v);
+		return token ? str(label(group, token)) : undefined;
+	};
+	/** An array of tokens rendered in stored order, de-duplicated. */
+	const lblList = (group: Parameters<typeof label>[0], v: unknown): string[] =>
+		Array.isArray(v)
+			? Array.from(new Set(v.map((x) => lbl(group, x)).filter((x): x is string => !!x)))
+			: [];
+	/** 'A · B · C' from the parts that exist, or undefined when none do. */
+	const join = (...parts: (string | undefined)[]): string | undefined => {
+		const kept = parts.filter((p): p is string => !!p);
+		return kept.length ? kept.join(' · ') : undefined;
+	};
+
+	const facts: { key: string; value: string | undefined }[] = [];
+
+	// 1. Age — exact only; a bucket midpoint is not a fact (see header).
+	const age = creator.age;
+	const ageSource = str(creator.ageSource);
+	facts.push({
+		key: 'Age',
+		value:
+			typeof age === 'number' && Number.isFinite(age) && ageSource !== 'bucket'
+				? String(Math.round(age))
+				: undefined
+	});
+
+	// 2. Home — 'Brisbane, Queensland · Urban', or whichever half exists.
+	const location = isObj(creator.location) ? creator.location : {};
+	const city = str(location.city);
+	const region = str(location.region);
+	facts.push({
+		key: 'Home',
+		value: join(
+			city && region ? `${city}, ${region}` : (city ?? region),
+			lbl('geographicContext', location.geographicContext)
+		)
+	});
+
+	// 3. Work — reading order: what they do, in what field, how senior, employed
+	//    how, from where.
+	const work = isObj(creator.work) ? creator.work : {};
+	facts.push({
+		key: 'Work',
+		value: join(
+			str(work.title),
+			lbl('workDomain', work.domain),
+			lbl('seniority', work.seniority),
+			lbl('employmentStatus', work.employmentStatus),
+			lbl('workLocationMode', work.workLocationMode)
+		)
+	});
+
+	// 4. Household — partner, children (count + bands), housing, pets.
+	const household = isObj(creator.household) ? creator.household : {};
+	const children = isObj(household.children) ? household.children : {};
+	const count = children.count;
+	const bands = lblList('childAgeBand', children.ageBands);
+	const childPhrase =
+		typeof count === 'number' && Number.isFinite(count) && count > 0
+			? `${Math.round(count)} ${Math.round(count) === 1 ? 'child' : 'children'}${bands.length ? ` (${bands.join(', ')})` : ''}`
+			: bands.length
+				? `children (${bands.join(', ')})`
+				: undefined;
+	const pets = lblList('pet', household.pets);
+	facts.push({
+		key: 'Household',
+		value: join(
+			lbl('relationshipStatus', household.relationshipStatus),
+			childPhrase,
+			lbl('housingType', household.housingType),
+			pets.length ? `Pets: ${pets.join(', ')}` : undefined
+		)
+	});
+
+	// 5. Lifestyle — how they move, how they travel, how they eat.
+	const lifestyle = isObj(creator.lifestyle) ? creator.lifestyle : {};
+	facts.push({
+		key: 'Lifestyle',
+		value: join(
+			lbl('activityLevel', lifestyle.activityLevel),
+			lbl('transportMode', lifestyle.transportMode),
+			lbl('dietaryStyle', lifestyle.dietaryStyle)
+		)
+	});
+
+	// 6. Character — derived trait labels only, never the raw scores.
+	const traits = lblList('traitLabel', creator.traitLabels);
+	facts.push({ key: 'Character', value: traits.length ? traits.join(' · ') : undefined });
+
+	const set = facts.filter((f) => f.value);
+	if (!set.length) return [];
+
+	return [
+		'',
+		'Life backbone — true facts about the person you are. Let them shape what you notice, reference, and could plausibly be doing; never read them out as a list, and never state one that is not here:',
+		...set.map((f) => `- ${f.key}: ${f.value}.`)
+	];
+}
+
+/**
  * Builds a rich agent context string from the agent row, pulling extended
  * persona profile off the agent row via the typed accessor.
  *
@@ -840,6 +1034,12 @@ export function buildRichAgentContext(agent: any): string {
 		}
 		if (skillsSummary) lines.push(`Creator skills & capabilities: ${skillsSummary.slice(0, 400)}.`);
 	}
+
+	// Persona Model v2 backbone. Appended LAST and in its own delimited block so
+	// nothing above is reordered, reworded or removed: below PERSONA_BACKBONE=on
+	// this contributes zero lines and the string is byte-identical to the one
+	// this function returned before the backbone existed.
+	lines.push(...personaBackboneLines(agent));
 
 	return lines.join('\n');
 }
