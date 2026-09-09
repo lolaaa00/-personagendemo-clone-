@@ -464,7 +464,14 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-09", hash: "4f6caf1", type: "fix", category: "fix", scope: "copy", title: "four claims the code does not make true" },
 	{ date: "2026-09-09", hash: "c55c353", type: "fix", category: "fix", scope: "credits", title: "a provider call that threw was billed anyway" },
 	{ date: "2026-09-09", hash: "911f86c", type: "fix", category: "fix", scope: "backfill", title: "Tier 1 now converges — it was rewriting the same rows forever" },
-	{ date: "2026-09-09", hash: "b59bb58", type: "feat", category: "automation", scope: "persona", title: "backfill Tier 2, the viewer panel, stale-state warnings — and an audit that could not see its own bug" }
+	{ date: "2026-09-09", hash: "b59bb58", type: "feat", category: "automation", scope: "persona", title: "backfill Tier 2, the viewer panel, stale-state warnings — and an audit that could not see its own bug" },
+	{ date: "2026-09-09", hash: "39fe738", type: "fix", category: "design", scope: "backfill", title: "the declared-leaf rule is Tier 1's, and Tier 2 was failing it by design" },
+	{ date: "2026-09-09", hash: "d74b603", type: "test", category: "maintenance", scope: "smoke", title: "the live run asserts the admission surface, and that its two halves agree" },
+	{ date: "2026-09-09", hash: "64f450b", type: "perf", category: "performance", scope: "plans", title: "cache the catalog, but never cache a failed read" },
+	{ date: "2026-09-09", hash: "6409625", type: "fix", category: "fix", scope: "copy", title: "\"free credit to start\" could be withheld, and said so nowhere" },
+	{ date: "2026-09-09", hash: "3097aef", type: "feat", category: "feature", scope: "plans", title: "the six gated controls stop looking enabled" },
+	{ date: "2026-09-09", hash: "e26ebd3", type: "fix", category: "fix", scope: "health", title: "\"pending\" for reconciliation was a container's memory, not the truth" },
+	{ date: "2026-09-09", hash: "135cb2a", type: "feat", category: "security", scope: "ops", title: "one preflight for every deploy path, and the auth gate can fail again" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -814,12 +821,12 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 	},
 	{
 		id: "4f6caf1", from: "2026-09-09", to: "2026-09-09",
-		category: "fix", categories: ["fix","automation"],
+		category: "fix", categories: ["fix","automation","design","maintenance","performance","feature","security"],
 		title: "Fixed: four claims the code does not make true",
-		summary: "Four claims the code does not make true. Plus 3 more changes, touching work the app does on its own.",
-		major: false, curated: false,
-		entries: [CHANGELOG[427], CHANGELOG[428], CHANGELOG[429], CHANGELOG[430]]
+		summary: "Four claims the code does not make true. Plus 10 more changes, touching work the app does on its own and layout, colours and readability and internal cleanup.",
+		major: true, curated: false,
+		entries: [CHANGELOG[427], CHANGELOG[428], CHANGELOG[429], CHANGELOG[430], CHANGELOG[431], CHANGELOG[432], CHANGELOG[433], CHANGELOG[434], CHANGELOG[435], CHANGELOG[436], CHANGELOG[437]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "b59bb58";
+export const CHANGELOG_GENERATED_FROM = "135cb2a";
