@@ -447,7 +447,7 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-09", hash: "7737d82", type: "fix", category: "infrastructure", scope: "copy", title: "two money claims of mine were false; the pipeline is right, the words were not" },
 	{ date: "2026-09-09", hash: "7f772ae", type: "docs", category: "docs", scope: null, title: "the promise audit as a method, its findings, and the API reference it caught" },
 	{ date: "2026-09-09", hash: "cfbad51", type: "feat", category: "automation", scope: "persona", title: "the backfill runs as an admin operation; portrait prompts hold the beard" },
-	{ date: "2026-09-09", hash: "602dca9", type: "feat", category: "feature", scope: "billing", title: "\"Cancel any time\" gets a line behind it" }
+	{ date: "2026-09-09", hash: "8ad01c9", type: "feat", category: "feature", scope: "billing", title: "\"Cancel any time\" gets a line behind it" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -788,7 +788,7 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 		entries: [CHANGELOG[399], CHANGELOG[400], CHANGELOG[401], CHANGELOG[402], CHANGELOG[403], CHANGELOG[404], CHANGELOG[405], CHANGELOG[406], CHANGELOG[407], CHANGELOG[408], CHANGELOG[409], CHANGELOG[410], CHANGELOG[411], CHANGELOG[412]]
 	},
 	{
-		id: "602dca9", from: "2026-09-09", to: "2026-09-09",
+		id: "8ad01c9", from: "2026-09-09", to: "2026-09-09",
 		category: "feature", categories: ["feature"],
 		title: "New: \"Cancel any time\" gets a line behind it",
 		summary: "\"Cancel any time\" gets a line behind it.",
@@ -797,4 +797,4 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "602dca9";
+export const CHANGELOG_GENERATED_FROM = "8ad01c9";

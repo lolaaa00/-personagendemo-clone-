@@ -161,7 +161,7 @@
 						</span>
 					{/if}
 				</p>
-				{#if data.plans.current}
+				{#if data.plans.current?.cancellable}
 					<div class="plan-actions">
 						{#if data.plans.current.cancelAtPeriodEnd}
 							<button class="buy ghost" disabled={cancelling} onclick={() => setCancellation(true)}>

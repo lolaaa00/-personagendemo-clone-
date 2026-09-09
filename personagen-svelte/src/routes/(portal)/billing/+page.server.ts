@@ -56,7 +56,7 @@ export const load: PageServerLoad = async ({ locals, request, url }) => {
 		// SECURITY DEFINER function, balance + mode only, never the owner's ledger.
 		locals.supabase.rpc('workspace_wallets'),
 		// Own subscription row (RLS: select own) and the plan catalog (service-only table).
-		locals.supabase.from('subscriptions').select('plan, status, current_period_end, included_credits, cancel_at_period_end').eq('user_id', user.id).maybeSingle(),
+		locals.supabase.from('subscriptions').select('plan, status, current_period_end, included_credits, cancel_at_period_end, stripe_subscription_id').eq('user_id', user.id).maybeSingle(),
 		loadPlanCatalog()
 	]);
 
@@ -107,6 +107,9 @@ export const load: PageServerLoad = async ({ locals, request, url }) => {
 						status: subscription.status,
 						periodEnd: subscription.current_period_end,
 						cancelAtPeriodEnd: subscription.cancel_at_period_end === true,
+						// A comped or hand-granted plan has nothing at Stripe to cancel; offering
+						// the button would be a dead end that answers 404.
+						cancellable: Boolean(subscription.stripe_subscription_id),
 						included: formatCredits(Number(subscription.included_credits ?? 0), currency, s.fx_rates, locale)
 					}
 				: null,
