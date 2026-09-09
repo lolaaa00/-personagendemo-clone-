@@ -480,7 +480,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-09", hash: "04a640d", type: "feat", category: "feature", scope: "audience", title: "the fit judge — a draft judged by four specific people, not a bracket" },
 	{ date: "2026-09-09", hash: "fd9cf48", type: "feat", category: "infrastructure", scope: "audience", title: "the fit verdict reaches the pipeline and the review drawer" },
 	{ date: "2026-09-09", hash: "bf062f6", type: "feat", category: "feature", scope: "persona-contract", title: "the touchpoint map — which parts of the product actually see each field" },
-	{ date: "2026-09-09", hash: "de0104d", type: "test", category: "maintenance", scope: "persona-contract", title: "a reverse check that measured clean because the measurement was broken" }
+	{ date: "2026-09-09", hash: "de0104d", type: "test", category: "maintenance", scope: "persona-contract", title: "a reverse check that measured clean because the measurement was broken" },
+	{ date: "2026-09-09", hash: "19801c6", type: "feat", category: "feature", scope: "persona", title: "the script and identity kit read the backbone; the contract caught four false claims" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -838,12 +839,12 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 	},
 	{
 		id: "f1ce3a8", from: "2026-09-09", to: "2026-09-09",
-		category: "maintenance", categories: ["maintenance","design","feature","infrastructure"],
-		title: "Tidying: the fingerprint must survive the page's own agent…",
-		summary: "The fingerprint must survive the page's own agent shape. Plus 5 more changes, touching layout, colours and readability and things you can now do and setup and deployment.",
+		category: "feature", categories: ["maintenance","design","feature","infrastructure"],
+		title: "New: the fingerprint must survive the page's own agent…",
+		summary: "The fingerprint must survive the page's own agent shape. Plus 6 more changes, touching internal cleanup and layout, colours and readability and setup and deployment.",
 		major: true, curated: false,
-		entries: [CHANGELOG[441], CHANGELOG[442], CHANGELOG[443], CHANGELOG[444], CHANGELOG[445], CHANGELOG[446]]
+		entries: [CHANGELOG[441], CHANGELOG[442], CHANGELOG[443], CHANGELOG[444], CHANGELOG[445], CHANGELOG[446], CHANGELOG[447]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "de0104d";
+export const CHANGELOG_GENERATED_FROM = "19801c6";
