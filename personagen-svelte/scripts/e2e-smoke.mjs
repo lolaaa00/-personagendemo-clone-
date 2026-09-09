@@ -63,6 +63,26 @@ async function pg(query) {
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+/**
+ * Delete the media this run put in the bucket.
+ *
+ * Every generation persists its image under `<userId>/…` in ugc-media. Deleting
+ * the user removes the database rows but NOT the objects, so each run left a
+ * file nobody can reach: 32 of them accumulated over three days before anyone
+ * looked. Storage has no cascade, so the sweep has to be explicit.
+ */
+async function purgeStorageFor(userId) {
+	try {
+		const objects = await pg(`select bucket_id, name from storage.objects where split_part(name, '/', 1) = ${q(userId)}`);
+		for (const o of objects ?? []) {
+			await fetch(`${SB}/storage/v1/object/${o.bucket_id}/${o.name}`, { method: 'DELETE', headers: { apikey: KEY, Authorization: `Bearer ${KEY}` } });
+		}
+		return (objects ?? []).length;
+	} catch {
+		return 0;
+	}
+}
+
 // ── tiny cookie jar over fetch ───────────────────────────────────────────────
 const jar = new Map();
 function absorb(res) {
@@ -121,8 +141,9 @@ async function main() {
 				await pg(`delete from agent_configs where agent_id=${q(a.id)}`);
 				await pg(`delete from agents where id=${q(a.id)}`);
 			}
+			const files = await purgeStorageFor(u.id);
 			await fetch(`${SB}/auth/v1/admin/users/${u.id}`, { method: 'DELETE', headers: { apikey: KEY, Authorization: `Bearer ${KEY}` } });
-			console.log(`swept stranded fixture from an earlier run: ${u.email}`);
+			console.log(`swept stranded fixture from an earlier run: ${u.email}${files ? ` (+${files} orphaned file(s))` : ''}`);
 		}
 	} catch (e) {
 		console.warn('fixture sweep skipped:', e.message);
@@ -286,8 +307,10 @@ async function cleanup() {
 			await pg(`delete from agents where id=${q(agentId)}`);
 		}
 		if (userId) {
+			// Media first: once the user is gone the prefix is unattributable.
+			await purgeStorageFor(userId);
 			const del = await fetch(`${SB}/auth/v1/admin/users/${userId}`, { method: 'DELETE', headers: { apikey: KEY, Authorization: `Bearer ${KEY}` } });
-			const left = await pg(`select (select count(*)::int from auth.users where id=${q(userId)}) as users, (select count(*)::int from credit_accounts where user_id=${q(userId)}) as wallets, (select count(*)::int from agents where user_id=${q(userId)}) as agents, (select count(*)::int from posts where user_id=${q(userId)}) as posts`);
+			const left = await pg(`select (select count(*)::int from auth.users where id=${q(userId)}) as users, (select count(*)::int from credit_accounts where user_id=${q(userId)}) as wallets, (select count(*)::int from agents where user_id=${q(userId)}) as agents, (select count(*)::int from posts where user_id=${q(userId)}) as posts, (select count(*)::int from storage.objects where split_part(name, '/', 1) = ${q(userId)}) as files`);
 			check('cleanup: throwaway user and rows removed', del.ok && Object.values(left[0]).every((n) => n === 0), JSON.stringify(left[0]));
 		}
 	} catch (e) {
