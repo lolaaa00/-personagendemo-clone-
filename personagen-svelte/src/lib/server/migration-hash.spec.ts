@@ -119,7 +119,22 @@ describe('the runner delegates to that module', () => {
 		expect(apply).toContain('if (!allowUncommitted)');
 		expect(apply).toContain('provenanceRefusal(m.name, state)');
 		expect(script).toContain("allowUncommitted: flags.has('--allow-uncommitted')");
-		expect(script).toContain('await cmdApply(pending, { dryRun, allowUncommitted })');
+		// --all forwards every flag; asserted by name so adding one to cmdApply
+		// without threading it through --all fails here.
+		expect(script).toMatch(/await cmdApply\(pending, \{[^}]*dryRun[^}]*allowUncommitted[^}]*\}\)/);
+	});
+
+	it('a backup is taken before the write, and never on a path that writes nothing', () => {
+		// The backup exists so a migration cannot be the thing that loses the data.
+		// It must sit AFTER every refusal (so a run that will not apply pays nothing)
+		// and BEFORE the single network write.
+		const apply = script.slice(script.indexOf('async function cmdApply'), script.indexOf('* Stamp migrations'));
+		expect(apply).toContain('backupBeforeWrite');
+		expect(apply.indexOf('if (dryRun)')).toBeLessThan(apply.indexOf('backupBeforeWrite'));
+		expect(apply.indexOf('backupBeforeWrite')).toBeLessThan(apply.indexOf('await pgQuery(sql)'));
+		// 000 bootstraps the ledger the backup reads; backing up first would die.
+		expect(apply).toMatch(/000_schema_migrations/);
+		expect(script).toContain("noBackup: flags.has('--no-backup')");
 	});
 
 	it('--rehash only rewrites rows classified legacy, refuses changed, and can dry-run', () => {

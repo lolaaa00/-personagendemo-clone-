@@ -22,6 +22,12 @@ param(
     # resolvers return pointing at a runnable row. Read-only, ~1s. Pass this only
     # when you are deliberately shipping with the catalog in a known-bad state.
     [switch]$allowRegistryDrift = $false,
+    # Production had no backup of any kind until 2026-09-09. Every deploy now takes
+    # one and proves it still restores, before anything is committed or pushed.
+    # Passing this downgrades a failed backup to a warning and records "backup" in
+    # the commit message. Legitimate only when the database is deliberately
+    # unreachable, or you have just taken a backup by other means.
+    [switch]$allowBackupFailure = $false,
     # Run every gate and print what WOULD be staged, then stop. Commits nothing,
     # pushes nothing. This is how you test a change to this script.
     [switch]$dryRun = $false
@@ -193,6 +199,40 @@ if (-not $skipTests) {
 } else {
     Write-Host "  [1/3] WARNING: TEST GATE SKIPPED (-skipTests)." -ForegroundColor Red
     $bypassed += "tests"
+}
+
+# ── Pre-deploy backup ──
+# Production had no backup of any kind until 2026-09-09. This is the last moment a
+# deploy is still free: nothing has been committed and nothing has been pushed, so
+# aborting here leaves no trace. The working directory is still personagen-svelte,
+# which npm run requires - there is no package.json at the repo root - and
+# $bypassed is still writable, so a bypass reaches the commit message and stays in
+# `git log` forever.
+#
+# Two separate calls, so the output says WHICH half failed.
+Write-Host "  [1/3] Taking a database backup..." -ForegroundColor Yellow
+$backupExit = Invoke-Gate "npm run backup"
+if ($backupExit -eq 0) {
+    # A failing check-restore is not noise. It is the specific signal that a column
+    # has changed type or been dropped and the backup on disk will NOT load - which
+    # is precisely the moment not to ship.
+    Write-Host "  [1/3] Proving the backup still restores..." -ForegroundColor Yellow
+    $backupExit = Invoke-Gate "npm run backup:check-restore"
+}
+if ($backupExit -ne 0) {
+    if ($allowBackupFailure) {
+        Write-Host "  [1/3] WARNING: BACKUP GATE BYPASSED (-allowBackupFailure) - shipping with no proven restore point." -ForegroundColor Red
+        $bypassed += "backup"
+    } else {
+        Write-Host "  [1/3] ERROR: the backup failed, or it will not restore into the live schema." -ForegroundColor Red
+        Write-Host "  [1/3]        Read the output above: a 'will NOT load', or a named dropped" -ForegroundColor Red
+        Write-Host "  [1/3]        column, means a restore would lose data. Fix it, or pass -allowBackupFailure." -ForegroundColor Red
+        Set-Location $projectDir
+        exit 1
+    }
+} else {
+    Write-Host "  [1/3] OK: backup taken and proven to restore." -ForegroundColor Green
+    Write-Host "  [1/3]     Database only - the media bytes in storage are never captured." -ForegroundColor DarkGray
 }
 Set-Location $projectDir
 

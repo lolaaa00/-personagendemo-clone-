@@ -458,7 +458,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-09", hash: "ef2174e", type: "fix", category: "fix", scope: "admin", title: "the console hid a switch it would happily accept, and the smoke said PASS anyway" },
 	{ date: "2026-09-09", hash: "8a152e8", type: "docs", category: "docs", scope: "security", title: "who can create an account today, and the two switches only you can flip" },
 	{ date: "2026-09-09", hash: "f2f32ec", type: "fix", category: "fix", scope: "verify", title: "the database verifiers still asserted the trigger grants" },
-	{ date: "2026-09-09", hash: "9564943", type: "fix", category: "fix", scope: "credits", title: "stop paying for runs we then record as someone else's" }
+	{ date: "2026-09-09", hash: "9564943", type: "fix", category: "fix", scope: "credits", title: "stop paying for runs we then record as someone else's" },
+	{ date: "2026-09-09", hash: "dc73ef4", type: "fix", category: "fix", scope: "security", title: "the signup-gate check could not fail, and the console hid the switch" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -802,10 +803,10 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 		id: "8ad01c9", from: "2026-09-09", to: "2026-09-09",
 		category: "fix", categories: ["feature","fix","maintenance","docs"],
 		title: "Fixed: \"Cancel any time\" gets a line behind it",
-		summary: "\"Cancel any time\" gets a line behind it. Plus 11 more changes, touching things you can now do and internal cleanup and guides and explanations.",
+		summary: "\"Cancel any time\" gets a line behind it. Plus 12 more changes, touching things you can now do and internal cleanup and guides and explanations.",
 		major: true, curated: false,
-		entries: [CHANGELOG[413], CHANGELOG[414], CHANGELOG[415], CHANGELOG[416], CHANGELOG[417], CHANGELOG[418], CHANGELOG[419], CHANGELOG[420], CHANGELOG[421], CHANGELOG[422], CHANGELOG[423], CHANGELOG[424]]
+		entries: [CHANGELOG[413], CHANGELOG[414], CHANGELOG[415], CHANGELOG[416], CHANGELOG[417], CHANGELOG[418], CHANGELOG[419], CHANGELOG[420], CHANGELOG[421], CHANGELOG[422], CHANGELOG[423], CHANGELOG[424], CHANGELOG[425]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "9564943";
+export const CHANGELOG_GENERATED_FROM = "dc73ef4";

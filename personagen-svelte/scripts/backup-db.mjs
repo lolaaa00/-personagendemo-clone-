@@ -30,6 +30,23 @@
 //
 // Partition CHILDREN are skipped: selecting the parent returns every row, so
 // dumping both would double every activity event.
+//
+// STORAGE — read this before you trust a restore. The bucket holds the actual
+// product: hundreds of generated images and videos, hundreds of megabytes. Their
+// BYTES are NOT in here, and there is deliberately no mode that downloads them —
+// at this host's throughput that is tens of minutes, which cannot sit inside a
+// deploy gate. What IS captured is the MANIFEST: storage.objects and
+// storage.buckets. Without even the list, a restored database points at files
+// nobody can enumerate, so you cannot tell what was lost. Every place that
+// reports on a backup says this out loud, every time.
+//
+// ENV — values come from personagen-svelte/.env when the file exists and from
+// the process environment otherwise, so a container, a cron job or CI can run
+// this with no file on disk. Precedence is apply-migration.mjs's, exactly: a
+// variable already in the environment wins over the file. That matters because
+// apply-migration.mjs spawns this script — if the two disagreed about
+// precedence, a migration could write to one database while the backup that is
+// supposed to protect it read another.
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync } from 'node:fs';
@@ -45,14 +62,21 @@ function die(msg) {
 }
 
 // ── env ──────────────────────────────────────────────────────────────────────
+// A .env file is no longer required. Without one the process environment is used
+// on its own, which is what makes a container, a cron job or CI able to call
+// this at all. The precedence rule is copied from apply-migration.mjs: a
+// variable already exported wins over the file, so the runner and the backup it
+// spawns can never end up pointed at two different databases.
 function loadEnv() {
 	const path = join(appRoot, '.env');
-	if (!existsSync(path)) die('.env not found next to package.json — run this from the app checkout.');
-	const out = {};
+	const out = { ...process.env };
+	if (!existsSync(path)) return out;
 	for (const line of readFileSync(path, 'utf-8').split(/\r?\n/)) {
 		if (!line.includes('=') || line.trim().startsWith('#')) continue;
 		const i = line.indexOf('=');
-		out[line.slice(0, i).trim()] = line
+		const name = line.slice(0, i).trim();
+		if (name in process.env) continue;
+		out[name] = line
 			.slice(i + 1)
 			.trim()
 			.replace(/^["']|["']$/g, '');
@@ -62,7 +86,15 @@ function loadEnv() {
 const env = loadEnv();
 const URL_BASE = env.PUBLIC_SUPABASE_URL;
 const KEY = env.SUPABASE_SERVICE_ROLE_KEY || env.SERVICE_ROLE_KEY;
-if (!URL_BASE || !KEY) die('PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must both be set in .env');
+if (!URL_BASE || !KEY) {
+	// Name only what is MISSING. KEY is a service-role secret; it is never
+	// printed, not even truncated, not even to say it looked wrong.
+	const missing = [!URL_BASE && 'PUBLIC_SUPABASE_URL', !KEY && 'SUPABASE_SERVICE_ROLE_KEY'].filter(Boolean);
+	die(
+		`${missing.join(' and ')} not set. Put ${missing.length > 1 ? 'them' : 'it'} in personagen-svelte/.env, ` +
+			'or export them — either source works, and the environment wins.'
+	);
+}
 
 async function q(sql) {
 	const res = await fetch(`${URL_BASE}/pg/query`, {
@@ -98,6 +130,27 @@ const AUTH_COLUMNS =
 	'id, email, encrypted_password, email_confirmed_at, created_at, updated_at, ' +
 	'last_sign_in_at, raw_user_meta_data, raw_app_meta_data, is_super_admin, phone';
 
+// The bucket MANIFEST — the list of media, never the media. These tables live in
+// the `storage` schema, so tablesToDump() (public only) never returns them and
+// they have to be named here. `metadata` carries size, mimetype and etag, which
+// is what makes the list usable for reconciling against a bucket volume that
+// survived: you can say exactly which objects are missing rather than guessing.
+const STORAGE_NOTE = 'manifest only — object CONTENT (the image and video bytes) is NOT in this backup';
+const STORAGE_CAPTURES = [
+	{
+		key: 'storage_objects',
+		label: 'storage.objects (manifest)',
+		sql:
+			'SELECT id, bucket_id, name, owner, created_at, updated_at, last_accessed_at, metadata ' +
+			'FROM storage.objects ORDER BY bucket_id, name'
+	},
+	{
+		key: 'storage_buckets',
+		label: 'storage.buckets',
+		sql: 'SELECT * FROM storage.buckets ORDER BY id'
+	}
+];
+
 async function backup(outRoot) {
 	const startedAt = new Date();
 	const stamp = startedAt.toISOString().replace(/[:.]/g, '-').slice(0, 19);
@@ -110,6 +163,7 @@ async function backup(outRoot) {
 		source: URL_BASE,
 		tables: {},
 		auth_users: 0,
+		storage: { content_captured: false, note: STORAGE_NOTE },
 		migrations_head: null,
 		migrations_count: 0,
 		total_rows: 0
@@ -131,6 +185,23 @@ async function backup(outRoot) {
 	total += users.length;
 	process.stdout.write(`  ${'auth.users'.padEnd(32)} ${String(users.length).padStart(6)}\n`);
 
+	// The bucket manifest. A database with no `storage` schema — a plain
+	// Postgres, a local test instance — must still back up, so a failure here is
+	// recorded in the manifest and stepped over instead of thrown.
+	for (const s of STORAGE_CAPTURES) {
+		try {
+			const rows = await q(s.sql);
+			writeFileSync(join(dir, `${s.key}.json`), JSON.stringify(rows, null, '\t'), 'utf-8');
+			manifest.storage[s.key] = rows.length;
+			total += rows.length;
+			process.stdout.write(`  ${s.label.padEnd(32)} ${String(rows.length).padStart(6)}\n`);
+		} catch (e) {
+			manifest.storage[s.key] = null;
+			manifest.storage[`${s.key}_error`] = String(e.message).slice(0, 200);
+			process.stdout.write(`  ${s.label.padEnd(32)}      - unavailable (${String(e.message).slice(0, 60)})\n`);
+		}
+	}
+
 	// The schema the data came from. A restore that cannot match this is a
 	// restore into the wrong shape, and the manifest is where that shows up.
 	const head = await q(
@@ -142,8 +213,20 @@ async function backup(outRoot) {
 	manifest.total_rows = total;
 	writeFileSync(join(dir, 'manifest.json'), JSON.stringify(manifest, null, '\t'), 'utf-8');
 
-	console.log(`\n  ${total} rows from ${tables.length + 1} tables → ${dir}`);
+	const storageFiles = STORAGE_CAPTURES.filter((s) => typeof manifest.storage[s.key] === 'number').length;
+	console.log(`\n  ${total} rows from ${tables.length + 1 + storageFiles} tables → ${dir}`);
 	console.log(`  schema: ${manifest.migrations_count} migrations, head ${manifest.migrations_head}`);
+	if (typeof manifest.storage.storage_objects === 'number') {
+		const buckets = manifest.storage.storage_buckets;
+		console.log(
+			`  storage: ${manifest.storage.storage_objects} object(s) LISTED` +
+				`${typeof buckets === 'number' ? ` across ${buckets} bucket(s)` : ''} — the manifest only.`
+		);
+		console.log('           The image and video BYTES are NOT in this backup. They come back only if');
+		console.log('           the bucket volume survived, or was copied separately.');
+	} else {
+		console.log('  storage: no storage schema on this database — no object manifest was captured.');
+	}
 	console.log('\n  These files hold password hashes and encrypted provider keys.');
 	console.log('  Copy them somewhere safe; never commit them.\n');
 	return dir;
@@ -173,6 +256,11 @@ function verify(dir) {
 
 	for (const [table, expected] of Object.entries(m.tables)) check(`${table}.json`, expected, table);
 	check('auth_users.json', m.auth_users, 'auth.users');
+	// Storage manifest files, only where this backup actually captured one — a
+	// null count means the storage schema was absent, which is not a problem.
+	for (const [key, expected] of Object.entries(m.storage || {})) {
+		if (typeof expected === 'number') check(`${key}.json`, expected, key);
+	}
 
 	if (problems.length) {
 		console.error(`\n  ${problems.length} problem(s) in ${dir}:`);
@@ -181,7 +269,11 @@ function verify(dir) {
 	}
 	console.log(`\n  ${dir}`);
 	console.log(`  ${checked} files match the manifest — ${m.total_rows} rows, taken ${m.taken_at}`);
-	console.log(`  schema at capture: ${m.migrations_count} migrations, head ${m.migrations_head}\n`);
+	console.log(`  schema at capture: ${m.migrations_count} migrations, head ${m.migrations_head}`);
+	if (typeof m.storage?.storage_objects === 'number') {
+		console.log(`  storage: ${m.storage.storage_objects} object(s) listed — ${m.storage.note || STORAGE_NOTE}`);
+	}
+	console.log('');
 }
 
 /**
@@ -233,6 +325,19 @@ function emitSql(dir) {
 		out.push('ON CONFLICT DO NOTHING;');
 		out.push('');
 		statements++;
+	}
+
+	// The storage manifest is deliberately NOT inserted. Rows in storage.objects
+	// naming files the bucket does not hold are worse than no rows at all: the
+	// app would advertise media it cannot serve. Bring the bucket volume back
+	// first, then reconcile it against storage_objects.json by hand.
+	if (typeof m.storage?.storage_objects === 'number') {
+		out.push(`-- storage: ${m.storage.storage_objects} object(s) were LISTED in storage_objects.json`);
+		out.push(`-- and ${m.storage.storage_buckets ?? 0} bucket(s) in storage_buckets.json. They are NOT inserted`);
+		out.push('-- here. The object CONTENT is not in this backup, and rows pointing at files the');
+		out.push('-- bucket does not hold would make the app advertise media it cannot serve.');
+		out.push('-- Restore the bucket volume first, then reconcile it against those two files.');
+		out.push('');
 	}
 
 	out.push("SET session_replication_role = 'origin';");
@@ -304,6 +409,18 @@ async function checkRestore(dir) {
 	}
 	console.log(`\n  ${rowsProved} rows across ${proved} tables convert back into the live schema.`);
 	console.log('  Read-only: nothing was written.');
+
+	// Say the limit out loud on every single pass. A gate that prints success
+	// while the product's actual output is absent teaches people to trust it for
+	// something it does not do.
+	if (typeof m.storage?.storage_objects === 'number') {
+		console.log(`\n  NOT PROVEN, AND NOT PRESENT: the ${m.storage.storage_objects} storage object(s) in this backup`);
+		console.log('  are a MANIFEST — name, bucket, size, metadata. The image and video BYTES are not');
+		console.log('  captured at all, and no restore of this backup brings them back.');
+	} else {
+		console.log('\n  NOTE: this backup has no storage manifest, and never holds media bytes either.');
+	}
+	console.log('');
 }
 
 // ── main ─────────────────────────────────────────────────────────────────────
