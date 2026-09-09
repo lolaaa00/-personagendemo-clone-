@@ -636,10 +636,39 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 					return;
 				}
 
-				// Have a publishable platform → schedule it. No caller-supplied slot
-				// means "now" — publish immediately, exactly like the old sync path.
-				// A supplied slot is left to the scheduler to fire when due.
+				// Have a publishable platform. What happens next is the persona's
+				// autonomy setting, which this route never used to read: it published
+				// the moment generation finished, so a persona set to "Advisor —
+				// suggests" or "Semi-autonomous — drafts and waits for you" posted to
+				// a live account before its owner ever saw the result. Every connected
+				// account in production is on one of those two levels, and the product
+				// promises approval on the pricing page. Only FULLY autonomous
+				// publishes by itself; an explicit publish_now from the caller is the
+				// deliberate "post this now" action.
+				//
+				// The unpublished case must be a DRAFT, not a 'scheduled' row dated
+				// today: the scheduler polls due slots every 60 s, so leaving it
+				// scheduled would publish it a minute later by another path.
+				const { data: cfgRow } = await taskSupabase
+					.from('agent_configs')
+					.select('autonomy_level')
+					.eq('agent_id', agentId)
+					.maybeSingle();
+				const autonomy = String(cfgRow?.autonomy_level ?? 'advisor');
+				const mayPublishItself = autonomy === 'fully_autonomous' || body.publish_now === true;
+
 				const now = new Date();
+				if (!scheduledDate && !mayPublishItself) {
+					await taskDb.posts.update(postId, {
+						content: JSON.stringify(content),
+						platforms: publishablePlatforms,
+						status: 'draft',
+						token_cost: content?.costBreakdown?.total ?? 0
+					});
+					console.log(`[generate-post] ${postId} held for review (autonomy=${autonomy})`);
+					return;
+				}
+
 				await taskDb.posts.update(postId, {
 					content: JSON.stringify(content),
 					platforms: publishablePlatforms,
