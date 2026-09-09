@@ -174,5 +174,9 @@
 	[
 		"plan_entitlements_migration.sql",
 		"Plan features get somewhere to be true: plan_catalog.entitlements (absent key = no restriction), seeded to match the copy; free stays open so every gate is inert until launch day"
+	],
+	[
+		"signup_invite_credit_guard_migration.sql",
+		"Welcome credit now requires the app-metadata marker only the signup route can write, so an account created straight against GoTrue gets no money"
 	]
 ]

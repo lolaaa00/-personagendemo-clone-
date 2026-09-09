@@ -128,7 +128,12 @@ export const POST: RequestHandler = async ({ request, locals, getClientAddress }
 		email,
 		password,
 		email_confirm: true,
-		user_metadata: { full_name: full_name || '' }
+		user_metadata: { full_name: full_name || '' },
+		// The marker the welcome-credit trigger requires. It goes in APP metadata,
+		// which only an admin call can write: a client POSTing to GoTrue directly
+		// can put anything it likes in user_metadata (proven — a forged
+		// app_metadata key lands there and is ignored) but cannot touch this.
+		app_metadata: { invited: true }
 	});
 
 	if (createError) {

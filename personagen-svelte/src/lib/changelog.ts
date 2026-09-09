@@ -451,7 +451,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-09", hash: "688c3fc", type: "fix", category: "fix", scope: "billing", title: "don't offer cancellation where there is nothing to cancel" },
 	{ date: "2026-09-09", hash: "8f69b34", type: "feat", category: "feature", scope: "plans", title: "nine feature lines stop being copy and become gates" },
 	{ date: "2026-09-09", hash: "d3780c3", type: "test", category: "maintenance", scope: "plans", title: "prove each gate refuses, and prove what it must never refuse" },
-	{ date: "2026-09-09", hash: "c376d52", type: "docs", category: "docs", scope: "plans", title: "the feature-gate audit, the launch-day edit, and the two copy calls left open" }
+	{ date: "2026-09-09", hash: "c376d52", type: "docs", category: "docs", scope: "plans", title: "the feature-gate audit, the launch-day edit, and the two copy calls left open" },
+	{ date: "2026-09-09", hash: "83be119", type: "feat", category: "feature", scope: "ops", title: "the database gets a backup, and the backup gets proved" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -795,10 +796,10 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 		id: "8ad01c9", from: "2026-09-09", to: "2026-09-09",
 		category: "feature", categories: ["feature","fix","maintenance","docs"],
 		title: "New: \"Cancel any time\" gets a line behind it",
-		summary: "\"Cancel any time\" gets a line behind it. Plus 4 more changes, touching things that were broken and internal cleanup and guides and explanations.",
+		summary: "\"Cancel any time\" gets a line behind it. Plus 5 more changes, touching things that were broken and internal cleanup and guides and explanations.",
 		major: true, curated: false,
-		entries: [CHANGELOG[413], CHANGELOG[414], CHANGELOG[415], CHANGELOG[416], CHANGELOG[417]]
+		entries: [CHANGELOG[413], CHANGELOG[414], CHANGELOG[415], CHANGELOG[416], CHANGELOG[417], CHANGELOG[418]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "c376d52";
+export const CHANGELOG_GENERATED_FROM = "83be119";

@@ -47,6 +47,15 @@ export interface PlatformSettings {
 	daily_platform_spend_usd: number;
 	/** Welcome-credit grants allowed per hour platform-wide (signup abuse guard); 0 = unlimited. */
 	signup_credits_hourly_cap: number;
+	/**
+	 * Grant welcome credit only to accounts created through /api/auth/signup,
+	 * which marks them in raw_app_meta_data — a field the client cannot set.
+	 * True is the safe default: while the Supabase project allows public
+	 * signups, anyone holding the anon key (it ships in the browser bundle) can
+	 * POST straight to GoTrue and mint an account. This is what stops that
+	 * account also minting credit.
+	 */
+	signup_credits_require_invite: boolean;
 	/** Plans (subscriptions) offered on /billing; the webhook keeps existing subscriptions working either way. */
 	plans_enabled: boolean;
 	/**
@@ -79,12 +88,13 @@ export const DEFAULT_SETTINGS: PlatformSettings = {
 	credit_markup: 1,
 	daily_platform_spend_usd: 0,
 	signup_credits_hourly_cap: 20,
+	signup_credits_require_invite: true,
 	plans_enabled: false,
 	persona_generator: 'v1',
 	persona_backbone: 'off'
 };
 
-export const SETTING_KEYS = ['credits_mode', 'activity_log', 'activity_pepper', 'signup_credits', 'display_currency_default', 'fx_rates', 'credit_markup', 'daily_platform_spend_usd', 'signup_credits_hourly_cap', 'plans_enabled', 'persona_generator', 'persona_backbone'] as const;
+export const SETTING_KEYS = ['credits_mode', 'activity_log', 'activity_pepper', 'signup_credits', 'display_currency_default', 'fx_rates', 'credit_markup', 'daily_platform_spend_usd', 'signup_credits_hourly_cap', 'signup_credits_require_invite', 'plans_enabled', 'persona_generator', 'persona_backbone'] as const;
 export type SettingKey = (typeof SETTING_KEYS)[number];
 
 const REFRESH_MS = 15_000;
@@ -154,6 +164,10 @@ function coerce(key: string, raw: unknown): unknown {
 			const n = Number(raw);
 			return Number.isInteger(n) && n >= 0 ? n : 20;
 		}
+		case 'signup_credits_require_invite':
+			// Anything unreadable means ON. A setting that fails open would hand the
+			// bypass its credit back.
+			return !(raw === false || raw === 'false');
 		case 'plans_enabled':
 			return raw === true || raw === 'true';
 		default:
