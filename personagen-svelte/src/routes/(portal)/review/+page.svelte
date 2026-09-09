@@ -34,7 +34,11 @@
 	 * poster only for videos; images may fall back to their media URL. */
 	function cardThumb(item: ReviewItem): string {
 		if (item.media_type === 'video') return item.poster_url ?? '';
-		return cardThumb(item) || '';
+		// Was `cardThumb(item)` — an unconditional self-call, so every IMAGE item
+		// (the default media_type) recursed until the stack blew and the whole
+		// queue failed to render. Table is the default view and calls this on
+		// every row, so one image draft took the page down.
+		return item.media_url ?? item.poster_url ?? '';
 	}
 
 	let items = $state<ReviewItem[]>([]);
