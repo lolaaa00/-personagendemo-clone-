@@ -97,8 +97,43 @@ arrays, jsonb, timestamps or enums. Foreign keys are deferred for the load with
 
 ## Cadence
 
-Two automatic triggers, both at the moment the risk actually appears. Neither is
-a schedule — nothing runs on a clock yet.
+Three triggers now: one command you run, and two that fire on their own at the
+moment the risk appears. Nothing runs on a clock yet.
+
+**Before ANY deploy — `npm run preflight`.**
+
+```
+cd personagen-svelte
+npm run preflight
+```
+
+One read-only command, three gates, one verdict, in this order: the migration
+ledger is clean (`apply-migration.mjs --status --strict`), a backup exists, is
+fresh and still restores (`backup-db.mjs` — it takes a new one only when the
+newest is more than two hours old, and otherwise re-proves the one on disk), and
+the signup gate is shut (`preflight-auth.mjs`). Exit 0 means safe to deploy,
+1 means a gate FAILED, 2 means a gate could not be run at all — missing
+credentials, unreachable database — so nothing was proved. **A gate that cannot
+run is reported as UNKNOWN, never as a pass**: a preflight that fails into "looks
+fine" is worse than none, because it is why nobody checks by hand any more.
+`--warn-only` reports without blocking; `--max-age-minutes N` moves the freshness
+threshold.
+
+**It is the only thing standing between a panel-triggered deploy and an
+unbacked-up schema change.** `deploy.ps1` is not the only way this app ships: a
+deploy can be started straight from the EasyPanel UI against a pushed commit, and
+that path runs **none** of the gates below — no backup, no restore proof, no
+ledger check, no signup probe. Those gates live in one PowerShell entry point;
+this one lives in the repository and travels with it. Run it first, whichever way
+the code is about to reach production.
+
+Two hours is the freshness threshold because it bounds what a restore can be
+missing. Autopilot writes the money-bearing rows — credit ledger entries,
+generated posts — on a slot grid across the 8am–8pm window, six hours apart at
+the default three posts a day, so a restore point inside a two-hour window is
+short by at most one slot. It is also comfortably longer than one deploy session
+(run it, fix what it caught, run it again), so the second run re-proves the same
+backup instead of pulling another 20 MB out of production.
 
 **Every deploy.** `deploy.ps1` runs `npm run backup`, then — only if that
 succeeded — `npm run backup:check-restore`, as a step-1 gate. It sits after the
@@ -131,6 +166,6 @@ Two details worth knowing:
 --dry-run`) never take one.
 
 Still worth doing by hand before any EasyPanel change that touches the database
-service. A weekly cron calling `npm run backup && npm run backup:check-restore`
-remains the next improvement — both exit non-zero on a problem, so either can be
-a cron check on its own.
+service — `npm run preflight` is that command too. A weekly cron calling
+`npm run backup && npm run backup:check-restore` remains the next improvement —
+both exit non-zero on a problem, so either can be a cron check on its own.

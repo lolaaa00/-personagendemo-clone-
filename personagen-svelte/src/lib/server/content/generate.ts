@@ -1312,8 +1312,8 @@ async function openRouterImageEdit(
 	userId: string,
 	prompt: string,
 	imageUrls: string[],
-	/** Registry-resolved OpenRouter edit route (resolveImageKeys().orRoutes.edit). Omitted → the compiled-in constant, as before. */
-	route?: OpenRouterImageRoute
+	/** Registry-resolved OpenRouter edit route (resolveImageKeys().orRoutes.edit): the id that RUNS, read from the same registry row as the price that gets BILLED. REQUIRED — a compiled-in fallback here is precisely how those two drift apart. */
+	route: OpenRouterImageRoute
 ): Promise<string> {
 	const content: any[] = [{ type: 'text', text: prompt }];
 	for (const url of imageUrls.slice(0, 4)) {
@@ -1328,7 +1328,7 @@ async function openRouterImageEdit(
 			'X-Title': 'PersonaGen'
 		},
 		body: JSON.stringify({
-			model: route?.id ?? IMAGE_EDIT_MODEL_OPENROUTER,
+			model: route.id,
 			messages: [{ role: 'user', content }],
 			modalities: ['image', 'text']
 		})
@@ -1376,8 +1376,8 @@ async function openRouterBrollVideo(
 	stillUrl: string,
 	motionPrompt: string,
 	timeoutMs = 270000,
-	/** Registry-resolved OpenRouter video route. Omitted → the constant, as before. */
-	route?: OpenRouterImageRoute
+	/** Registry-resolved OpenRouter video route (resolveImageKeys().orRoutes.video): the id that RUNS, read from the same registry row as the price that gets BILLED. REQUIRED — this route was the one model the ledger showed running that the Model Manager could not name. */
+	route: OpenRouterImageRoute
 ): Promise<string> {
 	const submit = await genFetch('https://openrouter.ai/api/v1/videos', {
 		method: 'POST',
@@ -1388,7 +1388,7 @@ async function openRouterBrollVideo(
 			'X-Title': 'PersonaGen'
 		},
 		body: JSON.stringify({
-			model: route?.id ?? BROLL_MODEL_OPENROUTER,
+			model: route.id,
 			prompt: motionPrompt,
 			duration: parseInt(VIDEO_DURATION, 10) || 5,
 			aspect_ratio: '9:16',

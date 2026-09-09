@@ -166,12 +166,25 @@ Write-Host "  [1/3] OK: No high/critical production advisories." -ForegroundColo
 # has public signups disabled: the anon key ships in the browser bundle, so an
 # open project can be registered against directly, bypassing the PIN entirely.
 Write-Host "  [1/3] Checking auth signup gate..." -ForegroundColor Yellow
-# --warn-only comes off once GOTRUE_DISABLE_SIGNUP is flipped on the Supabase project (today it still accepts public signups, so the strict probe exits 1).
-$authExit = Invoke-Gate "node scripts/preflight-auth.mjs --warn-only"
+# Run it WITHOUT --warn-only. Under that flag the probe exits 0 whatever it
+# finds, so the abort below could never fire: this gate reported OK no matter
+# what production was doing. That is the defect this repo has a name for.
+#
+# It still does not block, because both doors are open today and holding every
+# deploy hostage to an environment change is not this script's call. What it
+# does now is tell the truth and RECORD it — an open gate lands in $bypassed and
+# therefore in the commit message, so every commit shipped while registration
+# was open says so in git log, permanently.
+#
+# Once GOTRUE_DISABLE_SIGNUP=true and ADMIN_PIN are both set, turn the
+# `$bypassed +=` branch into an abort and this becomes a hard gate.
+$authExit = Invoke-Gate "node scripts/preflight-auth.mjs"
 if ($authExit -ne 0) {
-    Write-Host "  [1/3] ERROR: auth preflight failed. Aborting deployment." -ForegroundColor Red
-    Set-Location $projectDir
-    exit 1
+    Write-Host "  [1/3] WARNING: registration is OPEN - see docs/runbooks/signup-and-admission.md." -ForegroundColor Red
+    Write-Host "  [1/3]          Shipping anyway, and recording it in the commit message." -ForegroundColor Red
+    $bypassed += "open-registration"
+} else {
+    Write-Host "  [1/3] OK: the signup gate is closed on both doors." -ForegroundColor Green
 }
 
 if (-not $skipTests) {
