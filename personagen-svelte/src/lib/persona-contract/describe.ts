@@ -95,7 +95,8 @@ function householdValue(household: unknown): string | undefined {
 	if (status) parts.push(label('relationshipStatus', status));
 	const children = isObj(household.children) ? household.children : undefined;
 	const count = children ? num(children.count) : undefined;
-	if (count !== undefined && count > 0) parts.push(`${count} ${count === 1 ? 'child' : 'children'}`);
+	if (count !== undefined && count > 0)
+		parts.push(`${count} ${count === 1 ? 'child' : 'children'}`);
 	const housing = str(household.housingType);
 	if (housing) parts.push(label('housingType', housing));
 	return parts.length ? parts.join(' · ') : undefined;
@@ -134,7 +135,9 @@ export function describeShort(creator: unknown): string | undefined {
 		return `${name} is ${titleArticle(job)} ${job}${inPlace}.`;
 	}
 	if (age !== undefined) {
-		return place ? `${name} is ${age} years old and lives in ${place}.` : `${name} is ${age} years old.`;
+		return place
+			? `${name} is ${age} years old and lives in ${place}.`
+			: `${name} is ${age} years old.`;
 	}
 	if (place) return `${name} lives in ${place}.`;
 	return undefined;

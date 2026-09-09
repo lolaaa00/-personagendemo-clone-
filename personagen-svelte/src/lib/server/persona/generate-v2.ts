@@ -23,7 +23,12 @@
  * produced by downgrading the v2 record. That is what lets this run behind a flag
  * without touching the client at all.
  */
-import { NICHE_OPTIONS, PERSONA_ARCHETYPES, CONTENT_FOCUS_OPTIONS, coerceToOption } from '$lib/persona-profile';
+import {
+	NICHE_OPTIONS,
+	PERSONA_ARCHETYPES,
+	CONTENT_FOCUS_OPTIONS,
+	coerceToOption
+} from '$lib/persona-profile';
 import { label, tokenForLabel } from '$lib/persona-contract/labels';
 import { samplePersonaSkeleton, type SkeletonConstraints } from '$lib/persona-contract/sampler';
 import { downgradeV2toV1 } from '$lib/persona-contract/upgrade';
@@ -104,7 +109,9 @@ THESE FACTS ARE FIXED. Do not restate them as a list, do not contradict them, an
 BRAND: ${brand}${b.tagline ? ` — ${b.tagline}` : ''}. Mission: ${b.mission ?? '—'}.
 AUDIENCE: ${b.demographics ?? '—'}. Pain points: ${b.painPoints ?? '—'}.
 ${direction ? `\nCREATIVE DIRECTION (agreed with the user — honour it): ${direction}\n` : ''}${
-		takenAngles.length ? `\nAngles already used by other creators — do NOT overlap: ${JSON.stringify(takenAngles).slice(0, 1200)}\n` : ''
+		takenAngles.length
+			? `\nAngles already used by other creators — do NOT overlap: ${JSON.stringify(takenAngles).slice(0, 1200)}\n`
+			: ''
 	}
 Write ONLY these fields, as a person who genuinely has the life above:
 - "soul": 2-3 sentences of personality, tone and values, in third person. Let the day job and household show without listing them.
@@ -133,7 +140,9 @@ Return ONLY JSON with exactly those keys.`;
  * dropped, matching the "stored values are sacred" rule.
  */
 export function applyProseOnly(skeleton: PersonaProfileV2, answer: unknown): PersonaProfileV2 {
-	const a = (answer && typeof answer === 'object' && !Array.isArray(answer) ? answer : {}) as ProseAnswer;
+	const a = (
+		answer && typeof answer === 'object' && !Array.isArray(answer) ? answer : {}
+	) as ProseAnswer;
 	const out: PersonaProfileV2 = JSON.parse(JSON.stringify(skeleton));
 	const sources = (out.meta.fieldSources ??= {});
 	/**
@@ -262,7 +271,10 @@ function definedOnly(c: SkeletonConstraints | undefined): SkeletonConstraints {
  * (creator gender from the whole document, age and gender skew only from the
  * audience fields); this keeps the line intact on the way out.
  */
-function creatorConstraints(input: GenerateV2Input, fromBrief: BriefConstraints): SkeletonConstraints {
+function creatorConstraints(
+	input: GenerateV2Input,
+	fromBrief: BriefConstraints
+): SkeletonConstraints {
 	const explicit = definedOnly(input.constraints);
 	return {
 		// A brief-derived market is a real signal; absent, the sampler's own
@@ -286,7 +298,10 @@ function creatorConstraints(input: GenerateV2Input, fromBrief: BriefConstraints)
  * extracted leaf. That is the correct treatment for something we were told
  * rather than something we chose.
  */
-function applyBriefAudience(skeleton: PersonaProfileV2, fromBrief: BriefConstraints): PersonaProfileV2 {
+function applyBriefAudience(
+	skeleton: PersonaProfileV2,
+	fromBrief: BriefConstraints
+): PersonaProfileV2 {
 	const sources = (skeleton.meta.fieldSources ??= {});
 	const audience: PersonaAudience = (skeleton.audience ??= {});
 	const put = <K extends keyof PersonaAudience>(key: K, value: PersonaAudience[K]): void => {

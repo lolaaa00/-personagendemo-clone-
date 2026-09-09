@@ -427,7 +427,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-08", hash: "773a03a", type: "fix", category: "fix", scope: "budget", title: "the per-seat workspace cap fails CLOSED once credits are enforced" },
 	{ date: "2026-09-08", hash: "f3a7f1a", type: "feat", category: "feature", scope: "persona", title: "skeleton-first generation behind PERSONA_GENERATOR=v2" },
 	{ date: "2026-09-08", hash: "258b141", type: "feat", category: "automation", scope: "persona", title: "per-field re-roll, Tier 1 backfill, and one definition of the description" },
-	{ date: "2026-09-08", hash: "0b4c6d4", type: "feat", category: "generation", scope: "engine", title: "reroll_field — re-sample one part of a persona, no model, no spend" }
+	{ date: "2026-09-08", hash: "0b4c6d4", type: "feat", category: "generation", scope: "engine", title: "reroll_field — re-sample one part of a persona, no model, no spend" },
+	{ date: "2026-09-09", hash: "c5a7925", type: "feat", category: "generation", scope: "persona", title: "PERSONA_BACKBONE gets its only consumer — life facts reach the prompt at `on`" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -752,13 +753,13 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 		entries: [CHANGELOG[371], CHANGELOG[372], CHANGELOG[373], CHANGELOG[374], CHANGELOG[375], CHANGELOG[376], CHANGELOG[377], CHANGELOG[378], CHANGELOG[379], CHANGELOG[380], CHANGELOG[381], CHANGELOG[382], CHANGELOG[383], CHANGELOG[384]]
 	},
 	{
-		id: "7d3977a", from: "2026-09-08", to: "2026-09-08",
+		id: "7d3977a", from: "2026-09-08", to: "2026-09-09",
 		category: "feature", categories: ["infrastructure","feature","generation","maintenance","fix","automation"],
 		title: "New: finding #16 — the deploy gates were adopted…",
-		summary: "Finding #16 — the deploy gates were adopted, tested, and never executed. Plus 8 more changes, touching setup and deployment and making posts, images and video and internal cleanup.",
+		summary: "Finding #16 — the deploy gates were adopted, tested, and never executed. Plus 9 more changes, touching setup and deployment and making posts, images and video and internal cleanup.",
 		major: true, curated: false,
-		entries: [CHANGELOG[385], CHANGELOG[386], CHANGELOG[387], CHANGELOG[388], CHANGELOG[389], CHANGELOG[390], CHANGELOG[391], CHANGELOG[392], CHANGELOG[393]]
+		entries: [CHANGELOG[385], CHANGELOG[386], CHANGELOG[387], CHANGELOG[388], CHANGELOG[389], CHANGELOG[390], CHANGELOG[391], CHANGELOG[392], CHANGELOG[393], CHANGELOG[394]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "0b4c6d4";
+export const CHANGELOG_GENERATED_FROM = "c5a7925";

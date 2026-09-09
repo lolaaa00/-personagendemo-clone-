@@ -142,7 +142,14 @@ describe('PERSONA_BACKBONE=on — the facts actually arrive', () => {
 				if (block.includes(`- ${key}: `)) seen.add(key);
 			}
 		}
-		expect([...seen].sort()).toEqual(['Age', 'Character', 'Home', 'Household', 'Lifestyle', 'Work']);
+		expect([...seen].sort()).toEqual([
+			'Age',
+			'Character',
+			'Home',
+			'Household',
+			'Lifestyle',
+			'Work'
+		]);
 	});
 
 	it('is stable — the same profile produces the same string every time', () => {
@@ -203,7 +210,15 @@ describe('PERSONA_BACKBONE=on — nothing is allowed to break a generation', () 
 
 	it('survives malformed, empty and missing profiles without throwing', () => {
 		for (const profile of [null, undefined, 42, 'nope', [], {}, { creator: 'not an object' }]) {
-			const agent = { id: 'x', name: 'X', handle: 'x', niche: '', soul: '', skills: '', personas_profile: profile };
+			const agent = {
+				id: 'x',
+				name: 'X',
+				handle: 'x',
+				niche: '',
+				soul: '',
+				skills: '',
+				personas_profile: profile
+			};
 			expect(() => at('on', agent), JSON.stringify(profile)).not.toThrow();
 			expect(at('on', agent)).toBe(at('off', agent));
 		}

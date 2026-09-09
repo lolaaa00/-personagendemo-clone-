@@ -15,7 +15,11 @@ const CREATOR = {
 	age: 34,
 	location: { city: 'Brisbane', region: 'Queensland' },
 	work: { title: 'Customer Support Lead', domain: 'services' },
-	household: { relationshipStatus: 'partnered', children: { count: 2 }, housingType: 'apartment_rented' }
+	household: {
+		relationshipStatus: 'partnered',
+		children: { count: 2 },
+		housingType: 'apartment_rented'
+	}
 };
 
 describe('inSentence — a stored title as it reads mid-sentence', () => {
@@ -73,7 +77,9 @@ describe('describeShort — the one-line description', () => {
 			'Jenny Tran is 34 years old and lives in Perth.'
 		);
 		expect(describeShort({ ...name, age: 34 })).toBe('Jenny Tran is 34 years old.');
-		expect(describeShort({ ...name, location: { region: 'Victoria' } })).toBe('Jenny Tran lives in Victoria.');
+		expect(describeShort({ ...name, location: { region: 'Victoria' } })).toBe(
+			'Jenny Tran lives in Victoria.'
+		);
 	});
 
 	it('says nothing about a name it has nothing to say about', () => {
@@ -81,7 +87,9 @@ describe('describeShort — the one-line description', () => {
 	});
 
 	it('falls back to first + last when there is no display name', () => {
-		expect(describeShort({ firstName: 'Jenny', lastName: 'Tran', age: 34 })).toBe('Jenny Tran is 34 years old.');
+		expect(describeShort({ firstName: 'Jenny', lastName: 'Tran', age: 34 })).toBe(
+			'Jenny Tran is 34 years old.'
+		);
 	});
 
 	it('describes nothing without a name, and never throws on junk', () => {
@@ -109,13 +117,17 @@ describe('describeFrame — the fact strip', () => {
 	});
 
 	it('says "1 child" and not "1 children"', () => {
-		const frame = describeFrame({ household: { relationshipStatus: 'partnered', children: { count: 1 } } });
+		const frame = describeFrame({
+			household: { relationshipStatus: 'partnered', children: { count: 1 } }
+		});
 		expect(frame?.[0].value).toContain('1 child');
 		expect(frame?.[0].value).not.toContain('children');
 	});
 
 	it('omits children entirely at a count of zero', () => {
-		const frame = describeFrame({ household: { relationshipStatus: 'single', children: { count: 0 } } });
+		const frame = describeFrame({
+			household: { relationshipStatus: 'single', children: { count: 0 } }
+		});
 		expect(frame?.[0].value).not.toContain('0');
 	});
 
@@ -133,7 +145,11 @@ describe('describeProfile — what the sampler, the backfill and a re-roll all c
 	 */
 	it('produces a complete description for a sampled creator, on every seed', () => {
 		for (let i = 0; i < 25; i++) {
-			const profile = samplePersonaSkeleton(`describe-${i}`, {}, { now: '2026-01-01T00:00:00.000Z' });
+			const profile = samplePersonaSkeleton(
+				`describe-${i}`,
+				{},
+				{ now: '2026-01-01T00:00:00.000Z' }
+			);
 			const described = describeProfile(profile);
 			expect(described?.short, `seed ${i}`).toBe(profile.description?.short);
 			expect(described?.frame, `seed ${i}`).toEqual(profile.description?.frame);

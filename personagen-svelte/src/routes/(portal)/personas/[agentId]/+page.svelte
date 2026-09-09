@@ -45,6 +45,9 @@
 		type HandleCandidate
 	} from '$lib/persona-identity';
 	import { readPersonaProfile } from '$lib/persona-profile-store';
+	import { readPersonaProfileV2 } from '$lib/persona-contract';
+	import LifeDetails from '$lib/components/personas/LifeDetails.svelte';
+	import { buildLifeDetails } from '$lib/components/personas/life-details';
 	import { confirmDeletePosts } from '$lib/confirm-preview';
 	import { confirmAction } from '$lib/stores/confirm.svelte';
 	import MediaPreviewModal from '$lib/components/generation/MediaPreviewModal.svelte';
@@ -234,6 +237,15 @@
 		return readPersonaProfile(agent);
 	}
 	let personaProfile = $state<Record<string, any>>(parsePersonaProfile(agent));
+
+	// ── Life details (READ-ONLY) ──────────────────────────────────────────
+	// Persona Model v2 gives a creator a life the wizard never asks for — where
+	// they live, what they do, who they live with — and the sampler fills it in.
+	// This derives display rows straight from the stored record (a v1 blob is
+	// upgraded in memory by readPersonaProfileV2 and legitimately yields none),
+	// so the section is a view of the profile and has no path back into it.
+	// An empty array means the section is not mounted at all.
+	let lifeDetailGroups = $derived(buildLifeDetails(readPersonaProfileV2(agent)));
 	// Multi-brand: which of the user's brand briefs this persona generates for.
 	// `savedBrandBriefId` mirrors what's actually persisted so the Brand card can
 	// show an unsaved-change indicator and confirm precisely on apply.
@@ -3904,6 +3916,40 @@
 							</div>
 						</div>
 					</details>
+
+					<!-- Life details: what the system already knows about this person.
+				     Read-only, collapsed, and mounted ONLY when there is something to
+				     say — `lifeDetailGroups` is empty for any persona that has never
+				     been through the sampler, and then this whole block, header
+				     included, does not exist. Zero new required inputs: nothing here
+				     is ever asked of the user. -->
+					{#if lifeDetailGroups.length}
+						<details class="profile-section">
+							<summary class="section-summary">
+								<div class="section-header">
+									<h2 class="section-title">Life details</h2>
+									<p class="section-desc">
+										The everyday facts behind this persona — where they live, what they do, who they
+										live with. Filled in for you; shown here so you can see what the generator is
+										working from.
+									</p>
+								</div>
+								<svg
+									class="section-chevron"
+									width="18"
+									height="18"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2.5"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg
+								>
+							</summary>
+							<LifeDetails groups={lifeDetailGroups} />
+						</details>
+					{/if}
 
 					<!-- Platform Identity Kit: the persona's public-facing profile per
 				     platform. Copy-paste tooling by design — no platform (nor Zernio)

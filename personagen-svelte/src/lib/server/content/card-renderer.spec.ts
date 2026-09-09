@@ -123,6 +123,14 @@ describe('renderTypographicCard (never-brick contract)', () => {
 		await expect(renderTypographicCard({ cardText: '🔥🚀💯🔥🚀💯' })).resolves.toBeNull();
 	});
 
+	/**
+	 * Explicit timeout because this test SPAWNS FFMPEG twice — a capability probe
+	 * and a render — and an external process's runtime is not ours to control.
+	 * Under vitest's 5s default it passed alone and failed on a loaded full-suite
+	 * run, which is the worst kind of red: it looks like a regression, it is not
+	 * reproducible, and the reflex it trains is to stop trusting the suite. A
+	 * test whose result depends on machine load is not a test.
+	 */
 	it('renders a PNG when this host has ffmpeg + a font, else stays null', async () => {
 		const available = await isCardRendererAvailable();
 		const card = await renderTypographicCard({
@@ -138,5 +146,5 @@ describe('renderTypographicCard (never-brick contract)', () => {
 		} else {
 			expect(card).toBeNull();
 		}
-	});
+	}, 30_000);
 });

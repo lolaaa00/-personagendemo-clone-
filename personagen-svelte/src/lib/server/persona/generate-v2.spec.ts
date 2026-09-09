@@ -16,11 +16,14 @@ const BRIEF = {
 	painPoints: 'burned by viral serums'
 };
 
-const skeleton = () => skeletonFor({ seed: 'agent-1', brief: BRIEF, now: '2026-09-08T00:00:00.000Z' });
+const skeleton = () =>
+	skeletonFor({ seed: 'agent-1', brief: BRIEF, now: '2026-09-08T00:00:00.000Z' });
 
 describe('skeletonFor — facts before prose', () => {
 	it('is deterministic for a seed, so a re-generate reproduces the same person', () => {
-		expect(JSON.stringify(skeletonFor({ seed: 'a', brief: BRIEF, now: '2026-01-01T00:00:00.000Z' }))).toBe(
+		expect(
+			JSON.stringify(skeletonFor({ seed: 'a', brief: BRIEF, now: '2026-01-01T00:00:00.000Z' }))
+		).toBe(
 			JSON.stringify(skeletonFor({ seed: 'a', brief: BRIEF, now: '2026-01-01T00:00:00.000Z' }))
 		);
 	});
@@ -49,8 +52,11 @@ describe('skeletonFor — facts before prose', () => {
 	 * a single seed landing outside 25–40 could be luck.
 	 */
 	it('does not confine the creator to the audience age band', () => {
-		const ages = Array.from({ length: 120 }, (_, i) =>
-			skeletonFor({ seed: `creator-${i}`, brief: BRIEF, now: '2026-09-08T00:00:00.000Z' }).creator?.age ?? 0
+		const ages = Array.from(
+			{ length: 120 },
+			(_, i) =>
+				skeletonFor({ seed: `creator-${i}`, brief: BRIEF, now: '2026-09-08T00:00:00.000Z' }).creator
+					?.age ?? 0
 		);
 		expect(ages.some((a) => a < 25)).toBe(true);
 		expect(ages.some((a) => a > 40)).toBe(true);
@@ -63,7 +69,11 @@ describe('skeletonFor — facts before prose', () => {
 	 */
 	it('still honours an explicit creator age range passed as a constraint', () => {
 		for (let i = 0; i < 40; i++) {
-			const s = skeletonFor({ seed: `pin-${i}`, brief: BRIEF, constraints: { ageRange: [42, 48] } });
+			const s = skeletonFor({
+				seed: `pin-${i}`,
+				brief: BRIEF,
+				constraints: { ageRange: [42, 48] }
+			});
 			expect(s.creator?.age).toBeGreaterThanOrEqual(42);
 			expect(s.creator?.age).toBeLessThanOrEqual(48);
 		}
@@ -75,7 +85,11 @@ describe('skeletonFor — facts before prose', () => {
 	 * would erase them silently, and nothing in the visible output would say so.
 	 */
 	it('an explicitly-undefined constraint does not erase the brief-derived one', () => {
-		const s = skeletonFor({ seed: 'agent-1', brief: BRIEF, constraints: { market: undefined, niche: undefined } });
+		const s = skeletonFor({
+			seed: 'agent-1',
+			brief: BRIEF,
+			constraints: { market: undefined, niche: undefined }
+		});
 		expect(s.creator?.market).toBe('au');
 		expect(s.strategy?.niche).toBe('beauty_wellness');
 	});
@@ -142,7 +156,13 @@ describe('applyProseOnly — the guarantee', () => {
 			// Prose it is allowed to write…
 			contentAngle: 'legit angle',
 			// …and every fact it is not.
-			creator: { age: 99, firstName: 'Impostor', lastName: 'Name', heritage: 'white', gender: 'male' },
+			creator: {
+				age: 99,
+				firstName: 'Impostor',
+				lastName: 'Name',
+				heritage: 'white',
+				gender: 'male'
+			},
 			look: { hair: { color: 'blonde' }, skinTone: 'porcelain' },
 			age: 99,
 			name: 'Impostor Name',
