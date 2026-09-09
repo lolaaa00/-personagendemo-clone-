@@ -86,6 +86,33 @@ describe('describeShort — the one-line description', () => {
 		expect(describeShort({ displayName: 'Jenny Tran' })).toBeUndefined();
 	});
 
+	/**
+	 * Real personas keep a tagline in the name field. A Tier 1 shadow pass over
+	 * production found it in most of them: "Lexi Connor | Virtual Creator is 27
+	 * years old." is what the page would have shown.
+	 */
+	it('drops a tagline the user typed into the name field', () => {
+		expect(describeShort({ displayName: 'Lexi Connor | Virtual Creator', age: 27 })).toBe(
+			'Lexi Connor is 27 years old.'
+		);
+		expect(describeShort({ displayName: 'Aria Vance | AI Architect', age: 27 })).toBe(
+			'Aria Vance is 27 years old.'
+		);
+	});
+
+	it('leaves a name alone when the separator is one a real name can contain', () => {
+		expect(describeShort({ displayName: "Anne-Marie O'Connor", age: 40 })).toBe(
+			"Anne-Marie O'Connor is 40 years old."
+		);
+		expect(describeShort({ displayName: 'Dr. Sarah Chen, PhD', age: 40 })).toBe(
+			'Dr. Sarah Chen, PhD is 40 years old.'
+		);
+	});
+
+	it('keeps the name when a pipe is all there is', () => {
+		expect(describeShort({ displayName: '| |', age: 30 })).toBe('| | is 30 years old.');
+	});
+
 	it('falls back to first + last when there is no display name', () => {
 		expect(describeShort({ firstName: 'Jenny', lastName: 'Tran', age: 34 })).toBe(
 			'Jenny Tran is 34 years old.'

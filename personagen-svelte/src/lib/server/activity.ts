@@ -85,6 +85,7 @@ export const ACTIVITY_ACTIONS = {
 	'admin.export.downloaded': 'admin',
 	'admin.models.changed': 'admin',
 	'admin.settings.changed': 'admin',
+	'admin.persona_backfill.run': 'admin',
 	'engine.action': 'engine',
 	'api.request': 'api',
 	'api.key.created': 'api',

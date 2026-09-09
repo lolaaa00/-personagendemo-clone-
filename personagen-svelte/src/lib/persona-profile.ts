@@ -6,7 +6,13 @@
  *
  * Client-safe (no server imports) so both the generator endpoint and the UI can
  * read the same source of truth.
+ *
+ * The two imports below reach only into `persona-contract`'s leaf modules
+ * (look-prompt → labels → tokens, none of which import anything back), so this
+ * module stays client-safe and cycle-free.
  */
+import { isV2Look, lookToPromptClause } from './persona-contract/look-prompt';
+import type { PersonaLook } from './persona-contract/schema';
 
 export const PERSONA_ARCHETYPES = [
 	'The Creator',
@@ -110,7 +116,15 @@ export const ETHNICITY_OPTIONS = [
  * which is the AUDIENCE's age bracket consumed by the strategy prompt. Different
  * concept, different key, never aliased. Uses the same en-dash (U+2013) convention.
  */
-export const PERSONA_AGE_OPTIONS = ['18–24', '25–29', '30–35', '36–44', '45–54', '55–64', '65+'] as const;
+export const PERSONA_AGE_OPTIONS = [
+	'18–24',
+	'25–29',
+	'30–35',
+	'36–44',
+	'45–54',
+	'55–64',
+	'65+'
+] as const;
 
 export const SKIN_TONE_OPTIONS = [
 	'Fair/Light',
@@ -123,7 +137,15 @@ export const SKIN_TONE_OPTIONS = [
 	'Deep'
 ] as const;
 
-export const EYE_COLOR_OPTIONS = ['Brown', 'Blue', 'Green', 'Hazel', 'Amber', 'Gray', 'Dark Brown'] as const;
+export const EYE_COLOR_OPTIONS = [
+	'Brown',
+	'Blue',
+	'Green',
+	'Hazel',
+	'Amber',
+	'Gray',
+	'Dark Brown'
+] as const;
 
 export const BODY_TYPE_OPTIONS = [
 	'Athletic',
@@ -357,8 +379,36 @@ function hairDescriptor(a: Record<string, string>): string {
  * Turns an appearance config into a single natural-language clause appended to the
  * image prompt, so the generated portrait reflects the wardrobe/hair/eyes/etc.
  * Empty when nothing is set (the model then chooses freely).
+ *
+ * Accepts BOTH shapes (Persona Model v2, P2.2):
+ *  • a v1 `appearance` — the flat record of plain strings this has always taken.
+ *    Byte-identical output to before, forever: the v1 path below is untouched
+ *    and `prompt-regression.spec.ts` snapshots every word of it.
+ *  • a v2 `look` — delegated to `lookToPromptClause`, which adds the fields v1
+ *    has no key for (facial hair, eyewear, face shape, brow shape, hair texture,
+ *    gray coverage, height) in this fixed order: age, height, skin tone, build,
+ *    face shape, brow shape, hair (gray → colour → length → texture → style),
+ *    eyes, facial hair, eyewear, distinctive features, headwear, wardrobe,
+ *    outfit colours, styling. Only fields that are SET are emitted; tokens
+ *    always render through `label()`; a stored `*Text` companion outranks its
+ *    token, so a v1 'honey blonde' is never snapped to 'Blonde'.
+ *
+ * `isV2Look` decides, and an object carrying no v2-exclusive key is treated as
+ * v1 — the conservative reading, since v1 is what every existing caller passes.
+ *
+ * `opts.age` applies to the v2 path only: v2 stores an exact age on the creator
+ * ("34 years old") where v1 stored a bucket in `appearance.personaAge`
+ * ("30–35 years old"), which the v1 path still reads for itself.
+ *
+ * Note the v2 look's `promptCues` — a cache of this very clause — is NOT
+ * consulted. Nothing recomputes it after a field re-roll clears it, so it is
+ * never the source. See the header of `persona-contract/look-prompt.ts`.
  */
-export function appearanceToPromptClause(appearance: Record<string, string> | null | undefined): string {
+export function appearanceToPromptClause(
+	appearance: Record<string, string> | PersonaLook | null | undefined,
+	opts?: { age?: number }
+): string {
+	if (isV2Look(appearance)) return lookToPromptClause(appearance, opts);
 	const a = coerceAppearance(appearance);
 	const parts: string[] = [];
 	// NOTE: ethnicity is deliberately NOT emitted here — the portrait builders put it
@@ -413,9 +463,7 @@ export function coerceToOption(value: unknown, options: readonly string[]): stri
 	if (!v) return '';
 	const exact = options.find((o) => o.toLowerCase() === v);
 	if (exact) return exact;
-	const partial = options.find(
-		(o) => o.toLowerCase().includes(v) || v.includes(o.toLowerCase())
-	);
+	const partial = options.find((o) => o.toLowerCase().includes(v) || v.includes(o.toLowerCase()));
 	return partial ?? '';
 }
 

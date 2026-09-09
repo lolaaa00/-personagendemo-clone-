@@ -425,10 +425,18 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-08", hash: "fd276bc", type: "feat", category: "feature", scope: "admin", title: "the two persona switches are reachable from the console" },
 	{ date: "2026-09-08", hash: "0124ca2", type: "test", category: "maintenance", scope: "smoke", title: "prove every operator switch is readable and its write path is live" },
 	{ date: "2026-09-08", hash: "773a03a", type: "fix", category: "fix", scope: "budget", title: "the per-seat workspace cap fails CLOSED once credits are enforced" },
-	{ date: "2026-09-08", hash: "f3a7f1a", type: "feat", category: "feature", scope: "persona", title: "skeleton-first generation behind PERSONA_GENERATOR=v2" },
-	{ date: "2026-09-08", hash: "258b141", type: "feat", category: "automation", scope: "persona", title: "per-field re-roll, Tier 1 backfill, and one definition of the description" },
-	{ date: "2026-09-08", hash: "0b4c6d4", type: "feat", category: "generation", scope: "engine", title: "reroll_field — re-sample one part of a persona, no model, no spend" },
-	{ date: "2026-09-09", hash: "c5a7925", type: "feat", category: "generation", scope: "persona", title: "PERSONA_BACKBONE gets its only consumer — life facts reach the prompt at `on`" }
+	{ date: "2026-09-09", hash: "5bfa6e3", type: "fix", category: "generation", scope: "review", title: "the queue rendered nothing — cardThumb() recursed on every image" },
+	{ date: "2026-09-09", hash: "b720a62", type: "fix", category: "fix", scope: "publish", title: "a persona only posts by itself when its owner said it may; reconciliation checks the price too" },
+	{ date: "2026-09-09", hash: "0629c69", type: "fix", category: "fix", scope: "verification", title: "a check that examined nothing must not report ok" },
+	{ date: "2026-09-09", hash: "c415885", type: "docs", category: "docs", scope: "audit", title: "failure points 2026-09-09 — and the six checks that could not fail" },
+	{ date: "2026-09-08", hash: "2bbdead", type: "feat", category: "feature", scope: "persona", title: "skeleton-first generation behind PERSONA_GENERATOR=v2" },
+	{ date: "2026-09-08", hash: "c3d7b7d", type: "feat", category: "automation", scope: "persona", title: "per-field re-roll, Tier 1 backfill, and one definition of the description" },
+	{ date: "2026-09-08", hash: "2eff8d4", type: "feat", category: "generation", scope: "engine", title: "reroll_field — re-sample one part of a persona, no model, no spend" },
+	{ date: "2026-09-09", hash: "abf0389", type: "feat", category: "generation", scope: "persona", title: "PERSONA_BACKBONE gets its only consumer — life facts reach the prompt at `on`" },
+	{ date: "2026-09-09", hash: "39e382e", type: "feat", category: "feature", scope: "personas", title: "a collapsed \"Life details\" section — the life the generator is working from, made visible" },
+	{ date: "2026-09-09", hash: "f34b9b3", type: "fix", category: "fix", scope: "quote", title: "a persona's first post quotes the identity set it is about to buy" },
+	{ date: "2026-09-09", hash: "d656a18", type: "docs", category: "docs", scope: "audit", title: "the first-post quote gap is closed; record what remains" },
+	{ date: "2026-09-09", hash: "dbfdc50", type: "fix", category: "fix", scope: "quote", title: "the grader is quoted too; the smoke sweeps fixtures it stranded" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -754,12 +762,20 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 	},
 	{
 		id: "7d3977a", from: "2026-09-08", to: "2026-09-09",
-		category: "feature", categories: ["infrastructure","feature","generation","maintenance","fix","automation"],
-		title: "New: finding #16 — the deploy gates were adopted…",
-		summary: "Finding #16 — the deploy gates were adopted, tested, and never executed. Plus 9 more changes, touching setup and deployment and making posts, images and video and internal cleanup.",
+		category: "generation", categories: ["infrastructure","feature","generation","maintenance","fix","docs","automation"],
+		title: "Creating: finding #16 — the deploy gates were adopted…",
+		summary: "Finding #16 — the deploy gates were adopted, tested, and never executed. Plus 13 more changes, touching setup and deployment and things you can now do and internal cleanup.",
 		major: true, curated: false,
-		entries: [CHANGELOG[385], CHANGELOG[386], CHANGELOG[387], CHANGELOG[388], CHANGELOG[389], CHANGELOG[390], CHANGELOG[391], CHANGELOG[392], CHANGELOG[393], CHANGELOG[394]]
+		entries: [CHANGELOG[385], CHANGELOG[386], CHANGELOG[387], CHANGELOG[388], CHANGELOG[389], CHANGELOG[390], CHANGELOG[391], CHANGELOG[392], CHANGELOG[393], CHANGELOG[394], CHANGELOG[395], CHANGELOG[396], CHANGELOG[397], CHANGELOG[398]]
+	},
+	{
+		id: "39e382e", from: "2026-09-09", to: "2026-09-09",
+		category: "fix", categories: ["feature","fix","docs"],
+		title: "Fixed: a collapsed \"Life details\" section — the life the…",
+		summary: "A collapsed \"Life details\" section — the life the generator is working from, made visible. Plus 3 more changes, touching things you can now do and guides and explanations.",
+		major: false, curated: false,
+		entries: [CHANGELOG[399], CHANGELOG[400], CHANGELOG[401], CHANGELOG[402]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "c5a7925";
+export const CHANGELOG_GENERATED_FROM = "dbfdc50";

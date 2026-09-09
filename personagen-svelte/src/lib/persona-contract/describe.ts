@@ -79,10 +79,25 @@ function placePhrase(location: unknown): string | undefined {
 	return city ?? region;
 }
 
+/**
+ * A display name often carries a tagline the user typed into the same field —
+ * "Lexi Connor | Virtual Creator", "Aria Vance | AI Architect". That is a label
+ * for a profile header, not a name for a sentence, and leaving it in produces
+ * "Lexi Connor | Virtual Creator is 27 years old." Found in a Tier 1 shadow pass
+ * over real personas, where it was true of most of them.
+ *
+ * Only the pipe is treated as a separator. A dash or a comma can appear in a
+ * real name; a pipe cannot.
+ */
+function withoutTagline(name: string): string {
+	const [first] = name.split('|');
+	return first.trim() || name.trim();
+}
+
 /** The public name: displayName, else first + last. */
 function namePhrase(creator: Obj): string | undefined {
 	const display = str(creator.displayName);
-	if (display) return display;
+	if (display) return withoutTagline(display);
 	const parts = [str(creator.firstName), str(creator.lastName)].filter(Boolean);
 	return parts.length ? parts.join(' ') : undefined;
 }

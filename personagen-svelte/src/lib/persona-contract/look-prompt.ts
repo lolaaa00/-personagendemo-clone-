@@ -24,6 +24,15 @@
  * the SUBJECT of the prompt, which is stronger than a trailing clause — carried
  * over from v1), `clothingSizes` (wardrobe logistics, not visual), and
  * `promptCues` (that field IS the cached output of this function).
+ *
+ * `promptCues` IS NEVER READ — not here, and not by any caller. It is a cache
+ * WRITTEN on save and CLEARED by a field re-roll, and nothing in the codebase
+ * recomputes it in between; a look whose beard was just re-rolled would carry a
+ * stale cue string or none at all. There is no cheap way to prove a cached
+ * string still matches the look it was derived from (no hash, no version, no
+ * timestamp pair), so the clause is always recomputed from the look itself.
+ * Correct and a few microseconds slower beats fast and silently describing a
+ * face the persona no longer has. Treat the field as a display hint only.
  */
 import { label } from './labels';
 import type { PersonaLook } from './schema';
@@ -52,6 +61,54 @@ const EYEWEAR_PHRASES: Record<string, string> = {
 	glasses: 'wearing glasses',
 	sunglasses_often: 'often wearing sunglasses'
 };
+
+/**
+ * Facial hair as a NOUN PHRASE for the portrait SUBJECT ("a creator with a short
+ * beard"), article included. The trailing clause uses the bare label instead —
+ * "short beard" reads correctly in a comma list and wrongly after "with".
+ * 'stubble' is a mass noun and takes no article, which is why this is a table
+ * and not an `a ${label}` template.
+ */
+const FACIAL_HAIR_SUBJECT_PHRASES: Record<string, string> = {
+	stubble: 'stubble',
+	short_beard: 'a short beard',
+	full_beard: 'a full beard',
+	moustache: 'a moustache',
+	goatee: 'a goatee'
+};
+
+/** Eyewear as a noun phrase for the subject; 'none' is handled by the caller. */
+const EYEWEAR_SUBJECT_PHRASES: Record<string, string> = {
+	glasses: 'glasses',
+	sunglasses_often: 'sunglasses'
+};
+
+/**
+ * Look keys the v1 `appearance` shape CANNOT express or resend (the same list
+ * `upgradeV1toV2` guards when a v1 patch arrives). Their presence is the only
+ * honest evidence that a look was authored on the v2 contract — by the sampler,
+ * the vision read-back, or a v2 form — rather than upgraded in memory from v1.
+ *
+ * Presence, not truthiness: `facialHair: 'none'` renders nothing but still means
+ * "someone decided this on the v2 contract".
+ */
+const V2_ONLY_LOOK_KEYS = ['heightCm', 'faceShape', 'browShape', 'facialHair', 'eyewear'] as const;
+const V2_ONLY_HAIR_KEYS = ['texture', 'grayCoverage'] as const;
+
+/**
+ * Nested/renamed keys that only ever appear on a v2 look. A v1 appearance is a
+ * FLAT record of plain strings (`hairColor`, `hairstyle`, `eyeColor`), so none of
+ * these can occur on one.
+ */
+const V2_SHAPE_KEYS = [
+	...V2_ONLY_LOOK_KEYS,
+	'hair',
+	'eyes',
+	'clothingSizes',
+	'skinToneText',
+	'bodyTypeText',
+	'promptCues'
+] as const;
 
 function escapeRegExp(s: string): string {
 	return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -111,6 +168,75 @@ function hairPhrase(hair: PersonaLook['hair']): string {
 		.filter(Boolean)
 		.join(' ');
 	return descriptor ? `${descriptor} hair` : '';
+}
+
+/**
+ * True when `value` is shaped like a v2 `look` rather than a v1 `appearance`.
+ *
+ * The two shapes overlap on the free-form keys they share (`wardrobe`,
+ * `styling`, `distinctiveFeatures`, and the `skinTone`/`bodyType` names, which
+ * hold a LABEL in v1 and a TOKEN in v2), so only the v2-exclusive keys above can
+ * decide. An object carrying none of them is AMBIGUOUS and is reported as v1 —
+ * the conservative answer, because v1 is what every existing caller passes and
+ * misreading one as v2 would run its labels through `label()` as if they were
+ * tokens.
+ */
+export function isV2Look(value: unknown): value is PersonaLook {
+	if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+	return V2_SHAPE_KEYS.some((k) => k in value);
+}
+
+/**
+ * True when the look holds at least one attribute the v1 shape cannot carry.
+ *
+ * This is the switch a prompt builder needs: a v1 persona read as v2 (every
+ * profile still stored as v1, upgraded in memory) has NONE of these, so it keeps
+ * taking the v1 clause path and its prompts stay byte-identical. A persona the
+ * v2 sampler or the vision read-back wrote has at least one, and gets the v2
+ * clause with its beard, glasses, face shape, height and hair texture intact.
+ */
+export function hasV2OnlyLookAttributes(look: PersonaLook | null | undefined): boolean {
+	if (!look || typeof look !== 'object') return false;
+	if (V2_ONLY_LOOK_KEYS.some((k) => k in look)) return true;
+	const hair = look.hair;
+	return !!hair && typeof hair === 'object' && V2_ONLY_HAIR_KEYS.some((k) => k in hair);
+}
+
+/**
+ * The drift-prone attributes as a phrase for the portrait SUBJECT —
+ * ' with a short beard and glasses', or '' when neither is set.
+ *
+ * Deliberately restated here even though `lookToPromptClause` already names them
+ * in the trailing clause. Facial hair and eyewear are the two attributes image
+ * models drop between the hero portrait and a later edit ("the beard disappears
+ * on the second image"); naming them in the subject — the strongest position in
+ * the prompt — is what holds them, and the redundancy with the trailing clause
+ * is the point, not an oversight.
+ *
+ * Scope is exactly the two drift sources, matching `lookPreservationClause`.
+ * Height, face shape and hair texture do not drift and would only dilute the
+ * subject.
+ */
+export function lookSubjectAttributes(look: PersonaLook | null | undefined): string {
+	const l = look ?? {};
+	const parts: string[] = [];
+
+	const facialHairToken = clean(l.facialHair);
+	if (facialHairToken && facialHairToken !== 'none') {
+		const phrase =
+			FACIAL_HAIR_SUBJECT_PHRASES[facialHairToken] ??
+			lower(clean(label('facialHair', facialHairToken)));
+		if (phrase) parts.push(phrase);
+	}
+
+	const eyewearToken = clean(l.eyewear);
+	if (eyewearToken && eyewearToken !== 'none') {
+		const phrase =
+			EYEWEAR_SUBJECT_PHRASES[eyewearToken] ?? lower(clean(label('eyewear', eyewearToken)));
+		if (phrase) parts.push(phrase);
+	}
+
+	return parts.length ? ` with ${parts.join(' and ')}` : '';
 }
 
 /**

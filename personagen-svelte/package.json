@@ -22,6 +22,7 @@
     "smoke:live": "node scripts/e2e-smoke.mjs",
     "backfill:faststart": "node --env-file=.env --experimental-strip-types scripts/backfill-faststart.ts",
     "backfill:compress": "node --env-file=.env --experimental-strip-types scripts/backfill-compress.ts",
+    "backfill:persona-v2": "node scripts/backfill-persona-v2.mjs",
     "switch:media-host": "node --env-file=.env --experimental-strip-types scripts/switch-media-host.ts",
     "changelog": "node scripts/generate-changelog.mjs",
     "changelog:check": "node scripts/generate-changelog.mjs --check",

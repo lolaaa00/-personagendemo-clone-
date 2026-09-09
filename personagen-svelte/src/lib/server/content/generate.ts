@@ -40,6 +40,14 @@ import {
 	type GenerationProvenance
 } from '$lib/pricing';
 import { appearanceToPromptClause, stripLeadingAvatarName } from '$lib/persona-profile';
+// Persona Model v2 (P2.3): the portrait builders read the v2 look (via
+// `readPersonaProfileV2`, imported below) for the attributes the v1 shape has no
+// key for. Used ONLY by buildHeroPortraitPrompt and buildPortraitEditPrompt.
+import {
+	hasV2OnlyLookAttributes,
+	lookPreservationClause,
+	lookSubjectAttributes
+} from '$lib/persona-contract/look-prompt';
 import { readPersonaProfile } from '$lib/persona-profile-store';
 import { createDbService } from '$lib/server/db';
 import { DEFAULT_VOICE, VOICE_CATALOG } from '$lib/server/voices';
@@ -2515,6 +2523,26 @@ export function buildHeroPortraitPrompt(
 	// the model collapses to one generic "UGC creator" face. Gender rides in the subject
 	// too (the pinned face must match the configured voice gender up front).
 	const ethnicity = (profile.appearance?.ethnicity || '').trim();
+	// Persona Model v2 (P2.3). The v2 look carries attributes the v1 `appearance`
+	// record has no key for — facial hair, eyewear, face/brow shape, hair texture,
+	// gray coverage, height — so a bearded persona described only through the v1
+	// downgrade comes out clean-shaven. Read them LIVE off the look: `promptCues`
+	// is a cache a field re-roll clears and nothing recomputes, so it is never the
+	// source (see persona-contract/look-prompt.ts).
+	//
+	// The v2 clause is used only when the look actually holds one of those
+	// attributes. Every persona still stored as v1 is upgraded in memory with none
+	// of them, so it keeps the v1 clause and its prompt stays byte-identical —
+	// which is what prompt-regression.spec.ts pins.
+	const v2 = readPersonaProfileV2(agentData);
+	const look = v2.look;
+	const appearanceLine = hasV2OnlyLookAttributes(look)
+		? appearanceToPromptClause(look, { age: v2.creator?.age })
+		: appearanceToPromptClause(profile.appearance);
+	// Facial hair and eyewear are restated in the SUBJECT — the strongest position
+	// in the prompt — because those two are what the later edit drops. Empty for
+	// every v1 persona, so the subject is unchanged for them.
+	const driftProneAttributes = lookSubjectAttributes(look);
 	const subject = [ethnicity, voiceGender, 'relatable UGC content creator']
 		.filter(Boolean)
 		.join(' ');
@@ -2527,9 +2555,9 @@ export function buildHeroPortraitPrompt(
 		: '';
 	// Wardrobe/hair/eyes/distinctive-features directives from the persona profile — so the
 	// pinned face reflects the exact look the user configured (and "Generate for brand"
-	// filled), instead of a generic person.
-	const appearanceLine = appearanceToPromptClause(profile.appearance);
-	return `Photorealistic vertical portrait of one ${subject} who fits this audience: ${audience}.${ethnicityEmphasis}${persona}${archetypeLine}${avatarLine}${appearanceLine} Friendly, casual, natural window light, looking straight at the camera, authentic iPhone selfie style, clear visible face, upper body. Single person only — a unique, specific individual with their own distinct face, NOT a generic stock model.`;
+	// filled), instead of a generic person. (Resolved above, from whichever shape the
+	// persona is stored in.)
+	return `Photorealistic vertical portrait of one ${subject}${driftProneAttributes} who fits this audience: ${audience}.${ethnicityEmphasis}${persona}${archetypeLine}${avatarLine}${appearanceLine} Friendly, casual, natural window light, looking straight at the camera, authentic iPhone selfie style, clear visible face, upper body. Single person only — a unique, specific individual with their own distinct face, NOT a generic stock model.`;
 }
 
 /**
@@ -2541,7 +2569,18 @@ export function buildHeroPortraitPrompt(
 export function buildPortraitEditPrompt(agentData: any): string {
 	const profile = parsePersonaProfile(agentData);
 	const ethnicity = (profile.appearance?.ethnicity || '').trim();
-	const appearanceLine = appearanceToPromptClause(profile.appearance);
+	// Same v2 read as the hero builder, for the same reason and with the same
+	// v1-stays-byte-identical guard. See buildHeroPortraitPrompt above.
+	const v2 = readPersonaProfileV2(agentData);
+	const look = v2.look;
+	const appearanceLine = hasV2OnlyLookAttributes(look)
+		? appearanceToPromptClause(look, { age: v2.creator?.age })
+		: appearanceToPromptClause(profile.appearance);
+	// THE FIX for "the beard disappears on the second image". An edit prompt that
+	// only says "keep their facial identity" does not hold facial hair or eyewear —
+	// across this codebase's regenerations those are the two attributes that come
+	// back missing, so they are named explicitly, and only when actually set.
+	const preservationLine = lookPreservationClause(look);
 	// Preserve STRUCTURE (bone structure, feature placement) for consistency, but assert
 	// ethnicity rather than pinning "skin tone" — locking skin tone would perpetuate a face
 	// generated with the wrong heritage. When the source is already correct this is a no-op;
@@ -2549,7 +2588,7 @@ export function buildPortraitEditPrompt(agentData: any): string {
 	const ethnicityLine = ethnicity
 		? ` This person is authentically ${ethnicity}; keep them recognizably the same individual while ensuring the depiction accurately reflects ${ethnicity} features and skin tone.`
 		: '';
-	return `Regenerate this exact person as a fresh photorealistic vertical portrait. Preserve their facial identity from the reference image — same bone structure, eye shape, nose, jaw, and hairline; do NOT turn them into a different person.${ethnicityLine}${appearanceLine} Friendly, casual, natural window light, looking straight at the camera, authentic iPhone selfie style, clear visible face, upper body. Single person only.`;
+	return `Regenerate this exact person as a fresh photorealistic vertical portrait. Preserve their facial identity from the reference image — same bone structure, eye shape, nose, jaw, and hairline; do NOT turn them into a different person.${ethnicityLine}${appearanceLine}${preservationLine} Friendly, casual, natural window light, looking straight at the camera, authentic iPhone selfie style, clear visible face, upper body. Single person only.`;
 }
 
 /** Generates (and durably persists) a fresh hero portrait image. No DB pin — just the image. */
