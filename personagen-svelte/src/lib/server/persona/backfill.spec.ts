@@ -10,7 +10,11 @@
 import { describe, expect, it } from 'vitest';
 import { getPath, leafPaths, type Obj } from '$lib/persona-contract/paths';
 import { samplePersonaSkeleton } from '$lib/persona-contract/sampler';
-import { PERSONA_SCHEMA_VERSION, type FieldSource, type PersonaProfileV2 } from '$lib/persona-contract/schema';
+import {
+	PERSONA_SCHEMA_VERSION,
+	type FieldSource,
+	type PersonaProfileV2
+} from '$lib/persona-contract/schema';
 import {
 	ACTIVITY_LEVEL_TOKENS,
 	ARCHETYPE_TOKENS,
@@ -31,6 +35,7 @@ import {
 	SKIN_TONE_TOKENS,
 	WORK_DOMAIN_TOKENS
 } from '$lib/persona-contract/tokens';
+import { readPersonaProfileV2, serializePersonaProfileV2 } from '$lib/persona-contract/store';
 import { backfillTier1, TIER_1_DERIVED_LEAVES } from './backfill';
 
 const NOW = '2026-09-08T00:00:00.000Z';
@@ -40,7 +45,12 @@ const sourcesOf = (p: PersonaProfileV2): Record<string, FieldSource> => p.meta?.
 
 /** Every leaf except the bookkeeping this pass is expected to write. */
 const visibleLeaves = (p: unknown): string[] =>
-	leafPaths(p as Obj).filter((path) => path !== 'meta.backfill' && !path.startsWith('meta.backfill.') && !path.startsWith('meta.fieldSources'));
+	leafPaths(p as Obj).filter(
+		(path) =>
+			path !== 'meta.backfill' &&
+			!path.startsWith('meta.backfill.') &&
+			!path.startsWith('meta.fieldSources')
+	);
 
 const pick = <T>(list: readonly T[], i: number): T => list[i % list.length];
 
@@ -96,7 +106,8 @@ function syntheticProfiles(count: number): PersonaProfileV2[] {
 				relationshipStatus: pick(RELATIONSHIP_STATUS_TOKENS, i * 2 + 1),
 				housingType: pick(HOUSING_TYPE_TOKENS, i * 3)
 			};
-			if (i % 2 === 0) (creator.household as Obj).children = { count: 1 + (i % 3), ageBands: ['teen'] };
+			if (i % 2 === 0)
+				(creator.household as Obj).children = { count: 1 + (i % 3), ageBands: ['teen'] };
 			sources['creator.household.relationshipStatus'] = 'sampled';
 			sources['creator.household.housingType'] = 'sampled';
 		}
@@ -108,7 +119,8 @@ function syntheticProfiles(count: number): PersonaProfileV2[] {
 				agreeableness: (i * 37 + 23) % 101,
 				neuroticism: (i * 41 + 47) % 101
 			};
-			for (const trait of Object.keys(creator.bigFive as Obj)) sources[`creator.bigFive.${trait}`] = 'sampled';
+			for (const trait of Object.keys(creator.bigFive as Obj))
+				sources[`creator.bigFive.${trait}`] = 'sampled';
 		}
 		if (i % 11 !== 0) {
 			creator.economic = { incomeBand: pick(INCOME_BAND_TOKENS, i) };
@@ -141,7 +153,14 @@ function syntheticProfiles(count: number): PersonaProfileV2[] {
 				},
 				eyes: { color: pick(EYE_COLOR_TOKENS, i * 13) }
 			};
-			for (const path of ['look.skinTone', 'look.bodyType', 'look.hair.color', 'look.hair.length', 'look.hair.style', 'look.eyes.color'])
+			for (const path of [
+				'look.skinTone',
+				'look.bodyType',
+				'look.hair.color',
+				'look.hair.length',
+				'look.hair.style',
+				'look.eyes.color'
+			])
 				sources[path] = i % 2 ? 'user' : 'sampled';
 		}
 		out.push(profile);
@@ -183,7 +202,8 @@ describe('backfillTier1 — purity over a synthetic batch', () => {
 				if (beforePaths.has(path)) continue;
 				added++;
 				if (afterSources[path] !== 'derived') misMarked.push(`#${index} ${path}`);
-				if (!(TIER_1_DERIVED_LEAVES as readonly string[]).includes(path)) unexpected.push(`#${index} ${path}`);
+				if (!(TIER_1_DERIVED_LEAVES as readonly string[]).includes(path))
+					unexpected.push(`#${index} ${path}`);
 			}
 		}
 
@@ -226,7 +246,11 @@ describe('backfillTier1 — purity over a synthetic batch', () => {
 describe('backfillTier1 — provenance', () => {
 	const base = (): PersonaProfileV2 => ({
 		meta: { schemaVersion: PERSONA_SCHEMA_VERSION, fieldSources: {} },
-		creator: { displayName: 'Lexy Hart', age: 34, location: { city: 'Brisbane', region: 'Queensland' } }
+		creator: {
+			displayName: 'Lexy Hart',
+			age: 34,
+			location: { city: 'Brisbane', region: 'Queensland' }
+		}
 	});
 
 	it('leaves a `user`-sourced description.short untouched and still derives its siblings', () => {
@@ -258,16 +282,22 @@ describe('backfillTier1 — provenance', () => {
 	it('leaves a value with NO recorded provenance untouched', () => {
 		const profile = base();
 		profile.description = { short: 'Legacy sentence, provenance unknown.' };
-		expect(backfillTier1(profile, { now: NOW }).description?.short).toBe('Legacy sentence, provenance unknown.');
+		expect(backfillTier1(profile, { now: NOW }).description?.short).toBe(
+			'Legacy sentence, provenance unknown.'
+		);
 	});
 
 	it('recomputes a leaf it owns when the facts behind it moved', () => {
 		const profile = base();
-		profile.description = { short: 'Lexy Hart is 30 years old and lives in Perth, Western Australia.' };
+		profile.description = {
+			short: 'Lexy Hart is 30 years old and lives in Perth, Western Australia.'
+		};
 		profile.meta.fieldSources = { 'description.short': 'derived' };
 
 		const after = backfillTier1(profile, { now: NOW });
-		expect(after.description?.short).toBe('Lexy Hart is 34 years old and lives in Brisbane, Queensland.');
+		expect(after.description?.short).toBe(
+			'Lexy Hart is 34 years old and lives in Brisbane, Queensland.'
+		);
 		expect(sourcesOf(after)['description.short']).toBe('derived');
 	});
 });
@@ -277,23 +307,44 @@ describe('backfillTier1 — the derived leaves', () => {
 		const after = backfillTier1({
 			meta: { schemaVersion: PERSONA_SCHEMA_VERSION },
 			creator: {
-				bigFive: { openness: 65, conscientiousness: 35, extraversion: 64, agreeableness: 36, neuroticism: 100 }
+				bigFive: {
+					openness: 65,
+					conscientiousness: 35,
+					extraversion: 64,
+					agreeableness: 36,
+					neuroticism: 100
+				}
 			}
 		});
-		expect(after.creator?.traitLabels).toEqual(['high_openness', 'low_conscientiousness', 'high_neuroticism']);
+		expect(after.creator?.traitLabels).toEqual([
+			'high_openness',
+			'low_conscientiousness',
+			'high_neuroticism'
+		]);
 		expect(sourcesOf(after)['creator.traitLabels']).toBe('derived');
 	});
 
 	it('writes no traitLabels when every trait sits mid-range (an empty array is a clear)', () => {
 		const after = backfillTier1({
 			meta: { schemaVersion: PERSONA_SCHEMA_VERSION },
-			creator: { bigFive: { openness: 50, conscientiousness: 50, extraversion: 50, agreeableness: 50, neuroticism: 50 } }
+			creator: {
+				bigFive: {
+					openness: 50,
+					conscientiousness: 50,
+					extraversion: 50,
+					agreeableness: 50,
+					neuroticism: 50
+				}
+			}
 		});
 		expect(after.creator?.traitLabels).toBeUndefined();
 	});
 
 	it('writes no traitLabels when bigFive is absent', () => {
-		const after = backfillTier1({ meta: { schemaVersion: PERSONA_SCHEMA_VERSION }, creator: { age: 30 } });
+		const after = backfillTier1({
+			meta: { schemaVersion: PERSONA_SCHEMA_VERSION },
+			creator: { age: 30 }
+		});
 		expect(after.creator?.traitLabels).toBeUndefined();
 	});
 
@@ -303,31 +354,43 @@ describe('backfillTier1 — the derived leaves', () => {
 			creator: { age: 41 },
 			look: { skinTone: 'olive', eyes: { color: 'green' } }
 		});
-		expect(after.look?.promptCues).toBe(' Appearance: 41 years old, Olive skin tone, Green eyes.');
+		// TRIMMED. The live clause carries a leading space because it is appended
+		// straight onto a prompt, but the store trims every string leaf, so caching
+		// it verbatim gives a value that can never round-trip. See backfill.ts.
+		expect(after.look?.promptCues).toBe('Appearance: 41 years old, Olive skin tone, Green eyes.');
 		expect(sourcesOf(after)['look.promptCues']).toBe('derived');
 	});
 
 	it('does not conjure a look section out of an age alone', () => {
-		const after = backfillTier1({ meta: { schemaVersion: PERSONA_SCHEMA_VERSION }, creator: { age: 41 } });
+		const after = backfillTier1({
+			meta: { schemaVersion: PERSONA_SCHEMA_VERSION },
+			creator: { age: 41 }
+		});
 		expect(after.look).toBeUndefined();
 	});
 
 	it('degrades description.short to the facts present, never past them', () => {
 		const short = (creator: PersonaProfileV2['creator']) =>
-			backfillTier1({ meta: { schemaVersion: PERSONA_SCHEMA_VERSION }, creator }).description?.short;
+			backfillTier1({ meta: { schemaVersion: PERSONA_SCHEMA_VERSION }, creator }).description
+				?.short;
 
-		expect(short({ displayName: 'Ada Reyes', age: 34, work: { title: 'Physiotherapist' }, location: { city: 'Brisbane', region: 'Queensland' } })).toBe(
-			'Ada Reyes is a 34-year-old physiotherapist in Brisbane, Queensland.'
-		);
+		expect(
+			short({
+				displayName: 'Ada Reyes',
+				age: 34,
+				work: { title: 'Physiotherapist' },
+				location: { city: 'Brisbane', region: 'Queensland' }
+			})
+		).toBe('Ada Reyes is a 34-year-old physiotherapist in Brisbane, Queensland.');
 		expect(short({ displayName: 'Ada Reyes', age: 18, work: { title: 'AI Researcher' } })).toBe(
 			'Ada Reyes is an 18-year-old AI researcher.'
 		);
-		expect(short({ displayName: 'Ada Reyes', work: { title: 'Editor' }, location: { city: 'Perth' } })).toBe(
-			'Ada Reyes is an editor in Perth.'
-		);
-		expect(short({ firstName: 'Ada', lastName: 'Reyes', age: 34, location: { region: 'Queensland' } })).toBe(
-			'Ada Reyes is 34 years old and lives in Queensland.'
-		);
+		expect(
+			short({ displayName: 'Ada Reyes', work: { title: 'Editor' }, location: { city: 'Perth' } })
+		).toBe('Ada Reyes is an editor in Perth.');
+		expect(
+			short({ firstName: 'Ada', lastName: 'Reyes', age: 34, location: { region: 'Queensland' } })
+		).toBe('Ada Reyes is 34 years old and lives in Queensland.');
 		expect(short({ displayName: 'Ada Reyes', age: 34 })).toBe('Ada Reyes is 34 years old.');
 		expect(short({ displayName: 'Ada Reyes', location: { city: 'Perth', region: 'WA' } })).toBe(
 			'Ada Reyes lives in Perth, WA.'
@@ -344,7 +407,11 @@ describe('backfillTier1 — the derived leaves', () => {
 				age: 34,
 				location: { city: 'Brisbane', region: 'Queensland' },
 				work: { title: 'Physiotherapist', domain: 'health_care' },
-				household: { relationshipStatus: 'married', children: { count: 2, ageBands: ['primary'] }, housingType: 'house_owned' }
+				household: {
+					relationshipStatus: 'married',
+					children: { count: 2, ageBands: ['primary'] },
+					housingType: 'house_owned'
+				}
 			}
 		});
 		expect(after.description?.frame).toEqual([
@@ -356,7 +423,10 @@ describe('backfillTier1 — the derived leaves', () => {
 	});
 
 	it('writes no description at all for a profile with no facts', () => {
-		const after = backfillTier1({ meta: { schemaVersion: PERSONA_SCHEMA_VERSION }, creator: { gender: 'female' } });
+		const after = backfillTier1({
+			meta: { schemaVersion: PERSONA_SCHEMA_VERSION },
+			creator: { gender: 'female' }
+		});
 		expect(after.description).toBeUndefined();
 	});
 });
@@ -388,7 +458,12 @@ describe('backfillTier1 — bookkeeping and robustness', () => {
 
 	it('never lowers a tier a later pass already reached', () => {
 		const after = backfillTier1(
-			{ meta: { schemaVersion: PERSONA_SCHEMA_VERSION, backfill: { tier: 2, at: '2026-01-01T00:00:00.000Z' } } },
+			{
+				meta: {
+					schemaVersion: PERSONA_SCHEMA_VERSION,
+					backfill: { tier: 2, at: '2026-01-01T00:00:00.000Z' }
+				}
+			},
 			{ now: NOW }
 		);
 		expect(after.meta.backfill).toEqual({ tier: 2, at: NOW });
@@ -396,7 +471,9 @@ describe('backfillTier1 — bookkeeping and robustness', () => {
 
 	it('returns an empty profile plus nothing but the stamp', () => {
 		const after = backfillTier1({ meta: { schemaVersion: PERSONA_SCHEMA_VERSION } }, { now: NOW });
-		expect(after).toEqual({ meta: { schemaVersion: PERSONA_SCHEMA_VERSION, backfill: { tier: 1, at: NOW } } });
+		expect(after).toEqual({
+			meta: { schemaVersion: PERSONA_SCHEMA_VERSION, backfill: { tier: 1, at: NOW } }
+		});
 	});
 
 	it('does not throw on malformed or wrong-shaped input', () => {
@@ -404,27 +481,95 @@ describe('backfillTier1 — bookkeeping and robustness', () => {
 			{},
 			{ meta: 'not an object' },
 			{ meta: { schemaVersion: 2 }, creator: 'not an object' },
-			{ meta: { schemaVersion: 2 }, creator: { age: 'thirty', displayName: 42, location: 'Brisbane' } },
-			{ meta: { schemaVersion: 2 }, creator: { displayName: 'A', age: 30 }, description: 'a string, not an object' },
+			{
+				meta: { schemaVersion: 2 },
+				creator: { age: 'thirty', displayName: 42, location: 'Brisbane' }
+			},
+			{
+				meta: { schemaVersion: 2 },
+				creator: { displayName: 'A', age: 30 },
+				description: 'a string, not an object'
+			},
 			{ meta: { schemaVersion: 2 }, look: [1, 2, 3], creator: { bigFive: 'nope' } },
 			{ meta: { schemaVersion: 2, fieldSources: 'nope' }, creator: { displayName: 'B', age: 20 } }
 		];
 		for (const [index, value] of junk.entries()) {
-			expect(() => backfillTier1(value as PersonaProfileV2, { now: NOW }), `#${index}`).not.toThrow();
+			expect(
+				() => backfillTier1(value as PersonaProfileV2, { now: NOW }),
+				`#${index}`
+			).not.toThrow();
 		}
 		// A non-object `meta` means provenance cannot be recorded, so nothing is written.
-		const unstampable = backfillTier1({ meta: 'not an object' } as unknown as PersonaProfileV2, { now: NOW });
+		const unstampable = backfillTier1({ meta: 'not an object' } as unknown as PersonaProfileV2, {
+			now: NOW
+		});
 		expect(unstampable).toEqual({ meta: 'not an object' });
 		// A stored non-object is never clobbered to make room for a derived leaf.
 		const occupied = backfillTier1(
-			{ meta: { schemaVersion: PERSONA_SCHEMA_VERSION }, creator: { displayName: 'A', age: 30 }, description: 'a string' } as unknown as PersonaProfileV2,
+			{
+				meta: { schemaVersion: PERSONA_SCHEMA_VERSION },
+				creator: { displayName: 'A', age: 30 },
+				description: 'a string'
+			} as unknown as PersonaProfileV2,
 			{ now: NOW }
 		);
 		expect(occupied.description).toBe('a string');
 	});
 
 	it('tolerates an unparseable clock rather than throwing', () => {
-		const after = backfillTier1({ meta: { schemaVersion: PERSONA_SCHEMA_VERSION } }, { now: 'not a date' });
+		const after = backfillTier1(
+			{ meta: { schemaVersion: PERSONA_SCHEMA_VERSION } },
+			{ now: 'not a date' }
+		);
 		expect(typeof after.meta.backfill?.at).toBe('string');
+	});
+});
+
+describe('backfillTier1 — converges THROUGH THE STORE, not just in memory', () => {
+	const batch = syntheticProfiles(150);
+	/**
+	 * The idempotency test above calls the function twice on its own output. That
+	 * is not the loop production runs. Production is:
+	 *
+	 *   read → backfill → SERIALIZE → store → read again → backfill again
+	 *
+	 * and the serialize step is not the identity. It trims every string leaf, so a
+	 * derived value carrying meaningful leading whitespace comes back different
+	 * from what was written, is re-derived, differs again, and the backfill
+	 * rewrites the same rows on every run forever. That is exactly what happened
+	 * to `look.promptCues`, which the live clause builder returns with a leading
+	 * space because it is appended straight onto a prompt.
+	 *
+	 * An in-memory idempotency test cannot see this. This one can.
+	 */
+	const roundTrip = (profile: PersonaProfileV2) =>
+		readPersonaProfileV2({ personas_profile: serializePersonaProfileV2(profile, 'stored') });
+
+	it('adds nothing on a second pass after a store round trip', () => {
+		const offenders: string[] = [];
+		for (const [index, profile] of batch.entries()) {
+			const once = backfillTier1(profile, { now: NOW });
+			const twice = backfillTier1(roundTrip(once), { now: NOW });
+			for (const leaf of TIER_1_DERIVED_LEAVES) {
+				const a = JSON.stringify(getPath(once as unknown as Obj, leaf) ?? null);
+				const b = JSON.stringify(getPath(twice as unknown as Obj, leaf) ?? null);
+				if (a !== b) offenders.push(`#${index} ${leaf}: ${a.slice(0, 60)} -> ${b.slice(0, 60)}`);
+			}
+		}
+		expect(offenders).toEqual([]);
+	});
+
+	it('stores no derived value that the store would trim', () => {
+		const untrimmed: string[] = [];
+		for (const [index, profile] of batch.entries()) {
+			const once = backfillTier1(profile, { now: NOW });
+			for (const leaf of TIER_1_DERIVED_LEAVES) {
+				const value = getPath(once as unknown as Obj, leaf);
+				if (typeof value === 'string' && value !== value.trim()) {
+					untrimmed.push(`#${index} ${leaf}`);
+				}
+			}
+		}
+		expect(untrimmed).toEqual([]);
 	});
 });

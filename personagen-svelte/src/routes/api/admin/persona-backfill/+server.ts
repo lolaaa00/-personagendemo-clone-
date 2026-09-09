@@ -6,6 +6,7 @@ import { logActivity } from '$lib/server/activity';
 import { readPersonaProfileV2, serializePersonaProfileV2 } from '$lib/persona-contract/store';
 import { leafPaths, getPath, type Obj } from '$lib/persona-contract/paths';
 import { backfillTier1, TIER_1_DERIVED_LEAVES } from '$lib/server/persona/backfill';
+import { hasV2OnlyLookAttributes, lookToPromptClause } from '$lib/persona-contract/look-prompt';
 import type { PersonaProfileV2 } from '$lib/persona-contract/schema';
 
 /**
@@ -136,6 +137,18 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 	const addedByPath: Record<string, number> = {};
 	/** Anything Tier 1 touched that it has no business touching. */
 	const violations: string[] = [];
+	/**
+	 * Personas whose PORTRAIT PROMPT this pass would change.
+	 *
+	 * Tier 1 is supposed to be invisible, and "invisible" has to include the
+	 * images. The portrait builders pick the v2 appearance clause only when the
+	 * look holds an attribute the v1 record cannot express, so the way a backfill
+	 * could silently change a face is by flipping that condition — or by moving
+	 * the clause for a look that already met it. Both are measured here rather
+	 * than reasoned about, because "promptCues is not in that key list" is an
+	 * argument, and an argument is not a report.
+	 */
+	const promptDrift: string[] = [];
 	const startedAt = new Date().toISOString();
 	let changed = 0;
 	let written = 0;
@@ -152,6 +165,20 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 			const upgraded = before.meta?.upgradedFrom === 1;
 			const after = backfillTier1(before);
 			const added = addedLeaves(before, after);
+
+			const beforeUsesV2 = hasV2OnlyLookAttributes(before.look);
+			const afterUsesV2 = hasV2OnlyLookAttributes(after.look);
+			if (beforeUsesV2 !== afterUsesV2) {
+				promptDrift.push(
+					`${row.id}: appearance clause switches ${beforeUsesV2 ? 'v2→v1' : 'v1→v2'}`
+				);
+			} else if (afterUsesV2) {
+				const age = after.creator?.age;
+				const opts = typeof age === 'number' ? { age } : undefined;
+				if (lookToPromptClause(before.look, opts) !== lookToPromptClause(after.look, opts)) {
+					promptDrift.push(`${row.id}: v2 appearance clause text changed`);
+				}
+			}
 
 			for (const leaf of added) {
 				addedByPath[leaf.path] = (addedByPath[leaf.path] ?? 0) + 1;
@@ -209,7 +236,8 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 			changed,
 			written,
 			failed,
-			violations: violations.length
+			violations: violations.length,
+			promptDrift: promptDrift.length
 		}
 	});
 
@@ -227,6 +255,9 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 			// Non-empty means the backfill wrote outside the leaves it declares.
 			// That is a code defect and the report says so in those words.
 			violations,
+			// Non-empty means this pass would change what a portrait prompt says.
+			// Tier 1 must never do that; it is a defect, not a finding.
+			promptDrift,
 			addedByPath,
 			upgradedCount: outcomes.filter((o) => o.upgraded).length,
 			detail: outcomes,

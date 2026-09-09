@@ -106,6 +106,10 @@ const lines = [
 	'',
 	`Host \`${BASE}\`. Started ${d.startedAt}, finished ${d.finishedAt}.`,
 	'',
+	'_The host names the SERVER that ran this, not the data it touched. A locally',
+	'run build pointed at the production Supabase reads and writes production',
+	'personas. Read the host as "which build ran this", never as "which database"._',
+	'',
 	MODE === 'shadow'
 		? '**Nothing was written.** This report states exactly what `fill` would do.'
 		: '**This run PERSISTED.** Rows listed below were updated in the `agents` table.',
@@ -118,6 +122,7 @@ const lines = [
 	`| Failed | ${d.failed} |`,
 	`| Stored as v1, upgraded on read | ${d.upgradedCount} |`,
 	`| Contract violations | ${d.violations.length} |`,
+	`| Portrait prompts that would change | ${d.promptDrift?.length ?? 0} |`,
 	'',
 	'## Leaves derived',
 	'',
@@ -125,6 +130,19 @@ const lines = [
 	...pathRows.map(([p, n]) => `| \`${p}\` | ${n} |`),
 	''
 ];
+
+if (d.promptDrift?.length) {
+	lines.push(
+		'## PORTRAIT PROMPT DRIFT',
+		'',
+		'This pass would change what a portrait prompt says. Tier 1 is supposed to be',
+		'invisible, and invisible has to include the images.',
+		'**This is a defect in the backfill, not a finding about these personas.**',
+		'',
+		...d.promptDrift.slice(0, 50).map((v) => `- \x60${v}\x60`),
+		''
+	);
+}
 
 if (d.violations.length) {
 	lines.push(
@@ -167,4 +185,4 @@ console.log(
 	`tier ${d.tier} ${MODE}: scanned ${d.scanned}, ${MODE === 'shadow' ? 'would change' : 'changed'} ${d.changed}, wrote ${d.written}, failed ${d.failed}, violations ${d.violations.length}`
 );
 console.log(`report → ${report}`);
-process.exit(d.failed || d.violations.length ? 1 : 0);
+process.exit(d.failed || d.violations.length || (d.promptDrift?.length ?? 0) ? 1 : 0);

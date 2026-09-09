@@ -68,7 +68,10 @@ const HIGH_TRAIT = 65;
 const LOW_TRAIT = 35;
 
 /** Explicit token pairs, so a trait label is never assembled from a string template. */
-const TRAIT_LABELS: Record<keyof BigFive, { high: TokenOf<'traitLabel'>; low: TokenOf<'traitLabel'> }> = {
+const TRAIT_LABELS: Record<
+	keyof BigFive,
+	{ high: TokenOf<'traitLabel'>; low: TokenOf<'traitLabel'> }
+> = {
 	openness: { high: 'high_openness', low: 'low_openness' },
 	conscientiousness: { high: 'high_conscientiousness', low: 'low_conscientiousness' },
 	extraversion: { high: 'high_extraversion', low: 'low_extraversion' },
@@ -131,10 +134,20 @@ function deriveTraitLabels(bigFive: unknown): TokenOf<'traitLabel'>[] | undefine
  */
 function derivePromptCues(look: unknown, age: number | undefined): string | undefined {
 	if (!isObj(look)) return undefined;
-	const hasLookData = Object.keys(look).some((key) => key !== 'promptCues' && look[key] !== undefined);
+	const hasLookData = Object.keys(look).some(
+		(key) => key !== 'promptCues' && look[key] !== undefined
+	);
 	if (!hasLookData) return undefined;
 	const cue = lookToPromptClause(look as never, age === undefined ? undefined : { age });
-	return cue || undefined;
+	// TRIMMED, because the store trims every string leaf on write. The live
+	// function returns the clause with a LEADING SPACE — it is appended straight
+	// onto a prompt — so storing it verbatim produces a value that can never
+	// round-trip: the store strips the space, Tier 1 re-derives it with the space,
+	// and the leaf differs on every single pass. That is a backfill that rewrites
+	// the same rows forever, and it survived an idempotency test because that test
+	// called the function twice IN MEMORY and never went through the store.
+	// A cache must hold what the store can give back.
+	return cue.trim() || undefined;
 }
 
 // ── the pass ─────────────────────────────────────────────────────────────────
