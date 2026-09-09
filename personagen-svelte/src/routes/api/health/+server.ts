@@ -6,7 +6,7 @@ import { getServiceSupabase } from '$lib/server/service-supabase';
 import { creditsMode, creditsSource } from '$lib/server/flags';
 import { activityStats } from '$lib/server/activity';
 import { settingsStatus } from '$lib/server/settings';
-import { maintenanceStatus } from '$lib/server/maintenance';
+import { reconciliationCheck } from '$lib/server/maintenance';
 import { refreshAdmission, admissionSummary } from '$lib/server/admission';
 import MIGRATION_ORDER from '../../../../supabase/migrations.json';
 
@@ -96,16 +96,19 @@ export const GET: RequestHandler = async ({ locals }) => {
 	// Says what it EXAMINED, not just what it found. A run over an empty window
 	// finds nothing and must not read as a clean bill of health: "idle" is the
 	// honest word for "there was nothing to check".
-	const m = maintenanceStatus();
-	checks.reconciliation = m.lastError
-		? `error: ${m.lastError.slice(0, 80)}`
-		: !m.lastReconcileAt
-			? 'pending (runs on the next scheduler tick)'
-			: (m.lastMismatches ?? 0) > 0
-				? `mismatches:${m.lastMismatches} of ${m.lastExamined ?? '?'} examined (${m.lastReconcileAt})`
-				: (m.lastExamined ?? 0) === 0
-					? `idle: no billable events in the last 24h (${m.lastReconcileAt})`
-					: `ok: ${m.lastExamined} events examined (${m.lastReconcileAt})`;
+	//
+	// The run counter is MODULE state, so it resets on every deploy and is never
+	// set at all on a non-leader instance. Left at that, this line said "pending"
+	// forever while the activity log held dozens of successful runs. When this
+	// container has not run one, maintenance.ts falls back to the durable record
+	// — one cached, timeout-bounded, indexed read, skipped entirely once this
+	// container has its own answer. A failed read reads as 'unknown'.
+	//
+	// Deliberately NOT part of `healthy`: a quiet reconciliation is not a reason
+	// to answer 503 and drop out of a load balancer.
+	checks.reconciliation = await reconciliationCheck().catch(
+		(e) => `unknown: reconciliation check failed (${(e as Error).message.slice(0, 80)})`
+	);
 
 	// Who can create an account. Both doors were measured open on 2026-09-09 and
 	// only an operator can close them, so the question is asked here rather than
