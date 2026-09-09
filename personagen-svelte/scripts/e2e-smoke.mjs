@@ -311,6 +311,29 @@ async function main() {
 	const declared = settingKeysFromSource();
 	const readable = declared.filter((k) => switches[k] === undefined);
 	check('every operator switch is reported by the console API', readable.length === 0 && declared.length > 0, readable.length ? `missing: ${readable.join(', ')}` : `all ${declared.length} declared switches reported`);
+	// Admission posture. /api/health carries a COARSE word because it is public;
+	// the console names the door. Both must be present, and the two must agree —
+	// a health check saying 'ok' while the console says a door is open would be
+	// the worst of both.
+	const posture = adminBody.posture?.admission;
+	const healthSays = health.checks?.admission;
+	const agree =
+		posture && healthSays
+			? (posture.open && healthSays === 'review') ||
+				(!posture.open && posture.anonSignup === 'unverified' && healthSays === 'unverified') ||
+				(!posture.open && posture.anonSignup === 'closed' && healthSays === 'ok')
+			: false;
+	check(
+		'admission posture is reported, and health agrees with the console',
+		Boolean(posture) && Boolean(healthSays) && agree,
+		posture
+			? `console: anon=${posture.anonSignup} pin=${posture.routePin} open=${posture.open} · health: ${healthSays}`
+			: `console posture missing (health said ${healthSays ?? 'nothing'})`
+	);
+	if (posture?.open) {
+		console.log('   note: registration is OPEN — see docs/runbooks/signup-and-admission.md for the two operator switches');
+	}
+
 	const writeProbe = await postJson('/api/admin/settings', { key: 'persona_backbone', value: '__invalid__', note: 'e2e: write path reachable (rejected by design)' });
 	const writeBody = await writeProbe.json().catch(() => ({}));
 	check('a switch write reaches validation instead of "Unsupported key"', writeProbe.status === 400 && /off \| shadow \| fill \| on/.test(String(writeBody.error ?? '')), `HTTP ${writeProbe.status} ${writeBody.error ?? ''}`);
