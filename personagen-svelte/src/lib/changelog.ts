@@ -424,7 +424,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-08", hash: "7b1240b", type: "feat", category: "generation", scope: "persona", title: "the skeleton sampler, brief→constraints, look prompt clause, and the two v2 switches (P1.2, P1.3, P1.6, P2 clause)" },
 	{ date: "2026-09-08", hash: "fd276bc", type: "feat", category: "feature", scope: "admin", title: "the two persona switches are reachable from the console" },
 	{ date: "2026-09-08", hash: "0124ca2", type: "test", category: "maintenance", scope: "smoke", title: "prove every operator switch is readable and its write path is live" },
-	{ date: "2026-09-08", hash: "773a03a", type: "fix", category: "fix", scope: "budget", title: "the per-seat workspace cap fails CLOSED once credits are enforced" }
+	{ date: "2026-09-08", hash: "773a03a", type: "fix", category: "fix", scope: "budget", title: "the per-seat workspace cap fails CLOSED once credits are enforced" },
+	{ date: "2026-09-08", hash: "f3a7f1a", type: "feat", category: "feature", scope: "persona", title: "skeleton-first generation behind PERSONA_GENERATOR=v2" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -752,10 +753,10 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 		id: "7d3977a", from: "2026-09-08", to: "2026-09-08",
 		category: "feature", categories: ["infrastructure","feature","generation","maintenance","fix"],
 		title: "New: finding #16 — the deploy gates were adopted…",
-		summary: "Finding #16 — the deploy gates were adopted, tested, and never executed. Plus 5 more changes, touching setup and deployment and making posts, images and video and internal cleanup.",
+		summary: "Finding #16 — the deploy gates were adopted, tested, and never executed. Plus 6 more changes, touching setup and deployment and making posts, images and video and internal cleanup.",
 		major: true, curated: false,
-		entries: [CHANGELOG[385], CHANGELOG[386], CHANGELOG[387], CHANGELOG[388], CHANGELOG[389], CHANGELOG[390]]
+		entries: [CHANGELOG[385], CHANGELOG[386], CHANGELOG[387], CHANGELOG[388], CHANGELOG[389], CHANGELOG[390], CHANGELOG[391]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "773a03a";
+export const CHANGELOG_GENERATED_FROM = "f3a7f1a";
