@@ -1468,6 +1468,20 @@
 		editingTool = null;
 	}
 
+	/**
+	 * What actually happened to the row, in the words of the row itself.
+	 *
+	 * This used to toast "Post generated!" whenever the status was anything but
+	 * 'published' — which is exactly the case where generate-post held the post
+	 * as a draft because this persona is not fully autonomous. Nothing told the
+	 * user it was waiting for them, so nothing sent them to /review to find it.
+	 */
+	function postOutcomeMessage(status: string | null | undefined): string {
+		if (status === 'published') return 'Post generated and published!';
+		if (status === 'scheduled') return 'Post generated and scheduled.';
+		return 'Post generated — held as a draft in the review queue. Approve it there to publish.';
+	}
+
 	async function generatePostNow(approved: Record<string, unknown> = {}) {
 		// Re-entrancy guard — same rule as generateAvatar(): a second approve while
 		// the first is polling would double-spend.
@@ -1522,10 +1536,7 @@
 						showToast(reason, 'error');
 						return;
 					}
-					showToast(
-						status === 'published' ? 'Post generated and published!' : 'Post generated!',
-						'success'
-					);
+					showToast(postOutcomeMessage(status), 'success');
 					await loadFeed();
 					return;
 				}
@@ -1534,8 +1545,15 @@
 					'warning'
 				);
 			} else {
-				// Legacy synchronous completion (pre-migration fallback).
-				showToast('Post generated and published!', 'success');
+				// Legacy synchronous completion (pre-migration fallback). The response
+				// says which of the three endings happened — read it rather than
+				// assuming the happy one.
+				showToast(
+					postOutcomeMessage(
+						result?.draft ? 'draft' : result?.published ? 'published' : 'scheduled'
+					),
+					'success'
+				);
 				await loadFeed();
 			}
 		} catch (err) {
@@ -6508,6 +6526,7 @@
 		open={composerOpen}
 		spec={composerSpec}
 		{cinematicBlocked}
+		autonomyLevel={savedAutonomy}
 		onClose={() => (composerOpen = false)}
 		onConfirm={(body) => onComposerConfirm(body)}
 		onGoToConnections={() => {

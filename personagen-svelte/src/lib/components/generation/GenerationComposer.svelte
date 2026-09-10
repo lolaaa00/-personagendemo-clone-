@@ -59,6 +59,7 @@
 	} from '$lib/formats';
 	import { quote, pricingContext } from '$lib/stores/pricing.svelte';
 	import { STUDIO_TEMPLATES } from '$lib/studio-templates';
+	import { AUTONOMY_LABELS, type AutonomyLevel } from '$lib/types';
 
 	interface Props {
 		open: boolean;
@@ -95,6 +96,21 @@
 		 * that can never succeed.
 		 */
 		cinematicBlocked?: string | null;
+		/**
+		 * The persona's SAVED `agent_configs.autonomy_level` — the same row the
+		 * generate-post route reads before it decides whether the finished post may
+		 * publish itself.
+		 *
+		 * Without it this dialog promised "Approve & publish now / LIVE post" for
+		 * every persona, while the server held the output as a draft for anything
+		 * below 'fully_autonomous' — a button that lied in the safe direction, and
+		 * a post nobody knew to go and approve.
+		 *
+		 * `null`/absent is deliberately treated as HELD, matching the route's own
+		 * `String(cfgRow?.autonomy_level ?? 'advisor')` fallback: an unknown level
+		 * must never be advertised as an immediate publish.
+		 */
+		autonomyLevel?: AutonomyLevel | null;
 	}
 
 	let {
@@ -107,7 +123,8 @@
 		agents,
 		agentId,
 		onAgentChange,
-		cinematicBlocked = null
+		cinematicBlocked = null,
+		autonomyLevel = null
 	}: Props = $props();
 
 	let loading = $state(false);
@@ -382,10 +399,23 @@
 				label: 'Save as draft',
 				hint: 'Output: draft — no platform can take this post, so nothing publishes.'
 			};
+		// A date the user picked is an attended publish: generate-post writes a
+		// 'scheduled' row at every autonomy level (its hold is `!scheduledDate &&
+		// !mayPublishItself`) and the scheduler's poll sends it. True as written.
 		if (scheduledDate)
 			return {
 				label: 'Approve & schedule',
 				hint: `Output: scheduled post — publishes to ${selectablePlatforms.join(', ')} on ${scheduledDate}${scheduledTime ? ` at ${scheduledTime}` : ''}.`
+			};
+		// Unattended publishing is the persona's own setting. generate-post holds
+		// the finished post as a DRAFT unless the level is 'fully_autonomous', so
+		// only that level may be promised an immediate live post here. Say where
+		// the post actually went: a marketer who has never opened /review has no
+		// reason to look there for something a button called "publish now" made.
+		if (autonomyLevel !== 'fully_autonomous')
+			return {
+				label: 'Approve & send to review',
+				hint: `Output: draft in the review queue — ${autonomyLevel ? `this persona is set to ${AUTONOMY_LABELS[autonomyLevel].label}, so it does not publish` : 'this persona does not publish'} on its own. Approve it in Review to post to ${selectablePlatforms.join(', ')}.`
 			};
 		return {
 			label: 'Approve & publish now',

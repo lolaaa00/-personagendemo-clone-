@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { dialog } from '$lib/actions/dialog';
 	import { onMount } from 'svelte';
-	import type { Agent } from '$lib/types';
+	import type { Agent, AutonomyLevel } from '$lib/types';
 	import { showToast } from '$lib/stores/ui.svelte';
 	import { Posts, ContentForge, type AutopilotView } from '$lib/services/api';
 	import { invalidateAll } from '$app/navigation';
@@ -769,6 +769,32 @@
 		composerSpec = buildGenSpec(id);
 	}
 
+	/**
+	 * The SAVED autonomy level of the persona the composer is aimed at.
+	 *
+	 * Read from `autopilotConfigs`, not from `data.agents[].autonomy_level`: the
+	 * column lives on `agent_configs`, which is the row generate-post reads, and
+	 * is the one `autopilotConfigs[].mode` mirrors. (`agents.autonomy_level` does
+	 * not exist, so the load's `a.autonomy_level ?? 'advisor'` is always the
+	 * fallback.) Undefined stays undefined → the composer treats it as held,
+	 * which is what the route does too.
+	 */
+	let composerAutonomy = $derived(
+		(data?.autopilotConfigs?.[genAgentId]?.mode ?? null) as AutonomyLevel | null
+	);
+
+	/**
+	 * What actually happened to the row, in the words of the row itself.
+	 *
+	 * "Post generated" was said for a draft the server had deliberately held for
+	 * review — the one case where the user has to go somewhere to finish the job.
+	 */
+	function postOutcomeMessage(status: string | null | undefined): string {
+		if (status === 'published') return 'Post generated and published!';
+		if (status === 'scheduled') return 'Post generated and scheduled.';
+		return 'Post generated — held as a draft in the review queue. Approve it there to publish.';
+	}
+
 	async function generatePostNow(approved: Record<string, unknown> = {}) {
 		if (generatingPost) return; // a second approve mid-poll would double-spend
 		const targetAgentId =
@@ -809,7 +835,7 @@
 						return;
 					}
 					finishGeneration(jobId);
-					showToast('Post generated', 'success');
+					showToast(postOutcomeMessage(post.status), 'success');
 					await resyncPosts();
 					return;
 				}
@@ -820,7 +846,14 @@
 
 			if (res.ok && result.success) {
 				finishGeneration(jobId);
-				showToast('Post generated and published successfully!', 'success');
+				// Legacy synchronous completion. The response says which of the three
+				// endings happened — read it rather than assuming the happy one.
+				showToast(
+					postOutcomeMessage(
+						result?.draft ? 'draft' : result?.published ? 'published' : 'scheduled'
+					),
+					'success'
+				);
 				if (result.post) {
 					const agent = data.agents.find((a: any) => a.id === targetAgentId);
 					posts = [
@@ -1548,6 +1581,7 @@
 		: null}
 	agents={data.agents}
 	agentId={genAgentId}
+	autonomyLevel={composerAutonomy}
 	onAgentChange={handleComposerAgentChange}
 	onClose={() => (composerOpen = false)}
 	onConfirm={(body) => {
