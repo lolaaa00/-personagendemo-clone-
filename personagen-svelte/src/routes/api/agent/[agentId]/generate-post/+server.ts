@@ -211,12 +211,16 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 			? rawSourceUrl
 			: undefined;
 	const rawSourceSeconds = Number(body.source_seconds ?? body.sourceSeconds);
+	// CLAMPED, not dropped. Dropping an out-of-range duration falls back to the
+	// planner's 5s default, while the ENGINE clamps the same value to 30 — so a
+	// forged `source_seconds: 999` quoted $0.30 and billed $1.80. The two must
+	// clamp identically or the quote stops being an upper bound on the bill,
+	// which is the one promise a per-second stage has to keep. Garbage (NaN, a
+	// string, a missing url) is still dropped: that is absence, not a number out
+	// of range.
 	const sourceSeconds =
-		sourceVideoUrl &&
-		Number.isFinite(rawSourceSeconds) &&
-		rawSourceSeconds >= MIN_CLIP_SECONDS &&
-		rawSourceSeconds <= MAX_CLIP_SECONDS
-			? rawSourceSeconds
+		sourceVideoUrl && Number.isFinite(rawSourceSeconds) && rawSourceSeconds > 0
+			? Math.min(Math.max(rawSourceSeconds, MIN_CLIP_SECONDS), MAX_CLIP_SECONDS)
 			: undefined;
 	// WHICH Wan Animate endpoint runs is a property of the format the composer
 	// already sends, not a second field the two could disagree about: Reel remake

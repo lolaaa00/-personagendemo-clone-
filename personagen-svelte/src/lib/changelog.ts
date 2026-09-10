@@ -502,7 +502,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-10", hash: "078a5df", type: "fix", category: "fix", scope: "credits", title: "an account created by an operator got no wallet at all" },
 	{ date: "2026-09-10", hash: "53a8297", type: "fix", category: "publishing", scope: "copy", title: "the button promised an immediate publish that the server was holding" },
 	{ date: "2026-09-10", hash: "1a79e60", type: "fix", category: "fix", scope: "calendar", title: "a field that reported 'advisor' for every persona, always" },
-	{ date: "2026-09-10", hash: "a9d5d69", type: "docs", category: "docs", scope: "audit", title: "mark the sweep rows -12 closed today, each verified on origin/main and read back from production" }
+	{ date: "2026-09-10", hash: "a9d5d69", type: "docs", category: "docs", scope: "audit", title: "mark the sweep rows -12 closed today, each verified on origin/main and read back from production" },
+	{ date: "2026-09-10", hash: "bd40b3c", type: "test", category: "maintenance", scope: "smoke", title: "assert no MONEY, not \"no wallet row\"" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -873,7 +874,15 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 		summary: "Move the ratchet to the merged tree's real count. Plus 13 more changes, touching setup and deployment and internal cleanup and guides and explanations.",
 		major: true, curated: false,
 		entries: [CHANGELOG[455], CHANGELOG[456], CHANGELOG[457], CHANGELOG[458], CHANGELOG[459], CHANGELOG[460], CHANGELOG[461], CHANGELOG[462], CHANGELOG[463], CHANGELOG[464], CHANGELOG[465], CHANGELOG[466], CHANGELOG[467], CHANGELOG[468]]
+	},
+	{
+		id: "bd40b3c", from: "2026-09-10", to: "2026-09-10",
+		category: "maintenance", categories: ["maintenance"],
+		title: "Tidying: assert no MONEY, not \"no wallet row\"",
+		summary: "Assert no MONEY, not \"no wallet row\".",
+		major: false, curated: false,
+		entries: [CHANGELOG[469]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "a9d5d69";
+export const CHANGELOG_GENERATED_FROM = "bd40b3c";
