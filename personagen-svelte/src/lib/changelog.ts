@@ -483,9 +483,15 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-09", hash: "490eea2", type: "feat", category: "design", scope: "personas", title: "the viewer panel and stale notices reach the page; viewers get their own buying style" },
 	{ date: "2026-09-09", hash: "04a640d", type: "feat", category: "feature", scope: "audience", title: "the fit judge — a draft judged by four specific people, not a bracket" },
 	{ date: "2026-09-09", hash: "fd9cf48", type: "feat", category: "infrastructure", scope: "audience", title: "the fit verdict reaches the pipeline and the review drawer" },
+	{ date: "2026-09-09", hash: "bf062f6", type: "feat", category: "feature", scope: "persona-contract", title: "the touchpoint map — which parts of the product actually see each field" },
+	{ date: "2026-09-09", hash: "de0104d", type: "test", category: "maintenance", scope: "persona-contract", title: "a reverse check that measured clean because the measurement was broken" },
+	{ date: "2026-09-09", hash: "19801c6", type: "feat", category: "feature", scope: "persona", title: "the script and identity kit read the backbone; the contract caught four false claims" },
 	{ date: "2026-09-09", hash: "bd86d23", type: "feat", category: "generation", scope: "generation", title: "video-to-video, the listicle, and the gates that keep them honest" },
+	{ date: "2026-09-09", hash: "86966c4", type: "docs", category: "docs", scope: "persona-v2", title: "Phase 4 status — and what the touchpoint contract caught" },
 	{ date: "2026-09-09", hash: "95092dc", type: "other", category: "generation", scope: null, title: "Merge origin/main into feat/composer-upgrade-and-ui-defects" },
-	{ date: "2026-09-09", hash: "2aba57f", type: "chore", category: "infrastructure", scope: "lint", title: "move the ratchet to the merged tree's real count" }
+	{ date: "2026-09-09", hash: "2aba57f", type: "chore", category: "infrastructure", scope: "lint", title: "move the ratchet to the merged tree's real count" },
+	{ date: "2026-09-09", hash: "c615b11", type: "test", category: "maintenance", scope: null, title: "point five specs at the merged reality" },
+	{ date: "2026-09-09", hash: "cf2ade2", type: "other", category: "maintenance", scope: null, title: "Merge persona-v2/phase-0 into main: the touchpoint contract, identity kit, and the age hint" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -845,10 +851,18 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 		id: "135cb2a", from: "2026-09-09", to: "2026-09-09",
 		category: "feature", categories: ["security","automation","feature","docs","maintenance","design","infrastructure","generation"],
 		title: "New: one preflight for every deploy path, and the auth…",
-		summary: "One preflight for every deploy path, and the auth gate can fail again. Plus 10 more changes, touching sign-in and account protection and work the app does on its own and guides and explanations.",
+		summary: "One preflight for every deploy path, and the auth gate can fail again. Plus 13 more changes, touching sign-in and account protection and work the app does on its own and guides and explanations.",
 		major: true, curated: false,
-		entries: [CHANGELOG[441], CHANGELOG[442], CHANGELOG[443], CHANGELOG[444], CHANGELOG[445], CHANGELOG[446], CHANGELOG[447], CHANGELOG[448], CHANGELOG[449], CHANGELOG[450], CHANGELOG[451]]
+		entries: [CHANGELOG[441], CHANGELOG[442], CHANGELOG[443], CHANGELOG[444], CHANGELOG[445], CHANGELOG[446], CHANGELOG[447], CHANGELOG[448], CHANGELOG[449], CHANGELOG[450], CHANGELOG[451], CHANGELOG[452], CHANGELOG[453], CHANGELOG[454]]
+	},
+	{
+		id: "2aba57f", from: "2026-09-09", to: "2026-09-09",
+		category: "maintenance", categories: ["infrastructure","maintenance"],
+		title: "Tidying: move the ratchet to the merged tree's real count",
+		summary: "Move the ratchet to the merged tree's real count. Plus 2 more changes, touching setup and deployment.",
+		major: false, curated: false,
+		entries: [CHANGELOG[455], CHANGELOG[456], CHANGELOG[457]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "2aba57f";
+export const CHANGELOG_GENERATED_FROM = "cf2ade2";
