@@ -492,7 +492,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-09", hash: "2aba57f", type: "chore", category: "infrastructure", scope: "lint", title: "move the ratchet to the merged tree's real count" },
 	{ date: "2026-09-09", hash: "c615b11", type: "test", category: "maintenance", scope: null, title: "point five specs at the merged reality" },
 	{ date: "2026-09-09", hash: "cf2ade2", type: "other", category: "maintenance", scope: null, title: "Merge persona-v2/phase-0 into main: the touchpoint contract, identity kit, and the age hint" },
-	{ date: "2026-09-09", hash: "aabdb11", type: "chore", category: "infrastructure", scope: "changelog", title: "regenerate across the persona-v2 merge" }
+	{ date: "2026-09-09", hash: "aabdb11", type: "chore", category: "infrastructure", scope: "changelog", title: "regenerate across the persona-v2 merge" },
+	{ date: "2026-09-10", hash: "c812c5f", type: "fix", category: "fix", scope: "backup", title: "the restore proof was decaying as the activity log grew" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -857,13 +858,13 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 		entries: [CHANGELOG[441], CHANGELOG[442], CHANGELOG[443], CHANGELOG[444], CHANGELOG[445], CHANGELOG[446], CHANGELOG[447], CHANGELOG[448], CHANGELOG[449], CHANGELOG[450], CHANGELOG[451], CHANGELOG[452], CHANGELOG[453], CHANGELOG[454]]
 	},
 	{
-		id: "2aba57f", from: "2026-09-09", to: "2026-09-09",
-		category: "infrastructure", categories: ["infrastructure","maintenance"],
+		id: "2aba57f", from: "2026-09-09", to: "2026-09-10",
+		category: "infrastructure", categories: ["infrastructure","maintenance","fix"],
 		title: "Behind the scenes: move the ratchet to the merged tree's real count",
-		summary: "Move the ratchet to the merged tree's real count. Plus 3 more changes, touching internal cleanup.",
-		major: false, curated: false,
-		entries: [CHANGELOG[455], CHANGELOG[456], CHANGELOG[457], CHANGELOG[458]]
+		summary: "Move the ratchet to the merged tree's real count. Plus 4 more changes, touching internal cleanup and things that were broken.",
+		major: true, curated: false,
+		entries: [CHANGELOG[455], CHANGELOG[456], CHANGELOG[457], CHANGELOG[458], CHANGELOG[459]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "aabdb11";
+export const CHANGELOG_GENERATED_FROM = "c812c5f";

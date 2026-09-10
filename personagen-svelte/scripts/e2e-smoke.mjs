@@ -31,6 +31,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomBytes } from 'node:crypto';
+import { hostname } from 'node:os';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const appRoot = resolve(here, '..');
@@ -49,6 +50,14 @@ const args = process.argv.slice(2);
 const opt = (n) => { const i = args.indexOf(n); return i >= 0 ? args[i + 1] : null; };
 const BASE = (opt('--base') || 'https://honeyx.monarchstack.com').replace(/\/$/, '');
 const ENFORCE_TEST = !args.includes('--no-enforce-test');
+// Flipping credits_mode on PRODUCTION to exercise the 402 path is opt-in now.
+// It used to happen by default: the run set enforce, waited out the settings
+// cache, made its assertion and set the old value back — a ~35 second window in
+// which real users' generations behaved differently because a test asked them
+// to, plus a platform_settings_history row at each end. Fourteen such rows
+// accumulated. When the mode is already enforce (it is, in production) nothing
+// needs to be written at all, which is the common case this now takes.
+const ALLOW_MODE_FLIP = args.includes('--allow-mode-flip');
 const KEEP = args.includes('--keep');
 const SB = env.PUBLIC_SUPABASE_URL;
 const KEY = env.SUPABASE_SERVICE_ROLE_KEY;
@@ -142,6 +151,13 @@ const stamp = Date.now();
 const email = `e2e-${stamp}@personagen.test`;
 const password = `E2e!${randomBytes(9).toString('base64url')}`;
 let userId = null, agentId = null, postId = null, modeBefore = null, adminInserted = false;
+// True only while production is deliberately held in a mode this run set. The
+// exit handlers below use it to put the switch back even if the process dies.
+let modeFlipped = false;
+// Every write this harness makes to a shared table carries this, so a row in
+// platform_settings_history can be traced to a run instead of sitting there
+// unattributed.
+const RUN_TAG = `${hostname()}@${new Date().toISOString()}`;
 
 async function main() {
 	// A run that dies mid-way (a dropped connection, a 502) skips its cleanup and
@@ -349,8 +365,17 @@ async function main() {
 	if (ENFORCE_TEST) {
 		const postsBefore = (await pg(`select count(*)::int as n from posts where agent_id=${q(agentId)}`))[0].n;
 		await pg(`select credit_apply(${q(userId)}, 5, 'set', 'e2e: thin wallet for the enforce test', NULL)`);
+		if (mode !== 'enforce' && !ALLOW_MODE_FLIP) {
+			// Say what was not checked rather than quietly checking nothing.
+			notCovered(
+				'the enforce refusal (402 on a thin wallet)',
+				`credits_mode is '${mode}' and this run will not write a production switch — re-run with --allow-mode-flip, or check it while the platform is already in enforce`
+			);
+			return;
+		}
 		if (mode !== 'enforce') {
-			await pg(`select platform_setting_set('credits_mode', '"enforce"'::jsonb, NULL, 'e2e smoke: temporary enforce for the 402 check')`);
+			modeFlipped = true;
+			await pg(`select platform_setting_set('credits_mode', '"enforce"'::jsonb, NULL, ${q(`e2e smoke: temporary enforce for the 402 check (${RUN_TAG})`)})`);
 			await sleep(17_000); // settings cache refresh interval + margin
 		}
 		const thin = await postJson(`/api/agent/${agentId}/generate-post`, { media: 'image', still: 'graphic', refs: { character: false, product: false }, topic: 'should be refused', deliver: 'review' });
@@ -358,13 +383,54 @@ async function main() {
 		const postsAfter = (await pg(`select count(*)::int as n from posts where agent_id=${q(agentId)}`))[0].n;
 		check('enforce: thin wallet refused with 402 + billing link, no row created', thin.status === 402 && thinBody.code === 'INSUFFICIENT_CREDITS' && thinBody.billingUrl === '/billing' && postsAfter === postsBefore, `HTTP ${thin.status} ${thinBody.code ?? thinBody.error ?? ''}`);
 		if (mode !== 'enforce') {
-			await pg(`select platform_setting_set('credits_mode', ${q(JSON.stringify(mode))}::jsonb, NULL, 'e2e smoke: restore')`);
+			await pg(`select platform_setting_set('credits_mode', ${q(JSON.stringify(mode))}::jsonb, NULL, ${q(`e2e smoke: restore (${RUN_TAG})`)})`);
+			modeFlipped = false;
 			await sleep(17_000);
 			const [{ m }] = await pg(`select value #>> '{}' as m from platform_settings where key='credits_mode'`);
 			check('credits_mode restored', m === mode, m);
 		}
 	}
 }
+
+/**
+ * Put a deliberately flipped production switch back, even on a crash.
+ *
+ * `finally` covers a thrown error; it does not cover SIGINT, an uncaught
+ * rejection, or the terminal being closed — and the window is 35 seconds of
+ * production behaving the way a TEST asked it to. Synchronous-only work is
+ * possible in an exit handler, so the signal paths restore and then exit.
+ */
+function armModeRestore() {
+	const restore = async (why) => {
+		if (!modeFlipped || !modeBefore) return;
+		try {
+			await pg(`select platform_setting_set('credits_mode', ${q(JSON.stringify(modeBefore))}::jsonb, NULL, ${q(`e2e smoke: restore after ${why} (${RUN_TAG})`)})`);
+			modeFlipped = false;
+			console.error(`
+  [smoke] credits_mode restored to '${modeBefore}' after ${why}.`);
+		} catch (e) {
+			console.error(`
+  [smoke] COULD NOT RESTORE credits_mode — production is left in 'enforce'. Set it back to '${modeBefore}' in the Admin Console. (${e.message})`);
+		}
+	};
+	for (const sig of ['SIGINT', 'SIGTERM']) {
+		process.on(sig, async () => {
+			await restore(sig);
+			process.exit(130);
+		});
+	}
+	process.on('uncaughtException', async (e) => {
+		await restore('an uncaught exception');
+		console.error(e);
+		process.exit(1);
+	});
+	process.on('unhandledRejection', async (e) => {
+		await restore('an unhandled rejection');
+		console.error(e);
+		process.exit(1);
+	});
+}
+armModeRestore();
 
 async function cleanup() {
 	if (KEEP) { console.log(`--keep: leaving ${email} (${userId}) in place`); return; }
