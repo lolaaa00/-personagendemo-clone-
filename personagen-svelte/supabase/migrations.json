@@ -194,5 +194,9 @@
 	[
 		"source_clip_attestations_migration.sql",
 		"Source-clip attestations — append-only record of a user asserting they may use an uploaded clip; kept outside the switchable activity log so ingest can fail closed when it cannot be recorded"
+	],
+	[
+		"wallet_for_every_account_migration.sql",
+		"Every account gets a wallet row at ZERO: handle_new_user() opens credit_accounts next to the profile and free subscription, so an account created through the GoTrue admin API is no longer wallet-less. Opening only — the welcome grant stays in /api/auth/signup"
 	]
 ]
