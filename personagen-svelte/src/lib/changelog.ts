@@ -493,7 +493,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-09", hash: "c615b11", type: "test", category: "maintenance", scope: null, title: "point five specs at the merged reality" },
 	{ date: "2026-09-09", hash: "cf2ade2", type: "other", category: "maintenance", scope: null, title: "Merge persona-v2/phase-0 into main: the touchpoint contract, identity kit, and the age hint" },
 	{ date: "2026-09-09", hash: "aabdb11", type: "chore", category: "infrastructure", scope: "changelog", title: "regenerate across the persona-v2 merge" },
-	{ date: "2026-09-10", hash: "c812c5f", type: "fix", category: "fix", scope: "backup", title: "the restore proof was decaying as the activity log grew" }
+	{ date: "2026-09-10", hash: "c812c5f", type: "fix", category: "fix", scope: "backup", title: "the restore proof was decaying as the activity log grew" },
+	{ date: "2026-09-10", hash: "de91e47", type: "fix", category: "fix", scope: "smoke", title: "the test harness stops writing a production money switch by default" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -861,10 +862,10 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 		id: "2aba57f", from: "2026-09-09", to: "2026-09-10",
 		category: "infrastructure", categories: ["infrastructure","maintenance","fix"],
 		title: "Behind the scenes: move the ratchet to the merged tree's real count",
-		summary: "Move the ratchet to the merged tree's real count. Plus 4 more changes, touching internal cleanup and things that were broken.",
+		summary: "Move the ratchet to the merged tree's real count. Plus 5 more changes, touching internal cleanup and things that were broken.",
 		major: true, curated: false,
-		entries: [CHANGELOG[455], CHANGELOG[456], CHANGELOG[457], CHANGELOG[458], CHANGELOG[459]]
+		entries: [CHANGELOG[455], CHANGELOG[456], CHANGELOG[457], CHANGELOG[458], CHANGELOG[459], CHANGELOG[460]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "c812c5f";
+export const CHANGELOG_GENERATED_FROM = "de91e47";

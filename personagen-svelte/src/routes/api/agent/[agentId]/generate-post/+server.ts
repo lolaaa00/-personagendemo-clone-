@@ -1,4 +1,6 @@
 import { json } from '@sveltejs/kit';
+import { classifyFailure } from '$lib/server/failure-text';
+import { keySourceFor } from '$lib/server/credits';
 import { entitlementsFor, planRefusal } from '$lib/server/entitlements';
 import type { RequestHandler } from './$types';
 import { createDbService } from '$lib/server/db';
@@ -1102,6 +1104,23 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 				}
 			} catch (genErr) {
 				console.error('[generate-post] Detached generation failed:', genErr);
+				// Whose key ran the call decides who is asked to fix it. A provider
+				// funding error on OUR key is our problem; on the customer's own key
+				// it is theirs. Unknown resolves to ours — on 2026-09-10 a customer
+				// was shown a vendor's 402 telling him HE could not afford the tokens,
+				// with a link to our billing page, while his wallet was full.
+				let ranOnOwnKey = false;
+				try {
+					ranOnOwnKey =
+						(await keySourceFor(taskSupabase, user.id, 'openrouter').catch(() => 'platform')) === 'byo';
+				} catch {
+					/* unknown → treat as ours */
+				}
+				const failure = classifyFailure(genErr, { ownKey: ranOnOwnKey });
+				if (failure.onUs) {
+					// The operator needs the real text; the customer must not see it.
+					console.error(`[generate-post] PLATFORM-SIDE failure (${failure.kind}): ${failure.internal}`);
+				}
 				try {
 					await taskDb.posts.update(postId, {
 						status: 'failed',
@@ -1111,7 +1130,10 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 						content: JSON.stringify({
 							topic: body.topic || null,
 							intended,
-							error: (genErr as Error).message || 'Generation failed',
+							// Sanitised. The raw provider string never lands here: this row
+							// is readable by the post's owner, so anything written to it is
+							// published to them.
+							error: failure.customer,
 							...(studioMeta ? { studio: studioMeta } : {})
 						})
 					});
