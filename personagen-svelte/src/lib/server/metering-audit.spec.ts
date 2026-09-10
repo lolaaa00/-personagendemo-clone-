@@ -41,6 +41,10 @@ const FREE_PATHS: Record<string, string> = {
 		'model listing / schema probes — no inference, no per-call charge',
 	'lib/server/ai-client.ts':
 		'client factory — every generate() call site is wrapped by trackAi (packs) or meteredAiClient (engine)',
+	'lib/server/provider-balance.ts':
+		'balance probe only — one GET of /api/v1/credits, which the provider does not bill, and the module has no code path that can POST',
+	'lib/server/failure-text.ts':
+		'names a provider only inside a comment quoting the 402 it exists to stop leaking; it makes no network call at all',
 	'routes/api/settings/api-keys/+server.ts':
 		'key validation pings; the Firecrawl ping is one page and documented in the assessment'
 };

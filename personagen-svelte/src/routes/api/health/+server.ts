@@ -8,6 +8,7 @@ import { activityStats } from '$lib/server/activity';
 import { settingsStatus } from '$lib/server/settings';
 import { reconciliationCheck } from '$lib/server/maintenance';
 import { refreshAdmission, admissionSummary } from '$lib/server/admission';
+import { refreshProviderBalance, providerBalanceSummary } from '$lib/server/provider-balance';
 import MIGRATION_ORDER from '../../../../supabase/migrations.json';
 
 export const GET: RequestHandler = async ({ locals }) => {
@@ -121,6 +122,21 @@ export const GET: RequestHandler = async ({ locals }) => {
 	// a reason to answer 503 and drop out of a load balancer.
 	void refreshAdmission().catch(() => {});
 	checks.admission = admissionSummary();
+
+	// How much money is left in the provider account that pays for generation.
+	// Measured at $2.78 on 2026-09-10 — roughly seven more video posts — after it
+	// had already cost a customer a generation. Nothing watched it before.
+	//
+	// Deliberately COARSE: this route is unauthenticated, so the dollar figure
+	// stays out of it — that would publish both our burn rate and the fact that
+	// we are one post from failing. The Admin Console names the number.
+	// Deliberately NOT part of `healthy`: an empty provider account is an
+	// operator action (top up), not a reason to answer 503 and drop out of a
+	// load balancer — the app is up and everything unpaid still works.
+	// Deliberately fire-and-forget: the cached probe must never make a caller
+	// wait on a slow provider.
+	void refreshProviderBalance().catch(() => {});
+	checks.provider_balance = providerBalanceSummary();
 
 	return json(
 		{

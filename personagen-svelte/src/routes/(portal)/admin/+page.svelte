@@ -39,6 +39,17 @@
 				note: string | null;
 			};
 		};
+		providerBalance?: {
+			provider: string;
+			state: 'ok' | 'low' | 'unknown';
+			remainingUsd: number | null;
+			postsRemaining: number | null;
+			imagePostsRemaining: number | null;
+			lowThresholdUsd: number;
+			emptyThresholdUsd: number;
+			checkedAt: string | null;
+			note: string | null;
+		};
 		history: Array<{ key: string; old_value: any; new_value: any; changed_by: string | null; note: string | null; changed_at: string }>;
 	} | null>(null);
 	let controlsLoading = $state(false);
@@ -462,6 +473,38 @@
 						Could not read the auth service to check whether public signups are open{controls.posture.admission.note
 							? ` — ${controls.posture.admission.note}`
 							: ''}. Treat this as unknown, not as closed.
+					</p>
+				{/if}
+				{#if controls.providerBalance?.state === 'low'}
+					<p class="admin-warn">
+						<strong>The provider account is nearly empty.</strong>
+						OpenRouter has <strong>{money(controls.providerBalance.remainingUsd ?? 0)}</strong> left —
+						about {controls.providerBalance.postsRemaining ?? 0} more video posts, or
+						{controls.providerBalance.imagePostsRemaining ?? 0} image posts, before generation starts
+						failing for customers mid-post. Below
+						{money(controls.providerBalance.emptyThresholdUsd)} the next video call cannot run at all.
+						<strong>This is yours to fix, not a bug:</strong>
+						top up the OpenRouter account at <code>openrouter.ai/settings/credits</code>. The warning
+						starts at {money(controls.providerBalance.lowThresholdUsd)}.
+						{#if controls.providerBalance.checkedAt}
+							<span class="muted small">Measured {when(controls.providerBalance.checkedAt)}.</span>
+						{/if}
+					</p>
+				{:else if controls.providerBalance?.state === 'unknown'}
+					<p class="admin-warn">
+						<strong>Provider balance unknown.</strong>
+						Could not read what is left in the OpenRouter account{controls.providerBalance.note
+							? ` — ${controls.providerBalance.note}`
+							: ''}. Treat this as unknown, not as funded: an unread balance is exactly as likely to
+						be empty as full, and nothing else in the app is watching it.
+					</p>
+				{:else if controls.providerBalance?.state === 'ok'}
+					<p class="admin-hint small">
+						Provider balance: OpenRouter has {money(controls.providerBalance.remainingUsd ?? 0)} left ≈
+						{controls.providerBalance.postsRemaining ?? 0} video posts / {controls.providerBalance
+							.imagePostsRemaining ?? 0} image posts. Warns below
+						{money(controls.providerBalance.lowThresholdUsd)}.
+						{#if controls.providerBalance.checkedAt}Measured {when(controls.providerBalance.checkedAt)}.{/if}
 					</p>
 				{/if}
 				<div class="control-grid">

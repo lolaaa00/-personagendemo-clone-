@@ -12,6 +12,7 @@ import {
 	type SettingKey
 } from '$lib/server/settings';
 import { refreshAdmission } from '$lib/server/admission';
+import { refreshProviderBalance } from '$lib/server/provider-balance';
 import {
 	creditsMode,
 	creditsSource,
@@ -162,6 +163,10 @@ export const GET: RequestHandler = async ({ locals }) => {
 		// Who can create an account, in full — this route requires a platform
 		// admin, so unlike /api/health it can name the door that is open.
 		posture: { admission: await refreshAdmission() },
+		// What is left in the provider account that pays for generation. Unlike
+		// /api/health this route requires a platform admin, so the dollar figure
+		// belongs here — an operator cannot act on the word "low" alone.
+		providerBalance: await refreshProviderBalance(),
 		history: history ?? []
 	});
 };
