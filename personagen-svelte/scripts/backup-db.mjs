@@ -320,11 +320,18 @@ function emitSql(dir) {
 			out.push(`-- public.${table}: empty at capture`);
 			continue;
 		}
-		out.push(`INSERT INTO public."${table}"`);
-		out.push(`SELECT * FROM json_populate_recordset(null::public."${table}", ${lit(rows)})`);
-		out.push('ON CONFLICT DO NOTHING;');
-		out.push('');
-		statements++;
+		// Chunked for the same reason check-restore is: one statement per table
+		// grows without bound. A 20 MB statement is also the worst possible unit
+		// of failure during a restore — it either all lands or none of it does.
+		const batches = chunkRows(rows);
+		batches.forEach((batch, i) => {
+			if (batches.length > 1) out.push(`-- public.${table} — part ${i + 1} of ${batches.length}`);
+			out.push(`INSERT INTO public."${table}"`);
+			out.push(`SELECT * FROM json_populate_recordset(null::public."${table}", ${lit(batch)})`);
+			out.push('ON CONFLICT DO NOTHING;');
+			out.push('');
+			statements++;
+		});
 	}
 
 	// The storage manifest is deliberately NOT inserted. Rows in storage.objects
@@ -360,6 +367,43 @@ function emitSql(dir) {
  * It also names columns the schema no longer has: json_populate_recordset drops
  * those silently, so without this they would vanish on restore without a word.
  */
+/**
+ * Split rows into request-sized batches.
+ *
+ * The proof used to send one table as a single statement, which worked until a
+ * table outgrew the endpoint: on 2026-09-10 user_activity_events reached 1.1 MB
+ * of JSON and every check-restore began failing with "Request body is too
+ * large" — so the gate that exists to let deploys through was blocking them,
+ * and would have kept getting worse as the activity log grew. A restore proof
+ * whose reliability decays with your own success is not a proof.
+ *
+ * Sized by BYTES, not row count: rows here range from a few hundred bytes to
+ * several KB, so any fixed row count is either wasteful or eventually too big.
+ * 256 KB is comfortably under the limit that failed at 1.1 MB, and the extra
+ * round trips cost seconds on a 20 MB database.
+ */
+const MAX_BODY_BYTES = 256 * 1024;
+
+function chunkRows(rows) {
+	const out = [];
+	let batch = [];
+	let bytes = 0;
+	for (const row of rows) {
+		const size = JSON.stringify(row).length + 1;
+		// A single row larger than the budget still has to go on its own — better
+		// one oversized request that may fail loudly than a silent skip.
+		if (batch.length > 0 && bytes + size > MAX_BODY_BYTES) {
+			out.push(batch);
+			batch = [];
+			bytes = 0;
+		}
+		batch.push(row);
+		bytes += size;
+	}
+	if (batch.length > 0) out.push(batch);
+	return out.length > 0 ? out : [[]];
+}
+
 async function checkRestore(dir) {
 	const m = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf-8'));
 	const problems = [];
@@ -386,12 +430,15 @@ async function checkRestore(dir) {
 		const gone = Object.keys(rows[0]).filter((c) => !cols.has(c));
 		if (gone.length) problems.push(`${table}: column(s) the schema has dropped — ${gone.join(', ')} would be lost`);
 
-		const json = JSON.stringify(rows).replace(/'/g, "''");
 		try {
-			const out = await q(
-				`SELECT count(*)::int AS n FROM json_populate_recordset(null::public."${table}", '${json}'::json)`
-			);
-			const n = out[0]?.n ?? -1;
+			let n = 0;
+			for (const batch of chunkRows(rows)) {
+				const json = JSON.stringify(batch).replace(/'/g, "''");
+				const out = await q(
+					`SELECT count(*)::int AS n FROM json_populate_recordset(null::public."${table}", '${json}'::json)`
+				);
+				n += out[0]?.n ?? 0;
+			}
 			if (n !== rows.length) problems.push(`${table}: Postgres read back ${n} of ${rows.length} rows`);
 			else {
 				proved++;
