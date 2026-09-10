@@ -484,7 +484,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-09", hash: "04a640d", type: "feat", category: "feature", scope: "audience", title: "the fit judge — a draft judged by four specific people, not a bracket" },
 	{ date: "2026-09-09", hash: "fd9cf48", type: "feat", category: "infrastructure", scope: "audience", title: "the fit verdict reaches the pipeline and the review drawer" },
 	{ date: "2026-09-09", hash: "bd86d23", type: "feat", category: "generation", scope: "generation", title: "video-to-video, the listicle, and the gates that keep them honest" },
-	{ date: "2026-09-09", hash: "95092dc", type: "other", category: "generation", scope: null, title: "Merge origin/main into feat/composer-upgrade-and-ui-defects" }
+	{ date: "2026-09-09", hash: "95092dc", type: "other", category: "generation", scope: null, title: "Merge origin/main into feat/composer-upgrade-and-ui-defects" },
+	{ date: "2026-09-09", hash: "2aba57f", type: "chore", category: "infrastructure", scope: "lint", title: "move the ratchet to the merged tree's real count" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -844,10 +845,10 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 		id: "135cb2a", from: "2026-09-09", to: "2026-09-09",
 		category: "feature", categories: ["security","automation","feature","docs","maintenance","design","infrastructure","generation"],
 		title: "New: one preflight for every deploy path, and the auth…",
-		summary: "One preflight for every deploy path, and the auth gate can fail again. Plus 9 more changes, touching sign-in and account protection and work the app does on its own and guides and explanations.",
+		summary: "One preflight for every deploy path, and the auth gate can fail again. Plus 10 more changes, touching sign-in and account protection and work the app does on its own and guides and explanations.",
 		major: true, curated: false,
-		entries: [CHANGELOG[441], CHANGELOG[442], CHANGELOG[443], CHANGELOG[444], CHANGELOG[445], CHANGELOG[446], CHANGELOG[447], CHANGELOG[448], CHANGELOG[449], CHANGELOG[450]]
+		entries: [CHANGELOG[441], CHANGELOG[442], CHANGELOG[443], CHANGELOG[444], CHANGELOG[445], CHANGELOG[446], CHANGELOG[447], CHANGELOG[448], CHANGELOG[449], CHANGELOG[450], CHANGELOG[451]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "95092dc";
+export const CHANGELOG_GENERATED_FROM = "2aba57f";

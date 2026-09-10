@@ -107,7 +107,11 @@ describe('metering audit — every provider call site is metered or explicitly f
 		generateVoiceAudio: 'priced by the pack as fal/tts',
 		generateTalkingHead: 'priced by the pack as fal/talking_head',
 		generateBrollVideo: 'priced by the pack at the registry video rate',
-		generateCinematicVideo: 'priced by the cinematic pack at the pro video rate'
+		generateCinematicVideo: 'priced by the cinematic pack at the pro video rate',
+		// Per SECOND of the source clip, so only the caller — which holds the probed
+		// duration — can price it. Pricing it here would need a duration this helper
+		// never sees.
+		generateV2vVideo: 'priced by the pack at the per-second transfer rate x probed duration'
 	};
 
 	/** Name of the function a line sits inside, for the allow-list above. */

@@ -29,7 +29,10 @@ vi.mock('$lib/server/storage', () => ({
 	persistToStorage: vi.fn(),
 	persistBufferToStorage: vi.fn()
 }));
-vi.mock('$lib/server/video', () => ({ burnCaptions: vi.fn(), optimizeForWeb: vi.fn() }));
+vi.mock('$lib/server/video', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('$lib/server/video')>();
+	return { ...actual, burnCaptions: vi.fn(), optimizeForWeb: vi.fn() };
+});
 vi.mock('../content/card-renderer', () => ({
 	renderTypographicCard: vi.fn(),
 	CARD_RENDERER_LABEL: 'mock'
