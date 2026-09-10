@@ -46,6 +46,7 @@ import { downgradeV2toV1 } from '$lib/persona-contract/upgrade';
 import { getPath, type Obj } from '$lib/persona-contract/paths';
 import { rerollField, rerollGroupFor, rerollableGroupKeys } from '$lib/server/persona/reroll';
 import { pickVoiceForProfile } from '$lib/server/voices';
+import { buildIdentityKitPrompt } from '$lib/server/identity-kit-prompt';
 import { resolvePublicIps } from '$lib/server/safe-fetch';
 import { personaGenerator } from '$lib/server/flags';
 import { applyProseOnly, proseOnlyPrompt, skeletonFor, toV1Response } from '$lib/server/persona/generate-v2';
@@ -2348,22 +2349,11 @@ Return ONLY JSON: {"niche":"","ageRanges":["25–34"],"archetype":"","contentFoc
 					contract.push(`"bios":{${bioTargets.map((k) => `"${k}":""`).join(',')}}`);
 				}
 
-				const prompt = `You are an elite social-media brand strategist. Create the public-facing identity kit for one UGC creator.
-
-CREATOR: ${agent.name || 'this creator'}. Niche: ${agent.niche || profile.niche || '—'}. Archetype: ${profile.archetype || '—'}. Content focus: ${profile.contentFocus || '—'}. Unique angle: ${profile.contentAngle || '—'}. Audience: ${profile.targetAvatar || '—'}. Personality/soul: ${String(agent.soul || '').slice(0, 500)}.
-BRAND they create for: ${b.brandName || b.name || '—'}${b.tagline ? ` — ${b.tagline}` : ''}. Mission: ${b.mission || '—'}. Products: ${
-					Array.isArray(b.products)
-						? b.products
-								.map((p: any) => p.name)
-								.filter(Boolean)
-								.join(', ')
-						: '—'
-				}.
-
-Return:
-${wants.map((w, i) => `${i + 1}. ${w}`).join('\n')}
-
-Return ONLY JSON: {${contract.join(',')}}`;
+				// The prompt itself lives in `identity-kit-prompt.ts` so it can be pinned
+				// byte-for-byte by a spec: it now carries three backbone facts (city,
+				// job title, household) BEHIND `personaBackboneEmits()`, and below `on`
+				// it must stay exactly the prompt this action has always sent.
+				const prompt = buildIdentityKitPrompt({ agent, profile, brief: b, wants, contract });
 
 				try {
 					const parsed: any = safeParseJson(await ai!.generate(prompt, { json: true }));

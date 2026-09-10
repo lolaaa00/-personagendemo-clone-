@@ -901,18 +901,34 @@ async function logAutoReject(
  *     a fixed sequence, not an object walk, so the same profile produces the
  *     same string on every call, in every process, forever.
  *
- * WHICH FACTS, AND WHY THESE SIX. The test is narrow: does the fact change how
- * a 30-second script reads? Six do, and they are the six the rollout doc's fact
- * strip already shows the user, so what the model is told and what the customer
- * sees on the persona page cannot drift apart:
+ * WHICH FACTS, AND WHY THESE NINE. The test is narrow: does the fact change how
+ * a 30-second script reads? Six plain life facts do, and they are the six the
+ * rollout doc's fact strip already shows the user, so what the model is told and
+ * what the customer sees on the persona page cannot drift apart. Three further
+ * rows are DIRECTIVES derived from those same stored fields rather than more
+ * facts, because a fact the model has to interpret is a fact half of them will
+ * interpret wrongly:
  *
  *   • **Age** — the single strongest register cue. A 24-year-old and a
  *     46-year-old do not open a video the same way.
  *   • **Home** — city, region, and urban/suburban/regional/rural. Decides what
  *     is plausible to reference: a commute, a beach, a two-hour drive to a shop.
+ *   • **Local** — the market rendered as money and weather rather than as a
+ *     country name: which currency a price is quoted in, and which way the
+ *     seasons run. Derived from `creator.market`, deliberately NOT from
+ *     `location.timezone`: every AU zone is southern and every US/UK zone is
+ *     northern, so the market answers the same question, and `touchpoints.ts`
+ *     reserves `timezone` for `display` alone. `generic` is a fictional market
+ *     with neither currency nor hemisphere, so it contributes only its label.
+ *     No CURRENT season is computed — that would make this function's output a
+ *     function of the clock, which rule 4 forbids.
  *   • **Work** — title, field, seniority, employment status, and on-site /
  *     hybrid / remote. Decides what the person can plausibly be doing at 10am,
  *     what they are expert in, and how time-poor they sound.
+ *   • **Credibility** — the same job again, as authority rather than as a fact.
+ *     "Work: Registered nurse" tells the model what the person is; this tells it
+ *     where a claim may be backed from and — the half that actually protects the
+ *     brand — that expertise the job does not confer may not be claimed.
  *   • **Household** — partner, children and their ages, housing, pets. This is
  *     where most of a UGC script's incidental detail comes from: who is off
  *     camera, whose toy is on the floor, whose kitchen this is.
@@ -922,6 +938,12 @@ async function logAutoReject(
  *     "Organised", "Blunt"). The five raw 0–100 scores are NOT emitted: a model
  *     given "neuroticism: 71" writes a psychology report, a model given
  *     "Sensitive" writes a person.
+ *   • **Manner** — the same Big Five as short behavioural directives ("you push
+ *     back and say the blunt thing"), one per trait that is extreme, off the
+ *     SAME ≥ 65 / ≤ 35 thresholds the sampler uses to derive `traitLabels`, so
+ *     the two rows can never contradict each other. An adjective is a label the
+ *     model must interpret; a directive is one it can perform. Still no score
+ *     reaches the prompt.
  *
  * DELIBERATELY NOT EMITTED, so the section stays six lines instead of forty:
  *   • heritage / name / languages — identity, already carried by the portrait
@@ -929,6 +951,8 @@ async function logAutoReject(
  *     nothing and invites the model to write an accent.
  *   • the raw `bigFive` scores, `birthday`, `timezone`, `socialPlatformsUsed`,
  *     `clothingSizes` — operational or numeric; none of them change a sentence.
+ *     `bigFive` reaches the prompt only through **Manner**, as prose: a score
+ *     never appears, and a test asserts it.
  *   • `economic.incomeBand` / `priceFrame` — genuinely script-changing, but
  *     they are the *audience's* price frame in every existing prompt line above,
  *     and emitting the creator's alongside them would read as a contradiction.
@@ -936,7 +960,16 @@ async function logAutoReject(
  *   • `neverDiscusses` — a brand-safety denylist, not a life fact. It belongs in
  *     the guardrail block of the director prompt with the other prohibitions,
  *     and nothing populates it today (the sampler never writes it), so emitting
- *     it here would be a dead line with a live-looking test.
+ *     it here would be a dead line with a live-looking test. RE-AUDITED for
+ *     P4.1: `store.ts` validates the field and the Life details panel renders
+ *     it, but no code path anywhere WRITES it, and `touchpoints.ts` does not
+ *     list it for any consumer. Still out; wire it the day something fills it.
+ *   • `audience.ageRanges` — already in this prompt, as labels, a few lines
+ *     above: `readPersonaProfile` runs `downgradeV2toV1`, which maps every
+ *     ageRange token through `label()` before the "Target age demographic"
+ *     line, and all six tokens survive that mapping. A row here would tell the
+ *     model the same thing twice, so `backbone-context.spec.ts` pins the
+ *     existing line instead of duplicating it.
  *
  * A BUCKET AGE IS NOT AN AGE. `upgradeV1toV2` turns a v1 apparent-age bucket
  * ("30–35") into `age: 32, ageSource: 'bucket'` so the number has *something* to
@@ -1006,7 +1039,30 @@ function personaBackboneLines(agent: any): string[] {
 		)
 	});
 
-	// 3. Work — reading order: what they do, in what field, how senior, employed
+	// 3. Local — what the place implies, not what it is called: the currency a
+	//    price is quoted in and which way the seasons run. Keyed off `market`
+	//    (see header); an unlisted or fictional market contributes neither.
+	const CURRENCY: Record<string, string> = {
+		au: 'prices are in Australian dollars (A$)',
+		us: 'prices are in US dollars ($)',
+		uk: 'prices are in pounds (£)'
+	};
+	const SEASONS: Record<string, string> = {
+		au: 'southern-hemisphere seasons (December is summer)',
+		us: 'northern-hemisphere seasons (December is winter)',
+		uk: 'northern-hemisphere seasons (December is winter)'
+	};
+	const market = str(creator.market);
+	facts.push({
+		key: 'Local',
+		value: join(
+			lbl('market', creator.market),
+			market ? CURRENCY[market] : undefined,
+			market ? SEASONS[market] : undefined
+		)
+	});
+
+	// 4. Work — reading order: what they do, in what field, how senior, employed
 	//    how, from where.
 	const work = isObj(creator.work) ? creator.work : {};
 	facts.push({
@@ -1020,7 +1076,18 @@ function personaBackboneLines(agent: any): string[] {
 		)
 	});
 
-	// 4. Household — partner, children (count + bands), housing, pets.
+	// 5. Credibility — the job as authority rather than as biography. The title
+	//    is repeated on purpose: this row is a rule about what may be asserted,
+	//    and a rule that points at another row is a rule half of them will miss.
+	const jobPhrase = str(work.title) ?? lbl('workDomain', work.domain);
+	facts.push({
+		key: 'Credibility',
+		value: jobPhrase
+			? `your day job (${jobPhrase}) is where your first-hand knowledge comes from, so reach for it when a claim needs backing, and claim no expertise it does not give you`
+			: undefined
+	});
+
+	// 6. Household — partner, children (count + bands), housing, pets.
 	const household = isObj(creator.household) ? creator.household : {};
 	const children = isObj(household.children) ? household.children : {};
 	const count = children.count;
@@ -1042,7 +1109,7 @@ function personaBackboneLines(agent: any): string[] {
 		)
 	});
 
-	// 5. Lifestyle — how they move, how they travel, how they eat.
+	// 7. Lifestyle — how they move, how they travel, how they eat.
 	const lifestyle = isObj(creator.lifestyle) ? creator.lifestyle : {};
 	facts.push({
 		key: 'Lifestyle',
@@ -1053,9 +1120,51 @@ function personaBackboneLines(agent: any): string[] {
 		)
 	});
 
-	// 6. Character — derived trait labels only, never the raw scores.
+	// 8. Character — derived trait labels only, never the raw scores.
 	const traits = lblList('traitLabel', creator.traitLabels);
 	facts.push({ key: 'Character', value: traits.length ? traits.join(' · ') : undefined });
+
+	// 9. Manner — the same Big Five, as behaviour the model can perform. Fixed
+	//    trait order (object-literal insertion order, never a key sort of stored
+	//    data) so the row is byte-stable; a mid-range trait says nothing, which
+	//    is the correct answer rather than a hedged sentence.
+	const TRAIT_DIRECTIVES: Record<string, { high: string; low: string }> = {
+		openness: {
+			high: 'you reach for the unusual angle and say what a thing reminds you of',
+			low: 'you stay with what you already know works'
+		},
+		conscientiousness: {
+			high: 'you plan it, you finish it, and the details matter to you',
+			low: 'you improvise, and you let the loose ends show'
+		},
+		extraversion: {
+			high: 'you talk to camera like a friend and you fill the silences',
+			low: 'you are measured, and you let a pause sit'
+		},
+		agreeableness: {
+			high: 'you give people the benefit of the doubt',
+			low: 'you push back and say the blunt thing'
+		},
+		neuroticism: {
+			high: 'you notice what could go wrong and you say so out loud',
+			low: 'very little rattles you'
+		}
+	};
+	// The sampler's own HIGH_TRAIT / LOW_TRAIT, which are module-private there.
+	// Restated rather than exported: this file must not reach into the sampler's
+	// internals, and the numbers are part of the contract, not an implementation
+	// detail — `schema.ts` documents traitLabels as "≥ 65 high, ≤ 35 low".
+	const HIGH_TRAIT = 65;
+	const LOW_TRAIT = 35;
+	const bigFive: Record<string, unknown> = isObj(creator.bigFive) ? creator.bigFive : {};
+	const manner: string[] = [];
+	for (const [trait, pair] of Object.entries(TRAIT_DIRECTIVES)) {
+		const score = bigFive[trait];
+		if (typeof score !== 'number' || !Number.isFinite(score)) continue;
+		if (score >= HIGH_TRAIT) manner.push(pair.high);
+		else if (score <= LOW_TRAIT) manner.push(pair.low);
+	}
+	facts.push({ key: 'Manner', value: manner.length ? manner.join('; ') : undefined });
 
 	const set = facts.filter((f) => f.value);
 	if (!set.length) return [];

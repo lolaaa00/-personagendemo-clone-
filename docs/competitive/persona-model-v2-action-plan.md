@@ -186,7 +186,23 @@ Task-level deltas are marked **[09-07]** inline below.
 
 **The portrait-staleness evidence gap is CLOSED.** Nothing recorded what a portrait was generated from, so "your portrait predates your appearance edits" could not be detected — and no timestamp could stand in, because `meta.generatedAt` is bumped by every save. The avatar route now fingerprints the appearance BEFORE the detached run starts and stores it on success only. The fingerprint covers the INPUTS, not the rendered prompt: hashing the prompt would make a wording improvement declare every portrait in the estate stale at once.
 
-**Still open:** P1.6 default flip (gated on backbone reaching fill/on); running Tier 2 across the estate (one paid call per persona with prose); the Phase 3 fit judge (P3.3); wiring the panel and stale notices into the persona page.
+### Phase 4 — status 2026-09-09
+
+| Task | Landed | Notes |
+|---|---|---|
+| P4.1 | shipped | Backbone block grew 6 → 9 facts: Local (currency + hemisphere from `market`; no clock-derived season, which would break the "same string forever" rule), Credibility (the day job as the source of first-hand knowledge), Manner (Big Five as directives, never numbers). |
+| P4.2 | shipped | Identity kit reads city / job / household, **gated behind `personaBackboneEmits()`** — the plan did not ask for that, and it matters: the kit is not otherwise flag-gated, so without it every customer's bios changed on deploy. Byte-identity below `on` proven against a verbatim copy of the old template kept as an oracle. Voice picker takes an age band, inert until the catalog carries tags. |
+| P4.3 | shipped | `touchpoints.ts` — which consumers may read each field, checked three ways: completeness against leaves real personas carry, honesty against the builder sources, and the brand-safety class asserted not to EXIST as a field. |
+
+**Two fields deliberately NOT emitted, each recorded rather than quietly skipped:** `creator.neverDiscusses` is typed, validated, labelled and rendered by the persona page, and **nothing in the repo writes it** — emitting it would be a dead line with a live-looking test. `audience.ageRanges` already reaches the script through the v1 downgrade, several lines above the backbone; two tests now pin that existing line instead of adding a second one.
+
+**The contract caught four false claims within an hour of existing**, all mine: raw Big Five scores, `creator.displayName`, `creator.heritage` and `creator.economic.priceFrame` do not reach the script. Heritage is left to the portrait pair on purpose — repeating it into a script prompt invites the model to write an accent.
+
+**The honesty check had to be fixed twice before it could catch anything.** First `includes()` matched "education" inside "educational". Then, fixed, it read `creator.languages` in a header comment written precisely to say languages are NOT sent — a comment denying something being read as evidence for it. It strips comments now. A REVERSE check (does a builder read anything ungranted?) was attempted and removed: it cannot work at file granularity, because `generate.ts` hosts the script builder, both portrait builders and the fit judge. The probe that first called it clean was itself broken — `` inside a template literal is a backspace escape, not a word boundary.
+
+**Still open — all of these are DECISIONS, not implementation:** flipping `PERSONA_BACKBONE` up the staged ladder (`off` → `shadow` → `fill` → `on`); P1.6's `PERSONA_GENERATOR` default flip, gated on the backbone reaching fill/on; running Tier 2 across the estate, which costs one paid call per persona with prose; and `PERSONA_FIT_JUDGE=auto`, which is the only fit-judge setting that spends unasked.
+
+
 
 
 
