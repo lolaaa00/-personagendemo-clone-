@@ -428,8 +428,63 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-09", hash: "b6b4c27", type: "feat", category: "feature", scope: "composer", title: "one axis, one price — the format catalog, and the money it quotes" },
 	{ date: "2026-09-09", hash: "f7e46a8", type: "fix", category: "fix", scope: "publish", title: "a persona only posts by itself when its owner said it may; reconciliation checks the price too" },
 	{ date: "2026-09-09", hash: "d82cb13", type: "fix", category: "generation", scope: "review", title: "the queue rendered nothing — cardThumb() recursed on every image" },
+	{ date: "2026-09-09", hash: "5bfa6e3", type: "fix", category: "generation", scope: "review", title: "the queue rendered nothing — cardThumb() recursed on every image" },
+	{ date: "2026-09-09", hash: "b720a62", type: "fix", category: "fix", scope: "publish", title: "a persona only posts by itself when its owner said it may; reconciliation checks the price too" },
+	{ date: "2026-09-09", hash: "0629c69", type: "fix", category: "fix", scope: "verification", title: "a check that examined nothing must not report ok" },
 	{ date: "2026-09-09", hash: "f02a3ec", type: "feat", category: "infrastructure", scope: "composer", title: "close the pipeline gaps — two local formats, two more pickable stages" },
-	{ date: "2026-09-09", hash: "bd86d23", type: "feat", category: "generation", scope: "generation", title: "video-to-video, the listicle, and the gates that keep them honest" }
+	{ date: "2026-09-09", hash: "c415885", type: "docs", category: "docs", scope: "audit", title: "failure points 2026-09-09 — and the six checks that could not fail" },
+	{ date: "2026-09-08", hash: "2bbdead", type: "feat", category: "feature", scope: "persona", title: "skeleton-first generation behind PERSONA_GENERATOR=v2" },
+	{ date: "2026-09-08", hash: "c3d7b7d", type: "feat", category: "automation", scope: "persona", title: "per-field re-roll, Tier 1 backfill, and one definition of the description" },
+	{ date: "2026-09-08", hash: "2eff8d4", type: "feat", category: "generation", scope: "engine", title: "reroll_field — re-sample one part of a persona, no model, no spend" },
+	{ date: "2026-09-09", hash: "abf0389", type: "feat", category: "generation", scope: "persona", title: "PERSONA_BACKBONE gets its only consumer — life facts reach the prompt at `on`" },
+	{ date: "2026-09-09", hash: "39e382e", type: "feat", category: "feature", scope: "personas", title: "a collapsed \"Life details\" section — the life the generator is working from, made visible" },
+	{ date: "2026-09-09", hash: "f34b9b3", type: "fix", category: "fix", scope: "quote", title: "a persona's first post quotes the identity set it is about to buy" },
+	{ date: "2026-09-09", hash: "d656a18", type: "docs", category: "docs", scope: "audit", title: "the first-post quote gap is closed; record what remains" },
+	{ date: "2026-09-09", hash: "dbfdc50", type: "fix", category: "fix", scope: "quote", title: "the grader is quoted too; the smoke sweeps fixtures it stranded" },
+	{ date: "2026-09-09", hash: "712e3ac", type: "docs", category: "docs", scope: "audit", title: "quote-versus-charge is closed; record where the residue comes from" },
+	{ date: "2026-09-09", hash: "acf9638", type: "fix", category: "fix", scope: "smoke", title: "delete the media it uploads, and prove the bucket is clean" },
+	{ date: "2026-09-09", hash: "7d280de", type: "docs", category: "docs", scope: "audit", title: "a seventh check that cannot fail — the orphan audit's own key" },
+	{ date: "2026-09-09", hash: "5160d38", type: "fix", category: "fix", scope: "account", title: "deleting an account deletes its files, not just its rows" },
+	{ date: "2026-09-09", hash: "f35a173", type: "docs", category: "docs", scope: "audit", title: "the erasure failure is closed — account deletion now purges storage" },
+	{ date: "2026-09-09", hash: "26d6283", type: "test", category: "maintenance", scope: "account", title: "prove on a live host that deletion deletes the files" },
+	{ date: "2026-09-09", hash: "7a5f42b", type: "docs", category: "docs", scope: "audit", title: "quantify the backup risk, and record the search key that found the worst two" },
+	{ date: "2026-09-09", hash: "7737d82", type: "fix", category: "infrastructure", scope: "copy", title: "two money claims of mine were false; the pipeline is right, the words were not" },
+	{ date: "2026-09-09", hash: "7f772ae", type: "docs", category: "docs", scope: null, title: "the promise audit as a method, its findings, and the API reference it caught" },
+	{ date: "2026-09-09", hash: "cfbad51", type: "feat", category: "automation", scope: "persona", title: "the backfill runs as an admin operation; portrait prompts hold the beard" },
+	{ date: "2026-09-09", hash: "8ad01c9", type: "feat", category: "feature", scope: "billing", title: "\"Cancel any time\" gets a line behind it" },
+	{ date: "2026-09-09", hash: "688c3fc", type: "fix", category: "fix", scope: "billing", title: "don't offer cancellation where there is nothing to cancel" },
+	{ date: "2026-09-09", hash: "8f69b34", type: "feat", category: "feature", scope: "plans", title: "nine feature lines stop being copy and become gates" },
+	{ date: "2026-09-09", hash: "d3780c3", type: "test", category: "maintenance", scope: "plans", title: "prove each gate refuses, and prove what it must never refuse" },
+	{ date: "2026-09-09", hash: "c376d52", type: "docs", category: "docs", scope: "plans", title: "the feature-gate audit, the launch-day edit, and the two copy calls left open" },
+	{ date: "2026-09-09", hash: "83be119", type: "feat", category: "feature", scope: "ops", title: "the database gets a backup, and the backup gets proved" },
+	{ date: "2026-09-09", hash: "c3b0306", type: "fix", category: "fix", scope: "security", title: "an account that walks around the signup gate stops getting money" },
+	{ date: "2026-09-09", hash: "29e2b94", type: "fix", category: "fix", scope: "signup", title: "the welcome grant moves to the route, because the trigger cannot see the marker" },
+	{ date: "2026-09-09", hash: "ef2174e", type: "fix", category: "fix", scope: "admin", title: "the console hid a switch it would happily accept, and the smoke said PASS anyway" },
+	{ date: "2026-09-09", hash: "8a152e8", type: "docs", category: "docs", scope: "security", title: "who can create an account today, and the two switches only you can flip" },
+	{ date: "2026-09-09", hash: "f2f32ec", type: "fix", category: "fix", scope: "verify", title: "the database verifiers still asserted the trigger grants" },
+	{ date: "2026-09-09", hash: "9564943", type: "fix", category: "fix", scope: "credits", title: "stop paying for runs we then record as someone else's" },
+	{ date: "2026-09-09", hash: "dc73ef4", type: "fix", category: "fix", scope: "security", title: "the signup-gate check could not fail, and the console hid the switch" },
+	{ date: "2026-09-09", hash: "13ad7b8", type: "feat", category: "feature", scope: "ops", title: "nothing that can lose the data runs without a proved backup first" },
+	{ date: "2026-09-09", hash: "4f6caf1", type: "fix", category: "fix", scope: "copy", title: "four claims the code does not make true" },
+	{ date: "2026-09-09", hash: "c55c353", type: "fix", category: "fix", scope: "credits", title: "a provider call that threw was billed anyway" },
+	{ date: "2026-09-09", hash: "911f86c", type: "fix", category: "fix", scope: "backfill", title: "Tier 1 now converges — it was rewriting the same rows forever" },
+	{ date: "2026-09-09", hash: "b59bb58", type: "feat", category: "automation", scope: "persona", title: "backfill Tier 2, the viewer panel, stale-state warnings — and an audit that could not see its own bug" },
+	{ date: "2026-09-09", hash: "39fe738", type: "fix", category: "design", scope: "backfill", title: "the declared-leaf rule is Tier 1's, and Tier 2 was failing it by design" },
+	{ date: "2026-09-09", hash: "d74b603", type: "test", category: "maintenance", scope: "smoke", title: "the live run asserts the admission surface, and that its two halves agree" },
+	{ date: "2026-09-09", hash: "64f450b", type: "perf", category: "performance", scope: "plans", title: "cache the catalog, but never cache a failed read" },
+	{ date: "2026-09-09", hash: "6409625", type: "fix", category: "fix", scope: "copy", title: "\"free credit to start\" could be withheld, and said so nowhere" },
+	{ date: "2026-09-09", hash: "3097aef", type: "feat", category: "feature", scope: "plans", title: "the six gated controls stop looking enabled" },
+	{ date: "2026-09-09", hash: "e26ebd3", type: "fix", category: "fix", scope: "health", title: "\"pending\" for reconciliation was a container's memory, not the truth" },
+	{ date: "2026-09-09", hash: "135cb2a", type: "feat", category: "security", scope: "ops", title: "one preflight for every deploy path, and the auth gate can fail again" },
+	{ date: "2026-09-09", hash: "cbd9112", type: "chore", category: "automation", scope: "changelog", title: "regenerate after rebasing onto the persona backfill work" },
+	{ date: "2026-09-09", hash: "8aa4230", type: "feat", category: "feature", scope: "personas", title: "a portrait now records what it was made from, so the page can say when it stopped matching" },
+	{ date: "2026-09-09", hash: "7cd21ce", type: "docs", category: "docs", scope: "persona-v2", title: "Phase 1 closed but for the flip; Phases 2, 3 and 5 status" },
+	{ date: "2026-09-09", hash: "f1ce3a8", type: "test", category: "maintenance", scope: "personas", title: "the fingerprint must survive the page's own agent shape" },
+	{ date: "2026-09-09", hash: "490eea2", type: "feat", category: "design", scope: "personas", title: "the viewer panel and stale notices reach the page; viewers get their own buying style" },
+	{ date: "2026-09-09", hash: "04a640d", type: "feat", category: "feature", scope: "audience", title: "the fit judge — a draft judged by four specific people, not a bracket" },
+	{ date: "2026-09-09", hash: "fd9cf48", type: "feat", category: "infrastructure", scope: "audience", title: "the fit verdict reaches the pipeline and the review drawer" },
+	{ date: "2026-09-09", hash: "bd86d23", type: "feat", category: "generation", scope: "generation", title: "video-to-video, the listicle, and the gates that keep them honest" },
+	{ date: "2026-09-09", hash: "95092dc", type: "other", category: "generation", scope: null, title: "Merge origin/main into feat/composer-upgrade-and-ui-defects" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -755,12 +810,44 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 	},
 	{
 		id: "7d3977a", from: "2026-09-08", to: "2026-09-09",
-		category: "feature", categories: ["infrastructure","feature","generation","maintenance","fix"],
-		title: "New: finding #16 — the deploy gates were adopted…",
-		summary: "Finding #16 — the deploy gates were adopted, tested, and never executed. Plus 10 more changes, touching setup and deployment and making posts, images and video and internal cleanup.",
+		category: "fix", categories: ["infrastructure","feature","generation","maintenance","fix","docs"],
+		title: "Fixed: finding #16 — the deploy gates were adopted…",
+		summary: "Finding #16 — the deploy gates were adopted, tested, and never executed. Plus 13 more changes, touching setup and deployment and things you can now do and making posts, images and video.",
 		major: true, curated: false,
-		entries: [CHANGELOG[385], CHANGELOG[386], CHANGELOG[387], CHANGELOG[388], CHANGELOG[389], CHANGELOG[390], CHANGELOG[391], CHANGELOG[392], CHANGELOG[393], CHANGELOG[394], CHANGELOG[395]]
+		entries: [CHANGELOG[385], CHANGELOG[386], CHANGELOG[387], CHANGELOG[388], CHANGELOG[389], CHANGELOG[390], CHANGELOG[391], CHANGELOG[392], CHANGELOG[393], CHANGELOG[394], CHANGELOG[395], CHANGELOG[396], CHANGELOG[397], CHANGELOG[398]]
+	},
+	{
+		id: "2bbdead", from: "2026-09-08", to: "2026-09-09",
+		category: "fix", categories: ["feature","automation","generation","fix","docs","maintenance"],
+		title: "Fixed: skeleton-first generation behind…",
+		summary: "Skeleton-first generation behind PERSONA_GENERATOR=v2. Plus 13 more changes, touching things you can now do and work the app does on its own and making posts, images and video.",
+		major: true, curated: false,
+		entries: [CHANGELOG[399], CHANGELOG[400], CHANGELOG[401], CHANGELOG[402], CHANGELOG[403], CHANGELOG[404], CHANGELOG[405], CHANGELOG[406], CHANGELOG[407], CHANGELOG[408], CHANGELOG[409], CHANGELOG[410], CHANGELOG[411], CHANGELOG[412]]
+	},
+	{
+		id: "7a5f42b", from: "2026-09-09", to: "2026-09-09",
+		category: "docs", categories: ["docs","infrastructure","automation","feature","fix","maintenance"],
+		title: "Help: quantify the backup risk, and record the search key…",
+		summary: "Quantify the backup risk, and record the search key that found the worst two. Plus 13 more changes, touching setup and deployment and work the app does on its own and things you can now do.",
+		major: true, curated: false,
+		entries: [CHANGELOG[413], CHANGELOG[414], CHANGELOG[415], CHANGELOG[416], CHANGELOG[417], CHANGELOG[418], CHANGELOG[419], CHANGELOG[420], CHANGELOG[421], CHANGELOG[422], CHANGELOG[423], CHANGELOG[424], CHANGELOG[425], CHANGELOG[426]]
+	},
+	{
+		id: "f2f32ec", from: "2026-09-09", to: "2026-09-09",
+		category: "fix", categories: ["fix","feature","automation","design","maintenance","performance"],
+		title: "Fixed: the database verifiers still asserted the trigger…",
+		summary: "The database verifiers still asserted the trigger grants. Plus 13 more changes, touching things you can now do and work the app does on its own and layout, colours and readability.",
+		major: true, curated: false,
+		entries: [CHANGELOG[427], CHANGELOG[428], CHANGELOG[429], CHANGELOG[430], CHANGELOG[431], CHANGELOG[432], CHANGELOG[433], CHANGELOG[434], CHANGELOG[435], CHANGELOG[436], CHANGELOG[437], CHANGELOG[438], CHANGELOG[439], CHANGELOG[440]]
+	},
+	{
+		id: "135cb2a", from: "2026-09-09", to: "2026-09-09",
+		category: "feature", categories: ["security","automation","feature","docs","maintenance","design","infrastructure","generation"],
+		title: "New: one preflight for every deploy path, and the auth…",
+		summary: "One preflight for every deploy path, and the auth gate can fail again. Plus 9 more changes, touching sign-in and account protection and work the app does on its own and guides and explanations.",
+		major: true, curated: false,
+		entries: [CHANGELOG[441], CHANGELOG[442], CHANGELOG[443], CHANGELOG[444], CHANGELOG[445], CHANGELOG[446], CHANGELOG[447], CHANGELOG[448], CHANGELOG[449], CHANGELOG[450]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "bd86d23";
+export const CHANGELOG_GENERATED_FROM = "95092dc";

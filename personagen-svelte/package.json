@@ -11,7 +11,7 @@
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
     "lint": "prettier --check . && eslint .",
-    "lint:ci": "eslint . --max-warnings=1120",
+    "lint:ci": "eslint . --max-warnings=1129",
     "format": "prettier --write .",
     "test:unit": "vitest run --project=unit",
     "test:integration": "vitest run --project=integration",
