@@ -51,6 +51,13 @@
 		type HandleCandidate
 	} from '$lib/persona-identity';
 	import { readPersonaProfile } from '$lib/persona-profile-store';
+	import { readPersonaProfileV2 } from '$lib/persona-contract';
+	import LifeDetails from '$lib/components/personas/LifeDetails.svelte';
+	import { buildLifeDetails } from '$lib/components/personas/life-details';
+	import StaleNotices from '$lib/components/personas/StaleNotices.svelte';
+	import { staleWarnings } from '$lib/components/personas/stale-state';
+	import ViewerPanel, { hasStatedAudience } from '$lib/components/personas/ViewerPanel.svelte';
+	import { sampleViewerPanel } from '$lib/persona-contract/panel';
 	import { confirmDeletePosts } from '$lib/confirm-preview';
 	import { confirmAction } from '$lib/stores/confirm.svelte';
 	import MediaPreviewModal from '$lib/components/generation/MediaPreviewModal.svelte';
@@ -240,6 +247,42 @@
 		return readPersonaProfile(agent);
 	}
 	let personaProfile = $state<Record<string, any>>(parsePersonaProfile(agent));
+
+	// ── Life details (READ-ONLY) ──────────────────────────────────────────
+	// Persona Model v2 gives a creator a life the wizard never asks for — where
+	// they live, what they do, who they live with — and the sampler fills it in.
+	// This derives display rows straight from the stored record (a v1 blob is
+	// upgraded in memory by readPersonaProfileV2 and legitimately yields none),
+	// so the section is a view of the profile and has no path back into it.
+	// An empty array means the section is not mounted at all.
+	let lifeDetailGroups = $derived(buildLifeDetails(readPersonaProfileV2(agent)));
+
+	// ── Stale notices (READ-ONLY) ─────────────────────────────────────────
+	// What is on this page that no longer matches the persona it belongs to: a
+	// portrait job that failed or died, reference photos that never arrived, a
+	// voice cast for a different gender. `staleWarnings` keys every warning on
+	// evidence some code path actually WROTE, so an untouched persona yields `[]`
+	// and the strip is not mounted at all.
+	let staleNotices = $derived(staleWarnings(agent));
+
+	// ── Viewer panel (READ-ONLY) ──────────────────────────────────────────
+	// The audience is stored as a bracket; nobody writes a post for a bracket.
+	// `sampleViewerPanel` turns it into a handful of concrete viewers, seeded on
+	// the agent id so the panel is the same on every render rather than
+	// reshuffling under the reader. Sampled from the persona's own market so the
+	// places and jobs belong to the same world as the creator's.
+	//
+	// The sampler never returns an empty panel — an audience of nothing still
+	// yields five strangers — so the gate is on the INPUT: a persona that has
+	// never stated an audience gets `[]` here and no section is mounted.
+	let personaProfileV2 = $derived(readPersonaProfileV2(agent));
+	let viewerPanel = $derived(
+		hasStatedAudience(personaProfileV2?.audience)
+			? sampleViewerPanel(String(agent?.id ?? ''), personaProfileV2?.audience, {
+					market: personaProfileV2?.creator?.market
+				})
+			: []
+	);
 	// Multi-brand: which of the user's brand briefs this persona generates for.
 	// `savedBrandBriefId` mirrors what's actually persisted so the Brand card can
 	// show an unsaved-change indicator and confirm precisely on apply.
@@ -355,6 +398,48 @@
 	let activeHoursStart = $state(agent?.active_hours_start ?? 8);
 	let activeHoursEnd = $state(agent?.active_hours_end ?? 22);
 	let autonomyLevel = $state<AutonomyLevel>(agent?.autonomy_level ?? 'advisor');
+	// What this plan includes. The server refuses a RAISE above the ceiling
+	// (api/agents/config) and ONLY a raise — a persona already above it stays
+	// saveable, including from the twenty other fields this form sends on every
+	// save. Mirror that exactly, or an unrelated edit starts failing for no
+	// visible reason.
+	const AUTONOMY_RANK: Record<AutonomyLevel, number> = {
+		advisor: 0,
+		semi_autonomous: 1,
+		fully_autonomous: 2
+	};
+	const AUTONOMY_CEILING_LABEL: Record<AutonomyLevel, string> = {
+		advisor: 'Advisor',
+		semi_autonomous: 'Semi-autonomous',
+		fully_autonomous: 'Fully autonomous'
+	};
+	// The SAVED level, not the in-flight one: the server compares against what is
+	// in the database.
+	let savedAutonomy = $derived((agent?.autonomy_level ?? 'advisor') as AutonomyLevel);
+	let autonomyCeiling = $derived(
+		(data?.entitlements?.maxAutonomy ?? 'fully_autonomous') as AutonomyLevel
+	);
+	/** A reason this level is out of reach, or null when it is allowed. */
+	function autonomyBlockedReason(level: AutonomyLevel): string | null {
+		if (AUTONOMY_RANK[level] <= AUTONOMY_RANK[autonomyCeiling]) return null;
+		if (AUTONOMY_RANK[level] <= AUTONOMY_RANK[savedAutonomy]) return null;
+		return `${AUTONOMY_CEILING_LABEL[level]} is not included in the ${data?.entitlements?.plan ?? 'free'} plan.`;
+	}
+	// {@const} may only be the immediate child of a block, and these sit inside a
+	// plain <div>, so they are derived here instead.
+	let semiBlocked = $derived(autonomyBlockedReason('semi_autonomous'));
+	let fullyBlocked = $derived(autonomyBlockedReason('fully_autonomous'));
+	/**
+	 * Why Cinematic is out of reach, or null. The server refuses it BEFORE the
+	 * preview branch, so a cinematic Studio template would otherwise resolve into
+	 * an error pane with a Retry that can never succeed.
+	 */
+	let cinematicBlocked = $derived(
+		data?.entitlements?.cinematic === false
+			? `Cinematic video is not included in the ${data?.entitlements?.plan ?? 'free'} plan.`
+			: null
+	);
+
 	// Switching to Fully Autonomous means posts publish WITHOUT review — gate it
 	// behind an explicit confirm, reverting the select when the user backs out.
 	let prevAutonomyLevel: AutonomyLevel = agent?.autonomy_level ?? 'advisor';
@@ -3150,6 +3235,14 @@
 
 		<!-- ── Tab content ────────────────────────────────────────── -->
 		<div class="tab-body">
+			<!-- Stale notices: what on this page no longer matches the persona.
+			     Mounted here — first thing in the tab body, above every section and
+			     below the sticky nav — because these are the one thing on the page
+			     that must not need scrolling or a disclosure to be seen, and
+			     because a failed portrait or a miscast voice is just as relevant
+			     while writing content as while editing the profile. Renders
+			     absolutely nothing when there is nothing wrong. -->
+			<StaleNotices warnings={staleNotices} />
 			{#if activeTab === 'profile'}
 				<!-- Lens switcher shared by both Profile lenses — mirrors the Content
 			     tab's toggle so switching feels identical everywhere. -->
@@ -3917,6 +4010,74 @@
 							</div>
 						</div>
 					</details>
+
+					<!-- Life details: what the system already knows about this person.
+				     Read-only, collapsed, and mounted ONLY when there is something to
+				     say — `lifeDetailGroups` is empty for any persona that has never
+				     been through the sampler, and then this whole block, header
+				     included, does not exist. Zero new required inputs: nothing here
+				     is ever asked of the user. -->
+					{#if lifeDetailGroups.length}
+						<details class="profile-section">
+							<summary class="section-summary">
+								<div class="section-header">
+									<h2 class="section-title">Life details</h2>
+									<p class="section-desc">
+										The everyday facts behind this persona — where they live, what they do, who they
+										live with. Filled in for you; shown here so you can see what the generator is
+										working from.
+									</p>
+								</div>
+								<svg
+									class="section-chevron"
+									width="18"
+									height="18"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2.5"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg
+								>
+							</summary>
+							<LifeDetails groups={lifeDetailGroups} />
+						</details>
+					{/if}
+
+					<!-- Viewer panel: the audience bracket as a handful of concrete
+				     people. Sits directly after Life details — that section says who
+				     this persona IS, this one says who they are talking to, and the
+				     pair reads as one thought. Collapsed, read-only, and mounted
+				     ONLY when the persona actually states an audience the sampler
+				     can narrow on; otherwise the whole block, header included, does
+				     not exist. -->
+					{#if viewerPanel.length}
+						<details class="profile-section">
+							<summary class="section-summary">
+								<div class="section-header">
+									<h2 class="section-title">Who they’re talking to</h2>
+									<p class="section-desc">
+										Your audience settings, turned into a few specific people. Not real, not saved —
+										a way to picture who a post lands with instead of writing for a demographic.
+									</p>
+								</div>
+								<svg
+									class="section-chevron"
+									width="18"
+									height="18"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2.5"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg
+								>
+							</summary>
+							<ViewerPanel viewers={viewerPanel} />
+						</details>
+					{/if}
 
 					<!-- Platform Identity Kit: the persona's public-facing profile per
 				     platform. Copy-paste tooling by design — no platform (nor Zernio)
@@ -5445,8 +5606,20 @@
 								<label for="p-autonomy">Autonomy</label>
 								<select id="p-autonomy" bind:value={autonomyLevel} onchange={handleAutonomyChange}>
 									<option value="advisor">Advisor — manual generate only</option>
-									<option value="semi_autonomous">Semi — drafts for review</option>
-									<option value="fully_autonomous">Fully — publishes unattended</option>
+									<option
+										value="semi_autonomous"
+										disabled={semiBlocked !== null}
+										title={semiBlocked ?? undefined}
+									>
+										Semi — drafts for review{semiBlocked ? ' — not in your plan' : ''}
+									</option>
+									<option
+										value="fully_autonomous"
+										disabled={fullyBlocked !== null}
+										title={fullyBlocked ?? undefined}
+									>
+										Fully — publishes unattended{fullyBlocked ? ' — not in your plan' : ''}
+									</option>
 								</select>
 								<p class="field-hint">
 									{#if autonomyLevel === 'fully_autonomous'}
@@ -5469,10 +5642,13 @@
 										Eligible to graduate: {countLabel(publishedCleanCount, 'clean published post')}.
 										Switch to Fully when confident.
 									{:else}
-										Graduates to Fully after ~21 clean published posts ({publishedCleanCount} so far,
-										{countLabel(recentFailedCount, 'recent failure')}).
+										Ready for Fully at ~21 clean published posts — you make the switch; it never
+										happens on its own ({publishedCleanCount} so far, {countLabel(recentFailedCount, 'recent failure')}).
 									{/if}
 								</p>
+								{#if fullyBlocked}
+									<p class="field-hint">{fullyBlocked} <a href="/billing">Compare plans</a></p>
+								{/if}
 							</div>
 
 							<div class="field-group col-span-2">
@@ -6034,8 +6210,8 @@
 							<h2 class="studio-title">Studio</h2>
 							<p class="studio-sub">
 								Pick an archetype — the scaffold opens prefilled with an editable topic and scene,
-								already aimed at {agent.name}'s voice and the applied brand brief. For bulk generation
-								across a week or a month, plan a campaign.
+								already aimed at {agent.name}'s voice and the applied brand brief. For bulk
+								generation across a week or a month, plan a campaign.
 							</p>
 						</div>
 						<div class="studio-head-actions">
@@ -6267,7 +6443,12 @@
 															<button
 																type="button"
 																class="btn-generate studio-use"
-																disabled={generatingPost || !hydrated}
+																disabled={generatingPost ||
+																	!hydrated ||
+																	(t.baseBody?.media === 'cinematic' && cinematicBlocked !== null)}
+																title={t.baseBody?.media === 'cinematic'
+																	? (cinematicBlocked ?? undefined)
+																	: undefined}
 																onclick={() => useStudioTemplate(t)}
 															>
 																Use
@@ -6326,6 +6507,7 @@
 	<GenerationComposer
 		open={composerOpen}
 		spec={composerSpec}
+		{cinematicBlocked}
 		onClose={() => (composerOpen = false)}
 		onConfirm={(body) => onComposerConfirm(body)}
 		onGoToConnections={() => {

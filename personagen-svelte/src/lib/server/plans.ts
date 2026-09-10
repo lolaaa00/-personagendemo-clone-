@@ -28,13 +28,15 @@ export interface PlanRow {
 	features: string[];
 	sort: number;
 	active: boolean;
+	/** Feature gates; an absent key means no restriction. See entitlements.ts. */
+	entitlements?: Record<string, unknown>;
 }
 
 export const PLAN_FALLBACK: PlanRow[] = [
-	{ plan: 'free', name: 'Free', price_usd_cents: 0, included_credits: 0, persona_limit: null, brand_brief_limit: null, features: ['Welcome credit to start', 'Unlimited text posts', 'All 13 platforms'], sort: 0, active: true },
-	{ plan: 'studio', name: 'Studio', price_usd_cents: 7_900, included_credits: 4_000, persona_limit: 3, brand_brief_limit: 1, features: ['3 personas', '$40 / month of media generation included', 'Unlimited text posts', 'All 13 platforms', '1 brand brief', 'Advisor + Semi-autonomous', 'Standard video + lip-sync'], sort: 1, active: true },
-	{ plan: 'brand', name: 'Brand', price_usd_cents: 29_900, included_credits: 18_000, persona_limit: 10, brand_brief_limit: 3, features: ['10 personas', '$180 / month of media generation included', 'Unlimited text posts', 'All 13 platforms', '3 brand briefs', 'All three autonomy levels', 'Cinematic multi-shot + talking head', 'Spend ledger + verified publishing', 'Approval queue'], sort: 2, active: true },
-	{ plan: 'agency', name: 'Agency', price_usd_cents: 89_900, included_credits: 60_000, persona_limit: null, brand_brief_limit: null, features: ['Unlimited personas', '$600 / month of media generation included', 'Unlimited text posts', 'All 13 platforms', 'Unlimited brand briefs', 'Priority generation queue', 'Teams + shared workspaces', 'Bring your own keys — generation at no charge', 'API access + dedicated manager'], sort: 3, active: true }
+	{ plan: 'free', name: 'Free', price_usd_cents: 0, included_credits: 0, persona_limit: null, brand_brief_limit: null, features: ['One free credit per person to start', 'Unlimited text posts', 'All 13 platforms'], sort: 0, active: true , entitlements: {} },
+	{ plan: 'studio', name: 'Studio', price_usd_cents: 7_900, included_credits: 4_000, persona_limit: 3, brand_brief_limit: 1, features: ['3 personas', '$40 / month of media generation included', 'Unlimited text posts', 'All 13 platforms', '1 brand brief', 'Advisor + Semi-autonomous', 'Standard video + lip-sync'], sort: 1, active: true , entitlements: { max_autonomy: 'semi_autonomous', cinematic: false, teams: false, api: false, byok: false, priority: false } },
+	{ plan: 'brand', name: 'Brand', price_usd_cents: 29_900, included_credits: 18_000, persona_limit: 10, brand_brief_limit: 3, features: ['10 personas', '$180 / month of media generation included', 'Unlimited text posts', 'All 13 platforms', '3 brand briefs', 'All three autonomy levels', 'Cinematic multi-shot + talking head', 'Spend ledger + verified publishing', 'Approval queue'], sort: 2, active: true , entitlements: { max_autonomy: 'fully_autonomous', cinematic: true, teams: false, api: false, byok: false, priority: false } },
+	{ plan: 'agency', name: 'Agency', price_usd_cents: 89_900, included_credits: 60_000, persona_limit: null, brand_brief_limit: null, features: ['Unlimited personas', '$600 / month of media generation included', 'Unlimited text posts', 'All 13 platforms', 'Unlimited brand briefs', 'Priority generation queue', 'Teams + shared workspaces', 'Bring your own keys — generation at no charge', 'API access + dedicated manager'], sort: 3, active: true , entitlements: { max_autonomy: 'fully_autonomous', cinematic: true, teams: true, api: true, byok: true, priority: true } }
 ];
 
 export const PAID_PLANS = ['studio', 'brand', 'agency'] as const;
@@ -44,14 +46,33 @@ export function isPaidPlan(p: unknown): p is PaidPlan {
 	return typeof p === 'string' && (PAID_PLANS as readonly string[]).includes(p);
 }
 
+/**
+ * Cache for the catalog. Four rows that change on launch day and almost never
+ * again, read on every request that resolves entitlements — including, now,
+ * every portal navigation. 30s is short enough that an operator editing a plan
+ * sees it take effect while they are still looking at the console, and long
+ * enough that the read stops being per-navigation.
+ *
+ * Only a SUCCESSFUL read is cached: caching the never-brick fallback would turn
+ * one failed query into 30 seconds of wrong answers.
+ */
+const CATALOG_TTL_MS = 30_000;
+let catalogCache: { rows: PlanRow[]; at: number } | null = null;
+
+/** Drop the cached catalog — for tests, and for an operator write that must show at once. */
+export function invalidatePlanCatalog(): void {
+	catalogCache = null;
+}
+
 /** Catalog from the database, falling back to the static table (never-brick). */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- the Supabase client is untyped across this codebase; narrowing it here alone would be a fiction
 export async function loadPlanCatalog(client?: any): Promise<PlanRow[]> {
+	if (catalogCache && Date.now() - catalogCache.at < CATALOG_TTL_MS) return catalogCache.rows;
 	try {
 		const svc = client ?? getServiceSupabase();
-		const { data, error } = await svc.from('plan_catalog').select('plan, name, price_usd_cents, included_credits, persona_limit, brand_brief_limit, features, sort, active').order('sort');
+		const { data, error } = await svc.from('plan_catalog').select('plan, name, price_usd_cents, included_credits, persona_limit, brand_brief_limit, features, sort, active, entitlements').order('sort');
 		if (error || !data?.length) return PLAN_FALLBACK;
-		return data.map((r: Record<string, unknown>) => ({
+		const rows: PlanRow[] = data.map((r: Record<string, unknown>) => ({
 			plan: r.plan,
 			name: r.name,
 			price_usd_cents: Number(r.price_usd_cents),
@@ -60,8 +81,11 @@ export async function loadPlanCatalog(client?: any): Promise<PlanRow[]> {
 			brand_brief_limit: r.brand_brief_limit === null ? null : Number(r.brand_brief_limit),
 			features: Array.isArray(r.features) ? r.features : [],
 			sort: Number(r.sort ?? 0),
-			active: r.active !== false
+			active: r.active !== false,
+			entitlements: r.entitlements && typeof r.entitlements === 'object' && !Array.isArray(r.entitlements) ? (r.entitlements as Record<string, unknown>) : {}
 		}));
+		catalogCache = { rows, at: Date.now() };
+		return rows;
 	} catch {
 		return PLAN_FALLBACK;
 	}

@@ -3,6 +3,7 @@ import { timingSafeEqual } from 'node:crypto';
 import type { RequestHandler } from './$types';
 import { env } from '$env/dynamic/private';
 import { createSupabaseServiceClient } from '$lib/server/supabase';
+import { grantWelcomeCredit } from '$lib/server/welcome-guard';
 import { Throttle } from '$lib/server/throttle';
 
 /**
@@ -128,7 +129,12 @@ export const POST: RequestHandler = async ({ request, locals, getClientAddress }
 		email,
 		password,
 		email_confirm: true,
-		user_metadata: { full_name: full_name || '' }
+		user_metadata: { full_name: full_name || '' },
+		// The marker the welcome-credit trigger requires. It goes in APP metadata,
+		// which only an admin call can write: a client POSTing to GoTrue directly
+		// can put anything it likes in user_metadata (proven — a forged
+		// app_metadata key lands there and is ignored) but cannot touch this.
+		app_metadata: { invited: true }
 	});
 
 	if (createError) {
@@ -138,6 +144,14 @@ export const POST: RequestHandler = async ({ request, locals, getClientAddress }
 		console.error('[signup] admin.createUser failed:', createError.message);
 		return json({ error: createError.message }, { status: 400 });
 	}
+
+	// The welcome credit is granted HERE, not by the signup trigger. GoTrue
+	// inserts the auth.users row and applies app_metadata afterwards, so the
+	// trigger fires before the invited marker exists and can never see it — an
+	// account created straight against GoTrue therefore gets nothing, which is
+	// the point. Never fatal: an account with no credit is recoverable, a failed
+	// registration is not.
+	if (created.user?.id) await grantWelcomeCredit(created.user.id);
 
 	// Establish the browser session through the cookie-backed client so the
 	// redirect to /dashboard lands on an authenticated layout.

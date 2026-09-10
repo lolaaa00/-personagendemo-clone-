@@ -208,9 +208,26 @@ describe('upgradeV1toV2 — invariants', () => {
 		expect(out.creator).toEqual({ gender: '' });
 		expect(out.audience).toEqual({ ageRanges: [], targetAvatar: '' });
 		expect(out.strategy).toEqual({ archetype: '', archetypeText: '' });
-		expect(out.look).toEqual({});
-		expect(out.voice).toEqual({});
 		expect(out.identityKit).toEqual({ bios: {}, handleCandidates: [], confirmedHandles: {} });
+
+		// An empty v1 appearance/voiceProfile clears the fields v1 OWNS, as empty
+		// LEAVES — never as an empty section. An empty section would read to the
+		// merge as a whole-section clear and delete the v2-only siblings the v1
+		// form cannot express or resend (height, face shape, facial hair, eyewear,
+		// hair texture, gray coverage, the pinned voice). A shape may only clear
+		// what it can describe. Regression: see store.spec.ts.
+		expect(out.look).not.toEqual({});
+		expect(out.look?.wardrobe).toBe('');
+		expect(out.look?.hair?.color).toBe('');
+		expect(out.look?.eyes?.color).toBe('');
+		// …and it names none of the v2-only fields, so they survive the merge.
+		expect(out.look?.heightCm).toBeUndefined();
+		expect(out.look?.facialHair).toBeUndefined();
+		expect(out.look?.eyewear).toBeUndefined();
+		expect(out.look?.faceShape).toBeUndefined();
+		expect(out.look?.hair?.texture).toBeUndefined();
+		expect(out.look?.hair?.grayCoverage).toBeUndefined();
+		expect(out.voice).toEqual({ gender: '', nationality: '', accent: '' });
 	});
 
 	it('an empty v1 profile produces no sub-objects and no sources', () => {

@@ -14,6 +14,7 @@
 	import { compactCountLabel } from '$lib/plural';
 	import { resolveModel, getModel } from '$lib/models';
 	import ImageLightbox from '$lib/components/ui/ImageLightbox.svelte';
+	import FitVerdict from './FitVerdict.svelte';
 	import { dialog } from '$lib/actions/dialog';
 	import { confirmAction } from '$lib/stores/confirm.svelte';
 	import { postPreview } from '$lib/confirm-preview';
@@ -761,6 +762,10 @@
 					{/if}
 				</div>
 			{/if}
+
+			<!-- Advisory only, and silent unless the fit judge actually ran: with no
+			     verdict (the usual case) this renders nothing at all. -->
+			<FitVerdict fitScore={post.fit_score} fitNotes={post.fit_notes} />
 
 			{#if canReschedule}
 				<div class="drawer-reschedule">

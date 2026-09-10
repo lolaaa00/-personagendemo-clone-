@@ -1543,6 +1543,9 @@
 <GenerationComposer
 	open={composerOpen}
 	spec={composerSpec}
+	cinematicBlocked={data?.entitlements?.cinematic === false
+		? `Cinematic video is not included in the ${data?.entitlements?.plan ?? 'free'} plan.`
+		: null}
 	agents={data.agents}
 	agentId={genAgentId}
 	onAgentChange={handleComposerAgentChange}

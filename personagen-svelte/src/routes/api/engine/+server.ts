@@ -3,6 +3,7 @@ import type { RequestHandler } from './$types';
 import { env } from '$env/dynamic/private';
 import { createDbService } from '$lib/server/db';
 import { getUserApiKey } from '$lib/server/user-api-keys';
+import { entitlementsFor, planRefusal } from '$lib/server/entitlements';
 import { publishPostById } from '$lib/server/scheduler';
 import { resolveAiClient } from '$lib/server/ai-client';
 import { meteredAiClient, meteredCall, meteringRefusal, BATCH_MAX } from '$lib/server/metering';
@@ -40,8 +41,14 @@ import {
 	sanitizeHandle
 } from '$lib/persona-identity';
 import { readPersonaProfile } from '$lib/persona-profile-store';
+import { readPersonaProfileV2 } from '$lib/persona-contract/store';
+import { downgradeV2toV1 } from '$lib/persona-contract/upgrade';
+import { getPath, type Obj } from '$lib/persona-contract/paths';
+import { rerollField, rerollGroupFor, rerollableGroupKeys } from '$lib/server/persona/reroll';
 import { pickVoiceForProfile } from '$lib/server/voices';
 import { resolvePublicIps } from '$lib/server/safe-fetch';
+import { personaGenerator } from '$lib/server/flags';
+import { applyProseOnly, proseOnlyPrompt, skeletonFor, toV1Response } from '$lib/server/persona/generate-v2';
 
 /**
  * The `appearance` JSON contract handed to the persona-generation prompts, derived
@@ -1086,6 +1093,22 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 					return json({ success: true, data: saved });
 				}
 
+				// Brand-brief limit. The catalog has sold "1 brand brief" / "3 brand
+				// briefs" / "Unlimited" since plans were written and brand_brief_limit
+				// was read by nothing. Counted on CREATE only — updating an existing
+				// brief stays open, so a plan change never freezes work already done.
+				const ent = await entitlementsFor(session.user.id);
+				if (ent.brandBriefLimit !== null) {
+					const { data: mine } = await db.brandBriefs.list(session.user.id);
+					if ((mine?.length ?? 0) >= ent.brandBriefLimit) {
+						const n = ent.brandBriefLimit;
+						return json(
+							planRefusal(`More than ${n} brand brief${n === 1 ? '' : 's'}`, ent.plan),
+							{ status: 403 }
+						);
+					}
+				}
+
 				const { data: created, error } = await db.brandBriefs.create({
 					user_id: session.user.id,
 					name: briefName,
@@ -1930,6 +1953,89 @@ Input: "${fieldVal}"`;
 			// an INPUT (never overwritten); everything else is generated for competitive
 			// influencer positioning and feeds content generation prompts.
 			if (action === 'generate_persona_profile') {
+				const agentId = typeof body.agentId === 'string' ? body.agentId : '';
+				if (!agentId) return json({ success: false, error: 'Missing agentId' }, { status: 400 });
+
+				const { data: agent } = await db.agents.get(agentId);
+				if (!agent || agent.user_id !== session.user.id) {
+					return json({ success: false, error: 'Persona not found' }, { status: 404 });
+				}
+
+				// ── Persona Model v2 (skeleton first) ──────────────────────────────
+				// A single early branch, so the entire v1 path below is untouched and
+				// the switch is a true revert. Facts are sampled deterministically from
+				// the Trait Registry; the model is asked for PROSE ONLY and anything
+				// else it returns is discarded in code (applyProseOnly), not merely
+				// discouraged by the prompt. The response is downgraded to the v1 shape
+				// the persona page already consumes, so no client change is needed.
+				//
+				// Without a provider the persona is still created — facts, look, voice
+				// and all — which the v1 path cannot do. That is the point of sampling
+				// first: a persona no longer requires an AI key to exist.
+				if (personaGenerator() === 'v2') {
+					const v2Brief = await loadBriefForAgent(
+						db,
+						session.user.id,
+						body.brandBriefId || agent.brand_brief_id || null
+					);
+					const { data: v2Agents } = await db.agents.list();
+					const v2Taken = (v2Agents ?? [])
+						.filter((a: any) => a.id !== agentId)
+						.map((a: any) => readPersonaProfile(a).contentAngle)
+						.filter((x: unknown): x is string => typeof x === 'string' && !!x)
+						.slice(0, 20);
+
+					const skeleton = skeletonFor({
+						seed: agentId,
+						name: agent.name,
+						gender: typeof body.gender === 'string' ? body.gender : null,
+						brief: (v2Brief?.data ?? {}) as Record<string, unknown>,
+						takenAngles: v2Taken,
+						direction: typeof body.direction === 'string' ? body.direction : undefined
+					});
+
+					let profile = skeleton;
+					if (hasAi) {
+						try {
+							const prose = safeParseJson(
+								await ai!.generate(
+									proseOnlyPrompt(
+										skeleton,
+										(v2Brief?.data ?? {}) as Record<string, unknown>,
+										v2Taken,
+										typeof body.direction === 'string' ? body.direction : undefined
+									),
+									{ json: true }
+								)
+							);
+							profile = applyProseOnly(skeleton, prose);
+						} catch (err) {
+							// A provider failure costs the prose, never the persona: the
+							// sampled skeleton is already a complete, coherent creator.
+							console.error(
+								'[Engine] v2 prose generation failed, keeping the sampled skeleton:',
+								(err as Error).message?.slice(0, 200)
+							);
+						}
+					}
+
+					const v2Data = toV1Response(profile) as Record<string, unknown>;
+					const vpGenderV2 =
+						profile.creator?.gender === 'male' || profile.creator?.gender === 'female'
+							? profile.creator.gender
+							: null;
+					if (vpGenderV2) {
+						const picked = pickVoiceForProfile(
+							vpGenderV2,
+							(v2Data.voiceProfile as { accent?: string } | undefined)?.accent,
+							agentId
+						);
+						v2Data.voice = picked.voice.name;
+						v2Data.voiceMatch = picked.exact ? 'exact' : 'fallback';
+					}
+					return json({ success: true, data: v2Data });
+				}
+
 				if (!hasAi) {
 					return json(
 						{
@@ -1938,13 +2044,6 @@ Input: "${fieldVal}"`;
 						},
 						{ status: 400 }
 					);
-				}
-				const agentId = typeof body.agentId === 'string' ? body.agentId : '';
-				if (!agentId) return json({ success: false, error: 'Missing agentId' }, { status: 400 });
-
-				const { data: agent } = await db.agents.get(agentId);
-				if (!agent || agent.user_id !== session.user.id) {
-					return json({ success: false, error: 'Persona not found' }, { status: 404 });
 				}
 				const gender = typeof body.gender === 'string' && body.gender ? body.gender : 'unspecified';
 				// Gender is driven by the persona's NAME (its identity), NOT a possibly-stale
@@ -2079,6 +2178,66 @@ Return ONLY JSON: {"niche":"","ageRanges":["25–34"],"archetype":"","contentFoc
 						{ status: 502 }
 					);
 				}
+			}
+
+			// ── ACTION: reroll_field ──
+			// Re-samples ONE part of a persona — the job, the household, the face —
+			// leaving every other fact exactly as it is. No model, no spend: the
+			// values come from the local Trait Registry, so this costs a draw.
+			//
+			// It RETURNS a patch and does not persist. The client decides whether to
+			// keep the new draw, which is what makes a re-roll button safe to press.
+			if (action === 'reroll_field') {
+				const agentId = typeof body.agentId === 'string' ? body.agentId : '';
+				if (!agentId) return json({ success: false, error: 'Missing agentId' }, { status: 400 });
+
+				const fieldPath = typeof body.fieldPath === 'string' ? body.fieldPath.trim() : '';
+				if (!fieldPath) return json({ success: false, error: 'Missing fieldPath' }, { status: 400 });
+
+				// A caller that omits the nonce gets a fresh draw each press, which is
+				// what a button wants; one that supplies it gets a reproducible result.
+				const nonce =
+					typeof body.nonce === 'string' || typeof body.nonce === 'number' ? body.nonce : Date.now();
+
+				const { data: agent } = await db.agents.get(agentId);
+				if (!agent || agent.user_id !== session.user.id) {
+					return json({ success: false, error: 'Persona not found' }, { status: 404 });
+				}
+
+				const before = readPersonaProfileV2(agent);
+				const group = rerollGroupFor(fieldPath);
+				if (!group) {
+					// A path nothing can re-roll is a NO-OP, not an error. rerollField is
+					// total, and answering a harmless UI mistake with a 4xx would turn it
+					// into a visible failure. The rerollable keys come back so a caller
+					// can see what it should have asked for.
+					return json({
+						success: true,
+						data: { rerolled: false, fieldPath, rerollable: rerollableGroupKeys(), profile: before }
+					});
+				}
+
+				const after = rerollField(before, fieldPath, nonce);
+				const watched = [...group.owns, 'description.short', 'description.frame'];
+				const changed = watched.filter(
+					(path) =>
+						JSON.stringify(getPath(before as unknown as Obj, path) ?? null) !==
+						JSON.stringify(getPath(after as unknown as Obj, path) ?? null)
+				);
+
+				return json({
+					success: true,
+					data: {
+						rerolled: true,
+						fieldPath,
+						group: group.key,
+						changed,
+						profile: after,
+						// The v1 shape too, so a page that has not learned v2 can still
+						// render the result of a re-roll.
+						v1: downgradeV2toV1(after)
+					}
+				});
 			}
 
 			// ── ACTION: generate_identity_kit ──

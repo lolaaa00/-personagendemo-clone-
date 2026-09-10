@@ -41,7 +41,7 @@ export const AUTONOMY_LABELS: Record<
 > = {
 	advisor: {
 		label: 'Advisor',
-		description: 'Suggests content and strategies. User approves everything.',
+		description: 'Manual generate only — nothing runs unattended.',
 		icon: '💡'
 	},
 	semi_autonomous: {

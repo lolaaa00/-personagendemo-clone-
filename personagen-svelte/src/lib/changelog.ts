@@ -428,7 +428,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-09", hash: "b6b4c27", type: "feat", category: "feature", scope: "composer", title: "one axis, one price — the format catalog, and the money it quotes" },
 	{ date: "2026-09-09", hash: "f7e46a8", type: "fix", category: "fix", scope: "publish", title: "a persona only posts by itself when its owner said it may; reconciliation checks the price too" },
 	{ date: "2026-09-09", hash: "d82cb13", type: "fix", category: "generation", scope: "review", title: "the queue rendered nothing — cardThumb() recursed on every image" },
-	{ date: "2026-09-09", hash: "f02a3ec", type: "feat", category: "infrastructure", scope: "composer", title: "close the pipeline gaps — two local formats, two more pickable stages" }
+	{ date: "2026-09-09", hash: "f02a3ec", type: "feat", category: "infrastructure", scope: "composer", title: "close the pipeline gaps — two local formats, two more pickable stages" },
+	{ date: "2026-09-09", hash: "bd86d23", type: "feat", category: "generation", scope: "generation", title: "video-to-video, the listicle, and the gates that keep them honest" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -756,10 +757,10 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 		id: "7d3977a", from: "2026-09-08", to: "2026-09-09",
 		category: "feature", categories: ["infrastructure","feature","generation","maintenance","fix"],
 		title: "New: finding #16 — the deploy gates were adopted…",
-		summary: "Finding #16 — the deploy gates were adopted, tested, and never executed. Plus 9 more changes, touching setup and deployment and making posts, images and video and internal cleanup.",
+		summary: "Finding #16 — the deploy gates were adopted, tested, and never executed. Plus 10 more changes, touching setup and deployment and making posts, images and video and internal cleanup.",
 		major: true, curated: false,
-		entries: [CHANGELOG[385], CHANGELOG[386], CHANGELOG[387], CHANGELOG[388], CHANGELOG[389], CHANGELOG[390], CHANGELOG[391], CHANGELOG[392], CHANGELOG[393], CHANGELOG[394]]
+		entries: [CHANGELOG[385], CHANGELOG[386], CHANGELOG[387], CHANGELOG[388], CHANGELOG[389], CHANGELOG[390], CHANGELOG[391], CHANGELOG[392], CHANGELOG[393], CHANGELOG[394], CHANGELOG[395]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "f02a3ec";
+export const CHANGELOG_GENERATED_FROM = "bd86d23";

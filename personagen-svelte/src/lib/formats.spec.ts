@@ -144,13 +144,13 @@ describe('requestFor / formatFromRequest — the legacy body round-trip', () => 
 describe('planPipeline — one pipeline, one price', () => {
 	it('prices a spokesperson run as director + still + voiceover + talking head', () => {
 		const steps = plan('spokesperson');
-		expect(steps.map((s) => s.kind)).toEqual(['director', 'still', 'tts', 'talkinghead']);
+		expect(steps.map((s) => s.kind)).toEqual(['director', 'grader', 'still', 'tts', 'talkinghead']);
 		expect(planTotalUsd(steps)).toBeCloseTo(0.002 + 0.08 + 0.03 + 0.7, 4);
 	});
 
 	it('a text card costs the Director and nothing else when the host can render it', () => {
 		const steps = plan('text-card');
-		expect(steps.map((s) => s.kind)).toEqual(['director', 'card']);
+		expect(steps.map((s) => s.kind)).toEqual(['director', 'grader', 'card']);
 		expect(planTotalUsd(steps)).toBeCloseTo(0.002, 4);
 	});
 
@@ -242,12 +242,12 @@ describe('locally-assembled formats', () => {
 
 	it('assembles locally instead of paying a model for the expensive part', () => {
 		const card = plan('motion-card');
-		expect(card.map((s) => s.kind)).toEqual(['director', 'card', 'motion']);
+		expect(card.map((s) => s.kind)).toEqual(['director', 'grader', 'card', 'motion']);
 		// Director only: no image model, no video model.
 		expect(planTotalUsd(card)).toBeCloseTo(0.002, 4);
 
 		const vo = plan('vo-broll');
-		expect(vo.map((s) => s.kind)).toEqual(['director', 'still', 'tts', 'video', 'mux']);
+		expect(vo.map((s) => s.kind)).toEqual(['director', 'grader', 'still', 'tts', 'video', 'mux']);
 		// Narration over a clip costs the clip plus the voice — no talking head.
 		expect(planTotalUsd(vo)).toBeCloseTo(0.002 + 0.08 + 0.03 + 0.42, 4);
 		expect(planTotalUsd(vo)).toBeLessThan(planTotalUsd(plan('spokesperson')));
@@ -370,7 +370,7 @@ describe('video-to-video formats', () => {
 		// the steps would bill an image the quote never mentioned.
 		for (const id of ['reel-remake', 'motion-transfer']) {
 			expect(getFormat(id)!.steps).toContain('still');
-			expect(v2vPlan(id).map((s) => s.kind)).toEqual(['director', 'still', 'v2v']);
+			expect(v2vPlan(id).map((s) => s.kind)).toEqual(['director', 'grader', 'still', 'v2v']);
 		}
 	});
 

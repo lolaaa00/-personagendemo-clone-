@@ -5,6 +5,7 @@ import { describe, it, expect } from 'vitest';
 import { readPersonaProfileV2, serializePersonaProfileV2, mergePersonaProfileV2 } from './store';
 import { readPersonaProfile } from '../persona-profile-store';
 import type { PersonaProfileV2 } from './schema';
+import { upgradeV1toV2 } from './upgrade';
 
 const V1_BLOB = {
 	ageRanges: ['25–34'],
@@ -222,5 +223,76 @@ describe('mergePersonaProfileV2 — THE MERGE RULE', () => {
 		expect(out.creator).toEqual(existing.creator);
 		expect(out.look).toEqual(existing.look);
 		expect(out.identityKit).toEqual({ bios: { tiktok: 'new' } });
+	});
+});
+
+/**
+ * REGRESSION — a v1-shaped save must not delete v2-only fields.
+ *
+ * Found by a peer session's failure-point audit before either switch was
+ * flipped. The persona page always sends `appearance` and `voiceProfile`;
+ * coerceAppearance drops empties, so an untouched form collapses to `{}`; that
+ * used to become an empty SECTION, and the merge reads an empty section from a
+ * human as a deliberate whole-section clear. Everything v2-only under `look`
+ * and `voice` — height, face shape, facial hair, eyewear, hair texture, gray
+ * coverage, the pinned voice — was deleted on the first ordinary save, and the
+ * v1 form could never send it back because downgradeV2toV1 does not emit it.
+ *
+ * The rule now: a shape may only clear what it can describe.
+ */
+describe('a v1-shaped patch can only clear what v1 can express', () => {
+	const storedV2: PersonaProfileV2 = {
+		meta: { schemaVersion: 2 },
+		creator: { age: 34, gender: 'male' },
+		look: {
+			wardrobe: 'linen',
+			heightCm: 178,
+			faceShape: 'oval',
+			browShape: 'thick',
+			facialHair: 'short_beard',
+			eyewear: 'glasses',
+			hair: { color: 'black', texture: 'thick', grayCoverage: 'light' }
+		},
+		voice: { gender: 'male', accent: 'Australian', pinnedVoice: 'Bill', voiceMatch: 'exact' }
+	};
+	/** Exactly what the persona page posts on a save with an untouched appearance form. */
+	const untouchedFormPatch = () =>
+		serializePersonaProfileV2(upgradeV1toV2({ appearance: {}, voiceProfile: {} }, 'patch'), 'patch');
+
+	it('keeps every v2-only look field the form cannot send', () => {
+		const after = mergePersonaProfileV2(storedV2, untouchedFormPatch(), { origin: 'ui' });
+		expect(after.look?.heightCm).toBe(178);
+		expect(after.look?.faceShape).toBe('oval');
+		expect(after.look?.browShape).toBe('thick');
+		expect(after.look?.facialHair).toBe('short_beard');
+		expect(after.look?.eyewear).toBe('glasses');
+		expect(after.look?.hair?.texture).toBe('thick');
+		expect(after.look?.hair?.grayCoverage).toBe('light');
+	});
+
+	it('keeps the pinned voice and its match quality', () => {
+		const after = mergePersonaProfileV2(storedV2, untouchedFormPatch(), { origin: 'ui' });
+		expect(after.voice?.pinnedVoice).toBe('Bill');
+		expect(after.voice?.voiceMatch).toBe('exact');
+	});
+
+	it('still clears the fields v1 DOES own, so the v1 clear gesture keeps working', () => {
+		const after = mergePersonaProfileV2(storedV2, untouchedFormPatch(), { origin: 'ui' });
+		expect(after.look?.wardrobe).toBeUndefined();
+		expect(after.look?.hair?.color).toBeUndefined();
+		expect(after.voice?.accent).toBeUndefined();
+		expect(after.voice?.gender).toBeUndefined();
+	});
+
+	it('never deletes the whole section', () => {
+		const after = mergePersonaProfileV2(storedV2, untouchedFormPatch(), { origin: 'ui' });
+		expect(after.look).toBeDefined();
+		expect(after.voice).toBeDefined();
+	});
+
+	it('a STORED-mode upgrade still carries no clear markers at all', () => {
+		expect(upgradeV1toV2({ appearance: {}, voiceProfile: {} })).toEqual({
+			meta: { schemaVersion: 2, generator: 'manual', upgradedFrom: 1 }
+		});
 	});
 });

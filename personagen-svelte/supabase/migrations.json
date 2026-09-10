@@ -1,174 +1,198 @@
 [
-  [
-    "000_schema_migrations.sql",
-    "Migration ledger — schema_migrations (applied first, records itself)"
-  ],
-  [
-    "migration.sql",
-    "Base schema — 12 tables, RLS, signup trigger"
-  ],
-  [
-    "composio_hardening_migration.sql",
-    "connections state cols + posts.publication_results"
-  ],
-  [
-    "connections_provider_metadata_migration.sql",
-    "connections.provider + metadata"
-  ],
-  [
-    "social_analytics_migration.sql",
-    "posts analytics / token cost cols"
-  ],
-  [
-    "generation_events_migration.sql",
-    "generation_events ledger table"
-  ],
-  [
-    "generation_events_asset_url_migration.sql",
-    "generation_events.asset_url"
-  ],
-  [
-    "user_api_keys_migration.sql",
-    "user_api_keys BYOK table"
-  ],
-  [
-    "user_api_keys_providers_migration.sql",
-    "widen BYOK provider CHECK"
-  ],
-  [
-    "blotato_provider_migration.sql",
-    "allow blotato on connections + BYOK"
-  ],
-  [
-    "rss_migration.sql",
-    "agent_configs RSS cols + processed_rss_items"
-  ],
-  [
-    "agent_configs_ugc_migration.sql",
-    "per-agent UGC settings"
-  ],
-  [
-    "agent_reference_kit_migration.sql",
-    "agent_configs.ugc_reference_kit"
-  ],
-  [
-    "personas_profile_migration.sql",
-    "agents.personas_profile JSONB + backfill from legacy market blob"
-  ],
-  [
-    "multi_brand_briefs_migration.sql",
-    "multi-brand: brand_briefs.name + link"
-  ],
-  [
-    "apply_all_pending.sql",
-    "post_reviews, scheduler_leases, zernio_keys, status superset"
-  ],
-  [
-    "scheduler_indexes_and_provider_default_migration.sql",
-    "scheduler indexes + zernio default"
-  ],
-  [
-    "favorites_and_projects_migration.sql",
-    "favorite flags + persona_groups projects"
-  ],
-  [
-    "model_registry_migration.sql",
-    "model_registry — Model Manager backing table"
-  ],
-  [
-    "feature_requests_migration.sql",
-    "User Voice — feature_requests + votes"
-  ],
-  [
-    "workspaces_migration.sql",
-    "Workspaces & seats — orgs, roles, agent_access_role()"
-  ],
-  [
-    "posts_soft_delete_migration.sql",
-    "Trash & restore — posts.deleted_at + partial indexes"
-  ],
-  [
-    "workspace_admin_role_migration.sql",
-    "Workspace 'admin' seat tier — role_rank(), workspace_role()"
-  ],
-  [
-    "workspace_spend_limits_migration.sql",
-    "Per-seat monthly spend caps — workspace_members.spend_limit_usd"
-  ],
-  [
-    "api_keys_migration.sql",
-    "Programmatic API keys — machine auth for the agentic controller"
-  ],
-  [
-    "model_registry_provider_migration.sql",
-    "Model Registry multi-provider — provider + price_basis"
-  ],
-  [
-    "model_registry_multimode_migration.sql",
-    "Model Registry multi-mode — kinds[] + raw modalities"
-  ],
-  [
-    "platform_admins_migration.sql",
-    "Platform admins — cross-tenant operator identity, is_platform_admin()"
-  ],
-  [
-    "credits_migration.sql",
-    "Credits — credit_accounts, credit_ledger, credit_apply(), subscriptions RLS lockdown"
-  ],
-  [
-    "credits_ledger_seq_migration.sql",
-    "credit_ledger.seq — strict total order for ledger rows"
-  ],
-  [
-    "activity_log_migration.sql",
-    "Activity log — user_activity_events (partitioned), user_presence, daily roll-up, admin_auth_events()"
-  ],
-  [
-    "platform_settings_migration.sql",
-    "Platform settings — DB-backed operator switches (credits_mode, activity_log, activity_pepper) + history"
-  ],
-  [
-    "welcome_credits_and_fx_migration.sql",
-    "Welcome credits at signup (signup_credits), display currency + fx_rates settings, profiles.display_currency"
-  ],
-  [
-    "credit_markup_migration.sql",
-    "Credit markup — credit_markup setting makes the credit a retail cent (packs at par, margin from the console)"
-  ],
-  [
-    "credit_roles_policies_migration.sql",
-    "Credit system × roles — grant hygiene, caller-only is_platform_admin, workspace_wallets(), owner-pays event policies"
-  ],
-  [
-    "platform_guards_migration.sql",
-    "Platform guards — daily platform spend ceiling, welcome-grant hourly cap in the signup trigger, credit_reconcile_mismatches()"
-  ],
-  [
-    "plans_migration.sql",
-    "Plans — plan_catalog, subscriptions wallet columns + widened plan check, plans_enabled setting"
-  ],
-  [
-    "model_registry_origin_migration.sql",
-    "Model registry — origin column (seed | fal_catalog | openrouter_catalog | manual), backfilled from discovered_at/provider, NOT NULL, default manual"
-  ],
-  [
-    "market_restore_migration.sql",
-    "Persona Model v2 P0.6 — agents.market returns to a market string; profile lives only in personas_profile (rows with NULL personas_profile untouched)"
-  ],
-  [
-    "model_registry_platform_migration.sql",
-    "Model registry — platform-owned rows (user_id NULL): owner_key uniqueness, read-all/admin-write RLS, one-time backfill from the richest per-user copy, one default per kind"
-  ],
-  [
-    "model_registry_or_video_row_migration.sql",
-    "Model registry — list the OpenRouter video failover (kwaivgi/kling-v3.0-std, unwired) so the model the ledger shows running is visible and priced"
-  ],
-  [
-    "reconcile_price_drift_migration.sql",
-    "Reconciliation also checks the price: credits must equal ceil(est_cost x markup x 100) for events priced since the markup last changed; adds a reason column"
-  ],
-  [
-    "source_clip_attestations_migration.sql",
-    "Source-clip attestations — append-only record of a user asserting they may use an uploaded clip; kept outside the switchable activity log so ingest can fail closed when it cannot be recorded"
-  ]
+	[
+		"000_schema_migrations.sql",
+		"Migration ledger — schema_migrations (applied first, records itself)"
+	],
+	[
+		"migration.sql",
+		"Base schema — 12 tables, RLS, signup trigger"
+	],
+	[
+		"composio_hardening_migration.sql",
+		"connections state cols + posts.publication_results"
+	],
+	[
+		"connections_provider_metadata_migration.sql",
+		"connections.provider + metadata"
+	],
+	[
+		"social_analytics_migration.sql",
+		"posts analytics / token cost cols"
+	],
+	[
+		"generation_events_migration.sql",
+		"generation_events ledger table"
+	],
+	[
+		"generation_events_asset_url_migration.sql",
+		"generation_events.asset_url"
+	],
+	[
+		"user_api_keys_migration.sql",
+		"user_api_keys BYOK table"
+	],
+	[
+		"user_api_keys_providers_migration.sql",
+		"widen BYOK provider CHECK"
+	],
+	[
+		"blotato_provider_migration.sql",
+		"allow blotato on connections + BYOK"
+	],
+	[
+		"rss_migration.sql",
+		"agent_configs RSS cols + processed_rss_items"
+	],
+	[
+		"agent_configs_ugc_migration.sql",
+		"per-agent UGC settings"
+	],
+	[
+		"agent_reference_kit_migration.sql",
+		"agent_configs.ugc_reference_kit"
+	],
+	[
+		"personas_profile_migration.sql",
+		"agents.personas_profile JSONB + backfill from legacy market blob"
+	],
+	[
+		"multi_brand_briefs_migration.sql",
+		"multi-brand: brand_briefs.name + link"
+	],
+	[
+		"apply_all_pending.sql",
+		"post_reviews, scheduler_leases, zernio_keys, status superset"
+	],
+	[
+		"scheduler_indexes_and_provider_default_migration.sql",
+		"scheduler indexes + zernio default"
+	],
+	[
+		"favorites_and_projects_migration.sql",
+		"favorite flags + persona_groups projects"
+	],
+	[
+		"model_registry_migration.sql",
+		"model_registry — Model Manager backing table"
+	],
+	[
+		"feature_requests_migration.sql",
+		"User Voice — feature_requests + votes"
+	],
+	[
+		"workspaces_migration.sql",
+		"Workspaces & seats — orgs, roles, agent_access_role()"
+	],
+	[
+		"posts_soft_delete_migration.sql",
+		"Trash & restore — posts.deleted_at + partial indexes"
+	],
+	[
+		"workspace_admin_role_migration.sql",
+		"Workspace 'admin' seat tier — role_rank(), workspace_role()"
+	],
+	[
+		"workspace_spend_limits_migration.sql",
+		"Per-seat monthly spend caps — workspace_members.spend_limit_usd"
+	],
+	[
+		"api_keys_migration.sql",
+		"Programmatic API keys — machine auth for the agentic controller"
+	],
+	[
+		"model_registry_provider_migration.sql",
+		"Model Registry multi-provider — provider + price_basis"
+	],
+	[
+		"model_registry_multimode_migration.sql",
+		"Model Registry multi-mode — kinds[] + raw modalities"
+	],
+	[
+		"platform_admins_migration.sql",
+		"Platform admins — cross-tenant operator identity, is_platform_admin()"
+	],
+	[
+		"credits_migration.sql",
+		"Credits — credit_accounts, credit_ledger, credit_apply(), subscriptions RLS lockdown"
+	],
+	[
+		"credits_ledger_seq_migration.sql",
+		"credit_ledger.seq — strict total order for ledger rows"
+	],
+	[
+		"activity_log_migration.sql",
+		"Activity log — user_activity_events (partitioned), user_presence, daily roll-up, admin_auth_events()"
+	],
+	[
+		"platform_settings_migration.sql",
+		"Platform settings — DB-backed operator switches (credits_mode, activity_log, activity_pepper) + history"
+	],
+	[
+		"welcome_credits_and_fx_migration.sql",
+		"Welcome credits at signup (signup_credits), display currency + fx_rates settings, profiles.display_currency"
+	],
+	[
+		"credit_markup_migration.sql",
+		"Credit markup — credit_markup setting makes the credit a retail cent (packs at par, margin from the console)"
+	],
+	[
+		"credit_roles_policies_migration.sql",
+		"Credit system × roles — grant hygiene, caller-only is_platform_admin, workspace_wallets(), owner-pays event policies"
+	],
+	[
+		"platform_guards_migration.sql",
+		"Platform guards — daily platform spend ceiling, welcome-grant hourly cap in the signup trigger, credit_reconcile_mismatches()"
+	],
+	[
+		"plans_migration.sql",
+		"Plans — plan_catalog, subscriptions wallet columns + widened plan check, plans_enabled setting"
+	],
+	[
+		"model_registry_origin_migration.sql",
+		"Model registry — origin column (seed | fal_catalog | openrouter_catalog | manual), backfilled from discovered_at/provider, NOT NULL, default manual"
+	],
+	[
+		"market_restore_migration.sql",
+		"Persona Model v2 P0.6 — agents.market returns to a market string; profile lives only in personas_profile (rows with NULL personas_profile untouched)"
+	],
+	[
+		"model_registry_platform_migration.sql",
+		"Model registry — platform-owned rows (user_id NULL): owner_key uniqueness, read-all/admin-write RLS, one-time backfill from the richest per-user copy, one default per kind"
+	],
+	[
+		"model_registry_or_video_row_migration.sql",
+		"Model registry — list the OpenRouter video failover (kwaivgi/kling-v3.0-std, unwired) so the model the ledger shows running is visible and priced"
+	],
+	[
+		"reconcile_price_drift_migration.sql",
+		"Reconciliation also checks the price: credits must equal ceil(est_cost x markup x 100) for events priced since the markup last changed; adds a reason column"
+	],
+	[
+		"subscription_cancel_migration.sql",
+		"Cancel any time — subscriptions.cancel_at_period_end so \"active but not renewing\" is storable"
+	],
+	[
+		"plan_entitlements_migration.sql",
+		"Plan features get somewhere to be true: plan_catalog.entitlements (absent key = no restriction), seeded to match the copy; free stays open so every gate is inert until launch day"
+	],
+	[
+		"signup_invite_credit_guard_migration.sql",
+		"Welcome credit now requires the app-metadata marker only the signup route can write, so an account created straight against GoTrue gets no money"
+	],
+	[
+		"signup_welcome_grant_moves_migration.sql",
+		"The welcome grant moves to the signup route: GoTrue applies app_metadata after the insert, so the trigger can never see the invited marker"
+	],
+	[
+		"free_plan_credit_copy_migration.sql",
+		"Free plan says \"one free credit per person\": the welcome grant can be withheld by the hourly cap or the per-address clawback, and the catalog promised it unconditionally"
+	],
+	[
+		"post_fit_verdict_migration.sql",
+		"Persona Model v2 P3.3 — posts.fit_score / posts.fit_notes: somewhere to keep the viewer-panel fit verdict. Both nullable and advisory; NULL means no verdict and never a failed post."
+	],
+	[
+		"source_clip_attestations_migration.sql",
+		"Source-clip attestations — append-only record of a user asserting they may use an uploaded clip; kept outside the switchable activity log so ingest can fail closed when it cannot be recorded"
+	]
 ]

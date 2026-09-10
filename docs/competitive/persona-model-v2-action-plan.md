@@ -149,6 +149,51 @@ Task-level deltas are marked **[09-07]** inline below.
 
 **Phase 0 definition of done:** suite green, typecheck green, a persona created before Phase 0 opens, edits, saves, regenerates portrait identically; `meta.schemaVersion: 2` visible on the next save of any persona.
 
+### Phase 1 — status 2026-09-08
+
+| Task | Landed | Notes |
+|---|---|---|
+| P1.1 | `7b1240b` | seeded PRNG with per-field `fork(label)` streams; local Trait Registry (generic + au/us/uk), `REGISTRY_VERSION` stamped into every persona. No external persona API, ever. |
+| P1.2 | `7b1240b` | `samplePersonaSkeleton` — facts drawn in dependency order; look priors are AUTHORITATIVE for the group they name, not a re-weighting (a 'white' heritage could otherwise still draw a deep skin tone at base weight) |
+| P1.3 | `7b1240b` | `briefToConstraints` reads what the brief already says; creator gender from the whole document, audience age and gender skew only from the audience fields |
+| P1.4 | `3bbff90` | **the flip**: `generate-v2.ts` samples first and asks the model for PROSE ONLY, then discards non-prose in code. Wired into `generate_persona_profile` behind a single early `personaGenerator() === 'v2'` branch, so v1 is untouched and the switch is a true revert. Registry 1.1.0 adds archetype + contentFocus so a persona created with no provider key is complete. |
+| P1.5 | `258b141` + this commit | `rerollField` re-samples one group, pinning the rest; blast radius is an explicit table, not a derived graph. Wired as the `reroll_field` engine action — no model, no spend, returns a patch and does not persist. `education` became a pinnable constraint because occupations are gated on it. |
+| P1.6 | pending | `personaGenerator()` exists and is flippable from the Admin Console (`fd276bc`); the DEFAULT is still `v1`. Gated on P1.7/P1.8 per the note in P1.8. |
+| P1.7 | `258b141` (Tier 1) | `backfillTier1` is a pure function of data the profile already holds — no sampling, no extraction, no model, so it can run on read without a flag, a key or a budget. Tier 2, the CLI script and the audit report are **not** written. |
+| P1.8 | partial | `personaBackbone()` exists with `off/shadow/fill/on` and is flippable; **no consumer reads it yet**, so the staged rollout is declared but not wired. |
+
+**Three defects the wiring exposed, all fixed in `3bbff90`:**
+
+1. A brief's age band, gender skew, life stage and price positioning describe the AUDIENCE and were being fed in as CREATOR constraints — "we sell to 45-54s" became a 49-year-old creator nobody asked for. The test guarding this had encoded the bug as expected behaviour.
+2. Model-written prose was marked `user` in `meta.fieldSources`, which under the store's own rule froze a model's guess against the customer's re-generate while telling the UI a person had chosen it.
+3. An empty v1 `appearance`/`voiceProfile` in a patch became an empty SECTION, which the merge read as a whole-section clear and used to delete v2-only siblings. A shape may only clear what it can describe.
+
+**Live proof, 2026-09-08**, against a running server with no AI provider configured: `generate_persona_profile` returns 200 with a coherent creator, deterministic across two calls; a brief stating "Australian women 45-54" yields `audience.ageRanges: ['45_54']` while the creator stays 32; `reroll_field` moves the job and its economics only, reproduces for a given nonce, and answers a non-rerollable path with a 200 no-op.
+
+**Kill switch proven, not assumed (2026-09-08).** Two dev servers, same request, same persona. With `PERSONA_GENERATOR=v2` the engine returns 200 and a complete sampled creator with no provider configured. With the flag at its DEFAULT (`v1`) the identical request takes the old path and fails at the provider — `502 Generation failed via openrouter: HTTP 401` against a deliberately fake key — with no `_v2` payload and no spend. That is what "a true revert" has to look like: not a claim about a single early branch, but the old failure mode reproduced on demand.
+
+**Phase 1 remaining:** P1.6 default flip only. P1.7 is complete — Tier 1 and Tier 2 both shipped, and the "backfill script" is `npm run backfill:persona-v2` driving `POST /api/admin/persona-backfill` (see the resolved blocker above). P1.8's consumer shipped with the backbone prompt block.
+
+### Phases 2, 3 and 5 — status 2026-09-09
+
+| Task | Landed | Notes |
+|---|---|---|
+| P1.7 Tier 1 | shipped + **RUN on production** | 18 personas scanned, 9 filled, 0 failures, 0 contract violations, 0 portrait-prompt drift, and the pass converges. It did NOT converge at first: the cached look clause is written with a leading space and the store trims every string leaf, so it re-derived forever. The idempotency test called the function twice IN MEMORY; production is read → backfill → SERIALIZE → store → read. |
+| P1.7 Tier 2 | shipped, **not run at scale** | Reconcile-then-complete. Live-proven on one throwaway persona: the credit gate refused at a zero balance, and with a balance the call read 9 facts off the prose and discarded none. |
+| P2.2 / P2.3 | shipped | The clause accepts a v2 look; the hero subject states facial hair and eyewear and the edit prompt says to keep them. Switches on PER-LOOK, never per schemaVersion — every v1 persona is upgraded on read, so keying on the version would flip the whole estate at once. |
+| P3.2 viewer panel | shipped (module) | Deterministic panel of concrete viewers. Age bands are cycled so a two-band audience yields both; gender is a panel QUOTA, because independent per-viewer draws let a "mixed" panel come out all-female. |
+| P0.4 / P5 stale state | shipped (module) | Only the cases something actually writes evidence for. Plus the portrait fingerprint below, which created the evidence for the one that mattered most. |
+
+**The portrait-staleness evidence gap is CLOSED.** Nothing recorded what a portrait was generated from, so "your portrait predates your appearance edits" could not be detected — and no timestamp could stand in, because `meta.generatedAt` is bumped by every save. The avatar route now fingerprints the appearance BEFORE the detached run starts and stores it on success only. The fingerprint covers the INPUTS, not the rendered prompt: hashing the prompt would make a wording improvement declare every portrait in the estate stale at once.
+
+**Still open:** P1.6 default flip (gated on backbone reaching fill/on); running Tier 2 across the estate (one paid call per persona with prose); the Phase 3 fit judge (P3.3); wiring the panel and stale notices into the persona page.
+
+
+
+**[09-09] The backfill CLI blocker is RESOLVED — by not writing that CLI.** The blocker was real: every script here runs under `node --experimental-strip-types`, which resolves no `$lib` alias, and no existing script imports app library code, so there was no pattern to copy. Both recorded options were bad — relative imports everywhere fights the SvelteKit convention, and adding `vite-node` puts a new dependency on an ops path. The third option is better than either: put the OPERATION where the code already lives. `POST /api/admin/persona-backfill` runs it behind `requirePlatformAdmin`, and `scripts/backfill-persona-v2.mjs` is a thin HTTP client like every other script in this repo (`npm run backfill:persona-v2 -- --mode shadow`). The app resolves its own aliases, already holds the service client, and — when Tier 2 lands — already holds the budget gate, the credit gate and the generation-events ledger that P1.7 requires every paid backfill call to pass through. A CLI would have had to reimplement all of that or reach around it.
+
+**Tier 1 shadow pass over production, 2026-09-09** — 18 personas scanned, 9 would change, 0 failures, **0 contract violations**, which is the stated gate to `fill`. Two findings that only real data could produce: (1) **all 18 personas are still stored as v1** — nothing has been saved through the P0.5 write path since it shipped, so the dual-shape bridge is carrying every read; (2) most display names carry a tagline the user typed into the same field ("Lexi Connor | Virtual Creator"), which made the derived sentence read "Lexi Connor | Virtual Creator is 27 years old." Fixed in `describe.ts`: a pipe is treated as a separator, a dash or comma is not, because those appear in real names.
+
 ---
 
 ## Phase 1 — Skeleton sampler and the generator flip
@@ -231,6 +276,7 @@ Task-level deltas are marked **[09-07]** inline below.
 ### P2.2 Prompt clause
 - **Files:** `src/lib/persona-profile.ts` (`appearanceToPromptClause` → accepts v2 `look`, emits facial hair, eyewear, face shape, gray coverage, height in a fixed order; keeps legacy combined-hairstyle de-duplication), `persona-profile.spec.ts`
 - **Change:** `look.promptCues` cached by `serializePersonaProfile`.
+- **[09-08] TRAP, recorded before it can fire:** nothing reads `look.promptCues` today. It is WRITTEN by the Tier 1 backfill and CLEARED by a look re-roll, which is harmless only while no consumer exists. The moment this task makes it the portrait source, a re-rolled look emits no clause at all unless Tier 1 has a caller (P1.7/P1.8). Wire the reader and the recompute in the same commit, or read the clause live and treat the cached field as an optimisation rather than the source.
 - **Test:** snapshot for a fully populated look; empty look → empty clause; legacy `'long loose waves'` + `length: 'long'` → no duplicate word.
 
 ### P2.3 Portrait prompts assert drift-prone attributes

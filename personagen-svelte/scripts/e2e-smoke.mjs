@@ -9,7 +9,7 @@
 //
 // What it proves, in order:
 //   1. health + build version
-//   2. signup trigger grants the welcome credit (platform_settings.signup_credits)
+//   2. the signup ROUTE grants the welcome credit, and a GoTrue-created account gets none
 //   3. login through /api/auth/login sets a usable session
 //   4. the portal renders the wallet pill as money; /billing renders the balance,
 //      packs and the payments-closed state; checkout is refused while closed
@@ -52,6 +52,7 @@ const ENFORCE_TEST = !args.includes('--no-enforce-test');
 const KEEP = args.includes('--keep');
 const SB = env.PUBLIC_SUPABASE_URL;
 const KEY = env.SUPABASE_SERVICE_ROLE_KEY;
+const ANON = env.PUBLIC_SUPABASE_ANON_KEY;
 if (!SB || !KEY) { console.error('PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY missing'); process.exit(1); }
 
 const q = (s) => (s === null || s === undefined ? 'NULL' : `'${String(s).replace(/'/g, "''")}'`);
@@ -62,6 +63,26 @@ async function pg(query) {
 	try { return JSON.parse(t); } catch { return t; }
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Delete the media this run put in the bucket.
+ *
+ * Every generation persists its image under `<userId>/…` in ugc-media. Deleting
+ * the user removes the database rows but NOT the objects, so each run left a
+ * file nobody can reach: 32 of them accumulated over three days before anyone
+ * looked. Storage has no cascade, so the sweep has to be explicit.
+ */
+async function purgeStorageFor(userId) {
+	try {
+		const objects = await pg(`select bucket_id, name from storage.objects where split_part(name, '/', 1) = ${q(userId)}`);
+		for (const o of objects ?? []) {
+			await fetch(`${SB}/storage/v1/object/${o.bucket_id}/${o.name}`, { method: 'DELETE', headers: { apikey: KEY, Authorization: `Bearer ${KEY}` } });
+		}
+		return (objects ?? []).length;
+	} catch {
+		return 0;
+	}
+}
 
 // ── tiny cookie jar over fetch ───────────────────────────────────────────────
 const jar = new Map();
@@ -82,8 +103,34 @@ async function app(path, init = {}) {
 }
 const postJson = (path, body) => app(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 
+/**
+ * SETTING_KEYS as the app declares it, read from source so this check cannot
+ * drift from the code it is checking.
+ */
+function settingKeysFromSource() {
+	try {
+		const src = readFileSync(new URL('../src/lib/server/settings.ts', import.meta.url), 'utf-8');
+		const m = src.match(/export const SETTING_KEYS = \[([^\]]+)\]/);
+		if (!m) return [];
+		return m[1].split(',').map((k) => k.trim().replace(/^'|'$/g, '')).filter(Boolean);
+	} catch {
+		return [];
+	}
+}
+
 // ── reporting ────────────────────────────────────────────────────────────────
 const results = [];
+/**
+ * Paths this run could NOT reach, with the reason.
+ *
+ * A green smoke gets cited as evidence a change is safe. On 2026-09-09 it passed
+ * 25/25 while the publish gate it was cited for was absent from the build:
+ * every generation here is requested with deliver:'review', so the run never
+ * enters the publish branch at all. Silence about coverage is what let a pass
+ * stand in for a proof, so the run now names its blind spots out loud.
+ */
+const uncovered = [];
+const notCovered = (what, why) => uncovered.push(`${what} — ${why}`);
 function check(name, ok, detail = '') {
 	results.push({ name, ok: !!ok, detail });
 	console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? `  — ${detail}` : ''}`);
@@ -97,6 +144,27 @@ const password = `E2e!${randomBytes(9).toString('base64url')}`;
 let userId = null, agentId = null, postId = null, modeBefore = null, adminInserted = false;
 
 async function main() {
+	// A run that dies mid-way (a dropped connection, a 502) skips its cleanup and
+	// leaves a throwaway account behind; that happened twice on 2026-09-09. Sweep
+	// anything this script created more than 30 minutes ago before starting, so a
+	// failed run cannot quietly accumulate fixtures in a production database.
+	try {
+		const stale = await pg(`select id, email from auth.users where email like 'e2e-%@personagen.test' and created_at < now() - interval '30 minutes'`);
+		for (const u of stale ?? []) {
+			const agents = await pg(`select id from agents where user_id=${q(u.id)}`);
+			for (const a of agents ?? []) {
+				await pg(`delete from posts where agent_id=${q(a.id)}`);
+				await pg(`delete from agent_configs where agent_id=${q(a.id)}`);
+				await pg(`delete from agents where id=${q(a.id)}`);
+			}
+			const files = await purgeStorageFor(u.id);
+			await fetch(`${SB}/auth/v1/admin/users/${u.id}`, { method: 'DELETE', headers: { apikey: KEY, Authorization: `Bearer ${KEY}` } });
+			console.log(`swept stranded fixture from an earlier run: ${u.email}${files ? ` (+${files} orphaned file(s))` : ''}`);
+		}
+	} catch (e) {
+		console.warn('fixture sweep skipped:', e.message);
+	}
+
 	// 1. health
 	const health = await (await fetch(`${BASE}/api/health`)).json();
 	const version = await (await fetch(`${BASE}/_app/version.json`)).json();
@@ -109,14 +177,42 @@ async function main() {
 	modeBefore = mode;
 	console.log(`settings: credit_markup=${markup} signup_credits=${signup} credits_mode=${mode}`);
 
-	// 2. throwaway user via GoTrue admin → welcome grant by trigger
-	const cu = await fetch(`${SB}/auth/v1/admin/users`, { method: 'POST', headers: { apikey: KEY, Authorization: `Bearer ${KEY}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password, email_confirm: true, user_metadata: { full_name: 'E2E Smoke' } }) });
-	const cuBody = await cu.json();
-	userId = cuBody.id;
-	if (!check('throwaway user created', cu.ok && userId, email)) return;
+	// 2. throwaway user through the REAL signup route.
+	//
+	// It used to go straight at GoTrue admin and assert the TRIGGER granted. The
+	// trigger cannot grant any more: GoTrue applies app_metadata after the row is
+	// inserted, so it never sees the invited marker, and the grant moved into the
+	// route. Creating the user the old way would have kept passing while testing
+	// a path no real user takes — and would now fail, because that path is
+	// deliberately unfunded.
+	const su = await postJson('/api/auth/signup', { email, password, full_name: 'E2E Smoke' });
+	const suBody = await su.json().catch(() => ({}));
+	userId = suBody?.user?.id;
+	if (!check('throwaway user created through /api/auth/signup', su.status === 200 && userId, `HTTP ${su.status} · ${email}`)) return;
+	await sleep(800);
+	const [g] = await pg(`select
+		(select count(*)::int from credit_ledger where user_id=${q(userId)} and kind='grant' and note like 'welcome%') as granted,
+		(select count(*)::int from credit_ledger where user_id=${q(userId)} and kind='adjustment' and note like 'welcome credit withheld%') as withheld,
+		coalesce((select raw_app_meta_data->>'invited' from auth.users where id=${q(userId)}),'-') as marker`) ?? [];
+	check('signup route grants the welcome credit and marks the account', g && g.granted === 1 && g.marker === 'true', `grants=${g?.granted} marker=${g?.marker}`);
+	if (g?.withheld) console.log('   note: the per-address guard took the welcome credit back — another account was created from this address today');
+
+	// An account created straight against GoTrue with the anon key gets no money.
+	// That is the whole point of moving the grant, so the smoke proves it rather
+	// than trusting it.
+	const sideEmail = `smoke-side-${Date.now()}@example.com`;
+	const side = await fetch(`${SB}/auth/v1/signup`, { method: 'POST', headers: { apikey: ANON, 'Content-Type': 'application/json' }, body: JSON.stringify({ email: sideEmail, password, app_metadata: { invited: true }, data: { invited: true } }) });
 	await sleep(500);
-	const [w] = await pg(`select a.balance_credits, (select count(*)::int from credit_ledger l where l.user_id=a.user_id and l.kind='grant' and l.note like 'welcome%') as welcome_rows from credit_accounts a where a.user_id=${q(userId)}`) ?? [];
-	check('welcome credit granted by signup trigger', w && Number(w.balance_credits) === Number(signup) && w.welcome_rows === 1, `balance=${w?.balance_credits} expected=${signup}`);
+	const [sideRow] = await pg(`select coalesce((select balance_credits from credit_accounts a join auth.users u on u.id=a.user_id where u.email=${q(sideEmail)}),-1) as credits`) ?? [];
+	check('an account created straight against GoTrue gets no credit', side.status === 200 && Number(sideRow?.credits) === -1, `HTTP ${side.status} · wallet=${sideRow?.credits}`);
+	for (const u of (await pg(`select id from auth.users where email=${q(sideEmail)}`) ?? [])) {
+		await fetch(`${SB}/auth/v1/admin/users/${u.id}`, { method: 'DELETE', headers: { apikey: KEY, Authorization: `Bearer ${KEY}` } });
+	}
+
+	// Fixture, not an assertion: level the wallet so the money-rendering checks
+	// below are about rendering, not about how many times this smoke has run from
+	// this address today.
+	await pg(`select credit_apply(${q(userId)}, ${Number(signup)}, 'set', 'e2e: wallet levelled for the rendering checks', NULL)`);
 
 	// 3. login through the app
 	const login = await postJson('/api/auth/login', { email, password });
@@ -159,6 +255,11 @@ async function main() {
 	check('engine LLM action is metered (event + debit)', engOk, `HTTP ${eng.status} ${engBody.error ?? ''} events=${engEvents.map((e) => `${e.provider}/${e.operation}→${e.credits}cr debits=${e.debits}`).join(' | ') || 'none'}`);
 
 	// 6. real generation → draft; events attributed; wallet debited once per event
+	// deliver:'review' keeps this run away from a real social account, which also
+	// means it never enters the publish branch — the autonomy gate that decides
+	// whether a persona may post by itself is NOT exercised here, and cannot be
+	// without connecting a live account to a throwaway persona.
+	notCovered('the publish path (autonomy gate)', 'this run requests deliver:review and the throwaway persona has no connected platform');
 	const gen = await postJson(`/api/agent/${agentId}/generate-post`, { media: 'image', still: 'graphic', refs: { character: false, product: false }, topic: 'A short thank-you note to early testers', deliver: 'review' });
 	const genBody = await gen.json().catch(() => ({}));
 	postId = genBody.post_id ?? null;
@@ -202,8 +303,37 @@ async function main() {
 	// value is deliberate — it is rejected before anything is written, so this
 	// proves the path is live without changing a production setting.
 	const switches = adminBody.switches ?? {};
-	const readable = ['credits_mode', 'credit_markup', 'signup_credits', 'plans_enabled', 'persona_generator', 'persona_backbone', 'daily_platform_spend_usd', 'video_ingest'].filter((k) => switches[k] === undefined);
-	check('every operator switch is reported by the console API', readable.length === 0, readable.length ? `missing: ${readable.join(', ')}` : `${Object.keys(switches).length} switches reported`);
+	// Derived from the app's OWN key list, not hand-copied. A switch added to
+	// SETTING_KEYS and forgotten in the console's switches literal is exactly the
+	// miss this is for: it happened to signup_credits_require_invite on
+	// 2026-09-09, and the previous hand-written list of seven kept saying PASS
+	// while the console hid the new one.
+	const declared = settingKeysFromSource();
+	const readable = declared.filter((k) => switches[k] === undefined);
+	check('every operator switch is reported by the console API', readable.length === 0 && declared.length > 0, readable.length ? `missing: ${readable.join(', ')}` : `all ${declared.length} declared switches reported`);
+	// Admission posture. /api/health carries a COARSE word because it is public;
+	// the console names the door. Both must be present, and the two must agree —
+	// a health check saying 'ok' while the console says a door is open would be
+	// the worst of both.
+	const posture = adminBody.posture?.admission;
+	const healthSays = health.checks?.admission;
+	const agree =
+		posture && healthSays
+			? (posture.open && healthSays === 'review') ||
+				(!posture.open && posture.anonSignup === 'unverified' && healthSays === 'unverified') ||
+				(!posture.open && posture.anonSignup === 'closed' && healthSays === 'ok')
+			: false;
+	check(
+		'admission posture is reported, and health agrees with the console',
+		Boolean(posture) && Boolean(healthSays) && agree,
+		posture
+			? `console: anon=${posture.anonSignup} pin=${posture.routePin} open=${posture.open} · health: ${healthSays}`
+			: `console posture missing (health said ${healthSays ?? 'nothing'})`
+	);
+	if (posture?.open) {
+		console.log('   note: registration is OPEN — see docs/runbooks/signup-and-admission.md for the two operator switches');
+	}
+
 	const writeProbe = await postJson('/api/admin/settings', { key: 'persona_backbone', value: '__invalid__', note: 'e2e: write path reachable (rejected by design)' });
 	const writeBody = await writeProbe.json().catch(() => ({}));
 	check('a switch write reaches validation instead of "Unsupported key"', writeProbe.status === 400 && /off \| shadow \| fill \| on/.test(String(writeBody.error ?? '')), `HTTP ${writeProbe.status} ${writeBody.error ?? ''}`);
@@ -250,8 +380,10 @@ async function cleanup() {
 			await pg(`delete from agents where id=${q(agentId)}`);
 		}
 		if (userId) {
+			// Media first: once the user is gone the prefix is unattributable.
+			await purgeStorageFor(userId);
 			const del = await fetch(`${SB}/auth/v1/admin/users/${userId}`, { method: 'DELETE', headers: { apikey: KEY, Authorization: `Bearer ${KEY}` } });
-			const left = await pg(`select (select count(*)::int from auth.users where id=${q(userId)}) as users, (select count(*)::int from credit_accounts where user_id=${q(userId)}) as wallets, (select count(*)::int from agents where user_id=${q(userId)}) as agents, (select count(*)::int from posts where user_id=${q(userId)}) as posts`);
+			const left = await pg(`select (select count(*)::int from auth.users where id=${q(userId)}) as users, (select count(*)::int from credit_accounts where user_id=${q(userId)}) as wallets, (select count(*)::int from agents where user_id=${q(userId)}) as agents, (select count(*)::int from posts where user_id=${q(userId)}) as posts, (select count(*)::int from storage.objects where split_part(name, '/', 1) = ${q(userId)}) as files`);
 			check('cleanup: throwaway user and rows removed', del.ok && Object.values(left[0]).every((n) => n === 0), JSON.stringify(left[0]));
 		}
 	} catch (e) {
@@ -267,5 +399,10 @@ try {
 	await cleanup();
 	const failed = results.filter((r) => !r.ok);
 	console.log(`\n${results.length - failed.length}/${results.length} checks passed against ${BASE}`);
+	if (uncovered.length) {
+		console.log(`
+NOT COVERED by this run — a pass here says nothing about these:`);
+		for (const u of uncovered) console.log(`  · ${u}`);
+	}
 	process.exit(failed.length ? 1 : 0);
 }

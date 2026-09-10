@@ -22,6 +22,8 @@ import { FALLBACK_FX, type FxRates } from '$lib/money';
 export type CreditsModeSetting = 'off' | 'shadow' | 'enforce';
 export type PersonaGeneratorSetting = 'v1' | 'v2';
 export type PersonaBackboneSetting = 'off' | 'shadow' | 'fill' | 'on';
+/** Who judges a draft against the viewer panel, and when. */
+export type PersonaFitJudgeSetting = 'off' | 'on_demand' | 'auto';
 
 export interface PlatformSettings {
 	credits_mode: CreditsModeSetting;
@@ -47,6 +49,15 @@ export interface PlatformSettings {
 	daily_platform_spend_usd: number;
 	/** Welcome-credit grants allowed per hour platform-wide (signup abuse guard); 0 = unlimited. */
 	signup_credits_hourly_cap: number;
+	/**
+	 * Grant welcome credit only to accounts created through /api/auth/signup,
+	 * which marks them in raw_app_meta_data — a field the client cannot set.
+	 * True is the safe default: while the Supabase project allows public
+	 * signups, anyone holding the anon key (it ships in the browser bundle) can
+	 * POST straight to GoTrue and mint an account. This is what stops that
+	 * account also minting credit.
+	 */
+	signup_credits_require_invite: boolean;
 	/** Plans (subscriptions) offered on /billing; the webhook keeps existing subscriptions working either way. */
 	plans_enabled: boolean;
 	/**
@@ -73,6 +84,7 @@ export interface PlatformSettings {
 	 * model is told can never change in the same move.
 	 */
 	persona_backbone: PersonaBackboneSetting;
+	persona_fit_judge: PersonaFitJudgeSetting;
 }
 
 export const DEFAULT_SETTINGS: PlatformSettings = {
@@ -85,13 +97,31 @@ export const DEFAULT_SETTINGS: PlatformSettings = {
 	credit_markup: 1,
 	daily_platform_spend_usd: 0,
 	signup_credits_hourly_cap: 20,
+	signup_credits_require_invite: true,
 	plans_enabled: false,
 	video_ingest: false,
 	persona_generator: 'v1',
-	persona_backbone: 'off'
+	persona_backbone: 'off',
+	persona_fit_judge: 'on_demand'
 };
 
-export const SETTING_KEYS = ['credits_mode', 'activity_log', 'activity_pepper', 'signup_credits', 'display_currency_default', 'fx_rates', 'credit_markup', 'daily_platform_spend_usd', 'signup_credits_hourly_cap', 'plans_enabled', 'persona_generator', 'persona_backbone', 'video_ingest'] as const;
+export const SETTING_KEYS = [
+	'credits_mode',
+	'activity_log',
+	'activity_pepper',
+	'signup_credits',
+	'display_currency_default',
+	'fx_rates',
+	'credit_markup',
+	'daily_platform_spend_usd',
+	'signup_credits_hourly_cap',
+	'signup_credits_require_invite',
+	'plans_enabled',
+	'video_ingest',
+	'persona_generator',
+	'persona_backbone',
+	'persona_fit_judge'
+] as const;
 export type SettingKey = (typeof SETTING_KEYS)[number];
 
 const REFRESH_MS = 15_000;
@@ -132,6 +162,12 @@ function coerce(key: string, raw: unknown): unknown {
 			return raw === 'v2' ? 'v2' : 'v1';
 		case 'persona_backbone':
 			return raw === 'shadow' || raw === 'fill' || raw === 'on' ? raw : 'off';
+		// 'on_demand' is the default rather than 'off': the judge costs nothing
+		// until somebody presses the button, and a feature nobody can find is the
+		// same as one that does not exist. 'auto' is the one that spends without
+		// being asked, so it is the one you have to opt into.
+		case 'persona_fit_judge':
+			return raw === 'off' || raw === 'auto' ? raw : 'on_demand';
 		case 'activity_log':
 			return raw === true || raw === 'true';
 		case 'activity_pepper':
@@ -144,8 +180,19 @@ function coerce(key: string, raw: unknown): unknown {
 			return typeof raw === 'string' && (raw === 'auto' || /^[A-Z]{3}$/.test(raw)) ? raw : 'auto';
 		case 'fx_rates': {
 			const r = raw as any;
-			if (r && typeof r === 'object' && r.rates && typeof r.rates === 'object' && Object.keys(r.rates).length > 0) {
-				return { base: 'USD', rates: { USD: 1, ...r.rates }, updated_at: r.updated_at ?? null, source: r.source ?? null } as FxRates;
+			if (
+				r &&
+				typeof r === 'object' &&
+				r.rates &&
+				typeof r.rates === 'object' &&
+				Object.keys(r.rates).length > 0
+			) {
+				return {
+					base: 'USD',
+					rates: { USD: 1, ...r.rates },
+					updated_at: r.updated_at ?? null,
+					source: r.source ?? null
+				} as FxRates;
 			}
 			return FALLBACK_FX;
 		}
@@ -161,6 +208,10 @@ function coerce(key: string, raw: unknown): unknown {
 			const n = Number(raw);
 			return Number.isInteger(n) && n >= 0 ? n : 20;
 		}
+		case 'signup_credits_require_invite':
+			// Anything unreadable means ON. A setting that fails open would hand the
+			// bypass its credit back.
+			return !(raw === false || raw === 'false');
 		case 'plans_enabled':
 			return raw === true || raw === 'true';
 		// Fails SAFE like the persona switches: anything that is not an explicit
@@ -178,7 +229,9 @@ export async function refreshSettings(): Promise<void> {
 	state.inFlight = (async () => {
 		try {
 			const client = clientFactory();
-			const { data, error } = await client.from('platform_settings').select('key, value, updated_at');
+			const { data, error } = await client
+				.from('platform_settings')
+				.select('key, value, updated_at');
 			if (error) throw new Error(error.message ?? String(error));
 			const next: PlatformSettings = { ...DEFAULT_SETTINGS };
 			const at: Record<string, string> = {};
@@ -233,7 +286,12 @@ export function settingsStatus() {
  * then refreshes the cache immediately so the change is live on this
  * instance within the same request, and on any other instance within REFRESH_MS.
  */
-export async function setSetting(key: SettingKey, value: unknown, actorId: string | null, note: string | null): Promise<unknown> {
+export async function setSetting(
+	key: SettingKey,
+	value: unknown,
+	actorId: string | null,
+	note: string | null
+): Promise<unknown> {
 	const client = clientFactory();
 	const { data, error } = await client.rpc('platform_setting_set', {
 		p_key: key,

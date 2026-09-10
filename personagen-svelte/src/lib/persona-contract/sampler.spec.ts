@@ -611,3 +611,26 @@ describe('description prose reads as English', () => {
 		expect(inSentence('UX Designer')).toBe('UX designer');
 	});
 });
+
+describe('a pinned education is used, never re-drawn', () => {
+	/**
+	 * "A constraint the sampler could override is not a constraint." Education
+	 * joined the pinnable set so a field re-roll can hold it steady while the
+	 * job moves; if it were merely a hint, that re-roll would silently rewrite
+	 * a visible field.
+	 */
+	it('honours the pin across many seeds', () => {
+		for (let i = 0; i < 60; i++) {
+			const profile = samplePersonaSkeleton(`edu-${i}`, { education: 'postgraduate' }, { now: NOW });
+			expect(profile.creator?.education, `seed ${i}`).toBe('postgraduate');
+		}
+	});
+
+	it('still draws an education when none is pinned', () => {
+		const drawn = new Set<string | undefined>();
+		for (let i = 0; i < 60; i++) {
+			drawn.add(samplePersonaSkeleton(`edu-free-${i}`, {}, { now: NOW }).creator?.education);
+		}
+		expect(drawn.size).toBeGreaterThan(1);
+	});
+});

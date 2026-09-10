@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { generateApiKey } from '$lib/server/api-keys';
+import { entitlementsFor, planRefusal } from '$lib/server/entitlements';
 
 /** List the caller's API keys (never the plaintext — only prefix + metadata). */
 export const GET: RequestHandler = async ({ locals }) => {
@@ -26,6 +27,11 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	if (!session || !user) {
 		return json({ success: false, error: 'Unauthorized' }, { status: 401 });
 	}
+	// "API access" is an Agency line. Minting is gated; LISTING and REVOKING are
+	// not, so a plan change never strands a key the user cannot see or turn off.
+	const ent = await entitlementsFor(user.id);
+	if (!ent.apiAccess) return json(planRefusal('API access', ent.plan), { status: 403 });
+
 	const body = (await request.json().catch(() => ({}))) as { label?: string };
 	const label = (body.label || '').trim();
 	if (!label || label.length > 120) {

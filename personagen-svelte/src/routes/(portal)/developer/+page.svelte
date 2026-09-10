@@ -11,6 +11,24 @@
 	let tab = $state<'keys' | 'reference' | 'console'>('keys');
 	let keys = $derived((data as any).keys ?? []);
 
+	// ── Plan gate ─────────────────────────────────────────────────────────────
+	// POST /api/developer/keys refuses with 403 PLAN_FEATURE when the plan has no
+	// API access, and until now nothing here read that — so the refusal landed on
+	// a button that still looked enabled. Mirror the server's ONE gated door:
+	// minting. Listing and revoking stay open on every plan, deliberately, so a
+	// plan change never strands a key the user cannot see or turn off.
+	//
+	// Reason-or-null: an absent/permissive entitlement resolves to null, which is
+	// how a database blip or an unmigrated catalog can never lock this button.
+	let entitlements = $derived(
+		(data as any).entitlements as { plan?: string; apiAccess?: boolean } | undefined
+	);
+	let createKeyBlockedReason = $derived(
+		entitlements?.apiAccess === false
+			? `API access is not included in the ${entitlements?.plan ?? 'free'} plan. See Billing to compare plans.`
+			: null
+	);
+
 	// ── API keys ──────────────────────────────────────────────────────────────
 	let newLabel = $state('');
 	let creating = $state(false);
@@ -355,11 +373,21 @@
 					placeholder="Label (e.g. Monarch controller)"
 					bind:value={newLabel}
 					maxlength="120"
+					disabled={createKeyBlockedReason !== null}
+					title={createKeyBlockedReason ?? undefined}
 				/>
-				<button class="dev-btn primary" onclick={createKey} disabled={creating || !newLabel.trim()}>
+				<button
+					class="dev-btn primary"
+					onclick={createKey}
+					disabled={creating || !newLabel.trim() || createKeyBlockedReason !== null}
+					title={createKeyBlockedReason ?? undefined}
+				>
 					{creating ? 'Creating…' : 'Create key'}
 				</button>
 			</div>
+			{#if createKeyBlockedReason}
+				<p class="dev-hint plan-note">{createKeyBlockedReason}</p>
+			{/if}
 
 			{#if keys.length > 0}
 				<table class="key-table">
@@ -504,6 +532,11 @@
 		font-size: 0.9rem;
 		color: var(--text-muted);
 		line-height: 1.5;
+	}
+	/* Why the Create-key button is off — sits under the create row, not over it. */
+	.dev-hint.plan-note {
+		margin: 0.5rem 0 0;
+		font-size: 0.85rem;
 	}
 	.dev-hint code,
 	.dev-head code {

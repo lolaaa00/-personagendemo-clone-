@@ -1,4 +1,5 @@
 import { json } from '@sveltejs/kit';
+import { entitlementsFor, planRefusal } from '$lib/server/entitlements';
 import type { RequestHandler } from './$types';
 import { createDbService } from '$lib/server/db';
 import { checkAgentAccess } from '$lib/server/workspaces';
@@ -35,6 +36,7 @@ import {
 	MIN_ITEMS,
 	MAX_ITEMS,
 	DEFAULT_ITEMS,
+	type PipelineStep,
 	type StepKind,
 	type StepModel
 } from '$lib/formats';
@@ -144,6 +146,13 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 	// Cinematic mode is fal-exclusive (Kling O3 Pro reference-to-video) — check
 	// the key up front so a missing key fails fast, BEFORE any LLM spend.
 	const wantCinematic = body.media === 'cinematic';
+	// "Cinematic multi-shot + talking head" is a Brand line; Studio sells
+	// "Standard video + lip-sync". Checked before the fal key so the answer is
+	// about the plan, not about a missing key.
+	if (wantCinematic) {
+		const ent = await entitlementsFor(user.id);
+		if (!ent.cinematic) return json(planRefusal('Cinematic video', ent.plan), { status: 403 });
+	}
 	if (wantCinematic) {
 		const { falKey } = await resolveImageKeys(locals.supabase, user.id);
 		if (!falKey) {
@@ -500,18 +509,16 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		// Two host capabilities, probed together and shipped as siblings: whether
 		// this host can assemble locally (ffmpeg) and whether it can accept a
 		// source clip at all (ffprobe — the ingest endpoint measures with it, and
-		// a duration it cannot measure is a per-second stage it cannot price). The
-		// composer turns these into the capability set `buildableWith` reads, so a
-		// host that cannot ingest never OFFERS the video-to-video formats rather
-		// than failing them after the money is spent.
+		// a duration it cannot measure is a per-second stage it cannot price).
+		//
 		// Ingest needs BOTH halves, and they fail for different reasons: the host
-		// must be able to measure a clip (ffprobe), and the operator must have
-		// turned the capability on. Checking only the host would offer the
-		// video-to-video formats on a deployment where the switch is off — the
-		// upload then 403s AFTER the user picked a format and chose a file, which
-		// is precisely the "offered and failed after the money is spent" failure
-		// this capability set exists to prevent. An off switch must read as
-		// "this deployment does not do this", i.e. the format is simply absent.
+		// must be able to measure a clip, and the operator must have turned the
+		// capability on. Checking only the host would offer the video-to-video
+		// formats on a deployment where the switch is off — the upload then 403s
+		// AFTER the user picked a format and chose a file, which is precisely the
+		// "offered and failed after the money is spent" failure this capability
+		// set exists to prevent. An off switch must read as "this deployment does
+		// not do this", i.e. the format is simply absent.
 		const [freeCardRender, ffmpegAvailable, hostCanProbe] = await Promise.all([
 			isCardRendererAvailable(),
 			hasFfmpeg(),
@@ -584,10 +591,26 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 			still: stillOptions,
 			video: videoOptions,
 			talkinghead: effectiveOptions(registryRows, 'talking_head').map(toStepModel),
-			director: llmOptions
+			director: llmOptions,
+			// Same model, same price, and it runs on every draft — the quote was
+			// short one text call on EVERY format until it became a stage.
+			grader: llmOptions
 		};
 		const planFixed: Partial<Record<StepKind, StepModel>> = {
 			director: {
+				id: directorModel,
+				label: directorModel,
+				usd: priceOf(directorProvider, 'llm'),
+				provider: directorProvider
+			},
+			// gradeDraftWithRetry() runs unconditionally before any media is bought,
+			// on both the standard and cinematic paths. It is the same model at the
+			// same price as the Director, which is exactly why it went unquoted:
+			// nothing in the plan named it, so every run was short one text call.
+			// Retries stay unquoted on purpose — a hook rewrite, a regrade and an
+			// improvement pass are exceptions, and quoting the worst case would
+			// overstate the price of every normal run.
+			grader: {
 				id: directorModel,
 				label: directorModel,
 				usd: priceOf(directorProvider, 'llm'),
@@ -662,6 +685,38 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 			still: stillStyle
 		});
 
+		// A persona with no pinned face builds one DURING this run: ensureCharacterRef()
+		// fires generateCharacterPortrait(), which is three paid image calls (hero
+		// portrait, character sheet, avatar hero shot), all billed to the wallet.
+		// They belong to no format — every format skips them once a face exists — so
+		// they ride the plan as one-offs rather than becoming a stage. Left out, a
+		// persona's FIRST image post quoted ~26 credits and debited ~97, and every
+		// later post for that persona quoted correctly, which is what kept it hidden.
+		// Shipped with the plan so the composer re-prices to the same number.
+		const needsIdentitySet = useCharacter && !characterRef;
+		const identityModel: StepModel = {
+			id: 'identity-set',
+			label: NANO_STILL_LABEL,
+			usd: priceOf('fal', 'image', 'nano'),
+			provider: 'fal'
+		};
+		const oneOffs: PipelineStep[] = needsIdentitySet
+			? [
+					'identity: hero portrait (one-off)',
+					'identity: character sheet (one-off)',
+					'identity: avatar hero shot (one-off)'
+				].map((label) => ({
+					kind: 'still' as StepKind,
+					label,
+					purpose: 'Builds this persona’s pinned face. Runs once, on the first post.',
+					model: identityModel,
+					usd: identityModel.usd,
+					via: 'only' as const,
+					selectable: false,
+					supplied: false
+				}))
+			: [];
+
 		const shots = 4;
 		// The beat count this quote is built on, shipped with the plan so the
 		// composer opens on the number the server just priced rather than a second
@@ -673,6 +728,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 			fixed: planFixed,
 			seconds: sourceSeconds,
 			items,
+			oneOffs,
 			picks: {
 				...(body.still_model ? { still: String(body.still_model) } : {}),
 				...(body.video_model ? { video: String(body.video_model) } : {}),
@@ -694,7 +750,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 				// `v2vModels` rides along so a client-side format switch can re-pin the
 				// transfer stage to the endpoint that format runs, without inventing
 				// a model the server never resolved.
-				plan: { options: planOptions, fixed: planFixed, shots, items, v2vModels },
+				plan: { options: planOptions, fixed: planFixed, shots, items, oneOffs, v2vModels },
 				media: mediaKind,
 				provider: genInput.providerPreference || 'auto',
 				platforms: targetPool,
@@ -818,37 +874,58 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 	// (the dearer of the two video branches) or the cinematic pack, so a thin
 	// wallet is refused up front instead of overdrawing mid-run. The composer's
 	// preview above quotes the exact pipeline; this only has to be an upper bound.
-	const roughUsd = wantCinematic
-		? priceOf('openrouter', 'llm') +
-			4 * priceOf('fal', 'image', 'nano') +
-			priceOf('fal', 'video', 'pro')
-		: body.media === 'image'
-			? priceOf('openrouter', 'llm') + priceOf('fal', 'image', 'nano')
-			: // A transfer bills per second, so its upper bound is the LONGEST clip
-				// ingest would have accepted whenever the run didn't carry a measured
-				// duration — otherwise a 30s clip sails through a gate sized for one
-				// flat call and overdraws mid-run.
-				v2vMode
-				? priceOf('openrouter', 'llm') +
-					effectiveResolve(registryRows, 'video_v2v', null).usd *
-						(sourceSeconds ?? MAX_CLIP_SECONDS)
-				: // A listicle voices every beat separately, so its TTS line is per beat,
-					// not per run. Sized at the CEILING because the count is a client value and
-					// this gate is only useful as an upper bound — a six-beat run waved through
-					// a gate sized for one voiceover overdraws mid-run.
-					genInput.formatOverride === 'listicle'
-					? priceOf('openrouter', 'llm') +
+	// The gate must cover the identity set too, or a thin wallet passes the check
+	// and then overdraws by the three image calls it was never asked about.
+	let identityUsd = 0;
+	if (
+		!genInput.characterRefOverride &&
+		genInput.useCharacterRef !== false &&
+		genInput.stillStyle !== 'graphic'
+	) {
+		const { data: refRow } = await locals.supabase
+			.from('agent_configs')
+			.select('ugc_character_ref')
+			.eq('agent_id', agentId)
+			.maybeSingle();
+		if (!refRow?.ugc_character_ref) identityUsd = 3 * priceOf('fal', 'image', 'nano');
+	}
+	// TWO text calls on every branch: the Director writes, then an independent
+	// grader scores before any media is bought. One of the branches below used to
+	// count a single call, which made the gate short by one on exactly the runs
+	// that also bought a video.
+	const llm2 = 2 * priceOf('openrouter', 'llm');
+	const roughUsd =
+		identityUsd +
+		(wantCinematic
+			? llm2 + 4 * priceOf('fal', 'image', 'nano') + priceOf('fal', 'video', 'pro')
+			: body.media === 'image'
+				? llm2 + priceOf('fal', 'image', 'nano')
+				: // A transfer bills per second, so its upper bound is the LONGEST clip
+					// ingest would have accepted whenever the run didn't carry a measured
+					// duration — otherwise a 30s clip sails through a gate sized for one
+					// flat call and overdraws mid-run. It composites a still too.
+					v2vMode
+					? llm2 +
 						priceOf('fal', 'image', 'nano') +
-						MAX_LIST_ITEMS * priceOf('fal', 'tts') +
-						priceOf('fal', 'talking_head')
-					: genInput.formatOverride === 'broll'
-						? priceOf('openrouter', 'llm') +
+						effectiveResolve(registryRows, 'video_v2v', null).usd *
+							(sourceSeconds ?? MAX_CLIP_SECONDS)
+					: // A listicle voices every beat separately, so its TTS line is per beat,
+						// not per run. Sized at the CEILING because the count is a client value
+						// and this gate is only useful as an upper bound — a six-beat run waved
+						// through a gate sized for one voiceover overdraws mid-run.
+						genInput.formatOverride === 'listicle'
+						? llm2 +
 							priceOf('fal', 'image', 'nano') +
-							Math.max(genInput.videoModelUsd ?? 0, priceOf('fal', 'video', 'standard'))
-						: priceOf('openrouter', 'llm') +
-							priceOf('fal', 'image', 'nano') +
-							priceOf('fal', 'tts') +
-							priceOf('fal', 'talking_head');
+							MAX_LIST_ITEMS * priceOf('fal', 'tts') +
+							priceOf('fal', 'talking_head')
+						: genInput.formatOverride === 'broll'
+							? llm2 +
+								priceOf('fal', 'image', 'nano') +
+								Math.max(genInput.videoModelUsd ?? 0, priceOf('fal', 'video', 'standard'))
+							: llm2 +
+								priceOf('fal', 'image', 'nano') +
+								priceOf('fal', 'tts') +
+								priceOf('fal', 'talking_head'));
 	try {
 		await assertWithinBudget(locals.supabase, user.id, agentId, creditsFor(roughUsd));
 	} catch (err) {

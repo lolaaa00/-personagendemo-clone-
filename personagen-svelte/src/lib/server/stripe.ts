@@ -257,3 +257,26 @@ export async function createSubscriptionCheckout(i: SubscriptionCheckoutInput): 
 	if (!session?.url) throw new Error('Stripe returned no checkout URL');
 	return { id: session.id, url: session.url };
 }
+
+/**
+ * Cancel a subscription at the END of the paid period.
+ *
+ * "Cancel any time" was on the pricing page for months with nothing behind it.
+ * Cancelling at period end rather than immediately is the honest reading of it:
+ * the customer paid for this month, so they keep this month — and the included
+ * credit they were granted stays in their wallet, because it was bought.
+ */
+export async function cancelSubscriptionAtPeriodEnd(
+	subscriptionId: string,
+	fetchImpl: typeof fetch = fetch
+): Promise<{ id: string; cancel_at_period_end: boolean; current_period_end?: number; status?: string }> {
+	return await stripePost(`/subscriptions/${subscriptionId}`, { cancel_at_period_end: true }, undefined, fetchImpl);
+}
+
+/** Undo a pending cancellation, while the period is still running. */
+export async function resumeSubscription(
+	subscriptionId: string,
+	fetchImpl: typeof fetch = fetch
+): Promise<{ id: string; cancel_at_period_end: boolean }> {
+	return await stripePost(`/subscriptions/${subscriptionId}`, { cancel_at_period_end: false }, undefined, fetchImpl);
+}

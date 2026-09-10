@@ -1,4 +1,5 @@
 import type { LayoutServerLoad } from './$types';
+import { entitlementsFor, UNRESTRICTED } from '$lib/server/entitlements';
 import { redirect } from '@sveltejs/kit';
 import { env } from '$env/dynamic/public';
 import { checkConfigStatus } from '$lib/server/config-check';
@@ -22,7 +23,9 @@ export const load: LayoutServerLoad = async ({ locals, request }) => {
 			badgeLabel: 'Personal account',
 			mustChangePassword: false,
 			isWorkspaceAdmin: false,
-			isPlatformAdmin: false
+			isPlatformAdmin: false,
+			// Never-brick default: an unreadable plan restricts nothing.
+			entitlements: { plan: 'free', ...UNRESTRICTED }
 		};
 	}
 
@@ -186,10 +189,25 @@ export const load: LayoutServerLoad = async ({ locals, request }) => {
 			};
 		}
 
+		// What this account's plan includes, resolved ONCE for every portal page.
+		//
+		// Six server routes refuse a feature with 403 PLAN_FEATURE, and until now
+		// no client read any of them — so a gated plan produced a refusal on a
+		// control that still looked enabled, which reads as a bug rather than a
+		// plan limit. This is the presentation half; the server stays authority.
+		//
+		// Cheap enough to sit here: the plan catalog is cached (plans.ts), so in
+		// the steady state this is ONE subscriptions read, and this load does not
+		// re-run on client-side navigation — it has no tracked dependencies.
+		// Never throws: entitlementsFor resolves fully permissive on any failure,
+		// so a database blip cannot lock the UI down.
+		const entitlements = await entitlementsFor(user.id);
+
 		return {
 			session,
 			user,
 			configStatus: checkConfigStatus(),
+			entitlements,
 			sidebarAgents,
 			personaGroups,
 			pendingInvites,
@@ -216,7 +234,9 @@ export const load: LayoutServerLoad = async ({ locals, request }) => {
 			badgeLabel: 'Personal account',
 			mustChangePassword: false,
 			isWorkspaceAdmin: false,
-			isPlatformAdmin: false
+			isPlatformAdmin: false,
+			// Never-brick default: an unreadable plan restricts nothing.
+			entitlements: { plan: 'free', ...UNRESTRICTED }
 		};
 	}
 };

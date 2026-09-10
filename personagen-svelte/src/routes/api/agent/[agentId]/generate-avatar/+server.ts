@@ -19,6 +19,8 @@ import {
 	type RegistryRow
 } from '$lib/server/model-registry';
 import { getServiceSupabase } from '$lib/server/service-supabase';
+import { readPersonaProfileV2 } from '$lib/persona-contract/store';
+import { hasDescribableLook, lookFingerprint } from '$lib/persona-contract/look-fingerprint';
 import { persistBufferToStorage } from '$lib/server/storage';
 
 const MAX_REFERENCE_BYTES = 10 * 1024 * 1024; // 10MB
@@ -249,6 +251,15 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 	// poller (and a page reload) immediately sees a generation running.
 	// `profile_started_at` is what lets the guard above (and the scheduler
 	// reaper) age the marker.
+	// The appearance this run is about to render, captured BEFORE it starts.
+	// Taken here rather than on completion because the record can move while a
+	// detached generation is in flight, and the honest thing to record is what
+	// the portrait was actually made from — not what the persona looked like by
+	// the time it finished.
+	const renderedFrom = hasDescribableLook(readPersonaProfileV2(agent))
+		? lookFingerprint(readPersonaProfileV2(agent))
+		: null;
+
 	await updateReferenceKit(svc, agentId, (k) => {
 		k.profile_status = 'generating';
 		k.profile_started_at = new Date().toISOString();
@@ -263,6 +274,14 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 			await updateReferenceKit(svc, agentId, (k) => {
 				delete k.profile_status;
 				delete k.profile_started_at;
+				// What this portrait was rendered from, so the page can later say
+				// "your portrait predates your appearance edits" instead of showing a
+				// face that quietly stopped matching the person it belongs to. Written
+				// only on SUCCESS: a failed run pinned nothing, and recording a
+				// fingerprint for it would mark a stale portrait as current.
+				k.profile_generated_at = new Date().toISOString();
+				if (renderedFrom) k.profile_look_fingerprint = renderedFrom;
+				else delete k.profile_look_fingerprint;
 				return k;
 			});
 		} catch (err) {

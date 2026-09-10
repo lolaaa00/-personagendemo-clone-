@@ -4184,7 +4184,352 @@ REVOKE ALL ON FUNCTION public.credit_reconcile_mismatches(INTEGER) FROM PUBLIC, 
 
 
 -- ──────────────────────────────────────────────────────────────────────────
--- 43. source_clip_attestations_migration.sql
+-- 43. subscription_cancel_migration.sql
+--     Cancel any time — subscriptions.cancel_at_period_end so "active but not renewing" is storable
+-- ──────────────────────────────────────────────────────────────────────────
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- "Cancel any time" gets a column to be true with.
+--
+-- The pricing page has promised cancellation since before there was a
+-- subscription to cancel: no route, no portal link, and /api/billing/subscribe
+-- answering "Contact us to change plans". Cancelling happens at the END of the
+-- paid period — the customer paid for this month and keeps it — so the state
+-- "still active, will not renew" has to be storable, and it was not.
+--
+-- Additive. Existing rows default to false, which is what they already meant.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+ALTER TABLE public.subscriptions
+	ADD COLUMN IF NOT EXISTS cancel_at_period_end BOOLEAN NOT NULL DEFAULT false;
+
+COMMENT ON COLUMN public.subscriptions.cancel_at_period_end IS
+	'Set by /api/billing/cancel: the plan stays active until current_period_end and then stops. Stripe remains the source of truth; the webhook reconciles status on customer.subscription.updated/deleted.';
+
+
+-- ──────────────────────────────────────────────────────────────────────────
+-- 44. plan_entitlements_migration.sql
+--     Plan features get somewhere to be true: plan_catalog.entitlements (absent key = no restriction), seeded to match the copy; free stays open so every gate is inert until launch day
+-- ──────────────────────────────────────────────────────────────────────────
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- Plan features get somewhere to be true.
+--
+-- The catalog sells nine feature lines that nothing in the code consults:
+-- brand-brief limits, the autonomy ceiling ("Advisor + Semi-autonomous" on
+-- Studio against "All three autonomy levels" on Brand), cinematic video and
+-- talking head, the priority generation queue, teams, bring-your-own-keys and
+-- API access. Only the persona limit had a gate. Copy that nothing enforces is
+-- the same defect as a check that cannot fail.
+--
+-- One JSONB column rather than eight boolean ones: the next feature line is a
+-- data edit, not another migration. An ABSENT key means NO RESTRICTION, so an
+-- empty object is exactly today's behaviour.
+--
+--   { "max_autonomy": "advisor" | "semi_autonomous" | "fully_autonomous",
+--     "cinematic": bool, "teams": bool, "api": bool, "byok": bool,
+--     "priority": bool }
+--
+-- Free is seeded EMPTY on purpose. Every one of the nine live accounts is on
+-- free today and has all of this; seeding it restrictively would take working
+-- features away from real users in the name of a plan nobody can buy yet
+-- (plans_enabled is false and no paid row exists). The resolver also never
+-- lets a paid plan be less permissive than free, so while free is open the
+-- gates are inert everywhere — a paying Studio customer can never end up with
+-- less than a free one.
+--
+-- LAUNCH-DAY EDIT — the one row that turns all of this on:
+--   UPDATE public.plan_catalog SET entitlements =
+--     '{"max_autonomy":"advisor","cinematic":false,"teams":false,
+--       "api":false,"byok":false,"priority":false}'::jsonb
+--   WHERE plan = 'free';
+-- ═══════════════════════════════════════════════════════════════════════════
+
+ALTER TABLE public.plan_catalog
+	ADD COLUMN IF NOT EXISTS entitlements JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+COMMENT ON COLUMN public.plan_catalog.entitlements IS
+	'Feature gates for this plan. An absent key means no restriction. Read by lib/server/entitlements.ts; a paid plan is never resolved below free.';
+
+-- Seed the paid tiers to say exactly what their `features` text already sells.
+UPDATE public.plan_catalog SET entitlements =
+	'{"max_autonomy":"semi_autonomous","cinematic":false,"teams":false,"api":false,"byok":false,"priority":false}'::jsonb
+WHERE plan = 'studio' AND entitlements = '{}'::jsonb;
+
+UPDATE public.plan_catalog SET entitlements =
+	'{"max_autonomy":"fully_autonomous","cinematic":true,"teams":false,"api":false,"byok":false,"priority":false}'::jsonb
+WHERE plan = 'brand' AND entitlements = '{}'::jsonb;
+
+UPDATE public.plan_catalog SET entitlements =
+	'{"max_autonomy":"fully_autonomous","cinematic":true,"teams":true,"api":true,"byok":true,"priority":true}'::jsonb
+WHERE plan = 'agency' AND entitlements = '{}'::jsonb;
+
+
+-- ──────────────────────────────────────────────────────────────────────────
+-- 45. signup_invite_credit_guard_migration.sql
+--     Welcome credit now requires the app-metadata marker only the signup route can write, so an account created straight against GoTrue gets no money
+-- ──────────────────────────────────────────────────────────────────────────
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- The signup gate stops handing out money to accounts that walked around it.
+--
+-- /api/auth/signup asks for an Admin PIN. That gate is decorative while the
+-- Supabase project allows public signups: the anon key ships in the browser
+-- bundle, so anyone can POST to <supabase>/auth/v1/signup and get an account.
+-- The route's own comment has said so for a while. What made it expensive is
+-- that handle_new_user() then granted the welcome credit to that account —
+-- 1000 credits, capped only by signup_credits_hourly_cap (20/hour), which is
+-- 20,000 credits an hour of generation for anyone who noticed.
+--
+-- Proven against production before this migration: a direct GoTrue signup
+-- returned 200 with a session, a profile row, a free subscription and a wallet
+-- holding 1000 credits.
+--
+-- The fix is a marker only the SERVER can write. GoTrue puts client-supplied
+-- fields in raw_user_meta_data and never in raw_app_meta_data; an admin
+-- createUser call can write app_metadata. Also proven: a signup POST sending
+-- both `app_metadata: {invited:true}` and a nested decoy inside `data` left
+-- raw_app_meta_data untouched at {"provider":"email","providers":["email"]}.
+--
+-- So: profile and subscription are still created for ANY account (an account
+-- that exists must be usable and deletable), but the welcome CREDIT now
+-- requires the marker. A bypass account starts with an empty wallet, and in
+-- enforce mode an empty wallet generates nothing.
+--
+-- signup_credits_require_invite (platform_settings, default true) turns the
+-- requirement off if open signups with credit are ever wanted. Unreadable or
+-- absent means ON — a guard that fails open is not a guard.
+--
+-- This does NOT replace disabling public signups on the Supabase project
+-- (GOTRUE_DISABLE_SIGNUP=true). It removes the money from the hole; the hole
+-- is still there until that flag is set.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+INSERT INTO public.platform_settings (key, value)
+VALUES ('signup_credits_require_invite', 'true'::jsonb)
+ON CONFLICT (key) DO NOTHING;
+
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_credits BIGINT;
+  v_cap BIGINT;
+  v_recent BIGINT;
+  v_require BOOLEAN;
+  v_invited BOOLEAN;
+BEGIN
+  INSERT INTO public.profiles (id, full_name)
+  VALUES (NEW.id, NEW.raw_user_meta_data->>'full_name')
+  ON CONFLICT (id) DO NOTHING;
+
+  INSERT INTO public.subscriptions (user_id, plan, status)
+  VALUES (NEW.id, 'free', 'active')
+  ON CONFLICT (user_id) DO NOTHING;
+
+  BEGIN
+    SELECT COALESCE((value #>> '{}')::bigint, 0) INTO v_credits
+      FROM public.platform_settings WHERE key = 'signup_credits';
+    SELECT COALESCE((value #>> '{}')::bigint, 20) INTO v_cap
+      FROM public.platform_settings WHERE key = 'signup_credits_hourly_cap';
+
+    -- Absent, null or unreadable → require the marker.
+    SELECT COALESCE((value #>> '{}') <> 'false', true) INTO v_require
+      FROM public.platform_settings WHERE key = 'signup_credits_require_invite';
+    v_require := COALESCE(v_require, true);
+
+    -- raw_app_meta_data ONLY. raw_user_meta_data is client-controlled and a
+    -- forged marker there must not count.
+    v_invited := COALESCE(NEW.raw_app_meta_data->>'invited', '') = 'true';
+
+    IF v_credits > 0 AND (v_invited OR NOT v_require) THEN
+      SELECT count(*) INTO v_recent FROM public.credit_ledger
+       WHERE kind = 'grant' AND note LIKE 'welcome%' AND created_at > now() - interval '1 hour';
+      IF v_cap = 0 OR v_recent < v_cap THEN
+        PERFORM public.credit_apply(NEW.id, v_credits, 'grant', 'welcome credits (signup)', NULL);
+      ELSE
+        RAISE WARNING 'welcome credits withheld for % — hourly cap % reached (% grants in the last hour)', NEW.id, v_cap, v_recent;
+      END IF;
+    ELSIF v_credits > 0 THEN
+      RAISE WARNING 'welcome credits withheld for % — account was not created through the signup route', NEW.id;
+    END IF;
+  EXCEPTION WHEN OTHERS THEN
+    RAISE WARNING 'welcome credits not granted for %: %', NEW.id, SQLERRM;
+  END;
+
+  RETURN NEW;
+END;
+$$;
+
+
+-- ──────────────────────────────────────────────────────────────────────────
+-- 46. signup_welcome_grant_moves_migration.sql
+--     The welcome grant moves to the signup route: GoTrue applies app_metadata after the insert, so the trigger can never see the invited marker
+-- ──────────────────────────────────────────────────────────────────────────
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- The welcome grant moves to the signup route, because the trigger cannot see
+-- the marker it was just told to check.
+--
+-- signup_invite_credit_guard_migration.sql made handle_new_user() require an
+-- 'invited' marker in raw_app_meta_data. Correct in principle and, measured
+-- against production, unreachable in practice: GoTrue INSERTs the auth.users
+-- row and applies app_metadata in a second step, so the AFTER INSERT trigger
+-- runs while raw_app_meta_data is still {"provider":"email",...}. An admin
+-- createUser carrying app_metadata:{invited:true} ends up with the marker
+-- stored and the wallet empty — proven, both halves.
+--
+-- Left alone that is a regression: real signups get no welcome credit. So the
+-- grant moves to /api/auth/signup, which is the stronger arrangement anyway.
+-- An account that never went through that route is never granted anything,
+-- whatever it manages to put in its own metadata.
+--
+-- The trigger still grants in ONE case: signup_credits_require_invite = false,
+-- meaning the operator has deliberately opened signups and wants every account
+-- funded. Both paths now pass the same idempotency key, 'welcome:<user id>',
+-- against the unique index on credit_ledger.stripe_event_id — so if the
+-- setting is flipped mid-signup and both fire, whichever lands first is the
+-- only one that does. A double grant is not possible.
+--
+-- Profile and free subscription are still created for ANY account. Only the
+-- money is gated.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_credits BIGINT;
+  v_cap BIGINT;
+  v_recent BIGINT;
+  v_require BOOLEAN;
+BEGIN
+  INSERT INTO public.profiles (id, full_name)
+  VALUES (NEW.id, NEW.raw_user_meta_data->>'full_name')
+  ON CONFLICT (id) DO NOTHING;
+
+  INSERT INTO public.subscriptions (user_id, plan, status)
+  VALUES (NEW.id, 'free', 'active')
+  ON CONFLICT (user_id) DO NOTHING;
+
+  BEGIN
+    -- Absent, null or unreadable → require the route. A guard that fails open
+    -- is not a guard.
+    SELECT COALESCE((value #>> '{}') <> 'false', true) INTO v_require
+      FROM public.platform_settings WHERE key = 'signup_credits_require_invite';
+    v_require := COALESCE(v_require, true);
+
+    IF NOT v_require THEN
+      SELECT COALESCE((value #>> '{}')::bigint, 0) INTO v_credits
+        FROM public.platform_settings WHERE key = 'signup_credits';
+      SELECT COALESCE((value #>> '{}')::bigint, 20) INTO v_cap
+        FROM public.platform_settings WHERE key = 'signup_credits_hourly_cap';
+      IF v_credits > 0 THEN
+        SELECT count(*) INTO v_recent FROM public.credit_ledger
+         WHERE kind = 'grant' AND note LIKE 'welcome%' AND created_at > now() - interval '1 hour';
+        IF v_cap = 0 OR v_recent < v_cap THEN
+          PERFORM public.credit_apply(
+            NEW.id, v_credits, 'grant', 'welcome credits (signup)',
+            NULL, NULL, NULL, NULL, 'welcome:' || NEW.id::text, 0, false
+          );
+        ELSE
+          RAISE WARNING 'welcome credits withheld for % — hourly cap % reached (% grants in the last hour)', NEW.id, v_cap, v_recent;
+        END IF;
+      END IF;
+    END IF;
+  EXCEPTION WHEN OTHERS THEN
+    RAISE WARNING 'welcome credits not granted for %: %', NEW.id, SQLERRM;
+  END;
+
+  RETURN NEW;
+END;
+$$;
+
+
+-- ──────────────────────────────────────────────────────────────────────────
+-- 47. free_plan_credit_copy_migration.sql
+--     Free plan says "one free credit per person": the welcome grant can be withheld by the hourly cap or the per-address clawback, and the catalog promised it unconditionally
+-- ──────────────────────────────────────────────────────────────────────────
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- The Free plan stops promising a credit it can withhold.
+--
+-- The catalog's free row advertised "Welcome credit to start", unconditionally.
+-- Two abuse controls can withhold it, both legitimate and neither disclosed:
+--
+--   · grantWelcomeCredit() refuses when signup_credits_hourly_cap (default 20)
+--     welcome grants have already landed platform-wide in the trailing hour;
+--   · maybeWithholdWelcome() claws a granted credit back when a second account
+--     is created from the same daily-salted IP hash inside 24 hours.
+--
+-- A genuine first signup always gets it. What is refused is the second account
+-- from the same place — so the honest word is "per person", which is the
+-- qualifier the landing page now carries too.
+--
+-- The code-side PLAN_FALLBACK was updated with it, but that only applies when
+-- the database read FAILS; the live catalog is what /billing renders, so the
+-- row itself has to say it.
+--
+-- Guarded on the old text and idempotent: re-running changes nothing, and an
+-- operator who has already reworded the row is not overwritten.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+UPDATE public.plan_catalog
+   SET features = jsonb_set(features, '{0}', '"One free credit per person to start"'::jsonb),
+       updated_at = now()
+ WHERE plan = 'free'
+   AND features->>0 = 'Welcome credit to start';
+
+
+-- ──────────────────────────────────────────────────────────────────────────
+-- 48. post_fit_verdict_migration.sql
+--     Persona Model v2 P3.3 — posts.fit_score / posts.fit_notes: somewhere to keep the viewer-panel fit verdict. Both nullable and advisory; NULL means no verdict and never a failed post.
+-- ──────────────────────────────────────────────────────────────────────────
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- Persona Model v2 P3.3 — a post gets somewhere to keep the fit judge's verdict.
+--
+-- The judge reads a finished draft as four concrete viewers from the persona's
+-- own panel and reports, per viewer, the one thing that would stop them and how
+-- likely they are to take it seriously. Until now there was nowhere to put that:
+-- the verdict lived for the length of one request and was thrown away.
+--
+-- Two columns, both NULLABLE and both ADVISORY:
+--   · fit_score  — the mean across the viewers that returned a usable score.
+--   · fit_notes  — the per-viewer entries ({viewerIndex, fit, objection, viewer}),
+--                  carried as written so a card can render without re-sampling
+--                  the panel.
+--
+-- NULL is a first-class, expected state and must stay one: the switch is off,
+-- the persona has never stated an audience, the wallet refused, the model
+-- answered nonsense — every one of those resolves to "no verdict", never to a
+-- post that failed to be created. A quality opinion that can take down
+-- publishing is worse than no opinion at all, so nothing here is NOT NULL and
+-- nothing here has a default.
+--
+-- Additive and idempotent: re-running changes nothing, and existing rows keep
+-- the NULL that already describes them.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+ALTER TABLE public.posts
+	ADD COLUMN IF NOT EXISTS fit_score INT,
+	ADD COLUMN IF NOT EXISTS fit_notes JSONB;
+
+COMMENT ON COLUMN public.posts.fit_score IS
+	'Advisory viewer-panel fit, 0-100 (mean of the scored viewers). NULL = no verdict: judge off, no stated audience, refused, or unparseable. Never blocks a post.';
+
+COMMENT ON COLUMN public.posts.fit_notes IS
+	'Advisory per-viewer entries from the fit judge: [{viewerIndex, fit, objection?, viewer?}]. NULL whenever fit_score is NULL.';
+
+
+-- ──────────────────────────────────────────────────────────────────────────
+-- 49. source_clip_attestations_migration.sql
 --     Source-clip attestations — append-only record of a user asserting they may use an uploaded clip; kept outside the switchable activity log so ingest can fail closed when it cannot be recorded
 -- ──────────────────────────────────────────────────────────────────────────
 

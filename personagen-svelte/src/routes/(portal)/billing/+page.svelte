@@ -17,6 +17,29 @@
 	);
 	let subscribing = $state<string | null>(null);
 
+	let cancelling = $state(false);
+
+	async function setCancellation(resume: boolean) {
+		error = null;
+		if (!resume && !confirm('Cancel your plan? You keep it until the end of the period you have paid for, and the credit already in your wallet stays yours.')) return;
+		cancelling = true;
+		try {
+			const res = await fetch('/api/billing/cancel', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ resume })
+			});
+			const body = await res.json().catch(() => ({}));
+			if (!res.ok || !body.success) throw new Error(body.error || `HTTP ${res.status}`);
+			banner = body.message;
+			await invalidateAll();
+		} catch (e) {
+			error = (e as Error).message;
+		} finally {
+			cancelling = false;
+		}
+	}
+
 	async function subscribe(plan: string) {
 		error = null;
 		subscribing = plan;
@@ -106,10 +129,10 @@
 				<p class="sub">
 					{#if data.currency !== 'USD'}Shown in {data.currency} · exactly {data.balanceUsd} ·{/if}
 					{#if empty}
-						Your wallet is empty. Text posts still generate free; AI images and video need a top-up.
+						Your wallet is empty. Nothing more can be generated — even a text post pays for its writing — so top up to continue.
 					{:else}
 						≈ <strong>{data.buys.imagePosts}</strong> image posts, or <strong>{data.buys.videoPosts}</strong> video posts, or
-						<strong>{data.buys.talkingHeads}</strong> talking-head clips. Text posts are always free.
+						<strong>{data.buys.talkingHeads}</strong> talking-head clips. A text post costs only its writing, about two cents.
 					{/if}
 				</p>
 			{/if}
@@ -117,7 +140,7 @@
 		<ul class="promises">
 			<li><strong>Never expires.</strong> Credit sits in your wallet until you use it.</li>
 			<li><strong>Price before you spend.</strong> Every generation shows its cost first.</li>
-			<li><strong>Only what you start.</strong> Failed runs are not charged.</li>
+			<li><strong>Only what actually ran.</strong> If a generation dies partway, you pay for the images it had already made and nothing for the rest.</li>
 		</ul>
 	</section>
 
@@ -128,8 +151,29 @@
 				<p class="muted">
 					Priced per brand, not per seat. Every plan includes a monthly media wallet that resets at renewal; credit
 					you buy on top never expires.
-					{#if data.plans.current}<span class="soon">You are on the {data.plans.current.plan} plan{data.plans.current.periodEnd ? ` · renews ${new Date(data.plans.current.periodEnd).toLocaleDateString()}` : ''}.</span>{/if}
+					{#if data.plans.current}
+						<span class="soon">
+							You are on the {data.plans.current.plan} plan{data.plans.current.periodEnd
+								? data.plans.current.cancelAtPeriodEnd
+									? ` · ends ${new Date(data.plans.current.periodEnd).toLocaleDateString()}`
+									: ` · renews ${new Date(data.plans.current.periodEnd).toLocaleDateString()}`
+								: ''}.
+						</span>
+					{/if}
 				</p>
+				{#if data.plans.current?.cancellable}
+					<div class="plan-actions">
+						{#if data.plans.current.cancelAtPeriodEnd}
+							<button class="buy ghost" disabled={cancelling} onclick={() => setCancellation(true)}>
+								{cancelling ? 'Working…' : 'Keep my plan'}
+							</button>
+						{:else}
+							<button class="buy ghost" disabled={cancelling} onclick={() => setCancellation(false)}>
+								{cancelling ? 'Working…' : 'Cancel plan'}
+							</button>
+						{/if}
+					</div>
+				{/if}
 			</div>
 			<div class="pack-grid">
 				{#each data.plans.catalog as p (p.plan)}
@@ -233,7 +277,7 @@
 		<h2>How it works</h2>
 		<dl>
 			<dt>What costs money?</dt>
-			<dd>AI images, video, voice and talking-head clips. Text posts, scheduling, publishing and analytics are free on every account.</dd>
+			<dd>AI images, video, voice and talking-head clips, plus the writing behind every post — a text post is just the writing, about two cents. Scheduling, publishing and analytics are free on every account.</dd>
 			<dt>Why is the balance in {data.currency}?</dt>
 			<dd>We show your wallet in the currency of where you are. Change it any time in Settings. Charges are made in USD.</dd>
 			<dt>What if I bring my own provider keys?</dt>
@@ -412,6 +456,11 @@
 		color: #fff;
 		font-weight: 600;
 		cursor: pointer;
+	}
+	.plan-actions {
+		display: flex;
+		gap: 0.5rem;
+		margin-top: 0.35rem;
 	}
 	.buy.ghost {
 		background: transparent;

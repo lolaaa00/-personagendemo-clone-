@@ -69,7 +69,7 @@
 			n: '05',
 			title: 'Connect and set autonomy',
 			time: '~90 sec',
-			body: 'Link the accounts, choose Advisor, Semi-autonomous or Fully autonomous, set the cadence. Then it runs.'
+			body: 'Link the accounts, then pick a level per persona: Advisor stays manual — you generate on demand — while Semi-autonomous and Fully autonomous run to the cadence you set.'
 		}
 	];
 
@@ -88,15 +88,15 @@
 		},
 		{
 			title: 'Three levels of autonomy. Your call.',
-			body: 'Advisor suggests. Semi-autonomous drafts and waits for you. Fully autonomous runs inside your guardrails. Per persona, changeable any time.'
+			body: 'Advisor is manual — nothing runs unattended; you generate on demand. Semi-autonomous drafts and waits for you. Fully autonomous runs inside your guardrails. Per persona, changeable any time.'
 		},
 		{
-			title: 'No two personas look or sound alike.',
-			body: 'Run ten and they will not converge. Every new persona is checked against your whole roster — look, angle, audience, voice — and forced to be different.'
+			title: 'No two personas look alike.',
+			body: 'Every new persona is generated with your whole roster in view — look, angle, audience — so it lands somewhere different. You build a cast, not ten variations of one face.'
 		},
 		{
 			title: 'Every cent, on the record.',
-			body: 'Per-persona, per-post spend, shown in your currency before you confirm. Text posts are free. Your balance never expires. No guessing.'
+			body: 'Per-persona, per-post spend, shown in your currency before you confirm. A text post costs about two cents of writing and no image charge at all. Your balance never expires. No guessing.'
 		}
 	];
 
@@ -173,7 +173,7 @@
 	const FAQS = [
 		{
 			q: 'How does the media wallet work?',
-			a: 'Every plan includes a monthly wallet for AI images, video and voice, shown as money in your currency. Text posts cost nothing, so a persona can post six times a day without touching it. Every generation shows its price before you confirm. Run low and you top up at par: $25 buys $25.00 of generation, and it never expires.'
+			a: 'Every plan includes a monthly wallet for AI images, video and voice, shown as money in your currency. A text post only pays for the writing — about two cents — so a persona posting six times a day spends around a tenth of a dollar, against roughly $1.50 for a video post. Every generation shows its price before you confirm. Run low and you top up at par: $25 buys $25.00 of generation, and it never expires.'
 		},
 		{
 			q: 'How does the identity actually stay consistent?',
@@ -185,7 +185,7 @@
 		},
 		{
 			q: 'Are AI personas allowed on these platforms?',
-			a: 'Rules differ by platform and are tightening. Our position is that disclosure is the durable strategy, not stealth: generated video carries an AI-generated marker, and we would rather you pass a review than win a week.'
+			a: 'Rules differ by platform and are tightening. Our position is that disclosure is the durable strategy, not stealth. Every generation offers a one-tap “AI GENERATED” badge burned into the video — off by default, yours to set per post, and never switched on for you by an unattended autopilot run. Turn it on where a platform expects it: we would rather you pass a review than win a week.'
 		},
 		{
 			q: 'Do I own what it makes?',
@@ -359,10 +359,12 @@
 	<section class="lp-section lp-trust">
 		<h2>Built for brands that answer for what they post.</h2>
 		<p>
-			Every generated video carries an AI-generated marker. Every post is approved before it goes
-			out unless you say otherwise. Every publish is verified against the platform — and where a
-			platform makes deletion impossible, we tell you plainly instead of pretending. Disclosure
-			rules for synthetic content are arriving. We built for them first.
+			Disclosure is a switch you hold: one tap on any generation burns an “AI GENERATED” badge
+			into the video. It is off until you turn it on, and an unattended autopilot run will not
+			turn it on for you. Every post is approved before it goes out unless you say otherwise.
+			Every publish is verified against the platform — and where a platform makes deletion
+			impossible, we tell you plainly instead of pretending. Disclosure rules for synthetic
+			content are arriving. We shipped the switch before they did.
 		</p>
 	</section>
 
@@ -423,7 +425,9 @@
 	<section class="lp-final">
 		<h2>Everyone else sells you a face.<br /><span class="lp-grad">We run the account.</span></h2>
 		<a class="lp-btn lp-btn-lg" href="/signup">Create your first persona — free</a>
-		<p class="lp-fineprint">No credit card. Free generation credit to start. Cancel any time.</p>
+		<p class="lp-fineprint">
+			No credit card. One free generation credit per person to start. Cancel any time.
+		</p>
 	</section>
 
 	<footer class="lp-footer">

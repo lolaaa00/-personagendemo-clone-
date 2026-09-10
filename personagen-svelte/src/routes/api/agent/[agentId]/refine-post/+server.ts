@@ -4,6 +4,9 @@ import { createDbService } from '$lib/server/db';
 import { refineUgcMedia } from '$lib/server/content/generate';
 import { getServiceSupabase } from '$lib/server/service-supabase';
 import { checkAgentAccess } from '$lib/server/workspaces';
+import { assertWithinBudget } from '$lib/server/budget';
+import { creditsFor, isCreditsError, resolveBillingAccount } from '$lib/server/credits';
+import { priceOf } from '$lib/pricing';
 
 /**
  * Refine an existing draft/scheduled post: regenerate ONLY its media from a
@@ -67,6 +70,38 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 	} catch {
 		/* legacy plain-text post */
 	}
+	// Refine regenerates paid media, and until now it quoted nothing: the only
+	// thing between a 1-credit wallet and a fresh video was the inner gate, which
+	// rejects an EMPTY wallet and nothing else. A re-roll costs a new image and a
+	// new clip, so quote it the way generate-post quotes its run.
+	const refineUsd =
+		content?.media_type === 'image'
+			? priceOf('fal', 'image', 'nano')
+			: content?.format === 'broll'
+				? priceOf('fal', 'image', 'nano') + priceOf('fal', 'video', 'standard')
+				: priceOf('fal', 'image', 'nano') + priceOf('fal', 'tts') + priceOf('fal', 'talking_head');
+	try {
+		await assertWithinBudget(locals.supabase, user.id, agentId, creditsFor(refineUsd));
+	} catch (err) {
+		if (isCreditsError(err)) {
+			const billed = await resolveBillingAccount(locals.supabase, agentId, user.id).catch(() => user.id);
+			const ownerPays = billed !== user.id;
+			return json(
+				{
+					success: false,
+					code: 'INSUFFICIENT_CREDITS',
+					billedTo: ownerPays ? 'workspace_owner' : 'self',
+					error: ownerPays
+						? `${(err as Error).message} This persona is billed to the workspace owner's wallet — ask them to top up.`
+						: `${(err as Error).message} Top up at /billing to continue.`,
+					billingUrl: '/billing'
+				},
+				{ status: 402 }
+			);
+		}
+		return json({ success: false, error: (err as Error).message }, { status: 400 });
+	}
+
 	if (!content || !content.media_url) {
 		return json(
 			{ success: false, error: 'This post has no generated media to refine' },

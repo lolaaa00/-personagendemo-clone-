@@ -34,7 +34,6 @@
  *
  * Client-safe: no $env, no lib/server, no I/O.
  */
-import { label } from './labels';
 import { setPath, type Obj } from './paths';
 import { registry, REGISTRY_VERSION, type GateContext, type ResolvedRegistry } from './registry';
 import type { RegistryOccupation, RegistryTable } from './registry/types';
@@ -42,7 +41,6 @@ import { rng, type Rng } from './rng';
 import {
 	PERSONA_SCHEMA_VERSION,
 	type BigFive,
-	type PersonaDescriptionFact,
 	type PersonaProfileV2
 } from './schema';
 import { GENDER_TOKENS, NICHE_TOKENS, type TokenGroup, type TokenOf } from './tokens';
@@ -60,6 +58,13 @@ export interface SkeletonConstraints {
 	gender?: TokenOf<'gender'>;
 	ageRange?: [number, number];
 	heritage?: TokenOf<'heritage'>;
+	/**
+	 * Pinnable because occupations are GATED on it: a physiotherapist needs a
+	 * bachelor's. Without this pin a caller that re-draws only the job (P1.5)
+	 * would have to let education move with it, or hand a secondary-educated
+	 * creator a job the registry says they cannot hold.
+	 */
+	education?: TokenOf<'education'>;
 	niche?: TokenOf<'niche'>;
 	incomeBand?: TokenOf<'incomeBand'>;
 	/**
@@ -284,34 +289,13 @@ function clampAge(value: number): number {
 }
 
 /**
- * A job title as it should read mid-sentence, without mangling the stored title.
- *
- * Lower-casing only the first character produced "a 46-year-old customer Support
- * Lead": every later word kept its title case. Titles here are plain English
- * noun phrases, so the whole thing lower-cases cleanly — EXCEPT words that are
- * proper nouns or initialisms even in running text, which stay as stored.
+ * The description sentence lives in `describe.ts`, the single definition shared
+ * with the Tier 1 backfill and the field re-roll. Re-exported here because the
+ * sampler's own spec pins the casing rule through it.
  */
-const TITLE_KEEP_CASE = /^(AI|IT|HR|PR|UX|UI|SEO|QA|CEO|CTO|CFO|COO)$/;
+export { inSentence } from './describe';
+import { describeProfile } from './describe';
 
-/** Exported for the spec, which pins the casing rule directly rather than via 400 samples. */
-export function inSentence(title: string): string {
-	return title
-		.split(' ')
-		.map((word) => (TITLE_KEEP_CASE.test(word) ? word : word.toLowerCase()))
-		.join(' ');
-}
-
-/**
- * 'a' vs 'an' for "a 34-year-old" / "an 18-year-old".
- *
- * Driven by how the NUMBER is pronounced, not by its first letter: 18, 19 and
- * the eighties all open with a vowel sound while their digits do not, so a
- * spelling test would write "a 18-year-old" in the sampler's own headline
- * sentence.
- */
-function ageArticle(age: number): string {
-	return age === 11 || age === 18 || age === 19 || (age >= 80 && age <= 89) ? 'an' : 'a';
-}
 
 // ── the sampler ────────────────────────────────────────────────────────────
 
@@ -454,7 +438,9 @@ export function samplePersonaSkeleton(
 	// ── education ────────────────────────────────────────────────────────────
 	// Gated on age by the table ('postgraduate' has minAge 24) — the sampler
 	// supplies the age, the registry owns the rule.
-	const education = registry.pick(resolved.education, r.fork('creator.education'), { age, gender, market });
+	const education =
+		constraints.education ??
+		registry.pick(resolved.education, r.fork('creator.education'), { age, gender, market });
 	set('creator.education', education);
 
 	// ── strategy: niche ──────────────────────────────────────────────────────
@@ -463,6 +449,23 @@ export function samplePersonaSkeleton(
 	// about the persona, not a piece of positioning prose.
 	const niche: TokenOf<'niche'> = constraints.niche ?? r.fork('strategy.niche').pick(NICHE_TOKENS);
 	set('strategy.niche', niche);
+
+	// ── strategy: positioning ────────────────────────────────────────────────
+	// Archetype and content focus are SAMPLED, not left blank for a model to
+	// fill. A persona created with no provider key configured must be complete,
+	// not half-blank, and "the table always has an answer" is what makes the
+	// no-AI path a real path rather than a degraded one. When the prose pass does
+	// run it overwrites both — a model that has read the brief positions better
+	// than a weighted table — so this is a floor, never a ceiling.
+	const positioningCtx: GateContext = { age, gender, niche, market };
+	set(
+		'strategy.archetype',
+		registry.pick(resolved.archetype, r.fork('strategy.archetype'), positioningCtx)
+	);
+	set(
+		'strategy.contentFocus',
+		registry.pick(resolved.contentFocus, r.fork('strategy.contentFocus'), positioningCtx)
+	);
 
 	// ── work ─────────────────────────────────────────────────────────────────
 	const workCtx: GateContext = { age, gender, niche, education, market };
@@ -551,7 +554,6 @@ export function samplePersonaSkeleton(
 	const eligibleForChildren =
 		age >= MIN_PARENT_AGE && CHILD_BEARING_STATUSES.includes(relationshipStatus) && allowedBands.length > 0;
 	let hasChildren = false;
-	let childCount = 0;
 	if (eligibleForChildren && childRng.chance(age >= 34 ? 0.62 : 0.42)) {
 		hasChildren = true;
 		const count = childRng.weighted(
@@ -565,7 +567,6 @@ export function samplePersonaSkeleton(
 		const bandTable = restrictTable(resolved.childAgeBand, (token) => allowedBands.includes(token));
 		const ageBands: TokenOf<'childAgeBand'>[] = [];
 		for (let i = 0; i < count; i++) ageBands.push(registry.pick(bandTable, childRng, { age, market }));
-		childCount = count;
 		set('creator.household.children.count', count);
 		set('creator.household.children.ageBands', ageBands);
 	}
@@ -689,21 +690,9 @@ export function samplePersonaSkeleton(
 	// Derived, not drawn: regenerable from the fields above without an LLM, and
 	// rendered in LABELS because a token in a UI string is the en-dash incident
 	// waiting to happen again.
-	const jobPhrase = inSentence(occupation.title);
-	set(
-		'description.short',
-		`${displayName} is ${ageArticle(age)} ${age}-year-old ${jobPhrase} in ${city.name}, ${region.name}.`
-	);
-	const householdParts = [label('relationshipStatus', relationshipStatus)];
-	if (hasChildren) householdParts.push(`${childCount} ${childCount === 1 ? 'child' : 'children'}`);
-	householdParts.push(label('housingType', housingType));
-	const frame: PersonaDescriptionFact[] = [
-		{ key: 'age', label: 'Age', value: `${age}` },
-		{ key: 'location', label: 'Location', value: `${city.name}, ${region.name}` },
-		{ key: 'work', label: 'Work', value: `${occupation.title} · ${label('workDomain', occupation.domain)}` },
-		{ key: 'household', label: 'Household', value: householdParts.join(' · ') }
-	];
-	set('description.frame', frame);
+	const described = describeProfile(root as unknown as PersonaProfileV2);
+	if (described?.short) set('description.short', described.short);
+	if (described?.frame) set('description.frame', described.frame);
 
 	// ── meta ─────────────────────────────────────────────────────────────────
 	// The ONLY impure line in the file, and it is injectable — tests pass `now`

@@ -23,6 +23,7 @@
 import { getServiceSupabase } from './service-supabase';
 import { creditsMode, creditMarkup, type CreditsMode } from './flags';
 import { CREDITS_PER_USD, creditsForUsd } from '$lib/money';
+import { getUserApiKey, type UserKeyProvider } from './user-api-keys';
 
 export { CREDITS_PER_USD };
 
@@ -50,10 +51,26 @@ const KEYED_PROVIDERS: Record<string, string> = {
 };
 
 /**
- * Which key paid the provider for this actor. Mirrors the resolution order in
- * resolveImageKeys()/resolveAiClient(): a stored user key wins over the env
- * key. Reads only key METADATA (no decrypt). Unknown → 'platform' (charge) —
- * the safe direction for revenue; the ledger stays inspectable either way.
+ * Which key ACTUALLY paid the provider for this actor.
+ *
+ * This used to answer from key metadata alone — "a row exists, therefore the
+ * user paid" — and that was wrong in the one direction that costs money. The
+ * resolvers do not merely look the key up, they DECRYPT it, and they swallow a
+ * failure:
+ *
+ *     const userFalKey = await getUserApiKey(...).catch(() => null);
+ *     const falKey = userFalKey || env.FAL_API_KEY || null;
+ *
+ * So a stored key that no longer decrypts — a rotated encryption key, a corrupt
+ * auth tag — silently falls back to the PLATFORM key. The run spent our money
+ * and the event was stamped 'byo', which charge() skips (`key_source !==
+ * 'platform'`) and which every reconciliation view filters out. Unbilled and
+ * invisible at the same time, for every generation that user made until someone
+ * noticed.
+ *
+ * It now asks the same question the resolvers ask: can this key be used? A
+ * decrypt failure resolves to 'platform', which is both the truth and the safe
+ * direction for revenue.
  */
 export async function keySourceFor(
 	supabase: any,
@@ -67,15 +84,13 @@ export async function keySourceFor(
 	if (cache?.has(k)) return cache.get(k)!;
 	let src: KeySource = 'platform';
 	try {
-		const { data } = await supabase
-			.from('user_api_keys')
-			.select('provider')
-			.eq('user_id', userId)
-			.eq('provider', keyed)
-			.maybeSingle();
-		if (data) src = 'byo';
+		// getUserApiKey is exactly what the resolvers call: it selects the row AND
+		// decrypts it, throwing if the ciphertext will not open. A usable key is
+		// the only thing that makes this 'byo'.
+		const usable = await getUserApiKey(supabase, userId, keyed as UserKeyProvider);
+		if (usable) src = 'byo';
 	} catch {
-		/* unknown → platform */
+		/* unusable or unreadable → the platform key is what will run → charge */
 	}
 	cache?.set(k, src);
 	return src;

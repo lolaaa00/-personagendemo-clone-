@@ -77,6 +77,7 @@ export type HostCapability = 'ffmpeg' | 'videoIngest';
 /** One paid or free stage of a run. */
 export type StepKind =
 	| 'director'
+	| 'grader'
 	| 'still'
 	| 'card'
 	| 'tts'
@@ -170,7 +171,7 @@ export const FORMAT_CATALOG: FormatEntry[] = [
 		label: 'Photo',
 		note: 'A single frame from this persona’s life — the everyday post.',
 		needs: ['scene', 'framing', 'product', 'face'],
-		steps: ['director', 'still'],
+		steps: ['director', 'grader', 'still'],
 		request: { media: 'image', still: 'photo' },
 		video: false
 	},
@@ -180,7 +181,7 @@ export const FORMAT_CATALOG: FormatEntry[] = [
 		label: 'Text card',
 		note: 'Type on a brand field. Typeset on our own servers — no image model.',
 		needs: ['cardText', 'cardLayout', 'cardPalette'],
-		steps: ['director', 'card'],
+		steps: ['director', 'grader', 'card'],
 		request: { media: 'image', still: 'graphic', refs: { character: false, product: false } },
 		video: false
 	},
@@ -190,7 +191,7 @@ export const FORMAT_CATALOG: FormatEntry[] = [
 		label: 'Motion text card',
 		note: 'The typeset card, put in motion. No image model, no video model.',
 		needs: ['cardText', 'cardLayout', 'cardPalette', 'captions'],
-		steps: ['director', 'card', 'motion'],
+		steps: ['director', 'grader', 'card', 'motion'],
 		request: {
 			media: 'video',
 			format: 'motion_card',
@@ -206,7 +207,7 @@ export const FORMAT_CATALOG: FormatEntry[] = [
 		label: 'Spokesperson',
 		note: 'The persona talks to camera — voiceover and a lip-synced face.',
 		needs: ['script', 'voice', 'scene', 'framing', 'face', 'product', 'captions'],
-		steps: ['director', 'still', 'tts', 'talkinghead'],
+		steps: ['director', 'grader', 'still', 'tts', 'talkinghead'],
 		request: { media: 'video', format: 'spokesperson' },
 		video: true,
 		needsFace: true
@@ -220,7 +221,7 @@ export const FORMAT_CATALOG: FormatEntry[] = [
 		// Identical stages to Spokesperson — the difference is what the Director
 		// writes and that the voiceover is generated PER ITEM, which is the only
 		// way the on-screen reveals can be timed to speech rather than guessed.
-		steps: ['director', 'still', 'tts', 'talkinghead'],
+		steps: ['director', 'grader', 'still', 'tts', 'talkinghead'],
 		request: { media: 'video', format: 'listicle' },
 		video: true,
 		needsFace: true,
@@ -238,7 +239,7 @@ export const FORMAT_CATALOG: FormatEntry[] = [
 		label: 'Product motion',
 		note: 'A short lifestyle clip. Nobody on camera, no dialogue.',
 		needs: ['scene', 'product', 'face', 'captions'],
-		steps: ['director', 'still', 'video'],
+		steps: ['director', 'grader', 'still', 'video'],
 		request: { media: 'video', format: 'broll' },
 		video: true
 	},
@@ -248,7 +249,7 @@ export const FORMAT_CATALOG: FormatEntry[] = [
 		label: 'Narrated product motion',
 		note: 'The persona talks over a product clip. Their voice, no face on camera.',
 		needs: ['script', 'voice', 'scene', 'product', 'face', 'captions'],
-		steps: ['director', 'still', 'tts', 'video', 'mux'],
+		steps: ['director', 'grader', 'still', 'tts', 'video', 'mux'],
 		request: { media: 'video', format: 'vo_broll' },
 		video: true,
 		requires: ['ffmpeg']
@@ -264,7 +265,7 @@ export const FORMAT_CATALOG: FormatEntry[] = [
 		// re-performs from when the transfer fails. It runs, so it is quoted. A
 		// stage that bills but is not quoted is the same lie as one that is quoted
 		// but never runs, only harder to notice.
-		steps: ['director', 'still', 'v2v'],
+		steps: ['director', 'grader', 'still', 'v2v'],
 		request: { media: 'video', format: 'v2v_replace' },
 		video: true,
 		needsFace: true,
@@ -280,7 +281,7 @@ export const FORMAT_CATALOG: FormatEntry[] = [
 		// composition, not new machinery. The mux lays the voiceover under the
 		// transferred clip, which is also why ffmpeg is required here and not on
 		// the silent Replace format.
-		steps: ['director', 'still', 'v2v', 'tts', 'mux'],
+		steps: ['director', 'grader', 'still', 'v2v', 'tts', 'mux'],
 		request: { media: 'video', format: 'v2v_narrated' },
 		video: true,
 		needsFace: true,
@@ -292,7 +293,7 @@ export const FORMAT_CATALOG: FormatEntry[] = [
 		label: 'Motion transfer',
 		note: 'Takes only the movement from a clip you supply. The persona stays in their own scene.',
 		needs: ['sourceVideo', 'scene', 'face', 'captions'],
-		steps: ['director', 'still', 'v2v'],
+		steps: ['director', 'grader', 'still', 'v2v'],
 		request: { media: 'video', format: 'v2v_move' },
 		video: true,
 		needsFace: true,
@@ -310,7 +311,7 @@ export const FORMAT_CATALOG: FormatEntry[] = [
 		// time, so a picker here would be a lie. The quote prices the 4-shot
 		// midpoint, which is what planPipeline's default multiplier does.
 		needs: ['scene', 'face', 'product', 'captions'],
-		steps: ['director', 'cine_stills', 'cine_video'],
+		steps: ['director', 'grader', 'cine_stills', 'cine_video'],
 		request: { media: 'cinematic' },
 		video: true
 	},
@@ -320,7 +321,7 @@ export const FORMAT_CATALOG: FormatEntry[] = [
 		label: 'Let the Director choose',
 		note: 'The Director picks spokesperson or product motion to suit the topic.',
 		needs: ['script', 'voice', 'scene', 'framing', 'face', 'product', 'captions'],
-		steps: ['director', 'still', 'tts', 'talkinghead'],
+		steps: ['director', 'grader', 'still', 'tts', 'talkinghead'],
 		request: { media: 'video', format: 'auto' },
 		video: true
 	},
@@ -495,10 +496,26 @@ export interface PlanInput {
 	 * `per_item`.
 	 */
 	items?: number;
+	/**
+	 * Stages that are not part of the FORMAT but will run and bill on THIS run.
+	 *
+	 * The case that forced it: a persona with no pinned face builds its identity
+	 * set mid-run — `ensureCharacterRef` fires three paid image calls. They are
+	 * not a stage of any format (every format skips them once a face exists), yet
+	 * they are the majority of a first post's real cost. Left out, the first post
+	 * for a persona quoted about a quarter of what it debited, and every later
+	 * post quoted correctly — the shape that keeps a pricing bug hidden.
+	 *
+	 * They are quoted FIRST because they happen first, and they ride PlanInput so
+	 * the server preview and the composer's re-price produce the same number from
+	 * the same function.
+	 */
+	oneOffs?: PipelineStep[];
 }
 
 export const STEP_LABEL: Record<StepKind, string> = {
 	director: 'Director',
+	grader: 'Quality gate',
 	still: 'Still',
 	card: 'Text card',
 	tts: 'Voiceover',
@@ -513,6 +530,8 @@ export const STEP_LABEL: Record<StepKind, string> = {
 
 export const STEP_PURPOSE: Record<StepKind, string> = {
 	director: 'Writes the caption, the hashtags, the spoken line and the scene brief.',
+	grader:
+		'Scores the draft before any media is bought. A weak draft is abandoned here, while it is still cheap.',
 	still:
 		'Builds the frame everything else is made from — the product and the face composited into one shot.',
 	card: 'Typesets the line on our own servers. No AI model, nothing to pay.',
@@ -677,33 +696,37 @@ function resolveStepModel(
 export function planPipeline(input: PlanInput): PipelineStep[] {
 	const format = getFormat(input.formatId);
 	if (!format) return [];
-	return format.steps.map((kind) => {
-		const { model, via, selectable } = resolveStepModel(kind, input);
-		const supplied = input.supplied?.[kind] === true;
-		// Stages that bill on a quantity — the storyboard per shot, a per-second
-		// video model per second of output — are multiplied here. Quoting one unit
-		// for a 5-shot sequence under-quotes it by four stills, which is real money
-		// at that stage's price; the same is true of every second of a per-second
-		// clip. The basis is declared (see Billing), never inferred from the kind.
-		const multiplier = billedUnits(kind, model, input, format);
-		const usd = supplied ? 0 : +(model.usd * multiplier).toFixed(4);
-		return {
-			kind,
-			label: STEP_LABEL[kind],
-			purpose: STEP_PURPOSE[kind],
-			model:
-				multiplier > 1
-					? {
-							...model,
-							label: `${model.label} · ×${multiplier} ${UNIT_NOUN[billingFor(kind, model, format)]}`
-						}
-					: model,
-			usd,
-			via,
-			selectable,
-			supplied
-		};
-	});
+	const oneOffs = input.oneOffs ?? [];
+	return [
+		...oneOffs,
+		...format.steps.map((kind) => {
+			const { model, via, selectable } = resolveStepModel(kind, input);
+			const supplied = input.supplied?.[kind] === true;
+			// Stages that bill on a quantity — the storyboard per shot, a per-second
+			// video model per second of output — are multiplied here. Quoting one unit
+			// for a 5-shot sequence under-quotes it by four stills, which is real money
+			// at that stage's price; the same is true of every second of a per-second
+			// clip. The basis is declared (see Billing), never inferred from the kind.
+			const multiplier = billedUnits(kind, model, input, format);
+			const usd = supplied ? 0 : +(model.usd * multiplier).toFixed(4);
+			return {
+				kind,
+				label: STEP_LABEL[kind],
+				purpose: STEP_PURPOSE[kind],
+				model:
+					multiplier > 1
+						? {
+								...model,
+								label: `${model.label} · ×${multiplier} ${UNIT_NOUN[billingFor(kind, model, format)]}`
+							}
+						: model,
+				usd,
+				via,
+				selectable,
+				supplied
+			};
+		})
+	];
 }
 
 /** Total provider USD for a plan. The retail conversion belongs to $lib/money. */

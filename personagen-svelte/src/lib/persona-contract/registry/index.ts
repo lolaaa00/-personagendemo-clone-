@@ -36,8 +36,14 @@ import type {
  * golden snapshots are pinned to it.
  *
  * 1.0.0 — first tables (generic, au, us, uk). P1.1.
+ * 1.1.0 — archetype + contentFocus tables, so a persona created without an AI
+ *         provider is complete rather than half-blank. P1.4.
+ * 1.2.0 — decisioning tables (priceSensitivity, purchaseChannel, brandLoyalty,
+ *         promoResponsiveness, messageProcessingStyle, communicationPreference,
+ *         digitalCapability), gated on income and age, so a viewer panel can
+ *         sample a buying style per viewer instead of copying the audience's.
  */
-export const REGISTRY_VERSION = '1.0.0';
+export const REGISTRY_VERSION = '1.2.0';
 
 const MARKETS: Record<string, MarketRegistry> = { au: AU, us: US, uk: UK, generic: GENERIC };
 

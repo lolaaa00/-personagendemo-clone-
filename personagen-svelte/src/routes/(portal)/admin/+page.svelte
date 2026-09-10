@@ -13,6 +13,7 @@
 		credit_markup: { effective: number; stored: number; source: 'env' | 'database' | 'default' };
 		daily_platform_spend_usd: { stored: number };
 		signup_credits_hourly_cap: { stored: number };
+		signup_credits_require_invite: { stored: boolean };
 		plans_enabled: { stored: boolean };
 		video_ingest: { effective: boolean; stored: boolean; source: 'env' | 'database' | 'default' };
 		persona_generator: { effective: 'v1' | 'v2'; stored: string; source: 'env' | 'database' | 'default' };
@@ -29,6 +30,15 @@
 		cache: { primed: boolean; lastRefreshAt: string | null; lastError: string | null; updatedAt: Record<string, string> };
 		migrations: { pending: string[] | null; applied: number; total: number };
 		activity: { enabled: boolean; queued: number; flushed: number; dropped: number; lastError: string | null; lastFlushAt: string | null };
+		posture?: {
+			admission: {
+				anonSignup: 'open' | 'closed' | 'unverified';
+				routePin: 'set' | 'unset';
+				open: boolean;
+				checkedAt: string | null;
+				note: string | null;
+			};
+		};
 		history: Array<{ key: string; old_value: any; new_value: any; changed_by: string | null; note: string | null; changed_at: string }>;
 	} | null>(null);
 	let controlsLoading = $state(false);
@@ -430,6 +440,30 @@
 			</div>
 			{#if controlsError}<p class="admin-error">{controlsError}</p>{/if}
 			{#if controls}
+				{#if controls.posture?.admission?.open}
+					<p class="admin-warn">
+						<strong>Registration is open.</strong>
+						{#if controls.posture.admission.anonSignup === 'open'}
+							The Supabase project still accepts public signups, and the anon key ships in the
+							browser bundle — anyone can create an account without passing through this app.
+							Set <code>GOTRUE_DISABLE_SIGNUP=true</code> on the auth service.
+						{/if}
+						{#if controls.posture.admission.routePin === 'unset'}
+							ADMIN_PIN is not set, so the signup form asks for nothing.
+						{/if}
+						{#if controls.posture.admission.anonSignup === 'open' && controls.posture.admission.routePin === 'unset'}
+							Close the Supabase one first — shutting only the front door leaves the bypass.
+						{/if}
+						New accounts still receive welcome credit, so this costs money as well as control.
+					</p>
+				{:else if controls.posture?.admission?.anonSignup === 'unverified'}
+					<p class="admin-warn">
+						<strong>Admission unverified.</strong>
+						Could not read the auth service to check whether public signups are open{controls.posture.admission.note
+							? ` — ${controls.posture.admission.note}`
+							: ''}. Treat this as unknown, not as closed.
+					</p>
+				{/if}
 				<div class="control-grid">
 					<div class="control">
 						<div class="control-head">

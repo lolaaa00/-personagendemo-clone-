@@ -40,6 +40,14 @@ import {
 	type GenerationProvenance
 } from '$lib/pricing';
 import { appearanceToPromptClause, stripLeadingAvatarName } from '$lib/persona-profile';
+// Persona Model v2 (P2.3): the portrait builders read the v2 look (via
+// `readPersonaProfileV2`, imported below) for the attributes the v1 shape has no
+// key for. Used ONLY by buildHeroPortraitPrompt and buildPortraitEditPrompt.
+import {
+	hasV2OnlyLookAttributes,
+	lookPreservationClause,
+	lookSubjectAttributes
+} from '$lib/persona-contract/look-prompt';
 import { readPersonaProfile } from '$lib/persona-profile-store';
 import { createDbService } from '$lib/server/db';
 import { DEFAULT_VOICE, VOICE_CATALOG, liveVoice } from '$lib/server/voices';
@@ -83,7 +91,26 @@ import {
 	isCreditsError,
 	type KeySource
 } from '$lib/server/credits';
-import { creditsMode } from '$lib/server/flags';
+import {
+	creditsMode,
+	personaBackboneEmits,
+	personaFitJudgeRunsAutomatically
+} from '$lib/server/flags';
+import { readPersonaProfileV2 } from '$lib/persona-contract/store';
+import { label } from '$lib/persona-contract/labels';
+import { isObj } from '$lib/persona-contract/paths';
+import { sampleViewerPanel } from '$lib/persona-contract/panel';
+import {
+	fitColumnsFor,
+	fitJudgePrompt,
+	judgeablePanel,
+	parseFitVerdict,
+	type FitVerdictEntry
+} from '$lib/server/persona/fit-judge';
+// Cycle by design: metering.ts is the single gate→record→debit wrapper and it
+// records through recordCostEvents, which lives here. Both directions are used
+// inside function bodies only, so neither module reads the other at load time.
+import { meteredAiClient } from '$lib/server/metering';
 import {
 	loadRegistry,
 	openRouterRoute,
@@ -850,6 +877,197 @@ async function logAutoReject(
 }
 
 /**
+ * Persona Model v2 — the life backbone, rendered as prompt facts.
+ *
+ * THE ONE CONSUMER of `personaBackboneEmits()`. Until this function existed the
+ * staged rollout `off → shadow → fill → on` was a declaration: the switch could
+ * be flipped all the way to `on` and nothing anywhere read it. This is the gate.
+ *
+ * Four rules, each load-bearing:
+ *
+ *  1. **`on` ONLY.** At `off`, `shadow` and `fill` this returns `[]` and the
+ *     caller's output is byte-identical to what it emitted before this function
+ *     was written. `fill` deliberately persists the backbone and still tells the
+ *     model nothing — storing a fact and speaking it are two separate decisions,
+ *     which is the whole reason the flag has four positions and not two.
+ *  2. **Set leaves only.** No placeholders, no "unknown", no blank labels. A
+ *     persona holding three facts contributes three facts. An unset leaf is
+ *     absent, never an empty row — a prompt that says "Pets: none specified"
+ *     has told the model something false about the person.
+ *  3. **`label()`, never a raw token.** `partnered` is a storage token;
+ *     "Partnered" is English. A token in a prompt is the en-dash incident
+ *     waiting to happen again.
+ *  4. **Fixed order, fixed shape.** The facts below are a hand-written list in
+ *     a fixed sequence, not an object walk, so the same profile produces the
+ *     same string on every call, in every process, forever.
+ *
+ * WHICH FACTS, AND WHY THESE SIX. The test is narrow: does the fact change how
+ * a 30-second script reads? Six do, and they are the six the rollout doc's fact
+ * strip already shows the user, so what the model is told and what the customer
+ * sees on the persona page cannot drift apart:
+ *
+ *   • **Age** — the single strongest register cue. A 24-year-old and a
+ *     46-year-old do not open a video the same way.
+ *   • **Home** — city, region, and urban/suburban/regional/rural. Decides what
+ *     is plausible to reference: a commute, a beach, a two-hour drive to a shop.
+ *   • **Work** — title, field, seniority, employment status, and on-site /
+ *     hybrid / remote. Decides what the person can plausibly be doing at 10am,
+ *     what they are expert in, and how time-poor they sound.
+ *   • **Household** — partner, children and their ages, housing, pets. This is
+ *     where most of a UGC script's incidental detail comes from: who is off
+ *     camera, whose toy is on the floor, whose kitchen this is.
+ *   • **Lifestyle** — activity level, transport, diet. Decides what they would
+ *     actually buy, eat, and complain about.
+ *   • **Character** — the derived Big Five trait labels ("Curious",
+ *     "Organised", "Blunt"). The five raw 0–100 scores are NOT emitted: a model
+ *     given "neuroticism: 71" writes a psychology report, a model given
+ *     "Sensitive" writes a person.
+ *
+ * DELIBERATELY NOT EMITTED, so the section stays six lines instead of forty:
+ *   • heritage / name / languages — identity, already carried by the portrait
+ *     builders and `agent.name`; repeating heritage into a *script* prompt buys
+ *     nothing and invites the model to write an accent.
+ *   • the raw `bigFive` scores, `birthday`, `timezone`, `socialPlatformsUsed`,
+ *     `clothingSizes` — operational or numeric; none of them change a sentence.
+ *   • `economic.incomeBand` / `priceFrame` — genuinely script-changing, but
+ *     they are the *audience's* price frame in every existing prompt line above,
+ *     and emitting the creator's alongside them would read as a contradiction.
+ *     Revisit when the audience block is rewritten (P3.x), not before.
+ *   • `neverDiscusses` — a brand-safety denylist, not a life fact. It belongs in
+ *     the guardrail block of the director prompt with the other prohibitions,
+ *     and nothing populates it today (the sampler never writes it), so emitting
+ *     it here would be a dead line with a live-looking test.
+ *
+ * A BUCKET AGE IS NOT AN AGE. `upgradeV1toV2` turns a v1 apparent-age bucket
+ * ("30–35") into `age: 32, ageSource: 'bucket'` so the number has *something* to
+ * sort by. That midpoint is a rendering convenience, not a fact about the
+ * person, and asserting "You are 32" to the model on the strength of it invents
+ * precision the customer never supplied. Only an `exact` age (or one stored with
+ * no `ageSource` at all, i.e. written as a real value) is emitted.
+ *
+ * Never throws: a malformed, empty or still-v1 profile contributes no lines,
+ * which is the correct answer rather than a failed generation.
+ */
+function personaBackboneLines(agent: any): string[] {
+	if (!personaBackboneEmits()) return [];
+
+	let creator: Record<string, unknown>;
+	try {
+		const profile = readPersonaProfileV2(agent) as unknown;
+		const c = isObj(profile) ? profile.creator : undefined;
+		if (!isObj(c)) return [];
+		creator = c;
+	} catch {
+		// A profile shape nobody anticipated must not take a generation down.
+		return [];
+	}
+
+	/** Trimmed non-empty string, else undefined. */
+	const str = (v: unknown): string | undefined =>
+		typeof v === 'string' && v.trim() ? v.trim() : undefined;
+	/** A token rendered through the registry; unset and unknown-blank both drop. */
+	const lbl = (group: Parameters<typeof label>[0], v: unknown): string | undefined => {
+		const token = str(v);
+		return token ? str(label(group, token)) : undefined;
+	};
+	/** An array of tokens rendered in stored order, de-duplicated. */
+	const lblList = (group: Parameters<typeof label>[0], v: unknown): string[] =>
+		Array.isArray(v)
+			? Array.from(new Set(v.map((x) => lbl(group, x)).filter((x): x is string => !!x)))
+			: [];
+	/** 'A · B · C' from the parts that exist, or undefined when none do. */
+	const join = (...parts: (string | undefined)[]): string | undefined => {
+		const kept = parts.filter((p): p is string => !!p);
+		return kept.length ? kept.join(' · ') : undefined;
+	};
+
+	const facts: { key: string; value: string | undefined }[] = [];
+
+	// 1. Age — exact only; a bucket midpoint is not a fact (see header).
+	const age = creator.age;
+	const ageSource = str(creator.ageSource);
+	facts.push({
+		key: 'Age',
+		value:
+			typeof age === 'number' && Number.isFinite(age) && ageSource !== 'bucket'
+				? String(Math.round(age))
+				: undefined
+	});
+
+	// 2. Home — 'Brisbane, Queensland · Urban', or whichever half exists.
+	const location = isObj(creator.location) ? creator.location : {};
+	const city = str(location.city);
+	const region = str(location.region);
+	facts.push({
+		key: 'Home',
+		value: join(
+			city && region ? `${city}, ${region}` : (city ?? region),
+			lbl('geographicContext', location.geographicContext)
+		)
+	});
+
+	// 3. Work — reading order: what they do, in what field, how senior, employed
+	//    how, from where.
+	const work = isObj(creator.work) ? creator.work : {};
+	facts.push({
+		key: 'Work',
+		value: join(
+			str(work.title),
+			lbl('workDomain', work.domain),
+			lbl('seniority', work.seniority),
+			lbl('employmentStatus', work.employmentStatus),
+			lbl('workLocationMode', work.workLocationMode)
+		)
+	});
+
+	// 4. Household — partner, children (count + bands), housing, pets.
+	const household = isObj(creator.household) ? creator.household : {};
+	const children = isObj(household.children) ? household.children : {};
+	const count = children.count;
+	const bands = lblList('childAgeBand', children.ageBands);
+	const childPhrase =
+		typeof count === 'number' && Number.isFinite(count) && count > 0
+			? `${Math.round(count)} ${Math.round(count) === 1 ? 'child' : 'children'}${bands.length ? ` (${bands.join(', ')})` : ''}`
+			: bands.length
+				? `children (${bands.join(', ')})`
+				: undefined;
+	const pets = lblList('pet', household.pets);
+	facts.push({
+		key: 'Household',
+		value: join(
+			lbl('relationshipStatus', household.relationshipStatus),
+			childPhrase,
+			lbl('housingType', household.housingType),
+			pets.length ? `Pets: ${pets.join(', ')}` : undefined
+		)
+	});
+
+	// 5. Lifestyle — how they move, how they travel, how they eat.
+	const lifestyle = isObj(creator.lifestyle) ? creator.lifestyle : {};
+	facts.push({
+		key: 'Lifestyle',
+		value: join(
+			lbl('activityLevel', lifestyle.activityLevel),
+			lbl('transportMode', lifestyle.transportMode),
+			lbl('dietaryStyle', lifestyle.dietaryStyle)
+		)
+	});
+
+	// 6. Character — derived trait labels only, never the raw scores.
+	const traits = lblList('traitLabel', creator.traitLabels);
+	facts.push({ key: 'Character', value: traits.length ? traits.join(' · ') : undefined });
+
+	const set = facts.filter((f) => f.value);
+	if (!set.length) return [];
+
+	return [
+		'',
+		'Life backbone — true facts about the person you are. Let them shape what you notice, reference, and could plausibly be doing; never read them out as a list, and never state one that is not here:',
+		...set.map((f) => `- ${f.key}: ${f.value}.`)
+	];
+}
+
+/**
  * Builds a rich agent context string from the agent row, pulling extended
  * persona profile off the agent row via the typed accessor.
  *
@@ -910,6 +1128,12 @@ export function buildRichAgentContext(agent: any): string {
 		}
 		if (skillsSummary) lines.push(`Creator skills & capabilities: ${skillsSummary.slice(0, 400)}.`);
 	}
+
+	// Persona Model v2 backbone. Appended LAST and in its own delimited block so
+	// nothing above is reordered, reworded or removed: below PERSONA_BACKBONE=on
+	// this contributes zero lines and the string is byte-identical to the one
+	// this function returned before the backbone existed.
+	lines.push(...personaBackboneLines(agent));
 
 	return lines.join('\n');
 }
@@ -1506,8 +1730,8 @@ async function openRouterImageEdit(
 	userId: string,
 	prompt: string,
 	imageUrls: string[],
-	/** Registry-resolved OpenRouter edit route (resolveImageKeys().orRoutes.edit). Omitted → the compiled-in constant, as before. */
-	route?: OpenRouterImageRoute
+	/** Registry-resolved OpenRouter edit route (resolveImageKeys().orRoutes.edit): the id that RUNS, read from the same registry row as the price that gets BILLED. REQUIRED — a compiled-in fallback here is precisely how those two drift apart. */
+	route: OpenRouterImageRoute
 ): Promise<string> {
 	const content: any[] = [{ type: 'text', text: prompt }];
 	for (const url of imageUrls.slice(0, 4)) {
@@ -1522,7 +1746,7 @@ async function openRouterImageEdit(
 			'X-Title': 'PersonaGen'
 		},
 		body: JSON.stringify({
-			model: route?.id ?? IMAGE_EDIT_MODEL_OPENROUTER,
+			model: route.id,
 			messages: [{ role: 'user', content }],
 			modalities: ['image', 'text']
 		})
@@ -1570,8 +1794,8 @@ async function openRouterBrollVideo(
 	stillUrl: string,
 	motionPrompt: string,
 	timeoutMs = 270000,
-	/** Registry-resolved OpenRouter video route. Omitted → the constant, as before. */
-	route?: OpenRouterImageRoute
+	/** Registry-resolved OpenRouter video route (resolveImageKeys().orRoutes.video): the id that RUNS, read from the same registry row as the price that gets BILLED. REQUIRED — this route was the one model the ledger showed running that the Model Manager could not name. */
+	route: OpenRouterImageRoute
 ): Promise<string> {
 	const submit = await genFetch('https://openrouter.ai/api/v1/videos', {
 		method: 'POST',
@@ -1582,7 +1806,7 @@ async function openRouterBrollVideo(
 			'X-Title': 'PersonaGen'
 		},
 		body: JSON.stringify({
-			model: route?.id ?? BROLL_MODEL_OPENROUTER,
+			model: route.id,
 			prompt: motionPrompt,
 			duration: parseInt(VIDEO_DURATION, 10) || 5,
 			aspect_ratio: '9:16',
@@ -2150,6 +2374,21 @@ export async function generateCinematicUgcPack(input: UgcPackInput): Promise<Ugc
 			}
 		};
 
+		// Advisory, last, and unable to change anything above it — see judgeDraftFit.
+		const fit = await judgeDraftFit({
+			supabase,
+			userId,
+			agentId: input.agentId,
+			postId: input.postId,
+			ai: rawAi,
+			agent: agentData,
+			content
+		});
+		if (fit.fit_score !== null) {
+			content.fit_score = fit.fit_score;
+			if (fit.fit_notes) content.fit_notes = fit.fit_notes;
+		}
+
 		return { content, selectedProduct, briefData, agentData };
 	} finally {
 		// Flush the ledger even if generation threw partway through — otherwise
@@ -2440,14 +2679,35 @@ export interface UgcContent {
 	/** Full observability record — models per aspect, cost matrix, images sent,
 	 *  prompts, and the selections made. Rendered in the post drawer. */
 	generation?: GenerationProvenance;
+	/** Advisory viewer-panel fit (P3.3), mirrored from posts.fit_score. Present
+	 *  ONLY when the judge ran and returned a usable verdict — an absent key is
+	 *  the normal case and keeps the stored content identical to before. */
+	fit_score?: number;
+	fit_notes?: FitVerdictEntry[];
 }
 
-/** Wraps an AiClient so every text call self-records into the cost ledger. */
+/**
+ * Wraps an AiClient so every text call self-records into the cost ledger.
+ *
+ * Records AFTER the call returns, not before. Pushing first meant a provider
+ * call that threw was still billed — and /billing promises the opposite in as
+ * many words: "Only what actually ran. If a generation dies partway, you pay
+ * for the images it had already made and nothing for the rest." A call that
+ * threw did not run. This also settles a disagreement between the two metering
+ * wrappers: meteredCall in metering.ts already records only on success, on the
+ * stated grounds that providers do not bill errors. Same operation, same
+ * policy now, whichever path the user took.
+ *
+ * A call that succeeds and is then abandoned further down still records, since
+ * the array is flushed in the caller's `finally` — which is the "you pay for
+ * what it had already made" half of the same promise.
+ */
 function trackAi(ai: AiClient, costEvents: CostEvent[]): AiClient {
 	return {
 		provider: ai.provider,
 		model: ai.model,
 		async generate(prompt, opts) {
+			const out = await ai.generate(prompt, opts);
 			costEvents.push({
 				provider: ai.provider,
 				operation: 'llm',
@@ -2456,7 +2716,7 @@ function trackAi(ai: AiClient, costEvents: CostEvent[]): AiClient {
 				model: ai.model,
 				usd: priceOf(ai.provider, 'llm')
 			});
-			return ai.generate(prompt, opts);
+			return out;
 		}
 	};
 }
@@ -2479,9 +2739,19 @@ async function runBudgetedAssetJob<T>(
 	userId: string,
 	agentId: string,
 	costEvents: CostEvent[],
-	job: () => Promise<T>
+	job: () => Promise<T>,
+	/**
+	 * What this job is expected to spend, in provider USD.
+	 *
+	 * Without it the gate defaults to ONE credit, which only rejects an empty
+	 * wallet — so a wallet holding a single cent could start a multi-image
+	 * portrait job and finish it overdrawn, with only the NEXT run refused.
+	 * Every caller now quotes the models it is about to run. 0 keeps the old
+	 * behaviour for any caller that genuinely cannot quote.
+	 */
+	estimatedUsd = 0
 ): Promise<T> {
-	await assertWithinBudget(supabase, userId, agentId);
+	await assertWithinBudget(supabase, userId, agentId, estimatedUsd > 0 ? creditsFor(estimatedUsd) : 1);
 	try {
 		return await job();
 	} finally {
@@ -2557,9 +2827,20 @@ export async function recordCostEvents(
 			if (!error) {
 				inserted = data ?? [];
 				if (dropped.size > 0) {
-					console.warn(
-						`[Cost] Recorded generation events without ${[...dropped].join(', ')} — apply the pending generation_events migration(s) or reload the PostgREST schema cache (NOTIFY pgrst, 'reload schema').`
-					);
+					// asset_url going missing is cosmetic. billed_user_id, key_source and
+					// credits are not: the DEBIT still fires from the in-memory value, so
+					// money moves while the row it is keyed to cannot be attributed —
+					// invisible to every reconciliation view, which filters on
+					// key_source = 'platform', and to margin reporting with it.
+					const money = [...dropped].filter((c) => c === 'key_source' || c === 'credits' || c === 'billed_user_id');
+					const fix = `apply the pending generation_events migration(s) or reload the PostgREST schema cache (NOTIFY pgrst, 'reload schema')`;
+					if (money.length > 0 && mode !== 'off') {
+						console.error(
+							`[Cost] ATTRIBUTION LOST: recorded generation events without ${money.join(', ')} while credits are '${mode}'. The wallet was still debited, but these rows are invisible to reconciliation and margin. Fix now — ${fix}.`
+						);
+					} else {
+						console.warn(`[Cost] Recorded generation events without ${[...dropped].join(', ')} — ${fix}.`);
+					}
 				}
 				break;
 			}
@@ -2622,6 +2903,144 @@ export interface UgcPack {
 	selectedProduct: any | null;
 	briefData: any | null;
 	agentData: any | null;
+}
+
+// ── Fit judge (Persona Model v2, P3.3) ──────────────────────────────────────
+
+/**
+ * How long the advisory judge may hold up a finished post. A generation that has
+ * already paid for a video does not wait on an opinion: past this the verdict is
+ * abandoned and the post ships without one.
+ */
+const FIT_JUDGE_TIMEOUT_MS = 25_000;
+
+/**
+ * True when the audience is an actual STATED bracket rather than an empty shell.
+ *
+ * `sampleViewerPanel` deliberately never returns an empty panel — an audience of
+ * nothing still yields five strangers — so the gate has to be on the INPUT. A
+ * persona that has never said who it is for would otherwise be judged against
+ * five invented people and charged for the privilege. Mirrors the same gate the
+ * persona page applies before it mounts the panel section.
+ */
+function audienceIsStated(audience: unknown): boolean {
+	if (!isObj(audience)) return false;
+	const a = audience as Record<string, unknown>;
+	const str = (v: unknown) => typeof v === 'string' && !!v.trim();
+	const list = (v: unknown) => Array.isArray(v) && v.some(str);
+	if (list(a.ageRanges) || list(a.lifeStage)) return true;
+	if (str(a.genderMix) || str(a.incomeBand)) return true;
+	return isObj(a.decisioning) && Object.values(a.decisioning).some(str);
+}
+
+/** The text the judge reads: the caption as published, plus the spoken script. */
+function fitDraftText(content: Pick<UgcContent, 'text' | 'script' | 'dialogue'>): string {
+	const script = (content.script || content.dialogue || '').trim();
+	return [(content.text || '').trim(), script && `Script: ${script}`].filter(Boolean).join('\n\n');
+}
+
+export interface FitJudgeRun {
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- the Supabase client is untyped across this codebase
+	supabase: any;
+	userId: string;
+	agentId?: string;
+	postId?: string;
+	/** The UNWRAPPED client. Metering is applied here, so passing a tracked one double-bills. */
+	ai: AiClient | null;
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- agent rows are untyped throughout this file
+	agent: any;
+	content: Pick<UgcContent, 'text' | 'script' | 'dialogue'>;
+}
+
+/**
+ * Runs the fit judge for a finished draft and records the verdict on the post.
+ *
+ * WHERE IT SITS: after the caption, the script and the media are final and
+ * immediately before the pack is returned. It reads them; it cannot influence
+ * them. Nothing downstream of this call consumes its result except the two
+ * advisory columns.
+ *
+ * WHAT GUARDS IT:
+ *   · `personaFitJudgeRunsAutomatically()` — at 'off' and 'on_demand' this
+ *     returns before touching a provider, so an unflagged run is byte-identical
+ *     to the one that shipped before this existed;
+ *   · a stated audience and a panel with at least one judgeable viewer;
+ *   * `meteredAiClient` — the same gate → record → debit path as every other
+ *     paid call, so a refused wallet or a hit cap refuses HERE, not at the till;
+ *   · a timeout, because a hung provider must not hold a finished post;
+ *   · one catch around all of it.
+ *
+ * WHY IT CANNOT COST A POST: every failure mode — no provider, budget refusal,
+ * credit refusal, a malformed answer, a timeout, a posts UPDATE that is rejected
+ * because the column is not there yet — resolves to `{ fit_score: null,
+ * fit_notes: null }` and a logged warning. The function has no throw path, and
+ * the post row it writes to already exists (the composer claims it before
+ * generation starts), so the write is an UPDATE of two advisory columns and can
+ * never fail an insert. The status, the platforms and the content are not
+ * touched by it.
+ */
+export async function judgeDraftFit(run: FitJudgeRun): Promise<{
+	fit_score: number | null;
+	fit_notes: FitVerdictEntry[] | null;
+}> {
+	const noVerdict = fitColumnsFor(null);
+	try {
+		if (!personaFitJudgeRunsAutomatically()) return noVerdict;
+		if (!run.ai) return noVerdict;
+
+		const draft = fitDraftText(run.content);
+		if (!draft) return noVerdict;
+
+		const profile = readPersonaProfileV2(run.agent);
+		if (!audienceIsStated(profile?.audience)) return noVerdict;
+
+		// Same seed and same options as the persona page, so the viewers judged are
+		// the first four of the ones the user can already see — a verdict about
+		// strangers nobody was shown would be unreadable.
+		const panel = judgeablePanel(
+			sampleViewerPanel(String(run.agent?.id ?? ''), profile?.audience, {
+				market: profile?.creator?.market
+			})
+		);
+		if (!panel.length) return noVerdict;
+
+		const metered = meteredAiClient(run.ai, {
+			supabase: run.supabase,
+			userId: run.userId,
+			agentId: run.agentId ?? null,
+			postId: run.postId ?? null
+		});
+		if (!metered) return noVerdict;
+
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		const answer = await Promise.race([
+			metered.generate(fitJudgePrompt(draft, panel, profile), { json: true }),
+			new Promise<never>((_, reject) => {
+				timer = setTimeout(
+					() => reject(new Error(`fit judge timed out after ${FIT_JUDGE_TIMEOUT_MS}ms`)),
+					FIT_JUDGE_TIMEOUT_MS
+				);
+			})
+		]).finally(() => clearTimeout(timer));
+
+		const columns = fitColumnsFor(parseFitVerdict(safeParseJson(answer), panel));
+		if (columns.fit_score !== null && run.postId) {
+			// Best effort, and deliberately narrow: two advisory columns on a row that
+			// already exists. PostgREST returns its error rather than throwing, and a
+			// database that predates the migration is a warning, not a lost post.
+			const { error } = await run.supabase
+				.from('posts')
+				.update(columns)
+				.eq('id', run.postId)
+				.is('deleted_at', null);
+			if (error) console.warn('[FitJudge] verdict not stored:', error.message ?? error);
+		}
+		return columns;
+	} catch (err) {
+		// Advisory means advisory: this is the only exit an error takes.
+		console.warn('[FitJudge] skipped:', (err as Error)?.message ?? String(err));
+		return noVerdict;
+	}
 }
 
 const DIRECTOR_SYSTEM = `You are a world-class short-form UGC director and conversion copywriter. You write like a real person who genuinely discovered value — never like a brand running an ad.
@@ -2876,6 +3295,26 @@ export function buildHeroPortraitPrompt(
 	// the model collapses to one generic "UGC creator" face. Gender rides in the subject
 	// too (the pinned face must match the configured voice gender up front).
 	const ethnicity = (profile.appearance?.ethnicity || '').trim();
+	// Persona Model v2 (P2.3). The v2 look carries attributes the v1 `appearance`
+	// record has no key for — facial hair, eyewear, face/brow shape, hair texture,
+	// gray coverage, height — so a bearded persona described only through the v1
+	// downgrade comes out clean-shaven. Read them LIVE off the look: `promptCues`
+	// is a cache a field re-roll clears and nothing recomputes, so it is never the
+	// source (see persona-contract/look-prompt.ts).
+	//
+	// The v2 clause is used only when the look actually holds one of those
+	// attributes. Every persona still stored as v1 is upgraded in memory with none
+	// of them, so it keeps the v1 clause and its prompt stays byte-identical —
+	// which is what prompt-regression.spec.ts pins.
+	const v2 = readPersonaProfileV2(agentData);
+	const look = v2.look;
+	const appearanceLine = hasV2OnlyLookAttributes(look)
+		? appearanceToPromptClause(look, { age: v2.creator?.age })
+		: appearanceToPromptClause(profile.appearance);
+	// Facial hair and eyewear are restated in the SUBJECT — the strongest position
+	// in the prompt — because those two are what the later edit drops. Empty for
+	// every v1 persona, so the subject is unchanged for them.
+	const driftProneAttributes = lookSubjectAttributes(look);
 	const subject = [ethnicity, voiceGender, 'relatable UGC content creator']
 		.filter(Boolean)
 		.join(' ');
@@ -2888,9 +3327,9 @@ export function buildHeroPortraitPrompt(
 		: '';
 	// Wardrobe/hair/eyes/distinctive-features directives from the persona profile — so the
 	// pinned face reflects the exact look the user configured (and "Generate for brand"
-	// filled), instead of a generic person.
-	const appearanceLine = appearanceToPromptClause(profile.appearance);
-	return `Photorealistic vertical portrait of one ${subject} who fits this audience: ${audience}.${ethnicityEmphasis}${persona}${archetypeLine}${avatarLine}${appearanceLine} Friendly, casual, natural window light, looking straight at the camera, authentic iPhone selfie style, clear visible face, upper body. Single person only — a unique, specific individual with their own distinct face, NOT a generic stock model.`;
+	// filled), instead of a generic person. (Resolved above, from whichever shape the
+	// persona is stored in.)
+	return `Photorealistic vertical portrait of one ${subject}${driftProneAttributes} who fits this audience: ${audience}.${ethnicityEmphasis}${persona}${archetypeLine}${avatarLine}${appearanceLine} Friendly, casual, natural window light, looking straight at the camera, authentic iPhone selfie style, clear visible face, upper body. Single person only — a unique, specific individual with their own distinct face, NOT a generic stock model.`;
 }
 
 /**
@@ -2902,7 +3341,18 @@ export function buildHeroPortraitPrompt(
 export function buildPortraitEditPrompt(agentData: any): string {
 	const profile = parsePersonaProfile(agentData);
 	const ethnicity = (profile.appearance?.ethnicity || '').trim();
-	const appearanceLine = appearanceToPromptClause(profile.appearance);
+	// Same v2 read as the hero builder, for the same reason and with the same
+	// v1-stays-byte-identical guard. See buildHeroPortraitPrompt above.
+	const v2 = readPersonaProfileV2(agentData);
+	const look = v2.look;
+	const appearanceLine = hasV2OnlyLookAttributes(look)
+		? appearanceToPromptClause(look, { age: v2.creator?.age })
+		: appearanceToPromptClause(profile.appearance);
+	// THE FIX for "the beard disappears on the second image". An edit prompt that
+	// only says "keep their facial identity" does not hold facial hair or eyewear —
+	// across this codebase's regenerations those are the two attributes that come
+	// back missing, so they are named explicitly, and only when actually set.
+	const preservationLine = lookPreservationClause(look);
 	// Preserve STRUCTURE (bone structure, feature placement) for consistency, but assert
 	// ethnicity rather than pinning "skin tone" — locking skin tone would perpetuate a face
 	// generated with the wrong heritage. When the source is already correct this is a no-op;
@@ -2910,7 +3360,7 @@ export function buildPortraitEditPrompt(agentData: any): string {
 	const ethnicityLine = ethnicity
 		? ` This person is authentically ${ethnicity}; keep them recognizably the same individual while ensuring the depiction accurately reflects ${ethnicity} features and skin tone.`
 		: '';
-	return `Regenerate this exact person as a fresh photorealistic vertical portrait. Preserve their facial identity from the reference image — same bone structure, eye shape, nose, jaw, and hairline; do NOT turn them into a different person.${ethnicityLine}${appearanceLine} Friendly, casual, natural window light, looking straight at the camera, authentic iPhone selfie style, clear visible face, upper body. Single person only.`;
+	return `Regenerate this exact person as a fresh photorealistic vertical portrait. Preserve their facial identity from the reference image — same bone structure, eye shape, nose, jaw, and hairline; do NOT turn them into a different person.${ethnicityLine}${appearanceLine}${preservationLine} Friendly, casual, natural window light, looking straight at the camera, authentic iPhone selfie style, clear visible face, upper body. Single person only.`;
 }
 
 /** Generates (and durably persists) a fresh hero portrait image. No DB pin — just the image. */
@@ -2963,7 +3413,15 @@ export async function generateCharacterPortrait(
 	const editing = Boolean(identityRef);
 	const portraitModel = resolveModel(editing ? 'image_edit' : 'image_t2i', modelId);
 	const costEvents: CostEvent[] = [];
-	return await runBudgetedAssetJob(supabase, userId, agentId, costEvents, async () => {
+	// The portrait job runs three paid images: the hero portrait on the chosen
+	// model, then the character sheet and the avatar hero shot on nano.
+	const portraitQuoteUsd = portraitModel.usd + 2 * priceOf('fal', 'image', 'nano');
+	return await runBudgetedAssetJob(
+		supabase,
+		userId,
+		agentId,
+		costEvents,
+		async () => {
 		// 1. Hero portrait → pinned as the profile picture. When a face already exists
 		//    we EDIT it (feed the existing image back in) so the persona stays the SAME
 		//    person — only the shot and any configured styling change. This is the fix
@@ -3066,7 +3524,9 @@ export async function generateCharacterPortrait(
 		}
 
 		return durable;
-	});
+		},
+		portraitQuoteUsd
+	);
 }
 
 /**
@@ -3348,7 +3808,14 @@ export async function generateCharacterSheetFromReference(
 	referenceImageUrl: string
 ): Promise<string> {
 	const costEvents: CostEvent[] = [];
-	return await runBudgetedAssetJob(supabase, userId, agentId, costEvents, async () => {
+	// Two paid nano images: the character sheet, then the hero shot cut from it.
+	const sheetQuoteUsd = 2 * priceOf('fal', 'image', 'nano');
+	return await runBudgetedAssetJob(
+		supabase,
+		userId,
+		agentId,
+		costEvents,
+		async () => {
 		const data = await falSyncJson(
 			NANO_MODEL,
 			{ prompt: CHARACTER_SHEET_PROMPT, image_urls: [referenceImageUrl], aspect_ratio: '16:9' },
@@ -3397,7 +3864,9 @@ export async function generateCharacterSheetFromReference(
 		// (or a previous from-scratch face) no longer depict the same person.
 		await mergeReferenceKit(supabase, agentId, { sheet: durableSheet, full_body: durable }, true);
 		return durable;
-	});
+		},
+		sheetQuoteUsd
+	);
 }
 
 /**
@@ -3518,7 +3987,12 @@ export async function executeKitStage(
 	// models receive only the primary reference -- see buildEditInput.
 	const model = resolveModel('image_edit', plan.model);
 	const costEvents: CostEvent[] = [];
-	return await runBudgetedAssetJob(supabase, userId, agentId, costEvents, async () => {
+	return await runBudgetedAssetJob(
+		supabase,
+		userId,
+		agentId,
+		costEvents,
+		async () => {
 		const data = await falSyncJson(
 			model.id,
 			buildEditInput(model, plan.prompt, plan.image_urls, plan.aspect_ratio),
@@ -3537,7 +4011,9 @@ export async function executeKitStage(
 		const durable = await persistToStorage(svc, url, userId, 'png');
 		await mergeReferenceKit(supabase, agentId, { [stage]: durable });
 		return durable;
-	});
+		},
+		model.usd
+	);
 }
 
 async function ensureCharacterRef(
@@ -5118,6 +5594,21 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 				mediaType
 			}
 		};
+
+		// Advisory, last, and unable to change anything above it — see judgeDraftFit.
+		const fit = await judgeDraftFit({
+			supabase,
+			userId,
+			agentId: input.agentId,
+			postId: input.postId,
+			ai: rawAi,
+			agent: agentData,
+			content
+		});
+		if (fit.fit_score !== null) {
+			content.fit_score = fit.fit_score;
+			if (fit.fit_notes) content.fit_notes = fit.fit_notes;
+		}
 
 		return { content, selectedProduct, briefData, agentData };
 	} finally {

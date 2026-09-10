@@ -12,6 +12,7 @@
 //   node scripts/apply-migration.mjs --rehash [--dry-run]     one-time: move ledger rows written under the old
 //                                                             byte-sensitive hash onto the content hash
 //   node scripts/apply-migration.mjs --all                    apply every pending ORDER file, in order
+//   node scripts/apply-migration.mjs --no-backup <file.sql>   apply WITHOUT the pre-write backup (loud; see BACKUP below)
 //
 // Guarantees (see docs/monetization/durable-implementation-plan.md, D6):
 //   * each file runs inside BEGIN/COMMIT together with its ledger row — a failing
@@ -26,9 +27,18 @@
 //     that is live in production must exist in the repository first
 //     (--allow-uncommitted overrides, loudly; --dry-run is never gated).
 //
+// BACKUP: the first file of a run that is actually going to WRITE triggers
+// scripts/backup-db.mjs, then backup-db.mjs --check-restore, before the write.
+// Both run BEFORE, never after, because --check-restore validates the dump
+// against the LIVE schema and the migration is about to change that schema —
+// run afterwards it would be testing the dump against a shape it never came
+// from. One backup per run, not one per file. --no-backup is the escape hatch
+// and prints a warning, in the same spirit as --allow-uncommitted.
+//
 // Transport: the same `${PUBLIC_SUPABASE_URL}/pg/query` endpoint the legacy
 // run-migrations.js used, authenticated with the service-role key from .env.
-// Read-only invocations (--status, --dry-run) never send anything but SELECTs.
+// Read-only invocations (--status, --dry-run) never send anything but SELECTs,
+// and never take a backup.
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { execFileSync } from 'node:child_process';
@@ -136,6 +146,39 @@ function worktreeState(path) {
 	}
 }
 
+/**
+ * Take a backup, and prove it restores, BEFORE a migration writes.
+ *
+ * Order is the whole point. `--check-restore` converts the dump against the
+ * LIVE schema; the migration is about to change that schema, so run afterwards
+ * it would be checking the dump against a shape it never came from — and a
+ * column this migration drops would look like a backup fault rather than the
+ * expected consequence it is. Before the write, a failure means the backup on
+ * disk genuinely will not load, which is exactly when not to proceed.
+ *
+ * backup-db.mjs does all its work at module scope, so it cannot be imported —
+ * it is spawned, with stdio inherited so its own output (including the "media
+ * bytes are not captured" caveat) reaches this console unedited.
+ */
+function backupBeforeWrite(migrationName) {
+	const script = join(here, 'backup-db.mjs');
+	const step = (args, what) => {
+		try {
+			execFileSync(process.execPath, [script, ...args], { cwd: appRoot, stdio: 'inherit' });
+		} catch {
+			throw new Error(
+				`${what} FAILED before ${migrationName} — NOTHING was applied. The output above says why; ` +
+					'a "will NOT load" or a dropped column means a restore would lose data. ' +
+					'Re-run with --no-backup only if you accept applying with no proven restore point.'
+			);
+		}
+	};
+	console.log(`backup   ${migrationName} is about to write — taking a backup first`);
+	step([], 'backup');
+	step(['--check-restore'], 'backup --check-restore');
+	console.log('backup   ok · taken and proven against the schema this migration is about to change');
+}
+
 const q = (s) => `'${String(s).replace(/'/g, "''")}'`;
 
 function wrap(m, mode = 'applied') {
@@ -191,8 +234,11 @@ async function cmdStatus() {
 	return { pending, drifted };
 }
 
-async function cmdApply(files, { dryRun, allowUncommitted }) {
+async function cmdApply(files, { dryRun, allowUncommitted, noBackup }) {
 	const ledger = await readLedger();
+	// One backup per RUN. `--all` applying nine files should cost one dump, not
+	// nine; the point is a restore point that predates the whole batch.
+	let backedUp = false;
 	for (const f of files) {
 		const m = readMigration(f);
 		const rec = ledger.get(m.name);
@@ -228,6 +274,27 @@ async function cmdApply(files, { dryRun, allowUncommitted }) {
 				continue;
 			}
 			console.warn(`WARNING  ${m.name}: applying a file that ${state === 'untracked' ? 'is untracked' : state === 'modified' ? 'differs from HEAD' : 'could not be checked against git'} — --allow-uncommitted was given. Commit it immediately after; until you do, production depends on code that exists nowhere else.`);
+		}
+		// ── Backup, immediately before the one network write of this run ─────
+		// Every gate above can still decline this file (skip, REFUSE, dry-run
+		// exit, provenance), so a backup taken any earlier would be a backup for
+		// a migration that never ran. From here the next statement writes.
+		//
+		// 000_schema_migrations.sql is the exception: on a fresh database
+		// public.schema_migrations does not exist yet, and backup-db.mjs reads it
+		// unconditionally for the ledger head, so a backup here would die on the
+		// one migration that has nothing to lose. `backedUp` stays false, so the
+		// next real file in the same run still gets its backup.
+		if (!backedUp) {
+			if (m.name === '000_schema_migrations.sql') {
+				console.log(`backup   skipped for ${m.name} — the ledger a backup reads does not exist until this file creates it`);
+			} else if (noBackup) {
+				console.warn(`WARNING  ${m.name}: NO BACKUP TAKEN (--no-backup). The schema is about to change with no proven restore point. Take one by hand the moment you can: npm run backup.`);
+				backedUp = true;
+			} else {
+				backupBeforeWrite(m.name);
+				backedUp = true;
+			}
 		}
 		process.stdout.write(`apply    ${m.name} (${m.checksum.slice(0, 8)}) … `);
 		await pgQuery(sql);
@@ -335,12 +402,12 @@ async function cmdRehash({ dryRun }) {
 	if (refused.length) process.exitCode = 2;
 }
 
-async function cmdAll({ dryRun, allowUncommitted }) {
+async function cmdAll({ dryRun, allowUncommitted, noBackup }) {
 	const order = await loadOrder();
 	const ledger = await readLedger();
 	const pending = order.map((o) => o.file).filter((f) => !ledger.has(f) && existsSync(join(supabaseDir, f)));
 	if (pending.length === 0) return console.log('no pending migrations');
-	await cmdApply(pending, { dryRun, allowUncommitted });
+	await cmdApply(pending, { dryRun, allowUncommitted, noBackup });
 }
 
 // ── main ─────────────────────────────────────────────────────────────────────
@@ -356,11 +423,21 @@ try {
 		await cmdRecordExisting(i >= 0 ? args[i + 1] : null);
 	} else if (flags.has('--unrecord')) await cmdUnrecord(files);
 	else if (flags.has('--rehash')) await cmdRehash({ dryRun: flags.has('--dry-run') });
-	else if (flags.has('--all')) await cmdAll({ dryRun: flags.has('--dry-run'), allowUncommitted: flags.has('--allow-uncommitted') });
-	else if (files.length) await cmdApply(files, { dryRun: flags.has('--dry-run'), allowUncommitted: flags.has('--allow-uncommitted') });
+	else if (flags.has('--all'))
+		await cmdAll({
+			dryRun: flags.has('--dry-run'),
+			allowUncommitted: flags.has('--allow-uncommitted'),
+			noBackup: flags.has('--no-backup')
+		});
+	else if (files.length)
+		await cmdApply(files, {
+			dryRun: flags.has('--dry-run'),
+			allowUncommitted: flags.has('--allow-uncommitted'),
+			noBackup: flags.has('--no-backup')
+		});
 	else {
 		console.log(
-			'usage: apply-migration.mjs --status [--strict] | --record-existing --through <file> | --unrecord <name>... | --rehash [--dry-run] | --all [--dry-run] [--allow-uncommitted] | [--dry-run] [--allow-uncommitted] <file.sql>...'
+			'usage: apply-migration.mjs --status [--strict] | --record-existing --through <file> | --unrecord <name>... | --rehash [--dry-run] | --all [--dry-run] [--allow-uncommitted] [--no-backup] | [--dry-run] [--allow-uncommitted] [--no-backup] <file.sql>...'
 		);
 		process.exitCode = 1;
 	}

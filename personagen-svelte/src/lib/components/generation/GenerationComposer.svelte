@@ -85,6 +85,16 @@
 		agents?: Array<{ id: string; name: string }>;
 		agentId?: string;
 		onAgentChange?: (id: string) => void;
+		/**
+		 * Why Cinematic is out of reach on this plan, or null when it is included.
+		 *
+		 * The server refuses `media: 'cinematic'` with 403 PLAN_FEATURE BEFORE the
+		 * preview branch, so without this the option looks available, the refusal
+		 * arrives as an unexplained failure, and — for a cinematic Studio template,
+		 * which posts its preview immediately — the composer renders a Retry button
+		 * that can never succeed.
+		 */
+		cinematicBlocked?: string | null;
 	}
 
 	let {
@@ -96,7 +106,8 @@
 		onOpenPlanner,
 		agents,
 		agentId,
-		onAgentChange
+		onAgentChange,
+		cinematicBlocked = null
 	}: Props = $props();
 
 	let loading = $state(false);
@@ -265,6 +276,11 @@
 	// no combination has to be pre-shipped.
 	let planOptions = $derived<Partial<Record<StepKind, StepModel[]>>>(preview?.plan?.options ?? {});
 	let planFixed = $derived<Partial<Record<StepKind, StepModel>>>(preview?.plan?.fixed ?? {});
+	// Stages that belong to no format but WILL run and bill on this particular
+	// run — building a persona's face the first time. Priced by the server and
+	// carried here so the composer's total is the server's total; recomputing
+	// them client-side would be a second source of truth for a real charge.
+	let planOneOffs = $derived<PipelineStep[]>(preview?.plan?.oneOffs ?? []);
 	/**
 	 * The transfer stage has no picker — the FORMAT is the endpoint (Reel remake
 	 * runs Replace, Motion transfer runs Move). The server resolved both and sent
@@ -288,6 +304,7 @@
 					supplied: { still: !!stillUrl },
 					tier,
 					shots: preview?.plan?.shots ?? 4,
+					oneOffs: planOneOffs,
 					// The MEASURED length of the clip the user supplied. Absent, the
 					// planner quotes its own default duration — which is the honest
 					// answer before a clip exists, and wrong the moment one does.
@@ -421,6 +438,8 @@
 	// hang indefinitely. Abort covers three exits: superseded by a newer resolve,
 	// dialog closed, or the 30s timeout (which surfaces as a Retry-able error).
 	let previewAbort: AbortController | null = null;
+	/** The preview was refused by the plan, not by a hiccup — Retry is pointless. */
+	let loadBlockedByPlan = $state(false);
 	const PREVIEW_TIMEOUT_MS = 30_000;
 
 	async function loadPreview() {
@@ -436,6 +455,7 @@
 		}, PREVIEW_TIMEOUT_MS);
 		loading = true;
 		loadError = null;
+		loadBlockedByPlan = false;
 		preview = null;
 		try {
 			const res = await fetch(spec.endpoint, {
@@ -448,6 +468,11 @@
 			if (token !== previewToken) return; // superseded by a newer resolve
 			if (!res.ok || !data?.success) {
 				loadError = data?.error || `Could not resolve the request (HTTP ${res.status}).`;
+				// A plan refusal is not a transient failure: retrying it forever cannot
+				// help. Say so, and send them somewhere that can. This is the first
+				// place in the app that reads a server error CODE rather than only its
+				// sentence — the codes were being thrown away everywhere.
+				loadBlockedByPlan = data?.code === 'PLAN_FEATURE';
 				return;
 			}
 			preview = data.preview;
@@ -869,9 +894,15 @@
 		</div>
 	{:else if loadError}
 		<div class="composer-error" role="alert">
-			<strong>Can't prepare this generation</strong>
+			<strong
+				>{loadBlockedByPlan ? 'Not included in your plan' : "Can't prepare this generation"}</strong
+			>
 			<p>{loadError}</p>
-			<button type="button" class="btn-retry" onclick={() => loadPreview()}>Retry</button>
+			{#if loadBlockedByPlan}
+				<a class="btn-retry" href="/billing">Compare plans</a>
+			{:else}
+				<button type="button" class="btn-retry" onclick={() => loadPreview()}>Retry</button>
+			{/if}
 		</div>
 	{:else if preview}
 		<!-- ── The journey ──────────────────────────────────────────────
@@ -1070,20 +1101,26 @@
 											fixed: fixedFor(f),
 											tier: tier === 'manual' ? undefined : tier,
 											shots: preview?.plan?.shots ?? 4,
+											oneOffs: planOneOffs,
 											seconds: sourceSeconds ?? undefined,
 											items: listCount
 										})
 									)}
+									{@const planLocked = f.id === 'cinematic' && cinematicBlocked !== null}
 									<button
 										type="button"
 										class="fmt"
 										class:on={formatId === f.id}
 										role="radio"
 										aria-checked={formatId === f.id}
+										disabled={planLocked}
+										title={planLocked ? (cinematicBlocked ?? undefined) : undefined}
 										onclick={() => pickFormat(f.id)}
 									>
 										<span class="fmt-top">
-											<span class="fmt-name">{f.label}</span>
+											<span class="fmt-name"
+												>{f.label}{planLocked ? ' — not in your plan' : ''}</span
+											>
 											<span class="fmt-cost">{f.steps.length ? money(cost) : 'varies'}</span>
 										</span>
 										<span class="fmt-note">{f.note}</span>

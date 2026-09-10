@@ -1,4 +1,5 @@
 import { json } from '@sveltejs/kit';
+import { entitlementsFor, planRefusal } from '$lib/server/entitlements';
 import type { RequestHandler } from './$types';
 import {
 	encryptSecret,
@@ -118,6 +119,17 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	const provider = String(body.provider || '').toLowerCase();
 	if (!isSupportedProvider(provider)) {
 		return json({ success: false, error: 'Unsupported provider' }, { status: 400 });
+	}
+
+	// "Bring your own keys — generation at no charge" is an Agency line, and it
+	// is already true mechanically: keySourceFor marks the event 'byo' and
+	// charge() skips every non-platform row. Only the GENERATION providers are
+	// gated. Zernio is how every plan publishes and Firecrawl is how briefs are
+	// researched; gating those would break features Free is promised.
+	const GENERATION_PROVIDERS = ['openrouter', 'gemini', 'fal_ai', 'kie_ai'];
+	if (action === 'save' && GENERATION_PROVIDERS.includes(provider)) {
+		const ent = await entitlementsFor(user.id);
+		if (!ent.byok) return json(planRefusal('Bringing your own generation keys', ent.plan), { status: 403 });
 	}
 
 	try {
