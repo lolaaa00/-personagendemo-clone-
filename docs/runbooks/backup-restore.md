@@ -89,7 +89,7 @@ arrays, jsonb, timestamps or enums. Foreign keys are deferred for the load with
   carries it as a comment — the manifest rows are **not** inserted, because rows
   naming files the bucket does not hold would make the app advertise media it
   cannot serve.
-- **Server environment.** `SECRET_KEY_BASE` and the platform provider keys are in
+- **Server environment.** `USER_SECRETS_ENCRYPTION_KEY` and the platform provider keys are in
   the EasyPanel environment. Without them the encrypted key columns are
   unreadable ciphertext, and users would have to re-enter their own keys.
 - **GoTrue's own tables** beyond `auth.users`. Sessions and refresh tokens are not
@@ -140,7 +140,7 @@ succeeded — `npm run backup:check-restore`, as a step-1 gate. It sits after th
 test block and before anything is committed or pushed, so an abort leaves no
 trace in git and nothing reaches production. A failure stops the deploy.
 
-Pass `-skipBackup` to downgrade that failure to a warning. The bypass is appended
+Pass `-allowBackupFailure` to downgrade that failure to a warning. The bypass is appended
 to the commit message (`[gates skipped: backup]`), so it is visible in `git log`
 forever rather than in one terminal session. Legitimate when the database is
 deliberately unreachable, or you have just taken a backup another way.
