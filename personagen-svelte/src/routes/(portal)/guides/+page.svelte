@@ -9,6 +9,7 @@
 	} from '$lib/changelog';
 	import { ROADMAP, ROADMAP_STATUSES } from '$lib/roadmap';
 	import { confirmAction } from '$lib/stores/confirm.svelte';
+	import { DEMOS, ShotFigure, type DemoId } from '$lib/components/docs';
 
 	// ── Guide catalog ────────────────────────────────────────────────────────
 	// Screenshots are imported through Vite's asset pipeline so every capture
@@ -35,6 +36,17 @@
 		t: string;
 		img?: string; // filename (no extension) in /guide-shots/
 		alt?: string;
+		/** One line under the screenshot, when the step text alone does not say what to look at. */
+		caption?: string;
+		/**
+		 * The captures are full pages; a step is usually about ONE region of one.
+		 * focus = which point (0–100 %) stays centred, zoom = how far to magnify it.
+		 * Unset = the whole capture, top-aligned.
+		 */
+		focus?: { x: number; y: number };
+		zoom?: number;
+		/** A LIVE miniature of the UI instead of a picture — see $lib/components/docs. */
+		demo?: DemoId;
 	}
 	interface Guide {
 		id: string;
@@ -46,6 +58,45 @@
 		/** Quick facts — the 3-4 elementary answers someone came for, endpoint-style. */
 		facts?: string[];
 	}
+
+	// ── Providers ────────────────────────────────────────────────────────────
+	// A second axis over the same guides. Someone with an OpenRouter problem
+	// does not think in "Keys & credits" vs "Fixing problems" — they think
+	// "OpenRouter". The dropdown in the index narrows every category to the
+	// guides that touch one provider; a guide can touch several.
+	type ProviderId = 'openrouter' | 'zernio' | 'fal' | 'gemini' | 'firecrawl';
+	const PROVIDERS: Array<{ id: ProviderId; label: string; role: string }> = [
+		{ id: 'openrouter', label: 'OpenRouter', role: 'writing — captions, scripts, ideas' },
+		{ id: 'zernio', label: 'Zernio', role: 'publishing — connected accounts, posting' },
+		{ id: 'fal', label: 'Fal AI', role: 'media — images, video, voice' },
+		{ id: 'gemini', label: 'Gemini', role: 'writing — the alternative to OpenRouter' },
+		{ id: 'firecrawl', label: 'Firecrawl', role: 'brand reading — Scrape & Populate' }
+	];
+	const GUIDE_PROVIDERS: Record<string, ProviderId[]> = {
+		'openrouter-key': ['openrouter'],
+		'which-key-pays': ['openrouter', 'fal', 'gemini'],
+		'zernio-key': ['zernio'],
+		'all-keys': ['openrouter', 'zernio', 'fal', 'gemini', 'firecrawl'],
+		'zernio-billing': ['zernio'],
+		'brand-brief': ['firecrawl'],
+		glossary: ['openrouter', 'fal'],
+		'generate-post': ['openrouter', 'fal'],
+		'composer-costs': ['openrouter', 'fal'],
+		'studio-templates': ['fal'],
+		'reference-kit': ['fal'],
+		voice: ['fal'],
+		'identity-kit': ['openrouter', 'gemini'],
+		'connect-account': ['zernio'],
+		'schedule-autonomy': ['zernio'],
+		'confirm-live': ['zernio'],
+		reschedule: ['zernio'],
+		'delete-live': ['zernio'],
+		'model-manager': ['fal', 'openrouter'],
+		'intel-wizard': ['openrouter', 'firecrawl'],
+		'generation-failing': ['openrouter', 'fal', 'gemini'],
+		'publish-failing': ['zernio']
+	};
+	const providersOf = (g: Guide): ProviderId[] => GUIDE_PROVIDERS[g.id] ?? [];
 
 	const CATEGORIES = [
 		'Getting started',
@@ -73,13 +124,13 @@
 			steps: [
 				{
 					t: 'Everything lives in the left sidebar, in five groups: Network (Dashboard) · Library (All Generations, My Favorites) · Personas (every persona you have + New Persona) · Publish (Review Queue, Calendar) · Setup (Brand Brief, Model Manager, Docs, Settings).',
-					img: 'sidebar-guides',
-					alt: 'The PersonaGen sidebar with its five navigation groups'
+					demo: 'sidebar-map'
 				},
 				{
 					t: 'The Dashboard is your home base: persona health, engagement charts, and quick actions.',
 					img: 'dashboard',
-					alt: 'The Dashboard page with KPIs and the persona roster'
+					alt: 'The Dashboard page with KPIs and the persona roster',
+					caption: 'The Dashboard — KPIs across the top, the persona roster below.'
 				},
 				{ t: 'The moon/sun button in the top-right switches dark and light mode. Your name next to it opens the menu with Log Out.' },
 				{ t: 'Stuck anywhere? Come back to this Docs page (Setup → Docs): Guides for how-tos, Changelog for what changed, Roadmap for what is coming.' }
@@ -110,7 +161,11 @@
 				{ t: 'Spokesperson — a video where the persona speaks to camera: their voice, lip-synced, talking head. Pick it when the words are the point (a review, a tip, an announcement).' },
 				{ t: 'B-roll — a silent video with no talking: product motion, hands, lifestyle shots. No voiceover, so the caption carries the message. Pick it when the product is the point, or when you want something that works with the sound off.' },
 				{ t: 'Cinematic — the premium multi-shot format: several scenes cut together instead of one clip. It costs the most and takes the longest, so save it for hero content.' },
-				{ t: 'Text card — a still that is pure typography: your line IS the artwork, no photo, no face, no product. It is free and instant because it is typeset rather than generated, which makes it the cheap way to keep posting.' },
+				{ t: 'Text card — a still that is pure typography: your line IS the artwork, no photo, no face, no product. The card itself is typeset on our servers for nothing; the only cost is the writing step that comes up with the line, which is a fraction of a cent.' },
+				{
+					t: 'Every format is a short list of stages, and each stage bills a different key — or nothing. Pick one below to see exactly what runs.',
+					demo: 'format-explorer'
+				},
 				{ t: 'Draft — generated and waiting for you. Nothing has been published and nothing goes out until you approve it in the Review Queue.' },
 				{ t: 'Scheduled — approved, with a date and time. It publishes itself when that moment arrives; you can still move or cancel it from the Calendar.' },
 				{ t: 'Published — live on every account it was aimed at. Partial — live on some of them and failed on the rest, usually because one account needs re-linking; open the post to see which platform missed.' }
@@ -268,12 +323,12 @@
 			id: 'openrouter-key',
 			category: 'Keys & credits',
 			title: 'Get an OpenRouter key (fixes "out of credits")',
-			when: 'Content generation fails with a message like "Generation failed via openrouter", "402", or "insufficient credits". OpenRouter is the service that writes captions and scripts — when its credits run out, generation stops until you connect your own key.',
+			when: 'Content generation fails with "The generation key ran out of credits", "402", or "insufficient credits". OpenRouter is the service that writes captions and scripts — EVERY format uses it, even the free text card — so when its balance runs out, generation stops.',
 			facts: [
-				'Fixes: “402” / “insufficient credits” errors',
+				'Fixes: “ran out of credits” / “402” errors',
 				'The key starts with sk-or-v1-…',
-				'$10–20 of credits lasts a long time',
-				'Paste it in Settings → Provider API Keys',
+				'$5–10 of balance lasts a long time (a text card is ~$0.005)',
+				'Once saved, YOUR key pays — not the wallet (see "Which balance pays")',
 			],
 			steps: [
 				{ t: 'Go to openrouter.ai and sign in (Google sign-in works, no card needed yet).' },
@@ -295,6 +350,60 @@
 			tip: 'Your key is stored encrypted and never shown again after saving. Watch your usage anytime at openrouter.ai/activity.'
 		},
 		{
+			// The report that forced this guide: a user's OWN OpenRouter key ran dry,
+			// the run failed "out of credits", and the sidebar showed ₱3,131 the
+			// whole time. Nothing on screen said which balance a generation draws
+			// from. This is that answer, and the demo is the server's actual rule.
+			id: 'which-key-pays',
+			category: 'Keys & credits',
+			title: 'Which balance pays: your wallet or your own key?',
+			when: 'A generation failed for "out of credits" while the Credits pill in the sidebar showed a healthy balance — or you are about to top something up and want to be sure it is the right thing.',
+			facts: [
+				'A key you save ALWAYS wins over the platform key, per provider',
+				'The wallet is only debited for stages that ran on platform keys',
+				'“Ran out of credits” names the key that ran dry — check that one',
+				'Delete your key to switch that provider back to the wallet',
+			],
+			steps: [
+				{ t: 'There are two places money can come from: the Credits wallet (the pill in the sidebar, topped up at Billing) and any provider keys you saved yourself in Settings → Provider API Keys.' },
+				{ t: 'The rule is simple and per provider: if you saved your own key for a provider, every call to that provider runs on YOUR key and bills YOUR account there. The wallet is not touched for those calls.' },
+				{ t: 'Which means: with your own OpenRouter key saved, a text card, a caption, a script — all writing — goes to your OpenRouter balance. If that balance hits zero, the run fails with “The generation key ran out of credits” even though the wallet looks full. The wallet was never in play.' },
+				{
+					t: 'Try it: toggle the keys and watch who pays for each stage.',
+					demo: 'key-routing'
+				},
+				{ t: 'To run on the wallet instead, delete that provider’s key from Settings → Provider API Keys. From the next generation on, that provider runs on the platform key and debits credits at the rate quoted in the composer.' },
+				{ t: 'To keep using your own keys, top up at the provider (openrouter.ai/settings/credits for OpenRouter). Your wallet balance will simply sit there for anything that still runs on platform keys.' }
+			],
+			tip: 'Not sure which side ran dry? The failure message says “generation key” for a provider key. Open Settings → Provider API Keys: a saved key for that provider means it was yours.'
+		},
+		{
+			id: 'zernio-key',
+			category: 'Keys & credits',
+			title: 'Get publishing working (the Zernio key)',
+			when: 'Settings shows Zernio as “Not set”, or connecting a social account says there is no publishing key. Nothing can publish until this is in place.',
+			facts: [
+				'Zernio is the service that connects accounts and posts for you',
+				'You do not buy this one — it is provisioned on our side',
+				'“Not set” = your account has no key yet: ask us',
+				'Extra keys (more free slots) go in Settings → Zernio Key Manager',
+			],
+			steps: [
+				{ t: 'Zernio is the publishing layer: it holds the connection to each social account and sends approved posts to them. Without a key, generation still works but nothing can go live.' },
+				{ t: 'Unlike OpenRouter, you do not sign up and paste a key yourself. Your Zernio key is provisioned for your account by us — message support and we set it up, usually the same day.' },
+				{
+					t: 'Once it is in place, Settings → Provider API Keys shows Zernio as Saved (Test Connection turns it Valid). If it still says Not set, it has not been provisioned yet.',
+					img: 'settings-apikeys',
+					alt: 'The Provider API Keys section in Settings with the Zernio row',
+					focus: { x: 50, y: 20 },
+					zoom: 1.4
+				},
+				{ t: 'Then connect accounts: open a persona → Profile tab → Connections → Connect. See the “Connect a social account” guide for the walk-through.' },
+				{ t: 'Running several brands? Each Zernio key is its own account with 2 free connected-account slots. Settings → Zernio Key Manager lets you add more keys and assign personas to them — see the publishing-billing guide for the maths.' }
+			],
+			tip: 'Zernio is billed per connected account (first 2 free), not per post — so a key sitting unused costs nothing.'
+		},
+		{
 			id: 'all-keys',
 			category: 'Keys & credits',
 			title: 'What each API key powers',
@@ -311,9 +420,10 @@
 					img: 'settings-apikeys',
 					alt: 'The provider key cards in Settings'
 				},
-				{ t: 'Zernio — publishing. Connects social accounts and sends approved posts to them. Without it, nothing publishes.' },
+				{ t: 'Zernio — publishing. Connects social accounts and sends approved posts to them. Without it, nothing publishes. Provisioned by us, not something you buy — see the Zernio guide.' },
 				{ t: 'Fal AI — pictures, video, and voice. Generates the images, videos, and spoken audio in your posts.' },
-				{ t: 'OpenRouter — writing. Captions, scripts, ideas (also a backup route for media). See the OpenRouter guide if it runs out of credits.' },
+				{ t: 'OpenRouter — writing. Captions, scripts, ideas (also a backup route for media). Every format uses it. See the OpenRouter guide if it runs out of credits.' },
+				{ t: 'Saving a key here changes who pays: that provider stops drawing on the wallet and bills your own account instead. See “Which balance pays” before topping anything up.' },
 				{ t: 'Gemini — alternative writing engine; either OpenRouter or Gemini is enough.' },
 				{ t: 'Firecrawl — brand reading. Powers "Scrape & Populate" in the Brand Brief.' },
 				{ t: 'Settings also has a Zernio Key Manager section: add extra Zernio keys (each is its own account with its own 2 free slots) and assign specific personas to them.' }
@@ -371,6 +481,32 @@
 				{ t: 'The finished post appears as a Draft. Edit the caption if you like, then approve it like any other draft.' }
 			],
 			tip: 'Video posts come with the persona’s own voice and sound. Cinematic is the premium multi-scene format — best for hero content.'
+		},
+		{
+			// The Director is the only paid stage of a card format. When the user
+			// brings the words there is nothing to write and nothing to grade, so a
+			// batch of a hundred runs with no model at all — the route that makes
+			// them (/api/agent/[id]/cards) cannot reach a provider even by fallback.
+			id: 'own-words-cards',
+			category: 'Creating content',
+			title: 'Make cards from your own quotes (free, up to 100 at once)',
+			when: 'You already have the lines — quotes, tips, a numbered list — and want them as cards without paying for the Director, or you want a month of text posts in one sitting.',
+			facts: [
+				'Pick Text card or Motion text card, then Words → “My own words — free”',
+				'One quote per line; a blank line separates quotes that need their own line breaks',
+				'Up to 100 cards per batch — no model runs, nothing is charged to the wallet or your keys',
+				'Every card lands as a draft in the Review Queue; nothing publishes by itself',
+			],
+			steps: [
+				{ t: 'Open the composer for a persona (Generate a post, or a Studio template on the Text card shelf) and choose Text card — or Motion text card for the same card put in motion.' },
+				{ t: 'In the Look step, switch Words from “The Director writes it” to “My own words — free”. The single card-text box becomes a quote box.' },
+				{ t: 'Paste your quotes: one per line. A quote that needs its own line breaks (a list, a myth/fact pair) goes as its own block with a blank line before and after. The counter shows how many cards that makes — up to 100.' },
+				{ t: 'Choose the look across the set: Matching set (one palette, each line takes the layout that fits it), Same look (one palette and one layout — a uniform grid), or Every card different. Layout and Palette below apply to every card.' },
+				{ t: 'Notice the Craft step is gone: with the Director and the quality gate skipped there is nothing left to choose a model for, and the quote reads free. Pick a format below and toggle “I bring the words” to see why.', demo: 'format-explorer' },
+				{ t: 'Approve — the button reads “Create N cards — free”. The cards appear in the feed as each one is typeset (a few seconds each) and every one lands as a draft in the Review Queue.' },
+				{ t: 'A quote the card font cannot draw (emoji, non-Latin script) is flagged before you send and skipped if you send it anyway; the rest of the batch still runs.' }
+			],
+			tip: 'The receipt on each card says $0 and names the typesetter, not a model — and “My own words” is the one place in the product where neither the wallet nor your own keys are ever touched.'
 		},
 		{
 			id: 'composer-costs',
@@ -787,6 +923,7 @@
 				'Nothing fails silently',
 			],
 			steps: [
+				{ t: 'The whole life of a post, on one line — click a label to see what it means and whether it needs you.', demo: 'post-lifecycle' },
 				{ t: 'Generating — being created right now. Do nothing; it appears when ready.' },
 				{ t: 'Draft — waiting for you in the Review Queue. Approve, edit, or reject.' },
 				{ t: 'Scheduled — approved; goes out at its time slot. Nothing to do, or reschedule it.' },
@@ -803,20 +940,45 @@
 	// ── Quick fixes: symptom → guide, endpoint-style ─────────────────────────
 	// One-tap answers for the situations users actually arrive with.
 	// ── Selection + search ───────────────────────────────────────────────────
-	let selectedId = $state(GUIDES[0].id);
+	// null = the docs HOME: nothing auto-opened, every category folded. The page
+	// used to land on the first guide with "Getting started" forced open, which
+	// read as a wall of steps before the reader had chosen anything.
+	let selectedId = $state<string | null>(null);
 	let query = $state('');
+	let provider = $state<'all' | ProviderId>('all');
+	$effect(() => syncParam('provider', provider, 'all'));
 
 	let filtered = $derived.by(() => {
 		const q = query.trim().toLowerCase();
-		if (!q) return GUIDES;
-		return GUIDES.filter(
-			(g) =>
-				g.title.toLowerCase().includes(q) ||
-				g.when.toLowerCase().includes(q) ||
-				g.steps.some((s) => s.t.toLowerCase().includes(q))
-		);
+		const p = provider;
+		let list = p === 'all' ? GUIDES : GUIDES.filter((g) => providersOf(g).includes(p));
+		if (q)
+			list = list.filter(
+				(g) =>
+					g.title.toLowerCase().includes(q) ||
+					g.when.toLowerCase().includes(q) ||
+					g.steps.some((s) => s.t.toLowerCase().includes(q))
+			);
+		return list;
 	});
-	let selected = $derived(GUIDES.find((g) => g.id === selectedId) ?? GUIDES[0]);
+	let selected = $derived(selectedId ? (GUIDES.find((g) => g.id === selectedId) ?? null) : null);
+	let providerMeta = $derived(PROVIDERS.find((p) => p.id === provider) ?? null);
+	/** Guides per provider, for the home page's "by provider" row. */
+	let providerCounts = $derived(
+		PROVIDERS.map((p) => ({ ...p, count: GUIDES.filter((g) => providersOf(g).includes(p.id)).length }))
+	);
+
+	/** The first-run path: the four guides a new account needs, in order. */
+	const START_HERE = ['getting-around', 'openrouter-key', 'generate-post', 'connect-account'];
+	let startHere = $derived(
+		START_HERE.map((id) => GUIDES.find((g) => g.id === id)).filter((g): g is Guide => !!g)
+	);
+
+	function goHome() {
+		selectedId = null;
+		history.replaceState(null, '', location.pathname + location.search);
+		document.getElementById('guide-article')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+	}
 
 	function pick(id: string) {
 		selectedId = id;
@@ -852,10 +1014,11 @@
 		expandedCats = { ...expandedCats, [cat]: !catOpen(cat) };
 	}
 	function catOpen(cat: string): boolean {
-		if (query.trim()) return true;
+		if (query.trim() || provider !== 'all') return true;
 		const explicit = expandedCats[cat];
 		if (explicit !== undefined) return explicit;
-		return selected.category === cat;
+		// On the docs home nothing is selected, so every category starts folded.
+		return selected?.category === cat;
 	}
 
 	/** Short label for a step's nested nav anchor — first words, no markup. */
@@ -866,19 +1029,24 @@
 	}
 
 	function jumpToStep(i: number) {
+		if (!selected) return;
 		document
 			.getElementById(`step-${selected.id}-${i + 1}`)
 			?.scrollIntoView({ block: 'center', behavior: 'smooth' });
 	}
 
 	// Immersive reading: walk guides in catalog order without going back to the list.
-	let guideIndex = $derived(GUIDES.findIndex((g) => g.id === selected.id));
+	let guideIndex = $derived(selected ? GUIDES.findIndex((g) => g.id === selected!.id) : -1);
 	let prevGuide = $derived(guideIndex > 0 ? GUIDES[guideIndex - 1] : null);
-	let nextGuide = $derived(guideIndex < GUIDES.length - 1 ? GUIDES[guideIndex + 1] : null);
+	let nextGuide = $derived(
+		guideIndex >= 0 && guideIndex < GUIDES.length - 1 ? GUIDES[guideIndex + 1] : null
+	);
 
 	onMount(() => {
 		const hash = location.hash.replace('#', '');
 		if (hash && GUIDES.some((g) => g.id === hash)) selectedId = hash;
+		const p = new URLSearchParams(location.search).get('provider');
+		if (p && PROVIDERS.some((x) => x.id === p)) provider = p as ProviderId;
 	});
 
 	// ── Docs hub: Guides | Changelog | Roadmap | User Voice ──────────────────
@@ -1209,6 +1377,23 @@
 	<div class="gd-body">
 		<!-- ── Left: nested index — category ▸ guide ▸ steps of the open guide ── -->
 		<nav class="gd-nav" aria-label="Guide list">
+			<button type="button" class="nav-home" class:active={!selected} onclick={goHome}>
+				<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-8 9 8v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z" /></svg>
+				Docs home
+			</button>
+			<!-- Second axis: the same guides, narrowed to one provider. -->
+			<label class="nav-provider">
+				<span class="nav-provider-label">By provider</span>
+				<select bind:value={provider} aria-label="Show guides for one provider">
+					<option value="all">All providers</option>
+					{#each providerCounts as p (p.id)}
+						<option value={p.id}>{p.label} ({p.count})</option>
+					{/each}
+				</select>
+			</label>
+			{#if providerMeta}
+				<p class="nav-provider-role">{providerMeta.label}: {providerMeta.role}</p>
+			{/if}
 			{#each CATEGORIES as cat}
 				{@const inCat = filtered.filter((g) => g.category === cat)}
 				{#if inCat.length > 0}
@@ -1265,15 +1450,103 @@
 				{/if}
 			{/each}
 			{#if filtered.length === 0}
-				<p class="index-empty">No guides match “{query}”.</p>
+				<p class="index-empty">
+					No guides match {query ? `“${query}”` : ''}{query && providerMeta ? ' for ' : ''}{providerMeta ? providerMeta.label : ''}.
+				</p>
 			{/if}
 		</nav>
 
-		<!-- ── Center: the guide itself ── -->
+		<!-- ── Center: the guide itself, or the docs home ── -->
 		<article class="gd-article" id="guide-article" aria-live="polite">
+		{#if !selected}
+			<!-- Docs home: choose before you read. Nothing is opened for you. -->
+			<div class="gd-home">
+				<section class="home-start" aria-labelledby="home-start-title">
+					<h2 id="home-start-title">Start here</h2>
+					<p class="home-lede">Four guides, in order, take a new account from login to a live post.</p>
+					<ol class="home-path">
+						{#each startHere as g, i (g.id)}
+							<li>
+								<button type="button" class="home-path-btn" onclick={() => pick(g.id)}>
+									<span class="home-path-n">{i + 1}</span>
+									<span class="home-path-text">
+										<span class="home-path-title">{g.title}</span>
+										<span class="home-path-when">{g.when}</span>
+									</span>
+								</button>
+							</li>
+						{/each}
+					</ol>
+				</section>
+
+				<section class="home-cats" aria-labelledby="home-cats-title">
+					<h3 id="home-cats-title">Browse by topic</h3>
+					<div class="home-grid">
+						{#each CATEGORIES as cat (cat)}
+							{@const inCat = filtered.filter((g) => g.category === cat)}
+							{#if inCat.length > 0}
+								<button
+									type="button"
+									class="home-card"
+									onclick={() => {
+										expandedCats = { ...expandedCats, [cat]: true };
+										pick(inCat[0].id);
+									}}
+								>
+									<span class="home-card-title">{cat}</span>
+									<span class="home-card-count">{inCat.length} {inCat.length === 1 ? 'guide' : 'guides'}</span>
+									<span class="home-card-list">{inCat.slice(0, 3).map((g) => g.title).join(' · ')}{inCat.length > 3 ? ' · …' : ''}</span>
+								</button>
+							{/if}
+						{/each}
+					</div>
+				</section>
+
+				<section class="home-providers" aria-labelledby="home-prov-title">
+					<h3 id="home-prov-title">Browse by provider</h3>
+					<p class="home-lede">Every guide that touches one service — keys, billing, and the errors it throws.</p>
+					<div class="home-prov-row">
+						{#each providerCounts as p (p.id)}
+							<button
+								type="button"
+								class="home-prov"
+								class:active={provider === p.id}
+								onclick={() => (provider = provider === p.id ? 'all' : p.id)}
+							>
+								<span class="home-prov-name">{p.label}</span>
+								<span class="home-prov-role">{p.role}</span>
+								<span class="home-prov-count">{p.count} {p.count === 1 ? 'guide' : 'guides'}</span>
+							</button>
+						{/each}
+					</div>
+					{#if providerMeta}
+						<ul class="home-prov-list">
+							{#each filtered as g (g.id)}
+								<li>
+									<button type="button" class="home-prov-link" onclick={() => pick(g.id)}>
+										<span class="home-prov-link-cat">{g.category}</span>
+										{g.title}
+									</button>
+								</li>
+							{/each}
+						</ul>
+					{/if}
+				</section>
+			</div>
+		{:else}
+			<button type="button" class="article-back" onclick={goHome}>← Docs home</button>
 			<span class="article-cat">{selected.category}</span>
 			<h2>{selected.title}</h2>
 			<p class="article-when"><b>You need this when:</b> {selected.when}</p>
+			{#if providersOf(selected).length}
+				<p class="article-providers">
+					{#each providersOf(selected) as pid (pid)}
+						<button type="button" class="article-provider" onclick={() => (provider = pid)}>
+							{PROVIDERS.find((p) => p.id === pid)?.label}
+						</button>
+					{/each}
+				</p>
+			{/if}
 
 			{#if selected.facts?.length}
 				<section class="gd-facts" aria-label="Quick facts">
@@ -1290,21 +1563,19 @@
 				{#each selected.steps as step, i}
 					<li id={`step-${selected.id}-${i + 1}`}>
 						{step.t}
+						{#if step.demo}
+							{@const Demo = DEMOS[step.demo]}
+							<Demo />
+						{/if}
 						{#if step.img}
-							<a
-								class="step-shot-link"
-								href={shotUrl(step.img)}
-								target="_blank"
-								rel="noopener"
-								title="Open screenshot full size"
-							>
-								<img
-									class="step-shot"
-									src={shotUrl(step.img)}
-									alt={step.alt ?? 'App screenshot for this step'}
-									loading="lazy"
-								/>
-							</a>
+							<ShotFigure
+								src={shotUrl(step.img)}
+								alt={step.alt ?? 'App screenshot for this step'}
+								caption={step.caption}
+								focus={step.focus}
+								zoom={step.zoom}
+								ratio={step.img === 'sidebar-guides' ? 'tall' : 'wide'}
+							/>
 						{/if}
 					</li>
 				{/each}
@@ -1312,9 +1583,10 @@
 			{#if selected.tip}
 				<p class="article-tip">💡 {selected.tip}</p>
 			{/if}
+		{/if}
 
 			<!-- Walk the whole handbook without returning to the list. -->
-			<footer class="gd-pager">
+			<footer class="gd-pager" class:hidden={!selected}>
 				{#if prevGuide}
 					<button type="button" class="pager-btn" onclick={() => pick(prevGuide!.id)}>
 						<span class="pager-dir">← Previous</span>
@@ -1332,16 +1604,24 @@
 
 		<!-- ── Right: on-this-page rail ── -->
 		<aside class="gd-rail" aria-label="On this page">
-			<span class="rail-title">On this page</span>
-			<ol class="rail-steps">
-				{#each selected.steps as step, i}
-					<li>
-						<button type="button" class="rail-step" onclick={() => jumpToStep(i)}>
-							<span class="rail-n">{i + 1}</span>{stepLabel(step.t)}
-						</button>
-					</li>
-				{/each}
-			</ol>
+			{#if selected}
+				<span class="rail-title">On this page</span>
+				<ol class="rail-steps">
+					{#each selected.steps as step, i}
+						<li>
+							<button type="button" class="rail-step" onclick={() => jumpToStep(i)}>
+								<span class="rail-n">{i + 1}</span>{stepLabel(step.t)}
+							</button>
+						</li>
+					{/each}
+				</ol>
+			{:else}
+				<span class="rail-title">Handbook</span>
+				<p class="rail-home">
+					{GUIDES.length} guides across {CATEGORIES.length} topics and {PROVIDERS.length} providers.
+					Pick one on the left, or start with the four-step path.
+				</p>
+			{/if}
 		</aside>
 	</div>
 
@@ -1894,25 +2174,8 @@
 		font-weight: 700;
 		font-variant-numeric: tabular-nums;
 	}
-	.step-shot-link {
-		display: block;
-		margin-top: 0.7rem;
-		border-radius: var(--radius-sm);
-		max-width: 860px;
-	}
-	.step-shot-link:focus-visible {
-		outline: 2px solid var(--accent);
-		outline-offset: 3px;
-	}
-	.step-shot {
-		width: 100%;
-		height: auto;
-		border: 1px solid var(--border-strong);
-		border-radius: var(--radius-sm);
-		box-shadow: var(--shadow-md);
-		display: block;
-		cursor: zoom-in;
-	}
+	/* Screenshots render through ShotFigure ($lib/components/docs) — framed,
+	   focus-cropped, lightboxed — so no bare .step-shot styles live here. */
 	.article-tip {
 		margin: var(--space-6) 0 0;
 		background: var(--surface-2);
@@ -2579,6 +2842,285 @@
 	.uv-lane-empty { font-size: 0.72rem; color: var(--text-dim); text-align: center; padding: 0.6rem 0; }
 	@media (max-width: 1100px) { .uv-board { grid-template-columns: repeat(2, 1fr); } }
 	@media (max-width: 640px) { .uv-board { grid-template-columns: 1fr; } }
+
+	/* ── Docs home + provider axis ─────────────────────────────────────────── */
+	.gd-pager.hidden {
+		display: none;
+	}
+	.rail-home {
+		margin: 0.3rem 0 0;
+		font-size: var(--text-sm);
+		color: var(--text-dim);
+		line-height: var(--leading-snug);
+	}
+	.nav-home {
+		display: flex;
+		align-items: center;
+		gap: 0.45rem;
+		width: 100%;
+		padding: 0.5rem 0.6rem;
+		margin-bottom: 0.35rem;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		background: var(--surface);
+		color: var(--text);
+		font: inherit;
+		font-size: var(--text-base);
+		font-weight: 600;
+		cursor: pointer;
+	}
+	.nav-home:hover,
+	.nav-home.active {
+		border-color: var(--accent);
+		background: var(--accent-soft);
+		color: var(--accent-text);
+	}
+	.nav-provider {
+		display: grid;
+		gap: 0.25rem;
+		margin: 0.35rem 0 0.2rem;
+	}
+	.nav-provider-label {
+		font-size: var(--text-xs);
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+		color: var(--text-dim);
+	}
+	.nav-provider select {
+		width: 100%;
+		padding: 0.45rem 0.6rem;
+		border: 1px solid var(--border-strong);
+		border-radius: var(--radius-sm);
+		background: var(--surface);
+		color: var(--text);
+		font: inherit;
+		font-size: var(--text-base);
+	}
+	.nav-provider select:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 1px;
+	}
+	.nav-provider-role {
+		margin: 0 0 0.5rem;
+		font-size: var(--text-xs);
+		color: var(--text-dim);
+		line-height: var(--leading-snug);
+	}
+	.article-back {
+		border: 0;
+		background: none;
+		padding: 0;
+		margin-bottom: 0.6rem;
+		font: inherit;
+		font-size: var(--text-sm);
+		font-weight: 600;
+		color: var(--text-dim);
+		cursor: pointer;
+	}
+	.article-back:hover {
+		color: var(--accent-text);
+	}
+	.article-providers {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.35rem;
+		margin: 0.4rem 0 0;
+	}
+	.article-provider {
+		padding: 0.15rem 0.55rem;
+		border-radius: 999px;
+		border: 1px solid var(--border-strong);
+		background: var(--surface);
+		font: inherit;
+		font-size: var(--text-xs);
+		font-weight: 700;
+		color: var(--text-muted);
+		cursor: pointer;
+	}
+	.article-provider:hover {
+		border-color: var(--accent);
+		color: var(--accent-text);
+	}
+
+	.gd-home {
+		display: grid;
+		gap: 2rem;
+	}
+	.gd-home h2 {
+		margin: 0 0 0.25rem;
+	}
+	.gd-home h3 {
+		margin: 0 0 0.25rem;
+		font-size: var(--text-lg);
+	}
+	.home-lede {
+		margin: 0 0 0.9rem;
+		color: var(--text-muted);
+		font-size: var(--text-base);
+	}
+	.home-path {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: grid;
+		gap: 0.5rem;
+	}
+	.home-path-btn {
+		display: grid;
+		grid-template-columns: 2rem 1fr;
+		gap: 0.75rem;
+		align-items: start;
+		width: 100%;
+		text-align: left;
+		padding: 0.8rem 0.9rem;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-md, 12px);
+		background: var(--surface);
+		font: inherit;
+		color: var(--text);
+		cursor: pointer;
+		transition:
+			border-color 0.15s,
+			box-shadow 0.15s;
+	}
+	.home-path-btn:hover {
+		border-color: var(--accent);
+		box-shadow: var(--shadow-md);
+	}
+	.home-path-n {
+		width: 2rem;
+		height: 2rem;
+		border-radius: 50%;
+		display: grid;
+		place-items: center;
+		background: var(--accent);
+		color: #fff;
+		font-weight: 700;
+		font-size: var(--text-sm);
+	}
+	.home-path-text {
+		display: grid;
+		gap: 0.15rem;
+	}
+	.home-path-title {
+		font-weight: 700;
+		font-size: var(--text-md);
+	}
+	.home-path-when {
+		color: var(--text-dim);
+		font-size: var(--text-sm);
+		line-height: var(--leading-snug);
+	}
+	.home-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+		gap: 0.6rem;
+	}
+	.home-card {
+		display: grid;
+		gap: 0.25rem;
+		text-align: left;
+		padding: 0.8rem 0.9rem;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-md, 12px);
+		background: var(--surface);
+		font: inherit;
+		color: var(--text);
+		cursor: pointer;
+		transition:
+			border-color 0.15s,
+			box-shadow 0.15s;
+	}
+	.home-card:hover {
+		border-color: var(--accent);
+		box-shadow: var(--shadow-md);
+	}
+	.home-card-title {
+		font-weight: 700;
+	}
+	.home-card-count {
+		font-size: var(--text-xs);
+		color: var(--accent-text);
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+	}
+	.home-card-list {
+		font-size: var(--text-sm);
+		color: var(--text-dim);
+		line-height: var(--leading-snug);
+	}
+	.home-prov-row {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+		gap: 0.6rem;
+	}
+	.home-prov {
+		display: grid;
+		gap: 0.2rem;
+		text-align: left;
+		padding: 0.75rem 0.85rem;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-md, 12px);
+		background: var(--surface);
+		font: inherit;
+		color: var(--text);
+		cursor: pointer;
+	}
+	.home-prov:hover,
+	.home-prov.active {
+		border-color: var(--accent);
+		background: var(--accent-soft);
+	}
+	.home-prov-name {
+		font-weight: 700;
+	}
+	.home-prov-role {
+		font-size: var(--text-xs);
+		color: var(--text-dim);
+		line-height: var(--leading-snug);
+	}
+	.home-prov-count {
+		font-size: var(--text-xs);
+		font-weight: 700;
+		color: var(--accent-text);
+	}
+	.home-prov-list {
+		list-style: none;
+		margin: 0.8rem 0 0;
+		padding: 0;
+		display: grid;
+		gap: 0.25rem;
+	}
+	.home-prov-link {
+		display: flex;
+		align-items: baseline;
+		gap: 0.6rem;
+		width: 100%;
+		text-align: left;
+		padding: 0.5rem 0.7rem;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		background: var(--surface);
+		font: inherit;
+		font-size: var(--text-base);
+		font-weight: 600;
+		color: var(--text);
+		cursor: pointer;
+	}
+	.home-prov-link:hover {
+		border-color: var(--accent);
+		color: var(--accent-text);
+	}
+	.home-prov-link-cat {
+		font-size: var(--text-xs);
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+		color: var(--text-dim);
+		white-space: nowrap;
+	}
 
 	@media (prefers-reduced-motion: reduce) {
 		.nav-chevron {
