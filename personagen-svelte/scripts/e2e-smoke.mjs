@@ -220,7 +220,18 @@ async function main() {
 	const side = await fetch(`${SB}/auth/v1/signup`, { method: 'POST', headers: { apikey: ANON, 'Content-Type': 'application/json' }, body: JSON.stringify({ email: sideEmail, password, app_metadata: { invited: true }, data: { invited: true } }) });
 	await sleep(500);
 	const [sideRow] = await pg(`select coalesce((select balance_credits from credit_accounts a join auth.users u on u.id=a.user_id where u.email=${q(sideEmail)}),-1) as credits`) ?? [];
-	check('an account created straight against GoTrue gets no credit', side.status === 200 && Number(sideRow?.credits) === -1, `HTTP ${side.status} · wallet=${sideRow?.credits}`);
+	// The invariant is NO MONEY, not "no wallet row". This used to assert -1 (no
+	// row at all), which was true only as a side effect of the grant being what
+	// created the wallet. Since wallet_for_every_account every account opens one
+	// at zero, so the row now exists and is empty — and asserting the old shape
+	// would have failed a change that made the product better. Zero and absent
+	// are both "no money"; anything above zero is the finding.
+	const sideCredits = Number(sideRow?.credits);
+	check(
+		'an account created straight against GoTrue gets no money',
+		side.status === 200 && sideCredits <= 0,
+		`HTTP ${side.status} · wallet=${sideCredits === -1 ? 'no row' : sideCredits}`
+	);
 	for (const u of (await pg(`select id from auth.users where email=${q(sideEmail)}`) ?? [])) {
 		await fetch(`${SB}/auth/v1/admin/users/${u.id}`, { method: 'DELETE', headers: { apikey: KEY, Authorization: `Bearer ${KEY}` } });
 	}

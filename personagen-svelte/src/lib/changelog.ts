@@ -493,12 +493,16 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-09", hash: "c615b11", type: "test", category: "maintenance", scope: null, title: "point five specs at the merged reality" },
 	{ date: "2026-09-09", hash: "cf2ade2", type: "other", category: "maintenance", scope: null, title: "Merge persona-v2/phase-0 into main: the touchpoint contract, identity kit, and the age hint" },
 	{ date: "2026-09-09", hash: "aabdb11", type: "chore", category: "infrastructure", scope: "changelog", title: "regenerate across the persona-v2 merge" },
-	{ date: "2026-09-10", hash: "c812c5f", type: "fix", category: "fix", scope: "backup", title: "the restore proof was decaying as the activity log grew" },
-	{ date: "2026-09-10", hash: "de91e47", type: "fix", category: "fix", scope: "smoke", title: "the test harness stops writing a production money switch by default" },
-	{ date: "2026-09-10", hash: "259c8f6", type: "fix", category: "fix", scope: "generation", title: "a customer was shown our vendor's bill and told he could not afford it" },
-	{ date: "2026-09-10", hash: "70b924c", type: "feat", category: "feature", scope: "ops", title: "watch the provider balance, because today it ran out during a customer's post" },
-	{ date: "2026-09-10", hash: "29e6a9f", type: "fix", category: "fix", scope: "credits", title: "an account created by an operator got no wallet at all" },
-	{ date: "2026-09-10", hash: "492a857", type: "fix", category: "publishing", scope: "copy", title: "the button promised an immediate publish that the server was holding" }
+	{ date: "2026-09-10", hash: "fc4c74f", type: "docs", category: "docs", scope: "audit", title: "the register went stale in twelve hours; correct it, and the restore runbook" },
+	{ date: "2026-09-10", hash: "fbc53bf", type: "fix", category: "fix", scope: "backup", title: "the restore proof was decaying as the activity log grew" },
+	{ date: "2026-09-10", hash: "3ab7011", type: "docs", category: "docs", scope: "audit", title: "2026-09-10 sweep — operation, documents, interface, grouped by who can close each item" },
+	{ date: "2026-09-10", hash: "4754ae1", type: "fix", category: "fix", scope: "smoke", title: "the test harness stops writing a production money switch by default" },
+	{ date: "2026-09-10", hash: "367e90f", type: "fix", category: "fix", scope: "generation", title: "a customer was shown our vendor's bill and told he could not afford it" },
+	{ date: "2026-09-10", hash: "b9863a1", type: "feat", category: "feature", scope: "ops", title: "watch the provider balance, because today it ran out during a customer's post" },
+	{ date: "2026-09-10", hash: "078a5df", type: "fix", category: "fix", scope: "credits", title: "an account created by an operator got no wallet at all" },
+	{ date: "2026-09-10", hash: "53a8297", type: "fix", category: "publishing", scope: "copy", title: "the button promised an immediate publish that the server was holding" },
+	{ date: "2026-09-10", hash: "1a79e60", type: "fix", category: "fix", scope: "calendar", title: "a field that reported 'advisor' for every persona, always" },
+	{ date: "2026-09-10", hash: "a9d5d69", type: "docs", category: "docs", scope: "audit", title: "mark the sweep rows -12 closed today, each verified on origin/main and read back from production" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -864,12 +868,12 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 	},
 	{
 		id: "2aba57f", from: "2026-09-09", to: "2026-09-10",
-		category: "fix", categories: ["infrastructure","maintenance","fix","feature","publishing"],
+		category: "fix", categories: ["infrastructure","maintenance","docs","fix","feature","publishing"],
 		title: "Fixed: move the ratchet to the merged tree's real count",
-		summary: "Move the ratchet to the merged tree's real count. Plus 9 more changes, touching setup and deployment and internal cleanup and things you can now do.",
+		summary: "Move the ratchet to the merged tree's real count. Plus 13 more changes, touching setup and deployment and internal cleanup and guides and explanations.",
 		major: true, curated: false,
-		entries: [CHANGELOG[455], CHANGELOG[456], CHANGELOG[457], CHANGELOG[458], CHANGELOG[459], CHANGELOG[460], CHANGELOG[461], CHANGELOG[462], CHANGELOG[463], CHANGELOG[464]]
+		entries: [CHANGELOG[455], CHANGELOG[456], CHANGELOG[457], CHANGELOG[458], CHANGELOG[459], CHANGELOG[460], CHANGELOG[461], CHANGELOG[462], CHANGELOG[463], CHANGELOG[464], CHANGELOG[465], CHANGELOG[466], CHANGELOG[467], CHANGELOG[468]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "492a857";
+export const CHANGELOG_GENERATED_FROM = "a9d5d69";
