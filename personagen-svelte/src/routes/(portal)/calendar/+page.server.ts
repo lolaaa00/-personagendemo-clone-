@@ -52,7 +52,6 @@ export const load: PageServerLoad = async ({ locals }) => {
 					engagement_rate: parseFloat(a.engagement_rate as any) || 0,
 					active: a.status === 'active',
 					connection_count: a.connection_count ?? 0,
-					autonomy_level: a.autonomy_level ?? 'advisor',
 					connected_platforms: connectedPlatforms
 				};
 			});

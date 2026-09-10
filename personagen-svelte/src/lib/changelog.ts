@@ -497,7 +497,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-10", hash: "de91e47", type: "fix", category: "fix", scope: "smoke", title: "the test harness stops writing a production money switch by default" },
 	{ date: "2026-09-10", hash: "259c8f6", type: "fix", category: "fix", scope: "generation", title: "a customer was shown our vendor's bill and told he could not afford it" },
 	{ date: "2026-09-10", hash: "70b924c", type: "feat", category: "feature", scope: "ops", title: "watch the provider balance, because today it ran out during a customer's post" },
-	{ date: "2026-09-10", hash: "29e6a9f", type: "fix", category: "fix", scope: "credits", title: "an account created by an operator got no wallet at all" }
+	{ date: "2026-09-10", hash: "29e6a9f", type: "fix", category: "fix", scope: "credits", title: "an account created by an operator got no wallet at all" },
+	{ date: "2026-09-10", hash: "492a857", type: "fix", category: "publishing", scope: "copy", title: "the button promised an immediate publish that the server was holding" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -863,12 +864,12 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 	},
 	{
 		id: "2aba57f", from: "2026-09-09", to: "2026-09-10",
-		category: "fix", categories: ["infrastructure","maintenance","fix","feature"],
+		category: "fix", categories: ["infrastructure","maintenance","fix","feature","publishing"],
 		title: "Fixed: move the ratchet to the merged tree's real count",
-		summary: "Move the ratchet to the merged tree's real count. Plus 8 more changes, touching setup and deployment and internal cleanup and things you can now do.",
+		summary: "Move the ratchet to the merged tree's real count. Plus 9 more changes, touching setup and deployment and internal cleanup and things you can now do.",
 		major: true, curated: false,
-		entries: [CHANGELOG[455], CHANGELOG[456], CHANGELOG[457], CHANGELOG[458], CHANGELOG[459], CHANGELOG[460], CHANGELOG[461], CHANGELOG[462], CHANGELOG[463]]
+		entries: [CHANGELOG[455], CHANGELOG[456], CHANGELOG[457], CHANGELOG[458], CHANGELOG[459], CHANGELOG[460], CHANGELOG[461], CHANGELOG[462], CHANGELOG[463], CHANGELOG[464]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "29e6a9f";
+export const CHANGELOG_GENERATED_FROM = "492a857";
