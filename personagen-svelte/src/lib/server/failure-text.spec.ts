@@ -41,6 +41,16 @@ describe('the leak that started this', () => {
 		expect(out.internal).toContain('402');
 		expect(out.internal).toContain('openrouter.ai/settings/credits');
 	});
+
+	it('the one-line helper agrees with the classifier it wraps', () => {
+		// customerFailureText is what a caller reaches for when it wants the
+		// sentence and nothing else. If it ever drifts from classifyFailure().customer
+		// the two call sites would disagree about what a customer is told.
+		expect(customerFailureText(REAL_402)).toBe(out.customer);
+		expect(customerFailureText(REAL_402, { ownKey: true })).toBe(
+			classifyFailure(REAL_402, { ownKey: true }).customer
+		);
+	});
 });
 
 describe('whose key ran out decides who is asked to fix it', () => {

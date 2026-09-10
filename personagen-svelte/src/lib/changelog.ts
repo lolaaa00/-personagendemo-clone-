@@ -505,7 +505,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-10", hash: "a9d5d69", type: "docs", category: "docs", scope: "audit", title: "mark the sweep rows -12 closed today, each verified on origin/main and read back from production" },
 	{ date: "2026-09-10", hash: "bd40b3c", type: "test", category: "maintenance", scope: "smoke", title: "assert no MONEY, not \"no wallet row\"" },
 	{ date: "2026-09-10", hash: "0942a18", type: "fix", category: "fix", scope: "quote", title: "a forged clip duration quoted $0.30 and billed $1.80" },
-	{ date: "2026-09-10", hash: "4e4ba27", type: "docs", category: "docs", scope: "guides", title: "docs home, provider axis, live demos, framed screenshots" }
+	{ date: "2026-09-10", hash: "4e4ba27", type: "docs", category: "docs", scope: "guides", title: "docs home, provider axis, live demos, framed screenshots" },
+	{ date: "2026-09-10", hash: "2ee88f7", type: "feat", category: "feature", scope: "cards", title: "\"My own words\" — Director optional, up to 100 $0 cards a batch" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -879,12 +880,12 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 	},
 	{
 		id: "bd40b3c", from: "2026-09-10", to: "2026-09-10",
-		category: "maintenance", categories: ["maintenance","fix","docs"],
+		category: "maintenance", categories: ["maintenance","fix","docs","feature"],
 		title: "Tidying: assert no MONEY, not \"no wallet row\"",
-		summary: "Assert no MONEY, not \"no wallet row\". Plus 2 more changes, touching things that were broken and guides and explanations.",
+		summary: "Assert no MONEY, not \"no wallet row\". Plus 3 more changes, touching things that were broken and guides and explanations and things you can now do.",
 		major: false, curated: false,
-		entries: [CHANGELOG[469], CHANGELOG[470], CHANGELOG[471]]
+		entries: [CHANGELOG[469], CHANGELOG[470], CHANGELOG[471], CHANGELOG[472]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "4e4ba27";
+export const CHANGELOG_GENERATED_FROM = "2ee88f7";
