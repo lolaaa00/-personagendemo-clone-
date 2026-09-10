@@ -257,3 +257,59 @@ Each of these produced a confident, wrong FAIL before being caught:
   `OPENROUTER_API_KEY="sk-or-v1-verify-fake-key-never-valid"` alongside the scrub. `hasAi`
   becomes true, the guard runs first and returns 400 for internal targets; a public URL
   proceeds to the provider and fails with a harmless 401.
+
+## Additions 2026-09-10
+
+- **A change that needs the service key (storage writes, service-client row updates — e.g.
+  the `/api/agent/[id]/cards` batch) cannot run under the service-key scrub.** Use the boot
+  gate instead: `export RUN_SCHEDULER=false` skips `startScheduler()` entirely (hooks.server.ts),
+  so keep the real `SUPABASE_SERVICE_ROLE_KEY` from `.env`, scrub only the provider keys and
+  zero the autopilot vars. Confirm with `grep -c Scheduler <log>` → `0`. The rows you create
+  land on the harness account and go away with `destroy`; the PNG/MP4 objects in the storage
+  bucket do not — a handful per run, acceptable.
+- **The persona Content tab is `?tab=feed`** (`initialTab()` maps feed/assets/posts → Content;
+  `?tab=content` is ignored and lands on Profile). Open it by URL rather than clicking `.tab-btn`.
+- **"Generate Now" (`.btn-generate`) clicks are eaten in the hydration window even after it
+  reports enabled.** Click, wait up to ~8s for the composer's `.kind` radios, and click again
+  if they never appear — one attempt reads as "the composer does not open".
+- **Feed tiles (`.post-tile`) render no caption text** — only the media and badges (a `T`
+  badge marks a text card). To assert on a caption, read the row via
+  `POST /api/posts {action:'get', id}` (fields under `.data`) or look at `/review`'s table.
+- **Composer walk-through:** kinds `.kind` (Image / Video), formats `.fmt` by `.fmt-name`,
+  steps advance with `.btn-primary` whose label is the NEXT step's name; on the last step the
+  same button is the spend/create action — guard on `/create|approve|publish/i` before
+  clicking. `.sumrow strong` first match is the "Making" row, not the cost.
+
+## Additions 2026-09-10
+
+- **The persona page defeats `getByRole(...).click()`.** It polls, so Playwright's
+  actionability wait sits on "waiting for navigation to finish" and throws a 30s timeout that
+  reads exactly like a broken tab. Don't fight it: **the composer's best door is `/calendar` →
+  `Generate Post Now`**, which opens the full four-step modal (Subject / Look / Craft /
+  Deliver) with format cards and live prices. That is the surface for anything about formats,
+  stages or quoting.
+- **`verify-seed.mjs create` prints an `agentA` that may already be stale.** The fixed-address
+  account is shared, and a parallel session's recycle mints new ids while your login still
+  works — so you get `404 "Persona not found or ownership mismatch"` on a valid session, which
+  reads like an auth bug. Read the ids out of the DOM instead of trusting the seed output:
+  ```js
+  const hrefs = await p.locator('a[href*="/personas/"]').evaluateAll((e) => e.map((x) => x.getAttribute('href')));
+  const ids = [...new Set(hrefs.map((h) => h.split('/personas/')[1]?.split(/[/?#]/)[0]).filter(Boolean))];
+  ```
+- **Quoting/plan changes are best driven as an API surface from inside the authenticated page**,
+  which carries the session cookie for free and avoids the composer's hydration timing:
+  ```js
+  await p.evaluate(async ([a, body]) => {
+    const r = await fetch(`/api/agent/${a}/generate-post`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+    });
+    return { status: r.status, body: await r.json() };
+  }, [agentId, { preview: true, format: 'listicle', list_count: 5 }]);
+  ```
+  `preview: true` costs nothing and generates nothing — it returns the resolved plan, its steps
+  and their prices. Sweeping a numeric input across its range this way is how the
+  `source_seconds` quote-under-bill bug was found; no unit test had reached it.
+- **Backgrounding the dev server:** `nohup … &` from the Bash tool does not survive, but the
+  process it spawns may still be holding the port — a later launch then fails with
+  "Port N is already in use" while `curl http://localhost:N/login` returns 200. Check the port
+  before assuming the boot failed.
