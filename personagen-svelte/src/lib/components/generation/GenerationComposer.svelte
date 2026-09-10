@@ -58,6 +58,13 @@
 		type StepModel
 	} from '$lib/formats';
 	import { quote, pricingContext } from '$lib/stores/pricing.svelte';
+	import {
+		parseQuotes,
+		quoteProblem,
+		MAX_CARD_QUOTES,
+		CARD_LOOKS,
+		type CardLook
+	} from '$lib/card-quotes';
 	import { STUDIO_TEMPLATES } from '$lib/studio-templates';
 	import { AUTONOMY_LABELS, type AutonomyLevel } from '$lib/types';
 
@@ -163,6 +170,13 @@
 	let cardText = $state('');
 	let cardLayout = $state('auto');
 	let cardPalette = $state('auto');
+	// "My own words": the user's quotes replace the Director's line — one card
+	// per quote, up to MAX_CARD_QUOTES, and no model anywhere in the run. The
+	// Director and the quality gate are the only paid stages of a card format,
+	// so a batch typed by the user is free by construction, not by discount.
+	let cardMode = $state<'director' | 'own'>('director');
+	let cardQuotesRaw = $state('');
+	let cardLook = $state<CardLook>('set');
 	// Framing is only SENT when the user actually chooses one. Studio templates
 	// already bake a front-camera or mirror clause into their scene text, so
 	// posting a default on every run would splice the same instruction twice.
@@ -260,6 +274,15 @@
 	let usesCharacterRef = $derived(composition.character !== false);
 	let usesProductRef = $derived(composition.product !== false);
 	let isGraphicCard = $derived(composition.still === 'graphic');
+	let cardQuotes = $derived(parseQuotes(cardQuotesRaw));
+	let cardQuoteProblems = $derived(cardQuotes.map((q) => quoteProblem(q)));
+	let cardQuotesOk = $derived(cardQuoteProblems.filter((p) => p === null).length);
+	/** The batch is what will run: a card format, own-words mode, at least one quote. */
+	let ownWords = $derived(isGraphicCard && cardMode === 'own' && cardQuotes.length > 0);
+	/** Refuse to send a batch nothing can come out of, or one over the cap. */
+	let ownWordsBlocked = $derived(
+		ownWords && (cardQuotes.length > MAX_CARD_QUOTES || cardQuotesOk === 0)
+	);
 
 	/**
 	 * The beat counts a listicle can be. The whole range is offered because
@@ -318,7 +341,10 @@
 					options: planOptions,
 					fixed: fixedFor(format),
 					picks,
-					supplied: { still: !!stillUrl },
+					// A supplied stage runs nothing and costs nothing. The user's own
+					// quotes supply the Director's line AND make the quality gate moot —
+					// there is no draft to abandon when the words are the user's.
+					supplied: { still: !!stillUrl, director: ownWords, grader: ownWords },
 					tier,
 					shots: preview?.plan?.shots ?? 4,
 					oneOffs: planOneOffs,
@@ -379,6 +405,15 @@
 				label: 'Open the campaign planner',
 				hint: 'Nothing is generated here — the planner asks for a cadence and a mix, then queues the posts as drafts.'
 			};
+		// A batch of the user's own cards always lands as drafts: nothing typed a
+		// hundred times over should be able to race straight to a live account.
+		if (ownWords) {
+			const n = cardQuotes.length;
+			return {
+				label: `Create ${n} ${n === 1 ? 'card' : 'cards'} — free`,
+				hint: `Output: ${n} ${n === 1 ? 'draft' : 'drafts'} in the review queue. Your words, typeset on our servers — no model runs and nothing is charged. Approve each one in Review to post.`
+			};
+		}
 		if (deliverMode === 'asset')
 			return {
 				label: spec?.confirmLabel ?? 'Approve & generate',
@@ -527,6 +562,9 @@
 			framingTouched = false;
 			cardLayout = 'auto';
 			cardPalette = 'auto';
+			cardMode = 'director';
+			cardQuotesRaw = '';
+			cardLook = 'set';
 			stillUrl = '';
 			// The beat count opens on the one the server quoted this preview with, so
 			// the footer's number and the plan behind it agree from the first paint.
@@ -845,6 +883,14 @@
 			body.card_text = needs('cardText') && cardText.trim() ? cardText.trim() : undefined;
 			body.card_layout = needs('cardLayout') && cardLayout !== 'auto' ? cardLayout : undefined;
 			body.card_palette = needs('cardPalette') && cardPalette !== 'auto' ? cardPalette : undefined;
+			// The batch replaces the single card. A body carrying card_texts is routed
+			// by the persona page to /cards, which calls no model and records $0.
+			if (ownWords) {
+				if (ownWordsBlocked) return;
+				body.card_texts = cardQuotes;
+				body.card_look = cardLook;
+				body.card_text = undefined;
+			}
 			body.framing = needs('framing') && framingTouched ? framing : undefined;
 			body.still_model = picks.still || undefined;
 			body.video_model = picks.video || undefined;
@@ -1272,6 +1318,72 @@
 						{/if}
 
 						{#if needs('cardText')}
+							<!-- Who writes the line. The Director is a paid stage; the user's own
+							     words are not — and they can come a hundred at a time. -->
+							<div class="fld">
+								<span class="fld-label" id="gc-cardmode-label">Words</span>
+								<div class="segs" role="radiogroup" aria-labelledby="gc-cardmode-label">
+									<button
+										type="button"
+										class="seg"
+										class:on={cardMode === 'director'}
+										role="radio"
+										aria-checked={cardMode === 'director'}
+										onclick={() => (cardMode = 'director')}>The Director writes it</button
+									>
+									<button
+										type="button"
+										class="seg"
+										class:on={cardMode === 'own'}
+										role="radio"
+										aria-checked={cardMode === 'own'}
+										onclick={() => (cardMode = 'own')}>My own words — free</button
+									>
+								</div>
+							</div>
+							{#if cardMode === 'own'}
+								<div class="fld">
+									<label class="fld-label" for="gc-cardquotes">
+										Your quotes
+										<span class="fld-count" class:over={cardQuotes.length > MAX_CARD_QUOTES}>
+											{cardQuotes.length} of {MAX_CARD_QUOTES}
+											{cardQuotes.length === 1 ? 'card' : 'cards'}
+										</span>
+									</label>
+									<textarea
+										id="gc-cardquotes"
+										class="quotes"
+										aria-describedby="gc-cardquotes-hint"
+										bind:value={cardQuotesRaw}
+										rows="8"
+										placeholder="One quote per line.&#10;Leave a blank line between quotes that need their own line breaks (a list, a myth/fact)."
+									></textarea>
+									<span class="hint" id="gc-cardquotes-hint">
+										Each quote becomes one card, typeset on our servers. No model runs, nothing is
+										charged — to the wallet or to your keys.
+									</span>
+									{#if cardQuotes.length > MAX_CARD_QUOTES}
+										<span class="warn-line">Up to {MAX_CARD_QUOTES} at a time — trim the list to continue.</span>
+									{:else if cardQuotes.length > 0 && cardQuotesOk < cardQuotes.length}
+										<ul class="quote-problems">
+											{#each cardQuotes as q, i (i)}
+												{#if cardQuoteProblems[i]}
+													<li><b>“{q.length > 48 ? q.slice(0, 48) + '…' : q}”</b> — {cardQuoteProblems[i]}</li>
+												{/if}
+											{/each}
+										</ul>
+									{/if}
+								</div>
+								<div class="fld">
+									<label class="fld-label" for="gc-cardlook">Look across the set</label>
+									<select id="gc-cardlook" bind:value={cardLook}>
+										{#each CARD_LOOKS as l (l.id)}
+											<option value={l.id}>{l.label}</option>
+										{/each}
+									</select>
+									<span class="hint">{CARD_LOOKS.find((l) => l.id === cardLook)?.blurb}</span>
+								</div>
+							{:else}
 							<div class="fld">
 								<label class="fld-label" for="gc-cardtext">Card text</label>
 								<textarea
@@ -1286,6 +1398,7 @@
 									stack or a list.
 								</span>
 							</div>
+							{/if}
 							<div class="row">
 								<div class="fld">
 									<label class="fld-label" for="gc-cardlayout">Layout</label>
@@ -1627,7 +1740,9 @@
 									<div class="sc-ctl">
 										{#if s.supplied}
 											<span class="sc-note"
-												>Using the image you supplied — this stage won't run.</span
+												>{s.kind === 'still'
+													? 'Using the image you supplied'
+													: 'Using your own words'} — this stage won't run.</span
 											>
 										{:else if options.length > 1}
 											<select
@@ -1718,12 +1833,14 @@
 								{#if isGraphicCard}
 									<!-- A card is deterministic: this is genuinely what comes out. -->
 									<div class="frame frame-card">
-										<span>{cardText || 'The Director writes this line'}</span>
+										<span>{ownWords ? cardQuotes[0] : cardText || 'The Director writes this line'}</span>
 									</div>
 									<span class="frame-cap">
-										{cardText
-											? 'The card that will be made'
-											: 'Layout preview — the line is written at run time'}
+										{ownWords
+											? `1 of ${cardQuotes.length} — your words, one card each`
+											: cardText
+												? 'The card that will be made'
+												: 'Layout preview — the line is written at run time'}
 									</span>
 								{:else}
 									<!-- Everything else is written by the Director at run time, so the
@@ -1799,15 +1916,25 @@
 								{/if}
 								<div class="sumrow">
 									<dt>Built by</dt>
-									<dd>{activePlan.map((s) => s.label).join(' → ') || '—'}</dd>
+									<!-- Only the stages that RUN. A supplied stage (the user's still, the
+									     user's words) is not a builder, and naming it here would claim a
+									     Director wrote lines the user typed. -->
+									<dd>
+										{[
+											...(ownWords ? ['Your words'] : []),
+											...activePlan.filter((s) => !s.supplied).map((s) => s.label)
+										].join(' → ') || '—'}
+									</dd>
 								</div>
 								<div class="sumrow">
 									<dt>{costLabel}</dt>
 									<dd>
 										<strong>{money(planUsd)}</strong>
-										{metered
-											? ' — taken from your balance when you approve'
-											: ' — estimated, nothing is debited'}
+										{ownWords
+											? ' — no model runs; nothing is debited from the wallet or your keys'
+											: metered
+												? ' — taken from your balance when you approve'
+												: ' — estimated, nothing is debited'}
 									</dd>
 								</div>
 							</dl>
@@ -1974,7 +2101,7 @@
 		{#if isLastStep}
 			<button
 				class="btn-primary"
-				disabled={loading || !!loadError || !preview || missingSourceClip}
+				disabled={loading || !!loadError || !preview || missingSourceClip || ownWordsBlocked}
 				title={missingSourceClip
 					? 'Add a source clip on the Look step — this format transforms one.'
 					: undefined}
@@ -2455,6 +2582,36 @@
 		margin-top: 0.3rem;
 		font-size: 0.75rem;
 		color: var(--muted);
+	}
+	/* "My own words" — the batch textarea and its live count. */
+	.fld-count {
+		margin-left: 0.5rem;
+		font-family: var(--font-mono);
+		font-size: 0.7rem;
+		font-weight: 600;
+		color: var(--accent-text);
+	}
+	.fld-count.over {
+		color: var(--error-text);
+	}
+	.fld textarea.quotes {
+		min-height: 9.5rem;
+		font-family: var(--font-mono);
+		font-size: 0.8rem;
+		line-height: 1.5;
+	}
+	.warn-line {
+		display: block;
+		margin-top: 0.35rem;
+		font-size: 0.75rem;
+		color: var(--error-text);
+	}
+	.quote-problems {
+		margin: 0.35rem 0 0;
+		padding-left: 1rem;
+		font-size: 0.74rem;
+		color: var(--warning-text);
+		line-height: 1.45;
 	}
 	.captions-toggle {
 		display: flex;

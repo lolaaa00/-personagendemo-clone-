@@ -129,7 +129,7 @@ export function sanitizeCardText(raw: string): string | null {
 
 /** Editorial ground/type/accent trios for brand-less personas — rotated by text
  *  hash so a feed of cards varies while any single card stays reproducible. */
-const CURATED_PALETTES: CardPalette[] = [
+export const CURATED_PALETTES: CardPalette[] = [
 	{ bg: '#101418', fg: '#F5F1E8', accent: '#E8C468' }, // ink / cream / gold
 	{ bg: '#F4EFE6', fg: '#1B1B1F', accent: '#C4552A' }, // paper / ink / rust
 	{ bg: '#14281D', fg: '#EDE9DC', accent: '#8FB98B' }, // forest / bone / sage

@@ -741,5 +741,9 @@ export function planTotalUsd(steps: PipelineStep[]): number {
  * being composed — it was never meant to be fixed at four.
  */
 export function craftMatters(steps: PipelineStep[]): boolean {
-	return steps.some((s) => s.selectable || s.usd > 0);
+	// A supplied stage does not run, so there is nothing to pick a model for —
+	// a Director with three wired LLMs is still no decision when the user
+	// brought the words. Counting it kept the Craft step on a run that was
+	// entirely free and entirely fixed.
+	return steps.some((s) => !s.supplied && (s.selectable || s.usd > 0));
 }

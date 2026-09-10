@@ -1493,14 +1493,54 @@
 			// re-derivation that could disagree with what they saw.
 			const body: Record<string, unknown> = { ...approved };
 
-			const res = await fetch(`/api/agent/${agent.id}/generate-post`, {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify(body)
-			});
+			// "My own words": a batch of typeset cards. Its own endpoint, because it
+			// never calls a model — one row per quote, rendered on our servers, $0.
+			const ownWords = Array.isArray(body.card_texts) && body.card_texts.length > 0;
+			const res = await fetch(
+				ownWords ? `/api/agent/${agent.id}/cards` : `/api/agent/${agent.id}/generate-post`,
+				{
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify(body)
+				}
+			);
 			const result = await parseJsonResponse<any>(res);
 			if (!res.ok || !result.success) {
 				showToast(result?.error || 'Failed to generate post', 'error');
+				return;
+			}
+			if (ownWords) {
+				const requestAgentId = agent.id;
+				const ids: string[] = Array.isArray(result.post_ids) ? result.post_ids : [];
+				const skipped: Array<{ text: string; reason: string }> = Array.isArray(result.skipped)
+					? result.skipped
+					: [];
+				if (skipped.length)
+					showToast(
+						`${skipped.length} ${skipped.length === 1 ? 'quote' : 'quotes'} skipped — ${skipped[0].reason}`,
+						'warning'
+					);
+				if (ids.length === 0) return;
+				showToast(
+					`Creating ${ids.length} ${ids.length === 1 ? 'card' : 'cards'} — they appear in the feed as each one finishes`,
+					'info'
+				);
+				// The rows already exist as 'generating'; watch them land rather than
+				// polling a hundred ids one by one.
+				const deadline = Date.now() + 10 * 60_000;
+				while (Date.now() < deadline) {
+					await sleep(4000);
+					if (pageDestroyed || agent?.id !== requestAgentId) return;
+					await loadFeed();
+					if (!feedPosts.some((p: any) => ids.includes(p.id) && p.status === 'generating')) break;
+				}
+				const failed = feedPosts.filter((p: any) => ids.includes(p.id) && p.status === 'failed').length;
+				showToast(
+					failed
+						? `${ids.length - failed} of ${ids.length} cards ready — ${failed} failed (the reason is on each post)`
+						: `${ids.length} ${ids.length === 1 ? 'card is' : 'cards are'} ready in the review queue`,
+					failed ? 'warning' : 'success'
+				);
 				return;
 			}
 			if (res.status === 202 && result.post_id) {

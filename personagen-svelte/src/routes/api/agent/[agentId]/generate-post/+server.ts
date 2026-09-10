@@ -110,6 +110,21 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		/* an empty body is fine */
 	}
 
+	// "My own words" batches have their own endpoint — /api/agent/[id]/cards —
+	// which never resolves a model. A batch that lands here by mistake must not
+	// fall through to the Director path and quietly spend on a hundred cards the
+	// user was told were free. `card_look` travels with it and is read there.
+	if (Array.isArray(body.card_texts) && body.card_texts.length > 0) {
+		return json(
+			{
+				success: false,
+				code: 'USE_CARDS_ENDPOINT',
+				error: `A batch of your own cards (card_texts${body.card_look ? ', card_look' : ''}) is created at /api/agent/${agentId}/cards, not here. Nothing was generated.`
+			},
+			{ status: 400 }
+		);
+	}
+
 	// Model Manager: resolve models against the user's registry (enable/disable,
 	// per-kind default, price overrides). Unreachable/empty registry falls back
 	// to the static catalog — the manager can refine generation, never brick it.
@@ -834,6 +849,8 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 					'script',
 					'voice',
 					'card_text',
+					'card_texts',
+					'card_look',
 					'card_layout',
 					'card_palette',
 					'framing',
@@ -1116,14 +1133,17 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 				let ranOnOwnKey = false;
 				try {
 					ranOnOwnKey =
-						(await keySourceFor(taskSupabase, user.id, 'openrouter').catch(() => 'platform')) === 'byo';
+						(await keySourceFor(taskSupabase, user.id, 'openrouter').catch(() => 'platform')) ===
+						'byo';
 				} catch {
 					/* unknown → treat as ours */
 				}
 				const failure = classifyFailure(genErr, { ownKey: ranOnOwnKey });
 				if (failure.onUs) {
 					// The operator needs the real text; the customer must not see it.
-					console.error(`[generate-post] PLATFORM-SIDE failure (${failure.kind}): ${failure.internal}`);
+					console.error(
+						`[generate-post] PLATFORM-SIDE failure (${failure.kind}): ${failure.internal}`
+					);
 				}
 				try {
 					await taskDb.posts.update(postId, {
