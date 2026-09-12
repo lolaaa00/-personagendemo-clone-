@@ -1,7 +1,8 @@
 <script lang="ts">
 	import DocsDemo from './DocsDemo.svelte';
 	import { FORMAT_CATALOG, STEP_LABEL, STEP_PURPOSE, type StepKind } from '$lib/formats';
-	import { priceOf } from '$lib/pricing';
+	import { priceOf } from "$lib/pricing";
+	import { quote } from "$lib/stores/pricing.svelte";
 
 	/**
 	 * "What actually runs when I pick this format?" — answered from the same
@@ -77,8 +78,7 @@
 	let total = $derived(rows.reduce((s, r) => s + r.usd, 0));
 	let payers = $derived([...new Set(rows.map((r) => r.payer))] as Payer[]);
 
-	const money = (usd: number) =>
-		usd === 0 ? 'free' : usd < 0.01 ? `<$0.01 (~$${usd.toFixed(3)})` : `~$${usd.toFixed(2)}`;
+	
 </script>
 
 <DocsDemo title="Pick a format, see what runs and who pays">
@@ -120,7 +120,7 @@
 						<span class="fx-stage-purpose">{r.purpose}</span>
 					</span>
 					<span class="fx-payer">{PAYER_LABEL[r.payer]}</span>
-					<span class="fx-usd" class:free={r.usd === 0}>{money(r.usd)}</span>
+					<span class="fx-usd" class:free={r.usd === 0}>{quote(r.usd)}</span>
 				</li>
 			{/each}
 		</ol>
@@ -134,7 +134,7 @@
 					>
 				{/each}
 			</span>
-			<span class="fx-total-usd">≈ {total === 0 ? 'free' : `$${total.toFixed(2)}`} at default models</span>
+			<span class="fx-total-usd">≈ {quote(total)} at default models</span>
 		</div>
 		<p class="fx-fine">
 			Estimates at the default models — the composer's quote is the exact number for your
