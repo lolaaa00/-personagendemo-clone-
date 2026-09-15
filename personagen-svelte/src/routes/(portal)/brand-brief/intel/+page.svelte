@@ -420,7 +420,11 @@
 		intelGenerating = true;
 		intelError = null;
 		try {
-			const res = await fetch('/api/engine', {
+			// /api/engine refuses any request without ?path= (see +server.ts:279).
+			// Shipping this without it meant the rewrite returned 400 on every
+			// click and the server handler was never once reached — the feature
+			// was documented as fixed without ever being run.
+			const res = await fetch('/api/engine?path=personagen-brand-brief', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({

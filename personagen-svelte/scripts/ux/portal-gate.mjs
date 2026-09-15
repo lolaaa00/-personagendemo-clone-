@@ -33,6 +33,10 @@ const DIR = join(appRoot, '.ux-audit');
 mkdirSync(OUT, { recursive: true });
 
 const accounts = JSON.parse(readFileSync(join(DIR, 'accounts.json'), 'utf8')).accounts;
+/** The account the single-session checks (persistence, deep link) run as.
+ *  Prefers a workspace owner when a full tenant exists, else whatever is there. */
+const PRIMARY = accounts.owner ? 'owner' : Object.keys(accounts)[0];
+const primaryAccount = accounts[PRIMARY];
 
 /** Routes every role may open. `/personas/:id` is resolved per role from the sidebar. */
 const ROUTES = [
@@ -165,7 +169,7 @@ for (const [role, acct] of Object.entries(accounts)) {
 // ── 4b. Every internal link discovered must resolve ────────────────────────
 console.log('\n── internal links resolve');
 {
-	const ctx = await browser.newContext({ storageState: join(DIR, 'state-owner.json') });
+	const ctx = await browser.newContext({ storageState: join(DIR, `state-${PRIMARY}.json`) });
 	const page = await ctx.newPage();
 	for (const href of [...allInternalLinks].filter((h) => !h.startsWith('/api/'))) {
 		const r = await page.goto(`${BASE}${href}`, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => null);
@@ -179,7 +183,7 @@ console.log('\n── internal links resolve');
 // ── 7. Persistence — a mutation must survive a hard reload ─────────────────
 console.log('\n── persistence');
 {
-	const ctx = await browser.newContext({ storageState: join(DIR, 'state-owner.json'), viewport: { width: 1280, height: 900 } });
+	const ctx = await browser.newContext({ storageState: join(DIR, `state-${PRIMARY}.json`), viewport: { width: 1280, height: 900 } });
 	const page = await ctx.newPage();
 
 	// (a) Favourite a post from the library, reload, assert it stuck.
@@ -243,7 +247,7 @@ console.log('\n── session + deep link');
 		const carries = landed.search.includes(encodeURIComponent(target)) || landed.search.includes(target);
 		if (!carries) fail('session: return path', `/login?…  does not carry the requested path (${landed.search || 'no query'}) — after signing in the user cannot be returned to ${target}`);
 		else {
-			const acct = accounts.owner;
+			const acct = primaryAccount;
 			await page.fill('#email', acct.email);
 			await page.fill('#password', acct.password);
 			await Promise.all([page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 90000 }), page.click('button[type="submit"]')]);

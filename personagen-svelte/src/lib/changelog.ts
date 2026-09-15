@@ -511,7 +511,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-10", hash: "2ee88f7", type: "feat", category: "feature", scope: "cards", title: "\"My own words\" — Director optional, up to 100 $0 cards a batch" },
 	{ date: "2026-09-10", hash: "9872669", type: "other", category: "docs", scope: null, title: "Merge origin/main: the shipped quote fix meets the cards batch and the docs home" },
 	{ date: "2026-09-12", hash: "94eb7b4", type: "fix", category: "fix", scope: null, title: "FormatExplorer uses quote() to apply markup—was under-quoting by 3x" },
-	{ date: "2026-09-14", hash: "f16c6c1", type: "other", category: "maintenance", scope: "ux", title: "portal overhaul round 1 — integrity fixes, plus earlier uncommitted work" }
+	{ date: "2026-09-14", hash: "f16c6c1", type: "other", category: "maintenance", scope: "ux", title: "portal overhaul round 1 — integrity fixes, plus earlier uncommitted work" },
+	{ date: "2026-09-14", hash: "9788f2e", type: "fix", category: "fix", scope: "ux", title: "one status-colour source, and restore the lint gate I broke" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -887,10 +888,10 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 		id: "bd40b3c", from: "2026-09-10", to: "2026-09-14",
 		category: "fix", categories: ["maintenance","infrastructure","fix","docs","feature"],
 		title: "Fixed: assert no MONEY, not \"no wallet row\"",
-		summary: "Assert no MONEY, not \"no wallet row\". Plus 8 more changes, touching internal cleanup and setup and deployment and guides and explanations.",
+		summary: "Assert no MONEY, not \"no wallet row\". Plus 9 more changes, touching internal cleanup and setup and deployment and guides and explanations.",
 		major: true, curated: false,
-		entries: [CHANGELOG[469], CHANGELOG[470], CHANGELOG[471], CHANGELOG[472], CHANGELOG[473], CHANGELOG[474], CHANGELOG[475], CHANGELOG[476], CHANGELOG[477]]
+		entries: [CHANGELOG[469], CHANGELOG[470], CHANGELOG[471], CHANGELOG[472], CHANGELOG[473], CHANGELOG[474], CHANGELOG[475], CHANGELOG[476], CHANGELOG[477], CHANGELOG[478]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "f16c6c1";
+export const CHANGELOG_GENERATED_FROM = "9788f2e";
