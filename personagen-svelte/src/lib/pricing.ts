@@ -118,7 +118,26 @@ export interface CostEvent {
 	provider: string;
 	operation: string;
 	model: string;
+	/**
+	 * What the customer is billed against, from the table above. This stays the
+	 * billing basis even when `measuredUsd` is present — see the note there.
+	 */
 	usd: number;
+	/** Tokens the provider reported, when it reported any. */
+	tokensIn?: number | null;
+	tokensOut?: number | null;
+	/**
+	 * What the PROVIDER says the call cost, when it says anything (OpenRouter
+	 * returns this on every response; Gemini does not).
+	 *
+	 * Recorded, NOT billed. The number quoted to the user before the run comes
+	 * from the same table `usd` does, and this codebase treats "the quote is an
+	 * upper bound on the bill" as a promise — so a measured cost higher than the
+	 * table cannot silently become the charge. The fix for a wrong price is to
+	 * correct the TABLE, which moves the quote and the bill together. This column
+	 * is what makes that correction measurable instead of guessed.
+	 */
+	measuredUsd?: number | null;
 	/** Durable bucket URL of the asset this event produced, if any — recorded in
 	 * the generation_events ledger so every spent generation is recoverable. */
 	assetUrl?: string;

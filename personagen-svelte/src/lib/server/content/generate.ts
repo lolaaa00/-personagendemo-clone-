@@ -31,7 +31,7 @@
 
 import { env } from '$env/dynamic/private';
 import { getUserApiKey } from '$lib/server/user-api-keys';
-import { resolveAiClient, type AiClient } from '$lib/server/ai-client';
+import { resolveAiClient, type AiClient, type AiUsage } from '$lib/server/ai-client';
 import {
 	priceOf,
 	summarizeCosts,
@@ -2816,14 +2816,20 @@ function trackAi(ai: AiClient, costEvents: CostEvent[]): AiClient {
 		provider: ai.provider,
 		model: ai.model,
 		async generate(prompt, opts) {
-			const out = await ai.generate(prompt, opts);
+			// Held in an object, not a `let`: TypeScript narrows a closure-assigned
+			// local to `never` because it cannot see that onUsage runs.
+			const seen: { usage: AiUsage | null } = { usage: null };
+			const out = await ai.generate(prompt, { ...opts, onUsage: (u) => { seen.usage = u; } });
 			costEvents.push({
 				provider: ai.provider,
 				operation: 'llm',
 				// The real model id, so the observability panel names what actually
 				// wrote the script — not a 'text-generation' placeholder.
 				model: ai.model,
-				usd: priceOf(ai.provider, 'llm')
+				usd: priceOf(ai.provider, 'llm'),
+				tokensIn: seen.usage?.tokensIn ?? null,
+				tokensOut: seen.usage?.tokensOut ?? null,
+				measuredUsd: seen.usage?.costUsd ?? null
 			});
 			return out;
 		}
@@ -2905,6 +2911,11 @@ export async function recordCostEvents(
 			operation: e.operation,
 			model: e.model,
 			est_cost: e.usd,
+			// What the provider said it consumed. Recorded, never billed — the
+			// quote the user approved comes from the same table est_cost does.
+			tokens_in: e.tokensIn ?? null,
+			tokens_out: e.tokensOut ?? null,
+			measured_cost: e.measuredUsd ?? null,
 			asset_url: e.assetUrl ?? null,
 			billed_user_id: billedUserId,
 			key_source: (mode === 'off'
@@ -2921,7 +2932,7 @@ export async function recordCostEvents(
 	// (billed_user_id / key_source / credits) down with it. Bounded: at most
 	// one retry per optional column. Core columns are never dropped — if the
 	// error names one of those, the insert has genuinely failed.
-	const OPTIONAL = new Set(['asset_url', 'billed_user_id', 'key_source', 'credits']);
+	const OPTIONAL = new Set(['asset_url', 'billed_user_id', 'key_source', 'credits', 'tokens_in', 'tokens_out', 'measured_cost']);
 	const dropped = new Set<string>();
 	let inserted: Array<{ id: string }> | null = null;
 	let lastErr: any = null;

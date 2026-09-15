@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import type { CostEvent } from '$lib/pricing';
 
 const { budget, record } = vi.hoisted(() => ({
 	budget: { assertWithinBudget: vi.fn<(...args: unknown[]) => Promise<void>>(async () => {}) },
@@ -30,7 +31,44 @@ describe('meteredAiClient', () => {
 		expect(budget.assertWithinBudget).toHaveBeenCalledTimes(1);
 		expect(budget.assertWithinBudget.mock.calls[0]).toEqual([scope.supabase, 'u1', undefined, 1]); // ceil(0.002 × 100) at markup 1
 		expect(record.recordCostEvents).toHaveBeenCalledTimes(3);
-		expect(record.recordCostEvents.mock.calls[0][3]).toEqual([{ provider: 'openrouter', operation: 'llm', model: 'gemini-3.5-flash', usd: 0.002 }]);
+		// usd is the BILLING basis and stays the table rate. The three usage fields
+		// ride alongside it and are null here because this stub reports no usage —
+		// null, not 0, so "the provider said nothing" stays distinguishable from
+		// "the provider said it was free".
+		expect(record.recordCostEvents.mock.calls[0][3]).toEqual([
+			{
+				provider: 'openrouter',
+				operation: 'llm',
+				model: 'gemini-3.5-flash',
+				usd: 0.002,
+				tokensIn: null,
+				tokensOut: null,
+				measuredUsd: null
+			}
+		]);
+	});
+
+	it('records what the provider reported, without billing it', async () => {
+		// OpenRouter returns a real cost on every response. It is recorded and the
+		// charge stays the table rate: the quote the user approved before the run
+		// came from that same table, and the quote is an upper bound on the bill.
+		const raw = {
+			provider: 'openrouter' as const,
+			model: 'gemini-3.5-flash',
+			generate: vi.fn(async (_p: string, opts?: { onUsage?: (u: unknown) => void }) => {
+				opts?.onUsage?.({ tokensIn: 1200, tokensOut: 340, costUsd: 0.00731 });
+				return 'ok';
+			})
+		};
+		const ai = meteredAiClient(raw, scope)!;
+		await ai.generate('a');
+		const [, , , events] = record.recordCostEvents.mock.calls[0] as [unknown, unknown, unknown, CostEvent[]];
+		const event = events[0];
+		expect(event.tokensIn).toBe(1200);
+		expect(event.tokensOut).toBe(340);
+		expect(event.measuredUsd).toBe(0.00731);
+		// 3.6x the table rate, and still billed at the table rate.
+		expect(event.usd).toBe(0.002);
 	});
 
 	it('refuses every call when the gate refuses, and records nothing', async () => {
