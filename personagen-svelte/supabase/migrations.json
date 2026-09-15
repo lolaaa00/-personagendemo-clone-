@@ -198,5 +198,13 @@
 	[
 		"wallet_for_every_account_migration.sql",
 		"Every account gets a wallet row at ZERO: handle_new_user() opens credit_accounts next to the profile and free subscription, so an account created through the GoTrue admin API is no longer wallet-less. Opening only — the welcome grant stays in /api/auth/signup"
+	],
+	[
+		"generation_events_usage_migration.sql",
+		"Record what the provider said a call consumed (tokens + real cost) and a drift view against the hand-maintained price table — recorded, never billed"
+	],
+	[
+		"user_api_keys_column_grants_migration.sql",
+		"Take TRUNCATE (which RLS does not govern) and every other grant away from anon/authenticated on both secret-bearing key tables; re-grant authenticated exactly the four it needs"
 	]
 ]

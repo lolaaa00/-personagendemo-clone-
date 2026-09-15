@@ -510,7 +510,10 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-10", hash: "4e4ba27", type: "docs", category: "docs", scope: "guides", title: "docs home, provider axis, live demos, framed screenshots" },
 	{ date: "2026-09-10", hash: "2ee88f7", type: "feat", category: "feature", scope: "cards", title: "\"My own words\" — Director optional, up to 100 $0 cards a batch" },
 	{ date: "2026-09-10", hash: "9872669", type: "other", category: "docs", scope: null, title: "Merge origin/main: the shipped quote fix meets the cards batch and the docs home" },
-	{ date: "2026-09-15", hash: "e740031", type: "feat", category: "feature", scope: "billing", title: "capture what a call actually cost — recorded, never billed" }
+	{ date: "2026-09-12", hash: "94eb7b4", type: "fix", category: "fix", scope: null, title: "FormatExplorer uses quote() to apply markup—was under-quoting by 3x" },
+	{ date: "2026-09-15", hash: "6c848ae", type: "feat", category: "feature", scope: "billing", title: "capture what a call actually cost — recorded, never billed" },
+	{ date: "2026-09-15", hash: "7bc3928", type: "refactor", category: "maintenance", scope: "providers", title: "one catalogue, so \"can this be BYOK'd\" stops being an absence" },
+	{ date: "2026-09-15", hash: "7da8f72", type: "fix", category: "fix", scope: "security", title: "anon and authenticated hold TRUNCATE on both key tables" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -883,21 +886,13 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 		entries: [CHANGELOG[455], CHANGELOG[456], CHANGELOG[457], CHANGELOG[458], CHANGELOG[459], CHANGELOG[460], CHANGELOG[461], CHANGELOG[462], CHANGELOG[463], CHANGELOG[464], CHANGELOG[465], CHANGELOG[466], CHANGELOG[467], CHANGELOG[468]]
 	},
 	{
-		id: "bd40b3c", from: "2026-09-10", to: "2026-09-10",
+		id: "bd40b3c", from: "2026-09-10", to: "2026-09-15",
 		category: "fix", categories: ["maintenance","infrastructure","fix","docs","feature"],
 		title: "Fixed: assert no MONEY, not \"no wallet row\"",
-		summary: "Assert no MONEY, not \"no wallet row\". Plus 6 more changes, touching internal cleanup and setup and deployment and guides and explanations.",
+		summary: "Assert no MONEY, not \"no wallet row\". Plus 10 more changes, touching internal cleanup and setup and deployment and guides and explanations.",
 		major: true, curated: false,
-		entries: [CHANGELOG[469], CHANGELOG[470], CHANGELOG[471], CHANGELOG[472], CHANGELOG[473], CHANGELOG[474], CHANGELOG[475]]
-	},
-	{
-		id: "e740031", from: "2026-09-15", to: "2026-09-15",
-		category: "feature", categories: ["feature"],
-		title: "New: capture what a call actually cost — recorded, never…",
-		summary: "Capture what a call actually cost — recorded, never billed.",
-		major: false, curated: false,
-		entries: [CHANGELOG[476]]
+		entries: [CHANGELOG[469], CHANGELOG[470], CHANGELOG[471], CHANGELOG[472], CHANGELOG[473], CHANGELOG[474], CHANGELOG[475], CHANGELOG[476], CHANGELOG[477], CHANGELOG[478], CHANGELOG[479]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "e740031";
+export const CHANGELOG_GENERATED_FROM = "7da8f72";
