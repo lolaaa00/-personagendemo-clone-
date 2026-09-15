@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { confirmAction } from '$lib/stores/confirm.svelte';
 	import { onMount } from 'svelte';
 	import { invalidateAll } from '$app/navigation';
 
@@ -21,7 +22,17 @@
 
 	async function setCancellation(resume: boolean) {
 		error = null;
-		if (!resume && !confirm('Cancel your plan? You keep it until the end of the period you have paid for, and the credit already in your wallet stays yours.')) return;
+		if (
+			!resume &&
+			!(await confirmAction({
+				title: 'Cancel your plan?',
+				body: 'You keep it until the end of the period you have paid for, and the credit already in your wallet stays yours.',
+				tone: 'caution',
+				confirmLabel: 'Cancel plan',
+				cancelLabel: 'Keep my plan'
+			}))
+		)
+			return;
 		cancelling = true;
 		try {
 			const res = await fetch('/api/billing/cancel', {

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { showToast as globalToast } from '$lib/stores/ui.svelte';
 	import { thumbUrl, restoreOriginal } from '$lib/image-url';
 	import { syncParam, readParam } from '$lib/url-state';
 	import { onMount } from 'svelte';
@@ -46,7 +47,6 @@
 	let working = $state(false);
 	let error = $state('');
 	let selected = $state<Set<string>>(new Set());
-	let toast = $state('');
 
 	// ── Hard delete (permanent, plus best-effort live platform teardown) ──
 	// Kept separate from `working` (approve/reject) so the drawer's Approve
@@ -142,9 +142,11 @@
 		selected = allShownSelected ? new Set() : new Set(filteredItems.map((i) => i.id));
 	}
 
+	// This page shipped its own toast — a third stack, at a third position, with
+	// a locally-shadowed showToast() that hid the global one. Same call sites,
+	// one renderer.
 	function showToast(msg: string) {
-		toast = msg;
-		setTimeout(() => (toast = ''), 3500);
+		globalToast(msg, /fail|error|could not|couldn't|rejected/i.test(msg) ? 'error' : 'success');
 	}
 
 	async function act(action: 'approve' | 'reject', ids: string[], reason?: string) {
@@ -578,8 +580,6 @@
 			</button>
 		</div>
 	</header>
-
-	{#if toast}<div class="toast" role="status" aria-live="polite">{toast}</div>{/if}
 
 	{#if loading}
 		<div class="empty" role="status" aria-live="polite">Loading queue…</div>
@@ -1461,18 +1461,7 @@
 		color: var(--text-dim);
 		font-size: var(--text-sm, 0.85rem);
 		max-width: 640px;
-	}
-	.toast {
-		position: fixed;
-		bottom: 1.5rem;
-		right: 1.5rem;
-		background: var(--surface);
-		border: 1px solid var(--border);
-		padding: 0.75rem 1rem;
-		border-radius: 10px;
-		z-index: var(--z-toast);
-	}
-	.empty {
+	}	.empty {
 		padding: 3rem;
 		text-align: center;
 		color: var(--text-dim);

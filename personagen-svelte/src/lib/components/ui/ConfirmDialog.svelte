@@ -21,9 +21,14 @@
 	});
 
 	const needsTyping = $derived(!!confirmState.typeToConfirm);
+	// A required prompt gates Confirm the same way type-to-confirm does.
+	const promptUnfilled = $derived(
+		!!confirmState.prompt?.required && confirmState.promptValue.trim().length === 0
+	);
 	const canConfirm = $derived(
-		!needsTyping ||
-			typed.trim().toLowerCase() === (confirmState.typeToConfirm ?? '').trim().toLowerCase()
+		!promptUnfilled &&
+			(!needsTyping ||
+			typed.trim().toLowerCase() === (confirmState.typeToConfirm ?? '').trim().toLowerCase())
 	);
 
 	const shown = $derived((confirmState.preview ?? []).slice(0, 4));
@@ -122,6 +127,20 @@
 
 				{#if confirmState.warning}
 					<p class="confirm-warning">{confirmState.warning}</p>
+				{/if}
+
+				{#if confirmState.prompt}
+					<label class="confirm-prompt">
+						<span>{confirmState.prompt.label}</span>
+						<input
+							type="text"
+							bind:value={confirmState.promptValue}
+							autocomplete="off"
+							placeholder={confirmState.prompt.placeholder ?? ''}
+							required={confirmState.prompt.required ?? false}
+							onkeydown={(e) => e.key === 'Enter' && accept()}
+						/>
+					</label>
 				{/if}
 
 				{#if needsTyping}
@@ -342,6 +361,7 @@
 		padding: 0.6rem 0.75rem;
 	}
 
+	.confirm-prompt,
 	.confirm-type {
 		display: flex;
 		flex-direction: column;
@@ -354,6 +374,7 @@
 		color: var(--text);
 	}
 
+	.confirm-prompt input,
 	.confirm-type input {
 		font-size: 0.82rem;
 		padding: 0.5rem 0.7rem;

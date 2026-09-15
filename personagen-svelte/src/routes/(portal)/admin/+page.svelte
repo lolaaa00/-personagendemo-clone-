@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { promptAction } from '$lib/stores/confirm.svelte';
+	import { showToast } from '$lib/stores/ui.svelte';
 	let { data } = $props();
 
 	type Tab = 'overview' | 'activity' | 'seats' | 'spend' | 'access' | 'platform' | 'controls';
@@ -78,9 +80,24 @@
 				: key === 'fx_rates'
 					? 'Refresh display exchange rates from the ECB feed (display only — wallets stay in USD cents)?'
 					: `Set ${key} → ${String(value)}. Why?`;
-		const note = window.prompt(`${label}\n\nA note is required (it is the audit trail).`);
+		const note = await promptAction({
+			title:
+				key === 'activity_pepper'
+					? 'Rotate the hashing secret'
+					: key === 'fx_rates'
+						? 'Refresh exchange rates'
+						: `Change ${key}`,
+			body: label,
+			warning: 'This changes behaviour for every account on the platform.',
+			tone: 'caution',
+			confirmLabel: 'Apply change',
+			prompt: {
+				label: 'Why are you making this change? (recorded in the audit trail)',
+				placeholder: 'e.g. raising the cap for the launch campaign',
+				required: true
+			}
+		});
 		if (note === null) return;
-		if (!note.trim()) return flash('A note is required.');
 		controlsBusy = true;
 		try {
 			const res = await fetch('/api/admin/settings', {
@@ -152,13 +169,13 @@
 	let ledgerFor = $state<{ userId: string; email: string } | null>(null);
 	let ledgerRows = $state<any[]>([]);
 	let ledgerLoading = $state(false);
-	let toast = $state<string | null>(null);
-
 	const fmtCredits = (n: number) => `${(Number(n) || 0).toLocaleString()} cr`;
 	const usdOfCredits = (n: number) => `$${((Number(n) || 0) / 100).toFixed(2)}`;
+	// Was a local bottom-right div at z-index 50 — i.e. behind every modal in the
+	// portal, so a failure raised from inside a dialog was invisible. The global
+	// stack sits at --z-toast (2000) and is the one users already know.
 	const flash = (msg: string) => {
-		toast = msg;
-		setTimeout(() => (toast = null), 4000);
+		showToast(msg, /fail|error|could not|couldn't/i.test(msg) ? 'error' : 'success');
 	};
 
 	let visiblePlatformUsers = $derived(
@@ -283,9 +300,14 @@
 
 	async function toggleMode(u: PlatformUser) {
 		const next = u.billing_mode === 'unmetered' ? 'credits' : 'unmetered';
-		const note = window.prompt(`Set ${u.email ?? u.id} to "${next}". Why? (recorded in the ledger)`);
+		const note = await promptAction({
+			title: `Switch billing to "${next}"`,
+			body: `${u.email ?? u.id} will be billed as ${next === 'unmetered' ? 'unmetered — generations stop debiting their wallet' : 'credits — generations debit their wallet again'}.`,
+			tone: 'caution',
+			confirmLabel: 'Switch billing',
+			prompt: { label: 'Why? (recorded in the ledger)', placeholder: 'e.g. comped for the pilot', required: true }
+		});
 		if (note === null) return;
-		if (!note.trim()) return flash('A note is required.');
 		const err = await postCredits({ userId: u.id, op: 'mode', mode: next, note });
 		if (err) return flash(`Failed: ${err}`);
 		flash(`${u.email ?? u.id} → ${next}`);
@@ -378,8 +400,6 @@
 		</div>
 	{/if}
 
-	{#if toast}<div class="admin-toast" role="status">{toast}</div>{/if}
-
 	{#if tab === 'overview'}
 		<section class="admin-card">
 			<h2>Workspaces</h2>
@@ -422,7 +442,7 @@
 				<table class="admin-table">
 					<thead><tr><th>When</th><th>Who</th><th>What</th><th>Persona</th></tr></thead>
 					<tbody>
-						{#each data.activity.slice(0, 10) as a (a.at + a.actor + a.detail)}
+						{#each data.activity.slice(0, 10) as a (a.id)}
 							<tr>
 								<td class="nowrap">{when(a.at)}</td>
 								<td class="mono">{a.actor}</td>
@@ -1045,7 +1065,7 @@
 				<table class="admin-table">
 					<thead><tr><th>When</th><th>Who</th><th>Type</th><th>Detail</th><th>Persona</th><th>Cost</th></tr></thead>
 					<tbody>
-						{#each filteredActivity as a (a.at + a.actor + a.detail)}
+						{#each filteredActivity as a (a.id)}
 							<tr>
 								<td class="nowrap">{when(a.at)}</td>
 								<td class="mono">{a.actor}</td>
@@ -1375,17 +1395,5 @@
 		border-radius: 10px;
 		background: rgba(255, 255, 255, 0.03);
 		border: 1px solid rgba(255, 255, 255, 0.1);
-	}
-	.admin-toast {
-		position: fixed;
-		right: 1.25rem;
-		bottom: 1.25rem;
-		z-index: 50;
-		padding: 0.6rem 0.9rem;
-		border-radius: 10px;
-		background: #111827;
-		border: 1px solid rgba(255, 255, 255, 0.15);
-		box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
-		font-size: 0.85rem;
 	}
 </style>

@@ -24,6 +24,8 @@ export interface AutopilotView {
  * the raw `Unexpected token '<', "<!DOCTYPE"… is not valid JSON` parse failure
  * bubble into a toast.
  */
+import { loginWithReturn } from '$lib/return-to';
+
 export async function parseJsonResponse<T = any>(res: Response): Promise<T> {
 	const contentType = res.headers.get('content-type') ?? '';
 	if (contentType.includes('json')) {
@@ -39,7 +41,15 @@ export async function parseJsonResponse<T = any>(res: Response): Promise<T> {
 		);
 	}
 	if (res.status === 401) {
-		throw new Error('Session expired — log in again.');
+		// A session that expires mid-task used to surface as a toast and nothing
+		// else: the user was left on a page whose every action now failed, with no
+		// way back except finding the login page themselves. Send them there, and
+		// carry the page they were on so signing in puts them back on it.
+		if (typeof window !== 'undefined') {
+			const here = window.location.pathname + window.location.search;
+			if (!here.startsWith('/login')) window.location.assign(loginWithReturn(here));
+		}
+		throw new Error('Session expired — signing you back in.');
 	}
 	throw new Error(`Server error (HTTP ${res.status}).`);
 }

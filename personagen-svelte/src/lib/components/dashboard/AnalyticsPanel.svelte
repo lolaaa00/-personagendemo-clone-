@@ -1,11 +1,20 @@
 <script lang="ts">
 	import AnalyticsChart from './AnalyticsChart.svelte';
+	import type { SeatCapabilities } from '$lib/seat';
 
 	interface Props {
 		agents: any[];
+		/** What this seat may do. Analytics is manager-and-above on the server. */
+		seat?: SeatCapabilities;
 	}
 
-	let { agents }: Props = $props();
+	let { agents, seat }: Props = $props();
+
+	// Ask only when the answer can be yes. /api/analytics is manager+, so a
+	// creator or viewer used to fire a 403 into the console on every dashboard
+	// visit and get "Failed to load analytics" — an error that blamed the
+	// network for a permission rule. Now the panel says what it is and why.
+	let allowed = $derived(seat ? seat.canSeeSpend : true);
 
 	interface AnalyticsData {
 		totals: { views: number; likes: number; comments: number; shares: number; posts: number };
@@ -34,6 +43,7 @@
 	const defaultPlatformColor = 'linear-gradient(90deg,var(--accent),var(--accent-light))';
 
 	async function loadAnalytics(agentId: string) {
+		if (!allowed) return;
 		loading = true;
 		error = null;
 		try {
@@ -56,7 +66,7 @@
 	}
 
 	$effect(() => {
-		if (effectiveId) {
+		if (effectiveId && allowed) {
 			loadAnalytics(effectiveId);
 		}
 	});
@@ -155,7 +165,27 @@
 		{/if}
 	</div>
 
-	{#if agents.length === 0}
+	{#if !allowed}
+		<div class="panel-empty" role="status">
+			<svg
+				aria-hidden="true"
+				width="28"
+				height="28"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="1.5"
+			>
+				<path d="M12 3l8 3v6c0 5-3.5 8.5-8 9-4.5-.5-8-4-8-9V6z" />
+				<path d="M9 12l2 2 4-4" />
+			</svg>
+			<p>Performance is a {seat?.label ?? 'Manager'}-seat view</p>
+			<span
+				>Your {seat?.label ?? 'current'} seat can see the work but not the numbers behind it. Ask a
+				workspace admin for a Manager seat to see views, likes and spend.</span
+			>
+		</div>
+	{:else if agents.length === 0}
 		<div class="panel-empty">
 			<svg
 				aria-hidden="true"

@@ -27,3 +27,6 @@ test-results
 
 # Diagnostics/Checks logs
 *.txt
+
+# UX audit tenant credentials (random per run, never committed)
+.ux-audit/

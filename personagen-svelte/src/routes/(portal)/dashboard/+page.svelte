@@ -67,7 +67,7 @@
 					<div class="step-num">2</div>
 					<h4>Link Platforms</h4>
 					<p>Connect your persona to Instagram, TikTok, YouTube, and 12 more platforms via Zernio's hosted OAuth on the Connections tab.</p>
-					<span class="step-link disabled">Awaiting your first persona</span>
+					<span class="step-note">Unlocks once your first persona exists</span>
 				</div>
 				<div class="step-box">
 					<div class="step-num">3</div>
@@ -163,7 +163,7 @@
 
 	<!-- Analytics Section -->
 	<div class="analytics-section">
-		<AnalyticsPanel agents={creatorAgents} />
+		<AnalyticsPanel agents={creatorAgents} seat={(data as any).seat} />
 	</div>
 </div>
 
@@ -267,6 +267,11 @@
 	.step-link:hover:not(.disabled) {
 		color: var(--accent);
 		text-decoration: underline;
+	}
+
+	.step-note {
+		font-size: var(--text-sm);
+		color: var(--text-dim);
 	}
 
 	.step-link.disabled {

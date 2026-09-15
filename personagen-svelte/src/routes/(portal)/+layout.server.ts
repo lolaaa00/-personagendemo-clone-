@@ -1,4 +1,6 @@
 import type { LayoutServerLoad } from './$types';
+import { SEAT_RANK, capabilities, type SeatRole } from '$lib/seat';
+import { loginWithReturn } from '$lib/return-to';
 import { entitlementsFor, UNRESTRICTED } from '$lib/server/entitlements';
 import { redirect } from '@sveltejs/kit';
 import { env } from '$env/dynamic/public';
@@ -8,7 +10,7 @@ import { creditsMode, creditMarkup } from '$lib/server/flags';
 import { getSettings } from '$lib/server/settings';
 import { resolveDisplayCurrency, creditsToAmount, formatCredits, localeFromAcceptLanguage } from '$lib/money';
 
-export const load: LayoutServerLoad = async ({ locals, request }) => {
+export const load: LayoutServerLoad = async ({ locals, request, url }) => {
 	const supabaseUrl = env.PUBLIC_SUPABASE_URL ?? '';
 	const isPlaceholder = !supabaseUrl || supabaseUrl.includes('placeholder');
 
@@ -24,6 +26,9 @@ export const load: LayoutServerLoad = async ({ locals, request }) => {
 			mustChangePassword: false,
 			isWorkspaceAdmin: false,
 			isPlatformAdmin: false,
+			// Never-brick default: an unreadable seat restricts nothing, matching
+			// the entitlements fallback directly below.
+			seat: capabilities('owner'),
 			// Never-brick default: an unreadable plan restricts nothing.
 			entitlements: { plan: 'free', ...UNRESTRICTED }
 		};
@@ -31,7 +36,7 @@ export const load: LayoutServerLoad = async ({ locals, request }) => {
 
 	try {
 		const { session, user } = await locals.safeGetSession();
-		if (!session || !user) throw redirect(303, '/login');
+		if (!session || !user) throw redirect(303, loginWithReturn(url.pathname + url.search));
 
 		let sidebarAgents: any[] = [];
 		let personaGroups: any[] = [];
@@ -86,8 +91,15 @@ export const load: LayoutServerLoad = async ({ locals, request }) => {
 			// the caller's own verified JWT email, nothing client-supplied.
 			const { data: invites } = await locals.supabase
 				.from('workspace_invites')
-				.select('id, token, role, expires_at, workspaces(name)')
+				.select('id, token, role, expires_at, email, workspaces(name)')
 				.eq('status', 'pending')
+				// Addressed to THIS account. Without it the query returned every
+				// pending invite RLS would show — which for a workspace owner is
+				// the invites they SENT — so the owner was shown "You've been
+				// invited to join UX Audit Co" for a seat they had offered to
+				// someone else, with Accept and Decline buttons that are not
+				// theirs to press.
+				.eq('email', user.email ?? '')
 				.order('created_at', { ascending: false });
 			pendingInvites = (invites ?? []).filter(
 				(i: any) => !i.expires_at || new Date(i.expires_at).getTime() > Date.now()
@@ -102,6 +114,10 @@ export const load: LayoutServerLoad = async ({ locals, request }) => {
 		// Drives the admin-only nav entry: owning a workspace, or holding an
 		// admin seat in one, is what unlocks /admin.
 		let isWorkspaceAdmin = false;
+		// The seat this account effectively holds, and what it may do with it.
+		// Owning a workspace — or owning your own personas, which is what a
+		// personal account does — outranks any membership row.
+		let seatRole: SeatRole = 'owner';
 		if (locals.supabase) {
 			const [{ data: owned }, { data: memberOf }] = await Promise.all([
 				locals.supabase.from('workspaces').select('id, name').eq('owner_id', user.id),
@@ -120,6 +136,16 @@ export const load: LayoutServerLoad = async ({ locals, request }) => {
 			}
 			isWorkspaceAdmin =
 				(owned?.length ?? 0) > 0 || (memberOf ?? []).some((m: any) => m.role === 'admin');
+
+			// A member who owns nothing is limited by their highest seat. Anyone
+			// who owns a workspace, or holds no membership at all (a personal
+			// account with its own personas), is an owner of what they can see.
+			if ((owned?.length ?? 0) === 0 && (memberOf?.length ?? 0) > 0) {
+				seatRole = (memberOf ?? [])
+					.map((m: any) => m.role as SeatRole)
+					.filter((r) => r in SEAT_RANK)
+					.sort((a, b) => SEAT_RANK[b] - SEAT_RANK[a])[0] ?? 'viewer';
+			}
 		}
 
 		// Platform admin (cross-tenant operator) — unlocks the Platform tab on
@@ -214,6 +240,7 @@ export const load: LayoutServerLoad = async ({ locals, request }) => {
 			badgeLabel,
 			isWorkspaceAdmin,
 			isPlatformAdmin,
+			seat: capabilities(seatRole),
 			credits,
 			pricing,
 			// Provisioned team accounts start on a shared throwaway password with
@@ -235,6 +262,9 @@ export const load: LayoutServerLoad = async ({ locals, request }) => {
 			mustChangePassword: false,
 			isWorkspaceAdmin: false,
 			isPlatformAdmin: false,
+			// Never-brick default: an unreadable seat restricts nothing, matching
+			// the entitlements fallback directly below.
+			seat: capabilities('owner'),
 			// Never-brick default: an unreadable plan restricts nothing.
 			entitlements: { plan: 'free', ...UNRESTRICTED }
 		};

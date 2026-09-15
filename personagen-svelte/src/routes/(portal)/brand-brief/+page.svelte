@@ -89,8 +89,7 @@
 	let deletingBrief = $state(false);
 	async function deleteBrief() {
 		if (!currentBriefId || deletingBrief) return;
-		const name =
-			briefList.find((b) => b.id === currentBriefId)?.name || brandName || 'this brief';
+		const name = briefList.find((b) => b.id === currentBriefId)?.name || brandName || 'this brief';
 		const ok = await confirmAction({
 			title: `Permanently delete "${name}"?`,
 			body: 'Personas pinned to this brief are unpinned. There is no Trash for briefs.',
@@ -161,14 +160,12 @@
 			key: 'competitors',
 			label: 'Competitors',
 			icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z'
-	}
+		}
 	];
 
 	const COMM_STYLES = ['Casual', 'Professional', 'Bold', 'Minimal'];
 
-	let activeTab = $state<TabKey>(
-		readParam('tab', TABS.map((t) => t.key) as TabKey[], 'overview')
-	);
+	let activeTab = $state<TabKey>(readParam('tab', TABS.map((t) => t.key) as TabKey[], 'overview'));
 	$effect(() => syncParam('tab', activeTab, 'overview'));
 
 	// Auto-select tab from query param
@@ -334,7 +331,12 @@
 		// Theme), keep that palette in step with the edit — otherwise the theme
 		// would silently drift from the brief it names.
 		if (currentBriefId && brandThemeState.briefId === currentBriefId) {
-			applyBrandTheme(currentBriefId, brandName || brandThemeState.name, primaryColor, secondaryColor);
+			applyBrandTheme(
+				currentBriefId,
+				brandName || brandThemeState.name,
+				primaryColor,
+				secondaryColor
+			);
 		}
 	}
 
@@ -512,7 +514,9 @@
 			.slice(0, 3)
 			.join(', ');
 		const label =
-			ids.length === 1 ? `"${names}"` : `${ids.length} products (${names}${ids.length > 3 ? ', …' : ''})`;
+			ids.length === 1
+				? `"${names}"`
+				: `${ids.length} products (${names}${ids.length > 3 ? ', …' : ''})`;
 		const ok = await confirmAction({
 			title: `Remove ${label} from this brand brief?`,
 			body: 'Posts already generated with it keep their copy — only future generations change.',
@@ -586,21 +590,37 @@
 		}
 	}
 
-	async function generateField(fieldName: string, setter: (val: string) => void) {
-		generating = { ...generating, [fieldName]: true };
+	/**
+	 * `prompt` is what the model is asked for; `label` is what this screen calls
+	 * the field. They used to be ONE argument, and the in-flight key was the
+	 * prompt — so any field whose prompt was written for the model ("Customer
+	 * Pain Points this brand solves") keyed `generating` under that sentence
+	 * while its button read `generating['Pain Points']`. The guard never matched:
+	 * eight buttons never disabled and never showed a spinner, so each could be
+	 * fired repeatedly into a paid call. It also produced toasts reading
+	 * "Audience Interests & Behaviors generated!".
+	 *
+	 * Split, the key the markup reads is the key the handler sets.
+	 */
+	async function generateField(
+		prompt: string,
+		setter: (val: string) => void,
+		label: string = prompt
+	) {
+		generating = { ...generating, [label]: true };
 		try {
-			const res = await BrandBrief.generateField(fieldName, getBrandContext());
+			const res = await BrandBrief.generateField(prompt, getBrandContext());
 			if (res.success && res.data?.generated) {
 				setter(res.data.generated);
 				saveAll();
-				showToast(`${fieldName} generated!`, 'success');
+				showToast(`${label} generated!`, 'success');
 			} else {
 				showToast(res.error || 'AI generation failed — configure an API key in Settings', 'error');
 			}
 		} catch (err: any) {
 			showToast(err.message || 'AI generation failed', 'error');
 		} finally {
-			generating = { ...generating, [fieldName]: false };
+			generating = { ...generating, [label]: false };
 		}
 	}
 
@@ -757,7 +777,10 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		competitors = competitors.filter((c) => !ids.includes(c.id));
 		selectedCompetitorIds = selectedCompetitorIds.filter((s) => !ids.includes(s));
 		saveAll();
-		showToast(ids.length === 1 ? 'Competitor removed' : `${ids.length} competitors removed`, 'success');
+		showToast(
+			ids.length === 1 ? 'Competitor removed' : `${ids.length} competitors removed`,
+			'success'
+		);
 	}
 
 	// Sample post preview
@@ -765,7 +788,6 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		samplePost ||
 			`Hey ${brandName || 'there'}! ✨ ${tagline || 'Check this out'} — we're all about ${traits.length > 0 ? traits.slice(0, 3).join(', ') : 'being awesome'}. #brand`
 	);
-
 </script>
 
 <svelte:head>
@@ -812,7 +834,8 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 					{lastSaved ? `— Last saved: ${lastSaved}` : '— Not saved yet'}
 				</span>
 				<button class="action-btn" onclick={exportBrief}>
-					<svg aria-hidden="true"
+					<svg
+						aria-hidden="true"
 						width="14"
 						height="14"
 						viewBox="0 0 24 24"
@@ -831,7 +854,8 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 						disabled={deletingBrief}
 						title="Permanently delete this brief"
 					>
-						<svg aria-hidden="true"
+						<svg
+							aria-hidden="true"
 							width="14"
 							height="14"
 							viewBox="0 0 24 24"
@@ -847,7 +871,8 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 					</button>
 				{/if}
 				<button class="action-btn primary" onclick={(e) => saveAll(e)}>
-					<svg aria-hidden="true"
+					<svg
+						aria-hidden="true"
 						width="14"
 						height="14"
 						viewBox="0 0 24 24"
@@ -879,7 +904,8 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 					aria-controls="brand-brief-tabpanel"
 					aria-label={tab.label}
 				>
-					<svg aria-hidden="true"
+					<svg
+						aria-hidden="true"
 						width="16"
 						height="16"
 						viewBox="0 0 24 24"
@@ -899,9 +925,10 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		<a
 			class="wizard-launch"
 			href="/brand-brief/intel"
-			title="Open the Content Intelligence and Strategy Wizard"
+			title="Build a content plan from this brief"
 		>
-			<svg aria-hidden="true"
+			<svg
+				aria-hidden="true"
 				width="16"
 				height="16"
 				viewBox="0 0 24 24"
@@ -912,7 +939,8 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 				stroke-linejoin="round"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg
 			>
 			<span>Intel Wizard</span>
-			<svg aria-hidden="true"
+			<svg
+				aria-hidden="true"
 				class="launch-arrow"
 				width="12"
 				height="12"
@@ -939,7 +967,8 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 				<!-- Scraper block -->
 				<div class="scrape-card">
 					<div class="scrape-card-header">
-						<svg aria-hidden="true"
+						<svg
+							aria-hidden="true"
 							class="scrape-badge-icon"
 							width="16"
 							height="16"
@@ -1005,19 +1034,65 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 						<div class="label-row">
 							<label for="tagline">Tagline</label>
 							<div class="ai-btn-group">
-								<button class="enrich-btn" onclick={() => generateField('Tagline', (v) => (tagline = v))} disabled={generating['Tagline']}>
-									{#if generating['Tagline']}<div class="enrich-spinner"></div>Generating...{:else}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.7 4.6L18 9l-4.3 1.4L12 15l-1.7-4.6L6 9l4.3-1.4z" /><path d="M18.5 15l.6 1.6 1.6.6-1.6.6-.6 1.6-.6-1.6-1.6-.6 1.6-.6z" /></svg>Generate{/if}
+								<button
+									class="enrich-btn"
+									onclick={() => generateField('Tagline', (v) => (tagline = v))}
+									disabled={generating['Tagline']}
+								>
+									{#if generating['Tagline']}<div class="enrich-spinner"></div>
+										Generating...{:else}<svg
+											width="12"
+											height="12"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											aria-hidden="true"
+											><path d="M12 3l1.7 4.6L18 9l-4.3 1.4L12 15l-1.7-4.6L6 9l4.3-1.4z" /><path
+												d="M18.5 15l.6 1.6 1.6.6-1.6.6-.6 1.6-.6-1.6-1.6-.6 1.6-.6z"
+											/></svg
+										>Generate{/if}
 								</button>
-								<button class="enrich-btn spin" onclick={() => spinField('Tagline', tagline)} disabled={spinning['Tagline'] || !tagline.trim()}>
-									{#if spinning['Tagline']}<div class="enrich-spinner"></div>Spinning...{:else}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" /><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" /></svg>Spin{/if}
+								<button
+									class="enrich-btn spin"
+									onclick={() => spinField('Tagline', tagline)}
+									disabled={spinning['Tagline'] || !tagline.trim()}
+								>
+									{#if spinning['Tagline']}<div class="enrich-spinner"></div>
+										Spinning...{:else}<svg
+											width="12"
+											height="12"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											aria-hidden="true"
+											><polyline points="23 4 23 10 17 10" /><polyline
+												points="1 20 1 14 7 14"
+											/><path
+												d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"
+											/></svg
+										>Spin{/if}
 								</button>
 							</div>
 						</div>
-						<input id="tagline" type="text" bind:value={tagline} placeholder="e.g. AI Personas That Actually Convert" />
+						<input
+							id="tagline"
+							type="text"
+							bind:value={tagline}
+							placeholder="e.g. AI Personas That Actually Convert"
+						/>
 						{#if spinVariations['Tagline']}
 							<div class="spin-picker">
 								{#each spinVariations['Tagline'] as v, i}
-									<button class="spin-option" onclick={() => applySpinVariation('Tagline', v, (x) => (tagline = x))}>
+									<button
+										class="spin-option"
+										onclick={() => applySpinVariation('Tagline', v, (x) => (tagline = x))}
+									>
 										<span class="spin-idx">{i + 1}</span><span class="spin-text">{v}</span>
 									</button>
 								{/each}
@@ -1029,26 +1104,79 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 						<div class="label-row">
 							<label for="mission">Mission Statement</label>
 							<div class="ai-btn-group">
-								<button class="enrich-btn" onclick={() => generateField('Mission Statement', (v) => (mission = v))} disabled={generating['Mission Statement']}>
-									{#if generating['Mission Statement']}<div class="enrich-spinner"></div>Generating...{:else}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.7 4.6L18 9l-4.3 1.4L12 15l-1.7-4.6L6 9l4.3-1.4z" /><path d="M18.5 15l.6 1.6 1.6.6-1.6.6-.6 1.6-.6-1.6-1.6-.6 1.6-.6z" /></svg>Generate{/if}
+								<button
+									class="enrich-btn"
+									onclick={() => generateField('Mission Statement', (v) => (mission = v))}
+									disabled={generating['Mission Statement']}
+								>
+									{#if generating['Mission Statement']}<div class="enrich-spinner"></div>
+										Generating...{:else}<svg
+											width="12"
+											height="12"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											aria-hidden="true"
+											><path d="M12 3l1.7 4.6L18 9l-4.3 1.4L12 15l-1.7-4.6L6 9l4.3-1.4z" /><path
+												d="M18.5 15l.6 1.6 1.6.6-1.6.6-.6 1.6-.6-1.6-1.6-.6 1.6-.6z"
+											/></svg
+										>Generate{/if}
 								</button>
-								<button class="enrich-btn" onclick={() => extendField('Mission Statement', mission, (v) => (mission = v))} disabled={extending['Mission Statement'] || !mission.trim()}>
-									{#if extending['Mission Statement']}<div class="enrich-spinner"></div>Enriching...{:else}AI Enrich{/if}
+								<button
+									class="enrich-btn"
+									onclick={() => extendField('Mission Statement', mission, (v) => (mission = v))}
+									disabled={extending['Mission Statement'] || !mission.trim()}
+								>
+									{#if extending['Mission Statement']}<div class="enrich-spinner"></div>
+										Enriching...{:else}AI Enrich{/if}
 								</button>
-								<button class="enrich-btn spin" onclick={() => spinField('Mission Statement', mission)} disabled={spinning['Mission Statement'] || !mission.trim()}>
-									{#if spinning['Mission Statement']}<div class="enrich-spinner"></div>Spinning...{:else}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" /><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" /></svg>Spin{/if}
+								<button
+									class="enrich-btn spin"
+									onclick={() => spinField('Mission Statement', mission)}
+									disabled={spinning['Mission Statement'] || !mission.trim()}
+								>
+									{#if spinning['Mission Statement']}<div class="enrich-spinner"></div>
+										Spinning...{:else}<svg
+											width="12"
+											height="12"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											aria-hidden="true"
+											><polyline points="23 4 23 10 17 10" /><polyline
+												points="1 20 1 14 7 14"
+											/><path
+												d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"
+											/></svg
+										>Spin{/if}
 								</button>
 							</div>
 						</div>
-						<textarea id="mission" bind:value={mission} placeholder="What is the core purpose and mission of this brand? What problem does it solve and for whom?" rows="5"></textarea>
+						<textarea
+							id="mission"
+							bind:value={mission}
+							placeholder="What is the core purpose and mission of this brand? What problem does it solve and for whom?"
+							rows="5"
+						></textarea>
 						{#if spinVariations['Mission Statement']}
 							<div class="spin-picker">
 								{#each spinVariations['Mission Statement'] as v, i}
-									<button class="spin-option" onclick={() => applySpinVariation('Mission Statement', v, (x) => (mission = x))}>
+									<button
+										class="spin-option"
+										onclick={() => applySpinVariation('Mission Statement', v, (x) => (mission = x))}
+									>
 										<span class="spin-idx">{i + 1}</span><span class="spin-text">{v}</span>
 									</button>
 								{/each}
-								<button class="spin-dismiss" onclick={() => dismissSpin('Mission Statement')}>Dismiss</button>
+								<button class="spin-dismiss" onclick={() => dismissSpin('Mission Statement')}
+									>Dismiss</button
+								>
 							</div>
 						{/if}
 					</div>
@@ -1097,7 +1225,8 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 									</button>
 								{:else}
 									<div class="product-photo-fallback">
-										<svg aria-hidden="true"
+										<svg
+											aria-hidden="true"
 											width="24"
 											height="24"
 											viewBox="0 0 24 24"
@@ -1130,7 +1259,8 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 										title="Edit product"
 										aria-label="Edit {prod.name}"
 									>
-										<svg aria-hidden="true"
+										<svg
+											aria-hidden="true"
 											width="14"
 											height="14"
 											viewBox="0 0 24 24"
@@ -1150,7 +1280,8 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 										title="Delete product"
 										aria-label="Delete {prod.name}"
 									>
-										<svg aria-hidden="true"
+										<svg
+											aria-hidden="true"
 											width="14"
 											height="14"
 											viewBox="0 0 24 24"
@@ -1197,7 +1328,9 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 										</button>
 									{/if}
 									<div class="pe-actions">
-										<button type="button" class="mini-btn" onclick={cancelEditProduct}>Cancel</button>
+										<button type="button" class="mini-btn" onclick={cancelEditProduct}
+											>Cancel</button
+										>
 										<button type="button" class="mini-btn primary" onclick={saveEditProduct}
 											>Save</button
 										>
@@ -1215,7 +1348,8 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 
 					{#if products.length === 0}
 						<div class="products-empty">
-							<svg aria-hidden="true"
+							<svg
+								aria-hidden="true"
 								width="48"
 								height="48"
 								viewBox="0 0 24 24"
@@ -1228,7 +1362,8 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 								/></svg
 							>
 							<span
-								>No products active. Use the <strong>Firecrawl Scraper</strong> on the Overview tab or
+								>No products active. Use the <strong>Firecrawl Scraper</strong> on the Overview tab
+								or
 								<strong>add products manually</strong> below.</span
 							>
 						</div>
@@ -1236,14 +1371,19 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 				</div>
 
 				<!-- Manual Product Entry Card -->
-				<div class="manual-product-card glass-card" style="
+				<div
+					class="manual-product-card glass-card"
+					style="
 					border: 1px dashed var(--border-strong);
 					border-radius: 12px;
 					padding: 1.25rem;
 					margin-bottom: 1.5rem;
 					background: var(--surface-2);
-				">
-					<h3 style="margin: 0 0 0.75rem 0; font-size: 0.85rem; font-weight: 700; color: var(--accent); display: flex; align-items: center; gap: 0.4rem;">
+				"
+				>
+					<h3
+						style="margin: 0 0 0.75rem 0; font-size: 0.85rem; font-weight: 700; color: var(--accent); display: flex; align-items: center; gap: 0.4rem;"
+					>
 						<svg
 							width="14"
 							height="14"
@@ -1300,7 +1440,9 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 					<p class="sr-only" role="status" aria-live="polite">
 						{scrapingProduct ? 'Scraping product page. Please wait.' : ''}
 					</p>
-					<h3 style="margin: 0 0 0.75rem 0; font-size: 0.85rem; font-weight: 700; color: var(--accent); display: flex; align-items: center; gap: 0.4rem;">
+					<h3
+						style="margin: 0 0 0.75rem 0; font-size: 0.85rem; font-weight: 700; color: var(--accent); display: flex; align-items: center; gap: 0.4rem;"
+					>
 						<svg
 							width="14"
 							height="14"
@@ -1317,28 +1459,80 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 					</h3>
 					<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
 						<div class="field">
-							<label for="mp-name" style="font-size: 0.72rem; font-weight: 600; text-transform: uppercase; color: var(--text-dim);">Product Name</label>
-							<input id="mp-name" type="text" bind:value={newProductName} placeholder="e.g. Premium Honey Extract" style="width: 100%; padding: 0.5rem; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 1rem;" />
+							<label
+								for="mp-name"
+								style="font-size: 0.72rem; font-weight: 600; text-transform: uppercase; color: var(--text-dim);"
+								>Product Name</label
+							>
+							<input
+								id="mp-name"
+								type="text"
+								bind:value={newProductName}
+								placeholder="e.g. Premium Honey Extract"
+								style="width: 100%; padding: 0.5rem; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 1rem;"
+							/>
 						</div>
 						<div class="field">
-							<label for="mp-price" style="font-size: 0.72rem; font-weight: 600; text-transform: uppercase; color: var(--text-dim);">Price</label>
-							<input id="mp-price" type="text" bind:value={newProductPrice} placeholder="e.g. Rs. 2,450" style="width: 100%; padding: 0.5rem; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 1rem;" />
+							<label
+								for="mp-price"
+								style="font-size: 0.72rem; font-weight: 600; text-transform: uppercase; color: var(--text-dim);"
+								>Price</label
+							>
+							<input
+								id="mp-price"
+								type="text"
+								bind:value={newProductPrice}
+								placeholder="e.g. Rs. 2,450"
+								style="width: 100%; padding: 0.5rem; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 1rem;"
+							/>
 						</div>
 					</div>
 					<div class="field" style="margin-top: 0.75rem;">
-						<label for="mp-desc" style="font-size: 0.72rem; font-weight: 600; text-transform: uppercase; color: var(--text-dim);">Description</label>
-						<textarea id="mp-desc" bind:value={newProductDesc} placeholder="Brief product description for UGC content generation..." rows="2" style="width: 100%; padding: 0.5rem; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 1rem; resize: vertical;"></textarea>
+						<label
+							for="mp-desc"
+							style="font-size: 0.72rem; font-weight: 600; text-transform: uppercase; color: var(--text-dim);"
+							>Description</label
+						>
+						<textarea
+							id="mp-desc"
+							bind:value={newProductDesc}
+							placeholder="Brief product description for UGC content generation..."
+							rows="2"
+							style="width: 100%; padding: 0.5rem; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 1rem; resize: vertical;"
+						></textarea>
 					</div>
 					<div class="field" style="margin-top: 0.75rem;">
-						<label for="mp-photo" style="font-size: 0.72rem; font-weight: 600; text-transform: uppercase; color: var(--text-dim);">Image URL (optional)</label>
-						<input id="mp-photo" type="url" bind:value={newProductPhoto} placeholder="https://example.com/product.jpg" style="width: 100%; padding: 0.5rem; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 1rem;" />
+						<label
+							for="mp-photo"
+							style="font-size: 0.72rem; font-weight: 600; text-transform: uppercase; color: var(--text-dim);"
+							>Image URL (optional)</label
+						>
+						<input
+							id="mp-photo"
+							type="url"
+							bind:value={newProductPhoto}
+							placeholder="https://example.com/product.jpg"
+							style="width: 100%; padding: 0.5rem; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 1rem;"
+						/>
 					</div>
 					<button
 						style="margin-top: 0.75rem; padding: 0.5rem 1.25rem; min-height: 44px; border-radius: 8px; background: var(--accent); color: #fff; border: none; font-size: 0.82rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 0.4rem; transition: all 0.2s;"
 						onclick={addManualProduct}
 						disabled={!newProductName.trim()}
 					>
-						<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+						<svg
+							aria-hidden="true"
+							width="14"
+							height="14"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2.5"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"
+							></line></svg
+						>
 						Add Product
 					</button>
 				</div>
@@ -1365,20 +1559,85 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 						<div class="label-row">
 							<label for="ugcGuidelines">UGC Formats & Script Guidelines</label>
 							<div class="ai-btn-group">
-								<button class="enrich-btn" onclick={() => generateField('UGC Video Script Guidelines and Formats for this brand', (v) => (ugcGuidelines = v))} disabled={generating['UGC Guidelines']}>
-									{#if generating['UGC Guidelines']}<div class="enrich-spinner"></div>Generating...{:else}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.7 4.6L18 9l-4.3 1.4L12 15l-1.7-4.6L6 9l4.3-1.4z" /><path d="M18.5 15l.6 1.6 1.6.6-1.6.6-.6 1.6-.6-1.6-1.6-.6 1.6-.6z" /></svg>Generate{/if}
+								<button
+									class="enrich-btn"
+									onclick={() =>
+										generateField(
+											'UGC Video Script Guidelines and Formats for this brand',
+											(v) => (ugcGuidelines = v),
+											'UGC Guidelines'
+										)}
+									disabled={generating['UGC Guidelines']}
+								>
+									{#if generating['UGC Guidelines']}<div class="enrich-spinner"></div>
+										Generating...{:else}<svg
+											width="12"
+											height="12"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											aria-hidden="true"
+											><path d="M12 3l1.7 4.6L18 9l-4.3 1.4L12 15l-1.7-4.6L6 9l4.3-1.4z" /><path
+												d="M18.5 15l.6 1.6 1.6.6-1.6.6-.6 1.6-.6-1.6-1.6-.6 1.6-.6z"
+											/></svg
+										>Generate{/if}
 								</button>
-								<button class="enrich-btn" onclick={() => extendField('UGC Guidelines', ugcGuidelines, (v) => (ugcGuidelines = v))} disabled={extending['UGC Guidelines'] || !ugcGuidelines.trim()}>
-									{#if extending['UGC Guidelines']}<div class="enrich-spinner"></div>Enriching...{:else}AI Enrich{/if}
+								<button
+									class="enrich-btn"
+									onclick={() =>
+										extendField('UGC Guidelines', ugcGuidelines, (v) => (ugcGuidelines = v))}
+									disabled={extending['UGC Guidelines'] || !ugcGuidelines.trim()}
+								>
+									{#if extending['UGC Guidelines']}<div class="enrich-spinner"></div>
+										Enriching...{:else}AI Enrich{/if}
 								</button>
-								<button class="enrich-btn spin" onclick={() => spinField('UGC Guidelines', ugcGuidelines)} disabled={spinning['UGC Guidelines'] || !ugcGuidelines.trim()}>
-									{#if spinning['UGC Guidelines']}<div class="enrich-spinner"></div>...{:else}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" /><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" /></svg>Spin{/if}
+								<button
+									class="enrich-btn spin"
+									onclick={() => spinField('UGC Guidelines', ugcGuidelines)}
+									disabled={spinning['UGC Guidelines'] || !ugcGuidelines.trim()}
+								>
+									{#if spinning['UGC Guidelines']}<div class="enrich-spinner"></div>
+										...{:else}<svg
+											width="12"
+											height="12"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											aria-hidden="true"
+											><polyline points="23 4 23 10 17 10" /><polyline
+												points="1 20 1 14 7 14"
+											/><path
+												d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"
+											/></svg
+										>Spin{/if}
 								</button>
 							</div>
 						</div>
-						<textarea id="ugcGuidelines" bind:value={ugcGuidelines} placeholder="Choose a preset above or write custom UGC guidelines for your content here..." rows="8"></textarea>
+						<textarea
+							id="ugcGuidelines"
+							bind:value={ugcGuidelines}
+							placeholder="Choose a preset above or write custom UGC guidelines for your content here..."
+							rows="8"
+						></textarea>
 						{#if spinVariations['UGC Guidelines']}
-							<div class="spin-picker">{#each spinVariations['UGC Guidelines'] as v, i}<button class="spin-option" onclick={() => applySpinVariation('UGC Guidelines', v, (x) => (ugcGuidelines = x))}><span class="spin-idx">{i + 1}</span><span class="spin-text">{v.substring(0, 200)}{v.length > 200 ? '...' : ''}</span></button>{/each}<button class="spin-dismiss" onclick={() => dismissSpin('UGC Guidelines')}>Dismiss</button></div>
+							<div class="spin-picker">
+								{#each spinVariations['UGC Guidelines'] as v, i}<button
+										class="spin-option"
+										onclick={() =>
+											applySpinVariation('UGC Guidelines', v, (x) => (ugcGuidelines = x))}
+										><span class="spin-idx">{i + 1}</span><span class="spin-text"
+											>{v.substring(0, 200)}{v.length > 200 ? '...' : ''}</span
+										></button
+									>{/each}<button class="spin-dismiss" onclick={() => dismissSpin('UGC Guidelines')}
+									>Dismiss</button
+								>
+							</div>
 						{/if}
 					</div>
 				</div>
@@ -1405,7 +1664,11 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 									class="color-hex"
 									aria-label="Primary colour hex value"
 								/>
-								<div class="color-preview" style="background: {primaryColor}" aria-hidden="true"></div>
+								<div
+									class="color-preview"
+									style="background: {primaryColor}"
+									aria-hidden="true"
+								></div>
 							</div>
 						</div>
 						<div class="color-field">
@@ -1476,20 +1739,78 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 						<div class="field">
 							<div class="label-row">
 								<label for="fontPrimary">Primary Font</label>
-								<button class="enrich-btn" onclick={() => generateField('Primary Font (suggest a Google Font name matching the brand personality)', (v) => (fontPrimary = v))} disabled={generating['Primary Font']}>
-									{#if generating['Primary Font']}<div class="enrich-spinner"></div>...{:else}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.7 4.6L18 9l-4.3 1.4L12 15l-1.7-4.6L6 9l4.3-1.4z" /><path d="M18.5 15l.6 1.6 1.6.6-1.6.6-.6 1.6-.6-1.6-1.6-.6 1.6-.6z" /></svg>Suggest{/if}
+								<button
+									class="enrich-btn"
+									onclick={() =>
+										generateField(
+											'Primary Font (suggest a Google Font name matching the brand personality)',
+											(v) => (fontPrimary = v),
+											'Primary Font'
+										)}
+									disabled={generating['Primary Font']}
+								>
+									{#if generating['Primary Font']}<div class="enrich-spinner"></div>
+										...{:else}<svg
+											width="12"
+											height="12"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											aria-hidden="true"
+											><path d="M12 3l1.7 4.6L18 9l-4.3 1.4L12 15l-1.7-4.6L6 9l4.3-1.4z" /><path
+												d="M18.5 15l.6 1.6 1.6.6-1.6.6-.6 1.6-.6-1.6-1.6-.6 1.6-.6z"
+											/></svg
+										>Suggest{/if}
 								</button>
 							</div>
-							<input id="fontPrimary" type="text" bind:value={fontPrimary} placeholder="e.g. Inter, Playfair Display" />
+							<input
+								id="fontPrimary"
+								type="text"
+								bind:value={fontPrimary}
+								placeholder="e.g. Inter, Playfair Display"
+							/>
 						</div>
 						<div class="field">
 							<div class="label-row">
 								<label for="fontSecondary">Secondary Font</label>
-								<button class="enrich-btn" onclick={() => generateField('Secondary Font (a complementary Google Font to pair with ' + (fontPrimary || 'the primary font') + ')', (v) => (fontSecondary = v))} disabled={generating['Secondary Font']}>
-									{#if generating['Secondary Font']}<div class="enrich-spinner"></div>...{:else}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.7 4.6L18 9l-4.3 1.4L12 15l-1.7-4.6L6 9l4.3-1.4z" /><path d="M18.5 15l.6 1.6 1.6.6-1.6.6-.6 1.6-.6-1.6-1.6-.6 1.6-.6z" /></svg>Suggest{/if}
+								<button
+									class="enrich-btn"
+									onclick={() =>
+										generateField(
+											'Secondary Font (a complementary Google Font to pair with ' +
+												(fontPrimary || 'the primary font') +
+												')',
+											(v) => (fontSecondary = v),
+											'Secondary Font'
+										)}
+									disabled={generating['Secondary Font']}
+								>
+									{#if generating['Secondary Font']}<div class="enrich-spinner"></div>
+										...{:else}<svg
+											width="12"
+											height="12"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											aria-hidden="true"
+											><path d="M12 3l1.7 4.6L18 9l-4.3 1.4L12 15l-1.7-4.6L6 9l4.3-1.4z" /><path
+												d="M18.5 15l.6 1.6 1.6.6-1.6.6-.6 1.6-.6-1.6-1.6-.6 1.6-.6z"
+											/></svg
+										>Suggest{/if}
 								</button>
 							</div>
-							<input id="fontSecondary" type="text" bind:value={fontSecondary} placeholder="e.g. IBM Plex Mono" />
+							<input
+								id="fontSecondary"
+								type="text"
+								bind:value={fontSecondary}
+								placeholder="e.g. IBM Plex Mono"
+							/>
 						</div>
 					</div>
 				</div>
@@ -1503,22 +1824,55 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 					<div class="field">
 						<div class="label-row">
 							<label for="traitInput">Personality Traits</label>
-							<button class="enrich-btn" onclick={async () => {
-								generating = { ...generating, 'Traits': true };
-								try {
-									const res = await BrandBrief.generateField('Brand Personality Traits (5 single-word or short-phrase descriptors as a comma-separated list)', getBrandContext());
-									if (res.success && res.data?.generated) {
-										const suggested = res.data.generated.split(/[,;|]+/).map((s: string) => s.trim().replace(/^["'\s]+|["'\s]+$/g, '')).filter((s: string) => s.length > 0 && s.length < 30);
-										let added = 0;
-										for (const t of suggested) {
-											if (!traits.includes(t)) { traits = [...traits, t]; added++; }
+							<button
+								class="enrich-btn"
+								onclick={async () => {
+									generating = { ...generating, Traits: true };
+									try {
+										const res = await BrandBrief.generateField(
+											'Brand Personality Traits (5 single-word or short-phrase descriptors as a comma-separated list)',
+											getBrandContext()
+										);
+										if (res.success && res.data?.generated) {
+											const suggested = res.data.generated
+												.split(/[,;|]+/)
+												.map((s: string) => s.trim().replace(/^["'\s]+|["'\s]+$/g, ''))
+												.filter((s: string) => s.length > 0 && s.length < 30);
+											let added = 0;
+											for (const t of suggested) {
+												if (!traits.includes(t)) {
+													traits = [...traits, t];
+													added++;
+												}
+											}
+											if (added > 0) {
+												saveAll();
+												showToast(`${added} trait(s) suggested!`, 'success');
+											}
 										}
-										if (added > 0) { saveAll(); showToast(`${added} trait(s) suggested!`, 'success'); }
+									} catch {
+										showToast('Trait suggestion failed', 'error');
+									} finally {
+										generating = { ...generating, Traits: false };
 									}
-								} catch { showToast('Trait suggestion failed', 'error'); }
-								finally { generating = { ...generating, 'Traits': false }; }
-							}} disabled={generating['Traits']}>
-								{#if generating['Traits']}<div class="enrich-spinner"></div>...{:else}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.7 4.6L18 9l-4.3 1.4L12 15l-1.7-4.6L6 9l4.3-1.4z" /><path d="M18.5 15l.6 1.6 1.6.6-1.6.6-.6 1.6-.6-1.6-1.6-.6 1.6-.6z" /></svg>Suggest{/if}
+								}}
+								disabled={generating['Traits']}
+							>
+								{#if generating['Traits']}<div class="enrich-spinner"></div>
+									...{:else}<svg
+										width="12"
+										height="12"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="2"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										aria-hidden="true"
+										><path d="M12 3l1.7 4.6L18 9l-4.3 1.4L12 15l-1.7-4.6L6 9l4.3-1.4z" /><path
+											d="M18.5 15l.6 1.6 1.6.6-1.6.6-.6 1.6-.6-1.6-1.6-.6 1.6-.6z"
+										/></svg
+									>Suggest{/if}
 							</button>
 						</div>
 						<div class="tag-input-wrap">
@@ -1527,11 +1881,12 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 									<span class="tag">
 										{trait}
 										<button
-												class="tag-remove"
-												aria-label="Remove trait {trait}"
-												onclick={() => removeTrait(trait)}
-											>
-											<svg aria-hidden="true"
+											class="tag-remove"
+											aria-label="Remove trait {trait}"
+											onclick={() => removeTrait(trait)}
+										>
+											<svg
+												aria-hidden="true"
 												width="12"
 												height="12"
 												viewBox="0 0 24 24"
@@ -1582,23 +1937,76 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 						<div class="label-row">
 							<label for="samplePost">Custom Sample Post</label>
 							<div class="ai-btn-group">
-								<button class="enrich-btn" onclick={() => generateField('Sample Social Media Post (write a realistic brand post in the brand voice described above)', (v) => (samplePost = v))} disabled={generating['Sample Post']}>
-									{#if generating['Sample Post']}<div class="enrich-spinner"></div>Generating...{:else}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.7 4.6L18 9l-4.3 1.4L12 15l-1.7-4.6L6 9l4.3-1.4z" /><path d="M18.5 15l.6 1.6 1.6.6-1.6.6-.6 1.6-.6-1.6-1.6-.6 1.6-.6z" /></svg>Generate{/if}
+								<button
+									class="enrich-btn"
+									onclick={() =>
+										generateField(
+											'Sample Social Media Post (write a realistic brand post in the brand voice described above)',
+											(v) => (samplePost = v),
+											'Sample Post'
+										)}
+									disabled={generating['Sample Post']}
+								>
+									{#if generating['Sample Post']}<div class="enrich-spinner"></div>
+										Generating...{:else}<svg
+											width="12"
+											height="12"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											aria-hidden="true"
+											><path d="M12 3l1.7 4.6L18 9l-4.3 1.4L12 15l-1.7-4.6L6 9l4.3-1.4z" /><path
+												d="M18.5 15l.6 1.6 1.6.6-1.6.6-.6 1.6-.6-1.6-1.6-.6 1.6-.6z"
+											/></svg
+										>Generate{/if}
 								</button>
-								<button class="enrich-btn spin" onclick={() => spinField('Sample Post', samplePost)} disabled={spinning['Sample Post'] || !samplePost.trim()}>
-									{#if spinning['Sample Post']}<div class="enrich-spinner"></div>Spinning...{:else}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" /><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" /></svg>Spin{/if}
+								<button
+									class="enrich-btn spin"
+									onclick={() => spinField('Sample Post', samplePost)}
+									disabled={spinning['Sample Post'] || !samplePost.trim()}
+								>
+									{#if spinning['Sample Post']}<div class="enrich-spinner"></div>
+										Spinning...{:else}<svg
+											width="12"
+											height="12"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											aria-hidden="true"
+											><polyline points="23 4 23 10 17 10" /><polyline
+												points="1 20 1 14 7 14"
+											/><path
+												d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"
+											/></svg
+										>Spin{/if}
 								</button>
 							</div>
 						</div>
-						<textarea id="samplePost" bind:value={samplePost} placeholder="Write a sample post in this brand's voice… (leave empty for auto-generated preview)" rows="3"></textarea>
+						<textarea
+							id="samplePost"
+							bind:value={samplePost}
+							placeholder="Write a sample post in this brand's voice… (leave empty for auto-generated preview)"
+							rows="3"
+						></textarea>
 						{#if spinVariations['Sample Post']}
 							<div class="spin-picker">
 								{#each spinVariations['Sample Post'] as v, i}
-									<button class="spin-option" onclick={() => applySpinVariation('Sample Post', v, (x) => (samplePost = x))}>
+									<button
+										class="spin-option"
+										onclick={() => applySpinVariation('Sample Post', v, (x) => (samplePost = x))}
+									>
 										<span class="spin-idx">{i + 1}</span><span class="spin-text">{v}</span>
 									</button>
 								{/each}
-								<button class="spin-dismiss" onclick={() => dismissSpin('Sample Post')}>Dismiss</button>
+								<button class="spin-dismiss" onclick={() => dismissSpin('Sample Post')}
+									>Dismiss</button
+								>
 							</div>
 						{/if}
 					</div>
@@ -1635,77 +2043,318 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 						<div class="label-row">
 							<label for="demographics">Demographics</label>
 							<div class="ai-btn-group">
-								<button class="enrich-btn" onclick={() => generateField('Target Audience Demographics', (v) => (demographics = v))} disabled={generating['Demographics']}>
-									{#if generating['Demographics']}<div class="enrich-spinner"></div>Generating...{:else}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.7 4.6L18 9l-4.3 1.4L12 15l-1.7-4.6L6 9l4.3-1.4z" /><path d="M18.5 15l.6 1.6 1.6.6-1.6.6-.6 1.6-.6-1.6-1.6-.6 1.6-.6z" /></svg>Generate{/if}
+								<button
+									class="enrich-btn"
+									onclick={() =>
+										generateField(
+											'Target Audience Demographics',
+											(v) => (demographics = v),
+											'Demographics'
+										)}
+									disabled={generating['Demographics']}
+								>
+									{#if generating['Demographics']}<div class="enrich-spinner"></div>
+										Generating...{:else}<svg
+											width="12"
+											height="12"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											aria-hidden="true"
+											><path d="M12 3l1.7 4.6L18 9l-4.3 1.4L12 15l-1.7-4.6L6 9l4.3-1.4z" /><path
+												d="M18.5 15l.6 1.6 1.6.6-1.6.6-.6 1.6-.6-1.6-1.6-.6 1.6-.6z"
+											/></svg
+										>Generate{/if}
 								</button>
-								<button class="enrich-btn" onclick={() => extendField('Demographics', demographics, (v) => (demographics = v))} disabled={extending['Demographics'] || !demographics.trim()}>
-									{#if extending['Demographics']}<div class="enrich-spinner"></div>Enriching...{:else}AI Enrich{/if}
+								<button
+									class="enrich-btn"
+									onclick={() =>
+										extendField('Demographics', demographics, (v) => (demographics = v))}
+									disabled={extending['Demographics'] || !demographics.trim()}
+								>
+									{#if extending['Demographics']}<div class="enrich-spinner"></div>
+										Enriching...{:else}AI Enrich{/if}
 								</button>
-								<button class="enrich-btn spin" onclick={() => spinField('Demographics', demographics)} disabled={spinning['Demographics'] || !demographics.trim()}>
-									{#if spinning['Demographics']}<div class="enrich-spinner"></div>...{:else}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" /><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" /></svg>Spin{/if}
+								<button
+									class="enrich-btn spin"
+									onclick={() => spinField('Demographics', demographics)}
+									disabled={spinning['Demographics'] || !demographics.trim()}
+								>
+									{#if spinning['Demographics']}<div class="enrich-spinner"></div>
+										...{:else}<svg
+											width="12"
+											height="12"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											aria-hidden="true"
+											><polyline points="23 4 23 10 17 10" /><polyline
+												points="1 20 1 14 7 14"
+											/><path
+												d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"
+											/></svg
+										>Spin{/if}
 								</button>
 							</div>
 						</div>
-						<textarea id="demographics" bind:value={demographics} placeholder="Age range, gender, location, income level, education, occupation…" rows="4"></textarea>
+						<textarea
+							id="demographics"
+							bind:value={demographics}
+							placeholder="Age range, gender, location, income level, education, occupation…"
+							rows="4"
+						></textarea>
 						{#if spinVariations['Demographics']}
-							<div class="spin-picker">{#each spinVariations['Demographics'] as v, i}<button class="spin-option" onclick={() => applySpinVariation('Demographics', v, (x) => (demographics = x))}><span class="spin-idx">{i + 1}</span><span class="spin-text">{v}</span></button>{/each}<button class="spin-dismiss" onclick={() => dismissSpin('Demographics')}>Dismiss</button></div>
+							<div class="spin-picker">
+								{#each spinVariations['Demographics'] as v, i}<button
+										class="spin-option"
+										onclick={() => applySpinVariation('Demographics', v, (x) => (demographics = x))}
+										><span class="spin-idx">{i + 1}</span><span class="spin-text">{v}</span></button
+									>{/each}<button class="spin-dismiss" onclick={() => dismissSpin('Demographics')}
+									>Dismiss</button
+								>
+							</div>
 						{/if}
 					</div>
 					<div class="field">
 						<div class="label-row">
 							<label for="interests">Interests & Behaviors</label>
 							<div class="ai-btn-group">
-								<button class="enrich-btn" onclick={() => generateField('Audience Interests & Behaviors', (v) => (interests = v))} disabled={generating['Interests']}>
-									{#if generating['Interests']}<div class="enrich-spinner"></div>Generating...{:else}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.7 4.6L18 9l-4.3 1.4L12 15l-1.7-4.6L6 9l4.3-1.4z" /><path d="M18.5 15l.6 1.6 1.6.6-1.6.6-.6 1.6-.6-1.6-1.6-.6 1.6-.6z" /></svg>Generate{/if}
+								<button
+									class="enrich-btn"
+									onclick={() =>
+										generateField(
+											'Audience Interests & Behaviors',
+											(v) => (interests = v),
+											'Interests'
+										)}
+									disabled={generating['Interests']}
+								>
+									{#if generating['Interests']}<div class="enrich-spinner"></div>
+										Generating...{:else}<svg
+											width="12"
+											height="12"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											aria-hidden="true"
+											><path d="M12 3l1.7 4.6L18 9l-4.3 1.4L12 15l-1.7-4.6L6 9l4.3-1.4z" /><path
+												d="M18.5 15l.6 1.6 1.6.6-1.6.6-.6 1.6-.6-1.6-1.6-.6 1.6-.6z"
+											/></svg
+										>Generate{/if}
 								</button>
-								<button class="enrich-btn" onclick={() => extendField('Interests & Behaviors', interests, (v) => (interests = v))} disabled={extending['Interests & Behaviors'] || !interests.trim()}>
-									{#if extending['Interests & Behaviors']}<div class="enrich-spinner"></div>Enriching...{:else}AI Enrich{/if}
+								<button
+									class="enrich-btn"
+									onclick={() =>
+										extendField('Interests & Behaviors', interests, (v) => (interests = v))}
+									disabled={extending['Interests & Behaviors'] || !interests.trim()}
+								>
+									{#if extending['Interests & Behaviors']}<div class="enrich-spinner"></div>
+										Enriching...{:else}AI Enrich{/if}
 								</button>
-								<button class="enrich-btn spin" onclick={() => spinField('Interests', interests)} disabled={spinning['Interests'] || !interests.trim()}>
-									{#if spinning['Interests']}<div class="enrich-spinner"></div>...{:else}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" /><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" /></svg>Spin{/if}
+								<button
+									class="enrich-btn spin"
+									onclick={() => spinField('Interests', interests)}
+									disabled={spinning['Interests'] || !interests.trim()}
+								>
+									{#if spinning['Interests']}<div class="enrich-spinner"></div>
+										...{:else}<svg
+											width="12"
+											height="12"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											aria-hidden="true"
+											><polyline points="23 4 23 10 17 10" /><polyline
+												points="1 20 1 14 7 14"
+											/><path
+												d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"
+											/></svg
+										>Spin{/if}
 								</button>
 							</div>
 						</div>
-						<textarea id="interests" bind:value={interests} placeholder="Hobbies, media consumption, purchasing behaviors, lifestyle preferences…" rows="4"></textarea>
+						<textarea
+							id="interests"
+							bind:value={interests}
+							placeholder="Hobbies, media consumption, purchasing behaviors, lifestyle preferences…"
+							rows="4"
+						></textarea>
 						{#if spinVariations['Interests']}
-							<div class="spin-picker">{#each spinVariations['Interests'] as v, i}<button class="spin-option" onclick={() => applySpinVariation('Interests', v, (x) => (interests = x))}><span class="spin-idx">{i + 1}</span><span class="spin-text">{v}</span></button>{/each}<button class="spin-dismiss" onclick={() => dismissSpin('Interests')}>Dismiss</button></div>
+							<div class="spin-picker">
+								{#each spinVariations['Interests'] as v, i}<button
+										class="spin-option"
+										onclick={() => applySpinVariation('Interests', v, (x) => (interests = x))}
+										><span class="spin-idx">{i + 1}</span><span class="spin-text">{v}</span></button
+									>{/each}<button class="spin-dismiss" onclick={() => dismissSpin('Interests')}
+									>Dismiss</button
+								>
+							</div>
 						{/if}
 					</div>
 					<div class="field">
 						<div class="label-row">
 							<label for="platforms">Primary Platforms</label>
 							<div class="ai-btn-group">
-								<button class="enrich-btn" onclick={() => generateField('Primary Social Media Platforms for target audience', (v) => (platforms = v))} disabled={generating['Platforms']}>
-									{#if generating['Platforms']}<div class="enrich-spinner"></div>Generating...{:else}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.7 4.6L18 9l-4.3 1.4L12 15l-1.7-4.6L6 9l4.3-1.4z" /><path d="M18.5 15l.6 1.6 1.6.6-1.6.6-.6 1.6-.6-1.6-1.6-.6 1.6-.6z" /></svg>Generate{/if}
+								<button
+									class="enrich-btn"
+									onclick={() =>
+										generateField(
+											'Primary Social Media Platforms for target audience',
+											(v) => (platforms = v),
+											'Platforms'
+										)}
+									disabled={generating['Platforms']}
+								>
+									{#if generating['Platforms']}<div class="enrich-spinner"></div>
+										Generating...{:else}<svg
+											width="12"
+											height="12"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											aria-hidden="true"
+											><path d="M12 3l1.7 4.6L18 9l-4.3 1.4L12 15l-1.7-4.6L6 9l4.3-1.4z" /><path
+												d="M18.5 15l.6 1.6 1.6.6-1.6.6-.6 1.6-.6-1.6-1.6-.6 1.6-.6z"
+											/></svg
+										>Generate{/if}
 								</button>
-								<button class="enrich-btn spin" onclick={() => spinField('Platforms', platforms)} disabled={spinning['Platforms'] || !platforms.trim()}>
-									{#if spinning['Platforms']}<div class="enrich-spinner"></div>...{:else}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" /><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" /></svg>Spin{/if}
+								<button
+									class="enrich-btn spin"
+									onclick={() => spinField('Platforms', platforms)}
+									disabled={spinning['Platforms'] || !platforms.trim()}
+								>
+									{#if spinning['Platforms']}<div class="enrich-spinner"></div>
+										...{:else}<svg
+											width="12"
+											height="12"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											aria-hidden="true"
+											><polyline points="23 4 23 10 17 10" /><polyline
+												points="1 20 1 14 7 14"
+											/><path
+												d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"
+											/></svg
+										>Spin{/if}
 								</button>
 							</div>
 						</div>
-						<textarea id="platforms" bind:value={platforms} placeholder="Where does the audience spend time? TikTok, Instagram, YouTube, LinkedIn…" rows="3"></textarea>
+						<textarea
+							id="platforms"
+							bind:value={platforms}
+							placeholder="Where does the audience spend time? TikTok, Instagram, YouTube, LinkedIn…"
+							rows="3"
+						></textarea>
 						{#if spinVariations['Platforms']}
-							<div class="spin-picker">{#each spinVariations['Platforms'] as v, i}<button class="spin-option" onclick={() => applySpinVariation('Platforms', v, (x) => (platforms = x))}><span class="spin-idx">{i + 1}</span><span class="spin-text">{v}</span></button>{/each}<button class="spin-dismiss" onclick={() => dismissSpin('Platforms')}>Dismiss</button></div>
+							<div class="spin-picker">
+								{#each spinVariations['Platforms'] as v, i}<button
+										class="spin-option"
+										onclick={() => applySpinVariation('Platforms', v, (x) => (platforms = x))}
+										><span class="spin-idx">{i + 1}</span><span class="spin-text">{v}</span></button
+									>{/each}<button class="spin-dismiss" onclick={() => dismissSpin('Platforms')}
+									>Dismiss</button
+								>
+							</div>
 						{/if}
 					</div>
 					<div class="field">
 						<div class="label-row">
 							<label for="painPoints">Pain Points</label>
 							<div class="ai-btn-group">
-								<button class="enrich-btn" onclick={() => generateField('Customer Pain Points this brand solves', (v) => (painPoints = v))} disabled={generating['Pain Points']}>
-									{#if generating['Pain Points']}<div class="enrich-spinner"></div>Generating...{:else}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.7 4.6L18 9l-4.3 1.4L12 15l-1.7-4.6L6 9l4.3-1.4z" /><path d="M18.5 15l.6 1.6 1.6.6-1.6.6-.6 1.6-.6-1.6-1.6-.6 1.6-.6z" /></svg>Generate{/if}
+								<button
+									class="enrich-btn"
+									onclick={() =>
+										generateField(
+											'Customer Pain Points this brand solves',
+											(v) => (painPoints = v),
+											'Pain Points'
+										)}
+									disabled={generating['Pain Points']}
+								>
+									{#if generating['Pain Points']}<div class="enrich-spinner"></div>
+										Generating...{:else}<svg
+											width="12"
+											height="12"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											aria-hidden="true"
+											><path d="M12 3l1.7 4.6L18 9l-4.3 1.4L12 15l-1.7-4.6L6 9l4.3-1.4z" /><path
+												d="M18.5 15l.6 1.6 1.6.6-1.6.6-.6 1.6-.6-1.6-1.6-.6 1.6-.6z"
+											/></svg
+										>Generate{/if}
 								</button>
-								<button class="enrich-btn" onclick={() => extendField('Pain Points', painPoints, (v) => (painPoints = v))} disabled={extending['Pain Points'] || !painPoints.trim()}>
-									{#if extending['Pain Points']}<div class="enrich-spinner"></div>Enriching...{:else}AI Enrich{/if}
+								<button
+									class="enrich-btn"
+									onclick={() => extendField('Pain Points', painPoints, (v) => (painPoints = v))}
+									disabled={extending['Pain Points'] || !painPoints.trim()}
+								>
+									{#if extending['Pain Points']}<div class="enrich-spinner"></div>
+										Enriching...{:else}AI Enrich{/if}
 								</button>
-								<button class="enrich-btn spin" onclick={() => spinField('Pain Points', painPoints)} disabled={spinning['Pain Points'] || !painPoints.trim()}>
-									{#if spinning['Pain Points']}<div class="enrich-spinner"></div>...{:else}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" /><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" /></svg>Spin{/if}
+								<button
+									class="enrich-btn spin"
+									onclick={() => spinField('Pain Points', painPoints)}
+									disabled={spinning['Pain Points'] || !painPoints.trim()}
+								>
+									{#if spinning['Pain Points']}<div class="enrich-spinner"></div>
+										...{:else}<svg
+											width="12"
+											height="12"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											aria-hidden="true"
+											><polyline points="23 4 23 10 17 10" /><polyline
+												points="1 20 1 14 7 14"
+											/><path
+												d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"
+											/></svg
+										>Spin{/if}
 								</button>
 							</div>
 						</div>
-						<textarea id="painPoints" bind:value={painPoints} placeholder="What problems does this audience face that the brand solves?" rows="4"></textarea>
+						<textarea
+							id="painPoints"
+							bind:value={painPoints}
+							placeholder="What problems does this audience face that the brand solves?"
+							rows="4"
+						></textarea>
 						{#if spinVariations['Pain Points']}
-							<div class="spin-picker">{#each spinVariations['Pain Points'] as v, i}<button class="spin-option" onclick={() => applySpinVariation('Pain Points', v, (x) => (painPoints = x))}><span class="spin-idx">{i + 1}</span><span class="spin-text">{v}</span></button>{/each}<button class="spin-dismiss" onclick={() => dismissSpin('Pain Points')}>Dismiss</button></div>
+							<div class="spin-picker">
+								{#each spinVariations['Pain Points'] as v, i}<button
+										class="spin-option"
+										onclick={() => applySpinVariation('Pain Points', v, (x) => (painPoints = x))}
+										><span class="spin-idx">{i + 1}</span><span class="spin-text">{v}</span></button
+									>{/each}<button class="spin-dismiss" onclick={() => dismissSpin('Pain Points')}
+									>Dismiss</button
+								>
+							</div>
 						{/if}
 					</div>
 				</div>
@@ -1744,7 +2393,8 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 									aria-label="Remove competitor {comp.name || i + 1}"
 									onclick={() => deleteCompetitors([comp.id])}
 								>
-									<svg aria-hidden="true"
+									<svg
+										aria-hidden="true"
 										width="14"
 										height="14"
 										viewBox="0 0 24 24"
@@ -1796,7 +2446,8 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 
 					{#if competitors.length === 0}
 						<div class="empty-state">
-							<svg aria-hidden="true"
+							<svg
+								aria-hidden="true"
 								width="32"
 								height="32"
 								viewBox="0 0 24 24"
@@ -1814,7 +2465,8 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 					{/if}
 
 					<button class="add-comp-btn" onclick={addCompetitor}>
-						<svg aria-hidden="true"
+						<svg
+							aria-hidden="true"
 							width="14"
 							height="14"
 							viewBox="0 0 24 24"
@@ -2959,7 +3611,9 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		min-height: 44px;
 		cursor: pointer;
 		text-align: left;
-		transition: border-color 0.2s, background 0.2s;
+		transition:
+			border-color 0.2s,
+			background 0.2s;
 		font-family: var(--font-body);
 	}
 	.spin-option:hover {
@@ -2989,7 +3643,9 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		min-width: 44px;
 		min-height: 44px;
 	}
-	.spin-dismiss:hover { color: var(--text-muted); }
+	.spin-dismiss:hover {
+		color: var(--text-muted);
+	}
 
 	/* Products Grid */
 	.products-grid {

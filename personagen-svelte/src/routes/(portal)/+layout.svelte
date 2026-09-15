@@ -141,6 +141,11 @@
 			{ href: '/models', label: 'Model Manager', icon: 'sliders' },
 			{ href: '/guides', label: 'Docs', icon: 'book' },
 			{ href: '/developer', label: 'Developer API', icon: 'code' },
+			// Billing was reachable only through the sidebar credit pill, which is
+			// hidden when the sidebar is collapsed and absent entirely when credits
+			// mode is off — so a shipped Stripe checkout, plan picker and ledger
+			// had no dependable way in.
+			{ href: '/billing', label: 'Billing', icon: 'card' },
 			{ href: '/settings', label: 'Settings', icon: 'settings' }
 		]
 	};
@@ -746,6 +751,19 @@
 								><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path
 									d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"
 								/></svg
+							>
+						{:else if item.icon === 'card'}
+							<svg
+								aria-hidden="true"
+								width="18"
+								height="18"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								><rect x="2" y="5" width="20" height="14" rx="2" /><path d="M2 10h20" /></svg
 							>
 						{:else if item.icon === 'settings'}
 							<svg

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { FULL_ACCESS, seatBlockedReason, type SeatCapabilities } from '$lib/seat';
 	import { dialog } from '$lib/actions/dialog';
 	import { syncParam, readParam } from '$lib/url-state';
 	import { onMount, onDestroy } from 'svelte';
@@ -2138,7 +2139,12 @@
 		byProvider: Record<string, number>;
 		byOperation: Record<string, number>;
 	} | null>(null);
+	// /api/agent/[id]/spend is manager-and-above. Asking anyway put a 403 in the
+	// console on every visit by a creator or viewer seat; the panel below now
+	// says whose view this is instead of silently showing nothing.
+	const seat = $derived(((data as any).seat ?? FULL_ACCESS) as SeatCapabilities);
 	async function loadSpend(agentId: string) {
+		if (!seat.canSeeSpend) return;
 		try {
 			const res = await fetch(`/api/agent/${agentId}/spend`);
 			const d = await parseJsonResponse<any>(res);
@@ -2153,7 +2159,7 @@
 	let spendLoadedForId: string | null = null;
 	$effect(() => {
 		const id = agent?.id;
-		if (!id || id === spendLoadedForId) return;
+		if (!id || id === spendLoadedForId || !seat.canSeeSpend) return;
 		spendLoadedForId = id;
 		loadSpend(id);
 	});
@@ -5804,7 +5810,17 @@
 						</div>
 					</details>
 
-					<!-- Spend & Pricing section -->
+					<!-- Spend & Pricing section — manager seats and above only. -->
+					{#if !seat.canSeeSpend}
+						<div class="profile-section seat-locked" role="status">
+							<div class="section-header">
+								<h2 class="section-title">Spend &amp; Pricing</h2>
+								<p class="section-desc">
+									{seatBlockedReason(seat, 'manager')}
+								</p>
+							</div>
+						</div>
+					{:else}
 					<details class="profile-section">
 						<summary class="section-summary">
 							<div class="section-header">
@@ -5880,6 +5896,7 @@
 							</div>
 						</details>
 					</details>
+					{/if}
 
 					<!-- Save + Danger zone -->
 					<div class="profile-footer">
@@ -9259,6 +9276,16 @@
 		font-size: var(--text-sm);
 		cursor: pointer;
 		min-height: 44px;
+	}
+
+	/* A section this seat may not open: same frame, no disclosure affordance,
+	   and copy that names the seat instead of showing an empty panel. */
+	.seat-locked {
+		padding: var(--space-5);
+		opacity: 0.85;
+	}
+	.seat-locked .section-desc {
+		margin-top: var(--space-2);
 	}
 
 	/* ── Spend & Pricing ── */

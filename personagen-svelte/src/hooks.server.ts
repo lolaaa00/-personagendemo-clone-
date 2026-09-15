@@ -20,6 +20,7 @@ import {
 import { activityLogEnabled } from '$lib/server/flags';
 import { startSettingsRefresh } from '$lib/server/settings';
 import { maybeWithholdWelcome } from '$lib/server/welcome-guard';
+import { loginWithReturn } from '$lib/return-to';
 
 // SIGTERM/SIGINT → flush registered in-memory queues, then exit. Installed
 // before the scheduler so a redeploy mid-tick still drains cleanly.
@@ -67,7 +68,12 @@ const PROTECTED_PREFIXES = [
 	'/guides',
 	'/review',
 	'/developer',
-	'/admin'
+	'/admin',
+	// Both live under (portal) and were missing, against this comment's own
+	// instruction: each survived only on its page load's own redirect, so they
+	// skipped the outer gate and the placeholder-config interstitial.
+	'/trash',
+	'/billing'
 ];
 
 /**
@@ -340,7 +346,9 @@ const handleInner: Handle = async ({ event, resolve }) => {
 
 		try {
 			const { session } = await event.locals.safeGetSession();
-			if (!session) throw redirect(303, '/login');
+			// Carry the requested path so signing in returns the user to the page
+			// they asked for rather than dumping them on the dashboard.
+			if (!session) throw redirect(303, loginWithReturn(event.url.pathname + event.url.search));
 		} catch (e) {
 			if ((e as any)?.status === 303) throw e;
 			console.error('Auth guard error:', e);

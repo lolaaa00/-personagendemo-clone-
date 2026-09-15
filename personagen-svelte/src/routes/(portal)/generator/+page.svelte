@@ -81,6 +81,20 @@
 
 	// Step 3 — Submission
 	let isCreating = $state(false);
+
+	// The server enforces this in POST /api/agents (personaLimitExceeded), and
+	// `entitlements.personaLimit` has always been in `data` — but this wizard
+	// never read it, so a capped plan completed all three steps and failed on the
+	// final click with a toast. Every other gated control in the portal mirrors
+	// its gate with a disabled state and a visible reason; this one now does too.
+	let personaLimit = $derived((data as any).entitlements?.personaLimit ?? null);
+	let personaCount = $derived(((data as any).sidebarAgents ?? []).length);
+	let personaLimitReached = $derived(personaLimit !== null && personaCount >= personaLimit);
+	let createBlockedReason = $derived(
+		personaLimitReached
+			? `The ${(data as any).entitlements?.plan ?? 'free'} plan includes ${personaLimit} persona${personaLimit === 1 ? '' : 's'}, and you have ${personaCount}. See Billing to compare plans, or delete a persona first.`
+			: null
+	);
 	let createError = $state('');
 
 	// Validation
@@ -842,7 +856,8 @@
 						<button
 							type="button"
 							class="btn-method-action"
-							disabled={isCreating || !step1Valid || !step2Valid}
+							disabled={isCreating || !step1Valid || !step2Valid || personaLimitReached}
+							title={createBlockedReason ?? undefined}
 							aria-busy={isCreating}
 							onclick={createPersonaDirect}
 							style="background: var(--gradient-cta); color: #fff; border: none; padding: 0.75rem; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; font-size: var(--text-xs); font-weight: 700; border-radius: var(--radius-xs); cursor: pointer; text-align: center; transition: all 0.2s;"
@@ -869,6 +884,12 @@
 								Create Persona
 							{/if}
 						</button>
+						{#if createBlockedReason}
+							<p class="plan-note" role="status">
+								{createBlockedReason}
+								<a href="/billing">Compare plans →</a>
+							</p>
+						{/if}
 					</div>
 
 					<!-- Method 2: Account Factory Automation -->
@@ -892,7 +913,8 @@
 						<button
 							type="button"
 							class="btn-method-action"
-							disabled={isCreating || !step1Valid || !step2Valid}
+							disabled={isCreating || !step1Valid || !step2Valid || personaLimitReached}
+							title={createBlockedReason ?? undefined}
 							aria-busy={isCreating}
 							onclick={createPersonaDirect}
 							style="background: var(--gradient-cta); color: #fff; border: none; padding: 0.75rem; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; font-size: var(--text-xs); font-weight: 700; border-radius: var(--radius-xs); cursor: pointer; text-align: center; transition: all 0.2s;"
@@ -1369,6 +1391,19 @@
 		to {
 			transform: rotate(360deg);
 		}
+	}
+
+	/* Why a control is disabled, stated where the control is — the pattern the
+	   developer, settings, brand-brief and persona pages already use. */
+	.plan-note {
+		margin: var(--space-3) 0 0;
+		font-size: var(--text-sm);
+		line-height: 1.5;
+		color: var(--text-dim);
+	}
+	.plan-note a {
+		color: var(--accent-text);
+		white-space: nowrap;
 	}
 
 	.page-header {

@@ -2217,7 +2217,6 @@
 					</svg>
 				</div>
 				<h2>Billing &amp; Plan</h2>
-				<span class="coming-soon-badge">Coming Soon</span>
 			</div>
 			<div class="card-body">
 				<div class="billing-coming-soon">
@@ -2233,8 +2232,9 @@
 						<p class="billing-desc">
 							Your balance is shown as money in your currency, every generation is priced before you
 							confirm, purchased credit never expires, and workspace personas draw on the workspace
-							owner's wallet. <a href="/billing">Open Billing →</a>
+							owner's wallet.
 						</p>
+						<a class="btn btn-secondary billing-open" href="/billing">Open Billing</a>
 					</div>
 				</div>
 			</div>
@@ -3285,6 +3285,11 @@
 	/* Billing */
 	.billing-icon {
 		background: var(--accent-soft);
+	}
+
+	.billing-open {
+		align-self: flex-start;
+		margin-top: var(--space-3);
 	}
 
 	.coming-soon-badge {

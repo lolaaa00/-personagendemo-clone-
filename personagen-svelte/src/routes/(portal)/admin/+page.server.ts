@@ -151,8 +151,15 @@ export const load: PageServerLoad = async ({ locals }) => {
 	}
 
 	// Unified, newest-first activity feed across the three sources.
+	// Every row carries its own primary key as `id`. The client keys its
+	// {#each} on it: the previous key was `at + actor + detail`, which is not
+	// unique — one autopilot run fires several LLM calls for the same actor and
+	// model inside a millisecond, so two rows collided and Svelte threw
+	// each_key_duplicate, blanking the whole console for exactly the workspaces
+	// busy enough to need it.
 	const activity = [
 		...generations.map((g: any) => ({
+			id: `generation:${g.id}`,
 			kind: 'generation' as const,
 			at: g.created_at,
 			actor: actorLabel(g.user_id),
@@ -161,6 +168,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 			cost: Number(g.est_cost) || 0
 		})),
 		...reviews.map((r: any) => ({
+			id: `review:${r.id}`,
 			kind: 'review' as const,
 			at: r.created_at,
 			actor: actorLabel(r.user_id),
@@ -171,6 +179,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 		...recentPosts
 			.filter((p: any) => p.status === 'published' && p.published_at)
 			.map((p: any) => ({
+				id: `publish:${p.id}`,
 				kind: 'publish' as const,
 				at: p.published_at,
 				actor: actorLabel(p.user_id),

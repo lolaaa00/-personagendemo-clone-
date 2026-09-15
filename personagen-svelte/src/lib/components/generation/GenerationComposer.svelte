@@ -135,6 +135,19 @@
 	}: Props = $props();
 
 	let loading = $state(false);
+	/**
+	 * Latches the instant the spend is dispatched, and never unlatches — the
+	 * composer is unmounted by every caller right after `onConfirm`, so there is
+	 * no second legitimate submit from this instance.
+	 *
+	 * `loading` cannot do this job: it belongs to the PREVIEW fetch, and is false
+	 * exactly when the confirm button is enabled. Both call sites happen to set
+	 * `composerOpen = false` before running, but Svelte flushes effects
+	 * asynchronously, so the button survives the frame in which it was clicked —
+	 * and a third caller that ran before closing would re-open the window with no
+	 * warning. A double-charge must not depend on every caller's ordering.
+	 */
+	let submitting = $state(false);
 	let loadError = $state<string | null>(null);
 	let preview = $state<any>(null);
 
@@ -842,6 +855,8 @@
 	}
 
 	function confirm() {
+		// Re-entrancy first: everything below either spends or hands off.
+		if (submitting) return;
 		if (isSeries) {
 			onOpenPlanner?.();
 			return;
@@ -911,6 +926,9 @@
 			body.scheduled_date = scheduledDate || undefined;
 			body.scheduled_time = scheduledTime || undefined;
 		}
+		// Set immediately before dispatch, never before the early returns above —
+		// a blocked or handed-off click must leave the button usable.
+		submitting = true;
 		onConfirm(body);
 	}
 
@@ -1363,12 +1381,18 @@
 										charged — to the wallet or to your keys.
 									</span>
 									{#if cardQuotes.length > MAX_CARD_QUOTES}
-										<span class="warn-line">Up to {MAX_CARD_QUOTES} at a time — trim the list to continue.</span>
+										<span class="warn-line"
+											>Up to {MAX_CARD_QUOTES} at a time — trim the list to continue.</span
+										>
 									{:else if cardQuotes.length > 0 && cardQuotesOk < cardQuotes.length}
 										<ul class="quote-problems">
 											{#each cardQuotes as q, i (i)}
 												{#if cardQuoteProblems[i]}
-													<li><b>“{q.length > 48 ? q.slice(0, 48) + '…' : q}”</b> — {cardQuoteProblems[i]}</li>
+													<li>
+														<b>“{q.length > 48 ? q.slice(0, 48) + '…' : q}”</b> — {cardQuoteProblems[
+															i
+														]}
+													</li>
 												{/if}
 											{/each}
 										</ul>
@@ -1384,20 +1408,20 @@
 									<span class="hint">{CARD_LOOKS.find((l) => l.id === cardLook)?.blurb}</span>
 								</div>
 							{:else}
-							<div class="fld">
-								<label class="fld-label" for="gc-cardtext">Card text</label>
-								<textarea
-									id="gc-cardtext"
-									aria-describedby="gc-cardtext-hint"
-									bind:value={cardText}
-									rows="3"
-									placeholder="Leave blank and the Director writes the line"
-								></textarea>
-								<span class="hint" id="gc-cardtext-hint">
-									Line breaks decide the shape — one line reads as a statement, several become a
-									stack or a list.
-								</span>
-							</div>
+								<div class="fld">
+									<label class="fld-label" for="gc-cardtext">Card text</label>
+									<textarea
+										id="gc-cardtext"
+										aria-describedby="gc-cardtext-hint"
+										bind:value={cardText}
+										rows="3"
+										placeholder="Leave blank and the Director writes the line"
+									></textarea>
+									<span class="hint" id="gc-cardtext-hint">
+										Line breaks decide the shape — one line reads as a statement, several become a
+										stack or a list.
+									</span>
+								</div>
 							{/if}
 							<div class="row">
 								<div class="fld">
@@ -1833,7 +1857,11 @@
 								{#if isGraphicCard}
 									<!-- A card is deterministic: this is genuinely what comes out. -->
 									<div class="frame frame-card">
-										<span>{ownWords ? cardQuotes[0] : cardText || 'The Director writes this line'}</span>
+										<span
+											>{ownWords
+												? cardQuotes[0]
+												: cardText || 'The Director writes this line'}</span
+										>
 									</div>
 									<span class="frame-cap">
 										{ownWords
@@ -2101,13 +2129,20 @@
 		{#if isLastStep}
 			<button
 				class="btn-primary"
-				disabled={loading || !!loadError || !preview || missingSourceClip || ownWordsBlocked}
+				disabled={submitting ||
+					loading ||
+					!!loadError ||
+					!preview ||
+					missingSourceClip ||
+					ownWordsBlocked}
 				title={missingSourceClip
 					? 'Add a source clip on the Look step — this format transforms one.'
 					: undefined}
 				onclick={confirm}
 			>
-				{destination?.label ?? spec?.confirmLabel ?? 'Approve & generate'}
+				{submitting
+					? 'Starting…'
+					: (destination?.label ?? spec?.confirmLabel ?? 'Approve & generate')}
 			</button>
 		{:else}
 			<!-- Next, never "Approve" — the money decision belongs on the last step
