@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { postStatusFill, postStatusText } from '$lib/status-color';
 	import { dialog } from '$lib/actions/dialog';
 	import { syncParam, readParam } from '$lib/url-state';
 	/**
@@ -358,18 +359,6 @@
 	}
 
 	// ── Display bridges ────────────────────────────────────────────────────
-	const STATUS_COLORS: Record<string, string> = {
-		scheduled: 'var(--accent)',
-		draft: 'var(--warning)',
-		publishing: 'var(--cyan)',
-		published: 'var(--success)',
-		partial: 'var(--gold)',
-		rejected: 'var(--rose)',
-		failed: 'var(--error)',
-		// Campaign/composer slots load while still generating — without a color
-		// their status stripe silently rendered as nothing.
-		generating: 'var(--cyan)'
-	};
 
 	function getPostDisplay(p: CalendarPost) {
 		return sharedGetPostDisplay({ content: p.text, publication_results: p.publication_results });
@@ -615,7 +604,7 @@
 										>
 											<!-- Status is carried by the colour stripe visually; the sr-only
 											     text below is the non-colour equivalent. -->
-											<div class="event-status-bar" style="background: {STATUS_COLORS[post.status]}" aria-hidden="true"></div>
+											<div class="event-status-bar" style="background: {postStatusFill(post.status)}" aria-hidden="true"></div>
 											<!-- Media-first chip: the generated visual IS the preview; the text
 											     snippet only carries chips that have no media (generating slots,
 											     legacy text posts). -->
@@ -715,7 +704,7 @@
 								{@const views = post.analytics?.views ?? 0}
 								{@const thumb = getPostThumb(post)}
 								<div class="event-block week-event">
-									<div class="event-status-bar" style="background: {STATUS_COLORS[post.status]}" aria-hidden="true"></div>
+									<div class="event-status-bar" style="background: {postStatusFill(post.status)}" aria-hidden="true"></div>
 									{#if thumb}
 										<img class="event-thumb" src={thumb} alt="" width="44" height="55" loading="lazy" decoding="async" />
 									{/if}
@@ -762,7 +751,7 @@
 						<button class="day-post-main" onclick={() => onOpenPost(post)} title={postErrorHint(post)}>
 							<span class="day-post-time">{post.time}</span>
 							<!-- Colour-only status stripe; .status-badge below states it in words. -->
-							<div class="day-post-bar" style="background: {STATUS_COLORS[post.status]}" aria-hidden="true"></div>
+							<div class="day-post-bar" style="background: {postStatusFill(post.status)}" aria-hidden="true"></div>
 							{#if thumb}
 								<img class="day-post-thumb" src={thumb} alt="" width="56" height="56" loading="lazy" />
 							{/if}
@@ -771,7 +760,7 @@
 									<span class="day-post-agent">{post.agentName}</span>
 									<span
 										class="status-badge"
-										style="color: {STATUS_COLORS[post.status]}; border-color: {STATUS_COLORS[post.status]}"
+										style="color: {postStatusText(post.status)}; border-color: {postStatusText(post.status)}"
 									>{post.status}</span>
 								</div>
 								<p class="day-post-text">{getPostDisplay(post).text}</p>
@@ -851,7 +840,7 @@
 							{@const dp = getPostDisplay(post)}
 							{@const thumb = getPostThumb(post)}
 							<button class="modal-post-card" onclick={() => onOpenPost(post)}>
-								<div class="post-card-status" style="background: {STATUS_COLORS[post.status] || 'var(--accent)'}" aria-hidden="true"></div>
+								<div class="post-card-status" style="background: {postStatusFill(post.status)}" aria-hidden="true"></div>
 								{#if thumb}
 									<img class="post-card-thumb" src={thumb} alt="" width="52" height="52" loading="lazy" />
 								{/if}
@@ -860,7 +849,7 @@
 										<span class="post-card-time">{post.time}</span>
 										<span
 											class="status-badge"
-											style="color: {STATUS_COLORS[post.status]}; border-color: {STATUS_COLORS[post.status]}"
+											style="color: {postStatusText(post.status)}; border-color: {postStatusText(post.status)}"
 											title={postErrorHint(post)}
 										>{post.status}</span>
 									</div>

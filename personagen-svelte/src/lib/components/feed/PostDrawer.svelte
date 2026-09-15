@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { postStatusText } from '$lib/status-color';
 	import { thumbUrl, restoreOriginal, proxiedMediaUrl } from '$lib/image-url';
 	import { fly, fade } from 'svelte/transition';
 	import {
@@ -515,18 +516,10 @@
 		return typeof msg === 'string' && msg ? truncateError(msg) : null;
 	});
 
-	// Both call sites use this as a `color:` on small badge/pill text, so it must return
-	// the AA `-text` variants — the raw brand hues measure 2.77-4.08:1 on a light
-	// surface. The tokens fall back to the vivid hues in dark mode, where those pass.
-	function statusColor(status: string): string {
-		if (status === 'published') return 'var(--success-text)';
-		if (status === 'failed') return 'var(--error-text)';
-		if (status === 'publishing') return 'var(--cyan-text)';
-		if (status === 'partial') return 'var(--warning-text)';
-		if (status === 'rejected') return 'var(--rose-text)';
-		if (status === 'scheduled') return 'var(--accent-text)';
-		return 'var(--text-dim)';
-	}
+	// One source for status colour (src/lib/status-color.ts). These call sites
+	// render status AS TEXT, so they take the AA `-text` variants: the raw brand
+	// hues measure 2.77-4.08:1 on a light surface.
+	const statusColor = postStatusText;
 
 	function formatPostDate(p: any): string {
 		const d =

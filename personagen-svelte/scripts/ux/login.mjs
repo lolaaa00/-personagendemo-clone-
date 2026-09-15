@@ -5,7 +5,7 @@
 //
 //   node scripts/ux/login.mjs [--base http://127.0.0.1:5174] [--role owner]
 import { chromium } from '@playwright/test';
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { appRoot } from './sql.mjs';
 
@@ -39,7 +39,8 @@ for (const [role, acct] of Object.entries(accounts)) {
 	if (only && role !== only) continue;
 	const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
 	const page = await ctx.newPage();
-	let ok = false, detail = '';
+	let ok = false;
+	let detail;
 	try {
 		await page.goto(`${BASE}/login`, { waitUntil: 'domcontentloaded' });
 		await page.fill('#email', acct.email);

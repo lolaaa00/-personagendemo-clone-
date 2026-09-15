@@ -527,7 +527,7 @@
 
 	<!-- ─── Progress Steps ─── -->
 	<ol class="progress-steps" aria-label="Content intelligence wizard steps">
-		{#each INTEL_STEPS as s, i}
+		{#each INTEL_STEPS as s, i (s.id)}
 			<li class="step-item">
 				<button
 					type="button"
@@ -623,7 +623,7 @@
 							aria-describedby="intel-step1-hint"
 						>
 							<option value="">Select industry...</option>
-							{#each INTEL_INDUSTRIES as ind}
+							{#each INTEL_INDUSTRIES as ind (ind)}
 								<option value={ind}>{ind}</option>
 							{/each}
 						</select>
@@ -670,7 +670,7 @@
 				</div>
 
 				<div class="competitors-list">
-					{#each intelCompetitors as comp, i}
+					{#each intelCompetitors as comp, i (i)}
 						<div class="competitor-row">
 							<span class="comp-num" aria-hidden="true">{i + 1}</span>
 							<label class="sr-only" for="intel-comp-url-{i}">Competitor {i + 1} channel URL</label>
@@ -686,7 +686,7 @@
 								>Competitor {i + 1} platform</label
 							>
 							<select id="intel-comp-platform-{i}" bind:value={comp.platform} class="comp-platform">
-								{#each INTEL_PLATFORMS_LIST as p}
+								{#each INTEL_PLATFORMS_LIST as p (p.id)}
 									<option value={p.id}>{p.label}</option>
 								{/each}
 							</select>
@@ -775,7 +775,7 @@
 					<div class="field">
 						<label id="intel-content-types-label">Content Types You Currently Produce</label>
 						<div class="content-type-grid" role="group" aria-labelledby="intel-content-types-label">
-							{#each INTEL_CONTENT_TYPES_LIST as ct}
+							{#each INTEL_CONTENT_TYPES_LIST as ct (ct)}
 								<button
 									type="button"
 									class="ct-btn"
@@ -866,7 +866,7 @@
 						<label for="intel-interest-input">Interest Tags</label>
 						<div class="tags-input-wrapper">
 							<div class="tags-display">
-								{#each intelInterests as tag}
+								{#each intelInterests as tag (tag)}
 									<span class="tag">
 										{tag}
 										<button
@@ -904,7 +904,7 @@
 							</div>
 						</div>
 						<div class="suggestions" role="group" aria-label="Suggested interest tags">
-							{#each INTEL_INTEREST_SUGGESTIONS.filter((s) => !intelInterests.includes(s)) as sug}
+							{#each INTEL_INTEREST_SUGGESTIONS.filter((s) => !intelInterests.includes(s)) as sug (sug)}
 								<button
 									type="button"
 									class="sug-btn"
@@ -920,7 +920,7 @@
 							>Locations <span class="req" aria-hidden="true">*</span></label
 						>
 						<div class="location-grid" role="group" aria-labelledby="intel-locations-label">
-							{#each INTEL_LOCATIONS as loc}
+							{#each INTEL_LOCATIONS as loc (loc)}
 								<button
 									type="button"
 									class="loc-btn"
@@ -970,7 +970,7 @@
 
 					<div class="review-item">
 						<h3>Competitors</h3>
-						{#each intelCompetitors.filter((c) => c.url.trim()) as comp}
+						{#each intelCompetitors.filter((c) => c.url.trim()) as comp (comp.url)}
 							<p class="review-url">
 								{comp.url}
 								<span class="review-plat"
@@ -986,7 +986,7 @@
 					<div class="review-item">
 						<h3>Content Types</h3>
 						<div class="review-tags">
-							{#each intelContentTypes as ct}
+							{#each intelContentTypes as ct (ct)}
 								<span class="review-tag">{ct}</span>
 							{/each}
 							{#if intelContentTypes.length === 0}
@@ -1000,7 +1000,7 @@
 						<p>Ages {intelAgeMin}–{intelAgeMax} • {intelLocations.join(', ') || '—'}</p>
 						{#if intelInterests.length > 0}
 							<div class="review-tags">
-								{#each intelInterests as int}
+								{#each intelInterests as int (int)}
 									<span class="review-tag accent">{int}</span>
 								{/each}
 							</div>
@@ -1114,7 +1114,7 @@
 						Content Pillars
 					</h3>
 					<div class="pillars-grid">
-						{#each intelStrategyResults.pillars as pillar, i}
+						{#each intelStrategyResults.pillars as pillar, i (pillar.name)}
 							<div class="pillar-card" style="animation-delay: {i * 0.08}s">
 								<div class="pillar-header">
 									<h4>{pillar.name}</h4>
@@ -1158,7 +1158,7 @@
 							<div class="table-header">
 								<span>Day</span><span>Time</span><span>Content Type</span><span>Platform</span>
 							</div>
-							{#each intelStrategyResults.schedule as row}
+							{#each intelStrategyResults.schedule as row (row.day)}
 								<div class="table-row">
 									<span class="day-cell">{row.day}</span>
 									<span class="time-cell">{row.time}</span>

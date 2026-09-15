@@ -33,7 +33,7 @@ for (const theme of ['light', 'dark']) {
       const page = await ctx.newPage();
       page.on('pageerror', (e) => errors.push(`[${theme}/${v.name}/${p.name}] pageerror: ${e.message}`));
       page.on('console', (m) => { if (m.type() === 'error') errors.push(`[${theme}/${v.name}/${p.name}] console.error: ${m.text()}`); });
-      await page.addInitScript((t) => { try { localStorage.setItem('theme', t); localStorage.setItem('personagen-theme', t); } catch {} }, theme);
+      await page.addInitScript((t) => { try { localStorage.setItem('theme', t); localStorage.setItem('personagen-theme', t); } catch { /* private mode */ } }, theme);
       await page.goto(base + p.path, { waitUntil: 'networkidle' });
       await page.evaluate((t) => document.documentElement.setAttribute('data-theme', t), theme);
       await page.waitForTimeout(600);
@@ -54,7 +54,7 @@ for (const theme of ['light', 'dark']) {
         // 2x zoom of hero CTA area
         const ctx2 = await browser.newContext({ viewport: { width: 720, height: 450 }, deviceScaleFactor: 2, colorScheme: theme });
         const pz = await ctx2.newPage();
-        await pz.addInitScript((t) => { try { localStorage.setItem('theme', t); } catch {} }, theme);
+        await pz.addInitScript((t) => { try { localStorage.setItem('theme', t); } catch { /* private mode */ } }, theme);
         await pz.goto(base + p.path, { waitUntil: 'networkidle' });
         await pz.evaluate((t) => document.documentElement.setAttribute('data-theme', t), theme);
         await pz.waitForTimeout(400);

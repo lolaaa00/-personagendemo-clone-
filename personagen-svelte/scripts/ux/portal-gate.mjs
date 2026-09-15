@@ -53,7 +53,7 @@ const fail = (check, detail) => { failures.push({ check, detail }); console.log(
 const pass = (check) => console.log(`  ✓ ${check}`);
 
 /** Attach listeners that record everything the mission counts as an error. */
-function watch(page, ctx) {
+function watch(page) {
 	const bag = { console: [], pageerror: [], bad: [], notfound: [] };
 	page.on('console', (m) => { if (m.type() === 'error') bag.console.push(m.text().slice(0, 300)); });
 	page.on('pageerror', (e) => bag.pageerror.push(String(e.message).slice(0, 300)));
@@ -104,7 +104,7 @@ for (const [role, acct] of Object.entries(accounts)) {
 	const ctx = await browser.newContext({ storageState: statePath, viewport: { width: 1280, height: 900 } });
 
 	// Resolve this role's own persona link from the sidebar, if it has one.
-	let personaRoute = null;
+	let personaRoute;
 	{
 		const p = await ctx.newPage();
 		await p.goto(`${BASE}/dashboard`, { waitUntil: 'networkidle', timeout: 90000 }).catch(() => {});
@@ -118,10 +118,10 @@ for (const [role, acct] of Object.entries(accounts)) {
 	const routeList = [...ROUTES, ...(personaRoute ? [personaRoute] : []), ...GATED.map(([r]) => r)];
 	for (const route of routeList) {
 		const page = await ctx.newPage();
-		const bag = watch(page, ctx);
+		const bag = watch(page);
 		let status = 'ok';
 		try {
-			const resp = await page.goto(`${BASE}${route}`, { waitUntil: 'networkidle', timeout: 90000 });
+			await page.goto(`${BASE}${route}`, { waitUntil: 'networkidle', timeout: 90000 });
 			await page.waitForTimeout(400);
 			const landed = new URL(page.url()).pathname;
 			const info = await inspect(page);

@@ -58,7 +58,7 @@ for (const [role] of Object.entries(accounts)) {
 			}, theme);
 
 			// Resolve this role's own persona page once.
-			let personaRoute = null;
+			let personaRoute;
 			{
 				const p = await ctx.newPage();
 				await p.goto(`${BASE}/dashboard`, { waitUntil: 'networkidle', timeout: 90000 }).catch(() => {});

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { FULL_ACCESS, seatBlockedReason, type SeatCapabilities } from '$lib/seat';
+	import { personaStatusFill } from '$lib/status-color';
 	import { dialog } from '$lib/actions/dialog';
 	import { syncParam, readParam } from '$lib/url-state';
 	import { onMount, onDestroy } from 'svelte';
@@ -2997,11 +2998,7 @@
 		return `${Math.floor(diffHr / 24)}d ago`;
 	}
 
-	function getStatusColor(s: string) {
-		if (s === 'active') return 'var(--success)';
-		if (s === 'paused') return 'var(--warning)';
-		return 'var(--text-dim)';
-	}
+	const getStatusColor = personaStatusFill;
 </script>
 
 <svelte:head>
