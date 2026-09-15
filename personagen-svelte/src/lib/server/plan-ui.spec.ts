@@ -14,6 +14,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { BYOK_GATED_KEY_PROVIDERS } from '$lib/providers';
 
 const read = (...p: string[]) => readFileSync(new URL(`../../${p.join('/')}`, import.meta.url), 'utf-8');
 
@@ -97,10 +98,17 @@ describe('what must NEVER be gated', () => {
 	it('the publishing and research keys are never gated', () => {
 		// Zernio is how every plan publishes; Firecrawl is how briefs are
 		// researched. Both are promised to Free.
-		const list = files.settings.match(/BYOK_GATED_PROVIDERS\s*=\s*\[([^\]]*)\]/)?.[1] ?? '';
-		expect(list, 'the gated provider list must be present').toMatch(/openrouter/);
-		expect(list).not.toMatch(/zernio/);
-		expect(list).not.toMatch(/firecrawl/);
+		//
+		// This used to regex a BYOK_GATED_PROVIDERS literal out of the settings
+		// page. That literal is gone — the page now derives the list from the
+		// provider catalogue — and a test that greps for a vanished literal
+		// reports an empty string and passes on nothing. Assert the real values.
+		expect(BYOK_GATED_KEY_PROVIDERS.length, 'the gated list must not be empty').toBeGreaterThan(0);
+		expect(BYOK_GATED_KEY_PROVIDERS).toContain('openrouter');
+		expect(BYOK_GATED_KEY_PROVIDERS).not.toContain('zernio');
+		expect(BYOK_GATED_KEY_PROVIDERS).not.toContain('firecrawl');
+		// and the page really does derive rather than restate
+		expect(files.settings).toContain('isByokGated(');
 	});
 
 	it('the brand-brief SAVE button is not gated — only creating a new one', () => {
