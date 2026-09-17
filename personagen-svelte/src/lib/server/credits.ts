@@ -23,6 +23,7 @@
 import { getServiceSupabase } from './service-supabase';
 import { creditsMode, creditMarkup, type CreditsMode } from './flags';
 import { CREDITS_PER_USD, creditsForUsd } from '$lib/money';
+import { KEYED_COST_PROVIDERS } from '$lib/providers';
 import { getUserApiKey, type UserKeyProvider } from './user-api-keys';
 
 export { CREDITS_PER_USD };
@@ -42,13 +43,12 @@ export function retailUsdFor(usd: number, markup: number = creditMarkup()): numb
 
 export type KeySource = 'platform' | 'byo' | 'none';
 
-/** Providers that bill a key; everything else (local, storage) is 'none'. */
-const KEYED_PROVIDERS: Record<string, string> = {
-	fal: 'fal_ai',
-	openrouter: 'openrouter',
-	gemini: 'gemini',
-	firecrawl: 'firecrawl'
-};
+/**
+ * Which cost-event providers bill a customer key — DERIVED from the provider
+ * catalogue ($lib/providers), not restated here, so this map and the Settings
+ * page and the api-keys route cannot drift apart. Everything absent from it
+ * (local, storage, a provider that stores no key) is 'none'.
+ */
 
 /**
  * Which key ACTUALLY paid the provider for this actor.
@@ -78,7 +78,7 @@ export async function keySourceFor(
 	provider: string,
 	cache?: Map<string, KeySource>
 ): Promise<KeySource> {
-	const keyed = KEYED_PROVIDERS[provider];
+	const keyed = KEYED_COST_PROVIDERS[provider];
 	if (!keyed) return 'none';
 	const k = `${userId}:${keyed}`;
 	if (cache?.has(k)) return cache.get(k)!;

@@ -14,6 +14,13 @@
 	import { dialog } from '$lib/actions/dialog';
 	import { syncParam, readParam } from '$lib/url-state';
 	import { confirmAction } from '$lib/stores/confirm.svelte';
+	import {
+		NON_BYOK_PROVIDERS,
+		byokReason,
+		isByokGated,
+		providerByKeyProvider,
+		type UserKeyProvider
+	} from '$lib/providers';
 
 	let { data } = $props<{
 		data: {
@@ -230,7 +237,10 @@
 		updated_at: string | null;
 	}
 
-	type ApiKeyProvider = 'zernio' | 'gemini' | 'openrouter' | 'firecrawl' | 'kie_ai' | 'fal_ai';
+	// The `user_api_keys.provider` values, from the provider catalogue — the same
+	// union the server gate reads, so a provider added there cannot be forgotten
+	// here (or here and not there).
+	type ApiKeyProvider = UserKeyProvider;
 
 	// Keys are grouped by what they're FOR, not by vendor — someone setting the
 	// account up thinks "who publishes my posts / who makes my media / who
@@ -1071,18 +1081,25 @@
 
 	// POST /api/settings/api-keys gates `action === 'save'` — and only for the
 	// GENERATION providers — with 403 PLAN_FEATURE when the plan has no BYOK
-	// line. Keep this list identical to the server's GENERATION_PROVIDERS.
+	// line. Which providers those are is NOT restated here: isByokGated() reads
+	// the same provider catalogue ($lib/providers) the server route reads, so
+	// the client can no longer gate more (or less) than its server.
 	// Zernio is how every plan publishes and Firecrawl is how briefs are
 	// researched, so neither is ever gated; and because only 'save' is gated,
 	// Test Connection and Delete Key stay enabled for every provider — a user
 	// keeps, can still test, and can still remove a key they already have.
-	const BYOK_GATED_PROVIDERS = ['openrouter', 'gemini', 'fal_ai', 'kie_ai'];
 
 	/** Reason this provider's Save is off, or null. Keyed on the PROVIDER, never
 	 *  on the category card — a category mixes gated and ungated providers. */
 	function saveKeyBlockedReason(provider: string): string | null {
+		// A provider that can never take a customer key says so regardless of plan.
+		const catalogued = providerByKeyProvider(provider);
+		if (catalogued) {
+			const never = byokReason(catalogued);
+			if (never) return never;
+		}
 		if (data.entitlements?.byok !== false) return null;
-		if (!BYOK_GATED_PROVIDERS.includes(provider)) return null;
+		if (!isByokGated(provider)) return null;
 		return `Your own generation keys are not included in the ${data.entitlements?.plan ?? 'free'} plan. See Billing to compare plans.`;
 	}
 
@@ -1675,6 +1692,44 @@
 						</section>
 					{/if}
 				{/each}
+
+				{#if NON_BYOK_PROVIDERS.length > 0}
+					<!-- Providers that can NEVER take a customer key. Leaving them out
+					     of the list entirely is what the catalogue exists to stop: an
+					     absence reads as an oversight and explains nothing, so the
+					     reason goes exactly where the key field would have been. -->
+					<section class="key-category">
+						<div class="key-category-head">
+							<div class="key-category-title">
+								<h3>No key to bring</h3>
+								<span class="key-category-count">{NON_BYOK_PROVIDERS.length}</span>
+							</div>
+							<span class="key-category-blurb">
+								These providers do not issue customer API keys, so there is no field to fill in.
+							</span>
+						</div>
+
+						<div class="key-accordion">
+							{#each NON_BYOK_PROVIDERS as p (p.id)}
+								<div class="key-item key-item-static">
+									<div class="key-summary">
+										<span class="key-mark" style="--mark-tint: #64748b" aria-hidden="true"
+											>{p.label.slice(0, 1)}</span
+										>
+										<span class="key-name">
+											{p.label}
+											<span class="key-unused">no customer keys</span>
+										</span>
+										<span class="key-state key-state-unset">Not available</span>
+									</div>
+									<div class="key-body">
+										<p class="plan-note">{byokReason(p)}</p>
+									</div>
+								</div>
+							{/each}
+						</div>
+					</section>
+				{/if}
 			</div>
 		</div>
 
@@ -3027,6 +3082,11 @@
 	}
 	.key-summary::-webkit-details-marker {
 		display: none;
+	}
+	/* The "no key to bring" rows are not accordions — nothing opens, so nothing
+	   should invite a click. */
+	.key-item-static .key-summary {
+		cursor: default;
 	}
 	.key-summary:focus-visible {
 		outline: 2px solid var(--accent);

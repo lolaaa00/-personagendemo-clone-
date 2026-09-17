@@ -73,17 +73,17 @@ describe('outcomes at 3× — what the customer pays vs what we pay', () => {
 	it('states the retail price list used in the design document', () => {
 		const table = Object.fromEntries(OUTCOMES.map((k) => [k, { raw: rawUsdFor(k), retail: retailCreditsFor(k, MARKUP) / 100 }]));
 		// image post: director + grader + still
-		expect(table.imagePost.raw).toBeCloseTo(0.084, 6);
-		expect(table.imagePost.retail).toBe(0.26);
+		expect(table.imagePost.raw).toBeCloseTo(0.104, 6);
+		expect(table.imagePost.retail).toBe(0.32);
 		// video post adds the b-roll clip
-		expect(table.videoPost.raw).toBeCloseTo(0.504, 6);
-		expect(table.videoPost.retail).toBe(1.52);
+		expect(table.videoPost.raw).toBeCloseTo(0.524, 6);
+		expect(table.videoPost.retail).toBe(1.58);
 		// talking head adds voice + OmniHuman
-		expect(table.talkingHead.raw).toBeCloseTo(0.814, 6);
-		expect(table.talkingHead.retail).toBe(2.45);
+		expect(table.talkingHead.raw).toBeCloseTo(0.834, 6);
+		expect(table.talkingHead.retail).toBe(2.51);
 		// cinematic: 4 stills + pro shot-set
-		expect(table.cinematic.raw).toBeCloseTo(1.924, 6);
-		expect(table.cinematic.retail).toBe(5.78);
+		expect(table.cinematic.raw).toBeCloseTo(1.944, 6);
+		expect(table.cinematic.retail).toBe(5.84);
 		// persona: avatar (2 stills) + 4-stage kit
 		expect(table.persona.raw).toBeCloseTo(0.48, 6);
 		expect(table.persona.retail).toBe(1.44);
@@ -162,8 +162,12 @@ describe('gate — the pre-run quote is an upper bound of the real debit', () =>
 		expect(spokesperson).toBeGreaterThanOrEqual(retailCreditsFor('talkingHead', MARKUP) - retailCreditsForStep(llm, MARKUP));
 		expect(broll).toBeGreaterThanOrEqual(retailCreditsFor('videoPost', MARKUP) - retailCreditsForStep(llm, MARKUP));
 		expect(cinematic).toBeGreaterThanOrEqual(retailCreditsFor('cinematic', MARKUP) - retailCreditsForStep(llm, MARKUP));
-		// and the media alone dominates: a wallet that passes the gate can never
-		// overdraw by more than the LLM passes (≤ 3 credits at 3×)
-		expect(retailCreditsForStep(llm, MARKUP)).toBeLessThanOrEqual(1);
+		// and the media alone dominates: an un-quoted grader pass is the only way a
+		// gated wallet overdraws, and it must stay small against the CHEAPEST media
+		// step it guards. Asserted as a relationship, not a constant — this line
+		// used to read `<= 1`, which was true only while the LLM rate was 5.8x too
+		// low, and broke the moment the rate was measured rather than guessed.
+		const cheapestMedia = retailCreditsForStep(still, MARKUP);
+		expect(retailCreditsForStep(llm, MARKUP)).toBeLessThan(cheapestMedia / 4);
 	});
 });

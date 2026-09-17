@@ -1,5 +1,6 @@
 import { json } from '@sveltejs/kit';
 import { entitlementsFor, planRefusal } from '$lib/server/entitlements';
+import { byokReason, isByokGated, providerById } from '$lib/providers';
 import type { RequestHandler } from './$types';
 import {
 	encryptSecret,
@@ -117,6 +118,16 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	const body = (await request.json()) as any;
 	const action = body.action || 'save';
 	const provider = String(body.provider || '').toLowerCase();
+
+	// A provider the catalogue knows about but which can NEVER take a customer
+	// key answers with the reason, not with a bare "unsupported" — an absence
+	// that reads like an oversight is the thing the catalogue exists to end.
+	const catalogued = providerById(provider);
+	const cataloguedRefusal = catalogued ? byokReason(catalogued) : null;
+	if (cataloguedRefusal) {
+		return json({ success: false, error: cataloguedRefusal }, { status: 400 });
+	}
+
 	if (!isSupportedProvider(provider)) {
 		return json({ success: false, error: 'Unsupported provider' }, { status: 400 });
 	}
@@ -124,10 +135,11 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	// "Bring your own keys — generation at no charge" is an Agency line, and it
 	// is already true mechanically: keySourceFor marks the event 'byo' and
 	// charge() skips every non-platform row. Only the GENERATION providers are
-	// gated. Zernio is how every plan publishes and Firecrawl is how briefs are
+	// gated — that set is DERIVED from the provider catalogue ($lib/providers),
+	// which is also what the Settings page reads, so the two cannot disagree.
+	// Zernio is how every plan publishes and Firecrawl is how briefs are
 	// researched; gating those would break features Free is promised.
-	const GENERATION_PROVIDERS = ['openrouter', 'gemini', 'fal_ai', 'kie_ai'];
-	if (action === 'save' && GENERATION_PROVIDERS.includes(provider)) {
+	if (action === 'save' && isByokGated(provider)) {
 		const ent = await entitlementsFor(user.id);
 		if (!ent.byok) return json(planRefusal('Bringing your own generation keys', ent.plan), { status: 403 });
 	}

@@ -55,6 +55,41 @@ export interface AiGenerateOptions {
 	json?: boolean;
 	/** Optional image URL — the (multimodal) model reads the image with the prompt. */
 	imageUrl?: string;
+	/**
+	 * Called once, after a SUCCESSFUL call, with whatever the provider reported
+	 * about what the request actually consumed.
+	 *
+	 * A callback rather than a changed return type on purpose: `generate()`
+	 * resolves to a string at 29 call sites, and none of them care about tokens.
+	 * The two metering wrappers are the only callers that pass this, so the
+	 * measurement reaches the ledger without 29 files learning about billing.
+	 * A property on the client would have been simpler and wrong — one client is
+	 * shared across concurrent calls, so `lastUsage` would race.
+	 */
+	onUsage?: (usage: AiUsage) => void;
+}
+
+/**
+ * What a provider said the call cost. Every field is nullable because every
+ * field is optional in practice: Gemini reports tokens and no price, OpenRouter
+ * reports both, and a provider that reports neither must be distinguishable
+ * from one that reported zero.
+ */
+export interface AiUsage {
+	tokensIn: number | null;
+	tokensOut: number | null;
+	/**
+	 * USD the provider itself says this request cost. OpenRouter returns this on
+	 * every response and it is the only ground truth in the system — the price
+	 * table is an estimate maintained by hand.
+	 */
+	costUsd: number | null;
+}
+
+/** A finite, non-negative number, or null. Providers omit, null, and stringify. */
+function num(v: unknown): number | null {
+	const n = Number(v);
+	return Number.isFinite(n) && n >= 0 ? n : null;
 }
 
 /**
@@ -204,6 +239,14 @@ function createOpenRouterClient(apiKey: string, modelOverride?: string | null): 
 			}
 
 			const data = (await res.json()) as any;
+			// OpenRouter returns `usage` on every response, including a real `cost`
+			// in USD. It was read and discarded here for the life of the project,
+			// which is why an LLM call is billed a flat table rate whatever it used.
+			opts?.onUsage?.({
+				tokensIn: num(data.usage?.prompt_tokens),
+				tokensOut: num(data.usage?.completion_tokens),
+				costUsd: num(data.usage?.cost)
+			});
 			return data.choices?.[0]?.message?.content || '';
 		}
 	};
@@ -240,6 +283,14 @@ function createGeminiClient(apiKey: string, modelOverride?: string | null): AiCl
 				'Gemini generateContent'
 			);
 
+			// Gemini reports token counts but no price — costUsd stays null, which is
+			// why it is nullable rather than 0. Zero would read as "this was free".
+			const um = (res as unknown as { usageMetadata?: Record<string, unknown> }).usageMetadata;
+			opts?.onUsage?.({
+				tokensIn: num(um?.promptTokenCount),
+				tokensOut: num(um?.candidatesTokenCount),
+				costUsd: null
+			});
 			return res.text || '';
 		}
 	};

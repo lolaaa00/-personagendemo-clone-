@@ -114,9 +114,9 @@ describe('"Only what actually ran" — a call that threw did not run', () => {
 		// threw was billed anyway — the exact opposite of the sentence above, and
 		// a disagreement with meteredCall, which already recorded only on success.
 		const track = generate.slice(generate.indexOf('function trackAi'), generate.indexOf('function trackAi') + 900);
-		expect(track).toContain('const out = await ai.generate(prompt, opts);');
+		expect(track).toMatch(/const out = await ai\.generate\(prompt, \{ \.\.\.opts/);
 		expect(track.indexOf('await ai.generate')).toBeLessThan(track.indexOf('costEvents.push'));
-		expect(metering).toContain('const out = await ai.generate(prompt, opts);');
+		expect(metering).toMatch(/const out = await ai\.generate\(prompt, \{ \.\.\.opts/);
 		expect(metering.indexOf('await ai.generate')).toBeLessThan(metering.indexOf('recordCostEvents('));
 	});
 

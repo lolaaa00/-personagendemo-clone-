@@ -18,6 +18,8 @@
  * and never to a post that does not get created. A quality opinion that can take
  * down publishing is a worse feature than no opinion at all.
  */
+
+import { MAX_OBJECTION_CHARS } from '$lib/persona-contract/panel';
 import type { PersonaProfileV2, ViewerSkeleton } from '$lib/persona-contract/schema';
 
 /** How many viewers are judged. Four is the plan's number and the prompt's cost. */
@@ -93,6 +95,8 @@ For each person, in this order:
 2. Only then, how likely they are to stop and take it seriously, 0-100.
 
 A high score has to be earned by a reason to stop scrolling. Most posts do not land with most people; scoring everyone in the seventies tells the writer nothing they can use.
+
+Each objection must be at most ${MAX_OBJECTION_CHARS} characters — one or two sentences. Anything longer is cut off unread.
 
 Answer with JSON only, no prose, no code fence:
 {"verdicts":[{"viewerIndex":0,"objection":"...","fit":42}]}`;

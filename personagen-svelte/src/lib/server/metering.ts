@@ -19,7 +19,7 @@
  * generate.ts) or listed as FREE with a reason in metering-audit.spec.ts.
  */
 
-import type { AiClient, AiGenerateOptions } from './ai-client';
+import type { AiClient, AiGenerateOptions, AiUsage } from './ai-client';
 import { assertWithinBudget } from './budget';
 import { creditsFor, isCreditsError } from './credits';
 import { recordCostEvents } from './content/generate';
@@ -52,8 +52,30 @@ export function meteredAiClient(ai: AiClient | null, scope: MeterScope): AiClien
 		async generate(prompt: string, opts?: AiGenerateOptions): Promise<string> {
 			if (!gate) gate = assertWithinBudget(scope.supabase, scope.userId, scope.agentId ?? undefined, creditsFor(usd));
 			await gate;
-			const out = await ai.generate(prompt, opts);
-			await recordCostEvents(scope.supabase, scope.userId, scope.agentId ?? undefined, [{ provider: ai.provider, operation: 'llm', model: ai.model, usd }], scope.postId ?? undefined);
+			// The provider's own account of what it consumed, captured per call so
+			// the flat table rate can be checked against reality. Billing still uses
+			// `usd`; see CostEvent.measuredUsd for why.
+			// Held in an object, not a `let`: TypeScript narrows a closure-assigned
+			// local to `never` because it cannot see that onUsage runs.
+			const seen: { usage: AiUsage | null } = { usage: null };
+			const out = await ai.generate(prompt, { ...opts, onUsage: (u) => { seen.usage = u; } });
+			await recordCostEvents(
+				scope.supabase,
+				scope.userId,
+				scope.agentId ?? undefined,
+				[
+					{
+						provider: ai.provider,
+						operation: 'llm',
+						model: ai.model,
+						usd,
+						tokensIn: seen.usage?.tokensIn ?? null,
+						tokensOut: seen.usage?.tokensOut ?? null,
+						measuredUsd: seen.usage?.costUsd ?? null
+					}
+				],
+				scope.postId ?? undefined
+			);
 			return out;
 		}
 	};

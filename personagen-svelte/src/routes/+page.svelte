@@ -272,7 +272,7 @@
 	const FAQS = [
 		{
 			q: 'How does the media wallet work?',
-			a: 'Every plan includes a monthly wallet for AI images, video and voice, shown as money in your currency. A text post only pays for the writing — about two cents — so a persona posting six times a day spends around a tenth of a dollar, against $1.52 for a video post. Every generation shows its price before you confirm. Run low and you top up at par: $25 buys $25.00 of generation, and it never expires.'
+			a: 'Every plan includes a monthly wallet for AI images, video and voice, shown as money in your currency. A text post only pays for the writing — about eight cents — so a persona posting six times a day spends around fifty cents, against roughly $2.40 for a video post. Every generation shows its price before you confirm. Run low and you top up at par: $25 buys $25.00 of generation, and it never expires.'
 		},
 		{
 			q: 'How does the identity actually stay consistent?',
