@@ -808,9 +808,37 @@ function qualityFloor(): number {
  * rewrite rate, and a rewrite is a whole director call.
  */
 function graderReasoning(): ReasoningEffort | undefined {
-	const raw = String(env.UGC_GRADER_REASONING ?? '').trim().toLowerCase();
+	return reasoningFromEnv(env.UGC_GRADER_REASONING, 'minimal');
+}
+
+/**
+ * How hard the director may think. Measured in production 2026-09-17, once
+ * tokens_reasoning was live: the director spends ~86% of its output tokens
+ * thinking (1,655 of 1,922; $0.015 of a $0.019 call) and the profile
+ * generator 85%. That is roughly 45% of all LLM spend per post — and the
+ * script is the product, so unlike the grader's rubric this is NOT cut on a
+ * guess. Default is the provider's own (unchanged behaviour); set
+ * UGC_DIRECTOR_REASONING to a level to run the experiment on real traffic,
+ * reading llm_stage_usage (tokens, cost, the director_rewrite_qc share) and
+ * post_reviews (the grades) as the result. Applied to every director-stage
+ * call — first draft, hook retry, QC rewrite, shot retry — in both packs.
+ */
+function directorReasoning(): ReasoningEffort | undefined {
+	return reasoningFromEnv(env.UGC_DIRECTOR_REASONING, undefined);
+}
+
+/**
+ * One parser for the reasoning knobs: a valid level is used; 'provider' means
+ * send nothing (the provider's default); anything else — unset, junk — is
+ * the caller's fallback, so a typo can never silently pick a level.
+ */
+function reasoningFromEnv(
+	value: string | undefined,
+	fallback: ReasoningEffort | undefined
+): ReasoningEffort | undefined {
+	const raw = String(value ?? '').trim().toLowerCase();
 	if (raw === 'provider') return undefined;
-	return (REASONING_EFFORTS as readonly string[]).includes(raw) ? (raw as ReasoningEffort) : 'minimal';
+	return (REASONING_EFFORTS as readonly string[]).includes(raw) ? (raw as ReasoningEffort) : fallback;
 }
 
 const GRADER_SYSTEM = `You are a ruthless short-form content QC reviewer for UGC ads. You are NOT the writer — judge adversarially, as a scroller who has seen 10,000 ads.
@@ -2271,7 +2299,12 @@ export async function generateCinematicUgcPack(input: UgcPackInput): Promise<Ugc
 		const prompt = buildCinematicPrompt();
 
 		const raw =
-			(await ai.generate(prompt, { systemInstruction: CINEMATIC_DIRECTOR_SYSTEM, json: true, stage: 'director' })) ||
+			(await ai.generate(prompt, {
+				systemInstruction: CINEMATIC_DIRECTOR_SYSTEM,
+				json: true,
+				stage: 'director',
+				reasoning: directorReasoning()
+			})) ||
 			'{}';
 		let parsed = safeParseJson(raw);
 		if (!parsed) throw new Error('AI returned unparseable response');
@@ -2284,7 +2317,7 @@ export async function generateCinematicUgcPack(input: UgcPackInput): Promise<Ugc
 			const retryHookRaw =
 				(await ai.generate(
 					`${buildCinematicPrompt()}\n\nYour previous hook scored ${parsed.hookScore}/99. The hook must stop mid-scroll cold — a real confession or bold claim, not a description. Aim for 85+. Rewrite the full JSON.`,
-					{ systemInstruction: CINEMATIC_DIRECTOR_SYSTEM, json: true, stage: 'director_retry_hook' }
+					{ systemInstruction: CINEMATIC_DIRECTOR_SYSTEM, json: true, stage: 'director_retry_hook', reasoning: directorReasoning() }
 				)) || '{}';
 			const hookRetryParsed = safeParseJson(retryHookRaw);
 			if (hookRetryParsed && (hookRetryParsed.hookScore ?? 0) > (parsed.hookScore ?? 0)) {
@@ -2312,7 +2345,7 @@ export async function generateCinematicUgcPack(input: UgcPackInput): Promise<Ugc
 			const rewriteRaw =
 				(await ai.generate(
 					`${buildCinematicPrompt()}\n\nAn independent QC reviewer graded your draft ${cinematicGrade.overall}/10. Top issue: ${cinematicGrade.topIssue}. Required fix: ${cinematicGrade.fix}. Rewrite the ENTIRE JSON applying that fix.`,
-					{ systemInstruction: CINEMATIC_DIRECTOR_SYSTEM, json: true, stage: 'director_rewrite_qc' }
+					{ systemInstruction: CINEMATIC_DIRECTOR_SYSTEM, json: true, stage: 'director_rewrite_qc', reasoning: directorReasoning() }
 				)) || '{}';
 			const rewritten = safeParseJson(rewriteRaw);
 			if (rewritten?.text && Array.isArray(rewritten.shots) && rewritten.shots.length > 0) {
@@ -2351,7 +2384,7 @@ export async function generateCinematicUgcPack(input: UgcPackInput): Promise<Ugc
 			const retryRaw =
 				(await ai.generate(
 					`${prompt}\n\nYour previous response had too few shots. You MUST return at least ${CINEMATIC_MIN_SHOT_COUNT} shots (3-5 is ideal).`,
-					{ systemInstruction: CINEMATIC_DIRECTOR_SYSTEM, json: true, stage: 'director_retry_shots' }
+					{ systemInstruction: CINEMATIC_DIRECTOR_SYSTEM, json: true, stage: 'director_retry_shots', reasoning: directorReasoning() }
 				)) || '{}';
 			const retryParsed = safeParseJson(retryRaw);
 			if (
@@ -4509,7 +4542,8 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 			(await ai.generate(buildDirectorPrompt(), {
 				systemInstruction: DIRECTOR_SYSTEM,
 				json: true,
-				stage: 'director'
+				stage: 'director',
+				reasoning: directorReasoning()
 			})) || '{}';
 		let parsed = safeParseJson(raw);
 		if (!parsed) throw new Error('AI returned unparseable response');
@@ -4529,7 +4563,7 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 			const retryRaw =
 				(await ai.generate(
 					`${buildDirectorPrompt()}\n\nYour previous hook scored ${parsed.hookScore}/99. The hook must be a genuine pattern-interrupt or confession that stops the scroll cold — not a description or question. Aim for 85+. Rewrite the entire JSON with a stronger hook.`,
-					{ systemInstruction: DIRECTOR_SYSTEM, json: true, stage: 'director_retry_hook' }
+					{ systemInstruction: DIRECTOR_SYSTEM, json: true, stage: 'director_retry_hook', reasoning: directorReasoning() }
 				)) || '{}';
 			const retryParsed = safeParseJson(retryRaw);
 			if (retryParsed && (retryParsed.hookScore ?? 0) > (parsed.hookScore ?? 0)) {
@@ -4556,7 +4590,7 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 			const rewriteRaw =
 				(await ai.generate(
 					`${buildDirectorPrompt()}\n\nAn independent QC reviewer graded your draft ${qualityGrade.overall}/10. Top issue: ${qualityGrade.topIssue}. Required fix: ${qualityGrade.fix}. Rewrite the ENTIRE JSON applying that fix without losing the persona voice.`,
-					{ systemInstruction: DIRECTOR_SYSTEM, json: true, stage: 'director_rewrite_qc' }
+					{ systemInstruction: DIRECTOR_SYSTEM, json: true, stage: 'director_rewrite_qc', reasoning: directorReasoning() }
 				)) || '{}';
 			const rewritten = safeParseJson(rewriteRaw);
 			if (rewritten?.text) {

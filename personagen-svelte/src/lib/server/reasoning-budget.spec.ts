@@ -144,12 +144,34 @@ describe('the grader asks for the least', () => {
 	});
 
 	it("defaults to 'minimal', can be overridden without a deploy, and cannot be set to junk", () => {
-		const at = generate.indexOf('function graderReasoning');
+		expect(generate).toContain("reasoningFromEnv(env.UGC_GRADER_REASONING, 'minimal')");
+		const at = generate.indexOf('function reasoningFromEnv');
 		const body = generate.slice(at, generate.indexOf('\n}', at));
-		expect(body).toContain('env.UGC_GRADER_REASONING');
 		expect(body).toContain("if (raw === 'provider') return undefined;");
 		expect(body).toContain("REASONING_EFFORTS as readonly string[]).includes(raw)");
-		expect(body).toMatch(/: 'minimal';\s*$/);
+		// junk falls to the CALLER's fallback — a typo can never pick a level
+		expect(body).toMatch(/: fallback;\s*$/);
+	});
+});
+
+describe('the director has the same knob, and it is off', () => {
+	// Production, 2026-09-17, once tokens_reasoning was live: the director spent
+	// 1,655 of 1,922 output tokens thinking (86%, $0.015 of $0.019); the profile
+	// generator 85%. The script is the product — this stays the provider default
+	// until measured on real traffic; the knob is what makes that measurable.
+	it('the numbers: most of the director call is thinking', () => {
+		expect(1655 / 1922).toBeGreaterThan(0.85);
+	});
+
+	it('defaults to the provider — unchanged behaviour — and reads its own variable', () => {
+		expect(generate).toContain('reasoningFromEnv(env.UGC_DIRECTOR_REASONING, undefined)');
+	});
+
+	it('every director-stage call carries it, in both packs', () => {
+		const tags = generate.match(/stage: 'director(?:_[a-z_]+)?'/g) ?? [];
+		const knobs = generate.match(/reasoning: directorReasoning\(\)/g) ?? [];
+		expect(tags.length, 'expected the seven director-stage sites').toBe(7);
+		expect(knobs.length).toBe(tags.length);
 	});
 
 	it('the numbers that decided it', () => {

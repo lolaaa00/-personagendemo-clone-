@@ -519,7 +519,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-17", hash: "caa313c", type: "fix", category: "fix", scope: "ledger", title: "a bare user deletion no longer destroys the usage row behind a surviving debit" },
 	{ date: "2026-09-17", hash: "b22dc50", type: "feat", category: "feature", scope: "ledger", title: "every LLM call records which STAGE of the run made it" },
 	{ date: "2026-09-17", hash: "c7674db", type: "feat", category: "feature", scope: "byok", title: "read stored secrets as service_role; a broken key now says so" },
-	{ date: "2026-09-17", hash: "43a3d0a", type: "feat", category: "generation", scope: "ledger", title: "budget the model's thinking per call, and record how much it did" }
+	{ date: "2026-09-17", hash: "43a3d0a", type: "feat", category: "generation", scope: "ledger", title: "budget the model's thinking per call, and record how much it did" },
+	{ date: "2026-09-17", hash: "4438b9d", type: "fix", category: "fix", scope: "qc", title: "confirm a grade that lands within a point of the floor" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -901,12 +902,12 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 	},
 	{
 		id: "b22dc50", from: "2026-09-17", to: "2026-09-17",
-		category: "feature", categories: ["feature","generation"],
+		category: "feature", categories: ["feature","generation","fix"],
 		title: "New: every LLM call records which STAGE of the run made…",
-		summary: "Every LLM call records which STAGE of the run made it. Plus 2 more changes, touching making posts, images and video.",
+		summary: "Every LLM call records which STAGE of the run made it. Plus 3 more changes, touching making posts, images and video and things that were broken.",
 		major: false, curated: false,
-		entries: [CHANGELOG[483], CHANGELOG[484], CHANGELOG[485]]
+		entries: [CHANGELOG[483], CHANGELOG[484], CHANGELOG[485], CHANGELOG[486]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "43a3d0a";
+export const CHANGELOG_GENERATED_FROM = "4438b9d";
