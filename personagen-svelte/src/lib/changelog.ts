@@ -541,7 +541,10 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-17", hash: "8e9541f", type: "chore", category: "infrastructure", scope: "git", title: "ignore Python bytecode — the first .pyc arrived today, unignored" },
 	{ date: "2026-09-17", hash: "10a8979", type: "feat", category: "feature", scope: "ux", title: "one page shell, one focus ring, and counts that come from counting" },
 	{ date: "2026-09-17", hash: "38958dc", type: "fix", category: "security", scope: "portal", title: "permission denial is a designed state, never a teleport or a Retry" },
-	{ date: "2026-09-17", hash: "e381879", type: "docs", category: "generation", scope: "verify", title: "frozen build snapshot for shared trees, dialog-scoped composer reads, seat provisioning" }
+	{ date: "2026-09-17", hash: "e381879", type: "docs", category: "generation", scope: "verify", title: "frozen build snapshot for shared trees, dialog-scoped composer reads, seat provisioning" },
+	{ date: "2026-09-17", hash: "c7674db", type: "feat", category: "feature", scope: "byok", title: "read stored secrets as service_role; a broken key now says so" },
+	{ date: "2026-09-17", hash: "43a3d0a", type: "feat", category: "generation", scope: "ledger", title: "budget the model's thinking per call, and record how much it did" },
+	{ date: "2026-09-17", hash: "eb91ef9", type: "other", category: "maintenance", scope: null, title: "Merge origin/main: per-call thinking budgets, and stored secrets read as service_role" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -933,10 +936,10 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 		id: "d636290", from: "2026-09-17", to: "2026-09-17",
 		category: "infrastructure", categories: ["infrastructure","docs","fix","feature","maintenance","security","generation"],
 		title: "Behind the scenes: move the ratchet to the real count — lint:ci was…",
-		summary: "Move the ratchet to the real count — lint:ci was failing at 1136. Plus 10 more changes, touching guides and explanations and things that were broken and things you can now do.",
+		summary: "Move the ratchet to the real count — lint:ci was failing at 1136. Plus 13 more changes, touching guides and explanations and things that were broken and things you can now do.",
 		major: true, curated: false,
-		entries: [CHANGELOG[497], CHANGELOG[498], CHANGELOG[499], CHANGELOG[500], CHANGELOG[501], CHANGELOG[502], CHANGELOG[503], CHANGELOG[504], CHANGELOG[505], CHANGELOG[506], CHANGELOG[507]]
+		entries: [CHANGELOG[497], CHANGELOG[498], CHANGELOG[499], CHANGELOG[500], CHANGELOG[501], CHANGELOG[502], CHANGELOG[503], CHANGELOG[504], CHANGELOG[505], CHANGELOG[506], CHANGELOG[507], CHANGELOG[508], CHANGELOG[509], CHANGELOG[510]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "e381879";
+export const CHANGELOG_GENERATED_FROM = "eb91ef9";
