@@ -514,7 +514,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-15", hash: "6c848ae", type: "feat", category: "feature", scope: "billing", title: "capture what a call actually cost — recorded, never billed" },
 	{ date: "2026-09-15", hash: "7bc3928", type: "refactor", category: "maintenance", scope: "providers", title: "one catalogue, so \"can this be BYOK'd\" stops being an absence" },
 	{ date: "2026-09-15", hash: "87001c6", type: "fix", category: "fix", scope: "security", title: "anon and authenticated hold TRUNCATE on both key tables" },
-	{ date: "2026-09-17", hash: "59c3b2f", type: "fix", category: "fix", scope: "pricing", title: "the LLM rate was 5.8x low, so the text path sold below cost" }
+	{ date: "2026-09-17", hash: "59c3b2f", type: "fix", category: "fix", scope: "pricing", title: "the LLM rate was 5.8x low, so the text path sold below cost" },
+	{ date: "2026-09-17", hash: "1fb7cb4", type: "fix", category: "design", scope: "cost", title: "the grader was paid to write text the UI throws away" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -888,12 +889,12 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 	},
 	{
 		id: "bd40b3c", from: "2026-09-10", to: "2026-09-17",
-		category: "fix", categories: ["maintenance","infrastructure","fix","docs","feature"],
+		category: "fix", categories: ["maintenance","infrastructure","fix","docs","feature","design"],
 		title: "Fixed: assert no MONEY, not \"no wallet row\"",
-		summary: "Assert no MONEY, not \"no wallet row\". Plus 11 more changes, touching internal cleanup and setup and deployment and guides and explanations.",
+		summary: "Assert no MONEY, not \"no wallet row\". Plus 12 more changes, touching internal cleanup and setup and deployment and guides and explanations.",
 		major: true, curated: false,
-		entries: [CHANGELOG[469], CHANGELOG[470], CHANGELOG[471], CHANGELOG[472], CHANGELOG[473], CHANGELOG[474], CHANGELOG[475], CHANGELOG[476], CHANGELOG[477], CHANGELOG[478], CHANGELOG[479], CHANGELOG[480]]
+		entries: [CHANGELOG[469], CHANGELOG[470], CHANGELOG[471], CHANGELOG[472], CHANGELOG[473], CHANGELOG[474], CHANGELOG[475], CHANGELOG[476], CHANGELOG[477], CHANGELOG[478], CHANGELOG[479], CHANGELOG[480], CHANGELOG[481]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "59c3b2f";
+export const CHANGELOG_GENERATED_FROM = "1fb7cb4";

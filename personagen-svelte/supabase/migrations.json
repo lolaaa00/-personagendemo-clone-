@@ -206,5 +206,9 @@
 	[
 		"user_api_keys_column_grants_migration.sql",
 		"Take TRUNCATE (which RLS does not govern) and every other grant away from anon/authenticated on both secret-bearing key tables; re-grant authenticated exactly the four it needs"
+	],
+	[
+		"generation_events_retain_on_delete_migration.sql",
+		"generation_events.user_id/agent_id go CASCADE -> SET NULL so a bare user deletion keeps the usage row that explains a surviving debit (199 orphan debits had zero surviving events)"
 	]
 ]
