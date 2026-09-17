@@ -517,7 +517,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-17", hash: "59c3b2f", type: "fix", category: "fix", scope: "pricing", title: "the LLM rate was 5.8x low, so the text path sold below cost" },
 	{ date: "2026-09-17", hash: "1fb7cb4", type: "fix", category: "design", scope: "cost", title: "the grader was paid to write text the UI throws away" },
 	{ date: "2026-09-17", hash: "caa313c", type: "fix", category: "fix", scope: "ledger", title: "a bare user deletion no longer destroys the usage row behind a surviving debit" },
-	{ date: "2026-09-17", hash: "b22dc50", type: "feat", category: "feature", scope: "ledger", title: "every LLM call records which STAGE of the run made it" }
+	{ date: "2026-09-17", hash: "b22dc50", type: "feat", category: "feature", scope: "ledger", title: "every LLM call records which STAGE of the run made it" },
+	{ date: "2026-09-17", hash: "c7674db", type: "feat", category: "feature", scope: "byok", title: "read stored secrets as service_role; a broken key now says so" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -901,10 +902,10 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 		id: "b22dc50", from: "2026-09-17", to: "2026-09-17",
 		category: "feature", categories: ["feature"],
 		title: "New: every LLM call records which STAGE of the run made…",
-		summary: "Every LLM call records which STAGE of the run made it.",
+		summary: "Every LLM call records which STAGE of the run made it. Plus 1 more change.",
 		major: false, curated: false,
-		entries: [CHANGELOG[483]]
+		entries: [CHANGELOG[483], CHANGELOG[484]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "b22dc50";
+export const CHANGELOG_GENERATED_FROM = "c7674db";

@@ -73,6 +73,7 @@ export function meteredAiClient(ai: AiClient | null, scope: MeterScope): AiClien
 						usd,
 						tokensIn: seen.usage?.tokensIn ?? null,
 						tokensOut: seen.usage?.tokensOut ?? null,
+						tokensReasoning: seen.usage?.tokensReasoning ?? null,
 						measuredUsd: seen.usage?.costUsd ?? null,
 						stage: opts?.stage ?? scope.stage ?? null
 					}

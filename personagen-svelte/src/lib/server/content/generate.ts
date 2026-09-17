@@ -31,7 +31,13 @@
 
 import { env } from '$env/dynamic/private';
 import { getUserApiKey } from '$lib/server/user-api-keys';
-import { resolveAiClient, type AiClient, type AiUsage } from '$lib/server/ai-client';
+import {
+	resolveAiClient,
+	REASONING_EFFORTS,
+	type AiClient,
+	type AiUsage,
+	type ReasoningEffort
+} from '$lib/server/ai-client';
 import {
 	priceOf,
 	summarizeCosts,
@@ -788,6 +794,25 @@ function qualityFloor(): number {
 	return 5; // lenient default — placeholder-era models shouldn't empty the runway
 }
 
+/**
+ * How hard the grader may think. Measured 2026-09-17 on one grader call via
+ * OpenRouter (google/gemini-3.5-flash): provider default 1,054 completion
+ * tokens (950 of them reasoning) for $0.0099; 'low' 584/451 for $0.0057;
+ * 'minimal' 148/0 for $0.0018 — every level returned a valid 7-field grade.
+ * The rubric above is a weighted sum with the weights written out, so the
+ * default spends 90% of the call deliberating over arithmetic. 'minimal'
+ * is the default here; UGC_GRADER_REASONING overrides it without a deploy
+ * ('provider' = send nothing, i.e. the pre-2026-09-17 behaviour). What to
+ * watch after a change is not this call's cost but llm_stage_usage's
+ * director_rewrite_qc share — a grader that scores differently moves the
+ * rewrite rate, and a rewrite is a whole director call.
+ */
+function graderReasoning(): ReasoningEffort | undefined {
+	const raw = String(env.UGC_GRADER_REASONING ?? '').trim().toLowerCase();
+	if (raw === 'provider') return undefined;
+	return (REASONING_EFFORTS as readonly string[]).includes(raw) ? (raw as ReasoningEffort) : 'minimal';
+}
+
 const GRADER_SYSTEM = `You are a ruthless short-form content QC reviewer for UGC ads. You are NOT the writer — judge adversarially, as a scroller who has seen 10,000 ads.
 Score each 1-10 (10 = top 1% of UGC):
 - hook: does line 1 stop the scroll cold? (generic openers, questions, "elevate/discover" language = 3 or less)
@@ -811,7 +836,7 @@ CAPTION: ${draft.text || '(none)'}
 SPOKEN DIALOGUE: ${draft.dialogue || '(none)'}
 ON-SCREEN TEXT: ${draft.on_screen_text || '(none)'}
 Grade it.`,
-			{ systemInstruction: GRADER_SYSTEM, json: true, stage: 'qc_grade' }
+			{ systemInstruction: GRADER_SYSTEM, json: true, stage: 'qc_grade', reasoning: graderReasoning() }
 		);
 		const g = safeParseJson(raw || '');
 		if (!g || typeof g.overall !== 'number') return null;
@@ -2829,6 +2854,7 @@ function trackAi(ai: AiClient, costEvents: CostEvent[]): AiClient {
 				usd: priceOf(ai.provider, 'llm'),
 				tokensIn: seen.usage?.tokensIn ?? null,
 				tokensOut: seen.usage?.tokensOut ?? null,
+				tokensReasoning: seen.usage?.tokensReasoning ?? null,
 				measuredUsd: seen.usage?.costUsd ?? null,
 				stage: opts?.stage ?? null
 			});
@@ -2916,6 +2942,7 @@ export async function recordCostEvents(
 			// quote the user approved comes from the same table est_cost does.
 			tokens_in: e.tokensIn ?? null,
 			tokens_out: e.tokensOut ?? null,
+			tokens_reasoning: e.tokensReasoning ?? null,
 			measured_cost: e.measuredUsd ?? null,
 			stage: e.stage ?? null,
 			asset_url: e.assetUrl ?? null,
@@ -2934,7 +2961,7 @@ export async function recordCostEvents(
 	// (billed_user_id / key_source / credits) down with it. Bounded: at most
 	// one retry per optional column. Core columns are never dropped — if the
 	// error names one of those, the insert has genuinely failed.
-	const OPTIONAL = new Set(['asset_url', 'billed_user_id', 'key_source', 'credits', 'tokens_in', 'tokens_out', 'measured_cost', 'stage']);
+	const OPTIONAL = new Set(['asset_url', 'billed_user_id', 'key_source', 'credits', 'tokens_in', 'tokens_out', 'tokens_reasoning', 'measured_cost', 'stage']);
 	const dropped = new Set<string>();
 	let inserted: Array<{ id: string }> | null = null;
 	let lastErr: any = null;

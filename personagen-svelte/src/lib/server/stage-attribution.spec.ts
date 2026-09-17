@@ -93,8 +93,8 @@ describe('every LLM call in the pack path is attributed', () => {
 		expect(tags).toBe(calls);
 	});
 	it('the quality grader tags itself, covering both packs at once', () => {
-		expect(generate).toContain(
-			"{ systemInstruction: GRADER_SYSTEM, json: true, stage: 'qc_grade' }"
+		expect(generate).toMatch(
+			/\{ systemInstruction: GRADER_SYSTEM, json: true, stage: 'qc_grade'[^}]*\}/
 		);
 	});
 	it('the fit judge tags its wrapper', () => {

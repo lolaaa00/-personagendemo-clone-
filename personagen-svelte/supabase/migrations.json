@@ -218,5 +218,9 @@
 	[
 		"user_api_keys_secret_columns_migration.sql",
 		"BYOK stage B: authenticated keeps SELECT on the metadata columns of user_api_keys/zernio_keys and loses the ciphertext columns; the server reads secrets through service_role (readStoredSecret) and a decrypt failure now stamps the row status=error instead of silently falling back"
+	],
+	[
+		"generation_events_reasoning_migration.sql",
+		"generation_events.tokens_reasoning + reasoning_share in llm_stage_usage: the model's hidden thinking told apart from its answer (the grader spent 950 of 1,054 output tokens deliberating over a rubric), so a reasoning budget can be measured per stage"
 	]
 ]
