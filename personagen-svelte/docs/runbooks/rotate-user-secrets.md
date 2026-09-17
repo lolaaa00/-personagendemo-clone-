@@ -15,7 +15,7 @@ Tool: `scripts/rotate-user-secrets.mjs`.
 
 ## Why this is dangerous to get wrong
 
-A failed decrypt does not surface as an error. Every caller swallows it and
+A failed decrypt does not fail the request. Every caller swallows it and
 falls back to the platform's own provider key:
 
 ```
@@ -23,10 +23,17 @@ src/lib/server/content/generate.ts:364,368   getUserApiKey(...).catch(() => null
 src/lib/server/ai-client.ts:163,169          getUserApiKey(...).catch(() => null)
 ```
 
-So a half-finished rotation produces **no alarm, no failed request, and no log
-line**. It just moves every affected user's spend onto the company's account
-until somebody notices the bill. Treat "the app is running fine" as **no
-evidence at all** that a rotation worked.
+That fallback is deliberate and unchanged. What changed (2026-09-17): the
+failure is no longer invisible. `readStoredSecret()` in
+`src/lib/server/user-api-keys.ts` — which `getUserApiKey` and
+`getZernioKeySecretById` wrap — stamps the row `status='error'` with a short,
+secret-free `last_error` before rethrowing, writes one `console.error` line,
+and Settings → API keys shows both. Billing already attributes such a run to
+the platform rate. So a half-finished rotation now shows up as every affected
+key turning red in Settings and a log line per attempt — but it still produces
+**no failed request**, and the spend still lands on the company's account until
+somebody looks. Treat "the app is running fine" as **no evidence at all** that
+a rotation worked.
 
 That is why the script writes both tables in one transaction and refuses to
 write anything at all unless every single row decrypts first.
@@ -160,32 +167,44 @@ write while it is there — that refusal is the feature.
 
 ---
 
-## Related: the column-grant migration
+## Related: the column-grant migrations
 
-`supabase/user_api_keys_column_grants_migration.sql` is a separate change that
-narrows who may read these tables. Stage A (live in that file) removes `anon`
-entirely and strips `TRUNCATE` from `authenticated` — which RLS does not
-govern, and which today would let any signed-in role empty both key tables.
+Two migrations narrow who may read these tables.
 
-Stage B — revoking `SELECT` on `encrypted_value`, `iv` and `auth_tag` from
-`authenticated`, so a user cannot read even their own ciphertext — is written
-out in that file but **commented out and must stay that way** until a code
-change lands first. The server currently decrypts through `locals.supabase`,
-which connects as the `authenticated` role:
+**Stage A** — `supabase/user_api_keys_column_grants_migration.sql`, applied
+2026-09-15 — removes `anon` entirely and strips `TRUNCATE` from
+`authenticated` (which RLS does not govern, and which would have let any
+signed-in role empty both key tables). It left `SELECT` table-wide on purpose
+and carried stage B as a commented-out block.
 
-```
-src/lib/server/user-api-keys.ts:100
-src/lib/server/zernio-keys.ts:35
-src/routes/api/settings/zernio-keys/+server.ts:124
-```
+**Stage B** — `supabase/user_api_keys_secret_columns_migration.sql`, written
+2026-09-17 as live SQL — revokes the table-wide `SELECT` from `authenticated`
+and re-grants exactly the non-secret columns, so a user cannot read even their
+own ciphertext. Its prerequisite is now met in this repository:
 
-Postgres cannot distinguish that from the browser reading its own row. Applying
-stage B today would break every BYOK generation, and — via the same
-`.catch(() => null)` fallbacks above — break it silently onto the platform's
-key. Move those three reads to the service-role client and make the failure
-loud, then copy stage B into a new migration.
+- every read of `encrypted_value, iv, auth_tag` goes through the service-role
+  client, scoped by `user_id`, whatever client the caller passed in —
+  `readStoredSecret()` in `src/lib/server/user-api-keys.ts`, which
+  `getUserApiKey()`, `getZernioKeySecretById()` and the Zernio key "test"
+  route now use. The three `authenticated`-role secret reads named above no
+  longer exist; function signatures are unchanged, so no caller moved;
+- a decrypt failure stamps the row `status='error'` with a secret-free
+  `last_error` before rethrowing (see *Why this is dangerous to get wrong*).
 
-`src/lib/server/user-secrets-rotation.spec.ts` enforces both halves: that stage
-B names exactly the three secret columns and re-grants exactly the others
-(derived from the `CREATE TABLE` statements, so a new column fails the test),
-and that the active SQL still contains no column-level `SELECT` change.
+The migration is therefore **safe to apply**: `node scripts/apply-migration.mjs
+supabase/user_api_keys_secret_columns_migration.sql` once it is committed and
+registered in `supabase/migrations.json`. Not in the same window as a key
+rotation. Rollback is two `GRANT SELECT ON TABLE … TO authenticated` lines
+(in the file's header). After applying, the *Verify with a real decrypt* step
+above is the proof: Settings → API keys → **Test** still runs a real decrypt,
+now through the service role.
+
+Two specs enforce this. `src/lib/server/user-secrets-rotation.spec.ts` proves
+stage A's file still contains no column-level `SELECT` change and that its
+commented stage-B block names exactly the secret three.
+`src/lib/server/user-api-keys-service-read.spec.ts` proves the live stage-B
+file grants exactly the non-secret columns (derived from `client_bootstrap.sql`,
+so a new column fails the test), that the secret reads happen on the service
+client, that a bad ciphertext throws and stamps the row without leaking a
+fragment of it, and that no query in `src/` selects a secret column outside
+the service-routed readers or uses `select('*')` on either table.

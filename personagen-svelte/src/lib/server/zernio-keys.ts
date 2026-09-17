@@ -1,4 +1,4 @@
-import { decryptSecret } from '$lib/server/user-api-keys';
+import { readStoredSecret } from '$lib/server/user-api-keys';
 import { getZernioApiKey } from '$lib/server/social/zernio';
 
 /**
@@ -24,22 +24,18 @@ export interface AgentKeyRouting {
 	zernio_profile_id?: string | null;
 }
 
-/** Decrypts one managed key by id. Null when the row doesn't exist. */
+/**
+ * Decrypts one managed key by id. Null when the row doesn't exist. The
+ * ciphertext is read through the service role (readStoredSecret), scoped by
+ * user_id — never through the caller's `authenticated` client. A row that
+ * will not decrypt is stamped status='error' and the error is rethrown.
+ */
 export async function getZernioKeySecretById(
 	supabase: any,
 	userId: string,
 	keyId: string
 ): Promise<string | null> {
-	const { data, error } = await supabase
-		.from('zernio_keys')
-		.select('encrypted_value, iv, auth_tag')
-		.eq('user_id', userId)
-		.eq('id', keyId)
-		.maybeSingle();
-
-	if (error) throw error;
-	if (!data) return null;
-	return decryptSecret(data);
+	return readStoredSecret(supabase, 'zernio_keys', { user_id: userId, id: keyId });
 }
 
 /**
