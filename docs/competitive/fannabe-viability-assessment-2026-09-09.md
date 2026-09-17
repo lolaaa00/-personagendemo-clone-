@@ -501,6 +501,53 @@ image the product makes.
 
 ---
 
+### Two rounds deeper — 2026-09-17, acting on the five findings
+
+The previous section listed five findings. This round closes what can be
+closed, makes the rest measurable rather than asserted, and turns up two new
+things — one of them about how this branch is being worked, not about the code.
+
+**Closed.**
+
+| Finding | What happened |
+|---|---|
+| 5. The upscaled portrait became the identity anchor | **Closed.** The wizard now anchors `ugc_character_ref` to the base model's own output and shows the enhanced one on screen. Until the benchmark proves the pass does not move a face, an unproven pass is not what the five-stage kit gets built on. |
+| 3. Never run live; schema from docs | **Narrowed.** fal's machine-readable OpenAPI was fetched. `scale` allows 1–8 (we cap at 4, now stated as a choice). The schema documents *only* the queue host, where POST returns a `QueueStatus` — the sync host production relies on is documented nowhere. The module now handles both shapes, polls inside the same budget, and cancels what it cannot wait for. Still zero live calls. |
+| 4. Declared price bounds the bill, not the cost | **Cannot be closed for this endpoint — made visible instead.** The schema declares no cost, usage or billing field anywhere. `measuredUsd` is now an explicit `null` so `price_table_drift` shows the row as *unmeasured* rather than letting the declared rate pass for truth. **If drift accountability matters — and this repo says it does — "reports its cost" belongs in the criteria for choosing the upscaler**, not just quality. |
+| 2. P0.2 skipped | **Harness exists; unrun.** `enhance.benchmark.test.ts`: one portrait per realism register, the pass run over each, pairs written *shuffled* with the answer key in a separate file. Live-money, so it is an integration test gated on `ENHANCE_BENCHMARK=1` plus a key, touching no server, ledger, bucket or persona. It asserts the harness worked, not a winner. **Its own first version could not make a pair** — persistence on a fal URL threw and never-bricked to the original for every register, which would have looked like a run while measuring nothing. Caught by re-reading before commit. |
+| 1. Coverage is 1 of 14 | **Held on purpose.** Unchanged until the benchmark says the first stage is the right one. |
+
+**New, and the one that matters most is not about the code.**
+
+**A. Two agents are committing to one branch, and it just cost history its
+meaning.** While this round's commit was between its pre-commit hook and the
+ref write, a concurrent session committed — and its commit swept these staged
+files in under `fix(review): the queue answers to the seat`. The realism work
+is on the branch and green, but a reviewer reading that log line would never
+find it. The same shared-tree pattern is why `lint:ci` reads red on this
+branch from files this round never touched, and why an earlier merge conflict
+was resolved against a file another session rewrote fifty seconds later. **The
+repo already has a worktree protocol for exactly this** (persona v2 landed
+through it). Not using it is now the largest durability risk on the branch —
+larger than anything in `enhance.ts`.
+
+**B. The benchmark's judge is a person, and the loop cannot close from
+here.** Running it costs about a dollar and five minutes of looking; it needs
+a fal key and a human deciding which of two faces reads as real. That is not
+something to automate — encoding the answer would be skipping the benchmark —
+so it is the one item on this list that only the owner can move:
+
+```
+cd personagen-svelte && ENHANCE_BENCHMARK=1 npm run test:integration -- enhance.benchmark
+```
+
+then score `portfolio/enhance-benchmark/<run>/` before opening the key.
+If *upscaled* does not win clearly across registers, the first stage should be
+a skin/detail pass, not super-resolution, and the other thirteen call sites
+should wait for that.
+
+---
+
 ### Re-measured verdict — 2026-09-17
 
 **Viability: strong, and the deficiency is now more isolated than it was.**
