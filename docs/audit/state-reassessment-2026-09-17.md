@@ -379,6 +379,8 @@ Four merges this round, three of them routine — `eb91ef9`, and two more whose 
 
 The fourth is the record of a hazard. A merge of `4438b9d` resolved cleanly but its commit failed — the message file was never written, because an earlier abort had exited before the line that wrote it — leaving `MERGE_HEAD` set in the shared tree. A peer then staged thirteen files of their own and ran `git commit`; git produced `964be61`, a two-parent merge carrying *their* message. They noticed, `reset --mixed HEAD~1`, and recommitted their work cleanly as `1095ac7` — exactly the right response — which undid the merge. The re-merge is **deferred, not failed**: the reset dropped the merged `generate.ts` into the working tree as residue, and a peer has since edited that file (11 lines beyond the residue), so the overlap guard refuses until they commit. `reasoning-budget.spec.ts` is pure residue and identical to `origin/main`.
 
+**Closed minutes later, by the right person.** The owner of the dirty `generate.ts` committed it and merged `4438b9d` themselves (`943e748`, `caa0510`) — which is what the overlap guard is for: it refuses so the file's owner merges, not so the file gets discarded. The commit that landed on `origin/main` after that (`49f7ab1`, a reasoning knob for the director) was merged here in one step as `9b7e9c1`: message written first, staged set checked against the incoming files before the commit, `${PIPESTATUS[0]}` read. **Every conflict of the day is resolved; the branch is 34 ahead / 0 behind.**
+
 Three rules from it: never leave a merge pending across tool calls in a shared tree — resolve and commit in one script, and write the message file at the *top* of it; `commit: $?` after a pipe reports the pipe, not the commit — use `${PIPESTATUS[0]}`; and print the staged set before every commit, aborting if it lists anything you did not stage, because a merge commit takes the whole index.
 
 ### 10.5 Two claims I made today were wrong, and are corrected
@@ -388,4 +390,4 @@ Three rules from it: never leave a merge pending across tool calls in a shared t
 
 ### 10.6 Verified
 
-At `1095ac7` plus the css fix: **2012 unit tests / 104 files pass**; committed tree lints at **1114 warnings, 0 errors** (under the 1136 ratchet — the "over" readings all day were peer WIP in the shared tree); svelte-check **0 errors**; the hook is live and has refused nothing legitimate. Real `node_modules` counted intact (194 entries) after every junction removal.
+At `9b7e9c1`: **2015 unit tests / 104 files pass**; `lint:ci` exit 0 with 0 errors and 1131 warnings in the shared tree (twenty peer-dirty files included; the committed tree alone measured 1114); committed tree lints at **1114 warnings, 0 errors** (under the 1136 ratchet — the "over" readings all day were peer WIP in the shared tree); svelte-check **0 errors**; the hook is live and has refused nothing legitimate. Real `node_modules` counted intact (194 entries) after every junction removal.
