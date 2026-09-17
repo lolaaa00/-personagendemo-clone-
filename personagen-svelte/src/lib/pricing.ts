@@ -146,6 +146,8 @@ export interface CostEvent {
 	/** Tokens the provider reported, when it reported any. */
 	tokensIn?: number | null;
 	tokensOut?: number | null;
+	/** Of tokensOut, the hidden thinking — see AiUsage.tokensReasoning. */
+	tokensReasoning?: number | null;
 	/**
 	 * What the PROVIDER says the call cost, when it says anything (OpenRouter
 	 * returns this on every response; Gemini does not).

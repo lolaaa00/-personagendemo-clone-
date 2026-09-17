@@ -540,7 +540,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-17", hash: "4710d30", type: "other", category: "maintenance", scope: null, title: "Merge origin/main: every LLM call now records which stage of the run made it" },
 	{ date: "2026-09-17", hash: "8e9541f", type: "chore", category: "infrastructure", scope: "git", title: "ignore Python bytecode — the first .pyc arrived today, unignored" },
 	{ date: "2026-09-17", hash: "10a8979", type: "feat", category: "feature", scope: "ux", title: "one page shell, one focus ring, and counts that come from counting" },
-	{ date: "2026-09-17", hash: "38958dc", type: "fix", category: "security", scope: "portal", title: "permission denial is a designed state, never a teleport or a Retry" }
+	{ date: "2026-09-17", hash: "38958dc", type: "fix", category: "security", scope: "portal", title: "permission denial is a designed state, never a teleport or a Retry" },
+	{ date: "2026-09-17", hash: "e381879", type: "docs", category: "generation", scope: "verify", title: "frozen build snapshot for shared trees, dialog-scoped composer reads, seat provisioning" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -930,12 +931,12 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 	},
 	{
 		id: "d636290", from: "2026-09-17", to: "2026-09-17",
-		category: "infrastructure", categories: ["infrastructure","docs","fix","feature","maintenance","security"],
+		category: "infrastructure", categories: ["infrastructure","docs","fix","feature","maintenance","security","generation"],
 		title: "Behind the scenes: move the ratchet to the real count — lint:ci was…",
-		summary: "Move the ratchet to the real count — lint:ci was failing at 1136. Plus 9 more changes, touching guides and explanations and things that were broken and things you can now do.",
+		summary: "Move the ratchet to the real count — lint:ci was failing at 1136. Plus 10 more changes, touching guides and explanations and things that were broken and things you can now do.",
 		major: true, curated: false,
-		entries: [CHANGELOG[497], CHANGELOG[498], CHANGELOG[499], CHANGELOG[500], CHANGELOG[501], CHANGELOG[502], CHANGELOG[503], CHANGELOG[504], CHANGELOG[505], CHANGELOG[506]]
+		entries: [CHANGELOG[497], CHANGELOG[498], CHANGELOG[499], CHANGELOG[500], CHANGELOG[501], CHANGELOG[502], CHANGELOG[503], CHANGELOG[504], CHANGELOG[505], CHANGELOG[506], CHANGELOG[507]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "38958dc";
+export const CHANGELOG_GENERATED_FROM = "e381879";

@@ -1,5 +1,6 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
 import { env } from '$env/dynamic/private';
+import { getServiceSupabase } from './service-supabase';
 
 export const SUPPORTED_USER_KEY_PROVIDERS = [
 	'zernio',
@@ -25,6 +26,20 @@ export interface UserApiKeyMetadata {
 	last_tested_at: string | null;
 	updated_at: string | null;
 }
+
+/** The two tables that hold ciphertext. Nothing else on the platform does. */
+export type SecretTable = 'user_api_keys' | 'zernio_keys';
+
+/** The three columns `authenticated` must never read once stage B is applied. */
+export const SECRET_COLUMNS = 'encrypted_value, iv, auth_tag';
+
+/**
+ * What a row's `last_error` says after its ciphertext failed to open. Written
+ * verbatim — never with the ciphertext, iv or tag in it — and rendered as-is
+ * by Settings → API keys, so it has to tell the user what to DO.
+ */
+export const UNDECRYPTABLE_KEY_MESSAGE =
+	'Stored key could not be decrypted — delete it and save it again.';
 
 function getEncryptionKey(): Buffer {
 	const raw = env.USER_SECRETS_ENCRYPTION_KEY || '';
@@ -90,21 +105,98 @@ export function maskApiKey(value: string): { masked_value: string; last_four: st
 	};
 }
 
+/**
+ * The client that reads ciphertext: the service role, whatever the caller
+ * handed in. `locals.supabase` is anon-key + user JWT, i.e. the SAME
+ * `authenticated` role as the browser, and Postgres cannot tell "the server
+ * decrypting on the user's behalf" from "the browser reading its own row" —
+ * one role, one grant. Reading through service_role is what lets the
+ * column-level SELECT revoke on the secret columns (stage B of
+ * user_api_keys_column_grants_migration.sql) land without breaking BYOK.
+ *
+ * The `user_id` filter stays on every read: this changes which role performs
+ * the read, not who may see what. Same fallback as credits.ts — a test with
+ * no service key gets the caller's client.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- the Supabase client is untyped across this codebase; narrowing it here alone would be a fiction
+function secretReader(supabase: any): any {
+	try {
+		return getServiceSupabase();
+	} catch {
+		return supabase;
+	}
+}
+
+/**
+ * Best-effort: stamp the row so Settings shows WHY the key stopped being
+ * used. Never throws — a failed status write must not mask the decrypt error
+ * the caller is about to see. Skipped when the server has no encryption key
+ * at all: that is an ops fault of the deployment, not of this row, and
+ * "delete it and save it again" would be the wrong advice.
+ */
+async function markUndecryptable(
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- the Supabase client is untyped across this codebase
+	db: any,
+	table: SecretTable,
+	match: Record<string, string>
+): Promise<void> {
+	try {
+		getEncryptionKey();
+	} catch {
+		return;
+	}
+	try {
+		let q = db.from(table).update({ status: 'error', last_error: UNDECRYPTABLE_KEY_MESSAGE });
+		for (const [col, val] of Object.entries(match)) q = q.eq(col, val);
+		const res = await q;
+		if (res?.error) {
+			console.warn(`[user-api-keys] could not record decrypt failure on ${table}:`, res.error.message);
+		}
+	} catch (e) {
+		console.warn(`[user-api-keys] could not record decrypt failure on ${table}:`, (e as Error).message);
+	}
+}
+
+/**
+ * Read one stored secret through the service role and decrypt it. Null when
+ * no row matches. A ciphertext that will not open THROWS — and, first, marks
+ * the row `status='error'` with a secret-free `last_error`. The throw is
+ * deliberate and unchanged: resolvers still `.catch(() => null)` onto the
+ * platform key, but the user now sees why in Settings instead of a key that
+ * silently stopped being used.
+ */
+export async function readStoredSecret(
+	supabase: any,
+	table: SecretTable,
+	match: Record<string, string>
+): Promise<string | null> {
+	const db = secretReader(supabase);
+	let q = db.from(table).select(SECRET_COLUMNS);
+	for (const [col, val] of Object.entries(match)) q = q.eq(col, val);
+	const { data, error } = await q.maybeSingle();
+
+	if (error) throw error;
+	if (!data) return null;
+	try {
+		return decryptSecret(data);
+	} catch (e) {
+		console.error(
+			`[user-api-keys] ${table} row (${Object.entries(match)
+				.map(([k, v]) => `${k}=${v}`)
+				.join(', ')}) could not be decrypted; status set to error.`
+		);
+		await markUndecryptable(db, table, match);
+		throw e;
+	}
+}
+
 export async function getUserApiKey(
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- the Supabase client is untyped across this codebase
 	supabase: any,
 	userId: string,
 	provider: UserKeyProvider
 ): Promise<string | null> {
-	const { data, error } = await supabase
-		.from('user_api_keys')
-		.select('encrypted_value, iv, auth_tag')
-		.eq('user_id', userId)
-		.eq('provider', provider)
-		.maybeSingle();
-
-	if (error) throw error;
-	if (!data) return null;
-	return decryptSecret(data);
+	return readStoredSecret(supabase, 'user_api_keys', { user_id: userId, provider });
 }
 
 export function sanitizeKeyMetadata(row: any): UserApiKeyMetadata {

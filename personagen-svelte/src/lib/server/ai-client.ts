@@ -76,7 +76,33 @@ export interface AiGenerateOptions {
 	 * stage is verbose or how often a retry doubled a post's LLM cost.
 	 */
 	stage?: string;
+	/**
+	 * How much the model may THINK before it answers.
+	 *
+	 * Gemini 3.5 Flash thinks by default, and its thinking is billed as output
+	 * at the output rate. Measured 2026-09-17 on one quality-grader call through
+	 * OpenRouter: 1,054 completion tokens, of which 950 were `reasoning_tokens`
+	 * and ~92 were the 7-field JSON grade — 90% of the call's cost was hidden
+	 * deliberation over a mechanical rubric. The same call at 'minimal' returned
+	 * 148 completion tokens, 0 reasoning, a valid grade, at 18% of the price.
+	 * Thinking cannot be switched off on that endpoint ("Reasoning is mandatory
+	 * … cannot be disabled"), only budgeted — so this is a level, not a boolean.
+	 *
+	 * Unset = the provider's default, which is what every call did before this
+	 * option existed. Set it per call: a rubric grade needs none of it; a script
+	 * written by the director may well earn its keep.
+	 */
+	reasoning?: ReasoningEffort;
 }
+
+/**
+ * OpenRouter's `reasoning.effort` levels, in ascending order; each is also a
+ * member of the Gemini SDK's ThinkingLevel enum once upper-cased, which is how
+ * the direct client sends it. (OpenRouter's 'none' is deliberately absent — the
+ * Gemini endpoint rejects it, so a caller could never rely on it.)
+ */
+export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high';
+export const REASONING_EFFORTS: readonly ReasoningEffort[] = ['minimal', 'low', 'medium', 'high'];
 
 /**
  * What a provider said the call cost. Every field is nullable because every
@@ -86,6 +112,7 @@ export interface AiGenerateOptions {
  */
 export interface AiUsage {
 	tokensIn: number | null;
+	/** Everything billed as output — the answer AND any hidden thinking. */
 	tokensOut: number | null;
 	/**
 	 * USD the provider itself says this request cost. OpenRouter returns this on
@@ -93,6 +120,23 @@ export interface AiUsage {
 	 * table is an estimate maintained by hand.
 	 */
 	costUsd: number | null;
+	/**
+	 * Of `tokensOut`, how many were the model thinking rather than answering.
+	 * 0 means the provider said "none"; null means it did not say. The split is
+	 * what turns "this stage emits 1,100 output tokens" into "this stage emits a
+	 * 90-token answer after 1,000 tokens of deliberation" — two very different
+	 * fixes.
+	 */
+	tokensReasoning: number | null;
+}
+
+/**
+ * Google reports thinking apart from the answer (`thoughtsTokenCount` beside
+ * `candidatesTokenCount`) while OpenRouter folds both into `completion_tokens`.
+ * The ledger wants one meaning: tokensOut is everything billed as output.
+ */
+function billedOutput(answer: number | null, thoughts: number | null): number | null {
+	return answer === null ? null : answer + (thoughts ?? 0);
 }
 
 /** A finite, non-negative number, or null. Providers omit, null, and stringify. */
@@ -226,6 +270,11 @@ function createOpenRouterClient(apiKey: string, modelOverride?: string | null): 
 			if (opts?.json) {
 				body.response_format = { type: 'json_object' };
 			}
+			// Only when asked: an absent key is the provider's default, which is the
+			// behaviour every call had before the option existed.
+			if (opts?.reasoning) {
+				body.reasoning = { effort: opts.reasoning };
+			}
 
 			const res = await fetchWithTimeout(
 				'https://openrouter.ai/api/v1/chat/completions',
@@ -254,7 +303,9 @@ function createOpenRouterClient(apiKey: string, modelOverride?: string | null): 
 			opts?.onUsage?.({
 				tokensIn: num(data.usage?.prompt_tokens),
 				tokensOut: num(data.usage?.completion_tokens),
-				costUsd: num(data.usage?.cost)
+				costUsd: num(data.usage?.cost),
+				// Inside completion_tokens already; reported so the two can be told apart.
+				tokensReasoning: num(data.usage?.completion_tokens_details?.reasoning_tokens)
 			});
 			return data.choices?.[0]?.message?.content || '';
 		}
@@ -273,6 +324,10 @@ function createGeminiClient(apiKey: string, modelOverride?: string | null): AiCl
 			}
 			if (opts?.systemInstruction) {
 				config.systemInstruction = opts.systemInstruction;
+			}
+			// Same level the OpenRouter client sends, in the SDK's spelling.
+			if (opts?.reasoning) {
+				config.thinkingConfig = { thinkingLevel: opts.reasoning.toUpperCase() };
 			}
 
 			// Vision: fetch the image into inline base64 (Gemini takes no arbitrary URL).
@@ -295,10 +350,12 @@ function createGeminiClient(apiKey: string, modelOverride?: string | null): AiCl
 			// Gemini reports token counts but no price — costUsd stays null, which is
 			// why it is nullable rather than 0. Zero would read as "this was free".
 			const um = (res as unknown as { usageMetadata?: Record<string, unknown> }).usageMetadata;
+			const thoughts = num(um?.thoughtsTokenCount);
 			opts?.onUsage?.({
 				tokensIn: num(um?.promptTokenCount),
-				tokensOut: num(um?.candidatesTokenCount),
-				costUsd: null
+				tokensOut: billedOutput(num(um?.candidatesTokenCount), thoughts),
+				costUsd: null,
+				tokensReasoning: thoughts
 			});
 			return res.text || '';
 		}

@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { decryptSecret, encryptSecret, maskApiKey } from '$lib/server/user-api-keys';
+import { encryptSecret, maskApiKey } from '$lib/server/user-api-keys';
+import { getZernioKeySecretById } from '$lib/server/zernio-keys';
 import { ZernioClient, computeZernioAccountMeter } from '$lib/server/social/zernio';
 
 /**
@@ -119,16 +120,12 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 		if (action === 'test') {
 			const id = String(body.id || '');
-			const { data: row, error: rowErr } = await locals.supabase
-				.from('zernio_keys')
-				.select('id, encrypted_value, iv, auth_tag')
-				.eq('user_id', user.id)
-				.eq('id', id)
-				.maybeSingle();
-			if (rowErr) throw rowErr;
-			if (!row) return json({ success: false, error: 'Key not found.' }, { status: 404 });
-
-			const secret = decryptSecret(row);
+			// The ciphertext is read through the service role, scoped to this user —
+			// locals.supabase is the `authenticated` role and (stage B) no longer
+			// holds SELECT on the secret columns. A row that will not decrypt throws
+			// here after stamping itself status='error', and the catch below reports it.
+			const secret = await getZernioKeySecretById(locals.supabase, user.id, id);
+			if (!secret) return json({ success: false, error: 'Key not found.' }, { status: 404 });
 
 			// /accounts doubles as auth probe AND slot meter for this key.
 			let status: 'valid' | 'invalid' | 'error' = 'valid';
