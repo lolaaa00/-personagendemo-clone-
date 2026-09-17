@@ -45,6 +45,22 @@ import { CHILD_AGE_BAND_YEARS, MIN_PARENT_CHILD_GAP } from './sampler';
 import type { AudienceDecisioning, PersonaAudience, ViewerSkeleton } from './schema';
 import { isToken, type TokenGroup, type TokenOf } from './tokens';
 
+/**
+ * How long one viewer's objection may be.
+ *
+ * The producer and the consumer both need this number and they used to disagree
+ * silently. FitVerdict truncates at 240 characters with an ellipsis, and its
+ * comment said "The judge already caps objections" — the judge said nothing
+ * about length at all. So the model wrote as much as it liked, the app paid for
+ * every output token of it at 6x the input rate, and the UI threw away
+ * everything past 240 characters before a person ever saw it.
+ *
+ * Exported from here because the prompt lives under lib/server (unimportable
+ * from a component) and the renderer is client-side. One number, two importers,
+ * and a test that fails if the prompt stops stating it.
+ */
+export const MAX_OBJECTION_CHARS = 240;
+
 export const DEFAULT_PANEL_SIZE = 5;
 export const MIN_PANEL_SIZE = 1;
 export const MAX_PANEL_SIZE = 12;

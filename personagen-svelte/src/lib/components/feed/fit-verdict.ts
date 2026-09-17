@@ -1,3 +1,4 @@
+import { MAX_OBJECTION_CHARS } from '$lib/persona-contract/panel';
 /**
  * The read-only view model behind FitVerdict.svelte.
  *
@@ -53,8 +54,13 @@ export const MIXED_FIT = 40;
 const MIN_SCORE = 0;
 const MAX_SCORE = 100;
 
-/** The judge already caps objections; re-capped here because the column is data. */
-const MAX_OBJECTION = 240;
+/**
+ * The judge is told this limit and the column is still data, so it is enforced
+ * here too. Imported rather than restated: the two used to disagree, and the
+ * disagreement cost real money — the model wrote past the cut and the app paid
+ * for tokens nobody could read.
+ */
+const MAX_OBJECTION = MAX_OBJECTION_CHARS;
 
 export interface FitReaction {
 	/** Stable key for `{#each}` — the panel slot this reaction belongs to. */

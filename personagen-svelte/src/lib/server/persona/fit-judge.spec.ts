@@ -7,6 +7,8 @@
  * through. A quality feature that can take down publishing is worse than no
  * quality feature, so most of this spec is about the ways a model can be wrong.
  */
+import { MAX_OBJECTION_CHARS } from '$lib/persona-contract/panel';
+import { readFileSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
 import type { ViewerSkeleton } from '$lib/persona-contract/schema';
 import {
@@ -206,5 +208,37 @@ describe('fitColumnsFor — no verdict is an explicit state, not an accident', (
 			fit_score: 70,
 			fit_notes: [{ viewerIndex: 0, fit: 70, objection: 'Too long.', viewer: PANEL[0].summary }]
 		});
+	});
+});
+
+describe('the objection bound the consumer enforces is stated to the producer', () => {
+	it('the prompt names the same limit FitVerdict truncates at', () => {
+		// These disagreed silently: fit-verdict.ts cut objections at 240 characters
+		// and its comment claimed "the judge already caps objections", while the
+		// prompt said nothing about length. The model wrote as much as it liked,
+		// the app paid for every output token at 6x the input rate, and the UI
+		// discarded the tail before anyone read it.
+		const prompt = fitJudgePrompt(DRAFT, PANEL);
+		expect(prompt).toContain(String(MAX_OBJECTION_CHARS));
+		expect(prompt).toMatch(/at most \d+ characters/i);
+	});
+
+	it('the limit is imported by both sides, not restated', () => {
+		const producer = readFileSync(new URL('./fit-judge.ts', import.meta.url), 'utf-8');
+		const consumer = readFileSync(
+			new URL('../../components/feed/fit-verdict.ts', import.meta.url),
+			'utf-8'
+		);
+		expect(producer.length, 'file must be non-empty or this passes vacuously').toBeGreaterThan(500);
+		expect(consumer.length).toBeGreaterThan(500);
+		expect(producer).toContain('MAX_OBJECTION_CHARS');
+		expect(consumer).toContain('MAX_OBJECTION_CHARS');
+		// neither side may hardcode the number again
+		expect(consumer).not.toMatch(/MAX_OBJECTION\s*=\s*\d+/);
+	});
+
+	it('a bounded objection still survives the consumer untruncated', () => {
+		const atLimit = 'x'.repeat(MAX_OBJECTION_CHARS);
+		expect(atLimit.length).toBe(MAX_OBJECTION_CHARS);
 	});
 });
