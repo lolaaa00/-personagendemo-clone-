@@ -557,7 +557,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-17", hash: "d208584", type: "docs", category: "infrastructure", scope: "audit", title: "round 4 — the hook made durable, no CI, the ceiling gate red on committed code" },
 	{ date: "2026-09-17", hash: "9b7e9c1", type: "other", category: "maintenance", scope: null, title: "Merge origin/main: a reasoning knob for the director, off by default" },
 	{ date: "2026-09-17", hash: "9b49d52", type: "docs", category: "docs", scope: "audit", title: "close round 4 — every conflict resolved, 34 ahead / 0 behind" },
-	{ date: "2026-09-17", hash: "26936c3", type: "feat", category: "feature", scope: "ux", title: "finish the shell, and make the rules testable" }
+	{ date: "2026-09-17", hash: "26936c3", type: "feat", category: "feature", scope: "ux", title: "finish the shell, and make the rules testable" },
+	{ date: "2026-09-17", hash: "f0284a1", type: "fix", category: "fix", scope: "realism", title: "stop wiring the endpoint the repo's own research said to refuse" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -957,10 +958,10 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 		id: "06de1cd", from: "2026-09-17", to: "2026-09-17",
 		category: "fix", categories: ["docs","fix","design","feature","infrastructure","maintenance"],
 		title: "Fixed: refuse lint errors at commit, and never commit a…",
-		summary: "Refuse lint errors at commit, and never commit a stale changelog. Plus 12 more changes, touching guides and explanations and layout, colours and readability and things you can now do.",
+		summary: "Refuse lint errors at commit, and never commit a stale changelog. Plus 13 more changes, touching guides and explanations and layout, colours and readability and things you can now do.",
 		major: true, curated: false,
-		entries: [CHANGELOG[511], CHANGELOG[512], CHANGELOG[513], CHANGELOG[514], CHANGELOG[515], CHANGELOG[516], CHANGELOG[517], CHANGELOG[518], CHANGELOG[519], CHANGELOG[520], CHANGELOG[521], CHANGELOG[522], CHANGELOG[523]]
+		entries: [CHANGELOG[511], CHANGELOG[512], CHANGELOG[513], CHANGELOG[514], CHANGELOG[515], CHANGELOG[516], CHANGELOG[517], CHANGELOG[518], CHANGELOG[519], CHANGELOG[520], CHANGELOG[521], CHANGELOG[522], CHANGELOG[523], CHANGELOG[524]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "26936c3";
+export const CHANGELOG_GENERATED_FROM = "f0284a1";

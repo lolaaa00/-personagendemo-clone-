@@ -501,6 +501,55 @@ image the product makes.
 
 ---
 
+### Three rounds deeper — 2026-09-17, the wrong endpoint
+
+The previous round closed the anchor risk and made the schema gaps visible.
+This round found something upstream of all of it: **the module defaulted to
+an endpoint the repo's own research said to refuse, written the same day and
+never read.**
+
+[`realism-chain-feasibility-2026-09-09.md`](realism-chain-feasibility-2026-09-09.md)
+ran 11 live calls against fal and is unambiguous: `esrgan` bills per
+compute-second, "has no measurable ceiling," and its own risk table calls
+that **High severity** with the mitigation *"do not wire any of them,
+however attractive esrgan's face:true is."* Every hardening this document
+recorded for the price-drift finding — `measuredUsd: null`, the caveat that
+drift accountability is "structurally unmeasurable for this endpoint" — was
+a correct response to a real gap, but the gap existed only because of which
+endpoint got picked.
+
+**Fixed by swapping the model, not by hardening around it further.**
+`fal-ai/seedvr/upscale/image`, verified against fal's live schema: same
+`image_url` in / `image.url` out shape (the queue-polling fallback added
+last round needed no change), confirmed non-generative, aspect preserved to
+~1.3% in live testing, and — the point — billed **per output megapixel**, a
+number a human can look up and quote, rather than a compute-second charge
+with no ceiling before the call runs. `.env.example` now carries a real
+starting price (~$0.001/MP, ~$0.004 for a typical 4MP portrait) instead of a
+blank the operator had nothing to base a number on.
+
+**Read the feasibility doc's §6 before wiring stages 2 and 3.** It disagrees
+with this document's own ordering logic in one place worth flagging: it
+confirms upscale-first is right on *risk and cost*, but finds the
+"largest visible jump per dollar" claim **unsupported** — plastic skin is a
+stage-B (skin/detail) problem, and enlarging pixels cannot fix it. Do not
+expect the benchmark below to show a dramatic win; expect it to prove the
+rail is safe before the skin stage, which is where the real jump is and
+where the real identity risk also lives.
+
+**The branch this is landing on is being edited by dozens of concurrent
+sessions**, several of them on `personagendemo` specifically at the time of
+this round. `docs/audit/state-reassessment-2026-09-17.md` already tracks
+that hazard in far more depth than this document should — a `MERGE_HEAD`
+left pending across tool calls got consumed by a peer's commit earlier
+today, and a shared-tree run of `deploy.ps1` has no branch check and would
+push an unrelated `main` while gating against this branch. **That document
+is now the canonical source for branch/process risk; this one defers to it**
+rather than re-describing what it already measured better, with session
+transcripts this document has no access to.
+
+---
+
 ### Two rounds deeper — 2026-09-17, acting on the five findings
 
 The previous section listed five findings. This round closes what can be
@@ -519,17 +568,14 @@ things — one of them about how this branch is being worked, not about the code
 
 **New, and the one that matters most is not about the code.**
 
-**A. Two agents are committing to one branch, and it just cost history its
-meaning.** While this round's commit was between its pre-commit hook and the
-ref write, a concurrent session committed — and its commit swept these staged
-files in under `fix(review): the queue answers to the seat`. The realism work
-is on the branch and green, but a reviewer reading that log line would never
-find it. The same shared-tree pattern is why `lint:ci` reads red on this
-branch from files this round never touched, and why an earlier merge conflict
-was resolved against a file another session rewrote fifty seconds later. **The
-repo already has a worktree protocol for exactly this** (persona v2 landed
-through it). Not using it is now the largest durability risk on the branch —
-larger than anything in `enhance.ts`.
+**A. The branch is shared by dozens of concurrent sessions.** This document
+recorded one sweep incident when it looked like an isolated event; it was
+not — see the *Three rounds deeper* correction above, which points to
+[state-reassessment-2026-09-17.md](../audit/state-reassessment-2026-09-17.md)
+as the canonical, better-sourced account (git history plus session
+transcripts). Read that document for the branch/process risk, including the
+`deploy.ps1` finding that matters more than anything in this file: it has no
+branch check and would push an unrelated `main` if run from here.
 
 **B. The benchmark's judge is a person, and the loop cannot close from
 here.** Running it costs about a dollar and five minutes of looking; it needs
