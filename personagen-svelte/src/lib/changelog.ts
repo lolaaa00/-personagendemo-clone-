@@ -530,7 +530,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-17", hash: "bbe12fd", type: "fix", category: "fix", scope: "ux", title: "round 3 — three blockers, and stop the dashboard inventing a number" },
 	{ date: "2026-09-17", hash: "2cc2336", type: "test", category: "maintenance", scope: "money", title: "assert the landing page's prices against pricing.ts, not against prose" },
 	{ date: "2026-09-17", hash: "9c2d0a6", type: "fix", category: "fix", scope: "ux", title: "round 2's ranked list, deeper — trust, legibility and dead ends" },
-	{ date: "2026-09-17", hash: "cfd5fe5", type: "feat", category: "feature", scope: "realism", title: "the pass after the pass — P0.1, upscale first" }
+	{ date: "2026-09-17", hash: "cfd5fe5", type: "feat", category: "feature", scope: "realism", title: "the pass after the pass — P0.1, upscale first" },
+	{ date: "2026-09-17", hash: "d636290", type: "chore", category: "infrastructure", scope: "lint", title: "move the ratchet to the real count — lint:ci was failing at 1136" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -917,7 +918,15 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 		summary: "The LLM rate was 5.8x low, so the text path sold below cost. Plus 13 more changes, touching internal cleanup and layout, colours and readability and things you can now do.",
 		major: true, curated: false,
 		entries: [CHANGELOG[483], CHANGELOG[484], CHANGELOG[485], CHANGELOG[486], CHANGELOG[487], CHANGELOG[488], CHANGELOG[489], CHANGELOG[490], CHANGELOG[491], CHANGELOG[492], CHANGELOG[493], CHANGELOG[494], CHANGELOG[495], CHANGELOG[496]]
+	},
+	{
+		id: "d636290", from: "2026-09-17", to: "2026-09-17",
+		category: "infrastructure", categories: ["infrastructure"],
+		title: "Behind the scenes: move the ratchet to the real count — lint:ci was…",
+		summary: "Move the ratchet to the real count — lint:ci was failing at 1136.",
+		major: false, curated: false,
+		entries: [CHANGELOG[497]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "cfd5fe5";
+export const CHANGELOG_GENERATED_FROM = "d636290";

@@ -63,3 +63,9 @@ graphify-out/cache/last_query_stamp
 
 # graphify query cache — rebuilt locally on every /graphify run; never ship it
 graphify-out/cache/
+
+# SvelteKit's generated types. personagen-svelte/.gitignore already ignores its
+# own copy, but `svelte-kit sync` writes one wherever it is invoked from, and a
+# run at the repo root leaves this untracked and unignored — the one build
+# artifact a broad `git add` could still sweep in.
+.svelte-kit/
