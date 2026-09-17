@@ -546,11 +546,13 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-17", hash: "43a3d0a", type: "feat", category: "generation", scope: "ledger", title: "budget the model's thinking per call, and record how much it did" },
 	{ date: "2026-09-17", hash: "eb91ef9", type: "other", category: "maintenance", scope: null, title: "Merge origin/main: per-call thinking budgets, and stored secrets read as service_role" },
 	{ date: "2026-09-17", hash: "06de1cd", type: "chore", category: "docs", scope: "hooks", title: "refuse lint errors at commit, and never commit a stale changelog" },
+	{ date: "2026-09-17", hash: "4438b9d", type: "fix", category: "fix", scope: "qc", title: "confirm a grade that lands within a point of the floor" },
 	{ date: "2026-09-17", hash: "1095ac7", type: "fix", category: "fix", scope: "review", title: "the queue answers to the seat, not to ownership" },
 	{ date: "2026-09-17", hash: "a43369f", type: "fix", category: "fix", scope: "realism", title: "act on the deeper assessment — anchor, schema, drift, benchmark" },
 	{ date: "2026-09-17", hash: "0c296e5", type: "docs", category: "docs", scope: "competitive", title: "two rounds deeper — the anchor, the schema, and the branch itself" },
 	{ date: "2026-09-17", hash: "4be831a", type: "fix", category: "fix", scope: "css", title: "the scroll-reveal selectors are set at runtime, so say so" },
-	{ date: "2026-09-17", hash: "943e748", type: "fix", category: "fix", scope: "qc", title: "confirm a grade that lands within a point of the floor" }
+	{ date: "2026-09-17", hash: "943e748", type: "fix", category: "fix", scope: "qc", title: "confirm a grade that lands within a point of the floor" },
+	{ date: "2026-09-17", hash: "caa0510", type: "other", category: "design", scope: null, title: "Merge remote-tracking branch 'origin/main' into ux/portal-overhaul" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -948,12 +950,12 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 	},
 	{
 		id: "06de1cd", from: "2026-09-17", to: "2026-09-17",
-		category: "fix", categories: ["docs","fix"],
+		category: "fix", categories: ["docs","fix","design"],
 		title: "Fixed: refuse lint errors at commit, and never commit a…",
-		summary: "Refuse lint errors at commit, and never commit a stale changelog. Plus 5 more changes, touching guides and explanations.",
+		summary: "Refuse lint errors at commit, and never commit a stale changelog. Plus 7 more changes, touching guides and explanations and layout, colours and readability.",
 		major: true, curated: false,
-		entries: [CHANGELOG[511], CHANGELOG[512], CHANGELOG[513], CHANGELOG[514], CHANGELOG[515], CHANGELOG[516]]
+		entries: [CHANGELOG[511], CHANGELOG[512], CHANGELOG[513], CHANGELOG[514], CHANGELOG[515], CHANGELOG[516], CHANGELOG[517], CHANGELOG[518]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "943e748";
+export const CHANGELOG_GENERATED_FROM = "caa0510";

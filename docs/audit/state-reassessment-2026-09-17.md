@@ -327,3 +327,65 @@ A byte-level scan of all 464 tracked text sources then found two committed contr
 Worth recording because it is the same failure as the one in 9.4. The first control-byte sweep used `grep -P '[\x00\x07\x08...]'` and reported **zero hits across 464 files**. `grep -P` is unavailable in this environment's locale — every invocation errored to stderr and contributed nothing, and the loop counted the empty result as clean. Re-run byte-by-byte in node, the same sweep found the two files above.
 
 Any sweep asserting an absence has to be shown finding something first. `prettier --check` is the standing example in this repo of the opposite: it fails on 687 files and nobody looks, so it protects nothing.
+
+---
+
+## 10. Round 4 — durable fixes, and the one round deeper
+
+The brief was: fix robustly and durably, resolve every conflict, assess one round deeper. This section records what was made durable, what the deeper round found, and the two things it could not do.
+
+### 10.1 The pre-commit hook now gates lint errors and can no longer ship a stale changelog (`06de1cd`)
+
+Two holes, both measured before being closed, both exercised in a scratch worktree before landing.
+
+**Lint.** `lint:ci` sat red for two commits with nobody noticing, because nothing ran eslint at commit time; the same day a `\b` that had become a literal 0x08 byte inside a regex reached a working copy. The hook now runs `eslint --quiet` over the staged `.ts/.js/.mjs/.svelte` files. Exit 1 (errors found) refuses the commit. Exit 2 (eslint could not run) warns and proceeds — a broken linter must not block every commit in a tree three sessions share. eslint absent skips the guard. Errors only: the warning ratchet is a repo-wide count a per-file run cannot judge, so it stays in `lint:ci`. Cost on a one-file commit: about six seconds.
+
+**Changelog.** With a stale copy of the generated `changelog.ts` pre-staged, the normal path already healed it — but every path that skipped regeneration (generator missing, generator throwing) exited 0 and committed whatever was staged. The index and worktree copies are now reset to HEAD's before anything can exit early, so those paths commit an *unchanged* file: trailing by one more, never rolled back.
+
+**The harness lied twice before it told the truth**, and both lies are worth keeping:
+- The hook is a *tracked* file, so `git reset --hard` in the scratch worktree silently reinstalled the old one. A whole run "tested" the old hook. Install the file under test *after* every reset, and fingerprint it before asserting anything.
+- A draft whose awk rule had lost a backslash in transit (`/\\/` → `/\/`, "unterminated regexp", `set -e` abort) refused *every* commit — and three cases still "passed", because a refused commit leaves HEAD exactly where a pass assertion happened to expect it. Every proceed-case now asserts HEAD *advanced*; every refuse-case asserts the specific refusal text. Final run: 8/8, including both changelog failure paths, the literal-backspace regex refused with `no-control-regex` named, and the crash path warning-and-proceeding.
+
+### 10.2 The deeper round: there is no CI, and the deploy script is the only gate runner
+
+No `.github/workflows` at either level; the Dockerfile runs no lint or tests. **`deploy.ps1` is the only thing that runs `npm run check`, the per-rule warning ceilings, `lint:ci`, `npm audit`, the unit and integration suites and the backup proof** — on this laptop, at deploy time, against the *working tree*. The hook in 10.1 is now the only always-on gate, and it gates lint errors only.
+
+Three things about that script, all measured:
+
+1. **It has no branch check and pushes `origin main` unconditionally**, after `git add -A` on a scope and a commit on the *current* branch. Run from `ux/portal-overhaul` — where this tree has sat all day, now 27 commits ahead — the gates pass, the commit lands on the feature branch, an unchanged `main` is pushed, Easypanel rebuilds nothing, and the operator is told "Pipeline complete".
+2. **It silently commits every modified tracked file in scope.** Untracked files are listed and abort the run (`-allowUntracked`); modified ones are not listed at all. With three sessions sharing the tree, that was 24 files that were not the deployer's.
+3. **Gate bypasses are recorded** as `[gates skipped: …]` in the deploy commit message — and **no commit in history carries it**. The gates have never been skipped through the script. (A naive `--grep=skip` returns 25 false hits, all ordinary words.)
+
+**The fix for 1 and 2 was written, tested for anchors, and refused** by the session's auto-mode classifier as a modification of a shared resource. That is the right call for the one script every deploy runs through, and it was not retried. The change is packaged as `scratchpad/apply-deploy-guard.mjs` in session `b749991a`: a branch guard before any gate runs, and a printed list of the tracked files about to be swept. It is the operator's decision.
+
+### 10.3 The per-rule ceiling gate is red on committed code
+
+`scripts/check-warnings-ceiling.mjs` is a second ratchet, separate from eslint's `--max-warnings`: per-class caps on svelte-check warnings in `warning-ceilings.json` (10 classes, sum 119, last updated 2026-09-07). On a **clean checkout** of `06de1cd` — not the shared tree, whose count moves with every peer keystroke — svelte-check reports 0 errors and 167 warnings, and the gate fails twice:
+
+| Breach | Count | Where |
+|---|---|---|
+| `css_unused_selector` | **72** against a cap of 29 | 70 in eleven portal pages last touched by `10a8979` (the page-shell redesign), every one of them currently open in a peer session; 2 on the landing page |
+| `element_implicitly_closed` | **5**, a new class | admin, billing, dashboard, developer, trash — each "implicitly closed by the following `</PageShell>`": an element left open before the shell's closing tag, a real DOM-structure defect from the same redesign |
+
+The ceilings were **not** bumped. The breach is live dead-CSS and unclosed elements from a redesign in progress, in files a peer is editing; `--update` would have accepted 43 dead selectors and five DOM defects as the new normal. The gate stays truthfully red, and this table is the owner's work list.
+
+**The two landing-page selectors were the one part that could be fixed without collision, and they turned out to be false positives.** `[data-reveal]` and `[data-reveal].is-in` are set at runtime by a Svelte action — deliberately after hydration, so a no-JS visitor or a crawler sees every section. The compiler cannot see attributes set from script. Deleting the rules would have silenced the gate by breaking the animation; `:global(...)` states what is true, and the file's warning count drops by exactly two with no new ones. (`4be831a`'s own message quotes "drops from 0 to 0" — a shell-grep artefact that lost a backslash in the machine-output path; the measured delta, parsed properly, is 2 → 0. The message is left as committed rather than amended under three live sessions.)
+
+**Also found, and worth a line:** the ceiling script calls svelte-check directly and assumes `svelte-kit sync` has already run — in a fresh checkout it reports "1 ERROR" on `tsconfig.json` and refuses to count. `deploy.ps1` runs `npm run check` (which syncs) first, so it never bites there; it bit here.
+
+### 10.4 Conflicts resolved, and one merge that got consumed
+
+Four merges this round, three of them routine — `eb91ef9`, and two more whose only conflict was the generated `changelog.ts`, resolved by taking the branch copy and letting the hook regenerate. The guard now used before every one of them: compute the merge with `merge-tree`, `comm -12` the incoming files against the peer's dirty set, and abort on any overlap beyond the changelog.
+
+The fourth is the record of a hazard. A merge of `4438b9d` resolved cleanly but its commit failed — the message file was never written, because an earlier abort had exited before the line that wrote it — leaving `MERGE_HEAD` set in the shared tree. A peer then staged thirteen files of their own and ran `git commit`; git produced `964be61`, a two-parent merge carrying *their* message. They noticed, `reset --mixed HEAD~1`, and recommitted their work cleanly as `1095ac7` — exactly the right response — which undid the merge. The re-merge is **deferred, not failed**: the reset dropped the merged `generate.ts` into the working tree as residue, and a peer has since edited that file (11 lines beyond the residue), so the overlap guard refuses until they commit. `reasoning-budget.spec.ts` is pure residue and identical to `origin/main`.
+
+Three rules from it: never leave a merge pending across tool calls in a shared tree — resolve and commit in one script, and write the message file at the *top* of it; `commit: $?` after a pipe reports the pipe, not the commit — use `${PIPESTATUS[0]}`; and print the staged set before every commit, aborting if it lists anything you did not stage, because a merge commit takes the whole index.
+
+### 10.5 Two claims I made today were wrong, and are corrected
+
+- **"A stale staged changelog will ship on anyone's next commit."** Asserted three times, defused by hand three times, never tested. Reproduced through the real hook: it does **not** — regeneration heals it on the normal path. It shipped only when the generator failed, which is the narrow hole 10.1 closes. The memory that carried the wrong claim now carries the correction above it.
+- **"This branch is 4 ahead / 5 behind."** True of `origin/main`; the local `main` ref had been stale at `94eb7b4` all day, so every `main..HEAD` count was against the wrong base. Moved to `origin/main` (`43a3d0a`); the branch fast-forwards onto it with zero conflicts.
+
+### 10.6 Verified
+
+At `1095ac7` plus the css fix: **2012 unit tests / 104 files pass**; committed tree lints at **1114 warnings, 0 errors** (under the 1136 ratchet — the "over" readings all day were peer WIP in the shared tree); svelte-check **0 errors**; the hook is live and has refused nothing legitimate. Real `node_modules` counted intact (194 entries) after every junction removal.
