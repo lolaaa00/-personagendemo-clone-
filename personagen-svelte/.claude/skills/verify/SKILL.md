@@ -313,3 +313,37 @@ Each of these produced a confident, wrong FAIL before being caught:
   process it spawns may still be holding the port — a later launch then fails with
   "Port N is already in use" while `curl http://localhost:N/login` returns 200. Check the port
   before assuming the boot failed.
+
+## Additions 2026-09-17
+
+- **When several sessions share the working tree, `vite preview` cannot be trusted to stay up.**
+  Any other session's `npm run build` regenerates the hashed chunks under it and the preview
+  dies mid-run with `ENOENT …/_app/immutable/entry/start.<hash>.js`; a `vite dev` in the same
+  tree kills in-flight `goto`s with `ERR_ABORTED` on every HMR. Verify against a **frozen
+  snapshot of the adapter-node output** instead — it is literally what Docker runs:
+  ```bash
+  SNAP=node_modules/.ux-tmp/build-snap        # inside node_modules: externals resolve by walking up
+  rm -rf "$SNAP" && mkdir -p "$SNAP" && cp -r build/. "$SNAP"/
+  grep -rl '<a string only your change emits>' "$SNAP/client/_app/immutable" | wc -l   # prove it is YOUR build
+  export SUPABASE_SERVICE_ROLE_KEY="disabled-for-verification"   # scrubs first: process env beats --env-file
+  export FAL_API_KEY="" GEMINI_API_KEY="" OPENROUTER_API_KEY="" FIRECRAWL_API_KEY=""
+  export AUTOPILOT_MAX_PER_RUN=0 AUTOPILOT_LOOKAHEAD_DAYS=0
+  export PORT=4472 HOST=127.0.0.1 ORIGIN=http://localhost:4472
+  (cd "$SNAP" && node --env-file=../../../.env index.js)
+  ```
+  adapter-node does not bundle `@supabase/supabase-js` and friends, so a copy in the scratchpad
+  fails with `ERR_MODULE_NOT_FOUND`; under `node_modules/.ux-tmp/` it resolves like production.
+  `build/index.js` reads no `.env` on its own — `--env-file` supplies the public values, and the
+  scrubs exported beforehand win. The snapshot survives any number of rebuilds underneath it.
+- **Read the composer from inside `[role="dialog"]`.** The calendar's own **Generate Post Now**
+  is a `button.btn-primary` earlier in the DOM, so a page-wide "find the primary button" returns
+  it and reports the wrong `disabled`/label. The confirm's label is not fixed either —
+  `Approve & generate`, `Save as draft`, or the destination's label — take the *last*
+  `button.btn-primary` inside the dialog, and read `.composer-error strong` for a refusal.
+- **Seat roles are provisioned by `scripts/ux/audit-tenant.mjs create|status|destroy`**
+  (`ux-<role>@personagen.test`, passwords in the gitignored `.ux-audit/accounts.json`).
+  `verify-seed.mjs` creates the single harness user only; its `destroy` still sweeps any
+  `verify-<role>@` stragglers.
+- **A viewer never reaches the composer's steps.** The preview call itself refuses with 403
+  (`checkAgentAccess(..., 'creator')`), so "walk four steps then check the confirm" is the wrong
+  probe for a read-only seat; the designed denial card is the thing to assert on.
