@@ -498,7 +498,7 @@
 </script>
 
 <svelte:head>
-	<title>Model Manager · PersonaGen</title>
+	<title>Model Manager — PersonaGen</title>
 </svelte:head>
 
 <div class="mm-page">

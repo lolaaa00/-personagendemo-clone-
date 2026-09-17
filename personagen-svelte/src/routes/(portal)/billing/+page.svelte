@@ -118,7 +118,7 @@
 </script>
 
 <svelte:head>
-	<title>Billing · PersonaGen</title>
+	<title>Billing — PersonaGen</title>
 </svelte:head>
 
 <div class="billing">
@@ -131,12 +131,17 @@
 
 	<section class="hero">
 		<div class="hero-main">
+			<!-- The h1 used to BE the balance, so this page named itself nowhere on
+			     screen: the topbar said "Dashboard" (it was missing from the title
+			     map) and the only heading was a currency amount. The page is called
+			     Billing; the balance is the number it reports. -->
+			<h1 class="page-name">Billing</h1>
 			<p class="eyebrow">Your balance</p>
 			{#if data.billingMode === 'unmetered'}
-				<h1 class="amount">∞</h1>
+				<p class="amount">∞</p>
 				<p class="sub">Complimentary account. Generations are not charged.</p>
 			{:else}
-				<h1 class="amount" class:low class:empty>{data.balanceFormatted}</h1>
+				<p class="amount" class:low class:empty>{data.balanceFormatted}</p>
 				<p class="sub">
 					{#if data.currency !== 'USD'}Shown in {data.currency} · exactly {data.balanceUsd} ·{/if}
 					{#if empty}
@@ -345,6 +350,15 @@
 		text-transform: uppercase;
 		color: var(--text-dim);
 	}
+	.page-name {
+		margin: 0 0 var(--space-2);
+		font-family: var(--font-display);
+		font-size: var(--text-xl);
+		font-weight: 700;
+		letter-spacing: var(--tracking-tight);
+		color: var(--text);
+	}
+
 	.amount {
 		margin: 0;
 		font-size: clamp(2.4rem, 6vw, 3.6rem);

@@ -211,7 +211,7 @@
 </script>
 
 <svelte:head>
-	<title>All Generations · PersonaGen</title>
+	<title>All Generations — PersonaGen</title>
 </svelte:head>
 
 <div class="gen-page">

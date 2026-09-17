@@ -906,7 +906,10 @@
 							const agent = sidebarAgents.find((a: any) => path.startsWith(`/personas/${a.id}`));
 							return agent ? agent.name : 'Persona';
 						}
-						if (path.startsWith('/brand-brief/intel')) return 'Intel Wizard';
+						// One name for this feature. The h1 and <title> say "Content Plan";
+						// the topbar and the /brand-brief link said "Intel Wizard", so two
+						// names for one thing were visible on screen simultaneously.
+						if (path.startsWith('/brand-brief/intel')) return 'Content Plan';
 						if (path.startsWith('/brand-brief')) return 'Brand Brief';
 						if (path.startsWith('/settings')) return 'Settings';
 						if (path.startsWith('/generator')) return 'New Persona';
@@ -919,8 +922,16 @@
 						if (path.startsWith('/trash')) return 'Trash';
 						if (path.startsWith('/review')) return 'Review Queue';
 						if (path.startsWith('/calendar')) return 'Calendar';
+						if (path.startsWith('/billing')) return 'Billing';
 						if (path === '/dashboard' || path === '/') return 'Dashboard';
-						return 'Dashboard';
+						// Never claim to be the dashboard. /billing fell through to this
+						// line, so the money page's topbar read "Dashboard" while the
+						// sidebar highlighted Billing and its h1 was a currency amount —
+						// the page named itself nowhere. Any route added later would have
+						// inherited the same lie; this derives a name from the path.
+						return (path.split('/').filter(Boolean)[0] ?? 'PersonaGen')
+							.replace(/-/g, ' ')
+							.replace(/(^|\s)\w/g, (c) => c.toUpperCase());
 					})()}
 				</div>
 			</div>

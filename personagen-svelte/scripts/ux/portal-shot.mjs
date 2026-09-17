@@ -54,7 +54,10 @@ for (const [role] of Object.entries(accounts)) {
 			// The portal stores its theme itself; set both so the shot is not a
 			// light page inside a dark chrome.
 			await ctx.addInitScript((t) => {
-				try { localStorage.setItem('theme', t); localStorage.setItem('personagen-theme', t); } catch { /* private mode */ }
+				// The app reads `personagen_theme` (underscore). The two keys this used to
+					// set matched nothing, so themed shots relied on the context colorScheme
+					// plus an attribute set after load, never the app's own preference path.
+					try { localStorage.setItem('personagen_theme', t); } catch { /* private mode */ }
 			}, theme);
 
 			// Resolve this role's own persona page once.

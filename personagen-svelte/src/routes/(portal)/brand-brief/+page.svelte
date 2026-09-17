@@ -920,7 +920,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 			{/each}
 		</div>
 
-		<!-- The Intel Wizard leaves this page for a focused flow, so it sits beside
+		<!-- The Content Plan leaves this page for a focused flow, so it sits beside
 		     the tablist rather than inside it: it must not read as a seventh tab. -->
 		<a
 			class="wizard-launch"
@@ -938,7 +938,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 				stroke-linecap="round"
 				stroke-linejoin="round"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg
 			>
-			<span>Intel Wizard</span>
+			<span>Content Plan</span>
 			<svg
 				aria-hidden="true"
 				class="launch-arrow"

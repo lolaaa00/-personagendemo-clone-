@@ -5,6 +5,32 @@
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<meta name="text-scale" content="scale" />
 		<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+		<script>
+			/*
+			 * Set the theme before first paint.
+			 *
+			 * initializeThemeAndColors() already honours `prefers-color-scheme`,
+			 * but it runs in onMount — after hydration. The server renders no
+			 * `data-theme`, so a dark-mode user got a full white screen on every
+			 * cold load and watched it flip. For a tool people sit in for hours
+			 * that is the first impression, every time.
+			 *
+			 * Deliberately inline and synchronous: any deferred script paints
+			 * white first, which is the whole problem. Wrapped because a browser
+			 * with site data blocked throws on localStorage access.
+			 */
+			(function () {
+				try {
+					var saved = localStorage.getItem('personagen_theme');
+					var dark = saved
+						? saved === 'dark'
+						: window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+					document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+				} catch (e) {
+					/* storage unavailable — the client init will settle it after hydration */
+				}
+			})();
+		</script>
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">

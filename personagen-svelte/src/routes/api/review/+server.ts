@@ -51,7 +51,13 @@ export const GET: RequestHandler = async ({ locals }) => {
 		.select('id, agent_id, content, platforms, status, scheduled_date, scheduled_time, created_at')
 		.eq('user_id', user.id)
 		.is('deleted_at', null)
-		.in('status', ['draft', 'scheduled'])
+		// 'rejected' is included so a rejection is auditable. It used to be
+		// excluded here, which meant a rejected post left the queue and could not
+		// be reached from any filter, tab or link on the page — indistinguishable
+		// from a delete, on an action with no undo, while the page's own subtitle
+		// promises the reason "trains the future QC reviewer". The client defaults
+		// to Draft + Scheduled, so the queue still opens on work that needs doing.
+		.in('status', ['draft', 'scheduled', 'rejected'])
 		.order('scheduled_date', { ascending: true })
 		.order('scheduled_time', { ascending: true });
 
@@ -67,6 +73,23 @@ export const GET: RequestHandler = async ({ locals }) => {
 				.select('agent_id, ugc_character_ref')
 				.in('agent_id', agentIds)
 		: { data: [] as any[] };
+	// The reason a post was rejected, so the row can show it rather than just
+	// vanishing. Latest decision per post.
+	const postIds = (drafts || []).map((d: any) => d.id);
+	const { data: reviewRows } = postIds.length
+		? await locals.supabase
+				.from('post_reviews')
+				.select('post_id, decision, reason, created_at')
+				.in('post_id', postIds)
+				.order('created_at', { ascending: false })
+		: { data: [] as any[] };
+	const reasonByPost = new Map<string, string>();
+	for (const r of reviewRows || []) {
+		if (r.decision === 'reject' && r.reason && !reasonByPost.has(r.post_id)) {
+			reasonByPost.set(r.post_id, r.reason);
+		}
+	}
+
 	const agentById = new Map<string, any>((agents || []).map((a: any) => [a.id, a]));
 	const refByAgent = new Map<string, any>(
 		(cfgs || []).map((c: any) => [c.agent_id, c.ugc_character_ref])
@@ -100,6 +123,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 			media_type: display.mediaType,
 			surface: display.surface,
 			template_title: display.templateTitle,
+			reject_reason: reasonByPost.get(d.id) ?? null,
 			quality_score: parsed?.qualityGrade?.overall ?? null,
 			quality_issue: parsed?.qualityGrade?.topIssue ?? null,
 			platforms: d.platforms ?? [],

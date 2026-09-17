@@ -112,7 +112,7 @@
 </script>
 
 <svelte:head>
-	<title>My Favorites · PersonaGen</title>
+	<title>My Favorites — PersonaGen</title>
 </svelte:head>
 
 <div class="fav-page">

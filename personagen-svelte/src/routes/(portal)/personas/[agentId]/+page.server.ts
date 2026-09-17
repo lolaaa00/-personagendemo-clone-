@@ -4,7 +4,17 @@ import { resolvePersonaGender } from '$lib/server/content/generate';
 import { error } from '@sveltejs/kit';
 import { env } from '$env/dynamic/public';
 
+/** A persona id is a uuid. Anything else cannot name one. */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export const load: PageServerLoad = async ({ locals, params }) => {
+	// A malformed id used to reach Postgres, which rejected the uuid cast with
+	// 22P02 — not PGRST116 — so the guard below treated a typo as a database
+	// failure and returned 500 "Failed to load personas". A mistyped URL is not
+	// a system fault, and the message named the plural collection on a
+	// single-persona route, implying something was broken when nothing was.
+	if (!UUID_RE.test(params.agentId)) throw error(404, 'Persona not found');
+
 	const supabaseUrl = env.PUBLIC_SUPABASE_URL ?? '';
 	const isPlaceholder = !supabaseUrl || supabaseUrl.includes('placeholder');
 

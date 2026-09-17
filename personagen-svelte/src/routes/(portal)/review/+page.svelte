@@ -78,7 +78,9 @@
 			: new URL(window.location.href).searchParams.get(k);
 	let filterAgent = $state(qp('agent') ?? 'all');
 	let filterPlatform = $state(qp('platform') ?? 'all');
-	let filterStatus = $state(readParam('status', ['all', 'draft', 'scheduled'] as const, 'all'));
+	let filterStatus = $state(
+		readParam('status', ['all', 'draft', 'scheduled', 'rejected'] as const, 'all')
+	);
 	$effect(() => syncParam('agent', filterAgent, 'all'));
 	$effect(() => syncParam('platform', filterPlatform, 'all'));
 	$effect(() => syncParam('status', filterStatus, 'all'));
@@ -97,7 +99,11 @@
 			(i) =>
 				(filterAgent === 'all' || i.agent_id === filterAgent) &&
 				(filterPlatform === 'all' || i.platforms.includes(filterPlatform)) &&
-				(filterStatus === 'all' || i.status === filterStatus)
+				// 'all' is the actionable queue, not literally everything: a rejected
+				// post is only shown when explicitly asked for.
+				(filterStatus === 'all'
+					? i.status === 'draft' || i.status === 'scheduled'
+					: i.status === filterStatus)
 		)
 	);
 
@@ -110,7 +116,10 @@
 		'Other'
 	];
 	let rejectPickerOpen = $state(false);
-	let rejectReason = $state(REJECT_REASONS[0]);
+	// No default: the page states these reasons train a QC reviewer, and a
+	// pre-selected specific value makes the most common stored reason "whichever
+	// was first in the array" rather than what the reviewer meant.
+	let rejectReason = $state('');
 	let rejectNote = $state('');
 
 	async function load() {
@@ -563,6 +572,12 @@
 	}
 </script>
 
+<svelte:head>
+	<!-- The portal's most-used daily screen had no title at all, so a pinned
+	     or backgrounded tab for it was unidentifiable. -->
+	<title>Review Queue — PersonaGen</title>
+</svelte:head>
+
 <svelte:window onkeydown={onQueueKeydown} />
 
 <div class="review-page">
@@ -644,9 +659,10 @@
 			<label class="filt">
 				<span>Status</span>
 				<select bind:value={filterStatus}>
-					<option value="all">Draft + Scheduled</option>
+					<option value="all">Needs a decision (draft + scheduled)</option>
 					<option value="draft">Draft only</option>
 					<option value="scheduled">Scheduled only</option>
+					<option value="rejected">Rejected</option>
 				</select>
 			</label>
 			<span class="filt-count" aria-live="polite">{filteredItems.length} of {items.length} shown</span>
@@ -767,6 +783,7 @@
 			<div class="reject-picker">
 				<span class="rp-label" id="rp-label">Reason:</span>
 				<select bind:value={rejectReason} aria-labelledby="rp-label">
+					<option value="" disabled>— Choose a reason —</option>
 					{#each REJECT_REASONS as r}<option value={r}>{r}</option>{/each}
 				</select>
 				<input
@@ -776,7 +793,9 @@
 					bind:value={rejectNote}
 					maxlength="300"
 				/>
-				<button class="btn-reject" onclick={submitReject} disabled={working}>Confirm reject</button>
+				<button class="btn-reject" onclick={submitReject} disabled={working || !rejectReason}
+					>Confirm reject</button
+				>
 				<button class="btn-ghost" onclick={() => (rejectPickerOpen = false)}>Cancel</button>
 			</div>
 		{/if}
