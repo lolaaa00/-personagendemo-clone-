@@ -99,3 +99,58 @@ describe('attribution loss is not filed as an analytics blip', () => {
 		expect(generate).toMatch(/const money = \[\.\.\.dropped\]\.filter/);
 	});
 });
+
+describe('the persona preview quotes every stage it debits', () => {
+	const preview = read('routes', 'api', 'persona-preview', '+server.ts');
+
+	it('is the route it claims to be', () => {
+		expect(preview.length).toBeGreaterThan(500);
+		expect(preview).toContain('RequestHandler');
+	});
+
+	it('gates before it spends, and offers somewhere to go when it refuses', () => {
+		expect(preview).toContain('assertWithinBudget(');
+		expect(preview).toContain('assertCreditsAvailable(');
+		expect(preview).toContain('INSUFFICIENT_CREDITS');
+		expect(preview).toContain("billingUrl: '/billing'");
+	});
+
+	// The seam this describe exists for. The route debits the still PLUS the
+	// enhancement pass, so quoting the still alone would gate on less than it
+	// charges — and print a smaller number on screen than the wallet loses.
+	// Inert while the chain is off, and armed the moment an operator turns it
+	// on, which is exactly the shape that keeps a pricing bug hidden (see the
+	// first-run quote, the format explorer's 3x, the forged clip duration).
+	it('the quote adds the enhancement pass to the still', () => {
+		expect(preview).toMatch(/const quotedUsd = selected\.usd \+ enhanceUsd/);
+		expect(preview).toMatch(/enhanceChain\(\) === 'upscale' \? \(upscaleUsd\(\) \?\? 0\) : 0/);
+	});
+
+	it('never quotes the still alone', () => {
+		expect(preview).toContain('creditsFor(quotedUsd)');
+		expect(preview).not.toContain('creditsFor(selected.usd)');
+	});
+
+	it('both gates are handed the same quoted figure', () => {
+		expect(preview).toMatch(/assertWithinBudget\([^)]*quotedCredits\)/);
+		expect(preview).toMatch(/assertCreditsAvailable\([^)]*quotedCredits\)/);
+	});
+
+	it('the dry run quotes the same total the real run gates on', () => {
+		// A composer that previews one number and charges another is the same bug
+		// wearing a different hat.
+		expect(preview).toContain('estimatedCostUsd: quotedUsd');
+	});
+
+	it('the receipt reports what RAN, not what was quoted', () => {
+		// The pass never-bricks to the original and then returns no cost events,
+		// so a run that fell back must not report the enhancement as charged.
+		expect(preview).toMatch(/estimatedCostUsd: selected\.usd \+ enhanced\.costEvents\.reduce/);
+	});
+
+	it('the enhancement bills on the same ledger write as the still', () => {
+		// One run, one recordCostEvents — not a second path to the ledger.
+		expect(preview.split('recordCostEvents(').length - 1).toBe(1);
+		expect(preview).toContain('...enhanced.costEvents');
+	});
+});

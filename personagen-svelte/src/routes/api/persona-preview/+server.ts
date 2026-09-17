@@ -17,6 +17,8 @@ import {
 	effectiveResolve,
 	type RegistryRow
 } from '$lib/server/model-registry';
+import { enhanceImage, upscaleUsd } from '$lib/server/content/enhance';
+import { enhanceChain } from '$lib/server/flags';
 import { assertWithinBudget } from '$lib/server/budget';
 import { assertCreditsAvailable, resolveBillingAccount, creditsFor, isCreditsError } from '$lib/server/credits';
 
@@ -115,6 +117,15 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 	const resolvedPrompt = buildHeroPortraitPrompt(briefData, draftAgent, gender);
 
+	// What this run actually costs: the still, PLUS the enhancement pass when it
+	// is both switched on and priced. Quoting the still alone would gate on less
+	// than `recordCostEvents` below debits, and would print a smaller number on
+	// screen than the wallet is charged — the same asymmetry that shipped as the
+	// format explorer's 3x under-quote and the forged clip duration. One value
+	// feeds the quote, both gates and both responses so they cannot drift.
+	const enhanceUsd = enhanceChain() === 'upscale' ? (upscaleUsd() ?? 0) : 0;
+	const quotedUsd = selected.usd + enhanceUsd;
+
 	// `preview: true` costs nothing and generates nothing — the composer's
 	// look-before-you-pay contract, kept identical to generate-avatar's.
 	if (body.preview === true) {
@@ -129,12 +140,12 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				model: selected.id,
 				modelOptions: effectiveOptions(registryRows, 'image_t2i'),
 				editable: ['model'],
-				estimatedCostUsd: selected.usd
+				estimatedCostUsd: quotedUsd
 			}
 		});
 	}
 
-	const quotedCredits = creditsFor(selected.usd);
+	const quotedCredits = creditsFor(quotedUsd);
 	try {
 		// Agentless on purpose: assertWithinBudget's per-agent daily cap simply
 		// does not apply to a persona that does not exist, and the monthly
@@ -164,10 +175,19 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			selected.id
 		);
 
+		// The enhancement chain (P0.1). Off unless an operator has switched it on
+		// AND priced it, and it returns the original on any failure — so this line
+		// can only improve the portrait or leave it exactly as it was.
+		const enhanced = await enhanceImage(svc, user.id, url, falKey);
+
 		// Recorded AFTER the image exists, so a provider call that threw is not
 		// billed — the bug fixed in c55c353 for the generation path, not repeated
 		// here. `assetUrl` keeps the spent generation recoverable from the ledger
 		// even if the user abandons the wizard without creating anything.
+		//
+		// The enhancement's own events ride the SAME call rather than a second
+		// one: one run, one ledger write, and a stage that cannot bill through a
+		// private path of its own.
 		await recordCostEvents(locals.supabase, user.id, undefined, [
 			{
 				provider: 'fal',
@@ -175,12 +195,24 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				model: `${selected.label} (persona preview)`,
 				usd: selected.usd,
 				assetUrl: url
-			}
+			},
+			...enhanced.costEvents
 		]);
 
 		return json({
 			success: true,
-			data: { url, model: selected.id, modelLabel: selected.label, estimatedCostUsd: selected.usd }
+			data: {
+				url: enhanced.url,
+				model: selected.id,
+				modelLabel: selected.label,
+				// What RAN, not what was quoted. `quotedUsd` assumes the enhancement
+				// pass happens; it never-bricks to the original, and a pass that fell
+				// back returns no cost events. Reporting the quote here would tell the
+				// user they were charged for a stage that did not run.
+				estimatedCostUsd: selected.usd + enhanced.costEvents.reduce((t, e) => t + e.usd, 0),
+				// The stages that actually ran, for the same reason.
+				enhanced: enhanced.applied
+			}
 		});
 	} catch (err) {
 		console.error('[persona-preview] Preview generation failed:', err);
