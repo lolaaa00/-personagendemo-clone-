@@ -2,6 +2,7 @@
 	import { confirmAction } from '$lib/stores/confirm.svelte';
 	import { onMount } from 'svelte';
 	import { invalidateAll } from '$app/navigation';
+	import PageShell from '$lib/components/ui/PageShell.svelte';
 
 	let { data } = $props();
 
@@ -117,11 +118,8 @@
 	const empty = $derived(data.billingMode !== 'unmetered' && data.balance <= 0);
 </script>
 
-<svelte:head>
-	<title>Billing — PersonaGen</title>
-</svelte:head>
-
-<div class="billing">
+<PageShell title="Billing" description="What you have, what it buys, and what each generation costs.">
+	<div class="billing">
 	{#if banner}
 		<div class="banner" class:ok={data.status === 'success'} role="status">
 			{banner}
@@ -131,11 +129,9 @@
 
 	<section class="hero">
 		<div class="hero-main">
-			<!-- The h1 used to BE the balance, so this page named itself nowhere on
-			     screen: the topbar said "Dashboard" (it was missing from the title
-			     map) and the only heading was a currency amount. The page is called
-			     Billing; the balance is the number it reports. -->
-			<h1 class="page-name">Billing</h1>
+			<!-- The balance is a number this page reports, not the page's name —
+			     the h1 used to BE the currency amount, which is why the page named
+			     itself nowhere on screen. PageShell owns the name now. -->
 			<p class="eyebrow">Your balance</p>
 			{#if data.billingMode === 'unmetered'}
 				<p class="amount">∞</p>
@@ -302,7 +298,7 @@
 			<dd>No. Purchased and welcome credit stays until you use it.</dd>
 		</dl>
 	</section>
-</div>
+</PageShell>
 
 <style>
 	.billing {

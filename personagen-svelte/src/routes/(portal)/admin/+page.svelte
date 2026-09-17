@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { promptAction } from '$lib/stores/confirm.svelte';
 	import { showToast } from '$lib/stores/ui.svelte';
+	import PageShell from '$lib/components/ui/PageShell.svelte';
 	let { data } = $props();
 
 	type Tab = 'overview' | 'activity' | 'seats' | 'spend' | 'access' | 'platform' | 'controls';
@@ -353,11 +354,9 @@
 	});
 </script>
 
-<svelte:head><title>Admin Console — PersonaGen</title></svelte:head>
-
-<div class="admin-page">
+<PageShell title="Admin Console" width="wide">
+	<div class="admin-page">
 	<header class="admin-head">
-		<h1>Admin Console</h1>
 		{#if data.isPlatformAdmin}
 			<p>
 				Platform administration — switches, every account's wallet and behaviour, the model registry
@@ -1177,7 +1176,7 @@
 			{/if}
 		</section>
 	{/if}
-</div>
+</PageShell>
 
 <style>
 	.admin-page {

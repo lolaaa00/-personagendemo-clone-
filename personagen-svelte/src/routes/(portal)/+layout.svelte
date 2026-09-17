@@ -1793,7 +1793,6 @@
 		color: var(--text);
 	}
 	.pw-gate-field input:focus {
-		outline: none;
 		border-color: var(--accent);
 	}
 	.pw-gate-btn {
@@ -1971,8 +1970,7 @@
 	}
 
 	.sidebar-persona-search-input:focus {
-		outline: none;
-		border-color: var(--accent-mid);
+		border-color: var(--accent);
 		background: var(--surface);
 	}
 

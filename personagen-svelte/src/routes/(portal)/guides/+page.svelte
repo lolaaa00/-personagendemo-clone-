@@ -1911,13 +1911,14 @@
 		justify-content: space-between;
 		gap: var(--space-6);
 		flex-wrap: wrap;
-		padding: var(--space-5) var(--space-8);
+		padding-block: var(--space-5);
+		padding-inline: max(var(--space-8), calc((100% - var(--page-wide)) / 2));
 		border-bottom: 1px solid var(--border);
 		background: color-mix(in srgb, var(--bg) 88%, transparent);
 		backdrop-filter: blur(12px);
 	}
 	.gd-top-titles h1 {
-		font-size: 1.45rem;
+		font-size: var(--text-xl);
 		font-weight: 700;
 		color: var(--text);
 		margin: 0;
@@ -1949,7 +1950,8 @@
 		grid-template-columns: 280px minmax(0, 1fr) 250px;
 		gap: var(--space-8);
 		align-items: start;
-		padding: var(--space-6) var(--space-8) var(--space-16);
+		padding-block: var(--space-6) var(--space-16);
+		padding-inline: max(var(--space-8), calc((100% - var(--page-wide)) / 2));
 		width: 100%;
 	}
 

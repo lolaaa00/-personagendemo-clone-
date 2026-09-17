@@ -10,6 +10,7 @@
 	import { Posts } from '$lib/services/api';
 	import { SURFACE_LABEL, type PostSurface } from '$lib/components/feed/postDisplay';
 	import { confirmDeletePosts } from '$lib/confirm-preview';
+	import PageShell from '$lib/components/ui/PageShell.svelte';
 
 	interface ReviewItem {
 		id: string;
@@ -29,6 +30,8 @@
 		platforms: string[];
 		scheduled_date: string | null;
 		scheduled_time: string | null;
+		/** Why this post was rejected, from the post_reviews log. */
+		reject_reason: string | null;
 	}
 
 	/** Thumbnail-safe source: a video's mp4 URL must never land in an <img> —
@@ -116,6 +119,10 @@
 		'Other'
 	];
 	let rejectPickerOpen = $state(false);
+	/** Who the open picker acts on. Separate from `selected` on purpose: a row's
+	 *  Reject targets that row and leaves the bulk selection untouched, so the
+	 *  three destructive bulk buttons cannot be armed by a single-row action. */
+	let rejectTargets = $state<string[]>([]);
 	// No default: the page states these reasons train a QC reviewer, and a
 	// pre-selected specific value makes the most common stored reason "whichever
 	// was first in the array" rather than what the reviewer meant.
@@ -158,7 +165,7 @@
 		globalToast(msg, /fail|error|could not|couldn't|rejected/i.test(msg) ? 'error' : 'success');
 	}
 
-	async function act(action: 'approve' | 'reject', ids: string[], reason?: string) {
+	async function act(action: 'approve' | 'reject' | 'restore', ids: string[], reason?: string) {
 		if (ids.length === 0 || working) return;
 		working = true;
 		try {
@@ -181,28 +188,55 @@
 			// `filteredItems` already hides anything the active filter excludes, so
 			// setting the new status is enough: the row stays under "all" and
 			// disappears under "Draft only", which is what each filter means.
-			const nextStatus = action === 'approve' ? 'scheduled' : 'rejected';
-			items = items.map((i) => (ids.includes(i.id) ? { ...i, status: nextStatus } : i));
+			const nextStatus =
+				action === 'approve' ? 'scheduled' : action === 'restore' ? 'draft' : 'rejected';
+			items = items.map((i) =>
+				ids.includes(i.id)
+					? { ...i, status: nextStatus, reject_reason: action === 'restore' ? null : i.reject_reason }
+					: i
+			);
 			selected = new Set([...selected].filter((id) => !ids.includes(id)));
 			if (drawerPost && ids.includes(drawerPost.id)) drawerPost = null;
+			const noun = d.updated === 1 ? 'post' : 'posts';
 			showToast(
 				action === 'approve'
-					? `✅ ${d.updated} post(s) approved & scheduled`
-					: `🗑 ${d.updated} post(s) rejected`
+					? `✅ ${d.updated} ${noun} approved & scheduled`
+					: action === 'restore'
+						? `↩ ${d.updated} ${noun} returned to draft`
+						: `🗑 ${d.updated} ${noun} rejected`
 			);
 		} catch (e: any) {
 			showToast(`⚠ ${e.message}`);
 		} finally {
 			working = false;
 			rejectPickerOpen = false;
+			rejectTargets = [];
 			rejectNote = '';
 		}
 	}
 
 	function submitReject() {
 		const reason = rejectNote.trim() ? `${rejectReason}: ${rejectNote.trim()}` : rejectReason;
-		act('reject', [...selected], reason);
+		act('reject', [...rejectTargets], reason);
 	}
+
+	/** Open the picker against an explicit list, without disturbing `selected`. */
+	function openRejectPicker(ids: string[]) {
+		if (!ids.length) return;
+		rejectTargets = ids;
+		rejectReason = '';
+		rejectNote = '';
+		rejectPickerOpen = true;
+	}
+
+	/** The captions the open picker is about, so the user can see what they are
+	 *  rejecting — the picker renders above the table, far from the row. */
+	let rejectTargetLabels = $derived(
+		rejectTargets
+			.map((id) => items.find((i) => i.id === id))
+			.filter(Boolean)
+			.map((i: any) => (i.text || '').slice(0, 80))
+	);
 
 	// ── Hard delete ────────────────────────────────────────────────────────
 	// Reject/Unschedule only changes status (the row survives, with a logged
@@ -407,9 +441,8 @@
 	// Reject from the drawer routes through the existing reason picker so the
 	// decision (+ reason) still lands in post_reviews.
 	function drawerReject(post: any) {
-		selected = new Set([post.id]);
 		drawerPost = null;
-		rejectPickerOpen = true;
+		openRejectPicker([post.id]);
 	}
 
 	async function drawerSaveText(post: any, newText: string): Promise<boolean> {
@@ -530,9 +563,64 @@
 
 	// ── Board lanes ──
 	const isFlagged = (i: ReviewItem) => i.quality_score != null && i.quality_score < 6;
+
+	/** Nothing writes `quality_score` yet, so rendering the column spends a column
+	 *  of horizontal budget on a cell reading "—" on every row — and at narrow
+	 *  widths QC was one of the few columns that survived, displacing the caption
+	 *  the reviewer is there to judge. It returns by itself the day scores do. */
+	let hasQc = $derived(items.some((i) => i.quality_score != null));
 	let laneFlagged = $derived(sortedItems.filter(isFlagged));
 	let laneNeeds = $derived(sortedItems.filter((i) => i.status === 'draft' && !isFlagged(i)));
-	let laneScheduled = $derived(sortedItems.filter((i) => i.status !== 'draft' && !isFlagged(i)));
+	let laneScheduled = $derived(sortedItems.filter((i) => i.status === 'scheduled' && !isFlagged(i)));
+	let laneRejected = $derived(sortedItems.filter((i) => i.status === 'rejected' && !isFlagged(i)));
+
+	/** The lanes, as statuses a post can actually be in. The flagged lane only
+	 *  appears once something writes a QC score — same reason the QC column is
+	 *  conditional. */
+	let boardLanes = $derived([
+		{ title: 'Needs review', cls: 'needs', status: 'draft', list: laneNeeds },
+		{ title: 'Scheduled', cls: 'sched', status: 'scheduled', list: laneScheduled },
+		{ title: 'Rejected', cls: 'rej', status: 'rejected', list: laneRejected },
+		...(hasQc
+			? [{ title: 'Flagged · QC < 6.0', cls: 'flag', status: '', list: laneFlagged }]
+			: [])
+	]);
+
+	// ── Board drag and drop ───────────────────────────────────────────────
+	// Every move maps onto an action the API already exposes, so a drag is the
+	// same operation as the button — not a second, divergent code path.
+	let dragId = $state<string | null>(null);
+	let dragOverLane = $state<string>('');
+
+	/** null = this move is not offered. Rejecting needs a reason, so a drop into
+	 *  Rejected opens the reason picker rather than silently inventing one. */
+	function moveFor(from: string, to: string): 'approve' | 'reject' | 'restore' | null {
+		if (from === to) return null;
+		if (from === 'draft' && to === 'scheduled') return 'approve';
+		if (from === 'rejected' && to === 'draft') return 'restore';
+		if (to === 'rejected' && (from === 'draft' || from === 'scheduled')) return 'reject';
+		return null;
+	}
+
+	function draggedItem() {
+		return dragId ? sortedItems.find((i) => i.id === dragId) : undefined;
+	}
+
+	function laneAccepts(laneStatus: string) {
+		const item = draggedItem();
+		return !!item && !!laneStatus && moveFor(item.status, laneStatus) !== null;
+	}
+
+	function onLaneDrop(laneStatus: string) {
+		const item = draggedItem();
+		dragOverLane = '';
+		dragId = null;
+		if (!item) return;
+		const move = moveFor(item.status, laneStatus);
+		if (!move) return;
+		if (move === 'reject') openRejectPicker([item.id]);
+		else void act(move, [item.id]);
+	}
 
 	// ── Keyboard triage (split / deck / table) ──
 	function overlayOpen() {
@@ -541,8 +629,7 @@
 		);
 	}
 	function rejectOne(item: ReviewItem) {
-		selected = new Set([item.id]);
-		rejectPickerOpen = true;
+		openRejectPicker([item.id]);
 	}
 	function onQueueKeydown(e: KeyboardEvent) {
 		if (loading || working || deleteBusy || overlayOpen()) return;
@@ -572,24 +659,14 @@
 	}
 </script>
 
-<svelte:head>
-	<!-- The portal's most-used daily screen had no title at all, so a pinned
-	     or backgrounded tab for it was unidentifiable. -->
-	<title>Review Queue — PersonaGen</title>
-</svelte:head>
-
 <svelte:window onkeydown={onQueueKeydown} />
 
-<div class="review-page">
-	<header class="review-header">
-		<div>
-			<h1>Review Queue</h1>
-			<p class="sub">
-				Pending content from every persona — drafts to approve <em>and</em> scheduled posts not
-				yet published. Approve to schedule, reject with a reason (reasons train the future QC
-				reviewer).
-			</p>
-		</div>
+<PageShell
+	title="Review Queue"
+	width="wide"
+	description="Pending content from every persona — drafts to approve and scheduled posts not yet published. Approve to schedule, or reject with a reason."
+>
+	{#snippet actions()}
 		<div class="header-actions">
 			<button class="btn-ghost" onclick={load} disabled={loading || working}>
 				<svg
@@ -609,7 +686,7 @@
 				Refresh
 			</button>
 		</div>
-	</header>
+	{/snippet}
 
 	{#if loading}
 		<div class="empty" role="status" aria-live="polite">Loading queue…</div>
@@ -637,6 +714,7 @@
 		</div>
 	{:else}
 		<h2 class="sr-only">Filter the queue</h2>
+		<div class="queue-toolbar">
 		<div class="filter-bar">
 			<label class="filt">
 				<span>Persona</span>
@@ -700,7 +778,9 @@
 				</span>
 			{/if}
 		</div>
+		</div>
 
+		{#if selected.size > 0}
 		<h2 class="sr-only">Bulk actions</h2>
 		<div class="bulk-bar">
 			<label class="check-all">
@@ -733,7 +813,7 @@
 				<button
 					class="btn-reject"
 					disabled={selected.size === 0 || working || deleteBusy}
-					onclick={() => (rejectPickerOpen = true)}
+					onclick={() => openRejectPicker([...selected])}
 				>
 					<svg
 						width="16"
@@ -777,11 +857,17 @@
 				</button>
 			</div>
 		</div>
+		{/if}
 
 		{#if rejectPickerOpen}
 			<h2 class="sr-only">Reject reason</h2>
 			<div class="reject-picker">
-				<span class="rp-label" id="rp-label">Reason:</span>
+				<span class="rp-label" id="rp-label">
+					Reject {rejectTargets.length === 1 ? '1 post' : `${rejectTargets.length} posts`}:
+				</span>
+				{#if rejectTargetLabels.length === 1}
+					<span class="rp-target" title={rejectTargetLabels[0]}>“{rejectTargetLabels[0]}”</span>
+				{/if}
 				<select bind:value={rejectReason} aria-labelledby="rp-label">
 					<option value="" disabled>— Choose a reason —</option>
 					{#each REJECT_REASONS as r}<option value={r}>{r}</option>{/each}
@@ -796,7 +882,13 @@
 				<button class="btn-reject" onclick={submitReject} disabled={working || !rejectReason}
 					>Confirm reject</button
 				>
-				<button class="btn-ghost" onclick={() => (rejectPickerOpen = false)}>Cancel</button>
+				<button
+					class="btn-ghost"
+					onclick={() => {
+						rejectPickerOpen = false;
+						rejectTargets = [];
+					}}>Cancel</button
+				>
 			</div>
 		{/if}
 
@@ -1036,10 +1128,8 @@
 							<button
 								class="btn-reject sm"
 								disabled={working || deleteBusy}
-								onclick={() => {
-									selected = new Set([item.id]);
-									rejectPickerOpen = true;
-								}}>{item.status === 'scheduled' ? 'Unschedule' : 'Reject'}</button
+								onclick={() => openRejectPicker([item.id])}
+								>{item.status === 'scheduled' ? 'Unschedule' : 'Reject'}</button
 							>
 							<button
 								class="btn-delete sm"
@@ -1096,12 +1186,14 @@
 							</th>
 							<th class="th-cap">Caption</th>
 							<th class="th-plat">Platforms</th>
+							{#if hasQc}
 							<th>
 								<button class="th-sort" class:on={sortKey === 'qc'} onclick={() => setSort('qc')}>
 									QC{sortKey === 'qc' ? (sortDir === 1 ? ' ↑' : ' ↓') : ''}
 								</button>
 							</th>
-							<th>
+							{/if}
+							<th class="th-slot">
 								<button class="th-sort" class:on={sortKey === 'slot'} onclick={() => setSort('slot')}>
 									Slot{sortKey === 'slot' ? (sortDir === 1 ? ' ↑' : ' ↓') : ''}
 								</button>
@@ -1160,10 +1252,12 @@
 											cursor = i;
 											openDrawer(item);
 										}}>{item.text}</button>
+									<p class="cap-meta">{item.agent_name} · {slotLabel(item)}</p>
 								</td>
 								<td class="td-plat">
 									{#each item.platforms as p}<span class="plat-chip">{platformLabel(p)}</span>{/each}
 								</td>
+								{#if hasQc}
 								<td class="td-qc">
 									{#if item.quality_score != null}
 										<span
@@ -1175,8 +1269,14 @@
 										<span class="td-dash" aria-label="No QC score">—</span>
 									{/if}
 								</td>
+								{/if}
 								<td class="td-slot">{slotLabel(item)}</td>
-								<td class="td-status"><span class="status-badge status-{item.status}">{item.status}</span></td>
+								<td class="td-status">
+									<span class="status-badge status-{item.status}">{item.status}</span>
+									{#if item.status === 'rejected' && item.reject_reason}
+										<span class="reject-why" title={item.reject_reason}>{item.reject_reason}</span>
+									{/if}
+								</td>
 								<td class="td-act">
 									{#if item.status === 'draft'}
 										<button
@@ -1187,6 +1287,15 @@
 											aria-label="Approve post by {item.agent_name}"
 											onclick={() => act('approve', [item.id])}
 											><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg></button>
+									{:else if item.status === 'rejected'}
+										<button
+											type="button"
+											class="row-btn row-restore"
+											disabled={working || deleteBusy}
+											title="Return to draft"
+											aria-label="Return post by {item.agent_name} to draft"
+											onclick={() => act('restore', [item.id])}
+											><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7v6h6" /><path d="M3.51 13a9 9 0 105.36-8.36L3 10" /></svg></button>
 									{:else}
 										<!-- Holds the Approve slot open so Reject and Delete never
 										     move between rows of different status. -->
@@ -1196,7 +1305,11 @@
 										type="button"
 										class="row-btn row-no"
 										disabled={working || deleteBusy}
-										title={item.status === 'draft' ? 'Reject with a reason' : 'Unschedule with a reason'}
+										title={item.status === 'draft'
+											? 'Reject with a reason'
+											: item.status === 'rejected'
+												? 'Change the rejection reason'
+												: 'Unschedule with a reason'}
 										aria-label="Reject post by {item.agent_name}"
 										onclick={() => rejectOne(item)}
 										><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg></button>
@@ -1399,14 +1512,43 @@
 			<!-- ═══ BOARD — pipeline lanes. Flagged (QC < 6) gets its own lane so
 			     low-quality drafts stop hiding among good ones. ═══ -->
 			<div class="board">
-				{#each [{ title: 'Needs review', cls: 'needs', list: laneNeeds }, { title: 'Scheduled', cls: 'sched', list: laneScheduled }, { title: 'Flagged · QC < 6.0', cls: 'flag', list: laneFlagged }] as lane (lane.cls)}
-					<section class="lane {lane.cls}">
+				{#each boardLanes as lane (lane.cls)}
+					<!-- svelte-ignore a11y_no_static_element_interactions -->
+					<section
+						class="lane {lane.cls}"
+						class:drop-ok={dragOverLane === lane.cls && laneAccepts(lane.status)}
+						ondragover={(e) => {
+							if (!laneAccepts(lane.status)) return;
+							e.preventDefault();
+							dragOverLane = lane.cls;
+						}}
+						ondragleave={() => {
+							if (dragOverLane === lane.cls) dragOverLane = '';
+						}}
+						ondrop={(e) => {
+							e.preventDefault();
+							onLaneDrop(lane.status);
+						}}
+					>
 						<header class="lane-head">
 							<h3 class="lane-title">{lane.title}</h3>
 							<span class="lane-count">{lane.list.length}</span>
 						</header>
 						{#each lane.list as item (item.id)}
-							<div class="lane-card" class:flagged={lane.cls === 'flag'}>
+							<div
+								class="lane-card"
+								class:flagged={lane.cls === 'flag'}
+								class:dragging={dragId === item.id}
+								draggable="true"
+								ondragstart={(e) => {
+									dragId = item.id;
+									if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
+								}}
+								ondragend={() => {
+									dragId = null;
+									dragOverLane = '';
+								}}
+							>
 								<button
 									type="button"
 									class="lane-thumb"
@@ -1475,31 +1617,12 @@
 		poster={lightbox?.poster ?? null}
 		onClose={() => (lightbox = null)}
 	/>
-</div>
+</PageShell>
 
 <style>
-	.review-page {
-		max-width: 1200px;
-		margin: 0 auto;
-		padding: 1.5rem;
-	}
-	.review-header {
-		display: flex;
-		justify-content: space-between;
-		align-items: flex-start;
-		gap: 1rem;
-		margin-bottom: 1.25rem;
-	}
-	.review-header h1 {
-		margin: 0 0 0.25rem 0;
-		font-size: 1.4rem;
-	}
-	.sub {
-		margin: 0;
-		color: var(--text-dim);
-		font-size: var(--text-sm, 0.85rem);
-		max-width: 640px;
-	}	.empty {
+	/* The page frame, masthead and h1 scale now come from PageShell — see the
+	   note there on why routes no longer choose their own width. */
+	.empty {
 		padding: 3rem;
 		text-align: center;
 		color: var(--text-dim);
@@ -2156,12 +2279,13 @@
 		font-weight: var(--weight-semi);
 	}
 	.td-cap {
-		max-width: 320px;
+		width: 100%; /* absorbs whatever the fixed columns do not use */
+		max-width: 0; /* with width:100%, lets the cell shrink below its content */
 	}
 	.cap-open {
 		display: block;
 		width: 100%;
-		max-width: 320px;
+		max-width: 100%;
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -2221,20 +2345,103 @@
 		color: var(--success-text);
 		border-color: var(--success);
 	}
+	/* Filters and view modes share a row and wrap together. They used to be two
+	   stacked full-width bands, which with the always-on bulk bar put the first
+	   post below the fold at 640px and at 200% zoom. */
+	/* Drag affordances. A lane only lights up for a move the API can perform,
+	   so an impossible drag reads as impossible before the user commits to it. */
+	.lane-card {
+		cursor: grab;
+	}
+	.lane-card.dragging {
+		opacity: 0.45;
+		cursor: grabbing;
+	}
+	.lane.drop-ok {
+		outline: 2px dashed var(--accent);
+		outline-offset: -2px;
+		background: var(--accent-soft);
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.lane-card.dragging {
+			opacity: 1;
+		}
+	}
+	.queue-toolbar {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--space-3);
+		margin-bottom: var(--space-4);
+	}
+	.reject-why {
+		display: block;
+		max-width: 22ch;
+		margin-top: 2px;
+		overflow: hidden;
+		font-size: var(--text-xs);
+		line-height: var(--leading-snug);
+		color: var(--text-dim);
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.rp-target {
+		max-width: 34ch;
+		overflow: hidden;
+		font-style: italic;
+		color: var(--text-muted);
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.row-restore:hover:not(:disabled) {
+		background: var(--accent-soft);
+		border-color: var(--accent);
+		color: var(--accent-text);
+	}
 	.row-no:hover:not(:disabled),
 	.row-del:hover:not(:disabled) {
 		background: var(--error-soft);
 		color: var(--error-text);
 		border-color: var(--error);
 	}
-	@media (max-width: 900px) {
-		.th-cap,
-		.td-cap,
+	@media (max-width: 1023px) {
+		/* Platforms and the media thumbnail are context, not the decision. */
 		.th-plat,
 		.td-plat,
-		.th-status,
-		.td-status {
+		.queue-tbl thead th:nth-child(2),
+		.queue-tbl tbody td:nth-child(2) {
 			display: none;
+		}
+	}
+	@media (max-width: 767px) {
+		/* Persona and slot fold into the caption cell's meta line rather than
+		   disappearing — see .cap-meta, which is in the DOM at every width. */
+		.td-agent,
+		.queue-tbl thead th:nth-child(3),
+		.th-slot,
+		.td-slot {
+			display: none;
+		}
+	}
+	/* The caption's supporting facts, shown only once their columns fold away. */
+	.cap-meta {
+		display: none;
+		margin-top: 2px;
+		font-size: var(--text-xs);
+		color: var(--text-dim);
+	}
+	@media (max-width: 767px) {
+		.cap-meta {
+			display: block;
+		}
+		.cap-open {
+			white-space: normal;
+			min-height: 0;
+			line-height: var(--leading-snug);
+		}
+		.td-cap {
+			padding-block: var(--space-2);
 		}
 	}
 

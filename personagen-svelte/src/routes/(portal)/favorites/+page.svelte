@@ -6,6 +6,7 @@
 	import { Posts, parseJsonResponse } from '$lib/services/api';
 	import { showToast } from '$lib/stores/ui.svelte';
 	import { readParam, syncParam } from '$lib/url-state';
+	import PageShell from '$lib/components/ui/PageShell.svelte';
 
 	let { data } = $props();
 
@@ -111,19 +112,11 @@
 	}
 </script>
 
-<svelte:head>
-	<title>My Favorites — PersonaGen</title>
-</svelte:head>
-
-<div class="fav-page">
-	<header class="fav-header">
-		<div>
-			<h1>My Favorites</h1>
-			<p class="fav-sub">
-				Everything you've hearted — best posts and go-to personas, one tap away.
-			</p>
-		</div>
-	</header>
+<PageShell
+	title="My Favorites"
+	width="wide"
+	description="Everything you've hearted — best posts and go-to personas, one tap away."
+>
 
 	<div class="fav-tabs" role="tablist" aria-label="Favorite type">
 		<button
@@ -311,7 +304,7 @@
 			{/each}
 		</div>
 	{/if}
-</div>
+</PageShell>
 
 {#if modalPost}
 	<PostDrawer
@@ -334,23 +327,8 @@
 {/if}
 
 <style>
-	.fav-page {
-		max-width: 1280px;
-		margin: 0 auto;
-	}
 
-	.fav-header h1 {
-		font-family: var(--font-display);
-		font-size: 1.5rem;
-		font-weight: 700;
-		margin: 0 0 0.25rem;
-	}
 
-	.fav-sub {
-		color: var(--text-muted);
-		font-size: 0.85rem;
-		margin: 0 0 var(--space-5);
-	}
 
 	/* ── Tabs ── */
 	.fav-tabs {

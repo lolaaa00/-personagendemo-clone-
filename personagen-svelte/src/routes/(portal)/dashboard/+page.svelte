@@ -4,6 +4,7 @@
 	import SparkChart from '$lib/components/dashboard/SparkChart.svelte';
 	import PlatformBars from '$lib/components/dashboard/PlatformBars.svelte';
 	import AnalyticsPanel from '$lib/components/dashboard/AnalyticsPanel.svelte';
+	import PageShell from '$lib/components/ui/PageShell.svelte';
 
 	let { data } = $props();
 
@@ -12,21 +13,18 @@
 
 
 <svelte:head>
-	<title>Dashboard — PersonaGen</title>
 	<meta
 		name="description"
 		content="PersonaGen dashboard — status, engagement and spend for every persona you run."
 	/>
 </svelte:head>
 
-<div class="dashboard-page">
-	<h1 class="sr-only">Dashboard</h1>
-	<!-- Section Tag -->
-	<span class="section-tag tag-teal">Operations Center</span>
-	<h2 class="section-title">Persona Roster Health & Status</h2>
-	<p class="section-lead">
-		Status, engagement and spend for every persona you run.
-	</p>
+<PageShell
+	title="Dashboard"
+	width="wide"
+	description="Status, engagement and spend for every persona you run."
+>
+	<div class="dashboard-page">
 
 	<!-- KPI Grid -->
 	<KPIGrid agents={data.agents} postsThisWeek={data.postsThisWeek} />
@@ -165,7 +163,7 @@
 	<div class="analytics-section">
 		<AnalyticsPanel agents={creatorAgents} seat={(data as any).seat} />
 	</div>
-</div>
+</PageShell>
 
 <style>
 	.dashboard-page {

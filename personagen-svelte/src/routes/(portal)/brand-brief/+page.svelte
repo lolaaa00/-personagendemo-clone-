@@ -8,6 +8,7 @@
 	import { browser } from '$app/environment';
 	import { BrandBrief } from '$lib/services/api';
 	import { confirmAction } from '$lib/stores/confirm.svelte';
+	import PageShell from '$lib/components/ui/PageShell.svelte';
 
 	let { data } = $props<{
 		data: {
@@ -128,7 +129,25 @@
 	// wizard nested in a tab has no exit and no progress in the URL, so it now
 	// lives at its own focused route (`/brand-brief/intel`); stale `?tab=intel`
 	// links are redirected there in +page.server.ts.
-	type TabKey = 'overview' | 'products' | 'visual' | 'voice' | 'audience' | 'competitors';
+	type TabKey =
+		| 'overview'
+		| 'products'
+		| 'visual'
+		| 'voice'
+		| 'audience'
+		| 'competitors'
+		| 'plan';
+
+	/** The plan the Content Plan wizard saved onto this brief.
+	 *
+	 *  The wizard has been writing `data.contentStrategy` for a while and NOTHING
+	 *  read it back: six steps of work, and the best output in the product, were
+	 *  reachable only from the wizard's own last screen — gone on navigation, gone
+	 *  on a different browser — while the wizard told the user in writing that
+	 *  their answers were kept. A write with no read is not persistence. */
+	let contentStrategy = $derived(
+		(data.brief as any)?.data?.contentStrategy ?? (data.brief as any)?.contentStrategy ?? null
+	);
 
 	const TABS: { key: TabKey; label: string; icon: string }[] = [
 		{
@@ -155,6 +174,11 @@
 			key: 'audience',
 			label: 'Target Audience',
 			icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z'
+		},
+		{
+			key: 'plan',
+			label: 'Content Plan',
+			icon: 'M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11'
 		},
 		{
 			key: 'competitors',
@@ -790,17 +814,8 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 	);
 </script>
 
-<svelte:head>
-	<title>Brand Brief — PersonaGen</title>
-</svelte:head>
-
-<section class="page">
-	<header class="page-header">
-		<div class="header-top">
-			<div>
-				<h1>Brand Brief</h1>
-				<p class="subtitle">Define your brand identity for AI persona alignment.</p>
-			</div>
+<PageShell title="Brand Brief" description="Define your brand identity for AI persona alignment.">
+	{#snippet actions()}
 			<div class="header-actions">
 				{#if briefList.length > 0}
 					<select
@@ -887,8 +902,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 					Save
 				</button>
 			</div>
-		</div>
-	</header>
+	{/snippet}
 
 	<!-- Tabs -->
 	<div class="tabs-row">
@@ -2480,9 +2494,97 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 					</button>
 				</div>
 			</div>
+		{:else if activeTab === 'plan'}
+			<div class="panel" style="animation: fadeUp 0.25s var(--ease-out);">
+				{#if !contentStrategy}
+					<div class="plan-empty">
+						<h2>No content plan yet</h2>
+						<p>
+							The Content Plan wizard turns this brief into content pillars, a weekly schedule
+							and a platform order. It runs on what you have already written here — it calls no
+							model and costs nothing.
+						</p>
+						<a class="action-btn primary" href="/brand-brief/intel">Build a content plan</a>
+					</div>
+				{:else}
+					<div class="plan-head">
+						<div>
+							<h2>Content plan</h2>
+							<p class="plan-built">
+								Built {new Date(contentStrategy.builtAt).toLocaleDateString()} from this brief.
+								These are commitments, not predictions — the plan makes no claim about your reach.
+							</p>
+						</div>
+						<a class="action-btn" href="/brand-brief/intel">Rebuild</a>
+					</div>
+
+					<section class="plan-section">
+						<h3>Content pillars</h3>
+						<ul class="plan-pillars">
+							{#each contentStrategy.pillars ?? [] as pillar (pillar.name)}
+								<li class="plan-pillar">
+									<div class="plan-pillar-top">
+										<strong>{pillar.name}</strong>
+										<span class="plan-badge">{pillar.priority}</span>
+									</div>
+									<p>{pillar.description}</p>
+									<p class="plan-from">{pillar.from}</p>
+								</li>
+							{/each}
+						</ul>
+					</section>
+
+					<section class="plan-section">
+						<h3>Weekly schedule</h3>
+						<table class="plan-table">
+							<thead>
+								<tr><th>Day</th><th>Time</th><th>Format</th><th>Platform</th></tr>
+							</thead>
+							<tbody>
+								{#each contentStrategy.schedule ?? [] as slot, i (`${slot.day}-${slot.time}-${i}`)}
+									<tr>
+										<td>{slot.day}</td>
+										<td>{slot.time}</td>
+										<td>{slot.type}</td>
+										<td>{slot.platform}</td>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</section>
+
+					<section class="plan-section">
+						<h3>Platform order</h3>
+						<ol class="plan-platforms">
+							{#each contentStrategy.platforms ?? [] as fit (fit.platform)}
+								<li>
+									<strong>{fit.platform}</strong>
+									<span class="plan-why">{fit.why}</span>
+									{#if fit.fromYou}<span class="plan-badge">You named this</span>{/if}
+								</li>
+							{/each}
+						</ol>
+					</section>
+
+					{#if contentStrategy.provenance}
+						<section class="plan-section plan-prov">
+							<h3>What this was built from</h3>
+							{#if contentStrategy.provenance.used?.length}
+								<p><strong>Used:</strong> {contentStrategy.provenance.used.join(', ')}</p>
+							{/if}
+							{#if contentStrategy.provenance.missing?.length}
+								<p>
+									<strong>Missing:</strong> {contentStrategy.provenance.missing.join(', ')} — fill
+									these in and rebuild for a sharper plan.
+								</p>
+							{/if}
+						</section>
+					{/if}
+				{/if}
+			</div>
 		{/if}
 	</div>
-</section>
+</PageShell>
 
 <!-- Image lightbox: logo + product photos enlarge like persona profile shots -->
 <svelte:window
@@ -2907,6 +3009,104 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 	}
 
 	/* Tabs */
+	/* ── Content plan read-back ── */
+	.plan-empty {
+		max-width: 60ch;
+		padding: var(--space-8) 0;
+	}
+	.plan-head {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: var(--space-4);
+		margin-bottom: var(--space-6);
+	}
+	.plan-built {
+		max-width: 62ch;
+		margin: var(--space-2) 0 0;
+		color: var(--text-muted);
+		font-size: var(--text-base);
+	}
+	.plan-section {
+		margin-bottom: var(--space-8);
+	}
+	.plan-section h3 {
+		margin: 0 0 var(--space-3);
+		font-size: var(--text-lg);
+	}
+	.plan-pillars {
+		display: grid;
+		gap: var(--space-3);
+		grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+	.plan-pillar {
+		padding: var(--space-4);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-md);
+		background: var(--surface);
+	}
+	.plan-pillar-top {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--space-2);
+		margin-bottom: var(--space-2);
+	}
+	.plan-pillar p {
+		margin: 0;
+		font-size: var(--text-base);
+		line-height: var(--leading-normal);
+		color: var(--text-muted);
+	}
+	.plan-from,
+	.plan-why {
+		display: block;
+		margin-top: var(--space-2);
+		font-size: var(--text-sm);
+		color: var(--text-dim);
+	}
+	.plan-badge {
+		padding: 2px 8px;
+		border-radius: var(--radius-full);
+		background: var(--accent-soft);
+		color: var(--accent-text);
+		font-size: var(--text-xs);
+		font-weight: 600;
+		white-space: nowrap;
+	}
+	.plan-table {
+		width: 100%;
+		border-collapse: collapse;
+		font-size: var(--text-base);
+	}
+	.plan-table th,
+	.plan-table td {
+		padding: var(--space-2) var(--space-3);
+		border-bottom: 1px solid var(--border);
+		text-align: left;
+	}
+	.plan-table th {
+		color: var(--text-dim);
+		font-size: var(--text-sm);
+		font-weight: 600;
+		letter-spacing: var(--tracking-wide);
+		text-transform: uppercase;
+	}
+	.plan-platforms {
+		margin: 0;
+		padding-left: var(--space-5);
+		display: grid;
+		gap: var(--space-2);
+	}
+	.plan-prov p {
+		margin: 0 0 var(--space-2);
+		font-size: var(--text-base);
+		color: var(--text-muted);
+	}
 	.tabs-row {
 		display: flex;
 		align-items: center;

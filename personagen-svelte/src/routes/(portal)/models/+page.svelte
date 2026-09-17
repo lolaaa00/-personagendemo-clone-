@@ -3,6 +3,7 @@
 	import { parseJsonResponse } from '$lib/services/api';
 	import { readParam, syncParam } from '$lib/url-state';
 	import { countLabel } from '$lib/plural';
+	import PageShell from '$lib/components/ui/PageShell.svelte';
 
 	let { data } = $props();
 
@@ -497,20 +498,12 @@
 	}
 </script>
 
-<svelte:head>
-	<title>Model Manager — PersonaGen</title>
-</svelte:head>
-
-<div class="mm-page">
-	<header class="mm-header">
-		<div>
-			<h1>Model Manager</h1>
-			<p class="mm-sub">
-				The generation models your personas run on — how recent, what they cost, how they score.
-				Each row says where the pipeline consults it (“Runs as”) and whether it has run
-				(“Ran”). A star or toggle only changes behaviour where a Runs-as tag shows it.
-			</p>
-		</div>
+<PageShell
+	title="Model Manager"
+	width="wide"
+	description="The generation models your personas run on — how recent, what they cost, how they score. Each row says where the pipeline consults it (“Runs as”) and whether it has run (“Ran”). A star or toggle only changes behaviour where a Runs-as tag shows it."
+>
+	{#snippet actions()}
 		<div class="mm-header-actions">
 			{#if lastSync}<span class="mm-sync-note">Last new model found {lastSync}</span>{/if}
 			<button type="button" class="mm-sync-btn" onclick={runSync} disabled={syncing}>
@@ -532,7 +525,7 @@
 				{/if}
 			</button>
 		</div>
-	</header>
+	{/snippet}
 
 	{#if data.loadError}
 		<div class="mm-error">{data.loadError}</div>
@@ -1062,7 +1055,7 @@
 			{/each}
 		</div>
 	{/if}
-</div>
+</PageShell>
 
 <style>
 	.mm-page {
@@ -1632,8 +1625,7 @@
 	}
 
 	.mm-input:focus {
-		outline: none;
-		border-color: var(--accent-mid);
+		border-color: var(--accent);
 		background: var(--surface);
 	}
 

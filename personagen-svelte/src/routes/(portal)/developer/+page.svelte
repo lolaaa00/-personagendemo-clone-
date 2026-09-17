@@ -5,6 +5,7 @@
 	// show WHICH key or WHICH request is about to fire, and this page's two
 	// prompts guard the most expensive mistakes in the product.
 	import { confirmAction } from '$lib/stores/confirm.svelte';
+	import PageShell from '$lib/components/ui/PageShell.svelte';
 
 	let { data } = $props();
 
@@ -328,17 +329,11 @@
 	}
 </script>
 
-<svelte:head><title>Developer API — PersonaGen</title></svelte:head>
-
-<div class="dev-page">
-	<header class="dev-head">
-		<h1>Developer API</h1>
-		<p>
-			Drive PersonaGen programmatically — provision personas, generate content, and publish from
-			your own controller. The full written reference lives in <code>docs/API.md</code>; this page
-			is the live version with runnable examples.
-		</p>
-	</header>
+<PageShell
+	title="Developer API"
+	description="Drive PersonaGen programmatically — provision personas, generate content, and publish from your own controller. The full written reference lives in docs/API.md; this page is the live version with runnable examples."
+>
+	<div class="dev-page">
 
 	<div class="dev-tabs" role="tablist">
 		<button role="tab" class="dev-tab" class:active={tab === 'keys'} onclick={() => (tab = 'keys')}>API Keys</button>
@@ -474,26 +469,13 @@
 			{/if}
 		</section>
 	{/if}
-</div>
+</PageShell>
 
 <style>
 	.dev-page {
-		max-width: 900px;
-		margin: 0 auto;
-		padding: var(--space-6);
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-5);
-	}
-	.dev-head h1 {
-		font-size: 1.6rem;
-		color: var(--text);
-	}
-	.dev-head p {
-		color: var(--text-muted);
-		font-size: 0.95rem;
-		line-height: 1.5;
-		margin-top: 0.4rem;
 	}
 	.dev-tabs {
 		display: flex;

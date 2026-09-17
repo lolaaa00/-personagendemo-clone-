@@ -1,5 +1,11 @@
 <script lang="ts">
-	import { postStatusFill, postStatusText } from '$lib/status-color';
+	import {
+		postStatus,
+		postStatusFill,
+		postStatusText,
+		POST_STATUSES,
+		type PostStatus
+	} from '$lib/status-color';
 	import { dialog } from '$lib/actions/dialog';
 	import { syncParam, readParam } from '$lib/url-state';
 	/**
@@ -28,7 +34,7 @@
 	} from '$lib/components/feed/postDisplay';
 	import { platformColor } from '$lib/platforms';
 	import { thumbUrl } from '$lib/image-url';
-	import { plural, countLabel } from '$lib/plural';
+	import { countLabel } from '$lib/plural';
 	import type { CalendarPost } from './types';
 
 	interface RailAgent {
@@ -267,15 +273,33 @@
 		showDatePicker = false;
 	}
 
-	// ── Filtering: rail (persona) + summary chips (status group) ──────────
-	// The status chips group real statuses into the four states users think in.
-	const STATUS_GROUPS: Record<string, string[]> = {
-		published: ['published', 'partial'],
-		scheduled: ['scheduled', 'publishing'],
-		draft: ['draft'],
-		failed: ['failed', 'rejected']
-	};
-	let statusChip = $state<'all' | 'published' | 'scheduled' | 'draft' | 'failed'>('all');
+	// ── Filtering: rail (persona) + summary chips (one per status) ────────
+	//
+	// These chips used to be four buckets that quietly folded three statuses
+	// into other statuses' totals: `partial` was counted as published,
+	// `publishing` as scheduled, and `rejected` as FAILED. Measured on one real
+	// month the grid held 9 published / 8 scheduled / 3 rejected / 1 partial /
+	// 2 failed / 1 publishing / 5 draft, and the legend reported 10 / 9 / 5 / 5.
+	//
+	// Reporting a post you rejected as one the system failed to publish sends
+	// you debugging a provider over your own decision, and counting a post still
+	// mid-flight as live is the one rounding direction a publishing tool must
+	// never take. So there are no buckets now: one chip per status, counted by
+	// equality, driven off POST_STATUSES so a status added to the database
+	// constraint gets a chip instead of being silently absorbed by a neighbour.
+	const CHIP_ORDER: PostStatus[] = [
+		'published',
+		'partial',
+		'scheduled',
+		'publishing',
+		'draft',
+		'generating',
+		'rejected',
+		'failed'
+	];
+	/** Always shown, even at zero — these are the states you look for. */
+	const CHIP_ALWAYS: PostStatus[] = ['published', 'scheduled', 'draft'];
+	let statusChip = $state<'all' | PostStatus>('all');
 
 	function toggleChip(chip: typeof statusChip) {
 		statusChip = statusChip === chip ? 'all' : chip;
@@ -286,9 +310,7 @@
 	);
 
 	let filteredPosts = $derived(
-		statusChip === 'all'
-			? agentFiltered
-			: agentFiltered.filter((p) => STATUS_GROUPS[statusChip].includes(p.status))
+		statusChip === 'all' ? agentFiltered : agentFiltered.filter((p) => p.status === statusChip)
 	);
 
 	function getPostsForDate(dateStr: string) {
@@ -327,27 +349,22 @@
 	});
 
 	let rangeStats = $derived.by(() => {
-		const s = {
-			published: 0,
-			scheduled: 0,
-			draft: 0,
-			failed: 0,
-			generating: 0,
-			views: 0,
-			likes: 0,
-			comments: 0
-		};
+		// One counter per status, plus engagement. Every post in range increments
+		// exactly one counter, so the chips sum to the number of chips on screen.
+		const byStatus = Object.fromEntries(POST_STATUSES.map((k) => [k, 0])) as Record<
+			PostStatus,
+			number
+		>;
+		const s = { byStatus, views: 0, likes: 0, comments: 0 };
 		for (const p of agentFiltered) {
 			if (!inRange(p.date)) continue;
-			if (STATUS_GROUPS.published.includes(p.status)) {
-				s.published++;
+			if (p.status in byStatus) byStatus[p.status as PostStatus]++;
+			// Engagement is a property of what actually went live.
+			if (p.status === 'published' || p.status === 'partial') {
 				s.views += p.analytics?.views ?? 0;
 				s.likes += p.analytics?.likes ?? 0;
 				s.comments += p.analytics?.comments ?? 0;
-			} else if (STATUS_GROUPS.scheduled.includes(p.status)) s.scheduled++;
-			else if (p.status === 'draft') s.draft++;
-			else if (p.status === 'generating') s.generating++;
-			else if (STATUS_GROUPS.failed.includes(p.status)) s.failed++;
+			}
 		}
 		return s;
 	});
@@ -495,36 +512,35 @@
 
 <!-- ── Analytics strip: range metrics that double as the status filter ── -->
 <div class="summary-strip" role="group" aria-label="Range summary and status filter">
-	<button class="stat-chip" class:on={statusChip === 'published'} aria-pressed={statusChip === 'published'} onclick={() => toggleChip('published')}>
-		<span class="stat-dot" style="background: var(--success)" aria-hidden="true"></span>
-		<strong>{rangeStats.published}</strong> published
-		{#if rangeStats.views > 0}
-			<span class="stat-metric">{@render iconEye()} <span class="sr-only">views</span>{fmtNum(rangeStats.views)}</span>
+	{#each CHIP_ORDER as st (st)}
+		{@const n = rangeStats.byStatus[st]}
+		{#if n > 0 || CHIP_ALWAYS.includes(st)}
+			<button
+				class="stat-chip"
+				class:chip-failed={st === 'failed'}
+				class:on={statusChip === st}
+				aria-pressed={statusChip === st}
+				title={postStatus(st).meaning}
+				onclick={() => toggleChip(st)}
+			>
+				<span class="stat-dot" style="background: {postStatus(st).fill}" aria-hidden="true"></span>
+				<strong>{n}</strong>
+				{postStatus(st).label.toLowerCase()}
+				{#if st === 'published'}
+					{#if rangeStats.views > 0}
+						<span class="stat-metric"
+							>{@render iconEye()} <span class="sr-only">views</span>{fmtNum(rangeStats.views)}</span
+						>
+					{/if}
+					{#if rangeStats.likes > 0}
+						<span class="stat-metric"
+							>{@render iconHeart()} <span class="sr-only">likes</span>{fmtNum(rangeStats.likes)}</span
+						>
+					{/if}
+				{/if}
+			</button>
 		{/if}
-		{#if rangeStats.likes > 0}
-			<span class="stat-metric">{@render iconHeart()} <span class="sr-only">likes</span>{fmtNum(rangeStats.likes)}</span>
-		{/if}
-	</button>
-	<button class="stat-chip" class:on={statusChip === 'scheduled'} aria-pressed={statusChip === 'scheduled'} onclick={() => toggleChip('scheduled')}>
-		<span class="stat-dot" style="background: var(--accent)" aria-hidden="true"></span>
-		<strong>{rangeStats.scheduled}</strong> scheduled
-	</button>
-	<button class="stat-chip" class:on={statusChip === 'draft'} aria-pressed={statusChip === 'draft'} onclick={() => toggleChip('draft')}>
-		<span class="stat-dot" style="background: var(--warning)" aria-hidden="true"></span>
-		<strong>{rangeStats.draft}</strong> {plural(rangeStats.draft, 'draft')}
-	</button>
-	{#if rangeStats.generating > 0}
-		<span class="stat-chip" title="Slots still generating">
-			<span class="stat-dot" style="background: var(--cyan)" aria-hidden="true"></span>
-			<strong>{rangeStats.generating}</strong> generating
-		</span>
-	{/if}
-	{#if rangeStats.failed > 0}
-		<button class="stat-chip chip-failed" class:on={statusChip === 'failed'} aria-pressed={statusChip === 'failed'} onclick={() => toggleChip('failed')}>
-			<span class="stat-dot" style="background: var(--error)" aria-hidden="true"></span>
-			<strong>{rangeStats.failed}</strong> failed
-		</button>
-	{/if}
+	{/each}
 	{#if statusChip !== 'all'}
 		<button class="stat-clear" onclick={() => (statusChip = 'all')}>Show all</button>
 	{/if}
@@ -612,9 +628,10 @@
 												<img class="event-thumb" src={thumb} alt="" width="44" height="55" loading="lazy" decoding="async" />
 											{/if}
 											<div class="event-content">
-												<span class="sr-only">{post.status} · {post.time}</span>
+												<span class="sr-only">{postStatus(post.status).label}</span>
 												<span class="event-agent">
 													{post.agentName.split(' ')[0]}
+													{#if post.time}<span class="event-time">{post.time.slice(0, 5)}</span>{/if}
 													{#if views > 0}<span class="event-views">{@render iconEye()} <span class="sr-only">views</span>{fmtNum(views)}</span>{/if}
 												</span>
 												{#if !thumb}
@@ -1423,6 +1440,14 @@
 		color: var(--accent);
 	}
 
+	/* The scheduled time, on the chip. Tabular figures so times line up down a
+	   column rather than shimmying with each digit's width. */
+	.event-time {
+		margin-left: 0.3em;
+		font-variant-numeric: tabular-nums;
+		font-weight: var(--weight-semi);
+		color: var(--text-muted);
+	}
 	.cell-events {
 		display: flex;
 		flex-direction: column;

@@ -7,12 +7,21 @@ import { getPostDisplay } from '$lib/components/feed/postDisplay';
  *
  *   GET  /api/review                 -> all pending drafts across the user's
  *                                       personas, oldest slot first
- *   POST /api/review { action: 'approve'|'reject', post_ids: string[], reason? }
+ *   POST /api/review { action: 'approve'|'reject'|'restore', post_ids: string[], reason? }
  *
  * Approve flips drafts to 'scheduled' (their slot stands; the scheduler
  * publishes when it's due). Reject flips to 'rejected'. Every decision is
  * appended to post_reviews with an optional reason + a content snapshot —
  * that log is the training data for the future automated QC agent.
+ *
+ * Restore returns a rejected post to 'draft'. Before it existed, Reject was the
+ * only action on the page with no way back: a mis-click could be undone only by
+ * deleting the post and regenerating it, which costs real money. It deliberately
+ * writes NO post_reviews row — the rejection genuinely happened and stays in the
+ * training log; restoring is a status change, not a verdict, and recording it as
+ * one would put an approval in the log that no reviewer ever gave. (It could not
+ * be logged honestly in any case: `decision` is CHECK-constrained to
+ * approve/reject, and widening that is a migration this does not need.)
  */
 
 function snapshotOf(content: string): Record<string, unknown> {
@@ -145,7 +154,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	const postIds: string[] = Array.isArray(body.post_ids) ? body.post_ids.filter(Boolean) : [];
 	const reason = typeof body.reason === 'string' ? body.reason.trim().slice(0, 500) : null;
 
-	if (!['approve', 'reject'].includes(action)) {
+	if (!['approve', 'reject', 'restore'].includes(action)) {
 		return json({ success: false, error: `Invalid action: ${action}` }, { status: 400 });
 	}
 	if (postIds.length === 0 || postIds.length > 200) {
@@ -155,7 +164,8 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	// Approve only promotes DRAFTS (→ scheduled). Reject/unschedule can also pull back
 	// an already-SCHEDULED post (→ rejected) so the queue can catch content before it
 	// publishes. Ownership + eligible-status checked in one fetch.
-	const reviewable = action === 'approve' ? ['draft'] : ['draft', 'scheduled'];
+	const reviewable =
+		action === 'approve' ? ['draft'] : action === 'restore' ? ['rejected'] : ['draft', 'scheduled'];
 	const { data: posts, error: fetchErr } = await locals.supabase
 		.from('posts')
 		.select('id, agent_id, content, status')
@@ -167,10 +177,20 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 	const eligible = posts || [];
 	if (eligible.length === 0) {
-		return json({ success: false, error: 'No matching drafts (already reviewed?)' }, { status: 404 });
+		return json(
+			{
+				success: false,
+				error:
+					action === 'restore'
+						? 'No matching rejected posts (already restored?)'
+						: 'No matching drafts (already reviewed?)'
+			},
+			{ status: 404 }
+		);
 	}
 
-	const newStatus = action === 'approve' ? 'scheduled' : 'rejected';
+	const newStatus =
+		action === 'approve' ? 'scheduled' : action === 'restore' ? 'draft' : 'rejected';
 	const { error: updErr } = await locals.supabase
 		.from('posts')
 		.update({ status: newStatus })
@@ -184,6 +204,10 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	if (updErr) return json({ success: false, error: updErr.message }, { status: 500 });
 
 	// Append-only decision log. Non-fatal: a logging hiccup must not undo review.
+	// Restore is excluded on purpose — see the header note.
+	if (action === 'restore') {
+		return json({ success: true, updated: eligible.length, status: newStatus });
+	}
 	const { error: logErr } = await locals.supabase.from('post_reviews').insert(
 		eligible.map((p: any) => ({
 			user_id: user.id,

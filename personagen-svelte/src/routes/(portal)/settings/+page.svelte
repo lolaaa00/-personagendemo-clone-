@@ -14,6 +14,7 @@
 	import { dialog } from '$lib/actions/dialog';
 	import { syncParam, readParam } from '$lib/url-state';
 	import { confirmAction } from '$lib/stores/confirm.svelte';
+	import PageShell from '$lib/components/ui/PageShell.svelte';
 	import {
 		NON_BYOK_PROVIDERS,
 		byokReason,
@@ -1204,15 +1205,10 @@
 	}
 </script>
 
-<svelte:head>
-	<title>Settings — PersonaGen</title>
-</svelte:head>
-
-<section class="page">
-	<header class="page-header">
-		<h1>Settings</h1>
-		<p class="subtitle">Manage your profile, notifications, API keys, and account.</p>
-	</header>
+<PageShell
+	title="Settings"
+	description="Manage your profile, notifications, API keys, and account."
+>
 
 	<div class="settings-layout">
 		<nav class="settings-nav" aria-label="Settings sections">
@@ -2345,7 +2341,7 @@
 		{/if}
 		</div>
 	</div>
-</section>
+</PageShell>
 
 <svelte:window
 	onkeydown={(e) => {

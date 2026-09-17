@@ -22,6 +22,25 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 		const db = createDbService(locals.supabase);
 		const { user } = await locals.safeGetSession();
 
+		// Post counts by status, as a COUNT query.
+		//
+		// The hero's "Posts" stat used to be derived from `feedPosts`, the list
+		// the Content tab loads — and the feed is only fetched when the Content or
+		// Studio tab is open. On every other tab that array is empty, so a persona
+		// with three published posts reported "0 POSTS" in the one place the page
+		// makes a quantitative claim about her, while the dashboard, the calendar
+		// and /generations all showed her work. A count belongs in a count query,
+		// not in whatever list happens to be in memory.
+		const countFor = async (status: string) => {
+			const { count } = await locals.supabase
+				.from('posts')
+				.select('id', { count: 'exact', head: true })
+				.eq('agent_id', params.agentId)
+				.is('deleted_at', null)
+				.eq('status', status);
+			return count ?? 0;
+		};
+
 		const [agentRes, supervisorsRes, configRes, briefsResult] = await Promise.all([
 			// Single-row fetch instead of loading the whole roster (soul/skills/
 			// market text of EVERY agent) just to .find() one. RLS scopes the
@@ -54,6 +73,17 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 		const supervisors = supervisorsRes.data ?? [];
 		const config = configRes.data;
 
+		const [published, partial, draft, scheduled] = await Promise.all([
+			countFor('published'),
+			countFor('partial'),
+			countFor('draft'),
+			countFor('scheduled')
+		]);
+		const postCounts = {
+			published: published + partial,
+			queued: draft + scheduled
+		};
+
 		return {
 			agent: {
 				...agent,
@@ -71,6 +101,7 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 				brand_brief_id: config?.brand_brief_id ?? null
 			},
 			supervisors,
+			postCounts,
 			brandBriefs: briefsResult.data ?? [],
 			// Gender the server WILL use at generation time when the explicit
 			// field is blank (inferred from the soul/name, else a pinned voice).

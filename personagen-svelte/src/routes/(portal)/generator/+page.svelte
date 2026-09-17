@@ -8,6 +8,7 @@
 	import TraitPicker from '$lib/components/persona/TraitPicker.svelte';
 	import { goto } from '$app/navigation';
 	import { browser } from '$app/environment';
+	import PageShell from '$lib/components/ui/PageShell.svelte';
 
 	let { data } = $props();
 
@@ -410,15 +411,7 @@
 	];
 </script>
 
-<svelte:head>
-	<title>Create a Persona — PersonaGen</title>
-</svelte:head>
-
-<section class="page">
-	<header class="page-header">
-		<h1>Create a Persona</h1>
-		<p class="subtitle">Create a new AI persona from scratch.</p>
-	</header>
+<PageShell title="Create a Persona" description="Create a new AI persona from scratch.">
 
 	<!-- Progress Indicator -->
 	<div class="progress-bar">
@@ -1130,7 +1123,7 @@
 			<div></div>
 		{/if}
 	</div>
-</section>
+</PageShell>
 
 {#if showVaultModal}
 	<!-- svelte-ignore a11y_click_events_have_key_events -->

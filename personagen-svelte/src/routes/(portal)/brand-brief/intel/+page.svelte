@@ -3,6 +3,7 @@
 	import { onMount } from 'svelte';
 	import { browser } from '$app/environment';
 	import { syncParam, readParam } from '$lib/url-state';
+	import PageShell from '$lib/components/ui/PageShell.svelte';
 
 	let { data } = $props<{
 		data: {
@@ -280,6 +281,29 @@
 	);
 	let intelStep4Valid = $derived(intelLocations.length > 0);
 
+	/** Why step `n` will not let you forward yet, in the user's words. Empty
+	 *  string means nothing is blocking. A disabled button that explains nothing
+	 *  is a dead end: the user cannot tell a missing field from a broken page. */
+	function intelBlockedReason(step: number): string {
+		switch (step) {
+			case 1:
+				if (!intelCompanyName.trim() && !intelIndustry) return 'Add your brand name and pick an industry to continue.';
+				if (!intelCompanyName.trim()) return 'Add your brand name to continue.';
+				if (!intelIndustry) return 'Pick an industry to continue.';
+				return '';
+			case 2:
+				return intelStep2Valid ? '' : 'Add at least one competitor URL to continue.';
+			case 3:
+				return intelStep3Valid
+					? ''
+					: 'Pick at least one content type, or describe the content you make today.';
+			case 4:
+				return intelStep4Valid ? '' : 'Choose at least one location to continue.';
+			default:
+				return '';
+		}
+	}
+
 	function canIntelProceed(step: number): boolean {
 		switch (step) {
 			case 1:
@@ -352,6 +376,12 @@
 		if (intelCurrentStep > 1) {
 			intelCurrentStep--;
 		}
+	}
+
+	/** Exactly the steps goToIntelStep() will actually honour, so the stepper
+	 *  never offers a chip that does nothing when clicked. */
+	function intelStepReachable(step: number): boolean {
+		return step <= intelCurrentStep || canIntelProceed(step - 1);
 	}
 
 	function goToIntelStep(step: number) {
@@ -476,12 +506,11 @@
 
 </script>
 
-<svelte:head>
-	<title>Content Plan — PersonaGen</title>
-</svelte:head>
-
-<section class="page intel-wizard-panel">
-	<header class="page-header">
+<PageShell
+	title="Content Plan"
+	description="Six steps that turn your brand brief into content pillars, a weekly schedule and a platform order — built from what you tell it, and saved back onto the brief. It reports no performance figures, because it measures nothing."
+>
+	{#snippet actions()}
 		<a class="breadcrumb" href="/brand-brief">
 			<svg
 				aria-hidden="true"
@@ -497,16 +526,7 @@
 			>
 			Brand Brief
 		</a>
-		<div class="header-top">
-			<div>
-				<h1>Content Plan</h1>
-				<p class="subtitle">
-					Six steps that turn {brandName ? `${brandName}'s brand brief` : 'your brand brief'} into
-					content pillars, a weekly schedule and a platform order — built from what you tell it, and
-					saved back onto the brief. It reports no performance figures, because it measures nothing.
-				</p>
-			</div>
-			<div class="header-actions">
+		<div class="header-actions">
 				<a class="action-btn" href="/brand-brief">
 					<svg
 						aria-hidden="true"
@@ -522,12 +542,13 @@
 					>
 					Exit wizard
 				</a>
-			</div>
 		</div>
-		<p class="exit-hint">
-			Your answers are kept as you go — you can leave and come back to this step at any time.
-		</p>
-	</header>
+	{/snippet}
+
+	<div class="intel-wizard-panel">
+	<p class="exit-hint">
+		Your answers are kept as you go — you can leave and come back to this step at any time.
+	</p>
 
 	<!-- ─── Progress Steps ─── -->
 	<ol class="progress-steps" aria-label="Content intelligence wizard steps">
@@ -538,9 +559,10 @@
 					class="step-dot-group"
 					class:active={intelCurrentStep === s.id}
 					class:completed={intelCurrentStep > s.id}
-					class:disabled={s.id > intelCurrentStep + 1}
+					class:disabled={!intelStepReachable(s.id)}
 					onclick={() => goToIntelStep(s.id)}
-					disabled={s.id > intelCurrentStep + 1}
+					disabled={!intelStepReachable(s.id)}
+					title={!intelStepReachable(s.id) ? intelBlockedReason(intelCurrentStep) : undefined}
 					aria-current={intelCurrentStep === s.id ? 'step' : undefined}
 				>
 					<div class="step-dot">
@@ -1296,11 +1318,15 @@
 				Back
 			</button>
 			{#if intelCurrentStep < 5}
+				{#if intelBlockedReason(intelCurrentStep)}
+					<p class="nav-blocked" role="status">{intelBlockedReason(intelCurrentStep)}</p>
+				{/if}
 				<button
 					type="button"
 					class="nav-btn next"
 					onclick={nextIntelStep}
 					disabled={!canIntelProceed(intelCurrentStep)}
+					title={intelBlockedReason(intelCurrentStep) || undefined}
 				>
 					Next
 					<svg
@@ -1319,7 +1345,8 @@
 			{/if}
 		</div>
 	{/if}
-</section>
+</div>
+</PageShell>
 
 <style>
 	.page {
@@ -1374,6 +1401,13 @@
 		color: var(--accent);
 	}
 
+	/* The blocker, stated next to the control it blocks. */
+	.nav-blocked {
+		margin: 0 var(--space-3) 0 auto;
+		align-self: center;
+		font-size: var(--text-sm);
+		color: var(--warning-text);
+	}
 	.exit-hint {
 		margin-top: 0.5rem;
 		font-size: var(--text-xs);

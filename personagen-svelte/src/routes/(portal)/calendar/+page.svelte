@@ -17,6 +17,7 @@
 	import { platformColor } from '$lib/platforms';
 	import { confirmDeletePosts } from '$lib/confirm-preview';
 	import { countLabel } from '$lib/plural';
+	import PageShell from '$lib/components/ui/PageShell.svelte';
 
 	interface ScheduledPost {
 		id: string;
@@ -885,17 +886,12 @@
 	}
 </script>
 
-<svelte:head>
-	<title>Calendar — PersonaGen</title>
-</svelte:head>
-
-<section class="page">
-	<!-- Header -->
-	<header class="page-header">
-		<div>
-			<h1>Content Calendar</h1>
-			<p class="subtitle">Schedule and manage posts across all personas and platforms</p>
-		</div>
+<PageShell
+	title="Content Calendar"
+	width="wide"
+	description="Schedule and manage posts across all personas and platforms."
+>
+	{#snippet actions()}
 		<div class="header-actions">
 			<button
 				class="btn-ghost btn-campaign"
@@ -948,7 +944,7 @@
 				{/if}
 			</button>
 		</div>
-	</header>
+	{/snippet}
 
 	<!-- Bulk manage: the calendar grid is read-only presentation, so multi-select,
 	     bulk delete / approve and enlarge live on the page next to it. -->
@@ -1569,7 +1565,7 @@
 			</div>
 		</div>
 	{/if}
-</section>
+</PageShell>
 
 <!-- Same confirm-first composer as the persona page: the server resolves the real
      payload/cost, the user edits and approves, then we run exactly that. -->

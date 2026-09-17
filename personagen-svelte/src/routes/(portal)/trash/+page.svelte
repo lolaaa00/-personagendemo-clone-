@@ -14,6 +14,7 @@
 	import { showToast } from '$lib/stores/ui.svelte';
 	import { confirmRestorePosts, confirmPurgePosts } from '$lib/confirm-preview';
 	import { getPostDisplay } from '$lib/components/feed/postDisplay';
+	import PageShell from '$lib/components/ui/PageShell.svelte';
 
 	let { data } = $props();
 
@@ -168,23 +169,16 @@
 	}
 </script>
 
-<svelte:head>
-	<title>Trash — PersonaGen</title>
-</svelte:head>
-
-<div class="trash-page">
-	<header class="trash-head">
-		<div class="trash-headline">
-			<h1>Trash</h1>
-			<p>
-				Deleted posts wait here for {retention} days, then they're removed for good. Restoring one puts
-				it back in your feed and calendar exactly where it was.
-			</p>
-		</div>
+<PageShell
+	title="Trash"
+	description="Deleted posts wait here for {retention} days, then they're removed for good. Restoring one puts it back in your feed and calendar exactly where it was."
+>
+	{#snippet actions()}
 		{#if posts.length > 0}
 			<button class="btn-empty" onclick={emptyTrash} disabled={busy}>Empty Trash</button>
 		{/if}
-	</header>
+	{/snippet}
+	<div class="trash-page">
 
 	{#if data.loadError}
 		<p class="trash-error">
@@ -283,7 +277,7 @@
 			{/each}
 		</div>
 	{/if}
-</div>
+</PageShell>
 
 {#if lightbox}
 	<ImageLightbox
@@ -301,28 +295,8 @@
 		gap: var(--space-4);
 	}
 
-	.trash-head {
-		display: flex;
-		align-items: flex-start;
-		justify-content: space-between;
-		gap: 1rem;
-		flex-wrap: wrap;
-	}
 
-	.trash-headline h1 {
-		margin: 0 0 0.35rem;
-		font-size: 1.35rem;
-		font-weight: 700;
-		color: var(--text);
-	}
 
-	.trash-headline p {
-		margin: 0;
-		font-size: 0.82rem;
-		line-height: 1.6;
-		color: var(--text-dim);
-		max-width: 62ch;
-	}
 
 	.btn-empty {
 		flex-shrink: 0;

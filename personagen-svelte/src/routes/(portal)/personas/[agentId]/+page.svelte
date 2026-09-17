@@ -199,11 +199,24 @@
 	// partial = live on ≥1 platform) — NOT every internal row. Counting drafts/scheduled
 	// as "Posts" claimed "8 posts" for a persona whose connected account had 0. Pending
 	// work is surfaced separately as "Queued" so nothing is hidden.
+	/** True once loadFeed() has actually answered for THIS persona. Until then
+	 *  `feedPosts` is an empty array that means "not fetched", not "none". */
+	let feedLoaded = $state(false);
+
+	// The server's count query is the baseline, so the hero is right on every tab
+	// — the feed is only fetched on Content/Studio, and deriving the count from it
+	// made a persona with three published posts report "0 POSTS" everywhere else.
+	// Once the feed IS loaded it takes over, so approving or deleting a post
+	// updates the stat immediately instead of waiting for a reload.
 	let postedCount = $derived(
-		feedPosts.filter((p: any) => p.status === 'published' || p.status === 'partial').length
+		feedLoaded
+			? feedPosts.filter((p: any) => p.status === 'published' || p.status === 'partial').length
+			: (data.postCounts?.published ?? 0)
 	);
 	let queuedCount = $derived(
-		feedPosts.filter((p: any) => p.status === 'draft' || p.status === 'scheduled').length
+		feedLoaded
+			? feedPosts.filter((p: any) => p.status === 'draft' || p.status === 'scheduled').length
+			: (data.postCounts?.queued ?? 0)
 	);
 	let feedLoading = $state(false);
 	let syncingFeed = $state(false);
@@ -648,6 +661,7 @@
 		// Feed/Connections data belongs to the previous persona — drop it so
 		// stale posts or a stale open modal can't linger under the new identity.
 		feedPosts = [];
+		feedLoaded = false;
 		modalPost = null;
 		manualDeleteNotice = null;
 		platformStatuses = {};
@@ -782,6 +796,7 @@
 						new Date(b.published_at || b.created_at).getTime() -
 						new Date(a.published_at || a.created_at).getTime()
 				);
+				feedLoaded = true;
 			} else {
 				showToast('Failed to load feed: ' + result.error, 'error');
 			}
@@ -3094,9 +3109,9 @@
 					</div>
 				</div>
 				<div class="hero-stats">
-					<div class="stat-chip">
+					<div class="stat-chip" title="Posts the platform confirmed went live">
 						<span class="stat-val">{postedCount}</span>
-						<span class="stat-label">Posts</span>
+						<span class="stat-label">Published</span>
 					</div>
 					{#if queuedCount > 0}
 						<div class="stat-chip stat-chip-queued" title="Drafts + scheduled — not yet published">
