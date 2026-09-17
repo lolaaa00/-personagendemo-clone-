@@ -944,15 +944,20 @@
 		font-variant-numeric: tabular-nums;
 	}
 
-	/* ── Scroll reveal ── */
-	[data-reveal] {
+	/* ── Scroll reveal ──
+	   `data-reveal` and `is-in` are set at runtime by the reveal action above
+	   (deliberately after hydration, so a no-JS visitor sees everything). The
+	   compiler cannot see runtime-set attributes and reports these selectors as
+	   unused; :global states what is true — they are matched, just not in the
+	   template. */
+	:global([data-reveal]) {
 		opacity: 0;
 		transform: translateY(14px);
 		transition:
 			opacity 0.55s var(--ease-out) var(--reveal-delay, 0ms),
 			transform 0.55s var(--ease-out) var(--reveal-delay, 0ms);
 	}
-	[data-reveal].is-in {
+	:global([data-reveal].is-in) {
 		opacity: 1;
 		transform: none;
 	}

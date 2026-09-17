@@ -547,7 +547,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-17", hash: "eb91ef9", type: "other", category: "maintenance", scope: null, title: "Merge origin/main: per-call thinking budgets, and stored secrets read as service_role" },
 	{ date: "2026-09-17", hash: "06de1cd", type: "chore", category: "docs", scope: "hooks", title: "refuse lint errors at commit, and never commit a stale changelog" },
 	{ date: "2026-09-17", hash: "1095ac7", type: "fix", category: "fix", scope: "review", title: "the queue answers to the seat, not to ownership" },
-	{ date: "2026-09-17", hash: "a43369f", type: "fix", category: "fix", scope: "realism", title: "act on the deeper assessment — anchor, schema, drift, benchmark" }
+	{ date: "2026-09-17", hash: "a43369f", type: "fix", category: "fix", scope: "realism", title: "act on the deeper assessment — anchor, schema, drift, benchmark" },
+	{ date: "2026-09-17", hash: "0c296e5", type: "docs", category: "docs", scope: "competitive", title: "two rounds deeper — the anchor, the schema, and the branch itself" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -945,12 +946,12 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 	},
 	{
 		id: "06de1cd", from: "2026-09-17", to: "2026-09-17",
-		category: "fix", categories: ["docs","fix"],
-		title: "Fixed: refuse lint errors at commit, and never commit a…",
-		summary: "Refuse lint errors at commit, and never commit a stale changelog. Plus 2 more changes, touching guides and explanations.",
+		category: "docs", categories: ["docs","fix"],
+		title: "Help: refuse lint errors at commit, and never commit a…",
+		summary: "Refuse lint errors at commit, and never commit a stale changelog. Plus 3 more changes, touching things that were broken.",
 		major: false, curated: false,
-		entries: [CHANGELOG[511], CHANGELOG[512], CHANGELOG[513]]
+		entries: [CHANGELOG[511], CHANGELOG[512], CHANGELOG[513], CHANGELOG[514]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "a43369f";
+export const CHANGELOG_GENERATED_FROM = "0c296e5";
