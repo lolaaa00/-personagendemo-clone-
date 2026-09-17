@@ -545,7 +545,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-17", hash: "c7674db", type: "feat", category: "feature", scope: "byok", title: "read stored secrets as service_role; a broken key now says so" },
 	{ date: "2026-09-17", hash: "43a3d0a", type: "feat", category: "generation", scope: "ledger", title: "budget the model's thinking per call, and record how much it did" },
 	{ date: "2026-09-17", hash: "eb91ef9", type: "other", category: "maintenance", scope: null, title: "Merge origin/main: per-call thinking budgets, and stored secrets read as service_role" },
-	{ date: "2026-09-17", hash: "06de1cd", type: "chore", category: "docs", scope: "hooks", title: "refuse lint errors at commit, and never commit a stale changelog" }
+	{ date: "2026-09-17", hash: "06de1cd", type: "chore", category: "docs", scope: "hooks", title: "refuse lint errors at commit, and never commit a stale changelog" },
+	{ date: "2026-09-17", hash: "1095ac7", type: "fix", category: "fix", scope: "review", title: "the queue answers to the seat, not to ownership" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -943,12 +944,12 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 	},
 	{
 		id: "06de1cd", from: "2026-09-17", to: "2026-09-17",
-		category: "docs", categories: ["docs"],
+		category: "docs", categories: ["docs","fix"],
 		title: "Help: refuse lint errors at commit, and never commit a…",
-		summary: "Refuse lint errors at commit, and never commit a stale changelog.",
+		summary: "Refuse lint errors at commit, and never commit a stale changelog. Plus 1 more change, touching things that were broken.",
 		major: false, curated: false,
-		entries: [CHANGELOG[511]]
+		entries: [CHANGELOG[511], CHANGELOG[512]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "06de1cd";
+export const CHANGELOG_GENERATED_FROM = "1095ac7";
