@@ -158,6 +158,8 @@ export interface CostEvent {
 	 * is what makes that correction measurable instead of guessed.
 	 */
 	measuredUsd?: number | null;
+	/** The run stage that made this call — see AiGenerateOptions.stage. */
+	stage?: string | null;
 	/** Durable bucket URL of the asset this event produced, if any — recorded in
 	 * the generation_events ledger so every spent generation is recoverable. */
 	assetUrl?: string;

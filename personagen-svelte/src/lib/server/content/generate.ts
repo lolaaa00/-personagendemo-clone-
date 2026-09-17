@@ -811,7 +811,7 @@ CAPTION: ${draft.text || '(none)'}
 SPOKEN DIALOGUE: ${draft.dialogue || '(none)'}
 ON-SCREEN TEXT: ${draft.on_screen_text || '(none)'}
 Grade it.`,
-			{ systemInstruction: GRADER_SYSTEM, json: true }
+			{ systemInstruction: GRADER_SYSTEM, json: true, stage: 'qc_grade' }
 		);
 		const g = safeParseJson(raw || '');
 		if (!g || typeof g.overall !== 'number') return null;
@@ -2201,7 +2201,7 @@ export async function generateCinematicUgcPack(input: UgcPackInput): Promise<Ugc
 		const prompt = buildCinematicPrompt();
 
 		const raw =
-			(await ai.generate(prompt, { systemInstruction: CINEMATIC_DIRECTOR_SYSTEM, json: true })) ||
+			(await ai.generate(prompt, { systemInstruction: CINEMATIC_DIRECTOR_SYSTEM, json: true, stage: 'director' })) ||
 			'{}';
 		let parsed = safeParseJson(raw);
 		if (!parsed) throw new Error('AI returned unparseable response');
@@ -2214,7 +2214,7 @@ export async function generateCinematicUgcPack(input: UgcPackInput): Promise<Ugc
 			const retryHookRaw =
 				(await ai.generate(
 					`${buildCinematicPrompt()}\n\nYour previous hook scored ${parsed.hookScore}/99. The hook must stop mid-scroll cold — a real confession or bold claim, not a description. Aim for 85+. Rewrite the full JSON.`,
-					{ systemInstruction: CINEMATIC_DIRECTOR_SYSTEM, json: true }
+					{ systemInstruction: CINEMATIC_DIRECTOR_SYSTEM, json: true, stage: 'director_retry_hook' }
 				)) || '{}';
 			const hookRetryParsed = safeParseJson(retryHookRaw);
 			if (hookRetryParsed && (hookRetryParsed.hookScore ?? 0) > (parsed.hookScore ?? 0)) {
@@ -2241,7 +2241,7 @@ export async function generateCinematicUgcPack(input: UgcPackInput): Promise<Ugc
 			const rewriteRaw =
 				(await ai.generate(
 					`${buildCinematicPrompt()}\n\nAn independent QC reviewer graded your draft ${cinematicGrade.overall}/10. Top issue: ${cinematicGrade.topIssue}. Required fix: ${cinematicGrade.fix}. Rewrite the ENTIRE JSON applying that fix.`,
-					{ systemInstruction: CINEMATIC_DIRECTOR_SYSTEM, json: true }
+					{ systemInstruction: CINEMATIC_DIRECTOR_SYSTEM, json: true, stage: 'director_rewrite_qc' }
 				)) || '{}';
 			const rewritten = safeParseJson(rewriteRaw);
 			if (rewritten?.text && Array.isArray(rewritten.shots) && rewritten.shots.length > 0) {
@@ -2272,7 +2272,7 @@ export async function generateCinematicUgcPack(input: UgcPackInput): Promise<Ugc
 			const retryRaw =
 				(await ai.generate(
 					`${prompt}\n\nYour previous response had too few shots. You MUST return at least ${CINEMATIC_MIN_SHOT_COUNT} shots (3-5 is ideal).`,
-					{ systemInstruction: CINEMATIC_DIRECTOR_SYSTEM, json: true }
+					{ systemInstruction: CINEMATIC_DIRECTOR_SYSTEM, json: true, stage: 'director_retry_shots' }
 				)) || '{}';
 			const retryParsed = safeParseJson(retryRaw);
 			if (
@@ -2829,7 +2829,8 @@ function trackAi(ai: AiClient, costEvents: CostEvent[]): AiClient {
 				usd: priceOf(ai.provider, 'llm'),
 				tokensIn: seen.usage?.tokensIn ?? null,
 				tokensOut: seen.usage?.tokensOut ?? null,
-				measuredUsd: seen.usage?.costUsd ?? null
+				measuredUsd: seen.usage?.costUsd ?? null,
+				stage: opts?.stage ?? null
 			});
 			return out;
 		}
@@ -2916,6 +2917,7 @@ export async function recordCostEvents(
 			tokens_in: e.tokensIn ?? null,
 			tokens_out: e.tokensOut ?? null,
 			measured_cost: e.measuredUsd ?? null,
+			stage: e.stage ?? null,
 			asset_url: e.assetUrl ?? null,
 			billed_user_id: billedUserId,
 			key_source: (mode === 'off'
@@ -2932,7 +2934,7 @@ export async function recordCostEvents(
 	// (billed_user_id / key_source / credits) down with it. Bounded: at most
 	// one retry per optional column. Core columns are never dropped — if the
 	// error names one of those, the insert has genuinely failed.
-	const OPTIONAL = new Set(['asset_url', 'billed_user_id', 'key_source', 'credits', 'tokens_in', 'tokens_out', 'measured_cost']);
+	const OPTIONAL = new Set(['asset_url', 'billed_user_id', 'key_source', 'credits', 'tokens_in', 'tokens_out', 'measured_cost', 'stage']);
 	const dropped = new Set<string>();
 	let inserted: Array<{ id: string }> | null = null;
 	let lastErr: any = null;
@@ -3125,6 +3127,7 @@ export async function judgeDraftFit(run: FitJudgeRun): Promise<{
 		if (!panel.length) return noVerdict;
 
 		const metered = meteredAiClient(run.ai, {
+			stage: 'fit_judge',
 			supabase: run.supabase,
 			userId: run.userId,
 			agentId: run.agentId ?? null,
@@ -4431,7 +4434,8 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 		const raw =
 			(await ai.generate(buildDirectorPrompt(), {
 				systemInstruction: DIRECTOR_SYSTEM,
-				json: true
+				json: true,
+				stage: 'director'
 			})) || '{}';
 		let parsed = safeParseJson(raw);
 		if (!parsed) throw new Error('AI returned unparseable response');
@@ -4451,7 +4455,7 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 			const retryRaw =
 				(await ai.generate(
 					`${buildDirectorPrompt()}\n\nYour previous hook scored ${parsed.hookScore}/99. The hook must be a genuine pattern-interrupt or confession that stops the scroll cold — not a description or question. Aim for 85+. Rewrite the entire JSON with a stronger hook.`,
-					{ systemInstruction: DIRECTOR_SYSTEM, json: true }
+					{ systemInstruction: DIRECTOR_SYSTEM, json: true, stage: 'director_retry_hook' }
 				)) || '{}';
 			const retryParsed = safeParseJson(retryRaw);
 			if (retryParsed && (retryParsed.hookScore ?? 0) > (parsed.hookScore ?? 0)) {
@@ -4477,7 +4481,7 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 			const rewriteRaw =
 				(await ai.generate(
 					`${buildDirectorPrompt()}\n\nAn independent QC reviewer graded your draft ${qualityGrade.overall}/10. Top issue: ${qualityGrade.topIssue}. Required fix: ${qualityGrade.fix}. Rewrite the ENTIRE JSON applying that fix without losing the persona voice.`,
-					{ systemInstruction: DIRECTOR_SYSTEM, json: true }
+					{ systemInstruction: DIRECTOR_SYSTEM, json: true, stage: 'director_rewrite_qc' }
 				)) || '{}';
 			const rewritten = safeParseJson(rewriteRaw);
 			if (rewritten?.text) {

@@ -34,6 +34,8 @@ export interface MeterScope {
 	userId: string;
 	agentId?: string | null;
 	postId?: string | null;
+	/** Default stage for every call through this wrapper; a call's own opts.stage wins. */
+	stage?: string | null;
 }
 
 /**
@@ -71,7 +73,8 @@ export function meteredAiClient(ai: AiClient | null, scope: MeterScope): AiClien
 						usd,
 						tokensIn: seen.usage?.tokensIn ?? null,
 						tokensOut: seen.usage?.tokensOut ?? null,
-						measuredUsd: seen.usage?.costUsd ?? null
+						measuredUsd: seen.usage?.costUsd ?? null,
+						stage: opts?.stage ?? scope.stage ?? null
 					}
 				],
 				scope.postId ?? undefined

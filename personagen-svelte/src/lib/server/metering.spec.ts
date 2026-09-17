@@ -43,7 +43,9 @@ describe('meteredAiClient', () => {
 				usd: 0.012,
 				tokensIn: null,
 				tokensOut: null,
-				measuredUsd: null
+				measuredUsd: null,
+				// no stage on the scope and none on the call: null, never a guess
+				stage: null
 			}
 		]);
 	});
