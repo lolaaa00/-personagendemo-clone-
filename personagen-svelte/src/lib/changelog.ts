@@ -526,7 +526,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-17", hash: "1468e6f", type: "other", category: "design", scope: null, title: "Merge remote-tracking branch 'origin/main' into ux/portal-overhaul" },
 	{ date: "2026-09-17", hash: "caa313c", type: "fix", category: "fix", scope: "ledger", title: "a bare user deletion no longer destroys the usage row behind a surviving debit" },
 	{ date: "2026-09-17", hash: "39233e1", type: "fix", category: "generation", scope: "copy", title: "the FAQ quoted $2.40 for a video post the table prices at $1.58" },
-	{ date: "2026-09-17", hash: "1755812", type: "other", category: "maintenance", scope: null, title: "Merge origin/main: keep the branch current with the ledger retention fix" }
+	{ date: "2026-09-17", hash: "1755812", type: "other", category: "maintenance", scope: null, title: "Merge origin/main: keep the branch current with the ledger retention fix" },
+	{ date: "2026-09-17", hash: "bbe12fd", type: "fix", category: "fix", scope: "ux", title: "round 3 — three blockers, and stop the dashboard inventing a number" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -908,12 +909,12 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 	},
 	{
 		id: "59c3b2f", from: "2026-09-17", to: "2026-09-17",
-		category: "maintenance", categories: ["fix","maintenance","design","feature","docs","generation"],
-		title: "Tidying: the LLM rate was 5.8x low, so the text path sold…",
-		summary: "The LLM rate was 5.8x low, so the text path sold below cost. Plus 9 more changes, touching things that were broken and layout, colours and readability and things you can now do.",
+		category: "fix", categories: ["fix","maintenance","design","feature","docs","generation"],
+		title: "Fixed: the LLM rate was 5.8x low, so the text path sold…",
+		summary: "The LLM rate was 5.8x low, so the text path sold below cost. Plus 10 more changes, touching internal cleanup and layout, colours and readability and things you can now do.",
 		major: true, curated: false,
-		entries: [CHANGELOG[483], CHANGELOG[484], CHANGELOG[485], CHANGELOG[486], CHANGELOG[487], CHANGELOG[488], CHANGELOG[489], CHANGELOG[490], CHANGELOG[491], CHANGELOG[492]]
+		entries: [CHANGELOG[483], CHANGELOG[484], CHANGELOG[485], CHANGELOG[486], CHANGELOG[487], CHANGELOG[488], CHANGELOG[489], CHANGELOG[490], CHANGELOG[491], CHANGELOG[492], CHANGELOG[493]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "1755812";
+export const CHANGELOG_GENERATED_FROM = "bbe12fd";
