@@ -24,15 +24,19 @@ const { envMock, flagsMock } = vi.hoisted(() => ({
 vi.mock('$env/dynamic/private', () => ({ env: envMock }));
 vi.mock('$lib/server/flags', () => ({ enhanceChain: () => flagsMock.value }));
 vi.mock('$lib/server/storage', () => ({
-	persistToStorage: vi.fn(async (_svc: any, url: string) => `https://ours.test/durable/${btoa(url)}.png`)
+	persistToStorage: vi.fn(async (_svc: unknown, url: string) => `https://ours.test/durable/${btoa(url)}.png`)
 }));
 
 import { enhanceImage, upscaleUsd } from './enhance';
 
-const SVC = {} as any;
+const SVC = {} as unknown as Parameters<typeof enhanceImage>[0];
 const ORIGINAL = 'https://fal.media/ephemeral/original.png';
 const UPSCALED = 'https://fal.media/ephemeral/upscaled.png';
 const KEY = 'fal-key';
+
+/** The shape we actually assert on, so reading a call needs no `any`. */
+type FalCall = [url: string, init: { body: string }];
+const callsOf = (f: { mock: { calls: unknown[] } }): FalCall[] => f.mock.calls as FalCall[];
 
 function mockFal(body: unknown, ok = true, status = 200) {
 	const f = vi.fn(async () => ({
@@ -139,7 +143,7 @@ describe('a successful pass', () => {
 		const f = mockFal({ image: { url: UPSCALED } });
 		await enhanceImage(SVC, 'u1', ORIGINAL, KEY);
 
-		const body = JSON.parse((f.mock.calls[0] as any)[1].body);
+		const body = JSON.parse(callsOf(f)[0][1].body);
 		expect(body.image_url).toBe(ORIGINAL);
 		expect(body).not.toHaveProperty('image_urls');
 		expect(body.scale).toBe(2);
@@ -152,14 +156,14 @@ describe('a successful pass', () => {
 		envMock.UGC_UPSCALE_SCALE = '99';
 		const f = mockFal({ image: { url: UPSCALED } });
 		await enhanceImage(SVC, 'u1', ORIGINAL, KEY);
-		expect(JSON.parse((f.mock.calls[0] as any)[1].body).scale).toBe(2);
+		expect(JSON.parse(callsOf(f)[0][1].body).scale).toBe(2);
 	});
 
 	it('calls the configured endpoint', async () => {
 		envMock.UGC_UPSCALE_MODEL = 'fal-ai/clarity-upscaler';
 		const f = mockFal({ image: { url: UPSCALED } });
 		await enhanceImage(SVC, 'u1', ORIGINAL, KEY);
-		expect((f.mock.calls[0] as any)[0]).toContain('fal-ai/clarity-upscaler');
+		expect(callsOf(f)[0][0]).toContain('fal-ai/clarity-upscaler');
 	});
 });
 
@@ -211,5 +215,99 @@ describe('never-brick: a failure costs the original, and costs nothing', () => {
 		const r = await enhanceImage(SVC, 'u1', '', KEY);
 		expect(f).not.toHaveBeenCalled();
 		expect(r.costEvents).toEqual([]);
+	});
+});
+
+describe('the time budget: two model calls must fit in one synchronous request', () => {
+	it('does not start when there is not enough time left to finish', async () => {
+		const f = mockFal({ image: { url: UPSCALED } });
+
+		const r = await enhanceImage(SVC, 'u1', ORIGINAL, KEY, 5_000);
+
+		// Starting a call that will be aborted mid-flight still costs whatever the
+		// provider spent before the abort, and returns nothing for it.
+		expect(f).not.toHaveBeenCalled();
+		expect(r.url).toBe(ORIGINAL);
+		expect(r.costEvents).toEqual([]);
+		expect(r.skipped).toMatch(/time/i);
+	});
+
+	it('treats a negative remainder (the portrait already overran) as no time', async () => {
+		const f = mockFal({ image: { url: UPSCALED } });
+		const r = await enhanceImage(SVC, 'u1', ORIGINAL, KEY, -20_000);
+		expect(f).not.toHaveBeenCalled();
+		expect(r.costEvents).toEqual([]);
+	});
+
+	it('runs, and bills, when the remainder is enough', async () => {
+		mockFal({ image: { url: UPSCALED } });
+		const r = await enhanceImage(SVC, 'u1', ORIGINAL, KEY, 60_000);
+		expect(r.applied).toEqual(['upscale']);
+		expect(r.costEvents).toHaveLength(1);
+	});
+
+	it('defaults to the full timeout when the caller does not say', async () => {
+		mockFal({ image: { url: UPSCALED } });
+		const r = await enhanceImage(SVC, 'u1', ORIGINAL, KEY);
+		expect(r.applied).toEqual(['upscale']);
+	});
+});
+
+describe('the size ceiling: a portrait nobody can load is not an improvement', () => {
+	const OVERSIZE = 12 * 1024 * 1024;
+
+	it('keeps the original when the upscaled file is over the cap', async () => {
+		mockFal({ image: { url: UPSCALED, file_size: OVERSIZE } });
+
+		const r = await enhanceImage(SVC, 'u1', ORIGINAL, KEY);
+
+		expect(r.url).toBe(ORIGINAL);
+		expect(r.applied).toEqual([]);
+		expect(r.skipped).toMatch(/over/i);
+	});
+
+	it('STILL bills it, because fal ran the work either way', async () => {
+		// The alternative — discarding the result silently and recording nothing —
+		// would be a call we made and hid, which is the failure this module's whole
+		// pricing argument exists to avoid.
+		envMock.UGC_UPSCALE_USD = '0.006';
+		mockFal({ image: { url: UPSCALED, file_size: OVERSIZE } });
+
+		const r = await enhanceImage(SVC, 'u1', ORIGINAL, KEY);
+
+		expect(r.costEvents).toHaveLength(1);
+		expect(r.costEvents[0].usd).toBe(0.006);
+		expect(r.costEvents[0].model).toMatch(/discarded/i);
+		// Nothing was stored, so there is no asset to point the receipt at.
+		expect(r.costEvents[0].assetUrl).toBeUndefined();
+	});
+
+	it('accepts a file at or under the cap', async () => {
+		mockFal({ image: { url: UPSCALED, file_size: 2 * 1024 * 1024 } });
+		const r = await enhanceImage(SVC, 'u1', ORIGINAL, KEY);
+		expect(r.applied).toEqual(['upscale']);
+	});
+
+	it('proceeds when fal reports no size rather than refusing on a missing field', async () => {
+		mockFal({ image: { url: UPSCALED } });
+		const r = await enhanceImage(SVC, 'u1', ORIGINAL, KEY);
+		expect(r.applied).toEqual(['upscale']);
+	});
+});
+
+describe('the original is always returned, so there is a way back', () => {
+	it('on success it is the pre-enhancement image, not the enhanced one', async () => {
+		mockFal({ image: { url: UPSCALED } });
+		const r = await enhanceImage(SVC, 'u1', ORIGINAL, KEY);
+		expect(r.original).toBe(ORIGINAL);
+		expect(r.url).not.toBe(r.original);
+	});
+
+	it('when nothing ran, both point at the same image so callers need no branch', async () => {
+		flagsMock.value = 'off';
+		mockFal({ image: { url: UPSCALED } });
+		const r = await enhanceImage(SVC, 'u1', ORIGINAL, KEY);
+		expect(r.original).toBe(ORIGINAL);
+		expect(r.url).toBe(ORIGINAL);
 	});
 });

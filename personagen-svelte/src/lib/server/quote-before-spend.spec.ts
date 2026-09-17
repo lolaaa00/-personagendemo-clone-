@@ -148,6 +148,31 @@ describe('the persona preview quotes every stage it debits', () => {
 		expect(preview).toMatch(/estimatedCostUsd: selected\.usd \+ enhanced\.costEvents\.reduce/);
 	});
 
+	// A funded wallet will happily pay for twenty identical portraits fired by a
+	// double-click or a retry loop; the credit gate only stops an EMPTY wallet.
+	it('the paid path is rate limited, and the free dry run is not', () => {
+		expect(preview).toContain('previewThrottle.check(user.id)');
+		expect(preview).toContain('429');
+		expect(preview).toContain("'Retry-After'");
+		// Ordering is the assertion: the throttle must sit AFTER the dry-run
+		// early-return, or looking before you pay would burn the paid budget.
+		expect(preview.indexOf('body.preview === true')).toBeLessThan(
+			preview.indexOf('previewThrottle.check(user.id)')
+		);
+	});
+
+	// The route is synchronous and now makes TWO model calls. Two independent
+	// timeouts would let a slow portrait plus a slow upscale outrun the proxy and
+	// return nothing at all — losing an image the wallet was already charged for.
+	it('the second model call gets only the time the first one left', () => {
+		expect(preview).toContain('const startedAt = Date.now()');
+		expect(preview).toMatch(/PREVIEW_BUDGET_MS - \(Date\.now\(\) - startedAt\)/);
+	});
+
+	it('the pre-enhancement original is returned, not discarded', () => {
+		expect(preview).toContain('originalUrl: enhanced.original');
+	});
+
 	it('the enhancement bills on the same ledger write as the still', () => {
 		// One run, one recordCostEvents — not a second path to the ledger.
 		expect(preview.split('recordCostEvents(').length - 1).toBe(1);

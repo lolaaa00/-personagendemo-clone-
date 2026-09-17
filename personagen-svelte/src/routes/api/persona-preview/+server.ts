@@ -19,6 +19,7 @@ import {
 } from '$lib/server/model-registry';
 import { enhanceImage, upscaleUsd } from '$lib/server/content/enhance';
 import { enhanceChain } from '$lib/server/flags';
+import { Throttle } from '$lib/server/throttle';
 import { assertWithinBudget } from '$lib/server/budget';
 import { assertCreditsAvailable, resolveBillingAccount, creditsFor, isCreditsError } from '$lib/server/credits';
 
@@ -52,6 +53,25 @@ import { assertCreditsAvailable, resolveBillingAccount, creditsFor, isCreditsErr
  * path, and a preview that regenerates on a button is exactly the surface that
  * would be abused.
  */
+/**
+ * Regenerating the look is a button, and a button that spends is a button that
+ * gets held down. The credit gate alone does not stop it: a funded wallet will
+ * happily pay for twenty identical portraits fired by a double-click, a retry
+ * loop or a second tab. generate-avatar refuses a duplicate paid run while one
+ * is in flight; this is the same protection in the shape this route can use,
+ * since there is no agent row here to hold an in-flight marker on.
+ */
+const previewThrottle = new Throttle(12, 10 * 60_000);
+
+/**
+ * The whole request must fit inside the reverse proxy's patience, and it now
+ * contains TWO model calls rather than one. The portrait can take the full
+ * fal timeout on its own, so the enhancement gets whatever is left instead of
+ * its own fresh 120s — see `enhanceImage`'s `budgetMs`. Deliberately under a
+ * conventional 180s proxy limit, with headroom for the upload and the reply.
+ */
+const PREVIEW_BUDGET_MS = 150_000;
+
 export const POST: RequestHandler = async ({ request, locals }) => {
 	const { session, user } = await locals.safeGetSession();
 	if (!session || !user) {
@@ -145,6 +165,16 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		});
 	}
 
+	// Past the free dry run, so a look-before-you-pay call never burns a slot of
+	// the paid budget.
+	const rate = previewThrottle.check(user.id);
+	if (!rate.allowed) {
+		return json(
+			{ success: false, error: `Too many previews in a row. Try again in ${rate.retryAfterSeconds}s.` },
+			{ status: 429, headers: { 'Retry-After': String(rate.retryAfterSeconds) } }
+		);
+	}
+
 	const quotedCredits = creditsFor(quotedUsd);
 	try {
 		// Agentless on purpose: assertWithinBudget's per-agent daily cap simply
@@ -163,6 +193,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		return json({ success: false, error: (err as Error).message }, { status: 402 });
 	}
 
+	const startedAt = Date.now();
 	try {
 		const url = await generateHeroPortraitImage(
 			svc,
@@ -178,7 +209,13 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		// The enhancement chain (P0.1). Off unless an operator has switched it on
 		// AND priced it, and it returns the original on any failure — so this line
 		// can only improve the portrait or leave it exactly as it was.
-		const enhanced = await enhanceImage(svc, user.id, url, falKey);
+		const enhanced = await enhanceImage(
+			svc,
+			user.id,
+			url,
+			falKey,
+			PREVIEW_BUDGET_MS - (Date.now() - startedAt)
+		);
 
 		// Recorded AFTER the image exists, so a provider call that threw is not
 		// billed — the bug fixed in c55c353 for the generation path, not repeated
@@ -203,6 +240,11 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			success: true,
 			data: {
 				url: enhanced.url,
+				// The pre-enhancement portrait, kept rather than dropped: it is the
+				// A/B evidence for whether the pass is worth its money, and the only
+				// way back if an operator decides it is not. Same URL as `url` when
+				// nothing ran, so the client needs no branch.
+				originalUrl: enhanced.original,
 				model: selected.id,
 				modelLabel: selected.label,
 				// What RAN, not what was quoted. `quotedUsd` assumes the enhancement

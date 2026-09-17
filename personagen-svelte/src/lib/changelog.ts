@@ -532,7 +532,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-17", hash: "9c2d0a6", type: "fix", category: "fix", scope: "ux", title: "round 2's ranked list, deeper — trust, legibility and dead ends" },
 	{ date: "2026-09-17", hash: "cfd5fe5", type: "feat", category: "feature", scope: "realism", title: "the pass after the pass — P0.1, upscale first" },
 	{ date: "2026-09-17", hash: "d636290", type: "chore", category: "infrastructure", scope: "lint", title: "move the ratchet to the real count — lint:ci was failing at 1136" },
-	{ date: "2026-09-17", hash: "b481432", type: "chore", category: "infrastructure", scope: "git", title: "ignore a root .svelte-kit, the last unignored build artifact" }
+	{ date: "2026-09-17", hash: "b481432", type: "chore", category: "infrastructure", scope: "git", title: "ignore a root .svelte-kit, the last unignored build artifact" },
+	{ date: "2026-09-17", hash: "208db9e", type: "docs", category: "docs", scope: null, title: "the Hypit integration verdict, and a day of state measured three times" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -922,12 +923,12 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 	},
 	{
 		id: "d636290", from: "2026-09-17", to: "2026-09-17",
-		category: "infrastructure", categories: ["infrastructure"],
+		category: "infrastructure", categories: ["infrastructure","docs"],
 		title: "Behind the scenes: move the ratchet to the real count — lint:ci was…",
-		summary: "Move the ratchet to the real count — lint:ci was failing at 1136. Plus 1 more change.",
+		summary: "Move the ratchet to the real count — lint:ci was failing at 1136. Plus 2 more changes, touching guides and explanations.",
 		major: false, curated: false,
-		entries: [CHANGELOG[497], CHANGELOG[498]]
+		entries: [CHANGELOG[497], CHANGELOG[498], CHANGELOG[499]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "b481432";
+export const CHANGELOG_GENERATED_FROM = "208db9e";

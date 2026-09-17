@@ -52,6 +52,26 @@ const DEFAULT_UPSCALE_MODEL = 'fal-ai/esrgan';
 
 const UPSCALE_TIMEOUT_MS = 120_000;
 
+/**
+ * Below this there is no point starting: the call would be killed mid-flight,
+ * and a cancelled upscale still costs whatever the provider already spent.
+ */
+const MIN_UPSCALE_BUDGET_MS = 15_000;
+
+/**
+ * Ceiling on the upscaled file we are willing to store and then serve.
+ *
+ * Our storage host is not behind a CDN — video.ts sizes its whole web encode
+ * around that — so a 4x PNG of a portrait is not just a big file, it is a
+ * portrait that takes tens of seconds to appear for every viewer afterwards,
+ * forever. fal returns `file_size` on the image object, so this is checked
+ * BEFORE the download rather than after we have already paid the transfer.
+ *
+ * Over the cap we keep the original: a slightly softer portrait that loads is
+ * worth more than a sharper one that does not.
+ */
+const MAX_UPSCALED_BYTES = 8 * 1024 * 1024;
+
 /** How much bigger. fal's own default is 2; anything unparseable falls back to it. */
 function upscaleFactor(): number {
 	const n = Number((env.UGC_UPSCALE_SCALE ?? '').trim());
@@ -104,14 +124,28 @@ function untouched(url: string, skipped?: string): EnhanceResult {
  * second way for money to reach the ledger.
  */
 export async function enhanceImage(
-	svc: any,
+	/** Typed off the one function that consumes it, so this cannot drift from it. */
+	svc: Parameters<typeof persistToStorage>[0],
 	userId: string,
 	imageUrl: string,
-	falKey: string
+	falKey: string,
+	/**
+	 * How long the CALLER still has. The preview route is synchronous, and its
+	 * justification for that was "one model call" — this pass made it two, which
+	 * would have let a slow portrait plus a slow upscale run past the reverse
+	 * proxy and return nothing at all. The budget makes the second call fit in
+	 * whatever the first one left, and skip rather than overrun.
+	 */
+	budgetMs: number = UPSCALE_TIMEOUT_MS
 ): Promise<EnhanceResult> {
 	if (!imageUrl) return untouched(imageUrl, 'no image');
 	if (enhanceChain() !== 'upscale') return untouched(imageUrl, 'chain off');
 	if (!falKey) return untouched(imageUrl, 'no fal key');
+
+	const timeout = Math.min(UPSCALE_TIMEOUT_MS, Math.max(0, budgetMs));
+	if (timeout < MIN_UPSCALE_BUDGET_MS) {
+		return untouched(imageUrl, `not enough time left (${Math.round(timeout / 1000)}s)`);
+	}
 
 	const usd = upscaleUsd();
 	if (usd === null) {
@@ -132,7 +166,7 @@ export async function enhanceImage(
 			// return `images[]`; these upscalers share neither, which is exactly
 			// the mismatch models.ts warns guessing produces.
 			body: JSON.stringify({ image_url: imageUrl, scale: upscaleFactor() }),
-			signal: AbortSignal.timeout(UPSCALE_TIMEOUT_MS)
+			signal: AbortSignal.timeout(timeout)
 		});
 		if (!res.ok) {
 			throw new Error(`${model} failed (${res.status}): ${(await res.text()).slice(0, 200)}`);
@@ -143,6 +177,33 @@ export async function enhanceImage(
 		const out = data?.image?.url;
 		if (typeof out !== 'string' || !out) {
 			throw new Error(`${model} returned no image`);
+		}
+
+		// fal reports the size on the image object, so this costs nothing and
+		// happens before persistToStorage pulls the bytes across.
+		const size = Number(data?.image?.file_size);
+		if (Number.isFinite(size) && size > MAX_UPSCALED_BYTES) {
+			// Not an error: the provider did its job and we are declining the
+			// result. Billed all the same — fal ran the work either way, and a
+			// ledger that hides a call we made would be the lie this file exists
+			// to avoid. The caller still gets a usable portrait.
+			console.warn(
+				`[enhance] upscaled image is ${(size / 1048576).toFixed(1)}MB, over the ${MAX_UPSCALED_BYTES / 1048576}MB cap — keeping the original so it still loads over un-CDN'd storage`
+			);
+			return {
+				url: imageUrl,
+				original: imageUrl,
+				applied: [],
+				costEvents: [
+					{
+						provider: 'fal',
+						operation: 'image',
+						model: `${model} (upscale, discarded: oversize)`,
+						usd
+					}
+				],
+				skipped: `upscaled image over ${MAX_UPSCALED_BYTES / 1048576}MB`
+			};
 		}
 
 		// Persist before billing: the provider URL is ephemeral, and an event
