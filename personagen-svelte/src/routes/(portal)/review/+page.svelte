@@ -11,6 +11,7 @@
 	import { SURFACE_LABEL, type PostSurface } from '$lib/components/feed/postDisplay';
 	import { confirmDeletePosts } from '$lib/confirm-preview';
 	import PageShell from '$lib/components/ui/PageShell.svelte';
+	import { capabilities, seatBlockedReason, type SeatRole } from '$lib/seat';
 
 	interface ReviewItem {
 		id: string;
@@ -32,6 +33,8 @@
 		scheduled_time: string | null;
 		/** Why this post was rejected, from the post_reviews log. */
 		reject_reason: string | null;
+		/** This seat's role on the post's persona, resolved by the server; absent on an older server. */
+		role?: SeatRole;
 	}
 
 	/** Thumbnail-safe source: a video's mp4 URL must never land in an <img> —
@@ -57,6 +60,24 @@
 	let deletingId = $state<string | null>(null);
 	let bulkDeleting = $state(false);
 	let deleteBusy = $derived(bulkDeleting || deletingId !== null);
+
+	// What this seat may decide, per row. The role is the server's, resolved per
+	// persona: one queue can mix personas where the same account is manager on
+	// one and viewer on another. `owner` is the never-brick default for a server
+	// that sends no role — nothing that could be approved yesterday is blocked.
+	const blockFor = (item: ReviewItem) =>
+		seatBlockedReason(capabilities(item.role ?? 'owner'), 'manager');
+	/** The first reason among the selection — the bulk bar acts on all or none. */
+	let bulkBlock = $derived(
+		[...selected]
+			.map((id) => items.find((i) => i.id === id))
+			.map((i) => (i ? blockFor(i) : null))
+			.find(Boolean) ?? null
+	);
+	/** Every row is out of this seat's reach: the queue is read-only, and says so once. */
+	let queueBlock = $derived(
+		items.length > 0 && items.every((i) => blockFor(i)) ? blockFor(items[0]) : null
+	);
 	// Platforms with no API deletion path (Instagram, TikTok, Snapchat) — the
 	// live post has to be removed by hand, so we tell the user which and where.
 	let manualDeleteNotice = $state<Array<{ platform: string; permalink: string | null }> | null>(
@@ -780,6 +801,11 @@
 		</div>
 		</div>
 
+		{#if queueBlock}
+			<!-- A read-only seat is told once, up front — before anything is selected —
+			     instead of discovering every disabled button one hover at a time. -->
+			<p class="seat-note" role="note">{queueBlock}</p>
+		{/if}
 		{#if selected.size > 0}
 		<h2 class="sr-only">Bulk actions</h2>
 		<div class="bulk-bar">
@@ -794,7 +820,8 @@
 			<div class="bulk-actions">
 				<button
 					class="btn-approve"
-					disabled={selected.size === 0 || working || deleteBusy}
+					disabled={selected.size === 0 || working || deleteBusy || !!bulkBlock}
+					title={bulkBlock ?? undefined}
 					onclick={() => act('approve', [...selected])}
 				>
 					<svg
@@ -812,7 +839,8 @@
 				</button>
 				<button
 					class="btn-reject"
-					disabled={selected.size === 0 || working || deleteBusy}
+					disabled={selected.size === 0 || working || deleteBusy || !!bulkBlock}
+					title={bulkBlock ?? undefined}
 					onclick={() => openRejectPicker([...selected])}
 				>
 					<svg
@@ -831,8 +859,8 @@
 				</button>
 				<button
 					class="btn-delete"
-					title="Permanently delete — also removes published copies where the platform API allows it"
-					disabled={selected.size === 0 || working || deleteBusy}
+					title={bulkBlock ?? 'Permanently delete — also removes published copies where the platform API allows it'}
+					disabled={selected.size === 0 || working || deleteBusy || !!bulkBlock}
 					onclick={deleteSelected}
 				>
 					{#if bulkDeleting}
@@ -1123,19 +1151,25 @@
 						</div>
 						<div class="card-actions">
 							{#if item.status === 'draft'}
-								<button class="btn-approve sm" disabled={working || deleteBusy} onclick={() => act('approve', [item.id])}>Approve</button>
+								<button
+									class="btn-approve sm"
+									disabled={working || deleteBusy || !!blockFor(item)}
+									title={blockFor(item) ?? undefined}
+									onclick={() => act('approve', [item.id])}>Approve</button
+								>
 							{/if}
 							<button
 								class="btn-reject sm"
-								disabled={working || deleteBusy}
+								disabled={working || deleteBusy || !!blockFor(item)}
+								title={blockFor(item) ?? undefined}
 								onclick={() => openRejectPicker([item.id])}
 								>{item.status === 'scheduled' ? 'Unschedule' : 'Reject'}</button
 							>
 							<button
 								class="btn-delete sm"
-								title="Delete permanently — removes it from connected platforms where possible"
+								title={blockFor(item) ?? 'Delete permanently — removes it from connected platforms where possible'}
 								aria-label="Delete post permanently"
-								disabled={working || deleteBusy}
+								disabled={working || deleteBusy || !!blockFor(item)}
 								onclick={() => deletePost(item.id)}
 							>
 								{#if deletingId === item.id}
@@ -1282,8 +1316,8 @@
 										<button
 											type="button"
 											class="row-btn row-ok"
-											disabled={working || deleteBusy}
-											title="Approve & schedule"
+											disabled={working || deleteBusy || !!blockFor(item)}
+											title={blockFor(item) ?? 'Approve & schedule'}
 											aria-label="Approve post by {item.agent_name}"
 											onclick={() => act('approve', [item.id])}
 											><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg></button>
@@ -1291,8 +1325,8 @@
 										<button
 											type="button"
 											class="row-btn row-restore"
-											disabled={working || deleteBusy}
-											title="Return to draft"
+											disabled={working || deleteBusy || !!blockFor(item)}
+											title={blockFor(item) ?? 'Return to draft'}
 											aria-label="Return post by {item.agent_name} to draft"
 											onclick={() => act('restore', [item.id])}
 											><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7v6h6" /><path d="M3.51 13a9 9 0 105.36-8.36L3 10" /></svg></button>
@@ -1304,20 +1338,21 @@
 									<button
 										type="button"
 										class="row-btn row-no"
-										disabled={working || deleteBusy}
-										title={item.status === 'draft'
-											? 'Reject with a reason'
-											: item.status === 'rejected'
-												? 'Change the rejection reason'
-												: 'Unschedule with a reason'}
+										disabled={working || deleteBusy || !!blockFor(item)}
+										title={blockFor(item) ??
+											(item.status === 'draft'
+												? 'Reject with a reason'
+												: item.status === 'rejected'
+													? 'Change the rejection reason'
+													: 'Unschedule with a reason')}
 										aria-label="Reject post by {item.agent_name}"
 										onclick={() => rejectOne(item)}
 										><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg></button>
 									<button
 										type="button"
 										class="row-btn row-del"
-										disabled={working || deleteBusy}
-										title="Delete permanently"
+										disabled={working || deleteBusy || !!blockFor(item)}
+										title={blockFor(item) ?? 'Delete permanently'}
 										aria-label="Delete post by {item.agent_name} permanently"
 										onclick={() => deletePost(item.id)}
 										><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" /></svg></button>
@@ -1403,11 +1438,21 @@
 							<p class="sd-caption">{current.text}</p>
 							<div class="sd-actions">
 								{#if current.status === 'draft'}
-									<button class="btn-approve" disabled={working || deleteBusy} onclick={() => act('approve', [current!.id])}>
+									<button
+										class="btn-approve"
+										disabled={working || deleteBusy || !!blockFor(current!)}
+										title={blockFor(current!) ?? undefined}
+										onclick={() => act('approve', [current!.id])}
+									>
 										Approve &amp; schedule
 									</button>
 								{/if}
-								<button class="btn-reject" disabled={working || deleteBusy} onclick={() => rejectOne(current!)}>
+								<button
+									class="btn-reject"
+									disabled={working || deleteBusy || !!blockFor(current!)}
+									title={blockFor(current!) ?? undefined}
+									onclick={() => rejectOne(current!)}
+								>
 									{current.status === 'draft' ? 'Reject…' : 'Unschedule…'}
 								</button>
 								<button class="btn-ghost" onclick={() => openDrawer(current!)}>
@@ -1415,7 +1460,8 @@
 								</button>
 								<button
 									class="btn-delete sm"
-									disabled={working || deleteBusy}
+									disabled={working || deleteBusy || !!blockFor(current!)}
+									title={blockFor(current!) ?? undefined}
 									aria-label="Delete post permanently"
 									onclick={() => deletePost(current!.id)}
 									><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" /></svg></button>
@@ -1476,7 +1522,8 @@
 						<button
 							type="button"
 							class="dk-round dk-no"
-							disabled={working || deleteBusy}
+							disabled={working || deleteBusy || !!blockFor(current)}
+							title={blockFor(current) ?? undefined}
 							aria-label={current.status === 'draft' ? 'Reject with a reason' : 'Unschedule with a reason'}
 							onclick={() => rejectOne(current!)}
 							><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg></button>
@@ -1489,8 +1536,8 @@
 						<button
 							type="button"
 							class="dk-round dk-yes"
-							disabled={working || deleteBusy || current.status !== 'draft'}
-							title={current.status === 'draft' ? 'Approve & schedule' : 'Already scheduled'}
+							disabled={working || deleteBusy || current.status !== 'draft' || !!blockFor(current)}
+							title={blockFor(current) ?? (current.status === 'draft' ? 'Approve & schedule' : 'Already scheduled')}
 							aria-label="Approve and schedule"
 							onclick={() => act('approve', [current!.id])}
 							><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg></button>
@@ -1573,7 +1620,7 @@
 									</span>
 									<span class="lane-quick">
 										{#if item.status === 'draft'}
-											<button type="button" class="lq-btn lq-ok" disabled={working || deleteBusy} onclick={() => act('approve', [item.id])}>Approve</button>
+											<button type="button" class="lq-btn lq-ok" disabled={working || deleteBusy || !!blockFor(item)} title={blockFor(item) ?? undefined} onclick={() => act('approve', [item.id])}>Approve</button>
 										{/if}
 										<button type="button" class="lq-btn" onclick={() => openDrawer(item)}>Open</button>
 									</span>
@@ -1593,8 +1640,9 @@
 		post={drawerPost}
 		onClose={() => (drawerPost = null)}
 		onApprove={(p) => act('approve', [p.id])}
-		onReject={drawerReject}
-		onDelete={(p) => deletePost(p.id)}
+		approveBlock={drawerPost ? blockFor(drawerPost) : null}
+		onReject={drawerPost && blockFor(drawerPost) ? null : drawerReject}
+		onDelete={drawerPost && blockFor(drawerPost) ? undefined : (p) => deletePost(p.id)}
 		onSaveText={drawerSaveText}
 		onReschedule={drawerReschedule}
 		onRefined={(p) => {
@@ -1708,6 +1756,14 @@
 		color: var(--info-text);
 	}
 
+	.seat-note {
+		margin: 0 0 0.75rem;
+		padding: 0.6rem 0.85rem;
+		border-radius: 10px;
+		background: color-mix(in srgb, var(--accent) 8%, transparent);
+		border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
+		font-size: 0.85rem;
+	}
 	.bulk-bar {
 		display: flex;
 		/* Wrap so the select-all label and the Approve/Reject bulk buttons stack

@@ -105,6 +105,15 @@
 	// in localStorage) because it is PAID work: a refresh mid-wizard must not
 	// throw away an image the user has already been billed for.
 	let previewUrl = $state('');
+	// The image the persona is ANCHORED to, kept apart from the one on screen.
+	// When the enhancement chain is on, `previewUrl` is the upscaled portrait
+	// and this is the base model's own output. The anchor becomes
+	// ugc_character_ref — the reference every later generation is conditioned
+	// on, and the one asset whose whole job is to hold still. An upscaler can
+	// shift bone structure, eye shape or skin subtly, and until the blind
+	// benchmark proves it does not, an unproven pass must not be what the
+	// five-stage kit is built on. Same URL as previewUrl when nothing ran.
+	let previewAnchorUrl = $state('');
 	let previewLoading = $state(false);
 	let previewError = $state('');
 
@@ -129,6 +138,7 @@
 				throw new Error(payload?.error || `Preview failed (${res.status})`);
 			}
 			previewUrl = String(payload.data?.url || '');
+			previewAnchorUrl = String(payload.data?.originalUrl || payload.data?.url || '');
 			saveProgress();
 		} catch (err) {
 			previewError = (err as Error).message;
@@ -288,6 +298,7 @@
 				pinnedVoice = d.pinnedVoice || '';
 				generatedProfile = d.generatedProfile || emptyProfile();
 				previewUrl = d.previewUrl || '';
+				previewAnchorUrl = d.previewAnchorUrl || d.previewUrl || '';
 			} else {
 				// The gradient is no longer a UI choice — auto-pick a random one per persona
 				// (generation re-randomizes it too) so avatars differ without manual fiddling.
@@ -332,7 +343,8 @@
 				direction,
 				pinnedVoice,
 				generatedProfile,
-				previewUrl
+				previewUrl,
+				previewAnchorUrl
 			})
 		);
 	}
@@ -370,7 +382,7 @@
 			// one the persona is born with — and creation does not pay to render a
 			// second, different face. The server re-checks this URL is ours before
 			// trusting it (isOwnedBucketUrl).
-			characterRef: previewUrl || null
+			characterRef: previewAnchorUrl || previewUrl || null
 		};
 	}
 
@@ -1345,11 +1357,6 @@
 {/if}
 
 <style>
-	.page {
-		padding: 2rem;
-		max-width: 800px;
-		margin: 0 auto;
-	}
 
 	/* Brand-brief-driven generation (Step 1) */
 	.brand-gen-box {
@@ -1514,17 +1521,6 @@
 		white-space: nowrap;
 	}
 
-	.page-header {
-		margin-bottom: 2rem;
-		text-align: center;
-	}
-	.page-header h1 {
-		font-size: var(--text-3xl);
-		background: var(--gradient);
-		-webkit-background-clip: text;
-		-webkit-text-fill-color: transparent;
-		background-clip: text;
-	}
 	.subtitle {
 		color: var(--text-muted);
 		font-size: var(--text-base);

@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { getPostDisplay } from '$lib/components/feed/postDisplay';
+import { checkAgentAccess, getAgentRole, type AgentRole } from '$lib/server/workspaces';
 
 /**
  * Cross-persona review queue backend.
@@ -55,10 +56,15 @@ export const GET: RequestHandler = async ({ locals }) => {
 	// generated content but it's not in review" was the auto-scheduled posts. Both
 	// are now surfaced (distinguished by status), and the client filters by
 	// agent / platform / status.
+	// Every persona this seat can see, not only the ones this account owns.
+	// RLS (posts_select_own) already scopes the query to owned rows plus the
+	// workspace personas the caller holds any seat on. An extra
+	// `.eq('user_id', user.id)` used to narrow that to owned-only, which hid the
+	// whole workspace from every member seat: a manager opened an empty queue —
+	// "Queue is clear" — over nine drafts waiting for exactly their approval.
 	const { data: drafts, error } = await locals.supabase
 		.from('posts')
 		.select('id, agent_id, content, platforms, status, scheduled_date, scheduled_time, created_at')
-		.eq('user_id', user.id)
 		.is('deleted_at', null)
 		// 'rejected' is included so a rejection is auditable. It used to be
 		// excluded here, which meant a rejected post left the queue and could not
@@ -99,6 +105,17 @@ export const GET: RequestHandler = async ({ locals }) => {
 		}
 	}
 
+	// The seat's role on each persona, so the page can offer only the decisions
+	// this seat may make. One RPC per distinct persona (agent_access_role is
+	// the function RLS itself enforces with); a row that is visible but whose
+	// role cannot be resolved is treated as viewer — never over-granted.
+	const roleByAgent = new Map<string, AgentRole>(
+		await Promise.all(
+			agentIds.map(
+				async (id) => [id, (await getAgentRole(locals.supabase, user.id, id)) ?? 'viewer'] as const
+			)
+		)
+	);
 	const agentById = new Map<string, any>((agents || []).map((a: any) => [a.id, a]));
 	const refByAgent = new Map<string, any>(
 		(cfgs || []).map((c: any) => [c.agent_id, c.ugc_character_ref])
@@ -124,6 +141,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 			id: d.id,
 			agent_id: d.agent_id,
 			agent_name: agent?.name ?? 'Unknown',
+			role: roleByAgent.get(d.agent_id) ?? 'viewer',
 			agent_avatar: refByAgent.get(d.agent_id) ?? null,
 			status: d.status,
 			text: display.text,
@@ -163,13 +181,13 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 	// Approve only promotes DRAFTS (→ scheduled). Reject/unschedule can also pull back
 	// an already-SCHEDULED post (→ rejected) so the queue can catch content before it
-	// publishes. Ownership + eligible-status checked in one fetch.
+	// publishes. Visibility (RLS) + eligible-status checked in one fetch; the
+	// seat's right to decide is checked per persona below.
 	const reviewable =
 		action === 'approve' ? ['draft'] : action === 'restore' ? ['rejected'] : ['draft', 'scheduled'];
 	const { data: posts, error: fetchErr } = await locals.supabase
 		.from('posts')
 		.select('id, agent_id, content, status')
-		.eq('user_id', user.id)
 		.is('deleted_at', null)
 		.in('status', reviewable)
 		.in('id', postIds);
@@ -189,12 +207,22 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		);
 	}
 
+	// Approve, reject and restore are a manager's decisions (seat.ts: canPublish),
+	// checked once per persona in the batch. The whole batch is refused if any
+	// post is out of reach: "3 of 5 approved" would be a decision the caller
+	// never made, and the page only offers the batch when every row allows it.
+	// This used to be an owner filter on the UPDATE, which answered a manager's
+	// decision with 404 "already reviewed?" — the wrong verdict, in the wrong words.
+	for (const agentId of [...new Set(eligible.map((p: any) => p.agent_id as string))]) {
+		const access = await checkAgentAccess(locals.supabase, user.id, agentId, 'manager');
+		if (!access.ok) return json({ success: false, error: access.message }, { status: access.status });
+	}
+
 	const newStatus =
 		action === 'approve' ? 'scheduled' : action === 'restore' ? 'draft' : 'rejected';
 	const { error: updErr } = await locals.supabase
 		.from('posts')
 		.update({ status: newStatus })
-		.eq('user_id', user.id)
 		.is('deleted_at', null)
 		.in('status', reviewable)
 		.in(

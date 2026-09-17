@@ -72,7 +72,12 @@ const MIN_UPSCALE_BUDGET_MS = 15_000;
  */
 const MAX_UPSCALED_BYTES = 8 * 1024 * 1024;
 
-/** How much bigger. fal's own default is 2; anything unparseable falls back to it. */
+/**
+ * How much bigger. fal's schema (verified 2026-09-17 from the OpenAPI JSON,
+ * not the docs page) allows 1-8 with a default of 2. We stop at 4 by CHOICE:
+ * above that the file-size cap below rejects nearly everything anyway, and
+ * a portrait no viewer can load is not an improvement.
+ */
 function upscaleFactor(): number {
 	const n = Number((env.UGC_UPSCALE_SCALE ?? '').trim());
 	return Number.isFinite(n) && n > 1 && n <= 4 ? n : 2;
@@ -95,6 +100,65 @@ export function upscaleUsd(): number | null {
 	// still be a claim nobody verified, and it would make the ledger row lie.
 	if (!Number.isFinite(n) || n <= 0 || n > 1) return null;
 	return n;
+}
+
+/**
+ * fal's published OpenAPI for this endpoint describes ONLY the queue host
+ * (queue.fal.run), where POST answers with a QueueStatus and the image comes
+ * from a later GET. Production proves the sync host (fal.run) answers with the
+ * output directly for every other model here — but that host is documented
+ * nowhere, so this module accepts BOTH shapes rather than betting the pass on
+ * an undocumented one. A QueueStatus is collected by polling inside the same
+ * time budget; anything else is treated as the output.
+ */
+interface QueueStatusLike {
+	request_id: string;
+	status?: string;
+	status_url?: string;
+	response_url?: string;
+	cancel_url?: string;
+}
+
+function looksQueued(d: unknown): d is QueueStatusLike {
+	const q = d as QueueStatusLike | null;
+	return !!q && typeof q.request_id === 'string' && !Object.hasOwn(q, 'image');
+}
+
+const QUEUE_POLL_MS = 2_000;
+
+async function collectQueued(
+	model: string,
+	q: QueueStatusLike,
+	falKey: string,
+	deadline: number
+): Promise<unknown> {
+	const base = `https://queue.fal.run/${model}/requests/${q.request_id}`;
+	const headers = { Authorization: `Key ${falKey}` };
+	const statusUrl = q.status_url || `${base}/status`;
+	const resultUrl = q.response_url || base;
+	const cancelUrl = q.cancel_url || `${base}/cancel`;
+
+	while (Date.now() < deadline) {
+		const st = await fetch(statusUrl, { headers, signal: AbortSignal.timeout(10_000) });
+		if (!st.ok) throw new Error(`${model} queue status ${st.status}`);
+		const body = (await st.json()) as { status?: string };
+		if (body.status === 'COMPLETED') {
+			const r = await fetch(resultUrl, { headers, signal: AbortSignal.timeout(30_000) });
+			if (!r.ok) throw new Error(`${model} queue result ${r.status}`);
+			return r.json();
+		}
+		await new Promise((res) =>
+			setTimeout(res, Math.min(QUEUE_POLL_MS, Math.max(0, deadline - Date.now())))
+		);
+	}
+	// Out of time. Do not leave paid work running that nobody will collect —
+	// best effort, and the throw below is what the caller acts on either way.
+	try {
+		await fetch(cancelUrl, { method: 'PUT', headers, signal: AbortSignal.timeout(5_000) });
+	} catch {
+		/* the deadline is the failure being reported; a failed cancel does not change it */
+	}
+	throw new Error(`${model} queued request did not complete inside the budget`);
 }
 
 export interface EnhanceResult {
@@ -157,6 +221,7 @@ export async function enhanceImage(
 	}
 
 	const model = upscaleModel();
+	const deadline = Date.now() + timeout;
 	try {
 		const res = await fetch(`https://fal.run/${model}`, {
 			method: 'POST',
@@ -171,17 +236,20 @@ export async function enhanceImage(
 		if (!res.ok) {
 			throw new Error(`${model} failed (${res.status}): ${(await res.text()).slice(0, 200)}`);
 		}
-		const data = await res.json();
+		let data: unknown = await res.json();
+		if (looksQueued(data)) {
+			data = await collectQueued(model, data, falKey, deadline);
+		}
 		// `image.url` — a single object, NOT `images[0].url`. Reading the wrong
 		// path here would return undefined and silently bill for nothing.
-		const out = data?.image?.url;
+		const out = (data as { image?: { url?: unknown } })?.image?.url;
 		if (typeof out !== 'string' || !out) {
 			throw new Error(`${model} returned no image`);
 		}
 
 		// fal reports the size on the image object, so this costs nothing and
 		// happens before persistToStorage pulls the bytes across.
-		const size = Number(data?.image?.file_size);
+		const size = Number((data as { image?: { file_size?: unknown } })?.image?.file_size);
 		if (Number.isFinite(size) && size > MAX_UPSCALED_BYTES) {
 			// Not an error: the provider did its job and we are declining the
 			// result. Billed all the same — fal ran the work either way, and a
@@ -199,7 +267,8 @@ export async function enhanceImage(
 						provider: 'fal',
 						operation: 'image',
 						model: `${model} (upscale, discarded: oversize)`,
-						usd
+						usd,
+						measuredUsd: null
 					}
 				],
 				skipped: `upscaled image over ${MAX_UPSCALED_BYTES / 1048576}MB`
@@ -220,7 +289,12 @@ export async function enhanceImage(
 					operation: 'image',
 					model: `${model} (upscale)`,
 					usd,
-					assetUrl: durable
+					assetUrl: durable,
+				// Explicitly \"did not say\", never \"was free\". fal's schema for this
+				// endpoint declares no cost, usage or billing field anywhere (checked
+				// 2026-09-17), so the price_table_drift view shows this row as unmeasured
+				// instead of the declared rate quietly passing for truth.
+				measuredUsd: null
 				}
 			]
 		};

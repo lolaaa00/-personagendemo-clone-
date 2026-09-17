@@ -311,3 +311,94 @@ describe('the original is always returned, so there is a way back', () => {
 		expect(r.url).toBe(ORIGINAL);
 	});
 });
+
+describe('both response shapes fal documents, and the one it does not', () => {
+	// fal's OpenAPI for this endpoint describes only queue.fal.run, where POST
+	// answers with a QueueStatus. Production proves fal.run answers with the
+	// output directly for every other model here. Neither shape may be assumed.
+	const QUEUED = {
+		request_id: 'req-1',
+		status: 'IN_QUEUE',
+		status_url: 'https://queue.fal.run/fal-ai/esrgan/requests/req-1/status',
+		response_url: 'https://queue.fal.run/fal-ai/esrgan/requests/req-1',
+		cancel_url: 'https://queue.fal.run/fal-ai/esrgan/requests/req-1/cancel'
+	};
+
+	function mockSequence(responses: Array<{ body: unknown; ok?: boolean; status?: number }>) {
+		const f = vi.fn();
+		for (const r of responses) {
+			f.mockResolvedValueOnce({
+				ok: r.ok ?? true,
+				status: r.status ?? 200,
+				json: async () => r.body,
+				text: async () => JSON.stringify(r.body)
+			});
+		}
+		vi.stubGlobal('fetch', f);
+		return f;
+	}
+
+	it('collects a queued request by polling, then bills once for the collected image', async () => {
+		const f = mockSequence([
+			{ body: QUEUED }, // POST → QueueStatus
+			{ body: { status: 'IN_PROGRESS' } }, // poll 1
+			{ body: { status: 'COMPLETED' } }, // poll 2
+			{ body: { image: { url: UPSCALED, file_size: 1024 } } } // result
+		]);
+
+		const r = await enhanceImage(SVC, 'u1', ORIGINAL, KEY, 60_000);
+
+		expect(r.applied).toEqual(['upscale']);
+		expect(r.costEvents).toHaveLength(1);
+		expect(callsOf(f)[1][0]).toBe(QUEUED.status_url);
+		expect(callsOf(f)[3][0]).toBe(QUEUED.response_url);
+	});
+
+	it('cancels a queued request it cannot wait for, keeps the original, bills nothing', async () => {
+		type FakeRes = { ok: boolean; status: number; json: () => Promise<unknown>; text: () => Promise<string> };
+		const reply = (body: unknown): FakeRes => ({
+			ok: true,
+			status: 200,
+			json: async () => body,
+			text: async () => ''
+		});
+		const f = vi.fn(async (url: string, _init?: RequestInit): Promise<FakeRes> => {
+			if (url.endsWith('/cancel')) return reply({ success: true });
+			if (url.endsWith('/status')) return reply({ status: 'IN_PROGRESS' });
+			return reply(QUEUED);
+		});
+		vi.stubGlobal('fetch', f);
+
+		// Enough to start (≥15s floor) but not enough to ever see COMPLETED.
+		const r = await enhanceImage(SVC, 'u1', ORIGINAL, KEY, 15_050);
+
+		expect(r.url).toBe(ORIGINAL);
+		expect(r.costEvents).toEqual([]);
+		expect(r.skipped).toMatch(/budget/i);
+		const cancelled = f.mock.calls.some(([u, init]) => u.endsWith('/cancel') && init?.method === 'PUT');
+		expect(cancelled).toBe(true);
+	}, 30_000);
+
+	it('does not mistake an output that happens to carry a request_id for a queue status', async () => {
+		mockFal({ request_id: 'req-2', image: { url: UPSCALED } });
+		const r = await enhanceImage(SVC, 'u1', ORIGINAL, KEY);
+		expect(r.applied).toEqual(['upscale']);
+	});
+});
+
+describe('the ledger row says "unmeasured", never "free"', () => {
+	// fal's schema declares no cost, usage or billing field for this endpoint,
+	// so the price_table_drift view cannot see what it truly cost. Recording
+	// null keeps that visible; recording 0 would look like a free call.
+	it('a successful pass records measuredUsd as null', async () => {
+		mockFal({ image: { url: UPSCALED } });
+		const r = await enhanceImage(SVC, 'u1', ORIGINAL, KEY);
+		expect(r.costEvents[0]).toHaveProperty('measuredUsd', null);
+	});
+
+	it('a discarded-oversize pass records measuredUsd as null too', async () => {
+		mockFal({ image: { url: UPSCALED, file_size: 64 * 1024 * 1024 } });
+		const r = await enhanceImage(SVC, 'u1', ORIGINAL, KEY);
+		expect(r.costEvents[0]).toHaveProperty('measuredUsd', null);
+	});
+});

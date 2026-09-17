@@ -34,6 +34,7 @@
 		onPostNow = undefined,
 		onReject = undefined,
 		onRefined = undefined,
+		approveBlock = null,
 		// BUG, not dead code: three call sites (favorites, generations, review) pass
 		// characterRef, and this component never renders it — the caller's avatar is
 		// silently discarded. Kept declared so the prop keeps type-checking at those
@@ -50,6 +51,14 @@
 		/** When provided, the footer gets a Delete button (permanent removal + live teardown). */
 		onDelete?: (post: any) => void;
 		onApprove: (post: any) => void;
+		/**
+		 * Why this seat cannot decide on this post — the seat sentence from
+		 * seatBlockedReason(), resolved by the caller from the SERVER role on the
+		 * post's persona. Disables Approve, Publish and Post Now with the reason,
+		 * so a viewer who opens the drawer meets the same answer as on the row
+		 * behind it, not a 403 one click later.
+		 */
+		approveBlock?: string | null;
 		/** Review-queue flow: reject a draft / unschedule a scheduled post (with a
 		 *  reason, logged to post_reviews). Shown instead of Delete in review contexts. */
 		onReject?: ((post: any) => void) | null;
@@ -1441,7 +1450,8 @@
 				<button
 					type="button"
 					class="btn-drawer-approve"
-					disabled={approving || refining}
+					disabled={approving || refining || !!approveBlock}
+					title={approveBlock ?? undefined}
 					onclick={() => onApprove(post)}
 				>
 					{approving ? 'Approving…' : 'Approve & Schedule'}
@@ -1449,7 +1459,13 @@
 			{:else if canRepublish}
 				<!-- Media generated fine; only publishing failed. Re-send to a platform
 				     that IS connected — the user picks which. No auto-retry. -->
-				<button type="button" class="btn-drawer-approve" onclick={() => onPublishFallback?.(post)}>
+				<button
+					type="button"
+					class="btn-drawer-approve"
+					disabled={!!approveBlock}
+					title={approveBlock ?? undefined}
+					onclick={() => onPublishFallback?.(post)}
+				>
 					Publish to a connected platform
 				</button>
 			{/if}
@@ -1460,9 +1476,9 @@
 				<button
 					type="button"
 					class="btn-drawer-postnow"
-					disabled={posting || refining}
+					disabled={posting || refining || !!approveBlock}
 					onclick={handlePostNowClick}
-					title="Publish immediately, overriding the schedule"
+					title={approveBlock ?? 'Publish immediately, overriding the schedule'}
 				>
 					{posting ? 'Posting…' : 'Post Now'}
 				</button>

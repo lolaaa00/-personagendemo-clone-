@@ -544,7 +544,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-17", hash: "e381879", type: "docs", category: "generation", scope: "verify", title: "frozen build snapshot for shared trees, dialog-scoped composer reads, seat provisioning" },
 	{ date: "2026-09-17", hash: "c7674db", type: "feat", category: "feature", scope: "byok", title: "read stored secrets as service_role; a broken key now says so" },
 	{ date: "2026-09-17", hash: "43a3d0a", type: "feat", category: "generation", scope: "ledger", title: "budget the model's thinking per call, and record how much it did" },
-	{ date: "2026-09-17", hash: "eb91ef9", type: "other", category: "maintenance", scope: null, title: "Merge origin/main: per-call thinking budgets, and stored secrets read as service_role" }
+	{ date: "2026-09-17", hash: "eb91ef9", type: "other", category: "maintenance", scope: null, title: "Merge origin/main: per-call thinking budgets, and stored secrets read as service_role" },
+	{ date: "2026-09-17", hash: "06de1cd", type: "chore", category: "docs", scope: "hooks", title: "refuse lint errors at commit, and never commit a stale changelog" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -939,7 +940,15 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 		summary: "Move the ratchet to the real count — lint:ci was failing at 1136. Plus 13 more changes, touching guides and explanations and things that were broken and things you can now do.",
 		major: true, curated: false,
 		entries: [CHANGELOG[497], CHANGELOG[498], CHANGELOG[499], CHANGELOG[500], CHANGELOG[501], CHANGELOG[502], CHANGELOG[503], CHANGELOG[504], CHANGELOG[505], CHANGELOG[506], CHANGELOG[507], CHANGELOG[508], CHANGELOG[509], CHANGELOG[510]]
+	},
+	{
+		id: "06de1cd", from: "2026-09-17", to: "2026-09-17",
+		category: "docs", categories: ["docs"],
+		title: "Help: refuse lint errors at commit, and never commit a…",
+		summary: "Refuse lint errors at commit, and never commit a stale changelog.",
+		major: false, curated: false,
+		entries: [CHANGELOG[511]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "eb91ef9";
+export const CHANGELOG_GENERATED_FROM = "06de1cd";

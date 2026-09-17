@@ -3,6 +3,8 @@ import { createDbService } from '$lib/server/db';
 import { resolvePersonaGender } from '$lib/server/content/generate';
 import { error } from '@sveltejs/kit';
 import { env } from '$env/dynamic/public';
+import { getAgentRole } from '$lib/server/workspaces';
+import { capabilities } from '$lib/seat';
 
 /** A persona id is a uuid. Anything else cannot name one. */
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -41,7 +43,7 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 			return count ?? 0;
 		};
 
-		const [agentRes, supervisorsRes, configRes, briefsResult] = await Promise.all([
+		const [agentRes, supervisorsRes, configRes, briefsResult, role] = await Promise.all([
 			// Single-row fetch instead of loading the whole roster (soul/skills/
 			// market text of EVERY agent) just to .find() one. RLS scopes the
 			// query to the owner, so "missing" and "not owned" both come back as
@@ -56,7 +58,11 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 			db.agentConfigs.get(params.agentId),
 			// Multi-brand: the Profile tab's brief picker lists every brief the
 			// user has saved (e.g. "Just Kids Honey", "HoneyX Manly Plus").
-			user ? db.brandBriefs.list(user.id) : Promise.resolve({ data: [] as any[] })
+			user ? db.brandBriefs.list(user.id) : Promise.resolve({ data: [] as any[] }),
+			// This seat's role on THIS persona — the function RLS itself enforces with.
+			// The layout's seat is the account's highest membership seat, an upper
+			// bound; a page about one persona must carry that persona's answer.
+			user ? getAgentRole(locals.supabase, user.id, params.agentId) : Promise.resolve(null)
 		]);
 
 		const agent = agentRes.data;
@@ -108,7 +114,11 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 			// The Profile tab uses this to pre-fill the picker so what's shown
 			// matches what generates — no more "why is my female persona voiced
 			// as Adam".
-			inferredGender: resolvePersonaGender(agent, config?.ugc_voice ?? null) ?? null
+			inferredGender: resolvePersonaGender(agent, config?.ugc_voice ?? null) ?? null,
+			// Overrides the layout seat for this page. Never-brick: an unresolved role
+			// (RPC hiccup) keeps yesterday's behaviour rather than hiding an owner's
+			// own controls.
+			seat: capabilities(role ?? 'owner')
 		};
 	}
 

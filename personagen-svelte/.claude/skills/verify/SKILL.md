@@ -347,3 +347,15 @@ Each of these produced a confident, wrong FAIL before being caught:
 - **A viewer never reaches the composer's steps.** The preview call itself refuses with 403
   (`checkAgentAccess(..., 'creator')`), so "walk four steps then check the confirm" is the wrong
   probe for a read-only seat; the designed denial card is the thing to assert on.
+- **`/review` is the surface for seat roles, not the persona page.** The persona page's Content
+  tab shows a member every tile (RLS), so counting tiles proves nothing about seats. The queue
+  is where approve/reject/delete live for every role at once; read every control inside the
+  view that is actually rendered (`table` by default — `tbody tr`, `.row-ok`, `.row-del`) and
+  probe the API from inside the session with `reject` then `restore` (never `approve`: that
+  hands the post to the production scheduler). `scripts/ux/audit-tenant.mjs` seeds 9 drafts.
+- **Two ways a scripted edit silently stops matching.** (1) `git checkout HEAD -- <file>` on this
+  machine rewrites the file with CRLF (autocrlf) while every other working copy is LF, so every
+  `\n`-anchored `from` string finds 0 matches — `sed -i 's/\r$//'` the file first. (2) Never
+  `prettier --write` a file that is not Prettier-clean at HEAD (`npm run lint` counts ~700 such
+  files): it reformats the whole file and buries your hunks in a 1,200-line diff. Check with
+  `git show HEAD:<path> | npx prettier --stdin-filepath <path> --check` before writing.
