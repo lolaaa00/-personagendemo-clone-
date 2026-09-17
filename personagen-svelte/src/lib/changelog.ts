@@ -552,7 +552,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-17", hash: "0c296e5", type: "docs", category: "docs", scope: "competitive", title: "two rounds deeper — the anchor, the schema, and the branch itself" },
 	{ date: "2026-09-17", hash: "4be831a", type: "fix", category: "fix", scope: "css", title: "the scroll-reveal selectors are set at runtime, so say so" },
 	{ date: "2026-09-17", hash: "943e748", type: "fix", category: "fix", scope: "qc", title: "confirm a grade that lands within a point of the floor" },
-	{ date: "2026-09-17", hash: "caa0510", type: "other", category: "design", scope: null, title: "Merge remote-tracking branch 'origin/main' into ux/portal-overhaul" }
+	{ date: "2026-09-17", hash: "caa0510", type: "other", category: "design", scope: null, title: "Merge remote-tracking branch 'origin/main' into ux/portal-overhaul" },
+	{ date: "2026-09-17", hash: "d208584", type: "docs", category: "infrastructure", scope: "audit", title: "round 4 — the hook made durable, no CI, the ceiling gate red on committed code" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -950,12 +951,12 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 	},
 	{
 		id: "06de1cd", from: "2026-09-17", to: "2026-09-17",
-		category: "fix", categories: ["docs","fix","design"],
+		category: "fix", categories: ["docs","fix","design","infrastructure"],
 		title: "Fixed: refuse lint errors at commit, and never commit a…",
-		summary: "Refuse lint errors at commit, and never commit a stale changelog. Plus 7 more changes, touching guides and explanations and layout, colours and readability.",
+		summary: "Refuse lint errors at commit, and never commit a stale changelog. Plus 8 more changes, touching guides and explanations and layout, colours and readability and setup and deployment.",
 		major: true, curated: false,
-		entries: [CHANGELOG[511], CHANGELOG[512], CHANGELOG[513], CHANGELOG[514], CHANGELOG[515], CHANGELOG[516], CHANGELOG[517], CHANGELOG[518]]
+		entries: [CHANGELOG[511], CHANGELOG[512], CHANGELOG[513], CHANGELOG[514], CHANGELOG[515], CHANGELOG[516], CHANGELOG[517], CHANGELOG[518], CHANGELOG[519]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "caa0510";
+export const CHANGELOG_GENERATED_FROM = "d208584";
