@@ -44,6 +44,26 @@ if (!SB_URL || !SB_KEY) {
 
 const EMAIL = 'verify-harness@personagen.test';
 const PASSWORD = 'VerifyHarness!2026';
+
+/**
+ * Every seat role, as its own login.
+ *
+ * A portal cannot be verified from one account: `agent_access_role` is an RPC
+ * backed by RLS, so what a viewer may do is decided by the DATABASE, and the
+ * only honest way to see a viewer's portal is to be one. Seeding just the owner
+ * meant every permission claim was untested — a lesser role could have been
+ * shown a control that 403s, a blank page, or another workspace's data, and
+ * nothing would have noticed.
+ *
+ * `owner` is deliberately absent from this list: it is `workspaces.owner_id`,
+ * never a `workspace_members` row, and it is the account above. The four here
+ * are the values the members CHECK constraint actually accepts — 'admin' only
+ * since workspace_admin_role_migration.sql widened it.
+ */
+const SEATS = ['admin', 'manager', 'creator', 'viewer'];
+const seatEmail = (role) => `verify-${role}@personagen.test`;
+/** One password for all of them: these are disposable and never leave this file. */
+const SEAT_PASSWORD = 'VerifySeat!2026';
 // Distinct widths ⇒ distinct URLs. The persona Assets grid de-dupes by URL, so
 // reusing one image collapses every fixture into a single tile.
 const IMG = (w) =>
@@ -52,18 +72,46 @@ const IMG = (w) =>
 const H = { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' };
 const api = (path, init) => fetch(`${SB_URL}${path}`, { ...init, headers: { ...H, ...init?.headers } });
 
-async function findUser() {
+async function listUsers() {
 	const res = await api('/auth/v1/admin/users?per_page=200');
 	const body = await res.json();
-	return (body.users || []).find((u) => u.email === EMAIL) || null;
+	return body.users || [];
+}
+
+async function findUser() {
+	return (await listUsers()).find((u) => u.email === EMAIL) || null;
+}
+
+/** Creates a confirmed user, or returns the existing one at that address. */
+async function makeUser(email, password, fullName) {
+	const res = await api('/auth/v1/admin/users', {
+		method: 'POST',
+		body: JSON.stringify({ email, password, email_confirm: true, user_metadata: { full_name: fullName } })
+	});
+	const body = await res.json();
+	if (body.id) return body.id;
+	const existing = (await listUsers()).find((u) => u.email === email);
+	if (existing) return existing.id;
+	console.error(`user create failed for ${email}:`, JSON.stringify(body).slice(0, 300));
+	process.exit(1);
 }
 
 async function destroy(quiet = false) {
-	const user = await findUser();
+	// Seat users own no rows — their access is a membership row that cascades
+	// with the workspace — so they are removed first and unconditionally, even
+	// when the owner is already gone. Leaving them behind would let a later
+	// `create` collide on a duplicate address.
+	const all = await listUsers();
+	for (const seat of SEATS) {
+		const u = all.find((x) => x.email === seatEmail(seat));
+		if (u) await api(`/auth/v1/admin/users/${u.id}`, { method: 'DELETE' });
+	}
+	const user = all.find((u) => u.email === EMAIL) || null;
 	if (!user) {
 		if (!quiet) console.log('nothing to destroy');
 		return;
 	}
+	await api(`/rest/v1/workspaces?owner_id=eq.${user.id}`, { method: 'DELETE' });
 	// agent_configs / connections / posts cascade off agents in the app's own
 	// delete path, but a raw teardown has to sweep them explicitly.
 	for (const table of ['posts', 'brand_briefs', 'agent_configs', 'connections', 'agents']) {
@@ -90,29 +138,22 @@ async function insert(table, rows) {
 async function create() {
 	await destroy(true);
 
-	const created = await (
-		await api('/auth/v1/admin/users', {
-			method: 'POST',
-			body: JSON.stringify({
-				email: EMAIL,
-				password: PASSWORD,
-				email_confirm: true,
-				user_metadata: { full_name: 'Verify Harness' }
-			})
-		})
-	).json();
-	const userId = created.id;
-	if (!userId) {
-		console.error('user create failed:', JSON.stringify(created).slice(0, 300));
-		process.exit(1);
-	}
+	const userId = await makeUser(EMAIL, PASSWORD, 'Verify Harness');
+
+	// One workspace, owned by the harness user, holding every seeded persona.
+	// Without it there is nothing for a membership row to point at, so the four
+	// seat logins below would authenticate into an empty portal and every
+	// permission check would pass for the wrong reason.
+	const [workspace] = await insert('workspaces', [
+		{ owner_id: userId, name: 'Harness Workspace' }
+	]);
 
 	// NOTE: `agents` has no `bio`/`platform` column — inserting them fails with
 	// PGRST204 "Could not find the 'bio' column".
 	const agents = await insert('agents', [
-		{ user_id: userId, name: 'Harness Persona A', niche: 'wellness', handle: 'harness_a', status: 'active', market: '{}', initial: 'A' },
-		{ user_id: userId, name: 'Harness Persona B', niche: 'wellness', handle: 'harness_b', status: 'active', market: '{}', initial: 'B' },
-		{ user_id: userId, name: 'Harness Persona C', niche: 'fitness', handle: 'harness_c', status: 'paused', market: '{}', initial: 'C' }
+		{ user_id: userId, workspace_id: workspace.id, name: 'Harness Persona A', niche: 'wellness', handle: 'harness_a', status: 'active', market: '{}', initial: 'A' },
+		{ user_id: userId, workspace_id: workspace.id, name: 'Harness Persona B', niche: 'wellness', handle: 'harness_b', status: 'active', market: '{}', initial: 'B' },
+		{ user_id: userId, workspace_id: workspace.id, name: 'Harness Persona C', niche: 'fitness', handle: 'harness_c', status: 'paused', market: '{}', initial: 'C' }
 	]);
 	const agentA = agents.find((a) => a.name === 'Harness Persona A');
 
@@ -173,7 +214,26 @@ async function create() {
 		}
 	]);
 
-	console.log(JSON.stringify({ email: EMAIL, password: PASSWORD, userId, agentA: agentA.id }));
+	// One login per seat, all pointed at the SAME workspace, so the four portals
+	// differ only by role — which is the comparison a permission check is.
+	const seats = {};
+	for (const role of SEATS) {
+		const id = await makeUser(seatEmail(role), SEAT_PASSWORD, `Verify ${role}`);
+		await insert('workspace_members', [
+			{ workspace_id: workspace.id, user_id: id, role, invited_by: userId }
+		]);
+		seats[role] = { email: seatEmail(role), password: SEAT_PASSWORD, userId: id };
+	}
+
+	console.log(
+		JSON.stringify({
+			// `owner` is the workspace owner, not a members row — see SEATS.
+			owner: { email: EMAIL, password: PASSWORD, userId },
+			seats,
+			workspaceId: workspace.id,
+			agentA: agentA.id
+		})
+	);
 }
 
 const cmd = process.argv[2];
