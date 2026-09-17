@@ -29,7 +29,7 @@ describe('meteredAiClient', () => {
 		await ai.generate('b');
 		await ai.generate('c');
 		expect(budget.assertWithinBudget).toHaveBeenCalledTimes(1);
-		expect(budget.assertWithinBudget.mock.calls[0]).toEqual([scope.supabase, 'u1', undefined, 1]); // ceil(0.002 × 100) at markup 1
+		expect(budget.assertWithinBudget.mock.calls[0]).toEqual([scope.supabase, 'u1', undefined, 2]); // ceil(0.012 × 100) at markup 1
 		expect(record.recordCostEvents).toHaveBeenCalledTimes(3);
 		// usd is the BILLING basis and stays the table rate. The three usage fields
 		// ride alongside it and are null here because this stub reports no usage —
@@ -40,7 +40,7 @@ describe('meteredAiClient', () => {
 				provider: 'openrouter',
 				operation: 'llm',
 				model: 'gemini-3.5-flash',
-				usd: 0.002,
+				usd: 0.012,
 				tokensIn: null,
 				tokensOut: null,
 				measuredUsd: null
@@ -67,8 +67,9 @@ describe('meteredAiClient', () => {
 		expect(event.tokensIn).toBe(1200);
 		expect(event.tokensOut).toBe(340);
 		expect(event.measuredUsd).toBe(0.00731);
-		// 3.6x the table rate, and still billed at the table rate.
-		expect(event.usd).toBe(0.002);
+		// The provider reported LESS than the table here; billing still uses the
+		// table either way, which is the whole point of recording rather than billing.
+		expect(event.usd).toBe(0.012);
 	});
 
 	it('refuses every call when the gate refuses, and records nothing', async () => {

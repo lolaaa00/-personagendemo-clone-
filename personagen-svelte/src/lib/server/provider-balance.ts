@@ -59,7 +59,7 @@ export interface ProviderBalance {
  * so nobody re-derives the post economics from memory.
  */
 export const CALL_COST_USD = {
-	llm: 0.002,
+	llm: 0.012,
 	openrouterImage: 0.02,
 	falImage: 0.078,
 	openrouterVideo: 0.35,
@@ -73,8 +73,8 @@ export const CALL_COST_USD = {
  * customer sees a failure" does. So both thresholds are derived from what a
  * post actually draws on THIS account:
  *
- *   worst case — a video post: LLM caption $0.002 + OpenRouter video $0.35 = $0.352
- *   typical    — an image post: LLM caption $0.002 + OpenRouter image $0.02  = $0.022
+ *   worst case — a video post: LLM caption $0.012 + OpenRouter video $0.35 = $0.362
+ *   typical    — an image post: LLM caption $0.012 + OpenRouter image $0.02  = $0.032
  *
  * `low` fires at 70 worst-case posts (~$24.64). That number is chosen for the
  * time it buys, not for its roundness: autopilot's default is 3 posts/day per

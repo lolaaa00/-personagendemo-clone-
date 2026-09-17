@@ -327,17 +327,20 @@ export const MODEL_CATALOG: ModelOption[] = [
 	// clients — the OpenRouter ones over the same /chat/completions call that
 	// OPENROUTER_GEMINI_MODEL already parameterises, the direct one over the
 	// @google/genai SDK. Nothing here needs a new adapter.
-	// Prices are per-CALL ESTIMATES for a token-billed stage: the two Flash rows
-	// carry the figure pricing.ts already bills ($0.002), so picker and ledger
-	// cannot disagree. A long director prompt genuinely costs more.
+	// Prices are per-CALL ESTIMATES for a token-billed stage, DERIVED from the
+	// published per-token rates below against the mean real call (732 tokens in,
+	// 1,170 out, measured over 12 production generations). They carry the same
+	// figures pricing.ts bills, so picker and ledger cannot disagree. Both rows
+	// previously carried numbers ~6x too low — the per-token rates were written
+	// in these notes and never turned into a per-call estimate.
 	{
 		id: 'google/gemini-3.5-flash-lite',
 		label: 'Gemini 3.5 Flash Lite (OpenRouter)',
 		provider: 'openrouter',
 		kind: 'llm',
 		tier: 'budget',
-		usd: 0.0005,
-		note: "Cheapest director. Scaled from the Flash estimate by OpenRouter's published rates ($0.30/$2.50 per M vs $1.50/$9.00). Thinner scripts, weaker JSON discipline."
+		usd: 0.0032,
+		note: "Cheapest director. $0.30/$2.50 per M tokens against the mean real call = $0.0032. Thinner scripts, weaker JSON discipline."
 	},
 	{
 		id: 'google/gemini-3.5-flash',
@@ -345,8 +348,8 @@ export const MODEL_CATALOG: ModelOption[] = [
 		provider: 'openrouter',
 		kind: 'llm',
 		tier: 'balanced',
-		usd: 0.002,
-		note: 'The default. Same model the app has always run, routed through OpenRouter.'
+		usd: 0.012,
+		note: 'The default. $1.50/$9.00 per M tokens against the mean real call = $0.0116, and the provider reports $0.0116. Output is 95% of it.'
 	},
 	{
 		id: 'gemini-3.5-flash',
@@ -354,8 +357,8 @@ export const MODEL_CATALOG: ModelOption[] = [
 		provider: 'gemini',
 		kind: 'llm',
 		tier: 'balanced',
-		usd: 0.002,
-		note: 'Same model, billed by Google instead of OpenRouter — one less hop.',
+		usd: 0.012,
+		note: 'Same model, billed by Google instead of OpenRouter — one less hop, so it should cost less. UNMEASURED: this client never runs while an OpenRouter key exists, so it carries the OpenRouter figure rather than a guess downward.',
 		caveat:
 			'Only runs when no OpenRouter key is configured: resolveAiClient prefers OpenRouter over Gemini for every user.'
 	}

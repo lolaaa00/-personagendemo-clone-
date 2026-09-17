@@ -513,7 +513,7 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-12", hash: "94eb7b4", type: "fix", category: "fix", scope: null, title: "FormatExplorer uses quote() to apply markup—was under-quoting by 3x" },
 	{ date: "2026-09-15", hash: "6c848ae", type: "feat", category: "feature", scope: "billing", title: "capture what a call actually cost — recorded, never billed" },
 	{ date: "2026-09-15", hash: "7bc3928", type: "refactor", category: "maintenance", scope: "providers", title: "one catalogue, so \"can this be BYOK'd\" stops being an absence" },
-	{ date: "2026-09-15", hash: "7da8f72", type: "fix", category: "fix", scope: "security", title: "anon and authenticated hold TRUNCATE on both key tables" }
+	{ date: "2026-09-15", hash: "87001c6", type: "fix", category: "fix", scope: "security", title: "anon and authenticated hold TRUNCATE on both key tables" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -895,4 +895,4 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "7da8f72";
+export const CHANGELOG_GENERATED_FROM = "87001c6";

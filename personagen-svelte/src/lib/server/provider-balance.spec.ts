@@ -108,16 +108,16 @@ describe('three states: ok, low, unknown', () => {
 		const b = await pb.refreshProviderBalance(true, stubJson(PRODUCTION_TODAY).impl);
 		expect(b.state).toBe('low');
 		expect(b.remainingUsd).toBeCloseTo(2.7795, 4);
-		// $2.78 / $0.352 per video post, $2.78 / $0.022 per image post.
+		// $2.78 / $0.362 per video post, $2.78 / $0.032 per image post.
 		expect(b.postsRemaining).toBe(7);
-		expect(b.imagePostsRemaining).toBe(126);
+		expect(b.imagePostsRemaining).toBe(86);
 	});
 
 	it('the threshold is derived from post cost, not from a round dollar number', () => {
-		// 70 worst-case posts at $0.352 — a day of autopilot for ~20 personas even
+		// 70 worst-case posts at $0.362 — a day of autopilot for ~20 personas even
 		// if every post took the most expensive route.
-		expect(pb.LOW_BALANCE_USD).toBeCloseTo(24.64, 2);
-		expect(pb.EMPTY_BALANCE_USD).toBeCloseTo(0.352, 3);
+		expect(pb.LOW_BALANCE_USD).toBeCloseTo(25.34, 2);
+		expect(pb.EMPTY_BALANCE_USD).toBeCloseTo(0.362, 3);
 		expect(pb.CALL_COST_USD.openrouterVideo).toBe(0.35);
 	});
 

@@ -132,7 +132,7 @@
 						Your wallet is empty. Nothing more can be generated — even a text post pays for its writing — so top up to continue.
 					{:else}
 						≈ <strong>{data.buys.imagePosts}</strong> image posts, or <strong>{data.buys.videoPosts}</strong> video posts, or
-						<strong>{data.buys.talkingHeads}</strong> talking-head clips. A text post costs only its writing, about two cents.
+						<strong>{data.buys.talkingHeads}</strong> talking-head clips. A text post costs only its writing, about eight cents.
 					{/if}
 				</p>
 			{/if}
@@ -277,7 +277,7 @@
 		<h2>How it works</h2>
 		<dl>
 			<dt>What costs money?</dt>
-			<dd>AI images, video, voice and talking-head clips, plus the writing behind every post — a text post is just the writing, about two cents. Scheduling, publishing and analytics are free on every account.</dd>
+			<dd>AI images, video, voice and talking-head clips, plus the writing behind every post — a text post is just the writing, about eight cents. Scheduling, publishing and analytics are free on every account.</dd>
 			<dt>Why is the balance in {data.currency}?</dt>
 			<dd>We show your wallet in the currency of where you are. Change it any time in Settings. Charges are made in USD.</dd>
 			<dt>What if I bring my own provider keys?</dt>

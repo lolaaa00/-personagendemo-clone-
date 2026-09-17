@@ -63,11 +63,26 @@ export const PRICING_MATRIX: PriceEntry[] = [
 		usd: 0.7
 	},
 	// ── OpenRouter (text primary + media failover) ─────────────────────────
+	// MEASURED, not estimated. This row read $0.002 from the start and was wrong
+	// by 5.8x — every LLM call was sold below cost, because the retail price at a
+	// 3x markup (1 credit = $0.01) was under the $0.0116 the call actually cost.
+	//
+	// The rates were never unknown: the note on the Flash Lite row in models.ts
+	// has recorded Flash at $1.50/$9.00 per M tokens all along. Nobody derived a
+	// per-call figure from them. Doing that against the mean real call — 732
+	// tokens in, 1,170 out, from 12 consecutive production generations — gives
+	// $0.01163, and the provider's own reported cost for those calls averaged
+	// $0.01164. The two agree to a hundredth of a cent.
+	//
+	// Rounded UP to $0.012: per-call is a flat estimate for a token-billed stage,
+	// real calls ranged $0.0083-$0.0159, and quoting under cost is never the safe
+	// direction. 95% of the cost is OUTPUT tokens at 6x the input rate, so the
+	// lever on this number is prompt verbosity, not the price.
 	{
 		provider: 'openrouter',
 		operation: 'llm',
 		model: 'gemini-3.5-flash (director/grader/captions)',
-		usd: 0.002
+		usd: 0.012
 	},
 	// Was recorded as 'flux-schnell' @ $0.02 — both wrong. That model id 404s on
 	// OpenRouter (see UGC_IMAGE_MODEL_OPENROUTER in content/generate.ts, which
@@ -89,7 +104,12 @@ export const PRICING_MATRIX: PriceEntry[] = [
 		usd: 0.35
 	},
 	// ── Gemini direct (env-key text fallback) ──────────────────────────────
-	{ provider: 'gemini', operation: 'llm', model: 'gemini-3.5-flash', usd: 0.002 },
+	// The direct path is UNMEASURED — resolveAiClient prefers OpenRouter over
+	// Gemini at every level, so with both keys set this client never runs and no
+	// production call has ever been billed through it. It carries the OpenRouter
+	// measurement as a conservative stand-in: one less hop should cost less, but
+	// guessing DOWN on an unmeasured route is how the row above got wrong.
+	{ provider: 'gemini', operation: 'llm', model: 'gemini-3.5-flash', usd: 0.012 },
 	// ── Firecrawl (store / product page scrapes) ───────────────────────────
 	// Standard plan: $16 / 3,000 credits, 1 credit per scraped page → $0.0053.
 	// Rounded to a cent-fraction that survives the retail ceil at 3× (2 credits).

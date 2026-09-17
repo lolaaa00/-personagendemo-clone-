@@ -100,16 +100,30 @@ Every figure below is asserted by `src/lib/economics.spec.ts` and `src/lib/serve
 
 | outcome | steps | raw | retail | margin | × raw |
 |---|---|---|---|---|---|
-| image post | director + grader + still | $0.084 | **$0.26** | 67.7% | 3.10 |
-| video post | + b-roll clip | $0.504 | **$1.52** | 66.8% | 3.02 |
-| talking-head post | + voice + OmniHuman | $0.814 | **$2.45** | 66.8% | 3.01 |
-| cinematic multi-shot | + 4 stills + pro shot-set | $1.924 | **$5.78** | 66.7% | 3.00 |
+| image post | director + grader + still | $0.104 | **$0.32** | 67.5% | 3.08 |
+| video post | + b-roll clip | $0.524 | **$1.58** | 66.8% | 3.02 |
+| talking-head post | + voice + OmniHuman | $0.834 | **$2.51** | 66.8% | 3.01 |
+| cinematic multi-shot | + 4 stills + pro shot-set | $1.944 | **$5.84** | 66.7% | 3.00 |
 | persona (avatar + 4-stage kit) | 6 stills | $0.48 | **$1.44** | 66.7% | 3.00 |
 | text card post | local render | $0 | $0 | — | — |
 
 The earlier draft of §4 quoted one LLM pass per post; the runtime records the director and the QC grader, so two are quoted here and in the billing page's "what it buys".
 
-**Welcome credit.** 1,000 credits = $10.00 retail = $3.33 raw. After a persona ($1.44) it buys 32 image posts or 5 video posts. Break-even: one $10 pack per three signups that generate.
+**Corrected 2026-09-17.** Every row above moved, because the LLM rate underneath
+them was wrong by 5.8x. It read $0.002 per call from the start; the provider's
+own reported cost across twelve consecutive production generations averages
+$0.01164, and deriving it from the per-token rates this repo has always
+documented ($1.50 in / $9.00 out per M, against the mean real call of 732 tokens
+in and 1,170 out) gives $0.01163. The two agree to a hundredth of a cent, so
+this was never an unknown — it was a figure nobody derived.
+
+At the old rate an LLM call retailed for 1 credit and cost $0.0116: the text
+path sold **below cost**, and a text post moved from about two cents to about
+eight. Output tokens are 95% of the spend at 6x the input rate, so the lever on
+this line is prompt verbosity, not the price — capping output near 400 tokens
+would roughly halve it and bring the older figures back honestly.
+
+**Welcome credit.** 1,000 credits = $10.00 retail = $3.33 raw. After a persona ($1.44) it buys 26 image posts or 5 video posts. Break-even: one $10 pack per three signups that generate.
 
 **Packs.** Each sells at par plus bonus. Margin if fully spent at 3×: $10 → 66.7%, $25 → 65.3%, $50 → 63.3%, $100 → 60.0% (exactly 2.5× raw). Blended across an even mix: 62%. The §1 target of "≥ 65% blended" is therefore met only on the two smaller packs; the honest floor is 60% and the design accepts that on the $100 pack in exchange for order value.
 
