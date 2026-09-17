@@ -2,9 +2,10 @@
 	import { syncParam, readParam } from '$lib/url-state';
 	import { dialog } from '$lib/actions/dialog';
 	import { showToast } from '$lib/stores/ui.svelte';
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { Personas, BrandBrief, type GeneratedPersona } from '$lib/services/api';
 	import { PERSONA_ARCHETYPES, CONTENT_FOCUS_OPTIONS } from '$lib/persona-profile';
+	import TraitPicker from '$lib/components/persona/TraitPicker.svelte';
 	import { goto } from '$app/navigation';
 	import { browser } from '$app/environment';
 
@@ -96,6 +97,45 @@
 			: null
 	);
 	let createError = $state('');
+
+	// ── The look preview ──────────────────────────────────────────────────────
+	// A real portrait, rendered before the persona exists, so the traits above
+	// can be judged by looking rather than by reading. Kept in the draft (and so
+	// in localStorage) because it is PAID work: a refresh mid-wizard must not
+	// throw away an image the user has already been billed for.
+	let previewUrl = $state('');
+	let previewLoading = $state(false);
+	let previewError = $state('');
+
+	async function generatePreview() {
+		if (previewLoading) return;
+		previewLoading = true;
+		previewError = '';
+		try {
+			const res = await fetch('/api/persona-preview', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					name: agentName.trim(),
+					bio: soul.trim(),
+					ugcVoice: pinnedVoice || undefined,
+					brandBriefId: selectedBriefId || null,
+					personaProfile: generatedProfile
+				})
+			});
+			const payload = await res.json().catch(() => ({}));
+			if (!res.ok || !payload?.success) {
+				throw new Error(payload?.error || `Preview failed (${res.status})`);
+			}
+			previewUrl = String(payload.data?.url || '');
+			saveProgress();
+		} catch (err) {
+			previewError = (err as Error).message;
+			showToast(`Preview failed: ${previewError}`, 'error');
+		} finally {
+			previewLoading = false;
+		}
+	}
 
 	// Validation
 	// Handle was removed as a field; niche + market are generated/optional. Only a
@@ -246,6 +286,7 @@
 				direction = d.direction || '';
 				pinnedVoice = d.pinnedVoice || '';
 				generatedProfile = d.generatedProfile || emptyProfile();
+				previewUrl = d.previewUrl || '';
 			} else {
 				// The gradient is no longer a UI choice — auto-pick a random one per persona
 				// (generation re-randomizes it too) so avatars differ without manual fiddling.
@@ -258,6 +299,22 @@
 
 	// Save to localStorage (persists the generated profile + voice so a refresh
 	// mid-flow doesn't lose the generation).
+	// TraitPicker writes through its binding, so picking a chip fires no input
+	// event to hang saveProgress off the way every other field here does.
+	//
+	// It reassigns the whole object (`appearance = {...appearance, [key]: v}`),
+	// which reading the property alone would catch — the stringify is for the
+	// other writers into this object (brand generation, the vault options), so a
+	// per-key merge is picked up too rather than silently missing the draft.
+	//
+	// The save is untracked so this stays an appearance autosave: saveProgress
+	// reads most of the form, and tracking those reads would quietly turn this
+	// into a global effect that re-runs on every keystroke in the wizard.
+	$effect(() => {
+		JSON.stringify(generatedProfile.appearance);
+		untrack(() => saveProgress());
+	});
+
 	function saveProgress() {
 		if (!browser) return;
 		localStorage.setItem(
@@ -273,7 +330,8 @@
 				selectedBriefId,
 				direction,
 				pinnedVoice,
-				generatedProfile
+				generatedProfile,
+				previewUrl
 			})
 		);
 	}
@@ -306,7 +364,12 @@
 			skills: skills.trim(),
 			ugcVoice: pinnedVoice || undefined,
 			brandBriefId: selectedBriefId || null,
-			personaProfile: generatedProfile
+			personaProfile: generatedProfile,
+			// Adopted as the pinned face, so the portrait the user approved is the
+			// one the persona is born with — and creation does not pay to render a
+			// second, different face. The server re-checks this URL is ours before
+			// trusting it (isOwnedBucketUrl).
+			characterRef: previewUrl || null
 		};
 	}
 
@@ -700,16 +763,17 @@
 									<option value="male">Male</option>
 								</select>
 							</div>
-							<div class="field">
-								<label for="pf-eth">Ethnicity / heritage</label>
-								<input
-									id="pf-eth"
-									type="text"
-									bind:value={generatedProfile.appearance.ethnicity}
-									oninput={saveProgress}
-									placeholder="e.g. Vietnamese, Nigerian, Brazilian"
-								/>
-							</div>
+						</div>
+						<!-- The look, as chips rather than free text. Every row carries a real
+						     `Best Fit` default meaning "leave it to the model", so a persona can
+						     be created without writing a single prompt fragment — which is what
+						     the landing page's step 01 has been promising. Same component and
+						     same storage shape as the persona edit page (plain strings, legacy
+						     free-text values preserved as their own chip), so this is an
+						     input-method change and nothing downstream sees a new format. -->
+						<div class="field">
+							<span class="pf-group-label">Look</span>
+							<TraitPicker bind:appearance={generatedProfile.appearance} />
 						</div>
 						<div class="field">
 							<label for="pf-avatar">Target avatar (ideal audience)</label>
@@ -784,13 +848,64 @@
 				<p class="panel-desc">Confirm everything looks good before creating your persona.</p>
 
 				<div class="review-card">
-					<div class="review-avatar" style="background: {GRADIENT_PRESETS[selectedGradient].value}">
-						<span>{initial}</span>
-					</div>
+					{#if previewUrl}
+						<img class="review-avatar review-avatar-img" src={previewUrl} alt="" />
+					{:else}
+						<div
+							class="review-avatar"
+							style="background: {GRADIENT_PRESETS[selectedGradient].value}"
+						>
+							<span>{initial}</span>
+						</div>
+					{/if}
 					<div class="review-info">
 						<h3 class="review-name">{agentName || 'Unnamed Persona'}</h3>
 						<span class="review-handle">{displayHandle}</span>
 					</div>
+				</div>
+
+				<!-- The look, before you commit. This is the step the landing page
+				     promises: a real render off the traits, regenerated until the face
+				     is right, then adopted as the persona's pinned identity at create.
+				     It is a paid generation, so the cost is stated up front rather than
+				     discovered on the ledger afterwards. -->
+				<div class="preview-block">
+					<div class="preview-head">
+						<span class="pf-group-label">The look</span>
+						<button
+							type="button"
+							class="preview-btn"
+							onclick={generatePreview}
+							disabled={previewLoading || !step1Valid}
+						>
+							{#if previewLoading}
+								Rendering…
+							{:else if previewUrl}
+								Regenerate
+							{:else}
+								Generate the look
+							{/if}
+						</button>
+					</div>
+					{#if previewLoading}
+						<p class="field-hint">
+							Rendering a portrait from the traits you set. This takes 30 seconds to about two
+							minutes.
+						</p>
+					{:else if previewUrl}
+						<p class="field-hint">
+							Regenerate until the face is right — the one on screen when you create is the face
+							this persona keeps.
+						</p>
+					{:else}
+						<p class="field-hint">
+							Optional, and a paid generation. Skip it and the portrait is rendered later, on the
+							persona's own page.
+						</p>
+					{/if}
+					{#if previewError}
+						<p class="field-error">{previewError}</p>
+					{/if}
 				</div>
 
 				<div class="review-grid">
@@ -1631,6 +1746,19 @@
 		flex: 1;
 		min-width: 180px;
 	}
+	/* Group heading for the trait chips. A <span>, not a <label>, because the
+	   picker is a set of radiogroups rather than one labellable control — so it
+	   restates the global `label` rule (app.css) against the same tokens instead
+	   of inheriting it. Keep the two in step if that rule is retuned. */
+	.pf-group-label {
+		display: block;
+		font-size: var(--text-sm);
+		font-weight: var(--weight-bold);
+		text-transform: uppercase;
+		letter-spacing: var(--tracking-wider);
+		color: var(--text-dim);
+		margin-bottom: 0.35rem;
+	}
 	.pf-voice {
 		display: inline-flex;
 		align-items: center;
@@ -1662,6 +1790,49 @@
 		color: #fff;
 		font-family: var(--font-display);
 		flex-shrink: 0;
+	}
+	/* The generated portrait in the same 64px circle the gradient initial used,
+	   so swapping one for the other doesn't reflow the review card. */
+	.review-avatar-img {
+		object-fit: cover;
+	}
+	.preview-block {
+		display: flex;
+		flex-direction: column;
+		gap: 0.4rem;
+		margin-top: 1rem;
+	}
+	.preview-head {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+	}
+	.preview-head .pf-group-label {
+		margin-bottom: 0;
+	}
+	.preview-btn {
+		border: 1px solid var(--border);
+		background: var(--surface);
+		color: var(--text);
+		border-radius: var(--radius-sm);
+		padding: 0.4rem 0.85rem;
+		font-size: var(--text-sm);
+		font-weight: var(--weight-bold);
+		cursor: pointer;
+	}
+	.preview-btn:hover:not(:disabled) {
+		border-color: var(--accent);
+		color: var(--accent-text);
+	}
+	.preview-btn:disabled {
+		opacity: 0.55;
+		cursor: not-allowed;
+	}
+	.field-hint {
+		font-size: var(--text-sm);
+		color: var(--text-dim);
+		margin: 0;
 	}
 	.review-name {
 		font-size: var(--text-lg);

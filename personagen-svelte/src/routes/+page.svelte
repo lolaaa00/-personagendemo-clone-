@@ -121,8 +121,11 @@
 		{
 			n: '02',
 			title: 'Generate the look',
-			time: '8–30 sec',
-			body: 'A photoreal render, lit cleanly and on brief, built from the traits you set rather than a prompt you wrote.'
+			time: '30 sec – 2 min',
+			// The portrait is a detached job that chains several model calls — the
+			// endpoint's own estimate is "30s–minutes" (generate-avatar/+server.ts).
+			// An 8-second claim here was quoting a number nothing measured.
+			body: 'A photoreal render built from the traits you set rather than a prompt you wrote. Regenerate it until the face is right.'
 		},
 		{
 			n: '03',

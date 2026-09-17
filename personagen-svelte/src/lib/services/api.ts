@@ -413,6 +413,9 @@ export const Personas = {
 		ugcVoice?: string;
 		brandBriefId?: string | null;
 		personaProfile?: Record<string, unknown>;
+		/** A portrait already generated (and billed) by /api/persona-preview, adopted
+		 *  as the new persona's pinned face so creation does not re-render one. */
+		characterRef?: string | null;
 	}) =>
 		fetch('/api/agents', {
 			method: 'POST',

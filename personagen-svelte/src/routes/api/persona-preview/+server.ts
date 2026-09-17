@@ -1,0 +1,189 @@
+import { json } from '@sveltejs/kit';
+import type { RequestHandler } from './$types';
+import { createDbService } from '$lib/server/db';
+import { getServiceSupabase } from '$lib/server/service-supabase';
+import { buildStoredProfile } from '$lib/persona-contract/save';
+import {
+	resolveImageKeys,
+	resolvePersonaGender,
+	generateHeroPortraitImage,
+	buildHeroPortraitPrompt,
+	loadBriefForAgent,
+	recordCostEvents
+} from '$lib/server/content/generate';
+import {
+	loadRegistry,
+	effectiveOptions,
+	effectiveResolve,
+	type RegistryRow
+} from '$lib/server/model-registry';
+import { assertWithinBudget } from '$lib/server/budget';
+import { assertCreditsAvailable, resolveBillingAccount, creditsFor, isCreditsError } from '$lib/server/credits';
+
+/**
+ * The persona preview — one portrait for a persona that does NOT exist yet.
+ *
+ * WHY THIS IS NOT `/api/agent/[agentId]/generate-avatar`. That route needs an
+ * agent row: it checks access against one, pins the finished shot into
+ * `agent_configs.ugc_character_ref`, and rebuilds the reference kit around it.
+ * None of that can happen for a draft in the creation wizard, and creating a
+ * throwaway persona just to render a face would leave orphans behind every time
+ * someone abandoned the wizard.
+ *
+ * SYNCHRONOUS, unlike generate-avatar's detached job — and for the same reason
+ * source-clip is. That route is detached because it chains three paid images
+ * (portrait → character sheet → full body) and runs past the proxy timeout.
+ * A preview is ONE text-to-image call; the response IS the picture the user is
+ * waiting to look at, so a 202-and-poll would add a polling loop to the wizard
+ * for no benefit. The full chain still runs later, once, at creation.
+ *
+ * THE PREVIEW MUST BE THE REAL THING. The prompt is built by
+ * `buildHeroPortraitPrompt` — the same function the post-creation portrait uses
+ * — off a profile put through `buildStoredProfile`, the same gate the create
+ * route writes with. A preview built from a different shape than the persona is
+ * later born with would be a lie told at the exact moment the user is deciding
+ * whether to trust the product.
+ *
+ * IT IS PAID WORK AND IS BILLED AS SUCH. Both gates run agentless: the budget
+ * check skips only its per-agent daily cap, and the ledger row lands with
+ * `agent_id: null`. Under `credits_mode=enforce` an unmetered path is a free
+ * path, and a preview that regenerates on a button is exactly the surface that
+ * would be abused.
+ */
+export const POST: RequestHandler = async ({ request, locals }) => {
+	const { session, user } = await locals.safeGetSession();
+	if (!session || !user) {
+		return json({ success: false, error: 'Unauthorized' }, { status: 401 });
+	}
+
+	const body = await request.json().catch(() => ({}) as any);
+
+	const { falKey } = await resolveImageKeys(locals.supabase, user.id);
+	if (!falKey) {
+		return json(
+			{ success: false, error: 'No fal.ai key configured. Add one in Settings.' },
+			{ status: 400 }
+		);
+	}
+
+	let svc: any;
+	try {
+		svc = getServiceSupabase();
+	} catch {
+		return json(
+			{ success: false, error: 'Storage service is not configured on this server.' },
+			{ status: 500 }
+		);
+	}
+
+	// Model Manager: honour registry enable/disable + defaults; static fallback,
+	// exactly as generate-avatar does — a preview the operator disabled the model
+	// for must not quietly run on a different one.
+	let registryRows: RegistryRow[] = [];
+	try {
+		registryRows = await loadRegistry(locals.supabase, user.id);
+	} catch (e) {
+		console.error('[persona-preview] Registry unavailable, using static catalog:', e);
+	}
+	const selected = effectiveResolve(registryRows, 'image_t2i', body.model);
+
+	// The draft, shaped like the agent row it is about to become. `personas_profile`
+	// goes through buildStoredProfile so the prompt reads the v2 blob the create
+	// route would have written — not the looser UI record.
+	const profileToStore =
+		body.personaProfile && typeof body.personaProfile === 'object'
+			? buildStoredProfile(null, body.personaProfile, { origin: 'ui' })
+			: undefined;
+	const draftAgent = {
+		name: typeof body.name === 'string' ? body.name : '',
+		soul: typeof body.bio === 'string' ? body.bio : '',
+		...(profileToStore ? { personas_profile: profileToStore } : {})
+	};
+
+	const gender = resolvePersonaGender(
+		draftAgent,
+		typeof body.ugcVoice === 'string' ? body.ugcVoice : undefined
+	);
+
+	const db = createDbService(locals.supabase);
+	const briefRow = await loadBriefForAgent(
+		db,
+		user.id,
+		typeof body.brandBriefId === 'string' ? body.brandBriefId : null
+	);
+	const briefData = briefRow?.data || null;
+
+	const resolvedPrompt = buildHeroPortraitPrompt(briefData, draftAgent, gender);
+
+	// `preview: true` costs nothing and generates nothing — the composer's
+	// look-before-you-pay contract, kept identical to generate-avatar's.
+	if (body.preview === true) {
+		return json({
+			success: true,
+			preview: {
+				mode: 'from_scratch',
+				prompt: resolvedPrompt,
+				provider: 'fal',
+				gender: gender ?? null,
+				modelKind: 'image_t2i',
+				model: selected.id,
+				modelOptions: effectiveOptions(registryRows, 'image_t2i'),
+				editable: ['model'],
+				estimatedCostUsd: selected.usd
+			}
+		});
+	}
+
+	const quotedCredits = creditsFor(selected.usd);
+	try {
+		// Agentless on purpose: assertWithinBudget's per-agent daily cap simply
+		// does not apply to a persona that does not exist, and the monthly
+		// per-user cap — the one that matters here — still does.
+		await assertWithinBudget(locals.supabase, user.id, undefined, quotedCredits);
+		const billedUserId = await resolveBillingAccount(locals.supabase, undefined, user.id);
+		await assertCreditsAvailable(locals.supabase, billedUserId, quotedCredits);
+	} catch (err) {
+		if (isCreditsError(err)) {
+			return json(
+				{ success: false, code: 'INSUFFICIENT_CREDITS', error: (err as Error).message, billingUrl: '/billing' },
+				{ status: 402 }
+			);
+		}
+		return json({ success: false, error: (err as Error).message }, { status: 402 });
+	}
+
+	try {
+		const url = await generateHeroPortraitImage(
+			svc,
+			user.id,
+			falKey,
+			briefData,
+			draftAgent,
+			gender,
+			undefined,
+			selected.id
+		);
+
+		// Recorded AFTER the image exists, so a provider call that threw is not
+		// billed — the bug fixed in c55c353 for the generation path, not repeated
+		// here. `assetUrl` keeps the spent generation recoverable from the ledger
+		// even if the user abandons the wizard without creating anything.
+		await recordCostEvents(locals.supabase, user.id, undefined, [
+			{
+				provider: 'fal',
+				operation: 'image',
+				model: `${selected.label} (persona preview)`,
+				usd: selected.usd,
+				assetUrl: url
+			}
+		]);
+
+		return json({
+			success: true,
+			data: { url, model: selected.id, modelLabel: selected.label, estimatedCostUsd: selected.usd }
+		});
+	} catch (err) {
+		console.error('[persona-preview] Preview generation failed:', err);
+		return json({ success: false, error: (err as Error).message }, { status: 500 });
+	}
+};

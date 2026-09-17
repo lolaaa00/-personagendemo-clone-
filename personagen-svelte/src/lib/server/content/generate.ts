@@ -3473,7 +3473,14 @@ export function buildPortraitEditPrompt(agentData: any): string {
 }
 
 /** Generates (and durably persists) a fresh hero portrait image. No DB pin — just the image. */
-async function generateHeroPortraitImage(
+/**
+ * The single paid call behind a persona's face: prompt → one t2i image →
+ * durable URL. Exported because the pre-creation preview (`/api/persona-preview`)
+ * needs exactly this and nothing else — no agent row to pin to, no character
+ * sheet, no reference kit. `generateCharacterPortrait` is the full chain and
+ * requires an agent that exists; this is the one stage a draft can afford.
+ */
+export async function generateHeroPortraitImage(
 	svc: any,
 	userId: string,
 	falKey: string,
