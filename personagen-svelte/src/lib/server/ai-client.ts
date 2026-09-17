@@ -67,6 +67,15 @@ export interface AiGenerateOptions {
 	 * shared across concurrent calls, so `lastUsage` would race.
 	 */
 	onUsage?: (usage: AiUsage) => void;
+	/**
+	 * Which STAGE of a run this call is: 'director', 'director_retry_hook',
+	 * 'director_rewrite_qc', 'qc_grade', 'fit_judge', 'engine:<action>' …
+	 * Per call, not per client, because one tracked client serves the director,
+	 * its retries, the rewrite and the grader inside a single pack. Without it
+	 * every event reads `model: gemini-3.5-flash` and nobody can say which
+	 * stage is verbose or how often a retry doubled a post's LLM cost.
+	 */
+	stage?: string;
 }
 
 /**

@@ -210,5 +210,9 @@
 	[
 		"generation_events_retain_on_delete_migration.sql",
 		"generation_events.user_id/agent_id go CASCADE -> SET NULL so a bare user deletion keeps the usage row that explains a surviving debit (199 orphan debits had zero surviving events)"
+	],
+	[
+		"generation_events_stage_migration.sql",
+		"generation_events.stage + llm_stage_usage view: which run stage made each LLM call, so verbosity and the retry rate are measured per stage instead of guessed from token shapes"
 	]
 ]

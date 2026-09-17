@@ -286,7 +286,7 @@ export const POST: RequestHandler = async ({ url, request, locals, fetch }) => {
 	const db = createDbService(locals.supabase);
 	// Every engine text call is metered through one wrapper: gated once per
 	// request, recorded + debited per call (D11). Nothing below changes.
-	const ai = meteredAiClient(await resolveAiClient(locals.supabase, session.user.id), { supabase: locals.supabase, userId: session.user.id });
+	const ai = meteredAiClient(await resolveAiClient(locals.supabase, session.user.id), { supabase: locals.supabase, userId: session.user.id, stage: `engine:${String(action ?? 'unknown')}` });
 	const hasAi = !!ai;
 
 	console.log(
