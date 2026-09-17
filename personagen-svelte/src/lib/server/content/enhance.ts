@@ -28,10 +28,14 @@ import type { CostEvent } from '$lib/pricing';
  * 1. The switch (`enhance_chain`, off by default).
  * 2. A configured price.
  *
- * fal publishes NO rate for either upscaler — verified 2026-09-17 against both
- * model API pages and fal.ai/pricing, none of which carries a number for
- * `fal-ai/esrgan` or `fal-ai/clarity-upscaler`. So the operator supplies one in
- * UGC_UPSCALE_USD, and without a usable one this stage does not run even when
+ * fal's OpenAPI schema publishes no cost field for this endpoint (verified
+ * 2026-09-17). Unlike the compute-second models this module deliberately does
+ * NOT wire (esrgan, aura-sr, ccsr, retoucher — see the feasibility doc below),
+ * seedvr bills per output megapixel, a basis a human CAN look up and quote —
+ * it is simply not exposed in the machine-readable schema. So the operator
+ * still supplies the rate in UGC_UPSCALE_USD (a live-measured $0.001/MP ≈
+ * $0.004 for a typical 4MP portrait is the documented starting point — see
+ * .env.example), and without a usable one this stage does not run even when
  * the switch is on.
  *
  * That is deliberate and it is the whole billing argument: a paid step with no
@@ -45,10 +49,32 @@ import type { CostEvent } from '$lib/pricing';
  * Every failure returns the ORIGINAL image. A realism pass that loses someone
  * their post is worse than one that never ran, so there is no throw path out of
  * `enhanceImage` — same discipline as the card renderer's fallback.
+ *
+ * See docs/competitive/realism-chain-feasibility-2026-09-09.md for the full
+ * model survey (11 live-tested endpoints across all three stages), the
+ * recommended three-stage chain this is stage 1 of, and why upscale ships
+ * first on risk/cost grounds rather than "largest visible jump" grounds — a
+ * claim that document tests and finds unsupported (plastic skin, the tell
+ * this whole effort answers to, is a stage-B problem, not a resolution one).
  */
 
-/** Verified 2026-09-17 against fal's model API page: input `image_url`, output `image.url`. */
-const DEFAULT_UPSCALE_MODEL = 'fal-ai/esrgan';
+/**
+ * Verified 2026-09-17 against fal's live OpenAPI schema: input `image_url`,
+ * factor `upscale_factor`, output `image.url`.
+ *
+ * SWAPPED FROM `fal-ai/esrgan` (this module's original default) the same day,
+ * on the strength of docs/competitive/realism-chain-feasibility-2026-09-09.md
+ * — written before P0.1 shipped and not read until after. That document ran
+ * 11 live calls against fal and its verdict is unambiguous: esrgan bills
+ * per compute-second, which "has no measurable ceiling" and is explicitly
+ * named a High-severity risk ("Refuse to wire... however attractive esrgan's
+ * face:true is"). seedvr bills per output megapixel — a real, quotable basis
+ * — measured live at $0.001/MP (a 1600x912 output cost ≈$0.0015), confirmed
+ * non-generative, and confirmed to preserve aspect ratio to within ~1.3%
+ * (rounding to a multiple of 16). Same queue-only API shape as esrgan, so
+ * the fallback below and the response parsing needed no other change.
+ */
+const DEFAULT_UPSCALE_MODEL = 'fal-ai/seedvr/upscale/image';
 
 const UPSCALE_TIMEOUT_MS = 120_000;
 
@@ -73,10 +99,10 @@ const MIN_UPSCALE_BUDGET_MS = 15_000;
 const MAX_UPSCALED_BYTES = 8 * 1024 * 1024;
 
 /**
- * How much bigger. fal's schema (verified 2026-09-17 from the OpenAPI JSON,
- * not the docs page) allows 1-8 with a default of 2. We stop at 4 by CHOICE:
- * above that the file-size cap below rejects nearly everything anyway, and
- * a portrait no viewer can load is not an improvement.
+ * How much bigger. fal's schema (verified 2026-09-17 from the OpenAPI JSON)
+ * allows 1-10 with a default of 2. We stop at 4 by CHOICE: above that the
+ * file-size cap below rejects nearly everything anyway, and a portrait no
+ * viewer can load is not an improvement.
  */
 function upscaleFactor(): number {
 	const n = Number((env.UGC_UPSCALE_SCALE ?? '').trim());
@@ -226,11 +252,11 @@ export async function enhanceImage(
 		const res = await fetch(`https://fal.run/${model}`, {
 			method: 'POST',
 			headers: { Authorization: `Key ${falKey}`, 'Content-Type': 'application/json' },
-			// `image_url` SINGULAR and `scale` — verified against fal's schema.
-			// The t2i models in this codebase take `image_size`/`aspect_ratio` and
-			// return `images[]`; these upscalers share neither, which is exactly
-			// the mismatch models.ts warns guessing produces.
-			body: JSON.stringify({ image_url: imageUrl, scale: upscaleFactor() }),
+			// `image_url` SINGULAR and `upscale_factor` — verified against fal's
+			// schema. The t2i models in this codebase take `image_size`/
+			// `aspect_ratio` and return `images[]`; this upscaler shares neither,
+			// which is exactly the mismatch models.ts warns guessing produces.
+			body: JSON.stringify({ image_url: imageUrl, upscale_factor: upscaleFactor() }),
 			signal: AbortSignal.timeout(timeout)
 		});
 		if (!res.ok) {

@@ -139,15 +139,17 @@ describe('a successful pass', () => {
 		expect(r.costEvents[0].assetUrl).toBe(r.url);
 	});
 
-	it('sends the schema fal actually declares: image_url singular, and scale', async () => {
+	it('sends the schema fal actually declares: image_url singular, and upscale_factor', async () => {
 		const f = mockFal({ image: { url: UPSCALED } });
 		await enhanceImage(SVC, 'u1', ORIGINAL, KEY);
 
 		const body = JSON.parse(callsOf(f)[0][1].body);
 		expect(body.image_url).toBe(ORIGINAL);
 		expect(body).not.toHaveProperty('image_urls');
-		expect(body.scale).toBe(2);
-		// Not the t2i parameters — these endpoints take neither.
+		expect(body.upscale_factor).toBe(2);
+		// Not esrgan's param name, and not the t2i parameters either — this
+		// endpoint takes none of them.
+		expect(body).not.toHaveProperty('scale');
 		expect(body).not.toHaveProperty('image_size');
 		expect(body).not.toHaveProperty('aspect_ratio');
 	});
@@ -156,10 +158,17 @@ describe('a successful pass', () => {
 		envMock.UGC_UPSCALE_SCALE = '99';
 		const f = mockFal({ image: { url: UPSCALED } });
 		await enhanceImage(SVC, 'u1', ORIGINAL, KEY);
-		expect(JSON.parse(callsOf(f)[0][1].body).scale).toBe(2);
+		expect(JSON.parse(callsOf(f)[0][1].body).upscale_factor).toBe(2);
 	});
 
-	it('calls the configured endpoint', async () => {
+	it('calls seedvr by default, not the compute-second endpoint this module refuses to wire', async () => {
+		const f = mockFal({ image: { url: UPSCALED } });
+		await enhanceImage(SVC, 'u1', ORIGINAL, KEY);
+		expect(callsOf(f)[0][0]).toContain('fal-ai/seedvr/upscale/image');
+		expect(callsOf(f)[0][0]).not.toContain('esrgan');
+	});
+
+	it('calls the configured endpoint when overridden', async () => {
 		envMock.UGC_UPSCALE_MODEL = 'fal-ai/clarity-upscaler';
 		const f = mockFal({ image: { url: UPSCALED } });
 		await enhanceImage(SVC, 'u1', ORIGINAL, KEY);
@@ -319,9 +328,9 @@ describe('both response shapes fal documents, and the one it does not', () => {
 	const QUEUED = {
 		request_id: 'req-1',
 		status: 'IN_QUEUE',
-		status_url: 'https://queue.fal.run/fal-ai/esrgan/requests/req-1/status',
-		response_url: 'https://queue.fal.run/fal-ai/esrgan/requests/req-1',
-		cancel_url: 'https://queue.fal.run/fal-ai/esrgan/requests/req-1/cancel'
+		status_url: 'https://queue.fal.run/fal-ai/seedvr/upscale/image/requests/req-1/status',
+		response_url: 'https://queue.fal.run/fal-ai/seedvr/upscale/image/requests/req-1',
+		cancel_url: 'https://queue.fal.run/fal-ai/seedvr/upscale/image/requests/req-1/cancel'
 	};
 
 	function mockSequence(responses: Array<{ body: unknown; ok?: boolean; status?: number }>) {
