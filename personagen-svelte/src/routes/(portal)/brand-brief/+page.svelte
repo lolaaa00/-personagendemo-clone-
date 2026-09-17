@@ -221,7 +221,7 @@
 	let ugcGuidelines = $state('');
 
 	// Scraper & AI Enrich controls
-	let storeUrl = $state('honeyforx.com');
+	let storeUrl = $state('');
 	let scraping = $state(false);
 	let extending = $state<Record<string, boolean>>({});
 	let generating = $state<Record<string, boolean>>({});
@@ -257,7 +257,7 @@
 		competitors = d.competitors || [];
 		products = d.products || [];
 		ugcGuidelines = d.ugcGuidelines || '';
-		storeUrl = d.storeUrl || 'honeyforx.com';
+		storeUrl = d.storeUrl || '';
 		lastSaved = d.lastSaved || '';
 		version = d.version || '1.0';
 	}

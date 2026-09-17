@@ -35,7 +35,13 @@
 			case 'pending':
 				return result.filter((a) => a.status === 'pending');
 			case 'top':
-				return result.filter((a) => a.perf >= 70).sort((a, b) => b.perf - a.perf);
+				// Was `a.perf >= 70` against a score whose floor was 70, so it
+				// returned the whole roster. Now: personas that have actually
+				// published, best engagement first. A roster where nothing has
+				// published yields an empty list, which is the true answer.
+				return result
+					.filter((a) => (a.publishedPosts ?? 0) > 0)
+					.sort((a, b) => (b.engagementRate ?? 0) - (a.engagementRate ?? 0));
 			default:
 				return result;
 		}
@@ -192,12 +198,6 @@
 
 	// Semantic tokens rather than literals so the bars follow the theme (and the brand
 	// theme feature) instead of staying frozen at one palette.
-	function perfColor(p: number): string {
-		if (p >= 70) return 'var(--success)';
-		if (p >= 40) return 'var(--warning)';
-		return 'var(--error)';
-	}
-
 	function engagementClass(eng: number): string {
 		if (eng >= 5) return 'positive';
 		if (eng < 3) return 'negative';
@@ -287,7 +287,7 @@
 			<span role="columnheader">Followers</span>
 			<span role="columnheader">Engagement</span>
 			<span role="columnheader">Gen Spend</span>
-			<span role="columnheader">Performance</span>
+			<span role="columnheader">Published</span>
 			<span role="columnheader">Active</span>
 			<span class="pick-cell" role="columnheader"><span class="sr-only">Delete</span></span>
 		</div>
@@ -387,17 +387,14 @@
 						{quote(0)} <span class="token-count">(0)</span>
 					{/if}
 				</span>
-				<span class="dash-cell" role="cell">
-					<div class="perf-bar-wrap">
-						<div class="perf-bar-bg" aria-hidden="true">
-							<div
-								class="perf-bar"
-								style="--perf-pct: {Math.max(0, Math.min(100, agent.perf)) /
-									100}; background: {perfColor(agent.perf)}"
-							></div>
-						</div>
-						<span class="perf-val">{agent.perf}</span>
-					</div>
+				<!-- A count of posts that actually went out, not a score. The bar that
+				     used to live here plotted a number floored at 70 by a constant. -->
+				<span class="dash-cell published-cell" role="cell">
+					{#if (agent.publishedPosts ?? 0) > 0}
+						<span class="published-count">{agent.publishedPosts}</span>
+					{:else}
+						<span class="published-none" title="This persona has not published anything yet">—</span>
+					{/if}
 				</span>
 				<span class="dash-cell" role="cell">
 					{#if agent.status === 'pending'}
@@ -687,30 +684,10 @@
 		color: var(--rose-text);
 	}
 
-	.perf-bar-wrap {
-		display: flex;
-		align-items: center;
-		gap: 6px;
-	}
 
-	.perf-bar-bg {
-		flex: 1;
-		height: 5px;
-		background: var(--surface-3);
-		border-radius: 3px;
-		overflow: hidden;
-	}
 
 	/* scaleX rather than width: the bar holds no text (`.perf-val` is a flex sibling),
 	   so nothing is squashed and the meter no longer relayouts the row every frame. */
-	.perf-bar {
-		width: 100%;
-		height: 5px;
-		border-radius: 3px;
-		transform-origin: left center;
-		transform: scaleX(var(--perf-pct, 0));
-		transition: transform 0.25s ease;
-	}
 
 	@media (prefers-reduced-motion: reduce) {
 		.perf-bar {
@@ -718,15 +695,6 @@
 		}
 	}
 
-	.perf-val {
-		font-size: 0.7rem;
-		min-width: 28px;
-		text-align: right;
-		color: var(--text-dim);
-		font-family: var(--font-mono);
-		font-variant-numeric: tabular-nums;
-		font-feature-settings: 'tnum' 1;
-	}
 
 	/* Multi-select checkbox + row delete */
 	.pick-cell {
@@ -960,6 +928,17 @@
 		font-weight: 500;
 		font-variant-numeric: tabular-nums;
 		font-feature-settings: 'tnum' 1;
+	}
+
+	.published-cell {
+		font-variant-numeric: tabular-nums;
+	}
+	.published-count {
+		font-weight: 600;
+		color: var(--text);
+	}
+	.published-none {
+		color: var(--text-dim);
 	}
 
 	.token-count {

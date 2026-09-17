@@ -160,7 +160,20 @@
 			});
 			const d = await res.json();
 			if (!res.ok || !d.success) throw new Error(d.error || 'Action failed');
-			items = items.filter((i) => !ids.includes(i.id));
+			// Update the row in place rather than removing it.
+			//
+			// This used to be `items.filter(i => !ids.includes(i.id))`, which
+			// dropped the row unconditionally. The default filter is "all", which
+			// still matches an approved post, so the count went 14 → 13 while the
+			// server held 14 — press Back and all 14 returned. Approving the whole
+			// queue showed "Queue is clear" over work that was still there. The one
+			// number telling an operator whether their morning is done was wrong.
+			//
+			// `filteredItems` already hides anything the active filter excludes, so
+			// setting the new status is enough: the row stays under "all" and
+			// disappears under "Draft only", which is what each filter means.
+			const nextStatus = action === 'approve' ? 'scheduled' : 'rejected';
+			items = items.map((i) => (ids.includes(i.id) ? { ...i, status: nextStatus } : i));
 			selected = new Set([...selected].filter((id) => !ids.includes(id)));
 			if (drawerPost && ids.includes(drawerPost.id)) drawerPost = null;
 			showToast(
@@ -270,6 +283,8 @@
 				await load();
 				return;
 			}
+			// A deleted post really does leave the queue — unlike approve/reject,
+			// which only change its status.
 			items = items.filter((i) => !ids.includes(i.id));
 			selected = new Set();
 			if (drawerPost && ids.includes(drawerPost.id)) drawerPost = null;
@@ -1153,6 +1168,10 @@
 											aria-label="Approve post by {item.agent_name}"
 											onclick={() => act('approve', [item.id])}
 											><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg></button>
+									{:else}
+										<!-- Holds the Approve slot open so Reject and Delete never
+										     move between rows of different status. -->
+										<span class="row-btn-gap" aria-hidden="true"></span>
 									{/if}
 									<button
 										type="button"
@@ -1993,8 +2012,29 @@
 	}
 	.queue-tbl {
 		width: 100%;
-		border-collapse: collapse;
+		/* `separate`, not `collapse`: a sticky cell loses its borders under
+		   border-collapse, and the actions column below is sticky. */
+		border-collapse: separate;
+		border-spacing: 0;
 		font-size: 0.82rem;
+	}
+	/* The actions column stays on screen at every width. */
+	.queue-tbl th:last-child,
+	.queue-tbl td.td-act {
+		position: sticky;
+		right: 0;
+		background: var(--surface);
+		/* Only visible while there is content scrolled underneath. */
+		box-shadow: -8px 0 12px -8px rgba(15, 23, 42, 0.28);
+	}
+	.queue-tbl tbody tr:hover td.td-act {
+		background: var(--surface-2);
+	}
+	/* Matches .row-btn's rendered width exactly (44px). A narrower spacer still
+	   shifts Reject and Delete between rows, which is the whole defect. */
+	.row-btn-gap {
+		display: inline-block;
+		width: 44px;
 	}
 	.queue-tbl thead th {
 		text-align: left;

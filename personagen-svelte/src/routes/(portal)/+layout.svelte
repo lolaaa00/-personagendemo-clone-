@@ -1353,8 +1353,17 @@
 	}
 
 	.sidebar-nav-item:focus-visible {
-		box-shadow: 0 0 0 2px var(--accent-mid);
-		outline: none;
+		/* Was `box-shadow: 0 0 0 2px var(--accent-mid)` with `outline: none`.
+		   --accent-mid is `color-mix(… 22%, transparent)`, so the ring rendered at
+		   22% alpha against the sidebar and measured as fully transparent: the
+		   rule existed, matched, and drew nothing. A keyboard user could not see
+		   where they were in the primary navigation of any screen in the product.
+		   A focus indicator has to clear 3:1 against its own background, so this
+		   uses the accent at full strength, inset so it is not clipped by the
+		   sidebar edge and stays visible over the active-item background. */
+		outline: 2px solid var(--accent);
+		outline-offset: -2px;
+		box-shadow: none;
 	}
 
 	.sidebar-nav-icon {

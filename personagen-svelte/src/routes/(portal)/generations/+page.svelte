@@ -649,8 +649,9 @@
 	}
 
 	.toolbar-select:focus-visible {
-		outline: none;
-		border-color: var(--accent-mid);
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
+		border-color: var(--accent);
 	}
 
 	.toolbar-seg {
@@ -851,8 +852,9 @@
 	}
 
 	.profile-tile:focus-visible {
-		outline: none;
-		box-shadow: 0 0 0 2px var(--accent-mid);
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
+		box-shadow: none;
 	}
 
 	.profile-tile img {

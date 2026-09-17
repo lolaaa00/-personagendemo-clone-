@@ -15,7 +15,7 @@
 	<title>Dashboard — PersonaGen</title>
 	<meta
 		name="description"
-		content="PersonaGen Operations Dashboard — live status, metrics, and health scores for your autonomous creator roster."
+		content="PersonaGen dashboard — status, engagement and spend for every persona you run."
 	/>
 </svelte:head>
 
@@ -25,7 +25,7 @@
 	<span class="section-tag tag-teal">Operations Center</span>
 	<h2 class="section-title">Persona Roster Health & Status</h2>
 	<p class="section-lead">
-		Live status, metrics, and health scores for your autonomous creator roster.
+		Status, engagement and spend for every persona you run.
 	</p>
 
 	<!-- KPI Grid -->
@@ -53,7 +53,7 @@
 					</svg>
 					Welcome to PersonaGen! Let's initialize your Persona Roster
 				</h3>
-				<p>Deploy your first autonomous creator and link them to social platforms to begin operations.</p>
+				<p>Create your first persona and connect it to a platform to start publishing.</p>
 			</div>
 			
 			<div class="onboarding-steps">
