@@ -1,9 +1,45 @@
 # Fannabe — Deep Teardown & Cross-Referenced Viability Assessment
 
-**Date:** 2026-09-09
+**Date:** 2026-09-09 · **Re-measured:** 2026-09-17
 **Subject:** `fannabe.com` (Zillatech Limited, Paralimni, Cyprus)
-**Measured against:** PersonaGen at `feat/composer-upgrade-and-ui-defects` (`b6b4c27`)
+**Measured against:** PersonaGen at `b6b4c27` (original) · **re-measured against `e1bbdea`** (2026-09-17)
 **Companion docs:** [market-gap-assessment.md](market-gap-assessment.md) (2026-07-25, theinfluencer.ai / Higgsfield / createpersona), [viability-assessment-2026-09-07.md](../monetization/viability-assessment-2026-09-07.md), [persona-model-v2-action-plan.md](persona-model-v2-action-plan.md)
+
+---
+
+## 0.0 Revision — 2026-09-17 (eight days on, re-measured against `e1bbdea`)
+
+Thirty-plus commits landed since this was written. Three of this document's findings moved; the central one did not.
+
+**Still true, and now the only remaining realism P0:**
+
+> **The enhancement chain is still absent.** Re-verified by search across `src/` at `e1bbdea`: no upscaler, no face restoration, no skin/detail pass. The only `upscale` hits in the tree are a prompt string inside `CHARACTER_SHEET_PROMPT` and `video.ts:123`'s `// never upscale`. Every other P0 in §4 has moved; this one has not moved at all.
+
+**Closed since 09-09:**
+
+| Item | Status |
+|---|---|
+| Motion transfer + reel copy | ✅ Shipped as `reel-remake` and `motion-transfer` in the format catalog, on the guardrails §5 argued for — upload-only (no URL ingest), ownership attestation at upload, `video_ingest` operator flag, per-second billing off a *measured* clip duration ([source-clip/+server.ts](../../personagen-svelte/src/routes/api/agent/[agentId]/source-clip/+server.ts)). See the same-day correction in §3.2. |
+| Format breadth | ✅ **16-format catalog** ([formats.ts](../../personagen-svelte/src/lib/formats.ts)) across image / video / series, each quoted before confirm. The §3.3 "behind on breadth" verdict is now **closed** — see the revised scorecard below. |
+| Cost transparency | ✅ Extended — a forged clip duration that quoted $0.30 and billed $1.80 was caught and fixed (`c952175`); `FormatExplorer` was under-quoting markup by 3× and was fixed (`94eb7b4`). |
+| Landing overstatement | ⚠️ **Partly** fixed by the 09-11 landing rework. The "regenerate as many times as you want" promise is gone; step 03 now describes the real mechanism ("a five-stage reference set locks the face"), which is accurate. **What remains is narrower — see the revised integrity flag in §3.2.** |
+
+**Not closed, and the recommendation stands unchanged:**
+
+- ~~**Creation is still free-text, with no preview.**~~ **Closed later the same day — see the P0.3 status in §4.** This bullet recorded the measurement that prompted the fix: the wizard took ethnicity as a lone text input and rendered no portrait at any step. Both are now gone.
+- **The free tier is still one-time.** The copy changed — "One free credit per person to start" ([plans.ts:36](../../personagen-svelte/src/lib/server/plans.ts#L36)) — but the structure did not. Fannabe still gives recurring monthly credits and we still don't. §6 observation 1 stands.
+- Carousel, Explore gallery, prebuilt personas, prompt enhancer: all still ❌.
+
+**Revised scorecard (changes only):**
+
+| Dimension | Fannabe | PersonaGen 09-09 | **PersonaGen 09-17** |
+|---|---|---|---|
+| Content-format breadth | 8 | 5 | **8 — parity reached** |
+| Cost transparency & accounting | 2 | 9 | **10** |
+| Per-image photorealism | 8 | 5 | **5 — unmoved** |
+| Creation UX | 9 | 4 | **7 — P0.3 shipped 09-17** (see §4) |
+
+**Net:** we closed the format gap and widened the accounting lead, and did not touch either of the two gaps that decide a cold buyer's first impression. The §8 ordering is unchanged and now more lopsided than when it was written.
 
 ---
 
@@ -34,7 +70,7 @@ That is the gap. It is not a model-selection problem, not a prompt problem, and 
 |---|---|---|---|
 | Per-image photorealism | **8** | 5 | **Behind — P0** |
 | Identity consistency | **8** | 6 | Behind — P0 |
-| Creation UX (time-to-first-face) | **9** | 4 | Behind — P0 |
+| Creation UX (time-to-first-face) | **9** | 4 → **7** | Was behind — P0.3 shipped 09-17 |
 | Content-format breadth (carousel, trend-copy, swap) | **8** | 5 | Behind — P1 |
 | Distribution & operations | 0 | **9** | 🏆 Uncontested |
 | Brand grounding | 0 | **9** | 🏆 Uncontested |
@@ -193,12 +229,12 @@ The three tells that make an image read as AI — **plastic skin, drifted face, 
 | Trained/private identity model | ❌ (they market *not* training as the win) | ❌ | — *(deprioritise — see §5)* |
 | Model choice with per-call price shown | ❌ | 🏆 full catalog, tiered, priced in-UI | — |
 
-### 3.2 Creation UX — **we are behind**
+### 3.2 Creation UX — **was our weakest row; the two blocking gaps closed 09-17**
 
 | Capability | Fannabe | PersonaGen | Priority |
 |---|---|---|---|
-| Chip trait picker | ✅ 10 ethnicities, 6 age ranges | ⚠️ `TraitPicker.svelte` **exists but is only wired into the persona *edit* page** ([+page.svelte:3916](../../personagen-svelte/src/routes/(portal)/personas/[agentId]/+page.svelte#L3916)) | **P0** |
-| Preview → regenerate → **lock** wizard | ✅ | ❌ `createPersonaDirect()` creates without a preview loop ([generator/+page.svelte:299](../../personagen-svelte/src/routes/(portal)/generator/+page.svelte#L299)) — **and our landing page already promises this loop** | **P0** |
+| Chip trait picker | ✅ 10 ethnicities, 6 age ranges | ✅ **shipped 09-17** — `TraitPicker` in the creation wizard: 8 curated traits, every row defaulting to `Best Fit` | ✅ done |
+| Preview → regenerate → **lock** | ✅ | ✅ **shipped 09-17** — `POST /api/persona-preview` renders an agentless portrait, regenerable, adopted as the pinned face at create (gated by `isOwnedBucketUrl`) | ✅ done |
 | Time-to-first-face | "under a minute" | unmeasured, unpublished | P0 |
 | Easy Mode / preset scenes | ✅ named scenes | ⚠️ studio templates exist, not surfaced as one-click scenes | P1 |
 | Prebuilt personas | ✅ | ❌ | P1 |
@@ -218,7 +254,25 @@ The three tells that make an image read as AI — **plastic skin, drifted face, 
 > attestation, a per-workspace operator switch, and the AI-disclosure badge. See
 > [video-to-video-implementation-plan.md §7b–§7c](video-to-video-implementation-plan.md#7b-decision-2026-09-09--reel-copying-is-in-scope-and-the-phases-invert).
 
-> **Integrity flag — fix this week.** [`src/routes/+page.svelte:52`](../../personagen-svelte/src/routes/+page.svelte#L52) sells "See the preview" and "Lock the identity" as steps 2 and 3. The product does not do this yet. That is our own version of Fannabe's homepage-vs-terms contradiction, and we should not be running it while criticising theirs.
+> **Integrity flag — revised 2026-09-17, narrowed but still open.** The 09-11
+> landing rework fixed the worst of this. The "regenerate as many times as you
+> want" promise is gone, and step 03 now describes the real mechanism — "a
+> five-stage reference set locks the face" — which is **true** and is a better
+> claim than the one it replaced, because it is ours and checkable.
+>
+> Two overstatements survived that rework, and **both were closed on 2026-09-17**:
+>
+> - **Step 01 — "Guided fields with real options… leave the rest on Best Fit — no prompt writing."** Was false: the wizard took ethnicity as a lone free-text input with an `e.g.` placeholder, which *is* prompt writing. **Now true** — `TraitPicker` is the wizard's look input, eight curated traits, every row defaulting to a real `Best Fit` chip.
+> - **Step 02 — "Generate the look · 8–30 sec · a photoreal render."** Was false twice over: the wizard rendered nothing, and the 8-second figure was quoting a number nothing measured — `generate-avatar`'s own estimate is "30s–minutes". **Now true** — the wizard renders a real portrait before creation, and the claim reads "30 sec – 2 min".
+>
+> **Scoping note, recorded because the first estimate was wrong.** This was called
+> "wiring, not building". That held for the trait picker; it did not hold for the
+> preview. `generate-avatar` is keyed to an existing `agentId`, gated by
+> `checkAgentAccess`, and returns 202-and-poll — so the preview needed a new
+> agentless endpoint (`/api/persona-preview`) with its own budget and credit
+> gates, not a wire-up. It is synchronous because it is one text-to-image call
+> rather than the three-image chain, which is the same reasoning that makes
+> `source-clip` synchronous.
 
 ### 3.3 Content formats — **we are behind on breadth, ahead on depth**
 
@@ -262,6 +316,12 @@ The three tells that make an image read as AI — **plastic skin, drifted face, 
 
 ### P0 — the realism chain (this is the whole ask)
 
+> **Status 2026-09-17:** P0.1 **not started** · P0.2 **not started** · **P0.3 DONE** · P0.4 **not started**.
+>
+> P0.3 landed the same day this revision was written. `TraitPicker` is now the wizard's look input — all eight curated traits as chips, every row defaulting to `Best Fit` — and `POST /api/persona-preview` renders a real portrait for a persona that does not exist yet, regenerable, adopted as the pinned face at creation so it is never paid for twice. Both landing claims (§3.2) are now backed by the product. **The creation-UX row moves 4 → 7**; it is not 9 until pre-made personas and an Explore gallery exist.
+>
+> That leaves **P0.1 as the sole remaining realism blocker**, and it is now the only thing standing between us and the "ultra realistic" claim. The rest of this list is unchanged.
+
 **P0.1 — Post-generation enhancement pipeline.** Three stages, behind one flag, applied after every persona-bearing image.
 
 ```
@@ -279,7 +339,14 @@ Design constraints that follow from our existing rails:
 
 **P0.2 — Prove it or don't ship it.** Build a fixed 20-prompt benchmark set across our realism registers. Generate each with the chain off / partial / full. Judge blind. Publish the grid internally. We have a repo full of assertions about realism and zero measurements — this is the measurement.
 
-**P0.3 — Wire `TraitPicker` into a real creation wizard with preview → regenerate → lock.** The component exists. The copy is already live on the landing page. Only the wizard is missing. This closes both a competitive gap and a truth-in-advertising gap in one change.
+**P0.3 — Wire `TraitPicker` into a real creation wizard with preview → regenerate → lock. ✅ SHIPPED 2026-09-17.**
+
+What landed:
+- `TraitPicker` is the creation wizard's look input — eight curated traits as chips, every row defaulting to a real `Best Fit` chip. Storage shape unchanged (plain strings), so no prompt builder downstream sees a new format.
+- **`POST /api/persona-preview`** — a portrait for a persona that does not exist yet. One synchronous text-to-image call, prompt built by the same `buildHeroPortraitPrompt` the post-creation portrait uses, off a profile put through the same `buildStoredProfile` gate the create route writes with, so the preview cannot drift from what the persona is actually born as.
+- Both gates run agentless: `assertWithinBudget` skips only its per-agent daily cap, and the ledger row lands with `agent_id: null`. A regenerate button is exactly the surface that gets abused, so it is billed like any other generation.
+- The approved portrait is **adopted** at creation (`characterRef` → `ugc_character_ref`), so the face the user picked is the face the persona keeps and creation does not pay to render a second one.
+- Adoption is gated by `isOwnedBucketUrl` — the client supplies that URL, and it is later handed to fal as an `image_urls` entry and re-fetched server-side. That gate had **no test coverage at all** despite its docstring calling it "the ONLY gate"; it now has 18, including a regression test for the substring bypass its original fix never got.
 
 **P0.4 — Publish step timings.** We have fal queue data and show none of it. "Generated in 8s" is a confidence signal that costs nothing.
 
@@ -344,6 +411,8 @@ That table is defensible, checkable, and it is the wedge you asked for. It only 
 
 1. **Our free tier is structurally weaker than theirs and it is costing us the top of the funnel.** They give recurring monthly credits — "enough to generate a picture post every day" — which keeps a non-paying user in the product long enough to form a habit. Ours is a one-time grant: spend it and the product goes dark. Given that text posts are already free at $0 marginal cost (the ffmpeg card renderer), a small **recurring** monthly media allowance is affordable and would materially change activation.
 
+   **[09-17 — unchanged, and the copy now says so out loud.]** The free row reads "One free credit per person to start" ([plans.ts:36](../../personagen-svelte/src/lib/server/plans.ts#L36)). The wording got more honest; the structure did not move. The `$0` cards batch (up to 100 typographic cards with no model in the run) is a genuine free-tier asset that landed in the interval — but it is text, and the thing a visitor evaluates us on is a face.
+
 2. **The enhancement chain has a real unit cost and must be priced, not absorbed.** Three extra passes per image at a 3× markup is a meaningful per-post increase. The right shape is a **quality tier** the user chooses and sees priced — "Standard / Realistic / Ultra" — mapping to `off / face / full`. That fits the existing model-picker pattern exactly and turns a cost into a product surface. Do not make it silent and do not make it free.
 
 ---
@@ -352,7 +421,7 @@ That table is defensible, checkable, and it is the wedge you asked for. It only 
 
 | Risk | Severity | Mitigation |
 |---|---|---|
-| **Landing page promises a preview/lock loop that doesn't exist** | **High — live now** | P0.3, or pull the copy this week |
+| ~~Landing page promises a preview/lock loop that doesn't exist~~ | ~~High~~ → **closed 09-17** | P0.3 shipped; the claim is now backed by the product rather than pulled from the page |
 | Enhancement chain triples per-image cost, invisibly | High | Price it as a visible quality tier; meter every stage |
 | Face-restore pass degrades identity instead of fixing it | Medium | Ship upscale first; before/after in UI; blind benchmark (P0.2) |
 | Chasing NSFW revenue "just as an option" | **High** | Settled policy: no. Brand-safe is the product |
@@ -379,6 +448,18 @@ The work, in order:
 5. **Ship the integrity table** on the landing page — the one thing they structurally cannot answer.
 
 Do those five and we are not competing with Fannabe. We are the platform that generates images as good as theirs *and then actually runs the account*, which is a category they are not in.
+
+### Re-measured verdict — 2026-09-17
+
+**Viability: strong, and the deficiency is now more isolated than it was.**
+
+Eight days of work closed the format-breadth gap outright (16 formats, parity reached), widened the accounting lead, and shipped video-to-video on the exact guardrails §5 argued for — upload-only, attested, operator-gated. That is a good interval, and the reel-copy decision in §3.2 shows the refusal argument doing its proper job: not blocking the feature, but setting the terms it shipped on.
+
+Item 3 then shipped on 09-17 — the trait chips and the pre-creation preview, described in §4. Items 1, 2 and 4 remain open.
+
+**That halves the first-ninety-seconds problem and isolates what is left.** A visitor now picks traits from chips and looks at a real face before committing to anything, which is the half of the gap that was pure interface. What remains is not interface: they get three post-processing passes and we still get the base model's raw output. Everything downstream of those ninety seconds we already win, and won by more this week than last.
+
+So the ordering collapses to one item. **P0.1 is now the only thing between us and the claim in Fannabe's own headline.** It is the real engineering — a face-restore, a skin/detail pass and an upscale, each priced, metered and never-bricking — and it decides whether "ultra realistic" is something we can say about our own output or something we are still borrowing from their marketing.
 
 ---
 

@@ -515,7 +515,7 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-14", hash: "9788f2e", type: "fix", category: "fix", scope: "ux", title: "one status-colour source, and restore the lint gate I broke" },
 	{ date: "2026-09-15", hash: "e1bbdea", type: "fix", category: "fix", scope: "ux", title: "the content-plan rewrite never ran — /api/engine needs ?path=" },
 	{ date: "2026-09-17", hash: "d8c3221", type: "test", category: "maintenance", scope: "ux", title: "populate the portal for review, and route around a broken resolver" },
-	{ date: "2026-09-17", hash: "6a9368d", type: "other", category: "maintenance", scope: null, title: "@ feat(persona): the look you approve, before the persona exists" }
+	{ date: "2026-09-17", hash: "08d3f8a", type: "feat", category: "feature", scope: "persona", title: "the look you approve, before the persona exists" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -897,4 +897,4 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "6a9368d";
+export const CHANGELOG_GENERATED_FROM = "08d3f8a";
