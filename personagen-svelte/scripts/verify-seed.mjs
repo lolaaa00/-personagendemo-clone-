@@ -46,24 +46,16 @@ const EMAIL = 'verify-harness@personagen.test';
 const PASSWORD = 'VerifyHarness!2026';
 
 /**
- * Every seat role, as its own login.
- *
- * A portal cannot be verified from one account: `agent_access_role` is an RPC
- * backed by RLS, so what a viewer may do is decided by the DATABASE, and the
- * only honest way to see a viewer's portal is to be one. Seeding just the owner
- * meant every permission claim was untested — a lesser role could have been
- * shown a control that 403s, a blank page, or another workspace's data, and
- * nothing would have noticed.
- *
- * `owner` is deliberately absent from this list: it is `workspaces.owner_id`,
- * never a `workspace_members` row, and it is the account above. The four here
- * are the values the members CHECK constraint actually accepts — 'admin' only
- * since workspace_admin_role_migration.sql widened it.
+ * ONE user, deliberately. Per-role verification — every seat, a platform admin,
+ * and a brand-new empty account, each with realistic fixtures — lives in
+ * `scripts/ux/audit-tenant.mjs` (`create|status|destroy|reset`). This script
+ * stayed the lean, single-owner harness the verify skill documents, because a
+ * fast UI check should not mint five auth users on the live instance every run.
+ * The seat addresses below exist only so `destroy` can sweep any left behind by
+ * an earlier version of this script that did.
  */
 const SEATS = ['admin', 'manager', 'creator', 'viewer'];
 const seatEmail = (role) => `verify-${role}@personagen.test`;
-/** One password for all of them: these are disposable and never leave this file. */
-const SEAT_PASSWORD = 'VerifySeat!2026';
 // Distinct widths ⇒ distinct URLs. The persona Assets grid de-dupes by URL, so
 // reusing one image collapses every fixture into a single tile.
 const IMG = (w) =>
@@ -211,25 +203,8 @@ async function create() {
 		}
 	]);
 
-	// One login per seat, all pointed at the SAME workspace, so the four portals
-	// differ only by role — which is the comparison a permission check is.
-	const seats = {};
-	for (const role of SEATS) {
-		const id = await makeUser(seatEmail(role), SEAT_PASSWORD, `Verify ${role}`);
-		await insert('workspace_members', [
-			{ workspace_id: workspace.id, user_id: id, role, invited_by: userId }
-		]);
-		seats[role] = { email: seatEmail(role), password: SEAT_PASSWORD, userId: id };
-	}
-
 	console.log(
-		JSON.stringify({
-			// `owner` is the workspace owner, not a members row — see SEATS.
-			owner: { email: EMAIL, password: PASSWORD, userId },
-			seats,
-			workspaceId: workspace.id,
-			agentA: agentA.id
-		})
+		JSON.stringify({ email: EMAIL, password: PASSWORD, userId, workspaceId: workspace.id, agentA: agentA.id })
 	);
 }
 

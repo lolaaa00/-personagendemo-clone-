@@ -1,5 +1,5 @@
 import type { PageServerLoad } from './$types';
-import { redirect } from '@sveltejs/kit';
+import { error, redirect } from '@sveltejs/kit';
 import { getServiceSupabase } from '$lib/server/service-supabase';
 import { isPlatformAdmin } from '$lib/server/platform-admin';
 
@@ -41,7 +41,12 @@ export const load: PageServerLoad = async ({ locals }) => {
 	// role — the Platform tab is theirs even with zero workspaces of their own.
 	const platformAdmin = await isPlatformAdmin(locals.supabase, user);
 	if (adminWorkspaces.length === 0 && !platformAdmin) {
-		throw redirect(303, '/dashboard');
+		// A designed 403, not a teleport to /dashboard. The nav already hides
+		// this entry for non-admin seats, so anyone arriving here followed a shared
+		// link or a bookmark — bouncing them somewhere else with no explanation
+		// reads as a broken link. The error page names the seat and who can change
+		// it, and keeps the portal shell (see (portal)/+error.svelte).
+		throw error(403, 'The Admin Console is for workspace owners and admin seats.');
 	}
 
 	const wsIds = adminWorkspaces.map((w) => w.id);

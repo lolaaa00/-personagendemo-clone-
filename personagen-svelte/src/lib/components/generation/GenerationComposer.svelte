@@ -518,6 +518,12 @@
 	let previewAbort: AbortController | null = null;
 	/** The preview was refused by the plan, not by a hiccup — Retry is pointless. */
 	let loadBlockedByPlan = $state(false);
+	// A seat refusal is the SERVER's verdict, read from the preview's 403. Access
+	// is per persona (agent_access_role) and the account's workspace seat is only
+	// an upper bound on it: a Viewer in one workspace can still own personas of
+	// its own, so deciding here from the seat would block those. The server
+	// already decides at preview time; the composer only has to say it well.
+	let loadBlockedBySeat = $state(false);
 	const PREVIEW_TIMEOUT_MS = 30_000;
 
 	async function loadPreview() {
@@ -534,6 +540,7 @@
 		loading = true;
 		loadError = null;
 		loadBlockedByPlan = false;
+		loadBlockedBySeat = false;
 		preview = null;
 		try {
 			const res = await fetch(spec.endpoint, {
@@ -551,6 +558,9 @@
 				// place in the app that reads a server error CODE rather than only its
 				// sentence — the codes were being thrown away everywhere.
 				loadBlockedByPlan = data?.code === 'PLAN_FEATURE';
+				// 403 + the route convention's JSON body is an access refusal; a bare
+				// 403 (CSRF, origin) has no JSON and stays a plain failure with Retry.
+				loadBlockedBySeat = res.status === 403 && data?.success === false;
 				return;
 			}
 			preview = data.preview;
@@ -987,13 +997,24 @@
 			<span class="spinner" aria-hidden="true"></span> Resolving the exact request…
 		</div>
 	{:else if loadError}
+		<!-- Three refusals, three answers. A plan refusal points at a plan that
+		     includes it; a seat refusal names who can change the seat; only a
+		     transient failure gets Retry. Retrying a permission is a dead click
+		     that reads as "broken", and was the one permission state left in the
+		     product that looked like an outage. -->
 		<div class="composer-error" role="alert">
 			<strong
-				>{loadBlockedByPlan ? 'Not included in your plan' : "Can't prepare this generation"}</strong
+				>{loadBlockedByPlan
+					? 'Not included in your plan'
+					: loadBlockedBySeat
+						? 'Your seat cannot generate for this persona'
+						: "Can't prepare this generation"}</strong
 			>
 			<p>{loadError}</p>
 			{#if loadBlockedByPlan}
 				<a class="btn-retry" href="/billing">Compare plans</a>
+			{:else if loadBlockedBySeat}
+				<p>A workspace admin can change your seat.</p>
 			{:else}
 				<button type="button" class="btn-retry" onclick={() => loadPreview()}>Retry</button>
 			{/if}
@@ -2135,9 +2156,11 @@
 					!preview ||
 					missingSourceClip ||
 					ownWordsBlocked}
-				title={missingSourceClip
-					? 'Add a source clip on the Look step — this format transforms one.'
-					: undefined}
+				title={loadBlockedBySeat
+					? loadError
+					: missingSourceClip
+						? 'Add a source clip on the Look step — this format transforms one.'
+						: undefined}
 				onclick={confirm}
 			>
 				{submitting
