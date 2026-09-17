@@ -514,9 +514,15 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-14", hash: "f16c6c1", type: "other", category: "maintenance", scope: "ux", title: "portal overhaul round 1 — integrity fixes, plus earlier uncommitted work" },
 	{ date: "2026-09-14", hash: "9788f2e", type: "fix", category: "fix", scope: "ux", title: "one status-colour source, and restore the lint gate I broke" },
 	{ date: "2026-09-15", hash: "e1bbdea", type: "fix", category: "fix", scope: "ux", title: "the content-plan rewrite never ran — /api/engine needs ?path=" },
+	{ date: "2026-09-15", hash: "6c848ae", type: "feat", category: "feature", scope: "billing", title: "capture what a call actually cost — recorded, never billed" },
+	{ date: "2026-09-15", hash: "7bc3928", type: "refactor", category: "maintenance", scope: "providers", title: "one catalogue, so \"can this be BYOK'd\" stops being an absence" },
+	{ date: "2026-09-15", hash: "87001c6", type: "fix", category: "fix", scope: "security", title: "anon and authenticated hold TRUNCATE on both key tables" },
+	{ date: "2026-09-17", hash: "59c3b2f", type: "fix", category: "fix", scope: "pricing", title: "the LLM rate was 5.8x low, so the text path sold below cost" },
 	{ date: "2026-09-17", hash: "d8c3221", type: "test", category: "maintenance", scope: "ux", title: "populate the portal for review, and route around a broken resolver" },
+	{ date: "2026-09-17", hash: "1fb7cb4", type: "fix", category: "design", scope: "cost", title: "the grader was paid to write text the UI throws away" },
 	{ date: "2026-09-17", hash: "08d3f8a", type: "feat", category: "feature", scope: "persona", title: "the look you approve, before the persona exists" },
-	{ date: "2026-09-17", hash: "de337b5", type: "docs", category: "docs", scope: "competitive", title: "re-measure Fannabe eight days on, and close P0.3" }
+	{ date: "2026-09-17", hash: "de337b5", type: "docs", category: "docs", scope: "competitive", title: "re-measure Fannabe eight days on, and close P0.3" },
+	{ date: "2026-09-17", hash: "9475f72", type: "other", category: "maintenance", scope: null, title: "Merge origin/main: the corrected money numbers meet the persona preview" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -889,13 +895,21 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 		entries: [CHANGELOG[455], CHANGELOG[456], CHANGELOG[457], CHANGELOG[458], CHANGELOG[459], CHANGELOG[460], CHANGELOG[461], CHANGELOG[462], CHANGELOG[463], CHANGELOG[464], CHANGELOG[465], CHANGELOG[466], CHANGELOG[467], CHANGELOG[468]]
 	},
 	{
-		id: "bd40b3c", from: "2026-09-10", to: "2026-09-17",
+		id: "bd40b3c", from: "2026-09-10", to: "2026-09-15",
 		category: "fix", categories: ["maintenance","infrastructure","fix","docs","feature"],
 		title: "Fixed: assert no MONEY, not \"no wallet row\"",
 		summary: "Assert no MONEY, not \"no wallet row\". Plus 13 more changes, touching internal cleanup and setup and deployment and guides and explanations.",
 		major: true, curated: false,
 		entries: [CHANGELOG[469], CHANGELOG[470], CHANGELOG[471], CHANGELOG[472], CHANGELOG[473], CHANGELOG[474], CHANGELOG[475], CHANGELOG[476], CHANGELOG[477], CHANGELOG[478], CHANGELOG[479], CHANGELOG[480], CHANGELOG[481], CHANGELOG[482]]
+	},
+	{
+		id: "59c3b2f", from: "2026-09-17", to: "2026-09-17",
+		category: "maintenance", categories: ["fix","maintenance","design","feature","docs"],
+		title: "Tidying: the LLM rate was 5.8x low, so the text path sold…",
+		summary: "The LLM rate was 5.8x low, so the text path sold below cost. Plus 5 more changes, touching things that were broken and layout, colours and readability and things you can now do.",
+		major: true, curated: false,
+		entries: [CHANGELOG[483], CHANGELOG[484], CHANGELOG[485], CHANGELOG[486], CHANGELOG[487], CHANGELOG[488]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "de337b5";
+export const CHANGELOG_GENERATED_FROM = "9475f72";

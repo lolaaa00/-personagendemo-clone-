@@ -78,9 +78,6 @@ async function listUsers() {
 	return body.users || [];
 }
 
-async function findUser() {
-	return (await listUsers()).find((u) => u.email === EMAIL) || null;
-}
 
 /** Creates a confirmed user, or returns the existing one at that address. */
 async function makeUser(email, password, fullName) {

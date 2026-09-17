@@ -107,7 +107,7 @@
 	const PROOF = [
 		{ value: '13', label: 'platforms — every publish verified by the platform', short: 'platforms, every publish verified' },
 		{ value: '5', label: 'reference stages lock one face for good', short: 'stages lock one face' },
-		{ value: '$0.26', label: 'for an image post, quoted before you confirm', short: 'an image post, quoted upfront' },
+		{ value: '$0.32', label: 'for an image post, quoted before you confirm', short: 'an image post, quoted upfront' },
 		{ value: '3', label: 'autonomy levels, from manual to unattended', short: 'autonomy levels' }
 	];
 
@@ -177,9 +177,9 @@
 	].map((c) => ({ ...c, src: `/assets/personas/persona-${c.n}-720.webp` }));
 
 	const QUEUE = [
-		{ src: CAST[1].src, name: 'Mara', platform: 'Instagram', format: 'Reel · 12s', price: '$1.52', state: 'waiting' },
-		{ src: CAST[2].src, name: 'Jonah', platform: 'TikTok', format: 'Talking head · 15s', price: '$2.45', state: 'waiting' },
-		{ src: CAST[0].src, name: 'Ana', platform: 'LinkedIn', format: 'Image post', price: '$0.26', state: 'published' }
+		{ src: CAST[1].src, name: 'Mara', platform: 'Instagram', format: 'Reel · 12s', price: '$1.58', state: 'waiting' },
+		{ src: CAST[2].src, name: 'Jonah', platform: 'TikTok', format: 'Talking head · 15s', price: '$2.51', state: 'waiting' },
+		{ src: CAST[0].src, name: 'Ana', platform: 'LinkedIn', format: 'Image post', price: '$0.32', state: 'published' }
 	];
 
 	const PRODUCTS = [
@@ -263,10 +263,10 @@
 	];
 
 	const RECEIPT = [
-		{ item: 'Text post', note: 'writing only, no image charge', price: '≈ $0.02' },
-		{ item: 'Image post', note: 'one photoreal still', price: '$0.26' },
-		{ item: 'Video post', note: 'short clip with lip-sync', price: '$1.52' },
-		{ item: 'Talking head', note: 'scripted, voiced, lip-synced', price: '$2.45' }
+		{ item: 'Text post', note: 'two LLM passes, no image charge', price: '≈ $0.08' },
+		{ item: 'Image post', note: 'one photoreal still', price: '$0.32' },
+		{ item: 'Video post', note: 'short clip with lip-sync', price: '$1.58' },
+		{ item: 'Talking head', note: 'scripted, voiced, lip-synced', price: '$2.51' }
 	];
 
 	const FAQS = [
@@ -468,7 +468,7 @@
 				<div class="lp-chip lp-chip-approve">
 					<span class="lp-chip-body">
 						<strong>Awaiting your approval</strong>
-						<span>Reel · 12s · quoted <span class="lp-num">$1.52</span></span>
+						<span>Reel · 12s · quoted <span class="lp-num">$1.58</span></span>
 					</span>
 					<span class="lp-chip-actions" aria-hidden="true">
 						<span class="lp-chip-btn lp-chip-btn-primary">Approve</span>
@@ -477,7 +477,7 @@
 				</div>
 
 				<div class="lp-chip lp-chip-price">
-					<span class="lp-chip-price-num lp-num">$0.26</span>
+					<span class="lp-chip-price-num lp-num">$0.32</span>
 					<span class="lp-chip-body">
 						<strong>Image post</strong>
 						<span>Shown before you confirm</span>
