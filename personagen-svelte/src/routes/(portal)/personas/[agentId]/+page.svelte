@@ -63,6 +63,7 @@
 	import { confirmDeletePosts } from '$lib/confirm-preview';
 	import { confirmAction } from '$lib/stores/confirm.svelte';
 	import MediaPreviewModal from '$lib/components/generation/MediaPreviewModal.svelte';
+	import PageShell from '$lib/components/ui/PageShell.svelte';
 	import {
 		startGeneration,
 		finishGeneration,
@@ -3016,16 +3017,13 @@
 	const getStatusColor = personaStatusFill;
 </script>
 
-<svelte:head>
-	<title>{agent?.name ?? 'Persona'} — PersonaGen</title>
-</svelte:head>
-
 {#if !agent}
 	<div class="no-agent">
 		<p>Persona not found.</p>
 		<a href="/dashboard" class="btn-primary">Back to Dashboard</a>
 	</div>
 {:else}
+	<PageShell title={agent.name} width="wide" bare>
 	<div class="persona-page">
 		<!-- ── Hero header ─────────────────────────────────────────── -->
 		<!-- Compact identity header — the banner image was removed on request:
@@ -7028,6 +7026,7 @@
 			</div>
 		</div>
 	{/if}
+</PageShell>
 {/if}
 
 <style>
@@ -7227,11 +7226,6 @@
 	   It now fills the portal content area in BOTH views. Readability is
 	   protected where it actually matters — the prose measure below — rather
 	   than by starving the whole page of width. */
-	.persona-page {
-		max-width: 100%;
-		margin: 0 auto;
-	}
-
 	/* ── Feed view toggle (Posts | Assets) ── */
 	.feed-view-toggle {
 		display: inline-flex;

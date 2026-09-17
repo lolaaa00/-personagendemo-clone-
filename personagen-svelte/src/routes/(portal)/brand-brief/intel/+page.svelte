@@ -1349,34 +1349,7 @@
 </PageShell>
 
 <style>
-	.page {
-		padding: 2rem;
-		max-width: 960px;
-		margin: 0 auto;
-	}
 
-	.page-header {
-		margin-bottom: 1.5rem;
-	}
-	.header-top {
-		display: flex;
-		align-items: flex-start;
-		justify-content: space-between;
-		gap: 1rem;
-		flex-wrap: wrap;
-	}
-	.page-header h1 {
-		font-size: var(--text-3xl);
-		background: var(--gradient);
-		-webkit-background-clip: text;
-		-webkit-text-fill-color: transparent;
-		background-clip: text;
-	}
-	.subtitle {
-		color: var(--text-muted);
-		font-size: var(--text-base);
-		margin-top: 0.25rem;
-	}
 	.header-actions {
 		display: flex;
 		align-items: center;

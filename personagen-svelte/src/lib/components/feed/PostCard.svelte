@@ -356,7 +356,10 @@
 
 	<div class="tile-chips-top">
 		{#if plat}
-			<span class="tile-platform" style="background: {platformColor(plat)}">{plat}</span>
+			<span class="tile-platform">
+				<span class="tile-platform-dot" style="background: {platformColor(plat)}" aria-hidden="true"
+				></span>{plat}</span
+			>
 		{/if}
 		<!-- Format chip: Studio-shelf vocabulary, so every tile names what KIND of
 		     asset it is (and which template made it) wherever it appears. Pre-
@@ -724,13 +727,23 @@
 	}
 
 	.tile-platform {
-		font-size: 9px;
+		display: inline-flex;
+		align-items: center;
+		gap: 5px;
+		font-size: 11px;
 		font-weight: 700;
 		text-transform: uppercase;
 		color: #fff;
-		padding: 2px 8px;
-		border-radius: 999px;
+		background: rgba(10, 14, 26, 0.82);
+		padding: 2px 7px;
+		border-radius: 4px;
 		box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+	}
+	.tile-platform-dot {
+		width: 7px;
+		height: 7px;
+		border-radius: 50%;
+		flex: none;
 	}
 
 	.tile-status {

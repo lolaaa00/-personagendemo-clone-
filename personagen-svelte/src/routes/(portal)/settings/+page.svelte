@@ -2432,21 +2432,8 @@
 {/if}
 
 <style>
-	.page {
-		padding: 2rem;
-		max-width: 1240px;
-		margin: 0 auto;
-	}
 
-	.page-header {
-		margin-bottom: 2rem;
-	}
 
-	.page-header h1 {
-		font-size: var(--text-3xl);
-		font-family: var(--font-display);
-		margin-bottom: 0.5rem;
-	}
 
 	.subtitle {
 		color: var(--text-muted);

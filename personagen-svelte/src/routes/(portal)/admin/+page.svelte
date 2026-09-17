@@ -2,6 +2,7 @@
 	import { promptAction } from '$lib/stores/confirm.svelte';
 	import { showToast } from '$lib/stores/ui.svelte';
 	import PageShell from '$lib/components/ui/PageShell.svelte';
+	import { countLabel } from '$lib/plural';
 	let { data } = $props();
 
 	type Tab = 'overview' | 'activity' | 'seats' | 'spend' | 'access' | 'platform' | 'controls';
@@ -324,7 +325,7 @@
 			const err = await postCredits({ userId: id, op: 'grant', credits: bulkCredits, note: bulkNote });
 			if (err) failed++;
 		}
-		flash(failed ? `${selectedIds.length - failed} granted, ${failed} failed` : `Granted ${bulkCredits.toLocaleString()} to ${selectedIds.length} account(s)`);
+		flash(failed ? `${selectedIds.length - failed} granted, ${failed} failed` : `Granted ${bulkCredits.toLocaleString()} to ${countLabel(selectedIds.length, 'account')}`);
 		selectedIds = [];
 		await loadPlatform();
 	}
@@ -1180,14 +1181,10 @@
 
 <style>
 	.admin-page {
-		max-width: 1100px;
-		margin: 0 auto;
-		padding: var(--space-6);
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-5);
 	}
-	.admin-head h1 { font-size: 1.6rem; color: var(--text); }
 	.admin-head p { color: var(--text-muted); font-size: 0.95rem; margin-top: 0.35rem; line-height: 1.5; }
 	.admin-head a, .admin-hint a { color: var(--accent-text); font-weight: 600; }
 	.stat-row {

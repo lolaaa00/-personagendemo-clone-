@@ -213,7 +213,11 @@
 				<h2>Top up</h2>
 				<p class="muted">
 					Charged in USD at par: $25 buys $25.00 of generation. Bigger packs include bonus credit.
-					{#if !data.paymentsOpen}<span class="soon">Payments open soon — message us and we'll load your wallet.</span>{/if}
+					{#if !data.paymentsOpen}<span class="soon"
+							>Card payments are not switched on yet, so these packs cannot be bought from here
+							today. <a href="/guides?view=uservoice">Post on the request board</a> and we will load
+							your wallet manually.</span
+						>{/if}
 				</p>
 			</div>
 			{#if error}<p class="error" role="alert">{error}</p>{/if}
@@ -302,9 +306,6 @@
 
 <style>
 	.billing {
-		max-width: 1040px;
-		margin: 0 auto;
-		padding: 1.5rem 1.25rem 4rem;
 		display: grid;
 		gap: 2rem;
 	}

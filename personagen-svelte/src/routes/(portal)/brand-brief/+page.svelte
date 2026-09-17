@@ -9,6 +9,7 @@
 	import { BrandBrief } from '$lib/services/api';
 	import { confirmAction } from '$lib/stores/confirm.svelte';
 	import PageShell from '$lib/components/ui/PageShell.svelte';
+	import { countLabel } from '$lib/plural';
 
 	let { data } = $props<{
 		data: {
@@ -435,7 +436,7 @@
 
 				saveAll(undefined, true);
 				showToast(
-					`Scraped ${brandName}! ${products.length} product(s), ${competitors.length} competitor(s), fonts ${fontPrimary ? '✓' : '—'}.`,
+					`Scraped ${brandName}! ${countLabel(products.length, 'product')}, ${countLabel(competitors.length, 'competitor')}, fonts ${fontPrimary ? '✓' : '—'}.`,
 					'success'
 				);
 			} else {
@@ -1861,7 +1862,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 											}
 											if (added > 0) {
 												saveAll();
-												showToast(`${added} trait(s) suggested!`, 'success');
+												showToast(`${countLabel(added, 'trait')} suggested!`, 'success');
 											}
 										}
 									} catch {
@@ -2629,11 +2630,6 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 {/if}
 
 <style>
-	.page {
-		padding: 2rem;
-		max-width: 960px;
-		margin: 0 auto;
-	}
 
 	/* ── Image lightbox ── */
 	.lightbox-backdrop {
@@ -2889,28 +2885,6 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		margin-top: 0.5rem;
 	}
 
-	.page-header {
-		margin-bottom: 1.5rem;
-	}
-	.header-top {
-		display: flex;
-		align-items: flex-start;
-		justify-content: space-between;
-		gap: 1rem;
-		flex-wrap: wrap;
-	}
-	.page-header h1 {
-		font-size: var(--text-3xl);
-		background: var(--gradient);
-		-webkit-background-clip: text;
-		-webkit-text-fill-color: transparent;
-		background-clip: text;
-	}
-	.subtitle {
-		color: var(--text-muted);
-		font-size: var(--text-base);
-		margin-top: 0.25rem;
-	}
 
 	.header-actions {
 		display: flex;

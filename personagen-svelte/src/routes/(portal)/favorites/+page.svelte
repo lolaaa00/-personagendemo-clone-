@@ -367,7 +367,7 @@
 
 	.fav-tab.active {
 		background: var(--accent-soft);
-		color: var(--accent);
+		color: var(--accent-text);
 	}
 
 	.fav-count {
@@ -384,7 +384,7 @@
 	.fav-tab.active .fav-count {
 		background: color-mix(in srgb, var(--accent) 14%, transparent);
 		border-color: color-mix(in srgb, var(--accent) 30%, transparent);
-		color: var(--accent);
+		color: var(--accent-text);
 	}
 
 	/* ── Posts grid ── */

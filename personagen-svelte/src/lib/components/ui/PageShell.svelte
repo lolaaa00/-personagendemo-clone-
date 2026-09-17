@@ -39,6 +39,14 @@
 		actions?: Snippet;
 		/** Filters, tabs or a toolbar — sits below the masthead, above content. */
 		toolbar?: Snippet;
+		/**
+		 * Render the frame without the masthead, for a detail page whose subject
+		 * IS the heading — a persona's own page, where the name is the h1 and a
+		 * shell title above it would be a second one saying the same thing. The
+		 * page still gets the shared width, gutter and document <title>, which is
+		 * the part that must not vary; it just supplies its own h1.
+		 */
+		bare?: boolean;
 		children: Snippet;
 	}
 
@@ -49,6 +57,7 @@
 		width = 'default',
 		actions,
 		toolbar,
+		bare = false,
 		children
 	}: Props = $props();
 </script>
@@ -58,6 +67,7 @@
 </svelte:head>
 
 <div class="page-shell" class:is-wide={width === 'wide'}>
+	{#if !bare}
 	<header class="page-masthead">
 		<div class="page-masthead-text">
 			{#if eyebrow}<p class="page-eyebrow">{eyebrow}</p>{/if}
@@ -68,6 +78,7 @@
 			<div class="page-actions">{@render actions()}</div>
 		{/if}
 	</header>
+	{/if}
 
 	{#if toolbar}
 		<div class="page-toolbar">{@render toolbar()}</div>

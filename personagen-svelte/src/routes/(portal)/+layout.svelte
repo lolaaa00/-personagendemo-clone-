@@ -864,7 +864,7 @@
 								? 'Complimentary account — generations are not charged'
 								: `${(data as any).credits.usd} of generation credit${(data as any).credits.currency !== 'USD' ? ` (shown in ${(data as any).credits.currency})` : ''}`}
 						>
-							<span class="credit-pill-label">Credits</span>
+							<span class="credit-pill-label">Balance</span>
 							<span class="credit-pill-amount">{(data as any).credits.billing_mode === 'unmetered' ? '∞' : (data as any).credits.formatted}</span>
 						</a>
 					{/if}
@@ -2146,18 +2146,18 @@
 		border-color: rgba(255, 255, 255, 0.3);
 	}
 	.credit-pill-label {
-		opacity: 0.75;
+		color: var(--text-muted);
 	}
 	.credit-pill-amount {
 		font-weight: 600;
-		color: #16a34a;
+		color: var(--success-text);
 		font-variant-numeric: tabular-nums;
 	}
 	.credit-pill.low .credit-pill-amount {
-		color: #ef4444;
+		color: var(--error-text);
 	}
 	/* Under $3.00: amber, before the wall, the nudge to top up while a run still fits. */
 	.credit-pill.warn .credit-pill-amount {
-		color: #d97706;
+		color: var(--warning-text);
 	}
 </style>

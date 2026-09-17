@@ -1603,9 +1603,6 @@
 
 <style>
 	.page {
-		padding: 2rem;
-		max-width: 1400px;
-		margin: 0 auto;
 		position: relative;
 		min-height: calc(100vh - 60px);
 		display: flex;
@@ -1613,20 +1610,7 @@
 	}
 
 	/* ── Header ── */
-	.page-header {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 2rem;
-		margin-bottom: 1.5rem;
-		flex-wrap: wrap;
-	}
 
-	.page-header h1 {
-		font-family: var(--font-display);
-		font-size: var(--text-xl);
-		margin: 0 0 0.3rem;
-	}
 
 	.header-actions {
 		display: flex;
@@ -1643,11 +1627,6 @@
 		white-space: nowrap;
 	}
 
-	.subtitle {
-		color: var(--text-muted);
-		font-size: var(--text-base);
-		margin: 0;
-	}
 
 	/* ── Modals (manual-deletion notice) ── */
 	.modal-backdrop {

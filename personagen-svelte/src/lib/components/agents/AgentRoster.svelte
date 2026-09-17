@@ -14,6 +14,12 @@
 
 	let { agents }: Props = $props();
 
+	/** Gen Spend read "$0.00 (0)" on every row for any account whose generations
+	 *  predate metering, spending a column of horizontal budget on a cell that
+	 *  cannot carry a value. Same rule as the review queue's QC column: a column
+	 *  with nothing in it for any row is not rendered, and returns by itself. */
+	let hasSpend = $derived(agents.some((a: any) => (a.total_token_cost ?? 0) > 0));
+
 	type FilterType = 'all' | 'active' | 'paused' | 'pending' | 'top';
 
 	let currentFilter = $state<FilterType>('all');
@@ -271,7 +277,7 @@
 
 	<div class="dash-table" role="table" aria-label="Persona roster table">
 		<!-- Header Row -->
-		<div class="dash-row row-header" role="row">
+		<div class="dash-row row-header" class:no-spend={!hasSpend} role="row">
 			<span class="pick-cell" role="columnheader">
 				<input
 					type="checkbox"
@@ -286,7 +292,9 @@
 			<span role="columnheader">Persona</span>
 			<span role="columnheader">Followers</span>
 			<span role="columnheader">Engagement</span>
-			<span role="columnheader">Gen Spend</span>
+			{#if hasSpend}
+				<span role="columnheader">Gen Spend</span>
+			{/if}
 			<span role="columnheader">Published</span>
 			<span role="columnheader">Active</span>
 			<span class="pick-cell" role="columnheader"><span class="sr-only">Delete</span></span>
@@ -308,6 +316,7 @@
 					}
 				}}
 				class="dash-row"
+				class:no-spend={!hasSpend}
 				class:is-selected={selected.has(agent.id)}
 				role="link"
 				tabindex="0"
@@ -379,14 +388,16 @@
 				     at the platform markup, so rendering the raw figure with a `$` showed
 				     roughly a third of what the persona actually drew down. quote() puts
 				     it back in the same money the wallet pill speaks. -->
-				<span class="dash-cell token-cost-cell" role="cell">
-					{#if agent.total_token_cost !== undefined && agent.total_token_cost !== null && agent.total_token_cost > 0}
-						{quote(agent.total_token_cost)}
-						<span class="token-count">({formatTokens(agent.total_token_usage || 0)})</span>
-					{:else}
-						{quote(0)} <span class="token-count">(0)</span>
-					{/if}
-				</span>
+				{#if hasSpend}
+					<span class="dash-cell token-cost-cell" role="cell">
+						{#if agent.total_token_cost !== undefined && agent.total_token_cost !== null && agent.total_token_cost > 0}
+							{quote(agent.total_token_cost)}
+							<span class="token-count">({formatTokens(agent.total_token_usage || 0)})</span>
+						{:else}
+							{quote(0)} <span class="token-count">(0)</span>
+						{/if}
+					</span>
+				{/if}
 				<!-- A count of posts that actually went out, not a score. The bar that
 				     used to live here plotted a number floored at 70 by a constant. -->
 				<span class="dash-cell published-cell" role="cell">
@@ -537,6 +548,12 @@
 	.dash-row {
 		display: grid;
 		grid-template-columns: 30px 2.5fr 1fr 1fr 1fr 1.2fr 0.6fr 34px;
+	}
+	/* One fewer column when Gen Spend has nothing to report. */
+	.dash-row.no-spend {
+		grid-template-columns: 30px 2.5fr 1fr 1fr 1.2fr 0.6fr 34px;
+	}
+	.dash-row {
 		align-items: center;
 		gap: 0.75rem;
 		padding: 0.65rem 0.5rem;

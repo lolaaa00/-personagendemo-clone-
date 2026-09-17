@@ -91,7 +91,13 @@ async function inspect(page) {
 			deadLinks: dead.length,
 			internalLinks: internal,
 			// A SvelteKit error page renders its status in a <h1>; catch a thrown 500.
-			errorPage: /^(4\d\d|5\d\d)$/.test((document.querySelector('h1')?.textContent || '').trim())
+			errorPage: /^(4\d\d|5\d\d)$/.test((document.querySelector('h1')?.textContent || '').trim()),
+			// The app's own designed denial: a status line, a plain-words headline
+			// and at least one way out. Distinct from a framework crash page, whose
+			// h1 is the bare status code.
+			denied:
+				/^(401|403)$/.test((document.querySelector('.err-status')?.textContent || '').trim()) &&
+				document.querySelectorAll('.err-actions a').length > 0
 		};
 	});
 }
@@ -135,10 +141,19 @@ for (const [role, acct] of Object.entries(accounts)) {
 			const allowed = !gate || gate[1].includes(role);
 
 			if (!allowed) {
-				// A lesser role must be REDIRECTED cleanly, never shown a crash or a blank.
-				if (landed === route && !info.errorPage) fail(`${role} ${route}`, `not gated — rendered instead of redirecting`);
-				else if (info.errorPage) fail(`${role} ${route}`, `gate threw an error page instead of redirecting`);
-				else { status = `redirected → ${landed}`; pass(`${role} ${route} gated → ${landed}`); }
+				// Two acceptable shapes, and one that is not:
+				//   · a designed denial rendered in place (403 + a reason + a way out)
+				//   · a clean redirect somewhere the seat CAN go
+				//   · silently rendering the page anyway — a permission leak
+				if (landed !== route) {
+					status = `redirected → ${landed}`;
+					pass(`${role} ${route} gated → ${landed}`);
+				} else if (info.denied) {
+					status = 'denied in place (403)';
+					pass(`${role} ${route} gated → designed 403`);
+				} else {
+					fail(`${role} ${route}`, 'not gated — rendered the page instead of denying access');
+				}
 			} else {
 				if (info.errorPage) fail(`${role} ${route}`, 'rendered a SvelteKit error page');
 				if (info.textLen < 120) fail(`${role} ${route}`, `blank page (${info.textLen} chars of text)`);
@@ -146,8 +161,16 @@ for (const [role, acct] of Object.entries(accounts)) {
 				if (info.deadLinks > 0) fail(`${role} ${route}`, `${info.deadLinks} dead link(s) (href="#")`);
 			}
 			if (bag.pageerror.length) fail(`${role} ${route}`, `unhandled error: ${bag.pageerror[0]}`);
-			if (bag.console.length) fail(`${role} ${route}`, `console error: ${bag.console[0]}`);
-			if (bag.bad.length) fail(`${role} ${route}`, `unexpected ${bag.bad[0]}`);
+			// On a route this seat may not open, the route's OWN 403 is the designed
+			// outcome, not a fault — and the browser logs a console error for it
+			// whatever the page then renders. Anything else 4xx-ing still fails.
+			const expected403 = !allowed ? `403 ${route}` : null;
+			const badUnexpected = bag.bad.filter((b) => b !== expected403);
+			const consoleUnexpected = expected403
+				? bag.console.filter((c) => !/status of 403 \(Forbidden\)/.test(c))
+				: bag.console;
+			if (consoleUnexpected.length) fail(`${role} ${route}`, `console error: ${consoleUnexpected[0]}`);
+			if (badUnexpected.length) fail(`${role} ${route}`, `unexpected ${badUnexpected[0]}`);
 			if (bag.notfound.length) fail(`${role} ${route}`, `404 ${bag.notfound[0]}`);
 
 			// 360px overflow check on the same page.
@@ -156,7 +179,7 @@ for (const [role, acct] of Object.entries(accounts)) {
 			const narrow = await inspect(page);
 			if (narrow.overflow > 0) fail(`${role} ${route} @360`, `horizontal overflow ${narrow.overflow}px`);
 
-			rows.push({ role, route, landed, status, ...info, consoleErrors: bag.console.length, overflow360: narrow.overflow });
+			rows.push({ role, route, landed, status, ...info, consoleErrors: consoleUnexpected.length, overflow360: narrow.overflow });
 		} catch (e) {
 			fail(`${role} ${route}`, String(e.message).split('\n')[0].slice(0, 140));
 			rows.push({ route, role, status: 'threw' });

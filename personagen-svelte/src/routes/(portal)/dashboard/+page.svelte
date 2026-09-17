@@ -98,7 +98,7 @@
 				<path d="M12 14v4" />
 				<path d="M10 16h4" />
 			</svg>
-			New Post
+			Open calendar
 		</a>
 		<a href="/generator" class="btn-ghost">
 			<svg

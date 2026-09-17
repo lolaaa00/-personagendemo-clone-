@@ -19,16 +19,27 @@ const rows = await pg(`select id, email from auth.users where email = ${q(EMAIL)
 if (!rows?.length) { console.error(`${EMAIL} does not exist — refusing to create it`); process.exit(1); }
 const user = rows[0];
 
-// Refuse if it has acquired content since this was written.
-const owned = await pg(`select
-  (select count(*) from agents where user_id = ${q(user.id)}) personas,
-  (select count(*) from posts where user_id = ${q(user.id)}) posts,
-  (select count(*) from brand_briefs where user_id = ${q(user.id)}) briefs`);
-const o = owned[0];
-if (Number(o.personas) + Number(o.posts) + Number(o.briefs) > 0) {
-  console.error(`${EMAIL} now owns content (${JSON.stringify(o)}) — refusing to touch it`);
+// Refuse if it has acquired content that this audit did not put there.
+//
+// The original rule was "owns nothing at all", which is the right instinct — the
+// guard exists so a fixture login can never be pointed at a real person's
+// account. But seed-fixture.mjs deliberately puts content HERE, so after a seed
+// the account legitimately owns personas and posts, and the blanket rule locked
+// the audit out of its own fixture.
+//
+// So the test is ownership PROVENANCE, not emptiness: every persona on the
+// account must be one this audit seeded, identified by the fixed handles in
+// seed-fixture.mjs. One unrecognised persona and this refuses, exactly as before.
+const SEEDED_HANDLES = [
+  'maravance', 'jonahreid', 'anaokafor', 'lenabrandt', 'theomarsh', 'nicoalvarez'
+];
+const personas = await pg(`select handle from agents where user_id = ${q(user.id)}`);
+const foreign = (personas ?? []).map((r) => r.handle).filter((h) => !SEEDED_HANDLES.includes(h));
+if (foreign.length) {
+  console.error(`${EMAIL} owns personas this audit did not seed (${foreign.join(', ')}) — refusing to touch it`);
   process.exit(1);
 }
+const owned = { personas: personas?.length ?? 0 };
 
 const password = `Ux!${randomBytes(12).toString('base64url')}`;
 const { error } = await svc.auth.admin.updateUserById(user.id, { password, email_confirm: true });
@@ -39,4 +50,6 @@ writeFileSync(
   join(appRoot, '.ux-audit', 'accounts.json'),
   JSON.stringify({ createdAt: new Date().toISOString(), accounts: { fixture: { email: EMAIL, password, id: user.id, label: 'Existing empty fixture account', seat: null } } }, null, 2)
 );
-console.log(`ready: ${EMAIL} (owns nothing) → .ux-audit/accounts.json`);
+console.log(
+  `ready: ${EMAIL} (${owned.personas} seeded persona(s), none foreign) → .ux-audit/accounts.json`
+);

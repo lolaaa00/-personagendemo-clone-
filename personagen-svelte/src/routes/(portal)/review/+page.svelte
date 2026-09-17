@@ -741,7 +741,7 @@
 				<span>Persona</span>
 				<select bind:value={filterAgent}>
 					<option value="all">All personas</option>
-					{#each agentOptions as a}
+					{#each agentOptions as a (a.id)}
 						<option value={a.id}>{a.name}</option>
 					{/each}
 				</select>
@@ -750,7 +750,7 @@
 				<span>Platform</span>
 				<select bind:value={filterPlatform}>
 					<option value="all">All platforms</option>
-					{#each platformOptions as p}
+					{#each platformOptions as p (p)}
 						<option value={p}>{platformLabel(p)}</option>
 					{/each}
 				</select>
@@ -898,7 +898,7 @@
 				{/if}
 				<select bind:value={rejectReason} aria-labelledby="rp-label">
 					<option value="" disabled>— Choose a reason —</option>
-					{#each REJECT_REASONS as r}<option value={r}>{r}</option>{/each}
+					{#each REJECT_REASONS as r (r)}<option value={r}>{r}</option>{/each}
 				</select>
 				<input
 					type="text"
@@ -1147,7 +1147,7 @@
 							</div>
 						{/if}
 						<div class="plat-row">
-							{#each item.platforms as p}<span class="plat-chip">{platformLabel(p)}</span>{/each}
+							{#each item.platforms as p (p)}<span class="plat-chip">{platformLabel(p)}</span>{/each}
 						</div>
 						<div class="card-actions">
 							{#if item.status === 'draft'}
@@ -1289,7 +1289,7 @@
 									<p class="cap-meta">{item.agent_name} · {slotLabel(item)}</p>
 								</td>
 								<td class="td-plat">
-									{#each item.platforms as p}<span class="plat-chip">{platformLabel(p)}</span>{/each}
+									{#each item.platforms as p (p)}<span class="plat-chip">{platformLabel(p)}</span>{/each}
 								</td>
 								{#if hasQc}
 								<td class="td-qc">
@@ -1506,7 +1506,7 @@
 								</div>
 								<p class="deck-cap">{current.text}</p>
 								<div class="plat-row">
-									{#each current.platforms as p}<span class="plat-chip">{platformLabel(p)}</span>{/each}
+									{#each current.platforms as p (p)}<span class="plat-chip">{platformLabel(p)}</span>{/each}
 								</div>
 							</div>
 						</div>
@@ -1612,7 +1612,7 @@
 									<span class="lane-who">{item.agent_name}</span>
 									<span class="lane-cap">{item.text}</span>
 									<span class="lane-foot">
-										{#each item.platforms as p}<span class="plat-chip">{platformLabel(p)}</span>{/each}
+										{#each item.platforms as p (p)}<span class="plat-chip">{platformLabel(p)}</span>{/each}
 										<span class="slot">{slotLabel(item)}</span>
 										{#if lane.cls === 'flag' && item.quality_score != null}
 											<span class="qc-badge qc-low">QC {item.quality_score.toFixed(1)}{item.quality_issue ? ` · ${item.quality_issue}` : ''}</span>

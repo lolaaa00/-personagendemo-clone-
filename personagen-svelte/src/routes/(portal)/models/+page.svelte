@@ -1058,10 +1058,6 @@
 </PageShell>
 
 <style>
-	.mm-page {
-		max-width: 1280px;
-		margin: 0 auto;
-	}
 
 	.mm-header {
 		display: flex;
@@ -1072,12 +1068,6 @@
 		margin-bottom: var(--space-5);
 	}
 
-	.mm-header h1 {
-		font-family: var(--font-display);
-		font-size: 1.5rem;
-		font-weight: 700;
-		margin: 0 0 0.25rem;
-	}
 
 	.mm-sub {
 		color: var(--text-muted);

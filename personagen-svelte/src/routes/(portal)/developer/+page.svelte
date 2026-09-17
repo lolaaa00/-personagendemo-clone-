@@ -521,12 +521,6 @@
 		font-size: 0.85rem;
 	}
 	.dev-hint code,
-	.dev-head code {
-		background: var(--surface-2);
-		padding: 0.05rem 0.35rem;
-		border-radius: 4px;
-		font-size: 0.85em;
-	}
 	.dev-btn {
 		border: 1px solid var(--border-strong);
 		background: var(--surface-2);

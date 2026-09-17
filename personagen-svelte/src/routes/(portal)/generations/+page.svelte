@@ -569,7 +569,7 @@
 
 	.lens-btn.active {
 		background: var(--accent-soft);
-		color: var(--accent);
+		color: var(--accent-text);
 	}
 
 	.lens-count {
@@ -586,7 +586,7 @@
 	.lens-btn.active .lens-count {
 		background: color-mix(in srgb, var(--accent) 14%, transparent);
 		border-color: color-mix(in srgb, var(--accent) 30%, transparent);
-		color: var(--accent);
+		color: var(--accent-text);
 	}
 
 	/* ── Toolbar ── */
