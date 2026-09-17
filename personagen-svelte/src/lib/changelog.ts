@@ -535,7 +535,9 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-17", hash: "b481432", type: "chore", category: "infrastructure", scope: "git", title: "ignore a root .svelte-kit, the last unignored build artifact" },
 	{ date: "2026-09-17", hash: "208db9e", type: "docs", category: "docs", scope: null, title: "the Hypit integration verdict, and a day of state measured three times" },
 	{ date: "2026-09-17", hash: "590c942", type: "fix", category: "fix", scope: "realism", title: "make the enhancement pass survive contact with production" },
-	{ date: "2026-09-17", hash: "4f40382", type: "docs", category: "docs", scope: "competitive", title: "one round deeper — what P0.1 did not close" }
+	{ date: "2026-09-17", hash: "4f40382", type: "docs", category: "docs", scope: "competitive", title: "one round deeper — what P0.1 did not close" },
+	{ date: "2026-09-17", hash: "b22dc50", type: "feat", category: "feature", scope: "ledger", title: "every LLM call records which STAGE of the run made it" },
+	{ date: "2026-09-17", hash: "4710d30", type: "other", category: "maintenance", scope: null, title: "Merge origin/main: every LLM call now records which stage of the run made it" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -925,12 +927,12 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 	},
 	{
 		id: "d636290", from: "2026-09-17", to: "2026-09-17",
-		category: "infrastructure", categories: ["infrastructure","docs","fix"],
+		category: "infrastructure", categories: ["infrastructure","docs","fix","feature","maintenance"],
 		title: "Behind the scenes: move the ratchet to the real count — lint:ci was…",
-		summary: "Move the ratchet to the real count — lint:ci was failing at 1136. Plus 4 more changes, touching guides and explanations and things that were broken.",
+		summary: "Move the ratchet to the real count — lint:ci was failing at 1136. Plus 6 more changes, touching guides and explanations and things that were broken and things you can now do.",
 		major: true, curated: false,
-		entries: [CHANGELOG[497], CHANGELOG[498], CHANGELOG[499], CHANGELOG[500], CHANGELOG[501]]
+		entries: [CHANGELOG[497], CHANGELOG[498], CHANGELOG[499], CHANGELOG[500], CHANGELOG[501], CHANGELOG[502], CHANGELOG[503]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "4f40382";
+export const CHANGELOG_GENERATED_FROM = "4710d30";
