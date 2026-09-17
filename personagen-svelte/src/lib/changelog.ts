@@ -533,7 +533,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-17", hash: "cfd5fe5", type: "feat", category: "feature", scope: "realism", title: "the pass after the pass — P0.1, upscale first" },
 	{ date: "2026-09-17", hash: "d636290", type: "chore", category: "infrastructure", scope: "lint", title: "move the ratchet to the real count — lint:ci was failing at 1136" },
 	{ date: "2026-09-17", hash: "b481432", type: "chore", category: "infrastructure", scope: "git", title: "ignore a root .svelte-kit, the last unignored build artifact" },
-	{ date: "2026-09-17", hash: "208db9e", type: "docs", category: "docs", scope: null, title: "the Hypit integration verdict, and a day of state measured three times" }
+	{ date: "2026-09-17", hash: "208db9e", type: "docs", category: "docs", scope: null, title: "the Hypit integration verdict, and a day of state measured three times" },
+	{ date: "2026-09-17", hash: "590c942", type: "fix", category: "fix", scope: "realism", title: "make the enhancement pass survive contact with production" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -923,12 +924,12 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 	},
 	{
 		id: "d636290", from: "2026-09-17", to: "2026-09-17",
-		category: "infrastructure", categories: ["infrastructure","docs"],
+		category: "infrastructure", categories: ["infrastructure","docs","fix"],
 		title: "Behind the scenes: move the ratchet to the real count — lint:ci was…",
-		summary: "Move the ratchet to the real count — lint:ci was failing at 1136. Plus 2 more changes, touching guides and explanations.",
+		summary: "Move the ratchet to the real count — lint:ci was failing at 1136. Plus 3 more changes, touching guides and explanations and things that were broken.",
 		major: false, curated: false,
-		entries: [CHANGELOG[497], CHANGELOG[498], CHANGELOG[499]]
+		entries: [CHANGELOG[497], CHANGELOG[498], CHANGELOG[499], CHANGELOG[500]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "208db9e";
+export const CHANGELOG_GENERATED_FROM = "590c942";

@@ -11,9 +11,9 @@
 
 Thirty-plus commits landed since this was written. Three of this document's findings moved; the central one did not.
 
-**Still true, and now the only remaining realism P0:**
+**Was the only remaining realism P0 — and it moved later the same day:**
 
-> **The enhancement chain is still absent.** Re-verified by search across `src/` at `e1bbdea`: no upscaler, no face restoration, no skin/detail pass. The only `upscale` hits in the tree are a prompt string inside `CHARACTER_SHEET_PROMPT` and `video.ts:123`'s `// never upscale`. Every other P0 in §4 has moved; this one has not moved at all.
+> **The enhancement chain was absent.** Re-verified by search across `src/` at `e1bbdea`: no upscaler, no face restoration, no skin/detail pass. That measurement is what prompted P0.1, whose first stage (upscale) shipped hours later. **Do not read that as the gap being closed** — the pass is wired into one call site out of fourteen, and has never been benchmarked or run live. See *One round deeper* below, which is the honest state.
 
 **Closed since 09-09:**
 
@@ -36,7 +36,7 @@ Thirty-plus commits landed since this was written. Three of this document's find
 |---|---|---|---|
 | Content-format breadth | 8 | 5 | **8 — parity reached** |
 | Cost transparency & accounting | 2 | 9 | **10** |
-| Per-image photorealism | 8 | 5 | **5 — unmoved** |
+| Per-image photorealism | 8 | 5 | **5 — mechanism shipped, unproven** (P0.1 stage 1; 1 of 14 call sites, no benchmark) |
 | Creation UX | 9 | 4 | **7 — P0.3 shipped 09-17** (see §4) |
 
 **Net:** we closed the format gap and widened the accounting lead, and did not touch either of the two gaps that decide a cold buyer's first impression. The §8 ordering is unchanged and now more lopsided than when it was written.
@@ -448,6 +448,58 @@ The work, in order:
 5. **Ship the integrity table** on the landing page — the one thing they structurally cannot answer.
 
 Do those five and we are not competing with Fannabe. We are the platform that generates images as good as theirs *and then actually runs the account*, which is a category they are not in.
+
+### One round deeper — 2026-09-17, after P0.1 shipped
+
+P0.1's upscale stage is committed, hardened and green. Re-reading it against
+its own argument rather than its tests turns up five things, and the first two
+matter more than the code that was written.
+
+**1. Coverage is 1 call site out of 14.** `enhanceImage` is invoked in exactly
+one place — the persona preview portrait. The post pipeline has **13** image
+call sites (`generateUgcImage`, `generateProductStill`, `generateGraphicStill`)
+and **not one of them is enhanced**. The realism gap this whole document is
+about is a gap in the *content a buyer publishes*, and content is still leaving
+the building at the base model's raw output. What shipped improves the face a
+visitor sees once, in the wizard. Calling P0.1 "done" on that basis would be
+the same overstatement §3.2 was written to catch.
+
+**2. P0.2 was skipped, and it is now the gating question — not a formality.**
+The chain shipped with **zero evidence it improves realism**. Worse, there is a
+specific reason to think the first stage may be the wrong one: ESRGAN is
+super-resolution. It sharpens edges and *interpolates* skin, and the failure
+mode of that family is a smooth, waxy surface — which is precisely the "AI
+glaze" §2 identifies as the tell we are trying to remove. Fannabe's stack names
+a **skin enhancer** separately from its upscaler, and §2 reads their realism as
+coming from *restored micro-texture*. An upscaler can destroy the very thing
+the pass is supposed to add. **Until the blind benchmark runs, "we enhanced it"
+is a mechanism, not an improvement**, and it could be a regression.
+
+**3. It has never run.** Not once, against the live endpoint. The schema was
+verified from fal's published docs, not from a response. Never-brick means a
+wrong assumption degrades to the original rather than breaking a post, so this
+fails safe — but "safe" and "working" are different claims and only one of them
+is currently supported.
+
+**4. A declared price bounds the bill, never the cost.** `UGC_UPSCALE_USD` is
+what we *charge*. If fal bills compute-seconds above that figure, the ledger
+under-reports and margin erodes with nothing to notice — the 5.8× LLM-rate
+failure with a knob in place of a constant. No drift check exists.
+
+**5. The upscaled portrait becomes the identity anchor.** The wizard adopts the
+*enhanced* image as `ugc_character_ref`, so it is the reference every later
+generation is conditioned on. If the upscaler alters bone structure, eye shape
+or skin even slightly, it moves the one asset whose entire job is to hold still
+— and it moves it before the five-stage kit is built on top. This is the
+highest-consequence item on the list and the least obvious.
+
+**What this changes about the ordering.** P0.2 stops being a verification step
+after P0.1 and becomes a precondition for extending it: benchmark first, then
+decide whether upscale is even the right first stage, then wire the remaining
+13 call sites. Wiring them now would multiply an unproven pass across every
+image the product makes.
+
+---
 
 ### Re-measured verdict — 2026-09-17
 
