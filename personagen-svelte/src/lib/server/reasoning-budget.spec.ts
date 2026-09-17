@@ -166,6 +166,50 @@ describe('the grader asks for the least', () => {
 	});
 });
 
+describe('the gate is confirmed where it is a coin flip', () => {
+	// 8 real drafts, 2026-09-17: the provider default graded the SAME draft
+	// twice and disagreed on the floor-5 gate 2/8 times (score sd 1.04);
+	// 'low' vs default 6/8 (+0.81), 'minimal' vs default 5/8 (+1.10). The level
+	// is not the lever; a single call at the boundary is.
+	const measured = {
+		default_retest: { agree: 6, of: 8, sd: 1.04 },
+		low_vs_default: { agree: 6, of: 8, shift: 0.81, usd: 0.0057 },
+		minimal_vs_default: { agree: 5, of: 8, shift: 1.1, usd: 0.0017 }
+	};
+
+	it("the numbers that decided it: 'low' buys no agreement the default does not already lack", () => {
+		expect(measured.low_vs_default.agree).toBe(measured.default_retest.agree);
+		expect(measured.low_vs_default.usd / measured.minimal_vs_default.usd).toBeGreaterThan(3);
+	});
+
+	it('the band is the measured noise, and the wrapper takes the floor it confirms against', () => {
+		expect(generate).toMatch(/const GRADE_CONFIRM_BAND = 1;/);
+		expect(generate).toMatch(/async function gradeDraftWithRetry\([\s\S]{0,300}floor: number\s*\)/);
+		expect(generate).toContain('Math.abs(grade.overall - floor) < GRADE_CONFIRM_BAND');
+		expect(generate).toContain('grade = confirmed;');
+	});
+
+	it('floor 0 disables the confirmation along with the gate', () => {
+		expect(generate).toContain('if (floor > 0 && Math.abs(grade.overall - floor) < GRADE_CONFIRM_BAND)');
+	});
+
+	it('every gate decision in both packs goes through the confirming wrapper', () => {
+		// First grade and post-rewrite regrade, standard and cinematic: four sites.
+		const calls = generate.match(/await gradeDraftWithRetry\(/g) ?? [];
+		expect(calls.length, 'expected the four gate sites').toBe(4);
+		// and nothing decides a gate on a bare, unconfirmed grade any more
+		expect(generate).not.toMatch(/const regrade = await gradeDraft\(/);
+		// each site passes its own floor
+		expect(generate).toMatch(/platform,\s*cinematicFloor\s*\)/);
+		expect(generate).toMatch(/platform,\s*floor\s*\)/);
+	});
+
+	it('the critique travels with the lower grade, so a rewrite fixes the worse reading', () => {
+		expect(generate).toContain('const lower = a.overall <= b.overall ? a : b;');
+		expect(generate).toContain('topIssue: lower.topIssue');
+	});
+});
+
 describe('at runtime, against the real response shapes', () => {
 	const supabase = {};
 	beforeEach(() => {

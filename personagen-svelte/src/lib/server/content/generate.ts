@@ -856,27 +856,72 @@ Grade it.`,
 }
 
 /**
- * gradeDraft with one retry on grader failure. A single flaky grader call
- * shouldn't silently ungate media spend; two failures in a row means the
- * grade is genuinely unavailable — the caller proceeds ungated and tags the
- * post's content with qc_status 'ungraded' so those posts stay queryable.
+ * Within this distance of the floor, one grade is a coin flip. Measured
+ * 2026-09-17 on 8 real drafts: the SAME draft graded twice at the provider's
+ * default reasoning disagreed on the floor-5 gate 2 times in 8, with a score
+ * sd of 1.04 on identical input; 'low' and 'minimal' added a leniency shift
+ * (+0.8, +1.1) inside that band. A false-low grade buys a whole director
+ * rewrite ($0.014); a false-high one waves a weak script through. Neither is
+ * fixed by a pricier reasoning level — 'low' agreed with the default exactly
+ * as often as the default agreed with itself, at 3x the price of 'minimal'.
+ * So: a grade inside the band is confirmed by one more call (~$0.002 at
+ * 'minimal') and the two are averaged, which cuts the noise by √2 where the
+ * decision actually lives and costs nothing where it does not.
+ */
+const GRADE_CONFIRM_BAND = 1;
+
+/** Mean of two grades to one decimal; the critique travels with the lower one. */
+function meanGrade(a: QualityGrade, b: QualityGrade): QualityGrade {
+	const avg = (x: number, y: number) => Math.round(((x + y) / 2) * 10) / 10;
+	const lower = a.overall <= b.overall ? a : b;
+	return {
+		hook: avg(a.hook, b.hook),
+		authenticity: avg(a.authenticity, b.authenticity),
+		brandFit: avg(a.brandFit, b.brandFit),
+		cta: avg(a.cta, b.cta),
+		overall: avg(a.overall, b.overall),
+		topIssue: lower.topIssue,
+		fix: lower.fix
+	};
+}
+
+/**
+ * gradeDraft with one retry on grader failure, and one confirming call when
+ * the grade lands within GRADE_CONFIRM_BAND of the floor. A single flaky
+ * grader call shouldn't silently ungate media spend; two failures in a row
+ * means the grade is genuinely unavailable — the caller proceeds ungated and
+ * tags the post's content with qc_status 'ungraded' so those posts stay
+ * queryable. `floor` 0 disables both the gate and the confirmation.
  */
 async function gradeDraftWithRetry(
 	ai: AiClient,
 	draft: { text?: string; dialogue?: string; on_screen_text?: string },
 	productName: string | null,
-	platform: string
+	platform: string,
+	floor: number
 ): Promise<QualityGrade | null> {
-	const first = await gradeDraft(ai, draft, productName, platform);
-	if (first) return first;
-	console.warn('[QC] Grader returned no grade — retrying once before proceeding ungated.');
-	const second = await gradeDraft(ai, draft, productName, platform);
-	if (!second) {
-		console.warn(
-			'[QC] Grader failed twice — generation proceeds ungated; post will carry qc_status "ungraded".'
-		);
+	let grade = await gradeDraft(ai, draft, productName, platform);
+	if (!grade) {
+		console.warn('[QC] Grader returned no grade — retrying once before proceeding ungated.');
+		grade = await gradeDraft(ai, draft, productName, platform);
+		if (!grade) {
+			console.warn(
+				'[QC] Grader failed twice — generation proceeds ungated; post will carry qc_status "ungraded".'
+			);
+			return null;
+		}
 	}
-	return second;
+	if (floor > 0 && Math.abs(grade.overall - floor) < GRADE_CONFIRM_BAND) {
+		const again = await gradeDraft(ai, draft, productName, platform);
+		if (again) {
+			const confirmed = meanGrade(grade, again);
+			console.info(
+				`[QC] Grade ${grade.overall} is within ${GRADE_CONFIRM_BAND} of floor ${floor} — confirmed with a second grade ${again.overall} → ${confirmed.overall}`
+			);
+			grade = confirmed;
+		}
+	}
+	return grade;
 }
 
 /** Best-effort append of an auto-rejection to post_reviews (the QC training log). */
@@ -2257,7 +2302,8 @@ export async function generateCinematicUgcPack(input: UgcPackInput): Promise<Ugc
 			ai,
 			parsed,
 			selectedProduct?.name ?? null,
-			platform
+			platform,
+			cinematicFloor
 		);
 		if (cinematicFloor > 0 && cinematicGrade && cinematicGrade.overall < cinematicFloor) {
 			console.warn(
@@ -2270,7 +2316,15 @@ export async function generateCinematicUgcPack(input: UgcPackInput): Promise<Ugc
 				)) || '{}';
 			const rewritten = safeParseJson(rewriteRaw);
 			if (rewritten?.text && Array.isArray(rewritten.shots) && rewritten.shots.length > 0) {
-				const regrade = await gradeDraft(ai, rewritten, selectedProduct?.name ?? null, platform);
+				// The regrade decides the abandon-throw below, so it is confirmed at
+				// the boundary exactly like the first grade.
+				const regrade = await gradeDraftWithRetry(
+					ai,
+					rewritten,
+					selectedProduct?.name ?? null,
+					platform,
+					cinematicFloor
+				);
 				if (!regrade || regrade.overall >= (cinematicGrade?.overall ?? 0)) {
 					parsed = rewritten;
 					cinematicGrade = regrade ?? cinematicGrade;
@@ -4499,7 +4553,8 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 			ai,
 			parsed,
 			selectedProduct?.name ?? null,
-			platform
+			platform,
+			floor
 		);
 		if (floor > 0 && qualityGrade && qualityGrade.overall < floor) {
 			console.warn(
@@ -4512,7 +4567,15 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 				)) || '{}';
 			const rewritten = safeParseJson(rewriteRaw);
 			if (rewritten?.text) {
-				const regrade = await gradeDraft(ai, rewritten, selectedProduct?.name ?? null, platform);
+				// The regrade decides the abandon-throw below, so it is confirmed at
+				// the boundary exactly like the first grade.
+				const regrade = await gradeDraftWithRetry(
+					ai,
+					rewritten,
+					selectedProduct?.name ?? null,
+					platform,
+					floor
+				);
 				if (!regrade || regrade.overall >= (qualityGrade?.overall ?? 0)) {
 					parsed = rewritten;
 					qualityGrade = regrade ?? qualityGrade;
