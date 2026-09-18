@@ -1,23 +1,16 @@
 <script lang="ts">
+	import { personaStatus } from '$lib/status-color';
 	interface Props {
 		status: string;
 	}
 
 	let { status }: Props = $props();
 
-	const statusConfig = $derived.by(() => {
-		switch (status) {
-			case 'active':
-				return { label: 'active', cssClass: 'active' };
-			case 'paused':
-				return { label: 'paused', cssClass: 'paused' };
-			case 'pending':
-				return { label: 'PENDING', cssClass: 'pending' };
-			case 'failing':
-				return { label: 'failing', cssClass: 'failing' };
-			default:
-				return { label: status, cssClass: 'paused' };
-		}
+	// Labels come from the shared status map. This component used to return
+	// 'PENDING' in capitals while every sibling returned lower case.
+	const statusConfig = $derived({
+		label: personaStatus(status).label,
+		cssClass: ['active', 'paused', 'pending', 'failing'].includes(status) ? status : 'paused'
 	});
 </script>
 

@@ -1,5 +1,6 @@
 #!/bin/sh
-# Keeps src/lib/changelog.ts in step with git history on every commit.
+# Keeps src/lib/changelog.ts in step with git history on every commit, and
+# refuses a commit that stages a lint ERROR.
 #
 # Why here and not in the build: the Docker build context is personagen-svelte/,
 # .git lives one level up at the repo root, and node:22-alpine ships no git
@@ -11,6 +12,7 @@ set -e
 
 REPO_ROOT=$(git rev-parse --show-toplevel)
 APP="$REPO_ROOT/personagen-svelte"
+CHANGELOG="$APP/src/lib/changelog.ts"
 
 # ── Guard: non-portable staged filenames ───────────────────────────────────
 # A file literally named with a Windows temp path (carrying U+F03A, the
@@ -36,6 +38,46 @@ if [ -n "$bad" ]; then
   exit 1
 fi
 
+# ── Guard: lint ERRORS in staged sources ───────────────────────────────────
+# Errors only (--quiet); the warning ratchet stays a CI concern, because the
+# count is repo-wide and a per-file run cannot judge it. On 2026-09-17 lint:ci
+# sat red for two commits with nobody noticing, because nothing ran it at commit
+# time; the same day a `\b` that had become a literal 0x08 byte inside a regex
+# reached a working copy — the rule that catches that (no-control-regex) is an
+# error, and this is the first place it can refuse before the commit exists.
+#
+# eslint's exit codes are load-bearing: 1 = it found errors (refuse), 2 = it
+# could not run (warn and proceed — a broken linter must not block every commit
+# in a tree three sessions share). Never collapse the two.
+staged_src=$(git diff --cached --name-only --diff-filter=d -- \
+  'personagen-svelte/*.ts' 'personagen-svelte/*.js' 'personagen-svelte/*.mjs' 'personagen-svelte/*.svelte' \
+  | grep -v '^personagen-svelte/src/lib/changelog.ts$' || true)
+if [ -n "$staged_src" ] && [ -x "$APP/node_modules/.bin/eslint" ]; then
+  # Absolute paths, so the run is independent of the hook's own cwd.
+  list=$(printf '%s\n' "$staged_src" | sed "s|^|$REPO_ROOT/|")
+  rc=0
+  # shellcheck disable=SC2086 -- deliberate word splitting; no path here carries spaces (see filename guard above)
+  (cd "$APP" && ./node_modules/.bin/eslint --quiet --no-warn-ignored $list) || rc=$?
+  if [ "$rc" -eq 1 ]; then
+    echo "[pre-commit] REFUSED - lint error(s) in staged source (see above)." >&2
+    echo "[pre-commit] Fix them, or if a rule is wrong for this line, disable it there with a reason." >&2
+    exit 1
+  elif [ "$rc" -ne 0 ]; then
+    echo "[pre-commit] eslint could not run (exit $rc) — committing WITHOUT the lint guard." >&2
+  fi
+fi
+
+# ── changelog.ts is generated: what was pre-staged is irrelevant ───────────
+# Drop any copy already in the index BEFORE anything that can exit early.
+# Measured on 2026-09-17: with a stale copy staged, regeneration heals it on
+# the normal path — but on every path that skipped regeneration (generator
+# missing, generator throwing) the hook exited 0 and committed whatever was
+# staged, which shipped a changelog missing real entries. After these two lines
+# the index and the worktree both hold HEAD's copy, so any early exit commits an
+# UNCHANGED file: trailing by one more, never rolled back.
+git restore --staged -- "$CHANGELOG" 2>/dev/null || true
+git checkout -- "$CHANGELOG" 2>/dev/null || true
+
 [ -f "$APP/scripts/generate-changelog.mjs" ] || exit 0
 
 # Regenerate against the history as it stands. The commit being written is not
@@ -43,11 +85,12 @@ fi
 # trails by exactly one, which is the same behaviour as any build-time
 # generator and is corrected on the following commit.
 node "$APP/scripts/generate-changelog.mjs" >/dev/null 2>&1 || {
-  echo "[pre-commit] changelog generation failed — committing without regenerating." >&2
+  echo "[pre-commit] changelog generation failed — committing without regenerating (HEAD's copy, not a stale one)." >&2
+  git checkout -- "$CHANGELOG" 2>/dev/null || true
   exit 0
 }
 
-if ! git diff --quiet -- "$APP/src/lib/changelog.ts"; then
-  git add "$APP/src/lib/changelog.ts"
+if ! git diff --quiet -- "$CHANGELOG"; then
+  git add "$CHANGELOG"
   echo "[pre-commit] changelog.ts regenerated and staged."
 fi

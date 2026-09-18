@@ -21,6 +21,12 @@ import { FALLBACK_FX, type FxRates } from '$lib/money';
 
 export type CreditsModeSetting = 'off' | 'shadow' | 'enforce';
 export type PersonaGeneratorSetting = 'v1' | 'v2';
+/**
+ * The post-generation enhancement chain. 'upscale' runs the detail/resolution
+ * pass over a finished image; the face-restore and skin passes land later and
+ * will extend this union rather than reinterpret these two values.
+ */
+export type EnhanceChainSetting = 'off' | 'upscale';
 export type PersonaBackboneSetting = 'off' | 'shadow' | 'fill' | 'on';
 /** Who judges a draft against the viewer panel, and when. */
 export type PersonaFitJudgeSetting = 'off' | 'on_demand' | 'auto';
@@ -67,6 +73,13 @@ export interface PlatformSettings {
 	 */
 	video_ingest: boolean;
 	/**
+	 * Post-generation enhancement. OFF by default, and off is also what you get
+	 * when the stage has no configured price — see `enhance.ts`. fal publishes no
+	 * rate for either upscaler, so the operator supplies one; without it the
+	 * stage cannot run, because an unpriced paid step is an unmetered step.
+	 */
+	enhance_chain: EnhanceChainSetting;
+	/**
 	 * Persona Model v2 — which generator builds a new persona.
 	 * 'v1' = today's path (the LLM invents every field, values are coerced after).
 	 * 'v2' = skeleton first: facts sampled deterministically from the Trait
@@ -100,6 +113,7 @@ export const DEFAULT_SETTINGS: PlatformSettings = {
 	signup_credits_require_invite: true,
 	plans_enabled: false,
 	video_ingest: false,
+	enhance_chain: 'off',
 	persona_generator: 'v1',
 	persona_backbone: 'off',
 	persona_fit_judge: 'on_demand'
@@ -118,6 +132,7 @@ export const SETTING_KEYS = [
 	'signup_credits_require_invite',
 	'plans_enabled',
 	'video_ingest',
+	'enhance_chain',
 	'persona_generator',
 	'persona_backbone',
 	'persona_fit_judge'
@@ -218,6 +233,10 @@ function coerce(key: string, raw: unknown): unknown {
 		// true reads as off, so a half-written row never opens ingest.
 		case 'video_ingest':
 			return raw === true || raw === 'true';
+		// Fails SAFE: anything that is not the exact string 'upscale' reads as
+		// off. A half-written row must never start billing an enhancement pass.
+		case 'enhance_chain':
+			return raw === 'upscale' ? 'upscale' : 'off';
 		default:
 			return raw;
 	}

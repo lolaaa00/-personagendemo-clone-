@@ -1,5 +1,5 @@
 import type { PageServerLoad } from './$types';
-import { redirect } from '@sveltejs/kit';
+import { error, redirect } from '@sveltejs/kit';
 import { getServiceSupabase } from '$lib/server/service-supabase';
 import { isPlatformAdmin } from '$lib/server/platform-admin';
 
@@ -41,7 +41,12 @@ export const load: PageServerLoad = async ({ locals }) => {
 	// role — the Platform tab is theirs even with zero workspaces of their own.
 	const platformAdmin = await isPlatformAdmin(locals.supabase, user);
 	if (adminWorkspaces.length === 0 && !platformAdmin) {
-		throw redirect(303, '/dashboard');
+		// A designed 403, not a teleport to /dashboard. The nav already hides
+		// this entry for non-admin seats, so anyone arriving here followed a shared
+		// link or a bookmark — bouncing them somewhere else with no explanation
+		// reads as a broken link. The error page names the seat and who can change
+		// it, and keeps the portal shell (see (portal)/+error.svelte).
+		throw error(403, 'The Admin Console is for workspace owners and admin seats.');
 	}
 
 	const wsIds = adminWorkspaces.map((w) => w.id);
@@ -151,8 +156,15 @@ export const load: PageServerLoad = async ({ locals }) => {
 	}
 
 	// Unified, newest-first activity feed across the three sources.
+	// Every row carries its own primary key as `id`. The client keys its
+	// {#each} on it: the previous key was `at + actor + detail`, which is not
+	// unique — one autopilot run fires several LLM calls for the same actor and
+	// model inside a millisecond, so two rows collided and Svelte threw
+	// each_key_duplicate, blanking the whole console for exactly the workspaces
+	// busy enough to need it.
 	const activity = [
 		...generations.map((g: any) => ({
+			id: `generation:${g.id}`,
 			kind: 'generation' as const,
 			at: g.created_at,
 			actor: actorLabel(g.user_id),
@@ -161,6 +173,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 			cost: Number(g.est_cost) || 0
 		})),
 		...reviews.map((r: any) => ({
+			id: `review:${r.id}`,
 			kind: 'review' as const,
 			at: r.created_at,
 			actor: actorLabel(r.user_id),
@@ -171,6 +184,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 		...recentPosts
 			.filter((p: any) => p.status === 'published' && p.published_at)
 			.map((p: any) => ({
+				id: `publish:${p.id}`,
 				kind: 'publish' as const,
 				at: p.published_at,
 				actor: actorLabel(p.user_id),

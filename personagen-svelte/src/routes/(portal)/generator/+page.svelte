@@ -2,11 +2,13 @@
 	import { syncParam, readParam } from '$lib/url-state';
 	import { dialog } from '$lib/actions/dialog';
 	import { showToast } from '$lib/stores/ui.svelte';
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { Personas, BrandBrief, type GeneratedPersona } from '$lib/services/api';
 	import { PERSONA_ARCHETYPES, CONTENT_FOCUS_OPTIONS } from '$lib/persona-profile';
+	import TraitPicker from '$lib/components/persona/TraitPicker.svelte';
 	import { goto } from '$app/navigation';
 	import { browser } from '$app/environment';
+	import PageShell from '$lib/components/ui/PageShell.svelte';
 
 	let { data } = $props();
 
@@ -81,13 +83,104 @@
 
 	// Step 3 — Submission
 	let isCreating = $state(false);
+
+	// The server enforces this in POST /api/agents (personaLimitExceeded), and
+	// `entitlements.personaLimit` has always been in `data` — but this wizard
+	// never read it, so a capped plan completed all three steps and failed on the
+	// final click with a toast. Every other gated control in the portal mirrors
+	// its gate with a disabled state and a visible reason; this one now does too.
+	let personaLimit = $derived((data as any).entitlements?.personaLimit ?? null);
+	let personaCount = $derived(((data as any).sidebarAgents ?? []).length);
+	let personaLimitReached = $derived(personaLimit !== null && personaCount >= personaLimit);
+	let createBlockedReason = $derived(
+		personaLimitReached
+			? `The ${(data as any).entitlements?.plan ?? 'free'} plan includes ${personaLimit} persona${personaLimit === 1 ? '' : 's'}, and you have ${personaCount}. See Billing to compare plans, or delete a persona first.`
+			: null
+	);
 	let createError = $state('');
+
+	// ── The look preview ──────────────────────────────────────────────────────
+	// A real portrait, rendered before the persona exists, so the traits above
+	// can be judged by looking rather than by reading. Kept in the draft (and so
+	// in localStorage) because it is PAID work: a refresh mid-wizard must not
+	// throw away an image the user has already been billed for.
+	let previewUrl = $state('');
+	// The image the persona is ANCHORED to, kept apart from the one on screen.
+	// When the enhancement chain is on, `previewUrl` is the upscaled portrait
+	// and this is the base model's own output. The anchor becomes
+	// ugc_character_ref — the reference every later generation is conditioned
+	// on, and the one asset whose whole job is to hold still. An upscaler can
+	// shift bone structure, eye shape or skin subtly, and until the blind
+	// benchmark proves it does not, an unproven pass must not be what the
+	// five-stage kit is built on. Same URL as previewUrl when nothing ran.
+	let previewAnchorUrl = $state('');
+	let previewLoading = $state(false);
+	let previewError = $state('');
+
+	async function generatePreview() {
+		if (previewLoading) return;
+		previewLoading = true;
+		previewError = '';
+		try {
+			const res = await fetch('/api/persona-preview', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					name: agentName.trim(),
+					bio: soul.trim(),
+					ugcVoice: pinnedVoice || undefined,
+					brandBriefId: selectedBriefId || null,
+					personaProfile: generatedProfile
+				})
+			});
+			const payload = await res.json().catch(() => ({}));
+			if (!res.ok || !payload?.success) {
+				throw new Error(payload?.error || `Preview failed (${res.status})`);
+			}
+			previewUrl = String(payload.data?.url || '');
+			previewAnchorUrl = String(payload.data?.originalUrl || payload.data?.url || '');
+			saveProgress();
+		} catch (err) {
+			previewError = (err as Error).message;
+			showToast(`Preview failed: ${previewError}`, 'error');
+		} finally {
+			previewLoading = false;
+		}
+	}
 
 	// Validation
 	// Handle was removed as a field; niche + market are generated/optional. Only a
 	// name and niche are needed to proceed.
 	let step1Valid = $derived(agentName.trim().length >= 2 && niche !== '');
 	let step2Valid = $derived(soul.trim().length >= 10 && skills.trim().length >= 10);
+
+	/** Why this step will not let you forward yet, in the user's words.
+	 *
+	 *  Next was disabled on steps 1 and 2 with nothing on screen explaining it —
+	 *  and step 2's rule is a 10-character minimum on two fields that is stated
+	 *  nowhere, so a user who typed "fitness" in both sat looking at a dead
+	 *  button with no way to discover what it wanted. A disabled control that
+	 *  explains nothing is indistinguishable from a broken page. */
+	const MIN_DETAIL = 10;
+	let blockedReason = $derived.by(() => {
+		if (currentStep === 1) {
+			if (agentName.trim().length < 2 && niche === '')
+				return 'Give your persona a name and pick a niche to continue.';
+			if (agentName.trim().length < 2) return 'Give your persona a name to continue.';
+			if (niche === '') return 'Pick a niche to continue.';
+			return '';
+		}
+		if (currentStep === 2) {
+			const shortSoul = soul.trim().length < MIN_DETAIL;
+			const shortSkills = skills.trim().length < MIN_DETAIL;
+			if (shortSoul && shortSkills)
+				return `Describe the personality and the skills — at least ${MIN_DETAIL} characters each.`;
+			if (shortSoul) return `Describe the personality in at least ${MIN_DETAIL} characters.`;
+			if (shortSkills) return `List the skills in at least ${MIN_DETAIL} characters.`;
+			return '';
+		}
+		return '';
+	});
 
 	// Handle is auto-derived from the name ("Marcus Fit" → "@marcusfit"); the server
 	// falls back to the same rule, this just powers the review preview.
@@ -232,6 +325,8 @@
 				direction = d.direction || '';
 				pinnedVoice = d.pinnedVoice || '';
 				generatedProfile = d.generatedProfile || emptyProfile();
+				previewUrl = d.previewUrl || '';
+				previewAnchorUrl = d.previewAnchorUrl || d.previewUrl || '';
 			} else {
 				// The gradient is no longer a UI choice — auto-pick a random one per persona
 				// (generation re-randomizes it too) so avatars differ without manual fiddling.
@@ -244,6 +339,22 @@
 
 	// Save to localStorage (persists the generated profile + voice so a refresh
 	// mid-flow doesn't lose the generation).
+	// TraitPicker writes through its binding, so picking a chip fires no input
+	// event to hang saveProgress off the way every other field here does.
+	//
+	// It reassigns the whole object (`appearance = {...appearance, [key]: v}`),
+	// which reading the property alone would catch — the stringify is for the
+	// other writers into this object (brand generation, the vault options), so a
+	// per-key merge is picked up too rather than silently missing the draft.
+	//
+	// The save is untracked so this stays an appearance autosave: saveProgress
+	// reads most of the form, and tracking those reads would quietly turn this
+	// into a global effect that re-runs on every keystroke in the wizard.
+	$effect(() => {
+		JSON.stringify(generatedProfile.appearance);
+		untrack(() => saveProgress());
+	});
+
 	function saveProgress() {
 		if (!browser) return;
 		localStorage.setItem(
@@ -259,7 +370,9 @@
 				selectedBriefId,
 				direction,
 				pinnedVoice,
-				generatedProfile
+				generatedProfile,
+				previewUrl,
+				previewAnchorUrl
 			})
 		);
 	}
@@ -292,7 +405,12 @@
 			skills: skills.trim(),
 			ugcVoice: pinnedVoice || undefined,
 			brandBriefId: selectedBriefId || null,
-			personaProfile: generatedProfile
+			personaProfile: generatedProfile,
+			// Adopted as the pinned face, so the portrait the user approved is the
+			// one the persona is born with — and creation does not pay to render a
+			// second, different face. The server re-checks this URL is ours before
+			// trusting it (isOwnedBucketUrl).
+			characterRef: previewAnchorUrl || previewUrl || null
 		};
 	}
 
@@ -333,15 +451,7 @@
 	];
 </script>
 
-<svelte:head>
-	<title>Create a Persona — PersonaGen</title>
-</svelte:head>
-
-<section class="page">
-	<header class="page-header">
-		<h1>Create a Persona</h1>
-		<p class="subtitle">Create a new AI persona from scratch.</p>
-	</header>
+<PageShell title="Create a Persona" description="Create a new AI persona from scratch.">
 
 	<!-- Progress Indicator -->
 	<div class="progress-bar">
@@ -686,16 +796,17 @@
 									<option value="male">Male</option>
 								</select>
 							</div>
-							<div class="field">
-								<label for="pf-eth">Ethnicity / heritage</label>
-								<input
-									id="pf-eth"
-									type="text"
-									bind:value={generatedProfile.appearance.ethnicity}
-									oninput={saveProgress}
-									placeholder="e.g. Vietnamese, Nigerian, Brazilian"
-								/>
-							</div>
+						</div>
+						<!-- The look, as chips rather than free text. Every row carries a real
+						     `Best Fit` default meaning "leave it to the model", so a persona can
+						     be created without writing a single prompt fragment — which is what
+						     the landing page's step 01 has been promising. Same component and
+						     same storage shape as the persona edit page (plain strings, legacy
+						     free-text values preserved as their own chip), so this is an
+						     input-method change and nothing downstream sees a new format. -->
+						<div class="field">
+							<span class="pf-group-label">Look</span>
+							<TraitPicker bind:appearance={generatedProfile.appearance} />
 						</div>
 						<div class="field">
 							<label for="pf-avatar">Target avatar (ideal audience)</label>
@@ -770,13 +881,64 @@
 				<p class="panel-desc">Confirm everything looks good before creating your persona.</p>
 
 				<div class="review-card">
-					<div class="review-avatar" style="background: {GRADIENT_PRESETS[selectedGradient].value}">
-						<span>{initial}</span>
-					</div>
+					{#if previewUrl}
+						<img class="review-avatar review-avatar-img" src={previewUrl} alt="" />
+					{:else}
+						<div
+							class="review-avatar"
+							style="background: {GRADIENT_PRESETS[selectedGradient].value}"
+						>
+							<span>{initial}</span>
+						</div>
+					{/if}
 					<div class="review-info">
 						<h3 class="review-name">{agentName || 'Unnamed Persona'}</h3>
 						<span class="review-handle">{displayHandle}</span>
 					</div>
+				</div>
+
+				<!-- The look, before you commit. This is the step the landing page
+				     promises: a real render off the traits, regenerated until the face
+				     is right, then adopted as the persona's pinned identity at create.
+				     It is a paid generation, so the cost is stated up front rather than
+				     discovered on the ledger afterwards. -->
+				<div class="preview-block">
+					<div class="preview-head">
+						<span class="pf-group-label">The look</span>
+						<button
+							type="button"
+							class="preview-btn"
+							onclick={generatePreview}
+							disabled={previewLoading || !step1Valid}
+						>
+							{#if previewLoading}
+								Rendering…
+							{:else if previewUrl}
+								Regenerate
+							{:else}
+								Generate the look
+							{/if}
+						</button>
+					</div>
+					{#if previewLoading}
+						<p class="field-hint">
+							Rendering a portrait from the traits you set. This takes 30 seconds to about two
+							minutes.
+						</p>
+					{:else if previewUrl}
+						<p class="field-hint">
+							Regenerate until the face is right — the one on screen when you create is the face
+							this persona keeps.
+						</p>
+					{:else}
+						<p class="field-hint">
+							Optional, and a paid generation. Skip it and the portrait is rendered later, on the
+							persona's own page.
+						</p>
+					{/if}
+					{#if previewError}
+						<p class="field-error">{previewError}</p>
+					{/if}
 				</div>
 
 				<div class="review-grid">
@@ -842,7 +1004,8 @@
 						<button
 							type="button"
 							class="btn-method-action"
-							disabled={isCreating || !step1Valid || !step2Valid}
+							disabled={isCreating || !step1Valid || !step2Valid || personaLimitReached}
+							title={createBlockedReason ?? undefined}
 							aria-busy={isCreating}
 							onclick={createPersonaDirect}
 							style="background: var(--gradient-cta); color: #fff; border: none; padding: 0.75rem; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; font-size: var(--text-xs); font-weight: 700; border-radius: var(--radius-xs); cursor: pointer; text-align: center; transition: all 0.2s;"
@@ -869,6 +1032,12 @@
 								Create Persona
 							{/if}
 						</button>
+						{#if createBlockedReason}
+							<p class="plan-note" role="status">
+								{createBlockedReason}
+								<a href="/billing">Compare plans →</a>
+							</p>
+						{/if}
 					</div>
 
 					<!-- Method 2: Account Factory Automation -->
@@ -892,7 +1061,8 @@
 						<button
 							type="button"
 							class="btn-method-action"
-							disabled={isCreating || !step1Valid || !step2Valid}
+							disabled={isCreating || !step1Valid || !step2Valid || personaLimitReached}
+							title={createBlockedReason ?? undefined}
 							aria-busy={isCreating}
 							onclick={createPersonaDirect}
 							style="background: var(--gradient-cta); color: #fff; border: none; padding: 0.75rem; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; font-size: var(--text-xs); font-weight: 700; border-radius: var(--radius-xs); cursor: pointer; text-align: center; transition: all 0.2s;"
@@ -971,10 +1141,14 @@
 		{/if}
 
 		{#if currentStep < TOTAL_STEPS}
+			{#if blockedReason}
+				<p class="nav-blocked" role="status">{blockedReason}</p>
+			{/if}
 			<button
 				class="nav-next"
 				onclick={nextStep}
 				disabled={(currentStep === 1 && !step1Valid) || (currentStep === 2 && !step2Valid)}
+				title={blockedReason || undefined}
 			>
 				Next
 				<svg
@@ -993,7 +1167,7 @@
 			<div></div>
 		{/if}
 	</div>
-</section>
+</PageShell>
 
 {#if showVaultModal}
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -1215,11 +1389,6 @@
 {/if}
 
 <style>
-	.page {
-		padding: 2rem;
-		max-width: 800px;
-		margin: 0 auto;
-	}
 
 	/* Brand-brief-driven generation (Step 1) */
 	.brand-gen-box {
@@ -1371,17 +1540,19 @@
 		}
 	}
 
-	.page-header {
-		margin-bottom: 2rem;
-		text-align: center;
+	/* Why a control is disabled, stated where the control is — the pattern the
+	   developer, settings, brand-brief and persona pages already use. */
+	.plan-note {
+		margin: var(--space-3) 0 0;
+		font-size: var(--text-sm);
+		line-height: 1.5;
+		color: var(--text-dim);
 	}
-	.page-header h1 {
-		font-size: var(--text-3xl);
-		background: var(--gradient);
-		-webkit-background-clip: text;
-		-webkit-text-fill-color: transparent;
-		background-clip: text;
+	.plan-note a {
+		color: var(--accent-text);
+		white-space: nowrap;
 	}
+
 	.subtitle {
 		color: var(--text-muted);
 		font-size: var(--text-base);
@@ -1596,6 +1767,19 @@
 		flex: 1;
 		min-width: 180px;
 	}
+	/* Group heading for the trait chips. A <span>, not a <label>, because the
+	   picker is a set of radiogroups rather than one labellable control — so it
+	   restates the global `label` rule (app.css) against the same tokens instead
+	   of inheriting it. Keep the two in step if that rule is retuned. */
+	.pf-group-label {
+		display: block;
+		font-size: var(--text-sm);
+		font-weight: var(--weight-bold);
+		text-transform: uppercase;
+		letter-spacing: var(--tracking-wider);
+		color: var(--text-dim);
+		margin-bottom: 0.35rem;
+	}
 	.pf-voice {
 		display: inline-flex;
 		align-items: center;
@@ -1627,6 +1811,49 @@
 		color: #fff;
 		font-family: var(--font-display);
 		flex-shrink: 0;
+	}
+	/* The generated portrait in the same 64px circle the gradient initial used,
+	   so swapping one for the other doesn't reflow the review card. */
+	.review-avatar-img {
+		object-fit: cover;
+	}
+	.preview-block {
+		display: flex;
+		flex-direction: column;
+		gap: 0.4rem;
+		margin-top: 1rem;
+	}
+	.preview-head {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+	}
+	.preview-head .pf-group-label {
+		margin-bottom: 0;
+	}
+	.preview-btn {
+		border: 1px solid var(--border);
+		background: var(--surface);
+		color: var(--text);
+		border-radius: var(--radius-sm);
+		padding: 0.4rem 0.85rem;
+		font-size: var(--text-sm);
+		font-weight: var(--weight-bold);
+		cursor: pointer;
+	}
+	.preview-btn:hover:not(:disabled) {
+		border-color: var(--accent);
+		color: var(--accent-text);
+	}
+	.preview-btn:disabled {
+		opacity: 0.55;
+		cursor: not-allowed;
+	}
+	.field-hint {
+		font-size: var(--text-sm);
+		color: var(--text-dim);
+		margin: 0;
 	}
 	.review-name {
 		font-size: var(--text-lg);
@@ -1704,6 +1931,23 @@
 		margin-top: 1.5rem;
 	}
 
+	/* The blocker, stated beside the control it blocks — not in a tooltip only a
+	   mouse user can find. */
+	.nav-blocked {
+		margin: 0 var(--space-3) 0 auto;
+		align-self: center;
+		max-width: 46ch;
+		text-align: right;
+		font-size: var(--text-sm);
+		line-height: var(--leading-snug);
+		color: var(--warning-text);
+	}
+	@media (max-width: 639px) {
+		.nav-blocked {
+			margin: 0;
+			text-align: left;
+		}
+	}
 	.nav-back {
 		display: inline-flex;
 		align-items: center;

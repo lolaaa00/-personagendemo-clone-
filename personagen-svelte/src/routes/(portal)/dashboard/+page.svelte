@@ -4,6 +4,7 @@
 	import SparkChart from '$lib/components/dashboard/SparkChart.svelte';
 	import PlatformBars from '$lib/components/dashboard/PlatformBars.svelte';
 	import AnalyticsPanel from '$lib/components/dashboard/AnalyticsPanel.svelte';
+	import PageShell from '$lib/components/ui/PageShell.svelte';
 
 	let { data } = $props();
 
@@ -12,21 +13,18 @@
 
 
 <svelte:head>
-	<title>Dashboard — PersonaGen</title>
 	<meta
 		name="description"
-		content="PersonaGen Operations Dashboard — live status, metrics, and health scores for your autonomous creator roster."
+		content="PersonaGen dashboard — status, engagement and spend for every persona you run."
 	/>
 </svelte:head>
 
-<div class="dashboard-page">
-	<h1 class="sr-only">Dashboard</h1>
-	<!-- Section Tag -->
-	<span class="section-tag tag-teal">Operations Center</span>
-	<h2 class="section-title">Persona Roster Health & Status</h2>
-	<p class="section-lead">
-		Live status, metrics, and health scores for your autonomous creator roster.
-	</p>
+<PageShell
+	title="Dashboard"
+	width="wide"
+	description="Status, engagement and spend for every persona you run."
+>
+	<div class="dashboard-page">
 
 	<!-- KPI Grid -->
 	<KPIGrid agents={data.agents} postsThisWeek={data.postsThisWeek} />
@@ -53,7 +51,7 @@
 					</svg>
 					Welcome to PersonaGen! Let's initialize your Persona Roster
 				</h3>
-				<p>Deploy your first autonomous creator and link them to social platforms to begin operations.</p>
+				<p>Create your first persona and connect it to a platform to start publishing.</p>
 			</div>
 			
 			<div class="onboarding-steps">
@@ -67,7 +65,7 @@
 					<div class="step-num">2</div>
 					<h4>Link Platforms</h4>
 					<p>Connect your persona to Instagram, TikTok, YouTube, and 12 more platforms via Zernio's hosted OAuth on the Connections tab.</p>
-					<span class="step-link disabled">Awaiting your first persona</span>
+					<span class="step-note">Unlocks once your first persona exists</span>
 				</div>
 				<div class="step-box">
 					<div class="step-num">3</div>
@@ -100,7 +98,7 @@
 				<path d="M12 14v4" />
 				<path d="M10 16h4" />
 			</svg>
-			New Post
+			Open calendar
 		</a>
 		<a href="/generator" class="btn-ghost">
 			<svg
@@ -163,9 +161,9 @@
 
 	<!-- Analytics Section -->
 	<div class="analytics-section">
-		<AnalyticsPanel agents={creatorAgents} />
+		<AnalyticsPanel agents={creatorAgents} seat={(data as any).seat} />
 	</div>
-</div>
+</PageShell>
 
 <style>
 	.dashboard-page {
@@ -267,6 +265,11 @@
 	.step-link:hover:not(.disabled) {
 		color: var(--accent);
 		text-decoration: underline;
+	}
+
+	.step-note {
+		font-size: var(--text-sm);
+		color: var(--text-dim);
 	}
 
 	.step-link.disabled {

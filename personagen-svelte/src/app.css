@@ -180,6 +180,9 @@
 	--space-4: 1rem; /* 16px */
 	--space-5: 1.25rem; /* 20px */
 	--space-6: 1.5rem; /* 24px */
+	--space-7: 1.75rem; /* 28px — referenced by /models; the scale used to jump
+	                       6 → 8, so `margin-bottom: var(--space-7)` resolved to
+	                       nothing and collapsed silently. */
 	--space-8: 2rem; /* 32px */
 	--space-10: 2.5rem; /* 40px */
 	--space-12: 3rem; /* 48px */
@@ -193,6 +196,24 @@
 	--container-lg: 1080px;
 	--container-xl: 1200px; /* demo full-bleed */
 	--container-2xl: 1320px;
+
+	/* ── Layout: the page shell ──────────────────────────────────────────────
+	   Before these existed every portal route invented its own width, gutter
+	   and heading size: ten max-widths from 800px to 100%, four gutters and
+	   eight h1 sizes across thirteen routes. At 1920 the h1 left edge swung
+	   441px from route to route, so every navigation cost the reader a
+	   re-anchor. Two widths is the whole scale — anything wider than `wide`
+	   stops being readable, anything narrower than `default` is a column
+	   inside the page, not the page. Set with PageShell's `width` prop. */
+	--page-default: 1200px; /* every route that is not a dense data table */
+	--page-wide: 1440px; /* dashboard, review, calendar, generations */
+	--page-gutter: var(--space-4); /* 16px — phones; stepped up in PageShell */
+
+	/* The focus ring. Deliberately NOT --accent-mid: that is 22% alpha, and
+	   pairing it with `outline: none` drew a ring measuring 1.2:1 that keyboard
+	   users could not see at all. A focus indicator is held to 3:1 by WCAG 2.2
+	   SC 2.4.11, so this is opaque and tuned per theme. */
+	--focus-ring: #5b46d4;
 
 	/* ── Layout: Grid Gaps ── */
 	--gap-sm: 0.75rem;
@@ -263,6 +284,7 @@
 	/* ── Colour: Borders ── */
 	--border: rgba(255, 255, 255, 0.05);
 	--border-strong: rgba(255, 255, 255, 0.1);
+	--focus-ring: #a99bff;
 
 	/* ── Colour: Text ── */
 	--text: #e8e6f0;
@@ -1131,6 +1153,7 @@ textarea {
 	--surface-3: #1e1e2e;
 	--border: rgba(255, 255, 255, 0.05);
 	--border-strong: rgba(255, 255, 255, 0.1);
+	--focus-ring: #a99bff;
 	--text: #e8e6f0;
 	--text-muted: #8a88a0;
 	/* Raised from #6e6c85 (3.24-3.79:1 — failed AA on every dark surface). #82809a
@@ -1237,4 +1260,49 @@ textarea {
 		outline: 2px solid Highlight;
 		outline-offset: 2px;
 	}
+}
+
+/* ── Focus visibility ───────────────────────────────────────────────────────
+   A baseline ring for everything focusable, so a new control is accessible by
+   default rather than by remembering to style it. Component rules that set
+   `outline: none` on a :focus-visible selector out-specify this, which is why
+   `npm run test -- focus-ring` greps the source for that pairing and fails on
+   it: the rule below is the floor, the test is what keeps the floor from being
+   quietly removed one component at a time.
+
+   `:focus-visible`, not `:focus` — a mouse click on a button should not leave a
+   ring behind, and containers that receive programmatic focus for screen-reader
+   announcement should not flash one. */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+summary:focus-visible,
+[tabindex]:focus-visible,
+[role='button']:focus-visible,
+[role='tab']:focus-visible,
+[role='checkbox']:focus-visible,
+[contenteditable]:focus-visible {
+	outline: 2px solid var(--focus-ring);
+	outline-offset: 2px;
+}
+
+/* Inputs sit flush inside dense rows where an offset ring would collide with
+   the neighbour; draw it inside the border box instead. */
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+	outline-offset: -1px;
+}
+
+/* A narrow measure *inside* a normal page. Forms used to get their narrowness
+   by shrinking the whole page, which moved the masthead too and was half of why
+   the h1 left edge wandered. Wrap the fields in this instead: the page frame
+   stays put, only the column narrows. */
+.page-column {
+	max-width: 720px;
+}
+.page-column-wide {
+	max-width: 960px;
 }

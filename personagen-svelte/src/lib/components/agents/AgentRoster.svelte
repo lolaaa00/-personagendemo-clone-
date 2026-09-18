@@ -14,6 +14,12 @@
 
 	let { agents }: Props = $props();
 
+	/** Gen Spend read "$0.00 (0)" on every row for any account whose generations
+	 *  predate metering, spending a column of horizontal budget on a cell that
+	 *  cannot carry a value. Same rule as the review queue's QC column: a column
+	 *  with nothing in it for any row is not rendered, and returns by itself. */
+	let hasSpend = $derived(agents.some((a: any) => (a.total_token_cost ?? 0) > 0));
+
 	type FilterType = 'all' | 'active' | 'paused' | 'pending' | 'top';
 
 	let currentFilter = $state<FilterType>('all');
@@ -35,7 +41,13 @@
 			case 'pending':
 				return result.filter((a) => a.status === 'pending');
 			case 'top':
-				return result.filter((a) => a.perf >= 70).sort((a, b) => b.perf - a.perf);
+				// Was `a.perf >= 70` against a score whose floor was 70, so it
+				// returned the whole roster. Now: personas that have actually
+				// published, best engagement first. A roster where nothing has
+				// published yields an empty list, which is the true answer.
+				return result
+					.filter((a) => (a.publishedPosts ?? 0) > 0)
+					.sort((a, b) => (b.engagementRate ?? 0) - (a.engagementRate ?? 0));
 			default:
 				return result;
 		}
@@ -192,12 +204,6 @@
 
 	// Semantic tokens rather than literals so the bars follow the theme (and the brand
 	// theme feature) instead of staying frozen at one palette.
-	function perfColor(p: number): string {
-		if (p >= 70) return 'var(--success)';
-		if (p >= 40) return 'var(--warning)';
-		return 'var(--error)';
-	}
-
 	function engagementClass(eng: number): string {
 		if (eng >= 5) return 'positive';
 		if (eng < 3) return 'negative';
@@ -271,7 +277,7 @@
 
 	<div class="dash-table" role="table" aria-label="Persona roster table">
 		<!-- Header Row -->
-		<div class="dash-row row-header" role="row">
+		<div class="dash-row row-header" class:no-spend={!hasSpend} role="row">
 			<span class="pick-cell" role="columnheader">
 				<input
 					type="checkbox"
@@ -286,8 +292,10 @@
 			<span role="columnheader">Persona</span>
 			<span role="columnheader">Followers</span>
 			<span role="columnheader">Engagement</span>
-			<span role="columnheader">Gen Spend</span>
-			<span role="columnheader">Performance</span>
+			{#if hasSpend}
+				<span role="columnheader">Gen Spend</span>
+			{/if}
+			<span role="columnheader">Published</span>
 			<span role="columnheader">Active</span>
 			<span class="pick-cell" role="columnheader"><span class="sr-only">Delete</span></span>
 		</div>
@@ -308,6 +316,7 @@
 					}
 				}}
 				class="dash-row"
+				class:no-spend={!hasSpend}
 				class:is-selected={selected.has(agent.id)}
 				role="link"
 				tabindex="0"
@@ -379,25 +388,24 @@
 				     at the platform markup, so rendering the raw figure with a `$` showed
 				     roughly a third of what the persona actually drew down. quote() puts
 				     it back in the same money the wallet pill speaks. -->
-				<span class="dash-cell token-cost-cell" role="cell">
-					{#if agent.total_token_cost !== undefined && agent.total_token_cost !== null && agent.total_token_cost > 0}
-						{quote(agent.total_token_cost)}
-						<span class="token-count">({formatTokens(agent.total_token_usage || 0)})</span>
+				{#if hasSpend}
+					<span class="dash-cell token-cost-cell" role="cell">
+						{#if agent.total_token_cost !== undefined && agent.total_token_cost !== null && agent.total_token_cost > 0}
+							{quote(agent.total_token_cost)}
+							<span class="token-count">({formatTokens(agent.total_token_usage || 0)})</span>
+						{:else}
+							{quote(0)} <span class="token-count">(0)</span>
+						{/if}
+					</span>
+				{/if}
+				<!-- A count of posts that actually went out, not a score. The bar that
+				     used to live here plotted a number floored at 70 by a constant. -->
+				<span class="dash-cell published-cell" role="cell">
+					{#if (agent.publishedPosts ?? 0) > 0}
+						<span class="published-count">{agent.publishedPosts}</span>
 					{:else}
-						{quote(0)} <span class="token-count">(0)</span>
+						<span class="published-none" title="This persona has not published anything yet">—</span>
 					{/if}
-				</span>
-				<span class="dash-cell" role="cell">
-					<div class="perf-bar-wrap">
-						<div class="perf-bar-bg" aria-hidden="true">
-							<div
-								class="perf-bar"
-								style="--perf-pct: {Math.max(0, Math.min(100, agent.perf)) /
-									100}; background: {perfColor(agent.perf)}"
-							></div>
-						</div>
-						<span class="perf-val">{agent.perf}</span>
-					</div>
 				</span>
 				<span class="dash-cell" role="cell">
 					{#if agent.status === 'pending'}
@@ -540,6 +548,12 @@
 	.dash-row {
 		display: grid;
 		grid-template-columns: 30px 2.5fr 1fr 1fr 1fr 1.2fr 0.6fr 34px;
+	}
+	/* One fewer column when Gen Spend has nothing to report. */
+	.dash-row.no-spend {
+		grid-template-columns: 30px 2.5fr 1fr 1fr 1.2fr 0.6fr 34px;
+	}
+	.dash-row {
 		align-items: center;
 		gap: 0.75rem;
 		padding: 0.65rem 0.5rem;
@@ -687,30 +701,10 @@
 		color: var(--rose-text);
 	}
 
-	.perf-bar-wrap {
-		display: flex;
-		align-items: center;
-		gap: 6px;
-	}
 
-	.perf-bar-bg {
-		flex: 1;
-		height: 5px;
-		background: var(--surface-3);
-		border-radius: 3px;
-		overflow: hidden;
-	}
 
 	/* scaleX rather than width: the bar holds no text (`.perf-val` is a flex sibling),
 	   so nothing is squashed and the meter no longer relayouts the row every frame. */
-	.perf-bar {
-		width: 100%;
-		height: 5px;
-		border-radius: 3px;
-		transform-origin: left center;
-		transform: scaleX(var(--perf-pct, 0));
-		transition: transform 0.25s ease;
-	}
 
 	@media (prefers-reduced-motion: reduce) {
 		.perf-bar {
@@ -718,15 +712,6 @@
 		}
 	}
 
-	.perf-val {
-		font-size: 0.7rem;
-		min-width: 28px;
-		text-align: right;
-		color: var(--text-dim);
-		font-family: var(--font-mono);
-		font-variant-numeric: tabular-nums;
-		font-feature-settings: 'tnum' 1;
-	}
 
 	/* Multi-select checkbox + row delete */
 	.pick-cell {
@@ -960,6 +945,17 @@
 		font-weight: 500;
 		font-variant-numeric: tabular-nums;
 		font-feature-settings: 'tnum' 1;
+	}
+
+	.published-cell {
+		font-variant-numeric: tabular-nums;
+	}
+	.published-count {
+		font-weight: 600;
+		color: var(--text);
+	}
+	.published-none {
+		color: var(--text-dim);
 	}
 
 	.token-count {

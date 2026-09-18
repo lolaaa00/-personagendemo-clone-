@@ -141,6 +141,11 @@
 			{ href: '/models', label: 'Model Manager', icon: 'sliders' },
 			{ href: '/guides', label: 'Docs', icon: 'book' },
 			{ href: '/developer', label: 'Developer API', icon: 'code' },
+			// Billing was reachable only through the sidebar credit pill, which is
+			// hidden when the sidebar is collapsed and absent entirely when credits
+			// mode is off — so a shipped Stripe checkout, plan picker and ledger
+			// had no dependable way in.
+			{ href: '/billing', label: 'Billing', icon: 'card' },
 			{ href: '/settings', label: 'Settings', icon: 'settings' }
 		]
 	};
@@ -747,6 +752,19 @@
 									d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"
 								/></svg
 							>
+						{:else if item.icon === 'card'}
+							<svg
+								aria-hidden="true"
+								width="18"
+								height="18"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								><rect x="2" y="5" width="20" height="14" rx="2" /><path d="M2 10h20" /></svg
+							>
 						{:else if item.icon === 'settings'}
 							<svg
 								aria-hidden="true"
@@ -846,7 +864,7 @@
 								? 'Complimentary account — generations are not charged'
 								: `${(data as any).credits.usd} of generation credit${(data as any).credits.currency !== 'USD' ? ` (shown in ${(data as any).credits.currency})` : ''}`}
 						>
-							<span class="credit-pill-label">Credits</span>
+							<span class="credit-pill-label">Balance</span>
 							<span class="credit-pill-amount">{(data as any).credits.billing_mode === 'unmetered' ? '∞' : (data as any).credits.formatted}</span>
 						</a>
 					{/if}
@@ -888,7 +906,10 @@
 							const agent = sidebarAgents.find((a: any) => path.startsWith(`/personas/${a.id}`));
 							return agent ? agent.name : 'Persona';
 						}
-						if (path.startsWith('/brand-brief/intel')) return 'Intel Wizard';
+						// One name for this feature. The h1 and <title> say "Content Plan";
+						// the topbar and the /brand-brief link said "Intel Wizard", so two
+						// names for one thing were visible on screen simultaneously.
+						if (path.startsWith('/brand-brief/intel')) return 'Content Plan';
 						if (path.startsWith('/brand-brief')) return 'Brand Brief';
 						if (path.startsWith('/settings')) return 'Settings';
 						if (path.startsWith('/generator')) return 'New Persona';
@@ -901,8 +922,16 @@
 						if (path.startsWith('/trash')) return 'Trash';
 						if (path.startsWith('/review')) return 'Review Queue';
 						if (path.startsWith('/calendar')) return 'Calendar';
+						if (path.startsWith('/billing')) return 'Billing';
 						if (path === '/dashboard' || path === '/') return 'Dashboard';
-						return 'Dashboard';
+						// Never claim to be the dashboard. /billing fell through to this
+						// line, so the money page's topbar read "Dashboard" while the
+						// sidebar highlighted Billing and its h1 was a currency amount —
+						// the page named itself nowhere. Any route added later would have
+						// inherited the same lie; this derives a name from the path.
+						return (path.split('/').filter(Boolean)[0] ?? 'PersonaGen')
+							.replace(/-/g, ' ')
+							.replace(/(^|\s)\w/g, (c) => c.toUpperCase());
 					})()}
 				</div>
 			</div>
@@ -1335,8 +1364,17 @@
 	}
 
 	.sidebar-nav-item:focus-visible {
-		box-shadow: 0 0 0 2px var(--accent-mid);
-		outline: none;
+		/* Was `box-shadow: 0 0 0 2px var(--accent-mid)` with `outline: none`.
+		   --accent-mid is `color-mix(… 22%, transparent)`, so the ring rendered at
+		   22% alpha against the sidebar and measured as fully transparent: the
+		   rule existed, matched, and drew nothing. A keyboard user could not see
+		   where they were in the primary navigation of any screen in the product.
+		   A focus indicator has to clear 3:1 against its own background, so this
+		   uses the accent at full strength, inset so it is not clipped by the
+		   sidebar edge and stays visible over the active-item background. */
+		outline: 2px solid var(--accent);
+		outline-offset: -2px;
+		box-shadow: none;
 	}
 
 	.sidebar-nav-icon {
@@ -1755,7 +1793,6 @@
 		color: var(--text);
 	}
 	.pw-gate-field input:focus {
-		outline: none;
 		border-color: var(--accent);
 	}
 	.pw-gate-btn {
@@ -1933,8 +1970,7 @@
 	}
 
 	.sidebar-persona-search-input:focus {
-		outline: none;
-		border-color: var(--accent-mid);
+		border-color: var(--accent);
 		background: var(--surface);
 	}
 
@@ -2110,18 +2146,18 @@
 		border-color: rgba(255, 255, 255, 0.3);
 	}
 	.credit-pill-label {
-		opacity: 0.75;
+		color: var(--text-muted);
 	}
 	.credit-pill-amount {
 		font-weight: 600;
-		color: #16a34a;
+		color: var(--success-text);
 		font-variant-numeric: tabular-nums;
 	}
 	.credit-pill.low .credit-pill-amount {
-		color: #ef4444;
+		color: var(--error-text);
 	}
 	/* Under $3.00: amber, before the wall, the nudge to top up while a run still fits. */
 	.credit-pill.warn .credit-pill-amount {
-		color: #d97706;
+		color: var(--warning-text);
 	}
 </style>

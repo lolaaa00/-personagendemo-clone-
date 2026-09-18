@@ -17,6 +17,7 @@
 	import { platformColor } from '$lib/platforms';
 	import { confirmDeletePosts } from '$lib/confirm-preview';
 	import { countLabel } from '$lib/plural';
+	import PageShell from '$lib/components/ui/PageShell.svelte';
 
 	interface ScheduledPost {
 		id: string;
@@ -885,17 +886,12 @@
 	}
 </script>
 
-<svelte:head>
-	<title>Calendar — PersonaGen</title>
-</svelte:head>
-
-<section class="page">
-	<!-- Header -->
-	<header class="page-header">
-		<div>
-			<h1>Content Calendar</h1>
-			<p class="subtitle">Schedule and manage posts across all personas and platforms</p>
-		</div>
+<PageShell
+	title="Content Calendar"
+	width="wide"
+	description="Schedule and manage posts across all personas and platforms."
+>
+	{#snippet actions()}
 		<div class="header-actions">
 			<button
 				class="btn-ghost btn-campaign"
@@ -948,7 +944,7 @@
 				{/if}
 			</button>
 		</div>
-	</header>
+	{/snippet}
 
 	<!-- Bulk manage: the calendar grid is read-only presentation, so multi-select,
 	     bulk delete / approve and enlarge live on the page next to it. -->
@@ -1569,7 +1565,7 @@
 			</div>
 		</div>
 	{/if}
-</section>
+</PageShell>
 
 <!-- Same confirm-first composer as the persona page: the server resolves the real
      payload/cost, the user edits and approves, then we run exactly that. -->
@@ -1607,9 +1603,6 @@
 
 <style>
 	.page {
-		padding: 2rem;
-		max-width: 1400px;
-		margin: 0 auto;
 		position: relative;
 		min-height: calc(100vh - 60px);
 		display: flex;
@@ -1617,20 +1610,7 @@
 	}
 
 	/* ── Header ── */
-	.page-header {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 2rem;
-		margin-bottom: 1.5rem;
-		flex-wrap: wrap;
-	}
 
-	.page-header h1 {
-		font-family: var(--font-display);
-		font-size: var(--text-xl);
-		margin: 0 0 0.3rem;
-	}
 
 	.header-actions {
 		display: flex;
@@ -1647,11 +1627,6 @@
 		white-space: nowrap;
 	}
 
-	.subtitle {
-		color: var(--text-muted);
-		font-size: var(--text-base);
-		margin: 0;
-	}
 
 	/* ── Modals (manual-deletion notice) ── */
 	.modal-backdrop {

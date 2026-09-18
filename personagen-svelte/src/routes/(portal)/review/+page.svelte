@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { showToast as globalToast } from '$lib/stores/ui.svelte';
 	import { thumbUrl, restoreOriginal } from '$lib/image-url';
 	import { syncParam, readParam } from '$lib/url-state';
 	import { onMount } from 'svelte';
@@ -9,6 +10,9 @@
 	import { Posts } from '$lib/services/api';
 	import { SURFACE_LABEL, type PostSurface } from '$lib/components/feed/postDisplay';
 	import { confirmDeletePosts } from '$lib/confirm-preview';
+	import PageShell from '$lib/components/ui/PageShell.svelte';
+	import { postStatus } from '$lib/status-color';
+	import { capabilities, seatBlockedReason, type SeatRole } from '$lib/seat';
 
 	interface ReviewItem {
 		id: string;
@@ -28,6 +32,10 @@
 		platforms: string[];
 		scheduled_date: string | null;
 		scheduled_time: string | null;
+		/** Why this post was rejected, from the post_reviews log. */
+		reject_reason: string | null;
+		/** This seat's role on the post's persona, resolved by the server; absent on an older server. */
+		role?: SeatRole;
 	}
 
 	/** Thumbnail-safe source: a video's mp4 URL must never land in an <img> —
@@ -46,14 +54,31 @@
 	let working = $state(false);
 	let error = $state('');
 	let selected = $state<Set<string>>(new Set());
-	let toast = $state('');
 
-	// ── Hard delete (permanent, plus best-effort live platform teardown) ──
+	// ── Delete to Trash (soft, plus best-effort live platform teardown) ──
 	// Kept separate from `working` (approve/reject) so the drawer's Approve
 	// button doesn't read as busy while a delete is in flight.
 	let deletingId = $state<string | null>(null);
 	let bulkDeleting = $state(false);
 	let deleteBusy = $derived(bulkDeleting || deletingId !== null);
+
+	// What this seat may decide, per row. The role is the server's, resolved per
+	// persona: one queue can mix personas where the same account is manager on
+	// one and viewer on another. `owner` is the never-brick default for a server
+	// that sends no role — nothing that could be approved yesterday is blocked.
+	const blockFor = (item: ReviewItem) =>
+		seatBlockedReason(capabilities(item.role ?? 'owner'), 'manager');
+	/** The first reason among the selection — the bulk bar acts on all or none. */
+	let bulkBlock = $derived(
+		[...selected]
+			.map((id) => items.find((i) => i.id === id))
+			.map((i) => (i ? blockFor(i) : null))
+			.find(Boolean) ?? null
+	);
+	/** Every row is out of this seat's reach: the queue is read-only, and says so once. */
+	let queueBlock = $derived(
+		items.length > 0 && items.every((i) => blockFor(i)) ? blockFor(items[0]) : null
+	);
 	// Platforms with no API deletion path (Instagram, TikTok, Snapchat) — the
 	// live post has to be removed by hand, so we tell the user which and where.
 	let manualDeleteNotice = $state<Array<{ platform: string; permalink: string | null }> | null>(
@@ -78,7 +103,9 @@
 			: new URL(window.location.href).searchParams.get(k);
 	let filterAgent = $state(qp('agent') ?? 'all');
 	let filterPlatform = $state(qp('platform') ?? 'all');
-	let filterStatus = $state(readParam('status', ['all', 'draft', 'scheduled'] as const, 'all'));
+	let filterStatus = $state(
+		readParam('status', ['all', 'draft', 'scheduled', 'rejected'] as const, 'all')
+	);
 	$effect(() => syncParam('agent', filterAgent, 'all'));
 	$effect(() => syncParam('platform', filterPlatform, 'all'));
 	$effect(() => syncParam('status', filterStatus, 'all'));
@@ -97,7 +124,11 @@
 			(i) =>
 				(filterAgent === 'all' || i.agent_id === filterAgent) &&
 				(filterPlatform === 'all' || i.platforms.includes(filterPlatform)) &&
-				(filterStatus === 'all' || i.status === filterStatus)
+				// 'all' is the actionable queue, not literally everything: a rejected
+				// post is only shown when explicitly asked for.
+				(filterStatus === 'all'
+					? i.status === 'draft' || i.status === 'scheduled'
+					: i.status === filterStatus)
 		)
 	);
 
@@ -110,7 +141,14 @@
 		'Other'
 	];
 	let rejectPickerOpen = $state(false);
-	let rejectReason = $state(REJECT_REASONS[0]);
+	/** Who the open picker acts on. Separate from `selected` on purpose: a row's
+	 *  Reject targets that row and leaves the bulk selection untouched, so the
+	 *  three destructive bulk buttons cannot be armed by a single-row action. */
+	let rejectTargets = $state<string[]>([]);
+	// No default: the page states these reasons train a QC reviewer, and a
+	// pre-selected specific value makes the most common stored reason "whichever
+	// was first in the array" rather than what the reviewer meant.
+	let rejectReason = $state('');
 	let rejectNote = $state('');
 
 	async function load() {
@@ -142,12 +180,14 @@
 		selected = allShownSelected ? new Set() : new Set(filteredItems.map((i) => i.id));
 	}
 
+	// This page shipped its own toast — a third stack, at a third position, with
+	// a locally-shadowed showToast() that hid the global one. Same call sites,
+	// one renderer.
 	function showToast(msg: string) {
-		toast = msg;
-		setTimeout(() => (toast = ''), 3500);
+		globalToast(msg, /fail|error|could not|couldn't|rejected/i.test(msg) ? 'error' : 'success');
 	}
 
-	async function act(action: 'approve' | 'reject', ids: string[], reason?: string) {
+	async function act(action: 'approve' | 'reject' | 'restore', ids: string[], reason?: string) {
 		if (ids.length === 0 || working) return;
 		working = true;
 		try {
@@ -158,32 +198,77 @@
 			});
 			const d = await res.json();
 			if (!res.ok || !d.success) throw new Error(d.error || 'Action failed');
-			items = items.filter((i) => !ids.includes(i.id));
+			// Update the row in place rather than removing it.
+			//
+			// This used to be `items.filter(i => !ids.includes(i.id))`, which
+			// dropped the row unconditionally. The default filter is "all", which
+			// still matches an approved post, so the count went 14 → 13 while the
+			// server held 14 — press Back and all 14 returned. Approving the whole
+			// queue showed "Queue is clear" over work that was still there. The one
+			// number telling an operator whether their morning is done was wrong.
+			//
+			// `filteredItems` already hides anything the active filter excludes, so
+			// setting the new status is enough: the row stays under "all" and
+			// disappears under "Draft only", which is what each filter means.
+			const nextStatus =
+				action === 'approve' ? 'scheduled' : action === 'restore' ? 'draft' : 'rejected';
+			items = items.map((i) =>
+				ids.includes(i.id)
+					? { ...i, status: nextStatus, reject_reason: action === 'restore' ? null : i.reject_reason }
+					: i
+			);
 			selected = new Set([...selected].filter((id) => !ids.includes(id)));
 			if (drawerPost && ids.includes(drawerPost.id)) drawerPost = null;
+			const noun = d.updated === 1 ? 'post' : 'posts';
 			showToast(
 				action === 'approve'
-					? `✅ ${d.updated} post(s) approved & scheduled`
-					: `🗑 ${d.updated} post(s) rejected`
+					? `✅ ${d.updated} ${noun} approved & scheduled`
+					: action === 'restore'
+						? `↩ ${d.updated} ${noun} returned to draft`
+						: `🗑 ${d.updated} ${noun} rejected`
 			);
 		} catch (e: any) {
 			showToast(`⚠ ${e.message}`);
 		} finally {
 			working = false;
 			rejectPickerOpen = false;
+			rejectTargets = [];
 			rejectNote = '';
 		}
 	}
 
 	function submitReject() {
 		const reason = rejectNote.trim() ? `${rejectReason}: ${rejectNote.trim()}` : rejectReason;
-		act('reject', [...selected], reason);
+		act('reject', [...rejectTargets], reason);
 	}
 
-	// ── Hard delete ────────────────────────────────────────────────────────
+	/** Open the picker against an explicit list, without disturbing `selected`. */
+	function openRejectPicker(ids: string[]) {
+		if (!ids.length) return;
+		rejectTargets = ids;
+		rejectReason = '';
+		rejectNote = '';
+		rejectPickerOpen = true;
+	}
+
+	/** The captions the open picker is about, so the user can see what they are
+	 *  rejecting — the picker renders above the table, far from the row. */
+	let rejectTargetLabels = $derived(
+		rejectTargets
+			.map((id) => items.find((i) => i.id === id))
+			.filter(Boolean)
+			.map((i: any) => (i.text || '').slice(0, 80))
+	);
+
+	// ── Delete to Trash ────────────────────────────────────────────────────
 	// Reject/Unschedule only changes status (the row survives, with a logged
-	// reason). Delete is the permanent one: the row is destroyed and anything
-	// already live is torn down on-platform where the API allows it.
+	// reason). Delete removes it from the queue and puts it in the Trash, where
+	// it stays restorable for 30 days — anything already live is torn down
+	// on-platform where the API allows it, because you cannot restore your way
+	// out of a post that is already public.
+	//
+	// This is NOT the permanent one. That is confirmPurgePosts() on /trash, and
+	// it is the only place the words "forever" and "permanently" belong.
 
 	/** The posts API puts `teardown` / `deleted` / `requested` at the TOP level of
 	 *  the response body, not under `data` — same read the calendar and persona
@@ -268,6 +353,8 @@
 				await load();
 				return;
 			}
+			// A deleted post really does leave the queue — unlike approve/reject,
+			// which only change its status.
 			items = items.filter((i) => !ids.includes(i.id));
 			selected = new Set();
 			if (drawerPost && ids.includes(drawerPost.id)) drawerPost = null;
@@ -381,9 +468,8 @@
 	// Reject from the drawer routes through the existing reason picker so the
 	// decision (+ reason) still lands in post_reviews.
 	function drawerReject(post: any) {
-		selected = new Set([post.id]);
 		drawerPost = null;
-		rejectPickerOpen = true;
+		openRejectPicker([post.id]);
 	}
 
 	async function drawerSaveText(post: any, newText: string): Promise<boolean> {
@@ -504,9 +590,85 @@
 
 	// ── Board lanes ──
 	const isFlagged = (i: ReviewItem) => i.quality_score != null && i.quality_score < 6;
-	let laneFlagged = $derived(sortedItems.filter(isFlagged));
-	let laneNeeds = $derived(sortedItems.filter((i) => i.status === 'draft' && !isFlagged(i)));
-	let laneScheduled = $derived(sortedItems.filter((i) => i.status !== 'draft' && !isFlagged(i)));
+
+	/** Nothing writes `quality_score` yet, so rendering the column spends a column
+	 *  of horizontal budget on a cell reading "—" on every row — and at narrow
+	 *  widths QC was one of the few columns that survived, displacing the caption
+	 *  the reviewer is there to judge. It returns by itself the day scores do. */
+	let hasQc = $derived(items.some((i) => i.quality_score != null));
+	// The board's lanes ARE the status dimension, so they must not also be behind
+	// the status filter. They were: the default filter is "Needs a decision"
+	// (draft + scheduled), so the REJECTED lane read "0 / Nothing here" while
+	// three rejected posts existed, and could only ever populate if the user
+	// first changed a filter somewhere else on the page. A permanently empty
+	// column teaches people the board is broken. Persona and platform filters
+	// still apply — those are not dimensions the board renders.
+	let boardItems = $derived(
+		[...items]
+			.filter(
+				(i) =>
+					(filterAgent === 'all' || i.agent_id === filterAgent) &&
+					(filterPlatform === 'all' || i.platforms.includes(filterPlatform))
+			)
+			.sort((a, b) =>
+				`${a.scheduled_date ?? '9999'} ${a.scheduled_time ?? ''}`.localeCompare(
+					`${b.scheduled_date ?? '9999'} ${b.scheduled_time ?? ''}`
+				)
+			)
+	);
+
+	let laneFlagged = $derived(boardItems.filter(isFlagged));
+	let laneNeeds = $derived(boardItems.filter((i) => i.status === 'draft' && !isFlagged(i)));
+	let laneScheduled = $derived(boardItems.filter((i) => i.status === 'scheduled' && !isFlagged(i)));
+	let laneRejected = $derived(boardItems.filter((i) => i.status === 'rejected' && !isFlagged(i)));
+
+	/** The lanes, as statuses a post can actually be in. The flagged lane only
+	 *  appears once something writes a QC score — same reason the QC column is
+	 *  conditional. */
+	let boardLanes = $derived([
+		{ title: 'Needs review', cls: 'needs', status: 'draft', list: laneNeeds },
+		{ title: 'Scheduled', cls: 'sched', status: 'scheduled', list: laneScheduled },
+		{ title: 'Rejected', cls: 'rej', status: 'rejected', list: laneRejected },
+		...(hasQc
+			? [{ title: 'Flagged · QC < 6.0', cls: 'flag', status: '', list: laneFlagged }]
+			: [])
+	]);
+
+	// ── Board drag and drop ───────────────────────────────────────────────
+	// Every move maps onto an action the API already exposes, so a drag is the
+	// same operation as the button — not a second, divergent code path.
+	let dragId = $state<string | null>(null);
+	let dragOverLane = $state<string>('');
+
+	/** null = this move is not offered. Rejecting needs a reason, so a drop into
+	 *  Rejected opens the reason picker rather than silently inventing one. */
+	function moveFor(from: string, to: string): 'approve' | 'reject' | 'restore' | null {
+		if (from === to) return null;
+		if (from === 'draft' && to === 'scheduled') return 'approve';
+		if (from === 'rejected' && to === 'draft') return 'restore';
+		if (to === 'rejected' && (from === 'draft' || from === 'scheduled')) return 'reject';
+		return null;
+	}
+
+	function draggedItem() {
+		return dragId ? sortedItems.find((i) => i.id === dragId) : undefined;
+	}
+
+	function laneAccepts(laneStatus: string) {
+		const item = draggedItem();
+		return !!item && !!laneStatus && moveFor(item.status, laneStatus) !== null;
+	}
+
+	function onLaneDrop(laneStatus: string) {
+		const item = draggedItem();
+		dragOverLane = '';
+		dragId = null;
+		if (!item) return;
+		const move = moveFor(item.status, laneStatus);
+		if (!move) return;
+		if (move === 'reject') openRejectPicker([item.id]);
+		else void act(move, [item.id]);
+	}
 
 	// ── Keyboard triage (split / deck / table) ──
 	function overlayOpen() {
@@ -515,8 +677,7 @@
 		);
 	}
 	function rejectOne(item: ReviewItem) {
-		selected = new Set([item.id]);
-		rejectPickerOpen = true;
+		openRejectPicker([item.id]);
 	}
 	function onQueueKeydown(e: KeyboardEvent) {
 		if (loading || working || deleteBusy || overlayOpen()) return;
@@ -548,16 +709,12 @@
 
 <svelte:window onkeydown={onQueueKeydown} />
 
-<div class="review-page">
-	<header class="review-header">
-		<div>
-			<h1>Review Queue</h1>
-			<p class="sub">
-				Pending content from every persona — drafts to approve <em>and</em> scheduled posts not
-				yet published. Approve to schedule, reject with a reason (reasons train the future QC
-				reviewer).
-			</p>
-		</div>
+<PageShell
+	title="Review Queue"
+	width="wide"
+	description="Pending content from every persona — drafts to approve and scheduled posts not yet published. Approve to schedule, or reject with a reason."
+>
+	{#snippet actions()}
 		<div class="header-actions">
 			<button class="btn-ghost" onclick={load} disabled={loading || working}>
 				<svg
@@ -577,9 +734,7 @@
 				Refresh
 			</button>
 		</div>
-	</header>
-
-	{#if toast}<div class="toast" role="status" aria-live="polite">{toast}</div>{/if}
+	{/snippet}
 
 	{#if loading}
 		<div class="empty" role="status" aria-live="polite">Loading queue…</div>
@@ -607,12 +762,13 @@
 		</div>
 	{:else}
 		<h2 class="sr-only">Filter the queue</h2>
+		<div class="queue-toolbar">
 		<div class="filter-bar">
 			<label class="filt">
 				<span>Persona</span>
 				<select bind:value={filterAgent}>
 					<option value="all">All personas</option>
-					{#each agentOptions as a}
+					{#each agentOptions as a (a.id)}
 						<option value={a.id}>{a.name}</option>
 					{/each}
 				</select>
@@ -621,17 +777,21 @@
 				<span>Platform</span>
 				<select bind:value={filterPlatform}>
 					<option value="all">All platforms</option>
-					{#each platformOptions as p}
+					{#each platformOptions as p (p)}
 						<option value={p}>{platformLabel(p)}</option>
 					{/each}
 				</select>
 			</label>
 			<label class="filt">
 				<span>Status</span>
-				<select bind:value={filterStatus}>
-					<option value="all">Draft + Scheduled</option>
+				<select
+					bind:value={filterStatus}
+					title="Needs a decision = drafts awaiting approval plus scheduled posts not yet published"
+				>
+					<option value="all">Needs a decision</option>
 					<option value="draft">Draft only</option>
 					<option value="scheduled">Scheduled only</option>
+					<option value="rejected">Rejected</option>
 				</select>
 			</label>
 			<span class="filt-count" aria-live="polite">{filteredItems.length} of {items.length} shown</span>
@@ -669,7 +829,14 @@
 				</span>
 			{/if}
 		</div>
+		</div>
 
+		{#if queueBlock}
+			<!-- A read-only seat is told once, up front — before anything is selected —
+			     instead of discovering every disabled button one hover at a time. -->
+			<p class="seat-note" role="note">{queueBlock}</p>
+		{/if}
+		{#if selected.size > 0}
 		<h2 class="sr-only">Bulk actions</h2>
 		<div class="bulk-bar">
 			<label class="check-all">
@@ -683,7 +850,8 @@
 			<div class="bulk-actions">
 				<button
 					class="btn-approve"
-					disabled={selected.size === 0 || working || deleteBusy}
+					disabled={selected.size === 0 || working || deleteBusy || !!bulkBlock}
+					title={bulkBlock ?? undefined}
 					onclick={() => act('approve', [...selected])}
 				>
 					<svg
@@ -701,8 +869,9 @@
 				</button>
 				<button
 					class="btn-reject"
-					disabled={selected.size === 0 || working || deleteBusy}
-					onclick={() => (rejectPickerOpen = true)}
+					disabled={selected.size === 0 || working || deleteBusy || !!bulkBlock}
+					title={bulkBlock ?? undefined}
+					onclick={() => openRejectPicker([...selected])}
 				>
 					<svg
 						width="16"
@@ -720,8 +889,9 @@
 				</button>
 				<button
 					class="btn-delete"
-					title="Permanently delete — also removes published copies where the platform API allows it"
-					disabled={selected.size === 0 || working || deleteBusy}
+					title={bulkBlock ??
+						'Move to Trash — restorable for 30 days. Also unpublishes from connected platforms where the API allows it.'}
+					disabled={selected.size === 0 || working || deleteBusy || !!bulkBlock}
 					onclick={deleteSelected}
 				>
 					{#if bulkDeleting}
@@ -746,13 +916,20 @@
 				</button>
 			</div>
 		</div>
+		{/if}
 
 		{#if rejectPickerOpen}
 			<h2 class="sr-only">Reject reason</h2>
 			<div class="reject-picker">
-				<span class="rp-label" id="rp-label">Reason:</span>
+				<span class="rp-label" id="rp-label">
+					Reject {rejectTargets.length === 1 ? '1 post' : `${rejectTargets.length} posts`}:
+				</span>
+				{#if rejectTargetLabels.length === 1}
+					<span class="rp-target" title={rejectTargetLabels[0]}>“{rejectTargetLabels[0]}”</span>
+				{/if}
 				<select bind:value={rejectReason} aria-labelledby="rp-label">
-					{#each REJECT_REASONS as r}<option value={r}>{r}</option>{/each}
+					<option value="" disabled>— Choose a reason —</option>
+					{#each REJECT_REASONS as r (r)}<option value={r}>{r}</option>{/each}
 				</select>
 				<input
 					type="text"
@@ -761,8 +938,16 @@
 					bind:value={rejectNote}
 					maxlength="300"
 				/>
-				<button class="btn-reject" onclick={submitReject} disabled={working}>Confirm reject</button>
-				<button class="btn-ghost" onclick={() => (rejectPickerOpen = false)}>Cancel</button>
+				<button class="btn-reject" onclick={submitReject} disabled={working || !rejectReason}
+					>Confirm reject</button
+				>
+				<button
+					class="btn-ghost"
+					onclick={() => {
+						rejectPickerOpen = false;
+						rejectTargets = [];
+					}}>Cancel</button
+				>
 			</div>
 		{/if}
 
@@ -907,7 +1092,7 @@
 								>QC {item.quality_score.toFixed(1)}</span>
 							{/if}
 							<span class="slot">{slotLabel(item)}</span>
-							<span class="status-badge status-{item.status}">
+							<span class="status-badge" style="background: color-mix(in srgb, {postStatus(item.status).fill} 16%, transparent); color: {postStatus(item.status).text}">
 								{#if item.status === 'scheduled'}
 									<svg
 										width="10"
@@ -993,25 +1178,30 @@
 							</div>
 						{/if}
 						<div class="plat-row">
-							{#each item.platforms as p}<span class="plat-chip">{platformLabel(p)}</span>{/each}
+							{#each item.platforms as p (p)}<span class="plat-chip">{platformLabel(p)}</span>{/each}
 						</div>
 						<div class="card-actions">
 							{#if item.status === 'draft'}
-								<button class="btn-approve sm" disabled={working || deleteBusy} onclick={() => act('approve', [item.id])}>Approve</button>
+								<button
+									class="btn-approve sm"
+									disabled={working || deleteBusy || !!blockFor(item)}
+									title={blockFor(item) ?? undefined}
+									onclick={() => act('approve', [item.id])}>Approve</button
+								>
 							{/if}
 							<button
 								class="btn-reject sm"
-								disabled={working || deleteBusy}
-								onclick={() => {
-									selected = new Set([item.id]);
-									rejectPickerOpen = true;
-								}}>{item.status === 'scheduled' ? 'Unschedule' : 'Reject'}</button
+								disabled={working || deleteBusy || !!blockFor(item)}
+								title={blockFor(item) ?? undefined}
+								onclick={() => openRejectPicker([item.id])}
+								>{item.status === 'scheduled' ? 'Unschedule' : 'Reject'}</button
 							>
 							<button
 								class="btn-delete sm"
-								title="Delete permanently — removes it from connected platforms where possible"
-								aria-label="Delete post permanently"
-								disabled={working || deleteBusy}
+								title={blockFor(item) ??
+									'Move to Trash — restorable for 30 days. Also unpublishes from connected platforms where the API allows it.'}
+								aria-label="Move post to Trash"
+								disabled={working || deleteBusy || !!blockFor(item)}
 								onclick={() => deletePost(item.id)}
 							>
 								{#if deletingId === item.id}
@@ -1062,12 +1252,14 @@
 							</th>
 							<th class="th-cap">Caption</th>
 							<th class="th-plat">Platforms</th>
+							{#if hasQc}
 							<th>
 								<button class="th-sort" class:on={sortKey === 'qc'} onclick={() => setSort('qc')}>
 									QC{sortKey === 'qc' ? (sortDir === 1 ? ' ↑' : ' ↓') : ''}
 								</button>
 							</th>
-							<th>
+							{/if}
+							<th class="th-slot">
 								<button class="th-sort" class:on={sortKey === 'slot'} onclick={() => setSort('slot')}>
 									Slot{sortKey === 'slot' ? (sortDir === 1 ? ' ↑' : ' ↓') : ''}
 								</button>
@@ -1126,10 +1318,18 @@
 											cursor = i;
 											openDrawer(item);
 										}}>{item.text}</button>
+									<p class="cap-meta">
+										<span class="cm-persona">{item.agent_name}</span>
+										<span class="cm-plat"
+											>{item.platforms.map((pl) => platformLabel(pl)).join(', ')}</span
+										>
+										<span class="cm-slot">{slotLabel(item)}</span>
+									</p>
 								</td>
 								<td class="td-plat">
-									{#each item.platforms as p}<span class="plat-chip">{platformLabel(p)}</span>{/each}
+									{#each item.platforms as p (p)}<span class="plat-chip">{platformLabel(p)}</span>{/each}
 								</td>
+								{#if hasQc}
 								<td class="td-qc">
 									{#if item.quality_score != null}
 										<span
@@ -1141,33 +1341,57 @@
 										<span class="td-dash" aria-label="No QC score">—</span>
 									{/if}
 								</td>
+								{/if}
 								<td class="td-slot">{slotLabel(item)}</td>
-								<td class="td-status"><span class="status-badge status-{item.status}">{item.status}</span></td>
+								<td class="td-status">
+									<span class="status-badge" style="background: color-mix(in srgb, {postStatus(item.status).fill} 16%, transparent); color: {postStatus(item.status).text}">{postStatus(item.status).label}</span>
+									{#if item.status === 'rejected' && item.reject_reason}
+										<span class="reject-why" title={item.reject_reason}>{item.reject_reason}</span>
+									{/if}
+								</td>
 								<td class="td-act">
 									{#if item.status === 'draft'}
 										<button
 											type="button"
 											class="row-btn row-ok"
-											disabled={working || deleteBusy}
-											title="Approve & schedule"
+											disabled={working || deleteBusy || !!blockFor(item)}
+											title={blockFor(item) ?? 'Approve & schedule'}
 											aria-label="Approve post by {item.agent_name}"
 											onclick={() => act('approve', [item.id])}
 											><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg></button>
+									{:else if item.status === 'rejected'}
+										<button
+											type="button"
+											class="row-btn row-restore"
+											disabled={working || deleteBusy || !!blockFor(item)}
+											title={blockFor(item) ?? 'Return to draft'}
+											aria-label="Return post by {item.agent_name} to draft"
+											onclick={() => act('restore', [item.id])}
+											><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7v6h6" /><path d="M3.51 13a9 9 0 105.36-8.36L3 10" /></svg></button>
+									{:else}
+										<!-- Holds the Approve slot open so Reject and Delete never
+										     move between rows of different status. -->
+										<span class="row-btn-gap" aria-hidden="true"></span>
 									{/if}
 									<button
 										type="button"
 										class="row-btn row-no"
-										disabled={working || deleteBusy}
-										title={item.status === 'draft' ? 'Reject with a reason' : 'Unschedule with a reason'}
+										disabled={working || deleteBusy || !!blockFor(item)}
+										title={blockFor(item) ??
+											(item.status === 'draft'
+												? 'Reject with a reason'
+												: item.status === 'rejected'
+													? 'Change the rejection reason'
+													: 'Unschedule with a reason')}
 										aria-label="Reject post by {item.agent_name}"
 										onclick={() => rejectOne(item)}
 										><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg></button>
 									<button
 										type="button"
 										class="row-btn row-del"
-										disabled={working || deleteBusy}
-										title="Delete permanently"
-										aria-label="Delete post by {item.agent_name} permanently"
+										disabled={working || deleteBusy || !!blockFor(item)}
+										title={blockFor(item) ?? 'Move to Trash — restorable for 30 days'}
+										aria-label="Move post by {item.agent_name} to Trash"
 										onclick={() => deletePost(item.id)}
 										><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" /></svg></button>
 								</td>
@@ -1244,7 +1468,7 @@
 										title={current.quality_issue || 'Independent QC grade'}>QC {current.quality_score.toFixed(1)}</span>
 								{/if}
 								<span class="slot">{slotLabel(current)}</span>
-								<span class="status-badge status-{current.status}">{current.status}</span>
+								<span class="status-badge" style="background: color-mix(in srgb, {postStatus(current.status).fill} 16%, transparent); color: {postStatus(current.status).text}">{postStatus(current.status).label}</span>
 							</div>
 							{#if current.quality_issue}
 								<p class="sd-issue">QC note: {current.quality_issue}</p>
@@ -1252,11 +1476,21 @@
 							<p class="sd-caption">{current.text}</p>
 							<div class="sd-actions">
 								{#if current.status === 'draft'}
-									<button class="btn-approve" disabled={working || deleteBusy} onclick={() => act('approve', [current!.id])}>
+									<button
+										class="btn-approve"
+										disabled={working || deleteBusy || !!blockFor(current!)}
+										title={blockFor(current!) ?? undefined}
+										onclick={() => act('approve', [current!.id])}
+									>
 										Approve &amp; schedule
 									</button>
 								{/if}
-								<button class="btn-reject" disabled={working || deleteBusy} onclick={() => rejectOne(current!)}>
+								<button
+									class="btn-reject"
+									disabled={working || deleteBusy || !!blockFor(current!)}
+									title={blockFor(current!) ?? undefined}
+									onclick={() => rejectOne(current!)}
+								>
 									{current.status === 'draft' ? 'Reject…' : 'Unschedule…'}
 								</button>
 								<button class="btn-ghost" onclick={() => openDrawer(current!)}>
@@ -1264,8 +1498,9 @@
 								</button>
 								<button
 									class="btn-delete sm"
-									disabled={working || deleteBusy}
-									aria-label="Delete post permanently"
+									disabled={working || deleteBusy || !!blockFor(current!)}
+									title={blockFor(current!) ?? undefined}
+									aria-label="Move post to Trash"
 									onclick={() => deletePost(current!.id)}
 									><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" /></svg></button>
 							</div>
@@ -1309,7 +1544,7 @@
 								</div>
 								<p class="deck-cap">{current.text}</p>
 								<div class="plat-row">
-									{#each current.platforms as p}<span class="plat-chip">{platformLabel(p)}</span>{/each}
+									{#each current.platforms as p (p)}<span class="plat-chip">{platformLabel(p)}</span>{/each}
 								</div>
 							</div>
 						</div>
@@ -1325,7 +1560,8 @@
 						<button
 							type="button"
 							class="dk-round dk-no"
-							disabled={working || deleteBusy}
+							disabled={working || deleteBusy || !!blockFor(current)}
+							title={blockFor(current) ?? undefined}
 							aria-label={current.status === 'draft' ? 'Reject with a reason' : 'Unschedule with a reason'}
 							onclick={() => rejectOne(current!)}
 							><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg></button>
@@ -1338,8 +1574,8 @@
 						<button
 							type="button"
 							class="dk-round dk-yes"
-							disabled={working || deleteBusy || current.status !== 'draft'}
-							title={current.status === 'draft' ? 'Approve & schedule' : 'Already scheduled'}
+							disabled={working || deleteBusy || current.status !== 'draft' || !!blockFor(current)}
+							title={blockFor(current) ?? (current.status === 'draft' ? 'Approve & schedule' : 'Already scheduled')}
 							aria-label="Approve and schedule"
 							onclick={() => act('approve', [current!.id])}
 							><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg></button>
@@ -1361,14 +1597,43 @@
 			<!-- ═══ BOARD — pipeline lanes. Flagged (QC < 6) gets its own lane so
 			     low-quality drafts stop hiding among good ones. ═══ -->
 			<div class="board">
-				{#each [{ title: 'Needs review', cls: 'needs', list: laneNeeds }, { title: 'Scheduled', cls: 'sched', list: laneScheduled }, { title: 'Flagged · QC < 6.0', cls: 'flag', list: laneFlagged }] as lane (lane.cls)}
-					<section class="lane {lane.cls}">
+				{#each boardLanes as lane (lane.cls)}
+					<!-- svelte-ignore a11y_no_static_element_interactions -->
+					<section
+						class="lane {lane.cls}"
+						class:drop-ok={dragOverLane === lane.cls && laneAccepts(lane.status)}
+						ondragover={(e) => {
+							if (!laneAccepts(lane.status)) return;
+							e.preventDefault();
+							dragOverLane = lane.cls;
+						}}
+						ondragleave={() => {
+							if (dragOverLane === lane.cls) dragOverLane = '';
+						}}
+						ondrop={(e) => {
+							e.preventDefault();
+							onLaneDrop(lane.status);
+						}}
+					>
 						<header class="lane-head">
 							<h3 class="lane-title">{lane.title}</h3>
 							<span class="lane-count">{lane.list.length}</span>
 						</header>
 						{#each lane.list as item (item.id)}
-							<div class="lane-card" class:flagged={lane.cls === 'flag'}>
+							<div
+								class="lane-card"
+								class:flagged={lane.cls === 'flag'}
+								class:dragging={dragId === item.id}
+								draggable="true"
+								ondragstart={(e) => {
+									dragId = item.id;
+									if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
+								}}
+								ondragend={() => {
+									dragId = null;
+									dragOverLane = '';
+								}}
+							>
 								<button
 									type="button"
 									class="lane-thumb"
@@ -1385,7 +1650,7 @@
 									<span class="lane-who">{item.agent_name}</span>
 									<span class="lane-cap">{item.text}</span>
 									<span class="lane-foot">
-										{#each item.platforms as p}<span class="plat-chip">{platformLabel(p)}</span>{/each}
+										{#each item.platforms as p (p)}<span class="plat-chip">{platformLabel(p)}</span>{/each}
 										<span class="slot">{slotLabel(item)}</span>
 										{#if lane.cls === 'flag' && item.quality_score != null}
 											<span class="qc-badge qc-low">QC {item.quality_score.toFixed(1)}{item.quality_issue ? ` · ${item.quality_issue}` : ''}</span>
@@ -1393,7 +1658,7 @@
 									</span>
 									<span class="lane-quick">
 										{#if item.status === 'draft'}
-											<button type="button" class="lq-btn lq-ok" disabled={working || deleteBusy} onclick={() => act('approve', [item.id])}>Approve</button>
+											<button type="button" class="lq-btn lq-ok" disabled={working || deleteBusy || !!blockFor(item)} title={blockFor(item) ?? undefined} onclick={() => act('approve', [item.id])}>Approve</button>
 										{/if}
 										<button type="button" class="lq-btn" onclick={() => openDrawer(item)}>Open</button>
 									</span>
@@ -1413,8 +1678,9 @@
 		post={drawerPost}
 		onClose={() => (drawerPost = null)}
 		onApprove={(p) => act('approve', [p.id])}
-		onReject={drawerReject}
-		onDelete={(p) => deletePost(p.id)}
+		approveBlock={drawerPost ? blockFor(drawerPost) : null}
+		onReject={drawerPost && blockFor(drawerPost) ? null : drawerReject}
+		onDelete={drawerPost && blockFor(drawerPost) ? undefined : (p) => deletePost(p.id)}
 		onSaveText={drawerSaveText}
 		onReschedule={drawerReschedule}
 		onRefined={(p) => {
@@ -1437,41 +1703,11 @@
 		poster={lightbox?.poster ?? null}
 		onClose={() => (lightbox = null)}
 	/>
-</div>
+</PageShell>
 
 <style>
-	.review-page {
-		max-width: 1200px;
-		margin: 0 auto;
-		padding: 1.5rem;
-	}
-	.review-header {
-		display: flex;
-		justify-content: space-between;
-		align-items: flex-start;
-		gap: 1rem;
-		margin-bottom: 1.25rem;
-	}
-	.review-header h1 {
-		margin: 0 0 0.25rem 0;
-		font-size: 1.4rem;
-	}
-	.sub {
-		margin: 0;
-		color: var(--text-dim);
-		font-size: var(--text-sm, 0.85rem);
-		max-width: 640px;
-	}
-	.toast {
-		position: fixed;
-		bottom: 1.5rem;
-		right: 1.5rem;
-		background: var(--surface);
-		border: 1px solid var(--border);
-		padding: 0.75rem 1rem;
-		border-radius: 10px;
-		z-index: var(--z-toast);
-	}
+	/* The page frame, masthead and h1 scale now come from PageShell — see the
+	   note there on why routes no longer choose their own width. */
 	.empty {
 		padding: 3rem;
 		text-align: center;
@@ -1549,15 +1785,19 @@
 		border-radius: 999px;
 		white-space: nowrap;
 	}
-	.status-draft {
-		background: color-mix(in srgb, var(--text-dim) 18%, transparent);
-		color: var(--text-dim);
-	}
-	.status-scheduled {
-		background: color-mix(in srgb, var(--info) 18%, transparent);
-		color: var(--info-text);
-	}
+	/* Colour and label come from $lib/status-color — the one definition of what a
+	   status looks like. The local .status-draft / .status-scheduled rules that
+	   used to live here were a second vocabulary, and they had drifted below AA
+	   in dark theme on the queue's most common status. */
 
+	.seat-note {
+		margin: 0 0 0.75rem;
+		padding: 0.6rem 0.85rem;
+		border-radius: 10px;
+		background: color-mix(in srgb, var(--accent) 8%, transparent);
+		border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
+		font-size: 0.85rem;
+	}
 	.bulk-bar {
 		display: flex;
 		/* Wrap so the select-all label and the Approve/Reject bulk buttons stack
@@ -2004,8 +2244,29 @@
 	}
 	.queue-tbl {
 		width: 100%;
-		border-collapse: collapse;
+		/* `separate`, not `collapse`: a sticky cell loses its borders under
+		   border-collapse, and the actions column below is sticky. */
+		border-collapse: separate;
+		border-spacing: 0;
 		font-size: 0.82rem;
+	}
+	/* The actions column stays on screen at every width. */
+	.queue-tbl th:last-child,
+	.queue-tbl td.td-act {
+		position: sticky;
+		right: 0;
+		background: var(--surface);
+		/* Only visible while there is content scrolled underneath. */
+		box-shadow: -8px 0 12px -8px rgba(15, 23, 42, 0.28);
+	}
+	.queue-tbl tbody tr:hover td.td-act {
+		background: var(--surface-2);
+	}
+	/* Matches .row-btn's rendered width exactly (44px). A narrower spacer still
+	   shifts Reject and Delete between rows, which is the whole defect. */
+	.row-btn-gap {
+		display: inline-block;
+		width: 44px;
 	}
 	.queue-tbl thead th {
 		text-align: left;
@@ -2108,12 +2369,13 @@
 		font-weight: var(--weight-semi);
 	}
 	.td-cap {
-		max-width: 320px;
+		width: 100%; /* absorbs whatever the fixed columns do not use */
+		max-width: 0; /* with width:100%, lets the cell shrink below its content */
 	}
 	.cap-open {
 		display: block;
 		width: 100%;
-		max-width: 320px;
+		max-width: 100%;
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -2173,20 +2435,157 @@
 		color: var(--success-text);
 		border-color: var(--success);
 	}
+	/* Filters and view modes share a row and wrap together. They used to be two
+	   stacked full-width bands, which with the always-on bulk bar put the first
+	   post below the fold at 640px and at 200% zoom. */
+	/* Drag affordances. A lane only lights up for a move the API can perform,
+	   so an impossible drag reads as impossible before the user commits to it. */
+	.lane-card {
+		cursor: grab;
+	}
+	.lane-card.dragging {
+		opacity: 0.45;
+		cursor: grabbing;
+	}
+	.lane.drop-ok {
+		outline: 2px dashed var(--accent);
+		outline-offset: -2px;
+		background: var(--accent-soft);
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.lane-card.dragging {
+			opacity: 1;
+		}
+	}
+	/* ── The fold, on a narrow screen ──────────────────────────────────────
+	   Measured at 640x900 before this block: 553px of chrome, then a 4:5 media
+	   card, putting the caption — the thing the reviewer is here to judge — at
+	   1023px. You scrolled past a screen and a half to read the first post.
+
+	   The filter row was 180px of it: three full-width selects, stacked, on
+	   every visit. Side by side in one scrollable row they cost 44px and lose
+	   nothing, because a filter you have to scroll to is still a filter you can
+	   see. And the media is capped against the viewport so the caption and the
+	   verbs stay above the fold instead of being pushed down by a tall crop. */
+	@media (max-width: 767px) {
+		.filter-bar {
+			flex-wrap: nowrap;
+			overflow-x: auto;
+			padding-bottom: var(--space-2);
+			margin-bottom: var(--space-2);
+			scrollbar-width: thin;
+		}
+		.filt {
+			flex: none;
+		}
+		.filt select {
+			min-width: 11rem;
+		}
+	}
+	.queue-toolbar {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--space-3);
+		margin-bottom: var(--space-4);
+	}
+	.reject-why {
+		display: block;
+		max-width: 22ch;
+		margin-top: 2px;
+		overflow: hidden;
+		font-size: var(--text-xs);
+		line-height: var(--leading-snug);
+		color: var(--text-dim);
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.rp-target {
+		max-width: 34ch;
+		overflow: hidden;
+		font-style: italic;
+		color: var(--text-muted);
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.row-restore:hover:not(:disabled) {
+		background: var(--accent-soft);
+		border-color: var(--accent);
+		color: var(--accent-text);
+	}
 	.row-no:hover:not(:disabled),
 	.row-del:hover:not(:disabled) {
 		background: var(--error-soft);
 		color: var(--error-text);
 		border-color: var(--error);
 	}
-	@media (max-width: 900px) {
-		.th-cap,
-		.td-cap,
+	/* ── Column budget ─────────────────────────────────────────────────────
+	   Measured at 1280 before this block: caption 188px, against platforms 141
+	   and slot 144 — 285px on two columns of context, while the one column the
+	   reviewer actually reads got 20% of the table and truncated at about twenty
+	   characters. You cannot decide on a post from twenty characters, so every
+	   row needed an extra click, on the screen that is the product's premise.
+
+	   Nothing is deleted: what leaves a column reappears on the caption's own
+	   meta line, which is in the DOM at every width. The caption is the last
+	   thing to go, and it never goes. */
+	@media (max-width: 1439px) {
 		.th-plat,
 		.td-plat,
-		.th-status,
-		.td-status {
+		.th-slot,
+		.td-slot {
 			display: none;
+		}
+		.cm-plat,
+		.cm-slot {
+			display: inline;
+		}
+	}
+	@media (max-width: 1023px) {
+		/* The thumbnail is the next to go — it is recognition, not the decision. */
+		.queue-tbl thead th:nth-child(2),
+		.queue-tbl tbody td:nth-child(2) {
+			display: none;
+		}
+	}
+	@media (max-width: 767px) {
+		.td-agent,
+		.queue-tbl thead th:nth-child(3) {
+			display: none;
+		}
+		.cm-persona {
+			display: inline;
+		}
+	}
+	/* The caption's supporting facts, each shown only once its own column folds
+	   away. The <p> is always present; the spans inside it switch on. */
+	.cap-meta {
+		margin: 2px 0 0;
+		font-size: var(--text-xs);
+		line-height: var(--leading-snug);
+		color: var(--text-dim);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.cm-persona,
+	.cm-plat,
+	.cm-slot {
+		display: none;
+	}
+	/* Separator between whichever facts happen to be showing. */
+	.cap-meta span + span::before {
+		content: ' · ';
+	}
+	@media (max-width: 767px) {
+		.cap-open {
+			white-space: normal;
+			min-height: 0;
+			line-height: var(--leading-snug);
+		}
+		.td-cap {
+			padding-block: var(--space-2);
 		}
 	}
 
@@ -2400,6 +2799,14 @@
 		background: var(--surface-3);
 		cursor: zoom-in;
 		aspect-ratio: 4 / 5;
+		/* Never taller than this share of the viewport — see the fold note above.
+		   `object-fit: cover` on the image means the crop still fills it. */
+		max-height: 42vh;
+	}
+	@media (max-width: 639px) {
+		.deck-media {
+			max-height: 34vh;
+		}
 	}
 	.deck-media img {
 		width: 100%;

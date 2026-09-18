@@ -4,6 +4,7 @@ import type { RequestHandler } from './$types';
 import { buildStoredProfile } from '$lib/persona-contract/save';
 import type { PersonaProfileV2 } from '$lib/persona-contract/schema';
 import { writeWithProfileFallback } from '$lib/server/personas-profile-column';
+import { isOwnedBucketUrl } from '$lib/server/storage';
 
 export const POST: RequestHandler = async ({ request, locals }) => {
 	// 1. Authenticate user
@@ -26,7 +27,11 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		personaProfile,
 		skills,
 		ugcVoice,
-		brandBriefId
+		brandBriefId,
+		// The portrait the wizard already generated and the user already paid for
+		// (/api/persona-preview). Adopting it is what stops creation re-rendering —
+		// and re-billing — a face the user has already approved.
+		characterRef
 	} = body;
 
 	if (!name) {
@@ -82,6 +87,21 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			return json({ success: false, error: agentError.message }, { status: 500 });
 		}
 
+		// The previewed portrait, adopted as the pinned face.
+		//
+		// SECURITY: `characterRef` arrives from the client and is written to
+		// `ugc_character_ref`, which later gets handed to fal as an `image_urls`
+		// entry and re-fetched server-side — so an arbitrary URL here is the
+		// attack `isOwnedBucketUrl` exists to stop (see storage.ts). Only a URL
+		// inside THIS user's own folder in our own bucket is accepted; anything
+		// else is dropped silently and the persona is simply born without a face,
+		// which the lazy `ensureCharacterRef` fills on first generation exactly as
+		// it does for a persona created without a preview.
+		const adoptedRef =
+			typeof characterRef === 'string' && isOwnedBucketUrl(characterRef, session.user.id)
+				? characterRef
+				: null;
+
 		// Create default agent_configs row (with the pinned voice + brand link when the
 		// generator supplied them).
 		try {
@@ -99,7 +119,8 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				...(typeof ugcVoice === 'string' && ugcVoice ? { ugc_voice: ugcVoice } : {}),
 				...(typeof brandBriefId === 'string' && brandBriefId
 					? { brand_brief_id: brandBriefId }
-					: {})
+					: {}),
+				...(adoptedRef ? { ugc_character_ref: adoptedRef } : {})
 			});
 			if (configError) throw configError;
 		} catch (configErr) {

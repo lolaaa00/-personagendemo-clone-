@@ -14,6 +14,7 @@
 	import { dialog } from '$lib/actions/dialog';
 	import { syncParam, readParam } from '$lib/url-state';
 	import { confirmAction } from '$lib/stores/confirm.svelte';
+	import PageShell from '$lib/components/ui/PageShell.svelte';
 	import {
 		NON_BYOK_PROVIDERS,
 		byokReason,
@@ -1204,15 +1205,10 @@
 	}
 </script>
 
-<svelte:head>
-	<title>Settings — PersonaGen</title>
-</svelte:head>
-
-<section class="page">
-	<header class="page-header">
-		<h1>Settings</h1>
-		<p class="subtitle">Manage your profile, notifications, API keys, and account.</p>
-	</header>
+<PageShell
+	title="Settings"
+	description="Manage your profile, notifications, API keys, and account."
+>
 
 	<div class="settings-layout">
 		<nav class="settings-nav" aria-label="Settings sections">
@@ -2272,7 +2268,6 @@
 					</svg>
 				</div>
 				<h2>Billing &amp; Plan</h2>
-				<span class="coming-soon-badge">Coming Soon</span>
 			</div>
 			<div class="card-body">
 				<div class="billing-coming-soon">
@@ -2288,8 +2283,9 @@
 						<p class="billing-desc">
 							Your balance is shown as money in your currency, every generation is priced before you
 							confirm, purchased credit never expires, and workspace personas draw on the workspace
-							owner's wallet. <a href="/billing">Open Billing →</a>
+							owner's wallet.
 						</p>
+						<a class="btn btn-secondary billing-open" href="/billing">Open Billing</a>
 					</div>
 				</div>
 			</div>
@@ -2345,7 +2341,7 @@
 		{/if}
 		</div>
 	</div>
-</section>
+</PageShell>
 
 <svelte:window
 	onkeydown={(e) => {
@@ -2436,21 +2432,8 @@
 {/if}
 
 <style>
-	.page {
-		padding: 2rem;
-		max-width: 1240px;
-		margin: 0 auto;
-	}
 
-	.page-header {
-		margin-bottom: 2rem;
-	}
 
-	.page-header h1 {
-		font-size: var(--text-3xl);
-		font-family: var(--font-display);
-		margin-bottom: 0.5rem;
-	}
 
 	.subtitle {
 		color: var(--text-muted);
@@ -3345,6 +3328,11 @@
 	/* Billing */
 	.billing-icon {
 		background: var(--accent-soft);
+	}
+
+	.billing-open {
+		align-self: flex-start;
+		margin-top: var(--space-3);
 	}
 
 	.coming-soon-badge {

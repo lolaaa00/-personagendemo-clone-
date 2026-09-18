@@ -23,6 +23,8 @@ import {
 	creditMarkupSource,
 	videoIngestEnabled,
 	videoIngestSource,
+	enhanceChain,
+	enhanceChainSource,
 	personaGenerator,
 	personaGeneratorSource,
 	personaBackbone,
@@ -30,6 +32,7 @@ import {
 	personaFitJudge,
 	personaFitJudgeSource
 } from '$lib/server/flags';
+import { upscaleUsd } from '$lib/server/content/enhance';
 import { activityStats, logActivity } from '$lib/server/activity';
 import MIGRATION_ORDER from '../../../../../supabase/migrations.json';
 import { SUPPORTED_CURRENCIES, isSupportedCurrency, formatCredits, type FxRates } from '$lib/money';
@@ -126,6 +129,15 @@ export const GET: RequestHandler = async ({ locals }) => {
 				effective: videoIngestEnabled(),
 				stored: s.video_ingest,
 				source: videoIngestSource()
+			},
+			enhance_chain: {
+				effective: enhanceChain(),
+				stored: s.enhance_chain,
+				source: enhanceChainSource(),
+				// The switch alone does not start the pass: it also needs a price,
+				// which fal does not publish. Surfaced so the console can say "on but
+				// idle" instead of the operator wondering why nothing changed.
+				priced: upscaleUsd() !== null
 			},
 			persona_generator: {
 				effective: personaGenerator(),
@@ -258,6 +270,11 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			);
 		}
 		value = n;
+	} else if (key === 'enhance_chain') {
+		const v = String(body.value ?? '').toLowerCase();
+		if (!['off', 'upscale'].includes(v))
+			return json({ success: false, error: 'enhance_chain must be off | upscale' }, { status: 400 });
+		value = v;
 	} else if (key === 'persona_generator') {
 		const v = String(body.value ?? '').toLowerCase();
 		if (!['v1', 'v2'].includes(v))

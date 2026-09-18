@@ -310,8 +310,7 @@
 	}
 
 	.proj-input:focus {
-		outline: none;
-		border-color: var(--accent-mid);
+		border-color: var(--accent);
 		background: var(--surface);
 	}
 
@@ -502,8 +501,7 @@
 	}
 
 	.assign-select:focus-visible {
-		outline: none;
-		border-color: var(--accent-mid);
+		border-color: var(--accent);
 	}
 
 	.assign-select:disabled {

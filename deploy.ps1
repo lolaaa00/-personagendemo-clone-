@@ -37,6 +37,19 @@ param(
 # visible in `git log` forever instead of only in one terminal session.
 $bypassed = @()
 
+# ── Guard: this script deploys main, so it must be RUN from main ─────────
+# Step 2 commits the working tree onto whatever branch is checked out, and
+# Step 3 pushes `main` regardless. Run from a feature branch, the gates pass,
+# the commit lands on the feature branch, an unchanged main is pushed, and
+# Easypanel rebuilds nothing — while the operator believes they deployed.
+# Measured 2026-09-17 on ux/portal-overhaul, 26 commits ahead of main.
+$branch = (git rev-parse --abbrev-ref HEAD).Trim()
+if ($branch -ne "main") {
+    Write-Host "  [0/3] ERROR: deploy.ps1 pushes main, but this tree is on '$branch'." -ForegroundColor Red
+    Write-Host "  [0/3]        Merge or fast-forward main first, check it out, then deploy." -ForegroundColor Red
+    exit 1
+}
+
 $ErrorActionPreference = "Stop"
 $projectDir = $PSScriptRoot
 
@@ -292,6 +305,16 @@ if ($status) {
         Write-Host ""
         Write-Host "  Dry run complete. Nothing committed, nothing pushed." -ForegroundColor Cyan
         exit 0
+    }
+    # Say exactly which tracked files are about to be committed. `git add -A` on
+    # the scope takes every modification in it, including ones made by another
+    # session sharing this tree — on 2026-09-17 that was 24 files that were not
+    # the deployer's. A list the operator has to scroll past is the cheapest
+    # guard against shipping someone else's half-finished work.
+    $swept = git status --porcelain -- $stageScope | Where-Object { $_ -notmatch '^\?\?' }
+    if ($swept) {
+        Write-Host "  [2/3] Committing $(@($swept).Count) modified tracked file(s) in scope:" -ForegroundColor DarkYellow
+        foreach ($w in $swept) { Write-Host "          $w" -ForegroundColor DarkYellow }
     }
     Write-Host "  [2/3] Committing updated changes..." -ForegroundColor Yellow
     # Only the app, its docs, and the deploy tooling — never stray scratch files.

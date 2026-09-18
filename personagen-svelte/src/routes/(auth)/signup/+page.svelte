@@ -8,7 +8,6 @@
 	let fullName = $state('');
 	let email = $state('');
 	let password = $state('');
-	let confirmPassword = $state('');
 	let pin = $state('');
 	let loading = $state(false);
 	let error = $state('');
@@ -29,32 +28,19 @@
 		return { level: 3, label: 'Strong', color: 'var(--success)' };
 	});
 
-	let passwordsMatch = $derived(!confirmPassword || password === confirmPassword);
-
-	let canSubmit = $derived(
-		fullName.trim().length > 0 &&
-			email.trim().length > 0 &&
-			password.length >= 6 &&
-			confirmPassword.length > 0 &&
-			password === confirmPassword &&
-			!loading
-	);
-
 	// ── Presentation-only state: drives ARIA attributes, the error summary and focus ──
 	let showPassword = $state(false);
-	let showConfirm = $state(false);
 	let showPin = $state(false);
 
 	let nameEl: HTMLInputElement | null = $state(null);
 	let emailEl: HTMLInputElement | null = $state(null);
 	let passwordEl: HTMLInputElement | null = $state(null);
-	let confirmEl: HTMLInputElement | null = $state(null);
 	let pinEl: HTMLInputElement | null = $state(null);
 	let summaryEl: HTMLDivElement | null = $state(null);
 
 	// Email format is checked on blur, independent of submit — otherwise a typo'd
 	// address stayed aria-invalid="false" until the form was submitted, while the
-	// confirm-password field (whose check is submit-independent) reported correctly.
+	// confirm-password field (since removed) reported correctly.
 	// Screen-reader users got no on-blur signal for the one field most likely to
 	// be mistyped.
 	let emailTouched = $state(false);
@@ -65,26 +51,23 @@
 	let nameInvalid = $derived(!!error && fullName.trim().length === 0);
 	let emailInvalid = $derived(emailMalformed || (!!error && email.trim().length === 0));
 	let passwordInvalid = $derived(!!error && password.length < 6);
-	let confirmInvalid = $derived(!passwordsMatch || (!!error && confirmPassword.length === 0));
-	let hasFieldError = $derived(nameInvalid || emailInvalid || passwordInvalid || confirmInvalid);
+	let hasFieldError = $derived(nameInvalid || emailInvalid || passwordInvalid);
 	// The summary only appears after a failed submit; the live mismatch warning stays inline
 	// so the layout doesn't jump while the user is still typing.
-	let showSummary = $derived(!!error);
+	// Field problems are shown inline, next to the field; the summary is for
+	// server-side failures only, so one mistake never paints three red layers.
+	let showSummary = $derived(!!error && !hasFieldError);
 
 	let nameDescribedBy = $derived(nameInvalid ? 'full-name-error' : undefined);
 	let emailDescribedBy = $derived(emailInvalid ? 'email-error' : undefined);
 	let passwordDescribedBy = $derived(
 		passwordInvalid ? 'password-help password-error' : 'password-help'
 	);
-	let confirmDescribedBy = $derived(confirmInvalid ? 'confirm-password-error' : undefined);
 
 	// Svelte forbids a dynamic `type` attribute on an input that uses bind:value,
 	// so the show/hide toggles are reflected onto the elements imperatively.
 	$effect(() => {
 		if (passwordEl) passwordEl.type = showPassword ? 'text' : 'password';
-	});
-	$effect(() => {
-		if (confirmEl) confirmEl.type = showConfirm ? 'text' : 'password';
 	});
 	$effect(() => {
 		if (pinEl) pinEl.type = showPin ? 'text' : 'password';
@@ -102,9 +85,7 @@
 					? emailEl
 					: passwordInvalid
 						? passwordEl
-						: confirmInvalid
-							? confirmEl
-							: summaryEl;
+						: summaryEl;
 			target?.focus();
 		});
 	});
@@ -113,8 +94,8 @@
 		e.preventDefault();
 		error = '';
 
-		if (password !== confirmPassword) {
-			error = 'Passwords do not match';
+		if (!fullName.trim() || !email.trim()) {
+			error = 'A couple of fields still need filling in';
 			return;
 		}
 
@@ -166,12 +147,11 @@
 
 	<div class="signup-container">
 		<!-- Brand -->
-		<div class="signup-brand">
-			<div class="signup-logo">
+		<a class="signup-brand" href="/" aria-label="PersonaGen home">
+			<span class="signup-logo" aria-hidden="true">
 				<svg
-					aria-hidden="true"
-					width="22"
-					height="22"
+					width="18"
+					height="18"
 					viewBox="0 0 24 24"
 					fill="none"
 					stroke="currentColor"
@@ -181,9 +161,9 @@
 				>
 					<path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
 				</svg>
-			</div>
+			</span>
 			<span class="signup-wordmark">PersonaGen</span>
-		</div>
+		</a>
 
 		<!-- Card Primitive -->
 		<Card dark={themeState.current === 'dark'} class="signup-card">
@@ -192,10 +172,10 @@
 			{/snippet}
 
 			{#snippet description()}
-				<p>Get started with PersonaGen</p>
+				<p>No credit card. Your first persona live in about four minutes.</p>
 			{/snippet}
 
-			<form onsubmit={handleSignup} class="signup-form">
+			<form onsubmit={handleSignup} class="signup-form" novalidate>
 				{#if showSummary}
 					<div
 						class="signup-error"
@@ -238,12 +218,6 @@
 								{#if passwordInvalid}
 									<li>
 										<a href="#password">Password</a> is too short — use at least 6 characters.
-									</li>
-								{/if}
-								{#if confirmInvalid}
-									<li>
-										<a href="#confirm-password">Confirm password</a> does not match your password — re-type
-										the same password in both fields.
 									</li>
 								{/if}
 								{#if !hasFieldError}
@@ -412,145 +386,11 @@
 					</p>
 				</div>
 
-				<div class="signup-field">
-					<label for="confirm-password">
-						Confirm password <span class="signup-req" aria-hidden="true">*</span><span
-							class="sr-only">(required)</span
-						>
-					</label>
-					<div class="signup-input-wrap">
-						<input
-							id="confirm-password"
-							class="input-field signup-input-toggleable {confirmInvalid ? 'field-error' : ''}"
-							type="password"
-							bind:value={confirmPassword}
-							bind:this={confirmEl}
-							placeholder="••••••••"
-							required
-							aria-required="true"
-							autocomplete="new-password"
-							aria-invalid={confirmInvalid ? 'true' : 'false'}
-							aria-describedby={confirmDescribedBy}
-						/>
-						<button
-							type="button"
-							class="signup-pw-toggle"
-							aria-pressed={showConfirm}
-							aria-controls="confirm-password"
-							aria-label={showConfirm ? 'Hide confirmed password' : 'Show confirmed password'}
-							onclick={() => (showConfirm = !showConfirm)}
-						>
-							{#if showConfirm}
-								<svg
-									width="18"
-									height="18"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									aria-hidden="true"
-								>
-									<path d="M9.88 9.88a3 3 0 1 0 4.24 4.24" />
-									<path
-										d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"
-									/>
-									<path d="M6.61 6.61A13.53 13.53 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61" />
-									<line x1="2" y1="2" x2="22" y2="22" />
-								</svg>
-							{:else}
-								<svg
-									width="18"
-									height="18"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									aria-hidden="true"
-								>
-									<path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z" />
-									<circle cx="12" cy="12" r="3" />
-								</svg>
-							{/if}
-						</button>
-					</div>
-					{#if confirmInvalid}
-						<span class="field-hint error" id="confirm-password-error" role="alert">
-							Passwords do not match — re-type the same password in both fields.
-						</span>
-					{/if}
-				</div>
 
-				<div class="signup-field">
-					<label for="pin">Admin PIN <span class="signup-optional">(optional)</span></label>
-					<div class="signup-input-wrap">
-						<input
-							id="pin"
-							class="input-field signup-input-toggleable"
-							type="password"
-							bind:value={pin}
-							bind:this={pinEl}
-							placeholder="••••"
-							autocomplete="off"
-							aria-describedby="pin-help"
-						/>
-						<button
-							type="button"
-							class="signup-pw-toggle"
-							aria-pressed={showPin}
-							aria-controls="pin"
-							aria-label={showPin ? 'Hide admin PIN' : 'Show admin PIN'}
-							onclick={() => (showPin = !showPin)}
-						>
-							{#if showPin}
-								<svg
-									width="18"
-									height="18"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									aria-hidden="true"
-								>
-									<path d="M9.88 9.88a3 3 0 1 0 4.24 4.24" />
-									<path
-										d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"
-									/>
-									<path d="M6.61 6.61A13.53 13.53 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61" />
-									<line x1="2" y1="2" x2="22" y2="22" />
-								</svg>
-							{:else}
-								<svg
-									width="18"
-									height="18"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									aria-hidden="true"
-								>
-									<path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z" />
-									<circle cx="12" cy="12" r="3" />
-								</svg>
-							{/if}
-						</button>
-					</div>
-					<p class="field-hint" id="pin-help">
-						Leave this blank unless your administrator gave you a PIN.
-					</p>
-				</div>
 
 				<Button
 					type="submit"
 					variant="primary"
-					disabled={!canSubmit}
 					{loading}
 					class="signup-submit"
 				>
@@ -570,15 +410,73 @@
 					</svg>
 				</Button>
 
-				{#if !canSubmit && !loading}
-					<p class="field-hint signup-submit-note">
-						Fill in every required field and make sure both passwords match to enable this button.
-					</p>
-				{/if}
-
 				<p class="sr-only" role="status" aria-live="polite">
 					{loading ? 'Creating your account, please wait…' : ''}
 				</p>
+
+				<details class="signup-pin-disclosure">
+					<summary>Have an invite PIN?</summary>
+					<div class="signup-field">
+						<label for="pin">Invite PIN <span class="signup-optional">(optional)</span></label>
+						<div class="signup-input-wrap">
+							<input
+								id="pin"
+								class="input-field signup-input-toggleable"
+								type="password"
+								bind:value={pin}
+								bind:this={pinEl}
+								placeholder="••••"
+								autocomplete="off"
+								aria-describedby="pin-help"
+							/>
+							<button
+								type="button"
+								class="signup-pw-toggle"
+								aria-pressed={showPin}
+								aria-controls="pin"
+								aria-label={showPin ? 'Hide invite PIN' : 'Show invite PIN'}
+								onclick={() => (showPin = !showPin)}
+							>
+								{#if showPin}
+									<svg
+										width="18"
+										height="18"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="2"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										aria-hidden="true"
+									>
+										<path d="M9.88 9.88a3 3 0 1 0 4.24 4.24" />
+										<path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68" />
+										<path d="M6.61 6.61A13.53 13.53 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61" />
+										<line x1="2" y1="2" x2="22" y2="22" />
+									</svg>
+								{:else}
+									<svg
+										width="18"
+										height="18"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="2"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										aria-hidden="true"
+									>
+										<path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z" />
+										<circle cx="12" cy="12" r="3" />
+									</svg>
+								{/if}
+							</button>
+						</div>
+						<p class="field-hint" id="pin-help">
+							Only if you were given one.
+						</p>
+					</div>
+				</details>
 			</form>
 
 			<div class="signup-alt">
@@ -587,11 +485,11 @@
 			</div>
 
 			{#snippet footer()}
-				<div class="signup-footer">
-					<span>Managed by PersonaGen</span>
-					<span class="signup-pulse" aria-hidden="true"></span>
-					<span>Portal Active</span>
-				</div>
+				<ul class="signup-footer" aria-label="What you get">
+					<li>No credit card to start</li>
+					<li>Verified publishing</li>
+					<li>You own what it makes</li>
+				</ul>
 			{/snippet}
 		</Card>
 	</div>
@@ -602,7 +500,8 @@
 		min-height: 100vh;
 		min-height: 100dvh;
 		display: flex;
-		align-items: center;
+		align-items: flex-start;
+		padding-top: clamp(1.5rem, 8vh, 5rem);
 		justify-content: center;
 		background: var(--bg);
 		position: relative;
@@ -684,8 +583,7 @@
 	}
 
 	@media (prefers-reduced-motion: reduce) {
-		.signup-orb,
-		.signup-pulse {
+		.signup-orb {
 			animation: none;
 		}
 	}
@@ -717,30 +615,37 @@
 	.signup-brand {
 		display: flex;
 		align-items: center;
-		gap: 12px;
+		gap: 0.6rem;
+		text-decoration: none;
+		color: var(--text);
+		min-height: 44px;
+		border-radius: var(--radius-xs);
+	}
+	.signup-brand:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 3px;
 	}
 
 	.signup-logo {
-		width: 44px;
-		height: 44px;
-		border-radius: 12px;
+		width: 34px;
+		height: 34px;
+		border-radius: 10px;
 		background: var(--gradient);
-		display: flex;
+		display: inline-flex;
 		align-items: center;
 		justify-content: center;
 		color: #fff;
-		box-shadow: 0 0 30px color-mix(in srgb, var(--accent) 35%, transparent);
+		box-shadow:
+			inset 0 1px 0 rgba(255, 255, 255, 0.35),
+			0 4px 12px color-mix(in srgb, var(--accent) 35%, transparent);
 	}
 
 	.signup-wordmark {
-		font-family: var(--font-display);
+		font-family: var(--font-body);
 		font-weight: 700;
-		font-size: 1.5rem;
-		background: var(--gradient);
-		-webkit-background-clip: text;
-		-webkit-text-fill-color: transparent;
-		background-clip: text;
-		letter-spacing: var(--tracking-tight);
+		font-size: 1.1rem;
+		color: var(--text);
+		letter-spacing: -0.01em;
 	}
 
 	/* Form overrides */
@@ -888,10 +793,6 @@
 		font-weight: 600;
 	}
 
-	.signup-submit-note {
-		text-align: center;
-	}
-
 	/* Error summary */
 	.signup-error {
 		display: flex;
@@ -1012,35 +913,87 @@
 		}
 	}
 
+	/* Admin PIN lives behind a disclosure: it is for invited operators only and
+	   was the last field every ordinary visitor saw before the submit button. */
+	.signup-pin-disclosure summary {
+		cursor: pointer;
+		list-style: none;
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		min-height: 44px;
+		font-size: var(--text-base);
+		font-weight: 500;
+		color: var(--text-dim);
+		border-radius: var(--radius-xs);
+	}
+	.signup-pin-disclosure summary::-webkit-details-marker {
+		display: none;
+	}
+	.signup-pin-disclosure summary::before {
+		content: '+';
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 20px;
+		height: 20px;
+		border-radius: 50%;
+		background: var(--accent-soft);
+		color: var(--accent-text);
+		font-size: 0.9rem;
+		line-height: 1;
+	}
+	.signup-pin-disclosure[open] summary::before {
+		content: '−';
+	}
+	.signup-pin-disclosure summary:hover {
+		color: var(--text);
+	}
+	.signup-pin-disclosure summary:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
+	}
+	.signup-pin-disclosure {
+		margin-top: calc(-1 * var(--space-2));
+		text-align: center;
+	}
+	.signup-pin-disclosure summary {
+		font-size: var(--text-sm);
+		min-height: 36px;
+	}
+	.signup-pin-disclosure .signup-field {
+		text-align: left;
+	}
+	.signup-pin-disclosure[open] summary {
+		margin-bottom: var(--space-3);
+	}
+
 	/* Footer */
 	.signup-footer {
 		display: flex;
+		flex-wrap: wrap;
 		align-items: center;
 		justify-content: center;
-		gap: 8px;
-		font-size: var(--text-xs);
+		gap: 0.35rem 1.1rem;
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		font-size: var(--text-base);
 		color: var(--text-dim);
-		font-weight: 600;
-		letter-spacing: var(--tracking-wide);
-		text-transform: uppercase;
+		font-weight: 500;
 	}
-
-	.signup-pulse {
+	.signup-footer li {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+	}
+	.signup-footer li::before {
+		content: '';
 		width: 6px;
 		height: 6px;
 		border-radius: 50%;
 		background: var(--success);
-		box-shadow: 0 0 8px color-mix(in srgb, var(--success) 60%, transparent);
-		animation: pulse 2s ease-in-out infinite;
+		flex-shrink: 0;
 	}
 
-	@keyframes pulse {
-		0%,
-		100% {
-			opacity: 1;
-		}
-		50% {
-			opacity: 0.3;
-		}
-	}
 </style>

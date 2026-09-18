@@ -1,7 +1,9 @@
 <script lang="ts">
+	import type { ContentStrategy } from '$lib/content-strategy';
 	import { onMount } from 'svelte';
 	import { browser } from '$app/environment';
 	import { syncParam, readParam } from '$lib/url-state';
+	import PageShell from '$lib/components/ui/PageShell.svelte';
 
 	let { data } = $props<{
 		data: {
@@ -147,13 +149,10 @@
 	let intelInterestInput = $state('');
 	let intelLocations = $state<string[]>(['Sydney']);
 
-	interface IntelStrategyResults {
-		pillars: { name: string; description: string; priority: string }[];
-		schedule: { day: string; time: string; type: string; platform: string }[];
-		platformPriority: { platform: string; score: number; reason: string }[];
-		targets: { metric: string; current: string; target30: string; target90: string }[];
-	}
+	type IntelStrategyResults = ContentStrategy;
 	let intelStrategyResults = $state<IntelStrategyResults | null>(null);
+	let intelError = $state<string | null>(null);
+	let intelSaved = $state(false);
 
 	// Infer the wizard's industry pick from the brief's own text — deterministic
 	// keyword mapping onto the INTEL_INDUSTRIES options, E-Commerce as the
@@ -282,6 +281,29 @@
 	);
 	let intelStep4Valid = $derived(intelLocations.length > 0);
 
+	/** Why step `n` will not let you forward yet, in the user's words. Empty
+	 *  string means nothing is blocking. A disabled button that explains nothing
+	 *  is a dead end: the user cannot tell a missing field from a broken page. */
+	function intelBlockedReason(step: number): string {
+		switch (step) {
+			case 1:
+				if (!intelCompanyName.trim() && !intelIndustry) return 'Add your brand name and pick an industry to continue.';
+				if (!intelCompanyName.trim()) return 'Add your brand name to continue.';
+				if (!intelIndustry) return 'Pick an industry to continue.';
+				return '';
+			case 2:
+				return intelStep2Valid ? '' : 'Add at least one competitor URL to continue.';
+			case 3:
+				return intelStep3Valid
+					? ''
+					: 'Pick at least one content type, or describe the content you make today.';
+			case 4:
+				return intelStep4Valid ? '' : 'Choose at least one location to continue.';
+			default:
+				return '';
+		}
+	}
+
 	function canIntelProceed(step: number): boolean {
 		switch (step) {
 			case 1:
@@ -356,10 +378,28 @@
 		}
 	}
 
+	/** Exactly the steps goToIntelStep() will actually honour, so the stepper
+	 *  never offers a chip that does nothing when clicked.
+	 *
+	 *  Reachability is CUMULATIVE. Checking only the immediately preceding step
+	 *  left steps 5 and 6 enabled from step 1: canIntelProceed(5) returns `true`
+	 *  unconditionally (step 5 is the summary, it gates nothing), so step 6 was
+	 *  always clickable and always inert, while 3 and 4 were correctly disabled —
+	 *  which made it read as a bug rather than a gate. And step 6 needs more than
+	 *  passable gates: it needs a plan to actually exist. */
+	function intelStepReachable(step: number): boolean {
+		if (step <= intelCurrentStep) return true;
+		if (step >= 6 && !intelStrategyResults) return false;
+		for (let s = 1; s < step; s++) if (!canIntelProceed(s)) return false;
+		return true;
+	}
+
 	function goToIntelStep(step: number) {
-		if (step <= intelCurrentStep || (step <= 5 && canIntelProceed(step - 1))) {
-			intelCurrentStep = step;
-		}
+		// One rule, shared with the stepper's `disabled`. They used to be two
+		// different expressions, which is precisely how a chip came to be enabled
+		// by one and refused by the other — a button that looks available, is
+		// clickable, and does nothing at all.
+		if (intelStepReachable(step)) intelCurrentStep = step;
 	}
 
 	function addIntelCompetitor() {
@@ -409,89 +449,54 @@
 		}
 	}
 
-	function generateIntelStrategyResults(): IntelStrategyResults {
-		return {
-			pillars: [
-				{
-					name: 'Educational Authority',
-					description: `Deep-dive content establishing ${intelCompanyName || 'your brand'} as the go-to source for ${intelIndustry || 'industry'} knowledge. Focus on data-backed insights, how-to guides, and myth-busting.`,
-					priority: 'Primary'
-				},
-				{
-					name: 'Behind-the-Scenes',
-					description:
-						'Humanize the brand with process reveals, team spotlights, and day-in-the-life content. Builds trust and relatability with your audience.',
-					priority: 'Secondary'
-				},
-				{
-					name: 'Community Stories',
-					description:
-						'User-generated content, testimonials, and audience Q&A sessions. Drives engagement and creates social proof at scale.',
-					priority: 'Secondary'
-				},
-				{
-					name: 'Trend Commentary',
-					description: `Real-time takes on ${intelIndustry || 'industry'} trends and news. Positions the brand as a thought leader and drives discovery through timely, shareable content.`,
-					priority: 'Tertiary'
-				}
-			],
-			schedule: [
-				{ day: 'Monday', time: '8:00 AM', type: 'Educational Post', platform: 'Instagram' },
-				{ day: 'Tuesday', time: '12:00 PM', type: 'Short-form Video', platform: 'TikTok' },
-				{ day: 'Wednesday', time: '9:00 AM', type: 'Thread / Carousel', platform: 'X / Twitter' },
-				{ day: 'Thursday', time: '7:00 AM', type: 'BTS Content', platform: 'Instagram' },
-				{ day: 'Friday', time: '11:00 AM', type: 'Long-form Video', platform: 'YouTube' },
-				{ day: 'Saturday', time: '10:00 AM', type: 'Community Q&A', platform: 'Instagram' },
-				{ day: 'Sunday', time: '6:00 PM', type: 'Week Preview', platform: 'X / Twitter' }
-			],
-			platformPriority: [
-				{
-					platform: 'Instagram',
-					score: 92,
-					reason: `Best fit for ${intelTargetAudience || 'your target audience'}. High engagement potential in ${intelIndustry || 'your niche'} with Reels + Carousel format.`
-				},
-				{
-					platform: 'TikTok',
-					score: 87,
-					reason:
-						'Highest organic reach potential. Ideal for short-form educational and trend content targeting 18-34 demo.'
-				},
-				{
-					platform: 'YouTube',
-					score: 81,
-					reason:
-						'Long-form authority building. SEO benefits drive passive discovery. Best for evergreen educational content.'
-				},
-				{
-					platform: 'X / Twitter',
-					score: 74,
-					reason:
-						'Real-time engagement and thought leadership. Thread format works well for breaking down complex topics.'
-				},
-				{
-					platform: 'LinkedIn',
-					score: 68,
-					reason:
-						'Professional credibility builder. Effective for B2B reach and industry networking.'
-				}
-			],
-			targets: [
-				{ metric: 'Total Followers', current: '2,400', target30: '3,800', target90: '12,500' },
-				{ metric: 'Engagement Rate', current: '2.1%', target30: '4.5%', target90: '6.8%' },
-				{ metric: 'Weekly Posts', current: '3', target30: '5', target90: '7' },
-				{ metric: 'Avg. Reach / Post', current: '450', target30: '1,200', target90: '4,800' },
-				{ metric: 'Content Saves', current: '12/wk', target30: '45/wk', target90: '180/wk' },
-				{ metric: 'Brand Mentions', current: '5/mo', target30: '20/mo', target90: '80/mo' }
-			]
-		};
-	}
-
+	/**
+	 * Ask the server to build the plan from the brief and these answers.
+	 *
+	 * What this replaced: a local function that returned the same hardcoded
+	 * object every time — four fixed pillars, a fixed Mon-Sun schedule, fixed
+	 * platform scores, and a "Growth Targets" table whose `current` column
+	 * invented the user's own follower count and engagement rate. Steps 2-4 were
+	 * collected and never read. Nothing was saved. The spinner was a setTimeout.
+	 */
 	async function generateIntelStrategy() {
 		intelGenerating = true;
-		await new Promise((r) => setTimeout(r, 2500 + Math.random() * 1500));
-		intelStrategyResults = generateIntelStrategyResults();
-		intelGenerating = false;
-		intelCurrentStep = 6;
+		intelError = null;
+		try {
+			// /api/engine refuses any request without ?path= (see +server.ts:279).
+			// Shipping this without it meant the rewrite returned 400 on every
+			// click and the server handler was never once reached — the feature
+			// was documented as fixed without ever being run.
+			const res = await fetch('/api/engine?path=personagen-brand-brief', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					action: 'build_content_strategy',
+					brief_id: currentBriefId || undefined,
+					answers: {
+						companyName: intelCompanyName,
+						industry: intelIndustry,
+						targetAudience: intelTargetAudience,
+						competitors: intelCompetitors,
+						existingContent: intelExistingContent,
+						contentTypes: intelContentTypes,
+						ageMin: intelAgeMin,
+						ageMax: intelAgeMax,
+						interests: intelInterests,
+						locations: intelLocations
+					}
+				})
+			});
+			const body = await res.json();
+			if (!res.ok || !body.success) throw new Error(body.error || `Couldn't build the plan (HTTP ${res.status}).`);
+			intelStrategyResults = body.data as ContentStrategy;
+			intelSaved = body.saved !== false;
+			intelCurrentStep = 6;
+			if (!intelSaved) intelError = 'Built, but it could not be saved to your brief. Copy anything you need before leaving.';
+		} catch (err: any) {
+			intelError = err?.message || 'Something went wrong building the plan.';
+		} finally {
+			intelGenerating = false;
+		}
 	}
 
 	function startIntelOver() {
@@ -511,20 +516,13 @@
 		if (browser) localStorage.removeItem(INTEL_STORAGE_KEY);
 	}
 
-	function getIntelScoreColor(score: number): string {
-		if (score >= 85) return 'var(--success)';
-		if (score >= 70) return 'var(--cyan)';
-		if (score >= 55) return 'var(--gold)';
-		return 'var(--rose)';
-	}
 </script>
 
-<svelte:head>
-	<title>Content Intelligence Wizard — PersonaGen</title>
-</svelte:head>
-
-<section class="page intel-wizard-panel">
-	<header class="page-header">
+<PageShell
+	title="Content Plan"
+	description="Six steps that turn your brand brief into content pillars, a weekly schedule and a platform order — built from what you tell it, and saved back onto the brief. It reports no performance figures, because it measures nothing."
+>
+	{#snippet actions()}
 		<a class="breadcrumb" href="/brand-brief">
 			<svg
 				aria-hidden="true"
@@ -540,15 +538,7 @@
 			>
 			Brand Brief
 		</a>
-		<div class="header-top">
-			<div>
-				<h1>Content Intelligence &amp; Strategy Wizard</h1>
-				<p class="subtitle">
-					6-step wizard to analyze competitors, map audiences, and generate customized content
-					strategies{brandName ? ` for ${brandName}` : ''}.
-				</p>
-			</div>
-			<div class="header-actions">
+		<div class="header-actions">
 				<a class="action-btn" href="/brand-brief">
 					<svg
 						aria-hidden="true"
@@ -564,25 +554,27 @@
 					>
 					Exit wizard
 				</a>
-			</div>
 		</div>
-		<p class="exit-hint">
-			Your answers are kept as you go — you can leave and come back to this step at any time.
-		</p>
-	</header>
+	{/snippet}
+
+	<div class="intel-wizard-panel">
+	<p class="exit-hint">
+		Your answers are kept as you go — you can leave and come back to this step at any time.
+	</p>
 
 	<!-- ─── Progress Steps ─── -->
 	<ol class="progress-steps" aria-label="Content intelligence wizard steps">
-		{#each INTEL_STEPS as s, i}
+		{#each INTEL_STEPS as s, i (s.id)}
 			<li class="step-item">
 				<button
 					type="button"
 					class="step-dot-group"
 					class:active={intelCurrentStep === s.id}
 					class:completed={intelCurrentStep > s.id}
-					class:disabled={s.id > intelCurrentStep + 1}
+					class:disabled={!intelStepReachable(s.id)}
 					onclick={() => goToIntelStep(s.id)}
-					disabled={s.id > intelCurrentStep + 1}
+					disabled={!intelStepReachable(s.id)}
+					title={!intelStepReachable(s.id) ? intelBlockedReason(intelCurrentStep) : undefined}
 					aria-current={intelCurrentStep === s.id ? 'step' : undefined}
 				>
 					<div class="step-dot">
@@ -669,7 +661,7 @@
 							aria-describedby="intel-step1-hint"
 						>
 							<option value="">Select industry...</option>
-							{#each INTEL_INDUSTRIES as ind}
+							{#each INTEL_INDUSTRIES as ind (ind)}
 								<option value={ind}>{ind}</option>
 							{/each}
 						</select>
@@ -716,7 +708,7 @@
 				</div>
 
 				<div class="competitors-list">
-					{#each intelCompetitors as comp, i}
+					{#each intelCompetitors as comp, i (i)}
 						<div class="competitor-row">
 							<span class="comp-num" aria-hidden="true">{i + 1}</span>
 							<label class="sr-only" for="intel-comp-url-{i}">Competitor {i + 1} channel URL</label>
@@ -732,7 +724,7 @@
 								>Competitor {i + 1} platform</label
 							>
 							<select id="intel-comp-platform-{i}" bind:value={comp.platform} class="comp-platform">
-								{#each INTEL_PLATFORMS_LIST as p}
+								{#each INTEL_PLATFORMS_LIST as p (p.id)}
 									<option value={p.id}>{p.label}</option>
 								{/each}
 							</select>
@@ -821,7 +813,7 @@
 					<div class="field">
 						<label id="intel-content-types-label">Content Types You Currently Produce</label>
 						<div class="content-type-grid" role="group" aria-labelledby="intel-content-types-label">
-							{#each INTEL_CONTENT_TYPES_LIST as ct}
+							{#each INTEL_CONTENT_TYPES_LIST as ct (ct)}
 								<button
 									type="button"
 									class="ct-btn"
@@ -912,7 +904,7 @@
 						<label for="intel-interest-input">Interest Tags</label>
 						<div class="tags-input-wrapper">
 							<div class="tags-display">
-								{#each intelInterests as tag}
+								{#each intelInterests as tag (tag)}
 									<span class="tag">
 										{tag}
 										<button
@@ -950,7 +942,7 @@
 							</div>
 						</div>
 						<div class="suggestions" role="group" aria-label="Suggested interest tags">
-							{#each INTEL_INTEREST_SUGGESTIONS.filter((s) => !intelInterests.includes(s)) as sug}
+							{#each INTEL_INTEREST_SUGGESTIONS.filter((s) => !intelInterests.includes(s)) as sug (sug)}
 								<button
 									type="button"
 									class="sug-btn"
@@ -966,7 +958,7 @@
 							>Locations <span class="req" aria-hidden="true">*</span></label
 						>
 						<div class="location-grid" role="group" aria-labelledby="intel-locations-label">
-							{#each INTEL_LOCATIONS as loc}
+							{#each INTEL_LOCATIONS as loc (loc)}
 								<button
 									type="button"
 									class="loc-btn"
@@ -1016,7 +1008,7 @@
 
 					<div class="review-item">
 						<h3>Competitors</h3>
-						{#each intelCompetitors.filter((c) => c.url.trim()) as comp}
+						{#each intelCompetitors.filter((c) => c.url.trim()) as comp (comp.url)}
 							<p class="review-url">
 								{comp.url}
 								<span class="review-plat"
@@ -1032,7 +1024,7 @@
 					<div class="review-item">
 						<h3>Content Types</h3>
 						<div class="review-tags">
-							{#each intelContentTypes as ct}
+							{#each intelContentTypes as ct (ct)}
 								<span class="review-tag">{ct}</span>
 							{/each}
 							{#if intelContentTypes.length === 0}
@@ -1046,7 +1038,7 @@
 						<p>Ages {intelAgeMin}–{intelAgeMax} • {intelLocations.join(', ') || '—'}</p>
 						{#if intelInterests.length > 0}
 							<div class="review-tags">
-								{#each intelInterests as int}
+								{#each intelInterests as int (int)}
 									<span class="review-tag accent">{int}</span>
 								{/each}
 							</div>
@@ -1063,7 +1055,7 @@
 				>
 					{#if intelGenerating}
 						<div class="gen-spinner"></div>
-						Generating Strategy...
+						Building your plan…
 					{:else}
 						<svg
 							aria-hidden="true"
@@ -1077,7 +1069,7 @@
 							stroke-linejoin="round"
 							><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" /></svg
 						>
-						Generate Strategy
+						Build my content plan
 					{/if}
 				</button>
 
@@ -1085,10 +1077,16 @@
 					{#if intelGenerating}
 						<div class="gen-progress" style="animation: fadeUp 0.3s var(--ease-out)">
 							<div class="gen-bar" aria-hidden="true"><div class="gen-fill"></div></div>
-							<p>Analyzing competitors, mapping audience, building strategy...</p>
+							<p>Reading your brand brief and your answers…</p>
 						</div>
 					{/if}
 				</div>
+				{#if intelError}
+					<p class="intel-error" role="alert">
+						{intelError}
+						<button type="button" class="nav-btn back" onclick={generateIntelStrategy}>Try again</button>
+					</p>
+				{/if}
 			</div>
 
 			<!-- STEP 6: Results -->
@@ -1096,8 +1094,13 @@
 			<div class="results-container" style="animation: fadeUp 0.4s var(--ease-out)">
 				<div class="results-header-card">
 					<div class="results-title">
-						<h3>Strategy Report Generated</h3>
-						<p>{intelCompanyName} • {intelIndustry}</p>
+						<h3>Your content plan</h3>
+						<p>
+							{intelCompanyName || 'Your brand'} · built {new Date(
+								intelStrategyResults.builtAt
+							).toLocaleString()}
+							{#if intelSaved}· saved to your brand brief{/if}
+						</p>
 					</div>
 					<div class="results-actions">
 						<button type="button" class="start-over-btn" onclick={startIntelOver}>
@@ -1149,7 +1152,7 @@
 						Content Pillars
 					</h3>
 					<div class="pillars-grid">
-						{#each intelStrategyResults.pillars as pillar, i}
+						{#each intelStrategyResults.pillars as pillar, i (pillar.name)}
 							<div class="pillar-card" style="animation-delay: {i * 0.08}s">
 								<div class="pillar-header">
 									<h4>{pillar.name}</h4>
@@ -1160,6 +1163,7 @@
 									>
 								</div>
 								<p>{pillar.description}</p>
+								<p class="pillar-from">From {pillar.from}</p>
 							</div>
 						{/each}
 					</div>
@@ -1192,7 +1196,7 @@
 							<div class="table-header">
 								<span>Day</span><span>Time</span><span>Content Type</span><span>Platform</span>
 							</div>
-							{#each intelStrategyResults.schedule as row}
+							{#each intelStrategyResults.schedule as row (row.day)}
 								<div class="table-row">
 									<span class="day-cell">{row.day}</span>
 									<span class="time-cell">{row.time}</span>
@@ -1221,35 +1225,25 @@
 						Platform Priority
 					</h3>
 					<div class="platform-cards">
-						{#each intelStrategyResults.platformPriority as plat, i}
-							<div class="plat-card" style="animation-delay: {i * 0.06}s">
+						{#each intelStrategyResults.platforms as plat (plat.platform)}
+							<div class="plat-card">
 								<div class="plat-card-header">
+									<span class="plat-rank" aria-hidden="true">{plat.rank}</span>
 									<span class="plat-name">{plat.platform}</span>
-									<div
-										class="plat-score-bar"
-										role="img"
-										aria-label="{plat.platform} priority score {plat.score} out of 100"
-									>
-										<div
-											class="plat-score-fill"
-											style="transform: scaleX({plat.score / 100}); background: {getIntelScoreColor(
-												plat.score
-											)}"
-										></div>
-									</div>
-									<span
-										class="plat-score-num"
-										style="color: {getIntelScoreColor(plat.score)}"
-										aria-hidden="true">{plat.score}</span
-									>
+									{#if !plat.fromYou}
+										<span class="plat-default">default</span>
+									{/if}
 								</div>
-								<p class="plat-reason">{plat.reason}</p>
+								<p class="plat-reason">{plat.why}</p>
 							</div>
 						{/each}
 					</div>
 				</div>
 
-				<!-- Growth Targets -->
+				<!-- What the plan asks of you. The section this replaces was a
+				     "Growth Targets" table whose Current column invented the
+				     user's own followers, engagement rate, reach, saves and
+				     mentions. Nothing here is a measurement or a forecast. -->
 				<div class="result-section">
 					<h3 class="section-title">
 						<svg
@@ -1262,30 +1256,51 @@
 							stroke-width="2"
 							stroke-linecap="round"
 							stroke-linejoin="round"
-							><line x1="12" y1="20" x2="12" y2="10" /><line x1="18" y1="20" x2="18" y2="4" /><line
-								x1="6"
-								y1="20"
-								x2="6"
-								y2="16"
+							><path d="M9 11l3 3L22 4" /><path
+								d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"
 							/></svg
 						>
-						Growth Targets
+						What this plan asks of you
 					</h3>
-					<div class="table-scroll">
-						<div class="targets-table">
-							<div class="table-header targets-header">
-								<span>Metric</span><span>Current</span><span>30 Days</span><span>90 Days</span>
-							</div>
-							{#each intelStrategyResults.targets as target}
-								<div class="table-row targets-row">
-									<span class="metric-cell">{target.metric}</span>
-									<span class="current-cell">{target.current}</span>
-									<span class="t30-cell">{target.target30}</span>
-									<span class="t90-cell">{target.target90}</span>
-								</div>
-							{/each}
+					<div class="commit-row">
+						<div class="commit-stat">
+							<span class="commit-num">{intelStrategyResults.commitment.postsPerWeek}</span>
+							<span class="commit-label">posts a week</span>
+						</div>
+						<div class="commit-stat">
+							<span class="commit-num">{intelStrategyResults.commitment.platforms}</span>
+							<span class="commit-label"
+								>platform{intelStrategyResults.commitment.platforms === 1 ? '' : 's'}</span
+							>
+						</div>
+						<div class="commit-stat">
+							<span class="commit-num">{intelStrategyResults.commitment.formats.length}</span>
+							<span class="commit-label">format{intelStrategyResults.commitment.formats.length === 1 ? '' : 's'}</span>
 						</div>
 					</div>
+					<p class="commit-note">
+						These are commitments, not predictions. This plan makes no claim about your reach,
+						followers or engagement — connect a platform and the dashboard will report those from
+						real data.
+					</p>
+				</div>
+
+				<!-- What it was built from, and what was missing. -->
+				<div class="result-section provenance">
+					<h3 class="section-title">What this was built from</h3>
+					{#if intelStrategyResults.provenance.used.length}
+						<p class="prov-line">
+							<strong>Used:</strong>
+							{intelStrategyResults.provenance.used.join(', ')}.
+						</p>
+					{/if}
+					{#if intelStrategyResults.provenance.missing.length}
+						<p class="prov-line prov-missing">
+							<strong>Not available:</strong>
+							{intelStrategyResults.provenance.missing.join(', ')}. Fill these in on your
+							<a href="/brand-brief">brand brief</a> and build the plan again for a sharper result.
+						</p>
+					{/if}
 				</div>
 			</div>
 		{/if}
@@ -1315,11 +1330,15 @@
 				Back
 			</button>
 			{#if intelCurrentStep < 5}
+				{#if intelBlockedReason(intelCurrentStep)}
+					<p class="nav-blocked" role="status">{intelBlockedReason(intelCurrentStep)}</p>
+				{/if}
 				<button
 					type="button"
 					class="nav-btn next"
 					onclick={nextIntelStep}
 					disabled={!canIntelProceed(intelCurrentStep)}
+					title={intelBlockedReason(intelCurrentStep) || undefined}
 				>
 					Next
 					<svg
@@ -1338,37 +1357,11 @@
 			{/if}
 		</div>
 	{/if}
-</section>
+</div>
+</PageShell>
 
 <style>
-	.page {
-		padding: 2rem;
-		max-width: 960px;
-		margin: 0 auto;
-	}
 
-	.page-header {
-		margin-bottom: 1.5rem;
-	}
-	.header-top {
-		display: flex;
-		align-items: flex-start;
-		justify-content: space-between;
-		gap: 1rem;
-		flex-wrap: wrap;
-	}
-	.page-header h1 {
-		font-size: var(--text-3xl);
-		background: var(--gradient);
-		-webkit-background-clip: text;
-		-webkit-text-fill-color: transparent;
-		background-clip: text;
-	}
-	.subtitle {
-		color: var(--text-muted);
-		font-size: var(--text-base);
-		margin-top: 0.25rem;
-	}
 	.header-actions {
 		display: flex;
 		align-items: center;
@@ -1393,6 +1386,13 @@
 		color: var(--accent);
 	}
 
+	/* The blocker, stated next to the control it blocks. */
+	.nav-blocked {
+		margin: 0 var(--space-3) 0 auto;
+		align-self: center;
+		font-size: var(--text-sm);
+		color: var(--warning-text);
+	}
 	.exit-hint {
 		margin-top: 0.5rem;
 		font-size: var(--text-xs);
@@ -2442,5 +2442,72 @@
 		.intel-wizard-panel .targets-row {
 			grid-template-columns: 1fr 1fr;
 		}
+	}
+	/* ── Content plan results ── */
+	.pillar-from {
+		margin-top: var(--space-2);
+		font-size: var(--text-xs);
+		color: var(--text-dim);
+		font-style: italic;
+	}
+	.plat-rank {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 22px;
+		height: 22px;
+		border-radius: var(--radius-full);
+		background: var(--accent-soft);
+		color: var(--accent-text);
+		font-size: var(--text-xs);
+		font-weight: 700;
+		flex-shrink: 0;
+	}
+	.plat-default {
+		margin-left: auto;
+		padding: 0.1rem 0.45rem;
+		border-radius: var(--radius-full);
+		border: 1px solid var(--border-strong);
+		color: var(--text-dim);
+		font-size: var(--text-xs);
+	}
+	.commit-row {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--space-6);
+	}
+	.commit-stat {
+		display: flex;
+		flex-direction: column;
+	}
+	.commit-num {
+		font-family: var(--font-display);
+		font-size: var(--text-2xl);
+		font-weight: 700;
+		line-height: 1;
+		color: var(--text);
+	}
+	.commit-label {
+		font-size: var(--text-sm);
+		color: var(--text-dim);
+	}
+	.commit-note,
+	.prov-line {
+		margin-top: var(--space-3);
+		font-size: var(--text-sm);
+		line-height: 1.6;
+		color: var(--text-muted);
+	}
+	.prov-missing {
+		color: var(--text-dim);
+	}
+	.intel-error {
+		margin: var(--space-4) 0 0;
+		padding: var(--space-3) var(--space-4);
+		border: 1px solid var(--error);
+		border-radius: var(--radius-sm);
+		background: var(--error-soft);
+		color: var(--error-text);
+		font-size: var(--text-base);
 	}
 </style>

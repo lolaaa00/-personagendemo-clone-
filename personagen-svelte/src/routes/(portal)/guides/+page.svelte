@@ -123,7 +123,7 @@
 			],
 			steps: [
 				{
-					t: 'Everything lives in the left sidebar, in five groups: Network (Dashboard) · Library (All Generations, My Favorites) · Personas (every persona you have + New Persona) · Publish (Review Queue, Calendar) · Setup (Brand Brief, Model Manager, Docs, Settings).',
+					t: 'Everything lives in the left sidebar, in five groups: Network (Dashboard) · Library (All Generations, My Favorites, Trash) · Personas (every persona you have + New Persona) · Publish (Review Queue, Calendar) · Setup (Brand Brief, Docs, Developer API, Billing, Settings). Model Manager also appears under Setup if your account administers the platform.',
 					demo: 'sidebar-map'
 				},
 				{
@@ -817,14 +817,14 @@
 			title: 'Model Manager: control quality & cost',
 			when: 'You want to choose which AI models your personas use, or cut generation costs.',
 			facts: [
-				'Where: Setup → Model Manager',
+				'Where: Setup → Model Manager (platform administrators only)',
 				'Value ranking = quality ÷ price',
 				'★ sets the default · Enabled shows it in the composer',
 				'“Check for new models” scans new releases',
 			],
 			steps: [
 				{
-					t: 'Open Model Manager (sidebar → Setup). Tabs split models by type: Image · Image Edit · Video · Voice.',
+					t: 'If your account administers the platform, Model Manager appears in the sidebar under Setup — if it does not, this page is not open to your seat and the rest of this guide is background reading. Tabs split models by type: Image · Image Edit · Video · Voice.',
 					img: 'models',
 					alt: 'The Model Manager roster'
 				},
@@ -838,22 +838,24 @@
 		{
 			id: 'intel-wizard',
 			category: 'Power tools',
-			title: 'Run the Content Intelligence wizard',
-			when: 'You want a content strategy — pillars, posting schedule, platform priorities — built from your brand and competitors.',
+			title: 'Build a content plan',
+			when: 'You want content pillars, a weekly posting schedule and a platform order, built from your brand brief.',
 			facts: [
-				'Where: Brand Brief → Intel Wizard link',
-				'6 steps — answers are kept as you go',
-				'You get pillars, a schedule, and platform scores',
+				'Where: Brand Brief → Content Plan',
+				'6 steps, and it costs nothing — no model is called',
+				'You get pillars, a weekly schedule and a platform order',
+				'It reports no performance figures, because it measures nothing',
 			],
 			steps: [
 				{
-					t: 'Open Brand Brief and click the Intel Wizard link beside the tabs. It’s a 6-step wizard; your answers are kept as you go.',
+					t: 'Open Brand Brief and click Content Plan beside the tabs.',
 					img: 'intel-wizard',
-					alt: 'The Content Intelligence & Strategy Wizard'
+					alt: 'The Content Plan wizard'
 				},
-				{ t: 'Steps 1–4: confirm your brand & audience, add competitor URLs, paste any existing content, and tag audience interests.' },
-				{ t: 'Step 5: review the summary and click Generate Strategy.' },
-				{ t: 'Step 6: your report — Content Pillars, a Posting Schedule table, Platform Priority scores, and Growth Targets. Use it to set each persona’s cadence and topics.' }
+				{ t: 'Steps 1–4: confirm your brand & audience, add competitor URLs, paste any existing content, and tag audience interests. Each step says what it still needs before it will let you forward.' },
+				{ t: 'Step 5: review the summary and click “Build my content plan”.' },
+				{ t: 'Step 6: your plan — Content Pillars, a weekly schedule and a platform order, each citing the input it came from. It makes no claim about your reach: these are commitments, not predictions.' },
+				{ t: 'The plan is saved onto the brief. Reopen it any time from Brand Brief → Content Plan without rebuilding.' }
 			]
 		},
 		{
@@ -1911,13 +1913,23 @@
 		justify-content: space-between;
 		gap: var(--space-6);
 		flex-wrap: wrap;
-		padding: var(--space-5) var(--space-8);
+		padding-block: var(--space-5);
+		/* The floor is TWO gutters, not one. /guides escapes the portal's own
+		   padding with a negative inline margin, so one gutter only puts its
+		   content back at the portal content edge — 32px LEFT of where PageShell
+		   starts, which is exactly where its h1 was measured at 1280 and 1440.
+		   The calc branch already accounts for it (the full-bleed box is wider by
+		   both margins), which is why 1920 looked correct and hid the bug. */
+		padding-inline: max(
+			calc(var(--space-8) * 2),
+			calc((100% - var(--page-wide)) / 2 + var(--space-8))
+		);
 		border-bottom: 1px solid var(--border);
 		background: color-mix(in srgb, var(--bg) 88%, transparent);
 		backdrop-filter: blur(12px);
 	}
 	.gd-top-titles h1 {
-		font-size: 1.45rem;
+		font-size: var(--text-xl);
 		font-weight: 700;
 		color: var(--text);
 		margin: 0;
@@ -1949,7 +1961,17 @@
 		grid-template-columns: 280px minmax(0, 1fr) 250px;
 		gap: var(--space-8);
 		align-items: start;
-		padding: var(--space-6) var(--space-8) var(--space-16);
+		padding-block: var(--space-6) var(--space-16);
+		/* The floor is TWO gutters, not one. /guides escapes the portal's own
+		   padding with a negative inline margin, so one gutter only puts its
+		   content back at the portal content edge — 32px LEFT of where PageShell
+		   starts, which is exactly where its h1 was measured at 1280 and 1440.
+		   The calc branch already accounts for it (the full-bleed box is wider by
+		   both margins), which is why 1920 looked correct and hid the bug. */
+		padding-inline: max(
+			calc(var(--space-8) * 2),
+			calc((100% - var(--page-wide)) / 2 + var(--space-8))
+		);
 		width: 100%;
 	}
 

@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { FULL_ACCESS, seatBlockedReason, type SeatCapabilities } from '$lib/seat';
+	import { personaStatusFill } from '$lib/status-color';
 	import { dialog } from '$lib/actions/dialog';
 	import { syncParam, readParam } from '$lib/url-state';
 	import { onMount, onDestroy } from 'svelte';
@@ -61,6 +63,7 @@
 	import { confirmDeletePosts } from '$lib/confirm-preview';
 	import { confirmAction } from '$lib/stores/confirm.svelte';
 	import MediaPreviewModal from '$lib/components/generation/MediaPreviewModal.svelte';
+	import PageShell from '$lib/components/ui/PageShell.svelte';
 	import {
 		startGeneration,
 		finishGeneration,
@@ -197,11 +200,24 @@
 	// partial = live on ≥1 platform) — NOT every internal row. Counting drafts/scheduled
 	// as "Posts" claimed "8 posts" for a persona whose connected account had 0. Pending
 	// work is surfaced separately as "Queued" so nothing is hidden.
+	/** True once loadFeed() has actually answered for THIS persona. Until then
+	 *  `feedPosts` is an empty array that means "not fetched", not "none". */
+	let feedLoaded = $state(false);
+
+	// The server's count query is the baseline, so the hero is right on every tab
+	// — the feed is only fetched on Content/Studio, and deriving the count from it
+	// made a persona with three published posts report "0 POSTS" everywhere else.
+	// Once the feed IS loaded it takes over, so approving or deleting a post
+	// updates the stat immediately instead of waiting for a reload.
 	let postedCount = $derived(
-		feedPosts.filter((p: any) => p.status === 'published' || p.status === 'partial').length
+		feedLoaded
+			? feedPosts.filter((p: any) => p.status === 'published' || p.status === 'partial').length
+			: (data.postCounts?.published ?? 0)
 	);
 	let queuedCount = $derived(
-		feedPosts.filter((p: any) => p.status === 'draft' || p.status === 'scheduled').length
+		feedLoaded
+			? feedPosts.filter((p: any) => p.status === 'draft' || p.status === 'scheduled').length
+			: (data.postCounts?.queued ?? 0)
 	);
 	let feedLoading = $state(false);
 	let syncingFeed = $state(false);
@@ -646,6 +662,7 @@
 		// Feed/Connections data belongs to the previous persona — drop it so
 		// stale posts or a stale open modal can't linger under the new identity.
 		feedPosts = [];
+		feedLoaded = false;
 		modalPost = null;
 		manualDeleteNotice = null;
 		platformStatuses = {};
@@ -780,6 +797,7 @@
 						new Date(b.published_at || b.created_at).getTime() -
 						new Date(a.published_at || a.created_at).getTime()
 				);
+				feedLoaded = true;
 			} else {
 				showToast('Failed to load feed: ' + result.error, 'error');
 			}
@@ -2138,7 +2156,12 @@
 		byProvider: Record<string, number>;
 		byOperation: Record<string, number>;
 	} | null>(null);
+	// /api/agent/[id]/spend is manager-and-above. Asking anyway put a 403 in the
+	// console on every visit by a creator or viewer seat; the panel below now
+	// says whose view this is instead of silently showing nothing.
+	const seat = $derived(((data as any).seat ?? FULL_ACCESS) as SeatCapabilities);
 	async function loadSpend(agentId: string) {
+		if (!seat.canSeeSpend) return;
 		try {
 			const res = await fetch(`/api/agent/${agentId}/spend`);
 			const d = await parseJsonResponse<any>(res);
@@ -2153,7 +2176,7 @@
 	let spendLoadedForId: string | null = null;
 	$effect(() => {
 		const id = agent?.id;
-		if (!id || id === spendLoadedForId) return;
+		if (!id || id === spendLoadedForId || !seat.canSeeSpend) return;
 		spendLoadedForId = id;
 		loadSpend(id);
 	});
@@ -2991,16 +3014,8 @@
 		return `${Math.floor(diffHr / 24)}d ago`;
 	}
 
-	function getStatusColor(s: string) {
-		if (s === 'active') return 'var(--success)';
-		if (s === 'paused') return 'var(--warning)';
-		return 'var(--text-dim)';
-	}
+	const getStatusColor = personaStatusFill;
 </script>
-
-<svelte:head>
-	<title>{agent?.name ?? 'Persona'} — PersonaGen</title>
-</svelte:head>
 
 {#if !agent}
 	<div class="no-agent">
@@ -3008,6 +3023,7 @@
 		<a href="/dashboard" class="btn-primary">Back to Dashboard</a>
 	</div>
 {:else}
+	<PageShell title={agent.name} width="wide" bare>
 	<div class="persona-page">
 		<!-- ── Hero header ─────────────────────────────────────────── -->
 		<!-- Compact identity header — the banner image was removed on request:
@@ -3091,9 +3107,9 @@
 					</div>
 				</div>
 				<div class="hero-stats">
-					<div class="stat-chip">
+					<div class="stat-chip" title="Posts the platform confirmed went live">
 						<span class="stat-val">{postedCount}</span>
-						<span class="stat-label">Posts</span>
+						<span class="stat-label">Published</span>
 					</div>
 					{#if queuedCount > 0}
 						<div class="stat-chip stat-chip-queued" title="Drafts + scheduled — not yet published">
@@ -5804,7 +5820,17 @@
 						</div>
 					</details>
 
-					<!-- Spend & Pricing section -->
+					<!-- Spend & Pricing section — manager seats and above only. -->
+					{#if !seat.canSeeSpend}
+						<div class="profile-section seat-locked" role="status">
+							<div class="section-header">
+								<h2 class="section-title">Spend &amp; Pricing</h2>
+								<p class="section-desc">
+									{seatBlockedReason(seat, 'manager')}
+								</p>
+							</div>
+						</div>
+					{:else}
 					<details class="profile-section">
 						<summary class="section-summary">
 							<div class="section-header">
@@ -5880,6 +5906,7 @@
 							</div>
 						</details>
 					</details>
+					{/if}
 
 					<!-- Save + Danger zone -->
 					<div class="profile-footer">
@@ -6999,6 +7026,7 @@
 			</div>
 		</div>
 	{/if}
+</PageShell>
 {/if}
 
 <style>
@@ -7198,11 +7226,6 @@
 	   It now fills the portal content area in BOTH views. Readability is
 	   protected where it actually matters — the prose measure below — rather
 	   than by starving the whole page of width. */
-	.persona-page {
-		max-width: 100%;
-		margin: 0 auto;
-	}
-
 	/* ── Feed view toggle (Posts | Assets) ── */
 	.feed-view-toggle {
 		display: inline-flex;
@@ -9259,6 +9282,16 @@
 		font-size: var(--text-sm);
 		cursor: pointer;
 		min-height: 44px;
+	}
+
+	/* A section this seat may not open: same frame, no disclosure affordance,
+	   and copy that names the seat instead of showing an empty panel. */
+	.seat-locked {
+		padding: var(--space-5);
+		opacity: 0.85;
+	}
+	.seat-locked .section-desc {
+		margin-top: var(--space-2);
 	}
 
 	/* ── Spend & Pricing ── */

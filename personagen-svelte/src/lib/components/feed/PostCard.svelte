@@ -356,7 +356,10 @@
 
 	<div class="tile-chips-top">
 		{#if plat}
-			<span class="tile-platform" style="background: {platformColor(plat)}">{plat}</span>
+			<span class="tile-platform">
+				<span class="tile-platform-dot" style="background: {platformColor(plat)}" aria-hidden="true"
+				></span>{plat}</span
+			>
 		{/if}
 		<!-- Format chip: Studio-shelf vocabulary, so every tile names what KIND of
 		     asset it is (and which template made it) wherever it appears. Pre-
@@ -724,34 +727,44 @@
 	}
 
 	.tile-platform {
-		font-size: 9px;
+		display: inline-flex;
+		align-items: center;
+		gap: 5px;
+		font-size: 11px;
 		font-weight: 700;
 		text-transform: uppercase;
 		color: #fff;
-		padding: 2px 8px;
-		border-radius: 999px;
+		background: rgba(10, 14, 26, 0.82);
+		padding: 2px 7px;
+		border-radius: 4px;
 		box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+	}
+	.tile-platform-dot {
+		width: 7px;
+		height: 7px;
+		border-radius: 50%;
+		flex: none;
 	}
 
 	.tile-status {
-		font-size: 9px;
+		font-size: 11px;
 		font-weight: 700;
 		text-transform: uppercase;
 		padding: 2px 7px;
 		border-radius: 4px;
-		background: rgba(10, 14, 26, 0.72);
+		background: rgba(10, 14, 26, 0.82);
 		backdrop-filter: blur(4px);
 		border: 1px solid;
 	}
 
 	/* Same chip anatomy as .tile-status; hue = output class (Studio vocabulary). */
 	.tile-format {
-		font-size: 9px;
+		font-size: 11px;
 		font-weight: 700;
 		text-transform: uppercase;
 		padding: 2px 7px;
 		border-radius: 4px;
-		background: rgba(10, 14, 26, 0.72);
+		background: rgba(10, 14, 26, 0.82);
 		backdrop-filter: blur(4px);
 		border: 1px solid;
 	}
@@ -772,37 +785,44 @@
 		border-color: #ffd58a;
 	}
 
+	/* On-dark literals, deliberately not theme tokens: the scrim behind these
+	   chips is always dark, so a token that flips with the theme painted the
+	   dark-on-light variant onto a near-black background. `rejected` had no rule
+	   at all and inherited --text — near-black on near-black, measured 1.1:1.
+	   Every value below clears 4.5:1 against the scrim in both themes. */
 	.tile-status[data-status='published'] {
-		color: var(--success);
-		border-color: var(--success);
+		color: #4ade80;
+		border-color: #4ade80;
 	}
 	.tile-status[data-status='scheduled'] {
-		color: var(--accent);
-		border-color: var(--accent);
+		color: #a5b4fc;
+		border-color: #a5b4fc;
 	}
-	.tile-status[data-status='publishing'] {
-		color: var(--cyan);
-		border-color: var(--cyan);
+	.tile-status[data-status='publishing'],
+	.tile-status[data-status='generating'] {
+		color: #67e8f9;
+		border-color: #67e8f9;
 	}
 	.tile-status[data-status='draft'] {
-		color: #d9dbe3;
-		border-color: rgba(255, 255, 255, 0.45);
+		color: #e6e8ef;
+		border-color: rgba(255, 255, 255, 0.55);
 	}
 	.tile-status[data-status='asset'] {
 		color: #c9b8ff;
 		border-color: #c9b8ff;
 	}
 	.tile-status[data-status='failed'] {
-		color: var(--error);
-		border-color: var(--error);
+		color: #fca5a5;
+		border-color: #fca5a5;
 	}
-	.tile-status[data-status='partial'] {
-		color: var(--warning);
-		border-color: var(--warning);
+	.tile-status[data-status='rejected'] {
+		color: #f9a8d4;
+		border-color: #f9a8d4;
 	}
+	.tile-status[data-status='partial'],
 	.tile-status[data-status='post-failed'] {
-		color: var(--warning);
-		border-color: var(--warning);
+		color: #fcd34d;
+		border-color: #fcd34d;
 	}
 
 	.tile-postfail-banner {

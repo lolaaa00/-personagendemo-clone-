@@ -20,6 +20,7 @@
 import { env } from '$env/dynamic/private';
 import {
 	getSettings,
+	type EnhanceChainSetting,
 	type PersonaBackboneSetting,
 	type PersonaFitJudgeSetting,
 	type PersonaGeneratorSetting
@@ -227,4 +228,30 @@ export function videoIngestEnabled(): boolean {
 export function videoIngestSource(): SwitchSource {
 	if (envVideoIngest() !== null) return 'env';
 	return getSettings().video_ingest ? 'database' : 'default';
+}
+
+function envEnhanceChain(): EnhanceChainSetting | null {
+	const raw = (env.UGC_ENHANCE_CHAIN ?? '').trim().toLowerCase();
+	if (raw === '') return null;
+	return raw === 'upscale' ? 'upscale' : 'off';
+}
+
+/**
+ * The post-generation enhancement chain.
+ *
+ * This is only HALF the gate. The stage also needs a price, and fal publishes
+ * no rate for either upscaler, so the operator supplies one through
+ * UGC_UPSCALE_USD. `enhance.ts` treats a missing or unusable price as off no
+ * matter what this returns, because a paid step with no rate is a step the
+ * ledger cannot record — and an unmetered path is a free path once credits
+ * enforce. Turning this on is therefore necessary and not sufficient, which is
+ * the safe direction for a switch that starts spending money.
+ */
+export function enhanceChain(): EnhanceChainSetting {
+	return envEnhanceChain() ?? getSettings().enhance_chain ?? 'off';
+}
+
+export function enhanceChainSource(): SwitchSource {
+	if (envEnhanceChain() !== null) return 'env';
+	return getSettings().enhance_chain ? 'database' : 'default';
 }

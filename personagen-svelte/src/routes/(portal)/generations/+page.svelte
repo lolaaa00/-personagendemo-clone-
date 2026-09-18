@@ -7,6 +7,7 @@
 	import { showToast } from '$lib/stores/ui.svelte';
 	import { readParam, syncParam } from '$lib/url-state';
 	import { countLabel } from '$lib/plural';
+	import PageShell from '$lib/components/ui/PageShell.svelte';
 
 	let { data } = $props();
 
@@ -210,20 +211,11 @@
 	}
 </script>
 
-<svelte:head>
-	<title>All Generations · PersonaGen</title>
-</svelte:head>
-
-<div class="gen-page">
-	<header class="gen-header">
-		<div>
-			<h1>All Generations</h1>
-			<p class="gen-sub">
-				Every output your personas have created — content on one side, the assets that build each
-				persona's identity on the other.
-			</p>
-		</div>
-	</header>
+<PageShell
+	title="All Generations"
+	width="wide"
+	description="Every output your personas have created — content on one side, the assets that build each persona's identity on the other."
+>
 
 	<!-- Lens: the load-bearing distinction. Content outputs get published;
 	     profile assets only shape the persona. -->
@@ -514,7 +506,7 @@
 			</section>
 		{/each}
 	{/if}
-</div>
+</PageShell>
 
 {#if modalPost}
 	<PostDrawer
@@ -537,24 +529,8 @@
 {/if}
 
 <style>
-	.gen-page {
-		max-width: 1280px;
-		margin: 0 auto;
-	}
 
-	.gen-header h1 {
-		font-family: var(--font-display);
-		font-size: 1.5rem;
-		font-weight: 700;
-		margin: 0 0 0.25rem;
-	}
 
-	.gen-sub {
-		color: var(--text-muted);
-		font-size: 0.85rem;
-		margin: 0 0 var(--space-5);
-		max-width: 60ch;
-	}
 
 	/* ── Lens tabs ── */
 	.gen-lens {
@@ -593,7 +569,7 @@
 
 	.lens-btn.active {
 		background: var(--accent-soft);
-		color: var(--accent);
+		color: var(--accent-text);
 	}
 
 	.lens-count {
@@ -610,7 +586,7 @@
 	.lens-btn.active .lens-count {
 		background: color-mix(in srgb, var(--accent) 14%, transparent);
 		border-color: color-mix(in srgb, var(--accent) 30%, transparent);
-		color: var(--accent);
+		color: var(--accent-text);
 	}
 
 	/* ── Toolbar ── */
@@ -649,8 +625,9 @@
 	}
 
 	.toolbar-select:focus-visible {
-		outline: none;
-		border-color: var(--accent-mid);
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
+		border-color: var(--accent);
 	}
 
 	.toolbar-seg {
@@ -851,8 +828,9 @@
 	}
 
 	.profile-tile:focus-visible {
-		outline: none;
-		box-shadow: 0 0 0 2px var(--accent-mid);
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
+		box-shadow: none;
 	}
 
 	.profile-tile img {

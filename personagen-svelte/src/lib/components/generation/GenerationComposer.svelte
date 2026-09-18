@@ -135,6 +135,19 @@
 	}: Props = $props();
 
 	let loading = $state(false);
+	/**
+	 * Latches the instant the spend is dispatched, and never unlatches — the
+	 * composer is unmounted by every caller right after `onConfirm`, so there is
+	 * no second legitimate submit from this instance.
+	 *
+	 * `loading` cannot do this job: it belongs to the PREVIEW fetch, and is false
+	 * exactly when the confirm button is enabled. Both call sites happen to set
+	 * `composerOpen = false` before running, but Svelte flushes effects
+	 * asynchronously, so the button survives the frame in which it was clicked —
+	 * and a third caller that ran before closing would re-open the window with no
+	 * warning. A double-charge must not depend on every caller's ordering.
+	 */
+	let submitting = $state(false);
 	let loadError = $state<string | null>(null);
 	let preview = $state<any>(null);
 
@@ -505,6 +518,12 @@
 	let previewAbort: AbortController | null = null;
 	/** The preview was refused by the plan, not by a hiccup — Retry is pointless. */
 	let loadBlockedByPlan = $state(false);
+	// A seat refusal is the SERVER's verdict, read from the preview's 403. Access
+	// is per persona (agent_access_role) and the account's workspace seat is only
+	// an upper bound on it: a Viewer in one workspace can still own personas of
+	// its own, so deciding here from the seat would block those. The server
+	// already decides at preview time; the composer only has to say it well.
+	let loadBlockedBySeat = $state(false);
 	const PREVIEW_TIMEOUT_MS = 30_000;
 
 	async function loadPreview() {
@@ -521,6 +540,7 @@
 		loading = true;
 		loadError = null;
 		loadBlockedByPlan = false;
+		loadBlockedBySeat = false;
 		preview = null;
 		try {
 			const res = await fetch(spec.endpoint, {
@@ -538,6 +558,9 @@
 				// place in the app that reads a server error CODE rather than only its
 				// sentence — the codes were being thrown away everywhere.
 				loadBlockedByPlan = data?.code === 'PLAN_FEATURE';
+				// 403 + the route convention's JSON body is an access refusal; a bare
+				// 403 (CSRF, origin) has no JSON and stays a plain failure with Retry.
+				loadBlockedBySeat = res.status === 403 && data?.success === false;
 				return;
 			}
 			preview = data.preview;
@@ -842,6 +865,8 @@
 	}
 
 	function confirm() {
+		// Re-entrancy first: everything below either spends or hands off.
+		if (submitting) return;
 		if (isSeries) {
 			onOpenPlanner?.();
 			return;
@@ -911,6 +936,9 @@
 			body.scheduled_date = scheduledDate || undefined;
 			body.scheduled_time = scheduledTime || undefined;
 		}
+		// Set immediately before dispatch, never before the early returns above —
+		// a blocked or handed-off click must leave the button usable.
+		submitting = true;
 		onConfirm(body);
 	}
 
@@ -969,13 +997,24 @@
 			<span class="spinner" aria-hidden="true"></span> Resolving the exact request…
 		</div>
 	{:else if loadError}
+		<!-- Three refusals, three answers. A plan refusal points at a plan that
+		     includes it; a seat refusal names who can change the seat; only a
+		     transient failure gets Retry. Retrying a permission is a dead click
+		     that reads as "broken", and was the one permission state left in the
+		     product that looked like an outage. -->
 		<div class="composer-error" role="alert">
 			<strong
-				>{loadBlockedByPlan ? 'Not included in your plan' : "Can't prepare this generation"}</strong
+				>{loadBlockedByPlan
+					? 'Not included in your plan'
+					: loadBlockedBySeat
+						? 'Your seat cannot generate for this persona'
+						: "Can't prepare this generation"}</strong
 			>
 			<p>{loadError}</p>
 			{#if loadBlockedByPlan}
 				<a class="btn-retry" href="/billing">Compare plans</a>
+			{:else if loadBlockedBySeat}
+				<p>A workspace admin can change your seat.</p>
 			{:else}
 				<button type="button" class="btn-retry" onclick={() => loadPreview()}>Retry</button>
 			{/if}
@@ -1363,12 +1402,18 @@
 										charged — to the wallet or to your keys.
 									</span>
 									{#if cardQuotes.length > MAX_CARD_QUOTES}
-										<span class="warn-line">Up to {MAX_CARD_QUOTES} at a time — trim the list to continue.</span>
+										<span class="warn-line"
+											>Up to {MAX_CARD_QUOTES} at a time — trim the list to continue.</span
+										>
 									{:else if cardQuotes.length > 0 && cardQuotesOk < cardQuotes.length}
 										<ul class="quote-problems">
 											{#each cardQuotes as q, i (i)}
 												{#if cardQuoteProblems[i]}
-													<li><b>“{q.length > 48 ? q.slice(0, 48) + '…' : q}”</b> — {cardQuoteProblems[i]}</li>
+													<li>
+														<b>“{q.length > 48 ? q.slice(0, 48) + '…' : q}”</b> — {cardQuoteProblems[
+															i
+														]}
+													</li>
 												{/if}
 											{/each}
 										</ul>
@@ -1384,20 +1429,20 @@
 									<span class="hint">{CARD_LOOKS.find((l) => l.id === cardLook)?.blurb}</span>
 								</div>
 							{:else}
-							<div class="fld">
-								<label class="fld-label" for="gc-cardtext">Card text</label>
-								<textarea
-									id="gc-cardtext"
-									aria-describedby="gc-cardtext-hint"
-									bind:value={cardText}
-									rows="3"
-									placeholder="Leave blank and the Director writes the line"
-								></textarea>
-								<span class="hint" id="gc-cardtext-hint">
-									Line breaks decide the shape — one line reads as a statement, several become a
-									stack or a list.
-								</span>
-							</div>
+								<div class="fld">
+									<label class="fld-label" for="gc-cardtext">Card text</label>
+									<textarea
+										id="gc-cardtext"
+										aria-describedby="gc-cardtext-hint"
+										bind:value={cardText}
+										rows="3"
+										placeholder="Leave blank and the Director writes the line"
+									></textarea>
+									<span class="hint" id="gc-cardtext-hint">
+										Line breaks decide the shape — one line reads as a statement, several become a
+										stack or a list.
+									</span>
+								</div>
 							{/if}
 							<div class="row">
 								<div class="fld">
@@ -1833,7 +1878,11 @@
 								{#if isGraphicCard}
 									<!-- A card is deterministic: this is genuinely what comes out. -->
 									<div class="frame frame-card">
-										<span>{ownWords ? cardQuotes[0] : cardText || 'The Director writes this line'}</span>
+										<span
+											>{ownWords
+												? cardQuotes[0]
+												: cardText || 'The Director writes this line'}</span
+										>
 									</div>
 									<span class="frame-cap">
 										{ownWords
@@ -2101,13 +2150,22 @@
 		{#if isLastStep}
 			<button
 				class="btn-primary"
-				disabled={loading || !!loadError || !preview || missingSourceClip || ownWordsBlocked}
-				title={missingSourceClip
-					? 'Add a source clip on the Look step — this format transforms one.'
-					: undefined}
+				disabled={submitting ||
+					loading ||
+					!!loadError ||
+					!preview ||
+					missingSourceClip ||
+					ownWordsBlocked}
+				title={loadBlockedBySeat
+					? loadError
+					: missingSourceClip
+						? 'Add a source clip on the Look step — this format transforms one.'
+						: undefined}
 				onclick={confirm}
 			>
-				{destination?.label ?? spec?.confirmLabel ?? 'Approve & generate'}
+				{submitting
+					? 'Starting…'
+					: (destination?.label ?? spec?.confirmLabel ?? 'Approve & generate')}
 			</button>
 		{:else}
 			<!-- Next, never "Approve" — the money decision belongs on the last step

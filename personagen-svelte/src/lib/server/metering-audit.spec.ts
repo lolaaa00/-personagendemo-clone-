@@ -49,6 +49,23 @@ const FREE_PATHS: Record<string, string> = {
 		'key validation pings; the Firecrawl ping is one page and documented in the assessment'
 };
 
+/**
+ * Files that SPEND but do not RECORD: each returns its cost events to a caller
+ * that writes them, so the spend reaches the ledger through the caller's single
+ * recordCostEvents call instead of opening a second path to it.
+ *
+ * This is not a free pass and it is not prose — the named caller is CHECKED
+ * below: it must import the module AND call recordCostEvents, or this fails.
+ * Without that, "billed by my caller" would be exactly the sentence an
+ * unmetered path hides behind.
+ */
+const BILLED_BY_CALLER: Record<string, { caller: string; why: string }> = {
+	'lib/server/content/enhance.ts': {
+		caller: 'routes/api/persona-preview/+server.ts',
+		why: 'returns costEvents so the enhancement bills on the same ledger write as the generation it enhanced'
+	}
+};
+
 function walk(dir: string, out: string[] = []): string[] {
 	for (const name of readdirSync(dir)) {
 		const p = join(dir, name);
@@ -75,11 +92,25 @@ describe('metering audit — every provider call site is metered or explicitly f
 		const s = readFileSync(abs, 'utf8');
 		const metered = METERED_MARKERS.some((m) => m.test(s));
 		const free = FREE_PATHS[rel];
+		const billed = BILLED_BY_CALLER[rel];
 		expect(
-			metered || !!free,
-			`${rel} calls a provider but is neither metered nor allow-listed in FREE_PATHS`
+			metered || !!free || !!billed,
+			`${rel} calls a provider but is neither metered, allow-listed in FREE_PATHS, nor declared in BILLED_BY_CALLER`
 		).toBe(true);
 	});
+
+	// A file excused as "my caller bills it" is only excused while that is TRUE.
+	it.each(Object.entries(BILLED_BY_CALLER))(
+		'%s is actually billed by the caller it names',
+		(rel, { caller }) => {
+			const callerSrc = readFileSync(join(ROOT, caller), 'utf8');
+			const moduleName = rel.replace(/^.*\//, '').replace(/\.ts$/, '');
+			expect(callerSrc, `${caller} does not import ${rel}`).toMatch(
+				new RegExp(`from\\s+'[^']*${moduleName}'`)
+			);
+			expect(callerSrc, `${caller} never calls recordCostEvents`).toMatch(/recordCostEvents\(/);
+		}
+	);
 
 	// The check above is FILE-level: one metering marker anywhere clears the whole
 	// file. engine/+server.ts is ~2,800 lines and generate.ts is ~200 KB, so a new

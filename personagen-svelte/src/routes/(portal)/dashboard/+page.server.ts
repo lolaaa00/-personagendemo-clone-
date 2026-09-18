@@ -61,7 +61,6 @@ export const load: PageServerLoad = async ({ locals }) => {
 				const characterRefById = new Map((configs ?? []).map((c: any) => [c.agent_id, c.ugc_character_ref]));
 
 				agents = creators.map((a) => {
-					const connCount = a.connection_count ?? 0;
 					const agentPosts = postsByAgent[a.id] || [];
 
 					let totalTokenUsage = 0;
@@ -118,7 +117,26 @@ export const load: PageServerLoad = async ({ locals }) => {
 						trend = formatTrend(((curPosts - prevPosts) / prevPosts) * 100);
 					}
 
-					const perf = Math.min(99, Math.max(40, Math.round(70 + engVal * 2.5 + connCount * 4)));
+					// No invented score. The old line was
+					//   Math.min(99, Math.max(40, Math.round(70 + engVal * 2.5 + connCount * 4)))
+					// which is floored at 70 by a constant: a persona created a minute
+					// ago with no followers, no posts and no connections rendered 70/100
+					// behind a three-quarters-full green bar, and the "Top Performers"
+					// filter (perf >= 70) therefore returned every persona. It could not
+					// report a problem even in principle.
+					//
+					// It also contradicted the rest of the product, which had already
+					// learned this lesson: /brand-brief/intel says "It reports no
+					// performance figures, because it measures nothing", and the post
+					// drawer says "Stats pending first sync from the platform".
+					//
+					// What IS real is how many posts actually published, so that is what
+					// is reported. A persona with none has nothing to show, and says so.
+					// `publishedCount` above counts published posts that HAVE analytics,
+					// which is what engagement is derived from. This counts posts that
+					// actually went out, analytics or not — the fact a roster row can
+					// honestly show.
+					const publishedPosts = agentPosts.filter((p: any) => p.status === 'published').length;
 
 					return {
 						...a,
@@ -127,7 +145,10 @@ export const load: PageServerLoad = async ({ locals }) => {
 						engagement_rate: engVal,
 						active: a.status === 'active',
 						trend,
-						perf,
+						publishedPosts,
+						/** True only when there is measured platform data behind the
+						 *  engagement figure. Without it the roster shows "—". */
+						hasMetrics: publishedCount > 0 && totalViews > 0,
 						ugc_character_ref: characterRefById.get(a.id) ?? null,
 						total_token_usage: totalTokenUsage,
 						total_token_cost: Number(totalTokenCost.toFixed(4)),

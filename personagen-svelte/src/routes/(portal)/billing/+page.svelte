@@ -1,6 +1,8 @@
 <script lang="ts">
+	import { confirmAction } from '$lib/stores/confirm.svelte';
 	import { onMount } from 'svelte';
 	import { invalidateAll } from '$app/navigation';
+	import PageShell from '$lib/components/ui/PageShell.svelte';
 
 	let { data } = $props();
 
@@ -21,7 +23,17 @@
 
 	async function setCancellation(resume: boolean) {
 		error = null;
-		if (!resume && !confirm('Cancel your plan? You keep it until the end of the period you have paid for, and the credit already in your wallet stays yours.')) return;
+		if (
+			!resume &&
+			!(await confirmAction({
+				title: 'Cancel your plan?',
+				body: 'You keep it until the end of the period you have paid for, and the credit already in your wallet stays yours.',
+				tone: 'caution',
+				confirmLabel: 'Cancel plan',
+				cancelLabel: 'Keep my plan'
+			}))
+		)
+			return;
 		cancelling = true;
 		try {
 			const res = await fetch('/api/billing/cancel', {
@@ -106,11 +118,8 @@
 	const empty = $derived(data.billingMode !== 'unmetered' && data.balance <= 0);
 </script>
 
-<svelte:head>
-	<title>Billing · PersonaGen</title>
-</svelte:head>
-
-<div class="billing">
+<PageShell title="Billing" description="What you have, what it buys, and what each generation costs.">
+	<div class="billing">
 	{#if banner}
 		<div class="banner" class:ok={data.status === 'success'} role="status">
 			{banner}
@@ -120,12 +129,15 @@
 
 	<section class="hero">
 		<div class="hero-main">
+			<!-- The balance is a number this page reports, not the page's name —
+			     the h1 used to BE the currency amount, which is why the page named
+			     itself nowhere on screen. PageShell owns the name now. -->
 			<p class="eyebrow">Your balance</p>
 			{#if data.billingMode === 'unmetered'}
-				<h1 class="amount">∞</h1>
+				<p class="amount">∞</p>
 				<p class="sub">Complimentary account. Generations are not charged.</p>
 			{:else}
-				<h1 class="amount" class:low class:empty>{data.balanceFormatted}</h1>
+				<p class="amount" class:low class:empty>{data.balanceFormatted}</p>
 				<p class="sub">
 					{#if data.currency !== 'USD'}Shown in {data.currency} · exactly {data.balanceUsd} ·{/if}
 					{#if empty}
@@ -201,7 +213,11 @@
 				<h2>Top up</h2>
 				<p class="muted">
 					Charged in USD at par: $25 buys $25.00 of generation. Bigger packs include bonus credit.
-					{#if !data.paymentsOpen}<span class="soon">Payments open soon — message us and we'll load your wallet.</span>{/if}
+					{#if !data.paymentsOpen}<span class="soon"
+							>Card payments are not switched on yet, so these packs cannot be bought from here
+							today. <a href="/guides?view=uservoice">Post on the request board</a> and we will load
+							your wallet manually.</span
+						>{/if}
 				</p>
 			</div>
 			{#if error}<p class="error" role="alert">{error}</p>{/if}
@@ -286,13 +302,11 @@
 			<dd>No. Purchased and welcome credit stays until you use it.</dd>
 		</dl>
 	</section>
-</div>
+	</div>
+</PageShell>
 
 <style>
 	.billing {
-		max-width: 1040px;
-		margin: 0 auto;
-		padding: 1.5rem 1.25rem 4rem;
 		display: grid;
 		gap: 2rem;
 	}
@@ -334,6 +348,15 @@
 		text-transform: uppercase;
 		color: var(--text-dim);
 	}
+	.page-name {
+		margin: 0 0 var(--space-2);
+		font-family: var(--font-display);
+		font-size: var(--text-xl);
+		font-weight: 700;
+		letter-spacing: var(--tracking-tight);
+		color: var(--text);
+	}
+
 	.amount {
 		margin: 0;
 		font-size: clamp(2.4rem, 6vw, 3.6rem);

@@ -49,17 +49,36 @@ export interface ConfirmRequest {
 	 * trains people to type without reading.
 	 */
 	typeToConfirm?: string | null;
+	/**
+	 * Ask for a line of text as part of confirming — the Admin Console's audit
+	 * note, for instance. Use `promptAction()` to read it back.
+	 *
+	 * This exists because those notes were collected with `window.prompt()`: a
+	 * browser chrome dialog that cannot be styled, cannot show which row is being
+	 * changed, and in several browsers is suppressed entirely after the user
+	 * dismisses one — silently turning a mandatory audit note into no note.
+	 */
+	prompt?: {
+		label: string;
+		placeholder?: string;
+		/** Confirm stays disabled until something is typed. */
+		required?: boolean;
+		initial?: string;
+	} | null;
 }
 
 interface ConfirmState extends ConfirmRequest {
 	open: boolean;
 	resolve: ((ok: boolean) => void) | null;
+	/** Live value of the optional prompt field. */
+	promptValue: string;
 }
 
 export const confirmState = $state<ConfirmState>({
 	open: false,
 	title: '',
-	resolve: null
+	resolve: null,
+	promptValue: ''
 });
 
 /**
@@ -82,11 +101,25 @@ export function confirmAction(req: ConfirmRequest): Promise<boolean> {
 			warning: undefined,
 			preview: undefined,
 			typeToConfirm: null,
+			prompt: null,
 			...req,
+			promptValue: req.prompt?.initial ?? '',
 			open: true,
 			resolve
 		});
 	});
+}
+
+/**
+ * Confirm, and collect a line of text with it. Resolves the typed value, or
+ * null when the user cancels. An empty string is only possible when the prompt
+ * is not `required`.
+ */
+export async function promptAction(
+	req: ConfirmRequest & { prompt: NonNullable<ConfirmRequest['prompt']> }
+): Promise<string | null> {
+	const ok = await confirmAction(req);
+	return ok ? confirmState.promptValue.trim() : null;
 }
 
 /** Called by the dialog only. */

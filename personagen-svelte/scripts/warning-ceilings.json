@@ -5,7 +5,8 @@
 	"a11y_no_noninteractive_element_interactions": 2,
 	"a11y_no_noninteractive_element_to_interactive_role": 4,
 	"a11y_no_noninteractive_tabindex": 1,
-	"css_unused_selector": 29,
+	"css_unused_selector": 52,
+	"element_implicitly_closed": 1,
 	"other:also_define_the_standard_property_'x'": 6,
 	"other:do_not_use_empty_rulesets": 2,
 	"state_referenced_locally": 61

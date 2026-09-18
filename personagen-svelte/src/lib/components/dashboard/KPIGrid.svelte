@@ -31,7 +31,9 @@
 		// Posts this week (using real database statistics passed from server)
 		const postsText = String(postsThisWeek);
 
-		// Total reach
+		// Total followers across the roster. NOT "reach": reach is impressions,
+		// and this is a sum of follower counts that includes paused and pending
+		// personas with nothing published.
 		let reachText = '—';
 		if (agents.length) {
 			const totalFollowers = agents.reduce((s, a) => {
@@ -71,8 +73,9 @@
 			{
 				icon: 'reach',
 				value: reachText,
-				label: 'Total Reach',
-				color: 'var(--rose-text)'
+				label: 'Total Followers',
+				color: 'var(--rose-text)',
+				subtitle: `across ${totalCount} ${totalCount === 1 ? 'persona' : 'personas'}`
 			}
 		];
 	});

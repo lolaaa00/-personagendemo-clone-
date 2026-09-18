@@ -1,5 +1,5 @@
 import type { PageServerLoad } from './$types';
-import { redirect } from '@sveltejs/kit';
+import { error, redirect } from '@sveltejs/kit';
 import { loadRegistry } from '$lib/server/model-registry';
 import { describeUsage, reconcileLedger } from '$lib/server/registry-usage';
 import { isPlatformAdmin } from '$lib/server/platform-admin';
@@ -18,7 +18,10 @@ const LEDGER_WINDOW_DAYS = 30;
 export const load: PageServerLoad = async ({ locals }) => {
 	const { session, user } = await locals.safeGetSession();
 	if (!session || !user) throw redirect(303, '/login');
-	if (!(await isPlatformAdmin(locals.supabase, user))) throw redirect(303, '/dashboard');
+	// A designed 403, not a silent redirect — see admin/+page.server.ts for why.
+	if (!(await isPlatformAdmin(locals.supabase, user))) {
+		throw error(403, 'The Model Manager is a platform-operator surface.');
+	}
 
 	try {
 		const rows = await loadRegistry(locals.supabase, user.id);

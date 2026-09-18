@@ -511,16 +511,62 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-10", hash: "2ee88f7", type: "feat", category: "feature", scope: "cards", title: "\"My own words\" — Director optional, up to 100 $0 cards a batch" },
 	{ date: "2026-09-10", hash: "9872669", type: "other", category: "docs", scope: null, title: "Merge origin/main: the shipped quote fix meets the cards batch and the docs home" },
 	{ date: "2026-09-12", hash: "94eb7b4", type: "fix", category: "fix", scope: null, title: "FormatExplorer uses quote() to apply markup—was under-quoting by 3x" },
+	{ date: "2026-09-14", hash: "f16c6c1", type: "other", category: "maintenance", scope: "ux", title: "portal overhaul round 1 — integrity fixes, plus earlier uncommitted work" },
+	{ date: "2026-09-14", hash: "9788f2e", type: "fix", category: "fix", scope: "ux", title: "one status-colour source, and restore the lint gate I broke" },
+	{ date: "2026-09-15", hash: "e1bbdea", type: "fix", category: "fix", scope: "ux", title: "the content-plan rewrite never ran — /api/engine needs ?path=" },
 	{ date: "2026-09-15", hash: "6c848ae", type: "feat", category: "feature", scope: "billing", title: "capture what a call actually cost — recorded, never billed" },
 	{ date: "2026-09-15", hash: "7bc3928", type: "refactor", category: "maintenance", scope: "providers", title: "one catalogue, so \"can this be BYOK'd\" stops being an absence" },
 	{ date: "2026-09-15", hash: "87001c6", type: "fix", category: "fix", scope: "security", title: "anon and authenticated hold TRUNCATE on both key tables" },
 	{ date: "2026-09-17", hash: "59c3b2f", type: "fix", category: "fix", scope: "pricing", title: "the LLM rate was 5.8x low, so the text path sold below cost" },
+	{ date: "2026-09-17", hash: "d8c3221", type: "test", category: "maintenance", scope: "ux", title: "populate the portal for review, and route around a broken resolver" },
 	{ date: "2026-09-17", hash: "1fb7cb4", type: "fix", category: "design", scope: "cost", title: "the grader was paid to write text the UI throws away" },
+	{ date: "2026-09-17", hash: "08d3f8a", type: "feat", category: "feature", scope: "persona", title: "the look you approve, before the persona exists" },
+	{ date: "2026-09-17", hash: "de337b5", type: "docs", category: "docs", scope: "competitive", title: "re-measure Fannabe eight days on, and close P0.3" },
+	{ date: "2026-09-17", hash: "9475f72", type: "other", category: "maintenance", scope: null, title: "Merge origin/main: the corrected money numbers meet the persona preview" },
+	{ date: "2026-09-17", hash: "1468e6f", type: "other", category: "design", scope: null, title: "Merge remote-tracking branch 'origin/main' into ux/portal-overhaul" },
 	{ date: "2026-09-17", hash: "caa313c", type: "fix", category: "fix", scope: "ledger", title: "a bare user deletion no longer destroys the usage row behind a surviving debit" },
+	{ date: "2026-09-17", hash: "39233e1", type: "fix", category: "generation", scope: "copy", title: "the FAQ quoted $2.40 for a video post the table prices at $1.58" },
+	{ date: "2026-09-17", hash: "1755812", type: "other", category: "maintenance", scope: null, title: "Merge origin/main: keep the branch current with the ledger retention fix" },
+	{ date: "2026-09-17", hash: "bbe12fd", type: "fix", category: "fix", scope: "ux", title: "round 3 — three blockers, and stop the dashboard inventing a number" },
+	{ date: "2026-09-17", hash: "2cc2336", type: "test", category: "maintenance", scope: "money", title: "assert the landing page's prices against pricing.ts, not against prose" },
+	{ date: "2026-09-17", hash: "9c2d0a6", type: "fix", category: "fix", scope: "ux", title: "round 2's ranked list, deeper — trust, legibility and dead ends" },
+	{ date: "2026-09-17", hash: "cfd5fe5", type: "feat", category: "feature", scope: "realism", title: "the pass after the pass — P0.1, upscale first" },
+	{ date: "2026-09-17", hash: "d636290", type: "chore", category: "infrastructure", scope: "lint", title: "move the ratchet to the real count — lint:ci was failing at 1136" },
+	{ date: "2026-09-17", hash: "b481432", type: "chore", category: "infrastructure", scope: "git", title: "ignore a root .svelte-kit, the last unignored build artifact" },
+	{ date: "2026-09-17", hash: "208db9e", type: "docs", category: "docs", scope: null, title: "the Hypit integration verdict, and a day of state measured three times" },
+	{ date: "2026-09-17", hash: "590c942", type: "fix", category: "fix", scope: "realism", title: "make the enhancement pass survive contact with production" },
+	{ date: "2026-09-17", hash: "4f40382", type: "docs", category: "docs", scope: "competitive", title: "one round deeper — what P0.1 did not close" },
 	{ date: "2026-09-17", hash: "b22dc50", type: "feat", category: "feature", scope: "ledger", title: "every LLM call records which STAGE of the run made it" },
+	{ date: "2026-09-17", hash: "4710d30", type: "other", category: "maintenance", scope: null, title: "Merge origin/main: every LLM call now records which stage of the run made it" },
+	{ date: "2026-09-17", hash: "8e9541f", type: "chore", category: "infrastructure", scope: "git", title: "ignore Python bytecode — the first .pyc arrived today, unignored" },
+	{ date: "2026-09-17", hash: "10a8979", type: "feat", category: "feature", scope: "ux", title: "one page shell, one focus ring, and counts that come from counting" },
+	{ date: "2026-09-17", hash: "38958dc", type: "fix", category: "security", scope: "portal", title: "permission denial is a designed state, never a teleport or a Retry" },
+	{ date: "2026-09-17", hash: "e381879", type: "docs", category: "generation", scope: "verify", title: "frozen build snapshot for shared trees, dialog-scoped composer reads, seat provisioning" },
 	{ date: "2026-09-17", hash: "c7674db", type: "feat", category: "feature", scope: "byok", title: "read stored secrets as service_role; a broken key now says so" },
 	{ date: "2026-09-17", hash: "43a3d0a", type: "feat", category: "generation", scope: "ledger", title: "budget the model's thinking per call, and record how much it did" },
-	{ date: "2026-09-17", hash: "4438b9d", type: "fix", category: "fix", scope: "qc", title: "confirm a grade that lands within a point of the floor" }
+	{ date: "2026-09-17", hash: "eb91ef9", type: "other", category: "maintenance", scope: null, title: "Merge origin/main: per-call thinking budgets, and stored secrets read as service_role" },
+	{ date: "2026-09-17", hash: "06de1cd", type: "chore", category: "docs", scope: "hooks", title: "refuse lint errors at commit, and never commit a stale changelog" },
+	{ date: "2026-09-17", hash: "4438b9d", type: "fix", category: "fix", scope: "qc", title: "confirm a grade that lands within a point of the floor" },
+	{ date: "2026-09-17", hash: "1095ac7", type: "fix", category: "fix", scope: "review", title: "the queue answers to the seat, not to ownership" },
+	{ date: "2026-09-17", hash: "a43369f", type: "fix", category: "fix", scope: "realism", title: "act on the deeper assessment — anchor, schema, drift, benchmark" },
+	{ date: "2026-09-17", hash: "0c296e5", type: "docs", category: "docs", scope: "competitive", title: "two rounds deeper — the anchor, the schema, and the branch itself" },
+	{ date: "2026-09-17", hash: "4be831a", type: "fix", category: "fix", scope: "css", title: "the scroll-reveal selectors are set at runtime, so say so" },
+	{ date: "2026-09-17", hash: "943e748", type: "fix", category: "fix", scope: "qc", title: "confirm a grade that lands within a point of the floor" },
+	{ date: "2026-09-17", hash: "caa0510", type: "other", category: "design", scope: null, title: "Merge remote-tracking branch 'origin/main' into ux/portal-overhaul" },
+	{ date: "2026-09-17", hash: "49f7ab1", type: "feat", category: "feature", scope: "director", title: "a reasoning knob for the director, off by default" },
+	{ date: "2026-09-17", hash: "d208584", type: "docs", category: "infrastructure", scope: "audit", title: "round 4 — the hook made durable, no CI, the ceiling gate red on committed code" },
+	{ date: "2026-09-17", hash: "9b7e9c1", type: "other", category: "maintenance", scope: null, title: "Merge origin/main: a reasoning knob for the director, off by default" },
+	{ date: "2026-09-17", hash: "9b49d52", type: "docs", category: "docs", scope: "audit", title: "close round 4 — every conflict resolved, 34 ahead / 0 behind" },
+	{ date: "2026-09-17", hash: "26936c3", type: "feat", category: "feature", scope: "ux", title: "finish the shell, and make the rules testable" },
+	{ date: "2026-09-17", hash: "f0284a1", type: "fix", category: "fix", scope: "realism", title: "stop wiring the endpoint the repo's own research said to refuse" },
+	{ date: "2026-09-17", hash: "ace83e8", type: "docs", category: "docs", scope: "competitive", title: "three rounds deeper, and defer process risk to the audit" },
+	{ date: "2026-09-18", hash: "8111acf", type: "chore", category: "infrastructure", scope: "deploy", title: "refuse to deploy from any branch but main, and list what a deploy sweeps" },
+	{ date: "2026-09-18", hash: "0a684af", type: "docs", category: "infrastructure", scope: "audit", title: "the deploy guard is applied, not just proposed" },
+	{ date: "2026-09-18", hash: "382676b", type: "chore", category: "security", scope: "tree", title: "pin every session's work before the production merge" },
+	{ date: "2026-09-18", hash: "33a5798", type: "fix", category: "fix", scope: "realism", title: "the benchmark never actually enhanced anything" },
+	{ date: "2026-09-18", hash: "c5842e8", type: "fix", category: "fix", scope: "ux", title: "say why Next is disabled, and give the fold back to the post" },
+	{ date: "2026-09-18", hash: "bac7d71", type: "chore", category: "infrastructure", scope: "warnings", title: "close five page wrappers and drop provably-dead CSS" },
+	{ date: "2026-09-18", hash: "ab7eb18", type: "fix", category: "fix", scope: "ux", title: "round 5's ranked list — a label that lied, and a test that could not see" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -893,21 +939,45 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 		entries: [CHANGELOG[455], CHANGELOG[456], CHANGELOG[457], CHANGELOG[458], CHANGELOG[459], CHANGELOG[460], CHANGELOG[461], CHANGELOG[462], CHANGELOG[463], CHANGELOG[464], CHANGELOG[465], CHANGELOG[466], CHANGELOG[467], CHANGELOG[468]]
 	},
 	{
-		id: "bd40b3c", from: "2026-09-10", to: "2026-09-17",
-		category: "fix", categories: ["maintenance","infrastructure","fix","docs","feature","design"],
+		id: "bd40b3c", from: "2026-09-10", to: "2026-09-15",
+		category: "fix", categories: ["maintenance","infrastructure","fix","docs","feature"],
 		title: "Fixed: assert no MONEY, not \"no wallet row\"",
 		summary: "Assert no MONEY, not \"no wallet row\". Plus 13 more changes, touching internal cleanup and setup and deployment and guides and explanations.",
 		major: true, curated: false,
 		entries: [CHANGELOG[469], CHANGELOG[470], CHANGELOG[471], CHANGELOG[472], CHANGELOG[473], CHANGELOG[474], CHANGELOG[475], CHANGELOG[476], CHANGELOG[477], CHANGELOG[478], CHANGELOG[479], CHANGELOG[480], CHANGELOG[481], CHANGELOG[482]]
 	},
 	{
-		id: "b22dc50", from: "2026-09-17", to: "2026-09-17",
-		category: "feature", categories: ["feature","generation","fix"],
-		title: "New: every LLM call records which STAGE of the run made…",
-		summary: "Every LLM call records which STAGE of the run made it. Plus 3 more changes, touching making posts, images and video and things that were broken.",
-		major: false, curated: false,
-		entries: [CHANGELOG[483], CHANGELOG[484], CHANGELOG[485], CHANGELOG[486]]
+		id: "59c3b2f", from: "2026-09-17", to: "2026-09-17",
+		category: "fix", categories: ["fix","maintenance","design","feature","docs","generation"],
+		title: "Fixed: the LLM rate was 5.8x low, so the text path sold…",
+		summary: "The LLM rate was 5.8x low, so the text path sold below cost. Plus 13 more changes, touching internal cleanup and layout, colours and readability and things you can now do.",
+		major: true, curated: false,
+		entries: [CHANGELOG[483], CHANGELOG[484], CHANGELOG[485], CHANGELOG[486], CHANGELOG[487], CHANGELOG[488], CHANGELOG[489], CHANGELOG[490], CHANGELOG[491], CHANGELOG[492], CHANGELOG[493], CHANGELOG[494], CHANGELOG[495], CHANGELOG[496]]
+	},
+	{
+		id: "d636290", from: "2026-09-17", to: "2026-09-17",
+		category: "infrastructure", categories: ["infrastructure","docs","fix","feature","maintenance","security","generation"],
+		title: "Behind the scenes: move the ratchet to the real count — lint:ci was…",
+		summary: "Move the ratchet to the real count — lint:ci was failing at 1136. Plus 13 more changes, touching guides and explanations and things that were broken and things you can now do.",
+		major: true, curated: false,
+		entries: [CHANGELOG[497], CHANGELOG[498], CHANGELOG[499], CHANGELOG[500], CHANGELOG[501], CHANGELOG[502], CHANGELOG[503], CHANGELOG[504], CHANGELOG[505], CHANGELOG[506], CHANGELOG[507], CHANGELOG[508], CHANGELOG[509], CHANGELOG[510]]
+	},
+	{
+		id: "06de1cd", from: "2026-09-17", to: "2026-09-17",
+		category: "fix", categories: ["docs","fix","design","feature","infrastructure","maintenance"],
+		title: "Fixed: refuse lint errors at commit, and never commit a…",
+		summary: "Refuse lint errors at commit, and never commit a stale changelog. Plus 13 more changes, touching guides and explanations and layout, colours and readability and things you can now do.",
+		major: true, curated: false,
+		entries: [CHANGELOG[511], CHANGELOG[512], CHANGELOG[513], CHANGELOG[514], CHANGELOG[515], CHANGELOG[516], CHANGELOG[517], CHANGELOG[518], CHANGELOG[519], CHANGELOG[520], CHANGELOG[521], CHANGELOG[522], CHANGELOG[523], CHANGELOG[524]]
+	},
+	{
+		id: "ace83e8", from: "2026-09-17", to: "2026-09-18",
+		category: "infrastructure", categories: ["docs","infrastructure","security","fix"],
+		title: "Behind the scenes: three rounds deeper, and defer process risk to the…",
+		summary: "Three rounds deeper, and defer process risk to the audit. Plus 7 more changes, touching guides and explanations and sign-in and account protection and things that were broken.",
+		major: true, curated: false,
+		entries: [CHANGELOG[525], CHANGELOG[526], CHANGELOG[527], CHANGELOG[528], CHANGELOG[529], CHANGELOG[530], CHANGELOG[531], CHANGELOG[532]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "4438b9d";
+export const CHANGELOG_GENERATED_FROM = "ab7eb18";

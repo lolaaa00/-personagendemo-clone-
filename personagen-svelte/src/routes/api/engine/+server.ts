@@ -1,4 +1,5 @@
 import { json } from '@sveltejs/kit';
+import { buildStrategy } from '$lib/content-strategy';
 import type { RequestHandler } from './$types';
 import { env } from '$env/dynamic/private';
 import { createDbService } from '$lib/server/db';
@@ -1121,6 +1122,60 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 					return json({ success: false, error: error.message }, { status: 500 });
 				}
 				return json({ success: true, data: created });
+			}
+
+			// ── ACTION: build_content_strategy — the Content Plan wizard ──────────
+			//    Replaces a client-side function that returned a hardcoded literal
+			//    after a fake 2.5s delay, including a "your current followers:
+			//    2,400" table shown to accounts with nothing connected. Everything
+			//    returned here is derived from the caller's own brief plus the
+			//    answers they gave, and it is SAVED onto the brief — the old one
+			//    was never persisted anywhere, so "Done" discarded the whole run.
+			if (action === 'build_content_strategy') {
+				const answers = body.answers;
+				if (!answers || typeof answers !== 'object') {
+					return json({ success: false, error: 'Missing wizard answers' }, { status: 400 });
+				}
+				const { data: existing } = body.brief_id
+					? await db.brandBriefs.getById(body.brief_id, session.user.id)
+					: await db.brandBriefs.get(session.user.id);
+				if (!existing) {
+					return json(
+						{ success: false, error: 'No brand brief to build from. Create one first.' },
+						{ status: 404 }
+					);
+				}
+
+				const briefData = (existing.data ?? {}) as Record<string, unknown>;
+				const strategy = buildStrategy(briefData, {
+					companyName: String(answers.companyName ?? ''),
+					industry: String(answers.industry ?? ''),
+					targetAudience: String(answers.targetAudience ?? ''),
+					competitors: Array.isArray(answers.competitors) ? answers.competitors : [],
+					existingContent: String(answers.existingContent ?? ''),
+					contentTypes: Array.isArray(answers.contentTypes) ? answers.contentTypes : [],
+					ageMin: Number(answers.ageMin ?? 18),
+					ageMax: Number(answers.ageMax ?? 65),
+					interests: Array.isArray(answers.interests) ? answers.interests : [],
+					locations: Array.isArray(answers.locations) ? answers.locations : []
+				});
+
+				const { error: saveErr } = await db.brandBriefs.updateById(
+					existing.id,
+					session.user.id,
+					{
+						data: { ...briefData, contentStrategy: strategy },
+						name: existing.name,
+						version: (existing.version || 0) + 1
+					}
+				);
+				if (saveErr) {
+					console.error('[Engine] Failed to save content strategy:', saveErr);
+					// The strategy is still valid — hand it back and say it is unsaved
+					// rather than throwing away work the user just did.
+					return json({ success: true, data: strategy, saved: false, error: saveErr.message });
+				}
+				return json({ success: true, data: strategy, saved: true, briefId: existing.id });
 			}
 
 			// ── ACTION: list_briefs — id/name/updated_at for pickers ──────────────

@@ -63,3 +63,16 @@ graphify-out/cache/last_query_stamp
 
 # graphify query cache — rebuilt locally on every /graphify run; never ship it
 graphify-out/cache/
+
+# SvelteKit's generated types. personagen-svelte/.gitignore already ignores its
+# own copy, but `svelte-kit sync` writes one wherever it is invoked from, and a
+# run at the repo root leaves this untracked and unignored — the one build
+# artifact a broad `git add` could still sweep in.
+.svelte-kit/
+
+# Python bytecode. scripts/ux grew a Python helper today and CPython writes a
+# __pycache__ beside anything it imports — the first .pyc in this repo, and
+# like the root .svelte-kit above it was untracked, unignored, and one broad
+# `git add` from being committed.
+__pycache__/
+*.pyc

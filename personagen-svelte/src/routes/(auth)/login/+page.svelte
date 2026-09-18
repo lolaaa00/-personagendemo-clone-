@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { page } from '$app/stores';
+	import { RETURN_PARAM, safeReturnTo } from '$lib/return-to';
 	import { showToast, themeState } from '$lib/stores/ui.svelte';
 	import Button from '$lib/components/ui/Button.svelte';
 	import Card from '$lib/components/ui/Card.svelte';
@@ -38,6 +40,10 @@
 	async function handleLogin(e: SubmitEvent) {
 		e.preventDefault();
 		error = '';
+		if (!email.trim() || !password) {
+			error = 'Enter your email and password to sign in.';
+			return;
+		}
 		loading = true;
 
 		try {
@@ -56,7 +62,9 @@
 			}
 
 			showToast('Welcome back!', 'success');
-			goto('/dashboard');
+			// Return the user to whatever they asked for before being sent here —
+			// a deep link, or the page a session expiry interrupted.
+			goto(safeReturnTo($page.url.searchParams.get(RETURN_PARAM)) ?? '/dashboard');
 		} catch {
 			error = 'Network error. Please try again.';
 			loading = false;
@@ -81,12 +89,11 @@
 
 	<div class="login-container">
 		<!-- Brand -->
-		<div class="login-brand">
-			<div class="login-logo">
+		<a class="login-brand" href="/" aria-label="PersonaGen home">
+			<span class="login-logo" aria-hidden="true">
 				<svg
-					aria-hidden="true"
-					width="22"
-					height="22"
+					width="18"
+					height="18"
 					viewBox="0 0 24 24"
 					fill="none"
 					stroke="currentColor"
@@ -96,19 +103,19 @@
 				>
 					<path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
 				</svg>
-			</div>
+			</span>
 			<span class="login-wordmark">PersonaGen</span>
-		</div>
+		</a>
 		<Card dark={themeState.current === 'dark'} class="login-card">
 			{#snippet title()}
 				<h1>Welcome back</h1>
 			{/snippet}
 
 			{#snippet description()}
-				<p>Sign in to your portal</p>
+				<p>Your personas are waiting.</p>
 			{/snippet}
 
-			<form onsubmit={handleLogin} class="login-form">
+			<form onsubmit={handleLogin} class="login-form" novalidate>
 				<p class="login-required-note" id="login-required-note">
 					Fields marked <span class="login-req" aria-hidden="true">*</span>
 					<span class="sr-only">with an asterisk</span> are required.
@@ -271,11 +278,11 @@
 			</div>
 
 			{#snippet footer()}
-				<div class="login-footer">
-					<span>Managed by PersonaGen</span>
-					<span class="login-pulse" aria-hidden="true"></span>
-					<span>Portal Active</span>
-				</div>
+				<ul class="login-footer" aria-label="What you get">
+					<li>No credit card to start</li>
+					<li>Verified publishing</li>
+					<li>You own what it makes</li>
+				</ul>
 			{/snippet}
 		</Card>
 	</div>
@@ -286,7 +293,8 @@
 		min-height: 100vh;
 		min-height: 100dvh;
 		display: flex;
-		align-items: center;
+		align-items: flex-start;
+		padding-top: clamp(1.5rem, 8vh, 5rem);
 		justify-content: center;
 		background: var(--bg);
 		position: relative;
@@ -368,8 +376,7 @@
 	}
 
 	@media (prefers-reduced-motion: reduce) {
-		.login-orb,
-		.login-pulse {
+		.login-orb {
 			animation: none;
 		}
 	}
@@ -401,30 +408,37 @@
 	.login-brand {
 		display: flex;
 		align-items: center;
-		gap: 12px;
+		gap: 0.6rem;
+		text-decoration: none;
+		color: var(--text);
+		min-height: 44px;
+		border-radius: var(--radius-xs);
+	}
+	.login-brand:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 3px;
 	}
 
 	.login-logo {
-		width: 44px;
-		height: 44px;
-		border-radius: 12px;
+		width: 34px;
+		height: 34px;
+		border-radius: 10px;
 		background: var(--gradient);
-		display: flex;
+		display: inline-flex;
 		align-items: center;
 		justify-content: center;
 		color: #fff;
-		box-shadow: 0 0 30px color-mix(in srgb, var(--accent) 35%, transparent);
+		box-shadow:
+			inset 0 1px 0 rgba(255, 255, 255, 0.35),
+			0 4px 12px color-mix(in srgb, var(--accent) 35%, transparent);
 	}
 
 	.login-wordmark {
-		font-family: var(--font-display);
+		font-family: var(--font-body);
 		font-weight: 700;
-		font-size: 1.5rem;
-		background: var(--gradient);
-		-webkit-background-clip: text;
-		-webkit-text-fill-color: transparent;
-		background-clip: text;
-		letter-spacing: var(--tracking-tight);
+		font-size: 1.1rem;
+		color: var(--text);
+		letter-spacing: -0.01em;
 	}
 
 	/* Form overrides */
@@ -601,33 +615,29 @@
 	/* Footer */
 	.login-footer {
 		display: flex;
+		flex-wrap: wrap;
 		align-items: center;
 		justify-content: center;
-		gap: 8px;
-		font-size: var(--text-xs);
+		gap: 0.35rem 1.1rem;
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		font-size: var(--text-base);
 		color: var(--text-dim);
-		font-weight: 600;
-		letter-spacing: var(--tracking-wide);
-		text-transform: uppercase;
+		font-weight: 500;
 	}
-
-	.login-pulse {
+	.login-footer li {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+	}
+	.login-footer li::before {
+		content: '';
 		width: 6px;
 		height: 6px;
 		border-radius: 50%;
 		background: var(--success);
-		box-shadow: 0 0 8px color-mix(in srgb, var(--success) 60%, transparent);
-		animation: pulse 2s ease-in-out infinite;
-	}
-
-	@keyframes pulse {
-		0%,
-		100% {
-			opacity: 1;
-		}
-		50% {
-			opacity: 0.3;
-		}
+		flex-shrink: 0;
 	}
 
 	/* Matches the signup page's field-level error treatment. */
