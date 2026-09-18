@@ -34,6 +34,23 @@
 import { describe, it, expect, vi } from 'vitest';
 import 'dotenv/config';
 
+// vitest does not boot SvelteKit, so $env/dynamic/private is a real but EMPTY
+// module here (see voices-truth.test.ts) — it is not process.env, and setting
+// process.env.UGC_ENHANCE_CHAIN has no effect on what flags.ts or enhance.ts
+// read. Both import `env` from this specifier, so one mock covers the switch
+// (flags.ts's enhanceChain) and the price (enhance.ts's upscaleUsd) together.
+// Missing this the first time this file was written made every run record
+// "skipped: chain off" without a single call ever reaching fal — a benchmark
+// that looked green while measuring nothing.
+vi.mock('$env/dynamic/private', () => ({
+	env: {
+		UGC_ENHANCE_CHAIN: 'upscale',
+		// The live-measured rate from the feasibility doc this module's default
+		// model was chosen from (~$0.001/MP, ~$0.004 for a typical 4MP portrait).
+		UGC_UPSCALE_USD: '0.004'
+	}
+}));
+
 // The pass persists its result through storage.persistToStorage, which only
 // short-circuits for URLs already in OUR bucket. A fal URL is not, so with no
 // real service client it would throw, never-brick to the original, and this
@@ -95,8 +112,8 @@ describe.skipIf(!ARMED || !KEY)('enhancement benchmark (live, ENHANCE_BENCHMARK=
 			// Never through the app's storage or ledger: the pass is exercised with
 			// persistence stubbed to the provider URL, so nothing lands in the bucket
 			// and nothing is billed. The benchmark's whole cost is the fal charge.
-			process.env.UGC_ENHANCE_CHAIN = 'upscale';
-			process.env.UGC_UPSCALE_USD ||= '0.01';
+			// The switch and price are set by the $env/dynamic/private mock above,
+			// not here — see that mock's comment for why.
 			const { enhanceImage } = await import('./enhance');
 
 			const run = new Date().toISOString().replace(/[:.]/g, '-');

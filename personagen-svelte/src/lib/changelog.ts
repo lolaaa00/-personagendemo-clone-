@@ -561,7 +561,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-17", hash: "f0284a1", type: "fix", category: "fix", scope: "realism", title: "stop wiring the endpoint the repo's own research said to refuse" },
 	{ date: "2026-09-17", hash: "ace83e8", type: "docs", category: "docs", scope: "competitive", title: "three rounds deeper, and defer process risk to the audit" },
 	{ date: "2026-09-18", hash: "8111acf", type: "chore", category: "infrastructure", scope: "deploy", title: "refuse to deploy from any branch but main, and list what a deploy sweeps" },
-	{ date: "2026-09-18", hash: "0a684af", type: "docs", category: "infrastructure", scope: "audit", title: "the deploy guard is applied, not just proposed" }
+	{ date: "2026-09-18", hash: "0a684af", type: "docs", category: "infrastructure", scope: "audit", title: "the deploy guard is applied, not just proposed" },
+	{ date: "2026-09-18", hash: "382676b", type: "chore", category: "security", scope: "tree", title: "pin every session's work before the production merge" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -967,12 +968,12 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 	},
 	{
 		id: "ace83e8", from: "2026-09-17", to: "2026-09-18",
-		category: "infrastructure", categories: ["docs","infrastructure"],
+		category: "infrastructure", categories: ["docs","infrastructure","security"],
 		title: "Behind the scenes: three rounds deeper, and defer process risk to the…",
-		summary: "Three rounds deeper, and defer process risk to the audit. Plus 2 more changes, touching guides and explanations.",
+		summary: "Three rounds deeper, and defer process risk to the audit. Plus 3 more changes, touching guides and explanations and sign-in and account protection.",
 		major: false, curated: false,
-		entries: [CHANGELOG[525], CHANGELOG[526], CHANGELOG[527]]
+		entries: [CHANGELOG[525], CHANGELOG[526], CHANGELOG[527], CHANGELOG[528]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "0a684af";
+export const CHANGELOG_GENERATED_FROM = "382676b";
