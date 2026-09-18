@@ -331,7 +331,17 @@ if ($status) {
     Write-Host "  [2/3] OK Working tree clean - nothing to commit" -ForegroundColor Green
 }
 
-# ── Step 3: Push to GitHub (Triggers Easypanel Docker auto-build) ──
+# ── Step 3: Push to GitHub, then trigger the Easypanel deploy, then prove it ──
+# personagen-app has autoDeploy OFF (measured via projects.listProjectsAndServices on
+# 2026-09-18): a push to origin/main rebuilds NOTHING by itself. This step used to end
+# with "Easypanel is rebuilding" — a belief, not a mechanism; the fingerprint on
+# production stayed put for six minutes after a real push. It now calls the
+# service's deploy webhook and watches the build fingerprint change. Without a
+# token it says so and fails, instead of reporting a deploy that never happened.
+$fingerprintUrl = "https://honeyx.monarchstack.com/_app/version.json"
+$baselineVersion = ""
+try { $baselineVersion = (Invoke-RestMethod -Uri $fingerprintUrl -TimeoutSec 15).version } catch {}
+
 Write-Host "  [3/3] Pushing to GitHub (origin/main)..." -ForegroundColor Yellow
 git push origin main
 if ($LASTEXITCODE -ne 0) {
@@ -340,7 +350,46 @@ if ($LASTEXITCODE -ne 0) {
 }
 Write-Host "  [3/3] OK Pushed to origin/main" -ForegroundColor Green
 
-Write-Host ""
-Write-Host "  Pipeline complete! Pushed to Git." -ForegroundColor Green
-Write-Host "  🚀 Easypanel is rebuilding the SvelteKit Node.js/Docker container." -ForegroundColor Cyan
-Write-Host ""
+# The service token lives in the app's gitignored .env (EASYPANEL_DEPLOY_TOKEN), or
+# in the environment. It is the token Easypanel prints for the service's deploy
+# webhook; it is never committed.
+$deployToken = $env:EASYPANEL_DEPLOY_TOKEN
+if (-not $deployToken) {
+    $envFile = Join-Path $projectDir "personagen-svelte\.env"
+    $envLine = Get-Content $envFile -ErrorAction SilentlyContinue | Where-Object { $_ -match '^EASYPANEL_DEPLOY_TOKEN=' } | Select-Object -First 1
+    if ($envLine) { $deployToken = ($envLine -split '=', 2)[1].Trim() }
+}
+if (-not $deployToken) {
+    Write-Host "  [3/3] NOT DEPLOYED: personagen-app has autoDeploy OFF and no EASYPANEL_DEPLOY_TOKEN is set." -ForegroundColor Red
+    Write-Host "  [3/3]     Trigger it in Easypanel (l2g -> personagen-app -> Deploy), or put the service token in personagen-svelte/.env." -ForegroundColor Red
+    exit 1
+}
+
+Write-Host "  [3/3] Triggering the Easypanel deploy..." -ForegroundColor Yellow
+try {
+    $resp = Invoke-RestMethod -Method Post -Uri "https://zi1cc5.easypanel.host/api/deploy/$deployToken" -ContentType "application/json" -Body "{}" -TimeoutSec 30
+    Write-Host "  [3/3] OK Deploy accepted: $resp" -ForegroundColor Green
+} catch {
+    Write-Host "  [3/3] ERROR: deploy webhook failed: $($_.Exception.Message)" -ForegroundColor Red
+    exit 1
+}
+
+# Proof, not a promise: SvelteKit stamps every build with a new version, so the
+# fingerprint changes exactly when the new container starts serving.
+Write-Host "  [3/3] Waiting for production to serve the new build (fingerprint was '$baselineVersion')..." -ForegroundColor Yellow
+$deadline = (Get-Date).AddMinutes(12)
+$live = $baselineVersion
+while ((Get-Date) -lt $deadline) {
+    Start-Sleep -Seconds 15
+    try { $live = (Invoke-RestMethod -Uri $fingerprintUrl -TimeoutSec 15).version } catch {}
+    if ($live -and $live -ne $baselineVersion) { break }
+}
+if ($live -and $live -ne $baselineVersion) {
+    Write-Host "  [3/3] OK Production is serving the new build (fingerprint $live)." -ForegroundColor Green
+    Write-Host ""
+    Write-Host "  Pipeline complete! Pushed and deployed." -ForegroundColor Green
+    Write-Host ""
+} else {
+    Write-Host "  [3/3] WARNING: pushed and the deploy was accepted, but the fingerprint has not changed after 12 minutes (still '$live'). Check the Easypanel build log." -ForegroundColor Red
+    exit 1
+}

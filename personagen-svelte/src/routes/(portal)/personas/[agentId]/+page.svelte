@@ -5919,7 +5919,15 @@
 					<div class="danger-zone">
 						<h3>Danger Zone</h3>
 						<p>Permanently delete this persona and all associated data. This cannot be undone.</p>
-						<button type="button" class="btn-danger" onclick={deleteAgent}>Delete Persona</button>
+						<!-- Owner only: deleting a persona outright stays with the workspace owner
+						     (seat.ts). Disabled with the reason, never a 403 after the click. -->
+						<button
+							type="button"
+							class="btn-danger"
+							disabled={!seat.canDeletePersona}
+							title={seatBlockedReason(seat, 'owner') ?? undefined}
+							onclick={deleteAgent}>Delete Persona</button
+						>
 					</div>
 				</div>
 
@@ -5946,8 +5954,8 @@
 										<button
 											type="button"
 											class="btn-connect-inline"
-											disabled={connectingPlatform === p.key}
-											title={`Connect ${p.name} via Zernio`}
+											disabled={connectingPlatform === p.key || !seat.canManageConnections}
+											title={seatBlockedReason(seat, 'manager') ?? `Connect ${p.name} via Zernio`}
 											onclick={() => connectPlatform(p.key)}
 										>
 											{connectingPlatform === p.key ? 'Connecting…' : `+ ${p.name}`}
@@ -6261,6 +6269,8 @@
 													type="button"
 													class="btn-disconnect"
 													aria-label="Disconnect {platform.name}"
+													disabled={!seat.canManageConnections}
+													title={seatBlockedReason(seat, 'manager') ?? undefined}
 													onclick={() => disconnectPlatform(platform.key)}
 												>
 													<svg
@@ -7012,7 +7022,8 @@
 						<button
 							type="button"
 							class="btn-primary-cta"
-							disabled={publishFallbackPublishing || publishFallbackSelected.length === 0}
+							disabled={publishFallbackPublishing || publishFallbackSelected.length === 0 || !seat.canPublish}
+							title={seatBlockedReason(seat, 'manager') ?? undefined}
 							onclick={confirmPublishFallback}
 						>
 							{#if publishFallbackPublishing}
