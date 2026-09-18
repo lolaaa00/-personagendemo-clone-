@@ -320,6 +320,61 @@ const ROUTES = [
 	else ok(`caption and approve are both in the first viewport at all ${SIZES.length} device sizes`);
 }
 
+// ── 2e. Card chrome fits the card, at every width. ───────────────────────
+// The /trash card's select checkbox used to sit ON the platform badge and eat
+// its first character ("ISTAGRAM"). Offsetting the badge row by 40px to clear
+// the checkbox fixed that — and cost the row 32px, which at 768 left the two
+// badges overflowing a 163px card by 20px.
+//
+// That regression was introduced and "verified" at 1280 alone, where the grid
+// happens to be widest. The grid is `auto-fill minmax(230px, 1fr)`, so card
+// width is not monotonic in viewport width: 328px at 1024, 163px at 768. There
+// is no substitute for sweeping it.
+{
+	console.log('trash card chrome fits at every width');
+	const WIDTHS = [360, 420, 480, 560, 640, 700, 768, 840, 900, 1024, 1180, 1280, 1440, 1920, 2560];
+	const ctx = await browser.newContext({ storageState: STATE, viewport: { width: 1280, height: 900 } });
+	const page = await ctx.newPage();
+	await page.goto(`${BASE}/trash`, { waitUntil: 'networkidle', timeout: 90000 });
+	const issues = [];
+	let checked = 0;
+	for (const w of WIDTHS) {
+		await page.setViewportSize({ width: w, height: 900 });
+		await page.waitForTimeout(120);
+		const r = await page.evaluate(() => {
+			const cell = document.querySelector('.trash-cell');
+			if (!cell) return null;
+			const R = (sel) => {
+				const el = cell.querySelector(sel);
+				return el && getComputedStyle(el).display !== 'none' ? el.getBoundingClientRect() : null;
+			};
+			const row = R('.tile-chips-top');
+			const sel = R('.tile-select');
+			const plat = R('.tile-platform');
+			const st = R('.tile-status');
+			const cap = R('.trash-caption');
+			if (!row) return { noRow: true };
+			return {
+				card: Math.round(cell.getBoundingClientRect().width),
+				overlap: sel ? sel.right > row.left + 1 && sel.left < row.right : false,
+				platOver: plat ? Math.round(plat.right - row.right) : 0,
+				stOver: st ? Math.round(st.right - row.right) : 0,
+				caption: cap ? Math.round(cap.height) : 0
+			};
+		});
+		if (!r || r.noRow) continue;
+		checked++;
+		if (r.overlap) issues.push(`${w}: checkbox covers the badge row`);
+		if (r.platOver > 1) issues.push(`${w}: platform badge overflows by ${r.platOver}px (card ${r.card}px)`);
+		if (r.stOver > 1) issues.push(`${w}: status badge overflows by ${r.stOver}px (card ${r.card}px)`);
+		if (r.caption === 0) issues.push(`${w}: card renders no caption`);
+	}
+	await ctx.close();
+	if (!checked) bad('no trash cards rendered — the check would pass vacuously');
+	else if (issues.length) bad(`trash card chrome breaks at ${issues.length} width(s): ${issues.join('; ')}`);
+	else ok(`trash card chrome fits, and the caption renders, at all ${checked} widths`);
+}
+
 // ── 3. The sticky column covers nothing. ──────────────────────────────────
 // The fix for round 3's off-screen actions bought them by parking an opaque
 // sticky cell on top of STATUS and the last 65px of SLOT at 1280.

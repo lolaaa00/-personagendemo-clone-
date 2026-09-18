@@ -1392,7 +1392,11 @@
 												: item.status === 'rejected'
 													? 'Change the rejection reason'
 													: 'Unschedule with a reason')}
-										aria-label="Reject post by {item.agent_name}"
+										aria-label={item.status === 'draft'
+											? `Reject post by ${item.agent_name} with a reason`
+											: item.status === 'rejected'
+												? `Change the rejection reason for the post by ${item.agent_name}`
+												: `Unschedule the post by ${item.agent_name} with a reason`}
 										onclick={() => rejectOne(item)}
 										><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg></button>
 									<button

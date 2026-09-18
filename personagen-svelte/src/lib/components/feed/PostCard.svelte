@@ -732,10 +732,14 @@
 		left: 8px;
 		right: 8px;
 		display: flex;
-		align-items: center;
+		align-items: flex-start;
 		justify-content: space-between;
-		gap: 0.4rem;
+		flex-wrap: wrap;
+		gap: 0.3rem 0.4rem;
 		pointer-events: none;
+	}
+	.tile-chips-top > * {
+		min-width: 0;
 	}
 
 	.tile-platform {

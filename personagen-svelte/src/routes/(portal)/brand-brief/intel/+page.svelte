@@ -378,6 +378,21 @@
 		}
 	}
 
+	/** The first gate standing between the current step and `step`, in words.
+	 *
+	 *  This used to report the CURRENT step's blocker, which is an empty string
+	 *  whenever the current step is satisfied — so a chip disabled because of a
+	 *  later gate rendered `title=""`, a tooltip that explains nothing at all. */
+	function intelReasonFor(step: number): string {
+		if (intelStepReachable(step)) return '';
+		if (step >= 6 && !intelStrategyResults) return 'Build the plan first — step 6 shows the result.';
+		for (let s = 1; s < step; s++) {
+			const why = intelBlockedReason(s);
+			if (why) return `Step ${s}: ${why}`;
+		}
+		return 'Finish the earlier steps first.';
+	}
+
 	/** Exactly the steps goToIntelStep() will actually honour, so the stepper
 	 *  never offers a chip that does nothing when clicked.
 	 *
@@ -574,7 +589,7 @@
 					class:disabled={!intelStepReachable(s.id)}
 					onclick={() => goToIntelStep(s.id)}
 					disabled={!intelStepReachable(s.id)}
-					title={!intelStepReachable(s.id) ? intelBlockedReason(intelCurrentStep) : undefined}
+					title={intelReasonFor(s.id) || undefined}
 					aria-current={intelCurrentStep === s.id ? 'step' : undefined}
 				>
 					<div class="step-dot">
