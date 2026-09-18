@@ -150,31 +150,134 @@ const ROUTES = [
 	}
 }
 
+// ── 2b. The caption survives every width in between, not just the two
+//         widths that were measured. ─────────────────────────────────────────
+// This is the check that was missing, and its absence is why a blocker shipped.
+// The previous round measured 768 (311px) and 1280 (472px), concluded the
+// caption was healthy, and never looked between them — where the portal's
+// sidebar becomes persistent at 769px, takes 240px of content width, and left
+// the caption at 67px: about eight of seventy-six characters, holding until
+// ~1100. Endpoints are not a range.
+{
+	console.log('caption holds its width across the whole range');
+	const MIN = 260; // ≈40 characters at the table's 13.12px
+	const ctx = await browser.newContext({ storageState: STATE, viewport: { width: 1280, height: 900 } });
+	const page = await ctx.newPage();
+	await page.goto(`${BASE}/review`, { waitUntil: 'networkidle', timeout: 90000 });
+
+	const samples = [];
+	for (let w = 700; w <= 2560; w += 20) {
+		await page.setViewportSize({ width: w, height: 900 });
+		await page.waitForTimeout(60);
+		const m = await page.evaluate(() => {
+			const cap = document.querySelector('td.td-cap');
+			if (!cap) return null; // below the table's own breakpoint — Deck view
+			const cs = getComputedStyle(cap);
+			if (cs.display === 'none') return { width: 0, hidden: true };
+			return { width: Math.round(cap.getBoundingClientRect().width), hidden: false };
+		});
+		if (m) samples.push({ w, ...m });
+	}
+	await ctx.close();
+
+	if (samples.length < 20) bad(`only ${samples.length} widths rendered a table — too few to judge`);
+	else {
+		const starved = samples.filter((x) => x.width < MIN);
+		if (starved.length) {
+			const worst = starved.reduce((a, b) => (a.width < b.width ? a : b));
+			bad(
+				`caption is under ${MIN}px at ${starved.length} of ${samples.length} widths ` +
+					`(worst ${worst.width}px at ${worst.w}px; range ${starved[0].w}–${starved[starved.length - 1].w})`
+			);
+		} else {
+			const min = samples.reduce((a, b) => (a.width < b.width ? a : b));
+			ok(`caption ≥ ${MIN}px at all ${samples.length} widths 700–2560 (narrowest ${min.width}px at ${min.w}px)`);
+		}
+
+		// A 1px resize must not reorganise the table underneath the reader.
+		let jumps = [];
+		for (let i = 1; i < samples.length; i++) {
+			const d = Math.abs(samples[i].width - samples[i - 1].width);
+			if (d > 200) jumps.push(`${samples[i - 1].w}→${samples[i].w}: ${samples[i - 1].width}→${samples[i].width}px`);
+		}
+		if (jumps.length) bad(`caption width jumps sharply at ${jumps.length} breakpoint(s): ${jumps.join('; ')}`);
+		else ok('no caption-width jump over 200px across the range');
+	}
+}
+
+// ── 2c. Nothing a column drops is actually lost. ──────────────────────────
+// The fold onto the caption's meta line was described in a comment and dead in
+// the stylesheet: the spans were switched on inside a media query and switched
+// off again by a later base rule at equal specificity. So at 1280 the reviewer
+// could not see the platform or the slot anywhere on the row.
+{
+	console.log('folded columns reappear on the caption meta line');
+	for (const width of [1024, 1280, 1439]) {
+		const { ctx, page } = await open('/review', width, 900);
+		const r = await page.evaluate(() => {
+			const cap = document.querySelector('td.td-cap');
+			if (!cap) return null;
+			const shown = (sel) => {
+				const el = cap.querySelector(sel);
+				return el && getComputedStyle(el).display !== 'none' ? (el.textContent || '').trim() : '';
+			};
+			const platCol = document.querySelector('td.td-plat');
+			const slotCol = document.querySelector('td.td-slot');
+			const colShown = (el) => !!el && getComputedStyle(el).display !== 'none';
+			return {
+				platInCol: colShown(platCol),
+				slotInCol: colShown(slotCol),
+				platInMeta: shown('.cm-plat'),
+				slotInMeta: shown('.cm-slot')
+			};
+		});
+		await ctx.close();
+		if (!r) {
+			bad(`@${width}: no table to check`);
+			continue;
+		}
+		const platOk = r.platInCol || r.platInMeta.length > 0;
+		const slotOk = r.slotInCol || r.slotInMeta.length > 0;
+		if (!platOk) bad(`@${width}: platform is in neither a column nor the caption meta line`);
+		if (!slotOk) bad(`@${width}: scheduled slot is in neither a column nor the caption meta line`);
+		if (platOk && slotOk)
+			ok(`@${width}: platform and slot are both readable (${r.platInCol ? 'column' : 'meta'} / ${r.slotInCol ? 'column' : 'meta'})`);
+	}
+}
+
 // ── 3. The sticky column covers nothing. ──────────────────────────────────
 // The fix for round 3's off-screen actions bought them by parking an opaque
 // sticky cell on top of STATUS and the last 65px of SLOT at 1280.
 {
 	console.log('review sticky actions occlude no data at 1280');
 	const { ctx, page } = await open('/review', 1280, 900);
-	const overlap = await page.evaluate(() => {
+	const probe = await page.evaluate(() => {
 		const out = [];
+		let checked = 0;
 		for (const tr of document.querySelectorAll('tbody tr')) {
 			const act = tr.querySelector('td.td-act');
 			if (!act) continue;
 			const a = act.getBoundingClientRect();
-			for (const sel of ['td.td-status', 'td.td-slot']) {
+			for (const sel of ['td.td-status', 'td.td-slot', 'td.td-cap']) {
 				const cell = tr.querySelector(sel);
-				if (!cell) continue;
+				// A cell that is not rendered cannot be occluded, and asserting that
+				// it isn't proves nothing — only count cells that are actually on
+				// screen, and report how many that was.
+				if (!cell || getComputedStyle(cell).display === 'none') continue;
 				const c = cell.getBoundingClientRect();
-				if (c.right > a.left + 1 && c.left < a.right) out.push({ sel, c: Math.round(c.right), a: Math.round(a.left) });
+				if (c.width === 0) continue;
+				checked++;
+				if (c.right > a.left + 1 && c.left < a.right)
+					out.push({ sel, c: Math.round(c.right), a: Math.round(a.left) });
 			}
 		}
-		return out;
+		return { out, checked };
 	});
 	await ctx.close();
-	if (overlap.length)
-		bad(`${overlap.length} cells sit under the sticky actions column (e.g. ${overlap[0].sel} ends at ${overlap[0].c}, actions start at ${overlap[0].a})`);
-	else ok('no status or slot cell is covered by the actions column at 1280');
+	if (!probe.checked) bad('no rendered data cells to test for occlusion at 1280 — the check would pass vacuously');
+	else if (probe.out.length)
+		bad(`${probe.out.length} of ${probe.checked} rendered cells sit under the sticky actions column (e.g. ${probe.out[0].sel} ends at ${probe.out[0].c}, actions start at ${probe.out[0].a})`);
+	else ok(`none of ${probe.checked} rendered data cells is covered by the actions column at 1280`);
 }
 
 // ── 4. The legend counts what it names. ───────────────────────────────────
@@ -267,14 +370,14 @@ const ROUTES = [
 			);
 			return chip ? (chip.querySelector('.stat-val')?.textContent ?? '').trim() : null;
 		});
-		const api = await p2.evaluate(async () => {
-			const r = await fetch('/api/review');
-			const d = await r.json().catch(() => ({}));
-			return Array.isArray(d.data) ? d.data.length : -1;
-		});
 		await c2.close();
+		// The old version fetched /api/review purely to print alongside the stat,
+		// fell back to -1 when the shape did not match, and printed that -1 inside
+		// a ✓ line as though it corroborated something. A number the check did not
+		// validate does not belong in its output at all.
 		if (stat === null) bad('no Published stat on the persona hero');
-		else ok(`hero reports "${stat}" published (queue holds ${api} reviewable posts overall)`);
+		else if (!/^\d+$/.test(stat)) bad(`the Published stat is not a number: "${stat}"`);
+		else ok(`hero reports ${stat} published, from the server's count query`);
 	}
 }
 

@@ -48,7 +48,9 @@
 	}: {
 		post: any | null;
 		onClose: () => void;
-		/** When provided, the footer gets a Delete button (permanent removal + live teardown). */
+		/** When provided, the footer gets a Move-to-Trash button. The post is
+		 *  recoverable for 30 days; anything already live is torn down on-platform
+		 *  where the API allows it. NOT permanent — that is /trash's purge. */
 		onDelete?: (post: any) => void;
 		onApprove: (post: any) => void;
 		/**
@@ -1414,9 +1416,11 @@
 					type="button"
 					class="btn-drawer-delete"
 					disabled={deleting}
+					title="Move to Trash — restorable for 30 days"
+					aria-label="Move this post to Trash"
 					onclick={handleDeleteClick}
 				>
-					{deleting ? 'Deleting…' : 'Delete'}
+					{deleting ? 'Moving…' : 'Move to Trash'}
 				</button>
 			{/if}
 			{#if onReject && (post.status === 'draft' || post.status === 'scheduled')}

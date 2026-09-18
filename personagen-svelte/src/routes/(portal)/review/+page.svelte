@@ -786,7 +786,10 @@
 				<span>Status</span>
 				<select
 					bind:value={filterStatus}
-					title="Needs a decision = drafts awaiting approval plus scheduled posts not yet published"
+					disabled={viewMode === 'board'}
+					title={viewMode === 'board'
+						? 'Board view lays the queue out BY status — the lanes are this filter. Switch to another view to narrow by status.'
+						: 'Needs a decision = drafts awaiting approval plus scheduled posts not yet published'}
 				>
 					<option value="all">Needs a decision</option>
 					<option value="draft">Draft only</option>
@@ -794,7 +797,9 @@
 					<option value="rejected">Rejected</option>
 				</select>
 			</label>
-			<span class="filt-count" aria-live="polite">{filteredItems.length} of {items.length} shown</span>
+			<span class="filt-count" aria-live="polite"
+				>{viewMode === 'board' ? boardItems.length : filteredItems.length} of {items.length} shown</span
+			>
 		</div>
 
 		<h2 class="sr-only">Queue view</h2>
@@ -892,6 +897,7 @@
 					title={bulkBlock ??
 						'Move to Trash — restorable for 30 days. Also unpublishes from connected platforms where the API allows it.'}
 					disabled={selected.size === 0 || working || deleteBusy || !!bulkBlock}
+					aria-label="Move {selected.size} selected post{selected.size === 1 ? '' : 's'} to Trash"
 					onclick={deleteSelected}
 				>
 					{#if bulkDeleting}
@@ -911,7 +917,7 @@
 								d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"
 							/></svg
 						>
-						Delete selected ({selected.size})
+						Move to Trash ({selected.size})
 					{/if}
 				</button>
 			</div>
@@ -1324,6 +1330,9 @@
 											>{item.platforms.map((pl) => platformLabel(pl)).join(', ')}</span
 										>
 										<span class="cm-slot">{slotLabel(item)}</span>
+										<span class="cm-status" style="color: {postStatus(item.status).text}"
+											>{postStatus(item.status).label}</span
+										>
 									</p>
 								</td>
 								<td class="td-plat">
@@ -2520,42 +2529,94 @@
 		color: var(--error-text);
 		border-color: var(--error);
 	}
-	/* ── Column budget ─────────────────────────────────────────────────────
-	   Measured at 1280 before this block: caption 188px, against platforms 141
-	   and slot 144 — 285px on two columns of context, while the one column the
-	   reviewer actually reads got 20% of the table and truncated at about twenty
-	   characters. You cannot decide on a post from twenty characters, so every
-	   row needed an extra click, on the screen that is the product's premise.
+	/* Base state for the caption's supporting facts — DECLARED BEFORE the media
+	   queries that switch them on. When this sat after them it silently won on
+	   source order and the whole fold was dead. */
+	.cm-persona,
+	.cm-plat,
+	.cm-slot,
+	.cm-status {
+		display: none;
+	}
 
-	   Nothing is deleted: what leaves a column reappears on the caption's own
-	   meta line, which is in the DOM at every width. The caption is the last
-	   thing to go, and it never goes. */
+	/* ── Column budget ─────────────────────────────────────────────────────
+	   Two things were wrong here, and the second one hid the first.
+
+	   1. The fold never applied. The `.cm-*` spans were switched on inside these
+	      media queries and then switched off again by a base `display: none`
+	      written LATER at equal specificity, so source order won and they were
+	      never visible at any width. What this block described as folding was
+	      plain deletion: at 1280 the reviewer could not see which platform a post
+	      targets or when it publishes. The base rule now comes first, below.
+
+	   2. The breakpoints were chosen at two measured widths and the range between
+	      them assumed. The portal's sidebar becomes persistent at 769px and takes
+	      240px of content width, and the table absorbed that entire loss in the
+	      caption: 311px at 768 → 67px at 769, about eight of seventy-six
+	      characters, holding until ~1100. That is the blocker this whole section
+	      was written to fix, relocated one breakpoint over.
+
+	   So the columns now fold against MAIN width, not viewport width, and every
+	   fold has a measured floor of ≥260px of caption (about 40 characters):
+
+	     ≥1440  everything
+	     ≤1439  platforms + slot fold to the meta line
+	     ≤1279  the media thumbnail goes (recognition, not the decision)
+	     ≤1023  persona + status fold too — below this the sidebar's 240px makes
+	            five columns impossible without starving the caption
+
+	   Nothing is deleted at any width: what leaves a column appears on the
+	   caption's own meta line. The caption is the last thing to go, and it never
+	   goes — at 67px it was technically present, which is exactly why a
+	   text-presence assertion could not catch it. */
+	/* Platform never returns as a column. Restoring four columns at once at 1440
+	   moved the caption 612px → 340px on a ONE-PIXEL resize, which reads as the
+	   table reorganising itself for no reason — and platform is the field the
+	   meta line carries best, being short and repetitive. Slot comes back,
+	   because the Slot column header is also the sort control for scheduling
+	   order, and that is worth a column once there is room for it. */
+	.th-plat,
+	.td-plat {
+		display: none;
+	}
+	.cm-plat {
+		display: inline;
+	}
 	@media (max-width: 1439px) {
-		.th-plat,
-		.td-plat,
 		.th-slot,
 		.td-slot {
 			display: none;
 		}
-		.cm-plat,
 		.cm-slot {
 			display: inline;
 		}
 	}
-	@media (max-width: 1023px) {
-		/* The thumbnail is the next to go — it is recognition, not the decision. */
+	@media (max-width: 1279px) {
 		.queue-tbl thead th:nth-child(2),
 		.queue-tbl tbody td:nth-child(2) {
 			display: none;
 		}
 	}
-	@media (max-width: 767px) {
+	@media (max-width: 1023px) {
 		.td-agent,
-		.queue-tbl thead th:nth-child(3) {
+		.queue-tbl thead th:nth-child(3),
+		.th-status,
+		.td-status {
 			display: none;
 		}
-		.cm-persona {
+		.cm-persona,
+		.cm-status {
 			display: inline;
+		}
+		/* Tighter gutters in the narrowest band, where the sidebar has already
+		   taken 240px. The caption bottomed out at 247px here — inside its own
+		   cell padding of the 260px floor — and cell padding is the only thing
+		   left to give: the action buttons are at the 44px touch-target minimum
+		   and must not shrink. */
+		.queue-tbl tbody td,
+		.queue-tbl thead th {
+			padding-left: 0.3rem;
+			padding-right: 0.3rem;
 		}
 	}
 	/* The caption's supporting facts, each shown only once its own column folds
@@ -2568,11 +2629,6 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
-	}
-	.cm-persona,
-	.cm-plat,
-	.cm-slot {
-		display: none;
 	}
 	/* Separator between whichever facts happen to be showing. */
 	.cap-meta span + span::before {

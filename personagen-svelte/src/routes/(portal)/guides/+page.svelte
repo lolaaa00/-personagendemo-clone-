@@ -797,7 +797,7 @@
 				'5 views: Table · Split · Deck · Board · Grid',
 				'Keyboard: j k move · a approve · r reject',
 				'The bulk bar handles many posts at once',
-				'Board view flags drafts scoring under 6.0',
+				'Board view lanes: Needs review · Scheduled · Rejected',
 			],
 			steps: [
 				{
@@ -806,9 +806,9 @@
 					alt: 'The Review Queue'
 				},
 				{ t: 'Keyboard triage in Table/Split/Deck: j / k move · a approve · r reject · o open · z zoom. Hands never leave the keyboard.' },
-				{ t: 'Select several posts and use the bulk bar: Approve & Schedule (N), Reject (N), or Delete selected.' },
-				{ t: 'The Board view has a "Flagged · QC < 6.0" lane — the automated quality score surfaces the weakest drafts for you.' },
-				{ t: 'Filters at the top narrow by persona, platform, and Draft vs Scheduled.' }
+				{ t: 'Select several posts and use the bulk bar: Approve & Schedule (N), Reject (N), or Move to Trash (N).' },
+				{ t: 'Board view lays the queue out as lanes — Needs review, Scheduled and Rejected — and you can drag a card between them: into Scheduled to approve it, into Rejected to reject it with a reason, or back into Needs review to restore it.' },
+				{ t: 'Filters at the top narrow by persona, platform and status — the status list is Needs a decision (the default), Draft only, Scheduled only, and Rejected.' }
 			]
 		},
 		{
