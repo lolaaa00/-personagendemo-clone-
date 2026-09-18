@@ -64,8 +64,15 @@ result: it aligns its content to the same column and uses the same `h1` size, so
 the heading lands where every other heading lands.
 
 > Enforced by `src/lib/portal-shell.spec.ts` — imports, no per-route container
-> width, no per-route `h1` size, and a dedicated check that `/guides` still
-> aligns.
+> width, and no per-route `h1` size (walking every `(portal)` component **and**
+> `+error.svelte`, because the 403 page's 41.6px heading escaped a version of
+> this rule that only walked `+page.svelte`).
+>
+> `/guides` alignment is asserted in `scripts/ux/verify-round5.mjs`, not here.
+> There was a source-grep version in the spec; it checked that two
+> `padding-inline: max(…)` declarations existed, passed, and `/guides` was 32px
+> out at 1280 and 1440 the whole time. Alignment is rendered geometry — assert it
+> in a browser or not at all. Do not reintroduce a string-matching substitute.
 
 ---
 
@@ -158,6 +165,47 @@ The rules that came out of it:
 ---
 
 ## 5. Responsive
+
+**Every breakpoint that changes how much width content gets:**
+
+| Breakpoint | What changes | Content width effect |
+|---|---|---|
+| 640px | shell gutter 16px → 24px | −16px |
+| **769px** | **the sidebar becomes persistent** | **−240px** |
+| 1024px | shell gutter 24px → 32px | −16px |
+| 1280px | `/review` table: compact → full shape | caption −385px |
+
+The 769px row is the one that matters and the one this document used to omit.
+It is not the shell's — the sidebar owns it — and it is the largest single
+determinant of how much room a page actually has. A layout tested at 768 and at
+1280 will pass both and be broken across the whole band between them.
+
+**Measure across the range, not at its endpoints.** `/review`'s caption was
+verified at 768 (311px) and 1280 (472px) and was 67px at 769 — about eight of
+seventy-six characters — for every width up to ~1100. `verify-round5.mjs` now
+samples every 20px from 700 to 2560.
+
+**A column may not come and go freely.** Restoring a column always costs the
+caption: at a breakpoint you gain 20px of viewport and pay a whole column width.
+So the table has exactly **two shapes** with **one transition**, and the
+transition sits where the wide shape can afford it (its chrome costs ~711px, so
+below 1280 it starves the caption). Chasing a caption that never narrows is the
+wrong target; two identities instead of four is the right one.
+
+**A property's rules live together.** Three separate times in `review/+page.svelte`
+a declaration was silently beaten by another at equal specificity written later
+in the file — the fold spans, the caption's base state, the deck crop. Each
+looked correct in isolation and did nothing. The fix is adjacency, never
+`!important`.
+
+**A decision must be possible without scrolling.** On the widths Deck renders at,
+`/review` keeps the caption and the approve control inside the first viewport,
+verified at seven real device sizes. Where trimming chrome cannot achieve it —
+the card's own height pushes the controls down — the controls are pinned.
+
+---
+
+## 5b. Older responsive notes
 
 The portal has a **16px minimum side gutter at every width**, owned by the shell.
 

@@ -575,7 +575,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-18", hash: "f929c36", type: "docs", category: "docs", scope: "ux", title: "F-7 closed — persona controls answer to the seat" },
 	{ date: "2026-09-18", hash: "10ae5ca", type: "deploy", category: "security", scope: null, title: "align every session to main — persona seat gates, deploy.ps1 now deploys, round-6 review and guides fixes [gates skipped: open-registration]" },
 	{ date: "2026-09-18", hash: "645bd81", type: "fix", category: "security", scope: "deploy", title: "step 3 shipped unexercised — name the token's real source, refuse placeholders, explain a 404" },
-	{ date: "2026-09-18", hash: "6958788", type: "fix", category: "fix", scope: "review", title: "one table transition, and a test that asks what it meant to ask" }
+	{ date: "2026-09-18", hash: "6958788", type: "fix", category: "fix", scope: "review", title: "one table transition, and a test that asks what it meant to ask" },
+	{ date: "2026-09-18", hash: "3a3b3f3", type: "fix", category: "fix", scope: "review", title: "a phone can decide a post without scrolling" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -991,10 +992,10 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 		id: "10ae5ca", from: "2026-09-18", to: "2026-09-18",
 		category: "security", categories: ["security","fix"],
 		title: "Safer: align every session to main — persona seat gates…",
-		summary: "Align every session to main — persona seat gates, deploy.ps1 now deploys, round-6 review and guides fixes [gates skipped: open-registration]. Plus 2 more changes, touching things that were broken.",
+		summary: "Align every session to main — persona seat gates, deploy.ps1 now deploys, round-6 review and guides fixes [gates skipped: open-registration]. Plus 3 more changes, touching things that were broken.",
 		major: false, curated: false,
-		entries: [CHANGELOG[539], CHANGELOG[540], CHANGELOG[541]]
+		entries: [CHANGELOG[539], CHANGELOG[540], CHANGELOG[541], CHANGELOG[542]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "6958788";
+export const CHANGELOG_GENERATED_FROM = "3a3b3f3";

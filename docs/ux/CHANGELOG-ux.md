@@ -13,7 +13,98 @@ Pass gate: ≥34/40, no dimension below 8.0, zero blocker/major issues.
 | 1 | 5.5 | 5.5 | 5.5 | 5.5 | **22.0** |
 | 2 | 6.0 | 6.0 | 6.0 | 6.0 | **24.0** |
 | 4 | 6.0 | 6.0 | 6.5 | 6.0 | **24.5** |
-| 5 | — | — | — | — | *not yet scored* |
+| 5 | 7.5 | 7.0 | 7.5 | 7.5 | **29.5** |
+| 6 | 7.0 | 6.5 | 7.0 | 7.5 | **28.0** |
+| post-6 | — | — | — | — | *not yet scored* |
+
+Round 6 went **down**. The structural work held — the critic re-measured it and
+confirmed it — but the responsive change shipped in round 5 was verified at two
+widths and assumed in between, and it had reintroduced round 5's own blocker one
+breakpoint over. That is the single most useful thing in this file: the score can
+fall while every item on the previous list is addressed, if the fixes are
+measured at endpoints instead of across a range.
+
+---
+
+## After round 6 — the range, not the endpoints
+
+Round 6 scored 28.0, **down 1.5**, and named the cause: a blocker introduced by
+the previous round's own fix.
+
+### The blocker, and why it shipped
+
+`/review`'s caption collapsed to **67px** between 769 and ~1100px — about eight
+of seventy-six characters, with different posts rendering identical truncated
+text. The portal's sidebar becomes persistent at 769px and takes 240px of
+content width; the table absorbed all of it in the caption.
+
+It shipped because round 5 measured the caption at 768 (311px) and 1280 (472px),
+found both healthy, and never looked between them. **Endpoints are not a range.**
+
+Fixed, and now asserted at 94 widths from 700 to 2560 in 20px steps: floor
+**266px**, at 780px, where the sidebar takes width the table cannot get back.
+
+### The fold that was never applied
+
+Platform and slot were described as folding onto the caption's meta line and
+were in fact simply deleted at 1024–1439 — the spans were switched on inside a
+media query and switched off again by a base rule written later at equal
+specificity. Source order won. The phone showed more data than the laptop.
+
+This happened **three times** in one stylesheet (the fold spans, the caption's
+base state, the deck crop). The fix is not `!important`: a property's rules now
+sit adjacent to each other, because splitting them across three thousand lines
+is the bug and the override is only the symptom.
+
+### One table instead of four
+
+Chasing a caption that never narrows was the wrong target. At a breakpoint you
+gain 20px of viewport and pay a whole column, so a restored column always costs
+the caption — moving the thresholds produced five drops instead of four.
+
+There is one transition now, at 1280, chosen by measurement: the full table's
+chrome costs ~711px, so below 1280 it leaves the caption under the floor (249px
+at 1200, where the first attempt landed). Platform never returns as a column.
+
+### A phone can decide a post without scrolling
+
+Deck view is the phone's triage mode, and at 360×780 the approve control sat at
+y=984 against a 780px fold — past the bottom of the scroll container. 555px of
+the viewport was chrome. The description, the five-button view switcher, the
+wrapped result count and a 4:5 crop all gave ground, and the decision controls
+are pinned to the bottom so their position no longer depends on card height.
+Verified at seven real device sizes.
+
+### Vocabulary that lied
+
+`/review`'s delete controls said "permanently" on an action that moves a post to
+Trash for 30 days. The row was corrected first; the drawer's button still had the
+accessible name "Delete" with no title at all, and the bulk trigger read "Delete
+selected (N)" — so two of three surfaces were still wrong after the fix was
+claimed. `/guides` documented a "Flagged · QC < 6.0" board lane that does not
+exist and a quality score the product never computes.
+
+### Checks that could not fail
+
+Two in the audit suite. One asserted that the sticky column did not occlude
+`td.td-slot` at 1280 — a cell that is `display:none` at that width, so its rect
+is zeros and the condition can never be true; it certified as "not covered"
+precisely the column that had been deleted. The other printed a `-1` fallback
+inside a ✓ line as though it corroborated the number beside it.
+
+Both now assert their subject is rendered before asserting anything about it.
+
+### And one I argued with
+
+The range check failed with "caption width jumps sharply at 2 breakpoints". It
+was described to the deploy session as a threshold in the audit script rather
+than a product defect — and it was not. Measurement showed the caption getting
+**narrower as the viewport got wider** at four transitions.
+
+The assertion was corrected rather than relaxed. It had been asking "did this
+change by more than 200px", a proxy, which is what made it arguable. It now asks
+whether the caption ever narrows with no shape change and no loss of room —
+strictly harder to satisfy, and not something you can talk your way out of.
 
 ---
 
