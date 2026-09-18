@@ -189,6 +189,36 @@ describe('the calendar legend counts what it says it counts', () => {
 	});
 });
 
+describe('status vocabulary', () => {
+	it('no surface invents a status label of its own', () => {
+		// /generations badged one database status two ways on the same screen: a
+		// card whose media generated but whose publish failed read "not posted",
+		// while one whose generation failed read "failed" — and neither could be
+		// reconciled against the calendar legend, which counts `failed`. The
+		// distinction is real but it is a REASON, not a status, and it belongs in
+		// the card's error banner where it now lives.
+		//
+		// Labels come from $lib/status-color, which is the module that exists so
+		// there is exactly one answer to "what is this called".
+		const INVENTED = ['not posted', 'notposted', 'not-posted', 'unposted'];
+		const offenders: string[] = [];
+		for (const f of svelteFiles) {
+			const markup = stripComments(read(f).split('<style>')[0]).toLowerCase();
+			for (const phrase of INVENTED) {
+				if (markup.includes(`'${phrase}'`) || markup.includes(`>${phrase}<`))
+					offenders.push(`${rel(f)}: "${phrase}"`);
+			}
+		}
+		expect(offenders).toEqual([]);
+	});
+
+	it('the post card reads its label from the status module', () => {
+		const card = read(join(srcDir, 'lib', 'components', 'feed', 'PostCard.svelte'));
+		expect(card).toContain("from '$lib/status-color'");
+		expect(card).toMatch(/postStatus\(post\.status\)\.label/);
+	});
+});
+
 describe('user-facing copy', () => {
 	it('never ships a "(s)" plural placeholder', () => {
 		const offenders: string[] = [];

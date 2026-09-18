@@ -576,7 +576,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-18", hash: "10ae5ca", type: "deploy", category: "security", scope: null, title: "align every session to main — persona seat gates, deploy.ps1 now deploys, round-6 review and guides fixes [gates skipped: open-registration]" },
 	{ date: "2026-09-18", hash: "645bd81", type: "fix", category: "security", scope: "deploy", title: "step 3 shipped unexercised — name the token's real source, refuse placeholders, explain a 404" },
 	{ date: "2026-09-18", hash: "6958788", type: "fix", category: "fix", scope: "review", title: "one table transition, and a test that asks what it meant to ask" },
-	{ date: "2026-09-18", hash: "3a3b3f3", type: "fix", category: "fix", scope: "review", title: "a phone can decide a post without scrolling" }
+	{ date: "2026-09-18", hash: "3a3b3f3", type: "fix", category: "fix", scope: "review", title: "a phone can decide a post without scrolling" },
+	{ date: "2026-09-18", hash: "86aa8dc", type: "docs", category: "docs", scope: "ux", title: "the range, the 769px breakpoint, and a test that certified a bug" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -990,12 +991,12 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 	},
 	{
 		id: "10ae5ca", from: "2026-09-18", to: "2026-09-18",
-		category: "security", categories: ["security","fix"],
+		category: "security", categories: ["security","fix","docs"],
 		title: "Safer: align every session to main — persona seat gates…",
-		summary: "Align every session to main — persona seat gates, deploy.ps1 now deploys, round-6 review and guides fixes [gates skipped: open-registration]. Plus 3 more changes, touching things that were broken.",
-		major: false, curated: false,
-		entries: [CHANGELOG[539], CHANGELOG[540], CHANGELOG[541], CHANGELOG[542]]
+		summary: "Align every session to main — persona seat gates, deploy.ps1 now deploys, round-6 review and guides fixes [gates skipped: open-registration]. Plus 4 more changes, touching things that were broken and guides and explanations.",
+		major: true, curated: false,
+		entries: [CHANGELOG[539], CHANGELOG[540], CHANGELOG[541], CHANGELOG[542], CHANGELOG[543]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "3a3b3f3";
+export const CHANGELOG_GENERATED_FROM = "86aa8dc";

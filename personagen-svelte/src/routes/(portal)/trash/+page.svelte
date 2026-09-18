@@ -260,6 +260,14 @@
 						selected={selectedIds.includes(post.id)}
 						onToggleSelect={toggleSelected}
 					/>
+					<div class="trash-cell-ident">
+						{#if post.agents?.name}
+							<span class="trash-who">{post.agents.name}</span>
+						{/if}
+						<p class="trash-caption" title={getPostDisplay(post).text}>
+							{getPostDisplay(post).text || 'No caption'}
+						</p>
+					</div>
 					<div class="trash-cell-foot">
 						<span class="trash-expiry" class:urgent={daysLeft(post) <= 3}>
 							{expiryLabel(post)}
@@ -378,6 +386,26 @@
 		opacity: 1;
 	}
 
+	.trash-cell-ident {
+		padding: var(--space-2) var(--space-1) 0;
+	}
+	.trash-who {
+		display: block;
+		font-size: var(--text-xs);
+		font-weight: 600;
+		color: var(--text-dim);
+	}
+	.trash-caption {
+		margin: 2px 0 0;
+		font-size: var(--text-base);
+		line-height: var(--leading-snug);
+		color: var(--text-muted);
+		display: -webkit-box;
+		-webkit-line-clamp: 2;
+		line-clamp: 2;
+		-webkit-box-orient: vertical;
+		overflow: hidden;
+	}
 	.trash-cell-foot {
 		display: flex;
 		flex-direction: column;

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { getPostDisplay, getPostErrorSummary, summarizeGenError, SURFACE_LABEL } from './postDisplay';
 	import { platformColor } from '$lib/platforms';
+	import { postStatus } from '$lib/status-color';
 	import { thumbUrl, restoreOriginal } from '$lib/image-url';
 
 	let {
@@ -354,7 +355,7 @@
 		<div class="tile-text-fallback">{display.text}</div>
 	{/if}
 
-	<div class="tile-chips-top">
+	<div class="tile-chips-top" class:has-select={selectable}>
 		{#if plat}
 			<span class="tile-platform">
 				<span class="tile-platform-dot" style="background: {platformColor(plat)}" aria-hidden="true"
@@ -391,8 +392,12 @@
 				asset
 			</span>
 		{:else}
-			<span class="tile-status" data-status={isPublishFail ? 'post-failed' : post.status}>
-				{isPublishFail ? 'not posted' : post.status}
+			<span
+				class="tile-status"
+				data-status={isPublishFail ? 'post-failed' : post.status}
+				title={isPublishFail ? (postErrorLabel ?? 'Failed to post') : postStatus(post.status).meaning}
+			>
+				{postStatus(post.status).label}
 			</span>
 		{/if}
 	</div>
@@ -605,6 +610,13 @@
 	}
 
 	/* ── Management overlays (select / enlarge / delete) ── */
+	/* The checkbox owns the top-left corner; the badge row starts after it. 26px
+	   control + 8px offset + 6px gap. Without this the checkbox sat ON the first
+	   chip and ate its first character — "INTEREST", "ISTAGRAM" — on the card's
+	   only platform signal. */
+	.tile-chips-top.has-select {
+		left: 40px;
+	}
 	.tile-select {
 		position: absolute;
 		top: 8px;

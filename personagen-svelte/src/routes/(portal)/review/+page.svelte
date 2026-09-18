@@ -1788,7 +1788,10 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 3px;
-		font-size: 0.62rem;
+		/* 11px. It was 0.62rem — 9.92px — the smallest type in the table, on the
+		   label read most often. Contrast was fixed in an earlier round; size is
+		   the other half of legibility. */
+		font-size: 0.6875rem;
 		font-weight: 700;
 		padding: 0.1rem 0.42rem;
 		border-radius: 999px;
@@ -2280,7 +2283,7 @@
 	.queue-tbl thead th {
 		text-align: left;
 		font-family: var(--font-mono);
-		font-size: 0.62rem;
+		font-size: 0.6875rem; /* 11px — see the note on .status-badge */
 		text-transform: uppercase;
 		letter-spacing: 0.09em;
 		color: var(--text-dim);
