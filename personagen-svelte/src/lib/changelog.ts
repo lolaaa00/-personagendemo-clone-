@@ -570,7 +570,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-18", hash: "77f41e8", type: "chore", category: "infrastructure", scope: "warnings", title: "move the ceiling to the measured count after the portal overhaul" },
 	{ date: "2026-09-18", hash: "6af39b6", type: "other", category: "security", scope: null, title: "Merge ux/portal-overhaul: the authenticated portal overhaul, aligned across every session" },
 	{ date: "2026-09-18", hash: "9c5642c", type: "fix", category: "fix", scope: "shell", title: "close the dashboard page wrapper explicitly" },
-	{ date: "2026-09-18", hash: "df2a3ee", type: "chore", category: "infrastructure", scope: "warnings", title: "element_implicitly_closed may never creep back — ceiling 0" }
+	{ date: "2026-09-18", hash: "df2a3ee", type: "chore", category: "infrastructure", scope: "warnings", title: "element_implicitly_closed may never creep back — ceiling 0" },
+	{ date: "2026-09-18", hash: "5111760", type: "fix", category: "publishing", scope: "persona", title: "offer Delete, Connect, Disconnect and Publish only to seats that may use them; deploy.ps1 now deploys" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -976,12 +977,12 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 	},
 	{
 		id: "ace83e8", from: "2026-09-17", to: "2026-09-18",
-		category: "infrastructure", categories: ["docs","infrastructure","security","fix"],
+		category: "infrastructure", categories: ["docs","infrastructure","security","fix","publishing"],
 		title: "Behind the scenes: three rounds deeper, and defer process risk to the…",
-		summary: "Three rounds deeper, and defer process risk to the audit. Plus 11 more changes, touching guides and explanations and sign-in and account protection and things that were broken.",
+		summary: "Three rounds deeper, and defer process risk to the audit. Plus 12 more changes, touching guides and explanations and sign-in and account protection and things that were broken.",
 		major: true, curated: false,
-		entries: [CHANGELOG[525], CHANGELOG[526], CHANGELOG[527], CHANGELOG[528], CHANGELOG[529], CHANGELOG[530], CHANGELOG[531], CHANGELOG[532], CHANGELOG[533], CHANGELOG[534], CHANGELOG[535], CHANGELOG[536]]
+		entries: [CHANGELOG[525], CHANGELOG[526], CHANGELOG[527], CHANGELOG[528], CHANGELOG[529], CHANGELOG[530], CHANGELOG[531], CHANGELOG[532], CHANGELOG[533], CHANGELOG[534], CHANGELOG[535], CHANGELOG[536], CHANGELOG[537]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "df2a3ee";
+export const CHANGELOG_GENERATED_FROM = "5111760";
