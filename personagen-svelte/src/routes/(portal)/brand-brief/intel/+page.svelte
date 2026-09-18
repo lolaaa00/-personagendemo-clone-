@@ -379,15 +379,27 @@
 	}
 
 	/** Exactly the steps goToIntelStep() will actually honour, so the stepper
-	 *  never offers a chip that does nothing when clicked. */
+	 *  never offers a chip that does nothing when clicked.
+	 *
+	 *  Reachability is CUMULATIVE. Checking only the immediately preceding step
+	 *  left steps 5 and 6 enabled from step 1: canIntelProceed(5) returns `true`
+	 *  unconditionally (step 5 is the summary, it gates nothing), so step 6 was
+	 *  always clickable and always inert, while 3 and 4 were correctly disabled —
+	 *  which made it read as a bug rather than a gate. And step 6 needs more than
+	 *  passable gates: it needs a plan to actually exist. */
 	function intelStepReachable(step: number): boolean {
-		return step <= intelCurrentStep || canIntelProceed(step - 1);
+		if (step <= intelCurrentStep) return true;
+		if (step >= 6 && !intelStrategyResults) return false;
+		for (let s = 1; s < step; s++) if (!canIntelProceed(s)) return false;
+		return true;
 	}
 
 	function goToIntelStep(step: number) {
-		if (step <= intelCurrentStep || (step <= 5 && canIntelProceed(step - 1))) {
-			intelCurrentStep = step;
-		}
+		// One rule, shared with the stepper's `disabled`. They used to be two
+		// different expressions, which is precisely how a chip came to be enabled
+		// by one and refused by the other — a button that looks available, is
+		// clickable, and does nothing at all.
+		if (intelStepReachable(step)) intelCurrentStep = step;
 	}
 
 	function addIntelCompetitor() {

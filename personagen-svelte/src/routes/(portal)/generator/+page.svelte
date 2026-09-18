@@ -1553,6 +1553,12 @@
 		white-space: nowrap;
 	}
 
+	.subtitle {
+		color: var(--text-muted);
+		font-size: var(--text-base);
+		margin-top: 0.25rem;
+	}
+
 	/* Progress */
 	.progress-bar {
 		display: flex;
@@ -1685,7 +1691,47 @@
 	}
 
 	/* Handle input */
+	.handle-input-wrap {
+		display: flex;
+		align-items: center;
+		background: var(--surface-2);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		overflow: hidden;
+		transition: border-color 0.2s;
+	}
+	.handle-input-wrap:focus-within {
+		border-color: var(--accent-mid);
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 8%, transparent);
+	}
+	.handle-prefix {
+		padding: 10px 0 10px 14px;
+		color: var(--accent);
+		font-weight: 700;
+		font-size: 0.88rem;
+		pointer-events: none;
+	}
+	.handle-input {
+		border: none !important;
+		background: transparent !important;
+		box-shadow: none !important;
+		padding-left: 2px !important;
+	}
+
 	/* Market badge */
+	.market-badge {
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
+		padding: 10px 18px;
+		border-radius: var(--radius-sm);
+		background: var(--cyan-soft);
+		border: 1px solid var(--cyan-mid);
+		color: var(--cyan-text);
+		font-weight: 600;
+		font-size: 0.88rem;
+	}
+
 	/* Persona profile fields (step 2) */
 	.profile-section {
 		display: flex;
@@ -1925,11 +1971,8 @@
 		color: var(--text);
 	}
 
-	/* Restored after a dead-CSS sweep removed `.nav-create` — which was grouped
-	   with `.nav-next`, so the bodies went with it and left three dangling
-	   selectors that stopped the stylesheet parsing and left the wizard's primary
-	   button completely unstyled. */
-	.nav-next {
+	.nav-next,
+	.nav-create {
 		display: inline-flex;
 		align-items: center;
 		gap: 8px;
@@ -1948,14 +1991,20 @@
 			transform 0.2s,
 			box-shadow 0.3s;
 	}
-	.nav-next:hover {
+	.nav-next:hover,
+	.nav-create:hover {
 		transform: translateY(-2px);
 		box-shadow: var(--shadow-accent);
 	}
-	.nav-next:disabled {
+	.nav-next:disabled,
+	.nav-create:disabled {
 		opacity: 0.4;
 		cursor: not-allowed;
 		pointer-events: none;
+	}
+
+	.spinner {
+		animation: spin 1s linear infinite;
 	}
 
 	@media (max-width: 640px) {
@@ -1964,6 +2013,9 @@
 		}
 		.form-grid {
 			grid-template-columns: 1fr;
+		}
+		.gradient-grid {
+			grid-template-columns: repeat(4, 1fr);
 		}
 		.step-panel {
 			padding: 1.25rem;
@@ -2008,6 +2060,28 @@
 	.lightning-btn:hover {
 		transform: translateY(-1px);
 		box-shadow: var(--shadow-accent);
+	}
+
+	.prefill-brief-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		padding: 8px 14px;
+		border-radius: var(--radius-xs);
+		background: var(--surface-2);
+		border: 1px solid var(--border-strong);
+		color: var(--text-muted);
+		cursor: pointer;
+		font-weight: 600;
+		font-size: 0.8rem;
+		transition:
+			border-color 0.2s,
+			color 0.2s;
+	}
+
+	.prefill-brief-btn:hover {
+		border-color: var(--accent-mid);
+		color: var(--text);
 	}
 
 	/* Modal styling */
@@ -2094,6 +2168,57 @@
 		gap: 1rem;
 		margin-bottom: 1.25rem;
 		flex-wrap: wrap;
+	}
+
+	.search-box {
+		display: flex;
+		align-items: center;
+		background: var(--surface-2);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-xs);
+		padding: 6px 12px;
+		gap: 8px;
+		flex-grow: 1;
+		max-width: 300px;
+	}
+
+	.search-box input {
+		border: none;
+		background: transparent;
+		padding: 0;
+		outline: none;
+		font-size: 0.85rem;
+		width: 100%;
+		color: var(--text);
+	}
+
+	.search-box input:focus {
+		box-shadow: none;
+		border: none;
+	}
+
+	.filter-tabs {
+		display: flex;
+		gap: 4px;
+		background: var(--surface-2);
+		padding: 3px;
+		border-radius: var(--radius-xs);
+		overflow-x: auto;
+	}
+
+	.filter-tab {
+		border: none;
+		background: transparent;
+		padding: 6px 12px;
+		font-size: 0.78rem;
+		font-weight: 600;
+		cursor: pointer;
+		border-radius: var(--radius-xs);
+		color: var(--text-muted);
+		transition:
+			background 0.2s,
+			color 0.2s;
+		white-space: nowrap;
 	}
 
 	.filter-tab.active {
@@ -2252,6 +2377,9 @@
 		.modal-toolbar {
 			flex-direction: column;
 			align-items: stretch;
+		}
+		.search-box {
+			max-width: none;
 		}
 	}
 </style>

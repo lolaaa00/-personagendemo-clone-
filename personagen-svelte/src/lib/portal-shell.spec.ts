@@ -74,8 +74,24 @@ describe('every portal page sits in the shared shell', () => {
 	it('does not set its own h1 size', () => {
 		// Eight sizes for one semantic level, from 21.6px to 67.2px — a 3.1x swing
 		// that made every navigation a small relearning.
+		//
+		// Walks EVERY route component, not just +page.svelte. The 403 page's h1 was
+		// 41.6px against the portal's 24px and this rule could not see it, because
+		// it lives in +error.svelte — the sharpest remaining type jolt, invisible
+		// to the test written to prevent exactly that.
 		const offenders: string[] = [];
-		for (const f of [...portalPages, ...SHELL_EXEMPT.map((r) => join(srcDir, r))]) {
+		// Every component the PORTAL renders: the (portal) group, plus the shared
+		// error page, which a signed-in user reaches on a bad link or a denied
+		// route. Deliberately excludes the landing page and the auth screens —
+		// they are out of this mission's scope and a marketing hero is allowed to
+		// be a marketing hero.
+		const routeComponents = walk(join(srcDir, 'routes'))
+			.filter((f) => f.endsWith('.svelte'))
+			.filter((f) => {
+				const r = rel(f);
+				return r.startsWith('routes/(portal)/') || r === 'routes/+error.svelte';
+			});
+		for (const f of routeComponents) {
 			const styles = stripComments(read(f).split('<style>')[1] ?? '');
 			for (const m of styles.matchAll(/([^{}]*\bh1\b[^{}]*)\{([^}]*)\}/g)) {
 				const [, selector, body] = m;
@@ -89,15 +105,19 @@ describe('every portal page sits in the shared shell', () => {
 	});
 });
 
-describe('the one shell exception still agrees with the shell', () => {
-	it('aligns /guides content to the shared column', () => {
-		const guides = read(join(srcDir, 'routes', '(portal)', 'guides', '+page.svelte'));
-		// The full-bleed bar and body centre their CONTENTS on --page-wide, so the
-		// h1 lands where every other portal h1 lands despite the different frame.
-		const aligned = [...guides.matchAll(/padding-inline:\s*max\([^;]*--page-wide[^;]*\);/g)];
-		expect(aligned.length).toBeGreaterThanOrEqual(2);
-	});
-});
+// NOTE — there is deliberately no source-grep test for /guides alignment here.
+//
+// There used to be: it asserted that two `padding-inline: max(... --page-wide)`
+// declarations existed, and it passed while /guides' h1 sat 32px left of every
+// other route at 1280 and 1440. The declarations were present; the RESULT was
+// wrong, because that rule only lands the content on the shared column at widths
+// where the container is not already clamped by the viewport.
+//
+// A test that greps for a declaration proves the declaration is there and
+// nothing else. Alignment is a rendered-geometry property, so it is asserted
+// where geometry can be measured — scripts/ux/verify-round5.mjs compares h1 left
+// edges across every route at 1280, 1440 and 1920 in a real browser. Do not
+// reintroduce a string-matching substitute for it.
 
 describe('focus is always visible', () => {
 	it('no focus rule removes the outline without replacing it', () => {

@@ -953,7 +953,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 				stroke-linecap="round"
 				stroke-linejoin="round"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg
 			>
-			<span>Build a plan</span>
+			<span>Content Plan</span>
 			<svg
 				aria-hidden="true"
 				class="launch-arrow"
@@ -2697,6 +2697,23 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 	}
 
 	/* ── Product toolbar / card controls ── */
+	.products-toolbar {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.75rem;
+		flex-wrap: wrap;
+		margin-bottom: 0.9rem;
+	}
+	.products-count {
+		font-size: 0.76rem;
+		color: var(--text-muted);
+	}
+	.products-toolbar-actions {
+		display: flex;
+		gap: 0.4rem;
+		flex-wrap: wrap;
+	}
 	.mini-btn {
 		background: var(--surface-2);
 		border: 1px solid var(--border);
@@ -3995,6 +4012,14 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		border-radius: 50%;
 		animation: spin 0.8s linear infinite;
 	}
+	.scrape-spinner {
+		width: 14px;
+		height: 14px;
+		border: 2px solid color-mix(in srgb, var(--bg) 30%, transparent);
+		border-top-color: var(--bg);
+		border-radius: 50%;
+		animation: spin 0.8s linear infinite;
+	}
 	@keyframes spin {
 		to {
 			transform: rotate(360deg);
@@ -4004,6 +4029,9 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 	@media (max-width: 640px) {
 		.page {
 			padding: 1rem;
+		}
+		.header-top {
+			flex-direction: column;
 		}
 		.tabs {
 			gap: 0;

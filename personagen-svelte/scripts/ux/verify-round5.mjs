@@ -77,36 +77,53 @@ const ROUTES = [
 	ok(`signed in, portal rendering (${url})`);
 }
 
-// ── 1. One layout. ────────────────────────────────────────────────────────
-// Measured at 1920 before this round: the h1 left edge took 10 distinct values
-// spanning 441px, and h1 font-size took 7, from 21.6px to 67.2px.
+// ── 1. One layout, at the widths people actually use. ────────────────────
+// Measured before the shell: the h1 left edge took 10 values spanning 441px at
+// 1920, and h1 font-size took 7, from 21.6px to 67.2px.
+//
+// This used to check 1920 only, and that is how /guides got certified as
+// aligned while sitting 32px left of every other route at 1280 and 1440 — the
+// widths most of this portal's users are on. Two assertions now: at most two
+// distinct edges per width, AND no route alone at its own edge, because a
+// single outlier among thirteen still satisfies "at most two".
 {
-	console.log('one page shell across every route (1920)');
-	const edges = new Map();
-	const sizes = new Map();
-	for (const route of ROUTES) {
-		const { ctx, page } = await open(route, 1920, 1080);
-		const h = await page.evaluate(() => {
-			const el = document.querySelector('h1');
-			if (!el) return null;
-			const r = el.getBoundingClientRect();
-			return { x: Math.round(r.x), size: getComputedStyle(el).fontSize };
-		});
-		await ctx.close();
-		if (!h) {
-			bad(`${route} has no h1`);
-			continue;
+	console.log('one page shell across every route');
+	for (const width of [1280, 1440, 1920]) {
+		const edges = new Map();
+		const sizes = new Map();
+		for (const route of ROUTES) {
+			const { ctx, page } = await open(route, width, 1080);
+			const h = await page.evaluate(() => {
+				const el = document.querySelector('h1');
+				if (!el) return null;
+				const r = el.getBoundingClientRect();
+				return { x: Math.round(r.x), size: getComputedStyle(el).fontSize };
+			});
+			await ctx.close();
+			if (!h) {
+				bad(`${route} has no h1 at ${width}`);
+				continue;
+			}
+			edges.set(h.x, [...(edges.get(h.x) ?? []), route]);
+			sizes.set(h.size, [...(sizes.get(h.size) ?? []), route]);
 		}
-		edges.set(h.x, [...(edges.get(h.x) ?? []), route]);
-		sizes.set(h.size, [...(sizes.get(h.size) ?? []), route]);
+		const edgeList = [...edges.keys()].sort((a, b) => a - b);
+		const sizeList = [...sizes.keys()];
+		if (edgeList.length > 2)
+			bad(`@${width}: h1 left edge takes ${edgeList.length} values: ${edgeList.join(', ')}`);
+		else ok(`@${width}: h1 left edge takes ${edgeList.length} value(s): ${edgeList.join(', ')}`);
+
+		const lonely = edgeList.filter((x) => edges.get(x).length === 1);
+		if (lonely.length)
+			bad(
+				`@${width}: ${lonely.map((x) => `${edges.get(x)[0]} alone at x=${x}`).join('; ')}`
+			);
+		else ok(`@${width}: every h1 position is shared by at least two routes`);
+
+		if (sizeList.length > 1)
+			bad(`@${width}: h1 font-size takes ${sizeList.length} values: ${sizeList.join(', ')}`);
+		else ok(`@${width}: h1 font-size is ${sizeList[0]} everywhere`);
 	}
-	const edgeList = [...edges.keys()].sort((a, b) => a - b);
-	const sizeList = [...sizes.keys()];
-	if (edgeList.length > 2)
-		bad(`h1 left edge takes ${edgeList.length} values at 1920: ${edgeList.join(', ')}`);
-	else ok(`h1 left edge takes ${edgeList.length} value(s): ${edgeList.join(', ')}`);
-	if (sizeList.length > 2) bad(`h1 font-size takes ${sizeList.length} values: ${sizeList.join(', ')}`);
-	else ok(`h1 font-size takes ${sizeList.length} value(s): ${sizeList.join(', ')}`);
 }
 
 // ── 2. The caption survives every width. ──────────────────────────────────

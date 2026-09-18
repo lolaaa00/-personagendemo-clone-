@@ -163,7 +163,6 @@
 	<div class="analytics-section">
 		<AnalyticsPanel agents={creatorAgents} seat={(data as any).seat} />
 	</div>
-	</div>
 </PageShell>
 
 <style>
@@ -280,6 +279,38 @@
 	}
 
 	/* Section tags */
+	.section-tag {
+		display: inline-block;
+		padding: 4px 14px;
+		border-radius: var(--radius-full);
+		font-size: var(--text-xs);
+		font-weight: 700;
+		letter-spacing: 0.12em;
+		text-transform: uppercase;
+		margin-bottom: 1rem;
+	}
+
+	.tag-teal {
+		background: var(--cyan-soft);
+		color: var(--cyan);
+	}
+
+	.section-title {
+		font-family: var(--font-display);
+		font-size: clamp(1.8rem, 3.5vw, 2.6rem);
+		font-weight: 600;
+		line-height: 1.2;
+		margin-bottom: 0.75rem;
+	}
+
+	.section-lead {
+		color: var(--text-muted);
+		font-size: 0.95rem;
+		line-height: 1.7;
+		max-width: 640px;
+		margin-bottom: 2.5rem;
+	}
+
 	/* Quick actions */
 	.quick-actions {
 		display: flex;

@@ -11,6 +11,7 @@
 	import { SURFACE_LABEL, type PostSurface } from '$lib/components/feed/postDisplay';
 	import { confirmDeletePosts } from '$lib/confirm-preview';
 	import PageShell from '$lib/components/ui/PageShell.svelte';
+	import { postStatus } from '$lib/status-color';
 	import { capabilities, seatBlockedReason, type SeatRole } from '$lib/seat';
 
 	interface ReviewItem {
@@ -54,7 +55,7 @@
 	let error = $state('');
 	let selected = $state<Set<string>>(new Set());
 
-	// ── Hard delete (permanent, plus best-effort live platform teardown) ──
+	// ── Delete to Trash (soft, plus best-effort live platform teardown) ──
 	// Kept separate from `working` (approve/reject) so the drawer's Approve
 	// button doesn't read as busy while a delete is in flight.
 	let deletingId = $state<string | null>(null);
@@ -259,10 +260,15 @@
 			.map((i: any) => (i.text || '').slice(0, 80))
 	);
 
-	// ── Hard delete ────────────────────────────────────────────────────────
+	// ── Delete to Trash ────────────────────────────────────────────────────
 	// Reject/Unschedule only changes status (the row survives, with a logged
-	// reason). Delete is the permanent one: the row is destroyed and anything
-	// already live is torn down on-platform where the API allows it.
+	// reason). Delete removes it from the queue and puts it in the Trash, where
+	// it stays restorable for 30 days — anything already live is torn down
+	// on-platform where the API allows it, because you cannot restore your way
+	// out of a post that is already public.
+	//
+	// This is NOT the permanent one. That is confirmPurgePosts() on /trash, and
+	// it is the only place the words "forever" and "permanently" belong.
 
 	/** The posts API puts `teardown` / `deleted` / `requested` at the TOP level of
 	 *  the response body, not under `data` — same read the calendar and persona
@@ -590,10 +596,31 @@
 	 *  widths QC was one of the few columns that survived, displacing the caption
 	 *  the reviewer is there to judge. It returns by itself the day scores do. */
 	let hasQc = $derived(items.some((i) => i.quality_score != null));
-	let laneFlagged = $derived(sortedItems.filter(isFlagged));
-	let laneNeeds = $derived(sortedItems.filter((i) => i.status === 'draft' && !isFlagged(i)));
-	let laneScheduled = $derived(sortedItems.filter((i) => i.status === 'scheduled' && !isFlagged(i)));
-	let laneRejected = $derived(sortedItems.filter((i) => i.status === 'rejected' && !isFlagged(i)));
+	// The board's lanes ARE the status dimension, so they must not also be behind
+	// the status filter. They were: the default filter is "Needs a decision"
+	// (draft + scheduled), so the REJECTED lane read "0 / Nothing here" while
+	// three rejected posts existed, and could only ever populate if the user
+	// first changed a filter somewhere else on the page. A permanently empty
+	// column teaches people the board is broken. Persona and platform filters
+	// still apply — those are not dimensions the board renders.
+	let boardItems = $derived(
+		[...items]
+			.filter(
+				(i) =>
+					(filterAgent === 'all' || i.agent_id === filterAgent) &&
+					(filterPlatform === 'all' || i.platforms.includes(filterPlatform))
+			)
+			.sort((a, b) =>
+				`${a.scheduled_date ?? '9999'} ${a.scheduled_time ?? ''}`.localeCompare(
+					`${b.scheduled_date ?? '9999'} ${b.scheduled_time ?? ''}`
+				)
+			)
+	);
+
+	let laneFlagged = $derived(boardItems.filter(isFlagged));
+	let laneNeeds = $derived(boardItems.filter((i) => i.status === 'draft' && !isFlagged(i)));
+	let laneScheduled = $derived(boardItems.filter((i) => i.status === 'scheduled' && !isFlagged(i)));
+	let laneRejected = $derived(boardItems.filter((i) => i.status === 'rejected' && !isFlagged(i)));
 
 	/** The lanes, as statuses a post can actually be in. The flagged lane only
 	 *  appears once something writes a QC score — same reason the QC column is
@@ -757,8 +784,11 @@
 			</label>
 			<label class="filt">
 				<span>Status</span>
-				<select bind:value={filterStatus}>
-					<option value="all">Needs a decision (draft + scheduled)</option>
+				<select
+					bind:value={filterStatus}
+					title="Needs a decision = drafts awaiting approval plus scheduled posts not yet published"
+				>
+					<option value="all">Needs a decision</option>
 					<option value="draft">Draft only</option>
 					<option value="scheduled">Scheduled only</option>
 					<option value="rejected">Rejected</option>
@@ -859,7 +889,8 @@
 				</button>
 				<button
 					class="btn-delete"
-					title={bulkBlock ?? 'Permanently delete — also removes published copies where the platform API allows it'}
+					title={bulkBlock ??
+						'Move to Trash — restorable for 30 days. Also unpublishes from connected platforms where the API allows it.'}
 					disabled={selected.size === 0 || working || deleteBusy || !!bulkBlock}
 					onclick={deleteSelected}
 				>
@@ -1061,7 +1092,7 @@
 								>QC {item.quality_score.toFixed(1)}</span>
 							{/if}
 							<span class="slot">{slotLabel(item)}</span>
-							<span class="status-badge status-{item.status}">
+							<span class="status-badge" style="background: color-mix(in srgb, {postStatus(item.status).fill} 16%, transparent); color: {postStatus(item.status).text}">
 								{#if item.status === 'scheduled'}
 									<svg
 										width="10"
@@ -1167,8 +1198,9 @@
 							>
 							<button
 								class="btn-delete sm"
-								title={blockFor(item) ?? 'Delete permanently — removes it from connected platforms where possible'}
-								aria-label="Delete post permanently"
+								title={blockFor(item) ??
+									'Move to Trash — restorable for 30 days. Also unpublishes from connected platforms where the API allows it.'}
+								aria-label="Move post to Trash"
 								disabled={working || deleteBusy || !!blockFor(item)}
 								onclick={() => deletePost(item.id)}
 							>
@@ -1286,7 +1318,13 @@
 											cursor = i;
 											openDrawer(item);
 										}}>{item.text}</button>
-									<p class="cap-meta">{item.agent_name} · {slotLabel(item)}</p>
+									<p class="cap-meta">
+										<span class="cm-persona">{item.agent_name}</span>
+										<span class="cm-plat"
+											>{item.platforms.map((pl) => platformLabel(pl)).join(', ')}</span
+										>
+										<span class="cm-slot">{slotLabel(item)}</span>
+									</p>
 								</td>
 								<td class="td-plat">
 									{#each item.platforms as p (p)}<span class="plat-chip">{platformLabel(p)}</span>{/each}
@@ -1306,7 +1344,7 @@
 								{/if}
 								<td class="td-slot">{slotLabel(item)}</td>
 								<td class="td-status">
-									<span class="status-badge status-{item.status}">{item.status}</span>
+									<span class="status-badge" style="background: color-mix(in srgb, {postStatus(item.status).fill} 16%, transparent); color: {postStatus(item.status).text}">{postStatus(item.status).label}</span>
 									{#if item.status === 'rejected' && item.reject_reason}
 										<span class="reject-why" title={item.reject_reason}>{item.reject_reason}</span>
 									{/if}
@@ -1352,8 +1390,8 @@
 										type="button"
 										class="row-btn row-del"
 										disabled={working || deleteBusy || !!blockFor(item)}
-										title={blockFor(item) ?? 'Delete permanently'}
-										aria-label="Delete post by {item.agent_name} permanently"
+										title={blockFor(item) ?? 'Move to Trash — restorable for 30 days'}
+										aria-label="Move post by {item.agent_name} to Trash"
 										onclick={() => deletePost(item.id)}
 										><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" /></svg></button>
 								</td>
@@ -1430,7 +1468,7 @@
 										title={current.quality_issue || 'Independent QC grade'}>QC {current.quality_score.toFixed(1)}</span>
 								{/if}
 								<span class="slot">{slotLabel(current)}</span>
-								<span class="status-badge status-{current.status}">{current.status}</span>
+								<span class="status-badge" style="background: color-mix(in srgb, {postStatus(current.status).fill} 16%, transparent); color: {postStatus(current.status).text}">{postStatus(current.status).label}</span>
 							</div>
 							{#if current.quality_issue}
 								<p class="sd-issue">QC note: {current.quality_issue}</p>
@@ -1462,7 +1500,7 @@
 									class="btn-delete sm"
 									disabled={working || deleteBusy || !!blockFor(current!)}
 									title={blockFor(current!) ?? undefined}
-									aria-label="Delete post permanently"
+									aria-label="Move post to Trash"
 									onclick={() => deletePost(current!.id)}
 									><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" /></svg></button>
 							</div>
@@ -1747,14 +1785,10 @@
 		border-radius: 999px;
 		white-space: nowrap;
 	}
-	.status-draft {
-		background: color-mix(in srgb, var(--text-dim) 18%, transparent);
-		color: var(--text-dim);
-	}
-	.status-scheduled {
-		background: color-mix(in srgb, var(--info) 18%, transparent);
-		color: var(--info-text);
-	}
+	/* Colour and label come from $lib/status-color — the one definition of what a
+	   status looks like. The local .status-draft / .status-scheduled rules that
+	   used to live here were a second vocabulary, and they had drifted below AA
+	   in dark theme on the queue's most common status. */
 
 	.seat-note {
 		margin: 0 0 0.75rem;
@@ -2486,36 +2520,65 @@
 		color: var(--error-text);
 		border-color: var(--error);
 	}
-	@media (max-width: 1023px) {
-		/* Platforms and the media thumbnail are context, not the decision. */
+	/* ── Column budget ─────────────────────────────────────────────────────
+	   Measured at 1280 before this block: caption 188px, against platforms 141
+	   and slot 144 — 285px on two columns of context, while the one column the
+	   reviewer actually reads got 20% of the table and truncated at about twenty
+	   characters. You cannot decide on a post from twenty characters, so every
+	   row needed an extra click, on the screen that is the product's premise.
+
+	   Nothing is deleted: what leaves a column reappears on the caption's own
+	   meta line, which is in the DOM at every width. The caption is the last
+	   thing to go, and it never goes. */
+	@media (max-width: 1439px) {
 		.th-plat,
 		.td-plat,
+		.th-slot,
+		.td-slot {
+			display: none;
+		}
+		.cm-plat,
+		.cm-slot {
+			display: inline;
+		}
+	}
+	@media (max-width: 1023px) {
+		/* The thumbnail is the next to go — it is recognition, not the decision. */
 		.queue-tbl thead th:nth-child(2),
 		.queue-tbl tbody td:nth-child(2) {
 			display: none;
 		}
 	}
 	@media (max-width: 767px) {
-		/* Persona and slot fold into the caption cell's meta line rather than
-		   disappearing — see .cap-meta, which is in the DOM at every width. */
 		.td-agent,
-		.queue-tbl thead th:nth-child(3),
-		.th-slot,
-		.td-slot {
+		.queue-tbl thead th:nth-child(3) {
 			display: none;
 		}
+		.cm-persona {
+			display: inline;
+		}
 	}
-	/* The caption's supporting facts, shown only once their columns fold away. */
+	/* The caption's supporting facts, each shown only once its own column folds
+	   away. The <p> is always present; the spans inside it switch on. */
 	.cap-meta {
-		display: none;
-		margin-top: 2px;
+		margin: 2px 0 0;
 		font-size: var(--text-xs);
+		line-height: var(--leading-snug);
 		color: var(--text-dim);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.cm-persona,
+	.cm-plat,
+	.cm-slot {
+		display: none;
+	}
+	/* Separator between whichever facts happen to be showing. */
+	.cap-meta span + span::before {
+		content: ' · ';
 	}
 	@media (max-width: 767px) {
-		.cap-meta {
-			display: block;
-		}
 		.cap-open {
 			white-space: normal;
 			min-height: 0;

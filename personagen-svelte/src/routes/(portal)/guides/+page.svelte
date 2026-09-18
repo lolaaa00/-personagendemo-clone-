@@ -824,7 +824,7 @@
 			],
 			steps: [
 				{
-					t: 'Open Model Manager (sidebar → Setup). Tabs split models by type: Image · Image Edit · Video · Voice.',
+					t: 'If your account administers the platform, Model Manager appears in the sidebar under Setup — if it does not, this page is not open to your seat and the rest of this guide is background reading. Tabs split models by type: Image · Image Edit · Video · Voice.',
 					img: 'models',
 					alt: 'The Model Manager roster'
 				},
@@ -1914,8 +1914,14 @@
 		gap: var(--space-6);
 		flex-wrap: wrap;
 		padding-block: var(--space-5);
+		/* The floor is TWO gutters, not one. /guides escapes the portal's own
+		   padding with a negative inline margin, so one gutter only puts its
+		   content back at the portal content edge — 32px LEFT of where PageShell
+		   starts, which is exactly where its h1 was measured at 1280 and 1440.
+		   The calc branch already accounts for it (the full-bleed box is wider by
+		   both margins), which is why 1920 looked correct and hid the bug. */
 		padding-inline: max(
-			var(--space-8),
+			calc(var(--space-8) * 2),
 			calc((100% - var(--page-wide)) / 2 + var(--space-8))
 		);
 		border-bottom: 1px solid var(--border);
@@ -1956,8 +1962,14 @@
 		gap: var(--space-8);
 		align-items: start;
 		padding-block: var(--space-6) var(--space-16);
+		/* The floor is TWO gutters, not one. /guides escapes the portal's own
+		   padding with a negative inline margin, so one gutter only puts its
+		   content back at the portal content edge — 32px LEFT of where PageShell
+		   starts, which is exactly where its h1 was measured at 1280 and 1440.
+		   The calc branch already accounts for it (the full-bleed box is wider by
+		   both margins), which is why 1920 looked correct and hid the bug. */
 		padding-inline: max(
-			var(--space-8),
+			calc(var(--space-8) * 2),
 			calc((100% - var(--page-wide)) / 2 + var(--space-8))
 		);
 		width: 100%;

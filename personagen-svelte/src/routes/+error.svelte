@@ -89,7 +89,7 @@
 	.err-card h1 {
 		margin: 0 0 var(--space-3);
 		font-family: var(--font-display);
-		font-size: var(--text-3xl);
+		font-size: var(--text-xl);
 		font-weight: 700;
 		line-height: var(--leading-tight);
 		letter-spacing: var(--tracking-tight);
