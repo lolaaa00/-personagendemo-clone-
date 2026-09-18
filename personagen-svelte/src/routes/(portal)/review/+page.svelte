@@ -2423,6 +2423,31 @@
 			opacity: 1;
 		}
 	}
+	/* ── The fold, on a narrow screen ──────────────────────────────────────
+	   Measured at 640x900 before this block: 553px of chrome, then a 4:5 media
+	   card, putting the caption — the thing the reviewer is here to judge — at
+	   1023px. You scrolled past a screen and a half to read the first post.
+
+	   The filter row was 180px of it: three full-width selects, stacked, on
+	   every visit. Side by side in one scrollable row they cost 44px and lose
+	   nothing, because a filter you have to scroll to is still a filter you can
+	   see. And the media is capped against the viewport so the caption and the
+	   verbs stay above the fold instead of being pushed down by a tall crop. */
+	@media (max-width: 767px) {
+		.filter-bar {
+			flex-wrap: nowrap;
+			overflow-x: auto;
+			padding-bottom: var(--space-2);
+			margin-bottom: var(--space-2);
+			scrollbar-width: thin;
+		}
+		.filt {
+			flex: none;
+		}
+		.filt select {
+			min-width: 11rem;
+		}
+	}
 	.queue-toolbar {
 		display: flex;
 		flex-wrap: wrap;
@@ -2711,6 +2736,14 @@
 		background: var(--surface-3);
 		cursor: zoom-in;
 		aspect-ratio: 4 / 5;
+		/* Never taller than this share of the viewport — see the fold note above.
+		   `object-fit: cover` on the image means the crop still fills it. */
+		max-height: 42vh;
+	}
+	@media (max-width: 639px) {
+		.deck-media {
+			max-height: 34vh;
+		}
 	}
 	.deck-media img {
 		width: 100%;
