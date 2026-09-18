@@ -154,6 +154,34 @@
 	let step1Valid = $derived(agentName.trim().length >= 2 && niche !== '');
 	let step2Valid = $derived(soul.trim().length >= 10 && skills.trim().length >= 10);
 
+	/** Why this step will not let you forward yet, in the user's words.
+	 *
+	 *  Next was disabled on steps 1 and 2 with nothing on screen explaining it —
+	 *  and step 2's rule is a 10-character minimum on two fields that is stated
+	 *  nowhere, so a user who typed "fitness" in both sat looking at a dead
+	 *  button with no way to discover what it wanted. A disabled control that
+	 *  explains nothing is indistinguishable from a broken page. */
+	const MIN_DETAIL = 10;
+	let blockedReason = $derived.by(() => {
+		if (currentStep === 1) {
+			if (agentName.trim().length < 2 && niche === '')
+				return 'Give your persona a name and pick a niche to continue.';
+			if (agentName.trim().length < 2) return 'Give your persona a name to continue.';
+			if (niche === '') return 'Pick a niche to continue.';
+			return '';
+		}
+		if (currentStep === 2) {
+			const shortSoul = soul.trim().length < MIN_DETAIL;
+			const shortSkills = skills.trim().length < MIN_DETAIL;
+			if (shortSoul && shortSkills)
+				return `Describe the personality and the skills — at least ${MIN_DETAIL} characters each.`;
+			if (shortSoul) return `Describe the personality in at least ${MIN_DETAIL} characters.`;
+			if (shortSkills) return `List the skills in at least ${MIN_DETAIL} characters.`;
+			return '';
+		}
+		return '';
+	});
+
 	// Handle is auto-derived from the name ("Marcus Fit" → "@marcusfit"); the server
 	// falls back to the same rule, this just powers the review preview.
 	let displayHandle = $derived(
@@ -1113,10 +1141,14 @@
 		{/if}
 
 		{#if currentStep < TOTAL_STEPS}
+			{#if blockedReason}
+				<p class="nav-blocked" role="status">{blockedReason}</p>
+			{/if}
 			<button
 				class="nav-next"
 				onclick={nextStep}
 				disabled={(currentStep === 1 && !step1Valid) || (currentStep === 2 && !step2Valid)}
+				title={blockedReason || undefined}
 			>
 				Next
 				<svg
@@ -1899,6 +1931,23 @@
 		margin-top: 1.5rem;
 	}
 
+	/* The blocker, stated beside the control it blocks — not in a tooltip only a
+	   mouse user can find. */
+	.nav-blocked {
+		margin: 0 var(--space-3) 0 auto;
+		align-self: center;
+		max-width: 46ch;
+		text-align: right;
+		font-size: var(--text-sm);
+		line-height: var(--leading-snug);
+		color: var(--warning-text);
+	}
+	@media (max-width: 639px) {
+		.nav-blocked {
+			margin: 0;
+			text-align: left;
+		}
+	}
 	.nav-back {
 		display: inline-flex;
 		align-items: center;
