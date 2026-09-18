@@ -558,7 +558,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-17", hash: "9b7e9c1", type: "other", category: "maintenance", scope: null, title: "Merge origin/main: a reasoning knob for the director, off by default" },
 	{ date: "2026-09-17", hash: "9b49d52", type: "docs", category: "docs", scope: "audit", title: "close round 4 — every conflict resolved, 34 ahead / 0 behind" },
 	{ date: "2026-09-17", hash: "26936c3", type: "feat", category: "feature", scope: "ux", title: "finish the shell, and make the rules testable" },
-	{ date: "2026-09-17", hash: "f0284a1", type: "fix", category: "fix", scope: "realism", title: "stop wiring the endpoint the repo's own research said to refuse" }
+	{ date: "2026-09-17", hash: "f0284a1", type: "fix", category: "fix", scope: "realism", title: "stop wiring the endpoint the repo's own research said to refuse" },
+	{ date: "2026-09-17", hash: "ace83e8", type: "docs", category: "docs", scope: "competitive", title: "three rounds deeper, and defer process risk to the audit" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -961,7 +962,15 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 		summary: "Refuse lint errors at commit, and never commit a stale changelog. Plus 13 more changes, touching guides and explanations and layout, colours and readability and things you can now do.",
 		major: true, curated: false,
 		entries: [CHANGELOG[511], CHANGELOG[512], CHANGELOG[513], CHANGELOG[514], CHANGELOG[515], CHANGELOG[516], CHANGELOG[517], CHANGELOG[518], CHANGELOG[519], CHANGELOG[520], CHANGELOG[521], CHANGELOG[522], CHANGELOG[523], CHANGELOG[524]]
+	},
+	{
+		id: "ace83e8", from: "2026-09-17", to: "2026-09-17",
+		category: "docs", categories: ["docs"],
+		title: "Help: three rounds deeper, and defer process risk to the…",
+		summary: "Three rounds deeper, and defer process risk to the audit.",
+		major: false, curated: false,
+		entries: [CHANGELOG[525]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "f0284a1";
+export const CHANGELOG_GENERATED_FROM = "ace83e8";
