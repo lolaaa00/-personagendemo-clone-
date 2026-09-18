@@ -563,7 +563,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-18", hash: "8111acf", type: "chore", category: "infrastructure", scope: "deploy", title: "refuse to deploy from any branch but main, and list what a deploy sweeps" },
 	{ date: "2026-09-18", hash: "0a684af", type: "docs", category: "infrastructure", scope: "audit", title: "the deploy guard is applied, not just proposed" },
 	{ date: "2026-09-18", hash: "382676b", type: "chore", category: "security", scope: "tree", title: "pin every session's work before the production merge" },
-	{ date: "2026-09-18", hash: "33a5798", type: "fix", category: "fix", scope: "realism", title: "the benchmark never actually enhanced anything" }
+	{ date: "2026-09-18", hash: "33a5798", type: "fix", category: "fix", scope: "realism", title: "the benchmark never actually enhanced anything" },
+	{ date: "2026-09-18", hash: "c5842e8", type: "fix", category: "fix", scope: "ux", title: "say why Next is disabled, and give the fold back to the post" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -971,10 +972,10 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 		id: "ace83e8", from: "2026-09-17", to: "2026-09-18",
 		category: "infrastructure", categories: ["docs","infrastructure","security","fix"],
 		title: "Behind the scenes: three rounds deeper, and defer process risk to the…",
-		summary: "Three rounds deeper, and defer process risk to the audit. Plus 4 more changes, touching guides and explanations and sign-in and account protection and things that were broken.",
+		summary: "Three rounds deeper, and defer process risk to the audit. Plus 5 more changes, touching guides and explanations and sign-in and account protection and things that were broken.",
 		major: true, curated: false,
-		entries: [CHANGELOG[525], CHANGELOG[526], CHANGELOG[527], CHANGELOG[528], CHANGELOG[529]]
+		entries: [CHANGELOG[525], CHANGELOG[526], CHANGELOG[527], CHANGELOG[528], CHANGELOG[529], CHANGELOG[530]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "33a5798";
+export const CHANGELOG_GENERATED_FROM = "c5842e8";

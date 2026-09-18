@@ -277,6 +277,7 @@
 			{/each}
 		</div>
 	{/if}
+	</div>
 </PageShell>
 
 {#if lightbox}

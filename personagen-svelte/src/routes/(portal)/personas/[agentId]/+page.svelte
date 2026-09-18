@@ -8177,10 +8177,6 @@
 		min-width: 180px;
 	}
 
-	.age-slider-group input[type='range'] {
-		flex: 1;
-	}
-
 	.age-label {
 		font-size: 0.75rem;
 		color: var(--text-muted);
@@ -9014,11 +9010,6 @@
 		flex-shrink: 0;
 	}
 
-	.slider-row input[type='range'] {
-		flex: 1;
-		accent-color: var(--accent);
-	}
-
 	.hours-row {
 		display: flex;
 		align-items: center;
@@ -9262,12 +9253,6 @@
 		.composer-grid-2 {
 			grid-template-columns: 1fr;
 		}
-	}
-	.composer-advanced summary {
-		cursor: pointer;
-		font-size: var(--text-sm);
-		color: var(--text-dim);
-		margin: 0.25rem 0 0.75rem;
 	}
 	.composer-advanced .field-group {
 		margin-bottom: 0.75rem;

@@ -1177,6 +1177,7 @@
 			{/if}
 		</section>
 	{/if}
+	</div>
 </PageShell>
 
 <style>

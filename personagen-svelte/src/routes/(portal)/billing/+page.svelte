@@ -302,6 +302,7 @@
 			<dd>No. Purchased and welcome credit stays until you use it.</dd>
 		</dl>
 	</section>
+	</div>
 </PageShell>
 
 <style>
