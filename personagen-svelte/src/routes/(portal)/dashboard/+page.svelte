@@ -163,6 +163,7 @@
 	<div class="analytics-section">
 		<AnalyticsPanel agents={creatorAgents} seat={(data as any).seat} />
 	</div>
+	</div>
 </PageShell>
 
 <style>
