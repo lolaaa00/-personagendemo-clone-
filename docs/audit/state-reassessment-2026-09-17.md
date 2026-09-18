@@ -358,6 +358,8 @@ Three things about that script, all measured:
 
 **The fix for 1 and 2 was written, tested for anchors, and refused** by the session's auto-mode classifier as a modification of a shared resource. That is the right call for the one script every deploy runs through, and it was not retried. The change is packaged as `scratchpad/apply-deploy-guard.mjs` in session `b749991a`: a branch guard before any gate runs, and a printed list of the tracked files about to be swept. It is the operator's decision.
 
+**Applied 2026-09-18 on the operator's go-ahead, as `8111acf`.** Made as a plain source edit rather than the refused script rewrite. Proven before committing: the script parses clean, the guard sits at line 46 ahead of the first gate at line 82, and a dry run from `ux/portal-overhaul` exits 1 at `[0/3]` with zero gate lines printed and the tree untouched. The sweep listing, which only executes on `main`, was exercised standalone against the live tree and listed exactly the modified in-scope files while leaving untracked ones to the existing `-allowUntracked` guard.
+
 ### 10.3 The per-rule ceiling gate is red on committed code
 
 `scripts/check-warnings-ceiling.mjs` is a second ratchet, separate from eslint's `--max-warnings`: per-class caps on svelte-check warnings in `warning-ceilings.json` (10 classes, sum 119, last updated 2026-09-07). On a **clean checkout** of `06de1cd` — not the shared tree, whose count moves with every peer keystroke — svelte-check reports 0 errors and 167 warnings, and the gate fails twice:
