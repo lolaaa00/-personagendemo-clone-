@@ -278,6 +278,48 @@ const ROUTES = [
 	}
 }
 
+// ── 2d. A decision is possible without scrolling. ────────────────────────
+// Deck is what /review renders below 768, and it is the phone's triage mode:
+// one card, approve or reject, next. Measured before this: at 360x780 the
+// caption sat at y=830 and the approve control at y=984 against a 780px fold —
+// past the bottom of the scroll container — so every single decision cost a
+// scroll down and a scroll back, on the loop the product exists for.
+//
+// Tested at real device sizes rather than round numbers, and including the
+// awkward wide-but-short case, which is the one that kept failing.
+{
+	console.log('a post can be decided without scrolling, on a phone');
+	const SIZES = [
+		[360, 780],
+		[390, 844],
+		[414, 896],
+		[600, 800],
+		[640, 900],
+		[720, 1000],
+		[767, 800]
+	];
+	const failed = [];
+	for (const [w, h] of SIZES) {
+		const { ctx, page } = await open('/review', w, h);
+		const r = await page.evaluate(() => {
+			const cap = document.querySelector('.deck-cap');
+			const yes = document.querySelector('.dk-yes');
+			if (!cap || !yes) return null;
+			const inView = (el) => {
+				const b = el.getBoundingClientRect();
+				return b.top >= 0 && b.bottom <= window.innerHeight;
+			};
+			return { cap: inView(cap), approve: inView(yes) };
+		});
+		await ctx.close();
+		if (!r) failed.push(`${w}x${h}: deck view did not render a card`);
+		else if (!r.cap || !r.approve)
+			failed.push(`${w}x${h}: ${[!r.cap && 'caption', !r.approve && 'approve'].filter(Boolean).join(' + ')} below the fold`);
+	}
+	if (failed.length) bad(`a decision needs scrolling at ${failed.length} of ${SIZES.length} sizes: ${failed.join('; ')}`);
+	else ok(`caption and approve are both in the first viewport at all ${SIZES.length} device sizes`);
+}
+
 // ── 3. The sticky column covers nothing. ──────────────────────────────────
 // The fix for round 3's off-screen actions bought them by parking an opaque
 // sticky cell on top of STATUS and the last 65px of SLOT at 1280.

@@ -824,7 +824,7 @@
 					{:else}
 						<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></svg>
 					{/if}
-					{v.label}
+					<span class="vs-label">{v.label}</span>
 				</button>
 			{/each}
 			{#if viewMode === 'split' || viewMode === 'deck' || viewMode === 'table'}
@@ -2491,6 +2491,22 @@
 			min-width: 11rem;
 		}
 	}
+	@media (max-width: 767px) {
+		/* Icon-only view switcher: five labelled buttons wrap to two rows at
+		   360px. `title` and the visually-hidden label keep the meaning. */
+		.vs-label {
+			position: absolute;
+			width: 1px;
+			height: 1px;
+			overflow: hidden;
+			clip-path: inset(50%);
+			white-space: nowrap;
+		}
+		/* The result count sat on its own wrapped line, 61px tall. */
+		.filt-count {
+			white-space: nowrap;
+		}
+	}
 	.queue-toolbar {
 		display: flex;
 		flex-wrap: wrap;
@@ -2870,9 +2886,20 @@
 		   `object-fit: cover` on the image means the crop still fills it. */
 		max-height: 42vh;
 	}
-	@media (max-width: 639px) {
+	/* ALL deck-media sizing lives here, immediately after the base rule.
+	
+	   A copy of this cap was written in the toolbar block 380 lines earlier and
+	   lost to source order — the base 42vh below it simply won, at equal
+	   specificity, so the crop stayed 336px on a 800px-tall screen and pushed the
+	   caption past the fold. That is the third time in this file that a rule
+	   declared in one place has been silently overridden by one declared in
+	   another. Keeping a property's rules adjacent is the fix; splitting them is
+	   the bug. */
+	@media (max-width: 767px) {
 		.deck-media {
-			max-height: 34vh;
+			/* Sized so the caption clears the fold at every width Deck renders at,
+			   including the awkward wide-but-short case (767x800). */
+			max-height: 30vh;
 		}
 	}
 	.deck-media img {
@@ -2922,6 +2949,36 @@
 		gap: 0.7rem;
 		align-items: center;
 		padding: var(--space-5) 0 var(--space-2);
+	}
+	@media (max-width: 767px) {
+		/* The decision controls stay on screen.
+		
+		   Deck view is the phone's triage mode, and the whole point of it is one
+		   card at a time with approve and reject to hand. Measured at 360x780
+		   before this: the approve button sat at y=837 against a 780px fold —
+		   past the bottom of the scroll container — so every single decision cost
+		   a scroll down and a scroll back. Trimming chrome got the caption above
+		   the fold (721px) but could never reach the controls, because the card's
+		   own height is what pushes them down.
+		
+		   Pinning them is the right answer rather than a workaround: on a phone a
+		   persistent action bar is what the gesture expects, and it makes the
+		   control position independent of how tall the card happens to be. */
+		.deck-controls {
+			position: sticky;
+			bottom: 0;
+			z-index: 3;
+			justify-content: center;
+			margin-top: var(--space-3);
+			padding: var(--space-3) 0 calc(var(--space-3) + env(safe-area-inset-bottom, 0px));
+			background: linear-gradient(
+				to top,
+				var(--bg) 62%,
+				color-mix(in srgb, var(--bg) 82%, transparent)
+			);
+			backdrop-filter: blur(6px);
+			border-top: 1px solid var(--border);
+		}
 	}
 	.dk-round {
 		width: 50px;
