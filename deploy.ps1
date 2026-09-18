@@ -350,18 +350,26 @@ if ($LASTEXITCODE -ne 0) {
 }
 Write-Host "  [3/3] OK Pushed to origin/main" -ForegroundColor Green
 
-# The service token lives in the app's gitignored .env (EASYPANEL_DEPLOY_TOKEN), or
-# in the environment. It is the token Easypanel prints for the service's deploy
-# webhook; it is never committed.
+# The deploy token lives in the app's gitignored .env (EASYPANEL_DEPLOY_TOKEN), or
+# in the environment. Its ONLY source is the Easypanel UI: l2g -> personagen-app ->
+# Deploy -> "Webhook URL", whose last path segment is the token. The ops gateway
+# masks every token it returns (each one reads "[redacted]"), so nothing fetched
+# through it can be used here - on 2026-09-18 that placeholder was stored by
+# mistake and the webhook answered 404. It is never committed.
 $deployToken = $env:EASYPANEL_DEPLOY_TOKEN
 if (-not $deployToken) {
     $envFile = Join-Path $projectDir "personagen-svelte\.env"
     $envLine = Get-Content $envFile -ErrorAction SilentlyContinue | Where-Object { $_ -match '^EASYPANEL_DEPLOY_TOKEN=' } | Select-Object -First 1
     if ($envLine) { $deployToken = ($envLine -split '=', 2)[1].Trim() }
 }
+if ($deployToken -and $deployToken -notmatch '^[A-Za-z0-9_-]{8,}$') {
+    Write-Host "  [3/3] NOT DEPLOYED: EASYPANEL_DEPLOY_TOKEN is a placeholder ('$deployToken'), not a token." -ForegroundColor Red
+    Write-Host "  [3/3]     Copy the real one from Easypanel: l2g -> personagen-app -> Deploy -> Webhook URL (last path segment)." -ForegroundColor Red
+    exit 1
+}
 if (-not $deployToken) {
     Write-Host "  [3/3] NOT DEPLOYED: personagen-app has autoDeploy OFF and no EASYPANEL_DEPLOY_TOKEN is set." -ForegroundColor Red
-    Write-Host "  [3/3]     Trigger it in Easypanel (l2g -> personagen-app -> Deploy), or put the service token in personagen-svelte/.env." -ForegroundColor Red
+    Write-Host "  [3/3]     Copy it from Easypanel (l2g -> personagen-app -> Deploy -> Webhook URL) into personagen-svelte/.env, or click Deploy there." -ForegroundColor Red
     exit 1
 }
 
@@ -371,6 +379,10 @@ try {
     Write-Host "  [3/3] OK Deploy accepted: $resp" -ForegroundColor Green
 } catch {
     Write-Host "  [3/3] ERROR: deploy webhook failed: $($_.Exception.Message)" -ForegroundColor Red
+    if ($_.Exception.Message -match '404') {
+        Write-Host "  [3/3]     404 means the token is not this service's deploy token. The push succeeded; production is NOT rebuilt." -ForegroundColor Red
+        Write-Host "  [3/3]     Copy the token from Easypanel (l2g -> personagen-app -> Deploy -> Webhook URL) or click Deploy there." -ForegroundColor Red
+    }
     exit 1
 }
 

@@ -572,7 +572,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-18", hash: "9c5642c", type: "fix", category: "fix", scope: "shell", title: "close the dashboard page wrapper explicitly" },
 	{ date: "2026-09-18", hash: "df2a3ee", type: "chore", category: "infrastructure", scope: "warnings", title: "element_implicitly_closed may never creep back — ceiling 0" },
 	{ date: "2026-09-18", hash: "5111760", type: "fix", category: "publishing", scope: "persona", title: "offer Delete, Connect, Disconnect and Publish only to seats that may use them; deploy.ps1 now deploys" },
-	{ date: "2026-09-18", hash: "f929c36", type: "docs", category: "docs", scope: "ux", title: "F-7 closed — persona controls answer to the seat" }
+	{ date: "2026-09-18", hash: "f929c36", type: "docs", category: "docs", scope: "ux", title: "F-7 closed — persona controls answer to the seat" },
+	{ date: "2026-09-18", hash: "10ae5ca", type: "deploy", category: "security", scope: null, title: "align every session to main — persona seat gates, deploy.ps1 now deploys, round-6 review and guides fixes [gates skipped: open-registration]" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -983,7 +984,15 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 		summary: "Three rounds deeper, and defer process risk to the audit. Plus 13 more changes, touching guides and explanations and sign-in and account protection and things that were broken.",
 		major: true, curated: false,
 		entries: [CHANGELOG[525], CHANGELOG[526], CHANGELOG[527], CHANGELOG[528], CHANGELOG[529], CHANGELOG[530], CHANGELOG[531], CHANGELOG[532], CHANGELOG[533], CHANGELOG[534], CHANGELOG[535], CHANGELOG[536], CHANGELOG[537], CHANGELOG[538]]
+	},
+	{
+		id: "10ae5ca", from: "2026-09-18", to: "2026-09-18",
+		category: "security", categories: ["security"],
+		title: "Safer: align every session to main — persona seat gates…",
+		summary: "Align every session to main — persona seat gates, deploy.ps1 now deploys, round-6 review and guides fixes [gates skipped: open-registration].",
+		major: false, curated: false,
+		entries: [CHANGELOG[539]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "f929c36";
+export const CHANGELOG_GENERATED_FROM = "10ae5ca";
