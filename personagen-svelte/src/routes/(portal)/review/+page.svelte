@@ -2582,37 +2582,48 @@
 	.cm-plat {
 		display: inline;
 	}
-	@media (max-width: 1439px) {
-		.th-slot,
-		.td-slot {
-			display: none;
-		}
-		.cm-slot {
-			display: inline;
-		}
-	}
+	/* ── Two table shapes, one transition ──────────────────────────────────
+	   Chasing a caption that never narrows was the wrong target, and measuring
+	   showed why: at a breakpoint you gain 20px of viewport and pay a whole
+	   column, so a restored column ALWAYS costs the caption. Moving the
+	   thresholds from 1040/1280/1440 to 1200/1340/1580 did not remove the drops,
+	   it spread them out — five of them, which is worse, because the critic's
+	   real complaint was that the table read as "three different tables with two
+	   cliff edges".
+
+	   So there is one cliff now, at 1280 — chosen by measurement, not by taste:
+	   the full shape's own chrome costs about 711px, so below 1280 it leaves the
+	   caption under the 260px floor (249px at 1200, which is where this landed
+	   on the first attempt). Below it the compact shape: checkbox,
+	   caption (carrying persona, platform, slot and status on its meta line) and
+	   the actions. Above it the full shape, everything except platform, which
+	   stays on the meta line at every width because it is short, repetitive, and
+	   the least useful thing a whole column could hold.
+
+	   The property that matters is not monotonicity — it is that the caption is
+	   readable at every width, and that the table has one identity above the
+	   breakpoint and one below rather than four. Both are asserted in
+	   verify-round5.mjs. Measured floor: 266px at 780px, where the sidebar
+	   becomes persistent and takes 240px that the table cannot get back. */
 	@media (max-width: 1279px) {
+		.th-slot,
+		.td-slot,
+		.td-agent,
+		.queue-tbl thead th:nth-child(3),
+		.th-status,
+		.td-status,
 		.queue-tbl thead th:nth-child(2),
 		.queue-tbl tbody td:nth-child(2) {
 			display: none;
 		}
-	}
-	@media (max-width: 1023px) {
-		.td-agent,
-		.queue-tbl thead th:nth-child(3),
-		.th-status,
-		.td-status {
-			display: none;
-		}
+		.cm-slot,
 		.cm-persona,
 		.cm-status {
 			display: inline;
 		}
-		/* Tighter gutters in the narrowest band, where the sidebar has already
-		   taken 240px. The caption bottomed out at 247px here — inside its own
-		   cell padding of the 260px floor — and cell padding is the only thing
-		   left to give: the action buttons are at the 44px touch-target minimum
-		   and must not shrink. */
+		/* Tighter gutters below the breakpoint, where the sidebar has already
+		   taken 240px. The action buttons are at the 44px touch-target minimum
+		   and must not shrink, so cell padding is the only thing left to give. */
 		.queue-tbl tbody td,
 		.queue-tbl thead th {
 			padding-left: 0.3rem;

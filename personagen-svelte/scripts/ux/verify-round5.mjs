@@ -174,7 +174,15 @@ const ROUTES = [
 			if (!cap) return null; // below the table's own breakpoint — Deck view
 			const cs = getComputedStyle(cap);
 			if (cs.display === 'none') return { width: 0, hidden: true };
-			return { width: Math.round(cap.getBoundingClientRect().width), hidden: false };
+			const row = cap.closest('tr');
+			const cols = [...row.children].filter((td) => getComputedStyle(td).display !== 'none').length;
+			const main = document.querySelector('.portal-content') ?? document.body;
+			return {
+				width: Math.round(cap.getBoundingClientRect().width),
+				cols,
+				main: Math.round(main.getBoundingClientRect().width),
+				hidden: false
+			};
 		});
 		if (m) samples.push({ w, ...m });
 	}
@@ -182,6 +190,8 @@ const ROUTES = [
 
 	if (samples.length < 20) bad(`only ${samples.length} widths rendered a table — too few to judge`);
 	else {
+		// (a) The blocker property: the caption is readable at every width. This is
+		//     the one that matters, and it is what caught 67px at 769.
 		const starved = samples.filter((x) => x.width < MIN);
 		if (starved.length) {
 			const worst = starved.reduce((a, b) => (a.width < b.width ? a : b));
@@ -194,14 +204,37 @@ const ROUTES = [
 			ok(`caption ≥ ${MIN}px at all ${samples.length} widths 700–2560 (narrowest ${min.width}px at ${min.w}px)`);
 		}
 
-		// A 1px resize must not reorganise the table underneath the reader.
-		let jumps = [];
+		// (b) The coherence property. The critic's complaint was not that the
+		//     caption changed width — it was that the table read as "three
+		//     different tables with two cliff edges". Count the actual shapes.
+		const shapes = [...new Set(samples.map((x) => x.cols))];
+		if (shapes.length > 2)
+			bad(`the table takes ${shapes.length} different column shapes across the range (${shapes.join(', ')} columns)`);
+		else ok(`the table has ${shapes.length} column shape(s): ${shapes.join(' and ')} columns`);
+
+		// (c) No unexplained narrowing. A caption may only lose width where
+		//     something visibly changed: the column shape, or the space the table
+		//     has to work in (the sidebar becomes persistent at 769 and takes
+		//     240px the table cannot get back). A drop anywhere else is the
+		//     reader's text shrinking for no reason they can see.
+		//
+		//     Deliberately NOT a flat "no change over N px" rule. That version
+		//     fired on ordinary breakpoint reflow, I talked myself into calling it
+		//     a false positive, and it turned out to be describing a real defect
+		//     from the wrong angle. This asks the question that was actually meant.
+		const unexplained = [];
 		for (let i = 1; i < samples.length; i++) {
-			const d = Math.abs(samples[i].width - samples[i - 1].width);
-			if (d > 200) jumps.push(`${samples[i - 1].w}→${samples[i].w}: ${samples[i - 1].width}→${samples[i].width}px`);
+			const prev = samples[i - 1];
+			const cur = samples[i];
+			const drop = prev.width - cur.width;
+			if (drop <= 50) continue;
+			if (cur.cols !== prev.cols) continue; // the table changed shape — visible
+			if (cur.main < prev.main) continue; // less room to work in — not ours
+			unexplained.push(`${prev.w}→${cur.w}: ${prev.width}→${cur.width}px, same ${cur.cols} columns, same ${cur.main}px of room`);
 		}
-		if (jumps.length) bad(`caption width jumps sharply at ${jumps.length} breakpoint(s): ${jumps.join('; ')}`);
-		else ok('no caption-width jump over 200px across the range');
+		if (unexplained.length)
+			bad(`caption narrows with nothing to show for it at ${unexplained.length} step(s): ${unexplained.join('; ')}`);
+		else ok('every caption narrowing is explained by a shape change or by lost room');
 	}
 }
 

@@ -573,7 +573,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-18", hash: "df2a3ee", type: "chore", category: "infrastructure", scope: "warnings", title: "element_implicitly_closed may never creep back — ceiling 0" },
 	{ date: "2026-09-18", hash: "5111760", type: "fix", category: "publishing", scope: "persona", title: "offer Delete, Connect, Disconnect and Publish only to seats that may use them; deploy.ps1 now deploys" },
 	{ date: "2026-09-18", hash: "f929c36", type: "docs", category: "docs", scope: "ux", title: "F-7 closed — persona controls answer to the seat" },
-	{ date: "2026-09-18", hash: "10ae5ca", type: "deploy", category: "security", scope: null, title: "align every session to main — persona seat gates, deploy.ps1 now deploys, round-6 review and guides fixes [gates skipped: open-registration]" }
+	{ date: "2026-09-18", hash: "10ae5ca", type: "deploy", category: "security", scope: null, title: "align every session to main — persona seat gates, deploy.ps1 now deploys, round-6 review and guides fixes [gates skipped: open-registration]" },
+	{ date: "2026-09-18", hash: "645bd81", type: "fix", category: "security", scope: "deploy", title: "step 3 shipped unexercised — name the token's real source, refuse placeholders, explain a 404" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -989,10 +990,10 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 		id: "10ae5ca", from: "2026-09-18", to: "2026-09-18",
 		category: "security", categories: ["security"],
 		title: "Safer: align every session to main — persona seat gates…",
-		summary: "Align every session to main — persona seat gates, deploy.ps1 now deploys, round-6 review and guides fixes [gates skipped: open-registration].",
+		summary: "Align every session to main — persona seat gates, deploy.ps1 now deploys, round-6 review and guides fixes [gates skipped: open-registration]. Plus 1 more change.",
 		major: false, curated: false,
-		entries: [CHANGELOG[539]]
+		entries: [CHANGELOG[539], CHANGELOG[540]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "10ae5ca";
+export const CHANGELOG_GENERATED_FROM = "645bd81";
