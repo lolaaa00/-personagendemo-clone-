@@ -782,7 +782,7 @@
 					{/each}
 				</select>
 			</label>
-			<label class="filt">
+			<label class="filt filt-status">
 				<span>Status</span>
 				<select
 					bind:value={filterStatus}
@@ -2484,12 +2484,35 @@
 	   see. And the media is capped against the viewport so the caption and the
 	   verbs stay above the fold instead of being pushed down by a tall crop. */
 	@media (max-width: 767px) {
+		/* One scrolling row, with two things the first version got wrong.
+		
+		   The row scrolls (609px of content in a 296px viewport at 360) and said
+		   so nowhere: no fade, no chevron, no visible scrollbar. And STATUS was
+		   third, so at 360 it sat entirely off-screen — the filter carrying the
+		   default that decides what the queue shows was invisible, and "All
+		   platforms" was clipped mid-word at the right edge with nothing to
+		   suggest there was more.
+		
+		   Status leads now, because it is the filter that changes what you are
+		   looking at, and the right edge fades so the row reads as scrollable. */
 		.filter-bar {
 			flex-wrap: nowrap;
 			overflow-x: auto;
 			padding-bottom: var(--space-2);
 			margin-bottom: var(--space-2);
 			scrollbar-width: thin;
+			-webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent 100%);
+			mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent 100%);
+		}
+		.filter-bar::-webkit-scrollbar {
+			height: 4px;
+		}
+		.filter-bar::-webkit-scrollbar-thumb {
+			background: var(--border-strong);
+			border-radius: 999px;
+		}
+		.filt-status {
+			order: -1;
 		}
 		.filt {
 			flex: none;

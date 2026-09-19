@@ -375,6 +375,90 @@ const ROUTES = [
 	else ok(`trash card chrome fits, and the caption renders, at all ${checked} widths`);
 }
 
+// ── 2f. The filter you are looking through is on screen. ────────────────
+// The /review filter row scrolls below 768 and said so nowhere — no fade, no
+// chevron, no visible scrollbar — and STATUS was third in the row, so at 360 it
+// sat entirely off-screen. The filter carrying the default that decides what
+// the queue shows was invisible, on the width where it matters most.
+{
+	console.log('the active status filter is on screen at every narrow width');
+	const WIDTHS = [360, 390, 414, 480, 560, 640, 700, 767];
+	const ctx = await browser.newContext({ storageState: STATE, viewport: { width: 1280, height: 800 } });
+	const page = await ctx.newPage();
+	await page.goto(`${BASE}/review`, { waitUntil: 'networkidle', timeout: 90000 });
+	const hidden = [];
+	let checked = 0;
+	for (const w of WIDTHS) {
+		await page.setViewportSize({ width: w, height: 800 });
+		await page.waitForTimeout(130);
+		const r = await page.evaluate(() => {
+			const st = document.querySelector('.filt-status');
+			const bar = document.querySelector('.filter-bar');
+			if (!st || !bar) return null;
+			const a = st.getBoundingClientRect();
+			const b = bar.getBoundingClientRect();
+			return {
+				visible: a.left >= b.left - 1 && a.right <= b.right + 1,
+				label: (st.querySelector('select')?.selectedOptions[0]?.textContent ?? '').trim()
+			};
+		});
+		if (!r) continue;
+		checked++;
+		if (!r.visible) hidden.push(`${w}px`);
+		else if (!r.label) hidden.push(`${w}px (visible but no label)`);
+	}
+	await ctx.close();
+	if (!checked) bad('no filter row rendered — the check would pass vacuously');
+	else if (hidden.length)
+		bad(`the active status filter is off screen at ${hidden.length} width(s): ${hidden.join(', ')}`);
+	else ok(`the active status filter and its value are visible at all ${checked} narrow widths`);
+}
+
+// ── 2g. No control floats over the data. ────────────────────────────────
+// The calendar's composer trigger was a 56px position:fixed circle pinned to
+// the viewport's bottom-right, sitting on whatever happened to be underneath —
+// measured clipping a day cell's event chip. Reserving space cannot fix a
+// viewport-fixed element; it covers that corner at every scroll position.
+{
+	console.log('no floating control covers the calendar grid');
+	const ctx = await browser.newContext({ storageState: STATE, viewport: { width: 1280, height: 900 } });
+	const page = await ctx.newPage();
+	await page.goto(`${BASE}/calendar`, { waitUntil: 'networkidle', timeout: 90000 });
+	await page.waitForTimeout(1000);
+	const issues = [];
+	let seen = 0;
+	for (const w of [768, 1024, 1280, 1440, 1920, 2560]) {
+		await page.setViewportSize({ width: w, height: 900 });
+		await page.waitForTimeout(200);
+		const r = await page.evaluate(() => {
+			const chips = [...document.querySelectorAll('.event-block')];
+			// Anything fixed-position and small enough to be a floating action.
+			const floats = [...document.querySelectorAll('button, a')].filter((el) => {
+				const cs = getComputedStyle(el);
+				const b = el.getBoundingClientRect();
+				return cs.position === 'fixed' && b.width > 0 && b.width < 120 && b.height < 120;
+			});
+			let covered = 0;
+			for (const f of floats) {
+				const fb = f.getBoundingClientRect();
+				for (const ch of chips) {
+					const c = ch.getBoundingClientRect();
+					if (c.right > fb.left && c.left < fb.right && c.bottom > fb.top && c.top < fb.bottom)
+						covered++;
+				}
+			}
+			return { chips: chips.length, floats: floats.length, covered };
+		});
+		if (!r.chips) continue;
+		seen++;
+		if (r.covered) issues.push(`${w}px: ${r.covered} event chip(s) under a floating control`);
+	}
+	await ctx.close();
+	if (!seen) bad('no calendar chips rendered — the check would pass vacuously');
+	else if (issues.length) bad(issues.join('; '));
+	else ok(`no event chip is covered by a floating control, at all ${seen} widths`);
+}
+
 // ── 3. The sticky column covers nothing. ──────────────────────────────────
 // The fix for round 3's off-screen actions bought them by parking an opaque
 // sticky cell on top of STATUS and the last 65px of SLOT at 1280.

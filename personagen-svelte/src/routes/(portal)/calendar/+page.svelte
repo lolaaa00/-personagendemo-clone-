@@ -918,6 +918,24 @@
 				Plan Campaign
 			</button>
 			<button
+				class="btn-ghost"
+				onclick={openComposer}
+				title="Write a post yourself — nothing is generated until you ask for it"
+			>
+				<svg
+					width="16"
+					height="16"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					aria-hidden="true"><path d="M12 5v14" /><path d="M5 12h14" /></svg
+				>
+				Write a post
+			</button>
+			<button
 				class="btn-primary"
 				disabled={generatingPost}
 				onclick={() => requestGeneratePost()}
@@ -1248,21 +1266,6 @@
 				</div>
 			</div>
 		{/if}
-
-	<!-- FAB -->
-	<button class="fab" onclick={openComposer} aria-label="New Post">
-		<svg
-			width="24"
-			height="24"
-			viewBox="0 0 24 24"
-			fill="none"
-			stroke="currentColor"
-			stroke-width="2.5"
-			stroke-linecap="round"
-			stroke-linejoin="round"
-			aria-hidden="true"><path d="M12 5v14" /><path d="M5 12h14" /></svg
-		>
-	</button>
 
 	<!-- Composer overlay -->
 	{#if showComposer}
@@ -1744,35 +1747,6 @@
 		to { transform: scale(1); opacity: 1; }
 	}
 
-	/* ── FAB ── */
-	.fab {
-		position: fixed;
-		bottom: 2rem;
-		right: 2rem;
-		width: 56px;
-		height: 56px;
-		border-radius: var(--radius-full);
-		background: var(--gradient-cta);
-		border: none;
-		color: #fff;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		cursor: pointer;
-		box-shadow: var(--shadow-lg), var(--shadow-accent);
-		transition:
-			transform 0.2s ease,
-			box-shadow 0.2s ease;
-		z-index: var(--z-sticky);
-	}
-
-	.fab:hover {
-		transform: translateY(-3px) scale(1.05);
-		box-shadow:
-			var(--shadow-lg),
-			0 0 40px color-mix(in srgb, var(--accent) 30%, transparent);
-	}
-
 	/* ── Composer overlay ── */
 	.composer-overlay {
 		position: fixed;
@@ -1978,11 +1952,6 @@
 	}
 
 	@media (max-width: 640px) {
-		.fab {
-			bottom: 1.25rem;
-			right: 1.25rem;
-		}
-
 		.field-row {
 			flex-direction: column;
 			gap: 1rem;
