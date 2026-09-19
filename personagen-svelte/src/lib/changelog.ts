@@ -578,7 +578,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-18", hash: "6958788", type: "fix", category: "fix", scope: "review", title: "one table transition, and a test that asks what it meant to ask" },
 	{ date: "2026-09-18", hash: "3a3b3f3", type: "fix", category: "fix", scope: "review", title: "a phone can decide a post without scrolling" },
 	{ date: "2026-09-18", hash: "86aa8dc", type: "docs", category: "docs", scope: "ux", title: "the range, the 769px breakpoint, and a test that certified a bug" },
-	{ date: "2026-09-18", hash: "ee8dbcc", type: "fix", category: "fix", scope: "ux", title: "one word per status, and a card that names the post you are deleting" }
+	{ date: "2026-09-18", hash: "ee8dbcc", type: "fix", category: "fix", scope: "ux", title: "one word per status, and a card that names the post you are deleting" },
+	{ date: "2026-09-18", hash: "48389cb", type: "fix", category: "fix", scope: "ux", title: "the badge row I \"verified\" at one width overflows at two others" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -994,10 +995,10 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 		id: "10ae5ca", from: "2026-09-18", to: "2026-09-18",
 		category: "fix", categories: ["security","fix","docs"],
 		title: "Fixed: align every session to main — persona seat gates…",
-		summary: "Align every session to main — persona seat gates, deploy.ps1 now deploys, round-6 review and guides fixes [gates skipped: open-registration]. Plus 5 more changes, touching sign-in and account protection and guides and explanations.",
+		summary: "Align every session to main — persona seat gates, deploy.ps1 now deploys, round-6 review and guides fixes [gates skipped: open-registration]. Plus 6 more changes, touching sign-in and account protection and guides and explanations.",
 		major: true, curated: false,
-		entries: [CHANGELOG[539], CHANGELOG[540], CHANGELOG[541], CHANGELOG[542], CHANGELOG[543], CHANGELOG[544]]
+		entries: [CHANGELOG[539], CHANGELOG[540], CHANGELOG[541], CHANGELOG[542], CHANGELOG[543], CHANGELOG[544], CHANGELOG[545]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "ee8dbcc";
+export const CHANGELOG_GENERATED_FROM = "48389cb";
