@@ -579,7 +579,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-18", hash: "3a3b3f3", type: "fix", category: "fix", scope: "review", title: "a phone can decide a post without scrolling" },
 	{ date: "2026-09-18", hash: "86aa8dc", type: "docs", category: "docs", scope: "ux", title: "the range, the 769px breakpoint, and a test that certified a bug" },
 	{ date: "2026-09-18", hash: "ee8dbcc", type: "fix", category: "fix", scope: "ux", title: "one word per status, and a card that names the post you are deleting" },
-	{ date: "2026-09-18", hash: "48389cb", type: "fix", category: "fix", scope: "ux", title: "the badge row I \"verified\" at one width overflows at two others" }
+	{ date: "2026-09-18", hash: "48389cb", type: "fix", category: "fix", scope: "ux", title: "the badge row I \"verified\" at one width overflows at two others" },
+	{ date: "2026-09-19", hash: "42e4b9e", type: "docs", category: "generation", scope: "competitive", title: "muapi white-label studio and Open-Generative-AI, assessed as one company" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -992,13 +993,13 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 		entries: [CHANGELOG[525], CHANGELOG[526], CHANGELOG[527], CHANGELOG[528], CHANGELOG[529], CHANGELOG[530], CHANGELOG[531], CHANGELOG[532], CHANGELOG[533], CHANGELOG[534], CHANGELOG[535], CHANGELOG[536], CHANGELOG[537], CHANGELOG[538]]
 	},
 	{
-		id: "10ae5ca", from: "2026-09-18", to: "2026-09-18",
-		category: "fix", categories: ["security","fix","docs"],
+		id: "10ae5ca", from: "2026-09-18", to: "2026-09-19",
+		category: "fix", categories: ["security","fix","docs","generation"],
 		title: "Fixed: align every session to main — persona seat gates…",
-		summary: "Align every session to main — persona seat gates, deploy.ps1 now deploys, round-6 review and guides fixes [gates skipped: open-registration]. Plus 6 more changes, touching sign-in and account protection and guides and explanations.",
+		summary: "Align every session to main — persona seat gates, deploy.ps1 now deploys, round-6 review and guides fixes [gates skipped: open-registration]. Plus 7 more changes, touching sign-in and account protection and guides and explanations and making posts, images and video.",
 		major: true, curated: false,
-		entries: [CHANGELOG[539], CHANGELOG[540], CHANGELOG[541], CHANGELOG[542], CHANGELOG[543], CHANGELOG[544], CHANGELOG[545]]
+		entries: [CHANGELOG[539], CHANGELOG[540], CHANGELOG[541], CHANGELOG[542], CHANGELOG[543], CHANGELOG[544], CHANGELOG[545], CHANGELOG[546]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "48389cb";
+export const CHANGELOG_GENERATED_FROM = "42e4b9e";
