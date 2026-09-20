@@ -584,7 +584,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-19", hash: "ca8bdfa", type: "docs", category: "generation", scope: "competitive", title: "what in Open-Generative-AI is worth reading for the composer" },
 	{ date: "2026-09-19", hash: "19f7bb4", type: "fix", category: "fix", scope: "ux", title: "the last two open from round 6 — a filter you cannot see, a button on top of the data" },
 	{ date: "2026-09-19", hash: "2450735", type: "docs", category: "docs", scope: "competitive", title: "the \"$2.2M local AI agency\" playbook, measured against our costs" },
-	{ date: "2026-09-20", hash: "a4038da", type: "fix", category: "fix", scope: "video", title: "refuse an unfetchable media URL before spending a probe spawn and a temp dir" }
+	{ date: "2026-09-20", hash: "a4038da", type: "fix", category: "fix", scope: "video", title: "refuse an unfetchable media URL before spending a probe spawn and a temp dir" },
+	{ date: "2026-09-20", hash: "836ad13", type: "chore", category: "infrastructure", scope: "portfolio", title: "commit the enhancement benchmark that actually enhanced" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -998,12 +999,12 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 	},
 	{
 		id: "10ae5ca", from: "2026-09-18", to: "2026-09-20",
-		category: "fix", categories: ["security","fix","docs","generation"],
+		category: "fix", categories: ["security","fix","docs","generation","infrastructure"],
 		title: "Fixed: align every session to main — persona seat gates…",
-		summary: "Align every session to main — persona seat gates, deploy.ps1 now deploys, round-6 review and guides fixes [gates skipped: open-registration]. Plus 11 more changes, touching sign-in and account protection and guides and explanations and making posts, images and video.",
+		summary: "Align every session to main — persona seat gates, deploy.ps1 now deploys, round-6 review and guides fixes [gates skipped: open-registration]. Plus 12 more changes, touching sign-in and account protection and guides and explanations and making posts, images and video.",
 		major: true, curated: false,
-		entries: [CHANGELOG[539], CHANGELOG[540], CHANGELOG[541], CHANGELOG[542], CHANGELOG[543], CHANGELOG[544], CHANGELOG[545], CHANGELOG[546], CHANGELOG[547], CHANGELOG[548], CHANGELOG[549], CHANGELOG[550]]
+		entries: [CHANGELOG[539], CHANGELOG[540], CHANGELOG[541], CHANGELOG[542], CHANGELOG[543], CHANGELOG[544], CHANGELOG[545], CHANGELOG[546], CHANGELOG[547], CHANGELOG[548], CHANGELOG[549], CHANGELOG[550], CHANGELOG[551]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "a4038da";
+export const CHANGELOG_GENERATED_FROM = "836ad13";
