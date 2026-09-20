@@ -51,6 +51,27 @@ function ffmpegBin(): string {
  * genFetch in content/generate.ts.
  */
 const MEDIA_FETCH_TIMEOUT_MS = 120_000;
+
+/**
+ * A media URL the fetch layer can actually attempt. Every entry point below
+ * takes URLs — storage links, provider results — and fetches them into a temp
+ * dir before ffmpeg sees a file; none accepts a local path. Checking the shape
+ * FIRST means a truncated storage link, a null coerced to "null" or a
+ * user-supplied value returns the same null in microseconds, instead of after
+ * the ffmpeg probe spawn and a temp dir it used to be queued behind. That
+ * ordering is also what made the never-throw tests time out under CPU load:
+ * the "instant" failure was waiting on a subprocess.
+ */
+export function isFetchableMediaUrl(value: unknown): value is string {
+	if (typeof value !== 'string' || value.length === 0) return false;
+	try {
+		const u = new URL(value);
+		return u.protocol === 'http:' || u.protocol === 'https:' || u.protocol === 'data:';
+	} catch {
+		return false;
+	}
+}
+
 function mediaFetch(url: string, init?: RequestInit): Promise<Response> {
 	return fetch(url, {
 		...init,
@@ -454,6 +475,7 @@ export async function burnCaptions(
 	const plan = buildCaptionPlan(opts);
 	// Nothing requested → don't re-encode; the caller keeps the clean original.
 	if (plan.filters.length === 0) return null;
+	if (!isFetchableMediaUrl(videoUrl)) return null;
 	if (!(await hasFfmpeg())) return null;
 	const font = findFont();
 	if (!font) return null;
@@ -673,6 +695,7 @@ export async function stillToMotion(
 	imageUrl: string,
 	opts: StillToMotionOptions = {}
 ): Promise<Buffer | null> {
+	if (!isFetchableMediaUrl(imageUrl)) return null;
 	if (!(await hasFfmpeg())) return null;
 
 	let dir: string | null = null;
@@ -900,6 +923,7 @@ export async function muxVoiceover(
 	audioUrl: string,
 	opts: MuxVoiceoverOptions = {}
 ): Promise<Buffer | null> {
+	if (!isFetchableMediaUrl(videoUrl) || !isFetchableMediaUrl(audioUrl)) return null;
 	if (!(await hasFfmpeg())) return null;
 
 	let dir: string | null = null;
@@ -1144,6 +1168,7 @@ export async function concatAudio(
 	opts: ConcatAudioOptions = {}
 ): Promise<ConcatenatedAudio | null> {
 	if (urls.length === 0) return null;
+	if (!urls.every(isFetchableMediaUrl)) return null;
 	if (!(await hasFfmpeg())) return null;
 
 	let dir: string | null = null;

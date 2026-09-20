@@ -20,6 +20,8 @@
  * to keep that specific mistake from coming back.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 // Type-only: erased at compile time, so it cannot load the module before the
 // env mock below is installed.
 import type { MuxSourceFacts, MuxVoiceoverOptions, TimedCaption, VideoProbe } from './video';
@@ -664,10 +666,38 @@ describe('buildPcmDecodeArgs / buildPcmEncodeArgs — the join flags', () => {
 });
 
 describe('never-throw contract', () => {
-	// Not a network test: an unparseable URL makes fetch reject synchronously, so
-	// these finish in microseconds and cannot flake or hang in CI. (On a host
-	// without ffmpeg both bail even earlier, at hasFfmpeg.)
+	// Not a network test, and — since isFetchableMediaUrl — not a subprocess test
+	// either: an unparseable URL is refused before hasFfmpeg() spawns the probe
+	// and before a temp dir exists. The old comment claimed fetch's synchronous
+	// rejection made these instant; it did not, because the probe spawn came
+	// first, and under CPU load that spawn cost these tests 10 s each.
 	const BAD_URL = 'not a url';
+
+	it('the guard accepts what the fetch layer can attempt and nothing else', async () => {
+		const { isFetchableMediaUrl } = await import('./video');
+		for (const ok of ['https://x.test/a.png', 'http://x.test/a.mp4', 'data:image/png;base64,AAAA']) {
+			expect(isFetchableMediaUrl(ok), ok).toBe(true);
+		}
+		for (const bad of ['not a url', '', 'null', 'undefined', 'file:///tmp/a.png', 'ftp://x/a', '/tmp/a.png', 'C:\\tmp\\a.png']) {
+			expect(isFetchableMediaUrl(bad), bad).toBe(false);
+		}
+		expect(isFetchableMediaUrl(null)).toBe(false);
+		expect(isFetchableMediaUrl(undefined)).toBe(false);
+		expect(isFetchableMediaUrl(42)).toBe(false);
+	});
+
+	it('every entry point validates the URL before it probes for ffmpeg', () => {
+		// The order is the fix. A guard placed after hasFfmpeg() would keep the
+		// contract and lose the point.
+		const src = readFileSync(join(__dirname, 'video.ts'), 'utf8');
+		for (const fn of ['stillToMotion', 'muxVoiceover', 'burnCaptions', 'concatAudio']) {
+			const body = src.slice(src.indexOf(`export async function ${fn}(`));
+			const guard = body.indexOf('isFetchableMediaUrl');
+			const probe = body.indexOf('hasFfmpeg()');
+			expect(guard, `${fn} has the guard`).toBeGreaterThan(0);
+			expect(guard, `${fn} validates before it probes`).toBeLessThan(probe);
+		}
+	});
 
 	it('stillToMotion returns null instead of throwing when the still is unfetchable', async () => {
 		await expect(stillToMotion(BAD_URL)).resolves.toBeNull();
