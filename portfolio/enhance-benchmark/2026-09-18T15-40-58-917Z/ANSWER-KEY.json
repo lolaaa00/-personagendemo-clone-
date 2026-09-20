@@ -1,0 +1,21 @@
+{
+  "model": "fal-ai/flux-pro/v1.1",
+  "judgedBlind": "open this only after scoring A vs B per register",
+  "key": [
+    {
+      "register": "front-cam",
+      "a": "upscaled",
+      "b": "base"
+    },
+    {
+      "register": "mirror",
+      "a": "upscaled",
+      "b": "base"
+    },
+    {
+      "register": "propped",
+      "a": "upscaled",
+      "b": "base"
+    }
+  ]
+}
