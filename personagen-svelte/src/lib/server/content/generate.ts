@@ -5833,9 +5833,24 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 				// included because a transfer that fell back to i2v is otherwise
 				// indistinguishable from a plain b-roll request in this record — and the
 				// composer need not have pinned any model for a transfer to be requested.
-				...(input.videoModel && input.videoModel !== videoModelRan
+				// ...and ONLY on a generation that was actually making a video.
+				//
+				// `videoModelRan` is null on every still, so the old test
+				// (`input.videoModel !== videoModelRan`) was true for any still whose
+				// input still carried a video model — a pinned or default choice the
+				// composer sends regardless of format. A photo still then recorded
+				// "Requested: bytedance/seedance-2.5/reference-to-video — not what ran",
+				// naming a video model on an image the user never asked to be a video.
+				// The selection was right; the record was wrong about it.
+				//
+				// A video that fails throws rather than shipping a still, so
+				// `mediaType === 'video'` still covers the case this field exists for:
+				// a transfer that fell back to i2v, where both ran as video.
+				...(mediaType === 'video' &&
+				input.videoModel &&
+				input.videoModel !== videoModelRan
 					? { videoModelRequested: input.videoModel }
-					: v2vModelRequested && v2vModelRequested !== videoModelRan
+					: mediaType === 'video' && v2vModelRequested && v2vModelRequested !== videoModelRan
 						? { videoModelRequested: v2vModelRequested }
 						: {}),
 				// The still model REQUESTED. What ran is in aspects.image.models,
