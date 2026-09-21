@@ -458,7 +458,7 @@
 
 	<!-- Progress Indicator -->
 	<ol class="progress-bar" aria-label="Persona setup progress">
-		{#each STEPS as step, i}
+		{#each STEPS as step, i (step.num)}
 			<li
 				class="step-item"
 				class:active={currentStep === step.num}
@@ -557,7 +557,7 @@
 								{#if !data.brandBriefs?.length}
 									<option value="">No brand briefs yet — create one in Brand Brief</option>
 								{:else}
-									{#each data.brandBriefs as b}
+									{#each data.brandBriefs as b (b.id)}
 										<option value={b.id}>{b.name}</option>
 									{/each}
 								{/if}
@@ -600,7 +600,7 @@
 						</button>
 						{#if directionIdeas.length}
 							<div class="dir-chips">
-								{#each directionIdeas as idea}
+								{#each directionIdeas as idea (idea)}
 									<button
 										type="button"
 										class="dir-chip"
@@ -676,7 +676,7 @@
 							aria-describedby={niche === '' && agentName.length > 0 ? 'niche-error' : undefined}
 						>
 							<option value="" disabled>Select a niche…</option>
-							{#each NICHES as n}
+							{#each NICHES as n (n)}
 								<option value={n}>{n}</option>
 							{/each}
 						</select>
@@ -688,7 +688,7 @@
 					<div class="field">
 						<label for="market">Market <span class="opt-tag">(optional)</span></label>
 						<select id="market" bind:value={market} onchange={saveProgress}>
-							{#each MARKETS as m}
+							{#each MARKETS as m (m)}
 								<option value={m}>{m}</option>
 							{/each}
 						</select>
@@ -774,7 +774,7 @@
 										<option value={generatedProfile.archetype}>{generatedProfile.archetype}</option>
 									{/if}
 									<option value="">— Select archetype —</option>
-									{#each PERSONA_ARCHETYPES as a}
+									{#each PERSONA_ARCHETYPES as a (a)}
 										<option value={a}>{a}</option>
 									{/each}
 								</select>
@@ -792,7 +792,7 @@
 										>
 									{/if}
 									<option value="">— Select focus —</option>
-									{#each CONTENT_FOCUS_OPTIONS as f}
+									{#each CONTENT_FOCUS_OPTIONS as f (f)}
 										<option value={f}>{f}</option>
 									{/each}
 								</select>
@@ -1318,7 +1318,7 @@
 				</button>
 				{#if directionIdeas.length}
 					<div class="dir-chips">
-						{#each directionIdeas as idea}
+						{#each directionIdeas as idea (idea)}
 							<button
 								type="button"
 								class="dir-chip"
@@ -1340,7 +1340,7 @@
 						<span class="spinner-sm"></span> Generating 3 brand-tailored personas…
 					</div>
 				{:else}
-					{#each vaultOptions as p, i}
+					{#each vaultOptions as p, i (i)}
 						<button type="button" class="persona-card" onclick={() => applyGeneratedPersona(p)}>
 							<div
 								class="card-avatar-wrap"
