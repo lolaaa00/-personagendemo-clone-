@@ -23,7 +23,10 @@
 	// Step 1 — Identity
 	let agentName = $state('');
 	let niche = $state('');
-	let market = $state('Australia'); // optional — can be changed in the profile later
+	// Optional, and therefore neutral by default: pre-selecting a country shapes
+	// every generated caption for a user who never opens the field. `Global` is
+	// in the list already.
+	let market = $state('Global');
 	// Brand-brief-driven generation: the selected brief feeds generation, and the
 	// full generated profile + pinned voice are stashed so the created persona is
 	// born fully configured (not a bare name/soul shell).
@@ -316,7 +319,7 @@
 				const d = JSON.parse(saved);
 				agentName = d.agentName || '';
 				niche = d.niche || '';
-				market = d.market || 'Australia';
+				market = d.market || 'Global';
 				soul = d.soul || '';
 				skills = d.skills || '';
 				selectedGradient = d.selectedGradient || 0;
@@ -454,13 +457,21 @@
 <PageShell title="Create a Persona" description="Create a new AI persona from scratch.">
 
 	<!-- Progress Indicator -->
-	<div class="progress-bar">
+	<ol class="progress-bar" aria-label="Persona setup progress">
 		{#each STEPS as step, i}
-			<div
+			<li
 				class="step-item"
 				class:active={currentStep === step.num}
 				class:completed={currentStep > step.num}
+				aria-current={currentStep === step.num ? 'step' : undefined}
 			>
+				<span class="sr-only">
+					Step {step.num} of {TOTAL_STEPS}{currentStep > step.num
+						? ', completed'
+						: currentStep === step.num
+							? ', current'
+							: ''}:
+				</span>
 				<div class="step-circle">
 					{#if currentStep > step.num}
 						<svg
@@ -478,12 +489,12 @@
 					{/if}
 				</div>
 				<span class="step-label">{step.label}</span>
-			</div>
+			</li>
 			{#if i < STEPS.length - 1}
-				<div class="step-line" class:filled={currentStep > step.num}></div>
+				<li class="step-line" class:filled={currentStep > step.num} aria-hidden="true"></li>
 			{/if}
 		{/each}
-	</div>
+	</ol>
 
 	<!-- Step Content -->
 	<div class="wizard-body">
@@ -1568,6 +1579,10 @@
 		margin-bottom: 2rem;
 	}
 
+	.progress-bar {
+		list-style: none;
+		padding-left: 0;
+	}
 	.step-item {
 		display: flex;
 		flex-direction: column;

@@ -210,7 +210,10 @@ export const load: LayoutServerLoad = async ({ locals, request, url }) => {
 				currency,
 				amount: creditsToAmount(balance, currency, s.fx_rates),
 				// Pill: whole units with ".00" (A$28.00). Tooltip: the exact USD balance.
-				formatted: formatCredits(balance, currency, s.fx_rates, locale),
+				// `whole: false` — real cents, matching /billing exactly. The default
+				// rounds to whole units and pads .00, which put ₱3,131.00 in the
+				// sidebar beside ₱3,131.25 on the billing page for one wallet.
+				formatted: formatCredits(balance, currency, s.fx_rates, locale, { whole: false }),
 				usd: formatCredits(balance, 'USD', s.fx_rates, 'en-US', { whole: false })
 			};
 		}

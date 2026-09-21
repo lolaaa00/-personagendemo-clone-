@@ -797,9 +797,16 @@
 					<option value="rejected">Rejected</option>
 				</select>
 			</label>
-			<span class="filt-count" aria-live="polite"
-				>{viewMode === 'board' ? boardItems.length : filteredItems.length} of {items.length} shown</span
-			>
+			<span class="filt-count" aria-live="polite">
+				{viewMode === 'board' ? boardItems.length : filteredItems.length} of {items.length} shown
+				{#if viewMode !== 'board' && filteredItems.length < items.length}
+					<button type="button" class="filt-why" onclick={() => (filterStatus = 'all')}>
+						— {filterStatus === 'all'
+							? 'hidden by “Needs a decision”'
+							: `filtered to ${filterStatus}`}, show everything
+					</button>
+				{/if}
+			</span>
 		</div>
 
 		<h2 class="sr-only">Queue view</h2>
@@ -1782,6 +1789,17 @@
 		min-height: 44px;
 		text-transform: none;
 		letter-spacing: 0;
+	}
+	/* The count says what is hiding the rest, and undoes it in one click. It used
+	   to read "65 of 66 shown" with no way to learn what the 66th was. */
+	.filt-why {
+		border: none;
+		background: none;
+		padding: 0;
+		font: inherit;
+		color: var(--accent-text);
+		cursor: pointer;
+		text-decoration: underline;
 	}
 	.filt-count {
 		margin-left: auto;

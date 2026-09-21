@@ -130,7 +130,15 @@
 	const money = (n: number) => `$${(Number(n) || 0).toFixed(2)}`;
 	const when = (iso: string) => {
 		const d = new Date(iso);
-		return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString();
+		if (Number.isNaN(d.getTime())) return '—';
+		// Same shape as /billing ("Sep 9, 9:15 PM"). A month-first numeric date is
+		// ambiguous everywhere outside the US, and this workspace bills in PHP.
+		return d.toLocaleString(undefined, {
+			month: 'short',
+			day: 'numeric',
+			hour: 'numeric',
+			minute: '2-digit'
+		});
 	};
 
 	let activityFilter = $state<'all' | 'generation' | 'review' | 'publish'>('all');

@@ -9,6 +9,69 @@
 	let { data } = $props();
 
 	let creatorAgents = $derived(data.agents.filter((a) => !a.is_overseer));
+
+	// ── Setup checklist (ENH-002) ────────────────────────────────────────
+	// The order the docs already prescribe, each row checked against real state.
+	// It disappears on its own once everything is done — there is nothing to
+	// dismiss when there is nothing left to do.
+	let setupDismissed = $state(false);
+	let setupSteps = $derived.by(() => {
+		const st = (data as any).setup;
+		if (!st) return [];
+		const rows = [
+			{
+				key: 'openrouter',
+				done: st.openrouter,
+				title: 'Add an OpenRouter key',
+				why: 'Writes every caption and script — nothing generates without it.',
+				href: '/settings?section=api-keys',
+				cta: 'Add key'
+			},
+			{
+				key: 'persona',
+				done: creatorAgents.length > 0,
+				title: 'Create a persona',
+				why: 'The account that posts. You can change everything about it later.',
+				href: '/generator',
+				cta: 'Create'
+			},
+			{
+				key: 'brief',
+				done: st.brief,
+				title: 'Write a brand brief',
+				why: 'What your product is and who it is for — captions are aimed at it.',
+				href: '/brand-brief',
+				cta: 'Write it'
+			},
+			{
+				key: 'zernio',
+				done: st.zernio,
+				title: 'Add your Zernio key',
+				why: 'Publishing runs on it. Sign in at zernio.com with Google — the free account includes 2 connections.',
+				href: '/settings?section=api-keys',
+				cta: 'Add key'
+			},
+			{
+				key: 'connection',
+				done: st.connection,
+				title: 'Connect a social account',
+				why: 'Where the posts go.',
+				href: '/personas',
+				cta: 'Connect'
+			},
+			{
+				key: 'published',
+				done: st.published,
+				title: 'Publish your first post',
+				why: 'Approve a draft in the review queue and let it run.',
+				href: '/review',
+				cta: 'Open queue'
+			}
+		];
+		// Once every step is done the card has nothing to say.
+		return rows.every((r) => r.done) ? [] : rows;
+	});
+	let setupDone = $derived(setupSteps.filter((r) => r.done).length);
 </script>
 
 
@@ -28,6 +91,37 @@
 
 	<!-- KPI Grid -->
 	<KPIGrid agents={data.agents} postsThisWeek={data.postsThisWeek} />
+
+	{#if setupSteps.length && !setupDismissed}
+		<section class="setup-card" aria-labelledby="setup-h">
+			<div class="setup-head">
+				<h2 id="setup-h">Finish setting up</h2>
+				<button type="button" class="setup-dismiss" onclick={() => (setupDismissed = true)}>
+					Hide
+				</button>
+			</div>
+			<p class="setup-sub">
+				{setupDone} of {setupSteps.length} done. Each step is checked against your account, not
+				against whether you have visited the page.
+			</p>
+			<ol class="setup-list">
+				{#each setupSteps as st (st.key)}
+					<li class="setup-step" class:done={st.done}>
+						<span class="setup-mark" aria-hidden="true">{st.done ? '✓' : ''}</span>
+						<span class="setup-text">
+							<strong>{st.title}</strong>
+							<span>{st.why}</span>
+						</span>
+						{#if !st.done}
+							<a class="setup-go" href={st.href}>{st.cta}</a>
+						{:else}
+							<span class="setup-ok">Done</span>
+						{/if}
+					</li>
+				{/each}
+			</ol>
+		</section>
+	{/if}
 
 	{#if creatorAgents.length === 0}
 		<div class="onboarding-card">
@@ -172,6 +266,108 @@
 	}
 
 	/* Onboarding Card styling */
+	.setup-card {
+		margin-bottom: var(--space-6);
+		padding: var(--space-5);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-md);
+		background: var(--surface);
+	}
+	.setup-head {
+		display: flex;
+		align-items: baseline;
+		justify-content: space-between;
+		gap: var(--space-4);
+	}
+	.setup-head h2 {
+		margin: 0;
+		font-size: var(--text-lg);
+	}
+	.setup-dismiss {
+		border: none;
+		background: none;
+		padding: 0;
+		font: inherit;
+		color: var(--text-dim);
+		cursor: pointer;
+		text-decoration: underline;
+	}
+	.setup-sub {
+		margin: var(--space-2) 0 var(--space-4);
+		font-size: var(--text-base);
+		color: var(--text-muted);
+	}
+	.setup-list {
+		margin: 0;
+		padding: 0;
+		list-style: none;
+		display: grid;
+		gap: var(--space-2);
+	}
+	.setup-step {
+		display: flex;
+		align-items: center;
+		gap: var(--space-3);
+		padding: var(--space-3);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		background: var(--surface-2);
+	}
+	.setup-step.done {
+		opacity: 0.68;
+	}
+	.setup-mark {
+		flex: none;
+		width: 22px;
+		height: 22px;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		border-radius: 50%;
+		border: 1px solid var(--border-strong);
+		color: var(--success-text);
+		font-weight: 700;
+	}
+	.setup-step.done .setup-mark {
+		border-color: var(--success-text);
+	}
+	.setup-text {
+		display: flex;
+		flex-direction: column;
+		min-width: 0;
+		flex: 1;
+	}
+	.setup-text span {
+		font-size: var(--text-base);
+		color: var(--text-muted);
+	}
+	.setup-go {
+		flex: none;
+		min-height: 36px;
+		display: inline-flex;
+		align-items: center;
+		padding: 0 var(--space-4);
+		border-radius: var(--radius-full);
+		background: var(--gradient-cta);
+		color: #fff;
+		font-size: var(--text-base);
+		font-weight: 600;
+		text-decoration: none;
+	}
+	.setup-ok {
+		flex: none;
+		font-size: var(--text-base);
+		color: var(--success-text);
+	}
+	@media (max-width: 640px) {
+		.setup-step {
+			flex-wrap: wrap;
+		}
+		.setup-go {
+			width: 100%;
+			justify-content: center;
+		}
+	}
 	.onboarding-card {
 		background: linear-gradient(135deg, var(--surface), var(--surface-2));
 		backdrop-filter: blur(12px);

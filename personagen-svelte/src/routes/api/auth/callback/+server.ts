@@ -22,5 +22,16 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 		throw redirect(303, '/login?error=auth');
 	}
 
-	throw redirect(303, '/dashboard');
+	// `next` is how the password-recovery link reaches Settings → Profile. Only
+	// same-origin paths are honoured: an absolute URL or a protocol-relative one
+	// would make this an open redirect.
+	const next = url.searchParams.get('next');
+	const safeNext =
+		typeof next === 'string' &&
+		next.startsWith('/') &&
+		!next.startsWith('//') &&
+		!next.includes(String.fromCharCode(92))
+			? next
+			: '/dashboard';
+	throw redirect(303, safeNext);
 };

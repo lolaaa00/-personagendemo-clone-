@@ -232,9 +232,16 @@
 							{#if p.bonus > 0}<span class="bonus">+{Math.round((p.bonus / (p.credits - p.bonus)) * 100)}% bonus</span>{/if}
 						</p>
 						<p class="buys">≈ {p.buys.imagePosts} image posts · {p.buys.videoPosts} video posts</p>
-						<button class="buy" class:ghost={!p.featured} disabled={!data.paymentsOpen || buying !== null} onclick={() => buy(p.id)}>
-							{buying === p.id ? 'Opening checkout…' : data.paymentsOpen ? `Buy ${p.usd}` : 'Coming soon'}
+						{#if !data.paymentsOpen}
+							<!-- The disabled tier carries the way forward itself. It used to say
+							     only "Coming soon", with the manual route explained in a
+							     paragraph above that a user scanning the cards never reads. -->
+							<a class="buy ghost" href="/guides?view=uservoice">Ask us to load {p.usd}</a>
+						{:else}
+						<button class="buy" class:ghost={!p.featured} disabled={buying !== null} onclick={() => buy(p.id)}>
+							{buying === p.id ? 'Opening checkout…' : `Buy ${p.usd}`}
 						</button>
+						{/if}
 					</article>
 				{/each}
 			</div>

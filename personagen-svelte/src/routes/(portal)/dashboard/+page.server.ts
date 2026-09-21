@@ -1,6 +1,7 @@
 import type { PageServerLoad } from './$types';
 import { createDbService } from '$lib/server/db';
 import { env } from '$env/dynamic/public';
+import { ALL_PLATFORM_KEYS, platformLabel, platformColor } from '$lib/platforms';
 
 export const load: PageServerLoad = async ({ locals }) => {
 	const supabaseUrl = env.PUBLIC_SUPABASE_URL ?? '';
@@ -10,8 +11,35 @@ export const load: PageServerLoad = async ({ locals }) => {
 	let hasDbAgents = false;
 	let postsThisWeek = 0;
 
+	// Real state for the dashboard setup checklist — no step reads as done
+	// because a page was visited, only because the thing exists. ENH-002.
+	let setup: Record<string, boolean> | null = null;
+
 	if (!isPlaceholder && locals.supabase) {
 		const { session, user } = await locals.safeGetSession();
+		if (user) {
+			const [keys, briefs, conns, published] = await Promise.all([
+				locals.supabase.from('user_api_keys').select('provider, status').eq('user_id', user.id),
+				locals.supabase.from('brand_briefs').select('id').eq('user_id', user.id).limit(1),
+				locals.supabase.from('connections').select('id').eq('user_id', user.id).limit(1),
+				locals.supabase
+					.from('posts')
+					.select('id', { count: 'exact', head: true })
+					.eq('user_id', user.id)
+					.eq('status', 'published')
+			]);
+			const usable = (prov: string) =>
+				(keys.data ?? []).some(
+					(k: any) => k.provider === prov && k.status !== 'unset' && k.status !== 'invalid'
+				);
+			setup = {
+				openrouter: usable('openrouter'),
+				zernio: usable('zernio'),
+				brief: (briefs.data ?? []).length > 0,
+				connection: (conns.data ?? []).length > 0,
+				published: (published.count ?? 0) > 0
+			};
+		}
 		if (session && user) {
 			const db = createDbService(locals.supabase);
 			const { data: dbAgents } = await db.agents.list();
@@ -165,17 +193,13 @@ export const load: PageServerLoad = async ({ locals }) => {
 		postsThisWeek = 0;
 	}
 
-	const platformColors: Record<string, string> = {
-		Instagram: 'linear-gradient(90deg,#833ab4,#e1306c)',
-		TikTok: 'linear-gradient(90deg,#25f4ee,#fe2c55)',
-		'Twitter/X': 'linear-gradient(90deg,#1da1f2,#0d8bd9)',
-		LinkedIn: 'linear-gradient(90deg,#0077b5,#00a0dc)',
-		YouTube: 'linear-gradient(90deg,#ff0000,#cc0000)',
-		Threads: 'linear-gradient(90deg,#000,#333)'
+	const barFor = (key: string) => {
+		const c = platformColor(key);
+		return `linear-gradient(90deg, ${c}, ${c})`;
 	};
 
-	let platformData = Object.entries(platformColors).map(([name, color]) => {
-		return { name, pct: 0, color };
+	let platformData = ALL_PLATFORM_KEYS.slice(0, 6).map((key) => {
+		return { name: platformLabel(key), pct: 0, color: barFor(key) };
 	});
 
 	if (hasDbAgents && !isPlaceholder && locals.supabase) {
@@ -183,25 +207,21 @@ export const load: PageServerLoad = async ({ locals }) => {
 		if (conns && conns.length > 0) {
 			const counts: Record<string, number> = {};
 			conns.forEach((c) => {
-				let name = c.platform;
-				if (name === 'instagram') name = 'Instagram';
-				else if (name === 'tiktok') name = 'TikTok';
-				else if (name === 'x') name = 'Twitter/X';
-				else if (name === 'linkedin') name = 'LinkedIn';
-				else if (name === 'youtube') name = 'YouTube';
-				else if (name === 'threads') name = 'Threads';
-				else name = name.charAt(0).toUpperCase() + name.slice(1);
-
-				counts[name] = (counts[name] || 0) + 1;
+				const key = String(c.platform ?? '').toLowerCase();
+				if (!key) return;
+				counts[key] = (counts[key] || 0) + 1;
 			});
 
 			const total = conns.length;
-			platformData = Object.entries(platformColors)
-				.map(([name, color]) => {
-					const count = counts[name] || 0;
-					const pct = Math.round((count / total) * 100);
-					return { name, pct, color };
-				})
+			// Only platforms this workspace actually connects. A fixed six padded
+			// the card with zeroes and still omitted seven of the thirteen the
+			// persona page offers.
+			platformData = Object.keys(counts)
+				.map((key) => ({
+					name: platformLabel(key),
+					pct: total ? Math.round((counts[key] / total) * 100) : 0,
+					color: barFor(key)
+				}))
 				.sort((a, b) => b.pct - a.pct);
 		}
 	}
@@ -274,6 +294,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 		sparkData,
 		sparkAgents,
 		platformData,
+		setup,
 		postsThisWeek
 	};
 };

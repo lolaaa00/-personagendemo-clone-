@@ -275,10 +275,12 @@
 		onDelete={() => void requestDelete(selectedVisible.slice())}
 	/>
 
-	<div class="dash-table" role="table" aria-label="Persona roster table">
+	<div class="dash-table" aria-label="Persona roster">
 		<!-- Header Row -->
-		<div class="dash-row row-header" class:no-spend={!hasSpend} role="row">
-			<span class="pick-cell" role="columnheader">
+		<!-- Visual column labels. Each row carries its own spoken summary, so
+		     announcing these again would read as a fifteenth row of nothing. -->
+		<div class="dash-row row-header" class:no-spend={!hasSpend} aria-hidden="true">
+			<span class="pick-cell">
 				<input
 					type="checkbox"
 					class="pick-box"
@@ -289,15 +291,15 @@
 					onchange={() => (allVisibleSelected ? clearSelection() : selectAllVisible())}
 				/>
 			</span>
-			<span role="columnheader">Persona</span>
-			<span role="columnheader">Followers</span>
-			<span role="columnheader">Engagement</span>
+			<span>Persona</span>
+			<span>Followers</span>
+			<span>Engagement</span>
 			{#if hasSpend}
-				<span role="columnheader">Gen Spend</span>
+				<span>Gen Spend</span>
 			{/if}
-			<span role="columnheader">Published</span>
-			<span role="columnheader">Active</span>
-			<span class="pick-cell" role="columnheader"><span class="sr-only">Delete</span></span>
+			<span>Published</span>
+			<span>Active</span>
+			<span class="pick-cell"><span class="sr-only">Delete</span></span>
 		</div>
 
 		<!-- Agent Rows -->
@@ -319,6 +321,7 @@
 				class:no-spend={!hasSpend}
 				class:is-selected={selected.has(agent.id)}
 				role="link"
+				aria-label="{agent.name}{agent.handle ? `, ${agent.handle}` : ''}, {agent.niche}, {agent.status}. {agent.followers} followers, {agent.engagementRate}% engagement, {(agent.publishedPosts ?? 0) > 0 ? `${agent.publishedPosts} published` : 'nothing published yet'}."
 				tabindex="0"
 			>
 				<!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -337,7 +340,7 @@
 						onchange={() => toggleSelect(agent.id)}
 					/>
 				</label>
-				<div class="dash-agent-cell" role="cell">
+				<div class="dash-agent-cell">
 					<div
 						class="dash-agent-avatar"
 						style={agent.ugc_character_ref ? '' : `background: ${agent.gradient}`}
@@ -380,8 +383,8 @@
 						</span>
 					</div>
 				</div>
-				<span class="dash-cell" role="cell">{agent.followers}</span>
-				<span class="dash-cell {engagementClass(agent.engagementRate)}" role="cell">
+				<span class="dash-cell">{agent.followers}</span>
+				<span class="dash-cell {engagementClass(agent.engagementRate)}">
 					{agent.engagementRate}%
 				</span>
 				<!-- total_token_cost is the ledger's PROVIDER spend. The wallet was debited
@@ -389,7 +392,7 @@
 				     roughly a third of what the persona actually drew down. quote() puts
 				     it back in the same money the wallet pill speaks. -->
 				{#if hasSpend}
-					<span class="dash-cell token-cost-cell" role="cell">
+					<span class="dash-cell token-cost-cell">
 						{#if agent.total_token_cost !== undefined && agent.total_token_cost !== null && agent.total_token_cost > 0}
 							{quote(agent.total_token_cost)}
 							<span class="token-count">({formatTokens(agent.total_token_usage || 0)})</span>
@@ -400,14 +403,14 @@
 				{/if}
 				<!-- A count of posts that actually went out, not a score. The bar that
 				     used to live here plotted a number floored at 70 by a constant. -->
-				<span class="dash-cell published-cell" role="cell">
+				<span class="dash-cell published-cell">
 					{#if (agent.publishedPosts ?? 0) > 0}
 						<span class="published-count">{agent.publishedPosts}</span>
 					{:else}
 						<span class="published-none" title="This persona has not published anything yet">—</span>
 					{/if}
 				</span>
-				<span class="dash-cell" role="cell">
+				<span class="dash-cell">
 					{#if agent.status === 'pending'}
 						<a
 							class="agent-connect-cta"
@@ -434,7 +437,7 @@
 						</button>
 					{/if}
 				</span>
-				<span class="pick-cell" role="cell">
+				<span class="pick-cell">
 					<button
 						type="button"
 						class="row-del"

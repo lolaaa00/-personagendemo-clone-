@@ -10,6 +10,9 @@
 	let password = $state('');
 	let loading = $state(false);
 	let error = $state('');
+	/** True only for the blank-form case, which needs different help text than a
+	 *  rejected credential — see the note on the error body. */
+	let emptySubmit = $state(false);
 
 	// Email format is checked on blur, independently of the submit error. Both
 	// fields previously keyed aria-invalid off `error` alone, which meant a wrong
@@ -40,8 +43,10 @@
 	async function handleLogin(e: SubmitEvent) {
 		e.preventDefault();
 		error = '';
+		emptySubmit = false;
 		if (!email.trim() || !password) {
 			error = 'Enter your email and password to sign in.';
+			emptySubmit = true;
 			return;
 		}
 		loading = true;
@@ -218,6 +223,7 @@
 					</div>
 					<p class="login-hint" id="login-password-help">
 						Passwords are case-sensitive.
+						<a class="login-forgot" href="/reset-password">Forgot your password?</a>
 					</p>
 				</div>
 
@@ -242,8 +248,13 @@
 						<span class="login-error-body">
 							<strong class="login-error-message">{error}</strong>
 							<span class="login-error-help">
-								Re-enter your email address and password — passwords are case-sensitive — then try
-								again. If the problem continues, create an account or contact your administrator.
+								{#if emptySubmit}
+									Fill in both fields and try again.
+								{:else}
+									Re-enter your email address and password — passwords are case-sensitive — then
+									try again. If the problem continues, create an account or contact your
+									administrator.
+								{/if}
 							</span>
 						</span>
 					</div>

@@ -1212,15 +1212,19 @@
 
 	<div class="settings-layout">
 		<nav class="settings-nav" aria-label="Settings sections">
-			<ul>
+			<ul role="tablist" aria-orientation="vertical" aria-label="Settings sections">
 				{#each SECTIONS as section (section.key)}
-					<li>
+					<li role="presentation">
 						<button
 							type="button"
 							class="nav-item"
+							role="tab"
+							id="settings-tab-{section.key}"
+							aria-selected={activeSection === section.key}
+							aria-controls="settings-panel-{section.key}"
+							tabindex={activeSection === section.key ? 0 : -1}
 							class:active={activeSection === section.key}
 							class:danger={section.key === 'danger'}
-							aria-current={activeSection === section.key ? 'true' : undefined}
 							onclick={() => (activeSection = section.key)}
 						>
 							<svg
@@ -1241,7 +1245,13 @@
 			</ul>
 		</nav>
 
-		<div class="settings-grid">
+		<div
+			class="settings-grid"
+			role="tabpanel"
+			id="settings-panel-{activeSection}"
+			aria-labelledby="settings-tab-{activeSection}"
+			tabindex="0"
+		>
 		{#if activeSection === 'profile'}
 		<!-- Profile -->
 		<div class="settings-card">
@@ -1751,10 +1761,17 @@
 			</div>
 			<div class="card-body">
 				<p class="key-hint">
-					Add extra Zernio accounts (one per persona email) and assign them to personas. Each key is
-					a separate Zernio account with its own <strong>2 free connected-account slots</strong> and
-					its own bill. Personas without an assignment use the default Zernio key above. Moving a
-					persona to a different key requires reconnecting its social accounts under that key.
+					<strong>The first Zernio key is yours to create, and it is free.</strong> Sign in at
+					<a href="https://zernio.com" target="_blank" rel="noopener noreferrer">zernio.com</a> with
+					Google, copy the API key, and paste it into <strong>Zernio</strong> under Provider API Keys
+					above — that account comes with <strong>2 free connected-account slots</strong>, which is
+					enough to publish. We do not provision it for you, and nothing publishes until it is set.
+				</p>
+				<p class="key-hint">
+					This panel is for <em>extra</em> Zernio accounts (one per persona email) assigned to
+					specific personas. Each is a separate Zernio account with its own 2 free slots and its own
+					bill. Personas without an assignment use the default key above. Moving a persona to a
+					different key requires reconnecting its social accounts under that key.
 				</p>
 
 				<div class="provider-key-list">
