@@ -588,7 +588,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-20", hash: "836ad13", type: "chore", category: "infrastructure", scope: "portfolio", title: "commit the enhancement benchmark that actually enhanced" },
 	{ date: "2026-09-20", hash: "4ec6fd9", type: "chore", category: "infrastructure", scope: "portfolio", title: "drop the benchmark run whose chain never ran" },
 	{ date: "2026-09-21", hash: "c3bfbb5", type: "fix", category: "fix", scope: "audit", title: "client QA findings — the control that spends money was unreachable" },
-	{ date: "2026-09-21", hash: "8dd1706", type: "fix", category: "fix", scope: "audit", title: "close the rest of the client QA list" }
+	{ date: "2026-09-21", hash: "8dd1706", type: "fix", category: "fix", scope: "audit", title: "close the rest of the client QA list" },
+	{ date: "2026-09-21", hash: "c6e8cda", type: "chore", category: "infrastructure", scope: "lint", title: "key the generator's each blocks to stay under the ceiling" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -1010,12 +1011,12 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 	},
 	{
 		id: "c3bfbb5", from: "2026-09-21", to: "2026-09-21",
-		category: "fix", categories: ["fix"],
+		category: "fix", categories: ["fix","infrastructure"],
 		title: "Fixed: client QA findings — the control that spends money…",
-		summary: "Client QA findings — the control that spends money was unreachable. Plus 1 more change.",
+		summary: "Client QA findings — the control that spends money was unreachable. Plus 2 more changes, touching setup and deployment.",
 		major: false, curated: false,
-		entries: [CHANGELOG[553], CHANGELOG[554]]
+		entries: [CHANGELOG[553], CHANGELOG[554], CHANGELOG[555]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "8dd1706";
+export const CHANGELOG_GENERATED_FROM = "c6e8cda";
