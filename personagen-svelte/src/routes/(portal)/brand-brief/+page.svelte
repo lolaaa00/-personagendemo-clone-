@@ -248,6 +248,24 @@
 	// Scraper & AI Enrich controls
 	let storeUrl = $state('');
 	let scraping = $state(false);
+
+	/** Whether Firecrawl has a usable key. `null` until we know — the control
+	 *  stays enabled while unknown rather than blocking on a slow request. */
+	let firecrawlReady = $state<boolean | null>(null);
+	$effect(() => {
+		if (!browser || firecrawlReady !== null) return;
+		fetch('/api/settings/api-keys')
+			.then((r) => r.json())
+			.then((d) => {
+				if (!d?.success) return;
+				const fc = (d.keys ?? []).find((k: any) => k.provider === 'firecrawl');
+				firecrawlReady = !!fc && fc.status !== 'unset' && fc.status !== 'invalid';
+			})
+			.catch(() => {
+				/* Leave it unknown: a failed status check must not disable a working
+				   button. The generation path reports its own error either way. */
+			});
+	});
 	let extending = $state<Record<string, boolean>>({});
 	let generating = $state<Record<string, boolean>>({});
 	let spinning = $state<Record<string, boolean>>({});
@@ -1014,8 +1032,11 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 						<button
 							class="scrape-submit-btn"
 							onclick={runScrape}
-							disabled={scraping}
+							disabled={scraping || firecrawlReady === false}
 							aria-busy={scraping}
+							title={firecrawlReady === false
+								? 'Needs a Firecrawl key — add one in Settings → Provider API Keys'
+								: undefined}
 						>
 							{#if scraping}
 								<div class="btn-spinner"></div>
@@ -1025,6 +1046,13 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 							{/if}
 						</button>
 					</div>
+					{#if firecrawlReady === false}
+						<p class="scrape-needs-key" role="status">
+							This needs a <strong>Firecrawl</strong> key, which is not set on your account.
+							<a href="/settings?section=keys">Add one in Settings → Provider API Keys</a>, or
+							fill the brief in by hand below — scraping only pre-fills it.
+						</p>
+					{/if}
 					<p class="sr-only" role="status" aria-live="polite">
 						{scraping ? 'Scraping store, extracting brand details. Please wait.' : ''}
 					</p>
@@ -3079,6 +3107,16 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 	.plan-prov p {
 		margin: 0 0 var(--space-2);
 		font-size: var(--text-base);
+		color: var(--text-muted);
+	}
+	.scrape-needs-key {
+		margin: var(--space-3) 0 0;
+		padding: var(--space-3) var(--space-4);
+		border: 1px solid var(--warning-mid, var(--border-strong));
+		border-radius: var(--radius-sm);
+		background: var(--warning-soft, var(--surface-2));
+		font-size: var(--text-base);
+		line-height: var(--leading-normal);
 		color: var(--text-muted);
 	}
 	.tabs-row {

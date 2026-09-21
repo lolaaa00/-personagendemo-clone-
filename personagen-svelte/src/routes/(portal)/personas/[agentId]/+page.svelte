@@ -211,7 +211,7 @@
 	// updates the stat immediately instead of waiting for a reload.
 	let postedCount = $derived(
 		feedLoaded
-			? feedPosts.filter((p: any) => p.status === 'published' || p.status === 'partial').length
+			? feedPosts.filter((p: any) => p.status === 'published').length
 			: (data.postCounts?.published ?? 0)
 	);
 	let queuedCount = $derived(
@@ -6527,10 +6527,12 @@
 															     pipelines stay "Free" — the text card is typeset server-side. -->
 															<span
 																class="studio-cost"
-																title={metered
-																	? 'Estimated charge for this generation'
-																	: 'Estimated generation cost'}
-																>{pipelineUsd > 0 ? quote(pipelineUsd) : 'Free'}</span
+																title={pipelineUsd > 0
+																	? metered
+																		? 'Estimated charge for this generation'
+																		: 'Estimated generation cost'
+																	: 'No media to pay for — but the caption is still written by a model, which spends OpenRouter credit. If OpenRouter has no balance, this will not generate.'}
+																>{pipelineUsd > 0 ? quote(pipelineUsd) : 'No media cost'}</span
 															>
 															<span class="studio-time" title="Typical generation time"
 																>{meta.time}</span

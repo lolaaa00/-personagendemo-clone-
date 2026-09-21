@@ -1594,6 +1594,12 @@
 										<div class="key-body">
 											<p class="key-desc">{config.description}</p>
 
+										<p class="key-help">
+											<a href="/guides?provider={config.provider}">
+												Where do I get a {config.label} key?
+											</a>
+										</p>
+
 										{#if config.touchpoints.length > 0}
 											<div class="touchpoints">
 												<span class="touchpoints-title">Where this key is used</span>
@@ -2857,6 +2863,13 @@
 		word-break: break-all;
 	}
 
+	.key-help {
+		margin: var(--space-2) 0 0;
+		font-size: var(--text-base);
+	}
+	.key-help a {
+		color: var(--accent-text);
+	}
 	.provider-key-row {
 		border: 1px solid var(--border);
 		border-radius: var(--radius-md);

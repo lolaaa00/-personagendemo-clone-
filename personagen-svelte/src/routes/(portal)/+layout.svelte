@@ -92,6 +92,7 @@
 	}
 
 	let userDropdownOpen = $state(false);
+	let userMenuTrigger = $state<HTMLButtonElement | null>(null);
 
 	// a11y: on SPA navigation the focus ring is otherwise stranded on the previous
 	// page's link, so screen readers keep announcing the old context.
@@ -209,7 +210,15 @@
 	}
 </script>
 
-<svelte:window onclick={closeUserDropdown} />
+<svelte:window
+	onclick={closeUserDropdown}
+	onkeydown={(e) => {
+		if (e.key !== 'Escape' || !userDropdownOpen) return;
+		closeUserDropdown();
+		// Focus goes back to what opened it, not to the top of the document.
+		userMenuTrigger?.focus();
+	}}
+/>
 
 <a href="#main-content" class="skip-link">Skip to main content</a>
 
@@ -400,6 +409,7 @@
 			{/each}
 
 			<!-- PERSONAS -->
+			<div class="sidebar-personas">
 			{#if !sidebarState.collapsed}
 				<div class="sidebar-section-row">
 					<span class="sidebar-section-label">Personas</span>
@@ -608,6 +618,7 @@
 					<div class="sidebar-persona-empty">No personas match "{personaSearch}"</div>
 				{/if}
 			{/if}
+			</div>
 			<!-- PUBLISH -->
 			{#if !sidebarState.collapsed}
 				<span class="sidebar-section-label">Publish</span>
@@ -993,6 +1004,7 @@
 						aria-expanded={userDropdownOpen}
 						aria-haspopup="true"
 						aria-label="User menu"
+						bind:this={userMenuTrigger}
 					>
 						<span class="portal-user-avatar">
 							{(data.user?.email?.[0] ?? 'U').toUpperCase()}
@@ -1307,6 +1319,21 @@
 		flex: 1;
 		overflow-y: auto;
 		overflow-x: hidden;
+	}
+
+	/* The persona list gets its own bounded scroll so it cannot push Publish and
+	   Setup out of the sidebar — see the note in the markup. It shrinks before
+	   the fixed sections do, and never grows past a third of the rail. */
+	.sidebar-personas {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		flex: 0 1 auto;
+		min-height: 0;
+		max-height: 34vh;
+		overflow-y: auto;
+		overflow-x: hidden;
+		scrollbar-width: thin;
 	}
 
 	.sidebar-section-label {

@@ -164,7 +164,13 @@
 		margin-bottom: var(--space-5);
 	}
 
-	@media (max-width: 767px) {
+	/* 768, not 767. The application shell switches to mobile at `max-width: 768px`
+	   with its desktop counterpart at `min-width: 769px`; this block used 767px,
+	   so at exactly 768 — iPad portrait, and a standard test width — the sidebar,
+	   hamburger and content area were in mobile mode while the masthead, its
+	   description and its actions were still in desktop mode. One layout, one
+	   crossing point. */
+	@media (max-width: 768px) {
 		.page-masthead {
 			align-items: flex-start;
 		}

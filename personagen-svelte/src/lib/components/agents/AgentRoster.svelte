@@ -375,7 +375,7 @@
 							{/if}
 						</span>
 						<span class="dash-agent-niche">
-							{agent.handle} · {agent.niche} ·
+							{#if agent.handle}{agent.handle} · {/if}{agent.niche} ·
 							<StatusBadge status={agent.status} />
 						</span>
 					</div>
@@ -417,25 +417,21 @@
 							Connect →
 						</a>
 					{:else}
-						<!-- svelte-ignore a11y_click_events_have_key_events -->
-						<label
+						<button
+							type="button"
 							class="toggle"
+							role="switch"
+							aria-checked={agent.active}
+							aria-label="{agent.active ? 'Pause' : 'Activate'} {agent.name}"
+							title="{agent.active ? 'Pause' : 'Activate'} {agent.name} — an active persona generates and spends"
 							onclick={(e) => {
 								e.stopPropagation();
-								// preventDefault is load-bearing: without it the browser forwards the
-								// click to the labelled <input>, that synthetic click bubbles back to
-								// this same <label>, and the handler runs a SECOND time. toggleAgent
-								// flips (`agent.active = !agent.active`), so two runs cancel out — the
-								// switch appeared dead and fired two racing POSTs to /api/agents/config.
-								// Verified 2x-vs-1x in a browser before/after this line.
-								e.preventDefault();
 								toggleAgent(agent);
 							}}
 						>
-							<input type="checkbox" checked={agent.active} tabindex="-1" />
 							<span class="toggle-track"></span>
 							<span class="toggle-thumb"></span>
-						</label>
+						</button>
 					{/if}
 				</span>
 				<span class="pick-cell" role="cell">
@@ -805,6 +801,9 @@
 		cursor: pointer;
 		width: 36px;
 		height: 20px;
+		padding: 0;
+		border: none;
+		background: none;
 	}
 
 	/* The switch stays 36x20 visually; this invisible overlay lifts the tap target to
@@ -820,13 +819,6 @@
 		transform: translate(-50%, -50%);
 	}
 
-	.toggle input {
-		opacity: 0;
-		width: 0;
-		height: 0;
-		position: absolute;
-	}
-
 	.toggle-track {
 		position: absolute;
 		inset: 0;
@@ -835,7 +827,7 @@
 		transition: background 0.2s;
 	}
 
-	.toggle input:checked ~ .toggle-track {
+	.toggle[aria-checked='true'] .toggle-track {
 		background: var(--accent);
 	}
 
@@ -851,7 +843,7 @@
 		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 	}
 
-	.toggle input:checked ~ .toggle-thumb {
+	.toggle[aria-checked='true'] .toggle-thumb {
 		transform: translateX(16px);
 	}
 

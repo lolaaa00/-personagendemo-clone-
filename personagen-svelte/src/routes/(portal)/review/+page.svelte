@@ -2927,9 +2927,28 @@
 	   the bug. */
 	@media (max-width: 767px) {
 		.deck-media {
-			/* Sized so the caption clears the fold at every width Deck renders at,
-			   including the awkward wide-but-short case (767x800). */
-			max-height: 30vh;
+			/* Sized so the caption clears the PINNED CONTROL BAR, not just the fold.
+			
+			   At 30vh the caption cleared the fold and was then painted over by the
+			   sticky bar: 40px of overlap on a 41px caption at 360x780, with
+			   elementFromPoint at the caption's centre returning the approve
+			   button. Clearing the fold is not the property that matters — being
+			   visible is — and padding after the caption cannot fix it, because a
+			   bar pinned to the viewport bottom covers whatever is at the viewport
+			   bottom regardless of what follows it in flow. The only lever that
+			   moves the caption UP is the media above it. */
+			max-height: 26vh;
+		}
+	}
+	/* Below this height the chrome alone eats the viewport (640x500 is 200% zoom
+	   on a 1280 screen), nothing can be made to fit, and a pinned bar is just an
+	   obstruction. Let it scroll with the content instead. */
+	@media (max-width: 767px) and (max-height: 620px) {
+		.deck-controls {
+			position: static;
+			background: none;
+			backdrop-filter: none;
+			border-top: none;
 		}
 	}
 	.deck-media img {

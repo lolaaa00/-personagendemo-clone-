@@ -86,7 +86,14 @@ export const load: PageServerLoad = async ({ locals, params }) => {
 			countFor('scheduled')
 		]);
 		const postCounts = {
-			published: published + partial,
+			// `published` ONLY. Not published + partial: the dashboard roster counts
+			// bare `published`, and counting them differently under the same word is
+			// what made one persona read 4 here and 6 there. `partial` is its own
+			// status everywhere else in the product — the calendar gives it its own
+			// chip — and it means some platforms took it and some did not, which is
+			// not the same claim as published.
+			published,
+			partial,
 			queued: draft + scheduled
 		};
 
