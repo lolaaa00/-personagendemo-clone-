@@ -36,11 +36,15 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	}
 
 	const title = `${PROBLEM_REPORT_TITLE_PREFIX} · post ${postId}`;
+	// De-duplicated against OPEN reports only: once the operator marks one
+	// handled, the same post can be reported again. Matching closed ones too
+	// answered "Reported" while nothing reached the Admin list (pre-flight).
 	const { data: existing } = await locals.supabase
 		.from('tickets')
 		.select('id, created_at')
 		.eq('user_id', user.id)
 		.eq('title', title)
+		.eq('status', TOPUP_PENDING_STATUS)
 		.limit(1)
 		.maybeSingle();
 	if (existing) return json({ success: true, duplicate: true });
