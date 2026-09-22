@@ -1,3 +1,4 @@
+import { statusAfterConnectionCheck } from '$lib/server/agent-status';
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { createDbService } from '$lib/server/db';
@@ -356,9 +357,12 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 						);
 					});
 					const count = activeConns.length;
-					let newStatus = agent.status;
-					if (count === 0) newStatus = 'paused';
-					else if (agent.status !== 'paused') newStatus = 'active';
+					// Only LOSING the last connection pauses; see agent-status.ts.
+					const newStatus = statusAfterConnectionCheck(
+						agent.status,
+						(agent as { connection_count?: number | null }).connection_count,
+						count
+					);
 
 					const { followers, engagement_rate } = computeDynamicMetrics(activeConns);
 					await db.agents.update(persona_id, {
