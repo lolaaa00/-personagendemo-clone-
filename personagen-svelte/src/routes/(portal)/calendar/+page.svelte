@@ -18,6 +18,7 @@
 	import { confirmDeletePosts } from '$lib/confirm-preview';
 	import { countLabel } from '$lib/plural';
 	import PageShell from '$lib/components/ui/PageShell.svelte';
+	import { refreshCredits } from '$lib/credits-refresh';
 
 	interface ScheduledPost {
 		id: string;
@@ -882,6 +883,9 @@
 			showToast(e.message || 'Error generating post', 'error');
 		} finally {
 			generatingPost = false;
+			// The wallet may have moved; the pill is loaded by the layout and would
+			// otherwise keep showing the pre-generation number until a navigation.
+			void refreshCredits();
 		}
 	}
 </script>

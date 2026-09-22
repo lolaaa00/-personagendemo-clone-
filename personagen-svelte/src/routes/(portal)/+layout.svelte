@@ -1328,9 +1328,21 @@
 		display: flex;
 		flex-direction: column;
 		gap: 2px;
-		flex: 0 1 auto;
-		min-height: 0;
-		max-height: 34vh;
+		/* GROW into whatever the fixed sections leave, with a real floor.
+		
+		   This was `flex: 0 1 auto; min-height: 0`, which reads as "shrink me to
+		   nothing before anything else gives" — and since Network, Library,
+		   Publish and Setup do not shrink, the persona list absorbed the entire
+		   overflow and collapsed to a single row with scroll arrows. That is worse
+		   than the problem it was fixing: the point was to stop the persona list
+		   burying Publish and Setup, not to crush it.
+		
+		   `flex: 1 1 auto` makes it the section that takes the slack, and the
+		   min-height keeps roughly five personas visible on a laptop before it
+		   starts scrolling inside itself. Publish and Setup still stay anchored
+		   below it, because it can no longer grow past the space it is given. */
+		flex: 1 1 auto;
+		min-height: 11rem;
 		overflow-y: auto;
 		overflow-x: hidden;
 		scrollbar-width: thin;

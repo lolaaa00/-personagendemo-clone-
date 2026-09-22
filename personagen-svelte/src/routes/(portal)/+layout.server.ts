@@ -10,7 +10,13 @@ import { creditsMode, creditMarkup } from '$lib/server/flags';
 import { getSettings } from '$lib/server/settings';
 import { resolveDisplayCurrency, creditsToAmount, formatCredits, localeFromAcceptLanguage } from '$lib/money';
 
-export const load: LayoutServerLoad = async ({ locals, request, url }) => {
+export const load: LayoutServerLoad = async ({ locals, request, url, depends }) => {
+	// The sidebar balance is loaded here and nowhere else, so without a dependency
+	// to invalidate it only changed on navigation: a bulk generation could debit
+	// the wallet and the pill would sit on the old number until you clicked
+	// something. The money was right and the display was stale, which is the
+	// worst combination — it reads as "billing is broken".
+	depends('app:credits');
 	const supabaseUrl = env.PUBLIC_SUPABASE_URL ?? '';
 	const isPlaceholder = !supabaseUrl || supabaseUrl.includes('placeholder');
 

@@ -65,6 +65,7 @@
 	import MediaPreviewModal from '$lib/components/generation/MediaPreviewModal.svelte';
 	import PageShell from '$lib/components/ui/PageShell.svelte';
 	import { browser } from '$app/environment';
+	import { refreshCredits } from '$lib/credits-refresh';
 	import {
 		startGeneration,
 		finishGeneration,
@@ -1634,6 +1635,9 @@
 			showToast('Error: ' + (err as Error).message, 'error');
 		} finally {
 			generatingPost = false;
+			// The wallet may have moved; the pill is loaded by the layout and would
+			// otherwise keep showing the pre-generation number until a navigation.
+			void refreshCredits();
 		}
 	}
 
