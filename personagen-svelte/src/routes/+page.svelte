@@ -176,11 +176,15 @@
 		{ n: 4, name: 'Nico', platform: 'Threads' }
 	].map((c) => ({ ...c, src: `/assets/personas/persona-${c.n}-720.webp` }));
 
-	const QUEUE = [
-		{ src: CAST[1].src, name: 'Mara', platform: 'Instagram', format: 'Reel · 12s', price: '$1.58', state: 'waiting' },
-		{ src: CAST[2].src, name: 'Jonah', platform: 'TikTok', format: 'Talking head · 15s', price: '$2.51', state: 'waiting' },
-		{ src: CAST[0].src, name: 'Ana', platform: 'LinkedIn', format: 'Image post', price: '$0.32', state: 'published' }
-	];
+	// Every price on this page comes from the server (+page.server.ts): the
+	// same registry defaults the composer quotes from, at the platform markup.
+	// They were string literals — "$1.58 for a video post" that no format in
+	// the product costs (round-2 re-audit).
+	let QUEUE = $derived([
+		{ src: CAST[1].src, name: 'Mara', platform: 'Instagram', format: 'Reel · 12s', price: data.receipt.video, state: 'waiting' },
+		{ src: CAST[2].src, name: 'Jonah', platform: 'TikTok', format: 'Talking head · 15s', price: data.receipt.talkingHead, state: 'waiting' },
+		{ src: CAST[0].src, name: 'Ana', platform: 'LinkedIn', format: 'Image post', price: data.receipt.image, state: 'published' }
+	]);
 
 	const PRODUCTS = [
 		{ src: CAST[1].src, pos: '22% 62%', name: 'Manly Plus · 450g', meta: 'price, 6 photos, label copy' },
@@ -261,17 +265,26 @@
 		}
 	];
 
-	const RECEIPT = [
-		{ item: 'Text post', note: 'two LLM passes, no image charge', price: '≈ $0.08' },
-		{ item: 'Image post', note: 'one photoreal still', price: '$0.32' },
-		{ item: 'Video post', note: 'short clip with lip-sync', price: '$1.58' },
-		{ item: 'Talking head', note: 'scripted, voiced, lip-synced', price: '$2.51' }
-	];
+	// Cheapest first, whatever the registry currently prices: product motion and
+	// a talking head swap places when the default clip model changes.
+	let RECEIPT = $derived(
+		[
+			{ item: 'Text post', note: 'two LLM passes, no image charge', price: `≈ ${data.receipt.text}`, credits: data.receipt.credits.textPost },
+			{ item: 'Image post', note: 'one photoreal still', price: data.receipt.image, credits: data.receipt.credits.imagePost },
+			{ item: 'Video post', note: 'an animated product or lifestyle clip', price: data.receipt.video, credits: data.receipt.credits.videoPost },
+			{ item: 'Talking head', note: 'scripted, voiced, lip-synced', price: data.receipt.talkingHead, credits: data.receipt.credits.talkingHead }
+		].sort((a, b) => a.credits - b.credits)
+	);
+	let videoRange = $derived(
+		data.receipt.credits.videoPost <= data.receipt.credits.talkingHead
+			? `${data.receipt.video}–${data.receipt.talkingHead}`
+			: `${data.receipt.talkingHead}–${data.receipt.video}`
+	);
 
-	const FAQS = [
+	let FAQS = $derived([
 		{
 			q: 'How does the media wallet work?',
-			a: 'Every plan includes a monthly wallet for AI images, video and voice, shown as money in your currency. A text post only pays for the writing — about eight cents — so a persona posting six times a day spends around fifty cents, against roughly $1.60 for a video post. Every generation shows its price before you confirm. Run low and you top up at par: $25 buys $25.00 of generation, and it never expires.'
+			a: `Every plan includes a monthly wallet for AI images, video and voice, shown as money in your currency. A text post only pays for the writing — about ${data.receipt.text} — so a persona posting six times a day spends around ${data.receipt.sixText}, against ${videoRange} for a video. Every generation shows its price before you confirm. Run low and you top up at par — a dollar buys a dollar of generation, bigger packs add a bonus — and it never expires.`
 		},
 		{
 			q: 'How does the identity actually stay consistent?',
@@ -293,7 +306,7 @@
 			q: 'What happens if a generation fails?',
 			a: 'The slot retries a bounded number of times, then stops with a visible reason instead of retrying forever and billing you for it. Your other personas keep running.'
 		}
-	];
+	]);
 
 	const year = new Date().getFullYear();
 </script>
@@ -404,7 +417,7 @@
 				</p>
 				<div class="lp-hero-cta">
 					<a class="lp-btn lp-btn-lg" href="/signup">
-						Create your first persona<span class="lp-btn-tail"> — free</span>
+						Create your first persona<span class="lp-btn-tail"> — starter credit included</span>
 						<svg viewBox="0 0 24 24" aria-hidden="true"
 							><path
 								d="M5 12h14M13 6l6 6-6 6"
@@ -467,7 +480,7 @@
 				<div class="lp-chip lp-chip-approve">
 					<span class="lp-chip-body">
 						<strong>Awaiting your approval</strong>
-						<span>Reel · 12s · quoted <span class="lp-num">$1.58</span></span>
+						<span>Reel · 12s · quoted <span class="lp-num">{data.receipt.video}</span></span>
 					</span>
 					<span class="lp-chip-actions" aria-hidden="true">
 						<span class="lp-chip-btn lp-chip-btn-primary">Approve</span>
@@ -788,7 +801,8 @@
 				<h2>Priced per brand. Not per seat.</h2>
 			</div>
 			<p class="lp-section-sub">
-				Every account starts free. Paid plans add a monthly media wallet and unlimited text posts.
+				Every account starts free. Paid plans add a monthly media wallet — and a text post only ever
+				pays for its writing.
 			</p>
 		</div>
 		<div class="lp-plans">
@@ -829,8 +843,8 @@
 				<h3>Money, not points.</h3>
 				<p>
 					Rival wallets show a score and make you do the arithmetic. Yours shows dollars, quoted
-					before every generation. Top up at par — $25 buys $25.00 — and it never expires. Cancel
-					any time.
+					before every generation. Top up at par — bigger packs add a bonus — and it never expires.
+					Cancel any time.
 				</p>
 			</div>
 		</div>
@@ -865,7 +879,7 @@
 			</div>
 			<h2>Everyone else sells you a face.<br /><span class="lp-final-grad">We run the account.</span></h2>
 			<a class="lp-btn lp-btn-lg lp-btn-invert" href="/signup">
-				Create your first persona<span class="lp-btn-tail"> — free</span>
+				Create your first persona<span class="lp-btn-tail"> — starter credit included</span>
 			</a>
 			<p class="lp-fineprint lp-final-fineprint">
 				No credit card. Starter generation credit to try it, one grant per person. Cancel any time.

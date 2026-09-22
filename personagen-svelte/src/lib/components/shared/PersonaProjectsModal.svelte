@@ -343,12 +343,12 @@
 	.proj-btn.primary {
 		background: var(--accent-soft);
 		border-color: color-mix(in srgb, var(--accent) 30%, transparent);
-		color: var(--accent);
+		color: var(--accent-text);
 	}
 
 	.proj-btn.primary:hover:not(:disabled) {
 		background: color-mix(in srgb, var(--accent) 20%, transparent);
-		color: var(--accent);
+		color: var(--accent-text);
 	}
 
 	.proj-btn.danger {

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import { dialog } from '$lib/actions/dialog';
 	import { onMount } from 'svelte';
 	import type { Agent, AutonomyLevel } from '$lib/types';
@@ -1167,6 +1168,18 @@
 		</div>
 	{/if}
 
+	<!-- With no persona every create action is disabled — and a disabled button
+	     cannot say why to a keyboard or touch user (its title is unreachable). So
+	     the reason is visible text, and the per-day "+" is not offered at all
+	     (it was live, and answered with a toast). Round-2 re-audit, N14. -->
+	{#if data.agents.length === 0}
+		<p class="cal-no-persona">
+			You don't have a persona yet, so there is no one to post as. <a
+				href={resolve('/(portal)/generator')}>Create your first persona</a
+			> — then plan, write or generate posts here.
+		</p>
+	{/if}
+
 	<!-- Shared calendar: views, rail, analytics strip, day modal. The page
 	     keeps ownership of every mutation (drawer, approve, generate). -->
 	<CalendarView
@@ -1175,7 +1188,7 @@
 		bind:selectedAgentId
 		onOpenPost={(p) => (selectedPost = p as any)}
 		onApprove={(p) => approvePost(p as any)}
-		onGenerateForDate={(d) => requestGeneratePost(d)}
+		onGenerateForDate={data.agents.length > 0 ? (d) => requestGeneratePost(d) : undefined}
 	/>
 
 		<!-- Full post details: the same slide-in drawer the persona feed uses —
@@ -1618,6 +1631,16 @@
 />
 
 <style>
+	.cal-no-persona {
+		margin: 0 0 var(--space-4);
+		padding: 0.7rem 0.9rem;
+		border: 1px solid var(--border);
+		border-left: 3px solid var(--text-dim);
+		border-radius: var(--radius-xs);
+		background: var(--surface-2);
+		color: var(--text-muted);
+		font-size: 0.85rem;
+	}
 	.page {
 		position: relative;
 		min-height: calc(100vh - 60px);
@@ -2115,7 +2138,7 @@
 	}
 
 	.thumb-zoom:hover .thumb-zoom-badge {
-		background: var(--accent);
+		background: var(--accent-dark);
 	}
 
 	.manage-thumb {

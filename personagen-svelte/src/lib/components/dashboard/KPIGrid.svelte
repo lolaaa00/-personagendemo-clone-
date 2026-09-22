@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { parseCompactCount, formatCompactCount } from '$lib/compact-count';
+
 	interface KPI {
 		icon: string;
 		value: string;
@@ -21,10 +23,14 @@
 			(a) => (a.connection_count || a.connectionCount || 0) > 0
 		).length;
 
-		// Avg engagement
+		// Avg engagement — over the personas the card's own qualifier describes:
+		// published posts with stats (`hasMetrics`). Averaging every persona let a
+		// stored rate on three personas that had published nothing produce "3.6%"
+		// directly above a panel saying "No engagement data yet".
 		let avgEngText = '—';
-		if (agents.length) {
-			const avgEng = agents.reduce((s, a) => s + (a.engagementRate || 0), 0) / agents.length;
+		const measured = agents.filter((a) => a.hasMetrics);
+		if (measured.length) {
+			const avgEng = measured.reduce((s, a) => s + (a.engagementRate || 0), 0) / measured.length;
 			avgEngText = avgEng > 0 ? avgEng.toFixed(1) + '%' : '—';
 		}
 
@@ -36,16 +42,9 @@
 		// personas with nothing published.
 		let reachText = '—';
 		if (agents.length) {
-			const totalFollowers = agents.reduce((s, a) => {
-				const f = String(a.followers || '0')
-					.replace(/[Kk]/g, '000')
-					.replace(/[Mm]/g, '000000')
-					.replace(/\./g, '');
-				return s + (parseInt(f) || 0);
-			}, 0);
-			if (totalFollowers >= 1000000) reachText = (totalFollowers / 1000000).toFixed(1) + 'M';
-			else if (totalFollowers >= 1000) reachText = (totalFollowers / 1000).toFixed(1) + 'K';
-			else reachText = String(totalFollowers);
+			// See compact-count.ts: the old string surgery counted "13.8K" as 138,000.
+			const totalFollowers = agents.reduce((s, a) => s + parseCompactCount(a.followers), 0);
+			reachText = formatCompactCount(totalFollowers);
 		}
 
 		return [

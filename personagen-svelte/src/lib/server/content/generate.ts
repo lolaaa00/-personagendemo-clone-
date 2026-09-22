@@ -634,7 +634,7 @@ export async function generateUgcImage(
 	if (orKey) return viaOpenRouter();
 	if (falKey) return viaFal();
 	throw new Error(
-		'No image generation provider configured. Add an OpenRouter key or set FAL_API_KEY.'
+		'Image generation is unavailable right now — the platform’s image provider is not set up. That is on us, and nothing was taken from your wallet.'
 	);
 }
 
@@ -5127,7 +5127,7 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 				});
 			} else {
 				throw new Error(
-					'No media provider configured. Add a Fal AI or OpenRouter key in Settings.'
+					'Media generation is unavailable right now — the platform’s media provider is not set up. That is on us, and nothing was taken from your wallet.'
 				);
 			}
 		} else if (falKey && (productPhoto || characterRef)) {
@@ -5970,7 +5970,7 @@ export async function refineUgcMedia(input: RefineMediaInput): Promise<UgcConten
 	try {
 		const { orKey, falKey, orRoutes, falRoutes } = await resolveImageKeys(supabase, userId);
 		if (!falKey && !orKey) {
-			throw new Error('No media provider configured. Add a Fal AI or OpenRouter key in Settings.');
+			throw new Error('Media generation is unavailable right now — the platform’s media provider is not set up. That is on us, and nothing was taken from your wallet.');
 		}
 
 		// The refs that actually produced this post — preferred over the persona's
@@ -6171,7 +6171,7 @@ export async function refineUgcMedia(input: RefineMediaInput): Promise<UgcConten
 				});
 			} else {
 				throw new Error(
-					'No media provider configured. Add a Fal AI or OpenRouter key in Settings.'
+					'Media generation is unavailable right now — the platform’s media provider is not set up. That is on us, and nothing was taken from your wallet.'
 				);
 			}
 		} else if (falKey && (productPhoto || characterRef)) {

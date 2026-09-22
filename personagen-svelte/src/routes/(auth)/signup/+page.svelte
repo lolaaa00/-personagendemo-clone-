@@ -17,7 +17,7 @@
 		if (!password) return { level: 0, label: '', color: '' };
 
 		let score = 0;
-		if (password.length >= 6) score++;
+		if (password.length >= 8) score++;
 		if (password.length >= 10) score++;
 		if (/[A-Z]/.test(password)) score++;
 		if (/[0-9]/.test(password)) score++;
@@ -50,7 +50,7 @@
 
 	let nameInvalid = $derived(!!error && fullName.trim().length === 0);
 	let emailInvalid = $derived(emailMalformed || (!!error && email.trim().length === 0));
-	let passwordInvalid = $derived(!!error && password.length < 6);
+	let passwordInvalid = $derived(!!error && password.length < 8);
 	let hasFieldError = $derived(nameInvalid || emailInvalid || passwordInvalid);
 	// The summary only appears after a failed submit; the live mismatch warning stays inline
 	// so the layout doesn't jump while the user is still typing.
@@ -99,8 +99,8 @@
 			return;
 		}
 
-		if (password.length < 6) {
-			error = 'Password must be at least 6 characters';
+		if (password.length < 8) {
+			error = 'Password must be at least 8 characters';
 			return;
 		}
 
@@ -217,7 +217,7 @@
 								{/if}
 								{#if passwordInvalid}
 									<li>
-										<a href="#password">Password</a> is too short — use at least 6 characters.
+										<a href="#password">Password</a> is too short — use at least 8 characters.
 									</li>
 								{/if}
 								{#if !hasFieldError}
@@ -309,7 +309,7 @@
 							required
 							aria-required="true"
 							autocomplete="new-password"
-							minlength={6}
+							minlength={8}
 							aria-invalid={passwordInvalid ? 'true' : 'false'}
 							aria-describedby={passwordDescribedBy}
 						/>
@@ -359,12 +359,12 @@
 						</button>
 					</div>
 					<p class="field-hint" id="password-help">
-						At least 6 characters. Mixing in a capital letter, a number and a symbol makes it
+						At least 8 characters — the same rule as a reset or a change. Mixing in a capital letter, a number and a symbol makes it
 						stronger.
 					</p>
 					{#if passwordInvalid}
 						<span class="field-hint error" id="password-error" role="alert">
-							Password is too short — use at least 6 characters, then try again.
+							Password is too short — use at least 8 characters, then try again.
 						</span>
 					{/if}
 					{#if password}

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import { syncParam } from '$lib/url-state';
 	import {
 		CHANGELOG,
@@ -335,13 +335,12 @@
 			facts: [
 				'Fixes: “ran out of credits” / “402” errors',
 				'There is no key for you to add — generation runs on our keys',
-				'A text post costs only its writing, about eight cents',
-				'If the persona belongs to a workspace, the OWNER’s balance is the one that pays'
+				'A text post costs only its writing — a few cents; the Studio shows the exact price in your currency',
+				'If the persona belongs to a workspace, the OWNER’s wallet is the one that pays'
 			],
 			steps: [
-				{ t: 'Open Billing from the sidebar. The balance at the top is the one that funds your generations.' },
-				{ t: 'Check the label on the balance pill in the sidebar. If it shows a workspace name, that workspace’s owner funds it — ask them to top up, because you cannot do it for them.' },
-				{ t: 'If it is your own wallet and card payments are not switched on yet, use the request board link on the Billing page and we will load it manually.' },
+				{ t: 'Look at the balance pill in the sidebar: it names the wallet that pays for what you are generating. If that is a workspace you hold a seat in, the wallet is the workspace owner’s — only the owner can top it up, so ask them. Your own balance is not the one in play.' },
+				{ t: 'If the wallet is yours — your own account, or a workspace you own — open Billing. While card payments are switched off, press “Ask us to load” on a pack: the request reaches us privately, and we load it by hand.' },
 				{ t: 'Retry whatever failed — generate a post or approve a draft. Nothing is lost by a failed attempt.' }
 			],
 			tip: 'You do not need a provider account of your own. Generation runs on our keys and is charged to your balance, so every post is priced the same way.'
@@ -374,7 +373,7 @@
 				{ t: 'Bringing your own OpenRouter, Gemini, Fal or Firecrawl key no longer changes any of this. Customer keys for generation were withdrawn — they gave away margin and split one bill in two with no rule a customer could see. A key still saved from before is inert.' },
 				{ t: 'Zernio is the exception and stays: it connects your own social accounts for publishing, Zernio bills you per connected account per month, and it never changes what a generation costs.' }
 			],
-			tip: 'Topping up the wrong wallet is the common mistake. Billing lists every workspace wallet you draw on beside your own — top up the one the sidebar names.'
+			tip: 'The common mistake is topping up your own wallet while generating for a workspace persona. If the sidebar names a workspace you are a seat in, only its owner can top it up — your own balance will not be touched.'
 		},
 		{
 			// Rewritten 2026-09-22 to match Settings and the product owner's rule:
@@ -977,10 +976,11 @@
 		PROVIDERS.map((p) => ({ ...p, count: GUIDES.filter((g) => providersOf(g).includes(p.id)).length }))
 	);
 
-	/** The first-run path: the four guides a new account needs, in order. */
-	// Setup order for a new account. The out-of-credits troubleshooting guide
-	// used to sit at step 2 and the Zernio key was missing entirely.
-	const START_HERE = ['getting-around', 'generate-post', 'zernio-key', 'connect-account'];
+	/** The first-run path, in the dashboard checklist's own order. */
+	// Setup order for a new account. It skipped creating a persona and put
+	// "generate a post" second — a step a brand-new account cannot take
+	// (round-2 re-audit) — so it now follows the setup checklist.
+	const START_HERE = ['getting-around', 'new-persona', 'brand-brief', 'zernio-key', 'connect-account', 'generate-post'];
 	let startHere = $derived(
 		START_HERE.map((id) => GUIDES.find((g) => g.id === id)).filter((g): g is Guide => !!g)
 	);
@@ -1055,7 +1055,16 @@
 
 	onMount(() => {
 		const hash = location.hash.replace('#', '');
-		if (hash && GUIDES.some((g) => g.id === hash)) selectedId = hash;
+		if (hash && GUIDES.some((g) => g.id === hash)) {
+			selectedId = hash;
+			// Land ON the guide. On a phone the article sits below the whole index,
+			// so every "What went wrong?" / "Where do I get a key?" link opened on
+			// the list with the answer below the fold (round-2 re-audit). The
+			// article's scroll-margin keeps its title clear of the sticky header.
+			void tick().then(() =>
+				document.getElementById('guide-article')?.scrollIntoView({ block: 'start' })
+			);
+		}
 	});
 
 	// ── Docs hub: Guides | Changelog | Roadmap | User Voice ──────────────────
@@ -2419,8 +2428,8 @@
 	}
 
 	.cl-cat.active {
-		background: var(--accent);
-		border-color: var(--accent);
+		background: var(--accent-dark);
+		border-color: var(--accent-dark);
 		color: #fff;
 	}
 
@@ -2518,7 +2527,7 @@
 		padding: 0.3rem 0.1rem;
 		background: none;
 		border: none;
-		color: var(--accent);
+		color: var(--accent-text);
 		font-size: 0.8rem;
 		font-weight: 600;
 		cursor: pointer;
@@ -3023,7 +3032,7 @@
 		border-radius: 50%;
 		display: grid;
 		place-items: center;
-		background: var(--accent);
+		background: var(--accent-dark);
 		color: #fff;
 		font-weight: 700;
 		font-size: var(--text-sm);

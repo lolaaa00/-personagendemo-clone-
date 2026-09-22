@@ -18,9 +18,26 @@
  * margin, never overcharge the customer relative to what they were shown.
  */
 import type { FxRates, PricingContext, FormatOptions } from '$lib/money';
-import { quoteCredits, quoteMoney } from '$lib/money';
+import { quoteCredits, quoteMoney, formatCredits } from '$lib/money';
 
 const ctx = $state<PricingContext>({ markup: 1, currency: 'USD', fx: null, locale: undefined });
+
+/**
+ * Back to the at-cost defaults. The root layout calls this at the start of
+ * every SERVER render: this store is module-level, so on the server it is
+ * shared by every request — without a reset, a page outside the portal could
+ * render with the currency and markup the previous visitor's render left.
+ * (Safe because server rendering is synchronous: no other request's render
+ * can interleave between this reset, the portal layout's prime, and the page.)
+ */
+export function resetPricing(): void {
+	ctx.markup = 1;
+	ctx.currency = 'USD';
+	ctx.fx = null;
+	ctx.locale = undefined;
+	ctx.metered = undefined;
+	ctx.enforced = undefined;
+}
 
 /** Primed by the portal layout from server data. Safe to call repeatedly. */
 export function primePricing(next: Partial<PricingContext> | null | undefined): void {
@@ -51,4 +68,18 @@ export function quote(usd: number, opts?: FormatOptions): string {
 /** Retail credits for a provider estimate — for totals and comparisons. */
 export function quoteRaw(usd: number): number {
 	return quoteCredits(usd, ctx);
+}
+
+/**
+ * Retail credits for a multi-step run, rounded up PER STEP — the way the
+ * ledger debits (one event per paid stage, each ceiled). Rounding once on the
+ * total quoted a product-motion clip at 362 credits that debited 363.
+ */
+export function quoteStepsRaw(stepsUsd: readonly number[]): number {
+	return stepsUsd.reduce((sum, usd) => sum + quoteCredits(usd, ctx), 0);
+}
+
+/** The headline for a multi-step run; matches the debit to the credit. */
+export function quoteSteps(stepsUsd: readonly number[], opts?: FormatOptions): string {
+	return formatCredits(quoteStepsRaw(stepsUsd), ctx.currency, ctx.fx, ctx.locale, opts ?? { whole: false });
 }

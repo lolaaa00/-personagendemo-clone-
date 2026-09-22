@@ -239,7 +239,7 @@ export async function createSubscriptionCheckout(i: SubscriptionCheckoutInput): 
 						recurring: { interval: 'month' },
 						product_data: {
 							name: `${i.planName} plan`,
-							description: `Includes ${(i.includedCredits / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' })} of media generation every month. Text posts unlimited.`
+							description: `Includes ${(i.includedCredits / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' })} of media generation every month. A text post pays only for its writing.`
 						}
 					}
 				}

@@ -14,7 +14,9 @@
 	// Money on this screen is what the customer pays, not what the provider
 	// charges us: quote() applies the live markup and renders in the viewer's
 	// own currency, the same numbers the sidebar wallet pill shows.
-	import { quote, pricingContext } from '$lib/stores/pricing.svelte';
+	import { quote, quoteSteps, quoteStepsRaw, pricingContext } from '$lib/stores/pricing.svelte';
+	import { planPipeline } from '$lib/formats';
+	import { formatCredits } from '$lib/money';
 	import { countLabel, plural } from '$lib/plural';
 	import PostCard from '$lib/components/feed/PostCard.svelte';
 	import PostDrawer from '$lib/components/feed/PostDrawer.svelte';
@@ -22,7 +24,11 @@
 	import ManualDeleteNotice from '$lib/components/feed/ManualDeleteNotice.svelte';
 	import SelectionToolbar from '$lib/components/ui/SelectionToolbar.svelte';
 	import ImageLightbox from '$lib/components/ui/ImageLightbox.svelte';
-	import { getPostDisplay, retryBodyFromFailedPost } from '$lib/components/feed/postDisplay';
+	import {
+		getPostDisplay,
+		retryBodyFromFailedPost,
+		retryCarriedSummary
+	} from '$lib/components/feed/postDisplay';
 	import {
 		STUDIO_TEMPLATES,
 		STUDIO_SURFACES,
@@ -63,7 +69,7 @@
 	import { confirmAction } from '$lib/stores/confirm.svelte';
 	import MediaPreviewModal from '$lib/components/generation/MediaPreviewModal.svelte';
 	import PageShell from '$lib/components/ui/PageShell.svelte';
-	import { templateUsd, fetchStudioPlan, type StudioPlan } from '$lib/studio-pricing';
+	import { templateStepsUsd, fetchStudioPlan, type StudioPlan } from '$lib/studio-pricing';
 	import { refreshCredits } from '$lib/credits-refresh';
 	import {
 		startGeneration,
@@ -286,6 +292,10 @@
 	let seatCanGenerate = $derived(
 		(data as { seat?: { canCreate?: boolean } }).seat?.canCreate !== false
 	);
+	/** Shown where Retry would be, for a seat that cannot generate (never a dead control). */
+	let seatRetryReason = $derived(
+		`Retry needs a Creator seat or above — your ${(data as { seat?: { label?: string } }).seat?.label ?? 'current'} seat can view but not generate.`
+	);
 	let staleActionBlocked = $derived(
 		seatCanGenerate ? null : 'Your seat can view this persona but not generate for it.'
 	);
@@ -497,8 +507,10 @@
 	// plain <div>, so they are derived here instead.
 	let semiBlocked = $derived(autonomyBlockedReason('semi_autonomous'));
 	let fullyBlocked = $derived(autonomyBlockedReason('fully_autonomous'));
-	/** The Studio's registry-resolved plan (see tileUsd below); null until it answers. */
+	/** The Studio's registry-resolved plan (see tileSteps below); null until it answers. */
 	let studioPlan = $state<StudioPlan | null>(null);
+	/** 'unavailable' = the preview refused (a seat that cannot generate) or failed. */
+	let studioPlanState = $state<'loading' | 'ready' | 'unavailable'>('loading');
 	/**
 	 * Why Cinematic is out of reach, or null. The server refuses it BEFORE the
 	 * preview branch, so a cinematic Studio template would otherwise resolve into
@@ -853,7 +865,29 @@
 		url.searchParams.delete('retry');
 		history.replaceState(history.state, '', url.pathname + url.search + url.hash);
 		const post = feedPosts.find((p: { id: string }) => p.id === id);
-		if (post && seatCanGenerate) retryFailedPost(post);
+		// Never silent: a link that arrives here and cannot act says why.
+		if (!seatCanGenerate) showToast(seatRetryReason, 'info');
+		else if (post) retryFailedPost(post);
+		else showToast('That failed post is no longer here — it may have been deleted.', 'info');
+	}
+
+	/** ?republish=<postId> — the drawer on /generations and the calendar sends a
+	 *  publish-failed post here, where the connected-platform picker lives. */
+	function consumeRepublishParam() {
+		if (typeof window === 'undefined') return;
+		const url = new URL(window.location.href);
+		const id = url.searchParams.get('republish');
+		if (!id) return;
+		url.searchParams.delete('republish');
+		history.replaceState(history.state, '', url.pathname + url.search + url.hash);
+		const post = feedPosts.find((p: { id: string }) => p.id === id);
+		if (!seat.canPublish)
+			showToast(
+				`Publishing needs a Manager seat or above — your ${seat.label} seat cannot send it again.`,
+				'info'
+			);
+		else if (post) void openPublishFallback(post);
+		else showToast('That post is no longer here — it may have been deleted.', 'info');
 	}
 
 	async function loadFeed() {
@@ -874,6 +908,7 @@
 				);
 				feedLoaded = true;
 				consumeRetryParam();
+				consumeRepublishParam();
 			} else {
 				showToast('Failed to load feed: ' + result.error, 'error');
 			}
@@ -889,6 +924,45 @@
 	// follow the same confirm-before-spend rule as every other generate action.
 	let fillingDrafts = $state(false);
 	let confirmDraftsOpen = $state(false);
+	/**
+	 * What "Generate drafts" will actually spend, shown before it does. The
+	 * confirm said "about N/day … one generation per draft" — no count, no
+	 * price, no wallet (round-2 re-audit), on the one bulk-spend button here.
+	 * A run fills the next 7 days at the persona's cadence, at most 24 drafts
+	 * (autopilot.ts: AUTOPILOT_LOOKAHEAD_DAYS / AUTOPILOT_MAX_PER_RUN), each
+	 * priced like "Let the Director choose" — at its dearer outcome.
+	 */
+	const DRAFT_LOOKAHEAD_DAYS = 7;
+	const DRAFT_MAX_PER_RUN = 24;
+	let draftCountMax = $derived(Math.min(DRAFT_MAX_PER_RUN, DRAFT_LOOKAHEAD_DAYS * Math.max(0, postsPerDay)));
+	let draftUnitSteps = $derived(
+		studioPlan
+			? planPipeline({
+					formatId: 'auto',
+					options: studioPlan.options,
+					fixed: studioPlan.fixed,
+					shots: studioPlan.shots
+				}).map((st) => st.usd)
+			: null
+	);
+	let draftTotalMax = $derived.by(() => {
+		if (!draftUnitSteps) return null;
+		const ctx = pricingContext();
+		return formatCredits(quoteStepsRaw(draftUnitSteps) * draftCountMax, ctx.currency, ctx.fx, ctx.locale, {
+			whole: false
+		});
+	});
+	$effect(() => {
+		// The confirm needs the plan even when the Studio tab was never opened.
+		if (!confirmDraftsOpen || studioPlan || !agent?.id) return;
+		const id = agent.id;
+		void fetchStudioPlan(id).then((plan) => {
+			if (agent?.id === id && plan) {
+				studioPlan = plan;
+				studioPlanState = 'ready';
+			}
+		});
+	});
 	async function fillDraftsNow() {
 		if (!agent?.id || fillingDrafts) return;
 		confirmDraftsOpen = false;
@@ -1107,11 +1181,59 @@
 		if (activeTab !== 'studio' || !agent?.id || studioPlanFor === agent.id) return;
 		const id = agent.id;
 		studioPlanFor = id;
+		studioPlanState = 'loading';
 		void fetchStudioPlan(id).then((plan) => {
-			if (plan && agent?.id === id) studioPlan = plan;
+			if (agent?.id !== id) return;
+			studioPlan = plan;
+			studioPlanState = plan ? 'ready' : 'unavailable';
 		});
 	});
-	const tileUsd = (t: StudioTemplate) => templateUsd(t, studioPlan);
+	/**
+	 * The rate card, from THIS persona's plan — the models its runs actually
+	 * use. It was a static table naming kling-o3-standard for b-roll while
+	 * product motion ran the registry default (Seedance), and its model column
+	 * carried provider formulas like "(~5s @ $0.14/s)" (round-2 re-audit).
+	 */
+	const RATE_STAGES: Array<[string, string]> = [
+		['director', 'Writing'],
+		['grader', 'Quality check'],
+		['card', 'Text card render'],
+		['still', 'Photo / still'],
+		['video', 'Video clip'],
+		['tts', 'Voiceover'],
+		['talkinghead', 'Talking head'],
+		['cine_stills', 'Cinematic storyboard (per shot)'],
+		['cine_video', 'Cinematic video']
+	];
+	/** A model name without the provider's own price formula in it. */
+	const cleanModelLabel = (label: string) =>
+		label.replace(/\s*\([^)]*\$[^)]*\)/g, '').replace(/\s*·\s*×.*$/, '').trim();
+	let rateRows = $derived(
+		studioPlan
+			? RATE_STAGES.flatMap(([kind, label]) => {
+					const m = (studioPlan?.fixed as Record<string, { label: string; usd: number; billing?: string }> | undefined)?.[kind];
+					return m
+						? [{ label, model: cleanModelLabel(m.label), usd: m.usd, perSecond: m.billing === 'per_second' }]
+						: [];
+				})
+			: null
+	);
+	function ensureStudioPlan() {
+		if (studioPlan || !agent?.id) return;
+		const id = agent.id;
+		void fetchStudioPlan(id).then((plan) => {
+			if (agent?.id !== id) return;
+			studioPlan = plan;
+			studioPlanState = plan ? 'ready' : 'unavailable';
+		});
+	}
+
+	/** Per-stage USD for a tile, or null until the plan answers (never the stale table). */
+	const tileSteps = (t: StudioTemplate) => templateStepsUsd(t, studioPlan);
+	/** Who a tile's charge lands on, named the way the composer names it. */
+	let tilePayer = $derived(
+		agent?.workspace_id && data.credits?.paid_by ? `the ${data.credits.paid_by} wallet` : 'your wallet'
+	);
 
 	function useStudioTemplate(t: StudioTemplate) {
 		if (!agent?.id) return;
@@ -1139,7 +1261,13 @@
 	 * real plan and price before anything runs. A retry spends exactly like the
 	 * first attempt, so it gets no shortcut past that approval.
 	 */
-	function retryFailedPost(post: { id?: string; content?: unknown }) {
+	function retryFailedPost(post: {
+		id?: string;
+		content?: unknown;
+		platforms?: unknown;
+		scheduled_date?: unknown;
+		scheduled_time?: unknown;
+	}) {
 		if (!agent?.id) return;
 		const baseBody = retryBodyFromFailedPost(post);
 		if (!baseBody) {
@@ -1153,8 +1281,7 @@
 				endpoint: `/api/agent/${agent.id}/generate-post`,
 				baseBody,
 				title: `Retry — ${agent.name}`,
-				subtitle:
-					'The failed post’s settings are filled in below. Check the price and edit anything before approving.',
+				subtitle: retryCarriedSummary(baseBody, post),
 				confirmLabel: 'Approve & generate'
 			},
 			(body) => generatePostNow(body)
@@ -3650,7 +3777,7 @@
 								type="button"
 								class="btn-sync"
 								onclick={() => (confirmDraftsOpen = true)}
-								disabled={fillingDrafts || feedLoading}
+								disabled={fillingDrafts || feedLoading || !seatCanGenerate}
 								title="Top up this persona's review queue: autopilot fills the empty future slots with drafts"
 							>
 								{#if fillingDrafts}
@@ -3780,6 +3907,7 @@
 										{post}
 										onOpen={(p) => (modalPost = p)}
 										onRetry={seatCanGenerate ? retryFailedPost : null}
+										retryBlockedReason={seatCanGenerate ? null : seatRetryReason}
 										onPublishFallback={openPublishFallback}
 										selectable
 										selected={selectedPostIds.includes(post.id)}
@@ -4007,32 +4135,6 @@
 							<div class="section-header">
 								<div class="label-row">
 									<h2 class="section-title">Persona Profile</h2>
-									<button
-										type="button"
-										class="btn-sync btn-xs"
-										onclick={(e) => {
-											e.preventDefault();
-											e.stopPropagation();
-											generatePersonaProfile();
-										}}
-										disabled={generatingProfile}
-										title="Generate a unique profile tailored to the selected brand and this persona's gender"
-									>
-										{#if generatingProfile}Generating…{:else}<svg
-												width="13"
-												height="13"
-												viewBox="0 0 24 24"
-												fill="none"
-												stroke="currentColor"
-												stroke-width="2"
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												aria-hidden="true"
-												><path
-													d="M12 3l1.7 4.6L18 9.3l-4.3 1.7L12 15.6l-1.7-4.6L6 9.3l4.3-1.7L12 3z"
-												/><path d="M18.5 14.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2z" /></svg
-											> Generate for brand{/if}
-									</button>
 								</div>
 								<p class="section-desc">
 									Psychological depth and content strategy — these feed directly into content
@@ -4054,6 +4156,36 @@
 								aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg
 							>
 						</summary>
+							<!-- Outside the summary element: its content is the section label, so a
+							     button inside it is nested-interactive and misreported. -->
+							<div class="section-actions">
+						<button
+							type="button"
+							class="btn-sync btn-xs"
+							onclick={(e) => {
+								e.preventDefault();
+								e.stopPropagation();
+								generatePersonaProfile();
+							}}
+							disabled={generatingProfile}
+							title="Generate a unique profile tailored to the selected brand and this persona's gender"
+						>
+							{#if generatingProfile}Generating…{:else}<svg
+									width="13"
+									height="13"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									aria-hidden="true"
+									><path
+										d="M12 3l1.7 4.6L18 9.3l-4.3 1.7L12 15.6l-1.7-4.6L6 9.3l4.3-1.7L12 3z"
+									/><path d="M18.5 14.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2z" /></svg
+								> Generate for brand{/if}
+						</button>
+							</div>
 
 						<div class="fields-grid">
 							<!-- Identity fields, moved up into the profile: the NAME stays constant;
@@ -4334,35 +4466,6 @@
 											Save failed
 										{/if}
 									</span>
-									<button
-										type="button"
-										class="btn-sync btn-xs"
-										onclick={(e) => {
-											e.preventDefault();
-											e.stopPropagation();
-											generateKit('starter');
-										}}
-										disabled={kitBusy}
-										title="One small call: display name + username candidates + bios for this persona's connected platforms (or a TikTok/Instagram/YouTube starter set)"
-									>
-										{#if generatingKit}Generating…{:else}<svg
-												width="13"
-												height="13"
-												viewBox="0 0 24 24"
-												fill="none"
-												stroke="currentColor"
-												stroke-width="2"
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												aria-hidden="true"
-												><path
-													d="M12 3l1.7 4.6L18 9.3l-4.3 1.7L12 15.6l-1.7-4.6L6 9.3l4.3-1.7L12 3z"
-												/><path d="M18.5 14.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2z" /></svg
-											>
-											{ppHandleCandidates.length || Object.keys(ppBios).length
-												? 'Regenerate'
-												: 'Generate'} starter kit{/if}
-									</button>
 								</div>
 								<p class="section-desc">
 									What goes ON the platform profile — display name, username, bio, picture.
@@ -4386,6 +4489,39 @@
 								aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg
 							>
 						</summary>
+							<!-- Outside the summary element: its content is the section label, so a
+							     button inside it is nested-interactive and misreported. -->
+							<div class="section-actions">
+						<button
+							type="button"
+							class="btn-sync btn-xs"
+							onclick={(e) => {
+								e.preventDefault();
+								e.stopPropagation();
+								generateKit('starter');
+							}}
+							disabled={kitBusy}
+							title="One small call: display name + username candidates + bios for this persona's connected platforms (or a TikTok/Instagram/YouTube starter set)"
+						>
+							{#if generatingKit}Generating…{:else}<svg
+									width="13"
+									height="13"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									aria-hidden="true"
+									><path
+										d="M12 3l1.7 4.6L18 9.3l-4.3 1.7L12 15.6l-1.7-4.6L6 9.3l4.3-1.7L12 3z"
+									/><path d="M18.5 14.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2z" /></svg
+								>
+								{ppHandleCandidates.length || Object.keys(ppBios).length
+									? 'Regenerate'
+									: 'Generate'} starter kit{/if}
+						</button>
+							</div>
 
 						<div class="fields-grid">
 							<div class="field-group">
@@ -6029,8 +6165,33 @@
 							</p>
 						{/if}
 
-						<details class="pricing-details">
+						<details
+							class="pricing-details"
+							ontoggle={(e) => {
+								if ((e.currentTarget as HTMLDetailsElement).open) ensureStudioPlan();
+							}}
+						>
 							<summary>Rate card (estimated {metered ? 'charge' : 'cost'} per call)</summary>
+							{#if rateRows}
+								<div class="pricing-table-wrap">
+									<table class="pricing-table">
+										<thead><tr><th>Stage</th><th>Model this persona runs</th><th>Your rate</th></tr></thead>
+										<tbody>
+											{#each rateRows as row (row.label)}
+												<tr>
+													<td>{row.label}</td>
+													<td>{row.model}</td>
+													<td class="tabular-nums">
+														{row.usd > 0 ? quote(row.usd) : 'no charge (server render)'}{row.perSecond
+															? ' per second of clip'
+															: ''}
+													</td>
+												</tr>
+											{/each}
+										</tbody>
+									</table>
+								</div>
+							{:else}
 							<div class="pricing-table-wrap">
 								<table class="pricing-table">
 									<thead
@@ -6042,7 +6203,7 @@
 											<tr>
 												<td>{row.provider}</td>
 												<td>{row.operation}</td>
-												<td>{row.model}</td>
+												<td>{cleanModelLabel(row.model)}</td>
 												<!-- Quoted, like the totals above — a rate card that itemised provider
 												     cost under a retail total would never add up. Rows priced per-account
 												     rather than per-call carry a note instead of a number. -->
@@ -6057,6 +6218,7 @@
 									</tbody>
 								</table>
 							</div>
+							{/if}
 						</details>
 					</details>
 					{/if}
@@ -6461,16 +6623,23 @@
 								already aimed at {agent.name}'s voice and the applied brand brief. For bulk
 								generation across a week or a month, plan a campaign.
 							</p>
+							{#if !seatCanGenerate}
+								<p class="studio-blocked-note">
+									Your {seat.label} seat can browse the Studio but not generate — that needs a Creator
+									seat or above. Ask a workspace admin to change your seat.
+								</p>
+							{/if}
 							<p class="studio-payer">
 								{#if agent.workspace_id && data.credits?.paid_by}
-									Generating here draws on <strong>{data.credits.paid_by}</strong>'s wallet — the
-									balance in the sidebar, funded by the workspace owner.
+									Generating here draws on <strong>{data.credits.paid_by}</strong>'s wallet, which the
+									workspace owner funds — its balance is on the sidebar and on Billing.
 								{:else if data.credits?.paid_by}
 									This persona is yours alone, so generating here draws on
 									<strong>your own wallet</strong> — not the {data.credits.paid_by} balance shown
 									in the sidebar.
 								{:else}
-									Generating here draws on <strong>your wallet</strong> — the balance in the sidebar.
+									Generating here draws on <strong>your wallet</strong> — its balance is on the sidebar
+									and on Billing.
 								{/if}
 								<a href="/billing">What costs what</a>
 							</p>
@@ -6582,6 +6751,11 @@
 									<span class="studio-intent-hint">{hint}</span>
 								</div>
 								{#each studioShelves(intent as StudioIntent) as [shelf, list] (shelf.id)}
+									{#if shelf.id === 'cinematic' && cinematicBlocked}
+										<!-- Visible, not a tooltip on a disabled button (which cannot be
+										     focused or read on touch). -->
+										<p class="studio-blocked-note">{cinematicBlocked}</p>
+									{/if}
 									<div class="studio-shelf">
 										<div class="studio-shelf-head">
 											<span class="studio-shelf-label">{shelf.label}</span>
@@ -6591,7 +6765,7 @@
 											{#each list as t (t.id)}
 												{@const preview = studioPreviews.get(t.id)}
 												{@const meta = PIPELINE_META[t.pipeline]}
-												{@const pipelineUsd = tileUsd(t)}
+												{@const steps = tileSteps(t)}
 												<div class="studio-tile studio-sf-{t.surface}" role="listitem">
 													<!-- The tile's face is the OUTPUT: a real prior generation
 												     when one exists, else the template's sample line styled
@@ -6693,15 +6867,20 @@
 															     includes the writing every post pays for — through quote(), the
 															     same path as the charge itself. No format is free: a text card is
 															     the cheapest by an order of magnitude, and it still costs. -->
-															<span
-																class="studio-cost"
-																title={metered
-																	? t.pipeline === 'Text card'
-																		? 'Estimated charge for this generation — no media, only the writing, charged to your balance'
-																		: 'Estimated charge for this generation, writing included'
-																	: 'Estimated generation cost, writing included'}
-																>{quote(pipelineUsd)}</span
-															>
+															{#if steps}
+																<span
+																	class="studio-cost"
+																	title={metered
+																		? t.pipeline === 'Text card'
+																			? `Estimated charge for this generation — no media, only the writing, charged to ${tilePayer}`
+																			: `Estimated charge for this generation, writing included, charged to ${tilePayer}`
+																		: 'Estimated generation cost, writing included'}
+																	>{quoteSteps(steps)}</span
+																>
+															{:else if studioPlanState === 'loading'}
+																<!-- No stale-table price while the real one loads. -->
+																<span class="studio-cost studio-cost-pending" aria-label="Price loading">…</span>
+															{/if}
 															<span class="studio-time" title="Typical generation time"
 																>{meta.time}</span
 															>
@@ -6710,6 +6889,7 @@
 																class="btn-generate studio-use"
 																disabled={generatingPost ||
 																	!hydrated ||
+																	!seatCanGenerate ||
 																	(t.baseBody?.media === 'cinematic' && cinematicBlocked !== null)}
 																title={t.baseBody?.media === 'cinematic'
 																	? (cinematicBlocked ?? undefined)
@@ -6798,17 +6978,32 @@
 				use:dialog={{ onClose: () => (confirmDraftsOpen = false) }}
 			>
 				<h3>Generate drafts for {agent?.name}?</h3>
-				<p>
-					This fills the empty upcoming slots in the review queue with autopilot drafts — about
-					<strong>{postsPerDay}/day</strong> across active hours — and spends one generation
-					<strong>per draft</strong>. Nothing publishes: each lands in the
-					<a href="/review">review queue</a> for your approval.
-				</p>
+				{#if draftCountMax === 0}
+					<p>
+						This persona is set to <strong>0 posts a day</strong>, so there are no upcoming slots to
+						fill and nothing would be generated. Set a posting cadence in Autopilot first.
+					</p>
+				{:else}
+					<p>
+						This fills the empty slots in the next {DRAFT_LOOKAHEAD_DAYS} days at
+						<strong>{postsPerDay} a day</strong> — up to <strong>{draftCountMax} drafts</strong>, fewer if
+						some slots already have one. Each costs up to
+						<strong>{draftUnitSteps ? quoteSteps(draftUnitSteps) : '…'}</strong>
+						({draftTotalMax ? `at most ${draftTotalMax} in all` : 'pricing…'}), charged to
+						<strong>{tilePayer}</strong>. Nothing publishes: each lands in the
+						<a href="/review">review queue</a> for your approval.
+					</p>
+				{/if}
 				<div class="confirm-actions">
 					<button type="button" class="btn-cancel" onclick={() => (confirmDraftsOpen = false)}
 						>Cancel</button
 					>
-					<button type="button" class="btn-generate" onclick={fillDraftsNow}>
+					<button
+						type="button"
+						class="btn-generate"
+						onclick={fillDraftsNow}
+						disabled={draftCountMax === 0 || !draftUnitSteps}
+					>
 						<svg
 							width="14"
 							height="14"
@@ -6823,7 +7018,7 @@
 								d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"
 							/></svg
 						>
-						Generate drafts
+						{draftTotalMax && draftCountMax > 0 ? `Generate drafts · up to ${draftTotalMax}` : 'Generate drafts'}
 					</button>
 				</div>
 			</div>
@@ -7465,7 +7660,7 @@
 	}
 	.studio-campaign-btn:hover {
 		border-color: var(--accent);
-		color: var(--accent);
+		color: var(--accent-text);
 	}
 	.studio-deliver-hint {
 		margin: 0;
@@ -7736,6 +7931,25 @@
 		align-items: center;
 		gap: var(--space-2);
 		margin-top: var(--space-1);
+	}
+	.section-actions {
+		display: flex;
+		justify-content: flex-end;
+		gap: var(--space-2);
+		margin: 0 0 var(--space-3);
+	}
+	.studio-blocked-note {
+		margin: 0 0 var(--space-3);
+		padding: 0.5rem 0.75rem;
+		border-left: 3px solid var(--text-dim);
+		border-radius: var(--radius-xs);
+		background: var(--surface-2);
+		color: var(--text-muted);
+		font-size: 0.8rem;
+		line-height: 1.45;
+	}
+	.studio-cost-pending {
+		color: var(--text-dim);
 	}
 	.studio-payer {
 		margin: var(--space-3) 0 0;
@@ -8733,7 +8947,7 @@
 	.layout-switch.on {
 		background: var(--accent-soft);
 		border-color: var(--accent-mid, var(--accent));
-		color: var(--accent);
+		color: var(--accent-text);
 	}
 
 	.layout-switch:focus-visible {

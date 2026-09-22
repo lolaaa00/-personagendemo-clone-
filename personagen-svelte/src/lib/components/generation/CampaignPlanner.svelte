@@ -15,8 +15,8 @@
 	 */
 	import Modal from '$lib/components/ui/Modal.svelte';
 	import { STUDIO_TEMPLATES, type StudioTemplate } from '$lib/studio-templates';
-	import { templateUsd, fetchStudioPlan, type StudioPlan } from '$lib/studio-pricing';
-	import { quoteRaw, pricingContext } from '$lib/stores/pricing.svelte';
+	import { templateStepsUsd, fetchStudioPlan, type StudioPlan } from '$lib/studio-pricing';
+	import { quoteStepsRaw, pricingContext } from '$lib/stores/pricing.svelte';
 	import { formatCredits } from '$lib/money';
 	import { countLabel } from '$lib/plural';
 
@@ -61,30 +61,72 @@
 	// Price with the SAME 4:1 channel:brand rotation buildPlan runs — a flat pool
 	// average priced a distribution the planner doesn't produce (e.g. every
 	// channel video template is a Talking head; all Product motion is brand).
-	const poolAvgUsd = (c: FormatClass) => {
+	// Credits per template, rounded PER STAGE the way the ledger debits; null
+	// until the persona's real plan has answered (never the stale table).
+	const templateCredits = (t: StudioTemplate): number | null => {
+		const steps = templateStepsUsd(t, plannerPlan);
+		return steps ? quoteStepsRaw(steps) : null;
+	};
+	const poolAvgCredits = (c: FormatClass): number | null => {
 		const pool = POOLS[c];
 		if (!pool.length) return 0;
-		const avg = (l: StudioTemplate[]) =>
-			l.reduce((s, t) => s + templateUsd(t, plannerPlan), 0) / Math.max(1, l.length);
+		const avg = (l: StudioTemplate[]): number | null => {
+			let sum = 0;
+			for (const t of l) {
+				const cr = templateCredits(t);
+				if (cr === null) return null;
+				sum += cr;
+			}
+			return sum / Math.max(1, l.length);
+		};
 		const ch = pool.filter((t) => t.intent === 'channel');
 		const br = pool.filter((t) => t.intent === 'brand');
 		if (!ch.length || !br.length) return avg(pool);
-		return 0.8 * avg(ch) + 0.2 * avg(br);
+		const a = avg(ch);
+		const b = avg(br);
+		return a === null || b === null ? null : 0.8 * a + 0.2 * b;
 	};
 
 	// Priced from the selected persona's real plan — the same arithmetic the
 	// composer charges — so a campaign estimate cannot be built on the hand-kept
 	// table the tiles used to drift from (see $lib/studio-pricing).
 	let plannerPlan = $state<StudioPlan | null>(null);
+	let plannerPlanState = $state<'loading' | 'ready' | 'unavailable'>('loading');
 	let plannerPlanFor = '';
 	$effect(() => {
 		if (!open || !agentId || plannerPlanFor === agentId) return;
 		const id = agentId;
 		plannerPlanFor = id;
+		plannerPlan = null;
+		plannerPlanState = 'loading';
 		void fetchStudioPlan(id).then((plan) => {
-			if (agentId === id) plannerPlan = plan;
+			if (agentId !== id) return;
+			plannerPlan = plan;
+			plannerPlanState = plan ? 'ready' : 'unavailable';
 		});
 	});
+
+	/**
+	 * Why this planner cannot launch at all, or null. A seat that cannot
+	 * generate, and an account with no persona, were both shown a priced
+	 * "Generate 7 drafts" (re-audit: a fresh account saw "est. $5.74").
+	 */
+	let seatCanGenerate = $derived(
+		($page.data as { seat?: { canCreate?: boolean } }).seat?.canCreate !== false
+	);
+	let launchBlocked = $derived(
+		agents.length === 0
+			? 'Create a persona first — a campaign belongs to one persona.'
+			: !seatCanGenerate
+				? `Your ${($page.data as { seat?: { label?: string } }).seat?.label ?? 'current'} seat cannot generate — campaigns need a Creator seat or above.`
+				: null
+	);
+	/** Cinematic refuses without a product photo; the planner must not plan it. */
+	let cinematicBlocked = $derived(
+		plannerPlan && !plannerPlan.hasProductPhoto
+			? 'Cinematic needs a product photo in this persona’s Brand Brief, so it is left out of this plan.'
+			: null
+	);
 
 	// ── Plan inputs ──────────────────────────────────────────────────────────
 	let agentId = $state('');
@@ -104,7 +146,10 @@
 		video: 30,
 		cinematic: 5
 	});
-	let weightSum = $derived(CLASSES.reduce((s, c) => s + (weights[c.id] || 0), 0));
+	/** The weights the plan actually runs on: a blocked class counts as zero. */
+	let effectiveWeight = (c: FormatClass): number =>
+		c === 'cinematic' && cinematicBlocked ? 0 : weights[c] || 0;
+	let weightSum = $derived(CLASSES.reduce((s, c) => s + effectiveWeight(c.id), 0));
 
 	// One launch is capped — a month at 3/day is 90 generations, which is a
 	// bill and a rate-limit risk nobody should trip by accident.
@@ -123,7 +168,7 @@
 		if (weightSum <= 0 || totalPosts <= 0) return out;
 		const exact = CLASSES.map((c) => ({
 			id: c.id,
-			raw: (totalPosts * (weights[c.id] || 0)) / weightSum
+			raw: (totalPosts * effectiveWeight(c.id)) / weightSum
 		}));
 		let used = 0;
 		for (const e of exact) {
@@ -307,10 +352,18 @@
 	// (creditsForUsd ceils per generation). Rounding once on the total quoted
 	// seven text posts at $0.51 while seven tiles at $0.08 add up to $0.56 — the
 	// estimate has to be the sum of the prices the user was shown.
-	let estimatedCredits = $derived(
-		CLASSES.reduce((s, c) => s + allocation[c.id] * quoteRaw(poolAvgUsd(c.id)), 0)
-	);
+	let estimatedCredits = $derived.by((): number | null => {
+		let sum = 0;
+		for (const c of CLASSES) {
+			if (allocation[c.id] === 0) continue;
+			const per = poolAvgCredits(c.id);
+			if (per === null) return null;
+			sum += allocation[c.id] * per;
+		}
+		return Math.ceil(sum);
+	});
 	let estimatedPrice = $derived.by(() => {
+		if (estimatedCredits === null) return plannerPlanState === 'loading' ? 'estimating…' : 'unavailable';
 		const ctx = pricingContext();
 		return formatCredits(estimatedCredits, ctx.currency, ctx.fx, ctx.locale, { whole: false });
 	});
@@ -430,6 +483,13 @@
 			{/if}
 		</div>
 
+		{#if launchBlocked}
+			<p class="cp-warn" role="status">{launchBlocked}</p>
+		{/if}
+		{#if cinematicBlocked && weights.cinematic > 0}
+			<p class="cp-hint">{cinematicBlocked}</p>
+		{/if}
+
 		<div class="cp-summary" aria-live="polite">
 			<div class="cp-summary-main">
 				<strong>{countLabel(totalPosts, 'post')}</strong> over {countLabel(coveredDays, 'day')} · est.
@@ -440,8 +500,8 @@
 				{#if payerName}<strong>the {payerName} wallet</strong> (the workspace owner's){:else}<strong
 						>your balance</strong
 					>{/if}; publishing waits for your approval in the Review Queue.
-				Estimated at the default model prices — each slot's exact pipeline and cost follow your
-				Model Manager settings.
+				Estimated from this persona's current model prices, rounded up per stage exactly as each
+				post is charged; every post's own price is fixed before it runs.
 				{#if capped}<span class="cp-warn-inline"
 						>Capped at {MAX_POSTS} per launch, so only the first {coveredDays} of {days} days get slots
 						— run another campaign for the rest.</span
@@ -466,7 +526,11 @@
 			<button class="btn-ghost" onclick={onClose}>Cancel</button>
 			<button
 				class="btn-primary"
-				disabled={!agentId || totalPosts <= 0 || weightSum <= 0}
+				disabled={!agentId ||
+					totalPosts <= 0 ||
+					weightSum <= 0 ||
+					launchBlocked !== null ||
+					estimatedCredits === null}
 				onclick={launch}
 			>
 				Generate {countLabel(totalPosts, 'draft')} · est. {estimatedPrice}
@@ -531,7 +595,7 @@
 	}
 	.cp-chip.on {
 		border-color: var(--accent);
-		color: var(--accent);
+		color: var(--accent-text);
 		background: color-mix(in srgb, var(--accent) 12%, transparent);
 	}
 	.cp-chip:disabled {

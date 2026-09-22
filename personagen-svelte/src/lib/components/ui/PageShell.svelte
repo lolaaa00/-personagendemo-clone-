@@ -177,13 +177,13 @@
 		.page-actions {
 			width: 100%;
 		}
-		/* The description explains the page to someone seeing it for the first
-		   time. On a phone it costs 90px of a 780px viewport on every visit, and
-		   these are screens people return to daily — on /review it was part of
-		   555px of chrome standing between the reader and the first post they
-		   were there to judge. The title still names the page. */
+		/* Tighter, not gone. It was display:none here to save ~90px of chrome on
+		   screens people return to daily — but that dropped content at 320px /
+		   400% zoom, which WCAG 1.4.10 does not allow: reflow may re-arrange a
+		   page, never remove from it. */
 		.page-description {
-			display: none;
+			margin-top: var(--space-1);
+			line-height: var(--leading-snug);
 		}
 	}
 </style>

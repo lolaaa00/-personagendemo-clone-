@@ -5,8 +5,14 @@
 	import { initializeThemeAndColors } from '$lib/stores/ui.svelte';
 	import Toast from '$lib/components/shared/Toast.svelte';
 	import ActivityIndicator from '$lib/components/generation/ActivityIndicator.svelte';
+	import { browser } from '$app/environment';
+	import { resetPricing } from '$lib/stores/pricing.svelte';
 
 	let { children } = $props();
+
+	// Every server render starts from at-cost defaults; the portal layout then
+	// primes this request's pricing. See resetPricing() for why.
+	if (!browser) resetPricing();
 
 	/**
 	 * Theme init belongs at the ROOT, not per route group.

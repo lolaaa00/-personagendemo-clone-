@@ -529,7 +529,7 @@ Platform: ${bp.platform || platform}
 
 				if (!hasAi) {
 					return json(
-						{ success: false, error: 'No AI provider configured. Add an API key in Settings.' },
+						{ success: false, error: 'Writing is unavailable right now — the platform’s AI provider is not set up. That is on us, not your account, and nothing was charged.' },
 						{ status: 500 }
 					);
 				}
@@ -546,7 +546,7 @@ Platform: ${bp.platform || platform}
 						{
 							success: false,
 							error:
-								'No image generation provider configured. Add an OpenRouter or Fal AI key in Settings before batch generating.'
+								'Image generation is unavailable right now — the platform’s image provider is not set up. That is on us, not your account, and nothing was charged.'
 						},
 						{ status: 500 }
 					);
@@ -1827,7 +1827,7 @@ ${contentToParse.substring(0, 20000)}${catalogHint}${productPagesHint}`;
 				if (!/^https?:\/\//i.test(productUrl)) productUrl = `https://${productUrl}`;
 				if (!hasAi) {
 					return json(
-						{ success: false, error: 'No AI provider configured. Add a key in Settings.' },
+						{ success: false, error: 'Writing is unavailable right now — the platform’s AI provider is not set up. That is on us, not your account, and nothing was charged.' },
 						{ status: 400 }
 					);
 				}
@@ -2753,7 +2753,7 @@ Return ONLY JSON: ${APPEARANCE_JSON_SKELETON}`;
 
 				if (!hasAi) {
 					return json(
-						{ success: false, error: 'No AI provider configured. Add an API key in Settings.' },
+						{ success: false, error: 'Writing is unavailable right now — the platform’s AI provider is not set up. That is on us, not your account, and nothing was charged.' },
 						{ status: 400 }
 					);
 				}
@@ -2797,7 +2797,7 @@ Output ONLY the generated text for this field — no explanation, no label, no q
 				}
 				if (!hasAi) {
 					return json(
-						{ success: false, error: 'No AI provider configured. Add an API key in Settings.' },
+						{ success: false, error: 'Writing is unavailable right now — the platform’s AI provider is not set up. That is on us, not your account, and nothing was charged.' },
 						{ status: 400 }
 					);
 				}

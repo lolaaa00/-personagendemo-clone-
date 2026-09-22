@@ -648,7 +648,7 @@
 		padding: 8px 18px;
 		border-radius: 9px;
 		background: var(--accent-soft);
-		color: var(--accent);
+		color: var(--accent-text);
 		font-size: 0.83rem;
 		font-weight: 700;
 		text-decoration: none;

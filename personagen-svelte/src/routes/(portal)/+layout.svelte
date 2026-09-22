@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { thumbUrl, restoreOriginal } from '$lib/image-url';
 	import { page } from '$app/stores';
-	import { goto, afterNavigate } from '$app/navigation';
+	import { goto, afterNavigate, beforeNavigate } from '$app/navigation';
 	import {
 		sidebarState,
 		toggleSidebar,
@@ -12,12 +12,15 @@
 		initializeThemeAndColors,
 		showToast
 	} from '$lib/stores/ui.svelte';
-	import { onMount, tick } from 'svelte';
+	import { onMount, tick, untrack } from 'svelte';
+	import { browser } from '$app/environment';
+	import { resolve } from '$app/paths';
 	import { primePricing } from '$lib/stores/pricing.svelte';
 	import { invalidateAll } from '$app/navigation';
 	import BrandWave from '$lib/components/shared/BrandWave.svelte';
 	import PersonaProjectsModal from '$lib/components/shared/PersonaProjectsModal.svelte';
 	import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
+	import { dialog } from '$lib/actions/dialog';
 
 	let { children, data } = $props();
 
@@ -26,6 +29,13 @@
 	$effect.pre(() => {
 		primePricing((data as any)?.pricing);
 	});
+	// …and on the SERVER, where effects never run. Primed only in the browser,
+	// every price rendered before hydration was the provider's cost in USD: a
+	// re-audit saw a text post at "$0.03" beside a ₱7,518.00 wallet for up to
+	// four seconds, and a JS-off page kept it. The root layout resets the store
+	// first on every server render, so this cannot leak between requests.
+	if (!browser)
+		primePricing(untrack(() => (data as { pricing?: Parameters<typeof primePricing>[0] })?.pricing));
 
 	onMount(() => {
 		initializeThemeAndColors();
@@ -63,6 +73,21 @@
 	// blocks the whole portal until they've set their own.
 	let mustChangePassword = $derived(Boolean((data as any).mustChangePassword));
 	let badgeText = $derived((data as { badgeLabel?: string }).badgeLabel ?? 'Personal account');
+	/** The wallet for the collapsed rail's compact balance. */
+	let walletMini = $derived(
+		(
+			data as {
+				credits?: {
+					balance: number;
+					billing_mode: string;
+					label: string | null;
+					paid_by: string | null;
+					formatted: string;
+					compact: string;
+				} | null;
+			}
+		).credits ?? null
+	);
 	/**
 	 * Arrived from a password-recovery link (/api/auth/reset → callback →
 	 * ?reset=1). The recovery email used to promise "you'll land on your profile,
@@ -75,11 +100,35 @@
 	let recoveryMode = $derived($page.url.searchParams.get('reset') === '1');
 	let recoveryDismissed = $state(false);
 	let showPasswordGate = $derived(mustChangePassword || (recoveryMode && !recoveryDismissed));
-	let pwFirstField = $state<HTMLInputElement | null>(null);
-	$effect(() => {
-		// A dialog that opens must take focus, or a keyboard user is left behind it.
-		if (showPasswordGate) queueMicrotask(() => pwFirstField?.focus());
-	});
+	// Focus, the Tab trap and Escape come from `use:dialog` on the gate itself.
+	// It declared aria-modal without any of them: a re-audit tabbed out of the
+	// dialog into the sidebar behind it on the third Tab.
+
+	/** A recovery is optional; the provisioned-account gate is not. */
+	async function dismissRecovery() {
+		recoveryDismissed = true;
+		clearRecoveryParam();
+		// Focus lands where "change it later" points — the Password card when it
+		// is on this page — never on <body> (round-2 re-audit).
+		await tick();
+		const card = document.getElementById('password');
+		if (card) {
+			if (!card.hasAttribute('tabindex')) card.setAttribute('tabindex', '-1');
+			card.focus();
+		} else mainContentEl?.focus();
+	}
+
+	// Errors belong IN the dialog, next to the field: a mismatch used to surface
+	// only as a corner toast behind the modal, and focus dropped to <body>.
+	let pwError = $state('');
+	let pwErrorField = $state<'new' | 'confirm' | null>(null);
+	let pwNewEl = $state<HTMLInputElement | null>(null);
+	let pwConfirmEl = $state<HTMLInputElement | null>(null);
+	function pwFail(message: string, field: 'new' | 'confirm') {
+		pwError = message;
+		pwErrorField = field;
+		(field === 'new' ? pwNewEl : pwConfirmEl)?.focus();
+	}
 
 	/** Drop ?reset=1 so a reload or a shared link does not reopen the dialog. */
 	function clearRecoveryParam() {
@@ -98,6 +147,10 @@
 
 	async function submitPasswordChange(e: SubmitEvent) {
 		e.preventDefault();
+		pwError = '';
+		pwErrorField = null;
+		if (pwNew.length < 8) return pwFail('Use at least 8 characters.', 'new');
+		if (pwNew !== pwConfirm) return pwFail('The two passwords do not match.', 'confirm');
 		pwSaving = true;
 		try {
 			const res = await fetch('/api/settings/password', {
@@ -106,7 +159,10 @@
 				body: JSON.stringify({ newPassword: pwNew, confirmPassword: pwConfirm })
 			});
 			const result = await res.json();
-			if (!result.success) throw new Error(result.error || 'Failed to change password');
+			if (!result.success) {
+				pwFail(result.error || 'The password could not be changed. Try again.', 'new');
+				return;
+			}
 			showToast(
 				recoveryMode ? 'Password changed. Use it the next time you sign in.' : 'Password updated — welcome aboard',
 				'success'
@@ -115,8 +171,8 @@
 			pwConfirm = '';
 			clearRecoveryParam();
 			await invalidateAll();
-		} catch (err) {
-			showToast((err as Error).message, 'error');
+		} catch {
+			pwFail('Could not reach the server — check your connection and try again.', 'new');
 		} finally {
 			pwSaving = false;
 		}
@@ -129,9 +185,32 @@
 	// page's link, so screen readers keep announcing the old context.
 	let mainContentEl: HTMLElement | null = $state(null);
 
+	/**
+	 * The portal scrolls `.portal-content`, not the window — so SvelteKit's own
+	 * scroll handling (top of page on navigate, restore on back) never touched
+	 * it, and every route opened wherever the previous one had been scrolled to.
+	 * A re-audit followed the setup checklist on a phone: "Add key" opened
+	 * Settings 1,156px down, on the wrong card. Now: a new page starts at the
+	 * top, a #hash lands on its target, and Back/Forward restore where you were.
+	 */
+	// Plain record, deliberately not reactive: nothing renders from it.
+	const scrollMemory: Record<string, number> = {};
+	beforeNavigate((nav) => {
+		if (mainContentEl && nav.from) scrollMemory[nav.from.url.href] = mainContentEl.scrollTop;
+	});
+
 	afterNavigate((nav) => {
+		const el = mainContentEl;
+		if (el && nav.type !== 'enter') {
+			const hash = nav.to?.url.hash ?? '';
+			const target = hash.length > 1 ? document.getElementById(decodeURIComponent(hash.slice(1))) : null;
+			const remembered = nav.to ? scrollMemory[nav.to.url.href] : undefined;
+			if (nav.type === 'popstate' && remembered !== undefined) el.scrollTop = remembered;
+			else if (target) target.scrollIntoView({ block: 'start' });
+			else if (nav.from?.url.pathname !== nav.to?.url.pathname) el.scrollTop = 0;
+		}
 		if (nav.type === 'enter') return; // initial load — leave focus at document start
-		mainContentEl?.focus();
+		mainContentEl?.focus({ preventScroll: true });
 	});
 
 	function toggleUserDropdown(event: MouseEvent) {
@@ -253,6 +332,58 @@
 		sidebarEl?.querySelector<HTMLElement>('a[href], button:not([disabled])')?.focus();
 	}
 
+	/**
+	 * The page behind the open drawer is `inert` (see portal-main), so the
+	 * hamburger cannot take focus until that attribute is gone — hence the tick.
+	 */
+	async function closeDrawerToButton() {
+		closeSidebar();
+		await tick();
+		hamburgerBtn?.focus();
+	}
+
+	/**
+	 * The drawer is a modal surface only at phone widths. Keyed on the same
+	 * 768px breakpoint as the CSS, so a drawer left open while the window
+	 * widens can never leave the desktop page inert.
+	 */
+	let narrowViewport = $state(false);
+	$effect(() => {
+		const mq = window.matchMedia('(max-width: 768px)');
+		const sync = () => (narrowViewport = mq.matches);
+		sync();
+		mq.addEventListener('change', sync);
+		return () => mq.removeEventListener('change', sync);
+	});
+	let drawerModal = $derived(sidebarState.open && narrowViewport);
+
+	/**
+	 * "More below" cue for the rail. On a short laptop screen the rail scrolls,
+	 * and nothing said so: a client audit judged Settings and Docs absent from
+	 * the product because nothing above the fold showed more navigation existed.
+	 */
+	let navEl = $state<HTMLElement | null>(null);
+	let navMoreBelow = $state(false);
+	function measureNav() {
+		const n = navEl;
+		navMoreBelow = !!n && n.scrollTop + n.clientHeight < n.scrollHeight - 4;
+	}
+	$effect(() => {
+		const n = navEl;
+		if (!n) return;
+		const ro = new ResizeObserver(measureNav);
+		ro.observe(n);
+		const mo = new MutationObserver(measureNav);
+		mo.observe(n, { childList: true, subtree: true });
+		n.addEventListener('scroll', measureNav, { passive: true });
+		measureNav();
+		return () => {
+			ro.disconnect();
+			mo.disconnect();
+			n.removeEventListener('scroll', measureNav);
+		};
+	});
+
 	function isAgentActive(agentId: string, pathname: string): boolean {
 		return pathname.startsWith(`/personas/${agentId}`);
 	}
@@ -270,10 +401,7 @@
 		}
 		// The mobile drawer is a modal surface over the page: Escape dismisses
 		// it and hands focus back to the button that opened it (audit re-test N5).
-		if (sidebarState.open) {
-			closeSidebar();
-			hamburgerBtn?.focus();
-		}
+		if (sidebarState.open) void closeDrawerToButton();
 	}}
 />
 
@@ -339,6 +467,26 @@
 					{/if}
 				</svg>
 			</button>
+			<!-- Phone drawer only: a way out that is inside the drawer, since the
+			     page behind it (hamburger included) is inert while it is open. -->
+			<button
+				type="button"
+				class="sidebar-close-btn"
+				onclick={closeDrawerToButton}
+				aria-label="Close navigation"
+			>
+				<svg
+					aria-hidden="true"
+					width="18"
+					height="18"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"><path d="M18 6L6 18" /><path d="M6 6l12 12" /></svg
+				>
+			</button>
 		</div>
 
 		<!-- Client badge -->
@@ -350,7 +498,7 @@
 		{/if}
 
 		<!-- Navigation -->
-		<nav class="sidebar-nav" aria-label="Main navigation">
+		<nav class="sidebar-nav" aria-label="Main navigation" bind:this={navEl}>
 			<!-- NETWORK -->
 			{#if !sidebarState.collapsed}
 				<span class="sidebar-section-label">Network</span>
@@ -657,7 +805,7 @@
 			     primary destination ABOVE the list, the list can no longer push any of
 			     them away at any height; it takes the space that is left, and scrolls
 			     inside itself. -->
-			<div class="sidebar-personas">
+			<div class="sidebar-personas" class:has-rows={sidebarAgents.length > 0}>
 			{#if !sidebarState.collapsed}
 				<div class="sidebar-section-row">
 					<span class="sidebar-section-label">Personas</span>
@@ -903,6 +1051,24 @@
 			</div>
 			{/if}
 			</div>
+			{#if navMoreBelow && !sidebarState.collapsed}
+				<!-- Visual only: a keyboard or screen-reader user meets the rest of the
+				     list by moving through it; this tells a sighted user it is there. -->
+				<div class="sidebar-more-cue" aria-hidden="true">
+					<span
+						><svg
+							width="12"
+							height="12"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2.5"
+							stroke-linecap="round"
+							stroke-linejoin="round"><path d="M6 9l6 6 6-6" /></svg
+						>More below — scroll</span
+					>
+				</div>
+			{/if}
 		</nav>
 
 		<!-- Bottom -->
@@ -998,12 +1164,27 @@
 						</a>
 					{/if}
 				</div>
+			{:else if walletMini}
+				<!-- The collapsed rail keeps a balance on screen: collapsing it used to
+				     remove the wallet entirely while the Studio still said "the balance
+				     in the sidebar" (round-2 re-audit). -->
+				{@const wallet = walletMini}
+				{@const unmetered = wallet.billing_mode === 'unmetered'}
+				<a
+					href={resolve('/(portal)/billing')}
+					class="credit-mini"
+					class:low={wallet.balance <= 0 && !unmetered}
+					aria-label="{wallet.label ?? wallet.paid_by ?? 'Balance'}: {unmetered ? 'complimentary' : wallet.formatted}"
+					title="{wallet.label ?? wallet.paid_by ?? 'Balance'}: {unmetered ? 'complimentary' : wallet.formatted}"
+				>
+					{unmetered ? '∞' : wallet.compact}
+				</a>
 			{/if}
 		</div>
 	</aside>
 
 	<!-- Main area -->
-	<div class="portal-main">
+	<div class="portal-main" inert={drawerModal}>
 		<!-- Header -->
 		<header class="portal-header">
 			<div class="portal-header-left">
@@ -1122,7 +1303,16 @@
 					{/if}
 				</button>
 
-				<div class="portal-user-badge-container">
+				<!-- Focus leaving the trigger-plus-panel, by Tab OR Shift+Tab, closes the
+				     panel; the panel's own handler only saw focus leave forwards. -->
+				<div
+					class="portal-user-badge-container"
+					onfocusout={(e) => {
+						if (!userDropdownOpen) return;
+						const next = e.relatedTarget as Node | null;
+						if (next && !(e.currentTarget as HTMLElement).contains(next)) closeUserDropdown();
+					}}
+				>
 					<button
 						class="portal-user-badge"
 						onclick={toggleUserDropdown}
@@ -1146,15 +1336,7 @@
 						     navigation this never had, for a panel holding one address and
 						     one button. It closes when focus leaves it, so it can no longer be
 						     left open behind the page (re-audit N12). -->
-						<div
-							class="user-dropdown-menu glass-card"
-							id="user-account-panel"
-							onfocusout={(e) => {
-								const next = e.relatedTarget as Node | null;
-								const box = e.currentTarget as HTMLElement;
-								if (next && !box.contains(next) && next !== userMenuTrigger) closeUserDropdown();
-							}}
-						>
+						<div class="user-dropdown-menu glass-card" id="user-account-panel">
 							<div class="user-dropdown-info">
 								<span class="user-email">{data.user?.email ?? ''}</span>
 							</div>
@@ -1218,12 +1400,19 @@
 </div>
 
 {#if showPasswordGate}
+	<!-- Escape closes a RECOVERY (the user's choice, same as "Not now"); the
+	     provisioned starter-password gate has no exit, so it takes no onClose. -->
 	<div
 		class="pw-gate"
 		role="dialog"
 		aria-modal="true"
 		aria-labelledby="pw-gate-title"
 		aria-describedby="pw-gate-desc"
+		tabindex="-1"
+		use:dialog={{
+			onClose: mustChangePassword ? undefined : dismissRecovery,
+			initialFocus: 'input[type="password"]'
+		}}
 	>
 		<form class="pw-gate-card" onsubmit={submitPasswordChange}>
 			{#if mustChangePassword}
@@ -1246,8 +1435,10 @@
 					autocomplete="new-password"
 					minlength="8"
 					required
-					bind:this={pwFirstField}
+					bind:this={pwNewEl}
 					bind:value={pwNew}
+					aria-invalid={pwErrorField === 'new' ? 'true' : undefined}
+					aria-describedby={pwErrorField === 'new' ? 'pw-gate-error' : undefined}
 				/>
 			</label>
 			<label class="pw-gate-field">
@@ -1257,23 +1448,22 @@
 					autocomplete="new-password"
 					minlength="8"
 					required
+					bind:this={pwConfirmEl}
 					bind:value={pwConfirm}
+					aria-invalid={pwErrorField === 'confirm' ? 'true' : undefined}
+					aria-describedby={pwErrorField === 'confirm' ? 'pw-gate-error' : undefined}
 				/>
 			</label>
+			{#if pwError}
+				<p class="pw-gate-error" id="pw-gate-error" role="alert">{pwError}</p>
+			{/if}
 			<button type="submit" class="pw-gate-btn" disabled={pwSaving || !pwNew || !pwConfirm}>
 				{pwSaving ? 'Saving…' : 'Save password'}
 			</button>
 			{#if !mustChangePassword}
 				<!-- A recovery is the user's choice, so it has an exit; the provisioned
 				     starter-password gate above deliberately does not. -->
-				<button
-					type="button"
-					class="pw-gate-later"
-					onclick={() => {
-						recoveryDismissed = true;
-						clearRecoveryParam();
-					}}
-				>
+				<button type="button" class="pw-gate-later" onclick={dismissRecovery}>
 					Not now — change it later in Settings → Profile
 				</button>
 			{/if}
@@ -1504,13 +1694,48 @@
 		flex-direction: column;
 		gap: 2px;
 		flex: 1 1 auto;
-		/* A FLOOR, and overflow hidden. With min-height 0 the block was squeezed to
-		   42px at 1440x900 and its rows spilled out underneath the account footer
-		   (measured: rows box top 832px, footer top 811px) — "0 persona rows
-		   visible" again. Nine rem holds the header plus about three rows; below
-		   that the whole rail scrolls rather than this block collapsing. */
-		min-height: 9rem;
+		min-height: 0;
 		overflow: hidden;
+	}
+	/* A FLOOR, only when there are rows to show. With min-height 0 the block was
+	   squeezed to 42px at 1440x900 and its rows spilled out underneath the
+	   account footer (measured: rows box top 832px, footer top 811px). Nine rem
+	   holds the header plus about three rows; below that the whole rail scrolls
+	   rather than this block collapsing. A brand-new account has no rows, and the
+	   floor on its empty block pushed Billing and Settings off a 1366x657 rail. */
+	.sidebar-personas.has-rows {
+		min-height: 9rem;
+	}
+
+	/* Zero layout height and sticky to the scrollport's bottom edge: it overlays
+	   the last visible rows instead of adding a row of its own. */
+	.sidebar-more-cue {
+		position: sticky;
+		bottom: 0;
+		height: 0;
+		flex: 0 0 0;
+		pointer-events: none;
+		z-index: 1;
+	}
+	.sidebar-more-cue span {
+		position: absolute;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		height: 34px;
+		display: flex;
+		align-items: flex-end;
+		justify-content: center;
+		gap: 4px;
+		padding-bottom: 3px;
+		font-size: 0.68rem;
+		font-weight: 600;
+		color: var(--text-dim);
+		background: linear-gradient(to bottom, transparent, var(--surface) 55%);
+	}
+
+	.sidebar-close-btn {
+		display: none;
 	}
 	.sidebar-persona-rows {
 		display: flex;
@@ -1560,6 +1785,58 @@
 			padding-bottom: 2px;
 		}
 	}
+	/* Laptop heights (1440x900 and below): the chrome above and below the nav
+	   gives way before any destination does. The client badge repeats the
+	   account name the header already shows (54px); the brand, padding and
+	   footer tighten (about 50px more). */
+	@media (min-width: 769px) and (max-height: 900px) {
+		.sidebar {
+			padding-top: var(--space-3);
+			padding-bottom: var(--space-3);
+		}
+		.sidebar-brand {
+			margin-bottom: var(--space-2);
+			min-height: 36px;
+		}
+		.sidebar-logo-link {
+			min-height: 36px;
+		}
+		.sidebar-logo {
+			width: 32px;
+			height: 32px;
+		}
+		.sidebar-client {
+			display: none;
+		}
+		.sidebar-bottom {
+			padding-top: var(--space-2);
+		}
+	}
+	@media (pointer: fine) and (min-width: 769px) and (max-height: 900px) {
+		.sidebar-bottom .sidebar-nav-item {
+			min-height: 30px;
+			padding-top: 4px;
+			padding-bottom: 4px;
+		}
+	}
+	/* Short screens (a 1366x768 laptop gives the page ~657px): 28px rows (WCAG
+	   2.5.8 asks for 24) and slimmer group labels keep all eleven destinations
+	   above the fold with room left for persona rows. */
+	@media (pointer: fine) and (min-width: 769px) and (max-height: 720px) {
+		.sidebar-nav .sidebar-nav-item,
+		.sidebar-bottom .sidebar-nav-item {
+			min-height: 28px;
+			padding-top: 3px;
+			padding-bottom: 3px;
+		}
+		.sidebar-nav .sidebar-section-label {
+			padding-top: 5px;
+			padding-bottom: 1px;
+		}
+		.sidebar-plan-badge {
+			padding: 6px 10px;
+		}
+	}
 
 	.sidebar-section-label {
 		font-size: 0.62rem;
@@ -1606,7 +1883,7 @@
 
 	.sidebar-nav-item.active {
 		background: var(--accent-soft);
-		color: var(--accent);
+		color: var(--accent-text);
 		font-weight: 600;
 	}
 
@@ -1669,6 +1946,32 @@
 		font-weight: 600;
 		color: var(--text-dim);
 		letter-spacing: 0.04em;
+	}
+
+	.credit-mini {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		min-height: 32px;
+		margin-top: var(--space-2);
+		padding: 4px 2px;
+		border-radius: 8px;
+		border: 1px solid var(--border);
+		background: var(--surface-2);
+		color: var(--success-text);
+		font-size: 0.66rem;
+		font-weight: 700;
+		text-decoration: none;
+		font-variant-numeric: tabular-nums;
+		white-space: nowrap;
+		overflow: hidden;
+	}
+	.credit-mini.low {
+		color: var(--error-text);
+	}
+	.credit-mini:focus-visible {
+		outline: 2px solid var(--focus-ring);
+		outline-offset: 2px;
 	}
 
 	.sidebar-plan-dot {
@@ -1778,7 +2081,7 @@
 
 	.theme-toggle-btn:hover {
 		border-color: var(--border-hover);
-		color: var(--accent);
+		color: var(--accent-text);
 		background: var(--surface-3);
 		transform: scale(1.05) rotate(12deg);
 		box-shadow: var(--shadow-md);
@@ -1966,7 +2269,7 @@
 		cursor: pointer;
 	}
 	.invite-banner-btn.accept {
-		background: var(--accent);
+		background: var(--accent-dark);
 		color: #fff;
 	}
 	.invite-banner-btn.accept:hover:not(:disabled) {
@@ -2058,6 +2361,13 @@
 		text-decoration: underline;
 		cursor: pointer;
 	}
+	.pw-gate-error {
+		margin: 0;
+		font-size: 0.82rem;
+		font-weight: 600;
+		color: var(--error-text);
+	}
+
 	.pw-gate-btn {
 		margin-top: 0.25rem;
 		border: none;
@@ -2065,7 +2375,7 @@
 		padding: 0.65rem 1rem;
 		font-size: 0.95rem;
 		font-weight: 600;
-		background: var(--accent);
+		background: var(--accent-dark);
 		color: #fff;
 		cursor: pointer;
 	}
@@ -2104,6 +2414,36 @@
 
 		.sidebar.open {
 			transform: translateX(0);
+		}
+
+		/* Off-canvas is not hidden: translated off-screen, the closed drawer's
+		   ~21 links stayed in the Tab order ahead of every page, focus landing
+		   on nothing visible. visibility:hidden removes them from the Tab order
+		   and the accessibility tree; the delay lets the slide-out finish first. */
+		.sidebar:not(.open) {
+			visibility: hidden;
+			transition:
+				transform 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+				visibility 0s linear 0.3s;
+		}
+
+		.sidebar-close-btn {
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			width: 44px;
+			height: 44px;
+			margin-right: -8px;
+			border: none;
+			border-radius: 8px;
+			background: transparent;
+			color: var(--text-muted);
+			cursor: pointer;
+			flex-shrink: 0;
+		}
+		.sidebar-close-btn:hover {
+			background: var(--surface-2);
+			color: var(--text);
 		}
 
 		.sidebar-overlay {
@@ -2257,7 +2597,7 @@
 
 	.sidebar-new-persona:hover {
 		border-color: var(--accent-mid);
-		color: var(--accent);
+		color: var(--accent-text);
 		background: var(--accent-soft);
 	}
 
@@ -2322,7 +2662,7 @@
 	}
 
 	.sidebar-projects-btn:hover {
-		color: var(--accent);
+		color: var(--accent-text);
 		background: var(--accent-soft);
 		border-color: color-mix(in srgb, var(--accent) 25%, transparent);
 	}

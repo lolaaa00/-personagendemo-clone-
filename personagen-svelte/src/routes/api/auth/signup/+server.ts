@@ -89,8 +89,9 @@ export const POST: RequestHandler = async ({ request, locals, getClientAddress }
 		signupPinLimiter.reset(`signup-pin:${clientIp}`);
 	}
 
-	if (password.length < 6) {
-		return json({ error: 'Password must be at least 6 characters' }, { status: 400 });
+	// One policy everywhere: reset and change already required 8 (round-2 re-audit).
+	if (password.length < 8) {
+		return json({ error: 'Password must be at least 8 characters' }, { status: 400 });
 	}
 
 	let admin: ReturnType<typeof createSupabaseServiceClient> | null = null;

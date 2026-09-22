@@ -362,7 +362,7 @@
 
 	.trash-filters button.active {
 		border-color: var(--accent);
-		color: var(--accent);
+		color: var(--accent-text);
 		background: color-mix(in srgb, var(--accent) 10%, transparent);
 	}
 
@@ -446,7 +446,7 @@
 
 	.btn-restore:hover:not(:disabled) {
 		border-color: var(--accent);
-		color: var(--accent);
+		color: var(--accent-text);
 		background: color-mix(in srgb, var(--accent) 10%, transparent);
 	}
 
@@ -467,14 +467,14 @@
 		border-radius: var(--radius-sm);
 		border: 1px solid var(--accent);
 		background: transparent;
-		color: var(--accent);
+		color: var(--accent-text);
 		font-size: 0.76rem;
 		font-weight: 600;
 		cursor: pointer;
 	}
 
 	.btn-restore-bulk:hover:not(:disabled) {
-		background: var(--accent);
+		background: var(--accent-dark);
 		color: #fff;
 	}
 

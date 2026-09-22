@@ -1398,7 +1398,7 @@
 		transition: color 0.2s;
 	}
 	.breadcrumb:hover {
-		color: var(--accent);
+		color: var(--accent-text);
 	}
 
 	/* The blocker, stated next to the control it blocks. */
@@ -1502,7 +1502,7 @@
 	.intel-wizard-panel .step-dot-group.active .step-dot {
 		background: var(--accent-soft);
 		border-color: var(--accent);
-		color: var(--accent);
+		color: var(--accent-text);
 		box-shadow: var(--shadow-accent);
 	}
 
@@ -1521,7 +1521,7 @@
 	}
 
 	.intel-wizard-panel .step-dot-group.active .step-label {
-		color: var(--accent);
+		color: var(--accent-text);
 	}
 
 	.intel-wizard-panel .step-dot-group.completed .step-label {
@@ -1559,7 +1559,7 @@
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		color: var(--accent);
+		color: var(--accent-text);
 	}
 
 	.intel-wizard-panel .step-card-header h3 {
@@ -1618,7 +1618,7 @@
 		border-radius: var(--radius-full);
 		font-size: 0.72rem;
 		font-weight: 700;
-		color: var(--accent);
+		color: var(--accent-text);
 		flex-shrink: 0;
 	}
 
@@ -1677,7 +1677,7 @@
 
 	.intel-wizard-panel .add-comp-btn:hover {
 		border-color: var(--accent-mid);
-		color: var(--accent);
+		color: var(--accent-text);
 	}
 
 	.intel-wizard-panel .content-type-grid {
@@ -1706,7 +1706,7 @@
 	.intel-wizard-panel .ct-btn.active {
 		border-color: var(--accent-mid);
 		background: var(--accent-soft);
-		color: var(--accent);
+		color: var(--accent-text);
 	}
 
 	.intel-wizard-panel .range-group {
@@ -1797,7 +1797,7 @@
 		border: 1px solid var(--accent-mid);
 		border-radius: var(--radius-full);
 		font-size: 0.75rem;
-		color: var(--accent);
+		color: var(--accent-text);
 	}
 
 	.intel-wizard-panel .tag-remove {
@@ -1806,7 +1806,7 @@
 		align-items: center;
 		background: none;
 		border: none;
-		color: var(--accent);
+		color: var(--accent-text);
 		cursor: pointer;
 		font-size: 1rem;
 		padding: 0;
@@ -1862,7 +1862,7 @@
 
 	.intel-wizard-panel .sug-btn:hover {
 		border-color: var(--accent-mid);
-		color: var(--accent);
+		color: var(--accent-text);
 	}
 
 	.intel-wizard-panel .location-grid {
@@ -1938,7 +1938,7 @@
 	}
 
 	.intel-wizard-panel .review-plat {
-		color: var(--accent);
+		color: var(--accent-text);
 		font-weight: 600;
 		margin-left: 0.5rem;
 		font-family: var(--font-body);
@@ -1960,7 +1960,7 @@
 
 	.intel-wizard-panel .review-tag.accent {
 		background: var(--accent-soft);
-		color: var(--accent);
+		color: var(--accent-text);
 	}
 
 	.intel-wizard-panel .generate-btn {
@@ -1970,7 +1970,7 @@
 		justify-content: center;
 		gap: 0.6rem;
 		padding: 1rem;
-		background: var(--gradient);
+		background: var(--gradient-cta);
 		border: none;
 		border-radius: var(--radius-sm);
 		color: #fff;
@@ -2090,7 +2090,7 @@
 
 	.intel-wizard-panel .start-over-btn:hover {
 		border-color: var(--accent-mid);
-		color: var(--accent);
+		color: var(--accent-text);
 	}
 
 	.intel-wizard-panel .done-btn {
@@ -2098,7 +2098,7 @@
 		align-items: center;
 		padding: 0.6rem 1.2rem;
 		min-height: 44px;
-		background: var(--gradient);
+		background: var(--gradient-cta);
 		border: none;
 		border-radius: var(--radius-sm);
 		color: #fff;
@@ -2182,7 +2182,7 @@
 
 	.intel-wizard-panel .priority-tag.primary {
 		background: var(--accent-soft);
-		color: var(--accent);
+		color: var(--accent-text);
 	}
 
 	.intel-wizard-panel .priority-tag.secondary {
@@ -2259,7 +2259,7 @@
 		font-variant-numeric: tabular-nums;
 	}
 	.intel-wizard-panel .plat-cell {
-		color: var(--accent);
+		color: var(--accent-text);
 		font-weight: 500;
 	}
 	.intel-wizard-panel .metric-cell {
@@ -2380,7 +2380,7 @@
 	}
 
 	.intel-wizard-panel .nav-btn.next {
-		background: var(--gradient);
+		background: var(--gradient-cta);
 		border: none;
 		color: #fff;
 		margin-left: auto;

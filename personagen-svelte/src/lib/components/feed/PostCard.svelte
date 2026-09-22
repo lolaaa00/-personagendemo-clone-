@@ -9,6 +9,7 @@
 		post,
 		onOpen,
 		onRetry = null,
+		retryBlockedReason = null,
 		onPublishFallback = null,
 		selectable = false,
 		selected = false,
@@ -20,6 +21,8 @@
 		post: any;
 		onOpen: (post: any) => void;
 		onRetry?: ((post: any) => void) | null;
+		/** Why this seat cannot retry — shown as text where the Retry button would be. */
+		retryBlockedReason?: string | null;
 		/** Publish an already-generated but unpublished post to a connected platform. */
 		onPublishFallback?: ((post: any) => void) | null;
 		/** Multi-select support — a checkbox overlay for bulk actions. */
@@ -124,6 +127,17 @@
 		node.play?.().catch(() => {});
 	}
 
+	/** The open control's name: WHICH post, not 27 identical "Open post details". */
+	let openLabel = $derived.by(() => {
+		const kind = SURFACE_LABEL[display.surface] ?? 'Post';
+		const state = display.standalone ? 'asset' : postStatus(post.status).label;
+		const snippet = String(display.text ?? '')
+			.replace(/\s+/g, ' ')
+			.trim()
+			.slice(0, 60);
+		return `Open details: ${kind}, ${state}${snippet ? ` — ${snippet}` : ''}`;
+	});
+
 	let warmed = false;
 	function warmMedia() {
 		const url = display.mediaUrl;
@@ -139,26 +153,27 @@
 
 <!-- Media-first mosaic tile: the media IS the card. Everything else lives in
      the drawer that opens on click — tags stay as light overlays.
-     It's a role=button DIV, not a <button>, so the inline video play control
-     (a real <button>) and the <video> can nest legally inside it. -->
-<!-- svelte-ignore a11y_click_events_have_key_events -->
+
+     The tile is a plain container. It used to be role="button" wrapping up to
+     nine real controls (select, enlarge, delete, retry, "What went wrong?",
+     play, the video's own controls, publish-fallback, favourite) — but a
+     button's children are presentational to assistive tech, so every one of
+     those was misreported (axe nested-interactive). Now ONE real <button>,
+     stretched over the tile underneath everything else, opens the drawer; the
+     other controls sit above it as its siblings. -->
 <div
 	class="post-tile"
 	class:selected
 	class:has-fav={Boolean(onToggleFavorite)}
-	role="button"
-	tabindex="0"
-	onclick={() => onOpen(post)}
-	onkeydown={(e) => {
-		if (e.key === 'Enter' || e.key === ' ') {
-			e.preventDefault();
-			onOpen(post);
-		}
-	}}
 	onpointerenter={warmMedia}
-	onfocus={warmMedia}
-	aria-label="Open post details"
 >
+	<button
+		type="button"
+		class="tile-open"
+		aria-label={openLabel}
+		onclick={() => onOpen(post)}
+		onfocus={warmMedia}
+	></button>
 	<!-- Management overlays: select for bulk actions, enlarge, delete. All stop
 	     propagation so they never open the drawer by accident. -->
 	{#if selectable}
@@ -270,6 +285,8 @@
 						aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7" /><path d="M3 3v5h5" /></svg
 					> Retry</button
 				>
+			{:else if retryBlockedReason}
+				<span class="tile-gen-blocked">{retryBlockedReason}</span>
 			{/if}
 			<!-- The docs explain every failure in detail; put them where the failure
 			     is (audit ENH-001) instead of three menus away. -->
@@ -428,19 +445,12 @@
 				Failed to post{postErrorLabel ? ` — ${postErrorLabel.split('\n')[0]}` : ''}
 			</span>
 			{#if onPublishFallback}
-				<span
+				<button
+					type="button"
 					class="tile-postfail-cta"
-					role="button"
-					tabindex="0"
 					onclick={(e) => {
 						e.stopPropagation();
 						onPublishFallback?.(post);
-					}}
-					onkeydown={(e) => {
-						if (e.key === 'Enter') {
-							e.stopPropagation();
-							onPublishFallback?.(post);
-						}
 					}}
 					><svg
 						width="12"
@@ -452,7 +462,7 @@
 						stroke-linecap="round"
 						stroke-linejoin="round"
 						aria-hidden="true"><path d="M12 19V5" /><path d="m5 12 7-7 7 7" /></svg
-					> Publish to a connected platform</span
+					> Publish to a connected platform</button
 				>
 			{/if}
 		</div>
@@ -586,6 +596,9 @@
 <style>
 	.post-tile {
 		position: relative;
+		/* Its own stacking context, so the layer order below (open control at 1,
+		   every real control above it) is local to the tile. */
+		isolation: isolate;
 		display: block;
 		width: 100%;
 		padding: 0;
@@ -611,6 +624,35 @@
 	.post-tile.selected {
 		border-color: var(--accent);
 		box-shadow: 0 0 0 2px var(--accent) inset;
+	}
+
+	/* The open control: transparent, covering the whole tile, beneath every real
+	   control. Chips and stats paint through it and a click on them opens the
+	   post, exactly as a click on the old role=button tile did. */
+	.tile-open {
+		position: absolute;
+		inset: 0;
+		z-index: 1;
+		width: 100%;
+		height: 100%;
+		padding: 0;
+		margin: 0;
+		border: 0;
+		border-radius: inherit;
+		background: transparent;
+		cursor: pointer;
+	}
+	.tile-open:focus-visible {
+		outline: 2px solid var(--focus-ring);
+		outline-offset: -3px;
+	}
+
+	/* Every real control sits above the open control. */
+	.tile-video-play,
+	.tile-postfail-banner,
+	.tile-gen-retry,
+	.tile-gen-help {
+		z-index: 2;
 	}
 
 	/* ── Management overlays (select / enlarge / delete) ── */
@@ -878,6 +920,8 @@
 		position: relative;
 		align-self: flex-start;
 		pointer-events: auto;
+		border: none;
+		font: inherit;
 		background: rgba(255, 255, 255, 0.95);
 		color: #9a3412;
 		border-radius: 6px;
@@ -950,6 +994,9 @@
 	}
 
 	.post-tile video {
+		/* Above the open control, or its native controls could not be reached. */
+		position: relative;
+		z-index: 2;
 		aspect-ratio: 4 / 5;
 		background: #000;
 		object-fit: contain;
@@ -1176,9 +1223,23 @@
 		outline: 2px solid var(--focus-ring, #fff);
 		outline-offset: 2px;
 	}
+	.tile-gen-blocked {
+		position: relative;
+		z-index: 2;
+		max-width: 18rem;
+		font-size: 0.68rem;
+		line-height: 1.35;
+		color: var(--text-muted);
+	}
+
+	/* 24px tall at minimum (WCAG 2.5.8): as bare inline text it was 19.6px. */
 	.tile-gen-help {
 		position: relative;
-		margin-top: 0.3rem;
+		display: inline-flex;
+		align-items: center;
+		min-height: 24px;
+		padding: 0 4px;
+		margin-top: 0.2rem;
 		font-size: 0.72rem;
 		font-weight: 600;
 		color: inherit;

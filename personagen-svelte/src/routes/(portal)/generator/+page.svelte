@@ -5,6 +5,8 @@
 	import { onMount, untrack, tick } from 'svelte';
 	import { Personas, BrandBrief, type GeneratedPersona } from '$lib/services/api';
 	import { PERSONA_ARCHETYPES, CONTENT_FOCUS_OPTIONS } from '$lib/persona-profile';
+	import { MARKETS } from '$lib/markets';
+	import { quote } from '$lib/stores/pricing.svelte';
 	import TraitPicker from '$lib/components/persona/TraitPicker.svelte';
 	import { goto } from '$app/navigation';
 	import { browser } from '$app/environment';
@@ -120,6 +122,33 @@
 	let previewLoading = $state(false);
 	let previewError = $state('');
 
+	/**
+	 * What "Generate the look" costs, from the endpoint's own free quote
+	 * (`preview: true` generates nothing and charges nothing). The step said
+	 * "a paid generation" with no price and no wallet (round-2 re-audit).
+	 */
+	let lookQuoteUsd = $state<number | null>(null);
+	$effect(() => {
+		if (currentStep !== 3 || lookQuoteUsd !== null || !agentName.trim()) return;
+		void fetch('/api/persona-preview', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({
+				preview: true,
+				name: agentName.trim(),
+				bio: soul.trim(),
+				brandBriefId: selectedBriefId || null,
+				personaProfile: generatedProfile
+			})
+		})
+			.then((r) => r.json())
+			.then((p) => {
+				const usd = p?.preview?.estimatedCostUsd;
+				if (p?.success && typeof usd === 'number' && usd > 0) lookQuoteUsd = usd;
+			})
+			.catch(() => {});
+	});
+
 	async function generatePreview() {
 		if (previewLoading) return;
 		previewLoading = true;
@@ -198,17 +227,6 @@
 	// Computed initial
 	let initial = $derived(agentName.trim() ? agentName.trim().charAt(0).toUpperCase() : '?');
 
-	const MARKETS = [
-		'Australia',
-		'United States',
-		'United Kingdom',
-		'Canada',
-		'New Zealand',
-		'Germany',
-		'France',
-		'Japan',
-		'Global'
-	];
 
 	// Vault modal state — now a gallery of 3 freshly-generated, brand-tailored options.
 	let showVaultModal = $state(false);
@@ -427,7 +445,11 @@
 			// one the persona is born with — and creation does not pay to render a
 			// second, different face. The server re-checks this URL is ours before
 			// trusting it (isOwnedBucketUrl).
-			characterRef: previewAnchorUrl || previewUrl || null
+			characterRef: previewAnchorUrl || previewUrl || null,
+			// UX-008: the choice has to reach the persona, and Global runs the
+			// posting window on the creator's own clock rather than Sydney's.
+			market,
+			timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
 		};
 	}
 
@@ -486,7 +508,9 @@
 							? ', current'
 							: ''}:
 				</span>
-				<div class="step-circle">
+				<!-- Visual only: the sr-only "Step N of 3" above already says the number,
+				     so the circle's own digit read it twice ("Step 1 of 3, current: 1"). -->
+				<div class="step-circle" aria-hidden="true">
 					{#if currentStep > step.num}
 						<svg
 							width="16"
@@ -560,6 +584,27 @@
 				<p class="panel-desc">
 					Pick a brand and generate a unique persona — or fill it in yourself.
 				</p>
+
+				<!-- Market first: it shapes a generated persona AND one filled in by hand,
+				     so it sits above both paths (it was below the Generate button, where a
+				     re-audit measured it 186px under the control it was meant to steer). -->
+				<div class="field market-field">
+					<label for="market">Market <span class="opt-tag">(optional)</span></label>
+					<select
+						id="market"
+						bind:value={market}
+						onchange={saveProgress}
+						aria-describedby="market-hint"
+					>
+						{#each MARKETS as m (m)}
+							<option value={m}>{m}</option>
+						{/each}
+					</select>
+					<span class="field-hint" id="market-hint"
+						>Where the audience is. It sets the persona's regional voice and the clock its
+						posting window runs on — Global uses your own timezone.</span
+					>
+				</div>
 
 				<!-- Primary path: brand-brief-driven generation of a complete, unique persona,
 				     fine-tuned to an optional creative direction the user sets first. -->
@@ -699,14 +744,6 @@
 						{/if}
 					</div>
 
-					<div class="field">
-						<label for="market">Market <span class="opt-tag">(optional)</span></label>
-						<select id="market" bind:value={market} onchange={saveProgress}>
-							{#each MARKETS as m (m)}
-								<option value={m}>{m}</option>
-							{/each}
-						</select>
-					</div>
 				</div>
 			</div>
 		{:else if currentStep === 2}
@@ -941,7 +978,7 @@
 							{:else if previewUrl}
 								Regenerate
 							{:else}
-								Generate the look
+								Generate the look{lookQuoteUsd !== null ? ` · ${quote(lookQuoteUsd)}` : ''}
 							{/if}
 						</button>
 					</div>
@@ -957,8 +994,10 @@
 						</p>
 					{:else}
 						<p class="field-hint">
-							Optional, and a paid generation. Skip it and the portrait is rendered later, on the
-							persona's own page.
+							Optional, and a paid generation{lookQuoteUsd !== null
+								? ` — about ${quote(lookQuoteUsd)} each render, charged to your own wallet`
+								: ', charged to your own wallet'}. Skip it and the portrait is rendered later, on the
+							persona's own page, where its price is shown before it runs.
 						</p>
 					{/if}
 					{#if previewError}
@@ -1688,7 +1727,7 @@
 	}
 	.handle-prefix {
 		padding: 10px 0 10px 14px;
-		color: var(--accent);
+		color: var(--accent-text);
 		font-weight: 700;
 		font-size: 0.88rem;
 		pointer-events: none;
@@ -1832,6 +1871,11 @@
 		opacity: 0.55;
 		cursor: not-allowed;
 	}
+	.market-field {
+		max-width: 22rem;
+		margin-bottom: var(--space-5);
+	}
+
 	.field-hint {
 		font-size: var(--text-sm);
 		color: var(--text-dim);
@@ -2205,7 +2249,7 @@
 
 	.filter-tab.active {
 		background: var(--surface);
-		color: var(--accent);
+		color: var(--accent-text);
 		box-shadow: var(--shadow-sm);
 	}
 

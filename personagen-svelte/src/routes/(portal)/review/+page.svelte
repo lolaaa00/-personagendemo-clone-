@@ -4,6 +4,7 @@
 	import { syncParam, readParam } from '$lib/url-state';
 	import { onMount } from 'svelte';
 	import { platformLabel } from '$lib/platforms';
+	import { slotDateTime } from '$lib/datetime';
 	import PostDrawer from '$lib/components/feed/PostDrawer.svelte';
 	import ManualDeleteNotice from '$lib/components/feed/ManualDeleteNotice.svelte';
 	import ImageLightbox from '$lib/components/ui/ImageLightbox.svelte';
@@ -119,33 +120,45 @@
 	);
 	let platformOptions = $derived([...new Set(items.flatMap((i) => i.platforms))].sort());
 
-	let filteredItems = $derived(
-		items.filter(
-			(i) =>
-				(filterAgent === 'all' || i.agent_id === filterAgent) &&
-				(filterPlatform === 'all' || i.platforms.includes(filterPlatform)) &&
-				// 'all' is the actionable queue, not literally everything: a rejected
-				// post is only shown when explicitly asked for.
-				(filterStatus === 'everything'
-					? true
-					: filterStatus === 'all'
-						? i.status === 'draft' || i.status === 'scheduled'
-						: i.status === filterStatus)
-		)
-	);
+	type FilterKey = 'agent' | 'platform' | 'status';
+	const passes: Record<FilterKey, (i: ReviewItem) => boolean> = {
+		agent: (i) => filterAgent === 'all' || i.agent_id === filterAgent,
+		platform: (i) => filterPlatform === 'all' || i.platforms.includes(filterPlatform),
+		// 'all' is the actionable queue, not literally everything: a rejected
+		// post is only shown when explicitly asked for.
+		status: (i) =>
+			filterStatus === 'everything'
+				? true
+				: filterStatus === 'all'
+					? i.status === 'draft' || i.status === 'scheduled'
+					: i.status === filterStatus
+	};
+	let filteredItems = $derived(items.filter((i) => passes.agent(i) && passes.platform(i) && passes.status(i)));
 
-	/** Human names of every filter currently narrowing the list. */
-	let hidingFilters = $derived.by(() => {
+	/**
+	 * The filters that ACTUALLY remove rows from `keys`' result — a filter is
+	 * named only if some row that every other filter lets through fails it. The
+	 * first version named every active filter: "hidden by persona Ana +
+	 * Needs a decision" for a persona with no rejected posts (round-2 re-audit).
+	 */
+	function hidingOf(keys: FilterKey[]): string[] {
 		const out: string[] = [];
-		if (filterAgent !== 'all') {
-			const name = agentOptions.find((a) => a.id === filterAgent)?.name ?? 'one persona';
-			out.push(`persona “${name}”`);
+		for (const k of keys) {
+			const others = keys.filter((o) => o !== k);
+			const letThrough = items.filter((i) => others.every((o) => passes[o](i)));
+			if (!letThrough.some((i) => !passes[k](i))) continue;
+			if (k === 'agent') {
+				const name = agentOptions.find((a) => a.id === filterAgent)?.name ?? 'one persona';
+				out.push(`persona “${name}”`);
+			} else if (k === 'platform') out.push(`platform “${filterPlatform}”`);
+			else if (filterStatus === 'all') out.push('“Needs a decision” (rejected posts are hidden)');
+			else out.push(`status “${filterStatus}”`);
 		}
-		if (filterPlatform !== 'all') out.push(`platform “${filterPlatform}”`);
-		if (filterStatus === 'all') out.push('“Needs a decision” (rejected posts are hidden)');
-		else if (filterStatus !== 'everything') out.push(`status “${filterStatus}”`);
-		return out.length ? out : ['the current view'];
-	});
+		return out;
+	}
+	let hidingFilters = $derived(hidingOf(['agent', 'platform', 'status']));
+	/** Board lanes ARE the status split, so only persona and platform can hide rows there. */
+	let boardHiding = $derived(hidingOf(['agent', 'platform']));
 
 	function showEverything() {
 		filterAgent = 'all';
@@ -459,17 +472,8 @@
 	 * so the time shown is exactly the stored slot.
 	 */
 	function slotLabel(i: ReviewItem): string {
-		if (!i.scheduled_date) return 'Unscheduled';
-		const hhmm = (i.scheduled_time || '00:00').slice(0, 5);
-		const d = new Date(`${i.scheduled_date}T${hhmm}:00`);
-		if (Number.isNaN(d.getTime())) return `${i.scheduled_date} · ${hhmm}`;
-		return d.toLocaleString(undefined, {
-			weekday: 'short',
-			month: 'short',
-			day: 'numeric',
-			hour: 'numeric',
-			minute: '2-digit'
-		});
+		// One formatter for every slot on every surface — see $lib/datetime.
+		return slotDateTime(i.scheduled_date, i.scheduled_time || '00:00');
 	}
 
 	// ── Details drawer (same PostDrawer as the persona feed) ───────────────
@@ -644,8 +648,7 @@
 		[...items]
 			.filter(
 				(i) =>
-					(filterAgent === 'all' || i.agent_id === filterAgent) &&
-					(filterPlatform === 'all' || i.platforms.includes(filterPlatform))
+					passes.agent(i) && passes.platform(i)
 			)
 			.sort((a, b) =>
 				`${a.scheduled_date ?? '9999'} ${a.scheduled_time ?? ''}`.localeCompare(
@@ -800,6 +803,10 @@
 	{:else}
 		<h2 class="sr-only">Filter the queue</h2>
 		<div class="queue-toolbar">
+		<!-- The count lives OUTSIDE the scrolling filter strip: inside it, on a
+		     phone, "14 of 15 shown — hidden by…" sat 800px off-screen at the end
+		     of a 1,180px row (round-2 re-audit). -->
+		<div class="filter-row">
 		<div class="filter-bar">
 			<label class="filt">
 				<span>Persona</span>
@@ -835,9 +842,14 @@
 					<option value="everything">Everything, including rejected</option>
 				</select>
 			</label>
+		</div>
 			<span class="filt-count" aria-live="polite">
 				{viewMode === 'board' ? boardItems.length : filteredItems.length} of {items.length} shown
-				{#if viewMode !== 'board' && filteredItems.length < items.length}
+				{#if viewMode === 'board' && boardItems.length < items.length && boardHiding.length}
+					<button type="button" class="filt-why" onclick={showEverything}>
+						— hidden by {boardHiding.join(' + ')}; show everything
+					</button>
+				{:else if viewMode !== 'board' && filteredItems.length < items.length}
 					<!-- Names the filters that are really hiding rows, and clears ALL of
 					     them. The first version set the status to 'all' — which IS the
 					     default "Needs a decision" view — so the click changed nothing, and
@@ -1841,6 +1853,16 @@
 		cursor: pointer;
 		text-decoration: underline;
 	}
+	.filter-row {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: var(--space-2) var(--space-3);
+	}
+	.filter-row .filter-bar {
+		flex: 1 1 auto;
+		min-width: 0;
+	}
 	.filt-count {
 		margin-left: auto;
 		font-size: 0.75rem;
@@ -2058,9 +2080,9 @@
 		color: rgba(255, 255, 255, 0.85);
 	}
 	.pick.on {
-		background: var(--accent);
+		background: var(--accent-dark);
 		color: #fff;
-		border-color: var(--accent);
+		border-color: var(--accent-dark);
 	}
 	.card-body {
 		padding: 0.75rem;
@@ -2590,9 +2612,14 @@
 			clip-path: inset(50%);
 			white-space: nowrap;
 		}
-		/* The result count sat on its own wrapped line, 61px tall. */
+		/* Its own line under the strip, wrapping like prose — never scrolled away. */
+		.filter-row {
+			flex-direction: column;
+			align-items: stretch;
+		}
 		.filt-count {
-			white-space: nowrap;
+			margin-left: 0;
+			white-space: normal;
 		}
 	}
 	.queue-toolbar {

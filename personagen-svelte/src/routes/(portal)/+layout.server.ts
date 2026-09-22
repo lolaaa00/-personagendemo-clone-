@@ -195,6 +195,8 @@ export const load: LayoutServerLoad = async ({ locals, request, url, depends }) 
 			currency: string;
 			amount: number;
 			formatted: string;
+			/** "₱7.5K" — the collapsed rail's form: the full amount does not fit 56px. */
+			compact: string;
 			usd: string;
 		} | null = null;
 		if (mode !== 'off' && locals.supabase) {
@@ -233,6 +235,18 @@ export const load: LayoutServerLoad = async ({ locals, request, url, depends }) 
 				// rounds to whole units and pads .00, which put ₱3,131.00 in the
 				// sidebar beside ₱3,131.25 on the billing page for one wallet.
 				formatted: formatCredits(balance, currency, s.fx_rates, locale, { whole: false }),
+				compact: (() => {
+					try {
+						return new Intl.NumberFormat(locale, {
+							style: 'currency',
+							currency,
+							notation: 'compact',
+							maximumFractionDigits: 1
+						}).format(creditsToAmount(balance, currency, s.fx_rates));
+					} catch {
+						return formatCredits(balance, currency, s.fx_rates, locale);
+					}
+				})(),
 				usd: formatCredits(balance, 'USD', s.fx_rates, 'en-US', { whole: false })
 			};
 		}

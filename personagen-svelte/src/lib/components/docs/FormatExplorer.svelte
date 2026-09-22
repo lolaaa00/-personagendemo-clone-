@@ -174,8 +174,8 @@
 		border-color: var(--border-hover);
 	}
 	.fx-chip.active {
-		background: var(--accent);
-		border-color: var(--accent);
+		background: var(--accent-dark);
+		border-color: var(--accent-dark);
 		color: #fff;
 	}
 	.fx-chip-kind {

@@ -43,11 +43,10 @@
 		if (passwordEl) passwordEl.type = showPassword ? 'text' : 'password';
 	});
 
-	// After a failed submit, move focus to the first field the user must correct.
-	$effect(() => {
-		if (!error) return;
-		emailEl?.focus();
-	});
+	// Focus after a failed submit is set where the failure is known — an
+	// effect keyed on `error` used to run AFTER handleLogin and yank focus back
+	// to the email field, undoing the empty-password case (re-audit: in all
+	// three browsers, the trail was password → email within one microtask).
 
 	async function handleLogin(e: SubmitEvent) {
 		e.preventDefault();
@@ -80,6 +79,10 @@
 			if (!res.ok) {
 				error = data.error || 'Invalid credentials';
 				loading = false;
+				// A rejected credential is most often the password: select it so
+				// retyping replaces it. The alert above names the failure.
+				passwordEl?.focus();
+				passwordEl?.select();
 				return;
 			}
 
@@ -188,7 +191,7 @@
 							type="password"
 							bind:value={password}
 							bind:this={passwordEl}
-							placeholder="••••••••"
+							placeholder="Your password"
 							required
 							aria-required="true"
 							autocomplete="current-password"

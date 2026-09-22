@@ -82,6 +82,7 @@ export const ACTIVITY_ACTIONS = {
 	'admin.credits.set': 'admin',
 	'admin.credits.adjusted': 'admin',
 	'admin.mode.changed': 'admin',
+	'admin.user.password_reset': 'admin',
 	'admin.user.viewed': 'admin',
 	'admin.export.downloaded': 'admin',
 	'admin.models.changed': 'admin',

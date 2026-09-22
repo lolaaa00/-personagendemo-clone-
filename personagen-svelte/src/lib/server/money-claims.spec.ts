@@ -58,6 +58,13 @@ describe('what a text post actually costs', () => {
 		expect(studio).not.toContain("'No media cost'");
 	});
 
+	it('the landing makes no claim the product contradicts (round-2 re-audit)', () => {
+		// "$25 buys $25.00" sat above a $25 pack that delivers $26.00, and
+		// "unlimited text posts" contradicted every text tile's price.
+		expect(landing).not.toMatch(/\$25 buys \$25/);
+		expect(landing).not.toMatch(/unlimited text/i);
+	});
+
 	it('no surface claims text posts are free', () => {
 		for (const [name, copy] of [['landing', landing], ['billing', billing]] as const) {
 			expect(copy, `${name} still claims text posts are free`).not.toMatch(/text posts?[^.]{0,40}\b(are|is)\s+(always\s+)?free/i);

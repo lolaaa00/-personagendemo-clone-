@@ -12,18 +12,61 @@ export interface ToastMessage {
 
 export const toasts = $state<ToastMessage[]>([]);
 
+/**
+ * Timing a reader controls (WCAG 2.2.1). Toasts vanished after a fixed 4s —
+ * hovered, focused or not — and an ERROR, often the only account of what went
+ * wrong, disappeared mid-sentence (round-2 re-audit). Now: pointer or focus on
+ * a toast pauses its clock, errors stay until dismissed, and the stack keeps
+ * the newest four so persistent errors cannot pile up forever.
+ */
+const AUTO_DISMISS_MS = 6000;
+const MAX_TOASTS = 4;
+// A plain record, deliberately NOT reactive: nothing renders from it.
+const timers: Record<
+	string,
+	{ handle: ReturnType<typeof setTimeout> | null; remaining: number; startedAt: number }
+> = {};
+
+function startTimer(id: string, ms: number): void {
+	const handle = setTimeout(() => dismissToast(id), ms);
+	timers[id] = { handle, remaining: ms, startedAt: Date.now() };
+}
+
 export function showToast(message: string, type: ToastMessage['type'] = 'success'): void {
 	const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 	toasts.push({ id, message, type });
-	setTimeout(() => {
-		const index = toasts.findIndex((toast) => toast.id === id);
-		if (index !== -1) {
-			toasts.splice(index, 1);
-		}
-	}, 4000);
+	while (toasts.length > MAX_TOASTS) {
+		const oldest = toasts.shift();
+		if (oldest) clearToastTimer(oldest.id);
+	}
+	if (type !== 'error') startTimer(id, AUTO_DISMISS_MS);
+}
+
+/** Hover or focus: stop the clock. */
+export function pauseToast(id: string): void {
+	const t = timers[id];
+	if (!t?.handle) return;
+	clearTimeout(t.handle);
+	t.remaining = Math.max(0, t.remaining - (Date.now() - t.startedAt));
+	t.handle = null;
+}
+
+/** Pointer or focus left: resume, never with less than a moment to read. */
+export function resumeToast(id: string): void {
+	const t = timers[id];
+	if (!t || t.handle) return;
+	t.startedAt = Date.now();
+	t.handle = setTimeout(() => dismissToast(id), Math.max(1500, t.remaining));
+}
+
+function clearToastTimer(id: string): void {
+	const t = timers[id];
+	if (t?.handle) clearTimeout(t.handle);
+	delete timers[id];
 }
 
 export function dismissToast(id: string): void {
+	clearToastTimer(id);
 	const index = toasts.findIndex((toast) => toast.id === id);
 	if (index !== -1) {
 		toasts.splice(index, 1);

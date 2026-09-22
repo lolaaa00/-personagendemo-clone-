@@ -319,7 +319,7 @@ export const FORMAT_CATALOG: FormatEntry[] = [
 		id: 'auto',
 		kind: 'video',
 		label: 'Let the Director choose',
-		note: 'The Director picks spokesperson or product motion to suit the topic.',
+		note: 'The Director picks a talking head or product motion to suit the topic. Priced at the dearer of the two, so the charge can come in lower, never higher.',
 		needs: ['script', 'voice', 'scene', 'framing', 'face', 'product', 'captions'],
 		steps: ['director', 'grader', 'still', 'tts', 'talkinghead'],
 		request: { media: 'video', format: 'auto' },
@@ -694,6 +694,21 @@ function resolveStepModel(
 
 /** The stages this run will go through, priced. The single source for both sides. */
 export function planPipeline(input: PlanInput): PipelineStep[] {
+	// "Let the Director choose" runs EITHER a talking head or product motion,
+	// and the Director decides after the quote. It used to be quoted as the
+	// talking head only, so an approved $2.51 could debit $3.63 (round-2
+	// re-audit: 45% over, and the pre-spend credit check sized to the lower
+	// figure). It is now quoted at the DEARER of its two outcomes: the charge
+	// can come in under the quote, never over it.
+	if (input.formatId === 'auto') {
+		const talking = planOneFormat(input);
+		const motion = planOneFormat({ ...input, formatId: 'product-motion' });
+		return planTotalUsd(motion) > planTotalUsd(talking) ? motion : talking;
+	}
+	return planOneFormat(input);
+}
+
+function planOneFormat(input: PlanInput): PipelineStep[] {
 	const format = getFormat(input.formatId);
 	if (!format) return [];
 	const oneOffs = input.oneOffs ?? [];

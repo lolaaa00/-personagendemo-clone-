@@ -26,23 +26,27 @@
 	// Setup is the account owner's job, so seat members are not shown it (the
 	// server sends no `setup` for them); everyone else gets only steps they can
 	// actually perform, each with a target that exists.
-	const SETUP_HIDE_KEY = 'pg:setup-hidden';
+	// Per ACCOUNT, not per browser: one shared key meant hiding it as one user
+	// hid it for every other account signed in on the same machine (re-audit).
+	let setupHideKey = $derived(`pg:setup-hidden:${(data as { user?: { id?: string } }).user?.id ?? 'anon'}`);
 	let setupDismissed = $state(false);
 	$effect(() => {
 		try {
-			setupDismissed = localStorage.getItem(SETUP_HIDE_KEY) === '1';
+			setupDismissed = localStorage.getItem(setupHideKey) === '1';
 		} catch {
 			/* storage blocked (private window): the card simply shows */
 		}
 	});
-	function dismissSetup() {
-		setupDismissed = true;
+	function setSetupHidden(hidden: boolean) {
+		setupDismissed = hidden;
 		try {
-			localStorage.setItem(SETUP_HIDE_KEY, '1');
+			if (hidden) localStorage.setItem(setupHideKey, '1');
+			else localStorage.removeItem(setupHideKey);
 		} catch {
-			/* not persisted — it still hides for this visit */
+			/* not persisted — it still applies for this visit */
 		}
 	}
+	const dismissSetup = () => setSetupHidden(true);
 	let firstPersonaId = $derived(creatorAgents[0]?.id ?? null);
 	let setupSteps = $derived.by(() => {
 		const st = (data as any).setup;
@@ -71,7 +75,7 @@
 				key: 'zernio',
 				done: st.zernio,
 				title: 'Add your Zernio key',
-				why: 'Publishing runs on it, and it is yours: sign in at zernio.com with Google — the free account includes 2 connections — then paste the key here.',
+				why: 'Publishing runs on it, and it is yours: sign in at zernio.com with Google — the free account includes 2 connections — then paste it into Settings → Provider API Keys.',
 				href: '/settings?section=api-keys',
 				cta: 'Add key',
 				blocked: null
@@ -146,6 +150,11 @@
 				{/each}
 			</ol>
 		</section>
+	{:else if setupSteps.length && setupDismissed && setupDone < setupSteps.length}
+		<!-- Hidden is never gone: the unfinished checklist is one click away. -->
+		<button type="button" class="setup-show" onclick={() => setSetupHidden(false)}>
+			Show setup — {setupDone} of {setupSteps.length} done
+		</button>
 	{/if}
 
 	<!-- The old "Welcome — initialize your Persona Roster" card used to sit here,
@@ -266,6 +275,20 @@
 	.setup-head h2 {
 		margin: 0;
 		font-size: var(--text-lg);
+	}
+	.setup-show {
+		align-self: flex-start;
+		margin: 0 0 var(--space-4);
+		padding: 0.35rem 0.75rem;
+		min-height: 32px;
+		border: 1px solid var(--border-strong);
+		border-radius: var(--radius-xs);
+		background: var(--surface);
+		color: var(--text-muted);
+		font: inherit;
+		font-size: 0.8rem;
+		font-weight: 600;
+		cursor: pointer;
 	}
 	.setup-dismiss {
 		border: none;

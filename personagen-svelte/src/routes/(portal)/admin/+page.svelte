@@ -1,6 +1,7 @@
 <script lang="ts">
-	import { quote } from '$lib/stores/pricing.svelte';
-	import { promptAction } from '$lib/stores/confirm.svelte';
+	import { pricingContext } from '$lib/stores/pricing.svelte';
+	import { formatCredits } from '$lib/money';
+	import { promptAction, confirmAction } from '$lib/stores/confirm.svelte';
 	import { showToast } from '$lib/stores/ui.svelte';
 	import PageShell from '$lib/components/ui/PageShell.svelte';
 	import { countLabel } from '$lib/plural';
@@ -69,6 +70,7 @@
 			note: string | null;
 		};
 		topupRequests?: Array<{ id: string; title: string; description: string | null; created_at: string; user_id: string }>;
+		problemReports?: Array<{ id: string; title: string; description: string | null; created_at: string; user_id: string }>;
 		platformKeys?: Array<{
 			id: string;
 			label: string;
@@ -84,6 +86,32 @@
 	let controlsLoading = $state(false);
 	let controlsError = $state<string | null>(null);
 	let controlsBusy = $state(false);
+
+	/** Ledger credits actually debited, in the viewer's currency (priced on the server too). */
+	function charged(credits: number): string {
+		const c = pricingContext();
+		return formatCredits(credits, c.currency, c.fx, c.locale, { whole: false });
+	}
+
+	/** Mark a top-up (loaded) or a problem report (dealt with) as handled. */
+	let closingTicket = $state<string | null>(null);
+	async function closeRequest(id: string) {
+		closingTicket = id;
+		try {
+			const res = await fetch('/api/admin/requests', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ ticketId: id })
+			});
+			const body = await res.json().catch(() => ({}));
+			if (!res.ok || !body.success) throw new Error(body.error || `HTTP ${res.status}`);
+			await loadControls();
+		} catch (e) {
+			controlsError = (e as Error).message;
+		} finally {
+			closingTicket = null;
+		}
+	}
 
 	async function loadControls() {
 		controlsLoading = true;
@@ -316,6 +344,44 @@
 		return res.ok && body.success ? null : body.error || `HTTP ${res.status}`;
 	}
 
+	/**
+	 * A one-time temporary password, for an account that cannot receive the
+	 * reset email (this deployment's auth server may have no mail transport).
+	 * Shown once, here; the user must replace it on first sign-in.
+	 */
+	let tempPw = $state<{ email: string; password: string } | null>(null);
+	let tempPwBusy = $state<string | null>(null);
+	async function issueTempPassword(u: PlatformUser) {
+		// A real customer's password is replaced by this, so it goes through the
+		// app's typed confirmation — never a stray click.
+		const ok = await confirmAction({
+			title: `Replace the password for ${u.email ?? 'this account'}?`,
+			body:
+				'Their current password stops working immediately. You will see a one-time temporary ' +
+				'password to hand them privately; they must choose their own on first sign-in.',
+			warning: 'Use this only when the person cannot receive the reset email.',
+			confirmLabel: 'Replace password',
+			tone: 'danger',
+			typeToConfirm: 'REPLACE'
+		});
+		if (!ok) return;
+		tempPwBusy = u.id;
+		try {
+			const res = await fetch('/api/admin/users/temp-password', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ userId: u.id })
+			});
+			const body = await res.json().catch(() => ({}));
+			if (!res.ok || !body.success) throw new Error(body.error || `HTTP ${res.status}`);
+			tempPw = { email: body.email ?? u.email ?? u.id, password: body.password };
+		} catch (e) {
+			flash(`Failed: ${(e as Error).message}`);
+		} finally {
+			tempPwBusy = null;
+		}
+	}
+
 	function openAction(u: PlatformUser, op: 'grant' | 'set' | 'adjust') {
 		action = { userId: u.id, email: u.email ?? u.id, op };
 		actionCredits = op === 'set' ? u.balance_credits : op === 'grant' ? 1000 : 0;
@@ -411,8 +477,8 @@
 		     not raw provider cost in "$". Seat caps are enforced in retail, so the
 		     provider figure read a seat as a third of the way to a cap that was
 		     already blocking it (audit QA-001 / re-audit). -->
-		<div class="stat"><span class="stat-n">{quote(data.stats.spendMonth)}</span><span class="stat-l">Charged this month</span></div>
-		<div class="stat"><span class="stat-n">{data.stats.generationsMonth}</span><span class="stat-l">Generations this month</span></div>
+		<div class="stat"><span class="stat-n">{charged(data.stats.spendMonthCredits)}</span><span class="stat-l">Charged this month</span></div>
+		<div class="stat"><span class="stat-n">{data.stats.postsGeneratedMonth}</span><span class="stat-l">Posts generated this month</span></div>
 		<div class="stat"><span class="stat-n">{data.stats.publishedTotal}</span><span class="stat-l">Posts published, all time</span></div>
 		<div class="stat"><span class="stat-n">{data.stats.seatCount}</span><span class="stat-l">Seats</span></div>
 		<div class="stat"><span class="stat-n">{data.stats.personaCount}</span><span class="stat-l">Personas</span></div>
@@ -444,6 +510,9 @@
 	{#if tab === 'overview'}
 		<section class="admin-card">
 			<h2>Workspaces</h2>
+			<!-- A named, focusable scroll region: WebKit does not make a scroll container keyboard-focusable, so without tabindex its hidden columns were unreachable by keyboard. -->
+			<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+			<div class="table-scroll" role="region" aria-label="Workspaces" tabindex="0">
 			<table class="admin-table">
 				<thead><tr><th>Workspace</th><th>Your role</th><th>Created</th></tr></thead>
 				<tbody>
@@ -452,6 +521,7 @@
 					{/each}
 				</tbody>
 			</table>
+			</div>
 		</section>
 
 		<section class="admin-card">
@@ -459,6 +529,9 @@
 			{#if data.personas.length === 0}
 				<p class="admin-hint">No personas filed into these workspaces yet.</p>
 			{:else}
+				<!-- A named, focusable scroll region: WebKit does not make a scroll container keyboard-focusable, so without tabindex its hidden columns were unreachable by keyboard. -->
+				<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+				<div class="table-scroll" role="region" aria-label="Personas in these workspaces" tabindex="0">
 				<table class="admin-table">
 					<thead><tr><th>Persona</th><th>Handle</th><th>Status</th><th>Workspace</th></tr></thead>
 					<tbody>
@@ -472,6 +545,7 @@
 						{/each}
 					</tbody>
 				</table>
+				</div>
 			{/if}
 		</section>
 
@@ -480,6 +554,9 @@
 			{#if data.activity.length === 0}
 				<p class="admin-hint">Nothing logged yet.</p>
 			{:else}
+				<!-- A named, focusable scroll region: WebKit does not make a scroll container keyboard-focusable, so without tabindex its hidden columns were unreachable by keyboard. -->
+				<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+				<div class="table-scroll" role="region" aria-label="Recent activity" tabindex="0">
 				<table class="admin-table">
 					<thead><tr><th>When</th><th>Who</th><th>What</th><th>Persona</th></tr></thead>
 					<tbody>
@@ -493,6 +570,7 @@
 						{/each}
 					</tbody>
 				</table>
+				</div>
 				<button class="admin-link" onclick={() => (tab = 'activity')}>View full log →</button>
 			{/if}
 		</section>
@@ -617,6 +695,39 @@
 								<li>
 									<strong>{r.title.replace(/^Top-up request · /, '')}</strong>
 									<span class="muted small">— {when(r.created_at)}</span>
+									<button
+										type="button"
+										class="admin-link"
+										disabled={closingTicket === r.id}
+										onclick={() => closeRequest(r.id)}
+										>{closingTicket === r.id ? 'Closing…' : 'Mark loaded'}</button
+									>
+									{#if r.description}<p class="muted small">{r.description}</p>{/if}
+								</li>
+							{/each}
+						</ul>
+					</section>
+				{/if}
+
+				{#if controls.problemReports && controls.problemReports.length > 0}
+					<section class="pkeys" aria-labelledby="problem-rep-h">
+						<h3 id="problem-rep-h">Problem reports waiting ({controls.problemReports.length})</h3>
+						<p class="admin-hint">
+							Customers file these from a failed post ("Report this problem"). Each quotes the
+							message they were shown; the real cause is in the server log. Oldest first.
+						</p>
+						<ul class="topup-req-list">
+							{#each controls.problemReports as r (r.id)}
+								<li>
+									<strong>{r.title.replace(/^Problem report · /, '')}</strong>
+									<span class="muted small">— {when(r.created_at)}</span>
+									<button
+										type="button"
+										class="admin-link"
+										disabled={closingTicket === r.id}
+										onclick={() => closeRequest(r.id)}
+										>{closingTicket === r.id ? 'Closing…' : 'Mark handled'}</button
+									>
 									{#if r.description}<p class="muted small">{r.description}</p>{/if}
 								</li>
 							{/each}
@@ -943,7 +1054,9 @@
 				{#if controls.history.length === 0}
 					<p class="admin-hint">No changes yet.</p>
 				{:else}
-					<div class="table-scroll">
+					<!-- A named, focusable scroll region: WebKit does not make a scroll container keyboard-focusable, so without tabindex its hidden columns were unreachable by keyboard. -->
+					<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+					<div class="table-scroll" role="region" aria-label="Change history" tabindex="0">
 						<table class="admin-table">
 							<thead><tr><th>When</th><th>Setting</th><th>From</th><th>To</th><th>Note</th><th>By</th></tr></thead>
 							<tbody>
@@ -1008,7 +1121,19 @@
 			{#if visiblePlatformUsers.length === 0}
 				<p class="admin-hint">{platformLoaded ? 'No accounts match.' : 'Loading accounts…'}</p>
 			{:else}
-				<div class="table-scroll">
+				{#if tempPw}
+					<div class="temp-pw" role="status">
+						<p>
+							Temporary password for <strong>{tempPw.email}</strong> — shown once. Give it to them
+							privately; they must choose their own the first time they sign in.
+						</p>
+						<code class="temp-pw-value">{tempPw.password}</code>
+						<button type="button" class="admin-link" onclick={() => (tempPw = null)}>Done — hide it</button>
+					</div>
+				{/if}
+				<!-- A named, focusable scroll region: WebKit does not make a scroll container keyboard-focusable, so without tabindex its hidden columns were unreachable by keyboard. -->
+				<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+				<div class="table-scroll" role="region" aria-label="Every account on the platform" tabindex="0">
 					<table class="admin-table">
 						<thead>
 							<tr>
@@ -1053,6 +1178,14 @@
 										<button class="admin-link" onclick={() => toggleMode(u)}>{u.billing_mode === 'unmetered' ? 'Un-comp' : 'Comp'}</button>
 										<button class="admin-link" onclick={() => openLedger(u)}>Ledger</button>
 										<button class="admin-link" onclick={() => openTimeline(u)}>Timeline</button>
+										<button
+											class="admin-link"
+											onclick={() => issueTempPassword(u)}
+											disabled={tempPwBusy === u.id}
+											title="Sets a one-time password for {u.email ?? 'this account'} and makes them choose a new one on sign-in"
+										>
+											{tempPwBusy === u.id ? 'Setting…' : 'Temp password'}
+										</button>
 									</td>
 								</tr>
 							{/each}
@@ -1088,7 +1221,9 @@
 				{#if liveRows.length === 0}
 					<p class="admin-hint">Nothing recorded yet{activityStats && !activityStats.enabled ? ' — ACTIVITY_LOG is off' : ''}.</p>
 				{:else}
-					<div class="table-scroll">
+					<!-- A named, focusable scroll region: WebKit does not make a scroll container keyboard-focusable, so without tabindex its hidden columns were unreachable by keyboard. -->
+					<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+					<div class="table-scroll" role="region" aria-label={liveErrorsOnly ? 'Errors — last 100 events' : 'Live feed — last 100 events'} tabindex="0">
 						<table class="admin-table">
 							<thead><tr><th>When</th><th>Who</th><th>Action</th><th>Outcome</th><th>ms</th><th>Credits</th><th>Client</th><th>Detail</th></tr></thead>
 							<tbody>
@@ -1134,7 +1269,9 @@
 					{#if filteredTimeline.length === 0}
 						<p class="admin-hint">No events match.</p>
 					{:else}
-						<div class="table-scroll">
+						<!-- A named, focusable scroll region: WebKit does not make a scroll container keyboard-focusable, so without tabindex its hidden columns were unreachable by keyboard. -->
+						<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+						<div class="table-scroll" role="region" aria-label="Timeline — {timelineFor?.email ?? ''}" tabindex="0">
 							<table class="admin-table">
 								<thead><tr><th>When</th><th>Action</th><th>Outcome</th><th>ms</th><th>Persona</th><th>Credits / cost</th><th>Client</th><th>Detail</th></tr></thead>
 								<tbody>
@@ -1169,7 +1306,9 @@
 				{:else if ledgerRows.length === 0}
 					<p class="admin-hint">No ledger rows yet.</p>
 				{:else}
-					<div class="table-scroll">
+					<!-- A named, focusable scroll region: WebKit does not make a scroll container keyboard-focusable, so without tabindex its hidden columns were unreachable by keyboard. -->
+					<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+					<div class="table-scroll" role="region" aria-label="Ledger — {ledgerFor?.email ?? ''}" tabindex="0">
 						<table class="admin-table">
 							<thead><tr><th>When</th><th>Kind</th><th>Δ</th><th>Waived</th><th>Balance after</th><th>Note</th><th>Links</th></tr></thead>
 							<tbody>
@@ -1210,6 +1349,9 @@
 			{#if filteredActivity.length === 0}
 				<p class="admin-hint">Nothing matches this filter.</p>
 			{:else}
+				<!-- A named, focusable scroll region: WebKit does not make a scroll container keyboard-focusable, so without tabindex its hidden columns were unreachable by keyboard. -->
+				<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+				<div class="table-scroll" role="region" aria-label="Activity log" tabindex="0">
 				<table class="admin-table">
 					<thead><tr><th>When</th><th>Who</th><th>Type</th><th>Detail</th><th>Persona</th><th>Cost</th></tr></thead>
 					<tbody>
@@ -1225,6 +1367,7 @@
 						{/each}
 					</tbody>
 				</table>
+				</div>
 			{/if}
 		</section>
 	{:else if tab === 'seats'}
@@ -1233,6 +1376,9 @@
 			<p class="admin-hint">
 				Roles and spend caps are edited in <a href="/settings?section=team">Settings → Team</a>.
 			</p>
+			<!-- A named, focusable scroll region: WebKit does not make a scroll container keyboard-focusable, so without tabindex its hidden columns were unreachable by keyboard. -->
+			<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+			<div class="table-scroll" role="region" aria-label="Seats" tabindex="0">
 			<table class="admin-table">
 				<thead><tr><th>Member</th><th>Role</th><th>Monthly cap</th><th>Workspace</th><th>Joined</th></tr></thead>
 				<tbody>
@@ -1247,11 +1393,15 @@
 					{/each}
 				</tbody>
 			</table>
+			</div>
 		</section>
 
 		{#if data.pendingInvites.length > 0}
 			<section class="admin-card">
 				<h2>Pending invites</h2>
+				<!-- A named, focusable scroll region: WebKit does not make a scroll container keyboard-focusable, so without tabindex its hidden columns were unreachable by keyboard. -->
+				<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+				<div class="table-scroll" role="region" aria-label="Pending invites" tabindex="0">
 				<table class="admin-table">
 					<thead><tr><th>Email</th><th>Role</th><th>Sent</th><th>Expires</th></tr></thead>
 					<tbody>
@@ -1265,6 +1415,7 @@
 						{/each}
 					</tbody>
 				</table>
+				</div>
 			</section>
 		{/if}
 	{:else if tab === 'spend'}
@@ -1273,14 +1424,18 @@
 			{#if data.spendByActor.length === 0}
 				<p class="admin-hint">No spend recorded this month.</p>
 			{:else}
+				<!-- A named, focusable scroll region: WebKit does not make a scroll container keyboard-focusable, so without tabindex its hidden columns were unreachable by keyboard. -->
+				<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+				<div class="table-scroll" role="region" aria-label="Charged this month, by seat" tabindex="0">
 				<table class="admin-table">
 					<thead><tr><th>Seat</th><th>Spend</th></tr></thead>
 					<tbody>
 						{#each data.spendByActor as row (row.actor)}
-							<tr><td class="mono">{row.actor}</td><td>{quote(row.usd)}</td></tr>
+							<tr><td class="mono">{row.actor}</td><td>{charged(row.credits)}</td></tr>
 						{/each}
 					</tbody>
 				</table>
+				</div>
 			{/if}
 		</section>
 		<section class="admin-card">
@@ -1288,14 +1443,18 @@
 			{#if data.spendByPersona.length === 0}
 				<p class="admin-hint">No spend recorded this month.</p>
 			{:else}
+				<!-- A named, focusable scroll region: WebKit does not make a scroll container keyboard-focusable, so without tabindex its hidden columns were unreachable by keyboard. -->
+				<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+				<div class="table-scroll" role="region" aria-label="Charged this month, by persona" tabindex="0">
 				<table class="admin-table">
 					<thead><tr><th>Persona</th><th>Spend</th></tr></thead>
 					<tbody>
 						{#each data.spendByPersona as row (row.persona)}
-							<tr><td>{row.persona}</td><td>{quote(row.usd)}</td></tr>
+							<tr><td>{row.persona}</td><td>{charged(row.credits)}</td></tr>
 						{/each}
 					</tbody>
 				</table>
+				</div>
 			{/if}
 		</section>
 	{:else}
@@ -1308,6 +1467,9 @@
 			{#if data.apiKeys.length === 0}
 				<p class="admin-hint">No API keys issued.</p>
 			{:else}
+				<!-- A named, focusable scroll region: WebKit does not make a scroll container keyboard-focusable, so without tabindex its hidden columns were unreachable by keyboard. -->
+				<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+				<div class="table-scroll" role="region" aria-label="API keys issued by this team" tabindex="0">
 				<table class="admin-table">
 					<thead><tr><th>Label</th><th>Owner</th><th>Key</th><th>Last used</th><th>Status</th></tr></thead>
 					<tbody>
@@ -1322,6 +1484,7 @@
 						{/each}
 					</tbody>
 				</table>
+				</div>
 			{/if}
 		</section>
 	{/if}
@@ -1368,7 +1531,7 @@
 	}
 	.admin-card h2 { font-size: 1.05rem; color: var(--text); }
 	.admin-hint { font-size: 0.88rem; color: var(--text-muted); line-height: 1.5; }
-	.admin-table { width: 100%; border-collapse: collapse; font-size: 0.86rem; display: block; overflow-x: auto; }
+	.admin-table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
 	.admin-table thead, .admin-table tbody { width: 100%; }
 	.admin-table th {
 		text-align: left; color: var(--text-muted); font-weight: 600;
@@ -1392,7 +1555,7 @@
 		border-radius: 999px; padding: 0.3rem 0.8rem; font-size: 0.82rem;
 		font-weight: 600; color: var(--text-muted); cursor: pointer;
 	}
-	.filter-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+	.filter-btn.active { background: var(--accent-dark); border-color: var(--accent-dark); color: #fff; }
 	.admin-link {
 		align-self: flex-start; background: none; border: none;
 		color: var(--accent-text); font-weight: 600; font-size: 0.85rem; cursor: pointer; padding: 0;
@@ -1543,8 +1706,33 @@
 		min-width: 7rem;
 		width: 7rem;
 	}
+	/* The REGION scrolls, not the table: `.admin-table{display:block;overflow-x:auto}`
+	   made every table its own unnamed scroller (a re-audit found the named
+	   provider-keys region never scrolled at all), and WebKit gave those no Tab stop. */
+	.temp-pw {
+		margin: 0 0 var(--space-3);
+		padding: 0.75rem 1rem;
+		border: 1px solid var(--border-strong);
+		border-radius: var(--radius-xs);
+		background: var(--surface-2);
+	}
+	.temp-pw p {
+		margin: 0 0 0.5rem;
+	}
+	.temp-pw-value {
+		display: inline-block;
+		margin-right: 0.75rem;
+		padding: 0.2rem 0.5rem;
+		font-size: 1rem;
+		user-select: all;
+	}
 	.table-scroll {
 		overflow-x: auto;
+		max-width: 100%;
+	}
+	.table-scroll:focus-visible {
+		outline: 2px solid var(--focus-ring);
+		outline-offset: 2px;
 	}
 	.admin-table tr.negative .balance {
 		color: #f87171;

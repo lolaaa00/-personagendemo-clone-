@@ -36,6 +36,8 @@
 	import { platformColor } from '$lib/platforms';
 	import { thumbUrl } from '$lib/image-url';
 	import { countLabel } from '$lib/plural';
+	import { localDate, slotTime, slotDateTime } from '$lib/datetime';
+	import { pricingContext } from '$lib/stores/pricing.svelte';
 	import type { CalendarPost } from './types';
 
 	interface RailAgent {
@@ -104,9 +106,6 @@
 		'January', 'February', 'March', 'April', 'May', 'June',
 		'July', 'August', 'September', 'October', 'November', 'December'
 	];
-	const WEEKDAYS_FULL = [
-		'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'
-	];
 
 	function fmtDate(d: Date): string {
 		return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -129,7 +128,6 @@
 	// Headings follow the viewer's own date convention, like /billing and /admin
 	// (audit UI-005). They were assembled in US order by hand — "September 20" in
 	// an en-GB session where every other date on the account read "20 Sept".
-	const localDate = (d: Date, opts: Intl.DateTimeFormatOptions) => d.toLocaleDateString(undefined, opts);
 	let toolbarLabel = $derived.by(() => {
 		if (calendarView === 'day') {
 			return localDate(anchorDate, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
@@ -139,7 +137,11 @@
 			const end = weekDates[6];
 			// formatRange keeps "20–26 Sept 2026" / "Sep 20 – 26, 2026" natural in
 			// each locale; fall back to two dates where it is unavailable.
-			const f = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+			const f = new Intl.DateTimeFormat(pricingContext().locale ?? undefined, {
+				month: 'short',
+				day: 'numeric',
+				year: 'numeric'
+			});
 			const range = (f as unknown as { formatRange?: (a: Date, b: Date) => string }).formatRange;
 			return range ? range.call(f, start, end) : `${f.format(start)} – ${f.format(end)}`;
 		}
@@ -303,7 +305,8 @@
 	];
 	/** Always shown, even at zero — these are the states you look for. */
 	const CHIP_ALWAYS: PostStatus[] = ['published', 'scheduled', 'draft'];
-	let statusChip = $state<'all' | PostStatus>('all');
+	type FailChip = 'failed-generation' | 'failed-publish';
+	let statusChip = $state<'all' | PostStatus | FailChip>('all');
 
 	function toggleChip(chip: typeof statusChip) {
 		statusChip = statusChip === chip ? 'all' : chip;
@@ -314,7 +317,13 @@
 	);
 
 	let filteredPosts = $derived(
-		statusChip === 'all' ? agentFiltered : agentFiltered.filter((p) => p.status === statusChip)
+		statusChip === 'all'
+			? agentFiltered
+			: statusChip === 'failed-generation'
+				? agentFiltered.filter((p) => p.status === 'failed' && failureKind(p) === 'generation')
+				: statusChip === 'failed-publish'
+					? agentFiltered.filter((p) => p.status === 'failed' && failureKind(p) === 'publish')
+					: agentFiltered.filter((p) => p.status === statusChip)
 	);
 
 	function getPostsForDate(dateStr: string) {
@@ -359,10 +368,14 @@
 			PostStatus,
 			number
 		>;
-		const s = { byStatus, views: 0, likes: 0, comments: 0 };
+		const s = { byStatus, views: 0, likes: 0, comments: 0, genFailed: 0, pubFailed: 0 };
 		for (const p of agentFiltered) {
 			if (!inRange(p.date)) continue;
 			if (p.status in byStatus) byStatus[p.status as PostStatus]++;
+			if (p.status === 'failed') {
+				if (failureKind(p) === 'generation') s.genFailed++;
+				else s.pubFailed++;
+			}
 			// Engagement is a property of what actually went live.
 			if (p.status === 'published' || p.status === 'partial') {
 				s.views += p.analytics?.views ?? 0;
@@ -372,6 +385,21 @@
 		}
 		return s;
 	});
+
+	let failChips = $derived<Array<{ chip: FailChip; count: number; words: string; meaning: string }>>([
+		{
+			chip: 'failed-generation',
+			count: rangeStats.genFailed,
+			words: 'generation failed',
+			meaning: 'Nothing was produced — open it to retry'
+		},
+		{
+			chip: 'failed-publish',
+			count: rangeStats.pubFailed,
+			words: 'publish failed',
+			meaning: 'Made, but did not go out — open it for the platform’s reason'
+		}
+	]);
 
 	function fmtNum(v: number): string {
 		if (v >= 1_000_000) return (v / 1_000_000).toFixed(1) + 'M';
@@ -391,6 +419,24 @@
 		// for a 160w thumb (covers 2× screens) instead of the full-res original.
 		const raw = d.posterUrl || (d.mediaType !== 'video' ? d.mediaUrl : null);
 		return raw ? (thumbUrl(raw, 160) ?? null) : null;
+	}
+
+	/**
+	 * Which failure this is. A failed post with no media never got as far as
+	 * publishing — it failed to GENERATE (the rule PostCard uses). The two used
+	 * to differ only in a hover tooltip: chips, the mobile list and the legend
+	 * all said "Failed" (round-2 re-audit).
+	 */
+	function failureKind(p: CalendarPost): 'generation' | 'publish' | null {
+		if (p.status === 'partial') return 'publish';
+		if (p.status !== 'failed') return null;
+		return getPostDisplay(p).mediaUrl ? 'publish' : 'generation';
+	}
+	/** The status as words, with the failure kind named. */
+	function statusWords(p: CalendarPost): string {
+		const kind = failureKind(p);
+		if (p.status === 'failed' && kind) return kind === 'generation' ? 'Generation failed' : 'Publish failed';
+		return postStatus(p.status).label;
 	}
 
 	function postErrorHint(p: CalendarPost): string | undefined {
@@ -525,10 +571,27 @@
 <div class="summary-strip" role="group" aria-label="Range summary and status filter">
 	{#each CHIP_ORDER as st (st)}
 		{@const n = rangeStats.byStatus[st]}
-		{#if n > 0 || CHIP_ALWAYS.includes(st)}
+		{#if st === 'failed'}
+			<!-- Two different problems, two chips: one needs a retry, the other a
+			     platform fix. They were one "failed" count. -->
+			{#each failChips as { chip, count, words, meaning } (chip)}
+				{#if count > 0}
+					<button
+						class="stat-chip chip-failed"
+						class:on={statusChip === chip}
+						aria-pressed={statusChip === chip}
+						title={meaning}
+						onclick={() => toggleChip(chip)}
+					>
+						<span class="stat-dot" style="background: {postStatus('failed').fill}" aria-hidden="true"></span>
+						<strong>{count}</strong>
+						{words}
+					</button>
+				{/if}
+			{/each}
+		{:else if n > 0 || CHIP_ALWAYS.includes(st)}
 			<button
 				class="stat-chip"
-				class:chip-failed={st === 'failed'}
 				class:on={statusChip === st}
 				aria-pressed={statusChip === st}
 				title={postStatus(st).meaning}
@@ -604,9 +667,12 @@
 									class="cell-day-btn"
 									onclick={() => (selectedDay = cell.day)}
 									title="Open this day's posts"
-									aria-label="{MONTHS[currentMonth]} {cell.day}, {currentYear}{cell.isToday
-										? ' (today)'
-										: ''} — {countLabel(dayPosts.length, 'post')}"
+									aria-label="{localDate(new Date(currentYear, currentMonth, cell.day), {
+										weekday: 'long',
+										day: 'numeric',
+										month: 'long',
+										year: 'numeric'
+									})}{cell.isToday ? ' (today)' : ''} — {countLabel(dayPosts.length, 'post')}"
 								>
 									{cell.day}
 								</button>
@@ -639,10 +705,13 @@
 												<img class="event-thumb" src={thumb} alt="" width="44" height="55" loading="lazy" decoding="async" />
 											{/if}
 											<div class="event-content">
-												<span class="sr-only">{postStatus(post.status).label}</span>
+												{#if failureKind(post)}
+													<span class="event-fail">{failureKind(post) === 'generation' ? 'Gen failed' : 'Publish failed'}</span>
+												{/if}
+												<span class="sr-only">{statusWords(post)}</span>
 												<span class="event-agent">
 													{post.agentName.split(' ')[0]}
-													{#if post.time}<span class="event-time">{post.time.slice(0, 5)}</span>{/if}
+													{#if post.time}<span class="event-time">{slotTime(post.date, post.time)}</span>{/if}
 													{#if views > 0}<span class="event-views">{@render iconEye()} <span class="sr-only">views</span>{fmtNum(views)}</span>{/if}
 												</span>
 												{#if !thumb}
@@ -655,9 +724,10 @@
 										<button
 											class="event-overflow"
 											onclick={() => (selectedDay = cell.day)}
-											aria-label="Show all {countLabel(dayPosts.length, 'post')} for {MONTHS[
-												currentMonth
-											]} {cell.day}"
+											aria-label="Show all {countLabel(dayPosts.length, 'post')} for {localDate(
+												new Date(currentYear, currentMonth, cell.day),
+												{ day: 'numeric', month: 'long' }
+											)}"
 										>
 											+{dayPosts.length - 3} more
 										</button>
@@ -682,8 +752,10 @@
 						{/if}
 						<div class="mobile-post-body">
 							<div class="mobile-post-date">
-								{post.date} · {post.time}
-								<span class="mobile-post-status status-{post.status}" title={postErrorHint(post)}>{post.status}</span>
+								{slotDateTime(post.date, post.time)}
+								<span class="mobile-post-status status-{post.status}" title={postErrorHint(post)}
+									>{statusWords(post)}</span
+								>
 							</div>
 							<div class="mobile-post-text">{getPostDisplay(post).text}</div>
 							<div class="mobile-post-meta">
@@ -711,9 +783,12 @@
 								class="week-head-btn"
 								onclick={() => openDayView(wd)}
 								title="Open day view"
-								aria-label="Open day view for {WEEKDAYS_FULL[wd.getDay()]}, {MONTHS[
-									wd.getMonth()
-								]} {wd.getDate()}, {wd.getFullYear()} — {countLabel(dayPosts.length, 'post')}"
+								aria-label="Open day view for {localDate(wd, {
+									weekday: 'long',
+									day: 'numeric',
+									month: 'long',
+									year: 'numeric'
+								})} — {countLabel(dayPosts.length, 'post')}"
 							>
 								<span class="week-dow">{DAYS[i]}</span>
 								<span class="week-num">{wd.getDate()}</span>
@@ -738,7 +813,7 @@
 									{/if}
 									<button class="event-main" onclick={() => onOpenPost(post)} title={postErrorHint(post)}>
 										<span class="sr-only">{post.status}</span>
-										<span class="event-time">{post.time}</span>
+										<span class="event-time">{slotTime(post.date, post.time)}</span>
 										<span class="event-agent">
 											{post.agentName.split(' ')[0]}
 											{#if views > 0}<span class="event-views">{@render iconEye()} <span class="sr-only">views</span>{fmtNum(views)}</span>{/if}
@@ -753,7 +828,7 @@
 											onclick={() => approveOne(post)}
 											disabled={approvingIds.has(post.id)}
 											title="Approve — publishes at its scheduled time"
-											aria-label="Approve draft at {post.time} by {post.agentName} — publishes at its scheduled time"
+											aria-label="Approve draft at {slotTime(post.date, post.time)} by {post.agentName} — publishes at its scheduled time"
 										>
 											{#if approvingIds.has(post.id)}…{:else}{@render iconCheck()}{/if}
 										</button>
@@ -777,7 +852,7 @@
 					{@const a = post.analytics}
 					<div class="day-post">
 						<button class="day-post-main" onclick={() => onOpenPost(post)} title={postErrorHint(post)}>
-							<span class="day-post-time">{post.time}</span>
+							<span class="day-post-time">{slotTime(post.date, post.time)}</span>
 							<!-- Colour-only status stripe; .status-badge below states it in words. -->
 							<div class="day-post-bar" style="background: {postStatusFill(post.status)}" aria-hidden="true"></div>
 							{#if thumb}
@@ -814,7 +889,7 @@
 								onclick={() => approveOne(post)}
 								disabled={approvingIds.has(post.id)}
 								title="Approve — publishes at its scheduled time"
-								aria-label="Approve draft at {post.time} by {post.agentName} — publishes at its scheduled time"
+								aria-label="Approve draft at {slotTime(post.date, post.time)} by {post.agentName} — publishes at its scheduled time"
 							>
 								{#if approvingIds.has(post.id)}
 									Approving…
@@ -880,7 +955,7 @@
 								{/if}
 								<div class="post-card-body">
 									<div class="post-card-time-row">
-										<span class="post-card-time">{post.time}</span>
+										<span class="post-card-time">{slotTime(post.date, post.time)}</span>
 										<span
 											class="status-badge"
 											style="color: {postStatusText(post.status)}; border-color: {postStatusText(post.status)}"
@@ -1026,7 +1101,7 @@
 	.month-selector-btn:hover {
 		background: var(--surface-2);
 		border-color: var(--border-strong);
-		color: var(--accent);
+		color: var(--accent-text);
 	}
 
 	.dropdown-icon {
@@ -1037,7 +1112,7 @@
 	}
 
 	.month-selector-btn:hover .dropdown-icon {
-		color: var(--accent);
+		color: var(--accent-text);
 	}
 
 	.dropdown-icon.open {
@@ -1140,7 +1215,7 @@
 	}
 
 	.view-btn.active {
-		background: var(--accent);
+		background: var(--accent-dark);
 		color: #fff;
 	}
 
@@ -1151,6 +1226,15 @@
 		gap: 0.5rem;
 		flex-wrap: wrap;
 		margin-bottom: 1.1rem;
+	}
+
+	.event-fail {
+		display: block;
+		font-size: 0.62rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.03em;
+		color: var(--error-text);
 	}
 
 	.stat-chip {
@@ -1287,7 +1371,7 @@
 	.agent-item.active {
 		background: var(--accent-soft);
 		border-color: var(--accent);
-		color: var(--accent);
+		color: var(--accent-text);
 	}
 
 	.agent-dot {
@@ -1394,11 +1478,11 @@
 
 	.cell-day-btn:hover {
 		background: var(--surface-2);
-		color: var(--accent);
+		color: var(--accent-text);
 	}
 
 	.cell.today .cell-day-btn {
-		color: var(--accent);
+		color: var(--accent-text);
 	}
 
 	/* Hover-revealed one-click generate for a specific day */
@@ -1454,7 +1538,7 @@
 
 	.cell-add:hover {
 		border-color: var(--accent);
-		color: var(--accent);
+		color: var(--accent-text);
 	}
 
 	/* The scheduled time, on the chip. Tabular figures so times line up down a
@@ -1579,7 +1663,7 @@
 	}
 
 	.event-overflow:hover {
-		color: var(--accent);
+		color: var(--accent-text);
 		background: var(--surface-2);
 	}
 
@@ -1630,7 +1714,7 @@
 	}
 
 	.week-head-btn:hover .week-num {
-		color: var(--accent);
+		color: var(--accent-text);
 	}
 
 	.week-dow {
@@ -1648,7 +1732,7 @@
 	}
 
 	.week-col.today .week-num {
-		color: var(--accent);
+		color: var(--accent-text);
 	}
 
 	.week-col-body {
@@ -1756,7 +1840,7 @@
 
 	.day-generate:hover {
 		border-color: var(--accent);
-		color: var(--accent);
+		color: var(--accent-text);
 	}
 
 	.day-post {
@@ -2155,8 +2239,8 @@
 	}
 
 	.btn-primary {
-		background: var(--accent);
-		border: 1px solid var(--accent);
+		background: var(--accent-dark);
+		border: 1px solid var(--accent-dark);
 		color: #fff;
 	}
 

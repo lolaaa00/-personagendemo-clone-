@@ -37,6 +37,30 @@ export interface StudioPlan {
 	hasProductPhoto: boolean;
 }
 
+/**
+ * The template's per-stage provider USD, from the plan — or null when there
+ * is no plan yet (still loading, or a seat that cannot preview). Callers price
+ * it with quoteSteps() so the tile rounds per stage exactly like the ledger,
+ * and show nothing rather than the hand-kept table while it is null: that
+ * table flashed stale prices for half a second on every load, and stayed for
+ * a viewer seat (re-audit: $1.61 tiles against a $3.62 composer).
+ */
+export function templateStepsUsd(t: StudioTemplate, plan: StudioPlan | null): number[] | null {
+	if (!plan) return null;
+	try {
+		const steps = planPipeline({
+			formatId: formatFromRequest(t.baseBody as Record<string, unknown>),
+			options: plan.options,
+			fixed: plan.fixed,
+			shots: plan.shots,
+			oneOffs: plan.oneOffs
+		}).map((s) => s.usd);
+		return steps.some((u) => u > 0) ? steps : null;
+	} catch {
+		return null;
+	}
+}
+
 /** Provider USD for one template, from the plan when there is one. */
 export function templateUsd(t: StudioTemplate, plan: StudioPlan | null): number {
 	if (!plan) return PIPELINE_USD[t.pipeline];

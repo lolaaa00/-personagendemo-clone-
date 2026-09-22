@@ -44,7 +44,6 @@
 		formatFromRequest,
 		requestFor,
 		planPipeline,
-		planTotalUsd,
 		craftMatters,
 		buildableWith,
 		MIN_ITEMS,
@@ -57,7 +56,7 @@
 		type StepKind,
 		type StepModel
 	} from '$lib/formats';
-	import { quote, pricingContext } from '$lib/stores/pricing.svelte';
+	import { quote, quoteSteps, pricingContext } from '$lib/stores/pricing.svelte';
 	import {
 		parseQuotes,
 		quoteProblem,
@@ -372,7 +371,12 @@
 				})
 			: []
 	);
-	let planUsd = $derived(planTotalUsd(activePlan));
+	/** The run's price rounded per stage, as the ledger debits — see quoteSteps(). */
+	let planPrice = $derived(
+		// "Let the Director choose" is quoted at its dearer outcome (formats.ts),
+		// so it reads as a ceiling, not a price.
+		(isPostKind && formatId === 'auto' ? 'up to ' : '') + quoteSteps(activePlan.map((s) => s.usd))
+	);
 	/**
 	 * A format whose run is a transformation OF something has nothing to
 	 * transform until that something is here. Blocking the submit is the whole
@@ -439,12 +443,14 @@
 			};
 		if (!hasConnections)
 			return {
-				label: 'Save as draft',
+				// A paid run must never be labelled like a free save (round-2 re-audit:
+				// a spend button read "Save as draft", and a critic's stop-list missed it).
+				label: 'Approve & generate draft',
 				hint: 'Output: draft — no account is connected, so nothing can publish.'
 			};
 		if (selectablePlatforms.length === 0)
 			return {
-				label: 'Save as draft',
+				label: 'Approve & generate draft',
 				hint: 'Output: draft — no platform can take this post, so nothing publishes.'
 			};
 		// A date the user picked is an attended publish: generate-post writes a
@@ -1209,7 +1215,7 @@
 							<span class="fld-label" id="gc-format-label">Format</span>
 							<div class="formats" role="radiogroup" aria-labelledby="gc-format-label">
 								{#each formatsOfKind(kind).filter(buildable) as f (f.id)}
-									{@const cost = planTotalUsd(
+									{@const costSteps = (
 										planPipeline({
 											formatId: f.id,
 											options: planOptions,
@@ -1220,7 +1226,7 @@
 											seconds: sourceSeconds ?? undefined,
 											items: listCount
 										})
-									)}
+									).map((st) => st.usd)}
 									{@const planLocked = f.id === 'cinematic' && cinematicBlocked !== null}
 									<button
 										type="button"
@@ -1236,7 +1242,7 @@
 											<span class="fmt-name"
 												>{f.label}{planLocked ? ' — not in your plan' : ''}</span
 											>
-											<span class="fmt-cost">{f.steps.length ? money(cost) : 'varies'}</span>
+											<span class="fmt-cost">{f.steps.length ? quoteSteps(costSteps) : 'varies'}</span>
 										</span>
 										<span class="fmt-note">{f.note}</span>
 									</button>
@@ -1978,7 +1984,7 @@
 								<div class="sumrow">
 									<dt>{costLabel}</dt>
 									<dd>
-										<strong>{money(planUsd)}</strong>
+										<strong>{planPrice}</strong>
 										{ownWords
 											? ' — no model runs, so nothing is charged'
 											: !metered
@@ -2056,7 +2062,8 @@
 								</strong>
 								<p>
 									This post can't be scheduled to publish — there's nowhere to send it yet. Connect
-									a platform first, then it can go out. You can still save it as a draft below.
+									a platform first, then it can go out. You can still generate it as a draft below —
+									that is a paid generation, at the price shown.
 								</p>
 								{#if onGoToConnections}
 									<button type="button" class="no-conn-cta" onclick={onGoToConnections}>
@@ -2128,7 +2135,7 @@
 		{#if preview}
 			<span class="foot-cost" aria-live="polite">
 				<span class="foot-cost-label">{costLabel}</span>
-				<strong>{money(isPostKind ? planUsd : liveCost)}</strong>
+				<strong>{isPostKind ? planPrice : money(liveCost)}</strong>
 			</span>
 		{/if}
 		{#if isFirstStep}
@@ -2314,7 +2321,7 @@
 		cursor: pointer;
 	}
 	.seg.on {
-		background: var(--accent);
+		background: var(--accent-dark);
 		color: #fff;
 		font-weight: 600;
 	}
@@ -2565,7 +2572,7 @@
 	.comp-note svg {
 		flex-shrink: 0;
 		margin-top: 2px;
-		color: var(--accent);
+		color: var(--accent-text);
 	}
 	.comp-note strong {
 		color: var(--text);
@@ -2633,8 +2640,8 @@
 		text-transform: capitalize;
 	}
 	.chip.on {
-		background: var(--accent);
-		border-color: var(--accent);
+		background: var(--accent-dark);
+		border-color: var(--accent-dark);
 		color: #fff;
 	}
 	.hint {
@@ -2815,7 +2822,7 @@
 	.dest-note svg {
 		flex: none;
 		margin-top: 2px;
-		color: var(--accent);
+		color: var(--accent-text);
 	}
 	.meta {
 		display: flex;
@@ -2847,8 +2854,8 @@
 		color: var(--text);
 	}
 	.btn-primary {
-		background: var(--accent);
-		border: 1px solid var(--accent);
+		background: var(--accent-dark);
+		border: 1px solid var(--accent-dark);
 		color: #fff;
 	}
 	.btn-primary:disabled {
@@ -3133,8 +3140,8 @@
 	}
 
 	.journey-step.current .journey-dot {
-		border-color: var(--accent);
-		background: var(--accent);
+		border-color: var(--accent-dark);
+		background: var(--accent-dark);
 		color: #fff;
 	}
 
@@ -3144,7 +3151,7 @@
 
 	.journey-step.done .journey-dot {
 		border-color: var(--accent);
-		color: var(--accent);
+		color: var(--accent-text);
 		background: color-mix(in srgb, var(--accent) 14%, transparent);
 	}
 

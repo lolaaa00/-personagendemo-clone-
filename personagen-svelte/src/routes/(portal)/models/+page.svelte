@@ -1097,7 +1097,7 @@
 		border-radius: 10px;
 		border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
 		background: var(--accent-soft);
-		color: var(--accent);
+		color: var(--accent-text);
 		font-family: inherit;
 		font-size: 0.84rem;
 		font-weight: 700;
@@ -1184,7 +1184,7 @@
 
 	.mm-tab.active {
 		background: var(--accent-soft);
-		color: var(--accent);
+		color: var(--accent-text);
 	}
 
 	.mm-tab-count {
@@ -1402,7 +1402,7 @@
 	}
 
 	.mm-host[data-host='openrouter'] {
-		color: var(--accent);
+		color: var(--accent-text);
 		border-color: color-mix(in srgb, var(--accent) 45%, transparent);
 	}
 
@@ -1478,7 +1478,7 @@
 	.mm-swap-btn {
 		border: 1px solid var(--accent-mid, var(--border));
 		background: var(--accent-soft, transparent);
-		color: var(--accent);
+		color: var(--accent-text);
 		border-radius: 8px;
 		padding: 0.45rem 0.8rem;
 		font-size: 0.8rem;
@@ -1489,7 +1489,7 @@
 	}
 
 	.mm-swap-btn:hover:not(:disabled) {
-		background: var(--accent);
+		background: var(--accent-dark);
 		color: #fff;
 	}
 
@@ -1547,7 +1547,7 @@
 	.mm-edit-btn.editing {
 		background: var(--accent-soft);
 		border-color: var(--accent-mid);
-		color: var(--accent);
+		color: var(--accent-text);
 	}
 
 	.mm-edit-btn:focus-visible {
@@ -1561,7 +1561,7 @@
 	}
 	.pill.age.age-recent {
 		background: var(--accent-soft);
-		color: var(--accent);
+		color: var(--accent-text);
 	}
 	.pill.age.age-aging {
 		background: var(--surface-2);
@@ -1598,7 +1598,7 @@
 		text-transform: uppercase;
 	}
 	.pill-tier[data-tier='premium'] {
-		color: var(--accent);
+		color: var(--accent-text);
 		border-color: color-mix(in srgb, var(--accent) 35%, transparent);
 	}
 
@@ -1964,7 +1964,7 @@
 	}
 
 	.mm-probe-btn:hover:not(:disabled) {
-		color: var(--accent);
+		color: var(--accent-text);
 		border-color: color-mix(in srgb, var(--accent) 40%, transparent);
 	}
 

@@ -96,8 +96,23 @@ export function rawUsdFor(kind: OutcomeKind): number {
  * "What does this buy?" — so the page can say "≈ 40 image posts or 8 video
  * posts" instead of a number. Text cards are $0 and never counted.
  */
-export function whatItBuys(credits: number, markup: number) {
-	const per = (k: OutcomeKind) => Math.max(1, retailCreditsFor(k, markup));
+export function whatItBuys(
+	credits: number,
+	markup: number,
+	/**
+	 * Per-stage USD from the live registry (server/outcome-prices.ts). When
+	 * given, it replaces the static table for that outcome — the table priced a
+	 * video post at $1.58 that the composer never charged (round-2 re-audit).
+	 */
+	liveSteps?: Partial<Record<'imagePost' | 'videoPost' | 'talkingHead', number[]>>
+) {
+	const per = (k: OutcomeKind) => {
+		const steps = (liveSteps as Partial<Record<OutcomeKind, number[]>> | undefined)?.[k];
+		const credits = steps
+			? steps.reduce((s, usd) => s + retailCreditsForStep(usd, markup), 0)
+			: retailCreditsFor(k, markup);
+		return Math.max(1, credits);
+	};
 	const c = Math.max(0, Number(credits) || 0);
 	return {
 		imagePosts: Math.floor(c / per('imagePost')),

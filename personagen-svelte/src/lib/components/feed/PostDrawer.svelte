@@ -21,6 +21,8 @@
 	import { dialog } from '$lib/actions/dialog';
 	import { confirmAction } from '$lib/stores/confirm.svelte';
 	import { postPreview } from '$lib/confirm-preview';
+	import { page } from '$app/stores';
+	import { instantDateTime, slotDateTime } from '$lib/datetime';
 
 	/** Full-screen zoom of the post image (video already has native fullscreen). */
 	let zoomOpen = $state(false);
@@ -93,6 +95,48 @@
 		deleting?: boolean;
 		posting?: boolean;
 	} = $props();
+	/** The viewer's seat, from the portal layout. Absent = full access (never-brick). */
+	let seatCannotGenerate = $derived(
+		($page.data as { seat?: { canCreate?: boolean } }).seat?.canCreate === false
+	);
+	let seatLabel = $derived(($page.data as { seat?: { label?: string } }).seat?.label ?? 'current');
+	let seatCannotPublish = $derived(
+		($page.data as { seat?: { canPublish?: boolean } }).seat?.canPublish === false
+	);
+
+	/**
+	 * "Report this problem": the failure copy said "tell us" and there was no
+	 * way to. Files a private ticket the operator sees in Admin; one per post.
+	 */
+	let reportState = $state<'idle' | 'sending' | 'sent' | 'error'>('idle');
+	let reportError = $state('');
+	let reportedFor = $state<string | null>(null);
+	$effect(() => {
+		// A different post in the same drawer starts fresh.
+		if (post?.id !== reportedFor) {
+			reportState = 'idle';
+			reportError = '';
+		}
+	});
+	async function reportProblem() {
+		if (!post?.id || reportState === 'sending') return;
+		reportState = 'sending';
+		reportError = '';
+		try {
+			const res = await fetch('/api/support/report-failure', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ postId: post.id })
+			});
+			const data = await res.json().catch(() => ({}));
+			if (!res.ok || !data?.success) throw new Error(data?.error || 'The report could not be sent.');
+			reportedFor = post.id;
+			reportState = 'sent';
+		} catch (e) {
+			reportError = (e as Error).message;
+			reportState = 'error';
+		}
+	}
 
 	// ── Caption editing (available at any status — drafts through published) ──
 	let editingText = $state(false);
@@ -542,17 +586,11 @@
 	// hues measure 2.77-4.08:1 on a light surface.
 	const statusColor = postStatusText;
 
+	/** The Review Queue's and the calendar's form ($lib/datetime) — it was a third one. */
 	function formatPostDate(p: any): string {
-		const d =
-			p.published_at ||
-			(p.scheduled_date ? `${p.scheduled_date}T${p.scheduled_time || '10:00:00'}` : null);
-		if (!d) return 'Recently';
-		return new Date(d).toLocaleString(undefined, {
-			month: 'short',
-			day: 'numeric',
-			hour: '2-digit',
-			minute: '2-digit'
-		});
+		if (p.published_at) return instantDateTime(p.published_at) || 'Recently';
+		if (p.scheduled_date) return slotDateTime(p.scheduled_date, p.scheduled_time || '10:00:00');
+		return 'Recently';
 	}
 
 	// ── Delete ────────────────────────────────────────────────────────
@@ -595,6 +633,25 @@
 	// Escape, the focus trap and the background scroll lock all come from
 	// `use:dialog` — this drawer declares aria-modal, so it must honour it.
 </script>
+{#snippet reportAction()}
+	{#if reportState === 'sent'}
+		<span class="drawer-report-note" role="status">Reported — it is in our queue with this post attached. Nothing else to do.</span>
+	{:else}
+		<button
+			type="button"
+			class="drawer-report"
+			onclick={reportProblem}
+			disabled={reportState === 'sending'}
+			aria-busy={reportState === 'sending'}
+		>
+			{reportState === 'sending' ? 'Sending…' : 'Report this problem'}
+		</button>
+		{#if reportState === 'error'}
+			<span class="drawer-report-note" role="alert">{reportError}</span>
+		{/if}
+	{/if}
+{/snippet}
+
 
 {#if post && display}
 	<div
@@ -832,7 +889,13 @@
 					>
 					<p>{summarizeGenError(post)}</p>
 					<div class="drawer-error-actions">
-						{#if onRetry}
+						{#if seatCannotGenerate}
+							<!-- A seat that cannot generate got a link that opened Studio and did
+							     nothing (re-audit, viewer). Say why instead. -->
+							<span class="drawer-retry-blocked">
+								Retry needs a Creator seat or above — your {seatLabel} seat can view but not generate.
+							</span>
+						{:else if onRetry}
 							<button type="button" class="drawer-retry" onclick={() => onRetry?.(post)}>
 								Retry this post
 							</button>
@@ -845,6 +908,7 @@
 							</a>
 						{/if}
 						<a class="drawer-help" href="{resolve('/(portal)/guides')}#generation-failing">What went wrong?</a>
+						{@render reportAction()}
 					</div>
 				</div>
 			{/if}
@@ -861,7 +925,25 @@
 					>
 					<p>{getPostErrorSummary(post) ?? 'The platform did not say why.'}</p>
 					<div class="drawer-error-actions">
+						{#if !onPublishFallback && post.status === 'failed' && post.agent_id}
+							<!-- /generations and the calendar offered only the guide and Trash
+							     while the guide said to publish again. The persona page owns the
+							     platform picker; this opens it there. -->
+							{#if seatCannotPublish}
+								<span class="drawer-retry-blocked">
+									Publishing needs a Manager seat or above — your {seatLabel} seat cannot send it again.
+								</span>
+							{:else}
+								<a
+									class="drawer-retry"
+									href="{resolve('/(portal)/personas/[agentId]', { agentId: post.agent_id })}?republish={post.id}"
+								>
+									Publish to a connected platform
+								</a>
+							{/if}
+						{/if}
 						<a class="drawer-help" href="{resolve('/(portal)/guides')}#publish-failing">What went wrong?</a>
+						{@render reportAction()}
 					</div>
 				</div>
 			{/if}
@@ -1620,7 +1702,7 @@
 		cursor: pointer;
 	}
 	.dt-save {
-		background: var(--accent);
+		background: var(--accent-dark);
 		border-color: transparent;
 		color: #fff;
 	}
@@ -2224,7 +2306,7 @@
 		color: var(--accent-text);
 	}
 	.btn-drawer-refine:hover:not(:disabled) {
-		background: var(--accent);
+		background: var(--accent-dark);
 		color: #fff;
 	}
 
@@ -2288,6 +2370,35 @@
 		gap: var(--space-3);
 		margin-top: var(--space-3);
 	}
+	.drawer-report {
+		font: inherit;
+		font-size: 0.8rem;
+		font-weight: 600;
+		min-height: 32px;
+		padding: 0.3rem 0.7rem;
+		border-radius: 8px;
+		border: 1px solid var(--border-strong);
+		background: var(--surface);
+		color: var(--text);
+		cursor: pointer;
+	}
+	.drawer-report:disabled {
+		cursor: progress;
+		opacity: 0.7;
+	}
+	.drawer-report-note {
+		flex-basis: 100%;
+		font-size: 0.78rem;
+		line-height: 1.4;
+		color: var(--text-muted);
+	}
+
+	.drawer-retry-blocked {
+		font-size: 0.8rem;
+		line-height: 1.4;
+		color: var(--text-muted);
+	}
+
 	.drawer-retry {
 		display: inline-flex;
 		align-items: center;

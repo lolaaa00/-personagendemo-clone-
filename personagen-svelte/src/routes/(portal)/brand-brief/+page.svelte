@@ -1421,7 +1421,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 				"
 				>
 					<h3
-						style="margin: 0 0 0.75rem 0; font-size: 0.85rem; font-weight: 700; color: var(--accent); display: flex; align-items: center; gap: 0.4rem;"
+						style="margin: 0 0 0.75rem 0; font-size: 0.85rem; font-weight: 700; color: var(--accent-text); display: flex; align-items: center; gap: 0.4rem;"
 					>
 						<svg
 							width="14"
@@ -1484,7 +1484,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 						{scrapingProduct ? 'Scraping product page. Please wait.' : ''}
 					</p>
 					<h3
-						style="margin: 0 0 0.75rem 0; font-size: 0.85rem; font-weight: 700; color: var(--accent); display: flex; align-items: center; gap: 0.4rem;"
+						style="margin: 0 0 0.75rem 0; font-size: 0.85rem; font-weight: 700; color: var(--accent-text); display: flex; align-items: center; gap: 0.4rem;"
 					>
 						<svg
 							width="14"
@@ -1559,7 +1559,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 						/>
 					</div>
 					<button
-						style="margin-top: 0.75rem; padding: 0.5rem 1.25rem; min-height: 44px; border-radius: 8px; background: var(--accent); color: #fff; border: none; font-size: 0.82rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 0.4rem; transition: all 0.2s;"
+						style="margin-top: 0.75rem; padding: 0.5rem 1.25rem; min-height: 44px; border-radius: 8px; background: var(--accent-dark); color: #fff; border: none; font-size: 0.82rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 0.4rem; transition: all 0.2s;"
 						onclick={addManualProduct}
 						disabled={!newProductName.trim()}
 					>
@@ -2707,7 +2707,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		align-items: center;
 		gap: 4px;
 		min-height: 44px;
-		color: var(--accent);
+		color: var(--accent-text);
 		text-decoration: none;
 		font-weight: 600;
 	}
@@ -2763,7 +2763,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		cursor: not-allowed;
 	}
 	.mini-btn.primary {
-		background: var(--accent);
+		background: var(--accent-dark);
 		border-color: transparent;
 		color: #fff;
 	}
@@ -3165,7 +3165,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 	.wizard-launch:hover {
 		border-color: var(--accent-mid);
 		background: var(--accent-soft);
-		color: var(--accent);
+		color: var(--accent-text);
 	}
 	.wizard-launch .launch-arrow {
 		opacity: 0.6;
@@ -3196,7 +3196,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		color: var(--text-muted);
 	}
 	.tab-btn.active {
-		color: var(--accent);
+		color: var(--accent-text);
 		border-bottom-color: var(--accent);
 	}
 
@@ -3367,7 +3367,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		border-radius: var(--radius-full);
 		background: var(--accent-soft);
 		border: 1px solid var(--accent-mid);
-		color: var(--accent);
+		color: var(--accent-text);
 		font-size: 0.75rem;
 		font-weight: 600;
 	}
@@ -3377,7 +3377,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		background: none;
 		border: none;
 		cursor: pointer;
-		color: var(--accent);
+		color: var(--accent-text);
 		padding: 0;
 		opacity: 0.6;
 		transition: opacity 0.2s;
@@ -3416,7 +3416,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		border-radius: var(--radius-xs);
 		background: var(--accent-soft);
 		border: 1px solid var(--accent-mid);
-		color: var(--accent);
+		color: var(--accent-text);
 		font-size: 0.75rem;
 		cursor: pointer;
 		font-family: var(--font-body);
@@ -3467,7 +3467,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		color: var(--text-muted);
 	}
 	.radio-card.selected .radio-label {
-		color: var(--accent);
+		color: var(--accent-text);
 	}
 
 	/* Preview */
@@ -3583,7 +3583,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 	}
 	.comp-num {
 		font-size: var(--text-xs);
-		color: var(--accent);
+		color: var(--accent-text);
 		font-family: var(--font-mono);
 		font-weight: 700;
 	}
@@ -3649,7 +3649,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 	}
 	.add-comp-btn:hover {
 		border-color: var(--accent-mid);
-		color: var(--accent);
+		color: var(--accent-text);
 		background: var(--accent-soft);
 	}
 
@@ -3756,7 +3756,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 		gap: 4px;
 		background: var(--accent-soft);
 		border: 1px solid var(--accent-mid);
-		color: var(--accent);
+		color: var(--accent-text);
 		border-radius: var(--radius-full);
 		padding: 3px 10px;
 		min-height: 28px;
@@ -3835,7 +3835,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 	.spin-idx {
 		font-size: 0.65rem;
 		font-weight: 800;
-		color: var(--accent);
+		color: var(--accent-text);
 		min-width: 14px;
 		padding-top: 1px;
 	}

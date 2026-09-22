@@ -2,6 +2,7 @@
 	import StatusBadge from './StatusBadge.svelte';
 	import SelectionToolbar from '$lib/components/ui/SelectionToolbar.svelte';
 	import { goto, invalidateAll } from '$app/navigation';
+	import { tick } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { showToast } from '$lib/stores/ui.svelte';
 	import { confirmAction } from '$lib/stores/confirm.svelte';
@@ -42,12 +43,27 @@
 	let toggleBlocked = $derived(seatBlockedReason(seat, 'creator'));
 	/** Deleting a persona outright is owner-only on the server. */
 	let deleteBlocked = $derived(seatBlockedReason(seat, 'owner'));
+	/**
+	 * The seat's limits as VISIBLE text. The reason used to live only in the
+	 * `title` of a disabled switch — no pointer-free way to read it, and nothing
+	 * on screen said why a control did nothing. The switches and delete buttons
+	 * point at this with aria-describedby.
+	 */
+	let seatNote = $derived(
+		toggleBlocked
+			? `Your ${seat?.label ?? 'current'} seat can see these personas but can't switch them on or off (that needs Creator or above) or delete them (Owner only). Ask a workspace admin to change your seat.`
+			: deleteBlocked
+				? `Only the workspace owner can delete a persona — your ${seat?.label ?? 'current'} seat can switch them on and off.`
+				: null
+	);
 
 	/** Gen Spend read "$0.00 (0)" on every row for any account whose generations
 	 *  predate metering, spending a column of horizontal budget on a cell that
 	 *  cannot carry a value. Same rule as the review queue's QC column: a column
 	 *  with nothing in it for any row is not rendered, and returns by itself. */
 	let hasSpend = $derived(agents.some((a: any) => (a.total_token_cost ?? 0) > 0));
+	/** Column count, for the empty state's single spanning cell. */
+	let columnCount = $derived(hasSpend ? 8 : 7);
 
 	type FilterType = 'all' | 'active' | 'paused' | 'pending' | 'top';
 
@@ -259,6 +275,7 @@
 			showToast(`${agent.name} is now ${status}`, 'success');
 			// Every other surface that shows this persona's state reads server data.
 			await invalidateAll();
+			await restoreSwitchFocus(agent.id);
 		} catch (err: any) {
 			console.error('[AgentRoster] Failed to toggle status in DB:', err);
 			showToast(err.message || 'Failed to sync status with database', 'error');
@@ -272,6 +289,22 @@
 		}
 	}
 
+	/**
+	 * The switch stays focusable while its request is in flight (aria-disabled,
+	 * not `disabled`: disabling the focused button dropped keyboard focus to
+	 * <body> in every browser, so a second Space — the natural undo — went
+	 * nowhere). If the reload removed the row (e.g. pausing under the "Active"
+	 * filter), focus lands on the roster rather than the top of the document.
+	 */
+	let rosterEl = $state<HTMLElement | null>(null);
+	async function restoreSwitchFocus(agentId: string) {
+		await tick();
+		const active = document.activeElement;
+		if (active && active !== document.body) return;
+		const sw = rosterEl?.querySelector<HTMLElement>(`[data-toggle-for="${agentId}"]`);
+		(sw ?? rosterEl)?.focus();
+	}
+
 	function formatTokens(tokens: number): string {
 		if (tokens >= 1000000) return (tokens / 1000000).toFixed(1) + 'M';
 		if (tokens >= 1000) return (tokens / 1000).toFixed(1) + 'K';
@@ -282,13 +315,15 @@
 <div class="dash-table-wrap">
 	<div class="dash-table-header">
 		<h3>Your Personas</h3>
-		<div class="dash-table-filters" role="tablist" aria-label="Filter personas">
+		<!-- A group of pressed-state buttons. It was role="tablist" with no tabpanel
+		     and no arrow keys — the same fake tablist the Admin page dropped. -->
+		<div class="dash-table-filters" role="group" aria-label="Filter personas">
 			{#each filters as filter}
 				<button
+					type="button"
 					class="dash-filter"
 					class:active={currentFilter === filter.value}
-					role="tab"
-					aria-selected={currentFilter === filter.value}
+					aria-pressed={currentFilter === filter.value}
 					onclick={() => (currentFilter = filter.value)}
 				>
 					{filter.label}
@@ -297,15 +332,23 @@
 		</div>
 	</div>
 
-	<SelectionToolbar
-		total={filteredAgents.length}
-		selectedCount={selectedVisible.length}
-		noun="persona"
-		busy={deleting}
-		onSelectAll={selectAllVisible}
-		onClear={clearSelection}
-		onDelete={() => void requestDelete(selectedVisible.slice())}
-	/>
+	{#if seatNote}
+		<p class="roster-seat-note" id="roster-seat-note">{seatNote}</p>
+	{/if}
+
+	<!-- Selection exists only to bulk-delete, which is owner-only on the server:
+	     a seat that cannot delete is not offered checkboxes that lead to a 403. -->
+	{#if !deleteBlocked}
+		<SelectionToolbar
+			total={filteredAgents.length}
+			selectedCount={selectedVisible.length}
+			noun="persona"
+			busy={deleting}
+			onSelectAll={selectAllVisible}
+			onClear={clearSelection}
+			onDelete={() => void requestDelete(selectedVisible.slice())}
+		/>
+	{/if}
 
 	<!-- A real, consistent ARIA table (audit A11Y-002). The previous version made
 	     each row a role="link" with the checkbox, switch and delete button nested
@@ -314,18 +357,22 @@
 	     select-all checkbox inside an aria-hidden header. Now: table > row >
 	     columnheader/cell throughout, so a screen reader announces each value with
 	     its column, and the persona's NAME is the link. -->
-	<div class="dash-table" role="table" aria-label="Persona roster">
+	<div class="dash-table" role="table" aria-label="Persona roster" tabindex="-1" bind:this={rosterEl}>
 		<div class="dash-row row-header" class:no-spend={!hasSpend} role="row">
 			<span class="pick-cell" role="columnheader">
-				<input
-					type="checkbox"
-					class="pick-box"
-					aria-label="Select all personas in view"
-					checked={allVisibleSelected}
-					indeterminate={selectedVisible.length > 0 && !allVisibleSelected}
-					disabled={filteredAgents.length === 0 || deleting}
-					onchange={() => (allVisibleSelected ? clearSelection() : selectAllVisible())}
-				/>
+				{#if !deleteBlocked}
+					<input
+						type="checkbox"
+						class="pick-box pick-all"
+						aria-label="Select all personas in view"
+						checked={allVisibleSelected}
+						indeterminate={selectedVisible.length > 0 && !allVisibleSelected}
+						disabled={filteredAgents.length === 0 || deleting}
+						onchange={() => (allVisibleSelected ? clearSelection() : selectAllVisible())}
+					/>
+				{:else}
+					<span class="sr-only">Select</span>
+				{/if}
 			</span>
 			<span role="columnheader">Persona</span>
 			<span role="columnheader">Followers</span>
@@ -358,16 +405,18 @@
 				<!-- The cell is a span; the label inside it keeps the whole hit area
 				     clickable. A role on the <label> itself is not a valid pairing. -->
 				<span class="pick-cell pick-select" role="cell">
-					<label class="pick-hit" title="Select {agent.name}">
-						<input
-							type="checkbox"
-							class="pick-box"
-							aria-label="Select {agent.name}"
-							checked={selected.has(agent.id)}
-							disabled={deleting}
-							onchange={() => toggleSelect(agent.id)}
-						/>
-					</label>
+					{#if !deleteBlocked}
+						<label class="pick-hit" title="Select {agent.name}">
+							<input
+								type="checkbox"
+								class="pick-box"
+								aria-label="Select {agent.name}"
+								checked={selected.has(agent.id)}
+								disabled={deleting}
+								onchange={() => toggleSelect(agent.id)}
+							/>
+						</label>
+					{/if}
 				</span>
 				<div class="dash-agent-cell" role="cell">
 					<div
@@ -375,7 +424,8 @@
 						style={agent.ugc_character_ref ? '' : `background: ${agent.gradient}`}
 					>
 						{#if agent.ugc_character_ref}
-							<img src={agent.ugc_character_ref} alt={agent.name} />
+							<!-- decorative: the name link beside it already says who this is -->
+							<img src={agent.ugc_character_ref} alt="" />
 						{:else}
 							{agent.initial}
 						{/if}
@@ -418,8 +468,15 @@
 					</div>
 				</div>
 				<span class="dash-cell" role="cell"><span class="cell-label" aria-hidden="true">Followers</span>{agent.followers}</span>
-				<span class="dash-cell {engagementClass(agent.engagementRate)}" role="cell">
-					<span class="cell-label" aria-hidden="true">Engagement</span>{agent.engagementRate}%
+				<!-- Only a MEASURED rate (published posts with stats); a stored figure on
+				     a persona that has published nothing is not engagement. -->
+				<span
+					class="dash-cell {agent.hasMetrics ? engagementClass(agent.engagementRate) : ''}"
+					role="cell"
+				>
+					<span class="cell-label" aria-hidden="true">Engagement</span>{agent.hasMetrics
+						? `${agent.engagementRate}%`
+						: '—'}
 				</span>
 				<!-- total_token_cost is the ledger's PROVIDER spend. The wallet was debited
 				     at the platform markup, so rendering the raw figure with a `$` showed
@@ -461,14 +518,18 @@
 						     flips with state ("Pause X", on) makes a screen reader announce the
 						     action and the state together, and hides the visible column label
 						     "Active" (WCAG 2.5.3). -->
+						<!-- aria-disabled, never `disabled`: see restoreSwitchFocus(). A blocked
+						     seat can still reach the switch and hear why via the seat note. -->
 						<button
 							type="button"
 							class="toggle"
 							role="switch"
+							data-toggle-for={agent.id}
 							aria-checked={isActive(agent)}
 							aria-label="Active: {agent.name}"
 							aria-busy={togglingIds[agent.id] ? 'true' : undefined}
-							disabled={!!toggleBlocked || !!togglingIds[agent.id]}
+							aria-disabled={toggleBlocked || togglingIds[agent.id] ? 'true' : undefined}
+							aria-describedby={toggleBlocked ? 'roster-seat-note' : undefined}
 							title={toggleBlocked ??
 								`${isActive(agent) ? 'Pause' : 'Activate'} ${agent.name} — an active persona generates and spends`}
 							onclick={(e) => {
@@ -486,6 +547,7 @@
 						type="button"
 						class="row-del"
 						aria-label="Delete {agent.name}"
+						aria-describedby={deleteBlocked ? 'roster-seat-note' : undefined}
 						title={agent.is_overseer
 							? 'The Hermes overseer is protected and cannot be deleted'
 							: (deleteBlocked ?? `Delete ${agent.name}`)}
@@ -515,8 +577,9 @@
 		{/each}
 
 		{#if filteredAgents.length === 0}
-			<div class="dash-empty">
-				<p>No personas match this filter.</p>
+			<!-- Inside role="table" every child must be a row. -->
+			<div class="dash-empty" role="row">
+				<span role="cell" aria-colspan={columnCount}>No personas match this filter.</span>
 			</div>
 		{/if}
 	</div>
@@ -596,6 +659,23 @@
 	.dash-table {
 		container-type: inline-size;
 		container-name: roster;
+	}
+	/* Programmatic focus target (restoreSwitchFocus): a ring for keyboard users. */
+	.dash-table:focus-visible {
+		outline: 2px solid var(--focus-ring);
+		outline-offset: 2px;
+	}
+
+	.roster-seat-note {
+		margin: 0 0 0.9rem;
+		padding: 0.6rem 0.8rem;
+		border: 1px solid var(--border);
+		border-left: 3px solid var(--text-dim);
+		border-radius: var(--radius-xs);
+		background: var(--surface-2);
+		color: var(--text-muted);
+		font-size: 0.8rem;
+		line-height: 1.45;
 	}
 
 	/* minmax(0, …) on every flexible track. A bare `fr` track's minimum is its
@@ -929,32 +1009,68 @@
 		transform: translate(-50%, -50%);
 	}
 
+	/* OFF used to be a 15%-alpha grey track (1.37:1 against the card) under a
+	   white thumb (1.00:1) — on screen, a bare white dot. WCAG 1.4.11 wants the
+	   parts that identify a control and its state at 3:1. OFF is now an outlined
+	   track with a solid dim thumb (6.3:1 light, 5.0:1 dark); ON is the filled
+	   accent track with a white thumb, so the two states differ in shape and
+	   fill, not in colour alone. */
 	.toggle-track {
 		position: absolute;
 		inset: 0;
 		border-radius: 10px;
-		background: var(--border-strong);
-		transition: background 0.2s;
+		background: var(--surface);
+		box-shadow: inset 0 0 0 1.5px var(--text-dim);
+		transition:
+			background 0.2s,
+			box-shadow 0.2s;
 	}
 
 	.toggle[aria-checked='true'] .toggle-track {
 		background: var(--accent);
+		box-shadow: none;
 	}
 
 	.toggle-thumb {
 		position: absolute;
+		left: 4px;
+		top: 4px;
+		width: 12px;
+		height: 12px;
+		border-radius: 50%;
+		background: var(--text-dim);
+		transition:
+			transform 0.2s,
+			background 0.2s,
+			width 0.2s,
+			height 0.2s,
+			left 0.2s,
+			top 0.2s;
+	}
+
+	.toggle[aria-checked='true'] .toggle-thumb {
 		left: 2px;
 		top: 2px;
 		width: 16px;
 		height: 16px;
-		border-radius: 50%;
 		background: #fff;
-		transition: transform 0.2s;
 		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+		transform: translateX(16px);
 	}
 
-	.toggle[aria-checked='true'] .toggle-thumb {
-		transform: translateX(16px);
+	.toggle[aria-busy='true'] {
+		cursor: progress;
+	}
+	.toggle[aria-disabled='true']:not([aria-busy='true']) {
+		cursor: not-allowed;
+		opacity: 0.55;
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.toggle-track,
+		.toggle-thumb {
+			transition: none;
+		}
 	}
 
 	/* Connect CTA */
@@ -992,6 +1108,7 @@
 	}
 
 	.dash-empty {
+		display: block;
 		padding: 2rem;
 		text-align: center;
 		color: var(--text-dim);
@@ -1000,9 +1117,16 @@
 
 	@container roster (max-width: 720px) {
 		/* Stacked card: checkbox / agent / delete on the first line, labelled
-		   metrics underneath the agent cell. */
-		.dash-row {
-			grid-template-columns: 30px 1fr 34px;
+		   metrics underneath the agent cell.
+
+		   BOTH selectors, deliberately. A container query adds no specificity,
+		   so a lone `.dash-row` here lost to `.dash-row.no-spend` (two classes)
+		   above: every workspace without spend kept the seven-track desktop grid
+		   inside the card, and a re-audit measured persona names 0px wide at
+		   320–390px. roster-layout.spec.ts holds this. */
+		.dash-row,
+		.dash-row.no-spend {
+			grid-template-columns: 30px minmax(0, 1fr) 34px;
 			gap: 0.4rem 0.5rem;
 			padding: 0.75rem 0.5rem;
 		}
@@ -1028,8 +1152,7 @@
 
 		/* Visually hidden, NOT display:none: the column headers must stay in the
 		   accessibility tree, or a screen reader loses which value is which in
-		   exactly the layout where the labels are no longer lined up. The
-		   select-all checkbox moves with it, so it stays reachable. */
+		   exactly the layout where the labels are no longer lined up. */
 		.dash-row.row-header {
 			position: absolute;
 			width: 1px;
@@ -1054,6 +1177,13 @@
 			min-width: 6.5rem;
 			color: var(--text-dim);
 			font-weight: 600;
+		}
+
+		/* The select-all box would be a Tab stop inside a 1px clipped header —
+		   focus you cannot see (2.4.7). The toolbar's visible "Select all" button
+		   does the same job in this layout. */
+		.row-header .pick-all {
+			visibility: hidden;
 		}
 	}
 

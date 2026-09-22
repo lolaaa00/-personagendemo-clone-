@@ -533,8 +533,8 @@
 		cursor: pointer;
 	}
 	.dev-btn.primary {
-		background: var(--accent);
-		border-color: var(--accent);
+		background: var(--accent-dark);
+		border-color: var(--accent-dark);
 		color: #fff;
 	}
 	.dev-btn:disabled {

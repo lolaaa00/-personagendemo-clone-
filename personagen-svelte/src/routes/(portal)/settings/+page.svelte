@@ -1387,7 +1387,12 @@
 					</div>
 					<div class="avatar-info">
 						<span class="avatar-name">{profileName}</span>
-						<span class="avatar-role">Account Owner</span>
+						<!-- The seat this account actually holds: every seat read "Account Owner". -->
+						<span class="avatar-role"
+							>{seatIsMember
+								? `${(data as { seat?: { label?: string } }).seat?.label ?? 'Member'} seat`
+								: 'Account owner'}</span
+						>
 					</div>
 				</div>
 				<div class="field">
@@ -1775,6 +1780,15 @@
 												</p>
 											{/if}
 											<p class="key-desc">{config.description}</p>
+										{#if config.provider === 'zernio' && seatIsMember}
+											<!-- A seat saw "Not set" and a Save button with nothing saying the
+											     workspace's personas already publish through the OWNER's key. -->
+											<p class="key-seat-note">
+												<strong>Not needed for your workspace's personas</strong> — they publish through
+												the workspace owner's Zernio key. Set one here only for personas you run outside
+												the workspace.
+											</p>
+										{/if}
 
 										<p class="key-help">
 											<!-- Opens the guide itself (#id). The old ?provider= link only narrowed
@@ -1895,10 +1909,15 @@
 								<span class="key-category-count">{includedProviders.length}</span>
 							</div>
 							<span class="key-category-blurb">
-								Images, video, writing and research all run on our keys and are charged to your
-								balance, so every post is priced the same way. There is nothing to set up here —
-								the one key that is yours to bring is Zernio, above, because it owns your
-								publishing.
+								Images, video, writing and research all run on our keys and are charged to the
+								paying wallet, so every post is priced the same way. There is nothing to set up
+								here.
+								{#if seatIsMember}
+									Publishing for your workspace's personas runs on the owner's Zernio key.
+								{:else}
+									The one key that is yours to bring is Zernio, above, because it owns your
+									publishing.
+								{/if}
 							</span>
 						</div>
 						<ul class="key-included-list">
@@ -1978,7 +1997,9 @@
 				<p class="key-hint">
 					This panel is for <em>extra</em> Zernio accounts (one per persona email) assigned to
 					specific personas. Each is a separate Zernio account with its own 2 free slots and its own
-					bill. Personas without an assignment use your default key — the one in Provider API Keys.
+					bill. {#if seatIsMember}Workspace personas always use the workspace owner's key; personas of
+					your own without an assignment use your default key — the one in Provider API Keys.{:else}Personas
+					without an assignment use your default key — the one in Provider API Keys.{/if}
 					Moving a persona to a different key requires reconnecting its social accounts under that key.
 				</p>
 
@@ -3261,10 +3282,20 @@
 		text-transform: uppercase;
 		letter-spacing: 0.06em;
 	}
+	/* No opacity: at 0.8 the 10px count measured 3.95:1 (WCAG 1.4.3 wants 4.5). */
+	.key-seat-note {
+		margin: 0.4rem 0 0;
+		padding: 0.45rem 0.65rem;
+		border-left: 3px solid var(--text-dim);
+		background: var(--surface-2);
+		border-radius: var(--radius-xs);
+		font-size: 0.8rem;
+		line-height: 1.45;
+		color: var(--text-muted);
+	}
 	.key-category-count {
 		font-size: var(--text-xs);
 		color: var(--text-dim, var(--text-muted));
-		opacity: 0.8;
 	}
 	.key-category-blurb {
 		font-size: var(--text-xs);
@@ -3353,9 +3384,10 @@
 		color: var(--text-muted);
 		white-space: nowrap;
 	}
+	/* green-800: #15803d on this tint was 4.19:1 at 10px; this is 5.9:1. */
 	.key-state-valid {
 		background: color-mix(in srgb, #16a34a 16%, transparent);
-		color: #15803d;
+		color: #166534;
 	}
 	.key-state-error {
 		background: color-mix(in srgb, #dc2626 16%, transparent);

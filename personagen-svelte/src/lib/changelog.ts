@@ -599,7 +599,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-22", hash: "5c06fc5", type: "fix", category: "docs", scope: "brief", title: "Scrape & Populate was disabled for everyone, and the docs still sold keys" },
 	{ date: "2026-09-22", hash: "f1c1a47", type: "fix", category: "design", scope: "audit", title: "close UX-001 and UX-007 -- a price on every format, a button on every retry" },
 	{ date: "2026-09-22", hash: "6d410cc", type: "docs", category: "docs", scope: "changelog", title: "add f1c1a47 to 2026-09-22 group" },
-	{ date: "2026-09-22", hash: "eef4cf4", type: "fix", category: "fix", scope: "audit", title: "round 2 — every finding the three re-audit critics reopened" }
+	{ date: "2026-09-22", hash: "eef4cf4", type: "fix", category: "fix", scope: "audit", title: "round 2 — every finding the three re-audit critics reopened" },
+	{ date: "2026-09-22", hash: "74e628d", type: "fix", category: "fix", scope: "sidebar", title: "the persona list shows rows at laptop heights" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -1023,10 +1024,10 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 		id: "c3bfbb5", from: "2026-09-21", to: "2026-09-22",
 		category: "fix", categories: ["fix","infrastructure","docs","generation","feature","design"],
 		title: "Fixed: client QA findings — the control that spends money…",
-		summary: "Client QA findings — the control that spends money was unreachable. Plus 12 more changes, touching setup and deployment and guides and explanations and making posts, images and video.",
+		summary: "Client QA findings — the control that spends money was unreachable. Plus 13 more changes, touching setup and deployment and guides and explanations and making posts, images and video.",
 		major: true, curated: false,
-		entries: [CHANGELOG[553], CHANGELOG[554], CHANGELOG[555], CHANGELOG[556], CHANGELOG[557], CHANGELOG[558], CHANGELOG[559], CHANGELOG[560], CHANGELOG[561], CHANGELOG[562], CHANGELOG[563], CHANGELOG[564], CHANGELOG[565]]
+		entries: [CHANGELOG[553], CHANGELOG[554], CHANGELOG[555], CHANGELOG[556], CHANGELOG[557], CHANGELOG[558], CHANGELOG[559], CHANGELOG[560], CHANGELOG[561], CHANGELOG[562], CHANGELOG[563], CHANGELOG[564], CHANGELOG[565], CHANGELOG[566]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "eef4cf4";
+export const CHANGELOG_GENERATED_FROM = "74e628d";

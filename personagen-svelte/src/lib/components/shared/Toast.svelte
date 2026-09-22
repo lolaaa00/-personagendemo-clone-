@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { toasts, dismissToast } from '$lib/stores/ui.svelte';
+	import { toasts, dismissToast, pauseToast, resumeToast } from '$lib/stores/ui.svelte';
 
 	/** Lucide-style path data, one `d` per status — rendered as an inline SVG below. */
 	const iconMap: Record<string, string> = {
@@ -21,6 +21,10 @@
 			<button
 				class="toast-item toast-{toast.type}"
 				onclick={() => dismissToast(toast.id)}
+				onmouseenter={() => pauseToast(toast.id)}
+				onmouseleave={() => resumeToast(toast.id)}
+				onfocus={() => pauseToast(toast.id)}
+				onblur={() => resumeToast(toast.id)}
 				aria-label="{toast.message} — dismiss"
 			>
 				<span class="toast-icon toast-icon-{toast.type}">

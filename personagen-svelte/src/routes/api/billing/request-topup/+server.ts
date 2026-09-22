@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { packById } from '$lib/billing-packs';
+import { TOPUP_PENDING_STATUS, TOPUP_TITLE_PREFIX } from '$lib/server/topup-requests';
 
 /**
  * Ask for a wallet top-up while card payments are switched off.
@@ -19,8 +20,6 @@ import { packById } from '$lib/billing-packs';
  * Idempotent per pack for a day: a second click on the same pack returns the
  * request already open instead of filing another.
  */
-const TITLE_PREFIX = 'Top-up request';
-
 export const POST: RequestHandler = async ({ request, locals }) => {
 	const { session, user } = await locals.safeGetSession();
 	if (!session || !user) return json({ success: false, error: 'Sign in first.' }, { status: 401 });
@@ -30,14 +29,14 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	if (!pack) return json({ success: false, error: 'Pick one of the packs on this page.' }, { status: 400 });
 
 	const usd = `$${(pack.usdCents / 100).toFixed(2)}`;
-	const title = `${TITLE_PREFIX} · ${pack.label} ${usd}`;
+	const title = `${TOPUP_TITLE_PREFIX} · ${pack.label} ${usd}`;
 	const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
 	const { data: existing } = await locals.supabase
 		.from('tickets')
 		.select('id, title, created_at')
 		.eq('user_id', user.id)
-		.eq('status', 'open')
+		.eq('status', TOPUP_PENDING_STATUS)
 		.eq('title', title)
 		.gte('created_at', since)
 		.limit(1)
@@ -52,7 +51,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			user_id: user.id,
 			title,
 			description: `Load the ${pack.label} pack (${usd} → ${pack.credits.toLocaleString('en-US')} credits) into the wallet of ${user.email ?? user.id}. Requested from Billing while card payments are off.`,
-			status: 'open',
+			status: TOPUP_PENDING_STATUS,
 			priority: 'high'
 		})
 		.select('id, title, created_at')

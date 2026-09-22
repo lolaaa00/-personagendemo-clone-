@@ -5,6 +5,7 @@ import { buildStoredProfile } from '$lib/persona-contract/save';
 import type { PersonaProfileV2 } from '$lib/persona-contract/schema';
 import { writeWithProfileFallback } from '$lib/server/personas-profile-column';
 import { isOwnedBucketUrl } from '$lib/server/storage';
+import { marketName, marketToken, timezoneForMarket } from '$lib/markets';
 
 export const POST: RequestHandler = async ({ request, locals }) => {
 	// 1. Authenticate user
@@ -31,7 +32,10 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		// The portrait the wizard already generated and the user already paid for
 		// (/api/persona-preview). Adopting it is what stops creation re-rendering —
 		// and re-billing — a face the user has already approved.
-		characterRef
+		characterRef,
+		// The wizard's Market choice and the creator's browser timezone (UX-008).
+		market,
+		timezone
 	} = body;
 
 	if (!name) {
@@ -60,6 +64,15 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			personaProfile && typeof personaProfile === 'object'
 				? buildStoredProfile(null, personaProfile, { origin: 'ui' })
 				: undefined;
+		// The Market choice reaches the persona (UX-008). It used to stop at the
+		// wizard: the create request never carried it, so every persona got the
+		// column default 'Australia' and a hard-coded Australia/Sydney posting
+		// clock whatever the user picked. Post generation reads the profile token.
+		const chosenMarket = marketName(market);
+		if (profileToStore) {
+			profileToStore.creator = { ...(profileToStore.creator ?? {}) };
+			profileToStore.creator.market ??= marketToken(chosenMarket);
+		}
 
 		const insertPayload = {
 			user_id: session.user.id,
@@ -71,6 +84,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			gradient: agentGradient,
 			initial: agentInitial,
 			skills: skillsText,
+			market: chosenMarket,
 			...(profileToStore ? { personas_profile: profileToStore } : {})
 		};
 
@@ -111,7 +125,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				soul: bio || `Autonomous ${niche || 'lifestyle'} creator.`,
 				skills: skillsText,
 				tools: '',
-				timezone: 'Australia/Sydney',
+				timezone: timezoneForMarket(chosenMarket, timezone),
 				posts_per_day: 3,
 				active_hours_start: 8,
 				active_hours_end: 22,

@@ -488,3 +488,29 @@ describe('listicle bounds are one source of truth', () => {
 		expect(units(4)).toBe(4);
 	});
 });
+
+describe('"Let the Director choose" is quoted at its dearer outcome', () => {
+	// Round-2 re-audit: quoted as a talking head ($2.51), the Director could
+	// switch to product motion and debit $3.63. The quote must cover both.
+	const total = (formatId: string, fixed = FIXED, options = OPTIONS) =>
+		planTotalUsd(planPipeline({ formatId, options, fixed }));
+
+	it('never quotes less than either format the Director may pick', () => {
+		const auto = total('auto');
+		// A real sample: both outcomes cost money in the fixture.
+		expect(total('spokesperson')).toBeGreaterThan(0);
+		expect(total('product-motion')).toBeGreaterThan(0);
+		expect(auto).toBeGreaterThanOrEqual(total('spokesperson'));
+		expect(auto).toBeGreaterThanOrEqual(total('product-motion'));
+	});
+
+	it('follows whichever outcome is dearer when the prices move', () => {
+		// In the fixture the talking head is dearer; make the clip dearer instead.
+		expect(total('auto')).toBe(total('spokesperson'));
+		const seedance = model('seedance', 3.3, 'premium');
+		const fixed = { ...FIXED, video: seedance };
+		const options = { ...OPTIONS, video: [...(OPTIONS.video ?? []), seedance] };
+		expect(total('product-motion', fixed, options)).toBeGreaterThan(total('spokesperson', fixed, options));
+		expect(total('auto', fixed, options)).toBe(total('product-motion', fixed, options));
+	});
+});

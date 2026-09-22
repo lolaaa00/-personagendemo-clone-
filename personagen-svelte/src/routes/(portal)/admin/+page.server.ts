@@ -114,6 +114,12 @@ export const load: PageServerLoad = async ({ locals }) => {
 	let reviews: any[] = [];
 	let recentPosts: any[] = [];
 	let publishedCount = 0;
+	// What wallets were ACTUALLY debited this month, from the ledger. "Charged"
+	// used to re-price the newest 400 provider-cost estimates at today's markup
+	// — including runs that bill nobody — which is an estimate wearing the word
+	// "charged" (round-2 re-audit).
+	let debits: Array<{ delta: number; agent_id: string | null; actor_user_id: string | null; user_id: string }> = [];
+	let postsGeneratedMonth = 0;
 	if (personaIds.length > 0) {
 		const [g, r, p] = await Promise.all([
 			svc
@@ -139,6 +145,25 @@ export const load: PageServerLoad = async ({ locals }) => {
 		generations = g.data ?? [];
 		reviews = r.data ?? [];
 		recentPosts = p.data ?? [];
+		const [d, made] = await Promise.all([
+			svc
+				.from('credit_ledger')
+				.select('delta, agent_id, actor_user_id, user_id')
+				.eq('kind', 'debit')
+				.in('agent_id', personaIds)
+				.gte('created_at', monthStart.toISOString())
+				.limit(20000),
+			// Posts that came out of a generation this month — not provider calls
+			// (one post is several), and not the ones that failed.
+			svc
+				.from('posts')
+				.select('id', { count: 'exact', head: true })
+				.in('agent_id', personaIds)
+				.gte('created_at', monthStart.toISOString())
+				.not('status', 'in', '("failed","generating")')
+		]);
+		debits = (d.data ?? []) as typeof debits;
+		postsGeneratedMonth = made.count ?? 0;
 		// An exact count, not the newest 100 rows: past 100 posts the old tally could
 		// report fewer published posts for the whole workspace than one persona's
 		// page showed for itself (audit QA-001, "workspace 5 < persona 6").
@@ -157,6 +182,10 @@ export const load: PageServerLoad = async ({ locals }) => {
 	for (const row of [...generations, ...reviews, ...recentPosts]) {
 		if (row.user_id && !emailByUserId.has(row.user_id)) unknownActors.add(row.user_id);
 	}
+	for (const row of debits) {
+		const who = row.actor_user_id ?? row.user_id;
+		if (who && !emailByUserId.has(who)) unknownActors.add(who);
+	}
 	for (const id of unknownActors) {
 		try {
 			const { data } = await svc.auth.admin.getUserById(id);
@@ -168,20 +197,19 @@ export const load: PageServerLoad = async ({ locals }) => {
 	const actorLabel = (id: string | null) =>
 		(id && emailByUserId.get(id)) || (id ? `${id.slice(0, 8)}…` : 'system');
 
-	// Spend: this month, total and per seat / per persona.
-	const monthMs = monthStart.getTime();
-	let spendMonth = 0;
+	// Spend this month, in CREDITS actually debited — total, per seat (who ran
+	// it), per persona.
+	let spendMonthCredits = 0;
 	const spendByActor: Record<string, number> = {};
 	const spendByPersona: Record<string, number> = {};
-	for (const g of generations) {
-		const cost = Number(g.est_cost) || 0;
-		if (new Date(g.created_at).getTime() >= monthMs) {
-			spendMonth += cost;
-			const a = actorLabel(g.user_id);
-			spendByActor[a] = (spendByActor[a] ?? 0) + cost;
-			const pname = personaById.get(g.agent_id)?.name ?? 'unknown';
-			spendByPersona[pname] = (spendByPersona[pname] ?? 0) + cost;
-		}
+	for (const row of debits) {
+		const credits = -Number(row.delta) || 0;
+		if (credits <= 0) continue;
+		spendMonthCredits += credits;
+		const a = actorLabel(row.actor_user_id ?? row.user_id);
+		spendByActor[a] = (spendByActor[a] ?? 0) + credits;
+		const pname = (row.agent_id && personaById.get(row.agent_id)?.name) || 'unknown';
+		spendByPersona[pname] = (spendByPersona[pname] ?? 0) + credits;
 	}
 
 	// Unified, newest-first activity feed across the three sources.
@@ -248,20 +276,18 @@ export const load: PageServerLoad = async ({ locals }) => {
 		pendingInvites: (inviteRows ?? []).filter((i: any) => i.status === 'pending'),
 		activity,
 		stats: {
-			spendMonth: Number(spendMonth.toFixed(4)),
-			generationsMonth: generations.filter(
-				(g: any) => new Date(g.created_at).getTime() >= monthMs
-			).length,
+			spendMonthCredits,
+			postsGeneratedMonth,
 			publishedTotal: publishedCount,
 			seatCount: seats.length,
 			personaCount: personas.length
 		},
 		spendByActor: Object.entries(spendByActor)
-			.map(([actor, usd]) => ({ actor, usd: Number(usd.toFixed(4)) }))
-			.sort((a, b) => b.usd - a.usd),
+			.map(([actor, credits]) => ({ actor, credits }))
+			.sort((a, b) => b.credits - a.credits),
 		spendByPersona: Object.entries(spendByPersona)
-			.map(([persona, usd]) => ({ persona, usd: Number(usd.toFixed(4)) }))
-			.sort((a, b) => b.usd - a.usd)
+			.map(([persona, credits]) => ({ persona, credits }))
+			.sort((a, b) => b.credits - a.credits)
 			.slice(0, 10),
 		apiKeys: (keyRows ?? []).map((k: any) => ({
 			...k,

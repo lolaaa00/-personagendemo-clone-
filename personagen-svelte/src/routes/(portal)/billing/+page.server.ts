@@ -3,8 +3,10 @@ import { redirect } from '@sveltejs/kit';
 import { creditsMode, creditMarkup, plansEnabled } from '$lib/server/flags';
 import { getSettings } from '$lib/server/settings';
 import { stripeEnabled } from '$lib/server/stripe';
-import { CREDIT_PACKS, whatItBuys } from '$lib/billing-packs';
+import { CREDIT_PACKS, whatItBuys, retailCreditsForStep } from '$lib/billing-packs';
+import { outcomeStepsUsd } from '$lib/server/outcome-prices';
 import { loadPlanCatalog } from '$lib/server/plans';
+import { TOPUP_PENDING_STATUS, TOPUP_TITLE_PREFIX } from '$lib/server/topup-requests';
 import { resolveDisplayCurrency, creditsToAmount, formatCredits, formatMoney, localeFromAcceptLanguage } from '$lib/money';
 
 /**
@@ -67,7 +69,10 @@ export const load: PageServerLoad = async ({ locals, request, url }) => {
 		platformDefault: s.display_currency_default
 	});
 	const balance = Number(wallet?.balance_credits ?? 0);
-	const buys = whatItBuys(Math.max(balance, 0), markup);
+	// Priced from the live registry, like the composer — not the static table.
+	const live = await outcomeStepsUsd(locals.supabase, user.id);
+	const buys = whatItBuys(Math.max(balance, 0), markup, live);
+	const textPostCredits = live.textPost.reduce((s, usd) => s + retailCreditsForStep(usd, markup), 0);
 
 	return {
 		mode: creditsMode(),
@@ -79,6 +84,9 @@ export const load: PageServerLoad = async ({ locals, request, url }) => {
 		balanceFormatted: formatCredits(balance, currency, s.fx_rates, locale, { whole: false }),
 		balanceUsd: formatCredits(balance, 'USD', s.fx_rates, 'en-US', { whole: false }),
 		buys: { imagePosts: buys.imagePosts, videoPosts: buys.videoPosts, talkingHeads: buys.talkingHeads },
+		// "about eight cents" was USD prose on a page that speaks the viewer's
+		// currency (re-audit: beside ₱5.01 text tiles). Same price, their money.
+		textPostPrice: formatCredits(textPostCredits, currency, s.fx_rates, locale, { whole: false }),
 		paymentsOpen: stripeEnabled(),
 		// Open top-up requests this account has made (private: RLS select-own).
 		topupRequests: await pendingTopups(locals.supabase, user.id),
@@ -93,7 +101,7 @@ export const load: PageServerLoad = async ({ locals, request, url }) => {
 					? null
 					: formatMoney(creditsToAmount(p.usdCents, currency, s.fx_rates), currency, locale, { whole: false }),
 			worth: formatCredits(p.credits, currency, s.fx_rates, locale, { whole: false }),
-			buys: whatItBuys(p.credits, markup)
+			buys: whatItBuys(p.credits, markup, live)
 		})),
 		ledger: (ledger ?? []).map((r: LedgerRow) => ({
 			seq: r.seq,
@@ -158,8 +166,8 @@ async function pendingTopups(
 			.from('tickets')
 			.select('id, title, created_at')
 			.eq('user_id', userId)
-			.eq('status', 'open')
-			.like('title', 'Top-up request%')
+			.eq('status', TOPUP_PENDING_STATUS)
+			.like('title', `${TOPUP_TITLE_PREFIX}%`)
 			.order('created_at', { ascending: false })
 			.limit(10);
 		return data ?? [];

@@ -58,8 +58,10 @@
 				you'll be asked to choose a new password straight away.
 			</p>
 			<p class="reset-hint">
-				Nothing after a few minutes? Check spam, then try again — the link expires, so request a
-				fresh one rather than reusing an old email.
+				Nothing after a few minutes? Check spam first. If it still hasn't come, email may not be
+				reaching you from this server — trying again won't help. Ask whoever gave you access to
+				PersonaGen: a platform admin can issue you a temporary password from the Admin Console,
+				and you'll choose your own the first time you sign in.
 			</p>
 			<a class="reset-btn" href="/login">Back to sign in</a>
 		{:else}

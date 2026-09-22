@@ -166,8 +166,8 @@
 		color: var(--text);
 	}
 	.btn-primary {
-		background: var(--accent);
-		border: 1px solid var(--accent);
+		background: var(--accent-dark);
+		border: 1px solid var(--accent-dark);
 		color: #fff;
 	}
 	.btn-primary:disabled {

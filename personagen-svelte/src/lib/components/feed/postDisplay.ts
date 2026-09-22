@@ -133,9 +133,11 @@ export function truncateError(msg: string): string {
 export function summarizeGenError(post: any): string {
 	// Every generation runs on the platform's keys since customer generation keys
 	// were withdrawn (2026-09-21), so no failure here is ever "check your key":
-	// the user has none. A client re-audit found this sentence on every failed
-	// tile. The wording now matches the server's failure-text.ts.
-	const GENERIC = 'Generation didn’t finish. Try again — if it keeps failing, tell us.';
+	// the user has none. The generic line points at the one real way to reach
+	// us — the drawer's "Report this problem" — where it used to say "tell us"
+	// with no way to (round-2 re-audit).
+	const GENERIC =
+		'Generation didn’t finish, and nothing was taken from your wallet. Try again — if it keeps failing, open the post and use Report this problem.';
 
 	let raw: unknown = null;
 	try {
@@ -165,25 +167,46 @@ export function summarizeGenError(post: any): string {
 		return String(v);
 	};
 
-	const low = dig(raw).toLowerCase();
+	const text = dig(raw);
+	const low = text.toLowerCase();
 	if (!low) return GENERIC;
 
-	// Two different "out of credit" situations. OUR wallet check speaks of the
-	// balance or the wallet; a provider's own 402 is the platform's account, and
-	// that one is on us.
-	if (/wallet|your balance|not enough credit|insufficient credit/.test(low))
-		return 'Your balance is too low for this. Top up on Billing — for a workspace persona, the owner tops it up.';
+	// Since 2026-09-10 the server writes a customer-safe sentence onto the row
+	// (server/failure-text.ts: vendor-free, link-free, says whose problem it
+	// is). Show it AS WRITTEN. Re-classifying it here threw the real cause
+	// away: a re-audit found "Image provider returned 503 … nothing was
+	// charged" rendered as a generic "didn't finish" on every tile.
+	if (isCustomerSafeFailureText(text)) return text;
+
+	// Older rows can hold raw provider text: classify it, never show it. A
+	// failed POST is never the customer's wallet — the wallet check refuses a
+	// run up front (402) before any post exists — so credit wording here is
+	// always the provider account's, which is on us.
 	if (/credit|insufficient|can only afford|requires more|quota|balance|\b402\b/.test(low))
-		return 'Generation is paused on our side while the provider account is topped up. That’s on us — try again shortly.';
+		return 'Generation is paused on our side while the provider account is topped up. That’s on us — nothing was taken from your wallet. Try again shortly.';
 	if (/rate.?limit|too many requests|\b429\b/.test(low))
-		return 'Rate limited by the provider. Try again in a few minutes.';
+		return 'The provider is rate-limiting us right now. Try again in a few minutes.';
 	if (/timeout|timed out|deadline|took too long/.test(low))
-		return 'The model timed out. Try again.';
+		return 'The model took too long and the run was stopped. Try again.';
 	if (/content policy|safety|nsfw|flagged|moderat|blocked/.test(low))
-		return 'Blocked by the model’s content policy. Adjust the prompt and retry.';
+		return 'Blocked by the model’s content policy. Adjust the prompt and try again.';
 	if (/invalid.*key|unauthor|forbidden|\b401\b|\b403\b|api key/.test(low))
 		return 'Our provider key was rejected. That’s on us, not your account — try again shortly.';
 	return GENERIC;
+}
+
+/**
+ * True for a sentence written FOR a customer: no links, no JSON or markup, no
+ * vendor or key identifiers, and shaped like a sentence. Anything else is raw
+ * provider output, which is for the server log only.
+ */
+export function isCustomerSafeFailureText(text: string): boolean {
+	const t = text.trim();
+	if (t.length < 12 || t.length > 400) return false;
+	if (/https?:|www\.|[{}[\]<>]|\n/.test(t)) return false;
+	if (/openrouter|fal\.ai|\bfal\b|gemini|anthropic|openai|kie\b|firecrawl|elevenlabs|replicate|\bsk-|key[_-]?id|\/keys\//i.test(t))
+		return false;
+	return /^[A-Z“"']/.test(t) && /[.!?…]$/.test(t);
 }
 
 /**
@@ -350,9 +373,24 @@ export function getPostDisplay(post: any): PostDisplay {
  * composer with it, the server resolves the real plan and price, and the user
  * approves exactly as they did the first time. Returns null when the row does
  * not say enough to rebuild the request honestly.
+ *
+ * It carries the row's platforms and — only if it is still ahead — its
+ * schedule. A re-audit found the first version rebuilt only the format while
+ * the composer said "the failed post's settings are filled in": an
+ * Instagram-only post scheduled for 10:05 came back as Instagram + Threads,
+ * unscheduled. retryCarriedSummary() now says exactly what was carried.
  */
 export function retryBodyFromFailedPost(
-	post: { content?: unknown } | null | undefined
+	post:
+		| {
+				content?: unknown;
+				platforms?: unknown;
+				scheduled_date?: unknown;
+				scheduled_time?: unknown;
+		  }
+		| null
+		| undefined,
+	now: Date = new Date()
 ): Record<string, unknown> | null {
 	let parsed: unknown;
 	try {
@@ -377,5 +415,47 @@ export function retryBodyFromFailedPost(
 	const studio = c.studio && typeof c.studio === 'object' ? c.studio : null;
 	if (studio?.template) body.studio_template = studio.template;
 	if (studio?.standalone) body.deliver = 'asset';
+
+	// Platforms: the server keeps only the ones still connected, so a platform
+	// disconnected since shows as not connected rather than silently swapped.
+	const platforms = Array.isArray(post?.platforms)
+		? post.platforms.filter((p): p is string => typeof p === 'string' && p.length > 0)
+		: [];
+	if (platforms.length > 0 && !studio?.standalone) body.platforms = platforms;
+
+	// Schedule: only a time still in the future. A slot that has passed is not
+	// carried — scheduling "now" by accident is worse than asking again.
+	const date = typeof post?.scheduled_date === 'string' ? post.scheduled_date : '';
+	const time = typeof post?.scheduled_time === 'string' ? post.scheduled_time : '';
+	if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+		const at = new Date(`${date}T${/^\d{2}:\d{2}/.test(time) ? time.slice(0, 5) : '23:59'}:00`);
+		if (!Number.isNaN(at.getTime()) && at.getTime() > now.getTime()) {
+			body.scheduled_date = date;
+			if (/^\d{2}:\d{2}/.test(time)) body.scheduled_time = time.slice(0, 5);
+		}
+	}
 	return body;
+}
+
+/**
+ * The composer subtitle for a retry: what was actually carried over, so it can
+ * never again claim settings it did not fill in.
+ */
+export function retryCarriedSummary(
+	body: Record<string, unknown>,
+	failed?: { scheduled_date?: unknown } | null
+): string {
+	const carried: string[] = ['format'];
+	if (typeof body.topic === 'string') carried.push('topic');
+	if (Array.isArray(body.platforms) && body.platforms.length > 0) carried.push('platforms');
+	if (typeof body.scheduled_date === 'string') carried.push('schedule');
+	const list =
+		carried.length === 1
+			? carried[0]
+			: `${carried.slice(0, -1).join(', ')} and ${carried[carried.length - 1]}`;
+	const passed =
+		typeof failed?.scheduled_date === 'string' && typeof body.scheduled_date !== 'string'
+			? ' Its original time has passed, so pick a new one if it should be scheduled.'
+			: '';
+	return `The failed post’s ${list} ${carried.length === 1 ? 'is' : 'are'} filled in below.${passed} Check the price and edit anything before approving.`;
 }

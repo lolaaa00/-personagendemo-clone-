@@ -169,7 +169,7 @@
 						≈ <strong>{data.buys.imagePosts}</strong> {plural(data.buys.imagePosts, 'image post')}, or
 						<strong>{data.buys.videoPosts}</strong> {plural(data.buys.videoPosts, 'video post')}, or
 						<strong>{data.buys.talkingHeads}</strong> {plural(data.buys.talkingHeads, 'talking-head clip')}. A text
-						post costs only its writing, about eight cents.
+						post costs only its writing — about {data.textPostPrice}.
 					{/if}
 				</p>
 			{/if}
@@ -389,7 +389,7 @@
 		<h2>How it works</h2>
 		<dl>
 			<dt>What costs money?</dt>
-			<dd>AI images, video, voice and talking-head clips, plus the writing behind every post — a text post is just the writing, about eight cents. Scheduling, publishing and analytics are free on every account.</dd>
+			<dd>AI images, video, voice and talking-head clips, plus the writing behind every post — a text post is just the writing, about {data.textPostPrice}. Scheduling, publishing and analytics are free on every account.</dd>
 			<dt>Why is the balance in {data.currency}?</dt>
 			<dd>We show your wallet in the currency of where you are. Change it any time in Settings. Charges are made in USD.</dd>
 			<dt>Can I bring my own provider keys?</dt>
@@ -537,7 +537,7 @@
 		left: 1rem;
 		padding: 0.15rem 0.6rem;
 		border-radius: 999px;
-		background: var(--accent);
+		background: var(--accent-dark);
 		color: #fff;
 		font-size: 0.7rem;
 		font-weight: 600;
@@ -581,8 +581,8 @@
 		margin-top: 0.5rem;
 		padding: 0.6rem 0.9rem;
 		border-radius: 10px;
-		border: 1px solid var(--accent);
-		background: var(--accent);
+		border: 1px solid var(--accent-dark);
+		background: var(--accent-dark);
 		color: #fff;
 		font-weight: 600;
 		cursor: pointer;

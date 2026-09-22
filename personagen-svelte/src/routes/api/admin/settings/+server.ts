@@ -15,6 +15,11 @@ import { refreshAdmission } from '$lib/server/admission';
 import { refreshProviderBalance, refreshFalBalance } from '$lib/server/provider-balance';
 import { platformKeyStatuses } from '$lib/server/platform-keys';
 import {
+	PROBLEM_REPORT_TITLE_PREFIX,
+	TOPUP_PENDING_STATUS,
+	TOPUP_TITLE_PREFIX
+} from '$lib/server/topup-requests';
+import {
 	creditsMode,
 	creditsSource,
 	activityLogEnabled,
@@ -191,6 +196,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 		// (/api/billing/request-topup). They are private to each customer, so only
 		// this platform-admin route, reading as the service role, sees them all.
 		topupRequests: await openTopupRequests(svc),
+		problemReports: await openTicketsTitled(svc, PROBLEM_REPORT_TITLE_PREFIX),
 		history: history ?? []
 	});
 };
@@ -393,6 +399,26 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 };
 
 
+/** Open customer tickets whose title starts with `prefix`, oldest first. Never throws. */
+async function openTicketsTitled(
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- the Supabase client is untyped across this codebase
+	svc: any,
+	prefix: string
+): Promise<Array<{ id: string; title: string; description: string | null; created_at: string; user_id: string }>> {
+	try {
+		const { data } = await svc
+			.from('tickets')
+			.select('id, title, description, created_at, user_id')
+			.eq('status', TOPUP_PENDING_STATUS)
+			.like('title', `${prefix}%`)
+			.order('created_at', { ascending: true })
+			.limit(50);
+		return data ?? [];
+	} catch {
+		return [];
+	}
+}
+
 /** Every customer's open top-up request, oldest first (first come, first loaded). */
 async function openTopupRequests(
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- the Supabase client is untyped across this codebase
@@ -402,8 +428,8 @@ async function openTopupRequests(
 		const { data } = await svc
 			.from('tickets')
 			.select('id, title, description, created_at, user_id')
-			.eq('status', 'open')
-			.like('title', 'Top-up request%')
+			.eq('status', TOPUP_PENDING_STATUS)
+			.like('title', `${TOPUP_TITLE_PREFIX}%`)
 			.order('created_at', { ascending: true })
 			.limit(50);
 		return data ?? [];
