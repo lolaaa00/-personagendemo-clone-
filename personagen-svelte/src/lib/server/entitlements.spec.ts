@@ -30,8 +30,8 @@ const PROMISES: Array<{
 	// check survives in the api-keys route as defence in depth for a provider
 	// that is ever re-opened; providers.spec.ts asserts the gated list is empty.
 	{ match: /API access/, gate: { file: ['routes', 'api', 'developer', 'keys', '+server.ts'], needle: 'ent.apiAccess' } },
-	{ match: /free credit per person to start/, gate: { file: ['lib', 'server', 'welcome-guard.ts'], needle: 'maybeWithholdWelcome' } },
-	{ match: /Unlimited text posts/, universal: 'text costs only its writing; no plan restricts it' },
+	{ match: /Starter generation credit/, gate: { file: ['lib', 'server', 'welcome-guard.ts'], needle: 'maybeWithholdWelcome' } },
+	{ match: /No cap on text posts/, universal: 'text costs only its writing; no plan restricts how many' },
 	{ match: /All 13 platforms/, universal: 'publishing is on every plan, including free' },
 	{ match: /Spend ledger \+ verified publishing/, universal: 'the ledger and publish receipts are shown to every plan — listing it only under Brand overstates it, a copy decision, not a gate' },
 	{ match: /Approval queue/, universal: 'review/approve is how every persona below fully-autonomous works — same overstatement' }

@@ -654,7 +654,7 @@
 				saveAll();
 				showToast(`${label} generated!`, 'success');
 			} else {
-				showToast(res.error || 'AI generation failed — configure an API key in Settings', 'error');
+				showToast(res.error || 'AI generation failed — try again shortly; if it keeps failing, tell us', 'error');
 			}
 		} catch (err: any) {
 			showToast(err.message || 'AI generation failed', 'error');
@@ -676,7 +676,7 @@
 				spinVariations = { ...spinVariations, [fieldName]: res.data.variations };
 				showToast('3 variations ready — pick one below!', 'success');
 			} else {
-				showToast(res.error || 'Spin failed — configure an API key in Settings', 'error');
+				showToast(res.error || 'Spin failed — try again shortly; if it keeps failing, tell us', 'error');
 			}
 		} catch (err: any) {
 			showToast(err.message || 'Spin failed', 'error');
@@ -1449,11 +1449,15 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 							autocomplete="url"
 							style="flex: 1; min-width: 220px; font-size: 1rem;"
 						/>
+						<!-- Same research dependency as Scrape & Populate (scrape_product
+						     calls Firecrawl), so the same gate: it must not look ready and
+						     then fail on click (audit UX-003, re-audit N22). -->
 						<button
 							class="scrape-submit-btn"
 							onclick={scrapeProductByUrl}
-							disabled={scrapingProduct}
+							disabled={scrapingProduct || !firecrawlReady}
 							aria-busy={scrapingProduct}
+							title={!firecrawlReady ? 'Research is unavailable on this deployment right now' : undefined}
 						>
 							{#if scrapingProduct}
 								Scraping…

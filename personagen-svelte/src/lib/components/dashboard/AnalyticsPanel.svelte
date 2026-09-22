@@ -1,6 +1,7 @@
 <script lang="ts">
 	import AnalyticsChart from './AnalyticsChart.svelte';
 	import type { SeatCapabilities } from '$lib/seat';
+	import { platformLabel, platformColor } from '$lib/platforms';
 
 	interface Props {
 		agents: any[];
@@ -29,18 +30,11 @@
 	let error = $state<string | null>(null);
 	let analytics = $state<AnalyticsData | null>(null);
 
-	const platformColors: Record<string, string> = {
-		instagram: 'linear-gradient(90deg,#833ab4,#e1306c)',
-		tiktok: 'linear-gradient(90deg,#25f4ee,#fe2c55)',
-		x: 'linear-gradient(90deg,#1da1f2,#0d8bd9)',
-		twitter: 'linear-gradient(90deg,#1da1f2,#0d8bd9)',
-		linkedin: 'linear-gradient(90deg,#0077b5,#00a0dc)',
-		youtube: 'linear-gradient(90deg,#ff0000,#cc0000)',
-		threads: 'linear-gradient(90deg,#000,#333)'
-	};
-	// Platform-brand gradients above stay literal — they are those companies' identities.
-	// The fallback is ours, so it follows the brand theme.
-	const defaultPlatformColor = 'linear-gradient(90deg,var(--accent),var(--accent-light))';
+	// Names and colours come from $lib/platforms — the one list the dashboard's
+	// Platform Distribution card and every persona page already use (audit
+	// UI-003). This panel kept its own: a hard-coded "Twitter/X" in the old
+	// Twitter blue, and raw keys title-cased into "Tiktok", "Linkedin",
+	// "Youtube" and "Googlebusiness".
 
 	async function loadAnalytics(agentId: string) {
 		if (!allowed) return;
@@ -109,14 +103,12 @@
 						: totalPosts > 0
 							? Math.round((v.posts / totalPosts) * 100)
 							: 0;
-				const name =
-					key === 'x' ? 'Twitter/X' : key.charAt(0).toUpperCase() + key.slice(1);
 				return {
-					name,
+					name: platformLabel(key),
 					pct,
 					views: v.views,
 					posts: v.posts,
-					color: platformColors[key] ?? defaultPlatformColor
+					color: platformColor(key)
 				};
 			})
 			.sort((a, b) => b.pct - a.pct);

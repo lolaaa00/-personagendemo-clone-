@@ -23,7 +23,7 @@ export const PRICING_MATRIX: PriceEntry[] = [
 		operation: 'image',
 		model: 'typographic card (server-rendered)',
 		usd: 0,
-		note: 'deterministic ffmpeg typesetting — text cards generate for free'
+		note: 'deterministic ffmpeg typesetting — no image model; a text card pays only for its writing'
 	},
 	// ── fal.ai (primary media) ──────────────────────────────────────────────
 	{

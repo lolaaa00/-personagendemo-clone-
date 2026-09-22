@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
+	import { goto } from '$app/navigation';
 	import { getPostDisplay } from '$lib/components/feed/postDisplay';
 	import PostCard from '$lib/components/feed/PostCard.svelte';
 	import PostDrawer from '$lib/components/feed/PostDrawer.svelte';
@@ -159,6 +161,14 @@
 	}
 
 	// ── Drawer + approve (same behavior as the persona feed) ─────────────────
+	/** Retry lives on the persona page, which owns the confirm-first composer. */
+	function retryInStudio(p: { id: string; agent_id?: string }) {
+		if (!p.agent_id) return;
+		const target = `${resolve('/(portal)/personas/[agentId]', { agentId: p.agent_id })}?tab=studio&retry=${p.id}`;
+		// eslint-disable-next-line svelte/no-navigation-without-resolve -- resolve() IS applied above; the rule cannot see through the appended query string
+		void goto(target);
+	}
+
 	let modalPost = $state<any | null>(null);
 	let approving = $state(false);
 
@@ -423,11 +433,14 @@
 			<div class="gen-grid">
 				{#each contentPosts as post (post.id)}
 					<div class="gen-cell">
+						<!-- Retry lives on the persona page, which owns the confirm-first
+						     composer; this sends the user there with the failed post named. -->
 						<PostCard
 							{post}
 							onOpen={(p) => (modalPost = p)}
 							onEnlarge={openPostMedia}
 							onToggleFavorite={toggleFavorite}
+							onRetry={retryInStudio}
 						/>
 						<a
 							class="gen-cell-persona"

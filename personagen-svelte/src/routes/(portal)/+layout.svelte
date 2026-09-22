@@ -12,7 +12,7 @@
 		initializeThemeAndColors,
 		showToast
 	} from '$lib/stores/ui.svelte';
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import { primePricing } from '$lib/stores/pricing.svelte';
 	import { invalidateAll } from '$app/navigation';
 	import BrandWave from '$lib/components/shared/BrandWave.svelte';
@@ -62,6 +62,33 @@
 	// Provisioned team accounts all start on one shared starter password; this
 	// blocks the whole portal until they've set their own.
 	let mustChangePassword = $derived(Boolean((data as any).mustChangePassword));
+	let badgeText = $derived((data as { badgeLabel?: string }).badgeLabel ?? 'Personal account');
+	/**
+	 * Arrived from a password-recovery link (/api/auth/reset → callback →
+	 * ?reset=1). The recovery email used to promise "you'll land on your profile,
+	 * where you can set a new password" — and Profile had no password field, so
+	 * a re-audit could not finish a reset at all. The same dialog that makes a
+	 * provisioned account set its first password now finishes a reset.
+	 */
+	// A writable derived: it follows the URL, and clearRecoveryParam() sets it
+	// false after history.replaceState — which the page store does not observe.
+	let recoveryMode = $derived($page.url.searchParams.get('reset') === '1');
+	let recoveryDismissed = $state(false);
+	let showPasswordGate = $derived(mustChangePassword || (recoveryMode && !recoveryDismissed));
+	let pwFirstField = $state<HTMLInputElement | null>(null);
+	$effect(() => {
+		// A dialog that opens must take focus, or a keyboard user is left behind it.
+		if (showPasswordGate) queueMicrotask(() => pwFirstField?.focus());
+	});
+
+	/** Drop ?reset=1 so a reload or a shared link does not reopen the dialog. */
+	function clearRecoveryParam() {
+		const url = new URL(window.location.href);
+		if (!url.searchParams.has('reset')) return;
+		url.searchParams.delete('reset');
+		history.replaceState(history.state, '', url.pathname + url.search + url.hash);
+		recoveryMode = false;
+	}
 	// Admin console entry — only rendered for workspace owners / admin seats.
 	let isPlatformAdmin = $derived(Boolean((data as any).isPlatformAdmin));
 	let isWorkspaceAdmin = $derived(Boolean((data as any).isWorkspaceAdmin) || isPlatformAdmin);
@@ -80,9 +107,13 @@
 			});
 			const result = await res.json();
 			if (!result.success) throw new Error(result.error || 'Failed to change password');
-			showToast('Password updated — welcome aboard', 'success');
+			showToast(
+				recoveryMode ? 'Password changed. Use it the next time you sign in.' : 'Password updated — welcome aboard',
+				'success'
+			);
 			pwNew = '';
 			pwConfirm = '';
+			clearRecoveryParam();
 			await invalidateAll();
 		} catch (err) {
 			showToast((err as Error).message, 'error');
@@ -205,6 +236,23 @@
 		return pathname.startsWith(baseHref);
 	}
 
+	let hamburgerBtn = $state<HTMLButtonElement | null>(null);
+	let sidebarEl = $state<HTMLElement | null>(null);
+
+	/**
+	 * The hamburger opened the drawer and left focus on itself, BEHIND the
+	 * overlay — a keyboard user had to tab through the whole page to reach the
+	 * navigation that just appeared. Opening now moves focus to the first link
+	 * in the drawer; closing (Escape, or the button again) returns it here.
+	 */
+	async function openDrawerFromButton() {
+		const opening = !sidebarState.open;
+		toggleSidebar();
+		if (!opening) return;
+		await tick();
+		sidebarEl?.querySelector<HTMLElement>('a[href], button:not([disabled])')?.focus();
+	}
+
 	function isAgentActive(agentId: string, pathname: string): boolean {
 		return pathname.startsWith(`/personas/${agentId}`);
 	}
@@ -213,10 +261,19 @@
 <svelte:window
 	onclick={closeUserDropdown}
 	onkeydown={(e) => {
-		if (e.key !== 'Escape' || !userDropdownOpen) return;
-		closeUserDropdown();
-		// Focus goes back to what opened it, not to the top of the document.
-		userMenuTrigger?.focus();
+		if (e.key !== 'Escape') return;
+		if (userDropdownOpen) {
+			closeUserDropdown();
+			// Focus goes back to what opened it, not to the top of the document.
+			userMenuTrigger?.focus();
+			return;
+		}
+		// The mobile drawer is a modal surface over the page: Escape dismisses
+		// it and hands focus back to the button that opened it (audit re-test N5).
+		if (sidebarState.open) {
+			closeSidebar();
+			hamburgerBtn?.focus();
+		}
 	}}
 />
 
@@ -230,7 +287,13 @@
 	{/if}
 
 	<!-- Sidebar -->
-	<aside class="sidebar" class:open={sidebarState.open} aria-label="Sidebar">
+	<aside
+		class="sidebar"
+		id="portal-sidebar"
+		class:open={sidebarState.open}
+		aria-label="Sidebar"
+		bind:this={sidebarEl}
+	>
 		<!-- Brand -->
 		<div class="sidebar-brand">
 			<a href="/dashboard" class="sidebar-logo-link">
@@ -408,217 +471,6 @@
 				</a>
 			{/each}
 
-			<!-- PERSONAS -->
-			<div class="sidebar-personas">
-			{#if !sidebarState.collapsed}
-				<div class="sidebar-section-row">
-					<span class="sidebar-section-label">Personas</span>
-					<button
-						type="button"
-						class="sidebar-projects-btn"
-						onclick={() => (projectsModalOpen = true)}
-						aria-label="Manage projects"
-						title="Manage projects"
-					>
-						<svg
-							aria-hidden="true"
-							width="13"
-							height="13"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							><path
-								d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"
-							/><line x1="12" y1="10" x2="12" y2="16" /><line x1="9" y1="13" x2="15" y2="13" /></svg
-						>
-					</button>
-				</div>
-			{:else}
-				<div class="sidebar-section-divider"></div>
-			{/if}
-			{#if !sidebarState.collapsed && sidebarAgents.length > 4}
-				<div class="sidebar-persona-search">
-					<svg
-						aria-hidden="true"
-						class="sidebar-persona-search-icon"
-						width="14"
-						height="14"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg
-					>
-					<input
-						type="search"
-						class="sidebar-persona-search-input"
-						placeholder="Search personas..."
-						bind:value={personaSearch}
-						aria-label="Search personas"
-					/>
-				</div>
-			{/if}
-			<a
-				href="/generator"
-				class="sidebar-nav-item sidebar-new-persona"
-				class:active={isActive('/generator', $page.url.pathname)}
-				aria-current={isActive('/generator', $page.url.pathname) ? 'page' : undefined}
-				onclick={closeSidebar}
-				title={sidebarState.collapsed ? 'New Persona' : undefined}
-				aria-label={sidebarState.collapsed ? 'New Persona' : undefined}
-			>
-				<span class="sidebar-nav-icon sidebar-new-icon">
-					<svg
-						aria-hidden="true"
-						width="14"
-						height="14"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2.5"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg
-					>
-				</span>
-				{#if !sidebarState.collapsed}
-					<span class="sidebar-nav-label">New Persona</span>
-				{/if}
-			</a>
-			{#snippet personaItem(agent: any)}
-				<a
-					href="/personas/{agent.id}"
-					class="sidebar-nav-item sidebar-persona-item"
-					class:active={isAgentActive(agent.id, $page.url.pathname)}
-					aria-current={isAgentActive(agent.id, $page.url.pathname) ? 'page' : undefined}
-					onclick={closeSidebar}
-					title={sidebarState.collapsed ? agent.name : undefined}
-					aria-label={sidebarState.collapsed ? agent.name : undefined}
-				>
-					<span
-						class="sidebar-persona-avatar"
-						style={agent.ugc_character_ref
-							? ''
-							: `background: ${agent.gradient ?? 'var(--gradient)'}`}
-					>
-						{#if agent.ugc_character_ref}
-							<!-- decorative: the persona name is announced by the link label beside it -->
-							<!-- 64px covers the 28px box at 2x DPR; these were pulling the full
-							     1.5MB original for a 24px avatar, on every portal page. -->
-							<img
-								src={thumbUrl(agent.ugc_character_ref, 64)}
-								onerror={(e) => restoreOriginal(e, agent.ugc_character_ref)}
-								alt=""
-								width="28"
-								height="28"
-								loading="lazy"
-								decoding="async"
-							/>
-						{:else}
-							{agent.initial ?? (agent.name?.[0] ?? '?').toUpperCase()}
-						{/if}
-					</span>
-					{#if !sidebarState.collapsed}
-						<span class="sidebar-nav-label">
-							{agent.name}
-							<span
-								class="sidebar-persona-status"
-								class:status-active={agent.status === 'active'}
-								class:status-paused={agent.status === 'paused'}
-							></span>
-							<!-- the dot encodes status by colour alone — name it for AT -->
-							{#if agent.status === 'active' || agent.status === 'paused'}
-								<span class="sr-only">({agent.status === 'active' ? 'Active' : 'Paused'})</span>
-							{/if}
-						</span>
-					{/if}
-				</a>
-			{/snippet}
-
-			{#if sidebarState.collapsed}
-				<!-- Icon rail: groups add nothing at 28px wide — flat list. -->
-				{#each filteredSidebarAgents as agent (agent.id)}
-					{@render personaItem(agent)}
-				{/each}
-			{:else}
-				<!-- Projects first, each a collapsible section; searching overrides collapse. -->
-				{#each groupedSidebar.sections as section (section.group.id)}
-					{@const folded = collapsedGroups.includes(section.group.id) && !personaSearch.trim()}
-					<button
-						type="button"
-						class="sidebar-group-head"
-						aria-expanded={!folded}
-						onclick={() => toggleGroupCollapsed(section.group.id)}
-					>
-						<svg
-							aria-hidden="true"
-							class="sidebar-group-chevron"
-							class:folded
-							width="12"
-							height="12"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2.5"
-							stroke-linecap="round"
-							stroke-linejoin="round"><path d="M6 9l6 6 6-6" /></svg
-						>
-						<span class="sidebar-group-name">{section.group.name}</span>
-						<span class="sidebar-group-count">{section.members.length}</span>
-					</button>
-					{#if !folded}
-						{#each section.members as agent (agent.id)}
-							{@render personaItem(agent)}
-						{/each}
-						{#if section.members.length === 0}
-							<div class="sidebar-persona-empty">No personas in this project yet.</div>
-						{/if}
-					{/if}
-				{/each}
-				{#if groupedSidebar.sections.length > 0 && groupedSidebar.ungrouped.length > 0}
-					{@const ungroupedFolded = collapsedGroups.includes('__ungrouped__') && !personaSearch.trim()}
-					<button
-						type="button"
-						class="sidebar-group-head"
-						aria-expanded={!ungroupedFolded}
-						onclick={() => toggleGroupCollapsed('__ungrouped__')}
-					>
-						<svg
-							aria-hidden="true"
-							class="sidebar-group-chevron"
-							class:folded={ungroupedFolded}
-							width="12"
-							height="12"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2.5"
-							stroke-linecap="round"
-							stroke-linejoin="round"><path d="M6 9l6 6 6-6" /></svg
-						>
-						<span class="sidebar-group-name">Ungrouped</span>
-						<span class="sidebar-group-count">{groupedSidebar.ungrouped.length}</span>
-					</button>
-					{#if !ungroupedFolded}
-						{#each groupedSidebar.ungrouped as agent (agent.id)}
-							{@render personaItem(agent)}
-						{/each}
-					{/if}
-				{:else}
-					{#each groupedSidebar.ungrouped as agent (agent.id)}
-						{@render personaItem(agent)}
-					{/each}
-				{/if}
-				{#if filteredSidebarAgents.length === 0 && personaSearch.trim()}
-					<div class="sidebar-persona-empty">No personas match "{personaSearch}"</div>
-				{/if}
-			{/if}
-			</div>
 			<!-- PUBLISH -->
 			{#if !sidebarState.collapsed}
 				<span class="sidebar-section-label">Publish</span>
@@ -798,6 +650,232 @@
 					{/if}
 				</a>
 			{/each}
+			<!-- PERSONAS — deliberately LAST in the rail. A client audit (UX-006) found
+			     the persona list pushing primary navigation out of view. Measured: the
+			     non-persona items need ~630px, and a 1440x900 laptop gives the rail 575px,
+			     so no amount of flex tuning lets both sit above the fold. With every
+			     primary destination ABOVE the list, the list can no longer push any of
+			     them away at any height; it takes the space that is left, and scrolls
+			     inside itself. -->
+			<div class="sidebar-personas">
+			{#if !sidebarState.collapsed}
+				<div class="sidebar-section-row">
+					<span class="sidebar-section-label">Personas</span>
+					<button
+						type="button"
+						class="sidebar-projects-btn"
+						onclick={() => (projectsModalOpen = true)}
+						aria-label="Manage projects"
+						title="Manage projects"
+					>
+						<svg
+							aria-hidden="true"
+							width="13"
+							height="13"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							><path
+								d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"
+							/><line x1="12" y1="10" x2="12" y2="16" /><line x1="9" y1="13" x2="15" y2="13" /></svg
+						>
+					</button>
+				</div>
+			{:else}
+				<div class="sidebar-section-divider"></div>
+			{/if}
+			{#if !sidebarState.collapsed && sidebarAgents.length > 4}
+				<div class="sidebar-persona-search">
+					<svg
+						aria-hidden="true"
+						class="sidebar-persona-search-icon"
+						width="14"
+						height="14"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg
+					>
+					<input
+						type="search"
+						class="sidebar-persona-search-input"
+						placeholder="Search personas..."
+						bind:value={personaSearch}
+						aria-label="Search personas"
+					/>
+				</div>
+			{/if}
+			<a
+				href="/generator"
+				class="sidebar-nav-item sidebar-new-persona"
+				class:active={isActive('/generator', $page.url.pathname)}
+				aria-current={isActive('/generator', $page.url.pathname) ? 'page' : undefined}
+				onclick={closeSidebar}
+				title={sidebarState.collapsed ? 'New Persona' : undefined}
+				aria-label={sidebarState.collapsed ? 'New Persona' : undefined}
+			>
+				<span class="sidebar-nav-icon sidebar-new-icon">
+					<svg
+						aria-hidden="true"
+						width="14"
+						height="14"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2.5"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg
+					>
+				</span>
+				{#if !sidebarState.collapsed}
+					<span class="sidebar-nav-label">New Persona</span>
+				{/if}
+			</a>
+			{#snippet personaItem(agent: any)}
+				<a
+					href="/personas/{agent.id}"
+					class="sidebar-nav-item sidebar-persona-item"
+					class:active={isAgentActive(agent.id, $page.url.pathname)}
+					aria-current={isAgentActive(agent.id, $page.url.pathname) ? 'page' : undefined}
+					onclick={closeSidebar}
+					title={sidebarState.collapsed ? agent.name : undefined}
+					aria-label={sidebarState.collapsed ? agent.name : undefined}
+				>
+					<span
+						class="sidebar-persona-avatar"
+						style={agent.ugc_character_ref
+							? ''
+							: `background: ${agent.gradient ?? 'var(--gradient)'}`}
+					>
+						{#if agent.ugc_character_ref}
+							<!-- decorative: the persona name is announced by the link label beside it -->
+							<!-- 64px covers the 28px box at 2x DPR; these were pulling the full
+							     1.5MB original for a 24px avatar, on every portal page. -->
+							<img
+								src={thumbUrl(agent.ugc_character_ref, 64)}
+								onerror={(e) => restoreOriginal(e, agent.ugc_character_ref)}
+								alt=""
+								width="28"
+								height="28"
+								loading="lazy"
+								decoding="async"
+							/>
+						{:else}
+							{agent.initial ?? (agent.name?.[0] ?? '?').toUpperCase()}
+						{/if}
+					</span>
+					{#if !sidebarState.collapsed}
+						<span class="sidebar-nav-label">
+							{agent.name}
+							<span
+								class="sidebar-persona-status"
+								class:status-active={agent.status === 'active'}
+								class:status-paused={agent.status === 'paused'}
+							></span>
+							<!-- the dot encodes status by colour alone — name it for AT -->
+							{#if agent.status === 'active' || agent.status === 'paused'}
+								<span class="sr-only">({agent.status === 'active' ? 'Active' : 'Paused'})</span>
+							{/if}
+						</span>
+					{/if}
+				</a>
+			{/snippet}
+
+			<!-- Only the ROWS scroll. The label, search and New Persona sit outside the
+			     bounded area: when they were inside it, they filled the whole 11rem floor
+			     and a client re-audit measured 0 of 6 personas visible at every height from
+			     600 to 1200px. Not rendered at all for an account with no personas, so an
+			     empty list reserves no space. -->
+			{#if sidebarAgents.length > 0}
+			<div class="sidebar-persona-rows">
+			{#if sidebarState.collapsed}
+				<!-- Icon rail: groups add nothing at 28px wide — flat list. -->
+				{#each filteredSidebarAgents as agent (agent.id)}
+					{@render personaItem(agent)}
+				{/each}
+			{:else}
+				<!-- Projects first, each a collapsible section; searching overrides collapse. -->
+				{#each groupedSidebar.sections as section (section.group.id)}
+					{@const folded = collapsedGroups.includes(section.group.id) && !personaSearch.trim()}
+					<button
+						type="button"
+						class="sidebar-group-head"
+						aria-expanded={!folded}
+						onclick={() => toggleGroupCollapsed(section.group.id)}
+					>
+						<svg
+							aria-hidden="true"
+							class="sidebar-group-chevron"
+							class:folded
+							width="12"
+							height="12"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2.5"
+							stroke-linecap="round"
+							stroke-linejoin="round"><path d="M6 9l6 6 6-6" /></svg
+						>
+						<span class="sidebar-group-name">{section.group.name}</span>
+						<span class="sidebar-group-count">{section.members.length}</span>
+					</button>
+					{#if !folded}
+						{#each section.members as agent (agent.id)}
+							{@render personaItem(agent)}
+						{/each}
+						{#if section.members.length === 0}
+							<div class="sidebar-persona-empty">No personas in this project yet.</div>
+						{/if}
+					{/if}
+				{/each}
+				{#if groupedSidebar.sections.length > 0 && groupedSidebar.ungrouped.length > 0}
+					{@const ungroupedFolded = collapsedGroups.includes('__ungrouped__') && !personaSearch.trim()}
+					<button
+						type="button"
+						class="sidebar-group-head"
+						aria-expanded={!ungroupedFolded}
+						onclick={() => toggleGroupCollapsed('__ungrouped__')}
+					>
+						<svg
+							aria-hidden="true"
+							class="sidebar-group-chevron"
+							class:folded={ungroupedFolded}
+							width="12"
+							height="12"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2.5"
+							stroke-linecap="round"
+							stroke-linejoin="round"><path d="M6 9l6 6 6-6" /></svg
+						>
+						<span class="sidebar-group-name">Ungrouped</span>
+						<span class="sidebar-group-count">{groupedSidebar.ungrouped.length}</span>
+					</button>
+					{#if !ungroupedFolded}
+						{#each groupedSidebar.ungrouped as agent (agent.id)}
+							{@render personaItem(agent)}
+						{/each}
+					{/if}
+				{:else}
+					{#each groupedSidebar.ungrouped as agent (agent.id)}
+						{@render personaItem(agent)}
+					{/each}
+				{/if}
+				{#if filteredSidebarAgents.length === 0 && personaSearch.trim()}
+					<div class="sidebar-persona-empty">No personas match "{personaSearch}"</div>
+				{/if}
+			{/if}
+			</div>
+			{/if}
+			</div>
 		</nav>
 
 		<!-- Bottom -->
@@ -864,12 +942,13 @@
 			{#if !sidebarState.collapsed}
 				<div class="sidebar-plan-badge">
 					<span class="sidebar-plan-dot"></span>
-					<span>{(data as any).badgeLabel ?? 'Personal account'}</span>
+					<span class="sidebar-plan-label" title={badgeText}>{badgeText}</span>
 					{#if (data as any).credits}
 						{@const wallet = (data as any).credits as {
 							balance: number;
 							billing_mode: string;
 							paid_by: string | null;
+							label: string | null;
 							currency: string;
 							formatted: string;
 							usd: string;
@@ -887,7 +966,7 @@
 							<!-- A member spends from the workspace owner's wallet, so naming it
 							     is not decoration: an unlabelled shared balance is how someone
 							     concludes their own credits are being drained. -->
-							<span class="credit-pill-label">{wallet.paid_by ?? 'Balance'}</span>
+							<span class="credit-pill-label">{wallet.label ?? wallet.paid_by ?? 'Balance'}</span>
 							<span class="credit-pill-amount">{unmetered ? '∞' : wallet.formatted}</span>
 						</a>
 					{/if}
@@ -901,7 +980,14 @@
 		<!-- Header -->
 		<header class="portal-header">
 			<div class="portal-header-left">
-				<button class="hamburger-btn" onclick={toggleSidebar} aria-label="Toggle navigation menu">
+				<button
+					class="hamburger-btn"
+					bind:this={hamburgerBtn}
+					onclick={openDrawerFromButton}
+					aria-label="Navigation menu"
+					aria-expanded={sidebarState.open}
+					aria-controls="portal-sidebar"
+				>
 					<svg
 						aria-hidden="true"
 						width="20"
@@ -1014,8 +1100,8 @@
 						class="portal-user-badge"
 						onclick={toggleUserDropdown}
 						aria-expanded={userDropdownOpen}
-						aria-haspopup="true"
-						aria-label="User menu"
+						aria-controls="user-account-panel"
+						aria-label="Account: {data.user?.email ?? 'signed in'}"
 						bind:this={userMenuTrigger}
 					>
 						<span class="portal-user-avatar">
@@ -1029,12 +1115,24 @@
 					</button>
 
 					{#if userDropdownOpen}
-						<div class="user-dropdown-menu glass-card" role="menu">
+						<!-- A disclosure, not an ARIA menu. role="menu" promised arrow-key
+						     navigation this never had, for a panel holding one address and
+						     one button. It closes when focus leaves it, so it can no longer be
+						     left open behind the page (re-audit N12). -->
+						<div
+							class="user-dropdown-menu glass-card"
+							id="user-account-panel"
+							onfocusout={(e) => {
+								const next = e.relatedTarget as Node | null;
+								const box = e.currentTarget as HTMLElement;
+								if (next && !box.contains(next) && next !== userMenuTrigger) closeUserDropdown();
+							}}
+						>
 							<div class="user-dropdown-info">
 								<span class="user-email">{data.user?.email ?? ''}</span>
 							</div>
 							<hr class="dropdown-divider" />
-							<button class="dropdown-item logout-btn" role="menuitem" onclick={handleLogout}>
+							<button class="dropdown-item logout-btn" onclick={handleLogout}>
 								<svg
 									aria-hidden="true"
 									width="14"
@@ -1092,14 +1190,28 @@
 	</div>
 </div>
 
-{#if mustChangePassword}
-	<div class="pw-gate" role="dialog" aria-modal="true" aria-labelledby="pw-gate-title">
+{#if showPasswordGate}
+	<div
+		class="pw-gate"
+		role="dialog"
+		aria-modal="true"
+		aria-labelledby="pw-gate-title"
+		aria-describedby="pw-gate-desc"
+	>
 		<form class="pw-gate-card" onsubmit={submitPasswordChange}>
-			<h2 id="pw-gate-title">Set your password</h2>
-			<p>
-				You're on a shared starter password. Pick your own to continue — you'll use it for every
-				login from here on.
-			</p>
+			{#if mustChangePassword}
+				<h2 id="pw-gate-title">Set your password</h2>
+				<p id="pw-gate-desc">
+					You're on a shared starter password. Pick your own to continue — you'll use it for every
+					login from here on.
+				</p>
+			{:else}
+				<h2 id="pw-gate-title">Choose a new password</h2>
+				<p id="pw-gate-desc">
+					Your reset link worked and you're signed in. Pick a new password — at least 8 characters —
+					and use it the next time you sign in.
+				</p>
+			{/if}
 			<label class="pw-gate-field">
 				New password
 				<input
@@ -1107,6 +1219,7 @@
 					autocomplete="new-password"
 					minlength="8"
 					required
+					bind:this={pwFirstField}
 					bind:value={pwNew}
 				/>
 			</label>
@@ -1123,6 +1236,20 @@
 			<button type="submit" class="pw-gate-btn" disabled={pwSaving || !pwNew || !pwConfirm}>
 				{pwSaving ? 'Saving…' : 'Save password'}
 			</button>
+			{#if !mustChangePassword}
+				<!-- A recovery is the user's choice, so it has an exit; the provisioned
+				     starter-password gate above deliberately does not. -->
+				<button
+					type="button"
+					class="pw-gate-later"
+					onclick={() => {
+						recoveryDismissed = true;
+						clearRecoveryParam();
+					}}
+				>
+					Not now — change it later in Settings → Profile
+				</button>
+			{/if}
 		</form>
 	</div>
 {/if}
@@ -1333,31 +1460,50 @@
 		overflow-x: hidden;
 	}
 
-	/* The persona list gets its own bounded scroll so it cannot push Publish and
-	   Setup out of the sidebar — see the note in the markup. It shrinks before
-	   the fixed sections do, and never grows past a third of the rail. */
+	/* The persona list is LAST in the rail (see the markup), so it cannot push
+	   any primary destination out of view. It takes whatever height the nav
+	   above leaves and never reserves any of its own: the previous
+	   `min-height: 11rem` sat on the whole block, so its label, search field and
+	   New Persona link consumed the floor and a re-audit measured 0 of 6 persona
+	   rows visible at every height from 600 to 1200px.
+
+	   Only .sidebar-persona-rows scrolls. Its floor (about three rows) applies
+	   only when there are personas to show — the rows element is not rendered
+	   for an empty account. On a rail too short for the nav plus three rows the
+	   whole .sidebar-nav scrolls, and what falls below the fold is then the tail
+	   of the persona list, never a destination. */
 	.sidebar-personas {
 		display: flex;
 		flex-direction: column;
 		gap: 2px;
-		/* GROW into whatever the fixed sections leave, with a real floor.
-		
-		   This was `flex: 0 1 auto; min-height: 0`, which reads as "shrink me to
-		   nothing before anything else gives" — and since Network, Library,
-		   Publish and Setup do not shrink, the persona list absorbed the entire
-		   overflow and collapsed to a single row with scroll arrows. That is worse
-		   than the problem it was fixing: the point was to stop the persona list
-		   burying Publish and Setup, not to crush it.
-		
-		   `flex: 1 1 auto` makes it the section that takes the slack, and the
-		   min-height keeps roughly five personas visible on a laptop before it
-		   starts scrolling inside itself. Publish and Setup still stay anchored
-		   below it, because it can no longer grow past the space it is given. */
 		flex: 1 1 auto;
-		min-height: 11rem;
+		min-height: 0;
+	}
+	.sidebar-persona-rows {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		flex: 1 1 auto;
+		min-height: 7.5rem;
 		overflow-y: auto;
 		overflow-x: hidden;
+		overscroll-behavior: contain;
 		scrollbar-width: thin;
+	}
+
+	/* A mouse does not need a 44px target the way a finger does. Tightening the
+	   rail's items on fine pointers only (WCAG 2.5.8 asks for 24px; this keeps 36)
+	   returns roughly 90px of height to the persona list on a laptop, and the
+	   touch drawer keeps its full 44px targets. */
+	@media (pointer: fine) and (min-width: 769px) {
+		.sidebar-nav .sidebar-nav-item {
+			min-height: 36px;
+			padding-top: 6px;
+			padding-bottom: 6px;
+		}
+		.sidebar-nav .sidebar-section-label {
+			padding-top: var(--space-3);
+		}
 	}
 
 	.sidebar-section-label {
@@ -1457,8 +1603,9 @@
 
 	.sidebar-plan-badge {
 		display: flex;
+		flex-wrap: wrap;
 		align-items: center;
-		gap: 8px;
+		gap: 6px 8px;
 		padding: 8px 12px;
 		border-radius: 8px;
 		background: var(--surface-2);
@@ -1846,6 +1993,16 @@
 	.pw-gate-field input:focus {
 		border-color: var(--accent);
 	}
+	.pw-gate-later {
+		margin-top: var(--space-2);
+		padding: var(--space-2);
+		border: none;
+		background: none;
+		color: var(--text-muted);
+		font-size: var(--text-base);
+		text-decoration: underline;
+		cursor: pointer;
+	}
 	.pw-gate-btn {
 		margin-top: 0.25rem;
 		border: none;
@@ -2180,7 +2337,13 @@
 	/* Wallet pill beside the account badge — "Credits $20.00" in the visitor's
 	   currency (only when credits mode ≠ off). */
 	.credit-pill {
-		margin-left: auto;
+		/* Its own line under the role label, never beside it: side by side, the
+		   label wrapped onto four lines and the pill still overflowed. */
+		flex: 1 1 100%;
+		min-width: 0;
+		max-width: 100%;
+		justify-content: space-between;
+		margin-left: 0;
 		display: inline-flex;
 		align-items: center;
 		gap: 0.35rem;
@@ -2196,13 +2359,27 @@
 	.credit-pill:hover {
 		border-color: rgba(255, 255, 255, 0.3);
 	}
+	/* The name truncates; the AMOUNT never does. A re-audit found the named pill
+	   ("UX Audit Co ₱7,518.00") running 10–17px past its card at every width, the
+	   amount clipped to "₱7,518." — the one part of the pill that matters. */
+	.sidebar-plan-label {
+		flex: 1 1 0;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
 	.credit-pill-label {
 		color: var(--text-muted);
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
 	}
 	.credit-pill-amount {
 		font-weight: 600;
 		color: var(--success-text);
 		font-variant-numeric: tabular-nums;
+		flex-shrink: 0;
 	}
 	.credit-pill.low .credit-pill-amount {
 		color: var(--error-text);

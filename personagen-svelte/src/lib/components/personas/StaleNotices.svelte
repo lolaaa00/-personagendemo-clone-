@@ -21,7 +21,8 @@
 	let {
 		warnings,
 		onAction = null,
-		busy = false
+		busy = false,
+		blockedReason = null
 	}: {
 		warnings: StaleWarning[];
 		/**
@@ -31,6 +32,12 @@
 		onAction?: ((warning: StaleWarning) => void) | null;
 		/** True while any generation the page runs is in flight. */
 		busy?: boolean;
+		/**
+		 * Set when this seat may not run the fix (a viewer). The button still shows,
+		 * disabled with the reason — hiding it would leave "generate them again"
+		 * with nothing beside it, which is the defect this component closes.
+		 */
+		blockedReason?: string | null;
 	} = $props();
 </script>
 
@@ -83,12 +90,17 @@
 						<button
 							type="button"
 							class="stale-action"
-							disabled={busy}
-							aria-describedby="stale-detail-{warning.key}"
+							disabled={busy || !!blockedReason}
+							aria-describedby="stale-detail-{warning.key}{blockedReason
+								? ` stale-blocked-${warning.key}`
+								: ''}"
 							onclick={() => onAction?.(warning)}
 						>
 							{busy ? 'Working…' : warning.action.label}
 						</button>
+						{#if blockedReason}
+							<span class="stale-blocked" id="stale-blocked-{warning.key}">{blockedReason}</span>
+						{/if}
 					{/if}
 				</div>
 			</div>
@@ -138,6 +150,12 @@
 	.stale-action:focus-visible {
 		outline: 2px solid var(--focus-ring);
 		outline-offset: 2px;
+	}
+	.stale-blocked {
+		display: block;
+		margin-top: 0.35rem;
+		font-size: var(--text-sm);
+		color: var(--text-dim);
 	}
 	.stale-action:disabled {
 		opacity: 0.55;

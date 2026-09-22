@@ -190,6 +190,8 @@ export const load: LayoutServerLoad = async ({ locals, request, url, depends }) 
 			billing_mode: string;
 			/** Set when the wallet on screen belongs to a workspace owner, not the viewer. */
 			paid_by: string | null;
+			/** What the pill calls the wallet (workspace name), or null for "Balance". */
+			label: string | null;
 			currency: string;
 			amount: number;
 			formatted: string;
@@ -223,6 +225,7 @@ export const load: LayoutServerLoad = async ({ locals, request, url, depends }) 
 				mode,
 				billing_mode: shown.billingMode,
 				paid_by: shown.paidBy,
+				label: shown.label,
 				currency,
 				amount: creditsToAmount(balance, currency, s.fx_rates),
 				// Pill: whole units with ".00" (A$28.00). Tooltip: the exact USD balance.

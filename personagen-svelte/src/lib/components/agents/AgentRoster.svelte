@@ -8,11 +8,40 @@
 	import { quote } from '$lib/stores/pricing.svelte';
 	import { plural, countLabel } from '$lib/plural';
 	// Using any[] because agents data comes from raw JSON with camelCase fields
+	import { seatBlockedReason, type SeatCapabilities } from '$lib/seat';
 	interface Props {
 		agents: any[];
+		/** The viewer's seat. Absent = full access (the never-brick default). */
+		seat?: SeatCapabilities;
 	}
 
-	let { agents }: Props = $props();
+	let { agents, seat }: Props = $props();
+
+	/**
+	 * The Active switch's state as the user last set it, until the server's data
+	 * catches up.
+	 *
+	 * `agents` is plain load data, not a $state proxy, so the old
+	 * `agent.active = !agent.active` mutated an object nothing was watching: the
+	 * POST succeeded, the toast said "Status updated to active", and the switch,
+	 * the badge, the sidebar dot and the KPI all went on showing the OLD state
+	 * until a reload. A client re-audit caught it — the natural reaction, a
+	 * second press, then paused the persona again.
+	 *
+	 * So: an override the UI reads immediately, then invalidateAll() so every
+	 * surface (badge, sidebar, KPI) reconciles to what the server now holds, and
+	 * the override is dropped once that data arrives.
+	 */
+	let activeOverride = $state<Record<string, boolean>>({});
+	let togglingIds = $state<Record<string, boolean>>({});
+	const isActive = (agent: any): boolean => activeOverride[agent.id] ?? !!agent.active;
+	const shownStatus = (agent: any): string =>
+		agent.id in activeOverride ? (activeOverride[agent.id] ? 'active' : 'paused') : agent.status;
+
+	/** A viewer seat can see personas but the server refuses the toggle (403). */
+	let toggleBlocked = $derived(seatBlockedReason(seat, 'creator'));
+	/** Deleting a persona outright is owner-only on the server. */
+	let deleteBlocked = $derived(seatBlockedReason(seat, 'owner'));
 
 	/** Gen Spend read "$0.00 (0)" on every row for any account whose generations
 	 *  predate metering, spending a column of horizontal budget on a cell that
@@ -211,32 +240,35 @@
 	}
 
 	async function toggleAgent(agent: any) {
-		if (agent.status === 'pending') return;
-		const originalActive = agent.active;
-		const originalStatus = agent.status;
-
-		agent.active = !agent.active;
-		agent.status = agent.active ? 'active' : 'paused';
+		if (agent.status === 'pending' || toggleBlocked || togglingIds[agent.id]) return;
+		const next = !isActive(agent);
+		activeOverride = { ...activeOverride, [agent.id]: next };
+		togglingIds = { ...togglingIds, [agent.id]: true };
+		const status = next ? 'active' : 'paused';
 
 		try {
 			const res = await fetch('/api/agents/config', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					agentId: agent.id,
-					status: agent.status
-				})
+				body: JSON.stringify({ agentId: agent.id, status })
 			});
-			const data = await res.json();
+			const data = await res.json().catch(() => ({}));
 			if (!res.ok || !data.success) {
 				throw new Error(data.error || 'Server error');
 			}
-			showToast(`Status updated to ${agent.status} for ${agent.name}`, 'success');
+			showToast(`${agent.name} is now ${status}`, 'success');
+			// Every other surface that shows this persona's state reads server data.
+			await invalidateAll();
 		} catch (err: any) {
 			console.error('[AgentRoster] Failed to toggle status in DB:', err);
-			agent.active = originalActive;
-			agent.status = originalStatus;
 			showToast(err.message || 'Failed to sync status with database', 'error');
+		} finally {
+			// Success: the reloaded data now carries the new state. Failure: dropping
+			// the override IS the revert, to exactly what the server still holds.
+			const { [agent.id]: _dropped, ...rest } = activeOverride;
+			activeOverride = rest;
+			const { [agent.id]: _busy, ...others } = togglingIds;
+			togglingIds = others;
 		}
 	}
 
@@ -275,12 +307,16 @@
 		onDelete={() => void requestDelete(selectedVisible.slice())}
 	/>
 
-	<div class="dash-table" aria-label="Persona roster">
-		<!-- Header Row -->
-		<!-- Visual column labels. Each row carries its own spoken summary, so
-		     announcing these again would read as a fifteenth row of nothing. -->
-		<div class="dash-row row-header" class:no-spend={!hasSpend} aria-hidden="true">
-			<span class="pick-cell">
+	<!-- A real, consistent ARIA table (audit A11Y-002). The previous version made
+	     each row a role="link" with the checkbox, switch and delete button nested
+	     INSIDE the link — a link's children are presentational, so those controls
+	     were misrepresented — left one orphan role="cell", and hid a focusable
+	     select-all checkbox inside an aria-hidden header. Now: table > row >
+	     columnheader/cell throughout, so a screen reader announces each value with
+	     its column, and the persona's NAME is the link. -->
+	<div class="dash-table" role="table" aria-label="Persona roster">
+		<div class="dash-row row-header" class:no-spend={!hasSpend} role="row">
+			<span class="pick-cell" role="columnheader">
 				<input
 					type="checkbox"
 					class="pick-box"
@@ -291,56 +327,49 @@
 					onchange={() => (allVisibleSelected ? clearSelection() : selectAllVisible())}
 				/>
 			</span>
-			<span>Persona</span>
-			<span>Followers</span>
-			<span>Engagement</span>
+			<span role="columnheader">Persona</span>
+			<span role="columnheader">Followers</span>
+			<span role="columnheader">Engagement</span>
 			{#if hasSpend}
-				<span>Gen Spend</span>
+				<span role="columnheader">Gen Spend</span>
 			{/if}
-			<span>Published</span>
-			<span>Active</span>
-			<span class="pick-cell"><span class="sr-only">Delete</span></span>
+			<span role="columnheader">Published <span class="col-period">all time</span></span>
+			<span role="columnheader">Active</span>
+			<span class="pick-cell" role="columnheader"><span class="sr-only">Delete</span></span>
 		</div>
 
 		<!-- Agent Rows -->
 		{#each filteredAgents as agent (agent.id)}
-			<!-- svelte-ignore a11y_no_noninteractive_element_to_interactive_role -->
+			<!-- The whole row stays clickable as a mouse convenience; the keyboard and
+			     screen-reader path is the persona-name link in the first data cell. -->
+			<!-- svelte-ignore a11y_click_events_have_key_events -->
+			<!-- svelte-ignore a11y_interactive_supports_focus -->
 			<div
-				onclick={() => goto(`/personas/${agent.id}`)}
-				onkeydown={(e) => {
-					// The row is focusable but was mouse-only. Enter matches link semantics;
-					// the target guard stops the row from swallowing Enter aimed at the
-					// checkbox, toggle or delete button nested inside it.
-					if (e.target !== e.currentTarget) return;
-					if (e.key === 'Enter') {
-						e.preventDefault();
-						goto(`/personas/${agent.id}`);
-					}
+				onclick={(e) => {
+					// A click on a control inside the row is that control's, not the row's.
+					if ((e.target as HTMLElement).closest('a, button, input, label')) return;
+					goto(`/personas/${agent.id}`);
 				}}
 				class="dash-row"
 				class:no-spend={!hasSpend}
 				class:is-selected={selected.has(agent.id)}
-				role="link"
-				aria-label="{agent.name}{agent.handle ? `, ${agent.handle}` : ''}, {agent.niche}, {agent.status}. {agent.followers} followers, {agent.engagementRate}% engagement, {(agent.publishedPosts ?? 0) > 0 ? `${agent.publishedPosts} published` : 'nothing published yet'}."
-				tabindex="0"
+				role="row"
 			>
-				<!-- svelte-ignore a11y_click_events_have_key_events -->
-				<label
-					class="pick-cell"
-					role="cell"
-					onclick={(e) => e.stopPropagation()}
-					title="Select {agent.name}"
-				>
-					<input
-						type="checkbox"
-						class="pick-box"
-						aria-label="Select {agent.name}"
-						checked={selected.has(agent.id)}
-						disabled={deleting}
-						onchange={() => toggleSelect(agent.id)}
-					/>
-				</label>
-				<div class="dash-agent-cell">
+				<!-- The cell is a span; the label inside it keeps the whole hit area
+				     clickable. A role on the <label> itself is not a valid pairing. -->
+				<span class="pick-cell pick-select" role="cell">
+					<label class="pick-hit" title="Select {agent.name}">
+						<input
+							type="checkbox"
+							class="pick-box"
+							aria-label="Select {agent.name}"
+							checked={selected.has(agent.id)}
+							disabled={deleting}
+							onchange={() => toggleSelect(agent.id)}
+						/>
+					</label>
+				</span>
+				<div class="dash-agent-cell" role="cell">
 					<div
 						class="dash-agent-avatar"
 						style={agent.ugc_character_ref ? '' : `background: ${agent.gradient}`}
@@ -353,7 +382,7 @@
 					</div>
 					<div class="dash-agent-info">
 						<span class="dash-agent-name" style="display: flex; align-items: center; gap: 0.5rem;">
-							{agent.name}
+							<a class="dash-agent-link" href="/personas/{agent.id}">{agent.name}</a>
 							{#if agent.is_overseer}
 								<!-- Gradient darkened: the original mint/cyan pair carried white 9px
 								     text at ~2.5:1. These stops clear 4.5:1 in both themes. -->
@@ -377,22 +406,28 @@
 								</span>
 							{/if}
 						</span>
+						<!-- Join only the parts that exist (audit UI-001): a missing handle OR a
+						     missing niche must never leave a dangling " · ". -->
 						<span class="dash-agent-niche">
-							{#if agent.handle}{agent.handle} · {/if}{agent.niche} ·
-							<StatusBadge status={agent.status} />
+							{#each [agent.handle, agent.niche].filter((v) => typeof v === 'string' && v.trim()) as part (part)}<span
+									class="niche-part">{part}</span
+								><span class="niche-sep" aria-hidden="true">·</span>{/each}<StatusBadge
+								status={shownStatus(agent)}
+							/>
 						</span>
 					</div>
 				</div>
-				<span class="dash-cell">{agent.followers}</span>
-				<span class="dash-cell {engagementClass(agent.engagementRate)}">
-					{agent.engagementRate}%
+				<span class="dash-cell" role="cell"><span class="cell-label" aria-hidden="true">Followers</span>{agent.followers}</span>
+				<span class="dash-cell {engagementClass(agent.engagementRate)}" role="cell">
+					<span class="cell-label" aria-hidden="true">Engagement</span>{agent.engagementRate}%
 				</span>
 				<!-- total_token_cost is the ledger's PROVIDER spend. The wallet was debited
 				     at the platform markup, so rendering the raw figure with a `$` showed
 				     roughly a third of what the persona actually drew down. quote() puts
 				     it back in the same money the wallet pill speaks. -->
 				{#if hasSpend}
-					<span class="dash-cell token-cost-cell">
+					<span class="dash-cell token-cost-cell" role="cell">
+						<span class="cell-label" aria-hidden="true">Gen spend</span>
 						{#if agent.total_token_cost !== undefined && agent.total_token_cost !== null && agent.total_token_cost > 0}
 							{quote(agent.total_token_cost)}
 							<span class="token-count">({formatTokens(agent.total_token_usage || 0)})</span>
@@ -403,14 +438,16 @@
 				{/if}
 				<!-- A count of posts that actually went out, not a score. The bar that
 				     used to live here plotted a number floored at 70 by a constant. -->
-				<span class="dash-cell published-cell">
+				<span class="dash-cell published-cell" role="cell">
+					<span class="cell-label" aria-hidden="true">Published, all time</span>
 					{#if (agent.publishedPosts ?? 0) > 0}
 						<span class="published-count">{agent.publishedPosts}</span>
 					{:else}
 						<span class="published-none" title="This persona has not published anything yet">—</span>
 					{/if}
 				</span>
-				<span class="dash-cell">
+				<span class="dash-cell" role="cell">
+					<span class="cell-label" aria-hidden="true">Active</span>
 					{#if agent.status === 'pending'}
 						<a
 							class="agent-connect-cta"
@@ -420,13 +457,20 @@
 							Connect →
 						</a>
 					{:else}
+						<!-- The name is STABLE and aria-checked carries the state: a name that
+						     flips with state ("Pause X", on) makes a screen reader announce the
+						     action and the state together, and hides the visible column label
+						     "Active" (WCAG 2.5.3). -->
 						<button
 							type="button"
 							class="toggle"
 							role="switch"
-							aria-checked={agent.active}
-							aria-label="{agent.active ? 'Pause' : 'Activate'} {agent.name}"
-							title="{agent.active ? 'Pause' : 'Activate'} {agent.name} — an active persona generates and spends"
+							aria-checked={isActive(agent)}
+							aria-label="Active: {agent.name}"
+							aria-busy={togglingIds[agent.id] ? 'true' : undefined}
+							disabled={!!toggleBlocked || !!togglingIds[agent.id]}
+							title={toggleBlocked ??
+								`${isActive(agent) ? 'Pause' : 'Activate'} ${agent.name} — an active persona generates and spends`}
 							onclick={(e) => {
 								e.stopPropagation();
 								toggleAgent(agent);
@@ -437,15 +481,15 @@
 						</button>
 					{/if}
 				</span>
-				<span class="pick-cell">
+				<span class="pick-cell" role="cell">
 					<button
 						type="button"
 						class="row-del"
 						aria-label="Delete {agent.name}"
 						title={agent.is_overseer
 							? 'The Hermes overseer is protected and cannot be deleted'
-							: `Delete ${agent.name}`}
-						disabled={agent.is_overseer || deleting}
+							: (deleteBlocked ?? `Delete ${agent.name}`)}
+						disabled={agent.is_overseer || deleting || !!deleteBlocked}
 						onclick={(e) => {
 							e.stopPropagation();
 							void requestDelete([agent.id]);
@@ -544,13 +588,73 @@
 		background: var(--accent-soft);
 	}
 
+	/* The roster lays itself out by ITS OWN width, not the viewport's. Keyed on
+	   the viewport, the desktop grid switched on at 769px — where the sidebar
+	   takes 240px and leaves the roster ~480px — so eight columns were forced
+	   into a space that fits four, and a re-audit measured 11–92px clipped
+	   between 769 and 950px. The container decides now. */
+	.dash-table {
+		container-type: inline-size;
+		container-name: roster;
+	}
+
+	/* minmax(0, …) on every flexible track. A bare `fr` track's minimum is its
+	   content's min-content, so tracks could not shrink below their content
+	   (the overflow) and each row — its own grid — sized its columns from its
+	   own content (the zig-zag between rows). With a zero minimum every row
+	   resolves identical tracks. The switch column keeps a real floor. */
 	.dash-row {
 		display: grid;
-		grid-template-columns: 30px 2.5fr 1fr 1fr 1fr 1.2fr 0.6fr 34px;
+		grid-template-columns:
+			30px minmax(0, 2.5fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr)
+			minmax(0, 1.2fr) minmax(52px, 0.6fr) 34px;
 	}
 	/* One fewer column when Gen Spend has nothing to report. */
 	.dash-row.no-spend {
-		grid-template-columns: 30px 2.5fr 1fr 1fr 1.2fr 0.6fr 34px;
+		grid-template-columns:
+			30px minmax(0, 2.5fr) minmax(0, 1fr) minmax(0, 1fr)
+			minmax(0, 1.2fr) minmax(52px, 0.6fr) 34px;
+	}
+	.dash-row > * {
+		min-width: 0;
+	}
+
+	/* The card labels exist for sighted users in the stacked layout only.
+	   Screen readers get the column headers instead, so these stay aria-hidden. */
+	.cell-label {
+		display: none;
+	}
+	.col-period {
+		display: block;
+		font-size: 0.85em;
+		font-weight: 400;
+		text-transform: none;
+		letter-spacing: 0;
+		color: var(--text-dim);
+	}
+
+	.dash-agent-link {
+		color: inherit;
+		text-decoration: none;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.dash-agent-link:hover {
+		text-decoration: underline;
+	}
+	.dash-agent-link:focus-visible {
+		outline: 2px solid var(--focus-ring, var(--accent));
+		outline-offset: 2px;
+		border-radius: 3px;
+	}
+
+	.niche-part {
+		white-space: nowrap;
+	}
+	.niche-sep {
+		margin: 0 0.35em;
+		color: var(--text-dim);
 	}
 	.dash-row {
 		align-items: center;
@@ -720,7 +824,10 @@
 		min-width: 0;
 	}
 
-	label.pick-cell {
+	.pick-hit {
+		display: flex;
+		align-items: center;
+		justify-content: center;
 		position: relative;
 		cursor: pointer;
 		/* Negative margin keeps the wider hit area from shifting the grid. */
@@ -730,7 +837,7 @@
 
 	/* Padding alone leaves a 27px target; this overlay takes it to 44x44 without
 	   resizing the native box or disturbing the grid. */
-	label.pick-cell::before {
+	.pick-hit::before {
 		content: '';
 		position: absolute;
 		left: 50%;
@@ -891,16 +998,16 @@
 		font-size: 0.85rem;
 	}
 
-	@media (max-width: 768px) {
-		/* Stacked card: checkbox / agent / delete on the first line, metrics
-		   underneath the agent cell. */
+	@container roster (max-width: 720px) {
+		/* Stacked card: checkbox / agent / delete on the first line, labelled
+		   metrics underneath the agent cell. */
 		.dash-row {
 			grid-template-columns: 30px 1fr 34px;
 			gap: 0.4rem 0.5rem;
 			padding: 0.75rem 0.5rem;
 		}
 
-		label.pick-cell {
+		.pick-cell.pick-select {
 			grid-column: 1;
 			grid-row: 1;
 		}
@@ -910,7 +1017,7 @@
 			grid-row: 1;
 		}
 
-		span.pick-cell {
+		.pick-cell:not(.pick-select) {
 			grid-column: 3;
 			grid-row: 1;
 		}
@@ -919,14 +1026,40 @@
 			grid-column: 2;
 		}
 
+		/* Visually hidden, NOT display:none: the column headers must stay in the
+		   accessibility tree, or a screen reader loses which value is which in
+		   exactly the layout where the labels are no longer lined up. The
+		   select-all checkbox moves with it, so it stays reachable. */
 		.dash-row.row-header {
-			display: none;
+			position: absolute;
+			width: 1px;
+			height: 1px;
+			margin: -1px;
+			padding: 0;
+			overflow: hidden;
+			clip: rect(0 0 0 0);
+			white-space: nowrap;
+			border: 0;
 		}
 
 		.dash-cell {
+			display: flex;
+			align-items: center;
+			gap: 0.5rem;
 			font-size: 0.75rem;
 		}
 
+		.cell-label {
+			display: inline;
+			min-width: 6.5rem;
+			color: var(--text-dim);
+			font-weight: 600;
+		}
+	}
+
+	/* The filter bar stacks on narrow VIEWPORTS (its own row is not in the
+	   roster container). */
+	@media (max-width: 768px) {
 		.dash-table-header {
 			flex-direction: column;
 			align-items: flex-start;

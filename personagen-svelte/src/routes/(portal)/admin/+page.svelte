@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { quote } from '$lib/stores/pricing.svelte';
 	import { promptAction } from '$lib/stores/confirm.svelte';
 	import { showToast } from '$lib/stores/ui.svelte';
 	import PageShell from '$lib/components/ui/PageShell.svelte';
@@ -67,6 +68,7 @@
 			checkedAt: string | null;
 			note: string | null;
 		};
+		topupRequests?: Array<{ id: string; title: string; description: string | null; created_at: string; user_id: string }>;
 		platformKeys?: Array<{
 			id: string;
 			label: string;
@@ -405,28 +407,36 @@
 	</header>
 
 	<div class="stat-row">
-		<div class="stat"><span class="stat-n">{money(data.stats.spendMonth)}</span><span class="stat-l">Spend this month</span></div>
+		<!-- Spend as the WALLETS were charged — retail, in the viewer's currency —
+		     not raw provider cost in "$". Seat caps are enforced in retail, so the
+		     provider figure read a seat as a third of the way to a cap that was
+		     already blocking it (audit QA-001 / re-audit). -->
+		<div class="stat"><span class="stat-n">{quote(data.stats.spendMonth)}</span><span class="stat-l">Charged this month</span></div>
 		<div class="stat"><span class="stat-n">{data.stats.generationsMonth}</span><span class="stat-l">Generations this month</span></div>
-		<div class="stat"><span class="stat-n">{data.stats.publishedTotal}</span><span class="stat-l">Posts published</span></div>
+		<div class="stat"><span class="stat-n">{data.stats.publishedTotal}</span><span class="stat-l">Posts published, all time</span></div>
 		<div class="stat"><span class="stat-n">{data.stats.seatCount}</span><span class="stat-l">Seats</span></div>
 		<div class="stat"><span class="stat-n">{data.stats.personaCount}</span><span class="stat-l">Personas</span></div>
 	</div>
 
 	{#if data.isPlatformAdmin}
 		<div class="tab-group-label">Platform — every tenant</div>
-		<div class="admin-tabs" role="tablist">
+		<!-- View switchers, not tabs: there are no tab panels, and the strip holds
+		     a link and an action button — neither of which can live in a tablist.
+		     A labelled group of pressed-state buttons says what this really is,
+		     and the selected view is announced (it was shown by class only). -->
+		<div class="admin-tabs" role="group" aria-label="Platform views">
 			{#each [['controls', 'Controls & Health'], ['platform', 'Users & Credits']] as [k, label] (k)}
-				<button role="tab" class="admin-tab platform-tab-item" class:active={tab === k} onclick={() => (tab = k as any)}>{label}</button>
+				<button type="button" class="admin-tab platform-tab-item" class:active={tab === k} aria-pressed={tab === k} onclick={() => (tab = k as any)}>{label}</button>
 			{/each}
 			<a class="admin-tab platform-tab-item" href="/models">Model Manager ↗</a>
-			<button role="tab" class="admin-tab platform-tab-item" onclick={() => { tab = 'platform'; loadLive(); }}>Live feed</button>
+			<button type="button" class="admin-tab platform-tab-item" onclick={() => { tab = 'platform'; loadLive(); }}>Refresh live feed</button>
 		</div>
 	{/if}
 	{#if data.workspaces.length > 0}
 		<div class="tab-group-label">Workspace{data.workspaces.length > 1 ? 's' : ''} — {data.workspaces.map((w: any) => w.name).join(', ')}</div>
-		<div class="admin-tabs" role="tablist">
+		<div class="admin-tabs" role="group" aria-label="Workspace views">
 			{#each [['overview', 'Overview'], ['activity', 'Activity Log'], ['seats', 'Seats'], ['spend', 'Spend'], ['access', 'Access & Keys']] as [k, label] (k)}
-				<button role="tab" class="admin-tab" class:active={tab === k} onclick={() => (tab = k as any)}>{label}</button>
+				<button type="button" class="admin-tab" class:active={tab === k} aria-pressed={tab === k} onclick={() => (tab = k as any)}>{label}</button>
 			{/each}
 		</div>
 	{/if}
@@ -595,6 +605,25 @@
 					</p>
 				{/if}
 
+				{#if controls.topupRequests && controls.topupRequests.length > 0}
+					<section class="pkeys" aria-labelledby="topup-req-h">
+						<h3 id="topup-req-h">Top-up requests waiting ({controls.topupRequests.length})</h3>
+						<p class="admin-hint">
+							Card payments are off, so customers ask from Billing and the credit is loaded by hand
+							(Credits tab → grant). Oldest first.
+						</p>
+						<ul class="topup-req-list">
+							{#each controls.topupRequests as r (r.id)}
+								<li>
+									<strong>{r.title.replace(/^Top-up request · /, '')}</strong>
+									<span class="muted small">— {when(r.created_at)}</span>
+									{#if r.description}<p class="muted small">{r.description}</p>{/if}
+								</li>
+							{/each}
+						</ul>
+					</section>
+				{/if}
+
 				{#if controls.platformKeys && controls.platformKeys.length > 0}
 					<section class="pkeys">
 						<h3>Platform provider keys</h3>
@@ -603,6 +632,12 @@
 							2026-09-21, so there is no per-user fallback left. Set in the deployment environment,
 							not here: this panel is read-only and never reads a key's value.
 						</p>
+						<!-- A data table may scroll sideways on a phone (WCAG 1.4.10), but only
+					     inside a region that is reachable and named; it used to run off the
+					     right edge of the page with no cue at all. -->
+						<!-- A scrollable region must be focusable, or a keyboard user cannot scroll it (WCAG 2.1.1). -->
+						<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+						<div class="pkeys-scroll" role="region" aria-label="Platform provider keys" tabindex="0">
 						<table class="admin-table">
 								<thead>
 									<tr>
@@ -636,6 +671,7 @@
 									{/each}
 							</tbody>
 						</table>
+						</div>
 					</section>
 				{/if}
 
@@ -653,7 +689,7 @@
 						</p>
 						<div class="filter-row">
 							{#each ['off', 'shadow', 'enforce'] as m (m)}
-								<button class="filter-btn" class:active={controls.switches.credits_mode.stored === m} disabled={controlsBusy} onclick={() => setSwitch('credits_mode', m)}>{m}</button>
+								<button class="filter-btn" class:active={controls.switches.credits_mode.stored === m} aria-pressed={controls.switches.credits_mode.stored === m} disabled={controlsBusy} onclick={() => setSwitch('credits_mode', m)}>{m}</button>
 							{/each}
 						</div>
 						{#if controls.switches.credits_mode.source === 'env'}
@@ -673,8 +709,8 @@
 							timelines and the live feed.
 						</p>
 						<div class="filter-row">
-							<button class="filter-btn" class:active={controls.switches.activity_log.stored === true} disabled={controlsBusy} onclick={() => setSwitch('activity_log', true)}>on</button>
-							<button class="filter-btn" class:active={controls.switches.activity_log.stored === false} disabled={controlsBusy} onclick={() => setSwitch('activity_log', false)}>off</button>
+							<button class="filter-btn" class:active={controls.switches.activity_log.stored === true} aria-pressed={controls.switches.activity_log.stored === true} disabled={controlsBusy} onclick={() => setSwitch('activity_log', true)}>on</button>
+							<button class="filter-btn" class:active={controls.switches.activity_log.stored === false} aria-pressed={controls.switches.activity_log.stored === false} disabled={controlsBusy} onclick={() => setSwitch('activity_log', false)}>off</button>
 						</div>
 						{#if controls.switches.activity_log.source === 'env'}
 							<p class="admin-warn">ACTIVITY_LOG is set in the host environment and overrides the stored value.</p>
@@ -774,7 +810,7 @@
 						</p>
 						<div class="filter-row">
 							{#each ['v1', 'v2'] as g (g)}
-								<button class="filter-btn" class:active={controls.switches.persona_generator.stored === g} disabled={controlsBusy} onclick={() => setSwitch('persona_generator', g)}>{g}</button>
+								<button class="filter-btn" class:active={controls.switches.persona_generator.stored === g} aria-pressed={controls.switches.persona_generator.stored === g} disabled={controlsBusy} onclick={() => setSwitch('persona_generator', g)}>{g}</button>
 							{/each}
 						</div>
 						{#if controls.switches.persona_generator.source === 'env'}
@@ -796,7 +832,7 @@
 						</p>
 						<div class="filter-row">
 							{#each ['off', 'shadow', 'fill', 'on'] as b (b)}
-								<button class="filter-btn" class:active={controls.switches.persona_backbone.stored === b} disabled={controlsBusy} onclick={() => setSwitch('persona_backbone', b)}>{b}</button>
+								<button class="filter-btn" class:active={controls.switches.persona_backbone.stored === b} aria-pressed={controls.switches.persona_backbone.stored === b} disabled={controlsBusy} onclick={() => setSwitch('persona_backbone', b)}>{b}</button>
 							{/each}
 						</div>
 						{#if controls.switches.persona_backbone.source === 'env'}
@@ -815,8 +851,8 @@
 							renewing through the webhook whatever this says.
 						</p>
 						<div class="filter-row">
-							<button class="filter-btn" class:active={controls.switches.plans_enabled.stored === true} disabled={controlsBusy} onclick={() => setSwitch('plans_enabled', true)}>on</button>
-							<button class="filter-btn" class:active={controls.switches.plans_enabled.stored === false} disabled={controlsBusy} onclick={() => setSwitch('plans_enabled', false)}>off</button>
+							<button class="filter-btn" class:active={controls.switches.plans_enabled.stored === true} aria-pressed={controls.switches.plans_enabled.stored === true} disabled={controlsBusy} onclick={() => setSwitch('plans_enabled', true)}>on</button>
+							<button class="filter-btn" class:active={controls.switches.plans_enabled.stored === false} aria-pressed={controls.switches.plans_enabled.stored === false} disabled={controlsBusy} onclick={() => setSwitch('plans_enabled', false)}>off</button>
 						</div>
 					</div>
 
@@ -833,8 +869,8 @@
 							uploader's rights assertion in the activity log.
 						</p>
 						<div class="filter-row">
-							<button class="filter-btn" class:active={controls.switches.video_ingest.stored === true} disabled={controlsBusy} onclick={() => setSwitch('video_ingest', true)}>on</button>
-							<button class="filter-btn" class:active={controls.switches.video_ingest.stored === false} disabled={controlsBusy} onclick={() => setSwitch('video_ingest', false)}>off</button>
+							<button class="filter-btn" class:active={controls.switches.video_ingest.stored === true} aria-pressed={controls.switches.video_ingest.stored === true} disabled={controlsBusy} onclick={() => setSwitch('video_ingest', true)}>on</button>
+							<button class="filter-btn" class:active={controls.switches.video_ingest.stored === false} aria-pressed={controls.switches.video_ingest.stored === false} disabled={controlsBusy} onclick={() => setSwitch('video_ingest', false)}>off</button>
 						</div>
 						{#if controls.switches.video_ingest.source === 'env'}
 							<p class="admin-hint warn">VIDEO_INGEST is set in the host environment and overrides the stored value.</p>
@@ -1083,7 +1119,7 @@
 				</div>
 				<div class="filter-row">
 					{#each [['all', 'All'], ['auth', 'Auth'], ['nav', 'Pages'], ['generation', 'Generations'], ['review', 'Reviews'], ['publish', 'Publishing'], ['scheduler', 'Autopilot'], ['admin', 'Admin'], ['errors', 'Errors']] as [k, label] (k)}
-						<button class="filter-btn" class:active={timelineFilter === k} onclick={() => (timelineFilter = k as any)}>{label}</button>
+						<button class="filter-btn" class:active={timelineFilter === k} aria-pressed={timelineFilter === k} onclick={() => (timelineFilter = k as any)}>{label}</button>
 					{/each}
 				</div>
 				{#if timelineLoading}
@@ -1168,7 +1204,7 @@
 			</p>
 			<div class="filter-row">
 				{#each [['all', 'All'], ['generation', 'Generations'], ['review', 'Approvals'], ['publish', 'Publishes']] as [k, label] (k)}
-					<button class="filter-btn" class:active={activityFilter === k} onclick={() => (activityFilter = k as any)}>{label}</button>
+					<button class="filter-btn" class:active={activityFilter === k} aria-pressed={activityFilter === k} onclick={() => (activityFilter = k as any)}>{label}</button>
 				{/each}
 			</div>
 			{#if filteredActivity.length === 0}
@@ -1233,7 +1269,7 @@
 		{/if}
 	{:else if tab === 'spend'}
 		<section class="admin-card">
-			<h2>Spend this month — by seat</h2>
+			<h2>Charged this month — by seat</h2>
 			{#if data.spendByActor.length === 0}
 				<p class="admin-hint">No spend recorded this month.</p>
 			{:else}
@@ -1241,14 +1277,14 @@
 					<thead><tr><th>Seat</th><th>Spend</th></tr></thead>
 					<tbody>
 						{#each data.spendByActor as row (row.actor)}
-							<tr><td class="mono">{row.actor}</td><td>{money(row.usd)}</td></tr>
+							<tr><td class="mono">{row.actor}</td><td>{quote(row.usd)}</td></tr>
 						{/each}
 					</tbody>
 				</table>
 			{/if}
 		</section>
 		<section class="admin-card">
-			<h2>Spend this month — by persona</h2>
+			<h2>Charged this month — by persona</h2>
 			{#if data.spendByPersona.length === 0}
 				<p class="admin-hint">No spend recorded this month.</p>
 			{:else}
@@ -1256,7 +1292,7 @@
 					<thead><tr><th>Persona</th><th>Spend</th></tr></thead>
 					<tbody>
 						{#each data.spendByPersona as row (row.persona)}
-							<tr><td>{row.persona}</td><td>{money(row.usd)}</td></tr>
+							<tr><td>{row.persona}</td><td>{quote(row.usd)}</td></tr>
 						{/each}
 					</tbody>
 				</table>
@@ -1458,6 +1494,31 @@
 	}
 	/* The explanation for a row sits directly under it, sharing its full width,
 	   so the reason a key is flagged never ends up in a truncated cell. */
+	.pkeys-scroll {
+		overflow-x: auto;
+		max-width: 100%;
+	}
+	.pkeys-scroll:focus-visible {
+		outline: 2px solid var(--focus-ring);
+		outline-offset: 2px;
+	}
+	.topup-req-list {
+		margin: 0;
+		padding: 0;
+		list-style: none;
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-2);
+	}
+	.topup-req-list li {
+		padding: var(--space-3) var(--space-4);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+	}
+	.topup-req-list p {
+		margin: var(--space-1) 0 0;
+		overflow-wrap: anywhere;
+	}
 	.pkey-problem td {
 		padding-top: 0;
 		border-top: none;

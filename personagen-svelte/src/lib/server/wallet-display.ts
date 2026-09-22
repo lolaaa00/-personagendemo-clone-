@@ -38,6 +38,12 @@ export interface DisplayWallet {
 	balance: number;
 	billingMode: string;
 	/**
+	 * What the pill calls this wallet. The workspace name when there is exactly
+	 * one workspace it funds — for a member (the owner's) and for the owner
+	 * (their own) alike — otherwise null, and the pill says "Balance".
+	 */
+	label: string | null;
+	/**
 	 * The workspace whose owner pays, when that is not the signed-in user.
 	 * Null means this is the user's own wallet and the pill needs no caveat.
 	 */
@@ -63,12 +69,18 @@ export function walletToDisplay(
 	const mine: DisplayWallet = {
 		balance: num(own?.balance_credits),
 		billingMode: own?.billing_mode ?? 'credits',
-		paidBy: null
+		paidBy: null,
+		label: null
 	};
 
 	const rows = workspaces ?? [];
 	// Owning any workspace at all means the user's own wallet is a paying one.
-	if (rows.some((w) => w.owner_id === userId)) return mine;
+	const owned = rows.filter((w) => w.owner_id === userId);
+	if (owned.length > 0) {
+		// An owner's wallet funds their workspace; name it, as a member's pill is
+		// named. Only when there is exactly one to name.
+		return owned.length === 1 ? { ...mine, label: owned[0].workspace_name || null } : mine;
+	}
 
 	const foreign = rows.filter((w) => w.owner_id && w.owner_id !== userId);
 	if (foreign.length === 0) return mine;
@@ -80,9 +92,11 @@ export function walletToDisplay(
 	if (owners.size > 1) return mine;
 
 	const paying = foreign[0];
+	const name = paying.workspace_name || 'your workspace';
 	return {
 		balance: num(paying.balance_credits),
 		billingMode: paying.billing_mode ?? 'credits',
-		paidBy: paying.workspace_name || 'your workspace'
+		paidBy: name,
+		label: name
 	};
 }

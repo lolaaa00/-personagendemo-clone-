@@ -80,11 +80,19 @@ export const load: PageServerLoad = async ({ locals, request, url }) => {
 		balanceUsd: formatCredits(balance, 'USD', s.fx_rates, 'en-US', { whole: false }),
 		buys: { imagePosts: buys.imagePosts, videoPosts: buys.videoPosts, talkingHeads: buys.talkingHeads },
 		paymentsOpen: stripeEnabled(),
+		// Open top-up requests this account has made (private: RLS select-own).
+		topupRequests: await pendingTopups(locals.supabase, user.id),
 		packs: CREDIT_PACKS.map((p) => ({
 			...p,
 			usd: formatMoney(p.usdCents / 100, 'USD', 'en-US'),
-			local: currency === 'USD' ? null : formatMoney(creditsToAmount(p.usdCents, currency, s.fx_rates), currency, locale),
-			worth: formatCredits(p.credits, currency, s.fx_rates, locale),
+			// Real cents, like the balance above them (audit QA-002): whole-unit
+			// rounding printed "$10.00 ≈ ₱627.00" on the same screen as a balance of
+			// "₱626.50 · exactly $10.00".
+			local:
+				currency === 'USD'
+					? null
+					: formatMoney(creditsToAmount(p.usdCents, currency, s.fx_rates), currency, locale, { whole: false }),
+			worth: formatCredits(p.credits, currency, s.fx_rates, locale, { whole: false }),
 			buys: whatItBuys(p.credits, markup)
 		})),
 		ledger: (ledger ?? []).map((r: LedgerRow) => ({
@@ -137,3 +145,25 @@ export const load: PageServerLoad = async ({ locals, request, url }) => {
 			}))
 	};
 };
+
+
+/** This account's open top-up requests, newest first. Never throws. */
+async function pendingTopups(
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- the Supabase client is untyped across this codebase
+	supabase: any,
+	userId: string
+): Promise<Array<{ id: string; title: string; created_at: string }>> {
+	try {
+		const { data } = await supabase
+			.from('tickets')
+			.select('id, title, created_at')
+			.eq('user_id', userId)
+			.eq('status', 'open')
+			.like('title', 'Top-up request%')
+			.order('created_at', { ascending: false })
+			.limit(10);
+		return data ?? [];
+	} catch {
+		return [];
+	}
+}

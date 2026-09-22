@@ -760,10 +760,45 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		});
 		const planUsd = planTotalUsd(previewPlan);
 
+		// WHO pays, resolved the same way the charge is (credits.ts →
+		// resolveBillingAccount: persona → workspace → owner). The composer's last
+		// step told every seat "taken from your balance" while the owner's wallet
+		// was the one debited — a client re-audit filed it (UX-002, at the moment
+		// of spend). The 402 path below already knew; the preview never said.
+		const payerId = await resolveBillingAccount(locals.supabase, agentId, user.id).catch(
+			() => user.id
+		);
+		let payer: { kind: 'self' | 'workspace_owner'; name: string | null } = {
+			kind: 'self',
+			name: null
+		};
+		if (payerId !== user.id) {
+			let wsName: string | null = null;
+			try {
+				const { data: ag } = await locals.supabase
+					.from('agents')
+					.select('workspace_id')
+					.eq('id', agentId)
+					.maybeSingle();
+				if (ag?.workspace_id) {
+					const { data: ws } = await locals.supabase
+						.from('workspaces')
+						.select('name')
+						.eq('id', ag.workspace_id)
+						.maybeSingle();
+					wsName = ws?.name ?? null;
+				}
+			} catch {
+				/* the kind is still right; the name is a courtesy */
+			}
+			payer = { kind: 'workspace_owner', name: wsName };
+		}
+
 		return json({
 			success: true,
 			preview: {
 				kind: 'post',
+				payer,
 				topic: genInput.topic || null,
 				// The format the composer opens on, and everything it needs to plan
 				// any OTHER format the user switches to without a second round-trip.
@@ -917,12 +952,23 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 	// count a single call, which made the gate short by one on exactly the runs
 	// that also bought a video.
 	const llm2 = 2 * priceOf('openrouter', 'llm');
+	// A TEXT card typesets locally for $0 and only falls back to the image model
+	// when this host cannot render. The gate used to add that fallback image to
+	// every image run, so a text card's gate asked for ~32 credits while the tile
+	// and the composer quoted ~8 — a wallet holding 8–31 credits was shown an
+	// affordable price and then refused, the client audit's original failure
+	// (UX-001) moved to the last few cents of the wallet. The gate now sizes to
+	// the path that will actually run, the same check the preview quotes from.
+	const textCardRendersLocally =
+		body.media === 'image' && genInput.stillStyle === 'graphic'
+			? await isCardRendererAvailable().catch(() => false)
+			: false;
 	const roughUsd =
 		identityUsd +
 		(wantCinematic
 			? llm2 + 4 * priceOf('fal', 'image', 'nano') + priceOf('fal', 'video', 'pro')
 			: body.media === 'image'
-				? llm2 + priceOf('fal', 'image', 'nano')
+				? llm2 + (textCardRendersLocally ? 0 : priceOf('fal', 'image', 'nano'))
 				: // A transfer bills per second, so its upper bound is the LONGEST clip
 					// ingest would have accepted whenever the run didn't carry a measured
 					// duration — otherwise a 30s clip sails through a gate sized for one

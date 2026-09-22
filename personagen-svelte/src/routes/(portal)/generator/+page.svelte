@@ -2,7 +2,7 @@
 	import { syncParam, readParam } from '$lib/url-state';
 	import { dialog } from '$lib/actions/dialog';
 	import { showToast } from '$lib/stores/ui.svelte';
-	import { onMount, untrack } from 'svelte';
+	import { onMount, untrack, tick } from 'svelte';
 	import { Personas, BrandBrief, type GeneratedPersona } from '$lib/services/api';
 	import { PERSONA_ARCHETYPES, CONTENT_FOCUS_OPTIONS } from '$lib/persona-profile';
 	import TraitPicker from '$lib/components/persona/TraitPicker.svelte';
@@ -273,7 +273,7 @@
 		if (generatingPersona) return;
 		generatingPersona = true;
 		try {
-			const res = await BrandBrief.generateFullPersona(selectedBriefId || null, 1, direction);
+			const res = await BrandBrief.generateFullPersona(selectedBriefId || null, 1, direction, market);
 			if (res.success && res.data?.personas?.length) {
 				applyGeneratedPersona(res.data.personas[0]);
 			} else {
@@ -298,7 +298,7 @@
 		vaultLoading = true;
 		vaultOptions = [];
 		try {
-			const res = await BrandBrief.generateFullPersona(selectedBriefId || null, 3, direction);
+			const res = await BrandBrief.generateFullPersona(selectedBriefId || null, 3, direction, market);
 			if (res.success && res.data?.personas) {
 				vaultOptions = res.data.personas;
 			} else {
@@ -380,10 +380,23 @@
 		);
 	}
 
+	/**
+	 * Move focus to the new step's heading after a step change (audit UI-004,
+	 * reopened on re-test). Pressing Next with the keyboard disabled the focused
+	 * button as step 2 rendered, so focus fell to <body>: a screen-reader user
+	 * heard nothing and had to start again from the skip link. The heading is
+	 * made programmatically focusable (tabindex -1) and announces the step.
+	 */
+	async function focusStepHeading() {
+		await tick();
+		document.querySelector<HTMLElement>('.step-panel h2')?.focus();
+	}
+
 	function nextStep() {
 		if (currentStep < TOTAL_STEPS) {
 			currentStep++;
 			saveProgress();
+			void focusStepHeading();
 		}
 	}
 
@@ -391,6 +404,7 @@
 		if (currentStep > 1) {
 			currentStep--;
 			saveProgress();
+			void focusStepHeading();
 		}
 	}
 
@@ -520,7 +534,7 @@
 								r="4"
 							/></svg
 						>
-						<h2>Identity</h2>
+						<h2 tabindex="-1" class="step-heading">Identity <span class="sr-only">— step 1 of 3</span></h2>
 					</div>
 					<div class="lightning-btn-wrapper">
 						<button
@@ -711,7 +725,7 @@
 							d="M2 12l10 5 10-5"
 						/></svg
 					>
-					<h2>Persona</h2>
+					<h2 tabindex="-1" class="step-heading">Persona <span class="sr-only">— step 2 of 3</span></h2>
 				</div>
 				<p class="panel-desc">Define the personality, content skills, and visual identity.</p>
 
@@ -887,7 +901,7 @@
 							d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"
 						/></svg
 					>
-					<h2>Review & Create</h2>
+					<h2 tabindex="-1" class="step-heading">Review &amp; Create <span class="sr-only">— step 3 of 3</span></h2>
 				</div>
 				<p class="panel-desc">Confirm everything looks good before creating your persona.</p>
 
@@ -992,9 +1006,9 @@
 				<!-- Selection Cards for Creation Methods -->
 				<div
 					class="creation-methods-grid"
-					style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin-top: 2rem;"
+					style="display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.25rem; margin-top: 2rem; max-width: 34rem;"
 				>
-					<!-- Method 1: DB Only -->
+					<!-- Create -->
 					<div
 						class="method-card glass-card"
 						style="padding: 1.5rem; border: 1px solid var(--border); border-radius: var(--radius-sm); display: flex; flex-direction: column; justify-content: space-between; gap: 1rem; background: var(--surface-2);"
@@ -1003,13 +1017,13 @@
 							<h4
 								style="margin: 0; font-size: var(--text-base); font-weight: 700; color: var(--text);"
 							>
-								Create Persona Direct
+								Create the persona
 							</h4>
 							<p
 								style="margin: 0.5rem 0 0 0; font-size: var(--text-xs); color: var(--text-dim); line-height: 1.5;"
 							>
-								Creates a persona directly in the database. Social media channels can be linked
-								manually later using the dashboard.
+								Saves the persona now. You connect its social accounts from its own page —
+								Connections — whenever you're ready; nothing is posted until you do.
 							</p>
 						</div>
 						<button
@@ -1051,58 +1065,11 @@
 						{/if}
 					</div>
 
-					<!-- Method 2: Account Factory Automation -->
-					<div
-						class="method-card glass-card"
-						style="padding: 1.5rem; border: 1px solid var(--border); border-radius: var(--radius-sm); display: flex; flex-direction: column; justify-content: space-between; gap: 1rem; background: var(--surface-2); position: relative;"
-					>
-						<div>
-							<h4
-								style="margin: 0; font-size: var(--text-base); font-weight: 700; color: var(--text);"
-							>
-								Register Automated Account
-							</h4>
-							<p
-								style="margin: 0.5rem 0 0 0; font-size: var(--text-xs); color: var(--text-dim); line-height: 1.5;"
-							>
-								Trigger automated account creation on Instagram, YouTube, etc. using the Account
-								Factory service.
-							</p>
-						</div>
-						<button
-							type="button"
-							class="btn-method-action"
-							disabled={isCreating || !step1Valid || !step2Valid || personaLimitReached}
-							title={createBlockedReason ?? undefined}
-							aria-busy={isCreating}
-							onclick={createPersonaDirect}
-							style="background: var(--gradient-cta); color: #fff; border: none; padding: 0.75rem; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; font-size: var(--text-xs); font-weight: 700; border-radius: var(--radius-xs); cursor: pointer; text-align: center; transition: all 0.2s;"
-						>
-							{#if isCreating}
-								Creating...
-							{:else}
-								<svg
-									width="14"
-									height="14"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="2"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									aria-hidden="true"
-									><path
-										d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 00-2.91-.09z"
-									/><path
-										d="M12 15l-3-3a22 22 0 012-3.95A12.88 12.88 0 0122 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 01-4 2z"
-									/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0" /><path
-										d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"
-									/></svg
-								>
-								Create &amp; Connect Later
-							{/if}
-						</button>
-					</div>
+					<!-- A second card offered "Register Automated Account — trigger automated
+					     account creation on Instagram, YouTube, etc. using the Account Factory
+					     service". Its button called the same createPersonaDirect as this one:
+					     nothing was registered anywhere. Removed after a client re-audit; one
+					     honest action is better than two where one is a promise. -->
 				</div>
 
 				{#if createError}

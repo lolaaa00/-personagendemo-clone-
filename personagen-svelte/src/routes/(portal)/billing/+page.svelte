@@ -3,6 +3,7 @@
 	import { onMount } from 'svelte';
 	import { invalidateAll } from '$app/navigation';
 	import PageShell from '$lib/components/ui/PageShell.svelte';
+	import { plural } from '$lib/plural';
 
 	let { data } = $props();
 
@@ -102,6 +103,28 @@
 		}
 	}
 
+	let requesting = $state<string | null>(null);
+	let requestedPack = $state<string | null>(null);
+	async function requestTopup(packId: string) {
+		error = null;
+		requesting = packId;
+		try {
+			const res = await fetch('/api/billing/request-topup', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ packId })
+			});
+			const body = await res.json().catch(() => ({}));
+			if (!res.ok || !body.success) throw new Error(body.error || `HTTP ${res.status}`);
+			requestedPack = packId;
+			await invalidateAll();
+		} catch (e) {
+			error = (e as Error).message;
+		} finally {
+			requesting = null;
+		}
+	}
+
 	const when = (iso: string) =>
 		new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 
@@ -143,8 +166,10 @@
 					{#if empty}
 						Your wallet is empty. Nothing more can be generated — even a text post pays for its writing — so top up to continue.
 					{:else}
-						≈ <strong>{data.buys.imagePosts}</strong> image posts, or <strong>{data.buys.videoPosts}</strong> video posts, or
-						<strong>{data.buys.talkingHeads}</strong> talking-head clips. A text post costs only its writing, about eight cents.
+						≈ <strong>{data.buys.imagePosts}</strong> {plural(data.buys.imagePosts, 'image post')}, or
+						<strong>{data.buys.videoPosts}</strong> {plural(data.buys.videoPosts, 'video post')}, or
+						<strong>{data.buys.talkingHeads}</strong> {plural(data.buys.talkingHeads, 'talking-head clip')}. A text
+						post costs only its writing, about eight cents.
 					{/if}
 				</p>
 			{/if}
@@ -225,13 +250,33 @@
 			<div class="packs-head">
 				<h2>Top up</h2>
 				<p class="muted">
-					Charged in USD at par: $25 buys $25.00 of generation. Bigger packs include bonus credit.
+					Charged in USD at par — a dollar buys a dollar of generation — and the bigger packs add bonus
+					credit on top.
 					{#if !data.paymentsOpen}<span class="soon"
-							>Card payments are not switched on yet, so these packs cannot be bought from here
-							today. <a href="/guides?view=uservoice">Post on the request board</a> and we will load
-							your wallet manually.</span
+							>Card payments are not switched on yet. Pick a pack and we'll load it into your wallet by
+							hand — the request comes straight to us, privately, with the amount on it.</span
 						>{/if}
+					{#if data.workspaces.length > 0}
+						<!-- A seat was invited to top up a wallet the same page says does not pay
+						     for their work. Say which work this wallet funds. -->
+						<span class="soon"
+							>This tops up <strong>your personal wallet</strong>, used only for personas of your own.
+							Personas in {#each data.workspaces as w, i (w.id)}{i > 0 ? ', ' : ''}<strong
+									>{w.name}</strong
+								>{/each} are funded by the workspace owner.</span
+						>
+					{/if}
 				</p>
+				{#if data.topupRequests?.length}
+					<ul class="topup-pending" aria-label="Your open top-up requests">
+						{#each data.topupRequests as r (r.id)}
+							<li>
+								<strong>{r.title.replace(/^Top-up request · /, '')}</strong> requested {when(r.created_at)}
+								— we'll load it and it will appear in your balance.
+							</li>
+						{/each}
+					</ul>
+				{/if}
 			</div>
 			{#if error}<p class="error" role="alert">{error}</p>{/if}
 			<div class="pack-grid">
@@ -244,12 +289,26 @@
 							<strong>{p.worth}</strong> of generation
 							{#if p.bonus > 0}<span class="bonus">+{Math.round((p.bonus / (p.credits - p.bonus)) * 100)}% bonus</span>{/if}
 						</p>
-						<p class="buys">≈ {p.buys.imagePosts} image posts · {p.buys.videoPosts} video posts</p>
+						<p class="buys">
+							≈ {p.buys.imagePosts} {plural(p.buys.imagePosts, 'image post')} · {p.buys.videoPosts}
+							{plural(p.buys.videoPosts, 'video post')}
+						</p>
 						{#if !data.paymentsOpen}
 							<!-- The disabled tier carries the way forward itself. It used to say
 							     only "Coming soon", with the manual route explained in a
 							     paragraph above that a user scanning the cards never reads. -->
-							<a class="buy ghost" href="/guides?view=uservoice">Ask us to load {p.usd}</a>
+							<button
+								class="buy ghost"
+								disabled={requesting !== null}
+								aria-describedby="topup-note"
+								onclick={() => requestTopup(p.id)}
+							>
+								{requesting === p.id
+									? 'Sending…'
+									: requestedPack === p.id
+										? 'Requested ✓'
+										: `Ask us to load ${p.usd}`}
+							</button>
 						{:else}
 						<button class="buy" class:ghost={!p.featured} disabled={buying !== null} onclick={() => buy(p.id)}>
 							{buying === p.id ? 'Opening checkout…' : `Buy ${p.usd}`}
@@ -258,7 +317,14 @@
 					</article>
 				{/each}
 			</div>
-			<p class="fineprint">Secure checkout by Stripe. Prices in USD; your bank converts at its rate. Receipts by email.</p>
+			{#if data.paymentsOpen}
+				<p class="fineprint">Secure checkout by Stripe. Prices in USD; your bank converts at its rate. Receipts by email.</p>
+			{:else}
+				<p class="fineprint" id="topup-note">
+					A request is private to your account. Nothing is charged to a card; the credit appears in
+					your balance once we load it.
+				</p>
+			{/if}
 		</section>
 	{/if}
 
@@ -340,7 +406,16 @@
 <style>
 	.billing {
 		display: grid;
+		/* minmax(0, 1fr), not the implicit `auto` track. An auto track grows to
+		   its widest child's min-content width — here the 679px `nowrap` activity
+		   table — so on a phone the whole column overflowed and 338px of balance
+		   copy and top-up cards were clipped (WCAG 1.4.10). Capped, the track fits
+		   the viewport and the table scrolls inside its own .table-wrap. */
+		grid-template-columns: minmax(0, 1fr);
 		gap: 2rem;
+	}
+	.billing > * {
+		min-width: 0;
 	}
 	.banner {
 		display: flex;
@@ -641,5 +716,18 @@
 			grid-template-columns: 1fr;
 			padding: 1.25rem;
 		}
+	}
+	.topup-pending {
+		margin: var(--space-3) 0 0;
+		padding: var(--space-3) var(--space-4);
+		list-style: none;
+		border: 1px solid var(--border);
+		border-left: 3px solid var(--accent);
+		border-radius: var(--radius-sm);
+		background: var(--surface-2);
+		font-size: var(--text-base);
+	}
+	.topup-pending li + li {
+		margin-top: var(--space-2);
 	}
 </style>

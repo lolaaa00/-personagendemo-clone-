@@ -194,8 +194,8 @@
 			price: '0',
 			blurb: 'Try it with no card.',
 			features: [
-				'One free generation credit per person to start',
-				'Unlimited text posts',
+				'Starter generation credit — no card needed',
+				'No cap on text posts — each costs only its writing',
 				'All 13 platforms',
 				'Approval queue + verified publishing',
 				'Every price quoted before you confirm',
@@ -212,7 +212,7 @@
 			features: [
 				'3 personas',
 				'$40 / month of media generation included',
-				'Unlimited text posts',
+				'No cap on text posts — each costs only its writing',
 				'All 13 platforms',
 				'1 brand brief',
 				'Advisor + Semi-autonomous',
@@ -229,7 +229,7 @@
 			features: [
 				'10 personas',
 				'$180 / month of media generation included',
-				'Unlimited text posts',
+				'No cap on text posts — each costs only its writing',
 				'All 13 platforms',
 				'3 brand briefs',
 				'All three autonomy levels',
@@ -248,7 +248,7 @@
 			features: [
 				'Unlimited personas',
 				'$600 / month of media generation included',
-				'Unlimited text posts',
+				'No cap on text posts — each costs only its writing',
 				'All 13 platforms',
 				'Unlimited brand briefs',
 				'Priority generation queue',
@@ -868,7 +868,7 @@
 				Create your first persona<span class="lp-btn-tail"> — free</span>
 			</a>
 			<p class="lp-fineprint lp-final-fineprint">
-				No credit card. One free generation credit per person to start. Cancel any time.
+				No credit card. Starter generation credit to try it, one grant per person. Cancel any time.
 			</p>
 		</div>
 	</section>

@@ -900,7 +900,9 @@
 			<button
 				class="btn-ghost btn-campaign"
 				disabled={data.agents.length === 0}
-				title="Fill the calendar with a mix of content — drafts for your review"
+				title={data.agents.length === 0
+					? 'Create a persona first — a campaign fills the calendar for one'
+					: 'Fill the calendar with a mix of content — drafts for your review'}
 				onclick={() => (campaignOpen = true)}
 			>
 				<svg
@@ -921,10 +923,16 @@
 				>
 				Plan Campaign
 			</button>
+			<!-- With no persona there is nobody to post as: the form opened with an empty
+			     Persona select and enabled Save/Schedule (re-audit N14). Disabled, with
+			     the reason, like Plan Campaign beside it. -->
 			<button
 				class="btn-ghost"
 				onclick={openComposer}
-				title="Write a post yourself — nothing is generated until you ask for it"
+				disabled={data.agents.length === 0}
+				title={data.agents.length === 0
+					? 'Create a persona first — a post needs someone to post as'
+					: 'Write a post yourself — nothing is generated until you ask for it'}
 			>
 				<svg
 					width="16"
@@ -941,7 +949,8 @@
 			</button>
 			<button
 				class="btn-primary"
-				disabled={generatingPost}
+				disabled={generatingPost || data.agents.length === 0}
+				title={data.agents.length === 0 ? 'Create a persona first — generation writes as one' : undefined}
 				onclick={() => requestGeneratePost()}
 				style="display: inline-flex; align-items: center; gap: 0.5rem; background: var(--gradient-cta); border-color: transparent; white-space: nowrap;"
 			>

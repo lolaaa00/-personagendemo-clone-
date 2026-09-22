@@ -1398,8 +1398,8 @@
 										placeholder="One quote per line.&#10;Leave a blank line between quotes that need their own line breaks (a list, a myth/fact)."
 									></textarea>
 									<span class="hint" id="gc-cardquotes-hint">
-										Each quote becomes one card, typeset on our servers. No model runs, nothing is
-										charged — to the wallet or to your keys.
+										Each quote becomes one card, typeset on our servers. No model runs, so nothing
+										is charged.
 									</span>
 									{#if cardQuotes.length > MAX_CARD_QUOTES}
 										<span class="warn-line"
@@ -1980,10 +1980,12 @@
 									<dd>
 										<strong>{money(planUsd)}</strong>
 										{ownWords
-											? ' — no model runs; nothing is debited from the wallet or your keys'
-											: metered
-												? ' — taken from your balance when you approve'
-												: ' — estimated, nothing is debited'}
+											? ' — no model runs, so nothing is charged'
+											: !metered
+												? ' — estimated, nothing is debited'
+												: preview?.payer?.kind === 'workspace_owner'
+													? ` — taken from the ${preview.payer.name ?? 'workspace'} wallet (the workspace owner's) when you approve`
+													: ' — taken from your balance when you approve'}
 									</dd>
 								</div>
 							</dl>

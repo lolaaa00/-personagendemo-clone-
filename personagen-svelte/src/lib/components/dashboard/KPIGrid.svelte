@@ -56,19 +56,24 @@
 				// Token variants so the icon chips repaint with the brand theme and stay
 				// legible on the light surface (the raw brand hues washed out on white).
 				color: 'var(--accent-text)',
-				subtitle: `${connectedCount} of ${totalCount} connected`
+				// Each number names its own definition or period (audit ENH-005):
+				// "0 Active Personas" beside "2 of 14 connected" read as a
+				// contradiction when it was two different facts side by side.
+				subtitle: `switched on to generate · ${connectedCount} of ${totalCount} connected`
 			},
 			{
 				icon: 'engagement',
 				value: avgEngText,
 				label: 'Avg Engagement',
-				color: 'var(--cyan-text)'
+				color: 'var(--cyan-text)',
+				subtitle: 'likes ÷ views, published posts with stats'
 			},
 			{
 				icon: 'posts',
 				value: postsText,
 				label: 'Posts This Week',
-				color: 'var(--success-text)'
+				color: 'var(--success-text)',
+				subtitle: 'published in the last 7 days'
 			},
 			{
 				icon: 'reach',

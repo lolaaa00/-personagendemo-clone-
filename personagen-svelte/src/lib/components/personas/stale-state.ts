@@ -99,6 +99,9 @@ function joinNames(names: readonly string[]): string {
 	return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
 }
 
+/** Sentence case for a detail that opens with a stage name ("the side profiles…"). */
+const sentence = (text: string): string => text.charAt(0).toUpperCase() + text.slice(1);
+
 /** A `<key>_status` that records a failure. The routes write `failed: <message>`. */
 const isFailed = (status: string | undefined): boolean =>
 	!!status && status.toLowerCase().startsWith('failed');
@@ -219,28 +222,47 @@ export function staleWarnings(agent: unknown, now: number = Date.now()): StaleWa
 		out.push({
 			key: 'reference-photos-failed',
 			title: 'Some reference photos didn’t finish',
-			detail: `${joinNames(failedStages.map((stage) => stage.name))} failed to generate, so the photos that keep this persona’s face the same across videos are incomplete. Generate them again when you’re ready.`,
+			// "Generate them again" sat beside a button that retries ONE stage; the
+			// stages build on each other, so the copy now says to start with the
+			// earliest and that the rest follow from it.
+			detail: sentence(
+				`${joinNames(failedStages.map((stage) => stage.name))} didn’t finish, so the photos that keep this persona’s face the same across videos are incomplete. ${
+					failedStages.length > 1
+						? `Start with ${failedStages[0].name} — the others build on it.`
+						: 'Generate it again when you’re ready.'
+				}`
+			),
 			severity: 'warn',
 			// The stages build on each other, so the useful retry is the EARLIEST
 			// one that failed; the page's own order gate handles the rest.
-			action: {
-				kind: 'regenerate-kit-stage',
-				label: `Retry ${failedStages[0].name.replace(/^the /, '')}`,
-				stage: failedStages[0].key
-			}
+			// The character sheet is made by the PORTRAIT job, so its retry opens the
+			// portrait confirmation — the label says so rather than promising a sheet.
+			action:
+				failedStages[0].key === 'sheet'
+					? { kind: 'regenerate-portrait', label: 'Generate portrait again (it makes the sheet)' }
+					: {
+							kind: 'regenerate-kit-stage',
+							label: `Retry ${failedStages[0].name.replace(/^the /, '')}`,
+							stage: failedStages[0].key
+						}
 		});
 	}
 	if (stalledStages.length) {
 		out.push({
 			key: 'reference-photos-stalled',
 			title: 'Some reference photos never arrived',
-			detail: `${joinNames(stalledStages.map((stage) => stage.name))} were started a while ago and never came back. Nothing is running now — it’s safe to start them again.`,
+			detail: sentence(
+				`${joinNames(stalledStages.map((stage) => stage.name))} never came back after starting. Nothing is running now — it’s safe to start again${stalledStages.length > 1 ? ', beginning with ' + stalledStages[0].name : ''}.`
+			),
 			severity: 'info',
-			action: {
-				kind: 'regenerate-kit-stage',
-				label: `Start ${stalledStages[0].name.replace(/^the /, '')} again`,
-				stage: stalledStages[0].key
-			}
+			action:
+				stalledStages[0].key === 'sheet'
+					? { kind: 'regenerate-portrait', label: 'Start portrait again (it makes the sheet)' }
+					: {
+							kind: 'regenerate-kit-stage',
+							label: `Start ${stalledStages[0].name.replace(/^the /, '')} again`,
+							stage: stalledStages[0].key
+						}
 		});
 	}
 

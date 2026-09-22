@@ -187,6 +187,10 @@ export const GET: RequestHandler = async ({ locals }) => {
 		// Is each platform key even set, and has it worked lately. Booleans and
 		// timestamps only; this route never reads a key value.
 		platformKeys: await platformKeyStatuses(svc),
+		// Open wallet top-up requests from customers while card payments are off
+		// (/api/billing/request-topup). They are private to each customer, so only
+		// this platform-admin route, reading as the service role, sees them all.
+		topupRequests: await openTopupRequests(svc),
 		history: history ?? []
 	});
 };
@@ -387,3 +391,23 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 					: undefined
 	});
 };
+
+
+/** Every customer's open top-up request, oldest first (first come, first loaded). */
+async function openTopupRequests(
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- the Supabase client is untyped across this codebase
+	svc: any
+): Promise<Array<{ id: string; title: string; description: string | null; created_at: string; user_id: string }>> {
+	try {
+		const { data } = await svc
+			.from('tickets')
+			.select('id, title, description, created_at, user_id')
+			.eq('status', 'open')
+			.like('title', 'Top-up request%')
+			.order('created_at', { ascending: true })
+			.limit(50);
+		return data ?? [];
+	} catch {
+		return [];
+	}
+}

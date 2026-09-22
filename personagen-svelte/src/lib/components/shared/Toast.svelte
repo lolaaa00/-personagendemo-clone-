@@ -11,13 +11,17 @@
 	};
 </script>
 
-{#if toasts.length > 0}
-	<div class="toast-container" aria-live="polite" aria-atomic="false">
-		{#each toasts as toast (toast.id)}
+<!-- The live region is ALWAYS in the DOM. It used to mount together with its
+     first message, and a region created at the same moment as its content is
+     frequently not announced at all — and toasts are the only feedback several
+     actions give. The name also carries the message: aria-label="Dismiss
+     notification" replaced the text as the button's accessible name. -->
+<div class="toast-container" aria-live="polite" aria-atomic="false">
+	{#each toasts as toast (toast.id)}
 			<button
 				class="toast-item toast-{toast.type}"
 				onclick={() => dismissToast(toast.id)}
-				aria-label="Dismiss notification"
+				aria-label="{toast.message} — dismiss"
 			>
 				<span class="toast-icon toast-icon-{toast.type}">
 					<svg
@@ -36,9 +40,8 @@
 				</span>
 				<span class="toast-message">{toast.message}</span>
 			</button>
-		{/each}
-	</div>
-{/if}
+	{/each}
+</div>
 
 <style>
 	.toast-container {

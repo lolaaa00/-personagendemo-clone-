@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import { postStatusText } from '$lib/status-color';
 	import { thumbUrl, restoreOriginal, proxiedMediaUrl } from '$lib/image-url';
 	import { fly, fade } from 'svelte/transition';
@@ -6,6 +7,7 @@
 		getPostDisplay,
 		truncateError,
 		summarizeGenError,
+		getPostErrorSummary,
 		refineFormatOf,
 		VIDEO_FORMAT_LABEL
 	} from './postDisplay';
@@ -34,6 +36,7 @@
 		onPostNow = undefined,
 		onReject = undefined,
 		onRefined = undefined,
+		onRetry = undefined,
 		approveBlock = null,
 		// BUG, not dead code: three call sites (favorites, generations, review) pass
 		// characterRef, and this component never renders it — the caller's avatar is
@@ -48,6 +51,13 @@
 	}: {
 		post: any | null;
 		onClose: () => void;
+		/**
+		 * Retry a failed GENERATION in place (the persona page, which owns the
+		 * confirm-first composer). Where it is absent the drawer links to the
+		 * persona page with ?retry=<id>, which opens that same composer — so every
+		 * surface that shows a generation failure has a control for it (audit UX-007).
+		 */
+		onRetry?: (post: { id: string; agent_id?: string; content?: unknown }) => void;
 		/** When provided, the footer gets a Move-to-Trash button. The post is
 		 *  recoverable for 30 days; anything already live is torn down on-platform
 		 *  where the API allows it. NOT permanent — that is /trash's purge. */
@@ -821,6 +831,38 @@
 						> Generation failed — nothing was produced</strong
 					>
 					<p>{summarizeGenError(post)}</p>
+					<div class="drawer-error-actions">
+						{#if onRetry}
+							<button type="button" class="drawer-retry" onclick={() => onRetry?.(post)}>
+								Retry this post
+							</button>
+						{:else if post.agent_id}
+							<a
+								class="drawer-retry"
+								href="{resolve('/(portal)/personas/[agentId]', { agentId: post.agent_id })}?tab=studio&retry={post.id}"
+							>
+								Retry this post
+							</a>
+						{/if}
+						<a class="drawer-help" href="{resolve('/(portal)/guides')}#generation-failing">What went wrong?</a>
+					</div>
+				</div>
+			{/if}
+
+			{#if (post.status === 'failed' || post.status === 'partial') && display.mediaUrl}
+				<!-- The media exists, so this one failed at PUBLISHING. The drawer said
+				     nothing about why — a re-audit opened a publish-failed post from
+				     /generations and the calendar and found no reason and no next step. -->
+				<div class="drawer-error" role="alert">
+					<strong
+						>{post.status === 'partial'
+							? 'Published to some platforms, not all'
+							: 'Publishing failed — the post was made, but did not go out'}</strong
+					>
+					<p>{getPostErrorSummary(post) ?? 'The platform did not say why.'}</p>
+					<div class="drawer-error-actions">
+						<a class="drawer-help" href="{resolve('/(portal)/guides')}#publish-failing">What went wrong?</a>
+					</div>
 				</div>
 			{/if}
 
@@ -2238,5 +2280,37 @@
 			width: 100vw;
 			border-left: none;
 		}
+	}
+	.drawer-error-actions {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: var(--space-3);
+		margin-top: var(--space-3);
+	}
+	.drawer-retry {
+		display: inline-flex;
+		align-items: center;
+		min-height: 36px;
+		padding: 0 var(--space-4);
+		border: none;
+		border-radius: var(--radius-full, 999px);
+		background: var(--error);
+		color: #fff;
+		font: inherit;
+		font-weight: 600;
+		text-decoration: none;
+		cursor: pointer;
+	}
+	.drawer-help {
+		color: var(--accent-text);
+		font-weight: 600;
+		text-decoration: underline;
+		text-underline-offset: 2px;
+	}
+	.drawer-retry:focus-visible,
+	.drawer-help:focus-visible {
+		outline: 2px solid var(--focus-ring);
+		outline-offset: 2px;
 	}
 </style>

@@ -487,7 +487,7 @@ Platform: ${bp.platform || platform}
 					return json(
 						{
 							success: false,
-							error: 'No AI provider configured. Add an OpenRouter or Gemini key in Settings.'
+							error: 'Writing is unavailable on our side right now — the platform\'s AI provider is not configured. This isn\'t your account; tell us and we\'ll fix it.'
 						},
 						{ status: 400 }
 					);
@@ -875,7 +875,7 @@ Return a JSON object with:
 					return json(
 						{
 							success: false,
-							error: 'No AI provider configured. Add an OpenRouter or Gemini key in Settings.'
+							error: 'Writing is unavailable on our side right now — the platform\'s AI provider is not configured. This isn\'t your account; tell us and we\'ll fix it.'
 						},
 						{ status: 400 }
 					);
@@ -917,7 +917,7 @@ Return JSON: { "type": "script", "platform": "${platform}", "content": "formatte
 					return json(
 						{
 							success: false,
-							error: 'No AI provider configured. Add an OpenRouter or Gemini key in Settings.'
+							error: 'Writing is unavailable on our side right now — the platform\'s AI provider is not configured. This isn\'t your account; tell us and we\'ll fix it.'
 						},
 						{ status: 400 }
 					);
@@ -955,7 +955,7 @@ Return JSON: { "type": "titles", "platform": "${platform}", "titles": [string x 
 					return json(
 						{
 							success: false,
-							error: 'No AI provider configured. Add an OpenRouter or Gemini key in Settings.'
+							error: 'Writing is unavailable on our side right now — the platform\'s AI provider is not configured. This isn\'t your account; tell us and we\'ll fix it.'
 						},
 						{ status: 400 }
 					);
@@ -1057,7 +1057,7 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 					success: false,
 					error: hasAi
 						? 'AI returned an empty response — try again.'
-						: 'No AI provider configured. Add an OpenRouter or Gemini key in Settings.'
+						: 'Writing is unavailable on our side right now — the platform\'s AI provider is not configured. This isn\'t your account; tell us and we\'ll fix it.'
 				},
 				{ status: hasAi ? 502 : 400 }
 			);
@@ -1962,7 +1962,7 @@ ${pageContent}`,
 					return json(
 						{
 							success: false,
-							error: 'No AI provider configured. Add an OpenRouter or Gemini key in Settings.'
+							error: 'Writing is unavailable on our side right now — the platform\'s AI provider is not configured. This isn\'t your account; tell us and we\'ll fix it.'
 						},
 						{ status: 400 }
 					);
@@ -2096,7 +2096,7 @@ Input: "${fieldVal}"`;
 					return json(
 						{
 							success: false,
-							error: 'No AI provider configured. Add an OpenRouter or Gemini key in Settings.'
+							error: 'Writing is unavailable on our side right now — the platform\'s AI provider is not configured. This isn\'t your account; tell us and we\'ll fix it.'
 						},
 						{ status: 400 }
 					);
@@ -2309,7 +2309,7 @@ Return ONLY JSON: {"niche":"","ageRanges":["25–34"],"archetype":"","contentFoc
 					return json(
 						{
 							success: false,
-							error: 'No AI provider configured. Add an OpenRouter or Gemini key in Settings.'
+							error: 'Writing is unavailable on our side right now — the platform\'s AI provider is not configured. This isn\'t your account; tell us and we\'ll fix it.'
 						},
 						{ status: 400 }
 					);
@@ -2463,7 +2463,7 @@ Return ONLY JSON: {"niche":"","ageRanges":["25–34"],"archetype":"","contentFoc
 					return json(
 						{
 							success: false,
-							error: 'No AI provider configured. Add an OpenRouter or Gemini key in Settings.'
+							error: 'Writing is unavailable on our side right now — the platform\'s AI provider is not configured. This isn\'t your account; tell us and we\'ll fix it.'
 						},
 						{ status: 400 }
 					);
@@ -2473,6 +2473,14 @@ Return ONLY JSON: {"niche":"","ageRanges":["25–34"],"archetype":"","contentFoc
 				// must honour (e.g. "a no-nonsense male strength coach for busy dads").
 				const direction =
 					typeof body.direction === 'string' ? body.direction.trim().slice(0, 400) : '';
+				// The wizard's Market field. A client audit (UX-008) found it defaulting to
+				// Australia; the re-audit then found it did nothing at all — never sent,
+				// so the review step claimed a market the persona never received. "Global"
+				// (or nothing) means no constraint: the brief's audience decides.
+				const market =
+					typeof body.market === 'string' && body.market.trim() && body.market.trim() !== 'Global'
+						? body.market.trim().slice(0, 60)
+						: '';
 				const brief = await loadBriefForAgent(db, session.user.id, body.brandBriefId || null);
 				const b: any = brief?.data ?? {};
 
@@ -2504,7 +2512,7 @@ PRODUCTS: ${
 								.join(', ')
 						: '—'
 				}.
-${direction ? `\nCREATIVE DIRECTION (agreed with the user — EVERY persona you return MUST be fine-tuned to this steer, on top of the brand): ${direction}\n` : ''}
+${direction ? `\nCREATIVE DIRECTION (agreed with the user — EVERY persona you return MUST be fine-tuned to this steer, on top of the brand): ${direction}\n` : ''}${market ? `\nMARKET (chosen by the user — EVERY persona you return lives in and creates for this market; their name, heritage, nationality and accent must be credible there): ${market}\n` : ''}
 Each persona must be UNIQUE across the ENTIRE account${count > 1 ? ' AND distinct from every other persona you return in this batch' : ''} — recognizably different in name, niche, positioning, and visual look. Do NOT reuse another persona's name, content angle, or look. Already used by existing personas — avoid overlapping:
 ${JSON.stringify(taken).slice(0, 2200)}
 
@@ -2609,7 +2617,7 @@ Return ONLY JSON: {"personas":[{"name":"","gender":"","soul":"","niche":"","arch
 					return json(
 						{
 							success: false,
-							error: 'No AI provider configured. Add an OpenRouter or Gemini key in Settings.'
+							error: 'Writing is unavailable on our side right now — the platform\'s AI provider is not configured. This isn\'t your account; tell us and we\'ll fix it.'
 						},
 						{ status: 400 }
 					);
@@ -2692,7 +2700,7 @@ Return ONLY JSON: {"directions":["","","","",""]}`;
 					return json(
 						{
 							success: false,
-							error: 'No AI provider configured. Add an OpenRouter or Gemini key in Settings.'
+							error: 'Writing is unavailable on our side right now — the platform\'s AI provider is not configured. This isn\'t your account; tell us and we\'ll fix it.'
 						},
 						{ status: 400 }
 					);

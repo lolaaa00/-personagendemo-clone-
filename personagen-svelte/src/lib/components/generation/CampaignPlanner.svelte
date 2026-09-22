@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { page } from '$app/stores';
 	/**
 	 * Campaign Planner — fill the calendar with a MIX of content in one pass.
 	 *
@@ -13,8 +14,10 @@
 	 * until the user approves it; the spend that happens now is generation only.
 	 */
 	import Modal from '$lib/components/ui/Modal.svelte';
-	import { STUDIO_TEMPLATES, PIPELINE_USD, type StudioTemplate } from '$lib/studio-templates';
-	import { quote } from '$lib/stores/pricing.svelte';
+	import { STUDIO_TEMPLATES, type StudioTemplate } from '$lib/studio-templates';
+	import { templateUsd, fetchStudioPlan, type StudioPlan } from '$lib/studio-pricing';
+	import { quoteRaw, pricingContext } from '$lib/stores/pricing.svelte';
+	import { formatCredits } from '$lib/money';
 	import { countLabel } from '$lib/plural';
 
 	let {
@@ -38,7 +41,7 @@
 		{
 			id: 'typographic',
 			label: 'Text & Type',
-			hint: 'Quote cards, takes, lists — free, rendered without an image model'
+			hint: 'Quote cards, takes, lists — the cheapest: no image model, only the writing is charged'
 		},
 		{ id: 'photo', label: 'Photo', hint: 'Lifestyle stills, flat-lays, POV frames' },
 		{ id: 'video', label: 'Video', hint: 'Talking heads and product motion' },
@@ -62,12 +65,26 @@
 		const pool = POOLS[c];
 		if (!pool.length) return 0;
 		const avg = (l: StudioTemplate[]) =>
-			l.reduce((s, t) => s + PIPELINE_USD[t.pipeline], 0) / Math.max(1, l.length);
+			l.reduce((s, t) => s + templateUsd(t, plannerPlan), 0) / Math.max(1, l.length);
 		const ch = pool.filter((t) => t.intent === 'channel');
 		const br = pool.filter((t) => t.intent === 'brand');
 		if (!ch.length || !br.length) return avg(pool);
 		return 0.8 * avg(ch) + 0.2 * avg(br);
 	};
+
+	// Priced from the selected persona's real plan — the same arithmetic the
+	// composer charges — so a campaign estimate cannot be built on the hand-kept
+	// table the tiles used to drift from (see $lib/studio-pricing).
+	let plannerPlan = $state<StudioPlan | null>(null);
+	let plannerPlanFor = '';
+	$effect(() => {
+		if (!open || !agentId || plannerPlanFor === agentId) return;
+		const id = agentId;
+		plannerPlanFor = id;
+		void fetchStudioPlan(id).then((plan) => {
+			if (agentId === id) plannerPlan = plan;
+		});
+	});
 
 	// ── Plan inputs ──────────────────────────────────────────────────────────
 	let agentId = $state('');
@@ -125,7 +142,6 @@
 	// the way to the markup; only `quote()` turns it into the number the customer
 	// is actually charged. Rendering this figure with a `$` in front of it is how
 	// the launch button came to promise a third of the real debit.
-	let estimatedUsd = $derived(CLASSES.reduce((s, c) => s + allocation[c.id] * poolAvgUsd(c.id), 0));
 
 	// ── Slot + assignment plan ───────────────────────────────────────────────
 	// Posting window 8:00–20:00; anchors per cadence, jittered so a month of
@@ -287,7 +303,26 @@
 
 	// Both money renders quote the SAME retail figure, so the summary and the
 	// launch button can never disagree about what a launch costs.
-	let estimatedPrice = $derived(quote(estimatedUsd));
+	// Summed per POST, each rounded up to a whole credit the way every charge is
+	// (creditsForUsd ceils per generation). Rounding once on the total quoted
+	// seven text posts at $0.51 while seven tiles at $0.08 add up to $0.56 — the
+	// estimate has to be the sum of the prices the user was shown.
+	let estimatedCredits = $derived(
+		CLASSES.reduce((s, c) => s + allocation[c.id] * quoteRaw(poolAvgUsd(c.id)), 0)
+	);
+	let estimatedPrice = $derived.by(() => {
+		const ctx = pricingContext();
+		return formatCredits(estimatedCredits, ctx.currency, ctx.fx, ctx.locale, { whole: false });
+	});
+	/**
+	 * The wallet a launch draws on, named the way the sidebar pill names it. The
+	 * planner launches generation directly, so it is a spend step, and it named no
+	 * wallet at all — a seat member could launch a campaign without being told it
+	 * would be charged to the workspace owner's balance.
+	 */
+	let payerName = $derived(
+		($page.data as { credits?: { paid_by?: string | null } | null }).credits?.paid_by ?? null
+	);
 	let agentName = $derived(agents.find((a) => a.id === agentId)?.name ?? 'this persona');
 </script>
 
@@ -401,7 +436,10 @@
 				<strong>{estimatedPrice}</strong>
 			</div>
 			<p class="cp-summary-note">
-				Generation spend happens at launch; publishing waits for your approval in the Review Queue.
+				Generation spend happens at launch and is charged to
+				{#if payerName}<strong>the {payerName} wallet</strong> (the workspace owner's){:else}<strong
+						>your balance</strong
+					>{/if}; publishing waits for your approval in the Review Queue.
 				Estimated at the default model prices — each slot's exact pipeline and cost follow your
 				Model Manager settings.
 				{#if capped}<span class="cp-warn-inline"

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import {
 		showToast,
 		applyBrandTheme,
@@ -295,7 +296,7 @@
 		{
 			provider: 'zernio',
 			label: 'Zernio',
-			description: 'Publishing, connections, and analytics for all 15 platforms. Billed per connected account (2 free).',
+			description: 'Publishing, connections, and analytics for all 13 platforms. Billed per connected account (2 free).',
 			placeholder: 'Paste your Zernio API key',
 			category: 'publishing',
 			mark: 'Z',
@@ -1027,6 +1028,48 @@
 		}
 	}
 
+	/**
+	 * Change password. A client re-audit found no password field anywhere in
+	 * Settings or the account menu: a signed-in user could not change their
+	 * password at all, and the recovery email pointed at a form that did not
+	 * exist. /api/settings/password already existed — this is its missing UI.
+	 * No current password is asked for, matching the endpoint: the session proves
+	 * who is asking, exactly as it does for the recovery flow.
+	 */
+	let pwNew = $state('');
+	let pwConfirm = $state('');
+	let pwSaving = $state(false);
+	let pwError = $state('');
+	async function changePassword(e: SubmitEvent) {
+		e.preventDefault();
+		pwError = '';
+		if (pwNew.length < 8) {
+			pwError = 'Use at least 8 characters.';
+			return;
+		}
+		if (pwNew !== pwConfirm) {
+			pwError = 'The two passwords do not match.';
+			return;
+		}
+		pwSaving = true;
+		try {
+			const res = await fetch('/api/settings/password', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ newPassword: pwNew, confirmPassword: pwConfirm })
+			});
+			const result = await res.json().catch(() => ({}));
+			if (!res.ok || !result.success) throw new Error(result.error || 'Could not change the password.');
+			pwNew = '';
+			pwConfirm = '';
+			showToast('Password changed. Use it the next time you sign in.', 'success');
+		} catch (err) {
+			pwError = (err as Error).message;
+		} finally {
+			pwSaving = false;
+		}
+	}
+
 	async function toggleNotification(key: 'emailAlerts' | 'pushNotifications' | 'weeklyReports') {
 		// Optimistic flip; revert if the server rejects the update.
 		if (key === 'emailAlerts') emailAlerts = !emailAlerts;
@@ -1089,6 +1132,39 @@
 	// researched, so neither is ever gated; and because only 'save' is gated,
 	// Test Connection and Delete Key stay enabled for every provider — a user
 	// keeps, can still test, and can still remove a key they already have.
+
+	/**
+	 * WAI-ARIA vertical tabs keyboard model for the Settings sections.
+	 *
+	 * Arrow Up/Left and Down/Right move to the previous/next section (wrapping),
+	 * Home and End jump to the first and last. Activation follows focus: a
+	 * section renders synchronously, so there is no cost to selecting on arrow,
+	 * and it keeps the single rendered tabpanel matched to the focused tab.
+	 */
+	function onSectionKeydown(e: KeyboardEvent) {
+		const keys = ['ArrowDown', 'ArrowRight', 'ArrowUp', 'ArrowLeft', 'Home', 'End'];
+		if (!keys.includes(e.key)) return;
+		const order = SECTIONS.map((s) => s.key);
+		const at = Math.max(0, order.indexOf(activeSection));
+		let next = at;
+		if (e.key === 'ArrowDown' || e.key === 'ArrowRight') next = (at + 1) % order.length;
+		else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') next = (at - 1 + order.length) % order.length;
+		else if (e.key === 'Home') next = 0;
+		else if (e.key === 'End') next = order.length - 1;
+		e.preventDefault();
+		activeSection = order[next] as typeof activeSection;
+		// Focus the newly selected tab after it has become the tabbable one.
+		queueMicrotask(() => document.getElementById(`settings-tab-${order[next]}`)?.focus());
+	}
+
+	/** A seat in someone else's workspace — the owner's Zernio key publishes their personas. */
+	let seatRole = $derived((data as { seat?: { role?: string } }).seat?.role);
+	let seatIsMember = $derived(!!seatRole && seatRole !== 'owner');
+
+	/** Providers whose customer keys were withdrawn: they run on ours, included. */
+	const includedProviders = NON_BYOK_PROVIDERS.filter((p) => !!p.keyProvider && p.billsToUserKey);
+	/** Providers with genuinely no customer key (none issued, or nothing calls them). */
+	const noKeyProviders = NON_BYOK_PROVIDERS.filter((p) => !(p.keyProvider && p.billsToUserKey));
 
 	/**
 	 * Does this provider still get an editable card?
@@ -1236,7 +1312,16 @@
 
 	<div class="settings-layout">
 		<nav class="settings-nav" aria-label="Settings sections">
-			<ul role="tablist" aria-orientation="vertical" aria-label="Settings sections">
+			<!-- Roving tabindex REQUIRES arrow-key handling. The first version shipped
+			     the tabindex without the handler, which left 7 of 8 sections
+			     unreachable by keyboard in every browser — worse than the plain
+			     buttons it replaced. onSectionKeydown is the other half. -->
+			<ul
+				role="tablist"
+				aria-orientation="vertical"
+				aria-label="Settings sections"
+				onkeydown={onSectionKeydown}
+			>
 				{#each SECTIONS as section (section.key)}
 					<li role="presentation">
 						<button
@@ -1245,7 +1330,9 @@
 							role="tab"
 							id="settings-tab-{section.key}"
 							aria-selected={activeSection === section.key}
-							aria-controls="settings-panel-{section.key}"
+							aria-controls={activeSection === section.key
+								? `settings-panel-${section.key}`
+								: undefined}
 							tabindex={activeSection === section.key ? 0 : -1}
 							class:active={activeSection === section.key}
 							class:danger={section.key === 'danger'}
@@ -1368,6 +1455,56 @@
 					{/if}
 				</button>
 			</div>
+		</div>
+
+		<div class="settings-card" id="password">
+			<div class="card-header">
+				<div class="card-icon">
+					<svg
+						width="20"
+						height="20"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="var(--accent-text)"
+						stroke-width="2"
+						aria-hidden="true"
+						><rect x="4" y="11" width="16" height="10" rx="2" /><path d="M8 11V7a4 4 0 018 0v4" /></svg
+					>
+				</div>
+				<h2>Password</h2>
+			</div>
+			<form class="card-body pw-form" onsubmit={changePassword} novalidate>
+				{#if pwError}
+					<p class="pw-form-error" role="alert">{pwError}</p>
+				{/if}
+				<div class="field">
+					<label for="pw-new">New password <span class="pw-hint" id="pw-hint">— at least 8 characters</span></label>
+					<input
+						id="pw-new"
+						type="password"
+						autocomplete="new-password"
+						minlength="8"
+						bind:value={pwNew}
+					/>
+				</div>
+				<div class="field">
+					<label for="pw-confirm">Confirm new password</label>
+					<input
+						id="pw-confirm"
+						type="password"
+						autocomplete="new-password"
+						minlength="8"
+						bind:value={pwConfirm}
+					/>
+				</div>
+				<button type="submit" class="save-btn" disabled={pwSaving || !pwNew || !pwConfirm}>
+					{#if pwSaving}
+						<span class="spinner"></span> Saving…
+					{:else}
+						Change password
+					{/if}
+				</button>
+			</form>
 		</div>
 
 		{:else if activeSection === 'notifications'}
@@ -1640,7 +1777,10 @@
 											<p class="key-desc">{config.description}</p>
 
 										<p class="key-help">
-											<a href="/guides?provider={config.provider}">
+											<!-- Opens the guide itself (#id). The old ?provider= link only narrowed
+											     the docs index, and the page stripped the parameter before reading
+											     it, so it landed on the unfiltered docs home. -->
+											<a href="{resolve('/(portal)/guides')}#{config.provider === 'zernio' ? 'zernio-key' : 'all-keys'}">
 												Where do I get a {config.label} key?
 											</a>
 										</p>
@@ -1740,41 +1880,60 @@
 					{/if}
 				{/each}
 
-				{#if NON_BYOK_PROVIDERS.length > 0}
-					<!-- Providers that can NEVER take a customer key. Leaving them out
-					     of the list entirely is what the catalogue exists to stop: an
-					     absence reads as an oversight and explains nothing, so the
-					     reason goes exactly where the key field would have been. -->
+				<!-- Two different situations, kept apart because they are not the same
+				     fact. The generation and research providers DO issue keys — we
+				     stopped accepting customers' ones on 2026-09-21, so every run is
+				     charged the same way, from the balance. Higgsfield and Kie genuinely
+				     have no key to bring. One heading over both said "these providers do
+				     not issue customer API keys", which was false for four of them, and
+				     repeated the same fifty words under each. -->
+				{#if includedProviders.length > 0}
+					<section class="key-category">
+						<div class="key-category-head">
+							<div class="key-category-title">
+								<h3>Included — runs on our keys</h3>
+								<span class="key-category-count">{includedProviders.length}</span>
+							</div>
+							<span class="key-category-blurb">
+								Images, video, writing and research all run on our keys and are charged to your
+								balance, so every post is priced the same way. There is nothing to set up here —
+								the one key that is yours to bring is Zernio, above, because it owns your
+								publishing.
+							</span>
+						</div>
+						<ul class="key-included-list">
+							{#each includedProviders as p (p.id)}
+								<li class="key-included">
+									<span class="key-mark" style="--mark-tint: #64748b" aria-hidden="true"
+										>{p.label.slice(0, 1)}</span
+									>
+									<span class="key-name">{p.label}</span>
+									<span class="key-state key-state-valid">Included</span>
+								</li>
+							{/each}
+						</ul>
+					</section>
+				{/if}
+				{#if noKeyProviders.length > 0}
 					<section class="key-category">
 						<div class="key-category-head">
 							<div class="key-category-title">
 								<h3>No key to bring</h3>
-								<span class="key-category-count">{NON_BYOK_PROVIDERS.length}</span>
+								<span class="key-category-count">{noKeyProviders.length}</span>
 							</div>
-							<span class="key-category-blurb">
-								These providers do not issue customer API keys, so there is no field to fill in.
-							</span>
 						</div>
-
-						<div class="key-accordion">
-							{#each NON_BYOK_PROVIDERS as p (p.id)}
-								<div class="key-item key-item-static">
-									<div class="key-summary">
-										<span class="key-mark" style="--mark-tint: #64748b" aria-hidden="true"
-											>{p.label.slice(0, 1)}</span
-										>
-										<span class="key-name">
-											{p.label}
-											<span class="key-unused">no customer keys</span>
-										</span>
-										<span class="key-state key-state-unset">Not available</span>
-									</div>
-									<div class="key-body">
-										<p class="plan-note">{byokReason(p)}</p>
-									</div>
-								</div>
+						<ul class="key-included-list">
+							{#each noKeyProviders as p (p.id)}
+								<li class="key-included key-included-reason">
+									<span class="key-mark" style="--mark-tint: #64748b" aria-hidden="true"
+										>{p.label.slice(0, 1)}</span
+									>
+									<span class="key-name">{p.label}</span>
+									<span class="key-state key-state-unset">Not available</span>
+									<p class="plan-note">{byokReason(p)}</p>
+								</li>
 							{/each}
-						</div>
+						</ul>
 					</section>
 				{/if}
 			</div>
@@ -1795,18 +1954,32 @@
 				<h2>Zernio Key Manager</h2>
 			</div>
 			<div class="card-body">
-				<p class="key-hint">
-					<strong>The first Zernio key is yours to create, and it is free.</strong> Sign in at
-					<a href="https://zernio.com" target="_blank" rel="noopener noreferrer">zernio.com</a> with
-					Google, copy the API key, and paste it into <strong>Zernio</strong> under Provider API Keys
-					above — that account comes with <strong>2 free connected-account slots</strong>, which is
-					enough to publish. We do not provision it for you, and nothing publishes until it is set.
-				</p>
+				<!-- One answer everywhere (audit UX-005): the Zernio key is the customer's
+				     to create. "Provider API Keys above" pointed at a DIFFERENT tab with no
+				     link, and a workspace seat was told the key was theirs to set although
+				     workspace personas publish through the owner's key. -->
+				{#if seatIsMember}
+					<p class="key-hint">
+						<strong>Your workspace's personas publish through the workspace owner's Zernio key.</strong>
+						You don't need one of your own for them. Add a key here only for personas outside the
+						workspace.
+					</p>
+				{:else}
+					<p class="key-hint">
+						<strong>The first Zernio key is yours to create, and it is free.</strong> Sign in at
+						<a href="https://zernio.com" target="_blank" rel="noopener noreferrer">zernio.com</a> with
+						Google, copy the API key, and paste it into the Zernio card in
+						<button type="button" class="inline-link" onclick={() => (activeSection = 'api-keys')}
+							>Provider API Keys</button
+						> — that account comes with <strong>2 free connected-account slots</strong>, which is enough to
+						publish. Nothing publishes until it is set.
+					</p>
+				{/if}
 				<p class="key-hint">
 					This panel is for <em>extra</em> Zernio accounts (one per persona email) assigned to
 					specific personas. Each is a separate Zernio account with its own 2 free slots and its own
-					bill. Personas without an assignment use the default key above. Moving a persona to a
-					different key requires reconnecting its social accounts under that key.
+					bill. Personas without an assignment use your default key — the one in Provider API Keys.
+					Moving a persona to a different key requires reconnecting its social accounts under that key.
 				</p>
 
 				<div class="provider-key-list">
@@ -3131,11 +3304,6 @@
 	.key-summary::-webkit-details-marker {
 		display: none;
 	}
-	/* The "no key to bring" rows are not accordions — nothing opens, so nothing
-	   should invite a click. */
-	.key-item-static .key-summary {
-		cursor: default;
-	}
 	.key-summary:focus-visible {
 		outline: 2px solid var(--accent);
 		outline-offset: -2px;
@@ -3265,6 +3433,71 @@
 	}
 
 	.key-spans,
+	/* The read-only provider rows. flex-wrap so the status pill drops to its own
+	   line on a phone instead of painting over the name (it overlapped "no
+	   customer keys" at 320–414px). */
+	.inline-link {
+		padding: 0;
+		border: none;
+		background: none;
+		color: var(--accent-text);
+		font: inherit;
+		font-weight: 600;
+		text-decoration: underline;
+		cursor: pointer;
+	}
+
+	.pw-form {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-4);
+		align-items: flex-start;
+	}
+	.pw-form .field {
+		width: 100%;
+		max-width: 26rem;
+	}
+	.pw-hint {
+		font-weight: 400;
+		color: var(--text-dim);
+	}
+	.pw-form-error {
+		margin: 0;
+		padding: var(--space-3) var(--space-4);
+		border: 1px solid var(--error);
+		border-radius: var(--radius-sm);
+		color: var(--error-text);
+		font-size: var(--text-base);
+	}
+
+	.key-included-list {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-2);
+	}
+	.key-included {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: var(--space-2) var(--space-3);
+		padding: var(--space-3) var(--space-4);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-md, 12px);
+		background: var(--surface);
+		min-width: 0;
+	}
+	.key-included .key-name {
+		flex: 1 1 8rem;
+		min-width: 0;
+	}
+	.key-included .plan-note {
+		flex-basis: 100%;
+		margin: 0;
+	}
+
 	.key-unused {
 		font-size: var(--text-xs);
 		font-weight: 600;

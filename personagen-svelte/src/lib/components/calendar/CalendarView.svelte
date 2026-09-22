@@ -30,7 +30,8 @@
 	import { onMount } from 'svelte';
 	import {
 		getPostDisplay as sharedGetPostDisplay,
-		getPostErrorSummary
+		getPostErrorSummary,
+		summarizeGenError
 	} from '$lib/components/feed/postDisplay';
 	import { platformColor } from '$lib/platforms';
 	import { thumbUrl } from '$lib/image-url';
@@ -125,21 +126,24 @@
 		});
 	});
 
+	// Headings follow the viewer's own date convention, like /billing and /admin
+	// (audit UI-005). They were assembled in US order by hand — "September 20" in
+	// an en-GB session where every other date on the account read "20 Sept".
+	const localDate = (d: Date, opts: Intl.DateTimeFormatOptions) => d.toLocaleDateString(undefined, opts);
 	let toolbarLabel = $derived.by(() => {
 		if (calendarView === 'day') {
-			return `${WEEKDAYS_FULL[anchorDate.getDay()]}, ${MONTHS[anchorDate.getMonth()]} ${anchorDate.getDate()}, ${anchorDate.getFullYear()}`;
+			return localDate(anchorDate, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 		}
 		if (calendarView === 'week') {
 			const start = weekDates[0];
 			const end = weekDates[6];
-			const s = `${MONTHS[start.getMonth()].slice(0, 3)} ${start.getDate()}`;
-			const e =
-				start.getMonth() === end.getMonth()
-					? `${end.getDate()}`
-					: `${MONTHS[end.getMonth()].slice(0, 3)} ${end.getDate()}`;
-			return `${s} – ${e}, ${end.getFullYear()}`;
+			// formatRange keeps "20–26 Sept 2026" / "Sep 20 – 26, 2026" natural in
+			// each locale; fall back to two dates where it is unavailable.
+			const f = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+			const range = (f as unknown as { formatRange?: (a: Date, b: Date) => string }).formatRange;
+			return range ? range.call(f, start, end) : `${f.format(start)} – ${f.format(end)}`;
 		}
-		return `${MONTHS[currentMonth]} ${currentYear}`;
+		return localDate(new Date(currentYear, currentMonth, 1), { month: 'long', year: 'numeric' });
 	});
 
 	function getDaysInMonth(year: number, month: number): number {
@@ -391,7 +395,14 @@
 
 	function postErrorHint(p: CalendarPost): string | undefined {
 		if (p.status !== 'failed' && p.status !== 'partial') return undefined;
-		return getPostErrorSummary(p) || 'Publish failed — open the post for details';
+		// A failed post with no media never got as far as publishing — it failed
+		// to GENERATE. The same rule PostCard uses (isGenFail). The hint used to
+		// call every failure "Publish failed", sending people to look for a
+		// platform error that did not exist.
+		if (p.status === 'failed' && !getPostDisplay(p).mediaUrl) {
+			return summarizeGenError({ content: p.text });
+		}
+		return getPostErrorSummary(p) || 'Publishing failed — open the post for the platform’s reason';
 	}
 
 	// ── Inline approve (the golden action for approval-mode autopilot) ─────
@@ -840,7 +851,13 @@
 			use:dialog={{ onClose: () => (selectedDay = null) }}
 		>
 			<div class="modal-header">
-				<h3 id="cal-day-modal-title">{MONTHS[currentMonth]} {selectedDay}, {currentYear}</h3>
+				<h3 id="cal-day-modal-title">
+					{localDate(new Date(currentYear, currentMonth, selectedDay ?? 1), {
+						month: 'long',
+						day: 'numeric',
+						year: 'numeric'
+					})}
+				</h3>
 				<button class="modal-close" onclick={() => (selectedDay = null)} aria-label="Close modal">
 					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18" /><path d="M6 6l12 12" /></svg>
 				</button>

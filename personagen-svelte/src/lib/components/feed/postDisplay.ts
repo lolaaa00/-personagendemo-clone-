@@ -131,7 +131,11 @@ export function truncateError(msg: string): string {
  * actionable line. Falls back to a generic sentence, never the raw payload.
  */
 export function summarizeGenError(post: any): string {
-	const GENERIC = 'Generation failed. Try again, or check your key in Settings.';
+	// Every generation runs on the platform's keys since customer generation keys
+	// were withdrawn (2026-09-21), so no failure here is ever "check your key":
+	// the user has none. A client re-audit found this sentence on every failed
+	// tile. The wording now matches the server's failure-text.ts.
+	const GENERIC = 'Generation didn’t finish. Try again — if it keeps failing, tell us.';
 
 	let raw: unknown = null;
 	try {
@@ -164,8 +168,13 @@ export function summarizeGenError(post: any): string {
 	const low = dig(raw).toLowerCase();
 	if (!low) return GENERIC;
 
-	if (/credit|insufficient|can only afford|requires more|quota|balance/.test(low))
-		return 'The generation key ran out of credits. Top it up and try again.';
+	// Two different "out of credit" situations. OUR wallet check speaks of the
+	// balance or the wallet; a provider's own 402 is the platform's account, and
+	// that one is on us.
+	if (/wallet|your balance|not enough credit|insufficient credit/.test(low))
+		return 'Your balance is too low for this. Top up on Billing — for a workspace persona, the owner tops it up.';
+	if (/credit|insufficient|can only afford|requires more|quota|balance|\b402\b/.test(low))
+		return 'Generation is paused on our side while the provider account is topped up. That’s on us — try again shortly.';
 	if (/rate.?limit|too many requests|\b429\b/.test(low))
 		return 'Rate limited by the provider. Try again in a few minutes.';
 	if (/timeout|timed out|deadline|took too long/.test(low))
@@ -173,7 +182,7 @@ export function summarizeGenError(post: any): string {
 	if (/content policy|safety|nsfw|flagged|moderat|blocked/.test(low))
 		return 'Blocked by the model’s content policy. Adjust the prompt and retry.';
 	if (/invalid.*key|unauthor|forbidden|\b401\b|\b403\b|api key/.test(low))
-		return 'The generation key was rejected. Check it in Settings.';
+		return 'Our provider key was rejected. That’s on us, not your account — try again shortly.';
 	return GENERIC;
 }
 
@@ -323,4 +332,50 @@ export function getPostDisplay(post: any): PostDisplay {
 		voice: typeof parsed?.voice === 'string' ? parsed.voice : null,
 		intended
 	};
+}
+
+
+/**
+ * The generate-post request a failed post was trying to make, rebuilt from what
+ * the server kept on the failed row: `{ topic, intended: { media, format?,
+ * still? }, studio? }` (generate-post/+server.ts keeps these on failure "so a
+ * failed slot must still say WHAT it was going to be (format badge, retry)").
+ *
+ * The retry control was designed for and never built: a client audit (UX-007)
+ * found failure notices that said "try again" with nothing to click. This is
+ * the one mapping every surface uses, so a retry cannot quietly ask for a
+ * different format than the run that failed.
+ *
+ * It is a STARTING POINT, never a spend: callers open the confirm-first
+ * composer with it, the server resolves the real plan and price, and the user
+ * approves exactly as they did the first time. Returns null when the row does
+ * not say enough to rebuild the request honestly.
+ */
+export function retryBodyFromFailedPost(
+	post: { content?: unknown } | null | undefined
+): Record<string, unknown> | null {
+	let parsed: unknown;
+	try {
+		parsed = typeof post?.content === 'string' ? JSON.parse(post.content) : post?.content;
+	} catch {
+		return null;
+	}
+	if (!parsed || typeof parsed !== 'object') return null;
+	const c = parsed as {
+		topic?: unknown;
+		intended?: { media?: unknown; format?: unknown; still?: unknown };
+		studio?: { template?: unknown; standalone?: unknown };
+	};
+	const intended = c.intended && typeof c.intended === 'object' ? c.intended : null;
+	const media = intended?.media;
+	if (!intended || (media !== 'image' && media !== 'video' && media !== 'cinematic')) return null;
+
+	const body: Record<string, unknown> = { media };
+	if (typeof intended.format === 'string' && intended.format) body.format = intended.format;
+	if (intended.still === 'graphic') body.still = 'graphic';
+	if (typeof c.topic === 'string' && c.topic.trim()) body.topic = c.topic.trim();
+	const studio = c.studio && typeof c.studio === 'object' ? c.studio : null;
+	if (studio?.template) body.studio_template = studio.template;
+	if (studio?.standalone) body.deliver = 'asset';
+	return body;
 }

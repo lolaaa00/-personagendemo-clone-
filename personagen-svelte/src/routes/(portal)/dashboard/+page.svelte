@@ -11,29 +11,52 @@
 	let creatorAgents = $derived(data.agents.filter((a) => !a.is_overseer));
 
 	// ── Setup checklist (ENH-002) ────────────────────────────────────────
-	// The order the docs already prescribe, each row checked against real state.
-	// It disappears on its own once everything is done — there is nothing to
-	// dismiss when there is nothing left to do.
+	// The order the docs prescribe, each row checked against real state. It
+	// disappears on its own once everything is done.
+	//
+	// Rebuilt after a client re-audit found four defects in the first version:
+	//   · it led with "Add an OpenRouter key — nothing generates without it", a
+	//     step nobody can complete since customer generation keys were withdrawn,
+	//     so the card could never finish;
+	//   · "Connect" linked to /personas, which has no index page (404);
+	//   · "Hide" lived only in component state and came back on every visit;
+	//   · a workspace SEAT was checked against its own empty rows and told to
+	//     write a brief, add a Zernio key and connect accounts that belong to the
+	//     owner — while the cards beside it showed the workspace connected.
+	// Setup is the account owner's job, so seat members are not shown it (the
+	// server sends no `setup` for them); everyone else gets only steps they can
+	// actually perform, each with a target that exists.
+	const SETUP_HIDE_KEY = 'pg:setup-hidden';
 	let setupDismissed = $state(false);
+	$effect(() => {
+		try {
+			setupDismissed = localStorage.getItem(SETUP_HIDE_KEY) === '1';
+		} catch {
+			/* storage blocked (private window): the card simply shows */
+		}
+	});
+	function dismissSetup() {
+		setupDismissed = true;
+		try {
+			localStorage.setItem(SETUP_HIDE_KEY, '1');
+		} catch {
+			/* not persisted — it still hides for this visit */
+		}
+	}
+	let firstPersonaId = $derived(creatorAgents[0]?.id ?? null);
 	let setupSteps = $derived.by(() => {
 		const st = (data as any).setup;
 		if (!st) return [];
-		const rows = [
-			{
-				key: 'openrouter',
-				done: st.openrouter,
-				title: 'Add an OpenRouter key',
-				why: 'Writes every caption and script — nothing generates without it.',
-				href: '/settings?section=api-keys',
-				cta: 'Add key'
-			},
+		const hasPersona = creatorAgents.length > 0;
+		return [
 			{
 				key: 'persona',
-				done: creatorAgents.length > 0,
+				done: hasPersona,
 				title: 'Create a persona',
 				why: 'The account that posts. You can change everything about it later.',
 				href: '/generator',
-				cta: 'Create'
+				cta: 'Create',
+				blocked: null as string | null
 			},
 			{
 				key: 'brief',
@@ -41,23 +64,26 @@
 				title: 'Write a brand brief',
 				why: 'What your product is and who it is for — captions are aimed at it.',
 				href: '/brand-brief',
-				cta: 'Write it'
+				cta: 'Write it',
+				blocked: null
 			},
 			{
 				key: 'zernio',
 				done: st.zernio,
 				title: 'Add your Zernio key',
-				why: 'Publishing runs on it. Sign in at zernio.com with Google — the free account includes 2 connections.',
+				why: 'Publishing runs on it, and it is yours: sign in at zernio.com with Google — the free account includes 2 connections — then paste the key here.',
 				href: '/settings?section=api-keys',
-				cta: 'Add key'
+				cta: 'Add key',
+				blocked: null
 			},
 			{
 				key: 'connection',
 				done: st.connection,
 				title: 'Connect a social account',
-				why: 'Where the posts go.',
-				href: '/personas',
-				cta: 'Connect'
+				why: 'Where the posts go — connected per persona.',
+				href: firstPersonaId ? `/personas/${firstPersonaId}?tab=connections` : '/generator',
+				cta: 'Connect',
+				blocked: hasPersona ? null : 'Create a persona first — accounts are connected to a persona.'
 			},
 			{
 				key: 'published',
@@ -65,13 +91,12 @@
 				title: 'Publish your first post',
 				why: 'Approve a draft in the review queue and let it run.',
 				href: '/review',
-				cta: 'Open queue'
+				cta: 'Open queue',
+				blocked: null
 			}
 		];
-		// Once every step is done the card has nothing to say.
-		return rows.every((r) => r.done) ? [] : rows;
 	});
-	let setupDone = $derived(setupSteps.filter((r) => r.done).length);
+	let setupDone = $derived(setupSteps.filter((s) => s.done).length);
 </script>
 
 
@@ -96,9 +121,7 @@
 		<section class="setup-card" aria-labelledby="setup-h">
 			<div class="setup-head">
 				<h2 id="setup-h">Finish setting up</h2>
-				<button type="button" class="setup-dismiss" onclick={() => (setupDismissed = true)}>
-					Hide
-				</button>
+				<button type="button" class="setup-dismiss" onclick={dismissSetup}>Hide</button>
 			</div>
 			<p class="setup-sub">
 				{setupDone} of {setupSteps.length} done. Each step is checked against your account, not
@@ -112,7 +135,9 @@
 							<strong>{st.title}</strong>
 							<span>{st.why}</span>
 						</span>
-						{#if !st.done}
+						{#if !st.done && st.blocked}
+							<span class="setup-blocked">{st.blocked}</span>
+						{:else if !st.done}
 							<a class="setup-go" href={st.href}>{st.cta}</a>
 						{:else}
 							<span class="setup-ok">Done</span>
@@ -123,53 +148,12 @@
 		</section>
 	{/if}
 
-	{#if creatorAgents.length === 0}
-		<div class="onboarding-card">
-			<div class="onboarding-header">
-				<h3>
-					<svg
-						width="18"
-						height="18"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						aria-hidden="true"
-					>
-						<path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z" />
-						<path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z" />
-						<path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0" />
-						<path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5" />
-					</svg>
-					Welcome to PersonaGen! Let's initialize your Persona Roster
-				</h3>
-				<p>Create your first persona and connect it to a platform to start publishing.</p>
-			</div>
-			
-			<div class="onboarding-steps">
-				<div class="step-box">
-					<div class="step-num">1</div>
-					<h4>Create Persona</h4>
-					<p>Design a tailored niche, target audience, and personality. Create it in the database directly or use Account Factory registration.</p>
-					<a href="/generator" class="step-link">Configure Persona →</a>
-				</div>
-				<div class="step-box">
-					<div class="step-num">2</div>
-					<h4>Link Platforms</h4>
-					<p>Connect your persona to Instagram, TikTok, YouTube, and 12 more platforms via Zernio's hosted OAuth on the Connections tab.</p>
-					<span class="step-note">Unlocks once your first persona exists</span>
-				</div>
-				<div class="step-box">
-					<div class="step-num">3</div>
-					<h4>Connect publishing</h4>
-					<p>Add your Zernio key so posts can go out. Generation runs on our keys and is charged to your balance — there is nothing else to set up.</p>
-					<a href="/settings?section=keys" class="step-link">Add your Zernio key →</a>
-				</div>
-			</div>
-		</div>
-	{/if}
+	<!-- The old "Welcome — initialize your Persona Roster" card used to sit here,
+	     repeating the checklist above in static form. It said "Create it in the
+	     database directly or use Account Factory registration", and after the
+	     2026-09-21 key change it told the same user "there is nothing else to set
+	     up" directly under a five-step checklist. One setup surface, driven by
+	     real state, is the checklist. -->
 
 	<!-- Quick Actions -->
 	<div class="quick-actions">
@@ -219,7 +203,7 @@
 
 	<!-- Agent Roster Table -->
 	<div class="roster-section">
-		<AgentRoster agents={data.agents} />
+		<AgentRoster agents={data.agents} seat={(data as any).seat} />
 	</div>
 
 	<!-- Charts Row -->
@@ -368,112 +352,19 @@
 			justify-content: center;
 		}
 	}
-	.onboarding-card {
-		background: linear-gradient(135deg, var(--surface), var(--surface-2));
-		backdrop-filter: blur(12px);
-		border: 1px solid var(--accent-mid);
-		border-radius: var(--radius);
-		padding: 2rem;
-		margin-top: 1.5rem;
-		box-shadow: 0 8px 32px rgba(0, 0, 0, 0.24);
-	}
 
-	.onboarding-header h3 {
-		font-family: var(--font-display);
-		font-size: 1.25rem;
-		font-weight: 600;
-		color: var(--text);
-		margin: 0 0 0.5rem 0;
-		display: flex;
-		align-items: center;
-		gap: 0.55rem;
-	}
 
-	.onboarding-header h3 svg {
-		flex-shrink: 0;
-		color: var(--accent-text);
-	}
 
-	.onboarding-header p {
-		font-size: 0.85rem;
-		color: var(--text-dim);
-		margin: 0 0 1.5rem 0;
-	}
 
-	.onboarding-steps {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-		gap: 1.25rem;
-	}
 
-	.step-box {
-		background: rgba(255, 255, 255, 0.02);
-		border: 1px solid var(--border);
-		border-radius: var(--radius-sm);
-		padding: 1.25rem;
-		position: relative;
-		display: flex;
-		flex-direction: column;
-		transition: transform 0.2s, border-color 0.2s;
-	}
 
-	.step-box:hover {
-		transform: translateY(-2px);
-		border-color: color-mix(in srgb, var(--accent) 40%, transparent);
-	}
 
-	.step-num {
-		position: absolute;
-		top: 1rem;
-		right: 1rem;
-		font-size: 1.75rem;
-		font-weight: 900;
-		font-family: var(--font-mono);
-		color: color-mix(in srgb, var(--accent) 22%, transparent);
-		line-height: 1;
-	}
 
-	.step-box h4 {
-		font-size: 0.9rem;
-		font-weight: 600;
-		color: var(--text);
-		margin: 0 0 0.5rem 0;
-	}
 
-	.step-box p {
-		font-size: 0.75rem;
-		color: var(--text-dim);
-		line-height: 1.5;
-		margin: 0 0 1.25rem 0;
-		flex-grow: 1;
-	}
 
-	.step-link {
-		font-size: 0.75rem;
-		font-weight: 600;
-		color: var(--accent-text);
-		text-decoration: none;
-		display: inline-flex;
-		align-items: center;
-		min-height: 44px;
-		transition: color 0.2s;
-	}
 
-	.step-link:hover:not(.disabled) {
-		color: var(--accent);
-		text-decoration: underline;
-	}
 
-	.step-note {
-		font-size: var(--text-sm);
-		color: var(--text-dim);
-	}
 
-	.step-link.disabled {
-		color: var(--text-dim);
-		cursor: not-allowed;
-		opacity: 0.5;
-	}
 
 	/* Section tags */
 	.section-tag {
@@ -661,5 +552,11 @@
 			width: 100%;
 			justify-content: center;
 		}
+	}
+	.setup-blocked {
+		font-size: var(--text-sm);
+		color: var(--text-dim);
+		max-width: 16rem;
+		text-align: right;
 	}
 </style>

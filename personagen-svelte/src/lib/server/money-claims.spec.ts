@@ -89,7 +89,10 @@ describe('claims that ARE enforced stay enforced', () => {
 	it('"at par" is true of every pack: credits delivered >= cents paid', async () => {
 		const { CREDIT_PACKS } = await import('$lib/billing-packs');
 		for (const p of CREDIT_PACKS) expect(p.credits).toBeGreaterThanOrEqual(p.usdCents);
-		expect(billing).toMatch(/\$25 buys \$25\.00/);
+		// The sentence changed on purpose: "$25 buys $25.00" sat directly above a
+		// $25 pack that delivers $26.00, which a re-audit read as a contradiction.
+		// The claim is the same — at par — and the loop above is what enforces it.
+		expect(billing).toMatch(/a dollar buys a dollar of generation/);
 	});
 });
 

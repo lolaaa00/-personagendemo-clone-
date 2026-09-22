@@ -335,11 +335,12 @@ export const BrandBrief = {
 		),
 	// Agent Generator: invent `count` COMPLETE brand-tailored personas from scratch
 	// (name + gender + soul + full profile), each unique across the account.
-	generateFullPersona: (brandBriefId: string | null, count = 1, direction = '') =>
+	generateFullPersona: (brandBriefId: string | null, count = 1, direction = '', market = '') =>
 		request<{ personas: GeneratedPersona[] }>(ENDPOINTS.brandBrief, 'generate_full_persona', {
 			brandBriefId,
 			count,
-			direction
+			direction,
+			market
 		}),
 	// Brand-kit-informed direction ideas the user can click to steer generation.
 	suggestDirections: (brandBriefId: string | null) =>

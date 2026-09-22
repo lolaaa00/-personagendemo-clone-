@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { RETURN_PARAM, safeReturnTo } from '$lib/return-to';
@@ -10,6 +11,14 @@
 	let password = $state('');
 	let loading = $state(false);
 	let error = $state('');
+
+	/**
+	 * /api/auth/callback sends a failed code exchange here as ?error=auth — an
+	 * expired, already-used, or other-device recovery link. It used to land on a
+	 * blank sign-in form with no word about why, so the user could not tell a
+	 * dead link from a typo. Now it says what happened and what to do next.
+	 */
+	let linkFailed = $derived($page.url.searchParams.get('error') === 'auth');
 	/** True only for the blank-form case, which needs different help text than a
 	 *  rejected credential — see the note on the error body. */
 	let emptySubmit = $state(false);
@@ -45,8 +54,16 @@
 		error = '';
 		emptySubmit = false;
 		if (!email.trim() || !password) {
-			error = 'Enter your email and password to sign in.';
+			// Name what is actually missing, and put focus on THAT field — a
+			// re-audit found an email-only submit told the user to fill in "both"
+			// and sent focus to the email they had already typed.
+			error = !email.trim() && !password
+				? 'Enter your email and password to sign in.'
+				: !email.trim()
+					? 'Enter your email address to sign in.'
+					: 'Enter your password to sign in.';
 			emptySubmit = true;
+			(!email.trim() ? emailEl : passwordEl)?.focus();
 			return;
 		}
 		loading = true;
@@ -144,7 +161,7 @@
 						aria-required="true"
 						autocomplete="email"
 						onblur={() => (emailTouched = true)}
-						aria-invalid={emailMalformed || error ? 'true' : 'false'}
+						aria-invalid={emailMalformed || (emptySubmit ? !email.trim() : !!error) ? 'true' : 'false'}
 						aria-describedby={emailMalformed
 							? 'login-email-error'
 							: error
@@ -175,7 +192,7 @@
 							required
 							aria-required="true"
 							autocomplete="current-password"
-							aria-invalid={error ? 'true' : 'false'}
+							aria-invalid={(emptySubmit ? !password : !!error) ? 'true' : 'false'}
 							aria-describedby={error ? 'login-password-help login-error' : 'login-password-help'}
 						/>
 						<button
@@ -223,8 +240,15 @@
 					</div>
 					<p class="login-hint" id="login-password-help">
 						Passwords are case-sensitive.
-						<a class="login-forgot" href="/reset-password">Forgot your password?</a>
+						<a class="login-forgot" href="{resolve('/(auth)/reset-password')}">Forgot your password?</a>
 					</p>
+					{#if linkFailed}
+						<p class="login-link-failed" role="status">
+							That link didn't work — it may have expired, been used already, or been opened on a
+							different device. <a class="login-forgot" href="{resolve('/(auth)/reset-password')}">Request a new reset link</a>,
+							or sign in below.
+						</p>
+					{/if}
 				</div>
 
 				{#if error}
@@ -249,7 +273,7 @@
 							<strong class="login-error-message">{error}</strong>
 							<span class="login-error-help">
 								{#if emptySubmit}
-									Fill in both fields and try again.
+									{!email.trim() && !password ? 'Fill in both fields and try again.' : 'Fill it in and try again.'}
 								{:else}
 									Re-enter your email address and password — passwords are case-sensitive — then
 									try again. If the problem continues, create an account or contact your
@@ -665,5 +689,22 @@
 	.field-hint.error {
 		color: var(--error-text);
 		font-weight: 600;
+	}
+	/* A link that is the same grey as the hint text, with no underline, was
+	   findable only by hovering — which a touch screen cannot do. */
+	.login-forgot {
+		color: var(--accent-text);
+		font-weight: 600;
+		text-decoration: underline;
+		text-underline-offset: 2px;
+	}
+	.login-link-failed {
+		margin: var(--space-3) 0 0;
+		padding: var(--space-3) var(--space-4);
+		border: 1px solid var(--warning, var(--border));
+		border-radius: var(--radius-sm);
+		background: var(--warning-soft, var(--surface-2));
+		font-size: var(--text-base);
+		line-height: var(--leading-relaxed);
 	}
 </style>

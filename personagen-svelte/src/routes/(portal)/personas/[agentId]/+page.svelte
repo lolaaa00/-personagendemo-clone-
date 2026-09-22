@@ -22,12 +22,11 @@
 	import ManualDeleteNotice from '$lib/components/feed/ManualDeleteNotice.svelte';
 	import SelectionToolbar from '$lib/components/ui/SelectionToolbar.svelte';
 	import ImageLightbox from '$lib/components/ui/ImageLightbox.svelte';
-	import { getPostDisplay } from '$lib/components/feed/postDisplay';
+	import { getPostDisplay, retryBodyFromFailedPost } from '$lib/components/feed/postDisplay';
 	import {
 		STUDIO_TEMPLATES,
 		STUDIO_SURFACES,
 		PIPELINE_META,
-		PIPELINE_USD,
 		type StudioTemplate,
 		type StudioSurface,
 		type StudioIntent
@@ -64,6 +63,7 @@
 	import { confirmAction } from '$lib/stores/confirm.svelte';
 	import MediaPreviewModal from '$lib/components/generation/MediaPreviewModal.svelte';
 	import PageShell from '$lib/components/ui/PageShell.svelte';
+	import { templateUsd, fetchStudioPlan, type StudioPlan } from '$lib/studio-pricing';
 	import { refreshCredits } from '$lib/credits-refresh';
 	import {
 		startGeneration,
@@ -282,6 +282,13 @@
 	// evidence some code path actually WROTE, so an untouched persona yields `[]`
 	// and the strip is not mounted at all.
 	let staleNotices = $derived(staleWarnings(agent));
+	/** Per-persona seat from this page's own load. Viewers cannot generate. */
+	let seatCanGenerate = $derived(
+		(data as { seat?: { canCreate?: boolean } }).seat?.canCreate !== false
+	);
+	let staleActionBlocked = $derived(
+		seatCanGenerate ? null : 'Your seat can view this persona but not generate for it.'
+	);
 
 	/**
 	 * Runs a stale notice's fix (audit UX-007: the notice said "generate them
@@ -490,6 +497,8 @@
 	// plain <div>, so they are derived here instead.
 	let semiBlocked = $derived(autonomyBlockedReason('semi_autonomous'));
 	let fullyBlocked = $derived(autonomyBlockedReason('fully_autonomous'));
+	/** The Studio's registry-resolved plan (see tileUsd below); null until it answers. */
+	let studioPlan = $state<StudioPlan | null>(null);
 	/**
 	 * Why Cinematic is out of reach, or null. The server refuses it BEFORE the
 	 * preview branch, so a cinematic Studio template would otherwise resolve into
@@ -498,7 +507,12 @@
 	let cinematicBlocked = $derived(
 		data?.entitlements?.cinematic === false
 			? `Cinematic video is not included in the ${data?.entitlements?.plan ?? 'free'} plan.`
-			: null
+			: // The server also refuses cinematic without a product photo in the
+				// brand brief. Only asserted once the Studio's preview has answered —
+				// before that, "unknown" must not disable a working tile.
+				studioPlan && !studioPlan.hasProductPhoto
+				? 'Cinematic needs a product photo — add one to a product in your Brand Brief first.'
+				: null
 	);
 
 	// Switching to Fully Autonomous means posts publish WITHOUT review — gate it
@@ -826,6 +840,22 @@
 	}
 
 	// ── Feed functions ─────────────────────────────────────────────
+	/**
+	 * Other surfaces (/generations, the calendar) have no composer of their own,
+	 * so their Retry sends the user here with ?retry=<postId>. Consumed once, then
+	 * removed from the URL so a reload does not reopen the composer.
+	 */
+	function consumeRetryParam() {
+		if (typeof window === 'undefined') return;
+		const url = new URL(window.location.href);
+		const id = url.searchParams.get('retry');
+		if (!id) return;
+		url.searchParams.delete('retry');
+		history.replaceState(history.state, '', url.pathname + url.search + url.hash);
+		const post = feedPosts.find((p: { id: string }) => p.id === id);
+		if (post && seatCanGenerate) retryFailedPost(post);
+	}
+
 	async function loadFeed() {
 		if (!agent?.id) return;
 		feedLoading = true;
@@ -843,6 +873,7 @@
 						new Date(a.published_at || a.created_at).getTime()
 				);
 				feedLoaded = true;
+				consumeRetryParam();
 			} else {
 				showToast('Failed to load feed: ' + result.error, 'error');
 			}
@@ -1056,6 +1087,32 @@
 	function markStudioCardUnavailable(id: string) {
 		studioCardUnavailable = new Set([...studioCardUnavailable, id]);
 	}
+	/**
+	 * Tile prices from the SAME plan the composer charges.
+	 *
+	 * Tiles used a hand-kept table (PIPELINE_USD) while the composer priced from
+	 * the live model registry, so they drifted: a client re-audit found four
+	 * product-motion tiles quoting $1.61 where the approve step charged $3.62, and
+	 * "Photo" at $0.09 in one place and $0.32 in another (ENH-003: the price
+	 * before the click must be the price at the click).
+	 *
+	 * One free preview call (preview:true resolves the plan and returns before any
+	 * spend) hands back the registry-resolved stage options; each tile is then
+	 * priced with planPipeline/planTotalUsd — the composer's own functions — for
+	 * its own template's format. The table stays as the fallback until that
+	 * returns, or if it cannot (a viewer seat, a network blip).
+	 */
+	let studioPlanFor = '';
+	$effect(() => {
+		if (activeTab !== 'studio' || !agent?.id || studioPlanFor === agent.id) return;
+		const id = agent.id;
+		studioPlanFor = id;
+		void fetchStudioPlan(id).then((plan) => {
+			if (plan && agent?.id === id) studioPlan = plan;
+		});
+	});
+	const tileUsd = (t: StudioTemplate) => templateUsd(t, studioPlan);
+
 	function useStudioTemplate(t: StudioTemplate) {
 		if (!agent?.id) return;
 		askToGenerate(
@@ -1067,6 +1124,37 @@
 					studioDeliver === 'asset'
 						? 'Template scaffold filled in below. Edit anything before approving. Output is saved as a standalone asset — it will not enter the review queue.'
 						: 'Template scaffold filled in below. Edit anything — topic, scene, product, schedule — before approving. Output lands as a draft in the review queue.',
+				confirmLabel: 'Approve & generate'
+			},
+			(body) => generatePostNow(body)
+		);
+	}
+
+	/**
+	 * Retry a failed generation (audit UX-007: failure notices said "try again"
+	 * with nothing to click).
+	 *
+	 * The failed row keeps what it set out to make; retryBodyFromFailedPost turns
+	 * that back into the request, and the SAME confirm-first composer resolves the
+	 * real plan and price before anything runs. A retry spends exactly like the
+	 * first attempt, so it gets no shortcut past that approval.
+	 */
+	function retryFailedPost(post: { id?: string; content?: unknown }) {
+		if (!agent?.id) return;
+		const baseBody = retryBodyFromFailedPost(post);
+		if (!baseBody) {
+			// Too little recorded to rebuild honestly — start a fresh post instead of
+			// guessing a format.
+			requestGeneratePost();
+			return;
+		}
+		askToGenerate(
+			{
+				endpoint: `/api/agent/${agent.id}/generate-post`,
+				baseBody,
+				title: `Retry — ${agent.name}`,
+				subtitle:
+					'The failed post’s settings are filled in below. Check the price and edit anything before approving.',
 				confirmLabel: 'Approve & generate'
 			},
 			(body) => generatePostNow(body)
@@ -3272,7 +3360,9 @@
 		<!-- Sticky so identity stays visible while scrolling a long tab (fixes the
 	     class of confusion where you lose track of which persona you're on). -->
 		<nav class="tab-nav">
-			<div class="tab-nav-identity" title="{agent.name} ({agent.handle})">
+			<!-- Handle only when there is one (audit UI-001): a persona with no handle
+			     showed "Nico Alvarez ()" here. -->
+			<div class="tab-nav-identity" title={agent.handle ? `${agent.name} (${agent.handle})` : agent.name}>
 				{#if agent.ugc_character_ref}
 					<button
 						type="button"
@@ -3368,7 +3458,12 @@
 			     because a failed portrait or a miscast voice is just as relevant
 			     while writing content as while editing the profile. Renders
 			     absolutely nothing when there is nothing wrong. -->
-			<StaleNotices warnings={staleNotices} onAction={runStaleAction} busy={staleActionBusy} />
+			<StaleNotices
+				warnings={staleNotices}
+				onAction={runStaleAction}
+				busy={staleActionBusy}
+				blockedReason={staleActionBlocked}
+			/>
 			{#if activeTab === 'profile'}
 				<!-- Lens switcher shared by both Profile lenses — mirrors the Content
 			     tab's toggle so switching feels identical everywhere. -->
@@ -3684,6 +3779,7 @@
 									<PostCard
 										{post}
 										onOpen={(p) => (modalPost = p)}
+										onRetry={seatCanGenerate ? retryFailedPost : null}
 										onPublishFallback={openPublishFallback}
 										selectable
 										selected={selectedPostIds.includes(post.id)}
@@ -5950,7 +6046,12 @@
 												<!-- Quoted, like the totals above — a rate card that itemised provider
 												     cost under a retail total would never add up. Rows priced per-account
 												     rather than per-call carry a note instead of a number. -->
-												<td class="tabular-nums">{row.note ?? quote(row.usd)}</td>
+												<!-- A per-call price is always shown as YOUR price (quoted). The
+												     note used to REPLACE it, and several notes are the provider's
+												     own formula ("$60/M output tokens x 1290 tokens/image") —
+												     provider cost under a heading promising what you pay. The note
+												     now speaks only for rows with no per-call price. -->
+												<td class="tabular-nums">{row.usd > 0 ? quote(row.usd) : (row.note ?? quote(0))}</td>
 											</tr>
 										{/each}
 									</tbody>
@@ -6490,7 +6591,7 @@
 											{#each list as t (t.id)}
 												{@const preview = studioPreviews.get(t.id)}
 												{@const meta = PIPELINE_META[t.pipeline]}
-												{@const pipelineUsd = PIPELINE_USD[t.pipeline]}
+												{@const pipelineUsd = tileUsd(t)}
 												<div class="studio-tile studio-sf-{t.surface}" role="listitem">
 													<!-- The tile's face is the OUTPUT: a real prior generation
 												     when one exists, else the template's sample line styled
@@ -6528,7 +6629,7 @@
 																<img
 																	class="studio-face-img"
 																	src="/api/studio/card-sample/{t.id}/{studioSample(t).idx}"
-																	alt="Sample {t.title} card, rendered by the free card pipeline"
+																	alt="Sample {t.title} card, typeset on our servers"
 																	loading="lazy"
 																	onerror={() => markStudioCardUnavailable(t.id)}
 																/>
@@ -6637,6 +6738,7 @@
      Calendar lens set `modalPost` on click and nothing appeared — the drawer
      didn't exist in that subtree. Any tab can now open a post. -->
 	<PostDrawer
+		onRetry={seatCanGenerate ? (p) => { modalPost = null; retryFailedPost(p); } : undefined}
 		post={modalPost}
 		onClose={() => (modalPost = null)}
 		onDelete={handleDeletePost}

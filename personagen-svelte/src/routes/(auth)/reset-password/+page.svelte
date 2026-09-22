@@ -55,7 +55,7 @@
 		{#if sent}
 			<p class="reset-sent" role="status">
 				If that address has an account, a reset link is on its way. Open it on this device and
-				you'll land on your profile, where you can set a new password.
+				you'll be asked to choose a new password straight away.
 			</p>
 			<p class="reset-hint">
 				Nothing after a few minutes? Check spam, then try again — the link expires, so request a

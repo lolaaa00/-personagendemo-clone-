@@ -3,7 +3,7 @@ import { createDbService } from '$lib/server/db';
 import { env } from '$env/dynamic/public';
 import { ALL_PLATFORM_KEYS, platformLabel, platformColor } from '$lib/platforms';
 
-export const load: PageServerLoad = async ({ locals }) => {
+export const load: PageServerLoad = async ({ locals, parent }) => {
 	const supabaseUrl = env.PUBLIC_SUPABASE_URL ?? '';
 	const isPlaceholder = !supabaseUrl || supabaseUrl.includes('placeholder');
 
@@ -17,7 +17,13 @@ export const load: PageServerLoad = async ({ locals }) => {
 
 	if (!isPlaceholder && locals.supabase) {
 		const { session, user } = await locals.safeGetSession();
-		if (user) {
+		// Setup is the account OWNER's job. A workspace seat was being checked
+		// against its own empty rows and told to write a brief, add a Zernio key
+		// and connect accounts that belong to the owner — while the cards beside
+		// it showed the workspace connected. Seats get no checklist at all.
+		const { seat } = (await parent()) as { seat?: { role?: string } };
+		const ownsSetup = !seat?.role || seat.role === 'owner';
+		if (user && ownsSetup) {
 			const [keys, briefs, conns, published] = await Promise.all([
 				locals.supabase.from('user_api_keys').select('provider, status').eq('user_id', user.id),
 				locals.supabase.from('brand_briefs').select('id').eq('user_id', user.id).limit(1),
@@ -32,8 +38,10 @@ export const load: PageServerLoad = async ({ locals }) => {
 				(keys.data ?? []).some(
 					(k: any) => k.provider === prov && k.status !== 'unset' && k.status !== 'invalid'
 				);
+			// No OpenRouter step: customer generation keys were withdrawn on
+			// 2026-09-21, so it could never be completed. Zernio is the one key a
+			// customer brings.
 			setup = {
-				openrouter: usable('openrouter'),
 				zernio: usable('zernio'),
 				brief: (briefs.data ?? []).length > 0,
 				connection: (conns.data ?? []).length > 0,

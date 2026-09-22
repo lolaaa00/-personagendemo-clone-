@@ -340,11 +340,7 @@
 			],
 			steps: [
 				{ t: 'Open Billing from the sidebar. The balance at the top is the one that funds your generations.' },
-				{
-					t: 'Check the label on the balance pill in the sidebar. If it shows a workspace name, that workspace’s owner funds it — ask them to top up, because you cannot do it for them.',
-					img: 'settings-apikeys',
-					alt: 'The sidebar balance pill'
-				},
+				{ t: 'Check the label on the balance pill in the sidebar. If it shows a workspace name, that workspace’s owner funds it — ask them to top up, because you cannot do it for them.' },
 				{ t: 'If it is your own wallet and card payments are not switched on yet, use the request board link on the Billing page and we will load it manually.' },
 				{ t: 'Retry whatever failed — generate a post or approve a draft. Nothing is lost by a failed attempt.' }
 			],
@@ -381,57 +377,56 @@
 			tip: 'Topping up the wrong wallet is the common mistake. Billing lists every workspace wallet you draw on beside your own — top up the one the sidebar names.'
 		},
 		{
+			// Rewritten 2026-09-22 to match Settings and the product owner's rule:
+			// the Zernio key is the CUSTOMER'S to create. This guide used to say
+			// "provisioned on our side — ask us" while Settings said "yours to
+			// create", and a client re-audit filed the contradiction.
 			id: 'zernio-key',
 			category: 'Keys & credits',
 			title: 'Get publishing working (the Zernio key)',
 			when: 'Settings shows Zernio as “Not set”, or connecting a social account says there is no publishing key. Nothing can publish until this is in place.',
 			facts: [
-				'Zernio is the service that connects accounts and posts for you',
-				'You do not buy this one — it is provisioned on our side',
-				'“Not set” = your account has no key yet: ask us',
-				'Extra keys (more free slots) go in Settings → Zernio Key Manager',
+				'Zernio connects your social accounts and sends posts to them',
+				'The key is yours to create — free, with Google sign-in at zernio.com',
+				'The free account includes 2 connected accounts',
+				'Workspace members publish through the workspace owner’s key'
 			],
 			steps: [
 				{ t: 'Zernio is the publishing layer: it holds the connection to each social account and sends approved posts to them. Without a key, generation still works but nothing can go live.' },
-				{ t: 'Unlike OpenRouter, you do not sign up and paste a key yourself. Your Zernio key is provisioned for your account by us — message support and we set it up, usually the same day.' },
-				{
-					t: 'Once it is in place, Settings → Provider API Keys shows Zernio as Saved (Test Connection turns it Valid). If it still says Not set, it has not been provisioned yet.',
-					img: 'settings-apikeys',
-					alt: 'The Provider API Keys section in Settings with the Zernio row',
-					focus: { x: 50, y: 20 },
-					zoom: 1.4
-				},
-				{ t: 'Then connect accounts: open a persona → Profile tab → Connections → Connect. See the “Connect a social account” guide for the walk-through.' },
-				{ t: 'Running several brands? Each Zernio key is its own account with 2 free connected-account slots. Settings → Zernio Key Manager lets you add more keys and assign personas to them — see the publishing-billing guide for the maths.' }
+				{ t: 'Go to zernio.com and sign in with Google. There is no card to enter — the free account includes 2 connected accounts.' },
+				{ t: 'In Zernio, open your API keys and create one. Copy it — it is shown once.' },
+				{ t: 'Back here: Settings → Provider API Keys → the Zernio card. Paste the key, press Save Key, then Test Connection. The badge turns Valid.' },
+				{ t: 'Member of someone else’s workspace? You do not need a key of your own for that workspace’s personas — they publish through the owner’s Zernio key. You only need your own for personas outside the workspace.' },
+				{ t: 'Then connect accounts: open a persona → Connections → Connect. See the “Connect a social account” guide for the walk-through.' },
+				{ t: 'Running several brands? Each Zernio key is its own account with 2 free connected-account slots. Settings → Zernio Key Manager lets you add more keys and assign personas to them.' }
 			],
 			tip: 'Zernio is billed per connected account (first 2 free), not per post — so a key sitting unused costs nothing.'
 		},
 		{
+			// Rewritten 2026-09-22: customer keys for generation were withdrawn on
+			// 2026-09-21. This guide still said "Saving a key here changes who
+			// pays" and "either OpenRouter or Gemini is enough" — instructions for
+			// fields that no longer exist.
 			id: 'all-keys',
 			category: 'Keys & credits',
-			title: 'What each API key powers',
+			title: 'What each provider does',
 			when: 'You’re looking at Provider API Keys in Settings and wondering what’s what.',
 			facts: [
-				'Zernio = publishing',
-				'Fal AI = images, video, voice',
-				'OpenRouter or Gemini = writing (one is enough)',
-				'Firecrawl = reads your website for the brief',
+				'Zernio = publishing — the one key you bring',
+				'Images, video, voice, writing and research run on our keys',
+				'All of it is charged to your balance, priced before you spend',
+				'Nothing here needs a key of yours except Zernio'
 			],
 			steps: [
-				{
-					t: 'Open Settings → Provider API Keys (left menu inside Settings). Zernio has a card with Save Key / Test Connection / Delete Key. The generation providers are listed below it with no field: those run on our keys and are charged to your balance.',
-					img: 'settings-apikeys',
-					alt: 'The provider key cards in Settings'
-				},
-				{ t: 'Zernio — publishing. Connects social accounts and sends approved posts to them. Without it, nothing publishes. Provisioned by us, not something you buy — see the Zernio guide.' },
-				{ t: 'Fal AI — pictures, video, and voice. Generates the images, videos, and spoken audio in your posts.' },
-				{ t: 'OpenRouter — writing. Captions, scripts, ideas (also a backup route for media). Every format uses it. See the OpenRouter guide if it runs out of credits.' },
-				{ t: 'Saving a key here changes who pays: that provider stops drawing on the wallet and bills your own account instead. See “Which balance pays” before topping anything up.' },
-				{ t: 'Gemini — alternative writing engine; either OpenRouter or Gemini is enough.' },
-				{ t: 'Firecrawl — brand reading. Powers "Scrape & Populate" in the Brand Brief.' },
+				{ t: 'Open Settings → Provider API Keys (left menu inside Settings). The Zernio card is the only one with a field — it is your publishing connection, and it is yours.' },
+				{ t: 'Zernio — publishing. Connects social accounts and sends approved posts to them. Without it, nothing publishes. See the Zernio guide to create yours.' },
+				{ t: 'Fal AI — pictures, video and voice. Runs on our key.' },
+				{ t: 'OpenRouter and Gemini — writing: captions, scripts, ideas. Run on our keys.' },
+				{ t: 'Firecrawl — brand reading. Powers “Scrape & Populate” in the Brand Brief. Runs on our key.' },
+				{ t: 'Everything that runs on our keys is charged to your balance — the sidebar pill shows which wallet pays. If generation stops with “out of credits”, see the out-of-credits guide.' },
 				{ t: 'Settings also has a Zernio Key Manager section: add extra Zernio keys (each is its own account with its own 2 free slots) and assign specific personas to them.' }
 			],
-			tip: 'A card with a red status shows the reason right there — fix it on the card rather than guessing.'
+			tip: 'A Zernio card with a red status shows the reason right there — fix it on the card rather than guessing.'
 		},
 		{
 			id: 'zernio-billing',
@@ -497,7 +492,7 @@
 			facts: [
 				'Pick Text card or Motion text card, then Words → “My own words — free”',
 				'One quote per line; a blank line separates quotes that need their own line breaks',
-				'Up to 100 cards per batch — no model runs, nothing is charged to the wallet or your keys',
+				'Up to 100 cards per batch — no model runs, so nothing is charged',
 				'Every card lands as a draft in the Review Queue; nothing publishes by itself',
 			],
 			steps: [
@@ -632,7 +627,7 @@
 			when: 'A persona’s approved posts should start going to a real account.',
 			facts: [
 				'Where: Profile tab → Connections toggle',
-				'15 platforms supported',
+				'13 platforms supported',
 				'A normal social login — nothing technical',
 				'A Reconnect badge fixes broken links in one click',
 			],
@@ -888,7 +883,7 @@
 			facts: [
 				'Read the message — it names the real cause',
 				'“402” or “credits” → the OpenRouter guide',
-				'“fal” → check the Fal AI card in Settings',
+				'“fal” → runs on our key: check your balance, then tell us',
 				'Fixed it? Generate again — nothing is lost',
 			],
 			steps: [
@@ -950,7 +945,16 @@
 	// read as a wall of steps before the reader had chosen anything.
 	let selectedId = $state<string | null>(null);
 	let query = $state('');
-	let provider = $state<'all' | ProviderId>('all');
+	// Read ?provider= when the state is CREATED. It used to be read in onMount,
+	// after this sync effect had already run with 'all' and stripped the
+	// parameter from the URL — so every "?provider=zernio" link landed on the
+	// unfiltered docs home.
+	function initialProvider(): 'all' | ProviderId {
+		if (typeof window === 'undefined') return 'all';
+		const p = new URLSearchParams(window.location.search).get('provider');
+		return p && PROVIDERS.some((x) => x.id === p) ? (p as ProviderId) : 'all';
+	}
+	let provider = $state<'all' | ProviderId>(initialProvider());
 	$effect(() => syncParam('provider', provider, 'all'));
 
 	let filtered = $derived.by(() => {
@@ -974,7 +978,9 @@
 	);
 
 	/** The first-run path: the four guides a new account needs, in order. */
-	const START_HERE = ['getting-around', 'openrouter-key', 'generate-post', 'connect-account'];
+	// Setup order for a new account. The out-of-credits troubleshooting guide
+	// used to sit at step 2 and the Zernio key was missing entirely.
+	const START_HERE = ['getting-around', 'generate-post', 'zernio-key', 'connect-account'];
 	let startHere = $derived(
 		START_HERE.map((id) => GUIDES.find((g) => g.id === id)).filter((g): g is Guide => !!g)
 	);
@@ -1050,8 +1056,6 @@
 	onMount(() => {
 		const hash = location.hash.replace('#', '');
 		if (hash && GUIDES.some((g) => g.id === hash)) selectedId = hash;
-		const p = new URLSearchParams(location.search).get('provider');
-		if (p && PROVIDERS.some((x) => x.id === p)) provider = p as ProviderId;
 	});
 
 	// ── Docs hub: Guides | Changelog | Roadmap | User Voice ──────────────────

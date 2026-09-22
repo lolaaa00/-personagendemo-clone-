@@ -14,7 +14,7 @@
 	});
 </script>
 
-<span class="dash-status {statusConfig.cssClass}" role="status">
+<span class="dash-status {statusConfig.cssClass}">
 	<span class="dash-status-dot" aria-hidden="true"></span>
 	{statusConfig.label}
 </span>

@@ -99,11 +99,35 @@ describe('a personal account is unaffected', () => {
 	it('survives an unreadable wallet and an unreadable RPC', () => {
 		// Never-brick: a failed read renders a zero balance, not a broken sidebar.
 		const w = walletToDisplay(ME, null, null);
-		expect(w).toEqual({ balance: 0, billingMode: 'credits', paidBy: null });
+		expect(w).toEqual({ balance: 0, billingMode: 'credits', paidBy: null, label: null });
 	});
 
 	it('coerces a string balance, which is how postgres numerics arrive', () => {
 		const w = walletToDisplay(ME, { balance_credits: '1736' }, null);
 		expect(w.balance).toBe(1736);
+	});
+});
+
+describe('the pill names the wallet for owners as well as members (re-audit ENH-006)', () => {
+	it('an owner of exactly one workspace sees its name on their own wallet', () => {
+		const w = walletToDisplay(ME, { balance_credits: 2000, billing_mode: 'credits' }, [
+			ws({ owner_id: ME, role: 'owner', workspace_name: 'UX Audit Co' })
+		]);
+		expect(w.label).toBe('UX Audit Co');
+		expect(w.paidBy).toBeNull();
+		expect(w.balance).toBe(2000);
+	});
+
+	it('an owner of several workspaces gets the plain label rather than a guess', () => {
+		const w = walletToDisplay(ME, { balance_credits: 2000 }, [
+			ws({ workspace_id: 'a', owner_id: ME, workspace_name: 'A' }),
+			ws({ workspace_id: 'b', owner_id: ME, workspace_name: 'B' })
+		]);
+		expect(w.label).toBeNull();
+	});
+
+	it('a member is labelled with the workspace whose owner pays', () => {
+		const w = walletToDisplay(ME, { balance_credits: 2000 }, [ws()]);
+		expect(w.label).toBe('HoneyX');
 	});
 });

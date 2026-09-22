@@ -72,6 +72,21 @@ export const load: PageServerLoad = async ({ locals }) => {
 	const ownerIds = (owned ?? []).length > 0 ? [user.id] : [];
 	for (const id of ownerIds) emailByUserId.set(id, user.email ?? '');
 
+	// A seat added any way other than an accepted invite (an operator, a
+	// migration, the audit tenant) has no invite email, and the Seats tab showed
+	// it as a raw user id ("2a23da68…"). Resolve those directly, as the activity
+	// feed below already does for unknown actors.
+	for (const sr of seatRows ?? []) {
+		if (sr.user_id && !emailByUserId.has(sr.user_id)) {
+			try {
+				const { data } = await svc.auth.admin.getUserById(sr.user_id);
+				if (data?.user?.email) emailByUserId.set(sr.user_id, data.user.email);
+			} catch {
+				/* leave unresolved — rendered as a short id */
+			}
+		}
+	}
+
 	const seats = (seatRows ?? []).map((s: any) => ({
 		...s,
 		email: emailByUserId.get(s.user_id) ?? null,
@@ -81,9 +96,12 @@ export const load: PageServerLoad = async ({ locals }) => {
 	// Personas in these workspaces — the unit everything else attributes to.
 	const { data: personaRows } = await svc
 		.from('agents')
-		.select('id, name, handle, status, workspace_id, user_id')
+		.select('id, name, handle, status, workspace_id, user_id, is_overseer')
 		.in('workspace_id', wsIds);
-	const personas = personaRows ?? [];
+	// The Hermes overseer is a system persona, not one the customer runs: every
+	// other surface filters it out, and counting it here made "Personas" read 15
+	// in the Admin Console against 14 on the dashboard (audit QA-001).
+	const personas = (personaRows ?? []).filter((p: { is_overseer?: boolean | null }) => p.is_overseer !== true);
 	const personaIds = personas.map((p: any) => p.id);
 	const personaById = new Map(personas.map((p: any) => [p.id, p]));
 
@@ -95,6 +113,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 	let generations: any[] = [];
 	let reviews: any[] = [];
 	let recentPosts: any[] = [];
+	let publishedCount = 0;
 	if (personaIds.length > 0) {
 		const [g, r, p] = await Promise.all([
 			svc
@@ -120,6 +139,16 @@ export const load: PageServerLoad = async ({ locals }) => {
 		generations = g.data ?? [];
 		reviews = r.data ?? [];
 		recentPosts = p.data ?? [];
+		// An exact count, not the newest 100 rows: past 100 posts the old tally could
+		// report fewer published posts for the whole workspace than one persona's
+		// page showed for itself (audit QA-001, "workspace 5 < persona 6").
+		const { count } = await svc
+			.from('posts')
+			.select('id', { count: 'exact', head: true })
+			.in('agent_id', personaIds)
+			.is('deleted_at', null)
+			.eq('status', 'published');
+		publishedCount = count ?? recentPosts.filter((x: { status?: string }) => x.status === 'published').length;
 	}
 
 	// Any actor id we haven't got an email for yet (e.g. the persona's own owner
@@ -223,7 +252,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 			generationsMonth: generations.filter(
 				(g: any) => new Date(g.created_at).getTime() >= monthMs
 			).length,
-			publishedTotal: recentPosts.filter((p: any) => p.status === 'published').length,
+			publishedTotal: publishedCount,
 			seatCount: seats.length,
 			personaCount: personas.length
 		},

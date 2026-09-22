@@ -202,6 +202,9 @@ describe('staleWarnings — a portrait that never became the one you asked for',
 
 // ── The reference photos ─────────────────────────────────────────────────────
 
+// Stage names are matched case-insensitively: a detail that OPENS with the
+// stage name is sentence-cased ("The side profiles…"), which is correct English
+// and not what these tests are about — they check the stage is named at all.
 describe('staleWarnings — reference photos that did not finish', () => {
 	it('warns on a failed stage and names it in the customer’s words', () => {
 		const agent = untouchedAgent({
@@ -209,7 +212,7 @@ describe('staleWarnings — reference photos that did not finish', () => {
 		});
 		const warnings = staleWarnings(agent, NOW);
 		expect(keys(warnings)).toEqual(['reference-photos-failed']);
-		expect(warnings[0].detail).toContain('the face close-up');
+		expect(warnings[0].detail).toMatch(/the face close-up/i);
 		expect(warnings[0].severity).toBe('warn');
 	});
 
@@ -222,7 +225,7 @@ describe('staleWarnings — reference photos that did not finish', () => {
 			}
 		});
 		const [warning] = staleWarnings(agent, NOW);
-		expect(warning.detail).toContain('the character sheet, the side profiles and the feature grid');
+		expect(warning.detail).toMatch(/the character sheet, the side profiles and the feature grid/i);
 	});
 
 	it('says nothing while a stage is genuinely still generating', () => {
@@ -244,7 +247,7 @@ describe('staleWarnings — reference photos that did not finish', () => {
 		});
 		const warnings = staleWarnings(agent, NOW);
 		expect(keys(warnings)).toEqual(['reference-photos-stalled']);
-		expect(warnings[0].detail).toContain('the side profiles');
+		expect(warnings[0].detail).toMatch(/the side profiles/i);
 		expect(warnings[0].severity).toBe('info');
 	});
 
@@ -258,10 +261,10 @@ describe('staleWarnings — reference photos that did not finish', () => {
 		});
 		const warnings = staleWarnings(agent, NOW);
 		expect(keys(warnings)).toEqual(['reference-photos-failed', 'reference-photos-stalled']);
-		expect(warnings[0].detail).toContain('the character sheet');
-		expect(warnings[0].detail).not.toContain('the feature grid');
-		expect(warnings[1].detail).toContain('the feature grid');
-		expect(warnings[1].detail).not.toContain('the character sheet');
+		expect(warnings[0].detail).toMatch(/the character sheet/i);
+		expect(warnings[0].detail).not.toMatch(/the feature grid/i);
+		expect(warnings[1].detail).toMatch(/the feature grid/i);
+		expect(warnings[1].detail).not.toMatch(/the character sheet/i);
 	});
 
 	it('ignores a stage’s history and its finished URLs entirely', () => {

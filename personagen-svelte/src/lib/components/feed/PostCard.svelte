@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import { getPostDisplay, getPostErrorSummary, summarizeGenError, SURFACE_LABEL } from './postDisplay';
 	import { platformColor } from '$lib/platforms';
 	import { postStatus } from '$lib/status-color';
@@ -247,19 +248,15 @@
 			<span class="tile-gen-title">Generation failed</span>
 			<span class="tile-gen-err">{genError}</span>
 			{#if onRetry}
-				<span
+				<!-- A real <button>: the tile is a role=button DIV precisely so real
+				     buttons can nest in it (see the note at the top), and a button gets
+				     Space as well as Enter — the old span answered Enter only. -->
+				<button
+					type="button"
 					class="tile-gen-retry"
-					role="button"
-					tabindex="0"
 					onclick={(e) => {
 						e.stopPropagation();
 						onRetry?.(post);
-					}}
-					onkeydown={(e) => {
-						if (e.key === 'Enter') {
-							e.stopPropagation();
-							onRetry?.(post);
-						}
 					}}
 					><svg
 						width="13"
@@ -271,9 +268,16 @@
 						stroke-linecap="round"
 						stroke-linejoin="round"
 						aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7" /><path d="M3 3v5h5" /></svg
-					> Retry</span
+					> Retry</button
 				>
 			{/if}
+			<!-- The docs explain every failure in detail; put them where the failure
+			     is (audit ENH-001) instead of three menus away. -->
+			<a
+				class="tile-gen-help"
+				href="{resolve('/(portal)/guides')}#generation-failing"
+				onclick={(e) => e.stopPropagation()}>What went wrong?</a
+			>
 		</div>
 	{:else if display.mediaUrl}
 		{#if display.mediaType === 'video'}
@@ -1152,12 +1156,33 @@
 	.tile-gen-retry {
 		position: relative;
 		margin-top: 0.2rem;
+		/* Reset the <button> defaults so it looks exactly like the old pill. */
+		border: none;
+		font: inherit;
 		font-size: 0.72rem;
 		font-weight: 600;
 		padding: 0.25rem 0.6rem;
+		min-height: 28px;
 		border-radius: 8px;
 		background: var(--error);
 		color: #fff;
 		cursor: pointer;
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+	}
+	.tile-gen-retry:focus-visible,
+	.tile-gen-help:focus-visible {
+		outline: 2px solid var(--focus-ring, #fff);
+		outline-offset: 2px;
+	}
+	.tile-gen-help {
+		position: relative;
+		margin-top: 0.3rem;
+		font-size: 0.72rem;
+		font-weight: 600;
+		color: inherit;
+		text-decoration: underline;
+		text-underline-offset: 2px;
 	}
 </style>

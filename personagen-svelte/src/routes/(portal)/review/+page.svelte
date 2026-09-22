@@ -104,7 +104,7 @@
 	let filterAgent = $state(qp('agent') ?? 'all');
 	let filterPlatform = $state(qp('platform') ?? 'all');
 	let filterStatus = $state(
-		readParam('status', ['all', 'draft', 'scheduled', 'rejected'] as const, 'all')
+		readParam('status', ['all', 'draft', 'scheduled', 'rejected', 'everything'] as const, 'all')
 	);
 	$effect(() => syncParam('agent', filterAgent, 'all'));
 	$effect(() => syncParam('platform', filterPlatform, 'all'));
@@ -126,11 +126,32 @@
 				(filterPlatform === 'all' || i.platforms.includes(filterPlatform)) &&
 				// 'all' is the actionable queue, not literally everything: a rejected
 				// post is only shown when explicitly asked for.
-				(filterStatus === 'all'
-					? i.status === 'draft' || i.status === 'scheduled'
-					: i.status === filterStatus)
+				(filterStatus === 'everything'
+					? true
+					: filterStatus === 'all'
+						? i.status === 'draft' || i.status === 'scheduled'
+						: i.status === filterStatus)
 		)
 	);
+
+	/** Human names of every filter currently narrowing the list. */
+	let hidingFilters = $derived.by(() => {
+		const out: string[] = [];
+		if (filterAgent !== 'all') {
+			const name = agentOptions.find((a) => a.id === filterAgent)?.name ?? 'one persona';
+			out.push(`persona “${name}”`);
+		}
+		if (filterPlatform !== 'all') out.push(`platform “${filterPlatform}”`);
+		if (filterStatus === 'all') out.push('“Needs a decision” (rejected posts are hidden)');
+		else if (filterStatus !== 'everything') out.push(`status “${filterStatus}”`);
+		return out.length ? out : ['the current view'];
+	});
+
+	function showEverything() {
+		filterAgent = 'all';
+		filterPlatform = 'all';
+		filterStatus = 'everything';
+	}
 
 	const REJECT_REASONS = [
 		'Warped hands / anatomy',
@@ -430,9 +451,25 @@
 		}
 	}
 
+	/**
+	 * The slot in the viewer's own date convention — the same formatter /billing
+	 * and /admin use. It printed the raw "2026-09-22 · 14:00" in every locale, so
+	 * a workspace billing in PHP read one date style here and another on Billing
+	 * (audit UI-005). Parsed as a local wall-clock time and printed back as one,
+	 * so the time shown is exactly the stored slot.
+	 */
 	function slotLabel(i: ReviewItem): string {
 		if (!i.scheduled_date) return 'Unscheduled';
-		return `${i.scheduled_date} · ${(i.scheduled_time || '').slice(0, 5)}`;
+		const hhmm = (i.scheduled_time || '00:00').slice(0, 5);
+		const d = new Date(`${i.scheduled_date}T${hhmm}:00`);
+		if (Number.isNaN(d.getTime())) return `${i.scheduled_date} · ${hhmm}`;
+		return d.toLocaleString(undefined, {
+			weekday: 'short',
+			month: 'short',
+			day: 'numeric',
+			hour: 'numeric',
+			minute: '2-digit'
+		});
 	}
 
 	// ── Details drawer (same PostDrawer as the persona feed) ───────────────
@@ -795,15 +832,18 @@
 					<option value="draft">Draft only</option>
 					<option value="scheduled">Scheduled only</option>
 					<option value="rejected">Rejected</option>
+					<option value="everything">Everything, including rejected</option>
 				</select>
 			</label>
 			<span class="filt-count" aria-live="polite">
 				{viewMode === 'board' ? boardItems.length : filteredItems.length} of {items.length} shown
 				{#if viewMode !== 'board' && filteredItems.length < items.length}
-					<button type="button" class="filt-why" onclick={() => (filterStatus = 'all')}>
-						— {filterStatus === 'all'
-							? 'hidden by “Needs a decision”'
-							: `filtered to ${filterStatus}`}, show everything
+					<!-- Names the filters that are really hiding rows, and clears ALL of
+					     them. The first version set the status to 'all' — which IS the
+					     default "Needs a decision" view — so the click changed nothing, and
+					     with a persona filter active it blamed the wrong filter. -->
+					<button type="button" class="filt-why" onclick={showEverything}>
+						— hidden by {hidingFilters.join(' + ')}; show everything
 					</button>
 				{/if}
 			</span>

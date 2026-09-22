@@ -9,10 +9,11 @@ import type { RequestHandler } from './$types';
  * password. There was no reset route anywhere in the product, so the finding
  * was not "add a link" — the link had nowhere to point.
  *
- * The recovery link lands on /api/auth/callback, which already exchanges a code
- * for a session; `next` carries the user to Settings → Profile, where
- * /api/settings/password already exists to set the new one. No new auth
- * surface, and nothing here can set a password on its own.
+ * The recovery link lands on /api/auth/callback, which exchanges the code for a
+ * session; `next` carries `reset=1`, which opens the portal's set-a-new-password
+ * dialog (the same one provisioned accounts use for their first password), over
+ * Settings → Profile, whose Password card is the place to change it later.
+ * Nothing here can set a password on its own.
  */
 export const POST: RequestHandler = async ({ request, locals, url }) => {
 	const body = (await request.json().catch(() => ({}))) as { email?: string };
@@ -30,8 +31,10 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
 		return json({ success: false, error: 'Enter a valid email address.' }, { status: 400 });
 	}
 
+	// `reset=1` opens the portal's set-a-new-password dialog on arrival. It used
+	// to land on Settings → Profile, which had no password field at all.
 	const redirectTo = `${url.origin}/api/auth/callback?next=${encodeURIComponent(
-		'/settings?section=profile&reset=1'
+		'/settings?section=profile&reset=1#password'
 	)}`;
 
 	const { error } = await locals.supabase.auth.resetPasswordForEmail(email, { redirectTo });
