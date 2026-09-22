@@ -2,6 +2,24 @@ import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 import { createDbService } from '$lib/server/db';
 import { env } from '$env/dynamic/public';
+import { env as privateEnv } from '$env/dynamic/private';
+
+/**
+ * Can the platform research a URL at all?
+ *
+ * This used to be answered from the USER's saved Firecrawl key. Customer BYOK
+ * was withdrawn for Firecrawl on 2026-09-21, so from that moment nobody has one
+ * and the client's check resolved false for everyone — which disabled Scrape &
+ * Populate for every account while the platform key kept working perfectly.
+ * A gate that reads a key nobody can own any more is not a gate, it is an
+ * outage.
+ *
+ * The boolean, and only the boolean, is what the page needs: whether research
+ * is available. The key itself never leaves the server.
+ */
+function firecrawlAvailable(): boolean {
+	return ((privateEnv.FIRECRAWL_API_KEY ?? process.env.FIRECRAWL_API_KEY ?? '').trim()).length > 0;
+}
 
 export const load: PageServerLoad = async ({ locals, url }) => {
 	// The Intelligence wizard used to be `?tab=intel` on this page. Old links,
@@ -15,7 +33,13 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 
 	const supabaseUrl = env.PUBLIC_SUPABASE_URL ?? '';
 	const isPlaceholder = !supabaseUrl || supabaseUrl.includes('placeholder');
-	const empty = { brief: null, briefId: null, briefName: null, briefs: [] as any[] };
+	const empty = {
+		brief: null,
+		briefId: null,
+		briefName: null,
+		briefs: [] as any[],
+		firecrawlAvailable: firecrawlAvailable()
+	};
 	if (isPlaceholder || !locals.supabase) return empty;
 
 	const { user } = await locals.safeGetSession();
@@ -34,6 +58,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 		brief: (data?.data as Record<string, unknown>) ?? null,
 		briefId: data?.id ?? null,
 		briefName: data?.name ?? null,
-		briefs: listResult.data ?? []
+		briefs: listResult.data ?? [],
+		firecrawlAvailable: firecrawlAvailable()
 	};
 };

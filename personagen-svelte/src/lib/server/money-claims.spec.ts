@@ -164,6 +164,35 @@ describe('customer BYOK for generation is withdrawn, and the copy says so', () =
 		}
 	});
 
+	it('no guide still teaches a customer to save a withdrawn provider key', () => {
+		// The phrase scan above ran green while an entire guide — "Get an
+		// OpenRouter key", nine steps ending "Once saved, YOUR key pays — not the
+		// wallet" — sat untouched in the same file. It was missed because the scan
+		// looked for sentences somebody had thought to list, and this one used
+		// different words.
+		//
+		// So this derives the forbidden names from the catalogue instead of
+		// listing them: any provider whose customer BYOK is withdrawn must not
+		// appear in the docs as something to obtain, paste or save. Re-open one in
+		// providers.ts and this goes green again on its own.
+		const withdrawn = PROVIDER_CATALOGUE.filter((p) => p.keyProvider && !p.byok.supported);
+		expect(withdrawn.length, 'nothing withdrawn — the scan would be vacuous').toBeGreaterThan(0);
+		for (const p of withdrawn) {
+			// Provider labels are plain words today; escaped anyway so adding one
+			// with punctuation cannot quietly turn this scan into a wildcard.
+			const label = p.label.replace(/[^\w\s]/g, (c) => '\\' + c);
+			for (const pattern of [
+				new RegExp(`Get an? ${label}[^']{0,20}key`, 'i'),
+				new RegExp(`paste your ${label}[^']{0,20}key`, 'i'),
+				new RegExp(`Find the ${label} card`, 'i')
+			]) {
+				expect(guides, `${p.label}: ${pattern}`).not.toMatch(pattern);
+			}
+		}
+		// And the specific claim that outlived the first sweep.
+		expect(guides).not.toMatch(/YOUR key pays/i);
+	});
+
 	it('the Studio names the wallet the SERVER resolved, never a key it probed', () => {
 		// It used to fetch /api/settings/api-keys from the browser and conclude
 		// "your own key pays" from a row that is now inert — a money claim built

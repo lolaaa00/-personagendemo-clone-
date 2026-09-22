@@ -249,23 +249,19 @@
 	let storeUrl = $state('');
 	let scraping = $state(false);
 
-	/** Whether Firecrawl has a usable key. `null` until we know — the control
-	 *  stays enabled while unknown rather than blocking on a slow request. */
-	let firecrawlReady = $state<boolean | null>(null);
-	$effect(() => {
-		if (!browser || firecrawlReady !== null) return;
-		fetch('/api/settings/api-keys')
-			.then((r) => r.json())
-			.then((d) => {
-				if (!d?.success) return;
-				const fc = (d.keys ?? []).find((k: any) => k.provider === 'firecrawl');
-				firecrawlReady = !!fc && fc.status !== 'unset' && fc.status !== 'invalid';
-			})
-			.catch(() => {
-				/* Leave it unknown: a failed status check must not disable a working
-				   button. The generation path reports its own error either way. */
-			});
-	});
+	/**
+	 * Whether research is available at all, answered by the server.
+	 *
+	 * This used to fetch the USER's saved Firecrawl key. Customer BYOK was
+	 * withdrawn for Firecrawl on 2026-09-21, so nobody has one any more and this
+	 * resolved false for EVERY account — disabling Scrape & Populate for
+	 * everyone while the platform key went on working. The gate now asks the
+	 * question that still has a meaningful answer: is the platform's key set.
+	 *
+	 * Undefined (an older cached payload) is treated as available, keeping the
+	 * original rule that an unknown status must never disable a working button.
+	 */
+	let firecrawlReady = $derived(data.firecrawlAvailable !== false);
 	let extending = $state<Record<string, boolean>>({});
 	let generating = $state<Record<string, boolean>>({});
 	let spinning = $state<Record<string, boolean>>({});
@@ -1032,10 +1028,10 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 						<button
 							class="scrape-submit-btn"
 							onclick={runScrape}
-							disabled={scraping || firecrawlReady === false}
+							disabled={scraping || !firecrawlReady}
 							aria-busy={scraping}
-							title={firecrawlReady === false
-								? 'Needs a Firecrawl key — add one in Settings → Provider API Keys'
+							title={!firecrawlReady
+								? 'Research is unavailable on this deployment right now'
 								: undefined}
 						>
 							{#if scraping}
@@ -1046,11 +1042,11 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 							{/if}
 						</button>
 					</div>
-					{#if firecrawlReady === false}
+					{#if !firecrawlReady}
 						<p class="scrape-needs-key" role="status">
-							This needs a <strong>Firecrawl</strong> key, which is not set on your account.
-							<a href="/settings?section=keys">Add one in Settings → Provider API Keys</a>, or
-							fill the brief in by hand below — scraping only pre-fills it.
+							Research is temporarily unavailable, so this cannot read your store right now.
+							Fill the brief in by hand below — scraping only ever pre-fills it, so nothing
+							here depends on it.
 						</p>
 					{/if}
 					<p class="sr-only" role="status" aria-live="polite">

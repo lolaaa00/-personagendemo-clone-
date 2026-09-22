@@ -594,7 +594,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-21", hash: "53431b0", type: "fix", category: "generation", scope: "records", title: "a still no longer reports a video model it never asked for" },
 	{ date: "2026-09-21", hash: "4a9a69b", type: "fix", category: "fix", scope: "sidebar", title: "my persona list collapsed, and the balance never refreshed" },
 	{ date: "2026-09-21", hash: "23d0507", type: "fix", category: "fix", scope: "billing", title: "show the wallet that pays, and stop giving generation away" },
-	{ date: "2026-09-22", hash: "9e7d8cc", type: "feat", category: "feature", scope: "admin", title: "watch the expensive provider account, and say which keys are set" }
+	{ date: "2026-09-22", hash: "9e7d8cc", type: "feat", category: "feature", scope: "admin", title: "watch the expensive provider account, and say which keys are set" },
+	{ date: "2026-09-22", hash: "20c8e80", type: "fix", category: "fix", scope: "copy", title: "every surface that still promised customer keys pay for generation" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -1018,10 +1019,10 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 		id: "c3bfbb5", from: "2026-09-21", to: "2026-09-22",
 		category: "fix", categories: ["fix","infrastructure","docs","generation","feature"],
 		title: "Fixed: client QA findings — the control that spends money…",
-		summary: "Client QA findings — the control that spends money was unreachable. Plus 7 more changes, touching setup and deployment and guides and explanations and making posts, images and video.",
+		summary: "Client QA findings — the control that spends money was unreachable. Plus 8 more changes, touching setup and deployment and guides and explanations and making posts, images and video.",
 		major: true, curated: false,
-		entries: [CHANGELOG[553], CHANGELOG[554], CHANGELOG[555], CHANGELOG[556], CHANGELOG[557], CHANGELOG[558], CHANGELOG[559], CHANGELOG[560]]
+		entries: [CHANGELOG[553], CHANGELOG[554], CHANGELOG[555], CHANGELOG[556], CHANGELOG[557], CHANGELOG[558], CHANGELOG[559], CHANGELOG[560], CHANGELOG[561]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "9e7d8cc";
+export const CHANGELOG_GENERATED_FROM = "20c8e80";

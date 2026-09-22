@@ -163,9 +163,9 @@
 				</div>
 				<div class="step-box">
 					<div class="step-num">3</div>
-					<h4>Configure API Keys</h4>
-					<p>Ensure your AI, Zernio, and Supabase connections are operational under system settings.</p>
-					<a href="/settings" class="step-link">Manage Environment →</a>
+					<h4>Connect publishing</h4>
+					<p>Add your Zernio key so posts can go out. Generation runs on our keys and is charged to your balance — there is nothing else to set up.</p>
+					<a href="/settings?section=keys" class="step-link">Add your Zernio key →</a>
 				</div>
 			</div>
 		</div>

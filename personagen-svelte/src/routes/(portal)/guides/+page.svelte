@@ -320,34 +320,35 @@
 
 		// ── Keys & credits ───────────────────────────────────────────────────
 		{
+			// Rewritten 2026-09-22. This used to walk the customer through creating an
+			// OpenRouter key and saving it, closing with a promise that their own key
+			// would be charged instead of the wallet. Customer BYOK was withdrawn for
+			// every generation provider
+			// on 2026-09-21, so those steps now describe a field that no longer
+			// exists and a rule that no longer holds. The TRIGGER is unchanged — a
+			// 402 still happens — so the guide keeps its place and answers what to
+			// actually do about it.
 			id: 'openrouter-key',
 			category: 'Keys & credits',
-			title: 'Get an OpenRouter key (fixes "out of credits")',
-			when: 'Content generation fails with "The generation key ran out of credits", "402", or "insufficient credits". OpenRouter is the service that writes captions and scripts — EVERY format uses it, even the free text card — so when its balance runs out, generation stops.',
+			title: 'Generation stopped: "out of credits"',
+			when: 'Content generation fails with "ran out of credits", "402", or "insufficient credits". Writing captions and scripts costs a little on every format, so when the balance behind your account runs out, generation stops.',
 			facts: [
 				'Fixes: “ran out of credits” / “402” errors',
-				'The key starts with sk-or-v1-…',
-				'$5–10 of balance lasts a long time (a text card is ~$0.005)',
-				'Once saved, YOUR key pays — not the wallet (see "Which balance pays")',
+				'There is no key for you to add — generation runs on our keys',
+				'A text post costs only its writing, about eight cents',
+				'If the persona belongs to a workspace, the OWNER’s balance is the one that pays'
 			],
 			steps: [
-				{ t: 'Go to openrouter.ai and sign in (Google sign-in works, no card needed yet).' },
-				{ t: 'Open openrouter.ai/settings/keys and click Create Key. Give it any name (e.g. "PersonaGen").' },
-				{ t: 'Copy the key — it starts with sk-or-v1-… and is shown only once. Keep the tab open until you’ve pasted it.' },
-				{ t: 'Add credits at openrouter.ai/settings/credits → Add Credits. $10–20 covers a lot of caption writing.' },
+				{ t: 'Open Billing from the sidebar. The balance at the top is the one that funds your generations.' },
 				{
-					t: 'Back in PersonaGen: open Settings (sidebar → Setup) and click Provider API Keys in the left menu of the Settings page.',
+					t: 'Check the label on the balance pill in the sidebar. If it shows a workspace name, that workspace’s owner funds it — ask them to top up, because you cannot do it for them.',
 					img: 'settings-apikeys',
-					alt: 'The Provider API Keys section in Settings'
+					alt: 'The sidebar balance pill'
 				},
-				{
-					t: 'Find the OpenRouter card, paste your key into the "Paste your OpenRouter API key" box, and click Save Key. Use Test Connection to confirm — the badge flips from NOT SAVED to saved.',
-					img: 'settings-openrouter',
-					alt: 'The OpenRouter key card with Save Key and Test Connection buttons'
-				},
-				{ t: 'Retry whatever failed — generate a post or approve a draft. It uses your key from now on.' }
+				{ t: 'If it is your own wallet and card payments are not switched on yet, use the request board link on the Billing page and we will load it manually.' },
+				{ t: 'Retry whatever failed — generate a post or approve a draft. Nothing is lost by a failed attempt.' }
 			],
-			tip: 'Your key is stored encrypted and never shown again after saving. Watch your usage anytime at openrouter.ai/activity.'
+			tip: 'You do not need a provider account of your own. Generation runs on our keys and is charged to your balance, so every post is priced the same way.'
 		},
 		{
 			// Rewritten 2026-09-22. This used to answer "your wallet or your own key?" —
@@ -418,7 +419,7 @@
 			],
 			steps: [
 				{
-					t: 'Open Settings → Provider API Keys (left menu inside Settings). Each service has its own card with Save Key / Test Connection / Delete Key.',
+					t: 'Open Settings → Provider API Keys (left menu inside Settings). Zernio has a card with Save Key / Test Connection / Delete Key. The generation providers are listed below it with no field: those run on our keys and are charged to your balance.',
 					img: 'settings-apikeys',
 					alt: 'The provider key cards in Settings'
 				},
@@ -892,9 +893,9 @@
 			],
 			steps: [
 				{ t: 'Read the message — it names the real cause (the app never hides errors).' },
-				{ t: 'Mentions "openrouter", "402", or "credits" → your writing credits ran out. Follow the OpenRouter key guide in Keys & credits.' },
-				{ t: 'Mentions "fal" or images/video failing → check the Fal AI card in Settings → Provider API Keys (Test Connection) and your fal.ai balance.' },
-				{ t: 'Says "No AI provider configured" → add an OpenRouter or Gemini key in Settings.' },
+				{ t: 'Mentions "openrouter", "402", or "credits" → your balance ran out. Top up on the Billing page; if the persona belongs to a workspace, its owner tops it up.' },
+				{ t: 'Mentions "fal" or images/video failing → that runs on our key, so there is nothing to fix on your side. Check your balance on Billing, then tell us if it persists.' },
+				{ t: 'Says "No AI provider configured" → that is a platform-side problem, not your account. Tell us and we will fix it.' },
 				{ t: 'Fixed the cause? Just generate again — nothing is lost.' }
 			]
 		},
