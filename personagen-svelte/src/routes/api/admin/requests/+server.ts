@@ -21,17 +21,18 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	if (!ticketId) return json({ success: false, error: 'Which request?' }, { status: 400 });
 
 	const svc = getServiceSupabase();
-	const { data, error } = await svc
-		.from('tickets')
-		.update({ status: 'done' })
-		.eq('id', ticketId)
-		.or(`title.like.${TOPUP_TITLE_PREFIX}%,title.like.${PROBLEM_REPORT_TITLE_PREFIX}%`)
-		.select('id')
-		.maybeSingle();
+	// Checked in code, not in a PostgREST `or()` filter: the prefixes contain
+	// spaces, which that filter syntax cannot carry unquoted (it failed with
+	// "column tickets.title does not exist" in pre-flight).
+	const { data: ticket } = await svc.from('tickets').select('id, title').eq('id', ticketId).maybeSingle();
+	const title = String(ticket?.title ?? '');
+	if (!ticket || !(title.startsWith(TOPUP_TITLE_PREFIX) || title.startsWith(PROBLEM_REPORT_TITLE_PREFIX))) {
+		return json({ success: false, error: 'No such open request.' }, { status: 404 });
+	}
+	const { error } = await svc.from('tickets').update({ status: 'done' }).eq('id', ticketId);
 	if (error) {
 		console.error('[admin/requests] close failed:', error.message);
 		return json({ success: false, error: 'Could not close it. Try again.' }, { status: 500 });
 	}
-	if (!data) return json({ success: false, error: 'No such open request.' }, { status: 404 });
 	return json({ success: true });
 };

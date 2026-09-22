@@ -600,7 +600,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-22", hash: "f1c1a47", type: "fix", category: "design", scope: "audit", title: "close UX-001 and UX-007 -- a price on every format, a button on every retry" },
 	{ date: "2026-09-22", hash: "6d410cc", type: "docs", category: "docs", scope: "changelog", title: "add f1c1a47 to 2026-09-22 group" },
 	{ date: "2026-09-22", hash: "eef4cf4", type: "fix", category: "fix", scope: "audit", title: "round 2 — every finding the three re-audit critics reopened" },
-	{ date: "2026-09-22", hash: "74e628d", type: "fix", category: "fix", scope: "sidebar", title: "the persona list shows rows at laptop heights" }
+	{ date: "2026-09-22", hash: "74e628d", type: "fix", category: "fix", scope: "sidebar", title: "the persona list shows rows at laptop heights" },
+	{ date: "2026-09-22", hash: "01104cd", type: "fix", category: "fix", scope: "audit", title: "round 3 — every finding the round-2 critics raised" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -1027,7 +1028,15 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 		summary: "Client QA findings — the control that spends money was unreachable. Plus 13 more changes, touching setup and deployment and guides and explanations and making posts, images and video.",
 		major: true, curated: false,
 		entries: [CHANGELOG[553], CHANGELOG[554], CHANGELOG[555], CHANGELOG[556], CHANGELOG[557], CHANGELOG[558], CHANGELOG[559], CHANGELOG[560], CHANGELOG[561], CHANGELOG[562], CHANGELOG[563], CHANGELOG[564], CHANGELOG[565], CHANGELOG[566]]
+	},
+	{
+		id: "01104cd", from: "2026-09-22", to: "2026-09-22",
+		category: "fix", categories: ["fix"],
+		title: "Fixed: round 3 — every finding the round-2 critics raised",
+		summary: "Round 3 — every finding the round-2 critics raised.",
+		major: false, curated: false,
+		entries: [CHANGELOG[567]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "74e628d";
+export const CHANGELOG_GENERATED_FROM = "01104cd";
