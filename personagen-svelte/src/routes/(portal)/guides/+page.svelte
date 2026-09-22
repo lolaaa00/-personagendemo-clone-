@@ -350,32 +350,34 @@
 			tip: 'Your key is stored encrypted and never shown again after saving. Watch your usage anytime at openrouter.ai/activity.'
 		},
 		{
-			// The report that forced this guide: a user's OWN OpenRouter key ran dry,
-			// the run failed "out of credits", and the sidebar showed ₱3,131 the
-			// whole time. Nothing on screen said which balance a generation draws
-			// from. This is that answer, and the demo is the server's actual rule.
+			// Rewritten 2026-09-22. This used to answer "your wallet or your own key?" —
+			// a question with two answers only while customers could bring keys for
+			// generation providers. That was withdrawn: a key you bring is an IDENTITY
+			// (Zernio, your own social accounts), never a COST. The live question, and
+			// the one people do get wrong, is WHICH wallet: a persona that belongs to a
+			// workspace bills that workspace's owner, not the person generating.
 			id: 'which-key-pays',
 			category: 'Keys & credits',
-			title: 'Which balance pays: your wallet or your own key?',
-			when: 'A generation failed for "out of credits" while the Credits pill in the sidebar showed a healthy balance — or you are about to top something up and want to be sure it is the right thing.',
+			title: 'Which wallet pays for a generation?',
+			when: 'The balance in the sidebar is not moving after you generate — or it is moving and you did not expect it to be your money.',
 			facts: [
-				'A key you save ALWAYS wins over the platform key, per provider',
-				'The wallet is only debited for stages that ran on platform keys',
-				'“Ran out of credits” names the key that ran dry — check that one',
-				'Delete your key to switch that provider back to the wallet',
+				'Every generation runs on our provider accounts and bills a wallet',
+				'A persona in a workspace bills that workspace OWNER, not you',
+				'The pill shows the wallet that will actually be charged, and names it',
+				'Zernio is the one key you bring — it publishes, it never generates'
 			],
 			steps: [
-				{ t: 'There are two places money can come from: the Credits wallet (the pill in the sidebar, topped up at Billing) and any provider keys you saved yourself in Settings → Provider API Keys.' },
-				{ t: 'The rule is simple and per provider: if you saved your own key for a provider, every call to that provider runs on YOUR key and bills YOUR account there. The wallet is not touched for those calls.' },
-				{ t: 'Which means: with your own OpenRouter key saved, a text card, a caption, a script — all writing — goes to your OpenRouter balance. If that balance hits zero, the run fails with “The generation key ran out of credits” even though the wallet looks full. The wallet was never in play.' },
+				{ t: 'There is one place money comes from: a Credits wallet. Images, video, voice and every word written for a post run on our provider accounts, and the wallet is debited at the rate the composer quotes before you confirm.' },
+				{ t: 'WHICH wallet depends on the persona, not on you. A persona that belongs to a workspace bills that workspace owner’s wallet. A persona of your own, outside any workspace, bills yours.' },
+				{ t: 'That is why a seat in someone else’s workspace can generate all day and watch their personal balance sit still: it was never the balance in play. The sidebar names the workspace whenever the wallet on screen belongs to its owner.' },
 				{
-					t: 'Try it: toggle the keys and watch who pays for each stage.',
+					t: 'See it for yourself: move the persona between a workspace and your own account, and watch who is charged for each stage.',
 					demo: 'key-routing'
 				},
-				{ t: 'To run on the wallet instead, delete that provider’s key from Settings → Provider API Keys. From the next generation on, that provider runs on the platform key and debits credits at the rate quoted in the composer.' },
-				{ t: 'To keep using your own keys, top up at the provider (openrouter.ai/settings/credits for OpenRouter). Your wallet balance will simply sit there for anything that still runs on platform keys.' }
+				{ t: 'Bringing your own OpenRouter, Gemini, Fal or Firecrawl key no longer changes any of this. Customer keys for generation were withdrawn — they gave away margin and split one bill in two with no rule a customer could see. A key still saved from before is inert.' },
+				{ t: 'Zernio is the exception and stays: it connects your own social accounts for publishing, Zernio bills you per connected account per month, and it never changes what a generation costs.' }
 			],
-			tip: 'Not sure which side ran dry? The failure message says “generation key” for a provider key. Open Settings → Provider API Keys: a saved key for that provider means it was yours.'
+			tip: 'Topping up the wrong wallet is the common mistake. Billing lists every workspace wallet you draw on beside your own — top up the one the sidebar names.'
 		},
 		{
 			id: 'zernio-key',
@@ -506,7 +508,7 @@
 				{ t: 'Approve — the button reads “Create N cards — free”. The cards appear in the feed as each one is typeset (a few seconds each) and every one lands as a draft in the Review Queue.' },
 				{ t: 'A quote the card font cannot draw (emoji, non-Latin script) is flagged before you send and skipped if you send it anyway; the rest of the batch still runs.' }
 			],
-			tip: 'The receipt on each card says $0 and names the typesetter, not a model — and “My own words” is the one place in the product where neither the wallet nor your own keys are ever touched.'
+			tip: 'The receipt on each card says $0 and names the typesetter, not a model — and “My own words” is the one place in the product where the wallet is never touched at all.'
 		},
 		{
 			id: 'composer-costs',

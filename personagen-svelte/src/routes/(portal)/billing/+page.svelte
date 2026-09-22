@@ -326,8 +326,10 @@
 			<dd>AI images, video, voice and talking-head clips, plus the writing behind every post — a text post is just the writing, about eight cents. Scheduling, publishing and analytics are free on every account.</dd>
 			<dt>Why is the balance in {data.currency}?</dt>
 			<dd>We show your wallet in the currency of where you are. Change it any time in Settings. Charges are made in USD.</dd>
-			<dt>What if I bring my own provider keys?</dt>
-			<dd>Generations made with your own keys are never charged to your wallet. You pay the provider directly.</dd>
+			<dt>Can I bring my own provider keys?</dt>
+			<dd>Not for generation. Every image, video, voice clip and written word runs on our provider accounts and bills this wallet, so one quoted rate covers the whole run. The one key you bring is Zernio, which connects your own social accounts for publishing — it never changes what a generation costs.</dd>
+			<dt>Whose wallet is charged?</dt>
+			<dd>The persona&rsquo;s. A persona that belongs to a workspace bills that workspace&rsquo;s owner; a persona of your own bills you. The balance in the sidebar is the one that will actually be charged, and it names the workspace when it is not yours.</dd>
 			<dt>Do credits expire?</dt>
 			<dd>No. Purchased and welcome credit stays until you use it.</dd>
 		</dl>

@@ -34,6 +34,8 @@ const ALLOWED: Record<string, string> = {
 		'Model Manager is platform-admin only and its ledger is platform-wide COGS — quoting it at retail would tell the operator we paid our own markup.',
 	'src/lib/components/feed/PostDrawer.svelte':
 		'Observability panel shows the retail price as the headline and keeps the provider figure beneath it, explicitly labelled "at cost".',
+	'src/lib/components/docs/KeyRoutingDemo.svelte':
+		'Docs demo. Its two figures are illustrative WALLET balances — retail credits, the thing a customer is charged — not a provider cost, so there is no cost-quoted-as-price to guard against here.',
 	'src/lib/components/dashboard/SparkChart.svelte': 'Chart endpoint labels — not money.'
 };
 

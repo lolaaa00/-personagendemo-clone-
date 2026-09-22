@@ -2,95 +2,95 @@
 	import DocsDemo from './DocsDemo.svelte';
 
 	/**
-	 * "Which balance pays for this generation?" — the rule the server applies,
-	 * made clickable. It mirrors resolveAiClient() / resolveImageKeys(): a key
-	 * you saved ALWAYS wins over the platform key, and only platform-key runs
-	 * debit the wallet (credits.ts debitForEvents skips key_source !== 'platform').
+	 * "Which wallet pays for this generation?" — the rule the server applies,
+	 * made clickable. It mirrors resolveBillingAccount() (credits.ts): the
+	 * PERSONA decides, walking persona → workspace → OWNER. Whoever is sitting
+	 * at the keyboard does not come into it.
 	 *
-	 * The scenario that motivated this: a user saved their own OpenRouter key,
-	 * that key ran dry, the run failed "out of credits" — while the sidebar
-	 * showed a healthy wallet that was never going to be touched.
+	 * Rewritten 2026-09-22. It used to toggle customer-supplied provider keys,
+	 * which no longer exist for generation — a key you bring is an identity
+	 * (Zernio), never a cost. The scenario it teaches now is the one that
+	 * actually confuses people: a member of a workspace generates all day and
+	 * their own balance never moves, because it was never the balance in play.
 	 */
-	let ownWriting = $state(true);
-	let ownMedia = $state(false);
-	let wallet = $state(3131);
+	let inWorkspace = $state(true);
 
-	type Stage = { label: string; provider: 'writing' | 'media' | 'local' };
+	const WORKSPACE = 'Acme Studio';
+	/** Illustrative balances, in credits — 1 credit = 1 US cent. */
+	const OWNER_CREDITS = 4820;
+	const OWN_CREDITS = 2000;
+
+	const money = (c: number) => `$${(c / 100).toFixed(2)}`;
+
+	type Stage = { label: string; paid: boolean };
 	const STAGES: Stage[] = [
-		{ label: 'Director writes the line', provider: 'writing' },
-		{ label: 'Quality gate scores it', provider: 'writing' },
-		{ label: 'Still is generated', provider: 'media' },
-		{ label: 'Card is typeset on our servers', provider: 'local' }
+		{ label: 'Director writes the line', paid: true },
+		{ label: 'Quality gate scores it', paid: true },
+		{ label: 'Still is generated', paid: true },
+		{ label: 'Card is typeset on our servers', paid: false }
 	];
 
+	/** 'wallet' = the workspace owner's, 'you' = your own, 'none' = nothing runs. */
 	function payer(s: Stage): 'you' | 'wallet' | 'none' {
-		if (s.provider === 'local') return 'none';
-		if (s.provider === 'writing') return ownWriting ? 'you' : 'wallet';
-		return ownMedia ? 'you' : 'wallet';
+		if (!s.paid) return 'none';
+		return inWorkspace ? 'wallet' : 'you';
 	}
-	const PAYER_TEXT = {
-		you: 'Your own key pays',
-		wallet: 'Wallet credits pay',
+	let payerText = $derived({
+		wallet: `${WORKSPACE}'s wallet pays`,
+		you: 'Your wallet pays',
 		none: 'Nothing to pay'
-	} as const;
-
-	let anyWallet = $derived(STAGES.some((s) => payer(s) === 'wallet'));
-	let anyYou = $derived(STAGES.some((s) => payer(s) === 'you'));
+	});
+	let charged = $derived(inWorkspace ? OWNER_CREDITS : OWN_CREDITS);
 </script>
 
-<DocsDemo title="Who pays for a generation?" hint="Toggle the keys — the rule is the one the server applies.">
+<DocsDemo
+	title="Which wallet pays for a generation?"
+	hint="Move the persona — the rule is the one the server applies."
+>
 	<div class="kr">
 		<div class="kr-controls">
 			<label class="kr-toggle">
-				<input type="checkbox" bind:checked={ownWriting} />
+				<input type="checkbox" bind:checked={inWorkspace} />
 				<span class="kr-switch" aria-hidden="true"></span>
 				<span>
-					<b>Writing key saved</b>
-					<small>Your own OpenRouter or Gemini key in Settings → Provider API Keys</small>
+					<b>This persona belongs to a workspace</b>
+					<small>Off means it is a persona of your own, outside any workspace</small>
 				</span>
 			</label>
-			<label class="kr-toggle">
-				<input type="checkbox" bind:checked={ownMedia} />
-				<span class="kr-switch" aria-hidden="true"></span>
-				<span>
-					<b>Media key saved</b>
-					<small>Your own Fal key for images, video and voice</small>
-				</span>
-			</label>
-			<div class="kr-wallet" aria-label="Example wallet">
-				<span class="kr-wallet-label">Credits</span>
-				<span class="kr-wallet-amt">₱{wallet.toLocaleString('en-PH')}</span>
+			<div class="kr-wallet" aria-label="{WORKSPACE} wallet" data-active={inWorkspace}>
+				<span class="kr-wallet-label">{WORKSPACE}</span>
+				<span class="kr-wallet-amt">{money(OWNER_CREDITS)}</span>
+			</div>
+			<div class="kr-wallet" aria-label="Your wallet" data-active={!inWorkspace}>
+				<span class="kr-wallet-label">Your wallet</span>
+				<span class="kr-wallet-amt">{money(OWN_CREDITS)}</span>
 			</div>
 		</div>
 
-		<ol class="kr-stages" aria-label="Stages of one generation and who pays for each">
+		<ol class="kr-stages" aria-label="Stages of one generation and which wallet pays for each">
 			{#each STAGES as s (s.label)}
-				{@const p = payer(s)}
-				<li class="kr-stage" data-payer={p}>
+				<li class="kr-stage" data-payer={payer(s)}>
 					<span class="kr-stage-label">{s.label}</span>
-					<span class="kr-stage-payer">{PAYER_TEXT[p]}</span>
+					<span class="kr-stage-payer">{payerText[payer(s)]}</span>
 				</li>
 			{/each}
 		</ol>
 
-		<div class="kr-verdict" data-tone={anyWallet && anyYou ? 'mixed' : anyYou ? 'you' : 'wallet'}>
-			{#if anyYou && !anyWallet}
-				<b>Your wallet is not touched.</b> Every paid stage runs on keys you saved, so the
-				bill lands on <em>those</em> accounts — the ₱{wallet.toLocaleString('en-PH')} stays
-				exactly where it is. If one of your keys runs out, the run fails with "out of
-				credits" even though the wallet looks full.
-			{:else if anyYou && anyWallet}
-				<b>Split bill.</b> Stages on your saved key go to that account; the rest debit the
-				wallet. "Out of credits" can mean either side ran dry — the message names the
-				key.
+		<div class="kr-verdict" data-tone={inWorkspace ? 'wallet' : 'you'}>
+			{#if inWorkspace}
+				<b>The workspace owner pays.</b> Every paid stage debits {WORKSPACE}'s wallet —
+				{money(charged)} — and your own balance is not touched. This is the case people
+				report as "billing is broken": you generate, and the number you were watching
+				never moves, because it was never the one in play.
 			{:else}
-				<b>The wallet pays.</b> With no keys of your own saved, every paid stage runs on
-				the platform keys and debits your credits. Top up at Billing when it runs low.
+				<b>You pay.</b> This persona sits outside any workspace, so the bill lands on your
+				own wallet — {money(charged)}. Top it up at Billing.
 			{/if}
 		</div>
 		<p class="kr-fine">
-			Rule: a key you save always wins over ours, per provider. Delete the key to switch
-			that provider back to the wallet.
+			Rule: the persona decides, not the person generating. The balance in the sidebar is
+			always the one that will actually be charged, and it names the workspace when that
+			wallet is not yours.
 		</p>
 	</div>
 </DocsDemo>
@@ -102,7 +102,7 @@
 	}
 	.kr-controls {
 		display: grid;
-		grid-template-columns: 1fr 1fr auto;
+		grid-template-columns: 1fr auto auto;
 		gap: 0.6rem;
 		align-items: stretch;
 	}
@@ -183,6 +183,10 @@
 		border: 1px solid var(--border);
 		background: var(--surface-2, var(--bg));
 		min-width: 7rem;
+	}
+	.kr-wallet[data-active='true'] {
+		border-color: var(--accent);
+		background: var(--accent-soft);
 	}
 	.kr-wallet-label {
 		font-size: var(--text-xs);

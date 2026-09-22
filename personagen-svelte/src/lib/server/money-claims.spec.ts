@@ -23,6 +23,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { priceOf } from '$lib/pricing';
+import { PROVIDER_CATALOGUE } from '$lib/providers';
 
 const read = (...p: string[]) => readFileSync(join(__dirname, '..', '..', ...p), 'utf8');
 const landing = read('routes', '+page.svelte');
@@ -124,5 +125,63 @@ describe('"Only what actually ran" — a call that threw did not run', () => {
 		// The other half of the promise: the ledger flushes in a finally, so work
 		// already paid for is billed even though the run failed overall.
 		expect(generate).toMatch(/finally \{[\s\S]{0,200}recordCostEvents\(/);
+	});
+});
+
+describe('customer BYOK for generation is withdrawn, and the copy says so', () => {
+	const persona = read('routes', '(portal)', 'personas', '[agentId]', '+page.svelte');
+	const guides = read('routes', '(portal)', 'guides', '+page.svelte');
+	const demo = read('lib', 'components', 'docs', 'KeyRoutingDemo.svelte');
+
+	it('the catalogue holds the rule every sentence below depends on', () => {
+		// Bring your own key where the key is an IDENTITY, never where it is a
+		// COST. If a cost provider is ever re-opened this fails FIRST, which is
+		// the point: the sentences after it go false at the same moment.
+		const costly = PROVIDER_CATALOGUE.filter((p) => p.billsToUserKey);
+		expect(costly.length, 'no cost providers — the scan would be vacuous').toBeGreaterThan(0);
+		for (const p of costly) {
+			expect(p.byok.supported, `${p.id} bills a user key AND still allows BYOK`).toBe(false);
+		}
+		// and the one key a customer may still bring never carries a per-call cost
+		const byok = PROVIDER_CATALOGUE.filter((p) => p.byok.supported);
+		expect(byok.length, 'nothing is BYOK-able — Zernio should be').toBeGreaterThan(0);
+		for (const p of byok) expect(p.billsToUserKey, `${p.id}`).toBe(false);
+	});
+
+	it('no customer surface still says a key of theirs pays for a generation', () => {
+		for (const [name, copy] of [
+			['billing', billing],
+			['persona Studio', persona],
+			['guides', guides],
+			['docs demo', demo]
+		] as const) {
+			expect(copy.length, `${name} was not read`).toBeGreaterThan(500);
+			expect(copy, name).not.toMatch(/your own provider account/i);
+			expect(copy, name).not.toMatch(/never charged to your wallet/i);
+			expect(copy, name).not.toMatch(/you pay the provider directly/i);
+			expect(copy, name).not.toMatch(/runs on YOUR key/);
+			expect(copy, name).not.toMatch(/ALWAYS wins over the platform key/i);
+		}
+	});
+
+	it('the Studio names the wallet the SERVER resolved, never a key it probed', () => {
+		// It used to fetch /api/settings/api-keys from the browser and conclude
+		// "your own key pays" from a row that is now inert — a money claim built
+		// on a fact the server had already overruled.
+		expect(persona).not.toContain('api/settings/api-keys');
+		expect(persona).toContain('data.credits?.paid_by');
+		expect(persona).toContain('agent.workspace_id');
+	});
+
+	it('billing answers whose wallet is charged, since that is the live question', () => {
+		expect(billing).toContain('Whose wallet is charged?');
+		expect(billing).toMatch(/workspace/i);
+	});
+
+	it('the docs teach persona → workspace → owner, not two purses', () => {
+		expect(guides).toContain('Which wallet pays for a generation?');
+		expect(demo).toContain('inWorkspace');
+		expect(demo).not.toContain('ownWriting');
+		expect(demo).toMatch(/resolveBillingAccount/);
 	});
 });

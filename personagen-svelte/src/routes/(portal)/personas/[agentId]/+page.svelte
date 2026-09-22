@@ -64,7 +64,6 @@
 	import { confirmAction } from '$lib/stores/confirm.svelte';
 	import MediaPreviewModal from '$lib/components/generation/MediaPreviewModal.svelte';
 	import PageShell from '$lib/components/ui/PageShell.svelte';
-	import { browser } from '$app/environment';
 	import { refreshCredits } from '$lib/credits-refresh';
 	import {
 		startGeneration,
@@ -206,20 +205,6 @@
 	 *  `feedPosts` is an empty array that means "not fetched", not "none". */
 	let feedLoaded = $state(false);
 
-	/** Which funding source this persona's generations draw on. `null` until
-	 *  known; the Studio says nothing rather than guessing. */
-	let payer = $state<'own-key' | 'wallet' | null>(null);
-	$effect(() => {
-		if (!browser || payer !== null) return;
-		fetch('/api/settings/api-keys')
-			.then((r) => r.json())
-			.then((d) => {
-				if (!d?.success) return;
-				const or = (d.keys ?? []).find((k: any) => k.provider === 'openrouter');
-				payer = or && or.status !== 'unset' && or.status !== 'invalid' ? 'own-key' : 'wallet';
-			})
-			.catch(() => {});
-	});
 
 	// The server's count query is the baseline, so the hero is right on every tab
 	// — the feed is only fetched on Content/Studio, and deriving the count from it
@@ -6328,18 +6313,19 @@
 								already aimed at {agent.name}'s voice and the applied brand brief. For bulk
 								generation across a week or a month, plan a campaign.
 							</p>
-							{#if payer}
-								<p class="studio-payer">
-									{#if payer === 'own-key'}
-										Generating here bills <strong>your own provider account</strong>, not the
-										wallet in the sidebar — you pay OpenRouter and the media providers directly.
-									{:else}
-										Generating here draws on <strong>your wallet</strong>. A persona owned by a
-										workspace bills that workspace's owner.
-									{/if}
-									<a href="/billing">What costs what</a>
-								</p>
-							{/if}
+							<p class="studio-payer">
+								{#if agent.workspace_id && data.credits?.paid_by}
+									Generating here draws on <strong>{data.credits.paid_by}</strong>'s wallet — the
+									balance in the sidebar, funded by the workspace owner.
+								{:else if data.credits?.paid_by}
+									This persona is yours alone, so generating here draws on
+									<strong>your own wallet</strong> — not the {data.credits.paid_by} balance shown
+									in the sidebar.
+								{:else}
+									Generating here draws on <strong>your wallet</strong> — the balance in the sidebar.
+								{/if}
+								<a href="/billing">What costs what</a>
+							</p>
 						</div>
 						<div class="studio-head-actions">
 							<button
