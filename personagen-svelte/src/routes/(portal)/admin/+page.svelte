@@ -54,6 +54,29 @@
 			checkedAt: string | null;
 			note: string | null;
 		};
+		falBalance?: {
+			provider: string;
+			/** 'unconfigured' means nobody is watching it — never fold that into 'ok'. */
+			state: 'ok' | 'low' | 'unknown' | 'unconfigured';
+			remainingUsd: number | null;
+			currency: string | null;
+			postsRemaining: number | null;
+			imagePostsRemaining: number | null;
+			lowThresholdUsd: number;
+			emptyThresholdUsd: number;
+			checkedAt: string | null;
+			note: string | null;
+		};
+		platformKeys?: Array<{
+			id: string;
+			label: string;
+			envVar: string;
+			configured: boolean;
+			costProvider: string | null;
+			lastUsedAt: string | null;
+			events30d: number;
+			problem: string | null;
+		}>;
 		history: Array<{ key: string; old_value: any; new_value: any; changed_by: string | null; note: string | null; changed_at: string }>;
 	} | null>(null);
 	let controlsLoading = $state(false);
@@ -535,6 +558,87 @@
 						{#if controls.providerBalance.checkedAt}Measured {when(controls.providerBalance.checkedAt)}.{/if}
 					</p>
 				{/if}
+
+				<!-- fal. Separate from the block above rather than folded into it: the
+				     two accounts fail differently. OpenRouter degrades, fal LOCKS the
+				     account when it runs out, and fal is the expensive one — so an
+				     operator reading this needs to see which account is which. -->
+				{#if controls.falBalance?.state === 'low'}
+					<p class="admin-warn">
+						<strong>fal balance low.</strong>
+						fal has <strong>{money(controls.falBalance.remainingUsd ?? 0)}</strong> left — about
+						{controls.falBalance.postsRemaining ?? 0} more talking-head clips, or
+						{controls.falBalance.imagePostsRemaining ?? 0} image posts. fal locks the account when the
+						balance runs out, so this stops every image and video at once rather than slowing down.
+						Top up at <code>fal.ai/dashboard/billing</code>.
+						{#if controls.falBalance.checkedAt}
+							<span class="muted small">Measured {when(controls.falBalance.checkedAt)}.</span>
+						{/if}
+					</p>
+				{:else if controls.falBalance?.state === 'unconfigured'}
+					<p class="admin-hint small">
+						<strong>fal balance not watched.</strong>
+						{controls.falBalance.note}
+					</p>
+				{:else if controls.falBalance?.state === 'unknown'}
+					<p class="admin-warn">
+						<strong>fal balance unknown.</strong>
+						{controls.falBalance.note} Treat this as unknown, not as funded.
+					</p>
+				{:else if controls.falBalance?.state === 'ok'}
+					<p class="admin-hint small">
+						fal balance: {money(controls.falBalance.remainingUsd ?? 0)} left ≈
+						{controls.falBalance.postsRemaining ?? 0} talking-head clips / {controls.falBalance
+							.imagePostsRemaining ?? 0} image posts. Warns below
+						{money(controls.falBalance.lowThresholdUsd)}.
+						{#if controls.falBalance.checkedAt}Measured {when(controls.falBalance.checkedAt)}.{/if}
+					</p>
+				{/if}
+
+				{#if controls.platformKeys && controls.platformKeys.length > 0}
+					<section class="pkeys">
+						<h3>Platform provider keys</h3>
+						<p class="admin-hint">
+							Every generation runs on these — customer-supplied generation keys were withdrawn on
+							2026-09-21, so there is no per-user fallback left. Set in the deployment environment,
+							not here: this panel is read-only and never reads a key's value.
+						</p>
+						<table class="admin-table">
+								<thead>
+									<tr>
+										<th>Provider</th>
+										<th>Variable</th>
+										<th>Status</th>
+										<th class="nowrap">Last successful call</th>
+										<th class="num">30d</th>
+									</tr>
+								</thead>
+								<tbody>
+									{#each controls.platformKeys as k (k.id)}
+										<tr class:negative={!k.configured}>
+											<td>{k.label}</td>
+											<td><code>{k.envVar}</code></td>
+											<td>
+												<span class="mode-pill mode-{k.configured ? 'enforce' : 'off'}">
+													{k.configured ? 'set' : 'missing'}
+												</span>
+											</td>
+											<td class="nowrap">
+												{k.lastUsedAt ? when(k.lastUsedAt) : k.costProvider ? 'never' : '—'}
+											</td>
+											<td class="num">{k.costProvider ? k.events30d : '—'}</td>
+										</tr>
+										{#if k.problem}
+											<tr class="pkey-problem">
+												<td colspan="5"><span class="muted small">{k.problem}</span></td>
+											</tr>
+										{/if}
+									{/each}
+							</tbody>
+						</table>
+					</section>
+				{/if}
+
 				<div class="control-grid">
 					<div class="control">
 						<div class="control-head">
@@ -1341,6 +1445,22 @@
 	.admin-error {
 		background: rgba(239, 68, 68, 0.1);
 		border: 1px solid rgba(239, 68, 68, 0.35);
+	}
+	/* Platform provider keys — a read-only inventory, so it is styled as a
+	   sub-section of the controls card rather than as its own card. */
+	.pkeys {
+		margin: var(--space-5) 0 var(--space-4);
+	}
+	.pkeys h3 {
+		margin: 0 0 var(--space-2);
+		font-size: var(--text-md);
+		font-weight: 700;
+	}
+	/* The explanation for a row sits directly under it, sharing its full width,
+	   so the reason a key is flagged never ends up in a truncated cell. */
+	.pkey-problem td {
+		padding-top: 0;
+		border-top: none;
 	}
 	.admin-warn code {
 		font-family: ui-monospace, monospace;

@@ -12,7 +12,8 @@ import {
 	type SettingKey
 } from '$lib/server/settings';
 import { refreshAdmission } from '$lib/server/admission';
-import { refreshProviderBalance } from '$lib/server/provider-balance';
+import { refreshProviderBalance, refreshFalBalance } from '$lib/server/provider-balance';
+import { platformKeyStatuses } from '$lib/server/platform-keys';
 import {
 	creditsMode,
 	creditsSource,
@@ -179,6 +180,13 @@ export const GET: RequestHandler = async ({ locals }) => {
 		// /api/health this route requires a platform admin, so the dollar figure
 		// belongs here — an operator cannot act on the word "low" alone.
 		providerBalance: await refreshProviderBalance(),
+		// fal is the expensive account — $0.130/event against OpenRouter's
+		// $0.031 — and it was the unwatched one. It also fails harder: fal locks
+		// the account outright when the balance runs out.
+		falBalance: await refreshFalBalance(),
+		// Is each platform key even set, and has it worked lately. Booleans and
+		// timestamps only; this route never reads a key value.
+		platformKeys: await platformKeyStatuses(svc),
 		history: history ?? []
 	});
 };

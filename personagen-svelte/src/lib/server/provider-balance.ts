@@ -220,7 +220,24 @@ export async function refreshProviderBalance(
  * Admin Console says how much.
  */
 export function providerBalanceSummary(): BalanceState {
-	return providerBalanceStatus().state;
+	// Folds every account we are actually watching, worst state wins, because a
+	// funded OpenRouter account says nothing about a locked fal one — and fal is
+	// where the money goes. Still one bare word: the unauthenticated route must
+	// not learn which provider, or how much.
+	//
+	// An UNCONFIGURED fal is excluded rather than counted as 'unknown'. That is
+	// the one concession to "absent reads as fine" in this file and it is made
+	// deliberately: 'unknown' means we tried and failed, and degrading the public
+	// health word for an account the operator has not opted into watching would
+	// train them to ignore it — the exact failure the top of this file argues
+	// against. It is not hidden: the Admin Console shows 'unconfigured' in its
+	// own right, with the instructions for fixing it.
+	const states: BalanceState[] = [providerBalanceStatus().state];
+	const fal = falBalanceStatus();
+	if (fal.state !== 'unconfigured') states.push(fal.state);
+	if (states.includes('low')) return 'low';
+	if (states.includes('unknown')) return 'unknown';
+	return 'ok';
 }
 
 /**
@@ -258,4 +275,196 @@ export function _resetProviderBalanceForTests(): void {
 	state.checkedAt = 0;
 	state.note = 'not checked yet';
 	state.inFlight = null;
+	falState.remainingUsd = null;
+	falState.currency = null;
+	falState.checkedAt = 0;
+	falState.note = 'not checked yet';
+	falState.inFlight = null;
+}
+
+// ─── fal ─────────────────────────────────────────────────────────────────────
+
+/**
+ * The same watch, for the account that actually costs money.
+ *
+ * Everything above was written for OpenRouter and shipped watching only
+ * OpenRouter — which was the cheap provider. Measured over all of production:
+ * fal is **$0.130 per event against OpenRouter's $0.031**, 4.2x, and 43% of
+ * every dollar ever spent on 15% of the events. The expensive account was the
+ * unwatched one.
+ *
+ * It matters more since 2026-09-21, when customer BYOK was withdrawn: every
+ * generation for every customer now runs on our keys, so there is no longer a
+ * customer key anywhere absorbing part of the load.
+ *
+ * And fal fails harder than OpenRouter does. Per fal's own documentation, when
+ * the balance drops below the account's lock threshold **the account is locked
+ * and API requests are rejected** — not degraded, stopped. A missed fal balance
+ * is a full media outage, which is why `low` here is worth as much warning time
+ * as the OpenRouter one.
+ *
+ * SEPARATE KEY, DELIBERATELY. This reads `FAL_ADMIN_API_KEY` and never falls
+ * back to `FAL_API_KEY`. Two reasons, one measured and one structural:
+ *
+ *   - measured: the production FAL_API_KEY answers this endpoint with
+ *     `403 authorization_error`. fal issues API-scoped and ADMIN-scoped keys and
+ *     only ADMIN may read billing, so a fallback would report 'unknown' forever
+ *     while looking like it was configured.
+ *   - structural: the balance reader must not hold a key that can spend. A
+ *     read-only watcher with spend rights is the thing that turns a compromised
+ *     monitor into a bill.
+ */
+
+/** Documented shape: GET /v1/account/billing?expand=credits */
+const FAL_BILLING_URL = 'https://api.fal.ai/v1/account/billing?expand=credits';
+
+/**
+ * A fal post's worst case is the talking head at $0.667; the typical one is an
+ * image at $0.078. The caption LLM is not counted here — it is charged to
+ * OpenRouter, which has its own balance above. Same 70-posts-of-warning rule as
+ * OpenRouter, for the same reason: an operator who reads the console once a day
+ * still wakes up with room to top up.
+ */
+const WORST_FAL_POST_USD = CALL_COST_USD.falTalkingHead;
+const TYPICAL_FAL_POST_USD = CALL_COST_USD.falImage;
+export const FAL_LOW_BALANCE_USD = +(WORST_FAL_POST_USD * LOW_POSTS).toFixed(2);
+export const FAL_EMPTY_BALANCE_USD = +WORST_FAL_POST_USD.toFixed(3);
+
+export interface FalBalance {
+	provider: 'fal';
+	/** 'unconfigured' is NOT 'ok': it means nobody is watching this account. */
+	state: BalanceState | 'unconfigured';
+	remainingUsd: number | null;
+	currency: string | null;
+	postsRemaining: number | null;
+	imagePostsRemaining: number | null;
+	lowThresholdUsd: number;
+	emptyThresholdUsd: number;
+	checkedAt: string | null;
+	note: string | null;
+}
+
+const falState: {
+	remainingUsd: number | null;
+	currency: string | null;
+	checkedAt: number;
+	note: string | null;
+	inFlight: Promise<void> | null;
+} = { remainingUsd: null, currency: null, checkedAt: 0, note: 'not checked yet', inFlight: null };
+
+function falAdminKey(): string {
+	return (env.FAL_ADMIN_API_KEY ?? process.env.FAL_ADMIN_API_KEY ?? '').trim();
+}
+
+/** True when an admin-scoped fal key exists to read the balance with. */
+export function falBalanceConfigured(): boolean {
+	return falAdminKey().length > 0;
+}
+
+/** Synchronous read. Never probes; call refreshFalBalance() to update it. */
+export function falBalanceStatus(): FalBalance {
+	const remaining = falState.remainingUsd;
+	const configured = falBalanceConfigured();
+	const balanceState: FalBalance['state'] = !configured
+		? 'unconfigured'
+		: remaining === null
+			? 'unknown'
+			: remaining < FAL_LOW_BALANCE_USD
+				? 'low'
+				: 'ok';
+	return {
+		provider: 'fal',
+		state: balanceState,
+		remainingUsd: remaining,
+		currency: falState.currency,
+		postsRemaining:
+			remaining === null ? null : Math.max(0, Math.floor(remaining / WORST_FAL_POST_USD)),
+		imagePostsRemaining:
+			remaining === null ? null : Math.max(0, Math.floor(remaining / TYPICAL_FAL_POST_USD)),
+		lowThresholdUsd: FAL_LOW_BALANCE_USD,
+		emptyThresholdUsd: FAL_EMPTY_BALANCE_USD,
+		checkedAt: falState.checkedAt ? new Date(falState.checkedAt).toISOString() : null,
+		note:
+			balanceState === 'unconfigured'
+				? 'FAL_ADMIN_API_KEY is not set. fal only lets an ADMIN-scoped key read billing — the generation key returns 403 — so mint a second key at fal.ai/dashboard/keys with scope ADMIN and set it here. Nothing is watching the fal balance until then.'
+				: balanceState === 'unknown'
+					? (falState.note ?? 'no reason recorded')
+					: null
+	};
+}
+
+/**
+ * Ask fal what is left. One authenticated GET, at most one in flight, at most
+ * one per TTL, hard timeout, never throws — the same discipline as the
+ * OpenRouter probe above, and for the same reasons.
+ */
+export async function refreshFalBalance(
+	force = false,
+	fetchImpl: typeof fetch = fetch
+): Promise<FalBalance> {
+	if (!falBalanceConfigured()) return falBalanceStatus();
+	if (!force && Date.now() - falState.checkedAt < TTL_MS) return falBalanceStatus();
+	if (falState.inFlight) {
+		await falState.inFlight;
+		return falBalanceStatus();
+	}
+	falState.inFlight = (async () => {
+		try {
+			const res = await fetchImpl(FAL_BILLING_URL, {
+				method: 'GET',
+				// fal authenticates with `Key <token>`, not `Bearer`.
+				headers: { Authorization: `Key ${falAdminKey()}`, accept: 'application/json' },
+				signal: AbortSignal.timeout(PROBE_TIMEOUT_MS)
+			});
+			if (res.status === 401 || res.status === 403) {
+				// The measured failure, called out by name so an operator does not
+				// go looking for a network fault.
+				falState.remainingUsd = null;
+				falState.currency = null;
+				falState.note =
+					'fal refused the key for billing (HTTP ' +
+					res.status +
+					'). An API-scoped key cannot read this — it needs scope ADMIN.';
+				return;
+			}
+			if (!res.ok) throw new Error(`HTTP ${res.status}`);
+			const body = (await res.json()) as {
+				credits?: { current_balance?: unknown; currency?: unknown };
+			};
+			const balance = Number(body?.credits?.current_balance);
+			if (!Number.isFinite(balance)) {
+				falState.remainingUsd = null;
+				falState.currency = null;
+				falState.note =
+					'billing endpoint did not report credits.current_balance — expand=credits may have been dropped';
+			} else {
+				falState.remainingUsd = +balance.toFixed(4);
+				falState.currency = typeof body?.credits?.currency === 'string' ? body.credits.currency : 'USD';
+				falState.note = null;
+			}
+		} catch (e) {
+			falState.remainingUsd = null;
+			falState.currency = null;
+			falState.note = `could not read the fal balance (${(e as Error).message})`;
+		} finally {
+			falState.checkedAt = Date.now();
+		}
+	})();
+	try {
+		await falState.inFlight;
+	} finally {
+		falState.inFlight = null;
+	}
+	return falBalanceStatus();
+}
+
+/** Both accounts, for the Admin Console. Probes in parallel; never throws. */
+export async function refreshAllBalances(
+	force = false
+): Promise<{ openrouter: ProviderBalance; fal: FalBalance }> {
+	const [openrouter, fal] = await Promise.all([
+		refreshProviderBalance(force),
+		refreshFalBalance(force)
+	]);
+	return { openrouter, fal };
 }
