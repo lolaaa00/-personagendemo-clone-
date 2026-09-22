@@ -24,7 +24,11 @@ const PROMISES: Array<{
 	{ match: /Standard video \+ lip-sync|Cinematic multi-shot \+ talking head/, gate: { file: ['routes', 'api', 'agent', '[agentId]', 'generate-post', '+server.ts'], needle: 'ent.cinematic' } },
 	{ match: /Priority generation queue/, gate: { file: ['lib', 'server', 'autopilot.ts'], needle: 'orderByPlanPriority' } },
 	{ match: /Teams \+ shared workspaces/, gate: { file: ['routes', 'api', 'workspaces', '+server.ts'], needle: 'ent.teams' } },
-	{ match: /Bring your own keys/, gate: { file: ['routes', 'api', 'settings', 'api-keys', '+server.ts'], needle: 'ent.byok' } },
+	// "Bring your own keys — generation at no charge" was an Agency line until
+	// customer BYOK was withdrawn from every generation provider (providers.ts).
+	// No plan sells it now, so there is no promise left to back. The entitlement
+	// check survives in the api-keys route as defence in depth for a provider
+	// that is ever re-opened; providers.spec.ts asserts the gated list is empty.
 	{ match: /API access/, gate: { file: ['routes', 'api', 'developer', 'keys', '+server.ts'], needle: 'ent.apiAccess' } },
 	{ match: /free credit per person to start/, gate: { file: ['lib', 'server', 'welcome-guard.ts'], needle: 'maybeWithholdWelcome' } },
 	{ match: /Unlimited text posts/, universal: 'text costs only its writing; no plan restricts it' },
@@ -77,11 +81,28 @@ describe('entitlements — the seeded catalog says what the copy says', () => {
 		expect(ent('brand').cinematic).toBe(true);
 	});
 
-	it('teams, API and BYOK are Agency alone', () => {
-		for (const k of ['teams', 'apiAccess', 'byok'] as const) {
+	it('teams and API are Agency alone', () => {
+		for (const k of ['teams', 'apiAccess'] as const) {
 			expect(ent('studio')[k], k).toBe(false);
 			expect(ent('brand')[k], k).toBe(false);
 			expect(ent('agency')[k], k).toBe(true);
+		}
+	});
+
+	it('no priced plan sells BYOK any more, including the one that used to', () => {
+		// Customer BYOK is withdrawn at the catalogue (providers.ts), so an
+		// entitlement granting it would be a promise with no mechanism — exactly
+		// the failure the PROMISES table above exists to prevent.
+		//
+		// Free is not in this list and reads `true`, because its row is `{}` and
+		// an absent key means allowed — the never-brick default that keeps an
+		// unmigrated database from locking the product down. It grants nothing:
+		// the gate is the catalogue, and providers.spec.ts pins the gated list
+		// empty. Tightening the free row to say `false` would be tidier and would
+		// also make an unreadable row indistinguishable from a restricted one,
+		// which is the trade this codebase has already decided against.
+		for (const plan of ['studio', 'brand', 'agency']) {
+			expect(ent(plan).byok, plan).toBe(false);
 		}
 	});
 

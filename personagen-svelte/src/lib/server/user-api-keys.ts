@@ -1,6 +1,7 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
 import { env } from '$env/dynamic/private';
 import { getServiceSupabase } from './service-supabase';
+import { providerByKeyProvider } from '$lib/providers';
 
 export const SUPPORTED_USER_KEY_PROVIDERS = [
 	'zernio',
@@ -196,6 +197,19 @@ export async function getUserApiKey(
 	userId: string,
 	provider: UserKeyProvider
 ): Promise<string | null> {
+	// Withdrawing a provider from customer BYOK has to happen HERE, not only at
+	// the save route, because rows saved before the policy changed are still in
+	// the table. Returning null makes every resolver fall through to the
+	// platform key — and makes keySourceFor() (which calls this same function,
+	// deliberately) report 'platform', so the wallet is charged for the run that
+	// actually happened.
+	//
+	// The two must move together. The last time they didn't, a key that failed
+	// to decrypt fell back to the platform key while still stamping the event
+	// 'byo': unbilled and invisible at the same time. One gate, one answer.
+	const catalogued = providerByKeyProvider(provider);
+	if (catalogued && !catalogued.byok.supported) return null;
+
 	return readStoredSecret(supabase, 'user_api_keys', { user_id: userId, provider });
 }
 

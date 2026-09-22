@@ -14,9 +14,9 @@ const credits = await import('./credits');
 const userKeys = await import('./user-api-keys');
 
 /** A row that really decrypts, built with the same code the resolvers use. */
-function storedKey(secret = 'sk-user-key') {
+function storedKey(secret = 'sk-user-key', provider = 'fal_ai') {
 	mockEnv.USER_SECRETS_ENCRYPTION_KEY = 'x'.repeat(32);
-	return { provider: 'fal_ai', ...userKeys.encryptSecret(secret) };
+	return { provider, ...userKeys.encryptSecret(secret) };
 }
 
 beforeEach(() => {
@@ -66,24 +66,28 @@ describe('keySourceFor', () => {
 		expect(sb.queries).toHaveLength(0);
 	});
 
-	it('a USABLE stored key → byo; none → platform; maps fal → fal_ai', async () => {
+	it('a generation provider is platform even with a key stored, now that BYOK is Zernio-only', async () => {
+		// This test used to assert the opposite, and the opposite was the problem.
+		// A key that is a COST cannot be brought without taking the margin with
+		// it: at markup 3 a BYOK run forgoes exactly three times what it saves.
+		// Customer BYOK is now withdrawn for every generation provider
+		// (providers.ts), enforced in getUserApiKey so rows saved under the old
+		// policy go inert rather than keeping their holder on a free ride.
 		const row = storedKey();
 		const sb = createMockSupabase((q) =>
 			q.table === 'user_api_keys' && q.eqOf('provider') === 'fal_ai' ? { data: row } : { data: null }
 		);
-		expect(await credits.keySourceFor(sb, 'u1', 'fal')).toBe('byo');
+		expect(await credits.keySourceFor(sb, 'u1', 'fal')).toBe('platform');
 		expect(await credits.keySourceFor(sb, 'u1', 'openrouter')).toBe('platform');
 	});
 
-	it('a stored key that will NOT decrypt is platform, because the platform key is what runs', async () => {
-		// The leak this closes: the resolvers do `getUserApiKey(...).catch(() => null)`
-		// and fall back to env, so a rotated encryption key or a corrupt auth tag
-		// means WE pay. Stamping that event 'byo' made it both unbilled (charge()
-		// skips non-platform rows) and invisible to every reconciliation view.
-		mockEnv.USER_SECRETS_ENCRYPTION_KEY = 'x'.repeat(32);
-		const corrupt = { provider: 'fal_ai', encrypted_value: 'not-real', iv: 'nope', auth_tag: 'nope' };
-		const sb = createMockSupabase((q) => (q.table === 'user_api_keys' ? { data: corrupt } : { data: null }));
-		expect(await credits.keySourceFor(sb, 'u1', 'fal')).toBe('platform');
+	it('never reads the key store at all for a withdrawn provider', async () => {
+		// The gate short-circuits ahead of the query, so this is also the reason
+		// the cache below now measures zero. Asserting it explicitly keeps the
+		// next reader from concluding the store is simply empty.
+		const sb = createMockSupabase(() => ({ data: storedKey() }));
+		await credits.keySourceFor(sb, 'u1', 'fal');
+		expect(sb.of('user_api_keys')).toHaveLength(0);
 	});
 
 	it('an unreadable key store is platform, not byo', async () => {
@@ -93,12 +97,34 @@ describe('keySourceFor', () => {
 		expect(await credits.keySourceFor(sb, 'u1', 'fal')).toBe('platform');
 	});
 
-	it('uses the cache and only hits the DB once per user+provider', async () => {
+	it('resolves without a database round trip once BYOK is withdrawn', async () => {
 		const sb = createMockSupabase(() => ({ data: null }));
 		const cache = new Map();
 		await credits.keySourceFor(sb, 'u1', 'fal', cache);
 		await credits.keySourceFor(sb, 'u1', 'fal', cache);
-		expect(sb.of('user_api_keys')).toHaveLength(1);
+		expect(sb.of('user_api_keys')).toHaveLength(0);
+	});
+});
+
+describe('the decrypt-failure guard still runs where a key can still be brought', () => {
+	// keySourceFor can no longer reach this path — every cost provider is gated
+	// ahead of it — so the guard is asserted at the layer that still uses it.
+	// Without this, the original leak (a key that will not decrypt falling back
+	// to the platform key while the event is stamped 'byo') would be protected
+	// only by a test that can no longer fail.
+	it('refuses to hand back a Zernio key that will not decrypt', async () => {
+		mockEnv.USER_SECRETS_ENCRYPTION_KEY = 'x'.repeat(32);
+		const corrupt = { provider: 'zernio', encrypted_value: 'not-real', iv: 'nope', auth_tag: 'nope' };
+		const sb = createMockSupabase((q) => (q.table === 'user_api_keys' ? { data: corrupt } : { data: null }));
+		await expect(userKeys.getUserApiKey(sb, 'u1', 'zernio')).rejects.toThrow();
+	});
+
+	it('still returns a Zernio key that does decrypt', async () => {
+		const row = storedKey('zernio-secret', 'zernio');
+		const sb = createMockSupabase((q) =>
+			q.table === 'user_api_keys' && q.eqOf('provider') === 'zernio' ? { data: row } : { data: null }
+		);
+		expect(await userKeys.getUserApiKey(sb, 'u1', 'zernio')).toBe('zernio-secret');
 	});
 });
 

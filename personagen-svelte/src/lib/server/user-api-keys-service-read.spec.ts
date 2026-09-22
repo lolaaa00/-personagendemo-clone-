@@ -20,6 +20,14 @@
  *      And no query in src/ reads a secret column outside the two service-
  *      routed readers, or uses select('*') on either table — the thing that
  *      would 42501 the moment stage B is applied.
+ *
+ * Every case below uses 'zernio' as its exemplar provider, and that choice is
+ * load-bearing. Customer BYOK was withdrawn from the generation providers on
+ * 2026-09-21 and getUserApiKey now returns null for them ahead of any query, so
+ * an assertion written against 'openrouter' — as these were — would pass
+ * without the service client, the decryption or the status write ever running.
+ * Zernio is the one key a customer still brings, so it is the only provider for
+ * which these tests can still fail.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
@@ -145,7 +153,7 @@ describe('secret reads happen on the service client', () => {
 		const user = stubClient({ row: goodRow() });
 		serviceRef.current = () => service;
 
-		await expect(getUserApiKey(user, USER, 'openrouter')).resolves.toBe(PLAINTEXT);
+		await expect(getUserApiKey(user, USER, 'zernio')).resolves.toBe(PLAINTEXT);
 
 		expect(user.calls, 'the user-scoped client must not be touched').toHaveLength(0);
 		expect(service.calls).toHaveLength(1);
@@ -156,7 +164,7 @@ describe('secret reads happen on the service client', () => {
 		// Scoped by user — this changes which role reads, not who may see what.
 		expect(read.filters).toEqual([
 			['user_id', USER],
-			['provider', 'openrouter']
+			['provider', 'zernio']
 		]);
 	});
 
@@ -180,7 +188,7 @@ describe('secret reads happen on the service client', () => {
 
 	it('without a service key it falls back to the caller client (tests, local dev)', async () => {
 		const user = stubClient({ row: goodRow() });
-		await expect(getUserApiKey(user, USER, 'fal_ai')).resolves.toBe(PLAINTEXT);
+		await expect(getUserApiKey(user, USER, 'zernio')).resolves.toBe(PLAINTEXT);
 		expect(user.calls).toHaveLength(1);
 		expect(user.calls[0].table).toBe('user_api_keys');
 		expect(user.calls[0].filters[0]).toEqual(['user_id', USER]);
@@ -189,7 +197,7 @@ describe('secret reads happen on the service client', () => {
 	it('no row → null, and nothing is written', async () => {
 		const service = stubClient({ row: null });
 		serviceRef.current = () => service;
-		await expect(getUserApiKey(stubClient(), USER, 'gemini')).resolves.toBeNull();
+		await expect(getUserApiKey(stubClient(), USER, 'zernio')).resolves.toBeNull();
 		expect(service.calls.map((c) => c.op)).toEqual(['select']);
 	});
 });
@@ -202,7 +210,7 @@ describe('a ciphertext that will not open', () => {
 		const service = stubClient({ row });
 		serviceRef.current = () => service;
 
-		await expect(getUserApiKey(stubClient(), USER, 'openrouter')).rejects.toThrow(
+		await expect(getUserApiKey(stubClient(), USER, 'zernio')).rejects.toThrow(
 			/authenticate|auth tag|Unsupported state/i
 		);
 
@@ -217,7 +225,7 @@ describe('a ciphertext that will not open', () => {
 		// Scoped to the same row that was read.
 		expect(w.filters).toEqual([
 			['user_id', USER],
-			['provider', 'openrouter']
+			['provider', 'zernio']
 		]);
 		// Not one 6-char window of ciphertext, iv or tag may appear in it.
 		const frags = fragmentsOf(row);
@@ -243,7 +251,7 @@ describe('a ciphertext that will not open', () => {
 	it('a good ciphertext returns the plaintext and writes nothing', async () => {
 		const service = stubClient({ row: goodRow() });
 		serviceRef.current = () => service;
-		await expect(getUserApiKey(stubClient(), USER, 'openrouter')).resolves.toBe(PLAINTEXT);
+		await expect(getUserApiKey(stubClient(), USER, 'zernio')).resolves.toBe(PLAINTEXT);
 		expect(service.calls).toHaveLength(1);
 		expect(service.calls[0].op).toBe('select');
 	});
@@ -258,7 +266,7 @@ describe('a ciphertext that will not open', () => {
 		serviceRef.current = () => service;
 		let caught: Error | null = null;
 		try {
-			await getUserApiKey(stubClient(), USER, 'openrouter');
+			await getUserApiKey(stubClient(), USER, 'zernio');
 		} catch (e) {
 			caught = e as Error;
 		}
@@ -272,7 +280,7 @@ describe('a ciphertext that will not open', () => {
 	it('a failing status write does not change the thrown error ({ error } result)', async () => {
 		const service = stubClient({ row: badRow(), update: { error: { message: '42501 permission denied' } } });
 		serviceRef.current = () => service;
-		await expect(getUserApiKey(stubClient(), USER, 'openrouter')).rejects.toThrow(
+		await expect(getUserApiKey(stubClient(), USER, 'zernio')).rejects.toThrow(
 			/authenticate|auth tag|Unsupported state/i
 		);
 		expect(service.calls.some((c) => c.op === 'update')).toBe(true);
@@ -287,7 +295,7 @@ describe('a ciphertext that will not open', () => {
 		try {
 			const service = stubClient({ row });
 			serviceRef.current = () => service;
-			await expect(getUserApiKey(stubClient(), USER, 'openrouter')).rejects.toThrow(
+			await expect(getUserApiKey(stubClient(), USER, 'zernio')).rejects.toThrow(
 				/USER_SECRETS_ENCRYPTION_KEY is not configured/
 			);
 			expect(service.calls.map((c) => c.op)).toEqual(['select']);

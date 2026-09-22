@@ -69,6 +69,35 @@ export interface ProviderEntry {
 	byok: ByokPolicy;
 }
 
+/**
+ * Why a customer can no longer bring a generation key.
+ *
+ * Bring your own key where the key is an IDENTITY. Never where the key is a
+ * COST. Zernio is an identity: it holds the customer's own social connections,
+ * it is priced per connected account per month, and no run is charged against
+ * it — `billsToUserKey: false` says so. Fal, OpenRouter, Gemini and Firecrawl
+ * are costs, and a key that is a cost cannot be brought without taking the
+ * margin with it.
+ *
+ * The arithmetic is not a judgement call. At `credit_markup: 3` a BYOK run
+ * forgoes exactly three times what it saves, so every such run destroys two
+ * thirds of its own margin by definition of the markup. Measured on production
+ * before this changed: 50 BYOK runs saved ~$0.94 of provider cost and forgave
+ * 305 credits of retail — 47% of every credit ever metered — for a net of
+ * −$2.11. Two accounts had ever saved a key.
+ *
+ * It was also incoherent to use. Nobody had ever saved a fal key, so images and
+ * video always ran on the platform key and were charged, while text ran free on
+ * a customer's OpenRouter key — with nothing on screen explaining the rule. A
+ * wallet that moves for pictures and not for words reads as a broken wallet.
+ *
+ * The capability is not deleted: `billsToUserKey` and keySourceFor() still work
+ * exactly as before, so a platform operator can re-open one of these by
+ * restoring `supported: true` here, and historical 'byo' events stay readable.
+ */
+const GENERATION_KEY_REASON =
+	'Generation runs on our keys so that every post is charged the same way, from your balance — bringing your own would make some posts cost credits and others nothing, with no way to tell which. Connect your own Zernio account instead: that one is yours, and it is what owns your publishing.';
+
 /** Reading order matches the Settings page: publish, media, language, research. */
 export const PROVIDER_CATALOGUE: readonly ProviderEntry[] = [
 	{
@@ -88,7 +117,7 @@ export const PROVIDER_CATALOGUE: readonly ProviderEntry[] = [
 		keyProvider: 'fal_ai',
 		costProvider: 'fal',
 		billsToUserKey: true,
-		byok: { supported: true, entitlementGated: true }
+		byok: { supported: false, reason: GENERATION_KEY_REASON }
 	},
 	{
 		id: 'openrouter',
@@ -96,7 +125,7 @@ export const PROVIDER_CATALOGUE: readonly ProviderEntry[] = [
 		keyProvider: 'openrouter',
 		costProvider: 'openrouter',
 		billsToUserKey: true,
-		byok: { supported: true, entitlementGated: true }
+		byok: { supported: false, reason: GENERATION_KEY_REASON }
 	},
 	{
 		id: 'gemini',
@@ -104,7 +133,7 @@ export const PROVIDER_CATALOGUE: readonly ProviderEntry[] = [
 		keyProvider: 'gemini',
 		costProvider: 'gemini',
 		billsToUserKey: true,
-		byok: { supported: true, entitlementGated: true }
+		byok: { supported: false, reason: GENERATION_KEY_REASON }
 	},
 	{
 		id: 'firecrawl',
@@ -112,18 +141,21 @@ export const PROVIDER_CATALOGUE: readonly ProviderEntry[] = [
 		keyProvider: 'firecrawl',
 		costProvider: 'firecrawl',
 		billsToUserKey: true,
-		// Never gated: briefs are researched with it on every plan, Free included.
-		byok: { supported: true, entitlementGated: false }
+		byok: { supported: false, reason: GENERATION_KEY_REASON }
 	},
 	{
 		id: 'kie_ai',
 		label: 'Kie AI',
 		keyProvider: 'kie_ai',
 		// Nothing in the codebase calls it, so it emits no cost event and cannot
-		// resolve a key source. A saved key is validated and never spent.
+		// resolve a key source. A saved key was validated and never spent.
 		costProvider: null,
 		billsToUserKey: false,
-		byok: { supported: true, entitlementGated: true }
+		byok: {
+			supported: false,
+			reason:
+				'Nothing in the product calls Kie AI yet, so a key saved here would sit unused. There is nothing to bring until it is wired up.'
+		}
 	},
 	{
 		id: 'higgsfield',

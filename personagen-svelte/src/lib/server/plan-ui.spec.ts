@@ -14,7 +14,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { BYOK_GATED_KEY_PROVIDERS } from '$lib/providers';
+import { BYOK_GATED_KEY_PROVIDERS, byokReason, isByokGated, providerByKeyProvider } from '$lib/providers';
 
 const read = (...p: string[]) => readFileSync(new URL(`../../${p.join('/')}`, import.meta.url), 'utf-8');
 
@@ -103,10 +103,17 @@ describe('what must NEVER be gated', () => {
 		// page. That literal is gone — the page now derives the list from the
 		// provider catalogue — and a test that greps for a vanished literal
 		// reports an empty string and passes on nothing. Assert the real values.
-		expect(BYOK_GATED_KEY_PROVIDERS.length, 'the gated list must not be empty').toBeGreaterThan(0);
-		expect(BYOK_GATED_KEY_PROVIDERS).toContain('openrouter');
+		//
+		// Since 2026-09-21 the gated list is EMPTY, so the non-empty guard above
+		// was removed rather than relaxed: it would now fail on the intended
+		// state. The claim this test exists to protect is unchanged and is
+		// asserted directly — Zernio and Firecrawl must never be gated — and
+		// providers.spec.ts pins the emptiness itself, with the reason.
 		expect(BYOK_GATED_KEY_PROVIDERS).not.toContain('zernio');
 		expect(BYOK_GATED_KEY_PROVIDERS).not.toContain('firecrawl');
+		expect(isByokGated('zernio')).toBe(false);
+		// Zernio is still the one key a customer may bring, so its field is real.
+		expect(byokReason(providerByKeyProvider('zernio')!)).toBeNull();
 		// and the page really does derive rather than restate
 		expect(files.settings).toContain('isByokGated(');
 	});

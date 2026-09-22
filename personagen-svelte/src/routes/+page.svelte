@@ -253,7 +253,6 @@
 				'Unlimited brand briefs',
 				'Priority generation queue',
 				'Teams + shared workspaces',
-				'Bring your own keys — generation at no charge',
 				'API access + dedicated manager'
 			],
 			cta: 'Talk to us',

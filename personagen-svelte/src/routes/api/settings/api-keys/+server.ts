@@ -132,7 +132,12 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		return json({ success: false, error: 'Unsupported provider' }, { status: 400 });
 	}
 
-	// "Bring your own keys — generation at no charge" is an Agency line, and it
+	// Defence in depth, and currently unreachable: customer BYOK is withdrawn for
+	// every generation provider (providers.ts), so isByokGated() is false for all
+	// of them and the catalogue refusal above answers first. It stays because
+	// re-opening a provider there must not also silently un-gate it here.
+	//
+	// Historically: "Bring your own keys — generation at no charge" was an Agency line, and it
 	// is already true mechanically: keySourceFor marks the event 'byo' and
 	// charge() skips every non-platform row. Only the GENERATION providers are
 	// gated — that set is DERIVED from the provider catalogue ($lib/providers),

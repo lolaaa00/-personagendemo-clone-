@@ -148,6 +148,19 @@
 					{/if}
 				</p>
 			{/if}
+			{#if data.workspaces.length > 0}
+				<!-- The sidebar pill shows the wallet that PAYS, which for a member is
+				     the workspace owner's. Without this line the two numbers differ on
+				     screen with nothing connecting them. -->
+				<p class="sub hero-elsewhere">
+					This is your personal wallet. Personas in
+					{#each data.workspaces as w, i (w.id)}{i > 0 ? ', ' : ''}<strong>{w.name}</strong>{/each}
+					bill the owner instead —
+					<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- a fragment
+					     on this same page, not a route: resolve() would be wrong here. -->
+					<a href="#workspace-wallets">see those balances</a>.
+				</p>
+			{/if}
 		</div>
 		<ul class="promises">
 			<li><strong>Never expires.</strong> Credit sits in your wallet until you use it.</li>
@@ -250,7 +263,7 @@
 	{/if}
 
 	{#if data.workspaces.length > 0}
-		<section class="workspaces">
+		<section class="workspaces" id="workspace-wallets">
 			<h2>Workspace wallets you draw on</h2>
 			<p class="muted">
 				Personas that belong to a workspace are billed to that workspace's owner, not to you. These are the
@@ -271,7 +284,17 @@
 	<section class="ledger">
 		<h2>Recent activity</h2>
 		{#if data.ledger.length === 0}
-			<p class="muted">Nothing yet. Your first generation will show here with what it cost.</p>
+			<!-- A workspace member can have generated hundreds of times and have an
+			     empty ledger here: the charges land on the owner's, which this page
+			     deliberately never exposes. "Nothing yet" would be a plain untruth. -->
+			{#if data.workspaces.length > 0}
+				<p class="muted">
+					Nothing on your personal wallet. Work on a workspace persona is charged to that
+					workspace's owner, and their ledger is theirs to see — ask them for a breakdown.
+				</p>
+			{:else}
+				<p class="muted">Nothing yet. Your first generation will show here with what it cost.</p>
+			{/if}
 		{:else}
 			<div class="table-wrap">
 				<table>

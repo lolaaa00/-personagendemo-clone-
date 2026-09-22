@@ -143,9 +143,18 @@ describe('API access — /api/developer/keys', () => {
 });
 
 describe('BYOK — /api/settings/api-keys', () => {
-	it('refuses a generation key on a plan without BYOK', async () => {
+	it('refuses a generation key outright, on every plan', async () => {
+		// This expected 403 — "not on your plan" — until customer BYOK was
+		// withdrawn from the generation providers on 2026-09-21. The catalogue
+		// refusal now answers first with 400 and the sentence explaining why
+		// there is no key field, which is the truthful answer once no plan
+		// grants it. What matters either way is that the save does not succeed.
 		const res = await call(userKeys.POST, { action: 'save', provider: 'openrouter', apiKey: 'sk-or-averylongkey' });
-		expect(res.status).toBe(403);
+		expect(res.status).toBe(400);
+		expect(res.status).not.toBe(200);
+		const body = await res.json();
+		expect(body.success).toBe(false);
+		expect(String(body.error)).toMatch(/balance|Zernio/);
 	});
 
 	it('NEVER refuses the publishing connector — every plan publishes', async () => {

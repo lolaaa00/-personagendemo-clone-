@@ -1090,6 +1090,30 @@
 	// Test Connection and Delete Key stay enabled for every provider — a user
 	// keeps, can still test, and can still remove a key they already have.
 
+	/**
+	 * Does this provider still get an editable card?
+	 *
+	 * Customer BYOK is now Zernio-only: a key that is an identity, not a cost
+	 * (providers.ts). The withdrawn providers are explained in the read-only
+	 * list below instead of offering a field that would refuse on save.
+	 *
+	 * The exception is someone who saved a key under the old policy. That key no
+	 * longer runs anything — getUserApiKey gates it — but it is still their
+	 * secret sitting in our table, and hiding the card would leave them no way
+	 * to remove it. They keep the card, and it says what became of the key.
+	 */
+	function showsKeyField(provider: string): boolean {
+		const catalogued = providerByKeyProvider(provider);
+		if (!catalogued || catalogued.byok.supported) return true;
+		return !!getSavedKey(provider as ApiKeyProvider);
+	}
+
+	/** True when this card only exists so its holder can delete a now-inert key. */
+	function isRetiredKey(provider: string): boolean {
+		const catalogued = providerByKeyProvider(provider);
+		return !!catalogued && !catalogued.byok.supported && !!getSavedKey(provider as ApiKeyProvider);
+	}
+
 	/** Reason this provider's Save is off, or null. Keyed on the PROVIDER, never
 	 *  on the category card — a category mixes gated and ungated providers. */
 	function saveKeyBlockedReason(provider: string): string | null {
@@ -1534,7 +1558,7 @@
 					are never shown again after saving.
 				</p>
 				{#each KEY_CATEGORIES as cat (cat.key)}
-					{@const inCat = providerConfigs.filter((c) => c.category === cat.key)}
+					{@const inCat = providerConfigs.filter((c) => c.category === cat.key && showsKeyField(c.provider))}
 					{@const setCount = inCat.filter((c) => !!getSavedKey(c.provider)).length}
 					{#if inCat.length > 0}
 						<section class="key-category">
@@ -1602,6 +1626,17 @@
 										</summary>
 
 										<div class="key-body">
+											{#if isRetiredKey(config.provider)}
+												<!-- This card survives only so its owner can remove a secret we
+												     no longer use. Leaving it looking active would be the worse
+												     kind of wrong: they would believe their key is paying. -->
+												<p class="key-retired" role="status">
+													<strong>This key is no longer used.</strong> Generation now runs on our
+													keys and is charged to your balance, so every post costs the same
+													whether or not this is here. Nothing has been deleted — remove it below
+													whenever you like.
+												</p>
+											{/if}
 											<p class="key-desc">{config.description}</p>
 
 										<p class="key-help">
@@ -3236,6 +3271,19 @@
 		padding: 0.05rem 0.4rem;
 		border-radius: 999px;
 		white-space: nowrap;
+	}
+	/* Shown on a card that exists only so a key saved under the old BYOK policy
+	   can be removed. Notice weight, not error weight: nothing is broken. */
+	.key-retired {
+		margin: 0 0 var(--space-3);
+		padding: var(--space-3) var(--space-4);
+		border: 1px solid var(--border);
+		border-left: 3px solid var(--accent);
+		border-radius: var(--radius-sm);
+		background: var(--surface-2);
+		font-size: var(--text-base);
+		line-height: var(--leading-relaxed);
+		color: var(--text-muted);
 	}
 	.key-spans {
 		background: color-mix(in srgb, var(--accent) 14%, transparent);

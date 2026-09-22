@@ -866,17 +866,29 @@
 					<span class="sidebar-plan-dot"></span>
 					<span>{(data as any).badgeLabel ?? 'Personal account'}</span>
 					{#if (data as any).credits}
+						{@const wallet = (data as any).credits as {
+							balance: number;
+							billing_mode: string;
+							paid_by: string | null;
+							currency: string;
+							formatted: string;
+							usd: string;
+						}}
+						{@const unmetered = wallet.billing_mode === 'unmetered'}
 						<a
 							href="/billing"
 							class="credit-pill"
-							class:low={(data as any).credits.balance <= 0 && (data as any).credits.billing_mode !== 'unmetered'}
-							class:warn={(data as any).credits.balance > 0 && (data as any).credits.balance < 300 && (data as any).credits.billing_mode !== 'unmetered'}
-							title={(data as any).credits.billing_mode === 'unmetered'
+							class:low={wallet.balance <= 0 && !unmetered}
+							class:warn={wallet.balance > 0 && wallet.balance < 300 && !unmetered}
+							title={unmetered
 								? 'Complimentary account — generations are not charged'
-								: `${(data as any).credits.usd} of generation credit${(data as any).credits.currency !== 'USD' ? ` (shown in ${(data as any).credits.currency})` : ''}`}
+								: `${wallet.usd} of generation credit${wallet.currency !== 'USD' ? ` (shown in ${wallet.currency})` : ''}${wallet.paid_by ? ` — the ${wallet.paid_by} wallet, which pays for everything you generate here` : ''}`}
 						>
-							<span class="credit-pill-label">Balance</span>
-							<span class="credit-pill-amount">{(data as any).credits.billing_mode === 'unmetered' ? '∞' : (data as any).credits.formatted}</span>
+							<!-- A member spends from the workspace owner's wallet, so naming it
+							     is not decoration: an unlabelled shared balance is how someone
+							     concludes their own credits are being drained. -->
+							<span class="credit-pill-label">{wallet.paid_by ?? 'Balance'}</span>
+							<span class="credit-pill-amount">{unmetered ? '∞' : wallet.formatted}</span>
 						</a>
 					{/if}
 				</div>

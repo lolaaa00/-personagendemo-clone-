@@ -78,21 +78,32 @@ describe('the regression net — the derived lists equal the literals they repla
 		expect({ ...KEYED_COST_PROVIDERS }).toEqual(BEFORE.keyedProviders);
 	});
 
-	it('the entitlement-gated list is exactly the old four', () => {
-		// Order never mattered (both call sites used .includes), membership always did.
-		expect([...BYOK_GATED_KEY_PROVIDERS].sort()).toEqual([...BEFORE.byokGated].sort());
+	it('the entitlement-gated list is now empty, and that is a decision', () => {
+		// The freeze above held until 2026-09-21, when customer BYOK was withdrawn
+		// from every generation provider. `BEFORE.byokGated` stays as written — it
+		// is a record of what the refactor had to preserve, not of current policy.
+		//
+		// Why it moved: a key that is a COST cannot be brought without taking the
+		// margin with it. At credit_markup 3 a BYOK run forgoes exactly three
+		// times what it saves. Measured before the change: 50 BYOK runs saved
+		// ~$0.94 and forgave 305 credits of retail, 47% of every credit ever
+		// metered, for a net of −$2.11.
+		// See docs/monetization/byok-viability-assessment-2026-09-21.md.
+		expect([...BYOK_GATED_KEY_PROVIDERS]).toEqual([]);
+		for (const p of BEFORE.byokGated) expect(isByokGated(p), p).toBe(false);
 	});
 
-	it('publishing and research are STILL never gated', () => {
-		// Zernio is how every plan publishes, Firecrawl is how briefs are
-		// researched. Both are promised to Free; gating either breaks a feature
-		// someone paying nothing was told they had.
+	it('gates nothing, and refuses the generation keys outright instead', () => {
+		// Gating answers "not on your plan". Withdrawal answers "not at all, and
+		// here is why" — which is the honest answer once no plan grants it.
+		for (const p of ['openrouter', 'gemini', 'fal_ai', 'firecrawl', 'kie_ai']) {
+			expect(isByokGated(p), p).toBe(false);
+			expect(byokReason(providerByKeyProvider(p)!), p).toBeTruthy();
+		}
+		// Zernio is how every plan publishes, Free included. It is the one key a
+		// customer still brings, because it is an identity rather than a cost.
 		expect(isByokGated('zernio')).toBe(false);
-		expect(isByokGated('firecrawl')).toBe(false);
-		expect(isByokGated('openrouter')).toBe(true);
-		expect(isByokGated('gemini')).toBe(true);
-		expect(isByokGated('fal_ai')).toBe(true);
-		expect(isByokGated('kie_ai')).toBe(true);
+		expect(byokReason(providerByKeyProvider('zernio')!)).toBeNull();
 	});
 
 	it('the catalogue covers every provider a key can be stored for, and no more', () => {
@@ -128,17 +139,37 @@ describe('keySourceFor resolves identically for every provider it resolves today
 	});
 
 	it.each(Object.entries(BEFORE.keyedProviders))(
-		'%s still looks the key up under the %s row, and a usable one is byo',
+		'%s is platform even with a perfectly good key stored under %s',
 		async (costProvider, keyProvider) => {
+			// This asserted 'byo' until customer BYOK was withdrawn. The stored key
+			// is deliberately a real, decryptable one: the point is that a key which
+			// WOULD have worked no longer diverts the charge, because rows saved
+			// under the old policy must go inert rather than keep their holder on a
+			// free ride nobody else gets.
 			mockEnv.USER_SECRETS_ENCRYPTION_KEY = 'x'.repeat(32);
 			const row = { provider: keyProvider, ...userKeys.encryptSecret('sk-user-key') };
 			const sb = createMockSupabase((q) =>
 				q.table === 'user_api_keys' && q.eqOf('provider') === keyProvider ? { data: row } : { data: null }
 			);
-			expect(await credits.keySourceFor(sb, 'u1', costProvider)).toBe('byo');
+			expect(await credits.keySourceFor(sb, 'u1', costProvider)).toBe('platform');
+			// And it does not read the store at all — the gate is ahead of the query.
+			expect(sb.of('user_api_keys')).toHaveLength(0);
 			delete mockEnv.USER_SECRETS_ENCRYPTION_KEY;
 		}
 	);
+
+	it('no live path can produce a byo event any more', async () => {
+		// 'byo' stays meaningful for the 50 historical rows and the mechanism is
+		// intact — restoring `supported: true` on one provider re-opens it — but
+		// nothing reachable today writes one.
+		mockEnv.USER_SECRETS_ENCRYPTION_KEY = 'x'.repeat(32);
+		for (const [costProvider, keyProvider] of Object.entries(BEFORE.keyedProviders)) {
+			const row = { provider: keyProvider, ...userKeys.encryptSecret('sk-user-key') };
+			const sb = createMockSupabase(() => ({ data: row }));
+			expect(await credits.keySourceFor(sb, 'u1', costProvider), costProvider).not.toBe('byo');
+		}
+		delete mockEnv.USER_SECRETS_ENCRYPTION_KEY;
+	});
 });
 
 describe('every catalogue entry names a real key row, or declares it stores none', () => {
@@ -224,8 +255,26 @@ describe('a provider that cannot be BYOK’d explains itself instead of going mi
 		expect(String(reason)).toMatch(/\.$/);
 	});
 
-	it.each(NON_BYOK_PROVIDERS.map((p) => [p.id, p] as const))(
-		'%s is absent from every list that would key, gate or bill it',
+	/**
+	 * NON_BYOK_PROVIDERS now holds two different situations, and conflating them
+	 * would let a real mistake through. Higgsfield issues no customer key at all,
+	 * so every list that could name one must not. Fal, OpenRouter, Gemini and
+	 * Firecrawl still take OUR key and still bill the wallet — only the customer
+	 * door closed — so they must stay in the cost map, or their spend would stop
+	 * being attributed and we would quietly eat it.
+	 */
+	const noKeyExists = NON_BYOK_PROVIDERS.filter((p) => p.keyProvider === null);
+	const withdrawn = NON_BYOK_PROVIDERS.filter((p) => p.keyProvider !== null);
+
+	it('both situations are exercised, not theoretical', () => {
+		expect(noKeyExists.map((p) => p.id)).toContain('higgsfield');
+		expect(withdrawn.map((p) => p.id)).toEqual(
+			expect.arrayContaining(['fal_ai', 'openrouter', 'gemini', 'firecrawl'])
+		);
+	});
+
+	it.each(noKeyExists.map((p) => [p.id, p] as const))(
+		'%s issues no key, so it is absent from every list that would key, gate or bill it',
 		(id, p) => {
 			expect(p.keyProvider).toBeNull();
 			expect(p.billsToUserKey).toBe(false);
@@ -233,6 +282,18 @@ describe('a provider that cannot be BYOK’d explains itself instead of going mi
 			expect(BYOK_GATED_KEY_PROVIDERS as readonly string[]).not.toContain(id);
 			expect(Object.keys(KEYED_COST_PROVIDERS)).not.toContain(id);
 			expect(userKeys.isSupportedProvider(id)).toBe(false);
+		}
+	);
+
+	it.each(withdrawn.map((p) => [p.id, p] as const))(
+		'%s is off the gated list but still attributed, so its spend stays billable',
+		(_id, p) => {
+			expect(BYOK_GATED_KEY_PROVIDERS as readonly string[]).not.toContain(p.keyProvider!);
+			// The key row still exists — a holder must be able to delete their secret.
+			expect(USER_KEY_PROVIDERS as readonly string[]).toContain(p.keyProvider!);
+			if (p.costProvider) {
+				expect(KEYED_COST_PROVIDERS[p.costProvider]).toBe(p.keyProvider);
+			}
 		}
 	);
 

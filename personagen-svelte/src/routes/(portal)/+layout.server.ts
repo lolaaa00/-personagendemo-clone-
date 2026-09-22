@@ -9,6 +9,7 @@ import { isPlatformAdmin as checkPlatformAdmin } from '$lib/server/platform-admi
 import { creditsMode, creditMarkup } from '$lib/server/flags';
 import { getSettings } from '$lib/server/settings';
 import { resolveDisplayCurrency, creditsToAmount, formatCredits, localeFromAcceptLanguage } from '$lib/money';
+import { walletToDisplay, type WorkspaceWallet } from '$lib/server/wallet-display';
 
 export const load: LayoutServerLoad = async ({ locals, request, url, depends }) => {
 	// The sidebar balance is loaded here and nowhere else, so without a dependency
@@ -187,15 +188,22 @@ export const load: LayoutServerLoad = async ({ locals, request, url, depends }) 
 			balance: number;
 			mode: string;
 			billing_mode: string;
+			/** Set when the wallet on screen belongs to a workspace owner, not the viewer. */
+			paid_by: string | null;
 			currency: string;
 			amount: number;
 			formatted: string;
 			usd: string;
 		} | null = null;
 		if (mode !== 'off' && locals.supabase) {
-			const [{ data: wallet }, { data: profile }] = await Promise.all([
+			const [{ data: wallet }, { data: profile }, { data: wsWallets }] = await Promise.all([
 				locals.supabase.from('credit_accounts').select('balance_credits, billing_mode').eq('user_id', user.id).maybeSingle(),
-				locals.supabase.from('profiles').select('display_currency').eq('id', user.id).maybeSingle()
+				locals.supabase.from('profiles').select('display_currency').eq('id', user.id).maybeSingle(),
+				// The wallet that PAYS is the workspace owner's, not the viewer's
+				// (credits.ts → resolveBillingAccount). Same SECURITY DEFINER
+				// function /billing already uses: balance and mode only, never
+				// anyone else's ledger.
+				locals.supabase.rpc('workspace_wallets')
 			]);
 			const s = getSettings();
 			const acceptLanguage = request.headers.get('accept-language');
@@ -208,11 +216,13 @@ export const load: LayoutServerLoad = async ({ locals, request, url, depends }) 
 			const locale = localeFromAcceptLanguage(acceptLanguage);
 			pricing.currency = currency;
 			pricing.locale = locale;
-			const balance = Number(wallet?.balance_credits ?? 0);
+			const shown = walletToDisplay(user.id, wallet, wsWallets as WorkspaceWallet[] | null);
+			const balance = shown.balance;
 			credits = {
 				balance,
 				mode,
-				billing_mode: wallet?.billing_mode ?? 'credits',
+				billing_mode: shown.billingMode,
+				paid_by: shown.paidBy,
 				currency,
 				amount: creditsToAmount(balance, currency, s.fx_rates),
 				// Pill: whole units with ".00" (A$28.00). Tooltip: the exact USD balance.
