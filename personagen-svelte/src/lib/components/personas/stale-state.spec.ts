@@ -522,3 +522,57 @@ describe('staleWarnings — the shape the page can rely on', () => {
 		expect(JSON.stringify(agent)).toBe(before);
 	});
 });
+
+describe('a warning that asks the reader to act carries the act (audit UX-007)', () => {
+	// The audit found a notice reading "Generate them again when you're ready"
+	// with no control on it: told to retry, given no retry. These pin the rule
+	// rather than one notice, so a new warning cannot ship the same defect.
+
+	it('the failed reference-photo notice offers a retry of the earliest failed stage', () => {
+		const agent = untouchedAgent({
+			ugc_reference_kit: {
+				feature_grid_status: 'failed: a',
+				side_profiles_status: 'failed: c'
+			}
+		});
+		const [warning] = staleWarnings(agent, NOW);
+		expect(warning.action).toEqual({
+			kind: 'regenerate-kit-stage',
+			label: 'Retry side profiles',
+			// Stages build on each other, so the useful retry is the earliest.
+			stage: 'side_profiles'
+		});
+	});
+
+	it('a failed or stalled portrait offers to generate it again', () => {
+		const failed = staleWarnings(
+			untouchedAgent({ ugc_reference_kit: { profile_status: 'failed: fal returned 500' } }),
+			NOW
+		);
+		expect(failed[0].action?.kind).toBe('regenerate-portrait');
+	});
+
+	it('every warning whose copy tells the reader to do something has a button for it', () => {
+		// Built from every failure shape the module knows, then checked against its
+		// own words: any detail that ends in an instruction must carry an action.
+		const shapes = [
+			{ ugc_reference_kit: { profile_status: 'failed: x' } },
+			{ ugc_reference_kit: { profile_status: 'generating', profile_started_at: minutesAgo(600) } },
+			{ ugc_reference_kit: { side_profiles_status: 'failed: x' } },
+			{ ugc_reference_kit: { face_closeup_status: 'generating', face_closeup_started_at: minutesAgo(600) } }
+		];
+		const warnings: StaleWarning[] = shapes.flatMap((over) => staleWarnings(untouchedAgent(over), NOW));
+		// The sample must be real, or every assertion below passes vacuously.
+		expect(warnings.length).toBeGreaterThanOrEqual(4);
+		for (const w of warnings) {
+			if (/again|re-?generate|pick the voice|start (it|them)/i.test(w.detail)) {
+				expect(w.action, `${w.key} tells the reader to act and offers nothing to click`).toBeDefined();
+				expect(w.action!.label.length).toBeGreaterThan(3);
+			}
+		}
+	});
+
+	it('an untouched persona still produces nothing — no warning, so no button', () => {
+		expect(staleWarnings(untouchedAgent({}), NOW)).toEqual([]);
+	});
+});

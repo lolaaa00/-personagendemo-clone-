@@ -18,7 +18,20 @@
 <script lang="ts">
 	import type { StaleWarning } from './stale-state';
 
-	let { warnings }: { warnings: StaleWarning[] } = $props();
+	let {
+		warnings,
+		onAction = null,
+		busy = false
+	}: {
+		warnings: StaleWarning[];
+		/**
+		 * Runs a warning's fix. Without it the button is not rendered at all —
+		 * a control that does nothing would be the defect this exists to close.
+		 */
+		onAction?: ((warning: StaleWarning) => void) | null;
+		/** True while any generation the page runs is in flight. */
+		busy?: boolean;
+	} = $props();
 </script>
 
 {#if warnings.length}
@@ -62,7 +75,21 @@
 				</span>
 				<div class="stale-body">
 					<p class="stale-title">{warning.title}</p>
-					<p class="stale-detail">{warning.detail}</p>
+					<p class="stale-detail" id="stale-detail-{warning.key}">{warning.detail}</p>
+					{#if warning.action && onAction}
+						<!-- UX-007: the notice told the user to retry and offered no
+						     retry. The fix runs the page's own confirm-first flow, so a
+						     paid retry is approved exactly like the first attempt. -->
+						<button
+							type="button"
+							class="stale-action"
+							disabled={busy}
+							aria-describedby="stale-detail-{warning.key}"
+							onclick={() => onAction?.(warning)}
+						>
+							{busy ? 'Working…' : warning.action.label}
+						</button>
+					{/if}
 				</div>
 			</div>
 		{/each}
@@ -89,6 +116,32 @@
 		   for success/error/warning rows, so this reads as one more of those. */
 		border-left: 3px solid var(--border-strong, var(--border));
 		min-width: 0;
+	}
+
+	.stale-action {
+		display: inline-flex;
+		align-items: center;
+		min-height: 36px;
+		margin-top: 0.55rem;
+		padding: 0 0.9rem;
+		border: 1px solid var(--border-strong, var(--border));
+		border-radius: var(--radius-full, 999px);
+		background: var(--surface);
+		color: var(--text);
+		font-size: var(--text-base);
+		font-weight: 600;
+		cursor: pointer;
+	}
+	.stale-action:hover:not(:disabled) {
+		border-color: var(--accent);
+	}
+	.stale-action:focus-visible {
+		outline: 2px solid var(--focus-ring);
+		outline-offset: 2px;
+	}
+	.stale-action:disabled {
+		opacity: 0.55;
+		cursor: not-allowed;
 	}
 
 	.stale-notice.warn {

@@ -1103,29 +1103,55 @@ export const STUDIO_TEMPLATES: StudioTemplate[] = [
  * lib/pricing.ts + the models.ts catalog DEFAULTS (nano-banana still $0.08;
  * talking head = still + TTS + OmniHuman ~$0.81; product motion = still +
  * Kling O3 Standard $0.42 ≈ $0.51; cinematic = 2–5 storyboard stills + Kling
- * Pro ≈ $1.95). The composer's server-resolved preview remains the exact
+ * Pro ≈ $1.95), each plus ~$0.024 of writing (2 LLM calls at $0.012). The composer's server-resolved preview remains the exact
  * number — these tiles are default-model estimates and say "~" for that
  * reason (a Model Manager override changes the real price, which only the
  * preview can know). Times are observed queue-to-asset ranges, not promises.
  */
 export const PIPELINE_META: Record<StudioTemplate['pipeline'], { usd: string; time: string }> = {
-	// 'Text card' is typeset server-side (no image model) — the only cost left is
-	// the ~$0.002 Director text call, which rounds to Free on a tile. The image
-	// model runs solely as a fallback when the host can't render locally.
-	'Text card': { usd: 'Free', time: '~10s' },
-	'Still image': { usd: '$0.08', time: '~30s' },
-	'Talking head': { usd: '~$0.81', time: '2–4 min' },
-	'Product motion': { usd: '~$0.51', time: '2–5 min' },
-	Cinematic: { usd: '~$1.95', time: '3–6 min' }
+	// EVERY tile includes the writing, because every format pays for it.
+	//
+	// A client audit filed this as its lead finding: the Studio labelled 'Text
+	// card' **Free**, /billing said a text post costs about eight cents, and the
+	// docs said every format spends OpenRouter credit. Three surfaces, three
+	// answers, and the one a user reads before clicking was the one that was
+	// wrong — so an empty wallet produced a refusal the product had already
+	// decided not to warn about.
+	//
+	// The comment here was wrong too, in the same direction: it justified 'Free'
+	// with "the ~$0.002 Director text call". That rate was measured against the
+	// provider and corrected to $0.012 (pricing.ts) and a post makes TWO such
+	// calls — Director and Grader — so the writing is ~$0.024, twelve times the
+	// figure the label rested on. A text card is the cheapest format by an order
+	// of magnitude. It is not free.
+	//
+	// 'Free' is now reserved for a true zero, which no format currently is.
+	'Text card': { usd: '~$0.02', time: '~10s' },
+	'Still image': { usd: '~$0.10', time: '~30s' },
+	'Talking head': { usd: '~$0.83', time: '2–4 min' },
+	'Product motion': { usd: '~$0.53', time: '2–5 min' },
+	Cinematic: { usd: '~$1.97', time: '3–6 min' }
 };
 
 /** The same estimates as numbers — campaign budgeting math. Keep in sync. */
+/**
+ * The writing every post pays for, in provider USD: the Director and the
+ * Grader, two LLM calls at pricing.ts's measured $0.012 each.
+ *
+ * Held here as its own number, and pinned to pricing.ts by money-claims.spec,
+ * because it was the term everything left out. PIPELINE_USD priced media only,
+ * so 'Text card' came out at exactly 0 — the tile said "No media cost", and the
+ * Campaign Planner, which sums this table, quoted a month of text posts at
+ * nothing at all. Both were a charge the product then made anyway.
+ */
+export const WRITING_USD = 0.024;
+
 export const PIPELINE_USD: Record<StudioTemplate['pipeline'], number> = {
-	'Text card': 0,
-	'Still image': 0.08,
-	'Talking head': 0.81,
-	'Product motion': 0.51,
-	Cinematic: 1.95
+	'Text card': WRITING_USD,
+	'Still image': 0.08 + WRITING_USD,
+	'Talking head': 0.81 + WRITING_USD,
+	'Product motion': 0.51 + WRITING_USD,
+	Cinematic: 1.95 + WRITING_USD
 };
 
 /** Shelf definitions, in display order. Typographic leads — it is the cheapest,

@@ -3,7 +3,7 @@
 	import { personaStatusFill } from '$lib/status-color';
 	import { dialog } from '$lib/actions/dialog';
 	import { syncParam, readParam } from '$lib/url-state';
-	import { onMount, onDestroy } from 'svelte';
+	import { onMount, onDestroy, tick } from 'svelte';
 	import { showToast } from '$lib/stores/ui.svelte';
 	import { goto, invalidateAll, beforeNavigate } from '$app/navigation';
 	import { page } from '$app/stores';
@@ -57,7 +57,7 @@
 	import LifeDetails from '$lib/components/personas/LifeDetails.svelte';
 	import { buildLifeDetails } from '$lib/components/personas/life-details';
 	import StaleNotices from '$lib/components/personas/StaleNotices.svelte';
-	import { staleWarnings } from '$lib/components/personas/stale-state';
+	import { staleWarnings, type StaleWarning } from '$lib/components/personas/stale-state';
 	import ViewerPanel, { hasStatedAudience } from '$lib/components/personas/ViewerPanel.svelte';
 	import { sampleViewerPanel } from '$lib/persona-contract/panel';
 	import { confirmDeletePosts } from '$lib/confirm-preview';
@@ -282,6 +282,49 @@
 	// evidence some code path actually WROTE, so an untouched persona yields `[]`
 	// and the strip is not mounted at all.
 	let staleNotices = $derived(staleWarnings(agent));
+
+	/**
+	 * Runs a stale notice's fix (audit UX-007: the notice said "generate them
+	 * again" and offered nothing to click).
+	 *
+	 * Every branch goes through the SAME entry point the page's own buttons use,
+	 * so a retry is confirmed and priced exactly like the first attempt, and the
+	 * reference-kit order gate still applies. Nothing here spends directly.
+	 */
+	async function runStaleAction(warning: StaleWarning) {
+		const action = warning.action;
+		if (!action) return;
+		if (action.kind === 'regenerate-portrait') {
+			requestGenerateAvatar();
+			return;
+		}
+		if (action.kind === 'regenerate-kit-stage') {
+			const stage = action.stage;
+			// Only the four stages the kit route accepts can be retried there. The
+			// character sheet comes out of the portrait job, so its retry is that.
+			if (stage === 'full_body' || (KIT_STAGE_ORDER as readonly string[]).includes(stage)) {
+				requestGenerateKitStage(stage as KitStage);
+			} else {
+				requestGenerateAvatar();
+			}
+			return;
+		}
+		if (action.kind === 'recast-voice') {
+			// The voice picker lives in the Profile tab, inside the collapsed
+			// Automation section — so open both, then hand it focus. Pointing the
+			// user at a control they would still have to hunt for is the defect
+			// this closes, not a fix for it.
+			activeTab = 'profile';
+			profileView = 'overview';
+			await tick();
+			const select = document.getElementById('p-voice') as HTMLSelectElement | null;
+			const section = select?.closest('details');
+			if (section && !section.open) section.open = true;
+			await tick();
+			select?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+			select?.focus({ preventScroll: true });
+		}
+	}
 
 	// ── Viewer panel (READ-ONLY) ──────────────────────────────────────────
 	// The audience is stored as a bracket; nobody writes a post for a bracket.
@@ -2841,6 +2884,10 @@
 	// One click, whole kit: runs every missing stage sequentially (the order is
 	// a hard server-side dependency chain), stopping at the first failure.
 	let generatingAllKit = $state(false);
+	// Declared here, after every flag it reads: the stale-notice retry button is
+	// disabled while ANY portrait or kit generation is in flight, so a second
+	// click cannot start a second paid job behind the first.
+	let staleActionBusy = $derived(generatingAvatar || generatingKitStage !== null || generatingAllKit);
 	// force=false → gap-fill only (skip stages that already exist). force=true →
 	// re-run every downstream stage in order (the persistent "Regenerate kit").
 	async function generateAllKitStages(force = false) {
@@ -3321,7 +3368,7 @@
 			     because a failed portrait or a miscast voice is just as relevant
 			     while writing content as while editing the profile. Renders
 			     absolutely nothing when there is nothing wrong. -->
-			<StaleNotices warnings={staleNotices} />
+			<StaleNotices warnings={staleNotices} onAction={runStaleAction} busy={staleActionBusy} />
 			{#if activeTab === 'profile'}
 				<!-- Lens switcher shared by both Profile lenses — mirrors the Content
 			     tab's toggle so switching feels identical everywhere. -->
@@ -6541,16 +6588,18 @@
 														<p class="studio-tile-tag">{t.tagline}</p>
 														<div class="studio-tile-meta">
 															<!-- PIPELINE_META.usd is the raw provider string ("~$0.81"); this tile
-															     is a pre-spend decision, so it quotes PIPELINE_USD instead. Zero-cost
-															     pipelines stay "Free" — the text card is typeset server-side. -->
+															     is a pre-spend decision, so it quotes PIPELINE_USD — which now
+															     includes the writing every post pays for — through quote(), the
+															     same path as the charge itself. No format is free: a text card is
+															     the cheapest by an order of magnitude, and it still costs. -->
 															<span
 																class="studio-cost"
-																title={pipelineUsd > 0
-																	? metered
-																		? 'Estimated charge for this generation'
-																		: 'Estimated generation cost'
-																	: 'No media to pay for — but the caption is still written by a model, which spends OpenRouter credit. If OpenRouter has no balance, this will not generate.'}
-																>{pipelineUsd > 0 ? quote(pipelineUsd) : 'No media cost'}</span
+																title={metered
+																	? t.pipeline === 'Text card'
+																		? 'Estimated charge for this generation — no media, only the writing, charged to your balance'
+																		: 'Estimated charge for this generation, writing included'
+																	: 'Estimated generation cost, writing included'}
+																>{quote(pipelineUsd)}</span
 															>
 															<span class="studio-time" title="Typical generation time"
 																>{meta.time}</span

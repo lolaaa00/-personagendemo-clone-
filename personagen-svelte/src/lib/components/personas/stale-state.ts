@@ -36,6 +36,24 @@
 import { isToken, label, readPersonaProfileV2 } from '$lib/persona-contract';
 import { hasDescribableLook, lookFingerprint } from '$lib/persona-contract/look-fingerprint';
 
+/**
+ * What the user can DO about a warning, described as data.
+ *
+ * A client audit filed this as UX-007: the reference-photo notice said
+ * "Generate them again when you're ready" and carried no control. The user was
+ * told to retry and given no retry. Every warning below that asks the reader to
+ * act now carries the act.
+ *
+ * It stays a descriptor, not a callback, so this module remains pure and
+ * client-safe: the page decides HOW to run it, and does so through the same
+ * confirm-first flow as the original generation. A retry spends money exactly
+ * like the first attempt did, so it earns no shortcut past that approval.
+ */
+export type StaleAction =
+	| { kind: 'regenerate-portrait'; label: string }
+	| { kind: 'regenerate-kit-stage'; label: string; stage: string }
+	| { kind: 'recast-voice'; label: string };
+
 export interface StaleWarning {
 	/** Stable across renders and releases; used as the keyed-each key. */
 	key: string;
@@ -43,6 +61,8 @@ export interface StaleWarning {
 	detail: string;
 	/** 'warn' — something failed. 'info' — nothing broke, but what you see is old. */
 	severity: 'info' | 'warn';
+	/** The fix, when there is one the page can run. */
+	action?: StaleAction;
 }
 
 type Obj = Record<string, unknown>;
@@ -144,7 +164,8 @@ export function staleWarnings(agent: unknown, now: number = Date.now()): StaleWa
 			title: 'The last portrait didn’t finish',
 			detail:
 				'Something went wrong the last time this persona’s portrait was generated, so the picture here is still the previous one. Generate it again when you’re ready.',
-			severity: 'warn'
+			severity: 'warn',
+			action: { kind: 'regenerate-portrait', label: 'Generate portrait again' }
 		});
 	} else if (isStalled(kit, 'profile_status', 'profile_started_at', now)) {
 		out.push({
@@ -152,7 +173,8 @@ export function staleWarnings(agent: unknown, now: number = Date.now()): StaleWa
 			title: 'A portrait was started but never arrived',
 			detail:
 				'A portrait for this persona was started a while ago and never came back, so the picture here is still the previous one. Nothing is running now — it’s safe to start it again.',
-			severity: 'info'
+			severity: 'info',
+			action: { kind: 'regenerate-portrait', label: 'Start portrait again' }
 		});
 	}
 
@@ -179,7 +201,8 @@ export function staleWarnings(agent: unknown, now: number = Date.now()): StaleWa
 				title: 'This portrait was made before you changed how they look',
 				detail:
 					'The appearance on this persona has been edited since the picture was generated, so the face here no longer matches the description everything else uses. Generate the portrait again to bring them back together.',
-				severity: 'warn'
+				severity: 'warn',
+				action: { kind: 'regenerate-portrait', label: 'Generate portrait again' }
 			});
 		}
 	}
@@ -197,7 +220,14 @@ export function staleWarnings(agent: unknown, now: number = Date.now()): StaleWa
 			key: 'reference-photos-failed',
 			title: 'Some reference photos didn’t finish',
 			detail: `${joinNames(failedStages.map((stage) => stage.name))} failed to generate, so the photos that keep this persona’s face the same across videos are incomplete. Generate them again when you’re ready.`,
-			severity: 'warn'
+			severity: 'warn',
+			// The stages build on each other, so the useful retry is the EARLIEST
+			// one that failed; the page's own order gate handles the rest.
+			action: {
+				kind: 'regenerate-kit-stage',
+				label: `Retry ${failedStages[0].name.replace(/^the /, '')}`,
+				stage: failedStages[0].key
+			}
 		});
 	}
 	if (stalledStages.length) {
@@ -205,7 +235,12 @@ export function staleWarnings(agent: unknown, now: number = Date.now()): StaleWa
 			key: 'reference-photos-stalled',
 			title: 'Some reference photos never arrived',
 			detail: `${joinNames(stalledStages.map((stage) => stage.name))} were started a while ago and never came back. Nothing is running now — it’s safe to start them again.`,
-			severity: 'info'
+			severity: 'info',
+			action: {
+				kind: 'regenerate-kit-stage',
+				label: `Start ${stalledStages[0].name.replace(/^the /, '')} again`,
+				stage: stalledStages[0].key
+			}
 		});
 	}
 
@@ -218,7 +253,8 @@ export function staleWarnings(agent: unknown, now: number = Date.now()): StaleWa
 			key: 'voice-gender',
 			title: 'The voice doesn’t match this persona any more',
 			detail: `This persona’s voice was cast as ${cast} back when the persona was too. The persona is ${nowIs} now, so anything spoken in that voice will sound like someone else. Pick the voice again.`,
-			severity: 'warn'
+			severity: 'warn',
+			action: { kind: 'recast-voice', label: 'Pick a voice' }
 		});
 	}
 

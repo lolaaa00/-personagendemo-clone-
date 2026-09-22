@@ -24,6 +24,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { priceOf } from '$lib/pricing';
 import { PROVIDER_CATALOGUE } from '$lib/providers';
+import { PIPELINE_META, PIPELINE_USD, WRITING_USD } from '$lib/studio-templates';
 
 const read = (...p: string[]) => readFileSync(join(__dirname, '..', '..', ...p), 'utf8');
 const landing = read('routes', '+page.svelte');
@@ -37,6 +38,24 @@ describe('what a text post actually costs', () => {
 		expect(priceOf('openrouter', 'llm')).toBeGreaterThan(0);
 		const textPostUsd = 2 * priceOf('openrouter', 'llm');
 		expect(textPostUsd).toBeGreaterThan(0);
+	});
+
+	it('the Studio prices the writing it pays for, on every tile (audit UX-001)', () => {
+		// The audit's lead finding: the Studio labelled 'Text card' Free while
+		// /billing said eight cents and the docs said every format spends. Both
+		// the display string and the number the composer and Campaign Planner
+		// actually sum must carry the writing — the planner quoted a month of text
+		// posts at exactly $0 because PIPELINE_USD['Text card'] was 0.
+		const textPostUsd = 2 * priceOf('openrouter', 'llm');
+		expect(WRITING_USD).toBeCloseTo(textPostUsd, 6);
+		for (const [pipeline, usd] of Object.entries(PIPELINE_USD)) {
+			expect(usd, `${pipeline} prices below its own writing`).toBeGreaterThanOrEqual(WRITING_USD);
+		}
+		for (const [pipeline, meta] of Object.entries(PIPELINE_META)) {
+			expect(meta.usd, `${pipeline} tile says Free`).not.toMatch(/free/i);
+		}
+		const studio = read('routes', '(portal)', 'personas', '[agentId]', '+page.svelte');
+		expect(studio).not.toContain("'No media cost'");
 	});
 
 	it('no surface claims text posts are free', () => {
