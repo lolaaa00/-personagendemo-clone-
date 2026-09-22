@@ -683,11 +683,36 @@
 							/><line x1="12" y1="10" x2="12" y2="16" /><line x1="9" y1="13" x2="15" y2="13" /></svg
 						>
 					</button>
+					<!-- New persona lives in this header row in the expanded rail: as its
+					     own full-width row it cost 36px of the space the persona list needs
+					     on a laptop screen. The collapsed icon rail keeps the full item. -->
+					<a
+						href="/generator"
+						class="sidebar-projects-btn sidebar-new-btn"
+						class:active={isActive('/generator', $page.url.pathname)}
+						aria-current={isActive('/generator', $page.url.pathname) ? 'page' : undefined}
+						onclick={closeSidebar}
+						aria-label="New persona"
+						title="New persona"
+					>
+						<svg
+							aria-hidden="true"
+							width="13"
+							height="13"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2.5"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg
+						>
+					</a>
 				</div>
 			{:else}
 				<div class="sidebar-section-divider"></div>
 			{/if}
-			{#if !sidebarState.collapsed && sidebarAgents.length > 4}
+			{#if !sidebarState.collapsed && sidebarAgents.length > 8}
 				<div class="sidebar-persona-search">
 					<svg
 						aria-hidden="true"
@@ -711,6 +736,7 @@
 					/>
 				</div>
 			{/if}
+			{#if sidebarState.collapsed}
 			<a
 				href="/generator"
 				class="sidebar-nav-item sidebar-new-persona"
@@ -738,6 +764,7 @@
 					<span class="sidebar-nav-label">New Persona</span>
 				{/if}
 			</a>
+			{/if}
 			{#snippet personaItem(agent: any)}
 				<a
 					href="/personas/{agent.id}"
@@ -1477,14 +1504,20 @@
 		flex-direction: column;
 		gap: 2px;
 		flex: 1 1 auto;
-		min-height: 0;
+		/* A FLOOR, and overflow hidden. With min-height 0 the block was squeezed to
+		   42px at 1440x900 and its rows spilled out underneath the account footer
+		   (measured: rows box top 832px, footer top 811px) — "0 persona rows
+		   visible" again. Nine rem holds the header plus about three rows; below
+		   that the whole rail scrolls rather than this block collapsing. */
+		min-height: 9rem;
+		overflow: hidden;
 	}
 	.sidebar-persona-rows {
 		display: flex;
 		flex-direction: column;
 		gap: 2px;
 		flex: 1 1 auto;
-		min-height: 7.5rem;
+		min-height: 0;
 		overflow-y: auto;
 		overflow-x: hidden;
 		overscroll-behavior: contain;
@@ -1497,12 +1530,34 @@
 	   touch drawer keeps its full 44px targets. */
 	@media (pointer: fine) and (min-width: 769px) {
 		.sidebar-nav .sidebar-nav-item {
-			min-height: 36px;
-			padding-top: 6px;
-			padding-bottom: 6px;
+			min-height: 32px;
+			padding-top: 5px;
+			padding-bottom: 5px;
+		}
+		/* 33px per label x4 was 132px of the rail spent on four words. */
+		.sidebar-nav .sidebar-section-label {
+			padding-top: var(--space-2);
+			padding-bottom: 2px;
+		}
+		.sidebar-nav .sidebar-group-head {
+			min-height: 28px;
+			padding-top: 3px;
+			padding-bottom: 3px;
+		}
+	}
+	/* On a laptop-height screen the non-persona rail alone measured 557 of the
+	   599px available at 1440x900. Tightening the rail a step further on short
+	   screens (30px targets — WCAG 2.5.8 asks for 24) leaves room for every
+	   destination AND about three persona rows without scrolling. */
+	@media (pointer: fine) and (min-width: 769px) and (max-height: 1000px) {
+		.sidebar-nav .sidebar-nav-item {
+			min-height: 30px;
+			padding-top: 4px;
+			padding-bottom: 4px;
 		}
 		.sidebar-nav .sidebar-section-label {
-			padding-top: var(--space-3);
+			padding-top: var(--space-2);
+			padding-bottom: 2px;
 		}
 	}
 
