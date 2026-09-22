@@ -66,6 +66,13 @@ export function installLifecycle(): void {
 	};
 	process.on('SIGTERM', handler);
 	process.on('SIGINT', handler);
+	// A stray rejected promise must not take the server down. Node's default
+	// is to exit on one — for a web server that drops every in-flight request
+	// of every user because one background promise (an auth refresh settling
+	// after its response, say) had no catch. Log it loudly and keep serving.
+	process.on('unhandledRejection', (reason) => {
+		console.error('[lifecycle] unhandled promise rejection (server kept running):', reason);
+	});
 }
 
 /** Test-only: forget every registered flusher. */

@@ -603,7 +603,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-22", hash: "74e628d", type: "fix", category: "fix", scope: "sidebar", title: "the persona list shows rows at laptop heights" },
 	{ date: "2026-09-22", hash: "01104cd", type: "fix", category: "fix", scope: "audit", title: "round 3 — every finding the round-2 critics raised" },
 	{ date: "2026-09-22", hash: "52babe0", type: "fix", category: "fix", scope: "admin", title: "close a customer request by id, checking its prefix in code" },
-	{ date: "2026-09-22", hash: "328e9c0", type: "fix", category: "fix", scope: "support", title: "de-duplicate problem reports against open ones only" }
+	{ date: "2026-09-22", hash: "328e9c0", type: "fix", category: "fix", scope: "support", title: "de-duplicate problem reports against open ones only" },
+	{ date: "2026-09-22", hash: "a9ebcf3", type: "fix", category: "publishing", scope: "accounts", title: "the connection check only pauses a persona that lost its accounts" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -1033,12 +1034,12 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 	},
 	{
 		id: "01104cd", from: "2026-09-22", to: "2026-09-22",
-		category: "fix", categories: ["fix"],
+		category: "fix", categories: ["fix","publishing"],
 		title: "Fixed: round 3 — every finding the round-2 critics raised",
-		summary: "Round 3 — every finding the round-2 critics raised. Plus 2 more changes.",
+		summary: "Round 3 — every finding the round-2 critics raised. Plus 3 more changes, touching getting posts onto your accounts.",
 		major: false, curated: false,
-		entries: [CHANGELOG[567], CHANGELOG[568], CHANGELOG[569]]
+		entries: [CHANGELOG[567], CHANGELOG[568], CHANGELOG[569], CHANGELOG[570]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "328e9c0";
+export const CHANGELOG_GENERATED_FROM = "a9ebcf3";
