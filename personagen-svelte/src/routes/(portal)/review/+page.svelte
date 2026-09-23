@@ -2624,9 +2624,19 @@
 		   select was 257px in a 256px strip and could never fully clear it. */
 		.filt {
 			max-width: calc(100% - 28px);
+			min-width: 0;
 		}
 		.filt select {
+			/* An explicit width: Firefox will not shrink a select below its
+			   content on max-width alone. */
+			width: 100%;
 			max-width: 100%;
+		}
+		/* A real flex item as the end spacer: Firefox ignores a scroll
+		   container's end padding, so the last select could not clear the fade. */
+		.filter-bar::after {
+			content: '';
+			flex: 0 0 28px;
 		}
 	}
 	@media (max-width: 767px) {
