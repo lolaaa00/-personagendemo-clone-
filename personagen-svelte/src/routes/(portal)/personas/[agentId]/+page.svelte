@@ -2828,6 +2828,9 @@
 				if (ctl?.disabled && !lab.hasAttribute('aria-disabled')) {
 					lab.setAttribute('aria-disabled', 'true');
 					lab.setAttribute('data-seat-disabled', '');
+					lab.setAttribute('tabindex', '-1');
+					// A file-picker label is a write control with no read-only form: hide it.
+					if (ctl.type === 'file') lab.hidden = true;
 				}
 			}
 		};
