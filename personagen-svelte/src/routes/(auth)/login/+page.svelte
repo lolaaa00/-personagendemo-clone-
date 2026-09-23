@@ -700,6 +700,10 @@
 		font-weight: 600;
 		text-decoration: underline;
 		text-underline-offset: 2px;
+		/* A 24px target (WCAG 2.5.8) without moving the line it sits in. */
+		display: inline-block;
+		padding: 0.3rem 0;
+		margin: -0.3rem 0;
 	}
 	.login-link-failed {
 		margin: var(--space-3) 0 0;

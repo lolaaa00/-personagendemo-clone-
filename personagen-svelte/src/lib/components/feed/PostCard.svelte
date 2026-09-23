@@ -85,7 +85,9 @@
 	// PUBLISH (e.g. no connected account). Keep the thumbnail and tag it "failed
 	// to post"; reserve the blank "Generation failed" card for rows that truly
 	// produced no media.
-	let isPublishFail = $derived(isFailed && Boolean(display.mediaUrl));
+	// A partly published post has media too, and the same way forward: send it to
+	// the platforms that missed (round-5 re-audit).
+	let isPublishFail = $derived((isFailed || post.status === 'partial') && Boolean(display.mediaUrl));
 	let isGenFail = $derived(isFailed && !display.mediaUrl);
 	let postErrorLabel = $derived(getPostErrorSummary(post));
 
@@ -442,7 +444,7 @@
 						d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"
 					/><path d="M12 9v4" /><path d="M12 17h.01" /></svg
 				>
-				Failed to post{postErrorLabel ? ` — ${postErrorLabel.split('\n')[0]}` : ''}
+				{post.status === 'partial' ? 'Partly published' : 'Failed to post'}{postErrorLabel ? ` — ${postErrorLabel.split('\n')[0]}` : ''}
 			</span>
 			{#if onPublishFallback}
 				<button

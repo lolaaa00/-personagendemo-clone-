@@ -82,18 +82,49 @@ export function quoteStepsRaw(stepsUsd: readonly number[]): number {
 }
 
 /**
- * The headline for a multi-step run. The CREDITS are quoteStepsRaw (per-step
- * ceilings, as the ledger debits); the MONEY shown is the sum of each stage's
- * price as it is displayed — rounded to cents in the viewer's currency per
- * stage — so the stages on screen always add up to the total beside them.
- * Converting the credit total in one go printed ₱157.25 under stages that
- * summed to ₱157.27 (round-4 re-audit). USD needs no such care: a credit IS
- * a cent there, and the two paths agree.
+ * The headline for a multi-step run: the CREDITS the ledger will debit
+ * (per-step ceilings, quoteStepsRaw) converted ONCE into the viewer's
+ * currency — so the quote is the debit's value to the cent, and the same
+ * figure the landing page, Billing and the tiles print for that run.
+ *
+ * History: round 4 summed each stage's rounded price instead, so the stages
+ * on screen added up — and the composer then quoted ₱157.27 for a 251-credit
+ * debit worth ₱157.25, and a text post read ₱5.02 beside Billing's ₱5.01
+ * (round-5 re-audit). The stage lines now come from quoteStepsLines(), which
+ * allocates THIS total across the stages so they still add up exactly.
  */
 export function quoteSteps(stepsUsd: readonly number[], opts?: FormatOptions): string {
-	const shown = stepsUsd.reduce((sum, usd) => {
-		const amount = creditsToAmount(quoteCredits(usd, ctx), ctx.currency, ctx.fx);
-		return sum + Math.round(amount * 100) / 100;
-	}, 0);
-	return formatMoney(shown, ctx.currency, ctx.locale, opts ?? { whole: false });
+	return formatMoney(quoteStepsAmount(stepsUsd), ctx.currency, ctx.locale, opts ?? { whole: false });
+}
+
+/** The run's total in the viewer's currency (unrounded). */
+export function quoteStepsAmount(stepsUsd: readonly number[]): number {
+	return creditsToAmount(quoteStepsRaw(stepsUsd), ctx.currency, ctx.fx);
+}
+
+/**
+ * One price per stage that ADD UP to quoteSteps() exactly: the total's minor
+ * units are shared out in proportion to each stage's credits, remainders to
+ * the largest fractions first (the way an invoice splits tax). Rounding each
+ * stage on its own drifted from the total by a cent or two in PHP and GBP.
+ */
+export function quoteStepsLines(stepsUsd: readonly number[], opts?: FormatOptions): string[] {
+	const credits = stepsUsd.map((usd) => quoteCredits(usd, ctx));
+	const totalCredits = credits.reduce((a, b) => a + b, 0);
+	const totalMinor = Math.round(creditsToAmount(totalCredits, ctx.currency, ctx.fx) * 100);
+	if (totalCredits <= 0 || totalMinor <= 0) {
+		return credits.map(() => formatMoney(0, ctx.currency, ctx.locale, opts ?? { whole: false }));
+	}
+	const exact = credits.map((c) => (totalMinor * c) / totalCredits);
+	const floors = exact.map((x) => Math.floor(x));
+	let left = totalMinor - floors.reduce((a, b) => a + b, 0);
+	const order = exact
+		.map((x, i) => ({ i, frac: x - Math.floor(x) }))
+		.sort((a, b) => b.frac - a.frac || a.i - b.i);
+	for (const { i } of order) {
+		if (left <= 0) break;
+		floors[i] += 1;
+		left -= 1;
+	}
+	return floors.map((minor) => formatMoney(minor / 100, ctx.currency, ctx.locale, opts ?? { whole: false }));
 }

@@ -110,7 +110,9 @@
 			if (!res.ok || !body.success) throw new Error(body.error || `HTTP ${res.status}`);
 			await loadControls();
 			await tick();
-			document.querySelector<HTMLElement>('.admin-card h2, main h1')?.focus();
+			// The first `.admin-card h2` is "Workspaces", which has no tabindex, so
+			// the focus call did nothing (round-5 re-audit). This heading is focusable.
+			document.querySelector<HTMLElement>('#admin-controls-title, main h1')?.focus();
 		} catch (e) {
 			controlsError = (e as Error).message;
 		} finally {
@@ -581,7 +583,7 @@
 			<div class="platform-head">
 				<div>
 					<!-- Focusable: closeRequest() lands here after a request is handled. -->
-					<h2 tabindex="-1">Platform controls</h2>
+					<h2 id="admin-controls-title" tabindex="-1">Platform controls</h2>
 					<p class="admin-hint">
 						These switches live in the database and take effect on every server within 15 seconds — no
 						environment change, no redeploy. An environment variable of the same name, if set on the host,

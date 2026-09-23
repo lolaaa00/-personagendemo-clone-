@@ -296,7 +296,7 @@
 		{
 			provider: 'zernio',
 			label: 'Zernio',
-			description: 'Publishing, connections, and analytics for all 13 platforms. Billed per connected account (2 free).',
+			description: 'Publishing, connections, and analytics for all 13 platforms. Zernio bills your own Zernio account per connected account (2 free).',
 			placeholder: 'Paste your Zernio API key',
 			category: 'publishing',
 			mark: 'Z',

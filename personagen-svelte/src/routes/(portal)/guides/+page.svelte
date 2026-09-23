@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { goto, afterNavigate } from '$app/navigation';
 	import { onMount, tick } from 'svelte';
 	import { syncParam } from '$lib/url-state';
 	import {
@@ -168,7 +169,7 @@
 				},
 				{ t: 'Draft — generated and waiting for you. Nothing has been published and nothing goes out until you approve it in the Review Queue.' },
 				{ t: 'Scheduled — approved, with a date and time. It publishes itself when that moment arrives; you can still move or cancel it from the Calendar.' },
-				{ t: 'Published — live on every account it was aimed at. Partial — live on some of them and failed on the rest, usually because one account needs re-linking; open the post to see which platform missed.' }
+				{ t: 'Published — live on every account it was aimed at. Partly published — live on some of them and failed on the rest, usually because one account needs re-linking; open the post to see which platform missed.' }
 			],
 			tip: 'The two you’ll be asked about most: spokesperson if you want the persona to say something, b-roll if you want the product to show something.'
 		},
@@ -547,7 +548,7 @@
 			],
 			steps: [
 				{
-					t: 'Open the persona’s page → Studio tab. Thirteen ready-made templates — This Saved Me, Before & After, Unboxing Reveal, TV Spot, and more — filtered by UGC / Product / Cinematic / Stills.',
+					t: 'Open the persona’s page → Studio tab. Dozens of ready-made templates — This Saved Me, Before & After, Unboxing Reveal, TV Spot, and more — on the Text, Photo, Video and Cinematic shelves, each priced before you click.',
 					img: 'studio',
 					alt: 'The Studio template gallery'
 				},
@@ -637,7 +638,7 @@
 					img: 'connections',
 					alt: 'The Connections view of a persona'
 				},
-				{ t: 'Click + Connect on the platform (Instagram, TikTok, YouTube… 15 supported) and log in to the account in the window that opens — a normal social-media login, nothing technical.' },
+				{ t: 'Click + Connect on the platform (Instagram, TikTok, YouTube… 13 supported) and log in to the account in the window that opens — a normal social-media login, nothing technical.' },
 				{ t: 'A green badge appears with the handle, follower count, and last sync. From now on, this persona’s approved posts publish there automatically.' },
 				{ t: 'If a platform ever needs re-linking (password change, expired session), a Reconnect badge appears here — one click fixes it.' }
 			],
@@ -915,7 +916,7 @@
 				{ t: 'Most common: the account needs re-linking. Persona’s Profile → Connections (a Manager seat or above) — reconnect the account there.' },
 				{ t: 'Then open the post and use “Publish to a connected platform” to send it again to the platforms that failed. Posts that failed for a temporary reason (network hiccup) retry themselves automatically.' }
 			],
-			tip: 'A Partial label on a multi-platform post means some platforms succeeded — only the listed ones failed.'
+			tip: 'A “Partly published” label on a multi-platform post means some platforms succeeded — only the listed ones failed, and “Publish to a connected platform” sends it only to those.'
 		},
 		{
 			id: 'status-glossary',
@@ -935,7 +936,7 @@
 				{ t: 'Scheduled — approved; goes out at its time slot. Nothing to do, or reschedule it.' },
 				{ t: 'Publishing… — sent; waiting for the platform to confirm. Flips within minutes.' },
 				{ t: 'Published — confirmed live; View live post opens the real thing.' },
-				{ t: 'Partial — landed on some platforms, not others; open it to see each reason.' },
+				{ t: 'Partly published — landed on some platforms, not others; open it to see each reason.' },
 				{ t: 'Failed — didn’t go out; the post shows exactly why. Fix that, then retry.' },
 				{ t: 'Rejected — you said no in review; a new draft replaces it.' }
 			],
@@ -998,6 +999,39 @@
 		document.getElementById('guide-article')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
 	}
 
+	/**
+	 * Put the guide's title just under whatever sticky bar covers the top of the
+	 * scroller — measured, not assumed. scrollIntoView + scroll-margin landed
+	 * 149–987px past the title in Firefox and WebKit (the sticky docs header
+	 * only becomes sticky after the first scroll) and under the top bar on
+	 * phones (round-5 re-audit). Called several times as the page settles.
+	 */
+	function landOnArticle() {
+		const art = document.getElementById('guide-article');
+		if (!art) return;
+		const scroller = art.closest<HTMLElement>('.portal-content');
+		const edge = scroller ? scroller.getBoundingClientRect().top : 0;
+		let cover = edge;
+		for (const el of document.querySelectorAll<HTMLElement>('header, .gd-top, .portal-header, [class*="topbar"]')) {
+			const pos = getComputedStyle(el).position;
+			if (pos !== 'sticky' && pos !== 'fixed') continue;
+			const r = el.getBoundingClientRect();
+			if (r.height > 0 && r.top <= edge + 2 && r.bottom > cover) cover = r.bottom;
+		}
+		const delta = art.getBoundingClientRect().top - cover - 16;
+		if (Math.abs(delta) < 2) return;
+		if (scroller) scroller.scrollTop += delta;
+		else window.scrollBy(0, delta);
+	}
+	function landSoon() {
+		void tick().then(landOnArticle);
+		requestAnimationFrame(() => requestAnimationFrame(landOnArticle));
+		document.fonts?.ready.then(landOnArticle).catch(() => {});
+		setTimeout(landOnArticle, 150);
+		setTimeout(landOnArticle, 450);
+		setTimeout(landOnArticle, 900);
+	}
+
 	function pick(id: string) {
 		selectedId = id;
 		// Navigating to a guide re-reveals its category even if it was explicitly
@@ -1008,10 +1042,20 @@
 			const { [cat]: _drop, ...rest } = expandedCats;
 			expandedCats = rest;
 		}
-		// Deep-linkable: support /guides#openrouter-key style links for support.
-		history.replaceState(null, '', `#${id}`);
-		document.getElementById('guide-article')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+		// Deep-linkable, and a real history entry: Back after "Next" returns to
+		// the previous guide instead of leaving /guides (round-5 re-audit).
+		void goto(`#${id}`, { noScroll: true, keepFocus: true });
+		landSoon();
 	}
+	// The URL's hash is the source of truth for which guide shows: Back,
+	// Forward and a hand-edited hash all switch the article.
+	afterNavigate(() => {
+		const hash = location.hash.replace('#', '');
+		if (hash && GUIDES.some((g) => g.id === hash) && selectedId !== hash) {
+			selectedId = hash;
+			landSoon();
+		}
+	});
 
 	// ── Nav nesting ──────────────────────────────────────────────────────────
 	// Categories are CLOSED by default: every group open at once turned the index
@@ -1071,11 +1115,7 @@
 			// Once is not enough: desktop Firefox lands 343–673px past the title
 			// (the page above the article settles after the first scroll — round-4
 			// re-audit). Re-land after paint, after fonts, and after a short settle.
-			const land = () => document.getElementById('guide-article')?.scrollIntoView({ block: 'start' });
-			void tick().then(land);
-			requestAnimationFrame(() => requestAnimationFrame(land));
-			document.fonts?.ready.then(land).catch(() => {});
-			setTimeout(land, 400);
+			landSoon();
 		}
 	});
 

@@ -16,10 +16,13 @@
 			 */
 			try {
 				var tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-				if (tz && !/(?:^|; )tz=/.test(document.cookie) && !sessionStorage.getItem('tz-reload')) {
-					sessionStorage.setItem('tz-reload', '1');
+				var m = /(?:^|; )tz=([^;]*)/.exec(document.cookie);
+				// Missing OR stale (a laptop that flew: the cookie said New York, the
+				// clock says Manila — round-5 re-audit). One reload per zone, ever.
+				if (tz && (!m || decodeURIComponent(m[1]) !== tz) && sessionStorage.getItem('tz-reload') !== tz) {
+					sessionStorage.setItem('tz-reload', tz);
 					document.cookie = 'tz=' + tz + '; path=/; max-age=31536000; samesite=lax';
-					if (/(?:^|; )tz=/.test(document.cookie)) location.replace(location.href);
+					if (new RegExp('(?:^|; )tz=' + tz.replace(/[/+]/g, '\\$&')).test(document.cookie)) location.replace(location.href);
 				}
 			} catch (e) {
 				/* no Intl zone or storage — the server keeps its default */

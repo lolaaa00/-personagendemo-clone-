@@ -57,7 +57,7 @@
 		type StepKind,
 		type StepModel
 	} from '$lib/formats';
-	import { quote, quoteSteps, pricingContext } from '$lib/stores/pricing.svelte';
+	import { quote, quoteSteps, pricingContext, quoteStepsLines } from '$lib/stores/pricing.svelte';
 	import {
 		parseQuotes,
 		quoteProblem,
@@ -397,6 +397,8 @@
 		// so it reads as a ceiling, not a price.
 		(isPostKind && formatId === 'auto' ? 'up to ' : '') + quoteSteps(activePlan.map((s) => s.usd))
 	);
+	/** One line per stage, allocated from planPrice so they add up to it exactly. */
+	let planLines = $derived(quoteStepsLines(activePlan.map((s) => (s.supplied ? 0 : s.usd))));
 	/**
 	 * A format whose run is a transformation OF something has nothing to
 	 * transform until that something is here. Blocking the submit is the whole
@@ -1793,7 +1795,7 @@
 						</div>
 
 						<div class="stack">
-							{#each activePlan as s (s.kind)}
+							{#each activePlan as s, i (s.kind)}
 								{@const options = planOptions[s.kind] ?? []}
 								<div class="stepcard" class:supplied={s.supplied}>
 									<div class="sc-top">
@@ -1809,7 +1811,7 @@
 											<span class="sc-purpose">{s.purpose}</span>
 										</div>
 										<span class="sc-price">
-											<strong>{s.supplied ? money(0) : money(s.usd)}</strong>
+											<strong>{s.supplied ? money(0) : (planLines[i] ?? money(s.usd))}</strong>
 										</span>
 									</div>
 									<div class="sc-ctl">

@@ -3,7 +3,7 @@ import { creditMarkup } from '$lib/server/flags';
 import { getServiceSupabase } from '$lib/server/service-supabase';
 import { outcomeStepsUsd, type PostOutcome } from '$lib/server/outcome-prices';
 import { retailCreditsFor, retailCreditsForStep } from '$lib/billing-packs';
-import { formatCredits, resolveDisplayCurrency, localeFromAcceptLanguage, type FxRates } from '$lib/money';
+import { formatCredits, formatMoney, creditsToAmount, resolveDisplayCurrency, localeFromAcceptLanguage, type FxRates } from '$lib/money';
 import { getSettings } from '$lib/server/settings';
 import { priceOf } from '$lib/pricing';
 
@@ -57,7 +57,14 @@ export const load: PageServerLoad = async ({ request }) => {
 		receipt: {
 			credits,
 			text: usd(credits.textPost),
-			sixText: usd(6 * credits.textPost),
+			// The printed text price × 6 — "£0.06 … six times a day £0.35" did not
+			// multiply on the page (round-5 re-audit); rounding first gives £0.36.
+			sixText: formatMoney(
+				(Math.round(creditsToAmount(credits.textPost, currency, fx) * 100) / 100) * 6,
+				currency,
+				locale,
+				{ whole: false }
+			),
 			image: usd(credits.imagePost),
 			video: usd(credits.videoPost),
 			talkingHead: usd(credits.talkingHead)

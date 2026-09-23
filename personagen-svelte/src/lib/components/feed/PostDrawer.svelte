@@ -541,7 +541,7 @@
 	});
 	// A failed post that still has media only failed to PUBLISH — it can be re-sent.
 	let canRepublish = $derived(
-		Boolean(onPublishFallback && post && post.status === 'failed' && display?.mediaUrl)
+		Boolean(onPublishFallback && post && (post.status === 'failed' || post.status === 'partial') && display?.mediaUrl)
 	);
 	// Draft/scheduled posts can be published immediately, overriding the schedule.
 	let canPostNow = $derived(

@@ -14,9 +14,9 @@
 	// Money on this screen is what the customer pays, not what the provider
 	// charges us: quote() applies the live markup and renders in the viewer's
 	// own currency, the same numbers the sidebar wallet pill shows.
-	import { quote, quoteSteps, quoteStepsRaw, pricingContext } from '$lib/stores/pricing.svelte';
+	import { quote, quoteSteps, quoteStepsAmount, pricingContext } from '$lib/stores/pricing.svelte';
 	import { planPipeline } from '$lib/formats';
-	import { formatMoney, creditsToAmount } from '$lib/money';
+	import { formatMoney } from '$lib/money';
 	import { countLabel, plural } from '$lib/plural';
 	import PostCard from '$lib/components/feed/PostCard.svelte';
 	import PostDrawer from '$lib/components/feed/PostDrawer.svelte';
@@ -955,7 +955,9 @@
 		// Multiply the per-draft price AS SHOWN (rounded to cents in the viewer's
 		// currency): converting the credit total separately printed
 		// 21 × ₱227.42 as ₱4,775.81 (re-audit).
-		const unit = Math.round(creditsToAmount(quoteStepsRaw(draftUnitSteps), ctx.currency, ctx.fx) * 100) / 100;
+		// The SAME figure "Each costs up to" prints (quoteSteps → one conversion
+		// from credits), rounded to cents, times the count.
+		const unit = Math.round(quoteStepsAmount(draftUnitSteps) * 100) / 100;
 		return formatMoney(unit * draftCountMax, ctx.currency, ctx.locale, { whole: false });
 	});
 	$effect(() => {
@@ -2796,11 +2798,14 @@
 		}
 	}
 
+	/** Platforms the post is already live on — shown, never selectable. */
+	let publishFallbackLive = $state<string[]>([]);
 	async function openPublishFallback(post: any) {
 		if (!agent?.id) return;
 		publishFallbackPost = post;
 		publishFallbackOptions = [];
 		publishFallbackSelected = [];
+		publishFallbackLive = [];
 		publishFallbackLoading = true;
 		try {
 			const res = await fetch(
@@ -2808,8 +2813,14 @@
 			);
 			const d = await res.json().catch(() => ({}));
 			if (!res.ok || !d.success) throw new Error(d.error || 'Could not load connections');
-			publishFallbackOptions = d.connectedPlatforms ?? [];
-			publishFallbackSelected = [...publishFallbackOptions]; // default: all compatible connected
+			publishFallbackLive = (d.alreadyLive ?? []).map((p: string) => String(p).toLowerCase());
+			publishFallbackOptions = (d.connectedPlatforms ?? []).filter(
+				(p: string) => !publishFallbackLive.includes(String(p).toLowerCase())
+			);
+			// Default: every compatible connected platform it is NOT live on. The
+			// first version selected every connected platform — Instagram included
+			// on a post already live there (round-5 re-audit, High).
+			publishFallbackSelected = [...publishFallbackOptions];
 		} catch (e) {
 			showToast((e as Error).message, 'error');
 			publishFallbackPost = null;
@@ -2826,6 +2837,7 @@
 
 	async function confirmPublishFallback() {
 		if (!agent?.id || !publishFallbackPost || publishFallbackPublishing) return;
+		publishFallbackSelected = publishFallbackSelected.filter((p) => !publishFallbackLive.includes(p));
 		if (publishFallbackSelected.length === 0) {
 			showToast('Pick at least one platform', 'error');
 			return;
@@ -2851,6 +2863,10 @@
 
 	function requestGenerateAvatar() {
 		if (!agent?.id || generatingAvatar) return;
+		if (!seatCanGenerate) {
+			showToast(seatRetryReason, 'error');
+			return;
+		}
 		askToGenerate(
 			{
 				endpoint: `/api/agent/${agent.id}/generate-avatar`,
@@ -6439,7 +6455,7 @@
 								<p>
 									{seat.canManageConnections
 										? 'No platforms connected. Use the buttons above to link your first account.'
-										: `No platforms connected. ${seatBlockedReason(seat, 'manager')}`}
+										: 'No platforms connected.'}
 								</p>
 							</div>
 						{:else}
@@ -7394,8 +7410,14 @@
 					<div>
 						<h3>Publish to a connected platform</h3>
 						<p>
-							This post's media is ready — only publishing failed. Pick where to send it. Only
-							connected, compatible platforms are shown, and nothing auto-retries.
+							{#if publishFallbackLive.length}
+								This post is already live on {publishFallbackLive.map((p) => platformLabel(p)).join(', ')}
+								— it will not be sent there again. Pick where else to send it. Only connected,
+								compatible platforms are shown, and nothing auto-retries.
+							{:else}
+								This post's media is ready — only publishing failed. Pick where to send it. Only
+								connected, compatible platforms are shown, and nothing auto-retries.
+							{/if}
 						</p>
 					</div>
 					<button
@@ -7446,13 +7468,16 @@
 					</div>
 				{:else}
 					<div class="pubfb-chips">
+						{#each publishFallbackLive as p (p)}
+							<span class="pubfb-chip pubfb-live" aria-disabled="true">{platformLabel(p)} — already live</span>
+						{/each}
 						{#each publishFallbackOptions as p}
 							<button
 								type="button"
 								class="pubfb-chip"
 								class:on={publishFallbackSelected.includes(p)}
 								aria-pressed={publishFallbackSelected.includes(p)}
-								onclick={() => togglePublishFallback(p)}>{p}</button
+								onclick={() => togglePublishFallback(p)}>{platformLabel(p)}</button
 							>
 						{/each}
 					</div>
@@ -7637,6 +7662,14 @@
 	.pubfb-actions {
 		display: flex;
 		justify-content: flex-end;
+		/* Inside the dialog's rounded, overflow-hidden corner — the button sat
+		   1px from the edge and its corner was clipped (round-5 re-audit). */
+		padding: 0 var(--space-4) var(--space-4);
+	}
+	.pubfb-chip.pubfb-live {
+		cursor: default;
+		color: var(--text-muted);
+		border-style: dashed;
 	}
 	.btn-primary-cta {
 		background: var(--gradient-cta);

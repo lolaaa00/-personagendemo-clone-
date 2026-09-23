@@ -69,12 +69,32 @@ async function connectedCompatible(locals: any, agentId: string, post: any): Pro
 	return [...new Set<string>(platforms)];
 }
 
+/**
+ * Platforms this post is ALREADY LIVE on (publication_results[platform].status
+ * === 'published', the marker the scheduler itself writes and honours). A
+ * partly-published post must never be sent to these again: Instagram cannot
+ * be deleted through the API, so a double post is permanent (round-5 re-audit
+ * caught the picker preselecting exactly that).
+ */
+function livePlatforms(post: any): string[] {
+	const results = post?.publication_results;
+	if (!results || typeof results !== 'object') return [];
+	return Object.entries(results as Record<string, any>)
+		.filter(([k, v]) => !k.startsWith('_') && v && typeof v === 'object' && v.status === 'published')
+		.map(([k]) => k.toLowerCase());
+}
+
 export const GET: RequestHandler = async ({ params, url, locals }) => {
 	const postId = url.searchParams.get('postId') ?? '';
 	const ctx = await ownedAgentAndPost(locals, params.agentId, postId);
 	if (ctx.err) return ctx.err;
 	const connectedPlatforms = await connectedCompatible(locals, params.agentId!, ctx.post);
-	return json({ success: true, connectedPlatforms, mediaType: mediaTypeOf(ctx.post) });
+	return json({
+		success: true,
+		connectedPlatforms,
+		alreadyLive: livePlatforms(ctx.post),
+		mediaType: mediaTypeOf(ctx.post)
+	});
 };
 
 export const POST: RequestHandler = async ({ params, request, locals }) => {
@@ -114,6 +134,19 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		platforms = own.length ? own : allowed;
 	}
 
+	// Never to a platform it is already live on — whatever the client asked.
+	const live = livePlatforms(ctx.post);
+	platforms = platforms.filter((p: string) => !live.includes(p));
+	if (platforms.length === 0 && live.length > 0) {
+		return json(
+			{
+				success: false,
+				error: `This post is already live on ${live.join(', ')} — there is nothing left to send it to.`
+			},
+			{ status: 400 }
+		);
+	}
+
 	if (platforms.length === 0) {
 		return json(
 			{
@@ -129,13 +162,22 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		);
 	}
 
-	// Re-target and re-arm the post, then publish now. Clear the stale
-	// publication_results so the old failure (e.g. youtube) doesn't linger.
+	// Re-target and re-arm the post, then publish now. Stale FAILURES are
+	// dropped so the old error doesn't linger; records of platforms it is live
+	// on are KEPT (the scheduler skips those, and the "View live post" link
+	// comes from them). Nulling everything lost the first post's record
+	// (round-5 re-audit).
+	const prevResults = (ctx.post.publication_results ?? {}) as Record<string, any>;
+	const keptResults: Record<string, any> = {};
+	for (const [k, v] of Object.entries(prevResults)) {
+		if (k.startsWith('_')) continue;
+		if (v && typeof v === 'object' && v.status === 'published') keptResults[k] = v;
+	}
 	const now = new Date();
 	const { error: updErr } = await ctx.db.posts.update(postId, {
-		platforms,
+		platforms: [...new Set([...live, ...platforms])],
 		status: 'scheduled',
-		publication_results: null,
+		publication_results: keptResults,
 		scheduled_date: now.toISOString().split('T')[0],
 		scheduled_time: now.toTimeString().split(' ')[0]
 	} as any);

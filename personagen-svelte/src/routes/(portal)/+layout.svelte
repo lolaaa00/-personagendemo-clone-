@@ -27,7 +27,16 @@
 	// Every screen that quotes a generation reads this — primed from the same
 	// server data the wallet pill uses, so a quote and the wallet can't disagree.
 	$effect.pre(() => {
-		primePricing((data as any)?.pricing);
+		// In the browser the zone is the browser's, whatever the cookie said at
+		// render time: a stale cookie otherwise kept every in-app navigation in
+		// the old zone until a hard reload (round-5 re-audit).
+		let browserZone: string | undefined;
+		try {
+			browserZone = Intl.DateTimeFormat().resolvedOptions().timeZone || undefined;
+		} catch {
+			browserZone = undefined;
+		}
+		primePricing({ ...((data as any)?.pricing ?? {}), ...(browserZone ? { timeZone: browserZone } : {}) });
 	});
 	// …and on the SERVER, where effects never run. Primed only in the browser,
 	// every price rendered before hydration was the provider's cost in USD: a

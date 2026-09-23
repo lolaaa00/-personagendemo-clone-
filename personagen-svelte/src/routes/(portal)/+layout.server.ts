@@ -257,6 +257,11 @@ export const load: LayoutServerLoad = async ({ locals, request, url, depends, co
 						const amt = creditsToAmount(balance, currency, s.fx_rates);
 						const big = Math.abs(amt) >= 1000;
 						const tiny = Math.abs(amt) < 1;
+						// Compact figures truncate to two significant digits BEFORE Intl
+						// rounds: ₹3,779.60 read "₹3.8K" — more than the wallet held
+						// (round-5 re-audit). Now "₹3.7K".
+						const unit = big ? Math.pow(10, Math.floor(Math.log10(Math.abs(amt))) - 1) : 1;
+						const shown = big ? Math.trunc(amt / unit) * unit : tiny ? amt : Math.trunc(amt);
 						return new Intl.NumberFormat(locale, {
 							style: 'currency',
 							currency,
@@ -265,7 +270,7 @@ export const load: LayoutServerLoad = async ({ locals, request, url, depends, co
 								: tiny
 									? { maximumFractionDigits: 2 }
 									: { maximumFractionDigits: 0 })
-						}).format(big || tiny ? amt : Math.trunc(amt));
+						}).format(shown);
 					} catch {
 						return formatCredits(balance, currency, s.fx_rates, locale);
 					}

@@ -14,7 +14,7 @@ const STATUS_BADGE: Record<string, string> = {
 	published: 'Live',
 	publishing: 'Publishing',
 	scheduled: 'Scheduled',
-	partial: 'Partly live',
+	partial: 'Partly published',
 	failed: 'Failed',
 	generating: 'Generating',
 	draft: 'Draft',

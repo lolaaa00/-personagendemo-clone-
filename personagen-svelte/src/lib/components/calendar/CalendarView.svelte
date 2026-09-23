@@ -681,7 +681,11 @@
 										class="cell-add"
 										onclick={() => onGenerateForDate(cell.dateStr)}
 										title="Generate a post for this day"
-										aria-label="Generate a post for {cell.dateStr}"
+										aria-label="Generate a post for {localDate(new Date(currentYear, currentMonth, cell.day ?? 1), {
+											weekday: 'long',
+											day: 'numeric',
+											month: 'long'
+										})}"
 									>{@render iconPlus()}</button>
 								{/if}
 							</div>
