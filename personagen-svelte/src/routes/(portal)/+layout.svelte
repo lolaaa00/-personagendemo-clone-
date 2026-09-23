@@ -2149,7 +2149,9 @@
 		width: 28px;
 		height: 28px;
 		border-radius: 50%;
-		background: linear-gradient(135deg, var(--accent), var(--rose));
+		/* The CTA gradient is the one built for white text (7:1); accent→rose
+		   carried the initial at 4.08 light / 2.65 dark (round-4 sweep). */
+		background: var(--gradient-cta);
 		display: flex;
 		align-items: center;
 		justify-content: center;

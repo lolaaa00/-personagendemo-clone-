@@ -1576,7 +1576,7 @@
 	}
 	.kind-generation { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent-text); }
 	.kind-review { background: color-mix(in srgb, var(--gold, #d97706) 20%, transparent); }
-	.kind-publish { background: color-mix(in srgb, #16a34a 18%, transparent); color: #16a34a; }
+	.kind-publish { background: color-mix(in srgb, #16a34a 18%, transparent); color: var(--success-text); } /* #16a34a on its tint was 2.69:1 */
 	.filter-row { display: flex; gap: 0.4rem; flex-wrap: wrap; }
 	.filter-btn {
 		background: var(--surface-2); border: 1px solid var(--border);
