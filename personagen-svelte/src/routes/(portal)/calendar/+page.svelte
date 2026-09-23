@@ -1564,6 +1564,10 @@
 					</div>
 				</div>
 
+				{#if approveBlock || writeBlock}
+					<!-- The reason in visible text, not only a tooltip on the disabled button (round-8). -->
+					<p class="cal-zone-note" role="status">{writeBlock ?? approveBlock}</p>
+				{/if}
 				<div
 					class="composer-footer"
 					style="padding: 1rem 1.5rem; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 0.75rem; background: var(--surface-2);"
@@ -2293,5 +2297,13 @@
 		margin: 0 0 var(--space-2);
 		font-size: var(--text-sm);
 		color: var(--text-muted);
+	}
+	/* 320–390: Cancel sat outside the dialog and Save was clipped (round-8). */
+	.composer-footer {
+		flex-wrap: wrap;
+		gap: 0.5rem;
+	}
+	.composer-footer > * {
+		min-width: 0;
 	}
 </style>

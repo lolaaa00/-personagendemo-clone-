@@ -859,6 +859,9 @@
 			{#if canReschedule}
 				<div class="drawer-reschedule">
 					<span class="drawer-block-label">Scheduled for</span>
+					{#if seatCannotGenerate}
+						<span class="drawer-seat-note">Rescheduling needs a Creator seat or above — your {seatLabel} seat cannot do this.</span>
+					{/if}
 					<div class="reschedule-row">
 						<input
 							type="date"

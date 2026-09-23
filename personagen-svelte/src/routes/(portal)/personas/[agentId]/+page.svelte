@@ -2800,11 +2800,48 @@
 
 	/** Platforms the post is already live on — shown, never selectable. */
 	let publishFallbackLive = $state<string[]>([]);
+
+	/**
+	 * A seat that cannot change the persona sees the Profile tab read-only:
+	 * every field and action in it is disabled, and stays disabled through
+	 * re-renders (MutationObserver). The server refuses these writes anyway;
+	 * this stops the 403 one click later (round-8 re-audit).
+	 */
+	let profileTabEl = $state<HTMLElement | null>(null);
+	$effect(() => {
+		const rootEl = profileTabEl;
+		if (!rootEl || seatCanGenerate) return;
+		const KEEP = '.tab-btn, .view-toggle-btn, .kit-copy-btn, .hero-handle-chip, .tab-nav-avatar-btn, [data-readonly-ok], a';
+		const apply = () => {
+			for (const el of rootEl.querySelectorAll<HTMLInputElement>('input, select, textarea, button')) {
+				if (el.matches(KEEP) || el.closest('.seat-readonly-note')) continue;
+				if (!el.disabled) {
+					el.disabled = true;
+					el.setAttribute('data-seat-disabled', '');
+					if (!el.title) el.title = `Your ${seat.label} seat can view this persona but not change it.`;
+				}
+			}
+		};
+		apply();
+		const mo = new MutationObserver(apply);
+		mo.observe(rootEl, { childList: true, subtree: true });
+		return () => mo.disconnect();
+	});
+	/** Set when a connection attempt is refused for want of a Zernio key. */
+	let zernioKeyMissing = $state(false);
 	/** The post the picker was opened for: focus returns to its card on close
 	 *  (the drawer that opened it is gone by then — round-6 re-audit). */
 	let publishFallbackReturnId: string | null = null;
 	/** The control that opened the picker (the card CTA, a calendar chip…). */
 	let publishFallbackReturnEl: HTMLElement | null = null;
+	/** The control that opened the post DRAWER (a week/day/list chip, a card): the
+	 *  picker's opener inside the drawer is gone by the time the picker closes, so
+	 *  focus returns here (round-8 re-audit: week/day/phone chips lost it). */
+	let drawerOpenerEl: HTMLElement | null = null;
+	function activeControl(): HTMLElement | null {
+		const a = document.activeElement;
+		return a instanceof HTMLElement && !a.matches('body, main, [role="main"]') ? a : null;
+	}
 	$effect(() => {
 		if (publishFallbackPost !== null || !publishFallbackReturnId) return;
 		const id = publishFallbackReturnId;
@@ -2816,12 +2853,15 @@
 			const opener = publishFallbackReturnEl;
 			publishFallbackReturnEl = null;
 			const byId = document.querySelector<HTMLElement>(`[data-post-id="${id}"]`);
+			const visible = (el: HTMLElement | null) => !!el && el.isConnected && el.getBoundingClientRect().width > 0;
 			const target =
-				opener && opener.isConnected
+				visible(opener)
 					? opener
-					: byId
-						? (byId.matches('button, a, [tabindex]') ? byId : (byId.querySelector<HTMLElement>('button, a, [tabindex]') ?? byId))
-						: null;
+					: visible(drawerOpenerEl)
+						? drawerOpenerEl
+						: byId
+							? (byId.matches('button, a, [tabindex]') ? byId : (byId.querySelector<HTMLElement>('button, a, [tabindex]') ?? byId))
+							: null;
 			if (!target) return;
 			target.scrollIntoView?.({ block: 'nearest' });
 			target.focus({ preventScroll: true });
@@ -3322,6 +3362,8 @@
 				// A raw "Failed to fetch" means the request was dropped at the network
 				// level (the server took too long, usually reaching Zernio) — turn it
 				// into something actionable rather than a cryptic browser string.
+				// The Connections tab then says so up front, with links (round-8 re-audit).
+				if (/No Zernio key/i.test(res.error || '')) zernioKeyMissing = true;
 				const isNetworkDrop = /failed to fetch|load failed|networkerror|timed out/i.test(
 					res.error || ''
 				);
@@ -4014,7 +4056,10 @@
 								{#each groupedPosts as post (post.id)}
 									<PostCard
 										{post}
-										onOpen={(p) => (modalPost = p)}
+										onOpen={(p) => {
+											drawerOpenerEl = activeControl();
+											modalPost = p;
+										}}
 										onRetry={seatCanGenerate ? retryFailedPost : null}
 										retryBlockedReason={seatCanGenerate ? null : seatRetryReason}
 										onPublishFallback={seat.canPublish ? openPublishFallback : null}
@@ -4153,7 +4198,10 @@
 						{:else}
 							<CalendarView
 								posts={calendarPosts}
-								onOpenPost={(p) => (modalPost = feedRowFor(p))}
+								onOpenPost={(p) => {
+									drawerOpenerEl = activeControl();
+									modalPost = feedRowFor(p);
+								}}
 								onApprove={seat.canPublish
 									? async (p) => {
 											const row = feedRowFor(p);
@@ -4168,7 +4216,15 @@
 
 				<!-- PROFILE TAB · Overview lens -->
 			{:else if activeTab === 'profile' && profileView === 'overview'}
-				<div class="profile-tab" class:bento={profileLayout === 'bento'}>
+				<div class="profile-tab" class:bento={profileLayout === 'bento'} bind:this={profileTabEl}>
+					{#if !seatCanGenerate}
+						<!-- Said once, up front: a viewer could edit 25 fields and press Save
+						     into a 403 (round-8 re-audit). The controls below are disabled. -->
+						<p class="seat-readonly-note" role="status">
+							Your {seat.label} seat can view this persona but not change it — the fields and actions
+							here are read-only.
+						</p>
+					{/if}
 					<!-- Brand section: which of the user's brand briefs this persona
 				     generates for. One client can run several brands (Just Kids
 				     Honey, HoneyX Manly Plus…) — every asset this persona makes is
@@ -6382,6 +6438,13 @@
 								<!-- Visible, not a tooltip: thirteen disabled buttons with the reason
 								     on hover told a creator nothing (round-4 re-audit). -->
 								<p class="conn-seat-note">{seatBlockedReason(seat, 'manager')}</p>
+							{/if}
+							{#if zernioKeyMissing}
+								<p class="conn-seat-note" role="status">
+									No Zernio key covers this persona yet, so nothing can connect. Add one in
+									<a href="/settings?section=api-keys#provider-zernio">Settings → Provider API Keys</a>
+									(the workspace owner does, if that is not you) — <a href="/guides#zernio-key">how to get one</a>.
+								</p>
 							{/if}
 							<div class="conn-quick-links">
 								{#each PLATFORMS as p}
@@ -10808,5 +10871,14 @@
 		flex-wrap: wrap;
 		max-width: 100%;
 		min-width: 0;
+	}
+	.seat-readonly-note {
+		margin: 0 0 var(--space-4);
+		padding: var(--space-3) var(--space-4);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-md);
+		background: var(--surface-2);
+		color: var(--text-muted);
+		font-size: var(--text-sm);
 	}
 </style>

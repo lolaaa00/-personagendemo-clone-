@@ -126,7 +126,16 @@
 			await tick();
 			document.querySelector<HTMLElement>(`[data-pack="${packId}"]`)?.focus();
 		} catch (e) {
-			error = (e as Error).message;
+			error =
+				e instanceof TypeError
+					? 'Could not reach the server — check your connection and try again.'
+					: (e as Error).message;
+			// Focus stays on the button after a failure too, and the message is
+			// brought into view (on a phone it sat above the screen — round-8).
+			requesting = null;
+			await tick();
+			document.querySelector<HTMLElement>(`[data-pack="${packId}"]`)?.focus();
+			document.querySelector<HTMLElement>('.error[role="alert"]')?.scrollIntoView({ block: 'nearest' });
 		} finally {
 			requesting = null;
 		}

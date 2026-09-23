@@ -2480,4 +2480,9 @@
 			padding: 0.5rem;
 		}
 	}
+	/* Inside a cell with overflow:auto an outside ring is clipped (round-8). */
+	.event-block:focus-visible {
+		outline: 2px solid var(--focus-ring);
+		outline-offset: -2px;
+	}
 </style>

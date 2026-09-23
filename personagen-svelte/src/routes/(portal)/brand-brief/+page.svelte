@@ -985,7 +985,7 @@ CTA: "Satisfy your body and your taste buds. Direct link in bio."`
 				stroke-linecap="round"
 				stroke-linejoin="round"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg
 			>
-			<span>Content Plan</span>
+			<span>Open Content Plan</span>
 			<svg
 				aria-hidden="true"
 				class="launch-arrow"

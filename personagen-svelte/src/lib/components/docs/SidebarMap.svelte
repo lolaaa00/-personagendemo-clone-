@@ -32,14 +32,6 @@
 			]
 		},
 		{
-			label: 'Personas',
-			blurb: 'One entry per character. Each opens that persona’s own page.',
-			items: [
-				{ label: 'Lexi Connor', href: '#', blurb: 'A persona: profile, content, connections, studio.' },
-				{ label: 'New Persona', href: '/generator', blurb: 'Create another character from a brief.' }
-			]
-		},
-		{
 			label: 'Publish',
 			blurb: 'Where drafts become live posts.',
 			items: [
@@ -52,10 +44,19 @@
 			blurb: 'The things you configure once.',
 			items: [
 				{ label: 'Brand Brief', href: '/brand-brief', blurb: 'What your brand is — every persona writes from it.' },
-				{ label: 'Model Manager', href: '/models', blurb: 'Which AI models run, and at what price.' },
 				{ label: 'Docs', href: '/guides', blurb: 'This page.' },
 				{ label: 'Developer API', href: '/developer', blurb: 'Keys for driving PersonaGen from your own code.' },
-				{ label: 'Settings', href: '/settings', blurb: 'Provider keys, Zernio, billing, theme.' }
+				{ label: 'Billing', href: '/billing', blurb: 'Your wallet, what things cost, and top-ups.' },
+				{ label: 'Settings', href: '/settings', blurb: 'Provider keys, Zernio, theme, team.' },
+				{ label: 'Model Manager', href: '/models', blurb: 'Platform administrators only: which AI models run, and at what price.' }
+			]
+		},
+		{
+			label: 'Personas',
+			blurb: 'One entry per character. Each opens that persona’s own page.',
+			items: [
+				{ label: 'Lexi Connor', href: '#', blurb: 'A persona: profile, content, connections, studio.' },
+				{ label: 'New Persona', href: '/generator', blurb: 'Create another character from a brief.' }
 			]
 		}
 	];

@@ -470,7 +470,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				return json(
 					{
 						success: false,
-						error: 'No Zernio key covers this persona yet. Its owner adds one in Settings → Provider API Keys, then connects platforms here.'
+						error: 'No Zernio key covers this persona yet. Add one in Settings → Provider API Keys (the workspace owner does, if that is not you), then connect platforms here.'
 					},
 					{ status: 400 }
 				);

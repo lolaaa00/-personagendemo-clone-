@@ -124,7 +124,7 @@
 			],
 			steps: [
 				{
-					t: 'Everything lives in the left sidebar, in five groups: Network (Dashboard) · Library (All Generations, My Favorites, Trash) · Personas (every persona you have + New Persona) · Publish (Review Queue, Calendar) · Setup (Brand Brief, Docs, Developer API, Billing, Settings). Model Manager also appears under Setup if your account administers the platform.',
+					t: 'Everything lives in the left sidebar, in five groups: Network (Dashboard) · Library (All Generations, My Favorites, Trash) · Publish (Review Queue, Calendar) · Setup (Brand Brief, Docs, Developer API, Billing, Settings) · Personas (every persona you have + New Persona, last so the list can grow). Model Manager also appears under Setup if your account administers the platform.',
 					demo: 'sidebar-map'
 				},
 				{
@@ -996,7 +996,16 @@
 	function goHome() {
 		selectedId = null;
 		history.replaceState(null, '', location.pathname + location.search);
-		document.getElementById('guide-article')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+		// Land the home's heading under the sticky bar and give it focus: pressed
+		// from the keyboard the button vanished and focus fell to <body>, and at
+		// 320 the heading sat half under the top bar (round-8 re-audit).
+		void tick().then(() => {
+			const h = document.getElementById('home-start-title');
+			const sc = document.querySelector<HTMLElement>('main.portal-content');
+			if (sc) sc.scrollTop = 0;
+			else window.scrollTo(0, 0);
+			h?.focus({ preventScroll: true });
+		});
 	}
 
 	/**
@@ -1567,7 +1576,7 @@
 			<!-- Docs home: choose before you read. Nothing is opened for you. -->
 			<div class="gd-home">
 				<section class="home-start" aria-labelledby="home-start-title">
-					<h2 id="home-start-title">Start here</h2>
+					<h2 id="home-start-title" tabindex="-1">Start here</h2>
 					<p class="home-lede">{startHere.length} guides, in order, take a new account from login to a live post.</p>
 					<ol class="home-path">
 						{#each startHere as g, i (g.id)}

@@ -934,6 +934,8 @@
 					const el = document.getElementById(cardHash);
 					if (el instanceof HTMLDetailsElement) el.open = true;
 					el?.scrollIntoView({ block: 'start' });
+					// Focus follows: the link left focus on <body> (round-8 re-audit).
+					(el?.querySelector<HTMLElement>('summary, input, button') ?? el)?.focus({ preventScroll: true });
 				}, 50)
 			);
 		}

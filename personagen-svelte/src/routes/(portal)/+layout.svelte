@@ -218,7 +218,13 @@
 			if (nav.type === 'popstate' && remembered !== undefined) {
 				// After the page has laid out, or the restore lands short/long of
 				// where the reader was (re-audit: 1468 restored for 964).
-				requestAnimationFrame(() => requestAnimationFrame(() => (el.scrollTop = remembered)));
+				// Tries again while the page fills in: WebKit at 320 laid out late and a
+				// single assignment left the reader at the top (round-8 re-audit).
+				const restore = () => {
+					if (el.scrollHeight - el.clientHeight >= remembered) el.scrollTop = remembered;
+				};
+				requestAnimationFrame(() => requestAnimationFrame(restore));
+				for (const ms of [120, 400, 900, 1800]) setTimeout(() => { if (Math.abs(el.scrollTop - remembered) > 2) restore(); }, ms);
 			} else if (target) target.scrollIntoView({ block: 'start' });
 			else if (hash.length > 1) {
 				// A #hash with no element of that id is the PAGE's to resolve (e.g.
@@ -1075,7 +1081,7 @@
 			{/if}
 			</div>
 		</nav>
-		{#if navMoreBelow && !sidebarState.collapsed}
+		{#if navMoreBelow}
 				<!-- Visual only: a keyboard or screen-reader user meets the rest of the
 				     list by moving through it; this tells a sighted user it is there. -->
 				<div class="sidebar-more-cue" aria-hidden="true">
@@ -1719,7 +1725,9 @@
 		flex-direction: column;
 		gap: 2px;
 		flex: 1 1 auto;
-		min-height: 0;
+		/* Never 0: the platform role's block (Manage projects, New persona; no
+		   rows) measured 0px tall at 1280x600 (round-8 re-audit). */
+		min-height: 2.25rem;
 		overflow: hidden;
 	}
 	/* A FLOOR, only when there are rows to show. With min-height 0 the block was
@@ -2844,5 +2852,11 @@
 	}
 	.sidebar-persona-rows.has-more::after {
 		display: none;
+	}
+	/* Collapsed rail: the cue stays (a collapsed nav can still have more
+	   below); only its chevron shows. */
+	.sidebar-collapsed .sidebar-more-cue span {
+		font-size: 0;
+		gap: 0;
 	}
 </style>
