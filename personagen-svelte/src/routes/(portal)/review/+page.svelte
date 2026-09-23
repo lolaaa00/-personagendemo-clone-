@@ -2620,6 +2620,14 @@
 		.filt select {
 			min-width: 11rem;
 		}
+		/* No select wider than the strip minus its fade: at 320 the Status
+		   select was 257px in a 256px strip and could never fully clear it. */
+		.filt {
+			max-width: calc(100% - 28px);
+		}
+		.filt select {
+			max-width: 100%;
+		}
 	}
 	@media (max-width: 767px) {
 		/* Icon-only view switcher: five labelled buttons wrap to two rows at
