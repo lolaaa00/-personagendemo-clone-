@@ -608,7 +608,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-22", hash: "79b6078", type: "fix", category: "security", scope: "server", title: "a late auth cookie write can no longer crash the process" },
 	{ date: "2026-09-22", hash: "6f77152", type: "fix", category: "fix", scope: "audit", title: "round 4 part 1 — the Setup Journeys critic's round-3 list" },
 	{ date: "2026-09-22", hash: "fff7626", type: "fix", category: "fix", scope: "audit", title: "round 4 part 2 — the Money and Access critics' round-3 lists" },
-	{ date: "2026-09-22", hash: "11ebac0", type: "fix", category: "fix", scope: "audit", title: "round 4 part 3 — the Money critic's round-4 list" }
+	{ date: "2026-09-22", hash: "11ebac0", type: "fix", category: "fix", scope: "audit", title: "round 4 part 3 — the Money critic's round-4 list" },
+	{ date: "2026-09-22", hash: "72ba532", type: "fix", category: "fix", scope: "audit", title: "round 4 part 4 — the Access and Setup critics' round-4 lists" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -1040,10 +1041,10 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 		id: "01104cd", from: "2026-09-22", to: "2026-09-22",
 		category: "fix", categories: ["fix","publishing","security"],
 		title: "Fixed: round 3 — every finding the round-2 critics raised",
-		summary: "Round 3 — every finding the round-2 critics raised. Plus 7 more changes, touching getting posts onto your accounts and sign-in and account protection.",
+		summary: "Round 3 — every finding the round-2 critics raised. Plus 8 more changes, touching getting posts onto your accounts and sign-in and account protection.",
 		major: true, curated: false,
-		entries: [CHANGELOG[567], CHANGELOG[568], CHANGELOG[569], CHANGELOG[570], CHANGELOG[571], CHANGELOG[572], CHANGELOG[573], CHANGELOG[574]]
+		entries: [CHANGELOG[567], CHANGELOG[568], CHANGELOG[569], CHANGELOG[570], CHANGELOG[571], CHANGELOG[572], CHANGELOG[573], CHANGELOG[574], CHANGELOG[575]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "11ebac0";
+export const CHANGELOG_GENERATED_FROM = "72ba532";

@@ -7,6 +7,24 @@
 		<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
 		<script>
 			/*
+			 * The viewer's time zone, for the server to render instants in. A browser
+			 * with no `tz` cookie yet sets it and reloads ONCE before anything
+			 * paints, so even the very first page is in the viewer's zone rather than
+			 * the server's (round-4 re-audit: a 12-hour jump on first visit). The
+			 * sessionStorage flag stops any second reload if the cookie cannot be
+			 * written (blocked site data).
+			 */
+			try {
+				var tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+				if (tz && !/(?:^|; )tz=/.test(document.cookie) && !sessionStorage.getItem('tz-reload')) {
+					sessionStorage.setItem('tz-reload', '1');
+					document.cookie = 'tz=' + tz + '; path=/; max-age=31536000; samesite=lax';
+					if (/(?:^|; )tz=/.test(document.cookie)) location.replace(location.href);
+				}
+			} catch (e) {
+				/* no Intl zone or storage — the server keeps its default */
+			}
+			/*
 			 * Set the theme before first paint.
 			 *
 			 * initializeThemeAndColors() already honours `prefers-color-scheme`,

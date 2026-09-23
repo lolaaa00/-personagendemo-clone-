@@ -3192,7 +3192,10 @@
 	   inside an overflow:hidden pill (round-4 re-audit). Scroll, never clip. */
 	.gd-docs-nav {
 		max-width: 100%;
-		overflow-x: auto;
-		scrollbar-width: thin;
+	}
+	@media (max-width: 480px) {
+		.gd-docs-nav {
+			flex-wrap: wrap;
+		}
 	}
 </style>

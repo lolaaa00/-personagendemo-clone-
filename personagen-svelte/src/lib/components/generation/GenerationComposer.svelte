@@ -104,6 +104,13 @@
 		 */
 		cinematicBlocked?: string | null;
 		/**
+		 * Whose wallet pays, as the page names it ("the UX Audit Co wallet"), for
+		 * composers whose preview carries no payer (the reference-image ones): a
+		 * creator's side-profile retry said "from your balance" while the
+		 * workspace owner paid (round-4 re-audit).
+		 */
+		payerLabel?: string | null;
+		/**
 		 * The persona's SAVED `agent_configs.autonomy_level` — the same row the
 		 * generate-post route reads before it decides whether the finished post may
 		 * publish itself.
@@ -131,6 +138,7 @@
 		agentId,
 		onAgentChange,
 		cinematicBlocked = null,
+		payerLabel = null,
 		autonomyLevel = null
 	}: Props = $props();
 
@@ -2158,7 +2166,9 @@
 					<span class="foot-cost-payer"
 						>{preview?.payer?.kind === 'workspace_owner'
 							? `from the ${preview.payer.name ?? 'workspace'} wallet`
-							: 'from your balance'}</span
+							: payerLabel
+								? `from ${payerLabel}`
+								: 'from your balance'}</span
 					>
 				{/if}
 			</span>

@@ -510,7 +510,11 @@
 	/** The Studio's registry-resolved plan (see tileSteps below); null until it answers. */
 	let studioPlan = $state<StudioPlan | null>(null);
 	/** 'unavailable' = the preview refused (a seat that cannot generate) or failed. */
-	let studioPlanState = $state<'loading' | 'ready' | 'unavailable'>('loading');
+	let studioPlanState = $state<'loading' | 'ready' | 'unavailable'>(
+		// Decided at first render: a seat that cannot generate has no plan coming,
+		// so its tiles never show a "…" that ends blank (round-4 re-audit).
+		(data as { seat?: { canCreate?: boolean } }).seat?.canCreate === false ? 'unavailable' : 'loading'
+	);
 	/**
 	 * Why Cinematic is out of reach, or null. The server refuses it BEFORE the
 	 * preview branch, so a cinematic Studio template would otherwise resolve into
@@ -7021,6 +7025,7 @@
 		open={composerOpen}
 		spec={composerSpec}
 		{cinematicBlocked}
+		payerLabel={tilePayer}
 		autonomyLevel={savedAutonomy}
 		onClose={() => (composerOpen = false)}
 		onConfirm={(body) => onComposerConfirm(body)}
