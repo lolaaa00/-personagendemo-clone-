@@ -628,7 +628,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-23", hash: "c52b6c6", type: "fix", category: "fix", scope: "audit", title: "round 8 — the Money critic's two Lows" },
 	{ date: "2026-09-23", hash: "13b20f2", type: "fix", category: "publishing", scope: "audit", title: "round 8 follow-ups — Zernio coverage said up front; Back restore waits longer; upload label read-only for seats" },
 	{ date: "2026-09-23", hash: "6b72e8c", type: "fix", category: "fix", scope: "audit", title: "round 8 follow-ups — Back restore re-applies as the page grows; file-picker label hidden for read-only seats" },
-	{ date: "2026-09-23", hash: "a304445", type: "fix", category: "fix", scope: "audit", title: "the read-only Profile tab holds through Svelte re-renders and hides the file-picker label" }
+	{ date: "2026-09-23", hash: "a304445", type: "fix", category: "fix", scope: "audit", title: "the read-only Profile tab holds through Svelte re-renders and hides the file-picker label" },
+	{ date: "2026-09-23", hash: "45a0086", type: "fix", category: "fix", scope: "audit", title: "hide the file-picker label outright for read-only seats (its own display beat hidden)" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -1071,7 +1072,15 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 		summary: "Round 6 — the Setup and Access critics' lists. Plus 13 more changes, touching getting posts onto your accounts.",
 		major: true, curated: false,
 		entries: [CHANGELOG[581], CHANGELOG[582], CHANGELOG[583], CHANGELOG[584], CHANGELOG[585], CHANGELOG[586], CHANGELOG[587], CHANGELOG[588], CHANGELOG[589], CHANGELOG[590], CHANGELOG[591], CHANGELOG[592], CHANGELOG[593], CHANGELOG[594]]
+	},
+	{
+		id: "45a0086", from: "2026-09-23", to: "2026-09-23",
+		category: "fix", categories: ["fix"],
+		title: "Fixed: hide the file-picker label outright for read-only…",
+		summary: "Hide the file-picker label outright for read-only seats (its own display beat hidden).",
+		major: false, curated: false,
+		entries: [CHANGELOG[595]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "a304445";
+export const CHANGELOG_GENERATED_FROM = "45a0086";

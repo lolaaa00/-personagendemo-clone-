@@ -1715,13 +1715,16 @@
 				</p>
 				{#each KEY_CATEGORIES as cat (cat.key)}
 					{@const inCat = providerConfigs.filter((c) => c.category === cat.key && showsKeyField(c.provider))}
-					{@const setCount = inCat.filter((c) => !!getSavedKey(c.provider)).length}
+					<!-- A provider that is not wired up is neither expected nor counted:
+					     "0/2 set" implied a key the product cannot use (audit UX-003). -->
+					{@const wired = inCat.filter((c) => !c.unused)}
+					{@const setCount = wired.filter((c) => !!getSavedKey(c.provider)).length}
 					{#if inCat.length > 0}
 						<section class="key-category">
 							<div class="key-category-head">
 								<div class="key-category-title">
 									<h3>{cat.title}</h3>
-									<span class="key-category-count">{setCount}/{inCat.length} set</span>
+									{#if wired.length > 0}<span class="key-category-count">{setCount}/{wired.length} set</span>{/if}
 								</div>
 								<span class="key-category-blurb">{cat.blurb}</span>
 							</div>
