@@ -427,6 +427,13 @@
 	 * to differ only in a hover tooltip: chips, the mobile list and the legend
 	 * all said "Failed" (round-2 re-audit).
 	 */
+	/** The badge in words the chips use: never a raw status ("PARTIAL", "FAILED") — round-7. */
+	function badgeLabel(post: CalendarPost): string {
+		if (post.status === 'partial') return 'Partly published';
+		if (post.status === 'failed') return failureKind(post) === 'generation' ? 'Generation failed' : 'Publish failed';
+		return post.status;
+	}
+
 	function failureKind(p: CalendarPost): 'generation' | 'publish' | null {
 		if (p.status === 'partial') return 'publish';
 		if (p.status !== 'failed') return null;
@@ -695,6 +702,7 @@
 										{@const views = post.analytics?.views ?? 0}
 										{@const thumb = getPostThumb(post)}
 										<button
+											data-post-id={post.id}
 											class="event-block"
 											onclick={() => onOpenPost(post)}
 											title={postErrorHint(post)}
@@ -820,7 +828,7 @@
 										<img class="event-thumb" src={thumb} alt="" width="44" height="55" loading="lazy" decoding="async" />
 									{/if}
 									<button class="event-main" onclick={() => onOpenPost(post)} title={postErrorHint(post)}>
-										<span class="sr-only">{post.status}</span>
+										<span class="sr-only">{badgeLabel(post)}</span>
 										<span class="event-time">{slotTime(post.date, post.time)}</span>
 										<span class="event-agent">
 											{post.agentName.split(' ')[0]}
@@ -872,7 +880,7 @@
 									<span
 										class="status-badge"
 										style="color: {postStatusText(post.status)}; border-color: {postStatusText(post.status)}"
-									>{post.status}</span>
+									>{badgeLabel(post)}</span>
 								</div>
 								<p class="day-post-text">{getPostDisplay(post).text}</p>
 								<div class="day-post-foot">
@@ -968,7 +976,7 @@
 											class="status-badge"
 											style="color: {postStatusText(post.status)}; border-color: {postStatusText(post.status)}"
 											title={postErrorHint(post)}
-										>{post.status}</span>
+										>{badgeLabel(post)}</span>
 									</div>
 									<p class="post-card-text">{dp.text}</p>
 									<div class="post-card-footer">

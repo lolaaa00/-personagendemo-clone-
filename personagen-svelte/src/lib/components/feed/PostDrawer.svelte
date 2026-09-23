@@ -863,20 +863,20 @@
 						<input
 							type="date"
 							bind:value={schedDate}
-							disabled={savingSchedule || !!seatBlock}
+							disabled={savingSchedule || seatCannotGenerate}
 							aria-label="Scheduled date"
 						/>
 						<input
 							type="time"
 							bind:value={schedTime}
-							disabled={savingSchedule || !!seatBlock}
+							disabled={savingSchedule || seatCannotGenerate}
 							aria-label="Scheduled time"
 						/>
 						<button
 							type="button"
 							class="dt-btn dt-save"
 							onclick={saveReschedule}
-							disabled={savingSchedule || !schedDate || !schedTime || !!seatBlock}
+							disabled={savingSchedule || !schedDate || !schedTime || seatCannotGenerate}
 						>
 							{savingSchedule ? 'Saving…' : 'Reschedule'}
 						</button>

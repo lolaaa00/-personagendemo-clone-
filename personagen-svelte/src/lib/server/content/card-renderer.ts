@@ -33,7 +33,7 @@ import { env } from '$env/dynamic/private';
 import { hasFfmpeg, findFont, runFfmpeg } from '$lib/server/video';
 
 /** Ledger/provenance label — names the renderer that actually ran, like model labels do. */
-export const CARD_RENDERER_LABEL = 'server typographic renderer (no AI, $0)';
+export const CARD_RENDERER_LABEL = 'server typographic renderer (no AI, no charge)';
 
 const CANVAS_W = 1080;
 const CANVAS_H = 1920;

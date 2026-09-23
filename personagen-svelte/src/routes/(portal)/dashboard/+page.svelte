@@ -76,7 +76,10 @@
 				done: st.zernio,
 				title: 'Add your Zernio key',
 				why: 'Publishing runs on it, and it is yours: sign in at zernio.com with Google — the free account includes 2 connections — then paste it into Settings → Provider API Keys.',
-				href: '/settings?section=api-keys#zernio-keys',
+				// #provider-zernio is the card INSIDE Provider API Keys. #zernio-keys
+				// was also the name of the extra-keys section, so the link opened the
+				// Key Manager instead — the audit's headline finding, regressed (round-7).
+				href: '/settings?section=api-keys#provider-zernio',
 				cta: 'Add key',
 				blocked: null
 			},

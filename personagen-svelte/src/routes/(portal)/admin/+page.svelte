@@ -1806,7 +1806,7 @@
 		color: #4ade80;
 	}
 	.neg {
-		color: #f87171;
+		color: var(--error-text); /* #f87171 on white was 2.77:1 */
 	}
 	.action-panel {
 		display: flex;

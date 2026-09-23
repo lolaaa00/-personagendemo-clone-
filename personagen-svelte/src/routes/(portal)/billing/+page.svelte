@@ -120,7 +120,9 @@
 			requestedPack = packId;
 			await invalidateAll();
 			// The list re-renders; put focus back on the button that was pressed
-			// rather than letting it fall to <main> (round-4 re-audit).
+			// rather than letting it fall to <main>. Enabled FIRST: a disabled
+			// button cannot take focus (round-7 re-audit).
+			requesting = null;
 			await tick();
 			document.querySelector<HTMLElement>(`[data-pack="${packId}"]`)?.focus();
 		} catch (e) {
@@ -414,7 +416,7 @@
 			<dt>What costs money?</dt>
 			<dd>AI images, video, voice and talking-head clips, plus the writing behind every post — a text post is just the writing, about {data.textPostPrice}. Scheduling, publishing and analytics are free on every account.</dd>
 			<dt>Why is the balance in {data.currency}?</dt>
-			<dd>We show your wallet in the currency of where you are. Change it any time in Settings. Charges are made in USD.</dd>
+			<dd>We show your wallet in the currency of where you are (from your country and language). Charges are made in USD.</dd>
 			<dt>Can I bring my own provider keys?</dt>
 			<dd>Not for generation. Every image, video, voice clip and written word runs on our provider accounts and bills this wallet, so one quoted rate covers the whole run. The one key you bring is Zernio, which connects your own social accounts for publishing — it never changes what a generation costs.</dd>
 			<dt>Whose wallet is charged?</dt>

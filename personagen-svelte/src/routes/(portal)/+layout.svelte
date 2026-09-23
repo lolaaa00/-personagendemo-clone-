@@ -1074,7 +1074,8 @@
 			</div>
 			{/if}
 			</div>
-			{#if navMoreBelow && !sidebarState.collapsed}
+		</nav>
+		{#if navMoreBelow && !sidebarState.collapsed}
 				<!-- Visual only: a keyboard or screen-reader user meets the rest of the
 				     list by moving through it; this tells a sighted user it is there. -->
 				<div class="sidebar-more-cue" aria-hidden="true">
@@ -1091,8 +1092,7 @@
 						>More below — scroll</span
 					>
 				</div>
-			{/if}
-		</nav>
+		{/if}
 
 		<!-- Bottom -->
 		<div class="sidebar-bottom">
@@ -2827,12 +2827,14 @@
 		content: '';
 		flex: 0 0 30px;
 	}
-	/* The cue no longer overlays: at 1366x657 it sat on the only visible
-	   persona row (round-6 re-audit). It takes 22px of its own instead. */
+	/* The cue sits BELOW the scrolling nav, in its own 22px: never over a row
+	   (round-6 re-audit) and never below the fold (round-7 re-audit, when it
+	   sat at the end of the scrolled content). */
 	.sidebar-more-cue {
 		position: static;
 		height: 22px;
 		flex: 0 0 22px;
+		margin-top: -2px;
 	}
 	.sidebar-more-cue span {
 		position: static;

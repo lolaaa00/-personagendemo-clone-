@@ -270,19 +270,23 @@ export const load: LayoutServerLoad = async ({ locals, request, url, depends, co
 							// "₹11.0K" for 11,000 (round-6 re-audit). And a locale whose compact
 							// form does not abbreviate at this size (ja-JP below 10,000) gets
 							// whole units with grouping, so "￥6200" cannot read as exact.
-							const compact = new Intl.NumberFormat(locale, {
+							const compactFmt = new Intl.NumberFormat(locale, {
 								style: 'currency',
 								currency,
 								notation: 'compact',
 								minimumFractionDigits: 0,
 								maximumFractionDigits: 1
-							}).format(shown);
-							const plain = new Intl.NumberFormat(locale, {
+							});
+							// formatToParts says whether it abbreviated (a "compact" part). A regex
+							// on the string mistook de-DE's trailing "₹" for one and printed
+							// "4700 ₹" as if exact (round-7 re-audit).
+							const abbreviated = compactFmt.formatToParts(shown).some((p) => p.type === 'compact');
+							if (abbreviated) return compactFmt.format(shown);
+							return new Intl.NumberFormat(locale, {
 								style: 'currency',
 								currency,
 								maximumFractionDigits: 0
 							}).format(whole);
-							return /[^\d\s.,'’\u00a0\u202f]/.test(compact.replace(/^[^\d]*/, '')) ? compact : plain;
 						}
 						return new Intl.NumberFormat(locale, {
 							style: 'currency',

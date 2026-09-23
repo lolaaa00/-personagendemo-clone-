@@ -500,7 +500,7 @@
 			<p class="cp-summary-note">
 				Generation spend happens at launch and is charged to
 				{#if payerName}<strong>the {payerName} wallet</strong> (the workspace owner's){:else}<strong
-						>your balance</strong
+						>your wallet</strong
 					>{/if}; publishing waits for your approval in the Review Queue.
 				Estimated from this persona's current model prices, rounded up per stage exactly as each
 				post is charged; every post's own price is fixed before it runs.

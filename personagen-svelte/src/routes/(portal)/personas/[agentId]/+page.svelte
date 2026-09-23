@@ -955,10 +955,10 @@
 		// Multiply the per-draft price AS SHOWN (rounded to cents in the viewer's
 		// currency): converting the credit total separately printed
 		// 21 × ₱227.42 as ₱4,775.81 (re-audit).
-		// The SAME figure "Each costs up to" prints (quoteSteps → one conversion
-		// from credits), rounded to cents, times the count.
-		const unit = Math.round(quoteStepsAmount(draftUnitSteps) * 100) / 100;
-		return formatMoney(unit * draftCountMax, ctx.currency, ctx.locale, { whole: false });
+		// The EXACT maximum: the per-draft credits × the count, converted once —
+		// the rounded unit × count understated it by 4p (round-7 re-audit). The
+		// unit beside it is marked "about" for that reason.
+		return formatMoney(quoteStepsAmount(draftUnitSteps) * draftCountMax, ctx.currency, ctx.locale, { whole: false });
 	});
 	$effect(() => {
 		// The confirm needs the plan even when the Studio tab was never opened.
@@ -2803,18 +2803,35 @@
 	/** The post the picker was opened for: focus returns to its card on close
 	 *  (the drawer that opened it is gone by then — round-6 re-audit). */
 	let publishFallbackReturnId: string | null = null;
+	/** The control that opened the picker (the card CTA, a calendar chip…). */
+	let publishFallbackReturnEl: HTMLElement | null = null;
 	$effect(() => {
 		if (publishFallbackPost !== null || !publishFallbackReturnId) return;
 		const id = publishFallbackReturnId;
 		publishFallbackReturnId = null;
-		void tick().then(() =>
-			document.querySelector<HTMLElement>(`[data-post-id="${id}"] button`)?.focus({ preventScroll: true })
-		);
+		void tick().then(() => {
+			// The opener if it is still in the page (the card CTA, a calendar chip);
+			// else the post's card or chip by id. Scrolled into view first: a
+			// preventScroll focus left it 1,400px below the fold (round-7).
+			const opener = publishFallbackReturnEl;
+			publishFallbackReturnEl = null;
+			const byId = document.querySelector<HTMLElement>(`[data-post-id="${id}"]`);
+			const target =
+				opener && opener.isConnected
+					? opener
+					: byId
+						? (byId.matches('button, a, [tabindex]') ? byId : (byId.querySelector<HTMLElement>('button, a, [tabindex]') ?? byId))
+						: null;
+			if (!target) return;
+			target.scrollIntoView?.({ block: 'nearest' });
+			target.focus({ preventScroll: true });
+		});
 	});
 	async function openPublishFallback(post: any) {
 		if (!agent?.id) return;
 		publishFallbackPost = post;
 		publishFallbackReturnId = post?.id ?? null;
+		publishFallbackReturnEl = document.activeElement instanceof HTMLElement ? document.activeElement : null;
 		publishFallbackOptions = [];
 		publishFallbackSelected = [];
 		publishFallbackLive = [];
@@ -3987,6 +4004,7 @@
 								onSelectAll={selectAllPosts}
 								onClear={clearPostSelection}
 								onDelete={deleteSelectedPosts}
+								deleteBlock={seatBlockedReason(seat, 'manager')}
 							/>
 							<div class="post-mosaic">
 								{#each groupedPosts as post (post.id)}
@@ -3999,9 +4017,9 @@
 										selectable
 										selected={selectedPostIds.includes(post.id)}
 										onToggleSelect={(p) => togglePostSelected(p.id)}
-										onDelete={handleDeletePost}
+										onDelete={seat.canPublish ? handleDeletePost : undefined}
 										onEnlarge={openPostMedia}
-										onToggleFavorite={togglePostFavorite}
+										onToggleFavorite={seatCanGenerate ? togglePostFavorite : undefined}
 									/>
 								{/each}
 							</div>
@@ -7090,9 +7108,9 @@
 					<p>
 						This fills the empty slots in the next {DRAFT_LOOKAHEAD_DAYS} days at
 						<strong>{postsPerDay} a day</strong> — up to <strong>{draftCountMax} drafts</strong> (a run makes at most {DRAFT_MAX_PER_RUN}), fewer if
-						some slots already have one. Each costs up to
+						some slots already have one. Each costs up to about
 						<strong>{draftUnitSteps ? quoteSteps(draftUnitSteps) : '…'}</strong>
-						({draftTotalMax ? `at most ${draftTotalMax} in all` : 'pricing…'}), charged to
+						({draftTotalMax ? `at most ${draftTotalMax} in all — the exact charge` : 'pricing…'}), charged to
 						<strong>{tilePayer}</strong>. Nothing publishes: each lands in the
 						<a href="/review">review queue</a> for your approval.
 					</p>

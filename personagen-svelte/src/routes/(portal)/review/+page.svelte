@@ -581,6 +581,15 @@
 		{ id: 'grid', label: 'Grid', hint: 'The original card grid' }
 	];
 	let viewMode = $state<ViewMode>('table');
+	/** The filter strip only scrolls (and is only a tab stop) on phones. */
+	let stripScrolls = $state(false);
+	onMount(() => {
+		const mq = window.matchMedia('(max-width: 767px)');
+		const sync = () => (stripScrolls = mq.matches);
+		sync();
+		mq.addEventListener('change', sync);
+		return () => mq.removeEventListener('change', sync);
+	});
 	onMount(() => {
 		const saved = localStorage.getItem(VIEW_STORE) as ViewMode | null;
 		if (saved && VIEWS.some((v) => v.id === saved)) viewMode = saved;
@@ -704,6 +713,10 @@
 		dragOverLane = '';
 		dragId = null;
 		if (!item) return;
+		if (blockFor(item)) {
+			showToast(blockFor(item)!);
+			return;
+		}
 		const move = moveFor(item.status, laneStatus);
 		if (!move) return;
 		if (move === 'reject') openRejectPicker([item.id]);
@@ -733,10 +746,13 @@
 			if (cursor > 0) cursor--;
 		} else if (k === 'a' && current) {
 			e.preventDefault();
-			if (current.status === 'draft') act('approve', [current.id]);
+			// The keyboard is not a way around the seat block (round-7 re-audit).
+			if (blockFor(current)) showToast(blockFor(current)!);
+			else if (current.status === 'draft') act('approve', [current.id]);
 		} else if (k === 'r' && current) {
 			e.preventDefault();
-			rejectOne(current);
+			if (blockFor(current)) showToast(blockFor(current)!);
+			else rejectOne(current);
 		} else if ((k === 'o' || k === 'Enter') && current) {
 			e.preventDefault();
 			openDrawer(current);
@@ -817,12 +833,18 @@
 			class="filter-bar"
 			role="region"
 			aria-label="Queue filters"
-			tabindex="0"
+			tabindex={stripScrolls ? 0 : undefined}
 			onfocusin={(e) => {
 				// One frame later, after the browser's own focus scroll (Firefox runs
-				// it after focusin, which undid an immediate centre) — round-6.
+				// it after focusin). Centred by the STRIP's own scrollLeft: scrollIntoView
+				// also scrolled <main> sideways by a few px in Firefox (round-7).
 				const t = e.target as HTMLElement;
-				requestAnimationFrame(() => t.scrollIntoView?.({ inline: 'center', block: 'nearest' }));
+				const bar = e.currentTarget as HTMLElement;
+				if (t === bar) return;
+				requestAnimationFrame(() => {
+					const target = t.offsetLeft - (bar.clientWidth - t.offsetWidth) / 2;
+					bar.scrollLeft = Math.max(0, Math.min(target, bar.scrollWidth - bar.clientWidth));
+				});
 			}}
 		>
 			<label class="filt filt-status">
@@ -3389,5 +3411,11 @@
 		.board {
 			grid-template-columns: 1fr;
 		}
+	}
+	/* The strip's mask clips an outline drawn outside the box, so its focus
+	   ring vanished at ≤767 (round-7 re-audit): draw it inside. */
+	.filter-bar:focus-visible {
+		outline: 2px solid var(--focus-ring);
+		outline-offset: -2px;
 	}
 </style>

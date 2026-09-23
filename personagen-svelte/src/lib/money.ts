@@ -184,9 +184,16 @@ export function resolveDisplayCurrency(args: {
 }
 
 export function rateFor(currency: string, fx: FxRates | null | undefined): number {
-	const table = fx?.rates && Object.keys(fx.rates).length ? fx.rates : FALLBACK_FX.rates;
-	const r = Number(table[currency.toUpperCase()]);
-	return Number.isFinite(r) && r > 0 ? r : 1;
+	const code = currency.toUpperCase();
+	if (code === 'USD') return 1;
+	// The stored table (ECB via frankfurter, 27 currencies) wins; a currency it
+	// lacks takes the SEED rate — never 1. Nine currencies (AED, SAR, NGN, KES,
+	// EGP, ARS, CLP, COP, VND) were shown at 1:1 with USD, understating every
+	// price and balance by the whole rate (round-7 re-audit, High).
+	const stored = Number(fx?.rates?.[code]);
+	if (Number.isFinite(stored) && stored > 0) return stored;
+	const seed = Number(FALLBACK_FX.rates[code]);
+	return Number.isFinite(seed) && seed > 0 ? seed : 1;
 }
 
 /** Credits (USD cents) → amount in the display currency. */

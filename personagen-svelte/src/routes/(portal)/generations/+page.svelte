@@ -456,7 +456,7 @@
 							{post}
 							onOpen={(p) => (modalPost = p)}
 							onEnlarge={openPostMedia}
-							onToggleFavorite={toggleFavorite}
+							onToggleFavorite={seatCanGenerate ? toggleFavorite : undefined}
 							onRetry={seatCanGenerate ? retryInStudio : null}
 							retryBlockedReason={seatCanGenerate ? null : seatRetryReason}
 						/>

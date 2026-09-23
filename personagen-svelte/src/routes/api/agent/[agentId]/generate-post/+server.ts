@@ -672,14 +672,14 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 			},
 			motion: {
 				id: 'local/ffmpeg-motion',
-				label: 'server motion renderer (no AI, $0)',
+				label: 'server motion renderer (no AI, no charge)',
 				usd: 0,
 				provider: 'local',
 				tier: 'free'
 			},
 			mux: {
 				id: 'local/ffmpeg-mux',
-				label: 'server audio mix (no AI, $0)',
+				label: 'server audio mix (no AI, no charge)',
 				usd: 0,
 				provider: 'local',
 				tier: 'free'

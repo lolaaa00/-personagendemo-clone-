@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { FULL_ACCESS, seatBlockedReason, type SeatCapabilities } from '$lib/seat';
 	import { resolve } from '$app/paths';
 	import { dialog } from '$lib/actions/dialog';
 	import { onMount } from 'svelte';
@@ -55,6 +56,11 @@
 	}
 
 	let { data } = $props<{ data: PageData }>();
+	/** The viewer's seat (layout). Approve, delete and write are gated on it —
+	 *  a viewer met live ✓ buttons the server refused (round-7 re-audit). */
+	const seat = $derived(((data as unknown as { seat?: SeatCapabilities }).seat ?? FULL_ACCESS) as SeatCapabilities);
+	const approveBlock = $derived(seatBlockedReason(seat, 'manager'));
+	const writeBlock = $derived(seatBlockedReason(seat, 'creator'));
 
 	// ── State ──
 	// '' = All Personas — bound to CalendarView's rail; also the composer's
@@ -1053,6 +1059,7 @@
 				onSelectAll={selectAllManage}
 				onClear={clearManageSelection}
 				onDelete={bulkDeleteSelected}
+				deleteBlock={approveBlock}
 			>
 				{#snippet actions()}
 					{#if manageSelectedDrafts.length > 0}
@@ -1199,7 +1206,7 @@
 		agents={data.agents}
 		bind:selectedAgentId
 		onOpenPost={(p) => (selectedPost = p as any)}
-		onApprove={(p) => approvePost(p as any)}
+		onApprove={approveBlock ? undefined : (p) => approvePost(p as any)}
 		onGenerateForDate={data.agents.length > 0 ? (d) => requestGeneratePost(d) : undefined}
 	/>
 
@@ -1557,7 +1564,7 @@
 					style="padding: 1rem 1.5rem; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 0.75rem; background: var(--surface-2);"
 				>
 					<button type="button" class="btn-ghost btn-sm" onclick={closeComposer}>Cancel</button>
-					<button type="button" class="btn-ghost btn-sm" style="border: 1px solid var(--warning); color: var(--warning-text);" onclick={saveAsDraft} disabled={composerSubmitting}>
+					<button type="button" class="btn-ghost btn-sm" style="border: 1px solid var(--warning); color: var(--warning-text);" onclick={saveAsDraft} disabled={composerSubmitting || !!writeBlock} title={writeBlock ?? undefined}>
 						{#if composerSubmitting}
 							<span class="spinner"></span> Saving…
 						{:else}
@@ -1578,7 +1585,7 @@
 							Save as Draft
 						{/if}
 					</button>
-					<button type="button" class="btn-primary btn-sm" onclick={schedulePost} disabled={composerSubmitting}>
+					<button type="button" class="btn-primary btn-sm" onclick={schedulePost} disabled={composerSubmitting || !!approveBlock} title={approveBlock ?? undefined}>
 						{#if composerSubmitting}
 							<span class="spinner"></span> Scheduling…
 						{:else}

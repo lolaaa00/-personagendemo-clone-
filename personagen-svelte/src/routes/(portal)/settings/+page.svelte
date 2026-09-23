@@ -930,7 +930,11 @@
 		const cardHash = window.location.hash.replace('#', '');
 		if (cardHash) {
 			void tick().then(() =>
-				setTimeout(() => document.getElementById(cardHash)?.scrollIntoView({ block: 'start' }), 50)
+				setTimeout(() => {
+					const el = document.getElementById(cardHash);
+					if (el instanceof HTMLDetailsElement) el.open = true;
+					el?.scrollIntoView({ block: 'start' });
+				}, 50)
 			);
 		}
 		consumeHash();
@@ -1733,7 +1737,7 @@
 										: apiKeysLoading
 											? 'loading'
 											: 'unset'}
-									<details class="key-item" class:has-key={!!savedKey}>
+									<details class="key-item" class:has-key={!!savedKey} id="provider-{config.provider}">
 										<summary class="key-summary">
 											<span
 												class="key-mark"

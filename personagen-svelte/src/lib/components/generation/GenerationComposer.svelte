@@ -33,6 +33,7 @@
 	 * the real charge.
 	 */
 	import Modal from '$lib/components/ui/Modal.svelte';
+	import { formatMoney, minorUnitDigits } from '$lib/money';
 	import { platformLabel } from '$lib/platforms';
 	import { fly } from 'svelte/transition';
 	import { cubicOut } from 'svelte/easing';
@@ -405,14 +406,18 @@
 	 * bend either figure (round-5 and round-6 re-audits asked for opposite
 	 * bends; the honest answer is both figures, labelled).
 	 */
-	let stageSumOff = $derived.by(() => {
-		if (!isPostKind) return false;
-		const total = quoteStepsAmount(activePlan.map((s) => s.usd));
+	let stageSumNote = $derived.by(() => {
+		if (!isPostKind) return null;
+		const ctx = pricingContext();
+		const scale = Math.pow(10, minorUnitDigits(ctx.currency));
+		const total = Math.round(quoteStepsAmount(activePlan.map((s) => s.usd)) * scale);
 		const shown = activePlan.reduce((sum, s) => {
 			if (s.supplied) return sum;
-			return sum + Math.round(quoteStepsAmount([s.usd]) * 100) / 100;
+			return sum + Math.round(quoteStepsAmount([s.usd]) * scale);
 		}, 0);
-		return Math.abs(shown - total) >= 0.005;
+		if (shown === total) return null;
+		const diff = formatMoney(Math.abs(shown - total) / scale, ctx.currency, ctx.locale, { whole: false });
+		return `Each step is rounded; the total is the exact charge — they differ by ${diff}.`;
 	});
 	/**
 	 * A format whose run is a transformation OF something has nothing to
@@ -2033,12 +2038,6 @@
 												: preview?.payer?.kind === 'workspace_owner'
 													? ` — taken from the ${preview.payer.name ?? 'workspace'} wallet (the workspace owner's) when you approve`
 													: ' — taken from your wallet when you approve'}
-									{#if stageSumOff}
-										<span class="sum-rounding">
-											Each step above is rounded to the cent; this total is the exact charge, so the
-											steps can differ from it by a cent.
-										</span>
-									{/if}
 									</dd>
 								</div>
 							</dl>
@@ -2193,6 +2192,11 @@
 								? `from ${payerLabel}`
 								: 'from your wallet'}</span
 					>
+				{/if}
+				{#if stageSumNote}
+					<!-- On every step, beside the total it explains — not only on Deliver,
+					     where no stage prices are shown (round-7 re-audit). -->
+					<span class="foot-cost-note">{stageSumNote}</span>
 				{/if}
 			</span>
 		{/if}
@@ -3262,10 +3266,17 @@
 	.foot-cost {
 		margin-right: auto;
 		display: flex;
+		flex-wrap: wrap;
 		align-items: baseline;
 		gap: 0.4rem;
 		font-size: 0.78rem;
 		color: var(--muted);
+		min-width: 0;
+	}
+	.foot-cost-note {
+		flex-basis: 100%;
+		font-size: 0.7rem;
+		color: var(--text-muted);
 	}
 
 	.foot-cost strong {

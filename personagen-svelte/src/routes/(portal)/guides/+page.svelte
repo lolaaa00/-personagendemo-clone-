@@ -117,7 +117,7 @@
 			title: 'Find your way around',
 			when: 'You’re new, or you can’t find a page you saw before.',
 			facts: [
-				'Sidebar groups: Network · Library · Personas · Publish · Setup',
+				'Sidebar groups: Network · Library · Publish · Setup · Personas',
 				'Home base is the Dashboard',
 				'Moon button (top right) switches dark / light',
 				'Lost? Setup → Docs + the search box',
@@ -1059,6 +1059,9 @@
 		// the previous guide instead of leaving /guides (round-5 re-audit).
 		void goto(`#${id}`, { noScroll: true, keepFocus: true });
 		landSoon();
+		// Once landed, the article takes focus (a screen reader lands on the
+		// guide, and Tab continues inside it) — focus fell to <body> (round-7).
+		setTimeout(() => document.getElementById('guide-article')?.focus({ preventScroll: true }), 500);
 	}
 	// The URL's hash is the source of truth for which guide shows: Back,
 	// Forward and a hand-edited hash all switch the article. Both hooks, on
@@ -1073,8 +1076,14 @@
 			landSoon();
 		} else if (!hash && selectedId !== null) {
 			// Back to /guides with no hash is the docs home, not the last article
-			// (round-6 re-audit: the URL changed, the article stayed).
+			// (round-6 re-audit: the URL changed, the article stayed) — at the top
+			// (round-7: the sidebar "Docs" link kept the article's scroll position).
 			selectedId = null;
+			void tick().then(() => {
+				const sc = document.querySelector<HTMLElement>('main.portal-content');
+				if (sc) sc.scrollTop = 0;
+				else window.scrollTo(0, 0);
+			});
 		}
 	}
 	afterNavigate(selectFromHash);
@@ -1553,7 +1562,7 @@
 		</nav>
 
 		<!-- ── Center: the guide itself, or the docs home ── -->
-		<article class="gd-article" id="guide-article" aria-live="polite">
+		<article class="gd-article" id="guide-article" aria-live="polite" tabindex="-1">
 		{#if !selected}
 			<!-- Docs home: choose before you read. Nothing is opened for you. -->
 			<div class="gd-home">
@@ -1715,7 +1724,7 @@
 				<span class="rail-title">Handbook</span>
 				<p class="rail-home">
 					{GUIDES.length} guides across {CATEGORIES.length} topics and {PROVIDERS.length} providers.
-					Pick one on the left, or start with the four-step path.
+					Pick one on the left, or start with the six-step path.
 				</p>
 			{/if}
 		</aside>

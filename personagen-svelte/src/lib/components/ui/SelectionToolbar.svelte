@@ -16,6 +16,7 @@
 		deleteLabel = 'Delete selected',
 		busy = false,
 		onSelectAll,
+		deleteBlock = null,
 		onClear,
 		onDelete,
 		actions = null
@@ -27,6 +28,8 @@
 		deleteLabel?: string;
 		busy?: boolean;
 		onSelectAll: () => void;
+		/** Why this seat cannot delete — disables Delete with the reason (round-7). */
+		deleteBlock?: string | null;
 		onClear: () => void;
 		onDelete: () => void;
 		actions?: import('svelte').Snippet | null;
@@ -59,10 +62,12 @@
 			class="sel-btn danger"
 			onclick={onDelete}
 			aria-busy={busy}
-			disabled={busy || selectedCount === 0}
+			disabled={busy || selectedCount === 0 || !!deleteBlock}
+			title={deleteBlock ?? undefined}
 		>
 			{busy ? 'Deleting…' : deleteLabel}{selectedCount > 0 ? ` (${selectedCount})` : ''}
 		</button>
+		{#if deleteBlock}<span class="sel-note">{deleteBlock}</span>{/if}
 	</div>
 </div>
 
@@ -136,5 +141,10 @@
 	}
 	.sel-btn.danger:focus-visible {
 		outline-color: var(--danger);
+	}
+	.sel-note {
+		flex-basis: 100%;
+		font-size: var(--text-sm);
+		color: var(--text-muted);
 	}
 </style>

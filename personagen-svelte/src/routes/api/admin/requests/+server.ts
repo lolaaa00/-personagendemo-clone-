@@ -38,13 +38,18 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	const svc = getServiceSupabase();
 	const { data: ticket } = await svc
 		.from('tickets')
-		.select('id, title, user_id')
+		.select('id, title, user_id, status')
 		.eq('id', ticketId)
 		.maybeSingle();
 	const title = String(ticket?.title ?? '');
 	const kinds = [TOPUP_TITLE_PREFIX, PROBLEM_REPORT_TITLE_PREFIX, SIGNIN_HELP_TITLE_PREFIX];
 	if (!ticket || !kinds.some((x) => title.startsWith(x))) {
 		return json({ success: false, error: 'No such open request.' }, { status: 404 });
+	}
+	// A closed request stays closed: without this a "closed without loading"
+	// ticket could be replayed through the API and granted (round-7 re-audit).
+	if (ticket.status === 'done') {
+		return json({ success: false, error: 'This request is already closed.' }, { status: 409 });
 	}
 
 	let loaded: { credits: number; label: string } | null = null;

@@ -243,4 +243,15 @@
 			animation: none;
 		}
 	}
+	/* 320–390: the running price and two buttons did not fit one row —
+	   "Approve & generate" overprinted "Back" (round-7 re-audit). */
+	@media (max-width: 480px) {
+		.modal-foot {
+			flex-wrap: wrap;
+			gap: 0.5rem;
+		}
+		.modal-foot > * {
+			min-width: 0;
+		}
+	}
 </style>

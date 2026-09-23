@@ -7,7 +7,7 @@ import { CREDIT_PACKS, whatItBuys, retailCreditsForStep } from '$lib/billing-pac
 import { outcomeStepsUsd } from '$lib/server/outcome-prices';
 import { loadPlanCatalog } from '$lib/server/plans';
 import { TOPUP_PENDING_STATUS, TOPUP_TITLE_PREFIX } from '$lib/server/topup-requests';
-import { resolveDisplayCurrency, creditsToAmount, formatCredits, formatMoney, localeFromAcceptLanguage } from '$lib/money';
+import { resolveDisplayCurrency, creditsToAmount, formatCredits, formatMoney, localeFromAcceptLanguage, minorUnitDigits } from '$lib/money';
 
 /**
  * /billing — the wallet, in the visitor's money.
@@ -122,8 +122,9 @@ export const load: PageServerLoad = async ({ locals, request, url }) => {
 			deltaFormatted: (() => {
 				const after = Number(r.balance_after);
 				const before = after - Number(r.delta);
-				const cents = (c: number) => Math.round(creditsToAmount(c, currency, s.fx_rates) * 100);
-				return formatMoney(Math.abs(cents(after) - cents(before)) / 100, currency, locale, { whole: false });
+				const scale = Math.pow(10, minorUnitDigits(currency));
+				const minor = (c: number) => Math.round(creditsToAmount(c, currency, s.fx_rates) * scale);
+				return formatMoney(Math.abs(minor(after) - minor(before)) / scale, currency, locale, { whole: false });
 			})(),
 			after: formatCredits(Number(r.balance_after), currency, s.fx_rates, locale, { whole: false })
 		})),
