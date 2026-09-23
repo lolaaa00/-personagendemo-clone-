@@ -812,7 +812,12 @@
 		     the focused Platform select was 0% visible under the right-edge fade). -->
 		<div
 			class="filter-bar"
-			onfocusin={(e) => (e.target as HTMLElement).scrollIntoView?.({ inline: 'center', block: 'nearest' })}
+			onfocusin={(e) => {
+				// One frame later, after the browser's own focus scroll (Firefox runs
+				// it after focusin, which undid an immediate centre) — round-6.
+				const t = e.target as HTMLElement;
+				requestAnimationFrame(() => t.scrollIntoView?.({ inline: 'center', block: 'nearest' }));
+			}}
 		>
 			<label class="filt filt-status">
 				<span>Status</span>
@@ -2637,6 +2642,11 @@
 		.filter-bar::after {
 			content: '';
 			flex: 0 0 28px;
+		}
+		/* Instant, not the page's smooth scroll: a keyboard user's Tab was
+		   measured mid-animation with the select still under the fade. */
+		.filter-bar {
+			scroll-behavior: auto;
 		}
 	}
 	@media (max-width: 767px) {
