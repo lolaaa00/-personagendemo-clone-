@@ -205,9 +205,16 @@
 			const hash = nav.to?.url.hash ?? '';
 			const target = hash.length > 1 ? document.getElementById(decodeURIComponent(hash.slice(1))) : null;
 			const remembered = nav.to ? scrollMemory[nav.to.url.href] : undefined;
-			if (nav.type === 'popstate' && remembered !== undefined) el.scrollTop = remembered;
-			else if (target) target.scrollIntoView({ block: 'start' });
-			else if (nav.from?.url.pathname !== nav.to?.url.pathname) el.scrollTop = 0;
+			if (nav.type === 'popstate' && remembered !== undefined) {
+				// After the page has laid out, or the restore lands short/long of
+				// where the reader was (re-audit: 1468 restored for 964).
+				requestAnimationFrame(() => requestAnimationFrame(() => (el.scrollTop = remembered)));
+			} else if (target) target.scrollIntoView({ block: 'start' });
+			else if (hash.length > 1) {
+				// A #hash with no element of that id is the PAGE's to resolve (e.g.
+				// /guides#zernio-key opens that guide and scrolls to it). Resetting
+				// here undid it: the guide opened 1,313px below the fold on phones.
+			} else if (nav.from?.url.pathname !== nav.to?.url.pathname) el.scrollTop = 0;
 		}
 		if (nav.type === 'enter') return; // initial load — leave focus at document start
 		mainContentEl?.focus({ preventScroll: true });
@@ -1414,7 +1421,7 @@
 			initialFocus: 'input[type="password"]'
 		}}
 	>
-		<form class="pw-gate-card" onsubmit={submitPasswordChange}>
+		<form class="pw-gate-card" onsubmit={submitPasswordChange} novalidate>
 			{#if mustChangePassword}
 				<h2 id="pw-gate-title">Set your password</h2>
 				<p id="pw-gate-desc">

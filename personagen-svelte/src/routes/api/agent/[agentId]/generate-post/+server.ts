@@ -174,7 +174,7 @@ export const POST: RequestHandler = async ({ params, request, locals }) => {
 		const { falKey } = await resolveImageKeys(locals.supabase, user.id);
 		if (!falKey) {
 			return json(
-				{ success: false, error: 'Cinematic video requires a Fal AI key — add one in Settings.' },
+				{ success: false, error: 'Cinematic video is unavailable on our side right now — that is on us, and nothing was charged.' },
 				{ status: 400 }
 			);
 		}

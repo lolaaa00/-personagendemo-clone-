@@ -406,7 +406,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 					{
 						success: false,
 						error:
-							'No Zernio API key available for this persona. Add one in Settings → API Keys, or fix its key assignment in the Zernio Key Manager.'
+							'No Zernio key covers this persona yet. Its owner adds one in Settings → Provider API Keys, or assigns one in Settings → Zernio Key Manager.'
 					},
 					{ status: 400 }
 				);
@@ -470,7 +470,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 				return json(
 					{
 						success: false,
-						error: 'No Zernio API key available for this persona. Add one in Settings → API Keys, then connect platforms here.'
+						error: 'No Zernio key covers this persona yet. Its owner adds one in Settings → Provider API Keys, then connects platforms here.'
 					},
 					{ status: 400 }
 				);

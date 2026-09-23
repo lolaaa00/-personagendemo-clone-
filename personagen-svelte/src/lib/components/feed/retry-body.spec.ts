@@ -50,7 +50,7 @@ describe('retryCarriedSummary', () => {
 			{ content, platforms: ['instagram'], scheduled_date: '2026-09-22', scheduled_time: '10:05' },
 			now
 		)!;
-		expect(retryCarriedSummary(body)).toMatch(/format, topic, platforms and schedule are filled in/);
+		expect(retryCarriedSummary(body)).toMatch(/format, topic, platforms \(Instagram\) and schedule are filled in/);
 	});
 
 	it('says when the original time has passed instead of implying it was kept', () => {

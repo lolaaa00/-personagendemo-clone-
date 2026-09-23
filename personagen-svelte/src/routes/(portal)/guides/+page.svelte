@@ -879,18 +879,24 @@
 			category: 'Fixing problems',
 			title: 'Content generation keeps failing',
 			when: 'Drafts error out, or the composer shows a failure message.',
+			// Keyed to the sentences the product ACTUALLY shows (server/failure-text.ts
+			// and the tile's summary). The old tree branched on "openrouter" / "402"
+			// / "fal" — words the app never shows a customer — and told a 402 to top
+			// up, when a provider 402 is on us (round-3 re-audit).
 			facts: [
-				'Read the message — it names the real cause',
-				'“402” or “credits” → the OpenRouter guide',
-				'“fal” → runs on our key: check your balance, then tell us',
-				'Fixed it? Generate again — nothing is lost',
+				'The tile and the post drawer show the cause in plain words',
+				'“On us” / “paused on our side” → wait and retry; nothing was charged',
+				'“Too low for this” (before a run starts) → top up, or ask the workspace owner',
+				'Still failing? Open the post → Report this problem',
 			],
 			steps: [
-				{ t: 'Read the message — it names the real cause (the app never hides errors).' },
-				{ t: 'Mentions "openrouter", "402", or "credits" → your balance ran out. Top up on the Billing page; if the persona belongs to a workspace, its owner tops it up.' },
-				{ t: 'Mentions "fal" or images/video failing → that runs on our key, so there is nothing to fix on your side. Check your balance on Billing, then tell us if it persists.' },
-				{ t: 'Says "No AI provider configured" → that is a platform-side problem, not your account. Tell us and we will fix it.' },
-				{ t: 'Fixed the cause? Just generate again — nothing is lost.' }
+				{ t: 'Open the failed post. The drawer says what happened, and whether anything was taken from your wallet.' },
+				{ t: '"Paused on our side", "that’s on us", "key was rejected", or "is unavailable right now … not set up" → a problem with our provider account, not yours. Nothing was taken from your wallet. Try again in a little while.' },
+				{ t: '"Rate-limiting us" → the provider is busy. Wait a few minutes, then Retry.' },
+				{ t: '"Took too long and the run was stopped", "returned 503", or "interrupted" → a one-off; Retry usually works.' },
+				{ t: '"Blocked by the model’s content policy" or a quality-check message → change the topic or scene, then Retry.' },
+				{ t: 'Your wallet only stops a run BEFORE it starts: the composer says your balance is too low. Top up on Billing — or, for a workspace persona, ask its owner, because their wallet pays.' },
+				{ t: 'Retried and it still fails? Open the post and press "Report this problem". It reaches us privately with the post attached.' }
 			]
 		},
 		{
@@ -1481,7 +1487,7 @@
 			<div class="gd-home">
 				<section class="home-start" aria-labelledby="home-start-title">
 					<h2 id="home-start-title">Start here</h2>
-					<p class="home-lede">Four guides, in order, take a new account from login to a live post.</p>
+					<p class="home-lede">{startHere.length} guides, in order, take a new account from login to a live post.</p>
 					<ol class="home-path">
 						{#each startHere as g, i (g.id)}
 							<li>
@@ -3163,6 +3169,16 @@
 	@media (prefers-reduced-motion: reduce) {
 		.nav-chevron {
 			transition: none;
+		}
+	}
+	/* On a phone the masthead wraps to ~250px; sticky, it covered the guide a
+	   help link had just scrolled to (round-3 re-audit). It scrolls away there. */
+	@media (max-width: 768px) {
+		.gd-top {
+			position: static;
+		}
+		.gd-article {
+			scroll-margin-top: var(--space-4);
 		}
 	}
 </style>

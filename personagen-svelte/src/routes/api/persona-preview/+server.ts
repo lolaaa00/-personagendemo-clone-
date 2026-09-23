@@ -83,7 +83,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	const { falKey } = await resolveImageKeys(locals.supabase, user.id);
 	if (!falKey) {
 		return json(
-			{ success: false, error: 'Images and video are unavailable on our side right now — the platform\'s media provider is not configured. This isn\'t your account; tell us and we\'ll fix it.' },
+			{ success: false, error: 'Images and video are unavailable on our side right now — the platform\'s media provider is not configured. This isn\'t your account, and nothing was charged — try again later.' },
 			{ status: 400 }
 		);
 	}

@@ -214,6 +214,22 @@ export function isCustomerSafeFailureText(text: string): boolean {
  * publish: per-platform errors from publication_results when available,
  * falling back to the post-level _post.error / _post.last_error.
  */
+const PLATFORM_NAMES: Record<string, string> = {
+	instagram: 'Instagram',
+	facebook: 'Facebook',
+	tiktok: 'TikTok',
+	linkedin: 'LinkedIn',
+	youtube: 'YouTube',
+	twitter: 'X',
+	x: 'X',
+	threads: 'Threads',
+	pinterest: 'Pinterest',
+	reddit: 'Reddit',
+	bluesky: 'Bluesky',
+	snapchat: 'Snapchat',
+	googlebusiness: 'Google Business'
+};
+
 export function getPostErrorSummary(post: any): string | null {
 	const results = post?.publication_results;
 	if (!results || typeof results !== 'object') return null;
@@ -223,7 +239,10 @@ export function getPostErrorSummary(post: any): string | null {
 		if (platform === '_post') continue;
 		const r = result as any;
 		if (r && typeof r === 'object' && typeof r.error === 'string' && r.error) {
-			platformErrors.push(`${platform}: ${truncateError(r.error)}`);
+			// "Facebook: page token expired", not the raw "facebook: Page token expired".
+			const name = PLATFORM_NAMES[platform.toLowerCase()] ?? platform.charAt(0).toUpperCase() + platform.slice(1);
+			const msg = truncateError(r.error);
+			platformErrors.push(`${name}: ${msg.charAt(0).toLowerCase()}${msg.slice(1)}`);
 		}
 	}
 	if (platformErrors.length > 0) return platformErrors.join('\n');
@@ -447,7 +466,11 @@ export function retryCarriedSummary(
 ): string {
 	const carried: string[] = ['format'];
 	if (typeof body.topic === 'string') carried.push('topic');
-	if (Array.isArray(body.platforms) && body.platforms.length > 0) carried.push('platforms');
+	const plats = Array.isArray(body.platforms) ? (body.platforms as string[]) : [];
+	if (plats.length > 0)
+		carried.push(
+			`platforms (${plats.map((p) => PLATFORM_NAMES[p.toLowerCase()] ?? p).join(', ')})`
+		);
 	if (typeof body.scheduled_date === 'string') carried.push('schedule');
 	const list =
 		carried.length === 1
@@ -457,5 +480,9 @@ export function retryCarriedSummary(
 		typeof failed?.scheduled_date === 'string' && typeof body.scheduled_date !== 'string'
 			? ' Its original time has passed, so pick a new one if it should be scheduled.'
 			: '';
-	return `The failed post’s ${list} ${carried.length === 1 ? 'is' : 'are'} filled in below.${passed} Check the price and edit anything before approving.`;
+	const unconnected =
+		plats.length > 0
+			? ' A platform that is no longer connected cannot be picked — the Deliver step says so.'
+			: '';
+	return `The failed post’s ${list} ${carried.length === 1 ? 'is' : 'are'} filled in below.${passed}${unconnected} Check the price and edit anything before approving.`;
 }

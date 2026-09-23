@@ -20,3 +20,6 @@ export const TOPUP_PENDING_STATUS = 'backlog' as const;
  * Same private table, same status rule, its own title prefix.
  */
 export const PROBLEM_REPORT_TITLE_PREFIX = 'Problem report';
+
+/** "Ask us to help you sign in" — anonymous, filed under a platform admin. */
+export const SIGNIN_HELP_TITLE_PREFIX = 'Sign-in help';

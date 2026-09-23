@@ -103,6 +103,11 @@
 			: null
 	);
 	let createError = $state('');
+	/** A dropped connection is a TypeError from fetch ("Failed to fetch" / "Load failed"). */
+	function friendlyError(err: unknown): string {
+		if (err instanceof TypeError) return 'Could not reach the server — check your connection and try again.';
+		return (err as Error)?.message || 'Something went wrong. Try again.';
+	}
 
 	// ── The look preview ──────────────────────────────────────────────────────
 	// A real portrait, rendered before the persona exists, so the traits above
@@ -173,7 +178,7 @@
 			previewAnchorUrl = String(payload.data?.originalUrl || payload.data?.url || '');
 			saveProgress();
 		} catch (err) {
-			previewError = (err as Error).message;
+			previewError = friendlyError(err);
 			showToast(`Preview failed: ${previewError}`, 'error');
 		} finally {
 			previewLoading = false;
@@ -467,7 +472,7 @@
 				throw new Error(res.error || 'Creation failed');
 			}
 		} catch (err) {
-			createError = (err as Error).message;
+			createError = friendlyError(err);
 			showToast(`Persona creation failed: ${createError}`, 'error');
 		} finally {
 			isCreating = false;

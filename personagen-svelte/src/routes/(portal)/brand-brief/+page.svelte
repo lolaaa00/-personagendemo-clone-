@@ -654,7 +654,7 @@
 				saveAll();
 				showToast(`${label} generated!`, 'success');
 			} else {
-				showToast(res.error || 'AI generation failed — try again shortly; if it keeps failing, tell us', 'error');
+				showToast(res.error || 'AI generation failed — try again shortly; nothing was charged', 'error');
 			}
 		} catch (err: any) {
 			showToast(err.message || 'AI generation failed', 'error');
@@ -676,7 +676,7 @@
 				spinVariations = { ...spinVariations, [fieldName]: res.data.variations };
 				showToast('3 variations ready — pick one below!', 'success');
 			} else {
-				showToast(res.error || 'Spin failed — try again shortly; if it keeps failing, tell us', 'error');
+				showToast(res.error || 'Spin failed — try again shortly; nothing was charged', 'error');
 			}
 		} catch (err: any) {
 			showToast(err.message || 'Spin failed', 'error');

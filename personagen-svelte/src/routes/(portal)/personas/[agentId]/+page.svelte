@@ -3908,7 +3908,7 @@
 										onOpen={(p) => (modalPost = p)}
 										onRetry={seatCanGenerate ? retryFailedPost : null}
 										retryBlockedReason={seatCanGenerate ? null : seatRetryReason}
-										onPublishFallback={openPublishFallback}
+										onPublishFallback={seat.canPublish ? openPublishFallback : null}
 										selectable
 										selected={selectedPostIds.includes(post.id)}
 										onToggleSelect={(p) => togglePostSelected(p.id)}

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tick } from 'svelte';
 	import { resolve } from '$app/paths';
 	import { postStatusText } from '$lib/status-color';
 	import { thumbUrl, restoreOriginal, proxiedMediaUrl } from '$lib/image-url';
@@ -132,6 +133,8 @@
 			if (!res.ok || !data?.success) throw new Error(data?.error || 'The report could not be sent.');
 			reportedFor = post.id;
 			reportState = 'sent';
+			await tick();
+			document.querySelector<HTMLElement>('.drawer-report-note')?.focus();
 		} catch (e) {
 			reportError = (e as Error).message;
 			reportState = 'error';
@@ -635,7 +638,7 @@
 </script>
 {#snippet reportAction()}
 	{#if reportState === 'sent'}
-		<span class="drawer-report-note" role="status">Reported — it is in our queue with this post attached. Nothing else to do.</span>
+		<span class="drawer-report-note" role="status" tabindex="-1">Reported — it is in our queue with this post attached. Nothing else to do.</span>
 	{:else}
 		<button
 			type="button"
@@ -936,7 +939,7 @@
 							{:else}
 								<a
 									class="drawer-retry"
-									href="{resolve('/(portal)/personas/[agentId]', { agentId: post.agent_id })}?republish={post.id}"
+									href="{resolve('/(portal)/personas/[agentId]', { agentId: post.agent_id })}?tab=feed&republish={post.id}"
 								>
 									Publish to a connected platform
 								</a>

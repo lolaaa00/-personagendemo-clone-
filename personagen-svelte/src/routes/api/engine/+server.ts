@@ -487,7 +487,7 @@ Platform: ${bp.platform || platform}
 					return json(
 						{
 							success: false,
-							error: 'Writing is unavailable on our side right now — the platform\'s AI provider is not configured. This isn\'t your account; tell us and we\'ll fix it.'
+							error: 'Writing is unavailable on our side right now — the platform\'s AI provider is not configured. This isn\'t your account, and nothing was charged — try again later.'
 						},
 						{ status: 400 }
 					);
@@ -875,7 +875,7 @@ Return a JSON object with:
 					return json(
 						{
 							success: false,
-							error: 'Writing is unavailable on our side right now — the platform\'s AI provider is not configured. This isn\'t your account; tell us and we\'ll fix it.'
+							error: 'Writing is unavailable on our side right now — the platform\'s AI provider is not configured. This isn\'t your account, and nothing was charged — try again later.'
 						},
 						{ status: 400 }
 					);
@@ -917,7 +917,7 @@ Return JSON: { "type": "script", "platform": "${platform}", "content": "formatte
 					return json(
 						{
 							success: false,
-							error: 'Writing is unavailable on our side right now — the platform\'s AI provider is not configured. This isn\'t your account; tell us and we\'ll fix it.'
+							error: 'Writing is unavailable on our side right now — the platform\'s AI provider is not configured. This isn\'t your account, and nothing was charged — try again later.'
 						},
 						{ status: 400 }
 					);
@@ -955,7 +955,7 @@ Return JSON: { "type": "titles", "platform": "${platform}", "titles": [string x 
 					return json(
 						{
 							success: false,
-							error: 'Writing is unavailable on our side right now — the platform\'s AI provider is not configured. This isn\'t your account; tell us and we\'ll fix it.'
+							error: 'Writing is unavailable on our side right now — the platform\'s AI provider is not configured. This isn\'t your account, and nothing was charged — try again later.'
 						},
 						{ status: 400 }
 					);
@@ -1057,7 +1057,7 @@ Ensure the draft captures the voice perfectly. Do not include meta text, output 
 					success: false,
 					error: hasAi
 						? 'AI returned an empty response — try again.'
-						: 'Writing is unavailable on our side right now — the platform\'s AI provider is not configured. This isn\'t your account; tell us and we\'ll fix it.'
+						: 'Writing is unavailable on our side right now — the platform\'s AI provider is not configured. This isn\'t your account, and nothing was charged — try again later.'
 				},
 				{ status: hasAi ? 502 : 400 }
 			);
@@ -1894,7 +1894,7 @@ ${contentToParse.substring(0, 20000)}${catalogHint}${productPagesHint}`;
 						return json(
 							{
 								success: false,
-								error: 'Could not fetch that product page (check the URL / Firecrawl key).'
+								error: 'Could not fetch that product page — check the address and try again.'
 							},
 							{ status: 400 }
 						);
@@ -1962,7 +1962,7 @@ ${pageContent}`,
 					return json(
 						{
 							success: false,
-							error: 'Writing is unavailable on our side right now — the platform\'s AI provider is not configured. This isn\'t your account; tell us and we\'ll fix it.'
+							error: 'Writing is unavailable on our side right now — the platform\'s AI provider is not configured. This isn\'t your account, and nothing was charged — try again later.'
 						},
 						{ status: 400 }
 					);
@@ -2096,7 +2096,7 @@ Input: "${fieldVal}"`;
 					return json(
 						{
 							success: false,
-							error: 'Writing is unavailable on our side right now — the platform\'s AI provider is not configured. This isn\'t your account; tell us and we\'ll fix it.'
+							error: 'Writing is unavailable on our side right now — the platform\'s AI provider is not configured. This isn\'t your account, and nothing was charged — try again later.'
 						},
 						{ status: 400 }
 					);
@@ -2309,7 +2309,7 @@ Return ONLY JSON: {"niche":"","ageRanges":["25–34"],"archetype":"","contentFoc
 					return json(
 						{
 							success: false,
-							error: 'Writing is unavailable on our side right now — the platform\'s AI provider is not configured. This isn\'t your account; tell us and we\'ll fix it.'
+							error: 'Writing is unavailable on our side right now — the platform\'s AI provider is not configured. This isn\'t your account, and nothing was charged — try again later.'
 						},
 						{ status: 400 }
 					);
@@ -2463,7 +2463,7 @@ Return ONLY JSON: {"niche":"","ageRanges":["25–34"],"archetype":"","contentFoc
 					return json(
 						{
 							success: false,
-							error: 'Writing is unavailable on our side right now — the platform\'s AI provider is not configured. This isn\'t your account; tell us and we\'ll fix it.'
+							error: 'Writing is unavailable on our side right now — the platform\'s AI provider is not configured. This isn\'t your account, and nothing was charged — try again later.'
 						},
 						{ status: 400 }
 					);
@@ -2617,7 +2617,7 @@ Return ONLY JSON: {"personas":[{"name":"","gender":"","soul":"","niche":"","arch
 					return json(
 						{
 							success: false,
-							error: 'Writing is unavailable on our side right now — the platform\'s AI provider is not configured. This isn\'t your account; tell us and we\'ll fix it.'
+							error: 'Writing is unavailable on our side right now — the platform\'s AI provider is not configured. This isn\'t your account, and nothing was charged — try again later.'
 						},
 						{ status: 400 }
 					);
@@ -2700,7 +2700,7 @@ Return ONLY JSON: {"directions":["","","","",""]}`;
 					return json(
 						{
 							success: false,
-							error: 'Writing is unavailable on our side right now — the platform\'s AI provider is not configured. This isn\'t your account; tell us and we\'ll fix it.'
+							error: 'Writing is unavailable on our side right now — the platform\'s AI provider is not configured. This isn\'t your account, and nothing was charged — try again later.'
 						},
 						{ status: 400 }
 					);

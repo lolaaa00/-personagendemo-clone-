@@ -2229,7 +2229,7 @@ export async function generateCinematicUgcPack(input: UgcPackInput): Promise<Ugc
 		input.agentId ? db.agents.get(input.agentId) : Promise.resolve({ data: null as any })
 	]);
 	if (!rawAi)
-		throw new Error('Writing is unavailable on our side right now — the platform\'s AI provider is not configured. This isn\'t your account; tell us and we\'ll fix it.');
+		throw new Error('Writing is unavailable on our side right now — the platform\'s AI provider is not configured. This isn\'t your account, and nothing was charged — try again later.');
 	const costEvents: CostEvent[] = [];
 	const ai = trackAi(rawAi, costEvents);
 
@@ -2413,7 +2413,7 @@ export async function generateCinematicUgcPack(input: UgcPackInput): Promise<Ugc
 		const shots = clampCinematicShots(rawShots);
 
 		const { falKey } = await resolveImageKeys(supabase, userId);
-		if (!falKey) throw new Error('Images and video are unavailable on our side right now — the platform\'s media provider is not configured. This isn\'t your account; tell us and we\'ll fix it.');
+		if (!falKey) throw new Error('Images and video are unavailable on our side right now — the platform\'s media provider is not configured. This isn\'t your account, and nothing was charged — try again later.');
 
 		let svc: any;
 		try {
@@ -4391,7 +4391,7 @@ export async function generateUgcPack(input: UgcPackInput): Promise<UgcPack> {
 		assertWithinBudget(supabase, userId, input.agentId)
 	]);
 	if (!rawAi)
-		throw new Error('Writing is unavailable on our side right now — the platform\'s AI provider is not configured. This isn\'t your account; tell us and we\'ll fix it.');
+		throw new Error('Writing is unavailable on our side right now — the platform\'s AI provider is not configured. This isn\'t your account, and nothing was charged — try again later.');
 	// Every text call (director, retries, grader) self-records into the ledger.
 	const costEvents: CostEvent[] = [];
 	const ai = trackAi(rawAi, costEvents);

@@ -119,8 +119,8 @@
 	<div class="dashboard-page">
 
 	<!-- KPI Grid -->
-	<KPIGrid agents={data.agents} postsThisWeek={data.postsThisWeek} />
-
+	<!-- Setup first: on a phone the checklist sat below four zero-value KPI cards,
+	     under the fold of a new account's very first screen (round-3 re-audit). -->
 	{#if setupSteps.length && !setupDismissed}
 		<section class="setup-card" aria-labelledby="setup-h">
 			<div class="setup-head">
@@ -156,6 +156,9 @@
 			Show setup — {setupDone} of {setupSteps.length} done
 		</button>
 	{/if}
+
+	<KPIGrid agents={data.agents} postsThisWeek={data.postsThisWeek} />
+
 
 	<!-- The old "Welcome — initialize your Persona Roster" card used to sit here,
 	     repeating the checklist above in static form. It said "Create it in the

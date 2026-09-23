@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tick } from 'svelte';
 	import { pricingContext } from '$lib/stores/pricing.svelte';
 	import { formatCredits } from '$lib/money';
 	import { promptAction, confirmAction } from '$lib/stores/confirm.svelte';
@@ -71,6 +72,7 @@
 		};
 		topupRequests?: Array<{ id: string; title: string; description: string | null; created_at: string; user_id: string }>;
 		problemReports?: Array<{ id: string; title: string; description: string | null; created_at: string; user_id: string }>;
+		signInHelp?: Array<{ id: string; title: string; description: string | null; created_at: string; user_id: string }>;
 		platformKeys?: Array<{
 			id: string;
 			label: string;
@@ -106,6 +108,8 @@
 			const body = await res.json().catch(() => ({}));
 			if (!res.ok || !body.success) throw new Error(body.error || `HTTP ${res.status}`);
 			await loadControls();
+			await tick();
+			document.querySelector<HTMLElement>('.admin-card h2, main h1')?.focus();
 		} catch (e) {
 			controlsError = (e as Error).message;
 		} finally {
@@ -703,6 +707,27 @@
 										>{closingTicket === r.id ? 'Closing…' : 'Mark loaded'}</button
 									>
 									{#if r.description}<p class="muted small">{r.description}</p>{/if}
+								</li>
+							{/each}
+						</ul>
+					</section>
+				{/if}
+
+				{#if controls.signInHelp && controls.signInHelp.length > 0}
+					<section class="pkeys" aria-labelledby="signin-help-h">
+						<h3 id="signin-help-h" tabindex="-1">Sign-in help requests ({controls.signInHelp.length})</h3>
+						<p class="admin-hint">
+							From the reset page, by people the reset email could not reach. Verify them from your own
+							mail first; then Users &amp; Credits → Temp password.
+						</p>
+						<ul class="topup-req-list">
+							{#each controls.signInHelp as r (r.id)}
+								<li>
+									<strong>{r.title.replace(/^Sign-in help · /, '')}</strong>
+									<span class="muted small">— {when(r.created_at)}</span>
+									<button type="button" class="admin-link" disabled={closingTicket === r.id} onclick={() => closeRequest(r.id)}
+										>{closingTicket === r.id ? 'Closing…' : 'Mark handled'}</button
+									>
 								</li>
 							{/each}
 						</ul>

@@ -12,15 +12,38 @@
 	 * Settings → Profile, where the existing password form finishes the job.
 	 */
 	let email = $state('');
+	import { tick } from 'svelte';
+
 	let sending = $state(false);
 	let sent = $state(false);
 	let error = $state('');
+	let emailEl = $state<HTMLInputElement | null>(null);
+	let sentEl = $state<HTMLElement | null>(null);
+	let helpState = $state<'idle' | 'sending' | 'sent' | 'error'>('idle');
+	let helpMessage = $state('');
+	async function askForHelp() {
+		helpState = 'sending';
+		try {
+			const res = await fetch('/api/support/sign-in-help', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ email: email.trim() })
+			});
+			const d = await res.json().catch(() => ({}));
+			helpMessage = d?.message || d?.error || 'Request sent.';
+			helpState = res.ok ? 'sent' : 'error';
+		} catch {
+			helpMessage = 'Could not reach the server. Check your connection and try again.';
+			helpState = 'error';
+		}
+	}
 
 	async function submit(e: SubmitEvent) {
 		e.preventDefault();
 		error = '';
 		if (!email.trim()) {
 			error = 'Enter the email address you sign in with.';
+			emailEl?.focus();
 			return;
 		}
 		sending = true;
@@ -36,6 +59,9 @@
 				return;
 			}
 			sent = true;
+			// Focus follows the page's answer, not <body> (re-audit).
+			await tick();
+			sentEl?.focus();
 		} catch {
 			error = 'Could not reach the server. Check your connection and try again.';
 		} finally {
@@ -53,16 +79,24 @@
 		<h1>Reset your password</h1>
 
 		{#if sent}
-			<p class="reset-sent" role="status">
-				If that address has an account, a reset link is on its way. Open it on this device and
+			<p class="reset-sent" role="status" tabindex="-1" bind:this={sentEl}>
+				If that address has an account, we have asked our mail service to send a reset link — but
+				email is not reaching every inbox from this server right now. If it arrives, open it on this device and
 				you'll be asked to choose a new password straight away.
 			</p>
 			<p class="reset-hint">
-				Nothing after a few minutes? Check spam first. If it still hasn't come, email may not be
-				reaching you from this server — trying again won't help. Ask whoever gave you access to
-				PersonaGen: a platform admin can issue you a temporary password from the Admin Console,
-				and you'll choose your own the first time you sign in.
+				Nothing after a few minutes? Check spam first. If it still hasn't come, trying again won't
+				help — ask us instead. We check it is really you, then set you a temporary password that
+				you replace the first time you sign in.
 			</p>
+			{#if helpState === 'sent' || helpState === 'error'}
+				<p class="reset-sent" role="status">{helpMessage}</p>
+			{/if}
+			{#if helpState !== 'sent'}
+				<button class="reset-btn reset-btn-secondary" type="button" onclick={askForHelp} disabled={helpState === 'sending'}>
+					{helpState === 'sending' ? 'Sending…' : 'Ask us to help you sign in'}
+				</button>
+			{/if}
 			<a class="reset-btn" href="/login">Back to sign in</a>
 		{:else}
 			<p class="reset-lead">
@@ -71,12 +105,15 @@
 
 			<form onsubmit={submit} novalidate>
 				{#if error}
-					<p class="reset-error" role="alert">{error}</p>
+					<p class="reset-error" id="reset-error" role="alert">{error}</p>
 				{/if}
 
 				<label class="reset-label" for="reset-email">Email</label>
 				<input
 					id="reset-email"
+					bind:this={emailEl}
+					aria-invalid={error ? 'true' : undefined}
+					aria-describedby={error ? 'reset-error' : undefined}
 					type="email"
 					autocomplete="email"
 					bind:value={email}
@@ -164,6 +201,12 @@
 		background: var(--error-soft, var(--surface-2));
 		font-size: var(--text-base);
 		color: var(--error-text);
+	}
+	.reset-btn-secondary {
+		background: var(--surface);
+		color: var(--text);
+		border: 1px solid var(--border-strong);
+		margin-bottom: 0.75rem;
 	}
 	.reset-hint {
 		margin: var(--space-4) 0 0;

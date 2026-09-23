@@ -32,7 +32,8 @@ describe('top-up requests vs the tickets table', () => {
 			'src/routes/api/billing/request-topup/+server.ts',
 			'src/routes/(portal)/billing/+page.server.ts',
 			'src/routes/api/admin/settings/+server.ts',
-			'src/routes/api/support/report-failure/+server.ts'
+			'src/routes/api/support/report-failure/+server.ts',
+			'src/routes/api/support/sign-in-help/+server.ts'
 		];
 		for (const f of files) {
 			const src = readFileSync(join(appRoot, f), 'utf8');

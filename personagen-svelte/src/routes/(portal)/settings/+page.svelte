@@ -1785,8 +1785,8 @@
 											     workspace's personas already publish through the OWNER's key. -->
 											<p class="key-seat-note">
 												<strong>Not needed for your workspace's personas</strong> — they publish through
-												the workspace owner's Zernio key. Set one here only for personas you run outside
-												the workspace.
+												the workspace owner's Zernio key (if nothing publishes, the owner has not added one
+												yet). Set one here only for personas you run outside the workspace.
 											</p>
 										{/if}
 

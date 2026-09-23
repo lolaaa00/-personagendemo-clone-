@@ -16,6 +16,7 @@ import { refreshProviderBalance, refreshFalBalance } from '$lib/server/provider-
 import { platformKeyStatuses } from '$lib/server/platform-keys';
 import {
 	PROBLEM_REPORT_TITLE_PREFIX,
+	SIGNIN_HELP_TITLE_PREFIX,
 	TOPUP_PENDING_STATUS,
 	TOPUP_TITLE_PREFIX
 } from '$lib/server/topup-requests';
@@ -197,6 +198,7 @@ export const GET: RequestHandler = async ({ locals }) => {
 		// this platform-admin route, reading as the service role, sees them all.
 		topupRequests: await openTopupRequests(svc),
 		problemReports: await openTicketsTitled(svc, PROBLEM_REPORT_TITLE_PREFIX),
+		signInHelp: await openTicketsTitled(svc, SIGNIN_HELP_TITLE_PREFIX),
 		history: history ?? []
 	});
 };

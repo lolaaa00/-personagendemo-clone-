@@ -2,7 +2,11 @@ import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { requirePlatformAdmin } from '$lib/server/platform-admin';
 import { getServiceSupabase } from '$lib/server/service-supabase';
-import { PROBLEM_REPORT_TITLE_PREFIX, TOPUP_TITLE_PREFIX } from '$lib/server/topup-requests';
+import {
+	PROBLEM_REPORT_TITLE_PREFIX,
+	SIGNIN_HELP_TITLE_PREFIX,
+	TOPUP_TITLE_PREFIX
+} from '$lib/server/topup-requests';
 
 /**
  * Close a customer request — a top-up the operator has loaded, or a problem
@@ -26,7 +30,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	// "column tickets.title does not exist" in pre-flight).
 	const { data: ticket } = await svc.from('tickets').select('id, title').eq('id', ticketId).maybeSingle();
 	const title = String(ticket?.title ?? '');
-	if (!ticket || !(title.startsWith(TOPUP_TITLE_PREFIX) || title.startsWith(PROBLEM_REPORT_TITLE_PREFIX))) {
+	if (!ticket || ![TOPUP_TITLE_PREFIX, PROBLEM_REPORT_TITLE_PREFIX, SIGNIN_HELP_TITLE_PREFIX].some((x) => title.startsWith(x))) {
 		return json({ success: false, error: 'No such open request.' }, { status: 404 });
 	}
 	const { error } = await svc.from('tickets').update({ status: 'done' }).eq('id', ticketId);

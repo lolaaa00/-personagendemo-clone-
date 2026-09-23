@@ -706,7 +706,7 @@
 											{/if}
 											<div class="event-content">
 												{#if failureKind(post)}
-													<span class="event-fail">{failureKind(post) === 'generation' ? 'Gen failed' : 'Publish failed'}</span>
+													<span class="event-fail">{failureKind(post) === 'generation' ? 'Gen failed' : post.status === 'partial' ? 'Partly failed' : 'Publish failed'}</span>
 												{/if}
 												<span class="sr-only">{statusWords(post)}</span>
 												<span class="event-agent">
