@@ -373,8 +373,6 @@
 						disabled={filteredAgents.length === 0 || deleting}
 						onchange={() => (allVisibleSelected ? clearSelection() : selectAllVisible())}
 					/>
-				{:else}
-					<span class="sr-only">Select</span>
 				{/if}
 			</span>
 			<span role="columnheader">Persona</span>
@@ -582,7 +580,9 @@
 		{#if filteredAgents.length === 0}
 			<!-- Inside role="table" every child must be a row. -->
 			<div class="dash-empty" role="row">
-				<span role="cell" aria-colspan={columnCount}>No personas match this filter.</span>
+				<span role="cell" aria-colspan={columnCount}
+					>{agents.length === 0 ? 'No personas yet — create your first one to see it here.' : 'No personas match this filter.'}</span
+				>
 			</div>
 		{/if}
 	</div>

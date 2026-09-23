@@ -165,6 +165,7 @@
      other controls sit above it as its siblings. -->
 <div
 	class="post-tile"
+	data-post-id={post.id}
 	class:selected
 	class:has-fav={Boolean(onToggleFavorite)}
 	onpointerenter={warmMedia}

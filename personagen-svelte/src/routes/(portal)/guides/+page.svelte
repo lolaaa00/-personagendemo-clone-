@@ -916,7 +916,7 @@
 				{ t: 'Most common: the account needs re-linking. Persona’s Profile → Connections (a Manager seat or above) — reconnect the account there.' },
 				{ t: 'Then open the post and use “Publish to a connected platform” to send it again to the platforms that failed. Posts that failed for a temporary reason (network hiccup) retry themselves automatically.' }
 			],
-			tip: 'A “Partly published” label on a multi-platform post means some platforms succeeded — only the listed ones failed, and “Publish to a connected platform” sends it only to those.'
+			tip: 'A “Partly published” label on a multi-platform post means some platforms succeeded — only the listed ones failed. “Publish to a connected platform” sends it only to the connected platforms you pick; the ones it is already live on are shown but cannot be selected.'
 		},
 		{
 			id: 'status-glossary',
@@ -1023,13 +1023,26 @@
 		if (scroller) scroller.scrollTop += delta;
 		else window.scrollBy(0, delta);
 	}
+	// The reader's own scroll ends the re-landing: the settle timers yanked a
+	// reader who had already moved on back to the title (round-6 re-audit).
+	let landToken = 0;
 	function landSoon() {
-		void tick().then(landOnArticle);
-		requestAnimationFrame(() => requestAnimationFrame(landOnArticle));
-		document.fonts?.ready.then(landOnArticle).catch(() => {});
-		setTimeout(landOnArticle, 150);
-		setTimeout(landOnArticle, 450);
-		setTimeout(landOnArticle, 900);
+		const token = ++landToken;
+		const land = () => {
+			if (token === landToken) landOnArticle();
+		};
+		const stop = () => {
+			if (token === landToken) landToken++;
+		};
+		for (const ev of ['wheel', 'touchstart', 'pointerdown', 'keydown'] as const) {
+			window.addEventListener(ev, stop, { once: true, passive: true });
+		}
+		void tick().then(land);
+		requestAnimationFrame(() => requestAnimationFrame(land));
+		document.fonts?.ready.then(land).catch(() => {});
+		setTimeout(land, 150);
+		setTimeout(land, 450);
+		setTimeout(land, 900);
 	}
 
 	function pick(id: string) {
@@ -1058,6 +1071,10 @@
 		if (hash && GUIDES.some((g) => g.id === hash) && selectedId !== hash) {
 			selectedId = hash;
 			landSoon();
+		} else if (!hash && selectedId !== null) {
+			// Back to /guides with no hash is the docs home, not the last article
+			// (round-6 re-audit: the URL changed, the article stayed).
+			selectedId = null;
 		}
 	}
 	afterNavigate(selectFromHash);
@@ -2411,6 +2428,8 @@
 			gap: var(--space-4);
 		}
 		.gd-nav {
+			/* Below the docs home on phones: "Start here" sat ~1,030px down. */
+			order: 1;
 			position: static;
 			max-height: none;
 			border: 1px solid var(--border);

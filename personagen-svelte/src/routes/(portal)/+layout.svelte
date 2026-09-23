@@ -227,6 +227,9 @@
 			} else if (nav.from?.url.pathname !== nav.to?.url.pathname) el.scrollTop = 0;
 		}
 		if (nav.type === 'enter') return; // initial load — leave focus at document start
+		// A same-page #hash move (the guides' Next/Previous) keeps the reader's
+		// focus where it is; moving it to <main> overrode keepFocus (round-6).
+		if (nav.from?.url.pathname === nav.to?.url.pathname && (nav.to?.url.hash ?? '').length > 1) return;
 		mainContentEl?.focus({ preventScroll: true });
 	});
 
@@ -425,7 +428,7 @@
 <!-- While the password dialog is up, EVERYTHING behind it is inert — not just
      trapped by focus handling: a screen reader's virtual cursor walked the
      sidebar and page behind the modal (re-audit). -->
-<a href="#main-content" class="skip-link" inert={showPasswordGate}>Skip to main content</a>
+<a href="#main-content" class="skip-link" inert={showPasswordGate || drawerModal}>Skip to main content</a>
 
 <div class="portal-layout" class:sidebar-collapsed={sidebarState.collapsed} inert={showPasswordGate}>
 	<!-- Sidebar overlay (mobile) -->
@@ -2823,5 +2826,21 @@
 	.sidebar-persona-rows.has-more::after {
 		content: '';
 		flex: 0 0 30px;
+	}
+	/* The cue no longer overlays: at 1366x657 it sat on the only visible
+	   persona row (round-6 re-audit). It takes 22px of its own instead. */
+	.sidebar-more-cue {
+		position: static;
+		height: 22px;
+		flex: 0 0 22px;
+	}
+	.sidebar-more-cue span {
+		position: static;
+		height: 22px;
+		align-items: center;
+		background: none;
+	}
+	.sidebar-persona-rows.has-more::after {
+		display: none;
 	}
 </style>

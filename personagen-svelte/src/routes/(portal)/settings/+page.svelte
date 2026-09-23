@@ -11,7 +11,7 @@
 		DEFAULT_BRAND_SECONDARY
 	} from '$lib/stores/ui.svelte';
 	import { BrandBrief } from '$lib/services/api';
-	import { onMount, untrack } from 'svelte';
+	import { onMount, untrack, tick } from 'svelte';
 	import { dialog } from '$lib/actions/dialog';
 	import { syncParam, readParam } from '$lib/url-state';
 	import { confirmAction } from '$lib/stores/confirm.svelte';
@@ -925,6 +925,14 @@
 	// Server metadata is the source of truth; localStorage only fills gaps for
 	// values that were never persisted server-side (pre-migration installs).
 	onMount(() => {
+		// A #card hash (the checklist's "Add key" → #zernio-keys) scrolls to that
+		// card once the section has rendered; on phones it sat just below the fold.
+		const cardHash = window.location.hash.replace('#', '');
+		if (cardHash) {
+			void tick().then(() =>
+				setTimeout(() => document.getElementById(cardHash)?.scrollIntoView({ block: 'start' }), 50)
+			);
+		}
 		consumeHash();
 		window.addEventListener('hashchange', consumeHash);
 
@@ -3964,5 +3972,8 @@
 		.modal-actions {
 			flex-direction: column;
 		}
+	}
+	.profile-avatar {
+		background: var(--gradient-cta); /* the accent→cyan gradient carried the initial at 1.81:1 */
 	}
 </style>

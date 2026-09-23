@@ -613,7 +613,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-22", hash: "eff82d6", type: "fix", category: "fix", scope: "audit", title: "round 4 part 5 — what the critics' own scripts still reopened" },
 	{ date: "2026-09-22", hash: "104ff3b", type: "fix", category: "design", scope: "a11y", title: "the last two contrast failures in the critics' sweep" },
 	{ date: "2026-09-22", hash: "32e5e1b", type: "fix", category: "publishing", scope: "a11y", title: "lighter tint under the admin publish pill (4.47 → AA)" },
-	{ date: "2026-09-22", hash: "9801752", type: "fix", category: "fix", scope: "audit", title: "round 5 — the Money and Setup critics' lists" }
+	{ date: "2026-09-22", hash: "9801752", type: "fix", category: "fix", scope: "audit", title: "round 5 — the Money and Setup critics' lists" },
+	{ date: "2026-09-22", hash: "2cdf576", type: "fix", category: "docs", scope: "audit", title: "round 5 follow-ups — guide hash/Back switches the article; admin Mark handled keeps focus" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -1043,12 +1044,12 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 	},
 	{
 		id: "01104cd", from: "2026-09-22", to: "2026-09-22",
-		category: "fix", categories: ["fix","publishing","security","design"],
+		category: "fix", categories: ["fix","publishing","security","design","docs"],
 		title: "Fixed: round 3 — every finding the round-2 critics raised",
-		summary: "Round 3 — every finding the round-2 critics raised. Plus 12 more changes, touching getting posts onto your accounts and sign-in and account protection and layout, colours and readability.",
+		summary: "Round 3 — every finding the round-2 critics raised. Plus 13 more changes, touching getting posts onto your accounts and sign-in and account protection and layout, colours and readability.",
 		major: true, curated: false,
-		entries: [CHANGELOG[567], CHANGELOG[568], CHANGELOG[569], CHANGELOG[570], CHANGELOG[571], CHANGELOG[572], CHANGELOG[573], CHANGELOG[574], CHANGELOG[575], CHANGELOG[576], CHANGELOG[577], CHANGELOG[578], CHANGELOG[579]]
+		entries: [CHANGELOG[567], CHANGELOG[568], CHANGELOG[569], CHANGELOG[570], CHANGELOG[571], CHANGELOG[572], CHANGELOG[573], CHANGELOG[574], CHANGELOG[575], CHANGELOG[576], CHANGELOG[577], CHANGELOG[578], CHANGELOG[579], CHANGELOG[580]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "9801752";
+export const CHANGELOG_GENERATED_FROM = "2cdf576";

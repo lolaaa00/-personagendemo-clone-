@@ -384,7 +384,8 @@
 				<p class="muted">Nothing yet. Your first generation will show here with what it cost.</p>
 			{/if}
 		{:else}
-			<div class="table-wrap">
+			<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+			<div class="table-wrap" role="region" aria-label="Recent activity" tabindex="0">
 				<table>
 					<thead>
 						<tr><th>When</th><th>What</th><th class="num">Amount</th><th class="num">Balance</th></tr>

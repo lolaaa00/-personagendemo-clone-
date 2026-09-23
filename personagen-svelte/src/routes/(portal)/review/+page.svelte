@@ -807,7 +807,29 @@
 		     phone, "14 of 15 shown — hidden by…" sat 800px off-screen at the end
 		     of a 1,180px row (round-2 re-audit). -->
 		<div class="filter-row">
-		<div class="filter-bar">
+		<!-- Status leads in the DOM too, so Tab order is the visual order; the
+		     focused select scrolls into view inside the strip (round-6 re-audit:
+		     the focused Platform select was 0% visible under the right-edge fade). -->
+		<div
+			class="filter-bar"
+			onfocusin={(e) => (e.target as HTMLElement).scrollIntoView?.({ inline: 'center', block: 'nearest' })}
+		>
+			<label class="filt filt-status">
+				<span>Status</span>
+				<select
+					bind:value={filterStatus}
+					disabled={viewMode === 'board'}
+					title={viewMode === 'board'
+						? 'Board view lays the queue out BY status — the lanes are this filter. Switch to another view to narrow by status.'
+						: 'Needs a decision = drafts awaiting approval plus scheduled posts not yet published'}
+				>
+					<option value="all">Needs a decision</option>
+					<option value="draft">Draft only</option>
+					<option value="scheduled">Scheduled only</option>
+					<option value="rejected">Rejected</option>
+					<option value="everything">Everything, including rejected</option>
+				</select>
+			</label>
 			<label class="filt">
 				<span>Persona</span>
 				<select bind:value={filterAgent}>
@@ -824,22 +846,6 @@
 					{#each platformOptions as p (p)}
 						<option value={p}>{platformLabel(p)}</option>
 					{/each}
-				</select>
-			</label>
-			<label class="filt filt-status">
-				<span>Status</span>
-				<select
-					bind:value={filterStatus}
-					disabled={viewMode === 'board'}
-					title={viewMode === 'board'
-						? 'Board view lays the queue out BY status — the lanes are this filter. Switch to another view to narrow by status.'
-						: 'Needs a decision = drafts awaiting approval plus scheduled posts not yet published'}
-				>
-					<option value="all">Needs a decision</option>
-					<option value="draft">Draft only</option>
-					<option value="scheduled">Scheduled only</option>
-					<option value="rejected">Rejected</option>
-					<option value="everything">Everything, including rejected</option>
 				</select>
 			</label>
 		</div>
@@ -2603,9 +2609,6 @@
 		.filter-bar::-webkit-scrollbar-thumb {
 			background: var(--border-strong);
 			border-radius: 999px;
-		}
-		.filt-status {
-			order: -1;
 		}
 		.filt {
 			flex: none;

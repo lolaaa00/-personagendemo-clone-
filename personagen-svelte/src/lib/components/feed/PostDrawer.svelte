@@ -104,6 +104,18 @@
 	let seatCannotPublish = $derived(
 		($page.data as { seat?: { canPublish?: boolean } }).seat?.canPublish === false
 	);
+	/**
+	 * Why this seat cannot decide on this post: the host's approveBlock when it
+	 * passes one, else the layout seat. Approve, Publish, Post Now, Reschedule
+	 * and Trash all read this — a viewer on the calendar met enabled buttons
+	 * that 403'd one click later (round-6 re-audit).
+	 */
+	let seatBlock = $derived(
+		approveBlock ??
+			(seatCannotPublish
+				? `Publishing needs a Manager seat or above — your ${seatLabel} seat cannot do this.`
+				: null)
+	);
 
 	/**
 	 * "Report this problem": the failure copy said "tell us" and there was no
@@ -640,11 +652,14 @@
 	{#if reportState === 'sent'}
 		<span class="drawer-report-note" role="status" tabindex="-1">Reported — it is in our queue with this post attached. Nothing else to do.</span>
 	{:else}
+		<!-- aria-disabled, not disabled: disabling the pressed button drops focus
+		     to <body>, and after a failed send there was nothing to return to
+		     (round-6 re-audit). reportProblem() already ignores a second press. -->
 		<button
 			type="button"
 			class="drawer-report"
 			onclick={reportProblem}
-			disabled={reportState === 'sending'}
+			aria-disabled={reportState === 'sending' ? 'true' : undefined}
 			aria-busy={reportState === 'sending'}
 		>
 			{reportState === 'sending' ? 'Sending…' : 'Report this problem'}
@@ -812,7 +827,7 @@
 			{:else}
 				<div class="drawer-text-row">
 					<p class="drawer-text">{display.text}</p>
-					{#if onSaveText}
+					{#if onSaveText && !seatCannotGenerate}
 						<button
 							type="button"
 							class="dt-edit"
@@ -848,20 +863,20 @@
 						<input
 							type="date"
 							bind:value={schedDate}
-							disabled={savingSchedule}
+							disabled={savingSchedule || !!seatBlock}
 							aria-label="Scheduled date"
 						/>
 						<input
 							type="time"
 							bind:value={schedTime}
-							disabled={savingSchedule}
+							disabled={savingSchedule || !!seatBlock}
 							aria-label="Scheduled time"
 						/>
 						<button
 							type="button"
 							class="dt-btn dt-save"
 							onclick={saveReschedule}
-							disabled={savingSchedule || !schedDate || !schedTime}
+							disabled={savingSchedule || !schedDate || !schedTime || !!seatBlock}
 						>
 							{savingSchedule ? 'Saving…' : 'Reschedule'}
 						</button>
@@ -1538,12 +1553,16 @@
 		</div>
 
 		<div class="drawer-footer">
+			{#if seatBlock && (onDelete || canRepublish || canPostNow || post.status === 'draft')}
+				<!-- The reason in visible text, once, beside the buttons it disables. -->
+				<span class="drawer-seat-note">{seatBlock}</span>
+			{/if}
 			{#if onDelete}
 				<button
 					type="button"
 					class="btn-drawer-delete"
-					disabled={deleting}
-					title="Move to Trash — restorable for 30 days"
+					disabled={deleting || seatCannotPublish}
+					title={seatCannotPublish ? seatBlock : 'Move to Trash — restorable for 30 days'}
 					aria-label="Move this post to Trash"
 					onclick={handleDeleteClick}
 				>
@@ -1581,8 +1600,8 @@
 				<button
 					type="button"
 					class="btn-drawer-approve"
-					disabled={approving || refining || !!approveBlock}
-					title={approveBlock ?? undefined}
+					disabled={approving || refining || !!seatBlock}
+					title={seatBlock ?? undefined}
 					onclick={() => onApprove(post)}
 				>
 					{approving ? 'Approving…' : 'Approve & Schedule'}
@@ -1593,8 +1612,8 @@
 				<button
 					type="button"
 					class="btn-drawer-approve"
-					disabled={!!approveBlock}
-					title={approveBlock ?? undefined}
+					disabled={!!seatBlock}
+					title={seatBlock ?? undefined}
 					onclick={() => onPublishFallback?.(post)}
 				>
 					Publish to a connected platform
@@ -1607,9 +1626,9 @@
 				<button
 					type="button"
 					class="btn-drawer-postnow"
-					disabled={posting || refining || !!approveBlock}
+					disabled={posting || refining || !!seatBlock}
 					onclick={handlePostNowClick}
-					title={approveBlock ?? 'Publish immediately, overriding the schedule'}
+					title={seatBlock ?? 'Publish immediately, overriding the schedule'}
 				>
 					{posting ? 'Posting…' : 'Post Now'}
 				</button>
@@ -2426,5 +2445,14 @@
 	.drawer-help:focus-visible {
 		outline: 2px solid var(--focus-ring);
 		outline-offset: 2px;
+	}
+	.drawer-seat-note {
+		flex-basis: 100%;
+		font-size: var(--text-sm);
+		color: var(--text-muted);
+	}
+	/* Dark theme: the error text token on its soft tint measured 4.33:1 here. */
+	:global([data-theme='dark']) .btn-drawer-delete {
+		color: #fecaca;
 	}
 </style>

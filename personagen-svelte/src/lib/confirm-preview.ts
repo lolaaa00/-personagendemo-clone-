@@ -147,8 +147,9 @@ export async function confirmDeletePosts(posts: any[]): Promise<boolean> {
 			live > 0
 				? `${
 						live === n ? (n === 1 ? 'This post is' : 'They are') : `${live} of them are`
-					} live right now. Taking it down from the platforms happens immediately and is NOT ` +
-					'undone by restoring — restore brings back the record, not the live post.'
+					} live right now. Where the platform allows it, taking it down happens immediately and is NOT ` +
+					'undone by restoring — restore brings back the record, not the live post. Instagram cannot be ' +
+					'taken down through the API; you will be shown how to remove it by hand.'
 				: undefined,
 		preview: postPreviews(posts),
 		confirmLabel: n === 1 ? 'Move to Trash' : `Move ${n} to Trash`,

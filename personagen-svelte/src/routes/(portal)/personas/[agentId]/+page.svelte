@@ -2800,9 +2800,21 @@
 
 	/** Platforms the post is already live on — shown, never selectable. */
 	let publishFallbackLive = $state<string[]>([]);
+	/** The post the picker was opened for: focus returns to its card on close
+	 *  (the drawer that opened it is gone by then — round-6 re-audit). */
+	let publishFallbackReturnId: string | null = null;
+	$effect(() => {
+		if (publishFallbackPost !== null || !publishFallbackReturnId) return;
+		const id = publishFallbackReturnId;
+		publishFallbackReturnId = null;
+		void tick().then(() =>
+			document.querySelector<HTMLElement>(`[data-post-id="${id}"] button`)?.focus({ preventScroll: true })
+		);
+	});
 	async function openPublishFallback(post: any) {
 		if (!agent?.id) return;
 		publishFallbackPost = post;
+		publishFallbackReturnId = post?.id ?? null;
 		publishFallbackOptions = [];
 		publishFallbackSelected = [];
 		publishFallbackLive = [];
@@ -3792,7 +3804,7 @@
 									<option value="scheduled">Scheduled</option>
 									<option value="publishing">Publishing</option>
 									<option value="draft">Draft</option>
-									<option value="partial">Partial</option>
+									<option value="partial">Partly published</option>
 									<option value="failed"
 										>Failed{genFailedCount > 0 ? ` (${genFailedCount})` : ''}</option
 									>
@@ -9807,7 +9819,8 @@
 	   and copy that names the seat instead of showing an empty panel. */
 	.seat-locked {
 		padding: var(--space-5);
-		opacity: 0.85;
+		/* Dimmed by colour — opacity 0.85 took its note to 4.44 / 3.94:1. */
+		color: var(--text-muted);
 	}
 	.seat-locked .section-desc {
 		margin-top: var(--space-2);
@@ -10759,5 +10772,14 @@
 		margin: 0 0 var(--space-2);
 		font-size: var(--text-sm);
 		color: var(--text-muted);
+	}
+	/* "Generate TikTok bio" ran past main at 320–414 (round-6 re-audit). */
+	.label-row {
+		flex-wrap: wrap;
+	}
+	.kit-bio-controls {
+		flex-wrap: wrap;
+		max-width: 100%;
+		min-width: 0;
 	}
 </style>

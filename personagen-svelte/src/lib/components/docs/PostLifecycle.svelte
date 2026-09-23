@@ -22,7 +22,7 @@
 	];
 	const OFFRAMPS: Stage[] = [
 		{ id: 'rejected', label: 'Rejected', who: 'you', text: 'You said no in review. A new draft replaces it.', branch: true },
-		{ id: 'partial', label: 'Partial', who: 'platform', text: 'Live on some platforms, failed on others — open the post to see which one missed and why.', branch: true },
+		{ id: 'partial', label: 'Partly published', who: 'platform', text: 'Live on some platforms, failed on others — open the post to see which one missed and why.', branch: true },
 		{ id: 'failed', label: 'Failed', who: 'platform', text: 'Did not go out. The exact reason is written on the post; fix that and retry.', branch: true }
 	];
 	const WHO = { system: 'Automatic', you: 'Needs you', platform: 'The platform' } as const;

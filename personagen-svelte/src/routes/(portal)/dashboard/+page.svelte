@@ -76,7 +76,7 @@
 				done: st.zernio,
 				title: 'Add your Zernio key',
 				why: 'Publishing runs on it, and it is yours: sign in at zernio.com with Google — the free account includes 2 connections — then paste it into Settings → Provider API Keys.',
-				href: '/settings?section=api-keys',
+				href: '/settings?section=api-keys#zernio-keys',
 				cta: 'Add key',
 				blocked: null
 			},

@@ -89,7 +89,10 @@
 			showToast('Welcome back!', 'success');
 			// Return the user to whatever they asked for before being sent here —
 			// a deep link, or the page a session expiry interrupted.
-			goto(safeReturnTo($page.url.searchParams.get(RETURN_PARAM)) ?? '/dashboard');
+			// The browser carries the original #fragment onto /login; put it back on
+			// the return path, or /guides#zernio-key lands on the docs home (round-6).
+			const back = safeReturnTo($page.url.searchParams.get(RETURN_PARAM));
+			goto(back ? back + (typeof window !== 'undefined' ? window.location.hash : '') : '/dashboard');
 		} catch {
 			error = 'Network error. Please try again.';
 			loading = false;

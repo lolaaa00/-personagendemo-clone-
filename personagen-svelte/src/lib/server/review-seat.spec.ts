@@ -121,7 +121,10 @@ describe('the review page offers a decision only where the seat may make it', ()
 			DRAWER.indexOf('onclick={() => onApprove(post)}') - 400,
 			DRAWER.indexOf('onclick={() => onApprove(post)}')
 		);
-		expect(approve).toMatch(/approveBlock/);
+		// The button now reads seatBlock, which is approveBlock first and the
+		// layout seat second — a stronger guard, never a weaker one.
+		expect(approve).toMatch(/seatBlock/);
+		expect(DRAWER).toMatch(/let seatBlock = \$derived\(\s*approveBlock \?\?/);
 	});
 });
 

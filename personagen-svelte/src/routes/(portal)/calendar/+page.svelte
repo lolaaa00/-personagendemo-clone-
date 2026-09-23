@@ -1035,7 +1035,7 @@
 				<option value="scheduled">Scheduled</option>
 				<option value="publishing">Publishing</option>
 				<option value="published">Published</option>
-				<option value="partial">Partial</option>
+				<option value="partial">Partly published</option>
 				<option value="rejected">Rejected</option>
 				<option value="failed">Failed</option>
 			</select>

@@ -1616,7 +1616,8 @@
 	}
 	.control-grid {
 		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+		/* min(18rem, 100%): an 18rem floor made 288px cards in a 210px column at 320. */
+		grid-template-columns: repeat(auto-fit, minmax(min(18rem, 100%), 1fr));
 		gap: 0.9rem;
 		margin-top: 0.75rem;
 	}
@@ -1662,6 +1663,7 @@
 	.mode-shadow {
 		background: rgba(245, 158, 11, 0.15);
 		border-color: rgba(245, 158, 11, 0.4);
+		color: var(--warning-text); /* "N dropped" was 2.77:1 */
 	}
 	.mode-enforce {
 		background: rgba(34, 197, 94, 0.15);
