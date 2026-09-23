@@ -615,7 +615,8 @@ export const CHANGELOG: ChangeEntry[] = [
 	{ date: "2026-09-22", hash: "32e5e1b", type: "fix", category: "publishing", scope: "a11y", title: "lighter tint under the admin publish pill (4.47 → AA)" },
 	{ date: "2026-09-22", hash: "9801752", type: "fix", category: "fix", scope: "audit", title: "round 5 — the Money and Setup critics' lists" },
 	{ date: "2026-09-22", hash: "2cdf576", type: "fix", category: "docs", scope: "audit", title: "round 5 follow-ups — guide hash/Back switches the article; admin Mark handled keeps focus" },
-	{ date: "2026-09-23", hash: "6ad7e09", type: "fix", category: "fix", scope: "audit", title: "round 6 — the Setup and Access critics' lists" }
+	{ date: "2026-09-23", hash: "6ad7e09", type: "fix", category: "fix", scope: "audit", title: "round 6 — the Setup and Access critics' lists" },
+	{ date: "2026-09-23", hash: "97803c3", type: "fix", category: "fix", scope: "audit", title: "round 6 — the Money critic's list" }
 ];
 
 export const CHANGE_GROUPS: ChangeGroup[] = [
@@ -1055,10 +1056,10 @@ export const CHANGE_GROUPS: ChangeGroup[] = [
 		id: "6ad7e09", from: "2026-09-23", to: "2026-09-23",
 		category: "fix", categories: ["fix"],
 		title: "Fixed: round 6 — the Setup and Access critics' lists",
-		summary: "Round 6 — the Setup and Access critics' lists.",
+		summary: "Round 6 — the Setup and Access critics' lists. Plus 1 more change.",
 		major: false, curated: false,
-		entries: [CHANGELOG[581]]
+		entries: [CHANGELOG[581], CHANGELOG[582]]
 	}
 ];
 
-export const CHANGELOG_GENERATED_FROM = "6ad7e09";
+export const CHANGELOG_GENERATED_FROM = "97803c3";

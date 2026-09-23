@@ -8,7 +8,7 @@ import { checkConfigStatus } from '$lib/server/config-check';
 import { isPlatformAdmin as checkPlatformAdmin } from '$lib/server/platform-admin';
 import { creditsMode, creditMarkup } from '$lib/server/flags';
 import { getSettings } from '$lib/server/settings';
-import { resolveDisplayCurrency, creditsToAmount, formatCredits, localeFromAcceptLanguage } from '$lib/money';
+import { resolveDisplayCurrency, creditsToAmount, formatCredits, localeFromAcceptLanguage, minorUnitDigits } from '$lib/money';
 import { walletToDisplay, type WorkspaceWallet } from '$lib/server/wallet-display';
 
 /** The `tz` cookie, only if it names a zone this runtime knows. */
@@ -261,7 +261,10 @@ export const load: LayoutServerLoad = async ({ locals, request, url, depends, co
 						// rounds: ₹3,779.60 read "₹3.8K" — more than the wallet held
 						// (round-5 re-audit). Now "₹3.7K".
 						const unit = big ? Math.pow(10, Math.floor(Math.log10(Math.abs(amt))) - 1) : 1;
-						const shown = big ? Math.trunc(amt / unit) * unit : tiny ? amt : Math.trunc(amt);
+						// A zero-decimal currency has no cents to drop: its balance IS the
+						// rounded whole unit the pill shows (￥7,813), so the rail rounds too.
+						const whole = minorUnitDigits(currency) === 0 ? Math.round(amt) : Math.trunc(amt);
+						const shown = big ? Math.trunc(amt / unit) * unit : tiny ? amt : whole;
 						if (big) {
 							// minimumFractionDigits: 0 — with only a maximum set, Intl printed
 							// "₹11.0K" for 11,000 (round-6 re-audit). And a locale whose compact
@@ -278,7 +281,7 @@ export const load: LayoutServerLoad = async ({ locals, request, url, depends, co
 								style: 'currency',
 								currency,
 								maximumFractionDigits: 0
-							}).format(Math.trunc(amt));
+							}).format(whole);
 							return /[^\d\s.,'’\u00a0\u202f]/.test(compact.replace(/^[^\d]*/, '')) ? compact : plain;
 						}
 						return new Intl.NumberFormat(locale, {

@@ -2602,6 +2602,10 @@
 			scrollbar-width: thin;
 			-webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent 100%);
 			mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent 100%);
+			/* Room past the last filter equal to the fade, so the last select can
+			   scroll fully clear of it when focused (86% visible without this). */
+			padding-right: 28px;
+			scroll-padding-inline-end: 28px;
 		}
 		.filter-bar::-webkit-scrollbar {
 			height: 4px;
