@@ -224,7 +224,9 @@
 					if (el.scrollHeight - el.clientHeight >= remembered) el.scrollTop = remembered;
 				};
 				requestAnimationFrame(() => requestAnimationFrame(restore));
-				for (const ms of [120, 400, 900, 1800]) setTimeout(() => { if (Math.abs(el.scrollTop - remembered) > 2) restore(); }, ms);
+				// Up to 5s: WebKit at 320 grew the dashboard past the remembered offset
+				// only after the KPI cards loaded (round-8 re-audit, still 0 at 1.8s).
+				for (const ms of [120, 400, 900, 1800, 3000, 5000]) setTimeout(() => { if (Math.abs(el.scrollTop - remembered) > 2) restore(); }, ms);
 			} else if (target) target.scrollIntoView({ block: 'start' });
 			else if (hash.length > 1) {
 				// A #hash with no element of that id is the PAGE's to resolve (e.g.

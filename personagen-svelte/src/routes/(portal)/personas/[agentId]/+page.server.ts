@@ -6,6 +6,8 @@ import { env } from '$env/dynamic/public';
 import { getAgentRole } from '$lib/server/workspaces';
 import { capabilities } from '$lib/seat';
 import { fetchStudioPlan } from '$lib/studio-pricing';
+import { resolveZernioApiKeyForAgent } from '$lib/server/zernio-keys';
+import { getServiceSupabase } from '$lib/server/service-supabase';
 
 /** A persona id is a uuid. Anything else cannot name one. */
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -131,7 +133,14 @@ export const load: PageServerLoad = async ({ locals, params, fetch }) => {
 			// in the same response. Fetched from the browser after hydration, every
 			// Studio tile and the rate card sat on "…" or a static table for
 			// seconds (re-audit). A seat that cannot generate gets no plan.
-			studioPlan: capabilities(role ?? 'owner').canCreate ? fetchStudioPlan(agent.id, fetch) : null
+			studioPlan: capabilities(role ?? 'owner').canCreate ? fetchStudioPlan(agent.id, fetch) : null,
+			// Whether ANY Zernio key covers this persona (the owner's, an assigned
+			// Key Manager key, or the platform default). false = the Connections
+			// tab says so up front, with links, instead of a refusal after a click
+			// (round-8 re-audit). null = unknown, never claimed.
+			zernioCovered: await resolveZernioApiKeyForAgent(getServiceSupabase(), agent.user_id, agent)
+				.then((k) => !!k)
+				.catch(() => null)
 		};
 	}
 

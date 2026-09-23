@@ -2821,6 +2821,15 @@
 					if (!el.title) el.title = `Your ${seat.label} seat can view this persona but not change it.`;
 				}
 			}
+			// A label styled as a button ("Upload Reference Photo") still looked live
+			// once its file input was disabled — mark it too.
+			for (const lab of rootEl.querySelectorAll<HTMLLabelElement>('label')) {
+				const ctl = lab.control as HTMLInputElement | null;
+				if (ctl?.disabled && !lab.hasAttribute('aria-disabled')) {
+					lab.setAttribute('aria-disabled', 'true');
+					lab.setAttribute('data-seat-disabled', '');
+				}
+			}
 		};
 		apply();
 		const mo = new MutationObserver(apply);
@@ -6439,7 +6448,7 @@
 								     on hover told a creator nothing (round-4 re-audit). -->
 								<p class="conn-seat-note">{seatBlockedReason(seat, 'manager')}</p>
 							{/if}
-							{#if zernioKeyMissing}
+							{#if zernioKeyMissing || (data as { zernioCovered?: boolean | null }).zernioCovered === false}
 								<p class="conn-seat-note" role="status">
 									No Zernio key covers this persona yet, so nothing can connect. Add one in
 									<a href="/settings?section=api-keys#provider-zernio">Settings → Provider API Keys</a>
@@ -10880,5 +10889,9 @@
 		background: var(--surface-2);
 		color: var(--text-muted);
 		font-size: var(--text-sm);
+	}
+	.profile-tab label[data-seat-disabled] {
+		opacity: 0.6;
+		pointer-events: none;
 	}
 </style>
