@@ -470,7 +470,7 @@
 					alt: 'The Content tab with the Generate Now button'
 				},
 				{
-					t: 'The composer opens. Nothing is spent until you approve: review the topic, pick Image / Video, and check the price preview at the bottom ("Pipeline that will run" with the estimated cost).',
+					t: 'The composer opens. Nothing is spent until you approve: review the topic, pick Image / Video, and check the price preview at the bottom ("What builds it?" with the price of each step).',
 					img: 'composer',
 					alt: 'The generation composer with the cost preview'
 				},
@@ -511,23 +511,23 @@
 			title: 'The composer: approve exactly what you spend',
 			when: 'You want control over what a generation costs and what gets sent to the AI.',
 			facts: [
-				'Opens before every generation',
+				'Opens before every post generation',
 				'Shows the exact prompt and the price you will be charged',
 				'Cancel costs nothing',
 				'Platforms + schedule are set right here',
 			],
 			steps: [
 				{
-					t: 'Every generation opens this composer first — nothing is spent until you click Approve & generate.',
+					t: 'Every post generation opens this composer first — nothing is spent until you click Approve & generate. (Generate drafts, the campaign planner and the identity-kit buttons spend without it — each of those shows its price and wallet on the button or its confirm.)',
 					img: 'composer',
 					alt: 'The generation composer'
 				},
 				{ t: 'Pick a format. Each one shows its price; one you cannot use says why on the tile — for example “Cinematic — needs a product photo” until a product in your Brand Brief has one.' },
 				{ t: '"Prompt sent to the model" shows the exact text the AI receives — edit it if you want something specific.' },
 				{
-					t: '"Pipeline that will run" lists each step with its model and its price in your currency — what the wallet is charged for that step, rounded per step exactly as it is debited — plus the total and whose wallet pays it.',
+					t: '"What builds it?" lists each step with its model and its price in your currency — what the wallet is charged for that step, rounded per step exactly as it is debited — plus the total and whose wallet pays it.',
 					img: 'composer-costs',
-					alt: 'The composer scrolled to the Pipeline that will run cost breakdown'
+					alt: 'The composer scrolled to the What builds it? cost breakdown'
 				},
 				{ t: 'Two optional switches: Burn on-screen captions (subtitles baked into the video) and the "AI GENERATED" disclosure badge.' },
 				{ t: '"Publish to" chips choose which connected accounts the post targets; you can also set a schedule date and time right here.' },

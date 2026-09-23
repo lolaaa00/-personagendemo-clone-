@@ -269,11 +269,17 @@
 					{/if}
 				</p>
 				{#if data.topupLoaded?.length}
-					<ul class="topup-pending topup-loaded" aria-label="Top-ups we loaded for you">
+					<ul class="topup-pending topup-loaded" aria-label="Your recent top-up requests">
 						{#each data.topupLoaded as r (r.id)}
 							<li>
-								<strong>{r.title.replace(/^Top-up request · /, '')}</strong> loaded {when(r.updated_at)}
-								— it is in the balance above.
+								<strong>{r.title.replace(/^Top-up request · /, '')}</strong>
+								{#if r.loaded}
+									<!-- Asserted from the ledger grant, never from the ticket. -->
+									— {r.amount} loaded {when(r.updated_at)};
+									it is in the balance above.
+								{:else}
+									— closed {when(r.updated_at)} without loading credit. If you still need it, ask again below.
+								{/if}
 							</li>
 						{/each}
 					</ul>

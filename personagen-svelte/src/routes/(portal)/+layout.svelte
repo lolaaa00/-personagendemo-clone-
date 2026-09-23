@@ -39,16 +39,7 @@
 
 	onMount(() => {
 		initializeThemeAndColors();
-		// Tell the server the viewer's zone, so the NEXT server render prints
-		// instants in it rather than the server's (see PricingContext.timeZone).
-		try {
-			const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-			if (tz && !document.cookie.split('; ').includes(`tz=${tz}`)) {
-				document.cookie = `tz=${tz}; path=/; max-age=31536000; samesite=lax`;
-			}
-		} catch {
-			/* no Intl zone — the server keeps its default */
-		}
+		// (The viewer's `tz` cookie is written by the root layout, on every route.)
 	});
 
 	// ── Pending workspace invites — "you've been invited" banner ────────────

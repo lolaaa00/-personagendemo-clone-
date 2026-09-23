@@ -2151,6 +2151,15 @@
 			<span class="foot-cost" aria-live="polite">
 				<span class="foot-cost-label">{costLabel}</span>
 				<strong>{isPostKind ? planPrice : money(liveCost)}</strong>
+				{#if metered && !ownWords}
+					<!-- Whose wallet, on every composer — the reference-image ones had a
+					     price and no payer (round-4 re-audit). -->
+					<span class="foot-cost-payer"
+						>{preview?.payer?.kind === 'workspace_owner'
+							? `from the ${preview.payer.name ?? 'workspace'} wallet`
+							: 'from your balance'}</span
+					>
+				{/if}
 			</span>
 		{/if}
 		{#if isFirstStep}
@@ -3232,6 +3241,10 @@
 		font-variant-numeric: tabular-nums;
 	}
 
+	.foot-cost-payer {
+		font-size: 0.72rem;
+		color: var(--text-muted);
+	}
 	.foot-cost-label {
 		font-size: 0.7rem;
 		text-transform: uppercase;

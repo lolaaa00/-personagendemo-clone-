@@ -249,15 +249,23 @@ export const load: LayoutServerLoad = async ({ locals, request, url, depends, co
 				formatted: formatCredits(balance, currency, s.fx_rates, locale, { whole: false }),
 				compact: (() => {
 					try {
-						// Never a one-decimal money amount ("£88.7" beside "£88.69").
+						// Never a one-decimal money amount ("£88.7" beside "£88.69"), and
+						// never MORE than the wallet holds: £88.69 rounded to "£89" read as
+						// a balance the customer did not have (round-4 re-audit) — whole
+						// units truncate toward zero. Under one unit the cents show, so
+						// $0.40 is not "$0".
 						const amt = creditsToAmount(balance, currency, s.fx_rates);
+						const big = Math.abs(amt) >= 1000;
+						const tiny = Math.abs(amt) < 1;
 						return new Intl.NumberFormat(locale, {
 							style: 'currency',
 							currency,
-							...(Math.abs(amt) >= 1000
+							...(big
 								? { notation: 'compact', maximumFractionDigits: 1 }
-								: { maximumFractionDigits: 0 })
-						}).format(amt);
+								: tiny
+									? { maximumFractionDigits: 2 }
+									: { maximumFractionDigits: 0 })
+						}).format(big || tiny ? amt : Math.trunc(amt));
 					} catch {
 						return formatCredits(balance, currency, s.fx_rates, locale);
 					}

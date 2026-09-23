@@ -23,7 +23,21 @@
 	 * group-level calls still run first and are idempotent; this is the backstop
 	 * that covers every route.
 	 */
-	onMount(() => initializeThemeAndColors());
+	onMount(() => {
+		initializeThemeAndColors();
+		// The viewer's zone, for the server to render instants in (see
+		// PricingContext.timeZone). Written here — on the login page too — so
+		// the FIRST portal render already has it; a portal-only cookie left every
+		// new browser one page in the server's zone (round-4 re-audit).
+		try {
+			const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+			if (tz && !document.cookie.split('; ').includes(`tz=${tz}`)) {
+				document.cookie = `tz=${tz}; path=/; max-age=31536000; samesite=lax`;
+			}
+		} catch {
+			/* no Intl zone — the server keeps its default */
+		}
+	});
 
 	/**
 	 * Share-card branding, env-driven.

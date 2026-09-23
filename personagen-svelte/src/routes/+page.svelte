@@ -107,7 +107,8 @@
 	const PROOF = [
 		{ value: '13', label: 'platforms — every publish verified by the platform', short: 'platforms, every publish verified' },
 		{ value: '5', label: 'reference stages lock one face for good', short: 'stages lock one face' },
-		{ value: '$0.32', label: 'for an image post, quoted before you confirm', short: 'an image post, quoted upfront' },
+		// Server data in the visitor's currency, like every other price here.
+		{ value: data.receipt.image, label: 'for an image post, quoted before you confirm', short: 'an image post, quoted upfront' },
 		{ value: '3', label: 'autonomy levels, from manual to unattended', short: 'autonomy levels' }
 	];
 
@@ -489,7 +490,7 @@
 				</div>
 
 				<div class="lp-chip lp-chip-price">
-					<span class="lp-chip-price-num lp-num">$0.32</span>
+					<span class="lp-chip-price-num lp-num">{data.receipt.image}</span>
 					<span class="lp-chip-body">
 						<strong>Image post</strong>
 						<span>Shown before you confirm</span>

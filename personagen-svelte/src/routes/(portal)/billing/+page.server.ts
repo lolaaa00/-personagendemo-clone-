@@ -92,7 +92,10 @@ export const load: PageServerLoad = async ({ locals, request, url }) => {
 		topupRequests: await pendingTopups(locals.supabase, user.id),
 		// Loaded in the last fortnight: the customer is TOLD it happened, rather
 		// than watching their pending line silently disappear.
-		topupLoaded: await loadedTopups(locals.supabase, user.id),
+		topupLoaded: (await loadedTopups(locals.supabase, user.id)).map((t) => ({
+			...t,
+			amount: formatCredits(t.credits, currency, s.fx_rates, locale, { whole: false })
+		})),
 		packs: CREDIT_PACKS.map((p) => ({
 			...p,
 			usd: formatMoney(p.usdCents / 100, 'USD', 'en-US'),
@@ -158,12 +161,19 @@ export const load: PageServerLoad = async ({ locals, request, url }) => {
 };
 
 
-/** This account's top-up requests loaded in the last 14 days. Never throws. */
+/**
+ * This account's closed top-up requests from the last 14 days, each marked by
+ * whether a LEDGER GRANT keyed on it exists. "Loaded" is asserted from the
+ * ledger row, never from the ticket's status: the first version called every
+ * closed ticket loaded, and three closed by the old "Mark loaded" button (which
+ * granted nothing) told the customer $30 was "in the balance above" (round-4
+ * re-audit). Never throws.
+ */
 async function loadedTopups(
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any -- the Supabase client is untyped across this codebase
 	supabase: any,
 	userId: string
-): Promise<Array<{ id: string; title: string; updated_at: string }>> {
+): Promise<Array<{ id: string; title: string; updated_at: string; loaded: boolean; credits: number }>> {
 	try {
 		const since = new Date(Date.now() - 14 * 86400000).toISOString();
 		const { data } = await supabase
@@ -175,7 +185,27 @@ async function loadedTopups(
 			.gte('updated_at', since)
 			.order('updated_at', { ascending: false })
 			.limit(5);
-		return data ?? [];
+		const tickets = (data ?? []) as Array<{ id: string; title: string; updated_at: string }>;
+		if (tickets.length === 0) return [];
+		// The grant credit_apply() wrote when Load was pressed (see api/admin/requests).
+		const { data: grants } = await supabase
+			.from('credit_ledger')
+			.select('stripe_event_id, delta')
+			.eq('user_id', userId)
+			.in(
+				'stripe_event_id',
+				tickets.map((t) => `topup-request:${t.id}`)
+			);
+		const credited = new Map<string, number>(
+			((grants ?? []) as Array<{ stripe_event_id: string; delta: number | string }>).map((g) => [
+				g.stripe_event_id,
+				Number(g.delta) || 0
+			])
+		);
+		return tickets.map((t) => {
+			const credits = credited.get(`topup-request:${t.id}`) ?? 0;
+			return { ...t, loaded: credits > 0, credits };
+		});
 	} catch {
 		return [];
 	}

@@ -1238,6 +1238,9 @@
 	let planCache: { id: string; p: Promise<StudioPlan | null> } | null = null;
 	function planFor(id: string): Promise<StudioPlan | null> {
 		if (planCache?.id === id) return planCache.p;
+		// A seat that cannot generate has no plan to fetch: the preview answers
+		// 403, and the tiles sat on "…" for five seconds before going blank.
+		if (!seatCanGenerate) return Promise.resolve(null);
 		const streamed = (data as { studioPlan?: Promise<StudioPlan | null> | null }).studioPlan;
 		const p =
 			streamed && agent?.id === id
@@ -1382,7 +1385,7 @@
 
 	let generatingProfile = $state(false);
 	async function generatePersonaProfile() {
-		if (!agent?.id || generatingProfile) return;
+		if (!agent?.id || generatingProfile || profileLock) return;
 		generatingProfile = true;
 		try {
 			const res = await BrandBrief.generatePersonaProfile(
@@ -1553,6 +1556,9 @@
 	);
 	/** One metered text call per click — shown on every kit button. */
 	let kitPrice = $derived(quote(priceOf('openrouter', 'llm')));
+	/** "Generate for brand" = the profile call, then the identity kit: two calls. */
+	let profilePrice = $derived(quote(2 * priceOf('openrouter', 'llm')));
+	let profileLock = $derived(kitLock ? "Only the persona's owner can generate its profile." : null);
 
 	async function generateKit(scope: 'starter' | 'base' | 'bio') {
 		if (!agent?.id || kitBusy || kitLock) return;
@@ -4212,8 +4218,9 @@
 								e.stopPropagation();
 								generatePersonaProfile();
 							}}
-							disabled={generatingProfile}
-							title="Generate a unique profile tailored to the selected brand and this persona's gender"
+							disabled={generatingProfile || !!profileLock}
+							title={profileLock ??
+								`Generate a unique profile tailored to the selected brand and this persona's gender — two writing calls, ${profilePrice}`}
 						>
 							{#if generatingProfile}Generating…{:else}<svg
 									width="13"
@@ -4228,8 +4235,9 @@
 									><path
 										d="M12 3l1.7 4.6L18 9.3l-4.3 1.7L12 15.6l-1.7-4.6L6 9.3l4.3-1.7L12 3z"
 									/><path d="M18.5 14.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2z" /></svg
-								> Generate for brand{/if}
+								> Generate for brand <span class="kit-price">· {profilePrice}</span>{/if}
 						</button>
+						{#if profileLock}<span class="kit-lock-note">{profileLock}</span>{/if}
 							</div>
 
 						<div class="fields-grid">

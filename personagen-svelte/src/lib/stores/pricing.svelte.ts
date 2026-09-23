@@ -18,7 +18,7 @@
  * margin, never overcharge the customer relative to what they were shown.
  */
 import type { FxRates, PricingContext, FormatOptions } from '$lib/money';
-import { quoteCredits, quoteMoney, formatCredits } from '$lib/money';
+import { quoteCredits, quoteMoney, formatMoney, creditsToAmount } from '$lib/money';
 
 const ctx = $state<PricingContext>({ markup: 1, currency: 'USD', fx: null, locale: undefined });
 
@@ -81,7 +81,19 @@ export function quoteStepsRaw(stepsUsd: readonly number[]): number {
 	return stepsUsd.reduce((sum, usd) => sum + quoteCredits(usd, ctx), 0);
 }
 
-/** The headline for a multi-step run; matches the debit to the credit. */
+/**
+ * The headline for a multi-step run. The CREDITS are quoteStepsRaw (per-step
+ * ceilings, as the ledger debits); the MONEY shown is the sum of each stage's
+ * price as it is displayed — rounded to cents in the viewer's currency per
+ * stage — so the stages on screen always add up to the total beside them.
+ * Converting the credit total in one go printed ₱157.25 under stages that
+ * summed to ₱157.27 (round-4 re-audit). USD needs no such care: a credit IS
+ * a cent there, and the two paths agree.
+ */
 export function quoteSteps(stepsUsd: readonly number[], opts?: FormatOptions): string {
-	return formatCredits(quoteStepsRaw(stepsUsd), ctx.currency, ctx.fx, ctx.locale, opts ?? { whole: false });
+	const shown = stepsUsd.reduce((sum, usd) => {
+		const amount = creditsToAmount(quoteCredits(usd, ctx), ctx.currency, ctx.fx);
+		return sum + Math.round(amount * 100) / 100;
+	}, 0);
+	return formatMoney(shown, ctx.currency, ctx.locale, opts ?? { whole: false });
 }

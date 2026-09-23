@@ -1170,7 +1170,10 @@
 								<th>Mode</th>
 								<th>Debited (mo)</th>
 								<th>Waived (mo)</th>
-								<th>Est. spend (mo)</th>
+								<!-- Provider cost, not what the customer paid — the ledger column
+								     beside it is that. Under a header saying "1 credit = 1¢ retail" the
+								     old "Est. spend" label read as customer spend (round-4 re-audit). -->
+								<th title="What the providers charged us this month for this account's calls — not what the customer paid (see Debited)">Provider cost (mo)</th>
 								<th>Actions</th>
 							</tr>
 						</thead>
