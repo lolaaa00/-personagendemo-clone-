@@ -98,8 +98,16 @@
 
 	/** Mark a top-up (loaded) or a problem report (dealt with) as handled. */
 	let closingTicket = $state<string | null>(null);
+	let requestNotice = $state('');
 	async function closeRequest(id: string) {
+		if (closingTicket) return;
+		// Move focus to a heading that survives the section's removal BEFORE the
+		// request: the pressed button (and, for the last ticket, its whole
+		// section) is about to disappear, and a focus call after the fact found
+		// nothing to land on (round-5 re-audit: activeElement = body).
+		document.getElementById('admin-controls-title')?.focus();
 		closingTicket = id;
+		requestNotice = '';
 		try {
 			const res = await fetch('/api/admin/requests', {
 				method: 'POST',
@@ -110,9 +118,9 @@
 			if (!res.ok || !body.success) throw new Error(body.error || `HTTP ${res.status}`);
 			await loadControls();
 			await tick();
-			// The first `.admin-card h2` is "Workspaces", which has no tabindex, so
-			// the focus call did nothing (round-5 re-audit). This heading is focusable.
+			// Again after the re-render, in case the heading was replaced.
 			document.querySelector<HTMLElement>('#admin-controls-title, main h1')?.focus();
+			requestNotice = 'Request handled.';
 		} catch (e) {
 			controlsError = (e as Error).message;
 		} finally {
@@ -584,6 +592,7 @@
 				<div>
 					<!-- Focusable: closeRequest() lands here after a request is handled. -->
 					<h2 id="admin-controls-title" tabindex="-1">Platform controls</h2>
+					<p class="sr-only" role="status" aria-live="polite">{requestNotice}</p>
 					<p class="admin-hint">
 						These switches live in the database and take effect on every server within 15 seconds — no
 						environment change, no redeploy. An environment variable of the same name, if set on the host,
@@ -704,7 +713,7 @@
 									<button
 										type="button"
 										class="admin-link"
-										disabled={closingTicket === r.id}
+										aria-disabled={closingTicket === r.id ? 'true' : undefined}
 										onclick={() => closeRequest(r.id)}
 										>{closingTicket === r.id ? 'Loading…' : `Load ${r.title.replace(/^Top-up request · [^$]*/, '')}`}</button
 									>
@@ -727,7 +736,7 @@
 								<li>
 									<strong>{r.title.replace(/^Sign-in help · /, '')}</strong>
 									<span class="muted small">— {when(r.created_at)}</span>
-									<button type="button" class="admin-link" disabled={closingTicket === r.id} onclick={() => closeRequest(r.id)}
+									<button type="button" class="admin-link" aria-disabled={closingTicket === r.id ? 'true' : undefined} onclick={() => closeRequest(r.id)}
 										>{closingTicket === r.id ? 'Closing…' : 'Mark handled'}</button
 									>
 								</li>
@@ -751,7 +760,7 @@
 									<button
 										type="button"
 										class="admin-link"
-										disabled={closingTicket === r.id}
+										aria-disabled={closingTicket === r.id ? 'true' : undefined}
 										onclick={() => closeRequest(r.id)}
 										>{closingTicket === r.id ? 'Closing…' : 'Mark handled'}</button
 									>

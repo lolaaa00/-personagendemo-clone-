@@ -1048,13 +1048,22 @@
 		landSoon();
 	}
 	// The URL's hash is the source of truth for which guide shows: Back,
-	// Forward and a hand-edited hash all switch the article.
-	afterNavigate(() => {
+	// Forward and a hand-edited hash all switch the article. Both hooks, on
+	// purpose: the router's afterNavigate covers goto(), and the browser's own
+	// hashchange covers history traversal and a hand-typed fragment, which
+	// the router did not surface (round-5 re-audit: the URL changed, the
+	// article did not).
+	function selectFromHash() {
 		const hash = location.hash.replace('#', '');
 		if (hash && GUIDES.some((g) => g.id === hash) && selectedId !== hash) {
 			selectedId = hash;
 			landSoon();
 		}
+	}
+	afterNavigate(selectFromHash);
+	onMount(() => {
+		window.addEventListener('hashchange', selectFromHash);
+		return () => window.removeEventListener('hashchange', selectFromHash);
 	});
 
 	// ── Nav nesting ──────────────────────────────────────────────────────────
