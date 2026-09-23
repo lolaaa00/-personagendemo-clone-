@@ -810,8 +810,14 @@
 		<!-- Status leads in the DOM too, so Tab order is the visual order; the
 		     focused select scrolls into view inside the strip (round-6 re-audit:
 		     the focused Platform select was 0% visible under the right-edge fade). -->
+		<!-- A named, keyboard-focusable scroll region in every engine (Firefox
+		     already put the scroller in the Tab order, unnamed). -->
+		<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 		<div
 			class="filter-bar"
+			role="region"
+			aria-label="Queue filters"
+			tabindex="0"
 			onfocusin={(e) => {
 				// One frame later, after the browser's own focus scroll (Firefox runs
 				// it after focusin, which undid an immediate centre) — round-6.
