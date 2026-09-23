@@ -18,7 +18,7 @@
  * margin, never overcharge the customer relative to what they were shown.
  */
 import type { FxRates, PricingContext, FormatOptions } from '$lib/money';
-import { quoteCredits, quoteMoney, formatMoney, creditsToAmount } from '$lib/money';
+import { quoteCredits, quoteMoney, formatMoney, creditsToAmount, minorUnitDigits } from '$lib/money';
 
 const ctx = $state<PricingContext>({ markup: 1, currency: 'USD', fx: null, locale: undefined });
 
@@ -111,7 +111,8 @@ export function quoteStepsAmount(stepsUsd: readonly number[]): number {
 export function quoteStepsLines(stepsUsd: readonly number[], opts?: FormatOptions): string[] {
 	const credits = stepsUsd.map((usd) => quoteCredits(usd, ctx));
 	const totalCredits = credits.reduce((a, b) => a + b, 0);
-	const totalMinor = Math.round(creditsToAmount(totalCredits, ctx.currency, ctx.fx) * 100);
+	const scale = Math.pow(10, minorUnitDigits(ctx.currency));
+	const totalMinor = Math.round(creditsToAmount(totalCredits, ctx.currency, ctx.fx) * scale);
 	if (totalCredits <= 0 || totalMinor <= 0) {
 		return credits.map(() => formatMoney(0, ctx.currency, ctx.locale, opts ?? { whole: false }));
 	}
@@ -126,5 +127,5 @@ export function quoteStepsLines(stepsUsd: readonly number[], opts?: FormatOption
 		floors[i] += 1;
 		left -= 1;
 	}
-	return floors.map((minor) => formatMoney(minor / 100, ctx.currency, ctx.locale, opts ?? { whole: false }));
+	return floors.map((minor) => formatMoney(minor / scale, ctx.currency, ctx.locale, opts ?? { whole: false }));
 }

@@ -526,7 +526,7 @@
 				{ t: 'Pick a format. Each one shows its price; one you cannot use says why on the tile — for example “Cinematic — needs a product photo” until a product in your Brand Brief has one.' },
 				{ t: '"Prompt sent to the model" shows the exact text the AI receives — edit it if you want something specific.' },
 				{
-					t: '"What builds it?" lists each step with its model and its price in your currency — what the wallet is charged for that step, rounded per step exactly as it is debited — plus the total and whose wallet pays it.',
+					t: '"What builds it?" lists each step with its model and its price in your currency, plus the total and whose wallet pays it. The total is the exact charge; each step is rounded to the cent, so in a converted currency the steps can differ from the total by a cent.',
 					img: 'composer-costs',
 					alt: 'The composer scrolled to the What builds it? cost breakdown'
 				},

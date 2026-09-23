@@ -196,6 +196,11 @@ export function creditsToAmount(credits: number, currency: string, fx?: FxRates 
 
 const ZERO_DECIMAL = ['JPY', 'KRW', 'VND', 'IDR', 'HUF', 'CLP', 'COP'];
 
+/** Minor-unit digits of a currency: 0 for yen-like currencies, else 2. */
+export function minorUnitDigits(currency: string): number {
+	return ZERO_DECIMAL.includes(currency.toUpperCase()) ? 0 : 2;
+}
+
 /** Round half AWAY from zero (money convention). Math.round pulls -3.5 to -3. */
 function roundHalfAway(n: number): number {
 	return Math.sign(n) * Math.round(Math.abs(n));

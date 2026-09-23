@@ -262,14 +262,29 @@ export const load: LayoutServerLoad = async ({ locals, request, url, depends, co
 						// (round-5 re-audit). Now "₹3.7K".
 						const unit = big ? Math.pow(10, Math.floor(Math.log10(Math.abs(amt))) - 1) : 1;
 						const shown = big ? Math.trunc(amt / unit) * unit : tiny ? amt : Math.trunc(amt);
+						if (big) {
+							// minimumFractionDigits: 0 — with only a maximum set, Intl printed
+							// "₹11.0K" for 11,000 (round-6 re-audit). And a locale whose compact
+							// form does not abbreviate at this size (ja-JP below 10,000) gets
+							// whole units with grouping, so "￥6200" cannot read as exact.
+							const compact = new Intl.NumberFormat(locale, {
+								style: 'currency',
+								currency,
+								notation: 'compact',
+								minimumFractionDigits: 0,
+								maximumFractionDigits: 1
+							}).format(shown);
+							const plain = new Intl.NumberFormat(locale, {
+								style: 'currency',
+								currency,
+								maximumFractionDigits: 0
+							}).format(Math.trunc(amt));
+							return /[^\d\s.,'’\u00a0\u202f]/.test(compact.replace(/^[^\d]*/, '')) ? compact : plain;
+						}
 						return new Intl.NumberFormat(locale, {
 							style: 'currency',
 							currency,
-							...(big
-								? { notation: 'compact', maximumFractionDigits: 1 }
-								: tiny
-									? { maximumFractionDigits: 2 }
-									: { maximumFractionDigits: 0 })
+							...(tiny ? { maximumFractionDigits: 2 } : { maximumFractionDigits: 0 })
 						}).format(shown);
 					} catch {
 						return formatCredits(balance, currency, s.fx_rates, locale);

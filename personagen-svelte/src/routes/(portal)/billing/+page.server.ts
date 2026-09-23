@@ -115,7 +115,16 @@ export const load: PageServerLoad = async ({ locals, request, url }) => {
 			note: r.note,
 			created_at: r.created_at,
 			delta: Number(r.delta),
-			deltaFormatted: formatCredits(Math.abs(Number(r.delta)), currency, s.fx_rates, locale, { whole: false }),
+			// The shown delta is the difference of the two SHOWN balances (each
+			// rounded to the cent from credits), so "+£7.39 → £36.96" above a row
+			// ending at £29.56 cannot happen: converting each figure separately
+			// made the column add up to 1p off in GBP (round-6 re-audit).
+			deltaFormatted: (() => {
+				const after = Number(r.balance_after);
+				const before = after - Number(r.delta);
+				const cents = (c: number) => Math.round(creditsToAmount(c, currency, s.fx_rates) * 100);
+				return formatMoney(Math.abs(cents(after) - cents(before)) / 100, currency, locale, { whole: false });
+			})(),
 			after: formatCredits(Number(r.balance_after), currency, s.fx_rates, locale, { whole: false })
 		})),
 		status: url.searchParams.get('status'),

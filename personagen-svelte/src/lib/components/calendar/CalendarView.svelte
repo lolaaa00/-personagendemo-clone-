@@ -36,7 +36,7 @@
 	import { platformColor } from '$lib/platforms';
 	import { thumbUrl } from '$lib/image-url';
 	import { countLabel } from '$lib/plural';
-	import { localDate, slotTime, slotDateTime } from '$lib/datetime';
+	import { localDate, slotDate, slotTime, slotDateTime } from '$lib/datetime';
 	import { pricingContext } from '$lib/stores/pricing.svelte';
 	import type { CalendarPost } from './types';
 
@@ -802,7 +802,11 @@
 									class="cell-add week-add"
 									onclick={() => onGenerateForDate(dateStr)}
 									title="Generate a post for this day"
-									aria-label="Generate a post for {dateStr}"
+									aria-label="Generate a post for {localDate(slotDate(dateStr) ?? new Date(), {
+										weekday: 'long',
+										day: 'numeric',
+										month: 'long'
+									})}"
 								>{@render iconPlus()}</button>
 							{/if}
 						</div>

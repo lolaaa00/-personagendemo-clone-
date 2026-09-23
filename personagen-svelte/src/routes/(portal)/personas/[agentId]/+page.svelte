@@ -2876,7 +2876,10 @@
 	function requestGenerateAvatar() {
 		if (!agent?.id || generatingAvatar) return;
 		if (!seatCanGenerate) {
-			showToast(seatRetryReason, 'error');
+			showToast(
+				`Generating a profile picture needs a Creator seat or above — your ${seat.label} seat can view but not generate.`,
+				'error'
+			);
 			return;
 		}
 		askToGenerate(
@@ -6206,9 +6209,9 @@
 							<div class="section-header">
 								<h2 class="section-title">Spend &amp; Pricing</h2>
 								<p class="section-desc">
-									What this persona's generations {metered ? 'have cost you' : 'would cost you'},
+									What this persona's generations {metered ? 'have cost' : 'would cost'},
 									split by provider — plus the rate card behind the numbers. Every figure here is
-									what you pay, in your own currency, not what the provider bills us.
+									what <strong>{tilePayer}</strong> pays, in your own currency, not what the provider bills us.
 								</p>
 							</div>
 							<svg
@@ -7086,7 +7089,7 @@
 				{:else}
 					<p>
 						This fills the empty slots in the next {DRAFT_LOOKAHEAD_DAYS} days at
-						<strong>{postsPerDay} a day</strong> — up to <strong>{draftCountMax} drafts</strong>, fewer if
+						<strong>{postsPerDay} a day</strong> — up to <strong>{draftCountMax} drafts</strong> (a run makes at most {DRAFT_MAX_PER_RUN}), fewer if
 						some slots already have one. Each costs up to
 						<strong>{draftUnitSteps ? quoteSteps(draftUnitSteps) : '…'}</strong>
 						({draftTotalMax ? `at most ${draftTotalMax} in all` : 'pricing…'}), charged to

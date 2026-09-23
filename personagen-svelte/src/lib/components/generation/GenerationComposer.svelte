@@ -57,7 +57,7 @@
 		type StepKind,
 		type StepModel
 	} from '$lib/formats';
-	import { quote, quoteSteps, pricingContext, quoteStepsLines } from '$lib/stores/pricing.svelte';
+	import { quote, quoteSteps, quoteStepsAmount, pricingContext } from '$lib/stores/pricing.svelte';
 	import {
 		parseQuotes,
 		quoteProblem,
@@ -397,8 +397,23 @@
 		// so it reads as a ceiling, not a price.
 		(isPostKind && formatId === 'auto' ? 'up to ' : '') + quoteSteps(activePlan.map((s) => s.usd))
 	);
-	/** One line per stage, allocated from planPrice so they add up to it exactly. */
-	let planLines = $derived(quoteStepsLines(activePlan.map((s) => (s.supplied ? 0 : s.usd))));
+	/**
+	 * Rounding note: each stage line is that stage's own price rounded to the
+	 * cent (the same figure its model picker and the rate card show); the total
+	 * is the exact charge, converted once from credits. In a converted currency
+	 * the lines can sum to a cent or two off the total — say so, rather than
+	 * bend either figure (round-5 and round-6 re-audits asked for opposite
+	 * bends; the honest answer is both figures, labelled).
+	 */
+	let stageSumOff = $derived.by(() => {
+		if (!isPostKind) return false;
+		const total = quoteStepsAmount(activePlan.map((s) => s.usd));
+		const shown = activePlan.reduce((sum, s) => {
+			if (s.supplied) return sum;
+			return sum + Math.round(quoteStepsAmount([s.usd]) * 100) / 100;
+		}, 0);
+		return Math.abs(shown - total) >= 0.005;
+	});
 	/**
 	 * A format whose run is a transformation OF something has nothing to
 	 * transform until that something is here. Blocking the submit is the whole
@@ -1795,7 +1810,7 @@
 						</div>
 
 						<div class="stack">
-							{#each activePlan as s, i (s.kind)}
+							{#each activePlan as s (s.kind)}
 								{@const options = planOptions[s.kind] ?? []}
 								<div class="stepcard" class:supplied={s.supplied}>
 									<div class="sc-top">
@@ -1811,7 +1826,7 @@
 											<span class="sc-purpose">{s.purpose}</span>
 										</div>
 										<span class="sc-price">
-											<strong>{s.supplied ? money(0) : (planLines[i] ?? money(s.usd))}</strong>
+											<strong>{s.supplied ? money(0) : money(s.usd)}</strong>
 										</span>
 									</div>
 									<div class="sc-ctl">
@@ -2017,7 +2032,13 @@
 												? ' — estimated, nothing is debited'
 												: preview?.payer?.kind === 'workspace_owner'
 													? ` — taken from the ${preview.payer.name ?? 'workspace'} wallet (the workspace owner's) when you approve`
-													: ' — taken from your balance when you approve'}
+													: ' — taken from your wallet when you approve'}
+									{#if stageSumOff}
+										<span class="sum-rounding">
+											Each step above is rounded to the cent; this total is the exact charge, so the
+											steps can differ from it by a cent.
+										</span>
+									{/if}
 									</dd>
 								</div>
 							</dl>
@@ -2170,7 +2191,7 @@
 							? `from the ${preview.payer.name ?? 'workspace'} wallet`
 							: payerLabel
 								? `from ${payerLabel}`
-								: 'from your balance'}</span
+								: 'from your wallet'}</span
 					>
 				{/if}
 			</span>
@@ -3270,5 +3291,11 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 0.35rem;
+	}
+	.sum-rounding {
+		display: block;
+		margin-top: 0.25rem;
+		font-size: 0.72rem;
+		color: var(--text-muted);
 	}
 </style>
