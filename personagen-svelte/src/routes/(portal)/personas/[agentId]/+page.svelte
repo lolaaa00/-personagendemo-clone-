@@ -2831,7 +2831,10 @@
 					lab.setAttribute('data-seat-disabled', '');
 					lab.setAttribute('tabindex', '-1');
 					// A file-picker label is a write control with no read-only form: hide it.
-					if (ctl.type === 'file') lab.hidden = true;
+					if (ctl.type === 'file') {
+						lab.hidden = true;
+						lab.style.display = 'none'; // the label's own display:flex beats `hidden`
+					}
 				}
 			}
 		};
